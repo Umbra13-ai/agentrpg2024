@@ -6,20 +6,10 @@
 
 | Variable | Description | Where to get it |
 |----------|-------------|-----------------|
-| `DATABASE_URL` | Postgres connection string | Railway auto-injects from Postgres addon |
+| `DATABASE_URL` | Postgres connection string | your PostgreSQL server (`install.py` creates the database and writes it) |
 | `RESEND_API_KEY` | Transactional email API key | https://resend.com/api-keys |
 
 ## Setting Secrets
-
-### Railway (Production)
-
-```bash
-# Set a secret
-railway variables --set "RESEND_API_KEY=re_xxx" --service ai-dnd
-
-# List secrets
-railway variables --service ai-dnd
-```
 
 ### Local Development
 
@@ -38,6 +28,6 @@ cp .env.example .env
 ## Security Rules
 
 1. **Never commit `.env`** — it's in .gitignore
-2. **Use Railway CLI** for production secrets
+2. **Keep production secrets in the host's environment settings**, never in files
 3. **Rotate keys** if accidentally exposed
 4. **Reference env vars in code** via `os.Getenv()`

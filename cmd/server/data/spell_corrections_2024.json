@@ -1,0 +1,32 @@
+{
+ "animal-shapes": {
+  "replace": [
+   [
+    "equal to the Hit Points of the first form into which it shape-shifts. These Temporary Hit Points vanish if any remain when the spell ends. The transformation lasts for the duration or until the target ends it as a Bonus Action.",
+    "equal to the Beast form’s Hit Points. The transformation lasts for the duration for each target, until the target has no Temporary Hit Points, or until the target leaves the form as a Bonus Action."
+   ]
+  ]
+ },
+ "telekinesis": {
+  "replace": [
+   [
+    "such as manipulating a simple tool,",
+    "such as manipulating a simple tool, opening a door or a container, stowing or retrieving an item from an open container, or pouring the contents from a vial."
+   ]
+  ]
+ },
+ "flaming-sphere": {
+  "school": "Evocation"
+ },
+ "conjure-minor-elementals": {
+  "higher_level": "The damage increases by 2d8 for each spell slot level above 4.",
+  "damage_at_slot_level": {
+   "4": "2d8",
+   "5": "4d8",
+   "6": "6d8",
+   "7": "8d8",
+   "8": "10d8",
+   "9": "12d8"
+  }
+ }
+}

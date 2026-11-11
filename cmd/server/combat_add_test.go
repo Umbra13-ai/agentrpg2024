@@ -25,7 +25,7 @@ func TestSQLiteCombatAddPreservesHolderAndRejectsInvalidState(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if _, err := db.Exec("INSERT INTO agents VALUES (1,$1,'test-salt',true)", hashPassword("test-password", "test-salt")); err != nil {
+	if _, err := db.Exec("INSERT INTO agents VALUES (1,$1,'test-salt',true)", testPasswordHash("test-password")); err != nil {
 		t.Fatal(err)
 	}
 	for _, tc := range []struct {

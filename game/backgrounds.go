@@ -1,160 +1,117 @@
-// Package game provides core D&D 5e game mechanics.
-// backgrounds.go handles 5e character backgrounds (PHB).
+// Package game provides the core game rules (SRD 5.2.1).
+// backgrounds.go holds the character backgrounds from the SRD 5.2.1 (2024 rules).
 package game
 
-// Background represents a character background with its mechanical benefits (PHB)
-type Background struct {
-	Name               string   `json:"name"`
-	SkillProficiencies []string `json:"skill_proficiencies"` // 2 skills
-	ToolProficiencies  []string `json:"tool_proficiencies"`  // 0-2 tools
-	Languages          int      `json:"languages"`           // Number of bonus languages
-	Equipment          []string `json:"equipment"`           // Starting equipment
-	Feature            string   `json:"feature"`             // Feature name
-	FeatureDesc        string   `json:"feature_description"` // Feature description
-	Gold               int      `json:"gold"`                // Starting gold
+import (
+	"sort"
+	"strings"
+)
+
+// BgItem is one line of a background's starting equipment (option A).
+type BgItem struct {
+	Name   string `json:"name"`
+	Qty    int    `json:"qty"`
+	Quiver bool   `json:"in_quiver,omitempty"`   // goes in the quiver
+	Choice bool   `json:"chosen_tool,omitempty"` // the slot filled by the player's chosen tool
 }
 
-// backgrounds contains all PHB backgrounds with their mechanical benefits
+// Background is a 2024 background: three ability scores, an Origin feat, two
+// skills, one tool and a choice between an equipment package and 50 GP.
+type Background struct {
+	Key           string   `json:"key"`
+	Name          string   `json:"name"`
+	AbilityScores []string `json:"ability_scores"` // three abilities (str, dex, con, int, wis, cha); +2/+1 or +1/+1/+1
+	Feat          string   `json:"feat"`           // Origin feat slug
+	FeatNote      string   `json:"feat_note,omitempty"`
+	Skills        []string `json:"skill_proficiencies"` // two skills
+	Tool          string   `json:"tool_proficiency,omitempty"`
+	ToolCategory  string   `json:"tool_choice_category,omitempty"` // "gaming": the player picks the kind
+	Equipment     []BgItem `json:"equipment_a"`
+	GoldA         int      `json:"gold_a"` // gold that comes with package A
+	GoldB         int      `json:"gold_b"` // option B is gold only
+	Description   string   `json:"description"` // a narrative for the background: empty in the SRD; a private server can add one (local content)
+}
+
+// BackgroundAltGold is what option B (gold instead of the package) gives.
+const BackgroundAltGold = 50
+
 var backgrounds = map[string]Background{
 	"acolyte": {
-		Name:               "Acolyte",
-		SkillProficiencies: []string{"insight", "religion"},
-		ToolProficiencies:  []string{},
-		Languages:          2,
-		Equipment:          []string{"holy symbol", "prayer book", "5 sticks of incense", "vestments", "common clothes"},
-		Feature:            "Shelter of the Faithful",
-		FeatureDesc:        "As an acolyte, you command the respect of those who share your faith. You and your companions can expect free healing and care at temples of your faith, and you can call upon priests for assistance.",
-		Gold:               15,
-	},
-	"charlatan": {
-		Name:               "Charlatan",
-		SkillProficiencies: []string{"deception", "sleight of hand"},
-		ToolProficiencies:  []string{"disguise kit", "forgery kit"},
-		Languages:          0,
-		Equipment:          []string{"fine clothes", "disguise kit", "con tools"},
-		Feature:            "False Identity",
-		FeatureDesc:        "You have created a second identity including documentation, established acquaintances, and disguises that allow you to assume that persona.",
-		Gold:               15,
+		Key: "acolyte", Name: "Acolyte",
+		AbilityScores: []string{"int", "wis", "cha"},
+		Feat:          "magic_initiate", FeatNote: "Cleric",
+		Skills: []string{"insight", "religion"},
+		Tool:   "calligrapher's supplies",
+		Equipment: []BgItem{
+			{Name: "Calligrapher's Supplies", Qty: 1}, {Name: "Book (prayers)", Qty: 1}, {Name: "Holy Symbol", Qty: 1},
+			{Name: "Parchment", Qty: 10}, {Name: "Robe", Qty: 1},
+		},
+		GoldA: 8, GoldB: BackgroundAltGold,
 	},
 	"criminal": {
-		Name:               "Criminal",
-		SkillProficiencies: []string{"deception", "stealth"},
-		ToolProficiencies:  []string{"thieves' tools", "gaming set"},
-		Languages:          0,
-		Equipment:          []string{"crowbar", "dark common clothes with hood"},
-		Feature:            "Criminal Contact",
-		FeatureDesc:        "You have a reliable and trustworthy contact who acts as your liaison to a criminal network.",
-		Gold:               15,
-	},
-	"entertainer": {
-		Name:               "Entertainer",
-		SkillProficiencies: []string{"acrobatics", "performance"},
-		ToolProficiencies:  []string{"disguise kit", "musical instrument"},
-		Languages:          0,
-		Equipment:          []string{"musical instrument", "favor from admirer", "costume"},
-		Feature:            "By Popular Demand",
-		FeatureDesc:        "You can always find a place to perform. You receive free lodging and food of a modest or comfortable standard, as long as you perform each night.",
-		Gold:               15,
-	},
-	"folk_hero": {
-		Name:               "Folk Hero",
-		SkillProficiencies: []string{"animal handling", "survival"},
-		ToolProficiencies:  []string{"artisan's tools", "land vehicles"},
-		Languages:          0,
-		Equipment:          []string{"artisan's tools", "shovel", "iron pot", "common clothes"},
-		Feature:            "Rustic Hospitality",
-		FeatureDesc:        "Common folk will provide you with food and lodging and shield you from the law or anyone searching for you, as long as you do not pose a danger.",
-		Gold:               10,
-	},
-	"guild_artisan": {
-		Name:               "Guild Artisan",
-		SkillProficiencies: []string{"insight", "persuasion"},
-		ToolProficiencies:  []string{"artisan's tools"},
-		Languages:          1,
-		Equipment:          []string{"artisan's tools", "letter of introduction from guild", "traveler's clothes"},
-		Feature:            "Guild Membership",
-		FeatureDesc:        "Your guild offers lodging and food if necessary. You can call upon guild members for assistance. The guild will pay for your funeral and support your dependents.",
-		Gold:               15,
-	},
-	"hermit": {
-		Name:               "Hermit",
-		SkillProficiencies: []string{"medicine", "religion"},
-		ToolProficiencies:  []string{"herbalism kit"},
-		Languages:          1,
-		Equipment:          []string{"scroll case with notes", "winter blanket", "common clothes", "herbalism kit"},
-		Feature:            "Discovery",
-		FeatureDesc:        "In your hermitage, you discovered a unique and powerful truth—a rare herb, a secret about the gods, or some other significant discovery.",
-		Gold:               5,
-	},
-	"noble": {
-		Name:               "Noble",
-		SkillProficiencies: []string{"history", "persuasion"},
-		ToolProficiencies:  []string{"gaming set"},
-		Languages:          1,
-		Equipment:          []string{"fine clothes", "signet ring", "scroll of pedigree"},
-		Feature:            "Position of Privilege",
-		FeatureDesc:        "People assume you have the right to be wherever you are. Commoners make every effort to accommodate you and avoid your displeasure.",
-		Gold:               25,
-	},
-	"outlander": {
-		Name:               "Outlander",
-		SkillProficiencies: []string{"athletics", "survival"},
-		ToolProficiencies:  []string{"musical instrument"},
-		Languages:          1,
-		Equipment:          []string{"staff", "hunting trap", "trophy from animal", "traveler's clothes"},
-		Feature:            "Wanderer",
-		FeatureDesc:        "You have an excellent memory for maps and geography. You can always recall the general layout of terrain, settlements, and other features. You can find food and fresh water for yourself and up to five others each day.",
-		Gold:               10,
+		Key: "criminal", Name: "Criminal",
+		AbilityScores: []string{"dex", "con", "int"},
+		Feat:          "alert",
+		Skills:        []string{"sleight of hand", "stealth"},
+		Tool:          "thieves' tools",
+		Equipment: []BgItem{
+			{Name: "Dagger", Qty: 2}, {Name: "Thieves' Tools", Qty: 1}, {Name: "Crowbar", Qty: 1},
+			{Name: "Pouch", Qty: 2}, {Name: "Clothes, Traveler's", Qty: 1},
+		},
+		GoldA: 16, GoldB: BackgroundAltGold,
 	},
 	"sage": {
-		Name:               "Sage",
-		SkillProficiencies: []string{"arcana", "history"},
-		ToolProficiencies:  []string{},
-		Languages:          2,
-		Equipment:          []string{"bottle of black ink", "quill", "small knife", "letter with unanswered question", "common clothes"},
-		Feature:            "Researcher",
-		FeatureDesc:        "When you attempt to learn or recall a piece of lore, if you do not know it, you often know where and from whom you can obtain it.",
-		Gold:               10,
-	},
-	"sailor": {
-		Name:               "Sailor",
-		SkillProficiencies: []string{"athletics", "perception"},
-		ToolProficiencies:  []string{"navigator's tools", "water vehicles"},
-		Languages:          0,
-		Equipment:          []string{"belaying pin (club)", "50 feet of silk rope", "lucky charm", "common clothes"},
-		Feature:            "Ship's Passage",
-		FeatureDesc:        "When you need to, you can secure free passage on a sailing ship for yourself and your adventuring companions.",
-		Gold:               10,
+		Key: "sage", Name: "Sage",
+		AbilityScores: []string{"con", "int", "wis"},
+		Feat:          "magic_initiate", FeatNote: "Wizard",
+		Skills: []string{"arcana", "history"},
+		Tool:   "calligrapher's supplies",
+		Equipment: []BgItem{
+			{Name: "Quarterstaff", Qty: 1}, {Name: "Calligrapher's Supplies", Qty: 1}, {Name: "Book (history)", Qty: 1},
+			{Name: "Parchment", Qty: 8}, {Name: "Robe", Qty: 1},
+		},
+		GoldA: 8, GoldB: BackgroundAltGold,
 	},
 	"soldier": {
-		Name:               "Soldier",
-		SkillProficiencies: []string{"athletics", "intimidation"},
-		ToolProficiencies:  []string{"gaming set", "land vehicles"},
-		Languages:          0,
-		Equipment:          []string{"insignia of rank", "trophy from fallen enemy", "bone dice or deck of cards", "common clothes"},
-		Feature:            "Military Rank",
-		FeatureDesc:        "Soldiers loyal to your former military organization still recognize your authority and influence. You can invoke your rank to exert influence over other soldiers.",
-		Gold:               10,
-	},
-	"urchin": {
-		Name:               "Urchin",
-		SkillProficiencies: []string{"sleight of hand", "stealth"},
-		ToolProficiencies:  []string{"disguise kit", "thieves' tools"},
-		Languages:          0,
-		Equipment:          []string{"small knife", "map of home city", "pet mouse", "token from parents", "common clothes"},
-		Feature:            "City Secrets",
-		FeatureDesc:        "You know the secret patterns and flow to cities. You can find twice as fast the route to any place in the city, and you can lead others through the city with ease.",
-		Gold:               10,
+		Key: "soldier", Name: "Soldier",
+		AbilityScores: []string{"str", "dex", "con"},
+		Feat:          "savage_attacker",
+		Skills:        []string{"athletics", "intimidation"},
+		ToolCategory:  "gaming",
+		Equipment: []BgItem{
+			{Name: "Spear", Qty: 1}, {Name: "Shortbow", Qty: 1}, {Name: "Arrow", Qty: 20, Quiver: true},
+			{Name: "Quiver", Qty: 1}, {Name: "Gaming Set", Qty: 1, Choice: true}, {Name: "Healer's Kit", Qty: 1},
+			{Name: "Clothes, Traveler's", Qty: 1},
+		},
+		GoldA: 14, GoldB: BackgroundAltGold,
 	},
 }
 
-// GetBackground returns background info by slug, or nil if not found.
+// normalizeBackgroundKey turns "Folk Hero", "folk-hero" and "folk_hero" into one form.
+func normalizeBackgroundKey(slug string) string {
+	s := strings.ToLower(strings.TrimSpace(slug))
+	s = strings.ReplaceAll(s, "-", "_")
+	return strings.ReplaceAll(s, " ", "_")
+}
+
+// GetBackground returns background info by name or slug, or nil if not found.
 func GetBackground(slug string) *Background {
-	bg, ok := backgrounds[slug]
+	bg, ok := backgrounds[normalizeBackgroundKey(slug)]
 	if !ok {
 		return nil
 	}
 	return &bg
+}
+
+// SetBackgroundDescriptions gives backgrounds a narrative ({"acolyte": "..."}); the SRD has none (a private server's local content).
+func SetBackgroundDescriptions(m map[string]string) {
+	for k, text := range m {
+		key := normalizeBackgroundKey(k)
+		if bg, ok := backgrounds[key]; ok {
+			bg.Description = text
+			backgrounds[key] = bg
+		}
+	}
 }
 
 // GetAllBackgrounds returns all available backgrounds.
@@ -162,30 +119,46 @@ func GetAllBackgrounds() map[string]Background {
 	return backgrounds
 }
 
-// GetAllBackgroundSlugs returns a sorted slice of all background slugs.
-func GetAllBackgroundSlugs() []string {
+// BackgroundSlugs returns the background keys in alphabetical order.
+func BackgroundSlugs() []string {
 	slugs := make([]string, 0, len(backgrounds))
 	for slug := range backgrounds {
 		slugs = append(slugs, slug)
 	}
-	// Sort for consistent ordering
-	for i := 0; i < len(slugs)-1; i++ {
-		for j := i + 1; j < len(slugs); j++ {
-			if slugs[i] > slugs[j] {
-				slugs[i], slugs[j] = slugs[j], slugs[i]
-			}
-		}
-	}
+	sort.Strings(slugs)
 	return slugs
-}
-
-// IsValidBackground checks if a background slug is valid.
-func IsValidBackground(slug string) bool {
-	_, ok := backgrounds[slug]
-	return ok
 }
 
 // BackgroundCount returns the number of available backgrounds.
 func BackgroundCount() int {
 	return len(backgrounds)
+}
+
+// ValidateAbilityIncreases checks a background's ability score increases:
+// +2 and +1 on two of its three abilities, or +1 on all three. Keys are
+// short ability names (str, dex, con, int, wis, cha).
+func ValidateAbilityIncreases(bg *Background, inc map[string]int) error {
+	allowed := map[string]bool{}
+	for _, a := range bg.AbilityScores {
+		allowed[a] = true
+	}
+	var plus2, plus1 int
+	for k, v := range inc {
+		if !allowed[strings.ToLower(k)] {
+			return errAbility("%s is not one of this background's abilities (%s)", k, strings.Join(bg.AbilityScores, ", "))
+		}
+		switch v {
+		case 2:
+			plus2++
+		case 1:
+			plus1++
+		case 0:
+		default:
+			return errAbility("an increase must be +2 or +1, not %d", v)
+		}
+	}
+	if (plus2 == 1 && plus1 == 1) || (plus2 == 0 && plus1 == 3) {
+		return nil
+	}
+	return errAbility("increase one ability by 2 and another by 1, or all three by 1")
 }

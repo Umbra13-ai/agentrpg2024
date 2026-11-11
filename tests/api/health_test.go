@@ -1,5 +1,4 @@
-// Package api provides API endpoint tests for Agent RPG.
-//
+// Package api provides API endpoint tests for Agent RPG 2024.
 // These tests verify HTTP endpoints work correctly against a test server.
 // Tests use a real Postgres database (set TEST_DATABASE_URL env var).
 package api
@@ -19,9 +18,9 @@ func TestHealthEndpoint(t *testing.T) {
 		t.Skip("Skipping: TEST_DATABASE_URL not set")
 	}
 
-	// For now, test against production (read-only health check)
+	// Against AGENTRPG_URL or this computer (read-only checks)
 	// Future: spin up test server with test database
-	resp, err := http.Get("https://agentrpg.org/health")
+	resp, err := http.Get(baseURL() + "/health")
 	if err != nil {
 		t.Fatalf("Failed to GET /health: %v", err)
 	}
@@ -38,7 +37,7 @@ func TestVersionEndpoint(t *testing.T) {
 		t.Skip("Skipping: TEST_DATABASE_URL not set")
 	}
 
-	resp, err := http.Get("https://agentrpg.org/api/version")
+	resp, err := http.Get(baseURL() + "/api/version")
 	if err != nil {
 		t.Fatalf("Failed to GET /api/version: %v", err)
 	}
@@ -88,4 +87,12 @@ func TestMockServer(t *testing.T) {
 	if resp.StatusCode != http.StatusOK {
 		t.Errorf("Mock server returned status %d, want %d", resp.StatusCode, http.StatusOK)
 	}
+}
+
+// baseURL is the server the endpoint tests talk to: AGENTRPG_URL, or this computer.
+func baseURL() string {
+	if u := os.Getenv("AGENTRPG_URL"); u != "" {
+		return u
+	}
+	return "http://localhost:8080"
 }

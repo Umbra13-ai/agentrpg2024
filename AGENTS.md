@@ -1,14 +1,14 @@
 # AGENTS.md — Agent Developer Guide
 
-This file is for AI agents (Claude Code, Cursor, etc.) working on the Agent RPG codebase.
+This file is for AI agents (Claude Code, Cursor, etc.) working on the Agent RPG 2024 codebase.
 
 ---
 
 ## First Steps
 
-1. Read `ROADMAP.md` for the full feature list and priorities
-2. Check `README.md` for architecture overview
-3. The main code is in `cmd/server/main.go` (single-file server)
+1. Read `README.md` for the architecture overview and `BUILD.md` to build, run and test; the game follows the SRD 5.2.1 (2024 rules) only
+2. `docs/skill.md` is the guide for players and GMs; every endpoint is in the API reference (`/docs`)
+3. The server code is in `cmd/server/*.go`: `main.go` holds startup and the route table (`setupRoutes`), the other files are grouped by theme
 
 ---
 
@@ -17,8 +17,10 @@ This file is for AI agents (Claude Code, Cursor, etc.) working on the Agent RPG 
 ```
 agentrpg/
 ├── cmd/
-│   ├── server/main.go  # The main server (all endpoints, all logic)
-│   └── seed/main.go    # Database seeder (5e SRD data)
+│   ├── server/         # The server: main.go (startup, routes) plus themed files
+│   └── arpg/           # Command-line helper that keeps your token or key
+├── game/               # Rules (classes, species, spells, conditions ...) and their tests
+├── data in cmd/server/data/  # SRD 5.2.1 text and tables as JSON, built into the server
 ├── docs/               # Design docs and skill.md
 │   ├── PLAYER_EXPERIENCE.md
 │   ├── GAME_MASTER_EXPERIENCE.md
@@ -29,8 +31,7 @@ agentrpg/
 │   └── testing.md      # Testing infrastructure plan
 ├── tools/              # Helper scripts
 │   └── deploy.sh       # Deployment script
-├── ROADMAP.md          # Feature roadmap (source of truth)
-└── railway.json        # Railway config
+├── BUILD.md            # Building, running and testing
 ```
 
 ---
@@ -49,13 +50,13 @@ curl localhost:8080/health
 
 ### Making Changes
 
-1. Edit `cmd/server/main.go`
+1. Edit the themed file in `cmd/server/` (routes are registered in `main.go`)
 2. Test locally if possible
 3. Update version constant if meaningful change:
    ```go
    const Version = "0.8.46"  // Bump for new features
    ```
-4. Update `ROADMAP.md` — mark items as `[x]` when complete
+4. Update `docs/skill.md` and the API reference (`python tools/build_swagger.py`) when an endpoint changes
 5. Commit with clear message
 
 ### Commit Messages
@@ -67,101 +68,14 @@ curl localhost:8080/health
 
 ---
 
-## Railway Deployment
-
-**Production:** https://agentrpg.org
-
-### Deploy Command
-
-```bash
-cd /home/dorkitude/a/dev/goated/workspace/self/agentrpg
-~/.local/bin/railway up --service ai-dnd --detach
-```
-
-Or use the deploy script:
-```bash
-./tools/deploy.sh
-```
-
-### Checking Deployment Status
-
-```bash
-# List recent deployments
-~/.local/bin/railway deployment list --service ai-dnd
-
-# View build logs (for compile errors)
-~/.local/bin/railway logs --build <deployment-id>
-
-# View runtime logs (for crashes)
-~/.local/bin/railway logs --deployment <deployment-id>
-```
 
 ### Health Check
 
-After deployment, verify:
+After starting the server, verify:
 ```bash
-curl -s https://agentrpg.org/health
+curl -s https://YOUR-SERVER/health
 # Should return: ok
 ```
-
----
-
-## Staging Workflow
-
-**Staging URL:** https://agentrpg-staging-staging.up.railway.app
-
-### Deploy to Staging
-
-```bash
-# Deploy to staging (preferred method)
-./tools/deploy.sh staging
-
-# Or manually with Railway CLI:
-~/.local/bin/railway up --service agentrpg-staging --environment staging --detach
-```
-
-### Smoke Test
-
-```bash
-# Health check
-curl https://agentrpg-staging-staging.up.railway.app/health
-# Should return: ok
-
-# Version check
-curl https://agentrpg-staging-staging.up.railway.app/api/
-# Returns: {"version":"X.Y.Z", ...}
-```
-
-### When to Use Staging
-
-**MUST use staging first:**
-- Website/frontend changes (HTML templates, CSS)
-- Database schema changes
-- Breaking API changes
-
-**Can go direct to production:**
-- Bug fixes with clear scope
-- New endpoints that don't affect existing functionality
-- Documentation updates
-
-### Switching Environments (Manual)
-
-```bash
-# Switch Railway CLI context to staging
-~/.local/bin/railway environment staging
-
-# List staging deployments
-~/.local/bin/railway deployment list --service agentrpg-staging
-
-# Switch back to production
-~/.local/bin/railway environment production
-```
-
-### Staging Database
-
-Staging has its own Postgres instance. Data is separate from production.
-- Test with fresh registrations
-- Can seed test data without affecting real campaigns
 
 ---
 
@@ -264,7 +178,6 @@ Check if the function already exists — main.go is large. Search before adding.
 ### Build fails with "undefined" error
 Check the build logs:
 ```bash
-~/.local/bin/railway logs --build <deployment-id>
 ```
 
 ---

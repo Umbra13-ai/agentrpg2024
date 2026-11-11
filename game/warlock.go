@@ -1,6 +1,5 @@
-// Package game provides core D&D 5e game mechanics.
-//
-// warlock.go - Eldritch Invocations and Pact Boons per PHB pp107-111
+// Package game provides the core game rules (SRD 5.2.1).
+// warlock.go - Eldritch Invocations (SRD 5.2.1; the pacts of the Blade, Chain and Tome are invocations)
 package game
 
 // InvocationPrerequisites represents the requirements for an Eldritch Invocation
@@ -11,7 +10,7 @@ type InvocationPrerequisites struct {
 	RequiresPatron string `json:"requires_patron,omitempty"` // Must have specific patron
 }
 
-// EldritchInvocation represents a Warlock Eldritch Invocation (PHB pp110-111)
+// EldritchInvocation represents a Warlock Eldritch Invocation
 type EldritchInvocation struct {
 	Slug          string                  `json:"slug"`
 	Name          string                  `json:"name"`
@@ -20,7 +19,7 @@ type EldritchInvocation struct {
 	Mechanics     map[string]string       `json:"mechanics,omitempty"` // Mechanical effects
 }
 
-// AvailableInvocations contains all SRD Eldritch Invocations (PHB pp110-111)
+// AvailableInvocations contains all SRD Eldritch Invocations
 var AvailableInvocations = map[string]EldritchInvocation{
 	"agonizing-blast": {
 		Slug:          "agonizing-blast",
@@ -200,52 +199,13 @@ var AvailableInvocations = map[string]EldritchInvocation{
 	},
 }
 
-// PactBoon represents a Warlock Pact Boon (PHB pp107-108)
-// Warlocks choose one at level 3
-type PactBoon struct {
-	Slug        string                 `json:"slug"`
-	Name        string                 `json:"name"`
-	Description string                 `json:"description"`
-	Mechanics   map[string]interface{} `json:"mechanics,omitempty"`
-}
 
-// AvailablePactBoons contains the three SRD Pact Boons
-var AvailablePactBoons = map[string]PactBoon{
-	"chain": {
-		Slug:        "chain",
-		Name:        "Pact of the Chain",
-		Description: "You learn the find familiar spell and can cast it as a ritual. The spell doesn't count against your number of spells known. When you cast the spell, you can choose one of the normal forms for your familiar or one of the following special forms: imp, pseudodragon, quasit, or sprite. Additionally, when you take the Attack action, you can forgo one of your own attacks to allow your familiar to make one attack with its reaction.",
-		Mechanics: map[string]interface{}{
-			"learn_spell":     "find-familiar",
-			"familiar_forms":  []string{"imp", "pseudodragon", "quasit", "sprite"},
-			"familiar_attack": true,
-		},
-	},
-	"blade": {
-		Slug:        "blade",
-		Name:        "Pact of the Blade",
-		Description: "You can use your action to create a pact weapon in your empty hand. You can choose the form that this melee weapon takes each time you create it. You are proficient with it while you wield it. This weapon counts as magical for the purpose of overcoming resistance and immunity to nonmagical attacks and damage. Your pact weapon disappears if it is more than 5 feet away from you for 1 minute or more. It also disappears if you use this feature again, if you dismiss the weapon (no action required), or if you die. You can transform one magic weapon into your pact weapon by performing a special ritual while you hold the weapon.",
-		Mechanics: map[string]interface{}{
-			"create_weapon":     true,
-			"weapon_proficient": true,
-			"weapon_magical":    true,
-			"bond_magic_weapon": true,
-		},
-	},
-	"tome": {
-		Slug:        "tome",
-		Name:        "Pact of the Tome",
-		Description: "Your patron gives you a grimoire called a Book of Shadows. When you gain this feature, choose three cantrips from any class's spell list (the three needn't be from the same list). While the book is on your person, you can cast those cantrips at will. They don't count against your number of cantrips known. If they don't appear on the warlock spell list, they are nonetheless warlock spells for you. If you lose your Book of Shadows, you can perform a 1-hour ceremony to receive a replacement from your patron. This ceremony can be performed during a short or long rest, and it destroys the previous book.",
-		Mechanics: map[string]interface{}{
-			"extra_cantrips":     3,
-			"cantrips_any_class": true,
-			"book_of_shadows":    true,
-		},
-	},
-}
-
-// GetMaxInvocations returns how many invocations a Warlock can have at their level (PHB p106)
+// GetMaxInvocations returns how many invocations a Warlock can have at their level
 func GetMaxInvocations(warlockLevel int) int {
+	// 2024: the Eldritch Invocations column of the Warlock's Features table
+	if n := ClassTableInt("warlock", warlockLevel, "Eldritch Invocations"); n > 0 {
+		return n
+	}
 	switch {
 	case warlockLevel >= 18:
 		return 8
@@ -266,36 +226,3 @@ func GetMaxInvocations(warlockLevel int) int {
 	}
 }
 
-// GetInvocation returns an invocation by slug, or nil if not found
-func GetInvocation(slug string) *EldritchInvocation {
-	if inv, ok := AvailableInvocations[slug]; ok {
-		return &inv
-	}
-	return nil
-}
-
-// GetPactBoon returns a pact boon by slug, or nil if not found
-func GetPactBoon(slug string) *PactBoon {
-	if boon, ok := AvailablePactBoons[slug]; ok {
-		return &boon
-	}
-	return nil
-}
-
-// ListInvocations returns all available invocations as a slice
-func ListInvocations() []EldritchInvocation {
-	invocations := make([]EldritchInvocation, 0, len(AvailableInvocations))
-	for _, inv := range AvailableInvocations {
-		invocations = append(invocations, inv)
-	}
-	return invocations
-}
-
-// ListPactBoons returns all available pact boons as a slice
-func ListPactBoons() []PactBoon {
-	boons := make([]PactBoon, 0, len(AvailablePactBoons))
-	for _, boon := range AvailablePactBoons {
-		boons = append(boons, boon)
-	}
-	return boons
-}

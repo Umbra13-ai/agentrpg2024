@@ -1,6 +1,5 @@
-// Package mechanics provides game rule tests for Agent RPG.
-//
-// These tests verify D&D 5e mechanics are implemented correctly.
+// Package mechanics provides game rule tests for Agent RPG 2024.
+// These tests verify SRD 5.2.1 rules are implemented correctly.
 // Tests use the game package directly (no database required).
 package mechanics
 
@@ -61,7 +60,7 @@ func TestAdvantageDisadvantageCancel(t *testing.T) {
 
 // TestProficiencyBonusScaling verifies prof bonus follows PHB table
 func TestProficiencyBonusScaling(t *testing.T) {
-	// PHB p15: Proficiency bonus by level
+	// Proficiency bonus by level
 	expected := map[int]int{
 		1: 2, 2: 2, 3: 2, 4: 2,
 		5: 3, 6: 3, 7: 3, 8: 3,
@@ -80,7 +79,7 @@ func TestProficiencyBonusScaling(t *testing.T) {
 
 // TestAbilityModifiers verifies modifier calculation follows 5e formula
 func TestAbilityModifiers(t *testing.T) {
-	// PHB p13: Ability Scores and Modifiers table
+	// Ability Scores and Modifiers table
 	tests := []struct {
 		score    int
 		modifier int

@@ -1,5 +1,4 @@
-// Package game provides core D&D 5e game mechanics.
-//
+// Package game provides the core game rules (SRD 5.2.1).
 // spells.go - Spell mechanics, cantrip scaling, prepared spells, multiclass slots
 package game
 
@@ -53,20 +52,25 @@ func MaxPreparedSpells(class string, level, intl, wis, cha int) int {
 		return 0
 	}
 
+	// 2024: the number of prepared spells is printed in the class's Features table
+	if n := PreparedSpells2024(class, level); n > 0 {
+		return n
+	}
+
 	mod := SpellcastingAbilityMod(class, intl, wis, cha)
 	classLower := strings.ToLower(class)
 
 	var preparedCount int
 	switch classLower {
 	case "paladin":
-		// Paladins prepare: paladin level / 2 (round down) + CHA modifier (PHB p84)
+		// Paladins prepare: paladin level / 2 (round down) + CHA modifier
 		halfLevel := level / 2
 		if halfLevel < 1 {
 			halfLevel = 1
 		}
 		preparedCount = halfLevel + mod
 	case "cleric", "druid", "wizard":
-		// Full casters prepare: class level + spellcasting modifier (PHB p58, 66, 114)
+		// Full casters prepare: class level + spellcasting modifier
 		preparedCount = level + mod
 	default:
 		preparedCount = level + mod
@@ -80,7 +84,7 @@ func MaxPreparedSpells(class string, level, intl, wis, cha int) int {
 }
 
 // MulticlassSpellSlots calculates spell slots for multiclass characters.
-// Uses the PHB multiclass spellcasting rules (PHB p164-165):
+// Uses the PHB multiclass spellcasting rules:
 // - Full casters (Bard, Cleric, Druid, Sorcerer, Wizard): add full level
 // - Half casters (Paladin, Ranger): add half level (round down)
 // - Warlocks: separate Pact Magic, added on top of regular slots
@@ -109,7 +113,7 @@ func MulticlassSpellSlots(classLevels map[string]int) map[int]int {
 		if fullCasters[class] {
 			combinedLevel += level
 		} else if halfCasters[class] {
-			combinedLevel += level / 2 // Round down
+			combinedLevel += (level + 1) / 2 // 2024: half the Paladin and Ranger levels, rounded up
 		} else if class == "warlock" {
 			warlockLevel = level // Warlock pact magic is separate
 		}
@@ -143,22 +147,21 @@ func MulticlassSpellSlots(classLevels map[string]int) map[int]int {
 // SlotRecoveryAbility returns information about a class's spell slot recovery ability.
 // Returns the ability name, maximum combined slot levels to recover, and maximum slot level.
 // Returns empty values if the class/subclass doesn't have a slot recovery ability.
-//
 // Abilities:
-//   - Wizard Arcane Recovery (PHB p115): all wizards, level 1+
-//   - Druid Natural Recovery (PHB p68): Circle of the Land druids only, level 2+
+//   - Wizard Arcane Recovery: all wizards, level 1+
+//   - Druid Natural Recovery: Circle of the Land druids only, level 2+
 func SlotRecoveryAbility(class, subclass string, level int) (abilityName string, maxCombined int, maxSlotLevel int) {
 	classLower := strings.ToLower(class)
 	subclassLower := strings.ToLower(subclass)
 
-	// Wizard's Arcane Recovery (PHB p115) - all wizards get this at level 1
+	// Wizard's Arcane Recovery - all wizards get this at level 1
 	// Recover slots with combined level ≤ half wizard level (rounded up), max 5th level
 	if classLower == "wizard" {
 		maxCombined = (level + 1) / 2 // Round up
 		return "arcane_recovery", maxCombined, 5
 	}
 
-	// Druid's Natural Recovery (PHB p68) - Circle of the Land druids only, level 2+
+	// Druid's Natural Recovery - Circle of the Land druids only, level 2+
 	// Same mechanics as Arcane Recovery
 	if classLower == "druid" && subclassLower == "land" && level >= 2 {
 		maxCombined = (level + 1) / 2 // Round up
@@ -172,54 +175,31 @@ func SlotRecoveryAbility(class, subclass string, level int) (abilityName string,
 // Circle spells are unlocked at druid levels 3, 5, 7, 9 (for 2nd, 3rd, 4th, 5th level spells).
 // Returns nil if landType is not recognized.
 func LandCircleSpells(landType string, level int) []string {
+	// 2024 Circle of the Land (SRD 5.2.1): the Circle Spells of the four land types
 	circleSpells := map[string]map[int][]string{
-		"arctic": {
-			3: {"hold-person", "spike-growth"},
-			5: {"sleet-storm", "slow"},
-			7: {"freedom-of-movement", "ice-storm"},
-			9: {"commune-with-nature", "cone-of-cold"},
+		"arid": {
+			3: {"blur", "burning-hands", "fire-bolt"},
+			5: {"fireball"},
+			7: {"blight"},
+			9: {"wall-of-stone"},
 		},
-		"coast": {
-			3: {"mirror-image", "misty-step"},
-			5: {"water-breathing", "water-walk"},
-			7: {"control-water", "freedom-of-movement"},
-			9: {"conjure-elemental", "scrying"},
+		"polar": {
+			3: {"fog-cloud", "hold-person", "ray-of-frost"},
+			5: {"sleet-storm"},
+			7: {"ice-storm"},
+			9: {"cone-of-cold"},
 		},
-		"desert": {
-			3: {"blur", "silence"},
-			5: {"create-food-and-water", "protection-from-energy"},
-			7: {"blight", "hallucinatory-terrain"},
-			9: {"insect-plague", "wall-of-stone"},
+		"temperate": {
+			3: {"misty-step", "shocking-grasp", "sleep"},
+			5: {"lightning-bolt"},
+			7: {"freedom-of-movement"},
+			9: {"tree-stride"},
 		},
-		"forest": {
-			3: {"barkskin", "spider-climb"},
-			5: {"call-lightning", "plant-growth"},
-			7: {"divination", "freedom-of-movement"},
-			9: {"commune-with-nature", "tree-stride"},
-		},
-		"grassland": {
-			3: {"invisibility", "pass-without-trace"},
-			5: {"daylight", "haste"},
-			7: {"divination", "freedom-of-movement"},
-			9: {"dream", "insect-plague"},
-		},
-		"mountain": {
-			3: {"spider-climb", "spike-growth"},
-			5: {"lightning-bolt", "meld-into-stone"},
-			7: {"stone-shape", "stoneskin"},
-			9: {"passwall", "wall-of-stone"},
-		},
-		"swamp": {
-			3: {"darkness", "acid-arrow"}, // Melf's Acid Arrow in SRD
-			5: {"water-walk", "stinking-cloud"},
-			7: {"freedom-of-movement", "locate-creature"},
-			9: {"insect-plague", "scrying"},
-		},
-		"underdark": {
-			3: {"spider-climb", "web"},
-			5: {"gaseous-form", "stinking-cloud"},
-			7: {"greater-invisibility", "stone-shape"},
-			9: {"cloudkill", "insect-plague"},
+		"tropical": {
+			3: {"acid-splash", "ray-of-sickness", "web"},
+			5: {"stinking-cloud"},
+			7: {"polymorph"},
+			9: {"insect-plague"},
 		},
 	}
 
@@ -237,26 +217,3 @@ func LandCircleSpells(landType string, level int) []string {
 	return spells
 }
 
-// ValidLandTypes returns all valid land types for Circle of the Land druids.
-func ValidLandTypes() []string {
-	return []string{
-		"arctic",
-		"coast",
-		"desert",
-		"forest",
-		"grassland",
-		"mountain",
-		"swamp",
-		"underdark",
-	}
-}
-
-// IsValidLandType checks if a land type is valid for Circle of the Land druids.
-func IsValidLandType(landType string) bool {
-	for _, valid := range ValidLandTypes() {
-		if strings.ToLower(landType) == valid {
-			return true
-		}
-	}
-	return false
-}

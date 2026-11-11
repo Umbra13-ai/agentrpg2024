@@ -1,5 +1,5 @@
-// Package game provides core D&D 5e game mechanics.
-// This package is part of the Agent RPG modularization effort to break up
+// Package game provides the core game rules (SRD 5.2.1).
+// This package is part of the Agent RPG 2024 modularization effort to break up
 // the 46K+ line main.go into manageable, testable components.
 package game
 
@@ -12,6 +12,12 @@ import (
 
 // RollDie rolls a single die with the given number of sides using crypto/rand.
 // Returns a value from 1 to sides (inclusive).
+// MaxDice and MaxDieSides bound any roll (the largest SRD rolls are a few dozen dice); a dice string can come from a GM's request.
+const (
+	MaxDice     = 1000
+	MaxDieSides = 1000
+)
+
 func RollDie(sides int) int {
 	if sides < 1 {
 		sides = 1
@@ -25,6 +31,12 @@ func RollDie(sides int) int {
 func RollDice(count, sides int) ([]int, int) {
 	if count < 1 {
 		count = 1
+	}
+	if count > MaxDice {
+		count = MaxDice
+	}
+	if sides > MaxDieSides {
+		sides = MaxDieSides
 	}
 	rolls := make([]int, count)
 	total := 0
@@ -81,6 +93,12 @@ func ParseDice(dice string) (count int, sides int) {
 	if sides < 1 {
 		sides = 6
 	}
+	if count > MaxDice {
+		count = MaxDice
+	}
+	if sides > MaxDieSides {
+		sides = MaxDieSides
+	}
 	return count, sides
 }
 
@@ -95,11 +113,23 @@ func RollDamage(dice string, critical bool) int {
 	}
 
 	_, total := RollDice(count, sides)
-	return total
+	return total + FlatBonus(dice)
 }
 
-// RollDamageGWF rolls damage with Great Weapon Fighting style.
-// Rerolls 1s and 2s once (must use new roll, per PHB).
+// FlatBonus is the fixed amount in a dice string such as "3d4+3" (0 when there is none).
+func FlatBonus(dice string) int {
+	idx := strings.Index(dice, "+")
+	if idx < 0 {
+		return 0
+	}
+	n, err := strconv.Atoi(strings.TrimSpace(dice[idx+1:]))
+	if err != nil {
+		return 0
+	}
+	return n
+}
+
+// RollDamageGWF rolls damage with the Great Weapon Fighting style (2024): a 1 or a 2 on a damage die counts as a 3.
 func RollDamageGWF(dice string, critical bool) int {
 	count, sides := ParseDice(dice)
 
@@ -110,9 +140,9 @@ func RollDamageGWF(dice string, critical bool) int {
 	total := 0
 	for i := 0; i < count; i++ {
 		roll := RollDie(sides)
-		// GWF: reroll 1s and 2s once
-		if roll == 1 || roll == 2 {
-			roll = RollDie(sides) // Must use new roll
+		// 2024 Great Weapon Fighting: a 1 or a 2 on a damage die counts as a 3
+		if roll < 3 {
+			roll = 3
 		}
 		total += roll
 	}
@@ -124,11 +154,6 @@ func RollDamageGWF(dice string, critical bool) int {
 func RollDamageMax(dice string) int {
 	count, sides := ParseDice(dice)
 	return count * sides // Max roll = count * sides
-}
-
-// RollD20 is a convenience function for rolling a single d20.
-func RollD20() int {
-	return RollDie(20)
 }
 
 // Modifier calculates the ability modifier from an ability score.

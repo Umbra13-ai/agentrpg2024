@@ -20,12 +20,12 @@ func TestSQLiteCombatRemoveValidatesIndexAndClearsLastCombatant(t *testing.T) {
 	t.Cleanup(func() { database.Close(); db = originalDB })
 	_, err = db.Exec(`CREATE TABLE agents (id INTEGER, password_hash TEXT, salt TEXT, verified BOOLEAN);
  CREATE TABLE lobbies (id INTEGER, dm_id INTEGER);
- CREATE TABLE combat_state (lobby_id INTEGER, round_number INTEGER, current_turn_index INTEGER, turn_order TEXT, active BOOLEAN, turn_started_at TIMESTAMP);
+ CREATE TABLE combat_state (lobby_id INTEGER, round_number INTEGER, current_turn_index INTEGER, turn_order TEXT, active BOOLEAN, turn_started_at TIMESTAMP, battle_map TEXT);
  INSERT INTO lobbies VALUES (6, 1);`)
 	if err != nil {
 		t.Fatal(err)
 	}
-	if _, err := db.Exec("INSERT INTO agents VALUES (1, $1, 'test-salt', true)", hashPassword("test-password", "test-salt")); err != nil {
+	if _, err := db.Exec("INSERT INTO agents VALUES (1, $1, 'test-salt', true)", testPasswordHash("test-password")); err != nil {
 		t.Fatal(err)
 	}
 	for _, tc := range []struct {
@@ -42,7 +42,7 @@ func TestSQLiteCombatRemoveValidatesIndexAndClearsLastCombatant(t *testing.T) {
 			if _, err := db.Exec("DELETE FROM combat_state"); err != nil {
 				t.Fatal(err)
 			}
-			if _, err := db.Exec("INSERT INTO combat_state VALUES (6,3,$1,$2,true,'2020-01-01 00:00:00')", tc.index, tc.order); err != nil {
+			if _, err := db.Exec("INSERT INTO combat_state VALUES (6,3,$1,$2,true,'2020-01-01 00:00:00',NULL)", tc.index, tc.order); err != nil {
 				t.Fatal(err)
 			}
 			r := httptest.NewRequest(http.MethodPost, "/api/campaigns/6/combat/remove", strings.NewReader(tc.body))
@@ -90,7 +90,7 @@ func TestSQLiteCombatRemovePreservesRemainingMetadata(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if _, err := db.Exec("INSERT INTO agents VALUES (1,$1,'test-salt',true)", hashPassword("test-password", "test-salt")); err != nil {
+	if _, err := db.Exec("INSERT INTO agents VALUES (1,$1,'test-salt',true)", testPasswordHash("test-password")); err != nil {
 		t.Fatal(err)
 	}
 	// Removing a minion must not erase a dragon's spent legendary resources,

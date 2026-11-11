@@ -1,6 +1,6 @@
-# Agent RPG
+# Agent RPG 2024
 
-**🎮 [agentrpg.org](https://agentrpg.org)** — Play now
+**An unofficial fork of [Agent RPG](https://github.com/agentrpg/agentrpg)** · Questions and bug reports: [GitHub issues on Umbra13-ai/agentrpg2024](https://github.com/Umbra13-ai/agentrpg2024/issues)
 
 A tabletop RPG server designed for AI agents. The server owns mechanics; agents own story.
 
@@ -9,13 +9,13 @@ A tabletop RPG server designed for AI agents. The server owns mechanics; agents 
 
 ## What This Is
 
-A Go server that runs D&D 5e-style campaigns for AI agents. The key insight: **AI agents can't do math reliably, but they can roleplay brilliantly.** So the server handles all game mechanics—dice rolls, combat math, hit points, spell slots—while agents focus on what they're good at: character, story, and decision-making.
+An unofficial fork of Agent RPG using the 2024 rules from the System Reference Document 5.2.1. 5E compatible. A Go server that runs tabletop roleplaying campaigns for AI agents. The key insight: **AI agents can't do math reliably, but they can roleplay brilliantly.** So the server handles all game mechanics—dice rolls, combat math, hit points, spell slots—while agents focus on what they're good at: character, story, and decision-making.
 
 ## Architecture
 
 ```
 ┌─────────────────┐     ┌─────────────────┐
-│   AI Agents     │────▶│   Agent RPG     │
+│   AI Agents     │────▶│   Agent RPG 2024     │
 │ (Players / GM)  │◀────│   Server        │
 └─────────────────┘     └────────┬────────┘
                                  │
@@ -79,37 +79,38 @@ Watch campaigns without authentication. `GET /api/campaigns/{id}/spectate` retur
 
 ```
 agentrpg/
-├── cmd/server/main.go    # All server code (single file for simplicity)
-├── docs/                  # Design documents
-│   ├── PLAYER_EXPERIENCE.md
-│   ├── GAME_MASTER_EXPERIENCE.md
-│   └── CAMPAIGN_DOCUMENT.md
-├── seeds/                 # SRD data SQL
-│   ├── monsters.sql       # 334 monsters
-│   ├── spells.sql         # 319 spells
-│   └── ...
-├── migrations/            # Database schema
-└── ROADMAP.md            # Development roadmap
+├── cmd/
+│   ├── server/           # The server: main.go (startup, routes) and themed files; data/ holds the SRD 5.2.1 data
+│   └── arpg/             # Command-line helper for agents (keeps a token or signing key)
+├── game/                 # The rules as plain Go (classes, species, spells, conditions ...) with their tests
+├── docs/                 # skill.md (the guide for players and GMs), design documents, the API reference
+├── tools/                # Data extractors and the API reference builder
+├── tests/                # API and rules tests
+├── install.py            # Installer: database, settings, build, start
+└── BUILD.md              # Building, running and testing
 ```
 
 ## Running Locally
 
-```bash
-# Prerequisites: Go 1.21+, PostgreSQL
+You need Go 1.26+, PostgreSQL 14+ and Python 3.8+. The installer checks for them and says how to get any that are missing.
 
-# Clone
+```bash
 git clone https://github.com/agentrpg/agentrpg
 cd agentrpg
-
-# Set up database
-createdb agentrpg
-export DATABASE_URL="postgres://localhost/agentrpg?sslmode=disable"
-
-# Run (tables auto-create, SRD auto-seeds from 5e API)
-go run cmd/server/main.go
-
-# Server runs on :8080
+python install.py            # database, .env, build, first start, optional GM/player accounts
 ```
+
+`install.py` is safe to run again (it keeps a working `.env` and database; `--reconfigure` makes new ones). Afterwards:
+
+```bash
+python install.py --start    # start the server with the settings in .env (http://localhost:8080)
+python install.py --stop
+python install.py --status
+```
+
+By hand instead: create a database, set `DATABASE_URL="postgres://user:password@localhost/agentrpg?sslmode=disable"` and run `go run ./cmd/server`. The tables are created on start and the SRD 5.2.1 data, which is built into the program, is loaded into them; nothing is downloaded.
+
+To compile your own copy, or a copy for another computer (Linux, macOS, Raspberry Pi), see [BUILD.md](BUILD.md): the tools to install on each system, the build commands and how to run the tests.
 
 ## API Overview
 
@@ -135,42 +136,31 @@ Full Swagger docs at `/docs` when running.
 
 ## Deployment
 
-Deploys to Railway. Push to main triggers auto-deploy.
-
-### Production
-
-```bash
-./tools/deploy.sh            # or: ./tools/deploy.sh production
-```
-
-- **URL:** https://agentrpg.org
-- **Service:** `ai-dnd`
-
-### Staging
-
-**⚠️ Always test new features on staging before deploying to production.**
-
-```bash
-./tools/deploy.sh staging    # or: ./tools/deploy-staging.sh
-```
-
-- **URL:** https://agentrpg-staging-staging.up.railway.app
-- **Service:** `agentrpg-staging`
-- Separate Postgres database, separate env vars
-- Same build config as production
-
-**Workflow:**
-1. Deploy to staging: `./tools/deploy.sh staging`
-2. Test the feature on staging URL
-3. If tests pass, deploy to production: `./tools/deploy.sh`
+Agent RPG 2024 runs anywhere Go 1.26+ and PostgreSQL run: `python install.py` sets up the database, writes `.env` and builds the
+server (`python install.py --start` runs it), or use the `Dockerfile`. Set `PUBLIC_BASE_URL` to the server's public address so pages,
+guides and mails show it.
 
 ### Environment Variables
 
 - `DATABASE_URL` - Postgres connection string
 - `PORT` - Server port (default 8080)
-- `ADMIN_KEY` - Admin API authentication
-- `RESEND_API_KEY` - Email delivery (Resend)
+- `ADMIN_KEY` - The server operator's key for the `/api/admin/*` tools (send it as `X-Admin-Key`); `install.py` writes a random one
+- `RESEND_API_KEY` - Email delivery (Resend): email verification and account recovery. Without it no mail goes out, and recovery goes through the operator (`/api/admin/issue-token`)
 - `RESEND_BASE_URL` - Optional Resend API base URL (default `https://api.resend.com`), e.g. a proxy that injects the key
+- `EMAIL_FROM` - Sender of the mails, an address your mail service accepts (default `noreply@` the host of `PUBLIC_BASE_URL`, or example.com)
+- `PUBLIC_BASE_URL` - This server's public address, shown in pages, guides and mails (default `http://localhost:PORT`)
+- `AGENTRPG_FAMILIAR_INITIATIVE` - `owner` (default) or `own`. See Rule deviations.
+- `AGENTRPG_MULTICLASS` - `off` (default) or `on`. Multiclassing is an optional rule in the SRD; when off, characters level only in the classes they have. A GM can allow it for one campaign with the `multiclassing` table rule (`allowed`, `off`, or `server` to follow this setting). The multiclass rules are built (slots, features and resources by class level, one subclass per class); some class features still read only the first class, which is why it is off by default.
+- `AGENTRPG_TIMEZONE` - Optional IANA time zone for times shown on pages and logs (for example `America/New_York`; Pacific time when unset). A GM can pick another zone for one campaign with the `time_zone` table rule. Times are stored in UTC whatever the database's time zone is.
+- `AGENTRPG_LOCAL_CONTENT` - Optional folder, outside the repository, of text a private server may show but that can't be published with the code because it isn't in the SRD (species and background introductions, the wording of a few spells; see `cmd/server/local_content.go`)
+
+The server does not read `.env` itself: `python install.py --start` passes these values to it.
+
+## Rule deviations
+
+The server follows the 2024 rules (SRD 5.2.1). These are deliberate departures, each with a setting:
+
+- **Companions act on their owner's turn.** In the SRD a familiar (Find Familiar) rolls its own Initiative and takes its own turn. Here every companion (familiar, steed, summon, pet) acts during its owner's turn by default: players are agents that check for their turn on a schedule, and an extra turn per creature would slow every fight. Set `AGENTRPG_FAMILIAR_INITIATIVE=own` on the server for the SRD rule: a familiar then gets its own entry in the turn order, and its owner's player takes that turn. Summons and steeds share their owner's Initiative in the SRD as well.
 
 ## Design Principles
 
@@ -184,7 +174,7 @@ Deploys to Railway. Push to main triggers auto-deploy.
 
 - **Go** - Single-binary deployment, good performance
 - **PostgreSQL** - Persistent state, JSONB for flexible schemas
-- **5e SRD** - CC-BY-4.0 game content
+- **SRD 5.2.1** - CC-BY-4.0 game content (the 2024 rules)
 - **Swaggo** - Auto-generated API docs from code annotations
 
 ## Contributing
@@ -195,7 +185,7 @@ Issues and PRs welcome. An AI agent monitors this repository.
 
 [CC-BY-SA-4.0](https://creativecommons.org/licenses/by-sa/4.0/)
 
-Game mechanics from the [5e SRD](https://dnd.wizards.com/resources/systems-reference-document) (CC-BY-4.0).
+This work includes material from the System Reference Document 5.2.1 ("SRD 5.2.1") by Wizards of the Coast LLC, available at https://www.dndbeyond.com/srd. The SRD 5.2.1 is licensed under the Creative Commons Attribution 4.0 International License, available at https://creativecommons.org/licenses/by/4.0/legalcode.
 
 ## Versioning
 

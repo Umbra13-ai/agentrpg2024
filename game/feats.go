@@ -1,8 +1,8 @@
-// Package game provides core D&D 5e game mechanics.
-// feats.go - feat definitions and mechanics (v0.9.73)
+// Package game provides the core game rules (SRD 5.2.1).
+// feats.go - feat definitions and mechanics
 package game
 
-import "fmt"
+
 
 // Feat represents a character feat from the SRD/PHB
 type Feat struct {
@@ -16,6 +16,32 @@ type Feat struct {
 
 // AvailableFeats contains all available feats - SRD only has Grappler, but we include common ones for gameplay
 var AvailableFeats = map[string]Feat{
+	"skilled": {
+		Name:        "Skilled",
+		Description: "Origin feat (2024). You gain proficiency in any combination of three skills or tools of your choice. Repeatable.",
+		Benefits: []string{
+			"You gain proficiency in any combination of three skills or tools of your choice",
+		},
+		Features: map[string]string{
+			"origin_feat":   "true",
+			"proficiencies": "3",
+		},
+	},
+	"magic_initiate": {
+		Name:        "Magic Initiate",
+		Description: "Origin feat (2024). You learn a little magic from the Cleric, Druid or Wizard spell list. Repeatable, but you must choose a different list each time.",
+		Benefits: []string{
+			"Two Cantrips: you learn two cantrips of your choice from the Cleric, Druid or Wizard spell list",
+			"Spellcasting ability: Intelligence, Wisdom or Charisma (choose when you select the feat)",
+			"Level 1 Spell: choose a level 1 spell from the same list. You always have it prepared, can cast it once without a spell slot per Long Rest, and can also cast it with spell slots",
+			"Spell Change: whenever you gain a level, you can replace one of the spells you chose for this feat with another of the same level from the same list",
+		},
+		Features: map[string]string{
+			"origin_feat":  "true",
+			"cantrips":     "2",
+			"level1_spell": "1",
+		},
+	},
 	"grappler": {
 		Name:         "Grappler",
 		Description:  "You've developed the skills necessary to hold your own in close-quarters grappling.",
@@ -31,15 +57,14 @@ var AvailableFeats = map[string]Feat{
 	},
 	"alert": {
 		Name:        "Alert",
-		Description: "Always on the lookout for danger, you gain the following benefits.",
+		Description: "Origin feat (2024). Always on the lookout for danger.",
 		Benefits: []string{
-			"You gain a +5 bonus to initiative",
-			"You can't be surprised while you are conscious",
-			"Other creatures don't gain advantage on attack rolls against you as a result of being unseen by you",
+			"Initiative Proficiency: when you roll Initiative, you can add your Proficiency Bonus to the roll",
+			"Initiative Swap: immediately after you roll Initiative, you can swap your Initiative with a willing ally in the same combat (neither of you can be Incapacitated)",
 		},
 		Features: map[string]string{
-			"initiative_bonus":   "5",
-			"immune_to_surprise": "true",
+			"initiative_bonus": "proficiency",
+			"initiative_swap":  "true",
 		},
 	},
 	"lucky": {
@@ -141,9 +166,9 @@ var AvailableFeats = map[string]Feat{
 	},
 	"savage_attacker": {
 		Name:        "Savage Attacker",
-		Description: "Once per turn when you roll damage for a melee weapon attack, you can reroll the weapon's damage dice and use either total.",
+		Description: "Origin feat (2024). You've trained to deal particularly damaging strikes.",
 		Benefits: []string{
-			"Once per turn when you roll damage for a melee weapon attack, you can reroll the weapon's damage dice and use either total",
+			"Once per turn when you hit a target with a weapon, you can roll the weapon's damage dice twice and use either roll against the target",
 		},
 		Features: map[string]string{
 			"reroll_melee_damage": "true",
@@ -151,16 +176,8 @@ var AvailableFeats = map[string]Feat{
 	},
 }
 
-// GetFeat returns a feat by slug, or nil if not found
-func GetFeat(slug string) *Feat {
-	if feat, ok := AvailableFeats[slug]; ok {
-		return &feat
-	}
-	return nil
-}
-
 // HasFeatFeature checks if any of the character's feats grants a specific feature
-// v0.9.13: Used for War Caster somatic component bypass, etc.
+// Used for War Caster somatic component bypass, etc.
 func HasFeatFeature(feats []string, feature string) bool {
 	for _, slug := range feats {
 		if feat, ok := AvailableFeats[slug]; ok {
@@ -172,152 +189,3 @@ func HasFeatFeature(feats []string, feature string) bool {
 	return false
 }
 
-// HasFeat checks if a specific feat slug is in the character's feat list
-func HasFeat(feats []string, slug string) bool {
-	for _, f := range feats {
-		if f == slug {
-			return true
-		}
-	}
-	return false
-}
-
-// GetFeatFeatureValue returns the value of a specific feature from a feat
-// Returns empty string if feat or feature not found
-func GetFeatFeatureValue(slug, feature string) string {
-	if feat, ok := AvailableFeats[slug]; ok {
-		if value, hasFeature := feat.Features[feature]; hasFeature {
-			return value
-		}
-	}
-	return ""
-}
-
-// AllFeats returns a list of all feat slugs
-func AllFeats() []string {
-	slugs := make([]string, 0, len(AvailableFeats))
-	for slug := range AvailableFeats {
-		slugs = append(slugs, slug)
-	}
-	return slugs
-}
-
-// FeatMeetsPrerequisite checks if a character meets the prerequisite for a feat
-// Prerequisites can be:
-// - Empty string: no prerequisite
-// - "str:13", "dex:13", etc.: minimum ability score
-// - "spellcaster": must be a spellcasting class
-func FeatMeetsPrerequisite(prereq string, abilityScores map[string]int, isSpellcaster bool) bool {
-	if prereq == "" {
-		return true
-	}
-
-	if prereq == "spellcaster" {
-		return isSpellcaster
-	}
-
-	// Parse ability:score format (e.g., "str:13")
-	if len(prereq) > 4 && prereq[3] == ':' {
-		ability := prereq[:3]
-		var required int
-		_, err := fmt.Sscanf(prereq[4:], "%d", &required)
-		if err != nil {
-			return false
-		}
-		if score, ok := abilityScores[ability]; ok {
-			return score >= required
-		}
-	}
-
-	return false
-}
-
-// GetInitiativeBonus returns the initiative bonus from feats (e.g., Alert)
-func GetInitiativeBonus(feats []string) int {
-	bonus := 0
-	for _, slug := range feats {
-		if feat, ok := AvailableFeats[slug]; ok {
-			if val, hasFeature := feat.Features["initiative_bonus"]; hasFeature {
-				var b int
-				fmt.Sscanf(val, "%d", &b)
-				bonus += b
-			}
-		}
-	}
-	return bonus
-}
-
-// GetSpeedBonus returns the speed bonus from feats (e.g., Mobile)
-func GetSpeedBonus(feats []string) int {
-	bonus := 0
-	for _, slug := range feats {
-		if feat, ok := AvailableFeats[slug]; ok {
-			if val, hasFeature := feat.Features["speed_bonus"]; hasFeature {
-				var b int
-				fmt.Sscanf(val, "%d", &b)
-				bonus += b
-			}
-		}
-	}
-	return bonus
-}
-
-// GetPassiveBonus returns the passive perception/investigation bonus from feats (e.g., Observant)
-func GetPassiveBonus(feats []string) int {
-	bonus := 0
-	for _, slug := range feats {
-		if feat, ok := AvailableFeats[slug]; ok {
-			if val, hasFeature := feat.Features["passive_bonus"]; hasFeature {
-				var b int
-				fmt.Sscanf(val, "%d", &b)
-				bonus += b
-			}
-		}
-	}
-	return bonus
-}
-
-// GetHPBonusPerLevel returns the HP bonus per level from feats (e.g., Tough)
-func GetHPBonusPerLevel(feats []string) int {
-	bonus := 0
-	for _, slug := range feats {
-		if feat, ok := AvailableFeats[slug]; ok {
-			if val, hasFeature := feat.Features["hp_bonus_per_level"]; hasFeature {
-				var b int
-				fmt.Sscanf(val, "%d", &b)
-				bonus += b
-			}
-		}
-	}
-	return bonus
-}
-
-// HasAlertFeat returns true if character has the Alert feat (for hidden attacker immunity)
-func HasAlertFeat(feats []string) bool {
-	return HasFeat(feats, "alert")
-}
-
-// HasWarCasterFeat returns true if character has War Caster (concentration advantage, somatic with hands full)
-func HasWarCasterFeat(feats []string) bool {
-	return HasFeat(feats, "war_caster")
-}
-
-// HasSentinelFeat returns true if character has Sentinel (opportunity attack stops movement, etc.)
-func HasSentinelFeat(feats []string) bool {
-	return HasFeat(feats, "sentinel")
-}
-
-// HasMobileFeat returns true if character has Mobile (no opportunity attacks from melee targets)
-func HasMobileFeat(feats []string) bool {
-	return HasFeat(feats, "mobile")
-}
-
-// HasGrapplerFeat returns true if character has Grappler (advantage on grappled targets)
-func HasGrapplerFeat(feats []string) bool {
-	return HasFeat(feats, "grappler")
-}
-
-// HasSavageAttackerFeat returns true if character has Savage Attacker (reroll melee damage)
-func HasSavageAttackerFeat(feats []string) bool {
-	return HasFeat(feats, "savage_attacker")
-}

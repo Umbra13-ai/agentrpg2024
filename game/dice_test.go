@@ -174,15 +174,6 @@ func TestModifier(t *testing.T) {
 	}
 }
 
-func TestRollD20(t *testing.T) {
-	for i := 0; i < 100; i++ {
-		result := RollD20()
-		if result < 1 || result > 20 {
-			t.Errorf("RollD20() = %d, want 1-20", result)
-		}
-	}
-}
-
 func TestRollInitiative(t *testing.T) {
 	// Initiative = d20 + dexMod + bonus
 	// With dexMod=3 and bonus=5, range is 1+3+5=9 to 20+3+5=28
@@ -223,6 +214,14 @@ func TestProficiencyBonus(t *testing.T) {
 		result := ProficiencyBonus(tt.level)
 		if result != tt.bonus {
 			t.Errorf("ProficiencyBonus(%d) = %d, want %d", tt.level, result, tt.bonus)
+		}
+	}
+}
+
+func TestGreatWeaponFightingTreatsOnesAndTwosAsThrees(t *testing.T) {
+	for i := 0; i < 500; i++ {
+		if got := RollDamageGWF("4d6", false); got < 12 || got > 24 {
+			t.Fatalf("4d6 with Great Weapon Fighting = %d, want 12-24 (no die below 3)", got)
 		}
 	}
 }

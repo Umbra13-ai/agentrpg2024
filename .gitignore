@@ -6,9 +6,27 @@
 # Build artifacts (binary, not cmd/server/ directory)
 /server
 
-# Railway
-.railway
 
 # Core dumps
 core
-core
+
+# Python caches
+__pycache__/
+*.pyc
+
+# Reference material (copyrighted books, PDFs, premade sheets) lives outside the repository.
+# These rules stop it being added by accident.
+*.pdf
+/docs/Premade Characters/
+/reference/
+/arpg.exe
+/agentrpg.exe
+/*.log
+/*.err
+/main
+/arpg
+/server
+/agentrpg
+/dist/
+/server.exe
+/.agentrpg.pid

@@ -30,14 +30,14 @@ func TestSQLiteCombatSkipPastDeadCharacters(t *testing.T) {
 			_, err = db.Exec(`CREATE TABLE agents (id INTEGER, password_hash TEXT, salt TEXT, verified BOOLEAN);
    CREATE TABLE lobbies (id INTEGER, dm_id INTEGER);
    CREATE TABLE combat_state (lobby_id INTEGER, round_number INTEGER, current_turn_index INTEGER, turn_order TEXT, active BOOLEAN, turn_started_at TIMESTAMP);
-   CREATE TABLE characters (id INTEGER, lobby_id INTEGER, is_dead BOOLEAN, race TEXT, action_used BOOLEAN, bonus_action_used BOOLEAN, movement_remaining INTEGER, reaction_used BOOLEAN, multiattack_defense_hits TEXT);
+   CREATE TABLE characters (id INTEGER, lobby_id INTEGER, is_dead BOOLEAN, species TEXT, action_used BOOLEAN, bonus_action_used BOOLEAN, weapon_interaction_used BOOLEAN, movement_remaining INTEGER, reaction_used BOOLEAN, multiattack_defense_hits TEXT);
    CREATE TABLE actions (lobby_id INTEGER, character_id INTEGER, action_type TEXT, description TEXT, result TEXT);
    INSERT INTO lobbies VALUES (6, 1);
-   INSERT INTO characters (id, lobby_id, is_dead, race, action_used) VALUES (32,6,false,'human',true),(33,6,false,'human',true),(34,6,true,'human',true),(35,6,true,'human',true);`)
+   INSERT INTO characters (id, lobby_id, is_dead, species, action_used) VALUES (32,6,false,'human',true),(33,6,false,'human',true),(34,6,true,'human',true),(35,6,true,'human',true);`)
 			if err != nil {
 				t.Fatal(err)
 			}
-			if _, err := db.Exec("INSERT INTO agents VALUES (1, $1, 'test-salt', true)", hashPassword("test-password", "test-salt")); err != nil {
+			if _, err := db.Exec("INSERT INTO agents VALUES (1, $1, 'test-salt', true)", testPasswordHash("test-password")); err != nil {
 				t.Fatal(err)
 			}
 			started := time.Now().Add(-5 * time.Hour).UTC().Truncate(time.Second)

@@ -1,0 +1,174 @@
+{
+ "rules": [
+  {
+   "title": "",
+   "text": "The Armor table lists the game’s main armor. The table includes the cost and weight of armor, as well as the following details:"
+  },
+  {
+   "title": "Category",
+   "text": "Every type of armor falls into a category: Light, Medium, or Heavy. The category determines how long it takes to don or doff the armor (as shown in the table).",
+   "run_in": true
+  },
+  {
+   "title": "Armor Class (AC)",
+   "text": "The table’s Armor Class column tells you what your base AC is when you wear a type of armor. For example, if you wear Leather Armor, your base AC is 11 plus your Dexterity modifier, whereas your AC is 16 in Chain Mail.",
+   "run_in": true
+  },
+  {
+   "title": "Strength",
+   "text": "If the table shows a Strength score in the Strength column for an armor type, that armor reduces the wearer’s speed by 10 feet unless the wearer has a Strength score equal to or higher than the listed score.",
+   "run_in": true
+  },
+  {
+   "title": "Stealth",
+   "text": "If the table shows “Disadvantage” in the Stealth column for an armor type, the wearer has Disadvantage on Dexterity (Stealth) checks.",
+   "run_in": true
+  },
+  {
+   "title": "Armor Training",
+   "text": "Anyone can don armor or hold a Shield, but only those with training can use them effectively, as explained below. A character’s class and other features determine the character’s armor training. A monster has training with any armor in its stat block."
+  },
+  {
+   "title": "Light, Medium, or Heavy Armor",
+   "text": "If you wear Light, Medium, or Heavy armor and lack training with it, you have Disadvantage on any D20 Test that involves Strength or Dexterity, and you can’t cast spells."
+  },
+  {
+   "title": "Shield",
+   "text": "You gain the Armor Class benefit of a Shield only if you have training with it."
+  },
+  {
+   "title": "One at a Time",
+   "text": "A creature can wear only one suit of armor at a time and wield only one Shield at a time."
+  }
+ ],
+ "groups": [
+  {
+   "name": "Light Armor",
+   "note": "1 Minute to Don or Doff",
+   "armor": [
+    {
+     "name": "Padded Armor",
+     "ac": "11 + Dex modifier",
+     "strength": "—",
+     "stealth": "Disadvantage",
+     "weight": "8 lb.",
+     "cost": "5 GP"
+    },
+    {
+     "name": "Leather Armor",
+     "ac": "11 + Dex modifier",
+     "strength": "—",
+     "stealth": "—",
+     "weight": "10 lb.",
+     "cost": "10 GP"
+    },
+    {
+     "name": "Studded Leather Armor",
+     "ac": "12 + Dex modifier",
+     "strength": "—",
+     "stealth": "—",
+     "weight": "13 lb.",
+     "cost": "45 GP"
+    }
+   ]
+  },
+  {
+   "name": "Medium Armor",
+   "note": "5 Minutes to Don and 1 Minute to Doff",
+   "armor": [
+    {
+     "name": "Hide Armor",
+     "ac": "12 + Dex modifier (max 2)",
+     "strength": "—",
+     "stealth": "—",
+     "weight": "12 lb.",
+     "cost": "10 GP"
+    },
+    {
+     "name": "Chain Shirt",
+     "ac": "13 + Dex modifier (max 2)",
+     "strength": "—",
+     "stealth": "—",
+     "weight": "20 lb.",
+     "cost": "50 GP"
+    },
+    {
+     "name": "Scale Mail",
+     "ac": "14 + Dex modifier (max 2)",
+     "strength": "—",
+     "stealth": "Disadvantage",
+     "weight": "45 lb.",
+     "cost": "50 GP"
+    },
+    {
+     "name": "Breastplate",
+     "ac": "14 + Dex modifier (max 2)",
+     "strength": "—",
+     "stealth": "—",
+     "weight": "20 lb.",
+     "cost": "400 GP"
+    },
+    {
+     "name": "Half Plate Armor",
+     "ac": "15 + Dex modifier (max 2)",
+     "strength": "—",
+     "stealth": "Disadvantage",
+     "weight": "40 lb.",
+     "cost": "750 GP"
+    }
+   ]
+  },
+  {
+   "name": "Heavy Armor",
+   "note": "10 Minutes to Don and 5 Minutes to Doff",
+   "armor": [
+    {
+     "name": "Ring Mail",
+     "ac": "14",
+     "strength": "—",
+     "stealth": "Disadvantage",
+     "weight": "40 lb.",
+     "cost": "30 GP"
+    },
+    {
+     "name": "Chain Mail",
+     "ac": "16",
+     "strength": "Str 13",
+     "stealth": "Disadvantage",
+     "weight": "55 lb.",
+     "cost": "75 GP"
+    },
+    {
+     "name": "Splint Armor",
+     "ac": "17",
+     "strength": "Str 15",
+     "stealth": "Disadvantage",
+     "weight": "60 lb.",
+     "cost": "200 GP"
+    },
+    {
+     "name": "Plate Armor",
+     "ac": "18",
+     "strength": "Str 15",
+     "stealth": "Disadvantage",
+     "weight": "65 lb.",
+     "cost": "1,500 GP"
+    }
+   ]
+  },
+  {
+   "name": "Shield",
+   "note": "Utilize Action to Don or Doff",
+   "armor": [
+    {
+     "name": "Shield",
+     "ac": "+2",
+     "strength": "—",
+     "stealth": "—",
+     "weight": "6 lb.",
+     "cost": "10 GP"
+    }
+   ]
+  }
+ ]
+}

@@ -1,13 +1,13 @@
 #!/bin/bash
 # Campaign Test Runner
-# Tests the full campaign flow against the live agentrpg.org API
+# Tests the full campaign flow against a running server (default: this computer)
 # 
 # Usage: ./tools/test_campaign.sh [base_url]
-# Default base_url: https://agentrpg.org
+# Default base_url: http://localhost:8080
 
 set -e
 
-BASE_URL="${1:-https://agentrpg.org}"
+BASE_URL="${1:-http://localhost:8080}"
 TEST_PREFIX="test_$(date +%s)_"
 
 # Colors for output
@@ -62,7 +62,7 @@ check_success() {
 }
 
 echo "=============================================="
-echo "Agent RPG Campaign Test Suite"
+echo "Agent RPG 2024 Campaign Test Suite"
 echo "Base URL: $BASE_URL"
 echo "Test Prefix: $TEST_PREFIX"
 echo "=============================================="

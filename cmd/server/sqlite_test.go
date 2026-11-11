@@ -4,14 +4,13 @@ import (
 	"database/sql"
 	"errors"
 	"fmt"
+	"github.com/agentrpg/agentrpg/game"
+	_ "github.com/mattn/go-sqlite3"
 	"net/http"
 	"net/http/httptest"
 	"strings"
 	"testing"
 	"time"
-
-	"github.com/agentrpg/agentrpg/game"
-	_ "github.com/mattn/go-sqlite3"
 )
 
 func TestSQLiteDeadCharacterCannotLongRest(t *testing.T) {
@@ -116,7 +115,7 @@ func TestSQLiteStabilizeConsumesActionAndUpdatesOnlyDyingPatient(t *testing.T) {
 	_, err = db.Exec(`CREATE TABLE characters (
 		id INTEGER PRIMARY KEY, wis INTEGER, level INTEGER,
 		skill_proficiencies TEXT, expertise TEXT, hp INTEGER,
-		is_stable BOOLEAN DEFAULT false, is_dead BOOLEAN DEFAULT false,
+		is_stable BOOLEAN DEFAULT false, stable_rounds_left INTEGER DEFAULT 0, is_dead BOOLEAN DEFAULT false,
 		death_save_successes INTEGER, death_save_failures INTEGER
 	);
 	INSERT INTO characters (id, wis, level, skill_proficiencies, expertise, hp) VALUES (1, 30, 1, 'medicine', '', 9);
@@ -135,8 +134,9 @@ func TestSQLiteStabilizeConsumesActionAndUpdatesOnlyDyingPatient(t *testing.T) {
 		Scan(&stable, &hp, &successes, &failures); err != nil {
 		t.Fatal(err)
 	}
-	if !stable || hp != 0 || successes != 2 || failures != 1 {
-		t.Fatalf("first aid must stabilize without healing or clearing saves: stable=%v hp=%d saves=%d/%d", stable, hp, successes, failures)
+	// SRD 5.2.1: "The number of both is reset to zero when you regain any Hit Points or become Stable" (F210)
+	if !stable || hp != 0 || successes != 0 || failures != 0 {
+		t.Fatalf("first aid must stabilize without healing and reset both tallies: stable=%v hp=%d saves=%d/%d", stable, hp, successes, failures)
 	}
 	if _, err := db.Exec(`UPDATE characters SET is_stable = false, hp = 5, death_save_successes = 0 WHERE id = 2`); err != nil {
 		t.Fatal(err)
@@ -285,8 +285,11 @@ func TestSQLiteIncapacitationAndMovement(t *testing.T) {
 	if !isIncapacitated(2) {
 		t.Fatal("expected stunned character to be incapacitated")
 	}
-	if canMove(2) {
-		t.Fatal("expected stunned character to be unable to move")
+	if !canMove(2) {
+		t.Fatal("2024: a stunned character keeps its Speed")
+	}
+	if canMove(3) {
+		t.Fatal("expected paralyzed character to be unable to move")
 	}
 	if !autoFailsSave(2, "dex") {
 		t.Fatal("expected stunned character to auto-fail dex save")
@@ -296,8 +299,8 @@ func TestSQLiteIncapacitationAndMovement(t *testing.T) {
 		t.Fatal("expected paralyzed target to be auto-crit eligible")
 	}
 
-	if canMove(4) {
-		t.Fatal("expected exhaustion level 5 to prevent movement")
+	if !canMove(4) {
+		t.Fatal("2024: exhaustion level 5 only reduces Speed by 25 feet")
 	}
 }
 
@@ -312,8 +315,8 @@ func TestSQLiteSaveDisadvantageAndNames(t *testing.T) {
 	if getSaveDisadvantage(5, "wis") {
 		t.Fatal("did not expect restrained character to have wis save disadvantage at exhaustion 2")
 	}
-	if !getSaveDisadvantage(6, "wis") {
-		t.Fatal("expected exhaustion level 3 to impose save disadvantage")
+	if getSaveDisadvantage(6, "wis") {
+		t.Fatal("2024: Exhaustion is a -2 per level penalty, not Disadvantage")
 	}
 
 	if got := getCharacterName(5); got != "Eris" {
@@ -666,8 +669,8 @@ func TestProficiencyBonus(t *testing.T) {
 	}
 }
 
-// setupSQLiteTestDBWithRace creates a test DB with race column for racial feature tests
-func setupSQLiteTestDBWithRace(t *testing.T) *sql.DB {
+// setupSQLiteTestDBWithSpecies creates a test DB with species column for species trait tests
+func setupSQLiteTestDBWithSpecies(t *testing.T) *sql.DB {
 	t.Helper()
 
 	originalDB := db
@@ -680,7 +683,7 @@ func setupSQLiteTestDBWithRace(t *testing.T) *sql.DB {
 CREATE TABLE characters (
 	id INTEGER PRIMARY KEY,
 	name TEXT,
-	race TEXT,
+	species TEXT,
 	conditions TEXT,
 	exhaustion_level INTEGER DEFAULT 0,
 	lobby_id INTEGER DEFAULT 0
@@ -702,29 +705,29 @@ CREATE TABLE campaigns (
 	return testDB
 }
 
-func seedCharacterWithRace(t *testing.T, testDB *sql.DB, id int, name, race, conditionsJSON string, exhaustion int) {
+func seedCharacterWithSpecies(t *testing.T, testDB *sql.DB, id int, name, species, conditionsJSON string, exhaustion int) {
 	t.Helper()
 	_, err := testDB.Exec(
-		`INSERT INTO characters (id, name, race, conditions, exhaustion_level) VALUES (?, ?, ?, ?, ?)`,
-		id, name, race, conditionsJSON, exhaustion,
+		`INSERT INTO characters (id, name, species, conditions, exhaustion_level) VALUES (?, ?, ?, ?, ?)`,
+		id, name, species, conditionsJSON, exhaustion,
 	)
 	if err != nil {
 		t.Fatalf("insert character: %v", err)
 	}
 }
 
-// TestSQLiteRaceDetection tests race detection helpers for racial features
-func TestSQLiteRaceDetection(t *testing.T) {
-	testDB := setupSQLiteTestDBWithRace(t)
-	seedCharacterWithRace(t, testDB, 1, "Bilbo", "Halfling", `[]`, 0)
-	seedCharacterWithRace(t, testDB, 2, "Frodo", "Lightfoot Halfling", `[]`, 0)
-	seedCharacterWithRace(t, testDB, 3, "Gimli", "Dwarf", `[]`, 0)
-	seedCharacterWithRace(t, testDB, 4, "Durkon", "Mountain Dwarf", `[]`, 0)
-	seedCharacterWithRace(t, testDB, 5, "Gromm", "Half-Orc", `[]`, 0)
-	seedCharacterWithRace(t, testDB, 6, "Gnimble", "Forest Gnome", `[]`, 0)
-	seedCharacterWithRace(t, testDB, 7, "Legolas", "Elf", `[]`, 0)
-	seedCharacterWithRace(t, testDB, 8, "Mordai", "Tiefling", `[]`, 0)
-	seedCharacterWithRace(t, testDB, 9, "Human", "Human", `[]`, 0)
+// TestSQLiteSpeciesDetection tests species detection helpers for species traits
+func TestSQLiteSpeciesDetection(t *testing.T) {
+	testDB := setupSQLiteTestDBWithSpecies(t)
+	seedCharacterWithSpecies(t, testDB, 1, "Bilbo", "Halfling", `[]`, 0)
+	seedCharacterWithSpecies(t, testDB, 2, "Frodo", "Lightfoot Halfling", `[]`, 0)
+	seedCharacterWithSpecies(t, testDB, 3, "Gimli", "Dwarf", `[]`, 0)
+	seedCharacterWithSpecies(t, testDB, 4, "Durkon", "Mountain Dwarf", `[]`, 0)
+	seedCharacterWithSpecies(t, testDB, 5, "Gromm", "Orc", `[]`, 0)
+	seedCharacterWithSpecies(t, testDB, 6, "Gnimble", "Forest Gnome", `[]`, 0)
+	seedCharacterWithSpecies(t, testDB, 7, "Legolas", "Elf", `[]`, 0)
+	seedCharacterWithSpecies(t, testDB, 8, "Mordai", "Tiefling", `[]`, 0)
+	seedCharacterWithSpecies(t, testDB, 9, "Human", "Human", `[]`, 0)
 
 	// Test Halfling detection
 	if !isHalfling(1) {
@@ -745,9 +748,9 @@ func TestSQLiteRaceDetection(t *testing.T) {
 		t.Error("expected Durkon (Mountain Dwarf) to be detected as dwarf")
 	}
 
-	// Test Half-Orc detection
-	if !isHalfOrc(5) {
-		t.Error("expected Gromm (Half-Orc) to be detected as half-orc")
+	// Test Orc detection
+	if !isOrc(5) {
+		t.Error("expected Gromm (Orc) to be detected as an orc")
 	}
 
 	// Test Gnome detection
@@ -768,11 +771,14 @@ func TestSQLiteRaceDetection(t *testing.T) {
 
 // TestSQLiteDamageResistance tests damage resistance from conditions
 func TestSQLiteDamageResistance(t *testing.T) {
-	testDB := setupSQLiteTestDBWithRace(t)
-	seedCharacterWithRace(t, testDB, 1, "Stony", "Human", `["petrified"]`, 0)
-	seedCharacterWithRace(t, testDB, 2, "Normal", "Human", `[]`, 0)
-	seedCharacterWithRace(t, testDB, 3, "Rocky", "Dwarf", `[]`, 0)    // Dwarven Resilience: poison resistance
-	seedCharacterWithRace(t, testDB, 4, "Fiery", "Tiefling", `[]`, 0) // Hellish Resistance: fire resistance
+	testDB := setupSQLiteTestDBWithSpecies(t)
+	seedCharacterWithSpecies(t, testDB, 1, "Stony", "Human", `["petrified"]`, 0)
+	seedCharacterWithSpecies(t, testDB, 2, "Normal", "Human", `[]`, 0)
+	seedCharacterWithSpecies(t, testDB, 3, "Rocky", "Dwarf", `[]`, 0)    // Dwarven Resilience: poison resistance
+	seedCharacterWithSpecies(t, testDB, 4, "Fiery", "Tiefling", `[]`, 0) // Infernal legacy: fire resistance
+	testDB.Exec(`ALTER TABLE characters ADD COLUMN origin TEXT`)
+	testDB.Exec(`UPDATE characters SET origin = ? WHERE id = 3`, `{"species":{"key":"dwarf","resistances":["poison"]}}`)
+	testDB.Exec(`UPDATE characters SET origin = ? WHERE id = 4`, `{"species":{"key":"tiefling","resistances":["fire"]}}`)
 
 	// Test petrified resistance (halves ALL damage)
 	result := applyDamageResistance(1, 20, "fire")
@@ -808,11 +814,11 @@ func TestSQLiteDamageResistance(t *testing.T) {
 	}
 }
 
-// TestSQLiteHalflingBrave tests the Halfling Brave racial feature (PHB p28)
+// TestSQLiteHalflingBrave tests the Halfling Brave species trait
 func TestSQLiteHalflingBrave(t *testing.T) {
-	testDB := setupSQLiteTestDBWithRace(t)
-	seedCharacterWithRace(t, testDB, 1, "Merry", "Halfling", `[]`, 0)
-	seedCharacterWithRace(t, testDB, 2, "Aragorn", "Human", `[]`, 0)
+	testDB := setupSQLiteTestDBWithSpecies(t)
+	seedCharacterWithSpecies(t, testDB, 1, "Merry", "Halfling", `[]`, 0)
+	seedCharacterWithSpecies(t, testDB, 2, "Aragorn", "Human", `[]`, 0)
 
 	// Halfling should get advantage on frighten saves
 	if !checkHalflingBrave(1, "Save against the dragon's frightening presence") {
@@ -839,19 +845,19 @@ func TestSQLiteHalflingBrave(t *testing.T) {
 	}
 }
 
-// TestSQLiteFeyAncestry tests Elf/Half-Elf Fey Ancestry (charm advantage)
+// TestSQLiteFeyAncestry tests the Elf's Fey Ancestry (charm advantage)
 func TestSQLiteFeyAncestry(t *testing.T) {
-	testDB := setupSQLiteTestDBWithRace(t)
-	seedCharacterWithRace(t, testDB, 1, "Legolas", "Elf", `[]`, 0)
-	seedCharacterWithRace(t, testDB, 2, "Elrond", "Half-Elf", `[]`, 0)
-	seedCharacterWithRace(t, testDB, 3, "Boromir", "Human", `[]`, 0)
+	testDB := setupSQLiteTestDBWithSpecies(t)
+	seedCharacterWithSpecies(t, testDB, 1, "Legolas", "Elf", `[]`, 0)
+	seedCharacterWithSpecies(t, testDB, 2, "Elrond", "High Elf", `[]`, 0)
+	seedCharacterWithSpecies(t, testDB, 3, "Boromir", "Human", `[]`, 0)
 
 	// Elves have Fey Ancestry
 	if !hasFeyAncestry(1) {
 		t.Error("expected Elf to have Fey Ancestry")
 	}
 	if !hasFeyAncestry(2) {
-		t.Error("expected Half-Elf to have Fey Ancestry")
+		t.Error("expected a High Elf to have Fey Ancestry")
 	}
 	if hasFeyAncestry(3) {
 		t.Error("did not expect Human to have Fey Ancestry")
@@ -866,50 +872,50 @@ func TestSQLiteFeyAncestry(t *testing.T) {
 	}
 }
 
-// TestSQLiteGnomeCunning tests Gnome Cunning (magic INT/WIS/CHA save advantage)
+// TestSQLiteGnomeCunning tests Gnomish Cunning (magic INT/WIS/CHA save advantage)
 func TestSQLiteGnomeCunning(t *testing.T) {
-	testDB := setupSQLiteTestDBWithRace(t)
-	seedCharacterWithRace(t, testDB, 1, "Gnimble", "Gnome", `[]`, 0)
-	seedCharacterWithRace(t, testDB, 2, "Not-Gnome", "Human", `[]`, 0)
+	testDB := setupSQLiteTestDBWithSpecies(t)
+	seedCharacterWithSpecies(t, testDB, 1, "Gnimble", "Gnome", `[]`, 0)
+	seedCharacterWithSpecies(t, testDB, 2, "Not-Gnome", "Human", `[]`, 0)
 
-	// Gnome Cunning applies to INT/WIS/CHA saves against magic (from_magic=true)
+	// Gnomish Cunning applies to INT/WIS/CHA saves against magic (from_magic=true)
 	if !checkGnomeCunning(1, "int", true) {
-		t.Error("expected Gnome Cunning to apply to INT saves vs magic")
+		t.Error("expected Gnomish Cunning to apply to INT saves vs magic")
 	}
 	if !checkGnomeCunning(1, "wis", true) {
-		t.Error("expected Gnome Cunning to apply to WIS saves vs magic")
+		t.Error("expected Gnomish Cunning to apply to WIS saves vs magic")
 	}
 	if !checkGnomeCunning(1, "cha", true) {
-		t.Error("expected Gnome Cunning to apply to CHA saves vs magic")
+		t.Error("expected Gnomish Cunning to apply to CHA saves vs magic")
 	}
 
 	// Does NOT apply to STR/DEX/CON (even against magic)
 	if checkGnomeCunning(1, "str", true) {
-		t.Error("did not expect Gnome Cunning to apply to STR saves")
+		t.Error("did not expect Gnomish Cunning to apply to STR saves")
 	}
 	if checkGnomeCunning(1, "dex", true) {
-		t.Error("did not expect Gnome Cunning to apply to DEX saves")
+		t.Error("did not expect Gnomish Cunning to apply to DEX saves")
 	}
 	if checkGnomeCunning(1, "con", true) {
-		t.Error("did not expect Gnome Cunning to apply to CON saves")
+		t.Error("did not expect Gnomish Cunning to apply to CON saves")
 	}
 
-	// Does NOT apply to non-magic saves (from_magic=false)
-	if checkGnomeCunning(1, "int", false) {
-		t.Error("did not expect Gnome Cunning for non-magic INT save")
+	// 2024: applies to INT, WIS and CHA saves even when the effect is not magical
+	if !checkGnomeCunning(1, "int", false) {
+		t.Error("expected Gnomish Cunning for a non-magic INT save (2024 rules)")
 	}
 
 	// Non-gnomes don't get it
 	if checkGnomeCunning(2, "int", true) {
-		t.Error("did not expect Human to have Gnome Cunning")
+		t.Error("did not expect Human to have Gnomish Cunning")
 	}
 }
 
 // TestSQLiteDwarvenResilience tests Dwarf poison save advantage
 func TestSQLiteDwarvenResilience(t *testing.T) {
-	testDB := setupSQLiteTestDBWithRace(t)
-	seedCharacterWithRace(t, testDB, 1, "Thorin", "Dwarf", `[]`, 0)
-	seedCharacterWithRace(t, testDB, 2, "Human", "Human", `[]`, 0)
+	testDB := setupSQLiteTestDBWithSpecies(t)
+	seedCharacterWithSpecies(t, testDB, 1, "Thorin", "Dwarf", `[]`, 0)
+	seedCharacterWithSpecies(t, testDB, 2, "Human", "Human", `[]`, 0)
 
 	// Dwarf gets advantage on poison saves
 	if !checkDwarvenResilience(1, "Save against the poison") {
@@ -944,7 +950,7 @@ func setupSQLiteTestDBWithClassAndSubclass(t *testing.T) *sql.DB {
 CREATE TABLE characters (
 	id INTEGER PRIMARY KEY,
 	name TEXT,
-	race TEXT,
+	species TEXT,
 	class TEXT,
 	subclass TEXT,
 	level INTEGER DEFAULT 1,
@@ -973,97 +979,12 @@ func seedHunterRanger(t *testing.T, testDB *sql.DB, id int, name string, level i
 		choicesJSON = fmt.Sprintf(`{"defensive_tactics":"%s"}`, defensiveTactics)
 	}
 	_, err := testDB.Exec(
-		`INSERT INTO characters (id, name, race, class, subclass, level, subclass_choices) VALUES (?, ?, ?, ?, ?, ?, ?)`,
+		`INSERT INTO characters (id, name, species, class, subclass, level, subclass_choices) VALUES (?, ?, ?, ?, ?, ?, ?)`,
 		id, name, "Human", "ranger", "hunter", level, choicesJSON,
 	)
 	if err != nil {
 		t.Fatalf("insert hunter ranger: %v", err)
 	}
-}
-
-// TestSQLiteHunterDefensiveTactics tests Hunter Ranger Defensive Tactics (v0.9.58 PHB p93)
-func TestSQLiteHunterDefensiveTactics(t *testing.T) {
-	testDB := setupSQLiteTestDBWithClassAndSubclass(t)
-	// Level 7+ Hunter with Escape the Horde
-	seedHunterRanger(t, testDB, 1, "Strider", 7, "escape_the_horde")
-	// Level 7+ Hunter with Steel Will
-	seedHunterRanger(t, testDB, 2, "Aragorn", 7, "steel_will")
-	// Level 7+ Hunter with Multiattack Defense
-	seedHunterRanger(t, testDB, 3, "Drizzt", 8, "multiattack_defense")
-	// Level 6 Hunter (too low for Defensive Tactics)
-	seedHunterRanger(t, testDB, 4, "Newbie", 6, "escape_the_horde")
-	// Non-hunter Ranger
-	_, err := testDB.Exec(`INSERT INTO characters (id, name, race, class, subclass, level) VALUES (5, 'Beast Master', 'Human', 'ranger', 'beast_master', 10)`)
-	if err != nil {
-		t.Fatalf("insert beast master: %v", err)
-	}
-	// Non-ranger
-	_, err = testDB.Exec(`INSERT INTO characters (id, name, race, class, level) VALUES (6, 'Fighter', 'Human', 'fighter', 10)`)
-	if err != nil {
-		t.Fatalf("insert fighter: %v", err)
-	}
-
-	// Test Escape the Horde
-	t.Run("EscapeTheHorde", func(t *testing.T) {
-		if !hasEscapeTheHorde(1) {
-			t.Error("expected Strider (Level 7 Hunter with escape_the_horde) to have Escape the Horde")
-		}
-		if hasEscapeTheHorde(2) {
-			t.Error("Aragorn chose steel_will, should not have Escape the Horde")
-		}
-		if hasEscapeTheHorde(4) {
-			t.Error("Newbie is level 6, should not have Escape the Horde yet")
-		}
-		if hasEscapeTheHorde(5) {
-			t.Error("Beast Master is not a Hunter, should not have Escape the Horde")
-		}
-		if hasEscapeTheHorde(6) {
-			t.Error("Fighter should not have Escape the Horde")
-		}
-	})
-
-	// Test Steel Will
-	t.Run("SteelWill", func(t *testing.T) {
-		if !hasSteelWill(2) {
-			t.Error("expected Aragorn (Level 7 Hunter with steel_will) to have Steel Will")
-		}
-		if hasSteelWill(1) {
-			t.Error("Strider chose escape_the_horde, should not have Steel Will")
-		}
-		// Check that Steel Will grants advantage on frighten saves
-		if !checkSteelWill(2, "Save against the dragon's frightening presence") {
-			t.Error("Steel Will should apply to frightening presence save")
-		}
-		if checkSteelWill(2, "Save against fireball") {
-			t.Error("Steel Will should not apply to non-frighten saves")
-		}
-	})
-
-	// Test Multiattack Defense
-	t.Run("MultiattackDefense", func(t *testing.T) {
-		if !hasMultiattackDefense(3) {
-			t.Error("expected Drizzt (Level 8 Hunter with multiattack_defense) to have Multiattack Defense")
-		}
-		if hasMultiattackDefense(1) {
-			t.Error("Strider chose escape_the_horde, should not have Multiattack Defense")
-		}
-	})
-
-	// Test isHunterRangerWithDefensiveTactics helper
-	t.Run("HunterRangerWithDefensiveTactics", func(t *testing.T) {
-		if !isHunterRangerWithDefensiveTactics(1) {
-			t.Error("Strider should be a Hunter Ranger with Defensive Tactics")
-		}
-		if isHunterRangerWithDefensiveTactics(4) {
-			t.Error("Newbie is level 6, should not qualify for Defensive Tactics")
-		}
-		if isHunterRangerWithDefensiveTactics(5) {
-			t.Error("Beast Master is not a Hunter")
-		}
-		if isHunterRangerWithDefensiveTactics(6) {
-			t.Error("Fighter is not a Ranger")
-		}
-	})
 }
 
 func TestResolveGMNarrationCampaignID(t *testing.T) {
@@ -1231,7 +1152,7 @@ func TestClearCombatInitiativeRemovesStaleTurnData(t *testing.T) {
 			turn_order TEXT,
 			active BOOLEAN,
 			turn_started_at DATETIME
-		);
+		, battle_map TEXT);
 		INSERT INTO combat_state (lobby_id, round_number, current_turn_index, turn_order, active)
 		VALUES (6, 176, 1, '[{"name":"Ink Wraith"}]', true);`); err != nil {
 		t.Fatalf("seed combat state: %v", err)

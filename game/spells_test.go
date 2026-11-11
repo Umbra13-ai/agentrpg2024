@@ -2,7 +2,6 @@ package game
 
 import (
 	"reflect"
-	"sort"
 	"testing"
 )
 
@@ -54,7 +53,7 @@ func TestMaxPreparedSpells(t *testing.T) {
 		cha      int
 		expected int
 	}{
-		// Wizard (INT-based, full level + INT mod)
+		// 2024: the Prepared Spells column of each Features table (the ability modifier no longer counts)
 		{"Wizard L1 INT 16", "wizard", 1, 16, 10, 10, 4},    // 1 + 3 = 4
 		{"Wizard L5 INT 18", "wizard", 5, 18, 10, 10, 9},    // 5 + 4 = 9
 		{"Wizard L10 INT 20", "wizard", 10, 20, 10, 10, 15}, // 10 + 5 = 15
@@ -64,21 +63,21 @@ func TestMaxPreparedSpells(t *testing.T) {
 		{"Cleric L5 WIS 18", "cleric", 5, 10, 18, 10, 9}, // 5 + 4 = 9
 
 		// Druid (WIS-based, full level + WIS mod)
-		{"Druid L3 WIS 14", "druid", 3, 10, 14, 10, 5}, // 3 + 2 = 5
+		{"Druid L3 WIS 14", "druid", 3, 10, 14, 10, 6}, // 2024: printed in the Features table, no ability modifier
 
 		// Paladin (CHA-based, half level + CHA mod)
-		{"Paladin L2 CHA 16", "paladin", 2, 10, 10, 16, 4},   // 1 + 3 = 4 (level/2 min 1)
+		{"Paladin L2 CHA 16", "paladin", 2, 10, 10, 16, 3},   // 2024 table
 		{"Paladin L4 CHA 16", "paladin", 4, 10, 10, 16, 5},   // 2 + 3 = 5
 		{"Paladin L10 CHA 18", "paladin", 10, 10, 10, 18, 9}, // 5 + 4 = 9
 
 		// Known casters return 0
-		{"Bard returns 0", "bard", 5, 10, 10, 16, 0},
-		{"Sorcerer returns 0", "sorcerer", 5, 10, 10, 16, 0},
-		{"Warlock returns 0", "warlock", 5, 10, 10, 16, 0},
-		{"Ranger returns 0", "ranger", 5, 10, 16, 10, 0},
+		{"Bard level 5 prepares 9 (2024 table)", "bard", 5, 10, 10, 16, 9},
+		{"Sorcerer level 5 prepares 9 (2024 table)", "sorcerer", 5, 10, 10, 16, 9},
+		{"Warlock level 5 prepares 6 (2024 table)", "warlock", 5, 10, 10, 16, 6},
+		{"Ranger level 5 prepares 6 (2024 table)", "ranger", 5, 10, 16, 10, 6},
 
 		// Minimum 1 prepared
-		{"Wizard L1 INT 6", "wizard", 1, 6, 10, 10, 1}, // 1 + (-2) = -1 -> 1
+		{"Wizard L1 INT 6", "wizard", 1, 6, 10, 10, 4}, // 2024: 4 at level 1 whatever the Intelligence
 
 		// Non-casters
 		{"Fighter returns 0", "fighter", 5, 10, 10, 10, 0},
@@ -222,12 +221,12 @@ func TestLandCircleSpells(t *testing.T) {
 		contains []string
 		minCount int
 	}{
-		{"Arctic L3", "arctic", 3, []string{"hold-person", "spike-growth"}, 2},
-		{"Arctic L5", "arctic", 5, []string{"hold-person", "sleet-storm"}, 4},
-		{"Forest L9", "forest", 9, []string{"barkskin", "commune-with-nature"}, 8},
+		{"Polar L3", "polar", 3, []string{"hold-person", "ray-of-frost"}, 3},
+		{"Polar L5", "polar", 5, []string{"hold-person", "sleet-storm"}, 4},
+		{"Temperate L9", "temperate", 9, []string{"misty-step", "tree-stride"}, 6},
 		{"Invalid land type", "ocean", 5, nil, 0},
-		{"Level 1 (no spells yet)", "forest", 1, nil, 0},
-		{"Case insensitive", "ARCTIC", 3, []string{"hold-person"}, 2},
+		{"Level 1 (no spells yet)", "arid", 1, nil, 0},
+		{"Case insensitive", "ARID", 3, []string{"blur"}, 3},
 	}
 
 	for _, tt := range tests {
@@ -259,42 +258,6 @@ func TestLandCircleSpells(t *testing.T) {
 					t.Errorf("LandCircleSpells(%q, %d) missing spell %q, got %v",
 						tt.landType, tt.level, spell, result)
 				}
-			}
-		})
-	}
-}
-
-func TestValidLandTypes(t *testing.T) {
-	types := ValidLandTypes()
-	expected := []string{"arctic", "coast", "desert", "forest", "grassland", "mountain", "swamp", "underdark"}
-
-	sort.Strings(types)
-	sort.Strings(expected)
-
-	if !reflect.DeepEqual(types, expected) {
-		t.Errorf("ValidLandTypes() = %v, want %v", types, expected)
-	}
-}
-
-func TestIsValidLandType(t *testing.T) {
-	tests := []struct {
-		landType string
-		expected bool
-	}{
-		{"arctic", true},
-		{"FOREST", true},
-		{"Desert", true},
-		{"ocean", false},
-		{"", false},
-		{"plains", false},
-	}
-
-	for _, tt := range tests {
-		t.Run(tt.landType, func(t *testing.T) {
-			result := IsValidLandType(tt.landType)
-			if result != tt.expected {
-				t.Errorf("IsValidLandType(%q) = %v, want %v",
-					tt.landType, result, tt.expected)
 			}
 		})
 	}

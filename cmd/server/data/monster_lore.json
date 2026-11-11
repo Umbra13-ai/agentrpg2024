@@ -1,0 +1,1322 @@
+{
+ "aboleth": {
+  "description": "A bloated, eel-like fish as long as a wagon, olive and grey, with four boneless tentacles trailing slime and three eyes stacked down its head.",
+  "lore": "Sailors and cave-dwellers tell of pale things older than the gods that rule the deep lakes. They are said to remember everything, to bend minds from far away, and to keep thralls who forget their own names."
+ },
+ "air-elemental": {
+  "description": "A rushing column of wind with no fixed shape, seen only by the dust, leaves and rain it drags along. A howl and a pressure on the ears announce it.",
+  "lore": "Wizards bind these spirits of open sky into service. Free ones are fickle and fast, and are said to carry the voices of the dead on high storms."
+ },
+ "animated-armor": {
+  "description": "A suit of plate that walks with no one inside, the visor dark and empty, joints creaking.",
+  "lore": "Crafted by wizards and temple smiths to guard vaults and tombs, it follows one order forever and does not tire."
+ },
+ "animated-flying-sword": {
+  "description": "A blade hanging in the air, point forward, humming faintly as it turns to follow movement.",
+  "lore": "An enchanted weapon set to defend a place. It hunts anyone not carrying the proper token and has no grudge beyond its command."
+ },
+ "animated-rug-of-smothering": {
+  "description": "An ordinary-looking carpet, patterned and fringed, that rises and ripples with a purpose of its own.",
+  "lore": "A cruel trap left in rich halls: it lies still until a guest steps on it, then wraps around and crushes."
+ },
+ "ankheg": {
+  "description": "A hulking insect the size of a horse, with a tan plated body, long feelers and heavy mandibles that tear soil like cloth.",
+  "lore": "Farmers fear the patches of dead grass and collapsed tunnels that show where one has fed. It strikes from below and drags prey into the earth."
+ },
+ "assassin": {
+  "description": "A quiet figure in dark, close clothing, with a hood, soft boots and a flat, patient gaze.",
+  "lore": "Hired killers are trained in poison, disguise and waiting. Cities fear them more than armies, because they strike a single person and vanish."
+ },
+ "awakened-shrub": {
+  "description": "A knee-high bush that has learned to walk on its roots and rustles when it speaks.",
+  "lore": "Someone's spell has given it thought. It tends to be curious, loyal to its maker, and slow to anger."
+ },
+ "awakened-tree": {
+  "description": "A broad old tree whose bark holds a faint face, with branches that move without wind and a voice like creaking boards.",
+  "lore": "A druid's magic woke it, and it now guards a grove. It remembers decades as moments and rarely hurries."
+ },
+ "axe-beak": {
+  "description": "A tall flightless bird with strong legs, a thick neck and a heavy, wedge-shaped beak.",
+  "lore": "Hunters and herders keep them as mounts or fear them as pests. They are short-tempered and kick or peck anything that startles them."
+ },
+ "azer-sentinel": {
+  "description": "A stocky, bronze-skinned humanoid with hair and beard that burn like torches, wearing plates of worked brass.",
+  "lore": "A craftsfolk of the Plane of Fire, honor-bound and orderly, who stand guard in forge-cities and keep oaths they have sworn."
+ },
+ "balor": {
+  "description": "A towering, horned fiend with wings like rolled smoke, wreathed in flame and dragging a lashing whip and a jagged sword.",
+  "lore": "Among the most feared demons, said to lead the hosts of the Abyss in war. Tales say its death throes are an explosion."
+ },
+ "bandit": {
+  "description": "A rough traveler in patched leather with a blade at the hip and a hungry look.",
+  "lore": "Poverty, desertion and crime drive people to the roads. They ambush the weak and avoid the well-guarded."
+ },
+ "bandit-captain": {
+  "description": "A hard-eyed, scarred leader wearing the best armor stolen from the road.",
+  "lore": "Keeps a gang together with cunning, fear and a fair share of loot, and is often a former soldier."
+ },
+ "barbed-devil": {
+  "description": "A lean, spined devil with bone barbs from forearm to knee, red eyes and a thin, patient smile.",
+  "lore": "A devil of the lower hells that serves as jailer and enforcer; it is said to enjoy the cries of victims it has caught."
+ },
+ "basilisk": {
+  "description": "A heavy, eight-legged lizard with a rough brown hide, bony crest and eyes that glow faintly.",
+  "lore": "Legends say its gaze turns living things to stone. Statues around a lair warn of its presence."
+ },
+ "bearded-devil": {
+  "description": "A wiry, scaled devil with a writhing beard of fine tendrils and a jagged glaive.",
+  "lore": "A foot soldier of the hells, ferocious and disciplined, that fights in ranks and follows commands."
+ },
+ "behir": {
+  "description": "A serpentine beast like a long blue lizard with a dozen legs, curved horns and a crackling, bright maw.",
+  "lore": "Mountain folk tell that it hunts giants and dragons and spits lightning. Its bones are prized by alchemists."
+ },
+ "berserker": {
+  "description": "A wild fighter with matted hair, painted skin and a heavy weapon, who fights without armor.",
+  "lore": "Warriors who give themselves to rage in battle. Their clans honor them and their foes dread the sight."
+ },
+ "black-dragon-wyrmling": {
+  "description": "A young dragon about the size of a large dog, with glossy black scales that look wet, a gaunt skull-like face and horns that sweep back, and a smell of rot.",
+  "lore": "A newly hatched wyrmling is already dangerous and ambitious. Black dragons lair in swamps and flooded ruins and are known for spite and acid. They hoard what they steal and despise the clean and bright."
+ },
+ "young-black-dragon": {
+  "description": "A dragon about the size of a horse, with glossy black scales that look wet, a gaunt skull-like face and horns that sweep back, and a smell of rot.",
+  "lore": "A young dragon is still building a hoard and testing its power. Black dragons lair in swamps and flooded ruins and are known for spite and acid. They hoard what they steal and despise the clean and bright."
+ },
+ "adult-black-dragon": {
+  "description": "A huge, imposing dragon with glossy black scales that look wet, a gaunt skull-like face and horns that sweep back, and a smell of rot.",
+  "lore": "An adult dragon rules a territory and has gathered a great hoard. Black dragons lair in swamps and flooded ruins and are known for spite and acid. They hoard what they steal and despise the clean and bright."
+ },
+ "ancient-black-dragon": {
+  "description": "A colossal, ancient dragon whose weathered hide shows glossy black scales that look wet, a gaunt skull-like face and horns that sweep back, and a smell of rot.",
+  "lore": "An ancient dragon has lived for centuries, with a vast hoard and long memory; kingdoms remember its name. Black dragons lair in swamps and flooded ruins and are known for spite and acid. They hoard what they steal and despise the clean and bright."
+ },
+ "black-pudding": {
+  "description": "A heaving mass of black, glistening slime that flows along floors, walls and ceilings.",
+  "lore": "A scavenger of old dungeons that dissolves flesh and metal alike. Splitting it only makes more."
+ },
+ "blink-dog": {
+  "description": "A short-furred dog with a keen, noble face and a coat of tawny and grey, that vanishes and reappears in a breath.",
+  "lore": "Fey hounds that guard against evil and play tricks on those who wrong them. Rangers say they bark in a pattern when they teleport."
+ },
+ "blue-dragon-wyrmling": {
+  "description": "A young dragon about the size of a large dog, with sand-blue scales that gleam like polished metal, a single sharp horn-crest and a rumble that crackles.",
+  "lore": "A newly hatched wyrmling is already dangerous and ambitious. Blue dragons rule deserts and coasts with vanity and cunning, and a thunderstorm often follows them."
+ },
+ "young-blue-dragon": {
+  "description": "A dragon about the size of a horse, with sand-blue scales that gleam like polished metal, a single sharp horn-crest and a rumble that crackles.",
+  "lore": "A young dragon is still building a hoard and testing its power. Blue dragons rule deserts and coasts with vanity and cunning, and a thunderstorm often follows them."
+ },
+ "adult-blue-dragon": {
+  "description": "A huge, imposing dragon with sand-blue scales that gleam like polished metal, a single sharp horn-crest and a rumble that crackles.",
+  "lore": "An adult dragon rules a territory and has gathered a great hoard. Blue dragons rule deserts and coasts with vanity and cunning, and a thunderstorm often follows them."
+ },
+ "ancient-blue-dragon": {
+  "description": "A colossal, ancient dragon whose weathered hide shows sand-blue scales that gleam like polished metal, a single sharp horn-crest and a rumble that crackles.",
+  "lore": "An ancient dragon has lived for centuries, with a vast hoard and long memory; kingdoms remember its name. Blue dragons rule deserts and coasts with vanity and cunning, and a thunderstorm often follows them."
+ },
+ "bone-devil": {
+  "description": "A skeletal devil twice a man's height, with a tail tipped by a stinger and leathery wings.",
+  "lore": "A hellish overseer that watches over lesser devils and carries out punishments with a cold bureaucratic attitude."
+ },
+ "brass-dragon-wyrmling": {
+  "description": "A young dragon about the size of a large dog, with warm brass scales, a wide face with a frill of spikes and a restless, chatty manner.",
+  "lore": "A newly hatched wyrmling is already dangerous and ambitious. Brass dragons love conversation, riddles and sunny deserts. They are friendly to those who can keep them talking."
+ },
+ "young-brass-dragon": {
+  "description": "A dragon about the size of a horse, with warm brass scales, a wide face with a frill of spikes and a restless, chatty manner.",
+  "lore": "A young dragon is still building a hoard and testing its power. Brass dragons love conversation, riddles and sunny deserts. They are friendly to those who can keep them talking."
+ },
+ "adult-brass-dragon": {
+  "description": "A huge, imposing dragon with warm brass scales, a wide face with a frill of spikes and a restless, chatty manner.",
+  "lore": "An adult dragon rules a territory and has gathered a great hoard. Brass dragons love conversation, riddles and sunny deserts. They are friendly to those who can keep them talking."
+ },
+ "ancient-brass-dragon": {
+  "description": "A colossal, ancient dragon whose weathered hide shows warm brass scales, a wide face with a frill of spikes and a restless, chatty manner.",
+  "lore": "An ancient dragon has lived for centuries, with a vast hoard and long memory; kingdoms remember its name. Brass dragons love conversation, riddles and sunny deserts. They are friendly to those who can keep them talking."
+ },
+ "bronze-dragon-wyrmling": {
+  "description": "A young dragon about the size of a large dog, with bronze scales with a green tint, ridged horns and webbed feet suited to water.",
+  "lore": "A newly hatched wyrmling is already dangerous and ambitious. Bronze dragons patrol coasts and are proud defenders. They enjoy war stories and hate tyrants."
+ },
+ "young-bronze-dragon": {
+  "description": "A dragon about the size of a horse, with bronze scales with a green tint, ridged horns and webbed feet suited to water.",
+  "lore": "A young dragon is still building a hoard and testing its power. Bronze dragons patrol coasts and are proud defenders. They enjoy war stories and hate tyrants."
+ },
+ "adult-bronze-dragon": {
+  "description": "A huge, imposing dragon with bronze scales with a green tint, ridged horns and webbed feet suited to water.",
+  "lore": "An adult dragon rules a territory and has gathered a great hoard. Bronze dragons patrol coasts and are proud defenders. They enjoy war stories and hate tyrants."
+ },
+ "ancient-bronze-dragon": {
+  "description": "A colossal, ancient dragon whose weathered hide shows bronze scales with a green tint, ridged horns and webbed feet suited to water.",
+  "lore": "An ancient dragon has lived for centuries, with a vast hoard and long memory; kingdoms remember its name. Bronze dragons patrol coasts and are proud defenders. They enjoy war stories and hate tyrants."
+ },
+ "bugbear-stalker": {
+  "description": "A broad-shouldered goblinoid with shaggy hair, long arms and a surprisingly quiet tread.",
+  "lore": "A hunter that sneaks, waits and strikes from behind. Bugbears are hired as ambushers and raiders."
+ },
+ "bugbear-warrior": {
+  "description": "A large, hairy goblinoid with heavy arms and a morningstar or spear in hand.",
+  "lore": "Bugbears take what they want and bully smaller goblinoids. They love a surprise attack."
+ },
+ "bulette": {
+  "description": "A land shark: a huge armored beast with a slate-grey hide, a crest of plates and jaws that crack stone.",
+  "lore": "It burrows below farm fields and erupts when it feels footsteps. Folk say it is always hungry."
+ },
+ "centaur-trooper": {
+  "description": "A creature with a man's torso set on a horse's body, carrying a spear or bow and moving at a gallop.",
+  "lore": "Centaurs patrol old forests and plains and respect those who respect the land. They are proud and wary of walls."
+ },
+ "chain-devil": {
+  "description": "A devil wrapped in rattling chains that move on their own, with hooked links and a cruel, mocking face.",
+  "lore": "Hellish jailers that bind souls. Their chains are said to seek the guilty."
+ },
+ "chimera": {
+  "description": "A roaring beast with a lion's body, a goat's head on its back and a dragon's head on a thick neck, with ragged wings.",
+  "lore": "A monster of wild legend that terrorizes hills and herds, breathing fire from its dragon head."
+ },
+ "chuul": {
+  "description": "A crustacean taller than a man, with a greenish carapace, stinging tentacles at its mouth and pincers like iron.",
+  "lore": "Hunters of the ruined shallows. They drag prey underwater and are said to guard treasures of the deep."
+ },
+ "clay-golem": {
+  "description": "A hulking, reddish figure of baked clay with a blank face and fists like boulders.",
+  "lore": "A construct built by priests and wizards, it can be hurt by little but may go berserk if its bonds slip."
+ },
+ "cloaker": {
+  "description": "A broad, dark, leathery shape like a flying cloak, with a white-eyed face and a barbed tail.",
+  "lore": "Lurkers of caves and cellars. They flap down on prey and drain it, and their moan chills the nerves."
+ },
+ "cloud-giant": {
+  "description": "A towering, blue-skinned giant with silver or white hair, dressed in fine silks and gems.",
+  "lore": "They live in castles on the clouds. They are proud of their wealth, judge others by taste, and keep to old customs."
+ },
+ "cockatrice": {
+  "description": "A small, bird-like beast with a lizard's tail, bat-like wings and a comb of red flesh on its head.",
+  "lore": "Its bite is said to stiffen the victim to stone. Farmers hate it for turning livestock into statues."
+ },
+ "commoner": {
+  "description": "An ordinary villager or townsperson in plain clothes, with work-worn hands.",
+  "lore": "Farmers, cooks, carters and other folk who want to be left alone, and who flee at the first sign of danger."
+ },
+ "copper-dragon-wyrmling": {
+  "description": "A young dragon about the size of a large dog, with copper-colored scales streaked green, long curved horns and a sly smile.",
+  "lore": "A newly hatched wyrmling is already dangerous and ambitious. Copper dragons are practical jokers in hilly country, fond of riddles and jokes, and keep wry grudges."
+ },
+ "young-copper-dragon": {
+  "description": "A dragon about the size of a horse, with copper-colored scales streaked green, long curved horns and a sly smile.",
+  "lore": "A young dragon is still building a hoard and testing its power. Copper dragons are practical jokers in hilly country, fond of riddles and jokes, and keep wry grudges."
+ },
+ "adult-copper-dragon": {
+  "description": "A huge, imposing dragon with copper-colored scales streaked green, long curved horns and a sly smile.",
+  "lore": "An adult dragon rules a territory and has gathered a great hoard. Copper dragons are practical jokers in hilly country, fond of riddles and jokes, and keep wry grudges."
+ },
+ "ancient-copper-dragon": {
+  "description": "A colossal, ancient dragon whose weathered hide shows copper-colored scales streaked green, long curved horns and a sly smile.",
+  "lore": "An ancient dragon has lived for centuries, with a vast hoard and long memory; kingdoms remember its name. Copper dragons are practical jokers in hilly country, fond of riddles and jokes, and keep wry grudges."
+ },
+ "couatl": {
+  "description": "A radiant, feathered serpent with rainbow wings, gentle eyes and a voice that carries calmly.",
+  "lore": "Celestial messengers of the gods and teachers of magic. They guard sacred places and speak many languages."
+ },
+ "swarm-of-crawling-claws": {
+  "description": "A heap of severed hands scuttling over one another on their fingertips, grey and cold.",
+  "lore": "Left behind when a murderer is cursed or a necromancer cuts a hand free. It still wants to strangle."
+ },
+ "cultist": {
+  "description": "A robed follower with a hidden symbol, carrying a knife and a murmured prayer.",
+  "lore": "Ordinary folk drawn into secret worship of a terrible power, who obey the cult's leaders without question."
+ },
+ "cultist-fanatic": {
+  "description": "A zealot in ritual vestments, eyes wide and voice steady, hands marked with sigils.",
+  "lore": "Devout beyond reason, they channel the favor of dark patrons and call down curses."
+ },
+ "darkmantle": {
+  "description": "A ball of leathery tentacles that clings to cave ceilings, looking like a stalactite.",
+  "lore": "It drops onto prey and smothers it, and releases a cloud of inky darkness to cover its retreat."
+ },
+ "death-dog": {
+  "description": "A two-headed hound with a mangy coat and glaring eyes, snarling in chorus.",
+  "lore": "Desert tales call them the mounts of the dead. Their bites are said to rot like disease."
+ },
+ "deva": {
+  "description": "A tall, winged angelic being with calm features, a radiant face and a gleaming mace.",
+  "lore": "Messengers who walk among mortals, often disguised, to nudge them toward good."
+ },
+ "djinni": {
+  "description": "A tall, muscular being of air with bluish skin, flowing robes and a swirling lower body of smoke.",
+  "lore": "Noble genies of the wind, proud and generous, who may grant wishes but bristle at being commanded."
+ },
+ "doppelganger": {
+  "description": "A pale, plain-faced creature that takes the shape of any person it studies, mimicking their voice.",
+  "lore": "It replaces a victim or poses as an acquaintance to learn secrets. A bad habit of repeating questions can give it away."
+ },
+ "dragon-turtle": {
+  "description": "A turtle as large as a ship, green and bronze with a spiked shell and a dragon's head and tail.",
+  "lore": "Sailors tell of islands that move and sink ships. It boils the sea with its breath."
+ },
+ "dretch": {
+  "description": "A short, bloated, greasy demon with warty skin, a pig-like snout and thin limbs.",
+  "lore": "The lowest ranks of the Abyss, cowardly and numerous, and used as fodder by stronger fiends."
+ },
+ "drider": {
+  "description": "A drow from the waist up with a giant spider's body below, trailing silk and bristling hairs.",
+  "lore": "The result of a goddess's punishment for failing a test of loyalty. Driders hate the elves who cast them out."
+ },
+ "druid": {
+  "description": "A robed hermit with a wooden staff, dressed in leaves and hides, with bright, watchful eyes.",
+  "lore": "Keepers of the old ways who commune with nature and punish those who despoil it."
+ },
+ "dryad": {
+  "description": "A lithe fey woman with bark-like skin and hair of leaves, who steps from a tree.",
+  "lore": "She is bound to her tree and her grove. She charms intruders but shields those who respect the forest."
+ },
+ "earth-elemental": {
+  "description": "A walking heap of rock and soil, with glowing gems for eyes and the grinding sound of shifting stone.",
+  "lore": "Spirits of the deep earth, patient and heavy. Miners say they push through walls as easily as air."
+ },
+ "efreeti": {
+  "description": "A huge, red-skinned genie wreathed in flame, with curved horns, a stern face and a lower body of smoke and sparks.",
+  "lore": "Proud lords of the City of Brass. They grant wishes grudgingly and punish those who bind them."
+ },
+ "erinyes": {
+  "description": "A fallen angelic fury with feathery black wings, a bronze-hard stare and a bow and rope of barbed cords.",
+  "lore": "A devil that hunts oath-breakers and murderers, who cannot escape her once she has taken their scent."
+ },
+ "ettercap": {
+  "description": "A hunched, grey-skinned humanoid with a spider's fangs, silk-spinning abdomen and spindly arms.",
+  "lore": "Hermits of dark woods who trap prey in webs and keep giant spiders as pets."
+ },
+ "ettin": {
+  "description": "A two-headed giant with matted hair, ragged hides and each head arguing with the other.",
+  "lore": "Dim, brutish and always quarreling. The two heads never agree and can be tricked by pitting them against each other."
+ },
+ "fire-elemental": {
+  "description": "A swirling mass of flame in a rough human shape, crackling and leaving scorched ground.",
+  "lore": "Mages summon them for fuel and fury. In the wild they roam as sparks that grow into infernos."
+ },
+ "fire-giant": {
+  "description": "A black-skinned, red-bearded giant in blackened armor, with hair like embers.",
+  "lore": "Smiths and warlords of volcanic holds. They forge great weapons and demand tribute from lesser peoples."
+ },
+ "flesh-golem": {
+  "description": "A stitched-together body of many corpses, with scars, bolts and a dull, wary stare.",
+  "lore": "Created by mad wizards to serve. It fears fire and loud noise and can break free of its master."
+ },
+ "frost-giant": {
+  "description": "A pale, blue-white giant with braided beards, furs and an axe as long as a boat oar.",
+  "lore": "Raiders of the frozen north who value strength, boasts and plunder."
+ },
+ "shrieker-fungus": {
+  "description": "A squat mushroom with a spotted purple cap and a short stem, almost silent until it senses movement.",
+  "lore": "It lets out a piercing shriek to draw predators and feed on the leftovers."
+ },
+ "violet-fungus": {
+  "description": "A cluster of violet mushrooms with long, tendril-like limbs that sway and reach.",
+  "lore": "A rotting, slow predator of cave floors that smothers and digests with its touch."
+ },
+ "gargoyle": {
+  "description": "A stone-grey, winged humanoid with horns, claws and a snarling mouth, perched motionless on high places.",
+  "lore": "Often found guarding ancient buildings. It waits for hours as a statue, then falls on trespassers."
+ },
+ "gelatinous-cube": {
+  "description": "A near-invisible block of clear jelly filling a corridor, with bones and coins suspended inside.",
+  "lore": "It drifts through dungeons, slowly digesting everything it absorbs."
+ },
+ "ghast": {
+  "description": "A gaunt, rotting corpse with a cold stench, long claws and a pallid, hungry face.",
+  "lore": "A ghoul's stronger cousin that leads packs of them and smells strongly of the grave."
+ },
+ "ghost": {
+  "description": "A faint, translucent shape of a long-dead person, wailing and drifting through walls.",
+  "lore": "The restless dead who cannot leave until some wrong is righted. They drain life with a touch."
+ },
+ "ghoul": {
+  "description": "A lean, grey-skinned humanoid with sunken eyes, long tongue and claws.",
+  "lore": "Eaters of the dead who haunt graveyards and battlefields. Their touch can paralyze."
+ },
+ "gibbering-mouther": {
+  "description": "A mound of eyes and mouths on a blob of flesh, babbling meaninglessly and dragging itself on the ground.",
+  "lore": "The sound of it breaks the sanity of listeners. It flows toward the living, devouring them."
+ },
+ "glabrezu": {
+  "description": "A towering demon with a muscle-bound body, fanged jaw and giant pincers beside two human-like arms.",
+  "lore": "A tempter that grants desires at terrible cost, twisting wishes toward ruin."
+ },
+ "gladiator": {
+  "description": "A scarred arena fighter in mismatched armor and sweat-stained leather, carrying a short sword and a shield.",
+  "lore": "Crowd favorites trained to kill in staged combats, famed for flair and endurance."
+ },
+ "gnoll-warrior": {
+  "description": "A hyena-headed humanoid, spotted and tall, with a ragged mane and a ragged, chuckling laugh.",
+  "lore": "Raiders who follow demon lords of savagery. They move in packs and leave devastation behind."
+ },
+ "goblin-minion": {
+  "description": "A small green-skinned humanoid with big ears, a sharp-toothed grin and a rusty knife.",
+  "lore": "Weaker goblins that fill the ranks and are pushed to the front when a fight breaks out."
+ },
+ "goblin-warrior": {
+  "description": "A small, wiry, yellow-green humanoid with pointed ears, bright eyes and a scimitar and shortbow.",
+  "lore": "Goblins fight in packs and favor ambushes. They hate being laughed at and respect bigger bullies."
+ },
+ "goblin-boss": {
+  "description": "A bigger, meaner goblin in scavenged armor, barking orders and carrying a heavy weapon.",
+  "lore": "Rules a warren through cunning and cruelty. Underlings obey out of fear."
+ },
+ "gold-dragon-wyrmling": {
+  "description": "A young dragon about the size of a large dog, with shining gold scales, a sweeping mane of whiskers and wise amber eyes.",
+  "lore": "A newly hatched wyrmling is already dangerous and ambitious. Gold dragons are noble and long-lived, drawn to just causes, and expect honesty from those they help."
+ },
+ "young-gold-dragon": {
+  "description": "A dragon about the size of a horse, with shining gold scales, a sweeping mane of whiskers and wise amber eyes.",
+  "lore": "A young dragon is still building a hoard and testing its power. Gold dragons are noble and long-lived, drawn to just causes, and expect honesty from those they help."
+ },
+ "adult-gold-dragon": {
+  "description": "A huge, imposing dragon with shining gold scales, a sweeping mane of whiskers and wise amber eyes.",
+  "lore": "An adult dragon rules a territory and has gathered a great hoard. Gold dragons are noble and long-lived, drawn to just causes, and expect honesty from those they help."
+ },
+ "ancient-gold-dragon": {
+  "description": "A colossal, ancient dragon whose weathered hide shows shining gold scales, a sweeping mane of whiskers and wise amber eyes.",
+  "lore": "An ancient dragon has lived for centuries, with a vast hoard and long memory; kingdoms remember its name. Gold dragons are noble and long-lived, drawn to just causes, and expect honesty from those they help."
+ },
+ "gorgon": {
+  "description": "A great metallic bull with scaled iron plates, breathing a gray mist that stiffens living flesh.",
+  "lore": "An old legend that stalks open plains and turns herds to stone."
+ },
+ "gray-ooze": {
+  "description": "A puddle of gray slime that looks like wet stone until it moves.",
+  "lore": "It lurks in damp dungeons and corrodes metal and flesh with its touch."
+ },
+ "green-dragon-wyrmling": {
+  "description": "A young dragon about the size of a large dog, with deep green scales, a heavy crest and a cold, appraising gaze.",
+  "lore": "A newly hatched wyrmling is already dangerous and ambitious. Green dragons haunt old forests, manipulating and bullying folk through lies and poison, and they hate being refused."
+ },
+ "young-green-dragon": {
+  "description": "A dragon about the size of a horse, with deep green scales, a heavy crest and a cold, appraising gaze.",
+  "lore": "A young dragon is still building a hoard and testing its power. Green dragons haunt old forests, manipulating and bullying folk through lies and poison, and they hate being refused."
+ },
+ "adult-green-dragon": {
+  "description": "A huge, imposing dragon with deep green scales, a heavy crest and a cold, appraising gaze.",
+  "lore": "An adult dragon rules a territory and has gathered a great hoard. Green dragons haunt old forests, manipulating and bullying folk through lies and poison, and they hate being refused."
+ },
+ "ancient-green-dragon": {
+  "description": "A colossal, ancient dragon whose weathered hide shows deep green scales, a heavy crest and a cold, appraising gaze.",
+  "lore": "An ancient dragon has lived for centuries, with a vast hoard and long memory; kingdoms remember its name. Green dragons haunt old forests, manipulating and bullying folk through lies and poison, and they hate being refused."
+ },
+ "green-hag": {
+  "description": "A hunched, warty crone with green skin, long nails, matted hair and a rasping voice.",
+  "lore": "Hags dwell in swamps and woods and bargain with mortals, offering favors with a heavy price."
+ },
+ "grick": {
+  "description": "A worm-like creature with a dark, rubbery body and a beak ringed by four tentacles.",
+  "lore": "It hides in caves and rock crevices and strikes at anything that passes."
+ },
+ "griffon": {
+  "description": "A creature with an eagle's head, wings and forelegs and the body of a lion.",
+  "lore": "Noble beasts of the high places that can be trained as mounts, though they eat horses."
+ },
+ "grimlock": {
+  "description": "A pale, blind, lean humanoid with a hairless, grey-skinned body and a huge jaw.",
+  "lore": "Cave-dwellers who hunt by smell and hearing, enslaved by mind flayers in some tales."
+ },
+ "guardian-naga": {
+  "description": "A large serpent with a human-like head, scales gleaming gold and eyes calm and wise.",
+  "lore": "A protector of sacred places and treasures, wise and patient, and bound to an oath."
+ },
+ "guard": {
+  "description": "A city watchman in a helmet and mail, carrying a spear and shield and a stern expression.",
+  "lore": "Maintains order at gates and in markets and calls for help when outnumbered."
+ },
+ "guard-captain": {
+  "description": "A veteran officer in finer armor with a plumed helm, who commands the watch.",
+  "lore": "Knows the town's alleys and criminals, and holds the line when things turn bad."
+ },
+ "half-dragon": {
+  "description": "A humanoid warrior with scaly skin, claw-tipped fingers and a dragon's eyes.",
+  "lore": "The offspring or blessed servant of a dragon, bearing its power and temperament in smaller form."
+ },
+ "harpy": {
+  "description": "A woman's torso on the body of a vulture, with talons and bird wings.",
+  "lore": "Her song lures travelers to cliffs and shoals, where she preys on the shipwrecked."
+ },
+ "hell-hound": {
+  "description": "A black-furred hound with red eyes, smoking fur and a breath of fire.",
+  "lore": "Fiendish guard dogs that run in packs, spreading scorched earth."
+ },
+ "hezrou": {
+  "description": "A broad, toad-faced demon with slimy skin, a slouching gait and a stench that sickens.",
+  "lore": "A sturdy Abyssal soldier that leads lesser demons into battle."
+ },
+ "hill-giant": {
+  "description": "A big, uncouth giant with a sagging belly, hairy limbs and a club made of a tree.",
+  "lore": "Loud, greedy and stupid, they raid farms and hoard food."
+ },
+ "hippogriff": {
+  "description": "A mix of horse and eagle, with feathered forequarters and a hooked beak.",
+  "lore": "Wild ones nest on rocky hillsides; trained ones can serve as mounts."
+ },
+ "hobgoblin-warrior": {
+  "description": "A tall, disciplined goblinoid in red-lacquered armor, orange skin and a stern face.",
+  "lore": "Hobgoblins prize order and war, and march in ranks under strict officers."
+ },
+ "hobgoblin-captain": {
+  "description": "A seasoned hobgoblin officer in polished armor, giving orders in a hard voice.",
+  "lore": "Respected for tactics and discipline, the captain drills his soldiers relentlessly."
+ },
+ "homunculus": {
+  "description": "A tiny, winged, imp-like creature with green skin and a sly face, crafted from blood and clay.",
+  "lore": "A wizard's small servant and spy, bound by its master's will."
+ },
+ "horned-devil": {
+  "description": "A tall, spiked devil with huge horns, bat-like wings and a barbed tail, carrying a spear.",
+  "lore": "A commander of infernal legions, brutal and zealous."
+ },
+ "hydra": {
+  "description": "A reptilian beast with several snaking heads on long necks, a bulky body and thick legs.",
+  "lore": "Cut off one head and two may grow back, as tales go. It lurks in swamps and coastal caves."
+ },
+ "ice-devil": {
+  "description": "A frost-covered, insectoid devil with a heavy tail, wings and a spear.",
+  "lore": "Cold, disciplined and ruthless, they hold the frozen reaches of the hells."
+ },
+ "imp": {
+  "description": "A tiny, red-skinned devil with bat-like wings, a barbed tail and a mocking grin.",
+  "lore": "A devil's messenger and spy, often bound as a familiar to a wizard or warlock."
+ },
+ "incubus": {
+  "description": "A handsome, winged fiend with charming features, horns and clever hands.",
+  "lore": "A seducer that lures mortals into sin, preying on their desires."
+ },
+ "invisible-stalker": {
+  "description": "Nothing visible: only the displacement of dust, a drag of wind and the sense of being hunted.",
+  "lore": "A summoned air spirit that tracks one target relentlessly until the task is done."
+ },
+ "iron-golem": {
+  "description": "A huge figure of dark, welded iron plates with glowing eyes and a hollow chamber for a furnace.",
+  "lore": "An expensive construct made by master wizards. It shrugs off most weapons and spews poison gas."
+ },
+ "knight": {
+  "description": "An armored warrior with a surcoat, a long sword and a shield bearing a coat of arms.",
+  "lore": "A sworn defender of a lord or order, trained in war and etiquette."
+ },
+ "kobold-warrior": {
+  "description": "A small, scaly, reptilian humanoid with a dog-like snout, red eyes and ragged clothing.",
+  "lore": "Cowardly alone but dangerous in trap-filled warrens, and they worship dragons."
+ },
+ "kraken": {
+  "description": "A mountainous squid with arms the size of masts, dark eyes and a beak.",
+  "lore": "Sea legends warn of a hidden power that drags ships under and commands storms."
+ },
+ "lamia": {
+  "description": "A woman's torso on a lion's body, with a seductive voice and cruel eyes.",
+  "lore": "Cursed hunters of the desert who charm travelers and drain their wits."
+ },
+ "lemure": {
+  "description": "A shapeless, melting mass of flesh with a vaguely human face, groaning and slow.",
+  "lore": "The lowest form of devil, formed from the souls of the condemned."
+ },
+ "lich": {
+  "description": "A withered corpse in rich robes with burning pinpoints in its eye sockets and a gaunt, cold voice.",
+  "lore": "A wizard who traded away death by hiding its soul in a vessel. Few survive meeting one."
+ },
+ "mage": {
+  "description": "A scholar in robes with a staff and a satchel of components, hands ready to gesture.",
+  "lore": "Trained in arcane arts, serves as a court wizard, tutor or hired sorcerer."
+ },
+ "archmage": {
+  "description": "An elderly, regal wizard in layered robes with rings and an air of absolute confidence.",
+  "lore": "A master of high magic whose fame and rivals reach across kingdoms."
+ },
+ "magmin": {
+  "description": "A small, burning creature of cooling black rock with glowing cracks, aflame at touch.",
+  "lore": "They explode in a flash when slain, and they spark and smoulder where they walk."
+ },
+ "manticore": {
+  "description": "A lion's body with a human-like face, bat wings and a tail of iron spikes.",
+  "lore": "A cunning predator that hurls spikes from a distance and enjoys the hunt."
+ },
+ "marilith": {
+  "description": "A six-armed demon with a snake's lower body, a woman's torso and a sword in each hand.",
+  "lore": "An Abyssal general that commands lesser demons with cold tactics."
+ },
+ "medusa": {
+  "description": "A woman with serpents for hair and an unnerving gaze, her skin cold and green.",
+  "lore": "Statues around her lair warn visitors, for her stare is said to turn flesh to stone."
+ },
+ "dust-mephit": {
+  "description": "A tiny winged elemental of sand and dust that sneezes clouds and cackles.",
+  "lore": "Mischievous spirits of dry air who blind and pester travelers."
+ },
+ "ice-mephit": {
+  "description": "A tiny winged elemental made of frosty crystals that chill whatever it touches.",
+  "lore": "Playful and vindictive, it leaves a trail of frost where it flies."
+ },
+ "magma-mephit": {
+  "description": "A small imp-like elemental of glowing lava that drips molten stone.",
+  "lore": "It sulks and snaps and heats the air around it."
+ },
+ "steam-mephit": {
+  "description": "A tiny winged elemental of hissing steam that scalds the skin.",
+  "lore": "Born of hot springs and geysers; vain and pesky."
+ },
+ "merfolk-skirmisher": {
+  "description": "A humanoid with fish scales, webbed fingers and a powerful tail instead of legs.",
+  "lore": "Sea-dwelling folk who defend their reefs and shores with spears."
+ },
+ "merrow": {
+  "description": "A hulking, green-grey sea ogre with a fish tail, fangs and a harpoon.",
+  "lore": "Stranded in saltwater, they raid coasts and drag sailors under."
+ },
+ "mimic": {
+  "description": "A chest, door or barrel that seems ordinary until it sprouts pseudopods and a toothy maw.",
+  "lore": "Dungeon dwellers that wait for treasure hunters and stick to whatever they touch."
+ },
+ "minotaur-of-baphomet": {
+  "description": "A bull-headed, muscular giant with horns, a snorting snout and a great axe.",
+  "lore": "Servants of a demon lord of savagery, trapped in a maze of their own rage."
+ },
+ "mummy": {
+  "description": "A wrapped corpse in dry, tattered bandages with glowing eyes and a lurching gait.",
+  "lore": "Tomb guardians cursed to protect their rites. Their touch carries a rotting curse."
+ },
+ "mummy-lord": {
+  "description": "A regal, bandaged figure in gold ornaments and ritual gear, radiating dread.",
+  "lore": "A priest-king whose tomb is deadly and whose spells command lesser undead."
+ },
+ "nalfeshnee": {
+  "description": "A hulking, boar-headed demon with a swollen belly, small wings and clawed hands.",
+  "lore": "A demon that tempts and bewilders mortals with illusions and wealth."
+ },
+ "night-hag": {
+  "description": "A bent, cruel crone with grey skin, long teeth and a pouch of soul-stones.",
+  "lore": "A hag that creeps into dreams to steal the souls of the sleeping."
+ },
+ "nightmare": {
+  "description": "A black horse wreathed in flame and smoke, with burning hooves and red eyes.",
+  "lore": "A fiendish steed ridden by dark riders, leaving scorched earth behind."
+ },
+ "noble": {
+  "description": "A well-dressed aristocrat with fine clothes, jewelry and an assured manner.",
+  "lore": "A person of title and privilege, who commands servants and guards."
+ },
+ "ochre-jelly": {
+  "description": "A yellow-brown mass of slime that creeps along floors, squeezing under doors.",
+  "lore": "A sewer-dweller and dungeon-prowler that splits when struck."
+ },
+ "ogre": {
+  "description": "A huge, hunched humanoid with a fat belly, warty skin and a club.",
+  "lore": "Slow-witted brutes who raid for food and loot, and who bully smaller creatures."
+ },
+ "oni": {
+  "description": "A towering blue or green ogre-like being with horns, tusks and a magical club.",
+  "lore": "A trickster giant that can change shape and fly, preying on villages."
+ },
+ "otyugh": {
+  "description": "A bloated, three-legged scavenger with tentacles, a toothy maw and an eyestalk.",
+  "lore": "Lives in refuse heaps and sewers, feeding on filth and unwary visitors."
+ },
+ "owlbear": {
+  "description": "A massive bear with an owl's head, feathers and a hooked beak.",
+  "lore": "A ferocious forest predator that attacks anything entering its territory."
+ },
+ "pegasus": {
+  "description": "A graceful winged horse with a snowy coat and a regal bearing.",
+  "lore": "Celestial steeds that carry the righteous and flee the wicked."
+ },
+ "phase-spider": {
+  "description": "A large spider with a shimmering body that vanishes and returns from an unseen plane.",
+  "lore": "Hunters that blink in to bite and drag prey out of sight."
+ },
+ "pirate": {
+  "description": "A sea-worn sailor with a cutlass, a bandana and a salt-stained coat.",
+  "lore": "A deckhand of a raiding ship who takes what he wants."
+ },
+ "pirate-captain": {
+  "description": "A swaggering ship's leader with a feathered hat, a pistol and a brash grin.",
+  "lore": "Rules a crew by daring and share of the loot."
+ },
+ "pit-fiend": {
+  "description": "A towering, winged devil with scaly red skin, a fanged face and a flaming mace.",
+  "lore": "One of the generals of hell, bound by contract and cunning beyond measure."
+ },
+ "planetar": {
+  "description": "A giant, green-skinned angel with white wings, a calm face and a vast sword.",
+  "lore": "A righteous warrior of the heavens that fights evil and serves a deity."
+ },
+ "priest-acolyte": {
+  "description": "A young cleric in a plain robe with a holy symbol, assisting at a shrine.",
+  "lore": "Learns the faith's rites and tends to the sick and the faithful."
+ },
+ "priest": {
+  "description": "A robed servant of a god with a holy symbol, mace and a calm, weighing gaze.",
+  "lore": "Heals, blesses and leads worship, and is often the heart of a town."
+ },
+ "pseudodragon": {
+  "description": "A tiny dragon the size of a housecat, red-brown, with a stinging tail and bright eyes.",
+  "lore": "Curious and clever; they bond with spellcasters and speak in the mind."
+ },
+ "purple-worm": {
+  "description": "A monstrous, purple burrowing worm as long as a ship, with a gaping toothy mouth and a stinger tail.",
+  "lore": "Tunnelers of the deep that swallow prey whole and shake the ground."
+ },
+ "quasit": {
+  "description": "A tiny, clawed demon with a horned head and bat-like wings that shifts shape.",
+  "lore": "A demon's petty servant and spy, often a wizard's familiar."
+ },
+ "rakshasa": {
+  "description": "A tiger-headed fiend in fine robes with backward-facing hands.",
+  "lore": "Masters of illusion who corrupt rulers and love elaborate schemes."
+ },
+ "red-dragon-wyrmling": {
+  "description": "A young dragon about the size of a large dog, with crimson scales, a wide spiked crest and smoke curling from its nostrils.",
+  "lore": "A newly hatched wyrmling is already dangerous and ambitious. Red dragons are proud, covetous and fiery, hoarding vast treasure in mountain lairs and remembering every theft."
+ },
+ "young-red-dragon": {
+  "description": "A dragon about the size of a horse, with crimson scales, a wide spiked crest and smoke curling from its nostrils.",
+  "lore": "A young dragon is still building a hoard and testing its power. Red dragons are proud, covetous and fiery, hoarding vast treasure in mountain lairs and remembering every theft."
+ },
+ "adult-red-dragon": {
+  "description": "A huge, imposing dragon with crimson scales, a wide spiked crest and smoke curling from its nostrils.",
+  "lore": "An adult dragon rules a territory and has gathered a great hoard. Red dragons are proud, covetous and fiery, hoarding vast treasure in mountain lairs and remembering every theft."
+ },
+ "ancient-red-dragon": {
+  "description": "A colossal, ancient dragon whose weathered hide shows crimson scales, a wide spiked crest and smoke curling from its nostrils.",
+  "lore": "An ancient dragon has lived for centuries, with a vast hoard and long memory; kingdoms remember its name. Red dragons are proud, covetous and fiery, hoarding vast treasure in mountain lairs and remembering every theft."
+ },
+ "remorhaz": {
+  "description": "A huge, many-legged worm of white and red chitin, whose back glows hot as molten metal.",
+  "lore": "A predator of the ice, melting snow around its burrow."
+ },
+ "roc": {
+  "description": "A gigantic bird with golden-brown feathers and a wingspan wider than a ship.",
+  "lore": "Mountain legend says it carries away elephants and ships."
+ },
+ "roper": {
+  "description": "A stone-like pillar with a mouth and several long, sticky strands that snap out.",
+  "lore": "Lurks in caves, looking like a stalagmite until its prey draws near."
+ },
+ "rust-monster": {
+  "description": "A lizard-like beast with a bulbous, antennae-bearing head and a tail like a paddle.",
+  "lore": "It devours metal and crumbles armor and weapons, to adventurers' despair."
+ },
+ "sahuagin-warrior": {
+  "description": "A fish-faced humanoid with green-blue scales, fins and webbed claws.",
+  "lore": "Sea raiders who worship a shark god and harry coastal villages."
+ },
+ "salamander": {
+  "description": "A fiery humanoid with a serpent's lower body, glowing red scales and a flaming spear.",
+  "lore": "Soldiers of the Plane of Fire who scorn weakness."
+ },
+ "satyr": {
+  "description": "A merry man with a goat's legs, horns and a pipe at his lips.",
+  "lore": "Fey revelers who love wine, music and tricks."
+ },
+ "scout": {
+  "description": "A lean traveler in leather with a bow and a quiet step.",
+  "lore": "Watches roads, tracks game and reports on enemies."
+ },
+ "sea-hag": {
+  "description": "A hideous, barnacled crone with a pale, bloated face and webbed hands.",
+  "lore": "A coastal hag whose gaze and curses afflict sailors."
+ },
+ "shadow": {
+  "description": "A dark silhouette that moves on its own, thin and cold, slipping along walls.",
+  "lore": "The remnant of a dead soul that drains the strength of the living."
+ },
+ "shambling-mound": {
+  "description": "A mobile heap of rotting vegetation, vines and moss that lurches about.",
+  "lore": "Swamp-dwellers that smother prey and feed on rot."
+ },
+ "shield-guardian": {
+  "description": "A hulking construct of stone and metal with a gem-studded amulet link.",
+  "lore": "A bodyguard created for a wizard, who can absorb harm meant for its master."
+ },
+ "silver-dragon-wyrmling": {
+  "description": "A young dragon about the size of a large dog, with gleaming silver scales and a smooth, graceful profile with a long tail.",
+  "lore": "A newly hatched wyrmling is already dangerous and ambitious. Silver dragons love people and often take human form to walk among them. They defend the weak and the honest."
+ },
+ "young-silver-dragon": {
+  "description": "A dragon about the size of a horse, with gleaming silver scales and a smooth, graceful profile with a long tail.",
+  "lore": "A young dragon is still building a hoard and testing its power. Silver dragons love people and often take human form to walk among them. They defend the weak and the honest."
+ },
+ "adult-silver-dragon": {
+  "description": "A huge, imposing dragon with gleaming silver scales and a smooth, graceful profile with a long tail.",
+  "lore": "An adult dragon rules a territory and has gathered a great hoard. Silver dragons love people and often take human form to walk among them. They defend the weak and the honest."
+ },
+ "ancient-silver-dragon": {
+  "description": "A colossal, ancient dragon whose weathered hide shows gleaming silver scales and a smooth, graceful profile with a long tail.",
+  "lore": "An ancient dragon has lived for centuries, with a vast hoard and long memory; kingdoms remember its name. Silver dragons love people and often take human form to walk among them. They defend the weak and the honest."
+ },
+ "skeleton": {
+  "description": "A walking set of bones in rusted armor or rags, clacking weakly.",
+  "lore": "Raised by necromancers from old graves to serve without thought."
+ },
+ "warhorse-skeleton": {
+  "description": "A horse's skeleton with burning pinpricks for eyes.",
+  "lore": "A restless mount for undead riders."
+ },
+ "minotaur-skeleton": {
+  "description": "A hulking bull-headed skeleton with a splintered horn and notched axe.",
+  "lore": "A maze guardian raised from the bones of a great beast."
+ },
+ "solar": {
+  "description": "A giant, radiant angel with golden skin, enormous wings and a gleaming bow.",
+  "lore": "Among the greatest servants of the gods, rarely seen on the mortal plane."
+ },
+ "specter": {
+  "description": "A pale, transparent ghost with a twisted face and trailing, ragged robes.",
+  "lore": "A vengeful spirit that drains the life from those it touches."
+ },
+ "sphinx-of-wonder": {
+  "description": "A cat-sized sphinx with bright feathered wings and a lion's body.",
+  "lore": "Curious and playful, it enjoys riddles and puzzles."
+ },
+ "sphinx-of-lore": {
+  "description": "A lion-bodied, winged sphinx with a human face and wise eyes.",
+  "lore": "Keeps old secrets and rewards those who solve its riddles."
+ },
+ "sphinx-of-valor": {
+  "description": "A mighty winged lion with a stern human face and golden mane.",
+  "lore": "A guardian of sacred places that tests the courage of visitors."
+ },
+ "spirit-naga": {
+  "description": "A serpent with a humanoid head, black scales and an unsettling gaze.",
+  "lore": "A scheming spellcaster that lurks in ruins."
+ },
+ "sprite": {
+  "description": "A tiny, winged fey no larger than a hand, with a bow and a bright, mischievous laugh.",
+  "lore": "Woodland guardians that watch over the forest and punish the careless."
+ },
+ "spy": {
+  "description": "A nondescript person in plain clothes with a ready smile and quick eyes.",
+  "lore": "Gathers secrets and blackmail material for a master."
+ },
+ "stirge": {
+  "description": "A feathered, mosquito-like creature with a long proboscis and bat-like wings.",
+  "lore": "Swarms that drain blood from sleeping victims."
+ },
+ "stone-giant": {
+  "description": "A grey-skinned, lean giant with dark eyes and chiseled features.",
+  "lore": "Artists and hermits who live in mountain caves and throw boulders."
+ },
+ "stone-golem": {
+  "description": "A statue-like figure of carved rock, stern and slow.",
+  "lore": "A sturdy construct used as a guardian."
+ },
+ "storm-giant": {
+  "description": "A towering, blue-skinned giant with sea-green hair and a flowing robe.",
+  "lore": "Thoughtful hermits who dwell in storm-wracked towers or deep seas."
+ },
+ "succubus": {
+  "description": "A beautiful fiend with bat wings, horns and a hypnotic gaze.",
+  "lore": "A tempter that draws mortals into pacts and steals their vitality."
+ },
+ "tarrasque": {
+  "description": "A colossal, armored beast with a spiked back and a monstrous maw.",
+  "lore": "A legendary calamity that wakes rarely and ravages everything in its path."
+ },
+ "tough": {
+  "description": "A bruiser in leather and spiked knuckles who works as muscle.",
+  "lore": "Hired to scare debtors or guard a smuggler's back door."
+ },
+ "tough-boss": {
+  "description": "A hardened leader of a street gang, with scars and a heavy weapon.",
+  "lore": "Runs protection rackets and expects loyalty."
+ },
+ "treant": {
+  "description": "A giant walking tree with a rough face and sweeping branches.",
+  "lore": "Ancient guardians of the forest that move slowly and speak softly."
+ },
+ "troll": {
+  "description": "A tall, gaunt, green-skinned brute with long arms, sharp claws and a hooked nose.",
+  "lore": "Known for rapid healing; fire and acid are said to stop the regrowth."
+ },
+ "troll-limb": {
+  "description": "A severed troll limb that twitches and crawls with a life of its own.",
+  "lore": "A troll's cut-off limb that may grow into a new troll."
+ },
+ "unicorn": {
+  "description": "A radiant white horse with a long, spiraled horn and gentle eyes.",
+  "lore": "A creature of purity that heals the pure of heart and flees from the wicked."
+ },
+ "vampire-familiar": {
+  "description": "A pale servant with a vacant gaze, sharp teeth and loyalty to a vampire master.",
+  "lore": "A mortal enthralled to a vampire and bound to obey."
+ },
+ "vampire-spawn": {
+  "description": "A pale, gaunt undead with fangs and a hunger for blood.",
+  "lore": "A creature drained by a vampire and made into a lesser servant."
+ },
+ "vampire": {
+  "description": "A pale, aristocratic figure in dark finery with fangs, a cold voice and an unnatural grace.",
+  "lore": "An undead noble that feeds on blood and bends minds with a stare."
+ },
+ "vrock": {
+  "description": "A vulture-headed demon with broad wings, long talons and spores that fall from its feathers.",
+  "lore": "A demon of ruin that delights in chaos."
+ },
+ "warrior-infantry": {
+  "description": "A foot soldier in boiled leather or mail, with a spear and round shield.",
+  "lore": "Fights in ranks, hired by lords or mercenary companies."
+ },
+ "warrior-veteran": {
+  "description": "A battle-scarred soldier with a well-kept sword and a wary eye.",
+  "lore": "A seasoned fighter who leads recruits by example."
+ },
+ "water-elemental": {
+  "description": "A surging column of water in a rough human shape.",
+  "lore": "Rises from lakes and seas, crashing against what disturbs it."
+ },
+ "werebear": {
+  "description": "A burly human who can turn into a huge brown bear with a growl.",
+  "lore": "Often a solitary guardian of forests, cursed by bite."
+ },
+ "wereboar": {
+  "description": "A stocky human who becomes a bristling boar-man with tusks.",
+  "lore": "Hot-tempered; their curse spreads through bites."
+ },
+ "wererat": {
+  "description": "A thin, sly human who shifts into a rat-like humanoid or a giant rat.",
+  "lore": "Lurks in sewers and plots with thieves' guilds."
+ },
+ "weretiger": {
+  "description": "A lithe human who changes into a tiger-man with fangs and claws.",
+  "lore": "Solitary hunters who prowl jungles and cities at night."
+ },
+ "werewolf": {
+  "description": "A human who transforms under the full moon into a hairy wolf-like beast.",
+  "lore": "The curse spreads by a bite and drives its victims to savagery."
+ },
+ "white-dragon-wyrmling": {
+  "description": "A young dragon about the size of a large dog, with glittering frost-white scales, a stout body and a savage, animal temper.",
+  "lore": "A newly hatched wyrmling is already dangerous and ambitious. White dragons live on glaciers and the high cold, simpler and crueler than their kin, driven by hunger and territory."
+ },
+ "young-white-dragon": {
+  "description": "A dragon about the size of a horse, with glittering frost-white scales, a stout body and a savage, animal temper.",
+  "lore": "A young dragon is still building a hoard and testing its power. White dragons live on glaciers and the high cold, simpler and crueler than their kin, driven by hunger and territory."
+ },
+ "adult-white-dragon": {
+  "description": "A huge, imposing dragon with glittering frost-white scales, a stout body and a savage, animal temper.",
+  "lore": "An adult dragon rules a territory and has gathered a great hoard. White dragons live on glaciers and the high cold, simpler and crueler than their kin, driven by hunger and territory."
+ },
+ "ancient-white-dragon": {
+  "description": "A colossal, ancient dragon whose weathered hide shows glittering frost-white scales, a stout body and a savage, animal temper.",
+  "lore": "An ancient dragon has lived for centuries, with a vast hoard and long memory; kingdoms remember its name. White dragons live on glaciers and the high cold, simpler and crueler than their kin, driven by hunger and territory."
+ },
+ "wight": {
+  "description": "A gaunt, armored corpse with glowing eyes and a cold whisper.",
+  "lore": "A fallen warrior who commands lesser undead and drains life."
+ },
+ "will-o-wisp": {
+  "description": "A faint floating light in swamps and graveyards that flickers and drifts.",
+  "lore": "Lures travelers to their deaths in marshes and feeds on their fear."
+ },
+ "winter-wolf": {
+  "description": "A big, white wolf with pale blue eyes and a frost-laden breath.",
+  "lore": "Cunning arctic hunters that run in packs with frost giants."
+ },
+ "worg": {
+  "description": "A large, evil wolf with a rough grey coat and intelligent eyes.",
+  "lore": "Goblin raiders ride them and they speak a crude tongue."
+ },
+ "wraith": {
+  "description": "A hooded, shadowy specter with burning eyes and a withering touch.",
+  "lore": "A powerful undead spirit that drains life and commands shadows."
+ },
+ "wyvern": {
+  "description": "A dragon-like beast with two legs, bat wings and a venomous tail stinger.",
+  "lore": "Lesser kin of dragons, quick-tempered and feared on mountain trails."
+ },
+ "xorn": {
+  "description": "A three-legged, three-armed creature with a barrel body and a mouth in the top.",
+  "lore": "Earth elementals that swim through stone and eat metal."
+ },
+ "zombie": {
+  "description": "A shambling corpse in rotting clothes with dead eyes and groaning.",
+  "lore": "Raised by dark magic to serve and does not stop until destroyed."
+ },
+ "ogre-zombie": {
+  "description": "A huge, rotting ogre corpse swaying and lumbering.",
+  "lore": "Raised to guard crypts and hit with great, slow force."
+ },
+ "allosaurus": {
+  "description": "A large two-legged predatory dinosaur with a big head, serrated teeth and short arms.",
+  "lore": "Hunts open plains and forests in prehistoric lands, stalking herds."
+ },
+ "ankylosaurus": {
+  "description": "A low, heavy dinosaur with armor plates along its back and a bony club on its tail.",
+  "lore": "A placid grazer that swings its tail to drive off predators."
+ },
+ "ape": {
+  "description": "A strong, long-armed primate with dark fur and a thick body.",
+  "lore": "Lives in forests, can climb and throw things, and defends its troop."
+ },
+ "archelon": {
+  "description": "A huge sea turtle with a leathery shell, flippers and a hooked beak.",
+  "lore": "A giant ocean traveler that feeds on jellyfish and shellfish."
+ },
+ "baboon": {
+  "description": "A dog-faced monkey with a long muzzle, shaggy fur and strong arms.",
+  "lore": "Social troop animals that bark warnings and bite when cornered."
+ },
+ "badger": {
+  "description": "A low, stocky mammal with a black-and-white striped face and strong claws.",
+  "lore": "Digs burrows and fights fiercely when threatened."
+ },
+ "bat": {
+  "description": "A tiny flying mammal with leathery wings and big ears.",
+  "lore": "Roosts in caves and hunts insects at dusk by echolocation."
+ },
+ "black-bear": {
+  "description": "A shaggy black bear with a brown muzzle.",
+  "lore": "A forest omnivore that avoids people but defends cubs and food."
+ },
+ "blood-hawk": {
+  "description": "A sharp-eyed raptor with red-tinged feathers and a hooked beak.",
+  "lore": "A hunter that dives on prey and pecks eyes."
+ },
+ "boar": {
+  "description": "A bristly wild pig with tusks and a thick hide.",
+  "lore": "Roots through forests and charges when cornered."
+ },
+ "brown-bear": {
+  "description": "A large, heavy bear with brown fur and long claws.",
+  "lore": "Roams woods and mountains, eating fish, berries and carrion, and fighting to defend its territory."
+ },
+ "camel": {
+  "description": "A tall, humped desert beast with a long neck and thick lashes.",
+  "lore": "Carries riders and loads across dry lands, and spits when annoyed."
+ },
+ "cat": {
+  "description": "A small, sleek hunter with sharp claws, quick reflexes and sharp eyes.",
+  "lore": "A pet and mouser that stalks rodents and birds."
+ },
+ "constrictor-snake": {
+  "description": "A thick, muscular snake with mottled scales.",
+  "lore": "Ambushes prey and squeezes it to death."
+ },
+ "crab": {
+  "description": "A small crab with pincers and a hard shell.",
+  "lore": "Scuttles on shores and tide pools, pinching at foes."
+ },
+ "crocodile": {
+  "description": "A long, scaly reptile with a toothy snout and a powerful tail.",
+  "lore": "Lurks at river edges, grabbing animals at the water's edge."
+ },
+ "deer": {
+  "description": "A graceful, hooved forest animal with a slender build and large ears.",
+  "lore": "Flees from predators and grazes at dawn and dusk."
+ },
+ "dire-wolf": {
+  "description": "A large, powerful wolf with a thick coat and heavy jaws.",
+  "lore": "Hunts in packs and attacks larger prey than ordinary wolves."
+ },
+ "draft-horse": {
+  "description": "A very large, heavy horse with strong shoulders and thick legs.",
+  "lore": "Bred to pull plows and wagons, calm and strong."
+ },
+ "eagle": {
+  "description": "A large bird of prey with broad wings, a hooked beak and sharp talons.",
+  "lore": "Soars over mountains and open land, diving on small animals."
+ },
+ "elephant": {
+  "description": "A huge, grey animal with a trunk, tusks and big ears.",
+  "lore": "Wanders warm grasslands in herds and tramples threats."
+ },
+ "elk": {
+  "description": "A tall deer with broad antlers.",
+  "lore": "Grazes in forests and meadows and charges when threatened."
+ },
+ "flying-snake": {
+  "description": "A small, brightly colored snake with leathery wings.",
+  "lore": "Glides between branches to ambush small prey."
+ },
+ "frog": {
+  "description": "A small amphibian with smooth skin and strong back legs.",
+  "lore": "Leaps into ponds and snaps up flies."
+ },
+ "giant-ape": {
+  "description": "A massive ape with a dark pelt, huge arms and a fierce roar.",
+  "lore": "Rules dense jungles and defends its territory violently."
+ },
+ "giant-badger": {
+  "description": "A big, burrowing badger with a heavy body and sharp claws.",
+  "lore": "Digs lairs under hills and bites hard when cornered."
+ },
+ "giant-bat": {
+  "description": "A horse-sized bat with leathery wings and sharp teeth.",
+  "lore": "Roosts in caves and hunts by sound at night."
+ },
+ "giant-boar": {
+  "description": "A huge, bristled boar with long, curved tusks.",
+  "lore": "A savage forest beast that charges at intruders."
+ },
+ "giant-centipede": {
+  "description": "A segmented crawler as long as a dog, with many legs and venomous fangs.",
+  "lore": "Hides under rubble and strikes at passersby."
+ },
+ "giant-constrictor-snake": {
+  "description": "A thick snake as long as a tree trunk, with muscular coils.",
+  "lore": "Squeezes large prey to death in jungles and swamps."
+ },
+ "giant-crab": {
+  "description": "A crab as wide as a table with heavy claws.",
+  "lore": "Clacks along shores and reefs, feeding on carrion."
+ },
+ "giant-crocodile": {
+  "description": "A gargantuan, armored crocodile with a bone-crushing bite.",
+  "lore": "Ambushes large animals at river fords."
+ },
+ "giant-eagle": {
+  "description": "A huge eagle with golden brown feathers and keen, intelligent eyes.",
+  "lore": "A noble bird, said to speak, that sometimes aids good folk."
+ },
+ "giant-elk": {
+  "description": "An enormous elk with broad, sweeping antlers and a proud head.",
+  "lore": "A majestic forest creature, said to be messenger of the gods."
+ },
+ "giant-fire-beetle": {
+  "description": "A beetle as big as a dog, with glowing glands that give off a warm light.",
+  "lore": "Often harvested for its glands, it munches rotting plants."
+ },
+ "giant-frog": {
+  "description": "A frog the size of a pony with a long, sticky tongue.",
+  "lore": "Waits at pond edges and snatches prey whole."
+ },
+ "giant-goat": {
+  "description": "A large goat with curved horns and a surefooted stance.",
+  "lore": "Lives on steep mountains and charges intruders."
+ },
+ "giant-hyena": {
+  "description": "A hunched scavenger with a spotted coat and a strong jaw.",
+  "lore": "Hunts in packs and cackles in the night."
+ },
+ "giant-lizard": {
+  "description": "A big, scaly lizard with a long tail and strong legs.",
+  "lore": "Basks in the sun and ambushes small prey."
+ },
+ "giant-octopus": {
+  "description": "A huge octopus with eight arms and a bulbous head.",
+  "lore": "Hides in reef crevices and drags prey into deep water."
+ },
+ "giant-owl": {
+  "description": "A great owl with soft, quiet wings and large eyes.",
+  "lore": "A night hunter, intelligent and sometimes friend to fey."
+ },
+ "giant-rat": {
+  "description": "A cat-sized rat with dirty fur and sharp teeth.",
+  "lore": "Scavenges sewers and cellars in packs."
+ },
+ "giant-scorpion": {
+  "description": "A scorpion as large as a horse, with powerful pincers and a venom-tipped tail.",
+  "lore": "Burrows in deserts and strikes at passing creatures."
+ },
+ "giant-seahorse": {
+  "description": "A seahorse the size of a pony with a curled tail and iridescent hide.",
+  "lore": "Serves as a mount for sea folk."
+ },
+ "giant-shark": {
+  "description": "A massive shark with a gaping mouth and rows of teeth.",
+  "lore": "Rules the open sea and attacks anything that moves."
+ },
+ "giant-spider": {
+  "description": "A spider big as a wagon wheel, with hairy legs and glinting eyes.",
+  "lore": "Spins webs in dark forests and caves."
+ },
+ "giant-toad": {
+  "description": "A huge, warty toad with a wide mouth and sticky tongue.",
+  "lore": "Lies in wait at the edge of ponds."
+ },
+ "giant-venomous-snake": {
+  "description": "A thick, mottled snake with long fangs.",
+  "lore": "Strikes quickly with potent venom."
+ },
+ "giant-vulture": {
+  "description": "A large bald-necked scavenger with powerful wings and a sharp beak.",
+  "lore": "Circles over carrion and sometimes attacks the weak."
+ },
+ "giant-wasp": {
+  "description": "A dog-sized wasp with a bright, striped body and a long stinger.",
+  "lore": "Builds paper nests and attacks anything near."
+ },
+ "giant-weasel": {
+  "description": "A long, sleek hunter with a flexible body and sharp teeth.",
+  "lore": "Slips into burrows to hunt and drains blood."
+ },
+ "giant-wolf-spider": {
+  "description": "A big, hairy spider that hunts without a web.",
+  "lore": "Sprints across the ground and pounces on prey."
+ },
+ "goat": {
+  "description": "A horned, agile mountain animal with a beard.",
+  "lore": "Climbs cliffs and butts at pests."
+ },
+ "hawk": {
+  "description": "A swift bird of prey with a hooked beak and a keen eye.",
+  "lore": "Dives on small animals from high above."
+ },
+ "hippopotamus": {
+  "description": "A massive, round river beast with huge jaws.",
+  "lore": "Spends days in water and defends its stretch of river aggressively."
+ },
+ "hunter-shark": {
+  "description": "A sleek shark with grey skin and jagged teeth.",
+  "lore": "Roams open water seeking wounded prey."
+ },
+ "hyena": {
+  "description": "A hunched, spotted scavenger with strong jaws.",
+  "lore": "Hunts in clans and laughs in the dark."
+ },
+ "jackal": {
+  "description": "A small, lean canine with a golden coat.",
+  "lore": "Scavenges in the wild and hunts small game in packs."
+ },
+ "killer-whale": {
+  "description": "A sleek black-and-white whale with a tall fin.",
+  "lore": "A top predator of the sea that hunts in pods."
+ },
+ "lion": {
+  "description": "A tawny big cat with a male's mane and heavy paws.",
+  "lore": "Hunts in prides on grasslands."
+ },
+ "lizard": {
+  "description": "A small, scaly reptile with quick legs.",
+  "lore": "Basks on rocks and flees under cover."
+ },
+ "mammoth": {
+  "description": "A shaggy, elephant-like beast with long tusks and a high head.",
+  "lore": "Roams frozen plains and tramples enemies."
+ },
+ "mastiff": {
+  "description": "A big, muscular guard dog with a broad head.",
+  "lore": "Bred for guarding and hunting, loyal to its master."
+ },
+ "mule": {
+  "description": "A sturdy pack animal, hybrid of horse and donkey.",
+  "lore": "Carries heavy loads over rough trails and kicks when stubborn."
+ },
+ "octopus": {
+  "description": "A soft-bodied sea creature with eight arms and a bulbous head.",
+  "lore": "Hides in reefs and ambushes small prey."
+ },
+ "owl": {
+  "description": "A small night bird with soft feathers and wide eyes.",
+  "lore": "Hunts mice in silence and hoots at night."
+ },
+ "panther": {
+  "description": "A black, sleek big cat with glowing eyes.",
+  "lore": "Stalks silently and ambushes from the trees."
+ },
+ "piranha": {
+  "description": "A small, silver fish with razor teeth.",
+  "lore": "Hunts in schools and strips flesh in minutes."
+ },
+ "plesiosaurus": {
+  "description": "A long-necked sea reptile with paddle-like flippers.",
+  "lore": "Glides in the ocean, snapping up fish."
+ },
+ "polar-bear": {
+  "description": "A huge white bear with thick fur and wide paws.",
+  "lore": "Hunts seals on the ice and is strong and patient."
+ },
+ "pony": {
+  "description": "A small, sturdy horse with a thick mane.",
+  "lore": "Used for light riding and carrying packs."
+ },
+ "pteranodon": {
+  "description": "A flying reptile with leathery wings and a long beak.",
+  "lore": "Soars over coasts, snatching fish."
+ },
+ "rat": {
+  "description": "A small rodent with a long tail and sharp teeth.",
+  "lore": "Scurries in sewers and cellars and carries disease."
+ },
+ "raven": {
+  "description": "A big, black bird with a heavy beak and a hoarse call.",
+  "lore": "A clever scavenger that mimics sounds and gathers near battles."
+ },
+ "reef-shark": {
+  "description": "A medium shark with grey skin and a pointed snout.",
+  "lore": "Patrols coral reefs hunting small fish."
+ },
+ "rhinoceros": {
+  "description": "A massive, grey beast with a thick horn on its snout.",
+  "lore": "A short-sighted grazer that charges threats."
+ },
+ "riding-horse": {
+  "description": "A strong, swift horse with a trained temperament.",
+  "lore": "Bred for carrying riders over long distances."
+ },
+ "saber-toothed-tiger": {
+  "description": "A stocky big cat with long, curved fangs.",
+  "lore": "An ambush predator of cold plains."
+ },
+ "scorpion": {
+  "description": "A small arachnid with pincers and a venomous tail.",
+  "lore": "Hides in crevices and stings those who step near."
+ },
+ "seahorse": {
+  "description": "A tiny sea creature with a curled tail and a horse-like head.",
+  "lore": "Clings to seaweed and drifts quietly."
+ },
+ "spider": {
+  "description": "A small, eight-legged hunter with fangs.",
+  "lore": "Spins webs in corners and bites flies."
+ },
+ "swarm-of-bats": {
+  "description": "A cloud of squeaking bats that fills a cave.",
+  "lore": "Roosts in huge colonies and bursts out at dusk."
+ },
+ "swarm-of-insects": {
+  "description": "A buzzing cloud of biting, crawling insects.",
+  "lore": "Descends on prey in swampy or rotting places."
+ },
+ "swarm-of-piranhas": {
+  "description": "A thrashing school of fish with tiny razor teeth.",
+  "lore": "Churns the water to strip flesh."
+ },
+ "swarm-of-rats": {
+  "description": "A writhing mass of rodents.",
+  "lore": "Floods out of sewers and stores, devouring food."
+ },
+ "swarm-of-ravens": {
+  "description": "A flock of black birds circling and pecking.",
+  "lore": "Gathers around battlefields and battle sites."
+ },
+ "swarm-of-venomous-snakes": {
+  "description": "A writhing knot of snakes.",
+  "lore": "Fills pits and traps, striking at anything near."
+ },
+ "tiger": {
+  "description": "A large, striped big cat with powerful limbs.",
+  "lore": "A solitary hunter that stalks through jungles and grass."
+ },
+ "triceratops": {
+  "description": "A rhinoceros-like dinosaur with a bony frill and three horns.",
+  "lore": "Herds graze on plains and charge predators."
+ },
+ "tyrannosaurus-rex": {
+  "description": "A towering two-legged dinosaur with a huge head and tiny arms.",
+  "lore": "The great predator of prehistoric lands."
+ },
+ "venomous-snake": {
+  "description": "A slim snake with a triangular head and bright patterns.",
+  "lore": "Hides in brush and strikes if disturbed."
+ },
+ "vulture": {
+  "description": "A bald scavenger bird with broad wings and a hooked beak.",
+  "lore": "Circles above corpses and waits."
+ },
+ "warhorse": {
+  "description": "A large, powerful horse trained for battle.",
+  "lore": "Carries armored riders into combat."
+ },
+ "weasel": {
+  "description": "A small, slender hunter with a long body and quick movements.",
+  "lore": "Slips into burrows to catch mice."
+ },
+ "wolf": {
+  "description": "A grey, lean canine with a thick coat and bright eyes.",
+  "lore": "Hunts in packs and howls at the moon."
+ }
+}

@@ -28,6 +28,17 @@ func TestNextLivingCombatTurn(t *testing.T) {
 	}
 }
 
+func TestAtZeroHPConditions(t *testing.T) {
+	if !atZeroHP(0, 50, false) || atZeroHP(0, 50, true) || atZeroHP(5, 50, false) || atZeroHP(0, 0, false) {
+		t.Error("atZeroHP: living characters at 0 HP only")
+	}
+	for c, want := range map[string]bool{"unconscious": true, "incapacitated": true, "prone": true, "poisoned": false} {
+		if downedCondition(c) != want {
+			t.Errorf("downedCondition(%q) = %v", c, !want)
+		}
+	}
+}
+
 func TestCharacterActionBlock(t *testing.T) {
 	for _, tc := range []struct {
 		action string
@@ -42,6 +53,8 @@ func TestCharacterActionBlock(t *testing.T) {
 		{"death_save", 5, false, false, "death_save_unavailable"},
 		{"death_save", 0, false, false, ""},
 		{"attack", 5, false, false, ""},
+		{"attack", 0, false, false, "unconscious_at_0_hp"},
+		{"wild_shape", 0, true, false, "unconscious_at_0_hp"},
 	} {
 		if got := characterActionBlock(tc.action, tc.hp, tc.stable, tc.dead); got != tc.want {
 			t.Errorf("action=%s hp=%d stable=%v dead=%v: got %q, want %q", tc.action, tc.hp, tc.stable, tc.dead, got, tc.want)

@@ -1,6 +1,8 @@
 package game
 
-import "testing"
+import (
+	"testing"
+)
 
 func TestLevelForXP(t *testing.T) {
 	tests := []struct {
@@ -55,32 +57,8 @@ func TestXPForNextLevel(t *testing.T) {
 	}
 }
 
-func TestXPToNextLevel(t *testing.T) {
-	tests := []struct {
-		name      string
-		currentXP int
-		want      int
-	}{
-		{"0 XP needs 300 to level 2", 0, 300},
-		{"150 XP needs 150 to level 2", 150, 150},
-		{"300 XP needs 600 to level 3", 300, 600},
-		{"6400 XP needs 100 to level 5", 6400, 100},
-		{"355000 XP at max level", 355000, 0},
-		{"500000 XP at max level", 500000, 0},
-	}
-
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			got := XPToNextLevel(tt.currentXP)
-			if got != tt.want {
-				t.Errorf("XPToNextLevel(%d) = %d, want %d", tt.currentXP, got, tt.want)
-			}
-		})
-	}
-}
-
 func TestXPThresholds(t *testing.T) {
-	// Verify XP thresholds match PHB p15
+	// Verify XP thresholds match
 	expected := map[int]int{
 		1: 0, 2: 300, 3: 900, 4: 2700, 5: 6500,
 		6: 14000, 7: 23000, 8: 34000, 9: 48000, 10: 64000,

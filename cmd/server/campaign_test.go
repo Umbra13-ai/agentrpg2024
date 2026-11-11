@@ -34,7 +34,7 @@ type TestCharacter struct {
 	ID      int
 	Name    string
 	Class   string
-	Race    string
+	Species    string
 	AgentID int
 }
 
@@ -255,7 +255,7 @@ func TestCampaignCreationAndJoining(t *testing.T) {
 	characterConfigs := []struct {
 		Name       string
 		Class      string
-		Race       string
+		Species       string
 		Background string
 	}{
 		{"Thorin Ironforge", "fighter", "dwarf", "soldier"},
@@ -283,7 +283,7 @@ func TestCampaignCreationAndJoining(t *testing.T) {
 		_, result = makeRequest(t, "POST", "/api/characters", map[string]interface{}{
 			"name":       testPrefix + config.Name,
 			"class":      config.Class,
-			"race":       config.Race,
+			"species":       config.Species,
 			"background": config.Background,
 			"str":        14,
 			"dex":        12,
@@ -443,7 +443,7 @@ func TestCombatSystem(t *testing.T) {
 	_, result = makeRequest(t, "POST", "/api/characters", map[string]interface{}{
 		"name":  testPrefix + "Sir Combat",
 		"class": "fighter",
-		"race":  "human",
+		"species":  "human",
 		"str":   16,
 		"dex":   14,
 		"con":   15,
@@ -586,7 +586,7 @@ func TestDeathSaves(t *testing.T) {
 	_, result = makeRequest(t, "POST", "/api/characters", map[string]interface{}{
 		"name":  testPrefix + "Unfortunate Hero",
 		"class": "fighter",
-		"race":  "human",
+		"species":  "human",
 	}, playerAuth)
 	charID := int(result["character_id"].(float64))
 
@@ -656,7 +656,7 @@ func TestConditionEffects(t *testing.T) {
 	_, result = makeRequest(t, "POST", "/api/characters", map[string]interface{}{
 		"name":  testPrefix + "Condition Test",
 		"class": "fighter",
-		"race":  "human",
+		"species":  "human",
 	}, playerAuth)
 	charID := int(result["character_id"].(float64))
 
@@ -747,7 +747,7 @@ func TestXPAndLeveling(t *testing.T) {
 	_, result = makeRequest(t, "POST", "/api/characters", map[string]interface{}{
 		"name":  testPrefix + "XP Test Hero",
 		"class": "fighter",
-		"race":  "human",
+		"species":  "human",
 	}, playerAuth)
 	charID := int(result["character_id"].(float64))
 
@@ -811,7 +811,7 @@ func TestGoldAndInventory(t *testing.T) {
 	_, result = makeRequest(t, "POST", "/api/characters", map[string]interface{}{
 		"name":  testPrefix + "Rich Hero",
 		"class": "rogue",
-		"race":  "halfling",
+		"species":  "halfling",
 	}, playerAuth)
 	charID := int(result["character_id"].(float64))
 
@@ -899,7 +899,7 @@ func TestSpellcasting(t *testing.T) {
 	_, result = makeRequest(t, "POST", "/api/characters", map[string]interface{}{
 		"name":  testPrefix + "Arcane Master",
 		"class": "wizard",
-		"race":  "elf",
+		"species":  "elf",
 		"int":   16,
 	}, playerAuth)
 	charID := int(result["character_id"].(float64))
@@ -984,7 +984,7 @@ func TestContestedChecks(t *testing.T) {
 	_, result = makeRequest(t, "POST", "/api/characters", map[string]interface{}{
 		"name":  testPrefix + "Strong Grappler",
 		"class": "fighter",
-		"race":  "half-orc",
+		"species":  "half-orc",
 		"str":   18,
 	}, player1Auth)
 	char1ID := int(result["character_id"].(float64))
@@ -992,7 +992,7 @@ func TestContestedChecks(t *testing.T) {
 	_, result = makeRequest(t, "POST", "/api/characters", map[string]interface{}{
 		"name":  testPrefix + "Quick Dodger",
 		"class": "rogue",
-		"race":  "halfling",
+		"species":  "halfling",
 		"dex":   16,
 	}, player2Auth)
 	char2ID := int(result["character_id"].(float64))
@@ -1080,7 +1080,7 @@ func TestCampaignFlow(t *testing.T) {
 		playerName string
 		charName   string
 		class      string
-		race       string
+		species       string
 	}{
 		{"Alice", "Thorin Stonehammer", "fighter", "dwarf"},
 		{"Bob", "Elysia Starweaver", "wizard", "elf"},
@@ -1101,7 +1101,7 @@ func TestCampaignFlow(t *testing.T) {
 		_, result = makeRequest(t, "POST", "/api/characters", map[string]interface{}{
 			"name":  testPrefix + p.charName,
 			"class": p.class,
-			"race":  p.race,
+			"species":  p.species,
 			"str":   14,
 			"dex":   14,
 			"con":   14,
@@ -1260,7 +1260,7 @@ func TestCombatSkipRequired(t *testing.T) {
 	_, result = makeRequest(t, "POST", "/api/characters", map[string]interface{}{
 		"name":  testPrefix + "Slowpoke",
 		"class": "fighter",
-		"race":  "human",
+		"species":  "human",
 	}, playerAuth)
 	charID := int(result["character_id"].(float64))
 	charName := testPrefix + "Slowpoke"
@@ -1449,7 +1449,7 @@ func TestSkipRequiredVsSkipRecommended(t *testing.T) {
 	_, result = makeRequest(t, "POST", "/api/characters", map[string]interface{}{
 		"name":  testPrefix + "TestChar",
 		"class": "fighter",
-		"race":  "human",
+		"species":  "human",
 	}, playerAuth)
 	charID := int(result["character_id"].(float64))
 
@@ -1521,14 +1521,14 @@ func TestGMStatusMultiCampaign(t *testing.T) {
 	_, result = makeRequest(t, "POST", "/api/characters", map[string]interface{}{
 		"name":  testPrefix + "Fighter",
 		"class": "fighter",
-		"race":  "human",
+		"species":  "human",
 	}, player1Auth)
 	char1ID := int(result["character_id"].(float64))
 
 	_, result = makeRequest(t, "POST", "/api/characters", map[string]interface{}{
 		"name":  testPrefix + "Wizard",
 		"class": "wizard",
-		"race":  "elf",
+		"species":  "elf",
 	}, player2Auth)
 	char2ID := int(result["character_id"].(float64))
 

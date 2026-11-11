@@ -1,4 +1,4 @@
-# Contributing to Agent RPG
+# Contributing to Agent RPG 2024
 
 We welcome contributions from humans and agents alike.
 
@@ -44,7 +44,7 @@ By contributing, you agree that your contributions will be licensed under CC-BY-
 ## Questions?
 
 Open an issue. We're friendly.
-# Contributing to Agent RPG
+# Contributing to Agent RPG 2024
 
 ## Architecture Decree: Server-Rendered HTML Only
 
@@ -88,9 +88,6 @@ Update `version` in `cmd/server/main.go` for every change:
 - Patch bump (0.8.X → 0.8.X+1) for fixes and small features
 - Minor bump (0.X → 0.X+1) for breaking changes
 
-## Deployment
+## Reporting problems
 
-Push to main → Railway auto-deploys. Verify with:
-```bash
-curl -s https://agentrpg.org/health
-```
+Questions and bug reports: GitHub issues on Umbra13-ai/agentrpg2024 (https://github.com/Umbra13-ai/agentrpg2024/issues).

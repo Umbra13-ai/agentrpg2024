@@ -88,10 +88,10 @@ func TestSpellSlots(t *testing.T) {
 		t.Errorf("Paladin level 2 should have 2 first-level slots, got %d", slots[1])
 	}
 
-	// Half caster level 1 (no spells yet)
+	// 2024 half casters have spell slots from level 1
 	slots = SpellSlots("ranger", 1)
-	if len(slots) != 0 {
-		t.Errorf("Ranger level 1 should have no slots, got %v", slots)
+	if slots[1] != 2 {
+		t.Errorf("Ranger level 1 should have 2 first-level slots, got %v", slots)
 	}
 
 	// Warlock level 5
@@ -108,8 +108,8 @@ func TestSpellSlots(t *testing.T) {
 }
 
 func TestIsPreparedCaster(t *testing.T) {
-	prepared := []string{"cleric", "druid", "paladin", "wizard"}
-	notPrepared := []string{"bard", "ranger", "sorcerer", "warlock", "fighter", "rogue"}
+	prepared := []string{"bard", "cleric", "druid", "paladin", "ranger", "sorcerer", "warlock", "wizard"}
+	notPrepared := []string{"fighter", "rogue", "barbarian", "monk"}
 
 	for _, c := range prepared {
 		if !IsPreparedCaster(c) {
@@ -121,50 +121,6 @@ func TestIsPreparedCaster(t *testing.T) {
 		if IsPreparedCaster(c) {
 			t.Errorf("%s should not be a prepared caster", c)
 		}
-	}
-}
-
-func TestIsKnownCaster(t *testing.T) {
-	known := []string{"bard", "ranger", "sorcerer", "warlock"}
-	notKnown := []string{"cleric", "druid", "paladin", "wizard", "fighter", "rogue"}
-
-	for _, c := range known {
-		if !IsKnownCaster(c) {
-			t.Errorf("%s should be a known caster", c)
-		}
-	}
-
-	for _, c := range notKnown {
-		if IsKnownCaster(c) {
-			t.Errorf("%s should not be a known caster", c)
-		}
-	}
-}
-
-func TestSpellcastingAbility(t *testing.T) {
-	tests := []struct {
-		class string
-		want  string
-	}{
-		{"wizard", "int"},
-		{"cleric", "wis"},
-		{"druid", "wis"},
-		{"ranger", "wis"},
-		{"bard", "cha"},
-		{"paladin", "cha"},
-		{"sorcerer", "cha"},
-		{"warlock", "cha"},
-		{"fighter", ""},
-		{"rogue", ""},
-	}
-
-	for _, tt := range tests {
-		t.Run(tt.class, func(t *testing.T) {
-			got := SpellcastingAbility(tt.class)
-			if got != tt.want {
-				t.Errorf("SpellcastingAbility(%q) = %q, want %q", tt.class, got, tt.want)
-			}
-		})
 	}
 }
 
@@ -205,9 +161,9 @@ func TestSpellSaveDC(t *testing.T) {
 }
 
 func TestClassResources(t *testing.T) {
-	// Monk has Ki
+	// Monk has Focus Points
 	monk := ClassResources("monk")
-	if len(monk) != 1 || monk[0].Key != "ki" {
+	if len(monk) != 1 || monk[0].Key != "focus" {
 		t.Errorf("Monk resources incorrect: %v", monk)
 	}
 
@@ -238,13 +194,14 @@ func TestMaxClassResource(t *testing.T) {
 		chaMod   int
 		want     int
 	}{
-		// Ki equals monk level
-		{"monk", 5, "ki", 0, 5},
-		{"monk", 10, "ki", 0, 10},
+		// Focus Points equal the Monk level
+		{"monk", 5, "focus", 0, 5},
+		{"monk", 10, "focus", 0, 10},
 		// Rage scales with level
 		{"barbarian", 1, "rage", 0, 2},
 		{"barbarian", 6, "rage", 0, 4},
-		{"barbarian", 20, "rage", 0, 999}, // unlimited
+		{"barbarian", 17, "rage", 0, 6},
+		{"barbarian", 20, "rage", 0, 6}, // 2024: no unlimited Rage
 		// Bardic Inspiration scales with CHA mod
 		{"bard", 5, "bardic_inspiration", 3, 3},
 		{"bard", 5, "bardic_inspiration", 0, 1}, // min 1
@@ -252,9 +209,9 @@ func TestMaxClassResource(t *testing.T) {
 		{"paladin", 5, "lay_on_hands", 0, 25},
 		{"paladin", 10, "lay_on_hands", 0, 50},
 		// Channel Divinity for cleric
-		{"cleric", 2, "channel_divinity", 0, 1},
-		{"cleric", 6, "channel_divinity", 0, 2},
-		{"cleric", 18, "channel_divinity", 0, 3},
+		{"cleric", 2, "channel_divinity", 0, 2},
+		{"cleric", 6, "channel_divinity", 0, 3},
+		{"cleric", 18, "channel_divinity", 0, 4},
 	}
 
 	for _, tt := range tests {
@@ -269,10 +226,10 @@ func TestMaxClassResource(t *testing.T) {
 }
 
 func TestGetActiveClassFeatures(t *testing.T) {
-	// Fighter level 1 should have Fighting Style and Second Wind
+	// 2024 Fighter level 1: Fighting Style, Second Wind and Weapon Mastery
 	features := GetActiveClassFeatures("fighter", 1)
-	if len(features) != 2 {
-		t.Errorf("Fighter level 1 should have 2 features, got %d", len(features))
+	if len(features) != 3 {
+		t.Errorf("Fighter level 1 should have 3 features, got %d", len(features))
 	}
 
 	// Fighter level 5 should have Extra Attack
@@ -320,43 +277,19 @@ func TestHasClassFeature(t *testing.T) {
 	}
 }
 
-func TestGetClassFeatureMechanic(t *testing.T) {
-	// Barbarian brutal_critical scales
-	val, ok := GetClassFeatureMechanic("barbarian", 9, "brutal_critical")
-	if !ok || val != "1" {
-		t.Errorf("Barbarian level 9 brutal_critical should be 1, got %q", val)
-	}
-
-	val, ok = GetClassFeatureMechanic("barbarian", 13, "brutal_critical")
-	if !ok || val != "2" {
-		t.Errorf("Barbarian level 13 brutal_critical should be 2, got %q", val)
-	}
-
-	val, ok = GetClassFeatureMechanic("barbarian", 17, "brutal_critical")
-	if !ok || val != "3" {
-		t.Errorf("Barbarian level 17 brutal_critical should be 3, got %q", val)
-	}
-
-	// Non-existent mechanic
-	_, ok = GetClassFeatureMechanic("fighter", 20, "nonexistent")
-	if ok {
-		t.Error("Non-existent mechanic should return false")
-	}
-}
-
 func TestMartialArtsDie(t *testing.T) {
 	tests := []struct {
 		level int
 		want  int
 	}{
-		{1, 4},
-		{4, 4},
-		{5, 6},
-		{10, 6},
-		{11, 8},
-		{16, 8},
-		{17, 10},
-		{20, 10},
+		{1, 6},
+		{4, 6},
+		{5, 8},
+		{10, 8},
+		{11, 10},
+		{16, 10},
+		{17, 12},
+		{20, 12},
 	}
 
 	for _, tt := range tests {
@@ -413,43 +346,6 @@ func TestBardicInspirationDie(t *testing.T) {
 			got := BardicInspirationDie(tt.level)
 			if got != tt.want {
 				t.Errorf("BardicInspirationDie(%d) = %d, want %d", tt.level, got, tt.want)
-			}
-		})
-	}
-}
-
-func TestBrutalCriticalDice(t *testing.T) {
-	// Barbarian tests
-	barbarianTests := []struct {
-		level int
-		want  int
-	}{
-		{1, 0},
-		{8, 0},
-		{9, 1},
-		{12, 1},
-		{13, 2},
-		{16, 2},
-		{17, 3},
-		{20, 3},
-	}
-
-	for _, tt := range barbarianTests {
-		t.Run("barbarian_level_"+string(rune(tt.level)), func(t *testing.T) {
-			got := BrutalCriticalDice("barbarian", tt.level)
-			if got != tt.want {
-				t.Errorf("BrutalCriticalDice(barbarian, %d) = %d, want %d", tt.level, got, tt.want)
-			}
-		})
-	}
-
-	// Non-barbarian always returns 0
-	nonBarbarianTests := []string{"fighter", "rogue", "wizard", ""}
-	for _, class := range nonBarbarianTests {
-		t.Run("non_barbarian_"+class, func(t *testing.T) {
-			got := BrutalCriticalDice(class, 20)
-			if got != 0 {
-				t.Errorf("BrutalCriticalDice(%q, 20) = %d, want 0", class, got)
 			}
 		})
 	}
@@ -537,5 +433,24 @@ func TestUnarmoredMovementBonus(t *testing.T) {
 				t.Errorf("UnarmoredMovementBonus(%d) = %d, want %d", tt.level, got, tt.want)
 			}
 		})
+	}
+}
+
+func TestFighter2024Resources(t *testing.T) {
+	for _, tt := range []struct{ level, want int }{{1, 2}, {3, 2}, {4, 3}, {9, 3}, {10, 4}, {20, 4}} {
+		if got := MaxClassResource("fighter", tt.level, "second_wind", 0); got != tt.want {
+			t.Errorf("Second Wind uses at level %d = %d, want %d", tt.level, got, tt.want)
+		}
+	}
+	if MaxClassResource("fighter", 16, "action_surge", 0) != 1 || MaxClassResource("fighter", 17, "action_surge", 0) != 2 {
+		t.Error("Action Surge is one use, two from level 17")
+	}
+}
+
+func TestBardicInspirationDie2024(t *testing.T) {
+	for _, tt := range []struct{ level, want int }{{1, 6}, {4, 6}, {5, 8}, {9, 8}, {10, 10}, {14, 10}, {15, 12}, {20, 12}} {
+		if got := BardicInspirationDie(tt.level); got != tt.want {
+			t.Errorf("Bardic die at level %d = d%d, want d%d", tt.level, got, tt.want)
+		}
 	}
 }

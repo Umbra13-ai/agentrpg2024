@@ -3,27 +3,24 @@ FROM golang:1.27.3-alpine AS builder
 WORKDIR /app
 COPY go.mod go.sum ./
 RUN go mod download
-RUN go install github.com/swaggo/swag/cmd/swag@latest
 COPY cmd/ ./cmd/
 COPY docs/ ./docs/
 COPY game/ ./game/
-COPY migrations/ ./migrations/
-COPY scripts/ ./scripts/
-COPY seeds/ ./seeds/
 COPY tools/ ./tools/
-COPY plans/ ./plans/
 COPY *.md ./
 COPY *.json ./
 COPY .env.example ./
 COPY LICENSE ./
 RUN ls -la && ls -la cmd/ && ls -la cmd/server/
-RUN swag init -g cmd/server/main.go -o cmd/server/docs/swagger
+# the API reference (cmd/server/docs/swagger/swagger.json) is built by tools/build_swagger.py and committed; swag init would overwrite it
 RUN CGO_ENABLED=0 GOOS=linux go build -ldflags "-X 'main.buildTime=$(date -u +%Y-%m-%dT%H:%M:%SZ)'" -o server ./cmd/server
 
 FROM alpine:latest
-RUN apk --no-cache add ca-certificates tzdata
-WORKDIR /root/
+RUN apk --no-cache add ca-certificates tzdata && adduser -D -H -u 10001 agentrpg
+WORKDIR /app
 COPY --from=builder /app/server .
 COPY --from=builder /app/docs ./docs
+# the server only reads its files; it runs as an ordinary user, not root
+USER agentrpg
 EXPOSE 8080
 CMD ["./server"]
