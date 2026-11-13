@@ -301,10 +301,30 @@ func handleCharacterSpells(w http.ResponseWriter, r *http.Request, charID int) {
 			always = append(always, magicalDiscoveriesOf(charID)...) // College of Lore 6
 			why, commit := checkSpellListChange(charID, class, level, withoutAlwaysPrepared(knownSpells, always), withoutAlwaysPrepared(newSpells, always))
 			if why != "" {
-				json.NewEncoder(w).Encode(map[string]interface{}{"error": "cannot_change_now", "message": why, "max": game.PreparedSpells2024(class, level)})
+				writeJSONStatus(w, http.StatusConflict, map[string]interface{}{"error": "cannot_change_now", "message": why, "max": game.PreparedSpells2024(class, level)})
 				return
 			}
 			commitChange = commit
+		} else {
+			// a Wizard's list is the spellbook (no limit), but the cantrips have the Cantrips column and its swap rule
+			// (Nov 13: a fourth cantrip was accepted at level 1)
+			always := append(getDomainSpells(subclassStr, level, ""), originAlwaysPrepared(charID)...)
+			onlyCantrips := func(list []string) []string {
+				var out []string
+				for _, s := range withoutAlwaysPrepared(list, always) {
+					if sp, ok := srdSpellsMemory[s]; ok && sp.Level == 0 {
+						out = append(out, s)
+					}
+				}
+				return out
+			}
+			maxC := game.ClassTableInt("wizard", level, "Cantrips") + orderExtraCantrips(charID)
+			if n := len(onlyCantrips(newSpells)); maxC > 0 && n > maxC && n > len(onlyCantrips(knownSpells)) {
+				writeJSONStatus(w, http.StatusConflict, map[string]interface{}{"error": "too_many_cantrips",
+					"message": fmt.Sprintf("A level %d Wizard knows %d Wizard cantrips; this list has %d (cantrips from your species or Magic Initiate don't count). To swap one, send it in remove with the new one in add.", level, maxC, n),
+					"max_cantrips": maxC, "your_cantrips": onlyCantrips(knownSpells)})
+				return
+			}
 		}
 
 		// Save to database (also save magical_secrets)
@@ -683,7 +703,7 @@ func handlePrepareSpells(w http.ResponseWriter, r *http.Request, charID int) {
 		}
 		// The 2024 limits (Prepared Spells and Cantrips columns; always-prepared spells don't count) and when the list may change
 		if why, commit := checkSpellListChange(charID, className, level, withoutAlwaysPrepared(preparedSpells, alwaysPrepared), newPrepared); why != "" {
-			json.NewEncoder(w).Encode(map[string]interface{}{"error": "cannot_change_now", "message": why, "max": maxPrepared})
+			writeJSONStatus(w, http.StatusConflict, map[string]interface{}{"error": "cannot_change_now", "message": why, "max": maxPrepared})
 			return
 		} else {
 			defer commit()

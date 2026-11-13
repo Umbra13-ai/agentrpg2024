@@ -180,11 +180,17 @@ func resolveFeat(slug, source string, in *featChoiceInput, bgListNote string, us
 			if err != nil {
 				return nil, err
 			}
+			if containsStr(*known, s) {
+				return nil, originErr("spell_already_known", nil, "You already know %s (from your species or your other Magic Initiate): choose a different cantrip for %s Magic Initiate", originSpellName(s), featSourceName(source))
+			}
 			f.Cantrips = append(f.Cantrips, s)
 		}
 		s, err := check(in.Spell, 1)
 		if err != nil {
 			return nil, err
+		}
+		if containsStr(*known, s) {
+			return nil, originErr("spell_already_known", nil, "You already have %s from your other Magic Initiate: choose a different level 1 spell for %s Magic Initiate", originSpellName(s), featSourceName(source))
 		}
 		f.Spell, f.List, f.Ability = s, list, ab
 		usedLists[list] = true
@@ -302,7 +308,7 @@ func resolveOrigin(in originInput) (*originOutput, *originError) {
 
 	// Feats: the background's Origin feat, and the Human's extra one
 	usedLists := map[string]bool{}
-	var known []string
+	known := append([]string(nil), species.Cantrips...) // a feat can't give a cantrip the species already gives
 	var feats []originFeat
 	f1, ferr := resolveFeat(bg.Feat, "background", in.BackgroundFeat, bg.FeatNote, usedLists, &heldSkills, &heldTools, &known)
 	if ferr != nil {
@@ -334,7 +340,7 @@ func resolveOrigin(in originInput) (*originOutput, *originError) {
 	}
 
 	// Spells from species and feats
-	out.KnownSpells = append(append([]string(nil), species.Cantrips...), known...)
+	out.KnownSpells = known // species cantrips first, then the feats' spells
 
 	// Equipment: package A or 50 GP
 	opt := strings.ToLower(strings.TrimSpace(in.BackgroundEquipment))
@@ -529,4 +535,20 @@ func speciesHPPerLevel(charID int) int {
 		return rec.Species.HPPerLevel
 	}
 	return 0
+}
+
+// originSpellName is a spell's SRD name (or its slug in words when the spells aren't loaded).
+func originSpellName(slug string) string {
+	if sp, ok := srdSpellsMemory[slug]; ok && sp.Name != "" {
+		return sp.Name
+	}
+	return titleWords(strings.ReplaceAll(slug, "-", " "))
+}
+
+// featSourceName: "your background's" or "your Human feat's".
+func featSourceName(source string) string {
+	if source == "species" {
+		return "your Human feat's"
+	}
+	return "your background's"
 }

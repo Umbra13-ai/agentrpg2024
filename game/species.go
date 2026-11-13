@@ -400,3 +400,30 @@ func ValidateLanguages(chosen []string) ([]string, error) {
 	}
 	return out, nil
 }
+
+// SpeciesCantrips: the cantrips a species' lineage or legacy gives at level 1 (SRD 5.2.1), so a builder can warn before a feat
+// picks the same one. choice is the lineage (elf, gnome) or legacy (tiefling).
+func SpeciesCantrips(species, choice string) []string {
+	switch normalizeSpeciesKey(species) + "/" + strings.ToLower(strings.TrimSpace(choice)) {
+	case "elf/drow":
+		return []string{"dancing-lights"}
+	case "elf/high_elf", "elf/high elf":
+		return []string{"prestidigitation"}
+	case "elf/wood_elf", "elf/wood elf":
+		return []string{"druidcraft"}
+	case "gnome/forest":
+		return []string{"minor-illusion"}
+	case "gnome/rock":
+		return []string{"mending", "prestidigitation"}
+	case "tiefling/abyssal":
+		return []string{"thaumaturgy", "poison-spray"}
+	case "tiefling/chthonic":
+		return []string{"thaumaturgy", "chill-touch"}
+	case "tiefling/infernal":
+		return []string{"thaumaturgy", "fire-bolt"}
+	}
+	if normalizeSpeciesKey(species) == "tiefling" {
+		return []string{"thaumaturgy"}
+	}
+	return nil
+}

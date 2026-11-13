@@ -57,6 +57,11 @@ func checkSpellListChange(charID int, class string, level int, oldList, newList 
 	if max := game.ClassTableInt(c, level, "Cantrips") + orderExtraCantrips(charID); max > 0 && len(newC) > max {
 		return fmt.Sprintf("A level %d %s knows %d cantrips; this list has %d.", level, class, max, len(newC)), nil
 	}
+	if open, _ := shopOpen(charID); open {
+		// Before the campaign starts the character is still being made: any list within the limits is fine (Nov 13: a tester had
+		// to clear the old choices before choosing new ones)
+		return "", func() {}
+	}
 	removedL, removedC := 0, 0
 	for s := range oldL {
 		if !newL[s] {

@@ -14,7 +14,7 @@ import (
 	"time"
 )
 
-const version = "1.1.1"
+const version = "1.1.2"
 
 // Build time set via ldflags: -ldflags "-X main.buildTime=$(date -u +%Y-%m-%dT%H:%M:%SZ)"
 var buildTime = "dev"

@@ -731,15 +731,19 @@ func builderSteps(body map[string]interface{}, agentID int, withCheck bool) []bu
 			list := strings.ToLower(bg.FeatNote)
 			fc := bmap(body, "background_feat_choices")
 			miProblem := magicInitiateProblem(fc, list)
+			spCantrips := draftSpeciesCantrips(body)
+			if miProblem == "" {
+				miProblem = alreadyKnownProblem(fc, spCantrips, nil)
+			}
 			okF := fc != nil && miProblem == "" && len(blist(fc, "cantrips")) == 2 && bstr(fc, "spell") != "" && bstr(fc, "spellcasting_ability") != ""
 			featChoice := choice("background_feat_choices", fmt.Sprintf("Magic Initiate (%s): 2 cantrips and 1 level 1 spell from the %s list, and the ability you cast them with (int, wis or cha)", bg.FeatNote, bg.FeatNote), 1,
-				fmt.Sprintf("GET /api/universe/class-spells/%s", list), fc, okF, miProblem)
+				magicInitiateOptions(list, spCantrips, nil), fc, okF, miProblem)
 			featChoice["option_details"] = map[string]interface{}{
 				"what_the_feat_does": originFeatDoes(bg.Feat, bg.FeatNote),
 				"spellcasting_ability": map[string]string{"int": abilityDescriptions["int"], "wis": abilityDescriptions["wis"], "cha": abilityDescriptions["cha"]},
 			}
 			s3.Choices = append(s3.Choices, featChoice)
-			sug3["background_feat_choices"] = magicInitiateSuggestion(list, class)
+			sug3["background_feat_choices"] = magicInitiateSuggestion(list, class, spCantrips...)
 			if !okF {
 				s3.Remaining++
 			}
@@ -854,9 +858,17 @@ func builderSteps(body map[string]interface{}, agentID int, withCheck bool) []bu
 			if prob == "" && list != "" {
 				prob = magicInitiateProblem(fc, list)
 			}
+			var bgSpells []string // the background's Magic Initiate spells: the Human's can't repeat them
+			if bgList != "" {
+				bfc := bmap(body, "background_feat_choices")
+				bgSpells = append(blist(bfc, "cantrips"), bstr(bfc, "spell"))
+			}
+			if prob == "" {
+				prob = alreadyKnownProblem(fc, draftSpeciesCantrips(body), bgSpells)
+			}
 			okF := fc != nil && list != "" && prob == "" && len(blist(fc, "cantrips")) == 2 && bstr(fc, "spell") != "" && bstr(fc, "spellcasting_ability") != ""
 			featChoice := choice("species_feat_choices", "Magic Initiate (your Human feat): a spell list (cleric, druid or wizard), 2 cantrips and 1 level 1 spell from it, and the ability you cast them with (int, wis or cha)", 1,
-				"GET /api/universe/class-spells/{cleric|druid|wizard}", fc, okF, prob)
+				humanMagicInitiateOptions(bgList, bgSpells), fc, okF, prob)
 			featChoice["option_details"] = map[string]interface{}{
 				"what_the_feat_does":   srdOriginFeats["magic_initiate"],
 				"spellcasting_ability": map[string]string{"int": abilityDescriptions["int"], "wis": abilityDescriptions["wis"], "cha": abilityDescriptions["cha"]},
@@ -866,7 +878,7 @@ func builderSteps(body map[string]interface{}, agentID int, withCheck bool) []bu
 			if bgList == "wizard" {
 				sugList = "cleric"
 			}
-			sug4["species_feat_choices"] = magicInitiateSuggestion(sugList, class)
+			sug4["species_feat_choices"] = magicInitiateSuggestion(sugList, class, bgSpells...)
 			if !okF {
 				s4.Remaining++
 			}
@@ -1177,7 +1189,7 @@ func onClassList(slug, class string) bool {
 }
 
 // magicInitiateSuggestion: two cantrips and a spell from the feat's list that the class doesn't already get.
-func magicInitiateSuggestion(list, class string) map[string]interface{} {
+func magicInitiateSuggestion(list, class string, avoid ...string) map[string]interface{} {
 	cands := map[string][]string{"cleric": {"guidance", "sacred-flame", "light", "thaumaturgy", "spare-the-dying"}, "wizard": {"fire-bolt", "mage-hand", "light", "minor-illusion", "prestidigitation"},
 		"druid": {"guidance", "produce-flame", "druidcraft", "shillelagh"}}[list]
 	spells := map[string][]string{"cleric": {"bless", "healing-word", "cure-wounds", "shield-of-faith"}, "wizard": {"magic-missile", "shield", "find-familiar", "detect-magic"},
@@ -1191,7 +1203,7 @@ func magicInitiateSuggestion(list, class string) map[string]interface{} {
 	var cs []string
 	for _, pass := range []bool{true, false} { // first what the class doesn't already get, then any
 		for _, c := range cands {
-			if len(cs) < 2 && (!pass || !classHas[c]) && onClassList(c, list) && !containsStr(cs, c) {
+			if len(cs) < 2 && (!pass || !classHas[c]) && onClassList(c, list) && !containsStr(cs, c) && !containsStr(avoid, c) {
 				cs = append(cs, c)
 			}
 		}
@@ -1199,7 +1211,7 @@ func magicInitiateSuggestion(list, class string) map[string]interface{} {
 	sp := ""
 	for _, pass := range []bool{true, false} {
 		for _, s := range spells {
-			if sp == "" && (!pass || !classHas[s]) && onClassList(s, list) {
+			if sp == "" && (!pass || !classHas[s]) && onClassList(s, list) && !containsStr(avoid, s) {
 				sp = s
 			}
 		}
@@ -2268,4 +2280,74 @@ func magicInitiateProblem(fc map[string]interface{}, list string) string {
 		}
 	}
 	return ""
+}
+
+// draftSpeciesCantrips: the cantrips the draft's species lineage or legacy gives (High Elf: Prestidigitation ...).
+func draftSpeciesCantrips(body map[string]interface{}) []string {
+	sc := bmap(body, "species_choices")
+	choice := bstr(sc, "lineage")
+	if choice == "" {
+		choice = bstr(sc, "legacy")
+	}
+	return game.SpeciesCantrips(bstr(body, "species"), choice)
+}
+
+// alreadyKnownProblem: a Magic Initiate cantrip the species already gives, or a spell the other Magic Initiate already gives
+// (Nov 13: a High Elf Sage could take Prestidigitation twice).
+func alreadyKnownProblem(fc map[string]interface{}, speciesCantrips, otherFeat []string) string {
+	norm := func(x string) string { return strings.ToLower(strings.ReplaceAll(strings.TrimSpace(x), " ", "-")) }
+	for _, c := range blist(fc, "cantrips") {
+		if containsStr(speciesCantrips, norm(c)) {
+			return fmt.Sprintf("Your species already gives you %s: choose a different cantrip.", originSpellName(norm(c)))
+		}
+	}
+	for _, c := range append(blist(fc, "cantrips"), bstr(fc, "spell")) {
+		if c != "" && containsStr(otherFeat, norm(c)) {
+			return fmt.Sprintf("Your background's Magic Initiate already gives you %s: choose a different spell.", originSpellName(norm(c)))
+		}
+	}
+	return ""
+}
+
+// magicInitiateOptions: what Magic Initiate offers from one list, as lists (Nov 13: the options were a URL string, which a
+// client showed letter by letter). Spells the character already gets are left out and named.
+func magicInitiateOptions(list string, speciesCantrips, otherFeat []string) map[string]interface{} {
+	var cantrips, spells, have []string
+	for _, slug := range classSpellListFn(list) {
+		sp, ok := srdSpellsMemory[slug]
+		if !ok || sp.Level > 1 {
+			continue
+		}
+		if containsStr(speciesCantrips, slug) || containsStr(otherFeat, slug) {
+			have = append(have, slug)
+			continue
+		}
+		if sp.Level == 0 {
+			cantrips = append(cantrips, slug)
+		} else {
+			spells = append(spells, slug)
+		}
+	}
+	sort.Strings(cantrips)
+	sort.Strings(spells)
+	out := map[string]interface{}{
+		"list": list, "cantrips_choose_2": cantrips, "level_1_spell_choose_1": spells,
+		"spellcasting_ability_choose_1": []string{"int", "wis", "cha"},
+		"spell_details":                 "GET /api/universe/class-spells/" + list,
+	}
+	if len(have) > 0 {
+		out["left_out_you_already_have"] = have
+	}
+	return out
+}
+
+// humanMagicInitiateOptions: the Human's Magic Initiate: each list it can use (not the background's), with its spells.
+func humanMagicInitiateOptions(bgList string, bgSpells []string) map[string]interface{} {
+	out := map[string]interface{}{}
+	for _, l := range []string{"cleric", "druid", "wizard"} {
+		if l != bgList {
+			out[l] = magicInitiateOptions(l, nil, bgSpells)
+		}
+	}
+	return map[string]interface{}{"list_choose_1": out}
 }
