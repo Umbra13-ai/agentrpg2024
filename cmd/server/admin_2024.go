@@ -10,13 +10,14 @@ package main
 // Players: DELETE /api/characters/{id} (or POST /api/characters/{id}/delete) with {"confirm": "<the character's name>"}, only
 // while the character is in no campaign or in one that hasn't started.
 //
-// Admin: the /admin page and /api/admin/characters, /api/admin/campaigns, /api/admin/changes, all with the X-Admin-Key header
+// Admin: the admin page (at the secret address in ADMIN_PATH; off without it) and /api/admin/characters, /api/admin/campaigns, /api/admin/changes, all with the X-Admin-Key header
 // (the server's ADMIN_KEY). Every edit, delete and restore is written to admin_changes.
 
 import (
 	"database/sql"
 	"encoding/json"
 	"fmt"
+	"log"
 	"net/http"
 	"os"
 	"sort"
@@ -650,9 +651,50 @@ func handleAdminChanges(w http.ResponseWriter, r *http.Request) {
 	writeJSONStatus(w, http.StatusOK, map[string]interface{}{"changes": list})
 }
 
-// handleAdminPage serves /admin: a static page; the key stays in the browser tab (sessionStorage) and goes in X-Admin-Key.
+// adminPagePath: the page's address from ADMIN_PATH (the operator chooses it, so it isn't guessable from the public code), or ""
+// when the page is off: no ADMIN_KEY, no ADMIN_PATH, or a path that is too short, has other characters, or clashes with the site.
+func adminPagePath() (string, string) {
+	if os.Getenv("ADMIN_KEY") == "" {
+		return "", "no ADMIN_KEY"
+	}
+	p := strings.TrimSpace(os.Getenv("ADMIN_PATH"))
+	if p == "" {
+		return "", "no ADMIN_PATH (choose a secret address such as /manage-<random letters>)"
+	}
+	if !strings.HasPrefix(p, "/") {
+		p = "/" + p
+	}
+	p = strings.TrimRight(p, "/")
+	if len(p) < 13 {
+		return "", "ADMIN_PATH must be at least 12 characters after the /"
+	}
+	for _, c := range p[1:] {
+		if !(c >= 'a' && c <= 'z' || c >= 'A' && c <= 'Z' || c >= '0' && c <= '9' || c == '-' || c == '_') {
+			return "", "ADMIN_PATH may use only letters, digits, - and _"
+		}
+	}
+	for _, taken := range []string{"/api", "/docs", "/character", "/campaign", "/profile", "/universe", "/how-it-works", "/about", "/commands", "/skill", "/admin"} {
+		if strings.HasPrefix(strings.ToLower(p), taken) {
+			return "", "ADMIN_PATH can't start with " + taken
+		}
+	}
+	return p, ""
+}
+
+// registerAdminPage puts the page at its secret address (once, at startup).
+func registerAdminPage() {
+	p, why := adminPagePath()
+	if p == "" {
+		log.Printf("Admin page off: %s", why)
+		return
+	}
+	http.HandleFunc(p, handleAdminPage)
+	log.Printf("Admin page on (address from ADMIN_PATH)")
+}
+
+// handleAdminPage serves the admin page: a static page; the key stays in the browser tab (sessionStorage) and goes in X-Admin-Key.
 func handleAdminPage(w http.ResponseWriter, r *http.Request) {
-	if os.Getenv("ADMIN_KEY") == "" || r.URL.Path != "/admin" { // no admin on this server: the page doesn't exist
+	if p, _ := adminPagePath(); p == "" || r.URL.Path != p {
 		http.NotFound(w, r)
 		return
 	}

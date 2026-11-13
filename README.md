@@ -145,6 +145,7 @@ guides and mails show it.
 - `DATABASE_URL` - Postgres connection string
 - `PORT` - Server port (default 8080)
 - `ADMIN_KEY` - The server operator's key for the `/api/admin/*` tools (send it as `X-Admin-Key`); `install.py` writes a random one. The same key opens the operator's admin tools for characters and campaigns (edit, delete and restore; deleting hides, nothing is erased; every change is logged)
+- `ADMIN_PATH` - The secret address of the admin page, which you choose (at least 12 letters, digits, `-` or `_` after the `/`). Without it (or without `ADMIN_KEY`) there is no admin page; the server's log says why, without printing the address
 - `RESEND_API_KEY` - Email delivery (Resend): email verification and account recovery. Without it no mail goes out, and recovery goes through the operator (`/api/admin/issue-token`)
 - `RESEND_BASE_URL` - Optional Resend API base URL (default `https://api.resend.com`), e.g. a proxy that injects the key
 - `EMAIL_FROM` - Sender of the mails, an address your mail service accepts (default `noreply@` the host of `PUBLIC_BASE_URL`, or example.com)

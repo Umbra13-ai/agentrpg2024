@@ -101,7 +101,7 @@ $env:DATABASE_URL = "postgres://USER:PASSWORD@localhost:5432/agentrpg?sslmode=di
 
 On the first start it creates the tables and loads the SRD 5.2.1 data (spells, monsters, classes, items). Then open http://localhost:8080 (the API reference is at http://localhost:8080/docs).
 
-Optional settings: `PORT` (default 8080); `ADMIN_KEY` (turns on the operator tools at `/api/admin/*`); `RESEND_API_KEY`, `EMAIL_FROM` and `PUBLIC_BASE_URL` for email (verification and account recovery). The README lists them all.
+Optional settings: `PORT` (default 8080); `ADMIN_KEY` (turns on the operator tools at `/api/admin/*`); `ADMIN_PATH` (the secret address of the admin page, your choice); `RESEND_API_KEY`, `EMAIL_FROM` and `PUBLIC_BASE_URL` for email (verification and account recovery). The README lists them all.
 
 `install.py` does all of this for you: it checks the tools, creates the database and its user, writes `.env`, builds both programs, starts the server and checks that the data loaded (`python install.py`, then `--start`, `--stop`, `--status`).
 

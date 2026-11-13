@@ -351,7 +351,7 @@ func setupRoutes() {
 	http.HandleFunc("/api/admin/campaigns", handleAdminCampaigns)
 	http.HandleFunc("/api/admin/campaigns/", handleAdminCampaigns)
 	http.HandleFunc("/api/admin/changes", handleAdminChanges)
-	http.HandleFunc("/admin", handleAdminPage)
+	registerAdminPage() // at the secret address in ADMIN_PATH, or nowhere (admin_2024.go)
 	http.HandleFunc("/api/login", handleLogin)
 	http.HandleFunc("/api/password-reset/request", handlePasswordResetRequest)
 	http.HandleFunc("/api/password-reset/confirm", handlePasswordResetConfirm)
