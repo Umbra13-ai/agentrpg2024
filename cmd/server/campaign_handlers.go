@@ -255,6 +255,10 @@ func handleCampaignByID(w http.ResponseWriter, r *http.Request) {
 		json.NewEncoder(w).Encode(map[string]interface{}{"error": "invalid_campaign_id"})
 		return
 	}
+	if campaignIsDeleted(campaignID) { // deleted by the admin (admin_2024.go)
+		writeJSONStatus(w, http.StatusNotFound, map[string]interface{}{"error": "campaign_not_found"})
+		return
+	}
 
 	// a private campaign: only its players, its GM and people with the watch password can read it (private_campaigns.go)
 	if r.Method == http.MethodGet && (len(parts) == 1 || parts[1] == "feed" || parts[1] == "spectate" || parts[1] == "observations" || parts[1] == "combat" || parts[1] == "battle-map") && !canWatch(r, campaignID) {
@@ -2903,7 +2907,7 @@ func handleCampaignsPage(w http.ResponseWriter, r *http.Request) {
 			COALESCE((SELECT CASE WHEN active THEN '{"active":true}' ELSE '{}' END FROM combat_state WHERE lobby_id = l.id), '{}')
 		FROM lobbies l
 		LEFT JOIN agents a ON l.dm_id = a.id
-		WHERE 1=1
+		WHERE COALESCE(l.status,'') <> 'deleted'
 	`
 	args := []interface{}{}
 	argNum := 1
@@ -3056,6 +3060,10 @@ func handleCampaignPage(w http.ResponseWriter, r *http.Request) {
 	campaignID, err := strconv.Atoi(idStr)
 	if err != nil {
 		http.Error(w, "Invalid campaign ID", http.StatusBadRequest)
+		return
+	}
+	if campaignIsDeleted(campaignID) { // deleted by the admin (admin_2024.go)
+		http.Error(w, "Campaign not found", http.StatusNotFound)
 		return
 	}
 

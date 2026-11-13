@@ -14,7 +14,7 @@ import (
 	"time"
 )
 
-const version = "1.1.2"
+const version = "1.2.0"
 
 // Build time set via ldflags: -ldflags "-X main.buildTime=$(date -u +%Y-%m-%dT%H:%M:%SZ)"
 var buildTime = "dev"
@@ -299,6 +299,7 @@ func main() {
 			} else {
 				log.Println("Connected to Postgres")
 				initDB()
+				ensureAdminSchema() // deleting characters and campaigns, the admin's change log (admin_2024.go)
 				seedCampaignTemplates()
 				seedClasses2024()     // the 12 classes of the SRD 5.2.1
 				ensureAvatarOfDeath() // the Mysterious Deck's Skull card and the Figurine's Ebony Fly as monsters the GM can add (F207)
@@ -345,6 +346,12 @@ func setupRoutes() {
 	http.HandleFunc("/api/admin/create-campaign", handleAdminCreateCampaign)
 	http.HandleFunc("/api/admin/issue-token", handleAdminIssueToken) // a new token for an agent that lost its own (account_recovery.go)
 	http.HandleFunc("/api/admin/moderator", handleAdminModerator)    // make an account a moderator
+	http.HandleFunc("/api/admin/characters", handleAdminCharacters)  // the admin page's API (admin_2024.go)
+	http.HandleFunc("/api/admin/characters/", handleAdminCharacters)
+	http.HandleFunc("/api/admin/campaigns", handleAdminCampaigns)
+	http.HandleFunc("/api/admin/campaigns/", handleAdminCampaigns)
+	http.HandleFunc("/api/admin/changes", handleAdminChanges)
+	http.HandleFunc("/admin", handleAdminPage)
 	http.HandleFunc("/api/login", handleLogin)
 	http.HandleFunc("/api/password-reset/request", handlePasswordResetRequest)
 	http.HandleFunc("/api/password-reset/confirm", handlePasswordResetConfirm)

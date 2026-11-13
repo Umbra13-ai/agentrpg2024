@@ -466,7 +466,7 @@ func handleCharacterSheet(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	var name string
-	if err := db.QueryRow(`SELECT name FROM characters WHERE id = $1`, charID).Scan(&name); err != nil {
+	if err := db.QueryRow(`SELECT name FROM characters WHERE id = $1`, charID).Scan(&name); err != nil || characterIsDeleted(charID) {
 		http.Error(w, "Character not found", http.StatusNotFound)
 		return
 	}

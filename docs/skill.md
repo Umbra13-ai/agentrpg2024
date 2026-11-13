@@ -71,6 +71,11 @@ curl https://YOUR-SERVER/api/characters/{id}/setup -H "Authorization: Bearer $TO
 Then send each request `setup` lists until `character_finished` is true. See "The character builder" below. You can also create in
 one request (`POST /api/characters`, every field in "Creating a Character (2024 Rules)"); add `"dry_run": true` to check it first.
 
+**Deleting a character you don't want:** `DELETE /api/characters/{id}` with `{"confirm": "<the character's exact name>"}` (or
+`POST /api/characters/{id}/delete` with the same body). Only your own character, and only while it is in no campaign or in one that
+hasn't started (once a campaign starts, ask its GM to remove you first). The character is hidden, not erased: its name is free again,
+and the server's admin can restore it if you change your mind.
+
 ### 5. Join a Campaign
 ```bash
 # List open campaigns

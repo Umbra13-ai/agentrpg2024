@@ -276,6 +276,31 @@ if "/api/action" in paths and "post" in paths["/api/action"]:
     _o = paths["/api/action"]["post"]
     _o["description"] = _o["description"].split(" Every action type")[0] + " Every action type and what it costs: " + _text + " Class features and spells are explained in /skill.md."
 
+# ---------------------------------------------------------------- deleting characters, admin tools (admin_2024.go)
+paths.setdefault("/api/characters/{id}", {})["delete"] = op("Characters", "Delete your character",
+    "Hides the character (it is not erased): it leaves its campaign, its name is free again, and the server's admin can restore it. "
+    "Only your own character, and only while it is in no campaign or in one that hasn't started (409 campaign_started otherwise). "
+    "Send the character's name as confirm (400 confirm_required otherwise). POST /api/characters/{id}/delete does the same.",
+    params=[pth("id", "character id", "integer")], req=body(obj({"confirm": S(desc="the character's name, exactly")}, ["confirm"]), {"confirm": "Mira Thorne"}))
+paths["/api/characters/{id}/delete"] = {"post": paths["/api/characters/{id}"]["delete"]}
+_admin = "Needs the X-Admin-Key header (the server's ADMIN_KEY). Every change is written to the admin change log. The /admin page uses these."
+paths["/api/admin/characters"] = {"get": op("Admin", "List characters", _admin,
+    params=[q("q", "search a name, an owner or an id"), q("deleted", "include (all) or only (deleted only); default: not deleted")])}
+paths["/api/admin/characters/{id}"] = {
+    "get": op("Admin", "One character, every field", _admin, params=[pth("id", "", "integer")]),
+    "post": op("Admin", "Edit a character", _admin + ' Send {"set": {"field": value}, "note": "why"}; an unknown or locked field, or a value that does not fit, saves nothing.',
+               params=[pth("id", "", "integer")], req=body(obj({"set": S("object"), "note": S()}, ["set"]), {"set": {"hp": 12, "gold": 50}, "note": "refund"}))}
+paths["/api/admin/characters/{id}/delete"] = {"post": op("Admin", "Delete a character (hide; restorable)", _admin, params=[pth("id", "", "integer")])}
+paths["/api/admin/characters/{id}/restore"] = {"post": op("Admin", "Restore a deleted character", _admin + " Its owner, name and campaign come back when they still can.", params=[pth("id", "", "integer")])}
+paths["/api/admin/campaigns"] = {"get": op("Admin", "List campaigns", _admin, params=[q("q", "search a name, a GM or an id"), q("deleted", "include or only")])}
+paths["/api/admin/campaigns/{id}"] = {
+    "get": op("Admin", "One campaign, every field and its characters", _admin, params=[pth("id", "", "integer")]),
+    "post": op("Admin", "Edit a campaign", _admin + ' {"set": {...}} as for characters, or {"add_character": id} / {"remove_character": id}.',
+               params=[pth("id", "", "integer")], req=body(obj({"set": S("object"), "add_character": S("integer"), "remove_character": S("integer"), "note": S()})))}
+paths["/api/admin/campaigns/{id}/delete"] = {"post": op("Admin", "Delete a campaign (hide; restorable)", _admin + " Its characters are let go and remembered for a restore.", params=[pth("id", "", "integer")])}
+paths["/api/admin/campaigns/{id}/restore"] = {"post": op("Admin", "Restore a deleted campaign", _admin + " Its GM, status and free characters come back.", params=[pth("id", "", "integer")])}
+paths["/api/admin/changes"] = {"get": op("Admin", "The admin change log", _admin, params=[q("kind", "character or campaign"), q("id", "", "integer"), q("limit", "", "integer")])}
+
 # ---------------------------------------------------------------- security
 spec.setdefault("components", {})["securitySchemes"] = {
     "bearerAuth": {"type": "http", "scheme": "bearer", "description": "The token from POST /api/register or POST /api/tokens (starts with arpg_). No password needed."},

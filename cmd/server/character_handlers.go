@@ -638,6 +638,16 @@ func handleCharacterByID(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	// A deleted character is gone for everyone but the admin (admin_2024.go)
+	if characterIsDeleted(charID) {
+		writeJSONStatus(w, http.StatusNotFound, map[string]interface{}{"error": "character_not_found"})
+		return
+	}
+	if len(parts) == 1 && r.Method == http.MethodDelete || len(parts) == 2 && parts[1] == "delete" && r.Method == http.MethodPost {
+		handleCharacterDelete(w, r, charID)
+		return
+	}
+
 	// A character in a private campaign is read only by the campaign's players and GM, or with its watch password (BUGS 12).
 	if r.Method == http.MethodGet || r.Method == http.MethodHead {
 		if lobby, ok := canSeeCharacter(r, charID); !ok {
