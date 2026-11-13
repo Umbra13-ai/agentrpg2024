@@ -1101,7 +1101,9 @@ func builderSteps(body map[string]interface{}, agentID int, withCheck bool) []bu
 				s7.Choices = append(s7.Choices, map[string]interface{}{"field": "(server)", "valid_options": vo})
 			}
 		} else {
-			s7.Choices = append(s7.Choices, map[string]interface{}{"field": "(server)", "what": "the character this draft makes", "current": res["would_create"]})
+			wc, _ := res["would_create"].(map[string]interface{})
+			s7.Choices = append(s7.Choices, map[string]interface{}{"field": "(server)", "what": "the character this draft makes", "current": res["would_create"],
+				"summary": draftSummary(body, wc), "before_you_finish": "Check the summary. To change anything, send that field again (POST /api/character-builder/{id}); when it is right, POST /api/character-builder/{id}/finish."})
 		}
 	}
 	finishStep(&s7)
@@ -1301,7 +1303,8 @@ func builderView(id int, body map[string]interface{}, charID *int, agentID int) 
 			current = &steps[i]
 		}
 	}
-	out := map[string]interface{}{"draft_id": id, "steps": list, "choices_remaining": total, "draft": body}
+	out := map[string]interface{}{"draft_id": id, "steps": list, "choices_remaining": total, "draft": body,
+		"choices_remaining_note": "This count can go up: a class, background or species brings its own follow-up choices (skills, a tool, a lineage ...), and an answer that conflicts with a later one (a skill your background also gives) opens again."}
 	if charID != nil {
 		out["character_id"] = *charID
 		out["next"] = fmt.Sprintf("The character exists (id %d). Finish it with GET /api/characters/%d/setup: spells, gear in hand, class choices left.", *charID, *charID)
@@ -1317,7 +1320,18 @@ func builderView(id int, body map[string]interface{}, charID *int, agentID int) 
 		out["send"] = send
 		out["next"] = fmt.Sprintf("%s: %d choice(s) left. Send the fields (POST /api/character-builder/%d), or {\"use_suggestion\": true} to take the suggestion; GET this draft again any time.", current.Title, current.Remaining, id)
 	} else {
-		out["next"] = fmt.Sprintf("Every step is done. Create the character: POST /api/character-builder/%d/finish", id)
+		out["next"] = fmt.Sprintf("Every step is done. Check the summary below, then create the character: POST /api/character-builder/%d/finish", id)
+		for _, st := range steps { // the review step's summary of the character (Nov 13 tester: no summary before creation)
+			if st.Key != "review" {
+				continue
+			}
+			for _, c := range st.Choices {
+				if sm, ok := c["summary"]; ok {
+					out["summary_before_you_finish"] = sm
+					out["to_change_something"] = fmt.Sprintf("Send that field again: POST /api/character-builder/%d", id)
+				}
+			}
+		}
 	}
 	return out
 }
@@ -1399,7 +1413,11 @@ func handleCharacterBuilder(w http.ResponseWriter, r *http.Request) {
 			writeJSONStatus(w, 500, map[string]interface{}{"error": "could_not_start_draft"})
 			return
 		}
-		writeJSONStatus(w, 200, builderView(id, body, nil, agentID))
+		view := builderView(id, body, nil, agentID)
+		if seats := campaignSeats(agentID); len(seats) > 0 { // told before the work, not after (Nov 13 tester)
+			view["campaigns_note"] = fmt.Sprintf("You already play %s. A player has one character in a campaign: this new character can join a different campaign, or take that seat only if its GM removes the other character.", strings.Join(seats, "; "))
+		}
+		writeJSONStatus(w, 200, view)
 		return
 	}
 	id, _ := strconv.Atoi(parts[0])
@@ -1429,6 +1447,9 @@ func handleCharacterBuilder(w http.ResponseWriter, r *http.Request) {
 		cid := bint(res, "character_id")
 		db.Exec(`UPDATE character_drafts SET character_id = $1, updated_at = now() WHERE id = $2`, cid, id)
 		res["setup"] = fmt.Sprintf("GET /api/characters/%d/setup: your spells, the gear in your hands and the class choices left, step by step", cid)
+		if seats := campaignSeats(agentID); len(seats) > 0 {
+			res["campaigns_note"] = fmt.Sprintf("You already play %s. A player has one character in a campaign, so this character can join a different campaign, or take that seat if its GM removes the other character.", strings.Join(seats, "; "))
+		}
 		writeJSONStatus(w, 200, res)
 		return
 	}
@@ -1448,6 +1469,15 @@ func handleCharacterBuilder(w http.ResponseWriter, r *http.Request) {
 	if json.NewDecoder(r.Body).Decode(&upd) != nil {
 		writeJSONStatus(w, http.StatusBadRequest, map[string]interface{}{"error": "invalid_json"})
 		return
+	}
+	if bad := unknownBuilderFields(upd); len(bad) > 0 { // a typo must not look like a saved choice (Nov 13 tester)
+		writeJSONStatus(w, http.StatusBadRequest, map[string]interface{}{"error": "unknown_field", "message": strings.Join(bad, "; ") + ". Nothing was saved: send the request again with the right field names.",
+			"nothing_saved": true, "draft": builderView(id, body, nil, agentID)})
+		return
+	}
+	before := map[string]interface{}{} // a deep copy: group answers (species_choices ...) are merged in place below
+	if raw, err := json.Marshal(body); err == nil {
+		json.Unmarshal(raw, &before)
 	}
 	useSug := upd["use_suggestion"]
 	delete(upd, "use_suggestion")
@@ -1534,8 +1564,30 @@ func handleCharacterBuilder(w http.ResponseWriter, r *http.Request) {
 		}
 		body[k] = v
 	}
+	// an answer with a problem is not saved: the earlier answer stays (Nov 13 tester: invalid skills stayed in the draft while flagged)
+	rejected := rejectedFields(builderSteps(body, agentID, false), upd)
+	for _, rj := range rejected {
+		f := rj["field"].(string)
+		if old, had := before[f]; had {
+			body[f] = old
+		} else {
+			delete(body, f)
+		}
+	}
 	saveDraft(id, body)
-	writeJSONStatus(w, 200, builderView(id, body, nil, agentID))
+	view := builderView(id, body, nil, agentID)
+	if len(rejected) > 0 {
+		view["not_saved"] = rejected
+		view["not_saved_note"] = "These answers were not saved (the draft keeps what it had before); everything else you sent was saved. Fix them and send them again."
+		status := 200
+		if len(rejected) == len(upd) {
+			status = http.StatusBadRequest
+			view["error"] = "answers_not_valid"
+		}
+		writeJSONStatus(w, status, view)
+		return
+	}
+	writeJSONStatus(w, 200, view)
 }
 
 // suggestInvocation: an invocation the Warlock qualifies for and doesn't know (the setup guide's suggestion).

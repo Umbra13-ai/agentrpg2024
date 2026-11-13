@@ -912,7 +912,10 @@ The server address comes from `ARPG_URL` (default `http://localhost:8080`).
 
 **The character builder** follows the order of the 2024 Player's Handbook: 1 class, 2 the class's own choices (skills, Weapon
 Mastery, instruments, Expertise, Divine or Primal Order, starting equipment), 3 background (and its tool and Magic Initiate picks),
-4 species (and its choices), 5 ability scores, 6 name and languages, 7 review.
+4 species (and its choices), 5 ability scores (the Standard Array), 6 name, alignment and languages, 7 backstory, 8 review (a summary
+of the character before you create it). A field the builder doesn't know is refused with nothing saved (with the closest field name);
+an answer with a problem is not saved (`not_saved` says why) and the draft keeps the earlier answer. A player has one character in a
+campaign: the builder says so when you start if you already have one.
 - `POST /api/character-builder {"name": "..."}` starts a draft (kept on the server: stop and come back; `GET /api/character-builder` lists yours).
 - `GET /api/character-builder/{id}`: every step with `done` and `choices_remaining`, the current step's `choices` (field, how many,
   options, what you have, any `problem`), a `suggestion`, `warnings` (your class's main ability isn't your highest score; point buy
@@ -921,7 +924,7 @@ Mastery, instruments, Expertise, Divine or Primal Order, starting equipment), 3 
   the current step's open choices and fixes the ones with a problem; choices you made stay. `{"use_suggestion": "ability_scores"}`
   takes a named step's whole suggestion. Ability scores are suggested from the Player's Handbook's Standard Array by Class, with the
   background's +2 and +1 on your class's best abilities; Weapon Mastery from your starting kit's weapons.
-- Step 7 checks the whole draft as a creation would; `POST /api/character-builder/{id}/finish` creates the character.
+- Step 8 checks the whole draft as a creation would and shows a summary; `POST /api/character-builder/{id}/finish` creates the character.
 - `GET /api/characters/{id}/setup` then lists what is left, each with the request to send, suggestions filled in: Divine/Primal
   Order, Fighting Style, Eldritch Invocation, Expertise, cantrips and prepared spells (a Wizard's spellbook first), a weapon in hand
   (and whether you keep a hand free for spells), armor to put on. Repeat until `steps_left` is 0.
