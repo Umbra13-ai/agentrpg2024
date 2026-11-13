@@ -88,7 +88,7 @@ func spellAvailableNatively(charID int, spellKey, description string) (bool, str
 	}
 	sc := map[string]string{}
 	json.Unmarshal(choices, &sc)
-	if containsStr(getDomainSpells(subclass, level, sc["circle_land"]), spellKey) || containsStr(wordsOfCreationSpells(c, level), spellKey) {
+	if containsStr(getDomainSpells(subclass, level, sc["circle_land"]), spellKey) || containsStr(wordsOfCreationSpells(c, level), spellKey) || containsStr(magicalDiscoveriesOf(charID), spellKey) {
 		return true, "" // subclass spells; Words of Creation (Bard 20)
 	}
 	if has(jsonList(secrets)) || has(jsonList(mastery)) || has(jsonList(signature)) {

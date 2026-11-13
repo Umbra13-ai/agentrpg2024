@@ -49,13 +49,13 @@ var classLevelChoices = map[string][]levelChoice{
 	},
 	"ranger": {
 		{1, "Weapon Mastery: choose 2 kinds of weapon (POST /api/characters/weapon-masteries)"},
-		{2, "Deft Explorer: Expertise in 1 skill you are proficient in (POST /api/characters/%d/expertise) and 2 languages (tell the GM)"},
+		{2, "Deft Explorer: Expertise in 1 skill you are proficient in (POST /api/characters/%d/expertise) and 2 languages (POST /api/characters/%d/class-options {\"class_languages\": [...]})"},
 		{2, "Fighting Style: choose a Fighting Style feat or Druidic Warrior (POST /api/characters/fighting-style)"},
 		{9, "Expertise: choose 2 more skills (POST /api/characters/%d/expertise)"},
 	},
 	"rogue": {
 		{1, "Expertise: choose 2 skills you are proficient in (POST /api/characters/%d/expertise)"},
-		{1, "Thieves' Cant: you also learn 1 language of your choice (tell the GM)"},
+		{1, "Thieves' Cant: you also learn 1 language of your choice (POST /api/characters/%d/class-options {\"class_languages\": [...]})"},
 		{1, "Weapon Mastery: choose 2 kinds of weapon (POST /api/characters/weapon-masteries)"},
 		{6, "Expertise: choose 2 more skills (POST /api/characters/%d/expertise)"},
 	},

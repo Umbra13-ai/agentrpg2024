@@ -137,6 +137,9 @@ func levels23OpenChoices(charID int) []string {
 	if s == "hunter" && levels["ranger"] >= 3 && choices["hunters_prey"] == "" {
 		out = append(out, fmt.Sprintf("Hunter's Prey: choose colossus_slayer or horde_breaker (POST /api/characters/subclass-choice {\"character_id\": %d, \"feature\": \"hunters_prey\", \"choice\": ...})", charID))
 	}
+	if s == "hunter" && levels["ranger"] >= 7 && choices["defensive_tactics"] == "" {
+		out = append(out, fmt.Sprintf("Defensive Tactics: choose escape_the_horde or multiattack_defense (POST /api/characters/subclass-choice {\"character_id\": %d, \"feature\": \"defensive_tactics\", \"choice\": ...})", charID))
+	}
 	if levels["barbarian"] >= 3 && choices["primal_knowledge"] == "" {
 		out = append(out, fmt.Sprintf("Primal Knowledge: one more skill from the Barbarian list (POST /api/characters/%d/class-options {\"primal_knowledge\": \"perception\"})", charID))
 	}

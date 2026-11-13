@@ -138,7 +138,7 @@ func handleCharacterPortrait(w http.ResponseWriter, r *http.Request, charID int)
 		raw, err := io.ReadAll(r.Body)
 		if err != nil {
 			writeJSONStatus(w, http.StatusRequestEntityTooLarge, map[string]interface{}{
-				"error": "image_too_large", "max_bytes": maxPortraitBytes})
+				"error": "image_too_large", "max_bytes": maxPortraitBytes, "message": "The image is over 5 MB. Make it smaller (1024 by 1280 pixels is the best size for the sheet) and send it again."})
 			return
 		}
 
@@ -160,7 +160,7 @@ func handleCharacterPortrait(w http.ResponseWriter, r *http.Request, charID int)
 			}
 			imageBytes, err = base64.StdEncoding.DecodeString(b64)
 			if err != nil {
-				writeJSONStatus(w, http.StatusBadRequest, map[string]interface{}{"error": "invalid_base64"})
+				writeJSONStatus(w, http.StatusBadRequest, map[string]interface{}{"error": "invalid_base64", "message": "image_base64 is not valid base64. Encode the image file's bytes as standard base64 (a data: URL is also accepted)."})
 				return
 			}
 		} else {
@@ -168,24 +168,25 @@ func handleCharacterPortrait(w http.ResponseWriter, r *http.Request, charID int)
 		}
 
 		if len(imageBytes) == 0 {
-			writeJSONStatus(w, http.StatusBadRequest, map[string]interface{}{"error": "empty_image"})
+			writeJSONStatus(w, http.StatusBadRequest, map[string]interface{}{"error": "empty_image", "message": "No image was sent."})
 			return
 		}
 		if len(imageBytes) > maxPortraitBytes {
 			writeJSONStatus(w, http.StatusRequestEntityTooLarge, map[string]interface{}{
-				"error": "image_too_large", "max_bytes": maxPortraitBytes})
+				"error": "image_too_large", "max_bytes": maxPortraitBytes, "message": "The image is over 5 MB. Make it smaller (1024 by 1280 pixels is the best size for the sheet) and send it again."})
 			return
 		}
 		mime := detectPortraitType(imageBytes)
 		if mime == "" {
 			writeJSONStatus(w, http.StatusUnsupportedMediaType, map[string]interface{}{
-				"error": "unsupported_image_type", "allowed": []string{"image/png", "image/jpeg", "image/webp"}})
+				"error": "unsupported_image_type", "allowed": []string{"image/png", "image/jpeg", "image/webp"}, "message": "This is not a PNG, JPEG or WebP image. Send one of those."})
 			return
 		}
+		shapeNote := ""
 		if mime != "image/webp" { // webp has no decoder here; PNG/JPEG get a real decode check
 			cfg, _, err := image.DecodeConfig(bytes.NewReader(imageBytes))
 			if err != nil {
-				writeJSONStatus(w, http.StatusBadRequest, map[string]interface{}{"error": "corrupt_image"})
+				writeJSONStatus(w, http.StatusBadRequest, map[string]interface{}{"error": "corrupt_image", "message": "The image could not be read: the file looks damaged. Save it again and resend it."})
 				return
 			}
 			if cfg.Width > maxPortraitPixels || cfg.Height > maxPortraitPixels ||
@@ -193,8 +194,12 @@ func handleCharacterPortrait(w http.ResponseWriter, r *http.Request, charID int)
 				writeJSONStatus(w, http.StatusBadRequest, map[string]interface{}{
 					"error":      "bad_dimensions",
 					"min_pixels": minPortraitPixels, "max_pixels": maxPortraitPixels,
-					"got": fmt.Sprintf("%dx%d", cfg.Width, cfg.Height)})
+					"got": fmt.Sprintf("%dx%d", cfg.Width, cfg.Height),
+					"message": fmt.Sprintf("The image is %d by %d pixels. Each side must be %d to %d pixels; 1024 by 1280 is the best size for the sheet.", cfg.Width, cfg.Height, minPortraitPixels, maxPortraitPixels)})
 				return
+			}
+			if r := float64(cfg.Width) / float64(cfg.Height); r < 0.75 || r > 0.85 { // the sheet's frame is 4:5 (0.8)
+				shapeNote = fmt.Sprintf("Saved. The image is %d by %d pixels; the sheet shows a 4:5 frame and crops the rest, so the edges may be cut. 1024 by 1280 fits exactly.", cfg.Width, cfg.Height)
 			}
 		}
 
@@ -207,6 +212,7 @@ func handleCharacterPortrait(w http.ResponseWriter, r *http.Request, charID int)
 			"success": true, "content_type": mime, "bytes": len(imageBytes),
 			"portrait_url": fmt.Sprintf("/api/characters/%d/portrait", charID),
 			"profile_url":  fmt.Sprintf("/character/%d", charID),
+			"note":         nilIfEmpty(shapeNote),
 		})
 
 	case http.MethodDelete:
@@ -285,7 +291,8 @@ func setCharacterProfile(w http.ResponseWriter, r *http.Request, charID int) {
 		s = strings.TrimSpace(s)
 		if utf8.RuneCountInString(s) > f.limit {
 			writeJSONStatus(w, http.StatusBadRequest, map[string]interface{}{
-				"error": "field_too_long", "field": f.key, "max_characters": f.limit})
+				"error": "field_too_long", "field": f.key, "max_characters": f.limit,
+				"message": fmt.Sprintf("%s is %d characters; the limit is %d. Shorten it.", f.key, utf8.RuneCountInString(s), f.limit)})
 			return
 		}
 		args = append(args, s)

@@ -80,6 +80,9 @@ func handleCharacters(w http.ResponseWriter, r *http.Request) {
 			DraconicAncestry      string            `json:"draconic_ancestry"`       // e.g., "red", "blue" - for Dragonborn breath weapon
 			AbilityMethod         string            `json:"ability_method"`          // "standard_array", "point_buy" or "random" (the server rolls); scores before the background increases
 			StartingEquipment     string            `json:"starting_equipment"`      // class kit option: "a" (default), "b" or "c" where offered; gold-only options give gold
+			Backstory             string            `json:"backstory"`              // the character’s story (the builder asks for 3 to 6 paragraphs)
+			Appearance            string            `json:"appearance"`             // optional: how the character looks
+			Alignment             string            `json:"alignment"`               // one of the nine alignments (Lawful Good ... Chaotic Evil); a roleplaying guide
 			DryRun                bool              `json:"dry_run"` // F234: check everything, create nothing
 			ClassOptions          struct {
 				DivineOrder string `json:"divine_order"` // Cleric: "protector" or "thaumaturge"
@@ -270,14 +273,21 @@ func handleCharacters(w http.ResponseWriter, r *http.Request) {
 		}
 
 		// Level 1 class choices that change proficiencies
-		divineOrder := strings.ToLower(strings.TrimSpace(req.ClassOptions.DivineOrder))
-		primalOrder := strings.ToLower(strings.TrimSpace(req.ClassOptions.PrimalOrder))
+		firstWord := func(v string) string { // "thaumaturge (one extra cantrip ...)" means thaumaturge
+			if f := strings.FieldsFunc(strings.ToLower(strings.TrimSpace(v)), func(r rune) bool { return r == ' ' || r == '(' || r == ':' || r == ',' }); len(f) > 0 {
+				return f[0]
+			}
+			return ""
+		}
+		divineOrder := firstWord(req.ClassOptions.DivineOrder)
+		primalOrder := firstWord(req.ClassOptions.PrimalOrder)
+		req.ClassOptions.DivineOrder, req.ClassOptions.PrimalOrder = divineOrder, primalOrder
 		if divineOrder != "" && (strings.ToLower(req.Class) != "cleric" || (divineOrder != "protector" && divineOrder != "thaumaturge")) {
-			json.NewEncoder(w).Encode(map[string]interface{}{"error": "invalid_divine_order", "message": "Only Clerics choose a divine_order: protector or thaumaturge."})
+			json.NewEncoder(w).Encode(map[string]interface{}{"error": "invalid_divine_order", "message": pickMsg(strings.ToLower(req.Class) != "cleric", "Only Clerics choose a divine_order.", fmt.Sprintf("%q is not a Divine Order: choose protector or thaumaturge.", divineOrder))})
 			return
 		}
 		if primalOrder != "" && (strings.ToLower(req.Class) != "druid" || (primalOrder != "warden" && primalOrder != "magician")) {
-			json.NewEncoder(w).Encode(map[string]interface{}{"error": "invalid_primal_order", "message": "Only Druids choose a primal_order: warden or magician."})
+			json.NewEncoder(w).Encode(map[string]interface{}{"error": "invalid_primal_order", "message": pickMsg(strings.ToLower(req.Class) != "druid", "Only Druids choose a primal_order.", fmt.Sprintf("%q is not a Primal Order: choose warden or magician.", primalOrder))})
 			return
 		}
 
@@ -470,9 +480,21 @@ func handleCharacters(w http.ResponseWriter, r *http.Request) {
 			starting = sr
 		}
 
+		backstory, appearance := strings.TrimSpace(req.Backstory), strings.TrimSpace(req.Appearance)
+		if len([]rune(backstory)) > maxProfileTextRunes || len([]rune(appearance)) > maxProfileTextRunes {
+			json.NewEncoder(w).Encode(map[string]interface{}{"error": "text_too_long", "message": fmt.Sprintf("The backstory and the appearance can each be %d characters at most.", maxProfileTextRunes)})
+			return
+		}
+		alignment := ""
+		if strings.TrimSpace(req.Alignment) != "" {
+			if alignment = canonicalPlayerAlignment(req.Alignment); alignment == "" {
+				json.NewEncoder(w).Encode(map[string]interface{}{"error": "unknown_alignment", "message": fmt.Sprintf("%q is not an alignment. Choose one of: %s.", req.Alignment, strings.Join(playerAlignments(), ", "))})
+				return
+			}
+		}
 		if req.DryRun { // F234: everything checked; nothing created
 			json.NewEncoder(w).Encode(map[string]interface{}{"success": true, "dry_run": true, "would_create": map[string]interface{}{
-				"name": req.Name, "class": req.Class, "species": req.Species, "background": req.Background,
+				"name": req.Name, "class": req.Class, "species": req.Species, "background": req.Background, "alignment": alignment,
 				"ability_scores": map[string]int{"str": req.Str, "dex": req.Dex, "con": req.Con, "int": req.Int, "wis": req.Wis, "cha": req.Cha},
 				"hp": hp, "skills": skillProfsStr, "tools": toolProfsStr, "languages": languageProfsStr,
 				"weapon_masteries": masteryPicks, "expertise": expertiseStr, "starting_equipment": kitText(strings.ToLower(req.Class), startOption)},
@@ -493,6 +515,15 @@ func handleCharacters(w http.ResponseWriter, r *http.Request) {
 
 		masteryJSON, _ := json.Marshal(masteryPicks)
 		db.Exec(`UPDATE characters SET weapon_masteries = $1 WHERE id = $2`, masteryJSON, id)
+		if alignment != "" {
+			db.Exec(`UPDATE characters SET alignment = $1 WHERE id = $2`, alignment, id)
+		}
+		if backstory != "" {
+			db.Exec(`UPDATE characters SET backstory = $1 WHERE id = $2`, backstory, id)
+		}
+		if appearance != "" {
+			db.Exec(`UPDATE characters SET appearance = $1 WHERE id = $2`, appearance, id)
+		}
 		originJSON, _ := json.Marshal(origin.Record)
 		featsJSON, _ := json.Marshal(origin.FeatSlugs)
 		db.Exec(`UPDATE characters SET origin = $1, feats = $2 WHERE id = $3`, originJSON, featsJSON, id)
@@ -519,6 +550,9 @@ func handleCharacters(w http.ResponseWriter, r *http.Request) {
 		if starting != nil {
 			armorSlug, mainHand, hasShield = starting.EquippedArmor, starting.MainHand, starting.Shield
 		}
+		if hasShield && mainHand != "" && game.ClassTableInt(classKey, 1, "Cantrips") > 0 {
+			mainHand = "" // a caster with a Shield keeps the other hand free for spells with gestures (Nov 13); the setup asks whether to draw the weapon
+		}
 		db.Exec(`UPDATE characters SET starting_equipment = $1, equipped_armor = NULLIF($2, ''), equipped_shield = $3,
 			equipped_main_hand = NULLIF($4, ''), divine_order = NULLIF($5, ''), primal_order = NULLIF($6, '') WHERE id = $7`,
 			startOption, armorSlug, hasShield, mainHand, divineOrder, primalOrder, id)
@@ -527,7 +561,7 @@ func handleCharacters(w http.ResponseWriter, r *http.Request) {
 
 		json.NewEncoder(w).Encode(map[string]interface{}{"success": true, "character_id": id, "hp": hp, "ac": ac,
 			"species": origin.Record.Species.Name, "size": origin.Record.Species.Size, "speed": origin.Record.Species.Speed,
-			"background": origin.Record.Background, "feats": origin.FeatSlugs, "languages": origin.Languages,
+			"background": origin.Record.Background, "alignment": alignment, "backstory_saved": backstory != "", "portrait_tip": fmt.Sprintf("Give your character a portrait: GET /api/characters/%d/setup has the size an image should be and a prompt you can give an image generator.", id), "feats": origin.FeatSlugs, "languages": origin.Languages,
 			"ability_increases": origin.Increases, "background_equipment": origin.Record.BackgroundEquipment,
 			"ability_scores": map[string]int{"str": req.Str, "dex": req.Dex, "con": req.Con, "int": req.Int, "wis": req.Wis, "cha": req.Cha}, "ability_method": abilityNote,
 			"to_finish": characterToFinish(id), "character_finished": len(characterToFinish(id)) == 0, // F232: what the player still has to choose
@@ -689,6 +723,12 @@ func handleCharacterByID(w http.ResponseWriter, r *http.Request) {
 			return
 		case "setup":
 			handleCharacterSetup(w, r, charID) // F234: spells, gear in hand, class choices left
+			return
+		case "shop":
+			handleCharacterShop(w, r, charID) // the starting shop (shop_2024.go)
+			return
+		case "level-up-notices":
+			handleLevelUpNotices(w, r, charID) // the server's level-up notices (level_up_notice_2024.go)
 			return
 		}
 	}
@@ -857,8 +897,10 @@ func handleCharacterByID(w http.ResponseWriter, r *http.Request) {
 	effectiveStr := getEffectiveAbilityScore(str, "str", class, level, classLevels)
 	effectiveCon := getEffectiveAbilityScore(con, "con", class, level, classLevels)
 
+	var sheetAlignment string
+	db.QueryRow(`SELECT COALESCE(alignment, '') FROM characters WHERE id = $1`, charID).Scan(&sheetAlignment)
 	response := map[string]interface{}{
-		"id": charID, "name": name, "class": class, "species": species,
+		"id": charID, "name": name, "class": class, "species": species, "alignment": sheetAlignment,
 		"subclass":       subclassInfo,
 		"class_features": classFeaturesList,
 		"species_traits": speciesTraitsOf(species), // F116: the sheet listed no species traits
@@ -1794,4 +1836,12 @@ func nullStringToInterface(ns sql.NullString) interface{} {
 		return ns.String
 	}
 	return nil
+}
+
+// pickMsg returns a when c is true, else b.
+func pickMsg(c bool, a, b string) string {
+	if c {
+		return a
+	}
+	return b
 }

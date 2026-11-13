@@ -100,6 +100,7 @@ func applyLevelGain(charID, oldLevel, newLevel int, how string) (int, int, strin
 		classCapstones(charID, name, class, newLevel) // Primal Champion, Body and Mind: the +4 scores come with level 20
 	}
 
+	recordLevelUpNotices(charID, oldLevel, newLevel, hp) // the server's own notice to the player (level_up_notice_2024.go)
 	features := classFeaturesGained(class, sub, oldLevel, newLevel)
 	choices := levelUpChoices(charID, class, sub, oldLevel, newLevel, features)
 	note := fmt.Sprintf("🔔 Ding! %s reached level %d (from %d, %s): +%d Hit Points.", name, newLevel, oldLevel, how, hp)
@@ -451,5 +452,50 @@ func missingCantrips(charID int, class string, level int) int {
 	if have >= want {
 		return 0
 	}
+	// a class can't learn more cantrips than its list has: cantrips already known another way (Magic Initiate, lineage) leave fewer
+	// (Nov 13: an Acolyte Thaumaturge Cleric with Guidance and Sacred Flame from Magic Initiate ran out of Cleric cantrips at level 10)
+	left := 0
+	for c := range levels {
+		for _, k := range getClassSpellList(c) {
+			if sp, ok := srdSpellsMemory[k]; ok && sp.Level == 0 && !seen[k] {
+				left++
+			}
+		}
+	}
+	if left < want-have {
+		return left
+	}
 	return want - have
+}
+
+// cantripsCappedNote: when the class list has run out of cantrips to learn, why the Cantrips column isn't met ("" otherwise).
+func cantripsCappedNote(charID int, class string, level int) string {
+	want := game.ClassTableInt(strings.ToLower(class), level, "Cantrips") + orderExtraCantrips(charID)
+	if want == 0 {
+		return ""
+	}
+	var known, prepared []byte
+	db.QueryRow(`SELECT COALESCE(known_spells,'[]'), COALESCE(prepared_spells,'[]') FROM characters WHERE id = $1`, charID).Scan(&known, &prepared)
+	origin := originSpellsOf(charID)
+	have, onList := 0, 0
+	all := map[string]bool{}
+	for _, k := range append(jsonList(known), jsonList(prepared)...) {
+		all[k] = true
+	}
+	for k := range all {
+		if _, o := origin[k]; !o {
+			if sp, ok := srdSpellsMemory[k]; ok && sp.Level == 0 {
+				have++
+			}
+		}
+	}
+	for _, k := range getClassSpellList(strings.ToLower(class)) {
+		if sp, ok := srdSpellsMemory[k]; ok && sp.Level == 0 {
+			onList++
+		}
+	}
+	if have < want && missingCantrips(charID, class, level) == 0 {
+		return fmt.Sprintf("Your class table allows %d cantrips, but the %s list has only %d and you already know the rest another way (Magic Initiate or your species), so there are none left to learn. You know every %s cantrip.", want, titleCase(class), onList, titleCase(class))
+	}
+	return ""
 }

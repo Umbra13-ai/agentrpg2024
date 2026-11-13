@@ -456,7 +456,9 @@ func getBardicInspirationDie(level int) int {
 // Lore Bards get Additional Magical Secrets at level 6
 // All Bards get Magical Secrets at levels 10, 14, 18 (2 spells each)
 func getMagicalSecretsSlots(class string, subclass string, level int) int {
-	if strings.ToLower(class) != "bard" {
+	// SRD 5.2.1 (Nov 13): Magical Secrets (Bard 10) makes the Cleric, Druid and Wizard lists count as Bard spells (character_spells.go),
+	// and Magical Discoveries (Lore 6) is its own choice (magical_discoveries_2024.go). There are no extra spell slots to count.
+	if true {
 		return 0
 	}
 

@@ -267,13 +267,24 @@ func handleCharacterFeat(w http.ResponseWriter, r *http.Request, charID int) {
 	featSlug := strings.ToLower(strings.TrimSpace(req.Feat))
 	feat, exists := availableFeats[featSlug]
 	if !exists {
+		// the feats this character can take with Ability Score Improvement points, in order
 		featSlugs := []string{}
-		for slug := range availableFeats {
-			featSlugs = append(featSlugs, slug)
+		for slug, f := range availableFeats {
+			if f.Category == "Origin" || f.Category == "Fighting Style" || (f.Category == "Epic Boon" && level < 19) {
+				continue
+			}
+			if ok, _ := featPrerequisite(f.Prerequisite, class, level, str, dex); ok {
+				featSlugs = append(featSlugs, slug)
+			}
 		}
-		json.NewEncoder(w).Encode(map[string]interface{}{
+		sort.Strings(featSlugs)
+		msg := fmt.Sprintf("%q is not a feat on this server.", req.Feat)
+		if note := phbNote("feat", req.Feat); note != "" {
+			msg = note
+		}
+		writeJSONStatus(w, http.StatusBadRequest, map[string]interface{}{
 			"error":           "unknown_feat",
-			"message":         fmt.Sprintf("Unknown feat: %s", req.Feat),
+			"message":         msg + " Feats you can take now: " + strings.Join(featSlugs, ", ") + ".",
 			"available_feats": featSlugs,
 		})
 		return
@@ -733,10 +744,14 @@ func handleCharacterSubclass(w http.ResponseWriter, r *http.Request) {
 				}
 			}
 			sort.Strings(validOptions)
-			json.NewEncoder(w).Encode(map[string]interface{}{
-				"error":        "invalid_subclass",
-				"message":      fmt.Sprintf("Subclass '%s' not found", req.Subclass),
-				"valid_for_%s": validOptions,
+			msg := fmt.Sprintf("%q is not a %s subclass on this server.", req.Subclass, titleCase(class.String))
+			if note := phbNote("subclass", req.Subclass); note != "" {
+				msg = note
+			}
+			writeJSONStatus(w, http.StatusBadRequest, map[string]interface{}{
+				"error":                                  "invalid_subclass",
+				"message":                                msg + " Choose one of: " + strings.Join(validOptions, ", ") + ".",
+				"valid_for_" + strings.ToLower(class.String): validOptions,
 			})
 			return
 		}

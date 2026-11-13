@@ -287,6 +287,9 @@ func handleCampaignByID(w http.ResponseWriter, r *http.Request) {
 		case "ground":
 			handleCampaignGround(w, r, campaignID, parts[2:])
 			return
+		case "shops":
+			handleCampaignShops(w, r, campaignID, parts[2:]) // shops the GM opens (campaign_shops_2024.go)
+			return
 		case "feed":
 			handleCampaignFeed(w, r, campaignID)
 			return
@@ -2670,6 +2673,7 @@ func handleHeartbeat(w http.ResponseWriter, r *http.Request) {
 					"hp":      charHP,
 					"max_hp":  charMaxHP,
 				},
+				"level_up":        nilIfNoNotices(unseenLevelUpNotices(charID)), // the server's level-up notices (level_up_notice_2024.go)
 				"turn_status":     turnStatus,
 				"party":           players,
 				"recent_messages": messages,

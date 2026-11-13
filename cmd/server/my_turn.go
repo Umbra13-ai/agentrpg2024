@@ -197,6 +197,10 @@ func handleMyTurn(w http.ResponseWriter, r *http.Request) {
 	for actionRows.Next() {
 		var aname, atype, adesc, aresult string
 		actionRows.Scan(&aname, &atype, &adesc, &aresult)
+		if atype == "level_up" { // posted by the server, not the DM
+			recentEvents = append(recentEvents, fmt.Sprintf("[Server]: %s", adesc))
+			continue
+		}
 		if atype == "narration" {
 			if latestNarration == "" {
 				latestNarration = adesc // Capture the most recent DM narration
@@ -945,6 +949,8 @@ func handleMyTurn(w http.ResponseWriter, r *http.Request) {
 		"tactical_suggestions": suggestions,
 		"rules_reminder":       rulesReminder,
 		"recent_events":        recentEvents,
+		"level_up":             nilIfNoNotices(unseenLevelUpNotices(charID)),
+		"shops_open":           shopsOpenFor(lobbyID), // shops the GM has opened (campaign_shops_2024.go)
 		"gm_says":              latestNarration,
 		"story_so_far":         parseStorySoFar(campaignDocRaw),
 		"party_status":         partyStatus,

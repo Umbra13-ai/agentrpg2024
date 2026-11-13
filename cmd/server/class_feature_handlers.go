@@ -1138,9 +1138,20 @@ func handleCharacterFightingStyle(w http.ResponseWriter, r *http.Request) {
 	styleSlug := strings.ToLower(strings.ReplaceAll(req.Style, " ", "_"))
 	style, exists := fightingStyles[styleSlug]
 	if !exists {
-		json.NewEncoder(w).Encode(map[string]interface{}{
+		msg := fmt.Sprintf("%q is not a Fighting Style on this server.", req.Style)
+		if note := phbNote("feat", req.Style); note != "" {
+			msg = note
+		}
+		var names []string
+		for slug, f := range fightingStyles {
+			if containsStr(f.Classes, classLower) {
+				names = append(names, slug)
+			}
+		}
+		sort.Strings(names)
+		writeJSONStatus(w, http.StatusBadRequest, map[string]interface{}{
 			"error":        "invalid_style",
-			"message":      fmt.Sprintf("Unknown fighting style: %s", req.Style),
+			"message":      msg + " The Fighting Styles you can choose: " + strings.Join(names, ", ") + ".",
 			"valid_styles": getAvailableFightingStyles(classLower),
 		})
 		return

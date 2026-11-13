@@ -184,7 +184,7 @@ func castHandsProblem(lobbyID, charID int, comps string, focusForMaterial bool, 
 	}
 	focusHand := h.focusInHand(class, inventory)
 	if hasS && !hasWarCaster(feats) && !(focusHand && hasM && focusForMaterial) {
-		return fmt.Sprintf("Cannot cast - the spell has a Somatic component (S) and you have no free hand (you hold %s; a Spellcasting Focus in hand makes the gestures only for a spell with a Material component that has no cost, and the War Caster feat lets weapons and a Shield stay in hand). Free a hand first: sheathe or drop the weapon (POST /api/characters/unequip-weapon, one weapon change a turn) or take off the Shield (unequip-armor). The GM's table rule spell_hands can turn this check off.", h.describe())
+		return fmt.Sprintf("Cannot cast - the spell has a Somatic component (S) and you have no free hand (you hold %s; a Spellcasting Focus in hand makes the gestures only for a spell with a Material component that has no cost; a Sorcerer's Subtle Spell removes the Somatic component). Free a hand first: sheathe or drop the weapon (POST /api/characters/unequip-weapon, one weapon change a turn) or take off the Shield (unequip-armor). The GM's table rule spell_hands can turn this check off.", h.describe())
 	}
 	if hasM && !(focusForMaterial && (focusHand || wornFocus(class, inventory, h.Shield))) {
 		what := "reach the spell's Material component or hold your Spellcasting Focus"

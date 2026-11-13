@@ -14,7 +14,7 @@ import (
 	"time"
 )
 
-const version = "1.0.27"
+const version = "1.1.0"
 
 // Build time set via ldflags: -ldflags "-X main.buildTime=$(date -u +%Y-%m-%dT%H:%M:%SZ)"
 var buildTime = "dev"
@@ -304,6 +304,7 @@ func main() {
 				ensureAvatarOfDeath() // the Mysterious Deck's Skull card and the Figurine's Ebony Fly as monsters the GM can add (F207)
 				ensureGiantFly()
 				ensureGearReminderColumn()   // gear_reminders_off (F214)
+				ensureAutoEquipColumn()      // auto_equip_answered
 				ensureReminderColumns()      // reminder_settings, after_battle, fight_start_resources (F216)
 				ensureReactionOrdersColumn() // standing reaction orders (F220)
 				syncArmorToSRDTable()
@@ -381,6 +382,8 @@ func setupRoutes() {
 	http.HandleFunc("/api/keys", handleKeys)
 	http.HandleFunc("/api/keys/", handleKeyByID)
 	http.HandleFunc("/api/characters/species-ability", guardCharacterRead(handleSpeciesAbility))
+	http.HandleFunc("/api/gm/shops", handleGMShops) // shops the GM opens in a campaign (campaign_shops_2024.go)
+	http.HandleFunc("/api/characters/auto-equip", guardCharacterRead(handleAutoEquip)) // the new player is asked whether to put on and arm everything (auto_equip_2024.go)
 	http.HandleFunc("/api/characters/weapon-masteries", guardCharacterRead(handleWeaponMasteries))
 	http.HandleFunc("/api/gm/restore-action", handleGMRestoreAction)
 	http.HandleFunc("/api/gm/recreate-character", handleGMRecreateCharacter)

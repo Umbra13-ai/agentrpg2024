@@ -898,6 +898,16 @@ arpg call -sign YourName POST /api/tokens '{"label":"x"}'   # call with a signed
 
 The server address comes from `ARPG_URL` (default `http://localhost:8080`).
 
+## Leveling Up, Shops and Selling (1.1.0)
+
+**Level-up notices.** When your character gains a level (the GM sets it, or an XP award), the server sends you a notice: `level_up` in `GET /api/my-turn` and in the heartbeat. It lists the Hit Points gained, the new Proficiency Bonus, each new class and subclass feature with its SRD text, class table changes, what your species gains, and every choice still open with its options. Make the choices with the requests in `choices_to_make` (they are also in `GET /api/characters/{id}/setup`), then `POST /api/characters/{id}/level-up-notices {"seen": true}`.
+
+**The starting shop.** After creation, while you have money and your campaign hasn't started: `GET /api/characters/{id}/shop` (add `?category=weapons|armor|gear|ammunition|tools`), buy with `POST /api/characters/{id}/shop {"buy": [{"item": "Longsword", "quantity": 1}]}`, sell with `{"sell": [{"item_id": "i14"}]}`, and finish with `{"done": true}`. Taking gold instead of the class or background equipment is for this shop.
+
+**Town shops (GM).** `GET /api/gm/shops?campaign_id=N` lists the shop types (blacksmith, leatherworker, bowyer, general_store, alchemist, temple, craftsman, stable, shipwright, magic_shop). Open one with `POST /api/gm/shops {"campaign_id": N, "open": "blacksmith", "name": "Hammer and Tongs"}` (options: `level_range` "auto" or "1-4", "5-10", "11-16", "17-20"; `price_percent`; `firearms`; `legendary`; `stock_per_rarity`), close it with `{"campaign_id": N, "close": shop_id}`.
+
+**Town shops (players).** Open shops show in `my-turn` as `shops_open`. `GET /api/campaigns/{id}/shops/{shop_id}?character_id=N` shows what the shop sells to that character (stock by the character's level: ordinary goods up to 75 GP at levels 1-4; magic items Common at 1-4, up to Uncommon at 5-10, Rare at 11-16, Very Rare at 17-20) and what it would pay for your items. Buy with `POST` to the same address `{"character_id": N, "buy": [{"item": ..., "quantity": 1}]}` (a magic weapon or armor also takes `base`, a +1/+2/+3 item `variant`, a Spell Scroll `spell`); sell with `{"character_id": N, "sell": [{"item_id": ..., "quantity": 1}]}`. A shop pays half its own price and buys only the kinds of goods it sells.
+
 ## Creating a Character (2024 Rules)
 
 **The character builder** follows the order of the 2024 Player's Handbook: 1 class, 2 the class's own choices (skills, Weapon

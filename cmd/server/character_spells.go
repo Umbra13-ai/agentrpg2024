@@ -165,7 +165,7 @@ func handleCharacterSpells(w http.ResponseWriter, r *http.Request, charID int) {
 				} else {
 					return "", false, map[string]interface{}{
 						"error":   "unknown_spell",
-						"message": fmt.Sprintf("Spell '%s' not found in SRD. Check /api/universe/spells for valid spell slugs.", spellSlug),
+						"message": unknownSpellMessage(spellSlug),
 					}
 				}
 			}
@@ -218,7 +218,7 @@ func handleCharacterSpells(w http.ResponseWriter, r *http.Request, charID int) {
 			for _, spellSlug := range req.Spells {
 				validSlug, isMagicalSecret, errResp := validateSpell(spellSlug)
 				if errResp != nil {
-					json.NewEncoder(w).Encode(errResp)
+					writeJSONStatus(w, http.StatusBadRequest, errResp)
 					return
 				}
 				newSpells = append(newSpells, validSlug)
@@ -235,7 +235,7 @@ func handleCharacterSpells(w http.ResponseWriter, r *http.Request, charID int) {
 			for _, spellSlug := range req.Add {
 				validSlug, isMagicalSecret, errResp := validateSpell(spellSlug)
 				if errResp != nil {
-					json.NewEncoder(w).Encode(errResp)
+					writeJSONStatus(w, http.StatusBadRequest, errResp)
 					return
 				}
 				// Check if already known
@@ -298,6 +298,7 @@ func handleCharacterSpells(w http.ResponseWriter, r *http.Request, charID int) {
 			always := append(getDomainSpells(subclassStr, level, choices["circle_land"]), originAlwaysPrepared(charID)...) // subclass and origin spells
 			// Words of Creation (Bard 20): Power Word Heal and Kill
 			always = append(always, wordsOfCreationSpells(class, level)...)
+			always = append(always, magicalDiscoveriesOf(charID)...) // College of Lore 6
 			why, commit := checkSpellListChange(charID, class, level, withoutAlwaysPrepared(knownSpells, always), withoutAlwaysPrepared(newSpells, always))
 			if why != "" {
 				json.NewEncoder(w).Encode(map[string]interface{}{"error": "cannot_change_now", "message": why, "max": game.PreparedSpells2024(class, level)})
@@ -494,6 +495,7 @@ func handlePrepareSpells(w http.ResponseWriter, r *http.Request, charID int) {
 	originSpells := originAlwaysPrepared(charID) // species lineage and Magic Initiate spells: always prepared too
 	alwaysPrepared := append(append([]string{}, domainSpells...), originSpells...)
 	alwaysPrepared = append(alwaysPrepared, wordsOfCreationSpells(charClassOf(charID), level)...) // Bard 20: Words of Creation
+	alwaysPrepared = append(alwaysPrepared, magicalDiscoveriesOf(charID)...)                     // College of Lore 6: Magical Discoveries
 
 	if r.Method == "GET" {
 		// Return current prepared spells with enriched info
@@ -558,6 +560,7 @@ func handlePrepareSpells(w http.ResponseWriter, r *http.Request, charID int) {
 
 		// Validate each spell slug and build the prepared list
 		newPrepared := []string{}
+		var skippedAlways, skippedTwice []string // said in the reply (Nov 13): a list of only always-prepared spells used to answer "Prepared 0 spells" with no reason
 		for _, spellSlug := range req.Spells {
 			slugLower := strings.ToLower(strings.TrimSpace(spellSlug))
 			slugDashed := strings.ReplaceAll(slugLower, " ", "-")
@@ -571,13 +574,16 @@ func handlePrepareSpells(w http.ResponseWriter, r *http.Request, charID int) {
 			}
 
 			if validSlug == "" {
-				json.NewEncoder(w).Encode(map[string]interface{}{
+				writeJSONStatus(w, http.StatusBadRequest, map[string]interface{}{
 					"error":   "unknown_spell",
-					"message": fmt.Sprintf("Spell '%s' not found in SRD. Check /api/universe/spells for valid spell slugs.", spellSlug),
+					"message": unknownSpellMessage(spellSlug),
 				})
 				return
 			}
 			if containsStr(alwaysPrepared, validSlug) { // F240: a Magic Initiate, lineage or subclass spell sent back with the list: always prepared, skip it
+				if !containsStr(skippedAlways, srdSpellsMemory[validSlug].Name) {
+					skippedAlways = append(skippedAlways, srdSpellsMemory[validSlug].Name)
+				}
 				continue
 			}
 
@@ -655,6 +661,8 @@ func handlePrepareSpells(w http.ResponseWriter, r *http.Request, charID int) {
 			}
 			if !isDuplicate {
 				newPrepared = append(newPrepared, validSlug)
+			} else if !containsStr(skippedTwice, spell.Name) {
+				skippedTwice = append(skippedTwice, spell.Name)
 			}
 		}
 
@@ -725,6 +733,19 @@ func handlePrepareSpells(w http.ResponseWriter, r *http.Request, charID int) {
 			"max_prepared":    maxPrepared,
 			"slots_remaining": maxPrepared - countLeveled(newPrepared),
 			"message":         fmt.Sprintf("Prepared %d spells for the day.", len(newPrepared)),
+		}
+		var notes []string
+		if len(skippedAlways) > 0 {
+			notes = append(notes, fmt.Sprintf("%s: always prepared for you (it doesn't count against your limit), so it was left out of this list.", strings.Join(skippedAlways, ", ")))
+		}
+		if len(skippedTwice) > 0 {
+			notes = append(notes, fmt.Sprintf("%s: sent twice, prepared once.", strings.Join(skippedTwice, ", ")))
+		}
+		if n := countLeveled(newPrepared); n < maxPrepared {
+			notes = append(notes, fmt.Sprintf("This list replaces the one you had. It has %d spells of level 1 or higher; you can prepare %d.", n, maxPrepared))
+		}
+		if len(notes) > 0 {
+			response["notes"] = notes
 		}
 
 		if len(domainSpellsInfo) > 0 {

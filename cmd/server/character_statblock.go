@@ -33,6 +33,28 @@ func canonicalAlignment(s string) string {
 	return ""
 }
 
+// playerAlignments: the nine alignments a player character can have ("Unaligned" is for creatures).
+func playerAlignments() []string {
+	var out []string
+	for _, a := range allowedAlignments {
+		if a != "Unaligned" {
+			out = append(out, a)
+		}
+	}
+	return out
+}
+
+// canonicalPlayerAlignment: the standard spelling of one of the nine alignments, or "".
+func canonicalPlayerAlignment(s string) string {
+	if a := canonicalAlignment(s); a != "Unaligned" {
+		return a
+	}
+	return ""
+}
+
+// alignmentDescriptions: the SRD's summary of each alignment (The Nine Alignments), exactly as printed.
+var alignmentDescriptions = srdAlignments
+
 type sbEntry struct {
 	Name        string `json:"name"`
 	Description string `json:"description"`

@@ -24,6 +24,24 @@ type unfinishedKey struct{}
 func characterToFinish(charID int) []string {
 	out := append(levelUpOpenChoices(charID), classOpenChoices(charID)...)
 	out = append(out, levels23OpenChoices(charID)...)
+	for _, st := range wizardCapstoneSteps(charID) {
+		out = append(out, fmt.Sprintf("%s (%s)", st.Title, map[string]string{"spell_mastery": "POST /api/characters/spell-mastery", "signature_spells": "POST /api/characters/signature-spells"}[st.Key]))
+	}
+	if st := mysticArcanumStep(charID); st != nil {
+		out = append(out, fmt.Sprintf("Mystic Arcanum: %s (POST /api/characters/mystic-arcanum)", st.Title))
+	}
+	if d := pendingClassLanguage(charID); d != nil {
+		out = append(out, fmt.Sprintf("%s: choose %d language(s) (POST /api/characters/%d/class-options {\"class_languages\": [...]})", d.feature, d.count, charID))
+	}
+	for _, st := range pendingClassChoices(charID) {
+		out = append(out, fmt.Sprintf("%s (POST /api/characters/%d/class-options)", st.Title, charID))
+	}
+	if hasMagicalDiscoveries(charID) && len(magicalDiscoveriesOf(charID)) < 2 {
+		out = append(out, fmt.Sprintf("Magical Discoveries: choose 2 Cleric, Druid or Wizard spells (POST /api/characters/%d/class-options {\"magical_discoveries\": [...]})", charID))
+	}
+	if line := autoEquipOpen(charID); line != "" {
+		out = append(out, line)
+	}
 	sort.Strings(out)
 	return out
 }
@@ -89,9 +107,11 @@ func classOpenChoices(charID int) []string {
 	if levels["druid"] >= 1 && primal == "" {
 		out = append(out, fmt.Sprintf("Primal Order: choose magician or warden (POST /api/characters/%d/class-options {\"primal_order\": ...})", charID))
 	}
-	if l := levels["druid"]; l >= 2 && len(knownWildShapes(charID)) == 0 {
-		kn, _, _ := wildShapeLimits(l)
-		out = append(out, fmt.Sprintf("Wild Shape: choose your %d known Beast forms (POST /api/characters/%d/class-options {\"wild_shape_forms\": [...]})", kn, charID))
+	if l := levels["druid"]; l >= 2 {
+		// the number of known forms grows at Druid levels 4 and 8 (Nov 13: the new ones were never asked for)
+		if kn, _, _ := wildShapeLimits(l); len(knownWildShapes(charID)) < kn {
+			out = append(out, fmt.Sprintf("Wild Shape: %d of your %d known Beast forms chosen (POST /api/characters/%d/class-options {\"wild_shape_forms\": [...]} with all of them)", len(knownWildShapes(charID)), kn, charID))
+		}
 	}
 	if l := levels["warlock"]; l >= 1 {
 		if want, have := game.GetMaxInvocations(l), jsonCount(charID, "eldritch_invocations"); have < want {

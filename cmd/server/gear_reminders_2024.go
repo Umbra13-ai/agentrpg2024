@@ -252,6 +252,10 @@ func gearReminders(charID int) []map[string]interface{} {
 	var out []map[string]interface{}
 	seen := map[string]bool{}
 	attunedN, attuneMax := len(attunedItemNames(charID)), attunementMax(charID)
+	sameName := map[string]int{}
+	for _, it := range inv {
+		sameName[strings.ToLower(itemStr(it, "name"))]++
+	}
 	for _, it := range inv {
 		name := itemStr(it, "name")
 		low := strings.ToLower(name)
@@ -287,8 +291,12 @@ func gearReminders(charID int) []map[string]interface{} {
 		if place == "" || itemStr(it, "location") == "worn" || (limited && worn[place]) {
 			continue
 		}
+		itemRef := name // two items with the same name (two Robes) need the id, or the server answers ambiguous_item
+		if sameName[low] > 1 {
+			itemRef = itemStr(it, "id")
+		}
 		r := map[string]interface{}{"item": name, "kind": "worn", "place": place,
-			"how": fmt.Sprintf("POST /api/characters/%d/equipment/move {\"item\": %q, \"to\": \"worn\"}", charID, name), "mute": mute(name)}
+			"how": fmt.Sprintf("POST /api/characters/%d/equipment/move {\"item\": %q, \"to\": \"worn\"}", charID, itemRef), "mute": mute(name)}
 		if itemNeedsAttunement(name) || itemNeedsAttunement(baseItemName(name)) {
 			if !attunedToName(charID, name) {
 				r["attunement"] = fmt.Sprintf("needs attunement (%d of %d used): POST /api/characters/attune during a Short Rest", attunedN, attuneMax)

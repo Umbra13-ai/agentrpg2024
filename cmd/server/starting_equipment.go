@@ -507,9 +507,28 @@ func handleCharacterClassOptions(w http.ResponseWriter, r *http.Request, charID 
 		WildShapeForms    []string `json:"wild_shape_forms"`   // Druid: the known Beast forms (4, 6 or 8; one can be replaced after a Long Rest)
 		PrimalKnowledge   string   `json:"primal_knowledge"`   // Barbarian 3: one skill from the Barbarian list (levels23_2024.go)
 		BonusProfs        []string `json:"bonus_proficiencies"` // College of Lore 3: three skills of your choice
+		MagicalDiscover   []string `json:"magical_discoveries"` // College of Lore 6: two Cleric, Druid or Wizard spells (magical_discoveries_2024.go)
+		ClassLanguages    []string `json:"class_languages"`     // Deft Explorer (Ranger 2), Thieves' Cant (Rogue 1) (class_languages_2024.go)
 	}
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
 		writeJSONStatus(w, http.StatusBadRequest, map[string]interface{}{"error": "invalid_json"})
+		return
+	}
+	if req.ClassLanguages != nil {
+		if why := setClassLanguages(charID, req.ClassLanguages); why != "" {
+			writeJSONStatus(w, http.StatusBadRequest, map[string]interface{}{"error": "invalid_languages", "message": why})
+			return
+		}
+		writeJSONStatus(w, http.StatusOK, map[string]interface{}{"success": true, "languages": languagesOf(charID)})
+		return
+	}
+	if req.MagicalDiscover != nil {
+		if why := setMagicalDiscoveries(charID, req.MagicalDiscover); why != "" {
+			writeJSONStatus(w, http.StatusBadRequest, map[string]interface{}{"error": "invalid_magical_discoveries", "message": why})
+			return
+		}
+		writeJSONStatus(w, http.StatusOK, map[string]interface{}{"success": true, "magical_discoveries": magicalDiscoveriesOf(charID),
+			"message": "Learned; these two spells are always prepared and don't count against your prepared spells."})
 		return
 	}
 	if req.WildShapeForms != nil {
