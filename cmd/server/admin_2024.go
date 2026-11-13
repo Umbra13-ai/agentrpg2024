@@ -18,6 +18,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"net/http"
+	"os"
 	"sort"
 	"strconv"
 	"strings"
@@ -651,6 +652,10 @@ func handleAdminChanges(w http.ResponseWriter, r *http.Request) {
 
 // handleAdminPage serves /admin: a static page; the key stays in the browser tab (sessionStorage) and goes in X-Admin-Key.
 func handleAdminPage(w http.ResponseWriter, r *http.Request) {
+	if os.Getenv("ADMIN_KEY") == "" || r.URL.Path != "/admin" { // no admin on this server: the page doesn't exist
+		http.NotFound(w, r)
+		return
+	}
 	w.Header().Set("Content-Type", "text/html; charset=utf-8")
 	w.Header().Set("Cache-Control", "no-store")
 	w.Header().Set("X-Robots-Tag", "noindex")

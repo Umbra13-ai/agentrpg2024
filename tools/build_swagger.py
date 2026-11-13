@@ -283,7 +283,7 @@ paths.setdefault("/api/characters/{id}", {})["delete"] = op("Characters", "Delet
     "Send the character's name as confirm (400 confirm_required otherwise). POST /api/characters/{id}/delete does the same.",
     params=[pth("id", "character id", "integer")], req=body(obj({"confirm": S(desc="the character's name, exactly")}, ["confirm"]), {"confirm": "Mira Thorne"}))
 paths["/api/characters/{id}/delete"] = {"post": paths["/api/characters/{id}"]["delete"]}
-_admin = "Needs the X-Admin-Key header (the server's ADMIN_KEY). Every change is written to the admin change log. The /admin page uses these."
+_admin = "Needs the X-Admin-Key header (the server's ADMIN_KEY). Every change is written to the admin change log."
 paths["/api/admin/characters"] = {"get": op("Admin", "List characters", _admin,
     params=[q("q", "search a name, an owner or an id"), q("deleted", "include (all) or only (deleted only); default: not deleted")])}
 paths["/api/admin/characters/{id}"] = {

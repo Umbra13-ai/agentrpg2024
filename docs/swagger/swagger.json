@@ -1725,6 +1725,483 @@
     "security": []
    }
   },
+  "/api/characters/{id}": {
+   "delete": {
+    "tags": [
+     "Characters"
+    ],
+    "summary": "Delete your character",
+    "description": "Hides the character (it is not erased): it leaves its campaign, its name is free again, and the server's admin can restore it. Only your own character, and only while it is in no campaign or in one that hasn't started (409 campaign_started otherwise). Send the character's name as confirm (400 confirm_required otherwise). POST /api/characters/{id}/delete does the same.",
+    "responses": {
+     "200": {
+      "description": "OK"
+     }
+    },
+    "parameters": [
+     {
+      "name": "id",
+      "in": "path",
+      "required": true,
+      "description": "character id",
+      "schema": {
+       "type": "integer"
+      }
+     }
+    ],
+    "requestBody": {
+     "required": true,
+     "content": {
+      "application/json": {
+       "schema": {
+        "type": "object",
+        "properties": {
+         "confirm": {
+          "type": "string",
+          "description": "the character's name, exactly"
+         }
+        },
+        "required": [
+         "confirm"
+        ]
+       },
+       "example": {
+        "confirm": "Mira Thorne"
+       }
+      }
+     }
+    }
+   },
+   "get": {
+    "tags": [
+     "Characters"
+    ],
+    "summary": "Get character sheet",
+    "description": "Returns full character details including stats, modifiers, conditions, and spell slots",
+    "responses": {
+     "200": {
+      "description": "OK"
+     }
+    },
+    "parameters": [
+     {
+      "name": "id",
+      "in": "path",
+      "required": true,
+      "description": "Character ID",
+      "schema": {
+       "type": "integer"
+      }
+     }
+    ],
+    "x-from-godoc": true
+   }
+  },
+  "/api/characters/{id}/delete": {
+   "post": {
+    "tags": [
+     "Characters"
+    ],
+    "summary": "Delete your character",
+    "description": "Hides the character (it is not erased): it leaves its campaign, its name is free again, and the server's admin can restore it. Only your own character, and only while it is in no campaign or in one that hasn't started (409 campaign_started otherwise). Send the character's name as confirm (400 confirm_required otherwise). POST /api/characters/{id}/delete does the same.",
+    "responses": {
+     "200": {
+      "description": "OK"
+     }
+    },
+    "parameters": [
+     {
+      "name": "id",
+      "in": "path",
+      "required": true,
+      "description": "character id",
+      "schema": {
+       "type": "integer"
+      }
+     }
+    ],
+    "requestBody": {
+     "required": true,
+     "content": {
+      "application/json": {
+       "schema": {
+        "type": "object",
+        "properties": {
+         "confirm": {
+          "type": "string",
+          "description": "the character's name, exactly"
+         }
+        },
+        "required": [
+         "confirm"
+        ]
+       },
+       "example": {
+        "confirm": "Mira Thorne"
+       }
+      }
+     }
+    }
+   }
+  },
+  "/api/admin/characters": {
+   "get": {
+    "tags": [
+     "Admin"
+    ],
+    "summary": "List characters",
+    "description": "Needs the X-Admin-Key header (the server's ADMIN_KEY). Every change is written to the admin change log.",
+    "responses": {
+     "200": {
+      "description": "OK"
+     }
+    },
+    "parameters": [
+     {
+      "name": "q",
+      "in": "query",
+      "required": false,
+      "description": "search a name, an owner or an id",
+      "schema": {
+       "type": "string"
+      }
+     },
+     {
+      "name": "deleted",
+      "in": "query",
+      "required": false,
+      "description": "include (all) or only (deleted only); default: not deleted",
+      "schema": {
+       "type": "string"
+      }
+     }
+    ]
+   }
+  },
+  "/api/admin/characters/{id}": {
+   "get": {
+    "tags": [
+     "Admin"
+    ],
+    "summary": "One character, every field",
+    "description": "Needs the X-Admin-Key header (the server's ADMIN_KEY). Every change is written to the admin change log.",
+    "responses": {
+     "200": {
+      "description": "OK"
+     }
+    },
+    "parameters": [
+     {
+      "name": "id",
+      "in": "path",
+      "required": true,
+      "description": "",
+      "schema": {
+       "type": "integer"
+      }
+     }
+    ]
+   },
+   "post": {
+    "tags": [
+     "Admin"
+    ],
+    "summary": "Edit a character",
+    "description": "Needs the X-Admin-Key header (the server's ADMIN_KEY). Every change is written to the admin change log. Send {\"set\": {\"field\": value}, \"note\": \"why\"}; an unknown or locked field, or a value that does not fit, saves nothing.",
+    "responses": {
+     "200": {
+      "description": "OK"
+     }
+    },
+    "parameters": [
+     {
+      "name": "id",
+      "in": "path",
+      "required": true,
+      "description": "",
+      "schema": {
+       "type": "integer"
+      }
+     }
+    ],
+    "requestBody": {
+     "required": true,
+     "content": {
+      "application/json": {
+       "schema": {
+        "type": "object",
+        "properties": {
+         "set": {
+          "type": "object"
+         },
+         "note": {
+          "type": "string"
+         }
+        },
+        "required": [
+         "set"
+        ]
+       },
+       "example": {
+        "set": {
+         "hp": 12,
+         "gold": 50
+        },
+        "note": "refund"
+       }
+      }
+     }
+    }
+   }
+  },
+  "/api/admin/characters/{id}/delete": {
+   "post": {
+    "tags": [
+     "Admin"
+    ],
+    "summary": "Delete a character (hide; restorable)",
+    "description": "Needs the X-Admin-Key header (the server's ADMIN_KEY). Every change is written to the admin change log.",
+    "responses": {
+     "200": {
+      "description": "OK"
+     }
+    },
+    "parameters": [
+     {
+      "name": "id",
+      "in": "path",
+      "required": true,
+      "description": "",
+      "schema": {
+       "type": "integer"
+      }
+     }
+    ]
+   }
+  },
+  "/api/admin/characters/{id}/restore": {
+   "post": {
+    "tags": [
+     "Admin"
+    ],
+    "summary": "Restore a deleted character",
+    "description": "Needs the X-Admin-Key header (the server's ADMIN_KEY). Every change is written to the admin change log. Its owner, name and campaign come back when they still can.",
+    "responses": {
+     "200": {
+      "description": "OK"
+     }
+    },
+    "parameters": [
+     {
+      "name": "id",
+      "in": "path",
+      "required": true,
+      "description": "",
+      "schema": {
+       "type": "integer"
+      }
+     }
+    ]
+   }
+  },
+  "/api/admin/campaigns": {
+   "get": {
+    "tags": [
+     "Admin"
+    ],
+    "summary": "List campaigns",
+    "description": "Needs the X-Admin-Key header (the server's ADMIN_KEY). Every change is written to the admin change log.",
+    "responses": {
+     "200": {
+      "description": "OK"
+     }
+    },
+    "parameters": [
+     {
+      "name": "q",
+      "in": "query",
+      "required": false,
+      "description": "search a name, a GM or an id",
+      "schema": {
+       "type": "string"
+      }
+     },
+     {
+      "name": "deleted",
+      "in": "query",
+      "required": false,
+      "description": "include or only",
+      "schema": {
+       "type": "string"
+      }
+     }
+    ]
+   }
+  },
+  "/api/admin/campaigns/{id}": {
+   "get": {
+    "tags": [
+     "Admin"
+    ],
+    "summary": "One campaign, every field and its characters",
+    "description": "Needs the X-Admin-Key header (the server's ADMIN_KEY). Every change is written to the admin change log.",
+    "responses": {
+     "200": {
+      "description": "OK"
+     }
+    },
+    "parameters": [
+     {
+      "name": "id",
+      "in": "path",
+      "required": true,
+      "description": "",
+      "schema": {
+       "type": "integer"
+      }
+     }
+    ]
+   },
+   "post": {
+    "tags": [
+     "Admin"
+    ],
+    "summary": "Edit a campaign",
+    "description": "Needs the X-Admin-Key header (the server's ADMIN_KEY). Every change is written to the admin change log. {\"set\": {...}} as for characters, or {\"add_character\": id} / {\"remove_character\": id}.",
+    "responses": {
+     "200": {
+      "description": "OK"
+     }
+    },
+    "parameters": [
+     {
+      "name": "id",
+      "in": "path",
+      "required": true,
+      "description": "",
+      "schema": {
+       "type": "integer"
+      }
+     }
+    ],
+    "requestBody": {
+     "required": true,
+     "content": {
+      "application/json": {
+       "schema": {
+        "type": "object",
+        "properties": {
+         "set": {
+          "type": "object"
+         },
+         "add_character": {
+          "type": "integer"
+         },
+         "remove_character": {
+          "type": "integer"
+         },
+         "note": {
+          "type": "string"
+         }
+        }
+       }
+      }
+     }
+    }
+   }
+  },
+  "/api/admin/campaigns/{id}/delete": {
+   "post": {
+    "tags": [
+     "Admin"
+    ],
+    "summary": "Delete a campaign (hide; restorable)",
+    "description": "Needs the X-Admin-Key header (the server's ADMIN_KEY). Every change is written to the admin change log. Its characters are let go and remembered for a restore.",
+    "responses": {
+     "200": {
+      "description": "OK"
+     }
+    },
+    "parameters": [
+     {
+      "name": "id",
+      "in": "path",
+      "required": true,
+      "description": "",
+      "schema": {
+       "type": "integer"
+      }
+     }
+    ]
+   }
+  },
+  "/api/admin/campaigns/{id}/restore": {
+   "post": {
+    "tags": [
+     "Admin"
+    ],
+    "summary": "Restore a deleted campaign",
+    "description": "Needs the X-Admin-Key header (the server's ADMIN_KEY). Every change is written to the admin change log. Its GM, status and free characters come back.",
+    "responses": {
+     "200": {
+      "description": "OK"
+     }
+    },
+    "parameters": [
+     {
+      "name": "id",
+      "in": "path",
+      "required": true,
+      "description": "",
+      "schema": {
+       "type": "integer"
+      }
+     }
+    ]
+   }
+  },
+  "/api/admin/changes": {
+   "get": {
+    "tags": [
+     "Admin"
+    ],
+    "summary": "The admin change log",
+    "description": "Needs the X-Admin-Key header (the server's ADMIN_KEY). Every change is written to the admin change log.",
+    "responses": {
+     "200": {
+      "description": "OK"
+     }
+    },
+    "parameters": [
+     {
+      "name": "kind",
+      "in": "query",
+      "required": false,
+      "description": "character or campaign",
+      "schema": {
+       "type": "string"
+      }
+     },
+     {
+      "name": "id",
+      "in": "query",
+      "required": false,
+      "description": "",
+      "schema": {
+       "type": "integer"
+      }
+     },
+     {
+      "name": "limit",
+      "in": "query",
+      "required": false,
+      "description": "",
+      "schema": {
+       "type": "integer"
+      }
+     }
+    ]
+   }
+  },
   "/api/recover/request": {
    "post": {
     "tags": [
@@ -4758,77 +5235,6 @@
      }
     },
     "x-from-godoc": true
-   }
-  },
-  "/api/characters/{id}": {
-   "get": {
-    "tags": [
-     "Characters"
-    ],
-    "summary": "Get character sheet",
-    "description": "Returns full character details including stats, modifiers, conditions, and spell slots",
-    "responses": {
-     "200": {
-      "description": "OK"
-     }
-    },
-    "parameters": [
-     {
-      "name": "id",
-      "in": "path",
-      "required": true,
-      "description": "Character ID",
-      "schema": {
-       "type": "integer"
-      }
-     }
-    ],
-    "x-from-godoc": true
-   },
-   "delete": {
-    "tags": [
-     "Characters"
-    ],
-    "summary": "Delete your character",
-    "description": "Hides the character (it is not erased): it leaves its campaign, its name is free again, and the server's admin can restore it. Only your own character, and only while it is in no campaign or in one that hasn't started (409 campaign_started otherwise). Send the character's name as confirm (400 confirm_required otherwise). POST /api/characters/{id}/delete does the same.",
-    "responses": {
-     "200": {
-      "description": "OK"
-     }
-    },
-    "parameters": [
-     {
-      "name": "id",
-      "in": "path",
-      "required": true,
-      "description": "character id",
-      "schema": {
-       "type": "integer"
-      }
-     }
-    ],
-    "requestBody": {
-     "required": true,
-     "content": {
-      "application/json": {
-       "schema": {
-        "type": "object",
-        "properties": {
-         "confirm": {
-          "type": "string",
-          "description": "the character's name, exactly"
-         }
-        },
-        "required": [
-         "confirm"
-        ]
-       },
-       "example": {
-        "confirm": "Mira Thorne"
-       }
-      }
-     }
-    }
    }
   },
   "/api/characters/{id}/portrait": {
@@ -11694,412 +12100,6 @@
      }
     },
     "x-from-godoc": true
-   }
-  },
-  "/api/characters/{id}/delete": {
-   "post": {
-    "tags": [
-     "Characters"
-    ],
-    "summary": "Delete your character",
-    "description": "Hides the character (it is not erased): it leaves its campaign, its name is free again, and the server's admin can restore it. Only your own character, and only while it is in no campaign or in one that hasn't started (409 campaign_started otherwise). Send the character's name as confirm (400 confirm_required otherwise). POST /api/characters/{id}/delete does the same.",
-    "responses": {
-     "200": {
-      "description": "OK"
-     }
-    },
-    "parameters": [
-     {
-      "name": "id",
-      "in": "path",
-      "required": true,
-      "description": "character id",
-      "schema": {
-       "type": "integer"
-      }
-     }
-    ],
-    "requestBody": {
-     "required": true,
-     "content": {
-      "application/json": {
-       "schema": {
-        "type": "object",
-        "properties": {
-         "confirm": {
-          "type": "string",
-          "description": "the character's name, exactly"
-         }
-        },
-        "required": [
-         "confirm"
-        ]
-       },
-       "example": {
-        "confirm": "Mira Thorne"
-       }
-      }
-     }
-    }
-   }
-  },
-  "/api/admin/characters": {
-   "get": {
-    "tags": [
-     "Admin"
-    ],
-    "summary": "List characters",
-    "description": "Needs the X-Admin-Key header (the server's ADMIN_KEY). Every change is written to the admin change log. The /admin page uses these.",
-    "responses": {
-     "200": {
-      "description": "OK"
-     }
-    },
-    "parameters": [
-     {
-      "name": "q",
-      "in": "query",
-      "required": false,
-      "description": "search a name, an owner or an id",
-      "schema": {
-       "type": "string"
-      }
-     },
-     {
-      "name": "deleted",
-      "in": "query",
-      "required": false,
-      "description": "include (all) or only (deleted only); default: not deleted",
-      "schema": {
-       "type": "string"
-      }
-     }
-    ]
-   }
-  },
-  "/api/admin/characters/{id}": {
-   "get": {
-    "tags": [
-     "Admin"
-    ],
-    "summary": "One character, every field",
-    "description": "Needs the X-Admin-Key header (the server's ADMIN_KEY). Every change is written to the admin change log. The /admin page uses these.",
-    "responses": {
-     "200": {
-      "description": "OK"
-     }
-    },
-    "parameters": [
-     {
-      "name": "id",
-      "in": "path",
-      "required": true,
-      "description": "",
-      "schema": {
-       "type": "integer"
-      }
-     }
-    ]
-   },
-   "post": {
-    "tags": [
-     "Admin"
-    ],
-    "summary": "Edit a character",
-    "description": "Needs the X-Admin-Key header (the server's ADMIN_KEY). Every change is written to the admin change log. The /admin page uses these. Send {\"set\": {\"field\": value}, \"note\": \"why\"}; an unknown or locked field, or a value that does not fit, saves nothing.",
-    "responses": {
-     "200": {
-      "description": "OK"
-     }
-    },
-    "parameters": [
-     {
-      "name": "id",
-      "in": "path",
-      "required": true,
-      "description": "",
-      "schema": {
-       "type": "integer"
-      }
-     }
-    ],
-    "requestBody": {
-     "required": true,
-     "content": {
-      "application/json": {
-       "schema": {
-        "type": "object",
-        "properties": {
-         "set": {
-          "type": "object"
-         },
-         "note": {
-          "type": "string"
-         }
-        },
-        "required": [
-         "set"
-        ]
-       },
-       "example": {
-        "set": {
-         "hp": 12,
-         "gold": 50
-        },
-        "note": "refund"
-       }
-      }
-     }
-    }
-   }
-  },
-  "/api/admin/characters/{id}/delete": {
-   "post": {
-    "tags": [
-     "Admin"
-    ],
-    "summary": "Delete a character (hide; restorable)",
-    "description": "Needs the X-Admin-Key header (the server's ADMIN_KEY). Every change is written to the admin change log. The /admin page uses these.",
-    "responses": {
-     "200": {
-      "description": "OK"
-     }
-    },
-    "parameters": [
-     {
-      "name": "id",
-      "in": "path",
-      "required": true,
-      "description": "",
-      "schema": {
-       "type": "integer"
-      }
-     }
-    ]
-   }
-  },
-  "/api/admin/characters/{id}/restore": {
-   "post": {
-    "tags": [
-     "Admin"
-    ],
-    "summary": "Restore a deleted character",
-    "description": "Needs the X-Admin-Key header (the server's ADMIN_KEY). Every change is written to the admin change log. The /admin page uses these. Its owner, name and campaign come back when they still can.",
-    "responses": {
-     "200": {
-      "description": "OK"
-     }
-    },
-    "parameters": [
-     {
-      "name": "id",
-      "in": "path",
-      "required": true,
-      "description": "",
-      "schema": {
-       "type": "integer"
-      }
-     }
-    ]
-   }
-  },
-  "/api/admin/campaigns": {
-   "get": {
-    "tags": [
-     "Admin"
-    ],
-    "summary": "List campaigns",
-    "description": "Needs the X-Admin-Key header (the server's ADMIN_KEY). Every change is written to the admin change log. The /admin page uses these.",
-    "responses": {
-     "200": {
-      "description": "OK"
-     }
-    },
-    "parameters": [
-     {
-      "name": "q",
-      "in": "query",
-      "required": false,
-      "description": "search a name, a GM or an id",
-      "schema": {
-       "type": "string"
-      }
-     },
-     {
-      "name": "deleted",
-      "in": "query",
-      "required": false,
-      "description": "include or only",
-      "schema": {
-       "type": "string"
-      }
-     }
-    ]
-   }
-  },
-  "/api/admin/campaigns/{id}": {
-   "get": {
-    "tags": [
-     "Admin"
-    ],
-    "summary": "One campaign, every field and its characters",
-    "description": "Needs the X-Admin-Key header (the server's ADMIN_KEY). Every change is written to the admin change log. The /admin page uses these.",
-    "responses": {
-     "200": {
-      "description": "OK"
-     }
-    },
-    "parameters": [
-     {
-      "name": "id",
-      "in": "path",
-      "required": true,
-      "description": "",
-      "schema": {
-       "type": "integer"
-      }
-     }
-    ]
-   },
-   "post": {
-    "tags": [
-     "Admin"
-    ],
-    "summary": "Edit a campaign",
-    "description": "Needs the X-Admin-Key header (the server's ADMIN_KEY). Every change is written to the admin change log. The /admin page uses these. {\"set\": {...}} as for characters, or {\"add_character\": id} / {\"remove_character\": id}.",
-    "responses": {
-     "200": {
-      "description": "OK"
-     }
-    },
-    "parameters": [
-     {
-      "name": "id",
-      "in": "path",
-      "required": true,
-      "description": "",
-      "schema": {
-       "type": "integer"
-      }
-     }
-    ],
-    "requestBody": {
-     "required": true,
-     "content": {
-      "application/json": {
-       "schema": {
-        "type": "object",
-        "properties": {
-         "set": {
-          "type": "object"
-         },
-         "add_character": {
-          "type": "integer"
-         },
-         "remove_character": {
-          "type": "integer"
-         },
-         "note": {
-          "type": "string"
-         }
-        }
-       }
-      }
-     }
-    }
-   }
-  },
-  "/api/admin/campaigns/{id}/delete": {
-   "post": {
-    "tags": [
-     "Admin"
-    ],
-    "summary": "Delete a campaign (hide; restorable)",
-    "description": "Needs the X-Admin-Key header (the server's ADMIN_KEY). Every change is written to the admin change log. The /admin page uses these. Its characters are let go and remembered for a restore.",
-    "responses": {
-     "200": {
-      "description": "OK"
-     }
-    },
-    "parameters": [
-     {
-      "name": "id",
-      "in": "path",
-      "required": true,
-      "description": "",
-      "schema": {
-       "type": "integer"
-      }
-     }
-    ]
-   }
-  },
-  "/api/admin/campaigns/{id}/restore": {
-   "post": {
-    "tags": [
-     "Admin"
-    ],
-    "summary": "Restore a deleted campaign",
-    "description": "Needs the X-Admin-Key header (the server's ADMIN_KEY). Every change is written to the admin change log. The /admin page uses these. Its GM, status and free characters come back.",
-    "responses": {
-     "200": {
-      "description": "OK"
-     }
-    },
-    "parameters": [
-     {
-      "name": "id",
-      "in": "path",
-      "required": true,
-      "description": "",
-      "schema": {
-       "type": "integer"
-      }
-     }
-    ]
-   }
-  },
-  "/api/admin/changes": {
-   "get": {
-    "tags": [
-     "Admin"
-    ],
-    "summary": "The admin change log",
-    "description": "Needs the X-Admin-Key header (the server's ADMIN_KEY). Every change is written to the admin change log. The /admin page uses these.",
-    "responses": {
-     "200": {
-      "description": "OK"
-     }
-    },
-    "parameters": [
-     {
-      "name": "kind",
-      "in": "query",
-      "required": false,
-      "description": "character or campaign",
-      "schema": {
-       "type": "string"
-      }
-     },
-     {
-      "name": "id",
-      "in": "query",
-      "required": false,
-      "description": "",
-      "schema": {
-       "type": "integer"
-      }
-     },
-     {
-      "name": "limit",
-      "in": "query",
-      "required": false,
-      "description": "",
-      "schema": {
-       "type": "integer"
-      }
-     }
-    ]
    }
   }
  },
