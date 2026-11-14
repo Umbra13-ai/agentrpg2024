@@ -25,10 +25,11 @@ type spellChoice struct {
 	seen         map[string]bool        // every spell in either list
 	origin       map[string]originSpell // spells from the background or species
 	always       []string               // always-prepared spells (subclass, origin, class features, the Book of Shadows): not counted
+	bookShort    int                    // a Wizard's free spellbook spells still to write (SRD 5.2.1 Spellbook)
 }
 
 func (sc *spellChoice) done() bool {
-	return sc.wantCantrips == 0 && len(sc.leveled) >= sc.maxPrep && len(sc.problems) == 0
+	return sc.wantCantrips == 0 && len(sc.leveled) >= sc.maxPrep && len(sc.problems) == 0 && sc.bookShort == 0
 }
 
 func spellChoiceState(ch *choiceChar) *spellChoice {
@@ -73,6 +74,11 @@ func spellChoiceState(ch *choiceChar) *spellChoice {
 	}
 	// a list POST /prepare would refuse (too many, off the class list, too high) keeps the choice open
 	sc.problems = preparedListProblems(ch.id)
+	if wl := ch.levels["wizard"]; wl > 0 {
+		if n := wizardSpellbookTarget(ch.id, wl) - freeSpellbookCount(ch.id, sc.known); n > 0 {
+			sc.bookShort = n
+		}
+	}
 	return sc
 }
 
@@ -110,6 +116,9 @@ func spellsChoice() *choiceDef {
 			}
 			if len(sc.problems) > 0 {
 				parts = append(parts, "fix your prepared list: "+strings.Join(sc.problems, "; "))
+			}
+			if sc.bookShort > 0 {
+				parts = append(parts, fmt.Sprintf("%d spell(s) to write in your spellbook (PUT /api/characters/%d/spells {\"add\": [...]})", sc.bookShort, ch.id))
 			}
 			return strings.Join(parts, "; ")
 		},
@@ -200,7 +209,7 @@ func spellsStep(ch *choiceChar) *setupStep {
 			avoid[c] = true
 		}
 	}
-	spellsDone := wantCantrips == 0 && len(leveled) >= sc.maxPrep && len(sc.problems) == 0
+	spellsDone := wantCantrips == 0 && len(leveled) >= sc.maxPrep && len(sc.problems) == 0 && sc.bookShort == 0
 	maxLvl := (level + 1) / 2 // full casters and Pact Magic: level 2 spells from level 3
 	if cl == "paladin" || cl == "ranger" {
 		maxLvl = (level + 3) / 4

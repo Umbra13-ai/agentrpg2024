@@ -261,7 +261,7 @@ func natureWardResists(charID int, dtype string) bool {
 	if class != "druid" || sub != "land" || level < 10 {
 		return false
 	}
-	return map[string]string{"arid": "fire", "polar": "cold", "temperate": "lightning", "tropical": "poison"}[landTypeOf(charID)] == strings.ToLower(dtype)
+	return natureWardDamage[landTypeOf(charID)] == strings.ToLower(dtype)
 }
 
 // specialFreeCast: free casts that depend on more than the spell: Wild Companion, Natural Recovery's Circle spell, Spell Mastery.

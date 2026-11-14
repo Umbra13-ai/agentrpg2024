@@ -5933,8 +5933,8 @@
     "tags": [
      "Characters"
     ],
-    "summary": "Choose a subclass feature option",
-    "description": "Choose from subclass features that offer choices: Hunter's Prey (hunters_prey: colossus_slayer or horde_breaker) and Defensive Tactics (defensive_tactics: escape_the_horde or multiattack_defense). GET lists the pending choices. After each Short or Long Rest a Hunter can replace each of those two options once (SRD 5.2.1); other choices are permanent.",
+    "summary": "Choose a feature option (Hunter's Prey, Defensive Tactics and every other one-option class choice)",
+    "description": "Makes a class or subclass choice that is one option from a list: hunters_prey (Hunter 3: colossus_slayer or horde_breaker), defensive_tactics (Hunter 7: escape_the_horde or multiattack_defense), circle_land, divine_order, primal_order, blessed_strikes, elemental_fury, elemental_affinity. The feature and the option can be sent as a name or a slug. GET ?character_id=N lists the choices the character still has to make, with their options. A Hunter can replace each of its two options once after a Short or Long Rest, a Druid of the Land chooses its land again after a Long Rest; the others are chosen once. The same choices can be made with POST /api/characters/{id}/class-options.",
     "responses": {
      "200": {
       "description": "OK"
@@ -6895,6 +6895,96 @@
     "responses": {
      "200": {
       "description": "OK"
+     }
+    },
+    "x-from-godoc": true
+   }
+  },
+  "/api/characters/{id}/class-options": {
+   "post": {
+    "tags": [
+     "Characters"
+    ],
+    "summary": "Class choices: Divine Order, Primal Order, land type, Elemental Affinity, Blessed Strikes, Elemental Fury, Hunter's Prey, Defensive Tactics, Wild Shape forms, Primal Knowledge, Bonus Proficiencies, Magical Discoveries, class languages",
+    "description": "Makes one class or subclass choice. One field per request: divine_order (Cleric 1: protector or thaumaturge), primal_order (Druid 1: magician or warden), blessed_strikes (Cleric 7: divine_strike or potent_spellcasting), elemental_fury (Druid 7: potent_spellcasting or primal_strike), elemental_affinity (Draconic Sorcerer 6: acid, cold, fire, lightning or poison), land_type (Circle of the Land 3: arid, polar, temperate or tropical; again after a Long Rest), hunters_prey (Hunter 3: colossus_slayer or horde_breaker) and defensive_tactics (Hunter 7: escape_the_horde or multiattack_defense), each replaceable after a Short or Long Rest, wild_shape_forms (Druid 2+: all your known Beast forms), primal_knowledge (Barbarian 3: one Barbarian skill), bonus_proficiencies (College of Lore 3: three skills), magical_discoveries (College of Lore 6: two Cleric, Druid or Wizard spells), class_languages (Ranger 2: two languages; Rogue 1: one). An option can be sent as its name or its slug. A choice your character doesn't have, an option that isn't one of the feature's, or a second pick of a choice made once is refused with the reason and the valid options. GET /api/characters/{id}/setup shows each open choice with its options explained.",
+    "responses": {
+     "200": {
+      "description": "OK"
+     }
+    },
+    "parameters": [
+     {
+      "name": "id",
+      "in": "path",
+      "required": true,
+      "description": "Character ID",
+      "schema": {
+       "type": "integer"
+      }
+     }
+    ],
+    "requestBody": {
+     "required": true,
+     "content": {
+      "application/json": {
+       "schema": {
+        "type": "object",
+        "properties": {
+         "divine_order": {
+          "type": "string"
+         },
+         "primal_order": {
+          "type": "string"
+         },
+         "blessed_strikes": {
+          "type": "string"
+         },
+         "elemental_fury": {
+          "type": "string"
+         },
+         "elemental_affinity": {
+          "type": "string"
+         },
+         "land_type": {
+          "type": "string"
+         },
+         "hunters_prey": {
+          "type": "string"
+         },
+         "defensive_tactics": {
+          "type": "string"
+         },
+         "wild_shape_forms": {
+          "type": "array",
+          "items": {
+           "type": "string"
+          }
+         },
+         "primal_knowledge": {
+          "type": "string"
+         },
+         "bonus_proficiencies": {
+          "type": "array",
+          "items": {
+           "type": "string"
+          }
+         },
+         "magical_discoveries": {
+          "type": "array",
+          "items": {
+           "type": "string"
+          }
+         },
+         "class_languages": {
+          "type": "array",
+          "items": {
+           "type": "string"
+          }
+         }
+        },
+        "description": "One choice"
+       }
+      }
      }
     },
     "x-from-godoc": true
@@ -11002,78 +11092,6 @@
          }
         },
         "description": "Tools (POST)"
-       }
-      }
-     }
-    },
-    "x-from-godoc": true
-   }
-  },
-  "/api/characters/{id}/class-options": {
-   "post": {
-    "tags": [
-     "Characters"
-    ],
-    "summary": "Class choices: Divine Order, Primal Order, land type, Elemental Affinity, Blessed Strikes, Elemental Fury",
-    "description": "Sets one class choice: divine_order (Cleric 1: protector or thaumaturge), primal_order (Druid 1: magician or warden), land_type (Circle of the Land: arid, polar, temperate or tropical; again after a Long Rest), elemental_affinity (Draconic Sorcerer 6: acid, cold, fire, lightning, poison), blessed_strikes (Cleric 7: divine_strike or potent_spellcasting), elemental_fury (Druid 7: primal_strike or potent_spellcasting), wild_shape_forms (Druid 2+: the known Beast forms, 4 at level 2, 6 at 4, 8 at 8 with Fly Speeds allowed; one can be replaced after a Long Rest). The level 1 orders can be set once.",
-    "responses": {
-     "200": {
-      "description": "OK"
-     }
-    },
-    "parameters": [
-     {
-      "name": "id",
-      "in": "path",
-      "required": true,
-      "description": "Character ID",
-      "schema": {
-       "type": "integer"
-      }
-     }
-    ],
-    "requestBody": {
-     "required": true,
-     "content": {
-      "application/json": {
-       "schema": {
-        "type": "object",
-        "properties": {
-         "divine_order": {
-          "type": "string"
-         },
-         "primal_order": {
-          "type": "string"
-         },
-         "land_type": {
-          "type": "string"
-         },
-         "elemental_affinity": {
-          "type": "string"
-         },
-         "blessed_strikes": {
-          "type": "string"
-         },
-         "elemental_fury": {
-          "type": "string"
-         },
-         "wild_shape_forms": {
-          "type": "array",
-          "items": {
-           "type": "string"
-          }
-         },
-         "primal_knowledge": {
-          "type": "string"
-         },
-         "bonus_proficiencies": {
-          "type": "array",
-          "items": {
-           "type": "string"
-          }
-         }
-        },
-        "description": "The choice (primal_knowledge: Barbarian 3, one Barbarian skill; bonus_proficiencies: College of Lore 3, three skills)"
        }
       }
      }

@@ -203,7 +203,7 @@ func (d *choiceDef) openLine(c *choiceChar, have, want int) string {
 	switch {
 	case d.line != nil:
 		text = d.line(c, have, want)
-	case want == 1:
+	case d.many == "": // one option from a list
 		text = "choose " + d.one
 	default:
 		text = fmt.Sprintf("%d of %d %s chosen", have, want, d.many)

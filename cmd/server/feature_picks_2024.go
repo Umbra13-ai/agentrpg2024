@@ -27,11 +27,14 @@ type featurePick struct {
 	again    string   // "": chosen once. "short rest", "long rest": can be chosen again when the character finishes one
 	column   string   // stored in this column of characters instead of subclass_choices
 	viaSub   bool     // the request shown is POST /api/characters/subclass-choice (both requests take every pick)
-	// extra adds to the setup step's choices (what each land type's Circle Spells are)
-	extra func(c *choiceChar) map[string]interface{}
+	// describe says what an option does when the SRD's text has no paragraph of its own for it
+	describe func(level int, option string) string
 	// after runs when the pick is saved (proficiencies that follow from it)
 	after func(charID int)
 }
+
+// natureWardDamage: the Nature's Ward table (Circle of the Land 10): the damage type each land choice gives Resistance to.
+var natureWardDamage = map[string]string{"arid": "fire", "polar": "cold", "temperate": "lightning", "tropical": "poison"}
 
 var featurePicks = []featurePick{
 	{key: "divine_order", feature: "Divine Order", class: "cleric", level: 1, options: []string{"protector", "thaumaturge"}, suggest: "thaumaturge",
@@ -41,21 +44,20 @@ var featurePicks = []featurePick{
 	{key: "blessed_strikes", feature: "Blessed Strikes", class: "cleric", level: 7, options: []string{"divine_strike", "potent_spellcasting"}, suggest: "potent_spellcasting"},
 	{key: "elemental_fury", feature: "Elemental Fury", class: "druid", level: 7, options: []string{"potent_spellcasting", "primal_strike"}, suggest: "potent_spellcasting"},
 	{key: "elemental_affinity", feature: "Elemental Affinity", class: "sorcerer", subclass: "draconic", level: 6,
-		options: []string{"acid", "cold", "fire", "lightning", "poison"}, suggest: "fire"},
+		options: []string{"acid", "cold", "fire", "lightning", "poison"}, suggest: "fire",
+		describe: func(_ int, o string) string {
+			return fmt.Sprintf("Resistance to %s damage, and your Charisma modifier added to one damage roll of a spell that deals %s damage.", titleCase(o), titleCase(o))
+		}},
 	{key: "circle_land", field: "land_type", feature: "Circle of the Land Spells", class: "druid", subclass: "land", level: 3,
 		options: []string{"arid", "polar", "temperate", "tropical"}, suggest: "temperate", again: "long rest",
-		extra: func(c *choiceChar) map[string]interface{} {
-			spells := map[string]interface{}{}
-			for _, t := range []string{"arid", "polar", "temperate", "tropical"} {
-				var names []string
-				for _, sl := range getDomainSpells("land", c.levels["druid"], t) {
-					if sp, ok := srdSpellsMemory[sl]; ok {
-						names = append(names, sp.Name)
-					}
+		describe: func(level int, o string) string {
+			var names []string
+			for _, sl := range getDomainSpells("land", level, o) {
+				if sp, ok := srdSpellsMemory[sl]; ok {
+					names = append(names, sp.Name)
 				}
-				spells[t] = names
 			}
-			return map[string]interface{}{"circle_spells_at_your_level": spells}
+			return fmt.Sprintf("Circle Spells at your level: %s. Nature's Ward (level 10): Resistance to %s damage.", strings.Join(names, ", "), titleCase(natureWardDamage[o]))
 		}},
 	{key: "hunters_prey", feature: "Hunter’s Prey", class: "ranger", subclass: "hunter", level: 3,
 		options: []string{"colossus_slayer", "horde_breaker"}, suggest: "colossus_slayer", again: "short rest", viaSub: true},
@@ -136,13 +138,15 @@ func optionText(featureText, option string) string {
 }
 
 // optionList: each option with its name and what the SRD says it does.
-func (p *featurePick) optionList() []map[string]interface{} {
+func (p *featurePick) optionList(level int) []map[string]interface{} {
 	text := p.srdText()
 	var out []map[string]interface{}
 	for _, o := range p.options {
 		m := map[string]interface{}{"slug": o, "name": pickOptionName(o)}
 		if t := optionText(text, o); t != "" {
 			m["description"] = t
+		} else if p.describe != nil {
+			m["description"] = p.describe(max(level, p.level), o)
 		}
 		out = append(out, m)
 	}
@@ -211,12 +215,7 @@ func (p *featurePick) choice() *choiceDef {
 		},
 		step: func(c *choiceChar) *setupStep {
 			_, request := p.request(c.id, p.suggest)
-			choices := map[string]interface{}{"options": p.optionList()}
-			if p.extra != nil {
-				for k, v := range p.extra(c) {
-					choices[k] = v
-				}
-			}
+			choices := map[string]interface{}{"options": p.optionList(c.levels[p.class])}
 			return &setupStep{Key: stepKey, Title: "Choose your " + strings.ReplaceAll(p.feature, "’", "'"),
 				Why: p.feature + ". " + p.srdText() + " " + p.againWords(), Choices: choices, Request: request}
 		}}
@@ -308,7 +307,7 @@ func applyFeaturePick(charID int, p *featurePick, value string) (string, *pickRe
 		if strings.TrimSpace(value) == "" {
 			msg = fmt.Sprintf("No option was sent for %s: choose %s.", name, p.optionWords())
 		}
-		return "", &pickRefusal{http.StatusBadRequest, "invalid_choice", msg, map[string]interface{}{"valid_options": p.optionList(), "valid_slugs": p.options}}
+		return "", &pickRefusal{http.StatusBadRequest, "invalid_choice", msg, map[string]interface{}{"valid_options": p.optionList(c.levels[p.class]), "valid_slugs": p.options}}
 	}
 	current := c.picks[p.key]
 	ready := picksReadyAgain(charID)
@@ -368,7 +367,7 @@ func pendingFeaturePicks(c *choiceChar) []map[string]interface{} {
 	for i := range featurePicks {
 		p := &featurePicks[i]
 		if p.has(c) && c.picks[p.key] == "" {
-			out = append(out, map[string]interface{}{"feature": p.key, "name": strings.ReplaceAll(p.feature, "’", "'"), "description": p.srdText(), "options": p.optionList()})
+			out = append(out, map[string]interface{}{"feature": p.key, "name": strings.ReplaceAll(p.feature, "’", "'"), "description": p.srdText(), "options": p.optionList(c.levels[p.class])})
 		}
 	}
 	return out

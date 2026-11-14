@@ -72,7 +72,7 @@ func sanctuaryResists(charID int, dtype string) bool {
 	if !ok || z.Druid == charID {
 		return false
 	}
-	return map[string]string{"arid": "fire", "polar": "cold", "temperate": "lightning", "tropical": "poison"}[landTypeOf(z.Druid)] == strings.ToLower(dtype)
+	return natureWardDamage[landTypeOf(z.Druid)] == strings.ToLower(dtype)
 }
 
 // parseSquare reads "at 4,7" / "x 4 y 7" from a description; ok is false if there is none.
