@@ -226,6 +226,23 @@ func resolveFeat(slug, source string, in *featChoiceInput, bgListNote string, us
 	return f, nil
 }
 
+// speciesFeatChoicesUnused: species_feat_choices are the choices of the Human's Origin feat; they are refused for another species,
+// or for parts the Human's feat doesn't take, not ignored.
+func speciesFeatChoicesUnused(f *featChoiceInput, feat, species string) *originError {
+	if f == nil {
+		return nil
+	}
+	mi := strings.TrimSpace(f.List) != "" || len(f.Cantrips) > 0 || strings.TrimSpace(f.Spell) != "" || strings.TrimSpace(f.SpellcastingAbility) != ""
+	sk := len(f.Proficiencies) > 0
+	switch {
+	case (mi || sk) && feat == "":
+		return originErr("species_feat_choices_not_used", nil, "species_feat_choices is only for a Human's Origin feat; %s has none: leave it out.", withArticle(species))
+	case sk && feat != "skilled", mi && feat != "magic_initiate":
+		return originErr("species_feat_choices_not_used", nil, "Your Human feat is %s, which doesn't take those species_feat_choices: send only the choices it takes (Magic Initiate: list, cantrips, spell, spellcasting_ability; Skilled: proficiencies; Alert and Savage Attacker: none).", titleWords(feat))
+	}
+	return nil
+}
+
 // resolveOrigin checks all origin choices and works out what the character gets.
 func resolveOrigin(in originInput) (*originOutput, *originError) {
 	bg := game.GetBackground(in.Background)
@@ -257,7 +274,40 @@ func resolveOrigin(in originInput) (*originOutput, *originError) {
 			bg.Name, bg.Name, strings.Join(bg.AbilityScores, ", "), bg.AbilityScores[0], bg.AbilityScores[1])
 	}
 
-	species, serr := game.ResolveSpecies(sp.Key, in.SpeciesChoices)
+	// Species choices: a part the species doesn't use is refused, not ignored (a Halfling sent "size": "medium" was made Small with no
+	// word); a skill written another way ("sleight_of_hand", "sleight-of-hand") is the skill, so the duplicate check below sees it.
+	choices := map[string]string{}
+	var keys []string
+	for k := range in.SpeciesChoices {
+		keys = append(keys, k)
+	}
+	sort.Strings(keys)
+	for _, k0 := range keys {
+		v := in.SpeciesChoices[k0]
+		k := optionKey(k0) // "Lineage" is lineage
+		if strings.TrimSpace(v) == "" {
+			continue
+		}
+		alias := k == "lineage" && containsStr(sp.Needs, "legacy") && (strings.TrimSpace(in.SpeciesChoices["legacy"]) == "" || strings.EqualFold(normalizeSpeciesSlug(v), normalizeSpeciesSlug(in.SpeciesChoices["legacy"])))
+		if !containsStr(sp.Needs, k) && !alias {
+			why := ""
+			if k == "size" && len(sp.Sizes) == 1 {
+				why = fmt.Sprintf(" (%s is always %s)", withArticle(sp.Name), sp.Sizes[0])
+			}
+			asks := "nothing"
+			if len(sp.Needs) > 0 {
+				asks = strings.Join(sp.Needs, ", ")
+			}
+			return nil, originErr("species_choice_not_used", sp.Needs, "%s doesn't choose %s%s: leave species_choices.%s out. It asks for: %s.", titleFirst(withArticle(sp.Name)), k, why, k, asks)
+		}
+		if k == "skill" {
+			if n := skillKey(v); game.IsSkill(n) {
+				v = n
+			}
+		}
+		choices[k] = v
+	}
+	species, serr := game.ResolveSpecies(sp.Key, choices)
 	if serr != nil {
 		return nil, originErr("species_choices_required", sp.Needs, "%s", serr.Error())
 	}
@@ -322,11 +372,19 @@ func resolveOrigin(in originInput) (*originOutput, *originError) {
 		if species.Feat == bg.Feat && species.Feat != "skilled" && species.Feat != "magic_initiate" {
 			return nil, originErr("feat_already_taken", originFeatSlugs, "Your background already gives %s; choose a different Origin feat", species.Feat)
 		}
+		if serr := speciesFeatChoicesUnused(in.SpeciesFeat, species.Feat, sp.Name); serr != nil {
+			return nil, serr
+		}
 		f2, ferr := resolveFeat(species.Feat, "species", in.SpeciesFeat, "", usedLists, &heldSkills, &heldTools, &known)
 		if ferr != nil {
 			return nil, ferr
 		}
 		feats = append(feats, *f2)
+	}
+	if species.Feat == "" {
+		if serr := speciesFeatChoicesUnused(in.SpeciesFeat, "", sp.Name); serr != nil {
+			return nil, serr
+		}
 	}
 	for _, f := range feats {
 		out.FeatSlugs = append(out.FeatSlugs, f.Slug)

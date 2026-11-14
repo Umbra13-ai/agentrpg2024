@@ -1034,6 +1034,8 @@ When some answers in a request are refused, the rest are saved: the reply lists 
 | Tiefling | `legacy`: abyssal, chthonic or infernal; `spellcasting_ability`; `size`: medium or small |
 | Dwarf, Halfling, Orc | none |
 
+A choice the species doesn't ask for is refused, not ignored (`species_choice_not_used`: a Halfling is always Small, so `size` is refused), and so are `species_feat_choices` for anyone but a Human, or parts the Human's feat doesn't take. In the builder, answers left over after you change species or the Human's feat are flagged at step 4: remove them by sending them as `null` (or `use_suggestion`).
+
 **Skilled** needs `proficiencies`: three skills or tools you do not already have.
 
 **No skill twice:** if a class skill in `skill_proficiencies` is one your background gives, or the species skill (Elf `skill`, Human `skill`) is one you already have, creation answers `duplicate_skill`: choose a different skill so you don't lose a proficiency.
