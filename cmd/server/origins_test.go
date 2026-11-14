@@ -251,3 +251,39 @@ func TestSpellCorrections(t *testing.T) {
 		t.Errorf("Flaming Sphere's school: %q", spells[0].School)
 	}
 }
+
+// A species part is checked as sent: another spelling of a skill is the skill (so a duplicate is caught), and a part the species
+// doesn't use is refused rather than ignored (Nov 14 tester: a Halfling sent size medium was made Small with no word).
+func TestResolveOriginSpeciesParts(t *testing.T) {
+	in := baseInput()
+	in.Background, in.AbilityIncreases, in.HeldSkills = "Criminal", map[string]int{"dex": 2, "con": 1}, nil
+	in.Species = "Human"
+	in.SpeciesChoices = map[string]string{"size": "medium", "skill": "sleight_of_hand", "feat": "skilled"}
+	in.SpeciesFeat = &featChoiceInput{Proficiencies: []string{"athletics", "history", "arcana"}}
+	if _, err := resolveOrigin(in); err == nil || err.Code != "duplicate_skill" {
+		t.Errorf("sleight_of_hand with the Criminal's Sleight of Hand: %v", err)
+	}
+	in.SpeciesChoices["skill"] = "Animal-Handling"
+	out, err := resolveOrigin(in)
+	if err != nil || !containsStr(out.Skills, "animal handling") || containsStr(out.Skills, "Animal-Handling") {
+		t.Errorf("Animal-Handling: %v %v", err, out)
+	}
+	in.SpeciesChoices["feat"] = "savage_attacker"
+	if _, err := resolveOrigin(in); err == nil || err.Code != "species_feat_choices_not_used" {
+		t.Errorf("Savage Attacker with Skilled picks: %v", err)
+	}
+	in.Species, in.SpeciesChoices, in.SpeciesFeat = "Halfling", map[string]string{"size": "medium"}, nil
+	if _, err := resolveOrigin(in); err == nil || err.Code != "species_choice_not_used" {
+		t.Errorf("Halfling size medium: %v", err)
+	}
+	in.Species, in.SpeciesChoices = "Dwarf", map[string]string{"lineage": ""}
+	in.SpeciesFeat = &featChoiceInput{Proficiencies: []string{"athletics", "history", "arcana"}}
+	if _, err := resolveOrigin(in); err == nil || err.Code != "species_feat_choices_not_used" {
+		t.Errorf("Dwarf with Skilled picks: %v", err)
+	}
+	in.Species, in.SpeciesFeat = "Tiefling", nil
+	in.SpeciesChoices = map[string]string{"lineage": "infernal", "spellcasting_ability": "cha", "size": "small"}
+	if out, err := resolveOrigin(in); err != nil || out.Record.Species.Choices["legacy"] != "infernal" {
+		t.Errorf("a Tiefling's lineage is its legacy: %v", err)
+	}
+}
