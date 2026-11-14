@@ -31,6 +31,11 @@ func classChoicesRecord(charID int) []map[string]interface{} {
 	sort.Strings(keys)
 	for _, k := range keys {
 		name := choiceFeatureNames[k]
+		for _, d := range classLangDefs { // the class feature's own name ("Thieves’ Cant languages", "Deft Explorer languages")
+			if d.key == k {
+				name = d.feature + " languages"
+			}
+		}
 		if name == "" {
 			name = choiceLabel(k)
 		}
