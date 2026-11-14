@@ -394,7 +394,11 @@ func checkBuilderInput(upd, body map[string]interface{}) builderInput {
 			upd[k] = b
 		case "str", "dex", "con", "int", "wis", "cha":
 			if t, isStr := v.(string); isStr { // a number sent as text is refused, as POST /api/characters does (re-check F10)
-				in.refuse(k, v, fmt.Sprintf("send the score as a number (%s), not as text (%q)", strings.TrimSpace(t), t))
+				why := "send a whole number: the Standard Array is 15, 14, 13, 12, 10 and 8, once each"
+				if _, err := strconv.Atoi(strings.TrimSpace(t)); err == nil {
+					why = fmt.Sprintf("send the score as a number (%s), not as text (%q)", strings.TrimSpace(t), t)
+				}
+				in.refuse(k, v, why)
 				delete(upd, k)
 				continue
 			}
@@ -1133,14 +1137,33 @@ func applySuggestion(body map[string]interface{}, st builderStep) ([]string, []m
 			cur = bmap(body, top)[sub]
 		}
 		now := sv
+		var nulled []string // parts the suggestion removes (Skilled picks left after a change to Magic Initiate: round 2)
 		if isFeatGroup(top) && sub == "" {
 			now = mergeMagicInitiate(body, top, cur, sv, class)
+			if svm, ok := sv.(map[string]interface{}); ok {
+				for k, x := range svm {
+					if x == nil {
+						nulled = append(nulled, k)
+					}
+				}
+			}
 		} else if _, isList := sv.([]interface{}); isList {
 			now = mergeList(body, field, cur, sv, c)
 		}
 		if isFeatGroup(top) && sub == "" { // said part by part: the list filled, a cantrip replaced
 			oldM, _ := cur.(map[string]interface{})
 			newM, _ := now.(map[string]interface{})
+			for _, k := range nulled {
+				if newM != nil {
+					if old, has := newM[k]; has {
+						delete(newM, k)
+						if old != nil {
+							filled = append(filled, top+"."+k)
+							replaced = append(replaced, map[string]interface{}{"field": top + "." + k, "you_had": old, "now": nil})
+						}
+					}
+				}
+			}
 			body[top] = now
 			for _, k := range []string{"list", "cantrips", "spell", "spellcasting_ability", "proficiencies"} {
 				if _, has := newM[k]; has && !reflect.DeepEqual(deepCopyJSON(oldM[k]), deepCopyJSON(newM[k])) {

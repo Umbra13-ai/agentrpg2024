@@ -1451,8 +1451,11 @@ func builderSteps(body map[string]interface{}, agentID int, withCheck bool) []bu
 			for k := range heldSk {
 				avoid[k] = true
 			}
-			if v, _ := sugc["skill"].(string); v != "" && bstr(sc, "skill") == "" {
+			if v, _ := sugc["skill"].(string); v != "" { // the suggested species skill, also when it replaces one (round 2: Stealth twice)
 				avoid[v] = true
+			}
+			if v := bstr(sc, "skill"); v != "" {
+				avoid[skillKey(v)] = true
 			}
 			sug4["species_feat_choices"] = map[string]interface{}{"proficiencies": pickFrom([]string{"perception", "stealth", "insight", "athletics", "persuasion", "survival", "investigation", "medicine"}, nil, avoid, 3)}
 			if len(picks) != 3 || skProb != "" {
@@ -2611,12 +2614,15 @@ func applyBuilderUpdate(body, upd map[string]interface{}, agentID int) builderOu
 		rej[r["field"].(string)] = true
 	}
 	// earlier answers this request made invalid, said in the reply (Nov 14 audit F9: a background change left the saved increases
-	// invalid without a word; only a later GET showed it)
+	// invalid without a word; only a later GET showed it). An answer sent but refused leaves the earlier one in the draft: listed
+	// too when that one no longer fits (round 2: an Acolyte's Magic Initiate stayed after a change to Criminal)
 	for _, st := range builderSteps(body, agentID, false) {
 		for _, c := range st.Choices {
 			prob, _ := c["problem"].(string)
 			f, _ := c["field"].(string)
-			if prob == "" || c["current"] == nil || sentPart(f) || prob == problemBefore(f) {
+			top, _ := splitField(f)
+			refusedHere := rej[f] || rej[top]
+			if prob == "" || c["current"] == nil || (sentPart(f) && !refusedHere) || prob == problemBefore(f) {
 				continue
 			}
 			o.invalidated = append(o.invalidated, map[string]interface{}{"field": f, "you_had": c["current"], "problem": prob})

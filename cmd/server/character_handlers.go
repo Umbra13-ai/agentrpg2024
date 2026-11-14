@@ -104,6 +104,43 @@ func handleCharacters(w http.ResponseWriter, r *http.Request) {
 				"message": strings.Join(bad, "; ") + ". Nothing was created: send the request again with the right field names."})
 			return
 		}
+		// wrong types named with an example that fits the request, as the builder does (round 2 re-check)
+		if v, sent := raw["species_choices"]; sent && v != nil {
+			if _, ok := v.(map[string]interface{}); !ok {
+				ex := `like {"lineage": "high_elf", "spellcasting_ability": "int", "skill": "perception"} for an Elf`
+				if sp := game.GetSpecies(fmt.Sprint(raw["species"])); sp != nil && len(sp.Needs) > 0 {
+					ex = fmt.Sprintf("with what %s chooses: %s (for example {%q: ...})", aSpecies(sp.Name), strings.Join(sp.Needs, ", "), sp.Needs[0])
+				} else if sp != nil {
+					ex = fmt.Sprintf("but %s makes no species choices: leave species_choices out", aSpecies(sp.Name))
+				}
+				writeJSONStatus(w, http.StatusBadRequest, map[string]interface{}{"error": "invalid_field_type", "nothing_created": true,
+					"message": fmt.Sprintf("species_choices must be an object, %s; you sent %s. Nothing was created.", ex, jsonText(v))})
+				return
+			}
+		}
+		if v, sent := raw["background_feat_choices"]; sent && v != nil {
+			if _, ok := v.(map[string]interface{}); !ok {
+				ex := `an object: Magic Initiate {"cantrips": [...], "spell": "...", "spellcasting_ability": "int, wis or cha"}`
+				if bg := game.GetBackground(strings.ToLower(strings.TrimSpace(fmt.Sprint(raw["background"])))); bg != nil && bg.Feat == "magic_initiate" {
+					ex = fmt.Sprintf(`an object: {"cantrips": [two %s cantrips], "spell": "a level 1 %s spell", "spellcasting_ability": "int, wis or cha"} (%s's Magic Initiate uses the %s list)`, bg.FeatNote, bg.FeatNote, bg.Name, strings.ToLower(bg.FeatNote))
+				} else if bg != nil {
+					ex = fmt.Sprintf("left out: %s's Origin feat takes no choices", bg.Name)
+				}
+				writeJSONStatus(w, http.StatusBadRequest, map[string]interface{}{"error": "invalid_field_type", "nothing_created": true,
+					"message": fmt.Sprintf("background_feat_choices must be %s; you sent %s. Nothing was created.", ex, jsonText(v))})
+				return
+			}
+		}
+		if inc, ok := raw["ability_increases"].(map[string]interface{}); ok {
+			for k, x := range inc {
+				n, isNum := x.(float64)
+				if !isNum || n != float64(int(n)) {
+					writeJSONStatus(w, http.StatusBadRequest, map[string]interface{}{"error": "invalid_field_type", "nothing_created": true,
+						"message": fmt.Sprintf("ability_increases: the increase for %s is %s: send a whole number, 2 or 1. Nothing was created.", k, jsonText(x))})
+					return
+				}
+			}
+		}
 		if sc, ok := raw["species_choices"].(map[string]interface{}); ok { // the part with the wrong type is named (Nov 14 audit re-check)
 			for k, v := range sc {
 				if _, isStr := v.(string); !isStr && v != nil {
@@ -319,6 +356,14 @@ func handleCharacters(w http.ResponseWriter, r *http.Request) {
 		// Tool proficiencies sent here are the class's tool choices (a Bard's three Musical Instruments, a Monk's Artisan's Tools or
 		// Musical Instrument); the class's own tools, the background, the species and feats add theirs below. Each is stored under its
 		// full name ("musical instrument (lute)", BUGS 45).
+		for i, t := range req.ToolProficiencies { // "smiths tools" is Smith's Tools, as in the builder (round 2 re-check)
+			if _, ok := game.FindTool(t); !ok {
+				if ft, ok := findToolLoose(t); ok {
+					req.ToolProficiencies[i] = ft.Name
+					readAs = append(readAs, fmt.Sprintf("tool_proficiencies %q is read as %s", t, game.ToolDisplayName(ft.Name)))
+				}
+			}
+		}
 		toolProfsStr := game.MergeToolList("", req.ToolProficiencies)
 		if picks := game.ParseProficiencyList(toolProfsStr); len(picks) > 0 {
 			classTools := game.ProficienciesFor(game.CharacterInput{FirstClass: req.Class}).Tools
