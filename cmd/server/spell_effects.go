@@ -294,8 +294,12 @@ func characterSave(charID int, ability string, dc int) (bool, int) {
 	return ok, roll + bonus
 }
 
-func damageCharacter(targetID, dmg int, dtype string) string {
-	body, _ := json.Marshal(map[string]interface{}{"damage": dmg, "damage_type": strings.ToLower(dtype)})
+func damageCharacter(targetID, dmg int, dtype string, critical ...bool) string {
+	part := map[string]interface{}{"damage": dmg, "damage_type": strings.ToLower(dtype)}
+	if len(critical) > 0 && critical[0] {
+		part["critical"] = true // at 0 Hit Points a Critical Hit is two death save failures
+	}
+	body, _ := json.Marshal(part)
 	rr := httptest.NewRecorder()
 	handleDamage(rr, httptest.NewRequest(http.MethodPost, "/", bytes.NewReader(body)), targetID)
 	var out map[string]interface{}
@@ -325,31 +329,28 @@ func resolveSpellOnCharacters(charID int, spell SRDSpell, damageDice string, rol
 			continue
 		}
 		var name string
-		var ac int
-		if db.QueryRow(`SELECT name, ac FROM characters WHERE id = $1`, id).Scan(&name, &ac) != nil {
+		if db.QueryRow(`SELECT name FROM characters WHERE id = $1`, id).Scan(&name) != nil {
 			continue
 		}
 		if isSpellAttack(spell) {
-			lobby := lobbyOfChar(charID)
-			ac += spellACAdjust(lobby, id)
-			adj, _ := spellRollAdjust(lobby, charID, "attack")
-			roll := game.RollDie(20)
-			if outlined(lobby, id) {
-				if b := game.RollDie(20); b > roll {
-					roll = b
-				}
+			// the one attack function (attack_2024.go). Nov 14: this path ignored the target's Dodge, Blur and cover, the
+			// caster's conditions and magic item bonus, and Sanctuary.
+			sa := attackCtx{lobby: lobbyOfChar(charID), attacker: charID, target: id, name: "Spell attack against " + name,
+				bonus: characterSpellAttackBonus(charID, charLevel, spellMod), spell: true, melee: spellAttackIsMelee(spell.Range)}
+			if lost, note := sa.blocked(); lost {
+				lines = append(lines, " "+note)
+				continue
 			}
-			if roll == 1 || (roll != 20 && roll+game.ProficiencyBonus(charLevel)+spellMod+adj < ac) {
-				lines = append(lines, fmt.Sprintf(" Spell attack against %s: MISS.", name))
+			ar, out, rollNote := sa.roll()
+			if !out.Hit {
+				lines = append(lines, " "+ar.LineForAttacker(sa.name, out)+rollNote+".")
 				continue
 			}
 			d := rolled
-			label := "HIT"
-			if roll == 20 {
+			if out.Critical {
 				d += game.RollDamage(damageDice, false)
-				label = "CRITICAL HIT"
 			}
-			lines = append(lines, fmt.Sprintf(" Spell attack against %s: %s, %s.", name, label, damageCharacter(id, d, dtype)))
+			lines = append(lines, fmt.Sprintf(" %s%s, %s.", ar.LineForAttacker(sa.name, out), rollNote, damageCharacter(id, d, dtype, out.Critical)))
 			continue
 		}
 		ability := saveAbilityKey(spell.SavingThrow)

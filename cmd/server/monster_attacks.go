@@ -164,12 +164,12 @@ func resolveMonsterAttack(r *http.Request, campaignID int, monster, action, targ
 	if len(chosen) == 0 {
 		return "", nil, false
 	}
-	tid, tname, ac, found := characterByNameOrID(campaignID, target)
+	tid, tname, _, found := characterByNameOrID(campaignID, target)
 	redirectNote := ""
 	if found && allRangedAttacks(chosen) { // Shield of Missile Attraction's curse (missile_attraction_2024.go, F222)
 		if nid, note := missileAttractionRedirect(campaignID, tid); nid != 0 {
-			if t2, n2, ac2, ok := characterByNameOrID(campaignID, strconv.Itoa(nid)); ok {
-				tid, tname, ac, redirectNote = t2, n2, ac2, note
+			if t2, n2, _, ok := characterByNameOrID(campaignID, strconv.Itoa(nid)); ok {
+				tid, tname, redirectNote = t2, n2, note
 			}
 		}
 	}
@@ -202,20 +202,14 @@ func resolveMonsterAttack(r *http.Request, campaignID int, monster, action, targ
 			return text, info, true
 		}
 	}
-	if found {
-		refreshConcentrationConditions(tid) // Invisibility whose caster lost Concentration
-	}
-	var targetConds []string
-	if found {
-		targetConds = withoutInvisible(campaignID, tid, append(getCharConditions(tid), conditionNames(campaignID, tid)...)) // Faerie Fire
-		ac += spellACAdjust(campaignID, tid) + halfCoverBonus(campaignID, tid)                                              // Slow, Shield of Faith, Haste; Smite of Protection
-	}
+	// the attacker's conditions as every attack reads them (attack_2024.go); used here for what stops the whole attack and for
+	// the reactions after a hit. The roll itself gathers both sides' conditions in attackCtx.
 	var attackerConds []string
 	if attackerID != 0 {
-		attackerConds = withoutInvisible(campaignID, attackerID, append(conditionNames(campaignID, attackerID), combatEffectNames(campaignID, attackerID)...))
+		attackerConds = creatureConditions(campaignID, attackerID)
 	}
-	if found && buffSeesInvisible(tid) {
-		attackerConds = dropInvisible(attackerConds) // See Invisibility, True Seeing: an Invisible monster gains nothing (buff_spells_2024.go)
+	if found && seesUnseen(campaignID, tid) {
+		attackerConds = dropInvisible(attackerConds) // See Invisibility, True Seeing, Blindsight: an Invisible monster gains nothing
 	}
 	if game.IsIncapacitated(attackerConds) {
 		return attackerName + " is incapacitated (stunned, paralyzed, unconscious or the like) and can't attack.", map[string]interface{}{"attacks": 0, "incapacitated": true}, true
@@ -268,97 +262,48 @@ func resolveMonsterAttack(r *http.Request, campaignID int, monster, action, targ
 				withinFive = dist <= 5
 			}
 		}
-		var advWhy []string // why the attack has Advantage, shown when Disadvantage cancels it
-		if found && game.GetAttackAdvantage(targetConds, isMelee, withinFive) {
-			advWhy = append(advWhy, "the target is "+strings.Join(targetConds, ", "))
-		}
-		if found && outlined(campaignID, tid) {
-			advWhy = append(advWhy, "Faerie Fire")
-		}
-		if attackerID != 0 && auraOfAuthority(campaignID, attackerID) {
-			advWhy = append(advWhy, "Aura of Authority") // Hobgoblin Captain
-		}
-		adv := len(advWhy) > 0
-		hunterDef := ""
+		// The attack roll: every source of Advantage and Disadvantage, the Armor Class, Bless and Bane, Sanctuary and the
+		// judging of the roll are the one attack function's (attack_2024.go). Only what this monster's stat block and the
+		// battle map say about this attack is decided here.
+		atk := attackCtx{lobby: campaignID, attacker: attackerID, name: a.Name, bonus: a.AttackBonus, melee: isMelee, weapon: true,
+			opportunity: inReach, longRange: longRange, within5: &withinFive, autoHit: autoHitRe.MatchString(a.Desc)}
+		blockNote := ""
 		if found {
-			hunterDef = hunterDefense(tid)
-		}
-		dis := (inReach && hunterDef == "escape_the_horde") || (hits > 0 && hunterDef == "multiattack_defense") || // Hunter's Defensive Tactics
-			game.GetAttackDisadvantage(attackerConds, 0, false) || (found && game.GetAttackDisadvantageVsTarget(targetConds, !isMelee, withinFive)) || longRange ||
-			(!isMelee && attackerID != 0 && characterAdjacentToMonster(campaignID, attackerID)) || // a ranged attack with an enemy within 5 feet
-			grappledAttackPenalty(campaignID, attackerID, tid) // Grappled: Disadvantage against anyone but the grappler
-		if attackerID != 0 && takeCombatEffect(campaignID, attackerID, "sap", 0) {
-			dis = true // Sap
-		}
-		if found && elementalBane(tid, key) {
-			dis = true // Ring of Elemental Command: an Elemental attacks the wearer with Disadvantage
-		}
-		buffDis := ""
-		if found {
-			if d, why := buffAttackDisadvantage(campaignID, attackerID, tid); d { // Foresight, Blur, Holy Aura, Protection from Evil and Good
-				dis, buffDis = true, why
+			atk.target = tid
+			if attackerID == 0 && hits > 0 && hunterDefense(tid) == "multiattack_defense" {
+				atk.extraDis = append(atk.extraDis, "Multiattack Defense") // a monster outside the turn order: its hits are counted here
 			}
-			if lost, note := sanctuaryBlocks(campaignID, attackerID, attackerName, tid); lost {
+			lost, note := atk.blocked()
+			if lost {
 				lines = append(lines, a.Name+": "+note)
 				continue
 			}
+			blockNote = note // a Sanctuary save that succeeded
 		}
-		var roll int
-		switch {
-		case adv && !dis:
-			roll, _, _ = game.RollWithAdvantage()
-		case dis && !adv:
-			roll, _, _ = game.RollWithDisadvantage()
-		default:
-			roll = game.RollDie(20)
-		}
-		total := roll + a.AttackBonus
-		how := ""
-		if adv && !dis {
-			how = " with Advantage"
-		} else if dis && !adv {
-			how = " with Disadvantage"
-		}
-		if longRange {
-			how += " (long range)"
-		}
-		if buffDis != "" && dis && !adv {
-			how += " (" + buffDis + ")"
-		}
-		if adv && dis {
-			how = " (Advantage from " + strings.Join(advWhy, " and ") + " and Disadvantage" + map[bool]string{true: " from " + buffDis, false: ""}[buffDis != ""] + " cancel: one d20)" + how
-		}
-		if attackerID != 0 {
-			if adj, note := spellRollAdjust(campaignID, attackerID, "attack"); note != "" { // Bless, Bane
-				total += adj
-				how += note
-			}
-		}
+		rolled, out, rollNote := atk.roll()
+		rollNote = blockNote + rollNote
 		if !found {
 			extra := ""
 			for _, x := range attackExtraDamage(a.Desc) {
-				if x.IfAdvantage && !(adv && !dis) {
+				if x.IfAdvantage && !rolled.HasAdvantage() {
 					continue
 				}
 				extra += fmt.Sprintf(" plus %s %s", x.Dice, x.Type)
 			}
-			lines = append(lines, fmt.Sprintf("%s: %d to hit%s - %s %s%s damage if it hits", a.Name, total, how, a.DamageDice, a.DamageType, extra))
+			lines = append(lines, fmt.Sprintf("%s: %d%s to hit - %s %s%s damage if it hits", a.Name, out.Total, rolled.Describe()+rollNote, a.DamageDice, a.DamageType, extra))
 			continue
 		}
-		hit := roll != 1 && (roll == 20 || total >= ac) // a natural 1 misses, a natural 20 hits (F218: Paralyzed was an automatic hit)
-		crit := hit && (roll == 20 || game.IsAutoCrit(targetConds) && withinFive)
-		if autoHitRe.MatchString(a.Desc) {
-			hit, crit = true, false // "Automatic hit": no attack roll (the Avatar of Death)
-		}
-		if !hit {
-			lines = append(lines, fmt.Sprintf("%s: %d%s vs AC %d - MISS", a.Name, total, how, ac))
+		total, ac, crit := out.Total, rolled.AC, out.Critical
+		if !out.Hit {
+			lines = append(lines, rolled.Line(a.Name, out)+rollNote)
 			continue
 		}
+		hitLine := rolled.Line(a.Name, out) + rollNote
 		if absorbed, note := mirrorImageIntercept(campaignID, attackerID, tid, attackerConds); absorbed { // buff_spells_2024.go
-			lines = append(lines, fmt.Sprintf("%s: %d%s vs AC %d - HIT, but %s", a.Name, total, how, ac, note))
+			lines = append(lines, hitLine+", but "+note)
 			continue
 		} else if note != "" {
-			how += note
+			hitLine += note
 		}
 		dmg := game.RollDamage(a.DamageDice, crit)
 		sizeNote := ""
@@ -371,15 +316,11 @@ func resolveMonsterAttack(r *http.Request, campaignID int, monster, action, targ
 		}
 		hits++
 		totalDamage += dmg
-		label := "HIT"
-		if crit {
-			label = "CRITICAL HIT"
-		}
-		line := fmt.Sprintf("%s: %d%s vs AC %d - %s, %d %s damage", a.Name, total, how, ac, label, dmg, a.DamageType) + strings.TrimSuffix(sizeNote, ".")
+		line := hitLine + fmt.Sprintf(", %d %s damage", dmg, a.DamageType) + strings.TrimSuffix(sizeNote, ".")
 		parts := []extraDamage{{Type: a.DamageType}}
 		amounts := []int{dmg}
 		for _, x := range attackExtraDamage(a.Desc) { // "plus 10 (3d6) Fire damage": rolled (doubled on a critical hit) and dealt as its own type
-			if x.IfAdvantage && !(adv && !dis) {
+			if x.IfAdvantage && !rolled.HasAdvantage() {
 				continue // "plus 2 (1d4) Slashing damage if the attack roll had Advantage" (Goblin Warrior): only then
 			}
 			n := game.RollDamage(x.Dice, crit)
@@ -387,7 +328,7 @@ func resolveMonsterAttack(r *http.Request, campaignID int, monster, action, targ
 			totalDamage += n
 			line += fmt.Sprintf(" plus %d %s damage", n, x.Type)
 		}
-		nat20 := roll == 20 && !autoHitRe.MatchString(a.Desc)
+		nat20 := out.Natural == 20 && !out.AutoHit
 		if apply && !shieldWouldTurn(tid, total, ac, autoHitRe.MatchString(a.Desc), nat20) { // standing orders (reaction_orders_2024.go, F220)
 			types := make([]string, len(parts))
 			for i, p := range parts {
@@ -443,9 +384,7 @@ func resolveMonsterAttack(r *http.Request, campaignID int, monster, action, targ
 				HPBefore: hpB, TempBefore: tempB, HPAfter: hpA, TempAfter: tempA, DeadBefore: deadB, ConcBefore: concB, ConcAfter: concA, Ranged: !isMelee, Nat20: nat20})
 			if note, raised := reactionAfterHit(tid, total, ac, autoHitRe.MatchString(a.Desc), nat20); note != "" { // Shield by standing order (F220)
 				line += note
-				if raised {
-					ac += 5 // the rest of this monster's attacks face the Shield
-				}
+				_ = raised // the Shield spell is on the character now: armorClassOf adds it for the rest of this monster's attacks
 			}
 			if isMelee && withinFive { // Fire Shield; a Fiend or Undead hitting into a Holy Aura (buff_spells_2024.go)
 				line += fireShieldBack(campaignID, attackerID, attackerName, tid) + holyAuraBlinds(campaignID, attackerID, attackerName, tid)

@@ -417,35 +417,26 @@ func resolveMonsterSpellRules(lobbyID, monsterID int, monsterName, spellName str
 		}
 		for i := 0; i < count; i++ {
 			tid := targets[i%len(targets)]
-			if why := etherealBlock(lobbyID, tid); why != "" {
-				lines = append(lines, why)
+			// the one attack function (attack_2024.go): conditions on both sides, every source of Advantage and Disadvantage,
+			// Sanctuary, Bless and Bane, the Critical Hit. Nov 14: this path had only the target's defenses, and its hit line
+			// left the Disadvantage note out.
+			sa := attackCtx{lobby: lobbyID, attacker: monsterID, target: tid, name: "Spell attack at " + characterNameOf(tid), bonus: atk,
+				spell: true, melee: spellRangeFeet(sp.Range) >= 0 && spellRangeFeet(sp.Range) <= 5}
+			if lost, note := sa.blocked(); lost {
+				lines = append(lines, note)
 				continue
 			}
-			ac := characterACFor(lobbyID, tid)
-			roll := game.RollDie(20)
-			disNote := ""
-			if dis, why := buffAttackDisadvantage(lobbyID, monsterID, tid); dis { // Dodge, Blur, Foresight ...: as for any attack roll against the character
-				if second := game.RollDie(20); second < roll {
-					roll = second
-				}
-				disNote = " with Disadvantage (" + why + ")"
-			}
-			total := roll + atk
-			name := characterNameOf(tid)
-			if roll == 1 || (roll != 20 && total < ac) {
-				lines = append(lines, fmt.Sprintf("Spell attack at %s: %d%s vs AC %d - MISS", name, total, disNote, ac))
+			rolled, out, rollNote := sa.roll()
+			if !out.Hit {
+				lines = append(lines, rolled.Line(sa.name, out)+rollNote)
 				continue
 			}
-			dmg := game.RollDamage(normDice(beamDice), roll == 20)
+			dmg := game.RollDamage(normDice(beamDice), out.Critical)
 			res := fmt.Sprintf("%d %s damage", dmg, strings.ToLower(sp.DamageType))
 			if apply {
-				res = damageCharacter(tid, dmg, strings.ToLower(sp.DamageType))
+				res = damageCharacter(tid, dmg, strings.ToLower(sp.DamageType), out.Critical)
 			}
-			label := "HIT"
-			if roll == 20 {
-				label = "CRITICAL HIT"
-			}
-			lines = append(lines, fmt.Sprintf("Spell attack at %s: %d vs AC %d - %s, %s", name, total, ac, label, res))
+			lines = append(lines, rolled.Line(sa.name, out)+rollNote+", "+res)
 		}
 		return lines
 	}

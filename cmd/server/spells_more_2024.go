@@ -362,11 +362,10 @@ func characterSpeedOf(charID int) int {
 
 // spellMeleeAttack: a melee spell attack against a monster (Spiritual Weapon, Flame Blade).
 func spellMeleeAttack(charID, lobby, monster int, dice, dtype, what string) string {
-	var ac int
 	var tname string
 	for _, e := range combatEntries(lobby) {
 		if asInt(e["id"]) == monster {
-			ac, tname = asInt(e["ac"]), fmt.Sprint(e["name"])
+			tname = fmt.Sprint(e["name"])
 		}
 	}
 	if tname == "" {
@@ -378,27 +377,19 @@ func spellMeleeAttack(charID, lobby, monster int, dice, dtype, what string) stri
 	var level int
 	db.QueryRow(`SELECT level FROM characters WHERE id = $1`, charID).Scan(&level)
 	mod := game.Modifier(spellModScore(charID))
-	bonus := game.ProficiencyBonus(level) + mod + magicSpellAttackBonus(charID)
-	ac += spellACAdjust(lobby, monster)
-	nat := game.RollDie(20)
-	if outlined(lobby, monster) {
-		if b := game.RollDie(20); b > nat {
-			nat = b
-		}
+	// the caster's melee spell attack, made by the one attack function (attack_2024.go)
+	beside := true // the spectral weapon or the blade is next to its target, wherever the caster stands
+	sa := attackCtx{lobby: lobby, attacker: charID, target: monster, name: what + ": melee spell attack", bonus: characterSpellAttackBonus(charID, level, mod), spell: true, melee: true, within5: &beside}
+	ar, out, rollNote := sa.roll()
+	if !out.Hit {
+		return ar.LineForAttacker(sa.name, out) + rollNote + "."
 	}
-	adj, _ := spellRollAdjust(lobby, charID, "attack")
-	total := nat + bonus + adj
-	if nat == 1 || (nat != 20 && total < ac) {
-		return fmt.Sprintf("%s: melee spell attack %d vs AC %d - MISS.", what, total, ac)
-	}
-	crit := nat == 20
-	dmg := game.RollDamage(dice, crit) + mod
+	dmg := game.RollDamage(dice, out.Critical) + mod
 	if dmg < 0 {
 		dmg = 0
 	}
 	res, _ := damageMonster(lobby, monster, dmg, dtype)
-	return fmt.Sprintf("%s: melee spell attack %d vs AC %d - %s! %s takes %d %s damage. %s", what, total, ac,
-		map[bool]string{true: "CRITICAL HIT", false: "HIT"}[crit], tname, dmg, titleCase(dtype), strings.TrimSpace(res))
+	return fmt.Sprintf("%s%s! %s takes %d %s damage. %s", ar.LineForAttacker(sa.name, out), rollNote, tname, dmg, titleCase(dtype), strings.TrimSpace(res))
 }
 
 // moreSpellEconomy: the action economy of the spells' own actions ("" for the others).

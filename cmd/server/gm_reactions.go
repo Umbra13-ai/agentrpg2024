@@ -78,11 +78,7 @@ func handleGMOpportunityAttack(w http.ResponseWriter, r *http.Request) {
 	// The ac column already includes armor, shield, natural armor, etc.
 	var targetName string
 	var targetLobbyID int
-	var targetAC int
-	err = db.QueryRow(`
-		SELECT name, lobby_id, ac + COALESCE(cover_bonus, 0) as effective_ac
-		FROM characters WHERE id = $1
-	`, req.TargetID).Scan(&targetName, &targetLobbyID, &targetAC)
+	err = db.QueryRow(`SELECT name, lobby_id FROM characters WHERE id = $1`, req.TargetID).Scan(&targetName, &targetLobbyID)
 
 	if err != nil {
 		w.WriteHeader(http.StatusBadRequest)
@@ -96,101 +92,77 @@ func handleGMOpportunityAttack(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// Multiattack Defense (Hunter 7, 2024): a creature that already hit the target this turn has Disadvantage on its other
-	// attack rolls against it
-	multiattackDefenseActive := false
-	multiattackDefenseNote := ""
-	if !req.AttackerIsMonster && req.AttackerID > 0 && multiattackDefenseApplies(req.TargetID, req.AttackerID) {
-		multiattackDefenseActive = true
-		multiattackDefenseNote = " 🛡️[Multiattack Defense: Disadvantage]"
-	}
-
 	var attackerName string
 	var attackMod, damageMod int
 	var damageDice string
 	var weaponName string
+	damageType := "bludgeoning"
 
 	if req.AttackerIsMonster {
-		// Monster opportunity attack
-		if req.MonsterName == "" {
-			w.WriteHeader(http.StatusBadRequest)
-			json.NewEncoder(w).Encode(map[string]interface{}{
-				"error":   "invalid_request",
-				"message": "monster_name required when attacker_is_monster is true",
-			})
+		// A monster's Opportunity Attack is one melee attack from its stat block, made by the same code as every other
+		// stat-block attack (resolveMonsterAttack, and through it the one attack function). Nov 14: this command used the
+		// monster's Strength modifier or +3 as its bonus, guessed the damage from the action's text and set Hit Points itself.
+		who := req.MonsterName
+		if who == "" {
+			who = req.MonsterKey
+		}
+		if who == "" {
+			writeJSONStatus(w, http.StatusBadRequest, map[string]interface{}{"error": "invalid_request",
+				"message": "monster_name required when attacker_is_monster is true (its name in the fight, or monster_key for one that isn't in the turn order)"})
 			return
 		}
-		attackerName = req.MonsterName
-
-		// Try to get monster stats from SRD
-		if req.MonsterKey != "" {
-			var mStr, mDex int
-			var actionsJSON []byte
-			err = db.QueryRow(`
-				SELECT COALESCE((abilities->>'str')::int, 10), 
-				       COALESCE((abilities->>'dex')::int, 10),
-				       actions
-				FROM monsters WHERE slug = $1
-			`, req.MonsterKey).Scan(&mStr, &mDex, &actionsJSON)
-
-			if err == nil {
-				// Use STR for melee
-				attackMod = game.Modifier(mStr)
-				damageMod = game.Modifier(mStr)
-
-				// Try to find a melee attack in actions
-				var actions []map[string]interface{}
-				json.Unmarshal(actionsJSON, &actions)
-
-				for _, action := range actions {
-					if name, ok := action["name"].(string); ok {
-						nameLower := strings.ToLower(name)
-						// Look for melee attacks (claws, bite, slam, etc.)
-						if strings.Contains(nameLower, "claw") || strings.Contains(nameLower, "bite") || strings.Contains(nameLower, "slam") || strings.Contains(nameLower, "attack") || strings.Contains(nameLower, "sword") {
-							weaponName = name
-							// Try to parse damage from description
-							if desc, ok := action["desc"].(string); ok {
-								// Look for damage dice pattern like "2d6 + 4"
-								if idx := strings.Index(desc, "d"); idx > 0 {
-									// Find the start of the dice
-									start := idx - 1
-									for start > 0 && (desc[start-1] >= '0' && desc[start-1] <= '9') {
-										start--
-									}
-									// Find end of dice
-									end := idx + 1
-									for end < len(desc) && ((desc[end] >= '0' && desc[end] <= '9') || desc[end] == '+' || desc[end] == ' ') {
-										end++
-									}
-									if end > idx+1 {
-										damageDice = strings.TrimSpace(desc[start:end])
-										// Clean up the dice string
-										damageDice = strings.ReplaceAll(damageDice, " ", "")
-										if plusIdx := strings.Index(damageDice, "+"); plusIdx > 0 {
-											damageDice = damageDice[:plusIdx]
-										}
-									}
-								}
-							}
-							break
-						}
-					}
+		id := 0
+		alive := livingMonsterIDs(campaignID)
+		for _, name := range []string{req.MonsterName, req.MonsterKey} {
+			for _, mid := range monsterIDsByKeyOrName(campaignID, name) {
+				if id == 0 && name != "" && alive[mid] {
+					id = mid
 				}
 			}
 		}
+		var line string
+		if id != 0 {
+			if rnd, used := monsterReactionRound.Load(fmt.Sprintf("%d:%d", campaignID, id)); used && rnd.(int) == currentRound(campaignID) {
+				writeJSONStatus(w, http.StatusBadRequest, map[string]interface{}{"error": "no_reaction",
+					"message": fmt.Sprintf("%s has already used its Reaction this round", monsterName(campaignID, id))})
+				return
+			}
+			lines := resolveOpportunityAttacks(r, campaignID, req.TargetID, []int{id})
+			if len(lines) == 0 {
+				writeJSONStatus(w, http.StatusBadRequest, map[string]interface{}{"error": "no_melee_attack",
+					"message": fmt.Sprintf("%s has no melee attack in its stat block to make an Opportunity Attack with.", monsterName(campaignID, id))})
+				return
+			}
+			attackerName, line = monsterName(campaignID, id), lines[0]
+		} else {
+			// a monster that isn't in the turn order: its stat block by key
+			key := req.MonsterKey
+			if key == "" {
+				key = strings.ToLower(strings.ReplaceAll(strings.TrimSpace(req.MonsterName), " ", "-"))
+			}
+			action, _ := monsterMeleeAttackOfKey(key)
+			if action == "" {
+				writeJSONStatus(w, http.StatusBadRequest, map[string]interface{}{"error": "unknown_monster",
+					"message": fmt.Sprintf("%q isn't a monster in this fight, and no stat block %q with a melee attack was found. Send its name as the turn order shows it, or monster_key (GET /api/universe/monsters).", who, key)})
+				return
+			}
+			flag := fmt.Sprintf("%d:%d", campaignID, 0)
+			opportunityInReach.Store(flag, true) // the attack happens just before the character leaves its reach
+			text, _, ok := resolveMonsterAttack(r, campaignID, key, action, fmt.Sprint(req.TargetID), true)
+			opportunityInReach.Delete(flag)
+			if !ok {
+				writeJSONStatus(w, http.StatusBadRequest, map[string]interface{}{"error": "unknown_monster", "message": fmt.Sprintf("No stat block %q was found.", key)})
+				return
+			}
+			attackerName, line = who, "Opportunity Attack: "+text
+			recordGMAction(db, campaignID, "opportunity_attack", line, line)
+		}
+		writeJSONStatus(w, http.StatusOK, map[string]interface{}{"success": true, "attacker": attackerName, "target": targetName,
+			"hit": strings.Contains(line, " - HIT") || strings.Contains(line, " - CRITICAL HIT"), "result": line})
+		return
+	}
 
-		// Defaults if not found
-		if weaponName == "" {
-			weaponName = "melee attack"
-		}
-		if damageDice == "" {
-			damageDice = "1d6"
-		}
-		if attackMod == 0 {
-			attackMod = 3 // Default +3 for a basic monster
-		}
-
-	} else {
+	{
 		// Player character opportunity attack
 		if req.AttackerID == 0 {
 			w.WriteHeader(http.StatusBadRequest)
@@ -245,7 +217,9 @@ func handleGMOpportunityAttack(w http.ResponseWriter, r *http.Request) {
 		// Determine weapon and modifiers
 		attackMod = game.Modifier(str)
 		damageMod = game.Modifier(str)
-		damageDice = "1d6"
+		var attackerClass string
+		db.QueryRow(`SELECT COALESCE(class,'') FROM characters WHERE id = $1`, req.AttackerID).Scan(&attackerClass)
+		damageDice = unarmedDice(attackerClass, level) // an Unarmed Strike: 1 + the Strength modifier (a Monk's Martial Arts die)
 		weaponName = "unarmed strike"
 		weaponKey := ""
 
@@ -255,6 +229,7 @@ func handleGMOpportunityAttack(w http.ResponseWriter, r *http.Request) {
 			if weapon, ok := srdWeapons[weaponKey]; ok {
 				weaponName = weapon.Name
 				damageDice = weapon.Damage
+				damageType = attackDamageType(true, weapon)
 				if weapon.Type == "ranged" || containsProperty(weapon.Properties, "finesse") {
 					attackMod = game.Modifier(dex)
 					damageMod = game.Modifier(dex)
@@ -274,186 +249,51 @@ func handleGMOpportunityAttack(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 
-	// Check for Escape the Horde (Hunter Ranger Defensive Tactics)
-	// Opportunity attacks against you are made with disadvantage
-	escapeTheHordeActive := hasEscapeTheHorde(req.TargetID)
-
-	// Dodge, Blur, Foresight ...: as for any attack roll against the character (buff_spells_2024.go)
-	defenderDis, defenderWhy := buffAttackDisadvantage(campaignID, 0, req.TargetID)
-
-	// Roll the attack (with Disadvantage for Escape the Horde, Multiattack Defense or the target's own defenses)
-	var attackRoll int
-	var oaRoll1, oaRoll2 int
-	if escapeTheHordeActive || multiattackDefenseActive || defenderDis {
-		attackRoll, oaRoll1, oaRoll2 = game.RollWithDisadvantage()
-	} else {
-		attackRoll = game.RollDie(20)
-		oaRoll1 = attackRoll
-		oaRoll2 = 0
+	// The roll is the one attack function's (attack_2024.go): both creatures' conditions, every source of Advantage and
+	// Disadvantage (Escape the Horde, Multiattack Defense, Dodge, Blur ...), cover, Sanctuary, Bless and Bane, Halfling Luck.
+	var subclass string
+	var attackerLevel int
+	db.QueryRow(`SELECT COALESCE(subclass,''), COALESCE(level,1) FROM characters WHERE id = $1`, req.AttackerID).Scan(&subclass, &attackerLevel)
+	atk := attackCtx{lobby: campaignID, attacker: req.AttackerID, target: req.TargetID, name: "Opportunity Attack with " + weaponName, bonus: attackMod,
+		melee: true, weapon: true, opportunity: true, critFrom: game.CriticalHitRange(subclass, attackerLevel)}
+	head := fmt.Sprintf("⚔️ OPPORTUNITY ATTACK: %s attacks %s as they flee! ", attackerName, targetName)
+	response := map[string]interface{}{"success": true, "attacker": attackerName, "target": targetName, "attack_mod": attackMod,
+		"reaction_used": true, "note": fmt.Sprintf("%s's reaction is now expended for this round", attackerName)}
+	finish := func(text string) {
+		db.Exec(`INSERT INTO actions (lobby_id, action_type, description, result) VALUES ($1, 'opportunity_attack', $2, $3)`,
+			campaignID, fmt.Sprintf("Opportunity attack by %s against %s", attackerName, targetName), text)
+		response["result"] = text
+		writeJSONStatus(w, http.StatusOK, response)
 	}
-
-	// Halfling Lucky - reroll nat 1s on attack rolls
-	oaHalflingLuckyUsed := false
-	oaHalflingLuckyOriginal := 0
-	if attackRoll == 1 {
-		newRoll, rerolled, origRoll := applyHalflingLucky(attackRoll, req.AttackerID)
-		if rerolled {
-			oaHalflingLuckyUsed = true
-			oaHalflingLuckyOriginal = origRoll
-			attackRoll = newRoll
-		}
+	lost, blockNote := atk.blocked()
+	if lost {
+		response["hit"] = false
+		finish(head + blockNote)
+		return
 	}
-
-	totalAttack := attackRoll + attackMod
-
-	var resultText string
-	var hit bool
-	var damage int
-
-	luckyNote := ""
-	if oaHalflingLuckyUsed {
-		luckyNote = fmt.Sprintf(" 🍀[Lucky: %d→%d]", oaHalflingLuckyOriginal, attackRoll)
-	}
-	escapeNote := ""
-	if escapeTheHordeActive {
-		escapeNote = fmt.Sprintf(" 🏃[Escape the Horde: %d/%d→%d]", oaRoll1, oaRoll2, attackRoll)
-	} else if defenderDis {
-		escapeNote = fmt.Sprintf(" [Disadvantage (%s): %d/%d→%d]", defenderWhy, oaRoll1, oaRoll2, attackRoll)
-	}
-
-	if attackRoll == 1 && !oaHalflingLuckyUsed {
-		// Critical miss (only if not saved by Halfling Lucky)
-		resultText = fmt.Sprintf("⚔️ OPPORTUNITY ATTACK: %s attacks %s as they flee!%s%s%s Attack roll: %d (natural 1: miss)",
-			attackerName, targetName, escapeNote, luckyNote, multiattackDefenseNote, totalAttack)
-		hit = false
-	} else if attackRoll == 20 {
-		// Critical hit - double damage dice
-		damage = game.RollDamage(damageDice, true) + damageMod
+	ar, out, rollNote := atk.roll()
+	text := head + ar.LineForAttacker(atk.name, out) + blockNote + rollNote
+	response["attack_roll"], response["total"], response["target_ac"], response["hit"] = out.Natural, out.Total, ar.AC, out.Hit
+	if out.Hit {
+		damage := game.RollDamage(damageDice, out.Critical) + damageMod
 		if damage < 1 {
 			damage = 1
 		}
-		resultText = fmt.Sprintf("⚔️ OPPORTUNITY ATTACK: %s attacks %s as they flee!%s%s%s Attack roll: %d (nat 20 - CRITICAL HIT!) Damage: %d with %s",
-			attackerName, targetName, escapeNote, luckyNote, multiattackDefenseNote, totalAttack, damage, weaponName)
-		hit = true
-
-		// Record hit for Multiattack Defense tracking
-		if !req.AttackerIsMonster && req.AttackerID > 0 {
-			recordMultiattackDefenseHit(req.TargetID, req.AttackerID)
-		}
-	} else if totalAttack >= targetAC {
-		// Normal hit
-		damage = game.RollDamage(damageDice, false) + damageMod
-		if damage < 1 {
-			damage = 1
-		}
-		resultText = fmt.Sprintf("⚔️ OPPORTUNITY ATTACK: %s attacks %s as they flee!%s%s%s Attack roll: %d - HIT! Damage: %d with %s",
-			attackerName, targetName, escapeNote, luckyNote, multiattackDefenseNote, totalAttack, damage, weaponName)
-		hit = true
-
-		// Record hit for Multiattack Defense tracking
-		if !req.AttackerIsMonster && req.AttackerID > 0 {
-			recordMultiattackDefenseHit(req.TargetID, req.AttackerID)
-		}
-	} else {
-		// Miss
-		resultText = fmt.Sprintf("⚔️ OPPORTUNITY ATTACK: %s attacks %s as they flee!%s%s%s Attack roll: %d - MISS!",
-			attackerName, targetName, escapeNote, luckyNote, multiattackDefenseNote, totalAttack)
-		hit = false
-	}
-
-	// Apply damage to target if hit
-	if hit && damage > 0 {
-		// Apply damage resistance
-		dmgMod := applyDamageResistance(req.TargetID, damage, "")
-		if dmgMod.WasHalved {
-			damage = dmgMod.FinalDamage
-			resultText += fmt.Sprintf(" (Resisted: %s, damage halved to %d)", strings.Join(dmgMod.Resistances, ", "), damage)
-		}
-
-		var currentHP, maxHP int
-		db.QueryRow(`SELECT hp, max_hp FROM characters WHERE id = $1`, req.TargetID).Scan(&currentHP, &maxHP)
-		newHP := currentHP - damage
-		if newHP < 0 {
-			newHP = 0
-		}
-
-		// Check Barbarian Relentless Rage first (requires CON save)
-		if newHP == 0 {
-			relentlessHP, relentlessUsed, relentlessMsg := checkRelentlessRage(req.TargetID, currentHP, damage, maxHP)
-			if relentlessUsed {
-				newHP = relentlessHP
-				resultText += " " + relentlessMsg
-			} else if relentlessMsg != "" {
-				// Save failed, add the message but still at 0 HP
-				resultText += " " + relentlessMsg
-			}
-		}
-
-		// Check Orc Relentless Endurance (automatic, no save)
-		if newHP == 0 {
-			relentlessHP, relentlessUsed, relentlessMsg := checkRelentlessEndurance(req.TargetID, currentHP, damage, maxHP)
-			if relentlessUsed {
-				newHP = relentlessHP
-				resultText += " " + relentlessMsg
-			}
-		}
-
-		db.Exec(`UPDATE characters SET hp = $1 WHERE id = $2`, newHP, req.TargetID)
-
-		if newHP == 0 {
-			resultText += fmt.Sprintf(" %s falls to 0 HP!", targetName)
-
-			// Check for kill effects (Dark One's Blessing, etc.)
-			if !req.AttackerIsMonster && req.AttackerID > 0 {
-				if killEffects := applyKillEffects(req.AttackerID); killEffects != nil {
-					if msg, ok := killEffects["message"].(string); ok {
-						resultText += " " + msg
-					}
+		// the damage goes through the one damage pipeline for characters (Temporary Hit Points, Resistance, Concentration,
+		// death saves, Relentless Rage and Endurance)
+		text += ", " + targetName + " " + damageCharacter(req.TargetID, damage, damageType, out.Critical) + "."
+		response["damage"], response["weapon"] = damage, weaponName
+		if charAtZeroHP(req.TargetID) {
+			if killEffects := applyKillEffects(req.AttackerID); killEffects != nil { // Dark One's Blessing and the like
+				if msg, ok := killEffects["message"].(string); ok {
+					text += " " + msg
 				}
 			}
-		} else {
-			resultText += fmt.Sprintf(" (%s: %d → %d HP)", targetName, currentHP, newHP)
 		}
+	} else {
+		text += "."
 	}
-
-	// Log the action
-	actionDesc := fmt.Sprintf("Opportunity attack by %s against %s", attackerName, targetName)
-	db.Exec(`
-		INSERT INTO actions (lobby_id, action_type, description, result)
-		VALUES ($1, 'opportunity_attack', $2, $3)
-	`, campaignID, actionDesc, resultText)
-
-	response := map[string]interface{}{
-		"success":     true,
-		"attacker":    attackerName,
-		"target":      targetName,
-		"attack_roll": attackRoll,
-		"attack_mod":  attackMod,
-		"total":       totalAttack,
-		"target_ac":   targetAC,
-		"hit":         hit,
-		"result":      resultText,
-	}
-
-	if hit {
-		response["damage"] = damage
-		response["weapon"] = weaponName
-	}
-
-	// Include Multiattack Defense info if it was active
-	if multiattackDefenseActive {
-		response["multiattack_defense"] = map[string]interface{}{
-			"active": true,
-			"effect": "Disadvantage on the attack roll",
-		}
-	}
-
-	if !req.AttackerIsMonster {
-		response["reaction_used"] = true
-		response["note"] = fmt.Sprintf("%s's reaction is now expended for this round", attackerName)
-	}
-
-	json.NewEncoder(w).Encode(response)
+	finish(text)
 }
 
 // handleGMRetaliation godoc

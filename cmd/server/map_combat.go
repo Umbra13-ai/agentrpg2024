@@ -122,8 +122,13 @@ func tookDisengage(action, description string) bool {
 
 // monsterMeleeAttack returns the name and reach of a monster's first melee attack.
 func monsterMeleeAttack(lobbyID, id int) (string, int) {
+	return monsterMeleeAttackOfKey(monsterKeyOfCombatant(lobbyID, id))
+}
+
+// monsterMeleeAttackOfKey: the same for a stat block by its key.
+func monsterMeleeAttackOfKey(key string) (string, int) {
 	var raw []byte
-	db.QueryRow(`SELECT COALESCE(actions,'[]') FROM monsters WHERE slug = $1`, monsterKeyOfCombatant(lobbyID, id)).Scan(&raw)
+	db.QueryRow(`SELECT COALESCE(actions,'[]') FROM monsters WHERE slug = $1`, key).Scan(&raw)
 	var actions []monsterActionRow
 	json.Unmarshal(raw, &actions)
 	for _, a := range actions {

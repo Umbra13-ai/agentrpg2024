@@ -64,11 +64,9 @@ func resolveSpellOnMonster(charID int, spellKey string, spell SRDSpell, damageDi
 	if !ok {
 		return ""
 	}
-	var ac int
 	var name string
 	for _, e := range combatEntries(lobbyID) {
 		if asInt(e["id"]) == monster {
-			ac = asInt(e["ac"])
 			name = fmt.Sprint(e["name"])
 		}
 	}
@@ -79,37 +77,28 @@ func resolveSpellOnMonster(charID int, spellKey string, spell SRDSpell, damageDi
 		return fmt.Sprintf(" %s is inside an Antimagic Field: the spell has no effect on it.", name)
 	}
 	dtype := strings.ToLower(spell.DamageType)
-	bonus := game.ProficiencyBonus(charLevel) + spellMod + magicSpellAttackBonus(charID) // Wand of the War Mage, staffs, Robe of the Archmagi
-	ac += spellACAdjust(lobbyID, monster)                                                // Slow, Shield of Faith
-	// a Spell Scroll's own attack bonus
-	if v, ok := itemCastAttack.Load(charID); ok {
-		bonus = v.(int)
+	// Every spell attack roll here is the one attack function's (attack_2024.go): conditions on both sides, every source of
+	// Advantage and Disadvantage (Help, the GM's ruling, a ranged attack next to an enemy ...), Bless and Bane, Exhaustion.
+	spellAttack := func() (game.AttackRoll, game.AttackOutcome, string) {
+		sa := attackCtx{lobby: lobbyID, attacker: charID, target: monster, name: "Spell attack against " + name,
+			bonus: characterSpellAttackBonus(charID, charLevel, spellMod), spell: true, melee: spellAttackIsMelee(spell.Range)}
+		return sa.roll()
 	}
-	// spellD20 rolls one spell attack: Advantage against a creature outlined by Faerie Fire, Bless and Bane on the caster
-	closeCombat := spellRangeFeet(spell.Range) > 5 && enemyAdjacentOnMap(lobbyID, charID) // a ranged spell attack with an enemy within 5 feet
-	spellD20 := func() (natural, adj int) {
-		natural = game.RollDie(20)
-		adv := outlined(lobbyID, monster)
-		if adv != closeCombat {
-			b := game.RollDie(20)
-			if (adv && b > natural) || (closeCombat && b < natural) {
-				natural = b
-			}
-		}
-		adj, _ = spellRollAdjust(lobbyID, charID, "attack")
-		return
-	}
+	attackName := "Spell attack against " + name
 	var lines []string
 
 	if count, beamDice, auto := beamPlan(spellKey, spell.Level, slotLevel, charLevel); count > 0 {
 		total, hits := 0, 0
 		for i := 0; i < count; i++ {
-			roll, adj := spellD20()
-			hit := auto || roll == 20 || (roll != 1 && roll+bonus+adj >= ac)
-			if !hit {
-				continue
+			crit := false
+			if !auto { // Magic Missile hits without a roll
+				_, out, _ := spellAttack()
+				if !out.Hit {
+					continue
+				}
+				crit = out.Critical
 			}
-			d := game.RollDamage(beamDice, roll == 20 && !auto)
+			d := game.RollDamage(beamDice, crit)
 			if spellKey == "eldritch-blast" && hasInvocation(charID, "agonizing-blast") && game.Modifier(spellModScore(charID)) > 0 {
 				d += game.Modifier(spellModScore(charID))
 			}
@@ -125,34 +114,28 @@ func resolveSpellOnMonster(charID int, spellKey string, spell SRDSpell, damageDi
 
 	switch {
 	case isSpellAttack(spell):
-		roll, adj := spellD20()
-		bonus += adj
-		seekNote := ""
-		if _, seeking := seekingSpell.LoadAndDelete(charID); seeking && roll != 20 && (roll == 1 || roll+bonus < ac) {
-			roll = game.RollDie(20) // Seeking Spell: reroll a missed attack and use the new roll
-			seekNote = " (Seeking Spell: the miss is rerolled)"
+		ar, out, rollNote := spellAttack()
+		if _, seeking := seekingSpell.LoadAndDelete(charID); seeking && !out.Hit {
+			out = ar.Judge(game.RollDie(20)) // Seeking Spell: reroll a missed attack and use the new roll
+			rollNote += " (Seeking Spell: the miss is rerolled)"
 		}
-		if roll == 1 || (roll != 20 && roll+bonus < ac) {
+		if !out.Hit {
 			if potentCantrip(charID, spell) && rolled/2 > 0 { // F119: Potent Cantrip
 				text, _ := damageMonster(lobbyID, monster, rolled/2, dtype)
-				return fmt.Sprintf(" Spell attack against %s: MISS (Potent Cantrip: half damage, %d %s). %s", name, rolled/2, dtype, text)
+				return fmt.Sprintf(" %s%s (Potent Cantrip: half damage, %d %s). %s", ar.LineForAttacker(attackName, out), rollNote, rolled/2, dtype, text)
 			}
-			return fmt.Sprintf(" Spell attack against %s%s: MISS.", name, seekNote)
+			return fmt.Sprintf(" %s%s.", ar.LineForAttacker(attackName, out), rollNote)
 		}
 		d := rolled // the damage already shown in the cast text (all bonuses included)
-		if roll == 20 {
+		if out.Critical {
 			d += game.RollDamage(damageDice, false) // a critical hit rolls the damage dice twice
-		}
-		label := "HIT"
-		if roll == 20 {
-			label = "CRITICAL HIT"
 		}
 		text, _ := damageMonster(lobbyID, monster, d, dtype)
 		if monsterHPNow(lobbyID, monster) <= 0 {
 			text += killEffectNote(charID) // Dark One's Blessing (F134)
 		}
 		text += spellRider(lobbyID, charID, monster, spellKey) // Guiding Bolt, Ray of Frost, Chill Touch ... (F250)
-		lines = append(lines, fmt.Sprintf(" Spell attack against %s%s: %s, %d %s damage. %s", name, seekNote, label, d, dtype, text))
+		lines = append(lines, fmt.Sprintf(" %s%s, %d %s damage. %s", ar.LineForAttacker(attackName, out), rollNote, d, dtype, text))
 	case spell.SavingThrow != "" || len(spell.DamageParts) > 0:
 		ability := saveAbilityKey(spell.SavingThrow)
 		// F247: without damage parts the spell's text decides: "half as much damage" on a success, otherwise none (Sacred Flame, Acid

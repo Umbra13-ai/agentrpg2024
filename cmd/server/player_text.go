@@ -3,7 +3,7 @@ package main
 // What players may read of a result: hit or miss, damage, conditions, success or failure, but not a monster's numbers.
 // The stored text keeps them for the GM; every log, feed and action reply a player or spectator reads goes through playerText.
 //	"Greatclub: 11 vs AC 18 - MISS"                     -> "Greatclub: MISS"          (a monster's attack total)
-//	"Shortbow: 9 with Disadvantage vs AC 16 - MISS"     -> "Shortbow: with Disadvantage - MISS"
+//	"Shortbow: 9 with Disadvantage (long range) vs AC 16 - MISS" -> "Shortbow: with Disadvantage (long range) - MISS"
 //	"Goblin 1 fails its DEX save (3 vs DC 18)"          -> "Goblin 1 fails its DEX save"
 //	"Constitution save 15 vs DC 14, success"            -> "Constitution save, success"
 //	"repeats the Wisdom saving throw ... and fails (2)" -> "... and fails"
@@ -15,11 +15,12 @@ var playerTextRules = []struct {
 	re   *regexp.Regexp
 	repl string
 }{
-	// a monster attack: "<total>[ with Advantage|Disadvantage][ (long range)][ [Bane -2]] vs AC <ac> - "
-	{regexp.MustCompile(`(:\s)-?\d+((?: with (?:Advantage|Disadvantage))?(?: \(long range\))?(?: \[[^\]]*\])*) vs AC \d+ - `), "$1$2 - "},
+	// an attack roll's result line as game.AttackRoll.Line writes it (game/attack.go; change the two together):
+	// "<total>[ with Advantage (why)| with Disadvantage (why)| (Advantage from .. cancel: one d20)][ [Bane -2]] vs AC <ac> - "
+	{regexp.MustCompile(`(:\s)-?\d+((?: with (?:Advantage|Disadvantage))?(?: \([^)]*\))*(?: \[[^\]]*\])*) vs AC \d+ - `), "$1$2 - "},
 	{regexp.MustCompile(`(:\s) - `), "$1"},
 	// a monster attack without a known target: "Scimitar: 14 to hit - ..."
-	{regexp.MustCompile(`(:\s)-?\d+((?: with (?:Advantage|Disadvantage))?(?: \[[^\]]*\])*) to hit - `), "$1$2 "},
+	{regexp.MustCompile(`(:\s)-?\d+((?: with (?:Advantage|Disadvantage))?(?: \([^)]*\))*(?: \[[^\]]*\])*) to hit - `), "$1$2 "},
 	// saving throws against a DC
 	{regexp.MustCompile(` \(-?\d+ vs DC \d+\)`), ""},
 	{regexp.MustCompile(`((?:save|saving throw)):? -?\d+ vs DC \d+`), "$1"},
