@@ -137,4 +137,3 @@ func spellAvailableNatively(charID int, spellKey, description string) (bool, str
 	}
 	return false, fmt.Sprintf("You can't cast %s: %s. Nothing was spent.", sp.Name, where)
 }
-

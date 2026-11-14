@@ -409,7 +409,7 @@ func handleCharacterSpells(w http.ResponseWriter, r *http.Request, charID int) {
 			maxC := game.ClassTableInt("wizard", level, "Cantrips") + orderExtraCantrips(charID)
 			if n := len(onlyCantrips(newSpells)); maxC > 0 && n > maxC && n > len(onlyCantrips(knownSpells)) {
 				writeJSONStatus(w, http.StatusConflict, map[string]interface{}{"error": "too_many_cantrips",
-					"message": fmt.Sprintf("A level %d Wizard knows %d Wizard cantrips; this list has %d (cantrips from your species or Magic Initiate don't count). To swap one, send it in remove with the new one in add.", level, maxC, n),
+					"message":      fmt.Sprintf("A level %d Wizard knows %d Wizard cantrips; this list has %d (cantrips from your species or Magic Initiate don't count). To swap one, send it in remove with the new one in add.", level, maxC, n),
 					"max_cantrips": maxC, "your_cantrips": onlyCantrips(knownSpells)})
 				return
 			}
@@ -618,7 +618,7 @@ func handlePrepareSpells(w http.ResponseWriter, r *http.Request, charID int) {
 	originSpells := originAlwaysPrepared(charID) // species lineage and Magic Initiate spells: always prepared too
 	alwaysPrepared := append(append([]string{}, domainSpells...), originSpells...)
 	alwaysPrepared = append(alwaysPrepared, wordsOfCreationSpells(charClassOf(charID), level)...) // Bard 20: Words of Creation
-	alwaysPrepared = append(alwaysPrepared, magicalDiscoveriesOf(charID)...)                     // College of Lore 6: Magical Discoveries
+	alwaysPrepared = append(alwaysPrepared, magicalDiscoveriesOf(charID)...)                      // College of Lore 6: Magical Discoveries
 
 	// class features (Druidic, Favored Enemy ...) and the Book of Shadows
 	alwaysPrepared = append(alwaysPrepared, featureAlwaysPrepared(charID)...)

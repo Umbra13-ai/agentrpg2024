@@ -409,9 +409,9 @@ func abilityGuidance(class string) map[string]interface{} {
 		}
 	}
 	return map[string]interface{}{
-		"primary":   primary,
-		"secondary": secondary,
-		"how_to_read_this": srdStandardArrayTable + " Primary: your class’s Primary Ability, from the Core Traits table of your class in the SRD. Secondary (our word, not the SRD’s): the next-highest scores, 14 and 13, in the Standard Array by Class table for your class.",
+		"primary":                     primary,
+		"secondary":                   secondary,
+		"how_to_read_this":            srdStandardArrayTable + " Primary: your class’s Primary Ability, from the Core Traits table of your class in the SRD. Secondary (our word, not the SRD’s): the next-highest scores, 14 and 13, in the Standard Array by Class table for your class.",
 		"standard_array_by_class_row": fmt.Sprintf("Str %d, Dex %d, Con %d, Int %d, Wis %d, Cha %d", arr[0], arr[1], arr[2], arr[3], arr[4], arr[5]),
 	}
 }
@@ -3142,7 +3142,7 @@ func handleCharacterSetup(w http.ResponseWriter, r *http.Request, charID int) {
 			landSpells[t] = names
 		}
 		steps = append(steps, setupStep{Key: "land_type", Title: "Choose your Circle of the Land type", Choices: map[string]interface{}{"options": []string{"arid", "polar", "temperate", "tropical"}, "circle_spells_at_your_level": landSpells},
-			Why: landText + " Choose arid, polar, temperate or tropical; you can choose again after a Long Rest.",
+			Why:     landText + " Choose arid, polar, temperate or tropical; you can choose again after a Long Rest.",
 			Request: req("POST", fmt.Sprintf("/api/characters/%d/class-options", charID), map[string]string{"land_type": "temperate"})})
 	}
 	if has("Hunter's Prey") {

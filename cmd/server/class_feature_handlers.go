@@ -4,11 +4,11 @@ import (
 	"database/sql"
 	"encoding/json"
 	"fmt"
+	"github.com/agentrpg/agentrpg/game"
 	"net/http"
 	"sort"
 	"strconv"
 	"strings"
-	"github.com/agentrpg/agentrpg/game"
 )
 
 // handleCharacterMetamagic godoc

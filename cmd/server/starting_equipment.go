@@ -344,7 +344,9 @@ func chosenToolForClass(class, toolProfsCSV string) string {
 
 // handleCharacterStartingEquipment gives a character created before starting
 // equipment existed their class kit (items only, no gold).
+//
 //	POST /api/characters/{id}/starting-equipment  {"option":"a"}
+//
 // handleCharacterStartingEquipment godoc
 // @Summary Give an older character its class starting equipment
 // @Description For a character made before starting equipment existed: adds the class kit (option "a" or "b" of the class's Starting Equipment; items only, no gold). Once per character.
@@ -426,8 +428,10 @@ func handleCharacterStartingEquipment(w http.ResponseWriter, r *http.Request, ch
 }
 
 // handleCharacterToolProficiencies shows and sets the tool choices a class asks for.
+//
 //	GET  /api/characters/{id}/tool-proficiencies   pending choices and options
 //	POST /api/characters/{id}/tool-proficiencies   {"tools":["lute","drum","flute"]}
+//
 // handleCharacterToolProficiencies godoc
 // @Summary The tool proficiencies a class lets you choose
 // @Description GET shows the tool choices still open (a Bard's three Musical Instruments, a Monk's Artisan's Tools or Musical Instrument) and the options. POST sets them ({"tools": ["lute", "drum", "flute"]}).
@@ -481,7 +485,9 @@ func handleCharacterToolProficiencies(w http.ResponseWriter, r *http.Request, ch
 
 // handleCharacterClassOptions sets the level 1 class choices that change
 // proficiencies (Cleric Divine Order, Druid Primal Order). Settable once.
+//
 //	POST /api/characters/{id}/class-options  {"divine_order":"protector"}
+//
 // handleCharacterClassOptions godoc
 // @Summary Class choices: Divine Order, Primal Order, land type, Elemental Affinity, Blessed Strikes, Elemental Fury
 // @Description Sets one class choice: divine_order (Cleric 1: protector or thaumaturge), primal_order (Druid 1: magician or warden), land_type (Circle of the Land: arid, polar, temperate or tropical; again after a Long Rest), elemental_affinity (Draconic Sorcerer 6: acid, cold, fire, lightning, poison), blessed_strikes (Cleric 7: divine_strike or potent_spellcasting), elemental_fury (Druid 7: primal_strike or potent_spellcasting), wild_shape_forms (Druid 2+: the known Beast forms, 4 at level 2, 6 at 4, 8 at 8 with Fly Speeds allowed; one can be replaced after a Long Rest). The level 1 orders can be set once.
@@ -501,12 +507,12 @@ func handleCharacterClassOptions(w http.ResponseWriter, r *http.Request, charID 
 		DivineOrder string `json:"divine_order"`
 		PrimalOrder string `json:"primal_order"`
 
-		LandType          string   `json:"land_type"`          // Circle of the Land: arid, polar, temperate, tropical (again after a Long Rest)
-		ElementalAffinity string   `json:"elemental_affinity"` // Draconic Sorcerer level 6: acid, cold, fire, lightning, poison
-		BlessedStrikes    string   `json:"blessed_strikes"`    // Cleric level 7: divine_strike or potent_spellcasting
-		ElementalFury     string   `json:"elemental_fury"`     // Druid level 7: primal_strike or potent_spellcasting
-		WildShapeForms    []string `json:"wild_shape_forms"`   // Druid: the known Beast forms (4, 6 or 8; one can be replaced after a Long Rest)
-		PrimalKnowledge   string   `json:"primal_knowledge"`   // Barbarian 3: one skill from the Barbarian list (levels23_2024.go)
+		LandType          string   `json:"land_type"`           // Circle of the Land: arid, polar, temperate, tropical (again after a Long Rest)
+		ElementalAffinity string   `json:"elemental_affinity"`  // Draconic Sorcerer level 6: acid, cold, fire, lightning, poison
+		BlessedStrikes    string   `json:"blessed_strikes"`     // Cleric level 7: divine_strike or potent_spellcasting
+		ElementalFury     string   `json:"elemental_fury"`      // Druid level 7: primal_strike or potent_spellcasting
+		WildShapeForms    []string `json:"wild_shape_forms"`    // Druid: the known Beast forms (4, 6 or 8; one can be replaced after a Long Rest)
+		PrimalKnowledge   string   `json:"primal_knowledge"`    // Barbarian 3: one skill from the Barbarian list (levels23_2024.go)
 		BonusProfs        []string `json:"bonus_proficiencies"` // College of Lore 3: three skills of your choice
 		MagicalDiscover   []string `json:"magical_discoveries"` // College of Lore 6: two Cleric, Druid or Wizard spells (magical_discoveries_2024.go)
 		ClassLanguages    []string `json:"class_languages"`     // Deft Explorer (Ranger 2), Thieves' Cant (Rogue 1) (class_languages_2024.go)

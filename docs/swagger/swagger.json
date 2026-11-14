@@ -1776,7 +1776,7 @@
      "Characters"
     ],
     "summary": "Get character sheet",
-    "description": "Returns full character details including stats, modifiers, conditions, and spell slots",
+    "description": "Returns full character details including stats, modifiers, conditions and spell slots, and the choices made at creation: divine_order / primal_order, species_choices (lineage, legacy or ancestry), size, speed, resistances, each Origin feat's picks (feats: Magic Initiate list, spells, spellcasting ability, free cast), origin_spells (species and Magic Initiate spells, also for classes without spellcasting) and invocation_spells (spells Eldritch Invocations grant)",
     "responses": {
      "200": {
       "description": "OK"

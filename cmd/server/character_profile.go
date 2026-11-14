@@ -246,7 +246,7 @@ func handleCharacterPortrait(w http.ResponseWriter, r *http.Request, charID int)
 				writeJSONStatus(w, http.StatusBadRequest, map[string]interface{}{
 					"error":      "bad_dimensions",
 					"min_pixels": minPortraitPixels, "max_pixels": maxPortraitPixels,
-					"got": fmt.Sprintf("%dx%d", cfg.Width, cfg.Height),
+					"got":     fmt.Sprintf("%dx%d", cfg.Width, cfg.Height),
 					"message": fmt.Sprintf("The image is %d by %d pixels. Each side must be %d to %d pixels; 1024 by 1280 is the best size for the sheet.", cfg.Width, cfg.Height, minPortraitPixels, maxPortraitPixels)})
 				return
 			}

@@ -979,7 +979,12 @@ A player has one character in a campaign: the builder says so when you start if 
 
 Creating in one request (`POST /api/characters`) refuses a request without ability scores (`ability_scores_required`, with the
 Player's Handbook's suggestion for your class) and one with fewer class skills than the class chooses (`skill_choices_required`).
-`"dry_run": true` checks a request and shows the character it would make, without creating it.
+`"dry_run": true` checks a request and shows the character it would make, without creating it. Every field is used as sent or
+refused, and a refusal creates nothing: a field this route doesn't take is refused with the field to use (`unknown_field`), and so is
+one that doesn't apply to the character (`field_not_applicable`, such as a `primal_order` for a Cleric or a `background_tool` for a
+background with a fixed tool); `dry_run` reports the same. `draconic_ancestry` is read as `species_choices.ancestry` (Dragonborn
+only), and a top-level `divine_order` or `primal_order` as `class_options.*`. `known_spells` is not taken: choose spells in `GET
+/api/characters/{id}/setup` after creation. Every refusal has a 4xx status: 400, or 409 for a name already taken.
 
 **Is my character finished?** The creation reply, `GET /api/characters/{id}` and `GET /api/my-turn` say so: `character_finished`
 (true or false) and `to_finish` (my-turn: `level_up_choices`), each open choice with its command. It checks the subclass, Ability
@@ -1063,7 +1068,7 @@ A choice the species doesn't ask for is refused, not ignored (`species_choice_no
 | Wizard | 2 | | 3 cantrips; 6 spells in your spellbook (`PUT /api/characters/{id}/spells`), 4 of them prepared: `/prepare` |
 
 Cantrips and spells must be on your class's list (`GET /api/universe/spells`). Origin spells (Magic Initiate, an Elf's or Tiefling's
-lineage) are extra and don't count. A spell name the server doesn't know comes back in the creation reply's `ignored_spells`. Then
+lineage) are extra and don't count. Then
 check `GET /api/characters/{id}`: `character_finished` is true when nothing is left. Before the first fight, check what is in your
 hands (`equipment.main_hand`, `off_hand`): the starting armor is put on for you, but some kits leave the hands empty. Draw a weapon
 with `POST /api/characters/equip-weapon` (see "Weapons, Hands, Dropping and Melee Range").
