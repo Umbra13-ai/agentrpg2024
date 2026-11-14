@@ -443,14 +443,46 @@ func shopSetupStep(charID int) *setupStep {
 	var done bool
 	db.QueryRow(`SELECT COALESCE(shop_done,false) FROM characters WHERE id = $1`, charID).Scan(&done)
 	money := walletCP(charID)
-	if open, _ := shopOpen(charID); done || !open || money <= 0 {
+	// offered to every character while the shop is open and they haven't said done, with or without money (selling works with an
+	// empty purse); only the wording depends on what they chose (Matt, Nov 14: gold-option characters got no prompt while an
+	// equipment-pack fighter did)
+	if open, _ := shopOpen(charID); done || !open {
 		return nil
 	}
-	// a guided step again (Nov 14 tester: with the gold option no shop step was offered; making it optional had taken it out of
-	// steps_left and "next"): it is done when the player says so ({"done": true}), with or without buying
-	st := setupStep{Key: "shop", Title: "Buy equipment with your gold (or keep it)",
-		Why:     fmt.Sprintf("You have %s. Before your campaign starts you can buy weapons, armor, adventuring gear, ammunition and tools at the SRD's prices. GET /api/characters/%d/shop lists everything (add ?category=weapons, armor, gear, ammunition or tools), with what each item does, whether you are proficient with it and whether you can afford it. Buy with POST /api/characters/%d/shop {\"buy\": [{\"item\": \"Longsword\", \"quantity\": 1}]}. When you have finished, or if you want to keep your money, send the request below. The shop closes when your campaign starts; after that, buying is up to your GM.", moneyText(money), charID, charID),
+	var class, opt string
+	db.QueryRow(`SELECT LOWER(COALESCE(class,'')), LOWER(COALESCE(starting_equipment,'')) FROM characters WHERE id = $1`, charID).Scan(&class, &opt)
+	classGold := false
+	if o, ok := classStartingEquipment[class][opt]; ok && len(o.Items) == 0 {
+		classGold = true // the class kit option that is gold only
+	}
+	bgGold := false
+	if rec, ok := characterOriginOf(charID); ok && rec != nil && strings.EqualFold(rec.BackgroundEquipment, "b") {
+		bgGold = true // the background's 50 GP instead of its package
+	}
+	shop := fmt.Sprintf("GET /api/characters/%d/shop", charID)
+	buySell := fmt.Sprintf("Buy with POST /api/characters/%d/shop {\"buy\": [{\"item\": \"Longsword\", \"quantity\": 1}]}; sell with {\"sell\": [{\"item_id\": \"<id from your inventory>\"}]} (a shop pays half the price).", charID)
+	title, why := "", ""
+	switch {
+	case classGold && bgGold:
+		title = "Visit the shop: buy your starting gear"
+		why = fmt.Sprintf("You took gold instead of equipment, so you have %s and no kit. Buy your starting gear now: weapons, armor, a pack, tools and ammunition at the SRD's prices. %s lists everything (add ?category=weapons, armor, gear, ammunition or tools) with what each item does, whether you are proficient with it and whether you can afford it. %s ", moneyText(money), shop, buySell)
+	case classGold:
+		title = "Visit the shop: buy your class's gear"
+		why = fmt.Sprintf("You took gold instead of your class's equipment, so you have %s. Buy the weapons, armor and gear your class needs at the SRD's prices; you can also sell items from your background's package. %s lists everything (add ?category=weapons, armor, gear, ammunition or tools) with what each item does, whether you are proficient with it and whether you can afford it. %s ", moneyText(money), shop, buySell)
+	case bgGold:
+		title = "Visit the shop: buy what your background's package would have given"
+		why = fmt.Sprintf("You took your background's 50 GP instead of its package, so you have %s. Buy the gear you want (a pack, tools, clothes) at the SRD's prices; you can also sell items from your class's equipment. %s lists everything (add ?category=weapons, armor, gear, ammunition or tools). %s ", moneyText(money), shop, buySell)
+	default:
+		title = "Visit the shop: buy extras or sell items from your pack"
+		why = fmt.Sprintf("You took your equipment pack, and you have %s. You may visit the shop to buy extras or to sell items from your pack. %s lists everything (add ?category=weapons, armor, gear, ammunition or tools) with what each item does and whether you can afford it. %s ", moneyText(money), shop, buySell)
+	}
+	why += "When you have finished shopping (or want nothing), send the request below to continue setup. The shop closes when your campaign starts; after that, buying and selling are up to your GM."
+	st := setupStep{Key: "shop", Title: title, Why: why,
 		Request: req("POST", fmt.Sprintf("/api/characters/%d/shop", charID), map[string]interface{}{"done": true}),
-		Choices: map[string]interface{}{"your_money": moneyText(money), "see_the_shop": fmt.Sprintf("GET /api/characters/%d/shop", charID)}}
+		Choices: map[string]interface{}{"your_money": moneyText(money), "see_the_shop": shop,
+			"buy":             fmt.Sprintf("POST /api/characters/%d/shop {\"buy\": [{\"item\": \"...\", \"quantity\": 1}]}", charID),
+			"sell":            fmt.Sprintf("POST /api/characters/%d/shop {\"sell\": [{\"item_id\": \"...\"}]}", charID),
+			"finish_shopping": fmt.Sprintf("POST /api/characters/%d/shop {\"done\": true}", charID),
+			"you_chose":       map[bool]string{true: "gold instead of equipment", false: "the equipment pack"}[classGold || bgGold]}}
 	return &st
 }

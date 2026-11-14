@@ -3728,7 +3728,7 @@ func handleCharacterSetup(w http.ResponseWriter, r *http.Request, charID int) {
 			Why:     "Do you want me to equip everything for you? I will put on your armor, take your weapon (and a Shield or second Light weapon) in hand and wear your clothing and jewelry. If you have a choice to make (more weapons than hands, two items for the same body place) I will ask you which. GET /api/characters/auto-equip?character_id=N shows what I would do first.",
 			Request: req("POST", "/api/characters/auto-equip", autoEquipSuggestion(charID))})
 	}
-	// the starting shop, while the character has money (shop_2024.go)
+	// the starting shop, for every character while it is open: buy gear, sell from the pack, then done (shop_2024.go)
 	if st := shopSetupStep(charID); st != nil {
 		steps = append(steps, *st)
 	}
