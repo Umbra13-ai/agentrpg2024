@@ -620,7 +620,7 @@ func startingSpellcastingFocus(classKey string) string {
 
 // handleCharacterByID godoc
 // @Summary Get character sheet
-// @Description Returns full character details including stats, modifiers, conditions, and spell slots
+// @Description Returns full character details including stats, modifiers, conditions and spell slots, and the choices made at creation: divine_order / primal_order, species_choices (lineage, legacy or ancestry), size, speed, resistances, each Origin feat's picks (feats: Magic Initiate list, spells, spellcasting ability, free cast), origin_spells (species and Magic Initiate spells, also for classes without spellcasting) and invocation_spells (spells Eldritch Invocations grant)
 // @Tags Characters
 // @Produce json
 // @Param id path int true "Character ID"
@@ -1016,6 +1016,14 @@ func handleCharacterByID(w http.ResponseWriter, r *http.Request) {
 		"exhaustion_level": exhaustionLevel,
 		"inspiration":      hasInspiration,
 	}
+
+	// The choices made at creation, on the main record (character_view_2024.go): the Divine or Primal Order; the species choices,
+	// size, speed and resistances, with traits that match the lineage
+	addOrderView(response, classFeaturesList, charID)
+	origin, hasOrigin := characterOriginOf(charID)
+	addSpeciesView(response, charID, species, origin, hasOrigin)
+	response["resistances"] = resistancesView(charID, species, origin, hasOrigin)
+	response["resistances_note"] = "Resistances you always have (and Rage's while you rage); spells, potions and magic items add theirs when they apply."
 
 	// Add background feature from game package
 	if background != "" {
@@ -1450,7 +1458,17 @@ func handleCharacterByID(w http.ResponseWriter, r *http.Request) {
 				})
 			}
 		}
+		if hasOrigin {
+			addOriginFeatPicks(featsInfo, charID, origin) // Magic Initiate list, spells, ability, free cast; Skilled picks
+		}
 		response["feats"] = featsInfo
+	}
+	// Spells from the species and Origin feats (also for a class without spellcasting), and those Eldritch Invocations grant
+	if spells := originSpellsView(charID, origin, class, spellAbility, level, intl, wis, cha, spellMod); len(spells) > 0 {
+		response["origin_spells"] = spells
+	}
+	if is := invocationSpellsView(charID); len(is) > 0 {
+		response["invocation_spells"] = is
 	}
 
 	// Fighting Styles

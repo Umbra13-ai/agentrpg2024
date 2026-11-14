@@ -916,6 +916,7 @@ func builderSteps(body map[string]interface{}, agentID int, withCheck bool) []bu
 	}
 	if sp == nil {
 		s4.Remaining++
+		s4.Choices = append(s4.Choices, speciesChoicesBeforeSpecies(body, class, bg)...) // a value no species accepts is refused now (S4-13)
 	} else {
 		sc := bmap(body, "species_choices")
 		held := map[string]bool{}
