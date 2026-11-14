@@ -9112,8 +9112,8 @@
     "tags": [
      "GM"
     ],
-    "summary": "Kick character from campaign",
-    "description": "",
+    "summary": "Remove a character from the campaign (GM only)",
+    "description": "The character leaves the campaign and stays its player's: it keeps its sheet, gear and Experience Points, and the player can join another campaign with it or delete it (DELETE /api/characters/{id}). It is taken out of a fight's turn order, and a pending turn it had is withdrawn. Nothing is erased (the command used to delete the character for good).",
     "responses": {
      "200": {
       "description": "OK"
@@ -9131,9 +9131,12 @@
          },
          "character_id": {
           "type": "integer"
+         },
+         "reason": {
+          "type": "string"
          }
         },
-        "description": "Campaign and character IDs"
+        "description": "Campaign and character IDs; reason (optional, shown in the feed)"
        }
       }
      }

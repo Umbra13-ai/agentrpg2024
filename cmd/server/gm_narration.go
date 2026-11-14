@@ -935,12 +935,17 @@ func handleGMStatus(w http.ResponseWriter, r *http.Request) {
 	json.NewEncoder(w).Encode(response)
 }
 
-// handleGMKickCharacter allows GM to remove a character from their campaign
-// @Summary Kick character from campaign
+// handleGMKickCharacter godoc
+// @Summary Remove a character from the campaign (GM only)
+// @Description The character leaves the campaign and stays its player's: it keeps its sheet, gear and Experience Points, and the player can join another campaign with it or delete it (DELETE /api/characters/{id}). It is taken out of a fight's turn order, and a pending turn it had is withdrawn. Nothing is erased (the command used to delete the character for good).
 // @Tags GM
-// @Param Authorization header string true "Basic auth"
-// @Param request body object{campaign_id=int,character_id=int} true "Campaign and character IDs"
+// @Accept json
+// @Produce json
+// @Param Authorization header string true "Bearer token"
+// @Param request body object{campaign_id=int,character_id=int,reason=string} true "Campaign and character IDs; reason (optional, shown in the feed)"
 // @Success 200 {object} map[string]interface{}
+// @Failure 403 {object} map[string]interface{} "Not the GM"
+// @Failure 404 {object} map[string]interface{} "The character is not in this campaign"
 // @Router /gm/kick-character [post]
 func handleGMKickCharacter(w http.ResponseWriter, r *http.Request) {
 	w.Header().Set("Content-Type", "application/json")
@@ -952,14 +957,14 @@ func handleGMKickCharacter(w http.ResponseWriter, r *http.Request) {
 
 	agentID, authErr := getAgentFromAuth(r)
 	if authErr != nil {
-		w.WriteHeader(401)
-		json.NewEncoder(w).Encode(map[string]string{"error": "unauthorized"})
+		writeAuthError(w, authErr)
 		return
 	}
 
 	var req struct {
-		CampaignID  int `json:"campaign_id"`
-		CharacterID int `json:"character_id"`
+		CampaignID  int    `json:"campaign_id"`
+		CharacterID int    `json:"character_id"`
+		Reason      string `json:"reason"`
 	}
 	if decodeErr := json.NewDecoder(r.Body).Decode(&req); decodeErr != nil {
 		w.WriteHeader(400)
@@ -975,27 +980,37 @@ func handleGMKickCharacter(w http.ResponseWriter, r *http.Request) {
 		json.NewEncoder(w).Encode(map[string]string{"error": "not_gm_of_campaign"})
 		return
 	}
-
-	// Delete character's actions first
-	db.Exec("DELETE FROM actions WHERE character_id = $1", req.CharacterID)
-	// Delete the character
-	result, delErr := db.Exec("DELETE FROM characters WHERE id = $1 AND lobby_id = $2", req.CharacterID, req.CampaignID)
-	if delErr != nil {
-		w.WriteHeader(500)
-		json.NewEncoder(w).Encode(map[string]string{"error": "delete_failed", "details": delErr.Error()})
-		return
-	}
-
-	rows, _ := result.RowsAffected()
-	if rows == 0 {
+	var name string
+	if db.QueryRow(`SELECT name FROM characters WHERE id = $1 AND lobby_id = $2`, req.CharacterID, req.CampaignID).Scan(&name) != nil {
 		w.WriteHeader(404)
 		json.NewEncoder(w).Encode(map[string]string{"error": "character_not_found_in_campaign"})
 		return
 	}
 
+	// The character leaves the campaign; it is not erased (live test, Nov 14: this command deleted the character and its
+	// actions for good, so a player lost the character and the server's admin could not restore it).
+	if c, fighting := ptLoadCombat(req.CampaignID); fighting && c.slotOf(req.CharacterID) >= 0 {
+		rreq, rrec := ptInternal(http.MethodPost, fmt.Sprintf("/api/campaigns/%d/combat/remove", req.CampaignID), map[string]interface{}{"combatant_id": req.CharacterID}, agentID)
+		handleCombatRemove(rrec, rreq, req.CampaignID)
+	}
+	ensurePendingTurns()
+	db.Exec(`UPDATE pending_turns SET status = 'withdrawn', note = 'The character left the campaign.', resolved_at = NOW()
+		WHERE lobby_id = $1 AND character_id = $2 AND status IN ('pending', 'needs_gm')`, req.CampaignID, req.CharacterID)
+	if _, err := db.Exec(`UPDATE characters SET lobby_id = NULL WHERE id = $1 AND lobby_id = $2`, req.CharacterID, req.CampaignID); err != nil {
+		w.WriteHeader(500)
+		json.NewEncoder(w).Encode(map[string]string{"error": "remove_failed"})
+		return
+	}
+	text := fmt.Sprintf("%s has left the campaign (removed by the GM).", name)
+	if reason := strings.TrimSpace(req.Reason); reason != "" {
+		text = fmt.Sprintf("%s has left the campaign (removed by the GM: %s).", name, reason)
+	}
+	recordGMAction(db, req.CampaignID, "character_removed", text, text)
+
 	json.NewEncoder(w).Encode(map[string]interface{}{
-		"success": true,
-		"message": fmt.Sprintf("Character %d removed from campaign %d", req.CharacterID, req.CampaignID),
+		"success":      true,
+		"character_id": req.CharacterID,
+		"message":      fmt.Sprintf("%s is no longer in campaign %d. The character is not erased: it stays its player's, who can join another campaign with it or delete it (DELETE /api/characters/%d).", name, req.CampaignID, req.CharacterID),
 	})
 }
 

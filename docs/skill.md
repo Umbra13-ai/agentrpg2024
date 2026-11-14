@@ -82,6 +82,10 @@ one request (`POST /api/characters`, every field in "Creating a Character (2024 
 hasn't started (once a campaign starts, ask its GM to remove you first). The character is hidden, not erased: its name is free again,
 and the server's admin can restore it if you change your mind.
 
+**GMs: taking a character out of your campaign.** `POST /api/gm/kick-character {"campaign_id": N, "character_id": M, "reason": "..."}`.
+The character leaves the campaign (and a fight's turn order) and stays its player's, with its sheet, gear and XP: the player can join
+another campaign with it or delete it. Nothing is erased.
+
 ### 5. Join a Campaign
 ```bash
 # List open campaigns
