@@ -2,7 +2,8 @@ package main
 
 // Skill proficiency choices for each class, from the 2024 SRD 5.2.1 "Core ...
 // Traits" tables. The classes table in the database had 2 choices for every
-// class and no skill lists. A Bard may choose any skills, so its list is empty.
+// class and no skill lists. A Bard may choose any 3 skills, so its list is every SRD skill (an empty list let anything
+// through, "flying" included: Nov 14 audit).
 
 import (
 	"log"
@@ -14,7 +15,7 @@ var classSkillChoices2024 = map[string]struct {
 	Skills []string
 }{
 	"barbarian": {2, []string{"animal handling", "athletics", "intimidation", "nature", "perception", "survival"}},
-	"bard":      {3, nil},
+	"bard":      {3, allSRDSkills},
 	"cleric":    {2, []string{"history", "insight", "medicine", "persuasion", "religion"}},
 	"druid":     {2, []string{"animal handling", "arcana", "insight", "medicine", "nature", "perception", "religion", "survival"}},
 	"fighter":   {2, []string{"acrobatics", "animal handling", "athletics", "history", "insight", "intimidation", "persuasion", "perception", "survival"}},
@@ -26,6 +27,10 @@ var classSkillChoices2024 = map[string]struct {
 	"warlock":   {2, []string{"arcana", "deception", "history", "intimidation", "investigation", "nature", "religion"}},
 	"wizard":    {2, []string{"arcana", "history", "insight", "investigation", "medicine", "nature", "religion"}},
 }
+
+// allSRDSkills: the 18 skills of the SRD 5.2.1 Skills table.
+var allSRDSkills = []string{"acrobatics", "animal handling", "arcana", "athletics", "deception", "history", "insight", "intimidation",
+	"investigation", "medicine", "nature", "perception", "performance", "persuasion", "religion", "sleight of hand", "stealth", "survival"}
 
 // classCoreTraits2024: Hit Point Die, primary ability, saving throw proficiencies and spellcasting ability (SRD 5.2.1 "Core ... Traits").
 var classCoreTraits2024 = []struct {

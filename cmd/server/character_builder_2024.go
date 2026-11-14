@@ -265,6 +265,11 @@ func skillOptionDetails(allowed []string) map[string]string {
 }
 
 func classSkillChoices(class string) (int, []string) {
+	if c, ok := classSkillChoices2024[class]; ok { // the SRD's lists (a Bard's is every skill), as creation checks them
+		out := append([]string(nil), c.Skills...)
+		sort.Strings(out)
+		return c.Count, out
+	}
 	var list string
 	var n int
 	db.QueryRow(`SELECT COALESCE(skill_choices,''), COALESCE(num_skill_choices,2) FROM classes WHERE slug = $1`, class).Scan(&list, &n)
@@ -346,7 +351,7 @@ func backgroundAbilityInfo(abilities []string, class string) map[string]interfac
 		what[abilityFullNames[a]] = abilityDescriptions[a]
 	}
 	out := map[string]interface{}{
-		"how_it_works":      srdAdjustRule + " You choose in Step 5, after you set your scores.",
+		"how_it_works":     srdAdjustRule + " You choose in Step 5, after you set your scores.",
 		"what_each_is_for": what,
 	}
 	if g := abilityGuidance(class); g != nil {
@@ -552,61 +557,129 @@ func builderSteps(body map[string]interface{}, agentID int, withCheck bool) []bu
 	// 2. Class choices
 	s2 := builderStep{Key: "class_choices", Title: "Step 2: Your class's choices",
 		Explain: "Each class makes its own choices at level 1: skills, and for some Weapon Mastery, instruments, Expertise, a Divine or Primal Order, and the starting equipment. Spells are chosen after the character is made (GET /api/characters/{id}/setup)."}
+	var leftovers []map[string]interface{} // answers the class doesn't take (left from an earlier class), flagged after its own choices
 	if classOK {
 		n, allowed := classSkillChoices(class)
-		have := blist(body, "skill_proficiencies")
-		avoid := map[string]bool{}
+		have := normalizeListField(body, "skill_proficiencies", canonSkill) // "sleight_of_hand" is saved as "sleight of hand"
+		// a class skill the character already gets elsewhere would be lost (creation refuses it): the background's skills, the
+		// species' skill and the Human's Skilled picks are left out of the options and refused, each saying where it comes from
+		from := map[string]string{}
 		if bg != nil {
 			for _, s := range bg.Skills {
-				avoid[strings.ToLower(s)] = true
+				from[normSkillName(s)] = "your background"
 			}
 		}
-		prob := ""
-		okSkills := len(have) == n
+		spSkill, featSkills, featTools := draftSpeciesProficiencies(body)
+		if spSkill != "" && from[spSkill] == "" {
+			from[spSkill] = "your species (species_choices.skill)"
+		}
+		for _, s := range featSkills {
+			if from[s] == "" {
+				from[s] = "your Skilled feat (species_feat_choices)"
+			}
+		}
 		allowedSet := map[string]bool{}
 		for _, a := range allowed {
 			allowedSet[a] = true
 		}
+		var offered, fromBg, fromSpecies []string
+		for _, a := range allowed {
+			switch from[a] {
+			case "":
+				offered = append(offered, a)
+			case "your background":
+				fromBg = append(fromBg, a)
+			default:
+				fromSpecies = append(fromSpecies, a)
+			}
+		}
+		prob := ""
+		seenSk := map[string]bool{}
 		for _, h := range have {
-			if len(allowed) > 0 && !allowedSet[strings.NewReplacer("_", " ", "-", " ").Replace(h)] {
-				okSkills, prob = false, h+" isn't one of your class's skills"
+			switch {
+			case seenSk[h]:
+				prob = fmt.Sprintf("you chose %s twice: choose %d different skills", h, n)
+			case !allowedSet[h]:
+				prob = fmt.Sprintf("%s isn't one of your class's skills: choose from %s", h, strings.Join(offered, ", "))
+			case from[h] != "":
+				prob = fmt.Sprintf("%s also comes from %s: choose another so you don't lose a proficiency", h, from[h])
 			}
-			if avoid[h] {
-				okSkills, prob = false, h+" also comes from your background: choose another so you don't lose a proficiency"
+			if prob != "" {
+				break
 			}
+			seenSk[h] = true
 		}
-		if len(have) != n && prob == "" && len(have) > 0 {
-			prob = fmt.Sprintf("choose exactly %d", n)
+		if prob == "" && len(have) > 0 && len(have) != n {
+			prob = fmt.Sprintf("choose exactly %d (you chose %d)", n, len(have))
 		}
-		// the options leave out the skills the background already gives (they'd be refused), and say which (Nov 14 tester)
-		offered := allowed
-		var fromBg []string
-		if len(avoid) > 0 {
-			offered = nil
-			for _, a := range allowed {
-				if avoid[a] {
-					fromBg = append(fromBg, a)
-				} else {
-					offered = append(offered, a)
-				}
-			}
-		}
+		okSkills := len(have) == n && prob == ""
 		skillChoice := choice("skill_proficiencies", fmt.Sprintf("%d skills from your class's list", n), n, offered, have, okSkills, prob)
 		skillChoice["option_details"] = skillOptionDetails(offered) // what each skill is, so the player can choose knowing what it does
 		if len(fromBg) > 0 {
 			skillChoice["left_out_your_background_gives_them"] = fromBg
 		}
+		if len(fromSpecies) > 0 {
+			skillChoice["left_out_your_species_gives_them"] = fromSpecies
+		}
 		s2.Choices = append(s2.Choices, skillChoice)
-		sug := map[string]interface{}{"skill_proficiencies": pickFrom(skillPrefs[class], allowed, avoid, n)}
+		// the suggestion avoids those skills too and, before a background is chosen, the skills of the background Step 3 will
+		// suggest, so taking every suggestion in order never reopens this step (Nov 14 audit: Acolyte's Insight, Soldier's Athletics)
+		sugAvoid := map[string]bool{}
+		if bg == nil {
+			if pb := game.GetBackground(bestBackground(class, nil)); pb != nil {
+				for _, s := range pb.Skills {
+					sugAvoid[normSkillName(s)] = true
+				}
+			}
+		}
+		sugSkills := pickFrom(skillPrefs[class], offered, sugAvoid, n)
+		if len(sugSkills) < n {
+			sugSkills = pickFrom(skillPrefs[class], offered, map[string]bool{}, n)
+		}
+		sug := map[string]interface{}{"skill_proficiencies": sugSkills}
 		if !okSkills {
 			s2.Remaining++
 		}
+		// the starting equipment answer: a letter, or an option exactly as listed ("a: Chain Mail, ...")
+		eqKeys := startingOptionKeys(class)
+		eq, eqProblem := "", ""
+		if raw := body["starting_equipment"]; raw != nil {
+			if s, isText := raw.(string); !isText {
+				eqProblem = "send one option as text: " + strings.Join(eqKeys, " or ")
+			} else {
+				eq = strings.ToLower(strings.TrimSpace(s))
+				for _, k := range eqKeys {
+					if eq == strings.ToLower(k+": "+kitText(class, k)) {
+						eq = k
+					}
+				}
+				if eq != "" && !containsStr(eqKeys, eq) {
+					eqProblem = fmt.Sprintf("%q is not an option: send %s", s, strings.Join(eqKeys, " or "))
+				} else if eq != "" && eq != s {
+					body["starting_equipment"] = eq // saved as its letter
+				}
+			}
+		}
 		if mc := masteryCount(class, 1); mc > 0 {
+			// the weapons of the kit chosen (kit a until one is chosen, as the suggestion takes it), not always kit a (Nov 14 audit)
+			kitKey := "a"
+			if eq != "" && eqProblem == "" {
+				kitKey = eq
+			}
 			var kit []string
-			for _, it := range classStartingEquipment[class]["a"].Items {
+			for _, it := range classStartingEquipment[class][kitKey].Items {
 				if _, _, ok := findWeapon(it.Name); ok {
 					kit = append(kit, strings.ToLower(it.Name))
 				}
+			}
+			kitHint := ""
+			switch {
+			case len(kit) > 0 && kitKey == eq:
+				kitHint = " (the weapons of the kit you chose are a good choice: " + strings.Join(kit, ", ") + ")"
+			case len(kit) > 0:
+				kitHint = " (the weapons of starting equipment a, the suggested kit, are a good choice: " + strings.Join(kit, ", ") + ")"
+			default:
+				kitHint = " (you chose gold, not a kit: choose weapons you plan to buy in the shop)"
 			}
 			// the same check as creation (Nov 14 tester: step 2 took flail and javelin, the review refused them): every pick must be
 			// a weapon the class can master, and the options list them
@@ -641,11 +714,11 @@ func builderSteps(body map[string]interface{}, agentID int, withCheck bool) []bu
 				}
 			}
 			okM := len(m) == mc && mProblem == ""
-			mChoice := choice("weapon_masteries", fmt.Sprintf("Weapon Mastery: %d kinds of weapon you are proficient with (the weapons of your starting kit are a good choice: %s)", mc, strings.Join(kit, ", ")), mc, mOpts, m, okM, mProblem)
+			mChoice := choice("weapon_masteries", fmt.Sprintf("Weapon Mastery: %d kinds of weapon you are proficient with%s", mc, kitHint), mc, mOpts, m, okM, mProblem)
 			mChoice["option_details"] = mDetails
 			s2.Choices = append(s2.Choices, mChoice)
 			var mSug []string // only weapons the check accepts
-			for _, w := range append(kit, masteryFallback[class]...) {
+			for _, w := range append(append([]string(nil), kit...), masteryFallback[class]...) {
 				if _, ok := resolveMasteryPick(class, w); ok {
 					mSug = append(mSug, w)
 				}
@@ -655,21 +728,43 @@ func builderSteps(body map[string]interface{}, agentID int, withCheck bool) []bu
 			if !okM {
 				s2.Remaining++
 			}
+		} else if hasAnswer(body["weapon_masteries"]) {
+			leftovers = append(leftovers, leftoverChoice("weapon_masteries", body["weapon_masteries"], fmt.Sprintf("A %s has no Weapon Mastery", titleWords(class))))
+			sug["weapon_masteries"] = nil
 		}
 		if tc := game.ToolChoicesFor(class, nil); len(tc) > 0 {
-			tools := blist(body, "tool_proficiencies")
+			canon := classToolCanon(tc[0].Options)
+			// the actual tools, each saved under its option name ("Musical Instrument (Lute)" as "lute", as creation reads it), and a
+			// problem for one that isn't among them (Nov 14 tester: the options were only the categories)
+			tools := normalizeListField(body, "tool_proficiencies", canon)
 			pending := game.PendingToolChoices(tc, strings.Join(tools, ", "))
-			// the actual tools, and a problem for one that isn't among them (Nov 14 tester: the options were only the categories,
-			// and a tool the builder didn't recognise left the step open with no message)
-			bare := func(s string) string { return strings.NewReplacer("'", "", "’", "").Replace(game.NormalizeToolName(s)) }
-			allowed := map[string]bool{}
+			// a tool the character gets anyway (the background's, a Skilled pick) would be a wasted choice: left out and refused
+			toolFrom := map[string]string{}
+			if bg != nil && bg.Tool != "" {
+				if t, ok := game.FindTool(bg.Tool); ok {
+					toolFrom[t.Name] = "your background"
+				}
+			}
+			for _, t := range featTools {
+				if toolFrom[t] == "" {
+					toolFrom[t] = "your Skilled feat (species_feat_choices)"
+				}
+			}
+			var tOpts []string
 			for _, o := range tc[0].Options {
-				allowed[bare(o)] = true
+				if toolFrom[o] == "" {
+					tOpts = append(tOpts, o)
+				}
 			}
 			toolProblem := ""
 			for _, t := range tools {
-				if !allowed[bare(t)] {
-					toolProblem = fmt.Sprintf("%q is not one of the tools a %s can choose: pick from the options", t, titleWords(class))
+				c, ok := canon(t)
+				if !ok {
+					toolProblem = fmt.Sprintf("%q is not one of the tools a %s can choose: choose from %s", t, titleWords(class), strings.Join(tOpts, ", "))
+					break
+				}
+				if src := toolFrom[c]; src != "" {
+					toolProblem = fmt.Sprintf("%s also comes from %s: choose another so you don't lose a proficiency", c, src)
 					break
 				}
 			}
@@ -680,83 +775,122 @@ func builderSteps(body map[string]interface{}, agentID int, withCheck bool) []bu
 			if toolWhat == "" {
 				toolWhat = "tools your class lets you choose"
 			}
-			s2.Choices = append(s2.Choices, choice("tool_proficiencies", toolWhat, tc[0].Count, tc[0].Options, tools, len(pending) == 0 && toolProblem == "", toolProblem))
+			s2.Choices = append(s2.Choices, choice("tool_proficiencies", toolWhat, tc[0].Count, tOpts, tools, len(pending) == 0 && toolProblem == "", toolProblem))
+			toolPrefs := []string{"flute"}
 			if class == "bard" {
-				sug["tool_proficiencies"] = []string{"lute", "flute", "drum"}
-			} else {
-				sug["tool_proficiencies"] = []string{"flute"}
+				toolPrefs = []string{"lute", "flute", "drum"}
 			}
-			if len(pending) > 0 {
+			sug["tool_proficiencies"] = pickFrom(toolPrefs, tOpts, map[string]bool{}, tc[0].Count)
+			if len(pending) > 0 || toolProblem != "" {
 				s2.Remaining++
+			}
+		} else if hasAnswer(body["tool_proficiencies"]) {
+			// creation takes only the class's own tools here (a no-op); anything else is refused there, so it is refused here
+			own := game.ProficienciesFor(game.CharacterInput{FirstClass: class}).Tools
+			items := normalizeListField(body, "tool_proficiencies", func(s string) (string, bool) {
+				if t, ok := findToolLoose(s); ok && game.HasToolProficiency(own, t.Name) {
+					return t.Name, true // "Thieves Tools" is saved as "thieves' tools", as creation reads it
+				}
+				return "", false
+			})
+			extra := len(items) == 0
+			for _, t := range items {
+				if !game.HasToolProficiency(own, t) {
+					extra = true
+				}
+			}
+			if extra {
+				leftovers = append(leftovers, leftoverChoice("tool_proficiencies", body["tool_proficiencies"], fmt.Sprintf("A %s has no tools to choose (tool_proficiencies is for a Bard's or a Monk's choice)", titleWords(class))))
+				sug["tool_proficiencies"] = nil
 			}
 		}
 		if class == "rogue" {
-			// Expertise: 2 skills the character has (class, background, species), checked here as creation checks it (Nov 14: the
-			// suggestion was always Stealth and Perception, and the review refused it when the rogue hadn't taken those)
+			// Expertise: 2 skills the character has (class, background, species, the Human's Skilled feat), checked here as creation
+			// checks it (Nov 14: the suggestion was always Stealth and Perception, and the review refused it when the rogue hadn't
+			// taken those)
 			profSet := map[string]bool{}
 			var profs []string
-			addProf := func(s string) {
-				s = strings.ToLower(strings.TrimSpace(s))
-				if s != "" && !profSet[s] {
-					profSet[s] = true
-					profs = append(profs, s)
+			addProf := func(set map[string]bool, list *[]string, s string) {
+				s = normSkillName(s)
+				if s != "" && !set[s] {
+					set[s] = true
+					*list = append(*list, s)
 				}
 			}
-			for _, s := range have {
-				addProf(s)
+			others := append([]string(nil), featSkills...) // from the background, the species and the Skilled feat
+			if spSkill != "" {
+				others = append([]string{spSkill}, others...)
 			}
 			if bg != nil {
-				for _, s := range bg.Skills {
-					addProf(s)
-				}
+				others = append(append([]string(nil), bg.Skills...), others...)
 			}
-			addProf(bstr(bmap(body, "species_choices"), "skill"))
-			e := blist(body, "expertise")
+			for _, s := range append(append([]string(nil), have...), others...) {
+				addProf(profSet, &profs, s)
+			}
+			e := normalizeListField(body, "expertise", canonSkill)
 			eProb := ""
 			seenE := map[string]bool{}
 			for _, x := range e {
-				k := strings.ToLower(strings.TrimSpace(x))
-				if seenE[k] {
+				if seenE[x] {
 					eProb = fmt.Sprintf("you chose %s twice: choose 2 different skills", x)
 					break
 				}
-				seenE[k] = true
-				if !profSet[k] {
-					eProb = fmt.Sprintf("%s isn't one of your skill proficiencies (class, background or species): Expertise is for skills you have", x)
+				seenE[x] = true
+				if !profSet[x] {
+					eProb = fmt.Sprintf("%s isn't one of your skill proficiencies (class, background, species or Skilled feat): Expertise is for skills you have", x)
+					if len(profs) > 0 {
+						eProb += " (" + strings.Join(profs, ", ") + ")"
+					}
 					break
 				}
 			}
 			if eProb == "" && len(e) > 2 {
 				eProb = "choose exactly 2"
 			}
-			s2.Choices = append(s2.Choices, choice("expertise", "Expertise: 2 of your skill proficiencies (class, background or species) get double your Proficiency Bonus", 2, profs, e, len(e) == 2 && eProb == "", eProb))
+			s2.Choices = append(s2.Choices, choice("expertise", "Expertise: 2 of your skill proficiencies (class, background, species or Skilled feat) get double your Proficiency Bonus", 2, profs, e, len(e) == 2 && eProb == "", eProb))
+			// suggested from the skills the character will have once the suggestion is taken (Nov 14 audit: it was null before the
+			// skills were chosen, so one use_suggestion left Expertise open)
+			sugSet, sugList := profSet, profs
+			if !okSkills {
+				sugSet, sugList = map[string]bool{}, nil
+				for _, s := range append(append([]string(nil), sugSkills...), others...) {
+					addProf(sugSet, &sugList, s)
+				}
+			}
 			var eSug []string
-			for _, p := range []string{"stealth", "perception", "sleight of hand", "acrobatics", "deception", "investigation", "insight", "persuasion"} {
-				if profSet[p] && len(eSug) < 2 {
+			for _, p := range append([]string{"stealth", "perception", "sleight of hand", "acrobatics", "deception", "investigation", "insight", "persuasion"}, sugList...) {
+				if sugSet[p] && len(eSug) < 2 && !containsStr(eSug, p) {
 					eSug = append(eSug, p)
 				}
 			}
-			for _, p := range profs {
-				if len(eSug) < 2 && !containsStr(eSug, p) {
-					eSug = append(eSug, p)
-				}
+			if len(eSug) == 2 {
+				sug["expertise"] = eSug
 			}
-			sug["expertise"] = eSug
 			if len(e) != 2 || eProb != "" {
 				s2.Remaining++
 			}
+		} else if hasAnswer(body["expertise"]) {
+			leftovers = append(leftovers, leftoverChoice("expertise", body["expertise"], "Only Rogues choose Expertise at level 1 (Bards, Rangers and Wizards choose theirs after creation)"))
+			sug["expertise"] = nil
 		}
-		if class == "cleric" || class == "druid" {
-			field, opts := "divine_order", []string{"protector", "thaumaturge"}
-			sv := "thaumaturge"
-			if class == "druid" {
-				field, opts = "primal_order", []string{"magician", "warden"}
-				sv = "magician"
+		coSug := map[string]interface{}{}
+		co := bmap(body, "class_options")
+		for _, o := range []struct {
+			class, field, sv string
+			opts             []string
+		}{{"cleric", "divine_order", "thaumaturge", []string{"protector", "thaumaturge"}}, {"druid", "primal_order", "magician", []string{"magician", "warden"}}} {
+			if class != o.class {
+				if co != nil && hasAnswer(co[o.field]) { // left from an earlier class, or sent by mistake: creation refuses it
+					leftovers = append(leftovers, leftoverChoice("class_options."+o.field, co[o.field], fmt.Sprintf("Only %ss choose a %s", titleWords(o.class), o.field)))
+					coSug[o.field] = nil
+				}
+				continue
 			}
-			v := strings.ToLower(strings.TrimSpace(bstr(bmap(body, "class_options"), field)))
+			field, opts := o.field, o.opts
+			v := strings.ToLower(strings.TrimSpace(bstr(co, field)))
 			if f := strings.FieldsFunc(v, func(r rune) bool { return r == ' ' || r == '(' || r == ':' || r == ',' }); len(f) > 0 && containsStr(opts, f[0]) && f[0] != v {
 				v = f[0] // "thaumaturge (one extra cantrip ...)" means thaumaturge
-				bmap(body, "class_options")[field] = v
+				co[field] = v
 			}
 			orderProblem := ""
 			if v != "" && !containsStr(opts, v) {
@@ -765,21 +899,19 @@ func builderSteps(body map[string]interface{}, agentID int, withCheck bool) []bu
 			orderChoice := choice("class_options."+field, "your order", 1, opts, nilIfEmpty(v), v != "" && orderProblem == "", orderProblem)
 			orderChoice["option_details"] = srdOrders[field] // the SRD's text for each order
 			s2.Choices = append(s2.Choices, orderChoice)
-			sug["class_options"] = map[string]interface{}{field: sv}
+			coSug[field] = o.sv
 			if v == "" || orderProblem != "" {
 				s2.Remaining++
 			}
 		}
+		if len(coSug) > 0 {
+			sug["class_options"] = coSug
+		}
 		var eqOpts []string
-		for _, k := range startingOptionKeys(class) {
+		for _, k := range eqKeys {
 			eqOpts = append(eqOpts, k+": "+kitText(class, k))
 		}
-		eq := strings.ToLower(bstr(body, "starting_equipment"))
-		eqProblem := ""
-		if eq != "" && !containsStr(startingOptionKeys(class), eq) {
-			eqProblem = fmt.Sprintf("%q is not an option: send %s", eq, strings.Join(startingOptionKeys(class), " or "))
-		}
-		s2.Choices = append(s2.Choices, choice("starting_equipment", "your starting equipment: the kit, or gold to buy your own in the shop after the character is made (any gold left over can be spent there too)", 1, eqOpts, nilIfEmpty(eq), eq != "" && eqProblem == "", eqProblem))
+		s2.Choices = append(s2.Choices, choice("starting_equipment", "your starting equipment: the kit, or gold to buy your own in the shop after the character is made (any gold left over can be spent there too); send the letter", 1, eqOpts, nilIfEmpty(eq), eq != "" && eqProblem == "", eqProblem))
 		sug["starting_equipment"] = "a"
 		if eq == "" {
 			s2.Remaining++
@@ -800,6 +932,7 @@ func builderSteps(body map[string]interface{}, agentID int, withCheck bool) []bu
 		}
 		s2.Explain += " A " + titleWords(class) + " chooses: " + strings.Join(what, "; ") + "."
 	}
+	s2.Choices = append(s2.Choices, leftovers...)
 	finishStep(&s2)
 	steps = append(steps, s2)
 
@@ -807,50 +940,52 @@ func builderSteps(body map[string]interface{}, agentID int, withCheck bool) []bu
 	s3 := builderStep{Key: "background", Title: "Step 3: Choose a background",
 		Explain: "Your background is what you did before adventuring. It raises three of your abilities (in Step 5), and gives two skills, a tool, an Origin feat and equipment."}
 	var bgOpts []map[string]interface{}
-	bestBG, bestScore := "", -1
 	for _, k := range game.BackgroundSlugs() {
 		b := game.GetBackground(k)
 		if b == nil {
 			continue
 		}
 		bo := map[string]interface{}{"background": b.Key, "abilities": b.AbilityScores, "origin_feat": strings.TrimSpace(b.Feat + " " + b.FeatNote), "skills": b.Skills, "tool": firstNonEmpty(b.Tool, "a "+b.ToolCategory+" set of your choice")}
-		bo["origin_feat_does"] = originFeatDoes(b.Feat, b.FeatNote) // what the Origin feat does, so the player can choose knowing it
-		bo["tool_does"] = toolDoes(b.Tool, b.ToolCategory)          // what the tool is for
-		bo["skills_do"] = skillOptionDetails(b.Skills)               // what its two skills cover
+		bo["origin_feat_does"] = originFeatDoes(b.Feat, b.FeatNote)              // what the Origin feat does, so the player can choose knowing it
+		bo["tool_does"] = toolDoes(b.Tool, b.ToolCategory)                       // what the tool is for
+		bo["skills_do"] = skillOptionDetails(b.Skills)                           // what its two skills cover
 		bo["ability_bonuses_do"] = backgroundAbilityInfo(b.AbilityScores, class) // what its three abilities are for, and how they fit the class
-		bo["equipment_a"] = backgroundKit(b)                          // what the package holds
+		bo["equipment_a"] = backgroundKit(b)                                     // what the package holds
 		bo["equipment_b"] = fmt.Sprintf("%d GP and no equipment", game.BackgroundAltGold)
 		bgOpts = append(bgOpts, bo)
-		if arr, ok := phbArray[class]; ok {
-			vals := []int{}
-			for _, a := range b.AbilityScores {
-				for i, k6 := range abilityKeys6 {
-					if k6 == a {
-						vals = append(vals, arr[i])
-					}
-				}
-			}
-			sort.Sort(sort.Reverse(sort.IntSlice(vals)))
-			if len(vals) >= 3 && (2*vals[0]+vals[1])*100+vals[2] > bestScore { // +2 and +1 where they count most; the third breaks a tie
-				bestScore, bestBG = (2*vals[0]+vals[1])*100+vals[2], b.Key
-			}
-		}
 	}
 	s3.Choices = append(s3.Choices, choice("background", "your background", 1, bgOpts, nilIfEmpty(bgKey), bg != nil, ifStr(bgKey != "" && bg == nil, notOneOf("background", bgKey, bgOpts))))
 	sug3 := map[string]interface{}{}
-	if bestBG != "" && bg == nil { // never suggest replacing the background the player chose (Nov 13)
-		sug3["background"] = bestBG
-	}
 	if bg == nil {
 		s3.Remaining++
+		// the background that suits the class's abilities best, but not one that repeats a class skill already chosen (Nov 14 audit:
+		// taking every suggestion in order reopened Step 2 for 5 classes)
+		classSkills := map[string]bool{}
+		for _, s := range blist(body, "skill_proficiencies") {
+			classSkills[normSkillName(s)] = true
+		}
+		if best := bestBackground(class, classSkills); best != "" { // never suggest replacing the background the player chose (Nov 13)
+			sug3["background"] = best
+		}
 	} else {
+		toolOpts := []string{"dice set", "dragonchess set", "playing card set", "three-dragon ante set"}
+		bt := body["background_tool"]
 		if bg.ToolCategory != "" {
-			t := bstr(body, "background_tool")
+			t, isText := bt.(string)
+			t = strings.TrimSpace(t)
 			toolProblem := ""
-			if tl, ok := game.FindTool(t); t != "" && (!ok || tl.Category != bg.ToolCategory) {
+			if bt != nil && !isText {
+				toolProblem = "send the kind of Gaming Set as text: " + strings.Join(toolOpts, ", ")
+			} else if tl, ok := game.FindTool(t); t != "" && (!ok || tl.Category != bg.ToolCategory) {
 				toolProblem = fmt.Sprintf("%q is not a Gaming Set: choose dice set, dragonchess set, playing card set or three-dragon ante set", t)
+			} else if ok {
+				for _, o := range toolOpts { // "Gaming Set (Dice)" is saved as "dice set"
+					if ot, _ := game.FindTool(o); ot.Name == tl.Name && o != t {
+						body["background_tool"], t = o, o
+					}
+				}
 			}
-			toolChoice := choice("background_tool", "the kind of "+bg.ToolCategory+" set", 1, []string{"dice set", "dragonchess set", "playing card set", "three-dragon ante set"}, nilIfEmpty(t), t != "" && toolProblem == "", toolProblem)
+			toolChoice := choice("background_tool", "the kind of "+bg.ToolCategory+" set", 1, toolOpts, nilIfEmpty(t), t != "" && toolProblem == "", toolProblem)
 			toolChoice["option_details"] = map[string]string{
 				"dice set":              srdTools["gaming set"],
 				"dragonchess set":       srdTools["gaming set"],
@@ -862,20 +997,41 @@ func builderSteps(body map[string]interface{}, agentID int, withCheck bool) []bu
 			if t == "" || toolProblem != "" {
 				s3.Remaining++
 			}
+		} else if hasAnswer(bt) {
+			// this background's tool is fixed: a background_tool would be ignored at creation (Nov 14 audit), unless it names that tool
+			t, _ := bt.(string)
+			ft, ok1 := findToolLoose(t)
+			bgt, ok2 := findToolLoose(bg.Tool)
+			if !ok1 || !ok2 || ft.Name != bgt.Name {
+				s3.Choices = append(s3.Choices, leftoverChoice("background_tool", bt, fmt.Sprintf("%s gives %s; only a background with a tool to choose (%s) takes background_tool", bg.Name, game.ToolDisplayName(bg.Tool), strings.Join(backgroundsWithToolChoice(), ", "))))
+				sug3["background_tool"] = nil
+			}
 		}
+		fcRaw := body["background_feat_choices"]
 		if bg.Feat == "magic_initiate" {
 			list := strings.ToLower(bg.FeatNote)
 			fc := bmap(body, "background_feat_choices")
-			miProblem := magicInitiateProblem(fc, list)
+			miProblem := ""
+			if fcRaw != nil && fc == nil {
+				miProblem = "send background_feat_choices as an object: {\"cantrips\": [2 cantrips], \"spell\": \"...\", \"spellcasting_ability\": \"int, wis or cha\"}"
+			}
+			if lv, has := fc["list"]; has && lv != nil { // the list is fixed by the background; creation refuses another (Nov 14 audit)
+				if ls, isText := lv.(string); !isText || strings.ToLower(strings.TrimSpace(ls)) != list {
+					miProblem = fmt.Sprintf("%s's Magic Initiate uses the %s list, not %v: send \"list\": %q", bg.Name, list, lv, list)
+				}
+			}
+			if miProblem == "" {
+				miProblem = magicInitiateProblem(fc, list)
+			}
 			spCantrips := draftSpeciesCantrips(body)
 			if miProblem == "" {
 				miProblem = alreadyKnownProblem(fc, spCantrips, nil)
 			}
 			okF := fc != nil && miProblem == "" && len(blist(fc, "cantrips")) == 2 && bstr(fc, "spell") != "" && bstr(fc, "spellcasting_ability") != ""
 			featChoice := choice("background_feat_choices", fmt.Sprintf("Magic Initiate (%s): 2 cantrips and 1 level 1 spell from the %s list, and the ability you cast them with (int, wis or cha)", bg.FeatNote, bg.FeatNote), 1,
-				magicInitiateOptions(list, spCantrips, nil), fc, okF, miProblem)
+				magicInitiateOptions(list, spCantrips, nil), fcRaw, okF, miProblem)
 			featChoice["option_details"] = map[string]interface{}{
-				"what_the_feat_does": originFeatDoes(bg.Feat, bg.FeatNote),
+				"what_the_feat_does":   originFeatDoes(bg.Feat, bg.FeatNote),
 				"spellcasting_ability": map[string]string{"int": abilityDescriptions["int"], "wis": abilityDescriptions["wis"], "cha": abilityDescriptions["cha"]},
 			}
 			s3.Choices = append(s3.Choices, featChoice)
@@ -883,12 +1039,36 @@ func builderSteps(body map[string]interface{}, agentID int, withCheck bool) []bu
 			if !okF {
 				s3.Remaining++
 			}
+		} else if hasAnswer(fcRaw) {
+			// Alert and Savage Attacker take no choices: picks sent here would be shown and then dropped (Nov 14 audit)
+			s3.Choices = append(s3.Choices, leftoverChoice("background_feat_choices", fcRaw, fmt.Sprintf("%s's Origin feat, %s, takes no choices", bg.Name, titleWords(strings.ReplaceAll(bg.Feat, "_", " ")))))
+			sug3["background_feat_choices"] = nil
 		}
-		be := strings.ToLower(bstr(body, "background_equipment"))
-		eqChoice := choice("background_equipment", "the background's equipment (a: its package and a little gold; b: 50 GP)", 1, []string{"a", "b"}, nilIfEmpty(be), be == "" || be == "a" || be == "b", ifStr(be != "" && be != "a" && be != "b", fmt.Sprintf("%q is not an option: send a or b", be)))
+		// the equipment answer: "a" or "b" as text (Nov 14 audit: ["b"], true or 2 were marked done, then the character got package a)
+		be, beProblem := "", ""
+		if raw := body["background_equipment"]; raw != nil {
+			if s, isText := raw.(string); !isText {
+				beProblem = "send \"a\" (the package) or \"b\" (50 GP) as text"
+			} else if be = strings.ToLower(strings.TrimSpace(s)); be != "" && be != "a" && be != "b" {
+				beProblem = fmt.Sprintf("%q is not an option: send a or b", s)
+			} else if be != s {
+				body["background_equipment"] = be // saved as its letter
+			}
+		}
+		eqChoice := choice("background_equipment", "the background's equipment (a: its package and a little gold; b: 50 GP)", 1, []string{"a", "b"}, nilIfEmpty(be), beProblem == "", beProblem)
 		eqChoice["option_details"] = map[string]string{"a": backgroundKit(bg), "b": fmt.Sprintf("%d GP and no equipment: buy your own in the shop after the character is made (the setup's shop step, SRD prices)", game.BackgroundAltGold)}
 		s3.Choices = append(s3.Choices, eqChoice)
 		sug3["background_equipment"] = "a"
+		// increases saved for another background (or before one was chosen) no longer fit: said here, where the change was made
+		// (Nov 14 audit: the reply to the background change said nothing, and Step 5 replaced +2 Cha with +2 Dex later)
+		if inc := draftIncreases(body); len(inc) > 0 {
+			for k := range inc {
+				if !containsStr(bg.AbilityScores, k) {
+					s3.Warnings = append(s3.Warnings, fmt.Sprintf("Your saved ability_increases (%s) don't fit the %s, which raises %s: choose them again in Step 5.", formatIncreases(inc), bg.Name, strings.Join(bg.AbilityScores, ", ")))
+					break
+				}
+			}
+		}
 	}
 	s3.Suggestion = sug3
 	finishStep(&s3)
@@ -2434,7 +2614,7 @@ func magicInitiateProblem(fc map[string]interface{}, list string) string {
 	if len(cs) > 0 && len(cs) != 2 {
 		return fmt.Sprintf("choose exactly 2 cantrips (you chose %d)", len(cs))
 	}
-	if len(cs) == 2 && strings.EqualFold(cs[0], cs[1]) {
+	if len(cs) == 2 && builderSpellSlug(cs[0]) == builderSpellSlug(cs[1]) { // "Sacred Flame" and "sacred-flame" are the same cantrip (Nov 14 audit)
 		return "you chose the same cantrip twice: choose 2 different ones"
 	}
 	if sp := strings.ToLower(strings.ReplaceAll(strings.TrimSpace(bstr(fc, "spell")), " ", "-")); sp != "" {

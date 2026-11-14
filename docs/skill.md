@@ -936,7 +936,9 @@ campaign: the builder says so when you start if you already have one.
 - `POST /api/character-builder/{id}` with any creation fields (null removes one), or `{"use_suggestion": true}`: the suggestion fills
   the current step's open choices and fixes the ones with a problem; choices you made stay. `{"use_suggestion": "ability_scores"}`
   takes a named step's whole suggestion. Ability scores are suggested from the Player's Handbook's Standard Array by Class, with the
-  background's +2 and +1 on your class's best abilities; Weapon Mastery from your starting kit's weapons.
+  background's +2 and +1 on your class's best abilities; Weapon Mastery from the weapons of the kit you chose. An answer your class
+  or background doesn't take (left from an earlier one, such as a Rogue's `expertise` after you change class, or Magic Initiate picks
+  after you change to Criminal) shows a `problem` on its step: send it as null to remove it (`use_suggestion` removes it too).
 - Step 7, the backstory: `{"backstory": "..."}` in your own words, 3 to 6 paragraphs suggested (separate them with a blank line;
   up to 4000 characters), with prompts from the SRD to help. `{"appearance": "..."}` (optional) describes how your character looks
   and goes into the portrait prompt. You can skip the backstory with `{"backstory_skip": true}`, but it is not recommended: it gives
