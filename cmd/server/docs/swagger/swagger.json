@@ -4297,7 +4297,7 @@
      "Characters"
     ],
     "summary": "Character builder: create a character step by step",
-    "description": "Guides character creation in the order of the 2024 Player's Handbook (and the D&D Beyond builder): 1 class, 2 the class's choices (skills, Weapon Mastery, tools, Expertise, Divine/Primal Order, starting equipment), 3 background, 4 species, 5 ability scores (the PHB's Standard Array by Class is suggested), 6 name, alignment and languages, 7 backstory (3 to 6 paragraphs suggested) and appearance, 8 review (a summary before you create). POST starts a draft; GET /api/character-builder/{id} shows every step with the choices left, the current step's options and a suggestion; POST /api/character-builder/{id} with fields (any creation field; null removes one) or {\"use_suggestion\": true} (the class, the alignment and the backstory have no suggestion: send them yourself); POST /api/character-builder/{id}/finish creates the character. Then GET /api/characters/{id}/setup guides spells, gear, the shop and a portrait.",
+    "description": "Guides character creation in the order of the 2024 Player's Handbook (and the D&D Beyond builder): 1 class, 2 the class's choices (skills, Weapon Mastery, tools, Expertise, Divine/Primal Order, starting equipment), 3 background, 4 species, 5 ability scores (the Standard Array only; the PHB's Standard Array by Class is suggested), 6 name, alignment and languages, 7 backstory (3 to 6 paragraphs suggested) and appearance, 8 review (a summary before you create). POST starts a draft (with any fields, checked as an update is); GET lists your drafts (newest first; ?limit= up to 100 and ?offset=, with the total); GET /api/character-builder/{id} shows every step with the choices left, the current step's options and a suggestion; POST /api/character-builder/{id} with fields (any builder field; null removes one) or {\"use_suggestion\": true} (fills the open choices and fixes the ones with a problem; valid answers stay; the class, the alignment and the backstory have no suggestion: send them yourself). Each answer is saved as sent or refused with the reason (not_saved; 422 when other answers were saved, 400 when none was). POST /api/character-builder/{id}/finish (no body) creates the character; DELETE /api/character-builder/{id} removes a draft (a character it made is kept). Then GET /api/characters/{id}/setup guides spells, gear, the shop and a portrait.",
     "responses": {
      "200": {
       "description": "OK"
@@ -4329,7 +4329,7 @@
      "Characters"
     ],
     "summary": "Character builder: create a character step by step",
-    "description": "Guides character creation in the order of the 2024 Player's Handbook (and the D&D Beyond builder): 1 class, 2 the class's choices (skills, Weapon Mastery, tools, Expertise, Divine/Primal Order, starting equipment), 3 background, 4 species, 5 ability scores (the PHB's Standard Array by Class is suggested), 6 name, alignment and languages, 7 backstory (3 to 6 paragraphs suggested) and appearance, 8 review (a summary before you create). POST starts a draft; GET /api/character-builder/{id} shows every step with the choices left, the current step's options and a suggestion; POST /api/character-builder/{id} with fields (any creation field; null removes one) or {\"use_suggestion\": true} (the class, the alignment and the backstory have no suggestion: send them yourself); POST /api/character-builder/{id}/finish creates the character. Then GET /api/characters/{id}/setup guides spells, gear, the shop and a portrait.",
+    "description": "Guides character creation in the order of the 2024 Player's Handbook (and the D&D Beyond builder): 1 class, 2 the class's choices (skills, Weapon Mastery, tools, Expertise, Divine/Primal Order, starting equipment), 3 background, 4 species, 5 ability scores (the Standard Array only; the PHB's Standard Array by Class is suggested), 6 name, alignment and languages, 7 backstory (3 to 6 paragraphs suggested) and appearance, 8 review (a summary before you create). POST starts a draft (with any fields, checked as an update is); GET lists your drafts (newest first; ?limit= up to 100 and ?offset=, with the total); GET /api/character-builder/{id} shows every step with the choices left, the current step's options and a suggestion; POST /api/character-builder/{id} with fields (any builder field; null removes one) or {\"use_suggestion\": true} (fills the open choices and fixes the ones with a problem; valid answers stay; the class, the alignment and the backstory have no suggestion: send them yourself). Each answer is saved as sent or refused with the reason (not_saved; 422 when other answers were saved, 400 when none was). POST /api/character-builder/{id}/finish (no body) creates the character; DELETE /api/character-builder/{id} removes a draft (a character it made is kept). Then GET /api/characters/{id}/setup guides spells, gear, the shop and a portrait.",
     "responses": {
      "200": {
       "description": "OK"
@@ -4363,7 +4363,7 @@
      "Characters"
     ],
     "summary": "Character builder: create a character step by step",
-    "description": "Guides character creation in the order of the 2024 Player's Handbook (and the D&D Beyond builder): 1 class, 2 the class's choices (skills, Weapon Mastery, tools, Expertise, Divine/Primal Order, starting equipment), 3 background, 4 species, 5 ability scores (the PHB's Standard Array by Class is suggested), 6 name, alignment and languages, 7 backstory (3 to 6 paragraphs suggested) and appearance, 8 review (a summary before you create). POST starts a draft; GET /api/character-builder/{id} shows every step with the choices left, the current step's options and a suggestion; POST /api/character-builder/{id} with fields (any creation field; null removes one) or {\"use_suggestion\": true} (the class, the alignment and the backstory have no suggestion: send them yourself); POST /api/character-builder/{id}/finish creates the character. Then GET /api/characters/{id}/setup guides spells, gear, the shop and a portrait.",
+    "description": "Guides character creation in the order of the 2024 Player's Handbook (and the D&D Beyond builder): 1 class, 2 the class's choices (skills, Weapon Mastery, tools, Expertise, Divine/Primal Order, starting equipment), 3 background, 4 species, 5 ability scores (the Standard Array only; the PHB's Standard Array by Class is suggested), 6 name, alignment and languages, 7 backstory (3 to 6 paragraphs suggested) and appearance, 8 review (a summary before you create). POST starts a draft (with any fields, checked as an update is); GET lists your drafts (newest first; ?limit= up to 100 and ?offset=, with the total); GET /api/character-builder/{id} shows every step with the choices left, the current step's options and a suggestion; POST /api/character-builder/{id} with fields (any builder field; null removes one) or {\"use_suggestion\": true} (fills the open choices and fixes the ones with a problem; valid answers stay; the class, the alignment and the backstory have no suggestion: send them yourself). Each answer is saved as sent or refused with the reason (not_saved; 422 when other answers were saved, 400 when none was). POST /api/character-builder/{id}/finish (no body) creates the character; DELETE /api/character-builder/{id} removes a draft (a character it made is kept). Then GET /api/characters/{id}/setup guides spells, gear, the shop and a portrait.",
     "responses": {
      "200": {
       "description": "OK"
@@ -4395,7 +4395,39 @@
      "Characters"
     ],
     "summary": "Character builder: create a character step by step",
-    "description": "Guides character creation in the order of the 2024 Player's Handbook (and the D&D Beyond builder): 1 class, 2 the class's choices (skills, Weapon Mastery, tools, Expertise, Divine/Primal Order, starting equipment), 3 background, 4 species, 5 ability scores (the PHB's Standard Array by Class is suggested), 6 name, alignment and languages, 7 backstory (3 to 6 paragraphs suggested) and appearance, 8 review (a summary before you create). POST starts a draft; GET /api/character-builder/{id} shows every step with the choices left, the current step's options and a suggestion; POST /api/character-builder/{id} with fields (any creation field; null removes one) or {\"use_suggestion\": true} (the class, the alignment and the backstory have no suggestion: send them yourself); POST /api/character-builder/{id}/finish creates the character. Then GET /api/characters/{id}/setup guides spells, gear, the shop and a portrait.",
+    "description": "Guides character creation in the order of the 2024 Player's Handbook (and the D&D Beyond builder): 1 class, 2 the class's choices (skills, Weapon Mastery, tools, Expertise, Divine/Primal Order, starting equipment), 3 background, 4 species, 5 ability scores (the Standard Array only; the PHB's Standard Array by Class is suggested), 6 name, alignment and languages, 7 backstory (3 to 6 paragraphs suggested) and appearance, 8 review (a summary before you create). POST starts a draft (with any fields, checked as an update is); GET lists your drafts (newest first; ?limit= up to 100 and ?offset=, with the total); GET /api/character-builder/{id} shows every step with the choices left, the current step's options and a suggestion; POST /api/character-builder/{id} with fields (any builder field; null removes one) or {\"use_suggestion\": true} (fills the open choices and fixes the ones with a problem; valid answers stay; the class, the alignment and the backstory have no suggestion: send them yourself). Each answer is saved as sent or refused with the reason (not_saved; 422 when other answers were saved, 400 when none was). POST /api/character-builder/{id}/finish (no body) creates the character; DELETE /api/character-builder/{id} removes a draft (a character it made is kept). Then GET /api/characters/{id}/setup guides spells, gear, the shop and a portrait.",
+    "responses": {
+     "200": {
+      "description": "OK"
+     }
+    },
+    "requestBody": {
+     "required": true,
+     "content": {
+      "application/json": {
+       "schema": {
+        "type": "object",
+        "properties": {
+         "name": {
+          "type": "string"
+         },
+         "use_suggestion": {
+          "type": "boolean"
+         }
+        },
+        "description": "Start a draft, or fields to set"
+       }
+      }
+     }
+    },
+    "x-from-godoc": true
+   },
+   "delete": {
+    "tags": [
+     "Characters"
+    ],
+    "summary": "Character builder: create a character step by step",
+    "description": "Guides character creation in the order of the 2024 Player's Handbook (and the D&D Beyond builder): 1 class, 2 the class's choices (skills, Weapon Mastery, tools, Expertise, Divine/Primal Order, starting equipment), 3 background, 4 species, 5 ability scores (the Standard Array only; the PHB's Standard Array by Class is suggested), 6 name, alignment and languages, 7 backstory (3 to 6 paragraphs suggested) and appearance, 8 review (a summary before you create). POST starts a draft (with any fields, checked as an update is); GET lists your drafts (newest first; ?limit= up to 100 and ?offset=, with the total); GET /api/character-builder/{id} shows every step with the choices left, the current step's options and a suggestion; POST /api/character-builder/{id} with fields (any builder field; null removes one) or {\"use_suggestion\": true} (fills the open choices and fixes the ones with a problem; valid answers stay; the class, the alignment and the backstory have no suggestion: send them yourself). Each answer is saved as sent or refused with the reason (not_saved; 422 when other answers were saved, 400 when none was). POST /api/character-builder/{id}/finish (no body) creates the character; DELETE /api/character-builder/{id} removes a draft (a character it made is kept). Then GET /api/characters/{id}/setup guides spells, gear, the shop and a portrait.",
     "responses": {
      "200": {
       "description": "OK"
@@ -4429,7 +4461,7 @@
      "Characters"
     ],
     "summary": "Character builder: create a character step by step",
-    "description": "Guides character creation in the order of the 2024 Player's Handbook (and the D&D Beyond builder): 1 class, 2 the class's choices (skills, Weapon Mastery, tools, Expertise, Divine/Primal Order, starting equipment), 3 background, 4 species, 5 ability scores (the PHB's Standard Array by Class is suggested), 6 name, alignment and languages, 7 backstory (3 to 6 paragraphs suggested) and appearance, 8 review (a summary before you create). POST starts a draft; GET /api/character-builder/{id} shows every step with the choices left, the current step's options and a suggestion; POST /api/character-builder/{id} with fields (any creation field; null removes one) or {\"use_suggestion\": true} (the class, the alignment and the backstory have no suggestion: send them yourself); POST /api/character-builder/{id}/finish creates the character. Then GET /api/characters/{id}/setup guides spells, gear, the shop and a portrait.",
+    "description": "Guides character creation in the order of the 2024 Player's Handbook (and the D&D Beyond builder): 1 class, 2 the class's choices (skills, Weapon Mastery, tools, Expertise, Divine/Primal Order, starting equipment), 3 background, 4 species, 5 ability scores (the Standard Array only; the PHB's Standard Array by Class is suggested), 6 name, alignment and languages, 7 backstory (3 to 6 paragraphs suggested) and appearance, 8 review (a summary before you create). POST starts a draft (with any fields, checked as an update is); GET lists your drafts (newest first; ?limit= up to 100 and ?offset=, with the total); GET /api/character-builder/{id} shows every step with the choices left, the current step's options and a suggestion; POST /api/character-builder/{id} with fields (any builder field; null removes one) or {\"use_suggestion\": true} (fills the open choices and fixes the ones with a problem; valid answers stay; the class, the alignment and the backstory have no suggestion: send them yourself). Each answer is saved as sent or refused with the reason (not_saved; 422 when other answers were saved, 400 when none was). POST /api/character-builder/{id}/finish (no body) creates the character; DELETE /api/character-builder/{id} removes a draft (a character it made is kept). Then GET /api/characters/{id}/setup guides spells, gear, the shop and a portrait.",
     "responses": {
      "200": {
       "description": "OK"

@@ -926,22 +926,49 @@ The server address comes from `ARPG_URL` (default `http://localhost:8080`).
 **The character builder** follows the order of the 2024 Player's Handbook: 1 class, 2 the class's own choices (skills, Weapon
 Mastery, instruments, Expertise, Divine or Primal Order, starting equipment), 3 background (and its tool and Magic Initiate picks),
 4 species (and its choices), 5 ability scores (the Standard Array), 6 name, alignment and languages, 7 backstory, 8 review (a summary
-of the character before you create it). A field the builder doesn't know is refused with nothing saved (with the closest field name);
-an answer with a problem is not saved (`not_saved` says why) and the draft keeps the earlier answer. A player has one character in a
-campaign: the builder says so when you start if you already have one.
-- `POST /api/character-builder {"name": "..."}` starts a draft (kept on the server: stop and come back; `GET /api/character-builder` lists yours).
+of the character before you create it). Every answer is either saved as sent or refused with the reason:
+- A field the builder doesn't know, or a part of `species_choices`, `class_options`, `background_feat_choices` or
+  `species_feat_choices` it doesn't know, is refused with nothing saved (with the closest name).
+- An answer with a problem is not saved and the draft keeps the earlier answer: the reply lists it under `not_saved` and in
+  `message` ("NOT SAVED: ..."), with HTTP 422 when other answers in the request were saved and 400 when none was. In a group
+  (`species_choices`, `class_options`, a Magic Initiate answer) only the part with the problem is refused; the other parts are saved.
+- Each field takes one JSON type, and another is refused: text (`name`, `class`, `background`, `species`, `alignment`, `backstory`,
+  `appearance`, `ability_method`, `starting_equipment`, `background_tool`, `background_equipment`), a list of names
+  (`skill_proficiencies`, `tool_proficiencies`, `expertise`, `weapon_masteries`, `extra_languages`), a whole number (`str` to `cha`),
+  true or false (`backstory_skip`), an object (`class_options`, `species_choices`, `ability_increases` with whole numbers,
+  `background_feat_choices`, `species_feat_choices`). Text with a control character is refused (a line break is fine in the backstory
+  and the appearance); a name is at most 255 characters, with at least one letter and no invisible characters.
+- Spaces around a name or a class are removed, and obvious spellings are put in the server's form: "Sleight-of-Hand" is sleight of
+  hand, "High Elf" is high_elf, "Wisdom" is wis, "Standard Array" is standard_array, `{"strength": 2}` is `{"str": 2}` (a 0 is no
+  increase), `"spell": ["bless"]` is `"spell": "bless"`, a Tiefling's `lineage` is its `legacy`. `divine_order`, `primal_order`
+  and `draconic_ancestry` sent at the top level are read as `class_options.divine_order`, `class_options.primal_order` and
+  `species_choices.ancestry` (the reply says so under `read_as`).
+- `known_spells` is refused: spells are chosen after creation, in setup. A Fighting Style (`class_options.fighting_style`) is chosen
+  after creation too, and a subclass at level 3.
+A player has one character in a campaign: the builder says so when you start if you already have one.
+- `POST /api/character-builder {"name": "..."}` starts a draft (kept on the server: stop and come back). Fields sent here are checked
+  as in an update; a request with an unknown field, or whose answers are all refused, starts no draft. `GET /api/character-builder`
+  lists yours, newest first, with the `total` (`?limit=` up to 100 and `?offset=` for more); `DELETE /api/character-builder/{id}`
+  removes a draft (a character it made is kept).
 - `GET /api/character-builder/{id}`: every step with `done` and `choices_remaining`, the current step's `choices` (field, how many,
-  options, what you have, any `problem`), a `suggestion`, `warnings` (your class's main ability isn't your highest score; point buy
-  points left unspent) and the request to `send`.
-- `POST /api/character-builder/{id}` with any creation fields (null removes one), or `{"use_suggestion": true}`: the suggestion fills
-  the current step's open choices and fixes the ones with a problem; choices you made stay. `{"use_suggestion": "ability_scores"}`
-  takes a named step's whole suggestion. Ability scores are suggested from the Player's Handbook's Standard Array by Class, with the
-  background's +2 and +1 on your class's best abilities; Weapon Mastery from your starting kit's weapons.
+  options, what you have, any `problem`, and for a Magic Initiate answer with parts missing, `still_needed`), a `suggestion`,
+  `warnings` (your class's main ability isn't your highest score) and the request to `send`. `next` says which open choices have a
+  suggestion.
+- `POST /api/character-builder/{id}` with any builder fields (null removes one), or `{"use_suggestion": true}`: the suggestion fills
+  the current step's open choices and fixes only what has a problem; a valid answer stays (of four skills, only the one your
+  background also gives is replaced; of a Magic Initiate answer, only the missing or wrong parts). The reply lists what it filled
+  (`filled_by_suggestion`) and any earlier answer it changed (`replaced_by_suggestion`). `{"use_suggestion": "ability_scores"}` does
+  the same for a named step (class, class_choices, background, species, ability_scores, details, backstory); another name is refused.
+  When every step is done there is nothing to fill; at the review there is no suggestion. Ability scores are suggested from the
+  Player's Handbook's Standard Array by Class, with the background's +2 and +1 on your class's best abilities; Weapon Mastery from
+  your starting kit's weapons.
 - Step 7, the backstory: `{"backstory": "..."}` in your own words, 3 to 6 paragraphs suggested (separate them with a blank line;
   up to 4000 characters), with prompts from the SRD to help. `{"appearance": "..."}` (optional) describes how your character looks
   and goes into the portrait prompt. You can skip the backstory with `{"backstory_skip": true}`, but it is not recommended: it gives
   the GM and the other players something to play with.
-- Step 8 checks the whole draft as a creation would and shows a summary; `POST /api/character-builder/{id}/finish` creates the character.
+- Step 8 checks the whole draft as a creation would and shows a summary (with the background's equipment and the gold in all);
+  `POST /api/character-builder/{id}/finish` (no body) creates the character. Fields sent to `/finish` are refused and nothing is
+  created: send changes to `POST /api/character-builder/{id}` first. Only POST creates; another address under a draft answers 404.
 - `GET /api/characters/{id}/setup` then lists what is left, each with the request to send, suggestions filled in: Divine/Primal
   Order, Fighting Style, Eldritch Invocation, Expertise, cantrips and prepared spells (a Wizard's spellbook first), a weapon in hand
   (and whether you keep a hand free for spells), armor to put on, a shop if you have gold, and a portrait (`POST
@@ -972,12 +999,9 @@ curl -X POST http://localhost:8080/api/characters \
   }'
 ```
 
-**Scores:** `str` to `cha` are the scores you assigned before the background. Species give no ability scores. Generate them one of three ways (`ability_method`):
-- `standard_array`: 15, 14, 13, 12, 10 and 8, one to each ability (the example above).
-- `point_buy`: 27 points, every score 8 to 15; a score costs 8:0, 9:1, 10:2, 11:3, 12:4, 13:5, 14:7, 15:9.
-- `random`: the server rolls 4d6 and drops the lowest die, six times, and gives the highest roll to the ability you gave the highest score, the next to the next, and so on. The reply shows the rolls and the result.
-
-Without `ability_method`, the Standard Array or any legal point buy is accepted; other scores are refused (`invalid_ability_scores`).
+**Scores:** `str` to `cha` are the scores you assigned before the background. Species give no ability scores. This server uses the
+Standard Array only: 15, 14, 13, 12, 10 and 8, one to each ability (the example above), with `ability_method` `standard_array` or
+left out. Point buy and random rolls are not used: other scores, or another `ability_method`, are refused (`invalid_ability_scores`).
 
 **Background** (`background`): Acolyte, Criminal, Sage or Soldier. Each lists three abilities. Send `ability_increases` as one of them +2 and another +1 (`{"str":2,"con":1}`), or all three +1. Each background also gives:
 
@@ -994,7 +1018,7 @@ Tool proficiencies are stored under their full names: a Gaming Set or Musical In
 
 **Magic Initiate** (Acolyte, Sage) needs `background_feat_choices`: `{"list":"cleric","cantrips":["guidance","light"],"spell":"bless","spellcasting_ability":"wis"}`. The list is fixed by the background; the two cantrips and the level 1 spell must be on it, and not one your species already gives (a High Elf already knows Prestidigitation, a Rock Gnome Mending and Prestidigitation, a Tiefling Thaumaturgy): that is refused with `spell_already_known`. In the builder the choice's `options` lists what you can pick under the same names you answer with (`cantrips`, `spell`, `spellcasting_ability`, with an example under `how_to_answer`) and names the ones left out because you already have them. A part the builder doesn't know is refused with nothing saved.
 
-When some answers in a request are refused, the rest are saved: the reply lists the refused ones under `not_saved` and in `message` ("NOT SAVED: ..."). Send those again; `use_suggestion` would replace them with the suggestion.
+When some answers in a request are refused, the rest are saved: the reply lists the refused ones under `not_saved` and in `message` ("NOT SAVED: ..."). Send those again; where a refused answer's choice has a suggestion, the message says that `use_suggestion` would fill it.
 
 **Species** (`species`): Dragonborn, Dwarf, Elf, Gnome, Goliath, Halfling, Human, Orc or Tiefling. Some need `species_choices`:
 

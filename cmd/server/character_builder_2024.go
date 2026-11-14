@@ -1122,7 +1122,7 @@ func builderSteps(body map[string]interface{}, agentID int, withCheck bool) []bu
 		if len(inc) > 0 && incErr != nil {
 			incProblem = incErr.Error()
 		}
-		s5.Choices = append(s5.Choices, choice("ability_increases", fmt.Sprintf("your background's increases among %s: +2 and +1, or +1 to all three", strings.Join(bg.AbilityScores, ", ")), 1, bg.AbilityScores, inc, okInc, incProblem))
+		s5.Choices = append(s5.Choices, choice("ability_increases", fmt.Sprintf("your background's increases among %s: +2 and +1, or +1 to all three", strings.Join(bg.AbilityScores, ", ")), 1, increaseOptions(bg.AbilityScores), inc, okInc, incProblem))
 		if !okInc {
 			s5.Remaining++
 		}
@@ -1413,6 +1413,7 @@ func runCreation(body map[string]interface{}, agentID int, dry bool) map[string]
 	for k, v := range body {
 		b[k] = v
 	}
+	delete(b, "known_spells") // the builder takes no spells (an older draft may hold some): they are chosen in setup
 	if dry {
 		b["dry_run"] = true
 	}
@@ -1433,7 +1434,49 @@ func builderView(id int, body map[string]interface{}, charID *int, agentID int) 
 		return map[string]interface{}{"draft_id": id, "character_id": *charID, "draft": body,
 			"next": fmt.Sprintf("The character exists (id %d). Finish it with GET /api/characters/%d/setup: spells, gear in hand, class choices left.", *charID, *charID)}
 	}
-	steps := builderSteps(body, agentID, true)
+	return builderViewOf(id, body, builderSteps(body, agentID, true))
+}
+
+// suggestionCovers: the step's suggestion has an answer for this choice.
+func suggestionCovers(sug map[string]interface{}, field string) bool {
+	if field == "str, dex, con, int, wis, cha" {
+		_, ok := sug["str"]
+		return ok
+	}
+	top, sub := splitField(field)
+	if sub == "" {
+		_, ok := sug[top]
+		return ok
+	}
+	switch m := sug[top].(type) {
+	case map[string]interface{}:
+		_, ok := m[sub]
+		return ok
+	case map[string]string:
+		_, ok := m[sub]
+		return ok
+	}
+	return false
+}
+
+// openChoices: the fields of a step's choices still open, split by whether the step's suggestion answers them.
+func openChoices(st *builderStep) (withSug, without []string) {
+	for _, c := range st.Choices {
+		f, _ := c["field"].(string)
+		if done, _ := c["done"].(bool); done || f == "" || strings.HasPrefix(f, "(") {
+			continue
+		}
+		if suggestionCovers(st.Suggestion, f) {
+			withSug = append(withSug, f)
+		} else {
+			without = append(without, f)
+		}
+	}
+	return
+}
+
+// builderViewOf: the draft with its steps, the current step in detail and what to send next.
+func builderViewOf(id int, body map[string]interface{}, steps []builderStep) map[string]interface{} {
 	var list []map[string]interface{}
 	var current *builderStep
 	total := 0
@@ -1454,12 +1497,24 @@ func builderView(id int, body map[string]interface{}, charID *int, agentID int) 
 	}
 	out := map[string]interface{}{"draft_id": id, "steps": list, "choices_remaining": total, "draft": body,
 		"choices_remaining_note": "This count can go up: a class, background or species brings its own follow-up choices (skills, a tool, a lineage ...), and an answer that conflicts with a later one (a skill your background also gives) opens again."}
-	if charID != nil {
-		out["character_id"] = *charID
-		out["next"] = fmt.Sprintf("The character exists (id %d). Finish it with GET /api/characters/%d/setup: spells, gear in hand, class choices left.", *charID, *charID)
-		return out
+	var leftover []string // fields an older draft holds that the builder doesn't read
+	for _, k := range []string{"known_spells", "divine_order", "primal_order", "draconic_ancestry"} {
+		if _, has := body[k]; has {
+			leftover = append(leftover, k)
+		}
+	}
+	if len(leftover) > 0 {
+		out["fields_not_used"] = fmt.Sprintf("This draft holds %s from before, which the builder doesn't read or create (spells are chosen after creation, in setup; an order goes in class_options, a Dragonborn's ancestry in species_choices). Send them as null to remove them.", strings.Join(leftover, ", "))
 	}
 	if current != nil {
+		for _, c := range current.Choices { // a Magic Initiate answer with parts still missing says which (Nov 14: no word, the step stayed open)
+			f, _ := c["field"].(string)
+			if done, _ := c["done"].(bool); !done && isFeatGroup(f) && c["problem"] == nil && c["current"] != nil {
+				if need := featStillNeeded(body, f); len(need) > 0 {
+					c["still_needed"] = need
+				}
+			}
+		}
 		out["current_step"] = current
 		send := map[string]interface{}{"method": "POST", "path": fmt.Sprintf("/api/character-builder/%d", id)}
 		if len(current.Suggestion) > 0 {
@@ -1467,7 +1522,20 @@ func builderView(id int, body map[string]interface{}, charID *int, agentID int) 
 			send["or"] = map[string]interface{}{"use_suggestion": true}
 		}
 		out["send"] = send
-		out["next"] = fmt.Sprintf("%s: %d choice(s) left. Send the fields (POST /api/character-builder/%d), or {\"use_suggestion\": true} to take the suggestion; GET this draft again any time.", current.Title, current.Remaining, id)
+		if current.Key == "review" {
+			out["next"] = fmt.Sprintf("%s: the server's check of the draft found a problem: %s. Fix that field (POST /api/character-builder/%d), then GET this draft again; there is no suggestion for it.", current.Title, joinProblems(current.Problems), id)
+		} else {
+			withSug, without := openChoices(current)
+			next := fmt.Sprintf("%s: %d choice(s) left. Send the fields (POST /api/character-builder/%d)", current.Title, current.Remaining, id)
+			if len(withSug) > 0 {
+				next += fmt.Sprintf(", or {\"use_suggestion\": true} to take the suggestion for %s", strings.Join(withSug, ", "))
+			}
+			next += "."
+			if len(without) > 0 {
+				next += fmt.Sprintf(" No suggestion for %s: that is yours to choose.", strings.Join(without, ", "))
+			}
+			out["next"] = next + " GET this draft again any time."
+		}
 	} else {
 		out["next"] = fmt.Sprintf("Every step is done. Check the summary below, then create the character: POST /api/character-builder/%d/finish", id)
 		for _, st := range steps { // the review step's summary of the character (Nov 13 tester: no summary before creation)
@@ -1501,14 +1569,332 @@ func loadDraft(id, agentID int) (map[string]interface{}, *int, bool) {
 	return body, cid, true
 }
 
-func saveDraft(id int, body map[string]interface{}) {
-	raw, _ := json.Marshal(body)
-	db.Exec(`UPDATE character_drafts SET body = $1, updated_at = $2 WHERE id = $3`, raw, time.Now(), id)
+// saveDraft stores the draft; an error means nothing was saved (Nov 14 audit: a refused write was reported as saved).
+func saveDraft(id int, body map[string]interface{}) error {
+	raw, err := json.Marshal(body)
+	if err != nil {
+		return err
+	}
+	_, err = db.Exec(`UPDATE character_drafts SET body = $1, updated_at = $2 WHERE id = $3`, raw, time.Now(), id)
+	return err
+}
+
+// readBuilderBody: the request's JSON object (no body is an empty one).
+func readBuilderBody(r *http.Request) (map[string]interface{}, error) {
+	raw, err := io.ReadAll(io.LimitReader(r.Body, 1<<20))
+	if err != nil {
+		return nil, err
+	}
+	if strings.TrimSpace(string(raw)) == "" {
+		return map[string]interface{}{}, nil
+	}
+	dec := json.NewDecoder(bytes.NewReader(raw))
+	var v interface{}
+	if err := dec.Decode(&v); err != nil {
+		return nil, err
+	}
+	if dec.More() {
+		return nil, fmt.Errorf("there is more after the JSON object")
+	}
+	if v == nil {
+		return map[string]interface{}{}, nil
+	}
+	m, ok := v.(map[string]interface{})
+	if !ok {
+		return nil, fmt.Errorf("the body must be a JSON object, like {\"class\": \"fighter\"}")
+	}
+	return m, nil
+}
+
+var builderStepKeys = []string{"class", "class_choices", "background", "species", "ability_scores", "details", "backstory"}
+
+// joinProblems: problems as one sentence ("invalid_divine_order: Only Clerics choose a divine_order").
+func joinProblems(ps []string) string {
+	var out []string
+	for _, p := range ps {
+		out = append(out, strings.TrimRight(p, ". "))
+	}
+	return strings.Join(out, "; ")
+}
+
+// builderOutcome: what one request did to a draft.
+type builderOutcome struct {
+	unknown         []string                 // fields or parts the builder doesn't know: nothing is saved
+	errCode, errMsg string                   // the request refused as a whole (use_suggestion alone, with nothing it can fill)
+	refused         []map[string]interface{} // answers not saved, each with the reason
+	notes           []string                 // answers read under another name
+	filled          []string                 // parts the suggestion filled
+	replaced        []map[string]interface{} // earlier answers the suggestion changed (they had a problem)
+	sugNote         string
+	anySaved        bool
+	stillNeeded     []string
+}
+
+// takeSuggestion applies use_suggestion (true: the current step; a step's key: that step) to the draft: open choices are filled and
+// those with a problem fixed, valid answers stay. It returns an error code and message when there is nothing it can fill.
+func (o *builderOutcome) takeSuggestion(body map[string]interface{}, key string, agentID int) (string, string) {
+	steps := builderSteps(body, agentID, false)
+	var target *builderStep
+	if key != "" {
+		for i := range steps {
+			if steps[i].Key == key {
+				target = &steps[i]
+			}
+		}
+		if target == nil && key != "review" {
+			return "unknown_step", fmt.Sprintf("%q is not a step: use_suggestion takes true (the current step) or a step's key: %s", key, strings.Join(builderStepKeys, ", "))
+		}
+	} else {
+		for i := range steps {
+			if !steps[i].Done {
+				target = &steps[i]
+				break
+			}
+		}
+	}
+	if target == nil || target.Key == "review" {
+		full := builderSteps(body, agentID, true)
+		rv := full[len(full)-1]
+		if !rv.Done {
+			if len(rv.Problems) > 0 && rv.Problems[0] == "finish steps 1-7 first" {
+				return "no_suggestion", "Step 8, the review, has no suggestion: finish steps 1-7 first."
+			}
+			return "no_suggestion", "Steps 1-7 are done, and the review found a problem: " + joinProblems(rv.Problems) + ". There is no suggestion for it: send that field yourself."
+		}
+		o.sugNote = "Nothing to fill: every step is done. POST /api/character-builder/{id}/finish creates the character."
+		return "", ""
+	}
+	withSug, without := openChoices(target)
+	if !target.Done && len(withSug) == 0 {
+		return "no_suggestion", fmt.Sprintf("%s: there is no suggestion for %s: that choice is yours (see current_step.choices for the options).", target.Title, strings.Join(without, ", "))
+	}
+	o.filled, o.replaced = applySuggestion(body, *target)
+	if len(o.filled) == 0 && len(o.replaced) == 0 {
+		o.sugNote = target.Title + " is done: nothing to fill. To change a choice, send it."
+	} else if len(without) > 0 {
+		o.sugNote = fmt.Sprintf("No suggestion for %s: that is yours to choose.", strings.Join(without, ", "))
+	}
+	return "", ""
+}
+
+// applyBuilderUpdate checks one request and applies it to the draft (body, changed in place). Each answer is saved as sent (in
+// the server's spelling) or refused with the reason; an answer with a problem is not saved and the earlier one stays.
+func applyBuilderUpdate(body, upd map[string]interface{}, agentID int) builderOutcome {
+	var o builderOutcome
+	in := checkBuilderInput(upd, body)
+	if len(in.unknown) > 0 {
+		o.unknown = in.unknown
+		return o
+	}
+	o.refused, o.notes = in.refused, in.notes
+	useSug, hasSug := upd["use_suggestion"]
+	delete(upd, "use_suggestion")
+	before, _ := deepCopyJSON(body).(map[string]interface{}) // group answers (species_choices ...) are merged in place below
+	if before == nil {
+		before = map[string]interface{}{}
+	}
+	if hasSug && useSug != nil && useSug != false {
+		code, msg := "", ""
+		if key, isStr := useSug.(string); isStr {
+			code, msg = o.takeSuggestion(body, strings.ToLower(strings.TrimSpace(key)), agentID)
+		} else if useSug == true {
+			code, msg = o.takeSuggestion(body, "", agentID)
+		} else {
+			code, msg = "invalid_use_suggestion", "use_suggestion is true (the current step) or a step's key: "+strings.Join(builderStepKeys, ", ")
+		}
+		if code != "" {
+			if len(upd) == 0 && len(o.refused) == 0 {
+				o.errCode, o.errMsg = code, msg
+				return o
+			}
+			o.refused = append(o.refused, map[string]interface{}{"field": "use_suggestion", "you_sent": useSug, "problem": msg})
+		}
+	}
+	refusedIn := map[string]bool{}
+	for _, r := range in.refused {
+		refusedIn[r["field"].(string)] = true
+	}
+	sentPart := func(path string) bool { // a field (or part) the player sent, even refused: the suggestion doesn't fill it
+		top, sub := splitField(path)
+		if refusedIn[path] || refusedIn[top] {
+			return true
+		}
+		v, sent := upd[top]
+		if m, isMap := v.(map[string]interface{}); sent && isMap && sub != "" {
+			_, has := m[sub]
+			return has
+		}
+		return sent
+	}
+	var keepFilled []string
+	for _, f := range o.filled {
+		if !sentPart(f) {
+			keepFilled = append(keepFilled, f)
+		} else if top, _ := splitField(f); refusedIn[f] || refusedIn[top] {
+			rollbackAnswer(body, before, f) // the refused answer stays unsaved: the draft keeps what it had
+		}
+	}
+	o.filled = keepFilled
+	var keepReplaced []map[string]interface{}
+	for _, r := range o.replaced {
+		if !sentPart(fmt.Sprint(r["field"])) {
+			keepReplaced = append(keepReplaced, r)
+		}
+	}
+	o.replaced = keepReplaced
+	for k, v := range upd { // fields sent with use_suggestion win
+		if v == nil {
+			delete(body, k)
+			continue
+		}
+		// A group of choices (species_choices, class_options, background_feat_choices ...) merges: the parts sent win, the rest stay;
+		// a part sent as null is removed. The ability increases are one answer (+2 and +1): they replace the earlier ones.
+		if nm, isMap := v.(map[string]interface{}); isMap && k != "ability_increases" {
+			have, hasMap := body[k].(map[string]interface{})
+			if !hasMap {
+				have = map[string]interface{}{}
+			}
+			for sk, sv := range nm {
+				if sv == nil {
+					delete(have, sk)
+				} else {
+					have[sk] = sv
+				}
+			}
+			body[k] = have
+			continue
+		}
+		body[k] = v
+	}
+	// an answer with a problem is not saved: the earlier answer stays (Nov 13 tester: invalid skills stayed in the draft while
+	// flagged). Checked again after each refusal: an Expertise sent with refused skills is checked against the skills kept.
+	var beforeSteps []builderStep
+	problemBefore := func(f string) string {
+		if beforeSteps == nil {
+			beforeSteps = builderSteps(before, agentID, false)
+		}
+		for _, st := range beforeSteps {
+			for _, c := range st.Choices {
+				if c["field"] == f {
+					p, _ := c["problem"].(string)
+					return p
+				}
+			}
+		}
+		return ""
+	}
+	skip := map[string]bool{}
+	for i := 0; i < 4; i++ {
+		rj := rejectedFields(builderSteps(body, agentID, false), upd, body, problemBefore, skip)
+		if len(rj) == 0 {
+			break
+		}
+		for _, r := range rj {
+			p := r["field"].(string)
+			rollbackAnswer(body, before, p)
+			skip[p] = true
+		}
+		o.refused = append(o.refused, rj...)
+	}
+	rej := map[string]bool{}
+	for _, r := range o.refused {
+		rej[r["field"].(string)] = true
+	}
+	o.anySaved = len(o.filled) > 0
+	for k, v := range upd {
+		if rej[k] {
+			continue
+		}
+		if m, ok := v.(map[string]interface{}); ok && k != "ability_increases" {
+			for sk := range m {
+				if !rej[k+"."+sk] {
+					o.anySaved = true
+				}
+			}
+			if isFeatGroup(k) && len(m) > 0 {
+				if need := featStillNeeded(body, k); len(need) > 0 {
+					o.stillNeeded = append(o.stillNeeded, k+": "+strings.Join(need, ", "))
+				}
+			}
+			continue
+		}
+		o.anySaved = true
+	}
+	return o
+}
+
+// decorate adds what the request did to the reply (refused answers, what the suggestion filled) and gives its status: 200, 422 when
+// some answers were refused and others saved, 400 when none was saved.
+func (o *builderOutcome) decorate(view map[string]interface{}, steps []builderStep) int {
+	var msgs []string
+	if len(o.notes) > 0 {
+		view["read_as"] = o.notes
+	}
+	if len(o.filled) > 0 {
+		view["filled_by_suggestion"] = o.filled
+	}
+	if len(o.replaced) > 0 {
+		view["replaced_by_suggestion"] = o.replaced
+		var f []string
+		for _, r := range o.replaced {
+			f = append(f, fmt.Sprint(r["field"]))
+		}
+		msgs = append(msgs, "The suggestion replaced answers that had a problem: "+strings.Join(f, ", ")+" (see replaced_by_suggestion).")
+	}
+	if len(o.stillNeeded) > 0 {
+		view["still_needed"] = o.stillNeeded
+		msgs = append(msgs, "Saved; still needed: "+strings.Join(o.stillNeeded, "; ")+".")
+	}
+	if o.sugNote != "" {
+		msgs = append(msgs, o.sugNote)
+	}
+	status := http.StatusOK
+	if len(o.refused) > 0 {
+		sugKeys := map[string]bool{} // fields use_suggestion would fill: open choices the suggestion answers
+		for i := range steps {
+			withSug, _ := openChoices(&steps[i])
+			for _, f := range withSug {
+				for _, part := range strings.Split(f, ", ") {
+					top, _ := splitField(part)
+					sugKeys[top] = true
+				}
+			}
+		}
+		var lines, withSug []string // said plainly too (Nov 14 tester: +2 Dexterity refused in not_saved, missed, then a suggestion filled +2 Intelligence)
+		for _, rj := range o.refused {
+			f := fmt.Sprint(rj["field"])
+			lines = append(lines, fmt.Sprintf("%s: %s", f, strings.TrimRight(fmt.Sprint(rj["problem"]), ".")))
+			if top, _ := splitField(f); sugKeys[top] && !containsStr(withSug, top) {
+				withSug = append(withSug, top)
+			}
+		}
+		msg := "NOT SAVED: " + strings.Join(lines, "; ") + ". Send these again with a valid choice."
+		if len(withSug) > 0 {
+			msg += " {\"use_suggestion\": true} would fill " + strings.Join(withSug, ", ") + " with the suggestion."
+		}
+		msgs = append([]string{msg}, msgs...)
+		view["not_saved"] = o.refused
+		// not 200 even when other answers were saved (Nov 14 tester: refusals in a 200 reply were missed, then a suggestion filled them)
+		status = http.StatusUnprocessableEntity
+		view["error"] = "some_answers_not_saved"
+		view["partially_saved"] = true
+		view["not_saved_note"] = "These answers were not saved (the draft keeps what it had before); everything else you sent was saved. Fix them and send them again."
+		if !o.anySaved {
+			status = http.StatusBadRequest
+			view["error"] = "answers_not_valid"
+			view["partially_saved"] = false
+			view["not_saved_note"] = "Nothing you sent was saved (the draft keeps what it had before). Fix these and send them again."
+		}
+	}
+	if len(msgs) > 0 {
+		view["message"] = strings.Join(msgs, " ")
+	}
+	return status
 }
 
 // handleCharacterBuilder godoc
 // @Summary Character builder: create a character step by step
-// @Description Guides character creation in the order of the 2024 Player's Handbook (and the D&D Beyond builder): 1 class, 2 the class's choices (skills, Weapon Mastery, tools, Expertise, Divine/Primal Order, starting equipment), 3 background, 4 species, 5 ability scores (the PHB's Standard Array by Class is suggested), 6 name, alignment and languages, 7 backstory (3 to 6 paragraphs suggested) and appearance, 8 review (a summary before you create). POST starts a draft; GET /api/character-builder/{id} shows every step with the choices left, the current step's options and a suggestion; POST /api/character-builder/{id} with fields (any creation field; null removes one) or {"use_suggestion": true} (the class, the alignment and the backstory have no suggestion: send them yourself); POST /api/character-builder/{id}/finish creates the character. Then GET /api/characters/{id}/setup guides spells, gear, the shop and a portrait.
+// @Description Guides character creation in the order of the 2024 Player's Handbook (and the D&D Beyond builder): 1 class, 2 the class's choices (skills, Weapon Mastery, tools, Expertise, Divine/Primal Order, starting equipment), 3 background, 4 species, 5 ability scores (the Standard Array only; the PHB's Standard Array by Class is suggested), 6 name, alignment and languages, 7 backstory (3 to 6 paragraphs suggested) and appearance, 8 review (a summary before you create). POST starts a draft (with any fields, checked as an update is); GET lists your drafts (newest first; ?limit= up to 100 and ?offset=, with the total); GET /api/character-builder/{id} shows every step with the choices left, the current step's options and a suggestion; POST /api/character-builder/{id} with fields (any builder field; null removes one) or {"use_suggestion": true} (fills the open choices and fixes the ones with a problem; valid answers stay; the class, the alignment and the backstory have no suggestion: send them yourself). Each answer is saved as sent or refused with the reason (not_saved; 422 when other answers were saved, 400 when none was). POST /api/character-builder/{id}/finish (no body) creates the character; DELETE /api/character-builder/{id} removes a draft (a character it made is kept). Then GET /api/characters/{id}/setup guides spells, gear, the shop and a portrait.
 // @Tags Characters
 // @Accept json
 // @Produce json
@@ -1518,6 +1904,7 @@ func saveDraft(id int, body map[string]interface{}) {
 // @Router /character-builder [get]
 // @Router /character-builder/{id} [get]
 // @Router /character-builder/{id} [post]
+// @Router /character-builder/{id} [delete]
 // @Router /character-builder/{id}/finish [post]
 func handleCharacterBuilder(w http.ResponseWriter, r *http.Request) {
 	agentID, err := getAgentFromAuth(r)
@@ -1528,224 +1915,209 @@ func handleCharacterBuilder(w http.ResponseWriter, r *http.Request) {
 	}
 	ensureBuilderTable()
 	rest := strings.Trim(strings.TrimPrefix(r.URL.Path, "/api/character-builder"), "/")
-	parts := strings.Split(rest, "/")
 	if rest == "" {
-		if r.Method == http.MethodGet {
-			rows, err := db.Query(`SELECT id, body, character_id FROM character_drafts WHERE agent_id = $1 ORDER BY id DESC LIMIT 20`, agentID)
-			list := []map[string]interface{}{}
-			if err == nil {
-				for rows.Next() {
-					var id int
-					var raw []byte
-					var cid *int
-					if rows.Scan(&id, &raw, &cid) == nil {
-						b := map[string]interface{}{}
-						json.Unmarshal(raw, &b)
-						list = append(list, map[string]interface{}{"draft_id": id, "name": b["name"], "class": b["class"], "character_id": cid})
-					}
-				}
-				rows.Close()
-			}
-			writeJSONStatus(w, 200, map[string]interface{}{"drafts": list, "start": "POST /api/character-builder {\"name\": \"...\"} starts a new draft"})
-			return
+		switch r.Method {
+		case http.MethodGet:
+			listBuilderDrafts(w, r, agentID)
+		case http.MethodPost:
+			startBuilderDraft(w, r, agentID)
+		default:
+			writeJSONStatus(w, http.StatusMethodNotAllowed, map[string]interface{}{"error": "method_not_allowed", "message": "GET lists your drafts; POST starts one"})
 		}
-		if r.Method != http.MethodPost {
-			writeJSONStatus(w, http.StatusMethodNotAllowed, map[string]interface{}{"error": "GET lists your drafts; POST starts one"})
-			return
-		}
-		body := map[string]interface{}{}
-		json.NewDecoder(r.Body).Decode(&body)
-		delete(body, "use_suggestion")
-		raw, _ := json.Marshal(body)
-		var id int
-		if db.QueryRow(`INSERT INTO character_drafts (agent_id, body) VALUES ($1, $2) RETURNING id`, agentID, raw).Scan(&id) != nil {
-			writeJSONStatus(w, 500, map[string]interface{}{"error": "could_not_start_draft"})
-			return
-		}
-		view := builderView(id, body, nil, agentID)
-		if seats := campaignSeats(agentID); len(seats) > 0 { // told before the work, not after (Nov 13 tester)
-			view["campaigns_note"] = fmt.Sprintf("You already play %s. A player has one character in a campaign: this new character can join a different campaign, or take that seat only if its GM removes the other character.", strings.Join(seats, "; "))
-		}
-		writeJSONStatus(w, 200, view)
 		return
 	}
-	id, _ := strconv.Atoi(parts[0])
+	parts := strings.Split(rest, "/")
+	id, convErr := strconv.Atoi(parts[0])
+	if convErr != nil || id <= 0 || len(parts) > 2 || len(parts) == 2 && parts[1] != "finish" { // /finsh is not a draft update
+		writeJSONStatus(w, http.StatusNotFound, map[string]interface{}{"error": "not_found",
+			"message": "The builder's addresses: /api/character-builder (GET, POST), /api/character-builder/{id} (GET, POST, DELETE) and /api/character-builder/{id}/finish (POST)."})
+		return
+	}
 	body, charID, ok := loadDraft(id, agentID)
 	if !ok {
 		writeJSONStatus(w, http.StatusNotFound, map[string]interface{}{"error": "draft_not_found", "message": "GET /api/character-builder lists your drafts"})
 		return
 	}
-	if len(parts) > 1 && parts[1] == "finish" {
-		io.Copy(io.Discard, r.Body) // read the (empty) body: a reply sent before it is read can be reset on some systems
-		if charID != nil {           // finished before (a retried request): the same answer
-			writeJSONStatus(w, 200, map[string]interface{}{"success": true, "already_created": true, "character_id": *charID,
-				"setup": fmt.Sprintf("GET /api/characters/%d/setup: your spells, the gear in your hands and the class choices left, step by step", *charID)})
-			return
-		}
-		for _, s := range builderSteps(body, agentID, true) {
-			if !s.Done {
-				writeJSONStatus(w, http.StatusBadRequest, map[string]interface{}{"error": "draft_not_finished", "message": s.Title + " still has choices to make.", "draft": builderView(id, body, nil, agentID)})
-				return
-			}
-		}
-		res := runCreation(body, agentID, false)
-		if res["success"] != true {
-			writeJSONStatus(w, http.StatusBadRequest, res)
-			return
-		}
-		cid := bint(res, "character_id")
-		db.Exec(`UPDATE character_drafts SET character_id = $1, updated_at = now() WHERE id = $2`, cid, id)
-		res["setup"] = fmt.Sprintf("GET /api/characters/%d/setup: your spells, the gear in your hands and the class choices left, step by step", cid)
-		if seats := campaignSeats(agentID); len(seats) > 0 {
-			res["campaigns_note"] = fmt.Sprintf("You already play %s. A player has one character in a campaign, so this character can join a different campaign, or take that seat if its GM removes the other character.", strings.Join(seats, "; "))
-		}
-		writeJSONStatus(w, 200, res)
+	if len(parts) == 2 {
+		finishBuilderDraft(w, r, id, body, charID, agentID)
 		return
 	}
-	if r.Method == http.MethodGet {
+	switch r.Method {
+	case http.MethodGet:
 		writeJSONStatus(w, 200, builderView(id, body, charID, agentID))
 		return
-	}
-	if r.Method != http.MethodPost {
-		writeJSONStatus(w, http.StatusMethodNotAllowed, map[string]interface{}{"error": "GET shows the draft; POST sets fields"})
+	case http.MethodDelete:
+		if _, err := db.Exec(`DELETE FROM character_drafts WHERE id = $1 AND agent_id = $2`, id, agentID); err != nil {
+			writeJSONStatus(w, 500, map[string]interface{}{"error": "could_not_delete", "message": "The draft was not deleted. Try again."})
+			return
+		}
+		msg := "The draft is deleted."
+		if charID != nil {
+			msg += fmt.Sprintf(" The character it made (id %d) is kept.", *charID)
+		}
+		writeJSONStatus(w, 200, map[string]interface{}{"success": true, "deleted": true, "draft_id": id, "message": msg})
+		return
+	case http.MethodPost:
+	default:
+		writeJSONStatus(w, http.StatusMethodNotAllowed, map[string]interface{}{"error": "method_not_allowed", "message": "GET shows the draft; POST sets fields; DELETE removes it"})
 		return
 	}
 	if charID != nil {
 		writeJSONStatus(w, http.StatusBadRequest, map[string]interface{}{"error": "already_created", "message": fmt.Sprintf("This draft made character %d. Use GET /api/characters/%d/setup.", *charID, *charID)})
 		return
 	}
-	upd := map[string]interface{}{}
-	if json.NewDecoder(r.Body).Decode(&upd) != nil {
-		writeJSONStatus(w, http.StatusBadRequest, map[string]interface{}{"error": "invalid_json"})
+	upd, perr := readBuilderBody(r)
+	if perr != nil {
+		writeJSONStatus(w, http.StatusBadRequest, map[string]interface{}{"error": "invalid_json", "message": "Nothing was saved: " + perr.Error()})
 		return
 	}
-	if bad := unknownBuilderFields(upd); len(bad) > 0 { // a typo must not look like a saved choice (Nov 13 tester)
-		writeJSONStatus(w, http.StatusBadRequest, map[string]interface{}{"error": "unknown_field", "message": strings.Join(bad, "; ") + ". Nothing was saved: send the request again with the right field names.",
+	o := applyBuilderUpdate(body, upd, agentID)
+	if len(o.unknown) > 0 { // a typo must not look like a saved choice (Nov 13 tester)
+		writeJSONStatus(w, http.StatusBadRequest, map[string]interface{}{"error": "unknown_field", "message": strings.Join(o.unknown, "; ") + ". Nothing was saved: send the request again with the right field names.",
 			"nothing_saved": true, "draft": builderView(id, body, nil, agentID)})
 		return
 	}
-	before := map[string]interface{}{} // a deep copy: group answers (species_choices ...) are merged in place below
-	if raw, err := json.Marshal(body); err == nil {
-		json.Unmarshal(raw, &before)
-	}
-	useSug := upd["use_suggestion"]
-	delete(upd, "use_suggestion")
-	delete(upd, "dry_run")
-	if useSug == true || useSug != nil && useSug != false {
-		key, _ := useSug.(string)
-		for _, s := range builderSteps(body, agentID, false) {
-			if (key != "" && s.Key == key) || (key == "" && !s.Done) {
-				if len(s.Suggestion) == 0 {
-					writeJSONStatus(w, http.StatusBadRequest, map[string]interface{}{"error": "no_suggestion", "message": s.Title + ": this choice is yours to make (see current_step.choices)."})
-					return
-				}
-				// Round-trip the suggestion through JSON so its values have the same types as fields a player sends
-				// (a map[string]int of ability increases was never read back as done, so use_suggestion looped on Step 5).
-				if raw, err := json.Marshal(s.Suggestion); err == nil {
-					var norm map[string]interface{}
-					if json.Unmarshal(raw, &norm) == nil {
-						s.Suggestion = norm
-					}
-				}
-				// The suggestion fills the step's open choices and replaces the ones with a problem; a choice already made and in
-				// order stays (the player's Acolyte isn't swapped for the suggested Sage). Asking for a step by name takes all of it.
-				keep := map[string]bool{}
-				openFull := map[string]bool{} // "species_choices.lineage" and the like
-				if key == "" {
-					open := map[string]bool{}
-					for _, c := range s.Choices {
-						f, _ := c["field"].(string)
-						done, _ := c["done"].(bool)
-						for _, part := range strings.Split(f, ", ") {
-							top := strings.Split(part, ".")[0]
-							if !done {
-								open[top] = true
-								openFull[part] = true
-							}
-						}
-					}
-					for k := range s.Suggestion {
-						if _, set := body[k]; set && !open[k] {
-							keep[k] = true
-						}
-					}
-				}
-				for k, v := range s.Suggestion { // fields sent with it still win (below)
-					if keep[k] {
-						continue
-					}
-					sub, isMap := v.(map[string]interface{})
-					have, hasMap := body[k].(map[string]interface{})
-					if key == "" && isMap && hasMap && !openFull[k] { // a group of choices: fill what is missing or wrong, keep the rest (an Elf's chosen lineage)
-						for sk, sv := range sub {
-							if _, set := have[sk]; !set || openFull[k+"."+sk] {
-								have[sk] = sv
-							}
-						}
-						body[k] = have
-						continue
-					}
-					body[k] = v
-				}
-				break
-			}
-		}
-	}
-	for k, v := range upd {
-		if v == nil {
-			delete(body, k)
-			continue
-		}
-		// A group of choices (species_choices, class_options, background_feat_choices ...) merges: the parts sent win, the rest stay;
-		// a part sent as null is removed. Setting an Elf's lineage no longer wipes the suggested spellcasting ability and skill.
-		if nm, isMap := v.(map[string]interface{}); isMap {
-			if have, hasMap := body[k].(map[string]interface{}); hasMap {
-				for sk, sv := range nm {
-					if sv == nil {
-						delete(have, sk)
-					} else {
-						have[sk] = sv
-					}
-				}
-				body[k] = have
-				continue
-			}
-		}
-		body[k] = v
-	}
-	// an answer with a problem is not saved: the earlier answer stays (Nov 13 tester: invalid skills stayed in the draft while flagged)
-	rejected := rejectedFields(builderSteps(body, agentID, false), upd)
-	for _, rj := range rejected {
-		f := rj["field"].(string)
-		if old, had := before[f]; had {
-			body[f] = old
-		} else {
-			delete(body, f)
-		}
-	}
-	saveDraft(id, body)
-	view := builderView(id, body, nil, agentID)
-	if len(rejected) > 0 {
-		view["not_saved"] = rejected
-		view["not_saved_note"] = "These answers were not saved (the draft keeps what it had before); everything else you sent was saved. Fix them and send them again."
-		var lines []string // said plainly too (Nov 14 tester: +2 Dexterity refused in not_saved, missed, then a suggestion filled +2 Intelligence)
-		for _, rj := range rejected {
-			lines = append(lines, fmt.Sprintf("%v: %v", rj["field"], rj["problem"]))
-		}
-		view["message"] = "NOT SAVED: " + strings.Join(lines, "; ") + ". Send these again with a valid choice; use_suggestion would replace them with the suggestion."
-		// not 200 even when other answers were saved (Nov 14 tester: refusals in a 200 reply were missed, then a suggestion filled them)
-		status := http.StatusUnprocessableEntity
-		view["error"] = "some_answers_not_saved"
-		view["partially_saved"] = true
-		if len(rejected) == len(upd) {
-			status = http.StatusBadRequest
-			view["error"] = "answers_not_valid"
-			view["partially_saved"] = false
-		}
-		writeJSONStatus(w, status, view)
+	if o.errCode != "" {
+		writeJSONStatus(w, http.StatusBadRequest, map[string]interface{}{"error": o.errCode, "message": o.errMsg, "nothing_saved": true, "draft": builderView(id, body, nil, agentID)})
 		return
 	}
-	writeJSONStatus(w, 200, view)
+	if err := saveDraft(id, body); err != nil {
+		writeJSONStatus(w, http.StatusInternalServerError, map[string]interface{}{"error": "could_not_save", "message": "Nothing was saved: the server could not store the draft. Send the request again."})
+		return
+	}
+	steps := builderSteps(body, agentID, true)
+	view := builderViewOf(id, body, steps)
+	writeJSONStatus(w, o.decorate(view, steps), view)
+}
+
+// listBuilderDrafts: the player's drafts, newest first, with the total and paging (Nov 14 audit: only the latest 20, silently).
+func listBuilderDrafts(w http.ResponseWriter, r *http.Request, agentID int) {
+	limit, offset := 20, 0
+	for _, p := range []struct {
+		name string
+		dst  *int
+		min  int
+		max  int
+	}{{"limit", &limit, 1, 100}, {"offset", &offset, 0, 1 << 30}} {
+		if v := r.URL.Query().Get(p.name); v != "" {
+			n, err := strconv.Atoi(v)
+			if err != nil || n < p.min || n > p.max {
+				writeJSONStatus(w, http.StatusBadRequest, map[string]interface{}{"error": "invalid_" + p.name, "message": fmt.Sprintf("%s is a whole number from %d to %d", p.name, p.min, p.max)})
+				return
+			}
+			*p.dst = n
+		}
+	}
+	var total int
+	db.QueryRow(`SELECT COUNT(*) FROM character_drafts WHERE agent_id = $1`, agentID).Scan(&total)
+	rows, err := db.Query(`SELECT id, body, character_id FROM character_drafts WHERE agent_id = $1 ORDER BY id DESC LIMIT $2 OFFSET $3`, agentID, limit, offset)
+	list := []map[string]interface{}{}
+	if err == nil {
+		for rows.Next() {
+			var id int
+			var raw []byte
+			var cid *int
+			if rows.Scan(&id, &raw, &cid) == nil {
+				b := map[string]interface{}{}
+				json.Unmarshal(raw, &b)
+				list = append(list, map[string]interface{}{"draft_id": id, "name": b["name"], "class": b["class"], "character_id": cid})
+			}
+		}
+		rows.Close()
+	}
+	out := map[string]interface{}{"drafts": list, "total": total, "limit": limit, "offset": offset,
+		"start": "POST /api/character-builder {\"name\": \"...\"} starts a new draft", "delete": "DELETE /api/character-builder/{id} removes a draft (a character it made is kept)"}
+	if offset+len(list) < total {
+		out["more"] = fmt.Sprintf("Showing %d to %d of %d drafts, newest first: GET /api/character-builder?offset=%d for the next ones.", offset+1, offset+len(list), total, offset+len(list))
+	}
+	writeJSONStatus(w, 200, out)
+}
+
+// startBuilderDraft: a new draft, with the fields sent checked as an update's are (Nov 14 audit: they were stored unchecked).
+func startBuilderDraft(w http.ResponseWriter, r *http.Request, agentID int) {
+	upd, perr := readBuilderBody(r)
+	if perr != nil {
+		writeJSONStatus(w, http.StatusBadRequest, map[string]interface{}{"error": "invalid_json", "message": "No draft was started: " + perr.Error()})
+		return
+	}
+	body := map[string]interface{}{}
+	o := applyBuilderUpdate(body, upd, agentID)
+	if len(o.unknown) > 0 {
+		writeJSONStatus(w, http.StatusBadRequest, map[string]interface{}{"error": "unknown_field", "message": strings.Join(o.unknown, "; ") + ". No draft was started: send the request again with the right field names.", "nothing_saved": true})
+		return
+	}
+	if o.errCode != "" {
+		writeJSONStatus(w, http.StatusBadRequest, map[string]interface{}{"error": o.errCode, "message": "No draft was started: " + o.errMsg, "nothing_saved": true})
+		return
+	}
+	if len(o.refused) > 0 && !o.anySaved {
+		view := map[string]interface{}{}
+		o.decorate(view, nil)
+		view["message"] = "No draft was started: " + view["message"].(string)
+		view["nothing_saved"] = true
+		writeJSONStatus(w, http.StatusBadRequest, view)
+		return
+	}
+	raw, _ := json.Marshal(body)
+	var id int
+	if db.QueryRow(`INSERT INTO character_drafts (agent_id, body) VALUES ($1, $2) RETURNING id`, agentID, raw).Scan(&id) != nil {
+		writeJSONStatus(w, 500, map[string]interface{}{"error": "could_not_start_draft", "message": "No draft was started: the server could not store it. Send the request again."})
+		return
+	}
+	steps := builderSteps(body, agentID, true)
+	view := builderViewOf(id, body, steps)
+	status := o.decorate(view, steps)
+	if seats := campaignSeats(agentID); len(seats) > 0 { // told before the work, not after (Nov 13 tester)
+		view["campaigns_note"] = fmt.Sprintf("You already play %s. A player has one character in a campaign: this new character can join a different campaign, or take that seat only if its GM removes the other character.", strings.Join(seats, "; "))
+	}
+	writeJSONStatus(w, status, view)
+}
+
+// finishBuilderDraft creates the character (POST only; Nov 14 audit: a GET created it). It takes no fields.
+func finishBuilderDraft(w http.ResponseWriter, r *http.Request, id int, body map[string]interface{}, charID *int, agentID int) {
+	if r.Method != http.MethodPost {
+		writeJSONStatus(w, http.StatusMethodNotAllowed, map[string]interface{}{"error": "method_not_allowed",
+			"message": fmt.Sprintf("Nothing was created: POST /api/character-builder/%d/finish creates the character. GET /api/character-builder/%d shows the draft.", id, id)})
+		return
+	}
+	extra, perr := readBuilderBody(r) // read the body: a reply sent before it is read can be reset on some systems
+	if perr != nil {
+		writeJSONStatus(w, http.StatusBadRequest, map[string]interface{}{"error": "invalid_json", "message": "Nothing was created: " + perr.Error()})
+		return
+	}
+	if len(extra) > 0 { // fields here would be ignored: say so instead (Nov 14 audit)
+		var names []string
+		for k := range extra {
+			names = append(names, k)
+		}
+		sort.Strings(names)
+		writeJSONStatus(w, http.StatusBadRequest, map[string]interface{}{"error": "finish_takes_no_fields",
+			"message": fmt.Sprintf("Nothing was created: /finish takes no fields (you sent %s). Send changes to POST /api/character-builder/%d first, then POST /api/character-builder/%d/finish with no body.", strings.Join(names, ", "), id, id)})
+		return
+	}
+	if charID != nil { // finished before (a retried request): the same answer
+		writeJSONStatus(w, 200, map[string]interface{}{"success": true, "already_created": true, "character_id": *charID,
+			"setup": fmt.Sprintf("GET /api/characters/%d/setup: your spells, the gear in your hands and the class choices left, step by step", *charID)})
+		return
+	}
+	for _, s := range builderSteps(body, agentID, true) {
+		if !s.Done {
+			writeJSONStatus(w, http.StatusBadRequest, map[string]interface{}{"error": "draft_not_finished", "message": s.Title + " still has choices to make.", "draft": builderView(id, body, nil, agentID)})
+			return
+		}
+	}
+	res := runCreation(body, agentID, false)
+	if res["success"] != true {
+		writeJSONStatus(w, http.StatusBadRequest, res)
+		return
+	}
+	cid := bint(res, "character_id")
+	db.Exec(`UPDATE character_drafts SET character_id = $1, updated_at = now() WHERE id = $2`, cid, id)
+	res["setup"] = fmt.Sprintf("GET /api/characters/%d/setup: your spells, the gear in your hands and the class choices left, step by step", cid)
+	if seats := campaignSeats(agentID); len(seats) > 0 {
+		res["campaigns_note"] = fmt.Sprintf("You already play %s. A player has one character in a campaign, so this character can join a different campaign, or take that seat if its GM removes the other character.", strings.Join(seats, "; "))
+	}
+	writeJSONStatus(w, 200, res)
 }
 
 // suggestInvocation: an invocation the Warlock qualifies for and doesn't know (the setup guide's suggestion).
@@ -2581,10 +2953,14 @@ func magicInitiateOptions(list string, speciesCantrips, otherFeat []string) map[
 // humanMagicInitiateOptions: the Human's Magic Initiate: each list it can use (not the background's), with its spells.
 func humanMagicInitiateOptions(bgList string, bgSpells []string) map[string]interface{} {
 	out := map[string]interface{}{}
+	example := "" // a list this player can choose (Nov 14 audit: the example named the Acolyte's own cleric list)
 	for _, l := range []string{"cleric", "druid", "wizard"} {
 		if l != bgList {
 			out[l] = magicInitiateOptions(l, nil, bgSpells)
+			if example == "" {
+				example = l
+			}
 		}
 	}
-	return map[string]interface{}{"list": out, "how_to_answer": "choose one list, then from it 2 cantrips, 1 spell and the ability: {\"list\": \"cleric\", \"cantrips\": [...], \"spell\": \"...\", \"spellcasting_ability\": \"wis\"}"}
+	return map[string]interface{}{"list": out, "how_to_answer": "choose one list, then from it 2 cantrips, 1 spell and the ability: {\"list\": \"" + example + "\", \"cantrips\": [...], \"spell\": \"...\", \"spellcasting_ability\": \"wis\"}"}
 }
