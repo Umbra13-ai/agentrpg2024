@@ -97,7 +97,7 @@ func unknownBuilderFields(upd map[string]interface{}) []string {
 		if !builderFields[k] {
 			msg := fmt.Sprintf("%q is not a field the builder knows", k)
 			if nk := normKey(k); nk == "spells" || nk == "cantrips" || nk == "spell" || nk == "prepared_spells" { // not "did you mean species" (re-check)
-				msg += ": spells and cantrips are chosen after creation, in GET /api/characters/{id}/setup"
+				msg += `: your class's spells and cantrips are chosen after creation, in GET /api/characters/{id}/setup; Magic Initiate picks go in background_feat_choices (or species_feat_choices for a Human's feat): {"cantrips": [...], "spell": "...", "spellcasting_ability": "..."}`
 			} else if h, ok := createFieldHints[nk]; ok && nk != "use_suggestion" && nk != "spellcasting_ability" { // the same true hints as POST /api/characters (round 2)
 				msg += ": " + h
 			} else if c := closestField(k); c != "" {
@@ -1285,10 +1285,13 @@ func mergeList(body map[string]interface{}, field string, cur, sv interface{}, c
 				have[normItem(s)] = true
 			}
 		}
-		if s := bstr(bmap(body, "species_choices"), "skill"); s != "" {
-			have[normItem(s)] = true
+		// the species skill and Skilled picks count as the step-2 check counts them: only when the species asks for a skill, and
+		// only a Human whose feat is Skilled (round 3: a leftover skill kept an Expertise the check refused, and use_suggestion looped)
+		spSkill, featSkills, _ := draftSpeciesProficiencies(body)
+		if spSkill != "" {
+			have[normItem(spSkill)] = true
 		}
-		for _, s := range blist(bmap(body, "species_feat_choices"), "proficiencies") {
+		for _, s := range featSkills {
 			have[normItem(s)] = true
 		}
 		valid = func(s string) bool { return have[normItem(s)] }

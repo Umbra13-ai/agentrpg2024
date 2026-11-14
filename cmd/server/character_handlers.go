@@ -131,6 +131,13 @@ func handleCharacters(w http.ResponseWriter, r *http.Request) {
 				return
 			}
 		}
+		if v, sent := raw["backstory_skip"]; sent && v != nil { // one JSON type, as in the builder (round 3: any value was ignored)
+			if _, isBool := v.(bool); !isBool {
+				writeJSONStatus(w, http.StatusBadRequest, map[string]interface{}{"error": "invalid_field_type", "nothing_created": true,
+					"message": fmt.Sprintf("backstory_skip must be true or false (JSON true/false, not text); you sent %s. Nothing was created.", jsonText(v))})
+				return
+			}
+		}
 		if inc, ok := raw["ability_increases"].(map[string]interface{}); ok {
 			for k, x := range inc {
 				n, isNum := x.(float64)

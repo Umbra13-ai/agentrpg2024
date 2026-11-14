@@ -1535,6 +1535,7 @@ func builderSteps(body map[string]interface{}, agentID int, withCheck bool) []bu
 		s5.Remaining++
 	}
 	scores := map[string]int{}
+	sentScore := map[string]bool{}
 	missing := 0
 	scoreProblem := ""
 	for _, k := range abilityKeys6 {
@@ -1548,14 +1549,15 @@ func builderSteps(body map[string]interface{}, agentID int, withCheck bool) []bu
 			body[k] = n
 		}
 		scores[k] = n
-		if n == 0 {
+		sentScore[k] = present && ok
+		if !present || !ok { // a 0 that was sent is a score (not in the Standard Array), not a missing one (round 3)
 			missing++
 		}
 	}
 	if scoreProblem == "" && missing > 0 && missing < 6 {
 		// a score that can never be in the Standard Array is named (Nov 14 audit: {"str": 99} was refused as "5 abilities have no score")
 		for _, k := range abilityKeys6 {
-			if n := scores[k]; n != 0 && !containsInt([]int{15, 14, 13, 12, 10, 8}, n) {
+			if n := scores[k]; sentScore[k] && !containsInt([]int{15, 14, 13, 12, 10, 8}, n) {
 				scoreProblem = fmt.Sprintf("%s %d is not in the Standard Array: use 15, 14, 13, 12, 10 and 8 once each", titleWords(k), n)
 				break
 			}
@@ -2411,8 +2413,9 @@ func (o *builderOutcome) takeSuggestion(body map[string]interface{}, key string,
 	}
 	withSug, without := openChoices(target)
 	if !target.Done && len(withSug) == 0 {
-		// a step whose suggestion depends on an earlier one says so (Nov 14 audit: "there is no suggestion for : ..." before a class)
-		if len(target.Suggestion) == 0 {
+		// a step whose suggestion depends on an earlier one says so (Nov 14 audit: "there is no suggestion for : ..." before a class);
+		// only when the step has nothing open to answer yet, not when its open choice simply has no option left (round 3)
+		if len(target.Suggestion) == 0 && len(without) == 0 {
 			for i := range steps {
 				if steps[i].Key == target.Key {
 					break
@@ -2424,6 +2427,17 @@ func (o *builderOutcome) takeSuggestion(body map[string]interface{}, key string,
 		}
 		if len(without) == 0 {
 			return "no_suggestion", fmt.Sprintf("%s has no suggestion now: %s.", target.Title, joinProblems(target.Problems))
+		}
+		var why []string // the open choices' own problems, when they have one (Keen Senses with every option already held ...)
+		for _, c := range target.Choices {
+			if f, _ := c["field"].(string); containsStr(without, f) {
+				if p, _ := c["problem"].(string); p != "" {
+					why = append(why, f+": "+p)
+				}
+			}
+		}
+		if len(why) > 0 {
+			return "no_suggestion", fmt.Sprintf("%s: there is no suggestion for %s. %s.", target.Title, strings.Join(without, ", "), strings.Join(why, "; "))
 		}
 		return "no_suggestion", fmt.Sprintf("%s: there is no suggestion for %s: that choice is yours (see current_step.choices for the options).", target.Title, strings.Join(without, ", "))
 	}
@@ -2457,16 +2471,16 @@ func applyBuilderUpdate(body, upd map[string]interface{}, agentID int) builderOu
 		code, msg := "", ""
 		if key, isStr := useSug.(string); isStr {
 			sugKey = strings.ToLower(strings.TrimSpace(key))
-			code, msg = o.takeSuggestion(body, sugKey, agentID)
-		} else if useSug == true {
-			code, msg = o.takeSuggestion(body, "", agentID)
-		} else {
+		} else if useSug != true {
 			code, msg = "invalid_use_suggestion", "use_suggestion is true (the current step) or a step's key: "+strings.Join(builderStepKeys, ", ")
 		}
-		if code == "no_suggestion" && len(upd) > 0 {
-			// tried again once the fields sent are saved: {"class": "cleric", "use_suggestion": "class_choices"} works in one request
-			// (Nov 14 audit: the class was saved and the suggestion refused)
-			deferredSug, code, msg = true, "", ""
+		if code == "" && len(upd) > 0 {
+			// with other fields, the fields are saved first and the suggestion is taken for the draft they make, as documented
+			// ({"class": "cleric", "use_suggestion": "class_choices"}); round 3: it was taken for the old draft and its fills were
+			// then listed as invalid in the same reply
+			deferredSug = true
+		} else if code == "" {
+			code, msg = o.takeSuggestion(body, sugKey, agentID)
 		}
 		if code != "" {
 			if len(upd) == 0 && len(o.refused) == 0 {
@@ -2508,11 +2522,6 @@ func applyBuilderUpdate(body, upd map[string]interface{}, agentID int) builderOu
 		}
 	}
 	o.replaced = keepReplaced
-	if hasSug && !deferredSug && len(o.filled) == 0 && len(o.replaced) == 0 && len(upd) > 0 && o.errCode == "" {
-		// everything the suggestion filled was sent too ({"background": "acolyte", "use_suggestion": true}): taken again once the
-		// fields are saved, so the rest of that step is filled
-		deferredSug, o.sugNote = true, ""
-	}
 	for k, v := range upd { // fields sent with use_suggestion win
 		if v == nil {
 			delete(body, k)
@@ -2555,10 +2564,21 @@ func applyBuilderUpdate(body, upd map[string]interface{}, agentID int) builderOu
 		return ""
 	}
 	skip := map[string]bool{}
-	for i := 0; i < 4; i++ {
+	for i := 0; i < 5; i++ {
 		rj := rejectedFields(builderSteps(body, agentID, false), upd, body, problemBefore, skip)
 		if len(rj) == 0 {
 			break
+		}
+		// a refused class, background or species is rolled back first, and the other answers are checked again against the one
+		// the draft keeps (round 3: valid Rogue skills were refused as "choose a class first" with a refused "artificer")
+		var prereq []map[string]interface{}
+		for _, r := range rj {
+			if f, _ := r["field"].(string); f == "class" || f == "background" || f == "species" {
+				prereq = append(prereq, r)
+			}
+		}
+		if len(prereq) > 0 && len(prereq) < len(rj) {
+			rj = prereq
 		}
 		for _, r := range rj {
 			p := r["field"].(string)
@@ -2616,13 +2636,38 @@ func applyBuilderUpdate(body, upd map[string]interface{}, agentID int) builderOu
 	// earlier answers this request made invalid, said in the reply (Nov 14 audit F9: a background change left the saved increases
 	// invalid without a word; only a later GET showed it). An answer sent but refused leaves the earlier one in the draft: listed
 	// too when that one no longer fits (round 2: an Acolyte's Magic Initiate stayed after a change to Criminal)
+	// "before" is the draft before this request: an answer that already had a problem then (under any part name or wording) is not
+	// listed as made invalid now (round 3: an unrelated alignment request repeated an old leftover each time)
+	if beforeSteps == nil {
+		beforeSteps = builderSteps(before, agentID, false)
+	}
+	badBefore := map[string]bool{}
+	for _, st := range beforeSteps {
+		for _, c := range st.Choices {
+			if p, _ := c["problem"].(string); p != "" {
+				f, _ := c["field"].(string)
+				for _, part := range strings.Split(f, ", ") {
+					badBefore[part] = true
+				}
+			}
+		}
+	}
+	wasBad := func(f string) bool {
+		for _, part := range strings.Split(f, ", ") {
+			top, _ := splitField(part)
+			if badBefore[part] || badBefore[top] {
+				return true
+			}
+		}
+		return false
+	}
 	for _, st := range builderSteps(body, agentID, false) {
 		for _, c := range st.Choices {
 			prob, _ := c["problem"].(string)
 			f, _ := c["field"].(string)
 			top, _ := splitField(f)
 			refusedHere := rej[f] || rej[top]
-			if prob == "" || c["current"] == nil || (sentPart(f) && !refusedHere) || prob == problemBefore(f) {
+			if prob == "" || c["current"] == nil || (sentPart(f) && !refusedHere) || wasBad(f) || containsStr(o.filled, f) {
 				continue
 			}
 			o.invalidated = append(o.invalidated, map[string]interface{}{"field": f, "you_had": c["current"], "problem": prob})
