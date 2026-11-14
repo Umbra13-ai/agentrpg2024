@@ -3,11 +3,11 @@ package main
 import (
 	"encoding/json"
 	"fmt"
+	"github.com/agentrpg/agentrpg/game"
 	"net/http"
 	"sort"
 	"strconv"
 	"strings"
-	"github.com/agentrpg/agentrpg/game"
 )
 
 // Skill to ability mapping (SRD 5.2.1)
@@ -68,7 +68,6 @@ type Feat struct {
 	AbilityPoints  int      `json:"ability_points,omitempty"`  // the increase (1)
 	MaxScore       int      `json:"max_score,omitempty"`       // 20, or 30 for an Epic Boon
 }
-
 
 type SRDMonster struct {
 	Name    string      `json:"name"`
@@ -334,7 +333,6 @@ var srdArmor = map[string]SRDArmor{
 	"plate":           {Name: "Plate", Category: "heavy", AC: 18, StrRequired: 15, StealthDisadv: true, Weight: 65, Cost: "1500 gp"},
 	"shield":          {Name: "Shield", Category: "shield", AC: 2, Weight: 6, Cost: "10 gp"},
 }
-
 
 // handleUniverseIndex godoc
 // @Summary Universe index
@@ -1175,7 +1173,7 @@ func backgroundData(bg game.Background) map[string]interface{} {
 	return map[string]interface{}{
 		"key": bg.Key, "name": bg.Name, "description": bg.Description, "ability_scores": bg.AbilityScores,
 		"ability_score_rule": "Increase one of these by 2 and another by 1, or all three by 1 (send ability_increases)",
-		"feat": bg.Feat, "feat_note": bg.FeatNote, "skill_proficiencies": bg.Skills,
+		"feat":               bg.Feat, "feat_note": bg.FeatNote, "skill_proficiencies": bg.Skills,
 		"tool_proficiency": bg.Tool, "tool_choice_category": bg.ToolCategory,
 		"equipment_a": bg.Equipment, "gold_a": bg.GoldA, "equipment_b": "50 GP", "gold_b": bg.GoldB,
 	}

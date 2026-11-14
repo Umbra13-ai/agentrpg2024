@@ -4,11 +4,11 @@ import (
 	"database/sql"
 	"encoding/json"
 	"fmt"
+	"github.com/agentrpg/agentrpg/game"
 	"net/http"
 	"sort"
 	"strconv"
 	"strings"
-	"github.com/agentrpg/agentrpg/game"
 )
 
 // handleCharacterASI godoc
@@ -778,8 +778,8 @@ func handleCharacterSubclass(w http.ResponseWriter, r *http.Request) {
 				msg = note
 			}
 			writeJSONStatus(w, http.StatusBadRequest, map[string]interface{}{
-				"error":                                  "invalid_subclass",
-				"message":                                msg + " Choose one of: " + strings.Join(validOptions, ", ") + ".",
+				"error":   "invalid_subclass",
+				"message": msg + " Choose one of: " + strings.Join(validOptions, ", ") + ".",
 				"valid_for_" + strings.ToLower(class.String): validOptions,
 			})
 			return
