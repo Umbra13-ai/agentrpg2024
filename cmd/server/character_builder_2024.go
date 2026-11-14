@@ -592,10 +592,46 @@ func builderSteps(body map[string]interface{}, agentID int, withCheck bool) []bu
 					kit = append(kit, strings.ToLower(it.Name))
 				}
 			}
+			// the same check as creation (Nov 14 tester: step 2 took flail and javelin, the review refused them): every pick must be
+			// a weapon the class can master, and the options list them
+			var mOpts []string
+			mDetails := map[string]string{}
+			for _, c := range eligibleMasteryWeapons(class) {
+				mOpts = append(mOpts, strings.ToLower(c.Name))
+				mDetails[strings.ToLower(c.Name)] = c.Mastery + ": " + masteryText[c.Mastery]
+			}
 			m := blist(body, "weapon_masteries")
-			okM := len(m) == mc
-			s2.Choices = append(s2.Choices, choice("weapon_masteries", fmt.Sprintf("Weapon Mastery: %d kinds of weapon you are proficient with (the weapons of your starting kit are a good choice: %s)", mc, strings.Join(kit, ", ")), mc, nil, m, okM, ifStr(len(m) > 0 && !okM, fmt.Sprintf("choose exactly %d", mc))))
-			sug["weapon_masteries"] = pickFrom(append(kit, masteryFallback[class]...), nil, map[string]bool{}, mc)
+			mProblem := ""
+			if len(m) > 0 {
+				if _, oerr := validateMasteryPicks(class, 1, m, true); oerr != nil {
+					mProblem = oerr.Message
+					seenM := map[string]bool{}
+					for _, p := range m {
+						k, ok := resolveMasteryPick(class, p)
+						if !ok {
+							mProblem = fmt.Sprintf("%q is not a weapon a %s can choose for Weapon Mastery. Choose %d from the options.", p, titleWords(class), mc)
+							break
+						}
+						if seenM[k] {
+							mProblem = fmt.Sprintf("You chose %s twice: choose %d different weapons.", titleWords(p), mc)
+							break
+						}
+						seenM[k] = true
+					}
+				}
+			}
+			okM := len(m) == mc && mProblem == ""
+			mChoice := choice("weapon_masteries", fmt.Sprintf("Weapon Mastery: %d kinds of weapon you are proficient with (the weapons of your starting kit are a good choice: %s)", mc, strings.Join(kit, ", ")), mc, mOpts, m, okM, mProblem)
+			mChoice["option_details"] = mDetails
+			s2.Choices = append(s2.Choices, mChoice)
+			var mSug []string // only weapons the check accepts
+			for _, w := range append(kit, masteryFallback[class]...) {
+				if _, ok := resolveMasteryPick(class, w); ok {
+					mSug = append(mSug, w)
+				}
+			}
+			mSug = append(mSug, mOpts...)
+			sug["weapon_masteries"] = pickFrom(mSug, nil, map[string]bool{}, mc)
 			if !okM {
 				s2.Remaining++
 			}
