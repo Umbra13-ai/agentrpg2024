@@ -134,6 +134,9 @@ func enemyTargets(lobbyID int) []map[string]interface{} {
 func validateAttackTarget(lobbyID, targetID int) (bool, string) {
 	targets := enemyTargets(lobbyID)
 	if targets == nil {
+		if _, fighting := ptLoadCombat(lobbyID); fighting {
+			return false, "Every enemy in this fight is down (or out of sight): there is nothing left to target. The GM ends the fight."
+		}
 		return false, "There is no combat going on, so there is nothing to target. Leave out target_id and describe the attack."
 	}
 	var ids []string
@@ -404,6 +407,11 @@ func resolveAttackOnMonster(lobbyID, charID, targetID int, o attackOutcome, clea
 		var pnote string
 		hp, pnote = polymorphDrop(lobbyID, t, hp) // a Polymorph's beast form at 0: the true form, the extra damage carried over
 		vorpalNote += pnote
+	}
+	if hp <= 0 {
+		var unote string
+		hp, unote = undeadFortitude(lobbyID, t, hp, dmg+extraDmg, o.DamageType, o.Crit) // Zombie (dodge_2024.go)
+		vorpalNote += unote
 	}
 	if hp <= 0 {
 		vorpalNote += killEffectNote(charID) // Dark One's Blessing (F134)

@@ -740,6 +740,18 @@ func handleAction(w http.ResponseWriter, r *http.Request) {
 			req.TargetID = id // "Sacred Flame on Kobold 2": the monster named in the description is the target (F249)
 		}
 	}
+	if req.Action == "cast" && inCombat && req.TargetID < 0 { // a spell that harms needs a living enemy, as an attack does (live test, Nov 14)
+		key := req.SpellSlug
+		if key == "" {
+			key = parseSpellFromDescription(req.Description)
+		}
+		if sp, ok := srdSpellsMemory[normalizeSpellSlug(key)]; ok && spellHarms(sp) {
+			if okTarget, why := validateAttackTarget(lobbyID, req.TargetID); !okTarget {
+				writeJSONStatus(w, http.StatusBadRequest, map[string]interface{}{"success": false, "error": "invalid_target", "message": why, "hint": "Your action was not used, and no spell slot was spent."})
+				return
+			}
+		}
+	}
 	if req.Action == "cast" && inCombat && req.TargetID == 0 && len(req.TargetIDs) == 0 {
 		key := req.SpellSlug
 		if key == "" {

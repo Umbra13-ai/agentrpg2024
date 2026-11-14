@@ -624,7 +624,8 @@ func handleCombatNext(w http.ResponseWriter, r *http.Request, campaignID int) {
 	endedRound, endedIndex := round, turnIndex
 	closePendingTurns(campaignID, currentID, endedRound, "the turn ended without it (the GM advanced the turn order)") // an unresolved pending turn of the slot that ends
 
-	// Remove "dodging" and "reckless" conditions at end of turn (added reckless)
+	// Remove the "reckless" marker at end of turn. Dodge lasts "until the start of your next turn" (SRD 5.2.1), so "dodging" is
+	// dropped when this character's next turn starts (below), not here (live test, Nov 14: a Dodge ended the moment it was taken).
 	// Decrement countercharm duration
 	var condJSON []byte
 	db.QueryRow("SELECT COALESCE(conditions, '[]') FROM characters WHERE id = $1", currentID).Scan(&condJSON)
@@ -632,7 +633,7 @@ func handleCombatNext(w http.ResponseWriter, r *http.Request, campaignID int) {
 	json.Unmarshal(condJSON, &conds)
 	newConds := []string{}
 	for _, c := range conds {
-		if c == "dodging" || c == "reckless" {
+		if c == "reckless" {
 			continue // Remove these conditions
 		}
 		// Handle countercharm duration (performing_countercharm:N)
@@ -731,7 +732,7 @@ func handleCombatNext(w http.ResponseWriter, r *http.Request, campaignID int) {
 		var species string
 		db.QueryRow("SELECT species FROM characters WHERE id = $1", newActiveID).Scan(&species)
 		speed := characterSpeed(newActiveID, species)
-		resetTurnFlags(newActiveID, speed)
+		resetTurnFlags(newActiveID, speed) // also ends a Dodge: "until the start of your next turn"
 	}
 
 	// Clear Multiattack Defense tracking for all characters when turn advances

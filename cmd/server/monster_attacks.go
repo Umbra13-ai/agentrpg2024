@@ -81,9 +81,12 @@ func multiattackPlan(desc string, actions []monsterActionRow) []monsterActionRow
 var meleeRe = regexp.MustCompile(`(?i)melee`)
 
 // extraDamageRe: a hit's second damage type in a 2024 stat block, "Hit: 21 (4d6 + 7) Slashing damage plus 10 (3d6) Fire damage".
-var extraDamageRe = regexp.MustCompile(`(?i)\bplus \d+ \((\d+d\d+(?:\s*[+-]\s*\d+)?)\) ([A-Za-z]+) damage`)
+var extraDamageRe = regexp.MustCompile(`(?i)\bplus \d+ \((\d+d\d+(?:\s*[+-]\s*\d+)?)\) ([A-Za-z]+) damage( if the attack roll had Advantage)?`)
 
-type extraDamage struct{ Dice, Type string }
+type extraDamage struct {
+	Dice, Type  string
+	IfAdvantage bool // "... if the attack roll had Advantage": dealt only when the roll had it
+}
 
 // attackExtraDamage lists the extra damage of an attack ("plus 10 (3d6) Fire damage"); only the part after the first "Hit:".
 func attackExtraDamage(desc string) []extraDamage {
@@ -92,7 +95,7 @@ func attackExtraDamage(desc string) []extraDamage {
 	}
 	var out []extraDamage
 	for _, m := range extraDamageRe.FindAllStringSubmatch(desc, -1) {
-		out = append(out, extraDamage{strings.ReplaceAll(m[1], " ", ""), m[2]})
+		out = append(out, extraDamage{strings.ReplaceAll(m[1], " ", ""), m[2], m[3] != ""})
 	}
 	return out
 }
@@ -290,6 +293,10 @@ func resolveMonsterAttack(r *http.Request, campaignID int, monster, action, targ
 		if found && elementalBane(tid, key) {
 			dis = true // Ring of Elemental Command: an Elemental attacks the wearer with Disadvantage
 		}
+		dodged := found && dodgeActive(tid) // the target took the Dodge action (dodge_2024.go)
+		if dodged {
+			dis = true
+		}
 		buffDis := ""
 		if found {
 			if d, why := buffAttackDisadvantage(campaignID, attackerID, tid); d { // Foresight, Blur, Holy Aura, Protection from Evil and Good
@@ -321,6 +328,8 @@ func resolveMonsterAttack(r *http.Request, campaignID int, monster, action, targ
 		}
 		if buffDis != "" && dis && !adv {
 			how += " (" + buffDis + ")"
+		} else if dodged && dis && !adv {
+			how += " (the target is Dodging)"
 		}
 		if adv && dis {
 			how = " (Advantage from " + strings.Join(advWhy, " and ") + " and Disadvantage" + map[bool]string{true: " from " + buffDis, false: ""}[buffDis != ""] + " cancel: one d20)" + how
@@ -334,6 +343,9 @@ func resolveMonsterAttack(r *http.Request, campaignID int, monster, action, targ
 		if !found {
 			extra := ""
 			for _, x := range attackExtraDamage(a.Desc) {
+				if x.IfAdvantage && !(adv && !dis) {
+					continue
+				}
 				extra += fmt.Sprintf(" plus %s %s", x.Dice, x.Type)
 			}
 			lines = append(lines, fmt.Sprintf("%s: %d to hit%s - %s %s%s damage if it hits", a.Name, total, how, a.DamageDice, a.DamageType, extra))
@@ -370,9 +382,12 @@ func resolveMonsterAttack(r *http.Request, campaignID int, monster, action, targ
 			label = "CRITICAL HIT"
 		}
 		line := fmt.Sprintf("%s: %d%s vs AC %d - %s, %d %s damage", a.Name, total, how, ac, label, dmg, a.DamageType) + strings.TrimSuffix(sizeNote, ".")
-		parts := []extraDamage{{"", a.DamageType}}
+		parts := []extraDamage{{Type: a.DamageType}}
 		amounts := []int{dmg}
 		for _, x := range attackExtraDamage(a.Desc) { // "plus 10 (3d6) Fire damage": rolled (doubled on a critical hit) and dealt as its own type
+			if x.IfAdvantage && !(adv && !dis) {
+				continue // "plus 2 (1d4) Slashing damage if the attack roll had Advantage" (Goblin Warrior): only then
+			}
 			n := game.RollDamage(x.Dice, crit)
 			parts, amounts = append(parts, x), append(amounts, n)
 			totalDamage += n

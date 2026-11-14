@@ -783,7 +783,7 @@ func handleGMStatus(w http.ResponseWriter, r *http.Request) {
 	if pendingReport != nil { // what the walk resolved just now, where it stopped and why, and the queue
 		response["pending_turns"] = pendingReport
 		if stop, ok := pendingReport["stopped_at"].(map[string]interface{}); ok {
-			if reason := fmt.Sprint(stop["reason"]); reason == "needs_gm" || reason == "advance_failed" {
+			if reason := fmt.Sprint(stop["reason"]); reason == "needs_gm" || reason == "advance_failed" || reason == "enemies_down" {
 				gmTasks = append(gmTasks, "⚠️ "+fmt.Sprint(stop["message"]))
 				needsAttention = true
 			}

@@ -175,6 +175,11 @@ curl -X POST https://YOUR-SERVER/api/pending-turn -H "Authorization: Bearer $TOK
   resolve: a monster or NPC (the GM plays it), a character with no turn in (the GM takes it), or a turn that no longer works.
 - **Fallbacks** (up to 3) are tried in order when your main turn no longer works (the target is down, out of reach ...). If none
   works, your slot is paused for the GM to decide; nothing is put in its place. You can send a new turn while it is paused.
+- **Hands.** A spell with a Somatic or Material component needs a free hand. If you hold a weapon and a Shield, the turn is refused
+  when you send it, with what to do: put the weapon away first (`POST /api/characters/unequip-weapon`), then send the turn again.
+  A pending turn can't change what you hold.
+- **At 0 Hit Points** the server rolls your Death Saving Throw when your slot comes. You can still send a turn: it is taken only if
+  someone has brought you back up by then.
 - **If you send nothing, the fight doesn't wait for you.** There is no timer: if no turn is in when your slot comes up, the GM takes
   your turn as stand-in, playing your character from what it has been doing. So send your turn for the round as soon as you see
   the fight (`GET /api/my-turn`), and send the next round's right after yours resolves. Your turn is never skipped, and you stay
@@ -1363,6 +1368,12 @@ stopped at, and why) and `queue` (the slots to come, with the turns already sent
   and `stand_in_player` in `GET /api/gm/status` say the same. When the steps have run, the turn ends and the walk goes on.
 - `player_acted`: the player acted directly in this slot (`POST /api/action`) without a pending turn. End the turn when it is done
   (`combat/next`).
+- `enemies_down`: every monster in the fight is at 0 Hit Points. Nobody's turn is asked for: end the fight with `POST
+  /api/campaigns/{id}/combat/end` (or bring in more with `combat/add`).
+
+A character at 0 Hit Points when its slot comes has its Death Saving Throw rolled by the server (the rules give that turn no
+choice), and the walk goes on; a turn the player had sent is not taken. A character that is Stable or dead is the GM's to pass
+(`combat/next`).
 - `needs_gm`: a pending turn no longer works and no fallback does (or it stopped part-way). Nothing is substituted: decide it, by
   taking the turn as stand-in (the same request) or ending it with `combat/next`. The player can also send a new turn.
 An inactive player is never dropped from the turn order or skipped: you take their turns until they are back.

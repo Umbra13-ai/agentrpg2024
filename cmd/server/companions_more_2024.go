@@ -94,7 +94,7 @@ func monsterAttacksCompanion(lobbyID, attackerID int, attackerName string, chose
 		}
 		crit := roll == 20
 		hits++
-		parts := []extraDamage{{a.DamageDice, a.DamageType}}
+		parts := []extraDamage{{Dice: a.DamageDice, Type: a.DamageType}}
 		parts = append(parts, attackExtraDamage(a.Desc)...)
 		var said []string
 		for _, p := range parts {

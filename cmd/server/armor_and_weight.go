@@ -186,6 +186,11 @@ func isWeaponProficient(weaponProfsStr string, weaponKey string) bool {
 
 	// Get weapon info to determine category
 	weapon, hasWeapon := srdWeapons[weaponKey]
+	if !hasWeapon { // "Flail" as the shop and the inventory write it, "Flail +1": the name is not the table's key (live test, Nov 14)
+		if _, w, ok := findWeapon(strings.TrimSpace(plusRe.ReplaceAllString(weaponKey, ""))); ok {
+			weapon, hasWeapon = w, true
+		}
+	}
 
 	// Parse proficiency list
 	profs := strings.Split(strings.ToLower(weaponProfsStr), ",")

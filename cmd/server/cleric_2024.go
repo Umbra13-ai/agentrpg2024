@@ -69,6 +69,11 @@ func damageMonster(lobbyID, targetID, dmg int, dtype string) (string, bool) {
 		if hp <= 0 {
 			hp, pnote = polymorphDrop(lobbyID, e, hp) // a Polymorph's beast form at 0 (spells_more_2024.go)
 		}
+		if hp <= 0 {
+			var unote string
+			hp, unote = undeadFortitude(lobbyID, e, hp, d, dtype, false) // Zombie (dodge_2024.go)
+			pnote += unote
+		}
 		if hp < 0 {
 			hp = 0
 		}

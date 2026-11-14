@@ -247,6 +247,66 @@ func ptSlotProblem(charID int, sp SRDSpell, slug string, s ptStep) string {
 	return fmt.Sprintf("%s needs a spell slot of level %d or higher, and you have none left", sp.Name, need)
 }
 
+// ptEnemiesDown: the fight has monsters in its turn order and none of them is still up.
+func ptEnemiesDown(lobbyID int) bool {
+	monsters, up := 0, 0
+	for _, e := range combatEntries(lobbyID) {
+		if m, _ := e["is_monster"].(bool); m {
+			monsters++
+			if asInt(e["hp"]) > 0 {
+				up++
+			}
+		}
+	}
+	return monsters > 0 && up == 0
+}
+
+// ptDying: at 0 Hit Points, not stable and not dead: the character's turn is a Death Saving Throw.
+func ptDying(charID int) bool {
+	var hp int
+	var stable, dead bool
+	if db.QueryRow(`SELECT COALESCE(hp, 0), COALESCE(is_stable, false), COALESCE(is_dead, false) FROM characters WHERE id = $1`, charID).Scan(&hp, &stable, &dead) != nil {
+		return false
+	}
+	return hp <= 0 && !stable && !dead
+}
+
+// spellHarms: the spell deals damage or forces a saving throw, so its target has to be a creature still in the fight.
+func spellHarms(sp SRDSpell) bool {
+	return sp.DamageDice != "" || sp.SavingThrow != "" || len(sp.DamageParts) > 0
+}
+
+// ptHandsProblem: the spell's Somatic or Material component needs a hand the character doesn't have free (a weapon and a Shield).
+// No step of a pending turn can sheathe a weapon, so this is refused when the turn is sent, with what to do (live test, Nov 14:
+// a Cleric's Bless was refused at resolution and the fallback ran instead).
+func ptHandsProblem(lobbyID, charID int, sp SRDSpell, slug string, s ptStep) string {
+	if s.Item != "" || s.Charges > 0 || db == nil {
+		return "" // cast from an item: no components
+	}
+	var inventoryJSON, featsJSON []byte
+	var class string
+	if db.QueryRow(`SELECT COALESCE(inventory, '[]'), COALESCE(feats, '[]'), LOWER(COALESCE(class,'')) FROM characters WHERE id = $1`, charID).Scan(&inventoryJSON, &featsJSON, &class) != nil {
+		return ""
+	}
+	var inventory []map[string]interface{}
+	var feats []string
+	json.Unmarshal(inventoryJSON, &inventory)
+	json.Unmarshal(featsJSON, &feats)
+	focusClass := class
+	if _, isOrigin := originSpellsOf(charID)[slug]; isOrigin && !containsStr(getClassSpellList(class), slug) {
+		focusClass = ""
+	}
+	var metamagic []string
+	if hasWord(strings.ToLower(s.Description), "subtle") {
+		metamagic = []string{"subtle"}
+	}
+	why := castHandsProblem(lobbyID, charID, sp.Components, sp.MaterialCost == 0 && !sp.MaterialConsumed, usableInventory(inventory), focusClass, feats, metamagic)
+	if why == "" {
+		return ""
+	}
+	return strings.TrimPrefix(why, "Cannot cast - ") + " Do that now, before your slot, then send the turn again: a pending turn can't change what you hold."
+}
+
 // validatePendingSteps checks one attempt (the main turn or a fallback) against the state as it is now: what can be known without
 // rolling or spending anything. strict is false for a fallback at submission: it is meant for a changed situation, so its range is
 // only a warning then. Problems refuse the turn; warnings are told and the turn is kept.
@@ -293,11 +353,21 @@ func validatePendingSteps(lobbyID, charID int, steps []map[string]interface{}, s
 			continue
 		}
 		kind := getActionResourceType(s.Action)
+		if s.Action == "cast" { // a spell takes what its casting time says: Healing Word is a Bonus Action, Shield a Reaction
+			if slug, _, selErr := resolveCastSpellSlug(s.SpellSlug, actionNarrative(s.Description, s.Result)); selErr == "" {
+				switch ct := strings.ToLower(srdSpellsMemory[normalizeSpellSlug(slug)].CastingTime); {
+				case strings.Contains(ct, "bonus"):
+					kind = "bonus_action"
+				case strings.Contains(ct, "reaction"):
+					kind = "reaction"
+				}
+			}
+		}
 		if kind == "reaction" {
 			problems = append(problems, at+": this is a Reaction, taken on another creature's turn, so it isn't part of your turn. Standing reaction orders (Shield, Opportunity Attack ...) are set with POST /api/characters/reaction-orders")
 			continue
 		}
-		if kind == "action" || kind == "bonus_action" {
+		if (kind == "action" || kind == "bonus_action") && s.Action != "use_item" { // an item's use may be a Bonus Action (a potion): not counted
 			uses[kind] = append(uses[kind], s.Action)
 		}
 		if kind == "movement" {
@@ -365,6 +435,10 @@ func validatePendingSteps(lobbyID, charID int, steps []map[string]interface{}, s
 				problems = append(problems, at+": "+why)
 				continue
 			}
+			if why := ptHandsProblem(lobbyID, charID, sp, normalizeSpellSlug(slug), s); why != "" {
+				problems = append(problems, at+": "+why)
+				continue
+			}
 			targets := append([]int{}, s.TargetIDs...)
 			if targetID != 0 {
 				targets = append(targets, targetID)
@@ -379,6 +453,17 @@ func validatePendingSteps(lobbyID, charID int, steps []map[string]interface{}, s
 					if !known[id] {
 						problems = append(problems, fmt.Sprintf("%s: no creature with id %d in this fight (see situation in GET /api/my-turn)", at, id))
 						missing = true
+					}
+				}
+				if !missing && spellHarms(sp) { // a spell that harms needs a living enemy, as an attack does (live test, Nov 14)
+					for _, id := range targets {
+						if id < 0 {
+							if ok, why := validateAttackTarget(lobbyID, id); !ok {
+								problems = append(problems, at+": "+why)
+								missing = true
+								break
+							}
+						}
 					}
 				}
 				if !missing {
@@ -419,6 +504,9 @@ func ptReply(rec *httptest.ResponseRecorder) (map[string]interface{}, bool, stri
 			why = strings.TrimSpace(fmt.Sprint(out["reason"]))
 			if out["reason"] == nil {
 				why = ""
+				if res, isText := out["result"].(string); isText { // a cast that can't be made answers 200 with success false and says why in result
+					why = strings.TrimSpace(res)
+				}
 			}
 		}
 		if code := fmt.Sprint(out["error"]); out["error"] != nil && !strings.Contains(why, code) {
@@ -529,6 +617,13 @@ func resolvePendingTurns(lobbyID int) map[string]interface{} {
 		}
 		e := c.Entries[c.Index]
 		slot := map[string]interface{}{"slot": c.Index + 1, "name": e.Name, "initiative": e.Initiative, "round": c.Round}
+		if ptEnemiesDown(lobbyID) {
+			// every monster in the turn order is down: nothing is left to fight, so nobody's turn is asked for (live test, Nov 14:
+			// the walk ran on into the next round and asked the GM to stand in for a player after the last goblin fell)
+			stop = map[string]interface{}{"reason": "enemies_down", "round": c.Round,
+				"message": fmt.Sprintf("Every enemy in this fight is down. End the fight: POST /api/campaigns/%d/combat/end (or bring in more with POST /api/campaigns/%d/combat/add). The turns still held are dropped when the fight ends.", lobbyID, lobbyID)}
+			break
+		}
 		owner, isPC := ptOwner(e)
 		if !isPC {
 			slot["reason"] = "gm_turn"
@@ -537,6 +632,27 @@ func resolvePendingTurns(lobbyID int) map[string]interface{} {
 			break
 		}
 		slot["character_id"] = e.ID
+		if ptDying(e.ID) {
+			// at 0 Hit Points and not stable: the rules give this turn no choice ("whenever you start your turn with 0 Hit Points,
+			// you must make a Death Saving Throw"), so the server rolls it and the fight goes on. A held turn can't be taken.
+			out, ok, why := ptRunStep(lobbyID, e.ID, owner, map[string]interface{}{"action": "death_save"})
+			if ok {
+				res := []map[string]interface{}{{"step": 1, "action": "death_save", "result": out["result"]}}
+				raw, _ := json.Marshal(map[string]interface{}{"used": "death saving throw", "steps": res})
+				db.Exec(`UPDATE pending_turns SET status = 'closed', note = 'At 0 Hit Points when the slot came: the server rolled the Death Saving Throw instead.', result = $4, resolved_at = NOW()
+					WHERE lobby_id = $1 AND character_id = $2 AND round = $3 AND status IN ('pending', 'needs_gm')`, lobbyID, e.ID, c.Round, raw)
+				resolved = append(resolved, map[string]interface{}{"slot": c.Index + 1, "name": e.Name, "character_id": e.ID, "round": c.Round,
+					"used": "death saving throw (at 0 Hit Points: rolled by the server)", "steps": res})
+				recordGMAction(db, lobbyID, "pending_turn", fmt.Sprintf("%s is at 0 Hit Points: the Death Saving Throw was rolled", e.Name), "")
+				if ok, why := ptAdvance(lobbyID); !ok {
+					slot["reason"] = "advance_failed"
+					slot["message"] = fmt.Sprintf("%s's Death Saving Throw was rolled, but the turn order didn't advance (%s): POST /api/campaigns/%d/combat/next.", e.Name, why, lobbyID)
+					stop = slot
+				}
+				continue
+			}
+			_ = why // the roll was refused (the state changed under us): fall through to the usual handling
+		}
 		row, has := ptOpenRow(lobbyID, e.ID, c.Round)
 		if !has {
 			// no waiting on a timer (Matt, Nov 14: a fight must not stall for hours on an agent whose scheduler is broken): a
@@ -625,8 +741,12 @@ func resolvePendingTurns(lobbyID int) map[string]interface{} {
 func pendingQueue(lobbyID int, c ptCombat) []map[string]interface{} {
 	ensurePendingTurns()
 	var out []map[string]interface{}
+	dead := combatDeadFn(lobbyID)
 	add := func(i, round int) {
 		e := c.Entries[i]
+		if e.IsMonster && dead(e.ID) {
+			return // a defeated monster has no turn
+		}
 		line := map[string]interface{}{"slot": i + 1, "name": e.Name, "initiative": e.Initiative, "round": round}
 		if _, isPC := ptOwner(e); !isPC {
 			line["turn"] = "the GM's (monster or NPC)"
@@ -877,7 +997,7 @@ func handlePendingTurn(w http.ResponseWriter, r *http.Request) {
 
 // handleCombatResolve godoc
 // @Summary Resolve the pending turns (GM only)
-// @Description Walks the initiative order from the current slot and resolves every pending player turn it can, in order; stops at the first slot it can't resolve and says why (stopped_at: gm_turn, stand_in, player_acted, needs_gm). GET /api/gm/status and POST .../combat/next do the same walk.
+// @Description Walks the initiative order from the current slot and resolves every pending player turn it can, in order; stops at the first slot it can't resolve and says why (stopped_at: gm_turn, stand_in, player_acted, needs_gm, enemies_down). A character at 0 Hit Points has its Death Saving Throw rolled by the server. GET /api/gm/status and POST .../combat/next do the same walk.
 // @Tags Combat
 // @Produce json
 // @Param id path int true "Campaign ID"
@@ -1000,6 +1120,9 @@ func pendingTurnForMyTurn(lobbyID, charID int) map[string]interface{} {
 	round := c.roundFor(slot)
 	out := map[string]interface{}{"round": round,
 		"how": "You don't have to wait for your slot: POST /api/pending-turn {\"steps\": [{\"action\": \"attack\", \"target_id\": -1}], \"fallbacks\": [[{\"action\": \"dodge\"}]]} holds your whole turn (each step is a POST /api/action body) and it resolves in initiative order. GET /api/pending-turn shows the table's queue."}
+	if ptDying(charID) {
+		out["at_0_hit_points"] = "You are at 0 Hit Points. When your slot comes the server rolls your Death Saving Throw for you; a turn you send is held and is taken only if you are back up by then."
+	}
 	if row, has := ptOpenRow(lobbyID, charID, round); has {
 		out["yours"] = row.view()
 	} else {

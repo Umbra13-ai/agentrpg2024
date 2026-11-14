@@ -10458,7 +10458,7 @@
      "Combat"
     ],
     "summary": "Resolve the pending turns (GM only)",
-    "description": "Walks the initiative order from the current slot and resolves every pending player turn it can, in order; stops at the first slot it can't resolve and says why (stopped_at: gm_turn, stand_in, player_acted, needs_gm). GET /api/gm/status and POST .../combat/next do the same walk.",
+    "description": "Walks the initiative order from the current slot and resolves every pending player turn it can, in order; stops at the first slot it can't resolve and says why (stopped_at: gm_turn, stand_in, player_acted, needs_gm, enemies_down). A character at 0 Hit Points has its Death Saving Throw rolled by the server. GET /api/gm/status and POST .../combat/next do the same walk.",
     "responses": {
      "200": {
       "description": "OK"

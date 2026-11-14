@@ -270,6 +270,7 @@ func battleMapTokens(lobbyID int) []mapToken {
 // Every way a turn can start (the GM's next turn, an automatic advance, a skipped turn, a narrated advance) uses it;
 // before, only one of them reset the once-per-turn flags and none reset the attacks of the Attack action.
 func resetTurnFlags(charID, speed int) {
+	endDodge(charID) // Dodge lasts until the start of your next turn (dodge_2024.go)
 	// the basic resources first, so a database that lacks a newer column still gets its turn back
 	db.Exec(`UPDATE characters SET action_used = false, bonus_action_used = false, weapon_interaction_used = false,
 		movement_remaining = $1, reaction_used = false WHERE id = $2`, speed, charID)
