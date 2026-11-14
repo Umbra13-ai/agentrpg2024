@@ -96,7 +96,9 @@ func unknownBuilderFields(upd map[string]interface{}) []string {
 	for k := range upd {
 		if !builderFields[k] {
 			msg := fmt.Sprintf("%q is not a field the builder knows", k)
-			if c := closestField(k); c != "" {
+			if nk := normKey(k); nk == "spells" || nk == "cantrips" || nk == "spell" || nk == "prepared_spells" { // not "did you mean species" (re-check)
+				msg += ": spells and cantrips are chosen after creation, in GET /api/characters/{id}/setup"
+			} else if c := closestField(k); c != "" {
 				msg += fmt.Sprintf(" (did you mean %q?)", c)
 			}
 			out = append(out, msg)
@@ -267,6 +269,9 @@ func checkBuilderInput(upd, body map[string]interface{}) builderInput {
 				if nk == "lineage" && sp != nil && sp.Key == "tiefling" { // creation reads a Tiefling's lineage as the legacy
 					nk = "legacy"
 				}
+				if nk != normKey(k) && nk != strings.ToLower(strings.TrimSpace(k)) { // said, not done silently (re-check)
+					in.notes = append(in.notes, fmt.Sprintf("species_choices.%s is read as species_choices.%s", k, nk))
+				}
 			}
 			if old, dup := out[nk]; dup && !reflect.DeepEqual(old, v) {
 				in.refuse(g+"."+nk, v, fmt.Sprintf("sent twice with different values (%s and %s): send it once", jsonText(old), jsonText(v)))
@@ -281,6 +286,11 @@ func checkBuilderInput(upd, body map[string]interface{}) builderInput {
 	for _, alias := range []string{"divine_order", "primal_order", "draconic_ancestry"} {
 		v, sent := upd[alias]
 		if !sent {
+			continue
+		}
+		if alias == "draconic_ancestry" && sp != nil && sp.Key != "dragonborn" { // a Goliath's giant ancestry is not a draconic one (re-check)
+			in.refuse(alias, v, fmt.Sprintf("only a Dragonborn has a draconic ancestry, not %s %s", aOrAn(sp.Name), sp.Name))
+			delete(upd, alias)
 			continue
 		}
 		to := builderAliases[alias]
@@ -367,17 +377,21 @@ func checkBuilderInput(upd, body map[string]interface{}) builderInput {
 			}
 			upd[k] = s
 		case "backstory_skip":
+			// one JSON type per field, as documented and as POST /api/characters takes it: "true" (text) is refused, not read as
+			// true without a word (Nov 14 audit re-check, F4)
 			b, ok := v.(bool)
-			if s, isStr := v.(string); isStr && (strings.EqualFold(strings.TrimSpace(s), "true") || strings.EqualFold(strings.TrimSpace(s), "false")) {
-				b, ok = strings.EqualFold(strings.TrimSpace(s), "true"), true
-			}
 			if !ok {
-				in.refuse(k, v, "send true or false")
+				in.refuse(k, v, "send true or false (JSON true/false, not text)")
 				delete(upd, k)
 				continue
 			}
 			upd[k] = b
 		case "str", "dex", "con", "int", "wis", "cha":
+			if t, isStr := v.(string); isStr { // a number sent as text is refused, as POST /api/characters does (re-check F10)
+				in.refuse(k, v, fmt.Sprintf("send the score as a number (%s), not as text (%q)", strings.TrimSpace(t), t))
+				delete(upd, k)
+				continue
+			}
 			n, ok := wholeNumber(v)
 			if !ok {
 				in.refuse(k, v, "send a whole number: the Standard Array is 15, 14, 13, 12, 10 and 8, once each")
@@ -470,7 +484,13 @@ func checkBuilderInput(upd, body map[string]interface{}) builderInput {
 		case "species_choices":
 			m, ok := v.(map[string]interface{})
 			if !ok {
-				in.refuse(k, v, `send an object, like {"lineage": "high_elf", "spellcasting_ability": "int", "skill": "perception"}`)
+				ex := `send an object, like {"lineage": "high_elf", "spellcasting_ability": "int", "skill": "perception"} for an Elf`
+				if sp != nil && len(sp.Needs) > 0 { // an example that fits the species (re-check: a Dragonborn was shown the Elf's)
+					ex = fmt.Sprintf("send an object with what %s %s chooses: %s (for example {%q: ...})", aOrAn(sp.Name), sp.Name, strings.Join(sp.Needs, ", "), sp.Needs[0])
+				} else if sp != nil {
+					ex = fmt.Sprintf("%s %s makes no species choices: leave species_choices out", aOrAn(sp.Name), sp.Name)
+				}
+				in.refuse(k, v, ex)
 				delete(upd, k)
 				continue
 			}
@@ -512,7 +532,18 @@ func checkBuilderInput(upd, body map[string]interface{}) builderInput {
 		case "background_feat_choices", "species_feat_choices":
 			m, ok := v.(map[string]interface{})
 			if !ok {
-				in.refuse(k, v, `send an object: Magic Initiate {"list": "cleric", "cantrips": ["guidance", "light"], "spell": "bless", "spellcasting_ability": "wis"}; Skilled {"proficiencies": ["perception", "stealth", "lute"]}`)
+				ex := `send an object: Magic Initiate {"list": "cleric", "cantrips": ["guidance", "light"], "spell": "bless", "spellcasting_ability": "wis"}; Skilled {"proficiencies": ["perception", "stealth", "lute"]}`
+				bgKey := bstr(body, "background")
+				if b, isStr := upd["background"].(string); isStr {
+					bgKey = b
+				}
+				bg := game.GetBackground(strings.ToLower(strings.TrimSpace(bgKey)))
+				if k == "background_feat_choices" && bg != nil && bg.Feat == "magic_initiate" { // an example that fits (re-check: a Sage was shown the cleric list)
+					ex = fmt.Sprintf(`send an object: {"cantrips": [two %s cantrips], "spell": "a level 1 %s spell", "spellcasting_ability": "int, wis or cha"} (%s's Magic Initiate uses the %s list)`, bg.FeatNote, bg.FeatNote, bg.Name, strings.ToLower(bg.FeatNote))
+				} else if k == "background_feat_choices" && bg != nil {
+					ex = fmt.Sprintf("%s's Origin feat takes no choices: leave background_feat_choices out", bg.Name)
+				}
+				in.refuse(k, v, ex)
 				delete(upd, k)
 				continue
 			}
@@ -596,6 +627,9 @@ func abilityIncreasesInput(v interface{}) (map[string]interface{}, string) {
 			return nil, fmt.Sprintf("%s is sent twice (%q and %q): send each ability once", a, prev, k)
 		}
 		seen[a] = k
+		if t, isStr := m[k].(string); isStr {
+			return nil, fmt.Sprintf("the increase for %s is text (%q): send it as a number, 2 or 1", a, t)
+		}
 		n, ok := wholeNumber(m[k])
 		if !ok {
 			return nil, fmt.Sprintf("the increase for %s is %s: send a whole number, 2 or 1", a, jsonText(m[k]))
@@ -1036,6 +1070,40 @@ func applySuggestion(body map[string]interface{}, st builderStep) ([]string, []m
 			fillScores(body, sug, set)
 			continue
 		}
+		// a null in the suggestion removes a leftover answer (an Alert background's feat picks, a Rogue's expertise after a change
+		// to Fighter, an Elf's lineage on a Dwarf): applied and said (Nov 14 audit: the problem said "or use_suggestion", and
+		// use_suggestion answered "done: nothing to fill"). A field can name several parts ("species_choices.lineage, species_choices.skill").
+		removed := false
+		for _, part := range strings.Split(field, ", ") {
+			pt, ps := splitField(part)
+			var present bool
+			var pv interface{}
+			if ps == "" {
+				pv, present = sug[pt]
+			} else if m, ok := sug[pt].(map[string]interface{}); ok {
+				pv, present = m[ps]
+			}
+			if !present || pv != nil {
+				continue
+			}
+			if ps == "" {
+				if old, has := body[pt]; has && old != nil {
+					delete(body, pt)
+					filled = append(filled, part)
+					replaced = append(replaced, map[string]interface{}{"field": part, "you_had": old, "now": nil})
+				}
+			} else if m := bmap(body, pt); m != nil {
+				if old, has := m[ps]; has {
+					delete(m, ps)
+					filled = append(filled, part)
+					replaced = append(replaced, map[string]interface{}{"field": part, "you_had": old, "now": nil})
+				}
+			}
+			removed = true
+		}
+		if removed || strings.Contains(field, ", ") {
+			continue
+		}
 		top, sub := splitField(field)
 		sv := sug[top]
 		if sub != "" {
@@ -1086,7 +1154,7 @@ func applySuggestion(body map[string]interface{}, st builderStep) ([]string, []m
 	}
 	sort.Strings(keys)
 	for _, k := range keys { // a field with no answer whose default stands (background_equipment "a")
-		if _, has := body[k]; !has {
+		if _, has := body[k]; !has && sug[k] != nil {
 			body[k] = sug[k]
 			filled = append(filled, k)
 		}

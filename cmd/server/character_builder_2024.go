@@ -1554,7 +1554,11 @@ func builderSteps(body map[string]interface{}, agentID int, withCheck bool) []bu
 			}
 		}
 		if scoreProblem == "" {
-			scoreProblem = fmt.Sprintf("%d abilities have no score: send all six together (15, 14, 13, 12, 10 and 8 once each)", missing)
+			what := fmt.Sprintf("%d abilities have no score", missing)
+			if missing == 1 {
+				what = "1 ability has no score"
+			}
+			scoreProblem = what + ": the six scores are saved together, so send all six in one request (15, 14, 13, 12, 10 and 8 once each)"
 		}
 	}
 	scoresChoice := choice("str, dex, con, int, wis, cha", "one score for each ability: use 15, 14, 13, 12, 10 and 8 once each", 6, nil, scores, missing == 0 && scoreProblem == "", scoreProblem)
@@ -2167,6 +2171,14 @@ func suggestionCovers(sug map[string]interface{}, field string) bool {
 	if field == "str, dex, con, int, wis, cha" {
 		_, ok := sug["str"]
 		return ok
+	}
+	if strings.Contains(field, ", ") { // several parts: covered when every part is
+		for _, part := range strings.Split(field, ", ") {
+			if !suggestionCovers(sug, part) {
+				return false
+			}
+		}
+		return true
 	}
 	top, sub := splitField(field)
 	if sub == "" {

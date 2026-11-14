@@ -186,10 +186,28 @@ func handleCharacters(w http.ResponseWriter, r *http.Request) {
 
 		// 2024 rules: species give no ability scores; the background raises them
 		speciesKey := normalizeSpeciesSlug(req.Species)
-		for k, v := range req.AbilityIncreases { // a 0 is no increase, as in the builder (Nov 14 audit: {"cha": 0} was refused with a misleading reason)
-			if v == 0 {
-				delete(req.AbilityIncreases, k)
+		// a 0 is no increase, as in the builder (Nov 14 audit: {"cha": 0} was refused with a misleading reason); "Strength" is str,
+		// and one ability sent twice ({"str": 2, "STR": 2}) is refused by name
+		canonInc := map[string]int{}
+		for k, v := range req.AbilityIncreases {
+			a := normAbility(k)
+			if prev, dup := canonInc[a]; dup && (prev != 0 || v != 0) {
+				writeJSONStatus(w, http.StatusBadRequest, map[string]interface{}{"error": "invalid_ability_increases", "nothing_created": true, "message": fmt.Sprintf("ability_increases: %s is sent twice: send each ability once. Nothing was created.", a)})
+				return
 			}
+			if v != 0 {
+				canonInc[a] = v
+			} else if _, has := canonInc[a]; !has {
+				canonInc[a] = 0
+			}
+		}
+		for a, v := range canonInc {
+			if v == 0 {
+				delete(canonInc, a)
+			}
+		}
+		if req.AbilityIncreases != nil {
+			req.AbilityIncreases = canonInc
 		}
 		earlyInc, incErr := checkAbilityIncreases(req.Background, req.AbilityIncreases)
 		if incErr != nil {
@@ -335,6 +353,14 @@ func handleCharacters(w http.ResponseWriter, r *http.Request) {
 				return f[0]
 			}
 			return ""
+		}
+		// naming both orders is refused, as in the builder (Nov 14 audit re-check, S2-15: "thaumaturge, protector" became thaumaturge)
+		for _, o := range []struct{ field, v, a, b string }{{"divine_order", req.ClassOptions.DivineOrder, "protector", "thaumaturge"}, {"primal_order", req.ClassOptions.PrimalOrder, "warden", "magician"}} {
+			lv := strings.ToLower(o.v)
+			if strings.Contains(lv, o.a) && strings.Contains(lv, o.b) {
+				writeJSONStatus(w, http.StatusBadRequest, map[string]interface{}{"error": "invalid_" + o.field, "nothing_created": true, "message": fmt.Sprintf("class_options.%s: name one order, not both: %s or %s. Nothing was created.", o.field, o.a, o.b)})
+				return
+			}
 		}
 		divineOrder := firstWord(req.ClassOptions.DivineOrder)
 		primalOrder := firstWord(req.ClassOptions.PrimalOrder)

@@ -77,7 +77,17 @@ func normalizeCreateAliases(raw map[string]interface{}) []string {
 	if sc, ok := raw["species_choices"].(map[string]interface{}); ok {
 		tidy := map[string]interface{}{}
 		for k, v := range sc {
-			tidy[strings.NewReplacer(" ", "_", "-", "_").Replace(strings.ToLower(strings.TrimSpace(k)))] = v
+			nk := strings.NewReplacer(" ", "_", "-", "_").Replace(strings.ToLower(strings.TrimSpace(k)))
+			switch nk { // the same other names as the builder takes (Nov 14 audit re-check: the two routes disagreed)
+			case "ability", "spell_ability", "spellcasting":
+				nk = "spellcasting_ability"
+			case "subrace":
+				nk = "lineage"
+			}
+			if old, dup := tidy[nk]; dup && fmt.Sprint(old) != fmt.Sprint(v) {
+				out = append(out, fmt.Sprintf("species_choices.%s is sent twice with different values: send it once", nk))
+			}
+			tidy[nk] = v
 		}
 		raw["species_choices"] = tidy
 	}

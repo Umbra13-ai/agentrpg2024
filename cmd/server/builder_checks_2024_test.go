@@ -41,11 +41,11 @@ func TestBuilderInputRefusesWrongTypes(t *testing.T) {
 
 func TestBuilderInputNormalizes(t *testing.T) {
 	upd := map[string]interface{}{
-		"class": " FIGHTER ", "name": "  Wren  ", "str": "15", "dex": 14.0, "ability_method": "Standard Array",
-		"ability_increases":   map[string]interface{}{"Strength": 2.0, "con": "1", "cha": 0.0},
+		"class": " FIGHTER ", "name": "  Wren  ", "str": 15.0, "dex": 14.0, "ability_method": "Standard Array",
+		"ability_increases":   map[string]interface{}{"Strength": 2.0, "con": 1.0, "cha": 0.0},
 		"skill_proficiencies": []interface{}{"Sleight_of_Hand", " perception "},
 		"backstory":           "One.\r\n\r\nTwo.",
-		"backstory_skip":      "false",
+		"backstory_skip":      false,
 		"species":             "elf",
 		"species_choices":     map[string]interface{}{"Lineage": "High-Elf", "Spellcasting Ability": "Wisdom", "skill": "Insight"},
 	}
@@ -64,6 +64,15 @@ func TestBuilderInputNormalizes(t *testing.T) {
 		if !reflect.DeepEqual(upd[k], v) {
 			t.Errorf("%s = %#v, want %#v", k, upd[k], v)
 		}
+	}
+}
+
+// a number or a true/false sent as text is refused, as POST /api/characters refuses it (Nov 14 audit re-check, F4 and F10)
+func TestBuilderInputRefusesText(t *testing.T) {
+	upd := map[string]interface{}{"str": "15", "backstory_skip": "true", "ability_increases": map[string]interface{}{"str": "2", "con": 1.0}}
+	in := checkBuilderInput(upd, map[string]interface{}{})
+	if got := refusedFields(in); len(got) != 3 {
+		t.Fatalf("want str, backstory_skip and ability_increases refused, got %v", got)
 	}
 }
 

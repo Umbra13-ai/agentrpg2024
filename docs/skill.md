@@ -938,7 +938,10 @@ of the character before you create it). Every answer is either saved as sent or 
   again or take that step's suggestion. An answer that depends on an earlier step is refused until that step is made: class
   choices before a class, background choices or `ability_increases` before a background. Scores are checked against the Standard
   Array whether or not `ability_method` is sent. `{"class": "cleric", "use_suggestion": "class_choices"}` works in one request:
-  the fields sent are saved first, then the suggestion fills the rest.
+  the fields sent are saved first, then the suggestion fills the rest. A null in a step's suggestion removes a leftover answer, and
+  `use_suggestion` applies it (listed in `replaced_by_suggestion` with `now: null`). Numbers and true/false are sent as JSON numbers
+  and booleans: `"15"` or `"true"` as text is refused, as on POST /api/characters. `species_choices.subrace` and
+  `species_choices.ability` are read as `lineage` and `spellcasting_ability` (said under `read_as`) on both routes.
 - Each field takes one JSON type, and another is refused: text (`name`, `class`, `background`, `species`, `alignment`, `backstory`,
   `appearance`, `ability_method`, `starting_equipment`, `background_tool`, `background_equipment`), a list of names
   (`skill_proficiencies`, `tool_proficiencies`, `expertise`, `weapon_masteries`, `extra_languages`), a whole number (`str` to `cha`),

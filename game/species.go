@@ -200,6 +200,9 @@ func ResolveSpecies(name string, choices map[string]string) (*SpeciesResult, err
 		v := pick(choices, key)
 		v = strings.ReplaceAll(strings.ReplaceAll(v, " ", "_"), "-", "_")
 		if !oneOf(v, options...) {
+			if v != "" { // sent but not an option: said so, as the builder does ("Rock Gnome" is not "missing")
+				return "", fmt.Errorf("species_choices.%s: %q is not one of the options for %s %s: %s", key, pick(choices, key), aOrAnWord(sp.Name), sp.Name, strings.Join(options, ", "))
+			}
 			return "", fmt.Errorf("%s needs species_choices.%s: one of %s", sp.Name, key, strings.Join(options, ", "))
 		}
 		res.Choices[key] = v
@@ -426,4 +429,12 @@ func SpeciesCantrips(species, choice string) []string {
 		return []string{"thaumaturgy"}
 	}
 	return nil
+}
+
+// aOrAnWord: "a" or "an" before a word.
+func aOrAnWord(w string) string {
+	if w != "" && strings.ContainsRune("aeiouAEIOU", rune(w[0])) {
+		return "an"
+	}
+	return "a"
 }
