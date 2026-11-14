@@ -360,6 +360,7 @@ func adminSet(table, kind string, id int, set map[string]interface{}, note strin
 	}
 	defer tx.Rollback()
 	var changed []string
+	oldLobby := ""
 	for _, k := range keys {
 		var old sql.NullString
 		if err := tx.QueryRow(fmt.Sprintf(`SELECT %q::text FROM %s WHERE id = $1`, k, table), id).Scan(&old); err != nil {
@@ -373,13 +374,37 @@ func adminSet(table, kind string, id int, set map[string]interface{}, note strin
 		if old.Valid {
 			oldText = old.String
 		}
+		if k == "lobby_id" {
+			oldLobby = oldText
+		}
 		if oldText != text {
 			tx.Exec(`INSERT INTO admin_changes (kind, row_id, field, old_value, new_value, by_whom, note) VALUES ($1,$2,$3,$4,$5,'admin',$6)`,
 				kind, id, k, oldText, text, note)
 			changed = append(changed, k)
 		}
 	}
-	return changed, tx.Commit()
+	if err := tx.Commit(); err != nil {
+		return nil, err
+	}
+	// follow-ups: conditions live in two places (conditions_unified.go); a campaign's status depends on its players
+	if kind == "character" {
+		for _, k := range changed {
+			switch k {
+			case "conditions":
+				syncRecordsFromList(id)
+			case "lobby_id":
+				if n, err := strconv.Atoi(oldLobby); err == nil && n > 0 {
+					reconcileCampaignStatus(n)
+				}
+				var now sql.NullInt64
+				db.QueryRow(`SELECT lobby_id FROM characters WHERE id = $1`, id).Scan(&now)
+				if now.Valid {
+					reconcileCampaignStatus(int(now.Int64))
+				}
+			}
+		}
+	}
+	return changed, nil
 }
 
 // adminRow: one row as JSON (bytea columns left out).
@@ -500,8 +525,15 @@ func adminRowRoutes(w http.ResponseWriter, r *http.Request, table, kind string, 
 			return
 		}
 		out := map[string]interface{}{kind: row, "field_types": tableColumns(table), "locked_fields": adminLocked}
+		var n1, n2 string
 		if kind == "campaign" {
 			out["characters"] = adminCampaignMembers(id)
+			db.QueryRow(`SELECT COALESCE(a.name,'') FROM lobbies l LEFT JOIN agents a ON a.id = COALESCE(l.dm_id, l.deleted_dm) WHERE l.id = $1`, id).Scan(&n1)
+			out["gm_name"] = n1
+		} else {
+			db.QueryRow(`SELECT COALESCE(a.name,''), COALESCE(l.name,'') FROM characters c LEFT JOIN agents a ON a.id = COALESCE(c.agent_id, c.deleted_owner)
+				LEFT JOIN lobbies l ON l.id = c.lobby_id WHERE c.id = $1`, id).Scan(&n1, &n2)
+			out["owner_name"], out["campaign_name"] = n1, n2
 		}
 		writeJSONStatus(w, http.StatusOK, out)
 	case action == "" && r.Method == http.MethodPost:
@@ -632,8 +664,10 @@ func handleAdminChanges(w http.ResponseWriter, r *http.Request) {
 	}
 	kind := r.URL.Query().Get("kind")
 	id, _ := strconv.Atoi(r.URL.Query().Get("id"))
-	rows, err := db.Query(`SELECT id, at, kind, row_id, field, COALESCE(old_value,''), COALESCE(new_value,''), by_whom, COALESCE(note,'')
-		FROM admin_changes WHERE ($1 = '' OR kind = $1) AND ($2 = 0 OR row_id = $2) ORDER BY id DESC LIMIT $3`, kind, id, limit)
+	rows, err := db.Query(`SELECT x.id, x.at, x.kind, x.row_id, x.field, COALESCE(x.old_value,''), COALESCE(x.new_value,''), x.by_whom, COALESCE(x.note,''),
+		COALESCE(CASE WHEN x.kind = 'character' THEN (SELECT COALESCE(deleted_name, name) FROM characters WHERE id = x.row_id)
+			ELSE (SELECT name FROM lobbies WHERE id = x.row_id) END, '')
+		FROM admin_changes x WHERE ($1 = '' OR x.kind = $1) AND ($2 = 0 OR x.row_id = $2) ORDER BY x.id DESC LIMIT $3`, kind, id, limit)
 	if err != nil {
 		writeJSONStatus(w, http.StatusInternalServerError, map[string]interface{}{"error": publicError(err)})
 		return
@@ -643,10 +677,10 @@ func handleAdminChanges(w http.ResponseWriter, r *http.Request) {
 	for rows.Next() {
 		var cid, rowID int
 		var at time.Time
-		var k, field, oldV, newV, by, note string
-		rows.Scan(&cid, &at, &k, &rowID, &field, &oldV, &newV, &by, &note)
+		var k, field, oldV, newV, by, note, name string
+		rows.Scan(&cid, &at, &k, &rowID, &field, &oldV, &newV, &by, &note, &name)
 		list = append(list, map[string]interface{}{"id": cid, "at": at.Format("2006-01-02 15:04:05"), "kind": k, "row_id": rowID,
-			"field": field, "old": oldV, "new": newV, "by": by, "note": note})
+			"field": field, "old": oldV, "new": newV, "by": by, "note": note, "name": name})
 	}
 	writeJSONStatus(w, http.StatusOK, map[string]interface{}{"changes": list})
 }
@@ -702,4 +736,27 @@ func handleAdminPage(w http.ResponseWriter, r *http.Request) {
 	w.Header().Set("Cache-Control", "no-store")
 	w.Header().Set("X-Robots-Tag", "noindex")
 	fmt.Fprint(w, adminPageHTML)
+}
+
+// handleAdminAccounts: GET /api/admin/accounts?q= finds accounts by name or id (to choose a character's player or a campaign's GM).
+func handleAdminAccounts(w http.ResponseWriter, r *http.Request) {
+	if !requireAdmin(w, r) {
+		return
+	}
+	q := strings.TrimSpace(r.URL.Query().Get("q"))
+	rows, err := db.Query(`SELECT id, name, (SELECT COUNT(*) FROM characters WHERE agent_id = agents.id) FROM agents
+		WHERE LOWER(name) LIKE '%' || LOWER($1) || '%' OR id::text = $1 ORDER BY (LOWER(name) = LOWER($1)) DESC, id DESC LIMIT 20`, q)
+	if err != nil {
+		writeJSONStatus(w, http.StatusInternalServerError, map[string]interface{}{"error": publicError(err)})
+		return
+	}
+	defer rows.Close()
+	list := []map[string]interface{}{}
+	for rows.Next() {
+		var id, n int
+		var name string
+		rows.Scan(&id, &name, &n)
+		list = append(list, map[string]interface{}{"id": id, "name": name, "characters": n})
+	}
+	writeJSONStatus(w, http.StatusOK, map[string]interface{}{"accounts": list})
 }

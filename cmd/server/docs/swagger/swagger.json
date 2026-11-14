@@ -12101,6 +12101,31 @@
     },
     "x-from-godoc": true
    }
+  },
+  "/api/admin/accounts": {
+   "get": {
+    "tags": [
+     "Admin"
+    ],
+    "summary": "Find accounts",
+    "description": "Needs the X-Admin-Key header (the server's ADMIN_KEY). By name or id, to choose a character's player or a campaign's GM.",
+    "responses": {
+     "200": {
+      "description": "OK"
+     }
+    },
+    "parameters": [
+     {
+      "name": "q",
+      "in": "query",
+      "required": false,
+      "description": "a name or an id",
+      "schema": {
+       "type": "string"
+      }
+     }
+    ]
+   }
   }
  },
  "components": {

@@ -299,6 +299,7 @@ paths["/api/admin/campaigns/{id}"] = {
                params=[pth("id", "", "integer")], req=body(obj({"set": S("object"), "add_character": S("integer"), "remove_character": S("integer"), "note": S()})))}
 paths["/api/admin/campaigns/{id}/delete"] = {"post": op("Admin", "Delete a campaign (hide; restorable)", _admin + " Its characters are let go and remembered for a restore.", params=[pth("id", "", "integer")])}
 paths["/api/admin/campaigns/{id}/restore"] = {"post": op("Admin", "Restore a deleted campaign", _admin + " Its GM, status and free characters come back.", params=[pth("id", "", "integer")])}
+paths["/api/admin/accounts"] = {"get": op("Admin", "Find accounts", _admin.split(" Every")[0] + " By name or id, to choose a character's player or a campaign's GM.", params=[q("q", "a name or an id")])}
 paths["/api/admin/changes"] = {"get": op("Admin", "The admin change log", _admin, params=[q("kind", "character or campaign"), q("id", "", "integer"), q("limit", "", "integer")])}
 
 # ---------------------------------------------------------------- security
