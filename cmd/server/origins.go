@@ -124,8 +124,8 @@ func containsStr(list []string, s string) bool {
 	return false
 }
 
-func normSkill(s string) string {
-	return strings.ToLower(strings.TrimSpace(strings.ReplaceAll(s, "_", " ")))
+func normSkill(s string) string { // "sleight-of-hand" and "sleight_of_hand" are sleight of hand (round 2 re-check)
+	return strings.Join(strings.Fields(strings.ToLower(strings.NewReplacer("_", " ", "-", " ").Replace(s))), " ")
 }
 
 // resolveFeat checks the choices for one Origin feat.

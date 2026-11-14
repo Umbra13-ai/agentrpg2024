@@ -623,7 +623,16 @@ func handleCharacterClassOptions(w http.ResponseWriter, r *http.Request, charID 
 		db.Exec(`UPDATE characters SET primal_order = $1 WHERE id = $2`, v, charID)
 		saved["primal_order"], saved["message"] = v, "Primal Order: "+titleWords(v)+"."
 	default:
-		writeJSONStatus(w, http.StatusBadRequest, map[string]interface{}{"error": "nothing_to_set",
+		msg := "Nothing to set: a Cleric sends divine_order (protector or thaumaturge), a Druid primal_order (warden or magician). Nothing was changed."
+		switch {
+		case c == "cleric":
+			msg = "divine_order is empty or missing: send protector or thaumaturge. Nothing was changed."
+		case c == "druid":
+			msg = "primal_order is empty or missing: send warden or magician. Nothing was changed."
+		case c != "":
+			msg = fmt.Sprintf("A %s has no Divine or Primal Order to choose (only a Cleric or a Druid does). Nothing was changed.", titleWords(c))
+		}
+		writeJSONStatus(w, http.StatusBadRequest, map[string]interface{}{"error": "nothing_to_set", "message": msg,
 			"hint": "Clerics set divine_order (protector or thaumaturge); Druids set primal_order (warden or magician)."})
 		return
 	}

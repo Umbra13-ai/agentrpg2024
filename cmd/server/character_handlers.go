@@ -656,7 +656,8 @@ func handleCharacters(w http.ResponseWriter, r *http.Request) {
 				"name": req.Name, "class": req.Class, "species": req.Species, "background": req.Background, "alignment": alignment,
 				"ability_scores": map[string]int{"str": req.Str, "dex": req.Dex, "con": req.Con, "int": req.Int, "wis": req.Wis, "cha": req.Cha},
 				"hp":             hp, "skills": skillProfsStr, "tools": toolProfsStr, "languages": languageProfsStr,
-				"weapon_masteries": masteryPicks, "expertise": expertiseStr, "starting_equipment": kitText(strings.ToLower(req.Class), startOption)},
+				"weapon_masteries": masteryPicks, "expertise": expertiseStr, "starting_equipment": kitText(strings.ToLower(req.Class), startOption),
+				"divine_order": nilIfEmpty(divineOrder), "primal_order": nilIfEmpty(primalOrder)},
 				"message":        "Everything checks out. Send the same request without dry_run to create the character.",
 				"after_creation": "GET /api/characters/{id}/setup then guides what is left: spells, the gear in your hands and any class choice not made here."}
 			var open []string // a level 1 choice this request could make but didn't (it can also be made in the setup)
