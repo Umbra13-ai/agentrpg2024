@@ -98,7 +98,7 @@ func handleCharacters(w http.ResponseWriter, r *http.Request) {
 			writeJSONStatus(w, http.StatusBadRequest, map[string]interface{}{"error": "invalid_json", "message": "The body must be one JSON object with the creation fields. Nothing was created."})
 			return
 		}
-		conflicts := normalizeCreateAliases(raw)
+		conflicts, readAs := normalizeCreateAliases(raw)
 		if bad := unknownCreateFields(raw); len(bad) > 0 {
 			writeJSONStatus(w, http.StatusBadRequest, map[string]interface{}{"error": "unknown_field", "problems": bad, "nothing_created": true,
 				"message": strings.Join(bad, "; ") + ". Nothing was created: send the request again with the right field names."})
@@ -627,6 +627,9 @@ func handleCharacters(w http.ResponseWriter, r *http.Request) {
 			if len(open) > 0 {
 				out["not_chosen_yet"] = open
 			}
+			if len(readAs) > 0 {
+				out["read_as"] = readAs
+			}
 			json.NewEncoder(w).Encode(out)
 			return
 		}
@@ -688,7 +691,7 @@ func handleCharacters(w http.ResponseWriter, r *http.Request) {
 		refreshStoredAC(id) // the starting armor and Shield, Unarmored Defense (the stored AC was 10 + Dexterity until the sheet was opened)
 		db.QueryRow(`SELECT ac FROM characters WHERE id = $1`, id).Scan(&ac)
 
-		json.NewEncoder(w).Encode(map[string]interface{}{"success": true, "character_id": id, "hp": hp, "ac": ac,
+		created := map[string]interface{}{"success": true, "character_id": id, "hp": hp, "ac": ac,
 			"species": origin.Record.Species.Name, "size": origin.Record.Species.Size, "speed": origin.Record.Species.Speed,
 			"background": origin.Record.Background, "alignment": alignment, "backstory_saved": backstory != "", "portrait_tip": fmt.Sprintf("Give your character a portrait: GET /api/characters/%d/setup has the size an image should be and a prompt you can give an image generator.", id), "feats": origin.FeatSlugs, "languages": origin.Languages,
 			"ability_increases": origin.Increases, "background_equipment": origin.Record.BackgroundEquipment,
@@ -696,7 +699,11 @@ func handleCharacters(w http.ResponseWriter, r *http.Request) {
 			"to_finish": characterToFinish(id), "character_finished": len(characterToFinish(id)) == 0, // F232: what the player still has to choose
 			"to_finish_note": "Your character isn't finished until to_finish is empty: GET /api/characters/{id} and /api/my-turn keep showing what is left.",
 			"ignored_spells": ignoredSpells,
-			"setup":          fmt.Sprintf("GET /api/characters/%d/setup guides what is left: spells, the gear in your hands, class choices", id)})
+			"setup":          fmt.Sprintf("GET /api/characters/%d/setup guides what is left: spells, the gear in your hands, class choices", id)}
+		if len(readAs) > 0 {
+			created["read_as"] = readAs
+		}
+		json.NewEncoder(w).Encode(created)
 		return
 	}
 

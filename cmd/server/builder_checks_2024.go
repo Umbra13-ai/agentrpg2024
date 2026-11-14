@@ -98,6 +98,8 @@ func unknownBuilderFields(upd map[string]interface{}) []string {
 			msg := fmt.Sprintf("%q is not a field the builder knows", k)
 			if nk := normKey(k); nk == "spells" || nk == "cantrips" || nk == "spell" || nk == "prepared_spells" { // not "did you mean species" (re-check)
 				msg += ": spells and cantrips are chosen after creation, in GET /api/characters/{id}/setup"
+			} else if h, ok := createFieldHints[nk]; ok && nk != "use_suggestion" && nk != "spellcasting_ability" { // the same true hints as POST /api/characters (round 2)
+				msg += ": " + h
 			} else if c := closestField(k); c != "" {
 				msg += fmt.Sprintf(" (did you mean %q?)", c)
 			}

@@ -308,6 +308,11 @@ func resolveOrigin(in originInput) (*originOutput, *originError) {
 				v = n
 			}
 		}
+		if k == "spellcasting_ability" { // "Wisdom" is wis, as in the builder (Nov 14 audit re-check)
+			if a := normAbility(v); a == "int" || a == "wis" || a == "cha" {
+				v = a
+			}
+		}
 		choices[k] = v
 	}
 	species, serr := game.ResolveSpecies(sp.Key, choices)

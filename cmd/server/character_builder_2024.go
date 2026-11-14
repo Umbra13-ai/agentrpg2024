@@ -1117,6 +1117,10 @@ func builderSteps(body map[string]interface{}, agentID int, withCheck bool) []bu
 	if sp == nil {
 		s4.Remaining++
 		s4.Choices = append(s4.Choices, speciesChoicesBeforeSpecies(body, class, bg)...) // a value no species accepts is refused now (S4-13)
+		if hasAnswer(body["species_feat_choices"]) { // a Human's feat picks before the species: can't be checked yet (round 2 re-check)
+			s4.Choices = append(s4.Choices, choice("species_feat_choices", "a Human's Origin feat picks", 0, nil, body["species_feat_choices"], false,
+				"choose a species first (Step 4): only a Human has an Origin feat from its species, and its picks depend on that feat"))
+		}
 	} else {
 		// species_choices: the answers this species uses, each checked as creation checks it. Answers it doesn't use (left from an
 		// earlier species, or sent for this one) are refused or flagged, never kept silently (Nov 14 tester: a Halfling kept "size
@@ -1570,7 +1574,7 @@ func builderSteps(body map[string]interface{}, agentID int, withCheck bool) []bu
 	if missing == 0 && scoreProblem == "" && !isStandardArray([]int{scores["str"], scores["dex"], scores["con"], scores["int"], scores["wis"], scores["cha"]}) {
 		s5.Problems = append(s5.Problems, "the Standard Array is 15, 14, 13, 12, 10 and 8, each used once")
 		scoresChoice["done"] = false
-		scoresChoice["problem"] = fmt.Sprintf("these scores are not the Standard Array: you sent %d, %d, %d, %d, %d and %d (Str, Dex, Con, Int, Wis, Cha); use 15, 14, 13, 12, 10 and 8 once each", scores["str"], scores["dex"], scores["con"], scores["int"], scores["wis"], scores["cha"])
+		scoresChoice["problem"] = fmt.Sprintf("these scores are not the Standard Array: your scores would be %d, %d, %d, %d, %d and %d (Str, Dex, Con, Int, Wis, Cha); use 15, 14, 13, 12, 10 and 8 once each", scores["str"], scores["dex"], scores["con"], scores["int"], scores["wis"], scores["cha"])
 	}
 	inc := map[string]int{}
 	incRaw := bmap(body, "ability_increases")
@@ -2559,6 +2563,23 @@ func applyBuilderUpdate(body, upd map[string]interface{}, agentID int) builderOu
 			skip[p] = true
 		}
 		o.refused = append(o.refused, rj...)
+	}
+	// the six scores are one answer: when one was refused (a wrong type), the others are held back with that reason, not told they
+	// "have no score" (round 2 re-check)
+	var badScore string
+	for _, r := range in.refused {
+		if f, _ := r["field"].(string); containsStr(abilityKeys6[:], f) {
+			badScore = f
+			break
+		}
+	}
+	if badScore != "" {
+		for _, r := range o.refused {
+			f, _ := r["field"].(string)
+			if p, _ := r["problem"].(string); f != badScore && containsStr(abilityKeys6[:], f) && strings.Contains(p, "no score") {
+				r["problem"] = fmt.Sprintf("not saved because %s was refused: the six scores are saved together, so send all six again with %s fixed", badScore, badScore)
+			}
+		}
 	}
 	if deferredSug {
 		snap, _ := deepCopyJSON(body).(map[string]interface{})

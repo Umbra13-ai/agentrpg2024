@@ -31,7 +31,7 @@ func TestCreateFieldsUnknownAndMisplaced(t *testing.T) {
 
 func TestCreateFieldAliases(t *testing.T) {
 	raw := createBody(t, `{"species":"dragonborn","draconic_ancestry":"Red","divine_order":"protector"}`)
-	if c := normalizeCreateAliases(raw); len(c) != 0 {
+	if c, _ := normalizeCreateAliases(raw); len(c) != 0 {
 		t.Fatalf("unexpected conflicts %v", c)
 	}
 	if got := raw["species_choices"].(map[string]interface{})["ancestry"]; got != "red" {
@@ -44,7 +44,7 @@ func TestCreateFieldAliases(t *testing.T) {
 		t.Error("top-level divine_order left in place")
 	}
 	raw = createBody(t, `{"species":"dragonborn","draconic_ancestry":"red","species_choices":{"ancestry":"bronze"}}`)
-	if c := normalizeCreateAliases(raw); len(c) != 1 || !strings.Contains(c[0], "disagree") {
+	if c, _ := normalizeCreateAliases(raw); len(c) != 1 || !strings.Contains(c[0], "disagree") {
 		t.Errorf("conflicting ancestry not reported: %v", c)
 	}
 }

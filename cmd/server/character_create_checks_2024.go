@@ -72,17 +72,18 @@ var classOptionFields = map[string]string{"divine_order": "Cleric: protector or 
 // class_options, the species_choices keys are tidied ("Lineage" is lineage), a Dragonborn's draconic_ancestry fills
 // species_choices.ancestry (it used to be dropped for species_choices). It returns the conflicts (two answers for one choice
 // that disagree). The feat-choice aliases are handled by unknownCreateFields.
-func normalizeCreateAliases(raw map[string]interface{}) []string {
-	var out []string
+func normalizeCreateAliases(raw map[string]interface{}) (out []string, notes []string) {
 	if sc, ok := raw["species_choices"].(map[string]interface{}); ok {
 		tidy := map[string]interface{}{}
 		for k, v := range sc {
 			nk := strings.NewReplacer(" ", "_", "-", "_").Replace(strings.ToLower(strings.TrimSpace(k)))
-			switch nk { // the same other names as the builder takes (Nov 14 audit re-check: the two routes disagreed)
+			switch nk { // the same other names as the builder takes, said under read_as (Nov 14 audit re-check: the two routes disagreed)
 			case "ability", "spell_ability", "spellcasting":
 				nk = "spellcasting_ability"
+				notes = append(notes, fmt.Sprintf("species_choices.%s is read as species_choices.spellcasting_ability", k))
 			case "subrace":
 				nk = "lineage"
+				notes = append(notes, fmt.Sprintf("species_choices.%s is read as species_choices.lineage", k))
 			}
 			if old, dup := tidy[nk]; dup && fmt.Sprint(old) != fmt.Sprint(v) {
 				out = append(out, fmt.Sprintf("species_choices.%s is sent twice with different values: send it once", nk))
@@ -112,6 +113,7 @@ func normalizeCreateAliases(raw map[string]interface{}) []string {
 			continue
 		}
 		co[k] = v
+		notes = append(notes, fmt.Sprintf("%s is read as class_options.%s", k, k))
 	}
 	species, _ := raw["species"].(string)
 	if da, _ := raw["draconic_ancestry"].(string); strings.TrimSpace(da) != "" {
@@ -124,6 +126,7 @@ func normalizeCreateAliases(raw map[string]interface{}) []string {
 				switch {
 				case strings.TrimSpace(have) == "":
 					sc["ancestry"] = strings.ToLower(strings.TrimSpace(da)) // the field the docs name for it
+					notes = append(notes, "draconic_ancestry is read as species_choices.ancestry")
 				case !strings.EqualFold(strings.TrimSpace(have), strings.TrimSpace(da)):
 					out = append(out, fmt.Sprintf("draconic_ancestry %q and species_choices.ancestry %q disagree: send one", da, have))
 				}
@@ -136,10 +139,12 @@ func normalizeCreateAliases(raw map[string]interface{}) []string {
 			g, _ := sc["legacy"].(string)
 			if strings.TrimSpace(l) != "" && strings.TrimSpace(g) != "" && !strings.EqualFold(strings.TrimSpace(l), strings.TrimSpace(g)) {
 				out = append(out, fmt.Sprintf("species_choices.lineage %q and species_choices.legacy %q disagree: a Tiefling has one legacy", l, g))
+			} else if strings.TrimSpace(l) != "" && strings.TrimSpace(g) == "" {
+				notes = append(notes, "species_choices.lineage is read as species_choices.legacy (a Tiefling's)")
 			}
 		}
 	}
-	return out
+	return out, notes
 }
 
 // unknownCreateFields: each field (or part of class_options, background_feat_choices, species_feat_choices) the request doesn't
