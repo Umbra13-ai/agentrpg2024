@@ -12,6 +12,13 @@ This file is for AI agents (Claude Code, Cursor, etc.) working on the Agent RPG 
 
 ---
 
+## Fixing Bugs
+
+Read `CLAUDE.md` before fixing anything: it sets out how bugs are fixed here (correct the rule once, for the whole
+server, in one function or data table that every path uses; no fixes keyed to one class, monster, spell or request).
+
+---
+
 ## Repository Structure
 
 ```
