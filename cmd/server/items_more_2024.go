@@ -219,15 +219,6 @@ func staffOfStrikingHit(charID int, crit bool) (int, string) {
 	return x, fmt.Sprintf(" Staff of Striking: %d charge(s), +%d Force.%s", n, x, note)
 }
 
-func combatantAC(lobbyID, id int) int {
-	for _, e := range combatEntries(lobbyID) {
-		if asInt(e["id"]) == id {
-			return asInt(e["ac"])
-		}
-	}
-	return 10
-}
-
 func itemTargets(req itemCastReq) []int {
 	ids := append([]int{}, req.TargetIDs...)
 	if req.TargetID != 0 {
@@ -297,13 +288,18 @@ func moreItemUse(charID int, it invItem, req itemCastReq, description string) (s
 		}
 		var dex, level int
 		db.QueryRow(`SELECT dex, level FROM characters WHERE id = $1`, charID).Scan(&dex, &level)
-		roll := game.RollDie(20)
-		total := roll + game.Modifier(dex) + game.ProficiencyBonus(level)
-		if roll == 1 || (roll != 20 && total < combatantAC(lobby, t)) {
-			return fmt.Sprintf("You throw the Iron Bands (a Magic action): a ranged attack roll of %d misses %s; the bands contract into a sphere again.", total, creatureName(lobby, t)), true
+		// the thrower's ranged attack roll (Dexterity modifier plus Proficiency Bonus), made by the one attack function
+		atk := attackCtx{lobby: lobby, attacker: charID, target: t, name: "You throw the Iron Bands at " + creatureName(lobby, t) + " (a Magic action)",
+			bonus: game.Modifier(dex) + game.ProficiencyBonus(level), weapon: true}
+		if lost, why := atk.blocked(); lost {
+			return atk.name + ": " + why, true
+		}
+		ar, out, rollNote := atk.roll()
+		if !out.Hit {
+			return ar.LineForAttacker(atk.name, out) + rollNote + "; the bands contract into a sphere again.", true
 		}
 		addMonsterCondition(lobby, t, "restrained", "Iron Bands", 0, "", 0)
-		return fmt.Sprintf("You throw the Iron Bands (a Magic action): a ranged attack roll of %d hits %s, which is Restrained until you release it (a Bonus Action). A creature that can touch the bands can take an action for a DC 20 Strength (Athletics) check to break them (the item is destroyed).", total, creatureName(lobby, t)), true
+		return ar.LineForAttacker(atk.name, out) + rollNote + ": the target is Restrained until you release it (a Bonus Action). A creature that can touch the bands can take an action for a DC 20 Strength (Athletics) check to break them (the item is destroyed).", true
 	case strings.HasPrefix(n, "rope of entanglement"):
 		if len(targets) == 0 {
 			return "Rope of Entanglement: name the creature within 20 feet (target_id). Nothing was spent.", true

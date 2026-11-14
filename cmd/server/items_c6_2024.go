@@ -154,35 +154,30 @@ func ringOfTheRam(charID int, it invItem, req itemCastReq, description string) s
 		return refusal + " Nothing was spent."
 	}
 	lobby := lobbyOfChar(charID)
-	ac := 10
-	for _, e := range combatEntries(lobby) {
-		if asInt(e["id"]) == req.TargetID {
-			ac = asInt(e["ac"])
-		}
-	}
-	if req.TargetID > 0 {
-		db.QueryRow(`SELECT ac FROM characters WHERE id = $1`, req.TargetID).Scan(&ac)
-	}
-	d20 := game.RollDie(20)
-	total := d20 + 7
 	who := creatureName(lobby, req.TargetID)
-	if d20 == 1 || (d20 != 20 && total < ac) {
-		return fmt.Sprintf("A spectral ram's head charges from the ring (a Magic action, %d charge%s): %d to hit (+7) against %s - MISS.%s", n, map[bool]string{true: "", false: "s"}[n == 1], total, who, note)
+	// the wearer's ranged attack roll with the ring's own bonus, made by the one attack function (attack_2024.go)
+	atk := attackCtx{lobby: lobby, attacker: charID, target: req.TargetID, bonus: 7,
+		name: fmt.Sprintf("A spectral ram's head charges from the ring at %s (a Magic action, %d charge%s)", who, n, map[bool]string{true: "", false: "s"}[n == 1])}
+	if lost, why := atk.blocked(); lost {
+		return atk.name + ": " + why + note
 	}
-	dmg := game.RollDamage(fmt.Sprintf("%dd10", 2*n), d20 == 20)
+	ar, out, rollNote := atk.roll()
+	if !out.Hit {
+		return ar.LineForAttacker(atk.name, out) + rollNote + "." + note
+	}
+	dmg := game.RollDamage(fmt.Sprintf("%dd10", 2*n), out.Critical)
 	var res string
 	if req.TargetID < 0 {
-		res, _ = damageMonster(lobby, req.TargetID, dmg, "force")
+		res, _ = damageMonster(lobby, req.TargetID, dmg, "force", out.Critical)
 	} else {
-		res = damageCharacter(req.TargetID, dmg, "force")
+		res = damageCharacter(req.TargetID, dmg, "force", out.Critical)
 	}
 	moved, onMap := pushToken(lobby, charID, req.TargetID, 5*n)
 	push := fmt.Sprintf(" It is pushed %d feet away.", 5*n)
 	if onMap {
 		push = fmt.Sprintf(" It is pushed %d feet away.", moved)
 	}
-	return fmt.Sprintf("A spectral ram's head charges from the ring (a Magic action, %d charge%s): %d to hit (+7) - HIT, %dd10 = %d Force. %s.%s%s", n, map[bool]string{true: "", false: "s"}[n == 1],
-		total, 2*n, dmg, strings.TrimSpace(res), push, note)
+	return fmt.Sprintf("%s%s, %dd10 = %d Force. %s.%s%s", ar.LineForAttacker(atk.name, out), rollNote, 2*n, dmg, strings.TrimSpace(res), push, note)
 }
 
 func ringOfShootingStars(charID int, it invItem, req itemCastReq, description string) string {

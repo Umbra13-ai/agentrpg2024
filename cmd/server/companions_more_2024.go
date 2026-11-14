@@ -80,25 +80,26 @@ func monsterAttacksCompanion(lobbyID, attackerID int, attackerName string, chose
 		if cur.Status != "active" || cur.HP <= 0 {
 			break
 		}
-		adv := attackerID != 0 && auraOfAuthority(lobbyID, attackerID)
-		roll := game.RollDie(20)
-		if adv {
-			if r2 := game.RollDie(20); r2 > roll {
-				roll = r2
-			}
-		}
-		toHit := roll + a.AttackBonus
-		if roll == 1 || (roll != 20 && toHit < cur.AC) {
-			lines = append(lines, fmt.Sprintf("%s: %d vs AC %d - MISS", a.Name, toHit, cur.AC))
+		// the one attack function (attack_2024.go); the companion's own Armor Class is the one it has now
+		isMelee := meleeRe.MatchString(a.Desc) && !rangedOnlyRe.MatchString(a.Desc)
+		atk := attackCtx{lobby: lobbyID, attacker: attackerID, target: cur.CombatID, name: a.Name, bonus: a.AttackBonus, melee: isMelee, weapon: true,
+			ac: &cur.AC, autoHit: autoHitRe.MatchString(a.Desc)}
+		rolled, out, rollNote := atk.roll()
+		if !out.Hit {
+			lines = append(lines, rolled.Line(a.Name, out)+rollNote)
 			continue
 		}
-		crit := roll == 20
 		hits++
 		parts := []extraDamage{{Dice: a.DamageDice, Type: a.DamageType}}
-		parts = append(parts, attackExtraDamage(a.Desc)...)
+		for _, x := range attackExtraDamage(a.Desc) {
+			if x.IfAdvantage && !rolled.HasAdvantage() {
+				continue // damage "if the attack roll had Advantage": only then
+			}
+			parts = append(parts, x)
+		}
 		var said []string
 		for _, p := range parts {
-			d := game.RollDamage(p.Dice, crit)
+			d := game.RollDamage(p.Dice, out.Critical)
 			if d < 1 {
 				d = 1
 			}
@@ -112,11 +113,7 @@ func monsterAttacksCompanion(lobbyID, attackerID int, attackerName string, chose
 				said = append(said, fmt.Sprintf("%d %s damage", d, p.Type))
 			}
 		}
-		label := "HIT"
-		if crit {
-			label = "CRITICAL HIT"
-		}
-		lines = append(lines, fmt.Sprintf("%s: %d vs AC %d - %s, %s", a.Name, toHit, cur.AC, label, strings.Join(said, " ")))
+		lines = append(lines, rolled.Line(a.Name, out)+rollNote+", "+strings.Join(said, " "))
 	}
 	text := fmt.Sprintf("%s attacks %s. %s.", attackerName, companionDisplayName(c), strings.Join(lines, "; "))
 	return text, map[string]interface{}{"attacks": len(chosen), "hits": hits, "damage": total, "applied": apply, "target": c.Name, "companion_id": c.ID}

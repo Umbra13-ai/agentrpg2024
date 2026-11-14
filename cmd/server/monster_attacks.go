@@ -193,15 +193,6 @@ func resolveMonsterAttack(r *http.Request, campaignID int, monster, action, targ
 			chosen = plan
 		}
 	}
-	if !found && attackerID != 0 {
-		if c, ok := companionByNameOrID(campaignID, target); ok { // a familiar, steed, summon or pet (companions_more_2024.go)
-			if why := commandBlock(campaignID, attackerID, attackerName); why != "" {
-				return why, map[string]interface{}{"attacks": 0, "commanded": true}, true
-			}
-			text, info := monsterAttacksCompanion(campaignID, attackerID, attackerName, chosen, c, apply)
-			return text, info, true
-		}
-	}
 	// the attacker's conditions as every attack reads them (attack_2024.go); used here for what stops the whole attack and for
 	// the reactions after a hit. The roll itself gathers both sides' conditions in attackCtx.
 	var attackerConds []string
@@ -217,6 +208,12 @@ func resolveMonsterAttack(r *http.Request, campaignID int, monster, action, targ
 	if attackerID != 0 {
 		if why := commandBlock(campaignID, attackerID, attackerName); why != "" {
 			return why, map[string]interface{}{"attacks": 0, "commanded": true}, true
+		}
+	}
+	if !found && attackerID != 0 {
+		if c, ok := companionByNameOrID(campaignID, target); ok { // a familiar, steed, summon or pet (companions_more_2024.go)
+			text, info := monsterAttacksCompanion(campaignID, attackerID, attackerName, chosen, c, apply)
+			return text, info, true
 		}
 	}
 	if found && attackerID != 0 {

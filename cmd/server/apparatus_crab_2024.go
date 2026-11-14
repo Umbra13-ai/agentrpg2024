@@ -127,26 +127,26 @@ func crabClaws(lobby int, claws, up bool, req itemCastReq) string {
 	if target >= 0 || !ok {
 		return "Lever 5: the claws snap at the air: name the monster in reach as target_id (a negative id from GET /api/my-turn)."
 	}
-	name, ac := fmt.Sprint(e["name"]), asInt(e["ac"])
+	name := fmt.Sprint(e["name"])
 	var lines []string
 	for i := 1; i <= 2; i++ {
-		roll := game.RollDie(20)
-		total := roll + 8
-		if roll == 1 || (roll != 20 && total < ac) {
-			lines = append(lines, fmt.Sprintf("claw %d: %d vs AC %d, a miss", i, total, ac))
-			continue
+		// each claw's attack roll (+8) by the one attack function (attack_2024.go); the apparatus is not a creature in the fight
+		beside := true
+		atk := attackCtx{lobby: lobby, target: target, name: fmt.Sprintf("claw %d", i), bonus: 8, melee: true, weapon: true, within5: &beside}
+		ar, out, rollNote := atk.roll()
+		line := ar.LineForAttacker(atk.name, out) + rollNote
+		switch {
+		case !out.Hit:
+		case up:
+			text, _ := damageMonster(lobby, target, game.RollDamage("2d6", out.Critical), "bludgeoning", out.Critical)
+			line += ": " + text
+		case monsterConditionImmune(lobby, target, "grappled"):
+			line += ", but " + name + " can't be Grappled"
+		default:
+			addMonsterCondition(lobby, target, "grappled", "Apparatus of the Crab (escape DC 15)", 0, "", 0)
+			line += ": " + name + " has the Grappled condition (escape DC 15)"
 		}
-		if up {
-			text, _ := damageMonster(lobby, target, game.RollDamage("2d6", roll == 20), "bludgeoning")
-			lines = append(lines, fmt.Sprintf("claw %d: %d vs AC %d, a hit: %s", i, total, ac, text))
-			continue
-		}
-		if monsterConditionImmune(lobby, target, "grappled") {
-			lines = append(lines, fmt.Sprintf("claw %d: %d vs AC %d, a hit, but %s can't be Grappled", i, total, ac, name))
-			continue
-		}
-		addMonsterCondition(lobby, target, "grappled", "Apparatus of the Crab (escape DC 15)", 0, "", 0)
-		lines = append(lines, fmt.Sprintf("claw %d: %d vs AC %d, a hit: %s has the Grappled condition (escape DC 15)", i, total, ac, name))
+		lines = append(lines, line)
 	}
 	return "Lever 5, the claws attack " + name + " (+8, reach 5 ft.): " + strings.Join(lines, "; ") + "."
 }

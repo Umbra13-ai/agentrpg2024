@@ -111,11 +111,10 @@ func dancingSword(charID int, it invItem, req itemCastReq) string {
 	if okw && containsProperty(w.Properties, "finesse") && game.Modifier(dex) > mod {
 		mod = game.Modifier(dex)
 	}
-	var ac int
 	var tname string
 	for _, en := range combatEntries(lobby) {
 		if asInt(en["id"]) == req.TargetID {
-			ac, tname = asInt(en["ac"]), fmt.Sprint(en["name"])
+			tname = fmt.Sprint(en["name"])
 		}
 	}
 	if tname == "" {
@@ -128,18 +127,21 @@ func dancingSword(charID int, it invItem, req itemCastReq) string {
 		db.Exec(`UPDATE characters SET equipped_main_hand = NULL WHERE id = $1 AND equipped_main_hand = $2`, charID, name)
 	}
 	attacks++
-	nat := game.RollDie(20)
-	total := nat + mod + game.ProficiencyBonus(level)
-	text := fmt.Sprintf("The %s flies and attacks %s (attack roll %d)", name, tname, total)
-	if nat == 20 || (nat != 1 && total >= ac) {
-		dmg := game.RollDamage(dice, nat == 20) + mod
+	// "The sword uses your attack roll": the owner's roll by the one attack function (attack_2024.go); the sword is next to its target
+	beside := true
+	atk := attackCtx{lobby: lobby, attacker: charID, target: req.TargetID, name: fmt.Sprintf("The %s flies and attacks %s", name, tname),
+		bonus: mod + game.ProficiencyBonus(level), melee: true, weapon: true, within5: &beside}
+	ar, out, rollNote := atk.roll()
+	text := ar.LineForAttacker(atk.name, out) + rollNote
+	if out.Hit {
+		dmg := game.RollDamage(dice, out.Critical) + mod
 		if dmg < 1 {
 			dmg = 1
 		}
-		res, _ := damageMonster(lobby, req.TargetID, dmg, dtype)
-		text += fmt.Sprintf(" - %s! %s.", map[bool]string{true: "CRITICAL HIT", false: "HIT"}[nat == 20], strings.TrimRight(strings.TrimSpace(res), "."))
+		res, _ := damageMonster(lobby, req.TargetID, dmg, dtype, out.Critical)
+		text += "! " + strings.TrimRight(strings.TrimSpace(res), ".") + "."
 	} else {
-		text += " - MISS."
+		text += "."
 	}
 	db.Exec(`DELETE FROM spell_effects WHERE lobby_id = $1 AND target_id = $2 AND kind = 'dancing_sword'`, lobby, charID)
 	if attacks >= 4 {

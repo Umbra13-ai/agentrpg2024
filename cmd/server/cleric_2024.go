@@ -39,7 +39,8 @@ func choseBlessedStrikesDivine(charID int) bool {
 }
 
 // damageMonster deals damage to a monster in the combat (resistances and immunities applied) and says what happened.
-func damageMonster(lobbyID, targetID, dmg int, dtype string) (string, bool) {
+func damageMonster(lobbyID, targetID, dmg int, dtype string, critical ...bool) (string, bool) {
+	crit := len(critical) > 0 && critical[0]
 	tx, err := db.Begin()
 	if err != nil {
 		return "", false
@@ -71,7 +72,7 @@ func damageMonster(lobbyID, targetID, dmg int, dtype string) (string, bool) {
 		}
 		if hp <= 0 {
 			var unote string
-			hp, unote = undeadFortitude(lobbyID, e, hp, d, dtype, false) // Zombie (dodge_2024.go)
+			hp, unote = undeadFortitude(lobbyID, e, hp, d, dtype, crit) // Zombie (dodge_2024.go); no save against a Critical Hit
 			pnote += unote
 		}
 		if hp < 0 {

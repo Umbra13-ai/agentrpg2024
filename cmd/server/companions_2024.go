@@ -947,59 +947,33 @@ func mustCompanion(id int) companion {
 	return c
 }
 
-// companionAttack rolls one attack against a monster and applies the damage.
+// companionAttack rolls one attack against a monster and applies the damage. The roll is the one attack function's
+// (attack_2024.go) and the damage the one damage function's for monsters (damageMonster). c.CombatID is the attacker: a
+// companion's combat id, or the character's own id for a Wild Shape form, which then gets every rule of a character's attack.
 func companionAttack(lobbyID int, c companion, a compAttack, targetID int) string {
-	var ac, hp int
-	var key, name string
+	alive := false
 	for _, e := range combatEntries(lobbyID) {
-		if asInt(e["id"]) == targetID {
-			ac, hp = asInt(e["ac"]), asInt(e["hp"])
-			key, name = fmt.Sprint(e["monster_key"]), fmt.Sprint(e["name"])
+		if asInt(e["id"]) == targetID && asInt(e["hp"]) > 0 {
+			alive = true
 		}
 	}
-	if hp <= 0 {
+	if !alive {
 		return fmt.Sprintf("%s: the target is already down.", a.Name)
 	}
-	ac += spellACAdjust(lobbyID, targetID)
-	adv := takeCombatEffect(lobbyID, targetID, "assisted", c.CombatID)
-	d20 := game.RollDie(20)
-	if adv {
-		if r := game.RollDie(20); r > d20 {
-			d20 = r
-		}
+	atk := attackCtx{lobby: lobbyID, attacker: c.CombatID, target: targetID, name: a.Name, bonus: a.Bonus, melee: true, weapon: true}
+	if lost, note := atk.blocked(); lost {
+		return a.Name + ": " + note
 	}
-	total := d20 + a.Bonus
-	crit := d20 == 20
-	if d20 == 1 || (!crit && total < ac) {
-		return fmt.Sprintf("%s: %d to hit (d20 %d + %d)%s. MISS.", a.Name, total, d20, a.Bonus, map[bool]string{true: " with Advantage (Help)", false: ""}[adv])
+	ar, out, rollNote := atk.roll()
+	if !out.Hit {
+		return ar.LineForAttacker(a.Name, out) + rollNote + "."
 	}
-	dmg := game.RollDamage(a.Dice, crit)
-	dmg, note := adjustMonsterDamage(key, strings.ToLower(a.Type), dmg)
-	extra := ""
-	if a.Extra != "" {
-		x := game.RollDamage(a.Extra, crit)
-		x, n2 := adjustMonsterDamage(key, strings.ToLower(a.ExtraType), x)
-		dmg += x
-		extra = fmt.Sprintf(" plus %d %s%s", x, a.ExtraType, n2)
+	text, _ := damageMonster(lobbyID, targetID, game.RollDamage(a.Dice, out.Critical), strings.ToLower(a.Type), out.Critical)
+	if a.Extra != "" && monsterHPNow(lobbyID, targetID) > 0 {
+		more, _ := damageMonster(lobbyID, targetID, game.RollDamage(a.Extra, out.Critical), strings.ToLower(a.ExtraType), out.Critical)
+		text += " " + more
 	}
-	newHP := hp - dmg
-	fortNote := ""
-	if newHP <= 0 {
-		newHP, fortNote = undeadFortitudeFor(lobbyID, targetID, monsterName(lobbyID, targetID), hp, newHP, dmg, a.Type, crit) // Zombie (dodge_2024.go)
-	}
-	if newHP < 0 {
-		newHP = 0
-	}
-	setMonsterHP(lobbyID, targetID, newHP)
-	wakeText := ""
-	if dmg > 0 {
-		wakeText = wakeOnDamage(lobbyID, targetID, monsterName(lobbyID, targetID)) // Sleep, Suggestion, Dominate's repeat save (F221)
-	}
-	critText := ""
-	if crit {
-		critText = " CRITICAL HIT!"
-	}
-	return fmt.Sprintf("%s: %d to hit. HIT.%s %d %s damage%s%s to %s (%s).%s", a.Name, total, critText, dmg, a.Type, note, extra, name, healthWord(newHP, maxHPOf(lobbyID, targetID)), wakeText+fortNote)
+	return ar.LineForAttacker(a.Name, out) + rollNote + ". " + text
 }
 
 func maxHPOf(lobbyID, id int) int {

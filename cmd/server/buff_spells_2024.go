@@ -849,42 +849,8 @@ func monsterSeesThrough(lobbyID, monsterID int) bool {
 	return strings.Contains(s, "blindsight") || strings.Contains(s, "truesight")
 }
 
-// buffAttackDisadvantage: an attack roll against the character has Disadvantage because of what the character has done or has on
-// it (the Dodge action, Foresight, Blur, Holy Aura, Protection from Evil and Good ...). Every place that rolls an attack against a
-// character asks here: a stat block's attack, a monster's spell attack, an Opportunity Attack (Nov 14: Dodge was read in one of
-// them only). monsterID is 0 when the attacker is not a monster in the turn order.
-func buffAttackDisadvantage(lobbyID, monsterID, targetID int) (bool, string) {
-	if targetID <= 0 {
-		return false, ""
-	}
-	var why []string
-	if ok, w := moreAttackDisadvantage(lobbyID, monsterID, targetID); ok {
-		why = append(why, w) // Magic Circle (spells_more_2024.go)
-	}
-	if dodgeActive(targetID) {
-		why = append(why, "the target is Dodging") // the Dodge action (dodge_2024.go): every attack roll against the character
-	}
-	if _, ok := buffEffect(lobbyID, targetID, "foresight"); ok {
-		why = append(why, "Foresight")
-	}
-	if robeDazzle(lobbyID, targetID) {
-		why = append(why, "Robe of Scintillating Colors") // F176 (items_c6_2024.go)
-	}
-	if cloakOfDisplacement(lobbyID, targetID) {
-		why = append(why, "Cloak of Displacement") // F113 (rogue_fixes_2024.go)
-	}
-	if _, ok := buffEffect(lobbyID, targetID, "blur"); ok && (monsterID == 0 || !monsterSeesThrough(lobbyID, monsterID)) {
-		why = append(why, "Blur")
-	}
-	if ok, _ := holyAuraOn(lobbyID, targetID); ok {
-		why = append(why, "Holy Aura")
-	}
-	if _, ok := buffEffect(lobbyID, targetID, "protection_from_evil_and_good"); ok && monsterID < 0 &&
-		evilGoodTypes[strings.ToLower(monsterTypeOf(lobbyID, monsterID))] {
-		why = append(why, "Protection from Evil and Good")
-	}
-	return len(why) > 0, strings.Join(why, ", ")
-}
+// What gives an attack roll against a character Disadvantage (Dodge, Foresight, Blur, Holy Aura, Protection from Evil and Good ...)
+// is in attackSources (attack_2024.go), the one table every attack reads.
 
 // sanctuaryBlocks: an attack on a creature warded by Sanctuary needs a Wisdom save; on a failure the attack is lost.
 func sanctuaryBlocks(lobbyID, monsterID int, monsterName string, targetID int) (bool, string) {
