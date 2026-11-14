@@ -563,7 +563,7 @@ func builderSteps(body map[string]interface{}, agentID int, withCheck bool) []bu
 	var leftovers []map[string]interface{} // answers the class doesn't take (left from an earlier class), flagged after its own choices
 	if classOK {
 		n, allowed := classSkillChoices(class)
-		have := normalizeListField(body, "skill_proficiencies", canonSkill) // "sleight_of_hand" is saved as "sleight of hand"
+		have := normalizeListField(body, "skill_proficiencies", canonSkillOK) // "sleight_of_hand" is saved as "sleight of hand"
 		// a class skill the character already gets elsewhere would be lost (creation refuses it): the background's skills, the
 		// species' skill and the Human's Skilled picks are left out of the options and refused, each saying where it comes from
 		from := map[string]string{}
@@ -830,7 +830,7 @@ func builderSteps(body map[string]interface{}, agentID int, withCheck bool) []bu
 			for _, s := range append(append([]string(nil), have...), others...) {
 				addProf(profSet, &profs, s)
 			}
-			e := normalizeListField(body, "expertise", canonSkill)
+			e := normalizeListField(body, "expertise", canonSkillOK)
 			eProb := ""
 			seenE := map[string]bool{}
 			for _, x := range e {
@@ -1521,7 +1521,7 @@ func builderSteps(body map[string]interface{}, agentID int, withCheck bool) []bu
 	for _, k := range abilityKeys6 {
 		// a score is a whole number, as creation reads it: "15" is saved as 15; 15.5 or "fifteen" is refused, not read as 15 here
 		// and as no score at all by creation
-		n, present, ok := wholeNumber(body[k])
+		n, present, ok := wholeNumberField(body[k])
 		if present && !ok && scoreProblem == "" {
 			scoreProblem = fmt.Sprintf("%s must be a whole number (you sent %v): use 15, 14, 13, 12, 10 and 8 once each", k, body[k])
 		}
@@ -1563,7 +1563,7 @@ func builderSteps(body map[string]interface{}, agentID int, withCheck bool) []bu
 	canonInc := map[string]interface{}{} // under the short names creation uses ("Dexterity" is dex), each a number
 	rewrite := false
 	for k, v := range incRaw {
-		n, present, ok := wholeNumber(v)
+		n, present, ok := wholeNumberField(v)
 		if present && !ok && incTypeProblem == "" {
 			incTypeProblem = fmt.Sprintf("the increase for %s must be a whole number, +2 or +1 (you sent %v)", k, v)
 		}
@@ -2083,7 +2083,7 @@ func findToolLoose(s string) (game.Tool, bool) {
 
 // wholeNumber reads a number answer: present is false when nothing was sent; ok is false when it isn't a whole number
 // ("15" is 15; 15.5, "fifteen" and true are not numbers creation can read).
-func wholeNumber(v interface{}) (n int, present, ok bool) {
+func wholeNumberField(v interface{}) (n int, present, ok bool) {
 	switch x := v.(type) {
 	case nil:
 		return 0, false, true

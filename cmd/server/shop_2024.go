@@ -234,7 +234,7 @@ func handleCharacterShop(w http.ResponseWriter, r *http.Request, charID int) {
 		for k, v := range resp {
 			reply[k] = v
 		}
-		doneParts = append(doneParts, "sold "+strings.Join(toStrings(resp["sold"]), ", "))
+		doneParts = append(doneParts, "sold "+strings.Join(anyStrings(resp["sold"]), ", "))
 		money = walletCP(charID)
 	}
 	refuse := func(status int, body map[string]interface{}) {
@@ -307,7 +307,7 @@ func handleCharacterShop(w http.ResponseWriter, r *http.Request, charID int) {
 	writeJSONStatus(w, http.StatusOK, reply)
 }
 
-func toStrings(v interface{}) []string {
+func anyStrings(v interface{}) []string {
 	switch x := v.(type) {
 	case []string:
 		return x

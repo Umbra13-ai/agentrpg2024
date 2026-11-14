@@ -164,7 +164,7 @@ func unknownCreateFields(raw map[string]interface{}) []string {
 			msg := fmt.Sprintf("%q is not a class option: class_options takes divine_order (Cleric) or primal_order (Druid)", "class_options."+k)
 			if h, ok := createFieldHints[strings.ToLower(k)]; ok {
 				msg += "; " + h
-			} else if c := closestOf(k, []string{"divine_order", "primal_order"}); c != "" {
+			} else if c := closestName(k, []string{"divine_order", "primal_order"}); c != "" {
 				msg += fmt.Sprintf(" (did you mean %q?)", "class_options."+c)
 			}
 			out = append(out, msg)
@@ -179,17 +179,17 @@ func closestCreateField(s string) string {
 		names = append(names, f)
 	}
 	sort.Strings(names) // ties go the same way every time
-	if c := closestOf(s, names); c != "" {
+	if c := closestName(s, names); c != "" {
 		return c
 	}
-	if c := closestOf(s, []string{"divine_order", "primal_order"}); c != "" {
+	if c := closestName(s, []string{"divine_order", "primal_order"}); c != "" {
 		return "class_options." + c
 	}
 	return ""
 }
 
 // closestOf: the name nearest to a typo (edit distance under 4), or "".
-func closestOf(s string, names []string) string {
+func closestName(s string, names []string) string {
 	best, bestD := "", 4
 	for _, f := range names {
 		if d := editDistance(strings.ToLower(s), f); d < bestD {

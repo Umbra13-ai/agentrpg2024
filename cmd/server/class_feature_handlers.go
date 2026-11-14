@@ -525,7 +525,7 @@ func handleCharacterInvocations(w http.ResponseWriter, r *http.Request) {
 			saveBookOfShadows(req.CharacterID, book)
 			writeJSONStatus(w, http.StatusOK, map[string]interface{}{"success": true, "character_id": req.CharacterID, "book_of_shadows": book,
 				"message": fmt.Sprintf("Your Book of Shadows holds %s (cantrips) and %s (rituals). They are prepared while the book is on your person and work as Warlock spells for you. You conjure a new book at the end of a Short or Long Rest.",
-					spellNames(book.Cantrips), spellNames(book.Rituals))})
+					spellSlugNames(book.Cantrips), spellSlugNames(book.Rituals))})
 			return
 		}
 		writeJSONStatus(w, http.StatusConflict, map[string]interface{}{
@@ -709,7 +709,7 @@ func resolveInvocation(input string) (string, bool) {
 	return "", false
 }
 
-func spellNames(slugs []string) string {
+func spellSlugNames(slugs []string) string {
 	var out []string
 	for _, s := range slugs {
 		out = append(out, spellName(s))

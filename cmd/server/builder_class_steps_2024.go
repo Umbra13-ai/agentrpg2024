@@ -20,7 +20,7 @@ func normSkillName(s string) string {
 }
 
 // canonSkill: the SRD skill a name means, if it is one.
-func canonSkill(s string) (string, bool) {
+func canonSkillOK(s string) (string, bool) {
 	n := normSkillName(s)
 	return n, game.IsSkill(n)
 }
@@ -93,14 +93,14 @@ func draftSpeciesProficiencies(body map[string]interface{}) (skill string, featS
 	}
 	sc := bmap(body, "species_choices")
 	if containsStr(sp.Needs, "skill") {
-		if s, ok := canonSkill(bstr(sc, "skill")); ok {
+		if s, ok := canonSkillOK(bstr(sc, "skill")); ok {
 			skill = s
 		}
 	}
 	feat := strings.NewReplacer(" ", "_", "-", "_").Replace(strings.ToLower(firstNonEmpty(bstr(sc, "feat"), "skilled")))
 	if sp.Key == "human" && feat == "skilled" {
 		for _, p := range blist(bmap(body, "species_feat_choices"), "proficiencies") {
-			if s, ok := canonSkill(p); ok {
+			if s, ok := canonSkillOK(p); ok {
 				featSkills = append(featSkills, s)
 			} else if t, ok := game.FindTool(p); ok {
 				featTools = append(featTools, t.Name)
@@ -108,22 +108,6 @@ func draftSpeciesProficiencies(body map[string]interface{}) (skill string, featS
 		}
 	}
 	return
-}
-
-// findToolLoose: game.FindTool, also for a name written without its apostrophe ("Thieves Tools", "Smiths Tools").
-func findToolLoose(name string) (game.Tool, bool) {
-	if t, ok := game.FindTool(name); ok {
-		return t, true
-	}
-	bare := func(s string) string {
-		return strings.NewReplacer("'", "", "’", "").Replace(game.NormalizeToolName(s))
-	}
-	for _, t := range game.Tools {
-		if bare(t.Name) == bare(name) {
-			return t, true
-		}
-	}
-	return game.Tool{}, false
 }
 
 // classToolCanon: the class tool option a name means ("Musical Instrument (Lute)", "LUTE", "Smiths Tools"), as creation reads it.
