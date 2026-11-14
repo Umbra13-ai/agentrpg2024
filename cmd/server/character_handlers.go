@@ -78,7 +78,7 @@ func handleCharacters(w http.ResponseWriter, r *http.Request) {
 			WeaponMasteries       []string          `json:"weapon_masteries"`        // Barbarian 2, Fighter 3, Paladin/Ranger/Rogue 2 kinds of weapon
 			KnownSpells           []string          `json:"known_spells"`            // e.g., ["fireball", "magic-missile"] - spell slugs character knows
 			DraconicAncestry      string            `json:"draconic_ancestry"`       // e.g., "red", "blue" - for Dragonborn breath weapon
-			AbilityMethod         string            `json:"ability_method"`          // "standard_array", "point_buy" or "random" (the server rolls); scores before the background increases
+			AbilityMethod         string            `json:"ability_method"`          // "standard_array" (the only method this server uses) or left out; scores before the background increases
 			StartingEquipment     string            `json:"starting_equipment"`      // class kit option: "a" (default), "b" or "c" where offered; gold-only options give gold
 			Backstory             string            `json:"backstory"`              // the character’s story (the builder asks for 3 to 6 paragraphs)
 			Appearance            string            `json:"appearance"`             // optional: how the character looks
@@ -93,7 +93,7 @@ func handleCharacters(w http.ResponseWriter, r *http.Request) {
 		// F234: no scores at all used to become six 10s (a legal but wasted point buy); every class needs its scores assigned
 		if req.Str == 0 && req.Dex == 0 && req.Con == 0 && req.Int == 0 && req.Wis == 0 && req.Cha == 0 && strings.ToLower(strings.TrimSpace(req.AbilityMethod)) != "random" {
 			out := map[string]interface{}{"error": "ability_scores_required",
-				"message": "Assign your six ability scores (str, dex, con, int, wis, cha) with ability_method standard_array (15, 14, 13, 12, 10, 8), point_buy (27 points) or random. The character builder guides this step by step: POST /api/character-builder."}
+				"message": "Assign your six ability scores (str, dex, con, int, wis, cha) from the Standard Array: 15, 14, 13, 12, 10 and 8, once each (ability_method standard_array; this server uses the Standard Array only). The character builder guides this step by step: POST /api/character-builder."}
 			if arr, ok := phbArray[strings.ToLower(req.Class)]; ok {
 				out["suggestion"] = map[string]interface{}{"ability_method": "standard_array", "str": arr[0], "dex": arr[1], "con": arr[2], "int": arr[3], "wis": arr[4], "cha": arr[5],
 					"source": "the Player's Handbook's Standard Array by Class"}
