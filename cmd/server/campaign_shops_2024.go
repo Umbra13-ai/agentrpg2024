@@ -48,6 +48,7 @@ func shopVariantRows() []catalogRow {
 		mk("tool", "Horn", "3 GP", 3), mk("tool", "Lute", "35 GP", 35), mk("tool", "Lyre", "30 GP", 30), mk("tool", "Pan Flute", "12 GP", 12),
 		mk("tool", "Shawm", "2 GP", 2), mk("tool", "Viol", "30 GP", 30),
 		mk("tool", "Dice Set", "1 SP", 0.1), mk("tool", "Dragonchess Set", "1 GP", 1), mk("tool", "Playing Card Set", "5 SP", 0.5), mk("tool", "Three-Dragon Ante Set", "1 GP", 1),
+		mk("gear", "Spellbook", "50 GP", 50), // Adventuring Gear (SRD 5.2.1): missing from the equipment data, so a Wizard couldn't buy one (Nov 14 review)
 	}
 }
 

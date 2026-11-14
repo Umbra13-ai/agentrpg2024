@@ -264,7 +264,8 @@ func handleCharacterSpells(w http.ResponseWriter, r *http.Request, charID int) {
 					writeJSONStatus(w, http.StatusBadRequest, errResp)
 					return
 				}
-				if containsStr(newSpells, validSlug) {
+				if containsStr(newSpells, validSlug) { // said, as /prepare says it (Nov 14 review: saved once with no note)
+					notes = append(notes, fmt.Sprintf("%s was sent twice: it is on your list once.", spellName(validSlug)))
 					continue
 				}
 				newSpells = append(newSpells, validSlug)

@@ -323,7 +323,16 @@ func kitText(class, opt string) string {
 		items = append(items, name)
 	}
 	if len(items) == 0 {
-		return fmt.Sprintf("%d GP and no equipment: buy your own in the shop after the character is made (the setup's shop step, SRD prices)", o.Gold)
+		// a spellcaster keeps a basic spellcasting focus (and a Wizard a Spellbook): said here (Nov 14 review: "no equipment", then a
+		// free Arcane Focus appeared)
+		keep := ""
+		if f := startingSpellcastingFocus(class); f != "" {
+			keep = " (a spellcaster also keeps a basic " + f + ")"
+			if class == "wizard" {
+				keep = " (a Wizard also keeps a basic Arcane Focus and the Spellbook, a class feature)"
+			}
+		}
+		return fmt.Sprintf("%d GP and no other equipment%s: buy your own in the shop after the character is made (the setup's shop step, SRD prices)", o.Gold, keep)
 	}
 	return fmt.Sprintf("%s and %d GP", strings.Join(items, ", "), o.Gold)
 }

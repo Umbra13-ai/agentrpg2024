@@ -1717,6 +1717,9 @@ func handleCharacterByID(w http.ResponseWriter, r *http.Request) {
 	if is := invocationSpellsView(charID); len(is) > 0 {
 		response["invocation_spells"] = is
 	}
+	if b := bookOfShadowsOf(charID); len(b.Cantrips)+len(b.Rituals) > 0 { // Pact of the Tome's picks on the record (Nov 14 review)
+		response["book_of_shadows"] = map[string]interface{}{"cantrips": b.Cantrips, "rituals": b.Rituals}
+	}
 
 	// Fighting Styles
 	fightingStylesJSON := getFightingStyles(charID)

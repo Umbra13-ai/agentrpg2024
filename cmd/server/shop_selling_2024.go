@@ -203,6 +203,9 @@ func sellItems(charID int, def *shopTypeDef, shopName string, priceCP func(float
 		}
 		it := inv[idx]
 		name := itemStr(it, "name")
+		if s.ItemID != "" && s.Item != "" && normalizeRef(s.Item) != normalizeRef(name) { // the two name different items (Nov 14 review)
+			return http.StatusBadRequest, map[string]interface{}{"error": "item_mismatch", "message": fmt.Sprintf("item_id %s is %s, but item says %q: send one of them, or both for the same item. Nothing was sold.", s.ItemID, name, s.Item)}
+		}
 		have := 1
 		if v, ok := it["quantity"].(float64); ok && v > 1 {
 			have = int(v)

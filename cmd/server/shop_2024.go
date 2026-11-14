@@ -13,6 +13,7 @@ package main
 import (
 	"fmt"
 	"net/http"
+	"regexp"
 	"sort"
 	"strings"
 	"sync"
@@ -73,12 +74,53 @@ func shopCatalog() []shopItem {
 
 func findShopItem(name string) (shopItem, bool) {
 	k := itemKey(name)
+	alt := itemKey(shopParenRe.ReplaceAllString(name, ", $1")) // "Holy Symbol (Amulet)" is "Holy Symbol, Amulet"
 	for _, it := range shopCatalog() {
-		if itemKey(it.row.Name) == k || it.row.Slug == strings.ToLower(strings.TrimSpace(name)) {
+		if it.row.Slug == strings.ToLower(strings.TrimSpace(name)) {
+			return it, true
+		}
+		if ik := itemKey(it.row.Name); (ik == k || ik == alt) && !extraQualifier(name, it.row.Name) {
 			return it, true
 		}
 	}
 	return shopItem{}, false
+}
+
+var shopPlusRe = regexp.MustCompile(`\+\s*\d`)
+var shopParenRe = regexp.MustCompile(`\(([^)]*)\)`)
+var shopDigitsRe = regexp.MustCompile(`\d+`)
+
+// extraQualifier: the name asks for more than the shop item is (a "+1", a "(silvered)", a number): "Dagger +3" is not a Dagger
+// (Nov 14 review: the plain item was sold for each of these).
+func extraQualifier(asked, item string) bool {
+	li := strings.ToLower(item)
+	if shopPlusRe.MatchString(asked) && !shopPlusRe.MatchString(item) {
+		return true
+	}
+	for _, m := range shopParenRe.FindAllStringSubmatch(strings.ToLower(asked), -1) {
+		if inner := strings.TrimSpace(m[1]); inner != "" && !strings.Contains(li, inner) {
+			return true
+		}
+	}
+	outside := shopParenRe.ReplaceAllString(asked, " ")
+	for _, d := range shopDigitsRe.FindAllString(outside, -1) {
+		if !strings.Contains(li, d) {
+			return true
+		}
+	}
+	return false
+}
+
+// shopKindsOf: shop items whose name starts with the one asked ("Holy Symbol" -> "Holy Symbol, Amulet", "Holy Symbol, Emblem" ...).
+func shopKindsOf(name string) []string {
+	n := strings.ToLower(strings.TrimSpace(shopParenRe.ReplaceAllString(name, "")))
+	var out []string
+	for _, it := range shopCatalog() {
+		if n != "" && strings.HasPrefix(strings.ToLower(it.row.Name), n) {
+			out = append(out, fmt.Sprintf("%s (%s)", it.row.Name, moneyText(int(it.row.CostGP*100+0.5))))
+		}
+	}
+	return out
 }
 
 // walletCP: the character's money in copper pieces (10 CP = 1 SP, 10 SP = 1 GP, 1 EP = 5 SP, 1 PP = 10 GP).
@@ -275,8 +317,13 @@ func handleCharacterShop(w http.ResponseWriter, r *http.Request, charID int) {
 		it, ok := findShopItem(b.Item)
 		if !ok {
 			msg := fmt.Sprintf("%q is not in the SRD's equipment tables, so the shop doesn't sell it. GET /api/characters/%d/shop lists what it sells.", b.Item, charID)
-			if _, isMagic := findCraftItem(b.Item); isMagic || craftMagicItem(b.Item) {
+			plain := strings.TrimSpace(shopPlusRe.ReplaceAllString(shopParenRe.ReplaceAllString(b.Item, ""), ""))
+			if base, ok := findShopItem(plain); ok && plain != strings.TrimSpace(b.Item) {
+				msg = fmt.Sprintf("%q isn't sold here: the shop sells the plain %s (%s). A +1, silvered or other magic version comes from your GM.", b.Item, base.row.Name, moneyText(int(base.row.CostGP*100+0.5)))
+			} else if craftMagicItem(b.Item) || shopPlusRe.MatchString(b.Item) { // only a real magic item (Nov 14 review: Holy Symbol was called one)
 				msg = fmt.Sprintf("%q is a magic item; the shop sells only ordinary equipment. Magic items come from your GM.", b.Item)
+			} else if kinds := shopKindsOf(b.Item); len(kinds) > 0 {
+				msg = fmt.Sprintf("%q comes in kinds: choose one of %s.", b.Item, strings.Join(kinds, ", "))
 			}
 			refuse(http.StatusBadRequest, map[string]interface{}{"error": "not_sold_here", "message": msg})
 			return

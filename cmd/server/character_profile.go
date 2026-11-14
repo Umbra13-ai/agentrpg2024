@@ -267,6 +267,10 @@ func handleCharacterPortrait(w http.ResponseWriter, r *http.Request, charID int)
 					"message": fmt.Sprintf("The image is %d by %d pixels. Each side must be %d to %d pixels; 1024 by 1280 is the best size for the sheet.", cfg.Width, cfg.Height, minPortraitPixels, maxPortraitPixels)})
 				return
 			}
+			if _, _, derr := image.Decode(bytes.NewReader(imageBytes)); derr != nil { // the pixels too, not only the header (Nov 14 review: a truncated PNG was saved)
+				writeJSONStatus(w, http.StatusBadRequest, map[string]interface{}{"error": "corrupt_image", "message": "The image could not be read: the file looks damaged or cut short. Save it again and resend it. Nothing was changed."})
+				return
+			}
 			if r := float64(cfg.Width) / float64(cfg.Height); r < 0.75 || r > 0.85 { // the sheet's frame is 4:5 (0.8)
 				shapeNote = fmt.Sprintf("Saved. The image is %d by %d pixels; the sheet shows a 4:5 frame and crops the rest, so the edges may be cut. 1024 by 1280 fits exactly.", cfg.Width, cfg.Height)
 			}

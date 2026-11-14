@@ -527,9 +527,20 @@ func handleCharacterClassOptions(w http.ResponseWriter, r *http.Request, charID 
 	}
 	known := []string{"divine_order", "primal_order", "land_type", "elemental_affinity", "blessed_strikes", "elemental_fury", "wild_shape_forms", "primal_knowledge", "bonus_proficiencies", "magical_discoveries", "class_languages"}
 	var keys []string
-	for k := range sent {
-		if k == "character_id" {
+	for k, v := range sent {
+		if k == "character_id" { // must name this character, not another one (Nov 14 review: it was ignored)
+			var bodyID int
+			if json.Unmarshal(v, &bodyID) != nil || (bodyID != 0 && bodyID != charID) {
+				writeJSONStatus(w, http.StatusBadRequest, map[string]interface{}{"error": "character_id_mismatch",
+					"message": fmt.Sprintf("character_id in the body (%s) is not character %d in the address. Nothing was changed.", strings.TrimSpace(string(v)), charID)})
+				return
+			}
 			continue
+		}
+		if k == "class_languages" && strings.TrimSpace(string(v)) == "null" { // a null list gets its own reason, not the Divine Order one
+			writeJSONStatus(w, http.StatusBadRequest, map[string]interface{}{"error": "invalid_languages",
+				"message": "class_languages must be a list of languages, like [\"Giant\"]. Nothing was changed."})
+			return
 		}
 		if !containsStr(known, k) {
 			writeJSONStatus(w, http.StatusBadRequest, map[string]interface{}{"error": "unknown_field",
