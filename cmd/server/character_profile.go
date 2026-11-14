@@ -21,6 +21,7 @@ import (
 	_ "image/png"
 	"io"
 	"net/http"
+	"sort"
 	"strconv"
 	"strings"
 	"time"
@@ -147,6 +148,22 @@ func handleCharacterPortrait(w http.ResponseWriter, r *http.Request, charID int)
 			var req struct {
 				ImageBase64 string `json:"image_base64"`
 				Skip        bool   `json:"-"`
+			}
+			// a field the portrait step doesn't take is refused, as the other setup steps do (Nov 14 audit re-check)
+			var keys map[string]json.RawMessage
+			if json.Unmarshal(raw, &keys) == nil {
+				var bad []string
+				for k := range keys {
+					if lk := strings.ToLower(strings.TrimSpace(k)); lk != "image_base64" && lk != "skip" {
+						bad = append(bad, k)
+					}
+				}
+				if len(bad) > 0 {
+					sort.Strings(bad)
+					writeJSONStatus(w, http.StatusBadRequest, map[string]interface{}{"error": "unknown_field",
+						"message": fmt.Sprintf("The portrait step takes image_base64 or skip; it doesn't take %s. Nothing was changed.", strings.Join(bad, ", "))})
+					return
+				}
 			}
 			// skip: true (or "yes"/"true"); any other value is refused with the reason (F24: {"skip": "yes"} got an unrelated error)
 			var probe struct {

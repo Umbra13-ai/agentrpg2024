@@ -599,11 +599,12 @@ func handleCharacterClassOptions(w http.ResponseWriter, r *http.Request, charID 
 	case req.DivineOrder != "" && c == "cleric":
 		v := strings.ToLower(strings.TrimSpace(req.DivineOrder))
 		if v != "protector" && v != "thaumaturge" {
-			writeJSONStatus(w, http.StatusBadRequest, map[string]interface{}{"error": "invalid_divine_order", "allowed": []string{"protector", "thaumaturge"}})
+			writeJSONStatus(w, http.StatusBadRequest, map[string]interface{}{"error": "invalid_divine_order", "allowed": []string{"protector", "thaumaturge"}, "message": fmt.Sprintf("%q is not a Divine Order: choose protector or thaumaturge.", req.DivineOrder)})
 			return
 		}
 		if divine != "" {
-			writeJSONStatus(w, http.StatusConflict, map[string]interface{}{"error": "already_chosen", "divine_order": divine})
+			writeJSONStatus(w, http.StatusConflict, map[string]interface{}{"error": "already_chosen", "divine_order": divine,
+				"message": fmt.Sprintf("You already chose %s: the Divine Order is chosen once, at level 1.", titleWords(divine))})
 			return
 		}
 		db.Exec(`UPDATE characters SET divine_order = $1 WHERE id = $2`, v, charID)
@@ -611,11 +612,12 @@ func handleCharacterClassOptions(w http.ResponseWriter, r *http.Request, charID 
 	case req.PrimalOrder != "" && c == "druid":
 		v := strings.ToLower(strings.TrimSpace(req.PrimalOrder))
 		if v != "warden" && v != "magician" {
-			writeJSONStatus(w, http.StatusBadRequest, map[string]interface{}{"error": "invalid_primal_order", "allowed": []string{"warden", "magician"}})
+			writeJSONStatus(w, http.StatusBadRequest, map[string]interface{}{"error": "invalid_primal_order", "allowed": []string{"warden", "magician"}, "message": fmt.Sprintf("%q is not a Primal Order: choose warden or magician.", req.PrimalOrder)})
 			return
 		}
 		if primal != "" {
-			writeJSONStatus(w, http.StatusConflict, map[string]interface{}{"error": "already_chosen", "primal_order": primal})
+			writeJSONStatus(w, http.StatusConflict, map[string]interface{}{"error": "already_chosen", "primal_order": primal,
+				"message": fmt.Sprintf("You already chose %s: the Primal Order is chosen once, at level 1.", titleWords(primal))})
 			return
 		}
 		db.Exec(`UPDATE characters SET primal_order = $1 WHERE id = $2`, v, charID)

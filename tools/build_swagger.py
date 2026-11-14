@@ -124,15 +124,19 @@ create_props = {
     "starting_equipment": S(desc="Class kit option: a (default), b, or c where offered"),
     "weapon_masteries": S("array", "Barbarian 2, Fighter 3, Paladin 2, Ranger 2, Rogue 2 kinds of weapon", items={"type": "string"}),
     "skill_proficiencies": S("array", "Your class skill choices", items={"type": "string"}),
-    "tool_proficiencies": S("array", "Tool choices (Bard and Monk choose one)", items={"type": "string"}),
-    "expertise": S("array", "Rogue skills or thieves' tools", items={"type": "string"}),
-    "known_spells": S("array", "Spell slugs you know", items={"type": "string"}),
+    "tool_proficiencies": S("array", "The class's tool choices: a Bard's three Musical Instruments, a Monk's one Artisan's Tools or Musical Instrument", items={"type": "string"}),
+    "expertise": S("array", "Rogue: two of your skill proficiencies", items={"type": "string"}),
     "class_options": obj({"divine_order": S(desc="Cleric: protector or thaumaturge"), "primal_order": S(desc="Druid: warden or magician")}),
+    "alignment": S(desc="One of the nine alignments"), "backstory": S(desc="The character's story"), "appearance": S(desc="Optional: how the character looks"),
+    "ability_method": S(desc="standard_array (the only method) or left out"),
+    "dry_run": S("boolean", "Check everything and show the character it would make, without creating it"),
 }
 paths["/api/characters"] = {
     "post": op("Characters", "Create a character (2024 rules)",
                "Follows the SRD 5.2.1 character origins: class, background, species, two languages. Species give no ability scores or languages; the background raises scores. "
-               "A wrong choice returns `{error, message, valid_options}` and creates nothing. See skill.md, \"Creating a Character (2024 Rules)\".",
+               "Every field is used as sent or refused, and a refusal creates nothing: an unknown field (`unknown_field`), one that doesn't apply to the character (`field_not_applicable`), "
+               "a wrong JSON type (`invalid_field_type`) or a wrong choice (`{error, message, valid_options}`) returns 400; a name already taken returns 409. "
+               "Spells are chosen after creation (GET /api/characters/{id}/setup). See skill.md, \"Creating a Character (2024 Rules)\".",
                req=body(obj(create_props, ["name", "class", "species", "background", "ability_increases", "extra_languages"]),
                         {"name": "Thorin", "class": "fighter", "species": "Dwarf", "background": "Soldier", "str": 15, "dex": 13, "con": 14, "int": 12, "wis": 10, "cha": 8,
                          "ability_increases": {"str": 2, "con": 1}, "background_tool": "dice set", "extra_languages": ["Dwarvish", "Giant"],
@@ -140,6 +144,8 @@ paths["/api/characters"] = {
                resp=ok("Created", obj({"success": S("boolean"), "character_id": S("integer"), "hp": S("integer"), "ac": S("integer"), "species": S(), "size": S(),
                                       "speed": S("integer"), "background": S(), "feats": S("array", items={"type": "string"}), "languages": S("array", items={"type": "string"})}))),
     "get": op("Characters", "List your characters")}
+paths["/api/characters"]["post"]["responses"]["400"] = {"description": "Refused, nothing created: error (unknown_field, field_not_applicable, invalid_field_type, a wrong choice ...), message, and problems where there are several"}
+paths["/api/characters"]["post"]["responses"]["409"] = {"description": "character_name_taken: another character has this name"}
 paths["/api/characters/species-ability"] = {
     "get": op("Characters", "Species abilities", "Lists what your species lets you do, uses left, recovery, and running effects.", params=[q("character_id", required=True, t="integer")]),
     "post": op("Characters", "Use a species ability",

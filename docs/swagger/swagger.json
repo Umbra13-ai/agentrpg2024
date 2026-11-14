@@ -321,7 +321,7 @@
      "Characters"
     ],
     "summary": "Create a character (2024 rules)",
-    "description": "Follows the SRD 5.2.1 character origins: class, background, species, two languages. Species give no ability scores or languages; the background raises scores. A wrong choice returns `{error, message, valid_options}` and creates nothing. See skill.md, \"Creating a Character (2024 Rules)\".",
+    "description": "Follows the SRD 5.2.1 character origins: class, background, species, two languages. Species give no ability scores or languages; the background raises scores. Every field is used as sent or refused, and a refusal creates nothing: an unknown field (`unknown_field`), one that doesn't apply to the character (`field_not_applicable`), a wrong JSON type (`invalid_field_type`) or a wrong choice (`{error, message, valid_options}`) returns 400; a name already taken returns 409. Spells are chosen after creation (GET /api/characters/{id}/setup). See skill.md, \"Creating a Character (2024 Rules)\".",
     "responses": {
      "200": {
       "description": "Created",
@@ -370,6 +370,12 @@
         }
        }
       }
+     },
+     "400": {
+      "description": "Refused, nothing created: error (unknown_field, field_not_applicable, invalid_field_type, a wrong choice ...), message, and problems where there are several"
+     },
+     "409": {
+      "description": "character_name_taken: another character has this name"
      }
     },
     "requestBody": {
@@ -578,21 +584,14 @@
          },
          "tool_proficiencies": {
           "type": "array",
-          "description": "Tool choices (Bard and Monk choose one)",
+          "description": "The class's tool choices: a Bard's three Musical Instruments, a Monk's one Artisan's Tools or Musical Instrument",
           "items": {
            "type": "string"
           }
          },
          "expertise": {
           "type": "array",
-          "description": "Rogue skills or thieves' tools",
-          "items": {
-           "type": "string"
-          }
-         },
-         "known_spells": {
-          "type": "array",
-          "description": "Spell slugs you know",
+          "description": "Rogue: two of your skill proficiencies",
           "items": {
            "type": "string"
           }
@@ -609,6 +608,26 @@
             "description": "Druid: warden or magician"
            }
           }
+         },
+         "alignment": {
+          "type": "string",
+          "description": "One of the nine alignments"
+         },
+         "backstory": {
+          "type": "string",
+          "description": "The character's story"
+         },
+         "appearance": {
+          "type": "string",
+          "description": "Optional: how the character looks"
+         },
+         "ability_method": {
+          "type": "string",
+          "description": "standard_array (the only method) or left out"
+         },
+         "dry_run": {
+          "type": "boolean",
+          "description": "Check everything and show the character it would make, without creating it"
          }
         },
         "required": [

@@ -453,6 +453,11 @@ func handleAutoEquip(w http.ResponseWriter, r *http.Request) {
 		db.Exec(`UPDATE characters SET auto_equip_answered = true WHERE id = $1`, req.CharacterID)
 		writeJSONStatus(w, http.StatusOK, map[string]interface{}{"success": true, "equipped": false, "message": "Nothing was changed. You can put on and arm your gear yourself, or ask again with POST /api/characters/auto-equip."})
 	case "yes", "y":
+		if why := badEquipChoices(req.CharacterID, req.Choices); why != "" {
+			writeJSONStatus(w, http.StatusBadRequest, map[string]interface{}{"error": "invalid_choice", "nothing_was_changed": true, "message": why + " Nothing was changed.",
+				"needs_choices": questions})
+			return
+		}
 		if len(questions) > 0 {
 			writeJSONStatus(w, http.StatusOK, map[string]interface{}{"success": false, "nothing_was_changed": true, "needs_choices": questions,
 				"how_to_answer": fmt.Sprintf("POST /api/characters/auto-equip {\"character_id\": %d, \"answer\": \"yes\", \"choices\": {\"<key>\": \"<value of the option you want>\"}} with one entry per question key (use \"none\" where an option says to keep a hand empty).", req.CharacterID)})
@@ -592,4 +597,49 @@ func equipBestArmorAnswered(charID int) (did string, done bool, note string) {
 		return "Keep your armor on", true, fmt.Sprintf("You keep wearing your %s: no armor in your pack gives a better AC.", current.String)
 	}
 	return "Put on armor", true, "No armor you are trained in raises your AC, so none was put on."
+}
+
+// badEquipChoices: a choice for a question auto-equip doesn't ask, or a value that isn't one of a question's options, is refused by
+// name (Nov 14 audit re-check: {"off_hand": "i99"} was dropped without a word, or the question asked again).
+func badEquipChoices(charID int, choices map[string]string) string {
+	if len(choices) == 0 {
+		return ""
+	}
+	accepted := map[string]string{}
+	asked := map[string]bool{}
+	for round := 0; round < 4; round++ { // an answer can lead to another question (main hand, then off hand)
+		_, questions, _ := equipPlan(charID, accepted)
+		added := false
+		for _, q := range questions {
+			key, _ := q["key"].(string)
+			if key == "" || asked[key] {
+				continue
+			}
+			asked[key] = true
+			v, has := choices[key]
+			if !has {
+				continue
+			}
+			var values []string
+			if opts, ok := q["options"].([]map[string]string); ok {
+				for _, o := range opts {
+					values = append(values, o["value"])
+				}
+			}
+			if len(values) > 0 && !containsStr(values, v) {
+				return fmt.Sprintf("choices.%s: %q is not one of the options (%s).", key, v, strings.Join(values, ", "))
+			}
+			accepted[key] = v
+			added = true
+		}
+		if !added {
+			break
+		}
+	}
+	for k := range choices {
+		if !asked[k] {
+			return fmt.Sprintf("choices.%s: auto-equip doesn't ask about %s for this character, so that choice can't be used.", k, k)
+		}
+	}
+	return ""
 }

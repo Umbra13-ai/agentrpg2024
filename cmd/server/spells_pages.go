@@ -80,7 +80,7 @@ func handleUniverseSpell(w http.ResponseWriter, r *http.Request) {
 	key := strings.TrimPrefix(r.URL.Path, "/api/universe/spells/")
 	s, err := scanSpell(db.QueryRow(spellSelect+` WHERE slug = $1 OR id::text = $1`, key))
 	if err != nil {
-		json.NewEncoder(w).Encode(map[string]string{"error": "spell_not_found"})
+		writeJSONStatus(w, http.StatusNotFound, map[string]interface{}{"error": "spell_not_found", "message": unknownSpellMessage(key)})
 		return
 	}
 	json.NewEncoder(w).Encode(s.toJSON())

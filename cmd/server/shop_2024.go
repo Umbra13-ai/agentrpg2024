@@ -351,6 +351,9 @@ func completePurchase(charID, money, total int, kit []startItem, lines []string)
 			}
 		}
 	}
+	if f := freedItemIDFloor(charID); f > base { // not an id a sale just freed
+		base = f
+	}
 	remap := map[string]string{}
 	for i, it := range res.Items {
 		remap[itemStr(it, "id")] = fmt.Sprintf("i%d", base+i+1)

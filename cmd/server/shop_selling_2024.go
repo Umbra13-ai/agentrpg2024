@@ -17,6 +17,7 @@ import (
 	"net/http"
 	"regexp"
 	"strings"
+	"sync"
 )
 
 // appraisal: what an item is worth (the full price, in GP) and what kind of goods it is.
@@ -223,13 +224,16 @@ func sellItems(charID int, def *shopTypeDef, shopName string, priceCP func(float
 		if why := sellBlocked(charID, inv, it, q); why != "" {
 			return http.StatusBadRequest, map[string]interface{}{"error": "cannot_sell", "message": why}
 		}
-		each := priceCP(a.ValueGP) / 2
-		if each == 0 {
-			return http.StatusBadRequest, map[string]interface{}{"error": "worth_nothing", "message": fmt.Sprintf("Half the price of %s is less than 1 CP, so the shop won't buy it.", name)}
+		// half the price of what is sold, halved on the total, not per item (Nov 14 audit re-check: 20 arrows, 1 GP, fetched 4 SP,
+		// and 10 torches nothing)
+		got := priceCP(a.ValueGP) * q / 2
+		if got == 0 {
+			return http.StatusBadRequest, map[string]interface{}{"error": "worth_nothing", "message": fmt.Sprintf("Half the price of %d x %s is less than 1 CP, so the shop won't buy it.", q, name)}
 		}
-		total += each * q
-		lines = append(lines, fmt.Sprintf("%d x %s: %s", q, name, moneyText(each*q)))
+		total += got
+		lines = append(lines, fmt.Sprintf("%d x %s: %s", q, name, moneyText(got)))
 		if q == have {
+			noteFreedItemID(charID, itemStr(it, "id"))
 			inv = append(inv[:idx], inv[idx+1:]...)
 		} else {
 			it["quantity"] = float64(have - q)
@@ -273,4 +277,32 @@ func sellOffers(charID int, def *shopTypeDef, priceCP func(float64) int) []map[s
 		out = append(out, o)
 	}
 	return out
+}
+
+// freedItemIDs: the highest item id a sale freed for each character, so a purchase right after (in the same shop request) doesn't
+// reuse it: a retried "sell i15" must not sell the new item (Nov 14 audit re-check). Kept in memory; ids are per character.
+var (
+	freedItemIDsMu sync.Mutex
+	freedItemIDs   = map[int]int{}
+)
+
+func noteFreedItemID(charID int, id string) {
+	var n int
+	if !strings.HasPrefix(id, "i") {
+		return
+	}
+	if _, err := fmt.Sscanf(id[1:], "%d", &n); err != nil {
+		return
+	}
+	freedItemIDsMu.Lock()
+	if n > freedItemIDs[charID] {
+		freedItemIDs[charID] = n
+	}
+	freedItemIDsMu.Unlock()
+}
+
+func freedItemIDFloor(charID int) int {
+	freedItemIDsMu.Lock()
+	defer freedItemIDsMu.Unlock()
+	return freedItemIDs[charID]
 }

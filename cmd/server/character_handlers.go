@@ -104,6 +104,15 @@ func handleCharacters(w http.ResponseWriter, r *http.Request) {
 				"message": strings.Join(bad, "; ") + ". Nothing was created: send the request again with the right field names."})
 			return
 		}
+		if sc, ok := raw["species_choices"].(map[string]interface{}); ok { // the part with the wrong type is named (Nov 14 audit re-check)
+			for k, v := range sc {
+				if _, isStr := v.(string); !isStr && v != nil {
+					writeJSONStatus(w, http.StatusBadRequest, map[string]interface{}{"error": "invalid_field_type", "nothing_created": true,
+						"message": fmt.Sprintf("species_choices.%s must be text (a name, like \"high_elf\"); you sent %s. Nothing was created.", k, jsonText(v))})
+					return
+				}
+			}
+		}
 		fixed, _ := json.Marshal(raw)
 		if err := json.Unmarshal(fixed, &req); err != nil {
 			writeJSONStatus(w, http.StatusBadRequest, map[string]interface{}{"error": "invalid_field_type", "nothing_created": true, "message": createTypeError(err) + " Nothing was created."})
@@ -485,9 +494,12 @@ func handleCharacters(w http.ResponseWriter, r *http.Request) {
 					})
 					return
 				}
-				if !containsStr(chosen, k) {
-					chosen = append(chosen, k)
+				if containsStr(chosen, k) { // refused, not merged into one (Nov 14 audit re-check, F6: ["stealth","stealth"] became one)
+					writeJSONStatus(w, http.StatusBadRequest, map[string]interface{}{"error": "duplicate_skill", "nothing_created": true,
+						"message": fmt.Sprintf("expertise: you chose %s twice: choose 2 different skills. Nothing was created.", k)})
+					return
 				}
+				chosen = append(chosen, k)
 			}
 			expertiseStr = strings.Join(chosen, ", ")
 		}

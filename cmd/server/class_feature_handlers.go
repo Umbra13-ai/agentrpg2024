@@ -1254,6 +1254,30 @@ func handleCharacterFightingStyle(w http.ResponseWriter, r *http.Request) {
 	var knownSlugs []string
 	json.Unmarshal(stylesJSON, &knownSlugs)
 
+	// Validate style exists: the slug or the name the options show (F18: "Two-Weapon Fighting" was refused); checked first, so an
+	// unknown style isn't answered max_styles_reached (Nov 14 audit re-check)
+	styleSlug := resolveFightingStyle(req.Style)
+	style, exists := fightingStyles[styleSlug]
+	if !exists {
+		msg := fmt.Sprintf("%q is not a Fighting Style on this server.", req.Style)
+		if note := phbNote("feat", req.Style); note != "" {
+			msg = note
+		}
+		var names []string
+		for slug, f := range fightingStyles {
+			if containsStr(f.Classes, classLower) {
+				names = append(names, slug)
+			}
+		}
+		sort.Strings(names)
+		writeJSONStatus(w, http.StatusBadRequest, map[string]interface{}{
+			"error":        "invalid_style",
+			"message":      msg + " The Fighting Styles you can choose: " + strings.Join(names, ", ") + ".",
+			"valid_styles": getAvailableFightingStyles(classLower),
+		})
+		return
+	}
+
 	// before the campaign starts the character is still being made: its Fighting Style can be corrected freely (F23)
 	inSetup, _ := shopOpen(req.CharacterID)
 	replacing := ""
@@ -1289,29 +1313,6 @@ func handleCharacterFightingStyle(w http.ResponseWriter, r *http.Request) {
 				return
 			}
 		}
-	}
-
-	// Validate style exists: the slug or the name the options show (F18: "Two-Weapon Fighting" was refused)
-	styleSlug := resolveFightingStyle(req.Style)
-	style, exists := fightingStyles[styleSlug]
-	if !exists {
-		msg := fmt.Sprintf("%q is not a Fighting Style on this server.", req.Style)
-		if note := phbNote("feat", req.Style); note != "" {
-			msg = note
-		}
-		var names []string
-		for slug, f := range fightingStyles {
-			if containsStr(f.Classes, classLower) {
-				names = append(names, slug)
-			}
-		}
-		sort.Strings(names)
-		writeJSONStatus(w, http.StatusBadRequest, map[string]interface{}{
-			"error":        "invalid_style",
-			"message":      msg + " The Fighting Styles you can choose: " + strings.Join(names, ", ") + ".",
-			"valid_styles": getAvailableFightingStyles(classLower),
-		})
-		return
 	}
 
 	// Check if class can use this style

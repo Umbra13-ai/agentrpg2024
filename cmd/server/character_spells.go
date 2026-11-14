@@ -189,7 +189,7 @@ func handleCharacterSpells(w http.ResponseWriter, r *http.Request, charID int) {
 			return validSlug, isMagicalSecret, errResp
 		}
 		validateOnList = func(spellSlug string) (validSlug string, isMagicalSecret bool, errResp map[string]interface{}) {
-			slugLower := strings.ToLower(strings.TrimSpace(spellSlug))
+			slugLower := strings.NewReplacer("'", "", "’", "").Replace(strings.ToLower(strings.TrimSpace(spellSlug))) // "Hunter’s Mark" is hunters-mark (Nov 14 audit re-check)
 
 			// Find the spell in SRD
 			if _, ok := srdSpellsMemory[slugLower]; ok {
@@ -334,7 +334,7 @@ func handleCharacterSpells(w http.ResponseWriter, r *http.Request, charID int) {
 
 			// Remove spells
 			for _, spellSlug := range req.Remove {
-				slugLower := strings.ToLower(strings.TrimSpace(spellSlug))
+				slugLower := strings.NewReplacer("'", "", "’", "").Replace(strings.ToLower(strings.TrimSpace(spellSlug))) // "Hunter’s Mark" is hunters-mark (Nov 14 audit re-check)
 				slugDashed := strings.ReplaceAll(slugLower, " ", "-")
 				if o := origin[normalizeSpellSlug(spellSlug)]; o.Slug != "" {
 					src := o.Source
@@ -381,7 +381,7 @@ func handleCharacterSpells(w http.ResponseWriter, r *http.Request, charID int) {
 			always := allAlwaysPrepared(charID)
 			why, commit := checkSpellListChange(charID, class, level, withoutAlwaysPrepared(knownSpells, always), withoutAlwaysPrepared(newSpells, always))
 			if why != "" {
-				writeJSONStatus(w, http.StatusConflict, map[string]interface{}{"error": "cannot_change_now", "message": why, "max": game.PreparedSpells2024(class, level)})
+				writeJSONStatus(w, http.StatusConflict, spellListRefusal(charID, class, level, why))
 				return
 			}
 			commitChange = commit
@@ -429,6 +429,28 @@ func handleCharacterSpells(w http.ResponseWriter, r *http.Request, charID int) {
 		if listInKnownSpells[strings.ToLower(class)] {
 			db.Exec(`UPDATE characters SET prepared_spells = $1 WHERE id = $2`, newSpellsJSON, charID) // the prepared list, mirrored
 		}
+		var unprepared []string
+		if strings.ToLower(class) == "wizard" {
+			// a spell taken out of the spellbook can't stay prepared: it is unprepared too, and said (Nov 14 audit re-check: Sleep
+			// stayed prepared, and re-sending the same prepared list was refused as "not in your spellbook")
+			var raw []byte
+			db.QueryRow(`SELECT COALESCE(prepared_spells, '[]'::jsonb) FROM characters WHERE id = $1`, charID).Scan(&raw)
+			var prepared []string
+			json.Unmarshal(raw, &prepared)
+			always := allAlwaysPrepared(charID)
+			var keep []string
+			for _, p := range prepared {
+				if containsStr(newSpells, p) || containsStr(always, p) {
+					keep = append(keep, p)
+				} else {
+					unprepared = append(unprepared, spellName(p))
+				}
+			}
+			if len(unprepared) > 0 {
+				kb, _ := json.Marshal(keep)
+				db.Exec(`UPDATE characters SET prepared_spells = $1 WHERE id = $2`, kb, charID)
+			}
+		}
 
 		// Return updated spell list
 		spellsInfo := []map[string]interface{}{}
@@ -448,6 +470,10 @@ func handleCharacterSpells(w http.ResponseWriter, r *http.Request, charID int) {
 			"known_spells": spellsInfo,
 			"count":        len(spellsInfo),
 			"message":      fmt.Sprintf("Updated your spells: %d spells and cantrips.", len(spellsInfo)),
+		}
+		if len(unprepared) > 0 {
+			response["unprepared"] = unprepared
+			response["message"] = fmt.Sprint(response["message"]) + " No longer prepared (taken out of your spellbook): " + strings.Join(unprepared, ", ") + "."
 		}
 		if len(notes) > 0 {
 			response["notes"] = notes
@@ -663,6 +689,10 @@ func handlePrepareSpells(w http.ResponseWriter, r *http.Request, charID int) {
 			response["origin_spells"] = info
 			response["origin_spells_note"] = "Species and Magic Initiate spells: always prepared, don't count against your limit, cast with their own spellcasting ability; the free casts come back on a Long Rest (say \"free\" in the cast)."
 		}
+		if inv := invocationSpellsView(charID); len(inv) > 0 { // spells your Eldritch Invocations give (Pact of the Chain: Find Familiar), as on the sheet (re-check F21)
+			response["invocation_spells"] = inv
+			response["invocation_spells_note"] = "From your Eldritch Invocations: you know them without preparing them, and they don't count against your limit."
+		}
 
 		if len(domainSpellsInfo) > 0 {
 			response["domain_spells"] = domainSpellsInfo
@@ -698,7 +728,7 @@ func handlePrepareSpells(w http.ResponseWriter, r *http.Request, charID int) {
 		newPrepared := []string{}
 		var skippedAlways, skippedTwice []string // said in the reply (Nov 13): a list of only always-prepared spells used to answer "Prepared 0 spells" with no reason
 		for _, spellSlug := range *req.Spells {
-			slugLower := strings.ToLower(strings.TrimSpace(spellSlug))
+			slugLower := strings.NewReplacer("'", "", "’", "").Replace(strings.ToLower(strings.TrimSpace(spellSlug))) // "Hunter’s Mark" is hunters-mark (Nov 14 audit re-check)
 			slugDashed := strings.ReplaceAll(slugLower, " ", "-")
 
 			// Check SRD
@@ -819,7 +849,7 @@ func handlePrepareSpells(w http.ResponseWriter, r *http.Request, charID int) {
 		}
 		// The 2024 limits (Prepared Spells and Cantrips columns; always-prepared spells don't count) and when the list may change
 		if why, commit := checkSpellListChange(charID, className, level, withoutAlwaysPrepared(preparedSpells, alwaysPrepared), newPrepared); why != "" {
-			writeJSONStatus(w, http.StatusConflict, map[string]interface{}{"error": "cannot_change_now", "message": why, "max": maxPrepared})
+			writeJSONStatus(w, http.StatusConflict, spellListRefusal(charID, className, level, why))
 			return
 		} else {
 			defer commit()
@@ -1090,4 +1120,18 @@ func freeSpellbookCount(charID int, list []string) int {
 		}
 	}
 	return n
+}
+
+// spellListRefusal: the error code and limit for a refused list change: a count over the Cantrips column is too_many_cantrips with
+// the cantrip limit, over the Prepared Spells column too_many_spells, otherwise cannot_change_now (Nov 14 audit re-check: a cantrip
+// count was answered cannot_change_now with the prepared-spell max)
+func spellListRefusal(charID int, class string, level int, why string) map[string]interface{} {
+	c := strings.ToLower(class)
+	switch {
+	case strings.Contains(why, "cantrips; this list has"):
+		return map[string]interface{}{"error": "too_many_cantrips", "message": why, "max": game.ClassTableInt(c, level, "Cantrips") + orderExtraCantrips(charID)}
+	case strings.Contains(why, "spells of level 1 or higher (the Prepared Spells column"):
+		return map[string]interface{}{"error": "too_many_spells", "message": why, "max": game.PreparedSpells2024(c, level)}
+	}
+	return map[string]interface{}{"error": "cannot_change_now", "message": why, "max": game.PreparedSpells2024(c, level)}
 }
