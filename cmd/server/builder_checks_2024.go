@@ -267,7 +267,11 @@ func checkBuilderInput(upd, body map[string]interface{}) builderInput {
 					nk = "lineage"
 				}
 				if nk == "lineage" && sp != nil && sp.Key == "tiefling" { // creation reads a Tiefling's lineage as the legacy
-					nk = "legacy"
+					// but {"lineage": null} removes a stale lineage left from another species (an Elf's), not the legacy chosen
+					// (Nov 14 audit re-check, S4-02/M5: the legacy was deleted and the stale lineage stayed)
+					if _, stale := bmap(body, "species_choices")["lineage"]; !(v == nil && stale) {
+						nk = "legacy"
+					}
 				}
 				if nk != normKey(k) && nk != strings.ToLower(strings.TrimSpace(k)) { // said, not done silently (re-check)
 					in.notes = append(in.notes, fmt.Sprintf("species_choices.%s is read as species_choices.%s", k, nk))
@@ -771,6 +775,13 @@ func rejectedFields(steps []builderStep, sent, body map[string]interface{}, prob
 	add := func(path string, v interface{}, prob string) {
 		if !seen[path] && !skip[path] {
 			seen[path] = true
+			// a refused answer was never saved: the leftover-answer advice ("Remove it: send ... null (or use_suggestion)") doesn't
+			// fit it (Nov 14 audit re-check)
+			for _, cut := range []string{". Remove it: send ", ". Remove them: send ", ": send {"} {
+				if i := strings.Index(prob, cut); i > 0 && strings.Contains(prob[i:], "null") {
+					prob = prob[:i]
+				}
+			}
 			out = append(out, map[string]interface{}{"field": path, "you_sent": v, "problem": prob})
 		}
 	}
@@ -1225,7 +1236,18 @@ func mergeList(body map[string]interface{}, field string, cur, sv interface{}, c
 		if s := bstr(bmap(body, "species_choices"), "skill"); s != "" {
 			held[normItem(s)] = true
 		}
-		valid = func(s string) bool { return !held[normItem(s)] }
+		// tools held from the class and the background count too (Nov 14 audit re-check, S4-08/M3: a Skilled Calligrapher's
+		// Supplies held from an Acolyte background was "filled" and kept, and use_suggestion looped)
+		heldTools := draftHeldTools(body, strings.ToLower(bstr(body, "class")), game.GetBackground(strings.ToLower(bstr(body, "background"))))
+		valid = func(s string) bool {
+			if held[normItem(s)] {
+				return false
+			}
+			if t, ok := findToolLoose(s); ok && game.HasToolProficiency(heldTools, t.Name) {
+				return false
+			}
+			return true
+		}
 	} else if field == "expertise" {
 		// Expertise goes on skills the character has once this suggestion's skills are in (the options were listed before they
 		// were filled: Nov 14 audit re-check, a Rogue's suggested Perception Expertise became Sleight of Hand)

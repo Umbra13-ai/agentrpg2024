@@ -201,6 +201,9 @@ func resolveFeat(slug, source string, in *featChoiceInput, bgListNote string, us
 			return nil, originErr("feat_choices_required", nil, "Skilled needs %s_feat_choices.proficiencies: exactly three skills or tools", source)
 		}
 		for _, p := range in.Proficiencies {
+			if k := canonSkill(p); k != "" { // "animal-handling" and "Sleight-of-Hand" as the builder takes them (re-check)
+				p = k
+			}
 			if game.IsSkill(p) {
 				n := normSkill(p)
 				if containsStr(*held, n) {
@@ -210,7 +213,7 @@ func resolveFeat(slug, source string, in *featChoiceInput, bgListNote string, us
 				f.Proficiencies = append(f.Proficiencies, n)
 				continue
 			}
-			t, ok := game.FindTool(p)
+			t, ok := findToolLoose(p) // "thieves tools" is Thieves' Tools, as in the builder
 			if !ok {
 				return nil, originErr("unknown_proficiency", nil, "%q is neither a skill nor a tool", p)
 			}
