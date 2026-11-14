@@ -935,7 +935,10 @@ of the character before you create it). Every answer is either saved as sent or 
 - A change that makes an earlier answer invalid says so: changing the background, class or species can leave saved answers that no
   longer fit (increases for another background's abilities, a Rogue's skills after you change to Fighter, an Elf's lineage after you
   change to Dragonborn). The reply lists them under `now_invalid` (field, what you had, the problem) and in `message`; choose them
-  again or take that step's suggestion. `ability_increases` sent before a background is chosen is refused: they go on its abilities.
+  again or take that step's suggestion. An answer that depends on an earlier step is refused until that step is made: class
+  choices before a class, background choices or `ability_increases` before a background. Scores are checked against the Standard
+  Array whether or not `ability_method` is sent. `{"class": "cleric", "use_suggestion": "class_choices"}` works in one request:
+  the fields sent are saved first, then the suggestion fills the rest.
 - Each field takes one JSON type, and another is refused: text (`name`, `class`, `background`, `species`, `alignment`, `backstory`,
   `appearance`, `ability_method`, `starting_equipment`, `background_tool`, `background_equipment`), a list of names
   (`skill_proficiencies`, `tool_proficiencies`, `expertise`, `weapon_masteries`, `extra_languages`), a whole number (`str` to `cha`),
@@ -988,7 +991,8 @@ refused, and a refusal creates nothing: a field this route doesn't take is refus
 one that doesn't apply to the character (`field_not_applicable`, such as a `primal_order` for a Cleric or a `background_tool` for a
 background with a fixed tool); `dry_run` reports the same. `draconic_ancestry` is read as `species_choices.ancestry` (Dragonborn
 only), and a top-level `divine_order` or `primal_order` as `class_options.*`. `known_spells` is not taken: choose spells in `GET
-/api/characters/{id}/setup` after creation. Every refusal has a 4xx status: 400, or 409 for a name already taken.
+/api/characters/{id}/setup` after creation. Every refusal has a 4xx status: 400, or 409 for a name already taken. The name, backstory and appearance are checked as in the
+builder (at most 255 characters for the name, no control or invisible characters), and a 0 in `ability_increases` is no increase.
 
 **Is my character finished?** The creation reply, `GET /api/characters/{id}` and `GET /api/my-turn` say so: `character_finished`
 (true or false) and `to_finish` (my-turn: `level_up_choices`), each open choice with its command. It checks the subclass, Ability

@@ -157,6 +157,16 @@ func handleCharacters(w http.ResponseWriter, r *http.Request) {
 			writeJSONStatus(w, http.StatusBadRequest, map[string]interface{}{"error": "name_required", "message": "Give your character a name (name)."})
 			return
 		}
+		// the same name checks as the builder (Nov 14 audit F7, F11, F22: a 256-character name or a NUL gave a 500, an invisible
+		// name was created, and dry_run said "Everything checks out")
+		if p := badText(req.Name, false); p != "" {
+			writeJSONStatus(w, http.StatusBadRequest, map[string]interface{}{"error": "invalid_name", "nothing_created": true, "message": "name: " + p + ". Nothing was created."})
+			return
+		}
+		if p := badName(req.Name); p != "" {
+			writeJSONStatus(w, http.StatusBadRequest, map[string]interface{}{"error": "invalid_name", "nothing_created": true, "message": "name: " + p + ". Nothing was created."})
+			return
+		}
 
 		// Check for globally unique character name
 		var existingCount int
@@ -176,6 +186,11 @@ func handleCharacters(w http.ResponseWriter, r *http.Request) {
 
 		// 2024 rules: species give no ability scores; the background raises them
 		speciesKey := normalizeSpeciesSlug(req.Species)
+		for k, v := range req.AbilityIncreases { // a 0 is no increase, as in the builder (Nov 14 audit: {"cha": 0} was refused with a misleading reason)
+			if v == 0 {
+				delete(req.AbilityIncreases, k)
+			}
+		}
 		earlyInc, incErr := checkAbilityIncreases(req.Background, req.AbilityIncreases)
 		if incErr != nil {
 			writeCreateOriginError(w, incErr)
@@ -522,7 +537,13 @@ func handleCharacters(w http.ResponseWriter, r *http.Request) {
 			starting = sr
 		}
 
-		backstory, appearance := strings.TrimSpace(req.Backstory), strings.TrimSpace(req.Appearance)
+		backstory, appearance := strings.TrimSpace(strings.ReplaceAll(req.Backstory, "\r\n", "\n")), strings.TrimSpace(strings.ReplaceAll(req.Appearance, "\r\n", "\n"))
+		for _, t := range []struct{ field, text string }{{"backstory", backstory}, {"appearance", appearance}} {
+			if p := badText(t.text, true); p != "" { // a NUL was "saved" (backstory_saved: true) and silently dropped by the database
+				writeJSONStatus(w, http.StatusBadRequest, map[string]interface{}{"error": "invalid_text", "nothing_created": true, "message": t.field + ": " + p + ". Nothing was created."})
+				return
+			}
+		}
 		if len([]rune(backstory)) > maxProfileTextRunes || len([]rune(appearance)) > maxProfileTextRunes {
 			writeJSONStatus(w, http.StatusBadRequest, map[string]interface{}{"error": "text_too_long", "message": fmt.Sprintf("The backstory and the appearance can each be %d characters at most.", maxProfileTextRunes)})
 			return

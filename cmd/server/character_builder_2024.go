@@ -923,8 +923,15 @@ func builderSteps(body map[string]interface{}, agentID int, withCheck bool) []bu
 	} else {
 		s2.Remaining = 1
 		s2.Problems = []string{"choose a class first"}
+		// a class's answers sent before the class can't be checked: refused, not saved unchecked (Nov 14 audit: skills like
+		// "flying", a "laser sword" mastery and equipment option "z" were saved with 200 on a draft with no class)
+		for _, f := range []string{"skill_proficiencies", "expertise", "weapon_masteries", "tool_proficiencies", "starting_equipment", "class_options"} {
+			if hasAnswer(body[f]) {
+				s2.Choices = append(s2.Choices, choice(f, "your class's choice", 0, nil, body[f], false, "choose a class first (Step 1): this answer depends on the class, so it can't be checked yet"))
+			}
+		}
 	}
-	if len(s2.Choices) > 0 && class != "" { // name this class's choices (Nov 14 tester: the monk's tool wasn't mentioned)
+	if len(s2.Choices) > 0 && classOK { // name this class's choices (Nov 14 tester: the monk's tool wasn't mentioned)
 		var what []string
 		for _, c := range s2.Choices {
 			f, _ := c["field"].(string)
@@ -969,6 +976,11 @@ func builderSteps(body map[string]interface{}, agentID int, withCheck bool) []bu
 		}
 		if best := bestBackground(class, classSkills); best != "" { // never suggest replacing the background the player chose (Nov 13)
 			sug3["background"] = best
+		}
+		for _, f := range []string{"background_tool", "background_equipment", "background_feat_choices"} { // can't be checked yet
+			if hasAnswer(body[f]) {
+				s3.Choices = append(s3.Choices, choice(f, "your background's choice", 0, nil, body[f], false, "choose a background first (Step 3): this answer depends on the background, so it can't be checked yet"))
+			}
 		}
 	} else {
 		toolOpts := []string{"dice set", "dragonchess set", "playing card set", "three-dragon ante set"}
@@ -1534,7 +1546,16 @@ func builderSteps(body map[string]interface{}, agentID int, withCheck bool) []bu
 		}
 	}
 	if scoreProblem == "" && missing > 0 && missing < 6 {
-		scoreProblem = fmt.Sprintf("%d abilities have no score", missing)
+		// a score that can never be in the Standard Array is named (Nov 14 audit: {"str": 99} was refused as "5 abilities have no score")
+		for _, k := range abilityKeys6 {
+			if n := scores[k]; n != 0 && !containsInt([]int{15, 14, 13, 12, 10, 8}, n) {
+				scoreProblem = fmt.Sprintf("%s %d is not in the Standard Array: use 15, 14, 13, 12, 10 and 8 once each", titleWords(k), n)
+				break
+			}
+		}
+		if scoreProblem == "" {
+			scoreProblem = fmt.Sprintf("%d abilities have no score: send all six together (15, 14, 13, 12, 10 and 8 once each)", missing)
+		}
 	}
 	scoresChoice := choice("str, dex, con, int, wis, cha", "one score for each ability: use 15, 14, 13, 12, 10 and 8 once each", 6, nil, scores, missing == 0 && scoreProblem == "", scoreProblem)
 	scoresChoice["option_details"] = map[string]interface{}{"what_each_ability_is_for": abilityDescriptions, "for_your_class": abilityGuidance(class)}
@@ -1542,7 +1563,7 @@ func builderSteps(body map[string]interface{}, agentID int, withCheck bool) []bu
 	if missing > 0 || scoreProblem != "" {
 		s5.Remaining++
 	}
-	if method == "standard_array" && missing == 0 && scoreProblem == "" && !isStandardArray([]int{scores["str"], scores["dex"], scores["con"], scores["int"], scores["wis"], scores["cha"]}) {
+	if missing == 0 && scoreProblem == "" && !isStandardArray([]int{scores["str"], scores["dex"], scores["con"], scores["int"], scores["wis"], scores["cha"]}) {
 		s5.Problems = append(s5.Problems, "the Standard Array is 15, 14, 13, 12, 10 and 8, each used once")
 		scoresChoice["done"] = false
 		scoresChoice["problem"] = fmt.Sprintf("these scores are not the Standard Array: you sent %d, %d, %d, %d, %d and %d (Str, Dex, Con, Int, Wis, Cha); use 15, 14, 13, 12, 10 and 8 once each", scores["str"], scores["dex"], scores["con"], scores["int"], scores["wis"], scores["cha"])
@@ -2371,6 +2392,20 @@ func (o *builderOutcome) takeSuggestion(body map[string]interface{}, key string,
 	}
 	withSug, without := openChoices(target)
 	if !target.Done && len(withSug) == 0 {
+		// a step whose suggestion depends on an earlier one says so (Nov 14 audit: "there is no suggestion for : ..." before a class)
+		if len(target.Suggestion) == 0 {
+			for i := range steps {
+				if steps[i].Key == target.Key {
+					break
+				}
+				if !steps[i].Done {
+					return "no_suggestion", fmt.Sprintf("%s has no suggestion yet: it depends on %s, which isn't finished. Finish that first (use_suggestion fills the current step).", target.Title, steps[i].Title)
+				}
+			}
+		}
+		if len(without) == 0 {
+			return "no_suggestion", fmt.Sprintf("%s has no suggestion now: %s.", target.Title, joinProblems(target.Problems))
+		}
 		return "no_suggestion", fmt.Sprintf("%s: there is no suggestion for %s: that choice is yours (see current_step.choices for the options).", target.Title, strings.Join(without, ", "))
 	}
 	o.filled, o.replaced = applySuggestion(body, *target)
@@ -2398,14 +2433,21 @@ func applyBuilderUpdate(body, upd map[string]interface{}, agentID int) builderOu
 	if before == nil {
 		before = map[string]interface{}{}
 	}
+	deferredSug, sugKey := false, ""
 	if hasSug && useSug != nil && useSug != false {
 		code, msg := "", ""
 		if key, isStr := useSug.(string); isStr {
-			code, msg = o.takeSuggestion(body, strings.ToLower(strings.TrimSpace(key)), agentID)
+			sugKey = strings.ToLower(strings.TrimSpace(key))
+			code, msg = o.takeSuggestion(body, sugKey, agentID)
 		} else if useSug == true {
 			code, msg = o.takeSuggestion(body, "", agentID)
 		} else {
 			code, msg = "invalid_use_suggestion", "use_suggestion is true (the current step) or a step's key: "+strings.Join(builderStepKeys, ", ")
+		}
+		if code == "no_suggestion" && len(upd) > 0 {
+			// tried again once the fields sent are saved: {"class": "cleric", "use_suggestion": "class_choices"} works in one request
+			// (Nov 14 audit: the class was saved and the suggestion refused)
+			deferredSug, code, msg = true, "", ""
 		}
 		if code != "" {
 			if len(upd) == 0 && len(o.refused) == 0 {
@@ -2447,6 +2489,11 @@ func applyBuilderUpdate(body, upd map[string]interface{}, agentID int) builderOu
 		}
 	}
 	o.replaced = keepReplaced
+	if hasSug && !deferredSug && len(o.filled) == 0 && len(o.replaced) == 0 && len(upd) > 0 && o.errCode == "" {
+		// everything the suggestion filled was sent too ({"background": "acolyte", "use_suggestion": true}): taken again once the
+		// fields are saved, so the rest of that step is filled
+		deferredSug, o.sugNote = true, ""
+	}
 	for k, v := range upd { // fields sent with use_suggestion win
 		if v == nil {
 			delete(body, k)
@@ -2500,6 +2547,31 @@ func applyBuilderUpdate(body, upd map[string]interface{}, agentID int) builderOu
 			skip[p] = true
 		}
 		o.refused = append(o.refused, rj...)
+	}
+	if deferredSug {
+		snap, _ := deepCopyJSON(body).(map[string]interface{})
+		if code, msg := o.takeSuggestion(body, sugKey, agentID); code != "" {
+			o.refused = append(o.refused, map[string]interface{}{"field": "use_suggestion", "you_sent": useSug, "problem": msg})
+		} else { // the fields sent win over the suggestion
+			var keepF []string
+			for _, f := range o.filled {
+				if sentPart(f) {
+					rollbackAnswer(body, snap, f)
+				} else {
+					keepF = append(keepF, f)
+				}
+			}
+			o.filled = keepF
+			var keepR []map[string]interface{}
+			for _, r := range o.replaced {
+				if f := fmt.Sprint(r["field"]); sentPart(f) {
+					rollbackAnswer(body, snap, f)
+				} else {
+					keepR = append(keepR, r)
+				}
+			}
+			o.replaced = keepR
+		}
 	}
 	rej := map[string]bool{}
 	for _, r := range o.refused {
@@ -2575,13 +2647,19 @@ func (o *builderOutcome) decorate(view map[string]interface{}, steps []builderSt
 	}
 	status := http.StatusOK
 	if len(o.refused) > 0 {
-		sugKeys := map[string]bool{} // fields use_suggestion would fill: open choices the suggestion answers
+		sugKeys := map[string]string{} // fields use_suggestion would fill (open choices the suggestion answers), with their step
+		current := ""
 		for i := range steps {
+			if current == "" && !steps[i].Done {
+				current = steps[i].Key
+			}
 			withSug, _ := openChoices(&steps[i])
 			for _, f := range withSug {
 				for _, part := range strings.Split(f, ", ") {
 					top, _ := splitField(part)
-					sugKeys[top] = true
+					if sugKeys[top] == "" {
+						sugKeys[top] = steps[i].Key
+					}
 				}
 			}
 		}
@@ -2589,13 +2667,28 @@ func (o *builderOutcome) decorate(view map[string]interface{}, steps []builderSt
 		for _, rj := range o.refused {
 			f := fmt.Sprint(rj["field"])
 			lines = append(lines, fmt.Sprintf("%s: %s", f, strings.TrimRight(fmt.Sprint(rj["problem"]), ".")))
-			if top, _ := splitField(f); sugKeys[top] && !containsStr(withSug, top) {
+			if top, _ := splitField(f); sugKeys[top] != "" && !containsStr(withSug, top) {
 				withSug = append(withSug, top)
 			}
 		}
 		msg := "NOT SAVED: " + strings.Join(lines, "; ") + ". Send these again with a valid choice."
-		if len(withSug) > 0 {
-			msg += " {\"use_suggestion\": true} would fill " + strings.Join(withSug, ", ") + " with the suggestion."
+		// the hint names the step that owns the field: true fills the current step only (Nov 14 audit: a species answer refused at
+		// step 2 said {"use_suggestion": true}, which filled step 2)
+		byStep := map[string][]string{}
+		var stepOrder []string
+		for _, f := range withSug {
+			k := sugKeys[f]
+			if _, seen := byStep[k]; !seen {
+				stepOrder = append(stepOrder, k)
+			}
+			byStep[k] = append(byStep[k], f)
+		}
+		for _, k := range stepOrder {
+			how := fmt.Sprintf("{\"use_suggestion\": %q}", k)
+			if k == current {
+				how = "{\"use_suggestion\": true}"
+			}
+			msg += " " + how + " would fill " + strings.Join(byStep[k], ", ") + " with the suggestion."
 		}
 		msgs = append([]string{msg}, msgs...)
 		view["not_saved"] = o.refused

@@ -560,7 +560,9 @@ func badName(s string) string {
 	}
 	letter := false
 	for _, r := range s {
-		if unicode.Is(unicode.Cf, r) {
+		// invisible: format characters and the other default-ignorable ones (U+3164 HANGUL FILLER is a "letter" that shows nothing),
+		// variation selectors and the line and paragraph separators (Nov 14 audit F22)
+		if unicode.Is(unicode.Cf, r) || unicode.Is(unicode.Other_Default_Ignorable_Code_Point, r) || unicode.Is(unicode.Variation_Selector, r) || unicode.In(r, unicode.Zl, unicode.Zp) {
 			return fmt.Sprintf("the name has an invisible character (%U) in it: use letters, digits and spaces", r)
 		}
 		letter = letter || unicode.IsLetter(r) || unicode.IsDigit(r)
