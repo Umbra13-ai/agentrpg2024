@@ -154,9 +154,12 @@ func turnEffects(campaignID, endingIndex int, when string) []string {
 				phase = "at the start of its turn"
 			}
 			bonus, autoFail, dis := saveBonusFor(campaignID, id, s.Ability)
+			adv := spellSaveAdvantage(campaignID, id, s.Ability) // Dodge on a Dexterity save, Haste, Foresight ...: as for any saving throw
 			roll := game.RollDie(20)
-			if dis {
+			if dis && !adv {
 				roll, _, _ = game.RollWithDisadvantage()
+			} else if adv && !dis {
+				roll, _, _ = game.RollWithAdvantage()
 			}
 			total := roll + bonus
 			if !autoFail && total >= s.DC {

@@ -278,10 +278,13 @@ func handleGMOpportunityAttack(w http.ResponseWriter, r *http.Request) {
 	// Opportunity attacks against you are made with disadvantage
 	escapeTheHordeActive := hasEscapeTheHorde(req.TargetID)
 
-	// Roll the attack (with Disadvantage for Escape the Horde or Multiattack Defense)
+	// Dodge, Blur, Foresight ...: as for any attack roll against the character (buff_spells_2024.go)
+	defenderDis, defenderWhy := buffAttackDisadvantage(campaignID, 0, req.TargetID)
+
+	// Roll the attack (with Disadvantage for Escape the Horde, Multiattack Defense or the target's own defenses)
 	var attackRoll int
 	var oaRoll1, oaRoll2 int
-	if escapeTheHordeActive || multiattackDefenseActive {
+	if escapeTheHordeActive || multiattackDefenseActive || defenderDis {
 		attackRoll, oaRoll1, oaRoll2 = game.RollWithDisadvantage()
 	} else {
 		attackRoll = game.RollDie(20)
@@ -314,6 +317,8 @@ func handleGMOpportunityAttack(w http.ResponseWriter, r *http.Request) {
 	escapeNote := ""
 	if escapeTheHordeActive {
 		escapeNote = fmt.Sprintf(" 🏃[Escape the Horde: %d/%d→%d]", oaRoll1, oaRoll2, attackRoll)
+	} else if defenderDis {
+		escapeNote = fmt.Sprintf(" [Disadvantage (%s): %d/%d→%d]", defenderWhy, oaRoll1, oaRoll2, attackRoll)
 	}
 
 	if attackRoll == 1 && !oaHalflingLuckyUsed {

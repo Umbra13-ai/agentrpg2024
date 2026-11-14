@@ -679,7 +679,6 @@ func spellEffectsTurnEnd(lobbyID, id int, name string) []string {
 // spellSaveAdvantage: Haste gives Advantage on Dexterity saving throws.
 func spellSaveAdvantage(lobbyID, id int, ability string) bool {
 	return (strings.HasPrefix(strings.ToLower(ability), "dex") && hasSpellEffect(lobbyID, id, "hasted")) ||
-		(strings.HasPrefix(strings.ToLower(ability), "dex") && dodgeActive(id)) || // Dodge: Dexterity saving throws with Advantage
 		spellSaveItemAdvantage(lobbyID, id) || // a save against a spell with a Ring of Spell Turning, Scarab, Staff of the Magi, a Holy Avenger's aura
 		deckAdvantage(id) || // the Jester card
 		buffSaveAdv(lobbyID, id, ability) || // Foresight, Holy Aura, Beacon of Hope, Protection from Poison (buff_spells_2024.go)

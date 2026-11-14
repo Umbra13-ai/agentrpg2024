@@ -293,10 +293,6 @@ func resolveMonsterAttack(r *http.Request, campaignID int, monster, action, targ
 		if found && elementalBane(tid, key) {
 			dis = true // Ring of Elemental Command: an Elemental attacks the wearer with Disadvantage
 		}
-		dodged := found && dodgeActive(tid) // the target took the Dodge action (dodge_2024.go)
-		if dodged {
-			dis = true
-		}
 		buffDis := ""
 		if found {
 			if d, why := buffAttackDisadvantage(campaignID, attackerID, tid); d { // Foresight, Blur, Holy Aura, Protection from Evil and Good
@@ -328,8 +324,6 @@ func resolveMonsterAttack(r *http.Request, campaignID int, monster, action, targ
 		}
 		if buffDis != "" && dis && !adv {
 			how += " (" + buffDis + ")"
-		} else if dodged && dis && !adv {
-			how += " (the target is Dodging)"
 		}
 		if adv && dis {
 			how = " (Advantage from " + strings.Join(advWhy, " and ") + " and Disadvantage" + map[bool]string{true: " from " + buffDis, false: ""}[buffDis != ""] + " cancel: one d20)" + how

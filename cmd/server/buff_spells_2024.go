@@ -595,6 +595,9 @@ func buffSaveAdvantage(lobbyID, id int, ability string) (bool, string) {
 	if id <= 0 {
 		return false, ""
 	}
+	if shortAbility(ability) == "dex" && dodgeActive(id) {
+		return true, "Dodge" // the Dodge action (dodge_2024.go): Dexterity saving throws with Advantage
+	}
 	if _, ok := buffEffect(lobbyID, id, "foresight"); ok {
 		return true, "Foresight"
 	}
@@ -846,8 +849,10 @@ func monsterSeesThrough(lobbyID, monsterID int) bool {
 	return strings.Contains(s, "blindsight") || strings.Contains(s, "truesight")
 }
 
-// buffAttackDisadvantage: a monster's attack roll against the character has Disadvantage (Foresight, Blur, Holy Aura, Protection
-// from Evil and Good).
+// buffAttackDisadvantage: an attack roll against the character has Disadvantage because of what the character has done or has on
+// it (the Dodge action, Foresight, Blur, Holy Aura, Protection from Evil and Good ...). Every place that rolls an attack against a
+// character asks here: a stat block's attack, a monster's spell attack, an Opportunity Attack (Nov 14: Dodge was read in one of
+// them only). monsterID is 0 when the attacker is not a monster in the turn order.
 func buffAttackDisadvantage(lobbyID, monsterID, targetID int) (bool, string) {
 	if targetID <= 0 {
 		return false, ""
@@ -855,6 +860,9 @@ func buffAttackDisadvantage(lobbyID, monsterID, targetID int) (bool, string) {
 	var why []string
 	if ok, w := moreAttackDisadvantage(lobbyID, monsterID, targetID); ok {
 		why = append(why, w) // Magic Circle (spells_more_2024.go)
+	}
+	if dodgeActive(targetID) {
+		why = append(why, "the target is Dodging") // the Dodge action (dodge_2024.go): every attack roll against the character
 	}
 	if _, ok := buffEffect(lobbyID, targetID, "foresight"); ok {
 		why = append(why, "Foresight")

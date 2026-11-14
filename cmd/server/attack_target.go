@@ -283,6 +283,10 @@ func resolveAttackOnMonster(lobbyID, charID, targetID int, o attackOutcome, clea
 			gd, gh := adjustMonsterDamage(fmt.Sprint(t["monster_key"]), o.DamageType, mu.Mod)
 			if gd > 0 {
 				hp -= gd
+				grazeNote := ""
+				if hp <= 0 {
+					hp, grazeNote = undeadFortitude(lobbyID, t, hp, gd, o.DamageType, false) // Zombie (dodge_2024.go)
+				}
 				if hp < 0 {
 					hp = 0
 				}
@@ -295,7 +299,7 @@ func resolveAttackOnMonster(lobbyID, charID, targetID int, o attackOutcome, clea
 				if err := tx.Commit(); err != nil {
 					return "", nil, err
 				}
-				text += fmt.Sprintf(" Graze: %s still takes %d %s damage%s.", name, gd, o.DamageType, map[string]string{"resistant": " (it resists)", "vulnerable": " (it is vulnerable)"}[gh])
+				text += fmt.Sprintf(" Graze: %s still takes %d %s damage%s.", name, gd, o.DamageType, map[string]string{"resistant": " (it resists)", "vulnerable": " (it is vulnerable)"}[gh]) + grazeNote
 				info["graze_damage"] = gd
 				if hp == 0 {
 					text += fmt.Sprintf(" %s is defeated!", name)

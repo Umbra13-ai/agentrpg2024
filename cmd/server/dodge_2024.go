@@ -10,9 +10,14 @@ import (
 // attacker, and you make Dexterity saving throws with Advantage. You lose this benefit if you have the Incapacitated condition
 // or if your Speed is 0." The marker is "dodging" in the character's conditions.
 
-// dodgeActive: the character took the Dodge action and still has its benefit.
+// dodgeActive: the character took the Dodge action and still has its benefit (not Incapacitated, Speed not 0). It is read in the
+// two shared places only, so every attack roll against the character and every Dexterity save gets it: buffAttackDisadvantage
+// and buffSaveAdvantage (buff_spells_2024.go).
 func dodgeActive(charID int) bool {
-	return charID > 0 && db != nil && hasCondition(charID, "dodging") && !isIncapacitated(charID)
+	if charID <= 0 || db == nil || !hasCondition(charID, "dodging") || isIncapacitated(charID) {
+		return false
+	}
+	return !hasCondition(charID, "grappled") && !hasCondition(charID, "restrained") // Speed 0 ends the benefit
 }
 
 // endDodge drops the marker when the character's next turn starts.
@@ -40,8 +45,14 @@ func endDodge(charID int) {
 // throw (DC 5 plus the damage taken) unless the damage is Radiant or from a Critical Hit. On a successful save, the zombie drops
 // to 1 Hit Point instead." hp is what the damage left it with; e is its turn-order entry, still holding the Hit Points before.
 func undeadFortitude(lobbyID int, e map[string]interface{}, hp, taken int, dtype string, crit bool) (int, string) {
-	id := asInt(e["id"])
-	if hp > 0 || taken <= 0 || id >= 0 || asInt(e["hp"]) <= 0 || crit || strings.EqualFold(strings.TrimSpace(dtype), "radiant") {
+	return undeadFortitudeFor(lobbyID, asInt(e["id"]), fmt.Sprint(e["name"]), asInt(e["hp"]), hp, taken, dtype, crit)
+}
+
+// undeadFortitudeFor is the same for the places that hold the monster's id and Hit Points and not its turn-order entry. It is
+// called wherever damage can take a monster to 0 Hit Points: a weapon hit and a Graze (attack_target.go), every spell, item and
+// feature that deals damage (damageMonster, cleric_2024.go), and a companion's attack (companions_2024.go).
+func undeadFortitudeFor(lobbyID, id int, name string, hpBefore, hp, taken int, dtype string, crit bool) (int, string) {
+	if hp > 0 || taken <= 0 || id >= 0 || hpBefore <= 0 || crit || strings.EqualFold(strings.TrimSpace(dtype), "radiant") {
 		return hp, ""
 	}
 	if !monsterHasTrait(lobbyID, id, "Undead Fortitude") {
@@ -49,7 +60,6 @@ func undeadFortitude(lobbyID int, e map[string]interface{}, hp, taken int, dtype
 	}
 	dc := 5 + taken
 	saved, total := monsterSaveRoll(lobbyID, id, "con", dc)
-	name := fmt.Sprint(e["name"])
 	if saved {
 		return 1, fmt.Sprintf(" Undead Fortitude: %s makes its Constitution save (%d vs DC %d) and drops to 1 Hit Point instead.", name, total, dc)
 	}

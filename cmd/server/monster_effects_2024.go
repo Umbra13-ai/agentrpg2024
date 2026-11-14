@@ -423,10 +423,17 @@ func resolveMonsterSpellRules(lobbyID, monsterID int, monsterName, spellName str
 			}
 			ac := characterACFor(lobbyID, tid)
 			roll := game.RollDie(20)
+			disNote := ""
+			if dis, why := buffAttackDisadvantage(lobbyID, monsterID, tid); dis { // Dodge, Blur, Foresight ...: as for any attack roll against the character
+				if second := game.RollDie(20); second < roll {
+					roll = second
+				}
+				disNote = " with Disadvantage (" + why + ")"
+			}
 			total := roll + atk
 			name := characterNameOf(tid)
 			if roll == 1 || (roll != 20 && total < ac) {
-				lines = append(lines, fmt.Sprintf("Spell attack at %s: %d vs AC %d - MISS", name, total, ac))
+				lines = append(lines, fmt.Sprintf("Spell attack at %s: %d%s vs AC %d - MISS", name, total, disNote, ac))
 				continue
 			}
 			dmg := game.RollDamage(normDice(beamDice), roll == 20)

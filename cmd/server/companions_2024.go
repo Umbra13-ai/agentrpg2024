@@ -983,6 +983,10 @@ func companionAttack(lobbyID int, c companion, a compAttack, targetID int) strin
 		extra = fmt.Sprintf(" plus %d %s%s", x, a.ExtraType, n2)
 	}
 	newHP := hp - dmg
+	fortNote := ""
+	if newHP <= 0 {
+		newHP, fortNote = undeadFortitudeFor(lobbyID, targetID, monsterName(lobbyID, targetID), hp, newHP, dmg, a.Type, crit) // Zombie (dodge_2024.go)
+	}
 	if newHP < 0 {
 		newHP = 0
 	}
@@ -995,7 +999,7 @@ func companionAttack(lobbyID int, c companion, a compAttack, targetID int) strin
 	if crit {
 		critText = " CRITICAL HIT!"
 	}
-	return fmt.Sprintf("%s: %d to hit. HIT.%s %d %s damage%s%s to %s (%s).%s", a.Name, total, critText, dmg, a.Type, note, extra, name, healthWord(newHP, maxHPOf(lobbyID, targetID)), wakeText)
+	return fmt.Sprintf("%s: %d to hit. HIT.%s %d %s damage%s%s to %s (%s).%s", a.Name, total, critText, dmg, a.Type, note, extra, name, healthWord(newHP, maxHPOf(lobbyID, targetID)), wakeText+fortNote)
 }
 
 func maxHPOf(lobbyID, id int) int {
