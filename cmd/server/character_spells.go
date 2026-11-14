@@ -752,7 +752,7 @@ func handlePrepareSpells(w http.ResponseWriter, r *http.Request, charID int) {
 			"prepared_count":  countLeveled(newPrepared),
 			"max_prepared":    maxPrepared,
 			"slots_remaining": maxPrepared - countLeveled(newPrepared),
-			"message":         fmt.Sprintf("Prepared %d spells for the day.", len(newPrepared)),
+			"message":         preparedMessage(countLeveled(newPrepared), len(newPrepared)-countLeveled(newPrepared), maxPrepared),
 		}
 		var notes []string
 		if len(skippedAlways) > 0 {
@@ -876,4 +876,21 @@ func handleUseResource(w http.ResponseWriter, r *http.Request, charID int) {
 		"remaining":     remaining,
 		"message":       fmt.Sprintf("Spent %d %s. %d remaining.", req.Amount, resourceName, remaining),
 	})
+}
+
+// preparedMessage counts prepared spells and cantrips apart, as the class table does (Nov 14 tester: "Prepared 6 spells" for 4 spells
+// and 2 cantrips).
+func preparedMessage(spells, cantrips, max int) string {
+	msg := fmt.Sprintf("Prepared %d of %d spells of level 1 or higher", spells, max)
+	if spells == 1 {
+		msg = fmt.Sprintf("Prepared 1 of %d spells of level 1 or higher", max)
+	}
+	switch cantrips {
+	case 0:
+	case 1:
+		msg += ", plus 1 cantrip"
+	default:
+		msg += fmt.Sprintf(", plus %d cantrips", cantrips)
+	}
+	return msg + "."
 }
