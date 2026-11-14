@@ -139,6 +139,16 @@ func handleCharacters(w http.ResponseWriter, r *http.Request) {
 				return
 			}
 		}
+		for _, fc := range []string{"background_feat_choices", "species_feat_choices"} { // "spell": ["bless"] is "spell": "bless", as in the builder
+			if m, ok := raw[fc].(map[string]interface{}); ok {
+				if l, isList := m["spell"].([]interface{}); isList && len(l) == 1 {
+					if one, isStr := l[0].(string); isStr {
+						m["spell"] = one
+						readAs = append(readAs, fmt.Sprintf("%s.spell [%q] (a list of one) is read as %q", fc, one, one))
+					}
+				}
+			}
+		}
 		if inc, ok := raw["ability_increases"].(map[string]interface{}); ok {
 			for k, x := range inc {
 				n, isNum := x.(float64)

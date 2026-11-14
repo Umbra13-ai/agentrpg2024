@@ -1032,7 +1032,7 @@ func builderSteps(body map[string]interface{}, agentID int, withCheck bool) []bu
 			}
 			if lv, has := fc["list"]; has && lv != nil { // the list is fixed by the background; creation refuses another (Nov 14 audit)
 				if ls, isText := lv.(string); !isText || strings.ToLower(strings.TrimSpace(ls)) != list {
-					miProblem = fmt.Sprintf("%s's Magic Initiate uses the %s list, not %v: send \"list\": %q", bg.Name, list, lv, list)
+					miProblem = fmt.Sprintf("%s's Magic Initiate uses the %s list, not %v: send a new answer from that list (\"list\": %q, two %s cantrips and a level 1 %s spell), or {\"use_suggestion\": \"background\"}", bg.Name, list, lv, list, list, list)
 				}
 			}
 			if miProblem == "" {
@@ -1457,7 +1457,8 @@ func builderSteps(body map[string]interface{}, agentID int, withCheck bool) []bu
 			if v := bstr(sc, "skill"); v != "" {
 				avoid[skillKey(v)] = true
 			}
-			sug4["species_feat_choices"] = map[string]interface{}{"proficiencies": pickFrom([]string{"perception", "stealth", "insight", "athletics", "persuasion", "survival", "investigation", "medicine"}, nil, avoid, 3)}
+			// three picks, falling back to any skill not held (round 3: the fixed preferences ran out and the shown body had 2)
+			sug4["species_feat_choices"] = map[string]interface{}{"proficiencies": pickFrom([]string{"perception", "stealth", "insight", "athletics", "persuasion", "survival", "investigation", "medicine"}, allSRDSkills, avoid, 3)}
 			if len(picks) != 3 || skProb != "" {
 				s4.Remaining++
 			}
@@ -2264,7 +2265,41 @@ func builderViewOf(id int, body map[string]interface{}, steps []builderStep) map
 		out["current_step"] = current
 		send := map[string]interface{}{"method": "POST", "path": fmt.Sprintf("/api/character-builder/%d", id)}
 		if len(current.Suggestion) > 0 {
+			// the body is what use_suggestion would send: open choices filled, answers with a problem fixed, valid answers kept
+			// (round 3: the raw suggestion replaced valid skills and scores, and a Skilled body was refused)
 			send["body"] = current.Suggestion
+			if sim, ok := deepCopyJSON(body).(map[string]interface{}); ok {
+				filled, replaced := applySuggestion(sim, *current)
+				paths := append([]string{}, filled...)
+				for _, r := range replaced {
+					paths = append(paths, fmt.Sprint(r["field"]))
+				}
+				sb := map[string]interface{}{}
+				for _, pth := range paths {
+					top, sub := splitField(pth)
+					if sub == "" {
+						if v, has := sim[top]; has {
+							sb[top] = v
+						} else {
+							sb[top] = nil
+						}
+						continue
+					}
+					g, _ := sb[top].(map[string]interface{})
+					if g == nil {
+						g = map[string]interface{}{}
+						sb[top] = g
+					}
+					if v, has := bmap(sim, top)[sub]; has {
+						g[sub] = v
+					} else {
+						g[sub] = nil
+					}
+				}
+				if len(sb) > 0 {
+					send["body"] = sb
+				}
+			}
 			send["or"] = map[string]interface{}{"use_suggestion": true}
 		}
 		out["send"] = send
@@ -2579,6 +2614,25 @@ func applyBuilderUpdate(body, upd map[string]interface{}, agentID int) builderOu
 		}
 		if len(prereq) > 0 && len(prereq) < len(rj) {
 			rj = prereq
+		} else {
+			// a class skill or tool and a species answer naming the same proficiency in one request: the species answer is refused
+			// first and the class answer checked again, not both refused citing each other (round 3)
+			var speciesSide, rest []map[string]interface{}
+			classSide := false
+			for _, r := range rj {
+				f, _ := r["field"].(string)
+				switch {
+				case strings.HasPrefix(f, "species_choices.skill") || strings.HasPrefix(f, "species_feat_choices"):
+					speciesSide = append(speciesSide, r)
+				case f == "skill_proficiencies" || f == "tool_proficiencies" || f == "expertise":
+					classSide = true
+				default:
+					rest = append(rest, r)
+				}
+			}
+			if len(speciesSide) > 0 && classSide {
+				rj = append(speciesSide, rest...)
+			}
 		}
 		for _, r := range rj {
 			p := r["field"].(string)

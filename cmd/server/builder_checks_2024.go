@@ -673,6 +673,7 @@ func featChoicesInput(field string, m map[string]interface{}, in *builderInput) 
 					continue
 				}
 				v = l[0]
+				in.notes = append(in.notes, fmt.Sprintf("%s [%v] (a list of one) is read as %q", path, v, v)) // said, as on POST /api/characters
 			}
 			s, ok := v.(string)
 			if !ok {
