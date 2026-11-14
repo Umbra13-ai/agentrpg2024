@@ -461,20 +461,13 @@ func shopSetupStep(charID int) *setupStep {
 	}
 	shop := fmt.Sprintf("GET /api/characters/%d/shop", charID)
 	buySell := fmt.Sprintf("Buy with POST /api/characters/%d/shop {\"buy\": [{\"item\": \"Longsword\", \"quantity\": 1}]}; sell with {\"sell\": [{\"item_id\": \"<id from your inventory>\"}]} (a shop pays half the price).", charID)
-	title, why := "", ""
-	switch {
-	case classGold && bgGold:
+	// two wordings (Matt, Nov 14): a character who didn't take both equipment packages is told to shop for its gear; one who took
+	// both may buy extras or sell items from its pack
+	title := "Visit the shop: buy extras or sell items from your pack"
+	why := fmt.Sprintf("You took your equipment packages, and you have %s. You may visit the shop to buy extras or to sell items from your pack. %s lists everything (add ?category=weapons, armor, gear, ammunition or tools) with what each item does and whether you can afford it. %s ", moneyText(money), shop, buySell)
+	if classGold || bgGold {
 		title = "Visit the shop: buy your starting gear"
-		why = fmt.Sprintf("You took gold instead of equipment, so you have %s and no kit. Buy your starting gear now: weapons, armor, a pack, tools and ammunition at the SRD's prices. %s lists everything (add ?category=weapons, armor, gear, ammunition or tools) with what each item does, whether you are proficient with it and whether you can afford it. %s ", moneyText(money), shop, buySell)
-	case classGold:
-		title = "Visit the shop: buy your class's gear"
-		why = fmt.Sprintf("You took gold instead of your class's equipment, so you have %s. Buy the weapons, armor and gear your class needs at the SRD's prices; you can also sell items from your background's package. %s lists everything (add ?category=weapons, armor, gear, ammunition or tools) with what each item does, whether you are proficient with it and whether you can afford it. %s ", moneyText(money), shop, buySell)
-	case bgGold:
-		title = "Visit the shop: buy what your background's package would have given"
-		why = fmt.Sprintf("You took your background's 50 GP instead of its package, so you have %s. Buy the gear you want (a pack, tools, clothes) at the SRD's prices; you can also sell items from your class's equipment. %s lists everything (add ?category=weapons, armor, gear, ammunition or tools). %s ", moneyText(money), shop, buySell)
-	default:
-		title = "Visit the shop: buy extras or sell items from your pack"
-		why = fmt.Sprintf("You took your equipment pack, and you have %s. You may visit the shop to buy extras or to sell items from your pack. %s lists everything (add ?category=weapons, armor, gear, ammunition or tools) with what each item does and whether you can afford it. %s ", moneyText(money), shop, buySell)
+		why = fmt.Sprintf("You took gold instead of an equipment package, so you have %s: visit the shop to buy your starting gear (weapons, armor, a pack, tools, ammunition) at the SRD's prices. You can also sell items you have. %s lists everything (add ?category=weapons, armor, gear, ammunition or tools) with what each item does, whether you are proficient with it and whether you can afford it. %s ", moneyText(money), shop, buySell)
 	}
 	why += "When you have finished shopping (or want nothing), send the request below to continue setup. The shop closes when your campaign starts; after that, buying and selling are up to your GM."
 	st := setupStep{Key: "shop", Title: title, Why: why,
