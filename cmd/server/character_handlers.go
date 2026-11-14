@@ -70,7 +70,7 @@ func handleCharacters(w http.ResponseWriter, r *http.Request) {
 			Cha                   int               `json:"cha"`
 			SkillProficiencies    []string          `json:"skill_proficiencies"`     // e.g., ["perception", "stealth"]
 			ToolProficiencies     []string          `json:"tool_proficiencies"`      // e.g., ["thieves' tools", "herbalism kit"]
-			Expertise             []string          `json:"expertise"`               // Rogue only: two skill proficiencies, e.g. ["stealth", "sleight of hand"] (double Proficiency Bonus)
+			Expertise             []string          `json:"expertise"`               // a class with Expertise at level 1 (the Rogue): its skills, e.g. ["stealth", "sleight of hand"] (double Proficiency Bonus)
 			ExtraLanguages        []string          `json:"extra_languages"`         // exactly two Standard Languages besides Common (2024 rules)
 			AbilityIncreases      map[string]int    `json:"ability_increases"`       // from the background: {"int": 2, "wis": 1} or all three at 1
 			BackgroundTool        string            `json:"background_tool"`         // Soldier: which Gaming Set
@@ -503,26 +503,13 @@ func handleCharacters(w http.ResponseWriter, r *http.Request) {
 		armorProfsStr = game.MergeProficiencyList(armorProfsStr, grantedProfs.Armor)
 		toolProfsStr = game.MergeToolList(toolProfsStr, grantedProfs.Tools)
 
-		// Expertise (SRD 5.2.1): a Rogue chooses two of their skill proficiencies at level 1 (checked below, once the background's and
-		// species' skills are known). Bards, Rangers and Wizards (Scholar) choose theirs at level 2 with POST /api/characters/{id}/expertise.
-		// Expertise is for skills only.
-		if len(req.Expertise) > 0 && classKey != "rogue" {
+		// Expertise at level 1 (game.ExpertiseGrants says which classes have it then; the others choose theirs after creation with
+		// POST /api/characters/{id}/expertise). The picks are checked below, once the background's and species' skills are known.
+		if len(req.Expertise) > 0 && game.ExpertiseAllowed(classKey, 1) == 0 {
 			writeJSONStatus(w, http.StatusBadRequest, map[string]interface{}{
 				"error":   "expertise_not_available",
-				"message": "Only Rogues choose Expertise at level 1. Bards, Rangers and Wizards choose theirs at level 2 (POST /api/characters/{id}/expertise).",
+				"message": fmt.Sprintf("A level 1 %s has no Expertise to choose (%s). Leave expertise out; after level 1 it is chosen with POST /api/characters/{id}/expertise. Nothing was created.", titleCase(classKey), game.ExpertiseSummary()),
 			})
-			return
-		}
-		if len(req.Expertise) > 2 {
-			writeJSONStatus(w, http.StatusBadRequest, map[string]interface{}{
-				"error":   "too_many_expertise",
-				"message": "A Rogue chooses Expertise in 2 skills at level 1.",
-			})
-			return
-		}
-		if len(req.Expertise) == 1 { // one of two was saved without a word (Nov 14 review); the builder refuses it too
-			writeJSONStatus(w, http.StatusBadRequest, map[string]interface{}{"error": "expertise_count", "nothing_created": true,
-				"message": "expertise: a Rogue chooses exactly 2 skills at level 1 (you chose 1), or leave expertise out and choose it in the setup. Nothing was created."})
 			return
 		}
 
@@ -574,26 +561,16 @@ func handleCharacters(w http.ResponseWriter, r *http.Request) {
 		}
 		toolProfsStr = game.MergeToolList(toolProfsStr, nil)
 
-		// Rogue Expertise: two of the character's skill proficiencies, from the class, background or species.
+		// Expertise: the same check as the builder's step 2 and the Expertise request (expertise_2024.go). All of the class's level 1
+		// Expertise skills, or none (then the setup asks).
 		expertiseStr := ""
 		if len(req.Expertise) > 0 {
-			held := game.ParseProficiencyList(skillProfsStr)
-			var chosen []string
-			for _, exp := range req.Expertise {
-				k := normSkill(exp)
-				if !game.IsSkill(k) || !containsStr(held, k) {
-					writeJSONStatus(w, http.StatusBadRequest, map[string]interface{}{
-						"error":   "invalid_expertise",
-						"message": fmt.Sprintf("'%s' must be one of your skill proficiencies (from your class, background or species); Expertise is for skills.", exp),
-					})
-					return
-				}
-				if containsStr(chosen, k) { // refused, not merged into one (Nov 14 audit re-check, F6: ["stealth","stealth"] became one)
-					writeJSONStatus(w, http.StatusBadRequest, map[string]interface{}{"error": "duplicate_skill", "nothing_created": true,
-						"message": fmt.Sprintf("expertise: you chose %s twice: choose 2 different skills. Nothing was created.", k)})
-					return
-				}
-				chosen = append(chosen, k)
+			held, _ := skillSet(skillProfsStr)
+			chosen, code, msg := creationExpertise(classKey, held, req.Expertise, true)
+			if code != "" {
+				writeJSONStatus(w, http.StatusBadRequest, map[string]interface{}{"error": code, "nothing_created": true,
+					"message": "expertise: " + msg + " Or leave expertise out and choose it in the setup. Nothing was created."})
+				return
 			}
 			expertiseStr = strings.Join(chosen, ", ")
 		}
@@ -716,8 +693,8 @@ func handleCharacters(w http.ResponseWriter, r *http.Request) {
 			if classKey == "druid" && primalOrder == "" {
 				open = append(open, "Primal Order: add class_options.primal_order (magician or warden), or choose it in the setup")
 			}
-			if classKey == "rogue" && expertiseStr == "" {
-				open = append(open, "Expertise: add expertise (2 of your skill proficiencies), or choose it in the setup")
+			if n := game.ExpertiseAllowed(classKey, 1); n > 0 && expertiseStr == "" {
+				open = append(open, fmt.Sprintf("Expertise: add expertise (%d of your skill proficiencies), or choose it in the setup", n))
 			}
 			if len(open) > 0 {
 				out["not_chosen_yet"] = open

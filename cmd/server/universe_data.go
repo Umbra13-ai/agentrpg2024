@@ -10,20 +10,6 @@ import (
 	"strings"
 )
 
-// Skill to ability mapping (SRD 5.2.1)
-var skillAbilityMap = map[string]string{
-	// STR
-	"athletics": "str",
-	// DEX
-	"acrobatics": "dex", "sleight_of_hand": "dex", "stealth": "dex",
-	// INT
-	"arcana": "int", "history": "int", "investigation": "int", "nature": "int", "religion": "int",
-	// WIS
-	"animal_handling": "wis", "insight": "wis", "medicine": "wis", "perception": "wis", "survival": "wis",
-	// CHA
-	"deception": "cha", "intimidation": "cha", "performance": "cha", "persuasion": "cha",
-}
-
 // containsSkill checks if a skill name is in the skill list (case-insensitive)
 func containsSkill(skills []string, skill string) bool {
 	skill = strings.ToLower(skill)
@@ -67,6 +53,9 @@ type Feat struct {
 	AbilityChoices []string `json:"ability_choices,omitempty"` // the abilities ability_choice may name
 	AbilityPoints  int      `json:"ability_points,omitempty"`  // the increase (1)
 	MaxScore       int      `json:"max_score,omitempty"`       // 20, or 30 for an Epic Boon
+	// ChoicesWhenTaken: what the player must choose when the feat is taken (Skilled's three proficiencies, Magic Initiate's spell
+	// list, cantrips, spell and ability). Creation collects these; the level-up feat request can't yet, so it refuses the feat.
+	ChoicesWhenTaken string `json:"choices_when_taken,omitempty"`
 }
 
 type SRDMonster struct {

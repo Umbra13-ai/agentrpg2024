@@ -124,10 +124,6 @@ func containsStr(list []string, s string) bool {
 	return false
 }
 
-func normSkill(s string) string { // "sleight-of-hand" and "sleight_of_hand" are sleight of hand (round 2 re-check)
-	return strings.Join(strings.Fields(strings.ToLower(strings.NewReplacer("_", " ", "-", " ").Replace(s))), " ")
-}
-
 // resolveFeat checks the choices for one Origin feat.
 func resolveFeat(slug, source string, in *featChoiceInput, bgListNote string, usedLists map[string]bool, held *[]string, heldTools *[]string, known *[]string) (*originFeat, *originError) {
 	f := &originFeat{Slug: slug, Source: source}
@@ -201,11 +197,11 @@ func resolveFeat(slug, source string, in *featChoiceInput, bgListNote string, us
 			return nil, originErr("feat_choices_required", nil, "Skilled needs %s_feat_choices.proficiencies: exactly three skills or tools", source)
 		}
 		for _, p := range in.Proficiencies {
-			if k := canonSkill(p); k != "" { // "animal-handling" and "Sleight-of-Hand" as the builder takes them (re-check)
+			if k, ok := game.CanonSkill(p); ok { // "animal-handling" and "Sleight-of-Hand" as the builder takes them (re-check)
 				p = k
 			}
 			if game.IsSkill(p) {
-				n := normSkill(p)
+				n := game.SkillName(p)
 				if containsStr(*held, n) {
 					return nil, originErr("proficiency_already_held", nil, "You already have proficiency in %s; choose another", n)
 				}
@@ -304,7 +300,7 @@ func resolveOrigin(in originInput) (*originOutput, *originError) {
 			return nil, originErr("species_choice_not_used", sp.Needs, "%s doesn't choose %s%s: leave species_choices.%s out. It asks for: %s.", titleFirst(withArticle(sp.Name)), k, why, k, asks)
 		}
 		if k == "skill" {
-			if n := skillKey(v); game.IsSkill(n) {
+			if n := game.SkillName(v); game.IsSkill(n) {
 				v = n
 			}
 		}

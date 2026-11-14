@@ -360,18 +360,6 @@ func ResolveSpecies(name string, choices map[string]string) (*SpeciesResult, err
 	return res, nil
 }
 
-// IsSkill reports whether a name is one of the 18 skills.
-func IsSkill(name string) bool {
-	name = strings.ToLower(strings.TrimSpace(strings.ReplaceAll(name, "_", " ")))
-	for _, s := range []string{"acrobatics", "animal handling", "arcana", "athletics", "deception", "history", "insight", "intimidation",
-		"investigation", "medicine", "nature", "perception", "performance", "persuasion", "religion", "sleight of hand", "stealth", "survival"} {
-		if s == name {
-			return true
-		}
-	}
-	return false
-}
-
 // StandardLanguages is the Standard Languages table (Common is always known).
 var StandardLanguages = []string{"Common Sign Language", "Draconic", "Dwarvish", "Elvish", "Giant", "Gnomish", "Goblin", "Halfling", "Orc"}
 

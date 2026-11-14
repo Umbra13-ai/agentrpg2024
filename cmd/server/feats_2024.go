@@ -15,6 +15,7 @@ package main
 import (
 	"encoding/json"
 	"fmt"
+	"sort"
 	"strconv"
 	"strings"
 	"sync"
@@ -148,7 +149,8 @@ func originFeatsSRD() map[string]Feat {
 		},
 		"magic_initiate": {
 			Name: "Magic Initiate", Category: "Origin", Repeatable: true,
-			Description: "You gain the following benefits.",
+			ChoicesWhenTaken: "a spell list (Cleric, Druid or Wizard), two cantrips, one level 1 spell and a spellcasting ability",
+			Description:      "You gain the following benefits.",
 			Benefits: []string{
 				"Two Cantrips. You learn two cantrips of your choice from the Cleric, Druid, or Wizard spell list. Intelligence, Wisdom, or Charisma is your spellcasting ability for this feat's spells (choose when you select this feat).",
 				"Level 1 Spell. Choose a level 1 spell from the same list you selected for this feat's cantrips. You always have that spell prepared. You can cast it once without a spell slot, and you regain the ability to cast it in that way when you finish a Long Rest. You can also cast the spell using any spell slots you have.",
@@ -165,7 +167,8 @@ func originFeatsSRD() map[string]Feat {
 		},
 		"skilled": {
 			Name: "Skilled", Category: "Origin", Repeatable: true,
-			Description: "You gain proficiency in any combination of three skills or tools of your choice.",
+			ChoicesWhenTaken: "three skills or tools",
+			Description:      "You gain proficiency in any combination of three skills or tools of your choice.",
 			Benefits: []string{
 				"You gain proficiency in any combination of three skills or tools of your choice.",
 				"Repeatable. You can take this feat more than once.",
@@ -179,6 +182,83 @@ func originFeatsSRD() map[string]Feat {
 func lookupFeat(slug string) (Feat, bool) {
 	f, ok := availableFeats[slug]
 	return f, ok
+}
+
+// classHasFeature: whether a class has one of these class features at a level, read from the SRD class features table (so a
+// prerequisite such as "Fighting Style Feature" follows the table, not a list of class names typed here).
+func classHasFeature(class string, level int, names ...string) bool {
+	for _, f := range game.GetActiveClassFeatures(class, level) {
+		for _, n := range names {
+			if f.Name == n {
+				return true
+			}
+		}
+	}
+	return false
+}
+
+// ---- Which feats a character can take with an Ability Score Improvement. SRD 5.2.1: "You gain the Ability Score Improvement feat
+// or another feat of your choice for which you qualify." One rule: the feat request, the list in its refusal and the setup step's
+// options all come from featRefusal and featsOpenTo.
+
+// featTaker: what the feat rule needs to know about a character.
+type featTaker struct {
+	class    string
+	level    int
+	str, dex int
+	has      []string // the feats the character has
+}
+
+// findFeat: the feat a name means: its slug or the name the server shows ("Magic Initiate"), in any spelling.
+func findFeat(name string) (string, Feat, bool) {
+	k := nameKey(name)
+	if k == "" {
+		return "", Feat{}, false
+	}
+	for slug, f := range availableFeats {
+		if k == nameKey(slug) || k == nameKey(f.Name) {
+			return slug, f, true
+		}
+	}
+	return "", Feat{}, false
+}
+
+// featRefusal: why the character can't take a feat with its Ability Score Improvement, as an error code and a message; "" and ""
+// when it can.
+func featRefusal(t featTaker, slug string) (code, msg string) {
+	f, ok := availableFeats[slug]
+	switch {
+	case !ok:
+		return "unknown_feat", fmt.Sprintf("%q is not a feat on this server.", slug)
+	case slug == "ability_score_improvement":
+		return "use_asi", "Ability Score Improvement is a feat you take with POST /api/characters/{id}/asi."
+	case containsStr(t.has, slug) && !f.Repeatable:
+		return "already_has_feat", fmt.Sprintf("You already have the %s feat.", f.Name)
+	}
+	if ok, why := featPrerequisite(f.Prerequisite, t.class, t.level, t.str, t.dex); !ok {
+		return "prerequisite_not_met", why
+	}
+	// A feat the server can't apply through this request is refused, not recorded half-made (Nov 14: Skilled and Magic Initiate
+	// were accepted here without their proficiencies or spells, and a Fighting Style feat was recorded where nothing reads it).
+	if f.ChoicesWhenTaken != "" {
+		return "feat_needs_choices", fmt.Sprintf("%s needs choices when it is taken (%s), and the server can't take them at a level-up yet: it comes with a background or the Human species at creation. Choose another feat.", f.Name, f.ChoicesWhenTaken)
+	}
+	if f.Category == "Fighting Style" {
+		return "use_fighting_style", fmt.Sprintf("%s is a Fighting Style feat: it is chosen with your class's Fighting Style feature (POST /api/characters/fighting-style), not with an Ability Score Improvement.", f.Name)
+	}
+	return "", ""
+}
+
+// featsOpenTo: the feats the character can take now, by slug in alphabetical order: exactly the ones featRefusal lets through.
+func featsOpenTo(t featTaker) []string {
+	var out []string
+	for slug := range availableFeats {
+		if code, _ := featRefusal(t, slug); code == "" {
+			out = append(out, slug)
+		}
+	}
+	sort.Strings(out)
+	return out
 }
 
 // featPrerequisite checks a feat's prerequisite (";"-separated codes) and says what is missing.
@@ -199,13 +279,11 @@ func featPrerequisite(prereq, class string, level, str, dex int) (bool, string) 
 				return false, fmt.Sprintf("Requires Strength or Dexterity %d or higher", n)
 			}
 		case code == "fighting_style_feature":
-			c := strings.ToLower(class)
-			if c != "fighter" && c != "paladin" && c != "ranger" {
-				return false, "Requires the Fighting Style feature (Fighter, Paladin or Ranger)"
+			if !classHasFeature(class, level, "Fighting Style") {
+				return false, "Requires the Fighting Style feature, which your class doesn't have at this level"
 			}
 		case code == "spellcasting", code == "spellcaster":
-			c := strings.ToLower(class)
-			if !map[string]bool{"bard": true, "cleric": true, "druid": true, "paladin": true, "ranger": true, "sorcerer": true, "warlock": true, "wizard": true}[c] {
+			if !classHasFeature(class, level, "Spellcasting", "Pact Magic") {
 				return false, "Requires the Spellcasting or Pact Magic feature"
 			}
 		case strings.HasPrefix(code, "str:"):

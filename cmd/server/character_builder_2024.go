@@ -225,7 +225,7 @@ func originFeatDoes(feat, note string) string {
 	if t, ok := srdOriginFeats[feat]; ok {
 		return t // the SRD's own text
 	}
-	ft, ok := game.AvailableFeats[feat]
+	ft, ok := availableFeats[feat] // the server's one feat table (feats_2024.go)
 	if !ok {
 		return ""
 	}
@@ -260,8 +260,8 @@ func backgroundKit(b *game.Background) string {
 func skillOptionDetails(allowed []string) map[string]string {
 	out := map[string]string{}
 	for _, s := range allowed {
-		if r, ok := srdSkillRows[s]; ok {
-			out[s] = "Ability: " + r[0] + ". Example uses: " + r[1]
+		if sk, ok := game.LookupSkill(s); ok {
+			out[s] = "Ability: " + sk.AbilityName + ". Example uses: " + sk.Examples
 		}
 	}
 	return out
@@ -572,13 +572,13 @@ func builderSteps(body map[string]interface{}, agentID int, withCheck bool) []bu
 	var leftovers []map[string]interface{} // answers the class doesn't take (left from an earlier class), flagged after its own choices
 	if classOK {
 		n, allowed := classSkillChoices(class)
-		have := normalizeListField(body, "skill_proficiencies", canonSkillOK) // "sleight_of_hand" is saved as "sleight of hand"
+		have := normalizeListField(body, "skill_proficiencies", game.CanonSkill) // "sleight_of_hand" is saved as "sleight of hand"
 		// a class skill the character already gets elsewhere would be lost (creation refuses it): the background's skills, the
 		// species' skill and the Human's Skilled picks are left out of the options and refused, each saying where it comes from
 		from := map[string]string{}
 		if bg != nil {
 			for _, s := range bg.Skills {
-				from[normSkillName(s)] = "your background"
+				from[game.SkillName(s)] = "your background"
 			}
 		}
 		spSkill, featSkills, featTools := draftSpeciesProficiencies(body)
@@ -640,7 +640,7 @@ func builderSteps(body map[string]interface{}, agentID int, withCheck bool) []bu
 		if bg == nil {
 			if pb := game.GetBackground(bestBackground(class, nil)); pb != nil {
 				for _, s := range pb.Skills {
-					sugAvoid[normSkillName(s)] = true
+					sugAvoid[game.SkillName(s)] = true
 				}
 			}
 		}
@@ -816,73 +816,33 @@ func builderSteps(body map[string]interface{}, agentID int, withCheck bool) []bu
 				sug["tool_proficiencies"] = nil
 			}
 		}
-		if class == "rogue" {
-			// Expertise: 2 skills the character has (class, background, species, the Human's Skilled feat), checked here as creation
-			// checks it (Nov 14: the suggestion was always Stealth and Perception, and the review refused it when the rogue hadn't
-			// taken those)
-			profSet := map[string]bool{}
-			var profs []string
-			addProf := func(set map[string]bool, list *[]string, s string) {
-				s = normSkillName(s)
-				if s != "" && !set[s] {
-					set[s] = true
-					*list = append(*list, s)
-				}
+		// Expertise at level 1, for a class whose features give it then (game.ExpertiseGrants), on the skills the character has
+		// (class, background, species, the Human's Skilled feat). The same check as the one-request route and the Expertise request
+		// (Nov 14: step 2 counted the picks, the review checked them, and the suggestion was a fixed pair).
+		lv1 := map[string]int{class: 1}
+		if expCount := game.ExpertiseCount(lv1); expCount > 0 {
+			profSet, _ := draftSkills(have, bg, spSkill, featSkills)
+			e := normalizeListField(body, "expertise", game.CanonSkill)
+			_, eCode, eProb := creationExpertise(class, profSet, e, false)
+			if eCode == "" {
+				eProb = ""
 			}
-			others := append([]string(nil), featSkills...) // from the background, the species and the Skilled feat
-			if spSkill != "" {
-				others = append([]string{spSkill}, others...)
-			}
-			if bg != nil {
-				others = append(append([]string(nil), bg.Skills...), others...)
-			}
-			for _, s := range append(append([]string(nil), have...), others...) {
-				addProf(profSet, &profs, s)
-			}
-			e := normalizeListField(body, "expertise", canonSkillOK)
-			eProb := ""
-			seenE := map[string]bool{}
-			for _, x := range e {
-				if seenE[x] {
-					eProb = fmt.Sprintf("you chose %s twice: choose 2 different skills", x)
-					break
-				}
-				seenE[x] = true
-				if !profSet[x] {
-					eProb = fmt.Sprintf("%s isn't one of your skill proficiencies (class, background, species or Skilled feat): Expertise is for skills you have", x)
-					if len(profs) > 0 {
-						eProb += " (" + strings.Join(profs, ", ") + ")"
-					}
-					break
-				}
-			}
-			if eProb == "" && len(e) > 2 {
-				eProb = "choose exactly 2"
-			}
-			s2.Choices = append(s2.Choices, choice("expertise", "Expertise: 2 of your skill proficiencies (class, background, species or Skilled feat) get double your Proficiency Bonus", 2, profs, e, len(e) == 2 && eProb == "", eProb))
+			s2.Choices = append(s2.Choices, choice("expertise", fmt.Sprintf("Expertise: %d of your skill proficiencies (class, background, species or Skilled feat) get double your Proficiency Bonus", expCount),
+				expCount, game.ExpertiseOptions(lv1, profSet, nil), e, len(e) == expCount && eProb == "", eProb))
 			// suggested from the skills the character will have once the suggestion is taken (Nov 14 audit: it was null before the
 			// skills were chosen, so one use_suggestion left Expertise open)
-			sugSet, sugList := profSet, profs
+			sugSet := profSet
 			if !okSkills {
-				sugSet, sugList = map[string]bool{}, nil
-				for _, s := range append(append([]string(nil), sugSkills...), others...) {
-					addProf(sugSet, &sugList, s)
-				}
+				sugSet, _ = draftSkills(sugSkills, bg, spSkill, featSkills)
 			}
-			var eSug []string
-			for _, p := range append([]string{"stealth", "perception", "sleight of hand", "acrobatics", "deception", "investigation", "insight", "persuasion"}, sugList...) {
-				if sugSet[p] && len(eSug) < 2 && !containsStr(eSug, p) {
-					eSug = append(eSug, p)
-				}
-			}
-			if len(eSug) == 2 {
+			if eSug := game.SuggestExpertise(lv1, sugSet, nil, nil, expertiseSuggestionPrefs); len(eSug) == expCount {
 				sug["expertise"] = eSug
 			}
-			if len(e) != 2 || eProb != "" {
+			if len(e) != expCount || eProb != "" {
 				s2.Remaining++
 			}
 		} else if hasAnswer(body["expertise"]) {
-			leftovers = append(leftovers, leftoverChoice("expertise", body["expertise"], "Only Rogues choose Expertise at level 1 (Bards, Rangers and Wizards choose theirs after creation)"))
+			leftovers = append(leftovers, leftoverChoice("expertise", body["expertise"], fmt.Sprintf("A level 1 %s has no Expertise to choose (%s; after level 1 it is chosen in the setup)", titleCase(class), game.ExpertiseSummary())))
 			sug["expertise"] = nil
 		}
 		coSug := map[string]interface{}{}
@@ -981,7 +941,7 @@ func builderSteps(body map[string]interface{}, agentID int, withCheck bool) []bu
 		// taking every suggestion in order reopened Step 2 for 5 classes)
 		classSkills := map[string]bool{}
 		for _, s := range blist(body, "skill_proficiencies") {
-			classSkills[normSkillName(s)] = true
+			classSkills[game.SkillName(s)] = true
 		}
 		if best := bestBackground(class, classSkills); best != "" { // never suggest replacing the background the player chose (Nov 13)
 			sug3["background"] = best
@@ -1171,11 +1131,11 @@ func builderSteps(body map[string]interface{}, agentID int, withCheck bool) []bu
 		}
 		held := map[string]bool{} // the skills the class and the background give
 		for _, s := range blist(body, "skill_proficiencies") {
-			held[skillKey(s)] = true
+			held[game.SkillName(s)] = true
 		}
 		if bg != nil {
 			for _, s := range bg.Skills {
-				held[skillKey(s)] = true
+				held[game.SkillName(s)] = true
 			}
 		}
 		sfcRaw, hasSfc := body["species_feat_choices"]
@@ -1191,7 +1151,7 @@ func builderSteps(body map[string]interface{}, agentID int, withCheck bool) []bu
 		}
 		var skilledPicks []string // the player's own Skilled picks: the Human's skill suggestion avoids them
 		for _, p := range blist(sfc, "proficiencies") {
-			if k := canonSkill(p); k != "" {
+			if k, ok := game.CanonSkill(p); ok {
 				skilledPicks = append(skilledPicks, k)
 			}
 		}
@@ -1209,7 +1169,7 @@ func builderSteps(body map[string]interface{}, agentID int, withCheck bool) []bu
 				canon := optionKey(v)
 				switch need {
 				case "skill":
-					canon = canonSkill(v)
+					canon, _ = game.CanonSkill(v)
 				case "spellcasting_ability":
 					canon = normAbility(v)
 				}
@@ -1225,7 +1185,7 @@ func builderSteps(body map[string]interface{}, agentID int, withCheck bool) []bu
 			case "skill":
 				cands := opts
 				if sp.Key == "human" {
-					cands = allSkills // any skill
+					cands = game.SkillNames() // any skill
 				}
 				keep := []string{} // the skills the class and background don't already give
 				for _, o := range cands {
@@ -1242,7 +1202,7 @@ func builderSteps(body map[string]interface{}, agentID int, withCheck bool) []bu
 					if note != "" {
 						prob += ". " + strings.TrimSuffix(note, ".")
 					}
-				} else if prob == "" && v != "" && sp.Key == "human" && canonSkill(v) == "" {
+				} else if prob == "" && v != "" && sp.Key == "human" && !game.IsSkill(v) {
 					prob = fmt.Sprintf("%q is not a skill. Choose one of: %s", strings.TrimSpace(raw), strings.Join(keep, ", "))
 				}
 				sv = "" // the suggestion: a skill the character doesn't have and the player hasn't picked for Skilled
@@ -1385,7 +1345,7 @@ func builderSteps(body map[string]interface{}, agentID int, withCheck bool) []bu
 			for k := range held {
 				heldSk[k] = true
 			}
-			if k := canonSkill(bstr(sc, "skill")); k != "" {
+			if k, ok := game.CanonSkill(bstr(sc, "skill")); ok {
 				heldSk[k] = true // the Human's own skill comes first
 			}
 			heldTools := draftHeldTools(body, class, bg)
@@ -1401,7 +1361,7 @@ func builderSteps(body map[string]interface{}, agentID int, withCheck bool) []bu
 				if skProb != "" {
 					break
 				}
-				if k := canonSkill(x); k != "" {
+				if k, ok := game.CanonSkill(x); ok {
 					if seen[k] {
 						skProb = fmt.Sprintf("You chose %s twice: choose 3 different skills or tools", skillNames([]string{k}))
 					} else if heldSk[k] {
@@ -1441,7 +1401,7 @@ func builderSteps(body map[string]interface{}, agentID int, withCheck bool) []bu
 				}
 			}
 			var skOpts []string // what can still be picked
-			for _, s := range allSkills {
+			for _, s := range game.SkillNames() {
 				if !heldSk[s] {
 					skOpts = append(skOpts, s)
 				}
@@ -1464,10 +1424,10 @@ func builderSteps(body map[string]interface{}, agentID int, withCheck bool) []bu
 				avoid[v] = true
 			}
 			if v := bstr(sc, "skill"); v != "" {
-				avoid[skillKey(v)] = true
+				avoid[game.SkillName(v)] = true
 			}
 			// three picks, falling back to any skill not held (round 3: the fixed preferences ran out and the shown body had 2)
-			sug4["species_feat_choices"] = map[string]interface{}{"proficiencies": pickFrom([]string{"perception", "stealth", "insight", "athletics", "persuasion", "survival", "investigation", "medicine"}, allSRDSkills, avoid, 3)}
+			sug4["species_feat_choices"] = map[string]interface{}{"proficiencies": pickFrom([]string{"perception", "stealth", "insight", "athletics", "persuasion", "survival", "investigation", "medicine"}, game.SkillNames(), avoid, 3)}
 			if len(picks) != 3 || skProb != "" {
 				s4.Remaining++
 			}
@@ -1999,16 +1959,6 @@ func speciesChoiceOptions(species, need, class string, held map[string]bool) ([]
 // optionKey: an answer written as an option is ("High Elf", "high-elf" and "high_elf" are all high_elf).
 func optionKey(s string) string {
 	return strings.NewReplacer(" ", "_", "-", "_").Replace(strings.ToLower(strings.TrimSpace(s)))
-}
-
-// canonSkill: a skill as it is stored ("sleight of hand") for any spelling of it ("Sleight_of_Hand", "sleight-of-hand"), or "" when
-// the name is not one of the 18 skills.
-func canonSkill(s string) string {
-	k := strings.Join(strings.Fields(skillKey(s)), " ")
-	if game.IsSkill(k) {
-		return k
-	}
-	return ""
 }
 
 // titleFirst: the text with a capital first letter (a sentence that starts with withArticle).
@@ -3309,48 +3259,8 @@ func handleCharacterSetup(w http.ResponseWriter, r *http.Request, charID int) {
 			Request: req("POST", "/api/characters/invocations", map[string]interface{}{"character_id": charID, "invocation": "pact-of-the-tome", "cantrips": c, "rituals": rt}),
 			Choices: map[string]interface{}{"cantrips": map[string]interface{}{"choose": 3, "options": cOpts}, "rituals": map[string]interface{}{"choose": 2, "options": rOpts}}})
 	}
-	if has("Expertise") {
-		heldE, _ := heldSkills(charID)
-		var cur []string
-		var expCSV string
-		db.QueryRow(`SELECT COALESCE(expertise,'') FROM characters WHERE id = $1`, charID).Scan(&expCSV)
-		for _, e := range strings.Split(expCSV, ",") {
-			if e = skillKey(e); e != "" {
-				cur = append(cur, e)
-			}
-		}
-		want := 0
-		for c, l := range classLevelsOrSingle(charID) {
-			want += expertiseAllowed(c, l)
-		}
-		prefs := []string{"stealth", "perception", "persuasion", "insight", "athletics", "acrobatics", "investigation", "sleight of hand", "deception", "arcana", "survival"}
-		if cl == "wizard" {
-			prefs = []string{"arcana", "investigation", "history", "religion", "nature", "medicine"} // Scholar's list
-		}
-		picks := append([]string{}, cur...)
-		for _, s := range prefs {
-			if len(picks) < want && heldE[s] && !containsStr(picks, s) {
-				picks = append(picks, s)
-			}
-		}
-		var expOpts []map[string]string
-		for _, s := range append([]string{}, skillOrder...) {
-			if heldE[s] && (cl != "wizard" || containsStr(scholarSkills, s)) { // Scholar: only its six skills
-				row := srdSkillRows[s]
-				o := map[string]string{"skill": s, "ability": row[0], "example_uses": row[1]}
-				if containsStr(cur, s) {
-					o["already_expertise"] = "yes"
-				}
-				expOpts = append(expOpts, o)
-			}
-		}
-		rule := classFeatureText(cl, "Expertise")
-		if cl == "wizard" {
-			rule = classFeatureText(cl, "Scholar")
-		}
-		steps = append(steps, setupStep{Key: "expertise", Title: "Choose your Expertise skills", Why: rule + fmt.Sprintf(" You have %d of %d; send all of them (the ones you have and the new ones).", len(cur), want),
-			Request: req("POST", fmt.Sprintf("/api/characters/%d/expertise", charID), map[string]interface{}{"skills": picks}),
-			Choices: map[string]interface{}{"expertise_in_all": want, "you_have": cur, "options_your_skill_proficiencies": expOpts}})
+	if st := expertiseSetupStep(charID); st != nil { // options, suggestion and rule text from the character's grants (expertise_2024.go)
+		steps = append(steps, *st)
 	}
 	held, _ := heldSkills(charID)
 	if has("choose a subclass") {
@@ -3448,7 +3358,7 @@ func handleCharacterSetup(w http.ResponseWriter, r *http.Request, charID int) {
 		}
 		steps = append(steps, setupStep{Key: "bonus_proficiencies", Title: "Choose your three Bonus Proficiencies", Why: "College of Lore, level 3: Bonus Proficiencies. " + bp,
 			Request: req("POST", fmt.Sprintf("/api/characters/%d/class-options", charID), map[string]interface{}{"bonus_proficiencies": picks}),
-			Choices: map[string]interface{}{"choose": 3, "options": skillChoices(skillOrder, held)}})
+			Choices: map[string]interface{}{"choose": 3, "options": skillChoices(game.SkillNames(), held)}})
 	}
 	if has("Ability Score Improvement") {
 		if st := asiSetupStep(charID); st != nil {

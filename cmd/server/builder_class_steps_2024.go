@@ -13,16 +13,30 @@ import (
 	"github.com/agentrpg/agentrpg/game"
 )
 
-// normSkillName: a skill as the builder stores it ("Sleight_of-Hand" -> "sleight of hand").
-func normSkillName(s string) string {
-	s = strings.ToLower(strings.NewReplacer("_", " ", "-", " ").Replace(s))
-	return strings.Join(strings.Fields(s), " ")
-}
-
-// canonSkill: the SRD skill a name means, if it is one.
-func canonSkillOK(s string) (string, bool) {
-	n := normSkillName(s)
-	return n, game.IsSkill(n)
+// draftSkills: the skills a draft's character will have, in the order they are gained: the class picks, the background's, the
+// species' skill and the Human's Skilled feat picks. Step 2 and use_suggestion both read a draft's skills from here.
+func draftSkills(classPicks []string, bg *game.Background, spSkill string, featSkills []string) (map[string]bool, []string) {
+	set := map[string]bool{}
+	var list []string
+	add := func(s string) {
+		if s = game.SkillName(s); s != "" && !set[s] {
+			set[s] = true
+			list = append(list, s)
+		}
+	}
+	for _, s := range classPicks {
+		add(s)
+	}
+	if bg != nil {
+		for _, s := range bg.Skills {
+			add(s)
+		}
+	}
+	add(spSkill)
+	for _, s := range featSkills {
+		add(s)
+	}
+	return set, list
 }
 
 // normalizeListField writes a list answer back with each item in its canonical form, so the draft keeps what the step checked
@@ -93,14 +107,14 @@ func draftSpeciesProficiencies(body map[string]interface{}) (skill string, featS
 	}
 	sc := bmap(body, "species_choices")
 	if containsStr(sp.Needs, "skill") {
-		if s, ok := canonSkillOK(bstr(sc, "skill")); ok {
+		if s, ok := game.CanonSkill(bstr(sc, "skill")); ok {
 			skill = s
 		}
 	}
 	feat := strings.NewReplacer(" ", "_", "-", "_").Replace(strings.ToLower(firstNonEmpty(bstr(sc, "feat"), "skilled")))
 	if sp.Key == "human" && feat == "skilled" {
 		for _, p := range blist(bmap(body, "species_feat_choices"), "proficiencies") {
-			if s, ok := canonSkillOK(p); ok {
+			if s, ok := game.CanonSkill(p); ok {
 				featSkills = append(featSkills, s)
 			} else if t, ok := game.FindTool(p); ok {
 				featTools = append(featTools, t.Name)
@@ -152,7 +166,7 @@ func bestBackground(class string, skip map[string]bool) string {
 		}
 		overlap := false
 		for _, s := range b.Skills {
-			if skip[normSkillName(s)] {
+			if skip[game.SkillName(s)] {
 				overlap = true
 			}
 		}

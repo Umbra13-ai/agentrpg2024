@@ -63,19 +63,9 @@ func asiSetupStep(charID int) *setupStep {
 		m    map[string]interface{}
 	}
 	var feats []featOpt
-	for slug, f := range availableFeats {
-		if f.Category == "Origin" || f.Category == "Fighting Style" || slug == "ability_score_improvement" {
-			continue // Origin feats come with a background; Fighting Style feats with that feature; the ASI is option 1
-		}
-		if f.Category == "Epic Boon" && !epic {
-			continue
-		}
-		if ok, _ := featPrerequisite(f.Prerequisite, cl, level, str, dex); !ok {
-			continue
-		}
-		if containsStr(have, slug) && !f.Repeatable {
-			continue
-		}
+	// every feat the request would accept (featsOpenTo is the request's own rule), so the options and the check can't disagree
+	for _, slug := range featsOpenTo(featTaker{class: cl, level: level, str: str, dex: dex, has: have}) {
+		f := availableFeats[slug]
 		m := map[string]interface{}{"feat": slug, "name": f.Name, "category": f.Category, "prerequisite": featPrereqText(f.Prerequisite), "what_it_does": strings.Join(f.Benefits, " ")}
 		if len(f.AbilityChoices) > 0 {
 			m["ability_choice"] = fmt.Sprintf("send ability_choice: one of %s (the +%d increase, up to %d)", strings.Join(f.AbilityChoices, ", "), max1(f.AbilityPoints), maxScoreOr20(f.MaxScore))
@@ -233,15 +223,11 @@ func skillChoices(list []string, held map[string]bool) []map[string]string {
 		if held[s] {
 			continue
 		}
-		row := srdSkillRows[s]
-		out = append(out, map[string]string{"skill": s, "ability": row[0], "example_uses": row[1]})
+		sk, _ := game.LookupSkill(s)
+		out = append(out, map[string]string{"skill": s, "ability": sk.AbilityName, "example_uses": sk.Examples})
 	}
 	return out
 }
-
-// skillOrder: the 18 skills in the SRD's order.
-var skillOrder = []string{"acrobatics", "animal handling", "arcana", "athletics", "deception", "history", "insight", "intimidation", "investigation",
-	"medicine", "nature", "perception", "performance", "persuasion", "religion", "sleight of hand", "stealth", "survival"}
 
 // pendingClassChoices: one-time choices of a class or subclass feature that have no step elsewhere (Nov 13): Blessed Strikes (Cleric 7),
 // Elemental Fury (Druid 7), Elemental Affinity (Draconic Sorcerer 6). Each with the feature's SRD text and its options.

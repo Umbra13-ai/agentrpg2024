@@ -135,16 +135,17 @@ func levelUpNotice(charID, level, hp int, created time.Time) map[string]interfac
 			feats = append(feats, map[string]string{"name": "Ability Score Improvement", "what_it_does": classFeatureText(class, "Ability Score Improvement")})
 		}
 	}
-	// Expertise is printed once with "at level N you gain Expertise in two more": name it at those levels too
-	if expertiseAllowed(class, level) > expertiseAllowed(class, level-1) {
-		hasExp := false
+	// Expertise gained at this level (game.ExpertiseGrants): the SRD prints a class's Expertise once, with "at level N you gain
+	// Expertise in two more", so the feature is named at those levels too
+	for _, g := range game.ExpertiseGrantsAtLevel(class, level) {
+		named := false
 		for _, f := range feats {
-			if strings.Contains(f["name"], "Expertise") || strings.Contains(f["name"], "Deft Explorer") || strings.Contains(f["name"], "Scholar") {
-				hasExp = true
+			if f["name"] == g.Feature {
+				named = true
 			}
 		}
-		if !hasExp {
-			feats = append(feats, map[string]string{"name": "Expertise", "what_it_does": classFeatureText(class, "Expertise")})
+		if !named {
+			feats = append(feats, map[string]string{"name": g.Feature, "what_it_does": classFeatureText(class, g.Feature)})
 		}
 	}
 	// a feature from an earlier level that its SRD text says improves at this level ("starting at level 17", "at Fighter levels 13 and 17")
@@ -324,7 +325,6 @@ func nilIfNoNotices(n []map[string]interface{}) interface{} {
 	}
 	return n
 }
-
 
 var levelMention = regexp.MustCompile(`(?i)(?:at|starting at|when you reach|reach)\s+(?:[A-Z][a-z]+\s+)?levels?\s+(\d+(?:\s*\([^)]*\))?(?:\s*,\s*\d+(?:\s*\([^)]*\))?)*(?:,?\s*and\s+\d+(?:\s*\([^)]*\))?)?)`)
 var digitsRe = regexp.MustCompile(`\d+`)

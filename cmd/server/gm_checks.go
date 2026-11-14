@@ -180,10 +180,9 @@ func handleGMSkillCheck(w http.ResponseWriter, r *http.Request) {
 
 	// If skill provided, map to ability
 	primalKnowledge := false
-	if skillUsed != "" {
-		if mapped, ok := skillAbilityMap[skillUsed]; ok {
-			abilityUsed, primalKnowledge = primalKnowledgeAbility(req.CharacterID, skillUsed, req.Ability, mapped) // F101
-		}
+	if sk, ok := game.LookupSkill(req.Skill); ok { // any spelling of the skill (game.Skills)
+		skillUsed = game.SkillSlug(sk.Name)
+		abilityUsed, primalKnowledge = primalKnowledgeAbility(req.CharacterID, skillUsed, req.Ability, sk.Ability) // F101
 	}
 
 	// Get the modifier for the ability
@@ -1147,7 +1146,7 @@ func handleGMToolCheck(w http.ResponseWriter, r *http.Request) {
 		response["note"] = fmt.Sprintf("%s is not proficient with %s (no proficiency bonus added)", charName, req.Tool)
 	}
 	if toolAndSkill {
-		response["tool_and_skill"] = fmt.Sprintf("%s is proficient with %s and in %s: Advantage (SRD 5.2.1)", charName, req.Tool, titleSkill(normSkill(req.Skill)))
+		response["tool_and_skill"] = fmt.Sprintf("%s is proficient with %s and in %s: Advantage (SRD 5.2.1)", charName, req.Tool, titleSkill(game.SkillName(req.Skill)))
 	}
 	if usedInspiration {
 		response["used_inspiration"] = true
@@ -1865,51 +1864,14 @@ func handleGMContestedCheck(w http.ResponseWriter, r *http.Request) {
 	// (Expertise doubles it, Jack of All Trades gives half), through checkBonus.
 	calcMod := func(charID int, skill string, str, dex, con, intl, wis, cha, level int) (mod int, skillName string) {
 		skill = strings.ToLower(skill)
-		if k := strings.ReplaceAll(skill, " ", "_"); skillAbilityMap[k] != "" {
+		if sk, ok := game.LookupSkill(skill); ok { // any spelling of a skill (game.Skills)
 			var class string
 			db.QueryRow(`SELECT COALESCE(class,'') FROM characters WHERE id = $1`, charID).Scan(&class)
-			score := map[string]int{"str": str, "dex": dex, "con": con, "int": intl, "wis": wis, "cha": cha}[skillAbilityMap[k]]
-			m, prof, _, _ := checkBonus(charID, class, level, strings.ReplaceAll(k, "_", " "), score)
-			return m + prof, titleSkill(strings.ReplaceAll(k, "_", " "))
+			score := map[string]int{"str": str, "dex": dex, "con": con, "int": intl, "wis": wis, "cha": cha}[sk.Ability]
+			m, prof, _, _ := checkBonus(charID, class, level, sk.Name, score)
+			return m + prof, titleSkill(sk.Name)
 		}
-		// Skills map to abilities
 		switch skill {
-		case "athletics":
-			return game.Modifier(str) + game.ProficiencyBonus(level), "Athletics"
-		case "acrobatics":
-			return game.Modifier(dex) + game.ProficiencyBonus(level), "Acrobatics"
-		case "sleight_of_hand", "sleightofhand":
-			return game.Modifier(dex) + game.ProficiencyBonus(level), "Sleight of Hand"
-		case "stealth":
-			return game.Modifier(dex) + game.ProficiencyBonus(level), "Stealth"
-		case "arcana":
-			return game.Modifier(intl) + game.ProficiencyBonus(level), "Arcana"
-		case "history":
-			return game.Modifier(intl) + game.ProficiencyBonus(level), "History"
-		case "investigation":
-			return game.Modifier(intl) + game.ProficiencyBonus(level), "Investigation"
-		case "nature":
-			return game.Modifier(intl) + game.ProficiencyBonus(level), "Nature"
-		case "religion":
-			return game.Modifier(intl) + game.ProficiencyBonus(level), "Religion"
-		case "animal_handling", "animalhandling":
-			return game.Modifier(wis) + game.ProficiencyBonus(level), "Animal Handling"
-		case "insight":
-			return game.Modifier(wis) + game.ProficiencyBonus(level), "Insight"
-		case "medicine":
-			return game.Modifier(wis) + game.ProficiencyBonus(level), "Medicine"
-		case "perception":
-			return game.Modifier(wis) + game.ProficiencyBonus(level), "Perception"
-		case "survival":
-			return game.Modifier(wis) + game.ProficiencyBonus(level), "Survival"
-		case "deception":
-			return game.Modifier(cha) + game.ProficiencyBonus(level), "Deception"
-		case "intimidation":
-			return game.Modifier(cha) + game.ProficiencyBonus(level), "Intimidation"
-		case "performance":
-			return game.Modifier(cha) + game.ProficiencyBonus(level), "Performance"
-		case "persuasion":
-			return game.Modifier(cha) + game.ProficiencyBonus(level), "Persuasion"
 		// Raw abilities (no proficiency)
 		case "str", "strength":
 			return game.Modifier(str), "Strength"
@@ -1950,8 +1912,8 @@ func handleGMContestedCheck(w http.ResponseWriter, r *http.Request) {
 
 	// Goliath Large Form: Advantage on Strength checks (Athletics included)
 	strOf := func(skill string) string {
-		if a := skillAbilityMap[strings.ReplaceAll(strings.ToLower(skill), " ", "_")]; a != "" {
-			return a
+		if sk, ok := game.LookupSkill(skill); ok {
+			return sk.Ability
 		}
 		return skill
 	}

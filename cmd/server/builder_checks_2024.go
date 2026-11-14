@@ -1280,25 +1280,11 @@ func mergeList(body map[string]interface{}, field string, cur, sv interface{}, c
 	} else if field == "expertise" {
 		// Expertise goes on skills the character has once this suggestion's skills are in (the options were listed before they
 		// were filled: Nov 14 audit re-check, a Rogue's suggested Perception Expertise became Sleight of Hand)
-		have := map[string]bool{}
-		for _, s := range blist(body, "skill_proficiencies") {
-			have[normItem(s)] = true
-		}
-		if bg := game.GetBackground(strings.ToLower(bstr(body, "background"))); bg != nil {
-			for _, s := range bg.Skills {
-				have[normItem(s)] = true
-			}
-		}
 		// the species skill and Skilled picks count as the step-2 check counts them: only when the species asks for a skill, and
 		// only a Human whose feat is Skilled (round 3: a leftover skill kept an Expertise the check refused, and use_suggestion looped)
 		spSkill, featSkills, _ := draftSpeciesProficiencies(body)
-		if spSkill != "" {
-			have[normItem(spSkill)] = true
-		}
-		for _, s := range featSkills {
-			have[normItem(s)] = true
-		}
-		valid = func(s string) bool { return have[normItem(s)] }
+		have, _ := draftSkills(blist(body, "skill_proficiencies"), game.GetBackground(strings.ToLower(bstr(body, "background"))), spSkill, featSkills)
+		valid = func(s string) bool { return have[game.SkillName(s)] }
 	} else if len(opts) > 0 {
 		ok := map[string]bool{}
 		for _, o := range opts {

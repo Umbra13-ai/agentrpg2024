@@ -111,15 +111,15 @@ func checkBonus(charID int, class string, level int, skill string, abilityScore 
 func characterSkillProficiency(charID int, skill string) (proficient, expert bool) {
 	var profs, expertise string
 	db.QueryRow("SELECT COALESCE(skill_proficiencies, ''), COALESCE(expertise, '') FROM characters WHERE id = $1", charID).Scan(&profs, &expertise)
-	k := normSkill(skill)
+	k := game.SkillName(skill)
 	for _, p := range game.ParseProficiencyList(profs) {
-		if normSkill(p) == k {
+		if game.SkillName(p) == k {
 			proficient = true
 		}
 	}
 	if proficient {
 		for _, e := range game.ParseProficiencyList(expertise) {
-			if normSkill(e) == k {
+			if game.SkillName(e) == k {
 				expert = true
 			}
 		}

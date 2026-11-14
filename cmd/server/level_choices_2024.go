@@ -22,8 +22,6 @@ var classLevelChoices = map[string][]levelChoice{
 		{10, "Weapon Mastery: choose 1 more kind of weapon (4 in all) (POST /api/characters/weapon-masteries)"},
 	},
 	"bard": {
-		{2, "Expertise: choose 2 skills you are proficient in (POST /api/characters/%d/expertise)"},
-		{9, "Expertise: choose 2 more skills (POST /api/characters/%d/expertise)"},
 		{10, "Magical Secrets: your prepared spells can now come from the Bard, Cleric, Druid and Wizard lists (POST /api/characters/%d/prepare {\"spells\": [...]})"},
 	},
 	"cleric": {
@@ -50,15 +48,10 @@ var classLevelChoices = map[string][]levelChoice{
 	},
 	"ranger": {
 		{1, "Weapon Mastery: choose 2 kinds of weapon (POST /api/characters/weapon-masteries)"},
-		{2, "Deft Explorer: Expertise in 1 skill you are proficient in (POST /api/characters/%d/expertise) and 2 languages (POST /api/characters/%d/class-options {\"class_languages\": [...]})"},
 		{2, "Fighting Style: choose a Fighting Style feat or Druidic Warrior (POST /api/characters/fighting-style)"},
-		{9, "Expertise: choose 2 more skills (POST /api/characters/%d/expertise)"},
 	},
 	"rogue": {
-		{1, "Expertise: choose 2 skills you are proficient in (POST /api/characters/%d/expertise)"},
-		{1, "Thieves' Cant: you also learn 1 language of your choice (POST /api/characters/%d/class-options {\"class_languages\": [...]})"},
 		{1, "Weapon Mastery: choose 2 kinds of weapon (POST /api/characters/weapon-masteries)"},
-		{6, "Expertise: choose 2 more skills (POST /api/characters/%d/expertise)"},
 	},
 	"sorcerer": {
 		{2, "Metamagic: choose 2 Metamagic options (POST /api/characters/metamagic)"},
@@ -80,7 +73,6 @@ var classLevelChoices = map[string][]levelChoice{
 		{18, "Eldritch Invocations: choose 1 more (10 in all) (POST /api/characters/invocations)"},
 	},
 	"wizard": {
-		{2, "Scholar: Expertise in Arcana, History, Investigation, Medicine, Nature or Religion (POST /api/characters/%d/expertise)"},
 		{18, "Spell Mastery: choose a level 1 and a level 2 spell from your spellbook (POST /api/characters/spell-mastery)"},
 		{20, "Signature Spells: choose two level 3 spells from your spellbook (POST /api/characters/signature-spells)"},
 	},
@@ -137,6 +129,15 @@ func levelChoicesFor(charID int, class, subclass string, from, to int) []string 
 		}
 		if lvl == 19 {
 			out = append(out, fmt.Sprintf("level 19: Epic Boon: choose an Epic Boon feat or another feat (POST /api/characters/%d/feat)", charID))
+		}
+		// Expertise and class languages: from their tables (game.ExpertiseGrants, classLangDefs), not typed here
+		for _, line := range expertiseNoteLines(charID, class, lvl) {
+			out = append(out, fmt.Sprintf("level %d: %s", lvl, line))
+		}
+		for _, d := range classLangDefs {
+			if strings.EqualFold(d.class, class) && d.level == lvl {
+				out = append(out, fmt.Sprintf("level %d: %s", lvl, classLanguageLine(d, charID)))
+			}
 		}
 		for _, c := range classLevelChoices[strings.ToLower(class)] {
 			if c.Level == lvl {

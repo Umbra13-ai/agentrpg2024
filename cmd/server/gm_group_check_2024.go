@@ -49,7 +49,11 @@ func handleGMGroupCheck(w http.ResponseWriter, r *http.Request) {
 	skill := strings.ToLower(strings.TrimSpace(strings.ReplaceAll(req.Skill, " ", "_")))
 	ability := strings.ToLower(strings.TrimSpace(req.Ability))
 	if skill != "" {
-		a, known := skillAbilityMap[skill]
+		sk, known := game.LookupSkill(skill)
+		a := sk.Ability
+		if known {
+			skill = game.SkillSlug(sk.Name)
+		}
 		if !known {
 			dmBadRequest(w, "unknown_skill", "skill must be one of the 18 skills (for example perception, athletics, persuasion)")
 			return

@@ -7885,6 +7885,51 @@
     "x-from-godoc": true
    }
   },
+  "/api/characters/{id}/expertise": {
+   "post": {
+    "tags": [
+     "Characters"
+    ],
+    "summary": "Choose Expertise skills",
+    "description": "The skills your class gives Expertise in (double Proficiency Bonus). GET shows your features (which class feature, at which level, how many skills, and which skills it allows), your picks and your options. POST sends all of your class Expertise skills; each must be a skill you are proficient in that one of your features allows (most allow any; the Wizard's Scholar allows six). Once your campaign has started, Expertise you have chosen stays: send it again with the new skills.",
+    "responses": {
+     "200": {
+      "description": "OK"
+     }
+    },
+    "parameters": [
+     {
+      "name": "id",
+      "in": "path",
+      "required": true,
+      "description": "Character ID",
+      "schema": {
+       "type": "integer"
+      }
+     }
+    ],
+    "requestBody": {
+     "required": true,
+     "content": {
+      "application/json": {
+       "schema": {
+        "type": "object",
+        "properties": {
+         "skills": {
+          "type": "array",
+          "items": {
+           "type": "string"
+          }
+         }
+        },
+        "description": "Skills"
+       }
+      }
+     }
+    },
+    "x-from-godoc": true
+   }
+  },
   "/api/gm/grant-advantage": {
    "post": {
     "tags": [
@@ -9921,51 +9966,6 @@
          }
         },
         "description": "Character and the reason"
-       }
-      }
-     }
-    },
-    "x-from-godoc": true
-   }
-  },
-  "/api/characters/{id}/expertise": {
-   "post": {
-    "tags": [
-     "Characters"
-    ],
-    "summary": "Choose Expertise skills",
-    "description": "The skills your class gives Expertise in (double Proficiency Bonus): Rogue levels 1 and 6, Bard 2 and 9, Ranger 2 (Deft Explorer, 1 skill) and 9, Wizard 2 (Scholar, 1 skill). Send all of them; each must be a skill you are proficient in. GET shows the current ones and how many you may have.",
-    "responses": {
-     "200": {
-      "description": "OK"
-     }
-    },
-    "parameters": [
-     {
-      "name": "id",
-      "in": "path",
-      "required": true,
-      "description": "Character ID",
-      "schema": {
-       "type": "integer"
-      }
-     }
-    ],
-    "requestBody": {
-     "required": true,
-     "content": {
-      "application/json": {
-       "schema": {
-        "type": "object",
-        "properties": {
-         "skills": {
-          "type": "array",
-          "items": {
-           "type": "string"
-          }
-         }
-        },
-        "description": "Skills"
        }
       }
      }

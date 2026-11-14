@@ -5,28 +5,6 @@ package main
 // Examples and Saving Throw Examples tables; the Divine and Primal Order text; the nine alignments; the tool descriptions; the Origin feats;
 // the Light and Shield rules; and "Imagine Your Past and Present". Only the glue around them (names, field labels) is ours.
 
-// srdSkillRows: the Skills table (Skill, Ability, Example Uses).
-var srdSkillRows = map[string][2]string{
-	"acrobatics":      {"Dexterity", "Stay on your feet in a tricky situation, or perform an acrobatic stunt."},
-	"animal handling": {"Wisdom", "Calm or train an animal, or get an animal to behave in a certain way."},
-	"arcana":          {"Intelligence", "Recall lore about spells, magic items, and the planes of existence."},
-	"athletics":       {"Strength", "Jump farther than normal, stay afloat in rough water, or break something."},
-	"deception":       {"Charisma", "Tell a convincing lie, or wear a disguise convincingly."},
-	"history":         {"Intelligence", "Recall lore about historical events, people, nations, and cultures."},
-	"insight":         {"Wisdom", "Discern a person’s mood and intentions."},
-	"intimidation":    {"Charisma", "Awe or threaten someone into doing what you want."},
-	"investigation":   {"Intelligence", "Find obscure information in books, or deduce how something works."},
-	"medicine":        {"Wisdom", "Diagnose an illness, or determine what killed the recently slain."},
-	"nature":          {"Intelligence", "Recall lore about terrain, plants, animals, and weather."},
-	"perception":      {"Wisdom", "Using a combination of senses, notice something that’s easy to miss."},
-	"performance":     {"Charisma", "Act, tell a story, perform music, or dance."},
-	"persuasion":      {"Charisma", "Honestly and graciously convince someone of something."},
-	"religion":        {"Intelligence", "Recall lore about gods, religious rituals, and holy symbols."},
-	"sleight of hand": {"Dexterity", "Pick a pocket, conceal a handheld object, or perform legerdemain."},
-	"stealth":         {"Dexterity", "Escape notice by moving quietly and hiding behind things."},
-	"survival":        {"Wisdom", "Follow tracks, forage, find a trail, or avoid natural hazards."},
-}
-
 // srdAbilityRows: Ability Descriptions (Score Measures), Ability Check Examples (Make a Check To), Saving Throw Examples (Make a Save To).
 var srdAbilityRows = map[string][3]string{
 	"str": {"Physical might", "Lift, push, pull, or break something", "Physically resist direct force"},

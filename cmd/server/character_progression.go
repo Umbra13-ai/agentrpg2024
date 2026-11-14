@@ -270,71 +270,30 @@ func handleCharacterFeat(w http.ResponseWriter, r *http.Request, charID int) {
 		return
 	}
 
-	featSlug := strings.ToLower(strings.TrimSpace(req.Feat))
-	for slug, f := range availableFeats { // the slug or the displayed name ("Magic Initiate")
-		if k := nameKey(req.Feat); k == nameKey(slug) || k == nameKey(f.Name) {
-			featSlug = slug
-		}
+	// One rule decides whether the character can take the feat, and the same rule lists what it can take (feats_2024.go)
+	var held []string
+	json.Unmarshal(featsJSON, &held)
+	taker := featTaker{class: class, level: level, str: str, dex: dex, has: held}
+	featSlug, feat, known := findFeat(req.Feat)
+	if !known {
+		featSlug = req.Feat
 	}
-	feat, exists := availableFeats[featSlug]
-	if !exists {
-		// the feats this character can take now: the same checks the request makes below (Origin feats are accepted, so they are
-		// listed too: setup checker, Nov 14)
-		var held []string
-		json.Unmarshal(featsJSON, &held)
-		featSlugs := []string{}
-		for slug, f := range availableFeats {
-			if slug == "ability_score_improvement" || (containsStr(held, slug) && !f.Repeatable) {
-				continue
+	if code, msg := featRefusal(taker, featSlug); code != "" {
+		open := featsOpenTo(taker)
+		reply := map[string]interface{}{"error": code, "message": msg, "available_feats": open}
+		status := http.StatusBadRequest
+		switch code {
+		case "unknown_feat":
+			if note := phbNote("feat", req.Feat); note != "" {
+				msg = note
 			}
-			if ok, _ := featPrerequisite(f.Prerequisite, class, level, str, dex); ok {
-				featSlugs = append(featSlugs, slug)
-			}
+			reply["message"] = msg + " Feats you can take now: " + strings.Join(open, ", ") + "."
+		case "already_has_feat":
+			status = http.StatusConflict
+		case "prerequisite_not_met":
+			reply["prerequisite"] = featPrereqText(feat.Prerequisite)
 		}
-		sort.Strings(featSlugs)
-		msg := fmt.Sprintf("%q is not a feat on this server.", req.Feat)
-		if note := phbNote("feat", req.Feat); note != "" {
-			msg = note
-		}
-		writeJSONStatus(w, http.StatusBadRequest, map[string]interface{}{
-			"error":           "unknown_feat",
-			"message":         msg + " Feats you can take now: " + strings.Join(featSlugs, ", ") + ".",
-			"available_feats": featSlugs,
-		})
-		return
-	}
-
-	if featSlug == "ability_score_improvement" {
-		w.WriteHeader(http.StatusBadRequest)
-		json.NewEncoder(w).Encode(map[string]interface{}{
-			"error":   "use_asi",
-			"message": "Ability Score Improvement is a feat you take with POST /api/characters/{id}/asi.",
-		})
-		return
-	}
-
-	// Check if already has this feat
-	var currentFeats []string
-	json.Unmarshal(featsJSON, &currentFeats)
-	for _, f := range currentFeats {
-		if f == featSlug && !feat.Repeatable {
-			w.WriteHeader(http.StatusConflict)
-			json.NewEncoder(w).Encode(map[string]interface{}{
-				"error":   "already_has_feat",
-				"message": fmt.Sprintf("You already have the %s feat.", feat.Name),
-			})
-			return
-		}
-	}
-
-	// Check prerequisites
-	if ok, msg := featPrerequisite(feat.Prerequisite, class, level, str, dex); !ok {
-		w.WriteHeader(http.StatusBadRequest)
-		json.NewEncoder(w).Encode(map[string]interface{}{
-			"error":        "prerequisite_not_met",
-			"prerequisite": featPrereqText(feat.Prerequisite),
-			"message":      msg,
-		})
+		writeJSONStatus(w, status, reply)
 		return
 	}
 
@@ -385,8 +344,8 @@ func handleCharacterFeat(w http.ResponseWriter, r *http.Request, charID int) {
 	}
 
 	// Apply the feat
-	currentFeats = append(currentFeats, featSlug)
-	featsBytes, _ := json.Marshal(currentFeats)
+	held = append(held, featSlug)
+	featsBytes, _ := json.Marshal(held)
 
 	// Start building the update query
 	updates := []string{"feats = $1", "pending_asi = pending_asi - 2"}

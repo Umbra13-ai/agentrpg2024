@@ -27,10 +27,6 @@ type helpReq struct{ Ally, Enemy int }
 // helpTargets holds the ally and the enemy of a Help action while it resolves.
 var helpTargets sync.Map
 
-var helpSkills = []string{"acrobatics", "animal_handling", "arcana", "athletics", "deception", "history", "insight",
-	"intimidation", "investigation", "medicine", "nature", "perception", "performance", "persuasion", "religion",
-	"sleight_of_hand", "stealth", "survival"}
-
 func init() {
 	effectText["assisted"] = "The next attack roll against it by one of the helper's allies has Advantage (Help)"
 }
@@ -83,7 +79,8 @@ func helpProficiency(charID int, description string) (key, label string, ok bool
 	for _, s := range strings.Split(skills.String, ",") {
 		have[strings.ReplaceAll(strings.TrimSpace(strings.ToLower(s)), " ", "_")] = true
 	}
-	for _, s := range helpSkills {
+	for _, name := range game.SkillNames() {
+		s := game.SkillSlug(name)
 		if strings.Contains(low, strings.ReplaceAll(s, "_", " ")) && have[s] {
 			return s, titleCase(strings.ReplaceAll(s, "_", " ")), true
 		}

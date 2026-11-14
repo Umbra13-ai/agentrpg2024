@@ -222,9 +222,10 @@ func resolveDeckChoice(charID int, it invItem, description string) (string, bool
 		if skill == "" {
 			return "Cannot settle the Throne: choose History, Insight, Intimidation or Persuasion, \"throne: persuasion\". Nothing changed.", true
 		}
-		var profs, exp string
-		db.QueryRow(`SELECT COALESCE(skill_proficiencies,''), COALESCE(expertise,'') FROM characters WHERE id = $1`, charID).Scan(&profs, &exp)
-		db.Exec(`UPDATE characters SET skill_proficiencies = $1, expertise = $2 WHERE id = $3`, addListWord(profs, skill), addListWord(exp, skill), charID)
+		var profs string
+		db.QueryRow(`SELECT COALESCE(skill_proficiencies,'') FROM characters WHERE id = $1`, charID).Scan(&profs)
+		db.Exec(`UPDATE characters SET skill_proficiencies = $1 WHERE id = $2`, addListWord(profs, skill), charID)
+		giveExpertise(charID, skill) // not a class pick: the class's Expertise choices stay as they are (expertise_2024.go)
 		out = fmt.Sprintf("Throne: you have proficiency and Expertise in %s. You also own a small keep, home to monsters for now (the GM's).", titleCase(skill))
 	case "Puzzle":
 		n := atoiSafe(strings.TrimPrefix(pend[idx], "Puzzle:"))

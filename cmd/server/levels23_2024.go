@@ -10,24 +10,17 @@ package main
 import (
 	"encoding/json"
 	"fmt"
+	"github.com/agentrpg/agentrpg/game"
 	"net/http"
 	"strings"
 )
-
-var barbarianSkills = []string{"animal handling", "athletics", "intimidation", "nature", "perception", "survival"}
-
-var allSkills = []string{"acrobatics", "animal handling", "arcana", "athletics", "deception", "history", "insight", "intimidation",
-	"investigation", "medicine", "nature", "perception", "performance", "persuasion", "religion", "sleight of hand", "stealth", "survival"}
-
-// skillKey: "sleight-of-hand", "Sleight_of_Hand" and "sleight of hand" are the same skill.
-func skillKey(s string) string { return normSkill(strings.ReplaceAll(s, "-", " ")) }
 
 func heldSkills(charID int) (map[string]bool, string) {
 	var csv string
 	db.QueryRow(`SELECT COALESCE(skill_proficiencies,'') FROM characters WHERE id = $1`, charID).Scan(&csv)
 	held := map[string]bool{}
 	for _, s := range strings.Split(csv, ",") {
-		if s = skillKey(s); s != "" {
+		if s = game.SkillName(s); s != "" {
 			held[s] = true
 		}
 	}
@@ -47,7 +40,7 @@ func subclassChoicesOf(charID int) map[string]string {
 // bonus_skills).
 func checkBonusProficiencies(held map[string]bool, bonus []string) ([]string, string, string) {
 	var open []string
-	for _, s := range allSkills {
+	for _, s := range game.SkillNames() {
 		if !held[s] {
 			open = append(open, s)
 		}
@@ -57,8 +50,8 @@ func checkBonusProficiencies(held map[string]bool, bonus []string) ([]string, st
 	}
 	var add []string
 	for _, b := range bonus {
-		s := skillKey(b)
-		if !containsStr(allSkills, s) {
+		s := game.SkillName(b)
+		if !containsStr(game.SkillNames(), s) {
 			return nil, "invalid_skill", fmt.Sprintf("%q isn't a skill. Skills you aren't proficient in: %s. Nothing was changed.", b, strings.Join(open, ", "))
 		}
 		if containsStr(add, s) { // the same skill twice isn't "already proficient" (setup checker, Nov 14)
@@ -98,9 +91,10 @@ func applySkillChoice(w http.ResponseWriter, charID int, primal string, bonus []
 		if choices["primal_knowledge"] != "" {
 			return fail("already_chosen", "Primal Knowledge was chosen: "+choices["primal_knowledge"]+".")
 		}
-		s := skillKey(primal)
-		if !containsStr(barbarianSkills, s) {
-			return fail("invalid_skill", "Primal Knowledge: one skill from the Barbarian list: "+strings.Join(barbarianSkills, ", ")+".")
+		s := game.SkillName(primal)
+		list := classSkillChoices2024["barbarian"].Skills // "the skill list available to Barbarians at level 1"
+		if !containsStr(list, s) {
+			return fail("invalid_skill", "Primal Knowledge: one skill from the Barbarian list: "+strings.Join(list, ", ")+".")
 		}
 		if held[s] {
 			return fail("already_proficient", "You are already proficient in "+s+"; choose another.")

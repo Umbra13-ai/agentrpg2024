@@ -31,7 +31,7 @@ func characterToFinish(charID int) []string {
 		out = append(out, fmt.Sprintf("Mystic Arcanum: %s (POST /api/characters/mystic-arcanum)", st.Title))
 	}
 	if d := pendingClassLanguage(charID); d != nil {
-		out = append(out, fmt.Sprintf("%s: choose %d language(s) (POST /api/characters/%d/class-options {\"class_languages\": [...]})", d.feature, d.count, charID))
+		out = append(out, classLanguageLine(*d, charID))
 	}
 	for _, st := range pendingClassChoices(charID) {
 		out = append(out, fmt.Sprintf("%s (POST /api/characters/%d/class-options)", st.Title, charID))
@@ -88,20 +88,8 @@ func classOpenChoices(charID int) []string {
 	if have := len(getFightingStyles(charID)); have < wantStyles {
 		out = append(out, "Fighting Style: choose a Fighting Style feat (POST /api/characters/fighting-style)")
 	}
-	wantExp := 0
-	for c, l := range levels {
-		wantExp += expertiseAllowed(c, l)
-	}
-	haveExp := 0
-	seenExp := map[string]bool{} // the same skill twice is one Expertise (F6)
-	for _, s := range strings.Split(expertise, ",") {
-		if k := skillKey(s); k != "" && !seenExp[k] {
-			seenExp[k] = true
-			haveExp++
-		}
-	}
-	if haveExp < wantExp {
-		out = append(out, fmt.Sprintf("Expertise: %d of %d skills chosen (POST /api/characters/%d/expertise with all of them)", haveExp, wantExp, charID))
+	if line := expertiseOpenLine(charID); line != "" { // expertise_2024.go
+		out = append(out, line)
 	}
 	if levels["cleric"] >= 1 && divine == "" {
 		out = append(out, fmt.Sprintf("Divine Order: choose protector or thaumaturge (POST /api/characters/%d/class-options {\"divine_order\": ...})", charID))

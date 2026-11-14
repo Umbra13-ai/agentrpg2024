@@ -511,8 +511,7 @@ func resolveEffectSpell(charID int, spell SRDSpell, spellKey string, slotLevel, 
 			return fmt.Sprintf(" Resistance: when %s takes %s damage, the damage is reduced by 1d4 (once per turn) while you keep Concentration.", name, dtype)
 		case "guidance":
 			skill := ""
-			for k := range skillAbilityMap {
-				w := strings.ReplaceAll(strings.ToLower(k), "_", " ")
+			for _, w := range game.SkillNames() {
 				if strings.Contains(dl, w) && len(w) > len(skill) {
 					skill = w
 				}

@@ -30,3 +30,6 @@ __pycache__/
 /dist/
 /server.exe
 /.agentrpg.pid
+
+# The server binary when built inside cmd/server (go build .)
+/cmd/server/server

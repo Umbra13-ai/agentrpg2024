@@ -43,6 +43,12 @@ func knowsLanguage(langs []string, l string) bool {
 	return false
 }
 
+// classLanguageLine: the line that tells a player to choose a class feature's languages. The "still to choose" list and the
+// level-up note both use it.
+func classLanguageLine(d classLangDef, charID int) string {
+	return fmt.Sprintf("%s: choose %d language(s) (POST /api/characters/%d/class-options {\"class_languages\": [...]})", d.feature, d.count, charID)
+}
+
 // pendingClassLanguage: the class language choice still open (nil when none).
 func pendingClassLanguage(charID int) *classLangDef {
 	levels := classLevelsOrSingle(charID)
