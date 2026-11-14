@@ -66,6 +66,10 @@ Add to the owner, never beside it. When you give another rule one owner, add it 
 - **The 18 skills:** `game/skills.go`.
 - **Expertise:** `game/expertise.go`, with its database side in `cmd/server/expertise_2024.go`.
 - **Which feats a character can take:** `cmd/server/feats_2024.go`.
+- **The choices a character makes after creation:** `choiceDefs` (`cmd/server/choices_2024.go`): who has each choice, how
+  many picks at each class level, how picks are counted, the request, the setup step. The level-up note, the sheet's
+  `to_finish`, `GET /setup` and the level-up notice are made from it. A feature that picks one option from a list is a
+  row in `featurePicks` (`cmd/server/feature_picks_2024.go`); both pick requests and character creation read it.
 
 ### Before pushing
 `gofmt -l` on the files you changed, `go vet ./cmd/server ./game`, `go test ./...`, then the owner's test scripts for
