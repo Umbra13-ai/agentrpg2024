@@ -411,7 +411,9 @@ func resolveAttackOnMonster(lobbyID, charID, targetID int, o attackOutcome, clea
 	if hp <= 0 {
 		var unote string
 		hp, unote = undeadFortitude(lobbyID, t, hp, dmg+extraDmg, o.DamageType, o.Crit) // Zombie (dodge_2024.go)
-		vorpalNote += unote
+		if unote != "" {
+			vorpalNote += " [" + strings.TrimSuffix(strings.TrimSpace(unote), ".") + "]" // the sentence goes on after it
+		}
 	}
 	if hp <= 0 {
 		vorpalNote += killEffectNote(charID) // Dark One's Blessing (F134)

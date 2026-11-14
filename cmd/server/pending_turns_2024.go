@@ -304,7 +304,7 @@ func ptHandsProblem(lobbyID, charID int, sp SRDSpell, slug string, s ptStep) str
 	if why == "" {
 		return ""
 	}
-	return strings.TrimPrefix(why, "Cannot cast - ") + " Do that now, before your slot, then send the turn again: a pending turn can't change what you hold."
+	return strings.TrimPrefix(why, "Cannot cast - ") + " Do that now, before your slot, then send the turn again: a pending turn can't change what you hold"
 }
 
 // validatePendingSteps checks one attempt (the main turn or a fallback) against the state as it is now: what can be known without
