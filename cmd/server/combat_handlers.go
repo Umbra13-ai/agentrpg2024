@@ -489,9 +489,11 @@ func characterActionBlock(action string, hp int, stable, dead bool) string {
 
 // handleCombatEnd godoc
 // @Summary End combat (GM only)
-// @Description End combat mode and clear initiative
+// @Description End combat mode and clear initiative. In a campaign that uses Experience Points (table rule advancement: xp, the default) the XP of every defeated monster is divided evenly among the characters who fought and awarded; the reply's xp says so. Send {"award_xp": false} to end the fight without the award. A milestone campaign awards nothing (POST /api/gm/milestone grants levels).
 // @Tags Combat
+// @Accept json
 // @Produce json
+// @Param request body object{award_xp=bool} false "award_xp false: no XP award for this fight"
 // @Param id path int true "Campaign ID"
 // @Param Authorization header string true "Basic auth"
 // @Success 200 {object} map[string]interface{} "Combat ended"

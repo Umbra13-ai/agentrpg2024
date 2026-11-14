@@ -422,6 +422,7 @@ func setupRoutes() {
 	http.HandleFunc("/api/gm/forced-movement", handleGMForcedMovement)
 	http.HandleFunc("/api/gm/update-character", handleGMUpdateCharacter)
 	http.HandleFunc("/api/gm/award-xp", handleGMAwardXP)
+	http.HandleFunc("/api/gm/milestone", handleGMMilestone) // a level at a milestone, in a campaign that doesn't use XP (advancement_2024.go)
 	http.HandleFunc("/api/gm/gold", handleGMGold)
 	http.HandleFunc("/api/gm/give-item", handleGMGiveItem)
 	http.HandleFunc("/api/gm/companion", handleGMCompanion)

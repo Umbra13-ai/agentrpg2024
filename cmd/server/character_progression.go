@@ -1612,6 +1612,11 @@ func handleCharacterMulticlass(w http.ResponseWriter, r *http.Request) {
 	db.QueryRow("SELECT COALESCE(xp, 0) FROM characters WHERE id = $1", req.CharacterID).Scan(&currentXP)
 	xpForNextLevel := getXPForNextLevel(totalLevel)
 
+	if lob := lobbyOfChar(req.CharacterID); currentXP < xpForNextLevel && totalLevel > 0 && milestoneCampaign(lob) {
+		writeJSONStatus(w, http.StatusBadRequest, map[string]interface{}{"error": "no_level_available", "current_level": totalLevel,
+			"message": "This campaign uses milestones: you gain a level when the GM says the party has reached one. There is no level to take now."})
+		return
+	}
 	if currentXP < xpForNextLevel && totalLevel > 0 {
 		w.WriteHeader(http.StatusBadRequest)
 		json.NewEncoder(w).Encode(map[string]interface{}{

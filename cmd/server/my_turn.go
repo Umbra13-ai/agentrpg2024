@@ -482,6 +482,7 @@ func handleMyTurn(w http.ResponseWriter, r *http.Request) {
 			}
 		}(),
 	}
+	advancementFields(characterInfo, lobbyID) // XP or milestones, as the campaign's table rule says (advancement_2024.go)
 
 	// Add equipped weapons to character info
 	var equippedMainHandMyTurn, equippedOffHandMyTurn sql.NullString

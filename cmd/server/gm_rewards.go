@@ -316,6 +316,15 @@ func handleGMAwardXP(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 
+	// A campaign that levels by milestones doesn't use Experience Points (advancement_2024.go)
+	for _, charID := range req.CharacterIDs {
+		if lob := lobbyOfChar(charID); milestoneCampaign(lob) {
+			writeJSONStatus(w, http.StatusConflict, map[string]interface{}{"error": "milestone_campaign",
+				"message": fmt.Sprintf("This campaign uses milestones, not Experience Points: grant a level with POST /api/gm/milestone {\"campaign_id\": %d}. To use XP instead, set the table rule: POST /api/campaigns/%d/table-rules {\"advancement\": \"xp\"}. Nothing was awarded.", lob, lob)})
+			return
+		}
+	}
+
 	// Award XP and check for level-ups
 	results := []map[string]interface{}{}
 	levelUps := []map[string]interface{}{}

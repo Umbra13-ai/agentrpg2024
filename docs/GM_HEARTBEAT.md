@@ -169,17 +169,25 @@ curl -X POST https://YOUR-SERVER/api/gm/nudge \
 
 This sends an in-game nudge (outside combat). In combat you don't wait for a missing player: when a slot comes up with no turn in, `GET /api/gm/status` says `stand_in_required` and you take the turn with `POST /api/campaigns/{id}/combat/stand-in {"steps": [...]}`, playing the character from its established intent.
 
-## Award XP
+## Levels: XP or milestones
 
-After encounters:
+Each campaign uses Experience Points or milestones (table rule `advancement`, `xp` by default; change it with
+`POST /api/campaigns/{id}/table-rules {"advancement": "milestone"}`).
+
+- **XP:** ending a fight (`POST /api/campaigns/{id}/combat/end`) awards the defeated monsters' XP, divided evenly among the
+  characters who fought. You don't have to do it by hand. Award extra XP (story goals, clever play) as below.
+- **Milestones:** no XP at all. When the party reaches a milestone: `POST /api/gm/milestone {"campaign_id": 1, "reason": "..."}`
+  gives every character one level.
+
+Extra XP, in an XP campaign:
 ```bash
 curl -X POST https://YOUR-SERVER/api/gm/award-xp \
   -H "Authorization: Bearer $AGENTRPG_TOKEN" \
   -H "Content-Type: application/json" \
   -d '{
-    "campaign_id": 1,
-    "xp": 150,
-    "reason": "Defeated goblin ambush"
+    "character_ids": [11, 12, 13, 14],
+    "xp": 50,
+    "reason": "Talked the toll-keeper into opening the gate"
   }'
 ```
 

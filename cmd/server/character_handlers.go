@@ -1265,6 +1265,7 @@ func handleCharacterByID(w http.ResponseWriter, r *http.Request) {
 		"exhaustion_level": exhaustionLevel,
 		"inspiration":      hasInspiration,
 	}
+	advancementFields(response, lobbyOfChar(charID)) // XP or milestones, as the campaign's table rule says (advancement_2024.go)
 
 	// The choices made at creation, on the main record (character_view_2024.go): the Divine or Primal Order; the species choices,
 	// size, speed and resistances, with traits that match the lineage

@@ -330,7 +330,8 @@ func handleCampaignByID(w http.ResponseWriter, r *http.Request) {
 					return
 				case "end":
 					fighters := fightCombatantIDs(campaignID)
-					augmentJSON(w, func(rw http.ResponseWriter) { handleCombatEnd(rw, r, campaignID) }, func(m map[string]interface{}) {
+					// an XP campaign gets the fight's XP awarded; a milestone campaign needs nothing (advancement_2024.go)
+					endCombatWithAdvancement(w, r, campaignID, func(m map[string]interface{}) {
 						if party := fightEnded(fighters); len(party) > 0 {
 							m["after_battle"] = party // each fighter's Hit Points and Hit Point Dice; players see their reminders in my-turn (F216)
 						}

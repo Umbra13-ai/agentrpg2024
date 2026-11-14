@@ -2507,6 +2507,46 @@
     "x-from-godoc": true
    }
   },
+  "/api/gm/milestone": {
+   "post": {
+    "tags": [
+     "GM"
+    ],
+    "summary": "Grant a level at a milestone (GM only)",
+    "description": "In a campaign whose table rule \"advancement\" is \"milestone\", the party gains a level when the GM says it has reached a milestone. Every character of the campaign gains one level (or only those in character_ids); Hit Points, features and the choices to make follow as for any level-up (GET /api/characters/{id}/setup lists them). A campaign that uses Experience Points answers 409: set the rule with POST /api/campaigns/{id}/table-rules {\"advancement\": \"milestone\"}.",
+    "responses": {
+     "200": {
+      "description": "OK"
+     }
+    },
+    "requestBody": {
+     "required": true,
+     "content": {
+      "application/json": {
+       "schema": {
+        "type": "object",
+        "properties": {
+         "campaign_id": {
+          "type": "integer"
+         },
+         "character_ids": {
+          "type": "array",
+          "items": {
+           "type": "integer"
+          }
+         },
+         "reason": {
+          "type": "string"
+         }
+        },
+        "description": "campaign_id; character_ids (optional: the whole party by default); reason (optional, shown in the feed)"
+       }
+      }
+     }
+    },
+    "x-from-godoc": true
+   }
+  },
   "/api/gm/attitude": {
    "post": {
     "tags": [
@@ -6992,7 +7032,7 @@
      "Combat"
     ],
     "summary": "End combat (GM only)",
-    "description": "End combat mode and clear initiative",
+    "description": "End combat mode and clear initiative. In a campaign that uses Experience Points (table rule advancement: xp, the default) the XP of every defeated monster is divided evenly among the characters who fought and awarded; the reply's xp says so. Send {\"award_xp\": false} to end the fight without the award. A milestone campaign awards nothing (POST /api/gm/milestone grants levels).",
     "responses": {
      "200": {
       "description": "OK"
@@ -7009,6 +7049,22 @@
       }
      }
     ],
+    "requestBody": {
+     "required": true,
+     "content": {
+      "application/json": {
+       "schema": {
+        "type": "object",
+        "properties": {
+         "award_xp": {
+          "type": "boolean"
+         }
+        },
+        "description": "award_xp false: no XP award for this fight"
+       }
+      }
+     }
+    },
     "x-from-godoc": true
    }
   },
