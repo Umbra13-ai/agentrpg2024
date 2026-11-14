@@ -1226,6 +1226,25 @@ func mergeList(body map[string]interface{}, field string, cur, sv interface{}, c
 			held[normItem(s)] = true
 		}
 		valid = func(s string) bool { return !held[normItem(s)] }
+	} else if field == "expertise" {
+		// Expertise goes on skills the character has once this suggestion's skills are in (the options were listed before they
+		// were filled: Nov 14 audit re-check, a Rogue's suggested Perception Expertise became Sleight of Hand)
+		have := map[string]bool{}
+		for _, s := range blist(body, "skill_proficiencies") {
+			have[normItem(s)] = true
+		}
+		if bg := game.GetBackground(strings.ToLower(bstr(body, "background"))); bg != nil {
+			for _, s := range bg.Skills {
+				have[normItem(s)] = true
+			}
+		}
+		if s := bstr(bmap(body, "species_choices"), "skill"); s != "" {
+			have[normItem(s)] = true
+		}
+		for _, s := range blist(bmap(body, "species_feat_choices"), "proficiencies") {
+			have[normItem(s)] = true
+		}
+		valid = func(s string) bool { return have[normItem(s)] }
 	} else if len(opts) > 0 {
 		ok := map[string]bool{}
 		for _, o := range opts {

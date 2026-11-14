@@ -273,6 +273,11 @@ func inapplicableCreateFields(raw map[string]interface{}) []string {
 	if !emptyValue(raw["known_spells"]) {
 		out = append(out, "known_spells: "+spellsAfterCreation+" (it checks your class list, the spell levels and how many). Remove known_spells from the request")
 	}
+	if cls := strings.ToLower(str("class")); cls != "" && !emptyValue(raw["weapon_masteries"]) && masteryCount(cls, 1) == 0 {
+		if _, known := srdClasses[cls]; known { // a Wizard's masteries were dropped without a word (Nov 14 audit re-check, S2-03)
+			out = append(out, fmt.Sprintf("weapon_masteries: %s has no Weapon Mastery at level 1 (Barbarian, Fighter, Paladin, Ranger and Rogue choose it)", aSpecies(titleWords(cls))))
+		}
+	}
 	if sp := game.GetSpecies(str("species")); sp != nil {
 		sc := sub("species_choices")
 		allowed := map[string]bool{}
