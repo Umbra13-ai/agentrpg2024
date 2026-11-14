@@ -1793,6 +1793,8 @@ type setupStep struct {
 	Choices map[string]interface{} `json:"choices,omitempty"` // what the player can choose from, each option explained (spells)
 	// Optional: the character is finished without it (the shop, the portrait, gear reminders); steps_left counts only the others
 	Optional bool `json:"optional,omitempty"`
+
+	Problem string `json:"problem,omitempty"` // what is wrong with what is stored, and what the request fixes
 }
 
 // spellOptionInfo: one spell explained for the player choosing it.
@@ -1938,11 +1940,36 @@ func handleCharacterSetup(w http.ResponseWriter, r *http.Request, charID int) {
 		st := setupStep{Key: "invocations", Title: "Choose your Eldritch Invocation", Why: "Eldritch Invocations. " + classFeatureText("warlock", "Eldritch Invocations") + " Send one invocation per request.",
 			Choices: map[string]interface{}{"options_you_qualify_for": invocationOptions(charID)}}
 		if pick != "" {
-			st.Request = req("POST", "/api/characters/invocations", map[string]interface{}{"character_id": charID, "invocation": pick})
+			body := map[string]interface{}{"character_id": charID, "invocation": pick}
+			if pick == "pact-of-the-tome" { // the Book of Shadows picks go with it (F9)
+				body["cantrips"], body["rituals"] = suggestBookOfShadows(charID)
+				st.Why += " Pact of the Tome: send cantrips (3 cantrips) and rituals (2 level 1 Ritual spells) for your Book of Shadows with it; any class's spell list."
+			}
+			st.Request = req("POST", "/api/characters/invocations", body)
 		} else {
 			st.Request = req("GET", fmt.Sprintf("/api/characters/invocations?character_id=%d", charID), nil)
 		}
 		steps = append(steps, st)
+	}
+	if has("Pact of the Tome") {
+		c, rt := suggestBookOfShadows(charID)
+		var cOpts, rOpts []map[string]interface{}
+		sugg := map[string]bool{}
+		for _, x := range append(append([]string{}, c...), rt...) {
+			sugg[x] = true
+		}
+		bh := bookHave(charID)
+		for _, slug := range sortedSpellSlugs() {
+			sp := srdSpellsMemory[slug]
+			if sp.Level == 0 && bookPickOK(slug, false, bh) {
+				cOpts = append(cOpts, spellOptionInfo(slug, sugg))
+			} else if sp.Level == 1 && sp.IsRitual && bookPickOK(slug, true, bh) {
+				rOpts = append(rOpts, spellOptionInfo(slug, sugg))
+			}
+		}
+		steps = append(steps, setupStep{Key: "book_of_shadows", Title: "Fill your Book of Shadows", Why: "Pact of the Tome: choose three cantrips and two level 1 spells with the Ritual tag, from any class's spell list, that you don't already have prepared. While the book is on your person you have them prepared, and they work as Warlock spells for you.",
+			Request: req("POST", "/api/characters/invocations", map[string]interface{}{"character_id": charID, "invocation": "pact-of-the-tome", "cantrips": c, "rituals": rt}),
+			Choices: map[string]interface{}{"cantrips": map[string]interface{}{"choose": 3, "options": cOpts}, "rituals": map[string]interface{}{"choose": 2, "options": rOpts}}})
 	}
 	if has("Expertise") {
 		heldE, _ := heldSkills(charID)
@@ -2110,7 +2137,7 @@ func handleCharacterSetup(w http.ResponseWriter, r *http.Request, charID int) {
 	}
 	for _, t := range todo { // anything else the list names
 		known := false
-		for _, w := range []string{"Spell Mastery", "Signature Spells", "Mystic Arcanum", "Ability Score Improvement", "Weapon Mastery", "Magical Discoveries", "language(s)", "Defensive Tactics", "Choose your Blessed Strikes", "Choose your Elemental Fury", "Choose your Elemental Affinity", "Divine Order", "Primal Order", "Fighting Style", "Eldritch Invocations", "Expertise", "cantrip", "Spells:", "subclass", "Metamagic", "Wild Shape", "Circle of the Land", "Hunter's Prey", "Primal Knowledge", "Bonus Proficiencies", "Equipment: do you want"} {
+		for _, w := range []string{"Spell Mastery", "Signature Spells", "Mystic Arcanum", "Ability Score Improvement", "Weapon Mastery", "Magical Discoveries", "language(s)", "Defensive Tactics", "Choose your Blessed Strikes", "Choose your Elemental Fury", "Choose your Elemental Affinity", "Divine Order", "Primal Order", "Fighting Style", "Eldritch Invocations", "Pact of the Tome", "Expertise", "cantrip", "Spells:", "subclass", "Metamagic", "Wild Shape", "Circle of the Land", "Hunter's Prey", "Primal Knowledge", "Bonus Proficiencies", "Equipment: do you want"} {
 			if strings.Contains(t, w) {
 				known = true
 			}
@@ -2124,6 +2151,13 @@ func handleCharacterSetup(w http.ResponseWriter, r *http.Request, charID int) {
 	maxPrep := game.MaxPreparedSpells(class, level, intl, wis, cha)
 	if maxPrep > 0 || wantCantrips > 0 || game.ClassTableInt(cl, level, "Cantrips") > 0 {
 		origin := originSpellsOf(charID)
+		always := allAlwaysPrepared(charID) // subclass, origin and class-feature spells, the Book of Shadows: not counted (F11)
+		// the prepared list as /prepare and to_finish read it (F3: a Sorcerer's known spells counted here as prepared, so this step
+		// said done while to_finish said none were prepared)
+		prepList := jsonList(prepared)
+		if len(classLevelsOf(charID)) <= 1 {
+			prepList = currentPreparedList(charID, cl)
+		}
 		var cantrips, leveled []string
 		seen := map[string]bool{}
 		for _, s := range append(jsonList(known), jsonList(prepared)...) {
@@ -2131,15 +2165,35 @@ func handleCharacterSetup(w http.ResponseWriter, r *http.Request, charID int) {
 				continue
 			}
 			seen[s] = true
-			if _, o := origin[s]; o {
+			if _, o := origin[s]; o || containsStr(always, s) {
 				continue
 			}
 			if sp, ok := srdSpellsMemory[s]; ok {
 				if sp.Level == 0 {
 					cantrips = append(cantrips, s)
-				} else if cl != "wizard" || containsStr(jsonList(prepared), s) {
+				} else if containsStr(prepList, s) {
 					leveled = append(leveled, s)
 				}
+			}
+		}
+		// a list /prepare would refuse (too many, off the class list, too high) keeps the step open, and the request fixes it
+		listProblems := preparedListProblems(charID)
+		if len(listProblems) > 0 {
+			maxSlot := maxSpellLevelFor(charID, cl, level)
+			valid := func(cap int, list []string) []string {
+				var out []string
+				for _, x := range list {
+					if sp, ok := srdSpellsMemory[x]; ok && len(out) < cap && onClassList(x, cl) && sp.Level <= maxSlot {
+						out = append(out, x)
+					}
+				}
+				return out
+			}
+			cMax := game.ClassTableInt(cl, level, "Cantrips") + orderExtraCantrips(charID)
+			cantrips = valid(cMax, cantrips)
+			leveled = valid(maxPrep, leveled)
+			if need := cMax - len(cantrips); need > wantCantrips {
+				wantCantrips = need
 			}
 		}
 		avoid := map[string]bool{}
@@ -2150,6 +2204,9 @@ func handleCharacterSetup(w http.ResponseWriter, r *http.Request, charID int) {
 			avoid[s] = true
 		}
 		for s := range origin {
+			avoid[s] = true
+		}
+		for _, s := range always {
 			avoid[s] = true
 		}
 		_, subSlug, _ := subclassOf(charID)
@@ -2173,7 +2230,7 @@ func handleCharacterSetup(w http.ResponseWriter, r *http.Request, charID int) {
 				avoid[c] = true
 			}
 		}
-		spellsDone := wantCantrips == 0 && len(leveled) >= maxPrep
+		spellsDone := wantCantrips == 0 && len(leveled) >= maxPrep && len(listProblems) == 0
 		maxLvl := (level + 1) / 2 // full casters and Pact Magic: level 2 spells from level 3
 		if cl == "paladin" || cl == "ranger" {
 			maxLvl = (level + 3) / 4
@@ -2192,8 +2249,11 @@ func handleCharacterSetup(w http.ResponseWriter, r *http.Request, charID int) {
 				}
 			}
 		}
-		st := setupStep{Key: "spells", Title: "Choose your cantrips and prepare your spells", Done: spellsDone || (wantCantrips == 0 && len(leveled) >= maxPrep),
+		st := setupStep{Key: "spells", Title: "Choose your cantrips and prepare your spells", Done: spellsDone,
 			Why: fmt.Sprintf("You know %d cantrips (%d more to choose) and prepare %d level 1+ spells (%d prepared now). Cantrips and spells must be on your class's list: GET /api/universe/class-spells/%s. Origin spells (Magic Initiate, lineage) are extra.", len(cantrips)+wantCantrips, wantCantrips, maxPrep, len(leveled), cl)}
+		if len(listProblems) > 0 {
+			st.Problem = "Your prepared list can't stay as it is: " + strings.Join(listProblems, "; ") + ". The request sends a list that fits."
+		}
 		if !spellsDone {
 			all := append(append(append([]string{}, cantrips...), newC...), leveled...)
 			all = append(all, pick...)
@@ -2222,32 +2282,23 @@ func handleCharacterSetup(w http.ResponseWriter, r *http.Request, charID int) {
 				originList = append(originList, o)
 			}
 			sort.Strings(originList)
+			have := map[string]interface{}{"cantrips": cantrips, "prepared_level_1_plus": leveled, "always_prepared_extra (Magic Initiate, lineage)": originList}
+			if fa := featureAlwaysPreparedInfo(charID); len(fa) > 0 {
+				have["always_prepared_by_class_features"] = fa // Druidic's Speak with Animals, Favored Enemy's Hunter's Mark ... (F11)
+			}
 			st.Choices = map[string]interface{}{
 				"how_to_read_this": "Each option says what the spell does, how it is cast and whether it needs concentration. suggested: true marks the picks in the request body, which are the server's suggestion. Send your cantrips and spells together in one list: POST /api/characters/N/prepare {\"spells\": [...]}.",
-				"already_have":     map[string]interface{}{"cantrips": cantrips, "prepared_level_1_plus": leveled, "always_prepared_extra (Magic Initiate, lineage)": originList},
+				"already_have":     have,
 				"cantrips":         map[string]interface{}{"choose_this_many_more": wantCantrips, "options": spellOptions(classList, 0, 0, avoidBase, suggestedSet)},
 				"level_1_plus_spells": map[string]interface{}{"prepare_up_to": maxPrep, "already_prepared": len(leveled),
 					"highest_spell_level_you_can_cast": maxLvl, "you_can_change_prepared_spells": "after a Long Rest",
 					"options": spellOptions(classList, 1, maxLvl, avoidBase, suggestedSet)},
 			}
 			if cl == "wizard" {
-				book := 0
-				for _, s := range jsonList(known) {
-					if sp, ok := srdSpellsMemory[s]; ok && sp.Level > 0 {
-						book++
-					}
-				}
+				// origin spells (Magic Initiate) and copied spells aren't among the free spellbook spells (F14)
+				book := freeSpellbookCount(charID, jsonList(known))
 				var add []string
-				target := 6 + 2*(level-1) // 6 spells at level 1, two more each level (SRD 5.2.1 Spellbook)
-				if _, wsub, _ := subclassOf(charID); strings.EqualFold(wsub, "evocation") && level >= 3 {
-					// Evocation Savant: two Evocation spells at level 3, and one more each time a new level of spell slots comes (5, 7 ... 17)
-					target += 2
-					for _, l := range []int{5, 7, 9, 11, 13, 15, 17} {
-						if level >= l {
-							target++
-						}
-					}
-				}
+				target := wizardSpellbookTarget(charID, level) // 6 spells at level 1, two more each level (SRD 5.2.1 Spellbook)
 				// the whole Wizard list after the preferred spells, highest level first (Nov 13: the preferred lists ran out at level 7)
 				var fullList []string
 				for lv := maxLvl; lv >= 1; lv-- {
@@ -2369,6 +2420,18 @@ func handleCharacterSetup(w http.ResponseWriter, r *http.Request, charID int) {
 				warnings = append(warnings, fmt.Sprintf("Your highest score is %s (%d) but a %s relies on %s (%d). The GM can correct scores with POST /api/gm/update-character.", strings.ToUpper(k), sc[k], cl, strings.ToUpper(top), sc[top]))
 				break
 			}
+		}
+	}
+	// never "ready to play" while to_finish still has an item (F3): when no required step is open, each item is listed as a step
+	requiredOpen := false
+	for _, st := range steps {
+		if !st.Done && !st.Optional {
+			requiredOpen = true
+		}
+	}
+	if !requiredOpen {
+		for _, t := range todo {
+			steps = append(steps, setupStep{Key: "other", Title: t})
 		}
 	}
 	left, optLeft := 0, 0

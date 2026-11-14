@@ -7,6 +7,7 @@ package main
 import (
 	"encoding/json"
 	"fmt"
+	"io"
 	"net/http"
 	"sort"
 	"strings"
@@ -510,8 +511,35 @@ func handleCharacterClassOptions(w http.ResponseWriter, r *http.Request, charID 
 		MagicalDiscover   []string `json:"magical_discoveries"` // College of Lore 6: two Cleric, Druid or Wizard spells (magical_discoveries_2024.go)
 		ClassLanguages    []string `json:"class_languages"`     // Deft Explorer (Ranger 2), Thieves' Cant (Rogue 1) (class_languages_2024.go)
 	}
-	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
-		writeJSONStatus(w, http.StatusBadRequest, map[string]interface{}{"error": "invalid_json"})
+	// one choice per request, and a field that isn't one of these is refused (F22: {"divine_order": ..., "primal_order": ...} saved
+	// the first and ignored the second without a word)
+	raw, _ := io.ReadAll(io.LimitReader(r.Body, 64*1024))
+	var sent map[string]json.RawMessage
+	if err := json.Unmarshal(raw, &sent); err != nil {
+		writeJSONStatus(w, http.StatusBadRequest, map[string]interface{}{"error": "invalid_json", "message": "Send a JSON object with one class choice. Nothing was changed."})
+		return
+	}
+	known := []string{"divine_order", "primal_order", "land_type", "elemental_affinity", "blessed_strikes", "elemental_fury", "wild_shape_forms", "primal_knowledge", "bonus_proficiencies", "magical_discoveries", "class_languages"}
+	var keys []string
+	for k := range sent {
+		if k == "character_id" {
+			continue
+		}
+		if !containsStr(known, k) {
+			writeJSONStatus(w, http.StatusBadRequest, map[string]interface{}{"error": "unknown_field",
+				"message": fmt.Sprintf("Unknown field %q. Nothing was changed.", k), "valid_fields": known})
+			return
+		}
+		keys = append(keys, k)
+	}
+	sort.Strings(keys)
+	if len(keys) > 1 {
+		writeJSONStatus(w, http.StatusBadRequest, map[string]interface{}{"error": "one_choice_per_request",
+			"message": fmt.Sprintf("Send one class choice per request; you sent %s. Nothing was changed.", strings.Join(keys, " and "))})
+		return
+	}
+	if err := json.Unmarshal(raw, &req); err != nil {
+		writeJSONStatus(w, http.StatusBadRequest, map[string]interface{}{"error": "invalid_json", "message": publicError(err) + ". Nothing was changed."})
 		return
 	}
 	if req.ClassLanguages != nil {
@@ -552,6 +580,15 @@ func handleCharacterClassOptions(w http.ResponseWriter, r *http.Request, charID 
 		return
 	}
 	c := strings.ToLower(class)
+	if req.DivineOrder != "" && c != "cleric" {
+		writeJSONStatus(w, http.StatusBadRequest, map[string]interface{}{"error": "not_your_class", "message": fmt.Sprintf("Only Clerics choose a Divine Order; a %s has none. Nothing was changed.", titleWords(c))})
+		return
+	}
+	if req.PrimalOrder != "" && c != "druid" {
+		writeJSONStatus(w, http.StatusBadRequest, map[string]interface{}{"error": "not_your_class", "message": fmt.Sprintf("Only Druids choose a Primal Order; a %s has none. Nothing was changed.", titleWords(c))})
+		return
+	}
+	saved := map[string]interface{}{"success": true}
 	switch {
 	case req.DivineOrder != "" && c == "cleric":
 		v := strings.ToLower(strings.TrimSpace(req.DivineOrder))
@@ -564,6 +601,7 @@ func handleCharacterClassOptions(w http.ResponseWriter, r *http.Request, charID 
 			return
 		}
 		db.Exec(`UPDATE characters SET divine_order = $1 WHERE id = $2`, v, charID)
+		saved["divine_order"], saved["message"] = v, "Divine Order: "+titleWords(v)+"."
 	case req.PrimalOrder != "" && c == "druid":
 		v := strings.ToLower(strings.TrimSpace(req.PrimalOrder))
 		if v != "warden" && v != "magician" {
@@ -575,13 +613,14 @@ func handleCharacterClassOptions(w http.ResponseWriter, r *http.Request, charID 
 			return
 		}
 		db.Exec(`UPDATE characters SET primal_order = $1 WHERE id = $2`, v, charID)
+		saved["primal_order"], saved["message"] = v, "Primal Order: "+titleWords(v)+"."
 	default:
 		writeJSONStatus(w, http.StatusBadRequest, map[string]interface{}{"error": "nothing_to_set",
 			"hint": "Clerics set divine_order (protector or thaumaturge); Druids set primal_order (warden or magician)."})
 		return
 	}
 	syncCharacterProficiencies(charID)
-	writeJSONStatus(w, http.StatusOK, map[string]interface{}{"success": true})
+	writeJSONStatus(w, http.StatusOK, saved)
 }
 
 // genericFocusNames are the placeholder focus items characters were given before

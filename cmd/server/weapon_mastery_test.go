@@ -104,3 +104,26 @@ func TestMasteryNoteInAttacks(t *testing.T) {
 		t.Errorf("no weapon, no note: %q", n)
 	}
 }
+
+// S2-02: the same weapon under two keys (the built-in "light_crossbow" and a database slug "light-crossbow") resolves to one key
+// every time, and two spellings of it are refused as the same weapon.
+func TestMasteryPickDeterministic(t *testing.T) {
+	applyWeaponMastery()
+	w, ok := srdWeapons["light_crossbow"]
+	if !ok {
+		t.Skip("no light_crossbow")
+	}
+	srdWeapons["light-crossbow"] = w
+	defer delete(srdWeapons, "light-crossbow")
+	for i := 0; i < 30; i++ {
+		if k, ok := resolveMasteryPick("fighter", "crossbow, light"); !ok || k != "light_crossbow" {
+			t.Fatalf("try %d: %q %v", i, k, ok)
+		}
+	}
+	if _, err := validateMasteryPicks("fighter", 1, []string{"light crossbow", "Light-Crossbow", "dagger"}, true); err == nil || err.Code != "duplicate_weapon_mastery" {
+		t.Errorf("two spellings of one weapon: %v", err)
+	}
+	if keys, err := validateMasteryPicks("rogue", 1, []string{"Dagger (Nick)", "Quarterstaff (Topple)"}, true); err != nil || len(keys) != 2 {
+		t.Errorf("the listed option format: %v %v", keys, err)
+	}
+}

@@ -211,7 +211,15 @@ func equipPlan(charID int, choices map[string]string) (auto []string, questions 
 		}
 	}
 
-	// clothing and jewelry
+	// clothing and jewelry. An item of the same name already worn isn't worn twice, and two of the same carried item are a choice
+	// (F8: a Sage wizard wearing the background's Robe was given the kit's Robe on top, without being asked).
+	wornNames := map[string]bool{}
+	for _, it := range inv {
+		if !lost(it) && itemStr(it, "location") == "worn" {
+			wornNames[strings.ToLower(itemStr(it, "name"))] = true
+		}
+	}
+	keptBack := map[string]bool{}
 	var places []string
 	cands := map[string][]invItem{}
 	limitedPlace := map[string]bool{}
@@ -220,6 +228,15 @@ func equipPlan(charID int, choices map[string]string) (auto []string, questions 
 			continue
 		}
 		name := itemStr(it, "name")
+		if wornNames[strings.ToLower(name)] {
+			if _, info := armorValueFor(name); info == nil {
+				if p, _, _ := bodyPlaceOf(name); p != "" && !keptBack[strings.ToLower(name)] {
+					keptBack[strings.ToLower(name)] = true
+					auto = append(auto, fmt.Sprintf("Leave your other %s in your pack: you already wear one.", name))
+				}
+			}
+			continue
+		}
 		if _, info := armorValueFor(name); info != nil {
 			continue
 		}
@@ -245,7 +262,29 @@ func equipPlan(charID int, choices map[string]string) (auto []string, questions 
 	}
 	for _, place := range places {
 		list := cands[place]
-		if !limitedPlace[place] || len(list) == 1 {
+		if !limitedPlace[place] && len(list) > 1 {
+			// a place without a limit (rings, a robe) takes different items, but two of the same item are a choice
+			byName := map[string]int{}
+			for _, it := range list {
+				byName[strings.ToLower(itemStr(it, "name"))]++
+			}
+			var single, dup []invItem
+			for _, it := range list {
+				if byName[strings.ToLower(itemStr(it, "name"))] > 1 {
+					dup = append(dup, it)
+				} else {
+					single = append(single, it)
+				}
+			}
+			for _, it := range single {
+				auto = append(auto, fmt.Sprintf("Wear your %s (%s).", itemStr(it, "name"), place))
+				actions = append(actions, equipAction{Kind: "worn", Name: itemStr(it, "name"), ID: itemStr(it, "id")})
+			}
+			if len(dup) == 0 {
+				continue
+			}
+			list = dup
+		} else if !limitedPlace[place] || len(list) == 1 {
 			for _, it := range list {
 				auto = append(auto, fmt.Sprintf("Wear your %s (%s).", itemStr(it, "name"), place))
 				actions = append(actions, equipAction{Kind: "worn", Name: itemStr(it, "name"), ID: itemStr(it, "id")})
@@ -275,7 +314,11 @@ func equipPlan(charID int, choices map[string]string) (auto []string, questions 
 			}
 			opts = append(opts, map[string]string{"value": itemStr(it, "id"), "label": fmt.Sprintf("%s (id %s), from %s.", itemStr(it, "name"), itemStr(it, "id"), src)})
 		}
-		q := map[string]interface{}{"key": key, "ask": fmt.Sprintf("You can wear only one item on your %s, and you carry %d. Which one do you want to wear?", place, len(list)), "options": opts}
+		ask := fmt.Sprintf("You can wear only one item on your %s, and you carry %d. Which one do you want to wear?", place, len(list))
+		if !limitedPlace[place] {
+			ask = fmt.Sprintf("You carry %d of the same item for your %s. Which one do you want to wear? The other stays in your pack.", len(list), place)
+		}
+		q := map[string]interface{}{"key": key, "ask": ask, "options": opts}
 		if v := choices[key]; v != "" {
 			q["problem"] = fmt.Sprintf("%q is not one of the options: send the value of one of them", v)
 		}
@@ -313,12 +356,12 @@ func runEquip(charID, agentID int, actions []equipAction) []map[string]interface
 		what := ""
 		switch a.Kind {
 		case "armor":
-			what = "Put on armor"
-			if r := autoEquipArmor(charID); r != nil {
-				code, out = 200, r
-				what = fmt.Sprintf("Put on the %v", r["armor"])
-			} else {
-				code, out = 200, map[string]interface{}{"note": "Your armor was already on or no armor in your pack raises your AC."}
+			var done bool
+			var note string
+			what, done, note = equipBestArmorAnswered(charID)
+			code, out = 200, map[string]interface{}{"note": note}
+			if !done {
+				code, out = 409, map[string]interface{}{"error": "armor_not_put_on", "message": note}
 			}
 		case "main_hand":
 			what = "Hold the " + a.Name + " in your main hand"
@@ -337,6 +380,8 @@ func runEquip(charID, agentID int, actions []equipAction) []map[string]interface
 		r := map[string]interface{}{"did": what, "done": ok}
 		if !ok {
 			r["problem"] = out
+		} else if n, _ := out["note"].(string); n != "" && a.Kind == "armor" {
+			r["note"] = n
 		}
 		results = append(results, r)
 	}
@@ -472,4 +517,79 @@ func autoEquipSuggestion(charID int) map[string]interface{} {
 		body["choices"] = choices
 	}
 	return body
+}
+
+// equipBestArmorAnswered: the player answered yes, so the best armor they are trained in goes on when it raises AC, Stealth
+// Disadvantage or not; the note says so (F7: "Put on armor" said done:true while the Chain Mail stayed in the pack, because the
+// automatic donning skips armor with any drawback). Armor that needs attunement, is cursed or needs more Strength than the
+// character has is left off, and the result says why and how to wear it anyway.
+func equipBestArmorAnswered(charID int) (did string, done bool, note string) {
+	if _, inCombat, _ := isCharacterInCombat(charID); inCombat {
+		return "Put on armor", false, "Armor takes minutes to put on: not during combat."
+	}
+	var profs string
+	var str int
+	var current sql.NullString
+	var shield bool
+	if db.QueryRow(`SELECT COALESCE(armor_proficiencies,''), str, equipped_armor, COALESCE(equipped_shield,false) FROM characters WHERE id = $1`, charID).
+		Scan(&profs, &str, &current, &shield) != nil {
+		return "Put on armor", false, "Character not found."
+	}
+	if current.String != "" {
+		if ci, _ := getArmorInfo(current.String); ci != nil {
+			if why := armorDrawback(charID, current.String, ci, profs, str); why == "it needs attunement" || why == "it is cursed" {
+				return "Keep your armor on", true, fmt.Sprintf("You keep wearing your %s (%s).", current.String, why)
+			}
+		}
+	}
+	before := characterACWith(charID, current.String, shield)
+	floor := before
+	if current.String == "" && hasInvocation(charID, "armor-of-shadows") {
+		floor = maxInt(floor, atWillMageArmorAC(charID, shield)) // Mage Armor at will: armor must beat 13 + Dexterity
+	}
+	bestAC, bestValue, bestName, bestWhy := floor, "", "", ""
+	skipAC, skipName, skipValue, skipWhy := floor, "", "", ""
+	inv := inventoryOf(charID)
+	lost := lostChecker(inv)
+	for _, it := range inv {
+		name := itemStr(it, "name")
+		if itemBool(it, "no_auto_equip") || itemBool(it, "destroyed") || lost(it) || sameArmor(name, current.String) {
+			continue
+		}
+		value, info := armorValueFor(name)
+		if info == nil || !isArmorProficient(profs, info.Type) {
+			continue
+		}
+		ac := characterACWith(charID, value, shield)
+		why := armorDrawback(charID, name, info, profs, str)
+		if why == "" || info.StealthDisadvantage && why == "it gives Disadvantage on Dexterity (Stealth) checks" {
+			if ac > bestAC {
+				bestAC, bestValue, bestName, bestWhy = ac, value, name, why
+			}
+		} else if ac > skipAC {
+			skipAC, skipName, skipValue, skipWhy = ac, name, value, why
+		}
+	}
+	if bestValue != "" {
+		db.Exec(`UPDATE characters SET equipped_armor = $1 WHERE id = $2`, bestValue, charID)
+		refreshStoredAC(charID)
+		markNoAutoEquip(charID, bestName, false)
+		_, info := armorValueFor(bestName)
+		donTime, _ := game.ArmorDonDoffTime(info.Type)
+		note = fmt.Sprintf("You put on the %s (%d minutes): AC %d instead of %d.", bestName, donTime, computeCharacterAC(charID), before)
+		if bestWhy != "" {
+			note += " It gives Disadvantage on Dexterity (Stealth) checks."
+		}
+		if current.String != "" {
+			note += fmt.Sprintf(" You took off the %s.", current.String)
+		}
+		return "Put on the " + bestName, true, note
+	}
+	if skipName != "" {
+		return "Put on armor", false, fmt.Sprintf("Not put on: the %s would give AC %d instead of %d, but %s. To wear it anyway: POST /api/characters/equip-armor {\"character_id\": %d, \"armor\": %q}.", skipName, skipAC, before, skipWhy, charID, skipValue)
+	}
+	if current.String != "" {
+		return "Keep your armor on", true, fmt.Sprintf("You keep wearing your %s: no armor in your pack gives a better AC.", current.String)
+	}
+	return "Put on armor", true, "No armor you are trained in raises your AC, so none was put on."
 }

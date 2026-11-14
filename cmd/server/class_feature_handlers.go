@@ -312,7 +312,7 @@ func handleCharacterInvocations(w http.ResponseWriter, r *http.Request) {
 		`, charID).Scan(&class, &level, &invocationsJSON, &knownSpellsJSON)
 
 		if err != nil {
-			json.NewEncoder(w).Encode(map[string]interface{}{
+			writeJSONStatus(w, http.StatusNotFound, map[string]interface{}{
 				"error":   "character_not_found",
 				"message": fmt.Sprintf("Character %d not found", charID),
 			})
@@ -323,7 +323,7 @@ func handleCharacterInvocations(w http.ResponseWriter, r *http.Request) {
 			class, level = "warlock", wl // multiclass: the Warlock level
 		}
 		if strings.ToLower(class) != "warlock" {
-			json.NewEncoder(w).Encode(map[string]interface{}{
+			writeJSONStatus(w, http.StatusBadRequest, map[string]interface{}{
 				"error":   "not_a_warlock",
 				"message": "Only Warlocks can learn Eldritch Invocations",
 			})
@@ -401,7 +401,7 @@ func handleCharacterInvocations(w http.ResponseWriter, r *http.Request) {
 			return availableToLearn[i]["name"].(string) < availableToLearn[j]["name"].(string)
 		})
 
-		json.NewEncoder(w).Encode(map[string]interface{}{
+		resp := map[string]interface{}{
 			"character_id":       charID,
 			"level":              level,
 			"invocations_known":  knownInvocations,
@@ -410,7 +410,12 @@ func handleCharacterInvocations(w http.ResponseWriter, r *http.Request) {
 			"can_learn_more":     canLearnMore,
 			"available_to_learn": availableToLearn,
 			"note":               "Invocations with 'agonizing-blast' add CHA mod to eldritch blast damage. 'at_will_spell' invocations let you cast a spell without using a spell slot.",
-		})
+			"how_to_replace":     "POST {\"character_id\": N, \"invocation\": \"<new>\", \"replace\": \"<old>\"}: one invocation each time you gain a Warlock level, or freely before your campaign starts.",
+		}
+		if hasPactBoon(charID, "tome") {
+			resp["book_of_shadows"] = bookOfShadowsOf(charID)
+		}
+		json.NewEncoder(w).Encode(resp)
 		return
 	}
 
@@ -428,29 +433,29 @@ func handleCharacterInvocations(w http.ResponseWriter, r *http.Request) {
 	}
 
 	var req struct {
-		CharacterID int    `json:"character_id"`
-		Invocation  string `json:"invocation"` // slug
+		CharacterID int      `json:"character_id"`
+		Invocation  string   `json:"invocation"` // slug or name ("Pact of the Chain")
+		Replace     string   `json:"replace"`    // the invocation to swap out
+		Cantrips    []string `json:"cantrips"`   // Pact of the Tome: the Book of Shadows' three cantrips
+		Rituals     []string `json:"rituals"`    // Pact of the Tome: its two level 1 Ritual spells
 	}
-	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
-		json.NewEncoder(w).Encode(map[string]interface{}{
-			"error":   "invalid_json",
-			"message": publicError(err),
-		})
+	if msg := decodeStrict(r, &req, "character_id and invocation (and replace, or cantrips and rituals for Pact of the Tome)"); msg != "" {
+		writeJSONStatus(w, http.StatusBadRequest, map[string]interface{}{"error": "invalid_request", "message": msg + " Nothing was changed."})
 		return
 	}
 
-	// Validate invocation exists
-	invocationSlug := strings.ToLower(strings.TrimSpace(req.Invocation))
-	inv, validInvocation := game.AvailableInvocations[invocationSlug]
+	// Validate invocation exists: the slug, or the name the options show (F18: "Pact of the Chain" was refused)
+	invocationSlug, validInvocation := resolveInvocation(req.Invocation)
+	inv := game.AvailableInvocations[invocationSlug]
 	if !validInvocation {
 		validSlugs := []string{}
 		for slug := range game.AvailableInvocations {
 			validSlugs = append(validSlugs, slug)
 		}
 		sort.Strings(validSlugs)
-		json.NewEncoder(w).Encode(map[string]interface{}{
+		writeJSONStatus(w, http.StatusBadRequest, map[string]interface{}{
 			"error":         "invalid_invocation",
-			"message":       fmt.Sprintf("'%s' is not a valid Eldritch Invocation", req.Invocation),
+			"message":       fmt.Sprintf("'%s' is not an Eldritch Invocation. Nothing was changed.", req.Invocation),
 			"valid_options": validSlugs,
 		})
 		return
@@ -467,7 +472,7 @@ func handleCharacterInvocations(w http.ResponseWriter, r *http.Request) {
 	`, req.CharacterID).Scan(&ownerID, &charName, &class, &level, &invocationsJSON)
 
 	if err != nil {
-		json.NewEncoder(w).Encode(map[string]interface{}{
+		writeJSONStatus(w, http.StatusNotFound, map[string]interface{}{
 			"error":   "character_not_found",
 			"message": fmt.Sprintf("Character %d not found", req.CharacterID),
 		})
@@ -475,7 +480,7 @@ func handleCharacterInvocations(w http.ResponseWriter, r *http.Request) {
 	}
 
 	if ownerID != agentID {
-		json.NewEncoder(w).Encode(map[string]interface{}{
+		writeJSONStatus(w, http.StatusForbidden, map[string]interface{}{
 			"error":   "not_your_character",
 			"message": "You can only choose Invocations for your own characters",
 		})
@@ -486,7 +491,7 @@ func handleCharacterInvocations(w http.ResponseWriter, r *http.Request) {
 		class, level = "warlock", wl // a multiclass character's invocations follow its Warlock level (count and prerequisites)
 	}
 	if strings.ToLower(class) != "warlock" {
-		json.NewEncoder(w).Encode(map[string]interface{}{
+		writeJSONStatus(w, http.StatusBadRequest, map[string]interface{}{
 			"error":   "not_a_warlock",
 			"message": "Only Warlocks can learn Eldritch Invocations",
 		})
@@ -497,23 +502,87 @@ func handleCharacterInvocations(w http.ResponseWriter, r *http.Request) {
 	var currentInvocations []string
 	json.Unmarshal(invocationsJSON, &currentInvocations)
 
-	// Check if already known
-	for _, c := range currentInvocations {
-		if c == invocationSlug {
-			json.NewEncoder(w).Encode(map[string]interface{}{
-				"error":   "already_known",
-				"message": fmt.Sprintf("%s already knows %s", charName, inv.Name),
-			})
+	tome := invocationSlug == "pact-of-the-tome"
+	if !tome && (len(req.Cantrips) > 0 || len(req.Rituals) > 0) {
+		writeJSONStatus(w, http.StatusBadRequest, map[string]interface{}{"error": "not_pact_of_the_tome",
+			"message": "cantrips and rituals are the Book of Shadows picks of Pact of the Tome; " + inv.Name + " takes none. Nothing was changed."})
+		return
+	}
+	var book bookOfShadows
+	if tome {
+		why := ""
+		if book, why = checkBookOfShadows(req.CharacterID, req.Cantrips, req.Rituals); why != "" {
+			c, rt := suggestBookOfShadows(req.CharacterID)
+			writeJSONStatus(w, http.StatusBadRequest, map[string]interface{}{"error": "book_of_shadows_picks", "message": why + " Nothing was changed.",
+				"example": map[string]interface{}{"character_id": req.CharacterID, "invocation": "pact-of-the-tome", "cantrips": c, "rituals": rt}})
 			return
 		}
 	}
 
-	// Check if at capacity
+	// Check if already known (Pact of the Tome sent again with new picks conjures a new book)
+	if containsStr(currentInvocations, invocationSlug) {
+		if tome && req.Replace == "" {
+			saveBookOfShadows(req.CharacterID, book)
+			writeJSONStatus(w, http.StatusOK, map[string]interface{}{"success": true, "character_id": req.CharacterID, "book_of_shadows": book,
+				"message": fmt.Sprintf("Your Book of Shadows holds %s (cantrips) and %s (rituals). They are prepared while the book is on your person and work as Warlock spells for you. You conjure a new book at the end of a Short or Long Rest.",
+					spellNames(book.Cantrips), spellNames(book.Rituals))})
+			return
+		}
+		writeJSONStatus(w, http.StatusConflict, map[string]interface{}{
+			"error":   "already_known",
+			"message": fmt.Sprintf("%s already knows %s. Nothing was changed.", charName, inv.Name),
+		})
+		return
+	}
+
+	// Replacing an invocation: whenever you gain a Warlock level (SRD 5.2.1); while the character is still being made (before its
+	// campaign starts), the choice can be corrected freely (F9: a Warlock who followed the suggestion was locked in)
+	replacing := ""
 	maxInvocations := game.GetMaxInvocations(level)
-	if len(currentInvocations) >= maxInvocations {
-		json.NewEncoder(w).Encode(map[string]interface{}{
+	if req.Replace != "" {
+		old, ok := resolveInvocation(req.Replace)
+		if !ok || !containsStr(currentInvocations, old) {
+			writeJSONStatus(w, http.StatusBadRequest, map[string]interface{}{"error": "not_known",
+				"message": fmt.Sprintf("You don't have the invocation %q, so it can't be replaced. Nothing was changed.", req.Replace), "known": currentInvocations})
+			return
+		}
+		oldInv := game.AvailableInvocations[old]
+		for _, k := range currentInvocations {
+			if k == old {
+				continue
+			}
+			if p := game.AvailableInvocations[k].Prerequisites.Pact; p != "" && "pact-of-the-"+p == old {
+				writeJSONStatus(w, http.StatusConflict, map[string]interface{}{"error": "needed_by_another",
+					"message": fmt.Sprintf("%s needs %s: replace that one first. Nothing was changed.", game.AvailableInvocations[k].Name, oldInv.Name)})
+				return
+			}
+		}
+		if p := inv.Prerequisites.Pact; p != "" && "pact-of-the-"+p == old {
+			writeJSONStatus(w, http.StatusConflict, map[string]interface{}{"error": "prerequisite_not_met",
+				"message": fmt.Sprintf("%s needs %s, the invocation you are replacing. Nothing was changed.", inv.Name, oldInv.Name)})
+			return
+		}
+		if open, _ := shopOpen(req.CharacterID); !open {
+			db.Exec(`ALTER TABLE characters ADD COLUMN IF NOT EXISTS invocation_swap_level INTEGER DEFAULT 0`)
+			var swapLevel int
+			db.QueryRow(`SELECT COALESCE(invocation_swap_level,0) FROM characters WHERE id = $1`, req.CharacterID).Scan(&swapLevel)
+			if level < 2 || swapLevel >= level {
+				msg := fmt.Sprintf("You can replace one invocation each time you gain a Warlock level; you chose yours at level %d and haven't gained a level since.", level)
+				if swapLevel >= level {
+					msg = fmt.Sprintf("You can replace one invocation each time you gain a Warlock level; you already replaced one at level %d.", swapLevel)
+				}
+				writeJSONStatus(w, http.StatusConflict, map[string]interface{}{"error": "swap_not_yet", "message": msg + " Nothing was changed."})
+				return
+			}
+		}
+		replacing = old
+	}
+
+	// Check if at capacity
+	if replacing == "" && len(currentInvocations) >= maxInvocations {
+		writeJSONStatus(w, http.StatusConflict, map[string]interface{}{
 			"error":           "at_capacity",
-			"message":         fmt.Sprintf("%s has already learned %d Invocations (max at level %d)", charName, len(currentInvocations), level),
+			"message":         fmt.Sprintf("%s has already learned %d Invocations (the most at Warlock level %d). To swap one, send replace with the invocation to give up. Nothing was changed.", charName, len(currentInvocations), level),
 			"known":           currentInvocations,
 			"max_invocations": maxInvocations,
 		})
@@ -523,24 +592,43 @@ func handleCharacterInvocations(w http.ResponseWriter, r *http.Request) {
 	// Check prerequisites
 	meetsReqs, reason := meetsInvocationPrerequisites(req.CharacterID, inv)
 	if !meetsReqs {
-		json.NewEncoder(w).Encode(map[string]interface{}{
+		writeJSONStatus(w, http.StatusBadRequest, map[string]interface{}{
 			"error":   "prerequisite_not_met",
-			"message": reason,
+			"message": reason + ". Nothing was changed.",
 		})
 		return
 	}
 
-	// Add the invocation
-	currentInvocations = append(currentInvocations, invocationSlug)
+	// Add the invocation (or swap it for the one replaced)
+	if replacing != "" {
+		for i, k := range currentInvocations {
+			if k == replacing {
+				currentInvocations[i] = invocationSlug
+			}
+		}
+	} else {
+		currentInvocations = append(currentInvocations, invocationSlug)
+	}
 	updatedJSON, _ := json.Marshal(currentInvocations)
 
 	_, err = db.Exec("UPDATE characters SET eldritch_invocations = $1 WHERE id = $2", updatedJSON, req.CharacterID)
 	if err != nil {
-		json.NewEncoder(w).Encode(map[string]interface{}{
+		writeJSONStatus(w, http.StatusInternalServerError, map[string]interface{}{
 			"error":   "database_error",
 			"message": publicError(err),
 		})
 		return
+	}
+	if replacing != "" {
+		if open, _ := shopOpen(req.CharacterID); !open {
+			db.Exec(`UPDATE characters SET invocation_swap_level = $1 WHERE id = $2`, level, req.CharacterID)
+		}
+		if replacing == "pact-of-the-tome" {
+			saveBookOfShadows(req.CharacterID, bookOfShadows{}) // the book disappears with the pact
+		}
+	}
+	if tome {
+		saveBookOfShadows(req.CharacterID, book)
 	}
 
 	// Apply passive effects
@@ -575,6 +663,7 @@ func handleCharacterInvocations(w http.ResponseWriter, r *http.Request) {
 		"success":         true,
 		"character_id":    req.CharacterID,
 		"character_name":  charName,
+		"message":         fmt.Sprintf("%s learned %s.", charName, inv.Name),
 		"learned":         inv.Name,
 		"description":     inv.Description,
 		"mechanics":       inv.Mechanics,
@@ -586,8 +675,46 @@ func handleCharacterInvocations(w http.ResponseWriter, r *http.Request) {
 	if len(effects) > 0 {
 		response["effects_applied"] = effects
 	}
+	if replacing != "" {
+		response["replaced"] = game.AvailableInvocations[replacing].Name
+		response["message"] = fmt.Sprintf("%s replaced %s with %s.", charName, game.AvailableInvocations[replacing].Name, inv.Name)
+	}
+	if tome {
+		response["book_of_shadows"] = book
+	}
 
 	json.NewEncoder(w).Encode(response)
+}
+
+// resolveInvocation finds an invocation by slug or by name, ignoring case, spaces, underscores and apostrophes ("Pact of the
+// Chain", "PACT_OF_THE_CHAIN", "Devil's Sight").
+func resolveInvocation(input string) (string, bool) {
+	norm := func(x string) string {
+		x = strings.ToLower(strings.TrimSpace(x))
+		x = strings.NewReplacer("'", "", "’", "", "_", "-", " ", "-").Replace(x)
+		return strings.Join(strings.FieldsFunc(x, func(r rune) bool { return r == '-' }), "-")
+	}
+	want := norm(input)
+	if want == "" {
+		return "", false
+	}
+	if _, ok := game.AvailableInvocations[want]; ok {
+		return want, true
+	}
+	for slug, inv := range game.AvailableInvocations {
+		if norm(slug) == want || norm(inv.Name) == want {
+			return slug, true
+		}
+	}
+	return "", false
+}
+
+func spellNames(slugs []string) string {
+	var out []string
+	for _, s := range slugs {
+		out = append(out, spellName(s))
+	}
+	return strings.Join(out, ", ")
 }
 
 // handleUniverseInvocations godoc
@@ -968,7 +1095,7 @@ func handleCharacterFightingStyle(w http.ResponseWriter, r *http.Request) {
 		`, charID).Scan(&class, &level, &subclass, &stylesJSON)
 
 		if err != nil {
-			json.NewEncoder(w).Encode(map[string]interface{}{
+			writeJSONStatus(w, http.StatusNotFound, map[string]interface{}{
 				"error":   "character_not_found",
 				"message": fmt.Sprintf("Character %d not found", charID),
 			})
@@ -979,7 +1106,7 @@ func handleCharacterFightingStyle(w http.ResponseWriter, r *http.Request) {
 		maxStyles := getMaxFightingStyles(class, level, subclass)
 
 		if maxStyles == 0 {
-			json.NewEncoder(w).Encode(map[string]interface{}{
+			writeJSONStatus(w, http.StatusBadRequest, map[string]interface{}{
 				"error":   "no_fighting_style_feature",
 				"message": fmt.Sprintf("%s level %d does not have the Fighting Style feature", class, level),
 				"note":    "Fighters get Fighting Style at level 1. Paladins and Rangers get it at level 2.",
@@ -1059,8 +1186,8 @@ func handleCharacterFightingStyle(w http.ResponseWriter, r *http.Request) {
 		Replace     string   `json:"replace"`  // Fighter: the style to swap out when gaining a Fighter level
 		Cantrips    []string `json:"cantrips"` // Blessed Warrior / Druidic Warrior: two cantrips
 	}
-	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
-		json.NewEncoder(w).Encode(map[string]interface{}{"error": "invalid_json", "message": publicError(err)})
+	if msg := decodeStrict(r, &req, "character_id and style (and replace, or cantrips for Blessed or Druidic Warrior)"); msg != "" {
+		writeJSONStatus(w, http.StatusBadRequest, map[string]interface{}{"error": "invalid_request", "message": msg + " Nothing was changed."})
 		return
 	}
 
@@ -1075,7 +1202,7 @@ func handleCharacterFightingStyle(w http.ResponseWriter, r *http.Request) {
 	`, req.CharacterID).Scan(&ownerID, &class, &level, &subclass, &stylesJSON)
 
 	if err != nil {
-		json.NewEncoder(w).Encode(map[string]interface{}{
+		writeJSONStatus(w, http.StatusNotFound, map[string]interface{}{
 			"error":   "character_not_found",
 			"message": fmt.Sprintf("Character %d not found", req.CharacterID),
 		})
@@ -1095,7 +1222,7 @@ func handleCharacterFightingStyle(w http.ResponseWriter, r *http.Request) {
 	maxStyles := getMaxFightingStyles(class, level, subclass)
 
 	if maxStyles == 0 {
-		json.NewEncoder(w).Encode(map[string]interface{}{
+		writeJSONStatus(w, http.StatusBadRequest, map[string]interface{}{
 			"error":   "no_fighting_style_feature",
 			"message": fmt.Sprintf("%s level %d does not have the Fighting Style feature", class, level),
 		})
@@ -1105,37 +1232,45 @@ func handleCharacterFightingStyle(w http.ResponseWriter, r *http.Request) {
 	var knownSlugs []string
 	json.Unmarshal(stylesJSON, &knownSlugs)
 
+	// before the campaign starts the character is still being made: its Fighting Style can be corrected freely (F23)
+	inSetup, _ := shopOpen(req.CharacterID)
 	replacing := ""
-	if len(knownSlugs) >= maxStyles {
-		if req.Replace == "" || classLower != "fighter" {
-			msg := fmt.Sprintf("You already have %d fighting style(s), the maximum for %s level %d.", len(knownSlugs), class, level)
-			if classLower == "fighter" {
-				msg += " Whenever you gain a Fighter level you can replace one: send replace with the slug to swap out."
+	if len(knownSlugs) >= maxStyles && req.Replace == "" {
+		msg := fmt.Sprintf("You already have %d fighting style(s), the maximum for %s level %d.", len(knownSlugs), class, level)
+		if classLower == "fighter" || inSetup {
+			msg += " To change one, send replace with the style to give up."
+		}
+		writeJSONStatus(w, http.StatusConflict, map[string]interface{}{"error": "max_styles_reached", "message": msg + " Nothing was changed.", "known": knownSlugs})
+		return
+	}
+	if req.Replace != "" {
+		replacing = resolveFightingStyle(req.Replace)
+		if !containsStr(knownSlugs, replacing) {
+			writeJSONStatus(w, http.StatusBadRequest, map[string]interface{}{"error": "not_known", "message": "You do not have the fighting style " + req.Replace + ". Nothing was changed.", "known": knownSlugs})
+			return
+		}
+		if !inSetup {
+			if classLower != "fighter" {
+				writeJSONStatus(w, http.StatusConflict, map[string]interface{}{"error": "swap_not_allowed", "message": fmt.Sprintf("A %s can't replace a Fighting Style once the campaign has started (a Fighter replaces one when gaining a Fighter level). Nothing was changed.", class)})
+				return
 			}
-			json.NewEncoder(w).Encode(map[string]interface{}{"error": "max_styles_reached", "message": msg})
-			return
-		}
-		replacing = strings.ToLower(strings.ReplaceAll(req.Replace, " ", "_"))
-		found := false
-		for _, k := range knownSlugs {
-			if k == replacing {
-				found = true
+			var lastLevel int
+			db.QueryRow(`SELECT COALESCE(fighting_style_level,0) FROM characters WHERE id = $1`, req.CharacterID).Scan(&lastLevel)
+			if level <= lastLevel {
+				var swapped bool
+				db.QueryRow(`SELECT COALESCE(subclass_choices->>'fighting_style_swapped','') = 'true' FROM characters WHERE id = $1`, req.CharacterID).Scan(&swapped)
+				msg := fmt.Sprintf("You can replace a Fighting Style feat whenever you gain a Fighter level; you chose yours at level %d and haven't gained a level since.", lastLevel)
+				if swapped {
+					msg = fmt.Sprintf("You can replace a Fighting Style feat whenever you gain a Fighter level; you already replaced one at level %d.", lastLevel)
+				}
+				writeJSONStatus(w, http.StatusConflict, map[string]interface{}{"error": "swap_not_yet", "message": msg + " Nothing was changed."})
+				return
 			}
-		}
-		if !found {
-			json.NewEncoder(w).Encode(map[string]interface{}{"error": "not_known", "message": "You do not have the fighting style " + req.Replace, "known": knownSlugs})
-			return
-		}
-		var lastLevel int
-		db.QueryRow(`SELECT COALESCE(fighting_style_level,0) FROM characters WHERE id = $1`, req.CharacterID).Scan(&lastLevel)
-		if level <= lastLevel {
-			json.NewEncoder(w).Encode(map[string]interface{}{"error": "swap_not_yet", "message": "You can replace a Fighting Style feat whenever you gain a Fighter level; you already changed it at this level."})
-			return
 		}
 	}
 
-	// Validate style exists
-	styleSlug := strings.ToLower(strings.ReplaceAll(req.Style, " ", "_"))
+	// Validate style exists: the slug or the name the options show (F18: "Two-Weapon Fighting" was refused)
+	styleSlug := resolveFightingStyle(req.Style)
 	style, exists := fightingStyles[styleSlug]
 	if !exists {
 		msg := fmt.Sprintf("%q is not a Fighting Style on this server.", req.Style)
@@ -1166,9 +1301,9 @@ func handleCharacterFightingStyle(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 	if !classCanUse {
-		json.NewEncoder(w).Encode(map[string]interface{}{
+		writeJSONStatus(w, http.StatusBadRequest, map[string]interface{}{
 			"error":     "style_not_available",
-			"message":   fmt.Sprintf("%s cannot choose the %s fighting style", class, style.Name),
+			"message":   fmt.Sprintf("%s cannot choose the %s fighting style. Nothing was changed.", class, style.Name),
 			"available": getAvailableFightingStyles(classLower),
 		})
 		return
@@ -1177,17 +1312,22 @@ func handleCharacterFightingStyle(w http.ResponseWriter, r *http.Request) {
 	// Check if already known
 	for _, k := range knownSlugs {
 		if k == styleSlug {
-			json.NewEncoder(w).Encode(map[string]interface{}{
+			writeJSONStatus(w, http.StatusConflict, map[string]interface{}{
 				"error":   "already_known",
-				"message": fmt.Sprintf("You already know the %s fighting style", style.Name),
+				"message": fmt.Sprintf("You already know the %s fighting style. Nothing was changed.", style.Name),
 			})
 			return
 		}
 	}
+	if len(req.Cantrips) > 0 && styleSlug != "blessed_warrior" && styleSlug != "druidic_warrior" {
+		writeJSONStatus(w, http.StatusBadRequest, map[string]interface{}{"error": "cantrips_not_used",
+			"message": "cantrips are for Blessed Warrior or Druidic Warrior; " + style.Name + " takes none. Nothing was changed."})
+		return
+	}
 
 	if styleSlug == "blessed_warrior" || styleSlug == "druidic_warrior" {
 		if len(req.Cantrips) != 2 || strings.EqualFold(req.Cantrips[0], req.Cantrips[1]) {
-			json.NewEncoder(w).Encode(map[string]interface{}{"error": "cantrips_needed", "message": "Send cantrips: two different cantrips (Cleric cantrips for Blessed Warrior, Druid cantrips for Druidic Warrior)."})
+			writeJSONStatus(w, http.StatusBadRequest, map[string]interface{}{"error": "cantrips_needed", "message": "Send cantrips: two different cantrips (Cleric cantrips for Blessed Warrior, Druid cantrips for Druidic Warrior). Nothing was changed."})
 			return
 		}
 		db.Exec(`UPDATE characters SET subclass_choices = COALESCE(subclass_choices,'{}'::jsonb) || jsonb_build_object('fighting_style_cantrips', $1::text) WHERE id = $2`,
@@ -1207,9 +1347,14 @@ func handleCharacterFightingStyle(w http.ResponseWriter, r *http.Request) {
 	newStylesJSON, _ := json.Marshal(knownSlugs)
 
 	db.Exec(`UPDATE characters SET fighting_style_level = $1 WHERE id = $2`, level, req.CharacterID)
+	if replacing != "" && !inSetup { // a real swap (not a correction during setup) uses up this level's replacement
+		db.Exec(`UPDATE characters SET subclass_choices = COALESCE(subclass_choices,'{}'::jsonb) || '{"fighting_style_swapped":"true"}'::jsonb WHERE id = $1`, req.CharacterID)
+	} else if replacing == "" {
+		db.Exec(`UPDATE characters SET subclass_choices = COALESCE(subclass_choices,'{}'::jsonb) - 'fighting_style_swapped' WHERE id = $1`, req.CharacterID)
+	}
 	_, err = db.Exec(`UPDATE characters SET fighting_styles = $1 WHERE id = $2`, newStylesJSON, req.CharacterID)
 	if err != nil {
-		json.NewEncoder(w).Encode(map[string]interface{}{
+		writeJSONStatus(w, http.StatusInternalServerError, map[string]interface{}{
 			"error":   "db_error",
 			"message": publicError(err),
 		})
@@ -1224,9 +1369,13 @@ func handleCharacterFightingStyle(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 
+	msg := fmt.Sprintf("You have adopted the %s fighting style.", style.Name)
+	if replacing != "" {
+		msg = fmt.Sprintf("You replaced %s with the %s fighting style.", fightingStyles[replacing].Name, style.Name)
+	}
 	json.NewEncoder(w).Encode(map[string]interface{}{
 		"success":         true,
-		"message":         fmt.Sprintf("⚔️ You have adopted the %s fighting style!", style.Name),
+		"message":         msg,
 		"style":           style,
 		"fighting_styles": knownStyles,
 		"styles_count":    len(knownSlugs),
@@ -1240,6 +1389,23 @@ func handleCharacterFightingStyle(w http.ResponseWriter, r *http.Request) {
 			"druidic_warrior":       "Two Druid cantrips as Ranger spells (Wisdom)",
 		}[styleSlug],
 	})
+}
+
+// resolveFightingStyle turns a style's slug or name into its slug: "Two-Weapon Fighting", "two-weapon fighting" and
+// "two_weapon_fighting" all give "two_weapon_fighting".
+func resolveFightingStyle(input string) string {
+	slug := strings.ToLower(strings.TrimSpace(input))
+	slug = strings.NewReplacer("'", "", "’", "", "-", "_", " ", "_").Replace(slug)
+	slug = strings.Join(strings.FieldsFunc(slug, func(r rune) bool { return r == '_' }), "_")
+	if _, ok := fightingStyles[slug]; ok {
+		return slug
+	}
+	for k, f := range fightingStyles {
+		if strings.EqualFold(strings.TrimSpace(f.Name), strings.TrimSpace(input)) {
+			return k
+		}
+	}
+	return slug
 }
 
 // Dragonborn breath weapon area shapes

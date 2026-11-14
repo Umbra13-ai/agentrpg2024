@@ -93,8 +93,10 @@ func classOpenChoices(charID int) []string {
 		wantExp += expertiseAllowed(c, l)
 	}
 	haveExp := 0
+	seenExp := map[string]bool{} // the same skill twice is one Expertise (F6)
 	for _, s := range strings.Split(expertise, ",") {
-		if strings.TrimSpace(s) != "" {
+		if k := skillKey(s); k != "" && !seenExp[k] {
+			seenExp[k] = true
 			haveExp++
 		}
 	}
@@ -117,6 +119,9 @@ func classOpenChoices(charID int) []string {
 		if want, have := game.GetMaxInvocations(l), jsonCount(charID, "eldritch_invocations"); have < want {
 			out = append(out, fmt.Sprintf("Eldritch Invocations: %d of %d chosen (POST /api/characters/invocations)", have, want))
 		}
+		if bookOfShadowsOpen(charID) {
+			out = append(out, "Pact of the Tome: choose 3 cantrips and 2 level 1 Ritual spells for your Book of Shadows (POST /api/characters/invocations {\"invocation\": \"pact-of-the-tome\", \"cantrips\": [...], \"rituals\": [...]})")
+		}
 	}
 	if l := levels["sorcerer"]; l >= 2 {
 		if want, have := getMaxMetamagicChoices(l), len(getMetamagicChoices(charID)); have < want {
@@ -131,10 +136,13 @@ func classOpenChoices(charID int) []string {
 	if wantPrep > 0 {
 		var list []string
 		json.Unmarshal(prepared, &list)
-		origin := originSpellsOf(charID)
+		if len(levels) == 1 {
+			list = currentPreparedList(charID, class) // a Bard's, Ranger's, Sorcerer's or Warlock's list lives in known_spells, as /prepare reads it (F3)
+		}
+		always := allAlwaysPrepared(charID)
 		leveled := 0
 		for _, s := range list {
-			if _, isOrigin := origin[s]; isOrigin {
+			if containsStr(always, s) {
 				continue
 			}
 			if sp, ok := srdSpellsMemory[normalizeSpellSlug(s)]; ok && sp.Level > 0 {
@@ -146,6 +154,10 @@ func classOpenChoices(charID int) []string {
 		} else if leveled < wantPrep {
 			out = append(out, fmt.Sprintf("Spells: %d of your %d level 1+ spells prepared; your level allows more (POST /api/characters/%d/prepare {\"spells\": [...]} with the whole list)", leveled, wantPrep, charID))
 		}
+	}
+	// a list over the limits, or with spells the class can't prepare, is refused by /prepare: say it here too (F3)
+	if p := preparedListProblems(charID); len(p) > 0 {
+		out = append(out, fmt.Sprintf("Spells: fix your prepared list: %s (POST /api/characters/%d/prepare {\"spells\": [...]} with the whole list)", strings.Join(p, "; "), charID))
 	}
 	return out
 }
@@ -159,6 +171,17 @@ func withToFinish(w http.ResponseWriter, r *http.Request, charID int, h func(htt
 	augmentJSON(w, func(rw http.ResponseWriter) { h(rw, r2) }, func(m map[string]interface{}) {
 		todo := characterToFinish(charID)
 		m["character_finished"] = len(todo) == 0
+		// prepared_count counts level 1+ spells as /prepare does, not cantrips or always-prepared spells (F15: a Wizard with 3
+		// cantrips and 4 spells showed 7 of 4 and slots_remaining -3). The sheet builds these fields in character_handlers.go.
+		if max, ok := m["max_prepared"].(float64); ok {
+			class, _, _ := subclassOf(charID)
+			list := jsonListOf(charID, "prepared_spells")
+			if len(classLevelsOf(charID)) <= 1 {
+				list = currentPreparedList(charID, class)
+			}
+			n := countLeveled(withoutAlwaysPrepared(list, allAlwaysPrepared(charID)))
+			m["prepared_count"], m["slots_remaining"] = n, int(max)-n
+		}
 		if len(todo) > 0 {
 			m["to_finish"] = todo
 		}

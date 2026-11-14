@@ -11,7 +11,6 @@ package main
 // The shop is open from creation until the character's campaign starts; after that, buying is up to the GM.
 
 import (
-	"encoding/json"
 	"fmt"
 	"net/http"
 	"sort"
@@ -203,43 +202,74 @@ func handleCharacterShop(w http.ResponseWriter, r *http.Request, charID int) {
 	var req struct {
 		Buy []struct {
 			Item     string `json:"item"`
-			Quantity int    `json:"quantity"`
+			Quantity *int   `json:"quantity"` // missing: 1
 		} `json:"buy"`
 		Done bool      `json:"done"`
 		Sell []sellReq `json:"sell"`
 	}
-	if json.NewDecoder(r.Body).Decode(&req) != nil {
-		writeJSONStatus(w, http.StatusBadRequest, map[string]interface{}{"error": "invalid_json"})
+	// a misspelled field (qty) is refused, not read as 1 (F17)
+	if msg := decodeStrict(r, &req, `buy [{"item", "quantity"}], sell [{"item_id", "quantity"}] or done`); msg != "" {
+		writeJSONStatus(w, http.StatusBadRequest, map[string]interface{}{"error": "invalid_request", "message": msg + " Nothing was bought or sold."})
 		return
 	}
-	if req.Done && len(req.Buy) == 0 {
-		db.Exec(`UPDATE characters SET shop_done = true WHERE id = $1`, charID)
-		writeJSONStatus(w, http.StatusOK, map[string]interface{}{"success": true, "your_money": moneyText(money), "message": "Done shopping. You keep the money you didn't spend."})
+	if !req.Done && len(req.Buy) == 0 && len(req.Sell) == 0 {
+		writeJSONStatus(w, http.StatusBadRequest, map[string]interface{}{"error": "nothing_to_buy", "message": "Send buy: a list of {\"item\": ..., \"quantity\": ...}, sell, or {\"done\": true} when you have finished."})
 		return
 	}
-	if !open {
-		writeJSONStatus(w, http.StatusConflict, map[string]interface{}{"error": "shop_closed", "message": why})
+	if !open && (len(req.Buy) > 0 || len(req.Sell) > 0) {
+		writeJSONStatus(w, http.StatusConflict, map[string]interface{}{"error": "shop_closed", "message": why + " Nothing was bought or sold."})
 		return
 	}
-	if len(req.Sell) > 0 && len(req.Buy) == 0 {
+	// every part is done, in this order: sell, buy, done (F16: buy with sell or done dropped the rest without a word). Each part is
+	// checked before it runs; when a later part is refused, the reply says what was already done (HTTP 422).
+	reply := map[string]interface{}{"success": true}
+	var doneParts []string
+	if len(req.Sell) > 0 {
 		status, resp := sellItems(charID, nil, "The starting shop", func(gp float64) int { return int(gp*100 + 0.5) }, req.Sell)
-		writeJSONStatus(w, status, resp)
-		return
+		if status != http.StatusOK {
+			resp["message"] = fmt.Sprint(resp["message"]) + " Nothing was bought or sold."
+			writeJSONStatus(w, status, resp)
+			return
+		}
+		for k, v := range resp {
+			reply[k] = v
+		}
+		doneParts = append(doneParts, "sold "+strings.Join(toStrings(resp["sold"]), ", "))
+		money = walletCP(charID)
+	}
+	refuse := func(status int, body map[string]interface{}) {
+		if len(doneParts) > 0 {
+			body["not_saved"] = body["message"]
+			body["already_done"] = doneParts
+			body["message"] = fmt.Sprintf("%s Already done: %s.", body["message"], strings.Join(doneParts, "; "))
+			status = http.StatusUnprocessableEntity
+		} else {
+			body["message"] = fmt.Sprint(body["message"]) + " Nothing was bought or sold."
+		}
+		writeJSONStatus(w, status, body)
 	}
 	if len(req.Buy) == 0 {
-		writeJSONStatus(w, http.StatusBadRequest, map[string]interface{}{"error": "nothing_to_buy", "message": "Send buy: a list of {\"item\": ..., \"quantity\": ...}, or {\"done\": true} when you have finished."})
+		if req.Done {
+			db.Exec(`UPDATE characters SET shop_done = true WHERE id = $1`, charID)
+			reply["your_money"] = moneyText(money)
+			reply["message"] = "Done shopping. You keep the money you didn't spend."
+			if len(doneParts) > 0 {
+				reply["message"] = fmt.Sprintf("Done: %s. Done shopping; you keep the money you didn't spend.", strings.Join(doneParts, "; "))
+			}
+		}
+		writeJSONStatus(w, http.StatusOK, reply)
 		return
 	}
 	total := 0
 	var kit []startItem
 	var lines []string
 	for _, b := range req.Buy {
-		q := b.Quantity
-		if q == 0 {
-			q = 1
+		q := 1
+		if b.Quantity != nil {
+			q = *b.Quantity
 		}
 		if q < 1 || q > 100 {
-			writeJSONStatus(w, http.StatusBadRequest, map[string]interface{}{"error": "invalid_quantity", "message": fmt.Sprintf("%s: quantity must be 1 to 100.", b.Item)})
+			refuse(http.StatusBadRequest, map[string]interface{}{"error": "invalid_quantity", "message": fmt.Sprintf("%s: quantity must be 1 to 100.", b.Item)})
 			return
 		}
 		it, ok := findShopItem(b.Item)
@@ -248,7 +278,7 @@ func handleCharacterShop(w http.ResponseWriter, r *http.Request, charID int) {
 			if _, isMagic := findCraftItem(b.Item); isMagic || craftMagicItem(b.Item) {
 				msg = fmt.Sprintf("%q is a magic item; the shop sells only ordinary equipment. Magic items come from your GM.", b.Item)
 			}
-			writeJSONStatus(w, http.StatusBadRequest, map[string]interface{}{"error": "not_sold_here", "message": msg})
+			refuse(http.StatusBadRequest, map[string]interface{}{"error": "not_sold_here", "message": msg})
 			return
 		}
 		cost := int(it.row.CostGP*100+0.5) * q
@@ -261,10 +291,34 @@ func handleCharacterShop(w http.ResponseWriter, r *http.Request, charID int) {
 		lines = append(lines, fmt.Sprintf("%d x %s (%s each): %s", q, it.row.Name, it.row.CostText, moneyText(cost)))
 	}
 	status, resp := completePurchase(charID, money, total, kit, lines)
-	if status == http.StatusOK {
-		resp["next"] = fmt.Sprintf("Put on armor and take up weapons: POST /api/characters/auto-equip {\"character_id\": %d, \"answer\": \"yes\"}. Buy more, or POST /api/characters/%d/shop {\"done\": true} when you have finished.", charID, charID)
+	if status != http.StatusOK {
+		refuse(status, resp)
+		return
 	}
-	writeJSONStatus(w, status, resp)
+	for k, v := range resp {
+		reply[k] = v
+	}
+	reply["next"] = fmt.Sprintf("Put on armor and take up weapons: POST /api/characters/auto-equip {\"character_id\": %d, \"answer\": \"yes\"}. Buy more, or POST /api/characters/%d/shop {\"done\": true} when you have finished.", charID, charID)
+	if req.Done {
+		db.Exec(`UPDATE characters SET shop_done = true WHERE id = $1`, charID)
+		reply["next"] = fmt.Sprintf("Done shopping; you keep the money you didn't spend. Put on armor and take up weapons: POST /api/characters/auto-equip {\"character_id\": %d, \"answer\": \"yes\"}.", charID)
+		reply["done_shopping"] = true
+	}
+	writeJSONStatus(w, http.StatusOK, reply)
+}
+
+func toStrings(v interface{}) []string {
+	switch x := v.(type) {
+	case []string:
+		return x
+	case []interface{}:
+		var out []string
+		for _, e := range x {
+			out = append(out, fmt.Sprint(e))
+		}
+		return out
+	}
+	return nil
 }
 
 // completePurchase pays total (in CP) from the character's coins and puts the kit items in the inventory, in one transaction.

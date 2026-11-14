@@ -146,7 +146,45 @@ func handleCharacterPortrait(w http.ResponseWriter, r *http.Request, charID int)
 		if strings.HasPrefix(strings.ToLower(r.Header.Get("Content-Type")), "application/json") {
 			var req struct {
 				ImageBase64 string `json:"image_base64"`
-				Skip        bool   `json:"skip"`
+				Skip        bool   `json:"-"`
+			}
+			// skip: true (or "yes"/"true"); any other value is refused with the reason (F24: {"skip": "yes"} got an unrelated error)
+			var probe struct {
+				ImageBase64 json.RawMessage `json:"image_base64"`
+				Skip        json.RawMessage `json:"skip"`
+			}
+			if json.Unmarshal(raw, &probe) == nil && len(probe.Skip) > 0 {
+				var sv interface{}
+				json.Unmarshal(probe.Skip, &sv)
+				switch v := sv.(type) {
+				case bool:
+					req.Skip = v
+				case string:
+					switch strings.ToLower(strings.TrimSpace(v)) {
+					case "true", "yes":
+						req.Skip = true
+					case "false", "no":
+					default:
+						sv = nil
+					}
+				default:
+					sv = nil
+				}
+				if sv == nil {
+					writeJSONStatus(w, http.StatusBadRequest, map[string]interface{}{"error": "invalid_skip",
+						"message": "skip must be true (to go without a portrait for now). To upload one, send the image's base64 in image_base64."})
+					return
+				}
+				if req.Skip && len(probe.ImageBase64) > 0 && string(probe.ImageBase64) != `""` && string(probe.ImageBase64) != "null" {
+					writeJSONStatus(w, http.StatusBadRequest, map[string]interface{}{"error": "image_and_skip",
+						"message": "Send either an image in image_base64 or {\"skip\": true}, not both. Nothing was changed."})
+					return
+				}
+				if !req.Skip && (len(probe.ImageBase64) == 0 || string(probe.ImageBase64) == `""` || string(probe.ImageBase64) == "null") {
+					writeJSONStatus(w, http.StatusBadRequest, map[string]interface{}{"error": "image_base64_required",
+						"message": "skip is false and no image was sent: send the image's base64 in image_base64, or {\"skip\": true} to go without a portrait for now."})
+					return
+				}
 			}
 			if err := json.Unmarshal(raw, &req); err == nil && req.Skip && req.ImageBase64 == "" {
 				portraitSkipped(charID) // makes sure the column exists
@@ -162,8 +200,9 @@ func handleCharacterPortrait(w http.ResponseWriter, r *http.Request, charID int)
 			}
 			if err := json.Unmarshal(raw, &req); err != nil || req.ImageBase64 == "" {
 				writeJSONStatus(w, http.StatusBadRequest, map[string]interface{}{
-					"error": "image_base64_required",
-					"hint":  "Send JSON {\"image_base64\":\"...\"} or the raw PNG/JPEG/WebP bytes with a matching Content-Type.",
+					"error":   "image_base64_required",
+					"message": "No image was sent: put your PNG, JPEG or WebP file's base64 in image_base64, or send {\"skip\": true} to go without a portrait for now.",
+					"hint":    "Send JSON {\"image_base64\":\"...\"} or the raw PNG/JPEG/WebP bytes with a matching Content-Type.",
 				})
 				return
 			}

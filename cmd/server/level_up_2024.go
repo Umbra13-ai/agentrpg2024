@@ -184,7 +184,10 @@ func handleCharacterExpertise(w http.ResponseWriter, r *http.Request, charID int
 		writeJSONStatus(w, http.StatusNotFound, map[string]interface{}{"error": "character_not_found"})
 		return
 	}
-	allowed := expertiseAllowed(class, level)
+	allowed := 0
+	for c, l := range classLevelsOrSingle(charID) { // a multiclass character's classes each give theirs, as to_finish counts them
+		allowed += expertiseAllowed(c, l)
+	}
 	if r.Method == http.MethodGet {
 		writeJSONStatus(w, 200, map[string]interface{}{"expertise": current, "allowed": allowed})
 		return
@@ -196,17 +199,39 @@ func handleCharacterExpertise(w http.ResponseWriter, r *http.Request, charID int
 	var req struct {
 		Skills []string `json:"skills"`
 	}
-	json.NewDecoder(r.Body).Decode(&req)
-	if len(req.Skills) == 0 || len(req.Skills) > allowed {
-		writeJSONStatus(w, http.StatusBadRequest, map[string]interface{}{"error": "invalid_count", "message": fmt.Sprintf("Your class gives Expertise in %d skill(s) at level %d. Send all of them in skills.", allowed, level)})
+	if msg := decodeStrict(r, &req, `{"skills": [...]}`); msg != "" {
+		writeJSONStatus(w, http.StatusBadRequest, map[string]interface{}{"error": "invalid_request", "message": msg + " Nothing was changed."})
 		return
 	}
-	pl := strings.ReplaceAll(strings.ToLower(profs), "_", " ")
+	if allowed == 0 {
+		writeJSONStatus(w, http.StatusBadRequest, map[string]interface{}{"error": "no_expertise", "message": fmt.Sprintf("Your class gives no Expertise at level %d. Nothing was changed.", level)})
+		return
+	}
+	if len(req.Skills) == 0 || len(req.Skills) > allowed {
+		writeJSONStatus(w, http.StatusBadRequest, map[string]interface{}{"error": "invalid_count", "message": fmt.Sprintf("Your class gives Expertise in %d skill(s) at level %d. Send all of them in skills. Nothing was changed.", allowed, level)})
+		return
+	}
+	// each skill exactly as a proficiency the character has, and different ones (F6: ["stealth","stealth"] closed the step with one
+	// Expertise, and "ion" passed because it is part of "perception")
+	held, _ := heldSkills(charID)
+	var heldList []string
+	for _, k := range skillOrder {
+		if held[k] {
+			heldList = append(heldList, k)
+		}
+	}
 	var chosen []string
 	for _, sk := range req.Skills {
-		k := strings.ReplaceAll(strings.ToLower(strings.TrimSpace(sk)), "_", " ")
-		if !strings.Contains(pl, k) {
-			writeJSONStatus(w, http.StatusBadRequest, map[string]interface{}{"error": "not_proficient", "message": fmt.Sprintf("Expertise needs a skill you are proficient in; %s isn't one.", sk)})
+		k := skillKey(sk)
+		if !held[k] {
+			writeJSONStatus(w, http.StatusBadRequest, map[string]interface{}{"error": "not_proficient",
+				"message":       fmt.Sprintf("Expertise needs a skill you are proficient in; %q isn't one. Nothing was changed.", sk),
+				"valid_options": heldList})
+			return
+		}
+		if containsStr(chosen, k) {
+			writeJSONStatus(w, http.StatusBadRequest, map[string]interface{}{"error": "duplicate_skill",
+				"message": fmt.Sprintf("You chose %s twice: choose %d different skills. Nothing was changed.", titleWords(k), len(req.Skills))})
 			return
 		}
 		chosen = append(chosen, k)

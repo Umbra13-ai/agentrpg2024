@@ -96,6 +96,8 @@ func handleCopySpell2024(w http.ResponseWriter, r *http.Request) {
 	book = append(book, slug)
 	b, _ := json.Marshal(book)
 	db.Exec(`UPDATE characters SET known_spells = $1, gold = gold - $2 WHERE id = $3`, b, cost, req.CharacterID)
+	copied, _ := json.Marshal(append(spellbookCopied(req.CharacterID), slug)) // paid for: not one of the free spellbook spells
+	db.Exec(`UPDATE characters SET spellbook_copied = $1 WHERE id = $2`, copied, req.CharacterID)
 	writeJSONStatus(w, 200, map[string]interface{}{
 		"success": true, "spell": sp.Name, "hours": 2 * sp.Level, "gold_spent": cost, "gold": gold - cost, "spellbook_size": len(book),
 		"message": fmt.Sprintf("You spend %d hours and %d GP copying %s into your spellbook. You can prepare it after a Long Rest (POST /api/characters/%d/prepare).", 2*sp.Level, cost, sp.Name, req.CharacterID),

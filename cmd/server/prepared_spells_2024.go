@@ -215,3 +215,137 @@ func withoutAlwaysPrepared(list, always []string) []string {
 	}
 	return out
 }
+
+// classAlwaysPrepared: the spells a class feature always has prepared (SRD 5.2.1): Druidic (Speak with Animals), Favored Enemy
+// (Hunter's Mark), Paladin's Smite (Divine Smite, level 2), Faithful Steed (Find Steed, level 5) and Contact Patron (Contact Other
+// Plane, level 9). Like subclass spells they don't count against the Prepared Spells limit (F11: /prepare counted Speak with
+// Animals and Hunter's Mark, and no list showed them).
+func classAlwaysPrepared(levels map[string]int) []string {
+	var out []string
+	for _, g := range classSpellGrants {
+		if levels[g.class] >= g.level {
+			out = append(out, g.spell)
+		}
+	}
+	return out
+}
+
+var classSpellGrants = []struct {
+	class   string
+	level   int
+	spell   string
+	feature string
+}{
+	{"druid", 1, "speak-with-animals", "Druidic"},
+	{"ranger", 1, "hunters-mark", "Favored Enemy"},
+	{"paladin", 2, "divine-smite", "Paladin's Smite"},
+	{"paladin", 5, "find-steed", "Faithful Steed"},
+	{"warlock", 9, "contact-other-plane", "Contact Patron"},
+}
+
+// featureAlwaysPreparedInfo lists classAlwaysPrepared and the Book of Shadows spells with where each comes from (for /prepare and
+// the setup spells step).
+func featureAlwaysPreparedInfo(charID int) []map[string]interface{} {
+	var out []map[string]interface{}
+	add := func(slug, source string) {
+		e := map[string]interface{}{"slug": slug, "name": slug, "source": source}
+		if sp, ok := srdSpellsMemory[slug]; ok {
+			e["name"], e["level"] = sp.Name, sp.Level
+		}
+		out = append(out, e)
+	}
+	levels := classLevelsOrSingle(charID)
+	for _, g := range classSpellGrants {
+		if levels[g.class] >= g.level {
+			add(g.spell, g.feature)
+		}
+	}
+	for _, s := range bookOfShadowsSpells(charID) {
+		add(s, "Book of Shadows (Pact of the Tome)")
+	}
+	return out
+}
+
+// featureAlwaysPrepared: the always-prepared spells that come from class features and invocations (classAlwaysPrepared and a
+// Warlock's Book of Shadows), for the lists that already add subclass and origin spells.
+func featureAlwaysPrepared(charID int) []string {
+	return append(classAlwaysPrepared(classLevelsOrSingle(charID)), bookOfShadowsSpells(charID)...)
+}
+
+// allAlwaysPrepared: every spell the character has prepared without choosing it (subclass, origin, class features, Book of
+// Shadows, Words of Creation, Magical Discoveries).
+func allAlwaysPrepared(charID int) []string {
+	class, sub, level := subclassOf(charID)
+	out := append(getDomainSpells(sub, level, subclassChoicesOf(charID)["circle_land"]), originAlwaysPrepared(charID)...)
+	out = append(out, featureAlwaysPrepared(charID)...)
+	out = append(out, wordsOfCreationSpells(strings.ToLower(class), level)...)
+	return append(out, magicalDiscoveriesOf(charID)...)
+}
+
+// maxSpellLevelFor: the highest spell level the character has slots for (Pact Magic included); 0 without slots.
+func maxSpellLevelFor(charID int, class string, level int) int {
+	m := 0
+	for lv, n := range characterSpellSlots(charID, class, level) {
+		if n > 0 && lv > m {
+			m = lv
+		}
+	}
+	for lv, n := range characterPactSlots(charID) {
+		if n > 0 && lv > m {
+			m = lv
+		}
+	}
+	return m
+}
+
+// preparedListProblems: what is wrong with a single-class character's prepared list as stored: more spells or cantrips than the
+// class table allows, a spell that isn't on the class list, or a spell above the character's highest spell slot. The setup spells
+// step and to_finish both use it, so they agree (F3: setup said "ready to play" while to_finish still had an open spells item).
+func preparedListProblems(charID int) []string {
+	levels := classLevelsOf(charID)
+	if len(levels) > 1 || db == nil {
+		return nil // multiclass lists are checked per class by /prepare
+	}
+	class, _, level := subclassOf(charID)
+	c := strings.ToLower(class)
+	if game.ClassTableInt(c, level, "Prepared Spells") == 0 && game.ClassTableInt(c, level, "Cantrips") == 0 {
+		return nil
+	}
+	list := withoutAlwaysPrepared(currentPreparedList(charID, c), allAlwaysPrepared(charID))
+	secrets := jsonListOf(charID, "magical_secrets")
+	classList := getClassSpellList(c)
+	if c == "bard" && level >= 10 {
+		for _, other := range []string{"cleric", "druid", "wizard"} {
+			classList = append(classList, getClassSpellList(other)...)
+		}
+	}
+	maxLvl := maxSpellLevelFor(charID, c, level)
+	var out []string
+	var offList, tooHigh []string
+	for _, s := range list {
+		k := normalizeSpellSlug(s)
+		sp, ok := srdSpellsMemory[k]
+		if !ok {
+			continue
+		}
+		if len(classList) > 0 && !containsStr(classList, k) && !containsStr(secrets, k) {
+			offList = append(offList, sp.Name)
+		} else if sp.Level > maxLvl {
+			tooHigh = append(tooHigh, fmt.Sprintf("%s (level %d)", sp.Name, sp.Level))
+		}
+	}
+	cantrips, leveled := splitByLevel(list)
+	if max := game.PreparedSpells2024(c, level); max > 0 && len(leveled) > max {
+		out = append(out, fmt.Sprintf("%d level 1+ spells prepared, but a level %d %s prepares %d", len(leveled), level, titleWords(c), max))
+	}
+	if max := game.ClassTableInt(c, level, "Cantrips") + orderExtraCantrips(charID); max > 0 && len(cantrips) > max {
+		out = append(out, fmt.Sprintf("%d cantrips, but a level %d %s knows %d", len(cantrips), level, titleWords(c), max))
+	}
+	if len(offList) > 0 {
+		out = append(out, fmt.Sprintf("not on the %s spell list: %s", titleWords(c), strings.Join(offList, ", ")))
+	}
+	if len(tooHigh) > 0 {
+		out = append(out, fmt.Sprintf("above your highest spell slot (level %d): %s", maxLvl, strings.Join(tooHigh, ", ")))
+	}
+	return out
+}

@@ -238,8 +238,10 @@ func gearReminders(charID int) []map[string]interface{} {
 	}
 	inv := inventoryOf(charID)
 	worn := map[string]bool{}
+	wornName := map[string]bool{} // a second Robe isn't "carried but not worn" while one is worn (F8)
 	for _, it := range inv {
 		if itemStr(it, "location") == "worn" {
+			wornName[strings.ToLower(itemStr(it, "name"))] = true
 			if p, lim, _ := bodyPlaceOf(itemStr(it, "name")); lim {
 				worn[p] = true
 			}
@@ -288,7 +290,7 @@ func gearReminders(charID int) []map[string]interface{} {
 			continue
 		}
 		place, limited, _ := bodyPlaceOf(name)
-		if place == "" || itemStr(it, "location") == "worn" || (limited && worn[place]) {
+		if place == "" || itemStr(it, "location") == "worn" || (limited && worn[place]) || wornName[low] {
 			continue
 		}
 		itemRef := name // two items with the same name (two Robes) need the id, or the server answers ambiguous_item

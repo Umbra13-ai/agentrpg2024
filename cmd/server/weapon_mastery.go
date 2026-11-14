@@ -75,26 +75,54 @@ type masteryChoice struct {
 	Mastery string
 }
 
+// eligibleMasteryWeapons lists each weapon a class can master once. The same weapon can sit in srdWeapons under two keys (the
+// built-in "light_crossbow" and the database slug "light-crossbow"); the map's order is random, so the keys are walked in sorted
+// order, weapons are told apart by weaponNameKey, and the built-in key (the name with underscores) is kept when there is one.
+// Otherwise a crossbow resolved to a different key from call to call, and two spellings passed as two weapons.
 func eligibleMasteryWeapons(class string) []masteryChoice {
+	keys := make([]string, 0, len(srdWeapons))
+	for k := range srdWeapons {
+		keys = append(keys, k)
+	}
+	sort.Strings(keys)
+	byName := map[string]int{}
 	var out []masteryChoice
-	seen := map[string]bool{}
-	for key, w := range srdWeapons {
+	for _, key := range keys {
+		w := srdWeapons[key]
 		if strings.Contains(w.Name, ",") || !weaponMasteryEligible(class, w) {
 			continue
 		}
-		name := titleWords(w.Name)
-		if seen[name] {
+		nk := weaponNameKey(w.Name)
+		if i, ok := byName[nk]; ok {
+			if key == masteryCanonicalKey(w.Name) {
+				out[i].Key = key
+			}
 			continue
 		}
-		seen[name] = true
-		out = append(out, masteryChoice{key, name, w.Mastery})
+		byName[nk] = len(out)
+		out = append(out, masteryChoice{key, titleWords(w.Name), w.Mastery})
 	}
 	sort.Slice(out, func(i, j int) bool { return out[i].Name < out[j].Name })
 	return out
 }
 
-// resolveMasteryPick turns "Longsword" or "light crossbow" into the weapon's key.
+// masteryCanonicalKey is the built-in key form of a weapon name: "Light Crossbow" -> "light_crossbow".
+func masteryCanonicalKey(name string) string {
+	return strings.ReplaceAll(strings.ToLower(strings.TrimSpace(name)), " ", "_")
+}
+
+// stripMasterySuffix drops the "(Nick)" the listings show after a weapon: "Dagger (Nick)" -> "Dagger".
+func stripMasterySuffix(input string) string {
+	s := strings.TrimSpace(input)
+	if i := strings.LastIndex(s, "("); i > 0 && strings.HasSuffix(s, ")") {
+		s = strings.TrimSpace(s[:i])
+	}
+	return s
+}
+
+// resolveMasteryPick turns "Longsword", "light crossbow" or "Dagger (Nick)" into the weapon's key.
 func resolveMasteryPick(class, input string) (string, bool) {
+	input = stripMasterySuffix(input)
 	want := weaponNameKey(input)
 	for _, c := range eligibleMasteryWeapons(class) {
 		if weaponNameKey(c.Name) == want || c.Key == strings.ToLower(strings.ReplaceAll(input, " ", "_")) {
@@ -122,10 +150,13 @@ func validateMasteryPicks(class string, level int, picks []string, exact bool) (
 		if !ok {
 			return nil, originErr("invalid_weapon_mastery", names, "%q is not a weapon a %s can choose for Weapon Mastery", p, titleWords(class))
 		}
-		if !seen[k] {
-			seen[k] = true
-			keys = append(keys, k)
+		// the same weapon twice is refused, not merged (two spellings of a crossbow passed as two weapons, or one was dropped)
+		nk := weaponNameKey(srdWeapons[k].Name)
+		if seen[nk] {
+			return nil, originErr("duplicate_weapon_mastery", names, "You chose %s twice: choose %d different weapons for Weapon Mastery", titleWords(srdWeapons[k].Name), max)
 		}
+		seen[nk] = true
+		keys = append(keys, k)
 	}
 	if len(keys) > max || (exact && len(keys) != max) {
 		return nil, originErr("weapon_masteries_required", names, "A %s at level %d chooses %d kinds of weapon for Weapon Mastery (send weapon_masteries)", titleWords(class), level, max)

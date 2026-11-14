@@ -3,9 +3,12 @@ package main
 import (
 	"database/sql"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"net/http"
 	"strings"
+	"sync"
+
 	"github.com/agentrpg/agentrpg/game"
 )
 
@@ -45,7 +48,7 @@ func handleCharacterSpells(w http.ResponseWriter, r *http.Request, charID int) {
 	`, charID).Scan(&ownerID, &knownSpellsJSON, &magicalSecretsJSON, &class, &subclass, &level)
 
 	if err != nil {
-		json.NewEncoder(w).Encode(map[string]interface{}{"error": "character_not_found"})
+		writeJSONStatus(w, http.StatusNotFound, map[string]interface{}{"error": "character_not_found"})
 		return
 	}
 
@@ -138,21 +141,54 @@ func handleCharacterSpells(w http.ResponseWriter, r *http.Request, charID int) {
 
 	if r.Method == "PUT" {
 		var req struct {
-			Spells []string `json:"spells"` // Spell slugs to set
-			Add    []string `json:"add"`    // Spells to add to existing list
-			Remove []string `json:"remove"` // Spells to remove from existing list
+			Spells *[]string `json:"spells"` // Spell slugs to set
+			Add    []string  `json:"add"`    // Spells to add to existing list
+			Remove []string  `json:"remove"` // Spells to remove from existing list
 		}
-		if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
-			json.NewEncoder(w).Encode(map[string]interface{}{"error": "invalid_json"})
+		// every answer is saved as sent or refused with the reason (F13: a replace wiped origin spells without a word)
+		if msg := decodeStrict(r, &req, "spells (the whole list), add or remove"); msg != "" {
+			writeJSONStatus(w, http.StatusBadRequest, map[string]interface{}{"error": "invalid_request", "message": msg + " Nothing was changed."})
 			return
 		}
+		if req.Spells == nil && len(req.Add) == 0 && len(req.Remove) == 0 {
+			writeJSONStatus(w, http.StatusBadRequest, map[string]interface{}{"error": "nothing_to_change",
+				"message": "Send spells (the whole list, which replaces it), add or remove. Nothing was changed."})
+			return
+		}
+		if req.Spells != nil && (len(req.Add) > 0 || len(req.Remove) > 0) {
+			writeJSONStatus(w, http.StatusBadRequest, map[string]interface{}{"error": "spells_with_add_or_remove",
+				"message": "Send either spells (the whole list) or add/remove, not both. Nothing was changed."})
+			return
+		}
+		if req.Spells != nil && len(*req.Spells) == 0 {
+			writeJSONStatus(w, http.StatusBadRequest, map[string]interface{}{"error": "empty_list",
+				"message": "spells is empty. To take spells off your list, send them in remove. Nothing was changed."})
+			return
+		}
+		origin := originSpellsOf(charID)
+		maxSlotLevel := maxSpellLevelFor(charID, class, level)
+		var notes []string
 
 		var newSpells []string
 		var newMagicalSecrets []string
 		magicalSecretsRemaining := magicalSecretsAvailable
 
 		// Helper to validate and categorize a spell
-		validateSpell := func(spellSlug string) (validSlug string, isMagicalSecret bool, errResp map[string]interface{}) {
+		var validateOnList func(spellSlug string) (validSlug string, isMagicalSecret bool, errResp map[string]interface{})
+		// a spell needs a spell slot of its level (F12: a level 1 Wizard wrote Wish and Meteor Swarm into the book)
+		validateSpell := func(spellSlug string) (string, bool, map[string]interface{}) {
+			validSlug, isMagicalSecret, errResp := validateOnList(spellSlug)
+			if errResp == nil {
+				if sp := srdSpellsMemory[validSlug]; sp.Level > maxSlotLevel {
+					return "", false, map[string]interface{}{
+						"error":   "spell_too_high",
+						"message": fmt.Sprintf("%s is a level %d spell; your highest spell slot is level %d.", sp.Name, sp.Level, maxSlotLevel),
+					}
+				}
+			}
+			return validSlug, isMagicalSecret, errResp
+		}
+		validateOnList = func(spellSlug string) (validSlug string, isMagicalSecret bool, errResp map[string]interface{}) {
 			slugLower := strings.ToLower(strings.TrimSpace(spellSlug))
 
 			// Find the spell in SRD
@@ -209,22 +245,51 @@ func handleCharacterSpells(w http.ResponseWriter, r *http.Request, charID int) {
 			}
 		}
 
-		if len(req.Spells) > 0 {
+		if req.Spells != nil {
 			// Replace entire spell list
 			newSpells = []string{}
 			newMagicalSecrets = []string{}
 			magicalSecretsRemaining = magicalSecretsSlots // Reset for full replacement
 
-			for _, spellSlug := range req.Spells {
+			for _, spellSlug := range *req.Spells {
+				if k := normalizeSpellSlug(spellSlug); origin[k].Slug != "" {
+					if !containsStr(newSpells, k) {
+						newSpells = append(newSpells, k) // an origin spell sent back with the list: kept as it is
+					}
+					continue
+				}
 				validSlug, isMagicalSecret, errResp := validateSpell(spellSlug)
 				if errResp != nil {
+					errResp["message"] = fmt.Sprint(errResp["message"]) + " Nothing was changed."
 					writeJSONStatus(w, http.StatusBadRequest, errResp)
 					return
+				}
+				if containsStr(newSpells, validSlug) {
+					continue
 				}
 				newSpells = append(newSpells, validSlug)
 				if isMagicalSecret {
 					newMagicalSecrets = append(newMagicalSecrets, validSlug)
 				}
+			}
+			// origin spells (species, Magic Initiate) aren't part of the class list: a replace keeps them, and says what it removed
+			var kept, removed []string
+			for _, k := range knownSpells {
+				if containsStr(newSpells, k) {
+					continue
+				}
+				if origin[k].Slug != "" {
+					newSpells = append(newSpells, k)
+					kept = append(kept, spellName(k))
+				} else {
+					removed = append(removed, spellName(k))
+				}
+			}
+			if len(kept) > 0 {
+				notes = append(notes, fmt.Sprintf("Kept your origin spells (species, Magic Initiate), which this list doesn't change: %s.", strings.Join(kept, ", ")))
+			}
+			if len(removed) > 0 {
+				notes = append(notes, fmt.Sprintf("Removed from your list: %s.", strings.Join(removed, ", ")))
 			}
 		} else {
 			// Incremental add/remove
@@ -245,6 +310,9 @@ func handleCharacterSpells(w http.ResponseWriter, r *http.Request, charID int) {
 						alreadyKnown = true
 						break
 					}
+				}
+				if alreadyKnown {
+					notes = append(notes, fmt.Sprintf("%s was already on your list.", spellName(validSlug)))
 				}
 				if !alreadyKnown {
 					newSpells = append(newSpells, validSlug)
@@ -268,6 +336,24 @@ func handleCharacterSpells(w http.ResponseWriter, r *http.Request, charID int) {
 			for _, spellSlug := range req.Remove {
 				slugLower := strings.ToLower(strings.TrimSpace(spellSlug))
 				slugDashed := strings.ReplaceAll(slugLower, " ", "-")
+				if o := origin[normalizeSpellSlug(spellSlug)]; o.Slug != "" {
+					src := o.Source
+					if src == "Magic Initiate" {
+						src += " feat"
+					} else if !strings.HasSuffix(src, "lineage") && !strings.HasSuffix(src, "legacy") {
+						src += " lineage"
+					}
+					writeJSONStatus(w, http.StatusBadRequest, map[string]interface{}{"error": "origin_spell",
+						"message": fmt.Sprintf("%s comes from your %s, not your class: it stays on your sheet and can't be removed here. Nothing was changed.", spellName(o.Slug), src)})
+					return
+				}
+				if !containsStr(newSpells, slugLower) && !containsStr(newSpells, slugDashed) && !containsStr(newSpells, normalizeSpellSlug(spellSlug)) {
+					writeJSONStatus(w, http.StatusBadRequest, map[string]interface{}{"error": "not_on_your_list",
+						"message": fmt.Sprintf("%q isn't on your list of spells, so it can't be removed. Nothing was changed.", spellSlug), "your_spells": knownSpells})
+					return
+				}
+				slugLower = normalizeSpellSlug(spellSlug)
+				slugDashed = slugLower
 				filtered := []string{}
 				for _, known := range newSpells {
 					if known != slugLower && known != slugDashed {
@@ -291,14 +377,8 @@ func handleCharacterSpells(w http.ResponseWriter, r *http.Request, charID int) {
 		// (subclass spells) don't count; a Wizard's list here is the spellbook
 		var commitChange func()
 		if strings.ToLower(class) != "wizard" {
-			var choicesRaw []byte
-			db.QueryRow(`SELECT COALESCE(subclass_choices,'{}') FROM characters WHERE id = $1`, charID).Scan(&choicesRaw)
-			choices := map[string]string{}
-			json.Unmarshal(choicesRaw, &choices)
-			always := append(getDomainSpells(subclassStr, level, choices["circle_land"]), originAlwaysPrepared(charID)...) // subclass and origin spells
-			// Words of Creation (Bard 20): Power Word Heal and Kill
-			always = append(always, wordsOfCreationSpells(class, level)...)
-			always = append(always, magicalDiscoveriesOf(charID)...) // College of Lore 6
+			// subclass and origin spells, class-feature spells, Words of Creation (Bard 20), Magical Discoveries (College of Lore 6)
+			always := allAlwaysPrepared(charID)
 			why, commit := checkSpellListChange(charID, class, level, withoutAlwaysPrepared(knownSpells, always), withoutAlwaysPrepared(newSpells, always))
 			if why != "" {
 				writeJSONStatus(w, http.StatusConflict, map[string]interface{}{"error": "cannot_change_now", "message": why, "max": game.PreparedSpells2024(class, level)})
@@ -308,7 +388,15 @@ func handleCharacterSpells(w http.ResponseWriter, r *http.Request, charID int) {
 		} else {
 			// a Wizard's list is the spellbook (no limit), but the cantrips have the Cantrips column and its swap rule
 			// (Nov 13: a fourth cantrip was accepted at level 1)
-			always := append(getDomainSpells(subclassStr, level, ""), originAlwaysPrepared(charID)...)
+			always := allAlwaysPrepared(charID)
+			// the spellbook: 6 spells at level 1 and two more each level are free; others are copied (POST /api/characters/copy-spell).
+			// Origin spells and copied spells don't count (F12: any number of spells could be written into a level 1 Wizard's book).
+			target := wizardSpellbookTarget(charID, level)
+			if before, after := freeSpellbookCount(charID, knownSpells), freeSpellbookCount(charID, newSpells); after > target && after > before {
+				writeJSONStatus(w, http.StatusConflict, map[string]interface{}{"error": "spellbook_full", "spellbook_free_spells": target, "in_your_spellbook": before,
+					"message": fmt.Sprintf("A level %d Wizard writes %d spells into the spellbook for free (6 at level 1, two more each level); this would make %d. Other spells are copied into the book: POST /api/characters/copy-spell {\"character_id\": %d, \"spell\": \"...\"} (50 GP and 2 hours per spell level). Nothing was changed.", level, target, after, charID)})
+				return
+			}
 			onlyCantrips := func(list []string) []string {
 				var out []string
 				for _, s := range withoutAlwaysPrepared(list, always) {
@@ -332,7 +420,7 @@ func handleCharacterSpells(w http.ResponseWriter, r *http.Request, charID int) {
 		newMagicalSecretsJSON, _ := json.Marshal(newMagicalSecrets)
 		_, err = db.Exec(`UPDATE characters SET known_spells = $1, magical_secrets = $2 WHERE id = $3`, newSpellsJSON, newMagicalSecretsJSON, charID)
 		if err != nil {
-			json.NewEncoder(w).Encode(map[string]interface{}{"error": "database_error"})
+			writeJSONStatus(w, http.StatusInternalServerError, map[string]interface{}{"error": "database_error"})
 			return
 		}
 		if commitChange != nil {
@@ -360,6 +448,9 @@ func handleCharacterSpells(w http.ResponseWriter, r *http.Request, charID int) {
 			"known_spells": spellsInfo,
 			"count":        len(spellsInfo),
 			"message":      fmt.Sprintf("Updated your spells: %d spells and cantrips.", len(spellsInfo)),
+		}
+		if len(notes) > 0 {
+			response["notes"] = notes
 		}
 
 		// Include magical secrets info for Bards
@@ -429,7 +520,7 @@ func handlePrepareSpells(w http.ResponseWriter, r *http.Request, charID int) {
 		&subclassChoicesJSON)
 
 	if err != nil {
-		json.NewEncoder(w).Encode(map[string]interface{}{"error": "character_not_found"})
+		writeJSONStatus(w, http.StatusNotFound, map[string]interface{}{"error": "character_not_found"})
 		return
 	}
 
@@ -463,12 +554,24 @@ func handlePrepareSpells(w http.ResponseWriter, r *http.Request, charID int) {
 		}
 	}
 
-	// Check if this class is a prepared caster
+	// Check if this class is a prepared caster. A Fighter or Rogue with Magic Initiate or species spells still has those, always
+	// prepared: GET lists them (L7: it answered not_spellcaster, though skill.md says origin_spells are listed here).
 	if !game.IsPreparedCaster(className) {
-		json.NewEncoder(w).Encode(map[string]interface{}{
-			"error":   "not_spellcaster",
-			"message": fmt.Sprintf("%ss are not spellcasters.", className),
-		})
+		info := originSpellsInfo(charID)
+		if r.Method == "GET" && len(info) > 0 {
+			writeJSONStatus(w, http.StatusOK, map[string]interface{}{
+				"character_id": charID, "class": className, "level": level, "caster_type": "none",
+				"prepared_spells": []interface{}{}, "prepared_count": 0, "max_prepared": 0, "slots_remaining": 0,
+				"origin_spells":      info,
+				"origin_spells_note": fmt.Sprintf("A %s doesn't prepare spells. Species and Magic Initiate spells are always prepared and cast with their own spellcasting ability; with no spell slots you use the free cast (it comes back on a Long Rest).", titleWords(className)),
+			})
+			return
+		}
+		msg := fmt.Sprintf("A %s doesn't prepare spells.", titleWords(className))
+		if len(info) > 0 {
+			msg += " Your species and Magic Initiate spells are always prepared: GET this endpoint lists them."
+		}
+		writeJSONStatus(w, http.StatusBadRequest, map[string]interface{}{"error": "not_spellcaster", "message": msg})
 		return
 	}
 
@@ -517,6 +620,9 @@ func handlePrepareSpells(w http.ResponseWriter, r *http.Request, charID int) {
 	alwaysPrepared = append(alwaysPrepared, wordsOfCreationSpells(charClassOf(charID), level)...) // Bard 20: Words of Creation
 	alwaysPrepared = append(alwaysPrepared, magicalDiscoveriesOf(charID)...)                     // College of Lore 6: Magical Discoveries
 
+	// class features (Druidic, Favored Enemy ...) and the Book of Shadows
+	alwaysPrepared = append(alwaysPrepared, featureAlwaysPrepared(charID)...)
+
 	if r.Method == "GET" {
 		// Return current prepared spells with enriched info
 		preparedInfo := []map[string]interface{}{}
@@ -562,6 +668,10 @@ func handlePrepareSpells(w http.ResponseWriter, r *http.Request, charID int) {
 			response["domain_spells"] = domainSpellsInfo
 			response["domain_spells_note"] = "Always prepared, don't count against your limit"
 		}
+		if fa := featureAlwaysPreparedInfo(charID); len(fa) > 0 {
+			response["class_feature_spells"] = fa
+			response["class_feature_spells_note"] = "Always prepared by a class feature or your Book of Shadows; they don't count against your limit."
+		}
 
 		response["tip"] = fmt.Sprintf("POST to this endpoint with {\"spells\": [...]} to change prepared spells. You can prepare up to %d spells.", maxPrepared)
 
@@ -571,17 +681,23 @@ func handlePrepareSpells(w http.ResponseWriter, r *http.Request, charID int) {
 
 	if r.Method == "POST" {
 		var req struct {
-			Spells []string `json:"spells"` // Spell slugs to prepare
+			Spells *[]string `json:"spells"` // Spell slugs to prepare
 		}
-		if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
-			json.NewEncoder(w).Encode(map[string]interface{}{"error": "invalid_json"})
+		// F4: {"prepared": [...]} or {} was read as an empty list and wiped every prepared spell
+		if msg := decodeStrict(r, &req, `{"spells": [...]} (your whole list of cantrips and spells)`); msg != "" {
+			writeJSONStatus(w, http.StatusBadRequest, map[string]interface{}{"error": "invalid_request", "message": msg + " Nothing was changed."})
+			return
+		}
+		if req.Spells == nil {
+			writeJSONStatus(w, http.StatusBadRequest, map[string]interface{}{"error": "spells_required",
+				"message": `Send {"spells": [...]}: your whole list of cantrips and spells to prepare. Nothing was changed.`})
 			return
 		}
 
 		// Validate each spell slug and build the prepared list
 		newPrepared := []string{}
 		var skippedAlways, skippedTwice []string // said in the reply (Nov 13): a list of only always-prepared spells used to answer "Prepared 0 spells" with no reason
-		for _, spellSlug := range req.Spells {
+		for _, spellSlug := range *req.Spells {
 			slugLower := strings.ToLower(strings.TrimSpace(spellSlug))
 			slugDashed := strings.ReplaceAll(slugLower, " ", "-")
 
@@ -609,9 +725,9 @@ func handlePrepareSpells(w http.ResponseWriter, r *http.Request, charID int) {
 
 			// A Wizard prepares spells from the spellbook
 			if strings.ToLower(className) == "wizard" && srdSpellsMemory[validSlug].Level > 0 && !inSpellbook(charID, validSlug) { // cantrips are known, not in the book (F202)
-				json.NewEncoder(w).Encode(map[string]interface{}{
+				writeJSONStatus(w, http.StatusBadRequest, map[string]interface{}{
 					"error":   "not_in_spellbook",
-					"message": fmt.Sprintf("'%s' is not in your spellbook. A Wizard prepares spells from the spellbook.", srdSpellsMemory[validSlug].Name),
+					"message": fmt.Sprintf("'%s' is not in your spellbook. A Wizard prepares spells from the spellbook. Nothing was changed.", srdSpellsMemory[validSlug].Name),
 				})
 				return
 			}
@@ -632,9 +748,9 @@ func handlePrepareSpells(w http.ResponseWriter, r *http.Request, charID int) {
 					}
 				}
 				if !isOnList {
-					json.NewEncoder(w).Encode(map[string]interface{}{
+					writeJSONStatus(w, http.StatusBadRequest, map[string]interface{}{
 						"error":   "not_on_class_list",
-						"message": fmt.Sprintf("'%s' is not on the %s spell list. Check /api/universe/class-spells/%s for available spells.", srdSpellsMemory[validSlug].Name, className, strings.ToLower(className)),
+						"message": fmt.Sprintf("'%s' is not on the %s spell list. Check /api/universe/class-spells/%s for available spells. Nothing was changed.", srdSpellsMemory[validSlug].Name, className, strings.ToLower(className)),
 					})
 					return
 				}
@@ -656,9 +772,9 @@ func handlePrepareSpells(w http.ResponseWriter, r *http.Request, charID int) {
 					}
 				}
 				if spell.Level > maxSlot {
-					json.NewEncoder(w).Encode(map[string]interface{}{
+					writeJSONStatus(w, http.StatusBadRequest, map[string]interface{}{
 						"error":   "spell_too_high",
-						"message": fmt.Sprintf("Cannot prepare %s (level %d) - you don't have level %d spell slots yet.", spell.Name, spell.Level, spell.Level),
+						"message": fmt.Sprintf("Cannot prepare %s (level %d): you don't have level %d spell slots yet. Nothing was changed.", spell.Name, spell.Level, spell.Level),
 					})
 					return
 				}
@@ -727,7 +843,7 @@ func handlePrepareSpells(w http.ResponseWriter, r *http.Request, charID int) {
 			db.Exec(`UPDATE characters SET known_spells = $1 WHERE id = $2`, keptJSON, charID)
 		}
 		if err != nil {
-			json.NewEncoder(w).Encode(map[string]interface{}{"error": "database_error", "detail": publicError(err)})
+			writeJSONStatus(w, http.StatusInternalServerError, map[string]interface{}{"error": "database_error", "detail": publicError(err)})
 			return
 		}
 
@@ -893,4 +1009,81 @@ func preparedMessage(spells, cantrips, max int) string {
 		msg += fmt.Sprintf(", plus %d cantrips", cantrips)
 	}
 	return msg + "."
+}
+
+// decodeStrict reads a JSON body into v and refuses unknown fields: "" when it worked, else what is wrong in plain words. fields
+// names what the endpoint takes (F4: POST /prepare {"prepared": [...]} wiped every prepared spell and answered success).
+func decodeStrict(r *http.Request, v interface{}, fields string) string {
+	dec := json.NewDecoder(http.MaxBytesReader(nil, r.Body, 64*1024))
+	dec.DisallowUnknownFields()
+	err := dec.Decode(v)
+	if err == nil {
+		return ""
+	}
+	msg := err.Error()
+	switch {
+	case msg == "EOF":
+		return "Send a JSON body with " + fields + "."
+	case strings.HasPrefix(msg, "json: unknown field "):
+		return fmt.Sprintf("Unknown field %s: send %s.", strings.TrimPrefix(msg, "json: unknown field "), fields)
+	}
+	var te *json.UnmarshalTypeError
+	if errors.As(err, &te) && te.Field != "" {
+		return fmt.Sprintf("%s has the wrong type (expected %s): send %s.", te.Field, te.Type.String(), fields)
+	}
+	return "The body isn't valid JSON (" + msg + "): send " + fields + "."
+}
+
+func spellName(slug string) string {
+	if sp, ok := srdSpellsMemory[slug]; ok {
+		return sp.Name
+	}
+	return slug
+}
+
+// wizardSpellbookTarget: how many spells a Wizard writes into the spellbook for free (SRD 5.2.1 Spellbook: six level 1 spells,
+// two more each Wizard level; an Evoker's Evocation Savant spells too).
+func wizardSpellbookTarget(charID, level int) int {
+	target := 6 + 2*(level-1)
+	if _, wsub, _ := subclassOf(charID); strings.EqualFold(wsub, "evocation") && level >= 3 {
+		// Evocation Savant: two Evocation spells at level 3, and one more each time a new level of spell slots comes (5, 7 ... 17)
+		target += 2
+		for _, l := range []int{5, 7, 9, 11, 13, 15, 17} {
+			if level >= l {
+				target++
+			}
+		}
+	}
+	return target
+}
+
+var spellbookCopiedOnce sync.Once
+
+func ensureSpellbookCopied() {
+	spellbookCopiedOnce.Do(func() {
+		db.Exec(`ALTER TABLE characters ADD COLUMN IF NOT EXISTS spellbook_copied JSONB DEFAULT '[]'`)
+	})
+}
+
+// spellbookCopied: the spells copied into the book with POST /api/characters/copy-spell (paid for, so not among the free ones).
+func spellbookCopied(charID int) []string {
+	ensureSpellbookCopied()
+	return jsonListOf(charID, "spellbook_copied")
+}
+
+// freeSpellbookCount: the level 1+ spells of a spellbook list that count against the free ones (origin and copied spells don't:
+// F14, a Sage wizard's Magic Initiate spell took one of the six).
+func freeSpellbookCount(charID int, list []string) int {
+	origin := originSpellsOf(charID)
+	copied := spellbookCopied(charID)
+	n := 0
+	for _, s := range list {
+		if _, o := origin[s]; o || containsStr(copied, s) {
+			continue
+		}
+		if sp, ok := srdSpellsMemory[s]; ok && sp.Level > 0 {
+			n++
+		}
+	}
+	return n
 }

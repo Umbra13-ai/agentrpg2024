@@ -91,6 +91,9 @@ func spellAvailableNatively(charID int, spellKey, description string) (bool, str
 	if containsStr(getDomainSpells(subclass, level, sc["circle_land"]), spellKey) || containsStr(wordsOfCreationSpells(c, level), spellKey) || containsStr(magicalDiscoveriesOf(charID), spellKey) {
 		return true, "" // subclass spells; Words of Creation (Bard 20)
 	}
+	if containsStr(featureAlwaysPrepared(charID), spellKey) {
+		return true, "" // Druidic's Speak with Animals, Favored Enemy's Hunter's Mark ...; a Warlock's Book of Shadows
+	}
 	if has(jsonList(secrets)) || has(jsonList(mastery)) || has(jsonList(signature)) {
 		return true, ""
 	}

@@ -145,6 +145,20 @@ func sellBlocked(charID int, inv []invItem, it invItem, qty int) string {
 			have += q
 		}
 	}
+	// the very item in hand (F25: the held Quarterstaff was sold while a carried one remained, and main_hand pointed at nothing held)
+	if itemStr(it, "location") == "held" {
+		other := ""
+		for _, x := range inv {
+			if itemStr(x, "id") != id && strings.EqualFold(itemStr(x, "name"), name) && itemStr(x, "location") != "held" {
+				other = itemStr(x, "id")
+				break
+			}
+		}
+		if other != "" {
+			return fmt.Sprintf("You hold this %s (id %s) in your hand: sell the other one (id %s) instead, or unequip this one first (POST /api/characters/unequip-weapon).", name, id, other)
+		}
+		return fmt.Sprintf("You hold %s (id %s) in your hand: unequip it first (POST /api/characters/unequip-weapon).", name, id)
+	}
 	lastOne := have-qty < 1
 	main, off := equippedWeapons(charID)
 	held := strings.EqualFold(main, name) || strings.EqualFold(off, name)
@@ -159,7 +173,7 @@ func sellBlocked(charID int, inv []invItem, it invItem, qty int) string {
 type sellReq struct {
 	ItemID   string `json:"item_id"`
 	Item     string `json:"item"`
-	Quantity int    `json:"quantity"`
+	Quantity *int   `json:"quantity"` // missing: the whole stack; 0 or less is refused (F17: 0 sold the whole stack)
 }
 
 // sellItems: one transaction; priceCP turns a full price in GP into this shop's asking price in CP.
@@ -192,12 +206,12 @@ func sellItems(charID int, def *shopTypeDef, shopName string, priceCP func(float
 		if v, ok := it["quantity"].(float64); ok && v > 1 {
 			have = int(v)
 		}
-		q := s.Quantity
-		if q == 0 {
-			q = have
+		q := have
+		if s.Quantity != nil {
+			q = *s.Quantity
 		}
 		if q < 1 || q > have {
-			return http.StatusBadRequest, map[string]interface{}{"error": "invalid_quantity", "message": fmt.Sprintf("You have %d %s.", have, name)}
+			return http.StatusBadRequest, map[string]interface{}{"error": "invalid_quantity", "message": fmt.Sprintf("%s: quantity must be 1 to %d (you have %d).", name, have, have)}
 		}
 		a, ok := appraiseItem(name)
 		if !ok {
