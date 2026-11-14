@@ -8,15 +8,15 @@ import (
 
 // Species of the SRD 5.2.1
 const (
-	SpeciesHuman         = "human"
-	SpeciesElf           = "elf"
-	SpeciesDwarf         = "dwarf"
-	SpeciesHalfling      = "halfling"
-	SpeciesGnome         = "gnome"
-	SpeciesTiefling      = "tiefling"
-	SpeciesDragonborn    = "dragonborn"
-	SpeciesGoliath       = "goliath"
-	SpeciesOrc           = "orc"
+	SpeciesHuman      = "human"
+	SpeciesElf        = "elf"
+	SpeciesDwarf      = "dwarf"
+	SpeciesHalfling   = "halfling"
+	SpeciesGnome      = "gnome"
+	SpeciesTiefling   = "tiefling"
+	SpeciesDragonborn = "dragonborn"
+	SpeciesGoliath    = "goliath"
+	SpeciesOrc        = "orc"
 )
 
 // Size constants
@@ -171,6 +171,11 @@ func SizeOrder(size string) int {
 	}
 	if o, ok := order[size]; ok {
 		return o
+	}
+	for k, o := range order { // the monsters table stores "large": sizes are compared without case (Nov 14 review: a horse was "too small")
+		if strings.EqualFold(k, strings.TrimSpace(size)) {
+			return o
+		}
 	}
 	return 3 // Default to Medium
 }

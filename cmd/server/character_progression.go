@@ -562,7 +562,7 @@ func handleCharacterSubclass(w http.ResponseWriter, r *http.Request) {
 		charIDStr := r.URL.Query().Get("character_id")
 		charID, err := strconv.Atoi(charIDStr)
 		if err != nil {
-			w.WriteHeader(http.StatusNotFound)
+			w.WriteHeader(http.StatusBadRequest) // a missing or malformed parameter is not "not found" (Nov 14 review)
 			json.NewEncoder(w).Encode(map[string]interface{}{
 				"error":   "invalid_character_id",
 				"message": "Provide character_id query parameter",
@@ -1003,7 +1003,7 @@ func handleCharacterSubclassChoice(w http.ResponseWriter, r *http.Request) {
 		charIDStr := r.URL.Query().Get("character_id")
 		charID, err := strconv.Atoi(charIDStr)
 		if err != nil {
-			w.WriteHeader(http.StatusNotFound)
+			w.WriteHeader(http.StatusBadRequest) // a missing or malformed parameter is not "not found" (Nov 14 review)
 			json.NewEncoder(w).Encode(map[string]interface{}{
 				"error":   "invalid_character_id",
 				"message": "Provide character_id query parameter",

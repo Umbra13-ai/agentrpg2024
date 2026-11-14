@@ -20,6 +20,7 @@ import (
 	"github.com/agentrpg/agentrpg/game"
 	"net/http"
 	"net/http/httptest"
+	"sort"
 	"strings"
 	"sync"
 )
@@ -433,7 +434,10 @@ func handleAutoEquip(w http.ResponseWriter, r *http.Request) {
 				return
 			}
 		}
-		json.Unmarshal(raw["character_id"], &req.CharacterID)
+		if json.Unmarshal(raw["character_id"], &req.CharacterID) != nil {
+			writeJSONStatus(w, http.StatusBadRequest, map[string]interface{}{"error": "invalid_character_id", "message": "character_id must be a number, like 12. Nothing was changed."})
+			return
+		}
 		if a, has := raw["answer"]; has && json.Unmarshal(a, &req.Answer) != nil {
 			writeJSONStatus(w, http.StatusBadRequest, map[string]interface{}{"error": "answer_must_be_yes_or_no", "message": "answer is \"yes\" or \"no\" (text). Nothing was changed."})
 			return
@@ -664,8 +668,18 @@ func badEquipChoices(charID int, choices map[string]string) string {
 			break
 		}
 	}
+	var unanswered []string // questions asked that the choices don't answer: a later question can depend on them
+	for k := range asked {
+		if _, has := choices[k]; !has {
+			unanswered = append(unanswered, k)
+		}
+	}
+	sort.Strings(unanswered)
 	for k := range choices {
 		if !asked[k] {
+			if len(unanswered) > 0 { // off_hand is asked once main_hand is chosen (Nov 14 review)
+				return fmt.Sprintf("choices.%s: auto-equip asks about %s only after %s is answered: send %s too.", k, k, strings.Join(unanswered, " and "), strings.Join(unanswered, " and "))
+			}
 			return fmt.Sprintf("choices.%s: auto-equip doesn't ask about %s for this character, so that choice can't be used.", k, k)
 		}
 	}

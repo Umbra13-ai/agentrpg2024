@@ -276,7 +276,10 @@ func handleWeaponMasteries(w http.ResponseWriter, r *http.Request) {
 			writeJSONStatus(w, http.StatusBadRequest, map[string]interface{}{"error": "invalid_json", "message": "Send one JSON object: {\"character_id\": N, \"weapon_masteries\": [\"Longsword\", ...]}."})
 			return
 		}
-		json.Unmarshal(raw["character_id"], &req.CharacterID)
+		if json.Unmarshal(raw["character_id"], &req.CharacterID) != nil { // "3012" as text (Nov 14 review: answered character_not_found)
+			writeJSONStatus(w, http.StatusBadRequest, map[string]interface{}{"error": "invalid_character_id", "message": "character_id must be a number, like 12. Nothing was changed."})
+			return
+		}
 		wm, has := raw["weapon_masteries"]
 		if !has || json.Unmarshal(wm, &req.WeaponMasteries) != nil || req.WeaponMasteries == nil {
 			writeJSONStatus(w, http.StatusBadRequest, map[string]interface{}{"error": "weapon_masteries_required", "message": "weapon_masteries must be a list of weapon names, like [\"Longsword\", \"Shortbow\"]. Nothing was changed."})
@@ -327,7 +330,14 @@ func handleWeaponMasteries(w http.ResponseWriter, r *http.Request) {
 			"eligible": elig, "how_to_change": "POST {\"character_id\": N, \"weapon_masteries\": [...]}: after a Long Rest you can swap one choice; new slots from levels can be filled freely."})
 		return
 	}
-	picks, perr := validateMasteryPicks(class, level, req.WeaponMasteries, false)
+	// before the campaign starts the character is still being made: the masteries can be corrected freely, and the full number is
+	// sent (Nov 14 review: a correction was refused as a Long Rest swap, and [] or one weapon was taken as a swap)
+	inSetup, _ := shopOpen(req.CharacterID)
+	if len(req.WeaponMasteries) == 0 {
+		writeJSONStatus(w, http.StatusBadRequest, map[string]interface{}{"error": "weapon_masteries_required", "message": fmt.Sprintf("Send weapon_masteries: %d kinds of weapon. Nothing was changed.", max)})
+		return
+	}
+	picks, perr := validateMasteryPicks(class, level, req.WeaponMasteries, inSetup)
 	if perr != nil {
 		writeOriginError(w, perr)
 		return
@@ -339,12 +349,12 @@ func handleWeaponMasteries(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 	// slots that were never filled (a new level) can be filled without a swap
-	if removed > 1 || (removed == 1 && swapUsed) {
+	if !inSetup && (removed > 1 || (removed == 1 && swapUsed)) {
 		writeJSONStatus(w, http.StatusConflict, map[string]interface{}{"error": "swap_not_available",
 			"message": "You can change only one Weapon Mastery choice each time you finish a Long Rest."})
 		return
 	}
 	b, _ := json.Marshal(picks)
-	db.Exec(`UPDATE characters SET weapon_masteries = $1, mastery_swap_used = $2 WHERE id = $3`, b, swapUsed || removed == 1, req.CharacterID)
+	db.Exec(`UPDATE characters SET weapon_masteries = $1, mastery_swap_used = $2 WHERE id = $3`, b, (swapUsed || removed == 1) && !inSetup, req.CharacterID) // a correction before the campaign uses no swap
 	writeJSONStatus(w, http.StatusOK, map[string]interface{}{"success": true, "weapon_masteries": describe(picks), "allowed": max})
 }

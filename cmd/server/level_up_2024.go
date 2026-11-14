@@ -207,8 +207,8 @@ func handleCharacterExpertise(w http.ResponseWriter, r *http.Request, charID int
 		writeJSONStatus(w, http.StatusBadRequest, map[string]interface{}{"error": "no_expertise", "message": fmt.Sprintf("Your class gives no Expertise at level %d. Nothing was changed.", level)})
 		return
 	}
-	if len(req.Skills) == 0 || len(req.Skills) > allowed {
-		writeJSONStatus(w, http.StatusBadRequest, map[string]interface{}{"error": "invalid_count", "message": fmt.Sprintf("Your class gives Expertise in %d skill(s) at level %d. Send all of them in skills. Nothing was changed.", allowed, level)})
+	if len(req.Skills) != allowed { // fewer silently dropped the ones not sent (Nov 14 review)
+		writeJSONStatus(w, http.StatusBadRequest, map[string]interface{}{"error": "invalid_count", "message": fmt.Sprintf("Your class gives Expertise in %d skill(s) at level %d; you sent %d. Send all %d in skills (the list replaces your Expertise). Nothing was changed.", allowed, level, len(req.Skills), allowed)})
 		return
 	}
 	// each skill exactly as a proficiency the character has, and different ones (F6: ["stealth","stealth"] closed the step with one

@@ -98,6 +98,30 @@ func handleCharacterAttune(w http.ResponseWriter, r *http.Request) {
 			}
 		}
 
+		// only a magic item the character carries (Nov 14 review: any name, even one not carried, took a slot, and an unowned Ring
+		// of Protection raised AC)
+		magicItem := false
+		if tx, err := db.Begin(); err == nil {
+			inv, _ := loadInventoryTx(tx, req.CharacterID)
+			tx.Rollback()
+			if it, ferr := findInventoryItem(inv, req.ItemName); ferr != nil || it == nil {
+				w.WriteHeader(http.StatusBadRequest)
+				json.NewEncoder(w).Encode(map[string]interface{}{"error": "item_not_carried",
+					"message": fmt.Sprintf("%s doesn't carry %q: attune to a magic item in your inventory (its name or id). Nothing was changed.", charName, req.ItemName)})
+				return
+			} else {
+				if n := itemStr(it, "name"); n != "" {
+					req.ItemName = n // the item's own name, as the inventory has it
+				}
+				magicItem = itemStr(it, "magic_item") != "" || itemStr(it, "rarity") != "" || it["requires_attunement"] == true
+			}
+		}
+		if !magicItem && !isSRDMagicItem(req.ItemName) {
+			w.WriteHeader(http.StatusBadRequest)
+			json.NewEncoder(w).Encode(map[string]interface{}{"error": "not_a_magic_item",
+				"message": fmt.Sprintf("%s is not a magic item that needs attunement. Nothing was changed.", req.ItemName)})
+			return
+		}
 		if attunementNotNeeded(req.ItemName) { // F117: an item that doesn't require attunement took a slot
 			w.WriteHeader(http.StatusBadRequest)
 			json.NewEncoder(w).Encode(map[string]interface{}{"error": "attunement_not_needed", "message": req.ItemName + " doesn't require attunement: it works without it (worn or held as its text says). No slot was used."})
@@ -1200,7 +1224,7 @@ func handleCharacterMount(w http.ResponseWriter, r *http.Request) {
 	var ownerID, lobbyID, movementRemaining int
 	var currentMount sql.NullString
 	err = db.QueryRow(`
-		SELECT c.name, c.agent_id, c.lobby_id, c.species, 
+		SELECT c.name, c.agent_id, COALESCE(c.lobby_id, 0), c.species, 
 		       COALESCE(c.movement_remaining, 30), c.mounted_on_creature
 		FROM characters c WHERE c.id = $1`, req.CharacterID).Scan(
 		&charName, &ownerID, &lobbyID, &charSpecies, &movementRemaining, &currentMount)
@@ -1240,11 +1264,11 @@ func handleCharacterMount(w http.ResponseWriter, r *http.Request) {
 		FROM monsters WHERE slug = $1 OR LOWER(name) = LOWER($2)`,
 		creatureSlug, req.Creature).Scan(&mountName, &mountSize, &mountSpeed, &mountInt)
 	if err != nil {
-		// If not found in monsters, allow custom mount (GM flexibility)
-		mountName = req.Creature
-		mountSize = "Large" // Assume large
-		mountSpeed = 60     // Default mount speed
-		mountInt = 2        // Default low INT
+		// a creature the server doesn't know is refused, not made a Large 60 ft mount without a word (Nov 14 review)
+		w.WriteHeader(http.StatusBadRequest)
+		json.NewEncoder(w).Encode(map[string]interface{}{"error": "unknown_creature",
+			"message": fmt.Sprintf("%q is not a creature on this server: send a monster slug or name, like \"riding-horse\", \"warhorse\" or \"mastiff\". Nothing was changed.", req.Creature)})
+		return
 	}
 
 	// Get rider's size for comparison
@@ -1260,9 +1284,13 @@ func handleCharacterMount(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// Check movement cost (mounting costs half your speed)
+	// Check movement cost (mounting costs half your speed): in combat only, where movement is counted (Nov 14 review: two mounts
+	// outside combat used up movement_remaining and every later mount was refused)
 	movementSpeed := characterSpeed(req.CharacterID, charSpecies)
 	mountCost := movementSpeed / 2
+	if _, inCombat, _ := isCharacterInCombat(req.CharacterID); !inCombat {
+		mountCost = 0
+	}
 	if movementRemaining < mountCost {
 		w.WriteHeader(http.StatusBadRequest)
 		json.NewEncoder(w).Encode(map[string]interface{}{
@@ -1377,7 +1405,7 @@ func handleCharacterDismount(w http.ResponseWriter, r *http.Request) {
 	var ownerID, lobbyID, movementRemaining int
 	var currentMount sql.NullString
 	err = db.QueryRow(`
-		SELECT c.name, c.agent_id, c.lobby_id, c.species, 
+		SELECT c.name, c.agent_id, COALESCE(c.lobby_id, 0), c.species, 
 		       COALESCE(c.movement_remaining, 30), c.mounted_on_creature
 		FROM characters c WHERE c.id = $1`, req.CharacterID).Scan(
 		&charName, &ownerID, &lobbyID, &charSpecies, &movementRemaining, &currentMount)

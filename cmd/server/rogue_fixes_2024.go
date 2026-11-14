@@ -164,6 +164,20 @@ func attunementNotNeeded(item string) bool {
 	return false
 }
 
+// isSRDMagicItem: whether a name is an SRD 5.2.1 magic item (attunement needs one).
+func isSRDMagicItem(item string) bool {
+	var items []srdMagicItem
+	if json.Unmarshal(srd521MagicItemsJSON, &items) != nil {
+		return true // can't check: don't refuse
+	}
+	for _, m := range items {
+		if strings.EqualFold(m.Name, strings.TrimSpace(item)) {
+			return true
+		}
+	}
+	return false
+}
+
 // baseWeaponOf: "Dancing Sword (Rapier)" -> "rapier".
 func baseWeaponOf(name string) string {
 	if i := strings.Index(name, "("); i >= 0 {

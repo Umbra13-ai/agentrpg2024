@@ -315,7 +315,7 @@ func checkBuilderInput(upd, body map[string]interface{}) builderInput {
 			gm = map[string]interface{}{}
 			upd[to[0]] = gm
 		}
-		if old, both := gm[to[1]]; both && !reflect.DeepEqual(old, v) {
+		if old, both := gm[to[1]]; both && !reflect.DeepEqual(old, v) && !strings.EqualFold(strings.TrimSpace(fmt.Sprint(old)), strings.TrimSpace(fmt.Sprint(v))) { // "RED" and "red" agree (Nov 14 review)
 			in.refuse(alias, v, fmt.Sprintf("%s.%s is also sent, with %s: send it once", to[0], to[1], jsonText(old)))
 			continue
 		}
@@ -487,6 +487,9 @@ func checkBuilderInput(upd, body map[string]interface{}) builderInput {
 					continue
 				}
 				if len(named) == 1 {
+					if strings.ToLower(strings.TrimSpace(s)) != named[0] { // said, not changed silently (Nov 14 review: "the protector")
+						in.notes = append(in.notes, fmt.Sprintf("%s.%s %q is read as %s", k, part, s, named[0]))
+					}
 					s = named[0]
 				}
 				m[part] = s

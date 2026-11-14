@@ -1283,8 +1283,12 @@ func handleCharacterFightingStyle(w http.ResponseWriter, r *http.Request) {
 	replacing := ""
 	if len(knownSlugs) >= maxStyles && req.Replace == "" {
 		msg := fmt.Sprintf("You already have %d fighting style(s), the maximum for %s level %d.", len(knownSlugs), class, level)
-		if classLower == "fighter" || inSetup {
+		var styleLevel int
+		db.QueryRow(`SELECT COALESCE(fighting_style_level,0) FROM characters WHERE id = $1`, req.CharacterID).Scan(&styleLevel)
+		if inSetup || (classLower == "fighter" && level > styleLevel) {
 			msg += " To change one, send replace with the style to give up."
+		} else if classLower == "fighter" { // the advice works only after a Fighter level (Nov 14 review)
+			msg += fmt.Sprintf(" A Fighter replaces one when gaining a Fighter level: you chose at level %d, so the next chance is at level %d.", styleLevel, level+1)
 		}
 		writeJSONStatus(w, http.StatusConflict, map[string]interface{}{"error": "max_styles_reached", "message": msg + " Nothing was changed.", "known": knownSlugs})
 		return
@@ -1353,8 +1357,24 @@ func handleCharacterFightingStyle(w http.ResponseWriter, r *http.Request) {
 			writeJSONStatus(w, http.StatusBadRequest, map[string]interface{}{"error": "cantrips_needed", "message": "Send cantrips: two different cantrips (Cleric cantrips for Blessed Warrior, Druid cantrips for Druidic Warrior). Nothing was changed."})
 			return
 		}
+		// each must be a cantrip on that list (Nov 14 review: "fireball" and "not a spell" were accepted)
+		list := "cleric"
+		if styleSlug == "druidic_warrior" {
+			list = "druid"
+		}
+		var slugs []string
+		for _, c := range req.Cantrips {
+			slug := normalizeSpellSlug(strings.NewReplacer("'", "", "’", "").Replace(c))
+			sp, ok := srdSpellsMemory[slug]
+			if !ok || sp.Level != 0 || !onClassList(slug, list) {
+				writeJSONStatus(w, http.StatusBadRequest, map[string]interface{}{"error": "invalid_cantrip",
+					"message": fmt.Sprintf("%q is not a %s cantrip: %s takes two %s cantrips (GET /api/universe/spells?class=%s&level=0). Nothing was changed.", c, titleWords(list), style.Name, titleWords(list), list)})
+				return
+			}
+			slugs = append(slugs, slug)
+		}
 		db.Exec(`UPDATE characters SET subclass_choices = COALESCE(subclass_choices,'{}'::jsonb) || jsonb_build_object('fighting_style_cantrips', $1::text) WHERE id = $2`,
-			strings.Join(req.Cantrips, ", "), req.CharacterID)
+			strings.Join(slugs, ", "), req.CharacterID)
 	}
 
 	// Add the style (or swap it for the one being replaced)

@@ -9,6 +9,7 @@ import (
 	"sort"
 	"strconv"
 	"strings"
+	"unicode"
 )
 
 // handleCharacters godoc
@@ -244,7 +245,11 @@ func handleCharacters(w http.ResponseWriter, r *http.Request) {
 		canonInc := map[string]int{}
 		for k, v := range req.AbilityIncreases {
 			a := normAbility(k)
-			if prev, dup := canonInc[a]; dup && (prev != 0 || v != 0) {
+			if !containsStr([]string{"str", "dex", "con", "int", "wis", "cha"}, a) { // named, even sent as 0 (Nov 14 review)
+				writeJSONStatus(w, http.StatusBadRequest, map[string]interface{}{"error": "invalid_ability_increases", "nothing_created": true, "message": fmt.Sprintf("ability_increases: %q is not an ability: use str, dex, con, int, wis or cha. Nothing was created.", k)})
+				return
+			}
+			if _, dup := canonInc[a]; dup {
 				writeJSONStatus(w, http.StatusBadRequest, map[string]interface{}{"error": "invalid_ability_increases", "nothing_created": true, "message": fmt.Sprintf("ability_increases: %s is sent twice: send each ability once. Nothing was created.", a)})
 				return
 			}
@@ -363,6 +368,19 @@ func handleCharacters(w http.ResponseWriter, r *http.Request) {
 		// Tool proficiencies sent here are the class's tool choices (a Bard's three Musical Instruments, a Monk's Artisan's Tools or
 		// Musical Instrument); the class's own tools, the background, the species and feats add theirs below. Each is stored under its
 		// full name ("musical instrument (lute)", BUGS 45).
+		seenTool := map[string]string{}
+		for _, t := range req.ToolProficiencies { // the same tool twice is refused by name, as in the builder (Nov 14 review)
+			k := strings.ToLower(strings.TrimSpace(t))
+			if ft, ok := findToolLoose(t); ok {
+				k = ft.Name
+			}
+			if prev, dup := seenTool[k]; dup {
+				writeJSONStatus(w, http.StatusBadRequest, map[string]interface{}{"error": "duplicate_tool", "nothing_created": true,
+					"message": fmt.Sprintf("tool_proficiencies: you chose %s twice (%q and %q): choose different tools. Nothing was created.", t, prev, t)})
+				return
+			}
+			seenTool[k] = t
+		}
 		for i, t := range req.ToolProficiencies { // "smiths tools" is Smith's Tools, as in the builder (round 2 re-check)
 			if _, ok := game.FindTool(t); !ok {
 				if ft, ok := findToolLoose(t); ok {
@@ -422,8 +440,17 @@ func handleCharacters(w http.ResponseWriter, r *http.Request) {
 		}
 
 		// Level 1 class choices that change proficiencies
-		firstWord := func(v string) string { // "thaumaturge (one extra cantrip ...)" means thaumaturge
-			if f := strings.FieldsFunc(strings.ToLower(strings.TrimSpace(v)), func(r rune) bool { return r == ' ' || r == '(' || r == ':' || r == ',' }); len(f) > 0 {
+		firstWord := func(v string) string { // "thaumaturge (one extra cantrip ...)" or "the protector" names one order, as in the builder
+			lv := strings.ToLower(strings.TrimSpace(v))
+			for _, w := range strings.FieldsFunc(lv, func(r rune) bool { return !unicode.IsLetter(r) }) {
+				if w == "protector" || w == "thaumaturge" || w == "warden" || w == "magician" {
+					if w != lv {
+						readAs = append(readAs, fmt.Sprintf("%q is read as %s", v, w))
+					}
+					return w
+				}
+			}
+			if f := strings.FieldsFunc(lv, func(r rune) bool { return r == ' ' || r == '(' || r == ':' || r == ',' }); len(f) > 0 {
 				return f[0]
 			}
 			return ""
@@ -481,6 +508,11 @@ func handleCharacters(w http.ResponseWriter, r *http.Request) {
 				"error":   "too_many_expertise",
 				"message": "A Rogue chooses Expertise in 2 skills at level 1.",
 			})
+			return
+		}
+		if len(req.Expertise) == 1 { // one of two was saved without a word (Nov 14 review); the builder refuses it too
+			writeJSONStatus(w, http.StatusBadRequest, map[string]interface{}{"error": "expertise_count", "nothing_created": true,
+				"message": "expertise: a Rogue chooses exactly 2 skills at level 1 (you chose 1), or leave expertise out and choose it in the setup. Nothing was created."})
 			return
 		}
 
@@ -1677,6 +1709,9 @@ func handleCharacterByID(w http.ResponseWriter, r *http.Request) {
 			}
 		}
 		response["fighting_styles"] = fightingStylesInfo
+		if fc := subclassChoicesOf(charID)["fighting_style_cantrips"]; fc != "" { // Blessed or Druidic Warrior's two cantrips (Nov 14 review)
+			response["fighting_style_cantrips"] = strings.Split(fc, ", ")
+		}
 	}
 	// Weapon Mastery choices, also on the main record (GET/POST /api/characters/weapon-masteries changes them)
 	if wm := masterySummary(charID); len(wm) > 0 {
