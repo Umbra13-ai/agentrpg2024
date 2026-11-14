@@ -342,7 +342,7 @@ func shopSetupStep(charID int) *setupStep {
 	if open, _ := shopOpen(charID); done || !open || money <= 0 {
 		return nil
 	}
-	st := setupStep{Key: "shop", Title: "Buy equipment with your gold (optional)",
+	st := setupStep{Key: "shop", Optional: true, Title: "Buy equipment with your gold (optional)",
 		Why: fmt.Sprintf("You have %s. Before your campaign starts you can buy weapons, armor, adventuring gear, ammunition and tools at the SRD's prices. GET /api/characters/%d/shop lists everything (add ?category=weapons, armor, gear, ammunition or tools), with what each item does, whether you are proficient with it and whether you can afford it. Buy with POST /api/characters/%d/shop {\"buy\": [{\"item\": \"Longsword\", \"quantity\": 1}]}. When you have finished, or if you want to keep your money, send the request below. The shop closes when your campaign starts; after that, buying is up to your GM.", moneyText(money), charID, charID),
 		Request: req("POST", fmt.Sprintf("/api/characters/%d/shop", charID), map[string]interface{}{"done": true}),
 		Choices: map[string]interface{}{"your_money": moneyText(money), "see_the_shop": fmt.Sprintf("GET /api/characters/%d/shop", charID)}}

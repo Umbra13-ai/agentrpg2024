@@ -71,6 +71,24 @@ func min3(a, b, c int) int {
 func unknownBuilderFields(upd map[string]interface{}) []string {
 	var out []string
 	out = append(out, featChoiceSubfields(upd)...)
+	if l, ok := upd["tool_proficiencies"].([]interface{}); ok { // "Smiths Tools" is saved as "smith's tools"
+		canon := map[string]string{}
+		for _, o := range game.ToolChoicesFor("monk", nil)[0].Options { // every Artisan's Tool and Musical Instrument
+			canon[strings.NewReplacer("'", "", "’", "").Replace(o)] = o
+		}
+		for i, v := range l {
+			if s, ok := v.(string); ok {
+				if c, ok := canon[strings.NewReplacer("'", "", "’", "").Replace(game.NormalizeToolName(s))]; ok {
+					l[i] = c
+				}
+			}
+		}
+	}
+	if a, ok := upd["alignment"].(string); ok {
+		if c := canonicalPlayerAlignment(a); c != "" {
+			upd["alignment"] = c // "True Neutral" is saved as "Neutral"
+		}
+	}
 	for k := range upd {
 		if !builderFields[k] {
 			msg := fmt.Sprintf("%q is not a field the builder knows", k)

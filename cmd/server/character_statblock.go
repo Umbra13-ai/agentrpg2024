@@ -22,9 +22,20 @@ var allowedAlignments = []string{
 	"Lawful Evil", "Neutral Evil", "Chaotic Evil", "Unaligned",
 }
 
+// alignmentAliases: other common ways to write an alignment, and the SRD's abbreviations (LG ... CE, N).
+var alignmentAliases = map[string]string{
+	"true neutral": "Neutral", "neutral neutral": "Neutral", "n": "Neutral", "tn": "Neutral",
+	"lg": "Lawful Good", "ng": "Neutral Good", "cg": "Chaotic Good", "ln": "Lawful Neutral", "cn": "Chaotic Neutral",
+	"le": "Lawful Evil", "ne": "Neutral Evil", "ce": "Chaotic Evil",
+}
+
 // canonicalAlignment returns the standard spelling, or "" if not recognised.
 func canonicalAlignment(s string) string {
-	s = strings.TrimSpace(strings.ToLower(s))
+	s = strings.TrimSpace(strings.ToLower(strings.NewReplacer("-", " ", "_", " ").Replace(s)))
+	s = strings.Join(strings.Fields(s), " ")
+	if a, ok := alignmentAliases[s]; ok { // "True Neutral", "LG" ... (Nov 14 tester: "True Neutral" was refused)
+		return a
+	}
 	for _, a := range allowedAlignments {
 		if strings.ToLower(a) == s {
 			return a

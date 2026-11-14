@@ -146,6 +146,19 @@ func handleCharacterPortrait(w http.ResponseWriter, r *http.Request, charID int)
 		if strings.HasPrefix(strings.ToLower(r.Header.Get("Content-Type")), "application/json") {
 			var req struct {
 				ImageBase64 string `json:"image_base64"`
+				Skip        bool   `json:"skip"`
+			}
+			if err := json.Unmarshal(raw, &req); err == nil && req.Skip && req.ImageBase64 == "" {
+				portraitSkipped(charID) // makes sure the column exists
+				db.Exec(`UPDATE characters SET portrait_skipped = true WHERE id = $1`, charID)
+				writeJSONStatus(w, http.StatusOK, map[string]interface{}{"success": true, "skipped": true,
+					"message": "No portrait for now: the setup step is done. Upload one any time with an image in image_base64."})
+				return
+			}
+			if strings.HasPrefix(strings.TrimSpace(req.ImageBase64), "<") { // the setup step's template, sent unchanged
+				writeJSONStatus(w, http.StatusBadRequest, map[string]interface{}{"error": "placeholder_image",
+					"message": "That is the template text, not an image: put your PNG, JPEG or WebP file's base64 in image_base64, or send {\"skip\": true} to go without a portrait for now."})
+				return
 			}
 			if err := json.Unmarshal(raw, &req); err != nil || req.ImageBase64 == "" {
 				writeJSONStatus(w, http.StatusBadRequest, map[string]interface{}{

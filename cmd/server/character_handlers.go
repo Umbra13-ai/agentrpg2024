@@ -1241,7 +1241,7 @@ func handleCharacterByID(w http.ResponseWriter, r *http.Request) {
 	if !isMulticlass && strings.ToLower(class) == "warlock" {
 		effectiveWarlockLevel = level
 	}
-	if effectiveWarlockLevel >= 2 {
+	if effectiveWarlockLevel >= 1 { // 2024 rules: one Eldritch Invocation at level 1 (Nov 14 tester: Armor of Shadows didn't show)
 		invocations := getCharacterInvocations(charID)
 		maxInvocations := game.GetMaxInvocations(effectiveWarlockLevel)
 		invocationSpellsUsed := getInvocationSpellsUsed(charID)

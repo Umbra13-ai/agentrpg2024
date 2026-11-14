@@ -551,7 +551,7 @@ func builderSteps(body map[string]interface{}, agentID int, withCheck bool) []bu
 
 	// 2. Class choices
 	s2 := builderStep{Key: "class_choices", Title: "Step 2: Your class's choices",
-		Explain: "Each class makes its own choices at level 1: skills, and for some Weapon Mastery, instruments, Expertise, a Divine or Primal Order, and the starting equipment. Spells are chosen after the character is made (Step 7)."}
+		Explain: "Each class makes its own choices at level 1: skills, and for some Weapon Mastery, instruments, Expertise, a Divine or Primal Order, and the starting equipment. Spells are chosen after the character is made (GET /api/characters/{id}/setup)."}
 	if classOK {
 		n, allowed := classSkillChoices(class)
 		have := blist(body, "skill_proficiencies")
@@ -578,8 +578,24 @@ func builderSteps(body map[string]interface{}, agentID int, withCheck bool) []bu
 		if len(have) != n && prob == "" && len(have) > 0 {
 			prob = fmt.Sprintf("choose exactly %d", n)
 		}
-		skillChoice := choice("skill_proficiencies", fmt.Sprintf("%d skills from your class's list", n), n, allowed, have, okSkills, prob)
-		skillChoice["option_details"] = skillOptionDetails(allowed) // what each skill is, so the player can choose knowing what it does
+		// the options leave out the skills the background already gives (they'd be refused), and say which (Nov 14 tester)
+		offered := allowed
+		var fromBg []string
+		if len(avoid) > 0 {
+			offered = nil
+			for _, a := range allowed {
+				if avoid[a] {
+					fromBg = append(fromBg, a)
+				} else {
+					offered = append(offered, a)
+				}
+			}
+		}
+		skillChoice := choice("skill_proficiencies", fmt.Sprintf("%d skills from your class's list", n), n, offered, have, okSkills, prob)
+		skillChoice["option_details"] = skillOptionDetails(offered) // what each skill is, so the player can choose knowing what it does
+		if len(fromBg) > 0 {
+			skillChoice["left_out_your_background_gives_them"] = fromBg
+		}
 		s2.Choices = append(s2.Choices, skillChoice)
 		sug := map[string]interface{}{"skill_proficiencies": pickFrom(skillPrefs[class], allowed, avoid, n)}
 		if !okSkills {
@@ -643,7 +659,28 @@ func builderSteps(body map[string]interface{}, agentID int, withCheck bool) []bu
 		if tc := game.ToolChoicesFor(class, nil); len(tc) > 0 {
 			tools := blist(body, "tool_proficiencies")
 			pending := game.PendingToolChoices(tc, strings.Join(tools, ", "))
-			s2.Choices = append(s2.Choices, choice("tool_proficiencies", "tools your class lets you choose", tc[0].Count, tc[0].Categories, tools, len(pending) == 0, ""))
+			// the actual tools, and a problem for one that isn't among them (Nov 14 tester: the options were only the categories,
+			// and a tool the builder didn't recognise left the step open with no message)
+			bare := func(s string) string { return strings.NewReplacer("'", "", "’", "").Replace(game.NormalizeToolName(s)) }
+			allowed := map[string]bool{}
+			for _, o := range tc[0].Options {
+				allowed[bare(o)] = true
+			}
+			toolProblem := ""
+			for _, t := range tools {
+				if !allowed[bare(t)] {
+					toolProblem = fmt.Sprintf("%q is not one of the tools a %s can choose: pick from the options", t, titleWords(class))
+					break
+				}
+			}
+			if toolProblem == "" && len(tools) > tc[0].Count {
+				toolProblem = fmt.Sprintf("choose %d, not %d", tc[0].Count, len(tools))
+			}
+			toolWhat := map[string]string{"bard": "3 Musical Instruments you are proficient with", "monk": "1 type of Artisan's Tools or 1 Musical Instrument you are proficient with"}[class]
+			if toolWhat == "" {
+				toolWhat = "tools your class lets you choose"
+			}
+			s2.Choices = append(s2.Choices, choice("tool_proficiencies", toolWhat, tc[0].Count, tc[0].Options, tools, len(pending) == 0 && toolProblem == "", toolProblem))
 			if class == "bard" {
 				sug["tool_proficiencies"] = []string{"lute", "flute", "drum"}
 			} else {
@@ -654,10 +691,58 @@ func builderSteps(body map[string]interface{}, agentID int, withCheck bool) []bu
 			}
 		}
 		if class == "rogue" {
+			// Expertise: 2 skills the character has (class, background, species), checked here as creation checks it (Nov 14: the
+			// suggestion was always Stealth and Perception, and the review refused it when the rogue hadn't taken those)
+			profSet := map[string]bool{}
+			var profs []string
+			addProf := func(s string) {
+				s = strings.ToLower(strings.TrimSpace(s))
+				if s != "" && !profSet[s] {
+					profSet[s] = true
+					profs = append(profs, s)
+				}
+			}
+			for _, s := range have {
+				addProf(s)
+			}
+			if bg != nil {
+				for _, s := range bg.Skills {
+					addProf(s)
+				}
+			}
+			addProf(bstr(bmap(body, "species_choices"), "skill"))
 			e := blist(body, "expertise")
-			s2.Choices = append(s2.Choices, choice("expertise", "Expertise: 2 of your skill proficiencies (class or background) get double your Proficiency Bonus", 2, nil, e, len(e) == 2, ""))
-			sug["expertise"] = []string{"stealth", "perception"}
-			if len(e) != 2 {
+			eProb := ""
+			seenE := map[string]bool{}
+			for _, x := range e {
+				k := strings.ToLower(strings.TrimSpace(x))
+				if seenE[k] {
+					eProb = fmt.Sprintf("you chose %s twice: choose 2 different skills", x)
+					break
+				}
+				seenE[k] = true
+				if !profSet[k] {
+					eProb = fmt.Sprintf("%s isn't one of your skill proficiencies (class, background or species): Expertise is for skills you have", x)
+					break
+				}
+			}
+			if eProb == "" && len(e) > 2 {
+				eProb = "choose exactly 2"
+			}
+			s2.Choices = append(s2.Choices, choice("expertise", "Expertise: 2 of your skill proficiencies (class, background or species) get double your Proficiency Bonus", 2, profs, e, len(e) == 2 && eProb == "", eProb))
+			var eSug []string
+			for _, p := range []string{"stealth", "perception", "sleight of hand", "acrobatics", "deception", "investigation", "insight", "persuasion"} {
+				if profSet[p] && len(eSug) < 2 {
+					eSug = append(eSug, p)
+				}
+			}
+			for _, p := range profs {
+				if len(eSug) < 2 && !containsStr(eSug, p) {
+					eSug = append(eSug, p)
+				}
+			}
+			sug["expertise"] = eSug
+			if len(e) != 2 || eProb != "" {
 				s2.Remaining++
 			}
 		}
@@ -703,6 +788,17 @@ func builderSteps(body map[string]interface{}, agentID int, withCheck bool) []bu
 	} else {
 		s2.Remaining = 1
 		s2.Problems = []string{"choose a class first"}
+	}
+	if len(s2.Choices) > 0 && class != "" { // name this class's choices (Nov 14 tester: the monk's tool wasn't mentioned)
+		var what []string
+		for _, c := range s2.Choices {
+			f, _ := c["field"].(string)
+			w, _ := c["what"].(string)
+			if f != "" {
+				what = append(what, f+" ("+w+")")
+			}
+		}
+		s2.Explain += " A " + titleWords(class) + " chooses: " + strings.Join(what, "; ") + "."
 	}
 	finishStep(&s2)
 	steps = append(steps, s2)
@@ -1636,10 +1732,14 @@ func handleCharacterBuilder(w http.ResponseWriter, r *http.Request) {
 			lines = append(lines, fmt.Sprintf("%v: %v", rj["field"], rj["problem"]))
 		}
 		view["message"] = "NOT SAVED: " + strings.Join(lines, "; ") + ". Send these again with a valid choice; use_suggestion would replace them with the suggestion."
-		status := 200
+		// not 200 even when other answers were saved (Nov 14 tester: refusals in a 200 reply were missed, then a suggestion filled them)
+		status := http.StatusUnprocessableEntity
+		view["error"] = "some_answers_not_saved"
+		view["partially_saved"] = true
 		if len(rejected) == len(upd) {
 			status = http.StatusBadRequest
 			view["error"] = "answers_not_valid"
+			view["partially_saved"] = false
 		}
 		writeJSONStatus(w, status, view)
 		return
@@ -1691,6 +1791,8 @@ type setupStep struct {
 	Request map[string]interface{} `json:"request,omitempty"`
 	Then    *setupStep             `json:"then,omitempty"`
 	Choices map[string]interface{} `json:"choices,omitempty"` // what the player can choose from, each option explained (spells)
+	// Optional: the character is finished without it (the shop, the portrait, gear reminders); steps_left counts only the others
+	Optional bool `json:"optional,omitempty"`
 }
 
 // spellOptionInfo: one spell explained for the player choosing it.
@@ -2255,7 +2357,7 @@ func handleCharacterSetup(w http.ResponseWriter, r *http.Request, charID int) {
 		} else {
 			why = fmt.Sprintf("Wearing it: AC %v instead of %v. Not worn now because %s.", g["ac_with_it"], g["ac_now"], why)
 		}
-		steps = append(steps, setupStep{Key: "gear", Title: title, Why: why, Request: map[string]interface{}{"how": g["how"], "mute": g["mute"]}})
+		steps = append(steps, setupStep{Key: "gear", Title: title, Why: why, Optional: true, Request: map[string]interface{}{"how": g["how"], "mute": g["mute"]}})
 	}
 	// warnings
 	var warnings []string
@@ -2269,17 +2371,33 @@ func handleCharacterSetup(w http.ResponseWriter, r *http.Request, charID int) {
 			}
 		}
 	}
-	left := 0
-	var next *setupStep
+	left, optLeft := 0, 0
+	var next, nextOpt *setupStep
+	var optNames []string
 	for i := range steps {
-		if !steps[i].Done {
-			left++
-			if next == nil {
-				next = &steps[i]
+		if steps[i].Done {
+			continue
+		}
+		if steps[i].Optional {
+			optLeft++
+			optNames = append(optNames, steps[i].Key)
+			if nextOpt == nil {
+				nextOpt = &steps[i]
 			}
+			continue
+		}
+		left++
+		if next == nil {
+			next = &steps[i]
 		}
 	}
-	out := map[string]interface{}{"character_id": charID, "character_finished": len(todo) == 0, "steps": steps, "steps_left": left}
+	// finished and steps_left agree: optional steps (shop, portrait, gear reminders) don't count (Nov 14 tester: "finished" while
+	// steps were still listed)
+	out := map[string]interface{}{"character_id": charID, "character_finished": len(todo) == 0 && left == 0, "steps": steps, "steps_left": left,
+		"optional_steps_left": optLeft}
+	if next == nil && nextOpt != nil {
+		out["optional"] = fmt.Sprintf("Your character is finished. Optional, when you like: %s.", strings.Join(optNames, ", "))
+	}
 	if len(warnings) > 0 {
 		out["warnings"] = warnings
 	}
@@ -2288,6 +2406,9 @@ func handleCharacterSetup(w http.ResponseWriter, r *http.Request, charID int) {
 		out["how"] = "Send each step's request (the suggested choices are filled in; change them as you like), then GET this page again until steps_left is 0."
 	} else {
 		out["how"] = "Your character is ready to play."
+		if nextOpt != nil {
+			out["next_optional"] = nextOpt
+		}
 	}
 	writeJSONStatus(w, 200, out)
 }
