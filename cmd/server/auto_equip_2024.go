@@ -397,15 +397,12 @@ func autoEquipAnswered(charID int) bool {
 }
 
 // autoEquipOpen: the line for the character's to_finish list ("" once answered or when there is nothing to equip).
-func autoEquipOpen(charID int) string {
+func autoEquipOpen(charID int) bool {
 	if autoEquipAnswered(charID) {
-		return ""
+		return false
 	}
 	auto, questions, actions := equipPlan(charID, nil)
-	if len(auto) == 0 && len(questions) == 0 && len(actions) == 0 {
-		return ""
-	}
-	return fmt.Sprintf("Equipment: do you want me to put on your armor, arm your weapons and wear your gear for you? POST /api/characters/auto-equip {\"character_id\": %d, \"answer\": \"yes\"} (or \"no\"). If you have a choice to make (two weapons, two Robes) I will ask you which.", charID)
+	return len(auto) > 0 || len(questions) > 0 || len(actions) > 0
 }
 
 func handleAutoEquip(w http.ResponseWriter, r *http.Request) {

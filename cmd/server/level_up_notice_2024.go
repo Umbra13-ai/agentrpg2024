@@ -101,9 +101,9 @@ func speciesAtLevel(charID int, species string, level int) []map[string]interfac
 func levelUpNotice(charID, level, hp int, created time.Time) map[string]interface{} {
 	var name, class, species string
 	var subclass *string
-	var maxHP, agentID, curLevel int
-	db.QueryRow(`SELECT name, COALESCE(class,''), COALESCE(species,''), subclass, COALESCE(max_hp,0), COALESCE(agent_id,0), COALESCE(level,1) FROM characters WHERE id = $1`, charID).
-		Scan(&name, &class, &species, &subclass, &maxHP, &agentID, &curLevel)
+	var maxHP, curLevel int
+	db.QueryRow(`SELECT name, COALESCE(class,''), COALESCE(species,''), subclass, COALESCE(max_hp,0), COALESCE(level,1) FROM characters WHERE id = $1`, charID).
+		Scan(&name, &class, &species, &subclass, &maxHP, &curLevel)
 	sub := ""
 	if subclass != nil {
 		sub = *subclass
@@ -216,20 +216,9 @@ func levelUpNotice(charID, level, hp int, created time.Time) map[string]interfac
 	} else {
 		n["species"] = "Your species gains nothing new at this level."
 	}
-	// the choices still open, with their options, from the setup guide (only the newest level's notice carries them)
-	if level == curLevel && agentID > 0 {
-		_, setup := internalCall(agentID, "GET", fmt.Sprintf("/api/characters/%d/setup", charID), nil)
-		var open []interface{}
-		if steps, ok := setup["steps"].([]interface{}); ok {
-			for _, s := range steps {
-				if m, ok := s.(map[string]interface{}); ok {
-					if d, _ := m["done"].(bool); !d {
-						open = append(open, m)
-					}
-				}
-			}
-		}
-		if len(open) > 0 {
+	// the choices still open, each with its options, from the table of choices (only the newest level's notice carries them)
+	if level == curLevel {
+		if open := requiredOpenSteps(charID); len(open) > 0 {
 			n["choices_to_make"] = open
 		} else {
 			n["choices_to_make"] = "None: this level asks for no choices."

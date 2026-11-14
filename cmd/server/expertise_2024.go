@@ -2,8 +2,9 @@ package main
 
 // Expertise in the server. game.ExpertiseGrants (game/expertise.go) is the only place that says which class gets Expertise, at
 // which level, in how many skills and in which skills. This file is its database side. Everything that deals with Expertise goes
-// through here and the game package: both creation routes, POST /api/characters/{id}/expertise, the setup step, the "still to
-// choose" line, the level-up note and the level-up notice. Do not add a class name or a skill list anywhere else.
+// through here and the game package: both creation routes, POST /api/characters/{id}/expertise and the setup step. Its entry in
+// choiceDefs (choices_2024.go) makes the "still to choose" line, the level-up note line and the notice from the same grants. Do
+// not add a class name or a skill list anywhere else.
 
 import (
 	"fmt"
@@ -137,15 +138,6 @@ func expertiseRuleText(levels map[string]int) string {
 	return strings.Join(parts, " ")
 }
 
-// expertiseOpenLine: the "still to choose" line, or "" when nothing is open.
-func expertiseOpenLine(charID int) string {
-	st := loadExpertise(charID)
-	if st.open() == 0 {
-		return ""
-	}
-	return fmt.Sprintf("Expertise: %d of %d skills chosen (POST %s with all of them)", len(st.picks), st.total, expertisePath(charID))
-}
-
 // expertiseSuggestionPrefs: the order the suggestion tries skills in, after the picks the character has and the SRD's own
 // recommendation for the class.
 var expertiseSuggestionPrefs = []string{"stealth", "perception", "persuasion", "insight", "athletics", "acrobatics", "investigation", "sleight of hand", "deception", "arcana", "survival"}
@@ -172,15 +164,6 @@ func expertiseSetupStep(charID int) *setupStep {
 		Request: req("POST", expertisePath(charID), map[string]interface{}{"skills": picks}),
 		Choices: map[string]interface{}{"expertise_in_all": st.total, "you_have": st.picks, "your_features": expertiseFeatures(st.levels), "options_your_skill_proficiencies": opts}}
 	return &step
-}
-
-// expertiseNoteLines: the level-up note lines for the Expertise a class gains exactly at a level.
-func expertiseNoteLines(charID int, class string, level int) []string {
-	var out []string
-	for _, g := range game.ExpertiseGrantsAtLevel(class, level) {
-		out = append(out, fmt.Sprintf("%s (POST %s {\"skills\": [...]}, with all your Expertise skills)", g.Describe(), expertisePath(charID)))
-	}
-	return out
 }
 
 // creationExpertise checks the Expertise sent when a level 1 character is made (both creation routes). held is the skills the

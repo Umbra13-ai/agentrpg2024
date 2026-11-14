@@ -33,12 +33,10 @@ func magicalDiscoveriesOf(charID int) []string {
 	return out
 }
 
-// hasMagicalDiscoveries: a Lore Bard of level 6 or higher.
+// hasMagicalDiscoveries: the character has the feature (its entry in choiceDefs says who does).
 func hasMagicalDiscoveries(charID int) bool {
-	var class, sub string
-	var level int
-	db.QueryRow(`SELECT COALESCE(class,''), COALESCE(subclass,''), COALESCE(level,1) FROM characters WHERE id = $1`, charID).Scan(&class, &sub, &level)
-	return strings.EqualFold(class, "bard") && strings.EqualFold(sub, "lore") && level >= 6
+	_, want := choiceCount(charID, "magical_discoveries")
+	return want > 0
 }
 
 func bardMaxSpellLevel(level int) int {

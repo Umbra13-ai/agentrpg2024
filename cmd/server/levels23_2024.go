@@ -11,7 +11,6 @@ import (
 	"encoding/json"
 	"fmt"
 	"github.com/agentrpg/agentrpg/game"
-	"net/http"
 	"strings"
 )
 
@@ -63,103 +62,4 @@ func checkBonusProficiencies(held map[string]bool, bonus []string) ([]string, st
 		add = append(add, s)
 	}
 	return add, "", ""
-}
-
-// applySkillChoice handles primal_knowledge and bonus_proficiencies; false when neither was sent.
-func applySkillChoice(w http.ResponseWriter, charID int, primal string, bonus []string) bool {
-	if primal == "" && len(bonus) == 0 {
-		return false
-	}
-	class, sub, _ := subclassOf(charID)
-	levels := classLevelsOf(charID)
-	held, csv := heldSkills(charID)
-	choices := subclassChoicesOf(charID)
-	fail := func(code, msg string) bool {
-		writeJSONStatus(w, http.StatusBadRequest, map[string]interface{}{"error": code, "message": msg})
-		return true
-	}
-	var add []string
-	key := ""
-	if primal != "" {
-		barbLevel := levels["barbarian"]
-		if barbLevel == 0 && strings.EqualFold(class, "barbarian") {
-			db.QueryRow(`SELECT COALESCE(level,1) FROM characters WHERE id = $1`, charID).Scan(&barbLevel)
-		}
-		if barbLevel < 3 {
-			return fail("not_available", "Primal Knowledge is a Barbarian level 3 feature.")
-		}
-		if choices["primal_knowledge"] != "" {
-			return fail("already_chosen", "Primal Knowledge was chosen: "+choices["primal_knowledge"]+".")
-		}
-		s := game.SkillName(primal)
-		list := classSkillChoices2024["barbarian"].Skills // "the skill list available to Barbarians at level 1"
-		if !containsStr(list, s) {
-			return fail("invalid_skill", "Primal Knowledge: one skill from the Barbarian list: "+strings.Join(list, ", ")+".")
-		}
-		if held[s] {
-			return fail("already_proficient", "You are already proficient in "+s+"; choose another.")
-		}
-		add, key = []string{s}, "primal_knowledge"
-	} else {
-		var l int
-		db.QueryRow(`SELECT COALESCE(level,1) FROM characters WHERE id = $1`, charID).Scan(&l)
-		bardLevel := levels["bard"]
-		if bardLevel == 0 && strings.EqualFold(class, "bard") {
-			bardLevel = l
-		}
-		if bardLevel < 3 || !strings.Contains(strings.ToLower(sub), "lore") {
-			return fail("not_available", "Bonus Proficiencies is a College of Lore feature (Bard level 3).")
-		}
-		if choices["bonus_proficiencies"] != "" {
-			return fail("already_chosen", "Bonus Proficiencies were chosen: "+choices["bonus_proficiencies"]+".")
-		}
-		var code, msg string
-		if add, code, msg = checkBonusProficiencies(held, bonus); code != "" {
-			return fail(code, msg)
-		}
-		key = "bonus_proficiencies"
-	}
-	newCSV := csv
-	for _, s := range add {
-		if strings.TrimSpace(newCSV) == "" {
-			newCSV = s
-		} else {
-			newCSV += ", " + s
-		}
-	}
-	choices[key] = strings.Join(add, ", ")
-	b, _ := json.Marshal(choices)
-	db.Exec(`UPDATE characters SET skill_proficiencies = $1, subclass_choices = $2 WHERE id = $3`, newCSV, string(b), charID)
-	writeJSONStatus(w, http.StatusOK, map[string]interface{}{"success": true, key: add, "skill_proficiencies": newCSV,
-		"message": fmt.Sprintf("You are now proficient in %s.", joinNames(add))})
-	return true
-}
-
-// levels23OpenChoices: the level 2-3 choices classOpenChoices didn't list (land type, Hunter's Prey, Primal Knowledge, Bonus
-// Proficiencies, spells to prepare after a level-up).
-func levels23OpenChoices(charID int) []string {
-	class, sub, level := subclassOf(charID)
-	levels := classLevelsOf(charID)
-	if len(levels) == 0 {
-		levels = map[string]int{strings.ToLower(class): level}
-	}
-	choices := subclassChoicesOf(charID)
-	s := strings.ToLower(sub)
-	var out []string
-	if s == "land" && levels["druid"] >= 3 && choices["circle_land"] == "" {
-		out = append(out, fmt.Sprintf("Circle of the Land: choose a land type, arid, polar, temperate or tropical (POST /api/characters/%d/class-options {\"land_type\": ...})", charID))
-	}
-	if s == "hunter" && levels["ranger"] >= 3 && choices["hunters_prey"] == "" {
-		out = append(out, fmt.Sprintf("Hunter's Prey: choose colossus_slayer or horde_breaker (POST /api/characters/subclass-choice {\"character_id\": %d, \"feature\": \"hunters_prey\", \"choice\": ...})", charID))
-	}
-	if s == "hunter" && levels["ranger"] >= 7 && choices["defensive_tactics"] == "" {
-		out = append(out, fmt.Sprintf("Defensive Tactics: choose escape_the_horde or multiattack_defense (POST /api/characters/subclass-choice {\"character_id\": %d, \"feature\": \"defensive_tactics\", \"choice\": ...})", charID))
-	}
-	if levels["barbarian"] >= 3 && choices["primal_knowledge"] == "" {
-		out = append(out, fmt.Sprintf("Primal Knowledge: one more skill from the Barbarian list (POST /api/characters/%d/class-options {\"primal_knowledge\": \"perception\"})", charID))
-	}
-	if strings.Contains(s, "lore") && levels["bard"] >= 3 && choices["bonus_proficiencies"] == "" {
-		out = append(out, fmt.Sprintf("Bonus Proficiencies: three skills of your choice (POST /api/characters/%d/class-options {\"bonus_proficiencies\": [...]})", charID))
-	}
-	return out
 }

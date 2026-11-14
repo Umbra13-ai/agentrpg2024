@@ -136,11 +136,24 @@ var speciesChoiceKeys = []string{"lineage", "ancestry", "legacy", "spellcasting_
 var speciesChoiceExample = map[string]string{"lineage": "high_elf", "ancestry": "red", "legacy": "infernal", "spellcasting_ability": "int",
 	"size": "medium", "skill": "perception", "feat": "skilled"}
 
-// classOrders: the class_options parts, the class that has each, and its options.
-var classOrders = map[string]struct {
+// classOrders: the class_options parts, the class that has each, and its options, from the table of feature picks
+// (feature_picks_2024.go).
+var classOrders = func() map[string]struct {
 	class string
 	opts  []string
-}{"divine_order": {"cleric", []string{"protector", "thaumaturge"}}, "primal_order": {"druid", []string{"magician", "warden"}}}
+} {
+	m := map[string]struct {
+		class string
+		opts  []string
+	}{}
+	for _, p := range creationPicks() {
+		m[p.key] = struct {
+			class string
+			opts  []string
+		}{p.class, p.options}
+	}
+	return m
+}()
 
 var stringExamples = map[string]string{"name": "Thorin", "class": "fighter", "background": "soldier", "species": "dwarf",
 	"alignment": "Neutral Good", "ability_method": "standard_array", "starting_equipment": "a", "background_tool": "dice set",
@@ -443,7 +456,7 @@ func checkBuilderInput(upd, body map[string]interface{}) builderInput {
 		case "class_options":
 			m, ok := v.(map[string]interface{})
 			if !ok {
-				in.refuse(k, v, `send an object, like {"divine_order": "protector"} (Cleric) or {"primal_order": "warden"} (Druid)`)
+				in.refuse(k, v, "send an object with "+creationPickWords()+`, like {"divine_order": "protector"}`)
 				delete(upd, k)
 				continue
 			}
@@ -730,8 +743,8 @@ func groupSubfields(upd map[string]interface{}) []string {
 			case "subclass":
 				out = append(out, fmt.Sprintf("%q is not part of class_options: a subclass is chosen at level 3 (POST /api/characters/subclass)", k))
 			default:
-				msg := fmt.Sprintf("%q is not part of class_options: it takes divine_order (Cleric) or primal_order (Druid)", k)
-				if c := closestOf(k, func(y func(string)) { y("divine_order"); y("primal_order") }); c != "" {
+				msg := fmt.Sprintf("%q is not part of class_options: it takes %s", k, creationPickWords())
+				if c := closestName(k, creationPickNames()); c != "" {
 					msg += fmt.Sprintf(" (did you mean %q?)", c)
 				}
 				out = append(out, msg)

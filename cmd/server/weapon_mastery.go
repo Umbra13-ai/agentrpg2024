@@ -306,7 +306,7 @@ func handleWeaponMasteries(w http.ResponseWriter, r *http.Request) {
 		writeJSONStatus(w, http.StatusForbidden, map[string]interface{}{"error": "not_owner"})
 		return
 	}
-	max := masteryCount(class, level)
+	_, max := choiceCount(req.CharacterID, "weapon_mastery") // from the choice's definition (choices_2024.go)
 	if max == 0 {
 		writeJSONStatus(w, http.StatusBadRequest, map[string]interface{}{"error": "no_weapon_mastery", "message": titleWords(class) + " does not have the Weapon Mastery feature."})
 		return

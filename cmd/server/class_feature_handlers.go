@@ -79,7 +79,7 @@ func handleCharacterMetamagic(w http.ResponseWriter, r *http.Request) {
 			}
 		}
 
-		maxChoices := getMaxMetamagicChoices(level)
+		_, maxChoices := choiceCount(charID, "metamagic")
 		canLearnMore := len(knownSlugs) < maxChoices
 
 		// Available to learn
@@ -217,7 +217,7 @@ func handleCharacterMetamagic(w http.ResponseWriter, r *http.Request) {
 	}
 
 	// Check if at capacity
-	maxChoices := getMaxMetamagicChoices(level)
+	_, maxChoices := choiceCount(req.CharacterID, "metamagic") // from the choice's definition (choices_2024.go)
 	if len(currentChoices) >= maxChoices {
 		w.WriteHeader(http.StatusConflict)
 		json.NewEncoder(w).Encode(map[string]interface{}{
@@ -359,7 +359,7 @@ func handleCharacterInvocations(w http.ResponseWriter, r *http.Request) {
 			}
 		}
 
-		maxInvocations := game.GetMaxInvocations(level)
+		_, maxInvocations := choiceCount(charID, "invocations")
 		canLearnMore := len(knownSlugs) < maxInvocations
 
 		// Available to learn (filtered by prerequisites)
@@ -549,7 +549,7 @@ func handleCharacterInvocations(w http.ResponseWriter, r *http.Request) {
 	// Replacing an invocation: whenever you gain a Warlock level (SRD 5.2.1); while the character is still being made (before its
 	// campaign starts), the choice can be corrected freely (F9: a Warlock who followed the suggestion was locked in)
 	replacing := ""
-	maxInvocations := game.GetMaxInvocations(level)
+	_, maxInvocations := choiceCount(req.CharacterID, "invocations") // from the choice's definition (choices_2024.go)
 	if req.Replace != "" {
 		old, ok := resolveInvocation(req.Replace)
 		if !ok || !containsStr(currentInvocations, old) {
@@ -1120,7 +1120,7 @@ func handleCharacterFightingStyle(w http.ResponseWriter, r *http.Request) {
 		}
 
 		classLower := strings.ToLower(class)
-		maxStyles := getMaxFightingStyles(class, level, subclass)
+		_, maxStyles := choiceCount(charID, "fighting_style")
 
 		if maxStyles == 0 {
 			writeJSONStatus(w, http.StatusBadRequest, map[string]interface{}{
@@ -1236,7 +1236,7 @@ func handleCharacterFightingStyle(w http.ResponseWriter, r *http.Request) {
 	}
 
 	classLower := strings.ToLower(class)
-	maxStyles := getMaxFightingStyles(class, level, subclass)
+	_, maxStyles := choiceCount(req.CharacterID, "fighting_style") // from the choice's definition (choices_2024.go)
 
 	if maxStyles == 0 {
 		writeJSONStatus(w, http.StatusBadRequest, map[string]interface{}{

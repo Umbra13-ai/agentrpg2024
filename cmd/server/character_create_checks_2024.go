@@ -66,8 +66,6 @@ var createFieldHints = map[string]string{
 	"use_suggestion": "use_suggestion is for the character builder (POST /api/character-builder)",
 }
 
-var classOptionFields = map[string]string{"divine_order": "Cleric: protector or thaumaturge", "primal_order": "Druid: magician or warden"}
-
 // normalizeCreateAliases puts obvious other names where they belong, in place: a top-level divine_order or primal_order goes in
 // class_options, the species_choices keys are tidied ("Lineage" is lineage), a Dragonborn's draconic_ancestry fills
 // species_choices.ancestry (it used to be dropped for species_choices). It returns the conflicts (two answers for one choice
@@ -92,7 +90,7 @@ func normalizeCreateAliases(raw map[string]interface{}) (out []string, notes []s
 		}
 		raw["species_choices"] = tidy
 	}
-	for _, k := range []string{"divine_order", "primal_order"} {
+	for _, k := range creationPickNames() {
 		v, sent := raw[k]
 		if !sent {
 			continue
@@ -170,16 +168,16 @@ func unknownCreateFields(raw map[string]interface{}) []string {
 	if co, ok := raw["class_options"].(map[string]interface{}); ok {
 		var bad []string
 		for k := range co {
-			if _, ok := classOptionFields[k]; !ok {
+			if !containsStr(creationPickNames(), k) {
 				bad = append(bad, k)
 			}
 		}
 		sort.Strings(bad)
 		for _, k := range bad {
-			msg := fmt.Sprintf("%q is not a class option: class_options takes divine_order (Cleric) or primal_order (Druid)", "class_options."+k)
+			msg := fmt.Sprintf("%q is not a class option: class_options takes %s", "class_options."+k, creationPickWords())
 			if h, ok := createFieldHints[strings.ToLower(k)]; ok {
 				msg += "; " + h
-			} else if c := closestName(k, []string{"divine_order", "primal_order"}); c != "" {
+			} else if c := closestName(k, creationPickNames()); c != "" {
 				msg += fmt.Sprintf(" (did you mean %q?)", "class_options."+c)
 			}
 			out = append(out, msg)
@@ -197,7 +195,7 @@ func closestCreateField(s string) string {
 	if c := closestName(s, names); c != "" {
 		return c
 	}
-	if c := closestName(s, []string{"divine_order", "primal_order"}); c != "" {
+	if c := closestName(s, creationPickNames()); c != "" {
 		return "class_options." + c
 	}
 	return ""

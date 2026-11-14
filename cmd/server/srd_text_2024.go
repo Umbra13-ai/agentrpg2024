@@ -65,18 +65,6 @@ var srdOriginFeats = map[string]string{
 	"skilled":         "Skilled (Origin Feat). You gain proficiency in any combination of three skills or tools of your choice. Repeatable. You can take this feat more than once.",
 }
 
-// srdOrders: Level 1: Divine Order (Cleric) and Level 1: Primal Order (Druid), as the SRD prints them.
-var srdOrders = map[string]map[string]string{
-	"divine_order": {
-		"protector":   "Protector. Trained for battle, you gain proficiency with Martial weapons and training with Heavy armor.",
-		"thaumaturge": "Thaumaturge. You know one extra cantrip from the Cleric spell list. In addition, your mystical connection to the divine gives you a bonus to your Intelligence (Arcana or Religion) checks. The bonus equals your Wisdom modifier (minimum of +1).",
-	},
-	"primal_order": {
-		"magician": "Magician. You know one extra cantrip from the Druid spell list. In addition, your mystical connection to nature gives you a bonus to your Intelligence (Arcana or Nature) checks. The bonus equals your Wisdom modifier (minimum bonus of +1).",
-		"warden":   "Warden. Trained for battle, you gain proficiency with Martial weapons and training with Medium armor.",
-	},
-}
-
 // Weapon properties and the Shield rule, as the SRD prints them.
 const (
 	srdLightProperty     = "Light. When you take the Attack action on your turn and attack with a Light weapon, you can make one extra attack as a Bonus Action later on the same turn. That extra attack must be made with a different Light weapon, and you don’t add your ability modifier to the extra attack’s damage unless that modifier is negative."

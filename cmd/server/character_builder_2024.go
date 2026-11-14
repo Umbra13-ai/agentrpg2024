@@ -847,18 +847,15 @@ func builderSteps(body map[string]interface{}, agentID int, withCheck bool) []bu
 		}
 		coSug := map[string]interface{}{}
 		co := bmap(body, "class_options")
-		for _, o := range []struct {
-			class, field, sv string
-			opts             []string
-		}{{"cleric", "divine_order", "thaumaturge", []string{"protector", "thaumaturge"}}, {"druid", "primal_order", "magician", []string{"magician", "warden"}}} {
+		for _, o := range creationPicks() { // the level 1 picks, from the table of feature picks
 			if class != o.class {
-				if co != nil && hasAnswer(co[o.field]) { // left from an earlier class, or sent by mistake: creation refuses it
-					leftovers = append(leftovers, leftoverChoice("class_options."+o.field, co[o.field], fmt.Sprintf("Only %ss choose a %s", titleWords(o.class), o.field)))
-					coSug[o.field] = nil
+				if co != nil && hasAnswer(co[o.key]) { // left from an earlier class, or sent by mistake: creation refuses it
+					leftovers = append(leftovers, leftoverChoice("class_options."+o.key, co[o.key], fmt.Sprintf("Only %ss choose a %s", titleWords(o.class), o.key)))
+					coSug[o.key] = nil
 				}
 				continue
 			}
-			field, opts := o.field, o.opts
+			field, opts := o.key, o.options
 			v := strings.ToLower(strings.TrimSpace(bstr(co, field)))
 			if f := strings.FieldsFunc(v, func(r rune) bool { return r == ' ' || r == '(' || r == ':' || r == ',' }); len(f) > 0 && containsStr(opts, f[0]) && f[0] != v {
 				v = f[0] // "thaumaturge (one extra cantrip ...)" means thaumaturge
@@ -869,9 +866,9 @@ func builderSteps(body map[string]interface{}, agentID int, withCheck bool) []bu
 				orderProblem = fmt.Sprintf("%q is not an order you can choose: send %s.", v, strings.Join(opts, " or "))
 			}
 			orderChoice := choice("class_options."+field, "your order", 1, opts, nilIfEmpty(v), v != "" && orderProblem == "", orderProblem)
-			orderChoice["option_details"] = srdOrders[field] // the SRD's text for each order
+			orderChoice["option_details"] = o.optionDetails() // the SRD's text for each order
 			s2.Choices = append(s2.Choices, orderChoice)
-			coSug[field] = o.sv
+			coSug[field] = o.suggest
 			if v == "" || orderProblem != "" {
 				s2.Remaining++
 			}
@@ -3150,478 +3147,29 @@ func req(method, path string, body interface{}) map[string]interface{} {
 // @Success 200 {object} map[string]interface{}
 // @Router /characters/{id}/setup [get]
 func handleCharacterSetup(w http.ResponseWriter, r *http.Request, charID int) {
-	var level, str, dex, con, intl, wis, cha int
-	var class, mainHand string
-	var shield bool
-	var known, prepared []byte
-	if db.QueryRow(`SELECT COALESCE(level,1), COALESCE(class,''), str, dex, con, intl, wis, cha, COALESCE(equipped_main_hand,''), COALESCE(equipped_shield,false),
-		COALESCE(known_spells,'[]'), COALESCE(prepared_spells,'[]') FROM characters WHERE id = $1`, charID).
-		Scan(&level, &class, &str, &dex, &con, &intl, &wis, &cha, &mainHand, &shield, &known, &prepared) != nil {
+	c, ok := loadChoiceChar(charID)
+	if !ok {
 		writeJSONStatus(w, http.StatusNotFound, map[string]interface{}{"error": "character_not_found"})
 		return
 	}
-	cl := strings.ToLower(class)
-	var steps []setupStep
-	todo := characterToFinish(charID)
-	has := func(word string) bool {
-		for _, t := range todo {
-			if strings.Contains(t, word) {
-				return true
-			}
-		}
-		return false
-	}
-	// class choices
-	if has("Divine Order") {
-		steps = append(steps, setupStep{Key: "divine_order", Title: "Choose your Divine Order", Why: "Protector: heavy armor and Martial weapons. Thaumaturge: one extra cantrip, and your Wisdom added to Arcana and Religion checks.",
-			Request: req("POST", fmt.Sprintf("/api/characters/%d/class-options", charID), map[string]string{"divine_order": "thaumaturge"})})
-	}
-	if has("Primal Order") {
-		steps = append(steps, setupStep{Key: "primal_order", Title: "Choose your Primal Order", Why: "Magician: one extra cantrip, and your Wisdom added to Arcana and Nature checks. Warden: Medium armor and Martial weapons.",
-			Request: req("POST", fmt.Sprintf("/api/characters/%d/class-options", charID), map[string]string{"primal_order": "magician"})})
-	}
-	if has("Fighting Style") {
-		style := "defense"
-		if mainHand != "" {
-			if isTwoHandedWeapon(mainHand) {
-				style = "great_weapon_fighting"
-			} else if _, wpn, ok := findWeapon(mainHand); ok && strings.Contains(strings.ToLower(wpn.Type+" "+strings.Join(wpn.Properties, " ")), "ranged") {
-				style = "archery"
-			}
-		}
-		known := getFightingStyles(charID)
-		if containsStr(known, style) { // Additional Fighting Style (Champion 7): suggest one not known yet (Nov 13: it suggested the same one again)
-			for _, s := range []string{"defense", "great_weapon_fighting", "archery", "two_weapon_fighting"} {
-				if !containsStr(known, s) {
-					style = s
-					break
-				}
-			}
-		}
-		var fsOpts []map[string]string
-		var fsSlugs []string
-		for slug := range fightingStyles {
-			fsSlugs = append(fsSlugs, slug)
-		}
-		sort.Strings(fsSlugs)
-		for _, slug := range fsSlugs {
-			if containsStr(known, slug) || !containsStr(fightingStyles[slug].Classes, cl) {
-				continue
-			}
-			f := fightingStyles[slug]
-			does := f.Description
-			if ft, ok := availableFeats[slug]; ok && len(ft.Benefits) > 0 {
-				does = strings.Join(ft.Benefits, " ") // the feat's SRD text
-			}
-			fsOpts = append(fsOpts, map[string]string{"style": slug, "name": f.Name, "what_it_does": does})
-		}
-		fsWhy := "Fighting Style. " + classFeatureText(cl, "Fighting Style")
-		if len(known) > 0 {
-			fsWhy = "Additional Fighting Style: you gain another Fighting Style feat. You have: " + strings.Join(known, ", ") + "."
-		}
-		steps = append(steps, setupStep{Key: "fighting_style", Title: "Choose a Fighting Style", Why: fsWhy,
-			Request: req("POST", "/api/characters/fighting-style", map[string]interface{}{"character_id": charID, "style": style}),
-			Choices: map[string]interface{}{"options": fsOpts}})
-	}
-	if has("Eldritch Invocations") {
-		pick := suggestInvocation(charID)
-		st := setupStep{Key: "invocations", Title: "Choose your Eldritch Invocation", Why: "Eldritch Invocations. " + classFeatureText("warlock", "Eldritch Invocations") + " Send one invocation per request.",
-			Choices: map[string]interface{}{"options_you_qualify_for": invocationOptions(charID)}}
-		if pick != "" {
-			body := map[string]interface{}{"character_id": charID, "invocation": pick}
-			if pick == "pact-of-the-tome" { // the Book of Shadows picks go with it (F9)
-				body["cantrips"], body["rituals"] = suggestBookOfShadows(charID)
-				st.Why += " Pact of the Tome: send cantrips (3 cantrips) and rituals (2 level 1 Ritual spells) for your Book of Shadows with it; any class's spell list."
-			}
-			st.Request = req("POST", "/api/characters/invocations", body)
-		} else {
-			st.Request = req("GET", fmt.Sprintf("/api/characters/invocations?character_id=%d", charID), nil)
-		}
-		steps = append(steps, st)
-	}
-	if has("Pact of the Tome") {
-		c, rt := suggestBookOfShadows(charID)
-		var cOpts, rOpts []map[string]interface{}
-		sugg := map[string]bool{}
-		for _, x := range append(append([]string{}, c...), rt...) {
-			sugg[x] = true
-		}
-		bh := bookHave(charID)
-		for _, slug := range sortedSpellSlugs() {
-			sp := srdSpellsMemory[slug]
-			if sp.Level == 0 && bookPickOK(slug, false, bh) {
-				cOpts = append(cOpts, spellOptionInfo(slug, sugg))
-			} else if sp.Level == 1 && sp.IsRitual && bookPickOK(slug, true, bh) {
-				rOpts = append(rOpts, spellOptionInfo(slug, sugg))
-			}
-		}
-		steps = append(steps, setupStep{Key: "book_of_shadows", Title: "Fill your Book of Shadows", Why: "Pact of the Tome: choose three cantrips and two level 1 spells with the Ritual tag, from any class's spell list, that you don't already have prepared. While the book is on your person you have them prepared, and they work as Warlock spells for you.",
-			Request: req("POST", "/api/characters/invocations", map[string]interface{}{"character_id": charID, "invocation": "pact-of-the-tome", "cantrips": c, "rituals": rt}),
-			Choices: map[string]interface{}{"cantrips": map[string]interface{}{"choose": 3, "options": cOpts}, "rituals": map[string]interface{}{"choose": 2, "options": rOpts}}})
-	}
-	if st := expertiseSetupStep(charID); st != nil { // options, suggestion and rule text from the character's grants (expertise_2024.go)
-		steps = append(steps, *st)
-	}
-	held, _ := heldSkills(charID)
-	if has("choose a subclass") {
-		if sub := srdSubclassFor[cl]; sub != "" {
-			steps = append(steps, setupStep{Key: "subclass", Title: "Choose your subclass", Why: classFeatureText(cl, titleCase(cl)+" Subclass") + " Each option below has its introduction and its features by level.",
-				Request: req("POST", "/api/characters/subclass", map[string]interface{}{"character_id": charID, "subclass": sub}), Choices: subclassChoices(cl)})
-		}
-	}
-	if has("Metamagic") {
-		known := getMetamagicChoices(charID)
-		var mmOpts []map[string]interface{}
-		var mmSlugs []string
-		for slug := range metamagicOptions {
-			mmSlugs = append(mmSlugs, slug)
-		}
-		sort.Strings(mmSlugs)
-		for _, slug := range mmSlugs {
-			if !containsStr(known, slug) {
-				o := metamagicOptions[slug]
-				mmOpts = append(mmOpts, map[string]interface{}{"metamagic": slug, "name": o.Name, "cost_sorcery_points": o.Cost, "what_it_does": o.Description})
-			}
-		}
-		for _, m := range []string{"quickened", "twinned", "careful", "subtle", "extended", "empowered", "distant", "heightened", "seeking", "transmuted"} {
-			if !containsStr(known, m) {
-				steps = append(steps, setupStep{Key: "metamagic", Title: "Choose a Metamagic option", Why: "Metamagic. " + classFeatureText("sorcerer", "Metamagic") + " Send one option per request.",
-					Request: req("POST", "/api/characters/metamagic", map[string]interface{}{"character_id": charID, "metamagic": m}),
-					Choices: map[string]interface{}{"you_know": known, "options": mmOpts}})
-				break
-			}
-		}
-	}
-	if has("Wild Shape") {
-		if forms := suggestWildShapeForms(charID); len(forms) > 0 {
-			kn, _, _ := wildShapeLimits(level)
-			steps = append(steps, setupStep{Key: "wild_shape_forms", Title: "Choose your Wild Shape forms", Why: "Wild Shape. " + classFeatureText("druid", "Wild Shape") +
-				fmt.Sprintf(" You know %d forms now and can know %d: send all of them (the ones you have and the new ones).", len(knownWildShapes(charID)), kn),
-				Request: req("POST", fmt.Sprintf("/api/characters/%d/class-options", charID), map[string]interface{}{"wild_shape_forms": forms}),
-				Choices: map[string]interface{}{"you_know": knownWildShapes(charID), "know_in_all": kn, "options": wildShapeOptions(level)}})
-		}
-	}
-	if has("Circle of the Land") {
-		landText := ""
-		for _, f := range game.GetActiveSubclassFeatures("land", 3) {
-			if f.Name == "Circle of the Land Spells" || f.Name == "Circle Spells" {
-				landText = f.Description
-			}
-		}
-		landSpells := map[string]interface{}{}
-		for _, t := range []string{"arid", "polar", "temperate", "tropical"} {
-			var names []string
-			for _, sl := range getDomainSpells("land", level, t) {
-				if sp, ok := srdSpellsMemory[sl]; ok {
-					names = append(names, sp.Name)
-				}
-			}
-			landSpells[t] = names
-		}
-		steps = append(steps, setupStep{Key: "land_type", Title: "Choose your Circle of the Land type", Choices: map[string]interface{}{"options": []string{"arid", "polar", "temperate", "tropical"}, "circle_spells_at_your_level": landSpells},
-			Why:     landText + " Choose arid, polar, temperate or tropical; you can choose again after a Long Rest.",
-			Request: req("POST", fmt.Sprintf("/api/characters/%d/class-options", charID), map[string]string{"land_type": "temperate"})})
-	}
-	if has("Hunter's Prey") {
-		steps = append(steps, setupStep{Key: "hunters_prey", Title: "Choose your Hunter's Prey", Why: "Hunter’s Prey. " + subclassFeatureText("hunter", "Hunter’s Prey"),
-			Choices: map[string]interface{}{"options": []string{"colossus_slayer", "horde_breaker"}},
-			Request: req("POST", "/api/characters/subclass-choice", map[string]interface{}{"character_id": charID, "feature": "hunters_prey", "choice": "colossus_slayer"})})
-	}
-	if has("Defensive Tactics") {
-		steps = append(steps, setupStep{Key: "defensive_tactics", Title: "Choose your Defensive Tactics", Why: "Defensive Tactics. " + subclassFeatureText("hunter", "Defensive Tactics"),
-			Choices: map[string]interface{}{"options": []string{"escape_the_horde", "multiattack_defense"}},
-			Request: req("POST", "/api/characters/subclass-choice", map[string]interface{}{"character_id": charID, "feature": "defensive_tactics", "choice": "multiattack_defense"})})
-	}
-	if has("Primal Knowledge") {
-		pick := ""
-		for _, s := range []string{"perception", "athletics", "survival", "intimidation", "nature", "animal handling"} {
-			if pick == "" && !held[s] {
-				pick = s
-			}
-		}
-		steps = append(steps, setupStep{Key: "primal_knowledge", Title: "Choose your Primal Knowledge skill", Why: classFeatureText("barbarian", "Primal Knowledge"),
-			Request: req("POST", fmt.Sprintf("/api/characters/%d/class-options", charID), map[string]string{"primal_knowledge": pick}),
-			Choices: map[string]interface{}{"options": skillChoices([]string{"animal handling", "athletics", "intimidation", "nature", "perception", "survival"}, held)}})
-	}
-	if has("Bonus Proficiencies") {
-		var picks []string
-		for _, s := range []string{"perception", "stealth", "arcana", "history", "investigation", "insight", "persuasion", "deception", "athletics", "acrobatics"} {
-			if len(picks) < 3 && !held[s] {
-				picks = append(picks, s)
-			}
-		}
-		bp := ""
-		for _, f := range game.GetActiveSubclassFeatures("lore", 3) {
-			if f.Name == "Bonus Proficiencies" {
-				bp = f.Description
-			}
-		}
-		steps = append(steps, setupStep{Key: "bonus_proficiencies", Title: "Choose your three Bonus Proficiencies", Why: "College of Lore, level 3: Bonus Proficiencies. " + bp,
-			Request: req("POST", fmt.Sprintf("/api/characters/%d/class-options", charID), map[string]interface{}{"bonus_proficiencies": picks}),
-			Choices: map[string]interface{}{"choose": 3, "options": skillChoices(game.SkillNames(), held)}})
-	}
-	if has("Ability Score Improvement") {
-		if st := asiSetupStep(charID); st != nil {
-			steps = append(steps, *st)
-		}
-	}
-	steps = append(steps, pendingClassChoices(charID)...) // Blessed Strikes, Elemental Fury, Elemental Affinity
-	if st := mysticArcanumStep(charID); st != nil {
-		steps = append(steps, *st)
-	}
-	steps = append(steps, wizardCapstoneSteps(charID)...) // Spell Mastery, Signature Spells
-	if st := classLanguageStep(charID); st != nil {
-		steps = append(steps, *st)
-	}
-	if has("Magical Discoveries") {
-		if st := magicalDiscoveriesStep(charID); st != nil {
-			steps = append(steps, *st)
-		}
-	}
-	if has("Weapon Mastery") {
-		if st := masterySetupStep(charID, class, level); st != nil {
-			steps = append(steps, *st)
-		}
-	}
-	for _, t := range todo { // anything else the list names
-		known := false
-		for _, w := range []string{"Spell Mastery", "Signature Spells", "Mystic Arcanum", "Ability Score Improvement", "Weapon Mastery", "Magical Discoveries", "language(s)", "Defensive Tactics", "Choose your Blessed Strikes", "Choose your Elemental Fury", "Choose your Elemental Affinity", "Divine Order", "Primal Order", "Fighting Style", "Eldritch Invocations", "Pact of the Tome", "Expertise", "cantrip", "Spells:", "subclass", "Metamagic", "Wild Shape", "Circle of the Land", "Hunter's Prey", "Primal Knowledge", "Bonus Proficiencies", "Equipment: do you want"} {
-			if strings.Contains(t, w) {
-				known = true
-			}
-		}
-		if !known {
-			steps = append(steps, setupStep{Key: "other", Title: t})
-		}
-	}
-	// spells
-	wantCantrips := missingCantrips(charID, class, level)
-	maxPrep := game.MaxPreparedSpells(class, level, intl, wis, cha)
-	if maxPrep > 0 || wantCantrips > 0 || game.ClassTableInt(cl, level, "Cantrips") > 0 {
-		origin := originSpellsOf(charID)
-		always := allAlwaysPrepared(charID) // subclass, origin and class-feature spells, the Book of Shadows: not counted (F11)
-		// the prepared list as /prepare and to_finish read it (F3: a Sorcerer's known spells counted here as prepared, so this step
-		// said done while to_finish said none were prepared)
-		prepList := jsonList(prepared)
-		if len(classLevelsOf(charID)) <= 1 {
-			prepList = currentPreparedList(charID, cl)
-		}
-		var cantrips, leveled []string
-		seen := map[string]bool{}
-		for _, s := range append(jsonList(known), jsonList(prepared)...) {
-			if seen[s] {
-				continue
-			}
-			seen[s] = true
-			if _, o := origin[s]; o || containsStr(always, s) {
-				continue
-			}
-			if sp, ok := srdSpellsMemory[s]; ok {
-				if sp.Level == 0 {
-					cantrips = append(cantrips, s)
-				} else if containsStr(prepList, s) {
-					leveled = append(leveled, s)
-				}
-			}
-		}
-		// a list /prepare would refuse (too many, off the class list, too high) keeps the step open, and the request fixes it
-		listProblems := preparedListProblems(charID)
-		if len(listProblems) > 0 {
-			maxSlot := maxSpellLevelFor(charID, cl, level)
-			valid := func(cap int, list []string) []string {
-				var out []string
-				for _, x := range list {
-					if sp, ok := srdSpellsMemory[x]; ok && len(out) < cap && onClassList(x, cl) && sp.Level <= maxSlot {
-						out = append(out, x)
-					}
-				}
-				return out
-			}
-			cMax := game.ClassTableInt(cl, level, "Cantrips") + orderExtraCantrips(charID)
-			cantrips = valid(cMax, cantrips)
-			leveled = valid(maxPrep, leveled)
-			if need := cMax - len(cantrips); need > wantCantrips {
-				wantCantrips = need
-			}
-		}
-		avoid := map[string]bool{}
-		for s := range seen {
-			if sp, ok := srdSpellsMemory[s]; ok && cl == "wizard" && sp.Level > 0 && !containsStr(jsonList(prepared), s) {
-				continue // a Wizard's spellbook spell not yet prepared is what can be prepared (Nov 13)
-			}
-			avoid[s] = true
-		}
-		for s := range origin {
-			avoid[s] = true
-		}
-		for _, s := range always {
-			avoid[s] = true
-		}
-		_, subSlug, _ := subclassOf(charID)
-		for _, s := range getDomainSpells(subSlug, level, subclassChoicesOf(charID)["circle_land"]) { // the subclass's spells are always prepared
-			avoid[s] = true
-		}
-		avoidBase := map[string]bool{}
-		for k, v := range avoid {
-			avoidBase[k] = v
-		}
-		var newC []string
-		for _, c := range cantripPrefs[cl] {
-			if len(newC) < wantCantrips && !avoid[c] && onClassList(c, cl) {
-				newC = append(newC, c)
-				avoid[c] = true
-			}
-		}
-		for _, c := range getClassSpellList(cl) {
-			if sp, ok := srdSpellsMemory[c]; ok && sp.Level == 0 && len(newC) < wantCantrips && !avoid[c] {
-				newC = append(newC, c)
-				avoid[c] = true
-			}
-		}
-		spellsDone := wantCantrips == 0 && len(leveled) >= maxPrep && len(listProblems) == 0
-		maxLvl := (level + 1) / 2 // full casters and Pact Magic: level 2 spells from level 3
-		if cl == "paladin" || cl == "ranger" {
-			maxLvl = (level + 3) / 4
-		}
-		if maxLvl > 5 {
-			maxLvl = 5
-		}
-		var pick []string
-		for _, list := range [][]string{spell2Prefs[cl], spellPrefs[cl], getClassSpellList(cl)} { // the suggestions first, then the class list
-			for _, s := range list {
-				if len(leveled)+len(pick) < maxPrep && !avoid[s] && onClassList(s, cl) && (cl != "wizard" || inSpellbookStrict(charID, s)) { // a Wizard prepares only from the spellbook (Nov 13: the step suggested Burning Hands, not in the book, and every try failed)
-					if sp, ok := srdSpellsMemory[s]; ok && sp.Level >= 1 && sp.Level <= maxLvl {
-						pick = append(pick, s)
-						avoid[s] = true
-					}
-				}
-			}
-		}
-		st := setupStep{Key: "spells", Title: "Choose your cantrips and prepare your spells", Done: spellsDone,
-			Why: fmt.Sprintf("You know %d cantrips (%d more to choose) and prepare %d level 1+ spells (%d prepared now). Cantrips and spells must be on your class's list: GET /api/universe/class-spells/%s. Origin spells (Magic Initiate, lineage) are extra.", len(cantrips)+wantCantrips, wantCantrips, maxPrep, len(leveled), cl)}
-		if len(listProblems) > 0 {
-			st.Problem = "Your prepared list can't stay as it is: " + strings.Join(listProblems, "; ") + ". The request sends a list that fits."
-		}
-		if !spellsDone {
-			all := append(append(append([]string{}, cantrips...), newC...), leveled...)
-			all = append(all, pick...)
-			suggestedSet := map[string]bool{}
-			for _, x := range all {
-				suggestedSet[x] = true
-			}
-			classList := getClassSpellList(cl)
-			if cl == "bard" && level >= 10 { // Magical Secrets: the Cleric, Druid and Wizard lists count as Bard spells (SRD 5.2.1)
-				seenL := map[string]bool{}
-				for _, x := range classList {
-					seenL[x] = true
-				}
-				for _, other := range []string{"cleric", "druid", "wizard"} {
-					for _, x := range getClassSpellList(other) {
-						if !seenL[x] {
-							seenL[x] = true
-							classList = append(classList, x)
-						}
-					}
-				}
-				st.Why += " Magical Secrets: " + classFeatureText("bard", "Magical Secrets") + " The options below include those lists."
-			}
-			var originList []string
-			for o := range origin {
-				originList = append(originList, o)
-			}
-			sort.Strings(originList)
-			have := map[string]interface{}{"cantrips": cantrips, "prepared_level_1_plus": leveled, "always_prepared_extra (Magic Initiate, lineage)": originList}
-			if fa := featureAlwaysPreparedInfo(charID); len(fa) > 0 {
-				have["always_prepared_by_class_features"] = fa // Druidic's Speak with Animals, Favored Enemy's Hunter's Mark ... (F11)
-			}
-			st.Choices = map[string]interface{}{
-				"how_to_read_this": "Each option says what the spell does, how it is cast and whether it needs concentration. suggested: true marks the picks in the request body, which are the server's suggestion. Send your cantrips and spells together in one list: POST /api/characters/N/prepare {\"spells\": [...]}.",
-				"already_have":     have,
-				"cantrips":         map[string]interface{}{"choose_this_many_more": wantCantrips, "options": spellOptions(classList, 0, 0, avoidBase, suggestedSet)},
-				"level_1_plus_spells": map[string]interface{}{"prepare_up_to": maxPrep, "already_prepared": len(leveled),
-					"highest_spell_level_you_can_cast": maxLvl, "you_can_change_prepared_spells": "after a Long Rest",
-					"options": spellOptions(classList, 1, maxLvl, avoidBase, suggestedSet)},
-			}
-			if cl == "wizard" {
-				// origin spells (Magic Initiate) and copied spells aren't among the free spellbook spells (F14)
-				book := freeSpellbookCount(charID, jsonList(known))
-				var add []string
-				target := wizardSpellbookTarget(charID, level) // 6 spells at level 1, two more each level (SRD 5.2.1 Spellbook)
-				// the whole Wizard list after the preferred spells, highest level first (Nov 13: the preferred lists ran out at level 7)
-				var fullList []string
-				for lv := maxLvl; lv >= 1; lv-- {
-					for _, k := range getClassSpellList("wizard") {
-						if sp, ok := srdSpellsMemory[k]; ok && sp.Level == lv {
-							fullList = append(fullList, k)
-						}
-					}
-				}
-				if book < target {
-					// an Evoker's Evocation Savant spells first: only Evocation spells fill them (lowest level first, for the two
-					// of level 2 or lower)
-					if _, _, open := savantFit(charID, level, jsonList(known)); open > 0 {
-						for lv := 1; lv <= maxLvl; lv++ {
-							for _, k := range getClassSpellList("wizard") {
-								sp, ok := srdSpellsMemory[k]
-								if !ok || sp.Level != lv || !strings.EqualFold(sp.School, "evocation") || containsStr(jsonList(known), k) || containsStr(add, k) || len(add) >= target-book {
-									continue
-								}
-								if _, _, o2 := savantFit(charID, level, append(append([]string{}, jsonList(known)...), append(add, k)...)); o2 < open {
-									add = append(add, k)
-									open = o2
-								}
-							}
-						}
-					}
-					for _, list := range [][]string{spell2Prefs["wizard"], spellPrefs["wizard"], fullList} {
-						for _, s := range list {
-							if sp, ok := srdSpellsMemory[s]; ok && len(add) < target-book && sp.Level >= 1 && sp.Level <= maxLvl && onClassList(s, "wizard") && !containsStr(jsonList(known), s) && !containsStr(add, s) {
-								add = append(add, s)
-							}
-						}
-					}
-				}
-				add = append(add, newC...)
-				st.Why += " A Wizard writes spells in the spellbook (6 at level 1, two more each level: the first request), then prepares from it (the second)."
-				if st.Choices != nil {
-					st.Choices["wizard_spellbook"] = map[string]interface{}{"spells_in_your_spellbook_now": book, "spellbook_should_hold": target, "write_this_many_more": target - book,
-						"note": "A Wizard first writes spells into the spellbook (PUT /api/characters/N/spells {\"add\": [...]}), then prepares spells from the book (POST /api/characters/N/prepare). Choose the spellbook spells from level_1_plus_spells.options."}
-				}
-				if len(add) > 0 {
-					st.Request = req("PUT", fmt.Sprintf("/api/characters/%d/spells", charID), map[string]interface{}{"add": add})
-					var prep []string
-					for _, s := range append(append([]string{}, cantrips...), newC...) {
-						prep = append(prep, s)
-					}
-					n := 0
-					for _, s := range append(append([]string{}, leveled...), add...) {
-						if sp, ok := srdSpellsMemory[s]; ok && sp.Level > 0 && n < maxPrep && !containsStr(prep, s) {
-							prep = append(prep, s)
-							n++
-						}
-					}
-					st.Then = &setupStep{Key: "prepare", Title: "Prepare spells from your spellbook", Request: req("POST", fmt.Sprintf("/api/characters/%d/prepare", charID), map[string]interface{}{"spells": prep})}
-				} else {
-					st.Request = req("POST", fmt.Sprintf("/api/characters/%d/prepare", charID), map[string]interface{}{"spells": all})
-				}
-			} else {
-				st.Request = req("POST", fmt.Sprintf("/api/characters/%d/prepare", charID), map[string]interface{}{"spells": all})
-				st.Why += " Send your cantrips and spells together in one list."
-			}
-		}
-		steps = append(steps, st)
-	}
+	var level, str, dex, con, intl, wis, cha int
+	var mainHand string
+	var shield bool
+	db.QueryRow(`SELECT COALESCE(level,1), str, dex, con, intl, wis, cha, COALESCE(equipped_main_hand,''), COALESCE(equipped_shield,false) FROM characters WHERE id = $1`, charID).
+		Scan(&level, &str, &dex, &con, &intl, &wis, &cha, &mainHand, &shield)
+	cl := c.class
+	maxPrep := game.MaxPreparedSpells(cl, level, intl, wis, cha)
+	// the character's choices, each made from its definition (choices_2024.go); then the steps that aren't choices of the
+	// rules: a weapon in hand, the shop, the portrait, and reminders about gear
+	steps := choiceSteps(c)
+	extra := func(st setupStep) { steps = append(steps, st) }
 	// a weapon in hand
 	if mainHand == "" && shield && (cl == "cleric" || cl == "druid") {
-		steps = append(steps, setupStep{Key: "weapon_in_hand", Title: "Keep a hand free for spells", Done: true,
+		extra(setupStep{Key: "weapon_in_hand", Title: "Keep a hand free for spells", Done: true,
 			Why: "You hold a Shield, so keep your other hand empty: spells with gestures (S) need a free hand (your focus is worn or in that hand). When you attack, draw your weapon then: equipping or unequipping one weapon a turn is free (POST /api/characters/equip-weapon), and put it away on a later turn before you cast."})
 	} else if mainHand == "" {
-		var inv []invItem
-		var raw []byte
-		db.QueryRow(`SELECT COALESCE(inventory,'[]') FROM characters WHERE id = $1`, charID).Scan(&raw)
-		json.Unmarshal(raw, &inv)
 		weapon := ""
-		for _, it := range inv {
+		for _, it := range inventoryOf(charID) {
 			n := itemStr(it, "name")
 			if _, _, ok := findWeapon(n); ok && itemStr(it, "location") != "lost" {
 				weapon = n
@@ -3637,29 +3185,23 @@ func handleCharacterSetup(w http.ResponseWriter, r *http.Request, charID int) {
 				}
 			}
 			if shield && game.ClassTableInt(cl, level, "Cantrips") > 0 {
-				// a spellcaster with a Shield: a weapon in the other hand would leave no free hand for spells (Nov 13); not pushed, the auto-equip question asks
-				steps = append(steps, setupStep{Key: "weapon_in_hand", Title: "Hold a weapon", Done: true,
+				// a spellcaster with a Shield: a weapon in the other hand would leave no free hand for spells
+				extra(setupStep{Key: "weapon_in_hand", Title: "Hold a weapon", Done: true,
 					Why: "You hold a Shield and cast spells, so your other hand is left free for spells with gestures (S). To fight with a weapon, draw it: POST /api/characters/equip-weapon {\"character_id\": " + fmt.Sprint(charID) + ", \"weapon\": \"" + strings.ToLower(weapon) + "\", \"slot\": \"main_hand\"} (one weapon change a turn)."})
 			} else {
-				steps = append(steps, setupStep{Key: "weapon_in_hand", Title: "Hold a weapon", Why: why,
+				extra(setupStep{Key: "weapon_in_hand", Title: "Hold a weapon", Why: why,
 					Request: req("POST", "/api/characters/equip-weapon", map[string]interface{}{"character_id": charID, "weapon": strings.ToLower(weapon), "slot": "main_hand"})})
 			}
 		}
 	} else {
-		steps = append(steps, setupStep{Key: "weapon_in_hand", Title: "Hold a weapon", Done: true, Why: "In your main hand: " + mainHand})
-	}
-	// equip everything: the player is asked once (auto_equip_2024.go)
-	if line := autoEquipOpen(charID); line != "" {
-		steps = append(steps, setupStep{Key: "auto_equip", Title: "Put on your gear and arm your weapons",
-			Why:     "Do you want me to equip everything for you? I will put on your armor, take your weapon (and a Shield or second Light weapon) in hand and wear your clothing and jewelry. If you have a choice to make (more weapons than hands, two items for the same body place) I will ask you which. GET /api/characters/auto-equip?character_id=N shows what I would do first.",
-			Request: req("POST", "/api/characters/auto-equip", autoEquipSuggestion(charID))})
+		extra(setupStep{Key: "weapon_in_hand", Title: "Hold a weapon", Done: true, Why: "In your main hand: " + mainHand})
 	}
 	// the starting shop, for every character while it is open: buy gear, sell from the pack, then done (shop_2024.go)
 	if st := shopSetupStep(charID); st != nil {
-		steps = append(steps, *st)
+		extra(*st)
 	}
 	// a portrait for the character sheet (portrait_step_2024.go)
-	steps = append(steps, portraitSetupStep(charID))
+	extra(portraitSetupStep(charID))
 	// armor and gear
 	for _, g := range gearReminders(charID) {
 		why, _ := g["why_not_worn"].(string)
@@ -3672,7 +3214,7 @@ func handleCharacterSetup(w http.ResponseWriter, r *http.Request, charID int) {
 		} else {
 			why = fmt.Sprintf("Wearing it: AC %v instead of %v. Not worn now because %s.", g["ac_with_it"], g["ac_now"], why)
 		}
-		steps = append(steps, setupStep{Key: "gear", Title: title, Why: why, Optional: true, Request: map[string]interface{}{"how": g["how"], "mute": g["mute"]}})
+		extra(setupStep{Key: "gear", Title: title, Why: why, Optional: true, Request: map[string]interface{}{"how": g["how"], "mute": g["mute"]}})
 	}
 	// warnings
 	var warnings []string
@@ -3684,18 +3226,6 @@ func handleCharacterSetup(w http.ResponseWriter, r *http.Request, charID int) {
 				warnings = append(warnings, fmt.Sprintf("Your highest score is %s (%d) but a %s relies on %s (%d). The GM can correct scores with POST /api/gm/update-character.", strings.ToUpper(k), sc[k], cl, strings.ToUpper(top), sc[top]))
 				break
 			}
-		}
-	}
-	// never "ready to play" while to_finish still has an item (F3): when no required step is open, each item is listed as a step
-	requiredOpen := false
-	for _, st := range steps {
-		if !st.Done && !st.Optional {
-			requiredOpen = true
-		}
-	}
-	if !requiredOpen {
-		for _, t := range todo {
-			steps = append(steps, setupStep{Key: "other", Title: t})
 		}
 	}
 	left, optLeft := 0, 0
@@ -3718,9 +3248,8 @@ func handleCharacterSetup(w http.ResponseWriter, r *http.Request, charID int) {
 			next = &steps[i]
 		}
 	}
-	// finished and steps_left agree: optional steps (shop, portrait, gear reminders) don't count (Nov 14 tester: "finished" while
-	// steps were still listed)
-	out := map[string]interface{}{"character_id": charID, "character_finished": len(todo) == 0 && left == 0, "steps": steps, "steps_left": left,
+	// finished and steps_left agree: only the optional steps (gear reminders) don't count
+	out := map[string]interface{}{"character_id": charID, "character_finished": left == 0, "steps": steps, "steps_left": left,
 		"optional_steps_left": optLeft}
 	if next == nil && nextOpt != nil {
 		out["optional"] = fmt.Sprintf("Your character is finished. Optional, when you like: %s.", strings.Join(optNames, ", "))

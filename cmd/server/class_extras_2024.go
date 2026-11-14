@@ -500,10 +500,9 @@ func handleSpellMastery(w http.ResponseWriter, r *http.Request) {
 // restStudy is called when a character finishes a rest: a Wizard may study the spellbook (Memorize Spell, Spell Mastery).
 func restStudy(charID int, long bool) {
 	wildShapeRest(charID, long) // a Long Rest lets a Druid replace one known Wild Shape form
-	// Hunter's Prey and Defensive Tactics: "Whenever you finish a Short or Long Rest, you can replace the chosen option with the other one."
-	db.Exec(`UPDATE characters SET hunter_swaps = 'hunters_prey,defensive_tactics' WHERE id = $1 AND class = 'ranger'`, charID)
+	// the feature picks that can be made again after this rest (Hunter's Prey, Defensive Tactics, the land type): from their table
+	restReadiesPicks(charID, long)
 	if long {
-		db.Exec(`UPDATE characters SET land_ready = true WHERE id = $1 AND class = 'druid'`, charID)
 		db.Exec(`UPDATE characters SET memorize_ready = true, mastery_swap_ready = true WHERE id = $1 AND class = 'wizard'`, charID)
 	} else {
 		db.Exec(`UPDATE characters SET memorize_ready = true WHERE id = $1 AND class = 'wizard'`, charID)

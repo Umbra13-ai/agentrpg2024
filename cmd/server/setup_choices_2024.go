@@ -151,18 +151,18 @@ func maxScoreOr20(n int) int {
 }
 
 // masterySetupStep: more kinds of weapon to choose for Weapon Mastery, each option with its Mastery property's SRD text.
-func masterySetupStep(charID int, class string, level int) *setupStep {
-	want := 0
-	for c, l := range classLevelsOrSingle(charID) {
-		if n := masteryCount(c, l); n > want {
-			want = n
-		}
+func masterySetupStep(charID int) *setupStep {
+	d := choiceByKey("weapon_mastery")
+	c, ok := loadChoiceChar(charID)
+	if !ok {
+		return nil
 	}
+	_, want := d.status(c)
 	cur := jsonListOf(charID, "weapon_masteries")
 	if len(cur) >= want {
 		return nil
 	}
-	cl := strings.ToLower(class)
+	cl := d.classWith(c)
 	var opts []map[string]interface{}
 	var carried []string
 	for _, it := range inventoryOf(charID) {
@@ -229,49 +229,6 @@ func skillChoices(list []string, held map[string]bool) []map[string]string {
 	return out
 }
 
-// pendingClassChoices: one-time choices of a class or subclass feature that have no step elsewhere (Nov 13): Blessed Strikes (Cleric 7),
-// Elemental Fury (Druid 7), Elemental Affinity (Draconic Sorcerer 6). Each with the feature's SRD text and its options.
-type classChoiceDef struct {
-	class, subclass string
-	level           int
-	key, feature    string
-	options         []string
-	suggest         string
-}
-
-var classChoiceDefs = []classChoiceDef{
-	{"cleric", "", 7, "blessed_strikes", "Blessed Strikes", []string{"divine_strike", "potent_spellcasting"}, "potent_spellcasting"},
-	{"druid", "", 7, "elemental_fury", "Elemental Fury", []string{"potent_spellcasting", "primal_strike"}, "potent_spellcasting"},
-	{"sorcerer", "draconic", 6, "elemental_affinity", "Elemental Affinity", []string{"acid", "cold", "fire", "lightning", "poison"}, "fire"},
-}
-
-func pendingClassChoices(charID int) []setupStep {
-	class, sub, level := subclassOf(charID)
-	var raw []byte
-	db.QueryRow(`SELECT COALESCE(subclass_choices,'{}') FROM characters WHERE id = $1`, charID).Scan(&raw)
-	have := map[string]string{}
-	json.Unmarshal(raw, &have)
-	var out []setupStep
-	for _, d := range classChoiceDefs {
-		if !strings.EqualFold(class, d.class) || level < d.level || (d.subclass != "" && !strings.EqualFold(sub, d.subclass)) || have[d.key] != "" {
-			continue
-		}
-		text := classFeatureText(d.class, d.feature)
-		if text == "" && d.subclass != "" {
-			for _, f := range game.GetActiveSubclassFeatures(d.subclass, level) {
-				if f.Name == d.feature {
-					text = f.Description
-				}
-			}
-		}
-		out = append(out, setupStep{Key: d.key, Title: "Choose your " + d.feature,
-			Why:     d.feature + ". " + text,
-			Choices: map[string]interface{}{"options": d.options},
-			Request: req("POST", fmt.Sprintf("/api/characters/%d/class-options", charID), map[string]string{d.key: d.suggest})})
-	}
-	return out
-}
-
 // wildShapeOptions: the Beasts a Druid of this level can know, with what matters for choosing one.
 func wildShapeOptions(level int) []map[string]interface{} {
 	_, maxCR, fly := wildShapeLimits(level)
@@ -303,16 +260,25 @@ func subclassFeatureText(subclass, name string) string {
 	return ""
 }
 
-// mysticArcanumStep: a Warlock of level 11+ with a Mystic Arcanum spell level not yet chosen (Nov 13: never asked before).
-func mysticArcanumStep(charID int) *setupStep {
-	class, _, level := subclassOf(charID)
-	if !strings.EqualFold(class, "warlock") || level < 11 {
-		return nil
-	}
+// mysticArcanumChosen: the Mystic Arcanum spell chosen for each spell level a Warlock of this level has one for.
+func mysticArcanumChosen(charID, warlockLevel int) map[string]string {
 	var raw []byte
 	db.QueryRow(`SELECT COALESCE(mystic_arcanum,'{}') FROM characters WHERE id = $1`, charID).Scan(&raw)
-	cur := map[string]string{}
-	json.Unmarshal(raw, &cur)
+	all := map[string]string{}
+	json.Unmarshal(raw, &all)
+	out := map[string]string{}
+	for _, sl := range getAvailableMysticArcanumLevels(warlockLevel) {
+		if v := all[fmt.Sprint(sl)]; v != "" {
+			out[fmt.Sprint(sl)] = v
+		}
+	}
+	return out
+}
+
+// mysticArcanumStep: the lowest Mystic Arcanum spell level not yet chosen.
+func mysticArcanumStep(charID int) *setupStep {
+	level := classLevelsOrSingle(charID)["warlock"]
+	cur := mysticArcanumChosen(charID, level)
 	for _, sl := range getAvailableMysticArcanumLevels(level) {
 		if cur[fmt.Sprint(sl)] != "" {
 			continue
@@ -377,59 +343,51 @@ func invocationOptions(charID int) []map[string]interface{} {
 	return out
 }
 
-// wizardCapstoneSteps: Spell Mastery (Wizard 18) and Signature Spells (Wizard 20), chosen from the spellbook (Nov 13: never asked before).
-func wizardCapstoneSteps(charID int) []setupStep {
-	class, _, level := subclassOf(charID)
-	if !strings.EqualFold(class, "wizard") || level < 18 {
-		return nil
-	}
-	var bookRaw, masteryRaw, sigRaw []byte
-	db.QueryRow(`SELECT COALESCE(known_spells,'[]'), COALESCE(spell_mastery,'[]'), COALESCE(signature_spells,'[]') FROM characters WHERE id = $1`, charID).Scan(&bookRaw, &masteryRaw, &sigRaw)
-	book := jsonList(bookRaw)
-	var out []setupStep
-	bookOf := func(lv int, actionOnly bool) ([]map[string]interface{}, string) {
-		var opts []map[string]interface{}
-		first := ""
-		for _, k := range book {
-			sp, ok := srdSpellsMemory[k]
-			if !ok || sp.Level != lv || (actionOnly && !strings.EqualFold(strings.TrimSpace(sp.CastingTime), "action") && !strings.HasPrefix(strings.ToLower(sp.CastingTime), "1 action")) {
-				continue
-			}
-			opts = append(opts, spellOptionInfo(k, map[string]bool{}))
-			if first == "" {
-				first = k
-			}
+// spellbookOptions: the spells of a level in a Wizard's spellbook (with a casting time of an action only, when asked), explained,
+// and the first of them.
+func spellbookOptions(charID, spellLevel int, actionOnly bool) ([]map[string]interface{}, string) {
+	var opts []map[string]interface{}
+	first := ""
+	for _, k := range jsonListOf(charID, "known_spells") {
+		sp, ok := srdSpellsMemory[k]
+		if !ok || sp.Level != spellLevel || (actionOnly && !strings.EqualFold(strings.TrimSpace(sp.CastingTime), "action") && !strings.HasPrefix(strings.ToLower(sp.CastingTime), "1 action")) {
+			continue
 		}
-		return opts, first
-	}
-	if len(jsonList(masteryRaw)) < 2 {
-		o1, f1 := bookOf(1, true)
-		o2, f2 := bookOf(2, true)
-		st := setupStep{Key: "spell_mastery", Title: "Choose your Spell Mastery spells", Why: "Spell Mastery. " + classFeatureText("wizard", "Spell Mastery"),
-			Choices: map[string]interface{}{"level_1_options_from_your_spellbook": o1, "level_2_options_from_your_spellbook": o2}}
-		if f1 != "" && f2 != "" {
-			st.Request = req("POST", "/api/characters/spell-mastery", map[string]interface{}{"character_id": charID, "spells": []string{f1, f2}})
-		}
-		out = append(out, st)
-	}
-	if level >= 20 {
-		sig := jsonList(sigRaw)
-		if len(sig) < 2 {
-			o3, _ := bookOf(3, false)
-			pick := ""
-			for _, o := range o3 {
-				if k := fmt.Sprint(o["spell"]); !containsStr(sig, k) {
-					pick = k
-					break
-				}
-			}
-			st := setupStep{Key: "signature_spells", Title: "Choose your Signature Spells", Why: "Signature Spells. " + classFeatureText("wizard", "Signature Spells") + " Send one spell per request.",
-				Choices: map[string]interface{}{"you_have": sig, "level_3_options_from_your_spellbook": o3}}
-			if pick != "" {
-				st.Request = req("POST", "/api/characters/signature-spells", map[string]interface{}{"character_id": charID, "action": "choose", "spell": pick})
-			}
-			out = append(out, st)
+		opts = append(opts, spellOptionInfo(k, map[string]bool{}))
+		if first == "" {
+			first = k
 		}
 	}
-	return out
+	return opts, first
+}
+
+// spellMasteryStep: Spell Mastery (Wizard 18), chosen from the spellbook.
+func spellMasteryStep(charID int) *setupStep {
+	o1, f1 := spellbookOptions(charID, 1, true)
+	o2, f2 := spellbookOptions(charID, 2, true)
+	st := setupStep{Key: "spell_mastery", Title: "Choose your Spell Mastery spells", Why: "Spell Mastery. " + classFeatureText("wizard", "Spell Mastery"),
+		Choices: map[string]interface{}{"level_1_options_from_your_spellbook": o1, "level_2_options_from_your_spellbook": o2}}
+	if f1 != "" && f2 != "" {
+		st.Request = req("POST", "/api/characters/spell-mastery", map[string]interface{}{"character_id": charID, "spells": []string{f1, f2}})
+	}
+	return &st
+}
+
+// signatureSpellsStep: Signature Spells (Wizard 20), chosen from the spellbook.
+func signatureSpellsStep(charID int) *setupStep {
+	sig := jsonListOf(charID, "signature_spells")
+	o3, _ := spellbookOptions(charID, 3, false)
+	pick := ""
+	for _, o := range o3 {
+		if k := fmt.Sprint(o["spell"]); !containsStr(sig, k) {
+			pick = k
+			break
+		}
+	}
+	st := setupStep{Key: "signature_spells", Title: "Choose your Signature Spells", Why: "Signature Spells. " + classFeatureText("wizard", "Signature Spells") + " Send one spell per request.",
+		Choices: map[string]interface{}{"you_have": sig, "level_3_options_from_your_spellbook": o3}}
+	if pick != "" {
+		st.Request = req("POST", "/api/characters/signature-spells", map[string]interface{}{"character_id": charID, "action": "choose", "spell": pick})
+	}
+	return &st
 }

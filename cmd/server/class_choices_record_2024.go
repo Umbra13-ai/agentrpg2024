@@ -9,10 +9,8 @@ import (
 	"strings"
 )
 
-// choiceFeatureNames: the feature name for a subclass_choices key that titleWords would spell wrongly.
-var choiceFeatureNames = map[string]string{
-	"hunters_prey": "Hunter's Prey", "circle_land": "Circle of the Land", "fighting_style_cantrips": "Fighting Style cantrips",
-}
+// choiceFeatureNames: the name for a subclass_choices key that isn't a feature pick and that titleWords would spell wrongly.
+var choiceFeatureNames = map[string]string{"fighting_style_cantrips": "Fighting Style cantrips"}
 
 func choiceLabel(s string) string {
 	return titleWords(strings.NewReplacer("_", " ", "-", " ").Replace(s))
@@ -31,6 +29,9 @@ func classChoicesRecord(charID int) []map[string]interface{} {
 	sort.Strings(keys)
 	for _, k := range keys {
 		name := choiceFeatureNames[k]
+		if p := featurePickByKey(k); p != nil { // a feature pick: the feature's own name, from its table
+			name = strings.ReplaceAll(p.feature, "’", "'")
+		}
 		for _, d := range classLangDefs { // the class feature's own name ("Thieves’ Cant languages", "Deft Explorer languages")
 			if d.key == k {
 				name = d.feature + " languages"

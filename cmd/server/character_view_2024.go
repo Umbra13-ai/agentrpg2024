@@ -25,24 +25,23 @@ func characterOriginOf(charID int) (*originRecord, bool) {
 // addOrderView shows the chosen Divine Order (Cleric) and Primal Order (Druid): divine_order / primal_order (null while a Cleric
 // or Druid hasn't chosen), and the Divine Order / Primal Order class feature names the chosen order with its SRD text.
 func addOrderView(response map[string]interface{}, features []map[string]interface{}, charID int) {
-	var divine, primal string
-	db.QueryRow(`SELECT COALESCE(divine_order,''), COALESCE(primal_order,'') FROM characters WHERE id = $1`, charID).Scan(&divine, &primal)
-	levels := classLevelsOf(charID)
-	for _, o := range []struct{ field, feature, chosen, class string }{
-		{"divine_order", "Divine Order", strings.ToLower(strings.TrimSpace(divine)), "cleric"},
-		{"primal_order", "Primal Order", strings.ToLower(strings.TrimSpace(primal)), "druid"},
-	} {
-		if o.chosen == "" && levels[o.class] == 0 {
+	c, ok := loadChoiceChar(charID)
+	if !ok {
+		return
+	}
+	for _, p := range creationPicks() { // Divine Order, Primal Order: from the table of feature picks
+		chosen := strings.ToLower(strings.TrimSpace(c.picks[p.key]))
+		if chosen == "" && c.levels[p.class] == 0 {
 			continue
 		}
-		response[o.field] = nilIfEmpty(o.chosen)
-		if o.chosen == "" {
+		response[p.key] = nilIfEmpty(chosen)
+		if chosen == "" {
 			continue
 		}
 		for _, f := range features {
-			if name, _ := f["name"].(string); strings.HasPrefix(name, o.feature) {
-				f["chosen"] = titleWords(o.chosen)
-				if text := srdOrders[o.field][o.chosen]; text != "" {
+			if name, _ := f["name"].(string); strings.HasPrefix(name, p.feature) {
+				f["chosen"] = titleWords(chosen)
+				if text := p.optionDetails()[chosen]; text != "" {
 					f["chosen_text"] = text
 				}
 			}

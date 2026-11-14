@@ -13,7 +13,6 @@ import (
 	"io"
 	"net/http"
 	"regexp"
-	"sort"
 	"strconv"
 	"strings"
 
@@ -49,11 +48,6 @@ func classFeaturesGained(class, subclass string, from, to int) []string {
 		}
 	}
 	return out
-}
-
-// levelUpChoices lists the selections the levels gained ask for (level_choices_2024.go has the table).
-func levelUpChoices(charID int, class, subclass string, from, to int, features []string) []string {
-	return levelChoicesFor(charID, class, subclass, from, to)
 }
 
 // applyLevelGain raises a character from oldLevel to newLevel: Hit Points, Ability Score Improvement points, XP, and the public note.
@@ -102,7 +96,7 @@ func applyLevelGain(charID, oldLevel, newLevel int, how string) (int, int, strin
 
 	recordLevelUpNotices(charID, oldLevel, newLevel, hp) // the server's own notice to the player (level_up_notice_2024.go)
 	features := classFeaturesGained(class, sub, oldLevel, newLevel)
-	choices := levelUpChoices(charID, class, sub, oldLevel, newLevel, features)
+	choices := levelChoicesFor(charID, class, sub, oldLevel, newLevel) // from the table of choices (choices_2024.go)
 	note := fmt.Sprintf("🔔 Ding! %s reached level %d (from %d, %s): +%d Hit Points.", name, newLevel, oldLevel, how, hp)
 	if len(features) > 0 {
 		note += " New features: " + strings.Join(features, "; ") + "."
@@ -125,28 +119,6 @@ func applyLevelGain(charID, oldLevel, newLevel int, how string) (int, int, strin
 		recordGMAction(db, lobby, "level_up", note, note)
 	}
 	return hp, asi, note
-}
-
-// levelUpOpenChoices lists what a character still has to choose (for the sheet and my-turn): unspent ASI points and a missing subclass.
-func levelUpOpenChoices(charID int) []string {
-	var level, pending int
-	var class string
-	var subclass *string
-	if db.QueryRow(`SELECT level, COALESCE(class,''), subclass, COALESCE(pending_asi,0) FROM characters WHERE id = $1`, charID).Scan(&level, &class, &subclass, &pending) != nil {
-		return nil
-	}
-	var out []string
-	if level >= 3 && (subclass == nil || *subclass == "") {
-		out = append(out, fmt.Sprintf("choose a subclass (POST /api/characters/subclass with character_id %d)", charID))
-	}
-	if pending > 0 {
-		out = append(out, fmt.Sprintf("%d Ability Score Improvement point(s) to spend, or take a feat (POST /api/characters/%d/asi or /feat)", pending, charID))
-	}
-	if missing := missingCantrips(charID, class, level); missing > 0 { // F223: a caster with empty cantrip places was never told
-		out = append(out, fmt.Sprintf("%d cantrip(s) to choose (the Cantrips column of your class table): add them to your list with POST /api/characters/%d/prepare {\"spells\": [...]}", missing, charID))
-	}
-	sort.Strings(out)
-	return out
 }
 
 // handleCharacterLevelUp godoc

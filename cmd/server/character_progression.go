@@ -899,8 +899,8 @@ func handleCharacterSubclass(w http.ResponseWriter, r *http.Request) {
 }
 
 // handleCharacterSubclassChoice godoc
-// @Summary Choose a subclass feature option
-// @Description Choose from subclass features that offer choices: Hunter's Prey (hunters_prey: colossus_slayer or horde_breaker) and Defensive Tactics (defensive_tactics: escape_the_horde or multiattack_defense). GET lists the pending choices. After each Short or Long Rest a Hunter can replace each of those two options once (SRD 5.2.1); other choices are permanent.
+// @Summary Choose a feature option (Hunter's Prey, Defensive Tactics and every other one-option class choice)
+// @Description Makes a class or subclass choice that is one option from a list: hunters_prey (Hunter 3: colossus_slayer or horde_breaker), defensive_tactics (Hunter 7: escape_the_horde or multiattack_defense), circle_land, divine_order, primal_order, blessed_strikes, elemental_fury, elemental_affinity. The feature and the option can be sent as a name or a slug. GET ?character_id=N lists the choices the character still has to make, with their options. A Hunter can replace each of its two options once after a Short or Long Rest, a Druid of the Land chooses its land again after a Long Rest; the others are chosen once. The same choices can be made with POST /api/characters/{id}/class-options.
 // @Tags Characters
 // @Accept json
 // @Produce json
@@ -911,387 +911,80 @@ func handleCharacterSubclass(w http.ResponseWriter, r *http.Request) {
 // @Failure 401 {object} map[string]interface{} "Unauthorized"
 // @Router /characters/subclass-choice [post]
 func handleCharacterSubclassChoice(w http.ResponseWriter, r *http.Request) {
-	w.Header().Set("Content-Type", "application/json")
-
-	if r.Method == "GET" {
-		// Show available choices for a character
-		charIDStr := r.URL.Query().Get("character_id")
-		charID, err := strconv.Atoi(charIDStr)
+	if r.Method == http.MethodGet {
+		charID, err := strconv.Atoi(r.URL.Query().Get("character_id"))
 		if err != nil {
-			w.WriteHeader(http.StatusBadRequest) // a missing or malformed parameter is not "not found" (Nov 14 review)
-			json.NewEncoder(w).Encode(map[string]interface{}{
-				"error":   "invalid_character_id",
-				"message": "Provide character_id query parameter",
-			})
+			writeJSONStatus(w, http.StatusBadRequest, map[string]interface{}{"error": "invalid_character_id", "message": "Provide character_id query parameter"})
 			return
 		}
-
-		var class, subclass sql.NullString
-		var level int
-		var choicesJSON []byte
-		err = db.QueryRow(`
-			SELECT class, subclass, level, COALESCE(subclass_choices, '{}')
-			FROM characters WHERE id = $1
-		`, charID).Scan(&class, &subclass, &level, &choicesJSON)
-
-		if err != nil {
-			w.WriteHeader(http.StatusNotFound)
-			json.NewEncoder(w).Encode(map[string]interface{}{
-				"error":   "character_not_found",
-				"message": fmt.Sprintf("Character %d not found", charID),
-			})
+		c, ok := loadChoiceChar(charID)
+		if !ok {
+			writeJSONStatus(w, http.StatusNotFound, map[string]interface{}{"error": "character_not_found", "message": fmt.Sprintf("Character %d not found", charID)})
 			return
 		}
-
-		if !subclass.Valid || subclass.String == "" {
-			w.WriteHeader(http.StatusBadRequest)
-			json.NewEncoder(w).Encode(map[string]interface{}{
-				"error":   "no_subclass",
-				"message": "Character has no subclass selected yet. Use POST /api/characters/subclass first.",
-			})
-			return
-		}
-
-		var currentChoices map[string]string
-		json.Unmarshal(choicesJSON, &currentChoices)
-
-		// Get pending choices (features with choice mechanics that haven't been chosen yet)
-		pendingChoices := []map[string]interface{}{}
-		if sub, ok := game.AvailableSubclasses[subclass.String]; ok {
-			for _, feat := range sub.Features {
-				if feat.Level > level {
-					continue // Not yet unlocked
-				}
-				for mechKey, mechVal := range feat.Mechanics {
-					if isChoiceMechanic(subclass.String, mechKey, mechVal) {
-						// This is a choice feature
-						if _, alreadyChosen := currentChoices[mechKey]; !alreadyChosen {
-							// Build options based on feature
-							options := getSubclassChoiceOptions(subclass.String, mechKey)
-							pendingChoices = append(pendingChoices, map[string]interface{}{
-								"feature":     mechKey,
-								"name":        feat.Name,
-								"description": feat.Description,
-								"options":     options,
-							})
-						}
-					}
-				}
+		current := map[string]string{}
+		for i := range featurePicks {
+			if v := c.picks[featurePicks[i].key]; v != "" {
+				current[featurePicks[i].key] = v
 			}
 		}
-
-		json.NewEncoder(w).Encode(map[string]interface{}{
-			"character_id":    charID,
-			"subclass":        subclass.String,
-			"current_choices": currentChoices,
-			"pending_choices": pendingChoices,
-		})
+		writeJSONStatus(w, http.StatusOK, map[string]interface{}{"character_id": charID, "subclass": c.subs[c.class], "current_choices": current,
+			"pending_choices": pendingFeaturePicks(c)})
 		return
 	}
-
-	if r.Method != "POST" {
-		http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)
+	if r.Method != http.MethodPost {
+		writeJSONStatus(w, http.StatusMethodNotAllowed, map[string]interface{}{"error": "method_not_allowed"})
 		return
 	}
-
-	// Auth
 	agentID, err := getAgentFromAuth(r)
 	if err != nil {
-		w.WriteHeader(http.StatusUnauthorized)
-		json.NewEncoder(w).Encode(map[string]interface{}{"error": "unauthorized", "message": publicError(err)})
+		writeAuthError(w, err)
 		return
 	}
-
 	var req struct {
 		CharacterID int    `json:"character_id"`
-		Feature     string `json:"feature"` // e.g., "hunters_prey"
-		Choice      string `json:"choice"`  // e.g., "colossus_slayer"
+		Feature     string `json:"feature"` // "hunters_prey" or "Hunter's Prey"
+		Choice      string `json:"choice"`  // "colossus_slayer" or "Colossus Slayer"
 	}
 	if !decodeRequest(w, r, &req, false) {
 		return
 	}
-
-	// Get character info
 	var ownerID int
-	var class, subclass sql.NullString
-	var level int
 	var charName string
-	var choicesJSON []byte
-	err = db.QueryRow(`
-		SELECT agent_id, name, class, subclass, level, COALESCE(subclass_choices, '{}')
-		FROM characters WHERE id = $1
-	`, req.CharacterID).Scan(&ownerID, &charName, &class, &subclass, &level, &choicesJSON)
-
-	if err != nil {
-		w.WriteHeader(http.StatusNotFound)
-		json.NewEncoder(w).Encode(map[string]interface{}{
-			"error":   "character_not_found",
-			"message": fmt.Sprintf("Character %d not found", req.CharacterID),
-		})
+	if db.QueryRow(`SELECT agent_id, name FROM characters WHERE id = $1`, req.CharacterID).Scan(&ownerID, &charName) != nil {
+		writeJSONStatus(w, http.StatusNotFound, map[string]interface{}{"error": "character_not_found", "message": fmt.Sprintf("Character %d not found", req.CharacterID)})
 		return
 	}
-
 	if ownerID != agentID {
-		w.WriteHeader(http.StatusForbidden)
-		json.NewEncoder(w).Encode(map[string]interface{}{
-			"error":   "not_your_character",
-			"message": "You can only make choices for your own characters",
-		})
+		writeJSONStatus(w, http.StatusForbidden, map[string]interface{}{"error": "not_your_character", "message": "You can only make choices for your own characters"})
 		return
 	}
-
-	if !subclass.Valid || subclass.String == "" {
-		w.WriteHeader(http.StatusBadRequest)
-		json.NewEncoder(w).Encode(map[string]interface{}{
-			"error":   "no_subclass",
-			"message": "Character has no subclass selected yet. Use POST /api/characters/subclass first.",
-		})
-		return
-	}
-
-	// Validate the feature exists and requires a choice
-	sub, ok := game.AvailableSubclasses[subclass.String]
-	if !ok {
-		w.WriteHeader(http.StatusBadRequest)
-		json.NewEncoder(w).Encode(map[string]interface{}{
-			"error":   "invalid_subclass",
-			"message": fmt.Sprintf("Subclass '%s' not found", subclass.String),
-		})
-		return
-	}
-
-	featureFound := false
-	featureName := ""
-	for _, feat := range sub.Features {
-		if feat.Level > level {
-			continue
-		}
-		for key := range feat.Mechanics { // the key or the displayed feature name ("Hunter's Prey")
-			if k := nameKey(req.Feature); k == nameKey(key) || k == nameKey(feat.Name) {
-				if isChoiceMechanic(subclass.String, key, feat.Mechanics[key]) {
-					req.Feature = key
-				}
+	p := featurePickNamed(req.Feature)
+	if p == nil {
+		c, _ := loadChoiceChar(req.CharacterID)
+		var names []string
+		for i := range featurePicks {
+			if c != nil && featurePicks[i].has(c) {
+				names = append(names, featurePicks[i].key)
 			}
 		}
-		if mechVal, ok := feat.Mechanics[req.Feature]; ok && isChoiceMechanic(subclass.String, req.Feature, mechVal) {
-			featureFound = true
-			featureName = feat.Name
-			break
+		msg := fmt.Sprintf("%q is not a feature with an option to choose.", req.Feature)
+		if len(names) > 0 {
+			msg += " Your character's: " + strings.Join(names, ", ") + "."
+		} else {
+			msg += " Your character has none now."
 		}
-	}
-
-	if !featureFound {
-		w.WriteHeader(http.StatusBadRequest)
-		json.NewEncoder(w).Encode(map[string]interface{}{
-			"error":   "invalid_feature",
-			"message": fmt.Sprintf("Feature '%s' not found or doesn't require a choice for %s at level %d", req.Feature, subclass.String, level),
-		})
+		(&pickRefusal{http.StatusBadRequest, "invalid_feature", msg, map[string]interface{}{"your_features": names}}).write(w)
 		return
 	}
-
-	// Validate the choice is valid for this feature
-	validOptions := getSubclassChoiceOptions(subclass.String, req.Feature)
-	choiceLower := strings.ToLower(strings.TrimSpace(req.Choice))
-	validChoice := false
-	var choiceInfo map[string]interface{}
-	for _, opt := range validOptions {
-		name, _ := opt["name"].(string)
-		if k := nameKey(req.Choice); k == nameKey(opt["slug"].(string)) || name != "" && k == nameKey(name) { // the slug or the displayed name
-			choiceLower = opt["slug"].(string)
-			validChoice = true
-			choiceInfo = opt
-			break
-		}
-	}
-
-	if !validChoice {
-		slugs := []string{}
-		for _, opt := range validOptions {
-			slugs = append(slugs, opt["slug"].(string))
-		}
-		w.WriteHeader(http.StatusBadRequest)
-		json.NewEncoder(w).Encode(map[string]interface{}{
-			"error":         "invalid_choice",
-			"message":       fmt.Sprintf("'%s' is not a valid choice for %s", req.Choice, req.Feature),
-			"valid_options": validOptions,
-			"valid_slugs":   slugs,
-		})
+	chosen, refusal := applyFeaturePick(req.CharacterID, p, req.Choice)
+	if refusal != nil {
+		refusal.write(w)
 		return
 	}
-
-	// Update subclass_choices
-	var currentChoices map[string]string
-	json.Unmarshal(choicesJSON, &currentChoices)
-	if currentChoices == nil {
-		currentChoices = make(map[string]string)
-	}
-
-	// Check if already chosen. Hunter's Prey and Defensive Tactics can be swapped after a Short or Long Rest (SRD 5.2.1).
-	swapped := false
-	if existing, alreadyChosen := currentChoices[req.Feature]; alreadyChosen {
-		var swaps string
-		db.QueryRow(`SELECT COALESCE(hunter_swaps,'') FROM characters WHERE id = $1`, req.CharacterID).Scan(&swaps)
-		ready := strings.Contains(","+swaps+",", ","+req.Feature+",")
-		if !restSwappableChoice(req.Feature) || !ready || existing == choiceLower {
-			msg := fmt.Sprintf("You already chose '%s' for %s. This choice is permanent.", existing, featureName)
-			if restSwappableChoice(req.Feature) {
-				msg = fmt.Sprintf("You chose '%s' for %s. You can replace it with the other option after you finish a Short or Long Rest.", existing, featureName)
-			}
-			w.WriteHeader(http.StatusConflict)
-			json.NewEncoder(w).Encode(map[string]interface{}{
-				"error":          "already_chosen",
-				"current_choice": existing,
-				"message":        msg,
-			})
-			return
-		}
-		swapped = true
-	}
-
-	currentChoices[req.Feature] = choiceLower
-	updatedJSON, _ := json.Marshal(currentChoices)
-
-	_, err = db.Exec("UPDATE characters SET subclass_choices = $1 WHERE id = $2", updatedJSON, req.CharacterID)
-	if err == nil && swapped {
-		// each option can be replaced once per rest
-		db.Exec(`UPDATE characters SET hunter_swaps = trim(both ',' from replace(','||COALESCE(hunter_swaps,'')||',', ','||$1||',', ',')) WHERE id = $2`, req.Feature, req.CharacterID)
-	}
-	if err != nil {
-		w.WriteHeader(http.StatusInternalServerError)
-		json.NewEncoder(w).Encode(map[string]interface{}{
-			"error":   "database_error",
-			"message": publicError(err),
-		})
-		return
-	}
-
-	json.NewEncoder(w).Encode(map[string]interface{}{
-		"success":        true,
-		"character_id":   req.CharacterID,
-		"character_name": charName,
-		"feature":        req.Feature,
-		"feature_name":   featureName,
-		"choice":         choiceLower,
-		"choice_name":    choiceInfo["name"],
-		"description":    choiceInfo["description"],
-		"message":        fmt.Sprintf("%s has chosen %s for their %s feature!", charName, choiceInfo["name"], featureName),
-	})
-}
-
-// isChoiceMechanic: a subclass mechanic is a player choice when it is marked "choice", or when the server lists options for it
-// (the generated SRD feature data marks Hunter's Prey and Defensive Tactics "true").
-func isChoiceMechanic(subclass, key, val string) bool {
-	return val == "choice" || len(getSubclassChoiceOptions(subclass, key)) > 0
-}
-
-// restSwappableChoice: choices the SRD lets the character replace after a Short or Long Rest.
-func restSwappableChoice(feature string) bool {
-	return feature == "hunters_prey" || feature == "defensive_tactics"
-}
-
-// getSubclassChoiceOptions returns the valid options for a subclass feature choice
-func getSubclassChoiceOptions(subclass, feature string) []map[string]interface{} {
-	switch feature {
-	case "circle_land":
-		// 2024 Circle of the Land: the land type decides the Circle Spells and Nature's Ward (SRD 5.2.1)
-		return []map[string]interface{}{
-			{"slug": "arid", "name": "Arid", "description": "Circle spells: Blur, Burning Hands, Fire Bolt (3rd), Fireball (5th), Blight (7th), Wall of Stone (9th). Nature's Ward: Resistance to Fire."},
-			{"slug": "polar", "name": "Polar", "description": "Circle spells: Fog Cloud, Hold Person, Ray of Frost (3rd), Sleet Storm (5th), Ice Storm (7th), Cone of Cold (9th). Nature's Ward: Resistance to Cold."},
-			{"slug": "temperate", "name": "Temperate", "description": "Circle spells: Misty Step, Shocking Grasp, Sleep (3rd), Lightning Bolt (5th), Freedom of Movement (7th), Tree Stride (9th). Nature's Ward: Resistance to Lightning."},
-			{"slug": "tropical", "name": "Tropical", "description": "Circle spells: Acid Splash, Ray of Sickness, Web (3rd), Stinking Cloud (5th), Polymorph (7th), Insect Plague (9th). Nature's Ward: Resistance to Poison."},
-		}
-	case "hunters_prey":
-		return []map[string]interface{}{
-			{
-				"slug":        "colossus_slayer",
-				"name":        "Colossus Slayer",
-				"description": "Your tenacity can wear down even the most resilient foes. When you hit a creature with a weapon, the weapon deals an extra 1d8 damage to the target if it’s missing any of its Hit Points. You can deal this extra damage only once per turn.",
-			},
-			{
-				"slug":        "horde_breaker",
-				"name":        "Horde Breaker",
-				"description": "Once on each of your turns when you make an attack with a weapon, you can make another attack with the same weapon against a different creature that is within 5 feet of the original target, that is within the weapon’s range, and that you haven’t attacked this turn.",
-			},
-		}
-	case "defensive_tactics":
-		return []map[string]interface{}{
-			{
-				"slug":        "escape_the_horde",
-				"name":        "Escape the Horde",
-				"description": "Opportunity Attacks have Disadvantage against you.",
-			},
-			{
-				"slug":        "multiattack_defense",
-				"name":        "Multiattack Defense",
-				"description": "When a creature hits you with an attack roll, that creature has Disadvantage on all other attack rolls against you this turn.",
-			},
-		}
-	case "dragon_ancestor":
-		// Draconic Sorcerer dragon ancestry choice
-		return []map[string]interface{}{
-			{
-				"slug":        "black",
-				"name":        "Black Dragon",
-				"damage_type": "acid",
-				"description": "Black dragon ancestry. Associated damage type: Acid.",
-			},
-			{
-				"slug":        "blue",
-				"name":        "Blue Dragon",
-				"damage_type": "lightning",
-				"description": "Blue dragon ancestry. Associated damage type: Lightning.",
-			},
-			{
-				"slug":        "brass",
-				"name":        "Brass Dragon",
-				"damage_type": "fire",
-				"description": "Brass dragon ancestry. Associated damage type: Fire.",
-			},
-			{
-				"slug":        "bronze",
-				"name":        "Bronze Dragon",
-				"damage_type": "lightning",
-				"description": "Bronze dragon ancestry. Associated damage type: Lightning.",
-			},
-			{
-				"slug":        "copper",
-				"name":        "Copper Dragon",
-				"damage_type": "acid",
-				"description": "Copper dragon ancestry. Associated damage type: Acid.",
-			},
-			{
-				"slug":        "gold",
-				"name":        "Gold Dragon",
-				"damage_type": "fire",
-				"description": "Gold dragon ancestry. Associated damage type: Fire.",
-			},
-			{
-				"slug":        "green",
-				"name":        "Green Dragon",
-				"damage_type": "poison",
-				"description": "Green dragon ancestry. Associated damage type: Poison.",
-			},
-			{
-				"slug":        "red",
-				"name":        "Red Dragon",
-				"damage_type": "fire",
-				"description": "Red dragon ancestry. Associated damage type: Fire.",
-			},
-			{
-				"slug":        "silver",
-				"name":        "Silver Dragon",
-				"damage_type": "cold",
-				"description": "Silver dragon ancestry. Associated damage type: Cold.",
-			},
-			{
-				"slug":        "white",
-				"name":        "White Dragon",
-				"damage_type": "cold",
-				"description": "White dragon ancestry. Associated damage type: Cold.",
-			},
-		}
-	}
-	return []map[string]interface{}{}
+	reply := featurePickSaved(req.CharacterID, p, chosen)
+	reply["character_name"] = charName
+	writeJSONStatus(w, http.StatusOK, reply)
 }
 
 // handleCharacterMulticlass godoc
@@ -1674,7 +1367,7 @@ func handleCharacterMulticlass(w http.ResponseWriter, r *http.Request) {
 	newClassLevel = classLevels[targetClass]
 	sub := subclassesByClass(req.CharacterID)[targetClass] // each class's own subclass (multiclass)
 	mcFeatures := classFeaturesGained(targetClass, sub, newClassLevel-1, newClassLevel)
-	mcChoices := levelUpChoices(req.CharacterID, targetClass, sub, newClassLevel-1, newClassLevel, mcFeatures)
+	mcChoices := levelChoicesFor(req.CharacterID, targetClass, sub, newClassLevel-1, newClassLevel)
 	levelNote := fmt.Sprintf("🔔 Ding! %s reached character level %d (%s level %d): +%d Hit Points.", charName, newTotalLevel, srdClasses[targetClass].Name, newClassLevel, hpGain)
 	if len(mcFeatures) > 0 {
 		levelNote += " New features: " + strings.Join(mcFeatures, "; ") + "."

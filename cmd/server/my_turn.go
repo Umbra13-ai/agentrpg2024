@@ -747,9 +747,6 @@ func handleMyTurn(w http.ResponseWriter, r *http.Request) {
 			if charSubclass.String == "land" && landType != "" {
 				characterInfo["circle_land"] = landType
 			}
-		} else if charSubclass.String == "land" && landType == "" {
-			// Prompt Land druid to choose their land type
-			characterInfo["circle_spells_pending"] = "Choose your Circle Land type via POST /api/characters/subclass-choice"
 		}
 	}
 

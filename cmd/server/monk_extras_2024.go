@@ -12,13 +12,15 @@ package main
 import (
 	"encoding/json"
 	"fmt"
+	"github.com/agentrpg/agentrpg/game"
 	"net/http"
 	"strings"
-	"github.com/agentrpg/agentrpg/game"
 )
 
 // martialArtsDice is "2d8" for two rolls of the Martial Arts die.
-func martialArtsRolls(level, n int) string { return fmt.Sprintf("%dd%d", n, game.MartialArtsDie(level)) }
+func martialArtsRolls(level, n int) string {
+	return fmt.Sprintf("%dd%d", n, game.MartialArtsDie(level))
+}
 
 // handleGMDeflectAttacks: POST {"character_id": N, "damage": D, "damage_type": "piercing", "ranged": false, "attacker_name": "x", "redirect_target_id": monster id (optional)}
 // @Summary Monk Deflect Attacks (Reaction)
@@ -273,81 +275,6 @@ func quiveringPalm(charID int, description string) string {
 }
 
 // ---- class choices (Land type, Elemental Affinity, Blessed Strikes, Elemental Fury)
-
-// applyClassChoice handles the class-options fields that live in subclass_choices. It returns true when it answered.
-func applyClassChoice(w http.ResponseWriter, charID int, landType, affinity, blessed, fury string) bool {
-	if landType == "" && affinity == "" && blessed == "" && fury == "" {
-		return false
-	}
-	class, sub, level := subclassOf(charID)
-	var raw []byte
-	db.QueryRow(`SELECT COALESCE(subclass_choices,'{}') FROM characters WHERE id = $1`, charID).Scan(&raw)
-	choices := map[string]string{}
-	json.Unmarshal(raw, &choices)
-	fail := func(code, msg string) bool {
-		writeJSONStatus(w, http.StatusBadRequest, map[string]interface{}{"error": code, "message": msg})
-		return true
-	}
-	set := func(key, val string) bool {
-		choices[key] = val
-		b, _ := json.Marshal(choices)
-		db.Exec(`UPDATE characters SET subclass_choices = $1 WHERE id = $2`, string(b), charID)
-		writeJSONStatus(w, http.StatusOK, map[string]interface{}{"success": true, key: val})
-		return true
-	}
-	in := func(v string, opts ...string) bool {
-		for _, o := range opts {
-			if v == o {
-				return true
-			}
-		}
-		return false
-	}
-	switch {
-	case landType != "":
-		v := strings.ToLower(strings.TrimSpace(landType))
-		if dl := classLevelsOf(charID)["druid"]; class != "druid" && dl > 0 && subclassesByClass(charID)["druid"] == "land" {
-			class, sub, level = "druid", "land", dl // a multiclass character's Druid levels
-		}
-		if class != "druid" || sub != "land" || level < 3 {
-			return fail("not_land_druid", "Only a Druid of the Circle of the Land, level 3 or higher, chooses a land type.")
-		}
-		if !in(v, "arid", "polar", "temperate", "tropical") {
-			return fail("invalid_land_type", "Choose arid, polar, temperate or tropical.")
-		}
-		var ready bool
-		db.QueryRow(`SELECT COALESCE(land_ready,false) FROM characters WHERE id = $1`, charID).Scan(&ready)
-		if choices["circle_land"] != "" && !ready {
-			return fail("needs_long_rest", "You choose a land type again when you finish a Long Rest.")
-		}
-		db.Exec(`UPDATE characters SET land_ready = false WHERE id = $1`, charID)
-		return set("circle_land", v)
-	case affinity != "":
-		v := strings.ToLower(strings.TrimSpace(affinity))
-		if class != "sorcerer" || sub != "draconic" || level < 6 {
-			return fail("not_draconic", "Only a Draconic Sorcerer of level 6 or higher chooses an Elemental Affinity.")
-		}
-		if !in(v, "acid", "cold", "fire", "lightning", "poison") {
-			return fail("invalid_type", "Choose acid, cold, fire, lightning or poison.")
-		}
-		if choices["elemental_affinity"] != "" {
-			return fail("already_chosen", "Your Elemental Affinity is "+choices["elemental_affinity"]+".")
-		}
-		return set("elemental_affinity", v)
-	case blessed != "":
-		v := strings.ToLower(strings.TrimSpace(blessed))
-		if class != "cleric" || level < 7 || !in(v, "divine_strike", "potent_spellcasting") {
-			return fail("invalid_choice", "A Cleric of level 7+ chooses divine_strike or potent_spellcasting (Blessed Strikes).")
-		}
-		return set("blessed_strikes", v)
-	default:
-		v := strings.ToLower(strings.TrimSpace(fury))
-		if class != "druid" || level < 7 || !in(v, "primal_strike", "potent_spellcasting") {
-			return fail("invalid_choice", "A Druid of level 7+ chooses primal_strike or potent_spellcasting (Elemental Fury).")
-		}
-		return set("elemental_fury", v)
-	}
-}
 
 // elementalAffinityResists: Elemental Affinity gives Resistance to the chosen damage type.
 func elementalAffinityResists(charID int, dtype string) bool {

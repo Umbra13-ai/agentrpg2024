@@ -449,41 +449,45 @@ func handleCharacters(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 
-		// Level 1 class choices that change proficiencies
-		firstWord := func(v string) string { // "thaumaturge (one extra cantrip ...)" or "the protector" names one order, as in the builder
-			lv := strings.ToLower(strings.TrimSpace(v))
-			for _, w := range strings.FieldsFunc(lv, func(r rune) bool { return !unicode.IsLetter(r) }) {
-				if w == "protector" || w == "thaumaturge" || w == "warden" || w == "magician" {
-					if w != lv {
-						readAs = append(readAs, fmt.Sprintf("%q is read as %s", v, w))
-					}
-					return w
+		// Level 1 class choices that change proficiencies (Divine Order, Primal Order): who has each and its options come from the
+		// table of feature picks (feature_picks_2024.go)
+		sentPick := map[string]*string{"divine_order": &req.ClassOptions.DivineOrder, "primal_order": &req.ClassOptions.PrimalOrder}
+		for _, p := range creationPicks() {
+			v := sentPick[p.key]
+			if v == nil {
+				continue
+			}
+			lv := strings.ToLower(strings.TrimSpace(*v))
+			// "thaumaturge (one extra cantrip ...)" or "the protector" names one option, as in the builder; naming two is refused
+			var named []string
+			for _, w := range strings.FieldsFunc(lv, func(r rune) bool { return !unicode.IsLetter(r) && r != '_' }) {
+				if containsStr(p.options, w) && !containsStr(named, w) {
+					named = append(named, w)
 				}
 			}
-			if f := strings.FieldsFunc(lv, func(r rune) bool { return r == ' ' || r == '(' || r == ':' || r == ',' }); len(f) > 0 {
-				return f[0]
+			if len(named) > 1 {
+				writeJSONStatus(w, http.StatusBadRequest, map[string]interface{}{"error": "invalid_" + p.key, "nothing_created": true,
+					"message": fmt.Sprintf("class_options.%s: name one option, not several: %s. Nothing was created.", p.key, strings.Join(p.options, " or "))})
+				return
 			}
-			return ""
-		}
-		// naming both orders is refused, as in the builder (Nov 14 audit re-check, S2-15: "thaumaturge, protector" became thaumaturge)
-		for _, o := range []struct{ field, v, a, b string }{{"divine_order", req.ClassOptions.DivineOrder, "protector", "thaumaturge"}, {"primal_order", req.ClassOptions.PrimalOrder, "warden", "magician"}} {
-			lv := strings.ToLower(o.v)
-			if strings.Contains(lv, o.a) && strings.Contains(lv, o.b) {
-				writeJSONStatus(w, http.StatusBadRequest, map[string]interface{}{"error": "invalid_" + o.field, "nothing_created": true, "message": fmt.Sprintf("class_options.%s: name one order, not both: %s or %s. Nothing was created.", o.field, o.a, o.b)})
+			chosen := ""
+			if len(named) == 1 {
+				chosen = named[0]
+				if chosen != lv {
+					readAs = append(readAs, fmt.Sprintf("%q is read as %s", *v, chosen))
+				}
+			} else if f := strings.FieldsFunc(lv, func(r rune) bool { return r == ' ' || r == '(' || r == ':' || r == ',' }); len(f) > 0 {
+				chosen = f[0]
+			}
+			*v = chosen
+			if chosen != "" && (strings.ToLower(req.Class) != p.class || !containsStr(p.options, chosen)) {
+				writeJSONStatus(w, http.StatusBadRequest, map[string]interface{}{"error": "invalid_" + p.key,
+					"message": pickMsg(strings.ToLower(req.Class) != p.class, fmt.Sprintf("Only %ss choose a %s.", titleCase(p.class), p.key),
+						fmt.Sprintf("%q is not a %s: choose %s.", chosen, p.feature, strings.Join(p.options, " or ")))})
 				return
 			}
 		}
-		divineOrder := firstWord(req.ClassOptions.DivineOrder)
-		primalOrder := firstWord(req.ClassOptions.PrimalOrder)
-		req.ClassOptions.DivineOrder, req.ClassOptions.PrimalOrder = divineOrder, primalOrder
-		if divineOrder != "" && (strings.ToLower(req.Class) != "cleric" || (divineOrder != "protector" && divineOrder != "thaumaturge")) {
-			writeJSONStatus(w, http.StatusBadRequest, map[string]interface{}{"error": "invalid_divine_order", "message": pickMsg(strings.ToLower(req.Class) != "cleric", "Only Clerics choose a divine_order.", fmt.Sprintf("%q is not a Divine Order: choose protector or thaumaturge.", divineOrder))})
-			return
-		}
-		if primalOrder != "" && (strings.ToLower(req.Class) != "druid" || (primalOrder != "warden" && primalOrder != "magician")) {
-			writeJSONStatus(w, http.StatusBadRequest, map[string]interface{}{"error": "invalid_primal_order", "message": pickMsg(strings.ToLower(req.Class) != "druid", "Only Druids choose a primal_order.", fmt.Sprintf("%q is not a Primal Order: choose warden or magician.", primalOrder))})
-			return
-		}
+		divineOrder, primalOrder := req.ClassOptions.DivineOrder, req.ClassOptions.PrimalOrder
 
 		// Get weapon and armor proficiencies from class
 		weaponProfsStr := ""
@@ -687,11 +691,10 @@ func handleCharacters(w http.ResponseWriter, r *http.Request) {
 				"message":        "Everything checks out. Send the same request without dry_run to create the character.",
 				"after_creation": "GET /api/characters/{id}/setup then guides what is left: spells, the gear in your hands and any class choice not made here."}
 			var open []string // a level 1 choice this request could make but didn't (it can also be made in the setup)
-			if classKey == "cleric" && divineOrder == "" {
-				open = append(open, "Divine Order: add class_options.divine_order (protector or thaumaturge), or choose it in the setup")
-			}
-			if classKey == "druid" && primalOrder == "" {
-				open = append(open, "Primal Order: add class_options.primal_order (magician or warden), or choose it in the setup")
+			for _, p := range creationPicks() {
+				if v := sentPick[p.key]; classKey == p.class && v != nil && *v == "" {
+					open = append(open, fmt.Sprintf("%s: add class_options.%s (%s), or choose it in the setup", p.feature, p.key, strings.Join(p.options, " or ")))
+				}
 			}
 			if n := game.ExpertiseAllowed(classKey, 1); n > 0 && expertiseStr == "" {
 				open = append(open, fmt.Sprintf("Expertise: add expertise (%d of your skill proficiencies), or choose it in the setup", n))
