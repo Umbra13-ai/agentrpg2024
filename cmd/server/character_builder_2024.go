@@ -1117,7 +1117,7 @@ func builderSteps(body map[string]interface{}, agentID int, withCheck bool) []bu
 	if sp == nil {
 		s4.Remaining++
 		s4.Choices = append(s4.Choices, speciesChoicesBeforeSpecies(body, class, bg)...) // a value no species accepts is refused now (S4-13)
-		if hasAnswer(body["species_feat_choices"]) { // a Human's feat picks before the species: can't be checked yet (round 2 re-check)
+		if hasAnswer(body["species_feat_choices"]) {                                     // a Human's feat picks before the species: can't be checked yet (round 2 re-check)
 			s4.Choices = append(s4.Choices, choice("species_feat_choices", "a Human's Origin feat picks", 0, nil, body["species_feat_choices"], false,
 				"choose a species first (Step 4): only a Human has an Origin feat from its species, and its picks depend on that feat"))
 		}
