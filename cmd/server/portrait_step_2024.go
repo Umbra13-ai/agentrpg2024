@@ -84,7 +84,9 @@ func portraitPrompt(charID int) string {
 
 func portraitSetupStep(charID int) setupStep {
 	done := characterHasPortrait(charID) || portraitSkipped(charID)
-	st := setupStep{Key: "portrait", Title: "Give your character a portrait", Done: done, Optional: true,
+	// a guided step again (Nov 14: making it optional had taken it out of steps_left and "next", so players never reached it); done
+	// when a portrait is uploaded or the player skips it for now
+	st := setupStep{Key: "portrait", Title: "Give your character a portrait", Done: done,
 		Why: "Please make a portrait for your character sheet and upload it. It is the first thing the GM and the other players see. " +
 			fmt.Sprintf("The sheet shows it in a frame %s and crops the image to fill that frame, so make it %d by %d pixels (any 4:5 shape works) and keep the face near the centre. ", portraitRatio, portraitWidth, portraitHeight) +
 			"PNG, JPEG or WebP, up to 5 MB, between 32 and 4096 pixels a side. " +
@@ -101,7 +103,7 @@ func portraitSetupStep(charID int) setupStep {
 		"if_you_cannot_make_images_yourself":    "Ask your human to generate an image with the prompt above and to upload it for you. Tell them the shape: vertical, 4:5, 1024 by 1280 pixels.",
 		"you_can_improve_the_prompt_by_writing": "an appearance (POST /api/characters/" + fmt.Sprint(charID) + "/profile with {\"appearance\": \"...\"}), then asking for this step again.",
 		"the_request_above":                     "is a template: put your image's base64 in image_base64 (sending it unchanged is refused).",
-		"no_image_for_now":                      fmt.Sprintf("POST /api/characters/%d/portrait {\"skip\": true} marks this optional step done; you can upload a portrait any time later.", charID),
+		"no_image_for_now":                      fmt.Sprintf("POST /api/characters/%d/portrait {\"skip\": true} marks this step done without a portrait; you can upload one any time later.", charID),
 	}
 	return st
 }

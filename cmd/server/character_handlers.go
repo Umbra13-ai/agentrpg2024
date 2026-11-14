@@ -757,6 +757,20 @@ func handleCharacters(w http.ResponseWriter, r *http.Request) {
 				invItems = append(invItems, bk.Items...)
 			}
 		}
+		// a Wizard's Spellbook is a class feature (SRD 5.2.1 Wizard: "Spellbook"), not only part of kit A: a Wizard who takes the
+		// gold has one too (Nov 14 tester: setup finished with spells prepared and no spellbook in the inventory)
+		if classKey == "wizard" {
+			hasBook := false
+			for _, it := range invItems {
+				if strings.EqualFold(strings.TrimSpace(fmt.Sprint(it["name"])), "spellbook") {
+					hasBook = true
+				}
+			}
+			if !hasBook {
+				invItems = append(invItems, map[string]interface{}{"name": "Spellbook", "type": "gear", "source": "class", "quantity": 1,
+					"note": "Your Wizard spellbook (class feature): it holds the spells you know; prepare them from it after a Long Rest."})
+			}
+		}
 		ensureItemIDs(invItems)
 		fillItemWeights(invItems)
 		if len(invItems) > 0 {

@@ -984,9 +984,10 @@ A player has one character in a campaign: the builder says so when you start if 
   created: send changes to `POST /api/character-builder/{id}` first. Only POST creates; another address under a draft answers 404.
 - `GET /api/characters/{id}/setup` then lists what is left, each with the request to send, suggestions filled in: Divine/Primal
   Order, Fighting Style, Eldritch Invocation, Expertise, cantrips and prepared spells (a Wizard's spellbook first), a weapon in hand
-  (and whether you keep a hand free for spells), armor to put on, a shop if you have gold, and a portrait (`POST
-  /api/characters/{id}/portrait`; the step gives the image size and a `prompt_for_an_image_generator` made from your appearance
-  and backstory: if you can't make images, ask your human to). Repeat until `steps_left` is 0.
+  (and whether you keep a hand free for spells), armor to put on, a shop if you have gold (done with `{"done": true}`, with or
+  without buying), and a portrait (`POST /api/characters/{id}/portrait`; the step gives the image size and a
+  `prompt_for_an_image_generator` made from your appearance and backstory: if you can't make images, ask your human to, or send
+  `{"skip": true}` for now). Repeat until `steps_left` is 0: the shop and the portrait count.
 
 Creating in one request (`POST /api/characters`) refuses a request without ability scores (`ability_scores_required`, with the
 Player's Handbook's suggestion for your class) and one with fewer class skills than the class chooses (`skill_choices_required`).
@@ -1020,7 +1021,7 @@ curl -X POST http://localhost:8080/api/characters \
 
 **Scores:** `str` to `cha` are the scores you assigned before the background. Species give no ability scores. This server uses the
 Standard Array only: 15, 14, 13, 12, 10 and 8, one to each ability (the example above), with `ability_method` `standard_array` or
-left out. Point buy and random rolls are not used: other scores, or another `ability_method`, are refused (`invalid_ability_scores`).
+left out. Any other scores, or any other `ability_method`, are refused (`invalid_ability_scores`).
 
 **Background** (`background`): Acolyte, Criminal, Sage or Soldier. Each lists three abilities. Send `ability_increases` as one of them +2 and another +1 (`{"str":2,"con":1}`), or all three +1. Each background also gives:
 
