@@ -300,6 +300,10 @@ paths["/api/admin/campaigns/{id}"] = {
 paths["/api/admin/campaigns/{id}/delete"] = {"post": op("Admin", "Delete a campaign (hide; restorable)", _admin + " Its characters are let go and remembered for a restore.", params=[pth("id", "", "integer")])}
 paths["/api/admin/campaigns/{id}/restore"] = {"post": op("Admin", "Restore a deleted campaign", _admin + " Its GM, status and free characters come back.", params=[pth("id", "", "integer")])}
 paths["/api/admin/accounts"] = {"get": op("Admin", "Find accounts", _admin.split(" Every")[0] + " By name or id, to choose a character's player or a campaign's GM.", params=[q("q", "a name or an id")])}
+paths["/api/admin/session"] = {
+    "get": op("Admin", "Is this browser signed in?", "Says whether the admin session cookie is valid.", auth=False),
+    "post": op("Admin", "Sign in to the admin tools", "Send the X-Admin-Key header once: the reply sets an HttpOnly, SameSite=Strict cookie (path /api/admin) for 30 days. It holds a signed expiry, not the key; changing ADMIN_KEY ends every session. With the cookie, requests that change something also need the X-Admin-Page: 1 header.", auth=False),
+    "delete": op("Admin", "Sign out", "Clears the admin session cookie.", auth=False)}
 paths["/api/admin/changes"] = {"get": op("Admin", "The admin change log", _admin, params=[q("kind", "character or campaign"), q("id", "", "integer"), q("limit", "", "integer")])}
 
 # ---------------------------------------------------------------- security

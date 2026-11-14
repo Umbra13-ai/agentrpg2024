@@ -14,6 +14,9 @@ package main
 // (the server's ADMIN_KEY). Every edit, delete and restore is written to admin_changes.
 
 import (
+	"crypto/hmac"
+	"crypto/sha256"
+	"encoding/hex"
 	"database/sql"
 	"encoding/json"
 	"fmt"
@@ -269,7 +272,9 @@ var adminFails = struct {
 	byIP map[string][]time.Time
 }{byIP: map[string][]time.Time{}}
 
-// requireAdmin checks the X-Admin-Key; 10 wrong keys from one address in 15 minutes lock it out for the rest of that time.
+// requireAdmin lets the operator through: the X-Admin-Key header, or the admin session cookie (with the X-Admin-Page header on a
+// request that changes something, which another site can't send). 10 wrong keys from one address in 15 minutes lock it out for the
+// rest of that time; a request with no key at all is just refused (opening the page signed out is not an attempt).
 func requireAdmin(w http.ResponseWriter, r *http.Request) bool {
 	ip := clientIP(r)
 	adminFails.Lock()
@@ -286,15 +291,81 @@ func requireAdmin(w http.ResponseWriter, r *http.Request) bool {
 		writeJSONStatus(w, http.StatusTooManyRequests, map[string]interface{}{"error": "too_many_attempts", "message": "Too many wrong admin keys: try again in 15 minutes."})
 		return false
 	}
-	if !adminKeyOK(r) {
+	if adminKeyOK(r) || adminCookieOK(r) {
+		ensureAdminSchema()
+		return true
+	}
+	if r.Header.Get("X-Admin-Key") != "" {
 		adminFails.Lock()
 		adminFails.byIP[ip] = append(adminFails.byIP[ip], time.Now())
 		adminFails.Unlock()
-		writeJSONStatus(w, http.StatusUnauthorized, map[string]interface{}{"error": "unauthorized", "message": "The X-Admin-Key header must be the server's ADMIN_KEY."})
+	}
+	writeJSONStatus(w, http.StatusUnauthorized, map[string]interface{}{"error": "unauthorized", "message": "Sign in with the server's ADMIN_KEY."})
+	return false
+}
+
+// ---- the admin session cookie (Nov 14, Matt: "I'm tired of adding the key over and over")
+// The cookie holds an expiry time and an HMAC of it made with ADMIN_KEY, never the key itself: it lasts 30 days, and changing
+// ADMIN_KEY ends every session. HttpOnly (page scripts can't read it), Secure on HTTPS, SameSite=Strict, sent only to /api/admin.
+
+const adminCookieName = "arpg_admin"
+const adminSessionDays = 30
+
+func adminCookieSig(expiry string) string {
+	m := hmac.New(sha256.New, []byte("admin-session:"+os.Getenv("ADMIN_KEY")))
+	m.Write([]byte(expiry))
+	return hex.EncodeToString(m.Sum(nil))
+}
+
+func adminCookieOK(r *http.Request) bool {
+	if os.Getenv("ADMIN_KEY") == "" {
 		return false
 	}
-	ensureAdminSchema()
+	c, err := r.Cookie(adminCookieName)
+	if err != nil {
+		return false
+	}
+	parts := strings.SplitN(c.Value, ".", 2)
+	if len(parts) != 2 {
+		return false
+	}
+	exp, err := strconv.ParseInt(parts[0], 10, 64)
+	if err != nil || time.Now().Unix() > exp {
+		return false
+	}
+	if !hmac.Equal([]byte(parts[1]), []byte(adminCookieSig(parts[0]))) {
+		return false
+	}
+	// a request that changes something must come from the admin page itself
+	if r.Method != http.MethodGet && r.Method != http.MethodHead && r.Header.Get("X-Admin-Page") != "1" {
+		return false
+	}
 	return true
+}
+
+func setAdminCookie(w http.ResponseWriter, r *http.Request, value string, maxAge int) {
+	http.SetCookie(w, &http.Cookie{Name: adminCookieName, Value: value, Path: "/api/admin", MaxAge: maxAge, HttpOnly: true,
+		Secure: r.TLS != nil || strings.EqualFold(r.Header.Get("X-Forwarded-Proto"), "https"), SameSite: http.SameSiteStrictMode})
+}
+
+// handleAdminSession: POST with the X-Admin-Key header signs in (sets the cookie); DELETE signs out; GET says whether signed in.
+func handleAdminSession(w http.ResponseWriter, r *http.Request) {
+	switch r.Method {
+	case http.MethodGet:
+		writeJSONStatus(w, http.StatusOK, map[string]interface{}{"signed_in": adminCookieOK(r)})
+	case http.MethodPost:
+		if !requireAdmin(w, r) {
+			return
+		}
+		exp := strconv.FormatInt(time.Now().Add(adminSessionDays*24*time.Hour).Unix(), 10)
+		setAdminCookie(w, r, exp+"."+adminCookieSig(exp), adminSessionDays*24*3600)
+		writeJSONStatus(w, http.StatusOK, map[string]interface{}{"signed_in": true, "message": fmt.Sprintf("Signed in for %d days on this browser.", adminSessionDays)})
+	case http.MethodDelete:
+		setAdminCookie(w, r, "", -1)
+		writeJSONStatus(w, http.StatusOK, map[string]interface{}{"signed_in": false})
+	default:
+		writeJSONStatus(w, http.StatusMethodNotAllowed, map[string]interface{}{"error": "method_not_allowed"})
+	}
 }
 
 // tableColumns: a table's columns and their data types (for the admin's generic editor).

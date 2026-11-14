@@ -65,20 +65,20 @@ details.card>summary::-webkit-details-marker{display:none}details.card[open]>sum
 <div class="savebar" id="savebar"><div class="row"><input id="reason" placeholder="Reason (optional)"><button class="btn" id="discard">Undo</button><button class="btn primary" id="save">Save</button></div></div>
 <script>
 (function(){
-var key='',tab='characters',pending={},orig={},curId=0,campaignsCache=null,spellsCache=null;
-try{key=sessionStorage.getItem('ak')||''}catch(e){}
+var tab='characters',pending={},orig={},curId=0,campaignsCache=null,spellsCache=null;
 var M=document.getElementById('main');
 function el(t,a,txt){var e=document.createElement(t);if(a)for(var k in a){if(k==='class')e.className=a[k];else e.setAttribute(k,a[k])}if(txt!==undefined&&txt!==null)e.textContent=String(txt);return e}
 function add(p){for(var i=1;i<arguments.length;i++)if(arguments[i])p.appendChild(arguments[i]);return p}
 var toastT;function toast(t,err){var b=document.getElementById('toast');b.textContent=t;b.className=err?'err':'';b.style.display='block';clearTimeout(toastT);toastT=setTimeout(function(){b.style.display='none'},err?6000:3000)}
-function api(m,p,body){return fetch(p,{method:m,headers:{'X-Admin-Key':key,'Content-Type':'application/json'},body:body?JSON.stringify(body):undefined}).then(function(r){return r.json().catch(function(){return {}}).then(function(j){
-  if(r.status===401||r.status===429){signOut();toast(j.message||'Please sign in again',true);throw new Error('auth')}if(!r.ok)throw new Error(j.message||j.error||('Error '+r.status));return j})})}
+function api(m,p,body){return fetch(p,{method:m,credentials:'same-origin',headers:{'X-Admin-Page':'1','Content-Type':'application/json'},body:body?JSON.stringify(body):undefined}).then(function(r){return r.json().catch(function(){return {}}).then(function(j){
+  if(r.status===401||r.status===429){showSignedOut();toast(j.message||'Please sign in again',true);throw new Error('auth')}if(!r.ok)throw new Error(j.message||j.error||('Error '+r.status));return j})})}
 function fail(e){if(e.message!=='auth')toast(e.message,true)}
-function signOut(){key='';try{sessionStorage.removeItem('ak')}catch(e){};document.getElementById('tabs').hidden=true;document.getElementById('logout').hidden=true;pending={};hideSave();login()}
+function showSignedOut(){document.getElementById('tabs').hidden=true;document.getElementById('logout').hidden=true;pending={};hideSave();login()}
+function signOut(){fetch('/api/admin/session',{method:'DELETE',credentials:'same-origin'}).then(showSignedOut,showSignedOut)}
 document.getElementById('logout').onclick=function(){if(dirty()&&!confirm('Discard unsaved changes?'))return;signOut()};
-function login(){M.textContent='';var c=el('div',{'class':'card'});add(c,el('h2',null,'Sign in'),el('p',{'class':'muted'},'Enter the admin key. It stays in this tab only.'));
+function login(){M.textContent='';var c=el('div',{'class':'card'});add(c,el('h2',null,'Sign in'),el('p',{'class':'muted'},'Enter the admin key once. This browser stays signed in for 30 days (until you sign out or the key changes).'));
   var i=el('input',{type:'password',autocomplete:'current-password',placeholder:'Admin key'});var b=el('button',{'class':'btn primary'},'Sign in');b.style.marginTop='10px';b.style.width='100%';
-  b.onclick=function(){key=i.value.trim();if(!key)return;api('GET','/api/admin/characters?q=__check__').then(function(){try{sessionStorage.setItem('ak',key)}catch(e){};start()}).catch(fail)};
+  b.onclick=function(){var k=i.value.trim();if(!k)return;fetch('/api/admin/session',{method:'POST',credentials:'same-origin',headers:{'X-Admin-Key':k}}).then(function(r){return r.json().then(function(j){if(!r.ok)throw new Error(j.message||'Wrong key');i.value='';start()})}).catch(function(e){toast(e.message,true)})};
   i.onkeydown=function(e){if(e.key==='Enter')b.onclick()};add(c,i,b);M.appendChild(c)}
 function start(){document.getElementById('tabs').hidden=false;document.getElementById('logout').hidden=false;showList()}
 Array.prototype.forEach.call(document.querySelectorAll('#tabs button'),function(b){b.onclick=function(){if(dirty()&&!confirm('Discard unsaved changes?'))return;
@@ -243,6 +243,6 @@ function diff(o,n){var a,b;try{a=JSON.parse(o);b=JSON.parse(n)}catch(e){return s
 function short(v){v=v==='NULL'||v===''?'empty':String(v);return v.length>40?v.slice(0,40)+'…':v}
 function when(s){var d=new Date(s.replace(' ','T')+'Z');return isNaN(d)?s:d.toLocaleString([],{month:'short',day:'numeric',hour:'numeric',minute:'2-digit'})}
 window.addEventListener('beforeunload',function(e){if(dirty()){e.preventDefault();e.returnValue=''}});
-if(key)start();else login();
+fetch('/api/admin/session',{credentials:'same-origin'}).then(function(r){return r.json()}).then(function(j){j.signed_in?start():login()}).catch(login);
 })();
 </script></body></html>`
