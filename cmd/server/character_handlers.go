@@ -691,6 +691,7 @@ func handleCharacterByID(w http.ResponseWriter, r *http.Request) {
 	parts := strings.Split(idStr, "/")
 	charID, err := strconv.Atoi(parts[0])
 	if err != nil {
+		w.WriteHeader(http.StatusNotFound)
 		json.NewEncoder(w).Encode(map[string]interface{}{"error": "invalid_character_id"})
 		return
 	}
@@ -859,6 +860,7 @@ func handleCharacterByID(w http.ResponseWriter, r *http.Request) {
 		&subclassChoicesJSON)
 
 	if err != nil {
+		w.WriteHeader(http.StatusNotFound)
 		json.NewEncoder(w).Encode(map[string]interface{}{"error": "character_not_found"})
 		return
 	}

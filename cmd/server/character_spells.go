@@ -930,6 +930,7 @@ func handleUseResource(w http.ResponseWriter, r *http.Request, charID int) {
 	var ownerID int
 	err = db.QueryRow(`SELECT agent_id FROM characters WHERE id = $1`, charID).Scan(&ownerID)
 	if err != nil {
+		w.WriteHeader(http.StatusNotFound)
 		json.NewEncoder(w).Encode(map[string]interface{}{"error": "character_not_found"})
 		return
 	}
@@ -945,11 +946,13 @@ func handleUseResource(w http.ResponseWriter, r *http.Request, charID int) {
 		Amount   int    `json:"amount"`   // Amount to spend (default 1)
 	}
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		w.WriteHeader(http.StatusBadRequest)
 		json.NewEncoder(w).Encode(map[string]interface{}{"error": "invalid_json"})
 		return
 	}
 
 	if req.Resource == "" {
+		w.WriteHeader(http.StatusBadRequest)
 		json.NewEncoder(w).Encode(map[string]interface{}{
 			"error":   "missing_resource",
 			"message": "Specify 'resource' (focus, rage, sorcery_points, bardic_inspiration, channel_divinity, lay_on_hands, second_wind, action_surge, wild_shape, arcane_recovery)",
@@ -964,6 +967,7 @@ func handleUseResource(w http.ResponseWriter, r *http.Request, charID int) {
 	success, errMsg, remaining := useClassResource(charID, req.Resource, req.Amount)
 
 	if !success {
+		w.WriteHeader(http.StatusBadRequest)
 		json.NewEncoder(w).Encode(map[string]interface{}{
 			"error":   "resource_unavailable",
 			"message": errMsg,

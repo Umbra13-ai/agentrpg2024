@@ -52,6 +52,7 @@ func handleCharacterMetamagic(w http.ResponseWriter, r *http.Request) {
 		`, charID).Scan(&class, &level, &choicesJSON)
 
 		if err != nil {
+			w.WriteHeader(http.StatusNotFound)
 			json.NewEncoder(w).Encode(map[string]interface{}{
 				"error":   "character_not_found",
 				"message": fmt.Sprintf("Character %d not found", charID),
@@ -60,6 +61,7 @@ func handleCharacterMetamagic(w http.ResponseWriter, r *http.Request) {
 		}
 
 		if strings.ToLower(class) != "sorcerer" {
+			w.WriteHeader(http.StatusBadRequest)
 			json.NewEncoder(w).Encode(map[string]interface{}{
 				"error":   "not_a_sorcerer",
 				"message": "Only Sorcerers can learn Metamagic",
@@ -126,6 +128,7 @@ func handleCharacterMetamagic(w http.ResponseWriter, r *http.Request) {
 		Metamagic   string `json:"metamagic"` // slug: careful, distant, empowered, extended, heightened, quickened, subtle, twinned
 	}
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		w.WriteHeader(http.StatusBadRequest)
 		json.NewEncoder(w).Encode(map[string]interface{}{
 			"error":   "invalid_json",
 			"message": publicError(err),
@@ -142,6 +145,7 @@ func handleCharacterMetamagic(w http.ResponseWriter, r *http.Request) {
 			validSlugs = append(validSlugs, slug)
 		}
 		sort.Strings(validSlugs)
+		w.WriteHeader(http.StatusBadRequest)
 		json.NewEncoder(w).Encode(map[string]interface{}{
 			"error":         "invalid_metamagic",
 			"message":       fmt.Sprintf("'%s' is not a valid Metamagic option", req.Metamagic),
@@ -161,6 +165,7 @@ func handleCharacterMetamagic(w http.ResponseWriter, r *http.Request) {
 	`, req.CharacterID).Scan(&ownerID, &charName, &class, &level, &choicesJSON)
 
 	if err != nil {
+		w.WriteHeader(http.StatusNotFound)
 		json.NewEncoder(w).Encode(map[string]interface{}{
 			"error":   "character_not_found",
 			"message": fmt.Sprintf("Character %d not found", req.CharacterID),
@@ -169,6 +174,7 @@ func handleCharacterMetamagic(w http.ResponseWriter, r *http.Request) {
 	}
 
 	if ownerID != agentID {
+		w.WriteHeader(http.StatusForbidden)
 		json.NewEncoder(w).Encode(map[string]interface{}{
 			"error":   "not_your_character",
 			"message": "You can only choose Metamagic for your own characters",
@@ -177,6 +183,7 @@ func handleCharacterMetamagic(w http.ResponseWriter, r *http.Request) {
 	}
 
 	if strings.ToLower(class) != "sorcerer" {
+		w.WriteHeader(http.StatusBadRequest)
 		json.NewEncoder(w).Encode(map[string]interface{}{
 			"error":   "not_a_sorcerer",
 			"message": "Only Sorcerers can learn Metamagic",
@@ -185,6 +192,7 @@ func handleCharacterMetamagic(w http.ResponseWriter, r *http.Request) {
 	}
 
 	if level < 2 {
+		w.WriteHeader(http.StatusBadRequest)
 		json.NewEncoder(w).Encode(map[string]interface{}{
 			"error":   "level_too_low",
 			"message": "Sorcerers gain Metamagic at level 2",
@@ -199,6 +207,7 @@ func handleCharacterMetamagic(w http.ResponseWriter, r *http.Request) {
 	// Check if already known
 	for _, c := range currentChoices {
 		if c == metamagicSlug {
+			w.WriteHeader(http.StatusConflict)
 			json.NewEncoder(w).Encode(map[string]interface{}{
 				"error":   "already_known",
 				"message": fmt.Sprintf("%s already knows %s", charName, opt.Name),
@@ -210,6 +219,7 @@ func handleCharacterMetamagic(w http.ResponseWriter, r *http.Request) {
 	// Check if at capacity
 	maxChoices := getMaxMetamagicChoices(level)
 	if len(currentChoices) >= maxChoices {
+		w.WriteHeader(http.StatusConflict)
 		json.NewEncoder(w).Encode(map[string]interface{}{
 			"error":       "at_capacity",
 			"message":     fmt.Sprintf("%s has already learned %d Metamagic options (max at level %d)", charName, len(currentChoices), level),
@@ -226,6 +236,7 @@ func handleCharacterMetamagic(w http.ResponseWriter, r *http.Request) {
 
 	_, err = db.Exec("UPDATE characters SET metamagic_choices = $1 WHERE id = $2", updatedJSON, req.CharacterID)
 	if err != nil {
+		w.WriteHeader(http.StatusInternalServerError)
 		json.NewEncoder(w).Encode(map[string]interface{}{
 			"error":   "database_error",
 			"message": publicError(err),
@@ -851,6 +862,7 @@ func handleFlexibleCasting(w http.ResponseWriter, r *http.Request) {
 		SlotLevel   int    `json:"slot_level"` // 1-5
 	}
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		w.WriteHeader(http.StatusBadRequest)
 		json.NewEncoder(w).Encode(map[string]interface{}{
 			"error":   "invalid_json",
 			"message": publicError(err),
@@ -861,6 +873,7 @@ func handleFlexibleCasting(w http.ResponseWriter, r *http.Request) {
 	// Validate action
 	action := strings.ToLower(strings.TrimSpace(req.Action))
 	if action != "create_slot" && action != "convert_slot" {
+		w.WriteHeader(http.StatusBadRequest)
 		json.NewEncoder(w).Encode(map[string]interface{}{
 			"error":   "invalid_action",
 			"message": "Action must be 'create_slot' (spend points for slot) or 'convert_slot' (spend slot for points)",
@@ -870,6 +883,7 @@ func handleFlexibleCasting(w http.ResponseWriter, r *http.Request) {
 
 	// Validate slot level
 	if req.SlotLevel < 1 || req.SlotLevel > 5 {
+		w.WriteHeader(http.StatusBadRequest)
 		json.NewEncoder(w).Encode(map[string]interface{}{
 			"error":   "invalid_slot_level",
 			"message": "Slot level must be 1-5 for Flexible Casting",
@@ -893,6 +907,7 @@ func handleFlexibleCasting(w http.ResponseWriter, r *http.Request) {
 	`, req.CharacterID).Scan(&ownerID, &charName, &class, &level, &resourcesJSON, &slotsUsedJSON)
 
 	if err != nil {
+		w.WriteHeader(http.StatusNotFound)
 		json.NewEncoder(w).Encode(map[string]interface{}{
 			"error":   "character_not_found",
 			"message": fmt.Sprintf("Character %d not found", req.CharacterID),
@@ -901,6 +916,7 @@ func handleFlexibleCasting(w http.ResponseWriter, r *http.Request) {
 	}
 
 	if ownerID != agentID {
+		w.WriteHeader(http.StatusForbidden)
 		json.NewEncoder(w).Encode(map[string]interface{}{
 			"error":   "not_your_character",
 			"message": "You can only use Flexible Casting for your own characters",
@@ -909,6 +925,7 @@ func handleFlexibleCasting(w http.ResponseWriter, r *http.Request) {
 	}
 
 	if strings.ToLower(class) != "sorcerer" {
+		w.WriteHeader(http.StatusBadRequest)
 		json.NewEncoder(w).Encode(map[string]interface{}{
 			"error":   "not_a_sorcerer",
 			"message": "Only Sorcerers have Font of Magic",
@@ -917,6 +934,7 @@ func handleFlexibleCasting(w http.ResponseWriter, r *http.Request) {
 	}
 
 	if level < 2 {
+		w.WriteHeader(http.StatusBadRequest)
 		json.NewEncoder(w).Encode(map[string]interface{}{
 			"error":   "level_too_low",
 			"message": "Sorcerers gain Font of Magic at level 2",
@@ -952,6 +970,7 @@ func handleFlexibleCasting(w http.ResponseWriter, r *http.Request) {
 		// Spend sorcery points to create a spell slot
 		cost := slotCreationCosts[req.SlotLevel]
 		if currentPoints < cost {
+			w.WriteHeader(http.StatusBadRequest)
 			json.NewEncoder(w).Encode(map[string]interface{}{
 				"error":          "insufficient_points",
 				"message":        fmt.Sprintf("Creating a level %d spell slot costs %d sorcery points, but you only have %d", req.SlotLevel, cost, currentPoints),
@@ -968,6 +987,7 @@ func handleFlexibleCasting(w http.ResponseWriter, r *http.Request) {
 			slotsUsed[slotKey] = usedSlots - 1
 		} else {
 			// Already at max slots - can't create more
+			w.WriteHeader(http.StatusConflict)
 			json.NewEncoder(w).Encode(map[string]interface{}{
 				"error":           "slots_full",
 				"message":         fmt.Sprintf("You already have all your level %d spell slots available (%d/%d)", req.SlotLevel, availableSlots, totalSlots),
@@ -1000,6 +1020,7 @@ func handleFlexibleCasting(w http.ResponseWriter, r *http.Request) {
 	} else { // convert_slot
 		// Convert a spell slot to sorcery points
 		if availableSlots <= 0 {
+			w.WriteHeader(http.StatusBadRequest)
 			json.NewEncoder(w).Encode(map[string]interface{}{
 				"error":       "no_slots_available",
 				"message":     fmt.Sprintf("You have no level %d spell slots to convert (%d/%d used)", req.SlotLevel, usedSlots, totalSlots),
@@ -1012,6 +1033,7 @@ func handleFlexibleCasting(w http.ResponseWriter, r *http.Request) {
 		pointsGained := slotConversionYields[req.SlotLevel]
 		newPoints := currentPoints + pointsGained
 		if newPoints > maxPoints {
+			w.WriteHeader(http.StatusConflict)
 			json.NewEncoder(w).Encode(map[string]interface{}{
 				"error":            "would_exceed_max",
 				"message":          fmt.Sprintf("Converting would give you %d points, but max is %d", newPoints, maxPoints),
@@ -1483,6 +1505,7 @@ func handleCharacterFiendishResilience(w http.ResponseWriter, r *http.Request) {
 		charIDStr := r.URL.Query().Get("character_id")
 		charID, err := strconv.Atoi(charIDStr)
 		if err != nil {
+			w.WriteHeader(http.StatusBadRequest)
 			json.NewEncoder(w).Encode(map[string]interface{}{
 				"error":   "character_id_required",
 				"message": "Provide character_id to check Fiendish Resilience status",
@@ -1500,6 +1523,7 @@ func handleCharacterFiendishResilience(w http.ResponseWriter, r *http.Request) {
 		`, charID).Scan(&class, &level, &subclassNull, &fiendishResNull)
 
 		if err != nil {
+			w.WriteHeader(http.StatusNotFound)
 			json.NewEncoder(w).Encode(map[string]interface{}{
 				"error":   "character_not_found",
 				"message": fmt.Sprintf("Character %d not found", charID),
@@ -1513,6 +1537,7 @@ func handleCharacterFiendishResilience(w http.ResponseWriter, r *http.Request) {
 		}
 
 		if strings.ToLower(class) != "warlock" {
+			w.WriteHeader(http.StatusBadRequest)
 			json.NewEncoder(w).Encode(map[string]interface{}{
 				"error":   "not_warlock",
 				"message": fmt.Sprintf("Fiendish Resilience is a Warlock feature (character is %s)", class),
@@ -1521,6 +1546,7 @@ func handleCharacterFiendishResilience(w http.ResponseWriter, r *http.Request) {
 		}
 
 		if strings.ToLower(subclass) != "fiend" {
+			w.WriteHeader(http.StatusBadRequest)
 			json.NewEncoder(w).Encode(map[string]interface{}{
 				"error":   "wrong_patron",
 				"message": fmt.Sprintf("Fiendish Resilience is a Fiend patron feature (character's patron: %s)", subclass),
@@ -1529,6 +1555,7 @@ func handleCharacterFiendishResilience(w http.ResponseWriter, r *http.Request) {
 		}
 
 		if level < 10 {
+			w.WriteHeader(http.StatusBadRequest)
 			json.NewEncoder(w).Encode(map[string]interface{}{
 				"error":   "level_requirement",
 				"message": fmt.Sprintf("Fiendish Resilience requires Fiend Warlock level 10+ (currently level %d)", level),
@@ -1578,6 +1605,7 @@ func handleCharacterFiendishResilience(w http.ResponseWriter, r *http.Request) {
 		DamageType  string `json:"damage_type"`
 	}
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		w.WriteHeader(http.StatusBadRequest)
 		json.NewEncoder(w).Encode(map[string]interface{}{"error": "invalid_json", "message": publicError(err)})
 		return
 	}
@@ -1586,6 +1614,7 @@ func handleCharacterFiendishResilience(w http.ResponseWriter, r *http.Request) {
 	damageTypeLower := strings.ToLower(strings.TrimSpace(req.DamageType))
 	if !validDamageTypes[damageTypeLower] {
 		validList := []string{"acid", "cold", "fire", "lightning", "poison", "thunder", "necrotic", "psychic", "radiant", "bludgeoning", "piercing", "slashing"}
+		w.WriteHeader(http.StatusBadRequest)
 		json.NewEncoder(w).Encode(map[string]interface{}{
 			"error":              "invalid_damage_type",
 			"message":            fmt.Sprintf("'%s' is not a valid damage type for Fiendish Resilience", req.DamageType),
@@ -1608,6 +1637,7 @@ func handleCharacterFiendishResilience(w http.ResponseWriter, r *http.Request) {
 	`, req.CharacterID).Scan(&ownerID, &class, &charName, &level, &subclassNull, &fiendishResNull, &campaignID)
 
 	if err != nil {
+		w.WriteHeader(http.StatusNotFound)
 		json.NewEncoder(w).Encode(map[string]interface{}{
 			"error":   "character_not_found",
 			"message": fmt.Sprintf("Character %d not found", req.CharacterID),
@@ -1631,6 +1661,7 @@ func handleCharacterFiendishResilience(w http.ResponseWriter, r *http.Request) {
 
 	// Validate class and subclass
 	if strings.ToLower(class) != "warlock" {
+		w.WriteHeader(http.StatusBadRequest)
 		json.NewEncoder(w).Encode(map[string]interface{}{
 			"error":   "not_warlock",
 			"message": fmt.Sprintf("%s is a %s, not a Warlock. Fiendish Resilience is a Fiend Warlock feature.", charName, class),
@@ -1639,6 +1670,7 @@ func handleCharacterFiendishResilience(w http.ResponseWriter, r *http.Request) {
 	}
 
 	if strings.ToLower(subclass) != "fiend" {
+		w.WriteHeader(http.StatusBadRequest)
 		json.NewEncoder(w).Encode(map[string]interface{}{
 			"error":   "wrong_patron",
 			"message": fmt.Sprintf("%s has the %s patron, not the Fiend. Fiendish Resilience is a Fiend patron feature.", charName, subclass),
@@ -1647,6 +1679,7 @@ func handleCharacterFiendishResilience(w http.ResponseWriter, r *http.Request) {
 	}
 
 	if level < 10 {
+		w.WriteHeader(http.StatusBadRequest)
 		json.NewEncoder(w).Encode(map[string]interface{}{
 			"error":   "level_requirement",
 			"message": fmt.Sprintf("%s is level %d. Fiendish Resilience requires Fiend Warlock level 10+.", charName, level),
@@ -1662,6 +1695,7 @@ func handleCharacterFiendishResilience(w http.ResponseWriter, r *http.Request) {
 	// Update character
 	_, err = db.Exec(`UPDATE characters SET fiendish_resilience = $1 WHERE id = $2`, damageTypeLower, req.CharacterID)
 	if err != nil {
+		w.WriteHeader(http.StatusInternalServerError)
 		json.NewEncoder(w).Encode(map[string]interface{}{
 			"error":   "update_failed",
 			"message": "Failed to update Fiendish Resilience",
@@ -1745,6 +1779,7 @@ func handleCharacterMysticArcanum(w http.ResponseWriter, r *http.Request) {
 		`, charID).Scan(&class, &charName, &level, &arcanumJSON, &usedJSON)
 
 		if err != nil {
+			w.WriteHeader(http.StatusNotFound)
 			json.NewEncoder(w).Encode(map[string]interface{}{
 				"error":   "character_not_found",
 				"message": fmt.Sprintf("Character %d not found", charID),
@@ -1753,6 +1788,7 @@ func handleCharacterMysticArcanum(w http.ResponseWriter, r *http.Request) {
 		}
 
 		if strings.ToLower(class) != "warlock" {
+			w.WriteHeader(http.StatusBadRequest)
 			json.NewEncoder(w).Encode(map[string]interface{}{
 				"error":   "not_warlock",
 				"message": fmt.Sprintf("%s is a %s, not a Warlock. Mystic Arcanum is a Warlock feature.", charName, class),
@@ -1761,6 +1797,7 @@ func handleCharacterMysticArcanum(w http.ResponseWriter, r *http.Request) {
 		}
 
 		if level < 11 {
+			w.WriteHeader(http.StatusBadRequest)
 			json.NewEncoder(w).Encode(map[string]interface{}{
 				"error":          "level_requirement",
 				"message":        fmt.Sprintf("%s is level %d. Mystic Arcanum is available at Warlock level 11.", charName, level),
@@ -1898,11 +1935,13 @@ func handleCharacterMysticArcanum(w http.ResponseWriter, r *http.Request) {
 		SpellSlug   string `json:"spell_slug"`
 	}
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		w.WriteHeader(http.StatusBadRequest)
 		json.NewEncoder(w).Encode(map[string]interface{}{"error": "invalid_json", "message": publicError(err)})
 		return
 	}
 
 	if req.CharacterID == 0 {
+		w.WriteHeader(http.StatusBadRequest)
 		json.NewEncoder(w).Encode(map[string]interface{}{
 			"error":   "character_id_required",
 			"message": "Provide character_id",
@@ -1911,6 +1950,7 @@ func handleCharacterMysticArcanum(w http.ResponseWriter, r *http.Request) {
 	}
 
 	if req.SpellLevel < 6 || req.SpellLevel > 9 {
+		w.WriteHeader(http.StatusBadRequest)
 		json.NewEncoder(w).Encode(map[string]interface{}{
 			"error":        "invalid_spell_level",
 			"message":      "Mystic Arcanum spells must be 6th-9th level",
@@ -1931,6 +1971,7 @@ func handleCharacterMysticArcanum(w http.ResponseWriter, r *http.Request) {
 	`, req.CharacterID).Scan(&ownerID, &class, &charName, &level, &arcanumJSON, &campaignID)
 
 	if err != nil {
+		w.WriteHeader(http.StatusNotFound)
 		json.NewEncoder(w).Encode(map[string]interface{}{
 			"error":   "character_not_found",
 			"message": fmt.Sprintf("Character %d not found", req.CharacterID),
@@ -1948,6 +1989,7 @@ func handleCharacterMysticArcanum(w http.ResponseWriter, r *http.Request) {
 	}
 
 	if strings.ToLower(class) != "warlock" {
+		w.WriteHeader(http.StatusBadRequest)
 		json.NewEncoder(w).Encode(map[string]interface{}{
 			"error":   "not_warlock",
 			"message": fmt.Sprintf("%s is a %s, not a Warlock. Mystic Arcanum is a Warlock feature.", charName, class),
@@ -1958,6 +2000,7 @@ func handleCharacterMysticArcanum(w http.ResponseWriter, r *http.Request) {
 	// Check level requirement for this spell level
 	requiredLevel := getMysticArcanumLevelRequirement(req.SpellLevel)
 	if level < requiredLevel {
+		w.WriteHeader(http.StatusBadRequest)
 		json.NewEncoder(w).Encode(map[string]interface{}{
 			"error":          "level_requirement",
 			"message":        fmt.Sprintf("%s is level %d. A %dth-level Mystic Arcanum requires Warlock level %d.", charName, level, req.SpellLevel, requiredLevel),
@@ -1978,6 +2021,7 @@ func handleCharacterMysticArcanum(w http.ResponseWriter, r *http.Request) {
 	`, req.SpellSlug).Scan(&spellName, &spellLevelDB, &school)
 
 	if err != nil {
+		w.WriteHeader(http.StatusNotFound)
 		json.NewEncoder(w).Encode(map[string]interface{}{
 			"error":   "spell_not_found",
 			"message": fmt.Sprintf("'%s' is not a valid warlock spell", req.SpellSlug),
@@ -1986,6 +2030,7 @@ func handleCharacterMysticArcanum(w http.ResponseWriter, r *http.Request) {
 	}
 
 	if spellLevelDB != req.SpellLevel {
+		w.WriteHeader(http.StatusBadRequest)
 		json.NewEncoder(w).Encode(map[string]interface{}{
 			"error":   "wrong_spell_level",
 			"message": fmt.Sprintf("%s is a %dth-level spell, not %dth-level", spellName, spellLevelDB, req.SpellLevel),
@@ -2004,6 +2049,7 @@ func handleCharacterMysticArcanum(w http.ResponseWriter, r *http.Request) {
 
 	_, err = db.Exec("UPDATE characters SET mystic_arcanum = $1 WHERE id = $2", arcanumJSONNew, req.CharacterID)
 	if err != nil {
+		w.WriteHeader(http.StatusInternalServerError)
 		json.NewEncoder(w).Encode(map[string]interface{}{
 			"error":   "update_failed",
 			"message": "Failed to update Mystic Arcanum",
@@ -2060,6 +2106,7 @@ func handleCharacterSignatureSpells(w http.ResponseWriter, r *http.Request) {
 		charIDStr := r.URL.Query().Get("character_id")
 		charID, err := strconv.Atoi(charIDStr)
 		if err != nil {
+			w.WriteHeader(http.StatusBadRequest)
 			json.NewEncoder(w).Encode(map[string]interface{}{
 				"error":   "character_id_required",
 				"message": "Provide character_id to check Signature Spells status",
@@ -2077,6 +2124,7 @@ func handleCharacterSignatureSpells(w http.ResponseWriter, r *http.Request) {
 		`, charID).Scan(&class, &level, &signatureSpellsJSON, &signatureSpellsUsedJSON)
 
 		if err != nil {
+			w.WriteHeader(http.StatusNotFound)
 			json.NewEncoder(w).Encode(map[string]interface{}{
 				"error":   "character_not_found",
 				"message": fmt.Sprintf("Character %d not found", charID),
@@ -2087,6 +2135,7 @@ func handleCharacterSignatureSpells(w http.ResponseWriter, r *http.Request) {
 		// Check Wizard level (multiclass support)
 		wizardLevel := getWizardLevel(charID)
 		if wizardLevel < 20 {
+			w.WriteHeader(http.StatusBadRequest)
 			json.NewEncoder(w).Encode(map[string]interface{}{
 				"error":         "level_requirement",
 				"message":       fmt.Sprintf("Signature Spells requires Wizard level 20 (current: %d)", wizardLevel),
@@ -2188,11 +2237,13 @@ func handleCharacterSignatureSpells(w http.ResponseWriter, r *http.Request) {
 		Description string `json:"description"` // Optional flavor
 	}
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		w.WriteHeader(http.StatusBadRequest)
 		json.NewEncoder(w).Encode(map[string]interface{}{"error": "invalid_json", "message": publicError(err)})
 		return
 	}
 
 	if req.Action == "" {
+		w.WriteHeader(http.StatusBadRequest)
 		json.NewEncoder(w).Encode(map[string]interface{}{
 			"error":   "action_required",
 			"message": "Specify action: 'choose' to select a signature spell, 'cast' to cast one without a slot",
@@ -2212,6 +2263,7 @@ func handleCharacterSignatureSpells(w http.ResponseWriter, r *http.Request) {
 	`, req.CharacterID).Scan(&ownerID, &class, &charName, &level, &campaignID, &signatureSpellsJSON, &signatureSpellsUsedJSON)
 
 	if err != nil {
+		w.WriteHeader(http.StatusNotFound)
 		json.NewEncoder(w).Encode(map[string]interface{}{
 			"error":   "character_not_found",
 			"message": fmt.Sprintf("Character %d not found", req.CharacterID),
@@ -2231,6 +2283,7 @@ func handleCharacterSignatureSpells(w http.ResponseWriter, r *http.Request) {
 	// Check Wizard level (multiclass support)
 	wizardLevel := getWizardLevel(req.CharacterID)
 	if wizardLevel < 20 {
+		w.WriteHeader(http.StatusBadRequest)
 		json.NewEncoder(w).Encode(map[string]interface{}{
 			"error":        "level_requirement",
 			"message":      fmt.Sprintf("%s needs Wizard level 20 for Signature Spells (current: %d)", charName, wizardLevel),
@@ -2247,6 +2300,7 @@ func handleCharacterSignatureSpells(w http.ResponseWriter, r *http.Request) {
 	switch req.Action {
 	case "choose":
 		if len(signatureSpells) >= 2 {
+			w.WriteHeader(http.StatusConflict)
 			json.NewEncoder(w).Encode(map[string]interface{}{
 				"error":            "already_chosen",
 				"message":          fmt.Sprintf("%s has already chosen 2 signature spells", charName),
@@ -2266,6 +2320,7 @@ func handleCharacterSignatureSpells(w http.ResponseWriter, r *http.Request) {
 		`, req.Spell).Scan(&spellName, &spellLevel)
 
 		if err != nil {
+			w.WriteHeader(http.StatusBadRequest)
 			json.NewEncoder(w).Encode(map[string]interface{}{
 				"error":   "invalid_spell",
 				"message": fmt.Sprintf("'%s' is not a valid wizard spell", req.Spell),
@@ -2274,6 +2329,7 @@ func handleCharacterSignatureSpells(w http.ResponseWriter, r *http.Request) {
 		}
 
 		if spellLevel != 3 {
+			w.WriteHeader(http.StatusBadRequest)
 			json.NewEncoder(w).Encode(map[string]interface{}{
 				"error":   "wrong_level",
 				"message": fmt.Sprintf("Signature spells must be 3rd level (%s is level %d)", spellName, spellLevel),
@@ -2284,6 +2340,7 @@ func handleCharacterSignatureSpells(w http.ResponseWriter, r *http.Request) {
 		// Check not already chosen
 		for _, existing := range signatureSpells {
 			if existing == req.Spell {
+				w.WriteHeader(http.StatusConflict)
 				json.NewEncoder(w).Encode(map[string]interface{}{
 					"error":   "already_selected",
 					"message": fmt.Sprintf("%s is already a signature spell", spellName),
@@ -2319,6 +2376,7 @@ func handleCharacterSignatureSpells(w http.ResponseWriter, r *http.Request) {
 		}
 
 		if !isSignature {
+			w.WriteHeader(http.StatusBadRequest)
 			json.NewEncoder(w).Encode(map[string]interface{}{
 				"error":            "not_signature_spell",
 				"message":          fmt.Sprintf("'%s' is not one of %s's signature spells", req.Spell, charName),
@@ -2330,6 +2388,7 @@ func handleCharacterSignatureSpells(w http.ResponseWriter, r *http.Request) {
 		// Check if already used this rest
 		for _, used := range signatureSpellsUsed {
 			if used == req.Spell {
+				w.WriteHeader(http.StatusConflict)
 				json.NewEncoder(w).Encode(map[string]interface{}{
 					"error":   "already_cast",
 					"message": fmt.Sprintf("%s has already cast %s for free since their last long rest", charName, req.Spell),
@@ -2374,6 +2433,7 @@ func handleCharacterSignatureSpells(w http.ResponseWriter, r *http.Request) {
 		})
 
 	default:
+		w.WriteHeader(http.StatusBadRequest)
 		json.NewEncoder(w).Encode(map[string]interface{}{
 			"error":   "invalid_action",
 			"message": fmt.Sprintf("Unknown action '%s'. Use 'choose' or 'cast'", req.Action),

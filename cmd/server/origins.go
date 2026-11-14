@@ -493,7 +493,7 @@ func writeOriginError(w http.ResponseWriter, e *originError) {
 	if len(e.Options) > 0 {
 		resp["valid_options"] = e.Options
 	}
-	json.NewEncoder(w).Encode(resp)
+	writeJSONStatus(w, http.StatusBadRequest, resp) // a refusal is a 4xx (Nov 14 audit F5: it was a 200)
 }
 
 // backgroundSummary lists what a background gave the character, for the sheet.

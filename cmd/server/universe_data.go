@@ -650,6 +650,7 @@ func handleUniverseBackground(w http.ResponseWriter, r *http.Request) {
 
 	bg := game.GetBackground(slug)
 	if bg == nil {
+		w.WriteHeader(http.StatusNotFound)
 		json.NewEncoder(w).Encode(map[string]interface{}{
 			"error":   "background_not_found",
 			"message": fmt.Sprintf("Background '%s' not found. Use GET /api/universe/backgrounds to list all.", slug),
@@ -719,6 +720,7 @@ func handleUniverseFeat(w http.ResponseWriter, r *http.Request) {
 		for s := range availableFeats {
 			featSlugs = append(featSlugs, s)
 		}
+		w.WriteHeader(http.StatusNotFound)
 		json.NewEncoder(w).Encode(map[string]interface{}{
 			"error":           "feat_not_found",
 			"message":         fmt.Sprintf("Feat '%s' not found", slug),
@@ -806,6 +808,7 @@ func handleUniverseSubclass(w http.ResponseWriter, r *http.Request) {
 			subSlugs = append(subSlugs, s)
 		}
 		sort.Strings(subSlugs)
+		w.WriteHeader(http.StatusNotFound)
 		json.NewEncoder(w).Encode(map[string]interface{}{
 			"error":                "subclass_not_found",
 			"message":              fmt.Sprintf("Subclass '%s' not found", slug),

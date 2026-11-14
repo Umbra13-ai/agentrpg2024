@@ -53,6 +53,7 @@ func handleCharacterASI(w http.ResponseWriter, r *http.Request, charID int) {
 		&asiClass, &asiLevel, &asiClassLevelsJSON)
 
 	if err != nil {
+		w.WriteHeader(http.StatusNotFound)
 		json.NewEncoder(w).Encode(map[string]interface{}{"error": "character_not_found"})
 		return
 	}
@@ -64,6 +65,7 @@ func handleCharacterASI(w http.ResponseWriter, r *http.Request, charID int) {
 	}
 
 	if pendingASI <= 0 {
+		w.WriteHeader(http.StatusBadRequest)
 		json.NewEncoder(w).Encode(map[string]interface{}{
 			"error":   "no_asi_available",
 			"message": "You have no ability score improvement points to spend.",
@@ -76,11 +78,13 @@ func handleCharacterASI(w http.ResponseWriter, r *http.Request, charID int) {
 		Points  int    `json:"points"`
 	}
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		w.WriteHeader(http.StatusBadRequest)
 		json.NewEncoder(w).Encode(map[string]interface{}{"error": "invalid_json"})
 		return
 	}
 
 	if req.Points <= 0 || req.Points > pendingASI {
+		w.WriteHeader(http.StatusBadRequest)
 		json.NewEncoder(w).Encode(map[string]interface{}{
 			"error":   "invalid_points",
 			"message": fmt.Sprintf("Points must be between 1 and %d (your available ASI points)", pendingASI),
@@ -112,6 +116,7 @@ func handleCharacterASI(w http.ResponseWriter, r *http.Request, charID int) {
 		currentVal = cha
 		column = "cha"
 	default:
+		w.WriteHeader(http.StatusBadRequest)
 		json.NewEncoder(w).Encode(map[string]interface{}{
 			"error":   "invalid_ability",
 			"message": "Ability must be one of: str, dex, con, int, wis, cha",
@@ -123,6 +128,7 @@ func handleCharacterASI(w http.ResponseWriter, r *http.Request, charID int) {
 	abilityMax := asiScoreMax
 	newVal := currentVal + req.Points
 	if newVal > abilityMax {
+		w.WriteHeader(http.StatusBadRequest)
 		json.NewEncoder(w).Encode(map[string]interface{}{
 			"error":   "exceeds_maximum",
 			"message": fmt.Sprintf("Cannot increase %s above %d. Current: %d, Requested increase: %d", ability, abilityMax, currentVal, req.Points),
@@ -135,6 +141,7 @@ func handleCharacterASI(w http.ResponseWriter, r *http.Request, charID int) {
 	query := fmt.Sprintf(`UPDATE characters SET %s = %s + $1, pending_asi = pending_asi - $1 WHERE id = $2 AND COALESCE(pending_asi, 0) >= $1 AND %s + $1 <= $3`, column, column, column)
 	res, err := db.Exec(query, req.Points, charID, abilityMax)
 	if err != nil {
+		w.WriteHeader(http.StatusInternalServerError)
 		json.NewEncoder(w).Encode(map[string]interface{}{"error": "database_error"})
 		return
 	}
@@ -234,6 +241,7 @@ func handleCharacterFeat(w http.ResponseWriter, r *http.Request, charID int) {
 	`, charID).Scan(&ownerID, &pendingASI, &level, &str, &dex, &con, &intl, &wis, &cha, &class, &maxHP, &featsJSON)
 
 	if err != nil {
+		w.WriteHeader(http.StatusNotFound)
 		json.NewEncoder(w).Encode(map[string]interface{}{"error": "character_not_found"})
 		return
 	}
@@ -248,6 +256,7 @@ func handleCharacterFeat(w http.ResponseWriter, r *http.Request, charID int) {
 	lessonsGranted, lessonsUsed := lessonsOfTheFirstOnes(charID)
 	viaLessons := lessonsGranted > lessonsUsed
 	if pendingASI < 2 && !viaLessons {
+		w.WriteHeader(http.StatusBadRequest)
 		json.NewEncoder(w).Encode(map[string]interface{}{
 			"error":   "insufficient_asi",
 			"message": fmt.Sprintf("Taking a feat costs 2 ASI points. You have %d.", pendingASI),
@@ -260,6 +269,7 @@ func handleCharacterFeat(w http.ResponseWriter, r *http.Request, charID int) {
 		AbilityChoice string `json:"ability_choice"` // For feats like Resilient, Observant
 	}
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		w.WriteHeader(http.StatusBadRequest)
 		json.NewEncoder(w).Encode(map[string]interface{}{"error": "invalid_json"})
 		return
 	}
@@ -291,6 +301,7 @@ func handleCharacterFeat(w http.ResponseWriter, r *http.Request, charID int) {
 	}
 
 	if featSlug == "ability_score_improvement" {
+		w.WriteHeader(http.StatusBadRequest)
 		json.NewEncoder(w).Encode(map[string]interface{}{
 			"error":   "use_asi",
 			"message": "Ability Score Improvement is a feat you take with POST /api/characters/{id}/asi.",
@@ -303,6 +314,7 @@ func handleCharacterFeat(w http.ResponseWriter, r *http.Request, charID int) {
 	json.Unmarshal(featsJSON, &currentFeats)
 	for _, f := range currentFeats {
 		if f == featSlug && !feat.Repeatable {
+			w.WriteHeader(http.StatusConflict)
 			json.NewEncoder(w).Encode(map[string]interface{}{
 				"error":   "already_has_feat",
 				"message": fmt.Sprintf("You already have the %s feat.", feat.Name),
@@ -313,6 +325,7 @@ func handleCharacterFeat(w http.ResponseWriter, r *http.Request, charID int) {
 
 	// Check prerequisites
 	if ok, msg := featPrerequisite(feat.Prerequisite, class, level, str, dex); !ok {
+		w.WriteHeader(http.StatusBadRequest)
 		json.NewEncoder(w).Encode(map[string]interface{}{
 			"error":        "prerequisite_not_met",
 			"prerequisite": featPrereqText(feat.Prerequisite),
@@ -326,6 +339,7 @@ func handleCharacterFeat(w http.ResponseWriter, r *http.Request, charID int) {
 	if feat.AbilityBonus != nil {
 		if _, hasChosen := feat.AbilityBonus["chosen"]; hasChosen {
 			if abilityChoice == "" {
+				w.WriteHeader(http.StatusBadRequest)
 				json.NewEncoder(w).Encode(map[string]interface{}{
 					"error":   "ability_choice_required",
 					"message": "This feat requires you to choose an ability score. Include 'ability_choice' in your request (str, dex, con, int, wis, or cha).",
@@ -338,6 +352,7 @@ func handleCharacterFeat(w http.ResponseWriter, r *http.Request, charID int) {
 				abilityChoice = "wis" // Default to WIS for Observant
 			}
 			if abilityChoice != "int" && abilityChoice != "wis" {
+				w.WriteHeader(http.StatusBadRequest)
 				json.NewEncoder(w).Encode(map[string]interface{}{
 					"error":   "invalid_ability_choice",
 					"message": "For this feat, ability_choice must be 'int' or 'wis'.",
@@ -356,6 +371,7 @@ func handleCharacterFeat(w http.ResponseWriter, r *http.Request, charID int) {
 			}
 		}
 		if !okChoice {
+			w.WriteHeader(http.StatusBadRequest)
 			json.NewEncoder(w).Encode(map[string]interface{}{
 				"error":   "ability_choice_required",
 				"message": "This feat raises one ability score. Send ability_choice as one of: " + strings.Join(feat.AbilityChoices, ", ") + ".",
@@ -374,6 +390,7 @@ func handleCharacterFeat(w http.ResponseWriter, r *http.Request, charID int) {
 		updates = []string{"feats = $1"} // Lessons of the First Ones
 		setUsedResource(charID, "lessons_feats", lessonsUsed+1)
 	} else if pendingASI < 2 {
+		w.WriteHeader(http.StatusBadRequest)
 		json.NewEncoder(w).Encode(map[string]interface{}{"error": "insufficient_asi", "message": "Lessons of the First Ones grants Origin feats only; other feats cost 2 ASI points."})
 		return
 	}
@@ -481,6 +498,7 @@ func handleCharacterFeat(w http.ResponseWriter, r *http.Request, charID int) {
 
 	_, err = db.Exec(query, args...)
 	if err != nil {
+		w.WriteHeader(http.StatusInternalServerError)
 		json.NewEncoder(w).Encode(map[string]interface{}{"error": "database_error", "details": publicError(err)})
 		return
 	}
@@ -544,6 +562,7 @@ func handleCharacterSubclass(w http.ResponseWriter, r *http.Request) {
 		charIDStr := r.URL.Query().Get("character_id")
 		charID, err := strconv.Atoi(charIDStr)
 		if err != nil {
+			w.WriteHeader(http.StatusNotFound)
 			json.NewEncoder(w).Encode(map[string]interface{}{
 				"error":   "invalid_character_id",
 				"message": "Provide character_id query parameter",
@@ -561,6 +580,7 @@ func handleCharacterSubclass(w http.ResponseWriter, r *http.Request) {
 		`, charID).Scan(&ownerID, &class, &level, &currentSubclass)
 
 		if err != nil {
+			w.WriteHeader(http.StatusNotFound)
 			json.NewEncoder(w).Encode(map[string]interface{}{
 				"error":   "character_not_found",
 				"message": fmt.Sprintf("Character %d not found", charID),
@@ -569,6 +589,7 @@ func handleCharacterSubclass(w http.ResponseWriter, r *http.Request) {
 		}
 
 		if ownerID != agentID {
+			w.WriteHeader(http.StatusForbidden)
 			json.NewEncoder(w).Encode(map[string]interface{}{
 				"error":   "not_your_character",
 				"message": "You can only view subclass options for your own characters",
@@ -577,6 +598,7 @@ func handleCharacterSubclass(w http.ResponseWriter, r *http.Request) {
 		}
 
 		if !class.Valid || class.String == "" {
+			w.WriteHeader(http.StatusBadRequest)
 			json.NewEncoder(w).Encode(map[string]interface{}{
 				"error":   "no_class",
 				"message": "Character has no class set",
@@ -651,6 +673,7 @@ func handleCharacterSubclass(w http.ResponseWriter, r *http.Request) {
 			BonusSkills []string `json:"bonus_skills"` // For subclasses that grant bonus skill proficiencies (e.g., Lore Bard)
 		}
 		if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+			w.WriteHeader(http.StatusBadRequest)
 			json.NewEncoder(w).Encode(map[string]interface{}{
 				"error":   "invalid_json",
 				"message": publicError(err),
@@ -659,6 +682,7 @@ func handleCharacterSubclass(w http.ResponseWriter, r *http.Request) {
 		}
 
 		if req.CharacterID == 0 || req.Subclass == "" {
+			w.WriteHeader(http.StatusBadRequest)
 			json.NewEncoder(w).Encode(map[string]interface{}{
 				"error":   "missing_fields",
 				"message": "Provide character_id and subclass",
@@ -677,6 +701,7 @@ func handleCharacterSubclass(w http.ResponseWriter, r *http.Request) {
 		`, req.CharacterID).Scan(&ownerID, &charName, &class, &level, &currentSubclass)
 
 		if err != nil {
+			w.WriteHeader(http.StatusNotFound)
 			json.NewEncoder(w).Encode(map[string]interface{}{
 				"error":   "character_not_found",
 				"message": fmt.Sprintf("Character %d not found", req.CharacterID),
@@ -685,6 +710,7 @@ func handleCharacterSubclass(w http.ResponseWriter, r *http.Request) {
 		}
 
 		if ownerID != agentID {
+			w.WriteHeader(http.StatusForbidden)
 			json.NewEncoder(w).Encode(map[string]interface{}{
 				"error":   "not_your_character",
 				"message": "You can only choose a subclass for your own characters",
@@ -698,11 +724,13 @@ func handleCharacterSubclass(w http.ResponseWriter, r *http.Request) {
 			cls2 := strings.ToLower(sub2.Class)
 			if clsLevel := classLevelsOf(req.CharacterID)[cls2]; clsLevel > 0 {
 				if clsLevel < sub2.SubclassLevel {
+					w.WriteHeader(http.StatusBadRequest)
 					json.NewEncoder(w).Encode(map[string]interface{}{"error": "level_too_low", "required_level": sub2.SubclassLevel, "current_level": clsLevel,
 						"message": fmt.Sprintf("You choose the %s subclass at %s level %d; you are a level %d %s.", sub2.Name, titleCase(cls2), sub2.SubclassLevel, clsLevel, titleCase(cls2))})
 					return
 				}
 				if have := subclassesByClass(req.CharacterID)[cls2]; have != "" {
+					w.WriteHeader(http.StatusConflict)
 					json.NewEncoder(w).Encode(map[string]interface{}{"error": "already_has_subclass", "current_subclass": have,
 						"message": fmt.Sprintf("Your %s levels already have a subclass (%s). Subclasses cannot be changed once selected.", titleCase(cls2), have)})
 					return
@@ -724,6 +752,7 @@ func handleCharacterSubclass(w http.ResponseWriter, r *http.Request) {
 		}
 		// Check if already has a subclass
 		if currentSubclass.Valid && currentSubclass.String != "" {
+			w.WriteHeader(http.StatusConflict)
 			json.NewEncoder(w).Encode(map[string]interface{}{
 				"error":            "already_has_subclass",
 				"current_subclass": currentSubclass.String,
@@ -765,6 +794,7 @@ func handleCharacterSubclass(w http.ResponseWriter, r *http.Request) {
 				}
 			}
 			sort.Strings(validOptions)
+			w.WriteHeader(http.StatusBadRequest)
 			json.NewEncoder(w).Encode(map[string]interface{}{
 				"error":         "class_mismatch",
 				"message":       fmt.Sprintf("Subclass '%s' is for %s, not %s", sub.Name, sub.Class, class.String),
@@ -778,6 +808,7 @@ func handleCharacterSubclass(w http.ResponseWriter, r *http.Request) {
 			level = cl
 		}
 		if level < sub.SubclassLevel {
+			w.WriteHeader(http.StatusBadRequest)
 			json.NewEncoder(w).Encode(map[string]interface{}{
 				"error":          "level_too_low",
 				"required_level": sub.SubclassLevel,
@@ -790,6 +821,7 @@ func handleCharacterSubclass(w http.ResponseWriter, r *http.Request) {
 		// Apply the subclass
 		_, err = db.Exec("UPDATE characters SET subclass = $1 WHERE id = $2", subclassSlug, req.CharacterID)
 		if err != nil {
+			w.WriteHeader(http.StatusInternalServerError)
 			json.NewEncoder(w).Encode(map[string]interface{}{
 				"error":   "database_error",
 				"message": publicError(err),
@@ -843,6 +875,7 @@ func handleCharacterSubclass(w http.ResponseWriter, r *http.Request) {
 						"nature", "perception", "performance", "persuasion", "religion",
 						"sleight of hand", "stealth", "survival",
 					}
+					w.WriteHeader(http.StatusBadRequest)
 					json.NewEncoder(w).Encode(map[string]interface{}{
 						"error":            "bonus_skills_required",
 						"message":          fmt.Sprintf("The %s subclass grants %d bonus skill proficiencies. Include bonus_skills array in your request.", sub.Name, numSkills),
@@ -874,6 +907,7 @@ func handleCharacterSubclass(w http.ResponseWriter, r *http.Request) {
 				for _, skill := range req.BonusSkills {
 					skillLower := strings.ToLower(strings.TrimSpace(skill))
 					if !validSkills[skillLower] {
+						w.WriteHeader(http.StatusBadRequest)
 						json.NewEncoder(w).Encode(map[string]interface{}{
 							"error":   "invalid_skill",
 							"message": fmt.Sprintf("'%s' is not a valid skill", skill),
@@ -881,6 +915,7 @@ func handleCharacterSubclass(w http.ResponseWriter, r *http.Request) {
 						return
 					}
 					if currentSkillsMap[skillLower] {
+						w.WriteHeader(http.StatusConflict)
 						json.NewEncoder(w).Encode(map[string]interface{}{
 							"error":   "already_proficient",
 							"message": fmt.Sprintf("Character is already proficient in '%s'. Choose a different skill.", skill),
@@ -968,6 +1003,7 @@ func handleCharacterSubclassChoice(w http.ResponseWriter, r *http.Request) {
 		charIDStr := r.URL.Query().Get("character_id")
 		charID, err := strconv.Atoi(charIDStr)
 		if err != nil {
+			w.WriteHeader(http.StatusNotFound)
 			json.NewEncoder(w).Encode(map[string]interface{}{
 				"error":   "invalid_character_id",
 				"message": "Provide character_id query parameter",
@@ -984,6 +1020,7 @@ func handleCharacterSubclassChoice(w http.ResponseWriter, r *http.Request) {
 		`, charID).Scan(&class, &subclass, &level, &choicesJSON)
 
 		if err != nil {
+			w.WriteHeader(http.StatusNotFound)
 			json.NewEncoder(w).Encode(map[string]interface{}{
 				"error":   "character_not_found",
 				"message": fmt.Sprintf("Character %d not found", charID),
@@ -992,6 +1029,7 @@ func handleCharacterSubclassChoice(w http.ResponseWriter, r *http.Request) {
 		}
 
 		if !subclass.Valid || subclass.String == "" {
+			w.WriteHeader(http.StatusBadRequest)
 			json.NewEncoder(w).Encode(map[string]interface{}{
 				"error":   "no_subclass",
 				"message": "Character has no subclass selected yet. Use POST /api/characters/subclass first.",
@@ -1055,6 +1093,7 @@ func handleCharacterSubclassChoice(w http.ResponseWriter, r *http.Request) {
 		Choice      string `json:"choice"`  // e.g., "colossus_slayer"
 	}
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		w.WriteHeader(http.StatusBadRequest)
 		json.NewEncoder(w).Encode(map[string]interface{}{
 			"error":   "invalid_json",
 			"message": publicError(err),
@@ -1074,6 +1113,7 @@ func handleCharacterSubclassChoice(w http.ResponseWriter, r *http.Request) {
 	`, req.CharacterID).Scan(&ownerID, &charName, &class, &subclass, &level, &choicesJSON)
 
 	if err != nil {
+		w.WriteHeader(http.StatusNotFound)
 		json.NewEncoder(w).Encode(map[string]interface{}{
 			"error":   "character_not_found",
 			"message": fmt.Sprintf("Character %d not found", req.CharacterID),
@@ -1082,6 +1122,7 @@ func handleCharacterSubclassChoice(w http.ResponseWriter, r *http.Request) {
 	}
 
 	if ownerID != agentID {
+		w.WriteHeader(http.StatusForbidden)
 		json.NewEncoder(w).Encode(map[string]interface{}{
 			"error":   "not_your_character",
 			"message": "You can only make choices for your own characters",
@@ -1090,6 +1131,7 @@ func handleCharacterSubclassChoice(w http.ResponseWriter, r *http.Request) {
 	}
 
 	if !subclass.Valid || subclass.String == "" {
+		w.WriteHeader(http.StatusBadRequest)
 		json.NewEncoder(w).Encode(map[string]interface{}{
 			"error":   "no_subclass",
 			"message": "Character has no subclass selected yet. Use POST /api/characters/subclass first.",
@@ -1100,6 +1142,7 @@ func handleCharacterSubclassChoice(w http.ResponseWriter, r *http.Request) {
 	// Validate the feature exists and requires a choice
 	sub, ok := game.AvailableSubclasses[subclass.String]
 	if !ok {
+		w.WriteHeader(http.StatusBadRequest)
 		json.NewEncoder(w).Encode(map[string]interface{}{
 			"error":   "invalid_subclass",
 			"message": fmt.Sprintf("Subclass '%s' not found", subclass.String),
@@ -1121,6 +1164,7 @@ func handleCharacterSubclassChoice(w http.ResponseWriter, r *http.Request) {
 	}
 
 	if !featureFound {
+		w.WriteHeader(http.StatusBadRequest)
 		json.NewEncoder(w).Encode(map[string]interface{}{
 			"error":   "invalid_feature",
 			"message": fmt.Sprintf("Feature '%s' not found or doesn't require a choice for %s at level %d", req.Feature, subclass.String, level),
@@ -1146,6 +1190,7 @@ func handleCharacterSubclassChoice(w http.ResponseWriter, r *http.Request) {
 		for _, opt := range validOptions {
 			slugs = append(slugs, opt["slug"].(string))
 		}
+		w.WriteHeader(http.StatusBadRequest)
 		json.NewEncoder(w).Encode(map[string]interface{}{
 			"error":         "invalid_choice",
 			"message":       fmt.Sprintf("'%s' is not a valid choice for %s", req.Choice, req.Feature),
@@ -1173,6 +1218,7 @@ func handleCharacterSubclassChoice(w http.ResponseWriter, r *http.Request) {
 			if restSwappableChoice(req.Feature) {
 				msg = fmt.Sprintf("You chose '%s' for %s. You can replace it with the other option after you finish a Short or Long Rest.", existing, featureName)
 			}
+			w.WriteHeader(http.StatusConflict)
 			json.NewEncoder(w).Encode(map[string]interface{}{
 				"error":          "already_chosen",
 				"current_choice": existing,
@@ -1192,6 +1238,7 @@ func handleCharacterSubclassChoice(w http.ResponseWriter, r *http.Request) {
 		db.Exec(`UPDATE characters SET hunter_swaps = trim(both ',' from replace(','||COALESCE(hunter_swaps,'')||',', ','||$1||',', ',')) WHERE id = $2`, req.Feature, req.CharacterID)
 	}
 	if err != nil {
+		w.WriteHeader(http.StatusInternalServerError)
 		json.NewEncoder(w).Encode(map[string]interface{}{
 			"error":   "database_error",
 			"message": publicError(err),
@@ -1426,6 +1473,7 @@ func handleCharacterMulticlass(w http.ResponseWriter, r *http.Request) {
 		Skill       string `json:"skill"`        // the skill a first Bard, Ranger or Rogue level lets a multiclass character choose
 	}
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		w.WriteHeader(http.StatusBadRequest)
 		json.NewEncoder(w).Encode(map[string]interface{}{
 			"error":   "invalid_json",
 			"message": publicError(err),
@@ -1435,6 +1483,7 @@ func handleCharacterMulticlass(w http.ResponseWriter, r *http.Request) {
 
 	targetClass := strings.ToLower(strings.TrimSpace(req.TargetClass))
 	if targetClass == "" {
+		w.WriteHeader(http.StatusBadRequest)
 		json.NewEncoder(w).Encode(map[string]interface{}{
 			"error":   "missing_target_class",
 			"message": "target_class is required",
@@ -1449,6 +1498,7 @@ func handleCharacterMulticlass(w http.ResponseWriter, r *http.Request) {
 			validClasses = append(validClasses, c)
 		}
 		sort.Strings(validClasses)
+		w.WriteHeader(http.StatusBadRequest)
 		json.NewEncoder(w).Encode(map[string]interface{}{
 			"error":         "invalid_class",
 			"message":       fmt.Sprintf("Unknown class: %s", targetClass),
@@ -1474,6 +1524,7 @@ func handleCharacterMulticlass(w http.ResponseWriter, r *http.Request) {
 		&hp, &maxHP, &classLevelsJSON, &pendingASI, &armorProfsStr, &weaponProfsStr)
 
 	if err != nil {
+		w.WriteHeader(http.StatusNotFound)
 		json.NewEncoder(w).Encode(map[string]interface{}{
 			"error":   "character_not_found",
 			"message": fmt.Sprintf("Character %d not found", req.CharacterID),
@@ -1482,6 +1533,7 @@ func handleCharacterMulticlass(w http.ResponseWriter, r *http.Request) {
 	}
 
 	if ownerID != agentID {
+		w.WriteHeader(http.StatusForbidden)
 		json.NewEncoder(w).Encode(map[string]interface{}{
 			"error":   "not_your_character",
 			"message": "You can only multiclass your own characters",
@@ -1517,6 +1569,7 @@ func handleCharacterMulticlass(w http.ResponseWriter, r *http.Request) {
 		var mcLobbyID int
 		db.QueryRow(`SELECT COALESCE(lobby_id,0) FROM characters WHERE id = $1`, req.CharacterID).Scan(&mcLobbyID)
 		if !multiclassAllowed(mcLobbyID) {
+			w.WriteHeader(http.StatusBadRequest)
 			json.NewEncoder(w).Encode(map[string]interface{}{"error": "multiclassing_off", "message": multiclassOffMessage()})
 			return
 		}
@@ -1529,6 +1582,7 @@ func handleCharacterMulticlass(w http.ResponseWriter, r *http.Request) {
 		// Check prerequisites for LEAVING current class
 		canLeave, leaveReason := meetsMulticlassPrereqs(currentClass, str, dex, intl, wis, cha)
 		if !canLeave {
+			w.WriteHeader(http.StatusBadRequest)
 			json.NewEncoder(w).Encode(map[string]interface{}{
 				"error":         "prerequisites_not_met",
 				"message":       fmt.Sprintf("Cannot multiclass out of %s: %s", currentClass, leaveReason),
@@ -1541,6 +1595,7 @@ func handleCharacterMulticlass(w http.ResponseWriter, r *http.Request) {
 		// Check prerequisites for ENTERING new class
 		canEnter, enterReason := meetsMulticlassPrereqs(targetClass, str, dex, intl, wis, cha)
 		if !canEnter {
+			w.WriteHeader(http.StatusBadRequest)
 			json.NewEncoder(w).Encode(map[string]interface{}{
 				"error":         "prerequisites_not_met",
 				"message":       fmt.Sprintf("Cannot multiclass into %s: %s", targetClass, enterReason),
@@ -1558,6 +1613,7 @@ func handleCharacterMulticlass(w http.ResponseWriter, r *http.Request) {
 	xpForNextLevel := getXPForNextLevel(totalLevel)
 
 	if currentXP < xpForNextLevel && totalLevel > 0 {
+		w.WriteHeader(http.StatusBadRequest)
 		json.NewEncoder(w).Encode(map[string]interface{}{
 			"error":             "no_level_available",
 			"message":           fmt.Sprintf("Not enough XP to level up. Need %d XP, have %d", xpForNextLevel, currentXP),
@@ -1686,6 +1742,7 @@ func handleCharacterMulticlass(w http.ResponseWriter, r *http.Request) {
 	`, newTotalLevel, classLevelsJSON, newHP, newMaxHP, asiEarned, armorProfsStr, weaponProfsStr, req.CharacterID)
 
 	if err != nil {
+		w.WriteHeader(http.StatusInternalServerError)
 		json.NewEncoder(w).Encode(map[string]interface{}{
 			"error":   "database_error",
 			"message": publicError(err),

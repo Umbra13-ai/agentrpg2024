@@ -61,6 +61,7 @@ func handleCharacterAttune(w http.ResponseWriter, r *http.Request) {
 	var charName string
 	err = db.QueryRow(`SELECT agent_id, name FROM characters WHERE id = $1`, req.CharacterID).Scan(&charAgentID, &charName)
 	if err != nil {
+		w.WriteHeader(http.StatusNotFound)
 		json.NewEncoder(w).Encode(map[string]interface{}{"error": "character_not_found"})
 		return
 	}
@@ -88,6 +89,7 @@ func handleCharacterAttune(w http.ResponseWriter, r *http.Request) {
 		// Check if already attuned
 		for _, item := range attunedItems {
 			if strings.EqualFold(item, req.ItemName) {
+				w.WriteHeader(http.StatusConflict)
 				json.NewEncoder(w).Encode(map[string]interface{}{
 					"error":   "already_attuned",
 					"message": fmt.Sprintf("%s is already attuned to %s", charName, req.ItemName),
@@ -97,17 +99,20 @@ func handleCharacterAttune(w http.ResponseWriter, r *http.Request) {
 		}
 
 		if attunementNotNeeded(req.ItemName) { // F117: an item that doesn't require attunement took a slot
+			w.WriteHeader(http.StatusBadRequest)
 			json.NewEncoder(w).Encode(map[string]interface{}{"error": "attunement_not_needed", "message": req.ItemName + " doesn't require attunement: it works without it (worn or held as its text says). No slot was used."})
 			return
 		}
 		// "Requires Attunement by a Paladin" and the like (SRD 5.2.1): only those creatures can attune to the item
 		if why := attunementRestriction(req.CharacterID, req.ItemName); why != "" {
+			w.WriteHeader(http.StatusBadRequest)
 			json.NewEncoder(w).Encode(map[string]interface{}{"error": "attunement_restricted", "message": why})
 			return
 		}
 
 		// Check max attunement
 		if len(attunedItems) >= maxAttunement {
+			w.WriteHeader(http.StatusConflict)
 			json.NewEncoder(w).Encode(map[string]interface{}{
 				"error":         "max_attunement_reached",
 				"message":       fmt.Sprintf("%s already has %d items attuned (max %d). Unattune an item first.", charName, len(attunedItems), maxAttunement),
@@ -147,6 +152,7 @@ func handleCharacterAttune(w http.ResponseWriter, r *http.Request) {
 		}
 
 		if !found {
+			w.WriteHeader(http.StatusBadRequest)
 			json.NewEncoder(w).Encode(map[string]interface{}{
 				"error":         "not_attuned",
 				"message":       fmt.Sprintf("%s is not attuned to %s", charName, req.ItemName),
@@ -210,6 +216,7 @@ func handleCharacterEncumbrance(w http.ResponseWriter, r *http.Request) {
 	var charLobby int
 	err = db.QueryRow(`SELECT name, str, COALESCE(inventory, '[]'), COALESCE(species, ''), COALESCE(lobby_id, 0) FROM characters WHERE id = $1`, characterID).Scan(&charName, &str, &inventoryJSON, &species, &charLobby)
 	if err != nil {
+		w.WriteHeader(http.StatusNotFound)
 		json.NewEncoder(w).Encode(map[string]interface{}{"error": "character_not_found"})
 		return
 	}
@@ -1216,6 +1223,7 @@ func handleCharacterMount(w http.ResponseWriter, r *http.Request) {
 
 	// Check if already mounted
 	if currentMount.Valid && currentMount.String != "" {
+		w.WriteHeader(http.StatusConflict)
 		json.NewEncoder(w).Encode(map[string]interface{}{
 			"error":   "already_mounted",
 			"message": fmt.Sprintf("%s is already mounted on %s. Dismount first.", charName, currentMount.String),
@@ -1242,6 +1250,7 @@ func handleCharacterMount(w http.ResponseWriter, r *http.Request) {
 	// Get rider's size for comparison
 	riderSize := getSpeciesSize(charSpecies)
 	if !isMountLargeEnough(mountSize, riderSize) {
+		w.WriteHeader(http.StatusBadRequest)
 		json.NewEncoder(w).Encode(map[string]interface{}{
 			"error":      "mount_too_small",
 			"message":    fmt.Sprintf("A %s creature cannot serve as a mount for a %s rider. Mount must be at least one size larger.", mountSize, riderSize),
@@ -1255,6 +1264,7 @@ func handleCharacterMount(w http.ResponseWriter, r *http.Request) {
 	movementSpeed := characterSpeed(req.CharacterID, charSpecies)
 	mountCost := movementSpeed / 2
 	if movementRemaining < mountCost {
+		w.WriteHeader(http.StatusBadRequest)
 		json.NewEncoder(w).Encode(map[string]interface{}{
 			"error":                 "insufficient_movement",
 			"message":               fmt.Sprintf("Mounting costs %dft of movement, but %s only has %dft remaining.", mountCost, charName, movementRemaining),
@@ -1390,6 +1400,7 @@ func handleCharacterDismount(w http.ResponseWriter, r *http.Request) {
 
 	// Check if currently mounted
 	if !currentMount.Valid || currentMount.String == "" {
+		w.WriteHeader(http.StatusBadRequest)
 		json.NewEncoder(w).Encode(map[string]interface{}{
 			"error":   "not_mounted",
 			"message": fmt.Sprintf("%s is not currently mounted on anything.", charName),
@@ -1410,6 +1421,7 @@ func handleCharacterDismount(w http.ResponseWriter, r *http.Request) {
 	if !req.Forced {
 		dismountCost = movementSpeed / 2
 		if movementRemaining < dismountCost {
+			w.WriteHeader(http.StatusBadRequest)
 			json.NewEncoder(w).Encode(map[string]interface{}{
 				"error":                 "insufficient_movement",
 				"message":               fmt.Sprintf("Dismounting costs %dft of movement, but %s only has %dft remaining. Use forced:true for emergency dismount.", dismountCost, charName, movementRemaining),
