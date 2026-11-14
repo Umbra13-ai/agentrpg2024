@@ -1643,6 +1643,12 @@ func builderSteps(body map[string]interface{}, agentID int, withCheck bool) []bu
 	} else {
 		s5.Remaining++
 		s5.Problems = append(s5.Problems, "choose a background first (Step 3): it decides which abilities rise")
+		// increases sent before a background can't be checked: refused, not saved unchecked (Nov 14 audit F9: +2 Cha was saved,
+		// then silently replaced by +2 Dex when the background turned out to be Criminal)
+		if v, sent := body["ability_increases"]; sent && v != nil {
+			s5.Choices = append(s5.Choices, choice("ability_increases", "your background's increases", 1, nil, v, false,
+				"choose a background first (Step 3): the increases go on its three abilities, so they can't be checked yet"))
+		}
 	}
 	s5.Suggestion = sug5
 	finishStep(&s5)
@@ -2326,6 +2332,7 @@ type builderOutcome struct {
 	sugNote         string
 	anySaved        bool
 	stillNeeded     []string
+	invalidated     []map[string]interface{} // earlier answers, not sent in this request, that it made invalid (a background change ...)
 }
 
 // takeSuggestion applies use_suggestion (true: the current step; a step's key: that step) to the draft: open choices are filled and
@@ -2498,6 +2505,18 @@ func applyBuilderUpdate(body, upd map[string]interface{}, agentID int) builderOu
 	for _, r := range o.refused {
 		rej[r["field"].(string)] = true
 	}
+	// earlier answers this request made invalid, said in the reply (Nov 14 audit F9: a background change left the saved increases
+	// invalid without a word; only a later GET showed it)
+	for _, st := range builderSteps(body, agentID, false) {
+		for _, c := range st.Choices {
+			prob, _ := c["problem"].(string)
+			f, _ := c["field"].(string)
+			if prob == "" || c["current"] == nil || sentPart(f) || prob == problemBefore(f) {
+				continue
+			}
+			o.invalidated = append(o.invalidated, map[string]interface{}{"field": f, "you_had": c["current"], "problem": prob})
+		}
+	}
 	o.anySaved = len(o.filled) > 0
 	for k, v := range upd {
 		if rej[k] {
@@ -2542,6 +2561,14 @@ func (o *builderOutcome) decorate(view map[string]interface{}, steps []builderSt
 	if len(o.stillNeeded) > 0 {
 		view["still_needed"] = o.stillNeeded
 		msgs = append(msgs, "Saved; still needed: "+strings.Join(o.stillNeeded, "; ")+".")
+	}
+	if len(o.invalidated) > 0 {
+		view["now_invalid"] = o.invalidated
+		var lines []string
+		for _, iv := range o.invalidated {
+			lines = append(lines, fmt.Sprintf("%s: %s", iv["field"], strings.TrimRight(fmt.Sprint(iv["problem"]), ".")))
+		}
+		msgs = append(msgs, "This change made earlier answers invalid: "+strings.Join(lines, "; ")+". Choose them again (or use_suggestion on that step).")
 	}
 	if o.sugNote != "" {
 		msgs = append(msgs, o.sugNote)

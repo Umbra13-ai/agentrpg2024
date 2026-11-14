@@ -932,6 +932,10 @@ of the character before you create it). Every answer is either saved as sent or 
 - An answer with a problem is not saved and the draft keeps the earlier answer: the reply lists it under `not_saved` and in
   `message` ("NOT SAVED: ..."), with HTTP 422 when other answers in the request were saved and 400 when none was. In a group
   (`species_choices`, `class_options`, a Magic Initiate answer) only the part with the problem is refused; the other parts are saved.
+- A change that makes an earlier answer invalid says so: changing the background, class or species can leave saved answers that no
+  longer fit (increases for another background's abilities, a Rogue's skills after you change to Fighter, an Elf's lineage after you
+  change to Dragonborn). The reply lists them under `now_invalid` (field, what you had, the problem) and in `message`; choose them
+  again or take that step's suggestion. `ability_increases` sent before a background is chosen is refused: they go on its abilities.
 - Each field takes one JSON type, and another is refused: text (`name`, `class`, `background`, `species`, `alignment`, `backstory`,
   `appearance`, `ability_method`, `starting_equipment`, `background_tool`, `background_equipment`), a list of names
   (`skill_proficiencies`, `tool_proficiencies`, `expertise`, `weapon_masteries`, `extra_languages`), a whole number (`str` to `cha`),
