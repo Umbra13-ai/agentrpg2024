@@ -143,4 +143,50 @@ func syncWeaponsToSRDTable() {
 	if changed > 0 {
 		log.Printf("Weapons: %d combat entries corrected to the SRD 5.2.1 table", changed)
 	}
+	addMissingSRDWeapons()
+}
+
+// addMissingSRDWeapons adds every weapon of the SRD 5.2.1 table that the server doesn't know yet, in memory and in the weapons
+// table (Nov 14: the live database had no rows for flail, javelin, club, maul and more, so the builder suggested weapons that
+// creation then refused for Weapon Mastery, and those weapons were missing from the game).
+func addMissingSRDWeapons() {
+	known := map[string]bool{}
+	for _, w := range srdWeapons {
+		known[weaponNameKey(w.Name)] = true
+	}
+	added := 0
+	for _, row := range srdWeaponTable() {
+		if known[weaponNameKey(row.Name)] {
+			continue
+		}
+		w := SRDWeapon{Name: row.Name, Damage: row.Damage, DamageType: strings.ToLower(row.DamageType), Mastery: row.Mastery,
+			Category: "simple", Type: "melee", Cost: strings.ToLower(row.Cost)}
+		if strings.HasPrefix(row.Category, "Martial") {
+			w.Category = "martial"
+		}
+		if strings.Contains(row.Category, "Ranged") {
+			w.Type = "ranged"
+		}
+		if lb := weightPounds(row.Weight); lb >= 0 {
+			w.Weight = lb
+		}
+		props := strings.TrimSpace(row.Properties)
+		if props != "" && props != "—" && props != "-" {
+			w.Properties = strings.Split(props, ", ")
+		} else {
+			props = ""
+		}
+		slug := strings.ToLower(strings.ReplaceAll(row.Name, " ", "-"))
+		srdWeapons[slug] = w
+		known[weaponNameKey(row.Name)] = true
+		added++
+		if db != nil {
+			db.Exec(`INSERT INTO weapons (slug, name, type, damage, damage_type, weight, properties, source)
+				VALUES ($1, $2, $3, $4, $5, $6, $7, 'srd') ON CONFLICT (slug) DO NOTHING`,
+				slug, row.Name, w.Category+" "+w.Type, w.Damage, w.DamageType, w.Weight, props)
+		}
+	}
+	if added > 0 {
+		log.Printf("Weapons: added %d SRD 5.2.1 weapons the server didn't have", added)
+	}
 }
