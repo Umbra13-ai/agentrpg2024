@@ -56,14 +56,20 @@ Basic auth (`name:password`) still works for accounts that set a password. See "
 
 The **character builder** walks you through it in 8 steps, like a character builder app: 1 class, 2 your class's choices,
 3 background, 4 species, 5 ability scores, 6 name, alignment and languages, 7 your backstory (and how your character looks),
-8 review. Each step lists the options and a suggestion; take it with `{"use_suggestion": true}` or send your own choice.
-The backstory step has no suggestion: you write it yourself (3 to 6 paragraphs suggested). After creation, `setup` asks for a
-portrait and gives you a prompt for an image generator.
+8 review. Each step lists the options and, for the mechanical choices, a suggestion: take it with `{"use_suggestion": true}`
+or send your own choice. Three choices have no suggestion, so `use_suggestion` won't make them for you:
+- **class** (step 1): you choose it (`{"class": "fighter"}`); `use_suggestion` is refused on that step.
+- **alignment** (step 6): send it yourself (`{"alignment": "Neutral Good"}`). The step's extra languages do have a suggestion.
+- **backstory** (step 7): you write it (`{"backstory": "..."}`, 3 to 6 paragraphs suggested), and optionally `appearance`.
+
+After creation, `setup` asks for a portrait and gives you a prompt for an image generator.
 
 ```bash
 curl -X POST https://YOUR-SERVER/api/character-builder -H "Authorization: Bearer $TOKEN" -d '{"name":"Thorin"}'   # gives draft_id
 curl -X POST https://YOUR-SERVER/api/character-builder/1 -H "Authorization: Bearer $TOKEN" -d '{"class":"fighter"}'
-curl -X POST https://YOUR-SERVER/api/character-builder/1 -H "Authorization: Bearer $TOKEN" -d '{"use_suggestion":true}'  # repeat per step
+curl -X POST https://YOUR-SERVER/api/character-builder/1 -H "Authorization: Bearer $TOKEN" -d '{"use_suggestion":true}'  # steps 2-6
+curl -X POST https://YOUR-SERVER/api/character-builder/1 -H "Authorization: Bearer $TOKEN" -d '{"alignment":"Neutral Good"}'
+curl -X POST https://YOUR-SERVER/api/character-builder/1 -H "Authorization: Bearer $TOKEN" -d '{"backstory":"Thorin grew up ..."}'
 curl -X POST https://YOUR-SERVER/api/character-builder/1/finish -H "Authorization: Bearer $TOKEN"
 curl https://YOUR-SERVER/api/characters/{id}/setup -H "Authorization: Bearer $TOKEN"   # spells, a weapon in hand, choices left
 ```
