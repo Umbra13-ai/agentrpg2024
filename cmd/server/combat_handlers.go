@@ -123,6 +123,7 @@ func handleRoll(w http.ResponseWriter, r *http.Request) {
 
 	parts := strings.Split(strings.ToLower(dice), "d")
 	if len(parts) != 2 {
+		w.WriteHeader(http.StatusBadRequest)
 		json.NewEncoder(w).Encode(map[string]interface{}{"error": "format: NdM (e.g., 2d6)"})
 		return
 	}
@@ -195,6 +196,7 @@ func handleCombatStart(w http.ResponseWriter, r *http.Request, campaignID int) {
 	var dmID int
 	db.QueryRow("SELECT COALESCE(dm_id, 0) FROM lobbies WHERE id = $1", campaignID).Scan(&dmID)
 	if dmID != agentID {
+		w.WriteHeader(http.StatusForbidden)
 		json.NewEncoder(w).Encode(map[string]interface{}{"error": "only_gm_can_start_combat"})
 		return
 	}
@@ -219,6 +221,7 @@ func handleCombatStart(w http.ResponseWriter, r *http.Request, campaignID int) {
 		FROM characters c WHERE c.lobby_id = $1
 	`, campaignID)
 	if err != nil {
+		w.WriteHeader(http.StatusInternalServerError)
 		json.NewEncoder(w).Encode(map[string]interface{}{"error": publicError(err)})
 		return
 	}
@@ -503,6 +506,7 @@ func handleCombatEnd(w http.ResponseWriter, r *http.Request, campaignID int) {
 	var dmID int
 	db.QueryRow("SELECT COALESCE(dm_id, 0) FROM lobbies WHERE id = $1", campaignID).Scan(&dmID)
 	if dmID != agentID {
+		w.WriteHeader(http.StatusForbidden)
 		json.NewEncoder(w).Encode(map[string]interface{}{"error": "only_gm_can_end_combat"})
 		return
 	}
@@ -560,6 +564,7 @@ func handleCombatNext(w http.ResponseWriter, r *http.Request, campaignID int) {
 	var dmID int
 	db.QueryRow("SELECT COALESCE(dm_id, 0) FROM lobbies WHERE id = $1", campaignID).Scan(&dmID)
 	if dmID != agentID {
+		w.WriteHeader(http.StatusForbidden)
 		json.NewEncoder(w).Encode(map[string]interface{}{"error": "only_gm_can_advance_turn"})
 		return
 	}
@@ -580,6 +585,7 @@ func handleCombatNext(w http.ResponseWriter, r *http.Request, campaignID int) {
 	`, campaignID).Scan(&round, &turnIndex, &turnOrderJSON, &active)
 
 	if err != nil || !active {
+		w.WriteHeader(http.StatusConflict)
 		json.NewEncoder(w).Encode(map[string]interface{}{"error": "no_active_combat"})
 		return
 	}
@@ -600,6 +606,7 @@ func handleCombatNext(w http.ResponseWriter, r *http.Request, campaignID int) {
 	json.Unmarshal(turnOrderJSON, &entries)
 
 	if len(entries) == 0 {
+		w.WriteHeader(http.StatusBadRequest)
 		json.NewEncoder(w).Encode(map[string]interface{}{"error": "no_combatants"})
 		return
 	}
@@ -810,6 +817,7 @@ func handleCombatSkip(w http.ResponseWriter, r *http.Request, campaignID int) {
 	var dmID int
 	db.QueryRow("SELECT COALESCE(dm_id, 0) FROM lobbies WHERE id = $1", campaignID).Scan(&dmID)
 	if dmID != agentID {
+		w.WriteHeader(http.StatusForbidden)
 		json.NewEncoder(w).Encode(map[string]interface{}{"error": "only_gm_can_skip_turns"})
 		return
 	}
@@ -824,6 +832,7 @@ func handleCombatSkip(w http.ResponseWriter, r *http.Request, campaignID int) {
 	`, campaignID).Scan(&round, &turnIndex, &turnOrderJSON, &active, &turnStartedAt)
 
 	if err != nil || !active {
+		w.WriteHeader(http.StatusConflict)
 		json.NewEncoder(w).Encode(map[string]interface{}{"error": "no_active_combat"})
 		return
 	}
@@ -837,6 +846,7 @@ func handleCombatSkip(w http.ResponseWriter, r *http.Request, campaignID int) {
 	json.Unmarshal(turnOrderJSON, &entries)
 
 	if len(entries) == 0 {
+		w.WriteHeader(http.StatusBadRequest)
 		json.NewEncoder(w).Encode(map[string]interface{}{"error": "no_combatants"})
 		return
 	}
@@ -1117,6 +1127,7 @@ func handleExplorationSkip(w http.ResponseWriter, r *http.Request, campaignID in
 	var combatActive bool
 	db.QueryRow("SELECT active FROM combat_state WHERE lobby_id = $1", campaignID).Scan(&combatActive)
 	if combatActive {
+		w.WriteHeader(http.StatusConflict)
 		json.NewEncoder(w).Encode(map[string]interface{}{
 			"error":   "in_combat",
 			"message": "Use /api/campaigns/{id}/combat/skip for combat mode",
@@ -1139,6 +1150,7 @@ func handleExplorationSkip(w http.ResponseWriter, r *http.Request, campaignID in
 	var charLobbyID int
 	err = db.QueryRow("SELECT name, lobby_id FROM characters WHERE id = $1", req.CharacterID).Scan(&charName, &charLobbyID)
 	if err != nil || charLobbyID != campaignID {
+		w.WriteHeader(http.StatusNotFound)
 		json.NewEncoder(w).Encode(map[string]interface{}{"error": "character_not_found"})
 		return
 	}
@@ -1220,6 +1232,7 @@ func handleCombatAdd(w http.ResponseWriter, r *http.Request, campaignID int) {
 	var dmID int
 	db.QueryRow("SELECT COALESCE(dm_id, 0) FROM lobbies WHERE id = $1", campaignID).Scan(&dmID)
 	if dmID != agentID {
+		w.WriteHeader(http.StatusForbidden)
 		json.NewEncoder(w).Encode(map[string]interface{}{"error": "only_gm_can_add_combatants"})
 		return
 	}
@@ -1234,6 +1247,7 @@ func handleCombatAdd(w http.ResponseWriter, r *http.Request, campaignID int) {
 	`, campaignID).Scan(&round, &turnIndex, &turnOrderJSON, &active)
 
 	if err != nil || !active {
+		w.WriteHeader(http.StatusConflict)
 		json.NewEncoder(w).Encode(map[string]interface{}{"error": "no_active_combat", "hint": "Start combat first with POST /api/campaigns/{id}/combat/start"})
 		return
 	}
@@ -1251,11 +1265,13 @@ func handleCombatAdd(w http.ResponseWriter, r *http.Request, campaignID int) {
 		} `json:"combatants"`
 	}
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		w.WriteHeader(http.StatusBadRequest)
 		json.NewEncoder(w).Encode(map[string]interface{}{"error": "invalid_json"})
 		return
 	}
 
 	if len(req.Combatants) == 0 {
+		w.WriteHeader(http.StatusBadRequest)
 		json.NewEncoder(w).Encode(map[string]interface{}{"error": "no_combatants_provided"})
 		return
 	}
@@ -1510,6 +1526,7 @@ func handleCombatRemove(w http.ResponseWriter, r *http.Request, campaignID int) 
 	var dmID int
 	db.QueryRow("SELECT COALESCE(dm_id, 0) FROM lobbies WHERE id = $1", campaignID).Scan(&dmID)
 	if dmID != agentID {
+		w.WriteHeader(http.StatusForbidden)
 		json.NewEncoder(w).Encode(map[string]interface{}{"error": "only_gm_can_remove_combatants"})
 		return
 	}
@@ -1524,6 +1541,7 @@ func handleCombatRemove(w http.ResponseWriter, r *http.Request, campaignID int) 
 	`, campaignID).Scan(&round, &turnIndex, &turnOrderJSON, &active)
 
 	if err != nil || !active {
+		w.WriteHeader(http.StatusConflict)
 		json.NewEncoder(w).Encode(map[string]interface{}{"error": "no_active_combat"})
 		return
 	}
@@ -1534,11 +1552,13 @@ func handleCombatRemove(w http.ResponseWriter, r *http.Request, campaignID int) 
 		CombatantName string `json:"combatant_name"`
 	}
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		w.WriteHeader(http.StatusBadRequest)
 		json.NewEncoder(w).Encode(map[string]interface{}{"error": "invalid_json"})
 		return
 	}
 
 	if req.CombatantID == 0 && req.CombatantName == "" {
+		w.WriteHeader(http.StatusBadRequest)
 		json.NewEncoder(w).Encode(map[string]interface{}{"error": "must_provide_combatant_id_or_name"})
 		return
 	}
@@ -1598,6 +1618,7 @@ func handleCombatRemove(w http.ResponseWriter, r *http.Request, campaignID int) 
 	}
 
 	if removed == nil {
+		w.WriteHeader(http.StatusNotFound)
 		json.NewEncoder(w).Encode(map[string]interface{}{"error": "combatant_not_found"})
 		return
 	}
@@ -1740,6 +1761,7 @@ func handleDamage(w http.ResponseWriter, r *http.Request, charID int) {
 	}
 
 	if req.Damage <= 0 {
+		w.WriteHeader(http.StatusBadRequest)
 		json.NewEncoder(w).Encode(map[string]interface{}{"error": "damage_must_be_positive"})
 		return
 	}
@@ -1754,6 +1776,7 @@ func handleDamage(w http.ResponseWriter, r *http.Request, charID int) {
 	`, charID).Scan(&hp, &maxHP, &tempHP, &concentratingOn, &wildShapeForm)
 
 	if err != nil {
+		w.WriteHeader(http.StatusNotFound)
 		json.NewEncoder(w).Encode(map[string]interface{}{"error": "character_not_found"})
 		return
 	}
@@ -2080,6 +2103,7 @@ func handleAddCondition(w http.ResponseWriter, r *http.Request, charID int) {
 		for k := range conditionEffects {
 			validConditions = append(validConditions, k)
 		}
+		w.WriteHeader(http.StatusBadRequest)
 		json.NewEncoder(w).Encode(map[string]interface{}{
 			"error":            "invalid_condition",
 			"message":          "Use format 'condition' or 'condition:character_id' for charmed/grappled",
@@ -2093,6 +2117,7 @@ func handleAddCondition(w http.ResponseWriter, r *http.Request, charID int) {
 		var exists bool
 		db.QueryRow("SELECT EXISTS(SELECT 1 FROM characters WHERE id = $1)", paramID).Scan(&exists)
 		if !exists {
+			w.WriteHeader(http.StatusBadRequest)
 			json.NewEncoder(w).Encode(map[string]interface{}{
 				"error":   "invalid_target",
 				"message": fmt.Sprintf("Character ID %d not found", paramID),
@@ -2282,6 +2307,7 @@ func handleShortRest(w http.ResponseWriter, r *http.Request, charID int) {
 		FROM characters WHERE id = $1
 	`, charID).Scan(&class, &level, &hp, &maxHP, &con, &hitDiceSpent, &subclass, &classLevelsJSON, &lobbyID)
 	if err != nil {
+		w.WriteHeader(http.StatusNotFound)
 		json.NewEncoder(w).Encode(map[string]interface{}{
 			"error": "Character not found",
 		})
@@ -2319,6 +2345,7 @@ func handleShortRest(w http.ResponseWriter, r *http.Request, charID int) {
 
 	// Validate hit dice to spend
 	if req.HitDice > hitDiceAvailable {
+		w.WriteHeader(http.StatusBadRequest)
 		json.NewEncoder(w).Encode(map[string]interface{}{
 			"error":              "Not enough hit dice available",
 			"hit_dice_available": hitDiceAvailable,
@@ -2408,6 +2435,7 @@ func handleShortRest(w http.ResponseWriter, r *http.Request, charID int) {
 		abilityName, maxCombined, maxSlotLevel := game.SlotRecoveryAbility(class, subclassStr, level)
 
 		if abilityName == "" {
+			w.WriteHeader(http.StatusBadRequest)
 			json.NewEncoder(w).Encode(map[string]interface{}{
 				"error":   "Your class/subclass cannot recover spell slots on short rest",
 				"details": "Only Wizards (Arcane Recovery) and Circle of the Land Druids (Natural Recovery) can recover slots.",
@@ -2418,6 +2446,7 @@ func handleShortRest(w http.ResponseWriter, r *http.Request, charID int) {
 		// Check if ability has already been used (tracked as class resource)
 		current := getCurrentClassResources(charID)
 		if current[abilityName] <= 0 {
+			w.WriteHeader(http.StatusConflict)
 			json.NewEncoder(w).Encode(map[string]interface{}{
 				"error":   fmt.Sprintf("%s has already been used since your last long rest", strings.ReplaceAll(abilityName, "_", " ")),
 				"details": "This ability can only be used once per long rest.",
@@ -2429,6 +2458,7 @@ func handleShortRest(w http.ResponseWriter, r *http.Request, charID int) {
 		totalLevels := 0
 		for _, slotLevel := range req.RecoverSlots {
 			if slotLevel < 1 || slotLevel > maxSlotLevel {
+				w.WriteHeader(http.StatusBadRequest)
 				json.NewEncoder(w).Encode(map[string]interface{}{
 					"error":          fmt.Sprintf("Cannot recover %d-level slots with %s", slotLevel, strings.ReplaceAll(abilityName, "_", " ")),
 					"max_slot_level": maxSlotLevel,
@@ -2440,6 +2470,7 @@ func handleShortRest(w http.ResponseWriter, r *http.Request, charID int) {
 
 		// Validate total combined levels
 		if totalLevels > maxCombined {
+			w.WriteHeader(http.StatusBadRequest)
 			json.NewEncoder(w).Encode(map[string]interface{}{
 				"error":           "Combined slot levels exceed maximum",
 				"total_requested": totalLevels,
@@ -2469,6 +2500,7 @@ func handleShortRest(w http.ResponseWriter, r *http.Request, charID int) {
 			slotKey := fmt.Sprintf("%d", slotLevel)
 			usedAtLevel := used[slotKey]
 			if usedAtLevel < countToRecover {
+				w.WriteHeader(http.StatusBadRequest)
 				json.NewEncoder(w).Encode(map[string]interface{}{
 					"error":       fmt.Sprintf("Cannot recover %d level %d slots - only %d used", countToRecover, slotLevel, usedAtLevel),
 					"used_slots":  used,
@@ -2714,6 +2746,7 @@ func handleRest(w http.ResponseWriter, r *http.Request, charID int) {
 		FROM characters WHERE id = $1
 	`, charID).Scan(&class, &level, &con, &wis, &hitDiceSpent, &exhaustionLevel, &lastLongRest, &subclass, &isDead)
 	if err != nil {
+		w.WriteHeader(http.StatusNotFound)
 		json.NewEncoder(w).Encode(map[string]interface{}{
 			"error": "Character not found",
 		})
@@ -2730,6 +2763,7 @@ func handleRest(w http.ResponseWriter, r *http.Request, charID int) {
 		hoursSinceRest := time.Since(lastLongRest.Time).Hours()
 		if hoursSinceRest < 24 {
 			hoursRemaining := 24 - hoursSinceRest
+			w.WriteHeader(http.StatusConflict)
 			json.NewEncoder(w).Encode(map[string]interface{}{
 				"error":           "Can only take one long rest per 24 hours",
 				"hours_remaining": int(hoursRemaining),
@@ -2899,6 +2933,7 @@ func handleSetCover(w http.ResponseWriter, r *http.Request, charID int) {
 	coverType := strings.ToLower(strings.ReplaceAll(req.Cover, "-", "_"))
 	bonus, valid := coverBonuses[coverType]
 	if !valid {
+		w.WriteHeader(http.StatusBadRequest)
 		json.NewEncoder(w).Encode(map[string]interface{}{
 			"error":       "invalid_cover_type",
 			"valid_types": []string{"none", "half", "three_quarters", "full"},

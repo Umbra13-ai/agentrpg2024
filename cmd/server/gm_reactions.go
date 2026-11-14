@@ -902,6 +902,7 @@ func handleGMTriggerReadied(w http.ResponseWriter, r *http.Request) {
 	`, req.CharacterID, agentID).Scan(&lobbyID)
 
 	if err != nil {
+		w.WriteHeader(http.StatusForbidden)
 		json.NewEncoder(w).Encode(map[string]interface{}{
 			"error":   "not_gm_or_no_character",
 			"message": "Either you're not the DM of this campaign, or the character doesn't exist in an active campaign.",
@@ -914,6 +915,7 @@ func handleGMTriggerReadied(w http.ResponseWriter, r *http.Request) {
 	var charName string
 	err = db.QueryRow("SELECT name, readied_action FROM characters WHERE id = $1", req.CharacterID).Scan(&charName, &readiedJSON)
 	if err != nil || readiedJSON == nil || string(readiedJSON) == "null" {
+		w.WriteHeader(http.StatusBadRequest)
 		json.NewEncoder(w).Encode(map[string]interface{}{
 			"success": false,
 			"error":   "no_readied_action",
@@ -929,6 +931,7 @@ func handleGMTriggerReadied(w http.ResponseWriter, r *http.Request) {
 	var reactionUsed bool
 	db.QueryRow("SELECT COALESCE(reaction_used, false) FROM characters WHERE id = $1", req.CharacterID).Scan(&reactionUsed)
 	if reactionUsed {
+		w.WriteHeader(http.StatusConflict)
 		json.NewEncoder(w).Encode(map[string]interface{}{
 			"success":        false,
 			"error":          "reaction_used",

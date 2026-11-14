@@ -61,6 +61,7 @@ func handleGMStatus(w http.ResponseWriter, r *http.Request) {
 	}
 
 	if err != nil {
+		w.WriteHeader(http.StatusForbidden)
 		json.NewEncoder(w).Encode(map[string]interface{}{
 			"needs_attention": false,
 			"error":           "not_gm",

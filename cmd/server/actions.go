@@ -449,6 +449,7 @@ func handleAction(w http.ResponseWriter, r *http.Request) {
 	req.Action = canonicalAction(req.Action) // 2024 names: Magic is cast, Utilize is use_item
 	if strings.EqualFold(req.Action, "cast") && req.SlotLevel > 0 {
 		if req.SlotLevel > 9 {
+			w.WriteHeader(http.StatusBadRequest)
 			json.NewEncoder(w).Encode(map[string]interface{}{"error": "invalid_slot_level", "message": "slot_level must be 1 to 9"})
 			return
 		}
@@ -527,6 +528,7 @@ func handleAction(w http.ResponseWriter, r *http.Request) {
 	`, agentID, pickCharacterID(r, req.CharacterID), pickCampaignID(r, req.CampaignID)).Scan(&charID, &lobbyID, &species)
 
 	if err != nil {
+		w.WriteHeader(http.StatusConflict)
 		json.NewEncoder(w).Encode(map[string]interface{}{"error": "no_active_game"})
 		return
 	}
@@ -551,6 +553,7 @@ func handleAction(w http.ResponseWriter, r *http.Request) {
 	// A touch spell delivered by the caster's familiar (companions_2024.go)
 	if req.Action == "cast" && req.SpellSlug != "" {
 		if why := familiarTouchCheck(charID, lobbyID, req.SpellSlug, req.Description); why != "" {
+			w.WriteHeader(http.StatusBadRequest)
 			json.NewEncoder(w).Encode(map[string]interface{}{"success": false, "error": "familiar_cannot_deliver", "message": why})
 			return
 		}
@@ -559,21 +562,25 @@ func handleAction(w http.ResponseWriter, r *http.Request) {
 
 	// A character casts the spells it has prepared, its cantrips, and spells a feature, its origin or an item gives it (spell_access_2024.go)
 	if (req.Action == "cast" || req.Action == "attack") && (req.TargetID != 0 || len(req.TargetIDs) > 0) && ethereal(lobbyOfChar(charID), charID) {
+		w.WriteHeader(http.StatusBadRequest)
 		json.NewEncoder(w).Encode(map[string]interface{}{"success": false, "error": "ethereal", "message": "You are on the Ethereal Plane (Etherealness): you can't affect creatures on the Material Plane. Speak the armor's command word again (use_item) to return. Nothing was spent."})
 		return
 	}
 	if why := moreActionBlock(charID, req.Action); why != "" { // Gaseous Form; inside an Antimagic Field (spells_more_2024.go)
+		w.WriteHeader(http.StatusBadRequest)
 		json.NewEncoder(w).Encode(map[string]interface{}{"success": false, "error": "spell_effect_limit", "message": why})
 		return
 	}
 	if req.Action == "cast" && normalizeSpellSlug(req.SpellSlug) == "shield" { // Shield answers a hit (reactions_2024.go)
 		if why := shieldTriggerMissing(charID, req.Description); why != "" {
+			w.WriteHeader(http.StatusBadRequest)
 			json.NewEncoder(w).Encode(map[string]interface{}{"success": false, "error": "no_trigger", "message": why})
 			return
 		}
 	}
 	if req.Action == "cast" && req.SpellSlug != "" {
 		if ok, why := spellAvailable(charID, req.SpellSlug, req.Description); !ok {
+			w.WriteHeader(http.StatusBadRequest)
 			json.NewEncoder(w).Encode(map[string]interface{}{"success": false, "error": "spell_not_available", "message": why})
 			return
 		}
@@ -617,6 +624,7 @@ func handleAction(w http.ResponseWriter, r *http.Request) {
 		if errorCode == "unconscious_at_0_hp" {
 			msg = "You are at 0 Hit Points, so you are Unconscious: you can't take actions. On your turn make a Death Saving Throw ({\"action\": \"death_save\"}) unless you are stable. Healing brings you back. No action was recorded."
 		}
+		w.WriteHeader(http.StatusBadRequest)
 		json.NewEncoder(w).Encode(map[string]interface{}{"success": false, "error": errorCode, "message": msg})
 		return
 	}
@@ -651,6 +659,7 @@ func handleAction(w http.ResponseWriter, r *http.Request) {
 				break
 			}
 		}
+		w.WriteHeader(http.StatusBadRequest)
 		json.NewEncoder(w).Encode(map[string]interface{}{
 			"success":            false,
 			"error":              "incapacitated",
@@ -678,6 +687,7 @@ func handleAction(w http.ResponseWriter, r *http.Request) {
 		if exhaustion >= 5 {
 			blockingCondition = "exhaustion level 5"
 		}
+		w.WriteHeader(http.StatusBadRequest)
 		json.NewEncoder(w).Encode(map[string]interface{}{
 			"success":            false,
 			"error":              "cannot_move",
@@ -697,6 +707,7 @@ func handleAction(w http.ResponseWriter, r *http.Request) {
 		if sourceName != "" {
 			message = fmt.Sprintf("You cannot willingly move closer to %s while frightened.", sourceName)
 		}
+		w.WriteHeader(http.StatusBadRequest)
 		json.NewEncoder(w).Encode(map[string]interface{}{
 			"success":              false,
 			"error":                "frightened_movement",
@@ -759,6 +770,7 @@ func handleAction(w http.ResponseWriter, r *http.Request) {
 					return
 				}
 			}
+			w.WriteHeader(http.StatusConflict)
 			json.NewEncoder(w).Encode(map[string]interface{}{
 				"success":      false,
 				"error":        "awaiting_narration",
@@ -786,6 +798,7 @@ func handleAction(w http.ResponseWriter, r *http.Request) {
 	}
 
 	if req.MovementCost < 0 || req.MovementCost > 10000 { // a negative cost would add movement
+		w.WriteHeader(http.StatusBadRequest)
 		json.NewEncoder(w).Encode(map[string]interface{}{"success": false, "error": "invalid_movement_cost", "message": "movement_cost is the feet of movement you use: 0 or more. Nothing was spent."})
 		return
 	}
@@ -822,6 +835,7 @@ func handleAction(w http.ResponseWriter, r *http.Request) {
 				equipped = weaponEquippedInOffHand(charID, wk)
 			}
 			if !equipped {
+				w.WriteHeader(http.StatusBadRequest)
 				json.NewEncoder(w).Encode(map[string]interface{}{
 					"success": false,
 					"error":   "weapon_not_equipped",
@@ -837,6 +851,7 @@ func handleAction(w http.ResponseWriter, r *http.Request) {
 	speedAttack := false // the Scimitar of Speed's Bonus Action attack (F144, ranger_fixes_2024.go)
 	if req.Action == "bonus_attack" {
 		if why := scimitarOfSpeedReady(charID); why != "" {
+			w.WriteHeader(http.StatusBadRequest)
 			json.NewEncoder(w).Encode(map[string]interface{}{"success": false, "error": "no_bonus_attack", "message": why})
 			return
 		}
@@ -844,17 +859,20 @@ func handleAction(w http.ResponseWriter, r *http.Request) {
 	}
 	attackAction := req.Action == "attack" || req.Action == "offhand_attack" || req.Action == "frenzy_attack" || req.Action == "opportunity_attack" || speedAttack
 	if req.Action == "opportunity_attack" && !hasOAWindow(lobbyID, charID, req.TargetID) {
+		w.WriteHeader(http.StatusBadRequest)
 		json.NewEncoder(w).Encode(map[string]interface{}{"success": false, "error": "no_opportunity",
 			"message": "An Opportunity Attack needs a creature you can see leaving your reach: it becomes possible when a monster moves out of your reach on the battle map (the feed and GET /api/my-turn say so). Your Reaction was not used."})
 		return
 	}
 	if attackAction && req.TargetID != 0 {
 		if ok, why := validateAttackTarget(lobbyID, req.TargetID); !ok {
+			w.WriteHeader(http.StatusBadRequest)
 			json.NewEncoder(w).Encode(map[string]interface{}{"success": false, "error": "invalid_target", "message": why, "hint": "Your action was not used."})
 			return
 		}
 		// With a battle map, the target must be seen and within reach or range (an Opportunity Attack happens just before it leaves)
 		if why := attackRangeProblem(lobbyID, charID, req.TargetID, req.Description); why != "" && req.Action != "opportunity_attack" {
+			w.WriteHeader(http.StatusBadRequest)
 			json.NewEncoder(w).Encode(map[string]interface{}{"success": false, "error": "out_of_range", "message": why})
 			return
 		}
@@ -862,6 +880,7 @@ func handleAction(w http.ResponseWriter, r *http.Request) {
 	reactiveSpell := false
 	if req.Action == "opportunity_attack" && req.SpellSlug != "" {
 		if why := reactiveSpellProblem(charID, req.SpellSlug, req.TargetID, req.TargetIDs); why != "" {
+			w.WriteHeader(http.StatusBadRequest)
 			json.NewEncoder(w).Encode(map[string]interface{}{"success": false, "error": "reactive_spell", "message": why})
 			return
 		}
@@ -887,6 +906,7 @@ func handleAction(w http.ResponseWriter, r *http.Request) {
 				sp = distantRange(sp) // F194: Distant Spell doubles the range (Touch: 30 feet)
 			}
 			if why := spellRangeProblem(lobbyID, charID, sp, targets); why != "" {
+				w.WriteHeader(http.StatusBadRequest)
 				json.NewEncoder(w).Encode(map[string]interface{}{"success": false, "error": "out_of_range", "message": why})
 				return
 			}
@@ -930,6 +950,7 @@ func handleAction(w http.ResponseWriter, r *http.Request) {
 			}
 		}
 		if why := turnLimitProblem(charID, econAction); why != "" {
+			w.WriteHeader(http.StatusBadRequest)
 			json.NewEncoder(w).Encode(map[string]interface{}{"success": false, "error": "spell_effect_limit", "message": why, "hint": "Nothing was spent."})
 			return
 		}
@@ -946,6 +967,7 @@ func handleAction(w http.ResponseWriter, r *http.Request) {
 			canAct, resourceType = true, "haste_action" // Haste: one more action (one attack, Dash, Disengage, Hide or Utilize)
 		}
 		if !canAct {
+			w.WriteHeader(http.StatusConflict)
 			json.NewEncoder(w).Encode(map[string]interface{}{
 				"success":       false,
 				"error":         "resource_exhausted",
@@ -5096,6 +5118,7 @@ func handleTriggerReadied(w http.ResponseWriter, r *http.Request) {
 	`, agentID, pickCharacterID(r, 0), pickCampaignID(r, 0)).Scan(&charID, &lobbyID)
 
 	if err != nil {
+		w.WriteHeader(http.StatusConflict)
 		json.NewEncoder(w).Encode(map[string]interface{}{"error": "no_active_game"})
 		return
 	}
@@ -5104,6 +5127,7 @@ func handleTriggerReadied(w http.ResponseWriter, r *http.Request) {
 	var readiedJSON []byte
 	err = db.QueryRow("SELECT readied_action FROM characters WHERE id = $1", charID).Scan(&readiedJSON)
 	if err != nil || readiedJSON == nil || string(readiedJSON) == "null" {
+		w.WriteHeader(http.StatusBadRequest)
 		json.NewEncoder(w).Encode(map[string]interface{}{
 			"success": false,
 			"error":   "no_readied_action",
@@ -5119,6 +5143,7 @@ func handleTriggerReadied(w http.ResponseWriter, r *http.Request) {
 	var reactionUsed bool
 	db.QueryRow("SELECT COALESCE(reaction_used, false) FROM characters WHERE id = $1", charID).Scan(&reactionUsed)
 	if reactionUsed {
+		w.WriteHeader(http.StatusConflict)
 		json.NewEncoder(w).Encode(map[string]interface{}{
 			"success":        false,
 			"error":          "reaction_used",

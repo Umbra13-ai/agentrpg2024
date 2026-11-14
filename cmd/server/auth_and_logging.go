@@ -320,6 +320,7 @@ func isModerator(agentID int) bool {
 func handleFeatureRequests(w http.ResponseWriter, r *http.Request) {
 	w.Header().Set("Content-Type", "application/json")
 	if db == nil {
+		w.WriteHeader(http.StatusServiceUnavailable)
 		json.NewEncoder(w).Encode(map[string]interface{}{"error": "database_unavailable"})
 		return
 	}
@@ -1039,6 +1040,7 @@ func handleRegister(w http.ResponseWriter, r *http.Request) {
 	}
 	w.Header().Set("Content-Type", "application/json")
 	if db == nil {
+		w.WriteHeader(http.StatusServiceUnavailable)
 		json.NewEncoder(w).Encode(map[string]interface{}{"error": "database_unavailable"})
 		return
 	}
@@ -1048,10 +1050,12 @@ func handleRegister(w http.ResponseWriter, r *http.Request) {
 		Name     string `json:"name"`
 	}
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		w.WriteHeader(http.StatusBadRequest)
 		json.NewEncoder(w).Encode(map[string]interface{}{"error": "invalid_json"})
 		return
 	}
 	if req.Name == "" {
+		w.WriteHeader(http.StatusBadRequest)
 		json.NewEncoder(w).Encode(map[string]interface{}{
 			"error": "name_required",
 			"hint":  "Provide a name for your agent. Example: {\"name\":\"YourName\",\"password\":\"your-password\"}",
@@ -1059,6 +1063,7 @@ func handleRegister(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	if n := len([]rune(req.Name)); n > 64 || strings.IndexFunc(req.Name, func(c rune) bool { return c < 32 || c == 127 }) >= 0 {
+		w.WriteHeader(http.StatusBadRequest)
 		json.NewEncoder(w).Encode(map[string]interface{}{"error": "invalid_name", "message": "An agent name is 1 to 64 characters, with no control characters."})
 		return
 	}
@@ -1070,6 +1075,7 @@ func handleRegister(w http.ResponseWriter, r *http.Request) {
 		identifier = req.Name // Use name as the login identifier
 		autoVerify = true
 	} else if e, ok := validEmail(req.Email); !ok {
+		w.WriteHeader(http.StatusBadRequest)
 		json.NewEncoder(w).Encode(map[string]interface{}{"error": "invalid_email", "message": "Send one email address (it lets you recover the account). " + agentMailHint})
 		return
 	} else {
@@ -1093,8 +1099,10 @@ func handleRegister(w http.ResponseWriter, r *http.Request) {
 	).Scan(&id)
 	if err != nil {
 		if strings.Contains(err.Error(), "unique") {
+			w.WriteHeader(http.StatusConflict)
 			json.NewEncoder(w).Encode(map[string]interface{}{"error": "name_or_email_already_registered"})
 		} else {
+			w.WriteHeader(http.StatusInternalServerError)
 			json.NewEncoder(w).Encode(map[string]interface{}{"error": publicError(err)})
 		}
 		return
@@ -1166,6 +1174,7 @@ func handleVerify(w http.ResponseWriter, r *http.Request) {
 		Code  string `json:"code"`
 	}
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		w.WriteHeader(http.StatusBadRequest)
 		json.NewEncoder(w).Encode(map[string]interface{}{"error": "invalid_json"})
 		return
 	}
@@ -1181,28 +1190,33 @@ func handleVerify(w http.ResponseWriter, r *http.Request) {
 
 	if err != nil {
 		recordAuthFailure(clientIP(r))
+		w.WriteHeader(http.StatusNotFound)
 		json.NewEncoder(w).Encode(map[string]interface{}{"error": "email_not_found"})
 		return
 	}
 
 	if verified {
+		w.WriteHeader(http.StatusConflict)
 		json.NewEncoder(w).Encode(map[string]interface{}{"error": "already_verified"})
 		return
 	}
 
 	if time.Now().After(expires) {
+		w.WriteHeader(http.StatusBadRequest)
 		json.NewEncoder(w).Encode(map[string]interface{}{"error": "code_expired", "message": "Ask for a new code with POST /api/account/email (signed in)."})
 		return
 	}
 
 	if strings.ToLower(req.Code) != strings.ToLower(storedCode) {
 		recordAuthFailure(clientIP(r))
+		w.WriteHeader(http.StatusBadRequest)
 		json.NewEncoder(w).Encode(map[string]interface{}{"error": "invalid_code"})
 		return
 	}
 
 	_, err = db.Exec("UPDATE agents SET verified = true, email_verified = true, verification_code = NULL WHERE id = $1", agentID)
 	if err != nil {
+		w.WriteHeader(http.StatusInternalServerError)
 		json.NewEncoder(w).Encode(map[string]interface{}{"error": publicError(err)})
 		return
 	}
@@ -1235,6 +1249,7 @@ func handleAdminVerify(w http.ResponseWriter, r *http.Request) {
 
 	_, err := db.Exec("UPDATE agents SET verified = true WHERE email = $1", req.Email)
 	if err != nil {
+		w.WriteHeader(http.StatusInternalServerError)
 		json.NewEncoder(w).Encode(map[string]interface{}{"error": publicError(err)})
 		return
 	}
@@ -1257,6 +1272,7 @@ func handleAdminUsers(w http.ResponseWriter, r *http.Request) {
 
 	rows, err := db.Query("SELECT id, email, name, verified, created_at FROM agents ORDER BY created_at DESC LIMIT 50")
 	if err != nil {
+		w.WriteHeader(http.StatusInternalServerError)
 		json.NewEncoder(w).Encode(map[string]interface{}{"error": publicError(err)})
 		return
 	}
@@ -1322,6 +1338,7 @@ func handleAdminCreateCampaign(w http.ResponseWriter, r *http.Request) {
 		req.Name = "Unnamed Campaign"
 	}
 	if len([]rune(req.Name)) > 255 { // the column holds 255 characters
+		w.WriteHeader(http.StatusBadRequest)
 		json.NewEncoder(w).Encode(map[string]interface{}{"error": "name_too_long", "message": "A campaign name can be at most 255 characters."})
 		return
 	}
@@ -1338,6 +1355,7 @@ func handleAdminCreateCampaign(w http.ResponseWriter, r *http.Request) {
 		req.Name, req.DMID, req.Setting, req.MinLevel, req.MaxLevel,
 	).Scan(&id)
 	if err != nil {
+		w.WriteHeader(http.StatusInternalServerError)
 		json.NewEncoder(w).Encode(map[string]interface{}{"error": publicError(err)})
 		return
 	}
@@ -1361,6 +1379,7 @@ func handleLogin(w http.ResponseWriter, r *http.Request) {
 	}
 	w.Header().Set("Content-Type", "application/json")
 	if db == nil {
+		w.WriteHeader(http.StatusServiceUnavailable)
 		json.NewEncoder(w).Encode(map[string]interface{}{"error": "database_unavailable"})
 		return
 	}
@@ -1374,6 +1393,7 @@ func handleLogin(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		w.WriteHeader(http.StatusBadRequest)
 		json.NewEncoder(w).Encode(map[string]interface{}{"error": "invalid_json"})
 		return
 	}
@@ -1383,15 +1403,18 @@ func handleLogin(w http.ResponseWriter, r *http.Request) {
 	err := db.QueryRow("SELECT id, password_hash, salt, COALESCE(verified, false) FROM agents WHERE email = $1", req.Email).Scan(&id, &hash, &salt, &verified)
 	if err != nil {
 		recordAuthFailure(clientIP(r))
+		w.WriteHeader(http.StatusUnauthorized)
 		json.NewEncoder(w).Encode(map[string]interface{}{"error": "invalid_credentials"})
 		return
 	}
 	if !checkPassword(req.Password, hash) {
 		recordAuthFailure(clientIP(r))
+		w.WriteHeader(http.StatusUnauthorized)
 		json.NewEncoder(w).Encode(map[string]interface{}{"error": "invalid_credentials"})
 		return
 	}
 	if !verified {
+		w.WriteHeader(http.StatusForbidden)
 		json.NewEncoder(w).Encode(map[string]interface{}{"error": "email_not_verified", "message": "Check your email for the verification code."})
 		return
 	}

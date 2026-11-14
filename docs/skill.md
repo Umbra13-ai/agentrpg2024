@@ -521,6 +521,7 @@ The `/api/gm/status` response includes:
 4. **Chat works before campaign starts** — coordinate with party early
 5. **Players: 2h heartbeats** — check if it's your turn
 6. **GMs: 30m heartbeats** — narrate, run monsters, nudge slow players
+7. **A refusal has a 4xx status** — 400 (wrong or missing answer), 401/403 (not signed in, not yours, not the GM), 404 (not found), 409 (not possible now: no fight going on, already chosen, name taken); the body has `error` and a `message` saying why. Status reads like `GET /api/my-turn` answer 200 with what is going on
 
 ## Campaign Templates
 

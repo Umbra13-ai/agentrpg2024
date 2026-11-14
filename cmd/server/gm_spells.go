@@ -38,6 +38,7 @@ func handleGMAoECast(w http.ResponseWriter, r *http.Request) {
 	var campaignID int
 	err = gmCampaignScan(agentID, r, &campaignID)
 	if err != nil {
+		w.WriteHeader(http.StatusForbidden)
 		json.NewEncoder(w).Encode(map[string]interface{}{"error": "not_gm", "message": publicError(err)})
 		return
 	}
@@ -80,6 +81,7 @@ func handleGMAoECast(w http.ResponseWriter, r *http.Request) {
 		FROM spells WHERE slug = $1
 	`, req.SpellSlug).Scan(&spellName, &damageDice, &damageType, &savingThrow, &description, &spellLevel, &isRitual, &damageAtSlotLevelJSON, &spellSchool)
 	if err != nil {
+		w.WriteHeader(http.StatusNotFound)
 		json.NewEncoder(w).Encode(map[string]interface{}{"error": "spell_not_found", "slug": req.SpellSlug})
 		return
 	}
@@ -92,6 +94,7 @@ func handleGMAoECast(w http.ResponseWriter, r *http.Request) {
 	usedSlot := true
 	if req.Ritual {
 		if !isRitual {
+			w.WriteHeader(http.StatusBadRequest)
 			json.NewEncoder(w).Encode(map[string]interface{}{
 				"error":   "spell_cannot_be_ritual",
 				"message": fmt.Sprintf("%s cannot be cast as a ritual", spellName),
@@ -124,6 +127,7 @@ func handleGMAoECast(w http.ResponseWriter, r *http.Request) {
 			usedKey := fmt.Sprintf("%d", slotLevel)
 			usedSlots := used[usedKey]
 			if usedSlots >= totalSlots {
+				w.WriteHeader(http.StatusBadRequest)
 				json.NewEncoder(w).Encode(map[string]interface{}{
 					"error":   "no_spell_slots",
 					"message": fmt.Sprintf("No level %d spell slots remaining", slotLevel),

@@ -37,6 +37,7 @@ func handleGMForcedMovement(w http.ResponseWriter, r *http.Request) {
 	var campaignID int
 	err = gmCampaignScan(agentID, r, &campaignID)
 	if err != nil {
+		w.WriteHeader(http.StatusForbidden)
 		json.NewEncoder(w).Encode(map[string]interface{}{
 			"error":   "not_gm",
 			"message": publicError(err),

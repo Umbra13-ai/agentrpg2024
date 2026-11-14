@@ -40,6 +40,7 @@ func handleGMSkillCheck(w http.ResponseWriter, r *http.Request) {
 	err = gmCampaignScan(agentID, r, &campaignID)
 
 	if err != nil {
+		w.WriteHeader(http.StatusForbidden)
 		json.NewEncoder(w).Encode(map[string]interface{}{
 			"error":   "not_gm",
 			"message": publicError(err),
@@ -268,6 +269,7 @@ func handleGMSkillCheck(w http.ResponseWriter, r *http.Request) {
 			usedInspiration = true
 		} else {
 			// Character doesn't have Heroic Inspiration to spend
+			w.WriteHeader(http.StatusBadRequest)
 			json.NewEncoder(w).Encode(map[string]interface{}{
 				"error":   "no_inspiration",
 				"message": fmt.Sprintf("%s doesn't have Heroic Inspiration to spend", charName),
@@ -457,6 +459,7 @@ func handleGMSkillCheck(w http.ResponseWriter, r *http.Request) {
 	if req.UsePeerlessSkill {
 		// Check if character has Peerless Skill feature
 		if !hasSubclassFeature(subclassRaw.String, level, "peerless_skill") {
+			w.WriteHeader(http.StatusBadRequest)
 			json.NewEncoder(w).Encode(map[string]interface{}{
 				"error":   "no_peerless_skill",
 				"message": fmt.Sprintf("%s doesn't have Peerless Skill (requires College of Lore Bard level 14+)", charName),
@@ -467,6 +470,7 @@ func handleGMSkillCheck(w http.ResponseWriter, r *http.Request) {
 		// Check and consume Bardic Inspiration
 		success, errMsg, remaining := useClassResource(req.CharacterID, "bardic_inspiration", 1)
 		if !success {
+			w.WriteHeader(http.StatusBadRequest)
 			json.NewEncoder(w).Encode(map[string]interface{}{
 				"error":   "no_bardic_inspiration",
 				"message": errMsg,
@@ -702,6 +706,7 @@ func handleGMToolCheck(w http.ResponseWriter, r *http.Request) {
 	err = gmCampaignScan(agentID, r, &campaignID)
 
 	if err != nil {
+		w.WriteHeader(http.StatusForbidden)
 		json.NewEncoder(w).Encode(map[string]interface{}{
 			"error":   "not_gm",
 			"message": publicError(err),
@@ -907,6 +912,7 @@ func handleGMToolCheck(w http.ResponseWriter, r *http.Request) {
 			db.Exec(`UPDATE characters SET inspiration = false WHERE id = $1`, req.CharacterID)
 			usedInspiration = true
 		} else {
+			w.WriteHeader(http.StatusBadRequest)
 			json.NewEncoder(w).Encode(map[string]interface{}{
 				"error":   "no_inspiration",
 				"message": fmt.Sprintf("%s doesn't have Heroic Inspiration to spend", charName),
@@ -1009,6 +1015,7 @@ func handleGMToolCheck(w http.ResponseWriter, r *http.Request) {
 	if req.UsePeerlessSkill {
 		// Check if character has Peerless Skill feature
 		if !hasSubclassFeature(toolSubclassRaw.String, level, "peerless_skill") {
+			w.WriteHeader(http.StatusBadRequest)
 			json.NewEncoder(w).Encode(map[string]interface{}{
 				"error":   "no_peerless_skill",
 				"message": fmt.Sprintf("%s doesn't have Peerless Skill (requires College of Lore Bard level 14+)", charName),
@@ -1019,6 +1026,7 @@ func handleGMToolCheck(w http.ResponseWriter, r *http.Request) {
 		// Check and consume Bardic Inspiration
 		success, errMsg, remaining := useClassResource(req.CharacterID, "bardic_inspiration", 1)
 		if !success {
+			w.WriteHeader(http.StatusBadRequest)
 			json.NewEncoder(w).Encode(map[string]interface{}{
 				"error":   "no_bardic_inspiration",
 				"message": errMsg,
@@ -1236,6 +1244,7 @@ func handleGMSavingThrow(w http.ResponseWriter, r *http.Request) {
 	err = gmCampaignScan(agentID, r, &campaignID)
 
 	if err != nil {
+		w.WriteHeader(http.StatusForbidden)
 		json.NewEncoder(w).Encode(map[string]interface{}{
 			"error":   "not_gm",
 			"message": publicError(err),
@@ -1556,6 +1565,7 @@ func handleGMSavingThrow(w http.ResponseWriter, r *http.Request) {
 			usedInspiration = true
 		} else {
 			// Character doesn't have Heroic Inspiration to spend
+			w.WriteHeader(http.StatusBadRequest)
 			json.NewEncoder(w).Encode(map[string]interface{}{
 				"error":   "no_inspiration",
 				"message": fmt.Sprintf("%s doesn't have Heroic Inspiration to spend", charName),
@@ -1782,6 +1792,7 @@ func handleGMContestedCheck(w http.ResponseWriter, r *http.Request) {
 	err = gmCampaignScan(agentID, r, &campaignID)
 
 	if err != nil {
+		w.WriteHeader(http.StatusForbidden)
 		json.NewEncoder(w).Encode(map[string]interface{}{
 			"error":   "not_gm",
 			"message": publicError(err),

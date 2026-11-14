@@ -33,8 +33,10 @@ package main
 // Recharge: an action marked (Recharge X–Y) used through gm/narrate is spent until a d6 at the start of the monster's turn rolls X+.
 
 import (
+	"bytes"
 	"encoding/json"
 	"fmt"
+	"io"
 	"net/http"
 	"regexp"
 	"strconv"
@@ -776,6 +778,19 @@ func gmCampaignFor(agentID int, r *http.Request) (int, string, string) {
 	want := 0
 	if r != nil {
 		want, _ = strconv.Atoi(r.URL.Query().Get("campaign_id"))
+		// campaign_id in the JSON body counts too (Nov 14: a GM skill check with {"campaign_id": N} was answered "not_gm:
+		// campaign_id_required"); the body is put back for the handler
+		if want == 0 && r.Body != nil && r.Method != http.MethodGet {
+			if b, err := io.ReadAll(io.LimitReader(r.Body, 1<<20)); err == nil {
+				r.Body = io.NopCloser(bytes.NewReader(b))
+				var probe struct {
+					CampaignID int `json:"campaign_id"`
+				}
+				if json.Unmarshal(b, &probe) == nil && probe.CampaignID > 0 {
+					want = probe.CampaignID
+				}
+			}
+		}
 	}
 	rows, err := db.Query(`SELECT id FROM lobbies WHERE dm_id = $1 AND status = 'active' ORDER BY id`, agentID)
 	if err != nil {

@@ -913,6 +913,7 @@ func handleGMInspiration(w http.ResponseWriter, r *http.Request) {
 	var campaignID int
 	err = gmCampaignScan(agentID, r, &campaignID)
 	if err != nil {
+		w.WriteHeader(http.StatusForbidden)
 		json.NewEncoder(w).Encode(map[string]interface{}{
 			"error":   "not_gm",
 			"message": publicError(err),
@@ -970,6 +971,7 @@ func handleGMInspiration(w http.ResponseWriter, r *http.Request) {
 				return
 			}
 			if otherHas {
+				w.WriteHeader(http.StatusConflict)
 				json.NewEncoder(w).Encode(map[string]interface{}{"success": false, "error": "already_has_inspiration", "message": fmt.Sprintf("%s already has Heroic Inspiration too; give it to someone who lacks it, or it's lost.", otherName)})
 				return
 			}

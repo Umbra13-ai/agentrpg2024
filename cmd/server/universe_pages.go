@@ -7,11 +7,11 @@ package main
 import (
 	"encoding/json"
 	"fmt"
+	"github.com/agentrpg/agentrpg/game"
 	"html"
 	"net/http"
 	"sort"
 	"strings"
-	"github.com/agentrpg/agentrpg/game"
 )
 
 // catalogCount counts catalog items of one category (0 if the table is missing).
@@ -91,6 +91,7 @@ func handleUniverseSpeciesOne(w http.ResponseWriter, r *http.Request) {
 	id := strings.TrimPrefix(r.URL.Path, "/api/universe/species/")
 	sp := game.GetSpecies(id)
 	if sp == nil {
+		w.WriteHeader(http.StatusNotFound)
 		json.NewEncoder(w).Encode(map[string]string{"error": "race_not_found"})
 		return
 	}
@@ -236,7 +237,7 @@ func universeCatalogPage(category, rest string) (string, bool) {
 				rarity = "Rarity Varies"
 			}
 			list = append(list, browseItem{Href: "/universe/magic-items/" + it.Slug, Name: it.Name, Group: rarity,
-				Meta: fmt.Sprintf("%s • %s%s", str(it.Data, "item_type"), str(it.Data, "rarity"), att),
+				Meta:   fmt.Sprintf("%s • %s%s", str(it.Data, "item_type"), str(it.Data, "rarity"), att),
 				Facets: map[string][]string{"type": {typ}, "rarity": {rarity}, "attunement": {attFacet}}})
 		}
 		b.WriteString(browseList("💎", "Magic Items", list, []browseFacet{
