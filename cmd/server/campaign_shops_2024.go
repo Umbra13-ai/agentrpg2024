@@ -98,7 +98,10 @@ func anyOf(fs ...func(it shopItem) bool) func(it shopItem) bool {
 	}
 }
 
-func armorType(it shopItem) string { s, _ := it.row.Data["armor_type"].(string); return strings.ToLower(s) }
+func armorType(it shopItem) string {
+	s, _ := it.row.Data["armor_type"].(string)
+	return strings.ToLower(s)
+}
 func weaponKind(it shopItem) string {
 	s, _ := it.row.Data["type"].(string)
 	return strings.ToLower(s)
@@ -204,10 +207,10 @@ func rarityAllowed(r string, tier int, legendary bool) bool {
 
 type magicOffer struct {
 	Name, Short, Rarity, Type, Description string // Name: the SRD's name ("Weapon, +1, +2, or +3"); Short: without the variants ("Weapon")
-	ValueGP                         int // the rarity value (halved for a consumable), without a base item
-	Consumable, Attunement          bool
-	Bases                           []string // the weapon or armor it can be made from ([] = none needed)
-	Variants                        []string // "+1", "+2", "+3" when it comes in those
+	ValueGP                                int    // the rarity value (halved for a consumable), without a base item
+	Consumable, Attunement                 bool
+	Bases                                  []string // the weapon or armor it can be made from ([] = none needed)
+	Variants                               []string // "+1", "+2", "+3" when it comes in those
 }
 
 var plusVariants = regexp.MustCompile(`,\s*\+1,\s*\+2,\s*or\s*\+3`)
@@ -386,7 +389,7 @@ func (s *campaignShop) priceCP(gp float64) int {
 	if p <= 0 {
 		p = 100
 	}
-	return int(gp*float64(p)+0.5) // gp * 100 cp * p / 100
+	return int(gp*float64(p) + 0.5) // gp * 100 cp * p / 100
 }
 
 // stableHash picks the same magic stock for a shop every time (it changes only when the DM opens a new shop).
@@ -552,7 +555,7 @@ func handleGMShops(w http.ResponseWriter, r *http.Request) {
 		var cid int
 		fmt.Sscanf(r.URL.Query().Get("campaign_id"), "%d", &cid)
 		out := map[string]interface{}{"shop_types": types, "stock_by_level": stockRule,
-			"open_a_shop": "POST /api/gm/shops {\"campaign_id\": N, \"open\": \"blacksmith\", \"name\": \"Hammer and Tongs\"} (options: level_range \"auto\" or \"1-4\" ..., price_percent, firearms, legendary, stock_per_rarity)",
+			"open_a_shop":  "POST /api/gm/shops {\"campaign_id\": N, \"open\": \"blacksmith\", \"name\": \"Hammer and Tongs\"} (options: level_range \"auto\" or \"1-4\" ..., price_percent, firearms, legendary, stock_per_rarity)",
 			"close_a_shop": "POST /api/gm/shops {\"campaign_id\": N, \"close\": shop_id}"}
 		if cid > 0 {
 			var list []map[string]interface{}
@@ -697,7 +700,7 @@ func handleCampaignShops(w http.ResponseWriter, r *http.Request, campaignID int,
 			"stock_for": fmt.Sprintf("%s (tier %d)", tierRanges[tier], tier), "your_money": moneyText(money), "items": items,
 			"offers_for_your_items": sellOffers(charID, &t, shop.priceCP),
 			"how_to_sell":           fmt.Sprintf("POST /api/campaigns/%d/shops/%d {\"character_id\": %d, \"sell\": [{\"item_id\": \"<id>\", \"quantity\": 1}]}: the shop pays half its own price.", campaignID, shop.ID, charID),
-			"how_to_buy": fmt.Sprintf("POST /api/campaigns/%d/shops/%d {\"character_id\": %d, \"buy\": [{\"item\": \"<item>\", \"quantity\": 1}]}; a magic item made from a weapon or armor also takes base, a +1/+2/+3 item takes variant, a Spell Scroll takes spell.", campaignID, shop.ID, charID)})
+			"how_to_buy":            fmt.Sprintf("POST /api/campaigns/%d/shops/%d {\"character_id\": %d, \"buy\": [{\"item\": \"<item>\", \"quantity\": 1}]}; a magic item made from a weapon or armor also takes base, a +1/+2/+3 item takes variant, a Spell Scroll takes spell.", campaignID, shop.ID, charID)})
 		return
 	}
 	if len(req.Sell) > 0 && len(req.Buy) == 0 {
