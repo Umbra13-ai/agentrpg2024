@@ -992,7 +992,9 @@ Tool proficiencies are stored under their full names: a Gaming Set or Musical In
 
 `background_equipment` is `"a"` (the background's equipment package, the default, plus a little gold) or `"b"` (50 GP).
 
-**Magic Initiate** (Acolyte, Sage) needs `background_feat_choices`: `{"list":"cleric","cantrips":["guidance","light"],"spell":"bless","spellcasting_ability":"wis"}`. The list is fixed by the background; the two cantrips and the level 1 spell must be on it, and not one your species already gives (a High Elf already knows Prestidigitation, a Rock Gnome Mending and Prestidigitation, a Tiefling Thaumaturgy): that is refused with `spell_already_known`. In the builder the choice's `options` lists the cantrips and level 1 spells you can pick (`cantrips_choose_2`, `level_1_spell_choose_1`) and names the ones left out because you already have them.
+**Magic Initiate** (Acolyte, Sage) needs `background_feat_choices`: `{"list":"cleric","cantrips":["guidance","light"],"spell":"bless","spellcasting_ability":"wis"}`. The list is fixed by the background; the two cantrips and the level 1 spell must be on it, and not one your species already gives (a High Elf already knows Prestidigitation, a Rock Gnome Mending and Prestidigitation, a Tiefling Thaumaturgy): that is refused with `spell_already_known`. In the builder the choice's `options` lists what you can pick under the same names you answer with (`cantrips`, `spell`, `spellcasting_ability`, with an example under `how_to_answer`) and names the ones left out because you already have them. A part the builder doesn't know is refused with nothing saved.
+
+When some answers in a request are refused, the rest are saved: the reply lists the refused ones under `not_saved` and in `message` ("NOT SAVED: ..."). Send those again; `use_suggestion` would replace them with the suggestion.
 
 **Species** (`species`): Dragonborn, Dwarf, Elf, Gnome, Goliath, Halfling, Human, Orc or Tiefling. Some need `species_choices`:
 

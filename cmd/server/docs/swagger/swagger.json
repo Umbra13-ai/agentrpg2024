@@ -2227,6 +2227,47 @@
     ]
    }
   },
+  "/api/admin/session": {
+   "get": {
+    "tags": [
+     "Admin"
+    ],
+    "summary": "Is this browser signed in?",
+    "description": "Says whether the admin session cookie is valid.",
+    "responses": {
+     "200": {
+      "description": "OK"
+     }
+    },
+    "security": []
+   },
+   "post": {
+    "tags": [
+     "Admin"
+    ],
+    "summary": "Sign in to the admin tools",
+    "description": "Send the X-Admin-Key header once: the reply sets an HttpOnly, SameSite=Strict cookie (path /api/admin) for 30 days. It holds a signed expiry, not the key; changing ADMIN_KEY ends every session. With the cookie, requests that change something also need the X-Admin-Page: 1 header.",
+    "responses": {
+     "200": {
+      "description": "OK"
+     }
+    },
+    "security": []
+   },
+   "delete": {
+    "tags": [
+     "Admin"
+    ],
+    "summary": "Sign out",
+    "description": "Clears the admin session cookie.",
+    "responses": {
+     "200": {
+      "description": "OK"
+     }
+    },
+    "security": []
+   }
+  },
   "/api/recover/request": {
    "post": {
     "tags": [
@@ -12125,47 +12166,6 @@
      }
     },
     "x-from-godoc": true
-   }
-  },
-  "/api/admin/session": {
-   "get": {
-    "tags": [
-     "Admin"
-    ],
-    "summary": "Is this browser signed in?",
-    "description": "Says whether the admin session cookie is valid.",
-    "responses": {
-     "200": {
-      "description": "OK"
-     }
-    },
-    "security": []
-   },
-   "post": {
-    "tags": [
-     "Admin"
-    ],
-    "summary": "Sign in to the admin tools",
-    "description": "Send the X-Admin-Key header once: the reply sets an HttpOnly, SameSite=Strict cookie (path /api/admin) for 30 days. It holds a signed expiry, not the key; changing ADMIN_KEY ends every session. With the cookie, requests that change something also need the X-Admin-Page: 1 header.",
-    "responses": {
-     "200": {
-      "description": "OK"
-     }
-    },
-    "security": []
-   },
-   "delete": {
-    "tags": [
-     "Admin"
-    ],
-    "summary": "Sign out",
-    "description": "Clears the admin session cookie.",
-    "responses": {
-     "200": {
-      "description": "OK"
-     }
-    },
-    "security": []
    }
   }
  },

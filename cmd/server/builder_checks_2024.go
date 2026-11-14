@@ -70,6 +70,7 @@ func min3(a, b, c int) int {
 // unknownBuilderFields: the fields sent that the builder doesn't know, each with a hint.
 func unknownBuilderFields(upd map[string]interface{}) []string {
 	var out []string
+	out = append(out, featChoiceSubfields(upd)...)
 	for k := range upd {
 		if !builderFields[k] {
 			msg := fmt.Sprintf("%q is not a field the builder knows", k)
@@ -203,6 +204,54 @@ func campaignSeats(agentID int) []string {
 		var cn, ln string
 		rows.Scan(&cn, &ln)
 		out = append(out, fmt.Sprintf("%s in %s", cn, ln))
+	}
+	return out
+}
+
+// featChoiceAliases: names an answer may use for the Origin feat's choices (some are the names the options were once listed under).
+var featChoiceAliases = map[string]string{
+	"cantrips_choose_2": "cantrips", "level_1_spell_choose_1": "spell", "level_1_spell": "spell", "level1_spell": "spell",
+	"spellcasting_ability_choose_1": "spellcasting_ability", "ability": "spellcasting_ability", "list_choose_1": "list",
+	"spell_list": "list", "skills": "proficiencies",
+}
+
+var featChoiceFields = map[string]bool{"list": true, "cantrips": true, "spell": true, "spellcasting_ability": true, "proficiencies": true}
+
+// featChoiceSubfields puts the aliases in background_feat_choices and species_feat_choices under their real names, and reports a
+// part the builder doesn't know (Nov 14 tester: picks sent as cantrips_choose_2 and level_1_spell_choose_1 were kept but ignored,
+// the step stayed unfinished and the suggestion replaced them, with no error).
+func featChoiceSubfields(upd map[string]interface{}) []string {
+	var out []string
+	for _, field := range []string{"background_feat_choices", "species_feat_choices"} {
+		fc, ok := upd[field].(map[string]interface{})
+		if !ok {
+			continue
+		}
+		for k, v := range fc {
+			if real, ok := featChoiceAliases[k]; ok {
+				delete(fc, k)
+				if real == "spell" { // a list of one spell is the spell
+					if l, ok := v.([]interface{}); ok && len(l) == 1 {
+						v = l[0]
+					}
+				}
+				fc[real] = v
+			}
+		}
+		if l, ok := fc["spells"].([]interface{}); ok && len(l) == 1 && fc["spell"] == nil {
+			fc["spell"] = l[0]
+			delete(fc, "spells")
+		}
+		var bad []string
+		for k := range fc {
+			if !featChoiceFields[k] {
+				bad = append(bad, k)
+			}
+		}
+		sort.Strings(bad)
+		for _, k := range bad {
+			out = append(out, fmt.Sprintf("%q is not part of %s: Magic Initiate takes list, cantrips (2), spell (1) and spellcasting_ability; Skilled takes proficiencies (3)", k, field))
+		}
 	}
 	return out
 }

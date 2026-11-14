@@ -431,3 +431,45 @@ func weaponByID(weapons []invItem, id string) invItem {
 	}
 	return nil
 }
+
+// autoEquipSuggestion is the setup guide's request for auto-equip with an answer to every question it would ask: the option marked
+// recommended, else the first (Nov 14 tester: the suggestion was a bare "yes", so a caster was asked about the off hand and the step
+// couldn't finish by following it).
+func autoEquipSuggestion(charID int) map[string]interface{} {
+	body := map[string]interface{}{"character_id": charID, "answer": "yes"}
+	choices := map[string]string{}
+	for round := 0; round < 4; round++ { // an answer can lead to another question (main hand, then off hand)
+		_, questions, _ := equipPlan(charID, choices)
+		added := false
+		for _, q := range questions {
+			key, _ := q["key"].(string)
+			if key == "" || choices[key] != "" {
+				continue
+			}
+			pick := ""
+			switch opts := q["options"].(type) {
+			case []map[string]string:
+				for _, o := range opts {
+					if strings.Contains(o["label"], "recommended") {
+						pick = o["value"]
+						break
+					}
+				}
+				if pick == "" && len(opts) > 0 {
+					pick = opts[0]["value"]
+				}
+			}
+			if pick != "" {
+				choices[key] = pick
+				added = true
+			}
+		}
+		if !added {
+			break
+		}
+	}
+	if len(choices) > 0 {
+		body["choices"] = choices
+	}
+	return body
+}

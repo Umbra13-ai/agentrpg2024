@@ -1631,6 +1631,11 @@ func handleCharacterBuilder(w http.ResponseWriter, r *http.Request) {
 	if len(rejected) > 0 {
 		view["not_saved"] = rejected
 		view["not_saved_note"] = "These answers were not saved (the draft keeps what it had before); everything else you sent was saved. Fix them and send them again."
+		var lines []string // said plainly too (Nov 14 tester: +2 Dexterity refused in not_saved, missed, then a suggestion filled +2 Intelligence)
+		for _, rj := range rejected {
+			lines = append(lines, fmt.Sprintf("%v: %v", rj["field"], rj["problem"]))
+		}
+		view["message"] = "NOT SAVED: " + strings.Join(lines, "; ") + ". Send these again with a valid choice; use_suggestion would replace them with the suggestion."
 		status := 200
 		if len(rejected) == len(upd) {
 			status = http.StatusBadRequest
@@ -2230,7 +2235,7 @@ func handleCharacterSetup(w http.ResponseWriter, r *http.Request, charID int) {
 	if line := autoEquipOpen(charID); line != "" {
 		steps = append(steps, setupStep{Key: "auto_equip", Title: "Put on your gear and arm your weapons",
 			Why:     "Do you want me to equip everything for you? I will put on your armor, take your weapon (and a Shield or second Light weapon) in hand and wear your clothing and jewelry. If you have a choice to make (more weapons than hands, two items for the same body place) I will ask you which. GET /api/characters/auto-equip?character_id=N shows what I would do first.",
-			Request: req("POST", "/api/characters/auto-equip", map[string]interface{}{"character_id": charID, "answer": "yes"})})
+			Request: req("POST", "/api/characters/auto-equip", autoEquipSuggestion(charID))})
 	}
 	// the starting shop, while the character has money (shop_2024.go)
 	if st := shopSetupStep(charID); st != nil {
@@ -2370,10 +2375,17 @@ func magicInitiateOptions(list string, speciesCantrips, otherFeat []string) map[
 	}
 	sort.Strings(cantrips)
 	sort.Strings(spells)
-	out := map[string]interface{}{
-		"list": list, "cantrips_choose_2": cantrips, "level_1_spell_choose_1": spells,
-		"spellcasting_ability_choose_1": []string{"int", "wis", "cha"},
-		"spell_details":                 "GET /api/universe/class-spells/" + list,
+	ex := map[string]interface{}{"list": list, "spell": "", "spellcasting_ability": "int"}
+	if len(cantrips) >= 2 {
+		ex["cantrips"] = cantrips[:2]
+	}
+	if len(spells) > 0 {
+		ex["spell"] = spells[0]
+	}
+	out := map[string]interface{}{ // keys named as the answer's fields (Nov 14 tester sent the old option names back)
+		"list": list, "cantrips": cantrips, "spell": spells, "spellcasting_ability": []string{"int", "wis", "cha"},
+		"how_to_answer": map[string]interface{}{"choose": "2 cantrips, 1 level 1 spell and the ability", "example": ex},
+		"spell_details": "GET /api/universe/class-spells/" + list,
 	}
 	if len(have) > 0 {
 		out["left_out_you_already_have"] = have
@@ -2389,5 +2401,5 @@ func humanMagicInitiateOptions(bgList string, bgSpells []string) map[string]inte
 			out[l] = magicInitiateOptions(l, nil, bgSpells)
 		}
 	}
-	return map[string]interface{}{"list_choose_1": out}
+	return map[string]interface{}{"list": out, "how_to_answer": "choose one list, then from it 2 cantrips, 1 spell and the ability: {\"list\": \"cleric\", \"cantrips\": [...], \"spell\": \"...\", \"spellcasting_ability\": \"wis\"}"}
 }
