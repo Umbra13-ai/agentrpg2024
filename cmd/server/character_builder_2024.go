@@ -598,7 +598,11 @@ func builderSteps(body map[string]interface{}, agentID int, withCheck bool) []bu
 			mDetails := map[string]string{}
 			for _, c := range eligibleMasteryWeapons(class) {
 				mOpts = append(mOpts, strings.ToLower(c.Name))
-				mDetails[strings.ToLower(c.Name)] = c.Mastery + ": " + masteryText[c.Mastery]
+				t := masteryText[c.Mastery]
+				if t == "" {
+					t = masteryTextMore[c.Mastery]
+				}
+				mDetails[strings.ToLower(c.Name)] = c.Mastery + ": " + t
 			}
 			m := blist(body, "weapon_masteries")
 			mProblem := ""

@@ -154,10 +154,18 @@ func masterySummary(charID int) []map[string]string {
 		m := map[string]string{"weapon": titleWords(wp.Name), "mastery": wp.Mastery}
 		if t, ok := masteryText[wp.Mastery]; ok {
 			m["what_it_does"] = t
+		} else if t, ok := masteryTextMore[wp.Mastery]; ok {
+			m["what_it_does"] = t
 		}
 		out = append(out, m)
 	}
 	return out
+}
+
+// masteryTextMore: the two masteries whose effect depends on the attack (masteryNote works the numbers out); the SRD 5.2.1 wording.
+var masteryTextMore = map[string]string{
+	"Graze":  "If your attack roll with this weapon misses a creature, you can deal damage to that creature equal to the ability modifier you used to make the attack roll. This damage is the same type dealt by the weapon, and the damage can be increased only by increasing the ability modifier.",
+	"Topple": "If you hit a creature with this weapon, you can force the creature to make a Constitution saving throw (DC 8 plus the ability modifier used to make the attack roll and your Proficiency Bonus). On a failed save, the creature has the Prone condition.",
 }
 
 var masteryText = map[string]string{
