@@ -1230,7 +1230,8 @@ func TestCampaignFlow(t *testing.T) {
 	t.Log("\n=== Campaign Flow Test Complete ===")
 }
 
-// TestCombatSkipRequired tests the autonomous GM Phase 2: skip_required at 4h
+// TestCombatSkipRequired: past the combat turn deadline (4h) a player's slot is the GM's to take as stand-in (it was stand_in_required
+// before the pending-action turns of Nov 14)
 func TestCombatSkipRequired(t *testing.T) {
 	if os.Getenv("DATABASE_URL") == "" && os.Getenv("TEST_DATABASE_URL") == "" {
 		t.Skip("No database URL set - skipping integration test")
@@ -1280,20 +1281,20 @@ func TestCombatSkipRequired(t *testing.T) {
 	_, result = makeRequest(t, "POST", fmt.Sprintf("/api/campaigns/%d/combat/start", campaignID), nil, gmAuth)
 	t.Logf("Combat started: %v", result)
 
-	// Test 1: Before 4h - no skip_required
+	// Test 1: Before 4h - no stand_in_required
 	t.Run("BeforeThreshold_NoSkipRequired", func(t *testing.T) {
 		_, result := makeRequest(t, "GET", "/api/gm/status", nil, gmAuth)
 
-		if result["skip_required"] != nil && result["skip_required"].(bool) {
-			t.Error("skip_required should not be set before 4h threshold")
+		if result["stand_in_required"] != nil && result["stand_in_required"].(bool) {
+			t.Error("stand_in_required should not be set before 4h threshold")
 		}
 
 		if combat, ok := result["combat"].(map[string]interface{}); ok {
-			if combat["skip_required"] != nil && combat["skip_required"].(bool) {
-				t.Error("combat.skip_required should not be set before 4h threshold")
+			if combat["stand_in_required"] != nil && combat["stand_in_required"].(bool) {
+				t.Error("combat.stand_in_required should not be set before 4h threshold")
 			}
 		}
-		t.Log("Correctly no skip_required before 4h")
+		t.Log("Correctly no stand_in_required before 4h")
 	})
 
 	// Test 2: Set turn_started_at to 5 hours ago (exceeds 4h threshold)
@@ -1307,42 +1308,29 @@ func TestCombatSkipRequired(t *testing.T) {
 
 		_, result := makeRequest(t, "GET", "/api/gm/status", nil, gmAuth)
 
-		// Check skip_required at top level
-		if result["skip_required"] == nil || !result["skip_required"].(bool) {
-			t.Error("skip_required should be true after 4h threshold")
+		// Check stand_in_required at top level
+		if result["stand_in_required"] == nil || !result["stand_in_required"].(bool) {
+			t.Error("stand_in_required should be true after 4h threshold")
 		} else {
-			t.Log("✓ skip_required is true")
+			t.Log("✓ stand_in_required is true")
 		}
 
-		// Check skip_required_player
-		if result["skip_required_player"] == nil {
-			t.Error("skip_required_player should be set")
+		// Check stand_in_player
+		if result["stand_in_player"] == nil {
+			t.Error("stand_in_player should be set")
 		} else {
-			playerName := result["skip_required_player"].(string)
+			playerName := result["stand_in_player"].(string)
 			if playerName != charName {
-				t.Errorf("skip_required_player should be %s, got %s", charName, playerName)
+				t.Errorf("stand_in_player should be %s, got %s", charName, playerName)
 			} else {
-				t.Logf("✓ skip_required_player is %s", playerName)
+				t.Logf("✓ stand_in_player is %s", playerName)
 			}
 		}
 
-		// Check auto_skip_countdown (should show time remaining or "imminent")
-		if result["auto_skip_countdown"] == nil {
-			t.Error("auto_skip_countdown should be set")
-		} else {
-			countdown := result["auto_skip_countdown"].(string)
-			// After 5h, countdown should be "imminent" (since 4h30m has passed)
-			if countdown != "imminent" {
-				t.Logf("auto_skip_countdown: %s (expected 'imminent' at 5h)", countdown)
-			} else {
-				t.Log("✓ auto_skip_countdown is 'imminent'")
-			}
-		}
-
-		// Check combat.skip_required
+		// Check combat.stand_in_required
 		if combat, ok := result["combat"].(map[string]interface{}); ok {
-			if combat["skip_required"] == nil || !combat["skip_required"].(bool) {
-				t.Error("combat.skip_required should be true")
+			if combat["stand_in_required"] == nil || !combat["stand_in_required"].(bool) {
+				t.Error("combat.stand_in_required should be true")
 			}
 			if combat["turn_status"] != "timeout" {
 				t.Errorf("combat.turn_status should be 'timeout', got %v", combat["turn_status"])
@@ -1352,11 +1340,11 @@ func TestCombatSkipRequired(t *testing.T) {
 
 		// Check what_to_do_next has skip instruction
 		if whatToDo, ok := result["what_to_do_next"].(map[string]interface{}); ok {
-			if whatToDo["action_required"] != "skip_turn" {
-				t.Errorf("what_to_do_next.action_required should be 'skip_turn', got %v", whatToDo["action_required"])
+			if whatToDo["action_required"] != "stand_in" {
+				t.Errorf("what_to_do_next.action_required should be 'stand_in', got %v", whatToDo["action_required"])
 			}
-			if whatToDo["urgency"] != "critical" {
-				t.Errorf("what_to_do_next.urgency should be 'critical', got %v", whatToDo["urgency"])
+			if whatToDo["urgency"] != "high" {
+				t.Errorf("what_to_do_next.urgency should be 'high', got %v", whatToDo["urgency"])
 			}
 			t.Logf("✓ what_to_do_next has skip instruction: %v", whatToDo["instruction"])
 		}
@@ -1366,50 +1354,22 @@ func TestCombatSkipRequired(t *testing.T) {
 			foundSkipTask := false
 			for _, task := range tasks {
 				taskStr := task.(string)
-				if strings.HasPrefix(taskStr, "⚠") && (containsString(taskStr, "SKIP NOW") || containsString(taskStr, "turn timeout")) {
+				if strings.HasPrefix(taskStr, "⚠") && containsString(taskStr, "stand-in") {
 					foundSkipTask = true
 					t.Logf("✓ Found urgent skip task: %s", taskStr)
 					break
 				}
 			}
 			if !foundSkipTask {
-				t.Error("gm_tasks should contain urgent skip instruction with 'SKIP NOW'")
+				t.Error("gm_tasks should contain the stand-in instruction")
 			}
 		}
 
 		// Check needs_attention is true
 		if result["needs_attention"] == nil || !result["needs_attention"].(bool) {
-			t.Error("needs_attention should be true when skip_required")
+			t.Error("needs_attention should be true when stand_in_required")
 		} else {
 			t.Log("✓ needs_attention is true")
-		}
-	})
-
-	// Test 3: Countdown calculation when within 30-minute grace period
-	t.Run("CountdownCalculation", func(t *testing.T) {
-		// Set turn_started_at to 4h 15m ago (within the 30-min grace period)
-		fourHours15MinAgo := time.Now().Add(-4*time.Hour - 15*time.Minute)
-		_, err := db.Exec(`UPDATE combat_state SET turn_started_at = $1 WHERE lobby_id = $2`, fourHours15MinAgo, campaignID)
-		if err != nil {
-			t.Fatalf("Failed to update turn_started_at: %v", err)
-		}
-
-		_, result := makeRequest(t, "GET", "/api/gm/status", nil, gmAuth)
-
-		// skip_required should still be true (past 4h)
-		if result["skip_required"] == nil || !result["skip_required"].(bool) {
-			t.Error("skip_required should be true at 4h 15m")
-		}
-
-		// Countdown should show ~15 minutes remaining
-		if result["auto_skip_countdown"] != nil {
-			countdown := result["auto_skip_countdown"].(string)
-			// Should be around 15m, not "imminent"
-			if countdown == "imminent" {
-				t.Error("auto_skip_countdown should show remaining time, not 'imminent' at 4h 15m")
-			} else {
-				t.Logf("✓ auto_skip_countdown shows remaining time: %s", countdown)
-			}
 		}
 	})
 

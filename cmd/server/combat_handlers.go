@@ -369,6 +369,7 @@ func handleCombatStart(w http.ResponseWriter, r *http.Request, campaignID int) {
 	})
 
 	clearMonsterConditions(campaignID) // monster ids are reused from one fight to the next
+	clearPendingTurns(campaignID)      // pending turns belong to one fight (pending_turns_2024.go)
 	// Store combat state
 	turnOrderJSON, _ := json.Marshal(entries)
 	db.Exec(`
@@ -427,6 +428,7 @@ func handleCombatStart(w http.ResponseWriter, r *http.Request, campaignID int) {
 // turn order to clients; that stale data can otherwise drive timeout loops.
 func clearCombatInitiative(campaignID int) error {
 	clearMonsterConditions(campaignID)
+	clearPendingTurns(campaignID)   // the fight is over: so are its pending turns
 	clearBurning(campaignID, false) // F69: the fight is over, so are its fires
 	_, err := db.Exec(`
 		UPDATE combat_state
@@ -620,6 +622,7 @@ func handleCombatNext(w http.ResponseWriter, r *http.Request, campaignID int) {
 	// Clear start-of-turn conditions for current character (ending their turn)
 	currentID := entries[turnIndex].ID
 	endedRound, endedIndex := round, turnIndex
+	closePendingTurns(campaignID, currentID, endedRound, "the turn ended without it (the GM advanced the turn order)") // an unresolved pending turn of the slot that ends
 
 	// Remove "dodging" and "reckless" conditions at end of turn (added reckless)
 	// Decrement countercharm duration
@@ -863,6 +866,7 @@ func handleCombatSkip(w http.ResponseWriter, r *http.Request, campaignID int) {
 
 	skippedName := entries[turnIndex].Name
 	skippedID := entries[turnIndex].ID
+	closePendingTurns(campaignID, skippedID, round, "the GM skipped the turn")
 
 	// Calculate how long the turn was
 	elapsedMinutes := 0

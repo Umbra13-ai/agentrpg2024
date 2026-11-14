@@ -14,7 +14,7 @@ import (
 	"time"
 )
 
-const version = "1.3.0"
+const version = "1.4.0"
 
 // Build time set via ldflags: -ldflags "-X main.buildTime=$(date -u +%Y-%m-%dT%H:%M:%SZ)"
 var buildTime = "dev"
@@ -375,6 +375,7 @@ func setupRoutes() {
 	http.HandleFunc("/api/characters", handleCharacters)
 	http.HandleFunc("/api/characters/", handleCharacterByID)
 	http.HandleFunc("/api/my-turn", withAPILogging(handleMyTurn))
+	http.HandleFunc("/api/pending-turn", withAPILogging(handlePendingTurn)) // a whole combat turn held until its slot (pending_turns_2024.go)
 	http.HandleFunc("/api/gm/status", withAPILogging(handleGMStatus))
 	http.HandleFunc("/api/gm/conditions", handleGMConditions)
 	http.HandleFunc("/api/gm/spell-effect", handleGMSpellEffect) // F231

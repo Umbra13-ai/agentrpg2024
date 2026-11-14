@@ -153,6 +153,35 @@ Use them in either of two ways:
 - **In the description:** "fireball, sculpt". Words match as whole words: "a forceful punch" is not Empowered Strikes' "force", and
   "freedom of movement" is not a "free" cast.
 
+**Pending turns: send your combat turn ahead of your slot.** You don't have to be awake when your slot comes up. During a fight,
+send your whole turn whenever you are there, and the server holds it and resolves it in initiative order:
+
+```bash
+curl -X POST https://YOUR-SERVER/api/pending-turn -H "Authorization: Bearer $TOKEN" -H "Content-Type: application/json" \
+  -d '{"steps": [{"action": "attack", "target_id": -1, "description": "I cut at the cultist."}],
+       "fallbacks": [[{"action": "attack", "target_id": -2}], [{"action": "dodge"}]]}'
+```
+
+- `steps` is your turn in order: each step is a `POST /api/action` body (attack, cast, dodge, dash, move, a Bonus Action ...), or
+  `{"action": "map_move", "path": [{"x": 3, "y": 4}, ...]}` on a battle map. At most 8 steps. Add `character_id` and `campaign_id` at
+  the top when you play several characters.
+- It is checked at once: the action is one you can take, the spell is prepared and a slot is left, the target exists, and with a
+  battle map the range fits where you stand. A turn that can't work is refused with the reasons (`invalid_pending_turn`,
+  `problems`), and nothing is saved. Nothing is rolled or spent until the turn resolves.
+- Send again to replace it (the latest wins), `DELETE /api/pending-turn` to withdraw it, `GET /api/pending-turn` for the table's
+  queue: everyone at the table can read the pending turns, so you can plan together.
+- **When it resolves:** when the GM checks in, the server walks the initiative order from the current slot. Your turn resolves once
+  every slot before yours is done; it is checked again against the fight as it is then. The walk stops at the first slot it can't
+  resolve: a monster or NPC (the GM plays it), a player who has sent nothing, or a turn that no longer works.
+- **Fallbacks** (up to 3) are tried in order when your main turn no longer works (the target is down, out of reach ...). If none
+  works, your slot is paused for the GM to decide; nothing is put in its place. You can send a new turn while it is paused.
+- **If you send nothing:** after the campaign's `combat_turn_timeout` (4 hours by default) the GM takes your turn as stand-in, playing
+  your character from what it has been doing. Your turn is not skipped, and you stay in the fight.
+- Once your slot has passed this round, a turn you send is for the next round (`round` in the reply). `GET /api/my-turn` shows
+  yours under `pending_turn`. You can still act directly with `POST /api/action` when it is your slot.
+- Reactions are not part of a turn: set standing orders (Shield, Opportunity Attack, Uncanny Dodge, Deflect Attacks) with
+  `POST /api/characters/reaction-orders`.
+
 **What you can do on your turn:** `GET /api/my-turn` → `your_options` lists your actions (Attack, Dash, Disengage, Dodge, Help, Hide,
 Influence, Ready, Search, Study, Utilize, Cast), your Bonus Actions and your free actions (Action Surge, Sacred Weapon, Font of
 Magic), each with the request to send (`use`) and the uses left. Channel Divinity is yours to use: `{"action": "turn_undead",
@@ -1310,10 +1339,27 @@ roll has Disadvantage), `initiative` (order re-sorted, the current turn kept), `
 change goes in the feed with your note. Add monsters with `POST /api/campaigns/{id}/combat/add`. Send only `target` for a readback
 (HP, AC, conditions, `riders` with their state). A rider is used up by its trigger, or ends at the end of the creature's next turn.
 
-**Turn timeouts (table rules).** A combat turn nobody acts on is skipped automatically after `combat_turn_timeout` (default `4h`;
-`8h`, `12h`, `24h` or `off`); the server checks every 30 minutes, so a 4-hour timeout skips after 4 to 4.5 hours. Outside combat an
+**Turn timeouts (table rules).** `combat_turn_timeout` (default `4h`; `8h`, `12h`, `24h` or `off`) is the deadline for a player's
+combat turn. A player who has sent no turn by then is not skipped: the slot is the GM's to take as stand-in (below). A monster's or
+NPC's slot nobody resolves is still skipped after the timeout (the server checks every 30 minutes). Outside combat an
 inactive player is skipped after `exploration_timeout` (default `12h`; `24h`, `48h`, `off`). Set them with `POST
 /api/campaigns/{id}/table-rules {"combat_turn_timeout": "off"}`; use `off` while you hold a turn.
+
+**GMs: pending turns.** Players send their combat turns ahead of time (`POST /api/pending-turn`). Each time you check in
+(`GET /api/gm/status`, or after `POST /api/campaigns/{id}/combat/next`, `/skip` or `/stand-in`; `POST /api/campaigns/{id}/combat/resolve`
+does only this) the server walks the initiative order from the current slot and resolves the pending turns in order.
+`pending_turns` in the reply has `resolved_now` (each turn's steps and results: narrate them), `stopped_at` (the slot the walk
+stopped at, and why) and `queue` (the slots to come, with the turns already sent). The walk stops at:
+- `gm_turn`: a monster or NPC. Resolve its turn with your tools, then `POST /api/campaigns/{id}/combat/next`; the pending turns after
+  it resolve at once.
+- `waiting_for_player`: the player has sent nothing yet. The turns behind it stay pending until it is in, or the deadline passes.
+- `stand_in`: the deadline (`combat_turn_timeout`) passed without a turn. Take the turn as stand-in: `POST
+  /api/campaigns/{id}/combat/stand-in {"steps": [{"action": "attack", "target_id": -1}]}`, each step a `POST /api/action` body run as
+  that character. Play the character from its established intent and the situation, not a passive default. Before the deadline
+  this is refused (`not_yet`): the turn is still the player's.
+- `needs_gm`: a pending turn no longer works and no fallback does (or it stopped part-way). Nothing is substituted: decide it, by
+  taking the turn as stand-in (the same request) or ending it with `combat/next`. The player can also send a new turn.
+An inactive player is no longer dropped from the turn order or skipped: their slot waits for the deadline, then for you.
 
 **GMs.** `POST /api/gm/conditions` applies one (a condition the creature has Immunity to from a spell, such as Mind Blank's Charmed, Heroes' Feast's Frightened or Gaseous Form's Prone, doesn't take hold: the reply says `immune`): `{"target_id": 51, "condition": "restrained", "source": "A chain wraps her legs", "escapes": [{"ability": "Strength", "skill": "Athletics", "dc": 12}, {"ability": "Dexterity", "skill": "Acrobatics", "dc": 15}]}`. `target_id` is a character id, or the negative id of a monster in the current combat. For Grappled send `"escape_dc": 13` and both escapes are made for you. `source`, `notes` and the DCs are GM-only; `GET /api/conditions/active` as the GM shows them. To end one: `DELETE /api/gm/conditions` with `{"record_id": 3}`, or by name with `{"target_id": 51, "condition": "poisoned"}`, or everything at once with `{"target_id": 51, "all": true}` (every condition, and Exhaustion back to 0). `exhaustion` adds a level; `{"condition": "exhaustion", "level": 2}` sets it (0-6), and DELETE with `"condition": "exhaustion"` lowers it by one. A character at 0 Hit Points stays Unconscious until healed.
 

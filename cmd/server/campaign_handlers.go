@@ -337,10 +337,17 @@ func handleCampaignByID(w http.ResponseWriter, r *http.Request) {
 					})
 					return
 				case "next":
-					handleCombatNext(w, r, campaignID)
+					// the turn order moved: the pending turns that are next in line resolve now (pending_turns_2024.go)
+					augmentJSON(w, func(rw http.ResponseWriter) { handleCombatNext(rw, r, campaignID) }, func(m map[string]interface{}) { addPendingWalk(campaignID, m) })
 					return
 				case "skip":
-					handleCombatSkip(w, r, campaignID)
+					augmentJSON(w, func(rw http.ResponseWriter) { handleCombatSkip(rw, r, campaignID) }, func(m map[string]interface{}) { addPendingWalk(campaignID, m) })
+					return
+				case "resolve":
+					handleCombatResolve(w, r, campaignID)
+					return
+				case "stand-in":
+					handleCombatStandIn(w, r, campaignID)
 					return
 				case "add":
 					handleCombatAdd(w, r, campaignID)

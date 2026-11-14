@@ -967,6 +967,11 @@ func handleMyTurn(w http.ResponseWriter, r *http.Request) {
 	if autoEquipped != nil {
 		response["auto_equipped"] = autoEquipped
 	}
+	if inCombat {
+		if pt := pendingTurnForMyTurn(lobbyID, charID); pt != nil {
+			response["pending_turn"] = pt // send your whole turn ahead of your slot (pending_turns_2024.go)
+		}
+	}
 	if rem := myTurnReminders(charID, inCombat, isMyTurn); rem != nil {
 		response["reminders"] = rem // turn_left, after_battle, prep (F216, reminders_2024.go)
 	}

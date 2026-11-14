@@ -79,6 +79,10 @@ func handleGMStatus(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	// The GM checks in: the pending turns that are next in the initiative order resolve now, before the state is read
+	// (pending_turns_2024.go)
+	pendingReport := resolvePendingTurns(campaignID)
+
 	// Get combat state
 	var combatRound, turnIndex int
 	var turnOrderJSON []byte
@@ -113,6 +117,11 @@ func handleGMStatus(w http.ResponseWriter, r *http.Request) {
 			WHERE a.character_id = c.id 
 			AND a.created_at > NOW() - INTERVAL '4 hours'
 		)
+		AND NOT EXISTS (
+			SELECT 1 FROM pending_turns p
+			WHERE p.character_id = c.id AND p.lobby_id = c.lobby_id
+			AND (p.status IN ('pending', 'needs_gm') OR p.submitted_at > NOW() - INTERVAL '4 hours')
+		)
 	`, campaignID)
 	if inactiveRows != nil {
 		for inactiveRows.Next() {
@@ -129,51 +138,9 @@ func handleGMStatus(w http.ResponseWriter, r *http.Request) {
 			db.Exec(`UPDATE characters SET status = 'inactive' WHERE id = $1`, charID)
 		}
 
-		// Remove inactive players from combat turn order
-		if inCombat && len(inactiveCharIDs) > 0 {
-			type TurnEntry struct {
-				ID         int    `json:"id"`
-				Name       string `json:"name"`
-				Initiative int    `json:"initiative"`
-				DexScore   int    `json:"dex_score"`
-				IsMonster  bool   `json:"is_monster"`
-				MonsterKey string `json:"monster_key"`
-				HP         int    `json:"hp"`
-				MaxHP      int    `json:"max_hp"`
-				AC         int    `json:"ac"`
-			}
-			var turnOrder []TurnEntry
-			json.Unmarshal(turnOrderJSON, &turnOrder)
-
-			// Filter out inactive characters
-			newTurnOrder := []TurnEntry{}
-			for _, entry := range turnOrder {
-				isInactive := false
-				for _, inactiveID := range inactiveCharIDs {
-					if entry.ID == inactiveID {
-						isInactive = true
-						break
-					}
-				}
-				if !isInactive {
-					newTurnOrder = append(newTurnOrder, entry)
-				}
-			}
-
-			// Update turn order if changed
-			if len(newTurnOrder) != len(turnOrder) {
-				newOrderJSON, _ := json.Marshal(newTurnOrder)
-				// Adjust turn index if needed
-				newIndex := turnIndex
-				if newIndex >= len(newTurnOrder) {
-					newIndex = 0
-				}
-				db.Exec(`UPDATE combat_state SET turn_order = $1, current_turn_index = $2 WHERE lobby_id = $3`,
-					newOrderJSON, newIndex, campaignID)
-				turnOrderJSON = newOrderJSON
-				turnIndex = newIndex
-			}
-		}
+		// An inactive player stays in the fight's turn order (Nov 14, pending-action turns): a missing player's slot is not
+		// dropped, the GM takes that turn as stand-in once the deadline passes (pending_turns_2024.go). Before this, a character
+		// with no action in 4 hours was removed from the initiative order here.
 	}
 
 	// Get the last action
@@ -794,39 +761,23 @@ func handleGMStatus(w http.ResponseWriter, r *http.Request) {
 					gmTasks = append(gmTasks, fmt.Sprintf("⏰ %s has been on this turn for %d hours. Consider sending a nudge (POST /api/gm/nudge)", entries[turnIndex].Name, elapsedMinutes/60))
 				}
 			}
-			// Skip REQUIRED at 4 hours (autonomous GM phase 2)
-			// This is NOT optional - the server expects the GM to skip immediately
-			// Cron job will auto-skip 30 min after this flag appears
-			if elapsedMinutes >= 240 {
-				combatInfo["skip_required"] = true
-				combatInfo["turn_status"] = "timeout"
-				if len(entries) > turnIndex && !entries[turnIndex].IsMonster {
-					playerName := entries[turnIndex].Name
-					response["skip_required"] = true
-					response["skip_required_player"] = playerName
-
-					// Calculate countdown to auto-skip (cron runs 30 min after 4h threshold)
-					autoSkipTime := turnStartedAt.Time.Add(4*time.Hour + 30*time.Minute)
-					remaining := time.Until(autoSkipTime)
-					if remaining > 0 {
-						combatInfo["auto_skip_countdown"] = formatDuration(remaining)
-						response["auto_skip_countdown"] = formatDuration(remaining)
-					} else {
-						combatInfo["auto_skip_countdown"] = "imminent"
-						response["auto_skip_countdown"] = "imminent"
-					}
-
-					// Urgent task - this is NOT a suggestion
-					gmTasks = append(gmTasks, fmt.Sprintf("⚠️ %s turn timeout (4h+). SKIP NOW via POST /api/campaigns/%d/combat/skip. Auto-skip in %s.", playerName, campaignID, combatInfo["auto_skip_countdown"]))
-
-					// Override what_to_do_next with skip instruction
+			// Past the deadline (the combat_turn_timeout table rule, 4 hours by default) a player's slot is the GM's to take as
+			// stand-in (Matt, Nov 14, pending-action turns). It is no longer skipped, by the GM or by the worker.
+			limit, on := timeoutRule(campaignID, "combat_turn_timeout", 4*time.Hour)
+			if on && elapsed >= limit && len(entries) > turnIndex && !entries[turnIndex].IsMonster {
+				playerName := entries[turnIndex].Name
+				if _, hasTurn := ptOpenRow(campaignID, entries[turnIndex].ID, combatRound); !hasTurn {
+					combatInfo["stand_in_required"] = true
+					combatInfo["turn_status"] = "timeout"
+					response["stand_in_required"] = true
+					response["stand_in_player"] = playerName
+					gmTasks = append(gmTasks, fmt.Sprintf("⚠️ %s's player sent no turn before the deadline (%s). Take the turn as stand-in, from the character's established intent and situation, not a passive default: POST /api/campaigns/%d/combat/stand-in {\"steps\": [...]}.", playerName, formatDuration(limit), campaignID))
 					whatToDoNext = map[string]interface{}{
-						"instruction":          fmt.Sprintf("SKIP %s's turn immediately. They have exceeded the 4-hour timeout.", playerName),
-						"action_required":      "skip_turn",
-						"endpoint":             fmt.Sprintf("POST /api/campaigns/%d/combat/skip", campaignID),
-						"narrative_suggestion": fmt.Sprintf("%s hesitates, taking the Dodge action defensively.", playerName),
-						"urgency":              "critical",
-						"auto_skip_in":         combatInfo["auto_skip_countdown"],
+						"instruction":     fmt.Sprintf("Take %s's turn as stand-in: its player sent no turn before the deadline. Play it as the character would, from its established intent and the situation, not a passive default.", playerName),
+						"action_required": "stand_in",
+						"endpoint":        fmt.Sprintf("POST /api/campaigns/%d/combat/stand-in", campaignID),
+						"body":            "{\"steps\": [{\"action\": \"attack\", \"target_id\": -1}]}: each step is a POST /api/action body, run as the character",
+						"urgency":         "high",
 					}
 					needsAttention = true
 				}
@@ -835,6 +786,23 @@ func handleGMStatus(w http.ResponseWriter, r *http.Request) {
 
 		response["combat"] = combatInfo
 	}
+	if pendingReport != nil { // what the walk resolved just now, where it stopped and why, and the queue
+		response["pending_turns"] = pendingReport
+		if stop, ok := pendingReport["stopped_at"].(map[string]interface{}); ok {
+			if reason := fmt.Sprint(stop["reason"]); reason == "needs_gm" || reason == "advance_failed" {
+				gmTasks = append(gmTasks, "⚠️ "+fmt.Sprint(stop["message"]))
+				needsAttention = true
+			}
+		}
+		if done, _ := pendingReport["resolved_now"].([]map[string]interface{}); len(done) > 0 {
+			var names []string
+			for _, d := range done {
+				names = append(names, fmt.Sprint(d["name"]))
+			}
+			gmTasks = append(gmTasks, fmt.Sprintf("Pending turns resolved just now, in initiative order: %s (pending_turns.resolved_now has each step's result). Narrate them.", strings.Join(names, ", ")))
+			needsAttention = true
+		}
+	}
 	if inCombat && allPartyUnableToAct(partyStatus) {
 		// A timed skip cannot revive an unconscious party. Give the GM an
 		// explicit, supported way to adjudicate the encounter instead of
@@ -842,6 +810,8 @@ func handleGMStatus(w http.ResponseWriter, r *http.Request) {
 		delete(response, "skip_required")
 		delete(response, "skip_required_player")
 		delete(response, "auto_skip_countdown")
+		delete(response, "stand_in_required")
+		delete(response, "stand_in_player")
 		if combatInfo, ok := response["combat"].(map[string]interface{}); ok {
 			delete(combatInfo, "skip_required")
 			delete(combatInfo, "nudge_recommended")

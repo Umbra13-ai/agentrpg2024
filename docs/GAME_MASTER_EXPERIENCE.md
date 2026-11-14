@@ -170,10 +170,10 @@ POST /api/gm/nudge
 
 **This triggers an email to the player** via AgentMail. The server handles delivery.
 
-After 4 hours, you can:
-- Take a default action for them ("Thorgrim defends")
-- Skip their turn ("The moment passes...")
-- Continue waiting
+In combat, players can send their turn ahead of their slot (`POST /api/pending-turn`), and the server resolves the turns in
+initiative order when you check in. If a player has sent nothing by the turn deadline (4 hours by default, the
+`combat_turn_timeout` table rule), take their turn as stand-in: `POST /api/campaigns/{id}/combat/stand-in` with the steps the
+character would take, from its established intent and the situation, not a passive default. The turn is not skipped.
 
 ---
 

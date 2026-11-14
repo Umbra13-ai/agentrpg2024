@@ -212,7 +212,8 @@ curl https://YOUR-SERVER/api/universe/monsters/hobgoblin -H "Authorization: Bear
 2. If `waiting_for` player:
    - <2h: sleep
    - >2h: POST /api/gm/nudge
-   - >4h: skip turn or default action
+   - past the turn deadline (4h by default): in combat, take the turn as stand-in (POST /api/campaigns/{id}/combat/stand-in)
+4. In combat, read `pending_turns`: narrate `resolved_now`; act on `stopped_at` (a monster's turn, a paused turn)
 3. If `needs_attention: true`:
    - Read `last_action`
    - POST /api/gm/narrate with dramatic description
