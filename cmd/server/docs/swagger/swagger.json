@@ -2202,6 +2202,31 @@
     ]
    }
   },
+  "/api/admin/accounts": {
+   "get": {
+    "tags": [
+     "Admin"
+    ],
+    "summary": "Find accounts",
+    "description": "Needs the X-Admin-Key header (the server's ADMIN_KEY). By name or id, to choose a character's player or a campaign's GM.",
+    "responses": {
+     "200": {
+      "description": "OK"
+     }
+    },
+    "parameters": [
+     {
+      "name": "q",
+      "in": "query",
+      "required": false,
+      "description": "a name or an id",
+      "schema": {
+       "type": "string"
+      }
+     }
+    ]
+   }
+  },
   "/api/recover/request": {
    "post": {
     "tags": [
@@ -4231,7 +4256,7 @@
      "Characters"
     ],
     "summary": "Character builder: create a character step by step",
-    "description": "Guides character creation in the order of the 2024 Player's Handbook (and the D&D Beyond builder): 1 class, 2 the class's choices (skills, Weapon Mastery, tools, Expertise, Divine/Primal Order, starting equipment), 3 background, 4 species, 5 ability scores (the PHB's Standard Array by Class is suggested), 6 name and languages, 7 review. POST starts a draft; GET /api/character-builder/{id} shows every step with the choices left, the current step's options and a suggestion; POST /api/character-builder/{id} with fields (any creation field; null removes one) or {\"use_suggestion\": true}; POST /api/character-builder/{id}/finish creates the character. Then GET /api/characters/{id}/setup guides spells and gear.",
+    "description": "Guides character creation in the order of the 2024 Player's Handbook (and the D&D Beyond builder): 1 class, 2 the class's choices (skills, Weapon Mastery, tools, Expertise, Divine/Primal Order, starting equipment), 3 background, 4 species, 5 ability scores (the PHB's Standard Array by Class is suggested), 6 name, alignment and languages, 7 backstory (3 to 6 paragraphs suggested) and appearance, 8 review (a summary before you create). POST starts a draft; GET /api/character-builder/{id} shows every step with the choices left, the current step's options and a suggestion; POST /api/character-builder/{id} with fields (any creation field; null removes one) or {\"use_suggestion\": true}; POST /api/character-builder/{id}/finish creates the character. Then GET /api/characters/{id}/setup guides spells, gear, the shop and a portrait.",
     "responses": {
      "200": {
       "description": "OK"
@@ -4263,7 +4288,7 @@
      "Characters"
     ],
     "summary": "Character builder: create a character step by step",
-    "description": "Guides character creation in the order of the 2024 Player's Handbook (and the D&D Beyond builder): 1 class, 2 the class's choices (skills, Weapon Mastery, tools, Expertise, Divine/Primal Order, starting equipment), 3 background, 4 species, 5 ability scores (the PHB's Standard Array by Class is suggested), 6 name and languages, 7 review. POST starts a draft; GET /api/character-builder/{id} shows every step with the choices left, the current step's options and a suggestion; POST /api/character-builder/{id} with fields (any creation field; null removes one) or {\"use_suggestion\": true}; POST /api/character-builder/{id}/finish creates the character. Then GET /api/characters/{id}/setup guides spells and gear.",
+    "description": "Guides character creation in the order of the 2024 Player's Handbook (and the D&D Beyond builder): 1 class, 2 the class's choices (skills, Weapon Mastery, tools, Expertise, Divine/Primal Order, starting equipment), 3 background, 4 species, 5 ability scores (the PHB's Standard Array by Class is suggested), 6 name, alignment and languages, 7 backstory (3 to 6 paragraphs suggested) and appearance, 8 review (a summary before you create). POST starts a draft; GET /api/character-builder/{id} shows every step with the choices left, the current step's options and a suggestion; POST /api/character-builder/{id} with fields (any creation field; null removes one) or {\"use_suggestion\": true}; POST /api/character-builder/{id}/finish creates the character. Then GET /api/characters/{id}/setup guides spells, gear, the shop and a portrait.",
     "responses": {
      "200": {
       "description": "OK"
@@ -4297,7 +4322,7 @@
      "Characters"
     ],
     "summary": "Character builder: create a character step by step",
-    "description": "Guides character creation in the order of the 2024 Player's Handbook (and the D&D Beyond builder): 1 class, 2 the class's choices (skills, Weapon Mastery, tools, Expertise, Divine/Primal Order, starting equipment), 3 background, 4 species, 5 ability scores (the PHB's Standard Array by Class is suggested), 6 name and languages, 7 review. POST starts a draft; GET /api/character-builder/{id} shows every step with the choices left, the current step's options and a suggestion; POST /api/character-builder/{id} with fields (any creation field; null removes one) or {\"use_suggestion\": true}; POST /api/character-builder/{id}/finish creates the character. Then GET /api/characters/{id}/setup guides spells and gear.",
+    "description": "Guides character creation in the order of the 2024 Player's Handbook (and the D&D Beyond builder): 1 class, 2 the class's choices (skills, Weapon Mastery, tools, Expertise, Divine/Primal Order, starting equipment), 3 background, 4 species, 5 ability scores (the PHB's Standard Array by Class is suggested), 6 name, alignment and languages, 7 backstory (3 to 6 paragraphs suggested) and appearance, 8 review (a summary before you create). POST starts a draft; GET /api/character-builder/{id} shows every step with the choices left, the current step's options and a suggestion; POST /api/character-builder/{id} with fields (any creation field; null removes one) or {\"use_suggestion\": true}; POST /api/character-builder/{id}/finish creates the character. Then GET /api/characters/{id}/setup guides spells, gear, the shop and a portrait.",
     "responses": {
      "200": {
       "description": "OK"
@@ -4329,7 +4354,7 @@
      "Characters"
     ],
     "summary": "Character builder: create a character step by step",
-    "description": "Guides character creation in the order of the 2024 Player's Handbook (and the D&D Beyond builder): 1 class, 2 the class's choices (skills, Weapon Mastery, tools, Expertise, Divine/Primal Order, starting equipment), 3 background, 4 species, 5 ability scores (the PHB's Standard Array by Class is suggested), 6 name and languages, 7 review. POST starts a draft; GET /api/character-builder/{id} shows every step with the choices left, the current step's options and a suggestion; POST /api/character-builder/{id} with fields (any creation field; null removes one) or {\"use_suggestion\": true}; POST /api/character-builder/{id}/finish creates the character. Then GET /api/characters/{id}/setup guides spells and gear.",
+    "description": "Guides character creation in the order of the 2024 Player's Handbook (and the D&D Beyond builder): 1 class, 2 the class's choices (skills, Weapon Mastery, tools, Expertise, Divine/Primal Order, starting equipment), 3 background, 4 species, 5 ability scores (the PHB's Standard Array by Class is suggested), 6 name, alignment and languages, 7 backstory (3 to 6 paragraphs suggested) and appearance, 8 review (a summary before you create). POST starts a draft; GET /api/character-builder/{id} shows every step with the choices left, the current step's options and a suggestion; POST /api/character-builder/{id} with fields (any creation field; null removes one) or {\"use_suggestion\": true}; POST /api/character-builder/{id}/finish creates the character. Then GET /api/characters/{id}/setup guides spells, gear, the shop and a portrait.",
     "responses": {
      "200": {
       "description": "OK"
@@ -4363,7 +4388,7 @@
      "Characters"
     ],
     "summary": "Character builder: create a character step by step",
-    "description": "Guides character creation in the order of the 2024 Player's Handbook (and the D&D Beyond builder): 1 class, 2 the class's choices (skills, Weapon Mastery, tools, Expertise, Divine/Primal Order, starting equipment), 3 background, 4 species, 5 ability scores (the PHB's Standard Array by Class is suggested), 6 name and languages, 7 review. POST starts a draft; GET /api/character-builder/{id} shows every step with the choices left, the current step's options and a suggestion; POST /api/character-builder/{id} with fields (any creation field; null removes one) or {\"use_suggestion\": true}; POST /api/character-builder/{id}/finish creates the character. Then GET /api/characters/{id}/setup guides spells and gear.",
+    "description": "Guides character creation in the order of the 2024 Player's Handbook (and the D&D Beyond builder): 1 class, 2 the class's choices (skills, Weapon Mastery, tools, Expertise, Divine/Primal Order, starting equipment), 3 background, 4 species, 5 ability scores (the PHB's Standard Array by Class is suggested), 6 name, alignment and languages, 7 backstory (3 to 6 paragraphs suggested) and appearance, 8 review (a summary before you create). POST starts a draft; GET /api/character-builder/{id} shows every step with the choices left, the current step's options and a suggestion; POST /api/character-builder/{id} with fields (any creation field; null removes one) or {\"use_suggestion\": true}; POST /api/character-builder/{id}/finish creates the character. Then GET /api/characters/{id}/setup guides spells, gear, the shop and a portrait.",
     "responses": {
      "200": {
       "description": "OK"
@@ -12100,31 +12125,6 @@
      }
     },
     "x-from-godoc": true
-   }
-  },
-  "/api/admin/accounts": {
-   "get": {
-    "tags": [
-     "Admin"
-    ],
-    "summary": "Find accounts",
-    "description": "Needs the X-Admin-Key header (the server's ADMIN_KEY). By name or id, to choose a character's player or a campaign's GM.",
-    "responses": {
-     "200": {
-      "description": "OK"
-     }
-    },
-    "parameters": [
-     {
-      "name": "q",
-      "in": "query",
-      "required": false,
-      "description": "a name or an id",
-      "schema": {
-       "type": "string"
-      }
-     }
-    ]
    }
   }
  },

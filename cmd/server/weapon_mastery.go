@@ -141,6 +141,25 @@ func characterMasteries(charID int) []string {
 	return keys
 }
 
+// masterySummary: the character's Weapon Mastery choices for its sheet, each with what the property does (Nov 14 tester: the main
+// character record showed none, though they were saved).
+func masterySummary(charID int) []map[string]string {
+	out := []map[string]string{}
+	for _, k := range characterMasteries(charID) {
+		wp, ok := srdWeapons[k]
+		if !ok {
+			out = append(out, map[string]string{"weapon": titleWords(strings.ReplaceAll(k, "-", " "))})
+			continue
+		}
+		m := map[string]string{"weapon": titleWords(wp.Name), "mastery": wp.Mastery}
+		if t, ok := masteryText[wp.Mastery]; ok {
+			m["what_it_does"] = t
+		}
+		out = append(out, m)
+	}
+	return out
+}
+
 var masteryText = map[string]string{
 	"Cleave": "if this melee attack hits, make another attack roll with the weapon against a second creature within 5 feet of the first that is also in your reach; on a hit it takes the weapon's damage without your ability modifier (unless negative). Once per turn.",
 	"Nick":   "the extra attack of the Light property can be made as part of the Attack action instead of as a Bonus Action. Once per turn.",

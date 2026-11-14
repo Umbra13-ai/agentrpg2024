@@ -1469,6 +1469,10 @@ func handleCharacterByID(w http.ResponseWriter, r *http.Request) {
 		}
 		response["fighting_styles"] = fightingStylesInfo
 	}
+	// Weapon Mastery choices, also on the main record (GET/POST /api/characters/weapon-masteries changes them)
+	if wm := masterySummary(charID); len(wm) > 0 {
+		response["weapon_masteries"] = wm
+	}
 
 	// Concentration
 	if concentratingOn != "" {

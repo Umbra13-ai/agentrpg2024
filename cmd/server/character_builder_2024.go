@@ -3,7 +3,7 @@ package main
 // Character builder (F234, Nov 10). the project owner: in the game that began today the AI players didn't assign their ability scores properly,
 // didn't equip their gear and the casters didn't choose spells; "look at how D&D Beyond guides people through character creation".
 // The builder follows the order of the 2024 Player's Handbook and the D&D Beyond builder: Class (with the class's own choices),
-// Background, Species, Ability Scores, Details (name and languages), Review; then, once the character exists, Spells and gear
+// Background, Species, Ability Scores, Details (name and languages), Backstory, Review; then, once the character exists, Spells and gear
 // (GET /api/characters/{id}/setup). Each step says what to choose, how many, the valid options and a suggestion (the PHB's
 // Standard Array by Class, the weapons of the starting kit for Weapon Mastery ...), and counts the choices left, like the builder's
 // step tabs. The draft is kept on the server, so a player can stop and come back.
@@ -1371,7 +1371,7 @@ func saveDraft(id int, body map[string]interface{}) {
 
 // handleCharacterBuilder godoc
 // @Summary Character builder: create a character step by step
-// @Description Guides character creation in the order of the 2024 Player's Handbook (and the D&D Beyond builder): 1 class, 2 the class's choices (skills, Weapon Mastery, tools, Expertise, Divine/Primal Order, starting equipment), 3 background, 4 species, 5 ability scores (the PHB's Standard Array by Class is suggested), 6 name and languages, 7 review. POST starts a draft; GET /api/character-builder/{id} shows every step with the choices left, the current step's options and a suggestion; POST /api/character-builder/{id} with fields (any creation field; null removes one) or {"use_suggestion": true}; POST /api/character-builder/{id}/finish creates the character. Then GET /api/characters/{id}/setup guides spells and gear.
+// @Description Guides character creation in the order of the 2024 Player's Handbook (and the D&D Beyond builder): 1 class, 2 the class's choices (skills, Weapon Mastery, tools, Expertise, Divine/Primal Order, starting equipment), 3 background, 4 species, 5 ability scores (the PHB's Standard Array by Class is suggested), 6 name, alignment and languages, 7 backstory (3 to 6 paragraphs suggested) and appearance, 8 review (a summary before you create). POST starts a draft; GET /api/character-builder/{id} shows every step with the choices left, the current step's options and a suggestion; POST /api/character-builder/{id} with fields (any creation field; null removes one) or {"use_suggestion": true}; POST /api/character-builder/{id}/finish creates the character. Then GET /api/characters/{id}/setup guides spells, gear, the shop and a portrait.
 // @Tags Characters
 // @Accept json
 // @Produce json
