@@ -1747,6 +1747,10 @@ func handleCharacterByID(w http.ResponseWriter, r *http.Request) {
 	if wm := masterySummary(charID); len(wm) > 0 {
 		response["weapon_masteries"] = wm
 	}
+	// level-up choices: subclass choices, Metamagic, Wild Shape forms, Magical Discoveries (class_choices_record_2024.go)
+	if cc := classChoicesRecord(charID); len(cc) > 0 {
+		response["class_choices"] = cc
+	}
 
 	// Concentration
 	if concentratingOn != "" {

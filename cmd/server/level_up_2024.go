@@ -220,6 +220,31 @@ func handleCharacterExpertise(w http.ResponseWriter, r *http.Request, charID int
 			heldList = append(heldList, k)
 		}
 	}
+	// Wizard Scholar: one of Arcana, History, Investigation, Medicine, Nature or Religion (SRD 5.2.1), not any skill (setup checker,
+	// Nov 14). It applies when the Wizard's Scholar is where all of this character's Expertise comes from.
+	scholarOnly := true
+	for c, l := range classLevelsOrSingle(charID) {
+		if expertiseAllowed(c, l) > 0 && !strings.EqualFold(c, "wizard") {
+			scholarOnly = false
+		}
+	}
+	if scholarOnly {
+		var opts []string
+		for _, k := range heldList {
+			if containsStr(scholarSkills, k) {
+				opts = append(opts, k)
+			}
+		}
+		for _, sk := range req.Skills {
+			if k := skillKey(sk); !containsStr(scholarSkills, k) {
+				writeJSONStatus(w, http.StatusBadRequest, map[string]interface{}{"error": "not_a_scholar_skill",
+					"message":       fmt.Sprintf("Scholar gives Expertise in one of Arcana, History, Investigation, Medicine, Nature or Religion that you are proficient in; %q isn't one of them. Nothing was changed.", sk),
+					"valid_options": opts, "srd": classFeatureText("wizard", "Scholar")})
+				return
+			}
+		}
+		heldList = opts
+	}
 	var chosen []string
 	for _, sk := range req.Skills {
 		k := skillKey(sk)
@@ -239,6 +264,9 @@ func handleCharacterExpertise(w http.ResponseWriter, r *http.Request, charID int
 	db.Exec(`UPDATE characters SET expertise = $1 WHERE id = $2`, strings.Join(chosen, ", "), charID)
 	writeJSONStatus(w, 200, map[string]interface{}{"success": true, "expertise": strings.Join(chosen, ", ")})
 }
+
+// scholarSkills: the skills Wizard's Scholar (level 2) can give Expertise in.
+var scholarSkills = []string{"arcana", "history", "investigation", "medicine", "nature", "religion"}
 
 // handleCharacterLevelUp godoc
 // @Summary Take your next level
@@ -261,7 +289,9 @@ func handleCharacterLevelUp(w http.ResponseWriter, r *http.Request, charID int) 
 		Skill           string `json:"skill"`            // multiclassing into Bard, Ranger or Rogue: the skill it gives
 		MulticlassSkill string `json:"multiclass_skill"` // take a skill a multiclass level gave but that wasn't chosen yet
 	}
-	json.NewDecoder(r.Body).Decode(&req)
+	if !decodeRequest(w, r, &req, true) {
+		return
+	}
 	if req.MulticlassSkill != "" {
 		claimOwedMulticlassSkill(w, r, charID, req.MulticlassSkill)
 		return

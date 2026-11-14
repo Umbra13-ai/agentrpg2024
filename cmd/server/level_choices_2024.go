@@ -5,6 +5,7 @@ package main
 
 import (
 	"fmt"
+	"strconv"
 	"strings"
 )
 
@@ -23,7 +24,7 @@ var classLevelChoices = map[string][]levelChoice{
 	"bard": {
 		{2, "Expertise: choose 2 skills you are proficient in (POST /api/characters/%d/expertise)"},
 		{9, "Expertise: choose 2 more skills (POST /api/characters/%d/expertise)"},
-		{10, "Magical Secrets: your prepared spells can now come from the Bard, Cleric, Druid and Wizard lists (POST /api/characters/%d/spells)"},
+		{10, "Magical Secrets: your prepared spells can now come from the Bard, Cleric, Druid and Wizard lists (POST /api/characters/%d/prepare {\"spells\": [...]})"},
 	},
 	"cleric": {
 		{1, "Divine Order: choose Protector or Thaumaturge (POST /api/characters/%d/class-options)"},
@@ -88,7 +89,7 @@ var classLevelChoices = map[string][]levelChoice{
 var subclassLevelChoices = map[string][]levelChoice{
 	"lore": {
 		{3, "Bonus Proficiencies: 3 skills of your choice (POST /api/characters/%d/class-options {\"bonus_proficiencies\": [...]})"},
-		{6, "Magical Discoveries: learn 2 spells from the Cleric, Druid or Wizard lists (POST /api/characters/%d/spells)"},
+		{6, "Magical Discoveries: learn 2 spells from the Cleric, Druid or Wizard lists (POST /api/characters/%d/class-options {\"magical_discoveries\": [\"...\", \"...\"]})"},
 	},
 	"land": {
 		{3, "Circle of the Land Spells: choose a land type, Arid, Polar, Temperate or Tropical (POST /api/characters/%d/class-options {\"land_type\": ...}; again after each Long Rest)"},
@@ -116,10 +117,8 @@ var casterClasses = map[string]string{
 func levelChoicesFor(charID int, class, subclass string, from, to int) []string {
 	var out []string
 	fill := func(t string) string {
-		if strings.Contains(t, "%d") {
-			return fmt.Sprintf(t, charID)
-		}
-		return t
+		// every %d is the character id (Deft Explorer's text has two: it printed %!d(MISSING))
+		return strings.ReplaceAll(t, "%d", strconv.Itoa(charID))
 	}
 	sub := strings.ToLower(strings.ReplaceAll(subclass, " ", "-"))
 	for _, k := range []string{"lore", "land", "hunter", "champion", "draconic"} {
@@ -151,7 +150,11 @@ func levelChoicesFor(charID int, class, subclass string, from, to int) []string 
 		}
 	}
 	if what, ok := casterClasses[strings.ToLower(class)]; ok && to > from {
-		out = append(out, fmt.Sprintf("spells: new spell slots; %s (POST /api/characters/%d/spells, /prepare)", what, charID))
+		how := fmt.Sprintf("POST /api/characters/%d/prepare {\"spells\": [...]}; GET /api/characters/%d/setup lists the options", charID, charID)
+		if strings.EqualFold(class, "wizard") {
+			how = fmt.Sprintf("PUT /api/characters/%d/spells {\"add\": [...]} for the spellbook, then POST /api/characters/%d/prepare {\"spells\": [...]}; GET /api/characters/%d/setup lists the options", charID, charID, charID)
+		}
+		out = append(out, fmt.Sprintf("spells: new spell slots; %s (%s)", what, how))
 	}
 	return out
 }

@@ -127,17 +127,17 @@ func handleCharacterMetamagic(w http.ResponseWriter, r *http.Request) {
 		CharacterID int    `json:"character_id"`
 		Metamagic   string `json:"metamagic"` // slug: careful, distant, empowered, extended, heightened, quickened, subtle, twinned
 	}
-	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
-		w.WriteHeader(http.StatusBadRequest)
-		json.NewEncoder(w).Encode(map[string]interface{}{
-			"error":   "invalid_json",
-			"message": publicError(err),
-		})
+	if !decodeRequest(w, r, &req, false) {
 		return
 	}
 
 	// Validate metamagic option exists
 	metamagicSlug := strings.ToLower(strings.TrimSpace(req.Metamagic))
+	for slug, o := range metamagicOptions { // the slug or the displayed name ("Careful Spell")
+		if k := nameKey(req.Metamagic); k == nameKey(slug) || k == nameKey(o.Name) {
+			metamagicSlug = slug
+		}
+	}
 	opt, validMetamagic := metamagicOptions[metamagicSlug]
 	if !validMetamagic {
 		validSlugs := []string{}
@@ -861,12 +861,7 @@ func handleFlexibleCasting(w http.ResponseWriter, r *http.Request) {
 		Action      string `json:"action"`     // "create_slot" or "convert_slot"
 		SlotLevel   int    `json:"slot_level"` // 1-5
 	}
-	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
-		w.WriteHeader(http.StatusBadRequest)
-		json.NewEncoder(w).Encode(map[string]interface{}{
-			"error":   "invalid_json",
-			"message": publicError(err),
-		})
+	if !decodeRequest(w, r, &req, false) {
 		return
 	}
 
@@ -1625,9 +1620,7 @@ func handleCharacterFiendishResilience(w http.ResponseWriter, r *http.Request) {
 		CharacterID int    `json:"character_id"`
 		DamageType  string `json:"damage_type"`
 	}
-	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
-		w.WriteHeader(http.StatusBadRequest)
-		json.NewEncoder(w).Encode(map[string]interface{}{"error": "invalid_json", "message": publicError(err)})
+	if !decodeRequest(w, r, &req, false) {
 		return
 	}
 
@@ -1955,11 +1948,11 @@ func handleCharacterMysticArcanum(w http.ResponseWriter, r *http.Request) {
 		SpellLevel  int    `json:"spell_level"`
 		SpellSlug   string `json:"spell_slug"`
 	}
-	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
-		w.WriteHeader(http.StatusBadRequest)
-		json.NewEncoder(w).Encode(map[string]interface{}{"error": "invalid_json", "message": publicError(err)})
+	if !decodeRequest(w, r, &req, false) {
 		return
 	}
+	// the slug or the displayed name ("Finger of Death")
+	req.SpellSlug = normalizeSpellSlug(strings.NewReplacer("'", "", "’", "").Replace(req.SpellSlug))
 
 	if req.CharacterID == 0 {
 		w.WriteHeader(http.StatusBadRequest)
@@ -2257,9 +2250,7 @@ func handleCharacterSignatureSpells(w http.ResponseWriter, r *http.Request) {
 		Spell       string `json:"spell"`       // Spell slug
 		Description string `json:"description"` // Optional flavor
 	}
-	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
-		w.WriteHeader(http.StatusBadRequest)
-		json.NewEncoder(w).Encode(map[string]interface{}{"error": "invalid_json", "message": publicError(err)})
+	if !decodeRequest(w, r, &req, false) {
 		return
 	}
 

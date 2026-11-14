@@ -139,3 +139,45 @@ func jsonListOf(charID int, col string) []string {
 	db.QueryRow(`SELECT COALESCE(`+col+`,'[]') FROM characters WHERE id = $1`, charID).Scan(&raw)
 	return jsonList(raw)
 }
+
+// savantFit: how a Wizard's free spellbook spells fit the Spellbook feature (any Wizard spell: 6 at level 1, two more each level)
+// and an Evoker's Evocation Savant (two Evocation spells of level 2 or lower at level 3, one Evocation spell each new spell slot
+// level). baseUsed is how many free spells fall to the Spellbook feature once every Evocation spell that can go to Savant has;
+// savantOpen is how many Savant spells are still to choose. Rule, not count: only Evocation spells fill Savant (setup checker, Nov
+// 14: any spell was accepted as a Savant spell).
+func savantFit(charID, level int, list []string) (baseUsed, base, savantOpen int) {
+	base = 6 + 2*(level-1)
+	low, extra := 0, 0
+	if _, wsub, _ := subclassOf(charID); strings.EqualFold(wsub, "evocation") && level >= 3 {
+		low = 2
+		for _, l := range []int{5, 7, 9, 11, 13, 15, 17} {
+			if level >= l {
+				extra++
+			}
+		}
+	}
+	origin := originSpellsOf(charID)
+	copied := spellbookCopied(charID)
+	n, e2, e3 := 0, 0, 0
+	for _, s := range list {
+		if _, o := origin[s]; o || containsStr(copied, s) {
+			continue
+		}
+		sp, ok := srdSpellsMemory[s]
+		if !ok || sp.Level == 0 {
+			continue
+		}
+		switch {
+		case !strings.EqualFold(sp.School, "evocation"):
+			n++
+		case sp.Level <= 2:
+			e2++
+		default:
+			e3++
+		}
+	}
+	a := minInt(low, e2)
+	rest := e2 - a + e3
+	b := minInt(extra, rest)
+	return n + rest - b, base, (low - a) + (extra - b)
+}

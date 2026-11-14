@@ -707,6 +707,8 @@ function render(d,p){
   Object.keys(subs).forEach(function(k){featureSection(k,subs[k])});
   featureSection(title(d.species)+' Traits',features.filter(function(f){return f.group==='species'}));
   featureSection('Feats',features.filter(function(f){return f.group==='feat'}));
+  // level-up choices: subclass choices, Metamagic, Wild Shape forms, Magical Discoveries
+  if(d.class_choices&&d.class_choices.length){featureSection('Choices',d.class_choices.map(function(c){return {name:c.feature,description:c.choice}}))}
 
   // spells by level
   function spellGroups(label,arr){

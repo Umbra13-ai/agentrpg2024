@@ -3335,7 +3335,7 @@ func handleCharacterSetup(w http.ResponseWriter, r *http.Request, charID int) {
 		}
 		var expOpts []map[string]string
 		for _, s := range append([]string{}, skillOrder...) {
-			if heldE[s] {
+			if heldE[s] && (cl != "wizard" || containsStr(scholarSkills, s)) { // Scholar: only its six skills
 				row := srdSkillRows[s]
 				o := map[string]string{"skill": s, "ability": row[0], "example_uses": row[1]}
 				if containsStr(cur, s) {
@@ -3647,6 +3647,22 @@ func handleCharacterSetup(w http.ResponseWriter, r *http.Request, charID int) {
 					}
 				}
 				if book < target {
+					// an Evoker's Evocation Savant spells first: only Evocation spells fill them (lowest level first, for the two
+					// of level 2 or lower)
+					if _, _, open := savantFit(charID, level, jsonList(known)); open > 0 {
+						for lv := 1; lv <= maxLvl; lv++ {
+							for _, k := range getClassSpellList("wizard") {
+								sp, ok := srdSpellsMemory[k]
+								if !ok || sp.Level != lv || !strings.EqualFold(sp.School, "evocation") || containsStr(jsonList(known), k) || containsStr(add, k) || len(add) >= target-book {
+									continue
+								}
+								if _, _, o2 := savantFit(charID, level, append(append([]string{}, jsonList(known)...), append(add, k)...)); o2 < open {
+									add = append(add, k)
+									open = o2
+								}
+							}
+						}
+					}
 					for _, list := range [][]string{spell2Prefs["wizard"], spellPrefs["wizard"], fullList} {
 						for _, s := range list {
 							if sp, ok := srdSpellsMemory[s]; ok && len(add) < target-book && sp.Level >= 1 && sp.Level <= maxLvl && onClassList(s, "wizard") && !containsStr(jsonList(known), s) && !containsStr(add, s) {

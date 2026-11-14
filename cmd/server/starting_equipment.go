@@ -462,8 +462,7 @@ func handleCharacterToolProficiencies(w http.ResponseWriter, r *http.Request, ch
 		var req struct {
 			Tools []string `json:"tools"`
 		}
-		if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
-			writeJSONStatus(w, http.StatusBadRequest, map[string]interface{}{"error": "invalid_json"})
+		if !decodeRequest(w, r, &req, false) {
 			return
 		}
 		names, msg := game.ValidateToolChoices(req.Tools, pending)

@@ -42,6 +42,36 @@ func subclassChoicesOf(charID int) map[string]string {
 	return m
 }
 
+// checkBonusProficiencies checks College of Lore's Bonus Proficiencies (three different skills the character isn't proficient in):
+// the skills to add, or an error code and message. Both routes use it (class-options bonus_proficiencies and the subclass request's
+// bonus_skills).
+func checkBonusProficiencies(held map[string]bool, bonus []string) ([]string, string, string) {
+	var open []string
+	for _, s := range allSkills {
+		if !held[s] {
+			open = append(open, s)
+		}
+	}
+	if len(bonus) != 3 {
+		return nil, "invalid_count", fmt.Sprintf("Bonus Proficiencies: three skills of your choice (you sent %d). Skills you aren't proficient in: %s. Nothing was changed.", len(bonus), strings.Join(open, ", "))
+	}
+	var add []string
+	for _, b := range bonus {
+		s := skillKey(b)
+		if !containsStr(allSkills, s) {
+			return nil, "invalid_skill", fmt.Sprintf("%q isn't a skill. Skills you aren't proficient in: %s. Nothing was changed.", b, strings.Join(open, ", "))
+		}
+		if containsStr(add, s) { // the same skill twice isn't "already proficient" (setup checker, Nov 14)
+			return nil, "duplicate_skill", "You chose " + s + " twice: choose three different skills. Nothing was changed."
+		}
+		if held[s] {
+			return nil, "already_proficient", fmt.Sprintf("You are already proficient in %s; choose another. Skills you aren't proficient in: %s. Nothing was changed.", s, strings.Join(open, ", "))
+		}
+		add = append(add, s)
+	}
+	return add, "", ""
+}
+
 // applySkillChoice handles primal_knowledge and bonus_proficiencies; false when neither was sent.
 func applySkillChoice(w http.ResponseWriter, charID int, primal string, bonus []string) bool {
 	if primal == "" && len(bonus) == 0 {
@@ -89,18 +119,9 @@ func applySkillChoice(w http.ResponseWriter, charID int, primal string, bonus []
 		if choices["bonus_proficiencies"] != "" {
 			return fail("already_chosen", "Bonus Proficiencies were chosen: "+choices["bonus_proficiencies"]+".")
 		}
-		if len(bonus) != 3 {
-			return fail("invalid_count", "Bonus Proficiencies: three skills of your choice.")
-		}
-		for _, b := range bonus {
-			s := skillKey(b)
-			if !containsStr(allSkills, s) {
-				return fail("invalid_skill", s+" isn't a skill.")
-			}
-			if held[s] || containsStr(add, s) {
-				return fail("already_proficient", "You are already proficient in "+s+"; choose another.")
-			}
-			add = append(add, s)
+		var code, msg string
+		if add, code, msg = checkBonusProficiencies(held, bonus); code != "" {
+			return fail(code, msg)
 		}
 		key = "bonus_proficiencies"
 	}

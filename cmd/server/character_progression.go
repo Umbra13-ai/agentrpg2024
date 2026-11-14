@@ -77,9 +77,7 @@ func handleCharacterASI(w http.ResponseWriter, r *http.Request, charID int) {
 		Ability string `json:"ability"`
 		Points  int    `json:"points"`
 	}
-	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
-		w.WriteHeader(http.StatusBadRequest)
-		json.NewEncoder(w).Encode(map[string]interface{}{"error": "invalid_json"})
+	if !decodeRequest(w, r, &req, false) {
 		return
 	}
 
@@ -268,19 +266,25 @@ func handleCharacterFeat(w http.ResponseWriter, r *http.Request, charID int) {
 		Feat          string `json:"feat"`
 		AbilityChoice string `json:"ability_choice"` // For feats like Resilient, Observant
 	}
-	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
-		w.WriteHeader(http.StatusBadRequest)
-		json.NewEncoder(w).Encode(map[string]interface{}{"error": "invalid_json"})
+	if !decodeRequest(w, r, &req, false) {
 		return
 	}
 
 	featSlug := strings.ToLower(strings.TrimSpace(req.Feat))
+	for slug, f := range availableFeats { // the slug or the displayed name ("Magic Initiate")
+		if k := nameKey(req.Feat); k == nameKey(slug) || k == nameKey(f.Name) {
+			featSlug = slug
+		}
+	}
 	feat, exists := availableFeats[featSlug]
 	if !exists {
-		// the feats this character can take with Ability Score Improvement points, in order
+		// the feats this character can take now: the same checks the request makes below (Origin feats are accepted, so they are
+		// listed too: setup checker, Nov 14)
+		var held []string
+		json.Unmarshal(featsJSON, &held)
 		featSlugs := []string{}
 		for slug, f := range availableFeats {
-			if f.Category == "Origin" || f.Category == "Fighting Style" || (f.Category == "Epic Boon" && level < 19) {
+			if slug == "ability_score_improvement" || (containsStr(held, slug) && !f.Repeatable) {
 				continue
 			}
 			if ok, _ := featPrerequisite(f.Prerequisite, class, level, str, dex); ok {
@@ -672,12 +676,7 @@ func handleCharacterSubclass(w http.ResponseWriter, r *http.Request) {
 			Subclass    string   `json:"subclass"`
 			BonusSkills []string `json:"bonus_skills"` // For subclasses that grant bonus skill proficiencies (e.g., Lore Bard)
 		}
-		if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
-			w.WriteHeader(http.StatusBadRequest)
-			json.NewEncoder(w).Encode(map[string]interface{}{
-				"error":   "invalid_json",
-				"message": publicError(err),
-			})
+		if !decodeRequest(w, r, &req, false) {
 			return
 		}
 
@@ -818,6 +817,24 @@ func handleCharacterSubclass(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 
+		// College of Lore's Bonus Proficiencies sent with the subclass: checked before anything is saved (it used to save the
+		// subclass and then refuse, and took the same skill twice). Not sent: the setup step asks for them later.
+		var bonusSkillsApplied []string
+		n, ok := getSubclassMechanic(subclassSlug, level, "bonus_skill_proficiencies")
+		givesBonus := ok && n != "" && n != "0" || strings.Contains(strings.ToLower(subclassSlug), "lore") // College of Lore 3 (the data has no mechanic for it)
+		if givesBonus && len(req.BonusSkills) > 0 {
+			held, _ := heldSkills(req.CharacterID)
+			add, code, msg := checkBonusProficiencies(held, req.BonusSkills)
+			if code != "" {
+				writeJSONStatus(w, http.StatusBadRequest, map[string]interface{}{"error": code, "message": msg})
+				return
+			}
+			bonusSkillsApplied = add
+		} else if len(req.BonusSkills) > 0 {
+			writeJSONStatus(w, http.StatusBadRequest, map[string]interface{}{"error": "no_bonus_skills", "message": sub.Name + " gives no bonus skills: leave bonus_skills out. Nothing was changed."})
+			return
+		}
+
 		// Apply the subclass
 		_, err = db.Exec("UPDATE characters SET subclass = $1 WHERE id = $2", subclassSlug, req.CharacterID)
 		if err != nil {
@@ -861,79 +878,18 @@ func handleCharacterSubclass(w http.ResponseWriter, r *http.Request) {
 			}
 		}
 
-		// Check for bonus skill proficiencies (Lore Bard)
-		var bonusSkillsApplied []string
-		if numSkillsStr, ok := getSubclassMechanic(subclassSlug, level, "bonus_skill_proficiencies"); ok {
-			numSkills, _ := strconv.Atoi(numSkillsStr)
-			if numSkills > 0 {
-				// Validate that bonus_skills were provided
-				if len(req.BonusSkills) != numSkills {
-					// List all available skills (any skill for Lore Bard)
-					allSkills := []string{
-						"acrobatics", "animal handling", "arcana", "athletics", "deception",
-						"history", "insight", "intimidation", "investigation", "medicine",
-						"nature", "perception", "performance", "persuasion", "religion",
-						"sleight of hand", "stealth", "survival",
-					}
-					w.WriteHeader(http.StatusBadRequest)
-					json.NewEncoder(w).Encode(map[string]interface{}{
-						"error":            "bonus_skills_required",
-						"message":          fmt.Sprintf("The %s subclass grants %d bonus skill proficiencies. Include bonus_skills array in your request.", sub.Name, numSkills),
-						"required_count":   numSkills,
-						"available_skills": allSkills,
-						"example":          fmt.Sprintf(`{"character_id": %d, "subclass": "%s", "bonus_skills": ["history", "nature", "religion"]}`, req.CharacterID, subclassSlug),
-					})
-					return
-				}
-
-				// Get current skill proficiencies
-				var currentSkillProfs string
-				db.QueryRow(`SELECT COALESCE(skill_proficiencies, '') FROM characters WHERE id = $1`, req.CharacterID).Scan(&currentSkillProfs)
-				currentSkillsList := strings.Split(strings.ToLower(currentSkillProfs), ", ")
-				currentSkillsMap := make(map[string]bool)
-				for _, s := range currentSkillsList {
-					currentSkillsMap[strings.TrimSpace(s)] = true
-				}
-
-				// Validate and add each bonus skill
-				validSkills := map[string]bool{
-					"acrobatics": true, "animal handling": true, "arcana": true, "athletics": true,
-					"deception": true, "history": true, "insight": true, "intimidation": true,
-					"investigation": true, "medicine": true, "nature": true, "perception": true,
-					"performance": true, "persuasion": true, "religion": true, "sleight of hand": true,
-					"stealth": true, "survival": true,
-				}
-
-				for _, skill := range req.BonusSkills {
-					skillLower := strings.ToLower(strings.TrimSpace(skill))
-					if !validSkills[skillLower] {
-						w.WriteHeader(http.StatusBadRequest)
-						json.NewEncoder(w).Encode(map[string]interface{}{
-							"error":   "invalid_skill",
-							"message": fmt.Sprintf("'%s' is not a valid skill", skill),
-						})
-						return
-					}
-					if currentSkillsMap[skillLower] {
-						w.WriteHeader(http.StatusConflict)
-						json.NewEncoder(w).Encode(map[string]interface{}{
-							"error":   "already_proficient",
-							"message": fmt.Sprintf("Character is already proficient in '%s'. Choose a different skill.", skill),
-						})
-						return
-					}
-					bonusSkillsApplied = append(bonusSkillsApplied, skillLower)
-				}
-
-				// Add bonus skills to proficiencies
-				var newSkillProfs string
-				if currentSkillProfs == "" {
-					newSkillProfs = strings.Join(bonusSkillsApplied, ", ")
-				} else {
-					newSkillProfs = currentSkillProfs + ", " + strings.Join(bonusSkillsApplied, ", ")
-				}
-				db.Exec("UPDATE characters SET skill_proficiencies = $1 WHERE id = $2", newSkillProfs, req.CharacterID)
+		// Bonus Proficiencies (College of Lore), checked above
+		if len(bonusSkillsApplied) > 0 {
+			var currentSkillProfs string
+			db.QueryRow(`SELECT COALESCE(skill_proficiencies, '') FROM characters WHERE id = $1`, req.CharacterID).Scan(&currentSkillProfs)
+			newSkillProfs := strings.Join(bonusSkillsApplied, ", ")
+			if strings.TrimSpace(currentSkillProfs) != "" {
+				newSkillProfs = currentSkillProfs + ", " + newSkillProfs
 			}
+			choices := subclassChoicesOf(req.CharacterID)
+			choices["bonus_proficiencies"] = strings.Join(bonusSkillsApplied, ", ") // so the setup step knows they are chosen
+			cj, _ := json.Marshal(choices)
+			db.Exec("UPDATE characters SET skill_proficiencies = $1, subclass_choices = $2 WHERE id = $3", newSkillProfs, string(cj), req.CharacterID)
 		}
 
 		// Get active features
@@ -1092,12 +1048,7 @@ func handleCharacterSubclassChoice(w http.ResponseWriter, r *http.Request) {
 		Feature     string `json:"feature"` // e.g., "hunters_prey"
 		Choice      string `json:"choice"`  // e.g., "colossus_slayer"
 	}
-	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
-		w.WriteHeader(http.StatusBadRequest)
-		json.NewEncoder(w).Encode(map[string]interface{}{
-			"error":   "invalid_json",
-			"message": publicError(err),
-		})
+	if !decodeRequest(w, r, &req, false) {
 		return
 	}
 
@@ -1156,6 +1107,13 @@ func handleCharacterSubclassChoice(w http.ResponseWriter, r *http.Request) {
 		if feat.Level > level {
 			continue
 		}
+		for key := range feat.Mechanics { // the key or the displayed feature name ("Hunter's Prey")
+			if k := nameKey(req.Feature); k == nameKey(key) || k == nameKey(feat.Name) {
+				if isChoiceMechanic(subclass.String, key, feat.Mechanics[key]) {
+					req.Feature = key
+				}
+			}
+		}
 		if mechVal, ok := feat.Mechanics[req.Feature]; ok && isChoiceMechanic(subclass.String, req.Feature, mechVal) {
 			featureFound = true
 			featureName = feat.Name
@@ -1178,7 +1136,9 @@ func handleCharacterSubclassChoice(w http.ResponseWriter, r *http.Request) {
 	validChoice := false
 	var choiceInfo map[string]interface{}
 	for _, opt := range validOptions {
-		if opt["slug"].(string) == choiceLower {
+		name, _ := opt["name"].(string)
+		if k := nameKey(req.Choice); k == nameKey(opt["slug"].(string)) || name != "" && k == nameKey(name) { // the slug or the displayed name
+			choiceLower = opt["slug"].(string)
 			validChoice = true
 			choiceInfo = opt
 			break
@@ -1472,12 +1432,7 @@ func handleCharacterMulticlass(w http.ResponseWriter, r *http.Request) {
 		TargetClass string `json:"target_class"` // Class to take a level in
 		Skill       string `json:"skill"`        // the skill a first Bard, Ranger or Rogue level lets a multiclass character choose
 	}
-	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
-		w.WriteHeader(http.StatusBadRequest)
-		json.NewEncoder(w).Encode(map[string]interface{}{
-			"error":   "invalid_json",
-			"message": publicError(err),
-		})
+	if !decodeRequest(w, r, &req, false) {
 		return
 	}
 

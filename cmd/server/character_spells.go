@@ -398,6 +398,15 @@ func handleCharacterSpells(w http.ResponseWriter, r *http.Request, charID int) {
 					"message": fmt.Sprintf("A level %d Wizard writes %d spells into the spellbook for free (6 at level 1, two more each level); this would make %d. Other spells are copied into the book: POST /api/characters/copy-spell {\"character_id\": %d, \"spell\": \"...\"} (50 GP and 2 hours per spell level). Nothing was changed.", level, target, after, charID)})
 				return
 			}
+			// Evocation Savant's free spells are Evocation spells: past the Spellbook feature's own free spells, only Evocation
+			// spells (the first two of level 2 or lower) are free
+			if usedAfter, base, open := savantFit(charID, level, newSpells); usedAfter > base {
+				if usedBefore, _, _ := savantFit(charID, level, knownSpells); usedAfter > usedBefore {
+					writeJSONStatus(w, http.StatusConflict, map[string]interface{}{"error": "savant_spells_are_evocation", "spellbook_free_spells": base, "evocation_savant_spells_left": open,
+						"message": fmt.Sprintf("A level %d Wizard's Spellbook feature gives %d free spells of any school; this list would need %d. Your other free spells come from Evocation Savant and must be Wizard Evocation spells (the first two of level 2 or lower, the rest of a level you have slots for); you have %d of those still to choose. Choose Evocation spells, or copy other spells into the book: POST /api/characters/copy-spell {\"character_id\": %d, \"spell\": \"...\"}. Nothing was changed.", level, base, usedAfter, open, charID)})
+					return
+				}
+			}
 			onlyCantrips := func(list []string) []string {
 				var out []string
 				for _, s := range withoutAlwaysPrepared(list, always) {

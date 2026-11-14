@@ -363,7 +363,10 @@ func handleMemorizeSpell(w http.ResponseWriter, r *http.Request) {
 		Replace     string `json:"replace"`
 		With        string `json:"with"`
 	}
-	if json.NewDecoder(http.MaxBytesReader(w, r.Body, 4096)).Decode(&req) != nil || req.CharacterID == 0 {
+	if !decodeRequest(w, r, &req, false) {
+		return
+	}
+	if req.CharacterID == 0 {
 		writeJSONStatus(w, http.StatusBadRequest, map[string]interface{}{"error": "invalid_request", "message": "Send character_id, replace (a prepared spell) and with (a spell from your spellbook)."})
 		return
 	}
@@ -430,8 +433,10 @@ func handleSpellMastery(w http.ResponseWriter, r *http.Request) {
 	}
 	if r.Method == http.MethodGet {
 		req.CharacterID, _ = strconv.Atoi(r.URL.Query().Get("character_id"))
-	} else if r.Method != http.MethodPost || json.NewDecoder(http.MaxBytesReader(w, r.Body, 4096)).Decode(&req) != nil {
-		writeJSONStatus(w, http.StatusBadRequest, map[string]interface{}{"error": "invalid_request"})
+	} else if r.Method != http.MethodPost {
+		writeJSONStatus(w, http.StatusMethodNotAllowed, map[string]interface{}{"error": "method_not_allowed", "message": "GET to see Spell Mastery, POST {\"character_id\", \"spells\"} to choose."})
+		return
+	} else if !decodeRequest(w, r, &req, false) {
 		return
 	}
 	if req.CharacterID == 0 {
