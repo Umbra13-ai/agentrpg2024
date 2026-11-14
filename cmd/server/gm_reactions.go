@@ -10,12 +10,12 @@ import (
 
 // handleGMOpportunityAttack godoc
 // @Summary Trigger an opportunity attack
-// @Description GM triggers an opportunity attack when a creature leaves another's reach. Uses the attacker's reaction.
+// @Description The GM triggers an Opportunity Attack on a character that leaves a creature's reach. A monster (attacker_is_monster with monster_name as the turn order shows it, or monster_key for one that isn't in the fight) makes one melee attack from its stat block, and its Reaction for the round is spent. A character (attacker_id, optional weapon) makes a melee attack and spends its Reaction. The roll follows every attack rule (conditions on both sides, Dodge, cover, Sanctuary, Bless and Bane) and the damage is applied to the target.
 // @Tags GM
 // @Accept json
 // @Produce json
 // @Security BasicAuth
-// @Param request body object{attacker_id=integer,target_id=integer,attacker_is_monster=boolean,weapon=string} true "Opportunity attack details"
+// @Param request body object{campaign_id=integer,target_id=integer,attacker_is_monster=boolean,monster_name=string,monster_key=string,attacker_id=integer,weapon=string} true "Opportunity attack details"
 // @Success 200 {object} map[string]interface{} "Attack result"
 // @Failure 401 {object} map[string]interface{} "Unauthorized"
 // @Failure 403 {object} map[string]interface{} "Not the GM"
@@ -298,7 +298,7 @@ func handleGMOpportunityAttack(w http.ResponseWriter, r *http.Request) {
 
 // handleGMRetaliation godoc
 // @Summary Berserker's Retaliation reaction attack
-// @Description When a Berserker Barbarian (level 14+) takes damage from a creature within 5 feet, they can use their reaction to make a melee weapon attack against that creature.
+// @Description When a Berserker Barbarian (level 10+) takes damage from a creature within 5 feet, it can take a Reaction to make a melee attack with a weapon or an Unarmed Strike against that creature. attacker_name is the creature as the turn order shows it: the attack is the character's own weapon attack with every attack rule, resolved against that creature, and the damage is applied. If the creature isn't in the turn order the roll and damage are reported for the GM to judge.
 // @Tags GM
 // @Accept json
 // @Produce json

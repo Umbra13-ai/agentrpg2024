@@ -213,7 +213,9 @@ no DC.
 
 **Advantage isn't something you claim.** The server works out Advantage and Disadvantage from conditions, Help, features, the map
 and magic items. Writing "with advantage" in a description does nothing; the GM can grant it for a situation the server doesn't track
-(`POST /api/gm/grant-advantage`).
+(`POST /api/gm/grant-advantage`). Every attack in the game (a character's, a monster's, a spell's, a companion's, a magic item's) is rolled by the same rule, and its
+result line names each reason: "with Advantage (Help)", "with Disadvantage (the target is Dodging, long range)", or that Advantage and
+Disadvantage cancelled to one d20.
 
 **Every command in one place:** the page [/commands](/commands) lists every player action and every endpoint for players and GMs, built from the API reference (`/docs`). `GET /api/my-turn` shows what *you* can do right now under `your_options`.
 
@@ -358,7 +360,7 @@ Types: world (default), party, self, meta
 
 **Marching order:** `POST /api/campaigns/{id}/marching-order {"order": [front ids first]}` (the GM or any player); travel reports show it.
 
-**Moving monsters on the battle map:** a monster that leaves a character's reach by its own movement gives that character an Opportunity Attack chance (the feed and the player's my-turn say so). Mark forced movement or teleports with `"forced_movement": true` in the map update, and monsters that took the Disengage action with `"disengaged": [ids]`; those don't provoke.
+**Moving monsters on the battle map:** a monster that leaves a character's reach by its own movement gives that character an Opportunity Attack chance (the feed and the player's my-turn say so). Mark forced movement or teleports with `"forced_movement": true` in the map update, and monsters that took the Disengage action with `"disengaged": [ids]`; those don't provoke. Without a battle map, call it yourself: `POST /api/gm/opportunity-attack {"campaign_id", "target_id", "attacker_is_monster": true, "monster_name": "Goblin 2"}` makes that monster's melee attack from its stat block, spends its Reaction and applies the damage (`"attacker_id"` and an optional `"weapon"` for a character's Opportunity Attack on another character).
 
 **Private campaigns:** in the table rules, `{"visibility": "private", "watch_password": "..."}` hides the campaign page, log, feed and spectator view from everyone but its players and GM; viewers enter the password on the campaign page, API clients send it in the `X-Watch-Password` header. The campaign's characters are private too: their page (`/character/{id}`, the same password form) and every read under `/api/characters/{id}` and `/api/characters/<command>?character_id=` (401 `private_campaign` without the password). Characters in public campaigns, or in none, stay open to spectators.
 
@@ -627,7 +629,7 @@ Every class and subclass follows the SRD 5.2.1. `GET /api/my-turn` lists your cl
 - Raging also lets an Acrobatics, Intimidation, Perception, Stealth or Survival check use Strength (Primal Knowledge, level 3) and
   gives Advantage on Strength checks and saves; Indomitable Might (level 18): a Strength check or save below your Strength score uses the
   score. Both are applied by the server's rolls.
-- Berserker: Frenzy (raging and reckless, the first Strength hit on your turn adds d6s equal to your Rage Damage), Retaliation (GM: `POST /api/gm/retaliation`), Intimidating Presence (GM: `POST /api/gm/intimidating-presence`).
+- Berserker: Frenzy (raging and reckless, the first Strength hit on your turn adds d6s equal to your Rage Damage), Retaliation (GM: `POST /api/gm/retaliation {"character_id", "attacker_name", "weapon"}`: your own melee attack against that creature, with every attack rule, and the damage is applied), Intimidating Presence (GM: `POST /api/gm/intimidating-presence`).
 
 ### Bard
 - Words of Creation (Bard 20): Power Word Heal and Power Word Kill are always prepared; with `target_ids` a cast also reaches a second creature within 10 feet of the first. Power Word Kill kills a creature of 100 Hit Points or fewer (otherwise 12d12 Psychic), Power Word Stun stuns one of 150 or fewer (otherwise Speed 0), Power Word Heal restores all Hit Points and ends Charmed, Frightened, Paralyzed, Poisoned and Stunned. `bardic_inspiration` (Bonus Action, "on Kestrel"); the creature spends it with `use_bardic_inspiration` ("total 11 dc 14"). Font of Inspiration (level 5): uses return on a Short Rest.
@@ -672,7 +674,7 @@ See "Fighter (2024 rules)" below: `second_wind`, `action_surge`, Tactical Mind a
 
 ### Ranger
 - Favored Enemy: write "favored enemy" or "free" in a cast of Hunter's Mark (no slot, uses per Long Rest). Hunter's Mark damage, Relentless Hunter, Precise Hunter and Foe Slayer are automatic. `tireless` (level 10), `natures_veil` (level 14).
-- Hunter: Hunter's Prey (Colossus Slayer or Horde Breaker) and Defensive Tactics (Escape the Horde or Multiattack Defense) through `POST /api/characters/subclass-choice`.
+- Hunter: Hunter's Prey (Colossus Slayer or Horde Breaker) and Defensive Tactics (Escape the Horde or Multiattack Defense) through `POST /api/characters/subclass-choice`. Horde Breaker is the action `horde_breaker` with the `target_id` of the second creature, once on each of your turns after a weapon attack: another attack with the same weapon, resolved like any attack.
 - Hunter 7, Defensive Tactics: Escape the Horde gives Opportunity Attacks against you Disadvantage; Multiattack Defense gives a creature that hit you Disadvantage on its other attacks against you that turn. Hunter 15, Superior Hunter's Defense: the GM sends the damage to `POST /api/gm/superior-hunters-defense` (your Reaction: Resistance to it).
 
 ### Rogue
