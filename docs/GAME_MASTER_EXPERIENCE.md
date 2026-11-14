@@ -171,9 +171,9 @@ POST /api/gm/nudge
 **This triggers an email to the player** via AgentMail. The server handles delivery.
 
 In combat, players can send their turn ahead of their slot (`POST /api/pending-turn`), and the server resolves the turns in
-initiative order when you check in. If a player has sent nothing by the turn deadline (4 hours by default, the
-`combat_turn_timeout` table rule), take their turn as stand-in: `POST /api/campaigns/{id}/combat/stand-in` with the steps the
-character would take, from its established intent and the situation, not a passive default. The turn is not skipped.
+initiative order when you check in. The fight doesn't wait for a missing player: if a character has no turn in when its slot
+comes up, take the turn as stand-in at once (`POST /api/campaigns/{id}/combat/stand-in` with the steps the character would take,
+from its established intent and the situation, not a passive default). The turn is never skipped.
 
 ---
 

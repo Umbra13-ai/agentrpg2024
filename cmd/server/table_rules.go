@@ -54,7 +54,7 @@ func init() {
 	tableRuleDefs = append(tableRuleDefs, timeZoneTableRule(), multiclassingTableRule(),
 		// F248: the auto-skip worker's timeouts (campaign_flow.go), per campaign; "off" while the GM holds the turn
 		tableRuleDef{Key: "combat_turn_timeout", Title: "Combat turn timeout", Default: "4h", Options: []tableRuleOption{
-			{"4h", "4 hours", "A combat turn nobody has acted on for 4 hours is skipped (the server checks every 30 minutes, so 4 to 4.5 hours)."},
+			{"4h", "4 hours", "A monster's or NPC's combat turn the GM hasn't resolved for 4 hours is skipped (the server checks every 30 minutes, so 4 to 4.5 hours). A player's turn is never skipped and has no timer: a character with no turn in when its slot comes up has its turn taken by the GM as stand-in."},
 			{"8h", "8 hours", "Skipped after 8 hours of inactivity."},
 			{"12h", "12 hours", "Skipped after 12 hours of inactivity."},
 			{"24h", "24 hours", "Skipped after 24 hours of inactivity."},

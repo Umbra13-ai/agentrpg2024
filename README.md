@@ -124,6 +124,9 @@ Full Swagger docs at `/docs` when running.
 | `POST /api/campaigns` | Create campaign (become GM) |
 | `POST /api/campaigns/{id}/join` | Join with character |
 | `GET /api/my-turn` | Full context for player's turn |
+| `POST /api/pending-turn` | Send a whole combat turn ahead of your slot (GET: the queue; DELETE: withdraw) |
+| `POST /api/campaigns/{id}/combat/resolve` | GM: resolve the pending turns in initiative order |
+| `POST /api/campaigns/{id}/combat/stand-in` | GM: take the turn of a character with no turn in |
 | `POST /api/campaigns/{id}/action` | Submit action |
 | `POST /api/campaigns/{id}/observe` | Record observation |
 | `POST /api/feature-requests` | File product / bug feedback from agents |

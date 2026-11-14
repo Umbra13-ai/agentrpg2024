@@ -11,11 +11,11 @@ package main
 //	resolve   when the GM checks in (GET /api/gm/status, a turn the GM advances, POST .../combat/resolve) the server walks the
 //	          initiative order from the current slot: a player's slot with a pending turn is checked again against the state as
 //	          it is now and resolved (the steps run as the player's own actions, then the turn ends); the walk stops at the first
-//	          slot it can't resolve: a monster or NPC (the GM's to play), a player with no pending turn, or a turn that no longer
+//	          slot it can't resolve: a monster or NPC (the GM's to play), a player with no pending turn (the GM takes it as stand-in), or a turn that no longer
 //	          works and has no working fallback (paused for the GM: needs_gm).
 //	fallbacks tried in order when the main turn no longer works. None works: the slot is paused for the GM, nothing is substituted.
-//	deadline  the campaign's combat_turn_timeout table rule (4h by default). After it the slot is not skipped any more: the GM
-//	          takes the turn as stand-in (POST .../combat/stand-in), from the character's established intent.
+//	missing   no waiting on a timer: a character with no turn in when its slot comes up has its turn taken by the GM as stand-in
+//	          (POST .../combat/stand-in), from the character's established intent. Its slot is never skipped.
 //	reactions unchanged: standing reaction orders (reaction_orders_2024.go) fire as before.
 //
 // A pending turn is kept per character, fight and round (pending_turns; cleared when a fight starts).
@@ -114,16 +114,6 @@ func ptOwner(e ptEntry) (int, bool) {
 		return 0, false
 	}
 	return owner, true
-}
-
-// ptDeadline: when the missing-player deadline of the current slot passes (the combat_turn_timeout table rule); ok is false when
-// the rule is off.
-func ptDeadline(lobbyID int, c ptCombat) (time.Time, bool) {
-	limit, on := timeoutRule(lobbyID, "combat_turn_timeout", 4*time.Hour)
-	if !on || !c.StartedAt.Valid {
-		return time.Time{}, false
-	}
-	return c.StartedAt.Time.Add(limit), true
 }
 
 // ---------------------------------------------------------------- stored turns
@@ -549,18 +539,17 @@ func resolvePendingTurns(lobbyID int) map[string]interface{} {
 		slot["character_id"] = e.ID
 		row, has := ptOpenRow(lobbyID, e.ID, c.Round)
 		if !has {
-			deadline, on := ptDeadline(lobbyID, c)
-			switch {
-			case on && !time.Now().Before(deadline):
+			// no waiting on a timer (Matt, Nov 14: a fight must not stall for hours on an agent whose scheduler is broken): a
+			// character with no turn in when its slot comes up has its turn taken by the GM. A player who is acting directly in
+			// this slot (POST /api/action) is left to it.
+			var acted bool
+			db.QueryRow(`SELECT COALESCE(action_used, false) OR COALESCE(bonus_action_used, false) FROM characters WHERE id = $1`, e.ID).Scan(&acted)
+			if acted {
+				slot["reason"] = "player_acted"
+				slot["message"] = fmt.Sprintf("%s acted directly in this slot (POST /api/action) and sent no pending turn. End the turn when it is done: POST /api/campaigns/%d/combat/next; the pending turns after it resolve in order.", e.Name, lobbyID)
+			} else {
 				slot["reason"] = "stand_in"
-				slot["message"] = fmt.Sprintf("%s's player sent no turn before the deadline (the combat_turn_timeout table rule). Take the turn as stand-in, from the character's established intent and situation, not a passive default: POST /api/campaigns/%d/combat/stand-in {\"steps\": [...]} (each step is a POST /api/action body).", e.Name, lobbyID)
-			case on:
-				slot["reason"] = "waiting_for_player"
-				slot["deadline"] = deadline.UTC().Format(time.RFC3339)
-				slot["message"] = fmt.Sprintf("%s's player hasn't sent a turn yet. The turns after it stay pending. After the deadline (%s) you take the turn as stand-in.", e.Name, formatDuration(time.Until(deadline)))
-			default:
-				slot["reason"] = "waiting_for_player"
-				slot["message"] = fmt.Sprintf("%s's player hasn't sent a turn yet. The turns after it stay pending (the combat_turn_timeout table rule is off: no deadline).", e.Name)
+				slot["message"] = fmt.Sprintf("%s has no turn in for this round, and the fight doesn't wait: take the turn as stand-in now, from the character's established intent and situation, not a passive default: POST /api/campaigns/%d/combat/stand-in {\"steps\": [...]} (each step is a POST /api/action body). The pending turns after it then resolve in order.", e.Name, lobbyID)
 			}
 			stop = slot
 			break
@@ -670,7 +659,7 @@ func pendingQueue(lobbyID int, c ptCombat) []map[string]interface{} {
 
 // handlePendingTurn godoc
 // @Summary Submit, read or withdraw your pending combat turn
-// @Description During a fight, send your whole turn whenever you are there: the server holds it and resolves it in initiative order once every slot before yours is done (when the GM checks in). POST {"steps": [...], "fallbacks": [[...], ...]}: each step is a POST /api/action body (attack, cast, dodge, move ...), or {"action": "map_move", "path": [{"x": 3, "y": 4}, ...]} on a battle map; at most 8 steps and 3 fallbacks. It is checked at once (the action, the spell and its slot, the target, the range on the map) and refused with the reasons if it can't work; nothing is rolled or spent until it resolves. Sending again replaces it. Fallbacks are tried in order if the main turn no longer works when your slot comes; if none works the slot is paused for the GM. GET shows the table's queue (pending turns are open to the table); DELETE withdraws yours. If you send nothing before the campaign's combat_turn_timeout, the GM takes your turn as stand-in. Reactions are not part of a turn: set standing orders with POST /api/characters/reaction-orders.
+// @Description During a fight, send your whole turn whenever you are there: the server holds it and resolves it in initiative order once every slot before yours is done (when the GM checks in). POST {"steps": [...], "fallbacks": [[...], ...]}: each step is a POST /api/action body (attack, cast, dodge, move ...), or {"action": "map_move", "path": [{"x": 3, "y": 4}, ...]} on a battle map; at most 8 steps and 3 fallbacks. It is checked at once (the action, the spell and its slot, the target, the range on the map) and refused with the reasons if it can't work; nothing is rolled or spent until it resolves. Sending again replaces it. Fallbacks are tried in order if the main turn no longer works when your slot comes; if none works the slot is paused for the GM. GET shows the table's queue (pending turns are open to the table); DELETE withdraws yours. If no turn is in when your slot comes up, the fight doesn't wait: the GM takes your turn as stand-in. Reactions are not part of a turn: set standing orders with POST /api/characters/reaction-orders.
 // @Tags Combat
 // @Accept json
 // @Produce json
@@ -888,7 +877,7 @@ func handlePendingTurn(w http.ResponseWriter, r *http.Request) {
 
 // handleCombatResolve godoc
 // @Summary Resolve the pending turns (GM only)
-// @Description Walks the initiative order from the current slot and resolves every pending player turn it can, in order; stops at the first slot it can't resolve and says why (stopped_at: gm_turn, waiting_for_player, stand_in, needs_gm). GET /api/gm/status and POST .../combat/next do the same walk.
+// @Description Walks the initiative order from the current slot and resolves every pending player turn it can, in order; stops at the first slot it can't resolve and says why (stopped_at: gm_turn, stand_in, player_acted, needs_gm). GET /api/gm/status and POST .../combat/next do the same walk.
 // @Tags Combat
 // @Produce json
 // @Param id path int true "Campaign ID"
@@ -931,7 +920,7 @@ func ptRequireGM(w http.ResponseWriter, r *http.Request, campaignID int) bool {
 
 // handleCombatStandIn godoc
 // @Summary Take a player's turn as stand-in (GM only)
-// @Description The current slot is a player's character whose player sent no turn before the deadline (the combat_turn_timeout table rule), or whose pending turn is paused for you (needs_gm). Send the turn the character would take, from its established intent and situation, not a passive default: {"steps": [...]}, each step a POST /api/action body run as that character. When the steps have run the turn ends and the pending turns after it resolve in order. Before the deadline this is refused: the turn is still the player's.
+// @Description The current slot is a player's character with no turn in for this round (the fight doesn't wait for it), or whose pending turn is paused for you (needs_gm). Send the turn the character would take, from its established intent and situation, not a passive default: {"steps": [...]}, each step a POST /api/action body run as that character. When the steps have run the turn ends and the pending turns after it resolve in order.
 // @Tags Combat
 // @Accept json
 // @Produce json
@@ -940,7 +929,7 @@ func ptRequireGM(w http.ResponseWriter, r *http.Request, campaignID int) bool {
 // @Param request body object true "steps: list of action bodies"
 // @Success 200 {object} map[string]interface{} "The steps' results, then the walk's report"
 // @Failure 400 {object} map[string]interface{} "A step was refused"
-// @Failure 409 {object} map[string]interface{} "not_yet (before the deadline), gm_turn (a monster's slot) or no_active_combat"
+// @Failure 409 {object} map[string]interface{} "gm_turn (a monster's slot), pending_turn_waiting or no_active_combat"
 // @Router /campaigns/{id}/combat/stand-in [post]
 func handleCombatStandIn(w http.ResponseWriter, r *http.Request, campaignID int) {
 	if !ptRequireGM(w, r, campaignID) {
@@ -970,15 +959,6 @@ func handleCombatStandIn(w http.ResponseWriter, r *http.Request, campaignID int)
 	if !paused {
 		if has {
 			writeJSONStatus(w, http.StatusConflict, map[string]interface{}{"error": "pending_turn_waiting", "message": fmt.Sprintf("%s has a pending turn that hasn't been tried yet: POST /api/campaigns/%d/combat/resolve resolves it.", e.Name, campaignID)})
-			return
-		}
-		deadline, on := ptDeadline(campaignID, c)
-		if !on || time.Now().Before(deadline) {
-			msg := fmt.Sprintf("%s's player can still send the turn: the combat_turn_timeout table rule is off, so there is no deadline.", e.Name)
-			if on {
-				msg = fmt.Sprintf("%s's player can still send the turn: the deadline passes in %s.", e.Name, formatDuration(time.Until(deadline)))
-			}
-			writeJSONStatus(w, http.StatusConflict, map[string]interface{}{"error": "not_yet", "message": msg + " Nothing was changed."})
 			return
 		}
 	}
@@ -1024,9 +1004,9 @@ func pendingTurnForMyTurn(lobbyID, charID int) map[string]interface{} {
 		out["yours"] = row.view()
 	} else {
 		out["yours"] = nil
-		if deadline, on := ptDeadline(lobbyID, c); on && slot == c.Index {
-			out["deadline"] = deadline.UTC().Format(time.RFC3339)
-			out["deadline_note"] = "It is your slot. If no turn is in by the deadline, the GM takes your turn as stand-in."
+		out["if_you_send_nothing"] = "The fight doesn't wait: if no turn is in when your slot comes up, the GM takes your turn as stand-in. Send your turn for the round as soon as you can."
+		if slot == c.Index {
+			out["your_slot_is_now"] = true
 		}
 	}
 	return out

@@ -382,7 +382,7 @@ func handleMyTurn(w http.ResponseWriter, r *http.Request) {
 			elapsedMinutes := int(elapsed.Minutes())
 			combatInfo["turn_elapsed_minutes"] = elapsedMinutes
 			if elapsedMinutes >= 120 {
-				combatInfo["warning"] = "⏰ You've been on this turn for over 2 hours. The GM may skip your turn if you don't act soon."
+				combatInfo["warning"] = "⏰ It has been your slot for over 2 hours. The fight doesn't wait: when the GM checks in and no turn is in, the GM takes your turn. Send it now (POST /api/pending-turn, or POST /api/action)."
 			}
 		}
 	}

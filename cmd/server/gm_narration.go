@@ -757,31 +757,25 @@ func handleGMStatus(w http.ResponseWriter, r *http.Request) {
 			if elapsedMinutes >= 120 && elapsedMinutes < 240 {
 				combatInfo["nudge_recommended"] = true
 				combatInfo["turn_status"] = "overdue"
-				if len(entries) > turnIndex && !entries[turnIndex].IsMonster {
-					gmTasks = append(gmTasks, fmt.Sprintf("⏰ %s has been on this turn for %d hours. Consider sending a nudge (POST /api/gm/nudge)", entries[turnIndex].Name, elapsedMinutes/60))
-				}
 			}
-			// Past the deadline (the combat_turn_timeout table rule, 4 hours by default) a player's slot is the GM's to take as
-			// stand-in (Matt, Nov 14, pending-action turns). It is no longer skipped, by the GM or by the worker.
-			limit, on := timeoutRule(campaignID, "combat_turn_timeout", 4*time.Hour)
-			if on && elapsed >= limit && len(entries) > turnIndex && !entries[turnIndex].IsMonster {
-				playerName := entries[turnIndex].Name
-				if _, hasTurn := ptOpenRow(campaignID, entries[turnIndex].ID, combatRound); !hasTurn {
-					combatInfo["stand_in_required"] = true
-					combatInfo["turn_status"] = "timeout"
-					response["stand_in_required"] = true
-					response["stand_in_player"] = playerName
-					gmTasks = append(gmTasks, fmt.Sprintf("⚠️ %s's player sent no turn before the deadline (%s). Take the turn as stand-in, from the character's established intent and situation, not a passive default: POST /api/campaigns/%d/combat/stand-in {\"steps\": [...]}.", playerName, formatDuration(limit), campaignID))
-					whatToDoNext = map[string]interface{}{
-						"instruction":     fmt.Sprintf("Take %s's turn as stand-in: its player sent no turn before the deadline. Play it as the character would, from its established intent and the situation, not a passive default.", playerName),
-						"action_required": "stand_in",
-						"endpoint":        fmt.Sprintf("POST /api/campaigns/%d/combat/stand-in", campaignID),
-						"body":            "{\"steps\": [{\"action\": \"attack\", \"target_id\": -1}]}: each step is a POST /api/action body, run as the character",
-						"urgency":         "high",
-					}
-					needsAttention = true
-				}
+		}
+		// A player's slot with no turn in is the GM's to take as stand-in, at once: the fight doesn't wait on a timer (Matt, Nov 14:
+		// no stalling on an agent whose scheduler is broken). The walk above says so (stopped_at.reason "stand_in").
+		if stop, _ := pendingReport["stopped_at"].(map[string]interface{}); stop != nil && stop["reason"] == "stand_in" {
+			playerName := fmt.Sprint(stop["name"])
+			combatInfo["stand_in_required"] = true
+			combatInfo["turn_status"] = "stand_in"
+			response["stand_in_required"] = true
+			response["stand_in_player"] = playerName
+			gmTasks = append(gmTasks, fmt.Sprintf("⚠️ %s has no turn in for this round. Take the turn as stand-in now, from the character's established intent and situation, not a passive default: POST /api/campaigns/%d/combat/stand-in {\"steps\": [...]}.", playerName, campaignID))
+			whatToDoNext = map[string]interface{}{
+				"instruction":     fmt.Sprintf("Take %s's turn as stand-in now: no turn is in for this round and the fight doesn't wait. Play it as the character would, from its established intent and the situation, not a passive default.", playerName),
+				"action_required": "stand_in",
+				"endpoint":        fmt.Sprintf("POST /api/campaigns/%d/combat/stand-in", campaignID),
+				"body":            "{\"steps\": [{\"action\": \"attack\", \"target_id\": -1}]}: each step is a POST /api/action body, run as the character",
+				"urgency":         "high",
 			}
+			needsAttention = true
 		}
 
 		response["combat"] = combatInfo

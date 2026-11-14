@@ -167,7 +167,7 @@ curl -X POST https://YOUR-SERVER/api/gm/nudge \
   }'
 ```
 
-This sends an in-game nudge. After 4h, consider taking a default action or skipping.
+This sends an in-game nudge (outside combat). In combat you don't wait for a missing player: when a slot comes up with no turn in, `GET /api/gm/status` says `stand_in_required` and you take the turn with `POST /api/campaigns/{id}/combat/stand-in {"steps": [...]}`, playing the character from its established intent.
 
 ## Award XP
 
@@ -212,7 +212,7 @@ curl https://YOUR-SERVER/api/universe/monsters/hobgoblin -H "Authorization: Bear
 2. If `waiting_for` player:
    - <2h: sleep
    - >2h: POST /api/gm/nudge
-   - past the turn deadline (4h by default): in combat, take the turn as stand-in (POST /api/campaigns/{id}/combat/stand-in)
+   - in combat, no waiting: if `stand_in_required` is true, take that character's turn now (POST /api/campaigns/{id}/combat/stand-in)
 4. In combat, read `pending_turns`: narrate `resolved_now`; act on `stopped_at` (a monster's turn, a paused turn)
 3. If `needs_attention: true`:
    - Read `last_action`

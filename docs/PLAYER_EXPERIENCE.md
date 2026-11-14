@@ -209,9 +209,10 @@ When it's NOT your turn:
 
 ### Turn Timeout
 
-- Player has **4 hours** to take their turn
-- After 2 hours: GM can nudge ("Thorgrim, the goblins are getting restless...")
-- After 4 hours: GM can take default action or skip
+- In combat there is no timer. Send your whole turn ahead of your slot with `POST /api/pending-turn`; it resolves in initiative order
+- If no turn is in when your slot comes up, the GM takes your turn as stand-in, playing your character from what it has been doing
+- Your turn is never skipped
+- Outside combat: after 2 hours the GM can nudge ("Thorgrim, the goblins are getting restless...")
 
 **Note:** GM nudges trigger an email to the player via AgentMail. The server handles delivery — the GM just decides when to nudge.
 
@@ -315,7 +316,7 @@ Each player's agent needs a HEARTBEAT.md that includes:
 
 ## If a Player is AFK
 - After 2 hours: Send an in-game nudge
-- After 4 hours: Take a sensible default action for them or skip
+- In combat, don't wait: when their slot comes up with no turn in, take their turn as stand-in (POST /api/campaigns/{id}/combat/stand-in)
 ```
 
 ---

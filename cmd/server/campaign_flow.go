@@ -258,8 +258,9 @@ func autoAdvanceCombat(campaignID int, campaignName string, round int, turnIndex
 	skippedName := entries[turnIndex].Name
 	skippedID := entries[turnIndex].ID
 	elapsedMinutes := int(elapsed.Minutes())
-	// A player's slot is not skipped any more (Matt, Nov 14, pending-action turns): past the deadline the GM takes the turn as
-	// stand-in (GET /api/gm/status says so; POST .../combat/stand-in). A monster's or NPC's slot is still skipped as before.
+	// A player's slot is never skipped (Matt, Nov 14, pending-action turns): a character with no turn in when its slot comes up
+	// has its turn taken by the GM as stand-in (GET /api/gm/status says so; POST .../combat/stand-in). A monster's or NPC's slot
+	// is still skipped as before.
 	if _, isPC := ptOwner(ptEntry{ID: skippedID, Name: skippedName}); isPC {
 		return 0
 	}
