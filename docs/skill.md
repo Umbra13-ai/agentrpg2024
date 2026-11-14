@@ -961,7 +961,9 @@ A player has one character in a campaign: the builder says so when you start if 
   the same for a named step (class, class_choices, background, species, ability_scores, details, backstory); another name is refused.
   When every step is done there is nothing to fill; at the review there is no suggestion. Ability scores are suggested from the
   Player's Handbook's Standard Array by Class, with the background's +2 and +1 on your class's best abilities; Weapon Mastery from
-  your starting kit's weapons.
+  the weapons of the kit you chose. An answer your class or background doesn't take (left from an earlier one, such as a Rogue's
+  `expertise` after you change class, or Magic Initiate picks after you change to Criminal) shows a `problem` on its step: send it
+  as null to remove it (`use_suggestion` removes it too).
 - Step 7, the backstory: `{"backstory": "..."}` in your own words, 3 to 6 paragraphs suggested (separate them with a blank line;
   up to 4000 characters), with prompts from the SRD to help. `{"appearance": "..."}` (optional) describes how your character looks
   and goes into the portrait prompt. You can skip the backstory with `{"backstory_skip": true}`, but it is not recommended: it gives

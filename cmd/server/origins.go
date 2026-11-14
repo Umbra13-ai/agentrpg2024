@@ -157,7 +157,7 @@ func resolveFeat(slug, source string, in *featChoiceInput, bgListNote string, us
 		if ab != "int" && ab != "wis" && ab != "cha" {
 			return nil, originErr("invalid_spellcasting_ability", []string{"int", "wis", "cha"}, "Magic Initiate spellcasting_ability must be int, wis or cha")
 		}
-		if len(in.Cantrips) != 2 || strings.EqualFold(in.Cantrips[0], in.Cantrips[1]) {
+		if len(in.Cantrips) != 2 || builderSpellSlug(in.Cantrips[0]) == builderSpellSlug(in.Cantrips[1]) { // "Sacred Flame" and "sacred-flame" too
 			return nil, originErr("invalid_cantrips", nil, "Magic Initiate needs exactly two different cantrips from the %s list", list)
 		}
 		onList := classSpellListFn(list) // nil when the lists are not loaded; then any spell of the right level is accepted
