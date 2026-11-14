@@ -341,7 +341,7 @@ func handleCharacters(w http.ResponseWriter, r *http.Request) {
 			for _, t := range game.ParseProficiencyList(toolProfsStr) {
 				if game.SameTool(t, bgx.Tool) {
 					writeJSONStatus(w, http.StatusBadRequest, map[string]interface{}{"error": "duplicate_tool", "nothing_created": true,
-						"message": fmt.Sprintf("tool_proficiencies: %s also comes from your background (%s): choose another so you don't lose a proficiency. Nothing was created.", game.ToolDisplayName(bgx.Tool), bgx.Name),
+						"message":         fmt.Sprintf("tool_proficiencies: %s also comes from your background (%s): choose another so you don't lose a proficiency. Nothing was created.", game.ToolDisplayName(bgx.Tool), bgx.Name),
 						"pending_choices": game.ToolChoicesFor(req.Class, nil)})
 					return
 				}
