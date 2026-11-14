@@ -22,7 +22,10 @@ import (
 var shopOnce sync.Once
 
 func ensureShopColumn() {
-	shopOnce.Do(func() { db.Exec(`ALTER TABLE characters ADD COLUMN IF NOT EXISTS shop_done BOOLEAN DEFAULT false`) })
+	shopOnce.Do(func() {
+		db.Exec(`ALTER TABLE characters ADD COLUMN IF NOT EXISTS shop_done BOOLEAN DEFAULT false`)
+		db.Exec(`ALTER TABLE characters ADD COLUMN IF NOT EXISTS took_both_packages BOOLEAN`) // set at creation: both equipment packages taken
+	})
 }
 
 type shopItem struct {
@@ -449,23 +452,16 @@ func shopSetupStep(charID int) *setupStep {
 	if open, _ := shopOpen(charID); done || !open {
 		return nil
 	}
-	var class, opt string
-	db.QueryRow(`SELECT LOWER(COALESCE(class,'')), LOWER(COALESCE(starting_equipment,'')) FROM characters WHERE id = $1`, charID).Scan(&class, &opt)
-	classGold := false
-	if o, ok := classStartingEquipment[class][opt]; ok && len(o.Items) == 0 {
-		classGold = true // the class kit option that is gold only
-	}
-	bgGold := false
-	if rec, ok := characterOriginOf(charID); ok && rec != nil && strings.EqualFold(rec.BackgroundEquipment, "b") {
-		bgGold = true // the background's 50 GP instead of its package
-	}
+	// decided once, at creation: did the character take both equipment packages (class kit and background package)?
+	var bothPackages bool
+	db.QueryRow(`SELECT COALESCE(took_both_packages, false) FROM characters WHERE id = $1`, charID).Scan(&bothPackages)
 	shop := fmt.Sprintf("GET /api/characters/%d/shop", charID)
 	buySell := fmt.Sprintf("Buy with POST /api/characters/%d/shop {\"buy\": [{\"item\": \"Longsword\", \"quantity\": 1}]}; sell with {\"sell\": [{\"item_id\": \"<id from your inventory>\"}]} (a shop pays half the price).", charID)
 	// two wordings (Matt, Nov 14): a character who didn't take both equipment packages is told to shop for its gear; one who took
 	// both may buy extras or sell items from its pack
 	title := "Visit the shop: buy extras or sell items from your pack"
 	why := fmt.Sprintf("You took your equipment packages, and you have %s. You may visit the shop to buy extras or to sell items from your pack. %s lists everything (add ?category=weapons, armor, gear, ammunition or tools) with what each item does and whether you can afford it. %s ", moneyText(money), shop, buySell)
-	if classGold || bgGold {
+	if !bothPackages {
 		title = "Visit the shop: buy your starting gear"
 		why = fmt.Sprintf("You took gold instead of an equipment package, so you have %s: visit the shop to buy your starting gear (weapons, armor, a pack, tools, ammunition) at the SRD's prices. You can also sell items you have. %s lists everything (add ?category=weapons, armor, gear, ammunition or tools) with what each item does, whether you are proficient with it and whether you can afford it. %s ", moneyText(money), shop, buySell)
 	}
@@ -476,6 +472,6 @@ func shopSetupStep(charID int) *setupStep {
 			"buy":             fmt.Sprintf("POST /api/characters/%d/shop {\"buy\": [{\"item\": \"...\", \"quantity\": 1}]}", charID),
 			"sell":            fmt.Sprintf("POST /api/characters/%d/shop {\"sell\": [{\"item_id\": \"...\"}]}", charID),
 			"finish_shopping": fmt.Sprintf("POST /api/characters/%d/shop {\"done\": true}", charID),
-			"you_chose":       map[bool]string{true: "gold instead of equipment", false: "the equipment pack"}[classGold || bgGold]}}
+			"you_chose":       map[bool]string{false: "gold instead of an equipment package", true: "both equipment packages"}[bothPackages]}}
 	return &st
 }

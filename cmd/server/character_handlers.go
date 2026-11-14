@@ -794,6 +794,8 @@ func handleCharacters(w http.ResponseWriter, r *http.Request) {
 		if hasShield && mainHand != "" && game.ClassTableInt(classKey, 1, "Cantrips") > 0 {
 			mainHand = "" // a caster with a Shield keeps the other hand free for spells with gestures (Nov 13); the setup asks whether to draw the weapon
 		}
+		ensureShopColumn() // the shop prompt reads this: both equipment packages taken, or gold for either
+		db.Exec(`UPDATE characters SET took_both_packages = $1 WHERE id = $2`, hasClassOption && len(classOption.Items) > 0 && origin.Record.BackgroundEquipment != "b", id)
 		db.Exec(`UPDATE characters SET starting_equipment = $1, equipped_armor = NULLIF($2, ''), equipped_shield = $3,
 			equipped_main_hand = NULLIF($4, ''), divine_order = NULLIF($5, ''), primal_order = NULLIF($6, '') WHERE id = $7`,
 			startOption, armorSlug, hasShield, mainHand, divineOrder, primalOrder, id)
