@@ -1,8 +1,8 @@
 package main
 
-// Generating ability scores (Player's Handbook chapter 2, step 3; the SRD 5.2.1 character creation rules): the Standard Array
-// (15, 14, 13, 12, 10, 8), point buy (27 points, every score 8 to 15) or random generation (4d6, drop the lowest, six times).
-// These are the scores before the background's ability increases.
+// Generating ability scores (the SRD 5.2.1 character creation rules, step 3). This server uses the Standard Array only
+// (15, 14, 13, 12, 10, 8); point buy and random generation are refused with that reason. These are the scores before the
+// background's ability increases.
 
 import (
 	"fmt"
@@ -51,9 +51,8 @@ func roll4d6DropLowest() (int, []int) {
 	return s[1] + s[2] + s[3], d
 }
 
-// baseAbilityScores checks the six scores against the chosen method (in the order str, dex, con, int, wis, cha). With "random" the
-// server rolls the six scores and gives the highest to the ability the player ranked highest (by the scores sent), and so on.
-// With no method, the Standard Array and any legal point buy are accepted.
+// baseAbilityScores checks the six scores (in the order str, dex, con, int, wis, cha) against the Standard Array, the only method
+// this server uses; "point_buy" and "random" are refused with that reason. With no method, the scores must be the Standard Array.
 func baseAbilityScores(method string, scores []int) ([]int, string, error) {
 	method = strings.ToLower(strings.TrimSpace(strings.ReplaceAll(method, " ", "_")))
 	help := "This server uses the Standard Array only: 15, 14, 13, 12, 10 and 8, each used once, in any order (point buy and random rolls are not used). These are the scores before your background's increases."
