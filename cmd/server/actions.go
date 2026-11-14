@@ -869,7 +869,7 @@ func handleAction(w http.ResponseWriter, r *http.Request) {
 		}
 		speedAttack = true
 	}
-	attackAction := req.Action == "attack" || req.Action == "offhand_attack" || req.Action == "frenzy_attack" || req.Action == "opportunity_attack" || speedAttack
+	attackAction := req.Action == "attack" || req.Action == "offhand_attack" || req.Action == "frenzy_attack" || req.Action == "opportunity_attack" || req.Action == "horde_breaker" || speedAttack
 	if req.Action == "opportunity_attack" && !hasOAWindow(lobbyID, charID, req.TargetID) {
 		w.WriteHeader(http.StatusBadRequest)
 		json.NewEncoder(w).Encode(map[string]interface{}{"success": false, "error": "no_opportunity",
@@ -1284,141 +1284,7 @@ func resolveStabilizeAction(actorID, targetID int, targetName string) (string, e
 	return fmt.Sprintf("Medicine check for %s: %d %+d = %d vs DC 10; success. They are stable at 0 HP and no longer make death saves.", targetName, roll, mod, total), nil
 }
 
-// Check if character has a condition that grants advantage/disadvantage
-// isRanged indicates if this is a ranged attack (affects prone handling)
-// targetID is the target being attacked (for flanking checks, 0 if unknown)
-func getAttackModifiers(charID int, targetConditions []string, isRanged bool, targetID ...int) (bool, bool) {
-	refreshConcentrationConditions(charID) // Invisibility that its caster's lost Concentration ended (buff_spells_2024.go)
-	hasAdvantage := false
-	hasDisadvantage := false
-
-	// Get attacker conditions and lobby_id for lighting check
-	var conditionsJSON []byte
-	var lobbyID int
-	db.QueryRow("SELECT COALESCE(conditions, '[]'), COALESCE(lobby_id, 0) FROM characters WHERE id = $1", charID).Scan(&conditionsJSON, &lobbyID)
-	var conditions []string
-	json.Unmarshal(conditionsJSON, &conditions)
-	if ml, mid, ok := attackedMonster(charID); ok && mid < 0 { // Ring of Elemental Command: Elemental Bane (legendary_more_2024.go)
-		if e, _, ok2 := monsterCombatant(ml, mid); ok2 && elementalBane(charID, fmt.Sprint(e["monster_key"])) {
-			hasAdvantage = true
-		}
-	}
-	if a, d := deckD20(charID); a || d { // the Mysterious Deck's Jester (Advantage) and Fool (Disadvantage), 72 hours
-		hasAdvantage = hasAdvantage || a
-		hasDisadvantage = hasDisadvantage || d
-	}
-	if buffAttackAdvantage(charID) { // Foresight (buff_spells_2024.go)
-		hasAdvantage = true
-	}
-
-	// Lighting check: Darkness without darkvision/blindsight/truesight = effectively blinded
-	if lobbyID > 0 {
-		attackerVision := canSeeInLighting(charID, getCampaignLighting(lobbyID))
-		if attackerVision == "blind" {
-			// Attacker can't see: disadvantage on attacks
-			hasDisadvantage = true
-		}
-
-		// Check defender's vision for advantage against them
-		if len(targetID) > 0 && targetID[0] > 0 {
-			// Get defender's character info (might be a monster - handle gracefully)
-			var defenderLobbyID int
-			db.QueryRow("SELECT COALESCE(lobby_id, 0) FROM characters WHERE id = $1", targetID[0]).Scan(&defenderLobbyID)
-			if defenderLobbyID > 0 {
-				defenderVision := canSeeInLighting(targetID[0], getCampaignLighting(defenderLobbyID))
-				if defenderVision == "blind" {
-					// Defender can't see: advantage on attacks against them
-					hasAdvantage = true
-				}
-			}
-		}
-	}
-
-	// Attacker conditions
-	for _, cond := range conditions {
-		condLower := strings.ToLower(cond)
-		// Handle parameterized invisible conditions like "invisible:one_with_shadows"
-		if strings.HasPrefix(condLower, "invisible") {
-			// Invisible attacker gets advantage unless defender has blindsight/truesight
-			if len(targetID) > 0 && targetID[0] > 0 {
-				_, defenderBlindsight, defenderTruesight := getCharacterVision(targetID[0])
-				if defenderBlindsight == 0 && defenderTruesight == 0 {
-					hasAdvantage = true
-				}
-			} else {
-				hasAdvantage = true
-			}
-			continue
-		}
-		switch condLower {
-		case "hidden":
-			// Hidden attacker gets advantage
-			if len(targetID) > 0 && targetID[0] > 0 {
-				_, defenderBlindsight, defenderTruesight := getCharacterVision(targetID[0])
-				if defenderBlindsight == 0 && defenderTruesight == 0 {
-					hasAdvantage = true
-				}
-			} else {
-				hasAdvantage = true
-			}
-		case "blinded", "frightened", "poisoned", "prone", "restrained":
-			hasDisadvantage = true
-		}
-
-	}
-
-	// Grappled (SRD 5.2.1): Disadvantage on attack rolls against any target other than the grappler
-	if grappledAttackPenalty(lobbyID, charID, attackTargetID(charID)) {
-		hasDisadvantage = true
-	}
-
-	// Target conditions
-	for _, cond := range targetConditions {
-		condLower := strings.ToLower(cond)
-		// Handle parameterized invisible conditions like "invisible:one_with_shadows"
-		if strings.HasPrefix(condLower, "invisible") {
-			// Check if attacker has special senses that can see invisible creatures
-			// Blindsight and truesight allow seeing invisible creatures (PHB)
-			_, attackerBlindsight, attackerTruesight := getCharacterVision(charID)
-			if attackerBlindsight == 0 && attackerTruesight == 0 && !buffSeesInvisible(charID) { // See Invisibility
-				// Feral Senses (Ranger 18+) negates disadvantage from attacking unseen creatures
-				if !hasFeralSenses(charID) {
-					hasDisadvantage = true
-				}
-			}
-			continue
-		}
-		switch condLower {
-		case "blinded", "paralyzed", "petrified", "stunned", "unconscious", "restrained":
-			hasAdvantage = true
-		case "prone":
-			// Prone (SRD 5.2.1): Advantage if the attacker is within 5 feet of the target, otherwise Disadvantage
-			if attackerWithinFiveFeetOfTarget(charID, isRanged) {
-				hasAdvantage = true
-			} else {
-				hasDisadvantage = true
-			}
-		case "reckless":
-			// Reckless Attack - attacks against the reckless character have advantage
-			hasAdvantage = true
-		}
-	}
-
-	// Elusive (Rogue 18+) negates advantage against you while not incapacitated
-	if len(targetID) > 0 && targetID[0] > 0 && hasAdvantage {
-		if hasElusive(targetID[0]) && !isIncapacitated(targetID[0]) {
-			hasAdvantage = false
-		}
-	}
-
-	// Non-proficient armor imposes disadvantage on all attack rolls
-	// All weapon attacks involve either STR or DEX, so this always applies
-	if isWearingNonProficientArmor(charID) {
-		hasDisadvantage = true
-	}
-
-	return hasAdvantage, hasDisadvantage
-}
+// What gives an attack roll Advantage or Disadvantage is in attackSources (attack_2024.go), the one table every attack reads.
 
 func resolveAction(action, description string, charID int, castSpellSlug ...string) string {
 	return resolveActionWithBonusDash(action, description, charID, nil, castSpellSlug...)
@@ -1438,11 +1304,8 @@ func resolveActionWithBonusDash(action, description string, charID int, bonusDas
 
 	// Check for advantage/disadvantage keywords in description
 	descLower := strings.ToLower(description)
-	// F139: the word "advantage" in a player's description gave the attack Advantage (and "disadvantage" contains "advantage", so asking
-	// for Disadvantage gave both). Advantage and Disadvantage come from the rules the server tracks (conditions, Help, features) or from
-	// the GM: POST /api/gm/grant-advantage gives this character's next attack roll Advantage or Disadvantage.
-	gmAdvantage := func() bool { return takeCombatEffect(lobbyOfChar(charID), charID, "gm_advantage", 0) } // read only where an attack roll is made
-	gmDisadvantage := func() bool { return takeCombatEffect(lobbyOfChar(charID), charID, "gm_disadvantage", 0) }
+	// F139: Advantage and Disadvantage come from the rules the server tracks (conditions, Help, features) or from the GM's ruling
+	// (POST /api/gm/grant-advantage); a player's description can't claim them. All of it is in attackSources (attack_2024.go).
 
 	if action == "opportunity_attack" { // one melee attack with the Reaction (character_oa_2024.go)
 		action = "attack"
@@ -1623,96 +1486,18 @@ func resolveActionWithBonusDash(action, description string, charID int, bonusDas
 		powerAttackNote := ""
 
 		// Get condition-based advantage/disadvantage (pass isRanged for prone handling)
-		hasAdvantage, hasDisadvantage := getAttackModifiers(charID, attackTargetConditions(charID), isRangedAttack)
-		if vexActive(charID) {
-			hasAdvantage = true // Weapon Mastery: Vex
-		}
-		if takeSteadyAim(charID) {
-			hasAdvantage = true // Rogue: Steady Aim
-		}
-		if exposedTarget(charID) {
-			hasAdvantage = true // after a saved Stunning Strike
-		}
-		if assistedTarget(charID) {
-			hasAdvantage = true // an ally's Help (Assist an Attack Roll)
-		}
-		if preciseHunter(charID) {
-			hasAdvantage = true // Ranger level 17: Advantage against the creature marked by Hunter's Mark
-		}
-		if lid, mid, ok := attackedMonster(charID); ok && outlined(lid, mid) {
-			hasAdvantage = true // Faerie Fire
-		}
-
-		// Underwater combat check
-		// Melee attacks have disadvantage, ranged attacks have disadvantage unless exempt weapon
+		// What only this attack knows: its weapon, its range, what the player said. Everything else about the roll (conditions on
+		// both sides, every source of Advantage and Disadvantage, the Armor Class, Bless and Bane, Exhaustion, Sanctuary, Halfling
+		// Luck, the Critical Hit) is the one attack function's (attack_2024.go). Before Nov 14 this case, the off-hand attack,
+		// Horde Breaker, the Monk's strikes and Cleave each gathered their own subset of it.
 		var lobbyID int
 		db.QueryRow("SELECT lobby_id FROM characters WHERE id = $1", charID).Scan(&lobbyID)
+		atk := characterWeaponAttack(charID, attackMod, weapon, hasWeapon, weaponKey, description)
 		underwaterMiss.Delete(charID) // a flag left by an attack that stopped early must not touch this one
-		if isUnderwaterCombat(lobbyID) {
-			if !isRangedAttack {
-				// a melee weapon attack has Disadvantage unless the weapon deals Piercing damage (or the attacker has a Swim Speed)
-				if !(hasWeapon && strings.EqualFold(weapon.DamageType, "piercing")) && !hasSwimSpeed(charID) {
-					hasDisadvantage = true
-				}
-			} else {
-				// a ranged weapon attack has Disadvantage within normal range and automatically misses beyond it
-				hasDisadvantage = true
-				if _, mid, ok := attackedMonster(charID); ok && attackAtLongRange(lobbyID, charID, mid, description) {
-					underwaterMiss.Store(charID, true)
-				}
-			}
+		if atk.longRange && isUnderwaterCombat(lobbyID) {
+			underwaterMiss.Store(charID, true) // underwater, a ranged weapon attack beyond its normal range automatically misses
 		}
-
-		// Close-range ranged attack disadvantage
-		// "When you make a ranged attack with a weapon, a spell, or some other means,
-		// you have disadvantage on the attack roll if you are within 5 feet of a hostile
-		// creature who can see you and who isn't incapacitated."
-		// Crossbow Expert negates this penalty.
-		closeRangeNote := ""
-		isCloseRange := strings.Contains(descLower, "close range") ||
-			strings.Contains(descLower, "in melee") ||
-			strings.Contains(descLower, "within 5") ||
-			strings.Contains(descLower, "point blank") ||
-			strings.Contains(descLower, "point-blank")
-		if _, mid, ok := attackedMonster(charID); ok && isRangedAttack && attackAtLongRange(lobbyID, charID, mid, description) {
-			hasDisadvantage = true
-			closeRangeNote += " (long range: Disadvantage)"
-		}
-		if isRangedAttack && isCloseRange {
-			hasDisadvantage = true
-			closeRangeNote = " (close range: Disadvantage)"
-		}
-
-		// Melee range: a ranged attack with an enemy within 5 feet has Disadvantage.
-		// The game has no map, so this is the character's tracked melee range state (or
-		// the close_range flag the player sent).
-		if hasWeapon && !strings.Contains(closeRangeNote, "close range") {
-			if meleeDisadv, meleeNote := meleeRangeEffects(weapon, description, enemyWithinFive(lobbyID, charID, description),
-				false); meleeDisadv || meleeNote != "" {
-				if meleeDisadv {
-					hasDisadvantage = true
-				}
-				closeRangeNote += meleeNote
-			}
-		}
-
-		// Override with explicit request
-		if gmAdvantage() {
-			hasAdvantage = true
-		}
-		if grapplerAdvantage(charID) { // Grappler (F181, items_c6_2024.go)
-			hasAdvantage = true
-			closeRangeNote += " [Grappler: Advantage against the creature you grapple]"
-		}
-		if adv, dis, note := oathbowRoll(charID, weaponKey, description); adv || dis { // Oathbow (items_c4_2024.go)
-			hasAdvantage = hasAdvantage || adv
-			hasDisadvantage = hasDisadvantage || dis
-			closeRangeNote += note
-		}
-		if gmDisadvantage() {
-			hasDisadvantage = true
-		}
-
+		reckless := false
 		// Reckless Attack (Barbarian level 2+)
 		// "When you make your first attack on your turn, you can decide to attack recklessly"
 		// Grants advantage on STR melee attacks, but attacks against you have advantage until next turn
@@ -1730,7 +1515,7 @@ func resolveActionWithBonusDash(action, description string, charID int, bonusDas
 				}
 
 				if isSTRMelee {
-					hasAdvantage = true
+					reckless = true
 					recklessNote = " ⚔️ RECKLESS!"
 
 					// Apply "reckless" condition (grants enemies advantage against you until your next turn)
@@ -1763,16 +1548,8 @@ func resolveActionWithBonusDash(action, description string, charID int, bonusDas
 		}
 		// 2024 Brutal Strike (level 9): forgo the Advantage of this reckless Strength attack for extra damage and an effect
 		brutalStrike := brutalStrikeWanted(class, level, descLower, strings.Contains(recklessNote, "RECKLESS!"))
-		if brutalStrike {
-			hasAdvantage = false
-		}
-
-		// Check for auto-crit against paralyzed/unconscious targets
-		// Try to parse target from description (e.g., "attack goblin" or "attack the orc")
-		autoCrit := false
-		autoCritReason := ""
+		// a character named in the description (a target_id names a monster)
 		targetID := parseTargetFromDescription(description, charID)
-
 		// Charmed: Can't attack the charmer
 		if targetID > 0 && isCharmedBy(charID, targetID) {
 			var targetName string
@@ -1783,80 +1560,33 @@ func resolveActionWithBonusDash(action, description string, charID int, bonusDas
 			return fmt.Sprintf("Cannot attack %s — you are charmed by them!", targetName)
 		}
 
-		// Sanctuary check
-		// Target protected by Sanctuary requires WIS save or must choose different target
-		sanctuaryBlock, _ := checkSanctuaryProtection(charID, targetID, wis)
-		if sanctuaryBlock != "" {
-			return sanctuaryBlock
+		atk.forgoAdvantage = brutalStrike
+		if atk.target == 0 && targetID > 0 {
+			atk.target = targetID
 		}
-
-		if reason := monsterAutoCritReason(charID, isRangedAttack); reason != "" && !autoCrit {
-			autoCrit = true
-			autoCritReason = reason
+		if reckless {
+			atk.extraAdv = append(atk.extraAdv, "Reckless Attack")
 		}
-		if targetID > 0 && isAutoCrit(targetID) {
-			autoCrit = true
-			conditions := getCharConditions(targetID)
-			for _, c := range conditions {
-				if strings.ToLower(c) == "paralyzed" || strings.ToLower(c) == "unconscious" {
-					autoCritReason = c
-					break
-				}
+		if lost, why := atk.blocked(); lost { // Sanctuary, the Ethereal Plane
+			return why
+		}
+		rolled, out, luckNote := atk.roll()
+		hasAdvantage, hasDisadvantage := len(rolled.Advantage) > 0, len(rolled.Disadvantage) > 0 // a Rogue's Sneak Attack asks
+		attackRoll, totalAttack := out.Natural, out.Total
+		rollInfo := rolled.Describe() + luckNote + recklessNote + rageNote + magicAmmoNote
+		// A Critical Hit: decided by the roll against the target's Armor Class. With no target the server knows, the GM judges
+		// the hit, and the damage dice are doubled for a roll in the critical range.
+		crit := out.Critical
+		if atk.target == 0 {
+			crit = atk.critNoTarget(out)
+		}
+		autoCritReason := ""
+		if crit && rolled.AutoCrit && attackRoll < game.CriticalHitRange(subclass.String, level) {
+			autoCritReason = "paralyzed"
+			if hasCond(atk.targetConds, "unconscious") {
+				autoCritReason = "unconscious"
 			}
 		}
-
-		// Roll attack (advantage and disadvantage cancel out)
-		var attackRoll, roll1, roll2 int
-		rollType := "normal"
-		if hasAdvantage && !hasDisadvantage {
-			attackRoll, roll1, roll2 = game.RollWithAdvantage()
-			rollType = "advantage"
-		} else if hasDisadvantage && !hasAdvantage {
-			attackRoll, roll1, roll2 = game.RollWithDisadvantage()
-			rollType = "disadvantage"
-		} else {
-			attackRoll = game.RollDie(20)
-			roll1, roll2 = attackRoll, 0
-		}
-
-		// Halfling Lucky - reroll nat 1s on attack rolls
-		attackHalflingLuckyUsed := false
-		attackHalflingLuckyOriginal := 0
-		if attackRoll == 1 {
-			newRoll, rerolled, origRoll := applyHalflingLucky(attackRoll, charID)
-			if rerolled {
-				attackHalflingLuckyUsed = true
-				attackHalflingLuckyOriginal = origRoll
-				attackRoll = newRoll
-				roll1 = newRoll
-			}
-		}
-
-		totalAttack := attackRoll + attackMod - game.ExhaustionD20Penalty(exhaustionLevelOf(charID))
-
-		rollInfo := ""
-		if rollType != "normal" {
-			rollInfo = fmt.Sprintf(" [%s: %d, %d → %d]", rollType, roll1, roll2, attackRoll)
-		}
-		rollInfo += rageNote
-		// Add Halfling Lucky note to roll info
-		if attackHalflingLuckyUsed {
-			rollInfo = fmt.Sprintf(" 🍀[Lucky: %d→%d]", attackHalflingLuckyOriginal, attackRoll) + rollInfo
-		}
-		// Add reckless note to roll info
-		if recklessNote != "" {
-			rollInfo = recklessNote + rollInfo
-		}
-		// Add close-range note to roll info
-		if closeRangeNote != "" {
-			rollInfo = closeRangeNote + rollInfo
-		}
-		rollInfo += magicAmmoNote
-		if adj, note := spellRollAdjust(lobbyID, charID, "attack"); note != "" { // Bless, Bane
-			totalAttack += adj
-			rollInfo += note
-		}
-
 		// 2024 Weapon Mastery: say what the weapon's Mastery property adds, if the character has it
 		masteryUses.Delete(charID)
 		pendingBrutal.Delete(charID)
@@ -1872,294 +1602,8 @@ func resolveActionWithBonusDash(action, description string, charID int, bonusDas
 			}
 		}
 
-		// Auto-crit against paralyzed/unconscious targets (within 5ft assumed for melee)
-		if autoCrit && attackRoll != 1 {
-			// Critical hit - double damage dice
-			damageDice := unarmedDice(class, level)
-			if hasWeapon {
-				damageDice = monkWeaponDice(charID, class, level, weapon) // the Martial Arts die for a Monk weapon
-			}
-
-			// Great Weapon Fighting - reroll 1s and 2s on damage dice
-			autoCritGWFNote := ""
-			autoCritIsTwoHanded := hasWeapon && (containsProperty(weapon.Properties, "two-handed") ||
-				(containsProperty(weapon.Properties, "versatile") && strings.Contains(descLower, "two hand")))
-
-			var dmg int
-			if autoCritIsTwoHanded && hasFightingStyle(charID, "great_weapon_fighting") {
-				dmg = game.RollDamageGWF(damageDice, true) + damageMod
-				autoCritGWFNote = " (GWF)"
-			} else {
-				dmg = game.RollDamage(damageDice, true) + damageMod
-			}
-
-			// Dueling - +2 damage with one-handed melee
-			autoCritDuelingNote := ""
-			autoCritIsOneHandedMelee := hasWeapon && weapon.Type == "melee" && !containsProperty(weapon.Properties, "two-handed")
-			if autoCritIsOneHandedMelee && hasFightingStyle(charID, "dueling") {
-				dmg += 2
-				autoCritDuelingNote = " (Dueling +2)"
-			}
-
-			if fd, fn := frenzyDamage(charID, class, subclass, level, usesStrength && !isRangedAttack, true); fd > 0 {
-				dmg += fd
-				rollInfo += fn
-			}
-			if rd, rn := radiantStrikes(charID, class, level, !isRangedAttack, true); rd > 0 {
-				dmg += rd
-				rollInfo += rn
-			}
-			if pd, pn := primalStrike(charID, class, level, descLower, true); pd > 0 {
-				dmg += pd
-				rollInfo += pn
-			}
-			if ed, en := eldritchSmite(charID, class, level, descLower, true); en != "" {
-				dmg += ed
-				rollInfo += en
-			}
-			if brutalStrike {
-				bd, bn := brutalStrikeHit(charID, level, descLower, true)
-				dmg += bd
-				rollInfo += bn
-			}
-
-			weaponName := "unarmed"
-			if hasWeapon {
-				weaponName = weapon.Name
-			}
-
-			// Check for Hunter's Colossus Slayer on auto-crit
-			colossusSlayerNote := ""
-			if strings.ToLower(class) == "ranger" && subclass.Valid && subclass.String == "hunter" && level >= 3 {
-				var choicesJSON []byte
-				db.QueryRow("SELECT COALESCE(subclass_choices, '{}') FROM characters WHERE id = $1", charID).Scan(&choicesJSON)
-				var choices map[string]string
-				json.Unmarshal(choicesJSON, &choices)
-				if choices["hunters_prey"] == "colossus_slayer" {
-					if woundedTarget(charID, targetID) { // F146: a monster (negative id) too
-						colossusSlayerDmg := game.RollDie(8) + game.RollDie(8)
-						dmg += colossusSlayerDmg
-						colossusSlayerNote = fmt.Sprintf(" (+%d Colossus Slayer, 2d8 vs wounded)", colossusSlayerDmg)
-					}
-				}
-			}
-
-			// Check for Life Cleric's Divine Strike on auto-crit
-			// Double dice on crit: 2d8 at level 8+, 4d8 at level 14+
-			divineStrikeNote := ""
-			if strings.ToLower(class) == "cleric" && level >= 7 && choseBlessedStrikesDivine(charID) {
-				var divineStrikeDmg int
-				if level >= 14 {
-					divineStrikeDmg = game.RollDie(8) + game.RollDie(8) + game.RollDie(8) + game.RollDie(8) // 4d8 on crit
-					dmg += divineStrikeDmg
-					divineStrikeNote = fmt.Sprintf(" (+%d Divine Strike, 4d8 radiant)", divineStrikeDmg)
-				} else {
-					divineStrikeDmg = game.RollDie(8) + game.RollDie(8) // 2d8 on crit
-					dmg += divineStrikeDmg
-					divineStrikeNote = fmt.Sprintf(" (+%d Divine Strike, 2d8 radiant)", divineStrikeDmg)
-				}
-			}
-
-			// Check for Rogue's Sneak Attack on auto-crit
-			// Double dice on crit
-			sneakAttackNote := ""
-			if rogueLevel := classLevelIn(charID, class, level, "rogue"); rogueLevel > 0 { // a Rogue taken later counts (multiclass)
-				var sneakUsed bool
-				db.QueryRow("SELECT COALESCE(sneak_attack_used, false) FROM characters WHERE id = $1", charID).Scan(&sneakUsed)
-
-				if !sneakUsed && canSneakAttack(charID, weaponKey, hasAdvantage, hasDisadvantage, targetID) {
-					sneakDice, cunningNote := sneakDiceWithCunning(charID, rogueLevel, descLower)
-					rollInfo += cunningNote
-					sneakDmg := game.RollDamage(sneakDice, true) // Doubled on crit
-					dmg += sneakDmg
-					// Parse dice count for display (e.g., "3d6" -> "6d6" on crit)
-					var diceCount int
-					fmt.Sscanf(sneakDice, "%dd6", &diceCount)
-					sneakAttackNote = fmt.Sprintf(" (+%d Sneak Attack, %dd6)", sneakDmg, diceCount*2)
-					db.Exec("UPDATE characters SET sneak_attack_used = true WHERE id = $1", charID)
-				}
-			}
-
-			// Check for Divine Smite on auto-crit
-			divineSmiteNote := ""
-			wantsSmite, smiteSlot := parseDivineSmiteSlot(description)
-			if wantsSmite {
-				canSmite, smiteErr := canUseDivineSmite(charID, smiteSlot, wantsFreeSmite(description))
-				if canSmite {
-					isUndead := isUndeadOrFiend(targetID)
-					smiteDmg, smiteDice := calculateDivineSmiteDamage(smiteSlot, isUndead, true) // true = crit
-					dmg += smiteDmg
-					addRider(charID, "radiant", smiteDmg)
-					consumeSpellSlotForSmite(charID, smiteSlot, wantsFreeSmite(description))
-					undeadBonus := ""
-					if isUndead {
-						undeadBonus = " +undead/fiend"
-					}
-					divineSmiteNote = fmt.Sprintf(" (+%d Divine Smite, %s radiant%s)", smiteDmg, smiteDice, undeadBonus) + smiteOfProtection(lobbyID, charID)
-				} else {
-					divineSmiteNote = fmt.Sprintf(" [Smite failed: %s]", smiteErr)
-				}
-			}
-
-			ldDmg, autoCritLifedrinkerNote := lifedrinker2024(charID, class, level, isRangedAttack, true, description) // Lifedrinker (2024)
-			dmg += ldDmg
-
-			// Hunter's Mark / Hex bonus damage on auto-crit
-			// +1d6 damage (doubled on crit) to attacks against marked target
-			autoCritMarkDmg, autoCritMarkNote := getMarkBonusDamage(charID, targetID, true)
-			dmg += autoCritMarkDmg
-
-			recordAttackOutcome(charID, attackOutcome{Weapon: weaponName, Total: totalAttack, Natural: attackRoll, Crit: true, Damage: dmg, DamageType: attackDamageType(hasWeapon, weapon), RollInfo: archeryNote + rollInfo, SneakUsed: sneakAttackNote != "", SneakNote: autoCritGWFNote + autoCritDuelingNote + sneakAttackNote + colossusSlayerNote + divineStrikeNote + divineSmiteNote + autoCritLifedrinkerNote + autoCritMarkNote, Dice: damageDice, DiceMod: damageMod})
-			return fmt.Sprintf("Attack with %s: %d (AUTO-CRIT - target is %s!)%s%s Damage: %d%s%s%s%s%s%s%s%s (doubled dice)",
-				weaponName, totalAttack, autoCritReason, archeryNote, rollInfo, dmg, autoCritGWFNote, autoCritDuelingNote, colossusSlayerNote, divineStrikeNote, sneakAttackNote, divineSmiteNote, autoCritLifedrinkerNote, autoCritMarkNote)
-		}
-
-		// Get crit range for this character (Champion subclass can lower it)
-		critRange := game.CriticalHitRange(subclass.String, level)
-
-		if attackRoll >= critRange {
-			// Critical hit - double damage dice
-			damageDice := unarmedDice(class, level)
-			if hasWeapon {
-				damageDice = monkWeaponDice(charID, class, level, weapon) // the Martial Arts die for a Monk weapon
-			}
-
-			// Great Weapon Fighting - reroll 1s and 2s on damage dice
-			critGWFNote := ""
-			critIsTwoHanded := hasWeapon && (containsProperty(weapon.Properties, "two-handed") ||
-				(containsProperty(weapon.Properties, "versatile") && strings.Contains(descLower, "two hand")))
-
-			var dmg int
-			if critIsTwoHanded && hasFightingStyle(charID, "great_weapon_fighting") {
-				dmg = game.RollDamageGWF(damageDice, true) + damageMod
-				critGWFNote = " (GWF)"
-			} else {
-				dmg = game.RollDamage(damageDice, true) + damageMod
-			}
-
-			// Dueling - +2 damage with one-handed melee
-			critDuelingNote := ""
-			critIsOneHandedMelee := hasWeapon && weapon.Type == "melee" && !containsProperty(weapon.Properties, "two-handed")
-			if critIsOneHandedMelee && hasFightingStyle(charID, "dueling") {
-				dmg += 2
-				critDuelingNote = " (Dueling +2)"
-			}
-
-			weaponName := "unarmed"
-			if hasWeapon {
-				weaponName = weapon.Name
-			}
-
-			// Check for Hunter's Colossus Slayer on crit
-			// Extra 1d8 (doubled on crit = 2d8) against wounded targets
-			colossusSlayerNote := ""
-			if strings.ToLower(class) == "ranger" && subclass.Valid && subclass.String == "hunter" && level >= 3 {
-				var choicesJSON []byte
-				db.QueryRow("SELECT COALESCE(subclass_choices, '{}') FROM characters WHERE id = $1", charID).Scan(&choicesJSON)
-				var choices map[string]string
-				json.Unmarshal(choicesJSON, &choices)
-				if choices["hunters_prey"] == "colossus_slayer" {
-					if woundedTarget(charID, targetID) { // F146: a monster (negative id) too
-						colossusSlayerDmg := game.RollDie(8) + game.RollDie(8) // Doubled on crit
-						dmg += colossusSlayerDmg
-						colossusSlayerNote = fmt.Sprintf(" (+%d Colossus Slayer, 2d8 vs wounded)", colossusSlayerDmg)
-					}
-				}
-			}
-
-			// Check for Life Cleric's Divine Strike on crit
-			// Double dice on crit: 2d8 at level 8+, 4d8 at level 14+
-			divineStrikeNote := ""
-			if strings.ToLower(class) == "cleric" && level >= 7 && choseBlessedStrikesDivine(charID) {
-				var divineStrikeDmg int
-				if level >= 14 {
-					divineStrikeDmg = game.RollDie(8) + game.RollDie(8) + game.RollDie(8) + game.RollDie(8) // 4d8 on crit
-					dmg += divineStrikeDmg
-					divineStrikeNote = fmt.Sprintf(" (+%d Divine Strike, 4d8 radiant)", divineStrikeDmg)
-				} else {
-					divineStrikeDmg = game.RollDie(8) + game.RollDie(8) // 2d8 on crit
-					dmg += divineStrikeDmg
-					divineStrikeNote = fmt.Sprintf(" (+%d Divine Strike, 2d8 radiant)", divineStrikeDmg)
-				}
-			}
-
-			// Check for Rogue's Sneak Attack on crit
-			// Double dice on crit
-			sneakAttackNote := ""
-			if rogueLevel := classLevelIn(charID, class, level, "rogue"); rogueLevel > 0 { // a Rogue taken later counts (multiclass)
-				var sneakUsed bool
-				db.QueryRow("SELECT COALESCE(sneak_attack_used, false) FROM characters WHERE id = $1", charID).Scan(&sneakUsed)
-
-				if !sneakUsed && canSneakAttack(charID, weaponKey, hasAdvantage, hasDisadvantage, targetID) {
-					sneakDice, cunningNote := sneakDiceWithCunning(charID, rogueLevel, descLower)
-					rollInfo += cunningNote
-					sneakDmg := game.RollDamage(sneakDice, true) // Doubled on crit
-					dmg += sneakDmg
-					var diceCount int
-					fmt.Sscanf(sneakDice, "%dd6", &diceCount)
-					sneakAttackNote = fmt.Sprintf(" (+%d Sneak Attack, %dd6)", sneakDmg, diceCount*2)
-					db.Exec("UPDATE characters SET sneak_attack_used = true WHERE id = $1", charID)
-				}
-			}
-
-			// Check for Divine Smite on crit
-			divineSmiteNote := ""
-			wantsSmite, smiteSlot := parseDivineSmiteSlot(description)
-			if wantsSmite {
-				canSmite, smiteErr := canUseDivineSmite(charID, smiteSlot, wantsFreeSmite(description))
-				if canSmite {
-					isUndead := isUndeadOrFiend(targetID)
-					smiteDmg, smiteDice := calculateDivineSmiteDamage(smiteSlot, isUndead, true) // true = crit
-					dmg += smiteDmg
-					addRider(charID, "radiant", smiteDmg)
-					consumeSpellSlotForSmite(charID, smiteSlot, wantsFreeSmite(description))
-					undeadBonus := ""
-					if isUndead {
-						undeadBonus = " +undead/fiend"
-					}
-					divineSmiteNote = fmt.Sprintf(" (+%d Divine Smite, %s radiant%s)", smiteDmg, smiteDice, undeadBonus) + smiteOfProtection(lobbyID, charID)
-				} else {
-					divineSmiteNote = fmt.Sprintf(" [Smite failed: %s]", smiteErr)
-				}
-			}
-
-			ldDmg, critLifedrinkerNote := lifedrinker2024(charID, class, level, isRangedAttack, true, description) // Lifedrinker (2024)
-			dmg += ldDmg
-
-			if fd, fn := frenzyDamage(charID, class, subclass, level, usesStrength && !isRangedAttack, true); fd > 0 {
-				dmg += fd
-				rollInfo += fn
-			}
-			if rd, rn := radiantStrikes(charID, class, level, !isRangedAttack, true); rd > 0 {
-				dmg += rd
-				rollInfo += rn
-			}
-			if pd, pn := primalStrike(charID, class, level, descLower, true); pd > 0 {
-				dmg += pd
-				rollInfo += pn
-			}
-			if ed, en := eldritchSmite(charID, class, level, descLower, true); en != "" {
-				dmg += ed
-				rollInfo += en
-			}
-			if brutalStrike {
-				bd, bn := brutalStrikeHit(charID, level, descLower, true)
-				dmg += bd
-				rollInfo += bn
-			}
-			// Hunter's Mark / Hex bonus damage on crit
-			// +1d6 damage (doubled on crit) to attacks against marked target
-			critMarkDmg, critMarkNote := getMarkBonusDamage(charID, targetID, true)
-			dmg += critMarkDmg
-
-			critLabel := "nat 20 CRITICAL!"
-			if critRange < 20 && attackRoll < 20 {
-				critLabel = fmt.Sprintf("nat %d CRITICAL! (Improved Critical)", attackRoll)
-			}
-			// Include power attack note in crit result
-			recordAttackOutcome(charID, attackOutcome{Weapon: weaponName, Total: totalAttack, Natural: attackRoll, Crit: true, Damage: dmg, DamageType: attackDamageType(hasWeapon, weapon), RollInfo: archeryNote + rollInfo, SneakUsed: sneakAttackNote != "", SneakNote: critGWFNote + critDuelingNote + sneakAttackNote + colossusSlayerNote + divineStrikeNote + divineSmiteNote + critLifedrinkerNote + critMarkNote, Dice: damageDice, DiceMod: damageMod})
-			return fmt.Sprintf("Attack with %s: %d (%s)%s%s%s Damage: %d%s%s%s%s%s%s%s%s", weaponName, totalAttack, critLabel, archeryNote, powerAttackNote, rollInfo, dmg, critGWFNote, critDuelingNote, colossusSlayerNote, divineStrikeNote, sneakAttackNote, divineSmiteNote, critLifedrinkerNote, critMarkNote)
-		} else if attackRoll == 1 && !attackHalflingLuckyUsed && !peerlessWillHit(charID) {
+		// A natural 1 misses (unless Peerless Aim will turn it into a hit: the damage below is then rolled as for a hit)
+		if attackRoll == 1 && !peerlessWillHit(charID) {
 			// Critical miss (nat 1) - but not if Halfling Lucky was used (they already rerolled), nor when Peerless Aim will turn it into a hit
 			// (O-10: the hit then rolls its damage and every on-hit extra in the normal branch below)
 			fumbleWeapon := "your weapon"
@@ -2170,11 +1614,12 @@ func resolveActionWithBonusDash(action, description string, charID int, bonusDas
 			if hasWeapon {
 				fumbleDice = monkWeaponDice(charID, class, level, weapon)
 			}
-			recordAttackOutcome(charID, attackOutcome{Weapon: fumbleWeapon, Total: totalAttack, Natural: 1, Fumble: true, DamageType: attackDamageType(hasWeapon, weapon), RollInfo: archeryNote + rollInfo, Dice: fumbleDice, DiceMod: damageMod})
+			recordAttackOutcome(charID, attackOutcome{Weapon: fumbleWeapon, Total: totalAttack, Natural: 1, Fumble: true, Roll: rolled, Judged: atk.target != 0, DamageType: attackDamageType(hasWeapon, weapon), RollInfo: archeryNote + rollInfo, Dice: fumbleDice, DiceMod: damageMod})
 			return fmt.Sprintf("Attack roll: %d (natural 1: miss)%s", totalAttack, rollInfo)
 		}
 
-		// Normal hit
+		// The damage of a hit, rolled once here whether the hit is ordinary or a Critical Hit (crit doubles the dice). Nov 14: this was
+		// three copies of about 140 lines each (an automatic Critical Hit, a Critical Hit, an ordinary hit).
 		damageDice := unarmedDice(class, level)
 		weaponName := "unarmed"
 		if hasWeapon {
@@ -2190,10 +1635,10 @@ func resolveActionWithBonusDash(action, description string, charID int, bonusDas
 		// Roll damage (with GWF rerolls if applicable)
 		var dmg int
 		if isTwoHanded && hasFightingStyle(charID, "great_weapon_fighting") {
-			dmg = game.RollDamageGWF(damageDice, false) + damageMod
+			dmg = game.RollDamageGWF(damageDice, crit) + damageMod
 			gwfNote = " (GWF)"
 		} else {
-			dmg = game.RollDamage(damageDice, false) + damageMod
+			dmg = game.RollDamage(damageDice, crit) + damageMod
 		}
 
 		// Dueling - +2 damage with one-handed melee, no other weapons
@@ -2206,24 +1651,24 @@ func resolveActionWithBonusDash(action, description string, charID int, bonusDas
 			duelingNote = " (Dueling +2)"
 		}
 
-		if fd, fn := frenzyDamage(charID, class, subclass, level, usesStrength && !isRangedAttack, false); fd > 0 {
+		if fd, fn := frenzyDamage(charID, class, subclass, level, usesStrength && !isRangedAttack, crit); fd > 0 {
 			dmg += fd
 			rollInfo += fn
 		}
-		if rd, rn := radiantStrikes(charID, class, level, !isRangedAttack, false); rd > 0 {
+		if rd, rn := radiantStrikes(charID, class, level, !isRangedAttack, crit); rd > 0 {
 			dmg += rd
 			rollInfo += rn
 		}
-		if pd, pn := primalStrike(charID, class, level, descLower, false); pd > 0 {
+		if pd, pn := primalStrike(charID, class, level, descLower, crit); pd > 0 {
 			dmg += pd
 			rollInfo += pn
 		}
-		if ed, en := eldritchSmite(charID, class, level, descLower, false); en != "" {
+		if ed, en := eldritchSmite(charID, class, level, descLower, crit); en != "" {
 			dmg += ed
 			rollInfo += en
 		}
 		if brutalStrike {
-			bd, bn := brutalStrikeHit(charID, level, descLower, false)
+			bd, bn := brutalStrikeHit(charID, level, descLower, crit)
 			dmg += bd
 			rollInfo += bn
 		}
@@ -2241,9 +1686,9 @@ func resolveActionWithBonusDash(action, description string, charID int, bonusDas
 			if choices["hunters_prey"] == "colossus_slayer" {
 				// Check if target is wounded (HP < max_hp)
 				if woundedTarget(charID, targetID) { // F146: a monster (negative id) too
-					colossusSlayerDmg = game.RollDie(8)
+					colossusSlayerDmg = game.RollDamage("1d8", crit)
 					dmg += colossusSlayerDmg
-					colossusSlayerNote = fmt.Sprintf(" (+%d Colossus Slayer, 1d8 vs wounded)", colossusSlayerDmg)
+					colossusSlayerNote = fmt.Sprintf(" (+%d Colossus Slayer, %s vs wounded)", colossusSlayerDmg, critDice("1d8", crit))
 				}
 			}
 		}
@@ -2254,13 +1699,13 @@ func resolveActionWithBonusDash(action, description string, charID int, bonusDas
 		if strings.ToLower(class) == "cleric" && level >= 7 && choseBlessedStrikesDivine(charID) {
 			var divineStrikeDmg int
 			if level >= 14 {
-				divineStrikeDmg = game.RollDie(8) + game.RollDie(8)
+				divineStrikeDmg = game.RollDamage("2d8", crit)
 				dmg += divineStrikeDmg
-				divineStrikeNote = fmt.Sprintf(" (+%d Divine Strike, 2d8 radiant)", divineStrikeDmg)
+				divineStrikeNote = fmt.Sprintf(" (+%d Divine Strike, %s radiant)", divineStrikeDmg, critDice("2d8", crit))
 			} else {
-				divineStrikeDmg = game.RollDie(8)
+				divineStrikeDmg = game.RollDamage("1d8", crit)
 				dmg += divineStrikeDmg
-				divineStrikeNote = fmt.Sprintf(" (+%d Divine Strike, 1d8 radiant)", divineStrikeDmg)
+				divineStrikeNote = fmt.Sprintf(" (+%d Divine Strike, %s radiant)", divineStrikeDmg, critDice("1d8", crit))
 			}
 		}
 
@@ -2275,9 +1720,9 @@ func resolveActionWithBonusDash(action, description string, charID int, bonusDas
 			if !sneakUsed && canSneakAttack(charID, weaponKey, hasAdvantage, hasDisadvantage, targetID) {
 				sneakDice, cunningNote := sneakDiceWithCunning(charID, rogueLevel, descLower)
 				rollInfo += cunningNote
-				sneakDmg := game.RollDamage(sneakDice, false)
+				sneakDmg := game.RollDamage(sneakDice, crit)
 				dmg += sneakDmg
-				sneakAttackNote = fmt.Sprintf(" (+%d Sneak Attack, %s)", sneakDmg, sneakDice)
+				sneakAttackNote = fmt.Sprintf(" (+%d Sneak Attack, %s)", sneakDmg, critDice(sneakDice, crit))
 
 				// Mark sneak attack as used this turn
 				db.Exec("UPDATE characters SET sneak_attack_used = true WHERE id = $1", charID)
@@ -2292,7 +1737,7 @@ func resolveActionWithBonusDash(action, description string, charID int, bonusDas
 			canSmite, smiteErr := canUseDivineSmite(charID, smiteSlot, wantsFreeSmite(description))
 			if canSmite {
 				isUndead := isUndeadOrFiend(targetID)
-				smiteDmg, smiteDice := calculateDivineSmiteDamage(smiteSlot, isUndead, false) // false = not crit
+				smiteDmg, smiteDice := calculateDivineSmiteDamage(smiteSlot, isUndead, crit)
 				dmg += smiteDmg
 				addRider(charID, "radiant", smiteDmg)
 				consumeSpellSlotForSmite(charID, smiteSlot, wantsFreeSmite(description))
@@ -2309,17 +1754,28 @@ func resolveActionWithBonusDash(action, description string, charID int, bonusDas
 		// Lifedrinker (Warlock Invocation)
 		// When you hit with your pact weapon, add CHA modifier as necrotic damage
 		// Requires level 12+ and Pact of the Blade
-		ldDmg, lifedrinkerNote := lifedrinker2024(charID, class, level, isRangedAttack, false, description) // Lifedrinker (2024)
+		ldDmg, lifedrinkerNote := lifedrinker2024(charID, class, level, isRangedAttack, crit, description) // Lifedrinker (2024)
 		dmg += ldDmg
 
 		// Hunter's Mark / Hex bonus damage on normal hit
 		// +1d6 damage to attacks against marked target
-		markDmg, markNote := getMarkBonusDamage(charID, targetID, false)
+		markDmg, markNote := getMarkBonusDamage(charID, targetID, crit)
 		dmg += markDmg
 
 		// Include power attack note in normal hit result
-		recordAttackOutcome(charID, attackOutcome{Weapon: weaponName, Total: totalAttack, Natural: attackRoll, Fumble: attackRoll == 1, Damage: dmg, DamageType: attackDamageType(hasWeapon, weapon), RollInfo: archeryNote + rollInfo, SneakUsed: sneakAttackNote != "", SneakNote: gwfNote + duelingNote + sneakAttackNote + colossusSlayerNote + divineStrikeNote + divineSmiteNote + lifedrinkerNote + markNote, Dice: damageDice, DiceMod: damageMod})
-		return fmt.Sprintf("Attack with %s: %d to hit%s%s%s. Damage: %d%s%s%s%s%s%s%s%s", weaponName, totalAttack, archeryNote, powerAttackNote, rollInfo, dmg, gwfNote, duelingNote, colossusSlayerNote, divineStrikeNote, sneakAttackNote, divineSmiteNote, lifedrinkerNote, markNote)
+		recordAttackOutcome(charID, attackOutcome{Weapon: weaponName, Total: totalAttack, Natural: attackRoll, Crit: crit, Fumble: attackRoll == 1, Roll: rolled, Judged: atk.target != 0, Hit: out.Hit, Damage: dmg, DamageType: attackDamageType(hasWeapon, weapon), RollInfo: archeryNote + rollInfo, SneakUsed: sneakAttackNote != "", SneakNote: gwfNote + duelingNote + sneakAttackNote + colossusSlayerNote + divineStrikeNote + divineSmiteNote + lifedrinkerNote + markNote, Dice: damageDice, DiceMod: damageMod})
+		extras := gwfNote + duelingNote + colossusSlayerNote + divineStrikeNote + sneakAttackNote + divineSmiteNote + lifedrinkerNote + markNote
+		switch {
+		case autoCritReason != "":
+			return fmt.Sprintf("Attack with %s: %d (AUTO-CRIT - target is %s!)%s%s%s Damage: %d%s (doubled dice)", weaponName, totalAttack, autoCritReason, archeryNote, powerAttackNote, rollInfo, dmg, extras)
+		case crit:
+			critLabel := "nat 20 CRITICAL!"
+			if attackRoll < 20 {
+				critLabel = fmt.Sprintf("nat %d CRITICAL! (Improved Critical)", attackRoll)
+			}
+			return fmt.Sprintf("Attack with %s: %d (%s)%s%s%s Damage: %d%s", weaponName, totalAttack, critLabel, archeryNote, powerAttackNote, rollInfo, dmg, extras)
+		}
+		return fmt.Sprintf("Attack with %s: %d to hit%s%s%s. Damage: %d%s", weaponName, totalAttack, archeryNote, powerAttackNote, rollInfo, dmg, extras)
 
 	case "grapple", "shove":
 		return playerUnarmedOption(charID, action, description) // F180 (items_c6_2024.go)
@@ -3684,87 +3140,52 @@ func resolveActionWithBonusDash(action, description string, charID int, bonusDas
 			attackMod += game.ProficiencyBonus(level)
 		}
 
-		// Get condition-based advantage/disadvantage (offhand is always melee, so not ranged)
-		hasAdvantage, hasDisadvantage := getAttackModifiers(charID, attackTargetConditions(charID), false)
-
-		// Check for explicit advantage/disadvantage in description
-		if gmAdvantage() {
-			hasAdvantage = true
-		}
-		if gmDisadvantage() {
-			hasDisadvantage = true
-		}
-
-		// Roll attack
-		var attackRoll, roll1, roll2 int
-		rollType := "normal"
-		if hasAdvantage && !hasDisadvantage {
-			attackRoll, roll1, roll2 = game.RollWithAdvantage()
-			rollType = "advantage"
-		} else if hasDisadvantage && !hasAdvantage {
-			attackRoll, roll1, roll2 = game.RollWithDisadvantage()
-			rollType = "disadvantage"
-		} else {
-			attackRoll = game.RollDie(20)
-			roll1, roll2 = attackRoll, 0
-		}
-
-		totalAttack := attackRoll + attackMod - game.ExhaustionD20Penalty(exhaustionLevelOf(charID))
-
-		rollInfo := ""
-		if rollType != "normal" {
-			rollInfo = fmt.Sprintf(" [%s: %d, %d → %d]", rollType, roll1, roll2, attackRoll)
-		}
-
 		profInfo := ""
 		if !isProficient {
 			profInfo = " (not proficient)"
 		}
-
 		// Two-Weapon Fighting style allows adding ability modifier to off-hand damage
 		hasTWFStyle := hasFightingStyle(charID, "two_weapon_fighting")
 		damageMod := 0
 		twfNote := " (TWF - no ability modifier)"
 		if hasTWFStyle {
-			// Get the ability modifier used for the attack
-			if containsProperty(weapon.Properties, "finesse") {
+			// the ability modifier used for the attack: the better of Strength and Dexterity with a Finesse weapon
+			damageMod = game.Modifier(str)
+			if containsProperty(weapon.Properties, "finesse") && game.Modifier(dex) > game.Modifier(str) {
 				damageMod = game.Modifier(dex)
-			} else {
-				damageMod = game.Modifier(str)
 			}
 			twfNote = fmt.Sprintf(" (TWF Style +%d)", damageMod)
 		}
 		attackHeldItem.Store(charID, heldItemFor(charID, weaponKey, true))
 		if offPlus := weaponPlusFor(charID, "", weaponKey, true); offPlus > 0 { // a magic weapon in the off hand: +N to attack and damage
-			totalAttack += offPlus
+			attackMod += offPlus
 			damageMod += offPlus
 			twfNote += fmt.Sprintf(" (+%d magic weapon)", offPlus)
 		}
-
-		// Critical hit
-		if attackRoll == 20 {
-			// Double damage dice
-			dmg := game.RollDamage(weapon.Damage, true) // crit = double dice
-			dmg += damageMod                            // Add ability mod if have TWF style
-			recordAttackOutcome(charID, attackOutcome{Weapon: weapon.Name, Total: totalAttack, Natural: attackRoll, Crit: true, Damage: dmg, DamageType: attackDamageType(true, weapon), RollInfo: rollInfo + twfNote})
-			return fmt.Sprintf("Offhand attack with %s%s: %d (nat 20 CRITICAL!)%s Damage: %d%s",
-				weapon.Name, profInfo, totalAttack, rollInfo, dmg, twfNote)
+		// the roll: the one attack function (attack_2024.go), as for the main attack
+		atk := characterWeaponAttack(charID, attackMod, weapon, true, weaponKey, description)
+		if lost, why := atk.blocked(); lost {
+			return why
 		}
-
-		// Critical miss
-		if attackRoll == 1 {
-			recordAttackOutcome(charID, attackOutcome{Weapon: weapon.Name, Total: totalAttack, Natural: 1, Fumble: true, DamageType: attackDamageType(true, weapon), RollInfo: rollInfo})
-			return fmt.Sprintf("Offhand attack with %s%s: %d (natural 1: miss)%s",
-				weapon.Name, profInfo, totalAttack, rollInfo)
+		rolled, out, luckNote := atk.roll()
+		attackRoll, totalAttack := out.Natural, out.Total
+		rollInfo := rolled.Describe() + luckNote
+		if attackRoll == 1 { // a natural 1 misses
+			recordAttackOutcome(charID, attackOutcome{Weapon: weapon.Name, Total: totalAttack, Natural: 1, Fumble: true, Roll: rolled, Judged: atk.target != 0, DamageType: attackDamageType(true, weapon), RollInfo: rollInfo,
+				Dice: weapon.Damage, DiceMod: damageMod})
+			return fmt.Sprintf("Offhand attack with %s%s: %d (natural 1: miss)%s", weapon.Name, profInfo, totalAttack, rollInfo)
 		}
-
-		// Normal hit
-		dmg := game.RollDamage(weapon.Damage, false)
-		dmg += damageMod // Add ability mod if have TWF style
-		recordAttackOutcome(charID, attackOutcome{Weapon: weapon.Name, Total: totalAttack, Natural: attackRoll, Damage: dmg, DamageType: attackDamageType(true, weapon), RollInfo: rollInfo + twfNote})
-		return fmt.Sprintf("Offhand attack with %s%s: %d to hit%s. Damage: %d%s",
-			weapon.Name, profInfo, totalAttack, rollInfo, dmg, twfNote)
-
+		crit := out.Critical
+		if atk.target == 0 {
+			crit = atk.critNoTarget(out)
+		}
+		dmg := game.RollDamage(weapon.Damage, crit) + damageMod // the ability modifier only with the Two-Weapon Fighting style
+		recordAttackOutcome(charID, attackOutcome{Weapon: weapon.Name, Total: totalAttack, Natural: attackRoll, Crit: crit, Roll: rolled, Judged: atk.target != 0, Hit: out.Hit, Damage: dmg,
+			DamageType: attackDamageType(true, weapon), RollInfo: rollInfo + twfNote, Dice: weapon.Damage, DiceMod: damageMod})
+		if crit {
+			return fmt.Sprintf("Offhand attack with %s%s: %d (nat %d CRITICAL!)%s Damage: %d%s", weapon.Name, profInfo, totalAttack, attackRoll, rollInfo, dmg, twfNote)
+		}
+		return fmt.Sprintf("Offhand attack with %s%s: %d to hit%s. Damage: %d%s", weapon.Name, profInfo, totalAttack, rollInfo, dmg, twfNote)
 	case "horde_breaker":
 		// Hunter Ranger's Horde Breaker
 		// Once per turn, when you make a weapon attack, you can make another attack
@@ -3805,236 +3226,20 @@ func resolveActionWithBonusDash(action, description string, charID int, bonusDas
 			return "Horde Breaker requires making a weapon attack first! Use 'attack' action, then 'horde_breaker' against a different creature within 5ft of the original target."
 		}
 
-		// Parse weapon from description
-		hbWeaponKey := parseWeaponFromDescription(description)
-		hbWeapon, hbHasWeapon := srdWeapons[hbWeaponKey]
-
-		if !hbHasWeapon {
-			return "Horde Breaker requires specifying a weapon (e.g., 'horde_breaker with longbow against goblin B')."
-		}
-
 		// Mark horde_breaker as used
 		db.Exec(`UPDATE characters SET horde_breaker_used = true WHERE id = $1`, charID)
-
-		// Determine attack modifier
-		hbAttackMod := game.Modifier(str)
-		hbDamageMod := game.Modifier(str)
-		if hbWeapon.Type == "ranged" || containsProperty(hbWeapon.Properties, "finesse") {
-			hbAttackMod = game.Modifier(dex)
-			hbDamageMod = game.Modifier(dex)
-		}
-
-		// Add proficiency bonus if proficient
-		hbProficient := isWeaponProficient(weaponProfsStr, hbWeaponKey)
-		if hbProficient {
-			hbAttackMod += game.ProficiencyBonus(level)
-		}
-
-		// Get condition-based advantage/disadvantage
-		var hbConditions []byte
-		db.QueryRow("SELECT COALESCE(conditions, '[]') FROM characters WHERE id = $1", charID).Scan(&hbConditions)
-		var hbConds []string
-		json.Unmarshal(hbConditions, &hbConds)
-		isRangedAttack := hbWeapon.Type == "ranged"
-		hbAdvantage, hbDisadvantage := getAttackModifiers(charID, hbConds, isRangedAttack)
-
-		if gmAdvantage() {
-			hbAdvantage = true
-		}
-		if gmDisadvantage() {
-			hbDisadvantage = true
-		}
-
-		// Roll attack
-		var hbRoll, hbRoll1, hbRoll2 int
-		hbRollType := "normal"
-		if hbAdvantage && !hbDisadvantage {
-			hbRoll, hbRoll1, hbRoll2 = game.RollWithAdvantage()
-			hbRollType = "advantage"
-		} else if hbDisadvantage && !hbAdvantage {
-			hbRoll, hbRoll1, hbRoll2 = game.RollWithDisadvantage()
-			hbRollType = "disadvantage"
-		} else {
-			hbRoll = game.RollDie(20)
-			hbRoll1, hbRoll2 = hbRoll, 0
-		}
-
-		hbTotalAttack := hbRoll + hbAttackMod
-
-		hbRollInfo := ""
-		if hbRollType != "normal" {
-			hbRollInfo = fmt.Sprintf(" [%s: %d, %d → %d]", hbRollType, hbRoll1, hbRoll2, hbRoll)
-		}
-
-		hbProfInfo := ""
-		if !hbProficient {
-			hbProfInfo = " (not proficient)"
-		}
-
-		// Check for Hunter's Colossus Slayer (should not apply - they chose horde_breaker)
-		// This is intentionally not included since they chose horde_breaker instead
-
-		// Critical hit
-		if hbRoll == 20 {
-			hbDmg := game.RollDamage(hbWeapon.Damage, true) + hbDamageMod
-			return fmt.Sprintf("🏹 Horde Breaker with %s%s: %d (nat 20 CRITICAL!)%s Damage: %d (attacking second target within 5ft of original)",
-				hbWeapon.Name, hbProfInfo, hbTotalAttack, hbRollInfo, hbDmg)
-		}
-
-		// Critical miss
-		if hbRoll == 1 {
-			return fmt.Sprintf("🏹 Horde Breaker with %s%s: %d (natural 1: miss)%s",
-				hbWeapon.Name, hbProfInfo, hbTotalAttack, hbRollInfo)
-		}
-
-		// Normal hit
-		hbDmg := game.RollDamage(hbWeapon.Damage, false) + hbDamageMod
-		return fmt.Sprintf("🏹 Horde Breaker with %s%s: %d to hit%s. Damage: %d (attacking second target within 5ft of original)",
-			hbWeapon.Name, hbProfInfo, hbTotalAttack, hbRollInfo, hbDmg)
-
+		// "You can make another attack with the same weapon against a different creature": a weapon attack like any other, so it is
+		// made by the main attack's code and the one attack function (Nov 14: this had its own roll, read the attacker's own
+		// conditions as the target's, added no Proficiency for an Unarmed Strike, and was never compared with an Armor Class).
+		return "🏹 Horde Breaker (another attack with the same weapon, at a different creature within 5 feet of the first). " + resolveAction("attack", description, charID)
 	case "martial_arts":
-		// Martial Arts (Monk level 1): an Unarmed Strike as a Bonus Action, against the enemy picked with target_id
-		if text, handled := martialArtsOnMonster(charID, description); handled {
-			return text
-		}
-		return "Martial Arts: pick the enemy with target_id (see situation.enemies in GET /api/my-turn) and the server rolls the Unarmed Strike against it."
-
+		// Martial Arts (Monk level 1): an Unarmed Strike as a Bonus Action (monk_2024.go)
+		text, _ := martialArtsOnMonster(charID, description)
+		return text
 	case "flurry_of_blows":
-		if flurryText, handled := flurryOnMonster(charID, description); handled {
-			return flurryText
-		}
-		// Monk's Flurry of Blows
-		// 2024 Monk's Focus: 1 Focus Point, a Bonus Action, two Unarmed Strikes (three from level 10, Heightened Focus)
-		// For Warrior of the Open Hand (level 3+), each hit can impose one effect
-
-		classKey := strings.ToLower(strings.ReplaceAll(class, " ", "_"))
-		if classKey != "monk" {
-			return "Only monks can use Flurry of Blows!"
-		}
-
-		if level < 2 {
-			return "Flurry of Blows requires Monk's Focus (level 2+)!"
-		}
-
-		// Spend 1 Focus Point
-		kiSuccess, kiErr, kiRemaining := useClassResource(charID, "focus", 1)
-		if !kiSuccess {
-			return fmt.Sprintf("Cannot use Flurry of Blows: %s", kiErr)
-		}
-
-		// Get monk die for damage
-		monkDie := getMonkDie(level)
-
-		// Monks can use DEX or STR for unarmed strikes (Martial Arts)
-		flurryAttackMod := game.Modifier(dex)
-		flurryDamageMod := game.Modifier(dex)
-		if game.Modifier(str) > game.Modifier(dex) {
-			flurryAttackMod = game.Modifier(str)
-			flurryDamageMod = game.Modifier(str)
-		}
-
-		// Add proficiency bonus (monks are proficient with unarmed strikes)
-		flurryAttackMod += game.ProficiencyBonus(level)
-
-		// Check for conditions
-		var flurryConds []byte
-		db.QueryRow("SELECT COALESCE(conditions, '[]') FROM characters WHERE id = $1", charID).Scan(&flurryConds)
-		var flurryConditions []string
-		json.Unmarshal(flurryConds, &flurryConditions)
-
-		flurryAdvantage, flurryDisadvantage := getAttackModifiers(charID, flurryConditions, false)
-		if gmAdvantage() {
-			flurryAdvantage = true
-		}
-		if gmDisadvantage() {
-			flurryDisadvantage = true
-		}
-
-		// Check for Open Hand Technique
-		isOpenHand := subclass.Valid && strings.ToLower(subclass.String) == "open-hand" && level >= 3
-
-		// Open Hand Technique (2024): write "addle", "push" or "topple" in the description; every hit imposes it
-		openHandEffect := ""
-		if isOpenHand {
-			descLower := strings.ToLower(description)
-			for _, e := range []string{"addle", "push", "topple"} {
-				if strings.Contains(descLower, e) {
-					openHandEffect = e
-					break
-				}
-			}
-		}
-
-		// Make two unarmed strikes
-		var results []string
-		totalDamage := 0
-
-		flurryStrikes := 2
-		if level >= 10 {
-			flurryStrikes = 3 // Heightened Focus
-		}
-		for strike := 1; strike <= flurryStrikes; strike++ {
-			// Roll attack
-			var fRoll, fRoll1, fRoll2 int
-			fRollType := "normal"
-			if flurryAdvantage && !flurryDisadvantage {
-				fRoll, fRoll1, fRoll2 = game.RollWithAdvantage()
-				fRollType = "advantage"
-			} else if flurryDisadvantage && !flurryAdvantage {
-				fRoll, fRoll1, fRoll2 = game.RollWithDisadvantage()
-				fRollType = "disadvantage"
-			} else {
-				fRoll = game.RollDie(20)
-				fRoll1, fRoll2 = fRoll, 0
-			}
-
-			fTotalAttack := fRoll + flurryAttackMod
-
-			fRollInfo := ""
-			if fRollType != "normal" {
-				fRollInfo = fmt.Sprintf(" [%s: %d, %d → %d]", fRollType, fRoll1, fRoll2, fRoll)
-			}
-
-			// Critical hit
-			if fRoll == 20 {
-				fDmg := game.RollDamage(monkDie, true) + flurryDamageMod
-				totalDamage += fDmg
-				strikeResult := fmt.Sprintf("Strike %d: %d (nat 20 CRITICAL!)%s - %d damage", strike, fTotalAttack, fRollInfo, fDmg)
-
-				// Apply Open Hand effect on crit
-				if isOpenHand && openHandEffect != "" {
-					strikeResult += " " + applyOpenHandEffect(charID, openHandEffect, level)
-				}
-				results = append(results, strikeResult)
-				continue
-			}
-
-			// Critical miss
-			if fRoll == 1 {
-				results = append(results, fmt.Sprintf("Strike %d: %d (natural 1: miss)%s", strike, fTotalAttack, fRollInfo))
-				continue
-			}
-
-			// Normal hit (damage calculated, GM determines if it hits)
-			fDmg := game.RollDamage(monkDie, false) + flurryDamageMod
-			totalDamage += fDmg
-			strikeResult := fmt.Sprintf("Strike %d: %d to hit%s - %d damage", strike, fTotalAttack, fRollInfo, fDmg)
-
-			// Apply Open Hand effect on hit
-			if isOpenHand && openHandEffect != "" {
-				strikeResult += " " + applyOpenHandEffect(charID, openHandEffect, level)
-			}
-			results = append(results, strikeResult)
-		}
-
-		// Build response
-		header := fmt.Sprintf("👊 Flurry of Blows! (1 Focus Point spent, %d remaining)", kiRemaining)
-		if isOpenHand && openHandEffect == "" {
-			header += "\n💫 Open Hand Technique: write addle, push or topple in the description to impose it on each hit."
-		}
-
-		return header + "\n" + strings.Join(results, "\n") + fmt.Sprintf("\nTotal damage: %d", totalDamage)
-
+		// 2024 Monk's Focus: 1 Focus Point, a Bonus Action, two Unarmed Strikes (three from level 10); monk_2024.go
+		flurryText, _ := flurryOnMonster(charID, description)
+		return flurryText
 	case "patient_defense":
 		return patientDefense(charID, description)
 

@@ -94,20 +94,6 @@ func helpProficiency(charID int, description string) (key, label string, ok bool
 	return "", "", false
 }
 
-// assistedTarget says whether the monster the character attacks carries a Help from someone else.
-func assistedTarget(charID int) bool {
-	lobbyID, id, ok := attackedMonster(charID)
-	if !ok {
-		return false
-	}
-	for _, e := range combatEffectsOn(lobbyID, id) {
-		if e.Kind == "assisted" && e.SourceID != charID {
-			return true
-		}
-	}
-	return false
-}
-
 // takeHelpedCheck uses up an ally's Assist an Ability Check for this skill or tool, if there is one.
 func takeHelpedCheck(charID int, skillOrTool string) bool {
 	if skillOrTool == "" {

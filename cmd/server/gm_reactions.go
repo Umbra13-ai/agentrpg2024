@@ -419,139 +419,55 @@ func handleGMRetaliation(w http.ResponseWriter, r *http.Request) {
 	// Mark reaction as used
 	db.Exec(`UPDATE characters SET reaction_used = true WHERE id = $1`, req.CharacterID)
 
-	// Determine weapon and modifiers (melee only for Retaliation)
-	attackMod := game.Modifier(str)
-	damageMod := game.Modifier(str)
-	damageDice := "1d4"
-	weaponName := "unarmed strike"
-	weaponKey := ""
-
-	// Check for weapon in request
+	// "You can take a Reaction to make a melee attack with a weapon or an Unarmed Strike against that creature": a weapon
+	// attack like any other, so it is made by the character's own attack code and the one attack function (attack_2024.go),
+	// against the creature's entry in the turn order. Nov 14: this command had its own roll with none of the attack rules,
+	// took the Armor Class from the monsters table (or 13), and never applied the damage.
 	if req.Weapon != "" {
-		weaponKey = strings.ToLower(strings.ReplaceAll(req.Weapon, " ", "-"))
-		if weapon, ok := srdWeapons[weaponKey]; ok {
-			// Must be melee for Retaliation
-			if weapon.Type == "melee" {
-				weaponName = weapon.Name
-				damageDice = weapon.Damage
-				// Finesse weapons can use DEX
-				if containsProperty(weapon.Properties, "finesse") && dex > str {
-					attackMod = game.Modifier(dex)
-					damageMod = game.Modifier(dex)
-				}
-			} else {
-				w.WriteHeader(http.StatusBadRequest)
-				json.NewEncoder(w).Encode(map[string]interface{}{
-					"error":   "not_melee",
-					"message": fmt.Sprintf("%s is not a melee weapon. Retaliation requires a melee weapon attack.", weapon.Name),
-				})
-				return
+		if weapon, ok := srdWeapons[strings.ToLower(strings.ReplaceAll(req.Weapon, " ", "-"))]; ok && weapon.Type != "melee" {
+			db.Exec(`UPDATE characters SET reaction_used = false WHERE id = $1`, req.CharacterID)
+			writeJSONStatus(w, http.StatusBadRequest, map[string]interface{}{"error": "not_melee",
+				"message": fmt.Sprintf("%s is not a melee weapon. Retaliation requires a melee weapon attack.", weapon.Name)})
+			return
+		}
+	}
+	target := 0
+	alive := livingMonsterIDs(campaignID)
+	for _, name := range []string{req.AttackerName, req.AttackerMonsterKey} {
+		for _, mid := range monsterIDsByKeyOrName(campaignID, name) {
+			if target == 0 && name != "" && alive[mid] {
+				target = mid
 			}
 		}
 	}
-
-	// Add proficiency bonus only if proficient with the weapon
-	if weaponKey == "" || isWeaponProficient(weaponProfsStr, weaponKey) {
-		attackMod += game.ProficiencyBonus(level)
+	desc := "retaliation: unarmed strike"
+	if req.Weapon != "" {
+		desc = "retaliation with " + req.Weapon
 	}
-
-	// Check for Rage damage bonus (if currently raging)
-	var conditionsJSON []byte
-	db.QueryRow(`SELECT COALESCE(conditions, '[]') FROM characters WHERE id = $1`, req.CharacterID).Scan(&conditionsJSON)
-	isRaging := hasCondition(req.CharacterID, "raging")
-	_ = conditionsJSON
-	rageBonus := 0
-	if isRaging {
-		// rage damage bonus now from game.RageDamageBonus
-		rageBonus = game.RageDamageBonus(level)
+	if target != 0 {
+		attackTargets.Store(req.CharacterID, target)
+		defer attackTargets.Delete(req.CharacterID)
 	}
-
-	// Get target AC (monster AC or estimate)
-	targetAC := 13 // default
-	if req.AttackerMonsterKey != "" {
-		var mAC int
-		err = db.QueryRow("SELECT COALESCE(ac, 13) FROM monsters WHERE slug = $1", req.AttackerMonsterKey).Scan(&mAC)
-		if err == nil {
-			targetAC = mAC
+	text := resolveAction("attack", desc, req.CharacterID)
+	hit := false
+	if out, ok := takeAttackOutcome(req.CharacterID); ok && target != 0 {
+		if t, info, rerr := resolveAttackOnMonster(campaignID, req.CharacterID, target, out); rerr == nil {
+			text = t
+			hit, _ = info["hit"].(bool)
 		}
 	}
-
-	// Roll the attack
-	attackRoll := game.RollDie(20)
-	totalAttack := attackRoll + attackMod
-
-	var resultText string
-	var hit bool
-	var damage int
-
-	if attackRoll == 1 {
-		// Critical miss
-		resultText = fmt.Sprintf("💢 RETALIATION: %s strikes back at %s! Attack roll: %d (natural 1: miss)",
-			charName, req.AttackerName, totalAttack)
-		hit = false
-	} else if attackRoll == 20 {
-		// Critical hit - double damage dice
-		damage = game.RollDamage(damageDice, true) + damageMod + rageBonus
-		if damage < 1 {
-			damage = 1
-		}
-		rageText := ""
-		if isRaging {
-			rageText = fmt.Sprintf(" (+%d rage)", rageBonus)
-		}
-		resultText = fmt.Sprintf("💢 RETALIATION: %s strikes back at %s! Attack roll: %d (nat 20 - CRITICAL HIT!) Damage: %d%s with %s",
-			charName, req.AttackerName, totalAttack, damage, rageText, weaponName)
-		hit = true
-	} else if totalAttack >= targetAC {
-		// Normal hit
-		damage = game.RollDamage(damageDice, false) + damageMod + rageBonus
-		if damage < 1 {
-			damage = 1
-		}
-		rageText := ""
-		if isRaging {
-			rageText = fmt.Sprintf(" (+%d rage)", rageBonus)
-		}
-		resultText = fmt.Sprintf("💢 RETALIATION: %s strikes back at %s! Attack roll: %d - HIT! Damage: %d%s with %s",
-			charName, req.AttackerName, totalAttack, damage, rageText, weaponName)
-		hit = true
-	} else {
-		// Miss
-		resultText = fmt.Sprintf("💢 RETALIATION: %s strikes back at %s! Attack roll: %d - MISS!",
-			charName, req.AttackerName, totalAttack)
-		hit = false
+	who := req.AttackerName
+	if target != 0 {
+		who = monsterName(campaignID, target)
 	}
-
-	// Log the action
-	actionDesc := fmt.Sprintf("Retaliation attack by %s against %s", charName, req.AttackerName)
-	db.Exec(`
-		INSERT INTO actions (lobby_id, action_type, description, result)
-		VALUES ($1, 'retaliation', $2, $3)
-	`, campaignID, actionDesc, resultText)
-
-	response := map[string]interface{}{
-		"success":       true,
-		"attacker":      charName,
-		"target":        req.AttackerName,
-		"attack_roll":   attackRoll,
-		"attack_mod":    attackMod,
-		"total":         totalAttack,
-		"target_ac":     targetAC,
-		"hit":           hit,
-		"result":        resultText,
-		"reaction_used": true,
-		"note":          fmt.Sprintf("%s's reaction is now expended for this round", charName),
+	result := fmt.Sprintf("💢 RETALIATION: %s strikes back at %s! %s", charName, who, text)
+	if target == 0 {
+		result += " (That creature isn't in the turn order: the GM judges the hit and applies the damage.)"
 	}
-
-	if hit {
-		response["damage"] = damage
-		response["weapon"] = weaponName
-		if isRaging {
-			response["rage_bonus"] = rageBonus
-		}
-	}
-
-	json.NewEncoder(w).Encode(response)
+	db.Exec(`INSERT INTO actions (lobby_id, action_type, description, result) VALUES ($1, 'retaliation', $2, $3)`,
+		campaignID, fmt.Sprintf("Retaliation by %s against %s", charName, who), result)
+	writeJSONStatus(w, http.StatusOK, map[string]interface{}{"success": true, "character": charName, "target": who, "hit": hit, "result": result,
+		"reaction_used": true, "note": fmt.Sprintf("%s's reaction is now expended for this round", charName)})
 }
 
 // handleGMUncannyDodge godoc

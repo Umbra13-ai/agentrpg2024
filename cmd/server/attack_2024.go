@@ -38,7 +38,10 @@ type attackCtx struct {
 	opportunity bool // an Opportunity Attack
 	longRange   bool // beyond the attack's normal range (the caller knows the attack's ranges)
 	within5     *bool
-	desc        string // the player's description of the action, where a rule reads it (close_range)
+	desc        string // the player's description of the action, where a rule reads it (close_range, the Oathbow's "swift death")
+	weaponKey   string // the weapon used, where a rule reads it (the Oathbow)
+	piercing    bool   // the weapon deals Piercing damage (underwater)
+	closeRange  bool   // the player said an enemy is within 5 feet
 
 	ac       *int // the Armor Class to use when the caller holds the target itself (a companion, an object); else armorClassOf
 	critFrom int  // the lowest natural roll that is a Critical Hit; 0: 20
@@ -50,6 +53,21 @@ type attackCtx struct {
 
 	attackerConds []string // filled by gather
 	targetConds   []string
+	oathAdv       *bool // the Oathbow's ruling for this attack, asked once
+	oathDis       bool
+}
+
+// oathbow: the Oathbow's effect on this attack: Advantage against the sworn enemy, Disadvantage with any other weapon while it
+// lives (items_c4_2024.go). Asked once per attack: saying "swift death" names the sworn enemy.
+func (c *attackCtx) oathbow() (adv, dis bool) {
+	if c.oathAdv == nil {
+		a, d := false, false
+		if c.attacker > 0 && c.weapon {
+			a, d, _ = oathbowRoll(c.attacker, c.weaponKey, c.desc)
+		}
+		c.oathAdv, c.oathDis = &a, d
+	}
+	return *c.oathAdv, c.oathDis
 }
 
 // hasCond: the condition is in the list, in any letter case, with or without a ":detail" suffix.
@@ -198,6 +216,27 @@ var attackSources = []attackSource{
 	{true, "the GM's ruling", func(c *attackCtx) (bool, string) { // POST /api/gm/grant-advantage: the character's next attack roll
 		return yes(c.attacker > 0 && takeCombatEffect(c.lobby, c.attacker, "gm_advantage", 0))
 	}},
+	// ---- Advantage: a character's features and items
+	{true, "Vex", func(c *attackCtx) (bool, string) { // the Vex mastery: the next attack roll against the creature it hit
+		if c.attacker <= 0 {
+			return false, ""
+		}
+		if v, ok := vexMarks.Load(c.attacker); ok && v.(vexMark).Target == c.target {
+			vexMarks.Delete(c.attacker)
+			return true, ""
+		}
+		return false, ""
+	}},
+	{true, "Steady Aim", func(c *attackCtx) (bool, string) { return yes(c.attacker > 0 && takeSteadyAim(c.attacker)) }},     // Rogue: the next attack roll this turn
+	{true, "Precise Hunter", func(c *attackCtx) (bool, string) { return yes(c.attacker > 0 && preciseHunter(c.attacker)) }}, // Ranger 17: against the creature marked by Hunter's Mark
+	{true, "Grappler", func(c *attackCtx) (bool, string) { return yes(c.attacker > 0 && grapplerAdvantage(c.attacker)) }},   // the feat: against a creature the attacker has Grappled
+	{true, "Ring of Elemental Command", func(c *attackCtx) (bool, string) { // the wearer attacks an Elemental of the ring's plane
+		return yes(c.attacker > 0 && c.target < 0 && elementalBane(c.attacker, c.monsterKey(c.target)))
+	}},
+	{true, "the Oathbow's sworn enemy", func(c *attackCtx) (bool, string) {
+		a, _ := c.oathbow()
+		return yes(a)
+	}},
 
 	// ---- Disadvantage: the attacker's state
 	{false, "", func(c *attackCtx) (bool, string) { // Blinded, Frightened, Poisoned, Prone, Restrained
@@ -231,6 +270,16 @@ var attackSources = []attackSource{
 	{false, "the GM's ruling", func(c *attackCtx) (bool, string) {
 		return yes(c.attacker > 0 && takeCombatEffect(c.lobby, c.attacker, "gm_disadvantage", 0))
 	}},
+	{false, "another weapon while the Oathbow's sworn enemy lives", func(c *attackCtx) (bool, string) {
+		_, d := c.oathbow()
+		return yes(d)
+	}},
+	{false, "underwater", func(c *attackCtx) (bool, string) { // a weapon attack underwater: ranged, or melee without Piercing damage or a Swim Speed
+		if c.attacker <= 0 || !c.weapon || !isUnderwaterCombat(c.lobby) {
+			return false, ""
+		}
+		return yes(!c.melee || (!c.piercing && !hasSwimSpeed(c.attacker)))
+	}},
 	// ---- Disadvantage: range
 	{false, "long range", func(c *attackCtx) (bool, string) { return yes(c.longRange) }},
 	{false, "a ranged attack with an enemy within 5 feet", func(c *attackCtx) (bool, string) {
@@ -240,7 +289,7 @@ var attackSources = []attackSource{
 		case c.attacker < 0:
 			return yes(characterAdjacentToMonster(c.lobby, c.attacker))
 		case c.attacker > 0:
-			return yes(enemyWithinFive(c.lobby, c.attacker, c.desc))
+			return yes(c.closeRange || enemyWithinFive(c.lobby, c.attacker, c.desc))
 		}
 		return false, ""
 	}},
@@ -303,6 +352,16 @@ var attackSources = []attackSource{
 // gather collects everything the attack rule needs: both sides' conditions, the Armor Class, every source of Advantage and
 // Disadvantage, what is added to the roll, and whether a hit is automatically a Critical Hit.
 func (c *attackCtx) gather() game.AttackRoll {
+	if c.attacker > 0 && c.target < 0 { // some feature helpers (Precise Hunter, Grappler, the Oathbow) read the attacked monster from here
+		if prev, had := attackTargets.Load(c.attacker); !had || prev != c.target {
+			attackTargets.Store(c.attacker, c.target)
+			if had {
+				defer attackTargets.Store(c.attacker, prev)
+			} else {
+				defer attackTargets.Delete(c.attacker)
+			}
+		}
+	}
 	if c.attacker != 0 {
 		c.attackerConds = creatureConditions(c.lobby, c.attacker)
 	}
@@ -349,6 +408,14 @@ func (c *attackCtx) gather() game.AttackRoll {
 		if p := game.ExhaustionD20Penalty(exhaustionLevelOf(c.attacker)); p > 0 {
 			a.Adjust = append(a.Adjust, game.RollAdjust{Amount: -p, Why: fmt.Sprintf("Exhaustion -%d", p)})
 		}
+		if c.weapon && c.target < 0 {
+			if n := maceOfSmitingAttack(c.attacker, c.monsterKey(c.target)); n != 0 { // +3 in all against a Construct
+				a.Adjust = append(a.Adjust, game.RollAdjust{Amount: n, Why: fmt.Sprintf("Mace of Smiting +%d against a Construct", n)})
+			}
+		}
+	}
+	if c.target != 0 && takeCombatEffect(c.lobby, c.target, "sundering", c.attacker) { // Sundering Blow: the next attack roll against it by another creature
+		a.Adjust = append(a.Adjust, game.RollAdjust{Amount: 5, Why: "Sundering Blow +5"})
 	}
 	// a hit on a Paralyzed or Unconscious creature is a Critical Hit when the attacker is within 5 feet
 	a.AutoCrit = (hasCond(c.targetConds, "paralyzed") || hasCond(c.targetConds, "unconscious")) && c.withinFive()
@@ -416,4 +483,54 @@ func characterSpellAttackBonus(charID, charLevel, spellMod int) int {
 func spellAttackIsMelee(rangeText string) bool {
 	ft := spellRangeFeet(rangeText)
 	return ft >= 0 && ft <= 5
+}
+
+// characterWeaponAttack describes a character's attack with a weapon or an Unarmed Strike at whatever it is attacking (the
+// monster chosen with target_id). Every weapon attack a character makes starts here: the main attack, the off-hand attack,
+// Horde Breaker, a Monk's strikes, Cleave, an Opportunity Attack, Retaliation. bonus is the attack bonus with that weapon.
+func characterWeaponAttack(charID, bonus int, w SRDWeapon, hasWeapon bool, weaponKey, description string) attackCtx {
+	lobby := lobbyOfChar(charID)
+	c := attackCtx{lobby: lobby, attacker: charID, name: "Attack", bonus: bonus, weapon: true, desc: description, weaponKey: weaponKey}
+	c.melee = !(hasWeapon && usedAsRanged(w, description)) // a ranged weapon, or a thrown one, is a ranged attack
+	c.piercing = hasWeapon && strings.EqualFold(w.DamageType, "piercing")
+	d := strings.ToLower(description)
+	c.closeRange = strings.Contains(d, "close range") || strings.Contains(d, "in melee") || strings.Contains(d, "within 5") ||
+		strings.Contains(d, "point blank") || strings.Contains(d, "point-blank")
+	if _, mid, ok := attackedMonster(charID); ok {
+		c.target = mid
+		c.longRange = hasWeapon && w.Type == "ranged" && attackAtLongRange(lobby, charID, mid, description)
+	}
+	c.critFrom = characterCritFrom(charID)
+	return c
+}
+
+// characterCritFrom: the lowest natural roll that is a Critical Hit for the character's weapon attacks and Unarmed Strikes (a
+// Champion's Improved and Superior Critical).
+func characterCritFrom(charID int) int {
+	var subclass string
+	var level int
+	db.QueryRow(`SELECT COALESCE(subclass,''), COALESCE(level,1) FROM characters WHERE id = $1`, charID).Scan(&subclass, &level)
+	return game.CriticalHitRange(subclass, level)
+}
+
+// critNoTarget: with no target the server knows, the GM judges the hit; the damage dice are doubled for a natural roll in the
+// character's critical range.
+func (c *attackCtx) critNoTarget(o game.AttackOutcome) bool {
+	from := c.critFrom
+	if from <= 0 {
+		from = 20
+	}
+	return o.Natural != 1 && o.Natural >= from
+}
+
+// critDice: the dice as rolled for the text of a result: doubled in number on a Critical Hit ("3d6" -> "6d6").
+func critDice(dice string, crit bool) string {
+	if !crit {
+		return dice
+	}
+	var n, sides int
+	if _, err := fmt.Sscanf(dice, "%dd%d", &n, &sides); err != nil || n <= 0 {
+		return dice + " doubled"
+	}
+	return fmt.Sprintf("%dd%d", 2*n, sides)
 }

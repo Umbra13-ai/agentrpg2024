@@ -90,23 +90,6 @@ func takeMasteryUse(charID int) (masteryUse, bool) {
 	return v.(masteryUse), true
 }
 
-// vexActive says whether the attack being rolled is against the monster the attacker Vexed.
-func vexActive(charID int) bool {
-	v, ok := vexMarks.Load(charID)
-	if !ok {
-		return false
-	}
-	_, id, tgt := attackedMonster(charID)
-	return tgt && id == v.(vexMark).Target
-}
-
-// vexUsed spends the Advantage when an attack against the Vexed monster has been resolved.
-func vexUsed(charID, targetID int) {
-	if v, ok := vexMarks.Load(charID); ok && v.(vexMark).Target == targetID {
-		vexMarks.Delete(charID)
-	}
-}
-
 // monsterConScore reads the Constitution score of a monster from the monsters table.
 func monsterConScore(monsterKey string) int {
 	var con int
@@ -234,10 +217,13 @@ func cleaveAttack(lobbyID, charID, first, second int, o attackOutcome, mu master
 		}
 	}
 	db.Exec(`UPDATE characters SET cleave_used = true WHERE id = $1`, charID)
-	roll := game.RollDie(20)
-	bonus := o.Total - o.Natural
-	crit := roll == 20
-	extra := attackOutcome{Weapon: o.Weapon, Total: roll + bonus, Natural: roll, Crit: crit, Fumble: roll == 1, DamageType: o.DamageType, RollInfo: ""}
+	// the second attack is its own roll (attack_2024.go) with the weapon's attack bonus. Nov 14: it was a bare d20 plus whatever
+	// the first roll had added (its Bless die, bonuses that belonged to the first target).
+	atk := attackCtx{lobby: lobbyID, attacker: charID, target: second, name: "Cleave", bonus: o.Roll.Bonus, melee: true, weapon: true, critFrom: characterCritFrom(charID)}
+	rolled, out, luckNote := atk.roll()
+	crit := out.Critical
+	extra := attackOutcome{Weapon: o.Weapon, Total: out.Total, Natural: out.Natural, Crit: crit, Fumble: out.Natural == 1, Roll: rolled, Judged: true, Hit: out.Hit,
+		DamageType: o.DamageType, RollInfo: rolled.Describe() + luckNote}
 	mod := 0
 	if mu.Mod < 0 {
 		mod = mu.Mod // the ability modifier counts only when it is negative

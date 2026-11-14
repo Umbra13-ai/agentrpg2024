@@ -27,6 +27,9 @@ type attackOutcome struct {
 	Natural    int // the d20
 	Crit       bool
 	Fumble     bool
+	Roll       game.AttackRoll // the roll as the one attack function made it (attack_2024.go)
+	Judged     bool            // the roll was made against the target's Armor Class, so Hit is known
+	Hit        bool
 	Damage     int
 	DamageType string
 	RollInfo   string
@@ -200,31 +203,32 @@ func resolveAttackOnMonster(lobbyID, charID, targetID int, o attackOutcome, clea
 	}
 	t := entries[idx]
 	name := fmt.Sprint(t["name"])
-	ac, hp, maxHP := asInt(t["ac"]), asInt(t["hp"]), asInt(t["max_hp"])
-	hpStart := hp                                     // for a monster's Reaction to this hit (Parry, Shield, Deflect Missile: monster_reactions_2024.go)
-	ac += spellACAdjust(lobbyID, targetID)            // Slow -2, Shield of Faith +2
-	takeCombatEffect(lobbyID, targetID, "exposed", 0) // the Advantage after a saved Stunning Strike was used by this roll
-	// an ally's Help was used by this roll
-	takeCombatEffect(lobbyID, targetID, "assisted", charID)
-	if takeCombatEffect(lobbyID, targetID, "sundering", charID) {
-		o.Total += 5 // Sundering Blow: the next attack roll against the target by another creature gets +5
+	hp, maxHP := asInt(t["hp"]), asInt(t["max_hp"])
+	hpStart := hp // for a monster's Reaction to this hit (Parry, Shield, Deflect Missile: monster_reactions_2024.go)
+	// Hit or miss was decided by the one attack function when the roll was made (attack_2024.go): the Armor Class, Help,
+	// "exposed", Sundering Blow and the Mace of Smiting are its business, not this stage's. A roll that was made without a
+	// target is judged here by the same rule.
+	if !o.Judged {
+		o.Roll.AC = armorClassOf(lobbyID, targetID)
+		j := o.Roll.Judge(o.Natural)
+		o.Hit, o.Crit, o.Judged = j.Hit, j.Critical, true
 	}
-	o.Total += maceOfSmitingAttack(charID, fmt.Sprint(t["monster_key"])) // +3 against a Construct (F158, items_c4_2024.go)
+	ac := o.Roll.AC
 	if energyBowHeld(charID) {
 		o.DamageType = "force" // the Energy Bow's arrow of golden energy (F177)
 	}
-	hit := !o.Fumble && (o.Crit || o.Total >= ac)
+	hit := o.Hit
 	if _, asked := luckOnAttack.LoadAndDelete(charID); asked && !hit && luckReroll(charID, true) { // the Luck Blade's Luck
 		r := game.RollDie(20)
-		o.Total = o.Total - o.Natural + r
-		o.Natural, o.Crit, o.Fumble = r, r == 20, r == 1
+		j := o.Roll.Judge(r)
+		o.Total, o.Natural, o.Crit, o.Fumble = j.Total, r, j.Critical, r == 1
 		o.RollInfo += fmt.Sprintf(" [Luck Blade: the miss is rerolled: %d]", r)
 		if o.Damage == 0 && o.Dice != "" {
 			o.Damage = game.RollDamage(o.Dice, o.Crit) + o.DiceMod
 		} else if o.Crit && o.Dice != "" {
 			o.Damage += game.RollDamage(o.Dice, false) // a critical hit's extra dice
 		}
-		hit = !o.Fumble && (o.Crit || o.Total >= ac)
+		hit = j.Hit
 	}
 	if _, beyond := underwaterMiss.LoadAndDelete(charID); beyond {
 		hit, o.Crit = false, false // underwater: a ranged weapon attack beyond its normal range automatically misses
@@ -264,8 +268,6 @@ func resolveAttackOnMonster(lobbyID, charID, targetID int, o attackOutcome, clea
 		keepOnceAttack(charID) // the hit keeps Lifedrinker's and Primal Strike's once-a-turn use (F147)
 		clearPendingSpends(charID)
 	}
-	vexUsed(charID, targetID) // the next attack against a Vexed target uses up the Advantage
-
 	info := map[string]interface{}{"target_id": targetID, "target": name, "hit": hit}
 	var text string
 	if !hit {

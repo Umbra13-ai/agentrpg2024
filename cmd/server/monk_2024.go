@@ -65,20 +65,6 @@ func applyStunningStrike(lobbyID, charID, targetID int, name string) string {
 	return fmt.Sprintf(" Stunning Strike: %s fails its save (%d vs DC %d) and is Stunned until the start of your next turn.", name, total, dc)
 }
 
-// exposedTarget says whether the monster the character is attacking has Advantage coming (a Stunning Strike that was saved against).
-func exposedTarget(charID int) bool {
-	lobbyID, id, ok := attackedMonster(charID)
-	if !ok {
-		return false
-	}
-	for _, e := range combatEffectsOn(lobbyID, id) {
-		if e.Kind == "exposed" {
-			return true
-		}
-	}
-	return false
-}
-
 // uncannyMetabolism and perfectFocus run when a Monk rolls initiative. They return a note for the GM, or "".
 func monkInitiativeFeatures(charID int, name, class string, level int) string {
 	if strings.ToLower(class) != "monk" || level < 2 {
@@ -152,13 +138,11 @@ func martialArtsOnMonster(charID int, description string) (string, bool) {
 	return monkStrikesOnMonster(charID, description, false)
 }
 
-// monkStrikesOnMonster rolls a Monk's Unarmed Strikes against a monster: Flurry of Blows (1 Focus Point, two strikes, three
-// from level 10) or the single Martial Arts strike.
+// monkStrikesOnMonster rolls a Monk's Unarmed Strikes: Flurry of Blows (1 Focus Point, two strikes, three from level 10) or the
+// single Martial Arts strike. With target_id the strikes are resolved against that monster; without one the rolls go to the GM,
+// as a weapon attack's do. Each roll is the one attack function's (attack_2024.go).
 func monkStrikesOnMonster(charID int, description string, flurry bool) (string, bool) {
-	lobbyID, monster, ok := attackedMonster(charID)
-	if !ok {
-		return "", false
-	}
+	lobbyID, monster, hasTarget := attackedMonster(charID)
 	var class, name string
 	var sub sql.NullString
 	var level, str, dex, wis int
@@ -205,24 +189,40 @@ func monkStrikesOnMonster(charID int, description string, flurry bool) (string, 
 			}
 		}
 	}
+	die := fmt.Sprintf("1d%d", game.MartialArtsDie(level))
 	var lines []string
 	for i := 1; i <= strikes; i++ {
-		adv, dis := getAttackModifiers(charID, attackTargetConditions(charID), false)
-		var roll int
-		switch {
-		case adv && !dis:
-			roll, _, _ = game.RollWithAdvantage()
-		case dis && !adv:
-			roll, _, _ = game.RollWithDisadvantage()
-		default:
-			roll = game.RollDie(20)
+		atk := characterWeaponAttack(charID, attackMod, SRDWeapon{}, false, "", description)
+		if lost, why := atk.blocked(); lost {
+			lines = append(lines, fmt.Sprintf("Strike %d: %s", i, why))
+			continue
 		}
-		dmg := game.RollDamage(fmt.Sprintf("1d%d", game.MartialArtsDie(level)), roll == 20) + mod
+		rolled, out, luckNote := atk.roll()
+		crit := out.Critical
+		if !hasTarget {
+			crit = atk.critNoTarget(out)
+		}
+		dmg := game.RollDamage(die, crit) + mod
 		if dmg < 1 {
 			dmg = 1
 		}
-		out := attackOutcome{Weapon: "unarmed", Total: roll + attackMod, Natural: roll, Crit: roll == 20, Fumble: roll == 1, Damage: dmg, DamageType: dtype}
-		text, info, err := resolveAttackOnMonster(lobbyID, charID, monster, out)
+		o := attackOutcome{Weapon: "unarmed", Total: out.Total, Natural: out.Natural, Crit: crit, Fumble: out.Natural == 1, Roll: rolled, Judged: hasTarget, Hit: out.Hit,
+			Damage: dmg, DamageType: dtype, RollInfo: rolled.Describe() + luckNote, Dice: die, DiceMod: mod}
+		if !hasTarget { // no target the server knows: the GM judges the hit
+			line := fmt.Sprintf("Strike %d: %s", i, rolled.LineForAttacker("Unarmed Strike", out))
+			if out.Natural != 1 {
+				line = fmt.Sprintf("Strike %d: Unarmed Strike: %d to hit%s. Damage: %d %s", i, out.Total, o.RollInfo, dmg, dtype)
+				if crit {
+					line += " (a Critical Hit: the dice are doubled)"
+				}
+				if effect != "" {
+					line += fmt.Sprintf(" (on a hit, Open Hand Technique: %s, save DC %d)", effect, dc)
+				}
+			}
+			lines = append(lines, line)
+			continue
+		}
+		text, info, err := resolveAttackOnMonster(lobbyID, charID, monster, o)
 		if err != nil {
 			return "Flurry of Blows could not be resolved against that creature.", true
 		}
@@ -232,10 +232,14 @@ func monkStrikesOnMonster(charID int, description string, flurry bool) (string, 
 		}
 		lines = append(lines, line)
 	}
-	if !flurry {
-		return fmt.Sprintf("👊 Martial Arts: an Unarmed Strike as a Bonus Action.\n%s", strings.Join(lines, "\n")), true
+	tip := ""
+	if !hasTarget {
+		tip = "\nAdd target_id (an enemy id from situation.enemies in GET /api/my-turn) and the server decides hit or miss and applies the damage."
 	}
-	return fmt.Sprintf("👊 Flurry of Blows (1 Focus Point spent).\n%s", strings.Join(lines, "\n")), true
+	if !flurry {
+		return fmt.Sprintf("👊 Martial Arts: an Unarmed Strike as a Bonus Action.\n%s%s", strings.Join(lines, "\n"), tip), true
+	}
+	return fmt.Sprintf("👊 Flurry of Blows (1 Focus Point spent).\n%s%s", strings.Join(lines, "\n"), tip), true
 }
 
 // openHandEffect is the Open Hand Technique effect of a Flurry of Blows hit on a monster.

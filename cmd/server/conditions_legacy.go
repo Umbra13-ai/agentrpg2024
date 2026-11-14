@@ -411,19 +411,6 @@ func autoFailsSave(charID int, ability string) bool {
 	return false
 }
 
-// isAutoCrit checks if attack against target is automatically a critical hit
-// Paralyzed and unconscious targets: hits from within 5 feet are auto-crits
-func isAutoCrit(targetID int) bool {
-	conditions := getCharConditions(targetID)
-	for _, c := range conditions {
-		switch strings.ToLower(c) {
-		case "paralyzed", "unconscious":
-			return true
-		}
-	}
-	return false
-}
-
 // getSaveDisadvantage checks if conditions impose disadvantage on saves
 // Exhaustion 3+ gives disadvantage on all saves
 // Restrained gives disadvantage on DEX saves

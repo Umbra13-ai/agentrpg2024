@@ -295,8 +295,10 @@ func TestSQLiteIncapacitationAndMovement(t *testing.T) {
 		t.Fatal("expected stunned character to auto-fail dex save")
 	}
 
-	if !isAutoCrit(3) {
-		t.Fatal("expected paralyzed target to be auto-crit eligible")
+	// a hit on a Paralyzed creature from within 5 feet is a Critical Hit: the one attack function decides it (attack_2024.go)
+	near := true
+	if c := (&attackCtx{target: 3, melee: true, within5: &near}); !c.gather().AutoCrit {
+		t.Fatal("expected a hit on a paralyzed target from within 5 feet to be a Critical Hit")
 	}
 
 	if !canMove(4) {
