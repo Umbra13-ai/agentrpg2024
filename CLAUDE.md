@@ -7,12 +7,12 @@ notes are attached to your session, read their handoff file first for the standi
 ## How to fix a bug in this code
 
 ### How this codebase goes wrong
-Most bugs here come from one rule being written in several places that drift apart. Examples: four separate paths roll
-attacks against characters; a builder step and the final review each check the same answer in their own way; a choice's
-options, its suggestion, its validation and its refusal message are often separate code; each request reads its body in
-its own way. A fix made in only one of those places leaves the bug alive in the others and adds one more copy to
-maintain. So the goal of every fix is to correct the rule once, for the whole server, and leave the code with fewer
-copies than before.
+Most bugs here come from one rule being written in several places that drift apart. Examples: attack rolls were made
+in 29 places, each with its own idea of Advantage, until they were given one owner; a builder step and the final review
+each check the same answer in their own way; a choice's options, its suggestion, its validation and its refusal message
+are often separate code; each request reads its body in its own way. A fix made in only one of those places leaves the
+bug alive in the others and adds one more copy to maintain. So the goal of every fix is to correct the rule once, for
+the whole server, and leave the code with fewer copies than before.
 
 ### The method
 1. **Reproduce it, then name the cause as a rule.** The report is one symptom ("Wizard Scholar accepts any skill"). Ask
@@ -30,8 +30,9 @@ copies than before.
 5. **Guarantees belong in shared layers.** Something every request should do (refuse unknown fields, accept a displayed
    name or its slug, answer errors with 4xx) is built once where all requests pass through, not pasted into handlers one
    at a time.
-6. **If the correct fix is large or risky** (for example merging the four attack paths), stop and ask the owner before
-   starting. Say what the full fix is and what it would need retested. Never quietly do the narrow version instead.
+6. **If the correct fix is large or risky** (for example moving every request onto one reader), stop and ask the owner
+   before starting. Say what the full fix is and what it would need retested. Never quietly do the narrow version
+   instead.
 7. **Test the rule, not the example.** The test must go through every path that uses the rule (every class, every
    request that takes that kind of choice, every attack route), then the full regression suites, because a shared change
    reaches everything.
@@ -53,6 +54,18 @@ Report: "Wizard Scholar accepts any skill for Expertise."
 - Correct fix: define each Expertise feature (Rogue, Bard, Ranger's Deft Explorer, Wizard's Scholar) with its level,
   count and allowed skills in one table. The Expertise request, the setup step's options, its suggestion and the refusal
   message all read that table. Remove the per-class code. Test every class that gets Expertise at each level it gets it.
+
+### Rules that already have one owner
+Add to the owner, never beside it. When you give another rule one owner, add it to this list.
+- **Attack rolls:** `game.AttackRoll` (`game/attack.go`) is the rule of an attack roll (Advantage, Disadvantage and how
+  they cancel, natural 1 and 20, Critical Hits, the wording of the result line). `attackCtx` and the `attackSources`
+  table (`cmd/server/attack_2024.go`) decide what gives Advantage or Disadvantage, the bonuses, the target's Armor
+  Class and what blocks an attack. Every attack in the server (a character's, a monster's, a spell's, a companion's, an
+  item's) builds an `attackCtx` and calls `roll()`. A new source of Advantage or Disadvantage is one row in
+  `attackSources`. Never roll a d20 for an attack anywhere else.
+- **The 18 skills:** `game/skills.go`.
+- **Expertise:** `game/expertise.go`, with its database side in `cmd/server/expertise_2024.go`.
+- **Which feats a character can take:** `cmd/server/feats_2024.go`.
 
 ### Before pushing
 `gofmt -l` on the files you changed, `go vet ./cmd/server ./game`, `go test ./...`, then the owner's test scripts for
