@@ -13,14 +13,16 @@ import (
 
 // handleCharacters godoc
 // @Summary List or create characters
-// @Description GET: List your characters. POST: Create a new character. Ability scores (before the background increases) come from the Standard Array, a 27-point point buy, or ability_method "random" (the server rolls 4d6 drop lowest six times and assigns them in the order of the scores sent).
+// @Description GET: List your characters. POST: Create a new character. Ability scores (before the background increases) are the Standard Array: 15, 14, 13, 12, 10 and 8, one to each ability (this server uses the Standard Array only, not point buy or random rolls). Spells are chosen after creation (GET /api/characters/{id}/setup), so known_spells is refused. A field the request doesn't take, or one that doesn't apply to the character, is refused with the reason and nothing is created; every refusal has a 4xx status. "dry_run": true checks the request without creating anything.
 // @Tags Characters
 // @Accept json
 // @Produce json
 // @Param Authorization header string true "Basic auth"
 // @Param request body object{name=string,class=string,species=string,background=string,str=integer,dex=integer,con=integer,int=integer,wis=integer,cha=integer,ability_method=string} false "Character details (POST only)"
 // @Success 200 {object} map[string]interface{} "List of characters or creation result"
+// @Failure 400 {object} map[string]interface{} "Refused: the error and message say why; nothing was created"
 // @Failure 401 {object} map[string]interface{} "Unauthorized"
+// @Failure 409 {object} map[string]interface{} "The character name is taken"
 // @Router /characters [get]
 // @Router /characters [post]
 func handleCharacters(w http.ResponseWriter, r *http.Request) {
@@ -76,34 +78,83 @@ func handleCharacters(w http.ResponseWriter, r *http.Request) {
 			BackgroundFeatChoices *featChoiceInput  `json:"background_feat_choices"` // Magic Initiate or Skilled picks
 			SpeciesFeatChoices    *featChoiceInput  `json:"species_feat_choices"`    // the Human's extra Origin feat picks
 			WeaponMasteries       []string          `json:"weapon_masteries"`        // Barbarian 2, Fighter 3, Paladin/Ranger/Rogue 2 kinds of weapon
-			KnownSpells           []string          `json:"known_spells"`            // e.g., ["fireball", "magic-missile"] - spell slugs character knows
+			KnownSpells           []string          `json:"known_spells"`            // refused when sent: spells are chosen in the setup after creation; the origin spells are added here
 			DraconicAncestry      string            `json:"draconic_ancestry"`       // e.g., "red", "blue" - for Dragonborn breath weapon
-			AbilityMethod         string            `json:"ability_method"`          // "standard_array", "point_buy" or "random" (the server rolls); scores before the background increases
+			AbilityMethod         string            `json:"ability_method"`          // "standard_array", the only method this server uses; scores before the background increases
 			StartingEquipment     string            `json:"starting_equipment"`      // class kit option: "a" (default), "b" or "c" where offered; gold-only options give gold
-			Backstory             string            `json:"backstory"`              // the character’s story (the builder asks for 3 to 6 paragraphs)
-			Appearance            string            `json:"appearance"`             // optional: how the character looks
+			Backstory             string            `json:"backstory"`               // the character’s story (the builder asks for 3 to 6 paragraphs)
+			Appearance            string            `json:"appearance"`              // optional: how the character looks
 			Alignment             string            `json:"alignment"`               // one of the nine alignments (Lawful Good ... Chaotic Evil); a roleplaying guide
-			DryRun                bool              `json:"dry_run"` // F234: check everything, create nothing
+			DryRun                bool              `json:"dry_run"`                 // F234: check everything, create nothing
 			ClassOptions          struct {
 				DivineOrder string `json:"divine_order"` // Cleric: "protector" or "thaumaturge"
 				PrimalOrder string `json:"primal_order"` // Druid: "warden" or "magician"
 			} `json:"class_options"`
 		}
-		json.NewDecoder(r.Body).Decode(&req)
-		// F234: no scores at all used to become six 10s (a legal but wasted point buy); every class needs its scores assigned
-		if req.Str == 0 && req.Dex == 0 && req.Con == 0 && req.Int == 0 && req.Wis == 0 && req.Cha == 0 && strings.ToLower(strings.TrimSpace(req.AbilityMethod)) != "random" {
-			out := map[string]interface{}{"error": "ability_scores_required",
-				"message": "Assign your six ability scores (str, dex, con, int, wis, cha) with ability_method standard_array (15, 14, 13, 12, 10, 8), point_buy (27 points) or random. The character builder guides this step by step: POST /api/character-builder."}
-			if arr, ok := phbArray[strings.ToLower(req.Class)]; ok {
-				out["suggestion"] = map[string]interface{}{"ability_method": "standard_array", "str": arr[0], "dex": arr[1], "con": arr[2], "int": arr[3], "wis": arr[4], "cha": arr[5],
-					"source": "the Player's Handbook's Standard Array by Class"}
+		// Every field is either used as sent or refused with the reason (Nov 14 audit: unknown, misplaced and inapplicable fields were
+		// ignored without a word, and dry_run said "Everything checks out"); every refusal has a 4xx status.
+		raw := map[string]interface{}{}
+		if err := json.NewDecoder(r.Body).Decode(&raw); err != nil {
+			writeJSONStatus(w, http.StatusBadRequest, map[string]interface{}{"error": "invalid_json", "message": "The body must be one JSON object with the creation fields. Nothing was created."})
+			return
+		}
+		conflicts := normalizeCreateAliases(raw)
+		if bad := unknownCreateFields(raw); len(bad) > 0 {
+			writeJSONStatus(w, http.StatusBadRequest, map[string]interface{}{"error": "unknown_field", "problems": bad, "nothing_created": true,
+				"message": strings.Join(bad, "; ") + ". Nothing was created: send the request again with the right field names."})
+			return
+		}
+		fixed, _ := json.Marshal(raw)
+		if err := json.Unmarshal(fixed, &req); err != nil {
+			writeJSONStatus(w, http.StatusBadRequest, map[string]interface{}{"error": "invalid_field_type", "nothing_created": true, "message": createTypeError(err) + " Nothing was created."})
+			return
+		}
+		if bad := append(conflicts, inapplicableCreateFields(raw)...); len(bad) > 0 {
+			writeJSONStatus(w, http.StatusBadRequest, map[string]interface{}{"error": "field_not_applicable", "problems": bad, "nothing_created": true,
+				"message": strings.Join(bad, "; ") + ". Nothing was created: remove or fix these and send the request again."})
+			return
+		}
+		req.Class = strings.ToLower(strings.TrimSpace(req.Class))
+		if _, ok := srdClasses[req.Class]; !ok {
+			var names []string
+			for k := range srdClasses {
+				names = append(names, k)
 			}
-			json.NewEncoder(w).Encode(out)
+			sort.Strings(names)
+			msg := fmt.Sprintf("%q is not a class. The SRD 5.2.1 classes are: %s.", req.Class, strings.Join(names, ", "))
+			if req.Class == "" {
+				msg = "Choose a class: " + strings.Join(names, ", ") + "."
+			}
+			writeJSONStatus(w, http.StatusBadRequest, map[string]interface{}{"error": "invalid_class", "message": msg, "valid_options": names})
 			return
 		}
 
+		// F234: no scores at all used to become six 10s (a legal but wasted point buy); every class needs its scores assigned. A score
+		// left out is refused too (it used to become 10).
+		abilityMethod := strings.ToLower(strings.TrimSpace(strings.ReplaceAll(req.AbilityMethod, " ", "_")))
+		var missing []string
+		for i, v := range []int{req.Str, req.Dex, req.Con, req.Int, req.Wis, req.Cha} {
+			if v == 0 {
+				missing = append(missing, abilityOrder[i])
+			}
+		}
+		if len(missing) > 0 && (abilityMethod == "" || abilityMethod == "standard_array" || abilityMethod == "standard" || abilityMethod == "array") {
+			msg := "Assign your six ability scores (str, dex, con, int, wis, cha) from the Standard Array: 15, 14, 13, 12, 10 and 8, one to each ability. This server uses the Standard Array only. The character builder guides this step by step: POST /api/character-builder."
+			if len(missing) < 6 {
+				msg = fmt.Sprintf("Missing ability scores: %s. Send all six (str, dex, con, int, wis, cha) from the Standard Array: 15, 14, 13, 12, 10 and 8, one to each ability. This server uses the Standard Array only.", strings.Join(missing, ", "))
+			}
+			out := map[string]interface{}{"error": "ability_scores_required", "message": msg}
+			if arr, ok := phbArray[req.Class]; ok {
+				out["suggestion"] = map[string]interface{}{"ability_method": "standard_array", "str": arr[0], "dex": arr[1], "con": arr[2], "int": arr[3], "wis": arr[4], "cha": arr[5],
+					"source": "the Player's Handbook's Standard Array by Class"}
+			}
+			writeJSONStatus(w, http.StatusBadRequest, out)
+			return
+		}
+
+		req.Name = strings.TrimSpace(req.Name)
 		if req.Name == "" {
-			json.NewEncoder(w).Encode(map[string]interface{}{"error": "name_required"})
+			writeJSONStatus(w, http.StatusBadRequest, map[string]interface{}{"error": "name_required", "message": "Give your character a name (name)."})
 			return
 		}
 
@@ -111,33 +162,14 @@ func handleCharacters(w http.ResponseWriter, r *http.Request) {
 		var existingCount int
 		db.QueryRow("SELECT COUNT(*) FROM characters WHERE LOWER(name) = LOWER($1)", req.Name).Scan(&existingCount)
 		if existingCount > 0 {
-			json.NewEncoder(w).Encode(map[string]interface{}{"error": "character_name_taken", "message": "That character name is already in use. Please choose a unique name."})
+			writeJSONStatus(w, http.StatusConflict, map[string]interface{}{"error": "character_name_taken", "message": "That character name is already in use. Please choose a unique name."})
 			return
 		}
 
-		if req.Str == 0 {
-			req.Str = 10
-		}
-		if req.Dex == 0 {
-			req.Dex = 10
-		}
-		if req.Con == 0 {
-			req.Con = 10
-		}
-		if req.Int == 0 {
-			req.Int = 10
-		}
-		if req.Wis == 0 {
-			req.Wis = 10
-		}
-		if req.Cha == 0 {
-			req.Cha = 10
-		}
-
-		// Step 3 of character creation: the Standard Array, point buy or random generation
+		// Step 3 of character creation: the Standard Array (this server doesn't use point buy or random generation)
 		base, abilityNote, baseErr := baseAbilityScores(req.AbilityMethod, []int{req.Str, req.Dex, req.Con, req.Int, req.Wis, req.Cha})
 		if baseErr != nil {
-			json.NewEncoder(w).Encode(map[string]interface{}{"error": "invalid_ability_scores", "message": baseErr.Error()})
+			writeJSONStatus(w, http.StatusBadRequest, map[string]interface{}{"error": "invalid_ability_scores", "message": baseErr.Error()})
 			return
 		}
 		req.Str, req.Dex, req.Con, req.Int, req.Wis, req.Cha = base[0], base[1], base[2], base[3], base[4], base[5]
@@ -146,7 +178,7 @@ func handleCharacters(w http.ResponseWriter, r *http.Request) {
 		speciesKey := normalizeSpeciesSlug(req.Species)
 		earlyInc, incErr := checkAbilityIncreases(req.Background, req.AbilityIncreases)
 		if incErr != nil {
-			writeOriginError(w, incErr)
+			writeCreateOriginError(w, incErr)
 			return
 		}
 		req.Str += earlyInc["str"]
@@ -156,7 +188,7 @@ func handleCharacters(w http.ResponseWriter, r *http.Request) {
 		req.Wis += earlyInc["wis"]
 		req.Cha += earlyInc["cha"]
 		if req.Str > 20 || req.Dex > 20 || req.Con > 20 || req.Int > 20 || req.Wis > 20 || req.Cha > 20 {
-			json.NewEncoder(w).Encode(map[string]interface{}{"error": "ability_score_over_20", "message": "An ability increase cannot raise a score above 20"})
+			writeJSONStatus(w, http.StatusBadRequest, map[string]interface{}{"error": "ability_score_over_20", "message": "An ability increase cannot raise a score above 20"})
 			return
 		}
 
@@ -190,7 +222,7 @@ func handleCharacters(w http.ResponseWriter, r *http.Request) {
 				opts = append(opts, s)
 			}
 			sort.Strings(opts)
-			json.NewEncoder(w).Encode(map[string]interface{}{"error": "skill_choices_required",
+			writeJSONStatus(w, http.StatusBadRequest, map[string]interface{}{"error": "skill_choices_required",
 				"message":       fmt.Sprintf("A %s chooses %d skills from the class's list in skill_proficiencies; you sent %d.", req.Class, numSkillChoices, len(req.SkillProficiencies)),
 				"valid_options": opts, "count": numSkillChoices})
 			return
@@ -201,7 +233,7 @@ func handleCharacters(w http.ResponseWriter, r *http.Request) {
 		if len(req.SkillProficiencies) > 0 {
 			// Validate count
 			if len(req.SkillProficiencies) > numSkillChoices {
-				json.NewEncoder(w).Encode(map[string]interface{}{
+				writeJSONStatus(w, http.StatusBadRequest, map[string]interface{}{
 					"error":      "too_many_skills",
 					"message":    fmt.Sprintf("Your class allows %d skill proficiencies, you chose %d", numSkillChoices, len(req.SkillProficiencies)),
 					"max_skills": numSkillChoices,
@@ -213,7 +245,7 @@ func handleCharacters(w http.ResponseWriter, r *http.Request) {
 			for _, skill := range req.SkillProficiencies {
 				skillLower := strings.ToLower(strings.TrimSpace(strings.NewReplacer("_", " ", "-", " ").Replace(skill)))
 				if len(skillChoicesAvailable) > 0 && !skillChoicesAvailable[skillLower] {
-					json.NewEncoder(w).Encode(map[string]interface{}{
+					writeJSONStatus(w, http.StatusBadRequest, map[string]interface{}{
 						"error":   "invalid_skill_choice",
 						"message": fmt.Sprintf("'%s' is not available to %s class", skill, req.Class),
 						"available_skills": func() []string {
@@ -225,6 +257,16 @@ func handleCharacters(w http.ResponseWriter, r *http.Request) {
 							return skills
 						}(),
 					})
+					return
+				}
+				if !game.IsSkill(skillLower) { // a Bard chooses any skills, but they must be skills
+					writeJSONStatus(w, http.StatusBadRequest, map[string]interface{}{"error": "invalid_skill_choice",
+						"message": fmt.Sprintf("'%s' is not a skill.", skill)})
+					return
+				}
+				if containsStr(validSkills, skillLower) { // the same skill twice would lose a proficiency without a word
+					writeJSONStatus(w, http.StatusBadRequest, map[string]interface{}{"error": "duplicate_skill",
+						"message": fmt.Sprintf("You sent %s twice in skill_proficiencies: choose %d different skills.", titleWords(skillLower), numSkillChoices)})
 					return
 				}
 				validSkills = append(validSkills, skillLower)
@@ -250,7 +292,7 @@ func handleCharacters(w http.ResponseWriter, r *http.Request) {
 					_, msg = game.ValidateToolChoices(chosen, choices)
 				}
 				if msg != "" {
-					json.NewEncoder(w).Encode(map[string]interface{}{
+					writeJSONStatus(w, http.StatusBadRequest, map[string]interface{}{
 						"error":           "invalid_tool_proficiencies",
 						"message":         "tool_proficiencies is only for the tools your class lets you choose (a Bard's three Musical Instruments, a Monk's Artisan's Tools or Musical Instrument); your class's own tools and those of your background (background_tool), species and feats are added for you. Refused: " + msg,
 						"pending_choices": game.ToolChoicesFor(req.Class, nil),
@@ -263,7 +305,7 @@ func handleCharacters(w http.ResponseWriter, r *http.Request) {
 		// Some classes make the player choose tool proficiencies (Bard: three Musical
 		// Instruments; Monk: one Artisan's Tools or Musical Instrument).
 		if pendingTools := game.PendingToolChoices(game.ToolChoicesFor(req.Class, nil), toolProfsStr); len(pendingTools) > 0 {
-			json.NewEncoder(w).Encode(map[string]interface{}{
+			writeJSONStatus(w, http.StatusBadRequest, map[string]interface{}{
 				"error":           "tool_choice_required",
 				"message":         fmt.Sprintf("%s characters choose tool proficiencies at creation.", req.Class),
 				"pending_choices": pendingTools,
@@ -283,11 +325,11 @@ func handleCharacters(w http.ResponseWriter, r *http.Request) {
 		primalOrder := firstWord(req.ClassOptions.PrimalOrder)
 		req.ClassOptions.DivineOrder, req.ClassOptions.PrimalOrder = divineOrder, primalOrder
 		if divineOrder != "" && (strings.ToLower(req.Class) != "cleric" || (divineOrder != "protector" && divineOrder != "thaumaturge")) {
-			json.NewEncoder(w).Encode(map[string]interface{}{"error": "invalid_divine_order", "message": pickMsg(strings.ToLower(req.Class) != "cleric", "Only Clerics choose a divine_order.", fmt.Sprintf("%q is not a Divine Order: choose protector or thaumaturge.", divineOrder))})
+			writeJSONStatus(w, http.StatusBadRequest, map[string]interface{}{"error": "invalid_divine_order", "message": pickMsg(strings.ToLower(req.Class) != "cleric", "Only Clerics choose a divine_order.", fmt.Sprintf("%q is not a Divine Order: choose protector or thaumaturge.", divineOrder))})
 			return
 		}
 		if primalOrder != "" && (strings.ToLower(req.Class) != "druid" || (primalOrder != "warden" && primalOrder != "magician")) {
-			json.NewEncoder(w).Encode(map[string]interface{}{"error": "invalid_primal_order", "message": pickMsg(strings.ToLower(req.Class) != "druid", "Only Druids choose a primal_order.", fmt.Sprintf("%q is not a Primal Order: choose warden or magician.", primalOrder))})
+			writeJSONStatus(w, http.StatusBadRequest, map[string]interface{}{"error": "invalid_primal_order", "message": pickMsg(strings.ToLower(req.Class) != "druid", "Only Druids choose a primal_order.", fmt.Sprintf("%q is not a Primal Order: choose warden or magician.", primalOrder))})
 			return
 		}
 
@@ -313,14 +355,14 @@ func handleCharacters(w http.ResponseWriter, r *http.Request) {
 		// species' skills are known). Bards, Rangers and Wizards (Scholar) choose theirs at level 2 with POST /api/characters/{id}/expertise.
 		// Expertise is for skills only.
 		if len(req.Expertise) > 0 && classKey != "rogue" {
-			json.NewEncoder(w).Encode(map[string]interface{}{
+			writeJSONStatus(w, http.StatusBadRequest, map[string]interface{}{
 				"error":   "expertise_not_available",
 				"message": "Only Rogues choose Expertise at level 1. Bards, Rangers and Wizards choose theirs at level 2 (POST /api/characters/{id}/expertise).",
 			})
 			return
 		}
 		if len(req.Expertise) > 2 {
-			json.NewEncoder(w).Encode(map[string]interface{}{
+			writeJSONStatus(w, http.StatusBadRequest, map[string]interface{}{
 				"error":   "too_many_expertise",
 				"message": "A Rogue chooses Expertise in 2 skills at level 1.",
 			})
@@ -333,7 +375,7 @@ func handleCharacters(w http.ResponseWriter, r *http.Request) {
 		// Weapon Mastery (2024): the classes that have it choose their weapons now
 		masteryPicks, mErr := validateMasteryPicks(req.Class, 1, req.WeaponMasteries, true)
 		if mErr != nil {
-			writeOriginError(w, mErr)
+			writeCreateOriginError(w, mErr)
 			return
 		}
 
@@ -356,7 +398,7 @@ func handleCharacters(w http.ResponseWriter, r *http.Request) {
 			Languages: req.ExtraLanguages, HeldSkills: heldSkills, HeldTools: heldTools,
 		})
 		if oerr != nil {
-			writeOriginError(w, oerr)
+			writeCreateOriginError(w, oerr)
 			return
 		}
 		for _, s := range origin.Skills {
@@ -383,7 +425,7 @@ func handleCharacters(w http.ResponseWriter, r *http.Request) {
 			for _, exp := range req.Expertise {
 				k := normSkill(exp)
 				if !game.IsSkill(k) || !containsStr(held, k) {
-					json.NewEncoder(w).Encode(map[string]interface{}{
+					writeJSONStatus(w, http.StatusBadRequest, map[string]interface{}{
 						"error":   "invalid_expertise",
 						"message": fmt.Sprintf("'%s' must be one of your skill proficiencies (from your class, background or species); Expertise is for skills.", exp),
 					})
@@ -445,7 +487,7 @@ func handleCharacters(w http.ResponseWriter, r *http.Request) {
 			if ancestryLower != "" {
 				// Validate it's a valid dragon type
 				if _, ok := game.DragonAncestryDamageTypes[ancestryLower]; !ok {
-					json.NewEncoder(w).Encode(map[string]interface{}{
+					writeJSONStatus(w, http.StatusBadRequest, map[string]interface{}{
 						"error":         "invalid_draconic_ancestry",
 						"message":       fmt.Sprintf("'%s' is not a valid draconic ancestry", req.DraconicAncestry),
 						"valid_options": []string{"black", "blue", "brass", "bronze", "copper", "gold", "green", "red", "silver", "white"},
@@ -463,7 +505,7 @@ func handleCharacters(w http.ResponseWriter, r *http.Request) {
 		}
 		classOption, hasClassOption := classStartingEquipment[strings.ToLower(req.Class)][startOption]
 		if !hasClassOption {
-			json.NewEncoder(w).Encode(map[string]interface{}{
+			writeJSONStatus(w, http.StatusBadRequest, map[string]interface{}{
 				"error":   "invalid_starting_equipment_option",
 				"message": fmt.Sprintf("%s offers these starting_equipment options: %s", req.Class, strings.Join(startingOptionKeys(req.Class), ", ")),
 			})
@@ -474,7 +516,7 @@ func handleCharacters(w http.ResponseWriter, r *http.Request) {
 		if len(classOption.Items) > 0 {
 			sr, serr := buildStartingEquipment(req.Class, startOption, chosenToolForClass(req.Class, toolProfsStr))
 			if serr != nil {
-				json.NewEncoder(w).Encode(map[string]interface{}{"error": serr.Error()})
+				writeJSONStatus(w, http.StatusBadRequest, map[string]interface{}{"error": serr.Error()})
 				return
 			}
 			starting = sr
@@ -482,23 +524,38 @@ func handleCharacters(w http.ResponseWriter, r *http.Request) {
 
 		backstory, appearance := strings.TrimSpace(req.Backstory), strings.TrimSpace(req.Appearance)
 		if len([]rune(backstory)) > maxProfileTextRunes || len([]rune(appearance)) > maxProfileTextRunes {
-			json.NewEncoder(w).Encode(map[string]interface{}{"error": "text_too_long", "message": fmt.Sprintf("The backstory and the appearance can each be %d characters at most.", maxProfileTextRunes)})
+			writeJSONStatus(w, http.StatusBadRequest, map[string]interface{}{"error": "text_too_long", "message": fmt.Sprintf("The backstory and the appearance can each be %d characters at most.", maxProfileTextRunes)})
 			return
 		}
 		alignment := ""
 		if strings.TrimSpace(req.Alignment) != "" {
 			if alignment = canonicalPlayerAlignment(req.Alignment); alignment == "" {
-				json.NewEncoder(w).Encode(map[string]interface{}{"error": "unknown_alignment", "message": fmt.Sprintf("%q is not an alignment. Choose one of: %s.", req.Alignment, strings.Join(playerAlignments(), ", "))})
+				writeJSONStatus(w, http.StatusBadRequest, map[string]interface{}{"error": "unknown_alignment", "message": fmt.Sprintf("%q is not an alignment. Choose one of: %s.", req.Alignment, strings.Join(playerAlignments(), ", "))})
 				return
 			}
 		}
 		if req.DryRun { // F234: everything checked; nothing created
-			json.NewEncoder(w).Encode(map[string]interface{}{"success": true, "dry_run": true, "would_create": map[string]interface{}{
+			out := map[string]interface{}{"success": true, "dry_run": true, "would_create": map[string]interface{}{
 				"name": req.Name, "class": req.Class, "species": req.Species, "background": req.Background, "alignment": alignment,
 				"ability_scores": map[string]int{"str": req.Str, "dex": req.Dex, "con": req.Con, "int": req.Int, "wis": req.Wis, "cha": req.Cha},
-				"hp": hp, "skills": skillProfsStr, "tools": toolProfsStr, "languages": languageProfsStr,
+				"hp":             hp, "skills": skillProfsStr, "tools": toolProfsStr, "languages": languageProfsStr,
 				"weapon_masteries": masteryPicks, "expertise": expertiseStr, "starting_equipment": kitText(strings.ToLower(req.Class), startOption)},
-				"message": "Everything checks out. Send the same request without dry_run to create the character."})
+				"message":        "Everything checks out. Send the same request without dry_run to create the character.",
+				"after_creation": "GET /api/characters/{id}/setup then guides what is left: spells, the gear in your hands and any class choice not made here."}
+			var open []string // a level 1 choice this request could make but didn't (it can also be made in the setup)
+			if classKey == "cleric" && divineOrder == "" {
+				open = append(open, "Divine Order: add class_options.divine_order (protector or thaumaturge), or choose it in the setup")
+			}
+			if classKey == "druid" && primalOrder == "" {
+				open = append(open, "Primal Order: add class_options.primal_order (magician or warden), or choose it in the setup")
+			}
+			if classKey == "rogue" && expertiseStr == "" {
+				open = append(open, "Expertise: add expertise (2 of your skill proficiencies), or choose it in the setup")
+			}
+			if len(open) > 0 {
+				out["not_chosen_yet"] = open
+			}
+			json.NewEncoder(w).Encode(out)
 			return
 		}
 
@@ -509,7 +566,7 @@ func handleCharacters(w http.ResponseWriter, r *http.Request) {
 		`, agentID, req.Name, req.Class, req.Species, req.Background, req.Str, req.Dex, req.Con, req.Int, req.Wis, req.Cha, hp, ac, startingGold, skillProfsStr, toolProfsStr, weaponProfsStr, armorProfsStr, expertiseStr, languageProfsStr, darkvisionRange, knownSpellsJSON, draconicAncestryStr).Scan(&id)
 
 		if err != nil {
-			json.NewEncoder(w).Encode(map[string]interface{}{"error": publicError(err)})
+			writeJSONStatus(w, http.StatusInternalServerError, map[string]interface{}{"error": publicError(err)})
 			return
 		}
 
@@ -567,7 +624,7 @@ func handleCharacters(w http.ResponseWriter, r *http.Request) {
 			"to_finish": characterToFinish(id), "character_finished": len(characterToFinish(id)) == 0, // F232: what the player still has to choose
 			"to_finish_note": "Your character isn't finished until to_finish is empty: GET /api/characters/{id} and /api/my-turn keep showing what is left.",
 			"ignored_spells": ignoredSpells,
-			"setup": fmt.Sprintf("GET /api/characters/%d/setup guides what is left: spells, the gear in your hands, class choices", id)})
+			"setup":          fmt.Sprintf("GET /api/characters/%d/setup guides what is left: spells, the gear in your hands, class choices", id)})
 		return
 	}
 
