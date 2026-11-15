@@ -69,7 +69,7 @@ func talismanRebuke(charID int, it invItem, req itemCastReq, good bool) string {
 	}
 	sv := sc.resist(saveStakes{Condition: true})
 	saved := sv.Success
-	text := fmt.Sprintf("%s (a Magic action, 1 charge): a flaming fissure opens under %s: %s: ", label, who, sv.Line(who))
+	text := fmt.Sprintf("%s (a Magic action, 1 charge): a flaming fissure opens under %s: %s: ", label, who, sv.LineAgainst(who))
 	switch {
 	case saved:
 		dmg := game.RollDamage("4d6", false)

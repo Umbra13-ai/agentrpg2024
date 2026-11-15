@@ -136,7 +136,7 @@ func handleGMIntimidatingPresence(w http.ResponseWriter, r *http.Request) {
 		sv := (&saveCtx{lobby: campaignID, saver: tid, ability: "wis", dc: dc, against: []string{"frightened"}, source: req.BarbarianID}).roll()
 		saved := sv.Success
 		res := map[string]interface{}{"target_id": tid, "roll": sv.Natural, "total": sv.Total, "dc": dc, "saved": saved,
-			"save": sv.Line(creatureName(campaignID, tid))}
+			"save": sv.LineAgainst(creatureName(campaignID, tid))}
 		if !saved {
 			body, _ := json.Marshal(map[string]interface{}{"target_id": tid, "condition": "frightened", "source": "Intimidating Presence (" + name + ")",
 				"duration_rounds": 10, "end_save": map[string]interface{}{"ability": "wis", "dc": dc}, "campaign_id": campaignID})

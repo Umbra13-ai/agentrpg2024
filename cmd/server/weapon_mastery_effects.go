@@ -101,17 +101,17 @@ func masteryOnHit(lobbyID, charID, targetID int, name, monsterKey string, mu mas
 		// the target's Constitution save (save_2024.go): its conditions, Bless or Bane, Haste ... count as for any save
 		sv := (&saveCtx{lobby: lobbyID, saver: targetID, ability: "con", dc: mu.DC, against: []string{"prone"}, source: charID}).roll()
 		if sv.Success {
-			return fmt.Sprintf(" Topple: %s and stays on its feet.", sv.Line(name))
+			return fmt.Sprintf(" Topple: %s and stays on its feet.", sv.LineAgainst(name))
 		}
 		for _, c := range conditionNames(lobbyID, targetID) {
 			if c == "prone" {
-				return fmt.Sprintf(" Topple: %s but is already Prone.", sv.Line(name))
+				return fmt.Sprintf(" Topple: %s but is already Prone.", sv.LineAgainst(name))
 			}
 		}
 		db.Exec(`INSERT INTO condition_records (lobby_id, target_id, condition, source, escapes, notes)
 			VALUES ($1, $2, 'prone', $3, '[]', $4)`, lobbyID, targetID, "Topple ("+mu.Weapon+")",
 			fmt.Sprintf("Failed the Constitution save against Topple (DC %d).", mu.DC))
-		return fmt.Sprintf(" Topple: %s and falls Prone.", sv.Line(name))
+		return fmt.Sprintf(" Topple: %s and falls Prone.", sv.LineAgainst(name))
 	case "Vex":
 		if damage > 0 {
 			vexMarks.Store(charID, vexMark{Lobby: lobbyID, Target: targetID})

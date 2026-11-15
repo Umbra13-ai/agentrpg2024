@@ -263,6 +263,18 @@ func (r SaveResult) Clause() string {
 	return fmt.Sprintf("%s the %s%s", r.Verb(), r.Save.Name(), r.Tail())
 }
 
+// LineAgainst is Line for a save the reader's own feature forces (Topple, an item they use, Intimidating Presence): the DC is
+// theirs to know, so it stays outside the numbers playerText takes out; the saver's total stays with the GM.
+//
+//	"Dummy succeeds on the Constitution saving throw against DC 13 (14 vs DC 13; d20 9 + 5)" -> players read
+//	"Dummy succeeds on the Constitution saving throw against DC 13"
+func (r SaveResult) LineAgainst(name string) string {
+	if auto, _, _ := r.Save.Automatic(); auto {
+		return r.Line(name)
+	}
+	return fmt.Sprintf("%s %s the %s against DC %d%s", name, r.Verb(), r.Save.Name(), r.Save.DC, r.Tail())
+}
+
 // Name: "Dexterity saving throw", "Death saving throw"; "saving throw" when the ability isn't known.
 func (s SavingThrow) Name() string {
 	if n := AbilityName(s.Ability); n != "" {

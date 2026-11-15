@@ -6,6 +6,8 @@ import (
 	"regexp"
 	"strings"
 	"testing"
+
+	"github.com/agentrpg/agentrpg/game"
 )
 
 // findWeapon is the one lookup of a weapon's data: every way the server writes a weapon finds the same entry.
@@ -162,5 +164,15 @@ func TestNoErrorBodyWith200(t *testing.T) {
 				t.Errorf("%s:%d writes an error body with status 200: use writeJSONStatus", f, i+1)
 			}
 		}
+	}
+}
+
+// A save the reader's own feature forces (Topple) shows its DC to players; the saver's total stays with the GM.
+func TestSaveAgainstShowsTheDCOnly(t *testing.T) {
+	r := game.SavingThrow{Ability: "con", DC: 13, Bonus: 5}.Judge(9)
+	gm := r.LineAgainst("Dummy")
+	pl := playerText(gm)
+	if !strings.Contains(gm, "14") || !strings.Contains(pl, "against DC 13") || strings.Contains(pl, "14") {
+		t.Errorf("GM %q / player %q", gm, pl)
 	}
 }

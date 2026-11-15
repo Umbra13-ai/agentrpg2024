@@ -453,7 +453,7 @@ func ironFlask(charID int, it invItem, req itemCastReq, description string) stri
 	}
 	sv := sc.resist(saveStakes{Condition: true})
 	if sv.Success {
-		return fmt.Sprintf("You aim the %s at %s: %s. It resists.", name, mname, sv.Line(mname))
+		return fmt.Sprintf("You aim the %s at %s: %s. It resists.", name, mname, sv.LineAgainst(mname))
 	}
 	removeMonsterFromFight(lobby, target)
 	updateInventoryItem(charID, it, func(x invItem) {
@@ -461,7 +461,7 @@ func ironFlask(charID int, it invItem, req itemCastReq, description string) stri
 		list, _ := x["trapped_before"].([]interface{})
 		x["trapped_before"] = append(list, key)
 	})
-	return fmt.Sprintf("You aim the %s at %s: %s. %s is drawn into the flask and trapped (it leaves the fight; it doesn't age, breathe, eat or drink). Release it with {\"action\": \"use_item\", \"item\": \"%s\", \"description\": \"release\"}: it then obeys you for 1 hour.", name, mname, sv.Line(mname), mname, name)
+	return fmt.Sprintf("You aim the %s at %s: %s. %s is drawn into the flask and trapped (it leaves the fight; it doesn't age, breathe, eat or drink). Release it with {\"action\": \"use_item\", \"item\": \"%s\", \"description\": \"release\"}: it then obeys you for 1 hour.", name, mname, sv.LineAgainst(mname), mname, name)
 }
 
 // ---------------------------------------------------------------- Sphere of Annihilation and the Talisman of the Sphere
