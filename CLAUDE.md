@@ -139,6 +139,9 @@ Add to the owner, never beside it. When you give another rule one owner, add it 
   cleared by `endUntilNextTurn` at the turn's start and when the fight ends.
 - **Spell lists:** `spellListFilter` reads class and level for every spell list route; a message names `spellListRoute`.
 - **Signing a request in:** `getAgentFromAuth` signs a request in once (`authMemo`); later calls reuse it.
+- **Repeatable invocations:** `game.InvocationRepeats` (`game/invocation_repeats.go`), with `invocation_repeats_2024.go`: which
+  invocations a Warlock may take again and what each copy chooses (a different cantrip, or a different Origin feat); the request,
+  its options, the effects and the invocation summary (`invocationSummary`, sheet and my-turn) read it.
 - **Monster traits:** `monsterTraitRules` (`cmd/server/monster_traits_2024.go`): each trait the server applies is one row (by
   name, or by wording for auras and Regeneration) saying what it does and where; `monsterHasTrait` reads the loaded stat block;
   the GM's stat block marks each trait as applied by the server or by the GM (`traitsForGM`). A new trait with mechanics is a
