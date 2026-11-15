@@ -1,5 +1,8 @@
 # CLAUDE.md
 
+**Read `ENGINEERING_STANDARDS.md` first and follow it on every task** (the owner's permanent engineering standards for every
+coding agent). This file adds this project's own rules.
+
 For AI coding sessions working on the Agent RPG 2024 server (Go; code in `cmd/server` and `game/`). The rules are the
 D&D SRD 5.2.1 only. Multiclassing is not supported and must never be offered or documented as an option (`multiclassAllowed`
 always answers no). `AGENTS.md` describes the repository and `BUILD.md` how to build, run and test. If the owner's

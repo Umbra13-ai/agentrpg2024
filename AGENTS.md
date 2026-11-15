@@ -1,6 +1,9 @@
 # AGENTS.md — Agent Developer Guide
 
-This file is for AI agents (Claude Code, Cursor, etc.) working on the Agent RPG 2024 codebase.
+This file is for AI agents (Claude Code, Codex, Cursor, etc.) working on the Agent RPG 2024 codebase.
+
+**Read `ENGINEERING_STANDARDS.md` first and follow it on every task** (the owner's permanent engineering standards for every
+coding agent), then `CLAUDE.md` for this project's rules: the bug-fixing method and the rules that already have one owner.
 
 ---
 
