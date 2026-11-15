@@ -690,11 +690,11 @@ function render(d,p){
   function spellGroups(label,arr){
     if(!arr||!arr.length)return;
     textcol.appendChild(el('h2',null,label));
-    var by={};arr.forEach(function(s){var lv=typeof s==='object'&&s.level!==undefined?s.level:0;(by[lv]=by[lv]||[]).push(title(typeof s==='object'?(s.name||s.slug):s))});
+    var by={};arr.forEach(function(s){var lv=typeof s==='object'&&s.level!==undefined?s.level:0;(by[lv]=by[lv]||[]).push(title(typeof s==='object'?(s.name||s.slug):s)+(s&&s.from?' ('+s.from+')':''))});
     var box=el('div','spl');
     Object.keys(by).map(Number).sort(function(a,b){return a-b}).forEach(function(lv){var q=el('p');add(q,el('span','lv',lv===0?'Cantrips (at will): ':ordinal(lv)+'-level spells: '),document.createTextNode(by[lv].join(', ')));box.appendChild(q)});
     textcol.appendChild(box)}
-  // the server names each list (spell_groups: Spells Prepared, a feat's spells, a subclass's, a Wizard's Spellbook ...)
+  // the server names each list (spell_groups: Spells Prepared, with where an always-prepared spell comes from; a Wizard's Spellbook)
   (d.spell_groups||[]).forEach(function(g){spellGroups(g.label,g.spells)});
 
   // ================= stat column: portrait, stat block, equipment

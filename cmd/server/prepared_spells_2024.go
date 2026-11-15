@@ -368,18 +368,19 @@ func preparedListProblems(charID int) []string {
 	return out
 }
 
-// spellGroupsForSheet: the character's spells as the sheet shows them, each list named for what it is. It reads the lists the
-// sheet already built (prepared_spells, known_spells, origin_spells, invocation_spells, domain_spells) and adds:
-//   - "Spells Prepared";
-//   - one list per source of the spells species and Origin feats give ("Magic Initiate (Cleric list)") and "Eldritch Invocations";
-//   - the subclass's always-prepared spells, named for the subclass (a Cleric's domain, a Paladin's oath, a Druid's circle ...);
-//   - "Spellbook" only for a class whose features keep one (the class data's "spellbook" mechanic: the Wizard), holding the level
-//     1+ spells it knows, prepared or not (SRD 5.2.1: "The book contains the level 1+ spells you know"), but not a feat's or an
-//     invocation's spells (listed under their source, as freeSpellbookCount counts them apart);
-//   - "Spells Known" for any known spell no list above shows.
+// spellGroupsForSheet: the character's spells as the sheet shows them (SRD 5.2.1: every class prepares its spells from its own
+// class list, except the Wizard, who prepares from a spellbook):
+//   - "Spells Prepared": everything the character can cast now: its prepared spells and cantrips, and every spell it has
+//     prepared without choosing it (a feat's or a species', a subclass's, an Eldritch Invocation's), each of those with "from"
+//     saying where it comes from ("Magic Initiate, Cleric list", "Life Domain");
+//   - "Spellbook", only for a class whose features keep one (the class data's "spellbook" mechanic: the Wizard): the level 1+
+//     spells it knows, prepared or not (SRD 5.2.1: "The book contains the level 1+ spells you know"), but not a feat's or an
+//     invocation's spells (shown with their source, as freeSpellbookCount counts them apart).
 //
-// Before Nov 15 2026 the character page named the known list itself: "Spellbook" whenever the character had prepared spells, so
-// a Cleric's Magic Initiate spells were shown as a spellbook.
+// Other classes have no list of spells known beside the prepared one: they can prepare any spell of their class list.
+//
+// Before Nov 15 2026 the character page named the lists itself: "Spellbook" whenever the character had prepared spells (a
+// Cleric's Magic Initiate spells were shown as a spellbook) and "Domain Spells" for every subclass's.
 func spellGroupsForSheet(class string, level int, subclassSlug string, response map[string]interface{}) []map[string]interface{} {
 	asList := func(v interface{}) []map[string]interface{} {
 		l, _ := v.([]map[string]interface{})
@@ -387,64 +388,67 @@ func spellGroupsForSheet(class string, level int, subclassSlug string, response 
 	}
 	slugOf := func(s map[string]interface{}) string { return normalizeSpellSlug(fmt.Sprint(s["slug"])) }
 	levelOf := func(s map[string]interface{}) int { n, _ := s["level"].(int); return n }
-	shown := map[string]bool{}
-	var groups []map[string]interface{}
-	add := func(label, note string, spells []map[string]interface{}) {
-		if len(spells) == 0 {
+	// "Magic Initiate (Cleric list)" -> "Magic Initiate, Cleric list": read inside a list of spells in brackets
+	fromLabel := func(src string) string {
+		return strings.TrimSpace(strings.NewReplacer(" (", ", ", "(", "", ")", "").Replace(src))
+	}
+	var prepared []map[string]interface{}
+	at := map[string]int{}
+	put := func(s map[string]interface{}, from string) {
+		slug := slugOf(s)
+		if i, ok := at[slug]; ok {
+			if from != "" && prepared[i]["from"] == nil {
+				prepared[i]["from"] = from // prepared by choice and also given by a feature: say by what
+			}
 			return
 		}
-		for _, s := range spells {
-			shown[slugOf(s)] = true
+		e := map[string]interface{}{"slug": s["slug"], "name": s["name"], "level": levelOf(s)}
+		if e["name"] == nil || e["name"] == "" {
+			e["name"] = s["slug"]
 		}
-		g := map[string]interface{}{"label": label, "spells": spells}
-		if note != "" {
-			g["note"] = note
+		if from != "" {
+			e["from"] = from
 		}
-		groups = append(groups, g)
+		at[slug] = len(prepared)
+		prepared = append(prepared, e)
 	}
-	add("Spells Prepared", "", asList(response["prepared_spells"]))
-	var sources []string
-	bySource := map[string][]map[string]interface{}{}
-	for _, s := range asList(response["origin_spells"]) {
-		src := fmt.Sprint(s["source"])
-		if _, ok := bySource[src]; !ok {
-			sources = append(sources, src)
-		}
-		bySource[src] = append(bySource[src], s)
+	for _, sp := range asList(response["prepared_spells"]) {
+		put(sp, "")
 	}
-	for _, src := range sources {
-		add(src, "", bySource[src])
+	fromOthers := map[string]bool{}
+	for _, sp := range asList(response["origin_spells"]) {
+		put(sp, fromLabel(fmt.Sprint(sp["source"])))
+		fromOthers[slugOf(sp)] = true
 	}
-	add("Eldritch Invocations", "", asList(response["invocation_spells"]))
+	for _, sp := range asList(response["invocation_spells"]) {
+		put(sp, "Eldritch Invocation")
+		fromOthers[slugOf(sp)] = true
+	}
 	if d := asList(response["domain_spells"]); len(d) > 0 {
 		name := "subclass"
 		if sc, ok := game.AvailableSubclasses[subclassSlug]; ok {
 			name = sc.Name
 		}
-		add("Always Prepared ("+name+")", "Always prepared; they don't count against the prepared spell limit.", d)
+		for _, sp := range d {
+			put(sp, name)
+		}
 	}
-	known := asList(response["known_spells"])
+	var groups []map[string]interface{}
+	if len(prepared) > 0 {
+		groups = append(groups, map[string]interface{}{"label": "Spells Prepared", "spells": prepared,
+			"note": "Cantrips and prepared spells; a spell marked with where it comes from is always prepared and doesn't count against the limit."})
+	}
 	if game.HasClassFeature(class, level, "spellbook") {
-		fromOthers := map[string]bool{} // a feat's or an invocation's spell is listed under its source, not written in the book
-		for _, k := range []string{"origin_spells", "invocation_spells"} {
-			for _, s := range asList(response[k]) {
-				fromOthers[slugOf(s)] = true
-			}
-		}
 		var book []map[string]interface{}
-		for _, s := range known {
-			if levelOf(s) > 0 && !fromOthers[slugOf(s)] {
-				book = append(book, s)
+		for _, sp := range asList(response["known_spells"]) {
+			if levelOf(sp) > 0 && !fromOthers[slugOf(sp)] {
+				book = append(book, sp)
 			}
 		}
-		add("Spellbook", "The level 1+ spells in the spellbook; prepare from these.", book)
-	}
-	var rest []map[string]interface{}
-	for _, s := range known {
-		if !shown[slugOf(s)] {
-			rest = append(rest, s)
+		if len(book) > 0 {
+			groups = append(groups, map[string]interface{}{"label": "Spellbook", "spells": book,
+				"note": "The level 1+ spells in the spellbook; prepare from these."})
 		}
 	}
-	add("Spells Known", "", rest)
 	return groups
 }
