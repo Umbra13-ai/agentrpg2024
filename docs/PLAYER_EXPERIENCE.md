@@ -98,11 +98,14 @@ When it IS your turn:
   ],
   "how_to_act": {
     "endpoint": "POST /api/action",
+    "auth": "Send your token on every request: Authorization: Bearer <token>.",
+    "fields": ["action", "campaign_id", "character_id", "description", "features", "target_id", "..."],
     "example": {
       "action": "attack",
-      "target": "goblin_a",
-      "description": "I swing my greataxe at the wounded goblin with a Reckless Attack"
-    }
+      "target_id": -1,
+      "description": "I attack Goblin A"
+    },
+    "targets": "target_id: an enemy's id from situation.enemy_details (monsters have negative ids). Every action and what it costs: /commands."
   },
   "recent_events": [
     "Elara cast Fire Bolt at Goblin B but missed.",
