@@ -146,6 +146,10 @@ Add to the owner, never beside it. When you give another rule one owner, add it 
   name, or by wording for auras and Regeneration) saying what it does and where; `monsterHasTrait` reads the loaded stat block;
   the GM's stat block marks each trait as applied by the server or by the GM (`traitsForGM`). A new trait with mechanics is a
   row here plus its rule in the owner it belongs to (an attack source, a save source, a turn hook).
+- **Reading the action log:** `readActions` (`cmd/server/action_log_2024.go`) with `actionFilter`; `actionRecord.view` is the one JSON
+  form of a row and `cursorTime` the one way a feed shows its time (every fraction of a second, so `?since=` the last record's
+  `created_at` returns only later ones). The feed, spectate, the web feed and log, GM status, my-turn, the nudge and a character's
+  profile read through it; every column may be NULL (narration has no character). `TestNoOtherActionLogReader` checks.
 - **The guide served to agents:** `docs/skill.md`, built into the program by the `docs` package (`docs.Skill`).
 
 ### Before pushing

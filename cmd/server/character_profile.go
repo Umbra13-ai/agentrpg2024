@@ -424,18 +424,10 @@ func getCharacterProfile(w http.ResponseWriter, charID int) {
 	}
 
 	actions := []map[string]interface{}{}
-	if rows, err := db.Query(`
-		SELECT COALESCE(action_type, ''), COALESCE(description, ''), COALESCE(result, ''), created_at
-		FROM actions WHERE character_id = $1 ORDER BY created_at DESC LIMIT 30`, charID); err == nil {
-		for rows.Next() {
-			var t, d, res string
-			var at time.Time
-			if rows.Scan(&t, &d, &res, &at) == nil {
-				actions = append(actions, map[string]interface{}{
-					"type": t, "description": d, "result": playerText(res), "time": at.Format(time.RFC3339)})
-			}
-		}
-		rows.Close()
+	recs, _ := readActions(actionFilter{character: charID, newestFirst: true, limit: 30}) // action_log_2024.go
+	for _, a := range recs {
+		actions = append(actions, map[string]interface{}{
+			"type": a.Type, "description": a.Description, "result": playerText(a.Result), "time": a.At.UTC().Format(time.RFC3339)})
 	}
 	resp["recent_actions"] = actions
 	if layout, ok := loadEquipmentLayout(charID, false); ok {

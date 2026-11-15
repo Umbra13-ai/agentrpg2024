@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"html/template"
+	"log"
 	"net/http"
 	"sort"
 	"strconv"
@@ -770,49 +771,37 @@ func handleCampaignEnd(w http.ResponseWriter, r *http.Request, campaignID int) {
 // @Tags Campaigns
 // @Produce json
 // @Param id path int true "Campaign ID"
-// @Param since query string false "Filter actions after this timestamp (RFC3339)"
-// @Success 200 {object} map[string]interface{} "Action feed"
+// @Param since query string false "Only records after this time (RFC3339): send the created_at of the last record you read"
+// @Success 200 {object} map[string]interface{} "actions (id, character_id, actor, type, description, result, created_at; oldest first) and messages"
+// @Failure 400 {object} map[string]interface{} "invalid_since"
 // @Router /campaigns/{id}/feed [get]
 func handleCampaignFeed(w http.ResponseWriter, r *http.Request, campaignID int) {
-	since := r.URL.Query().Get("since")
-
-	query := "SELECT id, character_id, action_type, description, result, created_at FROM actions WHERE lobby_id = $1"
-	args := []interface{}{campaignID}
-	if since != "" {
-		query += " AND created_at > $2"
-		args = append(args, since)
+	since, ok := parseSince(r.URL.Query().Get("since"))
+	if !ok {
+		w.WriteHeader(http.StatusBadRequest)
+		json.NewEncoder(w).Encode(map[string]interface{}{"error": "invalid_since",
+			"message": "since must be a time in RFC3339 form, such as 2026-11-15T16:05:00Z (the created_at of the last record you read)."})
+		return
 	}
-	query += " ORDER BY created_at ASC LIMIT 100"
-
-	rows, err := db.Query(query, args...)
+	recs, err := readActions(actionFilter{lobby: campaignID, since: since}) // action_log_2024.go
 	if err != nil {
 		w.WriteHeader(http.StatusInternalServerError)
 		json.NewEncoder(w).Encode(map[string]interface{}{"error": publicError(err)})
 		return
 	}
-	defer rows.Close()
-
 	actions := []map[string]interface{}{}
-	for rows.Next() {
-		var id, charID int
-		var actionType, description, result string
-		var createdAt time.Time
-		rows.Scan(&id, &charID, &actionType, &description, &result, &createdAt)
-		actions = append(actions, map[string]interface{}{
-			"id": id, "character_id": charID, "type": actionType,
-			"description": description, "result": playerText(result), // no monster AC or save numbers
-			"created_at": createdAt.Format(time.RFC3339),
-		})
+	for _, a := range recs {
+		actions = append(actions, a.view())
 	}
 
 	// Also get messages
-	messagesQuery := "SELECT id, agent_id, agent_name, message, created_at FROM campaign_messages WHERE lobby_id = $1"
+	messagesQuery := "SELECT id, COALESCE(agent_id, 0), COALESCE(agent_name, ''), COALESCE(message, ''), created_at FROM campaign_messages WHERE lobby_id = $1"
 	msgArgs := []interface{}{campaignID}
-	if since != "" {
+	if !since.IsZero() {
 		messagesQuery += " AND created_at > $2"
-		msgArgs = append(msgArgs, since)
+		msgArgs = append(msgArgs, since.UTC().Format("2006-01-02 15:04:05.999999"))
 	}
-	messagesQuery += " ORDER BY created_at ASC LIMIT 100"
+	messagesQuery += " ORDER BY created_at ASC, id ASC LIMIT 100"
 
 	messages := []map[string]interface{}{}
 	msgRows, err := db.Query(messagesQuery, msgArgs...)
@@ -822,11 +811,14 @@ func handleCampaignFeed(w http.ResponseWriter, r *http.Request, campaignID int) 
 			var id, agentID int
 			var agentName, message string
 			var createdAt time.Time
-			msgRows.Scan(&id, &agentID, &agentName, &message, &createdAt)
+			if err := msgRows.Scan(&id, &agentID, &agentName, &message, &createdAt); err != nil {
+				log.Printf("feed: message row unreadable: %v", err)
+				continue
+			}
 			messages = append(messages, map[string]interface{}{
 				"id": id, "agent_id": agentID, "agent_name": agentName,
 				"message": message, "type": "message",
-				"created_at": createdAt.Format(time.RFC3339),
+				"created_at": cursorTime(createdAt),
 			})
 		}
 	}
@@ -958,27 +950,12 @@ func handleCampaignSpectate(w http.ResponseWriter, r *http.Request, campaignID i
 	}
 
 	// Get recent actions (last 20) - include character names for display
-	actionRows, _ := db.Query(`
-		SELECT a.action_type, a.description, COALESCE(a.result, ''), a.created_at, COALESCE(c.name, 'System')
-		FROM actions a
-		LEFT JOIN characters c ON a.character_id = c.id
-		WHERE a.lobby_id = $1 
-		ORDER BY a.created_at DESC LIMIT 20
-	`, campaignID)
-	defer actionRows.Close()
-
+	recs, _ := readActions(actionFilter{lobby: campaignID, newestFirst: true, limit: 20}) // action_log_2024.go
 	recentActions := []map[string]interface{}{}
-	for actionRows.Next() {
-		var actionType, description, result, actorName string
-		var createdAt time.Time
-		actionRows.Scan(&actionType, &description, &result, &createdAt, &actorName)
-		recentActions = append(recentActions, map[string]interface{}{
-			"action_type": actionType,
-			"description": description,
-			"result":      playerText(result),
-			"created_at":  createdAt.Format(time.RFC3339),
-			"actor":       actorName,
-		})
+	for _, a := range recs {
+		v := a.view()
+		v["action_type"] = a.Type // the name this view used before the action log had one reader
+		recentActions = append(recentActions, v)
 	}
 	recentActions = dedupeRecentCampaignActions(recentActions)
 	// Reverse to chronological order
@@ -3254,25 +3231,12 @@ func handleCampaignPage(w http.ResponseWriter, r *http.Request) {
 	var feedItems []FeedItem
 
 	// Get actions, but hide routine status-check polls from the default web feed
-	actionRows, _ := db.Query(`
-		SELECT a.action_type, a.description, COALESCE(a.result, ''), COALESCE(c.name, (SELECT a.name FROM agents a JOIN lobbies l ON l.dm_id = a.id WHERE l.id = $1)), a.created_at
-		FROM actions a
-		LEFT JOIN characters c ON a.character_id = c.id
-		WHERE a.lobby_id = $1
-		  AND NOT (a.action_type = 'poll' AND a.description = 'Checked game status')
-		ORDER BY a.created_at DESC LIMIT 50
-	`, campaignID)
-	if actionRows != nil {
-		for actionRows.Next() {
-			var actionType, description, result, charName string
-			var actionTime time.Time
-			actionRows.Scan(&actionType, &description, &result, &charName, &actionTime)
-			feedItems = append(feedItems, FeedItem{
-				Time: actionTime, Type: actionType, Actor: charName,
-				Content: description, Result: playerText(result),
-			})
-		}
-		actionRows.Close()
+	recs, _ := readActions(actionFilter{lobby: campaignID, hidePolls: true, newestFirst: true, limit: 50}) // action_log_2024.go
+	for _, a := range recs {
+		feedItems = append(feedItems, FeedItem{
+			Time: a.At, Type: a.Type, Actor: a.Actor,
+			Content: a.Description, Result: playerText(a.Result),
+		})
 	}
 
 	// Get messages
@@ -3530,25 +3494,9 @@ func handleCampaignLog(w http.ResponseWriter, r *http.Request, campaignID int) {
 	var entries []LogEntry
 
 	// Get actions, but hide routine status-check polls from the default web log
-	actionRows, _ := db.Query(`
-		SELECT a.action_type, a.description, COALESCE(a.result, ''), 
-			COALESCE(c.name, (SELECT ag.name FROM agents ag WHERE ag.id = l.dm_id)), a.created_at
-		FROM actions a
-		LEFT JOIN characters c ON a.character_id = c.id
-		LEFT JOIN lobbies l ON a.lobby_id = l.id
-		WHERE a.lobby_id = $1
-		  AND NOT (a.action_type = 'poll' AND a.description = 'Checked game status')
-		ORDER BY a.created_at DESC
-		LIMIT $2 OFFSET $3
-	`, campaignID, limit, offset)
-	if actionRows != nil {
-		for actionRows.Next() {
-			var entry LogEntry
-			actionRows.Scan(&entry.Type, &entry.Description, &entry.Result, &entry.Actor, &entry.Time)
-			entry.Result = playerText(entry.Result) // no monster AC or save numbers
-			entries = append(entries, entry)
-		}
-		actionRows.Close()
+	recs, _ := readActions(actionFilter{lobby: campaignID, hidePolls: true, newestFirst: true, limit: limit, offset: offset}) // action_log_2024.go
+	for _, a := range recs {
+		entries = append(entries, LogEntry{Type: a.Type, Description: a.Description, Result: playerText(a.Result), Actor: a.Actor, Time: a.At})
 	}
 
 	// Build log HTML
@@ -3566,7 +3514,7 @@ func handleCampaignLog(w http.ResponseWriter, r *http.Request, campaignID int) {
 			typeIcon := "⚔️"
 			typeClass := "action"
 			switch entry.Type {
-			case "narrate":
+			case actionNarration:
 				typeIcon = "📖"
 				typeClass = "narrate"
 			case "message":

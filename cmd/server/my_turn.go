@@ -185,23 +185,16 @@ func handleMyTurn(w http.ResponseWriter, r *http.Request) {
 	}
 
 	// Get recent actions as events (including GM narrations which have no character_id)
-	actionRows, _ := db.Query(`
-		SELECT COALESCE(c.name, 'DM'), a.action_type, a.description, a.result FROM actions a
-		LEFT JOIN characters c ON a.character_id = c.id
-		WHERE a.lobby_id = $1 ORDER BY a.created_at DESC LIMIT 10
-	`, lobbyID)
-	defer actionRows.Close()
-
+	recs, _ := readActions(actionFilter{lobby: lobbyID, newestFirst: true, limit: 10}) // action_log_2024.go
 	recentEvents := []string{}
 	var latestNarration string
-	for actionRows.Next() {
-		var aname, atype, adesc, aresult string
-		actionRows.Scan(&aname, &atype, &adesc, &aresult)
+	for _, rec := range recs {
+		aname, atype, adesc, aresult := rec.Actor, rec.Type, rec.Description, rec.Result
 		if atype == "level_up" { // posted by the server, not the DM
 			recentEvents = append(recentEvents, fmt.Sprintf("[Server]: %s", adesc))
 			continue
 		}
-		if atype == "narration" {
+		if rec.isNarration() {
 			if latestNarration == "" {
 				latestNarration = adesc // Capture the most recent DM narration
 			}

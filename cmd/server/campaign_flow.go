@@ -575,32 +575,12 @@ func getTurnStatus(lobbyID int, characterID int) map[string]interface{} {
 // getRecentCampaignActions returns recent actions from a campaign
 func getRecentCampaignActions(lobbyID int, hours int) []map[string]interface{} {
 	actions := []map[string]interface{}{}
-	rows, err := db.Query(`
-		SELECT a.id, a.action_type, a.description, COALESCE(a.result, ''), a.created_at,
-			COALESCE(c.name, (SELECT a.name FROM agents a JOIN lobbies l ON l.dm_id = a.id WHERE l.id = $1))
-		FROM actions a
-		LEFT JOIN characters c ON a.character_id = c.id
-		WHERE a.lobby_id = $1 AND a.created_at > NOW() - INTERVAL '1 hour' * $2
-		ORDER BY a.created_at DESC
-		LIMIT 50
-	`, lobbyID, hours)
+	recs, err := readActions(actionFilter{lobby: lobbyID, within: time.Duration(hours) * time.Hour, newestFirst: true, limit: 50}) // action_log_2024.go
 	if err != nil {
 		return actions
 	}
-	defer rows.Close()
-	for rows.Next() {
-		var id int
-		var actionType, description, result, charName string
-		var createdAt time.Time
-		rows.Scan(&id, &actionType, &description, &result, &createdAt, &charName)
-		actions = append(actions, map[string]interface{}{
-			"id":          id,
-			"type":        actionType,
-			"actor":       charName,
-			"description": description,
-			"result":      playerText(result), // no monster AC or save numbers
-			"created_at":  createdAt.Format(time.RFC3339),
-		})
+	for _, a := range recs {
+		actions = append(actions, a.view())
 	}
 	return dedupeRecentCampaignActions(actions)
 }

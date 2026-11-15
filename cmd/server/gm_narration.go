@@ -123,24 +123,15 @@ func handleGMStatus(w http.ResponseWriter, r *http.Request) {
 	}
 
 	// Get the last action
-	var lastActionID, lastCharID int
-	var lastActionType, lastDesc, lastResult string
-	var lastActionTime time.Time
-	var lastCharName string
-	err = db.QueryRow(`
-		SELECT a.id, a.character_id, COALESCE(c.name, 'Unknown'), a.action_type, a.description, a.result, a.created_at
-		FROM actions a
-		LEFT JOIN characters c ON a.character_id = c.id
-		WHERE a.lobby_id = $1
-		  AND a.action_type NOT IN ('poll', 'joined', 'following')
-		ORDER BY a.created_at DESC
-		LIMIT 1
-	`, campaignID).Scan(&lastActionID, &lastCharID, &lastCharName, &lastActionType, &lastDesc, &lastResult, &lastActionTime)
+	last, haveLast := lastAction(actionFilter{lobby: campaignID, skipTypes: []string{"poll", "joined", "following"}}) // action_log_2024.go
+	lastCharName := last.Actor
+	// a character's action waits for the GM's narration; narration, a monster's turn or a level-up does not
+	awaitsNarration := haveLast && last.CharacterID > 0 && !last.isNarration()
 
 	var lastAction map[string]interface{}
 	timeSinceAction := ""
-	if err == nil {
-		duration := time.Since(lastActionTime)
+	if haveLast {
+		duration := time.Since(last.At)
 		if duration < time.Minute {
 			timeSinceAction = "just now"
 		} else if duration < time.Hour {
@@ -151,8 +142,8 @@ func handleGMStatus(w http.ResponseWriter, r *http.Request) {
 
 		lastAction = map[string]interface{}{
 			"character": lastCharName,
-			"action":    fmt.Sprintf("%s: %s", lastActionType, lastDesc),
-			"result":    lastResult,
+			"action":    fmt.Sprintf("%s: %s", last.Type, last.Description),
+			"result":    last.Result,
 			"timestamp": timeSinceAction,
 		}
 	}
@@ -338,7 +329,7 @@ func handleGMStatus(w http.ResponseWriter, r *http.Request) {
 					"Environmental hazards worsen each round",
 				},
 			}
-		} else if lastAction != nil && strings.ToLower(lastActionType) != "narration" {
+		} else if awaitsNarration {
 			needsAttention = true
 			whatToDoNext = map[string]interface{}{
 				"instruction":          fmt.Sprintf("Narrate %s's action, then check if it's a monster's turn.", lastCharName),
@@ -354,7 +345,7 @@ func handleGMStatus(w http.ResponseWriter, r *http.Request) {
 		}
 	} else {
 		// Exploration mode
-		if lastAction != nil && strings.ToLower(lastActionType) != "narration" {
+		if awaitsNarration {
 			needsAttention = true
 			whatToDoNext = map[string]interface{}{
 				"instruction":          fmt.Sprintf("Narrate the result of %s's action.", lastCharName),
@@ -1614,24 +1605,13 @@ func handleGMNudge(w http.ResponseWriter, r *http.Request) {
 	}
 
 	// Get the last few actions for context
-	rows, _ := db.Query(`
-		SELECT COALESCE(c.name, 'GM'), a.action_type, a.description, a.result
-		FROM actions a
-		LEFT JOIN characters c ON a.character_id = c.id
-		WHERE a.lobby_id = $1
-		ORDER BY a.created_at DESC
-		LIMIT 3
-	`, campaignID)
-	defer rows.Close()
-
+	recs, _ := readActions(actionFilter{lobby: campaignID, newestFirst: true, limit: 3}) // action_log_2024.go
 	recentActions := []string{}
-	for rows.Next() {
-		var actorName, actionType, desc, result string
-		rows.Scan(&actorName, &actionType, &desc, &result)
-		if result != "" {
-			recentActions = append(recentActions, fmt.Sprintf("- %s: %s → %s", actorName, desc, result))
+	for _, a := range recs {
+		if a.Result != "" {
+			recentActions = append(recentActions, fmt.Sprintf("- %s: %s → %s", a.Actor, a.Description, playerText(a.Result)))
 		} else {
-			recentActions = append(recentActions, fmt.Sprintf("- %s: %s", actorName, desc))
+			recentActions = append(recentActions, fmt.Sprintf("- %s: %s", a.Actor, a.Description))
 		}
 	}
 
