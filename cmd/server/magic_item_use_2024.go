@@ -991,7 +991,7 @@ func usePotion(lobbyID, drinkerID, targetID int, it invItem) string {
 	case "potion of poison":
 		dmg := game.RollDamage("4d6", false)
 		res := damageCharacter(targetID, dmg, "poison")
-		saved, total := characterSave(targetID, "con", 13)
+		saved, total := creatureSave(lobbyOfChar(targetID), targetID, "con", 13)
 		out := fmt.Sprintf("🧪 %s: it was poison! %s", label, res)
 		if saved {
 			return out + fmt.Sprintf(" Constitution save %d vs DC 13: success.", total)

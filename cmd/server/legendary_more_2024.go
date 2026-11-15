@@ -322,7 +322,6 @@ func crystalBallNote(itemName, slug string) string {
 var (
 	spellAdvItemsOnce sync.Once
 	spellAdvItems     map[string]string // lower-case SRD name -> where it works ("held", "worn", "carried")
-	spellSaveCtx      sync.Map          // character id -> true while it saves against a spell
 )
 
 func loadSpellAdvItems() {
@@ -404,17 +403,6 @@ func holyAvengerAura(lobbyID, charID int) string {
 		return "Holy Avenger (" + h.name + ")"
 	}
 	return ""
-}
-
-// spellSaveItemAdvantage: Advantage from spellSaveProtection while the character saves against a spell (spellSaveAdvantage calls it).
-func spellSaveItemAdvantage(lobbyID, id int) bool {
-	if id <= 0 {
-		return false
-	}
-	if _, ok := spellSaveCtx.Load(id); !ok {
-		return false
-	}
-	return spellSaveProtection(lobbyID, id) != ""
 }
 
 // staffAbsorbs: a spell aimed only at this character, which holds its attuned Staff of the Magi and has its Reaction: the staff cancels

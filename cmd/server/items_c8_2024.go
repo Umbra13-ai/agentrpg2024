@@ -59,24 +59,17 @@ func talismanRebuke(charID int, it invItem, req itemCastReq, good bool) string {
 		kind = strings.ToLower(monsterTypeOf(lobby, req.TargetID))
 	}
 	dis := (good && (kind == "fiend" || kind == "undead")) || (!good && kind == "celestial")
-	var saved bool
-	if req.TargetID < 0 {
-		saved, _ = monsterSave(lobby, req.TargetID, "dex", 20)
-		if dis && saved {
-			saved, _ = monsterSave(lobby, req.TargetID, "dex", 20) // Disadvantage: the second roll must succeed too
-		}
-	} else {
-		saved, _ = characterSave(req.TargetID, "dex", 20)
-	}
 	label := "Ultimate End"
 	if good {
 		label = "Pure Rebuke"
 	}
-	disNote := ""
+	sc := saveCtx{lobby: lobby, saver: req.TargetID, ability: "dex", dc: 20}
 	if dis {
-		disNote = ", with Disadvantage"
+		sc.extraDis = []string{"the talisman's foe (" + titleCase(kind) + ")"}
 	}
-	text := fmt.Sprintf("%s (a Magic action, 1 charge): a flaming fissure opens under %s (DC 20 Dexterity save%s): ", label, who, disNote)
+	sv := sc.resist(saveStakes{Condition: true})
+	saved := sv.Success
+	text := fmt.Sprintf("%s (a Magic action, 1 charge): a flaming fissure opens under %s: %s: ", label, who, sv.Line(who))
 	switch {
 	case saved:
 		dmg := game.RollDamage("4d6", false)
@@ -134,7 +127,7 @@ func dragonOrb(charID int, it invItem, description string) string {
 	if itemBool(it, "orb_controlled") {
 		return "You already control the Dragon Orb: cast its spells with the cast action and \"item\": \"Dragon Orb\" (Cure Wounds level 9: 4 charges, Daylight 1, Death Ward 2, Detect Magic 0, Scrying 3), or \"call dragons\"."
 	}
-	saved, total := characterSave(charID, "cha", 15)
+	saved, total := creatureSave(lobbyOfChar(charID), charID, "cha", 15)
 	if saved {
 		editInventory(charID, func(inv []invItem) []invItem {
 			for _, x := range inv {

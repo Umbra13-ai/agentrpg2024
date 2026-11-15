@@ -309,8 +309,6 @@ func splitMonster(lobbyID, id int, name, base string) string {
 
 // ---- saves: Advantage when fighting it; notes on Magic Resistance and Legendary Resistance
 
-var fightingSaveAdvantage sync.Map // lobby -> monster id rolling a save with Advantage because the caster's side is fighting it
-
 // fightingItAdvantage: Charm Person, Charm Monster, Dominate Person/Beast/Monster: "Advantage on the save if you or your allies are
 // fighting it" (a creature in the fight).
 func fightingItAdvantage(spellKey string) bool {
@@ -349,11 +347,6 @@ func takeSaveNotes(lobbyID int) string {
 		}
 	}
 	return out
-}
-
-func fightingAdvantageFor(lobbyID, id int) bool {
-	v, ok := fightingSaveAdvantage.Load(lobbyID)
-	return ok && v.(int) == id
 }
 
 // clearMonsterReactionState: monster ids are reused by the next fight, so their Reaction uses and last hits go with the fight.

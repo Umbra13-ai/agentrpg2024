@@ -12,7 +12,6 @@ import (
 	"fmt"
 	"regexp"
 	"strings"
-	"sync"
 
 	"github.com/agentrpg/agentrpg/game"
 )
@@ -184,35 +183,24 @@ func resolveSpellOnMonster(charID int, spellKey string, spell SRDSpell, damageDi
 				disWhy = "Heightened Spell"
 			}
 			var saved bool
-			var total int
-			switch {
-			case typed && rule.AutoFail: // Blight: a Plant creature automatically fails (F191); Legendary Resistance may still turn it
+			var how string
+			if typed && rule.AutoFail { // Blight: a Plant creature automatically fails (F191); Legendary Resistance may still turn it
 				saved = id < 0 && legendaryResistance(lobbyID, id, stakes)
-			case disWhy != "": // Shatter: a Construct has Disadvantage (F192); Heightened Spell (F194)
-				typeSaveDisadvantage.Store(lobbyID, id)
-				saved, total = monsterSpellSaveFor(lobbyID, id, ability, saveDC, stakes)
-				typeSaveDisadvantage.Delete(lobbyID)
-			default:
-				saved, total = monsterSpellSaveFor(lobbyID, id, ability, saveDC, stakes) // Magic Resistance gives Advantage; Legendary Resistance
-			}
-			d := rolled
-			how := fmt.Sprintf("fails its %s save (%s)", strings.ToUpper(ability), saveRollText(lobbyID, id, ability, total, saveDC))
-			if disWhy != "" {
-				how = fmt.Sprintf("fails its %s save with Disadvantage, %s (%s)", strings.ToUpper(ability), disWhy, saveRollText(lobbyID, id, ability, total, saveDC))
-			}
-			if typed && rule.AutoFail {
 				how = fmt.Sprintf("automatically fails its %s save (a %s creature)", strings.ToUpper(ability), rule.Type)
 				if saved {
 					how = "automatically fails its save (a " + rule.Type + " creature) but succeeds with Legendary Resistance"
 				}
-			}
-			if saved {
-				if !(typed && rule.AutoFail) {
-					how = fmt.Sprintf("succeeds on its %s save (%s)", strings.ToUpper(ability), saveRollText(lobbyID, id, ability, total, saveDC))
-					if disWhy != "" {
-						how = fmt.Sprintf("succeeds on its %s save despite Disadvantage, %s (%s)", strings.ToUpper(ability), disWhy, saveRollText(lobbyID, id, ability, total, saveDC))
-					}
+			} else { // Shatter: a Construct has Disadvantage (F192); Heightened Spell (F194); Magic Resistance; Legendary Resistance
+				var dis []string
+				if disWhy != "" {
+					dis = []string{disWhy}
 				}
+				sv := monsterSpellSaveResult(lobbyID, id, ability, saveDC, stakes, dis)
+				saved = sv.Success
+				how = sv.Clause()
+			}
+			d := rolled
+			if saved {
 				if onSave == "half" || potentCantrip(charID, spell) { // F119: Potent Cantrip halves a cantrip's damage on a success
 					d /= 2
 				} else {
@@ -272,9 +260,6 @@ var spellTypeSaveRules = map[string]struct {
 	"shatter": {Type: "construct", Disadvantage: true}, // "A Construct has Disadvantage on the save." (F192)
 }
 
-// typeSaveDisadvantage: lobby -> the monster whose save now has Disadvantage from its creature type (read by moreSaveDisadvantage).
-var typeSaveDisadvantage sync.Map
-
 func spellModScore(charID int) int {
 	var class string
 	var intl, wis, cha int
@@ -323,9 +308,3 @@ func withSpellResolution(charID int, spellKey string, spell SRDSpell, damageDice
 
 // castDamageHeader is the "! 26 fire damage (DC 19 Dexterity save, ...)." at the start of a damaging cast's text.
 var castDamageHeader = regexp.MustCompile(`! \d+ [A-Za-z]+ damage(\s*\([^)]*\))?\.`)
-
-// saveRollText: a monster's saving throw as the DM can check it: "d20 12 +1 = 13 vs DC 13" (F247).
-func saveRollText(lobbyID, id int, ability string, total, dc int) string {
-	bonus, _, _ := saveBonusFor(lobbyID, id, ability)
-	return fmt.Sprintf("d20 %d %+d = %d vs DC %d", total-bonus, bonus, total, dc)
-}

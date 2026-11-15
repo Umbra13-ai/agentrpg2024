@@ -55,7 +55,7 @@ func necklaceOfFireballs(charID int, it invItem, req itemCastReq, description st
 			res, _ := damageMonster(lobby, id, d, "fire")
 			lines = append(lines, fmt.Sprintf("%s %s. %s", monsterName(lobby, id), how, strings.TrimSpace(res)))
 		} else {
-			saved, _ := characterSave(id, "dex", 15)
+			saved, _ := creatureSave(lobby, id, "dex", 15)
 			d := dmg
 			if saved {
 				d = dmg / 2

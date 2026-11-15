@@ -49,13 +49,13 @@ func saveOrDamage(lobby int, ids []int, ability string, dc int, dice, dtype, con
 	}
 	var lines []string
 	for _, id := range ids {
-		var saved bool
-		if id < 0 {
-			saved, _ = monsterSave(lobby, id, ability, dc)
-		} else {
-			saved, _ = characterSave(id, ability, dc)
+		sc := saveCtx{lobby: lobby, saver: id, ability: ability, dc: dc}
+		if cond != "" {
+			sc.against = []string{cond} // Brave against being Frightened, Fey Ancestry against being Charmed ...
 		}
-		line := creatureName(lobby, id) + map[bool]string{true: " saves", false: " fails"}[saved]
+		sv := sc.resist(saveStakes{Condition: cond != "", Damage: dmg})
+		saved := sv.Success
+		line := sv.Line(creatureName(lobby, id))
 		if dmg > 0 {
 			x := dmg
 			if saved {

@@ -8,11 +8,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"strings"
-
-	"github.com/agentrpg/agentrpg/game"
 )
-
-var saveAbilityShort = map[string]string{"Strength": "str", "Dexterity": "dex", "Constitution": "con", "Intelligence": "int", "Wisdom": "wis", "Charisma": "cha"}
 
 // validateEndSave checks the end_save the GM sent and fills in the ability name.
 func validateEndSave(s *conditionSave) string {
@@ -34,57 +30,6 @@ func validateEndSave(s *conditionSave) string {
 	}
 	s.Ability = ab
 	return ""
-}
-
-// saveBonusFor is the modifier a creature adds to a saving throw. ok is false when it is unknown.
-// Characters add their Proficiency Bonus for the saves of their class and lose 2 per Exhaustion level.
-func saveBonusFor(lobbyID, targetID int, ability string) (bonus int, autoFail, disadvantage bool) {
-	short := saveAbilityShort[ability]
-	if short == "" && len(ability) >= 3 { // callers also pass "dex", "con" ... (before this, a short name scored the ability as 0: -5)
-		short = strings.ToLower(ability[:3])
-	}
-	if targetID > 0 {
-		var str, dex, con, intl, wis, cha, level int
-		var class string
-		if db.QueryRow(`SELECT str, dex, con, intl, wis, cha, level, COALESCE(class,'') FROM characters WHERE id = $1`, targetID).
-			Scan(&str, &dex, &con, &intl, &wis, &cha, &level, &class) != nil {
-			return 0, false, false
-		}
-		score := map[string]int{"str": str, "dex": dex, "con": con, "int": intl, "wis": wis, "cha": cha}[short]
-		bonus = game.Modifier(score)
-		if ok, _ := saveProficiency(targetID, class, level, short); ok { // class saves, Disciplined Survivor, Slippery Mind
-			bonus += game.ProficiencyBonus(level)
-		}
-		bonus = wildShapeHigher(targetID, "save:"+short, bonus) // the beast's save modifier when it's higher
-		// Ring/Cloak of Protection, Luckstone, Staff of Power; Exhaustion
-		bonus += magicSaveBonus(targetID) + buffSaveBonus(targetID) - game.ExhaustionD20Penalty(exhaustionLevelOf(targetID))
-		conds := getCharConditions(targetID)
-		adj, _ := spellRollAdjust(lobbyID, targetID, "save:"+short) // Bless, Bane, Slow
-		return bonus + adj, game.AutoFailsSave(conds, short), game.GetSaveDisadvantage(conds, 0, short)
-	}
-	// a monster: its ability modifier (its stat block has no separate saving throw bonuses here)
-	var raw []byte
-	var entries []map[string]interface{}
-	if db.QueryRow(`SELECT turn_order FROM combat_state WHERE lobby_id = $1`, lobbyID).Scan(&raw) == nil {
-		json.Unmarshal(raw, &entries)
-		for _, e := range entries {
-			if asInt(e["id"]) == targetID {
-				if sb := monsterStatBlock(fmt.Sprint(e["monster_key"])); sb != nil {
-					bonus = monsterSaveBonus(fmt.Sprint(e["monster_key"]), short, asInt(sb[short]))
-				}
-			}
-		}
-	}
-	conds := []string{}
-	for _, r := range loadConditionRecords(lobbyID, targetID) {
-		conds = append(conds, r.Condition)
-	}
-	dis := game.GetSaveDisadvantage(conds, 0, short)
-	if takeCombatEffect(lobbyID, targetID, "staggering", 0) {
-		dis = true // Staggering Blow: Disadvantage on the next saving throw
-	}
-	adj, _ := spellRollAdjust(lobbyID, targetID, "save:"+short) // Bless, Bane, Slow
-	return bonus + adj, game.AutoFailsSave(conds, short), dis
 }
 
 // endTurnEffects runs at the end of a turn. endingIndex is the position in the turn order of the creature
@@ -153,21 +98,15 @@ func turnEffects(campaignID, endingIndex int, when string) []string {
 			if when == "start_of_turn" {
 				phase = "at the start of its turn"
 			}
-			bonus, autoFail, dis := saveBonusFor(campaignID, id, s.Ability)
-			adv := spellSaveAdvantage(campaignID, id, s.Ability) // Dodge on a Dexterity save, Haste, Foresight ...: as for any saving throw
-			roll := game.RollDie(20)
-			if dis && !adv {
-				roll, _, _ = game.RollWithDisadvantage()
-			} else if adv && !dis {
-				roll, _, _ = game.RollWithAdvantage()
-			}
-			total := roll + bonus
-			if !autoFail && total >= s.DC {
-				ended = fmt.Sprintf("%s repeats the %s saving throw %s and succeeds (%d): the %s condition ends.", name, s.Ability, phase, total, rec.Condition)
-			} else if id < 0 && legendaryResistance(campaignID, id, saveStakes{Condition: true}) {
+			// the one saving throw function (save_2024.go): Dodge on a Dexterity save, Haste, Foresight, Brave against Frightened ...
+			sv := (&saveCtx{lobby: campaignID, saver: id, ability: s.Ability, dc: s.DC, against: []string{rec.Condition}}).roll()
+			switch {
+			case sv.Success:
+				ended = fmt.Sprintf("%s repeats the %s saving throw %s and succeeds%s: the %s condition ends.", name, s.Ability, phase, sv.Tail(), rec.Condition)
+			case id < 0 && legendaryResistance(campaignID, id, saveStakes{Condition: true}):
 				ended = fmt.Sprintf("%s repeats the %s saving throw %s: the %s condition ends (Legendary Resistance).", name, s.Ability, phase, rec.Condition)
-			} else {
-				log = append(log, fmt.Sprintf("%s repeats the %s saving throw %s and fails (%d): the %s condition continues.", name, s.Ability, phase, total, rec.Condition))
+			default:
+				log = append(log, fmt.Sprintf("%s repeats the %s saving throw %s and fails%s: the %s condition continues.", name, s.Ability, phase, sv.Tail(), rec.Condition))
 			}
 		}
 		if ended == "" && rec.DurationRounds > 0 && when == "end_of_turn" {

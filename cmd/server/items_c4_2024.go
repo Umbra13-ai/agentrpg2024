@@ -280,11 +280,7 @@ func wandOfParalysis(charID int, it invItem, req itemCastReq) string {
 	lobby := lobbyOfChar(charID)
 	who := creatureName(lobby, req.TargetID)
 	var saved bool
-	if req.TargetID < 0 {
-		saved, _ = monsterSave(lobby, req.TargetID, "con", 15)
-	} else {
-		saved, _ = characterSave(req.TargetID, "con", 15)
-	}
+	saved, _ = creatureSave(lobby, req.TargetID, "con", 15)
 	if saved {
 		return fmt.Sprintf("A thin blue ray streaks from the wand (a Magic action, 1 charge) to %s, who succeeds on the DC 15 Constitution save.%s", who, note)
 	}

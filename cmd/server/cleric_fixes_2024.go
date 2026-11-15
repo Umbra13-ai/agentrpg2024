@@ -122,13 +122,6 @@ func pearlOfPower(charID int, it invItem, description string) string {
 	return fmt.Sprintf("Pearl of Power (a Magic action): you regain one expended level %d spell slot. The pearl can't be used again until the next dawn.", want)
 }
 
-// dwarvenResilience: the character is a Dwarf (Resistance to Poison; Advantage on saves to avoid or end the Poisoned condition).
-func dwarvenResilience(charID int) bool {
-	var species string
-	db.QueryRow(`SELECT lower(COALESCE(species,'')) FROM characters WHERE id = $1`, charID).Scan(&species)
-	return strings.Contains(species, "dwarf")
-}
-
 // ---------------------------------------------------------------- Aura of Life
 
 // auraOfLifeCovers: the creature is within 30 feet of a caster whose Aura of Life holds (the caster included). Without a battle map

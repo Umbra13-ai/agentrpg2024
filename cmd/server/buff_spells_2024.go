@@ -39,7 +39,6 @@ import (
 	"net/http/httptest"
 	"strconv"
 	"strings"
-	"sync"
 
 	"github.com/agentrpg/agentrpg/game"
 )
@@ -514,8 +513,6 @@ func buffSaveBonus(charID int) int {
 	return buffACBonus(lobbyOfChar(charID), charID)
 }
 
-var poisonSaveCtx sync.Map // character id -> true while it saves against an effect that would Poison it (Protection from Poison)
-
 // holyAuraOn: a Holy Aura covers the character (its caster, or an ally within 30 feet on the map); dc is the caster's save DC.
 func holyAuraOn(lobbyID, targetID int) (bool, int) {
 	if lobbyID == 0 || targetID <= 0 {
@@ -587,42 +584,6 @@ func buffStealthBonus(charID int) (int, string) {
 	return 0, ""
 }
 
-// buffSaveAdvantage: Foresight; a Holy Aura; Beacon of Hope on a Wisdom save; Protection from Poison against being Poisoned.
-func buffSaveAdvantage(lobbyID, id int, ability string) (bool, string) {
-	if ok, why := moreSaveAdvantage(lobbyID, id, ability); ok {
-		return true, why // Gaseous Form, Enlarge (spells_more_2024.go)
-	}
-	if id <= 0 {
-		return false, ""
-	}
-	if shortAbility(ability) == "dex" && dodgeActive(id) {
-		return true, "Dodge" // the Dodge action (dodge_2024.go): Dexterity saving throws with Advantage
-	}
-	if _, ok := buffEffect(lobbyID, id, "foresight"); ok {
-		return true, "Foresight"
-	}
-	if ok, _ := holyAuraOn(lobbyID, id); ok {
-		return true, "Holy Aura"
-	}
-	if shortAbility(ability) == "wis" {
-		if _, ok := buffEffect(lobbyID, id, "beacon_of_hope"); ok {
-			return true, "Beacon of Hope"
-		}
-	}
-	if _, ctx := poisonSaveCtx.Load(id); ctx {
-		if _, ok := buffEffect(lobbyID, id, "protection_from_poison"); ok {
-			return true, "Protection from Poison"
-		}
-		if dwarvenResilience(id) {
-			return true, "Dwarven Resilience" // F81
-		}
-		if periaptOfHealthPoison(id) {
-			return true, "Periapt of Health" // F154
-		}
-	}
-	return false, ""
-}
-
 // buffAttackAdvantage: Foresight on the attacker's own attack rolls.
 func buffAttackAdvantage(charID int) bool {
 	_, ok := charBuff(charID, "foresight")
@@ -689,17 +650,6 @@ func buffCheckRoll(charID int, ability string, roll int) (int, string) {
 		return roll, " [Disadvantage: " + dwhy + "]"
 	}
 	return roll, ""
-}
-
-// buffDeathSaveAdvantage: Beacon of Hope and Foresight give Advantage on Death Saving Throws.
-func buffDeathSaveAdvantage(charID int) (bool, string) {
-	if _, ok := charBuff(charID, "beacon_of_hope"); ok {
-		return true, "Beacon of Hope"
-	}
-	if _, ok := charBuff(charID, "foresight"); ok {
-		return true, "Foresight"
-	}
-	return false, ""
 }
 
 // buffSpeedBonus: Longstrider +10 feet.
@@ -1033,12 +983,6 @@ func refreshConcentrationConditions(charID int) {
 	if lobby := lobbyOfChar(charID); lobby != 0 {
 		pruneConcentrationConditions(lobby, charID)
 	}
-}
-
-// buffSaveAdv is buffSaveAdvantage without the reason (spellSaveAdvantage).
-func buffSaveAdv(lobbyID, id int, ability string) bool {
-	ok, _ := buffSaveAdvantage(lobbyID, id, ability)
-	return ok
 }
 
 // dropInvisible removes the Invisible condition from an attacker's list (a target that sees Invisible creatures).

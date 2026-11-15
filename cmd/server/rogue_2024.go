@@ -111,35 +111,22 @@ func addMonsterCondition(lobbyID, targetID int, cond, source string, rounds int,
 	}
 }
 
-// monsterSave rolls a monster's saving throw against a DC and returns whether it succeeded. A failure against an effect with a
-// condition can be turned into a success by Legendary Resistance (monsterSaveFor gives the stakes).
+// monsterSave rolls a monster's saving throw against a DC (creatureSave): a failure against an effect with a condition can be
+// turned into a success by Legendary Resistance.
 func monsterSave(lobbyID, targetID int, ability string, dc int) (bool, int) {
-	return monsterSaveFor(lobbyID, targetID, ability, dc, saveStakes{Condition: true})
+	return creatureSave(lobbyID, targetID, ability, dc)
 }
 
+// monsterSaveFor: the same with the stakes of the save for Legendary Resistance (damage only, or a condition).
 func monsterSaveFor(lobbyID, targetID int, ability string, dc int, st saveStakes) (bool, int) {
-	saved, total := monsterSaveRoll(lobbyID, targetID, ability, dc)
-	if !saved && targetID < 0 && legendaryResistance(lobbyID, targetID, st) {
-		return true, total
-	}
-	return saved, total
+	r := (&saveCtx{lobby: lobbyID, saver: targetID, ability: ability, dc: dc}).resist(st)
+	return r.Success, r.Total
 }
 
+// monsterSaveRoll: the save alone, without Legendary Resistance.
 func monsterSaveRoll(lobbyID, targetID int, ability string, dc int) (bool, int) {
-	bonus, autoFail, dis := saveBonusFor(lobbyID, targetID, ability)
-	dis = dis || moreSaveDisadvantage(lobbyID, targetID, ability)                               // Reduce (spells_more_2024.go)
-	adv := spellSaveAdvantage(lobbyID, targetID, ability) || auraOfAuthority(lobbyID, targetID) // Haste; Aura of Authority
-	roll := game.RollDie(20)
-	if dis && !adv {
-		if b := game.RollDie(20); b < roll {
-			roll = b
-		}
-	} else if adv && !dis {
-		if b := game.RollDie(20); b > roll {
-			roll = b
-		}
-	}
-	return !autoFail && roll+bonus >= dc, roll + bonus
+	r := (&saveCtx{lobby: lobbyID, saver: targetID, ability: ability, dc: dc}).roll()
+	return r.Success, r.Total
 }
 
 // applyCunningStrike applies the chosen effects after a hit.

@@ -867,114 +867,31 @@ func handleGMIndomitable(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// Parse the ability and calculate modifier
-	abilityLower := strings.ToLower(req.Ability)
-	var abilityMod int
-	var abilityName string
-	var abilityShort string
-
-	switch abilityLower {
-	case "str", "strength":
-		abilityMod = game.Modifier(str)
-		abilityName = "Strength"
-		abilityShort = "str"
-	case "dex", "dexterity":
-		abilityMod = game.Modifier(dex)
-		abilityName = "Dexterity"
-		abilityShort = "dex"
-	case "con", "constitution":
-		abilityMod = game.Modifier(con)
-		abilityName = "Constitution"
-		abilityShort = "con"
-	case "int", "intelligence":
-		abilityMod = game.Modifier(intl)
-		abilityName = "Intelligence"
-		abilityShort = "int"
-	case "wis", "wisdom":
-		abilityMod = game.Modifier(wis)
-		abilityName = "Wisdom"
-		abilityShort = "wis"
-	case "cha", "charisma":
-		abilityMod = game.Modifier(cha)
-		abilityName = "Charisma"
-		abilityShort = "cha"
-	default:
+	abilityShort, okAbility := game.AbilityKey(req.Ability)
+	if !okAbility {
 		w.WriteHeader(http.StatusBadRequest)
 		json.NewEncoder(w).Encode(map[string]interface{}{"error": "invalid ability - use str, dex, con, int, wis, or cha"})
 		return
 	}
+	abilityName := game.AbilityName(abilityShort)
 
-	// Get class saving throw proficiencies
-	var classSaves string
-	_ = db.QueryRow(`SELECT saving_throws FROM classes WHERE slug = $1`, strings.ToLower(class)).Scan(&classSaves)
-
-	// Check if proficient in this saving throw
-	proficient := false
-	if classSaves != "" {
-		for _, save := range strings.Split(classSaves, ",") {
-			if strings.TrimSpace(strings.ToLower(save)) == abilityShort {
-				proficient = true
-				break
-			}
-		}
-	}
-
-	// Calculate total modifier
-	totalMod := abilityMod
-	if proficient {
-		totalMod += game.ProficiencyBonus(level)
-	}
-	totalMod += indomitableExtraBonus(req.CharacterID, abilityShort) // Ring of Protection, Warding Bond, Bless, exhaustion (F98)
-
-	// Roll the new saving throw (Indomitable reroll)
-	newRoll := game.RollDie(20)
-
-	// Halfling Lucky - reroll 1s
-	halflingLuckyUsed := false
-	halflingLuckyOriginal := 0
-	if newRoll == 1 {
-		rerolledValue, rerolled, origRoll := applyHalflingLucky(newRoll, req.CharacterID)
-		if rerolled {
-			halflingLuckyUsed = true
-			halflingLuckyOriginal = origRoll
-			newRoll = rerolledValue
-		}
-	}
-
-	newTotal := newRoll + totalMod + level // 2024 Indomitable: the reroll has a bonus equal to your Fighter level
-	success := newTotal >= req.DC
-
-	// Natural 20 always succeeds, natural 1 always fails
-	outcomeStr := "FAILURE"
-	if success {
-		outcomeStr = "SUCCESS"
-	}
-	// A natural 20 or 1 means nothing special on a saving throw (only attack rolls and death saves use them).
+	// the reroll is the same saving throw made again (save_2024.go), with a bonus equal to the Fighter level (2024 Indomitable);
+	// the new roll stands
+	fighterLevel := classLevelIn(req.CharacterID, class, level, "fighter")
+	sv := (&saveCtx{lobby: lobbyID, saver: req.CharacterID, ability: abilityShort, dc: req.DC,
+		adjust: []game.RollAdjust{{Amount: fighterLevel, Why: fmt.Sprintf("Indomitable +%d", fighterLevel)}}}).roll()
+	_, proficient, _ := saveModifier(lobbyID, req.CharacterID, abilityShort)
+	success, newTotal := sv.Success, sv.Total
 
 	// Track usage
 	db.Exec("UPDATE characters SET indomitable_used = indomitable_used + 1 WHERE id = $1", req.CharacterID)
 	newUsedCount := usedCount + 1
 
-	// Build result string
-	rollStr := fmt.Sprintf("d20(%d)", newRoll)
-	if halflingLuckyUsed {
-		rollStr = fmt.Sprintf("d20(%d→%d Lucky)", halflingLuckyOriginal, newRoll)
-	}
-
-	modStr := ""
-	if totalMod >= 0 {
-		modStr = fmt.Sprintf("+%d", totalMod)
-	} else {
-		modStr = fmt.Sprintf("%d", totalMod)
-	}
-
-	profStr := ""
+	label := "Indomitable reroll: " + abilityName + " saving throw"
 	if proficient {
-		profStr = " (proficient)"
+		label += " (proficient)"
 	}
-
-	fullResult := fmt.Sprintf("Indomitable reroll: %s saving throw%s: %s%s = %d vs DC %d → %s",
-		abilityName, profStr, rollStr, modStr, newTotal, req.DC, outcomeStr)
+	fullResult := sv.ForSaver(label)
 
 	// Log the action
 	actionDesc := fmt.Sprintf("%s uses Indomitable to reroll failed %s save", charName, abilityName)
@@ -988,23 +905,22 @@ func handleGMIndomitable(w http.ResponseWriter, r *http.Request) {
 		"character":             charName,
 		"ability":               abilityName,
 		"proficient":            proficient,
-		"roll":                  newRoll,
-		"ability_mod":           abilityMod,
-		"total_mod":             totalMod,
+		"roll":                  sv.Natural,
+		"ability_mod":           game.Modifier(abilityScoreOf(req.CharacterID, abilityShort)),
+		"total_mod":             sv.Save.Modifier(),
 		"total":                 newTotal,
 		"dc":                    req.DC,
-		"outcome":               outcomeStr,
+		"outcome":               sv.Outcome(),
 		"result":                fullResult,
+		"advantage":             sv.Save.Advantage,
+		"disadvantage":          sv.Save.Disadvantage,
 		"indomitable_used":      newUsedCount,
 		"indomitable_max":       maxUses,
 		"indomitable_remaining": maxUses - newUsedCount,
 		"feature_note":          "Indomitable (Fighter): You must use the new roll result.",
 	}
-
-	if halflingLuckyUsed {
-		response["halfling_lucky"] = true
-		response["halfling_lucky_original"] = halflingLuckyOriginal
-		response["halfling_lucky_note"] = "🍀 Halfling Lucky rerolled the 1"
+	if len(sv.Changed) > 0 {
+		response["changed"] = sv.Changed // Halfling Luck, the Luck Blade, Indomitable Might
 	}
 
 	json.NewEncoder(w).Encode(response)

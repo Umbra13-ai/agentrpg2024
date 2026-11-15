@@ -618,27 +618,6 @@ func enlargeHit(lobby, attackerID, dmg int) (int, string) {
 
 // ---------------------------------------------------------------- saves, checks, damage, conditions, attacks, Speed, senses
 
-func moreSaveAdvantage(lobby, id int, ability string) (bool, string) {
-	ab := shortAbility(ability)
-	if ab == "str" && raging(id) {
-		return true, "Rage" // F100
-	}
-	if _, ok := buffEffect(lobby, id, "gaseous_form"); ok && (ab == "str" || ab == "dex" || ab == "con") {
-		return true, "Gaseous Form"
-	}
-	if ab == "str" && enlargeMode(lobby, id) == "enlarge" {
-		return true, "Enlarge"
-	}
-	return false, ""
-}
-
-func moreSaveDisadvantage(lobby, id int, ability string) bool {
-	if v, ok := typeSaveDisadvantage.Load(lobby); ok && v.(int) == id { // Shatter against a Construct (F192, spell_resolution.go)
-		return true
-	}
-	return shortAbility(ability) == "str" && enlargeMode(lobby, id) == "reduce"
-}
-
 func moreCheckAdvantage(charID int, ability string) (bool, string) {
 	if shortAbility(ability) == "str" && raging(charID) {
 		return true, "Rage" // F100

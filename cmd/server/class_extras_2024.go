@@ -48,31 +48,31 @@ func countercharm(charID int, description string) string {
 	if strings.ToLower(class) != "bard" || level < 7 {
 		return "Countercharm needs a Bard of level 7 or higher."
 	}
+	return fmt.Sprintf("🎵 Countercharm: %s uses a Reaction; the saving throw against the Charmed or Frightened effect is rolled again with Advantage: %s", name, rerollReportedSave(description, []string{"Countercharm"}))
+}
+
+// rerollReportedSave rolls again a saving throw the player reports in the description ("bonus 3 dc 14": the saver's bonus and
+// the DC), through the saving throw rule (game.SavingThrow), with the Advantage the rerolling feature gives. Countercharm and
+// Disciplined Survivor use it. Without the bonus the text says to add it.
+func rerollReportedSave(description string, advantage []string) string {
 	low := strings.ToLower(description)
-	a, b := game.RollDie(20), game.RollDie(20)
-	best := a
-	if b > a {
-		best = b
+	st := game.SavingThrow{Advantage: advantage}
+	m := reBonus.FindStringSubmatch(low)
+	if m != nil {
+		st.Bonus, _ = strconv.Atoi(m[1])
 	}
-	text := fmt.Sprintf("🎵 Countercharm: %s uses a Reaction; the saving throw against the Charmed or Frightened effect is rolled again with Advantage: d20s %d and %d, keeping %d.", name, a, b, best)
-	if m := reBonus.FindStringSubmatch(low); m != nil {
-		bonus, _ := strconv.Atoi(m[1])
-		total := best + bonus
-		text += fmt.Sprintf(" Total %d", total)
-		if d := reDC.FindStringSubmatch(low); d != nil {
-			dc, _ := strconv.Atoi(d[1])
-			if total >= dc {
-				text += fmt.Sprintf(" against DC %d: the save succeeds.", dc)
-			} else {
-				text += fmt.Sprintf(" against DC %d: the save still fails.", dc)
-			}
-		} else {
-			text += "."
-		}
-	} else {
-		text += " Add the creature's saving throw bonus to the kept d20."
+	d := reDC.FindStringSubmatch(low)
+	if d != nil {
+		st.DC, _ = strconv.Atoi(d[1])
 	}
-	return text
+	r := st.Roll()
+	switch {
+	case m == nil:
+		return fmt.Sprintf("%s. Add the creature's saving throw bonus to the d20 (send \"bonus N dc N\" to have it judged).", r.DiceText())
+	case d == nil:
+		return fmt.Sprintf("%d (%s).", r.Total, r.DiceText())
+	}
+	return r.ForSaver("The saving throw") + "."
 }
 
 // subclassOf returns a character's class, subclass slug and level.
@@ -528,12 +528,6 @@ func eldritchSmite(charID int, class string, level int, descLower string, crit b
 		}
 	}
 	return 0, " [Eldritch Smite: no Pact Magic slot left]"
-}
-
-// conSaveProficient says whether the character is proficient in Constitution saving throws.
-func conSaveProficient(charID int, class string, level int) bool {
-	ok, _ := saveProficiency(charID, class, level, "con")
-	return ok
 }
 
 // saveProficiency says whether a character is proficient in a saving throw ("str" ... "cha") and, when a class feature gives

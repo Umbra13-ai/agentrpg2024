@@ -178,25 +178,19 @@ func handleGMApplyPoison2024(w http.ResponseWriter, r *http.Request) {
 	var results []string
 	for _, id := range ids {
 		name := creatureName(lobby, id)
-		poisonSaveCtx.Store(id, true) // a save against being Poisoned: Protection from Poison, Dwarven Resilience
-		saved, total := creatureSave(lobby, id, "con", rule.DC)
-		advNote := ""
-		if adv, why := buffSaveAdvantage(lobby, id, "con"); adv {
-			advNote = " (Advantage: " + why + ")"
-		}
-		poisonSaveCtx.Delete(id)
-		line := fmt.Sprintf("%s: Constitution save %d%s vs DC %d, ", name, total, advNote, rule.DC)
+		// a save against being Poisoned (save_2024.go): Protection from Poison, Dwarven Resilience, a Periapt of Health ...
+		sv := (&saveCtx{lobby: lobby, saver: id, ability: "con", dc: rule.DC, against: []string{"poisoned"}}).resist(saveStakes{Condition: true})
+		saved, total := sv.Success, sv.Total
+		line := sv.Line(name)
 		dmg := 0
 		if dice != "" {
 			dmg = game.RollDamage(dice, false)
 		}
 		if saved {
-			line += "success"
 			if rule.Half && dmg > 0 {
 				line += "; " + damageAny(lobby, id, dmg/2, "poison")
 			}
 		} else {
-			line += failWord(total, rule.DC)
 			if dmg > 0 {
 				line += "; " + damageAny(lobby, id, dmg, "poison")
 			}
@@ -683,14 +677,15 @@ func handleGMEnvironmentalHazard2024(w http.ResponseWriter, r *http.Request) {
 				log = append(log, fmt.Sprintf("%d: automatic success", i+1))
 				continue
 			}
-			saved, total := creatureSave(lobby, id, ability, d)
-			if dis && saved { // Disadvantage: a second roll must also succeed
-				saved, total = creatureSave(lobby, id, ability, d)
+			sc := saveCtx{lobby: lobby, saver: id, ability: ability, dc: d}
+			if dis {
+				sc.extraDis = []string{"Medium or Heavy armor"}
 			}
-			if saved {
-				log = append(log, fmt.Sprintf("%d: %d vs DC %d, success", i+1, total, d))
+			sv := sc.roll()
+			if sv.Success {
+				log = append(log, fmt.Sprintf("%d: %s", i+1, sv.Line(name)))
 			} else {
-				log = append(log, fmt.Sprintf("%d: %d vs DC %d, failure: %s", i+1, total, d, addExhaustion(id, 1)))
+				log = append(log, fmt.Sprintf("%d: %s: %s", i+1, sv.Line(name), addExhaustion(id, 1)))
 			}
 		}
 		return log

@@ -13,7 +13,7 @@ package main
 //   Attacks: the beast's attacks from its stat block (Multiattack included); a Primal Strike druid adds 1d8 (2d8 from level 15) Cold, Fire,
 //     Lightning or Thunder once per turn.
 //   Skills and saves: the druid keeps its skill and saving throw proficiencies; when the stat block's modifier for a skill or save is
-//     higher, that one is used (wildShapeHigher: checkBonus, characterSave, saveBonusFor and the GM check and save routes).
+//     higher, that one is used (wildShapeHigher: checkBonus, saveModifier for every saving throw, and the GM check routes).
 //   The form ends after half the Druid level in hours (wild_shape_rounds_left, 600 rounds an hour: counted down at the end of the druid's
 //     turns in combat and by passSpellTime outside it), when Wild Shape is used again, with the Incapacitated condition (which 0 Hit Points
 //     bring: Unconscious), when the druid dies, or early as a Bonus Action (revert_wild_shape).

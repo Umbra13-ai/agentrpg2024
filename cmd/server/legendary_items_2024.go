@@ -447,18 +447,13 @@ func ironFlask(charID int, it invItem, req itemCastReq, description string) stri
 			}
 		}
 	}
-	saved, total := monsterSaveRoll(lobby, target, "wis", 17)
-	adv := ""
-	if before && !saved { // Advantage: it saves if either d20 succeeds
-		saved, total = monsterSaveRoll(lobby, target, "wis", 17)
-		adv = " with Advantage (it was trapped in the flask before)"
+	sc := saveCtx{lobby: lobby, saver: target, ability: "wis", dc: 17}
+	if before {
+		sc.extraAdv = []string{"it was trapped in the flask before"}
 	}
-	if !saved && legendaryResistance(lobby, target, saveStakes{Condition: true}) {
-		saved = true
-		adv += " (Legendary Resistance)"
-	}
-	if saved {
-		return fmt.Sprintf("You aim the %s at %s: Wisdom save %d%s against DC 17, a success. It resists.", name, mname, total, adv)
+	sv := sc.resist(saveStakes{Condition: true})
+	if sv.Success {
+		return fmt.Sprintf("You aim the %s at %s: %s. It resists.", name, mname, sv.Line(mname))
 	}
 	removeMonsterFromFight(lobby, target)
 	updateInventoryItem(charID, it, func(x invItem) {
@@ -466,7 +461,7 @@ func ironFlask(charID int, it invItem, req itemCastReq, description string) stri
 		list, _ := x["trapped_before"].([]interface{})
 		x["trapped_before"] = append(list, key)
 	})
-	return fmt.Sprintf("You aim the %s at %s: Wisdom save %d%s against DC 17, a failure. %s is drawn into the flask and trapped (it leaves the fight; it doesn't age, breathe, eat or drink). Release it with {\"action\": \"use_item\", \"item\": \"%s\", \"description\": \"release\"}: it then obeys you for 1 hour.", name, mname, total, adv, mname, name)
+	return fmt.Sprintf("You aim the %s at %s: %s. %s is drawn into the flask and trapped (it leaves the fight; it doesn't age, breathe, eat or drink). Release it with {\"action\": \"use_item\", \"item\": \"%s\", \"description\": \"release\"}: it then obeys you for 1 hour.", name, mname, sv.Line(mname), mname, name)
 }
 
 // ---------------------------------------------------------------- Sphere of Annihilation and the Talisman of the Sphere

@@ -55,32 +55,6 @@ func TestIsIncapacitated(t *testing.T) {
 	}
 }
 
-func TestAutoFailsSave(t *testing.T) {
-	tests := []struct {
-		name       string
-		conditions []string
-		ability    string
-		want       bool
-	}{
-		{"no conditions STR", []string{}, "STR", false},
-		{"paralyzed STR", []string{"paralyzed"}, "STR", true},
-		{"paralyzed DEX", []string{"paralyzed"}, "DEX", true},
-		{"paralyzed WIS", []string{"paralyzed"}, "WIS", false},
-		{"unconscious STR", []string{"unconscious"}, "STR", true},
-		{"stunned DEX", []string{"stunned"}, "DEX", true},
-		{"prone STR", []string{"prone"}, "STR", false},
-	}
-
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			got := AutoFailsSave(tt.conditions, tt.ability)
-			if got != tt.want {
-				t.Errorf("AutoFailsSave(%v, %q) = %v, want %v", tt.conditions, tt.ability, got, tt.want)
-			}
-		})
-	}
-}
-
 func TestIsAutoCrit(t *testing.T) {
 	tests := []struct {
 		name       string
@@ -99,31 +73,6 @@ func TestIsAutoCrit(t *testing.T) {
 			got := IsAutoCrit(tt.conditions)
 			if got != tt.want {
 				t.Errorf("IsAutoCrit(%v) = %v, want %v", tt.conditions, got, tt.want)
-			}
-		})
-	}
-}
-
-func TestGetSaveDisadvantage(t *testing.T) {
-	tests := []struct {
-		name       string
-		conditions []string
-		exhaustion int
-		ability    string
-		want       bool
-	}{
-		{"no conditions", []string{}, 0, "DEX", false},
-		{"exhaustion 3 is a penalty, not Disadvantage", []string{}, 3, "WIS", false},
-		{"restrained DEX", []string{"restrained"}, 0, "DEX", true},
-		{"restrained STR", []string{"restrained"}, 0, "STR", false},
-		{"exhaustion 2 no disadv", []string{}, 2, "DEX", false},
-	}
-
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			got := GetSaveDisadvantage(tt.conditions, tt.exhaustion, tt.ability)
-			if got != tt.want {
-				t.Errorf("GetSaveDisadvantage(%v, %d, %q) = %v, want %v", tt.conditions, tt.exhaustion, tt.ability, got, tt.want)
 			}
 		})
 	}

@@ -107,8 +107,8 @@ go test ./...
 
 Current SQLite coverage includes:
 1. Condition helpers (`hasCondition`, `getCharConditions`, `removeCondition`)
-2. Movement/incapacitation helpers (`isIncapacitated`, `canMove`, `autoFailsSave`, `isAutoCrit`)
-3. Save disadvantage/name helpers (`getSaveDisadvantage`, `getCharacterName`)
+2. Movement/incapacitation helpers (`isIncapacitated`, `canMove`), and the conditions a saving throw reads (`saveCtx.gather`)
+3. Save Disadvantage from conditions (`saveCtx.gather`) and `getCharacterName`
 
 ---
 

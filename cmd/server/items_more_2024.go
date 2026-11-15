@@ -164,20 +164,6 @@ func iounStone(charID int, kind string) bool {
 	return false
 }
 
-// itemPoisonSaveAdvantage: the Belt of Dwarvenkind (not a dwarf) and the Necklace of Adaptation: Advantage on saves against Poisoned.
-func itemPoisonSaveAdvantage(charID int, description string) (bool, string) {
-	if !strings.Contains(strings.ToLower(description), "poison") {
-		return false, ""
-	}
-	if wornItem(charID, "necklace of adaptation") {
-		return true, "Necklace of Adaptation"
-	}
-	if wornItem(charID, "belt of dwarvenkind") && !isDwarf(charID) {
-		return true, "Belt of Dwarvenkind"
-	}
-	return false, ""
-}
-
 // sunBladeHeld: the attack is with an attuned Sun Blade (its blade deals Radiant damage).
 func sunBladeHeld(charID int) bool {
 	h := handsOf(charID)
@@ -384,7 +370,7 @@ func moreItemUse(charID int, it invItem, req itemCastReq, description string) (s
 		}
 		out := "X-ray vision (a Magic action) for 1 minute: solid objects within 30 feet are transparent to you (through 1 foot of stone, 1 inch of metal, 3 feet of wood or dirt; lead blocks it)."
 		if itemBool(it, "used_since_rest") {
-			if ok, total := characterSave(charID, "con", 15); !ok {
+			if ok, total := creatureSave(lobbyOfChar(charID), charID, "con", 15); !ok {
 				db.Exec(`UPDATE characters SET exhaustion_level = LEAST(COALESCE(exhaustion_level,0) + 1, 6) WHERE id = $1`, charID)
 				out += fmt.Sprintf(" Used again before a Long Rest: Constitution save %d vs DC 15 fails, 1 Exhaustion level.", total)
 			} else {

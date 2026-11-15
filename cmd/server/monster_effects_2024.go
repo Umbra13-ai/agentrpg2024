@@ -4,7 +4,7 @@ package main
 // POST /api/gm/narrate monster_action (breath weapons, gazes, spells and the like, which used to get a made-up attack roll).
 //	saving throw effect  "Dexterity Saving Throw: DC 17, one creature ... Failure: 22 (4d10) Poison damage, and the target has the
 //	                     Frightened condition until the end of its next turn. Success: Half damage." Each target rolls its save
-//	                     (characterSave: proficiency, Aura of Protection, Bless, Exhaustion ...); the damage is rolled once; Evasion
+//	                     (saveCtx, save_2024.go: proficiency, Aura of Protection, Bless, Exhaustion ...); the damage is rolled once; Evasion
 //	                     halves or cancels Dexterity save damage; conditions get their duration ("until the start of its next turn",
 //	                     "until the end of its next turn", "for 1 minute", a repeated save at the end of each turn); Exhaustion levels
 //	                     are added; anything else in the Failure text is shown to the GM.
@@ -189,24 +189,10 @@ func applySaveEffect(lobbyID int, source string, e saveEffect, targets []int, ap
 				continue
 			}
 		}
-		advNote := ""
-		if e.IsSpell {
-			spellSaveCtx.Store(tid, true) // items that give Advantage against spells (spellSaveAdvantage)
-			if p := spellSaveProtection(lobbyID, tid); p != "" {
-				advNote = " with Advantage (" + p + ")"
-			}
-		}
-		for _, c := range e.Conditions {
-			if strings.EqualFold(c, "poisoned") {
-				poisonSaveCtx.Store(tid, true) // Protection from Poison: Advantage against being Poisoned
-			}
-		}
-		if ok, why := buffSaveAdvantage(lobbyID, tid, e.Ability); ok { // Foresight, Holy Aura, Beacon of Hope (buff_spells_2024.go)
-			advNote += " with Advantage (" + why + ")"
-		}
-		saved, total := characterSave(tid, e.Ability, e.DC)
-		spellSaveCtx.Delete(tid)
-		poisonSaveCtx.Delete(tid)
+		// the one saving throw function (save_2024.go): items against spells, Protection from Poison and Dwarven Resilience against
+		// being Poisoned, Fey Ancestry against being Charmed, Foresight, Holy Aura, Danger Sense ...
+		sv := (&saveCtx{lobby: lobbyID, saver: tid, ability: e.Ability, dc: e.DC, spell: e.IsSpell, against: e.Conditions, source: e.SourceID, fiendOrUndead: e.FromUndead}).roll()
+		saved := sv.Success
 		var protect []string
 		if !saved {
 			if note := scarabPreserves(tid, e.IsSpell && strings.EqualFold(e.School, "necromancy"), e.FromUndead); note != "" {
@@ -215,7 +201,8 @@ func applySaveEffect(lobbyID int, source string, e saveEffect, targets []int, ap
 			}
 		}
 		anyFailed = anyFailed || !saved
-		line := fmt.Sprintf("%s %s the %s saving throw (%d vs DC %d)%s", name, map[bool]string{true: "succeeds on", false: "fails"}[saved], e.AbilityName, total, e.DC, advNote)
+		// a failure the Scarab of Protection turned reads "fails" here and says so in the parts after it
+		line := sv.Line(name)
 		if saved && e.IsSpell && e.SpellLevel <= 7 && ringTurns(tid) { // Ring of Spell Turning: no effect on a success
 			line += ": Ring of Spell Turning: the spell has no effect on you."
 			if e.SingleTarget {
@@ -454,15 +441,15 @@ func resolveMonsterSpellRules(lobbyID, monsterID int, monsterName, spellName str
 				continue
 			}
 			name := characterNameOf(tid)
-			saved, total := characterSave(tid, "wis", dc)
-			if saved {
-				lines = append(lines, fmt.Sprintf("%s succeeds on the Wisdom saving throw (%d vs DC %d).", name, total, dc))
+			sv := (&saveCtx{lobby: lobbyID, saver: tid, ability: "wis", dc: dc, spell: true, source: monsterID}).roll()
+			if sv.Success {
+				lines = append(lines, sv.Line(name)+".")
 				continue
 			}
 			if apply {
 				addSpellEffect(lobbyID, tid, monsterID, "Command", "commanded", word, 1, "", 0)
 			}
-			lines = append(lines, fmt.Sprintf("%s fails the Wisdom saving throw (%d vs DC %d) and must obey \"%s\": on its next turn it %s.", name, total, dc, titleCase(word), commandText[word]))
+			lines = append(lines, fmt.Sprintf("%s and must obey \"%s\": on its next turn it %s.", sv.Line(name), titleCase(word), commandText[word]))
 		}
 		return lines
 	}

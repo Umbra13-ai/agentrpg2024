@@ -126,22 +126,18 @@ func resolveConditionSpell(charID int, spellKey string, saveDC int, spellName st
 			lines = append(lines, fmt.Sprintf("%s is immune to the %s condition.", name, strings.Join(cs.Conditions, " and ")))
 			continue
 		}
-		heightened := heightenedDisadvantage(charID, id) // Heightened Spell (F194)
-		if heightened {
-			typeSaveDisadvantage.Store(lobby, id)
+		// the one saving throw function (save_2024.go): Magic Resistance against a spell, Legendary Resistance against a condition
+		sc := saveCtx{lobby: lobby, saver: id, ability: cs.Save, dc: saveDC, spell: true, source: charID, against: cs.Conditions}
+		if heightenedDisadvantage(charID, id) { // Heightened Spell (F194)
+			sc.extraDis = []string{"Heightened Spell"}
 		}
-		if fightingItAdvantage(spellKey) && currentTurnID(lobby) != 0 {
-			fightingSaveAdvantage.Store(lobby, id) // "Advantage on the save if you or your allies are fighting it" (F225)
+		if fightingItAdvantage(spellKey) && currentTurnID(lobby) != 0 { // "Advantage on the save if you or your allies are fighting it" (F225)
+			sc.extraAdv = []string{"the caster's side is fighting it"}
 		}
-		saved, total := monsterSpellSave(lobby, id, cs.Save, saveDC) // Magic Resistance gives Advantage
-		fightingSaveAdvantage.Delete(lobby)
-		typeSaveDisadvantage.Delete(lobby)
-		if saved {
-			lines = append(lines, fmt.Sprintf("%s saves (%d vs DC %d)%s.", name, total, saveDC, map[bool]string{true: " despite Disadvantage (Heightened Spell)"}[heightened]))
+		sv := sc.resist(saveStakes{Condition: true})
+		if sv.Success {
+			lines = append(lines, sv.Line(name)+".")
 			continue
-		}
-		if heightened {
-			lines = append(lines, fmt.Sprintf("%s fails its save with Disadvantage (Heightened Spell).", name))
 		}
 		endSave := ""
 		if cs.EndSave {
@@ -155,7 +151,7 @@ func resolveConditionSpell(charID int, spellKey string, saveDC int, spellName st
 					charID, lobby, id, c, spellName)
 			}
 		}
-		lines = append(lines, fmt.Sprintf("%s fails its %s save (%d vs DC %d) and is %s.", name, strings.ToUpper(cs.Save), total, saveDC, strings.Join(cs.Conditions, " and ")))
+		lines = append(lines, fmt.Sprintf("%s and is %s.", sv.Line(name), strings.Join(cs.Conditions, " and ")))
 	}
 	return " " + strings.Join(lines, " ") + takeAreaNote(charID)
 }
@@ -237,63 +233,6 @@ func abilityScoreOf(charID int, ability string) int {
 	return v
 }
 
-// characterSave rolls a saving throw for a character: ability modifier, Proficiency Bonus where the class has the save, Aura of Protection,
-// and the Exhaustion penalty.
-func characterSave(charID int, ability string, dc int) (bool, int) {
-	var class string
-	var level, lobby int
-	db.QueryRow(`SELECT class, level, COALESCE(lobby_id,0) FROM characters WHERE id = $1`, charID).Scan(&class, &level, &lobby)
-	bonus := game.Modifier(abilityScoreOf(charID, ability))
-	var saves string
-	db.QueryRow(`SELECT COALESCE(saving_throws,'') FROM classes WHERE slug = $1`, strings.ToLower(class)).Scan(&saves)
-	proficient := strings.ToLower(class) == "monk" && level >= 14
-	for _, s := range strings.Split(saves, ",") {
-		if strings.TrimSpace(strings.ToLower(s)) == ability {
-			proficient = true
-		}
-	}
-	if proficient {
-		bonus += game.ProficiencyBonus(level)
-	}
-	bonus = wildShapeHigher(charID, "save:"+ability, bonus) // the beast's save modifier when it's higher
-	if aura, _ := getPaladinAuraBonus(lobby, charID); aura > 0 {
-		bonus += aura
-	}
-	bonus -= game.ExhaustionD20Penalty(exhaustionLevelOf(charID))
-	adj, _ := spellRollAdjust(lobby, charID, "save:"+ability) // Bless, Bane, Slow
-	bonus += adj
-	if ability == "dex" {
-		bonus += halfCoverBonus(lobby, charID) // Smite of Protection
-	}
-	bonus += magicSaveBonus(charID) // Ring and Cloak of Protection, Stone of Good Luck, Staff of Power, Luck Blade (F60: missing here)
-	bonus += buffSaveBonus(charID)  // Warding Bond +1 (buff_spells_2024.go)
-	dis, adv := getSaveDisadvantage(charID, ability), spellSaveAdvantage(lobby, charID, ability)
-	d20 := func() int {
-		r := game.RollDie(20)
-		if dis && !adv {
-			if b := game.RollDie(20); b < r {
-				r = b
-			}
-		} else if adv && !dis {
-			if b := game.RollDie(20); b > r {
-				r = b // Haste, a magic item against a spell
-			}
-		}
-		return r
-	}
-	roll := d20()
-	auto := autoFailsSave(charID, ability)
-	ok := !auto && roll+bonus >= dc
-	if !ok && !auto && luckReroll(charID, false) { // the Luck Blade's Luck: a failed D20 Test is rerolled; the second roll stands
-		roll = d20()
-		ok = roll+bonus >= dc
-	}
-	if t, note := indomitableMight(charID, ability, roll+bonus); note != "" && !auto { // F102
-		return t >= dc, t
-	}
-	return ok, roll + bonus
-}
-
 func damageCharacter(targetID, dmg int, dtype string, critical ...bool) string {
 	part := map[string]interface{}{"damage": dmg, "damage_type": strings.ToLower(dtype)}
 	if len(critical) > 0 && critical[0] {
@@ -366,24 +305,21 @@ func resolveSpellOnCharacters(charID int, spell SRDSpell, damageDice string, rol
 		if ability == "" {
 			continue
 		}
-		saved, total := characterSave(id, ability, saveDC)
-		d := rolled
-		how := fmt.Sprintf("fails its %s save (%d vs DC %d)", strings.ToUpper(ability), total, saveDC)
-		shielded := sculpted(charID)              // F119: Sculpt Spells
-		carefully := !shielded && careful(charID) // F194: Careful Spell
-		if shielded || carefully {
-			saved = true
-			if onSave == "half" {
-				onSave = "none"
-			}
+		sc := saveCtx{lobby: lobbyOfChar(charID), saver: id, ability: ability, dc: saveDC, spell: true, source: charID}
+		switch {
+		case sculpted(charID): // F119: Sculpt Spells
+			sc.autoSucceed = "Sculpt Spells"
+		case careful(charID): // F194: Careful Spell
+			sc.autoSucceed = "Careful Spell"
 		}
+		if sc.autoSucceed != "" && onSave == "half" {
+			onSave = "none" // and no damage
+		}
+		r := sc.roll()
+		saved := r.Success
+		d := rolled
+		how := r.Clause()
 		if saved {
-			how = fmt.Sprintf("saves (%d vs DC %d)", total, saveDC)
-			if shielded {
-				how = "is shielded by Sculpt Spells (an automatic success)"
-			} else if carefully {
-				how = "is protected by Careful Spell (an automatic success)"
-			}
 			if onSave == "half" {
 				d /= 2
 			} else {

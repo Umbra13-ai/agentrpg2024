@@ -165,24 +165,7 @@ func disciplinedSurvivor(charID int, description string) string {
 	if !okFP {
 		return "Cannot reroll: " + msg
 	}
-	roll := game.RollDie(20)
-	text := fmt.Sprintf("🧘 Disciplined Survivor: 1 Focus Point spent (%d left); the new d20 is %d and you must use it.", left, roll)
-	low := strings.ToLower(description)
-	if m := reBonus.FindStringSubmatch(low); m != nil {
-		var b int
-		fmt.Sscan(m[1], &b)
-		text += fmt.Sprintf(" Total %d", roll+b)
-		if d := reDC.FindStringSubmatch(low); d != nil {
-			var dc int
-			fmt.Sscan(d[1], &dc)
-			if roll+b >= dc {
-				text += fmt.Sprintf(" against DC %d: the save succeeds.", dc)
-			} else {
-				text += fmt.Sprintf(" against DC %d: the save fails.", dc)
-			}
-		}
-	}
-	return text
+	return fmt.Sprintf("🧘 Disciplined Survivor: 1 Focus Point spent (%d left); the save is rolled again and you must use the new roll: %s", left, rerollReportedSave(description, nil))
 }
 
 // superiorDefense (level 18): 3 Focus Points, Resistance to all damage except Force for 1 minute.

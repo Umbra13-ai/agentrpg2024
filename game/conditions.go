@@ -89,25 +89,6 @@ func ExhaustionSpeedPenalty(level int) int {
 	return 5 * level
 }
 
-// AutoFailsSave checks if conditions cause automatic save failure.
-// Paralyzed, Petrified, Stunned and Unconscious fail Strength and Dexterity saves automatically (SRD 5.2.1).
-func AutoFailsSave(conditions []string, ability string) bool {
-	ability = strings.ToUpper(ability)
-	if ability != "STR" && ability != "DEX" {
-		return false
-	}
-	// These conditions cause auto-fail on STR/DEX saves
-	autoFailConditions := []string{
-		ConditionParalyzed, ConditionPetrified, ConditionStunned, ConditionUnconscious,
-	}
-	for _, cond := range autoFailConditions {
-		if HasCondition(conditions, cond) {
-			return true
-		}
-	}
-	return false
-}
-
 // IsAutoCrit checks if conditions make melee attacks automatic crits.
 // Paralyzed and unconscious targets take auto-crits from melee hits within 5ft.
 func IsAutoCrit(conditions []string) bool {
@@ -116,17 +97,6 @@ func IsAutoCrit(conditions []string) bool {
 		if HasCondition(conditions, cond) {
 			return true
 		}
-	}
-	return false
-}
-
-// GetSaveDisadvantage checks if conditions grant Disadvantage on a saving throw.
-// Restrained gives Disadvantage on Dexterity saves. Exhaustion (2024) is a -2 per level penalty
-// on the D20 Test, not Disadvantage; the level argument is kept for the callers.
-func GetSaveDisadvantage(conditions []string, exhaustionLevel int, ability string) bool {
-	ability = strings.ToUpper(ability)
-	if ability == "DEX" && HasCondition(conditions, ConditionRestrained) {
-		return true
 	}
 	return false
 }

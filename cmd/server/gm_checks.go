@@ -1208,8 +1208,8 @@ func handleGMSavingThrow(w http.ResponseWriter, r *http.Request) {
 		Disadvantage      bool   `json:"disadvantage"`
 		Description       string `json:"description"`          // Optional context (e.g., "Fireball", "Dragon's Breath")
 		UseInspiration    bool   `json:"use_inspiration"`      // Spend Heroic Inspiration: reroll a failed d20
-		FromMagic         bool   `json:"from_magic"`           // Gnomish Cunning (save vs magic)
-		FromFiendOrUndead bool   `json:"from_fiend_or_undead"` // Holy Nimbus (advantage on saves vs fiend/undead spells)
+		FromMagic         bool   `json:"from_magic"`           // a save against a spell: items that give Advantage against spells
+		FromFiendOrUndead bool   `json:"from_fiend_or_undead"` // Holy Nimbus: Advantage on a save a Fiend or an Undead forces
 		ChooseToFail      bool   `json:"choose_to_fail"`       // the player doesn't resist: the save fails without a roll (SRD 5.2.1)
 	}
 	campaignID, ok := gmReadAs(w, r, agentID, &req, targetsIn(&req.CharacterID))
@@ -1240,466 +1240,108 @@ func handleGMSavingThrow(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// Get character stats, class, and inspiration
-	var charName, className string
-	var str, dex, con, intl, wis, cha, level int
-	var charLobbyID int
+	var charName string
 	var hasInspiration bool
-	err = db.QueryRow(`
-		SELECT name, str, dex, con, intl, wis, cha, level, lobby_id, class, COALESCE(inspiration, false)
-		FROM characters WHERE id = $1
-	`, req.CharacterID).Scan(&charName, &str, &dex, &con, &intl, &wis, &cha, &level, &charLobbyID, &className, &hasInspiration)
-
-	if err != nil {
+	if db.QueryRow(`SELECT name, COALESCE(inspiration, false) FROM characters WHERE id = $1`, req.CharacterID).Scan(&charName, &hasInspiration) != nil {
 		w.WriteHeader(http.StatusBadRequest)
 		json.NewEncoder(w).Encode(map[string]interface{}{"error": "character_not_found"})
 		return
 	}
-
-	// Verify character is in this campaign
-
-	// Get class saving throw proficiencies
-	var classSaves string
-	err = db.QueryRow(`SELECT saving_throws FROM classes WHERE slug = $1`, strings.ToLower(className)).Scan(&classSaves)
-	if err != nil {
-		classSaves = "" // Class not found, no proficiencies
-	}
-
-	// Parse the ability
-	abilityUsed := strings.ToLower(req.Ability)
-	var abilityMod int
-	var abilityName string
-	var abilityShort string
-
-	switch abilityUsed {
-	case "str", "strength":
-		abilityMod = game.Modifier(str)
-		abilityName = "Strength"
-		abilityShort = "str"
-	case "dex", "dexterity":
-		abilityMod = game.Modifier(dex)
-		abilityName = "Dexterity"
-		abilityShort = "dex"
-	case "con", "constitution":
-		abilityMod = game.Modifier(con)
-		abilityName = "Constitution"
-		abilityShort = "con"
-	case "int", "intelligence":
-		abilityMod = game.Modifier(intl)
-		abilityName = "Intelligence"
-		abilityShort = "int"
-	case "wis", "wisdom":
-		abilityMod = game.Modifier(wis)
-		abilityName = "Wisdom"
-		abilityShort = "wis"
-	case "cha", "charisma":
-		abilityMod = game.Modifier(cha)
-		abilityName = "Charisma"
-		abilityShort = "cha"
-	default:
+	abilityShort, okAbility := game.AbilityKey(req.Ability)
+	if !okAbility {
 		w.WriteHeader(http.StatusBadRequest)
 		json.NewEncoder(w).Encode(map[string]interface{}{"error": "invalid ability - use str, dex, con, int, wis, or cha"})
 		return
 	}
-
-	// Check if proficient in this saving throw
-	proficient := false
-	if classSaves != "" {
-		for _, save := range strings.Split(classSaves, ",") {
-			if strings.TrimSpace(strings.ToLower(save)) == abilityShort {
-				proficient = true
-				break
-			}
-		}
-	}
-
-	// Disciplined Survivor (Monk level 14: every saving throw) and Slippery Mind (Rogue level 15: Wisdom and Charisma)
-	saveFeature := ""
-	if !proficient {
-		if ok, feature := saveProficiency(req.CharacterID, className, level, abilityShort); ok {
-			proficient = true
-			saveFeature = feature
-		}
-	}
-
-	// Calculate total modifier
-	totalMod := abilityMod
-	if proficient {
-		totalMod += game.ProficiencyBonus(level)
-	}
-	totalMod = wildShapeHigher(req.CharacterID, "save:"+abilityShort, totalMod) // Wild Shape: the beast's save modifier when it's higher
-	totalMod -= game.ExhaustionD20Penalty(exhaustionLevelOf(req.CharacterID))   // SRD 5.2.1: -2 per Exhaustion level
-
-	// Paladin's Aura of Protection
-	// At level 6+, allies within 10ft (30ft at level 18) add Paladin's CHA mod to saves
-	// The Paladin also benefits from their own aura
-	auraBonus := 0
-	auraPaladinName := ""
-
-	// First check if THIS character is a Paladin level 6+ (they benefit from own aura)
-	paladinLevelSelf := 0
-	var selfClassLevelsJSON []byte
-	_ = db.QueryRow(`SELECT COALESCE(class_levels, '{}')::jsonb FROM characters WHERE id = $1`, req.CharacterID).Scan(&selfClassLevelsJSON)
-	var selfClassLevels map[string]int
-	if err := json.Unmarshal(selfClassLevelsJSON, &selfClassLevels); err == nil && len(selfClassLevels) > 0 {
-		for cn, lvl := range selfClassLevels {
-			if strings.ToLower(cn) == "paladin" {
-				paladinLevelSelf = lvl
-				break
-			}
-		}
-	} else if strings.ToLower(className) == "paladin" {
-		paladinLevelSelf = level
-	}
-
-	if paladinLevelSelf >= 6 && !isIncapacitated(req.CharacterID) {
-		selfChaBonus := game.Modifier(cha)
-		if selfChaBonus < 1 {
-			selfChaBonus = 1
-		}
-		auraBonus = selfChaBonus
-		auraPaladinName = charName + " (self)"
-	}
-
-	// Then check for other Paladins in the party
-	otherAura, otherPaladin := getPaladinAuraBonus(campaignID, req.CharacterID)
-	if otherAura > auraBonus {
-		auraBonus = otherAura
-		auraPaladinName = otherPaladin
-	}
-
-	if auraBonus > 0 {
-		totalMod += auraBonus
-	}
-	totalMod += magicSaveBonus(req.CharacterID) // Ring/Cloak of Protection, Stone of Good Luck, Staff of Power (magic_items_2024.go)
-	totalMod += buffSaveBonus(req.CharacterID)  // Warding Bond +1 (buff_spells_2024.go)
-
-	// CHECK: Auto-fail conditions (paralyzed, stunned, unconscious auto-fail STR/DEX saves)
-	if autoFailsSave(req.CharacterID, abilityShort) {
-		failReason := "condition"
-		conditions := getCharConditions(req.CharacterID)
-		for _, c := range conditions {
-			switch strings.ToLower(c) {
-			case "paralyzed", "petrified", "stunned", "unconscious":
-				failReason = c
-				break
-			}
-		}
-
-		fullResult := fmt.Sprintf("%s saving throw: AUTO-FAIL (character is %s)", abilityName, failReason)
-		desc := fmt.Sprintf("%s: %s saving throw (DC %d) - auto-fail (%s)", charName, abilityName, req.DC, failReason)
-		if req.Description != "" {
-			desc = fmt.Sprintf("%s: %s - %s saving throw (DC %d) - auto-fail (%s)", charName, req.Description, abilityName, req.DC, failReason)
-		}
-
-		_, _ = db.Exec(`
-			INSERT INTO actions (lobby_id, character_id, action_type, description, result)
-			VALUES ($1, $2, 'saving_throw', $3, $4)
-		`, campaignID, req.CharacterID, desc, fullResult)
-
+	abilityName := game.AbilityName(abilityShort)
+	if req.UseInspiration && !hasInspiration {
+		w.WriteHeader(http.StatusBadRequest)
 		json.NewEncoder(w).Encode(map[string]interface{}{
-			"success":          false,
-			"character":        charName,
-			"ability":          abilityName,
-			"auto_fail":        true,
-			"auto_fail_reason": failReason,
-			"dc":               req.DC,
-			"outcome":          "AUTO-FAIL",
-			"result":           fullResult,
-			"condition_note":   fmt.Sprintf("%s is %s and automatically fails %s saving throws", charName, failReason, abilityName),
+			"error":   "no_inspiration",
+			"message": fmt.Sprintf("%s doesn't have Heroic Inspiration to spend", charName),
 		})
 		return
 	}
 
-	// CHECK: Condition-based disadvantage (exhaustion 3+, restrained for DEX)
-	conditionDisadvantage := getSaveDisadvantage(req.CharacterID, abilityShort)
-	if conditionDisadvantage && !req.Advantage {
-		req.Disadvantage = true
+	// the one saving throw function (save_2024.go): every Advantage, Disadvantage, automatic failure and bonus the character's
+	// state gives, with the GM's ruling and the cause the GM describes (a spell, a Fiend or an Undead, poison, charm, fear)
+	sc := saveCtx{lobby: campaignID, saver: req.CharacterID, ability: abilityShort, dc: req.DC, desc: req.Description,
+		spell: req.FromMagic || strings.Contains(strings.ToLower(req.Description), "spell"), fiendOrUndead: req.FromFiendOrUndead,
+		inspiration: req.UseInspiration}
+	if req.Advantage {
+		sc.extraAdv = []string{"the GM's ruling"}
 	}
-	if spellSaveAdvantage(campaignID, req.CharacterID, abilityShort) {
-		req.Advantage = true // Haste: Advantage on Dexterity saving throws
+	if req.Disadvantage {
+		sc.extraDis = []string{"the GM's ruling"}
 	}
-
-	// Danger Sense (Barbarian level 2+)
-	// Advantage on DEX saves against effects you can see (traps, spells)
-	// Must not be blinded, deafened, or incapacitated
-	dangerSenseActive := false
-	if abilityShort == "dex" && strings.ToLower(className) == "barbarian" && level >= 2 {
-		// Check conditions that disable Danger Sense
-		charConditions := getCharConditions(req.CharacterID)
-		canUseDangerSense := true
-		for _, cond := range charConditions {
-			condLower := strings.ToLower(cond)
-			if condLower == "blinded" || condLower == "deafened" || isIncapacitated(req.CharacterID) {
-				canUseDangerSense = false
-				break
-			}
-		}
-		if canUseDangerSense {
-			req.Advantage = true
-			dangerSenseActive = true
-		}
+	sv := sc.roll()
+	if req.UseInspiration { // spent either way, as on a check (skill.md: "The inspiration is spent either way")
+		db.Exec(`UPDATE characters SET inspiration = false WHERE id = $1`, req.CharacterID)
 	}
-
-	// Gnomish Cunning
-	// Advantage on Intelligence, Wisdom and Charisma saving throws
-	gnomeCunningActive := false
-	if req.FromMagic || strings.Contains(strings.ToLower(req.Description), "spell") { // F130: Mantle of Spell Resistance, Robe of the Archmagi...
-		if p := spellSaveProtection(campaignID, req.CharacterID); p != "" {
-			req.Advantage = true
-			req.Description = strings.TrimSpace(req.Description + " [" + p + ": Advantage against spells]")
-		}
-	}
-	if checkGnomeCunning(req.CharacterID, abilityShort, req.FromMagic) {
-		req.Advantage = true
-		gnomeCunningActive = true
-	}
-
-	// Fey Ancestry
-	// Advantage on saving throws against being charmed
-	feyAncestryActive := false
-	if checkFeyAncestryCharm(req.CharacterID, req.Description) {
-		req.Advantage = true
-		feyAncestryActive = true
-	}
-
-	// Dwarven Resilience
-	// Advantage on saving throws against poison
-	dwarvenResilienceActive := false
-	if checkDwarvenResilience(req.CharacterID, req.Description) {
-		req.Advantage = true
-		dwarvenResilienceActive = true
-	}
-	if ok, why := itemPoisonSaveAdvantage(req.CharacterID, req.Description); ok { // Necklace of Adaptation, Belt of Dwarvenkind (F204)
-		req.Advantage = true
-		req.Description += " [" + why + ": Advantage against being Poisoned]"
-	}
-	if periaptOfHealthPoison(req.CharacterID) && strings.Contains(strings.ToLower(req.Description), "poison") { // F154
-		req.Advantage = true
-		req.Description += " [Periapt of Health: Advantage against being Poisoned]"
-	}
-
-	// Halfling Brave
-	// Advantage on saving throws against being frightened
-	halflingBraveActive := false
-	if checkHalflingBrave(req.CharacterID, req.Description) {
-		req.Advantage = true
-		halflingBraveActive = true
-	}
-
-	// Hunter Ranger Steel Will
-	// Advantage on saving throws against being frightened
-	steelWillActive := false
-
-	// Holy Nimbus
-	// Advantage on saving throws against spells cast by fiends or undead
-	holyNimbusActive := false
-	if req.FromFiendOrUndead && hasHolyNimbusActive(req.CharacterID) {
-		req.Advantage = true
-		holyNimbusActive = true
-	}
-
-	// Handle Heroic Inspiration (2024): reroll after a failure
-	usedInspiration := false
-	if req.UseInspiration {
-		if hasInspiration {
-			db.Exec(`UPDATE characters SET inspiration = false WHERE id = $1`, req.CharacterID)
-			usedInspiration = true
-		} else {
-			// Character doesn't have Heroic Inspiration to spend
-			w.WriteHeader(http.StatusBadRequest)
-			json.NewEncoder(w).Encode(map[string]interface{}{
-				"error":   "no_inspiration",
-				"message": fmt.Sprintf("%s doesn't have Heroic Inspiration to spend", charName),
-			})
-			return
-		}
-	}
-
-	// Roll the die
-	var roll1, roll2, finalRoll int
-	rollType := "normal"
-
-	if req.Advantage && !req.Disadvantage {
-		finalRoll, roll1, roll2 = game.RollWithAdvantage()
-		rollType = "advantage"
-		if usedInspiration {
-			rollType = "advantage (inspiration)"
-		} else if dangerSenseActive {
-			rollType = "advantage (Danger Sense)"
-		} else if gnomeCunningActive {
-			rollType = "advantage (Gnomish Cunning)"
-		} else if feyAncestryActive {
-			rollType = "advantage (Fey Ancestry)"
-		} else if dwarvenResilienceActive {
-			rollType = "advantage (Dwarven Resilience)"
-		} else if halflingBraveActive {
-			rollType = "advantage (Halfling Brave)"
-		} else if steelWillActive {
-			rollType = "advantage (Steel Will)"
-		} else if holyNimbusActive {
-			rollType = "advantage (☀️ Holy Nimbus)"
-		}
-	} else if req.Disadvantage && !req.Advantage {
-		finalRoll, roll1, roll2 = game.RollWithDisadvantage()
-		rollType = "disadvantage"
-	} else if req.Advantage && req.Disadvantage {
-		// Advantage and disadvantage cancel out
-		finalRoll = game.RollDie(20)
-		roll1 = finalRoll
-		roll2 = 0
-		rollType = "normal (advantage and disadvantage cancel)"
-	} else {
-		finalRoll = game.RollDie(20)
-		roll1 = finalRoll
-		roll2 = 0
-	}
-
-	// Halfling Lucky
-	// When you roll a 1 on the d20, you can reroll and must use the new roll
-	saveHalflingLuckyUsed := false
-	saveHalflingLuckyOriginal := 0
-	if finalRoll == 1 {
-		newRoll, rerolled, origRoll := applyHalflingLucky(finalRoll, req.CharacterID)
-		if rerolled {
-			saveHalflingLuckyUsed = true
-			saveHalflingLuckyOriginal = origRoll
-			finalRoll = newRoll
-			roll1 = newRoll
-		}
-	}
-
-	inspirationRerolled := false
-	spellAdj, spellNote := spellRollAdjust(campaignID, req.CharacterID, "save:"+abilityShort) // Bless, Bane, Slow
-	totalMod += spellAdj
-	total := finalRoll + totalMod
-	if usedInspiration && req.DC > 0 && total < req.DC { // 2024 Heroic Inspiration: reroll the die after a failure and use the new roll
-		oldRoll := finalRoll
-		finalRoll = game.RollDie(20)
-		roll1, roll2 = finalRoll, 0
-		total = total - oldRoll + finalRoll
-		inspirationRerolled = true
-	}
-	_ = inspirationRerolled
-	total, saveMightNote := indomitableMight(req.CharacterID, abilityShort, total) // F102
-	success := total >= req.DC
-
-	// Build result description
-	resultStr := fmt.Sprintf("d20(%d)", finalRoll)
-	if saveHalflingLuckyUsed {
-		resultStr = fmt.Sprintf("d20(%d→%d Lucky)", saveHalflingLuckyOriginal, finalRoll)
-	}
-	if rollType == "advantage" {
-		resultStr = fmt.Sprintf("d20(%d,%d→%d)", roll1, roll2, finalRoll)
-	} else if rollType == "disadvantage" {
-		if saveHalflingLuckyUsed {
-			resultStr = fmt.Sprintf("d20(%d,%d→%d→%d Lucky)", roll1, roll2, saveHalflingLuckyOriginal, finalRoll)
-		} else {
-			resultStr = fmt.Sprintf("d20(%d,%d→%d)", roll1, roll2, finalRoll)
-		}
-	}
-
-	modStr := ""
-	if totalMod >= 0 {
-		modStr = fmt.Sprintf("+%d", totalMod)
-	} else {
-		modStr = fmt.Sprintf("%d", totalMod)
-	}
-
-	profStr := ""
+	_, proficient, saveFeature := saveModifier(campaignID, req.CharacterID, abilityShort)
+	label := abilityName + " saving throw"
 	if proficient {
-		profStr = " (proficient)"
+		label += " (proficient)"
 	}
+	fullResult := sv.ForSaver(label)
 
-	outcomeStr := "FAILURE"
-	if success {
-		outcomeStr = "SUCCESS"
-	}
-
-	// A natural 20 or 1 means nothing special on a saving throw (only attack rolls and death saves use them).
-
-	fullResult := fmt.Sprintf("%s saving throw%s: %s%s = %d vs DC %d → %s%s",
-		abilityName, profStr, resultStr, modStr, total, req.DC, outcomeStr, spellNote)
-
-	// Record the saving throw
 	desc := fmt.Sprintf("%s: %s saving throw (DC %d)", charName, abilityName, req.DC)
 	if req.Description != "" {
 		desc = fmt.Sprintf("%s: %s - %s saving throw (DC %d)", charName, req.Description, abilityName, req.DC)
 	}
-
 	_, _ = db.Exec(`
 		INSERT INTO actions (lobby_id, character_id, action_type, description, result)
 		VALUES ($1, $2, 'saving_throw', $3, $4)
 	`, campaignID, req.CharacterID, desc, fullResult)
 
+	st := sv.Save
+	rollType := "normal"
+	switch st.Mode() {
+	case "advantage", "disadvantage":
+		rollType = st.Mode()
+	case "cancelled":
+		rollType = "normal (advantage and disadvantage cancel)"
+	}
+	var adjustments []string
+	for _, x := range st.Adjust {
+		adjustments = append(adjustments, x.Why)
+	}
 	response := map[string]interface{}{
-		"success":     success,
-		"character":   charName,
-		"ability":     abilityName,
-		"proficient":  proficient,
-		"roll":        finalRoll,
-		"roll_type":   rollType,
-		"ability_mod": abilityMod,
-		"total_mod":   totalMod,
-		"total":       total,
-		"dc":          req.DC,
-		"outcome":     outcomeStr,
-		"result":      fullResult,
+		"success":      sv.Success,
+		"character":    charName,
+		"ability":      abilityName,
+		"proficient":   proficient,
+		"roll":         sv.Natural,
+		"roll_type":    rollType,
+		"ability_mod":  game.Modifier(abilityScoreOf(req.CharacterID, abilityShort)),
+		"total_mod":    st.Modifier(),
+		"total":        sv.Total,
+		"dc":           req.DC,
+		"outcome":      sv.Outcome(),
+		"result":       fullResult,
+		"advantage":    st.Advantage,
+		"disadvantage": st.Disadvantage,
+		"adjustments":  adjustments,
 		"rolls_detail": map[string]interface{}{
-			"die1": roll1,
-			"die2": roll2,
+			"die1": sv.Dice[0],
+			"die2": sv.Dice[1],
 		},
 	}
-	if saveMightNote != "" {
-		response["indomitable_might"] = strings.TrimSpace(saveMightNote) // F102
+	if len(sv.Changed) > 0 {
+		response["changed"] = sv.Changed // Halfling Luck, Heroic Inspiration, the Luck Blade, Indomitable Might
 	}
-	if usedInspiration {
+	if st.AutoFail != "" && st.AutoSucceed == "" {
+		response["auto_fail"] = true
+		response["auto_fail_reason"] = st.AutoFail
+		response["condition_note"] = fmt.Sprintf("%s is %s and automatically fails %s saving throws", charName, st.AutoFail, abilityName)
+	}
+	if req.UseInspiration {
 		response["used_inspiration"] = true
-		response["inspiration_note"] = fmt.Sprintf("%s spent inspiration for advantage on this save", charName)
+		response["inspiration_note"] = fmt.Sprintf("%s spent Heroic Inspiration: rerolled=%v (a failed save is rolled again and the new roll is used)", charName, sc.inspirationUsed)
 	}
-	// Add Halfling Lucky note
-	if saveHalflingLuckyUsed {
-		response["halfling_lucky"] = true
-		response["halfling_lucky_original"] = saveHalflingLuckyOriginal
-		response["halfling_lucky_reroll"] = finalRoll
-		response["racial_feature_note"] = fmt.Sprintf("🍀 %s's Halfling Lucky: rerolled nat 1 → %d", charName, finalRoll)
-	}
-	// Add Danger Sense note
-	if dangerSenseActive {
-		response["danger_sense"] = true
-		response["class_feature_note"] = fmt.Sprintf("🎯 %s's Danger Sense grants advantage on DEX saves against effects they can see", charName)
-	}
-	// Add Gnomish Cunning note
-	if gnomeCunningActive {
-		response["gnome_cunning"] = true
-		response["species_trait_note"] = fmt.Sprintf("🧠 %s's Gnomish Cunning gives Advantage on %s saves", charName, abilityName)
-	}
-	// Add Fey Ancestry note
-	if feyAncestryActive {
-		response["fey_ancestry"] = true
-		response["racial_feature_note"] = fmt.Sprintf("✨ %s's Fey Ancestry grants advantage on saves against charm effects", charName)
-	}
-	// Add Dwarven Resilience note
-	if dwarvenResilienceActive {
-		response["dwarven_resilience"] = true
-		response["racial_feature_note"] = fmt.Sprintf("⛏️ %s's Dwarven Resilience grants advantage on saves against poison", charName)
-	}
-	// Add Halfling Brave note
-	if halflingBraveActive {
-		response["halfling_brave"] = true
-		response["racial_feature_note"] = fmt.Sprintf("💪 %s's Halfling Brave grants advantage on saves against frightened", charName)
-	}
-	// Disciplined Survivor / Slippery Mind note
 	if saveFeature != "" {
 		response["save_proficiency_from"] = saveFeature
 		response["class_feature_note"] = fmt.Sprintf("%s's %s gives proficiency in this saving throw", charName, saveFeature)
-	}
-	// Add Paladin's Aura of Protection note
-	if auraBonus > 0 {
-		response["aura_of_protection"] = true
-		response["aura_bonus"] = auraBonus
-		response["aura_source"] = auraPaladinName
-		response["paladin_aura_note"] = fmt.Sprintf("🛡️ Aura of Protection (+%d from %s)", auraBonus, auraPaladinName)
 	}
 	json.NewEncoder(w).Encode(response)
 }
