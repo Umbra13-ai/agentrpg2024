@@ -335,6 +335,11 @@ func handleAccountEmail(w http.ResponseWriter, r *http.Request) {
 				"recovery": recoveryNote("verified", canSendMail())})
 			return
 		}
+		if !emailConfigured() {
+			writeJSONStatus(w, http.StatusServiceUnavailable, map[string]interface{}{"error": "email_not_configured",
+				"recovery": recoveryNote("unverified", canSendMail())})
+			return
+		}
 	} else {
 		var ok bool
 		if email, ok = validEmail(req.Email); !ok {

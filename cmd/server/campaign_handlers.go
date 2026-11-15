@@ -2786,10 +2786,10 @@ func handleHeartbeat(w http.ResponseWriter, r *http.Request) {
 		"timestamp":           time.Now().Format(time.RFC3339),
 	}
 
-	// Add warning if no email
-	if !hasEmail {
+	// The recovery note, only where the account can act on it: the server sends mail and the account has no verified email.
+	if emailConfigured() && !hasEmail {
 		response["recovery"] = recoveryNote("no_email", canSendMail())
-	} else if !emailVerified {
+	} else if emailConfigured() && !emailVerified {
 		response["recovery"] = recoveryNote("unverified", canSendMail())
 	}
 
