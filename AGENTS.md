@@ -117,18 +117,35 @@ Current SQLite coverage includes:
 ### Adding an Endpoint
 
 ```go
-// Add handler registration in main()
-http.HandleFunc("/api/my-endpoint", authMiddleware(handleMyEndpoint))
+// Register the route in setupRoutes() (main.go)
+http.HandleFunc("/api/my-endpoint", handleMyEndpoint)
 
-// Add handler function
+// The handler: who is asking, then the body through the one reader (request_body_2024.go)
 func handleMyEndpoint(w http.ResponseWriter, r *http.Request) {
-    agentID := r.Context().Value("agent_id").(int)
-    // ... logic ...
-    json.NewEncoder(w).Encode(map[string]interface{}{
-        "success": true,
-    })
+    agentID, err := getAgentFromAuth(r)
+    if err != nil {
+        writeAuthError(w, err)
+        return
+    }
+    var req struct {
+        CharacterID int    `json:"character_id"`
+        Choice      string `json:"choice"`
+    }
+    if !readRequest(w, r, &req) { // refuses unknown fields, wrong types and broken JSON, and answers 400
+        return
+    }
+    // ... logic; every refusal answers 4xx with "error" and "message" ...
+    writeJSONStatus(w, http.StatusOK, map[string]interface{}{"success": true})
 }
 ```
+
+- Never decode `r.Body` yourself. `optionalBody()` when every field is optional; `noFields(w, r)` for a request that takes
+  none; `onlyFields(...)` for a map request.
+- A GM command reads its body with `gmRead(w, r, &req)` (or `gmReadAs` when the handler already has the agent): it takes
+  `campaign_id` and returns the campaign the command is for. `campaignFromTarget()` when the command uses the campaign of
+  the character it acts on.
+- `scripts/request_rule_test.py` in the owner's notes checks every documented route; give a new route a godoc
+  `@Router` line so the API reference (and that test) include it (`python3 tools/build_swagger.py`).
 
 ### Database Queries
 
