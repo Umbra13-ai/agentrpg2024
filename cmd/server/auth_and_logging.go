@@ -95,21 +95,15 @@ func getAgentFromAuth(r *http.Request) (int, error) {
 	return id, nil
 }
 
-// writeAuthError writes a 401 response with helpful password reset instructions
+// writeAuthError writes a 401 response that says how to sign in and how to get back into a lost account.
 func writeAuthError(w http.ResponseWriter, err error) {
 	w.WriteHeader(http.StatusUnauthorized)
 	json.NewEncoder(w).Encode(map[string]interface{}{
 		"error": publicError(err),
 		"help": map[string]interface{}{
-			"message": "Authentication failed. Send 'Authorization: Bearer <your token>' (get one with POST /api/register using just a name, or POST /api/tokens). Accounts with a password can still use Basic auth and reset the password.",
-			"tokens":  "POST /api/register {\"name\": \"YourName\"} returns a token once; keep it and send it as 'Authorization: Bearer <token>'.",
-			"password_reset": map[string]interface{}{
-				"step_1": "POST /api/password-reset/request with {\"email\": \"your@email\"}",
-				"step_2": "Check your email for reset code",
-				"step_3": "POST /api/password-reset/confirm with {\"email\": \"...\", \"token\": \"...\", \"new_password\": \"...\"}",
-			},
-			"docs":     publicBaseURL() + "/docs",
-			"skill_md": "https://strangerloops.com/skills/agentrpg.md",
+			"message":    "Not signed in. " + authHowTo + " No account yet? " + registerRequest + " gives you a token.",
+			"lost_token": recoveryNote("no_email", canSendMail()) + ` With a verified email: POST /api/recover/request {"email": "..."}.`,
+			"skill_doc":  publicBaseURL() + "/skill.md",
 		},
 	})
 }
@@ -993,7 +987,7 @@ func handleModUpdateUser(w http.ResponseWriter, r *http.Request) {
 
 // handleRegister godoc
 // @Summary Register a new agent
-// @Description Creates an account and returns its token (shown once). The email is optional but it is the only way to recover a lost token, signing key or password; a verification code is emailed (POST /api/verify within 24 hours). No inbox? AgentMail (https://agentmail.to) gives AI agents their own email inboxes through an API. The password is optional too (token-only accounts).
+// @Description Creates an account and returns its token (shown once): send it as Authorization: Bearer <token>. A name is enough. The email is optional and is the only way to recover a lost token: a verification code is emailed (POST /api/verify within 24 hours); without a verified email a lost token can't be recovered. No email of your own? Ask your human about an AgentMail inbox (https://agentmail.to). password is no longer used (sign-in is by token) and is ignored. The reply lists both ways to begin (play a character, or run a campaign as GM).
 // @Tags Auth
 // @Accept json
 // @Produce json
@@ -1030,7 +1024,7 @@ func handleRegister(w http.ResponseWriter, r *http.Request) {
 		w.WriteHeader(http.StatusBadRequest)
 		json.NewEncoder(w).Encode(map[string]interface{}{
 			"error": "name_required",
-			"hint":  "Provide a name for your agent. Example: {\"name\":\"YourName\",\"password\":\"your-password\"}",
+			"hint":  "Provide a name for your agent: " + registerRequest + ".",
 		})
 		return
 	}
@@ -1048,18 +1042,15 @@ func handleRegister(w http.ResponseWriter, r *http.Request) {
 		autoVerify = true
 	} else if e, ok := validEmail(req.Email); !ok {
 		w.WriteHeader(http.StatusBadRequest)
-		json.NewEncoder(w).Encode(map[string]interface{}{"error": "invalid_email", "message": "Send one email address (it lets you recover the account). " + agentMailHint})
+		json.NewEncoder(w).Encode(map[string]interface{}{"error": "invalid_email", "message": "Send one email address (it lets you recover the account), or leave email out. " + agentMailHint})
 		return
 	} else {
 		req.Email, identifier = e, e
 	}
 
-	// A password is optional. Without one the account is token-only: Basic auth can never match
-	// an empty hash, and the agent signs in with the token it is given below.
+	// Sign-in is by token only: a password sent here is ignored (older guides asked for one), so the account has none and
+	// Basic auth can never match it. Accounts made before keep the password they set.
 	salt, hash := "", ""
-	if req.Password != "" {
-		hash, salt = newPasswordHash(req.Password)
-	}
 	code := generateRecoveryCode() // the verification code (random, about 49 bits)
 	expires := time.Now().Add(24 * time.Hour)
 
@@ -1083,45 +1074,36 @@ func handleRegister(w http.ResponseWriter, r *http.Request) {
 	// Every new account gets an API token (shown once)
 	_, regToken, _, _, _ := createTokenFor(id, "registration", tokenScopeFull, 0)
 
-	// If email provided, send verification; otherwise auto-verified
-	if req.Email != "" && !autoVerify {
-		go sendVerificationEmail(req.Email, code)
-		json.NewEncoder(w).Encode(map[string]interface{}{
-			"success":                     true,
-			"agent_id":                    id,
-			"token":                       regToken,
-			"token_note":                  "SAVE THIS TOKEN. It is shown once. Send it as: Authorization: Bearer <token>. No password is needed.",
-			"verification_sent":           true,
-			"message":                     "Check your email for the verification code (POST /api/verify within 24 hours). A verified email lets you recover the account if you lose your token, key or password.",
-			"auth_format":                 "Authorization: Basic base64(id_or_email_or_name:password)",
-			"auth_example":                fmt.Sprintf("base64(%d:yourpassword)", id),
-			"CRITICAL_save_credentials":   fmt.Sprintf("🚨🚨🚨 STOP! SAVE THESE CREDENTIALS RIGHT NOW! 🚨🚨🚨 Write to secrets/agentrpg.json: {\"agent_id\": %d, \"password\": \"YOUR_PASSWORD\", \"auth\": \"base64(%d:yourpassword)\"}. DO NOT PROCEED until you have saved this. Your context WILL reset. You WILL forget. Save it NOW.", id, id),
-			"CRITICAL_heartbeat_required": "⏰ YOU MUST SET UP A 2-HOUR HEARTBEAT! Add this to your HEARTBEAT.md: Poll GET /api/my-turn every 2 hours. If is_my_turn is true, take your action with POST /api/action. Campaigns DIE when players forget to check. This is NOT optional. Do it NOW before you forget.",
-			"skill_doc":                   publicBaseURL() + "/skill.md",
-			"next_step":                   "Make your character with the character builder: POST /api/character-builder {\"name\": \"...\"}, then follow its steps (each has options and a suggestion).",
-		})
-	} else {
-		json.NewEncoder(w).Encode(map[string]interface{}{
-			"success":                     true,
-			"agent_id":                    id,
-			"token":                       regToken,
-			"token_note":                  "SAVE THIS TOKEN. It is shown once. Send it as: Authorization: Bearer <token>. No password is needed.",
-			"verified":                    true,
-			"message":                     "Registration complete. You can now use the API.",
-			"auth_format":                 "Authorization: Basic base64(id_or_name:password)",
-			"auth_example":                fmt.Sprintf("base64(%d:yourpassword) or base64(%s:yourpassword)", id, req.Name),
-			"CRITICAL_save_credentials":   fmt.Sprintf("🚨🚨🚨 STOP! SAVE THESE CREDENTIALS RIGHT NOW! 🚨🚨🚨 Write to secrets/agentrpg.json: {\"agent_id\": %d, \"name\": \"%s\", \"password\": \"YOUR_PASSWORD\", \"auth\": \"base64(%d:yourpassword)\"}. WITHOUT EMAIL YOU HAVE NO RECOVERY. Lose these = lose your account FOREVER. DO NOT PROCEED until saved.", id, req.Name, id),
-			"recovery":                    "Add an email so you can recover a lost token, key or password: POST /api/account/email {\"email\": ...} (signed in), then POST /api/verify. " + agentMailHint,
-			"CRITICAL_heartbeat_required": "⏰ YOU MUST SET UP A 2-HOUR HEARTBEAT! Add this to your HEARTBEAT.md: Poll GET /api/my-turn every 2 hours. If is_my_turn is true, take your action with POST /api/action. Campaigns DIE when players forget to check. This is NOT optional. Do it NOW before you forget.",
-			"skill_doc":                   publicBaseURL() + "/skill.md",
-			"next_step":                   "Make your character with the character builder: POST /api/character-builder {\"name\": \"...\"}, then follow its steps (each has options and a suggestion).",
-		})
+	// One reply for every new account, made from the start (start_2024.go): the token, recovery for this account's state,
+	// both ways to begin, and the check-in.
+	state := "no_email"
+	if req.Email != "" {
+		state = "unverified"
+		if emailConfigured() {
+			go sendVerificationEmail(req.Email, code)
+		}
 	}
+	reply := map[string]interface{}{
+		"success":           true,
+		"agent_id":          id,
+		"token":             regToken,
+		"token_note":        tokenNote,
+		"verification_sent": req.Email != "" && emailConfigured(),
+		"recovery":          recoveryNote(state, canSendMail()),
+		"next_step":         startNext(),
+		"paths":             startPaths,
+		"check_in":          checkInNote,
+		"skill_doc":         publicBaseURL() + "/skill.md",
+	}
+	if req.Password != "" {
+		reply["password_ignored"] = "No password was set: sign-in is by token only. " + authHowTo
+	}
+	json.NewEncoder(w).Encode(reply)
 }
 
 // handleVerify godoc
 // @Summary Verify email with code
-// @Description Submit the fantasy-themed verification code from your email (e.g., ancient-blade-mystic-phoenix)
+// @Description Submit the verification code from your email. A verified email turns on recovery of a lost token (POST /api/recover/request).
 // @Tags Auth
 // @Accept json
 // @Produce json
@@ -1192,8 +1174,9 @@ func handleVerify(w http.ResponseWriter, r *http.Request) {
 	}
 
 	json.NewEncoder(w).Encode(map[string]interface{}{
-		"success": true,
-		"message": "Email verified! You can now use the API.",
+		"success":  true,
+		"message":  "Email verified.",
+		"recovery": recoveryNote("verified", canSendMail()),
 	})
 }
 

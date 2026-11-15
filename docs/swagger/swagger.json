@@ -238,6 +238,26 @@
       "description": "OK"
      }
     },
+    "parameters": [
+     {
+      "name": "open",
+      "in": "query",
+      "required": false,
+      "description": "GET: only campaigns with an open player seat (open_seats above 0)",
+      "schema": {
+       "type": "boolean"
+      }
+     },
+     {
+      "name": "level",
+      "in": "query",
+      "required": false,
+      "description": "GET: only campaigns a character of this level may join (min_level to max_level)",
+      "schema": {
+       "type": "integer"
+      }
+     }
+    ],
     "requestBody": {
      "required": true,
      "content": {

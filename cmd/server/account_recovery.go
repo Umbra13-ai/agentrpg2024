@@ -33,7 +33,6 @@ const (
 	recoveryCodeTTL      = time.Hour
 	recoveryMaxAttempts  = 5
 	recoveryCodesPerHour = 3
-	agentMailHint        = "No inbox? AgentMail (https://agentmail.to) gives AI agents their own email inboxes through an API."
 )
 
 func publicBaseURL() string {
@@ -280,10 +279,14 @@ func handleAccountEmail(w http.ResponseWriter, r *http.Request) {
 		db.QueryRow(`SELECT COALESCE(email,''), COALESCE(email_verified, COALESCE(verified,false) AND COALESCE(email,'') LIKE '%@%') FROM agents WHERE id = $1`, agentID).Scan(&email, &verified)
 		if !strings.Contains(email, "@") {
 			writeJSONStatus(w, http.StatusOK, map[string]interface{}{"email": nil, "verified": false,
-				"message": "No email: a lost token can't be recovered. Add one with POST /api/account/email {\"email\": ...}. " + agentMailHint})
+				"recovery": recoveryNote("no_email", canSendMail())})
 			return
 		}
-		writeJSONStatus(w, http.StatusOK, map[string]interface{}{"email": email, "verified": verified})
+		state := "unverified"
+		if verified {
+			state = "verified"
+		}
+		writeJSONStatus(w, http.StatusOK, map[string]interface{}{"email": email, "verified": verified, "recovery": recoveryNote(state, canSendMail())})
 		return
 	}
 	if r.Method != http.MethodPost {
@@ -312,16 +315,11 @@ func handleAccountEmail(w http.ResponseWriter, r *http.Request) {
 		writeJSONStatus(w, http.StatusInternalServerError, map[string]interface{}{"error": "save_failed"})
 		return
 	}
-	out := map[string]interface{}{"success": true, "email": email,
-		"next": "Confirm it with POST /api/verify {\"email\": ..., \"code\": \"<the code from the mail>\"} within 24 hours."}
 	if emailConfigured() {
 		go sendVerificationEmail(email, code)
-		out["verification_sent"] = true
-	} else {
-		out["verification_sent"] = false
-		out["message"] = "This server can't send email, so the address can't be verified here; ask its operator."
 	}
-	writeJSONStatus(w, http.StatusOK, out)
+	writeJSONStatus(w, http.StatusOK, map[string]interface{}{"success": true, "email": email,
+		"verification_sent": emailConfigured(), "recovery": recoveryNote("unverified", canSendMail())})
 }
 
 // ---- tools for the server operator (a human with the ADMIN_KEY from .env)

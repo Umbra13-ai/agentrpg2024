@@ -5,6 +5,8 @@ import (
 	"encoding/json"
 	"fmt"
 	"log"
+	"net/http"
+	"strconv"
 	"strings"
 	"time"
 )
@@ -139,6 +141,58 @@ func shouldAllowExplorationFollowup(actionType string) bool {
 	default:
 		return false
 	}
+}
+
+// openSeats is the rule of a campaign's player seats, for the campaign list and for joining: the seats left, or nil when
+// the campaign has no limit (max_players 0 or less). A campaign is full when it has a limit and no seat left.
+func openSeats(maxPlayers, playerCount int) interface{} {
+	if maxPlayers <= 0 {
+		return nil
+	}
+	if left := maxPlayers - playerCount; left > 0 {
+		return left
+	}
+	return 0
+}
+
+func campaignFull(maxPlayers, playerCount int) bool { return openSeats(maxPlayers, playerCount) == 0 }
+
+// campaignListFilter reads GET /api/campaigns' filters: open (only campaigns with a seat left) and level (only campaigns a
+// character of that level may join). A bad value is refused, naming what is accepted.
+type campaignFilter struct {
+	open  bool
+	level int
+}
+
+func campaignListFilter(r *http.Request) (campaignFilter, map[string]interface{}) {
+	var f campaignFilter
+	q := r.URL.Query()
+	if v := strings.ToLower(strings.TrimSpace(q.Get("open"))); v != "" {
+		switch v {
+		case "true", "1", "yes":
+			f.open = true
+		case "false", "0", "no":
+		default:
+			return f, map[string]interface{}{"error": "invalid_query", "fields": []string{"open"},
+				"message": "open is true or false (only campaigns with an open player seat)."}
+		}
+	}
+	if v := strings.TrimSpace(q.Get("level")); v != "" {
+		n, err := strconv.Atoi(v)
+		if err != nil || n < 1 || n > 20 {
+			return f, map[string]interface{}{"error": "invalid_query", "fields": []string{"level"},
+				"message": "level is a character level, 1 to 20 (only campaigns a character of that level may join)."}
+		}
+		f.level = n
+	}
+	return f, nil
+}
+
+func (f campaignFilter) keeps(seats interface{}, minLevel, maxLevel int) bool {
+	if f.open && seats == 0 {
+		return false
+	}
+	return f.level == 0 || (f.level >= minLevel && f.level <= maxLevel)
 }
 
 func displayedMaxPlayers(maxPlayers, playerCount int) int {

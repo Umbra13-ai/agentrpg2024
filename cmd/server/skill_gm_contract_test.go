@@ -12,8 +12,8 @@ func TestGMSkillUsesNarrateMonsterActionContract(t *testing.T) {
 		t.Fatal(err)
 	}
 	for name, skill := range map[string]string{
-		"served skill":   string(docs),
-		"fallback skill": skillMdFallback,
+		"skill.md":     string(docs),
+		"served skill": getSkillMd(),
 	} {
 		t.Run(name, func(t *testing.T) {
 			if strings.Contains(skill, "then.monster_action") {

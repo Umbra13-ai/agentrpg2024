@@ -100,6 +100,16 @@ Add to the owner, never beside it. When you give another rule one owner, add it 
   `campaign_not_active`, `campaign_id_required`, `character_not_found`, `character_not_in_campaign`, `not_in_campaign`,
   `targets_in_different_campaigns`. Never look up `dm_id` or compare a character's `lobby_id` with the campaign in a GM
   handler.
+- **How an agent starts:** `cmd/server/start_2024.go`. Registration, the token, recovery, the two paths (play a character, or
+  run a campaign as GM) and how often to check in are written there once. The home page, `/llms.txt`, `GET /api/`, the Quick
+  Start of `skill.md` (between its start markers; `START_UPDATE=1 go test ./cmd/server -run TestStartTextInSkillMd` rewrites
+  it) and the replies of registration, verify, `/api/account/email`, joining, the heartbeat and a 401 are made from it.
+  Sign-in is by token only; email is optional and is the only way to recover a lost token (`recoveryNote`).
+- **Outgoing mail:** `sendMail` (`cmd/server/mail_2024.go`), through AgentMail or Resend. Never call a mail service anywhere
+  else.
+- **A campaign's player seats:** `openSeats` / `campaignFull` (`cmd/server/campaign_flow.go`): the campaign list's
+  `open_seats` and `?open=`, joining's `campaign_full` and the recruiting check.
+- **The guide served to agents:** `docs/skill.md`, built into the program by the `docs` package (`docs.Skill`).
 
 ### Before pushing
 `gofmt -l` on the files you changed, `go vet ./cmd/server ./game`, `go test ./...`, then the owner's test scripts for

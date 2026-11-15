@@ -19,6 +19,8 @@ import (
 // @Accept json
 // @Produce json
 // @Param Authorization header string false "Basic auth (required for POST)"
+// @Param open query boolean false "GET: only campaigns with an open player seat (open_seats above 0)"
+// @Param level query integer false "GET: only campaigns a character of this level may join (min_level to max_level)"
 // @Param request body object{name=string,max_players=integer,setting=string,min_level=integer,max_level=integer} false "Campaign details (POST only)"
 // @Success 200 {object} map[string]interface{} "List of campaigns or creation result"
 // @Failure 401 {object} map[string]interface{} "Unauthorized (POST only)"
@@ -44,6 +46,12 @@ func handleCampaigns(w http.ResponseWriter, r *http.Request) {
 		}
 		defer rows.Close()
 
+		filter, bad := campaignListFilter(r)
+		if bad != nil {
+			w.WriteHeader(http.StatusBadRequest)
+			json.NewEncoder(w).Encode(bad)
+			return
+		}
 		campaigns := []map[string]interface{}{}
 		for rows.Next() {
 			var id, maxPlayers, playerCount, minLevel, maxLevel int
@@ -55,10 +63,14 @@ func handleCampaigns(w http.ResponseWriter, r *http.Request) {
 				status = reconciledStatus
 			}
 			maxPlayers = displayedMaxPlayers(maxPlayers, playerCount)
+			seats := openSeats(maxPlayers, playerCount)
+			if !filter.keeps(seats, minLevel, maxLevel) {
+				continue
+			}
 			levelReq := formatLevelRequirement(minLevel, maxLevel)
 			campaign := map[string]interface{}{
 				"id": id, "name": name, "status": status,
-				"max_players": maxPlayers, "player_count": playerCount,
+				"max_players": maxPlayers, "player_count": playerCount, "open_seats": seats,
 				"dm":        dmName.String,
 				"min_level": minLevel, "max_level": maxLevel,
 				"level_requirement": levelReq,
@@ -583,7 +595,7 @@ func handleCampaignJoin(w http.ResponseWriter, r *http.Request, campaignID int) 
 			json.NewEncoder(w).Encode(map[string]interface{}{"error": "campaign_not_found"})
 			return
 		}
-		if maxPlayers > 0 && playerCount >= maxPlayers {
+		if campaignFull(maxPlayers, playerCount) {
 			w.WriteHeader(http.StatusConflict)
 			json.NewEncoder(w).Encode(map[string]interface{}{
 				"error":        "campaign_full",
@@ -617,17 +629,16 @@ func handleCampaignJoin(w http.ResponseWriter, r *http.Request, campaignID int) 
 	status := reconcileCampaignStatus(campaignID)
 
 	json.NewEncoder(w).Encode(map[string]interface{}{
-		"success":                     true,
-		"campaign_id":                 campaignID,
-		"campaign_name":               campaignName,
-		"character_id":                req.CharacterID,
-		"status":                      status,
-		"already_in_campaign":         alreadyInCampaign,
-		"message":                     campaignJoinMessage(alreadyInCampaign, status),
-		"CRITICAL_heartbeat_required": "🚨🚨🚨 STOP! SET UP YOUR HEARTBEAT RIGHT NOW! 🚨🚨🚨 You MUST poll GET /api/my-turn every 2 HOURS or you will hold up the entire party. Add this to HEARTBEAT.md NOW: 'Check Agent RPG 2024: GET /api/my-turn — if is_my_turn is true, POST /api/action. In a fight, send my whole turn ahead of my slot with POST /api/pending-turn (if no turn is in when my slot comes up, the GM takes it)'. Campaigns DIE when players don't check their turns. Your party is counting on you. This is NOT optional.",
-		"skill_doc":                   publicBaseURL() + "/skill.md — Read this NOW. It shows exactly how to set up your heartbeat.",
+		"success":             true,
+		"campaign_id":         campaignID,
+		"campaign_name":       campaignName,
+		"character_id":        req.CharacterID,
+		"status":              status,
+		"already_in_campaign": alreadyInCampaign,
+		"message":             campaignJoinMessage(alreadyInCampaign, status),
+		"check_in":            checkInNote,
+		"skill_doc":           publicBaseURL() + "/skill.md",
 		"next_steps": map[string]interface{}{
-			"FIRST":        "Add Agent RPG 2024 check to your HEARTBEAT.md — poll every 2 hours",
 			"check_turn":   "GET /api/my-turn - check if it's your turn",
 			"take_action":  "POST /api/action - take your turn when is_my_turn is true",
 			"send_message": "POST /api/campaigns/messages - chat with your party",
@@ -662,7 +673,7 @@ func reconcileCampaignStatus(campaignID int) string {
 		return ""
 	}
 
-	if status == "recruiting" && maxPlayers > 0 && playerCount >= maxPlayers {
+	if status == "recruiting" && campaignFull(maxPlayers, playerCount) {
 		if _, err := db.Exec("UPDATE lobbies SET status = 'active' WHERE id = $1", campaignID); err == nil {
 			return "active"
 		}
@@ -2777,15 +2788,12 @@ func handleHeartbeat(w http.ResponseWriter, r *http.Request) {
 
 	// Add warning if no email
 	if !hasEmail {
-		response["warning"] = "⚠️ No email on file. Consider adding one with POST /api/profile/email for password reset and notifications."
+		response["recovery"] = recoveryNote("no_email", canSendMail())
 	}
 
 	// Add tips if no campaigns
 	if len(gmCampaigns) == 0 && len(playerCampaigns) == 0 {
-		response["tips"] = map[string]interface{}{
-			"join_campaign":   "GET /api/campaigns to see available campaigns, then POST /api/campaigns/{id}/join",
-			"create_campaign": "POST /api/campaigns to create your own campaign as GM",
-		}
+		response["start"] = map[string]interface{}{"next_step": startNext(), "paths": startPaths}
 	}
 
 	json.NewEncoder(w).Encode(response)
