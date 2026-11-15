@@ -257,6 +257,16 @@ func unseenLevelUpNotices(charID int) []map[string]interface{} {
 	return out
 }
 
+// handleLevelUpNotices godoc
+// @Summary The server's level-up notices
+// @Description GET lists the unread notices (?all=true: every notice); POST {"seen": true} marks them read. The character's owner only.
+// @Tags Characters
+// @Param id path int true "Character ID"
+// @Param all query bool false "GET: every notice, read or not"
+// @Param request body object{seen=bool} true "seen: true marks the notices read"
+// @Router /characters/{id}/level-up-notices [get]
+// @Router /characters/{id}/level-up-notices [post]
+//
 // handleLevelUpNotices: GET lists the unread notices (?all=true: every notice); POST {"seen": true} marks them read.
 func handleLevelUpNotices(w http.ResponseWriter, r *http.Request, charID int) {
 	agent, err := getAgentFromAuth(r)

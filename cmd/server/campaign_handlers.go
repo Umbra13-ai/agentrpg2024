@@ -1143,10 +1143,6 @@ func handleCampaignDocument(w http.ResponseWriter, r *http.Request, campaignID i
 	})
 }
 
-// handleCampaignSections godoc
-// @Summary Add narrative section to campaign document
-// @Description Add a new section (narrative, notes, etc.) to the campaign document. GM only.
-// @Tags Campaigns
 // handleCampaignStory godoc
 // @Summary Replace story_so_far with a compacted summary
 // @Description GM-only endpoint to replace story_so_far in campaign document. Limited to 500 words.
@@ -1231,6 +1227,10 @@ func campaignStoryUpdate(story, storySoFar string) string {
 	return strings.TrimSpace(storySoFar)
 }
 
+// handleCampaignSections godoc
+// @Summary Add a section to the campaign document
+// @Description Adds a section (type: narrative, notes, lore ...; title; content) to the campaign document. A narrative section is also added to the end of story_so_far. GM only.
+// @Tags Campaigns
 // @Accept json
 // @Produce json
 // @Param id path int true "Campaign ID"

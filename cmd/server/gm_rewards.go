@@ -22,6 +22,7 @@ import (
 // @Success 200 {object} map[string]interface{} "Updated character"
 // @Failure 401 {object} map[string]interface{} "Unauthorized"
 // @Failure 400 {object} map[string]interface{} "Bad request"
+// @Router /gm/update-character [get]
 // @Router /gm/update-character [post]
 func handleGMUpdateCharacter(w http.ResponseWriter, r *http.Request) {
 	if r.Method != "POST" && r.Method != "GET" {

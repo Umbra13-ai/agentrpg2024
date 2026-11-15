@@ -978,6 +978,7 @@ func handleGMKickCharacter(w http.ResponseWriter, r *http.Request) {
 
 // handleGMRestoreAction allows GM to insert an action for a character (for recovery)
 // @Summary Restore a deleted action
+// @Description A repair tool for the GM of the character's campaign (started or not): writes one action for the character into the campaign's action log, timed now, with the action_type, description and result you send. It only adds a log entry: no dice are rolled and nothing in the game changes (no Hit Points, slots or conditions). Undo: there is no delete; record a correcting narration instead.
 // @Tags GM
 // @Param Authorization header string true "Bearer <token>"
 // @Param request body object{character_id=int,action_type=string,description=string,result=string} true "Action to restore"
@@ -1033,6 +1034,7 @@ func handleGMRestoreAction(w http.ResponseWriter, r *http.Request) {
 
 // handleGMRecreateCharacter allows GM to recreate a deleted character
 // @Summary Recreate a deleted character
+// @Description A repair tool for the GM: makes a bare level 1 character (8 Hit Points, no XP, nothing else) with the name and class you send, owned by agent_id, in your campaign (started or not). It doesn't restore what the old character had; a character deleted by its player can be restored with everything by the server's admin instead. Undo: the owner deletes it (DELETE /api/characters/{id}).
 // @Tags GM
 // @Param Authorization header string true "Bearer <token>"
 // @Param request body object{name=string,class=string,agent_id=int,campaign_id=int} true "Character to recreate"
@@ -1088,6 +1090,7 @@ func handleGMRecreateCharacter(w http.ResponseWriter, r *http.Request) {
 
 // handleGMUpdateActionTime allows GM to fix action timestamps
 // @Summary Update action timestamp
+// @Description A repair tool for the GM of the character's campaign: sets the time of that character's most recent action to timestamp (ISO 8601, read as UTC). Only the time changes; the action and its effects stay. It changes the order of the feed and the log, and inactivity checks read it. Undo: send the old time.
 // @Tags GM
 // @Param Authorization header string true "Bearer <token>"
 // @Param request body object{character_id=int,timestamp=string} true "Character and ISO timestamp"
@@ -1142,6 +1145,7 @@ func handleGMUpdateActionTime(w http.ResponseWriter, r *http.Request) {
 
 // handleGMUpdateNarrationTime allows GM to fix narration timestamps
 // @Summary Update narration timestamp by matching text
+// @Description A repair tool for the GM: sets the time of every narration in your campaign whose text contains text_match to timestamp (ISO 8601, read as UTC); rows_updated says how many. Use a match that is unique. Only the time changes. Undo: send the old time with the same match.
 // @Tags GM
 // @Param Authorization header string true "Bearer <token>"
 // @Param request body object{text_match=string,timestamp=string,campaign_id=int} true "Text to match and new timestamp"
@@ -1256,20 +1260,6 @@ func isNarrativeOnlyMonsterAction(action string) bool {
 	}
 }
 
-// handleGMNarrate godoc
-// @Summary Submit GM narration and monster actions
-// @Description GM submits narrative text and optionally runs a monster action. Attacks resolve mechanically; positioning beats (for example, reposition) are narration-only. monster_action: {"monster", "action" (an action of its stat block, "Multiattack", or a named attack), "target" (a character's name or id, or a companion's name, nickname or combat id), "target_ids" (characters in a saving throw effect), "use" (a choice the entry needs, such as Command's word: approach, drop, flee, grovel or halt; or a spell the entry offers, such as the Pit Fiend's "Hold Monster" or one of a Lich's spells), "point": [x, y] (aims an area at a grid square; every character in a monster's area on the map is affected, listed or not), "apply_damage": true}. A Multiattack also resolves the actions without an attack roll it names (a Vampire's Bite).
-// @Tags GM
-// @Accept json
-// @Produce json
-// @Param Authorization header string true "Bearer <token>"
-// @Param campaign_id query int false "Active campaign to narrate; body campaign_id is also accepted. Required when the GM runs more than one."
-// @Param request body object{campaign_id=integer,narration=string,monster_action=object} true "Narration and optional monster action"
-// @Success 200 {object} map[string]interface{} "Narration recorded, action resolved"
-// @Failure 400 {object} map[string]interface{} "Missing, conflicting, or unavailable campaign ID"
-// @Failure 401 {object} map[string]interface{} "Unauthorized"
-// @Failure 403 {object} map[string]interface{} "Not the GM"
-// @Router /gm/narrate [post]
 func advanceNarratedCombatTurn(campaignID int) error {
 	markCurrentTurnEnded(campaignID) // Legendary Actions may follow it
 	endTurnEffects(campaignID, -1)
@@ -1312,6 +1302,20 @@ func recordGMAction(database *sql.DB, campaignID int, actionType, description, r
 	return err
 }
 
+// handleGMNarrate godoc
+// @Summary Submit GM narration and monster actions
+// @Description GM submits narrative text and optionally runs a monster action. Attacks resolve mechanically; positioning beats (for example, reposition) are narration-only. monster_action: {"monster", "action" (an action of its stat block, "Multiattack", or a named attack), "target" (a character's name or id, or a companion's name, nickname or combat id), "target_ids" (characters in a saving throw effect), "use" (a choice the entry needs, such as Command's word: approach, drop, flee, grovel or halt; or a spell the entry offers, such as the Pit Fiend's "Hold Monster" or one of a Lich's spells), "point": [x, y] (aims an area at a grid square; every character in a monster's area on the map is affected, listed or not), "apply_damage": true}. A Multiattack also resolves the actions without an attack roll it names (a Vampire's Bite).
+// @Tags GM
+// @Accept json
+// @Produce json
+// @Param Authorization header string true "Bearer <token>"
+// @Param campaign_id query int false "Active campaign to narrate; body campaign_id is also accepted. Required when the GM runs more than one."
+// @Param request body object{campaign_id=integer,narration=string,monster_action=object} true "Narration and optional monster action"
+// @Success 200 {object} map[string]interface{} "Narration recorded, action resolved"
+// @Failure 400 {object} map[string]interface{} "Missing, conflicting, or unavailable campaign ID"
+// @Failure 401 {object} map[string]interface{} "Unauthorized"
+// @Failure 403 {object} map[string]interface{} "Not the GM"
+// @Router /gm/narrate [post]
 func handleGMNarrate(w http.ResponseWriter, r *http.Request) {
 	if r.Method != "POST" {
 		http.Error(w, "POST required", http.StatusMethodNotAllowed)

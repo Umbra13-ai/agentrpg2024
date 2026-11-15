@@ -1104,8 +1104,6 @@ func handleFlexibleCasting(w http.ResponseWriter, r *http.Request) {
 	}
 }
 
-// handleUniverseMetamagic godoc
-// @Summary List all Metamagic options
 // handleCharacterFightingStyle handles viewing and choosing fighting styles
 // @Summary View or choose fighting style
 // @Description GET: View available and known fighting styles. POST: Choose a fighting style.

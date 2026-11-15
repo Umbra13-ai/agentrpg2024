@@ -2239,6 +2239,7 @@ func restKind(t string) string {
 // @Tags Characters
 // @Param id path int true "Character ID"
 // @Param request body object{hit_dice=int,recover_slots=[]int} false "Hit Point Dice to spend; slots for Arcane Recovery or Natural Recovery"
+// @Router /characters/{id}/short-rest [get]
 // @Router /characters/{id}/short-rest [post]
 func handleShortRest(w http.ResponseWriter, r *http.Request, charID int) {
 	w.Header().Set("Content-Type", "application/json")
@@ -2666,7 +2667,7 @@ func handleShortRest(w http.ResponseWriter, r *http.Request, charID int) {
 	json.NewEncoder(w).Encode(response)
 }
 
-// handleLongRest godoc
+// handleRest godoc
 // @Summary Take a long rest
 // @Description Take a long rest (8 hours; an Elf's Trance: 4 hours). Restores HP, spell slots, death saves. Recovers half hit dice. Removes 1 exhaustion level. Only the character's owner or the campaign's GM. A body of {"type": "short"} (with the short-rest fields) takes a Short Rest instead, the same as POST /characters/{id}/short-rest.
 // @Tags Characters

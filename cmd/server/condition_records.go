@@ -676,6 +676,15 @@ func endSaveJSON(s *conditionSave) interface{} {
 	return string(b)
 }
 
+// handleCharacterConditions godoc
+// @Summary Apply or remove a condition on a character (GM)
+// @Description The same request as POST and DELETE /api/gm/conditions, with the character taken from the path (leave target_id out). Only the GM of the character's campaign; a player ends a condition with POST /api/conditions/escape.
+// @Tags GM
+// @Param id path int true "Character ID"
+// @Param request body object{condition=string,record_id=int,all=bool,source=string,notes=string,escape_dc=int,duration_rounds=int,level=int} true "As POST /api/gm/conditions (apply) or DELETE /api/gm/conditions (remove: record_id, condition, or all)"
+// @Router /characters/{id}/conditions [post]
+// @Router /characters/{id}/conditions [delete]
+//
 // handleCharacterConditions serves POST and DELETE /api/characters/{id}/conditions. Only the GM of the
 // character's campaign may apply or remove conditions; players end them with POST /api/conditions/escape.
 // The request is the same as POST /api/gm/conditions with target_id taken from the path.

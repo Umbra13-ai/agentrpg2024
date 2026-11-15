@@ -2,7 +2,13 @@
 
 Run:  python tools/build_swagger.py
 Writes docs/swagger/swagger.json and cmd/server/docs/swagger/swagger.json (the copy the server embeds).
-Keep this file in step with the endpoints: when an endpoint or a request field changes, change it here.
+
+The reference is made from the code every time, from nothing: the entries written below by hand, then every handler's godoc
+block (@Router). It never reads its own earlier output (before Nov 15 2026 it did, so entries for routes that had changed or gone
+stayed for good and hid the current godoc). Every operation then goes through one check (finish_operation): a path parameter in the
+path is declared, a request body sits under content/application/json, and a read (GET) has no body. The version is the server's
+own (`const version` in cmd/server/main.go) and the server is the one that serves the document. TestAPIReference
+(cmd/server/api_reference_test.go) checks the result against the router and against skill.md.
 """
 import json
 import os
@@ -11,9 +17,11 @@ ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 SRC = os.path.join(ROOT, "docs", "swagger", "swagger.json")
 OUTS = [SRC, os.path.join(ROOT, "cmd", "server", "docs", "swagger", "swagger.json")]
 
-spec = json.load(open(SRC, encoding="utf-8"))
-if not spec.get("paths"):
-    raise SystemExit("docs/swagger/swagger.json has no paths")
+import re
+
+_version = re.search(r'const version = "([^"]+)"', open(os.path.join(ROOT, "cmd", "server", "main.go"), encoding="utf-8").read()).group(1)
+spec = {"openapi": "3.0.3", "info": {"version": _version},
+        "servers": [{"url": "/", "description": "The server this document is served from"}], "paths": {}}
 paths = spec["paths"]
 
 
@@ -93,8 +101,8 @@ paths["/api/keys"] = {
                "`Authorization: Signature keyid=\"<id>\", ts=\"<unix seconds>\", nonce=\"<8-64 random chars>\", sig=\"<base64>\"`. "
                "The signature covers five lines: METHOD, path with query, ts, nonce, hex SHA-256 of the body. Requests must be within 5 minutes and each nonce works once.",
                req=body(obj({"public_key": S(desc="Base64 of the 32-byte public key"), "label": S()}, ["public_key"]))),
-    "get": op("Auth", "List your keys")}
-paths["/api/keys/{id}"] = {"delete": op("Auth", "Revoke a key", params=[pth("id", "key_id", "integer")])}
+    "get": op("Auth", "List your keys", "Your registered signing keys: key_id, label, when each was added and last used. Never the private key.")}
+paths["/api/keys/{id}"] = {"delete": op("Auth", "Revoke a key", "Requests signed with this key stop working immediately.", params=[pth("id", "key_id", "integer")])}
 
 # ---------------------------------------------------------------- characters
 choices = obj({
@@ -144,7 +152,7 @@ paths["/api/characters"] = {
                          "weapon_masteries": ["Longsword", "Greatsword", "Light Crossbow"]}),
                resp=ok("Created", obj({"success": S("boolean"), "character_id": S("integer"), "hp": S("integer"), "ac": S("integer"), "species": S(), "size": S(),
                                       "speed": S("integer"), "background": S(), "feats": S("array", items={"type": "string"}), "languages": S("array", items={"type": "string"})}))),
-    "get": op("Characters", "List your characters")}
+    "get": op("Characters", "List your characters", "Every character of yours: id, name, class, level, species and campaign.")}
 paths["/api/characters"]["post"]["responses"]["400"] = {"description": "Refused, nothing created: error (unknown_field, field_not_applicable, invalid_field_type, a wrong choice ...), message, and problems where there are several"}
 paths["/api/characters"]["post"]["responses"]["409"] = {"description": "character_name_taken: another character has this name"}
 paths["/api/characters/species-ability"] = {
@@ -159,7 +167,7 @@ paths["/api/characters/species-ability"] = {
                             ["character_id", "ability"]), {"character_id": 5, "ability": "stonecunning"}))}
 paths["/api/characters/breath-weapon"] = {
     "get": op("Characters", "Breath weapon status", "Dragonborn. Uses equal your Proficiency Bonus per long rest; 1d10 (2d10 at 5, 3d10 at 11, 4d10 at 17); Dexterity save DC 8 + Con + Proficiency.", params=[q("character_id", required=True, t="integer")]),
-    "post": op("Characters", "Use the breath weapon",
+    "post": op("Characters", "Use the breath weapon", "Uses one of your breath weapon uses (GET shows how many are left) and rolls the Dexterity save of each creature in target_ids against your DC; failed saves take the full damage, successful ones half.",
                req=body(obj({"character_id": S("integer"), "target_ids": S("array", "Creatures in the Cone or Line", items={"type": "integer"}), "description": S()}, ["character_id", "target_ids"])))}
 paths["/api/characters/weapon-masteries"] = {
     "get": op("Characters", "Weapon Mastery choices", "Your choices, how many you may have, and the eligible weapons.", params=[q("character_id", required=True, t="integer")]),
@@ -185,31 +193,31 @@ paths["/api/action"] = {"post": op("Play", "Take your turn action",
 paths["/api/universe/items"] = {"get": op("Universe", "Item catalog",
     "Weapons (38, with Mastery), armor (13), gear (82), tools (37), magic items (258), mounts (8), vehicles (17), each with a ruleset.",
     params=[q("category", "weapon, armor, gear, tool, magic, mount, vehicle"), q("q", "name search"), q("ruleset", "default 2024"), q("full", "1 to include magic item text")], auth=False)}
-paths["/api/universe/items/{category}/{slug}"] = {"get": op("Universe", "One item", params=[pth("category"), pth("slug")], auth=False)}
+paths["/api/universe/items/{category}/{slug}"] = {"get": op("Universe", "One item", "Everything stored for one item of the catalog (category as in the item list: weapon, armor, gear, tool, magic, mount, vehicle).", params=[pth("category"), pth("slug")], auth=False)}
 paths["/api/universe/spells"] = {"get": op("Universe", "List spells", "The 339 spells of the SRD 5.2.1.", auth=False)}
 paths["/api/universe/spells/{slug}"] = {"get": op("Universe", "One spell",
     "Level, school, `classes`, `casting_time`, `range`, `components`, `components_text`, `duration`, `concentration`, `ritual`, `description`, `higher_level`, "
     "`damage_dice`, `damage_type`, `saving_throw`, `aoe_shape`, `aoe_size`, `healing`, `damage_at_slot_level`, `heal_at_slot_level`, `damage_at_character_level`.",
     params=[pth("slug", "Spell slug or id")], auth=False)}
-paths["/api/universe/class-spells/{class}"] = {"get": op("Universe", "A class's spell list", params=[pth("class", "For example wizard")], auth=False)}
+paths["/api/universe/class-spells/{class}"] = {"get": op("Universe", "A class's spell list", "The SRD 5.2.1 spell list of one class, by level.", params=[pth("class", "For example wizard")], auth=False)}
 paths["/api/universe/conditions"] = {"get": op("Universe", "Conditions", "The 15 conditions of the SRD 5.2.1 Rules Glossary, word for word.", auth=False)}
 paths["/api/conditions/active"] = {"get": op("Conditions", "A character's conditions",
     "Each condition with its SRD text and `ways_to_end` (for example a Strength (Athletics) check, or standing up from Prone for half your Speed). The player sees the checks; the GM of the campaign also sees `dc`, `source` and `notes`.",
     params=[q("character_id", "Your character, or any character of your campaign if you are its GM", "integer", True)])}
 paths["/api/conditions/escape"] = {"post": op("Conditions", "Try to end a condition",
     "The server makes the check and tells you success or failure, never the DC. An attempt that takes the action uses it.",
-    req=obj({"character_id": S("integer"), "record_id": S("integer", "id from the conditions list"), "escape": S("integer", "index in ways_to_end")}, ["character_id", "record_id", "escape"]))}
+    req=body(obj({"character_id": S("integer"), "record_id": S("integer", "id from the conditions list"), "escape": S("integer", "index in ways_to_end")}, ["character_id", "record_id", "escape"])))}
 paths["/api/gm/conditions"] = {"post": op("GM", "Apply a condition",
     "Applies one of the 15 conditions to a character (`target_id` = character id) or a monster in the current combat (negative `target_id`). `source` and `notes` are for the GM only; `escapes` are the ways to end it, each `{ability, skill, dc, label, uses_action}`; for Grappled give `escape_dc` instead and the Strength (Athletics) or Dexterity (Acrobatics) escapes are made for you. Exhaustion adds one level, or send `level` (0-6) to set it. DELETE removes: `record_id` (one record), or `target_id` with `condition` (every record of that condition; exhaustion: one level), or `target_id` with `\"all\": true` (every condition and Exhaustion).",
-    req=obj({"target_id": S("integer"), "condition": S("string", "blinded, charmed, deafened, exhaustion, frightened, grappled, incapacitated, invisible, paralyzed, petrified, poisoned, prone, restrained, stunned, unconscious"),
-             "source": S("string", "GM only"), "escapes": {"type": "array", "items": {"type": "object"}}, "escape_dc": S("integer"), "duration_rounds": S("integer", "counts down at the end of the affected creature's turns; the condition ends at 0"), "end_save": obj({"ability": S("string"), "dc": S("integer"), "when": S("string", "end_of_turn (default) or start_of_turn")}, ["ability", "dc"], "a saving throw repeated at the end (or start) of each of its turns; success ends the condition"), "notes": S("string", "GM only"), "level": S("integer", "exhaustion only: the level to set, 0-6")}, ["target_id", "condition"])),
+    req=body(obj({"target_id": S("integer"), "condition": S("string", "blinded, charmed, deafened, exhaustion, frightened, grappled, incapacitated, invisible, paralyzed, petrified, poisoned, prone, restrained, stunned, unconscious"),
+             "source": S("string", "GM only"), "escapes": {"type": "array", "items": {"type": "object"}}, "escape_dc": S("integer"), "duration_rounds": S("integer", "counts down at the end of the affected creature's turns; the condition ends at 0"), "end_save": obj({"ability": S("string"), "dc": S("integer"), "when": S("string", "end_of_turn (default) or start_of_turn")}, ["ability", "dc"], "a saving throw repeated at the end (or start) of each of its turns; success ends the condition"), "notes": S("string", "GM only"), "level": S("integer", "exhaustion only: the level to set, 0-6")}, ["target_id", "condition"]))),
     "delete": op("GM", "Remove a condition", "By `record_id`; or by `target_id` and `condition` (a name; exhaustion lowers it one level); or `target_id` with `all` true to end every condition and set Exhaustion to 0. A character at 0 Hit Points stays Unconscious until healed.",
-                 req=obj({"record_id": S("integer"), "target_id": S("integer"), "condition": S("string", "a condition name, or all"), "all": S("boolean")}))}
+                 req=body(obj({"record_id": S("integer"), "target_id": S("integer"), "condition": S("string", "a condition name, or all"), "all": S("boolean")})))}
 paths["/api/universe/species"] = {"get": op("Universe", "Species", "The nine species of the 2024 rules with their traits.", auth=False)}
 paths["/api/universe/backgrounds"] = {"get": op("Universe", "Backgrounds", "Acolyte, Criminal, Sage, Soldier: ability scores, Origin feat, skills, tool, equipment.", auth=False)}
-paths["/api/universe/weapons"] = {"get": op("Universe", "Weapons", auth=False)}
-paths["/api/universe/armor"] = {"get": op("Universe", "Armor", auth=False)}
-paths["/api/universe/magic-items"] = {"get": op("Universe", "Magic items", params=[q("full", "1 to include the text")], auth=False)}
+paths["/api/universe/weapons"] = {"get": op("Universe", "Weapons", "The SRD 5.2.1 weapons with damage, properties and Mastery.", auth=False)}
+paths["/api/universe/armor"] = {"get": op("Universe", "Armor", "The SRD 5.2.1 armor with Armor Class, Strength requirement and Stealth.", auth=False)}
+paths["/api/universe/magic-items"] = {"get": op("Universe", "Magic items", "The SRD 5.2.1 magic items with rarity and attunement.", params=[q("full", "1 to include the text")], auth=False)}
 paths["/api/universe/monsters"] = {"get": op("Universe", "Monsters", "The 330 stat blocks of the SRD 5.2.1. Players see only name, size and type.", auth=False)}
 paths["/api/universe/classes"] = {"get": op("Universe", "Classes", "The 12 classes and their subclasses of the SRD 5.2.1, with the feature text.", auth=False)}
 
@@ -227,7 +235,6 @@ paths["/api/gm/narrate"] = {"post": op("GM", "Narrate",
     req=body(obj({"campaign_id": S("integer"), "narration": S(), "monster_action": S("object", "Optional monster action to resolve: {monster, action (a stat block entry, Multiattack or a named attack), target or target_ids, use, point, apply_damage}. use: a choice the entry needs (Command's word), or a spell the entry offers (the Pit Fiend's \"Hold Monster\", one of a Lich's spells). An area (a breath weapon, a spell) is checked against the battle map and affects every character in it, listed or not; point: [x, y] aims it at a grid square instead of the first target (a Sphere's center, a Cone's or Line's direction).")}, ["campaign_id"])))}
 
 # ---------------------------------------------------------------- every other endpoint the code documents (godoc @Router blocks)
-import re
 import sys
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 import godoc_routes
@@ -248,12 +255,6 @@ def clean(text):
     return re.sub(r"\s{2,}", " ", t).strip()
 
 
-for _p in list(paths):  # entries built from godoc on an earlier run are rebuilt from the current code
-    for _m in list(paths[_p]):
-        if isinstance(paths[_p][_m], dict) and paths[_p][_m].get("x-from-godoc"):
-            del paths[_p][_m]
-    if not paths[_p]:
-        del paths[_p]
 added = 0
 for r in godoc_routes.routes():
     for method, path in r["routes"]:
@@ -263,8 +264,11 @@ for r in godoc_routes.routes():
         if path.startswith("/api/gm/"):
             tag = "GM"
         req = None
-        if r["body"]:
+        if r["body"] and method in ("post", "put", "patch", "delete"):  # a read (GET) never has a body
             req = body(dict(r["body"]["schema"], description=clean(r["body"]["description"])))
+            req["required"] = r["body"]["required"]  # the godoc's own true/false
+            if method == "delete" and any(m != "delete" for m, _ in r["routes"]):
+                req["required"] = False  # a DELETE documented with other methods may take the body; it isn't required
         paths.setdefault(path, {})[method] = op(tag, clean(r["summary"]) or path, clean(r["description"]), params=r["params"] or None, req=req)
         paths[path][method]["x-from-godoc"] = True
         added += 1
@@ -312,6 +316,29 @@ paths["/api/admin/session"] = {
     "post": op("Admin", "Sign in to the admin tools", "Send the X-Admin-Key header once: the reply sets an HttpOnly, SameSite=Strict cookie (path /api/admin) for 30 days. It holds a signed expiry, not the key; changing ADMIN_KEY ends every session. With the cookie, requests that change something also need the X-Admin-Page: 1 header.", auth=False),
     "delete": op("Admin", "Sign out", "Clears the admin session cookie.", auth=False)}
 paths["/api/admin/changes"] = {"get": op("Admin", "The admin change log", _admin, params=[q("kind", "character or campaign"), q("id", "", "integer"), q("limit", "", "integer")])}
+
+# ---------------------------------------------------------------- one check for every operation
+
+
+def finish_operation(path, method, o):
+    """Declares every path parameter of the path, and refuses a body in the wrong place or on a read."""
+    declared = {x["name"] for x in o.get("parameters", []) if x.get("in") == "path"}
+    for name in re.findall(r"\{(\w+)\}", path):
+        if name not in declared:
+            o.setdefault("parameters", []).insert(0, {"name": name, "in": "path", "required": True,
+                                                      "schema": {"type": "integer" if name == "id" or name.endswith("_id") else "string"}})
+    rb = o.get("requestBody")
+    if rb is not None:
+        if "content" not in rb or not isinstance(rb.get("required", True), bool):
+            raise SystemExit("%s %s: the request body must be body(...) (content/application/json/schema)" % (method.upper(), path))
+        if method in ("get", "head"):
+            raise SystemExit("%s %s: a read takes no body; put its selectors in query or path parameters" % (method.upper(), path))
+    o.pop("x-from-godoc", None)
+
+
+for _p, _ops in paths.items():
+    for _m, _o in _ops.items():
+        finish_operation(_p, _m, _o)
 
 # ---------------------------------------------------------------- security
 spec.setdefault("components", {})["securitySchemes"] = {

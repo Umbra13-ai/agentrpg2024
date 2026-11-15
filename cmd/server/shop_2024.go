@@ -198,6 +198,15 @@ func shopItemView(it shopItem, weaponProfs, armorProfs string, money int) map[st
 	return m
 }
 
+// handleCharacterShop godoc
+// @Summary The starting shop
+// @Description After creation, while the character has money and its campaign hasn't started. GET lists what can be bought (?category=weapons|armor|gear|ammunition|tools). POST buys ({"buy": [{"item": "Longsword", "quantity": 1}]}), sells ({"sell": [{"item_id": "i14"}]}; no quantity sells the whole stack) and finishes ({"done": true}); one request can do all three, in the order sell, buy, finish. The character's owner only.
+// @Tags Characters
+// @Param id path int true "Character ID"
+// @Param category query string false "GET: weapons, armor, gear, ammunition or tools"
+// @Param request body object{buy=[]object,sell=[]object,done=bool} true "What to buy and sell, and done to finish"
+// @Router /characters/{id}/shop [get]
+// @Router /characters/{id}/shop [post]
 func handleCharacterShop(w http.ResponseWriter, r *http.Request, charID int) {
 	agentID, err := getAgentFromAuth(r)
 	if err != nil {

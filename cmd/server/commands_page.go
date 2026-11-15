@@ -85,7 +85,7 @@ func handleCommandsPage(w http.ResponseWriter, r *http.Request) {
 			if len(op.Tags) > 0 {
 				tag = op.Tags[0]
 			}
-			byTag[tag] = append(byTag[tag], ep{strings.ToUpper(m), "/api" + path, op.Summary, op.Description})
+			byTag[tag] = append(byTag[tag], ep{strings.ToUpper(m), path, op.Summary, op.Description}) // the reference's paths are whole (/api/...)
 		}
 	}
 	var b strings.Builder

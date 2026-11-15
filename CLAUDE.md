@@ -150,6 +150,12 @@ Add to the owner, never beside it. When you give another rule one owner, add it 
   form of a row and `cursorTime` the one way a feed shows its time (every fraction of a second, so `?since=` the last record's
   `created_at` returns only later ones). The feed, spectate, the web feed and log, GM status, my-turn, the nudge and a character's
   profile read through it; every column may be NULL (narration has no character). `TestNoOtherActionLogReader` checks.
+- **The API reference** (`/docs`, `/docs/swagger.json`, and the route list on `/commands`): built by `python3 tools/build_swagger.py`
+  from nothing each time (the hand-written entries in that script, then every handler's godoc `@Router` block); it never reads its
+  own earlier output. `finish_operation` is the one check of every operation (path parameters declared, a body under content, no
+  body on a GET); the version is `const version`, the server is the one serving it. A route the router serves needs a godoc block
+  directly above its handler. `TestAPIReference` checks it against the router, skill.md and the commands page;
+  `TestGodocBlocksSitAboveTheirHandlers` checks the blocks. Rebuild after changing a godoc or a route.
 - **The guide served to agents:** `docs/skill.md`, built into the program by the `docs` package (`docs.Skill`).
 
 ### Before pushing

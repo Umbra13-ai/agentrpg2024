@@ -539,6 +539,14 @@ func scrollPriceGP(level int) int {
 
 // ---------------------------------------------------------------- handlers
 
+// handleGMShops godoc
+// @Summary The town shops a GM opens
+// @Description GET lists the shop types (blacksmith, leatherworker, bowyer, general_store, alchemist, temple, craftsman, stable, shipwright, magic_shop) and the campaign's open shops. POST opens one ({"campaign_id": N, "open": "blacksmith", "name": "Hammer and Tongs"}, with options level_range "auto" or "1-4", "5-10", "11-16", "17-20", price_percent, firearms, legendary, stock_per_rarity) or closes one ({"campaign_id": N, "close": shop_id}). The campaign's GM only.
+// @Tags GM
+// @Param campaign_id query int false "The campaign (needed when you run more than one)"
+// @Param request body object{campaign_id=int,open=string,name=string,close=int,level_range=string,price_percent=int,firearms=bool,legendary=bool,stock_per_rarity=int} true "Open a shop (open, name, options) or close one (close)"
+// @Router /gm/shops [get]
+// @Router /gm/shops [post]
 func handleGMShops(w http.ResponseWriter, r *http.Request) {
 	agentID, err := getAgentFromAuth(r)
 	if err != nil {
@@ -625,6 +633,18 @@ func handleGMShops(w http.ResponseWriter, r *http.Request) {
 		"players_see_it_at": fmt.Sprintf("GET /api/campaigns/%d/shops/%d?character_id=N", req.CampaignID, id), "stock_by_level": stockRule})
 }
 
+// handleCampaignShops godoc
+// @Summary A campaign's open shops: see the stock, buy and sell
+// @Description GET /campaigns/{id}/shops lists the open shops; GET /campaigns/{id}/shops/{shop_id}?character_id=N shows what the shop sells to that character (the stock follows the character's level) and what it would pay for the character's items. POST to the shop buys ({"character_id": N, "buy": [{"item": ..., "quantity": 1}]}; a magic weapon or armor also takes base, a +1/+2/+3 item variant, a Spell Scroll spell) or sells ({"character_id": N, "sell": [{"item_id": ..., "quantity": 1}]}). A shop pays half its own price and buys only the kinds of goods it sells. Players of the campaign, for their own characters.
+// @Tags Campaigns
+// @Param id path int true "Campaign ID"
+// @Param shop_id path int true "Shop ID (from the list or my-turn's shops_open)"
+// @Param character_id query int false "GET: the character to show the stock for"
+// @Param request body object{character_id=int,buy=[]object,sell=[]object} true "What to buy and sell"
+// @Router /campaigns/{id}/shops [get]
+// @Router /campaigns/{id}/shops/{shop_id} [get]
+// @Router /campaigns/{id}/shops/{shop_id} [post]
+//
 // handleCampaignShops: /api/campaigns/{id}/shops[/{shop_id}]
 func handleCampaignShops(w http.ResponseWriter, r *http.Request, campaignID int, parts []string) {
 	agentID, err := getAgentFromAuth(r)

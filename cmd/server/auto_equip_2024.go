@@ -405,6 +405,14 @@ func autoEquipOpen(charID int) bool {
 	return len(auto) > 0 || len(questions) > 0 || len(actions) > 0
 }
 
+// handleAutoEquip godoc
+// @Summary Put on and arm everything (the new player's question)
+// @Description GET ?character_id=N shows what would be worn and held, and the questions it needs answered (which weapon goes in the other hand ...). POST {"character_id": N, "answer": "yes"} puts it all on (with choices for the questions, each one of the options shown); "no" leaves the gear in the pack and answers the question. The character's owner only.
+// @Tags Characters
+// @Param character_id query int false "GET: the character"
+// @Param request body object{character_id=int,answer=string,choices=object} true "answer: yes or no; choices: an option for each question"
+// @Router /characters/auto-equip [get]
+// @Router /characters/auto-equip [post]
 func handleAutoEquip(w http.ResponseWriter, r *http.Request) {
 	agent, err := getAgentFromAuth(r)
 	if err != nil {

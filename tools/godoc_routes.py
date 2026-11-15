@@ -9,6 +9,9 @@ import re
 import sys
 
 ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+# the handlers the router registers only outside /api (/health, /docs/swagger.json ...): their @Router path is the site's own
+_reg = re.findall(r'HandleFunc\("([^"]*)",\s*(?:\w+\()*(\w+)\)*', open(os.path.join(ROOT, "cmd", "server", "main.go"), encoding="utf-8").read())
+SITE_HANDLERS = {h for p, h in _reg if not p.startswith("/api")} - {h for p, h in _reg if p.startswith("/api")}
 TYPES = {"int": "integer", "integer": "integer", "string": "string", "bool": "boolean", "boolean": "boolean",
          "number": "number", "float": "number", "object": "object", "array": "array", "[]int": "array", "[]string": "array"}
 
@@ -42,15 +45,18 @@ def routes():
         for line in open(f, encoding="utf-8"):
             s = line.strip()
             if s.startswith("//"):
+                if re.match(r"^//\s*\w+ godoc\s*$", s):
+                    block = []  # a godoc header starts a new block: what came before it belongs to no route
                 block.append(s[2:].strip())
                 continue
             if block and any(b.startswith("@Router") for b in block):
-                yield _parse(block)
+                m = re.match(r"func (?:\([^)]*\) )?(\w+)", s)
+                yield _parse(block, m.group(1) if m else "")
             block = []
 
 
-def _parse(block):
-    r = {"summary": "", "description": "", "tags": [], "params": [], "body": None, "routes": []}
+def _parse(block, func=""):
+    r = {"summary": "", "description": "", "tags": [], "params": [], "body": None, "routes": [], "func": func}
     for b in block:
         if b.startswith("@Summary"):
             r["summary"] = b[len("@Summary"):].strip()
@@ -72,7 +78,7 @@ def _parse(block):
             m = re.match(r"@Router\s+(\S+)\s+\[(\w+)\]", b)
             if m:
                 path = m.group(1)
-                if not path.startswith("/api"):
+                if not path.startswith("/api") and r.get("func") not in SITE_HANDLERS:  # @Router paths are under /api, except the site's own
                     path = "/api" + path
                 r["routes"].append((m.group(2).lower(), path))
     return r

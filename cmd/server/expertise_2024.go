@@ -179,6 +179,7 @@ func creationExpertise(class string, held map[string]bool, picks []string, compl
 // @Tags Characters
 // @Param id path int true "Character ID"
 // @Param request body object{skills=[]string} true "Skills"
+// @Router /characters/{id}/expertise [get]
 // @Router /characters/{id}/expertise [post]
 func handleCharacterExpertise(w http.ResponseWriter, r *http.Request, charID int) {
 	agentID, err := getAgentFromAuth(r)
