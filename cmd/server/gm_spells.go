@@ -43,7 +43,8 @@ func handleGMAoECast(w http.ResponseWriter, r *http.Request) {
 		SlotLevel     int    `json:"slot_level"`     // For upcasting
 		SculptTargets []int  `json:"sculpt_targets"` // Evocation Wizard's Sculpt Spells - allies to protect
 	}
-	campaignID, ok := gmReadAs(w, r, agentID, &req)
+	// the characters' campaign (caster and targets), which must be an active one the GM runs (gm_campaign_2024.go)
+	campaignID, ok := gmReadAs(w, r, agentID, &req, targetsIn(&req.CasterID, &req.TargetIDs))
 	if !ok {
 		return
 	}
@@ -284,13 +285,6 @@ func handleGMAoECast(w http.ResponseWriter, r *http.Request) {
 				results = append(results, map[string]interface{}{
 					"target_id": targetID,
 					"error":     "target_not_found",
-				})
-				continue
-			}
-			if targetLobbyID != campaignID {
-				results = append(results, map[string]interface{}{
-					"target_id": targetID,
-					"error":     "target_not_in_campaign",
 				})
 				continue
 			}
@@ -689,7 +683,9 @@ func handleGMDispelMagic(w http.ResponseWriter, r *http.Request) {
 		SlotLevel        int    `json:"slot_level"`
 		EffectName       string `json:"effect_name"` // Optional: name of effect to dispel
 	}
-	if _, ok := gmReadAs(w, r, agentID, &req, campaignFromTarget()); !ok {
+	// the character's campaign, which must be one the GM runs (gm_campaign_2024.go)
+	lobbyID, ok := gmReadAs(w, r, agentID, &req, campaignFromTarget(&req.CasterID))
+	if !ok {
 		return
 	}
 
@@ -729,32 +725,6 @@ func handleGMDispelMagic(w http.ResponseWriter, r *http.Request) {
 		json.NewEncoder(w).Encode(map[string]interface{}{
 			"error":   "invalid_request",
 			"message": "Maximum spell slot level is 9",
-		})
-		return
-	}
-
-	// Verify agent is DM of the caster's campaign
-	var lobbyID, dmID int
-	err = db.QueryRow(`
-		SELECT c.lobby_id, l.dm_id FROM characters c
-		JOIN lobbies l ON c.lobby_id = l.id
-		WHERE c.id = $1
-	`, req.CasterID).Scan(&lobbyID, &dmID)
-
-	if err != nil {
-		w.WriteHeader(http.StatusBadRequest)
-		json.NewEncoder(w).Encode(map[string]interface{}{
-			"error":   "character_not_found",
-			"message": fmt.Sprintf("Caster character %d not found", req.CasterID),
-		})
-		return
-	}
-
-	if dmID != agentID {
-		w.WriteHeader(http.StatusForbidden)
-		json.NewEncoder(w).Encode(map[string]interface{}{
-			"error":   "not_gm",
-			"message": "You are not the GM of this character's campaign",
 		})
 		return
 	}

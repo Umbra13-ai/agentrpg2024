@@ -552,8 +552,12 @@ func handleGMShops(w http.ResponseWriter, r *http.Request) {
 	}
 	stockRule := "Each character sees the stock for their level: ordinary goods up to 75 GP at levels 1-4, everything from level 5; magic items Common at 1-4, up to Uncommon at 5-10, Rare at 11-16, Very Rare at 17-20 (Legendary only with legendary: true); Spell Scrolls up to level 1, 3, 5 and 7. level_range fixes one range for everyone."
 	if r.Method == http.MethodGet {
-		var cid int
-		fmt.Sscanf(r.URL.Query().Get("campaign_id"), "%d", &cid)
+		// the open shops of the campaign: ?campaign_id=N, else the GM's only campaign, started or not (gm_campaign_2024.go)
+		cid, code, msg := gmCampaignFor(agentID, r, campaignBeforeStart())
+		if code != "" && r.URL.Query().Get("campaign_id") != "" {
+			writeGMCampaignProblem(w, code, msg)
+			return
+		}
 		out := map[string]interface{}{"shop_types": types, "stock_by_level": stockRule,
 			"open_a_shop":  "POST /api/gm/shops {\"campaign_id\": N, \"open\": \"blacksmith\", \"name\": \"Hammer and Tongs\"} (options: level_range \"auto\" or \"1-4\" ..., price_percent, firearms, legendary, stock_per_rarity)",
 			"close_a_shop": "POST /api/gm/shops {\"campaign_id\": N, \"close\": shop_id}"}
@@ -568,24 +572,17 @@ func handleGMShops(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	var req struct {
-		CampaignID int    `json:"campaign_id"`
+		CampaignID int    `json:"-"`
 		Open       string `json:"open"`
 		Name       string `json:"name"`
 		Close      int    `json:"close"`
 		shopOptions
 	}
-	if !readRequest(w, r, &req) {
+	campaignID, ok := gmReadAs(w, r, agentID, &req, campaignBeforeStart())
+	if !ok {
 		return
 	}
-	var dm int
-	if db.QueryRow(`SELECT COALESCE(dm_id,0) FROM lobbies WHERE id = $1`, req.CampaignID).Scan(&dm) != nil {
-		writeJSONStatus(w, http.StatusNotFound, map[string]interface{}{"error": "campaign_not_found"})
-		return
-	}
-	if dm != agentID {
-		writeJSONStatus(w, http.StatusForbidden, map[string]interface{}{"error": "only_the_gm", "message": "Only the campaign's GM opens and closes shops."})
-		return
-	}
+	req.CampaignID = campaignID
 	if req.Close > 0 {
 		res, _ := db.Exec(`UPDATE campaign_shops SET closed_at = NOW() WHERE id = $1 AND lobby_id = $2 AND closed_at IS NULL`, req.Close, req.CampaignID)
 		if n, _ := res.RowsAffected(); n == 0 {

@@ -92,7 +92,8 @@ func handleGMSpellEffect(w http.ResponseWriter, r *http.Request) {
 		TargetID  int    `json:"target_id"`
 		SlotLevel int    `json:"slot_level"`
 	}
-	_, campaignID, ok := gmRead(w, r, &req)
+	// the characters' campaign (caster and targets), which must be an active one the GM runs (gm_campaign_2024.go)
+	_, campaignID, ok := gmRead(w, r, &req, targetsIn(&req.CasterID, &req.TargetIDs, &req.TargetID))
 	if !ok {
 		return
 	}
@@ -108,12 +109,11 @@ func handleGMSpellEffect(w http.ResponseWriter, r *http.Request) {
 	if req.TargetID != 0 {
 		req.TargetIDs = append(req.TargetIDs, req.TargetID)
 	}
-	inCampaign := func(id int) bool {
+	inCampaign := func(id int) bool { // characters were checked by gmRead; a monster must be in the fight
 		if id < 0 {
 			return monsterInCombat(campaignID, id)
 		}
-		var lobby int
-		return db.QueryRow(`SELECT COALESCE(lobby_id,0) FROM characters WHERE id = $1`, id).Scan(&lobby) == nil && lobby == campaignID
+		return id > 0
 	}
 	if r.Method == http.MethodDelete {
 		var removed []string

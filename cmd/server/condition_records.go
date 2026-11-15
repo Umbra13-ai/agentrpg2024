@@ -332,7 +332,8 @@ func handleGMConditions(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	var req gmConditionRequest
-	agentID, campaignID, ok := gmRead(w, r, &req)
+	// a character target's campaign, which must be an active one the GM runs (gm_campaign_2024.go)
+	agentID, campaignID, ok := gmRead(w, r, &req, targetsIn(&req.TargetID))
 	if !ok {
 		return
 	}
@@ -372,13 +373,7 @@ func handleGMConditions(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	cond := strings.ToLower(def.Name)
-	if req.TargetID > 0 {
-		var lobby int
-		if db.QueryRow(`SELECT lobby_id FROM characters WHERE id = $1`, req.TargetID).Scan(&lobby) != nil || lobby != campaignID {
-			writeJSONStatus(w, http.StatusBadRequest, map[string]interface{}{"error": "target_not_in_campaign"})
-			return
-		}
-	} else if req.TargetID == 0 || !monsterInCombat(campaignID, req.TargetID) {
+	if req.TargetID == 0 || (req.TargetID < 0 && !monsterInCombat(campaignID, req.TargetID)) {
 		writeJSONStatus(w, http.StatusBadRequest, map[string]interface{}{"error": "target_not_found", "message": "target_id is a character id, or the negative id of a monster in the current combat"})
 		return
 	}
@@ -471,14 +466,9 @@ func handleGMConditions(w http.ResponseWriter, r *http.Request) {
 // gmDeleteByName is DELETE /api/gm/conditions without a record_id: {"target_id": N, "condition": "poisoned"} ends that condition
 // (every record of it), {"target_id": N, "condition": "exhaustion"} removes one level (with "level", sets it), {"target_id": N,
 // "all": true} (or condition "all") ends every condition and Exhaustion.
+// Its callers have checked a character target is in the campaign (gmReadAs).
 func gmDeleteByName(w http.ResponseWriter, campaignID, targetID int, condition string, all bool) {
-	if targetID > 0 {
-		var lobby int
-		if db.QueryRow(`SELECT COALESCE(lobby_id,0) FROM characters WHERE id = $1`, targetID).Scan(&lobby) != nil || lobby != campaignID {
-			writeJSONStatus(w, http.StatusBadRequest, map[string]interface{}{"error": "target_not_in_campaign"})
-			return
-		}
-	} else if targetID == 0 {
+	if targetID == 0 {
 		writeJSONStatus(w, http.StatusBadRequest, map[string]interface{}{"error": "target_required",
 			"message": "Send record_id, or target_id (a character id, or a monster's negative id) with a condition name or \"all\": true"})
 		return
@@ -707,19 +697,12 @@ func handleCharacterConditions(w http.ResponseWriter, r *http.Request, charID in
 		writeAuthError(w, err)
 		return
 	}
-	var lobby, dm int
-	if db.QueryRow(`SELECT COALESCE(c.lobby_id,0), COALESCE(l.dm_id,0) FROM characters c LEFT JOIN lobbies l ON l.id = c.lobby_id WHERE c.id = $1`, charID).Scan(&lobby, &dm) != nil {
-		writeJSONStatus(w, http.StatusNotFound, map[string]interface{}{"error": "character_not_found"})
-		return
-	}
-	if dm != agentID {
-		writeJSONStatus(w, http.StatusForbidden, map[string]interface{}{"error": "not_gm",
-			"message": "Only the GM of this character's campaign applies or removes conditions. To end one, use POST /api/conditions/escape (see GET /api/conditions/active)."})
-		return
-	}
-	// the same request as POST /api/gm/conditions, for this character (target_id is the path's)
+	// the same request as POST /api/gm/conditions, for this character (target_id is the path's). Only the GM of the
+	// character's campaign may send it (gm_campaign_2024.go); a player ends a condition with POST /api/conditions/escape.
 	var req gmConditionRequest
-	if !readRequest(w, r, &req, optionalBody()) {
+	lobby, ok := gmReadAs(w, r, agentID, &req, optionalBody(), campaignFromTarget(&charID),
+		notGMHint("Only the GM of the character's campaign applies or removes conditions. To end one, use POST /api/conditions/escape (see GET /api/conditions/active)."))
+	if !ok {
 		return
 	}
 	if req.TargetID != 0 && req.TargetID != charID {

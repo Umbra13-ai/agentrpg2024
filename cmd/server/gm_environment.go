@@ -38,7 +38,7 @@ func handleGMForcedMovement(w http.ResponseWriter, r *http.Request) {
 		Cause    string `json:"cause"`    // e.g., "Thunderwave", "Eldritch Blast with Repelling Blast", "gust of wind"
 		Distance string `json:"distance"` // e.g., "10ft", "15 feet"
 	}
-	campaignID, ok := gmReadAs(w, r, agentID, &req)
+	campaignID, ok := gmReadAs(w, r, agentID, &req, targetsIn(&req.TargetID))
 	if !ok {
 		return
 	}
@@ -56,12 +56,6 @@ func handleGMForcedMovement(w http.ResponseWriter, r *http.Request) {
 	if err != nil {
 		w.WriteHeader(http.StatusBadRequest)
 		json.NewEncoder(w).Encode(map[string]interface{}{"error": "target_not_found"})
-		return
-	}
-
-	if targetLobby != campaignID {
-		w.WriteHeader(http.StatusBadRequest)
-		json.NewEncoder(w).Encode(map[string]interface{}{"error": "target_not_in_campaign"})
 		return
 	}
 
@@ -137,7 +131,9 @@ func handleGMFallingDamage(w http.ResponseWriter, r *http.Request) {
 		Reason       string `json:"reason"`
 		UseSlowFall  bool   `json:"use_slow_fall"` // Monk Slow Fall
 	}
-	if _, ok := gmReadAs(w, r, agentID, &req, campaignFromTarget()); !ok {
+	// the character's campaign, which must be one the GM runs (gm_campaign_2024.go)
+	lobbyID, ok := gmReadAs(w, r, agentID, &req, campaignFromTarget(&req.CharacterID))
+	if !ok {
 		return
 	}
 
@@ -146,32 +142,6 @@ func handleGMFallingDamage(w http.ResponseWriter, r *http.Request) {
 		json.NewEncoder(w).Encode(map[string]interface{}{
 			"error":   "invalid_request",
 			"message": "character_id and positive distance_feet required",
-		})
-		return
-	}
-
-	// Verify agent is DM of the character's campaign
-	var lobbyID, dmID int
-	err = db.QueryRow(`
-		SELECT c.lobby_id, l.dm_id FROM characters c
-		JOIN lobbies l ON c.lobby_id = l.id
-		WHERE c.id = $1
-	`, req.CharacterID).Scan(&lobbyID, &dmID)
-
-	if err != nil {
-		w.WriteHeader(http.StatusBadRequest)
-		json.NewEncoder(w).Encode(map[string]interface{}{
-			"error":   "character_not_found",
-			"message": fmt.Sprintf("Character %d not found", req.CharacterID),
-		})
-		return
-	}
-
-	if dmID != agentID {
-		w.WriteHeader(http.StatusForbidden)
-		json.NewEncoder(w).Encode(map[string]interface{}{
-			"error":   "not_gm",
-			"message": "You are not the GM of this character's campaign",
 		})
 		return
 	}
@@ -392,7 +362,7 @@ func handleGMFallingDamage(w http.ResponseWriter, r *http.Request) {
 // @Accept json
 // @Produce json
 // @Param Authorization header string true "Basic auth"
-// @Param request body object{campaign_id=integer,underwater=boolean} true "Underwater combat settings. If underwater is omitted, toggles current state."
+// @Param request body object{campaign_id=integer,underwater=boolean} true "Underwater combat settings. If underwater is omitted, toggles current state. campaign_id: one you run, started or not (optional when you run one)."
 // @Success 200 {object} map[string]interface{} "Underwater status updated"
 // @Failure 401 {object} map[string]interface{} "Unauthorized"
 // @Failure 403 {object} map[string]interface{} "Not GM"
@@ -412,42 +382,15 @@ func handleGMUnderwater(w http.ResponseWriter, r *http.Request) {
 	}
 
 	var req struct {
-		CampaignID int   `json:"campaign_id"`
+		CampaignID int   `json:"-"`
 		Underwater *bool `json:"underwater"` // Pointer to allow nil (toggle)
 	}
-	if !readRequest(w, r, &req) {
+	// the campaign: campaign_id, else the GM's only campaign, started or not (gm_campaign_2024.go)
+	campaignID, ok := gmReadAs(w, r, agentID, &req, campaignBeforeStart())
+	if !ok {
 		return
 	}
-
-	if req.CampaignID == 0 {
-		w.WriteHeader(http.StatusBadRequest)
-		json.NewEncoder(w).Encode(map[string]interface{}{
-			"error":   "invalid_request",
-			"message": "campaign_id required",
-		})
-		return
-	}
-
-	// Verify agent is DM
-	var dmID int
-	err = db.QueryRow("SELECT COALESCE(dm_id, 0) FROM lobbies WHERE id = $1", req.CampaignID).Scan(&dmID)
-	if err != nil {
-		w.WriteHeader(http.StatusBadRequest)
-		json.NewEncoder(w).Encode(map[string]interface{}{
-			"error":   "campaign_not_found",
-			"message": fmt.Sprintf("Campaign %d not found", req.CampaignID),
-		})
-		return
-	}
-
-	if dmID != agentID {
-		w.WriteHeader(http.StatusForbidden)
-		json.NewEncoder(w).Encode(map[string]interface{}{
-			"error":   "not_gm",
-			"message": "You are not the GM of this campaign",
-		})
-		return
-	}
+	req.CampaignID = campaignID
 
 	// Check if combat state exists
 	var currentUnderwater bool
@@ -520,7 +463,7 @@ func handleGMUnderwater(w http.ResponseWriter, r *http.Request) {
 // @Accept json
 // @Produce json
 // @Param Authorization header string true "Basic auth"
-// @Param request body object{campaign_id=integer,lighting=string} true "Lighting level: 'bright', 'dim', or 'darkness'"
+// @Param request body object{campaign_id=integer,lighting=string} true "Lighting level: 'bright', 'dim', or 'darkness'. campaign_id: one you run, started or not (optional when you run one)."
 // @Success 200 {object} map[string]interface{} "Lighting updated"
 // @Failure 401 {object} map[string]interface{} "Unauthorized"
 // @Failure 403 {object} map[string]interface{} "Not GM"
@@ -540,21 +483,15 @@ func handleGMSetLighting(w http.ResponseWriter, r *http.Request) {
 	}
 
 	var req struct {
-		CampaignID int    `json:"campaign_id"`
+		CampaignID int    `json:"-"`
 		Lighting   string `json:"lighting"`
 	}
-	if !readRequest(w, r, &req) {
+	// the campaign: campaign_id, else the GM's only campaign, started or not (gm_campaign_2024.go)
+	campaignID, ok := gmReadAs(w, r, agentID, &req, campaignBeforeStart())
+	if !ok {
 		return
 	}
-
-	if req.CampaignID == 0 {
-		w.WriteHeader(http.StatusBadRequest)
-		json.NewEncoder(w).Encode(map[string]interface{}{
-			"error":   "invalid_request",
-			"message": "campaign_id required",
-		})
-		return
-	}
+	req.CampaignID = campaignID
 
 	// Validate lighting value
 	req.Lighting = strings.ToLower(req.Lighting)
@@ -565,27 +502,6 @@ func handleGMSetLighting(w http.ResponseWriter, r *http.Request) {
 			"error":         "invalid_lighting",
 			"message":       "lighting must be 'bright', 'dim', or 'darkness'",
 			"valid_options": []string{"bright", "dim", "darkness"},
-		})
-		return
-	}
-
-	// Verify agent is DM
-	var dmID int
-	err = db.QueryRow("SELECT COALESCE(dm_id, 0) FROM lobbies WHERE id = $1", req.CampaignID).Scan(&dmID)
-	if err != nil {
-		w.WriteHeader(http.StatusBadRequest)
-		json.NewEncoder(w).Encode(map[string]interface{}{
-			"error":   "campaign_not_found",
-			"message": fmt.Sprintf("Campaign %d not found", req.CampaignID),
-		})
-		return
-	}
-
-	if dmID != agentID {
-		w.WriteHeader(http.StatusForbidden)
-		json.NewEncoder(w).Encode(map[string]interface{}{
-			"error":   "not_gm",
-			"message": "You are not the GM of this campaign",
 		})
 		return
 	}

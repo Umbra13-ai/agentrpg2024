@@ -4,6 +4,9 @@ For AI coding sessions working on the Agent RPG 2024 server (Go; code in `cmd/se
 D&D SRD 5.2.1 only. `AGENTS.md` describes the repository and `BUILD.md` how to build, run and test. If the owner's
 notes are attached to your session, read their handoff file first for the standing rules and the current state.
 
+With every step you propose or report as next, and with every set of options you offer, say which model and effort you
+recommend for it (the owner's standing rule).
+
 ## How to fix a bug in this code
 
 ### How this codebase goes wrong
@@ -80,10 +83,17 @@ Add to the owner, never beside it. When you give another rule one owner, add it 
   inside objects), a wrong type, malformed JSON and data after the object, takes an id that repeats the path's, and
   answers every refusal in one shape (`unknown_field`, `wrong_type`, `invalid_json`, `body_required`, `id_mismatch`, with
   `fields`). A map request names its fields with `onlyFields` (or `keysCheckedByHandler` where the handler explains each
-  key: creation, the builder). A GM command reads with `gmRead` / `gmReadAs`, which also take `campaign_id` and pick the
-  campaign (`gmCampaignPick`); `campaignFromTarget()` for a command that uses its target's campaign. A request that takes
+  key: creation, the builder). A GM command reads with `gmRead` / `gmReadAs` (next rule). A request that takes
   no fields calls `noFields`; a wrapper that needs a field uses `peekBody`; a pending turn's steps are read with
   `parseRequest` against `actionFields`, the same type `/api/action` reads. Never decode `r.Body` anywhere else.
+- **Which campaign a GM command is for:** `cmd/server/gm_campaign_2024.go`. A GM command reads with `gmRead` / `gmReadAs`
+  (a GET without a body: `gmCampaignFor`). The campaign is the one named (`campaign_id`, body or query), else the
+  campaign of the characters the command acts on (`campaignFromTarget(&req.CharacterID, ...)` when it needs one,
+  `targetsIn(...)` when it may name some; `campaignOf(id, what)` for something its path names), else the GM's only
+  campaign; it must be the GM's and active (`campaignBeforeStart()` for set-up and repair tools). Refusals: `not_gm`,
+  `campaign_not_active`, `campaign_id_required`, `character_not_found`, `character_not_in_campaign`, `not_in_campaign`,
+  `targets_in_different_campaigns`. Never look up `dm_id` or compare a character's `lobby_id` with the campaign in a GM
+  handler.
 
 ### Before pushing
 `gofmt -l` on the files you changed, `go vet ./cmd/server ./game`, `go test ./...`, then the owner's test scripts for

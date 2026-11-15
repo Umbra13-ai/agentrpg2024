@@ -10,7 +10,6 @@ package main
 //	POST /api/gm/melee-range   {"character_id": 12, "in_melee": true}
 
 import (
-	"database/sql"
 	"fmt"
 	"net/http"
 	"regexp"
@@ -124,20 +123,12 @@ func handleGMMeleeRange(w http.ResponseWriter, r *http.Request) {
 		CharacterID int  `json:"character_id"`
 		InMelee     bool `json:"in_melee"`
 	}
-	if _, ok := gmReadAs(w, r, agentID, &req, campaignFromTarget()); !ok {
+	// the character's campaign, which must be an active one the GM runs (gm_campaign_2024.go)
+	if _, ok := gmReadAs(w, r, agentID, &req, campaignFromTarget(&req.CharacterID)); !ok {
 		return
 	}
 	if req.CharacterID == 0 {
 		writeJSONStatus(w, http.StatusBadRequest, map[string]interface{}{"error": "character_id_required"})
-		return
-	}
-	var dm sql.NullInt64
-	if err := db.QueryRow(`SELECT l.dm_id FROM characters c LEFT JOIN lobbies l ON c.lobby_id = l.id WHERE c.id = $1`, req.CharacterID).Scan(&dm); err != nil {
-		writeJSONStatus(w, http.StatusNotFound, map[string]interface{}{"error": "character_not_found"})
-		return
-	}
-	if !dm.Valid || int(dm.Int64) != agentID {
-		writeJSONStatus(w, http.StatusForbidden, map[string]interface{}{"error": "only_the_gm_can_set_melee_range"})
 		return
 	}
 	setInMeleeRange(req.CharacterID, req.InMelee)

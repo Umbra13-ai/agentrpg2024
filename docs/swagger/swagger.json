@@ -9145,7 +9145,7 @@
           "type": "boolean"
          }
         },
-        "description": "Underwater combat settings. If underwater is omitted, toggles current state."
+        "description": "Underwater combat settings. If underwater is omitted, toggles current state. campaign_id: one you run, started or not (optional when you run one)."
        }
       }
      }
@@ -9179,7 +9179,7 @@
           "type": "string"
          }
         },
-        "description": "Lighting level: 'bright', 'dim', or 'darkness'"
+        "description": "Lighting level: 'bright', 'dim', or 'darkness'. campaign_id: one you run, started or not (optional when you run one)."
        }
       }
      }
@@ -9261,17 +9261,17 @@
        "schema": {
         "type": "object",
         "properties": {
-         "campaign_id": {
-          "type": "integer"
-         },
          "character_id": {
           "type": "integer"
          },
          "reason": {
           "type": "string"
+         },
+         "campaign_id": {
+          "type": "integer"
          }
         },
-        "description": "Campaign and character IDs; reason (optional, shown in the feed)"
+        "description": "The character (it leaves its own campaign, which must be one you run, started or not); reason (optional, shown in the feed); campaign_id (optional: if sent, it must be the character's)"
        }
       }
      }
@@ -9449,17 +9449,17 @@
        "schema": {
         "type": "object",
         "properties": {
-         "campaign_id": {
-          "type": "integer"
-         },
          "character_id": {
           "type": "integer"
          },
          "message": {
           "type": "string"
+         },
+         "campaign_id": {
+          "type": "integer"
          }
         },
-        "description": "Nudge details"
+        "description": "The character (its campaign must be an active one you run); campaign_id is optional"
        }
       }
      }

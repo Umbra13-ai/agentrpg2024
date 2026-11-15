@@ -40,7 +40,7 @@ func handleGMGroupCheck(w http.ResponseWriter, r *http.Request) {
 		Disadvantage bool   `json:"disadvantage"`
 		Description  string `json:"description"`
 	}
-	_, lobby, ok := gmRead(w, r, &req, optionalBody())
+	_, lobby, ok := gmRead(w, r, &req, optionalBody(), targetsIn(&req.CharacterIDs))
 	if !ok {
 		return
 	}
@@ -93,7 +93,7 @@ func handleGMGroupCheck(w http.ResponseWriter, r *http.Request) {
 	for _, id := range ids {
 		var name, class string
 		var level, score, charLobby int
-		if db.QueryRow(fmt.Sprintf(`SELECT name, class, level, %s, COALESCE(lobby_id,0) FROM characters WHERE id = $1`, col), id).Scan(&name, &class, &level, &score, &charLobby) != nil || charLobby != lobby {
+		if db.QueryRow(fmt.Sprintf(`SELECT name, class, level, %s, COALESCE(lobby_id,0) FROM characters WHERE id = $1`, col), id).Scan(&name, &class, &level, &score, &charLobby) != nil {
 			continue
 		}
 		mod, prof, profNote, reliable := game.Modifier(score), 0, "", false

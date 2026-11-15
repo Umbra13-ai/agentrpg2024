@@ -179,7 +179,8 @@ func handleGMMilestone(w http.ResponseWriter, r *http.Request) {
 		Reason       string `json:"reason"`
 		CampaignID   int    `json:"-"` // campaign_id picks the campaign, as for every GM command (gmRead)
 	}
-	campaignID, ok := gmReadAs(w, r, agentID, &req)
+	// the characters' campaign when they are named, which must be an active one the GM runs (gm_campaign_2024.go)
+	campaignID, ok := gmReadAs(w, r, agentID, &req, targetsIn(&req.CharacterIDs))
 	if !ok {
 		return
 	}
@@ -213,11 +214,7 @@ func handleGMMilestone(w http.ResponseWriter, r *http.Request) {
 	var party []who
 	for _, id := range ids {
 		var c who
-		var lobby int
-		if db.QueryRow(`SELECT name, COALESCE(level, 1), COALESCE(lobby_id, 0) FROM characters WHERE id = $1`, id).Scan(&c.name, &c.level, &lobby) != nil || lobby != req.CampaignID {
-			writeJSONStatus(w, http.StatusBadRequest, map[string]interface{}{"error": "character_not_in_campaign", "message": fmt.Sprintf("Character %d is not in this campaign. Nothing was changed.", id)})
-			return
-		}
+		db.QueryRow(`SELECT name, COALESCE(level, 1) FROM characters WHERE id = $1`, id).Scan(&c.name, &c.level)
 		c.id = id
 		party = append(party, c)
 	}

@@ -41,7 +41,7 @@ func handleGMDeflectAttacks(w http.ResponseWriter, r *http.Request) {
 		AttackerName     string `json:"attacker_name"`
 		RedirectTargetID int    `json:"redirect_target_id"`
 	}
-	_, campaignID, ok := gmRead(w, r, &req)
+	_, campaignID, ok := gmRead(w, r, &req, targetsIn(&req.CharacterID, &req.RedirectTargetID))
 	if !ok {
 		return
 	}
@@ -53,7 +53,7 @@ func handleGMDeflectAttacks(w http.ResponseWriter, r *http.Request) {
 	var level, dex, lobby int
 	var reactionUsed bool
 	if db.QueryRow(`SELECT name, class, level, dex, COALESCE(lobby_id,0), COALESCE(reaction_used,false) FROM characters WHERE id = $1`, req.CharacterID).
-		Scan(&name, &class, &level, &dex, &lobby, &reactionUsed) != nil || lobby != campaignID {
+		Scan(&name, &class, &level, &dex, &lobby, &reactionUsed) != nil {
 		writeJSONStatus(w, http.StatusNotFound, map[string]interface{}{"error": "character_not_found"})
 		return
 	}

@@ -1065,37 +1065,51 @@ func TestResolveCastSpellSlug(t *testing.T) {
 	}
 }
 
-func TestResolveGMNudgeCampaignHonorsRequestedCampaign(t *testing.T) {
+// The GM-campaign rule (gm_campaign_2024.go): a command acting on characters works in their one campaign, which must be the
+// GM's, in a status the command works in, and the named campaign if one is named.
+func TestGMTargetCampaignRule(t *testing.T) {
 	testDB := setupSQLiteTestDB(t)
 	if _, err := testDB.Exec(`
 		CREATE TABLE lobbies (id INTEGER PRIMARY KEY, dm_id INTEGER, name TEXT, status TEXT);
+		ALTER TABLE characters ADD COLUMN lobby_id INTEGER;
 		INSERT INTO lobbies (id, dm_id, name, status) VALUES
-			(1, 99, 'Older active campaign', 'active'),
-			(6, 99, 'Requested campaign', 'active'),
-			(9, 99, 'Archived campaign', 'completed'),
-			(7, 100, 'Another GM campaign', 'active');
+			(1, 99, 'Active', 'active'), (2, 99, 'Recruiting', 'recruiting'), (3, 99, 'Ended', 'completed'), (4, 100, 'Other GM', 'active');
+		INSERT INTO characters (id, lobby_id, name) VALUES (10, 1, 'A'), (11, 1, 'B'), (20, 2, 'C'), (30, 3, 'D'), (40, 4, 'E'), (50, NULL, 'F');
 	`); err != nil {
-		t.Fatalf("seed lobbies: %v", err)
+		t.Fatalf("seed: %v", err)
 	}
-
-	campaignID, campaignName, err := resolveGMNudgeCampaign(99, 6)
-	if err != nil {
-		t.Fatalf("resolve requested campaign: %v", err)
+	active, both := []string{"active"}, []string{"recruiting", "active"}
+	cases := []struct {
+		name     string
+		want     int
+		chars    []int
+		statuses []string
+		camp     int
+		code     string
+	}{
+		{"one character", 0, []int{10}, active, 1, ""},
+		{"two in one campaign", 0, []int{10, 11}, active, 1, ""},
+		{"named and right", 1, []int{10}, active, 1, ""},
+		{"named and wrong", 2, []int{10}, active, 0, "not_in_campaign"},
+		{"different campaigns", 0, []int{10, 20}, both, 0, "targets_in_different_campaigns"},
+		{"not started, active only", 0, []int{20}, active, 0, "campaign_not_active"},
+		{"not started, allowed", 0, []int{20}, both, 2, ""},
+		{"ended", 0, []int{30}, both, 0, "campaign_not_active"},
+		{"another GM's", 0, []int{40}, both, 0, "not_gm"},
+		{"no campaign", 0, []int{50}, both, 0, "character_not_in_campaign"},
+		{"no such character", 0, []int{77}, both, 0, "character_not_found"},
 	}
-	if campaignID != 6 || campaignName != "Requested campaign" {
-		t.Fatalf("requested campaign = (%d, %q), want (6, Requested campaign)", campaignID, campaignName)
+	for _, c := range cases {
+		camp, _, code, msg := gmTargetCampaign(99, c.want, c.chars, c.statuses)
+		if camp != c.camp || code != c.code {
+			t.Errorf("%s: got (%d, %q %q), want (%d, %q)", c.name, camp, code, msg, c.camp, c.code)
+		}
 	}
-
-	campaignID, campaignName, err = resolveGMNudgeCampaign(99, 0)
-	if err != nil {
-		t.Fatalf("resolve default campaign: %v", err)
+	if code, _ := gmCampaignCheck(99, 4, active); code != "not_gm" {
+		t.Errorf("another GM's campaign: %q", code)
 	}
-	if campaignID != 6 || campaignName != "Requested campaign" {
-		t.Fatalf("default campaign = (%d, %q), want newest active campaign", campaignID, campaignName)
-	}
-
-	if _, _, err := resolveGMNudgeCampaign(99, 7); err == nil {
-		t.Fatal("expected a campaign owned by another GM to be rejected")
+	if code, _ := gmCampaignCheck(99, 2, active); code != "campaign_not_active" {
+		t.Errorf("not started: %q", code)
 	}
 }
 

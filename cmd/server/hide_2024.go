@@ -86,13 +86,13 @@ func handleGMOverruleHide(w http.ResponseWriter, r *http.Request) {
 		CharacterID int    `json:"character_id"`
 		Reason      string `json:"reason"`
 	}
-	_, lobby, ok := gmRead(w, r, &req, optionalBody())
+	_, lobby, ok := gmRead(w, r, &req, optionalBody(), targetsIn(&req.CharacterID))
 	if !ok {
 		return
 	}
 	var name string
 	var charLobby int
-	if req.CharacterID == 0 || db.QueryRow(`SELECT name, COALESCE(lobby_id,0) FROM characters WHERE id = $1`, req.CharacterID).Scan(&name, &charLobby) != nil || charLobby != lobby {
+	if req.CharacterID == 0 || db.QueryRow(`SELECT name, COALESCE(lobby_id,0) FROM characters WHERE id = $1`, req.CharacterID).Scan(&name, &charLobby) != nil {
 		dmBadRequest(w, "character_required", "Send the character_id of a character in this campaign.")
 		return
 	}

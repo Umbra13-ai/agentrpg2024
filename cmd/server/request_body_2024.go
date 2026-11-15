@@ -36,15 +36,20 @@ import (
 
 // bodySpec: how one request reads its body. Built from bodyOpts.
 type bodySpec struct {
-	optional bool                   // an empty body (or null) is read as an empty object: every field is optional
-	extra    map[string]interface{} // envelope fields taken beside the request's own, decoded into these pointers
-	fields   []string               // a map request: the fields it takes (structs list their own)
-	anyKey   bool                   // a map request that checks its keys itself (character creation, the builder)
-	limit    int64                  // a larger body than maxRequestBody (none today but the portrait, which reads raw bytes)
-	aliases  map[string]string      // other names of a field (alias -> field), read as that field
-	hint     string                 // added to an unknown-field refusal: where a misplaced field goes
-	byTarget bool                   // gmRead: the command finds its campaign from its target; campaign_id is checked if sent
-	path     string                 // the request's path (an id in it may be repeated in the body)
+	optional    bool                   // an empty body (or null) is read as an empty object: every field is optional
+	extra       map[string]interface{} // envelope fields taken beside the request's own, decoded into these pointers
+	fields      []string               // a map request: the fields it takes (structs list their own)
+	anyKey      bool                   // a map request that checks its keys itself (character creation, the builder)
+	limit       int64                  // a larger body than maxRequestBody (none today but the portrait, which reads raw bytes)
+	aliases     map[string]string      // other names of a field (alias -> field), read as that field
+	hint        string                 // added to an unknown-field refusal: where a misplaced field goes
+	byTarget    bool                   // gmRead: the command finds its campaign from its target characters (gm_campaign_2024.go)
+	targets     []interface{}          // gmRead: the request's fields that hold those characters' ids (*int, *[]int)
+	beforeStart bool                   // gmRead: the command also works in a campaign that has not started
+	ofCampaign  int                    // gmRead: the campaign of what the path names (campaignOf)
+	ofWhat      string                 // ... and what that is, for a refusal
+	notGM       string                 // gmRead: added to a not_gm refusal (notGMHint)
+	path        string                 // the request's path (an id in it may be repeated in the body)
 }
 
 type bodyOpt func(*bodySpec)
@@ -82,10 +87,6 @@ func fieldAliases(m map[string]string) bodyOpt {
 		}
 	}
 }
-
-// campaignFromTarget: a GM command that finds its campaign from the character it acts on (gmReadAs). campaign_id is still
-// taken, and must be a campaign the GM runs; when it isn't sent, the command uses the target's campaign.
-func campaignFromTarget() bodyOpt { return func(s *bodySpec) { s.byTarget = true } }
 
 // bodyHint is added to an unknown-field refusal: where a field that isn't this request's goes.
 func bodyHint(h string) bodyOpt { return func(s *bodySpec) { s.hint = h } }

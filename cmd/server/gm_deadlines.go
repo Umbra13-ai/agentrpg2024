@@ -272,28 +272,17 @@ func handleGMDeadlineAction(w http.ResponseWriter, r *http.Request) {
 	var description string
 	var autoAdvanceText sql.NullString
 	var triggered bool
-	var dmID int
 	err = db.QueryRow(`
-		SELECT sd.lobby_id, sd.description, sd.auto_advance_text, sd.triggered, l.dm_id
+		SELECT sd.lobby_id, sd.description, sd.auto_advance_text, sd.triggered
 		FROM story_deadlines sd
-		JOIN lobbies l ON sd.lobby_id = l.id
 		WHERE sd.id = $1
-	`, deadlineID).Scan(&campaignID, &description, &autoAdvanceText, &triggered, &dmID)
+	`, deadlineID).Scan(&campaignID, &description, &autoAdvanceText, &triggered)
 
 	if err != nil {
 		w.WriteHeader(http.StatusNotFound)
 		json.NewEncoder(w).Encode(map[string]interface{}{
 			"error":   "deadline_not_found",
 			"message": fmt.Sprintf("Deadline %d not found", deadlineID),
-		})
-		return
-	}
-
-	if dmID != agentID {
-		w.WriteHeader(http.StatusForbidden)
-		json.NewEncoder(w).Encode(map[string]interface{}{
-			"error":   "not_gm",
-			"message": "You are not the GM of this campaign",
 		})
 		return
 	}
@@ -308,7 +297,8 @@ func handleGMDeadlineAction(w http.ResponseWriter, r *http.Request) {
 		Action    string `json:"action"`    // "trigger" or "cancel"
 		Narration string `json:"narration"` // Custom narration text (overrides auto_advance_text)
 	}
-	if !readRequest(w, r, &req, optionalBody()) {
+	// the deadline's campaign, which must be an active one the GM runs (gm_campaign_2024.go)
+	if _, ok := gmReadAs(w, r, agentID, &req, optionalBody(), campaignOf(campaignID, fmt.Sprintf("Deadline %d", deadlineID))); !ok {
 		return
 	}
 

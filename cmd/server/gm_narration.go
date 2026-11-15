@@ -9,7 +9,6 @@ import (
 	"net/http"
 	"os"
 	"sort"
-	"strconv"
 	"strings"
 	"time"
 )
@@ -33,40 +32,12 @@ func handleGMStatus(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// Find campaign where this agent is the DM
-	// Support optional ?campaign_id= param for GMs running multiple campaigns
-	var campaignID int
-	var campaignName, campaignStatus string
-	var campaignSetting sql.NullString
-	var campaignDocRaw []byte
-	requestedCampaignID := 0
-	if cidStr := r.URL.Query().Get("campaign_id"); cidStr != "" {
-		requestedCampaignID, _ = strconv.Atoi(cidStr)
-	}
-	if requestedCampaignID > 0 {
-		err = db.QueryRow(`
-			SELECT id, name, status, COALESCE(setting, ''), COALESCE(campaign_document, '{}')
-			FROM lobbies
-			WHERE dm_id = $1 AND status = 'active' AND id = $2
-			LIMIT 1
-		`, agentID, requestedCampaignID).Scan(&campaignID, &campaignName, &campaignStatus, &campaignSetting, &campaignDocRaw)
-	} else {
-		err = db.QueryRow(`
-			SELECT id, name, status, COALESCE(setting, ''), COALESCE(campaign_document, '{}')
-			FROM lobbies
-			WHERE dm_id = $1 AND status = 'active'
-			ORDER BY id DESC
-			LIMIT 1
-		`, agentID).Scan(&campaignID, &campaignName, &campaignStatus, &campaignSetting, &campaignDocRaw)
-	}
-
-	if err != nil {
-		w.WriteHeader(http.StatusForbidden)
-		json.NewEncoder(w).Encode(map[string]interface{}{
-			"needs_attention": false,
-			"error":           "not_gm",
-			"message":         "You are not the GM of any active campaign.",
-			"how_to_create": map[string]interface{}{
+	// The campaign: ?campaign_id=N, else the GM's only active campaign (gmCampaignFor, gm_campaign_2024.go)
+	campaignID, code, msg := gmCampaignFor(agentID, r)
+	if code != "" {
+		out := map[string]interface{}{"needs_attention": false, "error": code, "message": msg}
+		if code == "not_gm" {
+			out["how_to_create"] = map[string]interface{}{
 				"endpoint": "POST /api/campaigns",
 				"example": map[string]interface{}{
 					"name":      "My Adventure",
@@ -74,10 +45,20 @@ func handleGMStatus(w http.ResponseWriter, r *http.Request) {
 					"min_level": 1,
 					"max_level": 5,
 				},
-			},
-		})
+			}
+		}
+		status := http.StatusForbidden
+		if code == "campaign_id_required" {
+			status = http.StatusBadRequest
+		}
+		writeJSONStatus(w, status, out)
 		return
 	}
+	var campaignName, campaignStatus string
+	var campaignSetting sql.NullString
+	var campaignDocRaw []byte
+	db.QueryRow(`SELECT name, status, COALESCE(setting, ''), COALESCE(campaign_document, '{}') FROM lobbies WHERE id = $1`, campaignID).
+		Scan(&campaignName, &campaignStatus, &campaignSetting, &campaignDocRaw)
 
 	// The GM checks in: the pending turns that are next in the initiative order resolve now, before the state is read
 	// (pending_turns_2024.go)
@@ -942,10 +923,10 @@ func handleGMStatus(w http.ResponseWriter, r *http.Request) {
 // @Accept json
 // @Produce json
 // @Param Authorization header string true "Bearer token"
-// @Param request body object{campaign_id=int,character_id=int,reason=string} true "Campaign and character IDs; reason (optional, shown in the feed)"
+// @Param request body object{character_id=int,reason=string,campaign_id=int} true "The character (it leaves its own campaign, which must be one you run, started or not); reason (optional, shown in the feed); campaign_id (optional: if sent, it must be the character's)"
 // @Success 200 {object} map[string]interface{}
 // @Failure 403 {object} map[string]interface{} "Not the GM"
-// @Failure 404 {object} map[string]interface{} "The character is not in this campaign"
+// @Failure 400 {object} map[string]interface{} "The character is not in a campaign, or not in the campaign_id sent"
 // @Router /gm/kick-character [post]
 func handleGMKickCharacter(w http.ResponseWriter, r *http.Request) {
 	w.Header().Set("Content-Type", "application/json")
@@ -962,28 +943,22 @@ func handleGMKickCharacter(w http.ResponseWriter, r *http.Request) {
 	}
 
 	var req struct {
-		CampaignID  int    `json:"campaign_id"`
 		CharacterID int    `json:"character_id"`
 		Reason      string `json:"reason"`
+		CampaignID  int    `json:"-"`
 	}
-	if !readRequest(w, r, &req) {
+	// the character's campaign, which must be one the GM runs, started or not (gm_campaign_2024.go)
+	campaignID, ok := gmReadAs(w, r, agentID, &req, campaignFromTarget(&req.CharacterID), campaignBeforeStart())
+	if !ok {
 		return
 	}
-
-	// Verify requester is GM of this campaign
-	var gmID int
-	gmErr := db.QueryRow("SELECT dm_id FROM lobbies WHERE id = $1", req.CampaignID).Scan(&gmID)
-	if gmErr != nil || gmID != agentID {
-		w.WriteHeader(403)
-		json.NewEncoder(w).Encode(map[string]string{"error": "not_gm_of_campaign"})
+	if req.CharacterID == 0 {
+		writeJSONStatus(w, http.StatusBadRequest, map[string]interface{}{"error": "character_id_required", "message": "Send character_id: the character to remove. Nothing was changed."})
 		return
 	}
+	req.CampaignID = campaignID
 	var name string
-	if db.QueryRow(`SELECT name FROM characters WHERE id = $1 AND lobby_id = $2`, req.CharacterID, req.CampaignID).Scan(&name) != nil {
-		w.WriteHeader(404)
-		json.NewEncoder(w).Encode(map[string]string{"error": "character_not_found_in_campaign"})
-		return
-	}
+	db.QueryRow(`SELECT name FROM characters WHERE id = $1`, req.CharacterID).Scan(&name)
 
 	// The character leaves the campaign; it is not erased (live test, Nov 14: this command deleted the character and its
 	// actions for good, so a player lost the character and the server's admin could not restore it).
@@ -1040,24 +1015,15 @@ func handleGMRestoreAction(w http.ResponseWriter, r *http.Request) {
 		Description string `json:"description"`
 		Result      string `json:"result"`
 	}
-	if _, ok := gmReadAs(w, r, agentID, &req, campaignFromTarget()); !ok {
+	lobbyID, ok := gmReadAs(w, r, agentID, &req, campaignFromTarget(&req.CharacterID), campaignBeforeStart())
+	if !ok {
 		return
 	}
-
-	// Get character's campaign and verify GM
-	var lobbyID, dmID int
-	err := db.QueryRow("SELECT lobby_id FROM characters WHERE id = $1", req.CharacterID).Scan(&lobbyID)
-	if err != nil {
-		w.WriteHeader(404)
-		json.NewEncoder(w).Encode(map[string]string{"error": "character_not_found"})
+	if req.CharacterID == 0 {
+		writeJSONStatus(w, http.StatusBadRequest, map[string]interface{}{"error": "character_id_required", "message": "Send character_id. Nothing was changed."})
 		return
 	}
-	db.QueryRow("SELECT dm_id FROM lobbies WHERE id = $1", lobbyID).Scan(&dmID)
-	if dmID != agentID {
-		w.WriteHeader(403)
-		json.NewEncoder(w).Encode(map[string]string{"error": "not_gm_of_campaign"})
-		return
-	}
+	var err error
 
 	// Insert the action (include lobby_id for feed display)
 	_, err = db.Exec(`
@@ -1102,20 +1068,14 @@ func handleGMRecreateCharacter(w http.ResponseWriter, r *http.Request) {
 		Name       string `json:"name"`
 		Class      string `json:"class"`
 		AgentID    int    `json:"agent_id"`
-		CampaignID int    `json:"campaign_id"`
+		CampaignID int    `json:"-"`
 	}
-	if !readRequest(w, r, &req) {
+	campaignID, ok := gmReadAs(w, r, gmAgentID, &req, campaignBeforeStart())
+	if !ok {
 		return
 	}
-
-	// Verify requester is GM of this campaign
-	var dmID int
-	err := db.QueryRow("SELECT dm_id FROM lobbies WHERE id = $1", req.CampaignID).Scan(&dmID)
-	if err != nil || dmID != gmAgentID {
-		w.WriteHeader(403)
-		json.NewEncoder(w).Encode(map[string]string{"error": "not_gm_of_campaign"})
-		return
-	}
+	req.CampaignID = campaignID
+	var err error
 
 	// Create the character
 	var charID int
@@ -1163,24 +1123,15 @@ func handleGMUpdateActionTime(w http.ResponseWriter, r *http.Request) {
 		CharacterID int    `json:"character_id"`
 		Timestamp   string `json:"timestamp"`
 	}
-	if _, ok := gmReadAs(w, r, gmAgentID, &req, campaignFromTarget()); !ok {
+	_, ok := gmReadAs(w, r, gmAgentID, &req, campaignFromTarget(&req.CharacterID), campaignBeforeStart())
+	if !ok {
 		return
 	}
-
-	// Get character's campaign and verify GM
-	var lobbyID, dmID int
-	err := db.QueryRow("SELECT lobby_id FROM characters WHERE id = $1", req.CharacterID).Scan(&lobbyID)
-	if err != nil {
-		w.WriteHeader(404)
-		json.NewEncoder(w).Encode(map[string]string{"error": "character_not_found"})
+	if req.CharacterID == 0 {
+		writeJSONStatus(w, http.StatusBadRequest, map[string]interface{}{"error": "character_id_required", "message": "Send character_id. Nothing was changed."})
 		return
 	}
-	db.QueryRow("SELECT dm_id FROM lobbies WHERE id = $1", lobbyID).Scan(&dmID)
-	if dmID != gmAgentID {
-		w.WriteHeader(403)
-		json.NewEncoder(w).Encode(map[string]string{"error": "not_gm_of_campaign"})
-		return
-	}
+	var err error
 
 	// Update the most recent action's timestamp
 	_, err = db.Exec(`
@@ -1225,20 +1176,13 @@ func handleGMUpdateNarrationTime(w http.ResponseWriter, r *http.Request) {
 	var req struct {
 		TextMatch  string `json:"text_match"`
 		Timestamp  string `json:"timestamp"`
-		CampaignID int    `json:"campaign_id"`
+		CampaignID int    `json:"-"`
 	}
-	if !readRequest(w, r, &req) {
+	campaignID, ok := gmReadAs(w, r, gmAgentID, &req, campaignBeforeStart())
+	if !ok {
 		return
 	}
-
-	// Verify requester is GM of this campaign
-	var dmID int
-	err := db.QueryRow("SELECT dm_id FROM lobbies WHERE id = $1", req.CampaignID).Scan(&dmID)
-	if err != nil || dmID != gmAgentID {
-		w.WriteHeader(403)
-		json.NewEncoder(w).Encode(map[string]string{"error": "not_gm_of_campaign"})
-		return
-	}
+	req.CampaignID = campaignID
 
 	// Update the action matching the text
 	result, err := db.Exec(`
@@ -1591,32 +1535,8 @@ func handleGMNarrate(w http.ResponseWriter, r *http.Request) {
 }
 
 type gmNudgeRequest struct {
-	CampaignID  int    `json:"campaign_id"`
 	CharacterID int    `json:"character_id"`
 	Message     string `json:"message"`
-}
-
-// resolveGMNudgeCampaign selects the campaign explicitly requested by a GM.
-// When older clients omit campaign_id, match the same newest-active default as
-// GET /api/gm/status instead of leaving SQL row order to choose a campaign.
-func resolveGMNudgeCampaign(agentID, requestedCampaignID int) (int, string, error) {
-	var campaignID int
-	var campaignName string
-	var err error
-	if requestedCampaignID > 0 {
-		err = db.QueryRow(`
-			SELECT id, name FROM lobbies
-			WHERE dm_id = $1 AND status = 'active' AND id = $2
-		`, agentID, requestedCampaignID).Scan(&campaignID, &campaignName)
-	} else {
-		err = db.QueryRow(`
-			SELECT id, name FROM lobbies
-			WHERE dm_id = $1 AND status = 'active'
-			ORDER BY id DESC
-			LIMIT 1
-		`, agentID).Scan(&campaignID, &campaignName)
-	}
-	return campaignID, campaignName, err
 }
 
 // handleGMNudge godoc
@@ -1626,7 +1546,7 @@ func resolveGMNudgeCampaign(agentID, requestedCampaignID int) (int, string, erro
 // @Accept json
 // @Produce json
 // @Param Authorization header string true "Basic auth"
-// @Param request body object{campaign_id=integer,character_id=integer,message=string} true "Nudge details"
+// @Param request body object{character_id=integer,message=string,campaign_id=integer} true "The character (its campaign must be an active one you run); campaign_id is optional"
 // @Success 200 {object} map[string]interface{} "Nudge sent"
 // @Failure 401 {object} map[string]interface{} "Unauthorized"
 // @Failure 403 {object} map[string]interface{} "Not the GM"
@@ -1646,7 +1566,9 @@ func handleGMNudge(w http.ResponseWriter, r *http.Request) {
 	}
 
 	var req gmNudgeRequest
-	if !readRequest(w, r, &req) {
+	// the character's campaign, which must be an active one the GM runs (gm_campaign_2024.go)
+	campaignID, ok := gmReadAs(w, r, agentID, &req, campaignFromTarget(&req.CharacterID))
+	if !ok {
 		return
 	}
 	if req.CharacterID == 0 {
@@ -1657,15 +1579,8 @@ func handleGMNudge(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	campaignID, campaignName, err := resolveGMNudgeCampaign(agentID, req.CampaignID)
-	if err != nil {
-		w.WriteHeader(http.StatusBadRequest)
-		json.NewEncoder(w).Encode(map[string]interface{}{
-			"error":   "campaign_not_found",
-			"message": "Active campaign not found or not owned by this GM",
-		})
-		return
-	}
+	var campaignName string
+	db.QueryRow(`SELECT name FROM lobbies WHERE id = $1`, campaignID).Scan(&campaignName)
 
 	// Look up the character and their agent's email
 	var charName, charClass string

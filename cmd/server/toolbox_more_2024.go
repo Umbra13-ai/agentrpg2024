@@ -411,12 +411,12 @@ func handleGMStartingLevel(w http.ResponseWriter, r *http.Request) {
 		Level       int   `json:"level"`
 		Gold        *bool `json:"gold"`
 	}
-	_, lobby, ok := gmRead(w, r, &req, optionalBody())
+	_, _, ok := gmRead(w, r, &req, optionalBody(), targetsIn(&req.CharacterID))
 	if !ok {
 		return
 	}
 	var cur, charLobby int
-	if db.QueryRow(`SELECT level, COALESCE(lobby_id,0) FROM characters WHERE id = $1`, req.CharacterID).Scan(&cur, &charLobby) != nil || charLobby != lobby {
+	if db.QueryRow(`SELECT level, COALESCE(lobby_id,0) FROM characters WHERE id = $1`, req.CharacterID).Scan(&cur, &charLobby) != nil {
 		dmBadRequest(w, "character_required", "Send the character_id of a character in this campaign.")
 		return
 	}

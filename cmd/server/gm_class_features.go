@@ -42,7 +42,8 @@ func handleGMPreserveLife(w http.ResponseWriter, r *http.Request) {
 			Amount   int `json:"amount"`    // HP to restore to this target
 		} `json:"healing"` // Distribution of healing
 	}
-	if _, ok := gmReadAs(w, r, agentID, &req, campaignFromTarget()); !ok {
+	// the character's campaign, which must be one the GM runs (gm_campaign_2024.go)
+	if _, ok := gmReadAs(w, r, agentID, &req, campaignFromTarget(&req.CasterID)); !ok {
 		return
 	}
 
@@ -114,18 +115,6 @@ func handleGMPreserveLife(w http.ResponseWriter, r *http.Request) {
 		json.NewEncoder(w).Encode(map[string]interface{}{
 			"error":   "insufficient_level",
 			"message": fmt.Sprintf("%s is level %d. Preserve Life is a Life Domain feature from Cleric level 3.", casterName, casterLevel),
-		})
-		return
-	}
-
-	// Verify agent is GM of this campaign
-	var dmID int
-	err = db.QueryRow(`SELECT dm_id FROM lobbies WHERE id = $1`, lobbyID).Scan(&dmID)
-	if err != nil || dmID != agentID {
-		w.WriteHeader(http.StatusForbidden)
-		json.NewEncoder(w).Encode(map[string]interface{}{
-			"error":   "not_gm",
-			"message": "You must be the GM of this campaign to use Preserve Life",
 		})
 		return
 	}
@@ -312,7 +301,8 @@ func handleGMSacredWeapon(w http.ResponseWriter, r *http.Request) {
 	var req struct {
 		PaladinID int `json:"paladin_id"` // Paladin character ID
 	}
-	if _, ok := gmReadAs(w, r, agentID, &req, campaignFromTarget()); !ok {
+	// the character's campaign, which must be one the GM runs (gm_campaign_2024.go)
+	if _, ok := gmReadAs(w, r, agentID, &req, campaignFromTarget(&req.PaladinID)); !ok {
 		return
 	}
 
@@ -373,18 +363,6 @@ func handleGMSacredWeapon(w http.ResponseWriter, r *http.Request) {
 			"error":   "wrong_subclass",
 			"message": fmt.Sprintf("%s has the %s oath. Sacred Weapon requires Oath of Devotion.", paladinName, subclassSlug),
 			"note":    "Devotion Paladins choose their Oath at level 3.",
-		})
-		return
-	}
-
-	// Verify agent is GM of this campaign
-	var dmID int
-	err = db.QueryRow(`SELECT dm_id FROM lobbies WHERE id = $1`, lobbyID).Scan(&dmID)
-	if err != nil || dmID != agentID {
-		w.WriteHeader(http.StatusForbidden)
-		json.NewEncoder(w).Encode(map[string]interface{}{
-			"error":   "not_gm",
-			"message": "You must be the GM of this campaign to use Sacred Weapon",
 		})
 		return
 	}
@@ -494,7 +472,9 @@ func handleGMCuttingWords(w http.ResponseWriter, r *http.Request) {
 		EnemyRoll int    `json:"enemy_roll"`
 		RollType  string `json:"roll_type"` // "attack", "ability", or "damage"
 	}
-	if _, ok := gmReadAs(w, r, agentID, &req, campaignFromTarget()); !ok {
+	// the character's campaign, which must be one the GM runs (gm_campaign_2024.go)
+	lobbyID, ok := gmReadAs(w, r, agentID, &req, campaignFromTarget(&req.BardID))
+	if !ok {
 		return
 	}
 
@@ -517,32 +497,6 @@ func handleGMCuttingWords(w http.ResponseWriter, r *http.Request) {
 		json.NewEncoder(w).Encode(map[string]interface{}{
 			"error":   "invalid_request",
 			"message": "roll_type must be 'attack', 'ability', or 'damage'",
-		})
-		return
-	}
-
-	// Verify agent is DM of the bard's campaign
-	var lobbyID, dmID int
-	err = db.QueryRow(`
-		SELECT c.lobby_id, l.dm_id FROM characters c
-		JOIN lobbies l ON c.lobby_id = l.id
-		WHERE c.id = $1
-	`, req.BardID).Scan(&lobbyID, &dmID)
-
-	if err != nil {
-		w.WriteHeader(http.StatusBadRequest)
-		json.NewEncoder(w).Encode(map[string]interface{}{
-			"error":   "character_not_found",
-			"message": fmt.Sprintf("Character %d not found", req.BardID),
-		})
-		return
-	}
-
-	if dmID != agentID {
-		w.WriteHeader(http.StatusForbidden)
-		json.NewEncoder(w).Encode(map[string]interface{}{
-			"error":   "not_gm",
-			"message": "You are not the GM of this character's campaign",
 		})
 		return
 	}
@@ -678,7 +632,9 @@ func handleGMDarkOnesLuck(w http.ResponseWriter, r *http.Request) {
 		OriginalRoll int    `json:"original_roll"`
 		RollType     string `json:"roll_type"` // "ability" or "saving"
 	}
-	if _, ok := gmReadAs(w, r, agentID, &req, campaignFromTarget()); !ok {
+	// the character's campaign, which must be one the GM runs (gm_campaign_2024.go)
+	lobbyID, ok := gmReadAs(w, r, agentID, &req, campaignFromTarget(&req.CharacterID))
+	if !ok {
 		return
 	}
 
@@ -701,32 +657,6 @@ func handleGMDarkOnesLuck(w http.ResponseWriter, r *http.Request) {
 		json.NewEncoder(w).Encode(map[string]interface{}{
 			"error":   "invalid_request",
 			"message": "roll_type must be 'ability' or 'saving'",
-		})
-		return
-	}
-
-	// Verify agent is DM of the character's campaign
-	var lobbyID, dmID int
-	err = db.QueryRow(`
-		SELECT c.lobby_id, l.dm_id FROM characters c
-		JOIN lobbies l ON c.lobby_id = l.id
-		WHERE c.id = $1
-	`, req.CharacterID).Scan(&lobbyID, &dmID)
-
-	if err != nil {
-		w.WriteHeader(http.StatusBadRequest)
-		json.NewEncoder(w).Encode(map[string]interface{}{
-			"error":   "character_not_found",
-			"message": fmt.Sprintf("Character %d not found", req.CharacterID),
-		})
-		return
-	}
-
-	if dmID != agentID {
-		w.WriteHeader(http.StatusForbidden)
-		json.NewEncoder(w).Encode(map[string]interface{}{
-			"error":   "not_gm",
-			"message": "You are not the GM of this character's campaign",
 		})
 		return
 	}
@@ -869,7 +799,9 @@ func handleGMIndomitable(w http.ResponseWriter, r *http.Request) {
 		Ability     string `json:"ability"` // str, dex, con, int, wis, cha
 		DC          int    `json:"dc"`
 	}
-	if _, ok := gmReadAs(w, r, agentID, &req, campaignFromTarget()); !ok {
+	// the character's campaign, which must be one the GM runs (gm_campaign_2024.go)
+	lobbyID, ok := gmReadAs(w, r, agentID, &req, campaignFromTarget(&req.CharacterID))
+	if !ok {
 		return
 	}
 
@@ -894,32 +826,6 @@ func handleGMIndomitable(w http.ResponseWriter, r *http.Request) {
 
 	if req.DC == 0 {
 		req.DC = 10 // Default DC
-	}
-
-	// Verify agent is DM of the character's campaign
-	var lobbyID, dmID int
-	err = db.QueryRow(`
-		SELECT c.lobby_id, l.dm_id FROM characters c
-		JOIN lobbies l ON c.lobby_id = l.id
-		WHERE c.id = $1
-	`, req.CharacterID).Scan(&lobbyID, &dmID)
-
-	if err != nil {
-		w.WriteHeader(http.StatusBadRequest)
-		json.NewEncoder(w).Encode(map[string]interface{}{
-			"error":   "character_not_found",
-			"message": fmt.Sprintf("Character %d not found", req.CharacterID),
-		})
-		return
-	}
-
-	if dmID != agentID {
-		w.WriteHeader(http.StatusForbidden)
-		json.NewEncoder(w).Encode(map[string]interface{}{
-			"error":   "not_gm",
-			"message": "You are not the GM of this character's campaign",
-		})
-		return
 	}
 
 	// Get character info
@@ -1134,7 +1040,9 @@ func handleGMStrokeOfLuck(w http.ResponseWriter, r *http.Request) {
 		CharacterID int    `json:"character_id"`
 		Mode        string `json:"mode"` // "attack" or "ability_check"
 	}
-	if _, ok := gmReadAs(w, r, agentID, &req, campaignFromTarget()); !ok {
+	// the character's campaign, which must be one the GM runs (gm_campaign_2024.go)
+	lobbyID, ok := gmReadAs(w, r, agentID, &req, campaignFromTarget(&req.CharacterID))
+	if !ok {
 		return
 	}
 
@@ -1161,32 +1069,6 @@ func handleGMStrokeOfLuck(w http.ResponseWriter, r *http.Request) {
 		json.NewEncoder(w).Encode(map[string]interface{}{
 			"error":   "invalid_request",
 			"message": "mode must be 'attack', 'ability_check' or 'saving_throw' (a failed D20 Test becomes a 20)",
-		})
-		return
-	}
-
-	// Verify agent is DM of the character's campaign
-	var lobbyID, dmID int
-	err = db.QueryRow(`
-		SELECT c.lobby_id, l.dm_id FROM characters c
-		JOIN lobbies l ON c.lobby_id = l.id
-		WHERE c.id = $1
-	`, req.CharacterID).Scan(&lobbyID, &dmID)
-
-	if err != nil {
-		w.WriteHeader(http.StatusBadRequest)
-		json.NewEncoder(w).Encode(map[string]interface{}{
-			"error":   "character_not_found",
-			"message": fmt.Sprintf("Character %d not found", req.CharacterID),
-		})
-		return
-	}
-
-	if dmID != agentID {
-		w.WriteHeader(http.StatusForbidden)
-		json.NewEncoder(w).Encode(map[string]interface{}{
-			"error":   "not_gm",
-			"message": "You are not the GM of this character's campaign",
 		})
 		return
 	}

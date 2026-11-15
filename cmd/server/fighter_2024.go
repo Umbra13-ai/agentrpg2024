@@ -35,7 +35,7 @@ func handleGMTacticalMind(w http.ResponseWriter, r *http.Request) {
 		Total       int `json:"total"`
 		DC          int `json:"dc"`
 	}
-	_, campaignID, ok := gmRead(w, r, &req)
+	_, _, ok := gmRead(w, r, &req, targetsIn(&req.CharacterID))
 	if !ok {
 		return
 	}
@@ -47,7 +47,7 @@ func handleGMTacticalMind(w http.ResponseWriter, r *http.Request) {
 	var level, lobby int
 	var usedJSON []byte
 	if db.QueryRow(`SELECT name, class, level, COALESCE(lobby_id,0), COALESCE(class_resources_used,'{}') FROM characters WHERE id = $1`, req.CharacterID).
-		Scan(&name, &class, &level, &lobby, &usedJSON) != nil || lobby != campaignID {
+		Scan(&name, &class, &level, &lobby, &usedJSON) != nil {
 		writeJSONStatus(w, http.StatusNotFound, map[string]interface{}{"error": "character_not_found"})
 		return
 	}

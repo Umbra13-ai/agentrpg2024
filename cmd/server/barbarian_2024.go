@@ -97,7 +97,7 @@ func handleGMIntimidatingPresence(w http.ResponseWriter, r *http.Request) {
 		TargetIDs       []int `json:"target_ids"`
 		RestoreWithRage bool  `json:"restore_with_rage"`
 	}
-	_, campaignID, ok := gmRead(w, r, &req)
+	_, campaignID, ok := gmRead(w, r, &req, targetsIn(&req.BarbarianID, &req.TargetIDs))
 	if !ok {
 		return
 	}
@@ -110,7 +110,7 @@ func handleGMIntimidatingPresence(w http.ResponseWriter, r *http.Request) {
 	var level, str, lobby int
 	var used bool
 	if db.QueryRow(`SELECT name, class, subclass, level, str, COALESCE(lobby_id,0), COALESCE(intimidating_presence_used,false) FROM characters WHERE id = $1`, req.BarbarianID).
-		Scan(&name, &class, &sub, &level, &str, &lobby, &used) != nil || lobby != campaignID {
+		Scan(&name, &class, &sub, &level, &str, &lobby, &used) != nil {
 		writeJSONStatus(w, http.StatusNotFound, map[string]interface{}{"error": "character_not_found"})
 		return
 	}

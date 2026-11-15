@@ -42,7 +42,7 @@ func handleGMOpportunityAttack(w http.ResponseWriter, r *http.Request) {
 		MonsterKey        string `json:"monster_key"`         // SRD slug for monster stats
 		Weapon            string `json:"weapon"`              // Optional: specific weapon to use
 	}
-	campaignID, ok := gmReadAs(w, r, agentID, &req)
+	campaignID, ok := gmReadAs(w, r, agentID, &req, targetsIn(&req.AttackerID, &req.TargetID))
 	if !ok {
 		return
 	}
@@ -69,12 +69,6 @@ func handleGMOpportunityAttack(w http.ResponseWriter, r *http.Request) {
 	if err != nil {
 		w.WriteHeader(http.StatusBadRequest)
 		json.NewEncoder(w).Encode(map[string]interface{}{"error": "target_not_found"})
-		return
-	}
-
-	if targetLobbyID != campaignID {
-		w.WriteHeader(http.StatusBadRequest)
-		json.NewEncoder(w).Encode(map[string]interface{}{"error": "target_not_in_campaign"})
 		return
 	}
 
@@ -172,12 +166,6 @@ func handleGMOpportunityAttack(w http.ResponseWriter, r *http.Request) {
 		if err != nil {
 			w.WriteHeader(http.StatusBadRequest)
 			json.NewEncoder(w).Encode(map[string]interface{}{"error": "attacker_not_found"})
-			return
-		}
-
-		if attackerLobbyID != campaignID {
-			w.WriteHeader(http.StatusBadRequest)
-			json.NewEncoder(w).Encode(map[string]interface{}{"error": "attacker_not_in_campaign"})
 			return
 		}
 
@@ -314,7 +302,7 @@ func handleGMRetaliation(w http.ResponseWriter, r *http.Request) {
 		AttackerMonsterKey string `json:"attacker_monster_key"` // Optional: SRD slug for AC lookup
 		Weapon             string `json:"weapon"`               // Optional: specific weapon to use
 	}
-	campaignID, ok := gmReadAs(w, r, agentID, &req)
+	campaignID, ok := gmReadAs(w, r, agentID, &req, targetsIn(&req.CharacterID))
 	if !ok {
 		return
 	}
@@ -353,12 +341,6 @@ func handleGMRetaliation(w http.ResponseWriter, r *http.Request) {
 	if err != nil {
 		w.WriteHeader(http.StatusBadRequest)
 		json.NewEncoder(w).Encode(map[string]interface{}{"error": "character_not_found"})
-		return
-	}
-
-	if charLobbyID != campaignID {
-		w.WriteHeader(http.StatusBadRequest)
-		json.NewEncoder(w).Encode(map[string]interface{}{"error": "character_not_in_campaign"})
 		return
 	}
 
@@ -473,7 +455,7 @@ func handleGMUncannyDodge(w http.ResponseWriter, r *http.Request) {
 		Damage       int    `json:"damage"`        // The original damage amount
 		AttackerName string `json:"attacker_name"` // Name of the attacker (for logging)
 	}
-	campaignID, ok := gmReadAs(w, r, agentID, &req)
+	campaignID, ok := gmReadAs(w, r, agentID, &req, targetsIn(&req.CharacterID))
 	if !ok {
 		return
 	}
@@ -510,12 +492,6 @@ func handleGMUncannyDodge(w http.ResponseWriter, r *http.Request) {
 	if err != nil {
 		w.WriteHeader(http.StatusBadRequest)
 		json.NewEncoder(w).Encode(map[string]interface{}{"error": "character_not_found"})
-		return
-	}
-
-	if charLobbyID != campaignID {
-		w.WriteHeader(http.StatusBadRequest)
-		json.NewEncoder(w).Encode(map[string]interface{}{"error": "character_not_in_campaign"})
 		return
 	}
 
@@ -610,24 +586,13 @@ func handleGMTriggerReadied(w http.ResponseWriter, r *http.Request) {
 	var req struct {
 		CharacterID int `json:"character_id"`
 	}
-	if _, ok := gmReadAs(w, r, agentID, &req, optionalBody(), campaignFromTarget()); !ok {
+	// the character's campaign, which must be an active one the GM runs (gm_campaign_2024.go)
+	lobbyID, ok := gmReadAs(w, r, agentID, &req, optionalBody(), campaignFromTarget(&req.CharacterID))
+	if !ok {
 		return
 	}
-
-	// Verify agent is DM of the campaign containing this character
-	var lobbyID int
-	err = db.QueryRow(`
-		SELECT c.lobby_id FROM characters c
-		JOIN lobbies l ON c.lobby_id = l.id
-		WHERE c.id = $1 AND l.dm_id = $2 AND l.status = 'active'
-	`, req.CharacterID, agentID).Scan(&lobbyID)
-
-	if err != nil {
-		w.WriteHeader(http.StatusForbidden)
-		json.NewEncoder(w).Encode(map[string]interface{}{
-			"error":   "not_gm_or_no_character",
-			"message": "Either you're not the DM of this campaign, or the character doesn't exist in an active campaign.",
-		})
+	if req.CharacterID == 0 {
+		writeJSONStatus(w, http.StatusBadRequest, map[string]interface{}{"error": "character_id_required", "message": "Send character_id: the character whose readied action triggers. Nothing was changed."})
 		return
 	}
 

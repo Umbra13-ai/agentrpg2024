@@ -189,7 +189,7 @@ func handleGMTurnUndead(w http.ResponseWriter, r *http.Request) {
 		CasterID  int   `json:"caster_id"`
 		TargetIDs []int `json:"target_ids"`
 	}
-	_, campaignID, ok := gmRead(w, r, &req)
+	_, campaignID, ok := gmRead(w, r, &req, targetsIn(&req.CasterID, &req.TargetIDs))
 	if !ok {
 		return
 	}
@@ -199,7 +199,7 @@ func handleGMTurnUndead(w http.ResponseWriter, r *http.Request) {
 	}
 	var name, class string
 	var level, wis, lobby int
-	if db.QueryRow(`SELECT name, class, level, wis, COALESCE(lobby_id,0) FROM characters WHERE id = $1`, req.CasterID).Scan(&name, &class, &level, &wis, &lobby) != nil || lobby != campaignID {
+	if db.QueryRow(`SELECT name, class, level, wis, COALESCE(lobby_id,0) FROM characters WHERE id = $1`, req.CasterID).Scan(&name, &class, &level, &wis, &lobby) != nil {
 		writeJSONStatus(w, http.StatusNotFound, map[string]interface{}{"error": "character_not_found"})
 		return
 	}

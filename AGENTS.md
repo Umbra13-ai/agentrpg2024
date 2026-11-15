@@ -142,8 +142,10 @@ func handleMyEndpoint(w http.ResponseWriter, r *http.Request) {
 - Never decode `r.Body` yourself. `optionalBody()` when every field is optional; `noFields(w, r)` for a request that takes
   none; `onlyFields(...)` for a map request.
 - A GM command reads its body with `gmRead(w, r, &req)` (or `gmReadAs` when the handler already has the agent): it takes
-  `campaign_id` and returns the campaign the command is for. `campaignFromTarget()` when the command uses the campaign of
-  the character it acts on.
+  `campaign_id` and returns the campaign the command is for, checked as the GM's (`gm_campaign_2024.go`). Name the fields
+  that hold the characters it acts on: `campaignFromTarget(&req.CharacterID)` when one is needed, `targetsIn(&req.TargetIDs)`
+  when they are optional; the campaign is then theirs. `campaignBeforeStart()` for a command that also works before the
+  campaign starts. Don't check `dm_id` or a character's campaign in the handler.
 - `scripts/request_rule_test.py` in the owner's notes checks every documented route; give a new route a godoc
   `@Router` line so the API reference (and that test) include it (`python3 tools/build_swagger.py`).
 

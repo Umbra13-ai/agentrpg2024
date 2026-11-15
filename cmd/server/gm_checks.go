@@ -50,7 +50,7 @@ func handleGMSkillCheck(w http.ResponseWriter, r *http.Request) {
 		UsePeerlessSkill  bool   `json:"use_peerless_skill"`  // Lore Bard 14+ adds Bardic Inspiration die to own check
 		HalfSpeedMovement bool   `json:"half_speed_movement"` // For Supreme Sneak (Thief 9+) - moved no more than half speed this turn
 	}
-	campaignID, ok := gmReadAs(w, r, agentID, &req)
+	campaignID, ok := gmReadAs(w, r, agentID, &req, targetsIn(&req.CharacterID))
 	if !ok {
 		return
 	}
@@ -91,11 +91,6 @@ func handleGMSkillCheck(w http.ResponseWriter, r *http.Request) {
 	}
 
 	// Verify character is in this campaign
-	if charLobbyID != campaignID {
-		w.WriteHeader(http.StatusBadRequest)
-		json.NewEncoder(w).Encode(map[string]interface{}{"error": "character_not_in_campaign"})
-		return
-	}
 
 	// Check for auto-fail conditions (deafened/blinded)
 	skillUsedForCheck := strings.ToLower(strings.ReplaceAll(req.Skill, " ", "_"))
@@ -699,7 +694,7 @@ func handleGMToolCheck(w http.ResponseWriter, r *http.Request) {
 		UsePeerlessSkill bool   `json:"use_peerless_skill"` // Lore Bard 14+ adds Bardic Inspiration die to own check
 		Utilize          string `json:"utilize"`            // an SRD Utilize action of the tool, e.g. "pick a lock": sets the DC (and the ability) when you leave them out
 	}
-	campaignID, ok := gmReadAs(w, r, agentID, &req)
+	campaignID, ok := gmReadAs(w, r, agentID, &req, targetsIn(&req.CharacterID))
 	if !ok {
 		return
 	}
@@ -761,11 +756,6 @@ func handleGMToolCheck(w http.ResponseWriter, r *http.Request) {
 	}
 
 	// Verify character is in this campaign
-	if charLobbyID != campaignID {
-		w.WriteHeader(http.StatusBadRequest)
-		json.NewEncoder(w).Encode(map[string]interface{}{"error": "character_not_in_campaign"})
-		return
-	}
 
 	// Tool proficiencies: "dice", "Dice Set" and "Gaming Set (Dice)" are the same tool (BUGS 45). Expertise is for skills (2024).
 	ownedTools := game.ParseProficiencyList(toolProfsRaw)
@@ -1222,7 +1212,7 @@ func handleGMSavingThrow(w http.ResponseWriter, r *http.Request) {
 		FromFiendOrUndead bool   `json:"from_fiend_or_undead"` // Holy Nimbus (advantage on saves vs fiend/undead spells)
 		ChooseToFail      bool   `json:"choose_to_fail"`       // the player doesn't resist: the save fails without a roll (SRD 5.2.1)
 	}
-	campaignID, ok := gmReadAs(w, r, agentID, &req)
+	campaignID, ok := gmReadAs(w, r, agentID, &req, targetsIn(&req.CharacterID))
 	if !ok {
 		return
 	}
@@ -1267,11 +1257,6 @@ func handleGMSavingThrow(w http.ResponseWriter, r *http.Request) {
 	}
 
 	// Verify character is in this campaign
-	if charLobbyID != campaignID {
-		w.WriteHeader(http.StatusBadRequest)
-		json.NewEncoder(w).Encode(map[string]interface{}{"error": "character_not_in_campaign"})
-		return
-	}
 
 	// Get class saving throw proficiencies
 	var classSaves string
@@ -1755,7 +1740,7 @@ func handleGMContestedCheck(w http.ResponseWriter, r *http.Request) {
 		DefenderDisadvantage  bool   `json:"defender_disadvantage"`
 		Description           string `json:"description"` // e.g., "grapple attempt", "shove"
 	}
-	campaignID, ok := gmReadAs(w, r, agentID, &req)
+	campaignID, ok := gmReadAs(w, r, agentID, &req, targetsIn(&req.InitiatorID, &req.DefenderID))
 	if !ok {
 		return
 	}
@@ -1783,14 +1768,14 @@ func handleGMContestedCheck(w http.ResponseWriter, r *http.Request) {
 	}
 
 	// Get both characters
-	initName, initStr, initDex, initCon, initInt, initWis, initCha, initLevel, initLobby, err := getCharStats(req.InitiatorID)
+	initName, initStr, initDex, initCon, initInt, initWis, initCha, initLevel, _, err := getCharStats(req.InitiatorID)
 	if err != nil {
 		w.WriteHeader(http.StatusBadRequest)
 		json.NewEncoder(w).Encode(map[string]interface{}{"error": "initiator_not_found"})
 		return
 	}
 
-	defName, defStr, defDex, defCon, defInt, defWis, defCha, defLevel, defLobby, err := getCharStats(req.DefenderID)
+	defName, defStr, defDex, defCon, defInt, defWis, defCha, defLevel, _, err := getCharStats(req.DefenderID)
 	if err != nil {
 		w.WriteHeader(http.StatusBadRequest)
 		json.NewEncoder(w).Encode(map[string]interface{}{"error": "defender_not_found"})
@@ -1798,11 +1783,6 @@ func handleGMContestedCheck(w http.ResponseWriter, r *http.Request) {
 	}
 
 	// Verify both are in this campaign
-	if initLobby != campaignID || defLobby != campaignID {
-		w.WriteHeader(http.StatusBadRequest)
-		json.NewEncoder(w).Encode(map[string]interface{}{"error": "characters_not_in_campaign"})
-		return
-	}
 
 	// Helper to calculate skill/ability modifier: a skill adds the Proficiency Bonus only when the character is proficient
 	// (Expertise doubles it, Jack of All Trades gives half), through checkBonus.

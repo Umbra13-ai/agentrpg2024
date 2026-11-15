@@ -37,9 +37,13 @@ func handleGMUpdateCharacter(w http.ResponseWriter, r *http.Request) {
 	}
 	if r.Method == "GET" {
 		id, _ := strconv.Atoi(r.URL.Query().Get("character_id"))
-		var lobby, dm int
-		if id == 0 || db.QueryRow(`SELECT COALESCE(c.lobby_id,0), COALESCE(l.dm_id,0) FROM characters c LEFT JOIN lobbies l ON l.id = c.lobby_id WHERE c.id = $1`, id).Scan(&lobby, &dm) != nil || dm != agentID {
-			writeJSONStatus(w, http.StatusForbidden, map[string]interface{}{"error": "not_gm", "message": "Send character_id of a character in a campaign you run."})
+		if id <= 0 {
+			writeJSONStatus(w, http.StatusBadRequest, map[string]interface{}{"error": "character_id_required", "message": "Send ?character_id= of a character in a campaign you run."})
+			return
+		}
+		want, _ := strconv.Atoi(r.URL.Query().Get("campaign_id"))
+		if _, status, code, msg := gmTargetCampaign(agentID, want, []int{id}, gmSpec([]bodyOpt{campaignBeforeStart()}).gmStatuses()); code != "" {
+			writeJSONStatus(w, status, map[string]interface{}{"error": code, "message": msg})
 			return
 		}
 		writeJSONStatus(w, 200, map[string]interface{}{"character_id": id, "fields": gmCharacterRecord(id), "fixed_fields": []string{"id", "agent_id", "lobby_id", "created_at"}})
@@ -64,31 +68,15 @@ func handleGMUpdateCharacter(w http.ResponseWriter, r *http.Request) {
 		Name        *string                    `json:"name"`
 		Set         map[string]json.RawMessage `json:"set"` // any field: {"gold": 500, "conditions": ["prone"]}
 	}
-	if _, ok := gmReadAs(w, r, agentID, &req, campaignFromTarget()); !ok {
+	// the characters' campaign, which must be one the GM runs (gm_campaign_2024.go)
+	_, ok := gmReadAs(w, r, agentID, &req, campaignFromTarget(&req.CharacterID), campaignBeforeStart())
+	if !ok {
 		return
 	}
 
 	if req.CharacterID == 0 {
 		w.WriteHeader(http.StatusBadRequest)
 		json.NewEncoder(w).Encode(map[string]interface{}{"error": "character_id required"})
-		return
-	}
-
-	// Get character and verify GM owns the campaign
-	var charLobbyID int
-	err = db.QueryRow(`SELECT lobby_id FROM characters WHERE id = $1`, req.CharacterID).Scan(&charLobbyID)
-	if err != nil {
-		w.WriteHeader(http.StatusBadRequest)
-		json.NewEncoder(w).Encode(map[string]interface{}{"error": "character_not_found"})
-		return
-	}
-
-	// Verify this agent is the DM
-	var dmID int
-	err = db.QueryRow(`SELECT dm_id FROM lobbies WHERE id = $1`, charLobbyID).Scan(&dmID)
-	if err != nil || dmID != agentID {
-		w.WriteHeader(http.StatusUnauthorized)
-		json.NewEncoder(w).Encode(map[string]interface{}{"error": "not_gm", "message": "You are not the GM of this campaign"})
 		return
 	}
 
@@ -271,7 +259,8 @@ func handleGMAwardXP(w http.ResponseWriter, r *http.Request) {
 		Reason       string `json:"reason"`
 		AutoLevel    *bool  `json:"auto_level"` // default true; false banks the XP and the player takes the level (POST /api/characters/{id}/level-up)
 	}
-	if _, ok := gmReadAs(w, r, agentID, &req, campaignFromTarget()); !ok {
+	// the characters' campaign, which must be one the GM runs (gm_campaign_2024.go)
+	if _, ok := gmReadAs(w, r, agentID, &req, campaignFromTarget(&req.CharacterIDs), campaignBeforeStart()); !ok {
 		return
 	}
 
@@ -282,34 +271,6 @@ func handleGMAwardXP(w http.ResponseWriter, r *http.Request) {
 			"message": "character_ids and positive xp required",
 		})
 		return
-	}
-
-	// Verify this agent is the GM of all these characters' campaigns
-	for _, charID := range req.CharacterIDs {
-		var dmID int
-		err = db.QueryRow(`
-			SELECT l.dm_id FROM characters c 
-			JOIN lobbies l ON c.lobby_id = l.id 
-			WHERE c.id = $1
-		`, charID).Scan(&dmID)
-
-		if err != nil {
-			w.WriteHeader(http.StatusBadRequest)
-			json.NewEncoder(w).Encode(map[string]interface{}{
-				"error":   "character_not_found",
-				"message": fmt.Sprintf("Character %d not found", charID),
-			})
-			return
-		}
-
-		if dmID != agentID {
-			w.WriteHeader(http.StatusForbidden)
-			json.NewEncoder(w).Encode(map[string]interface{}{
-				"error":   "not_gm",
-				"message": fmt.Sprintf("You are not the GM for character %d's campaign", charID),
-			})
-			return
-		}
 	}
 
 	// A campaign that levels by milestones doesn't use Experience Points (advancement_2024.go)
@@ -469,7 +430,8 @@ func handleGMGold(w http.ResponseWriter, r *http.Request) {
 		Currency     string `json:"currency"` // cp, sp, ep, gp (default), pp
 		Reason       string `json:"reason"`
 	}
-	if _, ok := gmReadAs(w, r, agentID, &req, campaignFromTarget()); !ok {
+	// the characters' campaign, which must be one the GM runs (gm_campaign_2024.go)
+	if _, ok := gmReadAs(w, r, agentID, &req, campaignFromTarget(&req.CharacterIDs, &req.CharacterID), campaignBeforeStart()); !ok {
 		return
 	}
 
@@ -495,34 +457,6 @@ func handleGMGold(w http.ResponseWriter, r *http.Request) {
 			"message": "currency must be one of: cp (copper), sp (silver), ep (electrum), gp (gold), pp (platinum)",
 		})
 		return
-	}
-
-	// Verify this agent is the GM of all these characters' campaigns
-	for _, charID := range req.CharacterIDs {
-		var dmID int
-		err = db.QueryRow(`
-			SELECT l.dm_id FROM characters c 
-			JOIN lobbies l ON c.lobby_id = l.id 
-			WHERE c.id = $1
-		`, charID).Scan(&dmID)
-
-		if err != nil {
-			w.WriteHeader(http.StatusBadRequest)
-			json.NewEncoder(w).Encode(map[string]interface{}{
-				"error":   "character_not_found",
-				"message": fmt.Sprintf("Character %d not found", charID),
-			})
-			return
-		}
-
-		if dmID != agentID {
-			w.WriteHeader(http.StatusForbidden)
-			json.NewEncoder(w).Encode(map[string]interface{}{
-				"error":   "not_gm",
-				"message": fmt.Sprintf("You are not the GM for character %d's campaign", charID),
-			})
-			return
-		}
 	}
 
 	// Adjust currency for each character
@@ -643,7 +577,9 @@ func handleGMGiveItem(w http.ResponseWriter, r *http.Request) {
 		Quantity    int                    `json:"quantity"`
 		Custom      map[string]interface{} `json:"custom"` // For non-standard items
 	}
-	if _, ok := gmReadAs(w, r, agentID, &req, campaignFromTarget()); !ok {
+	// the characters' campaign, which must be one the GM runs (gm_campaign_2024.go)
+	lobbyID, ok := gmReadAs(w, r, agentID, &req, campaignFromTarget(&req.CharacterID), campaignBeforeStart())
+	if !ok {
 		return
 	}
 
@@ -660,32 +596,8 @@ func handleGMGiveItem(w http.ResponseWriter, r *http.Request) {
 		req.Quantity = 1
 	}
 
-	// Verify this agent is the GM of this character's campaign
-	var dmID, lobbyID int
 	var charName string
-	err = db.QueryRow(`
-		SELECT l.dm_id, l.id, c.name FROM characters c 
-		JOIN lobbies l ON c.lobby_id = l.id 
-		WHERE c.id = $1
-	`, req.CharacterID).Scan(&dmID, &lobbyID, &charName)
-
-	if err != nil {
-		w.WriteHeader(http.StatusBadRequest)
-		json.NewEncoder(w).Encode(map[string]interface{}{
-			"error":   "character_not_found",
-			"message": fmt.Sprintf("Character %d not found", req.CharacterID),
-		})
-		return
-	}
-
-	if dmID != agentID {
-		w.WriteHeader(http.StatusForbidden)
-		json.NewEncoder(w).Encode(map[string]interface{}{
-			"error":   "not_gm",
-			"message": "You are not the GM for this character's campaign",
-		})
-		return
-	}
+	db.QueryRow(`SELECT name FROM characters WHERE id = $1`, req.CharacterID).Scan(&charName)
 
 	// Build the item to add: an SRD magic item gets its charges, a Spell Scroll its spell (magic_item_use_2024.go)
 	var itemToAdd map[string]interface{}
@@ -807,8 +719,8 @@ func handleGMRecoverAmmo(w http.ResponseWriter, r *http.Request) {
 		CharacterID int    `json:"character_id"`
 		AmmoType    string `json:"ammo_type"`
 	}
-	campaignID, ok := gmReadAs(w, r, agentID, &req)
-	if !ok {
+	// the characters' campaign, which must be one the GM runs (gm_campaign_2024.go)
+	if _, ok := gmReadAs(w, r, agentID, &req, campaignFromTarget(&req.CharacterID)); !ok {
 		return
 	}
 
@@ -823,24 +735,8 @@ func handleGMRecoverAmmo(w http.ResponseWriter, r *http.Request) {
 		req.AmmoType = "arrows"
 	}
 
-	// Verify character is in GM's campaign
 	var charName string
-	var charCampaignID int
-	err = db.QueryRow(`SELECT name, lobby_id FROM characters WHERE id = $1`, req.CharacterID).Scan(&charName, &charCampaignID)
-	if err != nil {
-		w.WriteHeader(http.StatusBadRequest)
-		json.NewEncoder(w).Encode(map[string]interface{}{"error": "character_not_found"})
-		return
-	}
-
-	if charCampaignID != campaignID {
-		w.WriteHeader(http.StatusForbidden)
-		json.NewEncoder(w).Encode(map[string]interface{}{
-			"error":   "not_your_campaign",
-			"message": "Character is not in your campaign",
-		})
-		return
-	}
+	db.QueryRow(`SELECT name FROM characters WHERE id = $1`, req.CharacterID).Scan(&charName)
 
 	// Recover ammo
 	recovered, err := recoverAmmo(req.CharacterID, req.AmmoType)
@@ -901,7 +797,8 @@ func handleGMInspiration(w http.ResponseWriter, r *http.Request) {
 		Grant       bool `json:"grant"`   // true to grant, false to revoke
 		GiveTo      int  `json:"give_to"` // the character already has it: it goes to this player character, who lacks it (SRD: otherwise it's lost)
 	}
-	campaignID, ok := gmReadAs(w, r, agentID, &req)
+	// the characters' campaign (give_to included), which must be one the GM runs (gm_campaign_2024.go)
+	campaignID, ok := gmReadAs(w, r, agentID, &req, campaignFromTarget(&req.CharacterID, &req.GiveTo))
 	if !ok {
 		return
 	}
@@ -914,36 +811,15 @@ func handleGMInspiration(w http.ResponseWriter, r *http.Request) {
 
 	// Get character and verify they're in this campaign
 	var charName string
-	var charLobbyID int
 	var hasInspiration bool
-	err = db.QueryRow(`
-		SELECT name, lobby_id, COALESCE(inspiration, false) 
-		FROM characters WHERE id = $1
-	`, req.CharacterID).Scan(&charName, &charLobbyID, &hasInspiration)
-
-	if err != nil {
-		w.WriteHeader(http.StatusBadRequest)
-		json.NewEncoder(w).Encode(map[string]interface{}{"error": "character_not_found"})
-		return
-	}
-
-	if charLobbyID != campaignID {
-		w.WriteHeader(http.StatusBadRequest)
-		json.NewEncoder(w).Encode(map[string]interface{}{"error": "character_not_in_campaign"})
-		return
-	}
+	db.QueryRow(`SELECT name, COALESCE(inspiration, false) FROM characters WHERE id = $1`, req.CharacterID).Scan(&charName, &hasInspiration)
 
 	// Gaining Heroic Inspiration while having it: it's lost unless given to a player character who lacks it (SRD 5.2.1)
 	if req.Grant && hasInspiration {
 		if req.GiveTo != 0 {
 			var otherName string
-			var otherLobby int
 			var otherHas bool
-			if db.QueryRow(`SELECT name, COALESCE(lobby_id,0), COALESCE(inspiration,false) FROM characters WHERE id = $1`, req.GiveTo).Scan(&otherName, &otherLobby, &otherHas) != nil || otherLobby != campaignID {
-				w.WriteHeader(http.StatusBadRequest)
-				json.NewEncoder(w).Encode(map[string]interface{}{"error": "give_to_not_in_campaign"})
-				return
-			}
+			db.QueryRow(`SELECT name, COALESCE(inspiration,false) FROM characters WHERE id = $1`, req.GiveTo).Scan(&otherName, &otherHas)
 			if otherHas {
 				w.WriteHeader(http.StatusConflict)
 				json.NewEncoder(w).Encode(map[string]interface{}{"success": false, "error": "already_has_inspiration", "message": fmt.Sprintf("%s already has Heroic Inspiration too; give it to someone who lacks it, or it's lost.", otherName)})

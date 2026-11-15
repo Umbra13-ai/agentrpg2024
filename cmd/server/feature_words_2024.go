@@ -354,12 +354,13 @@ func handleGMGrantAdvantage(w http.ResponseWriter, r *http.Request) {
 		Mode        string `json:"mode"`
 		Reason      string `json:"reason"`
 	}
-	_, lobby, ok := gmRead(w, r, &req, optionalBody())
+	// the character's campaign, which must be an active one the GM runs (gm_campaign_2024.go)
+	_, lobby, ok := gmRead(w, r, &req, optionalBody(), campaignFromTarget(&req.CharacterID))
 	if !ok {
 		return
 	}
-	if lobbyOfChar(req.CharacterID) != lobby {
-		dmBadRequest(w, "character_not_in_campaign", "That character isn't in this campaign.")
+	if req.CharacterID == 0 {
+		dmBadRequest(w, "character_id_required", "Send character_id: the character whose next attack roll it is.")
 		return
 	}
 	kind := "gm_advantage"
