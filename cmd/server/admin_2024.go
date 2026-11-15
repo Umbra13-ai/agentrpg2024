@@ -494,6 +494,8 @@ func adminSet(table, kind string, id int, set map[string]interface{}, note strin
 			switch k {
 			case "conditions":
 				syncRecordsFromList(id)
+			case "inventory", "attuned_items":
+				syncAttunement(id) // attunement only to items carried (inventory_2024.go)
 			case "lobby_id":
 				if n, err := strconv.Atoi(oldLobby); err == nil && n > 0 {
 					reconcileCampaignStatus(n)

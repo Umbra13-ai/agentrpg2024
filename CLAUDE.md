@@ -116,6 +116,24 @@ Add to the owner, never beside it. When you give another rule one owner, add it 
   `handleDamage`, `handleHeal` and `damageCharacter` are thin wrappers. Temporary Hit Points are granted by `grantTempHP`
   (`temp_hp_2024.go`). A new feature that stops a drop to 0 is one row in `dropRescues`. `TestNoOtherHitPointWriter` checks;
   suite: `hp_rule_test.py` (audit AUD-06).
+- **What a character has expended** (spell slots, Pact Magic slots, class resources and other counted uses in
+  `class_resources_used`, Indomitable): `cmd/server/resources_2024.go` is the only writer. `changeSpent` (or `changeSpentTx` in a
+  caller's transaction) locks the row, the change checks what is left on the locked counts and changes them, and they are written
+  in the same step; a refusal (`notEnough`, read with `refusedSpend` / `spendText`) changes nothing. Typed helpers: `spendUse`,
+  `regainUse`, `setUse`, `useOnce`, `countUse`, `clearUses`, `spendSlot`, `spent.spend` / `regain` /
+  `addSlot`, `spendSlotIn` / `regainSlotIn`, `restoreSpent` (rests); `useClassResource` is built on them. Work out the maximum
+  before the change (it reads other tables). A feature route's use and its Bonus Action (or action) are spent together with
+  `spendWithTurn`; what an action costs in a fight is `getActionResourceType` with `featureTurnCost` / `turnCost.spendIn`
+  (`actions.go`; Font of Magic: `fontOfMagicActions`). `TestNoOtherResourceWriter` checks (a reset to `'{}'` or 0 on a rest is
+  allowed); suite: `resources_rule_test.py` (audit AUD-24, B-4, E-13).
+- **A character's inventory and attunement:** `cmd/server/inventory_2024.go` is the only writer. `changeInventory(charID, change)`
+  locks the row, gives the change the inventory as it is now and the transaction (for the other columns of the same change: the
+  money of a purchase or sale, the ground of a drop), saves the result and, in the same transaction, ends the attunement to any
+  item no longer carried (dropped, taken away, used up, destroyed); what that attunement gave is undone right after
+  (`attunementEnded`). `editInventory`, `updateInventoryItem` and `mutateInventory` (an HTTP reply) are built on it; refusals are
+  `refuseInv` / `codeRefusal`. Attuning is `attuneItem` / `unattuneItem` (carried, a free slot, one locked step); an editor that
+  writes the inventory or the list calls `syncAttunement`. `TestNoOtherInventoryWriter` checks; suite: `resources_rule_test.py`
+  (audit AUD-24, B-4, E-4).
 - **Reading a request's body:** `readRequest` (`cmd/server/request_body_2024.go`) is the only reader. It needs one JSON
   object (an empty body only with `optionalBody()`), reads field names with `game.Key`, refuses an unknown field (also
   inside objects), a wrong type, malformed JSON and data after the object, takes an id that repeats the path's, and

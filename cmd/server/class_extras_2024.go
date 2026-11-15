@@ -161,39 +161,36 @@ func naturalRecovery(charID int, description string) string {
 	if class != "druid" || sub != "land" || level < 6 {
 		return "Natural Recovery needs a Druid of the Circle of the Land, level 6 or higher."
 	}
-	used := classResourcesUsed(charID)
-	if used["natural_recovery_slots"] > 0 {
-		return "You already recovered spell slots with Natural Recovery; finish a Long Rest."
-	}
-	var slotsJSON []byte
-	db.QueryRow(`SELECT COALESCE(spell_slots_used,'{}') FROM characters WHERE id = $1`, charID).Scan(&slotsJSON)
-	slotsUsed := map[string]int{}
-	json.Unmarshal(slotsJSON, &slotsUsed)
 	budget := (level + 1) / 2
-	total := 0
 	var got []string
-	for _, n := range reNumbers.FindAllString(description, -1) {
-		lv, _ := strconv.Atoi(n)
-		if lv < 1 || lv > 5 {
-			return "Choose expended spell slots of level 1 to 5, for example: natural_recovery 3 1 1."
+	// the check and the recovery on the locked counts (resources_2024.go)
+	if _, _, err := changeSpent(charID, func(sp *spent) error {
+		if sp.Uses["natural_recovery_slots"] > 0 {
+			return &notEnough{"You already recovered spell slots with Natural Recovery; finish a Long Rest.", 0}
 		}
-		if slotsUsed[n] <= 0 {
-			return fmt.Sprintf("You have no expended level %d spell slot.", lv)
+		total := 0
+		for _, n := range reNumbers.FindAllString(description, -1) {
+			lv, _ := strconv.Atoi(n)
+			if lv < 1 || lv > 5 {
+				return &notEnough{"Choose expended spell slots of level 1 to 5, for example: natural_recovery 3 1 1.", 0}
+			}
+			if !regainSlotIn(sp.Slots, lv) {
+				return &notEnough{fmt.Sprintf("You have no expended level %d spell slot.", lv), 0}
+			}
+			total += lv
+			if total > budget {
+				return &notEnough{fmt.Sprintf("The slots can have a combined level of %d or less.", budget), 0}
+			}
+			got = append(got, "level "+n)
 		}
-		total += lv
-		if total > budget {
-			return fmt.Sprintf("The slots can have a combined level of %d or less.", budget)
+		if len(got) == 0 {
+			return &notEnough{fmt.Sprintf("Say which expended slots to recover (combined level up to %d), for example: natural_recovery 2 1.", budget), 0}
 		}
-		slotsUsed[n]--
-		got = append(got, "level "+n)
+		sp.Uses["natural_recovery_slots"] = 1
+		return nil
+	}); err != nil {
+		return spendText(err, "Natural Recovery")
 	}
-	if len(got) == 0 {
-		return fmt.Sprintf("Say which expended slots to recover (combined level up to %d), for example: natural_recovery 2 1.", budget)
-	}
-	used["natural_recovery_slots"] = 1
-	writeUsed(charID, used)
-	b, _ := json.Marshal(slotsUsed)
-	db.Exec(`UPDATE characters SET spell_slots_used = $1 WHERE id = $2`, string(b), charID)
 	return "🌿 Natural Recovery: you recover spell slots (" + strings.Join(got, ", ") + ")."
 }
 
@@ -203,36 +200,32 @@ func natureMagician(charID int, description string) string {
 	if class != "druid" || level < 20 {
 		return "Nature Magician needs a Druid of level 20."
 	}
-	used := classResourcesUsed(charID)
-	if used["nature_magician"] > 0 {
-		return "You already converted Wild Shape uses; finish a Long Rest."
-	}
 	n := 1
 	if m := reNumbers.FindString(description); m != "" {
 		n, _ = strconv.Atoi(m)
 	}
 	max := game.ClassTableInt("druid", level, "Wild Shape")
-	if n < 1 || used["wild_shape"]+n > max {
-		return fmt.Sprintf("You have %d unexpended uses of Wild Shape.", max-used["wild_shape"])
-	}
 	slotLevel := 2 * n
-	if slotLevel > 9 {
-		return "A spell slot can be at most level 9."
+	// the check and the change on the locked counts (resources_2024.go)
+	if _, _, err := changeSpent(charID, func(sp *spent) error {
+		if sp.Uses["nature_magician"] > 0 {
+			return &notEnough{"You already converted Wild Shape uses; finish a Long Rest.", 0}
+		}
+		if n < 1 || sp.Uses["wild_shape"]+n > max {
+			return &notEnough{fmt.Sprintf("You have %d unexpended uses of Wild Shape.", max-sp.Uses["wild_shape"]), 0}
+		}
+		if slotLevel > 9 {
+			return &notEnough{"A spell slot can be at most level 9.", 0}
+		}
+		if !regainSlotIn(sp.Slots, slotLevel) {
+			return &notEnough{fmt.Sprintf("You have no expended level %d spell slot to regain.", slotLevel), 0}
+		}
+		sp.Uses["wild_shape"] += n
+		sp.Uses["nature_magician"] = 1
+		return nil
+	}); err != nil {
+		return spendText(err, "Nature Magician")
 	}
-	var slotsJSON []byte
-	db.QueryRow(`SELECT COALESCE(spell_slots_used,'{}') FROM characters WHERE id = $1`, charID).Scan(&slotsJSON)
-	slotsUsed := map[string]int{}
-	json.Unmarshal(slotsJSON, &slotsUsed)
-	key := strconv.Itoa(slotLevel)
-	if slotsUsed[key] <= 0 {
-		return fmt.Sprintf("You have no expended level %d spell slot to regain.", slotLevel)
-	}
-	slotsUsed[key]--
-	used["wild_shape"] += n
-	used["nature_magician"] = 1
-	writeUsed(charID, used)
-	b, _ := json.Marshal(slotsUsed)
-	db.Exec(`UPDATE characters SET spell_slots_used = $1 WHERE id = $2`, string(b), charID)
 	return fmt.Sprintf("🌿 Nature Magician: %d use(s) of Wild Shape become a level %d spell slot.", n, slotLevel)
 }
 
@@ -242,11 +235,13 @@ func evergreenWildShape(charID int) {
 	if class != "druid" || level < 20 {
 		return
 	}
-	used := classResourcesUsed(charID)
-	if used["wild_shape"] >= game.ClassTableInt("druid", level, "Wild Shape") && used["wild_shape"] > 0 {
-		used["wild_shape"]--
-		writeUsed(charID, used)
-	}
+	max := game.ClassTableInt("druid", level, "Wild Shape")
+	changeSpent(charID, func(sp *spent) error { // resources_2024.go
+		if sp.Uses["wild_shape"] >= max && sp.Uses["wild_shape"] > 0 {
+			sp.Uses["wild_shape"]--
+		}
+		return nil
+	})
 }
 
 // natureWardResists: Nature's Ward (Land, level 10) gives Resistance by land type.
@@ -501,30 +496,36 @@ func eldritchSmite(charID int, class string, level int, descLower string, crit b
 	if strings.ToLower(class) != "warlock" || !strings.Contains(descLower, "eldritch smite") || !hasInvocation(charID, "eldritch-smite") {
 		return 0, ""
 	}
-	if classResourcesUsed(charID)["eldritch_smite"] > 0 {
-		return 0, " [Eldritch Smite: already used this turn]"
-	}
 	slots := game.SpellSlots("warlock", level)
-	var usedRaw []byte
-	col := pactSlotColumn(charID) // F132
-	db.QueryRow(`SELECT COALESCE(`+col+`,'{}') FROM characters WHERE id = $1`, charID).Scan(&usedRaw)
-	spent := map[string]int{}
-	json.Unmarshal(usedRaw, &spent)
-	for lvl, n := range slots {
-		key := strconv.Itoa(lvl)
-		if spent[key] < n {
-			spent[key]++
-			b, _ := json.Marshal(spent)
-			db.Exec(`UPDATE characters SET `+col+` = $1 WHERE id = $2`, string(b), charID)
-			setUsedResource(charID, "eldritch_smite", 1)
-			slotLvl := lvl
-			notePendingSpend(charID, func(p *pendingSpend) { p.EldritchLevel = slotLvl }) // given back if the attack misses
-			dmg := game.RollDamage(fmt.Sprintf("%dd8", 1+lvl), crit)
-			addRider(charID, "force", dmg)
-			return dmg, fmt.Sprintf(" [Eldritch Smite +%d force, level %d slot; the target is Prone if Huge or smaller]", dmg, lvl)
+	inSlots := pactSlotColumn(charID) == "spell_slots_used" // F132
+	slotLvl := 0
+	// once per turn, and a Pact Magic slot: one locked step (resources_2024.go)
+	if _, _, err := changeSpent(charID, func(sp *spent) error {
+		if sp.Uses["eldritch_smite"] > 0 {
+			return &notEnough{" [Eldritch Smite: already used this turn]", 0}
 		}
+		counts := sp.Pact
+		if inSlots {
+			counts = sp.Slots
+		}
+		for lvl, n := range slots {
+			if spendSlotIn(counts, lvl, n, "") == nil {
+				slotLvl = lvl
+				sp.Uses["eldritch_smite"] = 1
+				return nil
+			}
+		}
+		return &notEnough{" [Eldritch Smite: no Pact Magic slot left]", 0}
+	}); err != nil {
+		if r, ok := refusedSpend(err); ok {
+			return 0, r.Msg
+		}
+		return 0, " [Eldritch Smite: " + spendText(err, "Eldritch Smite") + "]"
 	}
-	return 0, " [Eldritch Smite: no Pact Magic slot left]"
+	notePendingSpend(charID, func(p *pendingSpend) { p.EldritchLevel = slotLvl }) // given back if the attack misses
+	dmg := game.RollDamage(fmt.Sprintf("%dd8", 1+slotLvl), crit)
+	addRider(charID, "force", dmg)
+	return dmg, fmt.Sprintf(" [Eldritch Smite +%d force, level %d slot; the target is Prone if Huge or smaller]", dmg, slotLvl)
 }
 
 // saveProficiency says whether a character is proficient in a saving throw ("str" ... "cha") and, when a class feature gives

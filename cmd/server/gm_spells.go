@@ -110,25 +110,17 @@ func handleGMAoECast(w http.ResponseWriter, r *http.Request) {
 		}
 
 		if totalSlots, ok := slots[slotLevel]; ok && totalSlots > 0 {
-			var usedJSON []byte
-			db.QueryRow("SELECT COALESCE(spell_slots_used, '{}') FROM characters WHERE id = $1", req.CasterID).Scan(&usedJSON)
-			var used map[string]int
-			json.Unmarshal(usedJSON, &used)
-
-			usedKey := fmt.Sprintf("%d", slotLevel)
-			usedSlots := used[usedKey]
-			if usedSlots >= totalSlots {
-				w.WriteHeader(http.StatusBadRequest)
-				json.NewEncoder(w).Encode(map[string]interface{}{
-					"error":   "no_spell_slots",
-					"message": fmt.Sprintf("No level %d spell slots remaining", slotLevel),
-				})
+			// the guarded spend (resources_2024.go)
+			if _, _, err := changeSpent(req.CasterID, func(s *spent) error {
+				return spendSlotIn(s.Slots, slotLevel, totalSlots, fmt.Sprintf("No level %d spell slots remaining", slotLevel))
+			}); err != nil {
+				if r, refused := refusedSpend(err); refused {
+					writeJSONStatus(w, http.StatusBadRequest, map[string]interface{}{"error": "no_spell_slots", "message": r.Msg})
+					return
+				}
+				answerDBFailure(w, err, "the caster")
 				return
 			}
-
-			used[usedKey] = usedSlots + 1
-			updatedJSON, _ := json.Marshal(used)
-			db.Exec("UPDATE characters SET spell_slots_used = $1 WHERE id = $2", updatedJSON, req.CasterID)
 		}
 	}
 
@@ -714,10 +706,17 @@ func handleGMDispelMagic(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 
-	// Use the spell slot
-	used[usedKey] = usedSlots + 1
-	updatedJSON, _ := json.Marshal(used)
-	db.Exec("UPDATE characters SET spell_slots_used = $1 WHERE id = $2", updatedJSON, req.CasterID)
+	// Use the spell slot: the guarded spend (resources_2024.go)
+	if _, _, err := changeSpent(req.CasterID, func(s *spent) error {
+		return spendSlotIn(s.Slots, req.SlotLevel, totalSlots, fmt.Sprintf("%s has no level %d spell slots remaining!", casterName, req.SlotLevel))
+	}); err != nil {
+		if r, refused := refusedSpend(err); refused {
+			writeJSONStatus(w, http.StatusBadRequest, map[string]interface{}{"error": "no_spell_slots", "message": r.Msg})
+			return
+		}
+		answerDBFailure(w, err, "the caster")
+		return
+	}
 
 	// Determine success
 	success := false

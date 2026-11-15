@@ -380,13 +380,7 @@ func peerlessAim(charID int) bool {
 	if !hasSpecificFeat(charID, "boon_of_combat_prowess") {
 		return false
 	}
-	used := classResourcesUsed(charID)
-	if used["peerless_aim"] > 0 {
-		return false
-	}
-	used["peerless_aim"] = 1
-	writeUsed(charID, used)
-	return true
+	return useOnce(charID, "peerless_aim", "used") == nil // resources_2024.go
 }
 
 // peerlessWillHit: a natural 1 against a monster that Peerless Aim will turn into a hit (it is checked, not spent, here; attack_target
@@ -453,12 +447,9 @@ func improveFate(charID int) string {
 	if !hasSpecificFeat(charID, "boon_of_fate") {
 		return "Improve Fate needs the Boon of Fate."
 	}
-	used := classResourcesUsed(charID)
-	if used["improve_fate"] > 0 {
-		return "You already used Improve Fate; it returns when you roll Initiative or finish a Short or Long Rest."
+	if err := useOnce(charID, "improve_fate", "You already used Improve Fate; it returns when you roll Initiative or finish a Short or Long Rest."); err != nil {
+		return spendText(err, "Improve Fate")
 	}
-	used["improve_fate"] = 1
-	writeUsed(charID, used)
 	a, b := game.RollDie(4), game.RollDie(4)
 	return fmt.Sprintf("🎲 Improve Fate: 2d4 = %d + %d = %d. Add it to, or subtract it from, the d20 roll of the creature within 60 feet (the GM applies it to the roll).", a, b, a+b)
 }
@@ -480,21 +471,6 @@ func blinkSteps(charID int, description string) string {
 		return "Blink Steps needs the Boon of Dimensional Travel."
 	}
 	return "✨ Blink Steps: you teleport up to 30 feet to an unoccupied space you can see. Say where in the description; the GM moves you."
-}
-
-// clearUsedKeys gives back class resources kept in class_resources_used.
-func clearUsedKeys(charID int, keys ...string) {
-	used := classResourcesUsed(charID)
-	changed := false
-	for _, k := range keys {
-		if _, ok := used[k]; ok {
-			delete(used, k)
-			changed = true
-		}
-	}
-	if changed {
-		writeUsed(charID, used)
-	}
 }
 
 // featPrereqText turns a prerequisite code into words.

@@ -364,16 +364,12 @@ func getCurrentClassResources(charID int) map[string]int {
 	return current
 }
 
-// useClassResource spends a resource and returns success/error
+// useClassResource spends amount of a class resource through the owner of expended uses (resources_2024.go): the check and the
+// spend are one locked step. It returns success, the refusal and what is left.
 func useClassResource(charID int, resourceKey string, amount int) (bool, string, int) {
 	var class string
 	var level, cha int
-	var usedJSON []byte
-
-	err := db.QueryRow(`
-		SELECT class, level, cha, COALESCE(class_resources_used, '{}')
-		FROM characters WHERE id = $1
-	`, charID).Scan(&class, &level, &cha, &usedJSON)
+	err := db.QueryRow(`SELECT class, level, cha FROM characters WHERE id = $1`, charID).Scan(&class, &level, &cha)
 	if err != nil {
 		if dbFailed(err) {
 			log.Printf("database error reading character %d: %v", charID, err)
@@ -381,50 +377,46 @@ func useClassResource(charID int, resourceKey string, amount int) (bool, string,
 		}
 		return false, "Character not found", 0
 	}
-
-	used := make(map[string]int)
-	json.Unmarshal(usedJSON, &used)
-
-	chaMod := game.Modifier(cha)
-	max := classResourceMax(charID, class, level, resourceKey, chaMod)
-
+	max := classResourceMax(charID, class, level, resourceKey, game.Modifier(cha))
 	if max == 0 {
 		return false, fmt.Sprintf("Class %s does not have resource '%s'", class, resourceKey), 0
 	}
-
-	current := max - used[resourceKey]
-	if current < amount {
-		return false, fmt.Sprintf("Not enough %s (have %d, need %d)", resourceKey, current, amount), current
+	left, err := spendUse(charID, resourceKey, amount, max)
+	if err != nil {
+		if r, ok := refusedSpend(err); ok {
+			return false, r.Msg, r.Left
+		}
+		return false, spendText(err, resourceKey), 0
 	}
-
-	// Spend the resource
-	used[resourceKey] += amount
-	newUsedJSON, _ := json.Marshal(used)
-	db.Exec(`UPDATE characters SET class_resources_used = $1 WHERE id = $2`, newUsedJSON, charID)
-
-	return true, "", current - amount
+	return true, "", left
 }
 
-// recoverClassResources recovers resources on rest
+// recoverClassResources gives back the class resources a rest restores, in one locked step (resources_2024.go). On a Long Rest
+// the slots come back too.
 func recoverClassResources(charID int, isLongRest bool) map[string]int {
 	var class string
-	var level, cha int
-	var usedJSON []byte
-
-	err := db.QueryRow(`
-		SELECT class, level, cha, COALESCE(class_resources_used, '{}')
-		FROM characters WHERE id = $1
-	`, charID).Scan(&class, &level, &cha, &usedJSON)
+	var level int
+	if db.QueryRow(`SELECT class, level FROM characters WHERE id = $1`, charID).Scan(&class, &level) != nil {
+		return nil
+	}
+	resources := characterResourceDefs(charID, class)
+	tx, err := db.Begin()
 	if err != nil {
 		return nil
 	}
+	defer tx.Rollback()
+	recovered, err := restoreSpent(tx, charID, isLongRest, func(used map[string]int) map[string]int {
+		return restRecovery(resources, used, level, isLongRest)
+	})
+	if err != nil || tx.Commit() != nil {
+		return nil
+	}
+	return recovered
+}
 
-	used := make(map[string]int)
-	json.Unmarshal(usedJSON, &used)
-
+// restRecovery is what a rest gives back of each resource (used is changed to match).
+func restRecovery(resources []game.ClassResource, used map[string]int, level int, isLongRest bool) map[string]int {
 	recovered := make(map[string]int)
-	resources := characterResourceDefs(charID, class)
-
 	for _, res := range resources {
 		// Check if this resource recovers on this type of rest
 		if (isLongRest && res.RecoverLong) || (!isLongRest && res.RecoverShort) {
@@ -443,10 +435,6 @@ func recoverClassResources(charID int, isLongRest bool) map[string]int {
 			}
 		}
 	}
-
-	newUsedJSON, _ := json.Marshal(used)
-	db.Exec(`UPDATE characters SET class_resources_used = $1 WHERE id = $2`, newUsedJSON, charID)
-
 	return recovered
 }
 

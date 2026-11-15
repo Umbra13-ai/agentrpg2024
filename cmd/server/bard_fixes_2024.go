@@ -7,7 +7,6 @@ package main
 //	                     (50 in its existence); "convert level N" turns stored energy into a spell slot of level 1-5 (F131)
 
 import (
-	"encoding/json"
 	"fmt"
 	"regexp"
 	"strconv"
@@ -50,13 +49,9 @@ func rodOfAbsorption(charID int, it invItem, description string) string {
 		if stored < n {
 			return fmt.Sprintf("The rod holds only %d levels of energy. Nothing was spent.", stored)
 		}
-		var raw []byte
-		db.QueryRow(`SELECT COALESCE(spell_slots_used,'{}') FROM characters WHERE id = $1`, charID).Scan(&raw)
-		used := map[string]int{}
-		json.Unmarshal(raw, &used)
-		used[strconv.Itoa(n)]--
-		b, _ := json.Marshal(used)
-		db.Exec(`UPDATE characters SET spell_slots_used = $1 WHERE id = $2`, string(b), charID)
+		if _, _, err := changeSpent(charID, func(s *spent) error { s.addSlot(n); return nil }); err != nil { // resources_2024.go
+			return spendText(err, "a spell slot") + " Nothing was spent."
+		}
 		stored -= n
 		save()
 		return fmt.Sprintf("You draw %d levels of energy from the Rod of Absorption: you have a level %d spell slot to cast a spell you know or have prepared. %d levels stay stored.", n, n, stored)

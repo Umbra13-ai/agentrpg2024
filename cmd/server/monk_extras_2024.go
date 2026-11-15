@@ -185,7 +185,7 @@ func superiorDefense(charID int) string {
 		return "Cannot use Superior Defense: " + msg
 	}
 	addCharacterCondition(charID, "superior_defense")
-	setUsedResource(charID, "superior_defense_rounds", 10) // 1 minute
+	setUse(charID, "superior_defense_rounds", 10) // 1 minute
 	return fmt.Sprintf("🛡️ Superior Defense: 3 Focus Points spent (%d left); for 1 minute or until you are Incapacitated you have Resistance to all damage except Force damage.", left)
 }
 
@@ -194,13 +194,17 @@ func superiorDefenseTick(charID int) {
 	if !hasCondition(charID, "superior_defense") {
 		return
 	}
-	used := classResourcesUsed(charID)
-	used["superior_defense_rounds"]--
-	if used["superior_defense_rounds"] <= 0 || isIncapacitated(charID) {
-		delete(used, "superior_defense_rounds")
+	incapacitated, ended := isIncapacitated(charID), false
+	changeSpent(charID, func(s *spent) error { // resources_2024.go
+		s.Uses["superior_defense_rounds"]--
+		if ended = s.Uses["superior_defense_rounds"] <= 0 || incapacitated; ended {
+			delete(s.Uses, "superior_defense_rounds")
+		}
+		return nil
+	})
+	if ended {
 		removeCondition(charID, "superior_defense")
 	}
-	writeUsed(charID, used)
 }
 
 // quiveringPalm: "quivering_palm start" (4 Focus Points, after an Unarmed Strike hit) with target_id; "quivering_palm end" with target_id
@@ -210,17 +214,21 @@ func quiveringPalm(charID int, description string) string {
 	if class != "monk" || level < 17 {
 		return "Quivering Palm needs a Monk of level 17 or higher."
 	}
-	used := classResourcesUsed(charID)
 	lobby, mid, isMonster := attackedMonster(charID)
 	low := strings.ToLower(description)
 	switch {
 	case strings.Contains(low, "end"):
-		if used["quivering_palm"] == 0 {
-			return "No creature is under your Quivering Palm."
+		target := 0
+		if _, _, err := changeSpent(charID, func(s *spent) error { // resources_2024.go
+			if s.Uses["quivering_palm"] == 0 {
+				return &notEnough{"No creature is under your Quivering Palm.", 0}
+			}
+			target = -s.Uses["quivering_palm"]
+			delete(s.Uses, "quivering_palm")
+			return nil
+		}); err != nil {
+			return spendText(err, "Quivering Palm")
 		}
-		target := -used["quivering_palm"]
-		delete(used, "quivering_palm")
-		writeUsed(charID, used)
 		if strings.Contains(low, "harmless") {
 			return "🌀 You end the vibrations harmlessly."
 		}
@@ -245,17 +253,21 @@ func quiveringPalm(charID int, description string) string {
 		if !isMonster {
 			return "Choose the creature you hit with an Unarmed Strike with target_id."
 		}
-		if used["quivering_palm"] != 0 {
-			return "Only one creature can be under your Quivering Palm."
+		focusMax := classResourceMax(charID, class, level, "focus", 0)
+		_, after, err := changeSpent(charID, func(s *spent) error { // the 4 Focus Points and the target in one step (resources_2024.go)
+			if s.Uses["quivering_palm"] != 0 {
+				return &notEnough{"Only one creature can be under your Quivering Palm.", 0}
+			}
+			if err := s.spend("focus", 4, focusMax); err != nil {
+				return &notEnough{"Cannot start Quivering Palm: " + err.Error(), 0}
+			}
+			s.Uses["quivering_palm"] = -mid
+			return nil
+		})
+		if err != nil {
+			return spendText(err, "Quivering Palm")
 		}
-		if okFP, msg, left := useClassResource(charID, "focus", 4); !okFP {
-			return "Cannot start Quivering Palm: " + msg
-		} else {
-			used = classResourcesUsed(charID)
-			used["quivering_palm"] = -mid
-			writeUsed(charID, used)
-			return fmt.Sprintf("🌀 Quivering Palm: 4 Focus Points spent (%d left); imperceptible vibrations last %d days or until you end them.", left, level)
-		}
+		return fmt.Sprintf("🌀 Quivering Palm: 4 Focus Points spent (%d left); imperceptible vibrations last %d days or until you end them.", focusMax-after.Uses["focus"], level)
 	}
 	return "Say \"quivering_palm start\" with a target_id after an Unarmed Strike hit, or \"quivering_palm end\"."
 }

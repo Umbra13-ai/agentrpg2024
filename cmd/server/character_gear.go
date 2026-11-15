@@ -3,6 +3,7 @@ package main
 import (
 	"database/sql"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"github.com/agentrpg/agentrpg/game"
 	"net/http"
@@ -60,45 +61,27 @@ func handleCharacterAttune(w http.ResponseWriter, r *http.Request) {
 	var charName string
 	db.QueryRow(`SELECT name FROM characters WHERE id = $1`, req.CharacterID).Scan(&charName)
 
-	// Get current attuned items
-	var attunedJSON []byte
-	db.QueryRow(`SELECT COALESCE(attuned_items, '[]') FROM characters WHERE id = $1`, req.CharacterID).Scan(&attunedJSON)
-	var attunedItems []string
-	json.Unmarshal(attunedJSON, &attunedItems)
-
 	maxAttunement := attunementMax(req.CharacterID)
 
 	if req.Action == "attune" {
-		// Check if already attuned
-		for _, item := range attunedItems {
-			if strings.EqualFold(item, req.ItemName) {
-				w.WriteHeader(http.StatusConflict)
-				json.NewEncoder(w).Encode(map[string]interface{}{
-					"error":   "already_attuned",
-					"message": fmt.Sprintf("%s is already attuned to %s", charName, req.ItemName),
-				})
-				return
-			}
-		}
-
 		// only a magic item the character carries (Nov 14 review: any name, even one not carried, took a slot, and an unowned Ring
-		// of Protection raised AC)
-		magicItem := false
-		if tx, err := db.Begin(); err == nil {
-			inv, _ := loadInventoryTx(tx, req.CharacterID)
-			tx.Rollback()
-			if it, ferr := findInventoryItem(inv, req.ItemName); ferr != nil || it == nil {
-				w.WriteHeader(http.StatusBadRequest)
-				json.NewEncoder(w).Encode(map[string]interface{}{"error": "item_not_carried",
-					"message": fmt.Sprintf("%s doesn't carry %q: attune to a magic item in your inventory (its name or id). Nothing was changed.", charName, req.ItemName)})
-				return
-			} else {
-				if n := itemStr(it, "name"); n != "" {
-					req.ItemName = n // the item's own name, as the inventory has it
-				}
-				magicItem = itemStr(it, "magic_item") != "" || itemStr(it, "rarity") != "" || it["requires_attunement"] == true
-			}
+		// of Protection raised AC). Whether it can be attuned is checked here; carrying it, a free slot and the attunement itself
+		// are one locked step (attuneItem, inventory_2024.go).
+		notCarried := func() {
+			w.WriteHeader(http.StatusBadRequest)
+			json.NewEncoder(w).Encode(map[string]interface{}{"error": "item_not_carried",
+				"message": fmt.Sprintf("%s doesn't carry %q: attune to a magic item in your inventory (its name or id). Nothing was changed.", charName, req.ItemName)})
 		}
+		ref := req.ItemName // the name or id sent
+		it, ferr := findInventoryItem(inventoryOf(req.CharacterID), ref)
+		if ferr != nil || it == nil {
+			notCarried()
+			return
+		}
+		if n := itemStr(it, "name"); n != "" {
+			req.ItemName = n // the item's own name, as the inventory has it
+		}
+		magicItem := itemStr(it, "magic_item") != "" || itemStr(it, "rarity") != "" || it["requires_attunement"] == true
 		if !magicItem && !isSRDMagicItem(req.ItemName) {
 			w.WriteHeader(http.StatusBadRequest)
 			json.NewEncoder(w).Encode(map[string]interface{}{"error": "not_a_magic_item",
@@ -117,21 +100,31 @@ func handleCharacterAttune(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 
-		// Check max attunement
-		if len(attunedItems) >= maxAttunement {
-			w.WriteHeader(http.StatusConflict)
-			json.NewEncoder(w).Encode(map[string]interface{}{
-				"error":         "max_attunement_reached",
-				"message":       fmt.Sprintf("%s already has %d items attuned (max %d). Unattune an item first.", charName, len(attunedItems), maxAttunement),
-				"attuned_items": attunedItems,
-			})
+		_, attunedItems, err := attuneItem(req.CharacterID, ref, maxAttunement)
+		var refused *invRefusal
+		if errors.As(err, &refused) {
+			switch refused.body["error"] {
+			case "item_not_carried":
+				notCarried()
+			case "already_attuned":
+				w.WriteHeader(http.StatusConflict)
+				json.NewEncoder(w).Encode(map[string]interface{}{
+					"error":   "already_attuned",
+					"message": fmt.Sprintf("%s is already attuned to %s", charName, req.ItemName),
+				})
+			default:
+				w.WriteHeader(http.StatusConflict)
+				json.NewEncoder(w).Encode(map[string]interface{}{
+					"error":         "max_attunement_reached",
+					"message":       fmt.Sprintf("%s already has %d items attuned (max %d). Unattune an item first.", charName, len(attunedItems), maxAttunement),
+					"attuned_items": attunedItems,
+				})
+			}
 			return
 		}
-
-		// Attune the item
-		attunedItems = append(attunedItems, req.ItemName)
-		updatedJSON, _ := json.Marshal(attunedItems)
-		db.Exec(`UPDATE characters SET attuned_items = $1 WHERE id = $2`, updatedJSON, req.CharacterID)
+		if answerDBFailure(w, err, "the character") {
+			return
+		}
 		scoreNote := applyAttunementScore(req.CharacterID, req.ItemName, true) // Belt of Giant Strength, Amulet of Health ... (magic_items_2024.go)
 		scoreNote += refreshMightOfGiants(req.CharacterID)                     // Hammer of Thunderbolts: Giant's Bane (legendary_more_2024.go)
 		scoreNote += attuneCurse(req.CharacterID, req.ItemName)                // Shield of Missile Attraction (missile_attraction_2024.go, F222)
@@ -147,30 +140,20 @@ func handleCharacterAttune(w http.ResponseWriter, r *http.Request) {
 		})
 
 	} else if req.Action == "unattune" {
-		// Find and remove the item
-		found := false
-		newAttuned := []string{}
-		for _, item := range attunedItems {
-			if strings.EqualFold(item, req.ItemName) {
-				found = true
-			} else {
-				newAttuned = append(newAttuned, item)
-			}
+		item, newAttuned, found, err := unattuneItem(req.CharacterID, req.ItemName)
+		if answerDBFailure(w, err, "the character") {
+			return
 		}
-
 		if !found {
 			w.WriteHeader(http.StatusBadRequest)
 			json.NewEncoder(w).Encode(map[string]interface{}{
 				"error":         "not_attuned",
 				"message":       fmt.Sprintf("%s is not attuned to %s", charName, req.ItemName),
-				"attuned_items": attunedItems,
+				"attuned_items": newAttuned,
 			})
 			return
 		}
-
-		updatedJSON, _ := json.Marshal(newAttuned)
-		db.Exec(`UPDATE characters SET attuned_items = $1 WHERE id = $2`, updatedJSON, req.CharacterID)
-		applyAttunementScore(req.CharacterID, req.ItemName, false)
+		applyAttunementScore(req.CharacterID, item, false)
 		refreshMightOfGiants(req.CharacterID)
 
 		json.NewEncoder(w).Encode(map[string]interface{}{
@@ -855,9 +838,7 @@ func handleCharacterEquipWeapon(w http.ResponseWriter, r *http.Request) {
 			reply := map[string]interface{}{"success": true, "message": "That weapon is already equipped in that hand.", "weapon": req.Weapon}
 			if baseChanged { // a named weapon already in hand gets its base weapon now (named_weapons_2024.go)
 				weaponInfo["base_weapon"] = baseKey
-				if b, err := json.Marshal(inventory); err == nil {
-					db.Exec(`UPDATE characters SET inventory = $1 WHERE id = $2`, b, req.CharacterID)
-				}
+				updateInventoryItem(req.CharacterID, weaponInfo, func(x invItem) { x["base_weapon"] = baseKey }) // inventory_2024.go
 				reply["base_weapon"] = baseKey
 				reply["message"] = "That weapon is already equipped in that hand; it is a " + srdWeapons[baseKey].Name + " now."
 			}
@@ -911,9 +892,7 @@ func handleCharacterEquipWeapon(w http.ResponseWriter, r *http.Request) {
 	}
 	if baseChanged { // a named weapon keeps its base weapon once it is equipped (not when the equip was refused)
 		weaponInfo["base_weapon"] = baseKey
-		if b, err := json.Marshal(inventory); err == nil {
-			db.Exec(`UPDATE characters SET inventory = $1 WHERE id = $2`, b, req.CharacterID)
-		}
+		updateInventoryItem(req.CharacterID, weaponInfo, func(x invItem) { x["base_weapon"] = baseKey }) // inventory_2024.go
 	}
 	syncHeldItems(req.CharacterID) // the equipped weapon is now held; the one it replaced is sheathed
 

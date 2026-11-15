@@ -99,6 +99,9 @@ func gmSetCharacterFields(charID int, set map[string]json.RawMessage) ([]string,
 		if strings.EqualFold(k, "conditions") {
 			syncRecordsFromList(charID) // the conditions list and the condition records stay in step
 		}
+		if strings.EqualFold(k, "inventory") || strings.EqualFold(k, "attuned_items") {
+			syncAttunement(charID) // attunement only to items carried (inventory_2024.go)
+		}
 	}
 	return keys, nil
 }
@@ -142,15 +145,12 @@ func addInventoryItems(charID int, items []string) {
 	if len(items) == 0 {
 		return
 	}
-	var raw []byte
-	db.QueryRow(`SELECT COALESCE(inventory, '[]') FROM characters WHERE id = $1`, charID).Scan(&raw)
-	var inv []map[string]interface{}
-	json.Unmarshal(raw, &inv)
-	for _, it := range items {
-		b := make([]byte, 4)
-		rand.Read(b)
-		inv = append(inv, map[string]interface{}{"id": "gm" + hex.EncodeToString(b), "name": it, "quantity": 1, "location": "worn"})
-	}
-	out, _ := json.Marshal(inv)
-	db.Exec(`UPDATE characters SET inventory = $1 WHERE id = $2`, out, charID)
+	editInventory(charID, func(inv []invItem) []invItem { // inventory_2024.go
+		for _, it := range items {
+			b := make([]byte, 4)
+			rand.Read(b)
+			inv = append(inv, invItem{"id": "gm" + hex.EncodeToString(b), "name": it, "quantity": 1, "location": "worn"})
+		}
+		return inv
+	})
 }

@@ -238,7 +238,7 @@ func handleCombatStart(w http.ResponseWriter, r *http.Request, campaignID int) {
 		var name, class string
 		var subclass sql.NullString
 		rows.Scan(&id, &name, &dex, &initBonus, &class, &level, &cha, &subclass)
-		clearUsedKeys(id, "improve_fate") // Boon of Fate returns when Initiative is rolled
+		clearUses(id, "improve_fate")     // Boon of Fate returns when Initiative is rolled
 		evergreenWildShape(id)            // Archdruid
 		if hasSpecificFeat(id, "alert") { // 2024 Alert: add the Proficiency Bonus to Initiative
 			initBonus += game.ProficiencyBonus(level)
@@ -291,21 +291,17 @@ func handleCombatStart(w http.ResponseWriter, r *http.Request, campaignID int) {
 
 		// 2024 Superior Inspiration (Bard 18): when you roll initiative, regain Bardic Inspiration until you have two
 		if classLower == "bard" && level >= 18 {
-			currentResources := getCurrentClassResources(id)
-			if bi, ok := currentResources["bardic_inspiration"]; ok && bi < 2 {
-				var usedJSON []byte
-				db.QueryRow("SELECT COALESCE(class_resources_used, '{}') FROM characters WHERE id = $1", id).Scan(&usedJSON)
-				used := make(map[string]int)
-				json.Unmarshal(usedJSON, &used)
-				if used["bardic_inspiration"] > 0 {
-					used["bardic_inspiration"] -= 2 - bi
-					if used["bardic_inspiration"] < 0 {
-						used["bardic_inspiration"] = 0
-					}
-					updatedJSON, _ := json.Marshal(used)
-					db.Exec("UPDATE characters SET class_resources_used = $1 WHERE id = $2", updatedJSON, id)
-					capstoneNotes = append(capstoneNotes, fmt.Sprintf("🎭 %s: Superior Inspiration triggered! Regained 1 Bardic Inspiration (had 0)", name))
+			biMax := classResourceMax(id, class, level, "bardic_inspiration", game.Modifier(abilityScoreOf(id, "cha")))
+			regained := 0
+			changeSpent(id, func(sp *spent) error { // resources_2024.go
+				if left := biMax - sp.Uses["bardic_inspiration"]; left < 2 && sp.Uses["bardic_inspiration"] > 0 {
+					regained = min(2-left, sp.Uses["bardic_inspiration"])
+					sp.regain("bardic_inspiration", regained)
 				}
+				return nil
+			})
+			if regained > 0 {
+				capstoneNotes = append(capstoneNotes, fmt.Sprintf("🎭 %s: Superior Inspiration triggered! Regained %d Bardic Inspiration", name, regained))
 			}
 		}
 
@@ -2072,7 +2068,7 @@ func handleShortRest(w http.ResponseWriter, r *http.Request, charID int) {
 		newHP, maxHP, actualHealing = h.After.HP, h.After.Max, h.Healed
 	}
 	db.Exec(`UPDATE characters SET hit_dice_spent = hit_dice_spent + $1 WHERE id = $2`, req.HitDice, charID)
-	clearUsedKeys(charID, "improve_fate") // Boon of Fate returns on a Short Rest
+	clearUses(charID, "improve_fate") // Boon of Fate returns on a Short Rest
 	restStudy(charID, false)
 
 	// Check for Warlock levels - recover Pact Magic slots
@@ -2123,14 +2119,17 @@ func handleShortRest(w http.ResponseWriter, r *http.Request, charID int) {
 			return
 		}
 
-		// Check if ability has already been used (tracked as class resource)
-		current := getCurrentClassResources(charID)
-		if current[abilityName] <= 0 {
+		alreadyUsed := func() {
 			w.WriteHeader(http.StatusConflict)
 			json.NewEncoder(w).Encode(map[string]interface{}{
 				"error":   fmt.Sprintf("%s has already been used since your last long rest", strings.ReplaceAll(abilityName, "_", " ")),
 				"details": "This ability can only be used once per long rest.",
 			})
+		}
+		// Check if ability has already been used (tracked as class resource)
+		current := getCurrentClassResources(charID)
+		if current[abilityName] <= 0 {
+			alreadyUsed()
 			return
 		}
 
@@ -2161,13 +2160,8 @@ func handleShortRest(w http.ResponseWriter, r *http.Request, charID int) {
 			return
 		}
 
-		// Get current spell slots used and total slots
-		var usedJSON []byte
-		db.QueryRow("SELECT COALESCE(spell_slots_used, '{}') FROM characters WHERE id = $1", charID).Scan(&usedJSON)
-		used := make(map[string]int)
-		json.Unmarshal(usedJSON, &used)
-
 		totalSlots := characterSpellSlots(charID, class, level)
+		abilityMax := classResourceMax(charID, class, level, abilityName, 0)
 
 		// Count how many slots of each level we're recovering
 		slotsToRecover := make(map[int]int)
@@ -2175,38 +2169,47 @@ func handleShortRest(w http.ResponseWriter, r *http.Request, charID int) {
 			slotsToRecover[slotLevel]++
 		}
 
-		// Validate we have used slots to recover for each level
-		for slotLevel, countToRecover := range slotsToRecover {
-			slotKey := fmt.Sprintf("%d", slotLevel)
-			usedAtLevel := used[slotKey]
-			if usedAtLevel < countToRecover {
-				w.WriteHeader(http.StatusBadRequest)
-				json.NewEncoder(w).Encode(map[string]interface{}{
-					"error":       fmt.Sprintf("Cannot recover %d level %d slots - only %d used", countToRecover, slotLevel, usedAtLevel),
-					"used_slots":  used,
-					"total_slots": totalSlots,
-				})
-				return
-			}
-		}
-
-		// Apply recovery - reduce used slots
+		// The use of the ability and the slots it recovers change together, on the locked counts (resources_2024.go)
 		recovered := []string{}
-		for slotLevel, countToRecover := range slotsToRecover {
-			slotKey := fmt.Sprintf("%d", slotLevel)
-			used[slotKey] -= countToRecover
-			if used[slotKey] <= 0 {
-				delete(used, slotKey)
+		var shortBody map[string]interface{}
+		_, _, err := changeSpent(charID, func(sp *spent) error {
+			if abilityMax-sp.Uses[abilityName] <= 0 {
+				return &notEnough{"used", 0}
 			}
-			recovered = append(recovered, fmt.Sprintf("%d level %d", countToRecover, slotLevel))
+			for slotLevel, countToRecover := range slotsToRecover {
+				slotKey := fmt.Sprintf("%d", slotLevel)
+				if usedAtLevel := sp.Slots[slotKey]; usedAtLevel < countToRecover {
+					shortBody = map[string]interface{}{
+						"error":       fmt.Sprintf("Cannot recover %d level %d slots - only %d used", countToRecover, slotLevel, usedAtLevel),
+						"used_slots":  sp.Slots,
+						"total_slots": totalSlots,
+					}
+					return &notEnough{"slots", 0}
+				}
+			}
+			for slotLevel, countToRecover := range slotsToRecover {
+				slotKey := fmt.Sprintf("%d", slotLevel)
+				sp.Slots[slotKey] -= countToRecover
+				if sp.Slots[slotKey] <= 0 {
+					delete(sp.Slots, slotKey)
+				}
+				recovered = append(recovered, fmt.Sprintf("%d level %d", countToRecover, slotLevel))
+			}
+			sp.Uses[abilityName]++
+			return nil
+		})
+		if r, ok := refusedSpend(err); ok {
+			if r.Msg == "used" {
+				alreadyUsed()
+			} else {
+				w.WriteHeader(http.StatusBadRequest)
+				json.NewEncoder(w).Encode(shortBody)
+			}
+			return
 		}
-
-		// Save updated spell slots used
-		updatedJSON, _ := json.Marshal(used)
-		db.Exec("UPDATE characters SET spell_slots_used = $1 WHERE id = $2", updatedJSON, charID)
-
-		// Mark the ability as used
-		useClassResource(charID, abilityName, 1)
+		if answerDBFailure(w, err, "the character") {
+			return
+		}
 
 		slotRecoveryResult = map[string]interface{}{
 			"ability":         strings.ReplaceAll(abilityName, "_", " "),
@@ -2293,37 +2296,20 @@ func handleShortRest(w http.ResponseWriter, r *http.Request, charID int) {
 	}
 
 	if sorcererLevel >= 5 { // 2024 Sorcerous Restoration (level 5)
-		// Get current resources and calculate max sorcery points
-		var resourcesUsedJSON []byte
-		db.QueryRow("SELECT COALESCE(class_resources_used, '{}') FROM characters WHERE id = $1", charID).Scan(&resourcesUsedJSON)
-		resourcesUsed := make(map[string]int)
-		json.Unmarshal(resourcesUsedJSON, &resourcesUsed)
-
-		maxSorceryPoints := sorcererLevel // Sorcery points = sorcerer level
-		currentUsed := resourcesUsed["sorcery_points"]
-
-		// Calculate how many points to recover (up to 4, not exceeding used)
-		recoverable := sorcererLevel / 2 // 2024: no more than half your Sorcerer level (round down), once per Long Rest
-		if currentUsed < recoverable {
-			recoverable = currentUsed
-		}
-		if resourcesUsed["sorcerous_restoration"] > 0 {
-			recoverable = 0
-		}
-
-		if recoverable > 0 {
-			resourcesUsed["sorcerous_restoration"] = 1
-			resourcesUsed["sorcery_points"] = currentUsed - recoverable
-			if resourcesUsed["sorcery_points"] <= 0 {
-				delete(resourcesUsed, "sorcery_points")
+		// 2024: no more than half your Sorcerer level (round down), once per Long Rest; on the locked counts (resources_2024.go)
+		changeSpent(charID, func(sp *spent) error {
+			recoverable := min(sorcererLevel/2, sp.Uses["sorcery_points"])
+			if sp.Uses["sorcerous_restoration"] > 0 || recoverable <= 0 {
+				return nil
 			}
-
-			updatedResourcesJSON, _ := json.Marshal(resourcesUsed)
-			db.Exec("UPDATE characters SET class_resources_used = $1 WHERE id = $2", updatedResourcesJSON, charID)
-
+			sp.Uses["sorcerous_restoration"] = 1
+			sp.regain("sorcery_points", recoverable)
+			if sp.Uses["sorcery_points"] <= 0 {
+				delete(sp.Uses, "sorcery_points")
+			}
 			sorcerousRestorationRecovered = recoverable
-		}
-		_ = maxSorceryPoints // Used for clarity in calculations
+			return nil
+		})
 	}
 
 	response := map[string]interface{}{

@@ -447,68 +447,6 @@ func buildEquipmentLayout(inv []invItem, equippedArmor string, shield bool, main
 	}
 }
 
-// ---- storage ----
-
-func loadInventoryTx(tx *sql.Tx, charID int) ([]invItem, error) {
-	var raw []byte
-	if err := tx.QueryRow(`SELECT COALESCE(inventory, '[]') FROM characters WHERE id = $1 FOR UPDATE`, charID).Scan(&raw); err != nil {
-		return nil, err
-	}
-	var inv []invItem
-	if err := json.Unmarshal(raw, &inv); err != nil {
-		inv = []invItem{}
-	}
-	if inv == nil {
-		inv = []invItem{}
-	}
-	ensureItemIDs(inv)
-	fillItemWeights(inv)
-	return inv, nil
-}
-
-func saveInventoryTx(tx *sql.Tx, charID int, inv []invItem) error {
-	b, err := json.Marshal(inv)
-	if err != nil {
-		return err
-	}
-	_, err = tx.Exec(`UPDATE characters SET inventory = $1 WHERE id = $2`, string(b), charID)
-	return err
-}
-
-// mutateInventory runs fn on the locked inventory and saves it if fn succeeds.
-func mutateInventory(w http.ResponseWriter, charID int, fn func(inv []invItem) ([]invItem, map[string]interface{}, int, string)) {
-	tx, err := db.Begin()
-	if err != nil {
-		writeJSONStatus(w, http.StatusInternalServerError, map[string]interface{}{"error": dbErrorCode})
-		return
-	}
-	defer tx.Rollback()
-	inv, err := loadInventoryTx(tx, charID)
-	if err != nil {
-		if answerDBFailure(w, err, "the character's pack") {
-			return
-		}
-		writeJSONStatus(w, http.StatusNotFound, map[string]interface{}{"error": "character_not_found"})
-		return
-	}
-	out, resp, status, errCode := fn(inv)
-	if errCode != "" {
-		resp["error"] = errCode
-		writeJSONStatus(w, status, resp)
-		return
-	}
-	if err := saveInventoryTx(tx, charID, out); err != nil {
-		writeJSONStatus(w, http.StatusInternalServerError, map[string]interface{}{"error": "save_failed"})
-		return
-	}
-	if err := tx.Commit(); err != nil {
-		writeJSONStatus(w, http.StatusInternalServerError, map[string]interface{}{"error": "save_failed"})
-		return
-	}
-	resp["success"] = true
-	writeJSONStatus(w, http.StatusOK, resp)
-}
-
 func fail(code string, status int, extra map[string]interface{}) ([]invItem, map[string]interface{}, int, string) {
 	if extra == nil {
 		extra = map[string]interface{}{}

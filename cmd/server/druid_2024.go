@@ -61,52 +61,49 @@ func primalStrike(charID int, class string, level int, descLower string, crit bo
 func wildResurgence(charID int, description string) string {
 	var class string
 	var level int
-	var usedJSON, slotsJSON []byte
-	if db.QueryRow(`SELECT class, level, COALESCE(class_resources_used,'{}'), COALESCE(spell_slots_used,'{}') FROM characters WHERE id = $1`, charID).Scan(&class, &level, &usedJSON, &slotsJSON) != nil {
+	if db.QueryRow(`SELECT class, level FROM characters WHERE id = $1`, charID).Scan(&class, &level) != nil {
 		return "Character not found."
 	}
 	if strings.ToLower(class) != "druid" || level < 5 {
 		return "Wild Resurgence needs a Druid of level 5 or higher."
 	}
-	used := map[string]int{}
-	json.Unmarshal(usedJSON, &used)
-	slotsUsed := map[string]int{}
-	json.Unmarshal(slotsJSON, &slotsUsed)
 	max := game.ClassTableInt(class, level, "Wild Shape")
 	slots := characterSpellSlots(charID, class, level)
-	if strings.Contains(strings.ToLower(description), "slot") && !strings.Contains(strings.ToLower(description), "shape") {
-		if used["wild_resurgence_slot"] > 0 {
-			return "You already traded Wild Shape for a spell slot; finish a Long Rest."
+	toSlot := strings.Contains(strings.ToLower(description), "slot") && !strings.Contains(strings.ToLower(description), "shape")
+	reply := ""
+	// the check and the trade on the locked counts (resources_2024.go)
+	_, _, err := changeSpent(charID, func(sp *spent) error {
+		if toSlot {
+			switch {
+			case sp.Uses["wild_resurgence_slot"] > 0:
+				return &notEnough{"You already traded Wild Shape for a spell slot; finish a Long Rest.", 0}
+			case sp.Uses["wild_shape"] >= max:
+				return &notEnough{"You have no Wild Shape use to expend.", 0}
+			case !regainSlotIn(sp.Slots, 1):
+				return &notEnough{"You have no expended level 1 spell slot to regain.", 0}
+			}
+			sp.Uses["wild_shape"]++
+			sp.Uses["wild_resurgence_slot"] = 1
+			reply = "🌿 Wild Resurgence: you expend a use of Wild Shape and regain a level 1 spell slot."
+			return nil
 		}
-		if used["wild_shape"] >= max {
-			return "You have no Wild Shape use to expend."
+		if sp.Uses["wild_shape"] < max {
+			return &notEnough{"Wild Resurgence works when you have no uses of Wild Shape left.", 0}
 		}
-		if slotsUsed["1"] <= 0 {
-			return "You have no expended level 1 spell slot to regain."
+		if sp.Uses["wild_resurgence_turn"] > 0 {
+			return &notEnough{"Once on each of your turns.", 0}
 		}
-		used["wild_shape"]++
-		used["wild_resurgence_slot"] = 1
-		slotsUsed["1"]--
-		writeUsed(charID, used)
-		b, _ := json.Marshal(slotsUsed)
-		db.Exec(`UPDATE characters SET spell_slots_used = $1 WHERE id = $2`, string(b), charID)
-		return "🌿 Wild Resurgence: you expend a use of Wild Shape and regain a level 1 spell slot."
-	}
-	if used["wild_shape"] < max {
-		return "Wild Resurgence works when you have no uses of Wild Shape left."
-	}
-	if used["wild_resurgence_turn"] > 0 {
-		return "Once on each of your turns."
-	}
-	for lvl := 1; lvl <= 9; lvl++ {
-		if slots[lvl] > 0 && slotsUsed[fmt.Sprint(lvl)] < slots[lvl] {
-			slotsUsed[fmt.Sprint(lvl)]++
-			used["wild_shape"]--
-			writeUsed(charID, used)
-			b, _ := json.Marshal(slotsUsed)
-			db.Exec(`UPDATE characters SET spell_slots_used = $1 WHERE id = $2`, string(b), charID)
-			return fmt.Sprintf("🌿 Wild Resurgence: you expend a level %d spell slot and regain one use of Wild Shape.", lvl)
+		for lvl := 1; lvl <= 9; lvl++ {
+			if slots[lvl] > 0 && spendSlotIn(sp.Slots, lvl, slots[lvl], "") == nil {
+				sp.Uses["wild_shape"]--
+				reply = fmt.Sprintf("🌿 Wild Resurgence: you expend a level %d spell slot and regain one use of Wild Shape.", lvl)
+				return nil
+			}
 		}
+		return &notEnough{"You have no spell slot left to expend.", 0}
+	})
+	if err != nil {
+		return spendText(err, "Wild Resurgence")
 	}
-	return "You have no spell slot left to expend."
+	return reply
 }

@@ -13,7 +13,6 @@ package main
 //	Dwarven Resilience     the Dwarf's Resistance to Poison and Advantage on saves against being Poisoned (F81, game/species.go)
 
 import (
-	"encoding/json"
 	"fmt"
 	"strconv"
 	"strings"
@@ -94,30 +93,29 @@ func pearlOfPower(charID int, it invItem, description string) string {
 	if dawnUsed(it, "pearl") {
 		return "Cannot use the Pearl of Power: it can't be used again until the next dawn. Nothing was spent."
 	}
-	var raw []byte
-	db.QueryRow(`SELECT COALESCE(spell_slots_used,'{}') FROM characters WHERE id = $1`, charID).Scan(&raw)
-	used := map[string]int{}
-	json.Unmarshal(raw, &used)
 	want := 0
 	for _, f := range strings.Fields(strings.ToLower(description)) {
 		if n, err := strconv.Atoi(strings.Trim(f, ".,:;")); err == nil && n >= 1 && n <= 3 {
 			want = n
 		}
 	}
-	if want == 0 {
-		for l := 3; l >= 1; l-- {
-			if used[strconv.Itoa(l)] > 0 {
-				want = l
-				break
+	// the slot found and regained on the locked counts (resources_2024.go)
+	if _, _, err := changeSpent(charID, func(s *spent) error {
+		if want == 0 {
+			for l := 3; l >= 1; l-- {
+				if s.Slots[strconv.Itoa(l)] > 0 {
+					want = l
+					break
+				}
 			}
 		}
+		if want == 0 || !regainSlotIn(s.Slots, want) {
+			return &notEnough{"Cannot use the Pearl of Power: you have no expended spell slot of level 3 or lower to regain. Nothing was spent.", 0}
+		}
+		return nil
+	}); err != nil {
+		return spendText(err, "a spell slot")
 	}
-	if want == 0 || used[strconv.Itoa(want)] <= 0 {
-		return "Cannot use the Pearl of Power: you have no expended spell slot of level 3 or lower to regain. Nothing was spent."
-	}
-	used[strconv.Itoa(want)]--
-	b, _ := json.Marshal(used)
-	db.Exec(`UPDATE characters SET spell_slots_used = $1 WHERE id = $2`, b, charID)
 	markDawnUsed(charID, it, "pearl")
 	return fmt.Sprintf("Pearl of Power (a Magic action): you regain one expended level %d spell slot. The pearl can't be used again until the next dawn.", want)
 }

@@ -5,8 +5,6 @@ package main
 // (with the Half Cover of Smite of Protection), and kept when it hits.
 
 import (
-	"encoding/json"
-	"strconv"
 	"sync"
 )
 
@@ -37,28 +35,25 @@ func refundMissedSpends(charID int) {
 		return
 	}
 	p := v.(pendingSpend)
-	adjust := func(col, key string) {
-		var raw []byte
-		db.QueryRow(`SELECT COALESCE(`+col+`,'{}') FROM characters WHERE id = $1`, charID).Scan(&raw)
-		used := map[string]int{}
-		json.Unmarshal(raw, &used)
-		if used[key] > 0 {
-			used[key]--
+	pactInSlots := p.EldritchLevel > 0 && pactSlotColumn(charID) == "spell_slots_used" // F132
+	changeSpent(charID, func(s *spent) error {                                         // everything given back in one locked step (resources_2024.go)
+		if p.SmiteSlot > 0 {
+			regainSlotIn(s.Slots, p.SmiteSlot)
 		}
-		b, _ := json.Marshal(used)
-		db.Exec(`UPDATE characters SET `+col+` = $1 WHERE id = $2`, string(b), charID)
-	}
-	if p.SmiteSlot > 0 {
-		adjust("spell_slots_used", strconv.Itoa(p.SmiteSlot))
-	}
-	if p.FreeSmite {
-		adjust("class_resources_used", "paladins_smite")
-	}
+		if p.FreeSmite {
+			s.regain("paladins_smite", 1)
+		}
+		if p.EldritchLevel > 0 {
+			if pactInSlots {
+				regainSlotIn(s.Slots, p.EldritchLevel)
+			} else {
+				regainSlotIn(s.Pact, p.EldritchLevel)
+			}
+			s.regain("eldritch_smite", 1)
+		}
+		return nil
+	})
 	if p.SmiteSlot > 0 || p.FreeSmite {
 		db.Exec(`DELETE FROM combat_effects WHERE source_id = $1 AND kind = 'half_cover'`, charID) // Smite of Protection needs the smite
-	}
-	if p.EldritchLevel > 0 {
-		adjust("pact_slots_used", strconv.Itoa(p.EldritchLevel))
-		adjust("class_resources_used", "eldritch_smite")
 	}
 }

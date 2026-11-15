@@ -331,12 +331,9 @@ func companionSpecialAction(c companion, charID, lobbyID int, action, descriptio
 			return "", fmt.Sprintf("%s is a %s steed; %s belongs to a %s steed.", companionDisplayName(c), titleCase(c.CreatureType), titleCase(strings.ReplaceAll(action, "_", " ")), titleCase(want))
 		}
 		key := "steed_" + action
-		var used int
-		db.QueryRow(`SELECT COALESCE((class_resources_used->>$2)::int,0) FROM characters WHERE id = $1`, charID, key).Scan(&used)
-		if used > 0 {
-			return "", "Used already; it comes back when you finish a Long Rest."
+		if err := useOnce(charID, key, "Used already; it comes back when you finish a Long Rest."); err != nil { // resources_2024.go
+			return "", spendText(err, action)
 		}
-		db.Exec(`UPDATE characters SET class_resources_used = jsonb_set(COALESCE(class_resources_used,'{}'), ARRAY[$2], '1') WHERE id = $1`, charID, key)
 		if action == "fey_step" {
 			return fmt.Sprintf("%s uses Fey Step (a Bonus Action): it teleports, with its rider, to an unoccupied space within 60 feet that it can see (move its token on the map).", companionDisplayName(c)), ""
 		}

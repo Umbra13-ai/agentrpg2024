@@ -72,17 +72,24 @@ func handleGMTacticalMind(w http.ResponseWriter, r *http.Request) {
 	roll := game.RollDie(10)
 	total := req.Total + roll
 	success := total >= req.DC
-	if success {
-		used["second_wind"]++
-		b, _ := json.Marshal(used)
-		db.Exec(`UPDATE characters SET class_resources_used = $1 WHERE id = $2`, string(b), req.CharacterID)
+	left := max - used["second_wind"]
+	if success { // the guarded spend (resources_2024.go)
+		var err error
+		if left, err = spendUse(req.CharacterID, "second_wind", 1, max); err != nil {
+			if _, refused := refusedSpend(err); refused {
+				writeJSONStatus(w, http.StatusConflict, map[string]interface{}{"error": "no_second_wind_left", "message": name + " has no Second Wind uses left."})
+				return
+			}
+			answerDBFailure(w, err, "the character")
+			return
+		}
 	}
 	note := "The check still fails, so the Second Wind use is not expended."
 	if success {
 		note = "The check succeeds; one use of Second Wind is expended."
 	}
 	writeJSONStatus(w, http.StatusOK, map[string]interface{}{"success": success, "character": name, "d10": roll, "total": total, "dc": req.DC,
-		"second_wind_left": max - used["second_wind"], "note": note})
+		"second_wind_left": left, "note": note})
 }
 
 // tacticalMasterProperty returns the mastery a Fighter of level 9+ swaps in with "tactical master push|sap|slow".

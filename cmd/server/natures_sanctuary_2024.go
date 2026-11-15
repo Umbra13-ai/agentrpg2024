@@ -6,7 +6,6 @@ package main
 // As a Bonus Action the Druid can move the Cube up to 60 feet. On the battle map the Cube is 3 x 3 squares around its centre square.
 
 import (
-	"encoding/json"
 	"fmt"
 	"strings"
 	"sync"
@@ -120,17 +119,15 @@ func naturesSanctuary(charID int, description string, move bool) string {
 		sanctuaries.Store(lobby, z)
 		return fmt.Sprintf("🌳 You move the spectral trees and vines: the Cube now centres on square %d,%d.", center.X, center.Y)
 	}
-	var raw []byte
-	db.QueryRow(`SELECT COALESCE(class_resources_used,'{}') FROM characters WHERE id = $1`, charID).Scan(&raw)
-	used := map[string]int{}
-	json.Unmarshal(raw, &used)
 	max := game.ClassTableInt("druid", level, "Wild Shape")
-	if used["wild_shape"] >= max {
-		return fmt.Sprintf("Nature's Sanctuary expends a use of Wild Shape, and you have none left (%d/%d used).", used["wild_shape"], max)
+	left, err := spendUse(charID, "wild_shape", 1, max) // the guarded spend (resources_2024.go)
+	if err != nil {
+		if _, refused := refusedSpend(err); refused {
+			return fmt.Sprintf("Nature's Sanctuary expends a use of Wild Shape, and you have none left (%d/%d used).", max, max)
+		}
+		return spendText(err, "Wild Shape")
 	}
-	used["wild_shape"]++
-	b, _ := json.Marshal(used)
-	db.Exec(`UPDATE characters SET class_resources_used = $1 WHERE id = $2`, b, charID)
+	used := map[string]int{"wild_shape": max - left}
 	sanctuaries.Store(lobby, sanctuaryZone{Druid: charID, Center: center, EndRound: currentRound(lobby) + 10})
 	ward := map[string]string{"arid": "Fire", "polar": "Cold", "temperate": "Lightning", "tropical": "Poison"}[landTypeOf(charID)]
 	out := fmt.Sprintf("🌳 Nature's Sanctuary (a Wild Shape use, %d/%d used): spectral trees and vines fill a 15-foot Cube", used["wild_shape"], max)

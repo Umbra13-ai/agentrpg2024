@@ -5,6 +5,7 @@ package main
 // keeps it.
 
 import (
+	"database/sql"
 	"encoding/json"
 	"log"
 	"regexp"
@@ -204,9 +205,8 @@ func backfillItemWeights() {
 		if json.Unmarshal(r.raw, &inv) != nil || len(inv) == 0 {
 			continue
 		}
-		if fillItemWeights(inv) {
-			b, _ := json.Marshal(inv)
-			if _, err := db.Exec(`UPDATE characters SET inventory = $1 WHERE id = $2`, string(b), r.id); err == nil {
+		if fillItemWeights(inv) { // loading the inventory fills them in (inventory_2024.go); saving it keeps them
+			if _, err := changeInventory(r.id, func(_ *sql.Tx, now []invItem) ([]invItem, error) { return now, nil }); err == nil {
 				updated++
 			}
 		}

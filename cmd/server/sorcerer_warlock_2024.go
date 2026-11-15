@@ -25,35 +25,35 @@ func ensureCasterColumns() {
 // innateSorcery is the Bonus Action that turns Innate Sorcery on.
 func innateSorcery(charID int) string {
 	var class string
-	var usedJSON []byte
-	if db.QueryRow(`SELECT class, COALESCE(class_resources_used,'{}') FROM characters WHERE id = $1`, charID).Scan(&class, &usedJSON) != nil {
+	var level int
+	if db.QueryRow(`SELECT class, level FROM characters WHERE id = $1`, charID).Scan(&class, &level) != nil {
 		return "Character not found."
 	}
 	if strings.ToLower(class) != "sorcerer" {
 		return "Only a Sorcerer has Innate Sorcery."
 	}
-	used := map[string]int{}
-	json.Unmarshal(usedJSON, &used)
 	extra := ""
-	if used["innate_sorcery"] >= 2 {
-		var level int
-		db.QueryRow(`SELECT level FROM characters WHERE id = $1`, charID).Scan(&level)
-		if level < 7 {
-			return "You have used Innate Sorcery twice; finish a Long Rest."
+	pointsMax := classResourceMax(charID, class, level, "sorcery_points", 0)
+	// a use, or (Sorcery Incarnate, level 7) 2 Sorcery Points when none is left: one locked step (resources_2024.go)
+	_, used, err := changeSpent(charID, func(sp *spent) error {
+		if sp.Uses["innate_sorcery"] < 2 {
+			sp.Uses["innate_sorcery"]++
+			return nil
 		}
-		// Sorcery Incarnate (level 7): with no uses left, spend 2 Sorcery Points
-		if okSP, msg, _ := useClassResource(charID, "sorcery_points", 2); !okSP {
-			return "You have used Innate Sorcery twice; Sorcery Incarnate needs 2 Sorcery Points (" + msg + ")."
+		if level < 7 {
+			return &notEnough{"You have used Innate Sorcery twice; finish a Long Rest.", 0}
+		}
+		if err := sp.spend("sorcery_points", 2, pointsMax); err != nil {
+			return &notEnough{"You have used Innate Sorcery twice; Sorcery Incarnate needs 2 Sorcery Points (" + err.Error() + ").", 0}
 		}
 		extra = " (Sorcery Incarnate: 2 Sorcery Points spent)"
-		used = classResourcesUsed(charID)
-	} else {
-		used["innate_sorcery"]++
-		b, _ := json.Marshal(used)
-		db.Exec(`UPDATE characters SET class_resources_used = $1 WHERE id = $2`, string(b), charID)
+		return nil
+	})
+	if err != nil {
+		return spendText(err, "Innate Sorcery")
 	}
 	db.Exec(`UPDATE characters SET innate_sorcery_rounds = 10 WHERE id = $1`, charID)
-	left := 2 - used["innate_sorcery"]
+	left := 2 - used.Uses["innate_sorcery"]
 	if left < 0 {
 		left = 0
 	}
@@ -82,53 +82,61 @@ func innateSorceryTick(charID int) {
 func magicalCunning(charID int) string {
 	var class string
 	var level int
-	var used bool
-	var usedJSON []byte
-	if db.QueryRow(`SELECT class, level, COALESCE(magical_cunning_used,false), COALESCE(pact_slots_used,'{}') FROM characters WHERE id = $1`, charID).Scan(&class, &level, &used, &usedJSON) != nil {
+	if db.QueryRow(`SELECT class, level FROM characters WHERE id = $1`, charID).Scan(&class, &level) != nil {
 		return "Character not found."
 	}
 	if strings.ToLower(class) != "warlock" || level < 2 {
 		return "Magical Cunning needs a Warlock of level 2 or higher."
 	}
-	if used {
-		return "You already used Magical Cunning; finish a Long Rest."
-	}
 	col := pactSlotColumn(charID) // F132: a single-class Warlock spends its Pact slots from spell_slots_used
-	if col == "spell_slots_used" {
-		db.QueryRow(`SELECT COALESCE(spell_slots_used,'{}') FROM characters WHERE id = $1`, charID).Scan(&usedJSON)
-	}
-	pact := game.SpellSlots("warlock", level)
 	total := 0
-	for _, n := range pact {
+	for _, n := range game.SpellSlots("warlock", level) {
 		total += n
 	}
-	spent := map[string]int{}
-	json.Unmarshal(usedJSON, &spent)
-	spentTotal := 0
-	for _, n := range spent {
-		spentTotal += n
+	regain := 0
+	// the once-per-Long-Rest mark and the slots in one transaction, the row locked (resources_2024.go)
+	tx, err := db.Begin()
+	if err != nil {
+		return dbReadMessage("the character")
 	}
-	if spentTotal == 0 {
-		return "You have all your Pact Magic slots."
+	defer tx.Rollback()
+	res, err := tx.Exec(`UPDATE characters SET magical_cunning_used = true WHERE id = $1 AND NOT COALESCE(magical_cunning_used,false)`, charID)
+	if err != nil {
+		return dbReadMessage("the character")
 	}
-	regain := (total + 1) / 2
-	if level >= 20 {
-		regain = total // Eldritch Master
+	if n, _ := res.RowsAffected(); n == 0 {
+		return "You already used Magical Cunning; finish a Long Rest."
 	}
-	if regain > spentTotal {
-		regain = spentTotal
-	}
-	left := regain
-	for k, n := range spent {
-		take := n
-		if take > left {
-			take = left
+	if _, _, err := changeSpentTx(tx, charID, func(sp *spent) error {
+		spent := sp.Pact
+		if col == "spell_slots_used" {
+			spent = sp.Slots
 		}
-		spent[k] = n - take
-		left -= take
+		spentTotal := 0
+		for _, n := range spent {
+			spentTotal += max(0, n)
+		}
+		if spentTotal == 0 {
+			return &notEnough{"You have all your Pact Magic slots.", 0}
+		}
+		regain = (total + 1) / 2
+		if level >= 20 {
+			regain = total // Eldritch Master
+		}
+		regain = min(regain, spentTotal)
+		left := regain
+		for k, n := range spent {
+			take := min(max(0, n), left)
+			spent[k] = n - take
+			left -= take
+		}
+		return nil
+	}); err != nil {
+		return spendText(err, "Magical Cunning")
 	}
-	b, _ := json.Marshal(spent)
-	db.Exec(`UPDATE characters SET `+col+` = $1, magical_cunning_used = true WHERE id = $2`, string(b), charID)
+	if tx.Commit() != nil {
+		return dbReadMessage("the character")
+	}
 	return fmt.Sprintf("✨ Magical Cunning: after a minute-long rite you regain %d Pact Magic slot(s).", regain)
 }
 
@@ -167,23 +175,31 @@ func naturalACBaseFor(charID int, subclass string, level int) int {
 func dragonWings(charID int) string {
 	var class, sub string
 	var level int
-	var usedJSON []byte
-	if db.QueryRow(`SELECT class, COALESCE(subclass,''), level, COALESCE(class_resources_used,'{}') FROM characters WHERE id = $1`, charID).Scan(&class, &sub, &level, &usedJSON) != nil {
+	if db.QueryRow(`SELECT class, COALESCE(subclass,''), level FROM characters WHERE id = $1`, charID).Scan(&class, &sub, &level) != nil {
 		return "Character not found."
 	}
 	if strings.ToLower(class) != "sorcerer" || strings.ToLower(sub) != "draconic" || level < 14 {
 		return "Dragon Wings needs a Draconic Sorcerer of level 14 or higher."
 	}
-	used := map[string]int{}
-	json.Unmarshal(usedJSON, &used)
-	if used["dragon_wings"] > 0 {
-		if okRes, msg, _ := useClassResource(charID, "sorcery_points", 3); !okRes {
-			return "You already used Dragon Wings; spending 3 Sorcery Points to restore it failed: " + msg
+	pointsMax := classResourceMax(charID, class, level, "sorcery_points", 0)
+	again := false
+	// the use, or 3 Sorcery Points to use it again: one locked step (resources_2024.go)
+	if _, _, err := changeSpent(charID, func(sp *spent) error {
+		if sp.Uses["dragon_wings"] == 0 {
+			sp.Uses["dragon_wings"] = 1
+			return nil
 		}
+		again = true
+		if err := sp.spend("sorcery_points", 3, pointsMax); err != nil {
+			return &notEnough{"You already used Dragon Wings; spending 3 Sorcery Points to restore it failed: " + err.Error(), 0}
+		}
+		return nil
+	}); err != nil {
+		return spendText(err, "Dragon Wings")
+	}
+	if again {
 		return "🐉 Dragon Wings: you spend 3 Sorcery Points to use it again; draconic wings appear and give you a Fly Speed of 60 feet for 1 hour."
 	}
-	used["dragon_wings"] = 1
-	writeUsed(charID, used)
 	return "🐉 Dragon Wings: draconic wings appear on your back for 1 hour, giving you a Fly Speed of 60 feet (dismiss them with no action)."
 }
 

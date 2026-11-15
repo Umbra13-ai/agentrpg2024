@@ -5,6 +5,7 @@ package main
 // submerged or suffocated (the GM ends it). Alchemist's Fire sets a creature burning; Acid is the other thrown flask.
 
 import (
+	"database/sql"
 	"encoding/json"
 	"fmt"
 	"net/http"
@@ -107,35 +108,34 @@ func extinguishSelf(charID int) string {
 
 // consumeInventoryItem removes one of the first item whose name matches (not from a lost bag). It returns false if there is none.
 func consumeInventoryItem(charID int, names ...string) bool {
-	var raw []byte
-	db.QueryRow(`SELECT COALESCE(inventory, '[]') FROM characters WHERE id = $1`, charID).Scan(&raw)
-	var inv []map[string]interface{}
-	json.Unmarshal(raw, &inv)
-	lost := lostChecker(inv)
 	norm := func(s string) string { return strings.ReplaceAll(strings.ToLower(strings.TrimSpace(s)), "’", "'") }
-	for i, it := range inv {
-		if lost(it) {
-			continue
-		}
-		n := norm(fmt.Sprint(it["name"]))
-		for _, want := range names {
-			if n == norm(want) || strings.HasPrefix(n, norm(want)+" (") || n == norm(want)+"s" {
-				qty := 1
-				if q, ok := it["quantity"].(float64); ok {
-					qty = int(q)
+	consumed := false
+	changeInventory(charID, func(_ *sql.Tx, inv []invItem) ([]invItem, error) { // inventory_2024.go
+		lost := lostChecker(inv)
+		for i, it := range inv {
+			if lost(it) {
+				continue
+			}
+			n := norm(fmt.Sprint(it["name"]))
+			for _, want := range names {
+				if n == norm(want) || strings.HasPrefix(n, norm(want)+" (") || n == norm(want)+"s" {
+					qty := 1
+					if q, ok := it["quantity"].(float64); ok {
+						qty = int(q)
+					}
+					if qty <= 1 {
+						inv = append(inv[:i], inv[i+1:]...)
+					} else {
+						inv[i]["quantity"] = float64(qty - 1)
+					}
+					consumed = true
+					return inv, nil
 				}
-				if qty <= 1 {
-					inv = append(inv[:i], inv[i+1:]...)
-				} else {
-					inv[i]["quantity"] = float64(qty - 1)
-				}
-				b, _ := json.Marshal(inv)
-				db.Exec(`UPDATE characters SET inventory = $1 WHERE id = $2`, b, charID)
-				return true
 			}
 		}
-	}
-	return false
+		return nil, nil
+	})
+	return consumed
 }
 
 // thrownFlask replaces an attack with throwing a flask of Alchemist's Fire or a vial of Acid at the monster picked with target_id

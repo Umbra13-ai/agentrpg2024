@@ -69,16 +69,13 @@ func tryFreeCast(charID int, class string, level int, spellKey, description stri
 	} else if !ok || !wantsFreeCast(description) {
 		return "", ""
 	}
-	var usedJSON []byte
-	db.QueryRow(`SELECT COALESCE(class_resources_used,'{}') FROM characters WHERE id = $1`, charID).Scan(&usedJSON)
-	used := map[string]int{}
-	json.Unmarshal(usedJSON, &used)
-	if used[key] >= max {
-		return "", fmt.Sprintf("Cannot cast it free: you have no free casts left (%d of %d used); finish a Long Rest or cast it with a spell slot.", used[key], max)
+	freeLeft, err := spendUse(charID, key, 1, max) // the guarded spend (resources_2024.go)
+	if err != nil {
+		if _, refused := refusedSpend(err); refused {
+			return "", fmt.Sprintf("Cannot cast it free: you have no free casts left (%d of %d used); finish a Long Rest or cast it with a spell slot.", max, max)
+		}
+		return "", spendText(err, "a free cast")
 	}
-	used[key]++
-	b, _ := json.Marshal(used)
-	db.Exec(`UPDATE characters SET class_resources_used = $1 WHERE id = $2`, string(b), charID)
 	if greaterWish {
 		rests := game.RollDie(4) + game.RollDie(4)
 		db.Exec(`UPDATE characters SET divine_intervention_rests = $1 WHERE id = $2`, rests, charID)
@@ -103,7 +100,7 @@ func tryFreeCast(charID int, class string, level int, spellKey, description stri
 	case "natural_recovery_cast":
 		return " [Natural Recovery: Circle spell without a spell slot]", ""
 	}
-	return fmt.Sprintf(" [free cast: %d of %d left]", max-used[key], max), ""
+	return fmt.Sprintf(" [free cast: %d of %d left]", freeLeft, max), ""
 }
 
 // markedTargetID is the combat id of the creature a character's Hunter's Mark or Hex is on (0 when there is none).
@@ -176,8 +173,7 @@ func naturesVeil(charID int) string {
 func useWisdomFeature(charID int, key string, minLevel int, run func(wis, level int) string) string {
 	var class string
 	var level, wis int
-	var usedJSON []byte
-	if db.QueryRow(`SELECT class, level, wis, COALESCE(class_resources_used,'{}') FROM characters WHERE id = $1`, charID).Scan(&class, &level, &wis, &usedJSON) != nil {
+	if db.QueryRow(`SELECT class, level, wis FROM characters WHERE id = $1`, charID).Scan(&class, &level, &wis) != nil {
 		return "Character not found."
 	}
 	if strings.ToLower(class) != "ranger" || level < minLevel {
@@ -187,15 +183,14 @@ func useWisdomFeature(charID int, key string, minLevel int, run func(wis, level 
 	if max < 1 {
 		max = 1
 	}
-	used := map[string]int{}
-	json.Unmarshal(usedJSON, &used)
-	if used[key] >= max {
-		return "You have used all your uses; finish a Long Rest."
+	left, err := spendUse(charID, key, 1, max) // the guarded spend (resources_2024.go)
+	if err != nil {
+		if _, refused := refusedSpend(err); refused {
+			return "You have used all your uses; finish a Long Rest."
+		}
+		return spendText(err, key)
 	}
-	used[key]++
-	b, _ := json.Marshal(used)
-	db.Exec(`UPDATE characters SET class_resources_used = $1 WHERE id = $2`, string(b), charID)
-	return run(wis, level) + fmt.Sprintf(" (%d of %d uses left)", max-used[key], max)
+	return run(wis, level) + fmt.Sprintf(" (%d of %d uses left)", left, max)
 }
 
 func addCharacterCondition(charID int, cond string) {

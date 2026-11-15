@@ -945,11 +945,8 @@ func handleFlexibleCasting(w http.ResponseWriter, r *http.Request) {
 	var ownerID int
 	var class, charName string
 	var level int
-	var resourcesJSON, slotsUsedJSON []byte
-	err = db.QueryRow(`
-		SELECT agent_id, name, class, level, COALESCE(class_resources, '{}'), COALESCE(spell_slots_used, '{}')
-		FROM characters WHERE id = $1
-	`, req.CharacterID).Scan(&ownerID, &charName, &class, &level, &resourcesJSON, &slotsUsedJSON)
+	err = db.QueryRow(`SELECT agent_id, name, class, level FROM characters WHERE id = $1`, req.CharacterID).
+		Scan(&ownerID, &charName, &class, &level)
 
 	if err != nil {
 		if answerDBFailure(w, err, "the character") {
@@ -990,134 +987,116 @@ func handleFlexibleCasting(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	var resources map[string]int
-	json.Unmarshal(resourcesJSON, &resources)
-	if resources == nil {
-		resources = make(map[string]int)
-	}
-
-	var slotsUsed map[string]int
-	json.Unmarshal(slotsUsedJSON, &slotsUsed)
-	if slotsUsed == nil {
-		slotsUsed = make(map[string]int)
+	// Creating a slot is a Bonus Action, converting one takes no action (SRD 5.2.1 Font of Magic): what it costs in a fight is
+	// the action economy's rule (fontOfMagicActions, getActionResourceType).
+	cost, refusal := featureTurnCost(req.CharacterID, fontOfMagicActions[action])
+	if refusal != nil {
+		writeJSONStatus(w, http.StatusConflict, map[string]interface{}{"error": refusal.Code, "message": refusal.Msg})
+		return
 	}
 
 	maxPoints := level // Sorcery points = sorcerer level
-	usedRes := classResourcesUsed(req.CharacterID)
-	currentPoints := max(0, maxPoints-usedRes["sorcery_points"]) // F125: the points Metamagic spends (class_resources_used), not the old class_resources column
-	resources["sorcery_points"] = currentPoints
-
-	// Get spell slots for this level
 	spellSlots := characterSpellSlots(req.CharacterID, class, level)
 	slotKey := fmt.Sprintf("%d", req.SlotLevel)
 	totalSlots := spellSlots[req.SlotLevel]
-	usedSlots := slotsUsed[slotKey]
-	availableSlots := totalSlots - usedSlots
 
-	if action == "create_slot" {
-		// Spend sorcery points to create a spell slot
-		cost := slotCreationCosts[req.SlotLevel]
-		if currentPoints < cost {
-			w.WriteHeader(http.StatusBadRequest)
-			json.NewEncoder(w).Encode(map[string]interface{}{
-				"error":          "insufficient_points",
-				"message":        fmt.Sprintf("Creating a level %d spell slot costs %d sorcery points, but you only have %d", req.SlotLevel, cost, currentPoints),
-				"current_points": currentPoints,
-				"cost":           cost,
-			})
-			return
+	// The points, the slot and the Bonus Action change together, on the locked row (resources_2024.go): two requests at once
+	// can't both spend the last points or the one Bonus Action.
+	var body map[string]interface{}
+	before, after, err := spendWithTurn(req.CharacterID, cost, func(sp *spent) error {
+		currentPoints := max(0, maxPoints-sp.Uses["sorcery_points"]) // F125: the points Metamagic spends (class_resources_used)
+		usedSlots := sp.Slots[slotKey]
+		availableSlots := totalSlots - usedSlots
+		if action == "create_slot" {
+			cost := slotCreationCosts[req.SlotLevel]
+			if currentPoints < cost {
+				body = map[string]interface{}{
+					"error":          "insufficient_points",
+					"message":        fmt.Sprintf("Creating a level %d spell slot costs %d sorcery points, but you only have %d", req.SlotLevel, cost, currentPoints),
+					"current_points": currentPoints,
+					"cost":           cost,
+				}
+				return &notEnough{"insufficient_points", currentPoints}
+			}
+			// an unspent slot comes back, or (F128, SRD 5.2.1) an extra slot that vanishes on a Long Rest (a negative used count)
+			sp.Uses["sorcery_points"] += cost
+			sp.addSlot(req.SlotLevel)
+			return nil
 		}
-
-		// Spend points
-		resources["sorcery_points"] = currentPoints - cost
-		// Gain a slot: an unspent one comes back, or (F128, SRD 5.2.1) an extra slot that vanishes on a Long Rest (a negative used count)
-		if true {
-			slotsUsed[slotKey] = usedSlots - 1
-		} else {
-			// Already at max slots - can't create more
-			w.WriteHeader(http.StatusConflict)
-			json.NewEncoder(w).Encode(map[string]interface{}{
-				"error":           "slots_full",
-				"message":         fmt.Sprintf("You already have all your level %d spell slots available (%d/%d)", req.SlotLevel, availableSlots, totalSlots),
-				"available_slots": availableSlots,
-				"total_slots":     totalSlots,
-			})
-			return
-		}
-
-		// Save
-		resourcesJSON, _ = json.Marshal(resources)
-		slotsUsedJSON, _ = json.Marshal(slotsUsed)
-		db.Exec("UPDATE characters SET class_resources = $1, spell_slots_used = $2 WHERE id = $3",
-			resourcesJSON, slotsUsedJSON, req.CharacterID)
-		usedRes["sorcery_points"] = maxPoints - resources["sorcery_points"]
-		writeUsed(req.CharacterID, usedRes) // F125
-
-		json.NewEncoder(w).Encode(map[string]interface{}{
-			"success":            true,
-			"action":             "create_slot",
-			"slot_level":         req.SlotLevel,
-			"points_spent":       cost,
-			"sorcery_points":     resources["sorcery_points"],
-			"max_sorcery_points": maxPoints,
-			"slots_available":    availableSlots + 1,
-			"total_slots":        totalSlots,
-			"message":            fmt.Sprintf("%s spent %d sorcery points to create a level %d spell slot", charName, cost, req.SlotLevel),
-		})
-
-	} else { // convert_slot
-		// Convert a spell slot to sorcery points
 		if availableSlots <= 0 {
-			w.WriteHeader(http.StatusBadRequest)
-			json.NewEncoder(w).Encode(map[string]interface{}{
+			body = map[string]interface{}{
 				"error":       "no_slots_available",
 				"message":     fmt.Sprintf("You have no level %d spell slots to convert (%d/%d used)", req.SlotLevel, usedSlots, totalSlots),
 				"used_slots":  usedSlots,
 				"total_slots": totalSlots,
-			})
-			return
+			}
+			return &notEnough{"no_slots_available", 0}
 		}
-
 		pointsGained := slotConversionYields[req.SlotLevel]
-		newPoints := currentPoints + pointsGained
-		if newPoints > maxPoints {
-			w.WriteHeader(http.StatusConflict)
-			json.NewEncoder(w).Encode(map[string]interface{}{
+		if newPoints := currentPoints + pointsGained; newPoints > maxPoints {
+			body = map[string]interface{}{
 				"error":            "would_exceed_max",
 				"message":          fmt.Sprintf("Converting would give you %d points, but max is %d", newPoints, maxPoints),
 				"current_points":   currentPoints,
 				"points_from_slot": pointsGained,
 				"max_points":       maxPoints,
-			})
-			return
+			}
+			return &notEnough{"would_exceed_max", currentPoints}
 		}
-
-		// Use the slot
-		slotsUsed[slotKey] = usedSlots + 1
-		// Gain points
-		resources["sorcery_points"] = newPoints
-
-		// Save
-		resourcesJSON, _ = json.Marshal(resources)
-		slotsUsedJSON, _ = json.Marshal(slotsUsed)
-		db.Exec("UPDATE characters SET class_resources = $1, spell_slots_used = $2 WHERE id = $3",
-			resourcesJSON, slotsUsedJSON, req.CharacterID)
-		usedRes["sorcery_points"] = maxPoints - resources["sorcery_points"]
-		writeUsed(req.CharacterID, usedRes) // F125
-
-		json.NewEncoder(w).Encode(map[string]interface{}{
-			"success":            true,
-			"action":             "convert_slot",
-			"slot_level":         req.SlotLevel,
-			"points_gained":      pointsGained,
-			"sorcery_points":     resources["sorcery_points"],
-			"max_sorcery_points": maxPoints,
-			"slots_remaining":    availableSlots - 1,
-			"total_slots":        totalSlots,
-			"message":            fmt.Sprintf("%s converted a level %d spell slot into %d sorcery points", charName, req.SlotLevel, pointsGained),
-		})
+		sp.Slots[slotKey] = usedSlots + 1
+		sp.regain("sorcery_points", pointsGained)
+		return nil
+	})
+	if r, ok := refusedSpend(err); ok {
+		switch {
+		case body == nil: // the change passed; the Bonus Action was already used
+			writeJSONStatus(w, http.StatusConflict, map[string]interface{}{"error": "action_unavailable", "message": r.Msg})
+		case r.Msg == "would_exceed_max":
+			writeJSONStatus(w, http.StatusConflict, body)
+		default:
+			writeJSONStatus(w, http.StatusBadRequest, body)
+		}
+		return
 	}
+	if answerDBFailure(w, err, "the character") {
+		return
+	}
+
+	points := max(0, maxPoints-after.Uses["sorcery_points"])
+	availableBefore := totalSlots - before.Slots[slotKey]
+	if action == "create_slot" {
+		reply := map[string]interface{}{
+			"success":            true,
+			"action":             "create_slot",
+			"slot_level":         req.SlotLevel,
+			"points_spent":       slotCreationCosts[req.SlotLevel],
+			"sorcery_points":     points,
+			"max_sorcery_points": maxPoints,
+			"slots_available":    availableBefore + 1,
+			"total_slots":        totalSlots,
+			"message":            fmt.Sprintf("%s spent %d sorcery points to create a level %d spell slot", charName, slotCreationCosts[req.SlotLevel], req.SlotLevel),
+		}
+		if cost.column != "" {
+			reply["bonus_action_used"] = true
+		}
+		json.NewEncoder(w).Encode(reply)
+		return
+	}
+	json.NewEncoder(w).Encode(map[string]interface{}{
+		"success":            true,
+		"action":             "convert_slot",
+		"slot_level":         req.SlotLevel,
+		"points_gained":      slotConversionYields[req.SlotLevel],
+		"sorcery_points":     points,
+		"max_sorcery_points": maxPoints,
+		"slots_remaining":    availableBefore - 1,
+		"total_slots":        totalSlots,
+		"message":            fmt.Sprintf("%s converted a level %d spell slot into %d sorcery points", charName, req.SlotLevel, slotConversionYields[req.SlotLevel]),
+	})
 }
+
+// fontOfMagicActions: the action word of each Font of Magic choice, whose cost is the action economy's (getActionResourceType).
+var fontOfMagicActions = map[string]string{"create_slot": "font_of_magic", "convert_slot": "font_of_magic_convert"}
 
 // handleCharacterFightingStyle handles viewing and choosing fighting styles
 // @Summary View or choose fighting style

@@ -10,7 +10,6 @@ package main
 //	suffocation        out of breath: 1 Exhaustion level at the end of each of its turns; all of it goes when it can breathe again
 
 import (
-	"encoding/json"
 	"fmt"
 	"net/http"
 	"strings"
@@ -310,28 +309,6 @@ func handleGMCounterspell2024(w http.ResponseWriter, r *http.Request) {
 	}
 	recordGMAction(db, lobby, "counterspell", result, result)
 	writeJSONStatus(w, 200, map[string]interface{}{"success": true, "countered": !saved, "save": total, "dc": dc, "result": result})
-}
-
-// spendSlot uses one spell slot of the level (Pact Magic slots count for a Warlock).
-func spendSlot(charID int, class string, level, slot int) bool {
-	total := characterSpellSlots(charID, class, level)[slot]
-	if strings.EqualFold(class, "warlock") {
-		if pl := pactSlotLevel(level); pl >= slot {
-			total, slot = getWarlockPactSlots(level), pl
-		}
-	}
-	var raw []byte
-	db.QueryRow(`SELECT COALESCE(spell_slots_used,'{}') FROM characters WHERE id = $1`, charID).Scan(&raw)
-	used := map[string]int{}
-	json.Unmarshal(raw, &used)
-	k := fmt.Sprint(slot)
-	if used[k] >= total {
-		return false
-	}
-	used[k]++
-	b, _ := json.Marshal(used)
-	db.Exec(`UPDATE characters SET spell_slots_used = $1 WHERE id = $2`, b, charID)
-	return true
 }
 
 // spellSaveDCOf is a character's spell save DC: 8 + spellcasting modifier + Proficiency Bonus.

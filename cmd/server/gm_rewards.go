@@ -635,44 +635,37 @@ func handleGMGiveItem(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 
-	// Get current inventory
-	var inventoryJSON []byte
-	db.QueryRow("SELECT COALESCE(inventory, '[]') FROM characters WHERE id = $1", req.CharacterID).Scan(&inventoryJSON)
-	var inventory []map[string]interface{}
-	json.Unmarshal(inventoryJSON, &inventory)
-
-	// Check if item already exists (stack quantities); items in a lost bag do not count
-	found := false
-	isLostItem := lostChecker(inventory)
-	for i, invItem := range inventory {
-		if isLostItem(invItem) {
-			continue
-		}
-		if name, ok := invItem["name"].(string); ok && strings.EqualFold(name, req.ItemName) {
-			// Stack the quantity
-			currentQty := 1
-			if q, ok := invItem["quantity"].(float64); ok {
-				currentQty = int(q)
+	// Add it to the inventory as it is now, locked (inventory_2024.go): items given at once are all kept
+	inventorySize := 0
+	_, err = changeInventory(req.CharacterID, func(_ *sql.Tx, inventory []invItem) ([]invItem, error) {
+		// Check if item already exists (stack quantities); items in a lost bag do not count
+		found := false
+		isLostItem := lostChecker(inventory)
+		for i, invItem := range inventory {
+			if isLostItem(invItem) {
+				continue
 			}
-			inventory[i]["quantity"] = currentQty + req.Quantity
-			found = true
-			break
+			if name, ok := invItem["name"].(string); ok && strings.EqualFold(name, req.ItemName) {
+				// Stack the quantity
+				currentQty := 1
+				if q, ok := invItem["quantity"].(float64); ok {
+					currentQty = int(q)
+				}
+				inventory[i]["quantity"] = currentQty + req.Quantity
+				found = true
+				break
+			}
 		}
-	}
-
-	if !found {
-		if _, ok := itemToAdd["id"]; !ok {
-			itemToAdd["id"] = newItemID("g")
+		if !found {
+			if _, ok := itemToAdd["id"]; !ok {
+				itemToAdd["id"] = newItemID("g")
+			}
+			inventory = append(inventory, itemToAdd)
 		}
-		inventory = append(inventory, itemToAdd)
-	}
-
-	// Update inventory
-	updatedInv, _ := json.Marshal(inventory)
-	_, err = db.Exec("UPDATE characters SET inventory = $1 WHERE id = $2", updatedInv, req.CharacterID)
-	if err != nil {
-		w.WriteHeader(http.StatusInternalServerError)
-		json.NewEncoder(w).Encode(map[string]interface{}{"error": "database_error"})
+		inventorySize = len(inventory)
+		return inventory, nil
+	})
+	if answerDBFailure(w, err, "the character's pack") {
 		return
 	}
 
@@ -685,7 +678,7 @@ func handleGMGiveItem(w http.ResponseWriter, r *http.Request) {
 		"character_name": charName,
 		"item_name":      req.ItemName,
 		"quantity":       req.Quantity,
-		"inventory_size": len(inventory),
+		"inventory_size": inventorySize,
 	}
 	if ae := autoEquipArmor(req.CharacterID); ae != nil {
 		giveOut["auto_equipped"] = ae // plain armor that raises AC is put on outside combat (F214)

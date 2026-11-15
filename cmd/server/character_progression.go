@@ -518,7 +518,7 @@ func handleCharacterFeat(w http.ResponseWriter, r *http.Request, charID int) {
 		return
 	}
 	if byLessons {
-		setUsedResource(charID, "lessons_feats", lessonsUsed+1)
+		countUse(charID, "lessons_feats") // resources_2024.go
 	}
 
 	response := map[string]interface{}{
