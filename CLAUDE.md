@@ -70,6 +70,11 @@ Add to the owner, never beside it. When you give another rule one owner, add it 
   many picks at each class level, how picks are counted, the request, the setup step. The level-up note, the sheet's
   `to_finish`, `GET /setup` and the level-up notice are made from it. A feature that picks one option from a list is a
   row in `featurePicks` (`cmd/server/feature_picks_2024.go`); both pick requests and character creation read it.
+- **Reading a player's answer (a name or a slug):** `game.Key` (`game/match.go`) is the one fold: case, spaces, hyphens,
+  underscores, "/" and apostrophes. `game.Match` matches an answer to a list of options; `game.Slug` gives the hyphen
+  form spells and monsters are stored in; `lookupSpell` and `game.LookupSubclass`, `game.AbilityKey` and
+  `game.FindTool` are built on it. Don't write another fold.
+- **The spells a character already has:** `spellsHeld` (`cmd/server/prepared_spells_2024.go`).
 
 ### Before pushing
 `gofmt -l` on the files you changed, `go vet ./cmd/server ./game`, `go test ./...`, then the owner's test scripts for

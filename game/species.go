@@ -143,15 +143,9 @@ var retiredSpecies = map[string]string{
 	"lightfoot": "halfling", "stout": "halfling", "rock_gnome": "gnome (lineage rock)", "forest_gnome": "gnome (lineage forest)",
 }
 
-func normalizeSpeciesKey(s string) string {
-	s = strings.ToLower(strings.TrimSpace(s))
-	s = strings.ReplaceAll(s, "-", "_")
-	return strings.ReplaceAll(s, " ", "_")
-}
-
 // GetSpecies returns a species by name, or nil.
 func GetSpecies(name string) *Species {
-	if sp, ok := species[normalizeSpeciesKey(name)]; ok {
+	if sp, ok := species[Key(name)]; ok {
 		return &sp
 	}
 	return nil
@@ -172,7 +166,7 @@ func AllSpecies() []Species {
 }
 
 // RetiredSpeciesHint says which species to use for a name that isn't an SRD 5.2.1 species ("" if none).
-func RetiredSpeciesHint(name string) string { return retiredSpecies[normalizeSpeciesKey(name)] }
+func RetiredSpeciesHint(name string) string { return retiredSpecies[Key(name)] }
 
 func pick(choices map[string]string, key string) string {
 	return strings.ToLower(strings.TrimSpace(choices[key]))
@@ -395,7 +389,7 @@ func ValidateLanguages(chosen []string) ([]string, error) {
 // SpeciesCantrips: the cantrips a species' lineage or legacy gives at level 1 (SRD 5.2.1), so a builder can warn before a feat
 // picks the same one. choice is the lineage (elf, gnome) or legacy (tiefling).
 func SpeciesCantrips(species, choice string) []string {
-	switch normalizeSpeciesKey(species) + "/" + strings.ToLower(strings.TrimSpace(choice)) {
+	switch Key(species) + "/" + strings.ToLower(strings.TrimSpace(choice)) {
 	case "elf/drow":
 		return []string{"dancing-lights"}
 	case "elf/high_elf", "elf/high elf":
@@ -413,7 +407,7 @@ func SpeciesCantrips(species, choice string) []string {
 	case "tiefling/infernal":
 		return []string{"thaumaturgy", "fire-bolt"}
 	}
-	if normalizeSpeciesKey(species) == "tiefling" {
+	if Key(species) == "tiefling" {
 		return []string{"thaumaturgy"}
 	}
 	return nil

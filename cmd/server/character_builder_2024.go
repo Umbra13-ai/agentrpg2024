@@ -800,7 +800,7 @@ func builderSteps(body map[string]interface{}, agentID int, withCheck bool) []bu
 			// creation takes only the class's own tools here (a no-op); anything else is refused there, so it is refused here
 			own := game.ProficienciesFor(game.CharacterInput{FirstClass: class}).Tools
 			items := normalizeListField(body, "tool_proficiencies", func(s string) (string, bool) {
-				if t, ok := findToolLoose(s); ok && game.HasToolProficiency(own, t.Name) {
+				if t, ok := game.FindTool(s); ok && game.HasToolProficiency(own, t.Name) {
 					return t.Name, true // "Thieves Tools" is saved as "thieves' tools", as creation reads it
 				}
 				return "", false
@@ -981,8 +981,8 @@ func builderSteps(body map[string]interface{}, agentID int, withCheck bool) []bu
 		} else if hasAnswer(bt) {
 			// this background's tool is fixed: a background_tool would be ignored at creation (Nov 14 audit), unless it names that tool
 			t, _ := bt.(string)
-			ft, ok1 := findToolLoose(t)
-			bgt, ok2 := findToolLoose(bg.Tool)
+			ft, ok1 := game.FindTool(t)
+			bgt, ok2 := game.FindTool(bg.Tool)
 			if !ok1 || !ok2 || ft.Name != bgt.Name {
 				s3.Choices = append(s3.Choices, leftoverChoice("background_tool", bt, fmt.Sprintf("%s gives %s; only a background with a tool to choose (%s) takes background_tool", bg.Name, game.ToolDisplayName(bg.Tool), strings.Join(backgroundsWithToolChoice(), ", "))))
 				sug3["background_tool"] = nil
@@ -1001,13 +1001,10 @@ func builderSteps(body map[string]interface{}, agentID int, withCheck bool) []bu
 					miProblem = fmt.Sprintf("%s's Magic Initiate uses the %s list, not %v: send a new answer from that list (\"list\": %q, two %s cantrips and a level 1 %s spell), or {\"use_suggestion\": \"background\"}", bg.Name, list, lv, list, list, list)
 				}
 			}
-			if miProblem == "" {
-				miProblem = magicInitiateProblem(fc, list)
+			if miProblem == "" { // the builder's one check of a Magic Initiate answer (builder_checks_2024.go)
+				miProblem = featProblemText(body, "background_feat_choices")
 			}
 			spCantrips := draftSpeciesCantrips(body)
-			if miProblem == "" {
-				miProblem = alreadyKnownProblem(fc, spCantrips, nil)
-			}
 			okF := fc != nil && miProblem == "" && len(blist(fc, "cantrips")) == 2 && bstr(fc, "spell") != "" && bstr(fc, "spellcasting_ability") != ""
 			featChoice := choice("background_feat_choices", fmt.Sprintf("Magic Initiate (%s): 2 cantrips and 1 level 1 spell from the %s list, and the ability you cast them with (int, wis or cha)", bg.FeatNote, bg.FeatNote), 1,
 				magicInitiateOptions(list, spCantrips, nil), fcRaw, okF, miProblem)
@@ -1107,7 +1104,7 @@ func builderSteps(body map[string]interface{}, agentID int, withCheck bool) []bu
 		for k, v := range sc { // a part sent as null is no answer; "Lineage" or "spellcasting ability" is the key it names
 			if v == nil {
 				delete(sc, k)
-			} else if ck := optionKey(k); ck != k && sc[ck] == nil {
+			} else if ck := game.Key(k); ck != k && sc[ck] == nil {
 				sc[ck] = v
 				delete(sc, k)
 			}
@@ -1121,7 +1118,7 @@ func builderSteps(body map[string]interface{}, agentID int, withCheck bool) []bu
 				continue
 			}
 			opts, _ := speciesChoiceOptions(sp.Key, want, class, nil)
-			if n := optionKey(a); containsStr(opts, n) && (bstr(sc, want) == "" || optionKey(bstr(sc, want)) == n) {
+			if n := game.Key(a); containsStr(opts, n) && (bstr(sc, want) == "" || game.Key(bstr(sc, want)) == n) {
 				sc[want] = n
 				delete(sc, alias)
 			}
@@ -1163,7 +1160,7 @@ func builderSteps(body map[string]interface{}, agentID int, withCheck bool) []bu
 			}
 			// a spelling of an option is saved as the option: "High Elf" is high_elf, "Intelligence" is int, "sleight_of_hand" is sleight of hand
 			if v != "" {
-				canon := optionKey(v)
+				canon := game.Key(v)
 				switch need {
 				case "skill":
 					canon, _ = game.CanonSkill(v)
@@ -1283,7 +1280,7 @@ func builderSteps(body map[string]interface{}, agentID int, withCheck bool) []bu
 		}
 		humanFeat := ""
 		if sp.Key == "human" {
-			humanFeat = optionKey(bstr(sc, "feat"))
+			humanFeat = game.Key(bstr(sc, "feat"))
 		}
 		if hasSfc && !sfcIsMap {
 			s4.Choices = append(s4.Choices, choice("species_feat_choices", "your Human feat's choices", 1, nil, sfcRaw, false, `species_feat_choices must be an object, like {"proficiencies": ["stealth", "insight", "medicine"]}: send it again that way`))
@@ -1303,17 +1300,10 @@ func builderSteps(body map[string]interface{}, agentID int, withCheck bool) []bu
 			} else if list != "" && list == bgList {
 				prob = "Your background's Magic Initiate already uses the " + list + " list: choose a different list (the feat is repeatable only with a different list)."
 			}
-			if prob == "" && list != "" {
-				prob = magicInitiateProblem(fc, list)
+			if prob == "" && list != "" { // the builder's one check of a Magic Initiate answer (builder_checks_2024.go)
+				prob = featProblemText(body, "species_feat_choices")
 			}
-			var bgSpells []string // the background's Magic Initiate spells: the Human's can't repeat them
-			if bgList != "" {
-				bfc := bmap(body, "background_feat_choices")
-				bgSpells = append(blist(bfc, "cantrips"), bstr(bfc, "spell"))
-			}
-			if prob == "" {
-				prob = alreadyKnownProblem(fc, draftSpeciesCantrips(body), bgSpells)
-			}
+			_, _, _, bgSpells, _ := miContext(body, "species_feat_choices") // the background's Magic Initiate spells: the Human's can't repeat them
 			okF := fc != nil && list != "" && prob == "" && len(blist(fc, "cantrips")) == 2 && bstr(fc, "spell") != "" && bstr(fc, "spellcasting_ability") != ""
 			var cur interface{}
 			if fc != nil {
@@ -1369,7 +1359,7 @@ func builderSteps(body map[string]interface{}, agentID int, withCheck bool) []bu
 					changed = changed || k != x
 					continue
 				}
-				t, ok := findToolLoose(x)
+				t, ok := game.FindTool(x)
 				if !ok {
 					skProb = fmt.Sprintf("%q is neither a skill nor a tool: choose from the options", x)
 					break
@@ -1493,7 +1483,7 @@ func builderSteps(body map[string]interface{}, agentID int, withCheck bool) []bu
 		s5.Explain += fmt.Sprintf(" The Standard Array by Class table’s row for a %s: Str %d, Dex %d, Con %d, Int %d, Wis %d, Cha %d.", class, arr[0], arr[1], arr[2], arr[3], arr[4], arr[5])
 	}
 	method := strings.ToLower(bstr(body, "ability_method"))
-	if optionKey(method) == "standard_array" && method != "standard_array" { // "Standard Array" is the standard array
+	if game.Key(method) == "standard_array" && method != "standard_array" { // "Standard Array" is the standard array
 		method = "standard_array"
 		body["ability_method"] = method
 	}
@@ -1953,11 +1943,6 @@ func speciesChoiceOptions(species, need, class string, held map[string]bool) ([]
 	return nil, ""
 }
 
-// optionKey: an answer written as an option is ("High Elf", "high-elf" and "high_elf" are all high_elf).
-func optionKey(s string) string {
-	return strings.NewReplacer(" ", "_", "-", "_").Replace(strings.ToLower(strings.TrimSpace(s)))
-}
-
 // titleFirst: the text with a capital first letter (a sentence that starts with withArticle).
 func titleFirst(s string) string {
 	if s == "" {
@@ -2059,23 +2044,6 @@ func rawList(v interface{}) (out []string, notText bool) {
 		return nil, true
 	}
 	return out, false
-}
-
-// findToolLoose: a tool by its name, also written without the apostrophe ("thieves tools", "calligraphers supplies").
-func findToolLoose(s string) (game.Tool, bool) {
-	if t, ok := game.FindTool(s); ok {
-		return t, true
-	}
-	bare := func(x string) string {
-		return strings.NewReplacer("'", "", "’", "").Replace(game.NormalizeToolName(x))
-	}
-	b := bare(s)
-	for _, t := range game.Tools {
-		if n := bare(t.Name); n == b || n == strings.TrimSuffix(b, " set") {
-			return t, true
-		}
-	}
-	return game.Tool{}, false
 }
 
 // wholeNumber reads a number answer: present is false when nothing was sent; ok is false when it isn't a whole number
@@ -3269,41 +3237,6 @@ func handleCharacterSetup(w http.ResponseWriter, r *http.Request, charID int) {
 	writeJSONStatus(w, 200, out)
 }
 
-// magicInitiateProblem: what is wrong with Magic Initiate picks, said at the step (Nov 13).
-func magicInitiateProblem(fc map[string]interface{}, list string) string {
-	if fc == nil {
-		return ""
-	}
-	if a := strings.ToLower(bstr(fc, "spellcasting_ability")); a != "" && a != "int" && a != "wis" && a != "cha" {
-		return fmt.Sprintf("%q can't be the spellcasting ability: choose int, wis or cha", a)
-	}
-	cs := blist(fc, "cantrips")
-	for _, c := range cs {
-		slug := strings.ToLower(strings.ReplaceAll(strings.TrimSpace(c), " ", "-"))
-		if sp, ok := srdSpellsMemory[slug]; ok && sp.Level != 0 {
-			return fmt.Sprintf("%s is not a cantrip", sp.Name)
-		}
-		if !onClassList(slug, list) {
-			return fmt.Sprintf("%s is not a cantrip on the %s list", titleWords(strings.ReplaceAll(slug, "-", " ")), list)
-		}
-	}
-	if len(cs) > 0 && len(cs) != 2 {
-		return fmt.Sprintf("choose exactly 2 cantrips (you chose %d)", len(cs))
-	}
-	if len(cs) == 2 && builderSpellSlug(cs[0]) == builderSpellSlug(cs[1]) { // "Sacred Flame" and "sacred-flame" are the same cantrip (Nov 14 audit)
-		return "you chose the same cantrip twice: choose 2 different ones"
-	}
-	if sp := strings.ToLower(strings.ReplaceAll(strings.TrimSpace(bstr(fc, "spell")), " ", "-")); sp != "" {
-		if s, ok := srdSpellsMemory[sp]; ok && s.Level != 1 {
-			return fmt.Sprintf("%s is not a level 1 spell", s.Name)
-		}
-		if !onClassList(sp, list) {
-			return fmt.Sprintf("%s is not on the %s spell list", titleWords(strings.ReplaceAll(sp, "-", " ")), list)
-		}
-	}
-	return ""
-}
-
 // draftSpeciesCantrips: the cantrips the draft's species lineage or legacy gives (High Elf: Prestidigitation ...).
 // It reads the key the species itself uses (an Elf's lineage, a Tiefling's legacy), so an answer left from an earlier species
 // can't hide the real cantrip (Nov 14 tester: a Wood Elf lineage left on a Tiefling hid the Infernal legacy's Fire Bolt).
@@ -3321,29 +3254,12 @@ func draftSpeciesCantrips(body map[string]interface{}) []string {
 	}
 	choice := ""
 	if key != "" {
-		choice = optionKey(bstr(sc, key))
+		choice = game.Key(bstr(sc, key))
 		if choice == "" {
-			choice = optionKey(bstr(sc, alias))
+			choice = game.Key(bstr(sc, alias))
 		}
 	}
 	return game.SpeciesCantrips(sp.Key, choice)
-}
-
-// alreadyKnownProblem: a Magic Initiate cantrip the species already gives, or a spell the other Magic Initiate already gives
-// (Nov 13: a High Elf Sage could take Prestidigitation twice).
-func alreadyKnownProblem(fc map[string]interface{}, speciesCantrips, otherFeat []string) string {
-	norm := func(x string) string { return strings.ToLower(strings.ReplaceAll(strings.TrimSpace(x), " ", "-")) }
-	for _, c := range blist(fc, "cantrips") {
-		if containsStr(speciesCantrips, norm(c)) {
-			return fmt.Sprintf("Your species already gives you %s: choose a different cantrip.", originSpellName(norm(c)))
-		}
-	}
-	for _, c := range append(blist(fc, "cantrips"), bstr(fc, "spell")) {
-		if c != "" && containsStr(otherFeat, norm(c)) {
-			return fmt.Sprintf("Your background's Magic Initiate already gives you %s: choose a different spell.", originSpellName(norm(c)))
-		}
-	}
-	return ""
 }
 
 // magicInitiateOptions: what Magic Initiate offers from one list, as lists (Nov 13: the options were a URL string, which a

@@ -36,23 +36,10 @@ type choiceChar struct {
 // subclassSlug gives a stored subclass in the form the subclass tables use ("lore", "open-hand"), whatever spelling it was
 // saved in ("College of Lore").
 func subclassSlug(s string) string {
-	s = strings.ToLower(strings.TrimSpace(s))
-	if s == "" {
-		return ""
+	if slug, ok := game.LookupSubclass(s); ok {
+		return slug
 	}
-	if _, ok := game.AvailableSubclasses[s]; ok {
-		return s
-	}
-	dashed := strings.ReplaceAll(s, " ", "-")
-	if _, ok := game.AvailableSubclasses[dashed]; ok {
-		return dashed
-	}
-	for slug := range game.AvailableSubclasses {
-		if strings.Contains(dashed, slug) {
-			return slug
-		}
-	}
-	return s
+	return strings.ToLower(strings.TrimSpace(s))
 }
 
 func loadChoiceChar(charID int) (*choiceChar, bool) {

@@ -105,14 +105,12 @@ type originOutput struct {
 
 var abilityShort = []string{"str", "dex", "con", "int", "wis", "cha"}
 
+// normAbility: the short name of the ability an answer means (game.AbilityKey); anything else lowercased, as sent.
 func normAbility(a string) string {
-	a = strings.ToLower(strings.TrimSpace(a))
-	for _, full := range [][2]string{{"strength", "str"}, {"dexterity", "dex"}, {"constitution", "con"}, {"intelligence", "int"}, {"wisdom", "wis"}, {"charisma", "cha"}} {
-		if a == full[0] {
-			return full[1]
-		}
+	if k, ok := game.AbilityKey(a); ok {
+		return k
 	}
-	return a
+	return strings.ToLower(strings.TrimSpace(a))
 }
 
 func containsStr(list []string, s string) bool {
@@ -153,13 +151,13 @@ func resolveFeat(slug, source string, in *featChoiceInput, bgListNote string, us
 		if ab != "int" && ab != "wis" && ab != "cha" {
 			return nil, originErr("invalid_spellcasting_ability", []string{"int", "wis", "cha"}, "Magic Initiate spellcasting_ability must be int, wis or cha")
 		}
-		if len(in.Cantrips) != 2 || builderSpellSlug(in.Cantrips[0]) == builderSpellSlug(in.Cantrips[1]) { // "Sacred Flame" and "sacred-flame" too
+		if len(in.Cantrips) != 2 || normalizeSpellSlug(in.Cantrips[0]) == normalizeSpellSlug(in.Cantrips[1]) { // "Sacred Flame" and "sacred-flame" too
 			return nil, originErr("invalid_cantrips", nil, "Magic Initiate needs exactly two different cantrips from the %s list", list)
 		}
 		onList := classSpellListFn(list) // nil when the lists are not loaded; then any spell of the right level is accepted
 		check := func(name string, level int) (string, *originError) {
-			slug := strings.ToLower(strings.ReplaceAll(strings.TrimSpace(name), " ", "-"))
-			sp, ok := srdSpellsMemory[slug]
+			slug, ok := lookupSpell(name) // any spelling of the name
+			sp := srdSpellsMemory[slug]
 			if !ok {
 				return "", originErr("unknown_spell", nil, "%q is not a known spell", name)
 			}
@@ -209,7 +207,7 @@ func resolveFeat(slug, source string, in *featChoiceInput, bgListNote string, us
 				f.Proficiencies = append(f.Proficiencies, n)
 				continue
 			}
-			t, ok := findToolLoose(p) // "thieves tools" is Thieves' Tools, as in the builder
+			t, ok := game.FindTool(p) // "thieves tools" is Thieves' Tools, as in the builder
 			if !ok {
 				return nil, originErr("unknown_proficiency", nil, "%q is neither a skill nor a tool", p)
 			}
@@ -283,11 +281,11 @@ func resolveOrigin(in originInput) (*originOutput, *originError) {
 	sort.Strings(keys)
 	for _, k0 := range keys {
 		v := in.SpeciesChoices[k0]
-		k := optionKey(k0) // "Lineage" is lineage
+		k := game.Key(k0) // "Lineage" is lineage
 		if strings.TrimSpace(v) == "" {
 			continue
 		}
-		alias := k == "lineage" && containsStr(sp.Needs, "legacy") && (strings.TrimSpace(in.SpeciesChoices["legacy"]) == "" || strings.EqualFold(normalizeSpeciesSlug(v), normalizeSpeciesSlug(in.SpeciesChoices["legacy"])))
+		alias := k == "lineage" && containsStr(sp.Needs, "legacy") && (strings.TrimSpace(in.SpeciesChoices["legacy"]) == "" || strings.EqualFold(game.Key(v), game.Key(in.SpeciesChoices["legacy"])))
 		if !containsStr(sp.Needs, k) && !alias {
 			why := ""
 			if k == "size" && len(sp.Sizes) == 1 {
@@ -463,13 +461,6 @@ func speciesAsSRDSpecies() map[string]SRDSpecies {
 			Traits: names, Languages: []string{}, DarkvisionRange: sp.Darkvision}
 	}
 	return out
-}
-
-// normalizeSpeciesSlug makes "High Elf" and "high-elf" into one form.
-func normalizeSpeciesSlug(s string) string {
-	s = strings.ToLower(strings.TrimSpace(s))
-	s = strings.ReplaceAll(s, " ", "_")
-	return strings.ReplaceAll(s, "-", "_")
 }
 
 // checkAbilityIncreases validates a background's ability increases early, so

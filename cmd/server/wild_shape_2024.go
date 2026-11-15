@@ -21,6 +21,7 @@ package main
 import (
 	"encoding/json"
 	"fmt"
+	"github.com/agentrpg/agentrpg/game"
 	"regexp"
 	"strconv"
 	"strings"
@@ -87,7 +88,7 @@ func setWildShapeForms(charID int, forms []string) string {
 	seen := map[string]bool{}
 	var clean []string
 	for _, f := range forms {
-		slug := strings.ToLower(strings.ReplaceAll(strings.TrimSpace(f), " ", "-"))
+		slug := game.Slug(f) // "Brown Bear", "brown_bear" or "brown-bear"
 		if seen[slug] {
 			continue
 		}

@@ -77,10 +77,10 @@ func featurePickByKey(key string) *featurePick {
 // featurePickNamed: the pick a request names, by its key, its other field name or the feature's displayed name
 // ("hunters_prey", "land_type", "Hunter's Prey").
 func featurePickNamed(name string) *featurePick {
-	k := nameKey(name)
+	k := game.Key(name)
 	for i := range featurePicks {
 		p := &featurePicks[i]
-		if k == nameKey(p.key) || (p.field != "" && k == nameKey(p.field)) || k == nameKey(p.feature) {
+		if k == game.Key(p.key) || (p.field != "" && k == game.Key(p.field)) || k == game.Key(p.feature) {
 			return p
 		}
 	}
@@ -298,7 +298,7 @@ func applyFeaturePick(charID int, p *featurePick, value string) (string, *pickRe
 	}
 	chosen := ""
 	for _, o := range p.options {
-		if k := nameKey(value); k != "" && (k == nameKey(o) || k == nameKey(pickOptionName(o))) {
+		if k := game.Key(value); k != "" && (k == game.Key(o) || k == game.Key(pickOptionName(o))) {
 			chosen = o
 		}
 	}

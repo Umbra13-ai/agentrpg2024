@@ -67,6 +67,17 @@ func GetSubclassesForClass(class string) map[string]Subclass {
 	return result
 }
 
+// LookupSubclass: the slug of the subclass a name means: its slug or its SRD name in any spelling ("College of Lore",
+// "lore", "Warrior of the Open Hand", "open_hand"). The subclass request and every reading of a stored subclass use it.
+func LookupSubclass(name string) (string, bool) {
+	var opts []Option
+	for slug, s := range AvailableSubclasses {
+		opts = append(opts, Option{Slug: slug, Name: s.Name})
+	}
+	o, ok := Match(name, opts)
+	return o.Slug, ok
+}
+
 // GetSubclass returns a subclass by slug, or nil if not found
 func GetSubclass(slug string) *Subclass {
 	if sub, ok := AvailableSubclasses[slug]; ok {

@@ -27,8 +27,8 @@ type Background struct {
 	Tool          string   `json:"tool_proficiency,omitempty"`
 	ToolCategory  string   `json:"tool_choice_category,omitempty"` // "gaming": the player picks the kind
 	Equipment     []BgItem `json:"equipment_a"`
-	GoldA         int      `json:"gold_a"` // gold that comes with package A
-	GoldB         int      `json:"gold_b"` // option B is gold only
+	GoldA         int      `json:"gold_a"`      // gold that comes with package A
+	GoldB         int      `json:"gold_b"`      // option B is gold only
 	Description   string   `json:"description"` // a narrative for the background: empty in the SRD; a private server can add one (local content)
 }
 
@@ -87,16 +87,9 @@ var backgrounds = map[string]Background{
 	},
 }
 
-// normalizeBackgroundKey turns "Folk Hero", "folk-hero" and "folk_hero" into one form.
-func normalizeBackgroundKey(slug string) string {
-	s := strings.ToLower(strings.TrimSpace(slug))
-	s = strings.ReplaceAll(s, "-", "_")
-	return strings.ReplaceAll(s, " ", "_")
-}
-
 // GetBackground returns background info by name or slug, or nil if not found.
 func GetBackground(slug string) *Background {
-	bg, ok := backgrounds[normalizeBackgroundKey(slug)]
+	bg, ok := backgrounds[Key(slug)]
 	if !ok {
 		return nil
 	}
@@ -106,7 +99,7 @@ func GetBackground(slug string) *Background {
 // SetBackgroundDescriptions gives backgrounds a narrative ({"acolyte": "..."}); the SRD has none (a private server's local content).
 func SetBackgroundDescriptions(m map[string]string) {
 	for k, text := range m {
-		key := normalizeBackgroundKey(k)
+		key := Key(k)
 		if bg, ok := backgrounds[key]; ok {
 			bg.Description = text
 			backgrounds[key] = bg

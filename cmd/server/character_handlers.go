@@ -249,7 +249,7 @@ func handleCharacters(w http.ResponseWriter, r *http.Request) {
 		req.Str, req.Dex, req.Con, req.Int, req.Wis, req.Cha = base[0], base[1], base[2], base[3], base[4], base[5]
 
 		// 2024 rules: species give no ability scores; the background raises them
-		speciesKey := normalizeSpeciesSlug(req.Species)
+		speciesKey := game.Key(req.Species)
 		// a 0 is no increase, as in the builder (Nov 14 audit: {"cha": 0} was refused with a misleading reason); "Strength" is str,
 		// and one ability sent twice ({"str": 2, "STR": 2}) is refused by name
 		canonInc := map[string]int{}
@@ -381,7 +381,7 @@ func handleCharacters(w http.ResponseWriter, r *http.Request) {
 		seenTool := map[string]string{}
 		for _, t := range req.ToolProficiencies { // the same tool twice is refused by name, as in the builder (Nov 14 review)
 			k := strings.ToLower(strings.TrimSpace(t))
-			if ft, ok := findToolLoose(t); ok {
+			if ft, ok := game.FindTool(t); ok {
 				k = ft.Name
 			}
 			if prev, dup := seenTool[k]; dup {
@@ -393,7 +393,7 @@ func handleCharacters(w http.ResponseWriter, r *http.Request) {
 		}
 		for i, t := range req.ToolProficiencies { // "smiths tools" is Smith's Tools, as in the builder (round 2 re-check)
 			if _, ok := game.FindTool(t); !ok {
-				if ft, ok := findToolLoose(t); ok {
+				if ft, ok := game.FindTool(t); ok {
 					req.ToolProficiencies[i] = ft.Name
 					readAs = append(readAs, fmt.Sprintf("tool_proficiencies %q is read as %s", t, game.ToolDisplayName(ft.Name)))
 				}
@@ -580,7 +580,7 @@ func handleCharacters(w http.ResponseWriter, r *http.Request) {
 		}
 		languages := origin.Languages
 		req.Species = origin.Record.Species.Name
-		speciesKey = normalizeSpeciesSlug(req.Species)
+		speciesKey = game.Key(req.Species)
 		req.Background = game.GetBackground(req.Background).Name
 		if a := origin.Record.Species.Choices["ancestry"]; origin.Record.Species.Key == "dragonborn" && a != "" {
 			req.DraconicAncestry = a
@@ -603,18 +603,10 @@ func handleCharacters(w http.ResponseWriter, r *http.Request) {
 		if len(req.KnownSpells) > 0 {
 			validSpells := []string{}
 			for _, spellSlug := range req.KnownSpells {
-				slugLower := strings.ToLower(strings.TrimSpace(spellSlug))
-				// Check if spell exists in SRD
-				if _, ok := srdSpellsMemory[slugLower]; ok {
-					validSpells = append(validSpells, slugLower)
+				if slug, ok := lookupSpell(spellSlug); ok { // any spelling of the name
+					validSpells = append(validSpells, slug)
 				} else {
-					// Try with dashes instead of spaces
-					slugDashed := strings.ReplaceAll(slugLower, " ", "-")
-					if _, ok := srdSpellsMemory[slugDashed]; ok {
-						validSpells = append(validSpells, slugDashed)
-					} else {
-						ignoredSpells = append(ignoredSpells, spellSlug)
-					}
+					ignoredSpells = append(ignoredSpells, spellSlug)
 				}
 			}
 			knownSpellsJSON, _ = json.Marshal(validSpells)

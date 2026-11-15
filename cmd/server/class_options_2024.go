@@ -33,7 +33,7 @@ func classOptionFor(c *choiceChar, field string) *choiceDef {
 		if d.set == nil {
 			continue
 		}
-		named := nameKey(field) == nameKey(d.field)
+		named := game.Key(field) == game.Key(d.field)
 		if p := featurePickNamed(field); p != nil && p.sendAs() == d.field {
 			named = true
 		}

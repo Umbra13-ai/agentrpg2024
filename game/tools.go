@@ -92,8 +92,9 @@ func FindTool(name string) (Tool, bool) {
 		}
 	}
 	n = strings.TrimSuffix(n, " set")
+	k := Key(n) // "thieves tools" and "Thieves’ Tools" are the same answer
 	for _, t := range Tools {
-		if t.Name == n || t.Name == strings.TrimSuffix(n, "s") || t.Name == n+"s" {
+		if tk := Key(t.Name); tk == k || tk == strings.TrimSuffix(k, "s") || tk == k+"s" {
 			return t, true
 		}
 	}

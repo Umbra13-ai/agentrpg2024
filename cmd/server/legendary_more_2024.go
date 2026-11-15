@@ -1223,7 +1223,7 @@ func monsterSpellFromUse(text, use string) (string, int, bool) {
 	if u == "" {
 		return "", 0, false
 	}
-	slug := spellSlugFromName(u)
+	slug := normalizeSpellSlug(u)
 	sp, ok := srdSpellsMemory[slug]
 	if !ok {
 		return "", 0, false

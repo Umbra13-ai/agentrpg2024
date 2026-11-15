@@ -345,12 +345,6 @@ func monsterSpellNumbers(text string, meta *monsterMeta) (dc, atk int) {
 	return
 }
 
-func spellSlugFromName(name string) string {
-	s := strings.ToLower(strings.TrimSpace(name))
-	s = strings.NewReplacer("’", "", "'", "", "/", "-", " ", "-").Replace(s)
-	return s
-}
-
 // resolveMonsterSpell casts a spell from the SRD data at characters.
 // use carries the GM's choice where the spell needs one (Command's word: approach, drop, flee, grovel or halt; grovel by default).
 func resolveMonsterSpell(lobbyID, monsterID int, monsterName, spellName string, level, dc, atk int, targets []int, selfCast, apply bool, use string) []string {
@@ -358,7 +352,7 @@ func resolveMonsterSpell(lobbyID, monsterID int, monsterName, spellName string, 
 		return []string{fmt.Sprintf("%s tries to cast %s, but %s.", monsterName, spellName, why)}
 	}
 	spellLevel := level
-	if sp, ok := srdSpellsMemory[spellSlugFromName(spellName)]; ok && spellLevel < sp.Level {
+	if sp, ok := srdSpellsMemory[normalizeSpellSlug(spellName)]; ok && spellLevel < sp.Level {
 		spellLevel = sp.Level
 	}
 	kept, notes := magicShieldedTargets(lobbyID, monsterID, spellLevel, targets) // Antimagic Field, Globe of Invulnerability
@@ -369,7 +363,7 @@ func resolveMonsterSpell(lobbyID, monsterID int, monsterName, spellName string, 
 }
 
 func resolveMonsterSpellRules(lobbyID, monsterID int, monsterName, spellName string, level, dc, atk int, targets []int, selfCast, apply bool, use string) []string {
-	slug := spellSlugFromName(spellName)
+	slug := normalizeSpellSlug(spellName)
 	sp, ok := srdSpellsMemory[slug]
 	if !ok {
 		return []string{fmt.Sprintf("%s casts %s (the GM resolves it).", monsterName, spellName)}

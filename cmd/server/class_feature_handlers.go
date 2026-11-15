@@ -134,7 +134,7 @@ func handleCharacterMetamagic(w http.ResponseWriter, r *http.Request) {
 	// Validate metamagic option exists
 	metamagicSlug := strings.ToLower(strings.TrimSpace(req.Metamagic))
 	for slug, o := range metamagicOptions { // the slug or the displayed name ("Careful Spell")
-		if k := nameKey(req.Metamagic); k == nameKey(slug) || k == nameKey(o.Name) {
+		if k := game.Key(req.Metamagic); k == game.Key(slug) || k == game.Key(o.Name) {
 			metamagicSlug = slug
 		}
 	}
@@ -1359,7 +1359,7 @@ func handleCharacterFightingStyle(w http.ResponseWriter, r *http.Request) {
 		}
 		var slugs []string
 		for _, c := range req.Cantrips {
-			slug := normalizeSpellSlug(strings.NewReplacer("'", "", "’", "").Replace(c))
+			slug := normalizeSpellSlug((c))
 			sp, ok := srdSpellsMemory[slug]
 			if !ok || sp.Level != 0 || !onClassList(slug, list) {
 				writeJSONStatus(w, http.StatusBadRequest, map[string]interface{}{"error": "invalid_cantrip",
@@ -1432,9 +1432,7 @@ func handleCharacterFightingStyle(w http.ResponseWriter, r *http.Request) {
 // resolveFightingStyle turns a style's slug or name into its slug: "Two-Weapon Fighting", "two-weapon fighting" and
 // "two_weapon_fighting" all give "two_weapon_fighting".
 func resolveFightingStyle(input string) string {
-	slug := strings.ToLower(strings.TrimSpace(input))
-	slug = strings.NewReplacer("'", "", "’", "", "-", "_", " ", "_").Replace(slug)
-	slug = strings.Join(strings.FieldsFunc(slug, func(r rune) bool { return r == '_' }), "_")
+	slug := game.Key(input)
 	if _, ok := fightingStyles[slug]; ok {
 		return slug
 	}
@@ -1952,7 +1950,7 @@ func handleCharacterMysticArcanum(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	// the slug or the displayed name ("Finger of Death")
-	req.SpellSlug = normalizeSpellSlug(strings.NewReplacer("'", "", "’", "").Replace(req.SpellSlug))
+	req.SpellSlug = normalizeSpellSlug((req.SpellSlug))
 
 	if req.CharacterID == 0 {
 		w.WriteHeader(http.StatusBadRequest)

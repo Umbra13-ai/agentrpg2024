@@ -96,7 +96,7 @@ func unknownBuilderFields(upd map[string]interface{}) []string {
 	for k := range upd {
 		if !builderFields[k] {
 			msg := fmt.Sprintf("%q is not a field the builder knows", k)
-			if nk := normKey(k); nk == "spells" || nk == "cantrips" || nk == "spell" || nk == "prepared_spells" { // not "did you mean species" (re-check)
+			if nk := game.Key(k); nk == "spells" || nk == "cantrips" || nk == "spell" || nk == "prepared_spells" { // not "did you mean species" (re-check)
 				msg += `: your class's spells and cantrips are chosen after creation, in GET /api/characters/{id}/setup; Magic Initiate picks go in background_feat_choices (or species_feat_choices for a Human's feat): {"cantrips": [...], "spell": "...", "spellcasting_ability": "..."}`
 			} else if h, ok := createFieldHints[nk]; ok && nk != "use_suggestion" && nk != "spellcasting_ability" { // the same true hints as POST /api/characters (round 2)
 				msg += ": " + h
@@ -164,11 +164,6 @@ var listExamples = map[string]string{"skill_proficiencies": `["perception", "ath
 
 // maxNameRunes: the longest character name the server stores.
 const maxNameRunes = 255
-
-// normKey: "Spellcasting Ability" and "spellcasting-ability" are spellcasting_ability.
-func normKey(s string) string {
-	return strings.Join(strings.FieldsFunc(strings.ToLower(strings.TrimSpace(s)), func(r rune) bool { return r == ' ' || r == '-' || r == '_' }), "_")
-}
 
 // skillForm: a skill in the server's form ("Sleight_of_Hand" -> "sleight of hand"); anything else as sent.
 func skillForm(s string) string {
@@ -273,7 +268,7 @@ func checkBuilderInput(upd, body map[string]interface{}) builderInput {
 		}
 		out := map[string]interface{}{}
 		for k, v := range m {
-			nk := normKey(k)
+			nk := game.Key(k)
 			if g == "species_choices" {
 				switch nk {
 				case "ability", "spell_ability", "spellcasting":
@@ -288,7 +283,7 @@ func checkBuilderInput(upd, body map[string]interface{}) builderInput {
 						nk = "legacy"
 					}
 				}
-				if nk != normKey(k) && nk != strings.ToLower(strings.TrimSpace(k)) { // said, not done silently (re-check)
+				if nk != game.Key(k) && nk != strings.ToLower(strings.TrimSpace(k)) { // said, not done silently (re-check)
 					in.notes = append(in.notes, fmt.Sprintf("species_choices.%s is read as species_choices.%s", k, nk))
 				}
 			}
@@ -375,7 +370,7 @@ func checkBuilderInput(upd, body map[string]interface{}) builderInput {
 					s = c // "True Neutral" is saved as "Neutral"
 				}
 			case "ability_method":
-				switch normKey(s) {
+				switch game.Key(s) {
 				case "standard_array", "standard", "array", "standardarray":
 					s = "standard_array"
 				}
@@ -542,7 +537,7 @@ func checkBuilderInput(upd, body map[string]interface{}) builderInput {
 				case "skill":
 					s = strings.ToLower(skillForm(s))
 				default:
-					s = normKey(s) // "High Elf" and "high-elf" are high_elf
+					s = game.Key(s) // "High Elf" and "high-elf" are high_elf
 				}
 				if sp != nil && !containsStr(sp.Needs, part) {
 					asks := "makes no species choices"
@@ -897,14 +892,9 @@ func rollbackAnswer(body, before map[string]interface{}, path string) {
 	}
 }
 
-// spellSlug: "Sacred Flame" -> sacred-flame.
-func spellSlug(s string) string {
-	return strings.ToLower(strings.Join(strings.Fields(strings.ReplaceAll(strings.TrimSpace(s), "_", " ")), "-"))
-}
-
 // miSpellProblem: what is wrong with one Magic Initiate pick on its own (level 0: a cantrip; 1: the level 1 spell).
 func miSpellProblem(name string, level int, list string, speciesCantrips, other []string) string {
-	slug := spellSlug(name)
+	slug := normalizeSpellSlug(name)
 	if sp, ok := srdSpellsMemory[slug]; ok && sp.Level != level {
 		if level == 0 {
 			return fmt.Sprintf("%s is not a cantrip", sp.Name)
@@ -940,7 +930,7 @@ func miContext(body map[string]interface{}, field string) (list, bgList string, 
 		bfc := bmap(body, "background_feat_choices")
 		for _, s := range append(blist(bfc, "cantrips"), bstr(bfc, "spell")) {
 			if s != "" {
-				other = append(other, spellSlug(s))
+				other = append(other, normalizeSpellSlug(s))
 			}
 		}
 	}
@@ -958,7 +948,20 @@ func humanListProblem(list, bgList string) string {
 	return ""
 }
 
-// featPartProblems: what is wrong with each part of a Magic Initiate answer on its own (list, cantrips, spell, ability).
+// featProblemText: the problems of a Magic Initiate answer as one sentence ("" when there are none), for the builder step.
+func featProblemText(body map[string]interface{}, field string) string {
+	pp := featPartProblems(body, field)
+	var parts []string
+	for _, k := range []string{"list", "spellcasting_ability", "cantrips", "spell"} {
+		if pp[k] != "" {
+			parts = append(parts, pp[k])
+		}
+	}
+	return strings.Join(parts, "; ")
+}
+
+// featPartProblems: what is wrong with each part of a Magic Initiate answer on its own (list, cantrips, spell, ability). It
+// is the builder's only check of a Magic Initiate answer.
 func featPartProblems(body map[string]interface{}, field string) map[string]string {
 	out := map[string]string{}
 	fc := bmap(body, field)
@@ -981,11 +984,11 @@ func featPartProblems(body map[string]interface{}, field string) map[string]stri
 	cs := blist(fc, "cantrips")
 	seen := map[string]bool{}
 	for _, c := range cs {
-		if seen[spellSlug(c)] {
+		if seen[normalizeSpellSlug(c)] {
 			out["cantrips"] = "you chose the same cantrip twice: choose 2 different ones"
 			break
 		}
-		seen[spellSlug(c)] = true
+		seen[normalizeSpellSlug(c)] = true
 		if list != "" {
 			if p := miSpellProblem(c, 0, list, spC, other); p != "" {
 				out["cantrips"] = p
@@ -1285,7 +1288,7 @@ func mergeList(body map[string]interface{}, field string, cur, sv interface{}, c
 			if held[normItem(s)] {
 				return false
 			}
-			if t, ok := findToolLoose(s); ok && game.HasToolProficiency(heldTools, t.Name) {
+			if t, ok := game.FindTool(s); ok && game.HasToolProficiency(heldTools, t.Name) {
 				return false
 			}
 			return true
@@ -1344,7 +1347,7 @@ func mergeMagicInitiate(body map[string]interface{}, field string, cur, sv inter
 		var picks []string // the one list every pick is on (druidcraft and goodberry: druid)
 		for _, s := range append(blist(out, "cantrips"), bstr(out, "spell")) {
 			if s != "" {
-				picks = append(picks, spellSlug(s))
+				picks = append(picks, normalizeSpellSlug(s))
 			}
 		}
 		var fits []string
@@ -1373,9 +1376,9 @@ func mergeMagicInitiate(body map[string]interface{}, field string, cur, sv inter
 	}
 	var cs, slugs []string
 	add := func(c string) {
-		if len(cs) < 2 && !containsStr(slugs, spellSlug(c)) && miSpellProblem(c, 0, list, spC, other) == "" {
+		if len(cs) < 2 && !containsStr(slugs, normalizeSpellSlug(c)) && miSpellProblem(c, 0, list, spC, other) == "" {
 			cs = append(cs, c)
-			slugs = append(slugs, spellSlug(c))
+			slugs = append(slugs, normalizeSpellSlug(c))
 		}
 	}
 	for _, c := range blist(out, "cantrips") {
@@ -1438,7 +1441,7 @@ func readable(v interface{}) string {
 func spellNames(v interface{}) string {
 	var out []string
 	for _, s := range toStrings(v) {
-		out = append(out, originSpellName(spellSlug(s)))
+		out = append(out, originSpellName(normalizeSpellSlug(s)))
 	}
 	return strings.Join(out, ", ")
 }
@@ -1456,7 +1459,7 @@ func featSummary(feat, list string, fc map[string]interface{}) string {
 			parts = append(parts, "cantrips "+s)
 		}
 		if s := bstr(fc, "spell"); s != "" {
-			parts = append(parts, "level 1 spell "+originSpellName(spellSlug(s)))
+			parts = append(parts, "level 1 spell "+originSpellName(normalizeSpellSlug(s)))
 		}
 		if a := bstr(fc, "spellcasting_ability"); a != "" {
 			parts = append(parts, "spellcasting ability "+firstNonEmpty(abilityFullNames[a], a))
@@ -1550,7 +1553,7 @@ func draftSummary(body map[string]interface{}, wc map[string]interface{}) []stri
 		add("Origin feat (background)", featSummary(bg.Feat, bg.FeatNote, bmap(body, "background_feat_choices")))
 	}
 	if sp != nil && sp.Key == "human" {
-		if f := normKey(bstr(sc, "feat")); f != "" {
+		if f := game.Key(bstr(sc, "feat")); f != "" {
 			fc := bmap(body, "species_feat_choices")
 			add("Origin feat (Human)", featSummary(f, bstr(fc, "list"), fc))
 		}
@@ -1631,7 +1634,7 @@ func featChoiceSubfields(upd map[string]interface{}) []string {
 			continue
 		}
 		for k, v := range fc {
-			nk := normKey(k) // "Spellcasting Ability" is spellcasting_ability
+			nk := game.Key(k) // "Spellcasting Ability" is spellcasting_ability
 			if real, ok := featChoiceAliases[nk]; ok {
 				nk = real
 			}

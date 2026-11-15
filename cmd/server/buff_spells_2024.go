@@ -1098,7 +1098,7 @@ func dispelSpellEffects(lobbyID, targetID, slot, mod int, effect string) (lines 
 			continue
 		}
 		seen[key] = true
-		sp, ok := srdSpellsMemory[spellSlugFromName(e.Spell)]
+		sp, ok := srdSpellsMemory[normalizeSpellSlug(e.Spell)]
 		if !ok {
 			continue // an item's, a species trait's or a monster's effect, not a spell
 		}

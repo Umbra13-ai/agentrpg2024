@@ -59,13 +59,3 @@ func decodeRequest(w http.ResponseWriter, r *http.Request, v interface{}, allowE
 	writeJSONStatus(w, http.StatusBadRequest, map[string]interface{}{"error": "invalid_json", "message": msg + " Nothing was changed.", "fields": fields})
 	return false
 }
-
-// nameKey folds a displayed name and a slug to one key: "Hunter's Prey", "hunters_prey" and "hunters-prey" all give "hunters_prey".
-// Choices are matched with it, so the name the server shows is accepted as well as the slug (setup checker, Nov 14: the displayed
-// Metamagic, Hunter's Prey and Mystic Arcanum names were refused).
-func nameKey(s string) string {
-	s = strings.ToLower(strings.TrimSpace(s))
-	s = strings.NewReplacer("'", "", "’", "", "(", "", ")", "").Replace(s)
-	s = strings.NewReplacer("-", " ", "_", " ").Replace(s)
-	return strings.Join(strings.Fields(s), "_")
-}

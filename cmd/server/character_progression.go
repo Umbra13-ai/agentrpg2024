@@ -91,7 +91,7 @@ func handleCharacterASI(w http.ResponseWriter, r *http.Request, charID int) {
 	}
 
 	// Validate ability and get current value
-	ability := strings.ToLower(req.Ability)
+	ability := normAbility(req.Ability) // "Strength", "STR" or "str"
 	var currentVal int
 	var column string
 	switch ability {
@@ -298,7 +298,7 @@ func handleCharacterFeat(w http.ResponseWriter, r *http.Request, charID int) {
 	}
 
 	// Handle ability choice for feats like Resilient or Observant
-	abilityChoice := strings.ToLower(strings.TrimSpace(req.AbilityChoice))
+	abilityChoice := normAbility(req.AbilityChoice) // "Strength", "STR" or "str"
 	if feat.AbilityBonus != nil {
 		if _, hasChosen := feat.AbilityBonus["chosen"]; hasChosen {
 			if abilityChoice == "" {
@@ -639,6 +639,9 @@ func handleCharacterSubclass(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 
+		if slug, ok := game.LookupSubclass(req.Subclass); ok { // the slug or the SRD name, in any spelling ("College of Lore")
+			req.Subclass = slug
+		}
 		if req.CharacterID == 0 || req.Subclass == "" {
 			w.WriteHeader(http.StatusBadRequest)
 			json.NewEncoder(w).Encode(map[string]interface{}{

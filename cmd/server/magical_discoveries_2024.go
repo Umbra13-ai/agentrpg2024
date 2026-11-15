@@ -9,7 +9,6 @@ package main
 import (
 	"encoding/json"
 	"fmt"
-	"strings"
 	"sync"
 )
 
@@ -49,30 +48,6 @@ func bardMaxSpellLevel(level int) int {
 
 const srdMagicalDiscoveries = "You learn two spells of your choice. These spells can come from the Cleric, Druid, or Wizard spell list or any combination thereof (see a class’s section for its spell list). A spell you choose must be a cantrip or a spell for which you have spell slots, as shown in the Bard Features table. You always have the chosen spells prepared, and whenever you gain a Bard level, you can replace one of the spells with another spell that meets these requirements."
 
-// spellsAlreadyHad: the spells a character already has (known, prepared, origin and other always-prepared spells), not counting its
-// Magical Discoveries themselves. Magical Discoveries options and the suggestion leave these out, and picking one is refused (setup
-// checker, Nov 14: the suggestion named a spell the Bard already had through Magic Initiate).
-func spellsAlreadyHad(charID int) map[string]bool {
-	have := map[string]bool{}
-	for _, k := range jsonListOf(charID, "known_spells") {
-		have[k] = true
-	}
-	for _, k := range jsonListOf(charID, "prepared_spells") {
-		have[k] = true
-	}
-	for k := range originSpellsOf(charID) {
-		have[k] = true
-	}
-	class, sub, level := subclassOf(charID)
-	for _, k := range append(append(getDomainSpells(sub, level, subclassChoicesOf(charID)["circle_land"]), originAlwaysPrepared(charID)...), append(featureAlwaysPrepared(charID), wordsOfCreationSpells(strings.ToLower(class), level)...)...) {
-		have[k] = true
-	}
-	for _, k := range magicalDiscoveriesOf(charID) {
-		delete(have, k)
-	}
-	return have
-}
-
 // setMagicalDiscoveries checks and saves the two spells ("" on success, else what is wrong).
 func setMagicalDiscoveries(charID int, picks []string) string {
 	if !hasMagicalDiscoveries(charID) {
@@ -84,9 +59,9 @@ func setMagicalDiscoveries(charID int, picks []string) string {
 		return fmt.Sprintf("choose exactly 2 spells (you sent %d)", len(picks))
 	}
 	var keys []string
-	had := spellsAlreadyHad(charID)
+	had := spellsHeld(charID, magicalDiscoveriesOf(charID)...)
 	for _, p := range picks {
-		k := normalizeSpellSlug(strings.NewReplacer("'", "", "’", "").Replace(p))
+		k := normalizeSpellSlug((p))
 		sp, ok := srdSpellsMemory[k]
 		if !ok {
 			if note := phbNote("spell", p); note != "" {
@@ -123,7 +98,7 @@ func magicalDiscoveriesStep(charID int) *setupStep {
 	db.QueryRow(`SELECT COALESCE(level,1) FROM characters WHERE id = $1`, charID).Scan(&level)
 	maxL := bardMaxSpellLevel(level)
 	var opts []map[string]interface{}
-	seen := spellsAlreadyHad(charID) // spells the Bard already has aren't options
+	seen := spellsHeld(charID, magicalDiscoveriesOf(charID)...) // spells the Bard already has aren't options
 	for _, list := range []string{"cleric", "druid", "wizard"} {
 		for _, k := range getClassSpellList(list) {
 			sp, ok := srdSpellsMemory[k]
@@ -143,7 +118,7 @@ func magicalDiscoveriesStep(charID int) *setupStep {
 		}
 	}
 	pick := []string{}
-	had := spellsAlreadyHad(charID)
+	had := spellsHeld(charID, magicalDiscoveriesOf(charID)...)
 	for _, k := range []string{"guidance", "spirit-guardians", "revivify", "cure-wounds", "shield", "magic-missile"} {
 		if sp, ok := srdSpellsMemory[k]; ok && sp.Level <= maxL && len(pick) < 2 && !isSpellOnClassList(k, "bard") && !had[k] {
 			pick = append(pick, k)

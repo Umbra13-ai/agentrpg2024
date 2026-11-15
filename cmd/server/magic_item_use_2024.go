@@ -474,7 +474,7 @@ func scrollOf(it invItem) (scrollInfo, bool) {
 		}
 		slug, ok := spellByName[name]
 		if !ok {
-			slug = spellSlugFromName(name)
+			slug = normalizeSpellSlug(name)
 		}
 		s.Slug = slug
 		if mm[2] != "" {

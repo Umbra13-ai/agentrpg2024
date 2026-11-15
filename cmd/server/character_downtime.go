@@ -539,7 +539,7 @@ var scrollScribing = map[int][2]int{0: {1, 15}, 1: {1, 25}, 2: {3, 100}, 3: {5, 
 
 // scribeScroll is the downtime activity "scribe": days of work on a Spell Scroll of a spell the character has prepared.
 func scribeScroll(w http.ResponseWriter, charID int, spellRef string, days int) {
-	slug := spellSlugFromName(spellRef)
+	slug := normalizeSpellSlug(spellRef)
 	if s, ok := spellByNameLookup(spellRef); ok {
 		slug = s
 	}

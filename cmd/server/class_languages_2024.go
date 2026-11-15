@@ -7,6 +7,7 @@ package main
 import (
 	"encoding/json"
 	"fmt"
+	"github.com/agentrpg/agentrpg/game"
 	"strings"
 )
 
@@ -118,7 +119,7 @@ func setClassLanguages(charID int, langs []string) string {
 	for _, l := range langs {
 		ok := ""
 		for _, o := range opts {
-			if strings.EqualFold(o, strings.TrimSpace(l)) {
+			if game.Key(o) == game.Key(l) { // "Deep Speech", "deep_speech"
 				ok = o
 			}
 		}

@@ -54,10 +54,6 @@ func toolboxKeys(sec string) []string {
 	return out
 }
 
-func toolboxKey(s string) string {
-	return strings.Trim(strings.NewReplacer("'", "", " ", "_", "-", "_").Replace(strings.ToLower(strings.TrimSpace(s))), "_")
-}
-
 // ---- shared helpers for monsters (negative ids) and characters
 
 func damageAny(lobbyID, id, dmg int, dtype string) string {
@@ -161,7 +157,7 @@ func handleGMApplyPoison2024(w http.ResponseWriter, r *http.Request) {
 		Repeat      bool   `json:"repeat"`
 	}
 	json.NewDecoder(r.Body).Decode(&req)
-	key := toolboxKey(req.Poison)
+	key := game.Key(req.Poison)
 	rule, okRule := poisonRules[key]
 	if !okRule {
 		dmBadRequest(w, "unknown_poison", "poison must be one of: "+strings.Join(toolboxKeys("poisons"), ", "))
@@ -264,7 +260,7 @@ func handleGMApplyContagion(w http.ResponseWriter, r *http.Request) {
 		DC          int    `json:"dc"`
 	}
 	json.NewDecoder(r.Body).Decode(&req)
-	key := toolboxKey(req.Contagion)
+	key := game.Key(req.Contagion)
 	dc, known := contagionInfectDC[key]
 	if !known {
 		dmBadRequest(w, "unknown_contagion", "contagion must be one of: cackle_fever, sewer_plague, sight_rot")
@@ -326,7 +322,7 @@ func handleGMContagionSave(w http.ResponseWriter, r *http.Request) {
 	if req.TargetID == 0 {
 		req.TargetID = req.CharacterID
 	}
-	key := toolboxKey(req.Contagion)
+	key := game.Key(req.Contagion)
 	ensureContagionTable()
 	var id, successes int
 	var onset bool
@@ -543,7 +539,7 @@ func handleGMTrap2024(w http.ResponseWriter, r *http.Request) {
 		Level       int    `json:"level"`
 	}
 	json.NewDecoder(r.Body).Decode(&req)
-	key := toolboxKey(req.Trap)
+	key := game.Key(req.Trap)
 	rule, known := trapRules[key]
 	if !known {
 		dmBadRequest(w, "unknown_trap", "trap must be one of: "+strings.Join(toolboxKeys("traps"), ", "))
@@ -658,7 +654,7 @@ func handleGMEnvironmentalHazard2024(w http.ResponseWriter, r *http.Request) {
 		DaysNoFood  int    `json:"days_without_food"` // malnutrition: whole days with no food
 	}
 	json.NewDecoder(r.Body).Decode(&req)
-	key := toolboxKey(req.Hazard)
+	key := game.Key(req.Hazard)
 	if key == "dehydration" || key == "malnutrition" { // Rules Glossary hazards
 		if req.CharacterID == 0 {
 			dmBadRequest(w, "character_required", "Send character_id.")

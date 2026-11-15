@@ -156,7 +156,7 @@ func spellsStep(ch *choiceChar) *setupStep {
 	cl, level := ch.class, ch.level
 	wantCantrips := sc.wantCantrips
 	cantrips, leveled := append([]string{}, sc.cantrips...), append([]string{}, sc.leveled...)
-	seen, origin, always := sc.seen, sc.origin, sc.always
+	origin, always := sc.origin, sc.always
 	if len(sc.problems) > 0 {
 		maxSlot := maxSpellLevelFor(ch.id, cl, level)
 		valid := func(cap int, list []string) []string {
@@ -175,23 +175,18 @@ func spellsStep(ch *choiceChar) *setupStep {
 			wantCantrips = need
 		}
 	}
-	avoid := map[string]bool{}
-	for s := range seen {
-		if sp, ok := srdSpellsMemory[s]; ok && cl == "wizard" && sp.Level > 0 && !containsStr(sc.prepared, s) {
-			continue // a Wizard's spellbook spell not yet prepared is what can be prepared (Nov 13)
+	// the spells the character already has aren't options (spellsHeld), except a Wizard's spellbook spells not yet prepared:
+	// those are what a Wizard prepares from
+	var bookUnprepared []string
+	if cl == "wizard" {
+		for _, s := range sc.known {
+			_, fromOrigin := origin[s]
+			if sp, ok := srdSpellsMemory[s]; ok && sp.Level > 0 && !fromOrigin && !containsStr(always, s) && !containsStr(sc.prepared, s) {
+				bookUnprepared = append(bookUnprepared, s)
+			}
 		}
-		avoid[s] = true
 	}
-	for s := range origin {
-		avoid[s] = true
-	}
-	for _, s := range always {
-		avoid[s] = true
-	}
-	_, subSlug, _ := subclassOf(ch.id)
-	for _, s := range getDomainSpells(subSlug, level, subclassChoicesOf(ch.id)["circle_land"]) { // the subclass's spells are always prepared
-		avoid[s] = true
-	}
+	avoid := spellsHeld(ch.id, bookUnprepared...)
 	avoidBase := map[string]bool{}
 	for k, v := range avoid {
 		avoidBase[k] = v

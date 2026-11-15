@@ -73,14 +73,7 @@ func onAnyClassList(slug string) bool {
 
 // bookHave: the spells the Warlock already has prepared (the book's picks must be others).
 func bookHave(charID int) map[string]bool {
-	have := map[string]bool{}
-	for _, s := range append(currentPreparedList(charID, "warlock"), originAlwaysPrepared(charID)...) {
-		have[normalizeSpellSlug(s)] = true
-	}
-	for _, s := range append(classAlwaysPrepared(classLevelsOrSingle(charID)), jsonListOf(charID, "prepared_spells")...) {
-		have[normalizeSpellSlug(s)] = true
-	}
-	return have
+	return spellsHeld(charID, bookOfShadowsSpells(charID)...) // the book's own spells can be chosen again for a new book
 }
 
 // sortedSpellSlugs: every SRD spell slug, sorted.

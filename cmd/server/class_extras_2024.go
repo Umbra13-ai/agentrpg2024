@@ -318,18 +318,6 @@ func wizardOwner(w http.ResponseWriter, r *http.Request, charID int) (class stri
 	return strings.ToLower(class), level, true
 }
 
-func spellSlugOf(s string) (string, bool) {
-	l := strings.ToLower(strings.TrimSpace(s))
-	if _, ok := srdSpellsMemory[l]; ok {
-		return l, true
-	}
-	d := strings.ReplaceAll(l, " ", "-")
-	if _, ok := srdSpellsMemory[d]; ok {
-		return d, true
-	}
-	return "", false
-}
-
 func inSpellbook(charID int, slug string) bool {
 	var raw []byte
 	db.QueryRow(`SELECT COALESCE(known_spells,'[]') FROM characters WHERE id = $1`, charID).Scan(&raw)
@@ -384,8 +372,8 @@ func handleMemorizeSpell(w http.ResponseWriter, r *http.Request) {
 		writeJSONStatus(w, http.StatusConflict, map[string]interface{}{"error": "needs_rest", "message": "You can study your spellbook when you finish a Short Rest (once per rest)."})
 		return
 	}
-	oldSlug, ok1 := spellSlugOf(req.Replace)
-	newSlug, ok2 := spellSlugOf(req.With)
+	oldSlug, ok1 := lookupSpell(req.Replace)
+	newSlug, ok2 := lookupSpell(req.With)
 	if !ok1 || !ok2 {
 		writeJSONStatus(w, http.StatusBadRequest, map[string]interface{}{"error": "unknown_spell"})
 		return
@@ -471,7 +459,7 @@ func handleSpellMastery(w http.ResponseWriter, r *http.Request) {
 	var slugs []string
 	levels := map[int]bool{}
 	for _, s := range req.Spells {
-		slug, ok := spellSlugOf(s)
+		slug, ok := lookupSpell(s)
 		if !ok {
 			writeJSONStatus(w, http.StatusBadRequest, map[string]interface{}{"error": "unknown_spell", "message": s})
 			return

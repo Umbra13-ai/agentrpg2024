@@ -282,6 +282,24 @@ func allAlwaysPrepared(charID int) []string {
 	return append(out, magicalDiscoveriesOf(charID)...)
 }
 
+// spellsHeld: every spell the character already has, from any source: its known spells (a Wizard's spellbook), its prepared
+// list, and every spell it has prepared without choosing it (allAlwaysPrepared: subclass, origin, class features, the Book
+// of Shadows, Words of Creation, Magical Discoveries). This is the server's one answer to "does the character already have
+// this spell?": the options and the checks of Magical Discoveries, the Book of Shadows and the spells setup step read it.
+// except leaves out the spells of the choice being made (the Book of Shadows' own spells when the book is filled again).
+func spellsHeld(charID int, except ...string) map[string]bool {
+	have := map[string]bool{}
+	for _, list := range [][]string{jsonListOf(charID, "known_spells"), jsonListOf(charID, "prepared_spells"), allAlwaysPrepared(charID)} {
+		for _, s := range list {
+			have[normalizeSpellSlug(s)] = true
+		}
+	}
+	for _, s := range except {
+		delete(have, normalizeSpellSlug(s))
+	}
+	return have
+}
+
 // maxSpellLevelFor: the highest spell level the character has slots for (Pact Magic included); 0 without slots.
 func maxSpellLevelFor(charID int, class string, level int) int {
 	m := 0

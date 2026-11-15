@@ -94,7 +94,7 @@ func eligibleMasteryWeapons(class string) []masteryChoice {
 		}
 		nk := weaponNameKey(w.Name)
 		if i, ok := byName[nk]; ok {
-			if key == masteryCanonicalKey(w.Name) {
+			if key == game.Key(w.Name) {
 				out[i].Key = key
 			}
 			continue
@@ -104,11 +104,6 @@ func eligibleMasteryWeapons(class string) []masteryChoice {
 	}
 	sort.Slice(out, func(i, j int) bool { return out[i].Name < out[j].Name })
 	return out
-}
-
-// masteryCanonicalKey is the built-in key form of a weapon name: "Light Crossbow" -> "light_crossbow".
-func masteryCanonicalKey(name string) string {
-	return strings.ReplaceAll(strings.ToLower(strings.TrimSpace(name)), " ", "_")
 }
 
 // stripMasterySuffix drops the "(Nick)" the listings show after a weapon: "Dagger (Nick)" -> "Dagger".

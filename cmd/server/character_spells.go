@@ -189,22 +189,14 @@ func handleCharacterSpells(w http.ResponseWriter, r *http.Request, charID int) {
 			return validSlug, isMagicalSecret, errResp
 		}
 		validateOnList = func(spellSlug string) (validSlug string, isMagicalSecret bool, errResp map[string]interface{}) {
-			slugLower := strings.NewReplacer("'", "", "’", "").Replace(strings.ToLower(strings.TrimSpace(spellSlug))) // "Hunter’s Mark" is hunters-mark (Nov 14 audit re-check)
-
-			// Find the spell in SRD
-			if _, ok := srdSpellsMemory[slugLower]; ok {
-				validSlug = slugLower
-			} else {
-				slugDashed := strings.ReplaceAll(slugLower, " ", "-")
-				if _, ok := srdSpellsMemory[slugDashed]; ok {
-					validSlug = slugDashed
-				} else {
-					return "", false, map[string]interface{}{
-						"error":   "unknown_spell",
-						"message": unknownSpellMessage(spellSlug),
-					}
+			slug, ok := lookupSpell(spellSlug) // any spelling of the name
+			if !ok {
+				return "", false, map[string]interface{}{
+					"error":   "unknown_spell",
+					"message": unknownSpellMessage(spellSlug),
 				}
 			}
+			validSlug = slug
 
 			// Check if on class spell list
 			if isSpellOnClassList(validSlug, class) {
@@ -335,9 +327,8 @@ func handleCharacterSpells(w http.ResponseWriter, r *http.Request, charID int) {
 
 			// Remove spells
 			for _, spellSlug := range req.Remove {
-				slugLower := strings.NewReplacer("'", "", "’", "").Replace(strings.ToLower(strings.TrimSpace(spellSlug))) // "Hunter’s Mark" is hunters-mark (Nov 14 audit re-check)
-				slugDashed := strings.ReplaceAll(slugLower, " ", "-")
-				if o := origin[normalizeSpellSlug(spellSlug)]; o.Slug != "" {
+				slug := normalizeSpellSlug(spellSlug)
+				if o := origin[slug]; o.Slug != "" {
 					src := o.Source
 					if src == "Magic Initiate" {
 						src += " feat"
@@ -348,16 +339,14 @@ func handleCharacterSpells(w http.ResponseWriter, r *http.Request, charID int) {
 						"message": fmt.Sprintf("%s comes from your %s, not your class: it stays on your sheet and can't be removed here. Nothing was changed.", spellName(o.Slug), src)})
 					return
 				}
-				if !containsStr(newSpells, slugLower) && !containsStr(newSpells, slugDashed) && !containsStr(newSpells, normalizeSpellSlug(spellSlug)) {
+				if !containsStr(newSpells, slug) {
 					writeJSONStatus(w, http.StatusBadRequest, map[string]interface{}{"error": "not_on_your_list",
 						"message": fmt.Sprintf("%q isn't on your list of spells, so it can't be removed. Nothing was changed.", spellSlug), "your_spells": knownSpells})
 					return
 				}
-				slugLower = normalizeSpellSlug(spellSlug)
-				slugDashed = slugLower
 				filtered := []string{}
 				for _, known := range newSpells {
-					if known != slugLower && known != slugDashed {
+					if known != slug {
 						filtered = append(filtered, known)
 					}
 				}
@@ -366,7 +355,7 @@ func handleCharacterSpells(w http.ResponseWriter, r *http.Request, charID int) {
 				// Also remove from magical secrets if present
 				filteredMS := []string{}
 				for _, ms := range newMagicalSecrets {
-					if ms != slugLower && ms != slugDashed {
+					if ms != slug {
 						filteredMS = append(filteredMS, ms)
 					}
 				}
@@ -738,15 +727,9 @@ func handlePrepareSpells(w http.ResponseWriter, r *http.Request, charID int) {
 		newPrepared := []string{}
 		var skippedAlways, skippedTwice []string // said in the reply (Nov 13): a list of only always-prepared spells used to answer "Prepared 0 spells" with no reason
 		for _, spellSlug := range *req.Spells {
-			slugLower := strings.NewReplacer("'", "", "’", "").Replace(strings.ToLower(strings.TrimSpace(spellSlug))) // "Hunter’s Mark" is hunters-mark (Nov 14 audit re-check)
-			slugDashed := strings.ReplaceAll(slugLower, " ", "-")
-
-			// Check SRD
-			validSlug := ""
-			if _, ok := srdSpellsMemory[slugLower]; ok {
-				validSlug = slugLower
-			} else if _, ok := srdSpellsMemory[slugDashed]; ok {
-				validSlug = slugDashed
+			validSlug, ok := lookupSpell(spellSlug) // any spelling of the name
+			if !ok {
+				validSlug = ""
 			}
 
 			if validSlug == "" {

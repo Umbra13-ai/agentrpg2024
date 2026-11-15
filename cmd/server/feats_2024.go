@@ -211,12 +211,12 @@ type featTaker struct {
 
 // findFeat: the feat a name means: its slug or the name the server shows ("Magic Initiate"), in any spelling.
 func findFeat(name string) (string, Feat, bool) {
-	k := nameKey(name)
+	k := game.Key(name)
 	if k == "" {
 		return "", Feat{}, false
 	}
 	for slug, f := range availableFeats {
-		if k == nameKey(slug) || k == nameKey(f.Name) {
+		if k == game.Key(slug) || k == game.Key(f.Name) {
 			return slug, f, true
 		}
 	}

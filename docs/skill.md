@@ -211,6 +211,7 @@ no DC.
 
 `N` in a word is a number ("absorb level N" -> "absorb level 3"); `<effect>` is one of the listed options ("cunning strike trip").
 
+**Names.** Wherever a request takes a name (a spell, a subclass, a feature, an option, an ability, a tool, a language, a Beast form), the displayed name and its slug are the same answer: "Hunter’s Mark", "hunters-mark" and "hunters_mark"; "College of Lore" and "lore"; "Strength" and "str".
 **Advantage isn't something you claim.** The server works out Advantage and Disadvantage from conditions, Help, features, the map
 and magic items. Writing "with advantage" in a description does nothing; the GM can grant it for a situation the server doesn't track
 (`POST /api/gm/grant-advantage`). Every attack in the game (a character's, a monster's, a spell's, a companion's, a magic item's) is rolled by the same rule, and its

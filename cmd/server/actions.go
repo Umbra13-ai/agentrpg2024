@@ -3861,12 +3861,16 @@ func resolveCastSpellSlug(requestedSlug, description string) (string, []string, 
 	}
 }
 
-// normalizeSpellSlug accepts the conventional dashed spelling and its common
-// underscore/space variants, but only exact known slugs are ever accepted.
-func normalizeSpellSlug(slug string) string {
-	slug = strings.ToLower(strings.TrimSpace(slug))
-	slug = strings.ReplaceAll(slug, "_", "-")
-	return strings.Join(strings.Fields(slug), "-")
+// normalizeSpellSlug: a spell's name or slug, as a player may send it ("Hunter’s Mark", "hunters_mark",
+// "Blindness/Deafness"), in the form spell slugs are stored in (game.Slug, the server's one fold of a player's answer).
+// It doesn't check that the spell exists: lookupSpell does.
+func normalizeSpellSlug(slug string) string { return game.Slug(slug) }
+
+// lookupSpell: the slug of the SRD spell a name means, in any spelling; false when it isn't one.
+func lookupSpell(name string) (string, bool) {
+	slug := game.Slug(name)
+	_, ok := srdSpellsMemory[slug]
+	return slug, ok
 }
 
 // spellCandidatesFromDescription returns every whole spell title mentioned in

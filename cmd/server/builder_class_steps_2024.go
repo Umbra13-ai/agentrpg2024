@@ -127,7 +127,7 @@ func draftSpeciesProficiencies(body map[string]interface{}) (skill string, featS
 // classToolCanon: the class tool option a name means ("Musical Instrument (Lute)", "LUTE", "Smiths Tools"), as creation reads it.
 func classToolCanon(options []string) func(string) (string, bool) {
 	return func(s string) (string, bool) {
-		if t, ok := findToolLoose(s); ok && containsStr(options, t.Name) {
+		if t, ok := game.FindTool(s); ok && containsStr(options, t.Name) {
 			return t.Name, true
 		}
 		return "", false
@@ -239,9 +239,4 @@ func backgroundsWithToolChoice() []string {
 		}
 	}
 	return out
-}
-
-// builderSpellSlug: a spell name as its slug ("Sacred Flame", "sacred_flame" -> "sacred-flame").
-func builderSpellSlug(name string) string {
-	return strings.Join(strings.Fields(strings.ToLower(strings.NewReplacer("_", " ", "-", " ").Replace(name))), "-")
 }
