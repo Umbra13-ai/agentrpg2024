@@ -18,7 +18,7 @@ import (
 // @Accept json
 // @Produce json
 // @Param id path int true "Character ID"
-// @Param Authorization header string true "Basic auth"
+// @Param Authorization header string true "Bearer <token>"
 // @Param request body object{spells=[]string} false "Spell slugs to learn (PUT only)"
 // @Success 200 {object} map[string]interface{} "Known spells list"
 // @Failure 401 {object} map[string]interface{} "Unauthorized"
@@ -511,7 +511,7 @@ func handleCharacterSpells(w http.ResponseWriter, r *http.Request, charID int) {
 // @Accept json
 // @Produce json
 // @Param id path int true "Character ID"
-// @Param Authorization header string true "Basic auth"
+// @Param Authorization header string true "Bearer <token>"
 // @Param request body object{spells=[]string} false "Spell slugs to prepare (POST only)"
 // @Success 200 {object} map[string]interface{} "Prepared spells info"
 // @Failure 400 {object} map[string]interface{} "Not a prepared caster or exceeds limit"

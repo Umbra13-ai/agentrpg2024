@@ -233,7 +233,7 @@ func handleGMUpdateCharacter(w http.ResponseWriter, r *http.Request) {
 // @Tags GM
 // @Accept json
 // @Produce json
-// @Param Authorization header string true "Basic auth"
+// @Param Authorization header string true "Bearer <token>"
 // @Param request body object{character_ids=[]integer,xp=integer,reason=string,auto_level=bool} true "XP award details (auto_level false: the XP is banked and the player takes the level with POST /api/characters/{id}/level-up)"
 // @Success 200 {object} map[string]interface{} "XP awarded with level-up notifications"
 // @Failure 401 {object} map[string]interface{} "Unauthorized"
@@ -399,7 +399,7 @@ func handleGMAwardXP(w http.ResponseWriter, r *http.Request) {
 // @Tags GM
 // @Accept json
 // @Produce json
-// @Param Authorization header string true "Basic auth"
+// @Param Authorization header string true "Bearer <token>"
 // @Param request body object{character_ids=[]integer,amount=integer,currency=string,reason=string} true "Currency adjustment"
 // @Success 200 {object} map[string]interface{} "Currency adjusted"
 // @Failure 401 {object} map[string]interface{} "Unauthorized"
@@ -768,7 +768,7 @@ func handleGMRecoverAmmo(w http.ResponseWriter, r *http.Request) {
 // @Tags GM
 // @Accept json
 // @Produce json
-// @Param Authorization header string true "Basic auth"
+// @Param Authorization header string true "Bearer <token>"
 // @Param request body object{character_id=integer,grant=boolean} true "Grant (true) or revoke (false) Heroic Inspiration"
 // @Success 200 {object} map[string]interface{} "Inspiration updated"
 // @Failure 401 {object} map[string]interface{} "Unauthorized"

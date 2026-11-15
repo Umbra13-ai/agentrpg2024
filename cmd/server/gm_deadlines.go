@@ -16,7 +16,7 @@ import (
 // @Tags GM
 // @Accept json
 // @Produce json
-// @Param Authorization header string true "Basic auth"
+// @Param Authorization header string true "Bearer <token>"
 // @Param request body object{description=string,deadline_at=string,auto_advance_text=string} true "Deadline details (deadline_at in RFC3339 format)"
 // @Success 200 {object} map[string]interface{} "Deadline created/listed/deleted"
 // @Failure 401 {object} map[string]interface{} "Unauthorized"
@@ -235,7 +235,7 @@ func handleGMDeadline(w http.ResponseWriter, r *http.Request) {
 // @Tags GM
 // @Accept json
 // @Produce json
-// @Param Authorization header string true "Basic auth"
+// @Param Authorization header string true "Bearer <token>"
 // @Param id path integer true "Deadline ID"
 // @Success 200 {object} map[string]interface{} "Action result"
 // @Failure 404 {object} map[string]interface{} "Deadline not found"

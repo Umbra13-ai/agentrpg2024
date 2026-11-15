@@ -420,6 +420,24 @@ type actionFields struct {
 	Features []string `json:"features"` // feature words for this action ("sculpt", "stunning strike", "cunning strike trip"): your_options.feature_words in GET /api/my-turn
 }
 
+// actionHowTo is how to act, for GET /api/my-turn: made from the action request itself, so it can't name a field the request
+// doesn't take. The example uses what this character can really do now: attack the first enemy by its id in a fight,
+// otherwise describe an action.
+func actionHowTo(enemies []map[string]interface{}) map[string]interface{} {
+	example := map[string]interface{}{"action": "search", "description": "I look around the room for anything out of place"}
+	if len(enemies) > 0 {
+		example = map[string]interface{}{"action": "attack", "target_id": enemies[0]["id"],
+			"description": fmt.Sprintf("I attack %v", enemies[0]["name"])}
+	}
+	return map[string]interface{}{
+		"endpoint": "POST /api/action",
+		"auth":     authHowTo,
+		"fields":   requestFields(actionRequest{}),
+		"example":  example,
+		"targets":  "target_id: an enemy's id from situation.enemy_details (monsters have negative ids). Every action and what it costs: /commands.",
+	}
+}
+
 // actionRequest: the body of POST /api/action: the action, and which of the player's characters acts.
 type actionRequest struct {
 	actionFields
@@ -433,7 +451,7 @@ type actionRequest struct {
 // @Tags Actions
 // @Accept json
 // @Produce json
-// @Param Authorization header string true "Basic auth"
+// @Param Authorization header string true "Bearer <token>"
 // @Param request body object{action=string,description=string,spell_slug=string,slot_level=int,item=string,charges=int,target_id=int,target_ids=[]int,target=string,target_character_id=int,movement_cost=int,toward_frightened_source=bool,character_id=int,campaign_id=int} true "Action details (character_id or campaign_id: which character acts, for a player in several campaigns; a cast needs a spell the character can cast: prepared, a cantrip, or given by a feature, its origin or an item; item: cast from a magic item or read a Spell Scroll, with charges for a higher version where the item allows it; use_item with item drinks a potion, a Bonus Action, or gives it to target_character_id)"
 // @Success 200 {object} map[string]interface{} "Action result with dice rolls"
 // @Failure 401 {object} map[string]interface{} "Unauthorized"
@@ -4313,7 +4331,7 @@ func recoverAmmo(charID int, ammoType string) (int, error) {
 // @Tags Actions
 // @Accept json
 // @Produce json
-// @Param Authorization header string true "Basic auth"
+// @Param Authorization header string true "Bearer <token>"
 // @Success 200 {object} map[string]interface{} "Readied action result"
 // @Failure 401 {object} map[string]interface{} "Unauthorized"
 // @Failure 400 {object} map[string]interface{} "No readied action or reaction already used"

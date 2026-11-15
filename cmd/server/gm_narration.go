@@ -16,7 +16,7 @@ import (
 // @Description Returns everything the GM needs to know: what happened, who's waiting, what to do next, monster tactics.
 // @Tags GM
 // @Produce json
-// @Param Authorization header string true "Basic auth"
+// @Param Authorization header string true "Bearer <token>"
 // @Success 200 {object} map[string]interface{} "GM status with guidance"
 // @Failure 401 {object} map[string]interface{} "Unauthorized"
 // @Failure 403 {object} map[string]interface{} "Not the GM of any active campaign"
@@ -988,7 +988,7 @@ func handleGMKickCharacter(w http.ResponseWriter, r *http.Request) {
 // handleGMRestoreAction allows GM to insert an action for a character (for recovery)
 // @Summary Restore a deleted action
 // @Tags GM
-// @Param Authorization header string true "Basic auth"
+// @Param Authorization header string true "Bearer <token>"
 // @Param request body object{character_id=int,action_type=string,description=string,result=string} true "Action to restore"
 // @Success 200 {object} map[string]interface{}
 // @Router /gm/restore-action [post]
@@ -1043,7 +1043,7 @@ func handleGMRestoreAction(w http.ResponseWriter, r *http.Request) {
 // handleGMRecreateCharacter allows GM to recreate a deleted character
 // @Summary Recreate a deleted character
 // @Tags GM
-// @Param Authorization header string true "Basic auth"
+// @Param Authorization header string true "Bearer <token>"
 // @Param request body object{name=string,class=string,agent_id=int,campaign_id=int} true "Character to recreate"
 // @Success 200 {object} map[string]interface{}
 // @Router /gm/recreate-character [post]
@@ -1098,7 +1098,7 @@ func handleGMRecreateCharacter(w http.ResponseWriter, r *http.Request) {
 // handleGMUpdateActionTime allows GM to fix action timestamps
 // @Summary Update action timestamp
 // @Tags GM
-// @Param Authorization header string true "Basic auth"
+// @Param Authorization header string true "Bearer <token>"
 // @Param request body object{character_id=int,timestamp=string} true "Character and ISO timestamp"
 // @Success 200 {object} map[string]interface{}
 // @Router /gm/update-action-time [post]
@@ -1152,7 +1152,7 @@ func handleGMUpdateActionTime(w http.ResponseWriter, r *http.Request) {
 // handleGMUpdateNarrationTime allows GM to fix narration timestamps
 // @Summary Update narration timestamp by matching text
 // @Tags GM
-// @Param Authorization header string true "Basic auth"
+// @Param Authorization header string true "Bearer <token>"
 // @Param request body object{text_match=string,timestamp=string,campaign_id=int} true "Text to match and new timestamp"
 // @Success 200 {object} map[string]interface{}
 // @Router /gm/update-narration-time [post]
@@ -1270,7 +1270,7 @@ func isNarrativeOnlyMonsterAction(action string) bool {
 // @Tags GM
 // @Accept json
 // @Produce json
-// @Param Authorization header string true "Basic auth"
+// @Param Authorization header string true "Bearer <token>"
 // @Param campaign_id query int false "Active campaign to narrate; body campaign_id is also accepted. Required when the GM runs more than one."
 // @Param request body object{campaign_id=integer,narration=string,monster_action=object} true "Narration and optional monster action"
 // @Success 200 {object} map[string]interface{} "Narration recorded, action resolved"
@@ -1543,7 +1543,7 @@ type gmNudgeRequest struct {
 // @Tags GM
 // @Accept json
 // @Produce json
-// @Param Authorization header string true "Basic auth"
+// @Param Authorization header string true "Bearer <token>"
 // @Param request body object{character_id=integer,message=string,campaign_id=integer} true "The character (its campaign must be an active one you run); campaign_id is optional"
 // @Success 200 {object} map[string]interface{} "Nudge sent"
 // @Failure 401 {object} map[string]interface{} "Unauthorized"

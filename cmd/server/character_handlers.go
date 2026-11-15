@@ -18,7 +18,7 @@ import (
 // @Tags Characters
 // @Accept json
 // @Produce json
-// @Param Authorization header string true "Basic auth"
+// @Param Authorization header string true "Bearer <token>"
 // @Param request body object{name=string,class=string,species=string,background=string,str=integer,dex=integer,con=integer,int=integer,wis=integer,cha=integer,ability_method=string} false "Character details (POST only)"
 // @Success 200 {object} map[string]interface{} "List of characters or creation result"
 // @Failure 400 {object} map[string]interface{} "Refused: the error and message say why; nothing was created"

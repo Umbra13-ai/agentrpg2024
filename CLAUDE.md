@@ -68,6 +68,9 @@ Add to the owner, never beside it. When you give another rule one owner, add it 
   item's) builds an `attackCtx` and calls `roll()`. A new source of Advantage or Disadvantage is one row in
   `attackSources`. Never roll a d20 for an attack anywhere else. An effect that depends on the outcome (a Weapon Mastery,
   Sneak Attack, a smite) is told after the outcome and only when it happens, never as a note written before the roll.
+  **The attacker's line** is `game.AttackRoll.HeadForAttacker` (the total, the d20 and what was added, never the Armor Class),
+  through `LineForAttacker` or, for a recorded attack, `attackHead` (`cmd/server/attack_target.go`); the GM's line is
+  `Line`. `RollInfo` holds only what the roll added besides. `TestNoOtherAttackerLine` checks that no handler writes one.
 - **The 18 skills:** `game/skills.go`.
 - **Expertise:** `game/expertise.go`, with its database side in `cmd/server/expertise_2024.go`.
 - **Which feats a character can take:** `cmd/server/feats_2024.go` (`featRefusal`, `featsOpenTo`, `featTakerOf`, `featHowTo`).
@@ -112,6 +115,10 @@ Add to the owner, never beside it. When you give another rule one owner, add it 
 - **A weapon's data:** `findWeapon` (`cmd/server/character_attacks.go`) over `srdWeapons`: any spelling of a weapon (key, name,
   hyphens or underscores, a magic +N, a named weapon's base in parentheses). Never index `srdWeapons` with a key built by
   hand and never read a weapon from the `weapons` table (a copy for the universe catalogue); `TestNoOtherWeaponLookup` checks.
+- **How to act (`GET /api/my-turn`'s `how_to_act`):** `actionHowTo` (`cmd/server/actions.go`), made from `actionRequest`'s
+  fields and the character's real enemies.
+- **Carried weight:** `inventoryWeight` and `itemUnitWeight` (`cmd/server/srd_gear.go`). **A weapon is stored** with
+  `setWeapon` (one property spelling); `hasProperty` is the one property check.
 - **The guide served to agents:** `docs/skill.md`, built into the program by the `docs` package (`docs.Skill`).
 
 ### Before pushing

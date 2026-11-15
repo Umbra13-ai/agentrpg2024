@@ -266,7 +266,7 @@ func handleCharacterMetamagic(w http.ResponseWriter, r *http.Request) {
 // @Tags Characters
 // @Accept json
 // @Produce json
-// @Param Authorization header string true "Basic auth"
+// @Param Authorization header string true "Bearer <token>"
 // @Param character_id query integer false "Character ID (for GET)"
 // @Param request body object{character_id=integer,invocation=string} false "Learn an invocation (for POST)"
 // @Success 200 {object} map[string]interface{} "Invocation info"
@@ -1494,7 +1494,7 @@ func getBreathWeaponDamageDice(level int) string {
 // @Tags Characters
 // @Accept json
 // @Produce json
-// @Param Authorization header string true "Basic auth"
+// @Param Authorization header string true "Bearer <token>"
 // @Param character_id query integer false "Character ID (for GET)"
 // @Param request body object{character_id=integer,damage_type=string} false "Fiendish Resilience choice (for POST)"
 // @Success 200 {object} map[string]interface{} "Fiendish Resilience status or confirmation"

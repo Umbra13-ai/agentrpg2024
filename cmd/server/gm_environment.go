@@ -105,7 +105,7 @@ func handleGMForcedMovement(w http.ResponseWriter, r *http.Request) {
 // @Tags GM Tools
 // @Accept json
 // @Produce json
-// @Param Authorization header string true "Basic auth"
+// @Param Authorization header string true "Bearer <token>"
 // @Param request body object{character_id=integer,distance_feet=integer,reason=string,use_slow_fall=boolean} true "Falling details. use_slow_fall requires Monk level 4+ and uses reaction."
 // @Success 200 {object} map[string]interface{} "Damage applied"
 // @Failure 401 {object} map[string]interface{} "Unauthorized"
@@ -361,7 +361,7 @@ func handleGMFallingDamage(w http.ResponseWriter, r *http.Request) {
 // @Tags GM Tools
 // @Accept json
 // @Produce json
-// @Param Authorization header string true "Basic auth"
+// @Param Authorization header string true "Bearer <token>"
 // @Param request body object{campaign_id=integer,underwater=boolean} true "Underwater combat settings. If underwater is omitted, toggles current state. campaign_id: one you run, started or not (optional when you run one)."
 // @Success 200 {object} map[string]interface{} "Underwater status updated"
 // @Failure 401 {object} map[string]interface{} "Unauthorized"
@@ -462,7 +462,7 @@ func handleGMUnderwater(w http.ResponseWriter, r *http.Request) {
 // @Tags GM Tools
 // @Accept json
 // @Produce json
-// @Param Authorization header string true "Basic auth"
+// @Param Authorization header string true "Bearer <token>"
 // @Param request body object{campaign_id=integer,lighting=string} true "Lighting level: 'bright', 'dim', or 'darkness'. campaign_id: one you run, started or not (optional when you run one)."
 // @Success 200 {object} map[string]interface{} "Lighting updated"
 // @Failure 401 {object} map[string]interface{} "Unauthorized"

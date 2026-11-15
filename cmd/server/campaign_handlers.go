@@ -18,7 +18,7 @@ import (
 // @Tags Campaigns
 // @Accept json
 // @Produce json
-// @Param Authorization header string false "Basic auth (required for POST)"
+// @Param Authorization header string false "Bearer <token> (required for POST)"
 // @Param open query boolean false "GET: only campaigns with an open player seat (open_seats above 0)"
 // @Param level query integer false "GET: only campaigns a character of this level may join (min_level to max_level)"
 // @Param request body object{name=string,max_players=integer,setting=string,min_level=integer,max_level=integer} false "Campaign details (POST only)"
@@ -508,7 +508,7 @@ func handleCampaignByID(w http.ResponseWriter, r *http.Request) {
 // @Accept json
 // @Produce json
 // @Param id path int true "Campaign ID"
-// @Param Authorization header string true "Basic auth"
+// @Param Authorization header string true "Bearer <token>"
 // @Param request body object{character_id=integer} true "Character to join with"
 // @Success 200 {object} map[string]interface{} "Joined successfully"
 // @Failure 400 {object} map[string]interface{} "Level requirement not met"
@@ -694,7 +694,7 @@ func reconcileCampaignStatus(campaignID int) string {
 // @Tags Campaigns
 // @Produce json
 // @Param id path int true "Campaign ID"
-// @Param Authorization header string true "Basic auth"
+// @Param Authorization header string true "Bearer <token>"
 // @Success 200 {object} map[string]interface{} "Campaign started"
 // @Failure 401 {object} map[string]interface{} "Unauthorized"
 // @Failure 403 {object} map[string]interface{} "Only DM can start"
@@ -737,7 +737,7 @@ func handleCampaignStart(w http.ResponseWriter, r *http.Request, campaignID int)
 // @Tags Campaigns
 // @Produce json
 // @Param id path int true "Campaign ID"
-// @Param Authorization header string true "Basic auth"
+// @Param Authorization header string true "Bearer <token>"
 // @Success 200 {object} map[string]interface{} "Campaign ended"
 // @Failure 401 {object} map[string]interface{} "Unauthorized"
 // @Failure 403 {object} map[string]interface{} "Only DM can end"
@@ -1149,7 +1149,7 @@ func filterMapFields(m map[string]interface{}, excludeFields []string) map[strin
 // @Tags Campaigns
 // @Produce json
 // @Param id path int true "Campaign ID"
-// @Param Authorization header string false "Basic auth (optional, determines what you see)"
+// @Param Authorization header string false "Bearer <token> (optional, determines what you see)"
 // @Success 200 {object} map[string]interface{} "Campaign document"
 // @Router /campaigns/{id}/campaign [get]
 func handleCampaignDocument(w http.ResponseWriter, r *http.Request, campaignID int) {
@@ -1202,7 +1202,7 @@ func handleCampaignDocument(w http.ResponseWriter, r *http.Request, campaignID i
 // @Accept json
 // @Produce json
 // @Param id path int true "Campaign ID"
-// @Param Authorization header string true "Basic auth"
+// @Param Authorization header string true "Bearer <token>"
 // @Param request body object{story=string} true "Story summary (max 500 words)"
 // @Success 200 {object} map[string]interface{} "Story updated"
 // @Failure 400 {object} map[string]interface{} "Over word limit"
@@ -1293,7 +1293,7 @@ func campaignStoryUpdate(story, storySoFar string) string {
 // @Accept json
 // @Produce json
 // @Param id path int true "Campaign ID"
-// @Param Authorization header string true "Basic auth"
+// @Param Authorization header string true "Bearer <token>"
 // @Param request body object{type=string,title=string,content=string} true "Section to add"
 // @Success 200 {object} map[string]interface{} "Section added"
 // @Failure 401 {object} map[string]interface{} "Unauthorized or not GM"
@@ -1395,7 +1395,7 @@ func handleCampaignSections(w http.ResponseWriter, r *http.Request, campaignID i
 // @Accept json
 // @Produce json
 // @Param id path int true "Campaign ID"
-// @Param Authorization header string true "Basic auth"
+// @Param Authorization header string true "Bearer <token>"
 // @Param request body object{name=string,title=string,disposition=string,notes=string,gm_only=boolean,gm_notes=string} true "NPC to add"
 // @Success 200 {object} map[string]interface{} "NPC added"
 // @Failure 401 {object} map[string]interface{} "Unauthorized or not GM"
@@ -1538,7 +1538,7 @@ func handleCampaignNPCsList(w http.ResponseWriter, r *http.Request, campaignID i
 // @Produce json
 // @Param id path int true "Campaign ID"
 // @Param npc_id path string true "NPC ID"
-// @Param Authorization header string true "Basic auth"
+// @Param Authorization header string true "Bearer <token>"
 // @Success 200 {object} map[string]interface{} "Update/delete result"
 // @Router /campaigns/{id}/campaign/npcs/{npc_id} [put]
 // @Router /campaigns/{id}/campaign/npcs/{npc_id} [delete]
@@ -1670,7 +1670,7 @@ func handleCampaignNPCByID(w http.ResponseWriter, r *http.Request, campaignID in
 // @Produce json
 // @Param id path int true "Campaign ID"
 // @Param section_id path string true "Section ID"
-// @Param Authorization header string true "Basic auth"
+// @Param Authorization header string true "Bearer <token>"
 // @Success 200 {object} map[string]interface{} "Update/delete result"
 // @Router /campaigns/{id}/campaign/sections/{section_id} [put]
 // @Router /campaigns/{id}/campaign/sections/{section_id} [delete]
@@ -1789,7 +1789,7 @@ func handleCampaignSectionByID(w http.ResponseWriter, r *http.Request, campaignI
 // @Accept json
 // @Produce json
 // @Param id path int true "Campaign ID"
-// @Param Authorization header string false "Basic auth"
+// @Param Authorization header string false "Bearer <token>"
 // @Success 200 {object} map[string]interface{} "Quest list or creation result"
 // @Router /campaigns/{id}/campaign/quests [get]
 // @Router /campaigns/{id}/campaign/quests [post]
@@ -1926,7 +1926,7 @@ func handleCampaignQuestsList(w http.ResponseWriter, r *http.Request, campaignID
 // @Produce json
 // @Param id path int true "Campaign ID"
 // @Param quest_id path string true "Quest ID"
-// @Param Authorization header string true "Basic auth"
+// @Param Authorization header string true "Bearer <token>"
 // @Param request body object{status=string,resolution=string,description=string} true "Fields to update"
 // @Success 200 {object} map[string]interface{} "Quest updated"
 // @Failure 401 {object} map[string]interface{} "Unauthorized or not GM"
@@ -2029,7 +2029,7 @@ func handleCampaignQuestUpdate(w http.ResponseWriter, r *http.Request, campaignI
 // @Accept json
 // @Produce json
 // @Param id path int true "Campaign ID"
-// @Param Authorization header string true "Basic auth"
+// @Param Authorization header string true "Bearer <token>"
 // @Param request body object{content=string,type=string} true "Observation details (type: world, party, self, meta - defaults to world)"
 // @Success 200 {object} map[string]interface{} "Observation recorded"
 // @Failure 401 {object} map[string]interface{} "Unauthorized"
@@ -2265,7 +2265,7 @@ func handleCharacterObservations(w http.ResponseWriter, r *http.Request, charID 
 // @Produce json
 // @Param id path int true "Campaign ID"
 // @Param observation_id path int true "Observation ID"
-// @Param Authorization header string true "Basic auth"
+// @Param Authorization header string true "Bearer <token>"
 // @Param request body object{section=string} true "Section to promote to (e.g., story_so_far)"
 // @Success 200 {object} map[string]interface{} "Observation promoted"
 // @Failure 401 {object} map[string]interface{} "Unauthorized"
@@ -2807,7 +2807,7 @@ func handleHeartbeat(w http.ResponseWriter, r *http.Request) {
 // @Tags Actions
 // @Accept json
 // @Produce json
-// @Param Authorization header string true "Basic auth"
+// @Param Authorization header string true "Bearer <token>"
 // @Param request body object{target_id=integer,type=string,content=string} true "Observation details (type: world, party, self, meta - defaults to world; target_id optional for party observations)"
 // @Success 200 {object} map[string]interface{} "Observation recorded"
 // @Failure 401 {object} map[string]interface{} "Unauthorized"
@@ -3813,7 +3813,7 @@ func handleCampaignLog(w http.ResponseWriter, r *http.Request, campaignID int) {
 // @Accept json
 // @Produce json
 // @Param id path int true "Campaign ID"
-// @Param Authorization header string true "Basic auth"
+// @Param Authorization header string true "Bearer <token>"
 // @Param request body object{item_type=string,slug=string,name=string,data=object,copy_from_universe=string} false "Item details (POST only). Use copy_from_universe to clone from /universe/"
 // @Success 200 {object} map[string]interface{} "List of items or creation result"
 // @Failure 401 {object} map[string]interface{} "Unauthorized"

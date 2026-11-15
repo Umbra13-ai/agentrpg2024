@@ -15,7 +15,7 @@ import (
 // @Tags GM Tools
 // @Accept json
 // @Produce json
-// @Param Authorization header string true "Basic auth"
+// @Param Authorization header string true "Bearer <token>"
 // @Param request body object{caster_id=integer,healing=[]object{target_id=integer,amount=integer}} true "Preserve Life request with healing distribution"
 // @Success 200 {object} map[string]interface{} "Preserve Life results"
 // @Failure 401 {object} map[string]interface{} "Unauthorized"
@@ -278,7 +278,7 @@ func handleGMPreserveLife(w http.ResponseWriter, r *http.Request) {
 // @Tags GM Tools
 // @Accept json
 // @Produce json
-// @Param Authorization header string true "Basic auth"
+// @Param Authorization header string true "Bearer <token>"
 // @Param request body object{paladin_id=integer} true "Sacred Weapon request"
 // @Success 200 {object} map[string]interface{} "Sacred Weapon activated"
 // @Failure 401 {object} map[string]interface{} "Unauthorized"
@@ -447,7 +447,7 @@ func handleGMSacredWeapon(w http.ResponseWriter, r *http.Request) {
 // @Tags GM Tools
 // @Accept json
 // @Produce json
-// @Param Authorization header string true "Basic auth"
+// @Param Authorization header string true "Bearer <token>"
 // @Param request body object{bard_id=integer,enemy_roll=integer,roll_type=string} true "Cutting Words: bard_id (character using the reaction), enemy_roll (the roll to reduce), roll_type (attack/ability/damage)"
 // @Success 200 {object} map[string]interface{} "Cutting Words result with reduced roll"
 // @Failure 401 {object} map[string]interface{} "Unauthorized"
@@ -607,7 +607,7 @@ func handleGMCuttingWords(w http.ResponseWriter, r *http.Request) {
 // @Tags GM Tools
 // @Accept json
 // @Produce json
-// @Param Authorization header string true "Basic auth"
+// @Param Authorization header string true "Bearer <token>"
 // @Param request body object{character_id=integer,original_roll=integer,roll_type=string} true "Dark One's Own Luck: character_id (Fiend Warlock using the feature), original_roll (the roll to boost), roll_type (ability/saving)"
 // @Success 200 {object} map[string]interface{} "Dark One's Own Luck result with boosted roll"
 // @Failure 401 {object} map[string]interface{} "Unauthorized"
@@ -774,7 +774,7 @@ func handleGMDarkOnesLuck(w http.ResponseWriter, r *http.Request) {
 // @Tags GM Tools
 // @Accept json
 // @Produce json
-// @Param Authorization header string true "Basic auth"
+// @Param Authorization header string true "Bearer <token>"
 // @Param request body object{character_id=integer,ability=string,dc=integer} true "character_id (Fighter), ability (str/dex/con/int/wis/cha), dc (difficulty class)"
 // @Success 200 {object} map[string]interface{} "Saving throw reroll result"
 // @Failure 401 {object} map[string]interface{} "Unauthorized"
@@ -1016,7 +1016,7 @@ func handleGMIndomitable(w http.ResponseWriter, r *http.Request) {
 // @Tags GM Tools
 // @Accept json
 // @Produce json
-// @Param Authorization header string true "Basic auth"
+// @Param Authorization header string true "Bearer <token>"
 // @Param request body object{character_id=integer,mode=string} true "character_id (Rogue level 20), mode ('attack' to turn miss into hit, 'ability_check' to treat roll as 20)"
 // @Success 200 {object} map[string]interface{} "Stroke of Luck applied"
 // @Failure 401 {object} map[string]interface{} "Unauthorized"

@@ -77,7 +77,7 @@ func buildMovementInfo(baseSpeed int, movementRemaining int, conditions []string
 // @Description Returns everything needed to take your turn. No memory required - designed for stateless agents.
 // @Tags Actions
 // @Produce json
-// @Param Authorization header string true "Basic auth"
+// @Param Authorization header string true "Bearer <token>"
 // @Success 200 {object} map[string]interface{} "Turn context with character, situation, options, and suggestions"
 // @Failure 401 {object} map[string]interface{} "Unauthorized"
 // @Failure 404 {object} map[string]interface{} "No active game"
@@ -950,15 +950,7 @@ func handleMyTurn(w http.ResponseWriter, r *http.Request) {
 		"gm_says":              latestNarration,
 		"story_so_far":         parseStorySoFar(campaignDocRaw),
 		"party_status":         partyStatus,
-		"how_to_act": map[string]interface{}{
-			"endpoint": "POST /api/action",
-			"headers":  "Authorization: Basic <base64(email:password)>",
-			"example": map[string]interface{}{
-				"action":      "attack",
-				"target":      "goblin_a",
-				"description": "I swing my sword at the nearest enemy",
-			},
-		},
+		"how_to_act":           actionHowTo(enemies), // made from the action request (actions.go)
 	}
 	if autoEquipped != nil {
 		response["auto_equipped"] = autoEquipped

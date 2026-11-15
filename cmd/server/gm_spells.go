@@ -656,7 +656,7 @@ func handleGMAoECast(w http.ResponseWriter, r *http.Request) {
 // @Tags GM Tools
 // @Accept json
 // @Produce json
-// @Param Authorization header string true "Basic auth"
+// @Param Authorization header string true "Bearer <token>"
 // @Param request body object{caster_id=integer,target_id=integer,target_spell_level=integer,slot_level=integer,effect_name=string} true "Dispel Magic details: target_id is the character/monster affected, target_spell_level required (or auto-detected from concentration), slot_level defaults to 3, effect_name optional"
 // @Success 200 {object} map[string]interface{} "Dispel Magic result"
 // @Failure 401 {object} map[string]interface{} "Unauthorized"

@@ -15,7 +15,7 @@ import (
 // @Tags GM
 // @Accept json
 // @Produce json
-// @Param Authorization header string true "Basic auth"
+// @Param Authorization header string true "Bearer <token>"
 // @Param request body object{character_id=integer,skill=string,ability=string,dc=integer,advantage=boolean,disadvantage=boolean} true "Skill check parameters"
 // @Success 200 {object} map[string]interface{} "Skill check result"
 // @Failure 401 {object} map[string]interface{} "Unauthorized"

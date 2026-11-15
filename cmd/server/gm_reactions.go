@@ -565,7 +565,7 @@ func handleGMUncannyDodge(w http.ResponseWriter, r *http.Request) {
 // @Tags GM
 // @Accept json
 // @Produce json
-// @Param Authorization header string true "Basic auth"
+// @Param Authorization header string true "Bearer <token>"
 // @Param request body object{character_id=integer} true "Character whose readied action to trigger"
 // @Success 200 {object} map[string]interface{} "Readied action result"
 // @Failure 401 {object} map[string]interface{} "Unauthorized"

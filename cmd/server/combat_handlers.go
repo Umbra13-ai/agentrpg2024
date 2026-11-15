@@ -176,7 +176,7 @@ func handleRoll(w http.ResponseWriter, r *http.Request) {
 // @Produce json
 // @Param id path int true "Campaign ID"
 // @Param request body object{surprised=[]int} false "Optional: ids of surprised characters"
-// @Param Authorization header string true "Basic auth"
+// @Param Authorization header string true "Bearer <token>"
 // @Success 200 {object} map[string]interface{} "Combat started with initiative order"
 // @Failure 401 {object} map[string]interface{} "Unauthorized"
 // @Failure 403 {object} map[string]interface{} "Only GM can start combat"
@@ -495,7 +495,7 @@ func characterActionBlock(action string, hp int, stable, dead bool) string {
 // @Produce json
 // @Param request body object{award_xp=bool} false "award_xp false: no XP award for this fight"
 // @Param id path int true "Campaign ID"
-// @Param Authorization header string true "Basic auth"
+// @Param Authorization header string true "Bearer <token>"
 // @Success 200 {object} map[string]interface{} "Combat ended"
 // @Router /campaigns/{id}/combat/end [post]
 func handleCombatEnd(w http.ResponseWriter, r *http.Request, campaignID int) {
@@ -552,7 +552,7 @@ func handleCombatEnd(w http.ResponseWriter, r *http.Request, campaignID int) {
 // @Tags Combat
 // @Produce json
 // @Param id path int true "Campaign ID"
-// @Param Authorization header string true "Basic auth"
+// @Param Authorization header string true "Bearer <token>"
 // @Success 200 {object} map[string]interface{} "Turn advanced"
 // @Router /campaigns/{id}/combat/next [post]
 func handleCombatNext(w http.ResponseWriter, r *http.Request, campaignID int) {
@@ -806,7 +806,7 @@ func handleCombatNext(w http.ResponseWriter, r *http.Request, campaignID int) {
 // @Tags Combat
 // @Produce json
 // @Param id path int true "Campaign ID"
-// @Param Authorization header string true "Basic auth"
+// @Param Authorization header string true "Bearer <token>"
 // @Success 200 {object} map[string]interface{} "Turn skipped"
 // @Failure 401 {object} map[string]interface{} "Unauthorized"
 // @Failure 403 {object} map[string]interface{} "Only GM can skip turns"
@@ -1011,7 +1011,7 @@ func advanceCombatSkipIfCurrent(campaignID, oldIndex, newIndex, round int, start
 // @Tags Exploration
 // @Produce json
 // @Param id path int true "Campaign ID"
-// @Param Authorization header string true "Basic auth"
+// @Param Authorization header string true "Bearer <token>"
 // @Success 200 {object} map[string]interface{} "Exploration status"
 // @Router /campaigns/{id}/exploration [get]
 func handleExplorationStatus(w http.ResponseWriter, r *http.Request, campaignID int) {
@@ -1103,7 +1103,7 @@ func handleExplorationStatus(w http.ResponseWriter, r *http.Request, campaignID 
 // @Accept json
 // @Produce json
 // @Param id path int true "Campaign ID"
-// @Param Authorization header string true "Basic auth"
+// @Param Authorization header string true "Bearer <token>"
 // @Param request body object{character_id=int} true "Character to skip"
 // @Success 200 {object} map[string]interface{} "Player skipped"
 // @Failure 401 {object} map[string]interface{} "Unauthorized"
@@ -1220,7 +1220,7 @@ func handleExplorationSkip(w http.ResponseWriter, r *http.Request, campaignID in
 // @Accept json
 // @Produce json
 // @Param id path int true "Campaign ID"
-// @Param Authorization header string true "Basic auth"
+// @Param Authorization header string true "Bearer <token>"
 // @Param request body object{combatants=[]object} true "Combatants to add (name, monster_key, initiative, surprised, hp, ac, in_lair). Identical monsters added together share one Initiative roll; surprised gives Disadvantage on it; in_lair gives a legendary monster the in-Lair uses of Legendary Actions and Legendary Resistance."
 // @Success 200 {object} map[string]interface{} "Combatants added"
 // @Failure 401 {object} map[string]interface{} "Unauthorized"
@@ -1512,7 +1512,7 @@ func handleCombatAdd(w http.ResponseWriter, r *http.Request, campaignID int) {
 // @Accept json
 // @Produce json
 // @Param id path int true "Campaign ID"
-// @Param Authorization header string true "Basic auth"
+// @Param Authorization header string true "Bearer <token>"
 // @Param request body object{combatant_id=integer,combatant_name=string} true "ID or name of combatant to remove"
 // @Success 200 {object} map[string]interface{} "Combatant removed"
 // @Failure 401 {object} map[string]interface{} "Unauthorized"
@@ -1745,7 +1745,7 @@ func handleCombatStatus(w http.ResponseWriter, r *http.Request, campaignID int) 
 // @Accept json
 // @Produce json
 // @Param id path int true "Character ID"
-// @Param Authorization header string true "Basic auth"
+// @Param Authorization header string true "Bearer <token>"
 // @Param request body object{damage=integer,damage_type=string,concentration_damage=integer,skip_concentration=boolean} true "Damage to apply. One source in several damage types makes one Concentration save: send the whole damage as concentration_damage with the first part and skip_concentration with the others"
 // @Success 200 {object} map[string]interface{} "Damage applied"
 // @Router /characters/{id}/damage [post]
@@ -2021,7 +2021,7 @@ func handleDamage(w http.ResponseWriter, r *http.Request, charID int) {
 // @Accept json
 // @Produce json
 // @Param id path int true "Character ID"
-// @Param Authorization header string true "Basic auth"
+// @Param Authorization header string true "Bearer <token>"
 // @Param request body object{healing=integer} true "Healing amount"
 // @Success 200 {object} map[string]interface{} "Healing applied"
 // @Router /characters/{id}/heal [post]
@@ -2068,7 +2068,7 @@ func handleHeal(w http.ResponseWriter, r *http.Request, charID int) {
 // @Accept json
 // @Produce json
 // @Param id path int true "Character ID"
-// @Param Authorization header string true "Basic auth"
+// @Param Authorization header string true "Bearer <token>"
 // @Param request body object{condition=string} true "Condition to add"
 // @Success 200 {object} map[string]interface{} "Condition added"
 // @Router /characters/{id}/conditions [post]
@@ -2960,7 +2960,7 @@ func handleConditionsList(w http.ResponseWriter, r *http.Request) {
 // @Accept json
 // @Produce json
 // @Param id path int true "Character ID"
-// @Param Authorization header string true "Basic auth"
+// @Param Authorization header string true "Bearer <token>"
 // @Param request body object{cover=string} true "Cover type (none, half, three_quarters, full)"
 // @Success 200 {object} map[string]interface{} "Cover set"
 // @Router /characters/{id}/cover [post]

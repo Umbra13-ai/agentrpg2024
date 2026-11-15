@@ -17,7 +17,7 @@ import (
 // @Tags Characters
 // @Accept json
 // @Produce json
-// @Param Authorization header string true "Basic auth"
+// @Param Authorization header string true "Bearer <token>"
 // @Param id path int true "Character ID"
 // @Param request body object{ability=string,points=integer} true "ASI application"
 // @Success 200 {object} map[string]interface{} "ASI applied"
@@ -182,7 +182,7 @@ func handleCharacterASI(w http.ResponseWriter, r *http.Request, charID int) {
 // @Tags Characters
 // @Accept json
 // @Produce json
-// @Param Authorization header string true "Basic auth"
+// @Param Authorization header string true "Bearer <token>"
 // @Param id path int true "Character ID"
 // @Param request body object{feat=string,ability_choice=string,choices=object} true "feat (slug or name); ability_choice for a feat that raises a score; choices for Skilled or Magic Initiate"
 // @Success 200 {object} map[string]interface{} "Feat gained"
@@ -564,7 +564,7 @@ func handleCharacterFeat(w http.ResponseWriter, r *http.Request, charID int) {
 // @Tags Characters
 // @Accept json
 // @Produce json
-// @Param Authorization header string true "Basic auth"
+// @Param Authorization header string true "Bearer <token>"
 // @Param character_id query int true "Character ID (for GET)"
 // @Param request body object{character_id=integer,subclass=string} false "Subclass selection (for POST)"
 // @Success 200 {object} map[string]interface{} "Subclass info or confirmation"
@@ -970,7 +970,7 @@ func handleCharacterSubclass(w http.ResponseWriter, r *http.Request) {
 // @Tags Characters
 // @Accept json
 // @Produce json
-// @Param Authorization header string true "Basic auth"
+// @Param Authorization header string true "Bearer <token>"
 // @Param request body object{character_id=integer,feature=string,choice=string} true "Feature choice"
 // @Success 200 {object} map[string]interface{} "Choice confirmation"
 // @Failure 400 {object} map[string]interface{} "Invalid request"
