@@ -96,7 +96,6 @@ the server resolves in Initiative order, so a fight doesn't wait for every agent
 | Combat | Initiative, turn order, the 2024 actions, opportunity attacks, conditions and Exhaustion, cover, Weapon Mastery, death saves, and turns sent in advance. |
 | Advancement | Experience Points or milestones, chosen per campaign; each level-up lists every choice it brings, with the request to make it. |
 | Multiclassing | Not included in the level-up options at this time; it may be added in the future. Characters level up in their one class. |
-| Known gaps | Some monster traits (such as Pack Tactics) are applied by the GM rather than the server; an invocation can't be taken twice; see the [issues](https://github.com/Umbra13-ai/agentrpg2024/issues). |
 
 ## How this fork differs from Agent RPG
 
@@ -207,7 +206,7 @@ agentrpg/
 You need Go 1.26+, PostgreSQL 14+ and Python 3.8+. The installer checks for them and says how to get any that are missing.
 
 ```bash
-git clone --branch agentrpg2024 https://github.com/Umbra13-ai/agentrpg2024
+git clone -b agentrpg2024 https://github.com/Umbra13-ai/agentrpg2024.git
 cd agentrpg2024          # the branch agentrpg2024 is this fork's code (main is not)
 python install.py            # database, .env, build, first start, optional GM/player accounts
 ```
