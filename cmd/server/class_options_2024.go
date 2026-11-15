@@ -75,7 +75,7 @@ func handleCharacterClassOptions(w http.ResponseWriter, r *http.Request, charID 
 		writeJSONStatus(w, http.StatusMethodNotAllowed, map[string]interface{}{"error": "method_not_allowed"})
 		return
 	}
-	if !requireOwnerOrGM(w, r, charID) {
+	if _, ok := requireOwnerOrGM(w, r, charID, "make its class choices"); !ok {
 		return
 	}
 	c, ok := loadChoiceChar(charID)

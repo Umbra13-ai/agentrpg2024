@@ -324,7 +324,7 @@ func handleCharacterDowntime(w http.ResponseWriter, r *http.Request) {
 		writeJSONStatus(w, http.StatusBadRequest, map[string]interface{}{"error": "character_id_required"})
 		return
 	}
-	if !requireOwnerOrGM(w, r, req.CharacterID) {
+	if _, ok := requireOwnerOrGM(w, r, req.CharacterID, "spend its downtime"); !ok {
 		return
 	}
 	switch strings.ToLower(strings.TrimSpace(req.Activity)) {

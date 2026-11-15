@@ -737,7 +737,7 @@ func handleReminders(w http.ResponseWriter, r *http.Request) {
 		writeJSONStatus(w, http.StatusBadRequest, map[string]interface{}{"error": "character_id required"})
 		return
 	}
-	if !requireOwnerOrGM(w, r, req.CharacterID) {
+	if _, ok := requireOwnerOrGM(w, r, req.CharacterID, "change its reminders"); !ok {
 		return
 	}
 	view := func() map[string]interface{} {

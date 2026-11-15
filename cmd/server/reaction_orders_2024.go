@@ -297,7 +297,7 @@ func handleReactionOrders(w http.ResponseWriter, r *http.Request) {
 		writeJSONStatus(w, http.StatusBadRequest, map[string]interface{}{"error": "character_id required"})
 		return
 	}
-	if !requireOwnerOrGM(w, r, req.CharacterID) {
+	if _, ok := requireOwnerOrGM(w, r, req.CharacterID, "set its reaction orders"); !ok {
 		return
 	}
 	view := func() map[string]interface{} {

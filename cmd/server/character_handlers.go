@@ -882,11 +882,11 @@ func handleCharacterByID(w http.ResponseWriter, r *http.Request) {
 		// are the owner's or that GM's. (The server's own code calls the handlers directly, without this check.)
 		switch parts[1] {
 		case "damage", "heal":
-			if !requireCharacterGM(w, r, charID) {
+			if _, ok := requireCharacterGM(w, r, charID, "deal it damage or heal it this way"); !ok {
 				return
 			}
 		case "rest", "short-rest", "cover", "setup":
-			if !requireOwnerOrGM(w, r, charID) {
+			if _, ok := requireOwnerOrGM(w, r, charID, "rest it, give it cover or change its setup"); !ok {
 				return
 			}
 		}

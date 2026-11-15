@@ -358,7 +358,7 @@ func handleCharacterStartingEquipment(w http.ResponseWriter, r *http.Request, ch
 		writeJSONStatus(w, http.StatusMethodNotAllowed, map[string]interface{}{"error": "method_not_allowed"})
 		return
 	}
-	if !requireOwnerOrGM(w, r, charID) {
+	if _, ok := requireOwnerOrGM(w, r, charID, "choose its starting equipment"); !ok {
 		return
 	}
 	var req struct {
@@ -457,7 +457,7 @@ func handleCharacterToolProficiencies(w http.ResponseWriter, r *http.Request, ch
 	case http.MethodGet:
 		writeJSONStatus(w, http.StatusOK, map[string]interface{}{"tool_proficiencies": game.ParseProficiencyList(tools), "pending_choices": pending})
 	case http.MethodPost:
-		if !requireOwnerOrGM(w, r, charID) {
+		if _, ok := requireOwnerOrGM(w, r, charID, "choose its tool proficiencies"); !ok {
 			return
 		}
 		var req struct {

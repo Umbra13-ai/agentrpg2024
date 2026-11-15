@@ -471,53 +471,6 @@ func saveInventoryTx(tx *sql.Tx, charID int, inv []invItem) error {
 	return err
 }
 
-// requireOwnerOrGM allows the character's player or the GM of its campaign.
-func requireOwnerOrGM(w http.ResponseWriter, r *http.Request, charID int) bool {
-	agentID, err := getAgentFromAuth(r)
-	if err != nil {
-		w.Header().Set("Content-Type", "application/json")
-		writeAuthError(w, err)
-		return false
-	}
-	var owner int
-	var dm sql.NullInt64
-	if err := db.QueryRow(`
-		SELECT c.agent_id, l.dm_id FROM characters c LEFT JOIN lobbies l ON c.lobby_id = l.id WHERE c.id = $1`, charID).
-		Scan(&owner, &dm); err != nil {
-		writeJSONStatus(w, http.StatusNotFound, map[string]interface{}{"error": "character_not_found"})
-		return false
-	}
-	if agentID != owner && !(dm.Valid && int(dm.Int64) == agentID) {
-		writeJSONStatus(w, http.StatusForbidden, map[string]interface{}{"error": "not_your_character_or_campaign"})
-		return false
-	}
-	return true
-}
-
-// requireCharacterGM lets only the GM of the character's campaign through (and writes the refusal).
-func requireCharacterGM(w http.ResponseWriter, r *http.Request, charID int) bool {
-	agentID, err := getAgentFromAuth(r)
-	if err != nil {
-		w.Header().Set("Content-Type", "application/json")
-		writeAuthError(w, err)
-		return false
-	}
-	if !isCharacterGM(agentID, charID) {
-		writeJSONStatus(w, http.StatusForbidden, map[string]interface{}{"error": "gm_only", "message": "Only the GM of this character's campaign can do that."})
-		return false
-	}
-	return true
-}
-
-// isCharacterGM reports whether the agent is the GM of the character's campaign.
-func isCharacterGM(agentID, charID int) bool {
-	var dm sql.NullInt64
-	if err := db.QueryRow(`SELECT l.dm_id FROM characters c LEFT JOIN lobbies l ON c.lobby_id = l.id WHERE c.id = $1`, charID).Scan(&dm); err != nil {
-		return false
-	}
-	return dm.Valid && int(dm.Int64) == agentID
-}
-
 // requireGMForLoss lets only the GM of the character's campaign lose or recover
 // a bag, because what happens to a lost bag is the GM's decision. A character
 // that is not in a campaign has no GM, so its player may do it.
@@ -672,7 +625,7 @@ func handleCharacterEquipment(w http.ResponseWriter, r *http.Request, charID int
 		if !requireGMForLoss(w, r, charID) {
 			return
 		}
-	} else if !requireOwnerOrGM(w, r, charID) {
+	} else if _, ok := requireOwnerOrGM(w, r, charID, "change its equipment"); !ok {
 		return
 	}
 	switch action {
@@ -680,7 +633,7 @@ func handleCharacterEquipment(w http.ResponseWriter, r *http.Request, charID int
 		handleItemUseCharge(w, r, charID)
 		return
 	case "charges": // the GM sets an item's charges
-		if !requireCharacterGM(w, r, charID) {
+		if _, ok := requireCharacterGM(w, r, charID, "set its items' charges"); !ok {
 			return
 		}
 		handleItemSetCharges(w, r, charID)

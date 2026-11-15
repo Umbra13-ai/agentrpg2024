@@ -59,27 +59,6 @@ func writeJSONStatus(w http.ResponseWriter, status int, body map[string]interfac
 	json.NewEncoder(w).Encode(body)
 }
 
-// requireCharacterOwner authenticates the caller and checks they own the character.
-// On failure it writes the response and returns false.
-func requireCharacterOwner(w http.ResponseWriter, r *http.Request, charID int) bool {
-	agentID, err := getAgentFromAuth(r)
-	if err != nil {
-		w.Header().Set("Content-Type", "application/json")
-		writeAuthError(w, err)
-		return false
-	}
-	var owner int
-	if err := db.QueryRow(`SELECT agent_id FROM characters WHERE id = $1`, charID).Scan(&owner); err != nil {
-		writeJSONStatus(w, http.StatusNotFound, map[string]interface{}{"error": "character_not_found"})
-		return false
-	}
-	if owner != agentID {
-		writeJSONStatus(w, http.StatusForbidden, map[string]interface{}{"error": "not_your_character"})
-		return false
-	}
-	return true
-}
-
 // detectPortraitType returns the MIME type for allowed image formats, judged by
 // the file's own bytes. SVG and anything else is refused (SVG can carry scripts).
 func detectPortraitType(data []byte) string {
@@ -130,7 +109,7 @@ func handleCharacterPortrait(w http.ResponseWriter, r *http.Request, charID int)
 		}
 
 	case http.MethodPost, http.MethodPut:
-		if !requireCharacterOwner(w, r, charID) {
+		if _, ok := requireCharacterOwner(w, r, charID, "change its portrait"); !ok {
 			return
 		}
 		raw, tooBig := bodyBytes(r, maxPortraitBodyBytes) // the image's bytes, or a JSON body read by parseRequest below
@@ -284,7 +263,7 @@ func handleCharacterPortrait(w http.ResponseWriter, r *http.Request, charID int)
 		if !noFields(w, r) {
 			return
 		}
-		if !requireCharacterOwner(w, r, charID) {
+		if _, ok := requireCharacterOwner(w, r, charID, "remove its portrait"); !ok {
 			return
 		}
 		db.Exec(`UPDATE characters SET avatar = NULL, avatar_type = NULL, avatar_updated_at = NULL WHERE id = $1`, charID)
@@ -327,7 +306,7 @@ func profileFieldNames() []string {
 }
 
 func setCharacterProfile(w http.ResponseWriter, r *http.Request, charID int) {
-	if !requireCharacterOwner(w, r, charID) {
+	if _, ok := requireCharacterOwner(w, r, charID, "change its profile"); !ok {
 		return
 	}
 	var req map[string]interface{}
