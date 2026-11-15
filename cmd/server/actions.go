@@ -1401,7 +1401,7 @@ func resolveActionWithBonusDash(action, description string, charID int, bonusDas
 		}
 
 		// Check ammunition for ranged weapons
-		if hasWeapon && !improvised && containsProperty(weapon.Properties, "ammunition") && !energyBowShot(charID, weaponKey) { // the Energy Bow needs none (F177)
+		if hasWeapon && !improvised && hasProperty(weapon.Properties, "ammunition") && !energyBowShot(charID, weaponKey) { // the Energy Bow needs none (F177)
 			ammoType := game.AmmoTypeForWeapon(weaponKey)
 			hasAmmo, ammoErr := checkAndUseAmmo(charID, ammoType)
 			if !hasAmmo {
@@ -1415,7 +1415,7 @@ func resolveActionWithBonusDash(action, description string, charID int, bonusDas
 		usesStrength := true
 		if hasWeapon {
 			// Finesse lets the attacker use the better of Strength and Dexterity; a ranged weapon uses Dexterity
-			if weapon.Type == "ranged" || (containsProperty(weapon.Properties, "finesse") && game.Modifier(dex) > game.Modifier(str)) {
+			if weapon.Type == "ranged" || (hasProperty(weapon.Properties, "finesse") && game.Modifier(dex) > game.Modifier(str)) {
 				attackMod = game.Modifier(dex)
 				damageMod = game.Modifier(dex)
 				usesStrength = false
@@ -1519,7 +1519,7 @@ func resolveActionWithBonusDash(action, description string, charID int, bonusDas
 			if classLower == "barbarian" && level >= 2 {
 				// Must be a STR-based melee attack (not ranged, not finesse with DEX)
 				isSTRMelee := !isRangedAttack
-				if hasWeapon && containsProperty(weapon.Properties, "finesse") {
+				if hasWeapon && hasProperty(weapon.Properties, "finesse") {
 					// Finesse weapons can use DEX - only grant advantage if using STR (higher mod)
 					if game.Modifier(str) < game.Modifier(dex) {
 						isSTRMelee = false
@@ -1639,8 +1639,8 @@ func resolveActionWithBonusDash(action, description string, charID int, bonusDas
 
 		// Great Weapon Fighting - reroll 1s and 2s on damage dice
 		gwfNote := ""
-		isTwoHanded := hasWeapon && (containsProperty(weapon.Properties, "two-handed") ||
-			(containsProperty(weapon.Properties, "versatile") && strings.Contains(descLower, "two hand")))
+		isTwoHanded := hasWeapon && (hasProperty(weapon.Properties, "two-handed") ||
+			(hasProperty(weapon.Properties, "versatile") && strings.Contains(descLower, "two hand")))
 
 		// Roll damage (with GWF rerolls if applicable)
 		var dmg int
@@ -1653,7 +1653,7 @@ func resolveActionWithBonusDash(action, description string, charID int, bonusDas
 
 		// Dueling - +2 damage with one-handed melee, no other weapons
 		duelingNote := ""
-		isOneHandedMelee := hasWeapon && weapon.Type == "melee" && !containsProperty(weapon.Properties, "two-handed")
+		isOneHandedMelee := hasWeapon && weapon.Type == "melee" && !hasProperty(weapon.Properties, "two-handed")
 		if isOneHandedMelee && hasFightingStyle(charID, "dueling") {
 			// Dueling requires wielding a melee weapon in one hand with no other weapons
 			// Shield is fine for Dueling (only blocks with off-hand)
@@ -3126,7 +3126,7 @@ func resolveActionWithBonusDash(action, description string, charID int, bonusDas
 		}
 
 		// Validate weapon is light
-		isLight := containsProperty(weapon.Properties, "light")
+		isLight := hasProperty(weapon.Properties, "light")
 		if !isLight {
 			return fmt.Sprintf("Two-Weapon Fighting requires a light weapon! %s is not light. Light weapons: dagger, handaxe, shortsword, scimitar, sickle, light hammer.", weapon.Name)
 		}
@@ -3138,7 +3138,7 @@ func resolveActionWithBonusDash(action, description string, charID int, bonusDas
 
 		// Determine attack modifier (DEX for finesse, STR otherwise)
 		attackMod := game.Modifier(str)
-		if containsProperty(weapon.Properties, "finesse") && game.Modifier(dex) > game.Modifier(str) {
+		if hasProperty(weapon.Properties, "finesse") && game.Modifier(dex) > game.Modifier(str) {
 			attackMod = game.Modifier(dex) // finesse: the better of Strength and Dexterity
 		}
 		masteryUses.Delete(charID)
@@ -3161,7 +3161,7 @@ func resolveActionWithBonusDash(action, description string, charID int, bonusDas
 		if hasTWFStyle {
 			// the ability modifier used for the attack: the better of Strength and Dexterity with a Finesse weapon
 			damageMod = game.Modifier(str)
-			if containsProperty(weapon.Properties, "finesse") && game.Modifier(dex) > game.Modifier(str) {
+			if hasProperty(weapon.Properties, "finesse") && game.Modifier(dex) > game.Modifier(str) {
 				damageMod = game.Modifier(dex)
 			}
 			twfNote = fmt.Sprintf(" (TWF Style +%d)", damageMod)
@@ -4025,14 +4025,6 @@ func checkSpellComponents(components string, conditions []string, inventory []ma
 }
 
 // Check if weapon has a property
-func containsProperty(props []string, prop string) bool {
-	for _, p := range props {
-		if strings.Contains(strings.ToLower(p), prop) {
-			return true
-		}
-	}
-	return false
-}
 
 // checkCostlyMaterial validates that a character has the required costly material in inventory
 // Returns: error message if missing, empty string if OK

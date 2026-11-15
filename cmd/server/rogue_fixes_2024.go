@@ -108,7 +108,7 @@ func dancingSword(charID int, it invItem, req itemCastReq) string {
 	var level, str, dex int
 	db.QueryRow(`SELECT level, str, dex FROM characters WHERE id = $1`, charID).Scan(&level, &str, &dex)
 	mod := game.Modifier(str)
-	if okw && containsProperty(w.Properties, "finesse") && game.Modifier(dex) > mod {
+	if okw && hasProperty(w.Properties, "finesse") && game.Modifier(dex) > mod {
 		mod = game.Modifier(dex)
 	}
 	var tname string

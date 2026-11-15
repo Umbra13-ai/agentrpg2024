@@ -70,7 +70,7 @@ func applyWeaponMastery() {
 	for slug, w := range srdWeapons {
 		if m, ok := srd521WeaponMastery[weaponNameKey(w.Name)]; ok {
 			w.Mastery = m
-			srdWeapons[slug] = w
+			setWeapon(slug, w)
 		}
 	}
 }
@@ -137,7 +137,7 @@ func syncWeaponsToSRDTable() {
 			if w.Damage != before.Damage || w.DamageType != before.DamageType || w.Weight != before.Weight || w.Mastery != before.Mastery || w.Category != before.Category || w.Type != before.Type {
 				changed++
 			}
-			srdWeapons[key] = w
+			setWeapon(key, w)
 		}
 	}
 	if changed > 0 {
@@ -177,7 +177,7 @@ func addMissingSRDWeapons() {
 			props = ""
 		}
 		slug := strings.ToLower(strings.ReplaceAll(row.Name, " ", "-"))
-		srdWeapons[slug] = w
+		setWeapon(slug, w)
 		known[weaponNameKey(row.Name)] = true
 		added++
 		if db != nil {

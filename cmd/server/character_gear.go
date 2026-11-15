@@ -805,8 +805,8 @@ func handleCharacterEquipWeapon(w http.ResponseWriter, r *http.Request) {
 	}
 	if baseKey != "" {
 		bw := srdWeapons[baseKey]
-		isTwoHanded = containsProperty(bw.Properties, "two-handed")
-		isLight = containsProperty(bw.Properties, "light")
+		isTwoHanded = hasProperty(bw.Properties, "two-handed")
+		isLight = hasProperty(bw.Properties, "light")
 		profWeapon = baseKey
 	}
 

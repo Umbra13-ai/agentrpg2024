@@ -205,7 +205,7 @@ func handleGMOpportunityAttack(w http.ResponseWriter, r *http.Request) {
 				weaponName = weapon.Name
 				damageDice = weapon.Damage
 				damageType = attackDamageType(true, weapon)
-				if weapon.Type == "ranged" || containsProperty(weapon.Properties, "finesse") {
+				if weapon.Type == "ranged" || hasProperty(weapon.Properties, "finesse") {
 					attackMod = game.Modifier(dex)
 					damageMod = game.Modifier(dex)
 				}

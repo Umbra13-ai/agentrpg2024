@@ -195,10 +195,10 @@ func isWeaponProficient(weaponProfsStr string, weaponKey string) bool {
 		// 2024: "martial weapons that have the light property" and
 		// "martial weapons that have the finesse or light property"
 		if hasWeapon && strings.HasPrefix(prof, "martial weapons that have") && weapon.Category == "martial" {
-			if strings.Contains(prof, "finesse") && containsProperty(weapon.Properties, "finesse") {
+			if strings.Contains(prof, "finesse") && hasProperty(weapon.Properties, "finesse") {
 				return true
 			}
-			if strings.Contains(prof, "light") && containsProperty(weapon.Properties, "light") {
+			if strings.Contains(prof, "light") && hasProperty(weapon.Properties, "light") {
 				return true
 			}
 		}

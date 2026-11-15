@@ -957,7 +957,7 @@ func loadSRDFromDB() {
 			if old, ok := srdWeapons[slug]; ok {
 				w.Cost = old.Cost
 			}
-			srdWeapons[slug] = w
+			setWeapon(slug, w)
 		}
 		applyWeaponMastery()
 		syncWeaponsToSRDTable()

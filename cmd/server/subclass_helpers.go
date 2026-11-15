@@ -483,7 +483,7 @@ func canSneakAttack(charID int, weaponKey string, hasAdvantage bool, hasDisadvan
 		return false // Unarmed doesn't qualify
 	}
 
-	isFinesse := containsProperty(weapon.Properties, "finesse")
+	isFinesse := hasProperty(weapon.Properties, "finesse")
 	isRanged := weapon.Type == "ranged"
 
 	if !isFinesse && !isRanged {

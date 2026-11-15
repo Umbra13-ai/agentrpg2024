@@ -48,6 +48,20 @@ func diceWithMod(dice string, mod int) string {
 	return dice
 }
 
+// setWeapon is the one way a weapon is stored in srdWeapons: its properties in one spelling (lower case, trimmed), whichever
+// source it came from (the built-in table, the database, the SRD 5.2.1 tables).
+func setWeapon(key string, w SRDWeapon) {
+	props := make([]string, 0, len(w.Properties))
+	for _, p := range w.Properties {
+		if p = strings.ToLower(strings.TrimSpace(p)); p != "" {
+			props = append(props, p)
+		}
+	}
+	w.Properties = props
+	srdWeapons[key] = w
+}
+
+// hasProperty: the weapon has the property (by its name: "finesse", "thrown", "two-handed").
 func hasProperty(props []string, name string) bool {
 	for _, p := range props {
 		if strings.HasPrefix(strings.ToLower(strings.TrimSpace(p)), name) {

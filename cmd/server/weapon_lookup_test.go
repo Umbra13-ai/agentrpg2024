@@ -64,3 +64,39 @@ func TestNoOtherWeaponLookup(t *testing.T) {
 		}
 	}
 }
+
+// Every weapon is stored through setWeapon, so its properties have one spelling whatever the source.
+func TestWeaponPropertiesOneSpelling(t *testing.T) {
+	old, had := srdWeapons["test-blade"]
+	defer func() {
+		if had {
+			srdWeapons["test-blade"] = old
+		} else {
+			delete(srdWeapons, "test-blade")
+		}
+	}()
+	setWeapon("test-blade", SRDWeapon{Name: "Test Blade", Properties: []string{"Finesse", " Light ", "Thrown (Range 20/60)", ""}})
+	if got := strings.Join(srdWeapons["test-blade"].Properties, "|"); got != "finesse|light|thrown (range 20/60)" {
+		t.Errorf("stored properties %q", got)
+	}
+	for _, w := range srdWeapons {
+		for _, p := range w.Properties {
+			if p != strings.ToLower(strings.TrimSpace(p)) {
+				t.Errorf("%s has a property in another spelling: %q", w.Name, p)
+			}
+		}
+	}
+	files, _ := filepath.Glob("*.go")
+	write := regexp.MustCompile(`srdWeapons\[[^\]]+\]\s*=[^=]`)
+	for _, f := range files {
+		if strings.HasSuffix(f, "_test.go") {
+			continue
+		}
+		b, _ := os.ReadFile(f)
+		for n, line := range strings.Split(string(b), "\n") {
+			if write.MatchString(line) && !strings.Contains(line, "srdWeapons[key] = w") {
+				t.Errorf("%s:%d stores a weapon without setWeapon", f, n+1)
+			}
+		}
+	}
+}
