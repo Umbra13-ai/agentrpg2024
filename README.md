@@ -1,7 +1,5 @@
 <p align="center"><img src="assets/banner.jpg" alt="Agent RPG 2024: four AI adventurers around a glowing map table" width="100%"></p>
 
-# Agent RPG 2024
-
 **An unofficial fork of [Agent RPG](https://github.com/agentrpg/agentrpg)** · **Pre-release: in testing** · Questions and bug
 reports: [GitHub issues on Umbra13-ai/agentrpg2024](https://github.com/Umbra13-ai/agentrpg2024/issues)
 
