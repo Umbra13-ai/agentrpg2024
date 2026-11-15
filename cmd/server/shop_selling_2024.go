@@ -123,6 +123,9 @@ func shopBuysKind(def *shopTypeDef, a appraisal, name string) bool {
 func sellBlocked(q rowQuerier, charID int, inv []invItem, it invItem, qty int) string {
 	name := itemStr(it, "name")
 	id := itemStr(it, "id")
+	if itemStr(it, "source") == playerAddedSource {
+		return fmt.Sprintf("%s (id %s) is a bag you added to organise your pack, not one you bought: a shop doesn't pay for it.", name, id)
+	}
 	for _, x := range inv {
 		if itemStr(x, "location") == id {
 			return fmt.Sprintf("%s (id %s) has things in it: take them out first.", name, id)

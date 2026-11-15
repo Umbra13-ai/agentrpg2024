@@ -391,10 +391,34 @@ func tableColumns(table string) map[string]string {
 	return out
 }
 
-// Columns the admin edits through delete/restore or not at all.
-var adminLocked = map[string]bool{"id": true, "avatar": true, "deleted_at": true, "deleted_owner": true, "deleted_name": true,
-	"deleted_lobby": true, "deleted_by": true, "deleted_dm": true, "deleted_status": true, "deleted_members": true,
-	"watch_password_hash": true, "password_hash": true}
+// editorColumns: who may write a column directly through an editor (the admin page, and the GM's "set" on a character in
+// their campaign): one table for both. "never": no editor (the server's own bookkeeping: ids, the soft-delete record, passwords,
+// and a character's class levels and subclasses, which follow from its one class); "admin": the admin page only (who owns a
+// character, which campaign it is in, its class). A column not listed is a game value both may set (Hit Points, gold,
+// conditions ...). Before Nov 15 2026 the GM's list protected only four columns: a GM could write the soft-delete record or a
+// second class (audit E-11, D-3).
+var editorColumns = map[string]string{
+	"id": "never", "created_at": "never", "avatar": "never", "password_hash": "never", "watch_password_hash": "never",
+	"deleted_at": "never", "deleted_owner": "never", "deleted_name": "never", "deleted_lobby": "never", "deleted_by": "never",
+	"deleted_dm": "never", "deleted_status": "never", "deleted_members": "never",
+	"class_levels": "never", "subclasses": "never", "hit_dice_spent_by_type": "never",
+	"agent_id": "admin", "lobby_id": "admin", "class": "admin", "subclass": "admin",
+}
+
+// adminMayEdit / gmMayEdit: may this editor write the column (editorColumns)?
+func adminMayEdit(col string) bool { return editorColumns[col] != "never" }
+func gmMayEdit(col string) bool    { return editorColumns[col] == "" }
+
+// adminLocked: the columns the admin page shows as locked.
+func adminLocked() map[string]bool {
+	out := map[string]bool{}
+	for c := range editorColumns {
+		if !adminMayEdit(c) {
+			out[c] = true
+		}
+	}
+	return out
+}
 
 func adminValueText(v interface{}) (interface{}, string) {
 	switch x := v.(type) {
@@ -425,7 +449,7 @@ func adminSet(table, kind string, id int, set map[string]interface{}, note strin
 		if _, ok := cols[k]; !ok {
 			return nil, fmt.Errorf("%q is not a field of %s", k, kind)
 		}
-		if adminLocked[k] {
+		if !adminMayEdit(k) {
 			return nil, fmt.Errorf("%q can't be edited here (delete and restore have their own buttons)", k)
 		}
 		if kind == "campaign" && k == "status" && set[k] == "deleted" {
@@ -602,7 +626,7 @@ func adminRowRoutes(w http.ResponseWriter, r *http.Request, table, kind string, 
 			writeJSONStatus(w, http.StatusNotFound, map[string]interface{}{"error": kind + "_not_found"})
 			return
 		}
-		out := map[string]interface{}{kind: row, "field_types": tableColumns(table), "locked_fields": adminLocked}
+		out := map[string]interface{}{kind: row, "field_types": tableColumns(table), "locked_fields": adminLocked()}
 		var n1, n2 string
 		if kind == "campaign" {
 			out["characters"] = adminCampaignMembers(id)

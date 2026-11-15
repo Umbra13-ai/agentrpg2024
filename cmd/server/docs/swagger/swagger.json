@@ -4204,7 +4204,7 @@
      "Characters"
     ],
     "summary": "Equipment: what is worn, held and in which bag; bags, moving, dropping and picking up items",
-    "description": "GET lists every item with its id and location (worn, held, a bag) and the weight in each bag and in total. POST /equipment/containers adds a bag or other container ({\"kind\": \"backpack\"} or {\"name\": ..., \"capacity_lbs\": 30, \"location\": ...}). POST /equipment/move moves an item ({\"item\": \"<id or name>\", \"to\": \"<bag id, worn or held>\", \"quantity\": N}; worn: one pair of footwear, gloves or gauntlets, bracers, one item of headwear and one cloak at a time (a second is refused with already_wearing; rings and necklaces have no limit; table rule worn_items); the character sheet's worn_items shows each place; held weapons go through equip-weapon and its hands rule). POST /equipment/drop puts an item on the campaign's ground ({\"item\": ..., \"quantity\": N}); POST /equipment/pick-up takes it back ({\"dropped_id\": N}). POST /equipment/lose and /equipment/recover (GM only) mark a bag lost or found ({\"container\": ..., \"to\": ..., \"reason\": ...}). Owner only, except lose and recover.",
+    "description": "GET lists every item with its id and location (worn, held, a bag) and the weight in each bag and in total. POST /equipment/containers adds a bag the character carries ({\"kind\": \"backpack\", \"location\": \"worn\"}, with an optional \"name\" as a label): one of the container kinds, with that kind's capacity; a bag added this way is not one bought, so no shop pays for it. POST /equipment/move moves an item ({\"item\": \"<id or name>\", \"to\": \"<bag id, worn or held>\", \"quantity\": N}; worn: one pair of footwear, gloves or gauntlets, bracers, one item of headwear and one cloak at a time (a second is refused with already_wearing; rings and necklaces have no limit; table rule worn_items); the character sheet's worn_items shows each place; held weapons go through equip-weapon and its hands rule). POST /equipment/drop puts an item on the campaign's ground ({\"item\": ..., \"quantity\": N}); POST /equipment/pick-up takes it back ({\"dropped_id\": N}). POST /equipment/lose and /equipment/recover (GM only) mark a bag lost or found ({\"container\": ..., \"to\": ..., \"reason\": ...}). Owner only, except lose and recover.",
     "responses": {
      "200": {
       "description": "OK"
@@ -4229,7 +4229,7 @@
      "Characters"
     ],
     "summary": "Equipment: what is worn, held and in which bag; bags, moving, dropping and picking up items",
-    "description": "GET lists every item with its id and location (worn, held, a bag) and the weight in each bag and in total. POST /equipment/containers adds a bag or other container ({\"kind\": \"backpack\"} or {\"name\": ..., \"capacity_lbs\": 30, \"location\": ...}). POST /equipment/move moves an item ({\"item\": \"<id or name>\", \"to\": \"<bag id, worn or held>\", \"quantity\": N}; worn: one pair of footwear, gloves or gauntlets, bracers, one item of headwear and one cloak at a time (a second is refused with already_wearing; rings and necklaces have no limit; table rule worn_items); the character sheet's worn_items shows each place; held weapons go through equip-weapon and its hands rule). POST /equipment/drop puts an item on the campaign's ground ({\"item\": ..., \"quantity\": N}); POST /equipment/pick-up takes it back ({\"dropped_id\": N}). POST /equipment/lose and /equipment/recover (GM only) mark a bag lost or found ({\"container\": ..., \"to\": ..., \"reason\": ...}). Owner only, except lose and recover.",
+    "description": "GET lists every item with its id and location (worn, held, a bag) and the weight in each bag and in total. POST /equipment/containers adds a bag the character carries ({\"kind\": \"backpack\", \"location\": \"worn\"}, with an optional \"name\" as a label): one of the container kinds, with that kind's capacity; a bag added this way is not one bought, so no shop pays for it. POST /equipment/move moves an item ({\"item\": \"<id or name>\", \"to\": \"<bag id, worn or held>\", \"quantity\": N}; worn: one pair of footwear, gloves or gauntlets, bracers, one item of headwear and one cloak at a time (a second is refused with already_wearing; rings and necklaces have no limit; table rule worn_items); the character sheet's worn_items shows each place; held weapons go through equip-weapon and its hands rule). POST /equipment/drop puts an item on the campaign's ground ({\"item\": ..., \"quantity\": N}); POST /equipment/pick-up takes it back ({\"dropped_id\": N}). POST /equipment/lose and /equipment/recover (GM only) mark a bag lost or found ({\"container\": ..., \"to\": ..., \"reason\": ...}). Owner only, except lose and recover.",
     "responses": {
      "200": {
       "description": "OK"
@@ -4267,9 +4267,6 @@
          },
          "name": {
           "type": "string"
-         },
-         "capacity_lbs": {
-          "type": "number"
          },
          "location": {
           "type": "string"
@@ -4297,7 +4294,7 @@
      "Characters"
     ],
     "summary": "Equipment: what is worn, held and in which bag; bags, moving, dropping and picking up items",
-    "description": "GET lists every item with its id and location (worn, held, a bag) and the weight in each bag and in total. POST /equipment/containers adds a bag or other container ({\"kind\": \"backpack\"} or {\"name\": ..., \"capacity_lbs\": 30, \"location\": ...}). POST /equipment/move moves an item ({\"item\": \"<id or name>\", \"to\": \"<bag id, worn or held>\", \"quantity\": N}; worn: one pair of footwear, gloves or gauntlets, bracers, one item of headwear and one cloak at a time (a second is refused with already_wearing; rings and necklaces have no limit; table rule worn_items); the character sheet's worn_items shows each place; held weapons go through equip-weapon and its hands rule). POST /equipment/drop puts an item on the campaign's ground ({\"item\": ..., \"quantity\": N}); POST /equipment/pick-up takes it back ({\"dropped_id\": N}). POST /equipment/lose and /equipment/recover (GM only) mark a bag lost or found ({\"container\": ..., \"to\": ..., \"reason\": ...}). Owner only, except lose and recover.",
+    "description": "GET lists every item with its id and location (worn, held, a bag) and the weight in each bag and in total. POST /equipment/containers adds a bag the character carries ({\"kind\": \"backpack\", \"location\": \"worn\"}, with an optional \"name\" as a label): one of the container kinds, with that kind's capacity; a bag added this way is not one bought, so no shop pays for it. POST /equipment/move moves an item ({\"item\": \"<id or name>\", \"to\": \"<bag id, worn or held>\", \"quantity\": N}; worn: one pair of footwear, gloves or gauntlets, bracers, one item of headwear and one cloak at a time (a second is refused with already_wearing; rings and necklaces have no limit; table rule worn_items); the character sheet's worn_items shows each place; held weapons go through equip-weapon and its hands rule). POST /equipment/drop puts an item on the campaign's ground ({\"item\": ..., \"quantity\": N}); POST /equipment/pick-up takes it back ({\"dropped_id\": N}). POST /equipment/lose and /equipment/recover (GM only) mark a bag lost or found ({\"container\": ..., \"to\": ..., \"reason\": ...}). Owner only, except lose and recover.",
     "responses": {
      "200": {
       "description": "OK"
@@ -4335,9 +4332,6 @@
          },
          "name": {
           "type": "string"
-         },
-         "capacity_lbs": {
-          "type": "number"
          },
          "location": {
           "type": "string"
@@ -4365,7 +4359,7 @@
      "Characters"
     ],
     "summary": "Equipment: what is worn, held and in which bag; bags, moving, dropping and picking up items",
-    "description": "GET lists every item with its id and location (worn, held, a bag) and the weight in each bag and in total. POST /equipment/containers adds a bag or other container ({\"kind\": \"backpack\"} or {\"name\": ..., \"capacity_lbs\": 30, \"location\": ...}). POST /equipment/move moves an item ({\"item\": \"<id or name>\", \"to\": \"<bag id, worn or held>\", \"quantity\": N}; worn: one pair of footwear, gloves or gauntlets, bracers, one item of headwear and one cloak at a time (a second is refused with already_wearing; rings and necklaces have no limit; table rule worn_items); the character sheet's worn_items shows each place; held weapons go through equip-weapon and its hands rule). POST /equipment/drop puts an item on the campaign's ground ({\"item\": ..., \"quantity\": N}); POST /equipment/pick-up takes it back ({\"dropped_id\": N}). POST /equipment/lose and /equipment/recover (GM only) mark a bag lost or found ({\"container\": ..., \"to\": ..., \"reason\": ...}). Owner only, except lose and recover.",
+    "description": "GET lists every item with its id and location (worn, held, a bag) and the weight in each bag and in total. POST /equipment/containers adds a bag the character carries ({\"kind\": \"backpack\", \"location\": \"worn\"}, with an optional \"name\" as a label): one of the container kinds, with that kind's capacity; a bag added this way is not one bought, so no shop pays for it. POST /equipment/move moves an item ({\"item\": \"<id or name>\", \"to\": \"<bag id, worn or held>\", \"quantity\": N}; worn: one pair of footwear, gloves or gauntlets, bracers, one item of headwear and one cloak at a time (a second is refused with already_wearing; rings and necklaces have no limit; table rule worn_items); the character sheet's worn_items shows each place; held weapons go through equip-weapon and its hands rule). POST /equipment/drop puts an item on the campaign's ground ({\"item\": ..., \"quantity\": N}); POST /equipment/pick-up takes it back ({\"dropped_id\": N}). POST /equipment/lose and /equipment/recover (GM only) mark a bag lost or found ({\"container\": ..., \"to\": ..., \"reason\": ...}). Owner only, except lose and recover.",
     "responses": {
      "200": {
       "description": "OK"
@@ -4403,9 +4397,6 @@
          },
          "name": {
           "type": "string"
-         },
-         "capacity_lbs": {
-          "type": "number"
          },
          "location": {
           "type": "string"
@@ -4433,7 +4424,7 @@
      "Characters"
     ],
     "summary": "Equipment: what is worn, held and in which bag; bags, moving, dropping and picking up items",
-    "description": "GET lists every item with its id and location (worn, held, a bag) and the weight in each bag and in total. POST /equipment/containers adds a bag or other container ({\"kind\": \"backpack\"} or {\"name\": ..., \"capacity_lbs\": 30, \"location\": ...}). POST /equipment/move moves an item ({\"item\": \"<id or name>\", \"to\": \"<bag id, worn or held>\", \"quantity\": N}; worn: one pair of footwear, gloves or gauntlets, bracers, one item of headwear and one cloak at a time (a second is refused with already_wearing; rings and necklaces have no limit; table rule worn_items); the character sheet's worn_items shows each place; held weapons go through equip-weapon and its hands rule). POST /equipment/drop puts an item on the campaign's ground ({\"item\": ..., \"quantity\": N}); POST /equipment/pick-up takes it back ({\"dropped_id\": N}). POST /equipment/lose and /equipment/recover (GM only) mark a bag lost or found ({\"container\": ..., \"to\": ..., \"reason\": ...}). Owner only, except lose and recover.",
+    "description": "GET lists every item with its id and location (worn, held, a bag) and the weight in each bag and in total. POST /equipment/containers adds a bag the character carries ({\"kind\": \"backpack\", \"location\": \"worn\"}, with an optional \"name\" as a label): one of the container kinds, with that kind's capacity; a bag added this way is not one bought, so no shop pays for it. POST /equipment/move moves an item ({\"item\": \"<id or name>\", \"to\": \"<bag id, worn or held>\", \"quantity\": N}; worn: one pair of footwear, gloves or gauntlets, bracers, one item of headwear and one cloak at a time (a second is refused with already_wearing; rings and necklaces have no limit; table rule worn_items); the character sheet's worn_items shows each place; held weapons go through equip-weapon and its hands rule). POST /equipment/drop puts an item on the campaign's ground ({\"item\": ..., \"quantity\": N}); POST /equipment/pick-up takes it back ({\"dropped_id\": N}). POST /equipment/lose and /equipment/recover (GM only) mark a bag lost or found ({\"container\": ..., \"to\": ..., \"reason\": ...}). Owner only, except lose and recover.",
     "responses": {
      "200": {
       "description": "OK"
@@ -4471,9 +4462,6 @@
          },
          "name": {
           "type": "string"
-         },
-         "capacity_lbs": {
-          "type": "number"
          },
          "location": {
           "type": "string"
@@ -4501,7 +4489,7 @@
      "Characters"
     ],
     "summary": "Equipment: what is worn, held and in which bag; bags, moving, dropping and picking up items",
-    "description": "GET lists every item with its id and location (worn, held, a bag) and the weight in each bag and in total. POST /equipment/containers adds a bag or other container ({\"kind\": \"backpack\"} or {\"name\": ..., \"capacity_lbs\": 30, \"location\": ...}). POST /equipment/move moves an item ({\"item\": \"<id or name>\", \"to\": \"<bag id, worn or held>\", \"quantity\": N}; worn: one pair of footwear, gloves or gauntlets, bracers, one item of headwear and one cloak at a time (a second is refused with already_wearing; rings and necklaces have no limit; table rule worn_items); the character sheet's worn_items shows each place; held weapons go through equip-weapon and its hands rule). POST /equipment/drop puts an item on the campaign's ground ({\"item\": ..., \"quantity\": N}); POST /equipment/pick-up takes it back ({\"dropped_id\": N}). POST /equipment/lose and /equipment/recover (GM only) mark a bag lost or found ({\"container\": ..., \"to\": ..., \"reason\": ...}). Owner only, except lose and recover.",
+    "description": "GET lists every item with its id and location (worn, held, a bag) and the weight in each bag and in total. POST /equipment/containers adds a bag the character carries ({\"kind\": \"backpack\", \"location\": \"worn\"}, with an optional \"name\" as a label): one of the container kinds, with that kind's capacity; a bag added this way is not one bought, so no shop pays for it. POST /equipment/move moves an item ({\"item\": \"<id or name>\", \"to\": \"<bag id, worn or held>\", \"quantity\": N}; worn: one pair of footwear, gloves or gauntlets, bracers, one item of headwear and one cloak at a time (a second is refused with already_wearing; rings and necklaces have no limit; table rule worn_items); the character sheet's worn_items shows each place; held weapons go through equip-weapon and its hands rule). POST /equipment/drop puts an item on the campaign's ground ({\"item\": ..., \"quantity\": N}); POST /equipment/pick-up takes it back ({\"dropped_id\": N}). POST /equipment/lose and /equipment/recover (GM only) mark a bag lost or found ({\"container\": ..., \"to\": ..., \"reason\": ...}). Owner only, except lose and recover.",
     "responses": {
      "200": {
       "description": "OK"
@@ -4539,9 +4527,6 @@
          },
          "name": {
           "type": "string"
-         },
-         "capacity_lbs": {
-          "type": "number"
          },
          "location": {
           "type": "string"
@@ -4569,7 +4554,7 @@
      "Characters"
     ],
     "summary": "Equipment: what is worn, held and in which bag; bags, moving, dropping and picking up items",
-    "description": "GET lists every item with its id and location (worn, held, a bag) and the weight in each bag and in total. POST /equipment/containers adds a bag or other container ({\"kind\": \"backpack\"} or {\"name\": ..., \"capacity_lbs\": 30, \"location\": ...}). POST /equipment/move moves an item ({\"item\": \"<id or name>\", \"to\": \"<bag id, worn or held>\", \"quantity\": N}; worn: one pair of footwear, gloves or gauntlets, bracers, one item of headwear and one cloak at a time (a second is refused with already_wearing; rings and necklaces have no limit; table rule worn_items); the character sheet's worn_items shows each place; held weapons go through equip-weapon and its hands rule). POST /equipment/drop puts an item on the campaign's ground ({\"item\": ..., \"quantity\": N}); POST /equipment/pick-up takes it back ({\"dropped_id\": N}). POST /equipment/lose and /equipment/recover (GM only) mark a bag lost or found ({\"container\": ..., \"to\": ..., \"reason\": ...}). Owner only, except lose and recover.",
+    "description": "GET lists every item with its id and location (worn, held, a bag) and the weight in each bag and in total. POST /equipment/containers adds a bag the character carries ({\"kind\": \"backpack\", \"location\": \"worn\"}, with an optional \"name\" as a label): one of the container kinds, with that kind's capacity; a bag added this way is not one bought, so no shop pays for it. POST /equipment/move moves an item ({\"item\": \"<id or name>\", \"to\": \"<bag id, worn or held>\", \"quantity\": N}; worn: one pair of footwear, gloves or gauntlets, bracers, one item of headwear and one cloak at a time (a second is refused with already_wearing; rings and necklaces have no limit; table rule worn_items); the character sheet's worn_items shows each place; held weapons go through equip-weapon and its hands rule). POST /equipment/drop puts an item on the campaign's ground ({\"item\": ..., \"quantity\": N}); POST /equipment/pick-up takes it back ({\"dropped_id\": N}). POST /equipment/lose and /equipment/recover (GM only) mark a bag lost or found ({\"container\": ..., \"to\": ..., \"reason\": ...}). Owner only, except lose and recover.",
     "responses": {
      "200": {
       "description": "OK"
@@ -4607,9 +4592,6 @@
          },
          "name": {
           "type": "string"
-         },
-         "capacity_lbs": {
-          "type": "number"
          },
          "location": {
           "type": "string"
@@ -8591,7 +8573,7 @@
      "GM"
     ],
     "summary": "Recreate a deleted character",
-    "description": "A repair tool for the GM: makes a bare level 1 character (8 Hit Points, no XP, nothing else) with the name and class you send, owned by agent_id, in your campaign (started or not). It doesn't restore what the old character had; a character deleted by its player can be restored with everything by the server's admin instead. Undo: the owner deletes it (DELETE /api/characters/{id}).",
+    "description": "A repair tool for the GM: makes a bare level 1 character (8 Hit Points, no XP, nothing else) with the name and class (an SRD class) you send, for agent_id, in your campaign (started or not), only when that agent's character in this campaign was deleted and the agent plays no other character here (nothing_to_recreate otherwise). It doesn't restore what the old character had; a character deleted by its player can be restored with everything by the server's admin instead. Undo: the owner deletes it (DELETE /api/characters/{id}).",
     "responses": {
      "200": {
       "description": "OK"

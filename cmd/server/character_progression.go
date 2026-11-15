@@ -1180,47 +1180,11 @@ func takeClassLevel(w http.ResponseWriter, r *http.Request) {
 		totalLevel = level
 	}
 
-	// Check if this is taking first level in a new class (multiclassing)
-	isNewClass := classLevels[targetClass] == 0 && targetClass != strings.ToLower(currentClass)
-	if isNewClass {
-		var mcLobbyID int
-		db.QueryRow(`SELECT COALESCE(lobby_id,0) FROM characters WHERE id = $1`, req.CharacterID).Scan(&mcLobbyID)
-		if !multiclassAllowed(mcLobbyID) {
-			w.WriteHeader(http.StatusBadRequest)
-			json.NewEncoder(w).Encode(map[string]interface{}{"error": multiclassRefusal, "message": multiclassOffMessage()})
-			return
-		}
-	}
-
-	// Check prerequisites for multiclassing
-	// "To qualify for a new class, you must meet the ability score prerequisites
-	// for both your current class and your new one"
-	if isNewClass {
-		// Check prerequisites for LEAVING current class
-		canLeave, leaveReason := meetsMulticlassPrereqs(currentClass, str, dex, intl, wis, cha)
-		if !canLeave {
-			w.WriteHeader(http.StatusBadRequest)
-			json.NewEncoder(w).Encode(map[string]interface{}{
-				"error":         "prerequisites_not_met",
-				"message":       fmt.Sprintf("Cannot multiclass out of %s: %s", currentClass, leaveReason),
-				"current_class": currentClass,
-				"failed_prereq": leaveReason,
-			})
-			return
-		}
-
-		// Check prerequisites for ENTERING new class
-		canEnter, enterReason := meetsMulticlassPrereqs(targetClass, str, dex, intl, wis, cha)
-		if !canEnter {
-			w.WriteHeader(http.StatusBadRequest)
-			json.NewEncoder(w).Encode(map[string]interface{}{
-				"error":         "prerequisites_not_met",
-				"message":       fmt.Sprintf("Cannot multiclass into %s: %s", targetClass, enterReason),
-				"target_class":  targetClass,
-				"failed_prereq": enterReason,
-			})
-			return
-		}
+	// A level is only ever taken in the character's own class: multiclassing is not supported (multiclass_2024.go). This is
+	// checked against the class itself, not only against class_levels, which an editor could once write (audit D-3).
+	if targetClass != strings.ToLower(currentClass) {
+		writeJSONStatus(w, http.StatusBadRequest, map[string]interface{}{"error": multiclassRefusal, "message": multiclassOffMessage()})
+		return
 	}
 
 	// Check for pending level-up (need XP or pending ASI to indicate level available)
@@ -1288,58 +1252,6 @@ func takeClassLevel(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 
-	// Grant proficiencies if taking first level in new class
-	newProfsMessage := ""
-	if isNewClass {
-		profs := multiclassProfsFor(targetClass)
-
-		// Add armor proficiencies
-		if len(profs.ArmorProf) > 0 {
-			existingArmor := strings.Split(armorProfsStr, ", ")
-			for _, prof := range profs.ArmorProf {
-				found := false
-				for _, existing := range existingArmor {
-					if strings.ToLower(existing) == strings.ToLower(prof) {
-						found = true
-						break
-					}
-				}
-				if !found && prof != "" {
-					if armorProfsStr != "" {
-						armorProfsStr += ", "
-					}
-					armorProfsStr += strings.ToLower(prof)
-				}
-			}
-			newProfsMessage += fmt.Sprintf("Armor: %v ", profs.ArmorProf)
-		}
-
-		// Add weapon proficiencies
-		if len(profs.WeaponProf) > 0 {
-			existingWeapons := strings.Split(weaponProfsStr, ", ")
-			for _, prof := range profs.WeaponProf {
-				found := false
-				for _, existing := range existingWeapons {
-					if strings.ToLower(existing) == strings.ToLower(prof) {
-						found = true
-						break
-					}
-				}
-				if !found && prof != "" {
-					if weaponProfsStr != "" {
-						weaponProfsStr += ", "
-					}
-					weaponProfsStr += strings.ToLower(prof)
-				}
-			}
-			newProfsMessage += fmt.Sprintf("Weapons: %v ", profs.WeaponProf)
-		}
-
-		// Note about tools and skills (would need additional handling)
-		if len(profs.ToolProf) > 0 {
-			newProfsMessage += fmt.Sprintf("Tools: %v ", profs.ToolProf)
-		}
-	}
 
 	// Save changes
 	classLevelsJSON, _ = json.Marshal(classLevels)
@@ -1394,18 +1306,9 @@ func takeClassLevel(w http.ResponseWriter, r *http.Request) {
 		"new_max_hp":       newMaxHP,
 	}
 
-	if isNewClass {
-		response["multiclassed_into"] = targetClass
-		response["message"] = fmt.Sprintf("%s took their first level in %s! (Now %s %d)",
-			charName, srdClasses[targetClass].Name, formatClassLevels(classLevels), newTotalLevel)
-		if newProfsMessage != "" {
-			response["new_proficiencies"] = newProfsMessage
-		}
-	} else {
-		response["leveled_up_in"] = targetClass
-		response["message"] = fmt.Sprintf("%s gained a level in %s! (Now %s %d)",
-			charName, srdClasses[targetClass].Name, formatClassLevels(classLevels), newTotalLevel)
-	}
+	response["leveled_up_in"] = targetClass
+	response["message"] = fmt.Sprintf("%s gained a level in %s! (Now %s %d)",
+		charName, srdClasses[targetClass].Name, formatClassLevels(classLevels), newTotalLevel)
 
 	if asiEarned > 0 {
 		response["asi_earned"] = asiEarned

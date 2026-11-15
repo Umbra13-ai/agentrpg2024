@@ -26,6 +26,10 @@ import (
 	"time"
 )
 
+// playerAddedSource marks an item a player added without buying it (a bag declared with POST .../equipment/containers): no shop
+// pays for it (sellBlocked).
+const playerAddedSource = "player"
+
 // containerKinds holds capacities from the SRD 5.2.1 adventuring gear entries.
 var containerKinds = map[string]struct {
 	Name     string
@@ -546,10 +550,10 @@ func validDestination(to string, inv []invItem, moving invItem) (string, error) 
 // handleCharacterEquipment routes /api/characters/{id}/equipment[/action].
 // handleCharacterEquipment godoc
 // @Summary Equipment: what is worn, held and in which bag; bags, moving, dropping and picking up items
-// @Description GET lists every item with its id and location (worn, held, a bag) and the weight in each bag and in total. POST /equipment/containers adds a bag or other container ({"kind": "backpack"} or {"name": ..., "capacity_lbs": 30, "location": ...}). POST /equipment/move moves an item ({"item": "<id or name>", "to": "<bag id, worn or held>", "quantity": N}; worn: one pair of footwear, gloves or gauntlets, bracers, one item of headwear and one cloak at a time (a second is refused with already_wearing; rings and necklaces have no limit; table rule worn_items); the character sheet's worn_items shows each place; held weapons go through equip-weapon and its hands rule). POST /equipment/drop puts an item on the campaign's ground ({"item": ..., "quantity": N}); POST /equipment/pick-up takes it back ({"dropped_id": N}). POST /equipment/lose and /equipment/recover (GM only) mark a bag lost or found ({"container": ..., "to": ..., "reason": ...}). Owner only, except lose and recover.
+// @Description GET lists every item with its id and location (worn, held, a bag) and the weight in each bag and in total. POST /equipment/containers adds a bag the character carries ({"kind": "backpack", "location": "worn"}, with an optional "name" as a label): one of the container kinds, with that kind's capacity; a bag added this way is not one bought, so no shop pays for it. POST /equipment/move moves an item ({"item": "<id or name>", "to": "<bag id, worn or held>", "quantity": N}; worn: one pair of footwear, gloves or gauntlets, bracers, one item of headwear and one cloak at a time (a second is refused with already_wearing; rings and necklaces have no limit; table rule worn_items); the character sheet's worn_items shows each place; held weapons go through equip-weapon and its hands rule). POST /equipment/drop puts an item on the campaign's ground ({"item": ..., "quantity": N}); POST /equipment/pick-up takes it back ({"dropped_id": N}). POST /equipment/lose and /equipment/recover (GM only) mark a bag lost or found ({"container": ..., "to": ..., "reason": ...}). Owner only, except lose and recover.
 // @Tags Characters
 // @Param id path int true "Character ID"
-// @Param request body object{item=string,to=string,quantity=int,kind=string,name=string,capacity_lbs=number,location=string,dropped_id=int,container=string,reason=string} false "The fields of the action"
+// @Param request body object{item=string,to=string,quantity=int,kind=string,name=string,location=string,dropped_id=int,container=string,reason=string} false "The fields of the action"
 // @Router /characters/{id}/equipment [get]
 // @Router /characters/{id}/equipment/containers [post]
 // @Router /characters/{id}/equipment/move [post]
@@ -614,54 +618,37 @@ func handleCharacterEquipment(w http.ResponseWriter, r *http.Request, charID int
 		handleItemSetCharges(w, r, charID)
 		return
 	case "containers":
+		// A bag the player says the character carries, to organise the pack. It is a real container kind (its name and capacity
+		// come from containerKinds, never from the request) and it is the player's own: source "player", so a shop never pays
+		// for it. Before Nov 15 2026 any name was accepted, so a "container" named after a magic item or a weapon was sold,
+		// equipped or attuned as that item (audit E-3).
 		var req struct {
-			Name        string  `json:"name"`
-			Kind        string  `json:"kind"`
-			Capacity    string  `json:"capacity"`
-			CapacityLbs float64 `json:"capacity_lbs"`
-			Location    string  `json:"location"`
-			Weight      float64 `json:"weight"`
+			Kind     string `json:"kind"`
+			Name     string `json:"name"` // a label for the bag ("the red sack"); the item keeps its kind's name
+			Location string `json:"location"`
 		}
 		if !readRequest(w, r, &req) {
 			return
 		}
 		kind := strings.ToLower(strings.TrimSpace(req.Kind))
 		known, isKnown := containerKinds[kind]
-		name := strings.TrimSpace(req.Name)
-		if name == "" && isKnown {
-			name = known.Name
-		}
-		if name == "" || len(name) > 80 {
+		if !isKnown || len(req.Name) > 80 {
 			kinds := []string{}
 			for k := range containerKinds {
 				kinds = append(kinds, k)
 			}
 			sort.Strings(kinds)
-			writeJSONStatus(w, http.StatusBadRequest, map[string]interface{}{"error": "name_or_kind_required", "kinds": kinds})
+			writeJSONStatus(w, http.StatusBadRequest, map[string]interface{}{"error": "kind_required", "kinds": kinds,
+				"message": "Send kind: one of the container kinds listed (name is an optional label of up to 80 characters). A magic container comes from a shop or the GM. Nothing was changed."})
 			return
 		}
+		name := known.Name
+		label := strings.TrimSpace(req.Name)
 		mutateInventory(w, charID, func(inv []invItem) ([]invItem, map[string]interface{}, int, string) {
-			item := invItem{"id": nextItemID(inv), "name": name, "type": "container", "quantity": 1}
-			if kind != "" {
-				item["container_kind"] = kind
-			}
-			capText, capLbs := req.Capacity, req.CapacityLbs
-			if isKnown {
-				if capText == "" {
-					capText = known.Capacity
-				}
-				if capLbs == 0 {
-					capLbs = known.Lbs
-				}
-			}
-			if capText != "" {
-				item["capacity"] = capText
-			}
-			if capLbs > 0 {
-				item["capacity_lbs"] = capLbs
-			}
-			if req.Weight > 0 {
-				item["weight"] = req.Weight
+			item := invItem{"id": nextItemID(inv), "name": name, "type": "container", "quantity": 1, "container_kind": kind,
+				"capacity": known.Capacity, "capacity_lbs": known.Lbs, "source": playerAddedSource}
+			if label != "" && !strings.EqualFold(label, name) {
+				item["label"] = label
 			}
 			loc, err := validDestination(req.Location, inv, item)
 			if err != nil {
@@ -669,7 +656,7 @@ func handleCharacterEquipment(w http.ResponseWriter, r *http.Request, charID int
 			}
 			item["location"] = loc
 			inv = append(inv, item)
-			return inv, map[string]interface{}{"container_id": item["id"], "name": name, "location": loc}, 0, ""
+			return inv, map[string]interface{}{"container_id": item["id"], "name": name, "label": label, "location": loc}, 0, ""
 		})
 
 	case "move":

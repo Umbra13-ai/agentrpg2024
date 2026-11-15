@@ -287,8 +287,10 @@ func handleCampaignByID(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// a private campaign: only its players, its GM and people with the watch password can read it (private_campaigns.go)
-	if r.Method == http.MethodGet && (len(parts) == 1 || parts[1] == "feed" || parts[1] == "spectate" || parts[1] == "observations" || parts[1] == "combat" || parts[1] == "battle-map") && !canWatch(r, campaignID) {
+	// a private campaign: only its players, its GM and people with the watch password can read any of it (private_campaigns.go).
+	// Every read under /api/campaigns/{id}/ is gated, so a new read route is private too; before Nov 15 2026 only six named
+	// subroutes were, and the story, items, marching order and exploration status were open to anyone (audit A-10).
+	if (r.Method == http.MethodGet || r.Method == http.MethodHead) && !canWatch(r, campaignID) {
 		writeWatchGate(w, r, campaignID, false)
 		return
 	}

@@ -1043,7 +1043,7 @@ func handleGMRestoreAction(w http.ResponseWriter, r *http.Request) {
 
 // handleGMRecreateCharacter allows GM to recreate a deleted character
 // @Summary Recreate a deleted character
-// @Description A repair tool for the GM: makes a bare level 1 character (8 Hit Points, no XP, nothing else) with the name and class you send, owned by agent_id, in your campaign (started or not). It doesn't restore what the old character had; a character deleted by its player can be restored with everything by the server's admin instead. Undo: the owner deletes it (DELETE /api/characters/{id}).
+// @Description A repair tool for the GM: makes a bare level 1 character (8 Hit Points, no XP, nothing else) with the name and class (an SRD class) you send, for agent_id, in your campaign (started or not), only when that agent's character in this campaign was deleted and the agent plays no other character here (nothing_to_recreate otherwise). It doesn't restore what the old character had; a character deleted by its player can be restored with everything by the server's admin instead. Undo: the owner deletes it (DELETE /api/characters/{id}).
 // @Tags GM
 // @Param Authorization header string true "Bearer <token>"
 // @Param request body object{name=string,class=string,agent_id=int,campaign_id=int} true "Character to recreate"
@@ -1077,11 +1077,32 @@ func handleGMRecreateCharacter(w http.ResponseWriter, r *http.Request) {
 	req.CampaignID = campaignID
 	var err error
 
+	// A repair tool: it gives back a character to a player of this campaign whose character here was deleted, and only to
+	// them. Before Nov 15 2026 it made a bare character for any agent_id at all, which then broke that agent's default
+	// character (audit A-8).
+	req.Name, req.Class = strings.TrimSpace(req.Name), strings.ToLower(strings.TrimSpace(req.Class))
+	if _, known := srdClasses[req.Class]; req.Name == "" || !known {
+		writeJSONStatus(w, http.StatusBadRequest, map[string]interface{}{"error": "name_and_class_required",
+			"message": "Send name and class (one of the 12 SRD classes). Nothing was changed."})
+		return
+	}
+	var lost, playing bool
+	err = db.QueryRow(`SELECT EXISTS (SELECT 1 FROM characters WHERE deleted_owner = $1 AND deleted_lobby = $2),
+		EXISTS (SELECT 1 FROM characters WHERE agent_id = $1 AND lobby_id = $2 AND deleted_at IS NULL)`, req.AgentID, req.CampaignID).Scan(&lost, &playing)
+	if answerDBFailure(w, err, "the campaign's characters") {
+		return
+	}
+	if !lost || playing {
+		writeJSONStatus(w, http.StatusBadRequest, map[string]interface{}{"error": "nothing_to_recreate",
+			"message": fmt.Sprintf("Agent %d has no deleted character in campaign %d to replace, or still plays one there: this tool only gives a player back a character that was deleted from your campaign. Nothing was changed.", req.AgentID, req.CampaignID)})
+		return
+	}
+
 	// Create the character
 	var charID int
 	err = db.QueryRow(`
-		INSERT INTO characters (agent_id, lobby_id, name, class, hp, max_hp, level, xp)
-		VALUES ($1, $2, $3, $4, 8, 8, 1, 0)
+		INSERT INTO characters (agent_id, lobby_id, name, class, species, hp, max_hp, level, xp)
+		VALUES ($1, $2, $3, $4, '', 8, 8, 1, 0)
 		RETURNING id
 	`, req.AgentID, req.CampaignID, req.Name, req.Class).Scan(&charID)
 	if err != nil {

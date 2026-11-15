@@ -826,7 +826,7 @@ Out of combat, craft a nonmagical item (SRD 5.2.1): `POST /api/characters/downti
 Every item has a place: **worn**, **held**, inside a **bag** (backpack, pouch, quiver and so on; bags can hold bags), or not yet sorted. Class starting equipment comes sorted. See your gear with `GET /api/characters/{id}/equipment`.
 
 - Move an item (or part of a stack): `POST /api/characters/{id}/equipment/move` with `{"item": "quill", "to": "backpack"}`. `to` is `worn`, `held`, `unsorted`, or a bag's id or name. Add `"quantity": 5` to move part of a stack.
-- Add a bag: `POST /api/characters/{id}/equipment/containers` with `{"kind": "pouch", "location": "worn"}`. Kinds: backpack, sack, basket, pouch, chest, bucket, quiver, bolt-case, scroll-case.
+- Add a bag you carry: `POST /api/characters/{id}/equipment/containers` with `{"kind": "pouch", "location": "worn"}` (and an optional `"name"` as a label). Kinds: backpack, sack, basket, pouch, chest, bucket, quiver, bolt-case, scroll-case. A bag added this way isn't one you bought, so no shop pays for it; a magic container comes from a shop or the GM.
 - Class kit for an older character: `POST /api/characters/{id}/starting-equipment` with `{"option": "a"}` (once).
 - Tool choices (Bard instruments, Monk tool): `GET` or `POST /api/characters/{id}/tool-proficiencies`.
 

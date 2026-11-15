@@ -12,8 +12,6 @@ import (
 	"strings"
 )
 
-// columns the GM can't change: who owns the character, which campaign it is in, its id and timestamps
-var protectedCharacterColumns = map[string]bool{"id": true, "agent_id": true, "lobby_id": true, "created_at": true}
 
 type characterColumn struct {
 	Name, Type string
@@ -56,7 +54,7 @@ func gmSetCharacterFields(charID int, set map[string]json.RawMessage) ([]string,
 			return nil, fmt.Errorf("the column is species, not race")
 		}
 		c, ok := cols[key]
-		if !ok || protectedCharacterColumns[key] {
+		if !ok || !gmMayEdit(key) { // editorColumns (admin_2024.go)
 			return nil, fmt.Errorf("%q is not a character field the GM can change (GET this endpoint with character_id to see the fields)", k)
 		}
 		raw := set[k]
