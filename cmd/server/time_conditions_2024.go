@@ -52,22 +52,16 @@ func repeatSavesOverTime(lobbyID, rounds, onlyTarget int) []string {
 			tries = x.dur
 		}
 		for i := 1; i <= tries; i++ {
-			bonus, autoFail, dis := saveBonusFor(lobbyID, x.target, x.save.Ability)
-			roll := game.RollDie(20)
-			if dis {
-				if b := game.RollDie(20); b < roll {
-					roll = b
-				}
-			}
-			if !autoFail && roll+bonus >= x.save.DC {
+			// the one saving throw function (save_2024.go): before this, Advantage on the save was never counted here
+			sv := (&saveCtx{lobby: lobbyID, saver: x.target, ability: x.save.Ability, dc: x.save.DC, against: []string{x.cond}}).roll()
+			if sv.Success {
 				db.Exec(`DELETE FROM condition_records WHERE id = $1`, x.id)
 				touched[x.target] = true
 				src := ""
 				if x.source != "" {
 					src = " (" + x.source + ")"
 				}
-				out = append(out, fmt.Sprintf("%s succeeds on the %s save (%d vs DC %d) after %d round(s): no longer %s%s.",
-					getCharacterName(x.target), titleCase(x.save.Ability), roll+bonus, x.save.DC, i, x.cond, src))
+				out = append(out, fmt.Sprintf("%s after %d round(s): no longer %s%s.", sv.Line(getCharacterName(x.target)), i, x.cond, src))
 				break
 			}
 		}

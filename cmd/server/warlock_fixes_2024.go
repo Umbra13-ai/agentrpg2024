@@ -67,11 +67,7 @@ func beadOfForce(charID int, it invItem, req itemCastReq) string {
 	var lines []string
 	for _, id := range ids {
 		saved := false
-		if id < 0 {
-			saved, _ = monsterSave(lobby, id, "dex", 15)
-		} else {
-			saved, _ = characterSave(id, "dex", 15)
-		}
+		saved, _ = creatureSave(lobby, id, "dex", 15)
 		if saved {
 			lines = append(lines, creatureName(lobby, id)+" saves.")
 			continue
@@ -116,11 +112,7 @@ func dustOfSneezing(charID int, it invItem, req itemCastReq) string {
 			continue
 		}
 		saved := false
-		if id < 0 {
-			saved, _ = monsterSave(lobby, id, "con", 15)
-		} else {
-			saved, _ = characterSave(id, "con", 15)
-		}
+		saved, _ = creatureSave(lobby, id, "con", 15)
 		if saved {
 			lines = append(lines, creatureName(lobby, id)+" saves.")
 			continue

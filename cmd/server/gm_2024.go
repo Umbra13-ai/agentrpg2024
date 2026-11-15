@@ -45,18 +45,7 @@ func tooBigToGrab(attackerSize, targetSize string) bool {
 
 // unarmedOptionSave: the target of a grapple or shove picks the better of its Strength and Dexterity saves.
 func unarmedOptionSave(lobbyID, id, dc int) (bool, int, string) {
-	strBonus, strFail, strDis := savePeek(lobbyID, id, "str")
-	dexBonus, dexFail, dexDis := savePeek(lobbyID, id, "dex")
-	score := func(b int, fail, dis bool) int { // what a sensible target compares before it rolls
-		if fail {
-			return -100
-		}
-		if dis {
-			return b - 5
-		}
-		return b
-	}
-	if score(dexBonus, dexFail, dexDis) > score(strBonus, strFail, strDis) {
+	if savePeek(lobbyID, id, "dex") > savePeek(lobbyID, id, "str") {
 		ok, total := creatureSave(lobbyID, id, "dex", dc)
 		return ok, total, "Dexterity"
 	}
@@ -64,18 +53,21 @@ func unarmedOptionSave(lobbyID, id, dc int) (bool, int, string) {
 	return ok, total, "Strength"
 }
 
-// savePeek is a creature's saving throw bonus without side effects (saveBonusFor would use up a monster's Staggering Blow).
-func savePeek(lobbyID, id int, short string) (int, bool, bool) {
-	if id > 0 {
-		return saveBonusFor(lobbyID, id, map[string]string{"str": "Strength", "dex": "Dexterity"}[short])
+// savePeek: how good a creature's saving throw looks before it rolls, as a sensible target compares them (an automatic failure
+// is the worst, Advantage and Disadvantage count as 5). Nothing is used up: a Staggering Blow is left for the real save.
+func savePeek(lobbyID, id int, short string) int {
+	s := (&saveCtx{lobby: lobbyID, saver: id, ability: short, peek: true}).gather()
+	switch {
+	case s.AutoSucceed != "":
+		return 100
+	case s.AutoFail != "":
+		return -100
+	case s.HasAdvantage():
+		return s.Modifier() + 5
+	case s.HasDisadvantage():
+		return s.Modifier() - 5
 	}
-	key := monsterKeyOfCombatant(lobbyID, id)
-	sb := monsterStatBlock(key)
-	if sb == nil {
-		return 0, false, false
-	}
-	conds := conditionNames(lobbyID, id)
-	return monsterSaveBonus(key, short, asInt(sb[short])), game.AutoFailsSave(conds, short), game.GetSaveDisadvantage(conds, 0, short)
+	return s.Modifier()
 }
 
 func grappleSource(attackerID int) string { return fmt.Sprintf("Grapple #%d", attackerID) }

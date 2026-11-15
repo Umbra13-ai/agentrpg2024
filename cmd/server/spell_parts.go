@@ -101,25 +101,28 @@ func extraPartsText(parts []damagePart, slotLevel, dc int) string {
 // ritualWord matches the word "ritual" in a description (not "spiritual").
 var ritualWord = regexp.MustCompile(`\britual\b`)
 
-// monsterSpellSave is a monster's saving throw against a spell: Magic Resistance (a trait in its stat block) gives Advantage.
+// monsterSpellSave is a monster's saving throw against a spell: Magic Resistance (a trait in its stat block) gives Advantage
+// (a row of saveSources, save_2024.go).
 func monsterSpellSave(lobbyID, id int, ability string, dc int) (bool, int) {
 	return monsterSpellSaveFor(lobbyID, id, ability, dc, saveStakes{Condition: true})
 }
 
 // monsterSpellSaveFor: the same with the stakes of the save for Legendary Resistance (damage only, or a condition).
 func monsterSpellSaveFor(lobbyID, id int, ability string, dc int, st saveStakes) (bool, int) {
-	saved, total := monsterSaveRoll(lobbyID, id, ability, dc)
-	_, fightAdv := fightingSaveAdvantage.Load(lobbyID)
-	if mr := monsterHasTrait(lobbyID, id, "Magic Resistance"); mr {
-		if !saved && !fightAdv {
-			saved, total = monsterSaveRoll(lobbyID, id, ability, dc) // Advantage: a second roll that succeeds wins
+	r := monsterSpellSaveResult(lobbyID, id, ability, dc, st, nil)
+	return r.Success, r.Total
+}
+
+// monsterSpellSaveResult: the whole result, with sources of Disadvantage only the caller knows (a Construct against Shatter,
+// Heightened Spell). A monster with Magic Resistance gets a note for the GM.
+func monsterSpellSaveResult(lobbyID, id int, ability string, dc int, st saveStakes, dis []string) game.SaveResult {
+	r := (&saveCtx{lobby: lobbyID, saver: id, ability: ability, dc: dc, spell: true, extraDis: dis}).resist(st)
+	for _, a := range r.Save.Advantage {
+		if a == "Magic Resistance" {
+			addSaveNote(lobbyID, fmt.Sprintf("[%s has Magic Resistance: Advantage on saving throws against spells.]", creatureName(lobbyID, id)))
 		}
-		addSaveNote(lobbyID, fmt.Sprintf("[%s has Magic Resistance: Advantage on saving throws against spells.]", creatureName(lobbyID, id)))
 	}
-	if !saved && id < 0 && legendaryResistance(lobbyID, id, st) {
-		return true, total
-	}
-	return saved, total
+	return r
 }
 
 // monsterHasTrait: the monster's stat block has a trait of that name.

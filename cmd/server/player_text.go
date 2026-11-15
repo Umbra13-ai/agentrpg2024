@@ -5,6 +5,7 @@ package main
 //	"Greatclub: 11 vs AC 18 - MISS"                     -> "Greatclub: MISS"          (a monster's attack total)
 //	"Shortbow: 9 with Disadvantage (long range) vs AC 16 - MISS" -> "Shortbow: with Disadvantage (long range) - MISS"
 //	"Goblin 1 fails its DEX save (3 vs DC 18)"          -> "Goblin 1 fails its DEX save"
+//	"Aria fails the Dexterity saving throw (12 vs DC 15; d20 9 + 3) [Bless +2]" -> "Aria fails the Dexterity saving throw [Bless +2]"
 //	"Constitution save 15 vs DC 14, success"            -> "Constitution save, success"
 //	"repeats the Wisdom saving throw ... and fails (2)" -> "... and fails"
 //	"tries to escape: 15 (d20 13 + 2) vs DC 17, ..."    -> "tries to escape: ..."
@@ -21,8 +22,9 @@ var playerTextRules = []struct {
 	{regexp.MustCompile(`(:\s) - `), "$1"},
 	// a monster attack without a known target: "Scimitar: 14 to hit - ..."
 	{regexp.MustCompile(`(:\s)-?\d+((?: with (?:Advantage|Disadvantage))?(?: \([^)]*\))*(?: \[[^\]]*\])*) to hit - `), "$1$2 "},
-	// saving throws against a DC
-	{regexp.MustCompile(` \(-?\d+ vs DC \d+\)`), ""},
+	// saving throws against a DC; the first is the result line as game.SaveResult.Tail writes it (game/save.go; change the two
+	// together): " (<total> vs DC <dc>; d20 <n> + <bonus>)"
+	{regexp.MustCompile(` \(-?\d+ vs DC \d+(?:; d20[^)]*)?\)`), ""},
 	{regexp.MustCompile(`((?:save|saving throw)):? -?\d+ vs DC \d+`), "$1"},
 	{regexp.MustCompile(`: -?\d+ \(d20 -?\d+ \+ -?\d+\) vs DC \d+, `), ": "},
 	{regexp.MustCompile(` and (succeeds|fails) \(-?\d+\)`), " and $1"},

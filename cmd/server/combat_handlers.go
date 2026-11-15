@@ -1922,27 +1922,17 @@ func handleDamage(w http.ResponseWriter, r *http.Request, charID int) {
 			dc = 30 // SRD 5.2.1: up to a maximum DC of 30
 		}
 		// F55: the server rolls the Constitution save (before, it only said one was required, and nobody rolled it)
-		kept, total := characterSave(charID, "con", dc)
-		how := ""
-		if !kept && (hasInvocation(charID, "eldritch-mind") || charHasWarCaster(charID) || extendedConcentration(charID)) { // Eldritch Mind, War Caster, Extended Spell (F194): Advantage on saves to keep Concentration
-			kept, total = characterSave(charID, "con", dc)
-			how = " (Eldritch Mind: Advantage)"
-			if !hasInvocation(charID, "eldritch-mind") {
-				how = " (War Caster: Advantage)"
-				if !charHasWarCaster(charID) {
-					how = " (Extended Spell: Advantage)"
-				}
-			}
-		}
+		cs := (&saveCtx{saver: charID, ability: "con", dc: dc, concentration: true}).roll() // Eldritch Mind, War Caster, Extended Spell: Advantage
+		kept, total := cs.Success, cs.Total
 		result["concentration_dc"] = dc
 		result["concentrating_on"] = concentratingOn
 		result["concentration_save"] = total
 		result["concentration_kept"] = kept
 		if kept {
-			result["concentration"] = fmt.Sprintf("Concentration save (DC %d): %d%s, kept: %s goes on.", dc, total, how, concentratingOn)
+			result["concentration"] = fmt.Sprintf("Concentration: %s; %s goes on.", cs.Line(characterNameOf(charID)), concentratingOn)
 		} else {
 			db.Exec(`UPDATE characters SET concentrating_on = NULL WHERE id = $1`, charID)
-			result["concentration"] = fmt.Sprintf("Concentration save (DC %d): %d%s, failed: %s ends.", dc, total, how, concentratingOn)
+			result["concentration"] = fmt.Sprintf("Concentration: %s; %s ends.", cs.Line(characterNameOf(charID)), concentratingOn)
 		}
 	}
 

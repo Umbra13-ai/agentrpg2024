@@ -291,8 +291,8 @@ func TestSQLiteIncapacitationAndMovement(t *testing.T) {
 	if canMove(3) {
 		t.Fatal("expected paralyzed character to be unable to move")
 	}
-	if !autoFailsSave(2, "dex") {
-		t.Fatal("expected stunned character to auto-fail dex save")
+	if s := (&saveCtx{saver: 2, ability: "dex", dc: 10}).gather(); s.AutoFail != "Stunned" {
+		t.Fatalf("expected stunned character to auto-fail dex save, got %q", s.AutoFail)
 	}
 
 	// a hit on a Paralyzed creature from within 5 feet is a Critical Hit: the one attack function decides it (attack_2024.go)
@@ -311,13 +311,18 @@ func TestSQLiteSaveDisadvantageAndNames(t *testing.T) {
 	seedCharacter(t, testDB, 5, "Eris", `["restrained"]`, 2)
 	seedCharacter(t, testDB, 6, "Finn", `[]`, 3)
 
-	if !getSaveDisadvantage(5, "dex") {
+	saveOf := func(id int, ability string) game.SavingThrow {
+		return (&saveCtx{saver: id, ability: ability, dc: 10}).gather()
+	}
+	if !saveOf(5, "dex").HasDisadvantage() {
 		t.Fatal("expected restrained character to have dex save disadvantage")
 	}
-	if getSaveDisadvantage(5, "wis") {
+	if s := saveOf(5, "wis"); s.HasDisadvantage() {
 		t.Fatal("did not expect restrained character to have wis save disadvantage at exhaustion 2")
+	} else if s.Modifier()-s.Bonus != -4 {
+		t.Fatalf("Exhaustion 2 takes 4 from the save: modifier %d, adjustments %v", s.Modifier(), s.Adjust)
 	}
-	if getSaveDisadvantage(6, "wis") {
+	if saveOf(6, "wis").HasDisadvantage() {
 		t.Fatal("2024: Exhaustion is a -2 per level penalty, not Disadvantage")
 	}
 
@@ -823,26 +828,26 @@ func TestSQLiteHalflingBrave(t *testing.T) {
 	seedCharacterWithSpecies(t, testDB, 2, "Aragorn", "Human", `[]`, 0)
 
 	// Halfling should get advantage on frighten saves
-	if !checkHalflingBrave(1, "Save against the dragon's frightening presence") {
+	if !saveAdvFrom(1, "wis", "Brave", "Save against the dragon's frightening presence") {
 		t.Error("expected Halfling Brave to apply to frightening presence save")
 	}
-	if !checkHalflingBrave(1, "Save against being frightened") {
+	if !saveAdvFrom(1, "wis", "Brave", "Save against being frightened") {
 		t.Error("expected Halfling Brave to apply to being frightened")
 	}
-	if !checkHalflingBrave(1, "Fear effect from the vampire") {
+	if !saveAdvFrom(1, "wis", "Brave", "Fear effect from the vampire") {
 		t.Error("expected Halfling Brave to apply to fear effect")
 	}
-	if !checkHalflingBrave(1, "The lich casts cause fear") {
+	if !saveAdvFrom(1, "wis", "Brave", "The lich casts cause fear") {
 		t.Error("expected Halfling Brave to apply to cause fear spell")
 	}
 
 	// Non-frighten saves should not trigger
-	if checkHalflingBrave(1, "Save against fireball") {
+	if saveAdvFrom(1, "wis", "Brave", "Save against fireball") {
 		t.Error("did not expect Halfling Brave to apply to fireball save")
 	}
 
 	// Non-halflings should not get Halfling Brave
-	if checkHalflingBrave(2, "Save against being frightened") {
+	if saveAdvFrom(2, "wis", "Brave", "Save against being frightened") {
 		t.Error("did not expect Human to have Halfling Brave")
 	}
 }
@@ -866,10 +871,10 @@ func TestSQLiteFeyAncestry(t *testing.T) {
 	}
 
 	// Fey Ancestry gives charm save advantage
-	if !checkFeyAncestryCharm(1, "Save against the vampire's charm") {
+	if !saveAdvFrom(1, "wis", "Fey Ancestry", "Save against the vampire's charm") {
 		t.Error("expected Fey Ancestry to apply to charm save")
 	}
-	if checkFeyAncestryCharm(1, "Save against fireball") {
+	if saveAdvFrom(1, "wis", "Fey Ancestry", "Save against fireball") {
 		t.Error("did not expect Fey Ancestry to apply to non-charm save")
 	}
 }
@@ -881,34 +886,34 @@ func TestSQLiteGnomeCunning(t *testing.T) {
 	seedCharacterWithSpecies(t, testDB, 2, "Not-Gnome", "Human", `[]`, 0)
 
 	// Gnomish Cunning applies to INT/WIS/CHA saves against magic (from_magic=true)
-	if !checkGnomeCunning(1, "int", true) {
+	if !saveAdvFrom(1, "int", "Gnomish Cunning", "") {
 		t.Error("expected Gnomish Cunning to apply to INT saves vs magic")
 	}
-	if !checkGnomeCunning(1, "wis", true) {
+	if !saveAdvFrom(1, "wis", "Gnomish Cunning", "") {
 		t.Error("expected Gnomish Cunning to apply to WIS saves vs magic")
 	}
-	if !checkGnomeCunning(1, "cha", true) {
+	if !saveAdvFrom(1, "cha", "Gnomish Cunning", "") {
 		t.Error("expected Gnomish Cunning to apply to CHA saves vs magic")
 	}
 
 	// Does NOT apply to STR/DEX/CON (even against magic)
-	if checkGnomeCunning(1, "str", true) {
+	if saveAdvFrom(1, "str", "Gnomish Cunning", "") {
 		t.Error("did not expect Gnomish Cunning to apply to STR saves")
 	}
-	if checkGnomeCunning(1, "dex", true) {
+	if saveAdvFrom(1, "dex", "Gnomish Cunning", "") {
 		t.Error("did not expect Gnomish Cunning to apply to DEX saves")
 	}
-	if checkGnomeCunning(1, "con", true) {
+	if saveAdvFrom(1, "con", "Gnomish Cunning", "") {
 		t.Error("did not expect Gnomish Cunning to apply to CON saves")
 	}
 
 	// 2024: applies to INT, WIS and CHA saves even when the effect is not magical
-	if !checkGnomeCunning(1, "int", false) {
+	if !saveAdvFrom(1, "int", "Gnomish Cunning", "") {
 		t.Error("expected Gnomish Cunning for a non-magic INT save (2024 rules)")
 	}
 
 	// Non-gnomes don't get it
-	if checkGnomeCunning(2, "int", true) {
+	if saveAdvFrom(2, "int", "Gnomish Cunning", "") {
 		t.Error("did not expect Human to have Gnomish Cunning")
 	}
 }
@@ -920,20 +925,20 @@ func TestSQLiteDwarvenResilience(t *testing.T) {
 	seedCharacterWithSpecies(t, testDB, 2, "Human", "Human", `[]`, 0)
 
 	// Dwarf gets advantage on poison saves
-	if !checkDwarvenResilience(1, "Save against the poison") {
+	if !saveAdvFrom(1, "con", "Dwarven Resilience", "Save against the poison") {
 		t.Error("expected Dwarven Resilience to apply to poison save")
 	}
-	if !checkDwarvenResilience(1, "poisoned") {
+	if !saveAdvFrom(1, "con", "Dwarven Resilience", "poisoned") {
 		t.Error("expected Dwarven Resilience to apply to 'poisoned' keyword")
 	}
 
 	// Non-poison saves don't trigger
-	if checkDwarvenResilience(1, "Save against fireball") {
+	if saveAdvFrom(1, "con", "Dwarven Resilience", "Save against fireball") {
 		t.Error("did not expect Dwarven Resilience for fireball")
 	}
 
 	// Humans don't get it
-	if checkDwarvenResilience(2, "Save against poison") {
+	if saveAdvFrom(2, "con", "Dwarven Resilience", "Save against poison") {
 		t.Error("did not expect Human to have Dwarven Resilience")
 	}
 }
@@ -1169,4 +1174,16 @@ func TestOtherActionNarrativeValidationAndLegacyResultAlias(t *testing.T) {
 	if actionNarrative("", "") != "" {
 		t.Fatal("empty narrative inputs should remain empty for validation")
 	}
+}
+
+// saveAdvFrom: the character's saving throw against the cause the GM describes has Advantage from the named source (the
+// species traits are rows of saveSources, save_2024.go).
+func saveAdvFrom(id int, ability, source, desc string) bool {
+	s := (&saveCtx{saver: id, ability: ability, dc: 10, desc: desc}).gather()
+	for _, a := range s.Advantage {
+		if a == source {
+			return true
+		}
+	}
+	return false
 }

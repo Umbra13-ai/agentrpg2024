@@ -11,8 +11,8 @@ import (
 // or if your Speed is 0." The marker is "dodging" in the character's conditions.
 
 // dodgeActive: the character took the Dodge action and still has its benefit (not Incapacitated, Speed not 0). It is read in the
-// two shared places only, so every attack roll against the character and every Dexterity save gets it: buffAttackDisadvantage
-// and buffSaveAdvantage (buff_spells_2024.go).
+// two shared places only, so every attack roll against the character and every Dexterity save gets it: the "the target is
+// Dodging" row of attackSources (attack_2024.go) and the "Dodge" row of saveSources (save_2024.go).
 func dodgeActive(charID int) bool {
 	if charID <= 0 || db == nil || !hasCondition(charID, "dodging") || isIncapacitated(charID) {
 		return false

@@ -366,14 +366,6 @@ func creatureName(lobbyID, id int) string {
 	return n
 }
 
-// creatureSave rolls a saving throw for a monster or a character.
-func creatureSave(lobbyID, id int, ability string, dc int) (bool, int) {
-	if id < 0 {
-		return monsterSave(lobbyID, id, ability, dc)
-	}
-	return characterSave(id, ability, dc)
-}
-
 func joinNames(names []string) string {
 	switch len(names) {
 	case 0:
@@ -674,15 +666,6 @@ func spellEffectsTurnEnd(lobbyID, id int, name string) []string {
 }
 
 // ---- Haste, Heroism, Resistance, Guidance, and what a creature may do on its turn
-
-// spellSaveAdvantage: Haste gives Advantage on Dexterity saving throws.
-func spellSaveAdvantage(lobbyID, id int, ability string) bool {
-	return (strings.HasPrefix(strings.ToLower(ability), "dex") && hasSpellEffect(lobbyID, id, "hasted")) ||
-		spellSaveItemAdvantage(lobbyID, id) || // a save against a spell with a Ring of Spell Turning, Scarab, Staff of the Magi, a Holy Avenger's aura
-		deckAdvantage(id) || // the Jester card
-		buffSaveAdv(lobbyID, id, ability) || // Foresight, Holy Aura, Beacon of Hope, Protection from Poison (buff_spells_2024.go)
-		fightingAdvantageFor(lobbyID, id) // Charm and Dominate spells against a creature being fought (monster_reactions_2024.go)
-}
 
 // hasteEnds: "When the spell ends, the target is Incapacitated and has a Speed of 0 until the end of its next turn." endingNow is the id of
 // the creature whose turn is ending right now (its condition then lasts through its next turn).

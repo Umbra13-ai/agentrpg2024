@@ -94,34 +94,24 @@ func takeMasteryUse(charID int) (masteryUse, bool) {
 	return v.(masteryUse), true
 }
 
-// monsterConScore reads the Constitution score of a monster from the monsters table.
-func monsterConScore(monsterKey string) int {
-	var con int
-	if monsterKey == "" || db.QueryRow(`SELECT COALESCE(con, 10) FROM monsters WHERE slug = $1`, monsterKey).Scan(&con) != nil {
-		return 10
-	}
-	return con
-}
-
 // masteryOnHit applies the mastery property after a hit that left the target alive and returns text for the result.
 func masteryOnHit(lobbyID, charID, targetID int, name, monsterKey string, mu masteryUse, damage int) string {
 	switch mu.Name {
 	case "Topple":
-		mod := monsterSaveBonus(monsterKey, "con", monsterConScore(monsterKey))
-		roll := game.RollDie(20)
-		save := fmt.Sprintf("Constitution save %d against DC %d", roll+mod, mu.DC)
-		if roll+mod >= mu.DC {
-			return fmt.Sprintf(" Topple: %s makes its %s and stays on its feet.", name, save)
+		// the target's Constitution save (save_2024.go): its conditions, Bless or Bane, Haste ... count as for any save
+		sv := (&saveCtx{lobby: lobbyID, saver: targetID, ability: "con", dc: mu.DC, against: []string{"prone"}, source: charID}).roll()
+		if sv.Success {
+			return fmt.Sprintf(" Topple: %s and stays on its feet.", sv.Line(name))
 		}
 		for _, c := range conditionNames(lobbyID, targetID) {
 			if c == "prone" {
-				return fmt.Sprintf(" Topple: %s fails its %s but is already Prone.", name, save)
+				return fmt.Sprintf(" Topple: %s but is already Prone.", sv.Line(name))
 			}
 		}
 		db.Exec(`INSERT INTO condition_records (lobby_id, target_id, condition, source, escapes, notes)
 			VALUES ($1, $2, 'prone', $3, '[]', $4)`, lobbyID, targetID, "Topple ("+mu.Weapon+")",
 			fmt.Sprintf("Failed the Constitution save against Topple (DC %d).", mu.DC))
-		return fmt.Sprintf(" Topple: %s fails its %s and falls Prone.", name, save)
+		return fmt.Sprintf(" Topple: %s and falls Prone.", sv.Line(name))
 	case "Vex":
 		if damage > 0 {
 			vexMarks.Store(charID, vexMark{Lobby: lobbyID, Target: targetID})

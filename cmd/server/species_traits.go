@@ -25,17 +25,6 @@ func applyHalflingLucky(roll int, characterID int) (int, bool, int) {
 	return game.ApplyHalflingLucky(roll, isHalfling(characterID))
 }
 
-// checkHalflingBrave returns true if Halfling Brave grants advantage on this save
-// Brave: You have advantage on saving throws against being frightened.
-func checkHalflingBrave(characterID int, description string) bool {
-	var species string
-	err := db.QueryRow("SELECT COALESCE(species, '') FROM characters WHERE id = $1", characterID).Scan(&species)
-	if err != nil {
-		return false
-	}
-	return game.CheckHalflingBrave(species, description)
-}
-
 // isOrc checks if a character is an Orc (Relentless Endurance)
 func isOrc(characterID int) bool {
 	var species string
@@ -56,17 +45,6 @@ func isGnome(characterID int) bool {
 	return game.IsGnome(species)
 }
 
-// checkGnomeCunning returns true if Gnomish Cunning grants advantage on this save
-// Gnomish Cunning: Advantage on Intelligence, Wisdom and Charisma saving throws.
-func checkGnomeCunning(characterID int, abilityShort string, fromMagic bool) bool {
-	var species string
-	err := db.QueryRow("SELECT COALESCE(species, '') FROM characters WHERE id = $1", characterID).Scan(&species)
-	if err != nil {
-		return false
-	}
-	return game.CheckGnomeCunningMagic(species, abilityShort, fromMagic)
-}
-
 // isElf checks if a character is an elf (Fey Ancestry)
 func isElf(characterID int) bool {
 	var species string
@@ -81,17 +59,6 @@ func isElf(characterID int) bool {
 // every Elf has Fey Ancestry
 func hasFeyAncestry(characterID int) bool {
 	return isElf(characterID)
-}
-
-// checkFeyAncestryCharm returns true if Fey Ancestry grants advantage on this charm save
-// Fey Ancestry: Advantage on saving throws against being charmed. Magic can't put you to sleep.
-func checkFeyAncestryCharm(characterID int, description string) bool {
-	var species string
-	err := db.QueryRow("SELECT COALESCE(species, '') FROM characters WHERE id = $1", characterID).Scan(&species)
-	if err != nil {
-		return false
-	}
-	return game.CheckFeyAncestryCharm(species, description)
 }
 
 // isImmuneToMagicalSleep returns true if character has Fey Ancestry (immune to magical sleep)
@@ -178,24 +145,19 @@ func checkRelentlessRage(characterID int, currentHP int, damage int, maxHP int) 
 	// Calculate DC: 10 + (5 * uses)
 	dc := 10 + (5 * relentlessUses)
 
-	// Make CON save
-	conMod := game.Modifier(con)
-	roll := game.RollDie(20)
-	total := roll + conMod
-
-	if total >= dc {
+	// the Constitution save (save_2024.go): proficiency, Aura of Protection, Bless and the rest count as for any save
+	sv := (&saveCtx{saver: characterID, ability: "con", dc: dc}).roll()
+	if sv.Success {
 		// Success: Hit Points become twice the Barbarian level, and the next DC is 5 higher
 		db.Exec("UPDATE characters SET relentless_rage_uses = relentless_rage_uses + 1 WHERE id = $1", characterID)
-		nextDC := dc + 5
 		newHP := 2 * level // 2024: your Hit Points change to twice your Barbarian level
-		msg := fmt.Sprintf("🔥 %s's Relentless Rage triggers! Constitution save DC %d: rolled %d + %d = %d - SUCCESS! Hit Points change to %d instead of 0. (Next DC: %d)",
-			charName, dc, roll, conMod, total, newHP, nextDC)
+		msg := fmt.Sprintf("🔥 %s's Relentless Rage triggers! %s. Hit Points change to %d instead of 0. (Next DC: %d)",
+			charName, sv.ForSaver("Constitution saving throw"), newHP, dc+5)
 		return newHP, true, msg
 	}
 
 	// Failed the save - drop to 0 HP as normal
-	msg := fmt.Sprintf("🔥 %s's Relentless Rage triggers! CON save DC %d: rolled %d + %d = %d - FAILED. Drops to 0 HP.",
-		charName, dc, roll, conMod, total)
+	msg := fmt.Sprintf("🔥 %s's Relentless Rage triggers! %s. Drops to 0 HP.", charName, sv.ForSaver("Constitution saving throw"))
 	return 0, false, msg
 }
 
@@ -207,17 +169,6 @@ func isDwarf(characterID int) bool {
 		return false
 	}
 	return game.IsDwarf(species)
-}
-
-// checkDwarvenResilience returns true if Dwarven Resilience grants advantage on this save
-// Dwarven Resilience: Advantage on saving throws against poison, and resistance against poison damage.
-func checkDwarvenResilience(characterID int, description string) bool {
-	var species string
-	err := db.QueryRow("SELECT COALESCE(species, '') FROM characters WHERE id = $1", characterID).Scan(&species)
-	if err != nil {
-		return false
-	}
-	return game.CheckDwarvenResiliencePoison(species, description)
 }
 
 // isTiefling checks if a character is a Tiefling

@@ -440,9 +440,7 @@ func (c *attackCtx) blocked() (lost bool, note string) {
 		return sanctuaryBlocks(c.lobby, c.attacker, c.attackerName(), c.target)
 	}
 	if c.attacker > 0 && c.target > 0 {
-		var wis int
-		db.QueryRow(`SELECT COALESCE(wis,10) FROM characters WHERE id = $1`, c.attacker).Scan(&wis)
-		if msg, ok := checkSanctuaryProtection(c.attacker, c.target, wis); msg != "" {
+		if msg, ok := checkSanctuaryProtection(c.attacker, c.target); msg != "" {
 			return true, msg
 		} else if ok != "" {
 			return false, ok

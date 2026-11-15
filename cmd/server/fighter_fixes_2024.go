@@ -104,13 +104,6 @@ func javelinOfLightning(charID int, it invItem, req itemCastReq, description str
 	return fmt.Sprintf("⚡ Javelin of Lightning: you throw it and it becomes a bolt of lightning in a 5-foot-wide Line (4d6 = %d Lightning). %s. The javelin reappears in your hand; the bolt can't be used again until the next dawn.", dmg, strings.Join(parts, "; "))
 }
 
-// indomitableExtraBonus: the save's bonuses other than the ability modifier and proficiency (Indomitable rerolls the same save).
-func indomitableExtraBonus(charID int, ability string) int {
-	b := magicSaveBonus(charID) + buffSaveBonus(charID) - game.ExhaustionD20Penalty(exhaustionLevelOf(charID))
-	adj, _ := spellRollAdjust(lobbyOfChar(charID), charID, "save:"+ability)
-	return b + adj
-}
-
 // potionOfGrowth: the enlarge effect for 10 minutes (100 rounds); an item's effect needs no Concentration.
 func potionOfGrowth(lobby, targetID int, label string) string {
 	db.Exec(`DELETE FROM spell_effects WHERE lobby_id = $1 AND target_id = $2 AND kind = 'enlarge_reduce'`, lobby, targetID)

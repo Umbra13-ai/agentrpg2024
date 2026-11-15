@@ -129,11 +129,7 @@ func thunderLightningStaff(charID int, it invItem, req itemCastReq, description 
 	var lines []string
 	for _, id := range ids {
 		var saved bool
-		if id < 0 {
-			saved, _ = monsterSave(lobby, id, ability, 17)
-		} else {
-			saved, _ = characterSave(id, ability, 17)
-		}
+		saved, _ = creatureSave(lobby, id, ability, 17)
 		x := dmg
 		if saved {
 			x /= 2
@@ -254,11 +250,7 @@ func hornOfBlasting(charID int, it invItem, req itemCastReq) string {
 	var lines []string
 	for _, id := range ids {
 		var saved bool
-		if id < 0 {
-			saved, _ = monsterSave(lobby, id, "con", 15)
-		} else {
-			saved, _ = characterSave(id, "con", 15)
-		}
+		saved, _ = creatureSave(lobby, id, "con", 15)
 		x := dmg
 		if saved {
 			x /= 2
@@ -338,11 +330,7 @@ func wandOfWonder(charID int, it invItem, req itemCastReq) string {
 		var lines []string
 		for _, id := range targets {
 			var saved bool
-			if id < 0 {
-				saved, _ = monsterSave(lobby, id, ability, 15)
-			} else {
-				saved, _ = characterSave(id, ability, 15)
-			}
+			saved, _ = creatureSave(lobby, id, ability, 15)
 			x := dmg
 			if saved {
 				x /= 2
@@ -411,11 +399,7 @@ func wandOfWonder(charID int, it invItem, req itemCastReq) string {
 		var lines []string
 		for _, id := range ids {
 			var saved bool
-			if id < 0 {
-				saved, _ = monsterSave(lobby, id, "con", 15)
-			} else {
-				saved, _ = characterSave(id, "con", 15)
-			}
+			saved, _ = creatureSave(lobby, id, "con", 15)
 			if !saved {
 				addMonsterCondition(lobby, id, "blinded", "Wand of Wonder", 10, "con", 15)
 			}
@@ -452,11 +436,7 @@ func wandOfWonder(charID int, it invItem, req itemCastReq) string {
 			effect = "the creature closest to the point makes a DC 15 Constitution save or begins to turn to stone (name it with target_id)."
 		} else {
 			var saved bool
-			if closest < 0 {
-				saved, _ = monsterSave(lobby, closest, "con", 15)
-			} else {
-				saved, _ = characterSave(closest, "con", 15)
-			}
+			saved, _ = creatureSave(lobby, closest, "con", 15)
 			if saved {
 				effect = fmt.Sprintf("%s, closest to the point, succeeds on the DC 15 Constitution save against turning to stone.", creatureName(lobby, closest))
 			} else {

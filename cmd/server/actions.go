@@ -2629,80 +2629,51 @@ func resolveActionWithBonusDash(action, description string, charID int, bonusDas
 		return fmt.Sprintf("Cast spell: %s (Save DC: %d)", description, saveDC)
 
 	case "death_save":
-		// Death saving throw
-		roll := game.RollDie(20)
-		if championDefyDeath(charID) { // Champion level 18, Defy Death: Advantage, and 18-20 counts as 20
-			if second := game.RollDie(20); second > roll {
-				roll = second
-			}
-			if roll >= 18 {
-				roll = 20
-			}
+		// a Death Saving Throw: the one saving throw function (save_2024.go) rolls it with everything that applies to a save
+		// (Foresight, Beacon of Hope, Defy Death, Bless, Aura of Protection, Exhaustion, Halfling Luck); the natural roll
+		// decides what the SRD gives a 20 or a 1
+		ds := (&saveCtx{saver: charID, ability: game.DeathSave}).roll()
+		if championDefyDeath(charID) && ds.Natural >= 18 && ds.Natural < 20 { // Champion 18, Defy Death: 18-20 counts as a 20
+			ds = ds.Replace(20, fmt.Sprintf("Defy Death: %d counts as a 20", ds.Natural))
 		}
-
-		dsAdvNote := ""
-		if ok, why := buffDeathSaveAdvantage(charID); ok { // Beacon of Hope, Foresight (buff_spells_2024.go)
-			if second := game.RollDie(20); second > roll {
-				roll = second
-			}
-			dsAdvNote = "[Advantage: " + why + "] "
+		if ds.Natural <= 9 && periaptActive(charID) { // Periapt of Wound Closure: a 9 or lower becomes a 10 (F142)
+			ds = ds.Replace(10, fmt.Sprintf("Periapt of Wound Closure: %d becomes 10", ds.Natural))
 		}
-
-		// Halfling Lucky - reroll nat 1s on death saves
-		dsHalflingLuckyUsed := false
-		dsHalflingLuckyOriginal := 0
-		if roll == 1 {
-			newRoll, rerolled, origRoll := applyHalflingLucky(roll, charID)
-			if rerolled {
-				dsHalflingLuckyUsed = true
-				dsHalflingLuckyOriginal = origRoll
-				roll = newRoll
-			}
-		}
-
-		if roll <= 9 && periaptActive(charID) { // Periapt of Wound Closure: a 9 or lower becomes a 10 (F142)
-			dsAdvNote += fmt.Sprintf("[Periapt of Wound Closure: %d becomes 10] ", roll)
-			roll = 10
-		}
-
-		luckyPrefix := ""
-		if dsHalflingLuckyUsed {
-			luckyPrefix = fmt.Sprintf("🍀 Lucky reroll (%d→%d)! ", dsHalflingLuckyOriginal, roll)
-		}
-		luckyPrefix = dsAdvNote + luckyPrefix
+		roll := ds.ForSaver("Death saving throw")
 
 		var successes, failures int
 		db.QueryRow("SELECT death_save_successes, death_save_failures FROM characters WHERE id = $1", charID).Scan(&successes, &failures)
 
-		if roll == 20 {
+		switch {
+		case ds.Natural == 20:
 			// Natural 20: regain 1 HP and wake up
 			db.Exec("UPDATE characters SET hp = 1, death_save_successes = 0, death_save_failures = 0, is_stable = false WHERE id = $1", charID)
-			return fmt.Sprintf("%sDeath save: Natural 20! You regain consciousness with 1 HP!", luckyPrefix)
-		} else if roll == 1 && !dsHalflingLuckyUsed {
-			// Natural 1: two failures (only if not rerolled by Halfling Lucky)
+			return fmt.Sprintf("%s. Natural 20! You regain consciousness with 1 HP!", roll)
+		case ds.Natural == 1:
+			// Natural 1: two failures
 			failures += 2
 			if failures >= 3 {
 				db.Exec("UPDATE characters SET death_save_failures = $1, is_dead = true WHERE id = $2", failures, charID)
-				return fmt.Sprintf("Death save: Natural 1 (2 failures)! Total: %d failures. YOU HAVE DIED.", failures)
+				return fmt.Sprintf("%s. Natural 1 (2 failures)! Total: %d failures. YOU HAVE DIED.", roll, failures)
 			}
 			db.Exec("UPDATE characters SET death_save_failures = $1 WHERE id = $2", failures, charID)
-			return fmt.Sprintf("Death save: Natural 1 (2 failures)! Total: %d successes, %d failures.", successes, failures)
-		} else if roll >= 10 {
+			return fmt.Sprintf("%s. Natural 1 (2 failures)! Total: %d successes, %d failures.", roll, successes, failures)
+		case ds.Success:
 			successes++
 			if successes >= 3 {
 				db.Exec("UPDATE characters SET death_save_successes = 0, death_save_failures = 0, is_stable = true, stable_rounds_left = "+stableRounds()+" WHERE id = $1", charID) // F210: "The number of both is reset to zero when you ... become Stable" (SRD 5.2.1)
-				return fmt.Sprintf("%sDeath save: %d - Success! Total: %d successes. You are STABLE.", luckyPrefix, roll, successes)
+				return fmt.Sprintf("%s. Success! Total: %d successes. You are STABLE.", roll, successes)
 			}
 			db.Exec("UPDATE characters SET death_save_successes = $1 WHERE id = $2", successes, charID)
-			return fmt.Sprintf("%sDeath save: %d - Success! Total: %d successes, %d failures.", luckyPrefix, roll, successes, failures)
-		} else {
+			return fmt.Sprintf("%s. Success! Total: %d successes, %d failures.", roll, successes, failures)
+		default:
 			failures++
 			if failures >= 3 {
 				db.Exec("UPDATE characters SET death_save_failures = $1, is_dead = true WHERE id = $2", failures, charID)
-				return fmt.Sprintf("%sDeath save: %d - Failure! Total: %d failures. YOU HAVE DIED.", luckyPrefix, roll, failures)
+				return fmt.Sprintf("%s. Failure! Total: %d failures. YOU HAVE DIED.", roll, failures)
 			}
 			db.Exec("UPDATE characters SET death_save_failures = $1 WHERE id = $2", failures, charID)
-			return fmt.Sprintf("%sDeath save: %d - Failure! Total: %d successes, %d failures.", luckyPrefix, roll, successes, failures)
+			return fmt.Sprintf("%s. Failure! Total: %d successes, %d failures.", roll, successes, failures)
 		}
 
 	case "concentration_check":
@@ -2718,41 +2689,16 @@ func resolveActionWithBonusDash(action, description string, charID int, bonusDas
 		if dc > 30 {
 			dc = 30
 		}
-
-		// Constitution saving throw: proficiency only if the class (or Disciplined Survivor) gives it; Eldritch Mind gives Advantage
-		var conScore int
-		db.QueryRow("SELECT con FROM characters WHERE id = $1", charID).Scan(&conScore)
-		conMod := game.Modifier(conScore)
-		conBonus := conMod
-		if conSaveProficient(charID, class, level) {
-			conBonus += game.ProficiencyBonus(level)
-		}
-		roll := game.RollDie(20)
-		rollNote := ""
-		if hasInvocation(charID, "eldritch-mind") || charHasWarCaster(charID) || extendedConcentration(charID) {
-			if second := game.RollDie(20); second > roll {
-				roll = second
-			}
-			rollNote = " (Eldritch Mind: Advantage)"
-			if !hasInvocation(charID, "eldritch-mind") {
-				rollNote = " (War Caster: Advantage)"
-				if !charHasWarCaster(charID) {
-					rollNote = " (Extended Spell: Advantage)"
-				}
-			}
-		}
-		total := roll + conBonus
-		conMod = conBonus
-
+		// a Constitution saving throw (save_2024.go): Eldritch Mind, War Caster and Extended Spell give Advantage
+		cs := (&saveCtx{saver: charID, ability: "con", dc: dc, concentration: true}).roll()
 		var concSpell string
 		db.QueryRow("SELECT COALESCE(concentrating_on, '') FROM characters WHERE id = $1", charID).Scan(&concSpell)
-
-		if total >= dc {
-			return fmt.Sprintf("Concentration check (DC %d): %d + %d = %d%s - SUCCESS! Maintaining %s.", dc, roll, conMod, total, rollNote, concSpell)
-		} else {
-			db.Exec("UPDATE characters SET concentrating_on = NULL WHERE id = $1", charID)
-			return fmt.Sprintf("Concentration check (DC %d): %d + %d = %d%s - FAILED! Lost concentration on %s.", dc, roll, conMod, total, rollNote, concSpell)
+		roll := cs.ForSaver("Concentration (Constitution saving throw)")
+		if cs.Success {
+			return fmt.Sprintf("%s. Maintaining %s.", roll, concSpell)
 		}
+		db.Exec("UPDATE characters SET concentrating_on = NULL WHERE id = $1", charID)
+		return fmt.Sprintf("%s. Lost concentration on %s.", roll, concSpell)
 
 	case "move":
 		return fmt.Sprintf("Movement: %s", description)

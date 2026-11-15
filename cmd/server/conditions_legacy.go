@@ -305,87 +305,6 @@ func isIncapacitated(charID int) bool {
 	return false
 }
 
-// getPaladinAuraBonus returns the bonus to saving throws from Paladin's Aura of Protection
-// At level 6+, allies within 10ft (30ft at level 18) add Paladin's CHA mod to saves
-// Returns the highest bonus from all conscious Paladins in the party
-// Note: Since we don't track positions, we assume party members are within aura range
-// The GM can separate the party narratively if needed
-func getPaladinAuraBonus(campaignID int, excludeCharID int) (int, string) {
-	// Find all Paladins in this campaign who are:
-	// 1. Level 6+ (Aura of Protection unlocks at level 6)
-	// 2. Conscious (not incapacitated, unconscious, etc.)
-	rows, err := db.Query(`
-		SELECT c.id, c.name, c.cha, c.level, COALESCE(c.class_levels, '{}')::jsonb as class_levels
-		FROM characters c
-		WHERE c.lobby_id = $1
-		  AND c.id != $2
-		  AND (LOWER(c.class) = 'paladin' OR c.class_levels::text ILIKE '%paladin%')
-	`, campaignID, excludeCharID)
-	if err != nil {
-		return 0, ""
-	}
-	defer rows.Close()
-
-	bestBonus := 0
-	bestPaladinName := ""
-
-	for rows.Next() {
-		var charID int
-		var charName string
-		var cha, level int
-		var classLevelsJSON []byte
-
-		if err := rows.Scan(&charID, &charName, &cha, &level, &classLevelsJSON); err != nil {
-			continue
-		}
-
-		// Check if this Paladin is incapacitated (aura requires consciousness)
-		if isIncapacitated(charID) {
-			continue
-		}
-
-		// Determine Paladin level (for multiclass)
-		paladinLevel := 0
-		var classLevels map[string]int
-		if err := json.Unmarshal(classLevelsJSON, &classLevels); err == nil && len(classLevels) > 0 {
-			// Multiclass - check Paladin-specific level
-			for className, lvl := range classLevels {
-				if strings.ToLower(className) == "paladin" {
-					paladinLevel = lvl
-					break
-				}
-			}
-		} else {
-			// Single class - total level is Paladin level
-			paladinLevel = level
-		}
-
-		// Aura of Protection requires Paladin level 6+
-		if paladinLevel < 6 {
-			continue
-		}
-
-		// The aura reaches 10 feet (30 feet at level 18); with a battle map the distance counts
-		if !auraReaches(campaignID, charID, excludeCharID, paladinLevel) {
-			continue
-		}
-
-		// Calculate CHA modifier (minimum +1 per PHB)
-		chaBonus := game.Modifier(cha)
-		if chaBonus < 1 {
-			chaBonus = 1
-		}
-
-		// Track the best bonus
-		if chaBonus > bestBonus {
-			bestBonus = chaBonus
-			bestPaladinName = charName
-		}
-	}
-
-	return bestBonus, bestPaladinName
-}
-
 // canMove checks if character's speed is not reduced to 0 by conditions
 // Grappled, restrained, and stunned set speed to 0
 func canMove(charID int) bool {
@@ -393,51 +312,6 @@ func canMove(charID int) bool {
 		return false
 	}
 	return exhaustionLevelOf(charID) < 6
-}
-
-// autoFailsSave checks if a condition causes automatic failure on a saving throw type
-// Paralyzed, Petrified, Stunned and Unconscious fail Strength and Dexterity saves automatically (SRD 5.2.1)
-func autoFailsSave(charID int, ability string) bool {
-	conditions := getCharConditions(charID)
-	ability = strings.ToLower(ability)
-	if ability == "str" || ability == "strength" || ability == "dex" || ability == "dexterity" {
-		for _, c := range conditions {
-			switch strings.ToLower(c) {
-			case "paralyzed", "petrified", "stunned", "unconscious":
-				return true
-			}
-		}
-	}
-	return false
-}
-
-// getSaveDisadvantage checks if conditions impose disadvantage on saves
-// Exhaustion 3+ gives disadvantage on all saves
-// Restrained gives disadvantage on DEX saves
-// Non-proficient armor gives disadvantage on STR/DEX saves
-func getSaveDisadvantage(charID int, ability string) bool {
-	ability = strings.ToLower(ability)
-	if moreSaveDisadvantage(lobbyOfChar(charID), charID, ability) { // Reduce (spells_more_2024.go)
-		return true
-	}
-	if deckDisadvantage(charID) { // the Mysterious Deck's Fool: Disadvantage on D20 Tests for 72 hours
-		return true
-	}
-
-	// Non-proficient armor: disadvantage on STR/DEX saves
-	if ability == "str" || ability == "strength" || ability == "dex" || ability == "dexterity" {
-		if isWearingNonProficientArmor(charID) {
-			return true
-		}
-	}
-
-	// Restrained: disadvantage on DEX saves
-	if ability == "dex" || ability == "dexterity" {
-		if hasCondition(charID, "restrained") {
-			return true
-		}
-	}
-	return false
 }
 
 // getCharacterName returns the name of a character by ID
@@ -604,7 +478,7 @@ func getSanctuaryDC(charID int) int {
 
 // checkSanctuaryProtection checks if target is protected by Sanctuary and handles the save
 // Returns (blockMessage, noteText) - blockMessage is non-empty if attack is blocked
-func checkSanctuaryProtection(attackerID, targetID, attackerWis int) (string, string) {
+func checkSanctuaryProtection(attackerID, targetID int) (string, string) {
 	if targetID <= 0 {
 		return "", ""
 	}
@@ -621,30 +495,16 @@ func checkSanctuaryProtection(attackerID, targetID, attackerWis int) (string, st
 		targetName = "the target"
 	}
 
-	// Attacker must make WIS save against the DC
-	wisMod := game.Modifier(attackerWis)
-	roll := game.RollDie(20)
-	total := roll + wisMod
-
-	// Check for Halfling Lucky on nat 1
-	luckyNote := ""
-	var attackerSpecies string
-	db.QueryRow("SELECT COALESCE(species, '') FROM characters WHERE id = $1", attackerID).Scan(&attackerSpecies)
-	if roll == 1 && strings.ToLower(attackerSpecies) == "halfling" {
-		reroll := game.RollDie(20)
-		luckyNote = fmt.Sprintf(" 🍀[Lucky: %d→%d]", roll, reroll)
-		roll = reroll
-		total = roll + wisMod
-	}
-
-	if total >= sanctuaryDC {
+	// the attacker's Wisdom save against the spell (save_2024.go)
+	sv := (&saveCtx{saver: attackerID, ability: "wis", dc: sanctuaryDC, spell: true}).roll()
+	if sv.Success {
 		// Save succeeded - can attack, but include note
-		return "", fmt.Sprintf(" (WIS save vs Sanctuary DC %d: %d%s = %d ✓)", sanctuaryDC, roll, luckyNote, total)
+		return "", " [Sanctuary: " + sv.ForSaver("Wisdom saving throw") + "]"
 	}
 
 	// Save failed - cannot attack this target
-	return fmt.Sprintf("🕊️ %s is protected by Sanctuary! WIS save DC %d: rolled %d%s + %d = %d (FAILED). You must choose a different target or take a different action.",
-		targetName, sanctuaryDC, roll, luckyNote, wisMod, total), ""
+	return fmt.Sprintf("🕊️ %s is protected by Sanctuary! %s. You must choose a different target or take a different action.",
+		targetName, sv.ForSaver("Wisdom saving throw")), ""
 }
 
 // removeSanctuaryOnOffensiveAction removes sanctuary condition when character attacks or casts offensive spell

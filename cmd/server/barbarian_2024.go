@@ -133,16 +133,10 @@ func handleGMIntimidatingPresence(w http.ResponseWriter, r *http.Request) {
 	dc := 8 + game.Modifier(str) + game.ProficiencyBonus(level)
 	var results []map[string]interface{}
 	for _, tid := range req.TargetIDs {
-		bonus, autoFail, dis := saveBonusFor(campaignID, tid, "wis")
-		roll := game.RollDie(20)
-		if dis {
-			if b := game.RollDie(20); b < roll {
-				roll = b
-			}
-		}
-		total := roll + bonus
-		saved := !autoFail && total >= dc
-		res := map[string]interface{}{"target_id": tid, "roll": roll, "total": total, "dc": dc, "saved": saved}
+		sv := (&saveCtx{lobby: campaignID, saver: tid, ability: "wis", dc: dc, against: []string{"frightened"}, source: req.BarbarianID}).roll()
+		saved := sv.Success
+		res := map[string]interface{}{"target_id": tid, "roll": sv.Natural, "total": sv.Total, "dc": dc, "saved": saved,
+			"save": sv.Line(creatureName(campaignID, tid))}
 		if !saved {
 			body, _ := json.Marshal(map[string]interface{}{"target_id": tid, "condition": "frightened", "source": "Intimidating Presence (" + name + ")",
 				"duration_rounds": 10, "end_save": map[string]interface{}{"ability": "wis", "dc": dc}, "campaign_id": campaignID})

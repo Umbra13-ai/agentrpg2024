@@ -293,90 +293,15 @@ func handleGMAoECast(w http.ResponseWriter, r *http.Request) {
 			targetName = fmt.Sprintf("Monster %d", -targetID)
 		}
 
-		// Get target's save modifier
-		saveMod := 0
-		// Track aura for each target
-		targetAuraBonus := 0
-		targetAuraPaladin := ""
-
-		if targetID > 0 && savingThrow != "" {
-			var str, dex, con, intl, wis, cha, targetLevel int
-			var targetClass string
-			var targetClassLevelsJSON []byte
-			db.QueryRow(`SELECT str, dex, con, intl, wis, cha, level, class, COALESCE(class_levels, '{}')::jsonb 
-				FROM characters WHERE id = $1`, targetID).Scan(&str, &dex, &con, &intl, &wis, &cha, &targetLevel, &targetClass, &targetClassLevelsJSON)
-			switch strings.ToUpper(savingThrow) {
-			case "STR":
-				saveMod = game.Modifier(str)
-			case "DEX":
-				saveMod = game.Modifier(dex)
-			case "CON":
-				saveMod = game.Modifier(con)
-			case "INT":
-				saveMod = game.Modifier(intl)
-			case "WIS":
-				saveMod = game.Modifier(wis)
-			case "CHA":
-				saveMod = game.Modifier(cha)
-			}
-
-			// Paladin's Aura of Protection for AoE saves
-			// Check if target is a Paladin 6+ (benefits from own aura)
-			targetPaladinLevel := 0
-			var targetClassLevels map[string]int
-			if err := json.Unmarshal(targetClassLevelsJSON, &targetClassLevels); err == nil && len(targetClassLevels) > 0 {
-				for cn, lvl := range targetClassLevels {
-					if strings.ToLower(cn) == "paladin" {
-						targetPaladinLevel = lvl
-						break
-					}
-				}
-			} else if strings.ToLower(targetClass) == "paladin" {
-				targetPaladinLevel = targetLevel
-			}
-
-			if targetPaladinLevel >= 6 && !isIncapacitated(targetID) {
-				selfCha := game.Modifier(cha)
-				if selfCha < 1 {
-					selfCha = 1
-				}
-				targetAuraBonus = selfCha
-				targetAuraPaladin = targetName + " (self)"
-			}
-
-			// Check for other Paladins in the party
-			otherAura, otherPaladin := getPaladinAuraBonus(campaignID, targetID)
-			if otherAura > targetAuraBonus {
-				targetAuraBonus = otherAura
-				targetAuraPaladin = otherPaladin
-			}
-
-			if targetAuraBonus > 0 {
-				saveMod += targetAuraBonus
-			}
+		// the target's saving throw against the spell: the one saving throw function (save_2024.go), for a character or a monster.
+		// Sculpt Spells: a protected target succeeds automatically and takes no damage.
+		sc := saveCtx{lobby: campaignID, saver: targetID, ability: savingThrow, dc: dc, spell: true, source: req.CasterID}
+		sculptSpellsApplied := sculptTargetSet[targetID]
+		if sculptSpellsApplied {
+			sc.autoSucceed = "Sculpt Spells"
 		}
-
-		// Roll saving throw
-		// Gnomish Cunning - Advantage on Intelligence, Wisdom and Charisma saves
-		gnomeCunningAoE := false
-		saveRoll := game.RollDie(20)
-		if targetID > 0 && checkGnomeCunning(targetID, strings.ToLower(savingThrow), true) {
-			// Roll with advantage
-			roll2 := game.RollDie(20)
-			gnomeCunningAoE = true
-			if roll2 > saveRoll {
-				saveRoll = roll2
-			}
-		}
-		saveTotal := saveRoll + saveMod
-		saved := saveTotal >= dc
-		sculptSpellsApplied := false
-
-		// Sculpt Spells: Protected targets auto-succeed and take no damage
-		if sculptTargetSet[targetID] {
-			saved = true
-			sculptSpellsApplied = true
-		}
+		sv := sc.roll()
+		saved := sv.Success
 
 		// Calculate damage (half on save for most AoE spells)
 		// Check for Evasion (Monk 7+, Rogue 7+) - DEX saves only
@@ -413,9 +338,10 @@ func handleGMAoECast(w http.ResponseWriter, r *http.Request) {
 		result := map[string]interface{}{
 			"target_id":   targetID,
 			"target_name": targetName,
-			"save_roll":   saveRoll,
-			"save_mod":    saveMod,
-			"save_total":  saveTotal,
+			"save_roll":   sv.Natural,
+			"save_mod":    sv.Save.Modifier(),
+			"save_total":  sv.Total,
+			"save":        sv.Line(targetName),
 			"dc":          dc,
 			"saved":       saved,
 			"damage":      damage,
@@ -441,20 +367,6 @@ func handleGMAoECast(w http.ResponseWriter, r *http.Request) {
 		if potentCantripApplied {
 			result["potent_cantrip"] = true
 			result["potent_cantrip_info"] = "Potent Cantrip: Succeeded on save against cantrip - took half damage instead of none"
-		}
-
-		// Add Gnomish Cunning info to result
-		if gnomeCunningAoE {
-			result["gnome_cunning"] = true
-			result["gnomish_cunning_info"] = "🧠 Gnomish Cunning: rolled with Advantage"
-		}
-
-		// Add Paladin's Aura of Protection info to result
-		if targetAuraBonus > 0 {
-			result["aura_of_protection"] = true
-			result["aura_bonus"] = targetAuraBonus
-			result["aura_source"] = targetAuraPaladin
-			result["paladin_aura_info"] = fmt.Sprintf("🛡️ Aura of Protection: +%d to save from %s", targetAuraBonus, targetAuraPaladin)
 		}
 
 		// Apply damage to characters or monsters
