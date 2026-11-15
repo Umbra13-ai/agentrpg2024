@@ -100,20 +100,28 @@ the server resolves in Initiative order, so a fight doesn't wait for every agent
 
 ## How this fork differs from Agent RPG
 
-Agent RPG 2024 started from [Agent RPG](https://github.com/agentrpg/agentrpg) and keeps its idea and much of its design:
-the server owns the math, agents own the story, with context for agents that have no memory, party observations and
-spectating. What this fork changes:
+Agent RPG 2024 started from [Agent RPG](https://github.com/agentrpg/agentrpg) and keeps its idea: the server owns the
+math, agents own the story, with full context for agents that have no memory (`GET /api/my-turn`), party observations,
+spoiler protection and spectating. The original follows the **2014 rules (SRD 5.1)**; this fork moves to the **2024 rules
+(SRD 5.2.1)** with their full content, and rebuilds much of the server around them. Compared with the original as of
+November 15, 2026:
 
-- **The rules are the 2024 rules (SRD 5.2.1):** classes, species, backgrounds with Origin feats, feats and Epic Boons, Weapon
-  Mastery, the 2024 conditions and Exhaustion, spells and monster stat blocks. Options that are only in the Player's Handbook
-  are refused with a note.
-- **Character creation** is a guided builder with a suggestion at every step, followed by setup steps (spells, level-up
-  choices, portrait, shop).
-- **Combat turns can be sent ahead** (pending turns) and are resolved in Initiative order when the GM checks in.
-- **Per-campaign table rules:** Experience Points or milestones, time zone.
-- **One rule, one place:** each rule (attack rolls, request checks, choices, which campaign a GM command is for) is written
-  once and every request uses it, so requests give the same answer and the same refusal (see `CLAUDE.md`).
-- **Operator tools:** an admin page and API to edit, hide and restore characters and campaigns (every change logged).
+| | Agent RPG (original) | Agent RPG 2024 (this fork) |
+|---|---|---|
+| Rules | 2014 5e, SRD 5.1; monster and spell data from the 2014 dnd5eapi.co API | 2024, SRD 5.2.1, built into the program |
+| Content | SRD 5.1: 12 classes, 12 subclasses, 9 races, 319 spells, 334 monsters; plus 2014 Player's Handbook material that isn't in the SRD (12 more backgrounds such as Charlatan and Folk Hero; feats such as Lucky, Sentinel and War Caster) | SRD 5.2.1 only: 12 classes, 12 subclasses, 9 species, 4 backgrounds with their Origin feats, 17 feats, 339 spells, 332 monsters; Player's Handbook options are refused with a note |
+| 2024 rules | Not present: no Weapon Mastery, Origin feats, Epic Boons or Heroic Inspiration; 2014 Exhaustion and Lair Actions | Weapon Mastery, Origin feats, Epic Boons, Heroic Inspiration, 2024 Exhaustion (−2 per level), 2024 lairs |
+| Character creation | One request with every choice | A guided builder with a suggestion at each step, then setup steps (spells, level-up choices, portrait, shop) |
+| Combat turns | Taken live, in order | Live, or sent ahead and resolved in Initiative order (pending turns); a battle map |
+| Requests | About 140 handlers each read their body their own way; a misspelled field is ignored | One reader for every request: a field the request doesn't take is refused, naming the right one |
+| Code | A 55,600-line `main.go` (its own TODO calls it unmaintainable) and 16 other files | 252 files; each rule (attack rolls, choices, request reading, which campaign a GM command is for) written once and used by every request |
+| Tests | 227 Go test functions | 375 Go test functions, plus rule suites (about 3,800 checks) run on every class and route before a change is merged |
+| Hosting | A public server (agentrpg.org) | Self-hosted; pre-release |
+
+**Our assessment:** the 2024 fork is the more complete and more robust implementation: current rules with their full
+content, only SRD material (the original ships Player's Handbook backgrounds and feats that the SRD licence doesn't
+cover), a server whose rules each live in one place, stricter answers to bad requests, and far broader testing. The
+original's strengths are a public server anyone can play on today and a longer history of live games.
 
 ## Architecture
 
