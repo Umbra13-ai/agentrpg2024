@@ -1229,14 +1229,15 @@ type gmNarrateRequest struct {
 	CampaignID    int    `json:"campaign_id"`
 	Narration     string `json:"narration"`
 	MonsterAction *struct {
-		Monster     string `json:"monster"`
-		Action      string `json:"action"`
-		Target      string `json:"target"`
-		Description string `json:"description"`
-		ApplyDamage bool   `json:"apply_damage"` // deal the damage of a hit to the target character
-		TargetIDs   []int  `json:"target_ids"`   // characters in a saving throw effect (breath weapon, spell ...)
-		Use         string `json:"use"`          // a choice the entry needs: Command's word (approach, drop, flee, grovel, halt)
-		Point       []int  `json:"point"`        // [x, y]: the grid square an area is aimed at on the battle map (a Sphere's center, a Cone's or Line's direction)
+		Monster      string `json:"monster"`
+		Action       string `json:"action"`
+		Target       string `json:"target"`
+		Description  string `json:"description"`
+		ApplyDamage  bool   `json:"apply_damage"`  // deal the damage of a hit to the target character
+		TargetIDs    []int  `json:"target_ids"`    // characters in a saving throw effect (breath weapon, spell ...)
+		Use          string `json:"use"`           // a choice the entry needs: Command's word (approach, drop, flee, grovel, halt)
+		Point        []int  `json:"point"`         // [x, y]: the grid square an area is aimed at on the battle map (a Sphere's center, a Cone's or Line's direction)
+		AllyAdjacent bool   `json:"ally_adjacent"` // an ally of the monster (not Incapacitated) is within 5 feet of the target: Pack Tactics without a battle map
 	} `json:"monster_action"`
 	AdvanceTurn bool `json:"advance_turn"`
 }
@@ -1385,14 +1386,26 @@ func handleGMNarrate(w http.ResponseWriter, r *http.Request) {
 		} else if handled {
 			result = text // a saving throw effect, a spell or another action of the stat block (monster_effects_2024.go)
 			response["monster_effect"] = true
-		} else if text, info, ok := resolveMonsterAttack(r, campaignID, req.MonsterAction.Monster, req.MonsterAction.Action, req.MonsterAction.Target, req.MonsterAction.ApplyDamage); ok {
+		} else if text, info, ok := resolveMonsterAttack(withAllySaid(r, req.MonsterAction.AllyAdjacent), campaignID, req.MonsterAction.Monster, req.MonsterAction.Action, req.MonsterAction.Target, req.MonsterAction.ApplyDamage); ok {
 			// the stat block's own attack bonus and damage, against the target's Armor Class
 			result = text
 			response["monster_attack"] = info
 		} else {
 			// no action of that name in the monster's stat block: nothing is rolled (the server used to make up an attack)
 			result = "No action of that name in the stat block of " + req.MonsterAction.Monster + "; nothing was rolled."
-			if ids := monsterIDsByKeyOrName(campaignID, req.MonsterAction.Monster); len(ids) > 0 {
+			ids := monsterIDsByKeyOrName(campaignID, req.MonsterAction.Monster)
+			alive := 0
+			for _, id := range ids {
+				for _, e := range combatEntries(campaignID) {
+					if asInt(e["id"]) == id && asInt(e["hp"]) > 0 {
+						alive++
+					}
+				}
+			}
+			if len(ids) > 0 && alive == 0 { // the monster is there but at 0 Hit Points: it takes no actions (not "no action of that name")
+				result = req.MonsterAction.Monster + " is at 0 Hit Points: it takes no actions; nothing was rolled."
+				response["monster_down"] = true
+			} else if len(ids) > 0 {
 				if _, meta, ok := monsterCombatant(campaignID, ids[0]); ok && meta != nil {
 					var names []string
 					for _, a := range append(append(append([]srdMonsterEntry{}, meta.Actions...), meta.BonusActions...), meta.Reactions...) {

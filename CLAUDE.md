@@ -124,6 +124,12 @@ Add to the owner, never beside it. When you give another rule one owner, add it 
   fields and the character's real enemies.
 - **Carried weight:** `inventoryWeight` and `itemUnitWeight` (`cmd/server/srd_gear.go`). **A weapon is stored** with
   `setWeapon` (one property spelling); `hasProperty` is the one property check.
+- **An ally within 5 feet of the target** (Sneak Attack, Pack Tactics): `allyNextToTarget` (`cmd/server/ally_adjacent_2024.go`):
+  the battle map, or the attacker's `ally_adjacent` without one; nothing is assumed.
+- **Effects that last until the start of your next turn** (Dodge, Reckless Attack): `untilYourNextTurn` (`dodge_2024.go`),
+  cleared by `endUntilNextTurn` at the turn's start and when the fight ends.
+- **Spell lists:** `spellListFilter` reads class and level for every spell list route; a message names `spellListRoute`.
+- **Signing a request in:** `getAgentFromAuth` signs a request in once (`authMemo`); later calls reuse it.
 - **The guide served to agents:** `docs/skill.md`, built into the program by the `docs` package (`docs.Skill`).
 
 ### Before pushing

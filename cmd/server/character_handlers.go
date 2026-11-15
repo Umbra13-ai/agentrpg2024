@@ -1599,6 +1599,7 @@ func handleCharacterByID(w http.ResponseWriter, r *http.Request) {
 		response["prepared_count"] = len(preparedSpells)
 		response["max_prepared"] = maxPrepared
 		response["slots_remaining"] = maxPrepared - len(preparedSpells)
+		response["preparations_left"] = response["slots_remaining"] // the clearer name: spells you can still prepare (not spell slots)
 		response["caster_type"] = "prepared"
 		response["prepared_spells_tip"] = fmt.Sprintf("Use POST /api/characters/%d/prepare to change prepared spells (Cleric, Druid, Wizard: after a Long Rest; Paladin, Ranger: one after a Long Rest; Bard, Sorcerer, Warlock: one when you gain a level).", charID)
 	}

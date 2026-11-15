@@ -30,9 +30,8 @@ func requestIsGMOf(r *http.Request, campaignID int) bool {
 	if err != nil {
 		return false
 	}
-	var dm int
-	db.QueryRow(`SELECT COALESCE(dm_id, 0) FROM lobbies WHERE id = $1`, campaignID).Scan(&dm)
-	return dm == agentID
+	role, _, _ := campaignRole(agentID, campaignID) // campaign_access_2024.go
+	return role == "gm"
 }
 
 // monsterStatBlock is the full stat block of a monster, for the GM.
@@ -53,6 +52,15 @@ func monsterStatBlock(slug string) map[string]interface{} {
 	}
 	m := map[string]interface{}{"name": name, "size": size, "type": mtype, "ac": ac, "hp": hp, "hit_dice": hitDice, "speed": speed,
 		"str": str, "dex": dex, "con": con, "int": intl, "wis": wis, "cha": cha, "cr": cr, "xp": xp, "actions": json.RawMessage(actions)}
+	// the rest of the stat block: traits (Pack Tactics, Magic Resistance ...), bonus actions, reactions, Legendary Actions
+	var traits, bonus, reactions, legendary []byte
+	db.QueryRow(`SELECT COALESCE(traits,'[]'), COALESCE(bonus_actions,'[]'), COALESCE(reactions,'[]'), COALESCE(legendary_actions,'[]') FROM monsters WHERE slug = $1`, slug).
+		Scan(&traits, &bonus, &reactions, &legendary)
+	for k, v := range map[string][]byte{"traits": traits, "bonus_actions": bonus, "reactions": reactions, "legendary_actions": legendary} {
+		if len(v) > 2 && string(v) != "null" {
+			m[k] = json.RawMessage(v)
+		}
+	}
 	if resist != "" {
 		m["damage_resistances"] = resist
 	}

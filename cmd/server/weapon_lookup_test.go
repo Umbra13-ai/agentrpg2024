@@ -139,3 +139,28 @@ func TestSpellListRoutesComeFromOneHelper(t *testing.T) {
 		}
 	}
 }
+
+// An error reply has a 4xx or 5xx status: no handler writes {"error": ...} without setting one first.
+func TestNoErrorBodyWith200(t *testing.T) {
+	files, _ := filepath.Glob("*.go")
+	enc := regexp.MustCompile(`Encode\(map\[string\](string|interface\{\})\{"error"`)
+	for _, f := range files {
+		if strings.HasSuffix(f, "_test.go") {
+			continue
+		}
+		b, _ := os.ReadFile(f)
+		lines := strings.Split(string(b), "\n")
+		for i, line := range lines {
+			if !enc.MatchString(line) {
+				continue
+			}
+			from := i - 3
+			if from < 0 {
+				from = 0
+			}
+			if !strings.Contains(strings.Join(lines[from:i], "\n"), "WriteHeader") {
+				t.Errorf("%s:%d writes an error body with status 200: use writeJSONStatus", f, i+1)
+			}
+		}
+	}
+}

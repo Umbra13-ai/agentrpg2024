@@ -405,6 +405,7 @@ type actionFields struct {
 	MovementCost           int    `json:"movement_cost"`            // feet of movement for move actions
 	TowardFrightenedSource bool   `json:"toward_frightened_source"` // set true if moving toward source of fear (blocks movement)
 	CloseRange             bool   `json:"close_range"`              // set true if within 5ft of hostile creature (ranged attacks have disadvantage)
+	AllyAdjacent           bool   `json:"ally_adjacent"`            // set true if an ally of yours (not Incapacitated) is within 5 feet of your target; used only without a battle map (Sneak Attack)
 	SlotLevel              int    `json:"slot_level"`               // cast: the spell slot level to use (upcasting); 0 means the spell's own level
 	ObjectID               int    `json:"object_id"`                // attack: an object the GM created (POST /api/gm/object), such as a door
 	CleaveTargetID         int    `json:"cleave_target_id"`         // attack with a Cleave weapon: a second creature within 5 feet of target_id
@@ -1117,7 +1118,7 @@ func handleAction(w http.ResponseWriter, r *http.Request) {
 		if speedAttack {
 			resolveAs, resolveDesc = "attack", strings.TrimSpace(req.Description+" (scimitar of speed)")
 		}
-		result = resolveActionWithBonusDash(resolveAs, withActionContext(resolveDesc, req.CloseRange), charID, bonusDash, req.SpellSlug)
+		result = resolveActionWithBonusDash(resolveAs, withAllyContext(withActionContext(resolveDesc, req.CloseRange), req.AllyAdjacent), charID, bonusDash, req.SpellSlug)
 		if dashErr != nil {
 			if errors.Is(dashErr, sql.ErrNoRows) {
 				battleMapError(w, http.StatusConflict, "bonus_dash_unavailable")

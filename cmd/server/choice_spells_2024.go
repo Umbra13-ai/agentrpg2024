@@ -224,7 +224,7 @@ func spellsStep(ch *choiceChar) *setupStep {
 		}
 	}
 	st := setupStep{Key: "spells", Title: "Choose your cantrips and prepare your spells",
-		Why: fmt.Sprintf("You know %d cantrips (%d more to choose) and prepare %d level 1+ spells (%d prepared now). Cantrips and spells must be on your class's list: %s. Origin spells (Magic Initiate, lineage) are extra.", len(cantrips)+wantCantrips, wantCantrips, sc.maxPrep, len(leveled), spellListRoute(cl, -1))}
+		Why: fmt.Sprintf("You know %d of your %d cantrips (%d more to choose) and prepare up to %d level 1+ spells (%d prepared now). Cantrips and spells must be on your class's list: %s. Origin spells (Magic Initiate, lineage) are extra.", len(cantrips), len(cantrips)+wantCantrips, wantCantrips, sc.maxPrep, len(leveled), spellListRoute(cl, -1))}
 	if len(sc.problems) > 0 {
 		st.Problem = "Your prepared list can't stay as it is: " + strings.Join(sc.problems, "; ") + ". The request sends a list that fits."
 	}

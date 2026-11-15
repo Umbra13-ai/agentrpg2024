@@ -366,36 +366,6 @@ func hiddenMonsterIDs(lobbyID int) map[int]bool {
 	return out
 }
 
-// sneakAllyOnMap: Sneak Attack without Advantage needs an ally (not Incapacitated) within 5 feet of the target. onMap is false without a battle map.
-func sneakAllyOnMap(charID, targetID int) (bool, bool) {
-	lobby := lobbyOfChar(charID)
-	m, ok := activeEncounterMap(lobby)
-	if !ok {
-		return false, false
-	}
-	if _, mid, isMonster := attackedMonster(charID); isMonster {
-		targetID = mid
-	}
-	target, ok := m.token(targetID)
-	if !ok {
-		return false, false
-	}
-	for _, t := range m.Tokens {
-		if t.ID <= 0 || t.ID == charID || t.ID == targetID {
-			continue
-		}
-		var hp int
-		db.QueryRow(`SELECT hp FROM characters WHERE id = $1`, t.ID).Scan(&hp)
-		if hp <= 0 || isIncapacitated(t.ID) {
-			continue
-		}
-		if tokensAdjacent(t, target) {
-			return true, true
-		}
-	}
-	return false, true
-}
-
 var areaNotes sync.Map
 
 func takeAreaNote(charID int) string {

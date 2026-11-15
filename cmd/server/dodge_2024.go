@@ -20,9 +20,20 @@ func dodgeActive(charID int) bool {
 	return !hasCondition(charID, "grappled") && !hasCondition(charID, "restrained") // Speed 0 ends the benefit
 }
 
-// endDodge drops the marker when the character's next turn starts.
-func endDodge(charID int) {
-	if db == nil || !hasCondition(charID, "dodging") {
+// untilYourNextTurn: markers that last until the start of the character's next turn (SRD 5.2.1): the Dodge action, and
+// Reckless Attack ("attack rolls against you have Advantage until the start of your next turn"). One list, cleared in one place.
+var untilYourNextTurn = []string{"dodging", "reckless"}
+
+// endUntilNextTurn drops those markers when the character's next turn starts (resetTurnFlags).
+func endUntilNextTurn(charID int) {
+	if db == nil {
+		return
+	}
+	any := false
+	for _, m := range untilYourNextTurn {
+		any = any || hasCondition(charID, m)
+	}
+	if !any {
 		return
 	}
 	var raw []byte
@@ -33,7 +44,7 @@ func endDodge(charID int) {
 	json.Unmarshal(raw, &conds)
 	kept = []string{}
 	for _, c := range conds {
-		if c != "dodging" {
+		if !containsStr(untilYourNextTurn, c) {
 			kept = append(kept, c)
 		}
 	}

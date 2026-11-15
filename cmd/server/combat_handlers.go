@@ -370,6 +370,18 @@ func handleCombatStart(w http.ResponseWriter, r *http.Request, campaignID int) {
 
 	// Reset action economy for all characters (reactions, actions, bonus actions, movement)
 	db.Exec("UPDATE characters SET reaction_used = false, action_used = false, bonus_action_used = false, weapon_interaction_used = false, in_melee_range = false WHERE lobby_id = $1", campaignID)
+	if rows, err := db.Query(`SELECT id FROM characters WHERE lobby_id = $1`, campaignID); err == nil { // Dodge and Reckless Attack end with the fight
+		var ids []int
+		for rows.Next() {
+			var id int
+			rows.Scan(&id)
+			ids = append(ids, id)
+		}
+		rows.Close()
+		for _, id := range ids {
+			endUntilNextTurn(id)
+		}
+	}
 	if rows, err := db.Query(`SELECT id FROM characters WHERE lobby_id = $1`, campaignID); err == nil { // F124: once-per-turn flags too
 		var ids []int
 		for rows.Next() {
@@ -595,8 +607,8 @@ func handleCombatNext(w http.ResponseWriter, r *http.Request, campaignID int) {
 	endedRound, endedIndex := round, turnIndex
 	closePendingTurns(campaignID, currentID, endedRound, "the turn ended without it (the GM advanced the turn order)") // an unresolved pending turn of the slot that ends
 
-	// Remove the "reckless" marker at end of turn. Dodge lasts "until the start of your next turn" (SRD 5.2.1), so "dodging" is
-	// dropped when this character's next turn starts (below), not here (live test, Nov 14: a Dodge ended the moment it was taken).
+	// Dodge and Reckless Attack last "until the start of your next turn" (SRD 5.2.1): they are dropped when this character's next
+	// turn starts (endUntilNextTurn), not here (a Dodge ended the moment it was taken, Nov 14; Reckless Attack did the same).
 	// Decrement countercharm duration
 	var condJSON []byte
 	db.QueryRow("SELECT COALESCE(conditions, '[]') FROM characters WHERE id = $1", currentID).Scan(&condJSON)
@@ -604,9 +616,6 @@ func handleCombatNext(w http.ResponseWriter, r *http.Request, campaignID int) {
 	json.Unmarshal(condJSON, &conds)
 	newConds := []string{}
 	for _, c := range conds {
-		if c == "reckless" {
-			continue // Remove these conditions
-		}
 		// Handle countercharm duration (performing_countercharm:N)
 		if strings.HasPrefix(c, "performing_countercharm:") {
 			parts := strings.Split(c, ":")

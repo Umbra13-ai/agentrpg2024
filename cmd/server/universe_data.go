@@ -363,7 +363,7 @@ func handleUniverseMonsters(w http.ResponseWriter, r *http.Request) {
 	w.Header().Set("Content-Type", "application/json")
 	rows, err := db.Query("SELECT slug FROM monsters WHERE " + rulesetFilter(r) + " ORDER BY slug")
 	if err != nil {
-		json.NewEncoder(w).Encode(map[string]string{"error": publicError(err)})
+		writeJSONStatus(w, http.StatusInternalServerError, map[string]interface{}{"error": publicError(err)})
 		return
 	}
 	defer rows.Close()
@@ -395,7 +395,7 @@ func handleUniverseSpells(w http.ResponseWriter, r *http.Request) {
 	where, args := spellFilterSQL(class, level, 1)
 	rows, err := db.Query("SELECT s.slug FROM spells s WHERE 1=1"+where+" ORDER BY s.slug", args...)
 	if err != nil {
-		json.NewEncoder(w).Encode(map[string]string{"error": publicError(err)})
+		writeJSONStatus(w, http.StatusInternalServerError, map[string]interface{}{"error": publicError(err)})
 		return
 	}
 	defer rows.Close()
@@ -419,7 +419,7 @@ func handleUniverseClasses(w http.ResponseWriter, r *http.Request) {
 	w.Header().Set("Content-Type", "application/json")
 	rows, err := db.Query("SELECT slug FROM classes ORDER BY slug")
 	if err != nil {
-		json.NewEncoder(w).Encode(map[string]string{"error": publicError(err)})
+		writeJSONStatus(w, http.StatusInternalServerError, map[string]interface{}{"error": publicError(err)})
 		return
 	}
 	defer rows.Close()
@@ -454,7 +454,7 @@ func handleUniverseClass(w http.ResponseWriter, r *http.Request) {
 	err := db.QueryRow("SELECT name, hit_die, primary_ability, saving_throws, spellcasting_ability FROM classes WHERE slug = $1", id).Scan(
 		&c.Name, &c.HitDie, &c.PrimaryAbility, &c.SavingThrows, &c.SpellcastingAbility)
 	if err != nil {
-		json.NewEncoder(w).Encode(map[string]string{"error": "class_not_found"})
+		writeJSONStatus(w, http.StatusNotFound, map[string]interface{}{"error": "class_not_found"})
 		return
 	}
 	out := map[string]interface{}{"name": c.Name, "hit_die": c.HitDie, "primary_ability": c.PrimaryAbility, "saving_throws": c.SavingThrows}
@@ -484,7 +484,7 @@ func handleUniverseClassSpells(w http.ResponseWriter, r *http.Request) {
 		ORDER BY class_slug
 	`)
 	if err != nil {
-		json.NewEncoder(w).Encode(map[string]string{"error": publicError(err)})
+		writeJSONStatus(w, http.StatusInternalServerError, map[string]interface{}{"error": publicError(err)})
 		return
 	}
 	defer rows.Close()
@@ -525,7 +525,7 @@ func handleUniverseClassSpellList(w http.ResponseWriter, r *http.Request) {
 	where, args := spellFilterSQL(class, level, 1)
 	rows, err := db.Query("SELECT s.slug, s.name, s.level, s.school FROM spells s WHERE 1=1"+where+" ORDER BY s.level, s.name", args...)
 	if err != nil {
-		json.NewEncoder(w).Encode(map[string]string{"error": publicError(err)})
+		writeJSONStatus(w, http.StatusInternalServerError, map[string]interface{}{"error": publicError(err)})
 		return
 	}
 	defer rows.Close()
@@ -544,7 +544,7 @@ func handleUniverseClassSpellList(w http.ResponseWriter, r *http.Request) {
 	}
 
 	if len(spells) == 0 {
-		json.NewEncoder(w).Encode(map[string]string{"error": "class_not_found_or_no_spells"})
+		writeJSONStatus(w, http.StatusNotFound, map[string]interface{}{"error": "class_not_found_or_no_spells"})
 		return
 	}
 
@@ -907,8 +907,9 @@ func handleUniverseMonsterSearch(w http.ResponseWriter, r *http.Request) {
 	mtype := r.URL.Query().Get("type")
 	cr := r.URL.Query().Get("cr")
 	gmView := requestIsGM(r)
-	if !gmView {
-		cr = "" // challenge rating is a stat too
+	crNote := ""
+	if !gmView && cr != "" {
+		cr, crNote = "", "cr was not applied: a monster's challenge rating is a stat only GMs see, so it filters only a GM's search."
 	}
 	limit := 20
 	if l, err := strconv.Atoi(r.URL.Query().Get("limit")); err == nil && l > 0 && l <= 100 {
@@ -940,7 +941,7 @@ func handleUniverseMonsterSearch(w http.ResponseWriter, r *http.Request) {
 
 	rows, err := db.Query(query, args...)
 	if err != nil {
-		json.NewEncoder(w).Encode(map[string]string{"error": publicError(err)})
+		writeJSONStatus(w, http.StatusInternalServerError, map[string]interface{}{"error": publicError(err)})
 		return
 	}
 	defer rows.Close()
@@ -958,7 +959,11 @@ func handleUniverseMonsterSearch(w http.ResponseWriter, r *http.Request) {
 			"slug": slug, "name": mname, "type": mtype, "cr": cr, "hp": hp, "ac": ac,
 		})
 	}
-	json.NewEncoder(w).Encode(map[string]interface{}{"monsters": monsters, "count": len(monsters)})
+	out := map[string]interface{}{"monsters": monsters, "count": len(monsters)}
+	if crNote != "" {
+		out["note"] = crNote
+	}
+	json.NewEncoder(w).Encode(out)
 }
 
 // handleUniverseSpellSearch godoc
@@ -1012,7 +1017,7 @@ func handleUniverseSpellSearch(w http.ResponseWriter, r *http.Request) {
 
 	rows, err := db.Query(query, args...)
 	if err != nil {
-		json.NewEncoder(w).Encode(map[string]string{"error": publicError(err)})
+		writeJSONStatus(w, http.StatusInternalServerError, map[string]interface{}{"error": publicError(err)})
 		return
 	}
 	defer rows.Close()
@@ -1072,7 +1077,7 @@ func handleUniverseWeaponSearch(w http.ResponseWriter, r *http.Request) {
 
 	rows, err := db.Query(query, args...)
 	if err != nil {
-		json.NewEncoder(w).Encode(map[string]string{"error": publicError(err)})
+		writeJSONStatus(w, http.StatusInternalServerError, map[string]interface{}{"error": publicError(err)})
 		return
 	}
 	defer rows.Close()

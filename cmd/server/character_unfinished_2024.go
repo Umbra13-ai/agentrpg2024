@@ -39,7 +39,7 @@ func withToFinish(w http.ResponseWriter, r *http.Request, charID int, h func(htt
 				list = currentPreparedList(charID, class)
 			}
 			n := countLeveled(withoutAlwaysPrepared(list, allAlwaysPrepared(charID)))
-			m["prepared_count"], m["slots_remaining"] = n, int(max)-n
+			m["prepared_count"], m["slots_remaining"], m["preparations_left"] = n, int(max)-n, int(max)-n
 		}
 		if len(todo) > 0 {
 			m["to_finish"] = todo

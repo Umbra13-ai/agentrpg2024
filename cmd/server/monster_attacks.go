@@ -262,7 +262,7 @@ func resolveMonsterAttack(r *http.Request, campaignID int, monster, action, targ
 		// The attack roll: every source of Advantage and Disadvantage, the Armor Class, Bless and Bane, Sanctuary and the
 		// judging of the roll are the one attack function's (attack_2024.go). Only what this monster's stat block and the
 		// battle map say about this attack is decided here.
-		atk := attackCtx{lobby: campaignID, attacker: attackerID, name: a.Name, bonus: a.AttackBonus, melee: isMelee, weapon: true,
+		atk := attackCtx{lobby: campaignID, attacker: attackerID, name: a.Name, bonus: a.AttackBonus, melee: isMelee, weapon: true, allySaid: allySaidIn(r),
 			opportunity: inReach, longRange: longRange, within5: &withinFive, autoHit: autoHitRe.MatchString(a.Desc)}
 		blockNote := ""
 		if found {

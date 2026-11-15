@@ -500,53 +500,15 @@ func canSneakAttack(charID int, weaponKey string, hasAdvantage bool, hasDisadvan
 		return true
 	}
 
-	// Or if there's an ally within 5ft of the target (and ally isn't incapacitated)
-	// Check for allies in the same campaign adjacent to target
-	// With a battle map the ally really has to be within 5 feet of the target
+	// Or an ally of the rogue, not Incapacitated, within 5 feet of the target (ally_adjacent_2024.go: the battle map, or the
+	// player's ally_adjacent without one; nothing is assumed)
 	if targetID == 0 {
 		targetID = attackTargetID(charID) // the attack's target_id (a monster's negative id); callers pass a character named in the text
 	}
-	if allyNearby, onMap := sneakAllyOnMap(charID, targetID); onMap {
-		return allyNearby
+	if _, mid, isMonster := attackedMonster(charID); isMonster {
+		targetID = mid
 	}
-	if targetID != 0 { // monsters have negative ids (this was "> 0", so without a map it never applied to a monster)
-		var lobbyID int
-		db.QueryRow("SELECT lobby_id FROM characters WHERE id = $1", charID).Scan(&lobbyID)
-
-		// Find other party members (not the attacker, not at 0 Hit Points or incapacitated, in same campaign)
-		rows, err := db.Query(`
-			SELECT id, COALESCE(conditions, '[]') FROM characters 
-			WHERE lobby_id = $1 AND id != $2 AND id != $3 AND status != 'inactive' AND hp > 0 AND NOT COALESCE(is_dead, false)
-		`, lobbyID, charID, targetID)
-		if err == nil {
-			defer rows.Close()
-			for rows.Next() {
-				var allyID int
-				var conditionsJSON []byte
-				rows.Scan(&allyID, &conditionsJSON)
-
-				// Check if ally is incapacitated
-				var conditions []string
-				json.Unmarshal(conditionsJSON, &conditions)
-				allyIncap := false
-				for _, c := range conditions {
-					cLower := strings.ToLower(c)
-					if cLower == "incapacitated" || cLower == "paralyzed" ||
-						cLower == "stunned" || cLower == "unconscious" || cLower == "petrified" {
-						allyIncap = true
-						break
-					}
-				}
-
-				if !allyIncap {
-					// Ally is adjacent and not incapacitated - sneak attack allowed
-					// Note: We don't track exact positions, so we assume party members
-					// are generally positioned to enable sneak attack when in combat together
-					return true
-				}
-			}
-		}
-	}
-
-	return false
+	desc, _ := attackDescriptions.Load(charID)
+	d, _ := desc.(string)
+	return allyNextToTarget(lobbyOfChar(charID), charID, targetID, allyAdjacentSaid(d))
 }

@@ -584,7 +584,7 @@ func handlePrepareSpells(w http.ResponseWriter, r *http.Request, charID int) {
 		if r.Method == "GET" && len(info) > 0 {
 			writeJSONStatus(w, http.StatusOK, map[string]interface{}{
 				"character_id": charID, "class": className, "level": level, "caster_type": "none",
-				"prepared_spells": []interface{}{}, "prepared_count": 0, "max_prepared": 0, "slots_remaining": 0,
+				"prepared_spells": []interface{}{}, "prepared_count": 0, "max_prepared": 0, "slots_remaining": 0, "preparations_left": 0,
 				"origin_spells":      info,
 				"origin_spells_note": fmt.Sprintf("A %s doesn't prepare spells. Species and Magic Initiate spells are always prepared and cast with their own spellcasting ability; with no spell slots you use the free cast (it comes back on a Long Rest).", titleWords(className)),
 			})
@@ -681,6 +681,7 @@ func handlePrepareSpells(w http.ResponseWriter, r *http.Request, charID int) {
 			"prepared_count":       countLeveled(withoutAlwaysPrepared(preparedSpells, alwaysPrepared)),
 			"max_prepared":         maxPrepared,
 			"slots_remaining":      maxPrepared - countLeveled(withoutAlwaysPrepared(preparedSpells, alwaysPrepared)),
+			"preparations_left":    maxPrepared - countLeveled(withoutAlwaysPrepared(preparedSpells, alwaysPrepared)), // spells you can still prepare (slots_remaining: the old name)
 		}
 		if info := originSpellsInfo(charID); len(info) > 0 {
 			response["origin_spells"] = info
@@ -883,12 +884,13 @@ func handlePrepareSpells(w http.ResponseWriter, r *http.Request, charID int) {
 		domainSpellsInfo := getDomainSpellsWithInfo(subclassSlug, level, landType)
 
 		response := map[string]interface{}{
-			"success":         true,
-			"prepared_spells": preparedInfo,
-			"prepared_count":  countLeveled(newPrepared),
-			"max_prepared":    maxPrepared,
-			"slots_remaining": maxPrepared - countLeveled(newPrepared),
-			"message":         preparedMessage(countLeveled(newPrepared), len(newPrepared)-countLeveled(newPrepared), maxPrepared),
+			"success":           true,
+			"prepared_spells":   preparedInfo,
+			"prepared_count":    countLeveled(newPrepared),
+			"max_prepared":      maxPrepared,
+			"slots_remaining":   maxPrepared - countLeveled(newPrepared),
+			"preparations_left": maxPrepared - countLeveled(newPrepared), // spells you can still prepare (slots_remaining: the old name)
+			"message":           preparedMessage(countLeveled(newPrepared), len(newPrepared)-countLeveled(newPrepared), maxPrepared),
 		}
 		var notes []string
 		if len(skippedAlways) > 0 {

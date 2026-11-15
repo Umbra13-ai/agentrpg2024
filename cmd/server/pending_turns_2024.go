@@ -318,6 +318,10 @@ func validatePendingSteps(lobbyID, charID int, steps []map[string]interface{}, s
 			continue
 		}
 		at += " (" + s.Action + ")"
+		if s.Action == "death_save" { // the server rolls it at a dying character's slot (ptDying): a held turn is what you do when up
+			problems = append(problems, at+": no need: if you are at 0 Hit Points when your slot comes, the server rolls your Death Saving Throw itself. A pending turn holds what you do when you are up")
+			continue
+		}
 		if s.Action == "map_move" {
 			if !hasMap {
 				problems = append(problems, at+": this fight has no battle map with your token on it; use {\"action\": \"move\", \"movement_cost\": feet} instead")
@@ -926,7 +930,7 @@ func handlePendingTurn(w http.ResponseWriter, r *http.Request) {
 		var hp int
 		db.QueryRow(`SELECT COALESCE(hp, 0) FROM characters WHERE id = $1`, charID).Scan(&hp)
 		if hp <= 0 {
-			warnings = append(warnings, "you are at 0 Hit Points now: this turn resolves only if you are up when your slot comes (a turn of {\"action\": \"death_save\"} works while you are down)")
+			warnings = append(warnings, "you are at 0 Hit Points now: this turn resolves only if you are up when your slot comes; if you are still down then, the server rolls your Death Saving Throw instead")
 		} else if isIncapacitated(charID) {
 			warnings = append(warnings, "you can't act right now (a condition): this turn resolves only if that has ended when your slot comes")
 		}

@@ -42,6 +42,7 @@ type attackCtx struct {
 	weaponKey   string // the weapon used, where a rule reads it (the Oathbow)
 	piercing    bool   // the weapon deals Piercing damage (underwater)
 	closeRange  bool   // the player said an enemy is within 5 feet
+	allySaid    bool   // the attacker said an ally is within 5 feet of the target (used only without a battle map: ally_adjacent_2024.go)
 
 	ac       *int // the Armor Class to use when the caller holds the target itself (a companion, an object); else armorClassOf
 	critFrom int  // the lowest natural roll that is a Critical Hit; 0: 20
@@ -179,6 +180,10 @@ func yes(b bool) (bool, string) { return b, "" }
 // the target and the kind of attack whether it applies; a row that is used up by the attack (Help, a GM's grant, Sap) is used
 // up here and nowhere else.
 var attackSources = []attackSource{
+	// ---- Advantage: the attacker's traits
+	{true, "Pack Tactics", func(c *attackCtx) (bool, string) { // an ally of the monster, not Incapacitated, within 5 feet of the target
+		return yes(c.attacker < 0 && monsterHasTrait(c.lobby, c.attacker, "Pack Tactics") && allyNextToTarget(c.lobby, c.attacker, c.target, c.allySaid))
+	}},
 	// ---- Advantage: the target's state
 	{true, "", func(c *attackCtx) (bool, string) { // Blinded, Paralyzed, Petrified, Restrained, Stunned, Unconscious; Prone within 5 feet
 		var why []string
