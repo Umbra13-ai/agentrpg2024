@@ -40,7 +40,7 @@ func swordOfSharpnessHit(lobbyID, charID, targetID int, monsterKey string, natur
 	if how == "resistant" {
 		note += " (resisted)"
 	}
-	addMonsterCondition(lobbyID, targetID, "exhaustion", "Sword of Sharpness", 0, "", 0)
+	applyCondition(lobbyID, targetID, "exhaustion", "Sword of Sharpness", 0, "", 0)
 	return d, note + " and 1 Exhaustion level."
 }
 

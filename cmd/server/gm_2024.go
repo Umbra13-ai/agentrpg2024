@@ -190,7 +190,7 @@ func handleGMEscapeGrapple2024(w http.ResponseWriter, r *http.Request) {
 	name := creatureName(lobby, req.TargetID)
 	result := fmt.Sprintf("%s tries to escape: %d (d20 %d + %d) vs DC %d, ", name, total, roll, bonus, dc)
 	if total >= dc {
-		deleteConditionRecord(rec.ID)
+		deleteConditionRecord(lobby, req.TargetID, rec.ID)
 		result += "success. The Grappled condition ends."
 	} else {
 		result += "failure."
@@ -235,18 +235,9 @@ func handleGMReleaseGrapple2024(w http.ResponseWriter, r *http.Request) {
 	if !ok {
 		return
 	}
-	res, xerr := db.Exec(`DELETE FROM condition_records WHERE lobby_id = $1 AND target_id = $2 AND condition = 'grappled' AND source = $3`, lobby, req.TargetID, grappleSource(req.GrapplerID))
-	if xerr != nil {
-		writeDBWriteError(w, xerr, "the grapple's end")
-		return
-	}
-	n, _ := res.RowsAffected()
-	if n == 0 {
+	if req.TargetID == 0 || len(removeConditionsWhere(lobby, req.TargetID, func(r conditionRecord) bool { return grappledBy(r, req.GrapplerID) })) == 0 {
 		writeJSONStatus(w, 404, map[string]interface{}{"error": "no_such_grapple", "message": "That creature doesn't grapple the target."})
 		return
-	}
-	if req.TargetID > 0 {
-		syncListFromRecords(req.TargetID)
 	}
 	result := fmt.Sprintf("%s releases %s.", creatureName(lobby, req.GrapplerID), creatureName(lobby, req.TargetID))
 	writeJSONStatus(w, 200, map[string]interface{}{"success": true, "result": result})

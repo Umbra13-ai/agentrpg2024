@@ -61,7 +61,7 @@ func applyStunningStrike(lobbyID, charID, targetID int, name string) string {
 		addCombatEffect(lobbyID, targetID, charID, "exposed")
 		return fmt.Sprintf(" Stunning Strike: %s saves (%d vs DC %d); its Speed is halved until the start of your next turn and the next attack roll against it has Advantage.", name, total, dc)
 	}
-	addMonsterCondition(lobbyID, targetID, "stunned", fmt.Sprintf("Stunning Strike #%d", charID), 0, "", 0)
+	applyCondition(lobbyID, targetID, "stunned", fmt.Sprintf("Stunning Strike #%d", charID), 0, "", 0)
 	return fmt.Sprintf(" Stunning Strike: %s fails its save (%d vs DC %d) and is Stunned until the start of your next turn.", name, total, dc)
 }
 
@@ -264,7 +264,7 @@ func openHandEffect(lobbyID, charID, monster int, effect string, dc int) string 
 		if saved, total := monsterSave(lobbyID, monster, "dex", dc); saved {
 			return fmt.Sprintf(" Topple: it saves (%d vs DC %d).", total, dc)
 		}
-		addMonsterCondition(lobbyID, monster, "prone", "Open Hand Technique: Topple", 0, "", 0)
+		applyCondition(lobbyID, monster, "prone", "Open Hand Technique: Topple", 0, "", 0)
 		return " Topple: it fails its save and has the Prone condition."
 	}
 	return ""

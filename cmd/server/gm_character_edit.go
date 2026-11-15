@@ -57,6 +57,9 @@ func gmSetCharacterFields(charID int, set map[string]json.RawMessage) ([]string,
 			return nil, fmt.Errorf("%q is not a character field the GM can change (GET this endpoint with character_id to see the fields)", k)
 		}
 		raw := set[k]
+		if conditionColumns[key] { // the condition owner writes them, after the other fields (condition_owner_2024.go)
+			continue
+		}
 		args = append(args, nil)
 		n := len(args)
 		switch {
@@ -88,16 +91,23 @@ func gmSetCharacterFields(charID int, set map[string]json.RawMessage) ([]string,
 			parts = append(parts, fmt.Sprintf("%s = $%d", key, n))
 		}
 	}
-	if len(parts) == 0 {
-		return nil, nil
-	}
-	args = append(args, charID)
-	if _, err := db.Exec(fmt.Sprintf("UPDATE characters SET %s WHERE id = $%d", strings.Join(parts, ", "), len(args)), args...); err != nil {
-		return nil, fmt.Errorf("the update failed: %v", err)
+	if len(parts) > 0 {
+		args = append(args, charID)
+		if _, err := db.Exec(fmt.Sprintf("UPDATE characters SET %s WHERE id = $%d", strings.Join(parts, ", "), len(args)), args...); err != nil {
+			return nil, fmt.Errorf("the update failed: %v", err)
+		}
 	}
 	for _, k := range keys {
-		if strings.EqualFold(k, "conditions") {
-			syncRecordsFromList(charID) // the conditions list and the condition records stay in step
+		key := strings.ToLower(strings.TrimSpace(k))
+		if !conditionColumns[key] {
+			continue
+		}
+		var v interface{}
+		if err := json.Unmarshal(set[k], &v); err != nil {
+			return nil, fmt.Errorf("%s: %v", k, err)
+		}
+		if err := setConditionColumn(charID, key, v); err != nil {
+			return nil, fmt.Errorf("%s: %v", k, err)
 		}
 	}
 	return keys, nil

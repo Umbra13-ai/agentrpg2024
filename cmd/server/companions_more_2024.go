@@ -357,7 +357,7 @@ func companionSpecialAction(c companion, charID, lobbyID int, action, descriptio
 		if saved {
 			return fmt.Sprintf("%s fixes %s with a Fell Glare: it succeeds on the DC %d Wisdom save (%d).", companionDisplayName(c), monsterName(lobbyID, targetID), dc, total), ""
 		}
-		addMonsterCondition(lobbyID, targetID, "frightened", companionDisplayName(c)+" (Fell Glare)", 2, "", 0)
+		applyCondition(lobbyID, targetID, "frightened", companionDisplayName(c)+" (Fell Glare)", 2, "", 0)
 		return fmt.Sprintf("%s fixes %s with a Fell Glare: it fails the DC %d Wisdom save (%d) and has the Frightened condition until the end of your next turn.", companionDisplayName(c), monsterName(lobbyID, targetID), dc, total), ""
 	}
 	return "", ""

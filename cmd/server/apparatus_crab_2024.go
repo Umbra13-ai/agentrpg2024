@@ -140,10 +140,11 @@ func crabClaws(lobby int, claws, up bool, req itemCastReq) string {
 		case up:
 			text, _ := damageMonster(lobby, target, game.RollDamage("2d6", out.Critical), "bludgeoning", out.Critical)
 			line += ": " + text
-		case monsterConditionImmune(lobby, target, "grappled"):
-			line += ", but " + name + " can't be Grappled"
 		default:
-			addMonsterCondition(lobby, target, "grappled", "Apparatus of the Crab (escape DC 15)", 0, "", 0)
+			if res := applyCondition(lobby, target, "grappled", "Apparatus of the Crab (escape DC 15)", 0, "", 0); res.Immune != "" {
+				line += ", but " + name + " can't be Grappled"
+				break
+			}
 			line += ": " + name + " has the Grappled condition (escape DC 15)"
 		}
 		lines = append(lines, line)

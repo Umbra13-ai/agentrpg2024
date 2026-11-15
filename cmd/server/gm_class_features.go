@@ -384,25 +384,7 @@ func handleGMSacredWeapon(w http.ResponseWriter, r *http.Request) {
 
 	// Apply sacred_weapon condition with bonus and duration (10 rounds = 1 minute)
 	// Format: "sacred_weapon:BONUS:ROUNDS_REMAINING"
-	var existingConds []byte
-	db.QueryRow("SELECT COALESCE(conditions, '[]') FROM characters WHERE id = $1", req.PaladinID).Scan(&existingConds)
-	var currentConds []string
-	json.Unmarshal(existingConds, &currentConds)
-
-	// Remove any existing sacred_weapon condition
-	newConds := []string{}
-	for _, c := range currentConds {
-		if !strings.HasPrefix(c, "sacred_weapon:") {
-			newConds = append(newConds, c)
-		}
-	}
-
-	// Add new sacred_weapon condition
-	sacredWeaponCond := fmt.Sprintf("sacred_weapon:%d:100", chaBonus) // 10 minutes
-	newConds = append(newConds, sacredWeaponCond)
-
-	condsJSON, _ := json.Marshal(newConds)
-	db.Exec("UPDATE characters SET conditions = $1 WHERE id = $2", condsJSON, req.PaladinID)
+	setMarker(req.PaladinID, "sacred_weapon", fmt.Sprintf("%d:100", chaBonus)) // 10 minutes; replaces an earlier one (the condition owner)
 
 	// Consume Channel Divinity
 	useClassResource(req.PaladinID, "channel_divinity", 1)

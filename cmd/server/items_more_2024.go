@@ -284,7 +284,7 @@ func moreItemUse(charID int, it invItem, req itemCastReq, description string) (s
 		if !out.Hit {
 			return ar.LineForAttacker(atk.name, out) + rollNote + "; the bands contract into a sphere again.", true
 		}
-		addMonsterCondition(lobby, t, "restrained", "Iron Bands", 0, "", 0)
+		applyCondition(lobby, t, "restrained", "Iron Bands", 0, "", 0)
 		return ar.LineForAttacker(atk.name, out) + rollNote + ": the target is Restrained until you release it (a Bonus Action). A creature that can touch the bands can take an action for a DC 20 Strength (Athletics) check to break them (the item is destroyed).", true
 	case strings.HasPrefix(n, "rope of entanglement"):
 		if len(targets) == 0 {
@@ -371,8 +371,7 @@ func moreItemUse(charID int, it invItem, req itemCastReq, description string) (s
 		out := "X-ray vision (a Magic action) for 1 minute: solid objects within 30 feet are transparent to you (through 1 foot of stone, 1 inch of metal, 3 feet of wood or dirt; lead blocks it)."
 		if itemBool(it, "used_since_rest") {
 			if ok, total := creatureSave(lobbyOfChar(charID), charID, "con", 15); !ok {
-				db.Exec(`UPDATE characters SET exhaustion_level = LEAST(COALESCE(exhaustion_level,0) + 1, 6) WHERE id = $1`, charID)
-				out += fmt.Sprintf(" Used again before a Long Rest: Constitution save %d vs DC 15 fails, 1 Exhaustion level.", total)
+				out += fmt.Sprintf(" Used again before a Long Rest: Constitution save %d vs DC 15 fails, 1 Exhaustion level: %s", total, addExhaustion(charID, 1))
 			} else {
 				out += fmt.Sprintf(" Used again before a Long Rest: Constitution save %d vs DC 15 succeeds.", total)
 			}

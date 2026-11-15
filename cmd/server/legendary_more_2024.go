@@ -489,7 +489,7 @@ func turnSpellBack(lobbyID, charID int, source string, e saveEffect, rolled map[
 			if e.EndSave {
 				endAbility = e.Ability
 			}
-			addMonsterCondition(lobbyID, e.SourceID, c, source, e.Rounds, endAbility, e.DC)
+			applyCondition(lobbyID, e.SourceID, c, source, e.Rounds, endAbility, e.DC)
 			parts = append(parts, name+" is "+c)
 		}
 	}
@@ -772,7 +772,7 @@ func rodPower(lobbyID, charID, targetID int, name, monsterKey string, it invItem
 	if saved {
 		return 0, fmt.Sprintf(" Paralyze: %s's Constitution save %d against DC 17 succeeds.", name, total)
 	}
-	addMonsterCondition(lobbyID, targetID, "paralyzed", "Rod of Lordly Might", 10, "con", 17)
+	applyCondition(lobbyID, targetID, "paralyzed", "Rod of Lordly Might", 10, "con", 17)
 	return 0, fmt.Sprintf(" Paralyze: %s fails the DC 17 Constitution save (%d) and is Paralyzed for 1 minute (it repeats the save at the end of each of its turns).", name, total)
 }
 
@@ -807,7 +807,7 @@ func rodOfLordlyMight(charID int, it invItem, req itemCastReq, description strin
 				lines = append(lines, fmt.Sprintf("%s saves (%d)", n, total))
 				continue
 			}
-			addMonsterCondition(lobby, t, "frightened", "Rod of Lordly Might", 10, "wis", 17)
+			applyCondition(lobby, t, "frightened", "Rod of Lordly Might", 10, "wis", 17)
 			lines = append(lines, fmt.Sprintf("%s fails (%d) and is Frightened for 1 minute (it repeats the save at the end of its turns)", n, total))
 		}
 		if len(lines) == 0 {
@@ -903,7 +903,7 @@ func elementalRingUse(charID int, it invItem, req itemCastReq, description strin
 		if saved {
 			return fmt.Sprintf("Elemental Compulsion (a Magic action): %s's Wisdom save %d against DC 18 succeeds.", n, total)
 		}
-		addMonsterCondition(lobby, req.TargetID, "charmed", "Ring of Elemental Command", 1, "", 0)
+		applyCondition(lobby, req.TargetID, "charmed", "Ring of Elemental Command", 1, "", 0)
 		return fmt.Sprintf("Elemental Compulsion (a Magic action): %s fails the DC 18 Wisdom save (%d): it is Charmed until the start of your next turn, and you decide what it does with its move and action on its next turn (the GM runs it so).", n, total)
 	}
 	focus := map[string]string{
@@ -1009,7 +1009,7 @@ func hammerThunderclap(lobbyID, charID, targetID int) string {
 			lines = append(lines, fmt.Sprintf("%s saves (%d)", n, total))
 			continue
 		}
-		addMonsterCondition(lobbyID, id, "stunned", "Hammer of Thunderbolts", 1, "", 0)
+		applyCondition(lobbyID, id, "stunned", "Hammer of Thunderbolts", 1, "", 0)
 		lines = append(lines, fmt.Sprintf("%s fails (%d) and is Stunned until the end of your next turn", n, total))
 	}
 	return " Thunderclap (audible 300 feet away): DC 17 Constitution saves: " + strings.Join(lines, "; ") + ". The hammer flies back to your hand."

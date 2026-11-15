@@ -107,7 +107,7 @@ func expireCombatEffectsOf(lobbyID, sourceID int) {
 		return
 	}
 	db.Exec(`DELETE FROM combat_effects WHERE lobby_id = $1 AND source_id = $2`, lobbyID, sourceID)
-	db.Exec(`DELETE FROM condition_records WHERE lobby_id = $1 AND target_id < 0 AND source = $2`, lobbyID, fmt.Sprintf("Stunning Strike #%d", sourceID)) // Stunned until the start of the Monk's next turn
+	endConditionsFromSource(lobbyID, fmt.Sprintf("Stunning Strike #%d", sourceID)) // Stunned until the start of the Monk's next turn
 }
 
 func clearCombatEffects(lobbyID int) {

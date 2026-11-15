@@ -110,14 +110,13 @@ func turnEffects(campaignID, endingIndex int, when string) []string {
 			}
 		}
 		if ended == "" && rec.DurationRounds > 0 && when == "end_of_turn" {
-			if rec.DurationRounds <= 1 {
-				ended = fmt.Sprintf("The %s condition on %s runs out.", rec.Condition, name)
-			} else {
-				db.Exec(`UPDATE condition_records SET duration_rounds = duration_rounds - 1 WHERE id = $1`, rec.ID)
+			if countDownCondition(campaignID, id, rec.ID) { // the condition owner: one round off, or it runs out
+				log = append(log, fmt.Sprintf("The %s condition on %s runs out.", rec.Condition, name))
 			}
+			continue
 		}
 		if ended != "" {
-			deleteConditionRecord(rec.ID)
+			deleteConditionRecord(campaignID, id, rec.ID)
 			log = append(log, ended)
 		}
 	}

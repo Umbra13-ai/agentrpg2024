@@ -1554,25 +1554,8 @@ func resolveActionWithBonusDash(action, description string, charID int, bonusDas
 					reckless = true
 					recklessNote = " ⚔️ RECKLESS!"
 
-					// Apply "reckless" condition (grants enemies advantage against you until your next turn)
-					var existingConds []byte
-					db.QueryRow("SELECT COALESCE(conditions, '[]') FROM characters WHERE id = $1", charID).Scan(&existingConds)
-					var currentConds []string
-					json.Unmarshal(existingConds, &currentConds)
-
-					// Check if already reckless
-					alreadyReckless := false
-					for _, c := range currentConds {
-						if c == "reckless" {
-							alreadyReckless = true
-							break
-						}
-					}
-					if !alreadyReckless {
-						currentConds = append(currentConds, "reckless")
-						updatedConds, _ := json.Marshal(currentConds)
-						db.Exec("UPDATE characters SET conditions = $1 WHERE id = $2", updatedConds, charID)
-					}
+					// the "reckless" marker: attack rolls against you have Advantage until the start of your next turn
+					addCharacterCondition(charID, "reckless")
 				} else {
 					recklessNote = " (Reckless Attack requires STR-based melee attack)"
 				}
@@ -2677,15 +2660,7 @@ func resolveActionWithBonusDash(action, description string, charID int, bonusDas
 	case "help":
 		return helpAction(charID, description)
 	case "dodge":
-		// Add dodge condition
-		var existing []byte
-		db.QueryRow("SELECT COALESCE(conditions, '[]') FROM characters WHERE id = $1", charID).Scan(&existing)
-		conds := normalizeConditionList(parseConditionsJSON(existing))
-		if !hasCondition(charID, "dodging") {
-			conds = append(conds, "dodging")
-		}
-		updated, _ := json.Marshal(conds)
-		db.Exec("UPDATE characters SET conditions = $1 WHERE id = $2", updated, charID)
+		addCharacterCondition(charID, "dodging") // the marker until the start of your next turn (dodge_2024.go)
 		return "Dodging. Attacks against you have disadvantage until your next turn."
 
 	case "rage":
@@ -2700,15 +2675,8 @@ func resolveActionWithBonusDash(action, description string, charID int, bonusDas
 			return "Only barbarians can rage!"
 		}
 
-		// Check if already raging
-		var existingConds []byte
-		db.QueryRow("SELECT COALESCE(conditions, '[]') FROM characters WHERE id = $1", charID).Scan(&existingConds)
-		var currentConds []string
-		json.Unmarshal(existingConds, &currentConds)
-		for _, c := range currentConds {
-			if c == "raging" {
-				return "You are already raging!"
-			}
+		if hasCondition(charID, "raging") {
+			return "You are already raging!"
 		}
 
 		// 2024: you cannot enter a Rage while wearing Heavy armor
@@ -2721,10 +2689,7 @@ func resolveActionWithBonusDash(action, description string, charID int, bonusDas
 		if okRage, msg, _ := useClassResource(charID, "rage", 1); !okRage {
 			return "You have no Rage uses left: " + msg
 		}
-		// Add raging condition
-		currentConds = append(currentConds, "raging")
-		updatedConds, _ := json.Marshal(currentConds)
-		db.Exec("UPDATE characters SET conditions = $1 WHERE id = $2", updatedConds, charID)
+		addCharacterCondition(charID, "raging")
 		startRageClock(charID)
 
 		// Build response with subclass-specific info
@@ -2756,69 +2721,11 @@ func resolveActionWithBonusDash(action, description string, charID int, bonusDas
 		return "Frenzy works differently in the 2024 rules: while raging, if you attack recklessly (include \"reckless\" in the attack description), the first target you hit with a Strength attack on your turn takes extra damage. There is no extra attack and no Exhaustion."
 
 	case "end_rage":
-		// End rage early
-		// Check for frenzy exhaustion
-		var existingConds []byte
-		db.QueryRow("SELECT COALESCE(conditions, '[]') FROM characters WHERE id = $1", charID).Scan(&existingConds)
-		var currentConds []string
-		json.Unmarshal(existingConds, &currentConds)
-
-		wasRaging := false
-		wasFrenzying := false
-		newConds := []string{}
-		for _, c := range currentConds {
-			if c == "raging" {
-				wasRaging = true
-			} else if c == "frenzying" {
-				wasFrenzying = true
-			} else {
-				newConds = append(newConds, c)
-			}
-		}
-
-		if !wasRaging {
+		// End rage early (the 2024 Frenzy costs no Exhaustion)
+		if !removeCondition(charID, "raging") {
 			return "You are not currently raging."
 		}
-
-		// Apply frenzy exhaustion if was frenzying
-		result := "Your rage ends."
-		if wasFrenzying {
-			// Get current exhaustion and increment
-			var currentExhaustion int
-			db.QueryRow("SELECT COALESCE(exhaustion_level, 0) FROM characters WHERE id = $1", charID).Scan(&currentExhaustion)
-			newExhaustion := currentExhaustion + 1
-			if newExhaustion > 6 {
-				newExhaustion = 6
-			}
-
-			// Update or add exhaustion condition
-			updatedConditions := []string{}
-			foundExhaustion := false
-			for _, c := range newConds {
-				if strings.HasPrefix(strings.ToLower(strings.TrimSpace(c)), "exhaustion:") {
-					updatedConditions = append(updatedConditions, fmt.Sprintf("exhaustion:%d", newExhaustion))
-					foundExhaustion = true
-				} else {
-					updatedConditions = append(updatedConditions, c)
-				}
-			}
-			if !foundExhaustion {
-				updatedConditions = append(updatedConditions, fmt.Sprintf("exhaustion:%d", newExhaustion))
-			}
-			newConds = updatedConditions
-
-			// Update exhaustion level in database
-			db.Exec("UPDATE characters SET exhaustion_level = $1 WHERE id = $2", newExhaustion, charID)
-
-			result = fmt.Sprintf("Your rage ends. The frenzy takes its toll — you gain 1 level of exhaustion (now at level %d).", newExhaustion)
-			if newExhaustion >= 6 {
-				result += " ☠️ EXHAUSTION LEVEL 6: You have died from exhaustion!"
-			}
-		}
-
-		updatedConds, _ := json.Marshal(newConds)
-		db.Exec("UPDATE characters SET conditions = $1 WHERE id = $2", updatedConds, charID)
-		return result
+		return "Your rage ends."
 
 	case "wild_shape":
 		// Druid Wild Shape - transform into a beast
@@ -3575,24 +3482,16 @@ func resolveActionWithBonusDash(action, description string, charID int, bonusDas
 				}
 			}
 
-			// Look for disease or poison conditions to cure
-			var targetConds []byte
-			var targetName string
-			db.QueryRow("SELECT COALESCE(conditions, '[]'), name FROM characters WHERE id = $1", targetID).Scan(&targetConds, &targetName)
-			var conds []string
-			json.Unmarshal(targetConds, &conds)
-
+			// the poison or condition to cure: each record of it ends (the condition owner)
+			targetName := getCharacterName(targetID)
+			cured := removeConditionsWhere(0, targetID, func(r conditionRecord) bool {
+				c := r.Condition
+				restoring := level >= 14 && (c == "blinded" || c == "charmed" || c == "deafened" || c == "frightened" || c == "paralyzed" || c == "stunned") && strings.Contains(descLower, c) // Restoring Touch
+				return restoring || (strings.Contains(descLower, "poison") && (c == "poisoned" || c == "poison"))
+			})
 			curedAilment := ""
-			newConds := []string{}
-			for _, c := range conds {
-				cLower := strings.ToLower(c)
-				restoring := level >= 14 && (cLower == "blinded" || cLower == "charmed" || cLower == "deafened" || cLower == "frightened" || cLower == "paralyzed" || cLower == "stunned") && strings.Contains(descLower, cLower) // Restoring Touch
-				if restoring || (strings.Contains(descLower, "poison") && (cLower == "poisoned" || strings.HasPrefix(cLower, "poison:"))) {
-					curedAilment = c
-					// Don't add this condition back (it's cured)
-				} else {
-					newConds = append(newConds, c)
-				}
+			if len(cured) > 0 {
+				curedAilment = cured[0].entry()
 			}
 
 			if curedAilment == "" {
@@ -3605,11 +3504,7 @@ func resolveActionWithBonusDash(action, description string, charID int, bonusDas
 				return fmt.Sprintf("%s has no %s to cure!", targetName, ailmentType)
 			}
 
-			// Update conditions and consume 5 HP from pool
-			updatedConds, _ := json.Marshal(newConds)
-			db.Exec("UPDATE characters SET conditions = $1 WHERE id = $2", updatedConds, targetID)
-			syncRecordsFromList(targetID) // Lay On Hands cured a condition
-
+			// consume 5 HP from the pool
 			resourcesUsed["lay_on_hands"] = currentUsed + 5
 			updatedResources, _ := json.Marshal(resourcesUsed)
 			db.Exec("UPDATE characters SET class_resources_used = $1 WHERE id = $2", updatedResources, charID)

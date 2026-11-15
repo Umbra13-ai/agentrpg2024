@@ -243,11 +243,7 @@ func jumpAction(charID int, description string) string {
 		if roll+mod+prof >= 10 {
 			out += fmt.Sprintf(" Landing in Difficult Terrain: Dexterity (Acrobatics) %d vs DC 10, you keep your feet.", roll+mod+prof)
 		} else {
-			conds := getCharConditions(charID)
-			conds = append(conds, "prone")
-			b, _ := json.Marshal(conds)
-			db.Exec(`UPDATE characters SET conditions = $1 WHERE id = $2`, b, charID)
-			syncRecordsFromList(charID)
+			addCharacterCondition(charID, "prone")
 			out += fmt.Sprintf(" Landing in Difficult Terrain: Dexterity (Acrobatics) %d vs DC 10, you fall Prone.", roll+mod+prof)
 		}
 	}

@@ -87,7 +87,7 @@ func dustOfDisappearance(charID int, it invItem, req itemCastReq) string {
 	}
 	var names []string
 	for _, id := range ids {
-		addMonsterCondition(lobby, id, "invisible", "Dust of Disappearance", minutes*10, "", 0)
+		applyCondition(lobby, id, "invisible", "Dust of Disappearance", minutes*10, "", 0)
 		names = append(names, creatureName(lobby, id))
 	}
 	editInventory(charID, func(inv []invItem) []invItem {

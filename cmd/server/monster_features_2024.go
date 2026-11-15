@@ -390,18 +390,8 @@ func monsterFeaturesTurnStart(lobbyID, id int, name string) []string {
 		return nil
 	}
 	var log []string
-	rows, err := db.Query(`DELETE FROM condition_records WHERE lobby_id = $1 AND target_id = $2 AND notes = 'until_start_of_next_turn' RETURNING condition`, lobbyID, id)
-	if err == nil {
-		for rows.Next() {
-			var c string
-			if rows.Scan(&c) == nil {
-				log = append(log, fmt.Sprintf("The %s condition on %s ends (start of its turn).", c, name))
-			}
-		}
-		rows.Close()
-		if id > 0 {
-			syncListFromRecords(id)
-		}
+	for _, r := range removeConditionsWhere(lobbyID, id, func(r conditionRecord) bool { return r.Notes == "until_start_of_next_turn" }) {
+		log = append(log, fmt.Sprintf("The %s condition on %s ends (start of its turn).", r.Condition, name))
 	}
 	if id < 0 {
 		e, meta, ok := monsterCombatant(lobbyID, id)

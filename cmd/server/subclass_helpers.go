@@ -67,88 +67,11 @@ func getSacredWeaponBonus(charID int) (int, string) {
 	return 0, ""
 }
 
-// decrementSacredWeapon decrements the Sacred Weapon duration at end of turn
-// Returns true if the condition expired and was removed
-func decrementSacredWeapon(charID int) bool {
-	var condsJSON []byte
-	err := db.QueryRow("SELECT COALESCE(conditions, '[]') FROM characters WHERE id = $1", charID).Scan(&condsJSON)
-	if err != nil {
-		return false
-	}
+// decrementSacredWeapon takes a round off Sacred Weapon at the end of the Paladin's turn; it says whether it ended.
+func decrementSacredWeapon(charID int) bool { return countDownMarker(charID, "sacred_weapon") }
 
-	var conds []string
-	if err := json.Unmarshal(condsJSON, &conds); err != nil {
-		return false
-	}
-
-	newConds := []string{}
-	expired := false
-	for _, c := range conds {
-		if strings.HasPrefix(c, "sacred_weapon:") {
-			parts := strings.Split(c, ":")
-			if len(parts) >= 3 {
-				bonus, _ := strconv.Atoi(parts[1])
-				rounds, _ := strconv.Atoi(parts[2])
-				rounds--
-				if rounds > 0 {
-					newConds = append(newConds, fmt.Sprintf("sacred_weapon:%d:%d", bonus, rounds))
-				} else {
-					expired = true // Don't add back - it expired
-				}
-			}
-		} else {
-			newConds = append(newConds, c)
-		}
-	}
-
-	if expired {
-		newCondsJSON, _ := json.Marshal(newConds)
-		db.Exec("UPDATE characters SET conditions = $1 WHERE id = $2", newCondsJSON, charID)
-	}
-
-	return expired
-}
-
-// decrementHolyNimbus decrements the Holy Nimbus duration at end of turn
-// Returns true if the condition expired and was removed
-func decrementHolyNimbus(charID int) bool {
-	var condsJSON []byte
-	err := db.QueryRow("SELECT COALESCE(conditions, '[]') FROM characters WHERE id = $1", charID).Scan(&condsJSON)
-	if err != nil {
-		return false
-	}
-
-	var conds []string
-	if err := json.Unmarshal(condsJSON, &conds); err != nil {
-		return false
-	}
-
-	newConds := []string{}
-	expired := false
-	for _, c := range conds {
-		if strings.HasPrefix(c, "holy_nimbus:") {
-			parts := strings.Split(c, ":")
-			if len(parts) >= 2 {
-				rounds, _ := strconv.Atoi(parts[1])
-				rounds--
-				if rounds > 0 {
-					newConds = append(newConds, fmt.Sprintf("holy_nimbus:%d", rounds))
-				} else {
-					expired = true // Don't add back - it expired
-				}
-			}
-		} else {
-			newConds = append(newConds, c)
-		}
-	}
-
-	if expired {
-		newCondsJSON, _ := json.Marshal(newConds)
-		db.Exec("UPDATE characters SET conditions = $1 WHERE id = $2", newCondsJSON, charID)
-	}
-
-	return expired
-}
+// decrementHolyNimbus takes a round off Holy Nimbus at the end of the turn; it says whether it ended.
+func decrementHolyNimbus(charID int) bool { return countDownMarker(charID, "holy_nimbus") }
 
 // hasHolyNimbusActive returns true if the character has Holy Nimbus active
 func hasHolyNimbusActive(charID int) bool {

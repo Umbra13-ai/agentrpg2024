@@ -242,7 +242,7 @@ func resolveSpellOnMonster(charID int, spellKey string, spell SRDSpell, damageDi
 			}
 			if cs, ok := conditionSpells[spellKey]; ok && isDamageConditionSpell(spellKey) && !saved {
 				for _, c := range cs.Conditions {
-					addMonsterCondition(lobbyID, id, c, spell.Name, extendRounds(charID, cs.Rounds), "", saveDC)
+					applyCondition(lobbyID, id, c, spell.Name, extendRounds(charID, cs.Rounds), "", saveDC)
 				}
 				lines = append(lines, fmt.Sprintf(" %s is %s.", tname, strings.Join(cs.Conditions, " and ")))
 			}

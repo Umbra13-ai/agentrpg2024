@@ -986,7 +986,7 @@ func usePotion(lobbyID, drinkerID, targetID int, it invItem) string {
 		addSpellEffect(lobbyID, targetID, targetID, "Potion of Speed", "hasted", "", 10, "", 0)
 		return fmt.Sprintf("🧪 %s: the effect of Haste for 1 minute (no Concentration, and no lethargy when it ends): +2 AC, Advantage on Dexterity saves, Speed doubled, one more action each turn.", label)
 	case "potion of invisibility":
-		addMonsterCondition(lobbyID, targetID, "invisible", "Potion of Invisibility", 600, "", 0)
+		applyCondition(lobbyID, targetID, "invisible", "Potion of Invisibility", 600, "", 0)
 		return fmt.Sprintf("🧪 %s: Invisible for 1 hour; it ends early if %s makes an attack roll, deals damage or casts a spell.", label, who)
 	case "potion of poison":
 		dmg := game.RollDamage("4d6", false)
@@ -996,10 +996,10 @@ func usePotion(lobbyID, drinkerID, targetID int, it invItem) string {
 		if saved {
 			return out + fmt.Sprintf(" Constitution save %d vs DC 13: success.", total)
 		}
-		addMonsterCondition(lobbyID, targetID, "poisoned", "Potion of Poison", 600, "", 0)
+		applyCondition(lobbyID, targetID, "poisoned", "Potion of Poison", 600, "", 0)
 		return out + fmt.Sprintf(" Constitution save %d vs DC 13: failure, Poisoned for 1 hour.", total)
 	case "potion of vitality":
-		db.Exec(`UPDATE characters SET exhaustion_level = 0 WHERE id = $1`, targetID)
+		setExhaustionLevel(targetID, 0)
 		removeCondition(targetID, "poisoned")
 		addSpellEffect(lobbyID, targetID, targetID, "Potion of Vitality", "potion", "", 14400, "", 0)
 		return fmt.Sprintf("🧪 %s: every Exhaustion level is gone and the Poisoned condition ends; for 24 hours each Hit Point Die spent heals the most it can.", label)
@@ -1061,12 +1061,7 @@ func endItemEffect(kind string, targetID int, detail string) {
 
 // endPotionInvisibility: a Potion of Invisibility ends when its drinker attacks, deals damage or casts a spell.
 func endPotionInvisibility(charID int) string {
-	res, err := db.Exec(`DELETE FROM condition_records WHERE target_id = $1 AND condition = 'invisible' AND source = 'Potion of Invisibility'`, charID)
-	if err != nil {
-		return ""
-	}
-	if n, _ := res.RowsAffected(); n > 0 {
-		syncListFromRecords(charID)
+	if len(endCondition(0, charID, "invisible", "Potion of Invisibility")) > 0 {
 		return " (The Potion of Invisibility's effect ends.)"
 	}
 	return ""

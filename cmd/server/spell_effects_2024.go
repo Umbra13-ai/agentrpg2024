@@ -474,18 +474,11 @@ func resolveEffectSpell(charID int, spell SRDSpell, spellKey string, slotLevel, 
 			}
 			addSpellEffect(lobby, id, charID, spell.Name, "heroism", strconv.Itoa(mod), 10, "", 0)
 			freed := ""
-			if id > 0 {
-				for _, c := range getCharConditions(id) {
-					if strings.EqualFold(c, "frightened") {
-						removeCondition(id, c)
-						freed = " The Frightened condition ends."
-					}
-				}
-				grantTempHP(id, mod)
+			if len(endCondition(lobby, id, "frightened", "")) > 0 {
+				freed = " The Frightened condition ends."
 			}
-			db.Exec(`DELETE FROM condition_records WHERE lobby_id = $1 AND target_id = $2 AND condition = 'frightened'`, lobby, id)
 			if id > 0 {
-				syncListFromRecords(id)
+				grantTempHP(id, mod)
 			}
 			return fmt.Sprintf(" Heroism: %s is immune to the Frightened condition and gains %d Temporary Hit Points now and at the start of each of its turns while you keep Concentration.%s", name, mod, freed)
 		case "resistance":
@@ -592,11 +585,7 @@ func spellEffectsTurnStart(lobbyID, id int, name string) []string {
 		}
 		db.Exec(`UPDATE spell_effects SET rounds_left = 0 WHERE id = $1`, e.ID)
 		if e.Detail == "grovel" {
-			if id < 0 {
-				addMonsterCondition(lobbyID, id, "prone", "Command", 0, "", 0)
-			} else {
-				addCharacterCondition(id, "prone")
-			}
+			applyCondition(lobbyID, id, "prone", "Command", 0, "", 0)
 		}
 		log = append(log, fmt.Sprintf("%s obeys the Command \"%s\": it %s.", name, titleCase(e.Detail), commandText[e.Detail]))
 	}
@@ -680,9 +669,8 @@ func hasteEnds(lobbyID, id, endingNow int) {
 	}
 	db.Exec(`DELETE FROM spell_effects WHERE lobby_id = $1 AND target_id = $2 AND kind = 'lethargic'`, lobbyID, id)
 	db.Exec(`INSERT INTO spell_effects (lobby_id, target_id, caster_id, spell, kind, rounds_left) VALUES ($1,$2,$2,'Haste','lethargic',$3)`, lobbyID, id, pending)
-	addMonsterCondition(lobbyID, id, "incapacitated", "Haste ends", rounds, "", 0)
+	applyCondition(lobbyID, id, "incapacitated", "Haste ends", rounds, "", 0)
 	if id > 0 {
-		addCharacterCondition(id, "incapacitated")
 		db.Exec(`UPDATE characters SET movement_remaining = 0 WHERE id = $1`, id)
 	}
 	line := creatureName(lobbyID, id) + ": Haste ends; a wave of lethargy leaves it Incapacitated with a Speed of 0 until the end of its next turn."
@@ -730,15 +718,6 @@ func spellTurnStart(charID int) {
 			}
 		}
 	}
-}
-
-// heroismImmune: Heroism makes the creature immune to the Frightened condition.
-func heroismImmune(lobbyID, id int, cond string) bool {
-	if strings.EqualFold(cond, "frightened") && hasSpellEffect(lobbyID, id, "heroism") {
-		return true
-	}
-	immune, _ := auraImmune(lobbyID, id, cond) // Aura of Courage, Aura of Devotion
-	return immune
 }
 
 var resistanceUsed sync.Map // effect id -> the turn it was used ("round:index")
@@ -857,7 +836,7 @@ func monsterStandsUp(lobbyID, id int, name string) string {
 	if !prone || hasSpellEffect(lobbyID, id, "lethargic") {
 		return ""
 	}
-	db.Exec(`DELETE FROM condition_records WHERE lobby_id = $1 AND target_id = $2 AND condition = 'prone'`, lobbyID, id)
+	endCondition(lobbyID, id, "prone", "")
 	return name + " stands up from Prone (half its movement)."
 }
 
@@ -900,21 +879,7 @@ func passSpellTimeOn(lobbyID, rounds, onlyTarget int) []string {
 	wildShapeTickLobby(lobbyID, rounds)                                                // a form that runs out ends (posted to the feed)
 	db.Exec(`DELETE FROM spell_effects WHERE lobby_id = $1 AND kind IN ('commanded','lethargic')`, lobbyID)
 	db.Exec(`UPDATE spell_effects SET rounds_left = rounds_left - $2 WHERE lobby_id = $1 AND ($3 = 0 OR target_id = $3)`, lobbyID, rounds, onlyTarget)
-	// conditions with a duration run out too
-	if crow, err := db.Query(`DELETE FROM condition_records WHERE lobby_id = $1 AND duration_rounds > 0 AND duration_rounds <= $2 AND ($3 = 0 OR target_id = $3) RETURNING target_id`, lobbyID, rounds, onlyTarget); err == nil {
-		var touched []int
-		for crow.Next() {
-			var t int
-			if crow.Scan(&t) == nil && t > 0 {
-				touched = append(touched, t)
-			}
-		}
-		crow.Close()
-		for _, t := range touched {
-			syncListFromRecords(t)
-		}
-	}
-	db.Exec(`UPDATE condition_records SET duration_rounds = duration_rounds - $2 WHERE lobby_id = $1 AND duration_rounds > 0 AND ($3 = 0 OR target_id = $3)`, lobbyID, rounds, onlyTarget)
+	passConditionTime(lobbyID, rounds, onlyTarget) // conditions with a duration run out too (the condition owner)
 	rows, err := db.Query(`DELETE FROM spell_effects WHERE lobby_id = $1 AND rounds_left <= 0 RETURNING spell, caster_id, kind, target_id, detail`, lobbyID)
 	if err != nil {
 		return nil

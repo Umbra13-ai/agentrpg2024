@@ -89,7 +89,7 @@ func creatureConditions(lobbyID, id int) []string {
 	switch {
 	case id > 0:
 		refreshConcentrationConditions(id) // Invisibility whose caster lost Concentration
-		conds = append(getCharConditions(id), conditionNames(lobbyID, id)...)
+		conds = getCharConditions(id)      // the character's condition records, as its list (condition_owner_2024.go)
 		if charAtZeroHP(id) {
 			for _, c := range []string{"unconscious", "prone"} {
 				if !hasCond(conds, c) {

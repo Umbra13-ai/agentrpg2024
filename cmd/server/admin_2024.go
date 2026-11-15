@@ -469,7 +469,12 @@ func adminSet(table, kind string, id int, set map[string]interface{}, note strin
 			return nil, fmt.Errorf("%s %d not found", kind, id)
 		}
 		val, text := adminValueText(set[k])
-		if _, err := tx.Exec(fmt.Sprintf(`UPDATE %s SET %q = $1 WHERE id = $2`, table, k), val, id); err != nil {
+		if kind == "character" && conditionColumns[k] { // the condition owner writes them (condition_owner_2024.go)
+			if err := setConditionColumnIn(tx, id, k, set[k]); err != nil {
+				return nil, fmt.Errorf("%s: %v", k, err)
+			}
+			tx.QueryRow(fmt.Sprintf(`SELECT %q::text FROM %s WHERE id = $1`, k, table), id).Scan(&text)
+		} else if _, err := tx.Exec(fmt.Sprintf(`UPDATE %s SET %q = $1 WHERE id = $2`, table, k), val, id); err != nil {
 			return nil, fmt.Errorf("%s: %q doesn't fit this field (its type is %s)", k, text, cols[k])
 		}
 		oldText := "NULL"
@@ -488,12 +493,10 @@ func adminSet(table, kind string, id int, set map[string]interface{}, note strin
 	if err := tx.Commit(); err != nil {
 		return nil, err
 	}
-	// follow-ups: conditions live in two places (conditions_unified.go); a campaign's status depends on its players
+	// follow-up: a campaign's status depends on its players
 	if kind == "character" {
 		for _, k := range changed {
 			switch k {
-			case "conditions":
-				syncRecordsFromList(id)
 			case "lobby_id":
 				if n, err := strconv.Atoi(oldLobby); err == nil && n > 0 {
 					reconcileCampaignStatus(n)

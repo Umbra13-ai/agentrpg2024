@@ -198,23 +198,6 @@ func useWisdomFeature(charID int, key string, minLevel int, run func(wis, level 
 	return run(wis, level) + fmt.Sprintf(" (%d of %d uses left)", max-used[key], max)
 }
 
-func addCharacterCondition(charID int, cond string) {
-	if heroismImmune(lobbyOfChar(charID), charID, cond) {
-		return
-	}
-	conds := getCharConditions(charID)
-	for _, c := range conds {
-		if c == cond {
-			return
-		}
-	}
-	conds = append(conds, cond)
-	b, _ := json.Marshal(conds)
-	db.Exec(`UPDATE characters SET conditions = $1 WHERE id = $2`, string(b), charID)
-	syncRecordsFromList(charID)
-	endWildShapeIfDown(charID) // an Incapacitating condition ends Wild Shape
-}
-
 // classSpeedBonus is the Speed a class feature adds: Barbarian Fast Movement (level 5) and Ranger Roving (level 6) when not wearing
 // Heavy armor, Monk Unarmored Movement (the Features table) when wearing no armor and no Shield.
 func classSpeedBonus(charID int) int {

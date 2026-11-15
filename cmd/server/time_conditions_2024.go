@@ -45,7 +45,6 @@ func repeatSavesOverTime(lobbyID, rounds, onlyTarget int) []string {
 	}
 	rows.Close()
 	var out []string
-	touched := map[int]bool{}
 	for _, x := range list {
 		tries := rounds
 		if x.dur > 0 && x.dur < tries {
@@ -55,8 +54,7 @@ func repeatSavesOverTime(lobbyID, rounds, onlyTarget int) []string {
 			// the one saving throw function (save_2024.go): before this, Advantage on the save was never counted here
 			sv := (&saveCtx{lobby: lobbyID, saver: x.target, ability: x.save.Ability, dc: x.save.DC, against: []string{x.cond}}).roll()
 			if sv.Success {
-				db.Exec(`DELETE FROM condition_records WHERE id = $1`, x.id)
-				touched[x.target] = true
+				deleteConditionRecord(lobbyID, x.target, x.id) // the condition owner
 				src := ""
 				if x.source != "" {
 					src = " (" + x.source + ")"
@@ -65,9 +63,6 @@ func repeatSavesOverTime(lobbyID, rounds, onlyTarget int) []string {
 				break
 			}
 		}
-	}
-	for t := range touched {
-		syncListFromRecords(t)
 	}
 	return out
 }

@@ -139,7 +139,7 @@ func dragonOrb(charID int, it invItem, description string) string {
 		})
 		return fmt.Sprintf("You peer into the orb's swirling mist (a Magic action): Charisma save %d vs DC 15, success. You control the Dragon Orb while you stay attuned: its spells (cast with \"item\": \"Dragon Orb\") and its call are yours.", total)
 	}
-	addMonsterCondition(lobby, charID, "charmed", "Dragon Orb", 0, "", 0)
+	applyCondition(lobby, charID, "charmed", "Dragon Orb", 0, "", 0)
 	return fmt.Sprintf("You peer into the orb's swirling mist (a Magic action): Charisma save %d vs DC 15, failure. The orb Charms you for as long as you stay attuned to it: you can't end the attunement, and it casts Suggestion on you at will (DC 18), urging its own ends. The GM plays the dragon's will.", total)
 }
 

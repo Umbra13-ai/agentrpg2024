@@ -123,32 +123,15 @@ func shieldReaction(charID int) string {
 // pruneConcentrationConditions drops the conditions a Concentration spell gave (Hold Monster's Paralyzed) once its caster no longer
 // concentrates on it (F56: they stayed until a save or the duration ended them).
 func pruneConcentrationConditions(lobbyID, targetID int) {
-	if db == nil {
-		return
+	where, args := `target_id = $1 AND notes = 'concentration' AND COALESCE(created_by,0) > 0`, []interface{}{targetID}
+	if targetID < 0 {
+		where, args = where+` AND lobby_id = $2`, append(args, lobbyID)
 	}
-	rows, err := db.Query(`SELECT id, created_by, source FROM condition_records WHERE lobby_id = $1 AND target_id = $2 AND notes = 'concentration' AND COALESCE(created_by,0) > 0`, lobbyID, targetID)
-	if err != nil {
-		return
-	}
-	type rec struct {
-		id, caster int
-		source     string
-	}
-	var drop []rec
-	for rows.Next() {
-		var r rec
-		if rows.Scan(&r.id, &r.caster, &r.source) == nil && !concentrationHolds(r.caster, r.source) {
+	var drop []conditionRecord
+	for _, r := range findConditionRecords(where, args...) {
+		if !concentrationHolds(r.CreatedBy, r.Source) {
 			drop = append(drop, r)
 		}
 	}
-	rows.Close()
-	for _, r := range drop {
-		db.Exec(`DELETE FROM condition_records WHERE id = $1`, r.id)
-	}
-	if len(drop) > 0 && targetID > 0 {
-		syncListFromRecords(targetID) // a character's list follows its records (Invisibility from a spell that ended)
-	}
-	if len(drop) > 0 && targetID > 0 {
-		syncListFromRecords(targetID)
-	}
+	endConditionRecords(drop) // the condition owner
 }

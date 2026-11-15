@@ -6742,107 +6742,6 @@
     }
    }
   },
-  "/api/characters/{id}/conditions": {
-   "post": {
-    "tags": [
-     "Combat"
-    ],
-    "summary": "Add a condition to a character (GM only)",
-    "description": "Apply a condition like frightened, poisoned, prone, etc.",
-    "responses": {
-     "200": {
-      "description": "OK"
-     }
-    },
-    "parameters": [
-     {
-      "name": "id",
-      "in": "path",
-      "required": true,
-      "description": "Character ID",
-      "schema": {
-       "type": "integer"
-      }
-     }
-    ],
-    "requestBody": {
-     "required": true,
-     "content": {
-      "application/json": {
-       "schema": {
-        "type": "object",
-        "properties": {
-         "condition": {
-          "type": "string"
-         }
-        },
-        "description": "Condition to add"
-       }
-      }
-     }
-    }
-   },
-   "delete": {
-    "tags": [
-     "GM"
-    ],
-    "summary": "Apply or remove a condition on a character (GM)",
-    "description": "The same request as POST and DELETE /api/gm/conditions, with the character taken from the path (leave target_id out). Only the GM of the character's campaign; a player ends a condition with POST /api/conditions/escape.",
-    "responses": {
-     "200": {
-      "description": "OK"
-     }
-    },
-    "parameters": [
-     {
-      "name": "id",
-      "in": "path",
-      "required": true,
-      "description": "Character ID",
-      "schema": {
-       "type": "integer"
-      }
-     }
-    ],
-    "requestBody": {
-     "required": false,
-     "content": {
-      "application/json": {
-       "schema": {
-        "type": "object",
-        "properties": {
-         "condition": {
-          "type": "string"
-         },
-         "record_id": {
-          "type": "integer"
-         },
-         "all": {
-          "type": "boolean"
-         },
-         "source": {
-          "type": "string"
-         },
-         "notes": {
-          "type": "string"
-         },
-         "escape_dc": {
-          "type": "integer"
-         },
-         "duration_rounds": {
-          "type": "integer"
-         },
-         "level": {
-          "type": "integer"
-         }
-        },
-        "description": "As POST /api/gm/conditions (apply) or DELETE /api/gm/conditions (remove: record_id, condition, or all)"
-       }
-      }
-     }
-    }
-   }
-  },
   "/api/characters/{id}/short-rest": {
    "get": {
     "tags": [
@@ -7116,6 +7015,128 @@
          }
         },
         "description": "Pet or change (POST)"
+       }
+      }
+     }
+    }
+   }
+  },
+  "/api/characters/{id}/conditions": {
+   "post": {
+    "tags": [
+     "GM"
+    ],
+    "summary": "Apply or remove a condition on a character (GM)",
+    "description": "The same request as POST and DELETE /api/gm/conditions, with the character taken from the path (leave target_id out). Only the GM of the character's campaign; a player ends a condition with POST /api/conditions/escape.",
+    "responses": {
+     "200": {
+      "description": "OK"
+     }
+    },
+    "parameters": [
+     {
+      "name": "id",
+      "in": "path",
+      "required": true,
+      "description": "Character ID",
+      "schema": {
+       "type": "integer"
+      }
+     }
+    ],
+    "requestBody": {
+     "required": true,
+     "content": {
+      "application/json": {
+       "schema": {
+        "type": "object",
+        "properties": {
+         "condition": {
+          "type": "string"
+         },
+         "record_id": {
+          "type": "integer"
+         },
+         "all": {
+          "type": "boolean"
+         },
+         "source": {
+          "type": "string"
+         },
+         "notes": {
+          "type": "string"
+         },
+         "escape_dc": {
+          "type": "integer"
+         },
+         "duration_rounds": {
+          "type": "integer"
+         },
+         "level": {
+          "type": "integer"
+         }
+        },
+        "description": "As POST /api/gm/conditions (apply) or DELETE /api/gm/conditions (remove: record_id, condition, or all)"
+       }
+      }
+     }
+    }
+   },
+   "delete": {
+    "tags": [
+     "GM"
+    ],
+    "summary": "Apply or remove a condition on a character (GM)",
+    "description": "The same request as POST and DELETE /api/gm/conditions, with the character taken from the path (leave target_id out). Only the GM of the character's campaign; a player ends a condition with POST /api/conditions/escape.",
+    "responses": {
+     "200": {
+      "description": "OK"
+     }
+    },
+    "parameters": [
+     {
+      "name": "id",
+      "in": "path",
+      "required": true,
+      "description": "Character ID",
+      "schema": {
+       "type": "integer"
+      }
+     }
+    ],
+    "requestBody": {
+     "required": false,
+     "content": {
+      "application/json": {
+       "schema": {
+        "type": "object",
+        "properties": {
+         "condition": {
+          "type": "string"
+         },
+         "record_id": {
+          "type": "integer"
+         },
+         "all": {
+          "type": "boolean"
+         },
+         "source": {
+          "type": "string"
+         },
+         "notes": {
+          "type": "string"
+         },
+         "escape_dc": {
+          "type": "integer"
+         },
+         "duration_rounds": {
+          "type": "integer"
+         },
+         "level": {
+          "type": "integer"
+         }
+        },
+        "description": "As POST /api/gm/conditions (apply) or DELETE /api/gm/conditions (remove: record_id, condition, or all)"
        }
       }
      }

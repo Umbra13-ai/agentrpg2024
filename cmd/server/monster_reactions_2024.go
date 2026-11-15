@@ -137,7 +137,7 @@ func resolveMonsterReaction(r *http.Request, lobbyID, id int, meta *monsterMeta,
 		if strings.Contains(low, "teleports") {
 			out += " It teleports up to 60 feet (move its token on the battle map)."
 			for _, t := range targetIDs {
-				addMonsterCondition(lobbyID, t, "blinded", base, 2, "", 0)
+				applyCondition(lobbyID, t, "blinded", base, 2, "", 0)
 				out += fmt.Sprintf(" %s is Blinded until the end of %s's next turn.", creatureName(lobbyID, t), name)
 			}
 			if len(targetIDs) == 0 {

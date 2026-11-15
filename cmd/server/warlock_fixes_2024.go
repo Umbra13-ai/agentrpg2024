@@ -78,7 +78,7 @@ func beadOfForce(charID int, it invItem, req itemCastReq) string {
 		} else {
 			res = damageCharacter(id, dmg, "force")
 		}
-		addMonsterCondition(lobby, id, "restrained", "Bead of Force: trapped in a sphere of force", 10, "", 0)
+		applyCondition(lobby, id, "restrained", "Bead of Force: trapped in a sphere of force", 10, "", 0)
 		lines = append(lines, fmt.Sprintf("%s fails: %s, and is trapped in the sphere of force for 1 minute.", creatureName(lobby, id), strings.TrimSpace(res)))
 	}
 	editInventory(charID, func(inv []invItem) []invItem {
@@ -117,7 +117,7 @@ func dustOfSneezing(charID int, it invItem, req itemCastReq) string {
 			lines = append(lines, creatureName(lobby, id)+" saves.")
 			continue
 		}
-		addMonsterCondition(lobby, id, "incapacitated", "Dust of Sneezing and Choking (suffocating)", 10, "con", 15)
+		applyCondition(lobby, id, "incapacitated", "Dust of Sneezing and Choking (suffocating)", 10, "con", 15)
 		lines = append(lines, creatureName(lobby, id)+" fails: Incapacitated and suffocating (a DC 15 Con save at the end of each of its turns ends it).")
 	}
 	editInventory(charID, func(inv []invItem) []invItem {

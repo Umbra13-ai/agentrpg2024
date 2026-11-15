@@ -75,7 +75,7 @@ func maceOfDisruptionHit(lobbyID, charID, targetID int, monsterKey, name string,
 	left := hpAfter - d
 	if left > 0 && left <= 25 {
 		if saved, total := monsterSave(lobbyID, targetID, "wis", 15); saved {
-			addMonsterCondition(lobbyID, targetID, "frightened", "Mace of Disruption", 2, "", 0)
+			applyCondition(lobbyID, targetID, "frightened", "Mace of Disruption", 2, "", 0)
 			text += fmt.Sprintf("; at %d Hit Points it makes the DC 15 Wisdom save (%d) and is Frightened until the end of your next turn", left, total)
 		} else {
 			text += fmt.Sprintf("; at %d Hit Points it fails the DC 15 Wisdom save (%d) and is destroyed", left, total)
@@ -199,21 +199,21 @@ func divineWord(charID, lobby int, saveDC int, targets []int) string {
 			}
 		case hp <= 30:
 			for _, c := range []string{"blinded", "deafened", "stunned"} {
-				addMonsterCondition(lobby, id, c, "Divine Word", 600, "", 0)
+				applyCondition(lobby, id, c, "Divine Word", 600, "", 0)
 			}
 			effect = "has the Blinded, Deafened and Stunned conditions for 1 hour"
 		case hp <= 40:
 			for _, c := range []string{"blinded", "deafened"} {
-				addMonsterCondition(lobby, id, c, "Divine Word", 100, "", 0)
+				applyCondition(lobby, id, c, "Divine Word", 100, "", 0)
 			}
 			effect = "has the Blinded and Deafened conditions for 10 minutes"
 		case hp <= 50:
-			addMonsterCondition(lobby, id, "deafened", "Divine Word", 10, "", 0)
+			applyCondition(lobby, id, "deafened", "Divine Word", 10, "", 0)
 			effect = "has the Deafened condition for 1 minute"
 		}
 		line := fmt.Sprintf("%s fails the Charisma save (%d vs DC %d) and %s", name, total, saveDC, effect)
 		if id < 0 && planarTypes[monsterBaseType(lobby, id)] && hp > 20 {
-			addMonsterCondition(lobby, id, "banished", "Divine Word", 14400, "", 0)
+			applyCondition(lobby, id, "banished", "Divine Word", 14400, "", 0)
 			line += "; as a " + titleCase(monsterBaseType(lobby, id)) + " it is forced back to its plane of origin for 24 hours (the GM removes it from the fight)"
 		}
 		lines = append(lines, line)
@@ -271,8 +271,7 @@ func reviveSpell(charID, lobby int, key string, spell SRDSpell, targets []int) s
 			}
 			continue
 		}
-		db.Exec(`DELETE FROM condition_records WHERE target_id = $1 AND condition IN ('unconscious','poisoned')`, id)
-		syncListFromRecords(id)
+		removeConditionsWhere(0, id, func(r conditionRecord) bool { return r.Condition == "unconscious" || r.Condition == "poisoned" })
 		line := fmt.Sprintf("%s returns to life with %d Hit Point%s (dead %s: the GM confirms)", name, hp, map[bool]string{true: "", false: "s"}[hp == 1], r.Limit)
 		if r.Penalty {
 			addSpellEffect(lobby, id, charID, spell.Name, "revival_penalty", "4", 999999, "", 0)
@@ -334,9 +333,7 @@ func greaterRestoration(charID, lobby int, description string, targets []int) st
 		if !has(pick) {
 			return fmt.Sprintf(" Greater Restoration: %s doesn't have the %s condition.", name, titleCase(pick))
 		}
-		removeCondition(id, pick)
-		db.Exec(`DELETE FROM condition_records WHERE target_id = $1 AND condition = $2`, id, pick)
-		syncListFromRecords(id)
+		endCondition(0, id, pick, "")
 		return fmt.Sprintf(" Greater Restoration: the %s condition on %s ends.", titleCase(pick), name)
 	}
 	return " Greater Restoration: " + name + " has none of the effects the spell removes (Exhaustion, Charmed, Petrified; name a curse or a reduction for the GM)."

@@ -82,35 +82,6 @@ func sneakDiceWithCunning(charID, level int, descLower string) (string, string) 
 	return fmt.Sprintf("%dd6", dice-cost), " [Cunning Strike: " + strings.Join(names, ", ") + "]"
 }
 
-// addMonsterCondition records a condition on a monster in the current combat (as a GM-applied condition would be).
-func addMonsterCondition(lobbyID, targetID int, cond, source string, rounds int, saveAbility string, dc int) {
-	if targetID > 0 {
-		defer endWildShapeIfDown(targetID) // an Incapacitating condition ends a druid's Wild Shape (wild_shape_2024.go)
-	}
-	if targetID > 0 {
-		if imm, _ := buffConditionImmune(lobbyID, targetID, cond, 0, false); imm {
-			return // a spell's Immunity on the character (Mind Blank, Heroes' Feast, Gaseous Form ...; F80)
-		}
-	}
-	if heroismImmune(lobbyID, targetID, cond) || (targetID < 0 && monsterConditionImmune(lobbyID, targetID, cond)) {
-		return // Heroism, or the monster's own condition immunities (its stat block)
-	}
-	for _, c := range conditionNames(lobbyID, targetID) {
-		if c == cond {
-			return // already has it
-		}
-	}
-	var end interface{}
-	if saveAbility != "" {
-		end = endSaveJSON(&conditionSave{Ability: saveAbility, DC: dc})
-	}
-	db.Exec(`INSERT INTO condition_records (lobby_id, target_id, condition, source, escapes, duration_rounds, end_save, notes)
-		VALUES ($1,$2,$3,$4,'[]',$5,$6,'')`, lobbyID, targetID, cond, source, rounds, end)
-	if targetID > 0 {
-		syncListFromRecords(targetID)
-	}
-}
-
 // monsterSave rolls a monster's saving throw against a DC (creatureSave): a failure against an effect with a condition can be
 // turned into a success by Legendary Resistance.
 func monsterSave(lobbyID, targetID int, ability string, dc int) (bool, int) {
@@ -151,10 +122,10 @@ func applyCunningStrike(lobbyID, charID, targetID int, name, monsterKey string) 
 			}
 			switch e.Key {
 			case "poison":
-				addMonsterCondition(lobbyID, targetID, "poisoned", "Cunning Strike: Poison", 10, "con", plan.DC)
+				applyCondition(lobbyID, targetID, "poisoned", "Cunning Strike: Poison", 10, "con", plan.DC)
 			case "trip":
 				if sizeAtMost(monsterKey, "large") {
-					addMonsterCondition(lobbyID, targetID, "prone", "Cunning Strike: Trip", 0, "", 0)
+					applyCondition(lobbyID, targetID, "prone", "Cunning Strike: Trip", 0, "", 0)
 				} else {
 					out += fmt.Sprintf(" Cunning Strike Trip: %s is too big to be tripped.", name)
 					continue
@@ -162,9 +133,9 @@ func applyCunningStrike(lobbyID, charID, targetID int, name, monsterKey string) 
 			case "daze":
 				addCombatEffect(lobbyID, targetID, charID, "dazed")
 			case "knock out":
-				addMonsterCondition(lobbyID, targetID, "unconscious", "Cunning Strike: Knock Out", 10, "con", plan.DC)
+				applyCondition(lobbyID, targetID, "unconscious", "Cunning Strike: Knock Out", 10, "con", plan.DC)
 			case "obscure":
-				addMonsterCondition(lobbyID, targetID, "blinded", "Cunning Strike: Obscure", 1, "", 0)
+				applyCondition(lobbyID, targetID, "blinded", "Cunning Strike: Obscure", 1, "", 0)
 			}
 			out += fmt.Sprintf(" Cunning Strike %s: %s fails its %s save (%d vs DC %d)%s.", e.Name, name, strings.ToUpper(e.Save), total, plan.DC, cunningResult[e.Key])
 		}

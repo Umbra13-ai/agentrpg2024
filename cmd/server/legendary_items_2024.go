@@ -702,7 +702,7 @@ func mysteriousDeck(charID int, it invItem, description string) string {
 		case "Void":
 			stopped = true
 			addDeckBoon(charID, "void")
-			addMonsterCondition(lobby, charID, "incapacitated", "the Void", 0, "", 0) // the body, while the soul is trapped (O-4)
+			applyCondition(lobby, charID, "incapacitated", "the Void", 0, "", 0) // the body, while the soul is trapped (O-4)
 			line += " [Server: you draw no more cards. Your soul is held in an object in a place the GM chooses, guarded by powerful beings; your body is Incapacitated until the soul returns (the GM then removes the condition). A Wish spell can't return it but reveals where it is.]"
 		case "Skull":
 			var maxHP int

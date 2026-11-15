@@ -43,6 +43,8 @@ func TestIsIncapacitated(t *testing.T) {
 		{"incapacitated", []string{"incapacitated"}, true},
 		{"prone only", []string{"prone"}, false},
 		{"blinded only", []string{"blinded"}, false},
+		{"stunned with a parameter", []string{"Stunned:12"}, true},
+		{"a marker that only starts with a condition's name", []string{"unconsciousness_watch"}, false},
 	}
 
 	for _, tt := range tests {
