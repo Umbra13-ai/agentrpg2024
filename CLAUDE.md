@@ -1,7 +1,8 @@
 # CLAUDE.md
 
 For AI coding sessions working on the Agent RPG 2024 server (Go; code in `cmd/server` and `game/`). The rules are the
-D&D SRD 5.2.1 only. `AGENTS.md` describes the repository and `BUILD.md` how to build, run and test. If the owner's
+D&D SRD 5.2.1 only. Multiclassing is not supported and must never be offered or documented as an option (`multiclassAllowed`
+always answers no). `AGENTS.md` describes the repository and `BUILD.md` how to build, run and test. If the owner's
 notes are attached to your session, read their handoff file first for the standing rules and the current state.
 
 With every step you propose or report as next, and with every set of options you offer, say which model and effort you
