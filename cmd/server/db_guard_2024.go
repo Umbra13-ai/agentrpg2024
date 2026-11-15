@@ -26,10 +26,12 @@ import (
 	"errors"
 	"log"
 	"net/http"
+	"net/url"
 	"runtime"
 	"strconv"
 	"strings"
 	"sync"
+	"time"
 
 	"github.com/lib/pq"
 )
@@ -173,12 +175,92 @@ func (c checkedDriver) Open(name string) (driver.Conn, error) {
 		noteDBError(err, "connect")
 		return nil, err
 	}
-	return &checkedConn{conn}, nil
+	return &checkedConn{c: conn}, nil
 }
 
-type checkedConn struct{ c driver.Conn }
+type checkedConn struct {
+	c     driver.Conn
+	txGo  uint64 // the goroutine whose transaction is open on this connection (0: none)
+	began string // where that transaction was begun
+}
+
+// ---------------------------------------------------------------- a query outside its own transaction
+//
+// While a request's transaction is open, the request must read and write through it. A query through db instead runs on a
+// second connection, which waits behind any lock the transaction holds or is queued behind: that froze the whole server once
+// (audit AUD-02). The driver notes which goroutine opened each transaction and logs "query outside its transaction" when that
+// goroutine sends a statement on another connection meanwhile. The check costs nothing while no transaction is open.
+var (
+	txMu      sync.Mutex
+	txOfGo    = map[uint64]*checkedConn{} // goroutine -> the connection its open transaction is on
+	openTxs   int
+	txOutside = func(q, began, from string) {
+		log.Printf("query outside its transaction: %s (from %s, in a transaction begun in %s)", strings.Join(strings.Fields(q), " "), from, began)
+	}
+)
+
+// serverCaller: the first function of this server on the calling stack (not database/sql, not the driver wrapper).
+func serverCaller() string {
+	pcs := make([]uintptr, 24)
+	n := runtime.Callers(3, pcs)
+	frames := runtime.CallersFrames(pcs[:n])
+	for {
+		fr, more := frames.Next()
+		name := fr.Function
+		for _, p := range []string{"main.", "github.com/agentrpg/agentrpg/cmd/server."} { // the server, or its test build
+			if strings.HasPrefix(name, p) && !strings.Contains(name, "checked") && !strings.Contains(name, "serverCaller") {
+				return strings.TrimPrefix(name, p)
+			}
+		}
+		if !more {
+			return "?"
+		}
+	}
+}
+
+func (c *checkedConn) txBegan() {
+	id := goroutineID()
+	txMu.Lock()
+	if old := txOfGo[id]; old != nil && old != c {
+		old.txGo = 0
+	} else if old == nil {
+		openTxs++
+	}
+	txOfGo[id] = c
+	c.txGo = id
+	c.began = serverCaller()
+	txMu.Unlock()
+}
+
+func (c *checkedConn) txEnded() {
+	txMu.Lock()
+	if c.txGo != 0 && txOfGo[c.txGo] == c {
+		delete(txOfGo, c.txGo)
+		openTxs--
+	}
+	c.txGo = 0
+	txMu.Unlock()
+}
+
+// checkOutside: a statement on c from a goroutine whose open transaction is on another connection is logged.
+func (c *checkedConn) checkOutside(q string) {
+	txMu.Lock()
+	n := openTxs
+	txMu.Unlock()
+	if n == 0 {
+		return
+	}
+	id := goroutineID()
+	txMu.Lock()
+	other := txOfGo[id]
+	txMu.Unlock()
+	if other != nil && other != c {
+		txOutside(q, other.began, serverCaller())
+	}
+}
 
 func (c *checkedConn) Prepare(q string) (driver.Stmt, error) {
+	c.checkOutside(q)
 	s, err := c.c.Prepare(q)
 	noteDBError(err, q)
 	if err != nil {
@@ -188,6 +270,7 @@ func (c *checkedConn) Prepare(q string) (driver.Stmt, error) {
 }
 
 func (c *checkedConn) PrepareContext(ctx context.Context, q string) (driver.Stmt, error) {
+	c.checkOutside(q)
 	var s driver.Stmt
 	var err error
 	if p, ok := c.c.(driver.ConnPrepareContext); ok {
@@ -205,12 +288,14 @@ func (c *checkedConn) PrepareContext(ctx context.Context, q string) (driver.Stmt
 func (c *checkedConn) Close() error { return c.c.Close() }
 
 func (c *checkedConn) Begin() (driver.Tx, error) { //nolint:staticcheck // driver.Conn requires it
+	c.checkOutside("BEGIN")
 	t, err := c.c.Begin() //nolint:staticcheck
 	noteDBError(err, "BEGIN")
 	if err != nil {
 		return nil, err
 	}
-	return checkedTx{t}, nil
+	c.txBegan()
+	return checkedTx{t, c}, nil
 }
 
 func (c *checkedConn) BeginTx(ctx context.Context, opts driver.TxOptions) (driver.Tx, error) {
@@ -225,7 +310,8 @@ func (c *checkedConn) BeginTx(ctx context.Context, opts driver.TxOptions) (drive
 	if err != nil {
 		return nil, err
 	}
-	return checkedTx{t}, nil
+	c.txBegan()
+	return checkedTx{t, c}, nil
 }
 
 func (c *checkedConn) ExecContext(ctx context.Context, q string, args []driver.NamedValue) (driver.Result, error) {
@@ -233,6 +319,7 @@ func (c *checkedConn) ExecContext(ctx context.Context, q string, args []driver.N
 	if !ok {
 		return nil, driver.ErrSkip
 	}
+	c.checkOutside(q)
 	res, err := e.ExecContext(ctx, q, args)
 	noteDBError(err, q)
 	return res, err
@@ -243,6 +330,7 @@ func (c *checkedConn) QueryContext(ctx context.Context, q string, args []driver.
 	if !ok {
 		return nil, driver.ErrSkip
 	}
+	c.checkOutside(q)
 	rows, err := qc.QueryContext(ctx, q, args)
 	noteDBError(err, q)
 	return rows, err
@@ -339,12 +427,84 @@ func namedToValues(args []driver.NamedValue) []driver.Value {
 	return out
 }
 
-type checkedTx struct{ t driver.Tx }
+type checkedTx struct {
+	t driver.Tx
+	c *checkedConn
+}
 
 func (t checkedTx) Commit() error {
+	defer t.c.txEnded()
 	err := t.t.Commit()
 	noteDBError(err, "COMMIT")
 	return err
 }
 
-func (t checkedTx) Rollback() error { return t.t.Rollback() }
+func (t checkedTx) Rollback() error {
+	defer t.c.txEnded()
+	return t.t.Rollback()
+}
+
+// ---------------------------------------------------------------- the connection's settings and the pool
+//
+// dbSessionSettings: what every connection to Postgres is opened with (lib/pq sends URL parameters it doesn't know as session
+// settings), unless DATABASE_URL already sets one:
+//   - timezone UTC: times are stored in UTC (time_zones.go shows them in a campaign's zone);
+//   - statement_timeout: no statement runs longer than this;
+//   - lock_timeout: no statement waits longer than this for a lock (a wait behind a stuck transaction fails instead of
+//     stopping every request behind it: audit AUD-02);
+//   - idle_in_transaction_session_timeout: a transaction left open without a statement for this long is ended by Postgres,
+//     which frees its locks and its connection.
+var dbSessionSettings = []struct{ key, value string }{
+	{"timezone", "UTC"},
+	{"statement_timeout", "30000"},                   // ms
+	{"lock_timeout", "10000"},                        // ms
+	{"idle_in_transaction_session_timeout", "60000"}, // ms
+}
+
+// Pool limits: at most dbMaxOpen connections from this process (Postgres allows about 100 on the plans in use, shared with
+// the admin's tools and a second instance during a deploy), idle ones kept a few minutes, every connection renewed after a
+// while.
+const (
+	dbMaxOpen         = 40
+	dbMaxIdle         = 10
+	dbConnMaxIdle     = 5 * time.Minute
+	dbConnMaxLifetime = 30 * time.Minute
+)
+
+// withDBSettings adds dbSessionSettings to a Postgres URL or key=value connection string, keeping any it already sets.
+func withDBSettings(dbURL string) string {
+	low := strings.ToLower(dbURL)
+	if strings.HasPrefix(low, "postgres://") || strings.HasPrefix(low, "postgresql://") {
+		u, err := url.Parse(dbURL)
+		if err != nil {
+			return dbURL
+		}
+		q := u.Query()
+		for _, st := range dbSessionSettings {
+			if q.Get(st.key) == "" {
+				q.Set(st.key, st.value)
+			}
+		}
+		u.RawQuery = q.Encode()
+		return u.String()
+	}
+	for _, st := range dbSessionSettings { // key=value form
+		if !strings.Contains(low, st.key+"=") {
+			dbURL += " " + st.key + "=" + st.value
+		}
+	}
+	return dbURL
+}
+
+// openDB opens Postgres through the checked driver with the session settings and the pool limits.
+func openDB(dbURL string) (*sql.DB, error) {
+	d, err := sql.Open("postgres-checked", withDBSettings(dbURL))
+	if err != nil {
+		return nil, err
+	}
+	d.SetMaxOpenConns(dbMaxOpen)
+	d.SetMaxIdleConns(dbMaxIdle)
+	d.SetConnMaxIdleTime(dbConnMaxIdle)
+	d.SetConnMaxLifetime(dbConnMaxLifetime)
+	return d, nil
+}

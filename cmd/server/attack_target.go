@@ -13,6 +13,7 @@ package main
 import (
 	"encoding/json"
 	"fmt"
+	"reflect"
 	"sort"
 	"strings"
 	"sync"
@@ -190,14 +191,14 @@ func adjustMonsterDamage(monsterKey, damageType string, dmg int) (int, string) {
 
 // resolveAttackOnMonster compares the attack with the target's AC, applies the damage and
 // returns the text a player may see and a small structured summary.
+//
+// The hit is worked out from the fight as it is (no lock held while the many rules below read and write), then saveMonsterHit
+// applies only this hit's own changes under a short lock: the Hit Points it took (from the monster's Hit Points as they are by
+// then, so two attacks at once both count) and any field the rules changed on the target. Before Nov 15 2026 a transaction
+// held the fight's row for the whole hit while helpers read and wrote through other connections (audit AUD-02, B-19).
 func resolveAttackOnMonster(lobbyID, charID, targetID int, o attackOutcome, cleaveTarget ...int) (string, map[string]interface{}, error) {
-	tx, err := db.Begin()
-	if err != nil {
-		return "", nil, err
-	}
-	defer tx.Rollback()
 	var raw []byte
-	if err := tx.QueryRow(`SELECT turn_order FROM combat_state WHERE lobby_id = $1 AND active = true FOR UPDATE`, lobbyID).Scan(&raw); err != nil {
+	if err := db.QueryRow(`SELECT turn_order FROM combat_state WHERE lobby_id = $1 AND active = true`, lobbyID).Scan(&raw); err != nil {
 		return "", nil, err
 	}
 	var entries []map[string]interface{}
@@ -214,6 +215,7 @@ func resolveAttackOnMonster(lobbyID, charID, targetID int, o attackOutcome, clea
 		return "", nil, fmt.Errorf("target_not_found")
 	}
 	t := entries[idx]
+	t0 := copyEntry(t) // the target as read: saveMonsterHit writes only what this hit changed
 	name := fmt.Sprint(t["name"])
 	hp, maxHP := asInt(t["hp"]), asInt(t["max_hp"])
 	hpStart := hp // for a monster's Reaction to this hit (Parry, Shield, Deflect Missile: monster_reactions_2024.go)
@@ -305,14 +307,11 @@ func resolveAttackOnMonster(lobbyID, charID, targetID int, o attackOutcome, clea
 					hp = 0
 				}
 				t["hp"] = hp
-				entries[idx] = t
-				b, _ := json.Marshal(entries)
-				if _, err := tx.Exec(`UPDATE combat_state SET turn_order = $1 WHERE lobby_id = $2`, b, lobbyID); err != nil {
+				saved, err := saveMonsterHit(lobbyID, targetID, t0, t, hpStart-hp)
+				if err != nil {
 					return "", nil, err
 				}
-				if err := tx.Commit(); err != nil {
-					return "", nil, err
-				}
+				hp = saved
 				text += fmt.Sprintf(" Graze: %s still takes %d %s damage%s.", name, gd, o.DamageType, map[string]string{"resistant": " (it resists)", "vulnerable": " (it is vulnerable)"}[gh]) + grazeNote
 				info["graze_damage"] = gd
 				if hp == 0 {
@@ -440,14 +439,11 @@ func resolveAttackOnMonster(lobbyID, charID, targetID int, o attackOutcome, clea
 		hp = 0
 	}
 	t["hp"] = hp
-	entries[idx] = t
-	b, _ := json.Marshal(entries)
-	if _, err := tx.Exec(`UPDATE combat_state SET turn_order = $1 WHERE lobby_id = $2`, b, lobbyID); err != nil {
+	saved, err := saveMonsterHit(lobbyID, targetID, t0, t, hpStart-hp)
+	if err != nil {
 		return "", nil, err
 	}
-	if err := tx.Commit(); err != nil {
-		return "", nil, err
-	}
+	hp = saved
 	status := healthWord(hp, maxHP)
 	label := "HIT!"
 	if o.Crit {
@@ -554,4 +550,64 @@ func wantsKnockOut(description string) bool {
 		}
 	}
 	return false
+}
+
+// copyEntry: a copy of a turn-order entry (its values are JSON values).
+func copyEntry(e map[string]interface{}) map[string]interface{} {
+	b, _ := json.Marshal(e)
+	var c map[string]interface{}
+	json.Unmarshal(b, &c)
+	return c
+}
+
+// saveMonsterHit writes one hit on a monster, in a short transaction that locks the fight: the monster's Hit Points as they are
+// now, less lost (never below 0), and every other field of the entry that the hit changed (before -> after). It returns the
+// monster's Hit Points after the hit.
+func saveMonsterHit(lobbyID, targetID int, before, after map[string]interface{}, lost int) (int, error) {
+	tx, err := db.Begin()
+	if err != nil {
+		return 0, err
+	}
+	defer tx.Rollback()
+	var raw []byte
+	if err := tx.QueryRow(`SELECT turn_order FROM combat_state WHERE lobby_id = $1 AND active = true FOR UPDATE`, lobbyID).Scan(&raw); err != nil {
+		return 0, err
+	}
+	var entries []map[string]interface{}
+	if err := json.Unmarshal(raw, &entries); err != nil {
+		return 0, err
+	}
+	for i, e := range entries {
+		if asInt(e["id"]) != targetID {
+			continue
+		}
+		for k, v := range after {
+			if k == "hp" {
+				continue
+			}
+			if old, had := before[k]; !had || !reflect.DeepEqual(old, v) {
+				e[k] = v
+			}
+		}
+		for k := range before {
+			if _, still := after[k]; !still && k != "hp" {
+				delete(e, k)
+			}
+		}
+		hp := asInt(e["hp"]) - lost
+		if _, changed := after["max_hp"]; changed && asInt(after["max_hp"]) != asInt(before["max_hp"]) {
+			hp = asInt(after["hp"]) // a new form (Polymorph's end): its Hit Points are the ones the rules set
+		}
+		if hp < 0 {
+			hp = 0
+		}
+		e["hp"] = hp
+		entries[i] = e
+		b, _ := json.Marshal(entries)
+		if _, err := tx.Exec(`UPDATE combat_state SET turn_order = $1 WHERE lobby_id = $2`, b, lobbyID); err != nil {
+			return 0, err
+		}
+		return hp, tx.Commit()
+	}
+	return 0, fmt.Errorf("target_not_found")
 }

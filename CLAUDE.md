@@ -114,12 +114,17 @@ Add to the owner, never beside it. When you give another rule one owner, add it 
   campaign; it must be the GM's and active (`campaignBeforeStart()` for set-up and repair tools). Refusals: `not_gm`,
   `campaign_not_active`, `campaign_id_required`, `character_not_found`, `character_not_in_campaign`, `not_in_campaign`,
   `targets_in_different_campaigns`. Never look up `dm_id` or compare a character's `lobby_id` with the campaign in a GM
-  handler.
+  handler. **Every character a GM command names** must be in that campaign: `gmReadAs` reads every field listed in
+  `characterIDFields` from the decoded request itself, declared or not (audit AUD-01: 18 commands acted on any character on the
+  server). A new request field that names a character is one entry there; `TestEveryGMRequestCharacterFieldIsKnown` fails on an
+  id field that is in neither list.
 - **Who may act on a campaign or character in the path:** `cmd/server/campaign_access_2024.go`: `requireCampaignGM`,
   `requireCampaignMember`, `requireCharacterOwner`, `requireOwnerOrGM`, `requireCharacterGM` (each signs the caller in and
   writes the refusal: `campaign_not_found`, `character_not_found`, `not_gm`, `not_in_campaign`, `not_your_character`), and
   `campaignRole` / `isCharacterGM` to show more to the GM without refusing. Never read `dm_id` or a character's owner to decide
-  access in a handler; `TestNoOtherCampaignAccessCheck` checks. (GM commands under `/api/gm/*` use the rule above.)
+  access in a handler; `TestNoOtherCampaignAccessCheck` checks. (GM commands under `/api/gm/*` use the rule above.) **A player's
+  action that names characters in its body** (`target_id`, `target_ids`, `target_character_id`): `namedCharactersIn`, called once
+  in `handleAction` (pending turns and companions go through it): another campaign's character is 404 `character_not_found`.
 - **How an agent starts:** `cmd/server/start_2024.go`. Registration, the token, recovery, the two paths (play a character, or
   run a campaign as GM) and how often to check in are written there once. The home page, `/llms.txt`, `GET /api/`, the Quick
   Start of `skill.md` (between its start markers; `START_UPDATE=1 go test ./cmd/server -run TestStartTextInSkillMd` rewrites
@@ -141,7 +146,9 @@ Add to the owner, never beside it. When you give another rule one owner, add it 
 - **Effects that last until the start of your next turn** (Dodge, Reckless Attack): `untilYourNextTurn` (`dodge_2024.go`),
   cleared by `endUntilNextTurn` at the turn's start and when the fight ends.
 - **Spell lists:** `spellListFilter` reads class and level for every spell list route; a message names `spellListRoute`.
-- **Signing a request in:** `getAgentFromAuth` signs a request in once (`authMemo`); later calls reuse it.
+- **Signing a request in:** `getAgentFromAuth` signs a request in once (`authMemo`); later calls reuse it. **The client's address**
+  is `clientIP` (`auth_tokens.go`; on Render the entry Render's proxy added to X-Forwarded-For). The failed sign-in throttle
+  (`authFailure`) never refuses a valid token or signature: only a failed attempt is answered 429 once its address failed too often.
 - **Repeatable invocations:** `game.InvocationRepeats` (`game/invocation_repeats.go`), with `invocation_repeats_2024.go`: which
   invocations a Warlock may take again and what each copy chooses (a different cantrip, or a different Origin feat); the request,
   its options, the effects and the invocation summary (`invocationSummary`, sheet and my-turn) read it.
@@ -163,6 +170,11 @@ Add to the owner, never beside it. When you give another rule one owner, add it 
   and `guardDB` (in `withProtections`) turns any success reply over a failed database call in that request into 500
   `database_error`. Never answer a lookup error as not found, not yours or an empty list. Local checks: `db_failure_rule_test.py`
   (breaks each table, every route) and `sql_errors_check.py` (no failed statement in a normal run of the suites).
+  **The connection** is opened by `openDB` (`db_guard_2024.go`): the session settings (UTC, `statement_timeout`, `lock_timeout`,
+  `idle_in_transaction_session_timeout`) and the pool limits, in one place. **Inside a transaction, read and write through it**
+  (`rowQuerier`, `execer`), never through `db`: a second connection waits behind the transaction's own locks, which froze the
+  server once (audit AUD-02). The checked driver logs `query outside its transaction` with where it came from and where the
+  transaction began; `tx_outside_check.py` (the batch) fails on any.
 - **The API reference** (`/docs`, `/docs/swagger.json`, and the route list on `/commands`): built by `python3 tools/build_swagger.py`
   from nothing each time (the hand-written entries in that script, then every handler's godoc `@Router` block); it never reads its
   own earlier output. `finish_operation` is the one check of every operation (path parameters declared, a body under content, no

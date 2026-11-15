@@ -18,6 +18,7 @@ import (
 	"fmt"
 	"log"
 	"net/http"
+	"reflect"
 	"strconv"
 	"strings"
 
@@ -193,6 +194,67 @@ func gmCampaignMatch(agentID, want, camp int, what string, statuses []string) (i
 	return camp, 0, "", ""
 }
 
+// characterIDFields: the request fields that name a character (a positive id; a negative id is a monster, which a command only
+// finds in its own campaign's fight). Every character a GM command names must be in the one campaign the command acts in, and
+// that campaign must be the GM's: gmReadAs reads these fields from every GM request itself, so a handler that doesn't declare
+// its targets (campaignFromTarget, targetsIn) can't act on another campaign's characters. A new field that names a character
+// is one entry here.
+var characterIDFields = map[string]bool{
+	"character_id": true, "character_ids": true, "target_id": true, "target_ids": true, "caster_id": true,
+	"attacker_id": true, "defender_id": true, "initiator_id": true, "grappler_id": true, "combatant_id": true,
+	"redirect_target_id": true, "sculpt_targets": true, "paladin_id": true, "bard_id": true, "barbarian_id": true,
+	"owner_id": true, "give_to": true,
+}
+
+// namedCharacters: the character ids (positive) in a decoded GM request's characterIDFields, found by their JSON names in the
+// request struct (embedded structs included).
+func namedCharacters(v interface{}) []int {
+	var ids []int
+	add := func(id int64) {
+		if id > 0 && !containsInt(ids, int(id)) {
+			ids = append(ids, int(id))
+		}
+	}
+	var walk func(rv reflect.Value)
+	walk = func(rv reflect.Value) {
+		for rv.Kind() == reflect.Ptr || rv.Kind() == reflect.Interface {
+			if rv.IsNil() {
+				return
+			}
+			rv = rv.Elem()
+		}
+		if rv.Kind() != reflect.Struct {
+			return
+		}
+		t := rv.Type()
+		for i := 0; i < t.NumField(); i++ {
+			f, fv := t.Field(i), rv.Field(i)
+			if f.Anonymous {
+				walk(fv)
+				continue
+			}
+			if !characterIDFields[strings.Split(f.Tag.Get("json"), ",")[0]] {
+				continue
+			}
+			for fv.Kind() == reflect.Ptr && !fv.IsNil() {
+				fv = fv.Elem()
+			}
+			switch fv.Kind() {
+			case reflect.Int, reflect.Int64, reflect.Int32:
+				add(fv.Int())
+			case reflect.Slice:
+				for j := 0; j < fv.Len(); j++ {
+					if e := fv.Index(j); e.Kind() == reflect.Int || e.Kind() == reflect.Int64 || e.Kind() == reflect.Int32 {
+						add(e.Int())
+					}
+				}
+			}
+		}
+	}
+	walk(reflect.ValueOf(v))
+	return ids
+}
+
 // targetIDs: the character ids in the request's target fields.
 func (s bodySpec) targetIDs() []int {
 	var ids []int
@@ -262,6 +324,11 @@ func gmReadAs(w http.ResponseWriter, r *http.Request, agentID int, v interface{}
 	}
 	spec := gmSpec(opts)
 	chars := spec.targetIDs()
+	for _, id := range namedCharacters(v) { // every character the request names, declared or not (characterIDFields)
+		if !containsInt(chars, id) {
+			chars = append(chars, id)
+		}
+	}
 	if len(chars) > 0 || spec.ofCampaign > 0 {
 		var id, status int
 		var code, msg string

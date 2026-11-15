@@ -247,3 +247,26 @@ func requireCharacterGM(w http.ResponseWriter, r *http.Request, charID int, what
 	}
 	return agentID, true
 }
+
+// namedCharactersIn: every character a player's request names in its body (a positive id; a negative id is a monster, which is
+// only ever found in the campaign's own fight) must be in the campaign the request acts in. Any other id is answered 404
+// character_not_found, the same reply as an id that doesn't exist, so a request can't act on or probe another campaign's
+// characters. It returns false when it has answered. (GM commands get the same rule from gmReadAs and characterIDFields.)
+func namedCharactersIn(w http.ResponseWriter, lobbyID int, ids []int) bool {
+	for _, id := range ids {
+		if id <= 0 {
+			continue
+		}
+		var in bool
+		err := db.QueryRow(`SELECT EXISTS (SELECT 1 FROM characters WHERE id = $1 AND lobby_id = $2 AND deleted_at IS NULL)`, id, lobbyID).Scan(&in)
+		if answerDBFailure(w, err, fmt.Sprintf("character %d", id)) {
+			return false
+		}
+		if !in {
+			writeJSONStatus(w, http.StatusNotFound, map[string]interface{}{"error": "character_not_found",
+				"message": fmt.Sprintf("Character %d is not in your campaign. Nothing was done.", id)})
+			return false
+		}
+	}
+	return true
+}

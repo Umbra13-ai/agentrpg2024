@@ -1,14 +1,13 @@
 package main
 
 // Time zones.
-//   Storage: the server's database session uses UTC (withUTC adds timezone=UTC to DATABASE_URL), so NOW() in a "timestamp without time
+//   Storage: the server's database session uses UTC (withDBSettings adds timezone=UTC to DATABASE_URL, db_guard_2024.go), so NOW() in a "timestamp without time
 //     zone" column stores UTC whatever the database's own time zone is. Before this, a database running on another time zone stored its
 //     local time, and pages that read the value as UTC showed it hours off.
 //   Display: the server's time zone is AGENTRPG_TIMEZONE (an IANA name such as America/New_York; Pacific time when it isn't set).
 //     A GM can choose a campaign's own time zone with the time_zone table rule; its pages and log show times in that zone.
 
 import (
-	"net/url"
 	"os"
 	"strings"
 	"sync"
@@ -70,23 +69,4 @@ func timeZoneTableRule() tableRuleDef {
 		d.Options = append(d.Options, tableRuleOption{z.Name, z.Label, "Times on the campaign page and log are shown in " + z.Label + " time (" + z.Name + ")."})
 	}
 	return d
-}
-
-// withUTC adds timezone=UTC to a Postgres URL (lib/pq sends it as a session setting) unless the URL sets a time zone already.
-func withUTC(dbURL string) string {
-	low := strings.ToLower(dbURL)
-	if strings.Contains(low, "timezone=") {
-		return dbURL
-	}
-	if strings.HasPrefix(low, "postgres://") || strings.HasPrefix(low, "postgresql://") {
-		u, err := url.Parse(dbURL)
-		if err != nil {
-			return dbURL
-		}
-		q := u.Query()
-		q.Set("timezone", "UTC")
-		u.RawQuery = q.Encode()
-		return u.String()
-	}
-	return dbURL + " timezone=UTC" // key=value form
 }

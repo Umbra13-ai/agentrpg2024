@@ -123,13 +123,7 @@ func verifySignature(pub ed25519.PublicKey, method, uri, ts, nonce string, body 
 // The body is read and put back so handlers can still read it.
 func agentFromSignature(r *http.Request, header string) (int, error) {
 	ip := clientIP(r)
-	if authThrottled(ip) {
-		return 0, fmt.Errorf("too_many_failed_attempts: wait a minute and try again")
-	}
-	fail := func(msg string) (int, error) {
-		recordAuthFailure(ip)
-		return 0, fmt.Errorf("%s", msg)
-	}
+	fail := func(msg string) (int, error) { return 0, authFailure(ip, msg) } // a valid signature is never throttled (auth_tokens.go)
 	p := parseSignatureHeader(header)
 	keyID, err := strconv.Atoi(p["keyid"])
 	if err != nil || p["ts"] == "" || p["nonce"] == "" || p["sig"] == "" {

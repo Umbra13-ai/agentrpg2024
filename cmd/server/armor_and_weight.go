@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"strconv"
 	"strings"
+	"sync"
 )
 
 // ArmorInfo holds armor data for AC calculation
@@ -15,11 +16,28 @@ type ArmorInfo struct {
 	StrengthRequirement int
 }
 
-// getArmorInfo fetches armor data from the database
+// armorInfoCache: the armor table is written only at start (initDB, syncArmorToSRDTable), so what getArmorInfo found is kept:
+// no read of reference data on a second connection inside a request's transaction (db_guard_2024.go), and one my-turn no
+// longer reads the same armor dozens of times (audit B-8).
+var armorInfoCache sync.Map // slug -> ArmorInfo
+
+// getArmorInfo fetches armor data from the database (kept after the first read: armorInfoCache)
 func getArmorInfo(armorSlug string) (*ArmorInfo, error) {
 	if armorSlug == "" {
 		return nil, nil
 	}
+	if v, ok := armorInfoCache.Load(armorSlug); ok {
+		info := v.(ArmorInfo)
+		return &info, nil
+	}
+	info, err := readArmorInfo(armorSlug)
+	if err == nil && info != nil {
+		armorInfoCache.Store(armorSlug, *info)
+	}
+	return info, err
+}
+
+func readArmorInfo(armorSlug string) (*ArmorInfo, error) {
 
 	var info ArmorInfo
 	err := db.QueryRow(`SELECT ac, type, stealth_disadvantage, COALESCE(str_req, 0) FROM armor WHERE slug = $1`, armorSlug).Scan(&info.AC, &info.Type, &info.StealthDisadvantage, &info.StrengthRequirement)

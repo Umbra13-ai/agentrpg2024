@@ -19,6 +19,7 @@ import (
 	"log"
 	"net"
 	"net/http"
+	"os"
 	"strconv"
 	"strings"
 	"sync"
@@ -82,19 +83,39 @@ func scopeAllows(scope, method string) bool {
 }
 
 // ---- failed attempt throttle (per client address, in memory) ----
+//
+// The throttle never refuses a valid credential: a token or a signature is checked first, and only a failed attempt is answered
+// 429 too_many_failed_attempts (instead of 401) once its address has failed maxFailedPerMinute times in a minute. Before Nov 15
+// 2026 every request from a throttled address was refused, valid tokens included, and behind Render's proxy every client shared
+// one address: 30 wrong tokens a minute from anyone locked every agent out (audit AUD-03).
 
 var authFailures = struct {
 	sync.Mutex
 	byIP map[string][]time.Time
 }{byIP: map[string][]time.Time{}}
 
+// clientIP: the client's address, the one owner (failed sign-ins, the registration limit, the admin key). On Render the
+// connection comes from Render's proxy, which appends the client's address to X-Forwarded-For: the rightmost entry is the one
+// the proxy added (a client can put anything in the entries before it). Elsewhere (no RENDER, or no header) it is the address
+// of the connection.
 func clientIP(r *http.Request) string {
+	if behindRenderProxy {
+		if xff := r.Header.Values("X-Forwarded-For"); len(xff) > 0 {
+			parts := strings.Split(xff[len(xff)-1], ",")
+			if ip := strings.TrimSpace(parts[len(parts)-1]); net.ParseIP(ip) != nil {
+				return ip
+			}
+		}
+	}
 	host, _, err := net.SplitHostPort(r.RemoteAddr)
 	if err != nil {
 		return r.RemoteAddr
 	}
 	return host
 }
+
+// behindRenderProxy: Render sets RENDER in every service's environment.
+var behindRenderProxy = os.Getenv("RENDER") != ""
 
 func authThrottled(ip string) bool {
 	authFailures.Lock()
@@ -114,6 +135,17 @@ func authThrottled(ip string) bool {
 	return len(kept) >= maxFailedPerMinute
 }
 
+// authFailure records a failed sign-in from ip and says how to answer it: msg, or too_many_failed_attempts once the address
+// has failed too often in the last minute.
+func authFailure(ip, msg string) error {
+	throttled := authThrottled(ip)
+	recordAuthFailure(ip)
+	if throttled {
+		return fmt.Errorf("too_many_failed_attempts: wait a minute and try again")
+	}
+	return fmt.Errorf("%s", msg)
+}
+
 func recordAuthFailure(ip string) {
 	authFailures.Lock()
 	defer authFailures.Unlock()
@@ -123,13 +155,10 @@ func recordAuthFailure(ip string) {
 // agentFromBearer authenticates a Bearer token and returns the agent id.
 func agentFromBearer(r *http.Request, token string) (int, error) {
 	ip := clientIP(r)
-	if authThrottled(ip) {
-		return 0, fmt.Errorf("too_many_failed_attempts: wait a minute and try again")
-	}
+	failed := func() (int, error) { return 0, authFailure(ip, "invalid_token") }
 	token = strings.TrimSpace(token)
 	if !strings.HasPrefix(token, tokenPrefix) {
-		recordAuthFailure(ip)
-		return 0, fmt.Errorf("invalid_token")
+		return failed()
 	}
 	var tokenID, agentID int
 	var scope string
@@ -137,8 +166,7 @@ func agentFromBearer(r *http.Request, token string) (int, error) {
 		WHERE token_hash = $1 AND revoked_at IS NULL AND (expires_at IS NULL OR expires_at > NOW())`,
 		hashToken(token)).Scan(&tokenID, &agentID, &scope)
 	if err != nil {
-		recordAuthFailure(ip)
-		return 0, fmt.Errorf("invalid_token")
+		return failed()
 	}
 	if !scopeAllows(scope, r.Method) {
 		return 0, fmt.Errorf("token_is_read_only: this token can only make GET requests")

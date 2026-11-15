@@ -120,7 +120,7 @@ func shopBuysKind(def *shopTypeDef, a appraisal, name string) bool {
 }
 
 // sellBlocked: why an item can't be sold as it is ("" if it can).
-func sellBlocked(charID int, inv []invItem, it invItem, qty int) string {
+func sellBlocked(q rowQuerier, charID int, inv []invItem, it invItem, qty int) string {
 	name := itemStr(it, "name")
 	id := itemStr(it, "id")
 	for _, x := range inv {
@@ -128,9 +128,11 @@ func sellBlocked(charID int, inv []invItem, it invItem, qty int) string {
 			return fmt.Sprintf("%s (id %s) has things in it: take them out first.", name, id)
 		}
 	}
-	var armor, attuned string
+	var armor, attuned, main, off string
 	var attRaw []byte
-	db.QueryRow(`SELECT COALESCE(equipped_armor,''), COALESCE(attuned_items,'[]') FROM characters WHERE id = $1`, charID).Scan(&armor, &attRaw)
+	var shieldHeld bool
+	q.QueryRow(`SELECT COALESCE(equipped_armor,''), COALESCE(attuned_items,'[]'), COALESCE(equipped_main_hand,''), COALESCE(equipped_off_hand,''),
+		COALESCE(equipped_shield,false) FROM characters WHERE id = $1`, charID).Scan(&armor, &attRaw, &main, &off, &shieldHeld)
 	attuned = string(attRaw)
 	if strings.Contains(strings.ToLower(attuned), strings.ToLower(`"`+name+`"`)) {
 		return fmt.Sprintf("You are attuned to %s: end the attunement first.", name)
@@ -161,10 +163,9 @@ func sellBlocked(charID int, inv []invItem, it invItem, qty int) string {
 		return fmt.Sprintf("You hold %s (id %s) in your hand: unequip it first (POST /api/characters/unequip-weapon).", name, id)
 	}
 	lastOne := have-qty < 1
-	main, off := equippedWeapons(charID)
 	held := strings.EqualFold(main, name) || strings.EqualFold(off, name)
 	worn := armor != "" && (strings.EqualFold(armor, name) || itemSlug(name) == armor || sameArmor(name, armor))
-	shield := strings.EqualFold(name, "Shield") && shieldInHand(charID) || (strings.HasPrefix(name, "Shield +") && shieldInHand(charID))
+	shield := shieldHeld && (strings.EqualFold(name, "Shield") || strings.HasPrefix(name, "Shield +"))
 	if lastOne && (held || worn || shield) {
 		return fmt.Sprintf("You are using %s (in hand or worn): unequip it first (POST /api/characters/unequip-weapon or unequip-armor).", name)
 	}
@@ -227,7 +228,7 @@ func sellItems(charID int, def *shopTypeDef, shopName string, priceCP func(float
 		if !shopBuysKind(def, a, name) {
 			return http.StatusBadRequest, map[string]interface{}{"error": "shop_doesnt_buy", "message": fmt.Sprintf("%s doesn't buy %s: a shop buys the kinds of goods it sells.", shopName, name)}
 		}
-		if why := sellBlocked(charID, inv, it, q); why != "" {
+		if why := sellBlocked(tx, charID, inv, it, q); why != "" {
 			return http.StatusBadRequest, map[string]interface{}{"error": "cannot_sell", "message": why}
 		}
 		// half the price of what is sold, halved on the total, not per item (Nov 14 audit re-check: 20 arrows, 1 GP, fetched 4 SP,
@@ -248,7 +249,7 @@ func sellItems(charID int, def *shopTypeDef, shopName string, priceCP func(float
 	if err := saveInventoryTx(tx, charID, inv); err != nil {
 		return http.StatusInternalServerError, map[string]interface{}{"error": "save_failed"}
 	}
-	money := walletCP(charID) + total
+	money := walletCPIn(tx, charID) + total // read in the transaction, with the character locked
 	if _, err := tx.Exec(`UPDATE characters SET gold = $1, silver = $2, copper = $3, electrum = 0, platinum = 0 WHERE id = $4`, money/100, (money%100)/10, money%10, charID); err != nil {
 		return http.StatusInternalServerError, map[string]interface{}{"error": "save_failed"}
 	}
@@ -277,7 +278,7 @@ func sellOffers(charID int, def *shopTypeDef, priceCP func(float64) int) []map[s
 		if q, ok := it["quantity"].(float64); ok && q > 1 {
 			o["you_have"] = int(q)
 		}
-		if why := sellBlocked(charID, inv, it, 1); why != "" {
+		if why := sellBlocked(db, charID, inv, it, 1); why != "" {
 			o["not_now"] = why
 		}
 		out = append(out, o)

@@ -568,6 +568,11 @@ func handleAction(w http.ResponseWriter, r *http.Request) {
 
 	endWildShapeIfDown(charID) // a druid that dropped to 0 HP or became Incapacitated is no longer in its form (wild_shape_2024.go)
 
+	// Every character the action names must be in the actor's campaign (campaign_access_2024.go)
+	if !namedCharactersIn(w, lobbyID, append([]int{req.TargetID, req.TargetCharacterID}, req.TargetIDs...)) {
+		return
+	}
+
 	// "features": the feature words as a list, checked against the character's own words and added to the description (feature_words_2024.go)
 	if add, refusal := featureListToText(charID, featureAction(req.Action), req.Features); refusal != "" {
 		w.WriteHeader(http.StatusBadRequest)

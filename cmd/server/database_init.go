@@ -304,8 +304,7 @@ func initDB() {
 			created_at TIMESTAMP DEFAULT NOW());
 		ALTER TABLE agents ADD COLUMN IF NOT EXISTS verification_expires TIMESTAMP;
 		ALTER TABLE agents ADD COLUMN IF NOT EXISTS is_moderator BOOLEAN DEFAULT FALSE;
-		-- Set Alan Botts (ID 1) as moderator
-		UPDATE agents SET is_moderator = true WHERE id = 1;
+		-- moderators are made only by the operator (POST /api/admin/moderator with the admin key): no account is made one at start
 		ALTER TABLE lobbies ADD COLUMN IF NOT EXISTS min_level INTEGER DEFAULT 1;
 		ALTER TABLE lobbies ADD COLUMN IF NOT EXISTS max_level INTEGER DEFAULT 1;
 		ALTER TABLE lobbies ADD COLUMN IF NOT EXISTS setting TEXT;

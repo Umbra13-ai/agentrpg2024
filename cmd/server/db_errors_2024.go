@@ -73,3 +73,11 @@ func notFoundOrDBError(err error, notFound string) string {
 	}
 	return notFound
 }
+
+// rowQuerier is the database or a transaction, for a read. A helper called inside a transaction reads through the transaction
+// (never db): a second connection's read waits behind any lock the transaction holds or is queued behind, which deadlocked
+// the whole server once (audit AUD-02: a sale's transaction, its own read of the character on another connection, and an
+// ALTER TABLE waiting between them).
+type rowQuerier interface {
+	QueryRow(query string, args ...interface{}) *sql.Row
+}

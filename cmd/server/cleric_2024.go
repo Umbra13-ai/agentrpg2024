@@ -38,24 +38,22 @@ func choseBlessedStrikesDivine(charID int) bool {
 	return choices["blessed_strikes"] != "potent_spellcasting"
 }
 
-// damageMonster deals damage to a monster in the combat (resistances and immunities applied) and says what happened.
+// damageMonster deals damage to a monster in the combat (resistances and immunities applied) and says what happened. Like an
+// attack (resolveAttackOnMonster), it works the damage out from the fight as it is and saves only its own change under a short
+// lock (saveMonsterHit).
 func damageMonster(lobbyID, targetID, dmg int, dtype string, critical ...bool) (string, bool) {
 	crit := len(critical) > 0 && critical[0]
-	tx, err := db.Begin()
-	if err != nil {
-		return "", false
-	}
-	defer tx.Rollback()
 	var raw []byte
-	if tx.QueryRow(`SELECT turn_order FROM combat_state WHERE lobby_id = $1 AND active = true FOR UPDATE`, lobbyID).Scan(&raw) != nil {
+	if db.QueryRow(`SELECT turn_order FROM combat_state WHERE lobby_id = $1 AND active = true`, lobbyID).Scan(&raw) != nil {
 		return "", false
 	}
 	var entries []map[string]interface{}
 	json.Unmarshal(raw, &entries)
-	for i, e := range entries {
+	for _, e := range entries {
 		if asInt(e["id"]) != targetID {
 			continue
 		}
+		e0 := copyEntry(e)
 		name := fmt.Sprint(e["name"])
 		d, how := adjustMonsterDamage(fmt.Sprint(e["monster_key"]), dtype, dmg)
 		d, how = petrifiedDamage(lobbyID, targetID, d, how)   // F196
@@ -79,11 +77,11 @@ func damageMonster(lobbyID, targetID, dmg int, dtype string, critical ...bool) (
 			hp = 0
 		}
 		e["hp"] = hp
-		entries[i] = e
-		b, _ := json.Marshal(entries)
-		if _, err := tx.Exec(`UPDATE combat_state SET turn_order = $1 WHERE lobby_id = $2`, b, lobbyID); err != nil || tx.Commit() != nil {
+		saved, err := saveMonsterHit(lobbyID, targetID, e0, e, asInt(e0["hp"])-hp)
+		if err != nil {
 			return "", false
 		}
+		hp = saved
 		text := fmt.Sprintf("%s takes %d %s damage", name, d, dtype)
 		if d > 0 {
 			text += wakeOnDamage(lobbyID, targetID, name)

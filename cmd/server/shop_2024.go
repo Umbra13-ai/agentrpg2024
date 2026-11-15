@@ -127,9 +127,12 @@ func shopKindsOf(name string) []string {
 }
 
 // walletCP: the character's money in copper pieces (10 CP = 1 SP, 10 SP = 1 GP, 1 EP = 5 SP, 1 PP = 10 GP).
-func walletCP(charID int) int {
+func walletCP(charID int) int { return walletCPIn(db, charID) }
+
+// walletCPIn: walletCP read through q; inside a transaction that has locked the character, the money it is about to change.
+func walletCPIn(q rowQuerier, charID int) int {
 	var gp, sp, cp, ep, pp int
-	db.QueryRow(`SELECT COALESCE(gold,0), COALESCE(silver,0), COALESCE(copper,0), COALESCE(electrum,0), COALESCE(platinum,0) FROM characters WHERE id = $1`, charID).Scan(&gp, &sp, &cp, &ep, &pp)
+	q.QueryRow(`SELECT COALESCE(gold,0), COALESCE(silver,0), COALESCE(copper,0), COALESCE(electrum,0), COALESCE(platinum,0) FROM characters WHERE id = $1`, charID).Scan(&gp, &sp, &cp, &ep, &pp)
 	return pp*1000 + gp*100 + ep*50 + sp*10 + cp
 }
 
@@ -404,6 +407,11 @@ func completePurchase(charID, money, total int, kit []startItem, lines []string)
 	}
 	if err != nil {
 		return http.StatusNotFound, map[string]interface{}{"error": "character_not_found"}
+	}
+	// the money as it is now, with the character locked (loadInventoryTx): purchases sent together pay one after another
+	if money = walletCPIn(tx, charID); total > money {
+		return http.StatusBadRequest, map[string]interface{}{"error": "not_enough_money",
+			"message": fmt.Sprintf("That costs %s and you have %s.", moneyText(total), moneyText(money)), "would_cost": lines}
 	}
 	base := 0
 	for _, it := range inv {
