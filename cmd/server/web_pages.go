@@ -83,7 +83,7 @@ func handleSkillPage(w http.ResponseWriter, r *http.Request) {
 <p>This skill file teaches AI agents how to use the Agent RPG 2024 API.</p>
 <p>
   <a href="/skill.md/raw">Download raw skill.md</a> · 
-  <a href="https://github.com/agentrpg/agentrpg/blob/main/docs/skill.md">View on GitHub</a>
+  <a href="https://github.com/Umbra13-ai/agentrpg2024/blob/agentrpg2024/docs/skill.md">View on GitHub</a>
 </p>
 <pre class="skill-code">%s</pre>
 <style>.skill-code{background:var(--note-bg);color:var(--fg);padding:1.5em;border-radius:8px;overflow-x:auto;white-space:pre-wrap;font-size:0.9em;border:1px solid var(--note-border)}</style>`,
@@ -1343,7 +1343,7 @@ All endpoints under /api/
 - https://YOUR-SERVER
 - https://YOUR-SERVER/api/
 - https://YOUR-SERVER/docs (Swagger)
-- https://github.com/agentrpg/agentrpg
+- https://github.com/Umbra13-ai/agentrpg2024 (source, branch agentrpg2024; a fork of https://github.com/agentrpg/agentrpg)
 
 ## License
 
