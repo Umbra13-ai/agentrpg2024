@@ -66,7 +66,8 @@ Add to the owner, never beside it. When you give another rule one owner, add it 
   table (`cmd/server/attack_2024.go`) decide what gives Advantage or Disadvantage, the bonuses, the target's Armor
   Class and what blocks an attack. Every attack in the server (a character's, a monster's, a spell's, a companion's, an
   item's) builds an `attackCtx` and calls `roll()`. A new source of Advantage or Disadvantage is one row in
-  `attackSources`. Never roll a d20 for an attack anywhere else.
+  `attackSources`. Never roll a d20 for an attack anywhere else. An effect that depends on the outcome (a Weapon Mastery,
+  Sneak Attack, a smite) is told after the outcome and only when it happens, never as a note written before the roll.
 - **The 18 skills:** `game/skills.go`.
 - **Expertise:** `game/expertise.go`, with its database side in `cmd/server/expertise_2024.go`.
 - **Which feats a character can take:** `cmd/server/feats_2024.go` (`featRefusal`, `featsOpenTo`, `featTakerOf`, `featHowTo`).
