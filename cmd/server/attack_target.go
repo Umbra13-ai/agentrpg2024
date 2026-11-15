@@ -479,8 +479,12 @@ func resolveAttackOnMonster(lobbyID, charID, targetID int, o attackOutcome, clea
 	if hasMastery && hp > 0 {
 		text += masteryOnHit(lobbyID, charID, targetID, name, fmt.Sprint(t["monster_key"]), mu, dmg)
 	}
-	if hasMastery && mu.Name == "Cleave" && len(cleaveTarget) > 0 && cleaveTarget[0] != 0 {
-		text += cleaveAttack(lobbyID, charID, targetID, cleaveTarget[0], o, mu)
+	if hasMastery && mu.Name == "Cleave" {
+		if len(cleaveTarget) > 0 && cleaveTarget[0] != 0 {
+			text += cleaveAttack(lobbyID, charID, targetID, cleaveTarget[0], o, mu)
+		} else if !cleaveUsedThisTurn(charID) {
+			text += " (Cleave: with this weapon a hit lets you attack a second creature within 5 feet of the first, once per turn: send cleave_target_id with the attack.)"
+		}
 	}
 	text += superiorHuntersPrey(lobbyID, charID, targetID)
 	text += applyGiantBoon(lobbyID, charID, targetID, dmg+extraDmg, hp > 0) // Goliath: Fire's Burn, Frost's Chill, Hill's Tumble

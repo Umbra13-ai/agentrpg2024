@@ -5,8 +5,12 @@ package main
 //	Topple on a hit the server rolls the target's Constitution save (DC 8 + ability modifier + Proficiency Bonus);
 //	       on a failure the target gets the Prone condition (a condition record, so the GM and players see it).
 //	Vex    on a hit that deals damage the attacker has Advantage on the next attack roll against that target.
-//	Sap, Slow  reported in the result text (what the player and the GM must apply); not tracked as events.
-//	Push, Cleave, Nick  stay as reminders in the attack result (they need a map position or a second attack).
+//	Sap    on a hit the target has Disadvantage on its next attack roll (a combat effect).
+//	Slow   on a hit that deals damage the target's Speed drops by 10 feet (a combat effect).
+//	Push   on a hit a Large or smaller target is pushed 10 feet (on the battle map when there is one).
+//	Cleave on a hit with cleave_target_id, a second attack; on a hit without it, the result says how to use it.
+//	Nick   the Light property's extra attack is part of the Attack action (its result says so).
+// Each effect is told after the outcome and only when it happens; nothing about a mastery is written before the roll's result.
 
 import (
 	"encoding/json"
@@ -105,28 +109,27 @@ func masteryOnHit(lobbyID, charID, targetID int, name, monsterKey string, mu mas
 	case "Topple":
 		mod := monsterSaveBonus(monsterKey, "con", monsterConScore(monsterKey))
 		roll := game.RollDie(20)
+		save := fmt.Sprintf("Constitution save %d against DC %d", roll+mod, mu.DC)
 		if roll+mod >= mu.DC {
-			return fmt.Sprintf(" Topple: %s resists and stays on its feet.", name)
+			return fmt.Sprintf(" Topple: %s makes its %s and stays on its feet.", name, save)
 		}
 		for _, c := range conditionNames(lobbyID, targetID) {
 			if c == "prone" {
-				return fmt.Sprintf(" Topple: %s fails its Constitution save but is already Prone.", name)
+				return fmt.Sprintf(" Topple: %s fails its %s but is already Prone.", name, save)
 			}
 		}
 		db.Exec(`INSERT INTO condition_records (lobby_id, target_id, condition, source, escapes, notes)
 			VALUES ($1, $2, 'prone', $3, '[]', $4)`, lobbyID, targetID, "Topple ("+mu.Weapon+")",
 			fmt.Sprintf("Failed the Constitution save against Topple (DC %d).", mu.DC))
-		return fmt.Sprintf(" Topple: %s fails its Constitution save and falls Prone.", name)
+		return fmt.Sprintf(" Topple: %s fails its %s and falls Prone.", name, save)
 	case "Vex":
 		if damage > 0 {
 			vexMarks.Store(charID, vexMark{Lobby: lobbyID, Target: targetID})
 			return " Vex: you have Advantage on your next attack roll against it before the end of your next turn."
 		}
-	case "Sap":
-		if damage > 0 {
-			addCombatEffect(lobbyID, targetID, charID, "sap")
-			return fmt.Sprintf(" Sap: %s has Disadvantage on its next attack roll before the start of your next turn.", name)
-		}
+	case "Sap": // SRD 5.2.1: any hit (Vex and Slow need damage too)
+		addCombatEffect(lobbyID, targetID, charID, "sap")
+		return fmt.Sprintf(" Sap: %s has Disadvantage on its next attack roll before the start of your next turn.", name)
 	case "Slow":
 		if damage > 0 {
 			addCombatEffect(lobbyID, targetID, charID, "slow")
@@ -186,10 +189,15 @@ func markNickUsed(charID int) {
 // cleaveAttack is the second attack of the Cleave mastery: after a melee hit, one attack against another creature
 // within 5 feet of the first. It uses the same attack bonus, the weapon's damage dice without the ability modifier
 // (unless negative), and works once per turn.
-func cleaveAttack(lobbyID, charID, first, second int, o attackOutcome, mu masteryUse) string {
+// cleaveUsedThisTurn: Cleave is once per turn.
+func cleaveUsedThisTurn(charID int) bool {
 	var used bool
 	db.QueryRow(`SELECT COALESCE(cleave_used,false) FROM characters WHERE id = $1`, charID).Scan(&used)
-	if used {
+	return used
+}
+
+func cleaveAttack(lobbyID, charID, first, second int, o attackOutcome, mu masteryUse) string {
+	if cleaveUsedThisTurn(charID) {
 		return " Cleave: you already used Cleave this turn."
 	}
 	if second == first {

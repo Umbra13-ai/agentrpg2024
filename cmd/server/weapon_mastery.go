@@ -197,7 +197,7 @@ func masterySummary(charID int) []map[string]string {
 	return out
 }
 
-// masteryTextMore: the two masteries whose effect depends on the attack (masteryNote works the numbers out); the SRD 5.2.1 wording.
+// masteryTextMore: the two masteries whose effect depends on the attack (the result works the numbers out); the SRD 5.2.1 wording.
 var masteryTextMore = map[string]string{
 	"Graze":  "If your attack roll with this weapon misses a creature, you can deal damage to that creature equal to the ability modifier you used to make the attack roll. This damage is the same type dealt by the weapon, and the damage can be increased only by increasing the ability modifier.",
 	"Topple": "If you hit a creature with this weapon, you can force the creature to make a Constitution saving throw (DC 8 plus the ability modifier used to make the attack roll and your Proficiency Bonus). On a failed save, the creature has the Prone condition.",
@@ -210,45 +210,6 @@ var masteryText = map[string]string{
 	"Sap":    "on a hit the target has Disadvantage on its next attack roll before the start of your next turn.",
 	"Slow":   "on a hit that deals damage you can reduce the target's Speed by 10 feet until the start of your next turn (it does not stack).",
 	"Vex":    "on a hit that deals damage you have Advantage on your next attack roll against that target before the end of your next turn.",
-}
-
-// masteryNote is what the weapon's Mastery property adds to an attack, or "" if
-// the character has not unlocked it for this weapon.
-func masteryNote(charID int, weaponKey string, w SRDWeapon, abilityMod, level int) string {
-	if w.Mastery == "" || weaponKey == "" {
-		return ""
-	}
-	have := false
-	for _, k := range characterMasteries(charID) {
-		if weaponNameKey(k) == weaponNameKey(weaponKey) || k == weaponKey {
-			have = true
-		}
-	}
-	if !have {
-		return ""
-	}
-	if v, ok := masteryUses.Load(charID); ok { // the mastery this attack uses: Tactical Master's Push, Sap or Slow (F212)
-		if mu, ok := v.(masteryUse); ok && mu.Name != "" {
-			w.Mastery = mu.Name
-		}
-	}
-	switch w.Mastery {
-	case "Graze":
-		if abilityMod <= 0 {
-			return " [Mastery Graze: on a miss the target takes no damage because your ability modifier is not positive]"
-		}
-		return fmt.Sprintf(" [Mastery Graze: if this attack misses, the target takes %d %s damage (your ability modifier)]", abilityMod, w.DamageType)
-	case "Cleave":
-		// only a reminder: the second attack happens when the player names a different creature (cleave_target_id)
-		return " [Cleave available: add cleave_target_id for a different creature within 5 feet of the target, once per turn]"
-	case "Topple":
-		return fmt.Sprintf(" [Mastery Topple: on a hit the target makes a Constitution saving throw, DC %d (8 + %d + %d), or has the Prone condition]",
-			8+abilityMod+game.ProficiencyBonus(level), abilityMod, game.ProficiencyBonus(level))
-	}
-	if t, ok := masteryText[w.Mastery]; ok {
-		return " [Mastery " + w.Mastery + ": " + t + "]"
-	}
-	return ""
 }
 
 func handleWeaponMasteries(w http.ResponseWriter, r *http.Request) {

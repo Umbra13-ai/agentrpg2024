@@ -980,6 +980,7 @@ func handleAction(w http.ResponseWriter, r *http.Request) {
 		canAct, resourceType, errMsg := true, "free", ""
 		if req.Action == "offhand_attack" && nickAvailable(charID, req.Description) {
 			markNickUsed(charID) // Nick: the extra attack is part of the Attack action, not a Bonus Action
+			fleetNote = " [Nick: this extra attack is part of the Attack action; no Bonus Action spent]"
 		} else if req.Action == "step_of_the_wind" && fleetStep(charID) {
 			canAct, resourceType = true, "free"                // Fleet Step (Open Hand 11): right after another Bonus Action, without one of its own
 			fleetNote = " [Fleet Step: no Bonus Action spent]" // F182
@@ -1099,7 +1100,6 @@ func handleAction(w http.ResponseWriter, r *http.Request) {
 			resolveAs, resolveDesc = "attack", strings.TrimSpace(req.Description+" (scimitar of speed)")
 		}
 		result = resolveActionWithBonusDash(resolveAs, withActionContext(resolveDesc, req.CloseRange), charID, bonusDash, req.SpellSlug)
-		result += fleetNote
 		if dashErr != nil {
 			if errors.Is(dashErr, sql.ErrNoRows) {
 				battleMapError(w, http.StatusConflict, "bonus_dash_unavailable")
@@ -1127,6 +1127,7 @@ func handleAction(w http.ResponseWriter, r *http.Request) {
 		} else if attackAction && len(enemyTargets(lobbyID)) > 0 {
 			attackTip = "Add target_id (an enemy id from situation.enemies in GET /api/my-turn) and the server decides hit or miss and applies the damage. Without it the roll goes to the GM."
 		}
+		result += fleetNote                                   // Fleet Step, Nick: after the target's result, which replaces the line
 		if v, ok := itemCastNotes.LoadAndDelete(charID); ok { // charges spent, or the scroll used up
 			result += v.(string)
 		}
@@ -1598,7 +1599,8 @@ func resolveActionWithBonusDash(action, description string, charID int, bonusDas
 				autoCritReason = "unconscious"
 			}
 		}
-		// 2024 Weapon Mastery: say what the weapon's Mastery property adds, if the character has it
+		// 2024 Weapon Mastery: the mastery this attack uses is noted here; its effect is told after the outcome, only when it
+		// happens (Graze on a miss, the others on a hit: attack_target.go, weapon_mastery_effects.go)
 		masteryUses.Delete(charID)
 		pendingBrutal.Delete(charID)
 		pendingCunning.Delete(charID) // effects chosen for an earlier attack must not carry over
@@ -1608,9 +1610,6 @@ func resolveActionWithBonusDash(action, description string, charID int, bonusDas
 		markRageExtended(charID)         // an attack roll extends a Rage
 		if hasWeapon {
 			noteMasteryUse(charID, weaponKey, weapon, masteryMod, level, descLower)
-			if mn := masteryNote(charID, weaponKey, weapon, masteryMod, level); mn != "" {
-				rollInfo += mn
-			}
 		}
 
 		// A natural 1 misses (unless Peerless Aim will turn it into a hit: the damage below is then rolled as for a hit)

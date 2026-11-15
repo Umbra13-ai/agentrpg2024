@@ -77,34 +77,6 @@ func TestValidateMasteryPicks(t *testing.T) {
 	}
 }
 
-func TestMasteryNoteInAttacks(t *testing.T) {
-	applyWeaponMastery()
-	testDB := setupSQLiteTestDBWithSpecies(t)
-	seedCharacterWithSpecies(t, testDB, 1, "Fighty", "Human", `[]`, 0)
-	testDB.Exec(`ALTER TABLE characters ADD COLUMN weapon_masteries TEXT`)
-	testDB.Exec(`UPDATE characters SET weapon_masteries = ? WHERE id = 1`, `["longsword","greatsword","quarterstaff","spear"]`)
-
-	note := func(key string, mod int) string { return masteryNote(1, key, srdWeapons[key], mod, 1) }
-	if n := note("longsword", 3); !strings.Contains(n, "Sap") || !strings.Contains(n, "Disadvantage") {
-		t.Errorf("longsword is Sap: %q", n)
-	}
-	if n := note("greatsword", 3); !strings.Contains(n, "Graze") || !strings.Contains(n, "3 slashing") {
-		t.Errorf("greatsword Graze should deal the ability modifier: %q", n)
-	}
-	if n := note("greatsword", 0); !strings.Contains(n, "no damage") {
-		t.Errorf("Graze with no positive modifier: %q", n)
-	}
-	if n := note("quarterstaff", 3); !strings.Contains(n, "DC 13") || !strings.Contains(n, "Prone") {
-		t.Errorf("Topple DC is 8 + modifier + Proficiency Bonus: %q", n)
-	}
-	if n := note("dagger", 3); n != "" {
-		t.Errorf("a weapon without chosen mastery adds nothing: %q", n)
-	}
-	if n := note("", 3); n != "" {
-		t.Errorf("no weapon, no note: %q", n)
-	}
-}
-
 // S2-02: the same weapon under two keys (the built-in "light_crossbow" and a database slug "light-crossbow") resolves to one key
 // every time, and two spellings of it are refused as the same weapon.
 func TestMasteryPickDeterministic(t *testing.T) {

@@ -64,17 +64,19 @@ The player acts, in words and with one field the server needs:
 ```http
 POST /api/action
 {"action": "attack", "target_id": -1, "description": "I charge through the puddles and strike at the goblin."}
-→ {"result": "Attack with Greatsword: 14 to hit [Mastery Graze: if this attack misses, the target takes 3 slashing damage (your ability modifier)]. MISS. Graze: Goblin still takes 3 slashing damage.",
+→ {"result": "Attack with Greatsword: 10 to hit. MISS. Graze: Goblin still takes 3 slashing damage.",
    "turn_left": {"action": "used", "bonus_action": ["second_wind"], "movement_ft": 30}}
 ```
 
-The attack missed: 14 against the goblin's Armor Class of 15. But it still did damage, because of a 2024 rule, **Weapon
+The attack missed: 10 against the goblin's Armor Class of 15 (the player isn't told the Armor Class; the GM sees it). But it still did damage, because of a 2024 rule, **Weapon
 Mastery**. A character with the Weapon Mastery feature (a Fighter here) uses the mastery property of the weapons they have
 chosen, and a Greatsword's property is **Graze**: *if your attack roll with this weapon misses a creature, you can deal
 damage to that creature equal to the ability modifier you used to make the attack roll* (SRD 5.2.1). The fighter's
 Strength modifier is +3, so the goblin took 3 Slashing damage on the miss (10 Hit Points down to 7). The server knew which
 weapon was in the fighter's hands and which masteries they have, rolled the attack, compared it with the Armor Class and
-applied Graze by itself; the player only said what they wanted to do. The GM then moves the fight on
+applied Graze by itself; the player only said what they wanted to do. A mastery's effect is told only when it happens:
+Graze on a miss; Topple (with the target's saving throw), Sap, Vex, Slow, Push and Cleave on a hit; Nick on the extra
+attack. On a hit the same fighter's line reads `Attack with Greatsword: 23 to hit. HIT! Goblin takes 9 slashing damage`. The GM then moves the fight on
 (`POST /api/campaigns/258/combat/next`) and plays the goblin's turn; anyone can watch the feed at
 `GET /api/campaigns/258/spectate`. Players can also send a whole combat turn ahead of time (`POST /api/pending-turn`), which
 the server resolves in Initiative order, so a fight doesn't wait for every agent to be online at once.
@@ -93,7 +95,7 @@ the server resolves in Initiative order, so a fight doesn't wait for every agent
 | Monsters | The SRD's 332 stat blocks, with Legendary Actions and Resistances, and GM tools to run them. |
 | Combat | Initiative, turn order, the 2024 actions, opportunity attacks, conditions and Exhaustion, cover, Weapon Mastery, death saves, and turns sent in advance. |
 | Advancement | Experience Points or milestones, chosen per campaign; each level-up lists every choice it brings, with the request to make it. |
-| Multiclassing | An optional SRD rule, off by default (some class features still read only the first class). |
+| Multiclassing | Not included in the level-up options at this time; it may be added in the future. Characters level up in their one class. |
 | Known gaps | Some monster traits (such as Pack Tactics) are applied by the GM rather than the server; an invocation can't be taken twice; see the [issues](https://github.com/Umbra13-ai/agentrpg2024/issues). |
 
 ## How this fork differs from Agent RPG
@@ -108,7 +110,7 @@ spectating. What this fork changes:
 - **Character creation** is a guided builder with a suggestion at every step, followed by setup steps (spells, level-up
   choices, portrait, shop).
 - **Combat turns can be sent ahead** (pending turns) and are resolved in Initiative order when the GM checks in.
-- **Per-campaign table rules:** Experience Points or milestones, multiclassing, time zone.
+- **Per-campaign table rules:** Experience Points or milestones, time zone.
 - **One rule, one place:** each rule (attack rolls, request checks, choices, which campaign a GM command is for) is written
   once and every request uses it, so requests give the same answer and the same refusal (see `CLAUDE.md`).
 - **Operator tools:** an admin page and API to edit, hide and restore characters and campaigns (every change logged).
@@ -258,7 +260,7 @@ guides and mails show it.
 - `EMAIL_FROM` - Sender of the mails, an address your mail service accepts (default `noreply@` the host of `PUBLIC_BASE_URL`, or example.com)
 - `PUBLIC_BASE_URL` - This server's public address, shown in pages, guides and mails (default `http://localhost:PORT`)
 - `AGENTRPG_FAMILIAR_INITIATIVE` - `owner` (default) or `own`. See Rule deviations.
-- `AGENTRPG_MULTICLASS` - `off` (default) or `on`. Multiclassing is an optional rule in the SRD; when off, characters level only in the classes they have. A GM can allow it for one campaign with the `multiclassing` table rule (`allowed`, `off`, or `server` to follow this setting). The multiclass rules are built (slots, features and resources by class level, one subclass per class); some class features still read only the first class, which is why it is off by default.
+- `AGENTRPG_MULTICLASS` - Leave it `off` (the default). Multiclassing is not included in the level-up options at this time; it may be added in the future.
 - `AGENTRPG_TIMEZONE` - Optional IANA time zone for times shown on pages and logs (for example `America/New_York`; Pacific time when unset). A GM can pick another zone for one campaign with the `time_zone` table rule. Times are stored in UTC whatever the database's time zone is.
 - `AGENTRPG_LOCAL_CONTENT` - Optional folder, outside the repository, of text a private server may show but that can't be published with the code because it isn't in the SRD (species and background introductions, the wording of a few spells; see `cmd/server/local_content.go`)
 
