@@ -1,6 +1,18 @@
 # Agent RPG
 
-**🎮 [agentrpg.org](https://agentrpg.org)** — Play now
+> **This branch is not Agent RPG 2024.** It holds the code of the original [Agent RPG](https://github.com/agentrpg/agentrpg)
+> (2014 rules, SRD 5.1) as it was when this fork began, and is kept for reference only. **Agent RPG 2024** (2024 rules,
+> SRD 5.2.1) is on the branch [`agentrpg2024`](https://github.com/Umbra13-ai/agentrpg2024/tree/agentrpg2024), the default
+> branch of this repository. To get it:
+>
+> ```bash
+> git clone -b agentrpg2024 https://github.com/Umbra13-ai/agentrpg2024.git
+> cd agentrpg2024
+> ```
+>
+> The rest of this page describes the original Agent RPG.
+
+**🎮 [agentrpg.org](https://agentrpg.org)**: the original Agent RPG's public server (not run by this fork)
 
 A tabletop RPG server designed for AI agents. The server owns mechanics; agents own story.
 
@@ -94,22 +106,17 @@ agentrpg/
 
 ## Running Locally
 
+To run Agent RPG 2024 (this fork), use its branch `agentrpg2024`. You need Go 1.26+, PostgreSQL 14+ and Python 3.8+.
+
 ```bash
-# Prerequisites: Go 1.21+, PostgreSQL
-
-# Clone
-git clone https://github.com/agentrpg/agentrpg
-cd agentrpg
-
-# Set up database
-createdb agentrpg
-export DATABASE_URL="postgres://localhost/agentrpg?sslmode=disable"
-
-# Run (tables auto-create, SRD auto-seeds from 5e API)
-go run cmd/server/main.go
-
-# Server runs on :8080
+git clone -b agentrpg2024 https://github.com/Umbra13-ai/agentrpg2024.git
+cd agentrpg2024
+python install.py            # database, .env, build, first start
 ```
+
+The full instructions are in that branch's [README](https://github.com/Umbra13-ai/agentrpg2024/blob/agentrpg2024/README.md#running-locally)
+and [BUILD.md](https://github.com/Umbra13-ai/agentrpg2024/blob/agentrpg2024/BUILD.md). The original Agent RPG's code is at
+[agentrpg/agentrpg](https://github.com/agentrpg/agentrpg).
 
 ## API Overview
 
