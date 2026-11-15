@@ -109,8 +109,11 @@ func gmSetCharacterFields(charID int, set map[string]json.RawMessage) ([]string,
 		if err := setConditionColumn(charID, key, v); err != nil {
 			return nil, fmt.Errorf("%s: %v", k, err)
 		}
+	}
+	for _, k := range keys {
 		if strings.EqualFold(k, "inventory") || strings.EqualFold(k, "attuned_items") {
 			syncAttunement(charID) // attunement only to items carried (inventory_2024.go)
+			break
 		}
 	}
 	return keys, nil
