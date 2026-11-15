@@ -81,9 +81,9 @@ func resolveAttackOnObject(lobbyID, objectID int, o attackOutcome) string {
 		return fmt.Sprintf("%s is already destroyed.", obj.Name)
 	}
 	if o.Fumble || (!o.Crit && o.Total < obj.AC) {
-		return fmt.Sprintf("Attack with %s on %s: %d to hit. MISS.", o.Weapon, obj.Name, o.Total)
+		return attackHead(o.Weapon+" on "+obj.Name, o) + ". MISS."
 	}
-	return fmt.Sprintf("Attack with %s on %s: %d to hit. HIT! %s", o.Weapon, obj.Name, o.Total, damageObject(lobbyID, obj, o.Damage, o.DamageType))
+	return attackHead(o.Weapon+" on "+obj.Name, o) + ". HIT! " + damageObject(lobbyID, obj, o.Damage, o.DamageType)
 }
 
 // @Summary Objects and doors (breaking objects)

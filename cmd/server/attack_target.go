@@ -32,7 +32,8 @@ type attackOutcome struct {
 	Hit        bool
 	Damage     int
 	DamageType string
-	RollInfo   string
+	RollInfo   string             // what the roll added besides the attacker's line (Lucky, Reckless Attack, a reroll): never its description
+	Out        game.AttackOutcome // the roll's outcome as the one attack function gave it (both d20s with Advantage)
 	SneakUsed  bool
 	SneakNote  string // " (+38 Sneak Attack, 10d6)": shown to the attacker after the damage
 	Dice       string // the weapon's damage dice and the modifier added, for Savage Attacker
@@ -41,6 +42,17 @@ type attackOutcome struct {
 }
 
 var lastAttacks sync.Map // character id -> attackOutcome
+
+// attackHead is the attacker's line of a recorded attack up to the outcome (game.AttackRoll.HeadForAttacker: the total, the
+// d20 and what was added, never the Armor Class), then what the roll added besides. A d20 changed after the roll (a Luck Blade
+// reroll) is shown as the d20 that counts.
+func attackHead(label string, o attackOutcome) string {
+	out := o.Out
+	if out.Natural != o.Natural || out.Total != o.Total {
+		out = game.AttackOutcome{Natural: o.Natural, Dice: [2]int{o.Natural, 0}, Total: o.Total}
+	}
+	return o.Roll.HeadForAttacker("Attack with "+label, out) + o.RollInfo
+}
 
 var underwaterMiss sync.Map // character id -> a ranged attack underwater beyond normal range (an automatic miss)
 
@@ -271,9 +283,9 @@ func resolveAttackOnMonster(lobbyID, charID, targetID int, o attackOutcome, clea
 	info := map[string]interface{}{"target_id": targetID, "target": name, "hit": hit}
 	var text string
 	if !hit {
-		text = fmt.Sprintf("Attack with %s: %d to hit%s. MISS.", weaponLabel, o.Total, o.RollInfo)
+		text = attackHead(weaponLabel, o) + ". MISS."
 		if o.Fumble {
-			text = fmt.Sprintf("Attack with %s: %d (natural 1)%s. MISS.", weaponLabel, o.Total, o.RollInfo)
+			text = attackHead(weaponLabel, o) + ". MISS (a natural 1)."
 		}
 		if v, ok := attackExtraNote.LoadAndDelete(charID); ok { // Defender's transfer and a hurled hammer happen on a miss too
 			text += v.(string)
@@ -444,11 +456,11 @@ func resolveAttackOnMonster(lobbyID, charID, targetID int, o attackOutcome, clea
 	if peerless {
 		label += " (Peerless Aim turns the miss into a hit)"
 	}
-	text = fmt.Sprintf("Attack with %s: %d to hit%s. %s %s takes %d %s damage", weaponLabel, o.Total, o.RollInfo, label, name, dmg, o.DamageType)
+	text = fmt.Sprintf("%s. %s %s takes %d %s damage", attackHead(weaponLabel, o), label, name, dmg, o.DamageType)
 	text += o.SneakNote + savageText
 	switch how {
 	case "immune":
-		text = fmt.Sprintf("Attack with %s: %d to hit%s. %s But %s is immune to %s damage", weaponLabel, o.Total, o.RollInfo, label, name, o.DamageType)
+		text = fmt.Sprintf("%s. %s But %s is immune to %s damage", attackHead(weaponLabel, o), label, name, o.DamageType)
 	case "resistant":
 		text += " (it resists)"
 	case "vulnerable":

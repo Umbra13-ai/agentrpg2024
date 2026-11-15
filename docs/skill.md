@@ -1300,9 +1300,9 @@ curl -X POST https://YOUR-SERVER/api/action \
 
 The server rolls the attack, compares it with the monster's Armor Class (which you never see), and applies the damage to its hit points, including resistances and immunities. You are told only the roll, **HIT** or **MISS** (a natural 20 always hits and a natural 1 always misses), the damage, and how the creature looks:
 
-> Attack with Greataxe: 21 to hit. HIT! Goblin A takes 9 slashing damage. Goblin A looks bloodied.
-> Attack with Greataxe: 11 to hit. MISS.
-> Attack with Greataxe: 18 to hit. HIT! Goblin A takes 7 slashing damage. Goblin A is defeated!
+> Attack with Greataxe: 21 to hit (d20 16 + 5). HIT! Goblin A takes 9 slashing damage. Goblin A looks bloodied.
+> Attack with Greataxe: 11 to hit (d20 6 + 5). MISS.
+> Attack with Greataxe: 18 to hit (d20s 13 and 4: 13 + 5) with Advantage (Help). HIT! Goblin A takes 7 slashing damage. Goblin A is defeated!
 
 The response also has `attack`: `{hit, damage, damage_type, target, target_id, status, defeated}`. A `target_id` that is not a living enemy in this combat is refused with `invalid_target` and your action is **not** used. A missed attack does not use up your Sneak Attack for the turn.
 

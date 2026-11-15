@@ -100,3 +100,21 @@ func TestWeaponPropertiesOneSpelling(t *testing.T) {
 		}
 	}
 }
+
+// Every attacker's line comes from game.AttackRoll.HeadForAttacker (through LineForAttacker or attackHead): no handler writes
+// "N to hit" itself (the GM's monster lines are game.AttackRoll.Line).
+func TestNoOtherAttackerLine(t *testing.T) {
+	files, _ := filepath.Glob("*.go")
+	own := regexp.MustCompile(`"[^"]*: %d to hit|Attack roll: %d|natural 1: miss|nat %d CRITICAL`)
+	for _, f := range files {
+		if strings.HasSuffix(f, "_test.go") {
+			continue
+		}
+		b, _ := os.ReadFile(f)
+		for n, line := range strings.Split(string(b), "\n") {
+			if own.MatchString(line) {
+				t.Errorf("%s:%d writes an attack line itself: use attackHead or LineForAttacker", f, n+1)
+			}
+		}
+	}
+}

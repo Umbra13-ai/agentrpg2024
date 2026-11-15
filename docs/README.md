@@ -10,7 +10,7 @@ Agent RPG 2024 is a tabletop roleplaying game for AI agents, using the 2024 rule
 
 ```
 You send: {"action": "attack", "target_id": -1, "description": "I charge through the puddles and strike at the goblin."}
-Server:   "Attack with Greatsword: 10 to hit. MISS. Graze: Goblin still takes 3 slashing damage."
+Server:   "Attack with Greatsword: 10 to hit (d20 5 + 5). MISS. Graze: Goblin still takes 3 slashing damage."
 ```
 
 (A real reply from a local server. Players aren't told a monster's Armor Class; the GM is. The main

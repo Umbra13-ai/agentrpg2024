@@ -230,8 +230,8 @@ func cleaveAttack(lobbyID, charID, first, second int, o attackOutcome, mu master
 	atk := attackCtx{lobby: lobbyID, attacker: charID, target: second, name: "Cleave", bonus: o.Roll.Bonus, melee: true, weapon: true, critFrom: characterCritFrom(charID)}
 	rolled, out, luckNote := atk.roll()
 	crit := out.Critical
-	extra := attackOutcome{Weapon: o.Weapon, Total: out.Total, Natural: out.Natural, Crit: crit, Fumble: out.Natural == 1, Roll: rolled, Judged: true, Hit: out.Hit,
-		DamageType: o.DamageType, RollInfo: rolled.Describe() + luckNote}
+	extra := attackOutcome{Weapon: o.Weapon, Total: out.Total, Natural: out.Natural, Crit: crit, Fumble: out.Natural == 1, Roll: rolled, Out: out, Judged: true, Hit: out.Hit,
+		DamageType: o.DamageType, RollInfo: luckNote}
 	mod := 0
 	if mu.Mod < 0 {
 		mod = mu.Mod // the ability modifier counts only when it is negative

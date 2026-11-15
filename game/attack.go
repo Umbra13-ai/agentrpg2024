@@ -159,13 +159,43 @@ func (a AttackRoll) Line(name string, o AttackOutcome) string {
 	return fmt.Sprintf("%s: %d%s vs AC %d - %s", name, o.Total, a.Describe(), a.AC, o.Label())
 }
 
-// LineForAttacker gives the result line as the attacker's player reads it: the roll and its total, without the target's Armor
-// Class.
+// HeadForAttacker is the attacker's side of every attack result line, up to the outcome: the total, the d20 and what was added
+// to it, why it had Advantage or Disadvantage, and each adjustment. It never shows the target's Armor Class (players aren't
+// told it; the GM's line, Line, has it). Every character, companion, item and spell attack the attacker reads uses it.
 //
-//	"Attack with Longsword: 17 to hit with Advantage (Help). HIT"
-func (a AttackRoll) LineForAttacker(name string, o AttackOutcome) string {
+//	"Attack with Longsword: 17 to hit (d20 12 + 5)"
+//	"Attack with Longsword: 17 to hit (d20s 12 and 7: 12 + 5) with Advantage (Help) [Bless +2]"
+//	"Claw: automatic hit"
+func (a AttackRoll) HeadForAttacker(name string, o AttackOutcome) string {
 	if o.AutoHit {
-		return fmt.Sprintf("%s: automatic hit. %s", name, o.Label())
+		return name + ": automatic hit"
 	}
-	return fmt.Sprintf("%s: %d to hit%s. %s", name, o.Total, a.Describe(), o.Label())
+	return fmt.Sprintf("%s: %d to hit%s%s", name, o.Total, a.dice(o), a.Describe())
+}
+
+// dice: " (d20 12 + 5)" or, with two d20s, " (d20s 12 and 7: 12 + 5)". What is added is the total less the d20 and the
+// adjustments in square brackets, so the numbers always add up to the total shown.
+func (a AttackRoll) dice(o AttackOutcome) string {
+	added := o.Total - o.Natural
+	for _, x := range a.Adjust {
+		added -= x.Amount
+	}
+	d := fmt.Sprintf("d20 %d", o.Natural)
+	if o.Dice[1] != 0 {
+		d = fmt.Sprintf("d20s %d and %d: %d", o.Dice[0], o.Dice[1], o.Natural)
+	}
+	switch {
+	case added > 0:
+		d += fmt.Sprintf(" + %d", added)
+	case added < 0:
+		d += fmt.Sprintf(" - %d", -added)
+	}
+	return " (" + d + ")"
+}
+
+// LineForAttacker gives the result line as the attacker's player reads it: HeadForAttacker and the outcome.
+//
+//	"Attack with Longsword: 17 to hit (d20 12 + 5) with Advantage (Help). HIT"
+func (a AttackRoll) LineForAttacker(name string, o AttackOutcome) string {
+	return a.HeadForAttacker(name, o) + ". " + o.Label()
 }

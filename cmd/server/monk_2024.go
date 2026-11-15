@@ -206,12 +206,12 @@ func monkStrikesOnMonster(charID int, description string, flurry bool) (string, 
 		if dmg < 1 {
 			dmg = 1
 		}
-		o := attackOutcome{Weapon: "unarmed", Total: out.Total, Natural: out.Natural, Crit: crit, Fumble: out.Natural == 1, Roll: rolled, Judged: hasTarget, Hit: out.Hit,
-			Damage: dmg, DamageType: dtype, RollInfo: rolled.Describe() + luckNote, Dice: die, DiceMod: mod}
+		o := attackOutcome{Weapon: "unarmed", Total: out.Total, Natural: out.Natural, Crit: crit, Fumble: out.Natural == 1, Roll: rolled, Out: out, Judged: hasTarget, Hit: out.Hit,
+			Damage: dmg, DamageType: dtype, RollInfo: luckNote, Dice: die, DiceMod: mod}
 		if !hasTarget { // no target the server knows: the GM judges the hit
 			line := fmt.Sprintf("Strike %d: %s", i, rolled.LineForAttacker("Unarmed Strike", out))
 			if out.Natural != 1 {
-				line = fmt.Sprintf("Strike %d: Unarmed Strike: %d to hit%s. Damage: %d %s", i, out.Total, o.RollInfo, dmg, dtype)
+				line = fmt.Sprintf("Strike %d: %s%s. Damage: %d %s", i, rolled.HeadForAttacker("Unarmed Strike", out), o.RollInfo, dmg, dtype)
 				if crit {
 					line += " (a Critical Hit: the dice are doubled)"
 				}

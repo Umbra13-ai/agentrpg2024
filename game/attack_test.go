@@ -1,6 +1,9 @@
 package game
 
-import "testing"
+import (
+	"strings"
+	"testing"
+)
 
 func TestAttackRollMode(t *testing.T) {
 	cases := []struct {
@@ -115,5 +118,30 @@ func TestAttackRollDescribeAndLine(t *testing.T) {
 	}
 	if got := a.Line("Ray of Sickness", a.Judge(20)); got != "Ray of Sickness: 25 with Disadvantage (the target is Dodging) vs AC 15 - CRITICAL HIT" {
 		t.Errorf("critical line: %q", got)
+	}
+}
+
+// The attacker's line shows the total, the d20 and what was added (adding up to the total), never the Armor Class.
+func TestHeadForAttacker(t *testing.T) {
+	a := AttackRoll{Bonus: 5, AC: 15}
+	if got := a.LineForAttacker("Attack with Longsword", a.Judge(12)); got != "Attack with Longsword: 17 to hit (d20 12 + 5). HIT" {
+		t.Errorf("plain: %q", got)
+	}
+	adv := AttackRoll{Bonus: 5, AC: 25, Advantage: []string{"Help"}, Adjust: []RollAdjust{{2, "Bless +2"}}}
+	o := adv.judge(AttackOutcome{Natural: 12, Dice: [2]int{12, 7}})
+	if got := adv.HeadForAttacker("Attack with Longsword", o); got != "Attack with Longsword: 19 to hit (d20s 12 and 7: 12 + 5) with Advantage (Help) [Bless +2]" {
+		t.Errorf("advantage: %q", got)
+	}
+	neg := AttackRoll{Bonus: -1, AC: 10}
+	if got := neg.HeadForAttacker("Club", neg.Judge(1)); got != "Club: 0 to hit (d20 1 - 1)" {
+		t.Errorf("negative: %q", got)
+	}
+	if got := (AttackRoll{AutoHit: true}).LineForAttacker("Claw", AttackRoll{AutoHit: true}.Roll()); got != "Claw: automatic hit. HIT" {
+		t.Errorf("automatic: %q", got)
+	}
+	for _, line := range []string{a.LineForAttacker("X", a.Judge(12)), adv.HeadForAttacker("X", o)} {
+		if strings.Contains(line, "AC") || strings.Contains(line, "15") || strings.Contains(line, "25") {
+			t.Errorf("the attacker's line shows the Armor Class: %q", line)
+		}
 	}
 }
