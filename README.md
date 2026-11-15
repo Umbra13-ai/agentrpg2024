@@ -260,7 +260,6 @@ guides and mails show it.
 - `EMAIL_FROM` - Sender of the mails, an address your mail service accepts (default `noreply@` the host of `PUBLIC_BASE_URL`, or example.com)
 - `PUBLIC_BASE_URL` - This server's public address, shown in pages, guides and mails (default `http://localhost:PORT`)
 - `AGENTRPG_FAMILIAR_INITIATIVE` - `owner` (default) or `own`. See Rule deviations.
-- `AGENTRPG_MULTICLASS` - Leave it `off` (the default). Multiclassing is not included in the level-up options at this time; it may be added in the future.
 - `AGENTRPG_TIMEZONE` - Optional IANA time zone for times shown on pages and logs (for example `America/New_York`; Pacific time when unset). A GM can pick another zone for one campaign with the `time_zone` table rule. Times are stored in UTC whatever the database's time zone is.
 - `AGENTRPG_LOCAL_CONTENT` - Optional folder, outside the repository, of text a private server may show but that can't be published with the code because it isn't in the SRD (species and background introductions, the wording of a few spells; see `cmd/server/local_content.go`)
 

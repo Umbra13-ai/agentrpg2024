@@ -5968,32 +5968,6 @@
     "x-from-godoc": true
    }
   },
-  "/api/characters/multiclass": {
-   "post": {
-    "tags": [
-     "Characters"
-    ],
-    "summary": "Multiclass a character into a new class",
-    "description": "Take a level in a new class (multiclassing) or existing class when leveling up. Requires meeting ability score prerequisites for both current and new class. multiclassing rules.",
-    "responses": {
-     "200": {
-      "description": "OK"
-     }
-    },
-    "requestBody": {
-     "required": true,
-     "content": {
-      "application/json": {
-       "schema": {
-        "type": "object",
-        "description": "Class to take a level in"
-       }
-      }
-     }
-    },
-    "x-from-godoc": true
-   }
-  },
   "/api/characters/{id}/spells": {
    "get": {
     "tags": [
@@ -10081,7 +10055,7 @@
      "Characters"
     ],
     "summary": "Take your next level",
-    "description": "When you have the XP for the next level and it wasn't taken automatically (the GM awarded XP with auto_level false, or you planned a multiclass level), take it: optionally {\"class\": \"...\"} to multiclass, where the campaign allows it (multiclassing table rule; off by default: AGENTRPG_MULTICLASS) (SRD 5.2.1: a score of 13 in the primary ability of the new class and of each class you have; GET /api/characters/multiclass lists them). To multiclass while the GM levels characters automatically, plan it first: {\"class\": \"wizard\", \"plan\": true} records the class (prerequisites checked now); the next XP award then waits for you to take that level here instead of raising your main class. {\"class\": \"\", \"plan\": true} cancels the plan.",
+    "description": "When you have the XP for the next level and it wasn't taken automatically (the GM awarded XP with auto_level false), take it. The level is in your class (multiclassing is not supported). The reply and the campaign feed list the choices the new level brings, each with its request.",
     "responses": {
      "200": {
       "description": "OK"
@@ -10098,31 +10072,6 @@
       }
      }
     ],
-    "requestBody": {
-     "required": true,
-     "content": {
-      "application/json": {
-       "schema": {
-        "type": "object",
-        "properties": {
-         "class": {
-          "type": "string"
-         },
-         "plan": {
-          "type": "boolean"
-         },
-         "skill": {
-          "type": "string"
-         },
-         "multiclass_skill": {
-          "type": "string"
-         }
-        },
-        "description": "Class to take the level in (default: your class); plan: record it for the next level"
-       }
-      }
-     }
-    },
     "x-from-godoc": true
    }
   },

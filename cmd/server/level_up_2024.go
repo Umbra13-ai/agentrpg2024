@@ -123,185 +123,32 @@ func applyLevelGain(charID, oldLevel, newLevel int, how string) (int, int, strin
 
 // handleCharacterLevelUp godoc
 // @Summary Take your next level
-// @Description When you have the XP for the next level and it wasn't taken automatically (the GM awarded XP with auto_level false, or you planned a multiclass level), take it: optionally {"class": "..."} to multiclass, where the campaign allows it (multiclassing table rule; off by default: AGENTRPG_MULTICLASS) (SRD 5.2.1: a score of 13 in the primary ability of the new class and of each class you have; GET /api/characters/multiclass lists them). To multiclass while the GM levels characters automatically, plan it first: {"class": "wizard", "plan": true} records the class (prerequisites checked now); the next XP award then waits for you to take that level here instead of raising your main class. {"class": "", "plan": true} cancels the plan.
+// @Description When you have the XP for the next level and it wasn't taken automatically (the GM awarded XP with auto_level false), take it. The level is in your class (multiclassing is not supported). The reply and the campaign feed list the choices the new level brings, each with its request.
 // @Tags Characters
 // @Param id path int true "Character ID"
-// @Param request body object{class=string,plan=bool,skill=string,multiclass_skill=string} false "Class to take the level in (default: your class); plan: record it for the next level"
 // @Router /characters/{id}/level-up [post]
-// handleCharacterLevelUp: POST /api/characters/{id}/level-up {"class": "wizard"} takes the next level when the character has the XP for
-// it (the GM awards XP; with auto_level false the player chooses when and in which class). The class defaults to the character's own;
-// another class is multiclassing (its prerequisites apply). The reply and the public note list the choices to make.
+// handleCharacterLevelUp: POST /api/characters/{id}/level-up takes the next level when the character has the XP for it (the GM awards
+// XP; with auto_level false the player chooses when). "class" may name the character's own class; any other is refused (multiclassing
+// is not supported).
 func handleCharacterLevelUp(w http.ResponseWriter, r *http.Request, charID int) {
 	if r.Method != http.MethodPost {
 		writeJSONStatus(w, http.StatusMethodNotAllowed, map[string]interface{}{"error": "POST required"})
 		return
 	}
 	var req struct {
-		Class           string `json:"class"`
-		Plan            bool   `json:"plan"`
-		Skill           string `json:"skill"`            // multiclassing into Bard, Ranger or Rogue: the skill it gives
-		MulticlassSkill string `json:"multiclass_skill"` // take a skill a multiclass level gave but that wasn't chosen yet
+		Class string `json:"class"` // the character's own class (the default); another is refused
 	}
 	if !readRequest(w, r, &req, optionalBody()) {
-		return
-	}
-	if req.MulticlassSkill != "" {
-		claimOwedMulticlassSkill(w, r, charID, req.MulticlassSkill)
-		return
-	}
-	if req.Plan {
-		planNextLevelClass(w, r, charID, req.Class)
 		return
 	}
 	if req.Class == "" {
 		db.QueryRow(`SELECT COALESCE(class,'') FROM characters WHERE id = $1`, charID).Scan(&req.Class)
 	}
-	var levelBefore int
-	db.QueryRow(`SELECT level FROM characters WHERE id = $1`, charID).Scan(&levelBefore)
-	defer func() { // the planned level is taken: the plan is used up
-		var levelAfter int
-		db.QueryRow(`SELECT level FROM characters WHERE id = $1`, charID).Scan(&levelAfter)
-		if levelAfter > levelBefore {
-			db.Exec(`UPDATE characters SET next_level_class = '' WHERE id = $1 AND lower(COALESCE(next_level_class,'')) = lower($2)`, charID, req.Class)
-		}
-	}()
-	body, _ := json.Marshal(map[string]interface{}{"character_id": charID, "target_class": req.Class, "skill": req.Skill})
+	body, _ := json.Marshal(map[string]interface{}{"character_id": charID, "target_class": req.Class})
 	r2 := r.Clone(r.Context())
 	r2.Body = io.NopCloser(bytes.NewReader(body))
 	r2.ContentLength = int64(len(body))
-	handleCharacterMulticlass(w, r2)
-}
-
-// planNextLevelClass records the class a player wants the next level in ("" cancels). The prerequisites are checked now: 13 in the
-// primary ability of that class and of every class the character already has (SRD 5.2.1, Multiclassing).
-func planNextLevelClass(w http.ResponseWriter, r *http.Request, charID int, class string) {
-	db.Exec(`ALTER TABLE characters ADD COLUMN IF NOT EXISTS next_level_class TEXT DEFAULT ''`)
-	agentID, err := getAgentFromAuth(r)
-	if err != nil {
-		writeAuthError(w, err)
-		return
-	}
-	var owner, str, dex, intl, wis, cha int
-	var main string
-	var levelsRaw []byte
-	if db.QueryRow(`SELECT agent_id, COALESCE(class,''), str, dex, intl, wis, cha, COALESCE(class_levels,'{}') FROM characters WHERE id = $1`, charID).
-		Scan(&owner, &main, &str, &dex, &intl, &wis, &cha, &levelsRaw) != nil || owner != agentID {
-		writeJSONStatus(w, http.StatusForbidden, map[string]interface{}{"error": "not_your_character"})
-		return
-	}
-	class = strings.ToLower(strings.TrimSpace(class))
-	var planLobby int
-	db.QueryRow(`SELECT COALESCE(lobby_id,0) FROM characters WHERE id = $1`, charID).Scan(&planLobby)
-	if class != "" && class != strings.ToLower(main) && classLevelsOf(charID)[class] == 0 && !multiclassAllowed(planLobby) {
-		writeJSONStatus(w, 400, map[string]interface{}{"error": "multiclassing_off", "message": multiclassOffMessage()})
-		return
-	}
-	if class == "" || class == strings.ToLower(main) {
-		db.Exec(`UPDATE characters SET next_level_class = '' WHERE id = $1`, charID)
-		writeJSONStatus(w, 200, map[string]interface{}{"success": true, "next_level_class": "", "message": "No multiclass plan: your next level goes to your class as usual."})
-		return
-	}
-	levels := map[string]int{}
-	json.Unmarshal(levelsRaw, &levels)
-	have := map[string]bool{strings.ToLower(main): true}
-	for c := range levels {
-		have[strings.ToLower(c)] = true
-	}
-	if ok, why := meetsMulticlassPrereqs(class, str, dex, intl, wis, cha); !ok {
-		writeJSONStatus(w, 400, map[string]interface{}{"error": "prerequisites_not_met", "message": fmt.Sprintf("You can't take a level in %s: %s (13 in its primary ability).", class, why)})
-		return
-	}
-	for c := range have {
-		if ok, why := meetsMulticlassPrereqs(c, str, dex, intl, wis, cha); !ok {
-			writeJSONStatus(w, 400, map[string]interface{}{"error": "prerequisites_not_met", "message": fmt.Sprintf("To multiclass you also need 13 in the primary ability of your current class %s: %s.", c, why)})
-			return
-		}
-	}
-	db.Exec(`UPDATE characters SET next_level_class = $1 WHERE id = $2`, class, charID)
-	writeJSONStatus(w, 200, map[string]interface{}{"success": true, "next_level_class": class,
-		"message": fmt.Sprintf("Planned: your next level goes to %s. When the GM's XP award reaches it, the level waits for you: take it with POST /api/characters/%d/level-up {\"class\": \"%s\"}.", class, charID, class)})
-}
-
-// ---- the skill a first level in Bard, Ranger or Rogue gives a multiclass character (SRD 5.2.1 "As a Multiclass Character")
-
-func classSkillList(class string) []string {
-	var list string
-	db.QueryRow(`SELECT COALESCE(skill_choices,'') FROM classes WHERE slug = $1`, strings.ToLower(class)).Scan(&list)
-	var out []string
-	for _, s := range strings.Split(list, ",") {
-		if s = strings.ToLower(strings.TrimSpace(s)); s != "" {
-			out = append(out, s)
-		}
-	}
-	return out
-}
-
-// grantMulticlassSkill adds the skill when the class allows it ("" when done, otherwise why not).
-func grantMulticlassSkill(charID int, class, skill string) string {
-	skill = strings.ToLower(strings.TrimSpace(strings.ReplaceAll(skill, "_", " ")))
-	if skill == "" {
-		return "no skill chosen"
-	}
-	list := classSkillList(class)
-	if strings.ToLower(class) != "bard" && len(list) > 0 && !containsStr(list, skill) {
-		return fmt.Sprintf("%s isn't on the %s skill list (%s).", skill, titleCase(class), strings.Join(list, ", "))
-	}
-	var have string
-	db.QueryRow(`SELECT COALESCE(skill_proficiencies,'') FROM characters WHERE id = $1`, charID).Scan(&have)
-	for _, h := range strings.Split(strings.ToLower(have), ",") {
-		if strings.TrimSpace(h) == skill {
-			return fmt.Sprintf("You're already proficient in %s; choose another skill.", skill)
-		}
-	}
-	if have != "" {
-		have += ", "
-	}
-	db.Exec(`UPDATE characters SET skill_proficiencies = $1 WHERE id = $2`, have+skill, charID)
-	return ""
-}
-
-func addOwedMulticlassSkill(charID int, class string) {
-	db.Exec(`ALTER TABLE characters ADD COLUMN IF NOT EXISTS multiclass_skills_owed TEXT DEFAULT ''`)
-	db.Exec(`UPDATE characters SET multiclass_skills_owed = TRIM(BOTH ',' FROM COALESCE(multiclass_skills_owed,'') || ',' || $1) WHERE id = $2`, strings.ToLower(class), charID)
-}
-
-// claimOwedMulticlassSkill: POST level-up {"multiclass_skill": "stealth"} takes a skill a Bard, Ranger or Rogue level gave.
-func claimOwedMulticlassSkill(w http.ResponseWriter, r *http.Request, charID int, skill string) {
-	db.Exec(`ALTER TABLE characters ADD COLUMN IF NOT EXISTS multiclass_skills_owed TEXT DEFAULT ''`)
-	agentID, err := getAgentFromAuth(r)
-	if err != nil {
-		writeAuthError(w, err)
-		return
-	}
-	var owner int
-	var owed string
-	if db.QueryRow(`SELECT agent_id, COALESCE(multiclass_skills_owed,'') FROM characters WHERE id = $1`, charID).Scan(&owner, &owed) != nil || owner != agentID {
-		writeJSONStatus(w, http.StatusForbidden, map[string]interface{}{"error": "not_your_character"})
-		return
-	}
-	classes := strings.Split(owed, ",")
-	if owed == "" || len(classes) == 0 {
-		writeJSONStatus(w, 400, map[string]interface{}{"error": "no_skill_owed", "message": "No multiclass level is waiting for a skill choice."})
-		return
-	}
-	cls := classes[0]
-	if why := grantMulticlassSkill(charID, cls, skill); why != "" {
-		writeJSONStatus(w, 400, map[string]interface{}{"error": "invalid_skill", "message": why})
-		return
-	}
-	db.Exec(`UPDATE characters SET multiclass_skills_owed = $1 WHERE id = $2`, strings.Join(classes[1:], ","), charID)
-	writeJSONStatus(w, 200, map[string]interface{}{"success": true, "message": fmt.Sprintf("Your %s level gives you proficiency in %s.", titleCase(cls), skill)})
-}
-
-// plannedNextClass is the class a player planned for the next level ("" when none, or the character's own class).
-func plannedNextClass(charID int) string {
-	db.Exec(`ALTER TABLE characters ADD COLUMN IF NOT EXISTS next_level_class TEXT DEFAULT ''`)
-	var plan, main string
-	db.QueryRow(`SELECT COALESCE(next_level_class,''), COALESCE(class,'') FROM characters WHERE id = $1`, charID).Scan(&plan, &main)
-	if strings.EqualFold(plan, main) {
-		return ""
-	}
-	return plan
+	takeClassLevel(w, r2)
 }
 
 // syncClassLevels keeps class_levels (the levels in each class, used by multiclassing and level-ups) in step with the total level:

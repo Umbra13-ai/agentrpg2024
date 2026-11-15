@@ -17,47 +17,29 @@ import (
 	"database/sql"
 	"encoding/json"
 	"fmt"
-	"os"
+	"net/http"
 	"sort"
 	"strings"
 
 	"github.com/agentrpg/agentrpg/game"
 )
 
-// ---- whether multiclassing is allowed (the project owner, Nov 8, 2026: off by default; the code stays and works when turned on)
-// Multiclassing is an optional rule in the SRD 5.2.1 ("With this rule, you have the option of gaining a level in a new class"). The
-// server setting AGENTRPG_MULTICLASS (on/off; off when unset) is the default; a campaign's multiclassing table rule ("allowed" or
-// "off"; "server" follows the setting) overrides it. When off, a level in a new class is refused; characters keep the classes they
-// have and level in them as before.
+// ---- Multiclassing is not supported (Matt, Nov 15, 2026: "We do not support multiclassing"). It can't be turned on: there is
+// no server setting and no table rule for it, no request offers it, and a level in a new class is refused everywhere from here.
 
-func multiclassServerDefault() bool {
-	switch strings.ToLower(strings.TrimSpace(os.Getenv("AGENTRPG_MULTICLASS"))) {
-	case "on", "true", "1", "yes", "allowed":
-		return true
-	}
-	return false
-}
+// multiclassAllowed: never. Every path that would take a level in a new class asks this.
+func multiclassAllowed(lobbyID int) bool { return false }
 
-func multiclassAllowed(lobbyID int) bool {
-	switch tableRule(lobbyID, "multiclassing") {
-	case "allowed":
-		return true
-	case "off":
-		return false
-	}
-	return multiclassServerDefault()
-}
-
-func multiclassingTableRule() tableRuleDef {
-	return tableRuleDef{Key: "multiclassing", Title: "Multiclassing", Default: "server", Options: []tableRuleOption{
-		{"server", "The server's setting", "Follows the server setting AGENTRPG_MULTICLASS (off unless the server turns it on)."},
-		{"allowed", "Allowed", "Characters may take levels in a new class (SRD 5.2.1 multiclassing: 13 in the primary abilities)."},
-		{"off", "Off", "Characters level only in the classes they have."},
-	}}
-}
+const multiclassRefusal = "multiclassing_not_supported"
 
 func multiclassOffMessage() string {
-	return "Multiclassing is off in this campaign (an optional rule; the GM can allow it with the multiclassing table rule, or the server with AGENTRPG_MULTICLASS=on). You can level in the classes you have."
+	return "Multiclassing is not supported on this server: a character levels up in its one class. Nothing was changed."
+}
+
+// handleMulticlassNotSupported answers the old multiclass route: a level is taken with POST /api/characters/{id}/level-up.
+func handleMulticlassNotSupported(w http.ResponseWriter, r *http.Request) {
+	writeJSONStatus(w, http.StatusBadRequest, map[string]interface{}{"error": multiclassRefusal,
+		"message": multiclassOffMessage() + " To take your next level, send POST /api/characters/{id}/level-up."})
 }
 
 // classLevelsOf: the character's levels per class, lowercased; a single-class character (or one without class_levels) is {class: level}.

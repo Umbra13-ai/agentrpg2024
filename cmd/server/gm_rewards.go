@@ -301,16 +301,12 @@ func handleGMAwardXP(w http.ResponseWriter, r *http.Request) {
 
 		newXP := currentXP + req.XP
 		newLevel := getLevelForXP(newXP)
-		planned := plannedNextClass(charID) // a multiclass level the player planned (POST level-up {"class", "plan": true})
-		if ((req.AutoLevel != nil && !*req.AutoLevel) || planned != "") && newLevel > currentLevel {
-			// the XP is banked: the player levels up when ready, choosing the class (multiclassing) and making the choices
+		if req.AutoLevel != nil && !*req.AutoLevel && newLevel > currentLevel {
+			// the XP is banked: the player levels up when ready and makes the choices
 			db.Exec(`UPDATE characters SET xp = $1 WHERE id = $2`, newXP, charID)
 			var lob int
 			db.QueryRow(`SELECT COALESCE(lobby_id,0) FROM characters WHERE id = $1`, charID).Scan(&lob)
-			note := fmt.Sprintf("⬆️ %s has enough XP for level %d: take it with POST /api/characters/%d/level-up (optionally {\"class\": \"...\"} to multiclass).", name, currentLevel+1, charID)
-			if planned != "" {
-				note = fmt.Sprintf("⬆️ %s has enough XP for level %d and planned it in %s: take it with POST /api/characters/%d/level-up {\"class\": \"%s\"}.", name, currentLevel+1, planned, charID, planned)
-			}
+			note := fmt.Sprintf("⬆️ %s has enough XP for level %d: take it with POST /api/characters/%d/level-up.", name, currentLevel+1, charID)
 			if lob > 0 {
 				recordGMAction(db, lob, "level_available", note, note)
 			}

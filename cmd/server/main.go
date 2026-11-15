@@ -353,7 +353,7 @@ func setupRoutes() {
 	http.HandleFunc("/api/admin/changes", handleAdminChanges)
 	http.HandleFunc("/api/admin/accounts", handleAdminAccounts)
 	http.HandleFunc("/api/admin/session", handleAdminSession) // the admin page's sign-in cookie
-	registerAdminPage() // at the secret address in ADMIN_PATH, or nowhere (admin_2024.go)
+	registerAdminPage()                                       // at the secret address in ADMIN_PATH, or nowhere (admin_2024.go)
 	http.HandleFunc("/api/login", handleLogin)
 	http.HandleFunc("/api/password-reset/request", handlePasswordResetRequest)
 	http.HandleFunc("/api/password-reset/confirm", handlePasswordResetConfirm)
@@ -378,9 +378,9 @@ func setupRoutes() {
 	http.HandleFunc("/api/pending-turn", withAPILogging(handlePendingTurn)) // a whole combat turn held until its slot (pending_turns_2024.go)
 	http.HandleFunc("/api/gm/status", withAPILogging(handleGMStatus))
 	http.HandleFunc("/api/gm/conditions", handleGMConditions)
-	http.HandleFunc("/api/gm/spell-effect", handleGMSpellEffect) // F231
-	http.HandleFunc("/api/gm/adjust-monster", handleGMAdjustMonster) // anything about an enemy (Nov 11)
-	http.HandleFunc("/api/character-builder", handleCharacterBuilder)  // F234: step-by-step creation
+	http.HandleFunc("/api/gm/spell-effect", handleGMSpellEffect)      // F231
+	http.HandleFunc("/api/gm/adjust-monster", handleGMAdjustMonster)  // anything about an enemy (Nov 11)
+	http.HandleFunc("/api/character-builder", handleCharacterBuilder) // F234: step-by-step creation
 	http.HandleFunc("/api/character-builder/", handleCharacterBuilder)
 	http.HandleFunc("/api/conditions/active", handleConditionsActive)
 	http.HandleFunc("/api/universe/conditions", handleUniverseConditions)
@@ -392,7 +392,7 @@ func setupRoutes() {
 	http.HandleFunc("/api/keys", handleKeys)
 	http.HandleFunc("/api/keys/", handleKeyByID)
 	http.HandleFunc("/api/characters/species-ability", guardCharacterRead(handleSpeciesAbility))
-	http.HandleFunc("/api/gm/shops", handleGMShops) // shops the GM opens in a campaign (campaign_shops_2024.go)
+	http.HandleFunc("/api/gm/shops", handleGMShops)                                    // shops the GM opens in a campaign (campaign_shops_2024.go)
 	http.HandleFunc("/api/characters/auto-equip", guardCharacterRead(handleAutoEquip)) // the new player is asked whether to put on and arm everything (auto_equip_2024.go)
 	http.HandleFunc("/api/characters/weapon-masteries", guardCharacterRead(handleWeaponMasteries))
 	http.HandleFunc("/api/gm/restore-action", handleGMRestoreAction)
@@ -520,7 +520,7 @@ func setupRoutes() {
 	http.HandleFunc("/api/characters/metamagic", guardCharacterRead(handleCharacterMetamagic))
 	http.HandleFunc("/api/characters/invocations", guardCharacterRead(handleCharacterInvocations))
 	http.HandleFunc("/api/characters/flexible-casting", guardCharacterRead(handleFlexibleCasting))
-	http.HandleFunc("/api/characters/multiclass", guardCharacterRead(withProficiencySync(handleCharacterMulticlass)))
+	http.HandleFunc("/api/characters/multiclass", handleMulticlassNotSupported) // multiclassing is not supported (multiclass_2024.go)
 	http.HandleFunc("/api/characters/fighting-style", guardCharacterRead(handleCharacterFightingStyle))
 	http.HandleFunc("/api/characters/breath-weapon", guardCharacterRead(handleBreathWeapon2024))
 	http.HandleFunc("/api/characters/wholeness-of-body", guardCharacterRead(handleWholenessOfBody2024))

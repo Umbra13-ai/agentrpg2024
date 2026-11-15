@@ -726,9 +726,7 @@ func handleMyTurn(w http.ResponseWriter, r *http.Request) {
 	}
 	characterInfo["class_levels"] = classLevelsOf(charID)
 	characterInfo["hit_dice_by_type"] = hitDicePools(charID)
-	if plan := plannedNextClass(charID); plan != "" { // a multiclass level the player planned
-		characterInfo["next_level_class"] = plan
-	}
+
 	// Words of Creation (Bard 20): Power Word Heal and Power Word Kill always prepared
 	if woc := wordsOfCreationSpells(class, level); len(woc) > 0 {
 		characterInfo["words_of_creation"] = "Power Word Heal and Power Word Kill are always prepared; a cast of either can target a second creature within 10 feet of the first (target_ids)."
@@ -1125,7 +1123,7 @@ func handleMyTurn(w http.ResponseWriter, r *http.Request) {
 				"Disadvantage on STR and DEX saving throws",
 				"You cannot cast spells",
 			},
-			"how_to_resolve": "Unequip the armor (POST /api/characters/unequip-armor) or gain proficiency through multiclassing/feats.",
+			"how_to_resolve": "Unequip the armor (POST /api/characters/unequip-armor).",
 		}
 	}
 

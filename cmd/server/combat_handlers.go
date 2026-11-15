@@ -2364,7 +2364,7 @@ func handleShortRest(w http.ResponseWriter, r *http.Request, charID int) {
 			"hit_dice_by_type":   hitDiceLeftByType(charID),
 			"hp":                 hp,
 			"max_hp":             maxHP,
-			"message":            "POST to take a Short Rest (1 hour); add hit_dice to spend Hit Point Dice (a multiclass character can add \"die\": \"d10\" to spend that type first).",
+			"message":            "POST to take a Short Rest (1 hour); add hit_dice to spend Hit Point Dice.",
 		})
 		return
 	}

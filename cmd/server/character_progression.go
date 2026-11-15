@@ -1053,84 +1053,10 @@ func handleCharacterSubclassChoice(w http.ResponseWriter, r *http.Request) {
 	writeJSONStatus(w, http.StatusOK, reply)
 }
 
-// handleCharacterMulticlass godoc
-// @Summary Multiclass a character into a new class
-// @Description Take a level in a new class (multiclassing) or existing class when leveling up.
-// @Description Requires meeting ability score prerequisites for both current and new class.
-// @Description multiclassing rules.
-// @Tags Characters
-// @Accept json
-// @Produce json
-// @Param character_id body int true "Character ID"
-// @Param target_class body string true "Class to take a level in"
-// @Success 200 {object} map[string]interface{} "Multiclass success with new class levels"
-// @Failure 400 {object} map[string]interface{} "Prerequisites not met or invalid request"
-// @Router /characters/multiclass [post]
-func handleCharacterMulticlass(w http.ResponseWriter, r *http.Request) {
+// takeClassLevel takes the next level (POST /api/characters/{id}/level-up forwards here) in the character's own class; a level in
+// a new class is refused (multiclassAllowed).
+func takeClassLevel(w http.ResponseWriter, r *http.Request) {
 	w.Header().Set("Content-Type", "application/json")
-
-	if r.Method == "GET" {
-		// Return multiclass prerequisites info
-		prereqInfo := map[string]interface{}{}
-		for class, prereqs := range multiclassPrereqs {
-			info := map[string]interface{}{}
-			if prereqs.STR > 0 {
-				info["str"] = prereqs.STR
-			}
-			if prereqs.DEX > 0 {
-				info["dex"] = prereqs.DEX
-			}
-			if prereqs.INT > 0 {
-				info["int"] = prereqs.INT
-			}
-			if prereqs.WIS > 0 {
-				info["wis"] = prereqs.WIS
-			}
-			if prereqs.CHA > 0 {
-				info["cha"] = prereqs.CHA
-			}
-			if prereqs.OrLogic {
-				info["logic"] = "OR (meet any one)"
-			} else if len(info) > 1 {
-				info["logic"] = "AND (meet all)"
-			}
-			prereqInfo[class] = info
-		}
-
-		profInfo := map[string]interface{}{}
-		for class := range multiclassPrereqs {
-			profs := multiclassProfsFor(class)
-			info := map[string]interface{}{}
-			if len(profs.ArmorProf) > 0 {
-				info["armor"] = profs.ArmorProf
-			}
-			if len(profs.WeaponProf) > 0 {
-				info["weapons"] = profs.WeaponProf
-			}
-			if len(profs.ToolProf) > 0 {
-				info["tools"] = profs.ToolProf
-			}
-			if profs.Skills > 0 {
-				info["skill_choices"] = profs.Skills
-			}
-			profInfo[class] = info
-		}
-
-		json.NewEncoder(w).Encode(map[string]interface{}{
-			"description":                      "Multiclassing allows taking levels in multiple classes",
-			"server_default_enabled":           multiclassServerDefault(), // AGENTRPG_MULTICLASS; a campaign's multiclassing table rule overrides it
-			"prerequisites":                    prereqInfo,
-			"proficiencies_when_multiclassing": profInfo,
-			"rules": map[string]interface{}{
-				"prerequisites": "Must meet ability score requirements for BOTH current class and new class",
-				"proficiencies": "When multiclassing INTO a class, gain limited proficiencies (not full)",
-				"spell_slots":   "Multiclass spellcasters combine levels for spell slots (full casters count fully, half casters at half level)",
-				"hit_points":    "Gain hit die for new class + CON mod (not max like level 1)",
-			},
-			"usage": "POST with character_id and target_class to take a level in that class",
-		})
-		return
-	}
 
 	if r.Method != "POST" {
 		http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)
@@ -1209,7 +1135,7 @@ func handleCharacterMulticlass(w http.ResponseWriter, r *http.Request) {
 		w.WriteHeader(http.StatusForbidden)
 		json.NewEncoder(w).Encode(map[string]interface{}{
 			"error":   "not_your_character",
-			"message": "You can only multiclass your own characters",
+			"message": "You can only level up your own characters",
 		})
 		return
 	}
@@ -1243,7 +1169,7 @@ func handleCharacterMulticlass(w http.ResponseWriter, r *http.Request) {
 		db.QueryRow(`SELECT COALESCE(lobby_id,0) FROM characters WHERE id = $1`, req.CharacterID).Scan(&mcLobbyID)
 		if !multiclassAllowed(mcLobbyID) {
 			w.WriteHeader(http.StatusBadRequest)
-			json.NewEncoder(w).Encode(map[string]interface{}{"error": "multiclassing_off", "message": multiclassOffMessage()})
+			json.NewEncoder(w).Encode(map[string]interface{}{"error": multiclassRefusal, "message": multiclassOffMessage()})
 			return
 		}
 	}
@@ -1394,17 +1320,6 @@ func handleCharacterMulticlass(w http.ResponseWriter, r *http.Request) {
 		// Note about tools and skills (would need additional handling)
 		if len(profs.ToolProf) > 0 {
 			newProfsMessage += fmt.Sprintf("Tools: %v ", profs.ToolProf)
-		}
-		if profs.Skills > 0 { // Bard (any skill), Ranger and Rogue (their lists): one skill proficiency
-			if why := grantMulticlassSkill(req.CharacterID, targetClass, req.Skill); req.Skill != "" && why == "" {
-				newProfsMessage += fmt.Sprintf("Skill: %s ", req.Skill)
-			} else {
-				addOwedMulticlassSkill(req.CharacterID, targetClass)
-				if why != "" && req.Skill != "" {
-					newProfsMessage += why + " "
-				}
-				newProfsMessage += fmt.Sprintf("(choose 1 skill proficiency: POST /api/characters/%d/level-up {\"multiclass_skill\": \"...\"}) ", req.CharacterID)
-			}
 		}
 	}
 
