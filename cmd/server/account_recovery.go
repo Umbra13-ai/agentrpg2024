@@ -12,17 +12,15 @@ package main
 //	POST /api/password-reset/request and /confirm    the same code, to set a new password (tokens kept)
 // Recovery codes are random (about 49 bits), stored as SHA-256 hashes, single use, valid for 1 hour, end after 5 wrong tries, and
 // an account gets at most 3 an hour. Agents without an inbox: AgentMail (https://agentmail.to) gives AI agents their own email
-// inboxes through an API. Mail goes out through Resend (RESEND_API_KEY); EMAIL_FROM and PUBLIC_BASE_URL set the sender and the
-// links in the mail (defaults: http://localhost:PORT and noreply@ the host of PUBLIC_BASE_URL). Every page and reply that shows
+// inboxes through an API. Mail goes out through sendMail (mail_2024.go: AgentMail or Resend); PUBLIC_BASE_URL sets the links in
+// the mail and EMAIL_FROM the sender through Resend (defaults: http://localhost:PORT and noreply@ the host of PUBLIC_BASE_URL). Every page and reply that shows
 // the server's address uses publicBaseURL, so a server shows its own address (there is no agentrpg.org in a fork).
 
 import (
 	"crypto/sha256"
 	"crypto/subtle"
 	"encoding/hex"
-	"encoding/json"
 	"fmt"
-	"io"
 	"log"
 	"net/http"
 	"net/mail"
@@ -61,33 +59,6 @@ func emailFrom() string {
 		host = "example.com" // set EMAIL_FROM to a sender your mail service accepts
 	}
 	return "Agent RPG 2024 <noreply@" + host + ">"
-}
-
-func emailConfigured() bool { return os.Getenv("RESEND_API_KEY") != "" }
-
-// sendAccountEmail sends a plain text mail through Resend.
-func sendAccountEmail(to, subject, body string) error {
-	apiKey := os.Getenv("RESEND_API_KEY")
-	if apiKey == "" {
-		log.Println("RESEND_API_KEY not set, skipping email")
-		return fmt.Errorf("email_not_configured")
-	}
-	payload, _ := json.Marshal(map[string]interface{}{"from": emailFrom(), "to": []string{to}, "subject": subject, "text": body})
-	req, _ := http.NewRequest("POST", resendBaseURL()+"/emails", strings.NewReader(string(payload)))
-	req.Header.Set("Authorization", "Bearer "+apiKey)
-	req.Header.Set("Content-Type", "application/json")
-	resp, err := (&http.Client{Timeout: 10 * time.Second}).Do(req)
-	if err != nil {
-		log.Printf("email to %s failed: %v", to, err)
-		return err
-	}
-	defer resp.Body.Close()
-	if resp.StatusCode >= 400 {
-		b, _ := io.ReadAll(io.LimitReader(resp.Body, 2048))
-		log.Printf("Resend returned %d: %s", resp.StatusCode, string(b))
-		return fmt.Errorf("email_send_failed")
-	}
-	return nil
 }
 
 // validEmail: a single address, at most 254 characters.
@@ -208,7 +179,7 @@ func startRecovery(w http.ResponseWriter, r *http.Request) {
 	}
 	if id, ok := recoveryAgentByEmail(req.Email); ok {
 		if code, ok := newRecoveryCode(id); ok {
-			go sendAccountEmail(strings.TrimSpace(req.Email), "Agent RPG 2024 account recovery", recoveryMail(code))
+			go sendMail(strings.TrimSpace(req.Email), "Agent RPG 2024 account recovery", recoveryMail(code))
 		}
 	}
 	writeJSONStatus(w, http.StatusOK, map[string]interface{}{"success": true,

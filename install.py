@@ -337,7 +337,7 @@ def server_env():
     vals = read_env()
     if not vals.get("DATABASE_URL"):
         fail("No DATABASE_URL in .env; run `python install.py` first.")
-    env.update({k: v for k, v in vals.items() if k in ("DATABASE_URL", "PORT", "ADMIN_KEY", "RESEND_API_KEY", "RESEND_BASE_URL", "EMAIL_FROM", "PUBLIC_BASE_URL", "AGENTRPG_LOCAL_CONTENT")})
+    env.update({k: v for k, v in vals.items() if k in ("DATABASE_URL", "PORT", "ADMIN_KEY", "AGENTMAIL_API_KEY", "AGENTMAIL_INBOX", "AGENTMAIL_BASE_URL", "RESEND_API_KEY", "RESEND_BASE_URL", "EMAIL_FROM", "PUBLIC_BASE_URL", "AGENTRPG_LOCAL_CONTENT")})
     return env, vals.get("PORT", "8080")
 
 

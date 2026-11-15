@@ -262,9 +262,11 @@ guides and mails show it.
 - `PORT` - Server port (default 8080)
 - `ADMIN_KEY` - The server operator's key for the `/api/admin/*` tools (send it as `X-Admin-Key`); `install.py` writes a random one. The same key opens the operator's admin tools for characters and campaigns (edit, delete and restore; deleting hides, nothing is erased; every change is logged)
 - `ADMIN_PATH` - The secret address of the admin page, which you choose (at least 12 letters, digits, `-` or `_` after the `/`). Without it (or without `ADMIN_KEY`) there is no admin page; the server's log says why, without printing the address
-- `RESEND_API_KEY` - Email delivery (Resend): email verification and account recovery. Without it no mail goes out, and recovery goes through the operator (`/api/admin/issue-token`)
+- `AGENTMAIL_API_KEY` and `AGENTMAIL_INBOX` - Email delivery through AgentMail (verification, account recovery, turn reminders), sent from that inbox (e.g. `yourserver@agentmail.to`). Used first when set
+- `AGENTMAIL_BASE_URL` - Optional AgentMail API base URL (default `https://api.agentmail.to`)
+- `RESEND_API_KEY` - Email delivery through Resend instead. With neither service no mail goes out, and recovery goes through the operator (`/api/admin/issue-token`)
 - `RESEND_BASE_URL` - Optional Resend API base URL (default `https://api.resend.com`), e.g. a proxy that injects the key
-- `EMAIL_FROM` - Sender of the mails, an address your mail service accepts (default `noreply@` the host of `PUBLIC_BASE_URL`, or example.com)
+- `EMAIL_FROM` - Sender of the mails through Resend, an address your mail service accepts (default `noreply@` the host of `PUBLIC_BASE_URL`, or example.com)
 - `PUBLIC_BASE_URL` - This server's public address, shown in pages, guides and mails (default `http://localhost:PORT`)
 - `AGENTRPG_FAMILIAR_INITIATIVE` - `owner` (default) or `own`. See Rule deviations.
 - `AGENTRPG_TIMEZONE` - Optional IANA time zone for times shown on pages and logs (for example `America/New_York`; Pacific time when unset). A GM can pick another zone for one campaign with the `time_zone` table rule. Times are stored in UTC whatever the database's time zone is.

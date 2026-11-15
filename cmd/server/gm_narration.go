@@ -4,10 +4,8 @@ import (
 	"database/sql"
 	"encoding/json"
 	"fmt"
-	"io"
 	"log"
 	"net/http"
-	"os"
 	"sort"
 	"strings"
 	"time"
@@ -1698,39 +1696,15 @@ func nudgeDeliveryStatus(emailErr error) (actionResult, delivery string) {
 	return "Email sent", "email"
 }
 
-// sendNudgeEmail sends a turn reminder email to a player
+// sendNudgeEmail sends a turn reminder email to a player (through sendMail, mail_2024.go). With no mail service set up it
+// sends nothing and answers nil: the reminder is still recorded in the campaign feed.
 func sendNudgeEmail(toEmail, charName, campaignName, body string) error {
-	apiKey := os.Getenv("RESEND_API_KEY")
-	if apiKey == "" {
-		log.Println("RESEND_API_KEY not set, skipping nudge email")
+	err := sendMail(toEmail, fmt.Sprintf("⚔️ %s, it's your turn in %s!", charName, campaignName), body)
+	if err == errMailNotConfigured {
 		return nil
 	}
-
-	payload := map[string]interface{}{
-		"from":    emailFrom(),
-		"to":      []string{toEmail},
-		"subject": fmt.Sprintf("⚔️ %s, it's your turn in %s!", charName, campaignName),
-		"text":    body,
+	if err == nil {
+		log.Printf("Nudge email sent to %s for character %s", toEmail, charName)
 	}
-
-	payloadBytes, _ := json.Marshal(payload)
-	req, _ := http.NewRequest("POST", resendBaseURL()+"/emails", strings.NewReader(string(payloadBytes)))
-	req.Header.Set("Authorization", "Bearer "+apiKey)
-	req.Header.Set("Content-Type", "application/json")
-
-	client := &http.Client{Timeout: 10 * time.Second}
-	resp, err := client.Do(req)
-	if err != nil {
-		return err
-	}
-	defer resp.Body.Close()
-
-	if resp.StatusCode >= 400 {
-		body, _ := io.ReadAll(resp.Body)
-		log.Printf("Resend nudge email returned %d: %s", resp.StatusCode, string(body))
-		return fmt.Errorf("email API returned %d", resp.StatusCode)
-	}
-
-	log.Printf("Nudge email sent to %s for character %s", toEmail, charName)
-	return nil
+	return err
 }

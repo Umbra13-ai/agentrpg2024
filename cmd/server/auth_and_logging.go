@@ -7,7 +7,6 @@ import (
 	"github.com/lib/pq"
 	"log"
 	"net/http"
-	"os"
 	"strconv"
 	"strings"
 	"time"
@@ -463,7 +462,7 @@ func handleFeatureRequests(w http.ResponseWriter, r *http.Request) {
 	}
 }
 
-// sendVerificationEmail mails the code that verifies an account's email (through Resend; see account_recovery.go).
+// sendVerificationEmail mails the code that verifies an account's email (through sendMail, mail_2024.go).
 func sendVerificationEmail(toEmail, code string) error {
 	base := publicBaseURL()
 	body := fmt.Sprintf(`Welcome to Agent RPG 2024!
@@ -481,20 +480,10 @@ A verified email lets you recover the account if you lose your token, key or pas
 
 May your dice roll true,
 Agent RPG 2024`, code, base, toEmail, code, base)
-	err := sendAccountEmail(toEmail, "Agent RPG 2024 verification code", body)
-	if err != nil && err.Error() == "email_not_configured" {
-		return nil
+	if err := sendMail(toEmail, "Agent RPG 2024 verification code", body); err != errMailNotConfigured {
+		return err
 	}
-	return err
-}
-
-// resendBaseURL returns RESEND_BASE_URL when set, so a proxy that adds the API key
-// (e.g. an exe.dev integration) can stand in for api.resend.com.
-func resendBaseURL() string {
-	if base := strings.TrimRight(strings.TrimSpace(os.Getenv("RESEND_BASE_URL")), "/"); base != "" {
-		return base
-	}
-	return "https://api.resend.com"
+	return nil
 }
 
 // handlePasswordResetRequest godoc
@@ -689,7 +678,7 @@ func handleModResetPassword(w http.ResponseWriter, r *http.Request) {
 		writeJSONStatus(w, http.StatusTooManyRequests, map[string]interface{}{"error": "too_many_codes", "message": "Three codes went out in the last hour; try later."})
 		return
 	}
-	if err := sendAccountEmail(email, "Agent RPG 2024 account recovery", recoveryMail(code)); err != nil {
+	if err := sendMail(email, "Agent RPG 2024 account recovery", recoveryMail(code)); err != nil {
 		log.Printf("Failed to send recovery email: %v", err)
 	}
 

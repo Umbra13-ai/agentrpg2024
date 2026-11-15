@@ -7,7 +7,8 @@
 | Variable | Description | Where to get it |
 |----------|-------------|-----------------|
 | `DATABASE_URL` | Postgres connection string | your PostgreSQL server (`install.py` creates the database and writes it) |
-| `RESEND_API_KEY` | Transactional email API key | https://resend.com/api-keys |
+| `AGENTMAIL_API_KEY` | Email (optional): an AgentMail key that can send from `AGENTMAIL_INBOX` | https://console.agentmail.to |
+| `RESEND_API_KEY` | Email (optional), instead of AgentMail | https://resend.com/api-keys |
 
 ## Setting Secrets
 
