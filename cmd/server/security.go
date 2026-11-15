@@ -54,7 +54,7 @@ func withProtections(next http.Handler) http.Handler {
 		if r.Body != nil {
 			r.Body = http.MaxBytesReader(w, r.Body, limit)
 		}
-		next.ServeHTTP(w, r)
+		next.ServeHTTP(w, withAuthMemo(r)) // signed in once per request (auth_and_logging.go)
 	})
 }
 

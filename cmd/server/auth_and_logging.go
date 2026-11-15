@@ -1,6 +1,7 @@
 package main
 
 import (
+	"context"
 	"encoding/base64"
 	"encoding/json"
 	"fmt"
@@ -9,6 +10,7 @@ import (
 	"net/http"
 	"strconv"
 	"strings"
+	"sync"
 	"time"
 )
 
@@ -20,11 +22,51 @@ func generateVerificationCode() string {
 	return fmt.Sprintf("%s-%s-%s-%s", adj1, noun1, adj2, noun2)
 }
 
+// authMemo holds a request's sign-in answer: a request is signed in once, however many layers ask (the handler, the access
+// owner, the logging and reminder wrappers). A signed request's nonce works once, so a second check of the same request
+// failed with nonce_already_used; a failed password or token now counts once toward the per-address limit too.
+type authMemoKey struct{}
+
+type authMemo struct {
+	sync.Mutex
+	done   bool
+	header string
+	id     int
+	err    error
+}
+
+// withAuthMemo gives the request its sign-in memo (security.go's withProtections, where every request passes).
+func withAuthMemo(r *http.Request) *http.Request {
+	return r.WithContext(context.WithValue(r.Context(), authMemoKey{}, &authMemo{}))
+}
+
+// memoAuth answers from the request's memo, signing in with signIn only the first time (or if the header changed).
+func memoAuth(r *http.Request, signIn func(*http.Request) (int, error)) (int, error) {
+	m, ok := r.Context().Value(authMemoKey{}).(*authMemo)
+	if !ok {
+		return signIn(r)
+	}
+	m.Lock()
+	defer m.Unlock()
+	h := r.Header.Get("Authorization")
+	if m.done && m.header == h {
+		return m.id, m.err
+	}
+	m.id, m.err = signIn(r)
+	m.done, m.header = true, h
+	return m.id, m.err
+}
+
 // Auth helpers
 func getAgentFromAuth(r *http.Request) (int, error) {
 	if id, ok := r.Context().Value(internalAgentKey{}).(int); ok && id > 0 {
 		return id, nil // the server acting for a character's own player (a standing reaction order, reaction_orders_2024.go)
 	}
+	return memoAuth(r, signInOnce)
+}
+
+// signInOnce checks the request's Authorization header (a token, a signature or a password). Call getAgentFromAuth instead.
+func signInOnce(r *http.Request) (int, error) {
 	auth := r.Header.Get("Authorization")
 	if strings.HasPrefix(auth, "Bearer ") {
 		return agentFromBearer(r, strings.TrimPrefix(auth, "Bearer "))
