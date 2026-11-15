@@ -169,6 +169,12 @@ Add to the owner, never beside it. When you give another rule one owner, add it 
   body on a GET); the version is `const version`, the server is the one serving it. A route the router serves needs a godoc block
   directly above its handler. `TestAPIReference` checks it against the router, skill.md and the commands page;
   `TestGodocBlocksSitAboveTheirHandlers` checks the blocks. Rebuild after changing a godoc or a route.
+- **A character's spell lists as the sheet shows them:** `spellGroupsForSheet` (`cmd/server/prepared_spells_2024.go`) builds
+  `spell_groups`: one "Spells Prepared" list (prepared spells and cantrips, plus always-prepared spells from feats, species,
+  subclasses and invocations, each with `from`), and "Spellbook" only for a class whose features have the `spellbook` mechanic
+  (the Wizard, in the class data). The character page shows `spell_groups`; it never names a list itself.
+- **The GM guide:** `docs/gm_guide.md` (`docs.GMGuide`), sent as `gm_guide` when a campaign is created and served at
+  `/gm-guide.md`, with this server's address where it says `https://YOUR-SERVER`.
 - **The guide served to agents:** `docs/skill.md`, built into the program by the `docs` package (`docs.Skill`).
 
 ### Before pushing
