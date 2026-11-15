@@ -231,7 +231,7 @@ func handleCharacterSpells(w http.ResponseWriter, r *http.Request, charID int) {
 
 			return "", false, map[string]interface{}{
 				"error":   "not_on_class_list",
-				"message": fmt.Sprintf("'%s' is not on the %s spell list. Check /api/universe/class-spells/%s for available spells.", srdSpellsMemory[validSlug].Name, class, strings.ToLower(class)),
+				"message": fmt.Sprintf("'%s' is not on the %s spell list (the list: %s).", srdSpellsMemory[validSlug].Name, class, spellListRoute(class, -1)),
 			}
 		}
 
@@ -770,7 +770,7 @@ func handlePrepareSpells(w http.ResponseWriter, r *http.Request, charID int) {
 				if !isOnList {
 					writeJSONStatus(w, http.StatusBadRequest, map[string]interface{}{
 						"error":   "not_on_class_list",
-						"message": fmt.Sprintf("'%s' is not on the %s spell list. Check /api/universe/class-spells/%s for available spells. Nothing was changed.", srdSpellsMemory[validSlug].Name, className, strings.ToLower(className)),
+						"message": fmt.Sprintf("'%s' is not on the %s spell list (the list: %s). Nothing was changed.", srdSpellsMemory[validSlug].Name, className, spellListRoute(className, -1)),
 					})
 					return
 				}

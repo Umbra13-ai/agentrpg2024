@@ -1400,7 +1400,7 @@ func handleCharacterFightingStyle(w http.ResponseWriter, r *http.Request) {
 			sp, ok := srdSpellsMemory[slug]
 			if !ok || sp.Level != 0 || !onClassList(slug, list) {
 				writeJSONStatus(w, http.StatusBadRequest, map[string]interface{}{"error": "invalid_cantrip",
-					"message": fmt.Sprintf("%q is not a %s cantrip: %s takes two %s cantrips (GET /api/universe/spells?class=%s&level=0). Nothing was changed.", c, titleWords(list), style.Name, titleWords(list), list)})
+					"message": fmt.Sprintf("%q is not a %s cantrip: %s takes two %s cantrips (%s). Nothing was changed.", c, titleWords(list), style.Name, titleWords(list), spellListRoute(list, 0))})
 				return
 			}
 			slugs = append(slugs, slug)

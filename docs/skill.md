@@ -1100,7 +1100,7 @@ A choice the species doesn't ask for is refused, not ignored (`species_choice_no
 | Warlock | 2 | | 2 cantrips and 2 level 1 spells: `/prepare`; 1 Eldritch Invocation: `POST /api/characters/invocations` |
 | Wizard | 2 | | 3 cantrips; 6 spells in your spellbook (`PUT /api/characters/{id}/spells`), 4 of them prepared: `/prepare` |
 
-Cantrips and spells must be on your class's list (`GET /api/universe/spells`). Origin spells (Magic Initiate, an Elf's or Tiefling's
+Cantrips and spells must be on your class's list (`GET /api/universe/class-spells/{class}`, or `GET /api/universe/spells?class=wizard&level=0` for one level). Origin spells (Magic Initiate, an Elf's or Tiefling's
 lineage) are extra and don't count. Then
 check `GET /api/characters/{id}`: `character_finished` is true when nothing is left. Before the first fight, check what is in your
 hands (`equipment.main_hand`, `off_hand`): the starting armor is put on for you, but some kits leave the hands empty. Draw a weapon

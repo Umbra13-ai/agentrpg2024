@@ -378,14 +378,22 @@ func handleUniverseMonsters(w http.ResponseWriter, r *http.Request) {
 
 // handleUniverseSpells godoc
 // @Summary List all spells
-// @Description Returns list of spell slugs. Use /universe/spells/{slug} for details, or /universe/spells/search for filtering.
+// @Description Returns list of spell slugs, filtered by class (its spell list) and level (0 for cantrips) when given. Use /universe/spells/{slug} for details, or /universe/spells/search to search by name.
 // @Tags Universe
 // @Produce json
+// @Param class query string false "A class: only its spell list"
+// @Param level query int false "Spell level, 0 (cantrips) to 9"
 // @Success 200 {object} map[string]interface{} "List of spell slugs"
 // @Router /universe/spells [get]
 func handleUniverseSpells(w http.ResponseWriter, r *http.Request) {
 	w.Header().Set("Content-Type", "application/json")
-	rows, err := db.Query("SELECT slug FROM spells ORDER BY slug")
+	class, level, bad := spellListFilter(r) // spell_lists_2024.go
+	if bad != nil {
+		writeJSONStatus(w, http.StatusBadRequest, bad)
+		return
+	}
+	where, args := spellFilterSQL(class, level, 1)
+	rows, err := db.Query("SELECT s.slug FROM spells s WHERE 1=1"+where+" ORDER BY s.slug", args...)
 	if err != nil {
 		json.NewEncoder(w).Encode(map[string]string{"error": publicError(err)})
 		return
@@ -509,38 +517,13 @@ func handleUniverseClassSpellList(w http.ResponseWriter, r *http.Request) {
 	class := strings.TrimPrefix(r.URL.Path, "/api/universe/class-spells/")
 	class = strings.ToLower(class)
 
-	// Optional level filter
-	levelFilter := r.URL.Query().Get("level")
-
-	var query string
-	var args []interface{}
-
-	if levelFilter != "" {
-		level, err := strconv.Atoi(levelFilter)
-		if err != nil || level < 0 || level > 9 {
-			json.NewEncoder(w).Encode(map[string]string{"error": "invalid_level"})
-			return
-		}
-		query = `
-			SELECT s.slug, s.name, s.level, s.school
-			FROM class_spells cs
-			JOIN spells s ON s.slug = cs.spell_slug
-			WHERE cs.class_slug = $1 AND s.level = $2
-			ORDER BY s.level, s.name
-		`
-		args = []interface{}{class, level}
-	} else {
-		query = `
-			SELECT s.slug, s.name, s.level, s.school
-			FROM class_spells cs
-			JOIN spells s ON s.slug = cs.spell_slug
-			WHERE cs.class_slug = $1
-			ORDER BY s.level, s.name
-		`
-		args = []interface{}{class}
+	_, level, bad := spellListFilter(r) // the level filter, read as every spell list reads it (spell_lists_2024.go)
+	if bad != nil {
+		writeJSONStatus(w, http.StatusBadRequest, bad)
+		return
 	}
-
-	rows, err := db.Query(query, args...)
+	where, args := spellFilterSQL(class, level, 1)
+	rows, err := db.Query("SELECT s.slug, s.name, s.level, s.school FROM spells s WHERE 1=1"+where+" ORDER BY s.level, s.name", args...)
 	if err != nil {
 		json.NewEncoder(w).Encode(map[string]string{"error": publicError(err)})
 		return
@@ -985,6 +968,7 @@ func handleUniverseMonsterSearch(w http.ResponseWriter, r *http.Request) {
 // @Produce json
 // @Param name query string false "Filter by name (partial match)"
 // @Param level query int false "Filter by spell level (0-9)"
+// @Param class query string false "A class: only its spell list"
 // @Param school query string false "Filter by school (e.g., evocation, necromancy)"
 // @Param limit query int false "Max results (default 20)"
 // @Success 200 {object} map[string]interface{} "Search results"
@@ -996,28 +980,26 @@ func handleUniverseSpellSearch(w http.ResponseWriter, r *http.Request) {
 	if name == "" {
 		name = r.URL.Query().Get("q") // Also accept 'q' for search box
 	}
-	levelStr := r.URL.Query().Get("level")
 	school := r.URL.Query().Get("school")
 	limit := 20
 	if l, err := strconv.Atoi(r.URL.Query().Get("limit")); err == nil && l > 0 && l <= 100 {
 		limit = l
 	}
 
-	query := "SELECT slug, name, level, school, casting_time, range FROM spells WHERE 1=1"
-	args := []interface{}{}
-	argNum := 1
+	class, lvl, bad := spellListFilter(r) // class and level, as every spell list reads them (spell_lists_2024.go)
+	if bad != nil {
+		writeJSONStatus(w, http.StatusBadRequest, bad)
+		return
+	}
+	query := "SELECT slug, name, level, school, casting_time, range FROM spells s WHERE 1=1"
+	where, args := spellFilterSQL(class, lvl, 1)
+	query += where
+	argNum := 1 + len(args)
 
 	if name != "" {
 		query += fmt.Sprintf(" AND LOWER(name) LIKE LOWER($%d)", argNum)
 		args = append(args, "%"+name+"%")
 		argNum++
-	}
-	if levelStr != "" {
-		if level, err := strconv.Atoi(levelStr); err == nil {
-			query += fmt.Sprintf(" AND level = $%d", argNum)
-			args = append(args, level)
-			argNum++
-		}
 	}
 	if school != "" {
 		query += fmt.Sprintf(" AND LOWER(school) = LOWER($%d)", argNum)

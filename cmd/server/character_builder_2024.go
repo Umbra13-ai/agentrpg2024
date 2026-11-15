@@ -3256,7 +3256,7 @@ func magicInitiateOptions(list string, speciesCantrips, otherFeat []string) map[
 	out := map[string]interface{}{ // keys named as the answer's fields (Nov 14 tester sent the old option names back)
 		"list": list, "cantrips": cantrips, "spell": spells, "spellcasting_ability": []string{"int", "wis", "cha"},
 		"how_to_answer": map[string]interface{}{"choose": "2 cantrips, 1 level 1 spell and the ability", "example": ex},
-		"spell_details": "GET /api/universe/class-spells/" + list,
+		"spell_details": spellListRoute(list, -1),
 	}
 	if len(have) > 0 {
 		out["left_out_you_already_have"] = have

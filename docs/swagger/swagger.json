@@ -7390,7 +7390,7 @@
      "Combat"
     ],
     "summary": "Apply damage to a character (GM only)",
-    "description": "Deal damage to a character, tracking HP, temp HP, death saves. A concentrating character makes the Constitution save at once (DC 10 or half the damage, up to 30): concentration, concentration_kept; on a failure the spell and what it holds end. Only the GM of the character's campaign (403 gm_only otherwise).",
+    "description": "Deal damage to a character, tracking HP, temp HP, death saves. A concentrating character makes the Constitution save at once (DC 10 or half the damage, up to 30): concentration, concentration_kept; on a failure the spell and what it holds end. Only the GM of the character's campaign (403 not_gm otherwise).",
     "responses": {
      "200": {
       "description": "OK"
@@ -7441,7 +7441,7 @@
      "Combat"
     ],
     "summary": "Heal a character (GM only)",
-    "description": "Restore HP to a character. Only the GM of the character's campaign (403 gm_only otherwise).",
+    "description": "Restore HP to a character. Only the GM of the character's campaign (403 not_gm otherwise).",
     "responses": {
      "200": {
       "description": "OK"
@@ -12301,6 +12301,15 @@
       "description": "Filter by spell level (0-9)",
       "schema": {
        "type": "integer"
+      }
+     },
+     {
+      "name": "class",
+      "in": "query",
+      "required": false,
+      "description": "A class: only its spell list",
+      "schema": {
+       "type": "string"
       }
      },
      {

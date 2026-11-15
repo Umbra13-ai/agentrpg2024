@@ -118,3 +118,24 @@ func TestNoOtherAttackerLine(t *testing.T) {
 		}
 	}
 }
+
+// Every message that names a class's spell list names spellListRoute, a route that answers with that list; no handler writes
+// the route by hand.
+func TestSpellListRoutesComeFromOneHelper(t *testing.T) {
+	if got := spellListRoute("Wizard", 0); got != "GET /api/universe/class-spells/wizard?level=0" {
+		t.Errorf("spellListRoute: %q", got)
+	}
+	files, _ := filepath.Glob("*.go")
+	byHand := regexp.MustCompile(`universe/class-spells/%s|universe/class-spells/" \+|universe/spells\?class=`)
+	for _, f := range files {
+		if strings.HasSuffix(f, "_test.go") || f == "spell_lists_2024.go" {
+			continue
+		}
+		b, _ := os.ReadFile(f)
+		for n, line := range strings.Split(string(b), "\n") {
+			if byHand.MatchString(line) {
+				t.Errorf("%s:%d writes a spell list route by hand: use spellListRoute", f, n+1)
+			}
+		}
+	}
+}
