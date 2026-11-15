@@ -94,8 +94,8 @@ func namedWeaponFor(name string) *namedWeapon {
 }
 
 // allows: the named weapon can be that SRD weapon.
-func (nw *namedWeapon) allows(key string) bool {
-	w, ok := srdWeapons[key]
+func (nw *namedWeapon) allows(name string) bool {
+	key, w, ok := findWeapon(name)
 	if !ok {
 		return false
 	}

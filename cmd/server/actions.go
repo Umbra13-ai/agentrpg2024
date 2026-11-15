@@ -1393,7 +1393,7 @@ func resolveActionWithBonusDash(action, description string, charID int, bonusDas
 				luckOnAttack.Store(charID, true)
 			}
 		}
-		weapon, hasWeapon := srdWeapons[weaponKey]
+		_, weapon, hasWeapon := findWeapon(weaponKey)
 		// Improvised weapons (improvised_2024.go): an object, a ranged weapon swung in melee, or a melee weapon without Thrown that is thrown
 		improvised := false
 		if iw, ok := improvisedWeapon(description, weaponKey, weapon, hasWeapon); ok {
@@ -3119,7 +3119,7 @@ func resolveActionWithBonusDash(action, description string, charID int, bonusDas
 		if weaponKey != "" && !weaponEquippedInOffHand(charID, weaponKey) {
 			return notEquippedMessage(weaponKey) + " An offhand attack uses the weapon equipped in your off hand."
 		}
-		weapon, hasWeapon := srdWeapons[weaponKey]
+		_, weapon, hasWeapon := findWeapon(weaponKey)
 
 		if !hasWeapon {
 			return "Offhand attack requires specifying a weapon (e.g., 'offhand_attack with dagger'). Light weapons: dagger, handaxe, shortsword, scimitar, sickle, light hammer."

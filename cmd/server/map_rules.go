@@ -114,7 +114,7 @@ func attackRangeProblem(lobbyID, charID, targetID int, description string) strin
 		db.QueryRow(`SELECT COALESCE(equipped_main_hand,'') FROM characters WHERE id = $1`, charID).Scan(&held)
 		key = mapWeaponKey(charID, held)
 	}
-	w, hasWeapon := srdWeapons[key]
+	_, w, hasWeapon := findWeapon(key)
 	throwing := strings.Contains(strings.ToLower(description), "throw") || strings.Contains(strings.ToLower(description), "hurl")
 	reach, normal, long := weaponReach(w, hasWeapon, throwing)
 	dist := tokenDistanceFeet(a, b)
@@ -158,7 +158,7 @@ func attackAtLongRange(lobbyID, charID, targetID int, description string) bool {
 		db.QueryRow(`SELECT COALESCE(equipped_main_hand,'') FROM characters WHERE id = $1`, charID).Scan(&held)
 		key = mapWeaponKey(charID, held)
 	}
-	w, hasWeapon := srdWeapons[key]
+	_, w, hasWeapon := findWeapon(key)
 	throwing := strings.Contains(strings.ToLower(description), "throw") || strings.Contains(strings.ToLower(description), "hurl")
 	_, normal, _ := weaponReach(w, hasWeapon, throwing)
 	return normal > 0 && tokenDistanceFeet(a, b) > normal

@@ -200,7 +200,8 @@ func handleGMOpportunityAttack(w http.ResponseWriter, r *http.Request) {
 		// Check for weapon in request or default to equipped weapon
 		if req.Weapon != "" {
 			weaponKey = strings.ToLower(strings.ReplaceAll(req.Weapon, " ", "-"))
-			if weapon, ok := srdWeapons[weaponKey]; ok {
+			if slug, weapon, ok := findWeapon(req.Weapon); ok {
+				weaponKey = slug
 				weaponName = weapon.Name
 				damageDice = weapon.Damage
 				damageType = attackDamageType(true, weapon)
@@ -378,7 +379,7 @@ func handleGMRetaliation(w http.ResponseWriter, r *http.Request) {
 	// against the creature's entry in the turn order. Nov 14: this command had its own roll with none of the attack rules,
 	// took the Armor Class from the monsters table (or 13), and never applied the damage.
 	if req.Weapon != "" {
-		if weapon, ok := srdWeapons[strings.ToLower(strings.ReplaceAll(req.Weapon, " ", "-"))]; ok && weapon.Type != "melee" {
+		if _, weapon, ok := findWeapon(req.Weapon); ok && weapon.Type != "melee" {
 			db.Exec(`UPDATE characters SET reaction_used = false WHERE id = $1`, req.CharacterID)
 			writeJSONStatus(w, http.StatusBadRequest, map[string]interface{}{"error": "not_melee",
 				"message": fmt.Sprintf("%s is not a melee weapon. Retaliation requires a melee weapon attack.", weapon.Name)})

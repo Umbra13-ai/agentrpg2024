@@ -81,9 +81,14 @@ func versatileDice(props []string) string {
 	return ""
 }
 
-// findWeapon resolves an item name to a weapon in the weapon table.
+// findWeapon is the one lookup of a weapon's data (srdWeapons): by its key, its name or how an inventory or a request writes
+// it ("Light Hammer", "light-hammer", "light_hammer", "Longsword +1", "Dancing Sword (Rapier)"). Never index srdWeapons with a key built by hand, and
+// never read a weapon's details from the weapons table: that table is a copy for the universe catalogue.
 func findWeapon(name string) (string, SRDWeapon, bool) {
-	key := weaponNameKey(name)
+	if w, ok := srdWeapons[name]; ok {
+		return name, w, true
+	}
+	key := weaponNameKey(plusRe.ReplaceAllString(name, ""))
 	if key == "" {
 		return "", SRDWeapon{}, false
 	}
@@ -98,7 +103,24 @@ func findWeapon(name string) (string, SRDWeapon, bool) {
 			return slug, w, true
 		}
 	}
+	// A named magic weapon written with its weapon in parentheses: "Dancing Sword (Rapier)", "Frost Brand (Scimitar)".
+	if i, j := strings.Index(name, "("), strings.LastIndex(name, ")"); i >= 0 && j > i+1 {
+		return findWeapon(strings.TrimSpace(name[i+1 : j]))
+	}
 	return "", SRDWeapon{}, false
+}
+
+// heldWeaponView is a held weapon on the character sheet: its details from the weapon data, or the name as held when it is not
+// a weapon (a torch, a shield).
+func heldWeaponView(held string) interface{} {
+	slug, w, ok := findWeapon(held)
+	if !ok {
+		return held
+	}
+	return map[string]interface{}{
+		"name": w.Name, "held_as": held, "slug": slug, "category": w.Category, "type": w.Type,
+		"properties": strings.Join(w.Properties, ", "), "damage_dice": w.Damage, "damage_type": w.DamageType, "mastery": w.Mastery,
+	}
 }
 
 // isMonkWeapon: SRD 5.2.1 Martial Arts works with Simple Melee weapons and Martial Melee weapons that have the Light property.

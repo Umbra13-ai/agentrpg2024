@@ -85,7 +85,7 @@ func isMeleeAttackAction(charID int, description string) bool {
 	if key == "" {
 		return true // unarmed strike
 	}
-	w, ok := srdWeapons[key]
+	_, w, ok := findWeapon(key)
 	return ok && !usedAsRanged(w, description)
 }
 

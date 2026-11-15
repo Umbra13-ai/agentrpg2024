@@ -20,7 +20,7 @@ func oaKey(lobbyID, charID int) string { return fmt.Sprintf("%d:%d", lobbyID, ch
 func characterMeleeReach(charID int) int {
 	var key string
 	db.QueryRow(`SELECT COALESCE(equipped_main_hand,'') FROM characters WHERE id = $1`, charID).Scan(&key)
-	w, ok := srdWeapons[strings.ToLower(strings.ReplaceAll(key, " ", "_"))]
+	_, w, ok := findWeapon(key)
 	if ok && w.Type == "melee" {
 		for _, p := range w.Properties {
 			if strings.EqualFold(p, "reach") {

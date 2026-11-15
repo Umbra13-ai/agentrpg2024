@@ -267,14 +267,12 @@ func handleCharacterEncumbrance(w http.ResponseWriter, r *http.Request) {
 			// Try to look up weight from SRD
 			itemSlug := strings.ToLower(strings.ReplaceAll(itemName, " ", "-"))
 
-			// Check weapons
+			// Check weapons (the weapon data), then armor
 			var dbWeight float64
-			err := db.QueryRow(`SELECT COALESCE(weight, 0) FROM weapons WHERE slug = $1`, itemSlug).Scan(&dbWeight)
-			if err == nil && dbWeight > 0 {
-				weight = dbWeight
+			if _, wpn, ok := findWeapon(itemName); ok && wpn.Weight > 0 {
+				weight = wpn.Weight
 			} else {
-				// Check armor
-				err = db.QueryRow(`SELECT COALESCE(weight, 0) FROM armor WHERE slug = $1`, itemSlug).Scan(&dbWeight)
+				err := db.QueryRow(`SELECT COALESCE(weight, 0) FROM armor WHERE slug = $1`, itemSlug).Scan(&dbWeight)
 				if err == nil && dbWeight > 0 {
 					weight = dbWeight
 				}
@@ -817,15 +815,10 @@ func handleCharacterEquipWeapon(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 
-	// Also check weapons table for properties
-	var dbWeaponName string
-	var dbProperties sql.NullString
+	// The weapon's properties (the weapon data)
 	var isTwoHanded, isLight bool
-	err = db.QueryRow(`SELECT name, properties FROM weapons WHERE slug = $1`, weaponSlug).Scan(&dbWeaponName, &dbProperties)
-	if err == nil {
-		propsLower := strings.ToLower(dbProperties.String)
-		isTwoHanded = strings.Contains(propsLower, "two-handed") || strings.Contains(propsLower, "2h")
-		isLight = strings.Contains(propsLower, "light")
+	if _, wpn, ok := findWeapon(weaponSlug); ok {
+		isTwoHanded, isLight = hasProperty(wpn.Properties, "two-handed"), hasProperty(wpn.Properties, "light")
 	}
 
 	if !foundWeapon {
@@ -844,8 +837,8 @@ func handleCharacterEquipWeapon(w http.ResponseWriter, r *http.Request) {
 	profWeapon := req.Weapon
 	if req.BaseWeapon == "" { // "Frost Brand (Scimitar)": the name already says which weapon it is (F173)
 		if i, j := strings.Index(req.Weapon, "("), strings.LastIndex(req.Weapon, ")"); i > 0 && j > i {
-			if _, ok := srdWeapons[strings.ToLower(strings.TrimSpace(req.Weapon[i+1:j]))]; ok {
-				req.BaseWeapon = strings.ToLower(strings.TrimSpace(req.Weapon[i+1 : j]))
+			if slug, _, ok := findWeapon(strings.TrimSpace(req.Weapon[i+1 : j])); ok {
+				req.BaseWeapon = slug
 			}
 		}
 	}
@@ -892,10 +885,7 @@ func handleCharacterEquipWeapon(w http.ResponseWriter, r *http.Request) {
 	if req.Slot == "off_hand" {
 		// Check if main hand has two-handed weapon
 		if mainHand.Valid && mainHand.String != "" {
-			var mainProps sql.NullString
-			mainSlug := strings.ToLower(strings.ReplaceAll(mainHand.String, " ", "-"))
-			db.QueryRow(`SELECT properties FROM weapons WHERE slug = $1`, mainSlug).Scan(&mainProps)
-			if mainProps.Valid && (strings.Contains(strings.ToLower(mainProps.String), "two-handed") || strings.Contains(strings.ToLower(mainProps.String), "2h")) {
+			if _, mainW, ok := findWeapon(mainHand.String); ok && hasProperty(mainW.Properties, "two-handed") {
 				w.WriteHeader(http.StatusBadRequest)
 				json.NewEncoder(w).Encode(map[string]interface{}{
 					"error":   "main_hand_is_two_handed",

@@ -100,7 +100,7 @@ func dancingSword(charID int, it invItem, req itemCastReq) string {
 		}
 	}
 	base := baseWeaponOf(name)
-	w, okw := srdWeapons[base]
+	_, w, okw := findWeapon(base)
 	dice, dtype := "1d8", "slashing"
 	if okw {
 		dice, dtype = w.Damage, strings.ToLower(w.DamageType)

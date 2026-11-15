@@ -1329,42 +1329,12 @@ func handleCharacterByID(w http.ResponseWriter, r *http.Request) {
 			equipment["armor"] = equippedArmor.String
 		}
 	}
-	// Add equipped weapons
+	// Add equipped weapons: their details come from the weapon data (findWeapon)
 	if equippedMainHand.Valid && equippedMainHand.String != "" {
-		weaponSlug := strings.ToLower(strings.ReplaceAll(equippedMainHand.String, " ", "-"))
-		var weaponName string
-		var properties sql.NullString
-		var damageDice, damageType sql.NullString
-		err := db.QueryRow(`SELECT name, properties, damage_dice, damage_type FROM weapons WHERE slug = $1`, weaponSlug).Scan(&weaponName, &properties, &damageDice, &damageType)
-		if err == nil {
-			equipment["main_hand"] = map[string]interface{}{
-				"name":        weaponName,
-				"slug":        weaponSlug,
-				"properties":  properties.String,
-				"damage_dice": damageDice.String,
-				"damage_type": damageType.String,
-			}
-		} else {
-			equipment["main_hand"] = equippedMainHand.String
-		}
+		equipment["main_hand"] = heldWeaponView(equippedMainHand.String)
 	}
 	if equippedOffHand.Valid && equippedOffHand.String != "" {
-		weaponSlug := strings.ToLower(strings.ReplaceAll(equippedOffHand.String, " ", "-"))
-		var weaponName string
-		var properties sql.NullString
-		var damageDice, damageType sql.NullString
-		err := db.QueryRow(`SELECT name, properties, damage_dice, damage_type FROM weapons WHERE slug = $1`, weaponSlug).Scan(&weaponName, &properties, &damageDice, &damageType)
-		if err == nil {
-			equipment["off_hand"] = map[string]interface{}{
-				"name":        weaponName,
-				"slug":        weaponSlug,
-				"properties":  properties.String,
-				"damage_dice": damageDice.String,
-				"damage_type": damageType.String,
-			}
-		} else {
-			equipment["off_hand"] = equippedOffHand.String
-		}
+		equipment["off_hand"] = heldWeaponView(equippedOffHand.String)
 	}
 	response["equipment"] = equipment
 	response["worn_items"] = wornItemsView(charID) // by place: armor, shield, feet, hands, wrists, head, shoulders, fingers, neck ... (F213)

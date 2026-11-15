@@ -186,7 +186,7 @@ func giantSlayerHit(lobbyID, targetID int, monsterKey, name, heldItem string, cr
 		return 0, ""
 	}
 	dtype := "slashing"
-	if w, ok := srdWeapons[baseWeaponOf(heldItem)]; ok {
+	if _, w, ok := findWeapon(baseWeaponOf(heldItem)); ok {
 		dtype = strings.ToLower(w.DamageType)
 	}
 	d, _ := adjustMonsterDamage(monsterKey, dtype, game.RollDamage("2d6", crit))

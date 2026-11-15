@@ -185,12 +185,7 @@ func isWeaponProficient(weaponProfsStr string, weaponKey string) bool {
 	}
 
 	// Get weapon info to determine category
-	weapon, hasWeapon := srdWeapons[weaponKey]
-	if !hasWeapon { // "Flail" as the shop and the inventory write it, "Flail +1": the name is not the table's key (live test, Nov 14)
-		if _, w, ok := findWeapon(strings.TrimSpace(plusRe.ReplaceAllString(weaponKey, ""))); ok {
-			weapon, hasWeapon = w, true
-		}
-	}
+	_, weapon, hasWeapon := findWeapon(weaponKey) // "Flail" as the shop and the inventory write it, "Flail +1" (live test, Nov 14)
 
 	// Parse proficiency list
 	profs := strings.Split(strings.ToLower(weaponProfsStr), ",")
@@ -363,14 +358,12 @@ func calculateInventoryWeight(inventory []map[string]interface{}) float64 {
 			// Try to look up weight from SRD
 			itemSlug := strings.ToLower(strings.ReplaceAll(itemName, " ", "-"))
 
-			// Check weapons
+			// Check weapons (the weapon data), then armor
 			var dbWeight float64
-			err := db.QueryRow(`SELECT COALESCE(weight, 0) FROM weapons WHERE slug = $1`, itemSlug).Scan(&dbWeight)
-			if err == nil && dbWeight > 0 {
-				weight = dbWeight
+			if _, wpn, ok := findWeapon(itemName); ok && wpn.Weight > 0 {
+				weight = wpn.Weight
 			} else {
-				// Check armor
-				err = db.QueryRow(`SELECT COALESCE(weight, 0) FROM armor WHERE slug = $1`, itemSlug).Scan(&dbWeight)
+				err := db.QueryRow(`SELECT COALESCE(weight, 0) FROM armor WHERE slug = $1`, itemSlug).Scan(&dbWeight)
 				if err == nil && dbWeight > 0 {
 					weight = dbWeight
 				}

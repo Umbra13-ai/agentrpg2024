@@ -145,7 +145,7 @@ func fumbleHitRiders(charID int, weaponName string) (int, string) {
 	v, _ := attackDescriptions.Load(charID)
 	desc, _ := v.(string)
 	ranged := false
-	if w, ok := srdWeapons[strings.ToLower(baseWeaponOf(weaponName+" ("+weaponName+")"))]; ok {
+	if _, w, ok := findWeapon(weaponName); ok {
 		ranged = w.Type == "ranged"
 	}
 	total, notes := 0, ""

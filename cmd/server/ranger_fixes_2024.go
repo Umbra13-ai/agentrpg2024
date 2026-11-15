@@ -15,7 +15,7 @@ import (
 
 func viciousHit(monsterKey, heldItem string, crit bool) (int, string) {
 	dtype := "slashing"
-	if w, ok := srdWeapons[baseWeaponOf(heldItem)]; ok {
+	if _, w, ok := findWeapon(baseWeaponOf(heldItem)); ok {
 		dtype = strings.ToLower(w.DamageType)
 	}
 	d, how := adjustMonsterDamage(monsterKey, dtype, game.RollDamage("2d6", crit))

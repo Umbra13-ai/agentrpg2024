@@ -173,7 +173,7 @@ func ensureMasteryColumns() {
 // Nick mastery the character has, once per turn. It then is made as part of the Attack action, not with the Bonus Action.
 func nickAvailable(charID int, description string) bool {
 	key := parseWeaponFromDescription(description)
-	w, ok := srdWeapons[key]
+	_, w, ok := findWeapon(key)
 	if !ok || w.Mastery != "Nick" || !characterHasMastery(charID, key, w) {
 		return false
 	}

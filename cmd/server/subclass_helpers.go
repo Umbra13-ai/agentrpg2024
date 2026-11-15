@@ -478,7 +478,7 @@ func getClassSpellList(class string) []string {
 // Requires finesse or ranged weapon AND (advantage OR ally adjacent to target)
 func canSneakAttack(charID int, weaponKey string, hasAdvantage bool, hasDisadvantage bool, targetID int) bool {
 	// Must use finesse or ranged weapon
-	weapon, hasWeapon := srdWeapons[weaponKey]
+	_, weapon, hasWeapon := findWeapon(weaponKey)
 	if !hasWeapon {
 		return false // Unarmed doesn't qualify
 	}
