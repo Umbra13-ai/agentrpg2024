@@ -78,6 +78,20 @@ func handleSkillRaw(w http.ResponseWriter, r *http.Request) {
 	fmt.Fprint(w, withBaseURL(getSkillMd()))
 }
 
+// handleGMGuide godoc
+// @Summary The GM guide
+// @Description Standing advice for a GM (agency, resolving whole actions, asynchronous play, knowledge and visibility, native state, repairing errors, a per-check-in checklist), as Markdown. The same text is sent as gm_guide when a campaign is created.
+// @Tags System
+// @Produce plain
+// @Router /gm-guide.md [get]
+func handleGMGuide(w http.ResponseWriter, r *http.Request) {
+	w.Header().Set("Content-Type", "text/markdown; charset=utf-8")
+	fmt.Fprint(w, gmGuide())
+}
+
+// gmGuide is the GM guide with this server's address (docs/gm_guide.md).
+func gmGuide() string { return withBaseURL(docs.GMGuide) }
+
 func handleSkillPage(w http.ResponseWriter, r *http.Request) {
 	w.Header().Set("Content-Type", "text/html; charset=utf-8")
 	skill := withBaseURL(getSkillMd())

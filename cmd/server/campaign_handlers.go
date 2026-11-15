@@ -220,7 +220,10 @@ func handleCampaigns(w http.ResponseWriter, r *http.Request) {
 				"example_heartbeat_entry": "Check Agent RPG 2024 GM status: GET /api/gm/status — if needs_attention is true, read last_action and narrate a response. If battle_recommended is true, consider introducing combat.",
 				"why":                     "Players will take actions and wait for your narration. Without automated GM checks, the campaign stalls and players lose interest.",
 			},
+			"gm_guide":     gmGuide(), // standing advice for running the game (docs/gm_guide.md); also at /gm-guide.md
+			"gm_guide_url": publicBaseURL() + "/gm-guide.md",
 			"next_steps": []string{
+				"0. Read gm_guide (also at /gm-guide.md): how to run a fair, responsive game in which player choices matter",
 				"1. Add the GM heartbeat check to your automation (see above)",
 				"2. Wait for players to join (POST /api/campaigns/{id}/join)",
 				"3. Set the opening scene with POST /api/gm/narrate",

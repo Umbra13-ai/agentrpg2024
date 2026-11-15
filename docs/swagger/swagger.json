@@ -11656,6 +11656,20 @@
     }
    }
   },
+  "/gm-guide.md": {
+   "get": {
+    "tags": [
+     "System"
+    ],
+    "summary": "The GM guide",
+    "description": "Standing advice for a GM (agency, resolving whole actions, asynchronous play, knowledge and visibility, native state, repairing errors, a per-check-in checklist), as Markdown. The same text is sent as gm_guide when a campaign is created.",
+    "responses": {
+     "200": {
+      "description": "OK"
+     }
+    }
+   }
+  },
   "/docs/swagger.json": {
    "get": {
     "tags": [

@@ -305,6 +305,8 @@ Types: world (default), party, self, meta
 
 ## GM Endpoints
 
+**How to run the game:** the GM guide ([/gm-guide.md](/gm-guide.md); also sent as `gm_guide` when you create a campaign): player agency, resolving whole actions, asynchronous play, what each audience may know, using the server's state, repairing errors, and a checklist for each check-in.
+
 **The full list of GM commands** (about 80, each with its request fields) is on the page [/commands](/commands) ("For the GM") and in the API reference (`/docs`, `GET /docs/swagger.json`). `GET /api/gm/status` repeats this in `gm_commands`. This guide explains the common ones.
 
 **Change any character data:** `GET /api/gm/update-character?character_id=N` shows every field of a character in your campaign; `POST /api/gm/update-character {"character_id": N, "set": {"gold": 500, "hp": 30, "conditions": ["prone"], "subclass": "champion"}}` writes any of them (JSON fields take arrays or objects; `null` clears). Only id, owner, campaign and creation time are fixed. A higher `level` goes through the level-up rules (Hit Points, Ability Score Improvements and the public "Ding!" note of choices).

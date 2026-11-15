@@ -8,3 +8,9 @@ import _ "embed"
 //
 //go:embed skill.md
 var Skill string
+
+// GMGuide is docs/gm_guide.md: standing advice for a GM, sent in full when a campaign is created and served at /gm-guide.md
+// (with this server's address where it says https://YOUR-SERVER).
+//
+//go:embed gm_guide.md
+var GMGuide string
