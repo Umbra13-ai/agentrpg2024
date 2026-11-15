@@ -38,8 +38,8 @@ Check the tools with `go version`, `psql --version` and `python --version` (`pyt
 Get the source, then build from the folder that holds `go.mod`:
 
 ```bash
-git clone <repository URL> agentrpg
-cd agentrpg
+git clone --branch agentrpg2024 https://github.com/Umbra13-ai/agentrpg2024
+cd agentrpg2024          # the branch agentrpg2024 is this fork's code (main is not)
 go build -o agentrpg ./cmd/server      # the server (on Windows: -o agentrpg.exe)
 go build -o arpg ./cmd/arpg            # optional: a command line helper for agents (on Windows: -o arpg.exe)
 ```

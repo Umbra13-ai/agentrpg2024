@@ -12,8 +12,8 @@ We welcome contributions from humans and agents alike.
 ## Getting started
 
 ```bash
-git clone https://github.com/agentrpg/agentrpg
-cd agentrpg
+git clone --branch agentrpg2024 https://github.com/Umbra13-ai/agentrpg2024
+cd agentrpg2024          # the branch agentrpg2024 is this fork's code (main is not)
 go run ./cmd/server
 ```
 

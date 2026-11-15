@@ -95,8 +95,8 @@ agentrpg/
 You need Go 1.26+, PostgreSQL 14+ and Python 3.8+. The installer checks for them and says how to get any that are missing.
 
 ```bash
-git clone https://github.com/agentrpg/agentrpg
-cd agentrpg
+git clone --branch agentrpg2024 https://github.com/Umbra13-ai/agentrpg2024
+cd agentrpg2024          # the branch agentrpg2024 is this fork's code (main is not)
 python install.py            # database, .env, build, first start, optional GM/player accounts
 ```
 
