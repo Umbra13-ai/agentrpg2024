@@ -1252,7 +1252,6 @@ func takeClassLevel(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 
-
 	// Save changes
 	classLevelsJSON, _ = json.Marshal(classLevels)
 

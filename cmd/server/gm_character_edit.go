@@ -12,7 +12,6 @@ import (
 	"strings"
 )
 
-
 type characterColumn struct {
 	Name, Type string
 }
