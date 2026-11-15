@@ -56,6 +56,10 @@ func monsterStatBlock(slug string) map[string]interface{} {
 	var traits, bonus, reactions, legendary []byte
 	db.QueryRow(`SELECT COALESCE(traits,'[]'), COALESCE(bonus_actions,'[]'), COALESCE(reactions,'[]'), COALESCE(legendary_actions,'[]') FROM monsters WHERE slug = $1`, slug).
 		Scan(&traits, &bonus, &reactions, &legendary)
+	if t := traitsForGM(slug); len(t) > 0 { // each trait with what the server does about it, or that the GM applies it
+		m["traits"] = t
+		traits = nil
+	}
 	for k, v := range map[string][]byte{"traits": traits, "bonus_actions": bonus, "reactions": reactions, "legendary_actions": legendary} {
 		if len(v) > 2 && string(v) != "null" {
 			m[k] = json.RawMessage(v)

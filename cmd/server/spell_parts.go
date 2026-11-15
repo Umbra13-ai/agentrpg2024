@@ -125,14 +125,3 @@ func monsterSpellSaveResult(lobbyID, id int, ability string, dc int, st saveStak
 	return r
 }
 
-// monsterHasTrait: the monster's stat block has a trait of that name.
-func monsterHasTrait(lobbyID, id int, trait string) bool {
-	for _, e := range combatEntries(lobbyID) {
-		if asInt(e["id"]) == id {
-			var n int
-			db.QueryRow(`SELECT count(*) FROM monsters WHERE slug = $1 AND traits::text ILIKE $2`, fmt.Sprint(e["monster_key"]), "%\"name\": \""+trait+"%").Scan(&n)
-			return n > 0
-		}
-	}
-	return false
-}

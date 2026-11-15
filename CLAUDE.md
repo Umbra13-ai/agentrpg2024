@@ -139,6 +139,10 @@ Add to the owner, never beside it. When you give another rule one owner, add it 
   cleared by `endUntilNextTurn` at the turn's start and when the fight ends.
 - **Spell lists:** `spellListFilter` reads class and level for every spell list route; a message names `spellListRoute`.
 - **Signing a request in:** `getAgentFromAuth` signs a request in once (`authMemo`); later calls reuse it.
+- **Monster traits:** `monsterTraitRules` (`cmd/server/monster_traits_2024.go`): each trait the server applies is one row (by
+  name, or by wording for auras and Regeneration) saying what it does and where; `monsterHasTrait` reads the loaded stat block;
+  the GM's stat block marks each trait as applied by the server or by the GM (`traitsForGM`). A new trait with mechanics is a
+  row here plus its rule in the owner it belongs to (an attack source, a save source, a turn hook).
 - **The guide served to agents:** `docs/skill.md`, built into the program by the `docs` package (`docs.Skill`).
 
 ### Before pushing
