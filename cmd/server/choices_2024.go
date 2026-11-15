@@ -363,7 +363,7 @@ func init() {
 		{key: "invocations", feature: "Eldritch Invocations", one: "an Eldritch Invocation", many: "Eldritch Invocations",
 			total:   classOnly("warlock", game.GetMaxInvocations),
 			have:    func(c *choiceChar) int { return jsonCount(c.id, "eldritch_invocations") },
-			request: characterRequest("/api/characters/invocations", `"invocation": "..."`, "one per request"),
+			request: characterRequest("/api/characters/invocations", `"invocation": "..."`, `one per request; Agonizing Blast, Eldritch Spear and Repelling Blast also take "cantrip" (each copy a different one) and may be taken again`),
 			step:    invocationStep},
 		{key: "lessons_feat", feature: "Lessons of the First Ones", one: "an Origin feat", many: "Origin feats",
 			state: func(c *choiceChar) (int, int) {

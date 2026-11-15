@@ -99,7 +99,7 @@ func resolveSpellOnMonster(charID int, spellKey string, spell SRDSpell, damageDi
 				crit = out.Critical
 			}
 			d := game.RollDamage(beamDice, crit)
-			if spellKey == "eldritch-blast" && hasInvocation(charID, "agonizing-blast") && game.Modifier(spellModScore(charID)) > 0 {
+			if invocationOn(charID, "agonizing-blast", spellKey) && game.Modifier(spellModScore(charID)) > 0 {
 				d += game.Modifier(spellModScore(charID))
 			}
 			total += d

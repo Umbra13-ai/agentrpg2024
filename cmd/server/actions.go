@@ -940,7 +940,7 @@ func handleAction(w http.ResponseWriter, r *http.Request) {
 			if req.TargetID != 0 {
 				targets = append(targets, req.TargetID)
 			}
-			if b := eldritchSpearBonus(charID); b > 0 && normalizeSpellSlug(key) == "eldritch-blast" {
+			if b := eldritchSpearBonus(charID, key); b > 0 {
 				sp.Range = fmt.Sprintf("%d feet", spellRangeFeet(sp.Range)+b) // Eldritch Spear: +30 feet per Warlock level (F195)
 			}
 			if hasWord(strings.ToLower(req.Description), "distant") && hasMetamagic(charID, "distant") {
@@ -2486,7 +2486,7 @@ func resolveActionWithBonusDash(action, description string, charID int, bonusDas
 				// Agonizing Blast (Warlock Invocation)
 				// Add CHA mod to eldritch blast damage
 				agonizingBlastNote := ""
-				if spellKey == "eldritch-blast" && hasInvocation(charID, "agonizing-blast") {
+				if invocationOn(charID, "agonizing-blast", spellKey) {
 					chaBonus := game.Modifier(cha)
 					if chaBonus > 0 {
 						dmg += chaBonus
@@ -2497,15 +2497,15 @@ func resolveActionWithBonusDash(action, description string, charID int, bonusDas
 				// Repelling Blast (Warlock Invocation)
 				// Push target 10 feet away on eldritch blast hit
 				repellingBlastNote := ""
-				if spellKey == "eldritch-blast" && hasInvocation(charID, "repelling-blast") {
+				if invocationOn(charID, "repelling-blast", spellKey) {
 					repellingBlastNote = " (Repelling Blast: target pushed 10 feet away)"
 				}
 
 				// Eldritch Spear (Warlock Invocation)
 				// Extends eldritch blast range to 300 feet (normal is 120 feet)
 				eldritchSpearNote := ""
-				if spellKey == "eldritch-blast" && hasInvocation(charID, "eldritch-spear") {
-					eldritchSpearNote = fmt.Sprintf(" (Eldritch Spear: range %d feet)", spellRangeFeet(spell.Range)+eldritchSpearBonus(charID)) // F195
+				if invocationOn(charID, "eldritch-spear", spellKey) {
+					eldritchSpearNote = fmt.Sprintf(" (Eldritch Spear: range %d feet)", spellRangeFeet(spell.Range)+eldritchSpearBonus(charID, spellKey)) // F195
 				}
 
 				saveInfo := ""

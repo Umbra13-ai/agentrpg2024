@@ -1447,34 +1447,7 @@ func handleCharacterByID(w http.ResponseWriter, r *http.Request) {
 		invocationSpellsUsed := getInvocationSpellsUsed(charID)
 
 		if len(invocations) > 0 {
-			invocationsInfo := []map[string]interface{}{}
-			for _, slug := range invocations {
-				if inv, ok := game.AvailableInvocations[slug]; ok {
-					invInfo := map[string]interface{}{
-						"slug":        slug,
-						"name":        inv.Name,
-						"description": inv.Description,
-						"mechanics":   inv.Mechanics,
-					}
-					// Show used status for once-per-rest invocations
-					if _, hasOncePerRest := inv.Mechanics["once_per_rest_spell"]; hasOncePerRest {
-						invInfo["once_per_rest"] = true
-						invInfo["used"] = hasUsedInvocationSpell(charID, slug)
-					}
-					// Show Eldritch Spear range extension
-					if _, hasEldritchSpear := inv.Mechanics["eldritch_spear"]; hasEldritchSpear {
-						invInfo["modifies"] = "eldritch-blast"
-						invInfo["effect"] = fmt.Sprintf("Range increased by 30 feet per Warlock level: %d feet", 120+eldritchSpearBonus(charID))
-					}
-					// Show Witch Sight info
-					if _, hasWitchSightMech := inv.Mechanics["witch_sight"]; hasWitchSightMech {
-						invInfo["passive"] = true
-						invInfo["range"] = "30 feet"
-						invInfo["effect"] = "You have Truesight with a range of 30 feet (shown under vision)"
-					}
-					invocationsInfo = append(invocationsInfo, invInfo)
-				}
-			}
+			invocationsInfo := invocationSummary(charID) // invocation_repeats_2024.go
 			invocationsResponse := map[string]interface{}{
 				"known":           invocationsInfo,
 				"known_count":     len(invocations),

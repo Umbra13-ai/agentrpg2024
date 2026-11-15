@@ -86,6 +86,7 @@ func protectorsPage(warlockID int) []int {
 func ensureInvocationColumns() {
 	if db != nil {
 		db.Exec(`ALTER TABLE characters ADD COLUMN IF NOT EXISTS protectors_page JSONB DEFAULT '[]'`)
+		db.Exec(`ALTER TABLE characters ADD COLUMN IF NOT EXISTS invocation_cantrips JSONB DEFAULT '{}'`) // invocation_repeats_2024.go
 	}
 }
 

@@ -1420,43 +1420,13 @@ func handleMyTurn(w http.ResponseWriter, r *http.Request) {
 		invocationSpellsUsed := getInvocationSpellsUsed(charID)
 
 		if len(invocations) > 0 {
-			invocationsInfo := []map[string]interface{}{}
-			for _, slug := range invocations {
-				if inv, ok := game.AvailableInvocations[slug]; ok {
-					invInfo := map[string]interface{}{
-						"slug":        slug,
-						"name":        inv.Name,
-						"description": inv.Description,
-					}
-					// Show used status for once-per-rest invocations
-					if spell, hasOncePerRest := inv.Mechanics["once_per_rest_spell"]; hasOncePerRest {
-						invInfo["once_per_rest"] = true
-						invInfo["grants_spell"] = spell
-						invInfo["used"] = hasUsedInvocationSpell(charID, slug)
-						if !hasUsedInvocationSpell(charID, slug) {
-							invInfo["tip"] = fmt.Sprintf("You can cast %s once using a warlock spell slot!", spell)
-						}
-					}
-					// Show Eldritch Spear range extension
-					if _, hasEldritchSpear := inv.Mechanics["eldritch_spear"]; hasEldritchSpear {
-						invInfo["modifies"] = "eldritch-blast"
-						invInfo["effect"] = fmt.Sprintf("Range increased by 30 feet per Warlock level: %d feet", 120+eldritchSpearBonus(charID))
-					}
-					// Show Witch Sight info
-					if _, hasWitchSightMech := inv.Mechanics["witch_sight"]; hasWitchSightMech {
-						invInfo["passive"] = true
-						invInfo["range"] = "30 feet"
-						invInfo["effect"] = "You have Truesight with a range of 30 feet (shown under vision on the sheet)"
-					}
-					invocationsInfo = append(invocationsInfo, invInfo)
-				}
-			}
+			invocationsInfo := invocationSummary(charID) // invocation_repeats_2024.go
 			invocationsResponse := map[string]interface{}{
 				"known":           invocationsInfo,
 				"known_count":     len(invocations),
 				"max_invocations": maxInvocations,
 				"can_learn_more":  len(invocations) < maxInvocations,
-				"tip":             "Invocations modify eldritch blast: 'agonizing-blast' adds CHA mod to damage, 'eldritch-spear' adds 30 feet of range per Warlock level, 'repelling-blast' pushes 10ft. 'at_will_spell' invocations let you cast a spell without spell slots.",
+				"tip":             "Agonizing Blast adds your Charisma modifier to its cantrip's damage, Eldritch Spear adds 30 feet of range per Warlock level, Repelling Blast pushes up to 10 feet on a hit: each copy works on the cantrip it names. 'at_will_spell' invocations let you cast a spell without spell slots.",
 			}
 			// Include once-per-rest usage info
 			if len(invocationSpellsUsed) > 0 {

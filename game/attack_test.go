@@ -145,3 +145,18 @@ func TestHeadForAttacker(t *testing.T) {
 		}
 	}
 }
+
+// InvocationRepeats is exactly the invocations whose SRD 5.2.1 text says "Repeatable.".
+func TestInvocationRepeatsMatchTheSRD(t *testing.T) {
+	for slug, inv := range AvailableInvocations {
+		_, listed := InvocationRepeats[slug]
+		if says := strings.Contains(inv.Description, "Repeatable."); says != listed {
+			t.Errorf("%s: the SRD says repeatable %v, InvocationRepeats lists it %v", slug, says, listed)
+		}
+	}
+	for slug := range InvocationRepeats {
+		if _, ok := AvailableInvocations[slug]; !ok {
+			t.Errorf("InvocationRepeats lists %s, which is not an invocation", slug)
+		}
+	}
+}

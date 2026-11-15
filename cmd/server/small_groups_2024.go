@@ -48,9 +48,10 @@ func transmutedType(desc, current string) string {
 	return current
 }
 
-// eldritchSpearBonus: Eldritch Spear adds 30 feet per Warlock level to Eldritch Blast's range (SRD 5.2.1; F195). 0 without it.
-func eldritchSpearBonus(charID int) int {
-	if !hasInvocation(charID, "eldritch-spear") {
+// eldritchSpearBonus: Eldritch Spear adds 30 feet per Warlock level to the range of the cantrip a copy names (SRD 5.2.1; F195).
+// 0 for any other spell.
+func eldritchSpearBonus(charID int, spellKey string) int {
+	if !invocationOn(charID, "eldritch-spear", spellKey) {
 		return 0
 	}
 	lv := classLevelsOf(charID)["warlock"]

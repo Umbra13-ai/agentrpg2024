@@ -348,14 +348,20 @@ func handleCharacterInvocations(w http.ResponseWriter, r *http.Request) {
 		json.Unmarshal(knownSpellsJSON, &knownSpells)
 
 		knownInvocations := []map[string]interface{}{}
+		copyNo := map[string]int{}
 		for _, slug := range knownSlugs {
 			if inv, ok := game.AvailableInvocations[slug]; ok {
-				knownInvocations = append(knownInvocations, map[string]interface{}{
+				entry := map[string]interface{}{
 					"slug":        slug,
 					"name":        inv.Name,
 					"description": inv.Description,
 					"mechanics":   inv.Mechanics,
-				})
+				}
+				if cs := invocationCantrips(charID, slug); copyNo[slug] < len(cs) {
+					entry["cantrip"] = cs[copyNo[slug]] // this copy's cantrip (a repeatable cantrip invocation)
+				}
+				copyNo[slug]++
+				knownInvocations = append(knownInvocations, entry)
 			}
 		}
 
@@ -373,12 +379,16 @@ func handleCharacterInvocations(w http.ResponseWriter, r *http.Request) {
 					break
 				}
 			}
-			if known {
+			repeat := invocationRepeatInfo(charID, slug) // a repeatable invocation stays on offer while a copy has a choice left
+			if known && repeat == nil {
 				continue
 			}
 
 			// Check prerequisites
 			meetsReqs, reason := meetsInvocationPrerequisites(charID, inv)
+			if open, ok := repeat["cantrips_open"].([]string); ok && meetsReqs && len(open) == 0 {
+				meetsReqs, reason = false, inv.Name+" needs "+game.InvocationRepeats[slug].Needs+" that no copy of it has yet"
+			}
 			prereqs := map[string]interface{}{}
 			if inv.Prerequisites.Level > 0 {
 				prereqs["level"] = inv.Prerequisites.Level
@@ -400,6 +410,9 @@ func handleCharacterInvocations(w http.ResponseWriter, r *http.Request) {
 			if !meetsReqs {
 				entry["ineligible_reason"] = reason
 			}
+			if repeat != nil {
+				entry["repeat"] = repeat
+			}
 			availableToLearn = append(availableToLearn, entry)
 		}
 		// Sort by eligibility then name
@@ -420,7 +433,7 @@ func handleCharacterInvocations(w http.ResponseWriter, r *http.Request) {
 			"max_invocations":    maxInvocations,
 			"can_learn_more":     canLearnMore,
 			"available_to_learn": availableToLearn,
-			"note":               "Invocations with 'agonizing-blast' add CHA mod to eldritch blast damage. 'at_will_spell' invocations let you cast a spell without using a spell slot.",
+			"note":               "Agonizing Blast, Eldritch Spear and Repelling Blast work on the cantrip each copy names (send \"cantrip\"; you may take them again for another cantrip). Lessons of the First Ones may be taken again for another Origin feat. 'at_will_spell' invocations let you cast a spell without using a spell slot.",
 			"how_to_replace":     "POST {\"character_id\": N, \"invocation\": \"<new>\", \"replace\": \"<old>\"}: one invocation each time you gain a Warlock level, or freely before your campaign starts.",
 		}
 		if hasPactBoon(charID, "tome") {
@@ -449,6 +462,7 @@ func handleCharacterInvocations(w http.ResponseWriter, r *http.Request) {
 		Replace     string   `json:"replace"`    // the invocation to swap out
 		Cantrips    []string `json:"cantrips"`   // Pact of the Tome: the Book of Shadows' three cantrips
 		Rituals     []string `json:"rituals"`    // Pact of the Tome: its two level 1 Ritual spells
+		Cantrip     string   `json:"cantrip"`    // a repeatable cantrip invocation (Agonizing Blast, Eldritch Spear, Repelling Blast): the copy's cantrip
 	}
 	if !readRequest(w, r, &req) {
 		return
@@ -529,8 +543,15 @@ func handleCharacterInvocations(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 
-	// Check if already known (Pact of the Tome sent again with new picks conjures a new book)
-	if containsStr(currentInvocations, invocationSlug) {
+	repeat, repeatable := game.InvocationRepeats[invocationSlug]
+	if req.Cantrip != "" && (!repeatable || repeat.Choice != "cantrip") {
+		writeJSONStatus(w, http.StatusBadRequest, map[string]interface{}{"error": "no_cantrip_choice",
+			"message": inv.Name + " doesn't name a cantrip (only Agonizing Blast, Eldritch Spear and Repelling Blast do). Nothing was changed."})
+		return
+	}
+	// Check if already known (Pact of the Tome sent again with new picks conjures a new book); a repeatable invocation may be
+	// gained again, each copy with a different choice (game.InvocationRepeats)
+	if containsStr(currentInvocations, invocationSlug) && !repeatable {
 		if tome && req.Replace == "" {
 			saveBookOfShadows(req.CharacterID, book)
 			writeJSONStatus(w, http.StatusOK, map[string]interface{}{"success": true, "character_id": req.CharacterID, "book_of_shadows": book,
@@ -609,11 +630,23 @@ func handleCharacterInvocations(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	// A cantrip invocation's copy names its cantrip: the one asked for, or the first one left (Eldritch Blast first)
+	copyCantrip := ""
+	if repeatable && repeat.Choice == "cantrip" && replacing != invocationSlug {
+		var why string
+		if copyCantrip, why = chooseInvocationCantrip(req.CharacterID, invocationSlug, req.Cantrip); why != "" {
+			writeJSONStatus(w, http.StatusBadRequest, map[string]interface{}{"error": "cantrip_not_eligible", "message": why + " Nothing was changed.",
+				"repeat": invocationRepeatInfo(req.CharacterID, invocationSlug)})
+			return
+		}
+	}
+
 	// Add the invocation (or swap it for the one replaced)
 	if replacing != "" {
-		for i, k := range currentInvocations {
-			if k == replacing {
+		for i := len(currentInvocations) - 1; i >= 0; i-- { // one copy (a repeatable invocation may have several): the last
+			if currentInvocations[i] == replacing {
 				currentInvocations[i] = invocationSlug
+				break
 			}
 		}
 	} else {
@@ -628,6 +661,12 @@ func handleCharacterInvocations(w http.ResponseWriter, r *http.Request) {
 			"message": publicError(err),
 		})
 		return
+	}
+	if replacing != "" {
+		dropInvocationCantrip(req.CharacterID, replacing)
+	}
+	if copyCantrip != "" {
+		addInvocationCantrip(req.CharacterID, invocationSlug, copyCantrip)
 	}
 	if replacing != "" {
 		if open, _ := shopOpen(req.CharacterID); !open {
