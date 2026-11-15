@@ -3,6 +3,8 @@ package main
 import (
 	"database/sql"
 	"encoding/json"
+	"errors"
+	"log"
 	"strconv"
 	"strings"
 	"sync"
@@ -19,7 +21,30 @@ type ArmorInfo struct {
 // armorInfoCache: the armor table is written only at start (initDB, syncArmorToSRDTable), so what getArmorInfo found is kept:
 // no read of reference data on a second connection inside a request's transaction (db_guard_2024.go), and one my-turn no
 // longer reads the same armor dozens of times (audit B-8).
-var armorInfoCache sync.Map // slug -> ArmorInfo
+var armorInfoCache sync.Map // slug -> ArmorInfo, or notArmor for a name the table doesn't have
+
+// notArmor marks a name that isn't armor (most items a shop is asked about): remembered too, so it isn't read again.
+type notArmor struct{}
+
+// loadArmorInfoCache reads the whole armor table once, at start (after syncArmorToSRDTable).
+func loadArmorInfoCache() {
+	rows, err := db.Query(`SELECT slug, ac, type, stealth_disadvantage, COALESCE(str_req, 0) FROM armor`)
+	if err != nil {
+		log.Printf("armor cache: %v", err)
+		return
+	}
+	defer rows.Close()
+	for rows.Next() {
+		var slug string
+		var info ArmorInfo
+		if rows.Scan(&slug, &info.AC, &info.Type, &info.StealthDisadvantage, &info.StrengthRequirement) == nil {
+			armorInfoCache.Store(slug, info)
+		}
+	}
+	if err := rows.Err(); err != nil {
+		log.Printf("armor cache: %v", err)
+	}
+}
 
 // getArmorInfo fetches armor data from the database (kept after the first read: armorInfoCache)
 func getArmorInfo(armorSlug string) (*ArmorInfo, error) {
@@ -27,12 +52,17 @@ func getArmorInfo(armorSlug string) (*ArmorInfo, error) {
 		return nil, nil
 	}
 	if v, ok := armorInfoCache.Load(armorSlug); ok {
-		info := v.(ArmorInfo)
-		return &info, nil
+		if info, isArmor := v.(ArmorInfo); isArmor {
+			return &info, nil
+		}
+		return nil, sql.ErrNoRows
 	}
 	info, err := readArmorInfo(armorSlug)
-	if err == nil && info != nil {
+	switch {
+	case err == nil && info != nil:
 		armorInfoCache.Store(armorSlug, *info)
+	case errors.Is(err, sql.ErrNoRows):
+		armorInfoCache.Store(armorSlug, notArmor{}) // a database failure is never remembered
 	}
 	return info, err
 }

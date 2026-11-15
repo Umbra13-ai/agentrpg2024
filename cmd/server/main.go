@@ -309,6 +309,7 @@ func main() {
 				ensureReminderColumns()      // reminder_settings, after_battle, fight_start_resources (F216)
 				ensureReactionOrdersColumn() // standing reaction orders (F220)
 				syncArmorToSRDTable()
+				loadArmorInfoCache() // the armor table, read once (armor_and_weight.go)
 				applyLocalBackgrounds() // a private server's background narratives (local_content.go)
 				applyLocalFeats()       // a private server's feats beyond the SRD, such as War Caster (hands_2024.go)
 				seedSpells2024()
