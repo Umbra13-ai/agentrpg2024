@@ -6,7 +6,6 @@ package main
 // the GM's call: a thief in the middle of a bright, empty room can't hide whatever the roll, so the GM can overrule a success.
 
 import (
-	"encoding/json"
 	"fmt"
 	"net/http"
 	"strings"
@@ -63,10 +62,8 @@ func attemptHide(charID int, label string) string {
 		db.Exec(`UPDATE characters SET hide_dc = 0 WHERE id = $1`, charID)
 		return fmt.Sprintf("🙈 %s: Dexterity (Stealth)%s %d (d20: %d%s%s). Not hidden: the check needs %d.", label, profNote, total, roll, rtNote, notes, hideDC)
 	}
-	conds := getCharConditions(charID)
-	conds = append(conds, "hidden")
-	b, _ := json.Marshal(conds)
-	db.Exec(`UPDATE characters SET conditions = $1, hide_dc = $2 WHERE id = $3`, b, total, charID)
+	addCharacterCondition(charID, "hidden") // the condition owner
+	db.Exec(`UPDATE characters SET hide_dc = $1 WHERE id = $2`, total, charID)
 	return fmt.Sprintf("🙈 %s: Dexterity (Stealth)%s %d (d20: %d%s%s). Hidden, if there is somewhere to hide: you must be Heavily Obscured or behind Three-Quarters or Total Cover and out of every enemy's line of sight, and the GM can rule that there isn't. "+
 		"While hidden you have the Invisible condition; a Wisdom (Perception) check of %d finds you. You stop being hidden if you make a sound louder than a whisper, an enemy finds you, you make an attack roll or cast a spell with a Verbal component.",
 		label, profNote, total, roll, rtNote, notes, total)

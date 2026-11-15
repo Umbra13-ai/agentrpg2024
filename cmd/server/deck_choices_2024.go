@@ -69,7 +69,7 @@ func deckCardPending(charID int, card string) (pending, line string, ok bool) {
 		return "", fmt.Sprintf(" [Server: you can cast Wish %d time(s): {\"action\": \"cast\", \"spell_slug\": \"wish\", \"item\": \"Moon card: Wish\"}.]", n), true
 	case "Donjon":
 		addDeckBoon(charID, "donjon")
-		addMonsterCondition(lobbyOfChar(charID), charID, "incapacitated", "Donjon", 0, "", 0) // entombed: no actions until found (O-4)
+		applyCondition(lobbyOfChar(charID), charID, "incapacitated", "Donjon", 0, "", 0) // entombed: no actions until found (O-4)
 		return "", " [Server: you disappear, entombed in suspended animation in an extradimensional sphere; you are Incapacitated and out of the scene until you're found. Everything you wear and carry stays behind. The GM decides where the sphere is; when you're freed, the GM removes the condition (POST /api/gm/conditions, remove incapacitated). You draw no more cards.]", true
 	case "Key":
 		weapon := keyCardWeapon(charID)

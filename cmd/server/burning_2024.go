@@ -89,19 +89,7 @@ func extinguishSelf(charID int) string {
 	if !stopBurning(lobby, charID) {
 		return "You aren't burning."
 	}
-	conds := getCharConditions(charID)
-	hasProne := false
-	for _, c := range conds {
-		if c == "prone" {
-			hasProne = true
-		}
-	}
-	if !hasProne {
-		conds = append(conds, "prone")
-		b, _ := json.Marshal(conds)
-		db.Exec(`UPDATE characters SET conditions = $1 WHERE id = $2`, b, charID)
-		syncRecordsFromList(charID)
-	}
+	applyCondition(lobby, charID, "prone", "", 0, "", 0)
 	return "🔥 You drop and roll on the ground: the fire goes out. You have the Prone condition."
 }
 

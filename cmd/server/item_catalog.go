@@ -89,7 +89,7 @@ func buildItemCatalog() []catalogRow {
 func seedItemCatalog() {
 	ensureItemCatalogTable()
 	ensureConditionRecordsTable()
-	reconcileAllConditions() // one set of conditions per character (see conditions_unified.go)
+	migrateConditionLists() // condition_records is the one store of conditions (condition_owner_2024.go)
 	ensureBarbarianColumns()
 	ensureCombatEffectsTable()
 	ensureSpellEffectsTable()

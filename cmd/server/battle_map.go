@@ -479,7 +479,6 @@ func handleBattleMap(w http.ResponseWriter, r *http.Request, campaignID int, rou
 		return
 	}
 	prone := false
-	remainingConditions := []string{}
 	for _, condition := range parseConditionsJSON(conditions) {
 		switch strings.SplitN(strings.ToLower(condition), ":", 2)[0] {
 		case "grappled", "restrained", "paralyzed", "unconscious", "petrified":
@@ -487,9 +486,6 @@ func handleBattleMap(w http.ResponseWriter, r *http.Request, campaignID int, rou
 			return
 		case "prone":
 			prone = true
-		}
-		if condition != "invisible:one_with_shadows" {
-			remainingConditions = append(remainingConditions, condition)
 		}
 	}
 	if hp <= 0 || dead || exhaustion >= 6 {
@@ -583,8 +579,15 @@ func handleBattleMap(w http.ResponseWriter, r *http.Request, campaignID int, rou
 		return
 	}
 	if cost > 0 {
-		remainingJSON, _ := json.Marshal(remainingConditions)
-		if _, err := tx.Exec("UPDATE characters SET movement_remaining=$1, conditions=$2 WHERE id=$3", movement-cost, remainingJSON, actor.ID); err != nil {
+		if _, err := tx.Exec("UPDATE characters SET movement_remaining=$1 WHERE id=$2", movement-cost, actor.ID); err != nil {
+			battleMapError(w, 500, "map_write_failed")
+			return
+		}
+		// moving ends One with Shadows' invisibility (the condition owner, in this transaction)
+		if err := changeConditionsIn(tx, campaignID, actor.ID, func(c *conditionChange) error {
+			_, err := c.remove(func(r conditionRecord) bool { return r.entry() == "invisible:one_with_shadows" })
+			return err
+		}); err != nil {
 			battleMapError(w, 500, "map_write_failed")
 			return
 		}
@@ -592,9 +595,6 @@ func handleBattleMap(w http.ResponseWriter, r *http.Request, campaignID int, rou
 	if err := writeAction(tx, campaignID, actor.ID, "map_move", "Moved on the battle map", fmt.Sprintf("%d ft of movement spent", cost)); err != nil || tx.Commit() != nil {
 		battleMapError(w, 500, "map_write_failed")
 		return
-	}
-	if cost > 0 {
-		syncRecordsFromList(actor.ID)
 	}
 	reply := map[string]any{"position": actor.Position, "traversed": traversed, "interrupted": actor.Paused, "distance_ft": len(traversed) * battleMapStepFeet, "cost_ft": cost, "movement_remaining_ft": movement - cost, "map": m.playerView(actor)}
 	if len(opportunity) > 0 {

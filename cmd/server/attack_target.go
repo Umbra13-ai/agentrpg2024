@@ -469,7 +469,7 @@ func resolveAttackOnMonster(lobbyID, charID, targetID int, o attackOutcome, clea
 		hp, knockedOut = 1, true
 		status = healthWord(hp, maxHP)
 		if err := setMonsterHP(lobbyID, targetID, 1); err == nil {
-			addMonsterCondition(lobbyID, targetID, "unconscious", "knocked out", 600, "", 0)
+			applyCondition(lobbyID, targetID, "unconscious", "knocked out", 600, "", 0)
 		}
 	}
 	if knockedOut {

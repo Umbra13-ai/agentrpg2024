@@ -108,9 +108,11 @@ func masteryOnHit(lobbyID, charID, targetID int, name, monsterKey string, mu mas
 				return fmt.Sprintf(" Topple: %s but is already Prone.", sv.LineAgainst(name))
 			}
 		}
-		db.Exec(`INSERT INTO condition_records (lobby_id, target_id, condition, source, escapes, notes)
-			VALUES ($1, $2, 'prone', $3, '[]', $4)`, lobbyID, targetID, "Topple ("+mu.Weapon+")",
-			fmt.Sprintf("Failed the Constitution save against Topple (DC %d).", mu.DC))
+		res := addCondition(lobbyID, targetID, condAdd{Condition: "prone", Source: "Topple (" + mu.Weapon + ")", SourceID: charID,
+			Notes: fmt.Sprintf("Failed the Constitution save against Topple (DC %d).", mu.DC)})
+		if res.Immune != "" { // the condition owner: Immunity to Prone (an Ooze, a Ghost, an Elemental ...)
+			return fmt.Sprintf(" Topple: %s, but %s is immune to the Prone condition.", sv.LineAgainst(name), name)
+		}
 		return fmt.Sprintf(" Topple: %s and falls Prone.", sv.LineAgainst(name))
 	case "Vex":
 		if damage > 0 {

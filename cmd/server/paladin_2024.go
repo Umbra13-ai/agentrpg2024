@@ -114,7 +114,7 @@ func handleGMAbjureFoes(w http.ResponseWriter, r *http.Request) {
 		saved, total := monsterSave(campaignID, tid, "wis", dc)
 		res := map[string]interface{}{"target_id": tid, "total": total, "dc": dc, "saved": saved}
 		if !saved {
-			addMonsterCondition(campaignID, tid, "frightened", "Abjure Foes ("+name+")", 10, "", 0)
+			applyCondition(campaignID, tid, "frightened", "Abjure Foes ("+name+")", 10, "", 0)
 			res["frightened"] = true
 			res["note"] = "Frightened for 1 minute or until it takes any damage; on its turns it can do only one of: move, take an action, or take a Bonus Action."
 		}

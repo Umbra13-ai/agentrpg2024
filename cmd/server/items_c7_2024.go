@@ -11,8 +11,7 @@ import (
 )
 
 func endInvisibleFrom(lobby, charID int, source string) {
-	db.Exec(`DELETE FROM condition_records WHERE lobby_id = $1 AND target_id = $2 AND condition = 'invisible' AND source = $3`, lobby, charID, source)
-	syncListFromRecords(charID)
+	endCondition(lobby, charID, "invisible", source)
 }
 
 func invisibleFrom(lobby, charID int, source string) bool {
@@ -34,7 +33,7 @@ func cloakOfInvisibility(charID int, it invItem, description string) string {
 	if refusal != "" {
 		return refusal + " Nothing was spent."
 	}
-	addMonsterCondition(lobby, charID, "invisible", "Cloak of Invisibility", 600, "", 0)
+	applyCondition(lobby, charID, "invisible", "Cloak of Invisibility", 600, "", 0)
 	return "You pull the hood over your head (a Magic action, 1 charge): you have the Invisible condition for 1 hour, until you pull the hood down (no action) or stop wearing the cloak." + note
 }
 
@@ -47,6 +46,6 @@ func ringOfInvisibility(charID int, it invItem) string {
 		endInvisibleFrom(lobby, charID, "Ring of Invisibility")
 		return "You become visible again (a Bonus Action)."
 	}
-	addMonsterCondition(lobby, charID, "invisible", "Ring of Invisibility", 0, "", 0)
+	applyCondition(lobby, charID, "invisible", "Ring of Invisibility", 0, "", 0)
 	return "You turn the ring (a Magic action): you have the Invisible condition until you remove the ring or take a Bonus Action to become visible again (use_item again)."
 }

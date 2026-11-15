@@ -169,8 +169,8 @@ func handleGMTurnUndead(w http.ResponseWriter, r *http.Request) {
 				text, _ := damageMonster(campaignID, tid, sear, "radiant")
 				res["sear_undead"] = text
 			}
-			addMonsterCondition(campaignID, tid, "frightened", "Turn Undead ("+name+")", 10, "", 0)
-			addMonsterCondition(campaignID, tid, "incapacitated", "Turn Undead ("+name+")", 10, "", 0)
+			applyCondition(campaignID, tid, "frightened", "Turn Undead ("+name+")", 10, "", 0)
+			applyCondition(campaignID, tid, "incapacitated", "Turn Undead ("+name+")", 10, "", 0)
 			res["turned"] = true
 		}
 		results = append(results, res)

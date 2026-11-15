@@ -200,15 +200,8 @@ func TestSQLiteConditionHelpers(t *testing.T) {
 		t.Fatalf("expected 2 conditions, got %d", len(conditions))
 	}
 
-	if !removeCondition(1, "prone") {
-		t.Fatal("expected removeCondition to remove prone")
-	}
-	if hasCondition(1, "prone") {
-		t.Fatal("expected prone to be removed")
-	}
-	if removeCondition(1, "prone") {
-		t.Fatal("expected removing missing condition to return false")
-	}
+	// removing a condition is the condition owner's (condition_owner_2024.go: a Postgres transaction with the row locked);
+	// conditions_rule_test.py exercises it against the server
 }
 
 func TestSQLiteIncapacitationAndMovement(t *testing.T) {
@@ -439,54 +432,10 @@ func TestIsMeaningfulActionTypeExcludesFollowing(t *testing.T) {
 	}
 }
 
-func TestCleanupDuplicateCharacterConditions(t *testing.T) {
-	testDB := setupSQLiteTestDB(t)
-	seedCharacter(t, testDB, 7, "Bramble", `["dodging","dodging","prone","prone"]`, 0)
-
-	cleanupDuplicateCharacterConditions()
-
-	var raw string
-	if err := testDB.QueryRow(`SELECT conditions FROM characters WHERE id = ?`, 7).Scan(&raw); err != nil {
-		t.Fatalf("read cleaned conditions: %v", err)
-	}
-	got := parseConditionsString(raw)
-	if len(got) != 2 || got[0] != "dodging" || got[1] != "prone" {
-		t.Fatalf("conditions = %#v, want []string{\"dodging\", \"prone\"}", got)
-	}
-
-	// A second pass must preserve the already-clean row.
-	cleanupDuplicateCharacterConditions()
-	if err := testDB.QueryRow(`SELECT conditions FROM characters WHERE id = ?`, 7).Scan(&raw); err != nil {
-		t.Fatalf("read idempotent conditions: %v", err)
-	}
-	if got := parseConditionsString(raw); len(got) != 2 || got[0] != "dodging" || got[1] != "prone" {
-		t.Fatalf("idempotent cleanup changed conditions to %#v", got)
-	}
-}
-
 func TestParseConditionsStringJSON(t *testing.T) {
 	got := normalizeConditionList(parseConditionsString(`["dodging","prone","dodging"]`))
 	if len(got) != 2 {
 		t.Fatalf("expected 2 parsed conditions, got %d: %#v", len(got), got)
-	}
-}
-
-func TestConditionCleanupRepairsJSONEncodedConditionArray(t *testing.T) {
-	testDB := setupSQLiteTestDB(t)
-	seedCharacter(t, testDB, 8, "Mira", `"[\"dodging\",\"dodging\",\"prone\"]"`, 0)
-
-	cleanupDuplicateCharacterConditions()
-
-	var raw string
-	if err := testDB.QueryRow(`SELECT conditions FROM characters WHERE id = ?`, 8).Scan(&raw); err != nil {
-		t.Fatalf("read cleaned conditions: %v", err)
-	}
-	if raw != `["dodging","prone"]` {
-		t.Fatalf("conditions = %q, want canonical JSON array", raw)
-	}
-	got := parseConditionsString(raw)
-	if len(got) != 2 || got[0] != "dodging" || got[1] != "prone" {
-		t.Fatalf("conditions = %#v, want []string{\"dodging\", \"prone\"}", got)
 	}
 }
 

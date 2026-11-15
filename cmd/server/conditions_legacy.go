@@ -1,11 +1,9 @@
 package main
 
 import (
-	"database/sql"
 	"encoding/json"
 	"fmt"
 	"github.com/agentrpg/agentrpg/game"
-	"log"
 	"strconv"
 	"strings"
 )
@@ -66,31 +64,6 @@ func downedCondition(condition string) bool {
 		return true
 	}
 	return false
-}
-
-// removeCondition removes a specific condition from a character
-// Used for standing up from prone, breaking grapple, etc.
-func removeCondition(charID int, condition string) bool {
-	condition = strings.ToLower(condition)
-	conditions := getCharConditions(charID)
-	wholeCondition := isRuleCondition(condition) && !strings.Contains(condition, ":") // "grappled" ends "grappled:12" too
-
-	newConditions := []string{}
-	removed := false
-	for _, c := range conditions {
-		if strings.ToLower(c) == condition || (wholeCondition && conditionBase(c) == condition) {
-			removed = true
-		} else {
-			newConditions = append(newConditions, c)
-		}
-	}
-
-	if removed {
-		updated, _ := json.Marshal(newConditions)
-		db.Exec("UPDATE characters SET conditions = $1 WHERE id = $2", updated, charID)
-		syncRecordsFromList(charID)
-	}
-	return removed
 }
 
 func parseConditionsJSON(raw []byte) []string {
@@ -183,50 +156,6 @@ func normalizeConditionList(conditions []string) []string {
 	return normalized
 }
 
-// cleanupDuplicateCharacterConditions repairs legacy rows once the service
-// starts. It is idempotent and preserves distinct parameterized conditions.
-func cleanupDuplicateCharacterConditions() {
-	rows, err := db.Query("SELECT id, COALESCE(conditions, '[]') FROM characters")
-	if err != nil {
-		log.Printf("Condition cleanup skipped: %v", err)
-		return
-	}
-
-	type conditionRepair struct {
-		id         int
-		conditions []byte
-	}
-	repairs := make([]conditionRepair, 0)
-	for rows.Next() {
-		var id int
-		var raw []byte
-		if err := rows.Scan(&id, &raw); err != nil {
-			continue
-		}
-		conditions := parseConditionsJSON(raw)
-		normalized := normalizeConditionList(conditions)
-		encoded, _ := json.Marshal(normalized)
-		if string(encoded) == strings.TrimSpace(string(raw)) {
-			continue
-		}
-		repairs = append(repairs, conditionRepair{id: id, conditions: encoded})
-	}
-	if err := rows.Close(); err != nil {
-		log.Printf("Condition cleanup read failed: %v", err)
-		return
-	}
-
-	updated := 0
-	for _, repair := range repairs {
-		if _, err := db.Exec("UPDATE characters SET conditions = $1 WHERE id = $2", repair.conditions, repair.id); err == nil {
-			updated++
-		}
-	}
-	if updated > 0 {
-		log.Printf("Removed duplicate conditions from %d character(s)", updated)
-	}
-}
-
 // characterHPStatus provides the concise party-status label used by GM and
 // spectator reads. A character at 0 HP who has made three successful death
 // saves is unconscious but stable, not dying.
@@ -249,35 +178,16 @@ func characterHPStatus(hp, maxHP int, isStable, isDead bool) string {
 	return "healthy"
 }
 
-// removeOneWithShadowsInvisibility checks for and removes the invisible:one_with_shadows condition
-// This is called when a character moves, takes an action, or uses a reaction.
-// One with Shadows: "invisible until you move or take an action or a reaction"
+// removeOneWithShadowsInvisibility ends the invisible:one_with_shadows entry (One with Shadows: "invisible until you move or take an
+// action or a reaction"). Called when the character moves, takes an action or uses a reaction.
 func removeOneWithShadowsInvisibility(charID int) bool {
-	conditions := getCharConditions(charID)
-
-	newConditions := []string{}
-	removed := false
-	for _, c := range conditions {
-		if c == "invisible:one_with_shadows" {
-			removed = true
-		} else {
-			newConditions = append(newConditions, c)
-		}
+	if !hasCondition(charID, "invisible:one_with_shadows") || !removeCondition(charID, "invisible:one_with_shadows") {
+		return false
 	}
-
-	if removed {
-		updated, _ := json.Marshal(newConditions)
-		db.Exec("UPDATE characters SET conditions = $1 WHERE id = $2", updated, charID)
-		syncRecordsFromList(charID)
-		// Log to campaign if applicable
-		var campaignID sql.NullInt64
-		var charName string
-		db.QueryRow("SELECT lobby_id, name FROM characters WHERE id = $1", charID).Scan(&campaignID, &charName)
-		if campaignID.Valid {
-			writeAction(db, int(campaignID.Int64), charID, "other", fmt.Sprintf("👁️ %s's invisibility from One with Shadows ends", charName), "")
-		}
+	if lobby := lobbyOfChar(charID); lobby != 0 {
+		writeAction(db, lobby, charID, "other", fmt.Sprintf("👁️ %s's invisibility from One with Shadows ends", getCharacterName(charID)), "")
 	}
-	return removed
+	return true
 }
 
 // conditionListHas checks if a condition list contains a specific condition
@@ -287,20 +197,10 @@ func conditionListHas(conditions []string, condition string) bool {
 	return game.HasCondition(conditions, condition)
 }
 
-// isIncapacitated checks if character cannot take actions or reactions
-// Per 5e: paralyzed, stunned, unconscious, petrified, and incapacitated all prevent actions
+// isIncapacitated: the character can't take actions or Reactions: an Incapacitating condition (game.IsIncapacitatingCondition), or
+// 0 Hit Points (Unconscious).
 func isIncapacitated(charID int) bool {
-	if charAtZeroHP(charID) {
-		return true
-	}
-	conditions := getCharConditions(charID)
-	for _, c := range conditions {
-		switch strings.ToLower(c) {
-		case "incapacitated", "paralyzed", "stunned", "unconscious", "petrified":
-			return true
-		}
-	}
-	return false
+	return charAtZeroHP(charID) || game.IsIncapacitated(getCharConditions(charID))
 }
 
 // canMove checks if character's speed is not reduced to 0 by conditions
@@ -319,115 +219,52 @@ func getCharacterName(charID int) string {
 	return name
 }
 
-// releaseAllGrapplesFrom releases all creatures that the specified character is grappling
-// Called when a grappler becomes incapacitated (5e PHB: grapple ends if grappler incapacitated)
-// Returns list of character names that were released
-func releaseAllGrapplesFrom(grapplerID int) []string {
+// grappledBy: the record is a grapple held by the creature (a grapple's source, or an old "grappled:ID" entry).
+func grappledBy(r conditionRecord, grapplerID int) bool {
+	return r.Condition == "grappled" && (r.Source == grappleSource(grapplerID) || r.Detail == strconv.Itoa(grapplerID))
+}
+
+// releaseAllGrapplesFrom ends every grapple the creature holds (SRD 5.2.1, Ending a Grapple: the grappler has the Incapacitated
+// condition). It returns the names of the creatures released.
+func releaseAllGrapplesFrom(lobbyID, grapplerID int) []string {
+	where := `condition = 'grappled' AND (source = $1 OR detail = $2)`
+	args := []interface{}{grappleSource(grapplerID), strconv.Itoa(grapplerID)}
+	if grapplerID < 0 { // a monster's id is its campaign's
+		where += ` AND lobby_id = $3`
+		args = append(args, lobbyID)
+	}
+	var found []conditionRecord
+	for _, r := range findConditionRecords(where, args...) {
+		if grappledBy(r, grapplerID) {
+			found = append(found, r)
+		}
+	}
 	released := []string{}
-	grappleCondition := fmt.Sprintf("grappled:%d", grapplerID)
-
-	// Find all characters with this grapple condition
-	rows, err := db.Query(`
-		SELECT id, name, COALESCE(conditions, '[]') 
-		FROM characters 
-		WHERE conditions::text LIKE $1`, "%"+grappleCondition+"%")
-	if err != nil {
-		return released
-	}
-	defer rows.Close()
-
-	for rows.Next() {
-		var charID int
-		var charName string
-		var condJSON []byte
-		rows.Scan(&charID, &charName, &condJSON)
-
-		var conditions []string
-		json.Unmarshal(condJSON, &conditions)
-
-		// Remove the grapple condition
-		newConditions := []string{}
-		wasGrappled := false
-		for _, c := range conditions {
-			if c == grappleCondition {
-				wasGrappled = true
-			} else {
-				newConditions = append(newConditions, c)
-			}
-		}
-
-		if wasGrappled {
-			updated, _ := json.Marshal(newConditions)
-			db.Exec("UPDATE characters SET conditions = $1 WHERE id = $2", updated, charID)
-			syncRecordsFromList(charID)
-			released = append(released, charName)
+	seen := map[int]bool{}
+	for _, r := range endConditionRecords(found) {
+		if !seen[r.TargetID] {
+			seen[r.TargetID] = true
+			released = append(released, creatureName(r.LobbyID, r.TargetID))
 		}
 	}
-
 	return released
 }
 
-// breakGrapplesOnTarget removes all grappled conditions FROM a character
-// Called when a grappled creature is forcibly moved out of reach (shove, Thunderwave, etc.)
-// Returns list of grappler names whose grapples were broken
+// breakGrapplesOnTarget ends every grapple on a character (it was moved out of reach: a shove, Thunderwave ...). It returns the
+// names of the grapplers ("unknown" for a grapple whose grappler isn't recorded).
 func breakGrapplesOnTarget(targetID int) []string {
 	broken := []string{}
-
-	// Get target's current conditions
-	var condJSON []byte
-	var targetName string
-	err := db.QueryRow(`SELECT name, COALESCE(conditions, '[]') FROM characters WHERE id = $1`, targetID).Scan(&targetName, &condJSON)
-	if err != nil {
-		return broken
-	}
-
-	var conditions []string
-	json.Unmarshal(condJSON, &conditions)
-
-	// Find and remove all grappled conditions
-	newConditions := []string{}
-	for _, c := range conditions {
-		if strings.HasPrefix(c, "grappled:") {
-			// Extract grappler ID and get their name
-			parts := strings.Split(c, ":")
-			if len(parts) == 2 {
-				grapplerID, _ := strconv.Atoi(parts[1])
-				var grapplerName string
-				err := db.QueryRow(`SELECT name FROM characters WHERE id = $1`, grapplerID).Scan(&grapplerName)
-				if err == nil {
-					broken = append(broken, grapplerName)
-				} else {
-					broken = append(broken, fmt.Sprintf("unknown(id:%d)", grapplerID))
-				}
+	for _, r := range endCondition(0, targetID, "grappled", "") {
+		id, err := strconv.Atoi(r.Detail)
+		if err != nil {
+			if _, scanErr := fmt.Sscanf(r.Source, "Grapple #%d", &id); scanErr != nil {
+				broken = append(broken, "unknown")
+				continue
 			}
-		} else if strings.ToLower(c) == "grappled" {
-			// Generic grappled without specific grappler
-			broken = append(broken, "unknown")
-		} else {
-			newConditions = append(newConditions, c)
 		}
+		broken = append(broken, creatureName(r.LobbyID, id))
 	}
-
-	if len(broken) > 0 {
-		updated, _ := json.Marshal(newConditions)
-		db.Exec("UPDATE characters SET conditions = $1 WHERE id = $2", updated, targetID)
-		syncRecordsFromList(targetID)
-	}
-
 	return broken
-}
-
-// isIncapacitatingCondition checks if a condition prevents taking actions
-func isIncapacitatingCondition(condition string) bool {
-	baseCondition := condition
-	if idx := strings.Index(condition, ":"); idx != -1 {
-		baseCondition = condition[:idx]
-	}
-	switch strings.ToLower(baseCondition) {
-	case "incapacitated", "paralyzed", "stunned", "unconscious", "petrified":
-		return true
-	}
-	return false
 }
 
 // getCharmerID returns the ID of who charmed this character, or 0 if not charmed
@@ -505,24 +342,9 @@ func checkSanctuaryProtection(attackerID, targetID int) (string, string) {
 		targetName, sv.ForSaver("Wisdom saving throw")), ""
 }
 
-// removeSanctuaryOnOffensiveAction removes sanctuary condition when character attacks or casts offensive spell
-// Called when a protected character takes offensive action (ends the Sanctuary effect)
+// removeSanctuaryOnOffensiveAction ends a character's sanctuary entry when it attacks or casts an offensive spell.
 func removeSanctuaryOnOffensiveAction(charID int) {
-	conditions := getCharConditions(charID)
-	newConditions := []string{}
-	removed := false
-	for _, c := range conditions {
-		cLower := strings.ToLower(c)
-		if cLower == "sanctuary" || strings.HasPrefix(cLower, "sanctuary:") {
-			removed = true
-			continue
-		}
-		newConditions = append(newConditions, c)
-	}
-	if removed {
-		updatedJSON, _ := json.Marshal(newConditions)
-		db.Exec("UPDATE characters SET conditions = $1 WHERE id = $2", updatedJSON, charID)
-	}
+	removeConditionsWhere(0, charID, func(r conditionRecord) bool { return r.Condition == "sanctuary" })
 }
 
 // hasAnyCharm checks if character has any form of charmed condition

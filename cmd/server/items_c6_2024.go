@@ -14,7 +14,6 @@ package main
 //	Fleet Step                   the reply says Step of the Wind took no Bonus Action (F182)
 
 import (
-	"encoding/json"
 	"fmt"
 	"strings"
 
@@ -74,7 +73,7 @@ func saveOrDamage(lobby int, ids []int, ability string, dc int, dice, dtype, con
 			if condSave {
 				saveAb, saveDC = ability, dc
 			}
-			addMonsterCondition(lobby, id, cond, source, condRounds, saveAb, saveDC)
+			applyCondition(lobby, id, cond, source, condRounds, saveAb, saveDC)
 			line += " and is " + titleCase(cond)
 		}
 		lines = append(lines, line+".")
@@ -256,19 +255,22 @@ func resolveUnarmedOption(lobby, attackerID, targetID int, kind, effect string) 
 	case saved:
 		result += "success. Nothing happens."
 	case kind == "grapple":
-		esc, _ := jsonMarshalString([]conditionEscape{
-			{Label: "Strength (Athletics) check", Ability: "Strength", Skill: "Athletics", DC: dc},
-			{Label: "Dexterity (Acrobatics) check", Ability: "Dexterity", Skill: "Acrobatics", DC: dc},
-		})
-		db.Exec(`INSERT INTO condition_records (lobby_id, target_id, condition, source, escapes, duration_rounds, notes) VALUES ($1,$2,'grappled',$3,$4,0,$5)`,
-			lobby, targetID, grappleSource(attackerID), esc, fmt.Sprintf("Grappled by %s; escape DC %d", aName, dc))
-		if targetID > 0 {
-			syncListFromRecords(targetID)
+		escapes, _ := normalizeEscapes(defaultEscapes("grappled", dc))
+		res := addCondition(lobby, targetID, condAdd{Condition: "grappled", Source: grappleSource(attackerID), Escapes: escapes,
+			Notes: fmt.Sprintf("Grappled by %s; escape DC %d", aName, dc), SourceID: attackerID})
+		if res.Immune != "" { // the condition owner: Immunity (a Ghost, an Ooze, an Elemental ...)
+			result += fmt.Sprintf("%s, but %s is immune to the Grappled condition (%s).", failWord(total, dc), tName, res.Immune)
+			out["immune"] = res.Immune
+			break
 		}
 		result += fmt.Sprintf("%s. %s has the Grappled condition (escape DC %d: an action for a Strength (Athletics) or Dexterity (Acrobatics) check).", failWord(total, dc), tName, dc)
 		out["escape_dc"] = dc
 	case effect == "prone":
-		applyCondition(lobby, targetID, "prone", "Shove", 0, "", 0)
+		if res := addCondition(lobby, targetID, condAdd{Condition: "prone", Source: "Shove", SourceID: attackerID}); res.Immune != "" {
+			result += fmt.Sprintf("failure, but %s is immune to the Prone condition (%s).", tName, res.Immune)
+			out["immune"] = res.Immune
+			break
+		}
 		result += fmt.Sprintf("failure. %s has the Prone condition.", tName)
 	default:
 		moved, onMap := pushToken(lobby, attackerID, targetID, 5)
@@ -308,11 +310,6 @@ func grapplerAdvantage(charID int) bool {
 	var n int
 	db.QueryRow(`SELECT COUNT(*) FROM condition_records WHERE lobby_id = $1 AND target_id = $2 AND condition = 'grappled' AND source = $3`, lobby, target, grappleSource(charID)).Scan(&n)
 	return n > 0
-}
-
-func jsonMarshalString(v interface{}) (string, error) {
-	b, err := json.Marshal(v)
-	return string(b), err
 }
 
 // energyBowHeld: the attack being resolved is with the Energy Bow (its arrows deal Force damage).

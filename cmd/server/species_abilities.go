@@ -218,7 +218,7 @@ func giantBoonOnTarget(lobbyID, charID, targetID int, ancestry string) (string, 
 				return fmt.Sprintf("Hill's Tumble: %s is %s, too big to knock Prone.", name, sb["size"]), res
 			}
 		}
-		addMonsterCondition(lobbyID, targetID, "prone", "Hill's Tumble", 0, "", 0)
+		applyCondition(lobbyID, targetID, "prone", "Hill's Tumble", 0, "", 0)
 		return fmt.Sprintf("Hill's Tumble: %s has the Prone condition.", name), res
 	}
 	return "", nil

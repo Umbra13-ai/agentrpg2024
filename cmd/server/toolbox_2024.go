@@ -67,23 +67,6 @@ func damageAny(lobbyID, id, dmg int, dtype string) string {
 	return damageCharacter(id, dmg, dtype)
 }
 
-// applyCondition puts a condition on a monster or a character, with a duration in rounds (0 = until removed) and an optional
-// repeated save ("end_of_turn").
-func applyCondition(lobbyID, id int, cond, source string, rounds int, saveAbility string, dc int) {
-	addMonsterCondition(lobbyID, id, cond, source, rounds, saveAbility, dc) // the record (a character's list follows it)
-}
-
-// addExhaustion changes a character's Exhaustion level (2024: a creature dies at level 6).
-func addExhaustion(charID, n int) string {
-	var level int
-	db.QueryRow(`UPDATE characters SET exhaustion_level = GREATEST(0, LEAST(6, COALESCE(exhaustion_level,0) + $1)) WHERE id = $2 RETURNING exhaustion_level`, n, charID).Scan(&level)
-	if level >= 6 {
-		killCharacter(charID) // the Hit Point owner (hit_points_2024.go)
-		return "Exhaustion level 6: the creature dies."
-	}
-	return fmt.Sprintf("Exhaustion level %d.", level)
-}
-
 // failWord is "failure", or "automatic failure" when a condition (Paralyzed, Stunned, Unconscious ...) made a high roll fail.
 func failWord(total, dc int) string {
 	if total >= dc {
@@ -325,10 +308,7 @@ func handleGMContagionSave(w http.ResponseWriter, r *http.Request) {
 	end := func(why string) string {
 		db.Exec(`DELETE FROM contagions WHERE id = $1`, id)
 		if key == "sight_rot" {
-			db.Exec(`DELETE FROM condition_records WHERE lobby_id = $1 AND target_id = $2 AND condition = 'blinded' AND source = 'Sight Rot'`, lobby, req.TargetID)
-			if req.TargetID > 0 {
-				syncListFromRecords(req.TargetID)
-			}
+			endCondition(lobby, req.TargetID, "blinded", "Sight Rot")
 		}
 		if key == "cackle_fever" && onset && req.TargetID > 0 {
 			addExhaustion(req.TargetID, -1) // the Fever's Exhaustion level lasts until the contagion ends

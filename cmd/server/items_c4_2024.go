@@ -194,7 +194,7 @@ func giantSlayerHit(lobbyID, targetID int, monsterKey, name, heldItem string, cr
 	if saved, _ := monsterSave(lobbyID, targetID, "str", 15); saved {
 		text += fmt.Sprintf(" %s keeps its footing (Strength save).", name)
 	} else if sizeAtMost(monsterKey, "gargantuan") {
-		addMonsterCondition(lobbyID, targetID, "prone", "Giant Slayer", 0, "", 0)
+		applyCondition(lobbyID, targetID, "prone", "Giant Slayer", 0, "", 0)
 		text += fmt.Sprintf(" %s fails its Strength save and has the Prone condition.", name)
 	}
 	return d, text
@@ -284,7 +284,7 @@ func wandOfParalysis(charID int, it invItem, req itemCastReq) string {
 	if saved {
 		return fmt.Sprintf("A thin blue ray streaks from the wand (a Magic action, 1 charge) to %s, who succeeds on the DC 15 Constitution save.%s", who, note)
 	}
-	addMonsterCondition(lobby, req.TargetID, "paralyzed", "Wand of Paralysis", 10, "con", 15)
+	applyCondition(lobby, req.TargetID, "paralyzed", "Wand of Paralysis", 10, "con", 15)
 	return fmt.Sprintf("A thin blue ray streaks from the wand (a Magic action, 1 charge): %s fails the DC 15 Constitution save and has the Paralyzed condition for 1 minute (it repeats the save at the end of each of its turns).%s", who, note)
 }
 

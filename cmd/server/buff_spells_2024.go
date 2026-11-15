@@ -332,12 +332,8 @@ func resolveBuffSpell(charID, lobby int, spell SRDSpell, spellKey string, slotLe
 	case "greater-invisibility", "invisibility":
 		for _, id := range ids {
 			add(id, "")
-			addMonsterCondition(lobby, id, "invisible", spell.Name, b.Rounds, "", 0)
-			db.Exec(`UPDATE condition_records SET created_by = $1, notes = 'concentration' WHERE lobby_id = $2 AND target_id = $3 AND condition = 'invisible' AND source = $4`,
-				charID, lobby, id, spell.Name) // it lasts while the caster keeps Concentration
-			if id > 0 {
-				syncListFromRecords(id)
-			}
+			// it lasts while the caster keeps Concentration
+			addCondition(lobby, id, condAdd{Condition: "invisible", Source: spell.Name, Rounds: b.Rounds, Notes: "concentration", CreatedBy: charID, Magical: true})
 		}
 		out = fmt.Sprintf("%s has the Invisible condition while you keep Concentration.", who)
 		if spellKey == "invisibility" {
@@ -463,9 +459,7 @@ func lesserRestoration(charID, lobby int, description string) string {
 	if pick == "" {
 		return fmt.Sprintf(" Lesser Restoration: %s has none of Blinded, Deafened, Paralyzed or Poisoned, so nothing ends.", name)
 	}
-	removeCondition(id, pick)
-	db.Exec(`DELETE FROM condition_records WHERE lobby_id = $1 AND target_id = $2 AND condition = $3`, lobby, id, pick)
-	syncListFromRecords(id)
+	endCondition(lobby, id, pick, "")
 	return fmt.Sprintf(" Lesser Restoration: the %s condition on %s ends.", titleCase(pick), name)
 }
 
@@ -883,7 +877,7 @@ func holyAuraBlinds(lobbyID, monsterID int, monsterName string, targetID int) st
 	if saved {
 		return fmt.Sprintf(" Holy Aura: %s's Constitution save %d vs DC %d succeeds.", monsterName, total, dc)
 	}
-	addMonsterCondition(lobbyID, monsterID, "blinded", "Holy Aura", 2, "", 0)
+	applyCondition(lobbyID, monsterID, "blinded", "Holy Aura", 2, "", 0)
 	return fmt.Sprintf(" Holy Aura: %s fails the Constitution save (%d vs DC %d) and is Blinded until the end of its next turn.", monsterName, total, dc)
 }
 
@@ -942,13 +936,9 @@ func endWardsOnOffense(charID int) string {
 		db.Exec(`DELETE FROM spell_effects WHERE lobby_id = $1 AND target_id = $2 AND kind = 'sanctuary'`, lobby, charID)
 		notes = append(notes, "Sanctuary")
 	}
-	res, err := db.Exec(`DELETE FROM condition_records WHERE target_id = $1 AND condition = 'invisible' AND source = 'Invisibility'`, charID)
-	if err == nil {
-		if n, _ := res.RowsAffected(); n > 0 {
-			db.Exec(`DELETE FROM spell_effects WHERE target_id = $1 AND kind = 'invisibility'`, charID)
-			syncListFromRecords(charID)
-			notes = append(notes, "Invisibility")
-		}
+	if len(endCondition(lobby, charID, "invisible", "Invisibility")) > 0 {
+		db.Exec(`DELETE FROM spell_effects WHERE target_id = $1 AND kind = 'invisibility'`, charID)
+		notes = append(notes, "Invisibility")
 	}
 	if len(notes) == 0 {
 		return ""
@@ -984,30 +974,13 @@ func pruneConcentrationByCaster(casterID int) {
 	if db == nil || casterID <= 0 {
 		return
 	}
-	rows, err := db.Query(`SELECT id, target_id, source FROM condition_records WHERE created_by = $1 AND notes = 'concentration'`, casterID)
-	if err != nil {
-		return
-	}
-	type rec struct {
-		id, target int
-		source     string
-	}
-	var drop []rec
-	for rows.Next() {
-		var r rec
-		if rows.Scan(&r.id, &r.target, &r.source) == nil && !concentrationHolds(casterID, r.source) {
+	var drop []conditionRecord
+	for _, r := range findConditionRecords(`created_by = $1 AND notes = 'concentration'`, casterID) {
+		if !concentrationHolds(casterID, r.Source) {
 			drop = append(drop, r)
 		}
 	}
-	rows.Close()
-	synced := map[int]bool{}
-	for _, r := range drop {
-		db.Exec(`DELETE FROM condition_records WHERE id = $1`, r.id)
-		if r.target > 0 && !synced[r.target] {
-			synced[r.target] = true
-			syncListFromRecords(r.target)
-		}
-	}
+	endConditionRecords(drop)
 }
 
 // dispelSpellEffects: Dispel Magic ends each spell on the creature of the slot's level or lower; a higher one needs the caster's
@@ -1054,9 +1027,8 @@ func dispelSpellEffects(lobbyID, targetID, slot, mod int, effect string) (lines 
 				endItemEffect(x.kind, targetID, x.detail) // Aid's maximum, Barkskin's and Mage Armor's AC go back
 			}
 		}
-		db.Exec(`DELETE FROM condition_records WHERE lobby_id = $1 AND target_id = $2 AND source = $3`, lobbyID, targetID, e.Spell)
+		removeConditionsWhere(lobbyID, targetID, func(r conditionRecord) bool { return r.Source == e.Spell })
 		if targetID > 0 {
-			syncListFromRecords(targetID)
 			refreshStoredAC(targetID)
 		}
 		lines = append(lines, fmt.Sprintf("%s (level %d) ends%s", e.Spell, sp.Level, note))

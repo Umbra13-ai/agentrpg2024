@@ -175,11 +175,11 @@ func handleGMAdjustMonster(w http.ResponseWriter, r *http.Request) {
 	for _, rc := range req.RemoveConditions {
 		c := strings.ToLower(strings.TrimSpace(rc))
 		if c == "all" {
-			db.Exec(`DELETE FROM condition_records WHERE lobby_id = $1 AND target_id = $2`, campaignID, tid)
+			removeConditionsWhere(campaignID, tid, func(conditionRecord) bool { return true })
 			did = append(did, "every condition ends")
 			continue
 		}
-		db.Exec(`DELETE FROM condition_records WHERE lobby_id = $1 AND target_id = $2 AND split_part(condition, ':', 1) = $3`, campaignID, tid, c)
+		endCondition(campaignID, tid, c, "")
 		did = append(did, c+" ends")
 	}
 	src := req.Source
@@ -191,9 +191,9 @@ func handleGMAdjustMonster(w http.ResponseWriter, r *http.Request) {
 		if c == "" {
 			continue
 		}
-		db.Exec(`DELETE FROM condition_records WHERE lobby_id = $1 AND target_id = $2 AND condition = $3`, campaignID, tid, c)
-		db.Exec(`INSERT INTO condition_records (lobby_id, target_id, condition, source, escapes, duration_rounds, end_save, notes, created_by)
-			VALUES ($1,$2,$3,$4,'[]',$5,$6,$7,$8)`, campaignID, tid, c, src, req.Rounds, endSaveJSON(req.EndSave), req.Note, agentID)
+		// the condition owner, as the GM tells it: replacing the creature's other records of it, even on an immune creature
+		addCondition(campaignID, tid, condAdd{Condition: c, Source: src, Rounds: req.Rounds, EndSave: req.EndSave, Notes: req.Note,
+			CreatedBy: agentID, Replace: true, Force: true})
 		d := titleCase(c)
 		if req.Rounds > 0 {
 			d += fmt.Sprintf(" (%d rounds)", req.Rounds)

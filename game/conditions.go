@@ -48,15 +48,21 @@ func HasCondition(conditions []string, condition string) bool {
 	return false
 }
 
-// IsIncapacitated checks if conditions prevent taking actions or reactions.
-// Per 5e: paralyzed, stunned, unconscious, petrified, and incapacitated all prevent actions.
-func IsIncapacitated(conditions []string) bool {
-	incapConditions := []string{
-		ConditionIncapacitated, ConditionParalyzed, ConditionStunned,
-		ConditionUnconscious, ConditionPetrified,
+// IsIncapacitatingCondition reports whether a condition includes the Incapacitated condition (SRD 5.2.1: Incapacitated itself,
+// and Paralyzed, Petrified, Stunned and Unconscious, which give it): no actions, Bonus Actions or Reactions, Concentration ends.
+// A parameter after a colon ("stunned:12") is ignored. The one rule; IsIncapacitated reads a list with it.
+func IsIncapacitatingCondition(condition string) bool {
+	switch strings.ToLower(strings.TrimSpace(strings.SplitN(condition, ":", 2)[0])) {
+	case ConditionIncapacitated, ConditionParalyzed, ConditionPetrified, ConditionStunned, ConditionUnconscious:
+		return true
 	}
-	for _, inc := range incapConditions {
-		if HasCondition(conditions, inc) {
+	return false
+}
+
+// IsIncapacitated reports whether any condition in the list is Incapacitating.
+func IsIncapacitated(conditions []string) bool {
+	for _, c := range conditions {
+		if IsIncapacitatingCondition(c) {
 			return true
 		}
 	}

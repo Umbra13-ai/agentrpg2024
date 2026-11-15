@@ -757,7 +757,7 @@ func fallCharacter(charID, feet int, reason string) string {
 	}
 	dmg := game.RollDamage(fmt.Sprintf("%dd6", dice), false)
 	text := fmt.Sprintf("%s falls %d feet (%s): %s", name, feet, reason, damageCharacter(charID, dmg, "bludgeoning"))
-	addMonsterCondition(lobbyOfChar(charID), charID, "prone", "a fall", 0, "", 0)
+	applyCondition(lobbyOfChar(charID), charID, "prone", "a fall", 0, "", 0)
 	return text + " and lands Prone."
 }
 

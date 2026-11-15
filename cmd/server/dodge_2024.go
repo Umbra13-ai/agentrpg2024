@@ -1,7 +1,6 @@
 package main
 
 import (
-	"encoding/json"
 	"fmt"
 	"strings"
 )
@@ -29,27 +28,12 @@ func endUntilNextTurn(charID int) {
 	if db == nil {
 		return
 	}
-	any := false
 	for _, m := range untilYourNextTurn {
-		any = any || hasCondition(charID, m)
-	}
-	if !any {
-		return
-	}
-	var raw []byte
-	if db.QueryRow(`SELECT COALESCE(conditions, '[]') FROM characters WHERE id = $1`, charID).Scan(&raw) != nil {
-		return
-	}
-	var conds, kept []string
-	json.Unmarshal(raw, &conds)
-	kept = []string{}
-	for _, c := range conds {
-		if !containsStr(untilYourNextTurn, c) {
-			kept = append(kept, c)
+		if hasCondition(charID, m) {
+			removeConditionsWhere(0, charID, func(r conditionRecord) bool { return containsStr(untilYourNextTurn, r.entry()) })
+			return
 		}
 	}
-	out, _ := json.Marshal(kept)
-	db.Exec(`UPDATE characters SET conditions = $1 WHERE id = $2`, out, charID)
 }
 
 // undeadFortitude (Zombie, Ogre Zombie; SRD 5.2.1): "If damage reduces the zombie to 0 Hit Points, it makes a Constitution saving

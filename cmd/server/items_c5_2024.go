@@ -87,7 +87,7 @@ func thunderLightningHit(lobbyID, charID, targetID int, monsterKey, name string,
 		if saved, _ := monsterSave(lobbyID, targetID, "con", 17); saved {
 			text += fmt.Sprintf(" Thunder: %s succeeds on the DC 17 Constitution save.", name)
 		} else {
-			addMonsterCondition(lobbyID, targetID, "stunned", "Staff of Thunder and Lightning", 2, "", 0)
+			applyCondition(lobbyID, targetID, "stunned", "Staff of Thunder and Lightning", 2, "", 0)
 			text += fmt.Sprintf(" Thunder: %s fails the DC 17 Constitution save and is Stunned until the end of your next turn.", name)
 		}
 	}
@@ -142,7 +142,7 @@ func thunderLightningStaff(charID int, it invItem, req itemCastReq, description 
 		}
 		line := fmt.Sprintf("%s %s: %s.", creatureName(lobby, id), map[bool]string{true: "saves (half)", false: "fails"}[saved], strings.TrimSpace(res))
 		if !saved && cond != "" {
-			addMonsterCondition(lobby, id, cond, "Staff of Thunder and Lightning", 10, "", 0)
+			applyCondition(lobby, id, cond, "Staff of Thunder and Lightning", 10, "", 0)
 			line += " Deafened for 1 minute."
 		}
 		lines = append(lines, line)
@@ -222,7 +222,7 @@ func venomHit(lobbyID, charID, targetID int, monsterKey, name string, crit bool)
 		return 0, fmt.Sprintf(" Dagger of Venom: %s succeeds on the DC 15 Constitution save; the poison is spent.", name)
 	}
 	d, how := adjustMonsterDamage(monsterKey, "poison", game.RollDamage("2d10", crit))
-	addMonsterCondition(lobbyID, targetID, "poisoned", "Dagger of Venom", 10, "", 0)
+	applyCondition(lobbyID, targetID, "poisoned", "Dagger of Venom", 10, "", 0)
 	return d, fmt.Sprintf(" Dagger of Venom: %s fails the DC 15 Constitution save: +%d Poison%s and the Poisoned condition for 1 minute.", name, d, map[string]string{"resistant": " (it resists)", "immune": " (it is immune)"}[how])
 }
 
@@ -263,7 +263,7 @@ func hornOfBlasting(charID int, it invItem, req itemCastReq) string {
 		}
 		line := fmt.Sprintf("%s %s: %s.", creatureName(lobby, id), map[bool]string{true: "saves (half)", false: "fails"}[saved], strings.TrimSpace(res))
 		if !saved {
-			addMonsterCondition(lobby, id, "deafened", "Horn of Blasting", 10, "", 0)
+			applyCondition(lobby, id, "deafened", "Horn of Blasting", 10, "", 0)
 			line += " Deafened for 1 minute."
 		}
 		lines = append(lines, line)
@@ -366,7 +366,7 @@ func wandOfWonder(charID int, it invItem, req itemCastReq) string {
 		}
 		effect = fmt.Sprintf("a spell (d10 %d): %s", d10, effect)
 	case roll <= 25:
-		addMonsterCondition(lobby, charID, "stunned", "Wand of Wonder", 1, "", 0)
+		applyCondition(lobby, charID, "stunned", "Wand of Wonder", 1, "", 0)
 		effect = "nothing happens there; instead you are Stunned until the start of your next turn, believing something awesome just happened."
 	case roll <= 30:
 		effect = "you cast Gust of Wind toward the point (a Line 60 feet long, 10 feet wide; DC 15 Strength save or pushed 15 feet; the GM runs it)."
@@ -401,13 +401,13 @@ func wandOfWonder(charID int, it invItem, req itemCastReq) string {
 			var saved bool
 			saved, _ = creatureSave(lobby, id, "con", 15)
 			if !saved {
-				addMonsterCondition(lobby, id, "blinded", "Wand of Wonder", 10, "con", 15)
+				applyCondition(lobby, id, "blinded", "Wand of Wonder", 10, "con", 15)
 			}
 			lines = append(lines, fmt.Sprintf("%s %s.", creatureName(lobby, id), map[bool]string{true: "saves", false: "is Blinded for 1 minute (a save at the end of each turn)"}[saved]))
 		}
 		effect = "nothing happens there; instead a burst of shimmering light fills a 30-foot Emanation from you (DC 15 Constitution save or Blinded). " + strings.Join(lines, " ")
 	case roll <= 87:
-		addMonsterCondition(lobby, charID, "invisible", "Wand of Wonder (Invisibility)", 600, "", 0)
+		applyCondition(lobby, charID, "invisible", "Wand of Wonder (Invisibility)", 600, "", 0)
 		effect = "nothing happens there; instead you cast Invisibility on yourself (Invisible for up to 1 hour)."
 	case roll <= 92:
 		gems := game.RollDie(4) * 10
@@ -440,7 +440,7 @@ func wandOfWonder(charID int, it invItem, req itemCastReq) string {
 			if saved {
 				effect = fmt.Sprintf("%s, closest to the point, succeeds on the DC 15 Constitution save against turning to stone.", creatureName(lobby, closest))
 			} else {
-				addMonsterCondition(lobby, closest, "restrained", "Wand of Wonder (turning to stone)", 2, "", 0)
+				applyCondition(lobby, closest, "restrained", "Wand of Wonder (turning to stone)", 2, "", 0)
 				effect = fmt.Sprintf("%s, closest to the point, fails the DC 15 Constitution save: it is Restrained and begins to turn to stone; it repeats the save at the end of its next turn (a failure: Petrified until Greater Restoration).", creatureName(lobby, closest))
 			}
 		}

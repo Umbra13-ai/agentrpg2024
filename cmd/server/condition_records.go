@@ -13,7 +13,6 @@ import (
 	"fmt"
 	"io"
 	"net/http"
-	"net/http/httptest"
 	"strconv"
 	"strings"
 
@@ -75,6 +74,8 @@ type conditionRecord struct {
 	DurationRounds int               `json:"duration_rounds,omitempty"`
 	EndSave        *conditionSave    `json:"end_save,omitempty"`
 	Notes          string            `json:"notes,omitempty"`
+	Detail         string            `json:"-"` // what follows the condition's name in the list entry ("charmed:12": 12)
+	CreatedBy      int               `json:"-"` // a Concentration spell's caster (notes "concentration"), or the GM who set it
 }
 
 func ensureConditionRecordsTable() {
@@ -92,6 +93,7 @@ func ensureConditionRecordsTable() {
 		created_at TIMESTAMPTZ NOT NULL DEFAULT now()
 	)`)
 	db.Exec(`ALTER TABLE condition_records ADD COLUMN IF NOT EXISTS end_save JSONB`)
+	db.Exec(`ALTER TABLE condition_records ADD COLUMN IF NOT EXISTS detail TEXT NOT NULL DEFAULT ''`) // the one store (condition_owner_2024.go)
 	if err == nil {
 		db.Exec(`CREATE INDEX IF NOT EXISTS condition_records_target ON condition_records (lobby_id, target_id)`)
 	}
@@ -146,25 +148,14 @@ func normalizeEscapes(in []conditionEscape) ([]conditionEscape, string) {
 	return out, ""
 }
 
+// loadConditionRecords reads a creature's conditions (condition_owner_2024.go): a character's wherever it plays, a monster's in its
+// campaign. Conditions a caster's ended Concentration held are dropped first.
 func loadConditionRecords(lobbyID, targetID int) []conditionRecord {
-	pruneConcentrationConditions(lobbyID, targetID)
-	rows, err := db.Query(`SELECT id, target_id, condition, source, escapes, duration_rounds, COALESCE(end_save, 'null'::jsonb), notes
-		FROM condition_records WHERE lobby_id = $1 AND target_id = $2 ORDER BY id`, lobbyID, targetID)
-	if err != nil {
+	if db == nil {
 		return nil
 	}
-	defer rows.Close()
-	var out []conditionRecord
-	for rows.Next() {
-		var r conditionRecord
-		var esc, es []byte
-		if rows.Scan(&r.ID, &r.TargetID, &r.Condition, &r.Source, &esc, &r.DurationRounds, &es, &r.Notes) == nil {
-			json.Unmarshal(esc, &r.Escapes)
-			json.Unmarshal(es, &r.EndSave)
-			r.LobbyID = lobbyID
-			out = append(out, r)
-		}
-	}
+	pruneConcentrationConditions(lobbyID, targetID)
+	out, _ := readConditionRecords(db, lobbyID, targetID)
 	return out
 }
 
@@ -243,64 +234,23 @@ func monsterInCombat(lobbyID, id int) bool {
 	return false
 }
 
-// setExhaustionLevel sets a character's Exhaustion level (0-6): the exhaustion_level column and the exhaustion:N marker in its list.
-func setExhaustionLevel(charID, level int) int {
-	if level < 0 {
-		level = 0
-	}
-	if level > 6 {
-		level = 6
-	}
-	db.Exec(`UPDATE characters SET exhaustion_level = $1 WHERE id = $2`, level, charID)
-	var list []string
-	for _, c := range getCharConditions(charID) {
-		if !strings.HasPrefix(strings.ToLower(c), "exhaustion:") {
-			list = append(list, c)
-		}
-	}
-	if level > 0 {
-		list = append(list, fmt.Sprintf("exhaustion:%d", level))
-	}
-	writeCharList(charID, list)
-	return level
-}
-
 // gmClearConditions removes a condition ("" = every condition) from a character or monster, by name (F230: the GM clears any
 // condition without looking up record ids). For a character the list entries go too ("grappled:12" with "grappled"); "" also sets
 // Exhaustion to 0 and leaves the markers that are not conditions (raging, dodging ...). It returns the conditions removed.
 func gmClearConditions(campaignID, targetID int, cond string) []string {
 	var removed []string
 	seen := map[string]bool{}
-	for _, rec := range loadConditionRecords(campaignID, targetID) {
-		base := conditionBase(rec.Condition)
-		if cond != "" && base != cond {
-			continue
-		}
-		db.Exec(`DELETE FROM condition_records WHERE id = $1`, rec.ID)
-		if !seen[base] {
-			seen[base] = true
-			removed = append(removed, base)
+	for _, rec := range removeConditionsWhere(campaignID, targetID, func(r conditionRecord) bool {
+		return ruleConditions[r.Condition] && (cond == "" || r.Condition == cond)
+	}) {
+		if !seen[rec.Condition] {
+			seen[rec.Condition] = true
+			removed = append(removed, rec.Condition)
 		}
 	}
-	if targetID > 0 {
-		var list []string
-		for _, c := range getCharConditions(targetID) {
-			base := conditionBase(c)
-			if isRuleCondition(c) && (cond == "" || base == cond) {
-				if !seen[base] {
-					seen[base] = true
-					removed = append(removed, base)
-				}
-				continue
-			}
-			list = append(list, c)
-		}
-		writeCharList(targetID, list)
-		syncListFromRecords(targetID)
-		if cond == "" && exhaustionLevelOf(targetID) > 0 {
-			setExhaustionLevel(targetID, 0)
-			removed = append(removed, "exhaustion")
-		}
+	if targetID > 0 && cond == "" && exhaustionLevelOf(targetID) > 0 {
+		setExhaustionLevel(targetID, 0)
+		removed = append(removed, "exhaustion")
 	}
 	return removed
 }
@@ -350,16 +300,13 @@ func handleGMConditions(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	if r.Method == http.MethodDelete {
-		var target int
-		var cond string
-		if db.QueryRow(`DELETE FROM condition_records WHERE id = $1 AND lobby_id = $2 RETURNING target_id, condition`, req.RecordID, campaignID).Scan(&target, &cond) != nil {
+		found := findConditionRecords(`id = $1 AND lobby_id = $2`, req.RecordID, campaignID)
+		gone := endConditionRecords(found)
+		if len(gone) == 0 {
 			writeJSONStatus(w, http.StatusNotFound, map[string]interface{}{"error": "record_not_found", "message": "Give the record_id from the condition list"})
 			return
 		}
-		if target > 0 {
-			syncListFromRecords(target)
-		}
-		writeJSONStatus(w, 200, map[string]interface{}{"success": true, "removed": cond, "target_id": target})
+		writeJSONStatus(w, 200, map[string]interface{}{"success": true, "removed": gone[0].Condition, "target_id": gone[0].TargetID})
 		return
 	}
 	def, valid := srdCondition(req.Condition)
@@ -404,63 +351,33 @@ func handleGMConditions(w http.ResponseWriter, r *http.Request) {
 		writeJSONStatus(w, http.StatusBadRequest, map[string]interface{}{"error": "invalid_end_save", "message": msg})
 		return
 	}
-	extra := map[string]interface{}{}
-	if req.TargetID > 0 {
-		magical := strings.Contains(strings.ToLower(req.Source), "spell") || strings.Contains(strings.ToLower(req.Source), "magic") // the GM names the source
-		if imm, why := buffConditionImmune(campaignID, req.TargetID, cond, 0, magical); imm {                                       // a spell's Immunity: Mind Blank, Heroes' Feast, Gaseous Form ... (F80)
-			writeJSONStatus(w, 200, map[string]interface{}{"success": true, "immune": true, "immunity_source": why,
-				"message": fmt.Sprintf("%s makes the creature immune to the %s condition: it doesn't take hold.", why, titleCase(conditionBase(cond)))})
-			return
-		}
-		// The established rules for a character (Paladin and Barbarian immunities, Fey Ancestry, releasing
-		// grapples, dropping items and falling Prone when Unconscious) are applied by the original handler.
-		oldBody, _ := json.Marshal(map[string]interface{}{"condition": cond, "from_magical_sleep": req.FromMagicalSleep,
-			"from_elemental": req.FromElemental, "from_fey": req.FromFey})
-		rec := httptest.NewRecorder()
-		handleAddCondition(rec, httptest.NewRequest(http.MethodPost, "/", bytes.NewReader(oldBody)), req.TargetID)
-		json.Unmarshal(rec.Body.Bytes(), &extra)
-		if _, bad := extra["error"]; bad {
-			writeJSONStatus(w, http.StatusBadRequest, extra)
-			return
-		}
-		if immune, _ := extra["immune"].(bool); immune {
-			writeJSONStatus(w, 200, extra) // no record: the condition did not take hold
-			return
-		}
-		delete(extra, "condition")
-		delete(extra, "effect")
-	}
-	if heroismImmune(campaignID, req.TargetID, cond) {
-		writeJSONStatus(w, 200, map[string]interface{}{"success": true, "immune": true, "immunity_source": "Heroism", "message": "Heroism makes the creature immune to the Frightened condition."})
+	res := addCondition(campaignID, req.TargetID, condAdd{Condition: cond, Source: req.Source, Escapes: escapes, Rounds: req.DurationRounds,
+		EndSave: req.EndSave, Notes: req.Notes, CreatedBy: agentID, MagicalSleep: req.FromMagicalSleep,
+		Magical: strings.Contains(strings.ToLower(req.Source), "spell") || strings.Contains(strings.ToLower(req.Source), "magic")}) // the GM names the source
+	if res.Immune != "" {
+		writeJSONStatus(w, 200, map[string]interface{}{"success": true, "immune": true, "immunity_source": res.Immune, "target_id": req.TargetID,
+			"condition": cond, "message": fmt.Sprintf("%s makes %s immune to the %s condition: it doesn't take hold.", res.Immune,
+				creatureName(campaignID, req.TargetID), titleCase(cond))})
 		return
 	}
-	esc, _ := json.Marshal(escapes)
-	if req.TargetID > 0 { // handleAddCondition left a bare record; this one carries the source, duration and saves
-		db.Exec(`DELETE FROM condition_records WHERE lobby_id = $1 AND target_id = $2 AND condition = $3 AND source = '' AND duration_rounds = 0 AND end_save IS NULL`, campaignID, req.TargetID, conditionBase(cond))
-	}
-	var id int
-	err := db.QueryRow(`INSERT INTO condition_records (lobby_id, target_id, condition, source, escapes, duration_rounds, end_save, notes, created_by)
-		VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9) RETURNING id`, campaignID, req.TargetID, cond, req.Source, esc, req.DurationRounds, endSaveJSON(req.EndSave), req.Notes, agentID).Scan(&id)
-	if err != nil {
+	if res.Err != nil {
 		writeJSONStatus(w, 500, map[string]interface{}{"error": "could_not_record_condition"})
 		return
 	}
-	if cond == "incapacitated" || cond == "paralyzed" || cond == "petrified" || cond == "stunned" || cond == "unconscious" {
-		if req.TargetID > 0 {
-			if n, _ := db.Exec(`UPDATE characters SET concentrating_on = NULL WHERE id = $1 AND concentrating_on IS NOT NULL AND concentrating_on <> ''`, req.TargetID); n != nil {
-				if c, _ := n.RowsAffected(); c > 0 {
-					extra["concentration_broken"] = "Incapacitated: Concentration is broken"
-				}
-			}
-			if isInWildShape(req.TargetID) { // the Incapacitated condition ends Wild Shape (wild_shape_2024.go)
-				extra["wild_shape_ended"] = leaveWildShape(req.TargetID, "Incapacitated")
-			}
-		}
+	out := map[string]interface{}{}
+	for k, v := range res.Notes { // what the condition set off: Concentration and Wild Shape end, grapples released, Prone ...
+		out[k] = v
 	}
-	rec := conditionRecord{ID: id, TargetID: req.TargetID, Condition: cond, Source: req.Source, Escapes: escapes, DurationRounds: req.DurationRounds, EndSave: req.EndSave, Notes: req.Notes}
-	extra["success"] = true
-	extra["condition"] = conditionView(rec, 0, true)
-	writeJSONStatus(w, 200, extra)
+	rec := conditionRecord{ID: res.ID, TargetID: req.TargetID, Condition: cond, Source: req.Source, Escapes: escapes, DurationRounds: req.DurationRounds, EndSave: req.EndSave, Notes: req.Notes}
+	if res.Already {
+		out["message"] = "The creature already has this condition from this source."
+	}
+	if req.TargetID > 0 {
+		out["conditions"] = getCharConditions(req.TargetID)
+	}
+	out["success"] = true
+	out["condition"] = conditionView(rec, 0, true)
+	writeJSONStatus(w, 200, out)
 }
 
 // gmDeleteByName is DELETE /api/gm/conditions without a record_id: {"target_id": N, "condition": "poisoned"} ends that condition
@@ -623,7 +540,7 @@ func handleConditionEscape(w http.ResponseWriter, r *http.Request) {
 		resp["advantage"] = "Large Form"
 	}
 	if success {
-		deleteConditionRecord(rec.ID)
+		deleteConditionRecord(lobby, req.CharacterID, rec.ID)
 		resp["message"] = fmt.Sprintf("%s total %d: success. The %s condition ends.", name, total, rec.Condition)
 	} else {
 		resp["message"] = fmt.Sprintf("%s total %d: failure. The %s condition continues.", name, total, rec.Condition)
@@ -732,7 +649,5 @@ func clearMonsterConditions(campaignID int) {
 	clearMonsterStates(campaignID) // Legendary Action and Resistance uses, lair, auras (monster_features_2024.go)
 	clearMonsterReactions(campaignID)
 	clearBurning(campaignID, true) // F69: a monster's fire doesn't pass to the monster with its id in the next fight
-	if db != nil {
-		db.Exec(`DELETE FROM condition_records WHERE lobby_id = $1 AND target_id < 0`, campaignID)
-	}
+	clearMonsterConditionRecords(campaignID)
 }

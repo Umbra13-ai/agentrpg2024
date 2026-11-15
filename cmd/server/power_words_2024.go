@@ -150,30 +150,15 @@ func powerWordOn(lobby int, spellKey string, id, saveDC int) string {
 		return fmt.Sprintf("%s has more than 100 Hit Points and %s.", name, damageCharacter(id, dmg, "psychic"))
 	case "power-word-stun":
 		if hp <= 150 {
-			addMonsterCondition(lobby, id, "stunned", "Power Word Stun", 0, "con", saveDC)
+			applyCondition(lobby, id, "stunned", "Power Word Stun", 0, "con", saveDC)
 			return fmt.Sprintf("%s has the Stunned condition (150 Hit Points or fewer); it makes a DC %d Constitution saving throw at the end of each of its turns, ending it on a success.", name, saveDC)
 		}
 		return name + " has more than 150 Hit Points: its Speed is 0 until the start of your next turn."
 	case "power-word-heal":
 		ended := []string{}
 		for _, c := range powerWordEnds {
-			if id < 0 {
-				res, err := db.Exec(`DELETE FROM condition_records WHERE lobby_id = $1 AND target_id = $2 AND condition = $3`, lobby, id, c)
-				if err != nil {
-					continue // the request's database guard answers the failure (db_guard_2024.go)
-				}
-				if n, _ := res.RowsAffected(); n > 0 {
-					ended = append(ended, titleCase(c))
-				}
-			} else {
-				had := false
-				for _, cur := range getCharConditions(id) {
-					had = had || conditionBase(strings.ToLower(cur)) == c
-				}
-				db.Exec(`DELETE FROM condition_records WHERE lobby_id = $1 AND target_id = $2 AND condition = $3`, lobby, id, c)
-				if removeCondition(id, c) || had {
-					ended = append(ended, titleCase(c))
-				}
+			if len(endCondition(lobby, id, c, "")) > 0 {
+				ended = append(ended, titleCase(c))
 			}
 		}
 		if id < 0 {

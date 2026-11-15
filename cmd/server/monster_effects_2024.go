@@ -236,21 +236,16 @@ func applySaveEffect(lobbyID int, source string, e saveEffect, targets []int, ap
 		}
 		if !saved {
 			for _, c := range e.Conditions {
-				if imm, why := auraImmune(lobbyID, tid, c); imm {
-					parts = append(parts, fmt.Sprintf("not %s (%s)", c, why))
-					continue
-				}
-				if imm, why := buffConditionImmune(lobbyID, tid, c, e.SourceID, e.IsSpell); imm { // Mind Blank, Heroes' Feast ...
-					parts = append(parts, fmt.Sprintf("not %s (%s)", c, why))
-					continue
-				}
-				endAbility := ""
+				a := condAdd{Condition: c, Source: source, Rounds: e.Rounds, SourceID: e.SourceID, Magical: e.IsSpell}
 				if e.EndSave {
-					endAbility = e.Ability
+					a.EndSave = &conditionSave{Ability: e.Ability, DC: e.DC}
 				}
-				addMonsterCondition(lobbyID, tid, c, source, e.Rounds, endAbility, e.DC)
 				if e.UntilStart {
-					db.Exec(`UPDATE condition_records SET notes = 'until_start_of_next_turn' WHERE lobby_id = $1 AND target_id = $2 AND condition = $3 AND source = $4`, lobbyID, tid, c, source)
+					a.Notes = "until_start_of_next_turn"
+				}
+				if res := addCondition(lobbyID, tid, a); res.Immune != "" { // the condition owner: Immunity (auras, Mind Blank ...)
+					parts = append(parts, fmt.Sprintf("not %s (%s)", c, res.Immune))
+					continue
 				}
 				parts = append(parts, titleCase(c))
 			}
@@ -364,7 +359,7 @@ func resolveMonsterSpellRules(lobbyID, monsterID int, monsterName, spellName str
 	}
 	if selfCast {
 		if slug == "invisibility" {
-			addMonsterCondition(lobbyID, monsterID, "invisible", sp.Name, 0, "", 0)
+			applyCondition(lobbyID, monsterID, "invisible", sp.Name, 0, "", 0)
 			return []string{head + " on itself: it has the Invisible condition (until it attacks, deals damage or casts a spell, or its Concentration ends)."}
 		}
 		return []string{head + " on itself."}

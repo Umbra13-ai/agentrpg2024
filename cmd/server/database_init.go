@@ -830,7 +830,6 @@ func initDB() {
 		log.Printf("Schema error: %v", err)
 	} else {
 		log.Println("Database schema initialized")
-		cleanupDuplicateCharacterConditions()
 	}
 }
 

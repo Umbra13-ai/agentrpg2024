@@ -114,7 +114,7 @@ func resolveConditionSpell(charID int, spellKey string, saveDC int, spellName st
 		}
 		immuneAll := true
 		for _, c := range cs.Conditions {
-			if !monsterConditionImmune(lobby, id, c) {
+			if immuneToCondition(lobby, id, condAdd{Condition: c, SourceID: charID, Magical: true}) == "" { // the condition owner's Immunity
 				immuneAll = false
 			}
 		}
@@ -140,12 +140,14 @@ func resolveConditionSpell(charID int, spellKey string, saveDC int, spellName st
 			endSave = cs.Save
 		}
 		for _, c := range cs.Conditions {
-			addMonsterCondition(lobby, id, c, spellName, extendRounds(charID, cs.Rounds), endSave, saveDC) // Extended Spell doubles it (F194)
-			if sp, ok := srdSpellsMemory[spellKey]; ok && strings.Contains(strings.ToLower(sp.Duration), "concentration") {
-				// F56: it lasts while the caster keeps Concentration (loadConditionRecords drops it when that ends)
-				db.Exec(`UPDATE condition_records SET created_by = $1, notes = 'concentration' WHERE lobby_id = $2 AND target_id = $3 AND condition = $4 AND source = $5 AND COALESCE(created_by,0) = 0`,
-					charID, lobby, id, c, spellName)
+			a := condAdd{Condition: c, Source: spellName, Rounds: extendRounds(charID, cs.Rounds), SourceID: charID, Magical: true} // Extended Spell doubles it (F194)
+			if endSave != "" {
+				a.EndSave = &conditionSave{Ability: endSave, DC: saveDC}
 			}
+			if sp, ok := srdSpellsMemory[spellKey]; ok && strings.Contains(strings.ToLower(sp.Duration), "concentration") {
+				a.Notes, a.CreatedBy = "concentration", charID // F56: it lasts while the caster keeps Concentration (loadConditionRecords drops it when that ends)
+			}
+			addCondition(lobby, id, a)
 		}
 		lines = append(lines, fmt.Sprintf("%s and is %s.", sv.Line(name), strings.Join(cs.Conditions, " and ")))
 	}
@@ -320,17 +322,10 @@ func wakeOnDamage(lobbyID, id int, name string) string {
 // damage here comes from the party's attacks, spells and effects (monsters rarely damage each other).
 func charmEndsOnDamage(lobbyID, id int, name string) string {
 	out := ""
-	if res, err := db.Exec(`DELETE FROM condition_records WHERE lobby_id = $1 AND target_id = $2 AND source IN ('Suggestion','Mass Suggestion')`, lobbyID, id); err == nil {
-		if n, _ := res.RowsAffected(); n > 0 {
-			out += fmt.Sprintf(" The damage ends the Suggestion on %s.", name)
-		}
+	if len(removeConditionsWhere(lobbyID, id, func(r conditionRecord) bool { return r.Source == "Suggestion" || r.Source == "Mass Suggestion" })) > 0 {
+		out += fmt.Sprintf(" The damage ends the Suggestion on %s.", name)
 	}
 	if id >= 0 {
-		return out
-	}
-	rows, err := db.Query(`SELECT DISTINCT source, COALESCE(created_by,0) FROM condition_records WHERE lobby_id = $1 AND target_id = $2
-		AND source IN ('Dominate Person','Dominate Beast','Dominate Monster')`, lobbyID, id)
-	if err != nil {
 		return out
 	}
 	type dom struct {
@@ -338,12 +333,13 @@ func charmEndsOnDamage(lobbyID, id int, name string) string {
 		caster int
 	}
 	var list []dom
-	for rows.Next() {
-		var d dom
-		rows.Scan(&d.spell, &d.caster)
-		list = append(list, d)
+	seen := map[dom]bool{}
+	for _, r := range loadConditionRecords(lobbyID, id) {
+		if d := (dom{r.Source, r.CreatedBy}); (d.spell == "Dominate Person" || d.spell == "Dominate Beast" || d.spell == "Dominate Monster") && !seen[d] {
+			seen[d] = true
+			list = append(list, d)
+		}
 	}
-	rows.Close()
 	for _, d := range list {
 		dc := 13
 		if d.caster > 0 {
@@ -354,7 +350,7 @@ func charmEndsOnDamage(lobbyID, id int, name string) string {
 			out += fmt.Sprintf(" %s repeats the Wisdom save against %s (%d vs DC %d) and fails: it stays charmed.", name, d.spell, total, dc)
 			continue
 		}
-		db.Exec(`DELETE FROM condition_records WHERE lobby_id = $1 AND target_id = $2 AND source = $3`, lobbyID, id, d.spell)
+		removeConditionsWhere(lobbyID, id, func(r conditionRecord) bool { return r.Source == d.spell })
 		if d.caster > 0 {
 			db.Exec(`UPDATE characters SET concentrating_on = '' WHERE id = $1 AND (concentrating_on ILIKE $2 OR concentrating_on ILIKE $3)`, d.caster, d.spell, strings.ReplaceAll(strings.ToLower(d.spell), " ", "-"))
 		}
@@ -365,24 +361,18 @@ func charmEndsOnDamage(lobbyID, id int, name string) string {
 
 // wakeOnDamageSleep: Hypnotic Pattern and Sleep end on damage, and the turning of Turn Undead.
 func wakeOnDamageSleep(lobbyID, id int, name string) string {
-	turned, terr := db.Exec(`DELETE FROM condition_records WHERE lobby_id = $1 AND target_id = $2 AND source LIKE 'Turn Undead%'`, lobbyID, id)
-	if terr != nil {
-		turned = nil // the request's database guard answers the failure (db_guard_2024.go)
-	}
-	res, err := db.Exec(`DELETE FROM condition_records WHERE lobby_id = $1 AND target_id = $2 AND source IN ('Hypnotic Pattern','Sleep')`, lobbyID, id)
-	if err != nil {
-		return ""
-	}
-	n, _ := res.RowsAffected()
-	var tn int64
-	if turned != nil {
-		tn, _ = turned.RowsAffected()
+	n, tn := 0, 0
+	for _, r := range removeConditionsWhere(lobbyID, id, func(r conditionRecord) bool {
+		return strings.HasPrefix(r.Source, "Turn Undead") || r.Source == "Hypnotic Pattern" || r.Source == "Sleep"
+	}) {
+		if strings.HasPrefix(r.Source, "Turn Undead") {
+			tn++
+		} else {
+			n++
+		}
 	}
 	if n == 0 && tn == 0 {
 		return ""
-	}
-	if id > 0 {
-		syncListFromRecords(id)
 	}
 	if n == 0 {
 		return fmt.Sprintf(" The damage ends the turning of %s (Turn Undead).", name) // F85

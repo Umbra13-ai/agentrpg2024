@@ -134,6 +134,19 @@ Add to the owner, never beside it. When you give another rule one owner, add it 
   a lock, saved as a change); `hurtMonster` / `damageMonster` (resistances, Polymorph, Undead Fortitude); `reshapeMonster` (a new
   form). Companions: `changeCompanionHP` (row locked) with `damageCompanion`, `healCompanion`, `companionTakesForm`.
   `TestNoOtherCompanionHPWriter` checks; suite: `combat_state_rule_test.py`.
+- **A creature's conditions:** `condition_records` is the one store (one row per entry of a creature's list: rules conditions with
+  source, duration, repeated save and escapes, and the markers such as raging, dodging, sanctuary:DC), written only by
+  `cmd/server/condition_owner_2024.go`: each change runs in `changeConditions` (the character's row locked, a monster's id under a
+  transaction lock) and rewrites `characters.conditions` (the records as a list, plus exhaustion:N) in the same transaction, so the
+  sheet, my-turn and every reader of the column see the records. `addCondition` (short forms `applyCondition`,
+  `addCharacterCondition`, `setMarker`) is the one way to apply one: Immunity from the `conditionImmunities` table (stat block,
+  spells and items, Heroism, auras, Fey Ancestry, Nature's Ward, Mindless Rage), one copy per source, and `conditionTakesHold` (an
+  Incapacitating condition ends Concentration, Wild Shape and the grapples the creature holds; Unconscious brings Prone and drops
+  what it holds). Ending: `removeConditionsWhere`, `endCondition`, `removeCondition`, `deleteConditionRecord`,
+  `endConditionRecords`; time: `countDownCondition`, `passConditionTime`, `countDownMarker`; Exhaustion: `setExhaustionLevel`,
+  `addExhaustion`; the editors send `conditionColumns` to `setConditionColumn(In)`. `game.IsIncapacitatingCondition` is the one
+  "is it Incapacitating" rule. A new source of Immunity is one row. `TestNoOtherConditionWriter` and
+  `TestConditionImmunitiesAreOneTable` check; suite: `conditions_rule_test.py` (audit AUD-08, AUD-34, AUD-38).
 - **Reading a request's body:** `readRequest` (`cmd/server/request_body_2024.go`) is the only reader. It needs one JSON
   object (an empty body only with `optionalBody()`), reads field names with `game.Key`, refuses an unknown field (also
   inside objects), a wrong type, malformed JSON and data after the object, takes an id that repeats the path's, and
