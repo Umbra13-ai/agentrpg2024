@@ -136,10 +136,18 @@ func handleGMUpdateCharacter(w http.ResponseWriter, r *http.Request) {
 		args = append(args, *req.CHA)
 		argNum++
 	}
-	if req.HP != nil {
-		updates = append(updates, fmt.Sprintf("hp = $%d", argNum))
-		args = append(args, *req.HP)
-		argNum++
+	// Hit Points are set by the Hit Point owner (hit_points_2024.go), after the other fields (a new max_hp first): 0 to the maximum,
+	// from 0 the Death Saving Throws reset, to 0 the character is dying. The shortcut and set's "hp" both go there.
+	hpTo := req.HP
+	if raw, ok := req.Set["hp"]; ok {
+		var n int
+		if json.Unmarshal(raw, &n) != nil {
+			w.WriteHeader(http.StatusBadRequest)
+			json.NewEncoder(w).Encode(map[string]interface{}{"error": "invalid_field", "message": "hp is a whole number"})
+			return
+		}
+		hpTo = &n
+		delete(req.Set, "hp")
 	}
 	if req.MaxHP != nil {
 		updates = append(updates, fmt.Sprintf("max_hp = $%d", argNum))
@@ -183,7 +191,7 @@ func handleGMUpdateCharacter(w http.ResponseWriter, r *http.Request) {
 		changed = append(changed, "level")
 	}
 
-	if len(updates) == 0 && len(req.Items) == 0 && len(changed) == 0 {
+	if len(updates) == 0 && len(req.Items) == 0 && len(changed) == 0 && hpTo == nil {
 		w.WriteHeader(http.StatusBadRequest)
 		json.NewEncoder(w).Encode(map[string]interface{}{"error": "no_updates", "message": "No fields to update"})
 		return
@@ -199,6 +207,13 @@ func handleGMUpdateCharacter(w http.ResponseWriter, r *http.Request) {
 			json.NewEncoder(w).Encode(map[string]interface{}{"error": "update_failed", "details": publicError(err)})
 			return
 		}
+	}
+
+	if hpTo != nil {
+		if _, err := setHP(req.CharacterID, *hpTo); answerDBFailure(w, err, "the character") {
+			return
+		}
+		changed = append(changed, "hp")
 	}
 
 	// Items go into the inventory (the old character_items table no longer exists)

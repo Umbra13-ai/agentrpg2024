@@ -9,11 +9,7 @@ package main
 //	                    (condition_records, with the end-of-turn saving throw where the spell allows one).
 
 import (
-	"bytes"
-	"encoding/json"
 	"fmt"
-	"net/http"
-	"net/http/httptest"
 	"strings"
 	"sync"
 
@@ -171,28 +167,6 @@ func monsterName(lobbyID, id int) string {
 	return "the creature"
 }
 
-// healCharacter restores Hit Points (not above the maximum). A creature at 0 Hit Points wakes up with its death saves cleared.
-func healCharacter(targetID, amount int) (name string, before, after int) {
-	if _, wounded := charBuff(targetID, "no_regain"); wounded {
-		amount = 0 // Sword of Wounding: can't regain Hit Points (F171)
-	}
-	var maxHP int
-	if db.QueryRow(`SELECT name, hp, max_hp FROM characters WHERE id = $1`, targetID).Scan(&name, &before, &maxHP) != nil {
-		return "", 0, 0
-	}
-	after = before + amount
-	if after > maxHP {
-		after = maxHP
-	}
-	if before <= 0 && after > 0 {
-		db.Exec(`UPDATE characters SET hp = $1, death_save_successes = 0, death_save_failures = 0, is_stable = false WHERE id = $2`, after, targetID)
-		removeCondition(targetID, "unconscious")
-	} else {
-		db.Exec(`UPDATE characters SET hp = $1 WHERE id = $2`, after, targetID)
-	}
-	return
-}
-
 // applySpellHealing heals the characters a healing spell is aimed at and says who got what.
 func applySpellHealing(charID, heal, healMax int, description string) string {
 	targets := spellCharacterTargets(charID)
@@ -233,24 +207,19 @@ func abilityScoreOf(charID int, ability string) int {
 	return v
 }
 
+// damageCharacter deals damage of one type to a character (the Hit Point owner, hit_points_2024.go) and returns the clause a reply
+// shows: "takes 7 fire damage (now 5 HP) [Concentration: ...]".
 func damageCharacter(targetID, dmg int, dtype string, critical ...bool) string {
-	part := map[string]interface{}{"damage": dmg, "damage_type": strings.ToLower(dtype)}
-	if len(critical) > 0 && critical[0] {
-		part["critical"] = true // at 0 Hit Points a Critical Hit is two death save failures
+	hit := oneHit(dmg, dtype)
+	hit.Critical = len(critical) > 0 && critical[0] // at 0 Hit Points a Critical Hit is two death save failures
+	d, err := damageHP(targetID, hit)
+	if dbFailed(err) {
+		return fmt.Sprintf("takes no damage (%s)", notFoundOrDBError(err, ""))
 	}
-	body, _ := json.Marshal(part)
-	rr := httptest.NewRecorder()
-	handleDamage(rr, httptest.NewRequest(http.MethodPost, "/", bytes.NewReader(body)), targetID)
-	var out map[string]interface{}
-	json.Unmarshal(rr.Body.Bytes(), &out)
-	text := fmt.Sprintf("takes %d %s damage", asInt(out["damage_dealt"]), dtype)
-	if hp, ok := out["hp"]; ok {
-		text += fmt.Sprintf(" (now %v HP)", hp)
+	if err != nil {
+		return fmt.Sprintf("takes 0 %s damage", dtype)
 	}
-	if c, ok := out["concentration"].(string); ok {
-		text += " [" + c + "]"
-	}
-	return text
+	return d.Sentence(dtype)
 }
 
 // resolveSpellOnCharacters applies a damaging spell to the characters in target_ids (or a character target_id): a spell attack against

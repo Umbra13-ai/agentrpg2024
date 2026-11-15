@@ -104,6 +104,18 @@ Add to the owner, never beside it. When you give another rule one owner, add it 
   XP are added to what they are then, never overwritten. Two requests at once take the step once; the other gets 409
   (`level_changed`, `feats_changed`, `asi_changed`, `subclass_already_chosen`). `applyLevelGain` (`level_up_2024.go`) applies a
   level only while the character is still at the old one. Suite: `progression_race_test.py` (audit AUD-07).
+- **A character's Hit Points:** `game.TakeDamage`, `game.Heal`, `Vitals.SetHP` / `Revive` / `Kill` / `DeathSave` and
+  `game.ConcentrationDC` (`game/hit_points.go`) are the rule (Temporary Hit Points first, never below 0 or above the maximum,
+  dropping to 0, damage at 0 = one Death Saving Throw failure or two from a Critical Hit, Instant Death when the damage left after
+  0 is at least the maximum, no healing for the dead, healing from 0 resets the saves, the Concentration DC from the damage taken
+  after resistance). `cmd/server/hit_points_2024.go` is the only writer: each change locks the row (`changeVitals`, `SELECT ...
+  FOR UPDATE`) and writes in one transaction, so changes at once are all counted. `damageHP` (one hit, in one or more damage
+  types: resistances, Death Ward inside the transaction, the `dropRescues` table after it, Concentration), `healHP` (options
+  `healUpToHalf`, `healOnlyAtZero`), `healCharacter`, `undoDamage` (a hit undone or reduced afterwards), `setHP`, `restoreAllHP`,
+  `killCharacter`, `reviveCharacter`, `recordDeathSave`, and `changeMaxHP` / `maxHPChange` (the SQL a progression claim includes).
+  `handleDamage`, `handleHeal` and `damageCharacter` are thin wrappers. Temporary Hit Points are granted by `grantTempHP`
+  (`temp_hp_2024.go`). A new feature that stops a drop to 0 is one row in `dropRescues`. `TestNoOtherHitPointWriter` checks;
+  suite: `hp_rule_test.py` (audit AUD-06).
 - **Reading a request's body:** `readRequest` (`cmd/server/request_body_2024.go`) is the only reader. It needs one JSON
   object (an empty body only with `optionalBody()`), reads field names with `game.Key`, refuses an unknown field (also
   inside objects), a wrong type, malformed JSON and data after the object, takes an id that repeats the path's, and

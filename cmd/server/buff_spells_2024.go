@@ -32,11 +32,7 @@ package main
 //   Lesser Restoration       ends one condition: Blinded, Deafened, Paralyzed or Poisoned
 
 import (
-	"bytes"
-	"encoding/json"
 	"fmt"
-	"net/http"
-	"net/http/httptest"
 	"strconv"
 	"strings"
 
@@ -409,19 +405,14 @@ func raiseMaxHP(lobby, id, caster int, spellName, kind string, n, rounds int) st
 	db.Exec(`DELETE FROM spell_effects WHERE lobby_id = $1 AND target_id = $2 AND kind = $3`, lobby, id, kind)
 	addSpellEffect(lobby, id, caster, spellName, kind, strconv.Itoa(n), rounds, "", 0)
 	up := n - old
-	var before, hp, mx int
-	var dead bool
-	db.QueryRow(`SELECT hp, COALESCE(is_dead,false) FROM characters WHERE id = $1`, id).Scan(&before, &dead)
-	if dead {
-		db.Exec(`UPDATE characters SET max_hp = max_hp + $1 WHERE id = $2`, up, id)
+	v, err := changeMaxHP(id, up, true) // a dead creature's maximum rises, not its Hit Points (hit_points_2024.go)
+	if err != nil {
+		return fmt.Sprintf("%s's Hit Points couldn't be changed (%s)", name, notFoundOrDBError(err, "no such character"))
+	}
+	if v.Dead {
 		return fmt.Sprintf("%s's Hit Point maximum rises by %d", name, up)
 	}
-	db.QueryRow(`UPDATE characters SET max_hp = max_hp + $1, hp = GREATEST(hp, 0) + $1 WHERE id = $2 RETURNING hp, max_hp`, up, id).Scan(&hp, &mx)
-	if before <= 0 && hp > 0 {
-		db.Exec(`UPDATE characters SET death_save_successes = 0, death_save_failures = 0, is_stable = false WHERE id = $1`, id)
-		removeCondition(id, "unconscious")
-	}
-	return fmt.Sprintf("%s's Hit Point maximum and current Hit Points rise by %d (%d/%d)", name, up, hp, mx)
+	return fmt.Sprintf("%s's Hit Point maximum and current Hit Points rise by %d (%d/%d)", name, up, v.HP, v.Max)
 }
 
 // buffEnds undoes what an ending effect changed (endItemEffect calls it): the raised Hit Point maximum; the AC (Barkskin, Warding
@@ -436,7 +427,7 @@ func buffEnds(kind string, targetID int, detail string) {
 	switch kind {
 	case "aid", "heroes_feast":
 		if n := atoiSafe(detail); n > 0 {
-			db.Exec(`UPDATE characters SET max_hp = GREATEST(1, max_hp - $1), hp = LEAST(hp, GREATEST(1, max_hp - $1)) WHERE id = $2`, n, targetID)
+			changeMaxHP(targetID, -n, false) // the maximum falls back; Hit Points only stay within it
 		}
 	case "barkskin", "warding_bond":
 		refreshStoredAC(targetID)
@@ -896,16 +887,6 @@ func holyAuraBlinds(lobbyID, monsterID int, monsterName string, targetID int) st
 	return fmt.Sprintf(" Holy Aura: %s fails the Constitution save (%d vs DC %d) and is Blinded until the end of its next turn.", monsterName, total, dc)
 }
 
-// deathWardHolds: the first drop to 0 Hit Points under Death Ward is a drop to 1, and the spell ends.
-func deathWardHolds(charID int) (bool, string) {
-	e, ok := charBuff(charID, "death_ward")
-	if !ok {
-		return false, ""
-	}
-	db.Exec(`DELETE FROM spell_effects WHERE id = $1`, e.ID)
-	return true, "Death Ward: instead of dropping to 0 Hit Points you drop to 1, and the spell ends."
-}
-
 // wardingBondShare: the caster of a Warding Bond takes the same damage as its target (typeless: their own resistances don't apply).
 func wardingBondShare(charID, dmg int) string {
 	if dmg <= 0 || charID <= 0 {
@@ -916,12 +897,13 @@ func wardingBondShare(charID, dmg int) string {
 	if !ok || e.CasterID <= 0 || e.CasterID == charID || !bondInRange(lobby, e) {
 		return ""
 	}
-	body, _ := json.Marshal(map[string]interface{}{"damage": dmg, "damage_type": "", "no_bond": true})
-	rr := httptest.NewRecorder()
-	handleDamage(rr, httptest.NewRequest(http.MethodPost, "/", bytes.NewReader(body)), e.CasterID)
-	var out map[string]interface{}
-	json.Unmarshal(rr.Body.Bytes(), &out)
-	return fmt.Sprintf(" Warding Bond: %s takes the same %d damage (now %v HP).", getCharacterName(e.CasterID), dmg, out["hp"])
+	hit := oneHit(dmg, "")
+	hit.NoBond = true
+	d, err := damageHP(e.CasterID, hit)
+	if err != nil {
+		return ""
+	}
+	return fmt.Sprintf(" Warding Bond: %s takes the same %d damage (now %d HP).", d.Name, dmg, d.After.HP)
 }
 
 // endWardingBondsOf: the bond ends when its caster drops to 0 Hit Points.

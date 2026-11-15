@@ -140,14 +140,7 @@ func divineSpark(charID int, description string) string {
 		if tid <= 0 {
 			tid = charID
 		}
-		var hp, maxHP int
-		var tname string
-		db.QueryRow(`SELECT hp, max_hp, name FROM characters WHERE id = $1`, tid).Scan(&hp, &maxHP, &tname)
-		nh := hp + total
-		if nh > maxHP {
-			nh = maxHP
-		}
-		db.Exec(`UPDATE characters SET hp = $1 WHERE id = $2`, nh, tid)
+		tname, hp, nh := healCharacter(tid, total) // the Hit Point owner (hit_points_2024.go): from 0 the Death Saving Throws reset
 		return fmt.Sprintf("✨ Divine Spark: %s regains %d Hit Points (%d → %d).", tname, nh-hp, hp, nh)
 	}
 	dtype := "radiant"

@@ -290,7 +290,7 @@ func setAbilityScore(charID int, col string, v int) {
 		var old, level int
 		db.QueryRow(`SELECT con, level FROM characters WHERE id = $1`, charID).Scan(&old, &level)
 		if d := (game.Modifier(v) - game.Modifier(old)) * level; d != 0 {
-			db.Exec(`UPDATE characters SET max_hp = GREATEST(1, max_hp + $1), hp = GREATEST(0, LEAST(max_hp + $1, hp + $1)) WHERE id = $2`, d, charID)
+			changeMaxHP(charID, d, true) // the Hit Point owner (hit_points_2024.go)
 		}
 	}
 	db.Exec(`UPDATE characters SET `+col+` = $1 WHERE id = $2`, v, charID)

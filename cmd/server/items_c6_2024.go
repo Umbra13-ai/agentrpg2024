@@ -362,13 +362,11 @@ func glovesOfMissileSnaring(charID int) string {
 	if back > lost {
 		back = lost
 	}
-	var hp, temp int
-	db.QueryRow(`SELECT hp, COALESCE(temp_hp,0) FROM characters WHERE id = $1`, charID).Scan(&hp, &temp)
 	toHP := back
 	if toHP > h.HPBefore-h.HPAfter {
 		toHP = h.HPBefore - h.HPAfter
 	}
-	db.Exec(`UPDATE characters SET hp = hp + $1, temp_hp = COALESCE(temp_hp,0) + $2 WHERE id = $3`, toHP, back-toHP, charID)
+	undoDamage(charID, toHP, back-toHP, h.DeadBefore, false) // the Hit Point owner (hit_points_2024.go): damage taken back
 	th.Hits[idx].Snared = true
 	monsterHitsOn.Store(charID, th)
 	text := fmt.Sprintf("You snare the missile (a Reaction): the damage of %s's %s is reduced by %d (1d10 %d + Dex %+d); %d Hit Points back.", h.Attacker, h.Attack, reduce, d10, game.Modifier(dex), back)

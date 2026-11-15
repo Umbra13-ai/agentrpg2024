@@ -740,38 +740,9 @@ func handleCombatNext(w http.ResponseWriter, r *http.Request, campaignID int) {
 		}
 	}
 
-	// Champion's Survivor feature - regenerate HP at start of turn if below 50% (level 18+)
 	if !newEntry.IsMonster {
-		var charClass, subclass sql.NullString
-		var charLevel, hp, maxHP, conScore int
-		err := db.QueryRow(`
-			SELECT class, COALESCE(subclass, ''), level, hp, max_hp, con 
-			FROM characters WHERE id = $1
-		`, newActiveID).Scan(&charClass, &subclass, &charLevel, &hp, &maxHP, &conScore)
-		if err == nil && charClass.Valid && subclass.Valid && subclass.String == "champion" && charLevel >= 18 {
-			if _, hasSurvivor := getSubclassMechanic("champion", charLevel, "survivor_regen"); hasSurvivor {
-				// Survivor triggers if HP > 0 and HP <= 50% max HP
-				if hp > 0 && hp <= maxHP/2 {
-					conMod := (conScore - 10) / 2
-					healAmount := 5 + conMod
-					if healAmount < 1 {
-						healAmount = 1 // Minimum 1 HP
-					}
-					newHP := hp + healAmount
-					if newHP > maxHP {
-						newHP = maxHP
-					}
-					db.Exec("UPDATE characters SET hp = $1 WHERE id = $2", newHP, newActiveID)
-					response["survivor_regen"] = map[string]interface{}{
-						"feature":     "Survivor",
-						"healed":      healAmount,
-						"previous_hp": hp,
-						"new_hp":      newHP,
-						"max_hp":      maxHP,
-						"message":     fmt.Sprintf("⚔️ Survivor: %s regenerates %d HP at start of turn (5 + CON %+d)", entries[turnIndex].Name, healAmount, conMod),
-					}
-				}
-			}
+		if regen := survivorRegen(newActiveID, entries[turnIndex].Name); regen != nil { // Champion level 18 (subclass_helpers.go)
+			response["survivor_regen"] = regen
 		}
 	}
 
@@ -916,36 +887,9 @@ func handleCombatSkip(w http.ResponseWriter, r *http.Request, campaignID int) {
 			recordGMAction(db, campaignID, "spell_effect", n, n)
 		}
 	}
-	// Champion's Survivor feature - regenerate HP at start of turn if below 50% (level 18+)
-	var charClass, subclass sql.NullString
-	var charLevel, hp, maxHP, conScore int
-	err = db.QueryRow(`
-		SELECT class, COALESCE(subclass, ''), level, hp, max_hp, con 
-		FROM characters WHERE id = $1
-	`, newActiveID).Scan(&charClass, &subclass, &charLevel, &hp, &maxHP, &conScore)
-	if err == nil && charClass.Valid && subclass.Valid && subclass.String == "champion" && charLevel >= 18 {
-		if _, hasSurvivor := getSubclassMechanic("champion", charLevel, "survivor_regen"); hasSurvivor {
-			// Survivor triggers if HP > 0 and HP <= 50% max HP
-			if hp > 0 && hp <= maxHP/2 {
-				conMod := (conScore - 10) / 2
-				healAmount := 5 + conMod
-				if healAmount < 1 {
-					healAmount = 1 // Minimum 1 HP
-				}
-				newHP := hp + healAmount
-				if newHP > maxHP {
-					newHP = maxHP
-				}
-				db.Exec("UPDATE characters SET hp = $1 WHERE id = $2", newHP, newActiveID)
-				response["survivor_regen"] = map[string]interface{}{
-					"feature":     "Survivor",
-					"healed":      healAmount,
-					"previous_hp": hp,
-					"new_hp":      newHP,
-					"max_hp":      maxHP,
-					"message":     fmt.Sprintf("⚔️ Survivor: %s regenerates %d HP at start of turn (5 + CON %+d)", entries[turnIndex].Name, healAmount, conMod),
-				}
-			}
+	if newActiveID > 0 {
+		if regen := survivorRegen(newActiveID, entries[turnIndex].Name); regen != nil { // Champion level 18 (subclass_helpers.go)
+			response["survivor_regen"] = regen
 		}
 	}
 
@@ -1675,7 +1619,7 @@ func handleCombatStatus(w http.ResponseWriter, r *http.Request, campaignID int) 
 
 // handleDamage godoc
 // @Summary Apply damage to a character (GM only)
-// @Description Deal damage to a character, tracking HP, temp HP, death saves. A concentrating character makes the Constitution save at once (DC 10 or half the damage, up to 30): concentration, concentration_kept; on a failure the spell and what it holds end. Only the GM of the character's campaign (403 not_gm otherwise).
+// @Description Deal damage to a character: resistances, Temporary Hit Points first, then Hit Points (never below 0); dropping to 0 (dying), damage at 0 (a Death Saving Throw failure, two from a critical), Instant Death when the damage left after 0 is at least the Hit Point maximum. A concentrating character makes the Constitution save at once (DC 10 or half the damage taken after resistance, up to 30): concentration, concentration_kept; on a failure the spell and what it holds end. Only the GM of the character's campaign (403 not_gm otherwise).
 // @Tags Combat
 // @Accept json
 // @Produce json
@@ -1712,15 +1656,8 @@ func handleDamage(w http.ResponseWriter, r *http.Request, charID int) {
 		return
 	}
 
-	var hp, maxHP, tempHP int
-	var concentratingOn string
-	var wildShapeForm sql.NullString
-	err := db.QueryRow(`
-		SELECT hp, max_hp, COALESCE(temp_hp, 0), COALESCE(concentrating_on, ''),
-		       wild_shape_form
-		FROM characters WHERE id = $1
-	`, charID).Scan(&hp, &maxHP, &tempHP, &concentratingOn, &wildShapeForm)
-
+	d, err := damageHP(charID, hpHit{Parts: []hpPart{{req.Damage, strings.ToLower(req.DamageType)}}, Critical: req.Critical,
+		NoBond: req.NoBond, ConcentrationDamage: req.ConcentrationDamage, SkipConcentration: req.SkipConcentration, SameHit: req.SameHit})
 	if err != nil {
 		if answerDBFailure(w, err, "the character") {
 			return
@@ -1729,222 +1666,12 @@ func handleDamage(w http.ResponseWriter, r *http.Request, charID int) {
 		json.NewEncoder(w).Encode(map[string]interface{}{"error": "character_not_found"})
 		return
 	}
-
-	damage := req.Damage
-	result := map[string]interface{}{
-		"original_damage": damage,
-	}
-
-	// Apply damage resistance from conditions
-	dmgMod := applyDamageResistance(charID, damage, req.DamageType)
-	if dmgMod.WasHalved {
-		damage = dmgMod.FinalDamage
-		result["resistances_applied"] = dmgMod.Resistances
-		result["damage_dealt"] = damage
-	} else {
-		if d, ok := underwaterFire(lobbyOfChar(charID), req.DamageType, damage); ok {
-			damage = d
-			result["resistances_applied"] = []string{"fire (underwater)"}
-		}
-		result["damage_dealt"] = damage
-	}
-	if damage > 0 {
-		cloakTakesDamage(charID) // the Cloak of Displacement stops until the start of the wearer's next turn (F113)
-		if note := wakeOnDamage(lobbyOfChar(charID), charID, getCharacterName(charID)); note != "" {
-			result["woke_up"] = note // Hypnotic Pattern, Sleep
-		}
-	}
-	if cut, note := ringOfWarmth(charID, req.DamageType); cut > 0 { // Ring of Warmth: Cold damage 2d8 less (F204)
-		damage -= cut
-		if damage < 0 {
-			damage = 0
-		}
-		result["damage_dealt"] = damage
-		result["ring_of_warmth"] = note
-	}
-	if cut, note := resistanceSpellReduction(charID, req.DamageType); cut > 0 { // the Resistance cantrip: 1d4 less, once per turn
-		damage -= cut
-		if damage < 0 {
-			damage = 0
-		}
-		result["damage_dealt"] = damage
-		result["resistance_spell"] = note
-	}
-
-	if !req.NoBond {
-		if note := wardingBondShare(charID, damage); note != "" { // its caster takes the same damage (buff_spells_2024.go)
-			result["warding_bond"] = strings.TrimSpace(note)
-		}
-	}
-
-	// Wild Shape (2024): no beast Hit Points; the druid's Temporary Hit Points and Hit Points take the damage, and the form ends at 0 HP
-
-	// Apply to temp HP first
-	if tempHP > 0 {
-		if damage <= tempHP {
-			tempHP -= damage
-			damage = 0
-		} else {
-			damage -= tempHP
-			tempHP = 0
-		}
-		result["temp_hp_absorbed"] = req.Damage - damage
-	}
-
-	// Damage at 0 Hit Points (SRD 5.2.1): a Death Saving Throw failure, two from a Critical Hit; damage equal to the Hit Point maximum or
-	// more kills; a Stable creature stops being Stable (F93: the server only set the Hit Points to 0 again)
-	if hp <= 0 && damage > 0 {
-		var fails int
-		var dead bool
-		db.QueryRow(`SELECT COALESCE(death_save_failures,0), COALESCE(is_dead,false) FROM characters WHERE id = $1`, charID).Scan(&fails, &dead)
-		result["damage_dealt"] = damage
-		result["hp"], result["max_hp"], result["temp_hp"] = 0, maxHP, tempHP
-		switch {
-		case dead:
-			result["status"] = "already_dead"
-		case damage >= maxHP:
-			db.Exec(`UPDATE characters SET hp = 0, temp_hp = $1, is_dead = true, is_stable = false WHERE id = $2`, tempHP, charID)
-			result["status"] = "INSTANT_DEATH"
-			result["message"] = "Damage at 0 Hit Points equal to the Hit Point maximum or more: the character dies."
-		case req.SameHit:
-			db.Exec(`UPDATE characters SET temp_hp = $1 WHERE id = $2`, tempHP, charID)
-			result["status"] = "unconscious"
-		default:
-			n := 1
-			if req.Critical {
-				n = 2
-			}
-			fails += n
-			result["death_save_failures"] = fails
-			if fails >= 3 {
-				db.Exec(`UPDATE characters SET hp = 0, temp_hp = $1, death_save_failures = $2, is_dead = true, is_stable = false WHERE id = $3`, tempHP, fails, charID)
-				result["status"] = "dead"
-				result["message"] = fmt.Sprintf("Damage at 0 Hit Points: %d Death Saving Throw failure%s (%d in all). The character dies.", n, map[bool]string{true: "s", false: ""}[n > 1], fails)
-			} else {
-				db.Exec(`UPDATE characters SET hp = 0, temp_hp = $1, death_save_failures = $2, is_stable = false WHERE id = $3`, tempHP, fails, charID)
-				result["status"] = "unconscious"
-				result["message"] = fmt.Sprintf("Damage at 0 Hit Points: %d Death Saving Throw failure%s (%d of 3); the character isn't Stable.", n, map[bool]string{true: "s", false: ""}[n > 1], fails)
-			}
-		}
-		json.NewEncoder(w).Encode(result)
-		return
-	}
-
-	// Apply remaining to HP
-	hp -= damage
-
-	// Check for unconscious/death
-	if hp <= 0 {
-		if dwUsed, dwNote := deathWardHolds(charID); dwUsed { // Death Ward: 1 Hit Point instead of 0 (buff_spells_2024.go)
-			hp = 1
-			db.Exec("UPDATE characters SET hp = 1, temp_hp = $1 WHERE id = $2", tempHP, charID)
-			result["status"] = "death_ward"
-			result["message"] = dwNote
-		} else if hp <= -maxHP {
-			// Massive damage - instant death
-			db.Exec("UPDATE characters SET hp = 0, temp_hp = $1, is_dead = true WHERE id = $2", tempHP, charID)
-			result["status"] = "INSTANT_DEATH"
-			result["message"] = "Massive damage (damage exceeded max HP) - instant death!"
-			hp = 0
-		} else {
-			// Check Barbarian Relentless Rage first (requires CON save)
-			relentlessHP, relentlessUsed, relentlessMsg := checkRelentlessRage(charID, hp+damage, damage, maxHP)
-			if relentlessUsed {
-				hp = relentlessHP
-				db.Exec("UPDATE characters SET hp = $1, temp_hp = $2 WHERE id = $3", hp, tempHP, charID)
-				result["status"] = "relentless_rage"
-				result["message"] = relentlessMsg
-				result["relentless_rage"] = true
-				result["class_feature_note"] = relentlessMsg
-			} else {
-				// Add failed Relentless Rage message if applicable
-				if relentlessMsg != "" {
-					result["relentless_rage_failed"] = true
-					result["class_feature_note"] = relentlessMsg
-				}
-
-				// Check Orc Relentless Endurance before falling unconscious
-				enduranceHP, enduranceUsed, enduranceMsg := checkRelentlessEndurance(charID, hp+damage, damage, maxHP)
-				if enduranceUsed {
-					hp = enduranceHP
-					db.Exec("UPDATE characters SET hp = $1, temp_hp = $2 WHERE id = $3", hp, tempHP, charID)
-					result["status"] = "relentless_endurance"
-					result["message"] = enduranceMsg
-					result["relentless_endurance"] = true
-					result["racial_feature_note"] = enduranceMsg
-				} else if note := giftOfTheProtectors(charID); note != "" {
-					hp = 1 // a name in a Warlock's Book of Shadows
-					result["status"] = "gift_of_the_protectors"
-					result["message"] = note
-				} else {
-					// Fall unconscious, start death saves
-					db.Exec("UPDATE characters SET hp = 0, temp_hp = $1, concentrating_on = NULL WHERE id = $2", tempHP, charID)
-					result["status"] = "unconscious"
-					result["message"] = "Dropped to 0 HP - unconscious and making death saves"
-					hp = 0
-				}
-			}
-		}
-	} else {
-		db.Exec("UPDATE characters SET hp = $1, temp_hp = $2 WHERE id = $3", hp, tempHP, charID)
-		result["status"] = "damaged"
-	}
-
-	result["hp"] = hp
-	result["max_hp"] = maxHP
-	if hp <= 0 {
-		endWardingBondsOf(charID) // a Warding Bond ends when its caster drops to 0 Hit Points
-		if n, _ := db.Exec(`DELETE FROM spell_effects WHERE target_id = $1 AND kind = 'gaseous_form'`, charID); n != nil {
-			if c, _ := n.RowsAffected(); c > 0 {
-				result["gaseous_form_ended"] = "Gaseous Form ends: the creature dropped to 0 Hit Points."
-			}
-		}
-	}
-	if note := polymorphTempGone(charID); note != "" {
-		result["polymorph_ended"] = note // the beast's Temporary Hit Points are gone (spells_more_2024.go)
-		wildShapeForm.Valid = false
-	}
-	if wildShapeForm.Valid && wildShapeForm.String != "" {
-		if note := endWildShapeIfDown(charID); note != "" {
-			result["wild_shape_ended"] = note // 0 Hit Points: Unconscious, so Incapacitated; the druid's own scores and AC come back
-		}
-	}
-	result["temp_hp"] = tempHP
-
-	// Concentration check if concentrating
-	if concentratingOn != "" && hp > 0 && !req.SkipConcentration && !relentlessHunter(charID, concentratingOn) { // Ranger level 13: damage can't break Hunter's Mark
-		dc := 10
-		concDamage := req.Damage
-		if req.ConcentrationDamage > concDamage {
-			concDamage = req.ConcentrationDamage
-		}
-		if concDamage/2 > 10 {
-			dc = concDamage / 2
-		}
-		if dc > 30 {
-			dc = 30 // SRD 5.2.1: up to a maximum DC of 30
-		}
-		// F55: the server rolls the Constitution save (before, it only said one was required, and nobody rolled it)
-		cs := (&saveCtx{saver: charID, ability: "con", dc: dc, concentration: true}).roll() // Eldritch Mind, War Caster, Extended Spell: Advantage
-		kept, total := cs.Success, cs.Total
-		result["concentration_dc"] = dc
-		result["concentrating_on"] = concentratingOn
-		result["concentration_save"] = total
-		result["concentration_kept"] = kept
-		if kept {
-			result["concentration"] = fmt.Sprintf("Concentration: %s; %s goes on.", cs.Line(characterNameOf(charID)), concentratingOn)
-		} else {
-			db.Exec(`UPDATE characters SET concentrating_on = NULL WHERE id = $1`, charID)
-			result["concentration"] = fmt.Sprintf("Concentration: %s; %s ends.", cs.Line(characterNameOf(charID)), concentratingOn)
-		}
-	}
-
-	json.NewEncoder(w).Encode(result)
+	json.NewEncoder(w).Encode(d.View())
 }
 
 // handleHeal godoc
 // @Summary Heal a character (GM only)
-// @Description Restore HP to a character. Only the GM of the character's campaign (403 not_gm otherwise).
+// @Description Restore HP to a character: never above the maximum, nothing for a dead character; healing from 0 Hit Points resets the Death Saving Throws. Only the GM of the character's campaign (403 not_gm otherwise).
 // @Tags Combat
 // @Accept json
 // @Produce json
@@ -1962,30 +1689,22 @@ func handleHeal(w http.ResponseWriter, r *http.Request, charID int) {
 	if !readRequest(w, r, &req, optionalBody()) {
 		return
 	}
-
-	var hp, maxHP int
-	var isStable bool
-	db.QueryRow("SELECT hp, max_hp, COALESCE(is_stable, false) FROM characters WHERE id = $1", charID).Scan(&hp, &maxHP, &isStable)
-
-	wasUnconscious := hp == 0
-	hp += req.Healing
-	if hp > maxHP {
-		hp = maxHP
+	h, err := healHP(charID, req.Healing)
+	if err != nil {
+		if answerDBFailure(w, err, "the character") {
+			return
+		}
+		w.WriteHeader(http.StatusNotFound)
+		json.NewEncoder(w).Encode(map[string]interface{}{"error": "character_not_found"})
+		return
 	}
-
-	// Reset death saves if healed from 0
-	if wasUnconscious {
-		db.Exec("UPDATE characters SET hp = $1, death_save_successes = 0, death_save_failures = 0, is_stable = false WHERE id = $2", hp, charID)
-	} else {
-		db.Exec("UPDATE characters SET hp = $1 WHERE id = $2", hp, charID)
-	}
-
 	json.NewEncoder(w).Encode(map[string]interface{}{
 		"success":                true,
-		"hp":                     hp,
-		"max_hp":                 maxHP,
-		"healing_applied":        req.Healing,
-		"regained_consciousness": wasUnconscious && hp > 0,
+		"hp":                     h.After.HP,
+		"max_hp":                 h.After.Max,
+		"healing_applied":        h.Healed,
+		"regained_consciousness": h.Woke,
+		"dead":                   h.After.Dead,
 	})
 }
 
@@ -2343,20 +2062,16 @@ func handleShortRest(w http.ResponseWriter, r *http.Request, charID int) {
 		totalHealing += healing
 	}
 
-	// Apply healing (can't exceed max HP)
-	newHP := hp + totalHealing
-	if newHP > maxHP {
-		newHP = maxHP
+	// Apply healing (the Hit Point owner, hit_points_2024.go: can't exceed max HP)
+	newHP, actualHealing := hp, 0
+	if totalHealing > 0 {
+		h, err := healHP(charID, totalHealing)
+		if answerDBFailure(w, err, "the character") {
+			return
+		}
+		newHP, maxHP, actualHealing = h.After.HP, h.After.Max, h.Healed
 	}
-	actualHealing := newHP - hp
-
-	// Update character
-	db.Exec(`
-		UPDATE characters SET 
-			hp = $1, 
-			hit_dice_spent = hit_dice_spent + $2
-		WHERE id = $3
-	`, newHP, req.HitDice, charID)
+	db.Exec(`UPDATE characters SET hit_dice_spent = hit_dice_spent + $1 WHERE id = $2`, req.HitDice, charID)
 	clearUsedKeys(charID, "improve_fate") // Boon of Fate returns on a Short Rest
 	restStudy(charID, false)
 
@@ -2770,16 +2485,15 @@ func handleRest(w http.ResponseWriter, r *http.Request, charID int) {
 	}
 
 	restStudy(charID, true)
-	// Reset everything for long rest
+	// SRD 5.2.1 Long Rest: all Hit Points back; Temporary Hit Points end (F67); the Death Saving Throws reset (the Hit Point owner)
+	if _, err := restoreAllHP(charID); answerDBFailure(w, err, "the character") {
+		return
+	}
+	// Reset everything else for long rest
 	db.Exec(`
 		UPDATE characters SET
-			hp = max_hp,
-			temp_hp = 0, -- Temporary Hit Points last until a Long Rest (F67)
 			spell_slots_used = '{}',
 			pact_slots_used = '{}',
-			death_save_successes = 0,
-			death_save_failures = 0,
-			is_stable = false,
 			concentrating_on = NULL,
 			conditions = '[]',
 			hit_dice_spent = $2,

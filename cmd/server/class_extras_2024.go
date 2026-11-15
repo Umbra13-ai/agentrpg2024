@@ -146,15 +146,9 @@ func landsAid(charID int, description string) string {
 		for i := 0; i < dice; i++ {
 			heal += game.RollDie(6)
 		}
-		var hp, maxHP int
-		var tname string
-		db.QueryRow(`SELECT hp, max_hp, name FROM characters WHERE id = $1`, healTarget).Scan(&hp, &maxHP, &tname)
-		nh := hp + heal
-		if nh > maxHP {
-			nh = maxHP
+		if tname, hp, nh := healCharacter(healTarget, heal); tname != "" { // the Hit Point owner (hit_points_2024.go)
+			parts = append(parts, fmt.Sprintf("%s regains %d Hit Points (%d → %d)", tname, nh-hp, hp, nh))
 		}
-		db.Exec(`UPDATE characters SET hp = $1 WHERE id = $2`, nh, healTarget)
-		parts = append(parts, fmt.Sprintf("%s regains %d Hit Points (%d → %d)", tname, nh-hp, hp, nh))
 	}
 	return "🌿 Land's Aid: " + strings.Join(parts, "; ") + "."
 }

@@ -2439,16 +2439,16 @@ func resolveActionWithBonusDash(action, description string, charID int, bonusDas
 							necroticDamage += game.RollDie(12) + game.RollDie(12)
 						}
 
-						// Apply necrotic damage to caster (ignores resistance and immunity per PHB)
-						var currentHP, maxHP int
-						db.QueryRow("SELECT hp, max_hp FROM characters WHERE id = $1", charID).Scan(&currentHP, &maxHP)
-						newHP := currentHP - necroticDamage
-						if newHP < 0 {
-							newHP = 0
-						}
-						db.Exec("UPDATE characters SET hp = $1 WHERE id = $2", newHP, charID)
-
+						// Apply necrotic damage to caster: it ignores Resistance and Immunity (the Hit Point owner, hit_points_2024.go)
+						hit := oneHit(necroticDamage, "necrotic")
+						hit.Raw = true
 						overchannelPenaltyNote = fmt.Sprintf(" ⚠️ Overchannel penalty: took %d necrotic damage (cannot be reduced)!", necroticDamage)
+						if d, err := damageHP(charID, hit); err == nil {
+							overchannelPenaltyNote = fmt.Sprintf(" ⚠️ Overchannel penalty: took %d necrotic damage (cannot be reduced; now %d HP)!", d.Dealt, d.After.HP)
+							if c, ok := d.View()["concentration"].(string); ok {
+								overchannelPenaltyNote += " " + c
+							}
+						}
 					} else {
 						// Mark first use
 						db.Exec("UPDATE characters SET overchannel_used = true WHERE id = $1", charID)
@@ -2596,21 +2596,8 @@ func resolveActionWithBonusDash(action, description string, charID int, bonusDas
 
 					if !healingSelf {
 						// Healing another creature - heal self too
-						selfHeal := 2 + slotLevel
-
-						// Get current HP and max HP
-						var selfHP, selfMaxHP int
-						db.QueryRow("SELECT hp, max_hp FROM characters WHERE id = $1", charID).Scan(&selfHP, &selfMaxHP)
-
-						newSelfHP := selfHP + selfHeal
-						if newSelfHP > selfMaxHP {
-							newSelfHP = selfMaxHP
-						}
-						actualSelfHeal := newSelfHP - selfHP
-
-						if actualSelfHeal > 0 {
-							db.Exec("UPDATE characters SET hp = $1 WHERE id = $2", newSelfHP, charID)
-							blessedHealerInfo = fmt.Sprintf(" Blessed Healer: you also heal %d HP!", actualSelfHeal)
+						if h, err := healHP(charID, 2+slotLevel); err == nil && h.Healed > 0 {
+							blessedHealerInfo = fmt.Sprintf(" Blessed Healer: you also heal %d HP!", h.Healed)
 						}
 					}
 				}
@@ -2646,54 +2633,34 @@ func resolveActionWithBonusDash(action, description string, charID int, bonusDas
 		}
 		roll := ds.ForSaver("Death saving throw")
 
-		var successes, failures int
-		db.QueryRow("SELECT death_save_successes, death_save_failures FROM characters WHERE id = $1", charID).Scan(&successes, &failures)
-
-		switch {
-		case ds.Natural == 20:
-			// Natural 20: regain 1 HP and wake up
-			db.Exec("UPDATE characters SET hp = 1, death_save_successes = 0, death_save_failures = 0, is_stable = false WHERE id = $1", charID)
-			return fmt.Sprintf("%s. Natural 20! You regain consciousness with 1 HP!", roll)
-		case ds.Natural == 1:
-			// Natural 1: two failures
-			failures += 2
-			if failures >= 3 {
-				db.Exec("UPDATE characters SET death_save_failures = $1, is_dead = true WHERE id = $2", failures, charID)
-				return fmt.Sprintf("%s. Natural 1 (2 failures)! Total: %d failures. YOU HAVE DIED.", roll, failures)
-			}
-			db.Exec("UPDATE characters SET death_save_failures = $1 WHERE id = $2", failures, charID)
-			return fmt.Sprintf("%s. Natural 1 (2 failures)! Total: %d successes, %d failures.", roll, successes, failures)
-		case ds.Success:
-			successes++
-			if successes >= 3 {
-				db.Exec("UPDATE characters SET death_save_successes = 0, death_save_failures = 0, is_stable = true, stable_rounds_left = "+stableRounds()+" WHERE id = $1", charID) // F210: "The number of both is reset to zero when you ... become Stable" (SRD 5.2.1)
-				return fmt.Sprintf("%s. Success! Total: %d successes. You are STABLE.", roll, successes)
-			}
-			db.Exec("UPDATE characters SET death_save_successes = $1 WHERE id = $2", successes, charID)
-			return fmt.Sprintf("%s. Success! Total: %d successes, %d failures.", roll, successes, failures)
-		default:
-			failures++
-			if failures >= 3 {
-				db.Exec("UPDATE characters SET death_save_failures = $1, is_dead = true WHERE id = $2", failures, charID)
-				return fmt.Sprintf("%s. Failure! Total: %d failures. YOU HAVE DIED.", roll, failures)
-			}
-			db.Exec("UPDATE characters SET death_save_failures = $1 WHERE id = $2", failures, charID)
-			return fmt.Sprintf("%s. Failure! Total: %d successes, %d failures.", roll, successes, failures)
+		// the result is written by the Hit Point owner with the row locked (hit_points_2024.go): a hit at 0 Hit Points at the same
+		// moment still counts. F210: "The number of both is reset to zero when you ... become Stable" (SRD 5.2.1).
+		before, after, out, err := recordDeathSave(charID, ds.Natural, ds.Success)
+		if err != nil {
+			return fmt.Sprintf("%s. The result couldn't be recorded (%s); try again.", roll, notFoundOrDBError(err, "no such character"))
 		}
+		nat1 := map[bool]string{true: "Natural 1 (2 failures)!", false: "Failure!"}[ds.Natural == 1]
+		switch out {
+		case game.DeathSaveRegained:
+			return fmt.Sprintf("%s. Natural 20! You regain consciousness with 1 HP!", roll)
+		case game.DeathSaveDied:
+			return fmt.Sprintf("%s. %s Total: %d failures. YOU HAVE DIED.", roll, nat1, after.Failures)
+		case game.DeathSaveFailure:
+			return fmt.Sprintf("%s. %s Total: %d successes, %d failures.", roll, nat1, after.Successes, after.Failures)
+		case game.DeathSaveStable:
+			return fmt.Sprintf("%s. Success! Total: %d successes. You are STABLE.", roll, before.Successes+1)
+		case game.DeathSaveSuccess:
+			return fmt.Sprintf("%s. Success! Total: %d successes, %d failures.", roll, after.Successes, after.Failures)
+		}
+		return fmt.Sprintf("%s. You aren't dying (at 0 Hit Points and alive), so nothing is recorded.", roll)
 
 	case "concentration_check":
-		// Concentration check when taking damage
-		// DC is 10 or half the damage, whichever is higher, up to a maximum DC of 30 (SRD 5.2.1)
-		// Parse damage from description if provided
-		dc := 10
-		if dmgMatch := strings.Fields(description); len(dmgMatch) > 0 {
-			if dmg, err := strconv.Atoi(dmgMatch[0]); err == nil && dmg/2 > 10 {
-				dc = dmg / 2
-			}
+		// Concentration check when taking damage (the damage taken is the first word of the description): game.ConcentrationDC
+		damageTaken := 0
+		if words := strings.Fields(description); len(words) > 0 {
+			damageTaken, _ = strconv.Atoi(words[0])
 		}
-		if dc > 30 {
-			dc = 30
-		}
+		dc := game.ConcentrationDC(damageTaken)
 		// a Constitution saving throw (save_2024.go): Eldritch Mind, War Caster and Extended Spell give Advantage
 		cs := (&saveCtx{saver: charID, ability: "con", dc: dc, concentration: true}).roll()
 		var concSpell string
@@ -2998,12 +2965,8 @@ func resolveActionWithBonusDash(action, description string, charID int, bonusDas
 		db.Exec("UPDATE characters SET class_resources_used = $1 WHERE id = $2", updatedResources, charID)
 
 		// Set Wild Shape form
-		db.Exec(`
-			UPDATE characters 
-			SET wild_shape_form = $1,
-			    temp_hp = GREATEST(COALESCE(temp_hp, 0), $2)
-			WHERE id = $3
-		`, beastSlug, level, charID) // 2024: Temporary Hit Points equal to your Druid level; you keep your own Hit Points
+		db.Exec(`UPDATE characters SET wild_shape_form = $1 WHERE id = $2`, beastSlug, charID)
+		grantTempHP(charID, level)                                       // 2024: Temporary Hit Points equal to your Druid level; you keep your own Hit Points
 		equipNote := enterWildShapeStats(charID, beastSlug, description) // the beast's Strength, Dexterity, Constitution and AC
 
 		// Parse actions for display
@@ -3494,17 +3457,12 @@ func resolveActionWithBonusDash(action, description string, charID int, bonusDas
 		healRoll := game.RollDie(10)
 		totalHeal := healRoll + level
 
-		// Apply healing (up to max HP)
-		var currentHP, maxHP int
-		db.QueryRow("SELECT hp, max_hp FROM characters WHERE id = $1", charID).Scan(&currentHP, &maxHP)
-		newHP := currentHP + totalHeal
-		if newHP > maxHP {
-			newHP = maxHP
+		// Apply healing (the Hit Point owner: up to max HP)
+		h, err := healHP(charID, totalHeal)
+		if err != nil {
+			return "Second Wind couldn't be applied: " + notFoundOrDBError(err, "no such character") + ". Nothing was spent."
 		}
-		actualHeal := newHP - currentHP
-
-		// Update HP
-		db.Exec("UPDATE characters SET hp = $1 WHERE id = $2", newHP, charID)
+		currentHP, newHP, actualHeal := h.Before.HP, h.After.HP, h.Healed
 
 		// Consume the resource
 		resourcesUsed["second_wind"] = currentUsed + 1
@@ -3691,25 +3649,24 @@ func resolveActionWithBonusDash(action, description string, charID int, bonusDas
 			}
 		}
 
-		// Apply healing
-		var targetHP, targetMaxHP int
-		var targetName string
-		db.QueryRow("SELECT hp, max_hp, name FROM characters WHERE id = $1", targetID).Scan(&targetHP, &targetMaxHP, &targetName)
-
-		newHP := targetHP + healAmount
-		if newHP > targetMaxHP {
-			newHP = targetMaxHP
+		// Apply healing (the Hit Point owner: up to the maximum; from 0 the Death Saving Throws reset)
+		h, err := healHP(targetID, healAmount)
+		if err != nil {
+			return "🙌 Lay on Hands couldn't be applied: " + notFoundOrDBError(err, "no such character") + ". Nothing was spent."
 		}
-		actualHeal := newHP - targetHP
+		targetName, targetHP, newHP, actualHeal := h.Name, h.Before.HP, h.After.HP, h.Healed
 
 		if actualHeal == 0 {
-			if targetID == charID {
+			switch {
+			case h.After.Dead:
+				return fmt.Sprintf("🙌 Lay on Hands! %s is dead: Hit Points can't be restored. Pool: %d HP remaining.", targetName, remainingPool)
+			case newHP < h.After.Max:
+				return fmt.Sprintf("🙌 Lay on Hands! %s can't regain Hit Points right now. Pool: %d HP remaining.", targetName, remainingPool)
+			case targetID == charID:
 				return fmt.Sprintf("🙌 Lay on Hands! You're already at full HP. Pool: %d HP remaining.", remainingPool)
 			}
 			return fmt.Sprintf("🙌 Lay on Hands! %s is already at full HP. Pool: %d HP remaining.", targetName, remainingPool)
 		}
-
-		db.Exec("UPDATE characters SET hp = $1 WHERE id = $2", newHP, targetID)
 
 		// Consume from pool
 		resourcesUsed["lay_on_hands"] = currentUsed + actualHeal

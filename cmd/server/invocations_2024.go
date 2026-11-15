@@ -142,7 +142,8 @@ func giftOfTheProtectorsAction(charID int, description string) string {
 }
 
 // giftOfTheProtectors: a character reduced to 0 Hit Points but not killed outright drops to 1 instead, if a Warlock in its campaign wrote
-// its name on the page and the magic has not been used since the Warlock's last Long Rest. It returns the note ("" when it doesn't apply).
+// its name on the page and the magic has not been used since the Warlock's last Long Rest. It spends the use and returns the note ("" when
+// it doesn't apply); the Hit Point owner writes the 1 Hit Point (dropRescues, hit_points_2024.go).
 func giftOfTheProtectors(charID int) string {
 	lobby := lobbyOfChar(charID)
 	if lobby == 0 {
@@ -170,8 +171,7 @@ func giftOfTheProtectors(charID int) string {
 		}
 		for _, id := range protectorsPage(x.id) {
 			if id == charID {
-				setUsedResource(x.id, "gift_of_the_protectors", 1)
-				db.Exec(`UPDATE characters SET hp = 1 WHERE id = $1`, charID)
+				setUsedResource(x.id, "gift_of_the_protectors", 1) // the 1 Hit Point is written by the Hit Point owner (dropRescues)
 				return fmt.Sprintf("Gift of the Protectors: the name in %s's Book of Shadows keeps them at 1 Hit Point.", x.name)
 			}
 		}

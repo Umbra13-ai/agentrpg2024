@@ -1544,37 +1544,8 @@ func handleGMNarrate(w http.ResponseWriter, r *http.Request) {
 
 			response["action_economy_reset_for"] = turnOrder[turnIndex].Name
 
-			// Champion's Survivor feature - regenerate HP at start of turn if below 50% (level 18+)
-			var charClass, subclass sql.NullString
-			var charLevel, hp, maxHP, conScore int
-			err := db.QueryRow(`
-				SELECT class, COALESCE(subclass, ''), level, hp, max_hp, con 
-				FROM characters WHERE id = $1
-			`, newActiveID).Scan(&charClass, &subclass, &charLevel, &hp, &maxHP, &conScore)
-			if err == nil && charClass.Valid && subclass.Valid && subclass.String == "champion" && charLevel >= 18 {
-				if _, hasSurvivor := getSubclassMechanic("champion", charLevel, "survivor_regen"); hasSurvivor {
-					// Survivor triggers if HP > 0 and HP <= 50% max HP
-					if hp > 0 && hp <= maxHP/2 {
-						conMod := (conScore - 10) / 2
-						healAmount := 5 + conMod
-						if healAmount < 1 {
-							healAmount = 1 // Minimum 1 HP
-						}
-						newHP := hp + healAmount
-						if newHP > maxHP {
-							newHP = maxHP
-						}
-						db.Exec("UPDATE characters SET hp = $1 WHERE id = $2", newHP, newActiveID)
-						response["survivor_regen"] = map[string]interface{}{
-							"feature":     "Survivor",
-							"healed":      healAmount,
-							"previous_hp": hp,
-							"new_hp":      newHP,
-							"max_hp":      maxHP,
-							"message":     fmt.Sprintf("⚔️ Survivor: %s regenerates %d HP at start of turn (5 + CON %+d)", turnOrder[turnIndex].Name, healAmount, conMod),
-						}
-					}
-				}
+			if regen := survivorRegen(newActiveID, turnOrder[turnIndex].Name); regen != nil { // Champion level 18 (subclass_helpers.go)
+				response["survivor_regen"] = regen
 			}
 		}
 

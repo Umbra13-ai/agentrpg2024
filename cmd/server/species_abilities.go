@@ -199,10 +199,12 @@ func giantBoonOnTarget(lobbyID, charID, targetID int, ancestry string) (string, 
 			}
 			text = fmt.Sprintf("%s (1d%d = %d): %s", giantBoonName(ancestry), b[1].(int), roll, t)
 		} else {
-			mod := applyDamageResistance(targetID, roll, dtype)
-			db.Exec(`UPDATE characters SET hp = GREATEST(hp - $1, 0) WHERE id = $2`, mod.FinalDamage, targetID)
-			res["damage_applied"] = mod.FinalDamage
-			text = fmt.Sprintf("%s (1d%d = %d): %s takes %d %s damage.", giantBoonName(ancestry), b[1].(int), roll, name, mod.FinalDamage, dtype)
+			d, err := damageHP(targetID, oneHit(roll, dtype)) // the Hit Point owner (hit_points_2024.go)
+			if err != nil {
+				return "", nil
+			}
+			res["damage_applied"] = d.Dealt
+			text = fmt.Sprintf("%s (1d%d = %d): %s %s.", giantBoonName(ancestry), b[1].(int), roll, name, d.Sentence(dtype))
 		}
 		if ancestry == "frost" {
 			addCombatEffect(lobbyID, targetID, charID, "chilled")
@@ -346,10 +348,11 @@ func dealBoonDamage(targetID int, dice, sides int, damageType string) (map[strin
 	if targetID > 0 {
 		var name string
 		if db.QueryRow(`SELECT name FROM characters WHERE id = $1`, targetID).Scan(&name) == nil {
-			mod := applyDamageResistance(targetID, total, damageType)
-			db.Exec(`UPDATE characters SET hp = GREATEST(hp - $1, 0) WHERE id = $2`, mod.FinalDamage, targetID)
 			res["target"] = name
-			res["damage_applied"] = mod.FinalDamage
+			if d, err := damageHP(targetID, oneHit(total, damageType)); err == nil { // the Hit Point owner (hit_points_2024.go)
+				res["damage_applied"] = d.Dealt
+				res["hp"] = d.After.HP
+			}
 		} else {
 			res["note"] = "Target is not a player character: the GM applies the damage."
 		}
@@ -524,11 +527,7 @@ func handleSpeciesAbility(w http.ResponseWriter, r *http.Request) {
 		setEffect(10 * time.Minute)
 		resp["effect"] = "Tremorsense with a range of 60 feet for 10 minutes. You must be on or touching a stone surface (natural or worked)."
 	case key == "adrenaline_rush":
-		newTemp := temp
-		if pb > newTemp { // temporary Hit Points do not add together
-			newTemp = pb
-		}
-		db.Exec(`UPDATE characters SET temp_hp = $1 WHERE id = $2`, newTemp, req.CharacterID)
+		newTemp := grantTempHP(req.CharacterID, pb) // temporary Hit Points do not add together
 		resp["effect"] = fmt.Sprintf("You take the Dash action as a bonus action and gain %d Temporary Hit Points (you now have %d).", pb, newTemp)
 		resp["temp_hp"] = newTemp
 	case key == "large_form":
@@ -571,8 +570,10 @@ func handleSpeciesAbility(w http.ResponseWriter, r *http.Request) {
 				if heal > req.DamageTaken {
 					heal = req.DamageTaken
 				}
-				db.Exec(`UPDATE characters SET hp = LEAST(hp + $1, max_hp) WHERE id = $2`, heal, req.CharacterID)
-				resp["hp_restored"] = heal
+				if v, err := undoDamage(req.CharacterID, heal, 0, true, false); err == nil { // damage taken back, not healing (no return from death)
+					resp["hp_restored"] = heal
+					resp["hp"] = v.HP
+				}
 			}
 		}
 	}

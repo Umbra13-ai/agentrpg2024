@@ -78,7 +78,7 @@ func addExhaustion(charID, n int) string {
 	var level int
 	db.QueryRow(`UPDATE characters SET exhaustion_level = GREATEST(0, LEAST(6, COALESCE(exhaustion_level,0) + $1)) WHERE id = $2 RETURNING exhaustion_level`, n, charID).Scan(&level)
 	if level >= 6 {
-		db.Exec(`UPDATE characters SET hp = 0, is_dead = true WHERE id = $1`, charID)
+		killCharacter(charID) // the Hit Point owner (hit_points_2024.go)
 		return "Exhaustion level 6: the creature dies."
 	}
 	return fmt.Sprintf("Exhaustion level %d.", level)

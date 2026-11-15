@@ -89,7 +89,7 @@ func applyLevelGain(charID, oldLevel, newLevel int, how string) (int, int, strin
 	}
 	// applied only while the character is still at oldLevel: two gains at once (an XP award and a level-up, two awards) give the
 	// level once; XP is never lowered (audit B-18, D-2)
-	res, err := db.Exec(`UPDATE characters SET level = $1, hp = hp + $2, max_hp = max_hp + $2, pending_asi = COALESCE(pending_asi,0) + $3,
+	res, err := db.Exec(`UPDATE characters SET level = $1, `+maxHPChange("$2", true)+`, pending_asi = COALESCE(pending_asi,0) + $3,
 		xp = GREATEST(COALESCE(xp, 0), $4) WHERE id = $5 AND COALESCE(level, 1) = $6`, newLevel, hp, asi, xp, charID, oldLevel)
 	if err != nil {
 		return 0, 0, ""

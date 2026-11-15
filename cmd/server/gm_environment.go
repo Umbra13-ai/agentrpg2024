@@ -236,55 +236,35 @@ func handleGMFallingDamage(w http.ResponseWriter, r *http.Request) {
 		damageAfterSlowFall = 0
 	}
 
-	// Apply damage resistance if character has bludgeoning resistance (e.g., petrified)
-	damageResult := applyDamageResistance(req.CharacterID, damageAfterSlowFall, "bludgeoning")
-	finalDamage := damageResult.FinalDamage
-
-	// Apply the damage
-	newHP := currentHP - finalDamage
-	if newHP < 0 {
-		newHP = 0
-	}
-
-	// Check Barbarian Relentless Rage first (requires CON save)
-	relentlessTriggered := false
-	relentlessMsg := ""
-	if newHP == 0 {
-		relentlessHP, relentlessUsed, msg := checkRelentlessRage(req.CharacterID, currentHP, finalDamage, maxHP)
-		if relentlessUsed {
-			newHP = relentlessHP
-			relentlessTriggered = true
-			relentlessMsg = msg
-		} else if msg != "" {
-			// Save failed, still add the message
-			relentlessMsg = msg
-		}
-	}
-
-	// Check Orc Relentless Endurance (automatic, no save)
-	if newHP == 0 {
-		relentlessHP, relentlessUsed, msg := checkRelentlessEndurance(req.CharacterID, currentHP, finalDamage, maxHP)
-		if relentlessUsed {
-			newHP = relentlessHP
-			relentlessTriggered = true
-			relentlessMsg = msg
-		}
-	}
-
-	_, err = db.Exec("UPDATE characters SET hp = $1 WHERE id = $2", newHP, req.CharacterID)
+	// The damage goes through the Hit Point owner (hit_points_2024.go): resistance, Temporary Hit Points, dropping to 0 (Relentless
+	// Rage, Relentless Endurance, Death Ward), damage at 0, Instant Death and Concentration. Before Nov 15 2026 this request wrote the
+	// Hit Points itself and skipped all but resistance and the two Relentless features.
+	fall, err := damageHP(req.CharacterID, oneHit(damageAfterSlowFall, "bludgeoning"))
 	if err != nil {
-		w.WriteHeader(http.StatusInternalServerError)
-		json.NewEncoder(w).Encode(map[string]interface{}{"error": "failed_to_update_hp"})
+		if answerDBFailure(w, err, "the character") {
+			return
+		}
+		w.WriteHeader(http.StatusBadRequest)
+		json.NewEncoder(w).Encode(map[string]interface{}{"error": "character_not_found"})
 		return
 	}
+	finalDamage, newHP := fall.Dealt, fall.After.HP
+	view := fall.View()
+	resistances, resisted := view["resistances_applied"]
 
 	// Determine consequence
 	consequence := ""
-	if relentlessTriggered {
-		consequence = relentlessMsg
-	} else if newHP == 0 {
+	switch {
+	case fall.Status == "relentless_rage" || fall.Status == "relentless_endurance" || fall.Status == "death_ward" || fall.Status == "gift_of_the_protectors":
+		consequence = fmt.Sprint(view["message"])
+	case fall.After.Dead:
+		consequence = "💀 " + fmt.Sprint(view["message"])
+	case newHP == 0:
 		consequence = "💀 Character is unconscious and must make death saving throws!"
-	} else if newHP <= maxHP/4 {
+		if m, ok := view["message"].(string); ok && fall.Before.HP <= 0 {
+			consequence = "💀 " + m
+		}
+	case newHP <= maxHP/4:
 		consequence = "⚠️ Character is badly hurt!"
 	}
 
@@ -300,7 +280,7 @@ func handleGMFallingDamage(w http.ResponseWriter, r *http.Request) {
 	if slowFallUsed {
 		actionResult += fmt.Sprintf(" (Slow Fall: -%d)", slowFallReduction)
 	}
-	if damageResult.WasHalved {
+	if resisted {
 		actionResult += " (halved due to resistance)"
 	}
 
@@ -324,10 +304,17 @@ func handleGMFallingDamage(w http.ResponseWriter, r *http.Request) {
 		"raw_damage":       totalDamage,
 		"damage_type":      "bludgeoning",
 		"final_damage":     finalDamage,
-		"previous_hp":      currentHP,
+		"previous_hp":      fall.Before.HP,
 		"current_hp":       newHP,
+		"temp_hp":          fall.After.Temp,
 		"max_hp":           maxHP,
+		"status":           fall.Status,
 		"message":          message,
+	}
+	for _, k := range []string{"temp_hp_absorbed", "death_save_failures", "concentration", "concentration_kept", "class_feature_note", "racial_feature_note", "relentless_rage", "relentless_rage_failed", "relentless_endurance", "wild_shape_ended"} {
+		if v, ok := view[k]; ok {
+			response[k] = v
+		}
 	}
 
 	// Add Slow Fall info if used
@@ -340,9 +327,9 @@ func handleGMFallingDamage(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 
-	if damageResult.WasHalved {
+	if resisted {
 		response["resistance_applied"] = true
-		response["resistances"] = damageResult.Resistances
+		response["resistances"] = resistances
 	}
 
 	if consequence != "" {

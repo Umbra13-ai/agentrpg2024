@@ -10,11 +10,9 @@ package main
 // Without a known target the old behaviour remains: the roll and the damage if it hits.
 
 import (
-	"bytes"
 	"encoding/json"
 	"fmt"
 	"net/http"
-	"net/http/httptest"
 	"regexp"
 	"strconv"
 	"strings"
@@ -344,37 +342,18 @@ func resolveMonsterAttack(r *http.Request, campaignID int, monster, action, targ
 			line += fmt.Sprintf(" [Shield of Missile Attraction: Resistance to Ranged weapon damage, %d halved]", before)
 		}
 		if apply {
-			var lastHP interface{}
 			hpB, tempB, deadB, concB := characterVitals(tid) // for a Shield cast in reply to this hit (reactions_2024.go)
+			// one hit is one source (hit_points_2024.go): one Concentration save, its DC from the whole damage taken, and at 0 Hit
+			// Points one Death Saving Throw failure, two from a Critical Hit (F93)
+			hit := hpHit{Critical: crit}
 			for i, p := range parts {
-				part := map[string]interface{}{"damage": amounts[i], "damage_type": strings.ToLower(p.Type)}
-				if i == 0 { // one hit is one source: one Concentration save, its DC from the whole damage
-					sum := 0
-					for _, n := range amounts {
-						sum += n
-					}
-					part["concentration_damage"] = sum
-					part["critical"] = crit // at 0 Hit Points a Critical Hit is two death save failures (F93)
-				} else {
-					part["skip_concentration"] = true
-					part["same_hit"] = true // one failure per hit at 0 Hit Points
-				}
-				body, _ := json.Marshal(part)
-				rr := httptest.NewRecorder()
-				rq := httptest.NewRequest(http.MethodPost, "/", bytes.NewReader(body))
-				rq.Header = r.Header.Clone()
-				handleDamage(rr, rq, tid)
-				var out map[string]interface{}
-				json.Unmarshal(rr.Body.Bytes(), &out)
-				if hp, ok := out["hp"]; ok {
-					lastHP = hp
-				}
-				if c, ok := out["concentration"].(string); ok {
+				hit.Parts = append(hit.Parts, hpPart{amounts[i], strings.ToLower(p.Type)})
+			}
+			if d, err := damageHP(tid, hit); err == nil {
+				if c, ok := d.View()["concentration"].(string); ok {
 					line += " [" + c + "]" // the Concentration save the damage called for (F55)
 				}
-			}
-			if lastHP != nil {
-				line += fmt.Sprintf(" (%s now has %v HP)", tname, lastHP)
+				line += fmt.Sprintf(" (%s now has %d HP)", tname, d.After.HP)
 			}
 			hpA, tempA, _, concA := characterVitals(tid)
 			noteMonsterHit(campaignID, tid, monsterHit{Attacker: attackerName, Attack: a.Name, Total: total, AC: ac, Auto: autoHitRe.MatchString(a.Desc),

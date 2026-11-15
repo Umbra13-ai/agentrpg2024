@@ -76,7 +76,10 @@ func monkInitiativeFeatures(charID int, name, class string, level int) string {
 	if !usedMeta {
 		// Uncanny Metabolism: all Focus Points back, and heal the Martial Arts die + Monk level
 		heal := game.RollDie(game.MartialArtsDie(level)) + level
-		db.Exec(`UPDATE characters SET uncanny_metabolism_used = true, hp = LEAST(max_hp, hp + $1) WHERE id = $2`, heal, charID)
+		db.Exec(`UPDATE characters SET uncanny_metabolism_used = true WHERE id = $1`, charID)
+		if h, err := healHP(charID, heal); err == nil { // the Hit Point owner (hit_points_2024.go)
+			heal = h.Healed
+		}
 		restoreAllFocus(charID)
 		return fmt.Sprintf("🥋 %s: Uncanny Metabolism: all Focus Points regained and %d Hit Points healed", name, heal)
 	}

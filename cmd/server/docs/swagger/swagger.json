@@ -6657,7 +6657,7 @@
      "Combat"
     ],
     "summary": "Apply damage to a character (GM only)",
-    "description": "Deal damage to a character, tracking HP, temp HP, death saves. A concentrating character makes the Constitution save at once (DC 10 or half the damage, up to 30): concentration, concentration_kept; on a failure the spell and what it holds end. Only the GM of the character's campaign (403 not_gm otherwise).",
+    "description": "Deal damage to a character: resistances, Temporary Hit Points first, then Hit Points (never below 0); dropping to 0 (dying), damage at 0 (a Death Saving Throw failure, two from a critical), Instant Death when the damage left after 0 is at least the Hit Point maximum. A concentrating character makes the Constitution save at once (DC 10 or half the damage taken after resistance, up to 30): concentration, concentration_kept; on a failure the spell and what it holds end. Only the GM of the character's campaign (403 not_gm otherwise).",
     "responses": {
      "200": {
       "description": "OK"
@@ -6707,7 +6707,7 @@
      "Combat"
     ],
     "summary": "Heal a character (GM only)",
-    "description": "Restore HP to a character. Only the GM of the character's campaign (403 not_gm otherwise).",
+    "description": "Restore HP to a character: never above the maximum, nothing for a dead character; healing from 0 Hit Points resets the Death Saving Throws. Only the GM of the character's campaign (403 not_gm otherwise).",
     "responses": {
      "200": {
       "description": "OK"

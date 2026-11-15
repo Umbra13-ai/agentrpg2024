@@ -372,56 +372,30 @@ func handleGMAoECast(w http.ResponseWriter, r *http.Request) {
 		// Apply damage to characters or monsters
 		if damage > 0 {
 			if targetID > 0 {
-				// Character - apply condition-based resistance
-				dmgMod := applyDamageResistance(targetID, damage, damageType)
-				if dmgMod.WasHalved || dmgMod.WasNegated {
-					damage = dmgMod.FinalDamage
-					result["resistances_applied"] = dmgMod.Resistances
-					if dmgMod.WasNegated {
-						result["immunities_applied"] = dmgMod.Immunities
+				// Character: the Hit Point owner (hit_points_2024.go) applies resistance and immunity, Temporary Hit Points, dropping to 0
+				// (Relentless Rage and Endurance, Death Ward), damage at 0, Instant Death and Concentration. Before Nov 15 2026 this path
+				// wrote the Hit Points itself and skipped Temporary Hit Points, the 0 Hit Point rules and Concentration.
+				d, err := damageHP(targetID, oneHit(damage, damageType))
+				if err != nil {
+					result["error"] = notFoundOrDBError(err, "character_not_found")
+					results = append(results, result)
+					continue
+				}
+				view := d.View()
+				for _, k := range []string{"resistances_applied", "temp_hp_absorbed", "status", "message", "death_save_failures", "concentration", "concentration_kept", "relentless_rage", "relentless_rage_failed", "class_feature_note", "relentless_endurance", "racial_feature_note"} {
+					if v, ok := view[k]; ok {
+						result[k] = v
 					}
 				}
-
-				newHP := targetHP - damage
-				if newHP < 0 {
-					newHP = 0
-				}
-
-				var charMaxHP int
-				db.QueryRow("SELECT max_hp FROM characters WHERE id = $1", targetID).Scan(&charMaxHP)
-
-				// Check Barbarian Relentless Rage first (requires CON save)
-				if newHP == 0 {
-					relentlessHP, relentlessUsed, relentlessMsg := checkRelentlessRage(targetID, targetHP, damage, charMaxHP)
-					if relentlessUsed {
-						newHP = relentlessHP
-						result["relentless_rage"] = true
-						result["class_feature_note"] = relentlessMsg
-					} else if relentlessMsg != "" {
-						// Save failed, add the message
-						result["relentless_rage_failed"] = true
-						result["class_feature_note"] = relentlessMsg
-					}
-				}
-
-				// Check Orc Relentless Endurance (automatic, no save)
-				if newHP == 0 {
-					relentlessHP, relentlessUsed, relentlessMsg := checkRelentlessEndurance(targetID, targetHP, damage, charMaxHP)
-					if relentlessUsed {
-						newHP = relentlessHP
-						result["relentless_endurance"] = true
-						result["racial_feature_note"] = relentlessMsg
-					}
-				}
-
-				db.Exec(`UPDATE characters SET hp = $1 WHERE id = $2`, newHP, targetID)
-				result["hp_before"] = targetHP
-				result["hp_after"] = newHP
+				damage = d.Dealt
+				result["hp_before"] = d.Before.HP
+				result["hp_after"] = d.After.HP
+				result["temp_hp"] = d.After.Temp
 				result["damage"] = damage // Update with resisted damage
 				totalDamageDealt += damage
 
 				// Check for kill effects when target drops to 0 HP
-				if newHP == 0 && req.CasterID > 0 {
+				if d.Down && req.CasterID > 0 {
 					if killEffects := applyKillEffects(req.CasterID); killEffects != nil {
 						result["kill_effects"] = killEffects
 					}

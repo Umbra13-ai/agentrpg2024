@@ -481,7 +481,7 @@ func resolveEffectSpell(charID int, spell SRDSpell, spellKey string, slotLevel, 
 						freed = " The Frightened condition ends."
 					}
 				}
-				db.Exec(`UPDATE characters SET temp_hp = GREATEST(COALESCE(temp_hp,0), $1) WHERE id = $2`, mod, id)
+				grantTempHP(id, mod)
 			}
 			db.Exec(`DELETE FROM condition_records WHERE lobby_id = $1 AND target_id = $2 AND condition = 'frightened'`, lobby, id)
 			if id > 0 {
@@ -726,7 +726,7 @@ func spellTurnStart(charID int) {
 			db.Exec(`UPDATE characters SET movement_remaining = 0 WHERE id = $1`, charID)
 		case "heroism":
 			if n, _ := strconv.Atoi(e.Detail); n > 0 {
-				db.Exec(`UPDATE characters SET temp_hp = GREATEST(COALESCE(temp_hp,0), $1) WHERE id = $2`, n, charID)
+				grantTempHP(charID, n)
 			}
 		}
 	}

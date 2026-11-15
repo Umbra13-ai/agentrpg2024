@@ -957,7 +957,7 @@ func usePotion(lobbyID, drinkerID, targetID int, it invItem) string {
 		}
 		return fmt.Sprintf("🧪 %s: %s = %d Hit Points (%d → %d).", label, dice, amount, before, after)
 	case "potion of heroism":
-		db.Exec(`UPDATE characters SET temp_hp = GREATEST(COALESCE(temp_hp,0), 10) WHERE id = $1`, targetID)
+		grantTempHP(targetID, 10)
 		addSpellEffect(lobbyID, targetID, targetID, "Potion of Heroism", "bless", "", 600, "", 0)
 		return fmt.Sprintf("🧪 %s: 10 Temporary Hit Points for 1 hour, and the effect of Bless for 1 hour (no Concentration).", label)
 	case "giant strength":

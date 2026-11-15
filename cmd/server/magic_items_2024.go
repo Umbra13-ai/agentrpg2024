@@ -245,7 +245,10 @@ func conHitPoints(charID int, col string, from, to int) {
 	if d == 0 {
 		return
 	}
-	db.Exec(`UPDATE characters SET max_hp = GREATEST(1, max_hp + $1 * level), hp = GREATEST(0, LEAST(max_hp + $1 * level, hp + $1 * level)) WHERE id = $2`, d, charID)
+	var level int
+	if db.QueryRow(`SELECT level FROM characters WHERE id = $1`, charID).Scan(&level) == nil {
+		changeMaxHP(charID, d*level, true) // the Hit Point owner (hit_points_2024.go)
+	}
 }
 
 // minInt is the smaller of two ints.

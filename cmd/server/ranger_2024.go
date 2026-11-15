@@ -160,7 +160,7 @@ func tireless(charID int) string {
 		if hp < 1 {
 			hp = 1
 		}
-		db.Exec(`UPDATE characters SET temp_hp = GREATEST(COALESCE(temp_hp,0), $1) WHERE id = $2`, hp, charID)
+		grantTempHP(charID, hp)
 		return fmt.Sprintf("🌿 Tireless: you gain %d Temporary Hit Points.", hp)
 	})
 }

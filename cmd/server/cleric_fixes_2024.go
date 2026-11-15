@@ -153,13 +153,9 @@ func auraOfLifeRevives(lobby, id int) string {
 	if id <= 0 || !auraOfLifeCovers(lobby, id) {
 		return ""
 	}
-	var hp int
-	var dead bool
-	if db.QueryRow(`SELECT hp, COALESCE(is_dead,false) FROM characters WHERE id = $1`, id).Scan(&hp, &dead) != nil || dead || hp > 0 {
+	if h, err := healHP(id, 1, healOnlyAtZero()); err != nil || !h.Woke { // the Hit Point owner: only at 0 and alive
 		return ""
 	}
-	db.Exec(`UPDATE characters SET hp = 1, is_stable = false, death_save_successes = 0, death_save_failures = 0 WHERE id = $1`, id)
-	removeCondition(id, "unconscious")
 	return fmt.Sprintf("Aura of Life: %s starts their turn in the aura at 0 Hit Points and regains 1 Hit Point.", creatureName(lobby, id))
 }
 
@@ -197,7 +193,7 @@ func divineWord(charID, lobby int, saveDC int, targets []int) string {
 		case hp <= 20:
 			effect = "dies"
 			if id > 0 {
-				db.Exec(`UPDATE characters SET hp = 0, is_dead = true, is_stable = false WHERE id = $1`, id)
+				killCharacter(id) // the Hit Point owner (hit_points_2024.go)
 			} else {
 				editMonsterEntry(lobby, id, func(e map[string]interface{}) { e["hp"] = 0 })
 			}
@@ -267,8 +263,14 @@ func reviveSpell(charID, lobby int, key string, spell SRDSpell, targets []int) s
 		if r.Full {
 			hp = max
 		}
-		db.Exec(`UPDATE characters SET hp = $1, is_dead = false, is_stable = false, death_save_successes = 0, death_save_failures = 0, temp_hp = 0 WHERE id = $2`, hp, id)
-		removeCondition(id, "unconscious")
+		if revived, err := reviveCharacter(id, hp); err != nil || !revived { // the Hit Point owner (hit_points_2024.go)
+			if err != nil {
+				lines = append(lines, name+": the spell couldn't be applied ("+notFoundOrDBError(err, "no such character")+")")
+			} else {
+				lines = append(lines, name+" isn't dead, so the spell does nothing for them")
+			}
+			continue
+		}
 		db.Exec(`DELETE FROM condition_records WHERE target_id = $1 AND condition IN ('unconscious','poisoned')`, id)
 		syncListFromRecords(id)
 		line := fmt.Sprintf("%s returns to life with %d Hit Point%s (dead %s: the GM confirms)", name, hp, map[bool]string{true: "", false: "s"}[hp == 1], r.Limit)

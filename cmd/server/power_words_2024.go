@@ -135,8 +135,7 @@ func powerWordOn(lobby int, spellKey string, id, saveDC int) string {
 			if id < 0 {
 				setMonsterHP(lobby, id, 0)
 			} else {
-				db.Exec(`UPDATE characters SET hp = 0, is_dead = true, is_stable = false WHERE id = $1`, id)
-				endWildShapeIfDown(id)
+				killCharacter(id) // the Hit Point owner: dead at 0 Hit Points, and what that ends (Wild Shape, Concentration)
 			}
 			return name + " dies (it had 100 Hit Points or fewer)."
 		}

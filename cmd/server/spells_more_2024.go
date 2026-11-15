@@ -1229,7 +1229,7 @@ func moreSpellEnds(kind string, targetID int, detail string) string {
 			return ""
 		}
 		if targetID > 0 {
-			db.Exec(`UPDATE characters SET temp_hp = 0 WHERE id = $1`, targetID) // the beast's Temporary Hit Points vanish
+			loseTempHP(targetID) // the beast's Temporary Hit Points vanish (temp_hp_2024.go)
 			return leaveWildShape(targetID, "Polymorph ends")
 		}
 	case "enlarge_reduce":

@@ -211,21 +211,18 @@ func handleGMPreserveLife(w http.ResponseWriter, r *http.Request) {
 			continue
 		}
 
-		// Calculate maximum we can heal to (half HP)
-		maxHealable := halfMax - currentHP
-		if actualHeal > maxHealable {
-			actualHeal = maxHealable
+		// Apply healing (the Hit Point owner, hit_points_2024.go: not above half the maximum; from 0 the Death Saving Throws reset)
+		healed, err := healHP(h.TargetID, actualHeal, healUpToHalf())
+		if err != nil {
+			result["error"] = notFoundOrDBError(err, "target_not_found")
+			results = append(results, result)
+			continue
+		}
+		currentHP, actualHeal = healed.Before.HP, healed.Healed
+		newHP := healed.After.HP
+		if actualHeal < h.Amount {
 			result["capped_at_half"] = true
 		}
-
-		// Apply healing
-		newHP := currentHP + actualHeal
-		if newHP > halfMax {
-			newHP = halfMax
-			actualHeal = halfMax - currentHP
-		}
-
-		db.Exec(`UPDATE characters SET hp = $1 WHERE id = $2`, newHP, h.TargetID)
 
 		result["healed"] = actualHeal
 		result["hp_after"] = newHP

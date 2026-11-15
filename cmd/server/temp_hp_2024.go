@@ -10,12 +10,17 @@ package main
 
 import "fmt"
 
-// grantTempHP gives a character Temporary Hit Points, keeping the larger pool, and returns the pool it has afterwards.
+// grantTempHP gives a character Temporary Hit Points, keeping the larger pool, and returns the pool it has afterwards: the one
+// grant of Temporary Hit Points (with the Hit Point owner, hit_points_2024.go), one statement, so two grants at once keep the larger.
 func grantTempHP(charID, n int) int {
-	db.Exec(`UPDATE characters SET temp_hp = GREATEST(COALESCE(temp_hp,0), $1) WHERE id = $2`, n, charID)
 	var now int
-	db.QueryRow(`SELECT COALESCE(temp_hp,0) FROM characters WHERE id = $1`, charID).Scan(&now)
+	db.QueryRow(`UPDATE characters SET temp_hp = GREATEST(COALESCE(temp_hp,0), $1) WHERE id = $2 RETURNING temp_hp`, n, charID).Scan(&now)
 	return now
+}
+
+// loseTempHP ends a character's Temporary Hit Points (a Polymorph's beast form ends).
+func loseTempHP(charID int) {
+	db.Exec(`UPDATE characters SET temp_hp = 0 WHERE id = $1`, charID)
 }
 
 // falseLifeCast resolves False Life (Self).

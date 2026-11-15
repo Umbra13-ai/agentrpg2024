@@ -824,7 +824,7 @@ func sunCardDawn(charID int) string {
 	if !deckBoon(charID, "sun") {
 		return ""
 	}
-	db.Exec(`UPDATE characters SET temp_hp = GREATEST(COALESCE(temp_hp,0), 10) WHERE id = $1`, charID)
+	grantTempHP(charID, 10)
 	return "the Sun card gives 10 Temporary Hit Points"
 }
 

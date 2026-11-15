@@ -130,7 +130,7 @@ func patientDefense(charID int, description string) string {
 	text := fmt.Sprintf("🛡️ Patient Defense: 1 Focus Point spent (%d left); you take Disengage and Dodge: attacks against you have Disadvantage until your next turn.", left)
 	if level >= 10 { // Heightened Focus
 		t := game.RollDamage(martialArtsRolls(level, 2), false)
-		db.Exec(`UPDATE characters SET temp_hp = GREATEST(COALESCE(temp_hp,0), $1) WHERE id = $2`, t, charID)
+		grantTempHP(charID, t)
 		text += fmt.Sprintf(" Heightened Focus: you gain %d Temporary Hit Points.", t)
 	}
 	return text

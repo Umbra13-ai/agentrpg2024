@@ -159,7 +159,7 @@ func handleCharacterASI(w http.ResponseWriter, r *http.Request, charID int) {
 		newMod := game.Modifier(scoreNow)
 		if newMod > oldMod {
 			hpIncrease := levelNow * (newMod - oldMod)
-			db.Exec(`UPDATE characters SET max_hp = max_hp + $1, hp = hp + $1 WHERE id = $2`, hpIncrease, charID)
+			changeMaxHP(charID, hpIncrease, true) // the Hit Point owner (hit_points_2024.go)
 		}
 	}
 
@@ -494,8 +494,7 @@ func handleCharacterFeat(w http.ResponseWriter, r *http.Request, charID int) {
 	// Apply Tough feat HP bonus
 	if featSlug == "tough" {
 		hpBonus := level * 2
-		updates = append(updates, fmt.Sprintf("max_hp = max_hp + $%d", argIndex))
-		updates = append(updates, fmt.Sprintf("hp = hp + $%d", argIndex))
+		updates = append(updates, maxHPChange(fmt.Sprintf("$%d", argIndex), true)) // the Hit Point owner's rule (hit_points_2024.go)
 		args = append(args, hpBonus)
 		argIndex++
 	}
@@ -783,7 +782,7 @@ func handleCharacterSubclass(w http.ResponseWriter, r *http.Request) {
 				if bonusStr, ok := getSubclassMechanic(slug2, clsLevel, "bonus_hp_per_level"); ok { // Draconic Resilience: +1 HP per Sorcerer level
 					if b, err := strconv.Atoi(bonusStr); err == nil && b > 0 {
 						hpBonus = b * clsLevel
-						db.Exec("UPDATE characters SET hp = hp + $1, max_hp = max_hp + $1 WHERE id = $2", hpBonus, req.CharacterID)
+						changeMaxHP(req.CharacterID, hpBonus, true) // the Hit Point owner (hit_points_2024.go)
 					}
 				}
 				refreshStoredAC(req.CharacterID)
@@ -905,7 +904,7 @@ func handleCharacterSubclass(w http.ResponseWriter, r *http.Request) {
 			bonus, err := strconv.Atoi(bonusStr)
 			if err == nil && bonus > 0 {
 				hpBonusApplied = bonus * level
-				db.Exec("UPDATE characters SET hp = hp + $1, max_hp = max_hp + $1 WHERE id = $2", hpBonusApplied, req.CharacterID)
+				changeMaxHP(req.CharacterID, hpBonusApplied, true) // the Hit Point owner (hit_points_2024.go)
 			}
 		}
 
@@ -1274,7 +1273,7 @@ func takeClassLevel(w http.ResponseWriter, r *http.Request) {
 	// so a level-up sent twice (or with an XP award) is taken once; Hit Points are added to what they are now (audit D-2).
 	res, err := db.Exec(`
 		UPDATE characters 
-		SET level = $1, class_levels = $2, hp = hp + $3, max_hp = max_hp + $3,
+		SET level = $1, class_levels = $2, `+maxHPChange("$3", true)+`,
 		    pending_asi = COALESCE(pending_asi, 0) + $4,
 		    armor_proficiencies = $5, weapon_proficiencies = $6
 		WHERE id = $7 AND COALESCE(level, 1) = $8

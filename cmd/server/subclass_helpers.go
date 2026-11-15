@@ -4,10 +4,39 @@ import (
 	"database/sql"
 	"encoding/json"
 	"fmt"
+	"github.com/agentrpg/agentrpg/game"
 	"strconv"
 	"strings"
-	"github.com/agentrpg/agentrpg/game"
 )
+
+// survivorRegen: a Champion of level 18 (Survivor) who starts a turn with at least 1 Hit Point and no more than half of them
+// regains 5 + its Constitution modifier (at least 1), through the Hit Point owner. It returns the reply's survivor_regen, or nil.
+// The three turn-advance paths each had their own copy until Nov 15 2026.
+func survivorRegen(charID int, name string) map[string]interface{} {
+	var subclass string
+	var level, hp, maxHP, con int
+	if db.QueryRow(`SELECT COALESCE(subclass, ''), level, hp, max_hp, con FROM characters WHERE id = $1`, charID).
+		Scan(&subclass, &level, &hp, &maxHP, &con) != nil || subclass != "champion" || level < 18 || hp <= 0 || hp > maxHP/2 {
+		return nil
+	}
+	if _, ok := getSubclassMechanic("champion", level, "survivor_regen"); !ok {
+		return nil
+	}
+	conMod := game.Modifier(con)
+	heal := max(1, 5+conMod)
+	h, err := healHP(charID, heal)
+	if err != nil {
+		return nil
+	}
+	return map[string]interface{}{
+		"feature":     "Survivor",
+		"healed":      h.Healed,
+		"previous_hp": h.Before.HP,
+		"new_hp":      h.After.HP,
+		"max_hp":      h.After.Max,
+		"message":     fmt.Sprintf("⚔️ Survivor: %s regenerates %d HP at start of turn (5 + CON %+d)", name, heal, conMod),
+	}
+}
 
 // hasFightingStyle checks if a character has a specific fighting style
 // getSacredWeaponBonus returns the Sacred Weapon attack bonus and a note if active
@@ -433,7 +462,7 @@ func applyKillEffects(killerCharID int) map[string]interface{} {
 
 			// Only update if new temp HP is higher than current (temp HP doesn't stack)
 			if tempHP > currentTempHP {
-				db.Exec("UPDATE characters SET temp_hp = $1 WHERE id = $2", tempHP, killerCharID)
+				grantTempHP(killerCharID, tempHP)
 				return map[string]interface{}{
 					"feature":        "Dark One's Blessing",
 					"temp_hp_gained": tempHP,

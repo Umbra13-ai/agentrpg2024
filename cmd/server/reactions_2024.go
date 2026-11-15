@@ -102,13 +102,13 @@ func shieldReaction(charID int) string {
 	}
 	if len(undone) == len(hits) { // every hit misses now: back to before the first one
 		f, last := hits[0], hits[len(hits)-1]
-		db.Exec(`UPDATE characters SET hp = $1, temp_hp = $2, is_dead = $3 WHERE id = $4`, f.HPBefore, f.TempBefore, f.DeadBefore, charID)
+		undoDamage(charID, f.HPBefore, f.TempBefore, f.DeadBefore, true) // the Hit Point owner (hit_points_2024.go)
 		if f.ConcBefore != "" && last.ConcAfter == "" {
 			db.Exec(`UPDATE characters SET concentrating_on = $1 WHERE id = $2`, f.ConcBefore, charID)
 			out += " (Your Concentration on " + f.ConcBefore + " comes back: no damage, no save.)"
 		}
 	} else if restore > 0 {
-		db.Exec(`UPDATE characters SET hp = LEAST(max_hp, hp + $1), is_dead = false WHERE id = $2`, restore, charID)
+		undoDamage(charID, restore, 0, hits[0].DeadBefore, false) // the Hit Point owner (hit_points_2024.go)
 	}
 	if len(undone) > 0 {
 		hp, _, _, _ := characterVitals(charID)

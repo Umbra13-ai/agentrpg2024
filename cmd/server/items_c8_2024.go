@@ -84,7 +84,7 @@ func talismanRebuke(charID int, it invItem, req itemCastReq, good bool) string {
 		setMonsterHP(lobby, req.TargetID, 0)
 		text += "it fails and falls into the fissure: it is destroyed, leaving no remains."
 	default:
-		db.Exec(`UPDATE characters SET hp = 0, is_dead = true WHERE id = $1`, req.TargetID)
+		killCharacter(req.TargetID) // the Hit Point owner (hit_points_2024.go)
 		text += "it fails and falls into the fissure: it is destroyed, leaving no remains."
 	}
 	text += " The fissure closes." + note
