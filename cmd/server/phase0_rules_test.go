@@ -109,16 +109,18 @@ func TestClientIP(t *testing.T) {
 	defer func(v bool) { behindRenderProxy = v }(behindRenderProxy)
 	r := httptest.NewRequest("GET", "/", nil)
 	r.RemoteAddr = "10.0.0.9:5555"
-	r.Header.Set("X-Forwarded-For", "6.6.6.6, 203.0.113.7")
+	// as Render passes a request on (seen on staging, Nov 15 2026)
+	r.Header.Set("X-Forwarded-For", "6.6.6.6, 203.0.113.7, 104.22.93.28, 10.31.159.139")
+	r.Header.Set("CF-Connecting-IP", "203.0.113.7")
 	behindRenderProxy = false
 	if got := clientIP(r); got != "10.0.0.9" {
 		t.Errorf("not behind a proxy: %q, want the connection's address", got)
 	}
 	behindRenderProxy = true
 	if got := clientIP(r); got != "203.0.113.7" {
-		t.Errorf("behind Render: %q, want the entry the proxy added (the last), not the client's own", got)
+		t.Errorf("behind Render: %q, want CF-Connecting-IP (not a forwarded entry the client wrote, not Render's own hop)", got)
 	}
-	r.Header.Set("X-Forwarded-For", "not-an-address")
+	r.Header.Set("CF-Connecting-IP", "not-an-address")
 	if got := clientIP(r); got != "10.0.0.9" {
 		t.Errorf("a malformed header: %q, want the connection's address", got)
 	}

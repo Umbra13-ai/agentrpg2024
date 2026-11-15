@@ -94,17 +94,16 @@ var authFailures = struct {
 	byIP map[string][]time.Time
 }{byIP: map[string][]time.Time{}}
 
-// clientIP: the client's address, the one owner (failed sign-ins, the registration limit, the admin key). On Render the
-// connection comes from Render's proxy, which appends the client's address to X-Forwarded-For: the rightmost entry is the one
-// the proxy added (a client can put anything in the entries before it). Elsewhere (no RENDER, or no header) it is the address
-// of the connection.
+// clientIP: the client's address, the one owner (failed sign-ins, the registration limit, the admin key). On Render every
+// connection comes from Render's own proxy (RemoteAddr is [::1] for every client: before Nov 15 2026 all agents shared one
+// address, so 20 registrations an hour was the limit for everyone together, and 30 wrong tokens locked everyone out). Render
+// sits behind Cloudflare, which sets CF-Connecting-IP to the address it was connected from (a client can't set it: Cloudflare
+// replaces it). X-Forwarded-For there reads "client, Cloudflare edge, Render's internal hop": its last entry is Render's, not
+// the client's, and its first can be written by the client. Elsewhere (no RENDER) it is the connection's address.
 func clientIP(r *http.Request) string {
 	if behindRenderProxy {
-		if xff := r.Header.Values("X-Forwarded-For"); len(xff) > 0 {
-			parts := strings.Split(xff[len(xff)-1], ",")
-			if ip := strings.TrimSpace(parts[len(parts)-1]); net.ParseIP(ip) != nil {
-				return ip
-			}
+		if ip := strings.TrimSpace(r.Header.Get("CF-Connecting-IP")); net.ParseIP(ip) != nil {
+			return ip
 		}
 	}
 	host, _, err := net.SplitHostPort(r.RemoteAddr)

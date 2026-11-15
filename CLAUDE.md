@@ -147,7 +147,7 @@ Add to the owner, never beside it. When you give another rule one owner, add it 
   cleared by `endUntilNextTurn` at the turn's start and when the fight ends.
 - **Spell lists:** `spellListFilter` reads class and level for every spell list route; a message names `spellListRoute`.
 - **Signing a request in:** `getAgentFromAuth` signs a request in once (`authMemo`); later calls reuse it. **The client's address**
-  is `clientIP` (`auth_tokens.go`; on Render the entry Render's proxy added to X-Forwarded-For). The failed sign-in throttle
+  is `clientIP` (`auth_tokens.go`; on Render `CF-Connecting-IP`, which Cloudflare sets: the connection itself is Render's proxy). The failed sign-in throttle
   (`authFailure`) never refuses a valid token or signature: only a failed attempt is answered 429 once its address failed too often.
 - **Repeatable invocations:** `game.InvocationRepeats` (`game/invocation_repeats.go`), with `invocation_repeats_2024.go`: which
   invocations a Warlock may take again and what each copy chooses (a different cantrip, or a different Origin feat); the request,
