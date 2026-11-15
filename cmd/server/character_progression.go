@@ -139,27 +139,26 @@ func handleCharacterASI(w http.ResponseWriter, r *http.Request, charID int) {
 
 	// Apply the ASI
 	// one guarded statement: two requests at once can't both spend the same points or pass the maximum
-	query := fmt.Sprintf(`UPDATE characters SET %s = %s + $1, pending_asi = pending_asi - $1 WHERE id = $2 AND COALESCE(pending_asi, 0) >= $1 AND %s + $1 <= $3`, column, column, column)
-	res, err := db.Exec(query, req.Points, charID, abilityMax)
-	if err != nil {
+	query := fmt.Sprintf(`UPDATE characters SET %s = %s + $1, pending_asi = pending_asi - $1 WHERE id = $2 AND COALESCE(pending_asi, 0) >= $1 AND %s + $1 <= $3 RETURNING %s, COALESCE(level, 1)`, column, column, column, column)
+	var scoreNow, levelNow int
+	err = db.QueryRow(query, req.Points, charID, abilityMax).Scan(&scoreNow, &levelNow)
+	if dbFailed(err) {
 		w.WriteHeader(http.StatusInternalServerError)
 		json.NewEncoder(w).Encode(map[string]interface{}{"error": "database_error"})
 		return
 	}
-	if n, _ := res.RowsAffected(); n == 0 {
+	if err != nil {
 		w.WriteHeader(http.StatusConflict)
 		json.NewEncoder(w).Encode(map[string]interface{}{"error": "asi_changed", "message": "Your ability scores or points changed meanwhile; check them and try again."})
 		return
 	}
 
 	// Also update max_hp if CON was increased (level * CON modifier change)
-	if column == "con" {
-		var level, maxHP int
-		db.QueryRow(`SELECT level, max_hp FROM characters WHERE id = $1`, charID).Scan(&level, &maxHP)
-		oldMod := game.Modifier(currentVal)
-		newMod := game.Modifier(newVal)
+	if column == "con" { // from the score as this statement left it, not as it was read (two requests at once both count)
+		oldMod := game.Modifier(scoreNow - req.Points)
+		newMod := game.Modifier(scoreNow)
 		if newMod > oldMod {
-			hpIncrease := level * (newMod - oldMod)
+			hpIncrease := levelNow * (newMod - oldMod)
 			db.Exec(`UPDATE characters SET max_hp = max_hp + $1, hp = hp + $1 WHERE id = $2`, hpIncrease, charID)
 		}
 	}
@@ -278,6 +277,8 @@ func handleCharacterFeat(w http.ResponseWriter, r *http.Request, charID int) {
 	// One rule decides whether the character can take the feat, and the same rule lists what it can take (feats_2024.go)
 	taker, _ := featTakerOf(charID)
 	held := jsonListOf(charID, "feats")
+	var featsRead string // the feats as read: the feat is recorded only if they and the points are unchanged when it is written
+	db.QueryRow(`SELECT COALESCE(feats, '[]'::jsonb)::text FROM characters WHERE id = $1`, charID).Scan(&featsRead)
 	featSlug, feat, known := findFeat(req.Feat)
 	if !known {
 		featSlug = req.Feat
@@ -502,13 +503,19 @@ func handleCharacterFeat(w http.ResponseWriter, r *http.Request, charID int) {
 	// 2024 Alert adds the Proficiency Bonus to Initiative when it is rolled; nothing is stored here.
 
 	// Add character ID as final arg
-	args = append(args, charID)
-	query := fmt.Sprintf("UPDATE characters SET %s WHERE id = $%d", strings.Join(updates, ", "), argIndex)
+	args = append(args, charID, featsRead, pendingASI)
+	query := fmt.Sprintf("UPDATE characters SET %s WHERE id = $%d AND COALESCE(feats, '[]'::jsonb) = $%d::jsonb AND COALESCE(pending_asi, 0) = $%d",
+		strings.Join(updates, ", "), argIndex, argIndex+1, argIndex+2)
 
-	_, err = db.Exec(query, args...)
+	res, err := db.Exec(query, args...)
 	if err != nil {
 		w.WriteHeader(http.StatusInternalServerError)
 		json.NewEncoder(w).Encode(map[string]interface{}{"error": "database_error", "details": publicError(err)})
+		return
+	}
+	if n, _ := res.RowsAffected(); n == 0 { // another feat or ASI was taken meanwhile (audit D-2)
+		writeJSONStatus(w, http.StatusConflict, map[string]interface{}{"error": "feats_changed",
+			"message": "The character's feats or Ability Score Improvement points changed meanwhile: check the sheet and try again. Nothing was changed."})
 		return
 	}
 	if byLessons {
@@ -873,7 +880,15 @@ func handleCharacterSubclass(w http.ResponseWriter, r *http.Request) {
 		}
 
 		// Apply the subclass
-		_, err = db.Exec("UPDATE characters SET subclass = $1 WHERE id = $2", subclassSlug, req.CharacterID)
+		var res sql.Result
+		res, err = db.Exec("UPDATE characters SET subclass = $1 WHERE id = $2 AND COALESCE(subclass, '') = ''", subclassSlug, req.CharacterID) // chosen once, even when sent twice at once (audit D-2)
+		if err == nil {
+			if n, _ := res.RowsAffected(); n == 0 {
+				writeJSONStatus(w, http.StatusConflict, map[string]interface{}{"error": "subclass_already_chosen",
+					"message": "A subclass was chosen meanwhile: check the sheet. Nothing was changed."})
+				return
+			}
+		}
 		if err != nil {
 			w.WriteHeader(http.StatusInternalServerError)
 			json.NewEncoder(w).Encode(map[string]interface{}{
@@ -1255,13 +1270,15 @@ func takeClassLevel(w http.ResponseWriter, r *http.Request) {
 	// Save changes
 	classLevelsJSON, _ = json.Marshal(classLevels)
 
-	_, err = db.Exec(`
+	// One guarded statement claims the level: it is applied only while the character is still at the level this request read,
+	// so a level-up sent twice (or with an XP award) is taken once; Hit Points are added to what they are now (audit D-2).
+	res, err := db.Exec(`
 		UPDATE characters 
-		SET level = $1, class_levels = $2, hp = $3, max_hp = $4, 
-		    pending_asi = pending_asi + $5,
-		    armor_proficiencies = $6, weapon_proficiencies = $7
-		WHERE id = $8
-	`, newTotalLevel, classLevelsJSON, newHP, newMaxHP, asiEarned, armorProfsStr, weaponProfsStr, req.CharacterID)
+		SET level = $1, class_levels = $2, hp = hp + $3, max_hp = max_hp + $3,
+		    pending_asi = COALESCE(pending_asi, 0) + $4,
+		    armor_proficiencies = $5, weapon_proficiencies = $6
+		WHERE id = $7 AND COALESCE(level, 1) = $8
+	`, newTotalLevel, classLevelsJSON, hpGain, asiEarned, armorProfsStr, weaponProfsStr, req.CharacterID, level)
 
 	if err != nil {
 		w.WriteHeader(http.StatusInternalServerError)
@@ -1269,6 +1286,11 @@ func takeClassLevel(w http.ResponseWriter, r *http.Request) {
 			"error":   "database_error",
 			"message": publicError(err),
 		})
+		return
+	}
+	if n, _ := res.RowsAffected(); n == 0 {
+		writeJSONStatus(w, http.StatusConflict, map[string]interface{}{"error": "level_changed",
+			"message": "The character's level changed meanwhile (another level-up or an XP award): check the sheet and try again. Nothing was changed."})
 		return
 	}
 

@@ -300,11 +300,14 @@ func handleGMAwardXP(w http.ResponseWriter, r *http.Request) {
 			continue
 		}
 
-		newXP := currentXP + req.XP
+		// the XP is added in the database and read back with the level as they are then: two awards at once both count (B-18)
+		var newXP int
+		if err := db.QueryRow(`UPDATE characters SET xp = COALESCE(xp, 0) + $1 WHERE id = $2 RETURNING xp, COALESCE(level, 1)`, req.XP, charID).Scan(&newXP, &currentLevel); err != nil {
+			continue
+		}
 		newLevel := getLevelForXP(newXP)
 		if req.AutoLevel != nil && !*req.AutoLevel && newLevel > currentLevel {
 			// the XP is banked: the player levels up when ready and makes the choices
-			db.Exec(`UPDATE characters SET xp = $1 WHERE id = $2`, newXP, charID)
 			var lob int
 			db.QueryRow(`SELECT COALESCE(lobby_id,0) FROM characters WHERE id = $1`, charID).Scan(&lob)
 			note := fmt.Sprintf("⬆️ %s has enough XP for level %d: take it with POST /api/characters/%d/level-up.", name, currentLevel+1, charID)
@@ -312,12 +315,6 @@ func handleGMAwardXP(w http.ResponseWriter, r *http.Request) {
 				recordGMAction(db, lob, "level_available", note, note)
 			}
 			results = append(results, map[string]interface{}{"character_id": charID, "character_name": name, "xp_gained": req.XP, "total_xp": newXP, "level_available": currentLevel + 1, "note": note})
-			continue
-		}
-
-		// Update character
-		_, err = db.Exec(`UPDATE characters SET xp = $1 WHERE id = $2`, newXP, charID)
-		if err != nil {
 			continue
 		}
 
@@ -332,6 +329,10 @@ func handleGMAwardXP(w http.ResponseWriter, r *http.Request) {
 		if newLevel > currentLevel {
 			// one level-up path for every way a level goes up (level_up_2024.go): Hit Points, ASI points, a public note of the choices
 			hpBonus, asiEarned, note := applyLevelGain(charID, currentLevel, newLevel, "XP award")
+			if note == "" { // the level was taken meanwhile (another award or the player's level-up): the XP counts, no second level
+				results = append(results, result)
+				continue
+			}
 			result["level_up"] = true
 			result["old_level"] = currentLevel
 			result["new_level"] = newLevel

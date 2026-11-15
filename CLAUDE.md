@@ -99,6 +99,11 @@ Add to the owner, never beside it. When you give another rule one owner, add it 
   form spells and monsters are stored in; `lookupSpell` and `game.LookupSubclass`, `game.AbilityKey` and
   `game.FindTool` are built on it. Don't write another fold.
 - **The spells a character already has:** `spellsHeld` (`cmd/server/prepared_spells_2024.go`).
+- **A progression step is claimed once** (level-up, XP award, feat, Ability Score Improvement, subclass): its write is one guarded
+  statement (the level, the points, the feats list or the empty subclass as the request read them), and Hit Points, points and
+  XP are added to what they are then, never overwritten. Two requests at once take the step once; the other gets 409
+  (`level_changed`, `feats_changed`, `asi_changed`, `subclass_already_chosen`). `applyLevelGain` (`level_up_2024.go`) applies a
+  level only while the character is still at the old one. Suite: `progression_race_test.py` (audit AUD-07).
 - **Reading a request's body:** `readRequest` (`cmd/server/request_body_2024.go`) is the only reader. It needs one JSON
   object (an empty body only with `optionalBody()`), reads field names with `game.Key`, refuses an unknown field (also
   inside objects), a wrong type, malformed JSON and data after the object, takes an id that repeats the path's, and
