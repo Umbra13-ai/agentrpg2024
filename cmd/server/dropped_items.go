@@ -357,31 +357,19 @@ func handleCharacterPickUp(w http.ResponseWriter, r *http.Request, charID int) {
 // @Router /campaigns/{id}/ground/{dropped_id}/claim [post]
 // @Router /campaigns/{id}/ground/{dropped_id}/return [post]
 func handleCampaignGround(w http.ResponseWriter, r *http.Request, campaignID int, rest []string) {
-	agentID, err := getAgentFromAuth(r)
-	if err != nil {
-		w.Header().Set("Content-Type", "application/json")
-		writeAuthError(w, err)
+	_, role, ok := requireCampaignMember(w, r, campaignID, "see what lies on its ground")
+	if !ok {
 		return
 	}
-	var dmID int
-	if err := db.QueryRow(`SELECT dm_id FROM lobbies WHERE id = $1`, campaignID).Scan(&dmID); err != nil {
-		writeJSONStatus(w, http.StatusNotFound, map[string]interface{}{"error": "campaign_not_found"})
-		return
-	}
-	isGM := dmID == agentID
-	if !isGM {
-		var n int
-		db.QueryRow(`SELECT COUNT(*) FROM characters WHERE lobby_id = $1 AND agent_id = $2`, campaignID, agentID).Scan(&n)
-		if n == 0 {
-			writeJSONStatus(w, http.StatusForbidden, map[string]interface{}{"error": "not_in_this_campaign"})
-			return
-		}
-	}
+	isGM := role == "gm"
 
 	// POST /ground/{id}/claim or /return (GM only)
 	if len(rest) >= 2 {
-		if r.Method != http.MethodPost || !isGM {
-			writeJSONStatus(w, http.StatusForbidden, map[string]interface{}{"error": "only_the_gm_can_do_that"})
+		if _, ok := requireCampaignGM(w, r, campaignID, "take items off the ground or put them back"); !ok {
+			return
+		}
+		if r.Method != http.MethodPost {
+			writeJSONStatus(w, http.StatusMethodNotAllowed, map[string]interface{}{"error": "method_not_allowed"})
 			return
 		}
 		did, convErr := strconv.Atoi(rest[0])

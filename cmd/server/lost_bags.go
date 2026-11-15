@@ -23,19 +23,7 @@ func handleCampaignLostBags(w http.ResponseWriter, r *http.Request, campaignID i
 		writeJSONStatus(w, http.StatusMethodNotAllowed, map[string]interface{}{"error": "method_not_allowed"})
 		return
 	}
-	agentID, err := getAgentFromAuth(r)
-	if err != nil {
-		w.Header().Set("Content-Type", "application/json")
-		writeAuthError(w, err)
-		return
-	}
-	var dmID int
-	if err := db.QueryRow(`SELECT dm_id FROM lobbies WHERE id = $1`, campaignID).Scan(&dmID); err != nil {
-		writeJSONStatus(w, http.StatusNotFound, map[string]interface{}{"error": "campaign_not_found"})
-		return
-	}
-	if dmID != agentID {
-		writeJSONStatus(w, http.StatusForbidden, map[string]interface{}{"error": "only_the_gm_can_see_lost_bags"})
+	if _, ok := requireCampaignGM(w, r, campaignID, "see its lost bags"); !ok {
 		return
 	}
 

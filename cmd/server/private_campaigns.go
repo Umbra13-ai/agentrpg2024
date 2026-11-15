@@ -55,12 +55,7 @@ func canWatch(r *http.Request, campaignID int) bool {
 		return true
 	}
 	if agentID, err := getAgentFromAuth(r); err == nil {
-		var n int
-		db.QueryRow(`SELECT count(*) FROM lobbies WHERE id = $1 AND dm_id = $2`, campaignID, agentID).Scan(&n)
-		if n == 0 {
-			db.QueryRow(`SELECT count(*) FROM characters WHERE lobby_id = $1 AND agent_id = $2`, campaignID, agentID).Scan(&n)
-		}
-		if n > 0 {
+		if role, _, _ := campaignRole(agentID, campaignID); role != "" {
 			return true
 		}
 	}

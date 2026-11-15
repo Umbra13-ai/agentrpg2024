@@ -520,24 +520,15 @@ func gmDeleteByName(w http.ResponseWriter, campaignID, targetID int, condition s
 // handleConditionsActive: GET /api/conditions/active?character_id=N lists a character's conditions.
 // The character's player gets the player view; the GM of the campaign gets the GM view.
 func handleConditionsActive(w http.ResponseWriter, r *http.Request) {
-	agentID, err := getAgentFromAuth(r)
-	if err != nil {
-		w.Header().Set("Content-Type", "application/json")
-		writeAuthError(w, err)
-		return
-	}
 	charID, _ := strconv.Atoi(r.URL.Query().Get("character_id"))
-	var owner, lobby, dm int
+	agentID, ok := requireOwnerOrGM(w, r, charID, "see its conditions")
+	if !ok {
+		return
+	}
+	gm := isCharacterGM(agentID, charID)
+	var lobby int
 	var species string
-	if db.QueryRow(`SELECT c.agent_id, c.lobby_id, COALESCE(l.dm_id,0), COALESCE(c.species,'') FROM characters c LEFT JOIN lobbies l ON l.id = c.lobby_id WHERE c.id = $1`, charID).Scan(&owner, &lobby, &dm, &species) != nil {
-		writeJSONStatus(w, http.StatusNotFound, map[string]interface{}{"error": "character_not_found"})
-		return
-	}
-	gm := dm == agentID
-	if owner != agentID && !gm {
-		writeJSONStatus(w, http.StatusForbidden, map[string]interface{}{"error": "not_your_character"})
-		return
-	}
+	db.QueryRow(`SELECT COALESCE(lobby_id, 0), COALESCE(species,'') FROM characters WHERE id = $1`, charID).Scan(&lobby, &species)
 	speed := characterSpeed(charID, species)
 	writeJSONStatus(w, 200, map[string]interface{}{"character_id": charID, "conditions": conditionsDetail(lobby, charID, speed, gm), "exhaustion_level": exhaustionLevelOf(charID)})
 }
@@ -548,8 +539,7 @@ func handleConditionEscape(w http.ResponseWriter, r *http.Request) {
 		writeJSONStatus(w, http.StatusMethodNotAllowed, map[string]interface{}{"error": "POST required"})
 		return
 	}
-	agentID, err := getAgentFromAuth(r)
-	if err != nil {
+	if _, err := getAgentFromAuth(r); err != nil { // signed in before the body is read
 		w.Header().Set("Content-Type", "application/json")
 		writeAuthError(w, err)
 		return
@@ -562,15 +552,14 @@ func handleConditionEscape(w http.ResponseWriter, r *http.Request) {
 	if !readRequest(w, r, &req) {
 		return
 	}
-	var owner, lobby, level, str, dex, con, intl, wis, cha int
-	var name, skillRaw, expRaw string
-	if db.QueryRow(`SELECT agent_id, lobby_id, level, str, dex, con, intl, wis, cha, name, COALESCE(skill_proficiencies,''), COALESCE(expertise,'') FROM characters WHERE id = $1`,
-		req.CharacterID).Scan(&owner, &lobby, &level, &str, &dex, &con, &intl, &wis, &cha, &name, &skillRaw, &expRaw) != nil {
-		writeJSONStatus(w, http.StatusNotFound, map[string]interface{}{"error": "character_not_found"})
+	if _, ok := requireCharacterOwner(w, r, req.CharacterID, "make its escape checks"); !ok {
 		return
 	}
-	if owner != agentID {
-		writeJSONStatus(w, http.StatusForbidden, map[string]interface{}{"error": "not_your_character"})
+	var lobby, level, str, dex, con, intl, wis, cha int
+	var name, skillRaw, expRaw string
+	if db.QueryRow(`SELECT lobby_id, level, str, dex, con, intl, wis, cha, name, COALESCE(skill_proficiencies,''), COALESCE(expertise,'') FROM characters WHERE id = $1`,
+		req.CharacterID).Scan(&lobby, &level, &str, &dex, &con, &intl, &wis, &cha, &name, &skillRaw, &expRaw) != nil {
+		writeJSONStatus(w, http.StatusNotFound, map[string]interface{}{"error": "character_not_found"})
 		return
 	}
 	var recs []conditionRecord

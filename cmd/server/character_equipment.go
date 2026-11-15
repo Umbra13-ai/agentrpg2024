@@ -471,37 +471,6 @@ func saveInventoryTx(tx *sql.Tx, charID int, inv []invItem) error {
 	return err
 }
 
-// requireGMForLoss lets only the GM of the character's campaign lose or recover
-// a bag, because what happens to a lost bag is the GM's decision. A character
-// that is not in a campaign has no GM, so its player may do it.
-func requireGMForLoss(w http.ResponseWriter, r *http.Request, charID int) bool {
-	agentID, err := getAgentFromAuth(r)
-	if err != nil {
-		w.Header().Set("Content-Type", "application/json")
-		writeAuthError(w, err)
-		return false
-	}
-	var owner int
-	var dm sql.NullInt64
-	if err := db.QueryRow(`SELECT c.agent_id, l.dm_id FROM characters c LEFT JOIN lobbies l ON c.lobby_id = l.id WHERE c.id = $1`, charID).Scan(&owner, &dm); err != nil {
-		writeJSONStatus(w, http.StatusNotFound, map[string]interface{}{"error": "character_not_found"})
-		return false
-	}
-	if dm.Valid {
-		if int(dm.Int64) != agentID {
-			writeJSONStatus(w, http.StatusForbidden, map[string]interface{}{"error": "only_the_gm_can_lose_or_recover_a_bag",
-				"hint": "Ask your GM. A lost bag is kept, with everything in it, until the GM decides."})
-			return false
-		}
-		return true
-	}
-	if owner != agentID {
-		writeJSONStatus(w, http.StatusForbidden, map[string]interface{}{"error": "not_your_character"})
-		return false
-	}
-	return true
-}
-
 // mutateInventory runs fn on the locked inventory and saves it if fn succeeds.
 func mutateInventory(w http.ResponseWriter, charID int, fn func(inv []invItem) ([]invItem, map[string]interface{}, int, string)) {
 	tx, err := db.Begin()
@@ -596,22 +565,17 @@ func handleCharacterEquipment(w http.ResponseWriter, r *http.Request, charID int
 			writeJSONStatus(w, http.StatusMethodNotAllowed, map[string]interface{}{"error": "method_not_allowed"})
 			return
 		}
-		includeLost := false
-		if agentID, err := getAgentFromAuth(r); err == nil && isCharacterGM(agentID, charID) {
-			includeLost = true
-		}
-		layout, ok := loadEquipmentLayout(charID, includeLost)
+		// anyone may look; the GM also sees the lost bags, and the player and the GM what was dropped and not yet picked up
+		agentID, err := getAgentFromAuth(r)
+		signed := err == nil && agentID != 0
+		gm := signed && isCharacterGM(agentID, charID)
+		layout, ok := loadEquipmentLayout(charID, gm)
 		if !ok {
 			writeJSONStatus(w, http.StatusNotFound, map[string]interface{}{"error": "character_not_found"})
 			return
 		}
-		// the player (and the GM) can see what was dropped and not yet picked up
-		if agentID, err := getAgentFromAuth(r); err == nil {
-			var owner int
-			db.QueryRow(`SELECT agent_id FROM characters WHERE id = $1`, charID).Scan(&owner)
-			if owner == agentID || isCharacterGM(agentID, charID) {
-				layout["dropped_by_you"] = droppedByCharacter(charID)
-			}
+		if owner, _, _, _ := characterAccess(charID); signed && (owner == agentID || gm) {
+			layout["dropped_by_you"] = droppedByCharacter(charID)
 		}
 		writeJSONStatus(w, http.StatusOK, layout)
 		return
@@ -622,7 +586,12 @@ func handleCharacterEquipment(w http.ResponseWriter, r *http.Request, charID int
 		return
 	}
 	if action == "lose" || action == "recover" {
-		if !requireGMForLoss(w, r, charID) {
+		// What happens to a lost bag is the GM's decision; a character in no campaign has no GM, so its player decides.
+		check := requireCharacterGM
+		if _, _, camp, found := characterAccess(charID); found && camp == 0 {
+			check = requireCharacterOwner
+		}
+		if _, ok := check(w, r, charID, "lose or recover its bags (a lost bag is kept, with everything in it, until the GM decides)"); !ok {
 			return
 		}
 	} else if _, ok := requireOwnerOrGM(w, r, charID, "change its equipment"); !ok {

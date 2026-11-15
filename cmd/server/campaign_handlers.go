@@ -435,15 +435,15 @@ func handleCampaignByID(w http.ResponseWriter, r *http.Request) {
 	}
 
 	var name, status string
-	var maxPlayers, minLevel, maxLevel, dmID int
+	var maxPlayers, minLevel, maxLevel int
 	var dmName sql.NullString
 	var setting sql.NullString
 	var campaignDocRaw []byte
 	err = db.QueryRow(`
 		SELECT l.name, l.status, l.max_players, a.name, l.setting, COALESCE(l.min_level, 1), COALESCE(l.max_level, 1),
-			COALESCE(l.dm_id, 0), COALESCE(l.campaign_document, '{}')
+			COALESCE(l.campaign_document, '{}')
 		FROM lobbies l LEFT JOIN agents a ON l.dm_id = a.id WHERE l.id = $1
-	`, campaignID).Scan(&name, &status, &maxPlayers, &dmName, &setting, &minLevel, &maxLevel, &dmID, &campaignDocRaw)
+	`, campaignID).Scan(&name, &status, &maxPlayers, &dmName, &setting, &minLevel, &maxLevel, &campaignDocRaw)
 	if err != nil {
 		w.WriteHeader(http.StatusNotFound)
 		json.NewEncoder(w).Encode(map[string]interface{}{"error": "campaign_not_found"})
@@ -456,7 +456,8 @@ func handleCampaignByID(w http.ResponseWriter, r *http.Request) {
 
 	// Check if requester is the GM (for spoiler filtering)
 	agentID, _ := getAgentFromAuth(r) // OK if auth fails - just means not GM
-	isGM := agentID == dmID && dmID != 0
+	role, _, _ := campaignRole(agentID, campaignID)
+	isGM := role == "gm"
 
 	rows, _ := db.Query(`
 		SELECT c.id, c.name, c.class, c.species, c.level, c.hp, c.max_hp, c.last_active
@@ -705,24 +706,14 @@ func handleCampaignStart(w http.ResponseWriter, r *http.Request, campaignID int)
 		return
 	}
 
-	agentID, err := getAgentFromAuth(r)
-	if err != nil {
-		writeAuthError(w, err)
+	if _, ok := requireCampaignGM(w, r, campaignID, "start the campaign"); !ok {
 		return
 	}
 	if !noFields(w, r) { // this request takes no fields
 		return
 	}
 
-	var dmID int
-	db.QueryRow("SELECT dm_id FROM lobbies WHERE id = $1", campaignID).Scan(&dmID)
-	if dmID != agentID {
-		w.WriteHeader(http.StatusForbidden)
-		json.NewEncoder(w).Encode(map[string]interface{}{"error": "only_dm_can_start"})
-		return
-	}
-
-	_, err = db.Exec("UPDATE lobbies SET status = 'active' WHERE id = $1", campaignID)
+	_, err := db.Exec("UPDATE lobbies SET status = 'active' WHERE id = $1", campaignID)
 	if err != nil {
 		w.WriteHeader(http.StatusInternalServerError)
 		json.NewEncoder(w).Encode(map[string]interface{}{"error": publicError(err)})
@@ -748,27 +739,15 @@ func handleCampaignEnd(w http.ResponseWriter, r *http.Request, campaignID int) {
 		return
 	}
 
-	agentID, err := getAgentFromAuth(r)
-	if err != nil {
-		writeAuthError(w, err)
+	if _, ok := requireCampaignGM(w, r, campaignID, "end the campaign"); !ok {
 		return
 	}
 	if !noFields(w, r) { // this request takes no fields
 		return
 	}
 
-	var dmID int
 	var status string
-	if err := db.QueryRow("SELECT dm_id, status FROM lobbies WHERE id = $1", campaignID).Scan(&dmID, &status); err != nil {
-		w.WriteHeader(http.StatusNotFound)
-		json.NewEncoder(w).Encode(map[string]interface{}{"error": "campaign_not_found"})
-		return
-	}
-	if dmID != agentID {
-		w.WriteHeader(http.StatusForbidden)
-		json.NewEncoder(w).Encode(map[string]interface{}{"error": "only_dm_can_end"})
-		return
-	}
+	db.QueryRow("SELECT status FROM lobbies WHERE id = $1", campaignID).Scan(&status)
 	if status == "completed" || status == "archived" {
 		json.NewEncoder(w).Encode(map[string]interface{}{"success": true, "status": status, "message": "Campaign was already ended."})
 		return
@@ -895,13 +874,12 @@ func spectatorHPStatus(hp, maxHP int, isDead bool) string {
 func handleCampaignSpectate(w http.ResponseWriter, r *http.Request, campaignID int) {
 	// Get campaign info
 	var name, status string
-	var dmID int
 	var dmName sql.NullString
 	var setting sql.NullString
 	err := db.QueryRow(`
-		SELECT l.name, l.status, COALESCE(l.dm_id, 0), a.name, l.setting
+		SELECT l.name, l.status, a.name, l.setting
 		FROM lobbies l LEFT JOIN agents a ON l.dm_id = a.id WHERE l.id = $1
-	`, campaignID).Scan(&name, &status, &dmID, &dmName, &setting)
+	`, campaignID).Scan(&name, &status, &dmName, &setting)
 	if err != nil {
 		w.WriteHeader(http.StatusNotFound)
 		json.NewEncoder(w).Encode(map[string]interface{}{"error": "campaign_not_found"})
@@ -1161,11 +1139,7 @@ func handleCampaignDocument(w http.ResponseWriter, r *http.Request, campaignID i
 	}
 
 	var campaignDocRaw []byte
-	var dmID int
-	err := db.QueryRow(`
-		SELECT COALESCE(campaign_document, '{}'), COALESCE(dm_id, 0)
-		FROM lobbies WHERE id = $1
-	`, campaignID).Scan(&campaignDocRaw, &dmID)
+	err := db.QueryRow(`SELECT COALESCE(campaign_document, '{}') FROM lobbies WHERE id = $1`, campaignID).Scan(&campaignDocRaw)
 
 	if err != nil {
 		w.WriteHeader(http.StatusNotFound)
@@ -1178,7 +1152,8 @@ func handleCampaignDocument(w http.ResponseWriter, r *http.Request, campaignID i
 
 	// Check if requester is the GM
 	agentID, _ := getAgentFromAuth(r)
-	isGM := agentID == dmID && dmID != 0
+	role, _, _ := campaignRole(agentID, campaignID)
+	isGM := role == "gm"
 
 	if !isGM {
 		campaignDoc = filterCampaignDocForPlayer(campaignDoc)
@@ -1216,18 +1191,7 @@ func handleCampaignStory(w http.ResponseWriter, r *http.Request, campaignID int)
 		return
 	}
 
-	agentID, err := getAgentFromAuth(r)
-	if err != nil {
-		writeAuthError(w, err)
-		return
-	}
-
-	// Check if user is GM
-	var dmID int
-	db.QueryRow("SELECT COALESCE(dm_id, 0) FROM lobbies WHERE id = $1", campaignID).Scan(&dmID)
-	if dmID != agentID {
-		w.WriteHeader(http.StatusForbidden)
-		json.NewEncoder(w).Encode(map[string]interface{}{"error": "gm_only", "message": "Only the GM can update story_so_far"})
+	if _, ok := requireCampaignGM(w, r, campaignID, "update the story so far"); !ok {
 		return
 	}
 
@@ -1306,18 +1270,7 @@ func handleCampaignSections(w http.ResponseWriter, r *http.Request, campaignID i
 		return
 	}
 
-	agentID, err := getAgentFromAuth(r)
-	if err != nil {
-		writeAuthError(w, err)
-		return
-	}
-
-	// Check if user is GM
-	var dmID int
-	db.QueryRow("SELECT COALESCE(dm_id, 0) FROM lobbies WHERE id = $1", campaignID).Scan(&dmID)
-	if dmID != agentID {
-		w.WriteHeader(http.StatusForbidden)
-		json.NewEncoder(w).Encode(map[string]interface{}{"error": "gm_only", "message": "Only the GM can add sections"})
+	if _, ok := requireCampaignGM(w, r, campaignID, "add sections to the campaign document"); !ok {
 		return
 	}
 
@@ -1414,18 +1367,7 @@ func handleCampaignNPCs(w http.ResponseWriter, r *http.Request, campaignID int) 
 		return
 	}
 
-	agentID, err := getAgentFromAuth(r)
-	if err != nil {
-		writeAuthError(w, err)
-		return
-	}
-
-	// Check if user is GM
-	var dmID int
-	db.QueryRow("SELECT COALESCE(dm_id, 0) FROM lobbies WHERE id = $1", campaignID).Scan(&dmID)
-	if dmID != agentID {
-		w.WriteHeader(http.StatusForbidden)
-		json.NewEncoder(w).Encode(map[string]interface{}{"error": "gm_only", "message": "Only the GM can add NPCs"})
+	if _, ok := requireCampaignGM(w, r, campaignID, "add NPCs"); !ok {
 		return
 	}
 
@@ -1491,17 +1433,14 @@ func handleCampaignNPCs(w http.ResponseWriter, r *http.Request, campaignID int) 
 // handleCampaignNPCsList returns NPCs (filtered for players)
 func handleCampaignNPCsList(w http.ResponseWriter, r *http.Request, campaignID int) {
 	var campaignDocRaw []byte
-	var dmID int
-	db.QueryRow(`
-		SELECT COALESCE(campaign_document, '{}'), COALESCE(dm_id, 0)
-		FROM lobbies WHERE id = $1
-	`, campaignID).Scan(&campaignDocRaw, &dmID)
+	db.QueryRow(`SELECT COALESCE(campaign_document, '{}') FROM lobbies WHERE id = $1`, campaignID).Scan(&campaignDocRaw)
 
 	var campaignDoc map[string]interface{}
 	json.Unmarshal(campaignDocRaw, &campaignDoc)
 
 	agentID, _ := getAgentFromAuth(r)
-	isGM := agentID == dmID && dmID != 0
+	role, _, _ := campaignRole(agentID, campaignID)
+	isGM := role == "gm"
 
 	npcs, _ := campaignDoc["npcs"].([]interface{})
 	if npcs == nil {
@@ -1550,18 +1489,7 @@ func handleCampaignNPCByID(w http.ResponseWriter, r *http.Request, campaignID in
 		return
 	}
 
-	agentID, err := getAgentFromAuth(r)
-	if err != nil {
-		writeAuthError(w, err)
-		return
-	}
-
-	// Check if user is GM
-	var dmID int
-	db.QueryRow("SELECT COALESCE(dm_id, 0) FROM lobbies WHERE id = $1", campaignID).Scan(&dmID)
-	if dmID != agentID {
-		w.WriteHeader(http.StatusForbidden)
-		json.NewEncoder(w).Encode(map[string]interface{}{"error": "gm_only", "message": "Only the GM can modify NPCs"})
+	if _, ok := requireCampaignGM(w, r, campaignID, "change or remove NPCs"); !ok {
 		return
 	}
 
@@ -1682,18 +1610,7 @@ func handleCampaignSectionByID(w http.ResponseWriter, r *http.Request, campaignI
 		return
 	}
 
-	agentID, err := getAgentFromAuth(r)
-	if err != nil {
-		writeAuthError(w, err)
-		return
-	}
-
-	// Check if user is GM
-	var dmID int
-	db.QueryRow("SELECT COALESCE(dm_id, 0) FROM lobbies WHERE id = $1", campaignID).Scan(&dmID)
-	if dmID != agentID {
-		w.WriteHeader(http.StatusForbidden)
-		json.NewEncoder(w).Encode(map[string]interface{}{"error": "gm_only", "message": "Only the GM can modify sections"})
+	if _, ok := requireCampaignGM(w, r, campaignID, "change or remove sections of the campaign document"); !ok {
 		return
 	}
 
@@ -1806,18 +1723,7 @@ func handleCampaignQuests(w http.ResponseWriter, r *http.Request, campaignID int
 		return
 	}
 
-	agentID, err := getAgentFromAuth(r)
-	if err != nil {
-		writeAuthError(w, err)
-		return
-	}
-
-	// Check if user is GM
-	var dmID int
-	db.QueryRow("SELECT COALESCE(dm_id, 0) FROM lobbies WHERE id = $1", campaignID).Scan(&dmID)
-	if dmID != agentID {
-		w.WriteHeader(http.StatusForbidden)
-		json.NewEncoder(w).Encode(map[string]interface{}{"error": "gm_only", "message": "Only the GM can add quests"})
+	if _, ok := requireCampaignGM(w, r, campaignID, "add quests"); !ok {
 		return
 	}
 
@@ -1879,17 +1785,14 @@ func handleCampaignQuests(w http.ResponseWriter, r *http.Request, campaignID int
 // handleCampaignQuestsList returns quests (filtered for players)
 func handleCampaignQuestsList(w http.ResponseWriter, r *http.Request, campaignID int) {
 	var campaignDocRaw []byte
-	var dmID int
-	db.QueryRow(`
-		SELECT COALESCE(campaign_document, '{}'), COALESCE(dm_id, 0)
-		FROM lobbies WHERE id = $1
-	`, campaignID).Scan(&campaignDocRaw, &dmID)
+	db.QueryRow(`SELECT COALESCE(campaign_document, '{}') FROM lobbies WHERE id = $1`, campaignID).Scan(&campaignDocRaw)
 
 	var campaignDoc map[string]interface{}
 	json.Unmarshal(campaignDocRaw, &campaignDoc)
 
 	agentID, _ := getAgentFromAuth(r)
-	isGM := agentID == dmID && dmID != 0
+	role, _, _ := campaignRole(agentID, campaignID)
+	isGM := role == "gm"
 
 	quests, _ := campaignDoc["quests"].([]interface{})
 	if quests == nil {
@@ -1940,18 +1843,7 @@ func handleCampaignQuestUpdate(w http.ResponseWriter, r *http.Request, campaignI
 		return
 	}
 
-	agentID, err := getAgentFromAuth(r)
-	if err != nil {
-		writeAuthError(w, err)
-		return
-	}
-
-	// Check if user is GM
-	var dmID int
-	db.QueryRow("SELECT COALESCE(dm_id, 0) FROM lobbies WHERE id = $1", campaignID).Scan(&dmID)
-	if dmID != agentID {
-		w.WriteHeader(http.StatusForbidden)
-		json.NewEncoder(w).Encode(map[string]interface{}{"error": "gm_only", "message": "Only the GM can update quests"})
+	if _, ok := requireCampaignGM(w, r, campaignID, "update quests"); !ok {
 		return
 	}
 
@@ -2042,9 +1934,8 @@ func handleCampaignObserve(w http.ResponseWriter, r *http.Request, campaignID in
 	}
 	w.Header().Set("Content-Type", "application/json")
 
-	agentID, err := getAgentFromAuth(r)
-	if err != nil {
-		writeAuthError(w, err)
+	agentID, _, ok := requireCampaignMember(w, r, campaignID, "record an observation")
+	if !ok {
 		return
 	}
 
@@ -2078,32 +1969,16 @@ func handleCampaignObserve(w http.ResponseWriter, r *http.Request, campaignID in
 		return
 	}
 
-	// Check if user has a character in this campaign OR is the GM
+	// The observer is the account's character in this campaign; a GM without one records it as the GM
 	var observerID sql.NullInt64
-	var isInCampaign bool
-	err = db.QueryRow(`
+	db.QueryRow(`
 		SELECT c.id FROM characters c
 		WHERE c.agent_id = $1 AND c.lobby_id = $2
 	`, agentID, campaignID).Scan(&observerID)
-	if err == nil {
-		isInCampaign = true
-	}
-
-	// Also check if they're the GM
-	var dmID int
-	db.QueryRow("SELECT COALESCE(dm_id, 0) FROM lobbies WHERE id = $1", campaignID).Scan(&dmID)
-	if dmID == agentID {
-		isInCampaign = true
-	}
-
-	if !isInCampaign {
-		w.WriteHeader(http.StatusBadRequest)
-		json.NewEncoder(w).Encode(map[string]interface{}{"error": "not_in_campaign"})
-		return
-	}
 
 	// Insert observation (target_id is NULL for freeform observations)
 	var obsID int
+	var err error
 	if observerID.Valid {
 		err = db.QueryRow(`
 			INSERT INTO observations (observer_id, lobby_id, observation_type, content)
@@ -2278,18 +2153,7 @@ func handleObservationPromote(w http.ResponseWriter, r *http.Request, campaignID
 	}
 	w.Header().Set("Content-Type", "application/json")
 
-	agentID, err := getAgentFromAuth(r)
-	if err != nil {
-		writeAuthError(w, err)
-		return
-	}
-
-	// Check if user is the GM
-	var dmID int
-	db.QueryRow("SELECT COALESCE(dm_id, 0) FROM lobbies WHERE id = $1", campaignID).Scan(&dmID)
-	if dmID != agentID {
-		w.WriteHeader(http.StatusForbidden)
-		json.NewEncoder(w).Encode(map[string]interface{}{"error": "only_gm_can_promote"})
+	if _, ok := requireCampaignGM(w, r, campaignID, "promote an observation"); !ok {
 		return
 	}
 
@@ -2308,7 +2172,7 @@ func handleObservationPromote(w http.ResponseWriter, r *http.Request, campaignID
 
 	// Get the observation content
 	var content string
-	err = db.QueryRow("SELECT content FROM observations WHERE id = $1 AND lobby_id = $2", obsID, campaignID).Scan(&content)
+	err := db.QueryRow("SELECT content FROM observations WHERE id = $1 AND lobby_id = $2", obsID, campaignID).Scan(&content)
 	if err != nil {
 		w.WriteHeader(http.StatusNotFound)
 		json.NewEncoder(w).Encode(map[string]interface{}{"error": "observation_not_found"})
@@ -2504,20 +2368,7 @@ func handleCampaignMessages(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 
-		// Verify user is GM or player in this campaign
-		var dmID int
-		db.QueryRow(`SELECT dm_id FROM lobbies WHERE id = $1`, campaignID).Scan(&dmID)
-
-		isPlayer := false
-		if dmID != agentID {
-			var count int
-			db.QueryRow(`SELECT COUNT(*) FROM characters WHERE agent_id = $1 AND lobby_id = $2`, agentID, campaignID).Scan(&count)
-			isPlayer = count > 0
-		}
-
-		if dmID != agentID && !isPlayer {
-			w.WriteHeader(http.StatusUnauthorized)
-			json.NewEncoder(w).Encode(map[string]interface{}{"error": "not_in_campaign"})
+		if _, _, ok := requireCampaignMember(w, r, campaignID, "post messages to it"); !ok {
 			return
 		}
 
@@ -3823,18 +3674,14 @@ func handleCampaignLog(w http.ResponseWriter, r *http.Request, campaignID int) {
 func handleCampaignItems(w http.ResponseWriter, r *http.Request, campaignID int) {
 	w.Header().Set("Content-Type", "application/json")
 
-	// Check if user is GM for POST/PUT/DELETE
-	agentID, authErr := getAgentFromAuth(r)
-
-	var dmID int
-	err := db.QueryRow("SELECT COALESCE(dm_id, 0) FROM lobbies WHERE id = $1", campaignID).Scan(&dmID)
-	if err != nil {
+	agentID, _ := getAgentFromAuth(r) // the list says whether the caller is the GM; signing in is not needed to read it
+	role, _, found := campaignRole(agentID, campaignID)
+	if !found {
 		w.WriteHeader(http.StatusNotFound)
 		json.NewEncoder(w).Encode(map[string]interface{}{"error": "campaign_not_found"})
 		return
 	}
-
-	isGM := authErr == nil && agentID == dmID && dmID != 0
+	isGM := role == "gm"
 
 	if r.Method == "GET" {
 		// Anyone in the campaign can list items
@@ -3878,9 +3725,7 @@ func handleCampaignItems(w http.ResponseWriter, r *http.Request, campaignID int)
 	}
 
 	if r.Method == "POST" {
-		if !isGM {
-			w.WriteHeader(http.StatusForbidden)
-			json.NewEncoder(w).Encode(map[string]interface{}{"error": "only_gm_can_create_items"})
+		if _, ok := requireCampaignGM(w, r, campaignID, "create campaign items"); !ok {
 			return
 		}
 
@@ -3986,17 +3831,11 @@ func handleCampaignItems(w http.ResponseWriter, r *http.Request, campaignID int)
 func handleCampaignItemBySlug(w http.ResponseWriter, r *http.Request, campaignID int, slug string) {
 	w.Header().Set("Content-Type", "application/json")
 
-	agentID, authErr := getAgentFromAuth(r)
-
-	var dmID int
-	err := db.QueryRow("SELECT COALESCE(dm_id, 0) FROM lobbies WHERE id = $1", campaignID).Scan(&dmID)
-	if err != nil {
+	if _, _, found := campaignRole(0, campaignID); !found { // anyone may read an item; the campaign must exist
 		w.WriteHeader(http.StatusNotFound)
 		json.NewEncoder(w).Encode(map[string]interface{}{"error": "campaign_not_found"})
 		return
 	}
-
-	isGM := authErr == nil && agentID == dmID && dmID != 0
 
 	if r.Method == "GET" {
 		var itemType, name string
@@ -4028,9 +3867,7 @@ func handleCampaignItemBySlug(w http.ResponseWriter, r *http.Request, campaignID
 	}
 
 	if r.Method == "PUT" {
-		if !isGM {
-			w.WriteHeader(http.StatusForbidden)
-			json.NewEncoder(w).Encode(map[string]interface{}{"error": "only_gm_can_update_items"})
+		if _, ok := requireCampaignGM(w, r, campaignID, "change campaign items"); !ok {
 			return
 		}
 
@@ -4090,9 +3927,7 @@ func handleCampaignItemBySlug(w http.ResponseWriter, r *http.Request, campaignID
 	}
 
 	if r.Method == "DELETE" {
-		if !isGM {
-			w.WriteHeader(http.StatusForbidden)
-			json.NewEncoder(w).Encode(map[string]interface{}{"error": "only_gm_can_delete_items"})
+		if _, ok := requireCampaignGM(w, r, campaignID, "delete campaign items"); !ok {
 			return
 		}
 

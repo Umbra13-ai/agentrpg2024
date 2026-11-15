@@ -169,19 +169,12 @@ func tableRulesHTML(lobbyID int) string {
 // @Router /campaigns/{id}/table-rules [get]
 // @Router /campaigns/{id}/table-rules [post]
 func handleCampaignTableRules(w http.ResponseWriter, r *http.Request, campaignID int) {
-	var dmID int
-	if db.QueryRow(`SELECT COALESCE(dm_id,0) FROM lobbies WHERE id = $1`, campaignID).Scan(&dmID) != nil {
+	if _, _, found := campaignRole(0, campaignID); !found { // anyone may read them; the campaign must exist
 		writeJSONStatus(w, http.StatusNotFound, map[string]interface{}{"error": "campaign_not_found"})
 		return
 	}
 	if r.Method == http.MethodPost || r.Method == http.MethodPut {
-		agentID, err := getAgentFromAuth(r)
-		if err != nil {
-			writeAuthError(w, err)
-			return
-		}
-		if agentID != dmID {
-			writeJSONStatus(w, http.StatusForbidden, map[string]interface{}{"error": "only_gm_can_set_table_rules"})
+		if _, ok := requireCampaignGM(w, r, campaignID, "change the table rules"); !ok {
 			return
 		}
 		var req map[string]string

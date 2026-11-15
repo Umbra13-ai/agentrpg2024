@@ -311,14 +311,14 @@ func handleBattleMap(w http.ResponseWriter, r *http.Request, campaignID int, rou
 		return
 	}
 	defer tx.Rollback()
-	var gm, turn int
+	var turn int
 	var started time.Time
 	var raw, order []byte
 	err = tx.QueryRow(`
-  SELECT l.dm_id, c.current_turn_index, c.turn_started_at, c.battle_map, c.turn_order
+  SELECT c.current_turn_index, c.turn_started_at, c.battle_map, c.turn_order
   FROM combat_state c JOIN lobbies l ON l.id=c.lobby_id
   WHERE c.lobby_id=$1 AND c.active AND l.status='active' FOR UPDATE OF c
- `, campaignID).Scan(&gm, &turn, &started, &raw, &order)
+ `, campaignID).Scan(&turn, &started, &raw, &order)
 	if errors.Is(err, sql.ErrNoRows) {
 		battleMapError(w, 404, "no_active_encounter")
 		return
@@ -340,7 +340,7 @@ func handleBattleMap(w http.ResponseWriter, r *http.Request, campaignID int, rou
 		return
 	}
 
-	if agentID == gm {
+	if role, _, _ := campaignRole(agentID, campaignID); role == "gm" {
 		switch {
 		case r.Method == http.MethodGet && operation == "":
 			if len(raw) == 0 {
@@ -413,7 +413,7 @@ func handleBattleMap(w http.ResponseWriter, r *http.Request, campaignID int, rou
 	}
 
 	if r.Method == http.MethodPut || len(req.Map.Grid) > 0 {
-		battleMapReply(w, 403, map[string]string{"error": "not_gm", "message": "Only the GM of this campaign can publish or preview a map. Players read their view with GET and move with preview and move."})
+		requireCampaignGM(w, r, campaignID, "publish or preview a map (players read their view with GET and move with preview and move)") // not the GM: writes the refusal
 		return
 	}
 	if req.CharacterID == 0 {

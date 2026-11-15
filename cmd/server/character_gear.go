@@ -29,7 +29,7 @@ func handleCharacterAttune(w http.ResponseWriter, r *http.Request) {
 	}
 	w.Header().Set("Content-Type", "application/json")
 
-	agentID, err := getAgentFromAuth(r)
+	_, err := getAgentFromAuth(r) // signed in before the body is read
 	if err != nil {
 		writeAuthError(w, err)
 		return
@@ -54,26 +54,11 @@ func handleCharacterAttune(w http.ResponseWriter, r *http.Request) {
 		req.Action = "attune"
 	}
 
-	// Verify ownership
-	var charAgentID int
-	var charName string
-	err = db.QueryRow(`SELECT agent_id, name FROM characters WHERE id = $1`, req.CharacterID).Scan(&charAgentID, &charName)
-	if err != nil {
-		w.WriteHeader(http.StatusNotFound)
-		json.NewEncoder(w).Encode(map[string]interface{}{"error": "character_not_found"})
+	if _, ok := requireOwnerOrGM(w, r, req.CharacterID, "attune or unattune its items"); !ok {
 		return
 	}
-	if charAgentID != agentID {
-		// Check if requester is GM
-		var lobbyID, dmID int
-		db.QueryRow(`SELECT lobby_id FROM characters WHERE id = $1`, req.CharacterID).Scan(&lobbyID)
-		db.QueryRow(`SELECT dm_id FROM lobbies WHERE id = $1`, lobbyID).Scan(&dmID)
-		if dmID != agentID {
-			w.WriteHeader(http.StatusForbidden)
-			json.NewEncoder(w).Encode(map[string]interface{}{"error": "not_your_character"})
-			return
-		}
-	}
+	var charName string
+	db.QueryRow(`SELECT name FROM characters WHERE id = $1`, req.CharacterID).Scan(&charName)
 
 	// Get current attuned items
 	var attunedJSON []byte
@@ -302,7 +287,7 @@ func handleCharacterEquipArmor(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	agent, err := getAgentFromAuth(r)
+	_, err := getAgentFromAuth(r) // signed in before the body is read
 	if err != nil {
 		writeAuthError(w, err)
 		return
@@ -323,23 +308,19 @@ func handleCharacterEquipArmor(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// Verify character belongs to agent
+	if _, ok := requireCharacterOwner(w, r, req.CharacterID, "put on its armor or Shield"); !ok {
+		return
+	}
 	var charName string
-	var ownerID, charStr, charDex, charLevel int
+	var charStr, charDex, charLevel int
 	var armorProfs string
 	var currentArmor, charSubclass sql.NullString
 	var currentShield bool
-	err = db.QueryRow(`SELECT name, agent_id, str, dex, armor_proficiencies, equipped_armor, COALESCE(equipped_shield, false), level, subclass 
-		FROM characters WHERE id = $1`, req.CharacterID).Scan(&charName, &ownerID, &charStr, &charDex, &armorProfs, &currentArmor, &currentShield, &charLevel, &charSubclass)
+	err = db.QueryRow(`SELECT name, str, dex, armor_proficiencies, equipped_armor, COALESCE(equipped_shield, false), level, subclass 
+		FROM characters WHERE id = $1`, req.CharacterID).Scan(&charName, &charStr, &charDex, &armorProfs, &currentArmor, &currentShield, &charLevel, &charSubclass)
 	if err != nil {
 		w.WriteHeader(http.StatusNotFound)
 		json.NewEncoder(w).Encode(map[string]interface{}{"error": "character_not_found"})
-		return
-	}
-
-	if ownerID != agent {
-		w.WriteHeader(http.StatusForbidden)
-		json.NewEncoder(w).Encode(map[string]interface{}{"error": "not_your_character"})
 		return
 	}
 
@@ -524,7 +505,7 @@ func handleCharacterUnequipArmor(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	agent, err := getAgentFromAuth(r)
+	_, err := getAgentFromAuth(r) // signed in before the body is read
 	if err != nil {
 		writeAuthError(w, err)
 		return
@@ -551,22 +532,18 @@ func handleCharacterUnequipArmor(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// Verify character belongs to agent
+	if _, ok := requireCharacterOwner(w, r, req.CharacterID, "take off its armor or Shield"); !ok {
+		return
+	}
 	var charName string
-	var ownerID, charDex, charLevel int
+	var charDex, charLevel int
 	var currentArmor, charSubclass sql.NullString
 	var currentShield bool
-	err = db.QueryRow(`SELECT name, agent_id, dex, equipped_armor, COALESCE(equipped_shield, false), level, subclass 
-		FROM characters WHERE id = $1`, req.CharacterID).Scan(&charName, &ownerID, &charDex, &currentArmor, &currentShield, &charLevel, &charSubclass)
+	err = db.QueryRow(`SELECT name, dex, equipped_armor, COALESCE(equipped_shield, false), level, subclass 
+		FROM characters WHERE id = $1`, req.CharacterID).Scan(&charName, &charDex, &currentArmor, &currentShield, &charLevel, &charSubclass)
 	if err != nil {
 		w.WriteHeader(http.StatusNotFound)
 		json.NewEncoder(w).Encode(map[string]interface{}{"error": "character_not_found"})
-		return
-	}
-
-	if ownerID != agent {
-		w.WriteHeader(http.StatusForbidden)
-		json.NewEncoder(w).Encode(map[string]interface{}{"error": "not_your_character"})
 		return
 	}
 
@@ -696,7 +673,7 @@ func handleCharacterEquipWeapon(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	agent, err := getAgentFromAuth(r)
+	_, err := getAgentFromAuth(r) // signed in before the body is read
 	if err != nil {
 		writeAuthError(w, err)
 		return
@@ -727,24 +704,19 @@ func handleCharacterEquipWeapon(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// Verify character belongs to agent
+	if _, ok := requireCharacterOwner(w, r, req.CharacterID, "wield its weapons"); !ok {
+		return
+	}
 	var charName string
-	var ownerID int
 	var inventoryJSON []byte
 	var weaponProfs string
 	var mainHand, offHand sql.NullString
-	err = db.QueryRow(`SELECT name, agent_id, COALESCE(inventory, '[]'), COALESCE(weapon_proficiencies, ''),
+	err = db.QueryRow(`SELECT name, COALESCE(inventory, '[]'), COALESCE(weapon_proficiencies, ''),
 		equipped_main_hand, equipped_off_hand
-		FROM characters WHERE id = $1`, req.CharacterID).Scan(&charName, &ownerID, &inventoryJSON, &weaponProfs, &mainHand, &offHand)
+		FROM characters WHERE id = $1`, req.CharacterID).Scan(&charName, &inventoryJSON, &weaponProfs, &mainHand, &offHand)
 	if err != nil {
 		w.WriteHeader(http.StatusNotFound)
 		json.NewEncoder(w).Encode(map[string]interface{}{"error": "character_not_found"})
-		return
-	}
-
-	if ownerID != agent {
-		w.WriteHeader(http.StatusForbidden)
-		json.NewEncoder(w).Encode(map[string]interface{}{"error": "not_your_character"})
 		return
 	}
 
@@ -978,7 +950,7 @@ func handleCharacterUnequipWeapon(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	agent, err := getAgentFromAuth(r)
+	_, err := getAgentFromAuth(r) // signed in before the body is read
 	if err != nil {
 		writeAuthError(w, err)
 		return
@@ -1008,21 +980,16 @@ func handleCharacterUnequipWeapon(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// Verify character belongs to agent
+	if _, ok := requireCharacterOwner(w, r, req.CharacterID, "put away its weapons"); !ok {
+		return
+	}
 	var charName string
-	var ownerID int
 	var mainHand, offHand sql.NullString
-	err = db.QueryRow(`SELECT name, agent_id, equipped_main_hand, equipped_off_hand
-		FROM characters WHERE id = $1`, req.CharacterID).Scan(&charName, &ownerID, &mainHand, &offHand)
+	err = db.QueryRow(`SELECT name, equipped_main_hand, equipped_off_hand
+		FROM characters WHERE id = $1`, req.CharacterID).Scan(&charName, &mainHand, &offHand)
 	if err != nil {
 		w.WriteHeader(http.StatusNotFound)
 		json.NewEncoder(w).Encode(map[string]interface{}{"error": "character_not_found"})
-		return
-	}
-
-	if ownerID != agent {
-		w.WriteHeader(http.StatusForbidden)
-		json.NewEncoder(w).Encode(map[string]interface{}{"error": "not_your_character"})
 		return
 	}
 
@@ -1128,7 +1095,7 @@ func handleCharacterMount(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	agentID, err := getAgentFromAuth(r)
+	_, err := getAgentFromAuth(r) // signed in before the body is read
 	if err != nil {
 		writeAuthError(w, err)
 		return
@@ -1152,30 +1119,21 @@ func handleCharacterMount(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// Verify character belongs to agent or agent is GM
+	if _, ok := requireOwnerOrGM(w, r, req.CharacterID, "mount a creature"); !ok {
+		return
+	}
 	var charName, charSpecies string
-	var ownerID, lobbyID, movementRemaining int
+	var lobbyID, movementRemaining int
 	var currentMount sql.NullString
 	err = db.QueryRow(`
-		SELECT c.name, c.agent_id, COALESCE(c.lobby_id, 0), c.species, 
+		SELECT c.name, COALESCE(c.lobby_id, 0), c.species, 
 		       COALESCE(c.movement_remaining, 30), c.mounted_on_creature
 		FROM characters c WHERE c.id = $1`, req.CharacterID).Scan(
-		&charName, &ownerID, &lobbyID, &charSpecies, &movementRemaining, &currentMount)
+		&charName, &lobbyID, &charSpecies, &movementRemaining, &currentMount)
 	if err != nil {
 		w.WriteHeader(http.StatusNotFound)
 		json.NewEncoder(w).Encode(map[string]interface{}{"error": "character_not_found"})
 		return
-	}
-
-	// Check authorization
-	if ownerID != agentID {
-		var dmID int
-		db.QueryRow(`SELECT dm_id FROM lobbies WHERE id = $1`, lobbyID).Scan(&dmID)
-		if dmID != agentID {
-			w.WriteHeader(http.StatusForbidden)
-			json.NewEncoder(w).Encode(map[string]interface{}{"error": "not_your_character"})
-			return
-		}
 	}
 
 	// Check if already mounted
@@ -1311,7 +1269,7 @@ func handleCharacterDismount(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	agentID, err := getAgentFromAuth(r)
+	_, err := getAgentFromAuth(r) // signed in before the body is read
 	if err != nil {
 		writeAuthError(w, err)
 		return
@@ -1331,30 +1289,21 @@ func handleCharacterDismount(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// Verify character belongs to agent or agent is GM
+	if _, ok := requireOwnerOrGM(w, r, req.CharacterID, "dismount"); !ok {
+		return
+	}
 	var charName, charSpecies string
-	var ownerID, lobbyID, movementRemaining int
+	var lobbyID, movementRemaining int
 	var currentMount sql.NullString
 	err = db.QueryRow(`
-		SELECT c.name, c.agent_id, COALESCE(c.lobby_id, 0), c.species, 
+		SELECT c.name, COALESCE(c.lobby_id, 0), c.species, 
 		       COALESCE(c.movement_remaining, 30), c.mounted_on_creature
 		FROM characters c WHERE c.id = $1`, req.CharacterID).Scan(
-		&charName, &ownerID, &lobbyID, &charSpecies, &movementRemaining, &currentMount)
+		&charName, &lobbyID, &charSpecies, &movementRemaining, &currentMount)
 	if err != nil {
 		w.WriteHeader(http.StatusNotFound)
 		json.NewEncoder(w).Encode(map[string]interface{}{"error": "character_not_found"})
 		return
-	}
-
-	// Check authorization
-	if ownerID != agentID {
-		var dmID int
-		db.QueryRow(`SELECT dm_id FROM lobbies WHERE id = $1`, lobbyID).Scan(&dmID)
-		if dmID != agentID {
-			w.WriteHeader(http.StatusForbidden)
-			json.NewEncoder(w).Encode(map[string]interface{}{"error": "not_your_character"})
-			return
-		}
 	}
 
 	// Check if currently mounted

@@ -285,15 +285,7 @@ func marchingOrderNames(lobbyID int) []string {
 func handleMarchingOrder(w http.ResponseWriter, r *http.Request, campaignID int) {
 	ensureMoreTables()
 	if r.Method == http.MethodPost {
-		agentID, err := getAgentFromAuth(r)
-		if err != nil {
-			writeAuthError(w, err)
-			return
-		}
-		var n int
-		db.QueryRow(`SELECT (SELECT count(*) FROM lobbies WHERE id = $1 AND dm_id = $2) + (SELECT count(*) FROM characters WHERE lobby_id = $1 AND agent_id = $2)`, campaignID, agentID).Scan(&n)
-		if n == 0 {
-			writeJSONStatus(w, http.StatusForbidden, map[string]interface{}{"error": "not_in_campaign"})
+		if _, _, ok := requireCampaignMember(w, r, campaignID, "set its marching order"); !ok {
 			return
 		}
 		var req struct {

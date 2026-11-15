@@ -19,9 +19,9 @@ func TestSQLiteCombatAddPreservesHolderAndRejectsInvalidState(t *testing.T) {
 	db = database
 	t.Cleanup(func() { database.Close(); db = originalDB })
 	_, err = db.Exec(`CREATE TABLE agents (id INTEGER, password_hash TEXT, salt TEXT, verified BOOLEAN);
- CREATE TABLE lobbies (id INTEGER, dm_id INTEGER);
+ CREATE TABLE lobbies (id INTEGER, dm_id INTEGER, name TEXT);
  CREATE TABLE combat_state (lobby_id INTEGER, round_number INTEGER, current_turn_index INTEGER, turn_order TEXT, active BOOLEAN);
- INSERT INTO lobbies VALUES (6, 1);`)
+ INSERT INTO lobbies (id, dm_id) VALUES (6, 1);`)
 	if err != nil {
 		t.Fatal(err)
 	}

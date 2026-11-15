@@ -980,7 +980,7 @@ func handlePendingTurn(w http.ResponseWriter, r *http.Request) {
 // @Failure 409 {object} map[string]interface{} "no_active_combat"
 // @Router /campaigns/{id}/combat/resolve [post]
 func handleCombatResolve(w http.ResponseWriter, r *http.Request, campaignID int) {
-	if !ptRequireGM(w, r, campaignID) {
+	if !ptRequireGM(w, r, campaignID, "resolve the pending turns") {
 		return
 	}
 	if !noFields(w, r) { // this request takes no fields
@@ -995,20 +995,13 @@ func handleCombatResolve(w http.ResponseWriter, r *http.Request, campaignID int)
 	writeJSONStatus(w, http.StatusOK, rep)
 }
 
-func ptRequireGM(w http.ResponseWriter, r *http.Request, campaignID int) bool {
-	agentID, err := getAgentFromAuth(r)
-	if err != nil {
-		writeAuthError(w, err)
+// ptRequireGM: the GM's POST (the access rule is requireCampaignGM's).
+func ptRequireGM(w http.ResponseWriter, r *http.Request, campaignID int, what string) bool {
+	if _, ok := requireCampaignGM(w, r, campaignID, what); !ok {
 		return false
 	}
 	if r.Method != http.MethodPost {
 		writeJSONStatus(w, http.StatusMethodNotAllowed, map[string]interface{}{"error": "method_not_allowed", "message": "POST."})
-		return false
-	}
-	var dm int
-	db.QueryRow(`SELECT COALESCE(dm_id, 0) FROM lobbies WHERE id = $1`, campaignID).Scan(&dm)
-	if dm != agentID {
-		writeJSONStatus(w, http.StatusForbidden, map[string]interface{}{"error": "gm_only", "message": "Only the GM of this campaign can do this."})
 		return false
 	}
 	return true
@@ -1028,7 +1021,7 @@ func ptRequireGM(w http.ResponseWriter, r *http.Request, campaignID int) bool {
 // @Failure 409 {object} map[string]interface{} "gm_turn (a monster's slot), pending_turn_waiting or no_active_combat"
 // @Router /campaigns/{id}/combat/stand-in [post]
 func handleCombatStandIn(w http.ResponseWriter, r *http.Request, campaignID int) {
-	if !ptRequireGM(w, r, campaignID) {
+	if !ptRequireGM(w, r, campaignID, "take a turn as stand-in") {
 		return
 	}
 	ensurePendingTurns()

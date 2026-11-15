@@ -184,18 +184,7 @@ func handleRoll(w http.ResponseWriter, r *http.Request) {
 func handleCombatStart(w http.ResponseWriter, r *http.Request, campaignID int) {
 	w.Header().Set("Content-Type", "application/json")
 
-	agentID, err := getAgentFromAuth(r)
-	if err != nil {
-		writeAuthError(w, err)
-		return
-	}
-
-	// Check if user is GM
-	var dmID int
-	db.QueryRow("SELECT COALESCE(dm_id, 0) FROM lobbies WHERE id = $1", campaignID).Scan(&dmID)
-	if dmID != agentID {
-		w.WriteHeader(http.StatusForbidden)
-		json.NewEncoder(w).Encode(map[string]interface{}{"error": "only_gm_can_start_combat"})
+	if _, ok := requireCampaignGM(w, r, campaignID, "start a fight"); !ok {
 		return
 	}
 
@@ -501,17 +490,7 @@ func characterActionBlock(action string, hp int, stable, dead bool) string {
 func handleCombatEnd(w http.ResponseWriter, r *http.Request, campaignID int) {
 	w.Header().Set("Content-Type", "application/json")
 
-	agentID, err := getAgentFromAuth(r)
-	if err != nil {
-		writeAuthError(w, err)
-		return
-	}
-
-	var dmID int
-	db.QueryRow("SELECT COALESCE(dm_id, 0) FROM lobbies WHERE id = $1", campaignID).Scan(&dmID)
-	if dmID != agentID {
-		w.WriteHeader(http.StatusForbidden)
-		json.NewEncoder(w).Encode(map[string]interface{}{"error": "only_gm_can_end_combat"})
+	if _, ok := requireCampaignGM(w, r, campaignID, "end the fight"); !ok {
 		return
 	}
 
@@ -559,17 +538,7 @@ func handleCombatNext(w http.ResponseWriter, r *http.Request, campaignID int) {
 	defer clearOAWindows(campaignID) // Opportunity Attack chances last until the turn order moves on (character_oa_2024.go)
 	w.Header().Set("Content-Type", "application/json")
 
-	agentID, err := getAgentFromAuth(r)
-	if err != nil {
-		writeAuthError(w, err)
-		return
-	}
-
-	var dmID int
-	db.QueryRow("SELECT COALESCE(dm_id, 0) FROM lobbies WHERE id = $1", campaignID).Scan(&dmID)
-	if dmID != agentID {
-		w.WriteHeader(http.StatusForbidden)
-		json.NewEncoder(w).Encode(map[string]interface{}{"error": "only_gm_can_advance_turn"})
+	if _, ok := requireCampaignGM(w, r, campaignID, "advance the turn"); !ok {
 		return
 	}
 	// Optional: Legendary Actions taken right after the turn that is ending (monster_features_2024.go)
@@ -583,7 +552,7 @@ func handleCombatNext(w http.ResponseWriter, r *http.Request, campaignID int) {
 	var round, turnIndex int
 	var turnOrderJSON []byte
 	var active bool
-	err = db.QueryRow(`
+	err := db.QueryRow(`
 		SELECT round_number, current_turn_index, turn_order, active 
 		FROM combat_state WHERE lobby_id = $1
 	`, campaignID).Scan(&round, &turnIndex, &turnOrderJSON, &active)
@@ -814,20 +783,10 @@ func handleCombatNext(w http.ResponseWriter, r *http.Request, campaignID int) {
 func handleCombatSkip(w http.ResponseWriter, r *http.Request, campaignID int) {
 	w.Header().Set("Content-Type", "application/json")
 
-	agentID, err := getAgentFromAuth(r)
-	if err != nil {
-		writeAuthError(w, err)
+	if _, ok := requireCampaignGM(w, r, campaignID, "skip a turn"); !ok {
 		return
 	}
 	if !noFields(w, r) { // this request takes no fields
-		return
-	}
-
-	var dmID int
-	db.QueryRow("SELECT COALESCE(dm_id, 0) FROM lobbies WHERE id = $1", campaignID).Scan(&dmID)
-	if dmID != agentID {
-		w.WriteHeader(http.StatusForbidden)
-		json.NewEncoder(w).Encode(map[string]interface{}{"error": "only_gm_can_skip_turns"})
 		return
 	}
 
@@ -835,7 +794,7 @@ func handleCombatSkip(w http.ResponseWriter, r *http.Request, campaignID int) {
 	var turnOrderJSON []byte
 	var active bool
 	var turnStartedAt sql.NullTime
-	err = db.QueryRow(`
+	err := db.QueryRow(`
 		SELECT round_number, current_turn_index, turn_order, active, turn_started_at
 		FROM combat_state WHERE lobby_id = $1
 	`, campaignID).Scan(&round, &turnIndex, &turnOrderJSON, &active, &turnStartedAt)
@@ -1118,18 +1077,7 @@ func handleExplorationSkip(w http.ResponseWriter, r *http.Request, campaignID in
 		return
 	}
 
-	agentID, err := getAgentFromAuth(r)
-	if err != nil {
-		writeAuthError(w, err)
-		return
-	}
-
-	// Verify GM
-	var dmID int
-	db.QueryRow("SELECT COALESCE(dm_id, 0) FROM lobbies WHERE id = $1", campaignID).Scan(&dmID)
-	if dmID != agentID {
-		w.WriteHeader(http.StatusForbidden)
-		json.NewEncoder(w).Encode(map[string]interface{}{"error": "only_gm_can_skip"})
+	if _, ok := requireCampaignGM(w, r, campaignID, "skip a player's exploration turn"); !ok {
 		return
 	}
 
@@ -1161,7 +1109,7 @@ func handleExplorationSkip(w http.ResponseWriter, r *http.Request, campaignID in
 	// Get character info
 	var charName string
 	var charLobbyID int
-	err = db.QueryRow("SELECT name, lobby_id FROM characters WHERE id = $1", req.CharacterID).Scan(&charName, &charLobbyID)
+	err := db.QueryRow("SELECT name, lobby_id FROM characters WHERE id = $1", req.CharacterID).Scan(&charName, &charLobbyID)
 	if err != nil || charLobbyID != campaignID {
 		w.WriteHeader(http.StatusNotFound)
 		json.NewEncoder(w).Encode(map[string]interface{}{"error": "character_not_found"})
@@ -1235,18 +1183,7 @@ func handleCombatAdd(w http.ResponseWriter, r *http.Request, campaignID int) {
 		return
 	}
 
-	agentID, err := getAgentFromAuth(r)
-	if err != nil {
-		writeAuthError(w, err)
-		return
-	}
-
-	// Check if user is GM
-	var dmID int
-	db.QueryRow("SELECT COALESCE(dm_id, 0) FROM lobbies WHERE id = $1", campaignID).Scan(&dmID)
-	if dmID != agentID {
-		w.WriteHeader(http.StatusForbidden)
-		json.NewEncoder(w).Encode(map[string]interface{}{"error": "only_gm_can_add_combatants"})
+	if _, ok := requireCampaignGM(w, r, campaignID, "add combatants to the fight"); !ok {
 		return
 	}
 
@@ -1254,7 +1191,7 @@ func handleCombatAdd(w http.ResponseWriter, r *http.Request, campaignID int) {
 	var round, turnIndex int
 	var turnOrderJSON []byte
 	var active bool
-	err = db.QueryRow(`
+	err := db.QueryRow(`
 		SELECT round_number, current_turn_index, turn_order, active 
 		FROM combat_state WHERE lobby_id = $1
 	`, campaignID).Scan(&round, &turnIndex, &turnOrderJSON, &active)
@@ -1527,18 +1464,7 @@ func handleCombatRemove(w http.ResponseWriter, r *http.Request, campaignID int) 
 		return
 	}
 
-	agentID, err := getAgentFromAuth(r)
-	if err != nil {
-		writeAuthError(w, err)
-		return
-	}
-
-	// Check if user is GM
-	var dmID int
-	db.QueryRow("SELECT COALESCE(dm_id, 0) FROM lobbies WHERE id = $1", campaignID).Scan(&dmID)
-	if dmID != agentID {
-		w.WriteHeader(http.StatusForbidden)
-		json.NewEncoder(w).Encode(map[string]interface{}{"error": "only_gm_can_remove_combatants"})
+	if _, ok := requireCampaignGM(w, r, campaignID, "remove combatants from the fight"); !ok {
 		return
 	}
 
@@ -1546,7 +1472,7 @@ func handleCombatRemove(w http.ResponseWriter, r *http.Request, campaignID int) 
 	var round, turnIndex int
 	var turnOrderJSON []byte
 	var active bool
-	err = db.QueryRow(`
+	err := db.QueryRow(`
 		SELECT round_number, current_turn_index, turn_order, active 
 		FROM combat_state WHERE lobby_id = $1
 	`, campaignID).Scan(&round, &turnIndex, &turnOrderJSON, &active)
@@ -1740,7 +1666,7 @@ func handleCombatStatus(w http.ResponseWriter, r *http.Request, campaignID int) 
 
 // handleDamage godoc
 // @Summary Apply damage to a character (GM only)
-// @Description Deal damage to a character, tracking HP, temp HP, death saves. A concentrating character makes the Constitution save at once (DC 10 or half the damage, up to 30): concentration, concentration_kept; on a failure the spell and what it holds end. Only the GM of the character's campaign (403 gm_only otherwise).
+// @Description Deal damage to a character, tracking HP, temp HP, death saves. A concentrating character makes the Constitution save at once (DC 10 or half the damage, up to 30): concentration, concentration_kept; on a failure the spell and what it holds end. Only the GM of the character's campaign (403 not_gm otherwise).
 // @Tags Combat
 // @Accept json
 // @Produce json
@@ -2016,7 +1942,7 @@ func handleDamage(w http.ResponseWriter, r *http.Request, charID int) {
 
 // handleHeal godoc
 // @Summary Heal a character (GM only)
-// @Description Restore HP to a character. Only the GM of the character's campaign (403 gm_only otherwise).
+// @Description Restore HP to a character. Only the GM of the character's campaign (403 not_gm otherwise).
 // @Tags Combat
 // @Accept json
 // @Produce json
