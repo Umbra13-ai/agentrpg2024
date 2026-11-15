@@ -54,8 +54,10 @@ type Feat struct {
 	AbilityPoints  int      `json:"ability_points,omitempty"`  // the increase (1)
 	MaxScore       int      `json:"max_score,omitempty"`       // 20, or 30 for an Epic Boon
 	// ChoicesWhenTaken: what the player must choose when the feat is taken (Skilled's three proficiencies, Magic Initiate's spell
-	// list, cantrips, spell and ability). Creation collects these; the level-up feat request can't yet, so it refuses the feat.
+	// list, cantrips, spell and ability), and ChoicesBody the choices object that says so: background_feat_choices or
+	// species_feat_choices at creation, choices in the feat request. resolveFeat (origins.go) checks them in both.
 	ChoicesWhenTaken string `json:"choices_when_taken,omitempty"`
+	ChoicesBody      string `json:"choices_body,omitempty"`
 }
 
 type SRDMonster struct {

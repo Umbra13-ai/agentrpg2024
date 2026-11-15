@@ -68,7 +68,11 @@ Add to the owner, never beside it. When you give another rule one owner, add it 
   `attackSources`. Never roll a d20 for an attack anywhere else.
 - **The 18 skills:** `game/skills.go`.
 - **Expertise:** `game/expertise.go`, with its database side in `cmd/server/expertise_2024.go`.
-- **Which feats a character can take:** `cmd/server/feats_2024.go`.
+- **Which feats a character can take:** `cmd/server/feats_2024.go` (`featRefusal`, `featsOpenTo`, `featTakerOf`, `featHowTo`).
+  **A feat's choices** (Skilled, Magic Initiate) are checked by `resolveFeat` (`cmd/server/origins.go`) at creation and in the
+  feat request (`takeOriginFeat`), and recorded in the origin record with their source; what they give comes from
+  `originFeat.grants`. A Fighting Style feat taken with an Ability Score Improvement is one more Fighting Style (the
+  `more` count of the Fighting Style row in `choiceDefs`).
 - **The choices a character makes after creation:** `choiceDefs` (`cmd/server/choices_2024.go`): who has each choice, how
   many picks at each class level, how picks are counted, the request, the setup step. The level-up note, the sheet's
   `to_finish`, `GET /setup` and the level-up notice are made from it. A feature that picks one option from a list is a

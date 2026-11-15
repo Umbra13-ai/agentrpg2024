@@ -102,6 +102,8 @@ type choiceDef struct {
 	total func(class, subclass string, level int) int
 	// have: how many of them the character has made.
 	have func(c *choiceChar) int
+	// more: picks the character has from elsewhere, added to total (a Fighting Style feat taken with an Ability Score Improvement).
+	more func(c *choiceChar) int
 	// state replaces total and have for a choice that isn't a count of picks per class level (unspent points, the prepared list).
 	state func(c *choiceChar) (have, want int)
 
@@ -168,6 +170,9 @@ func (d *choiceDef) status(c *choiceChar) (have, want int) {
 		}
 	}
 	if want > 0 {
+		if d.more != nil {
+			want += d.more(c)
+		}
 		have = d.have(c)
 	}
 	return have, want
@@ -352,6 +357,7 @@ func init() {
 		{key: "fighting_style", feature: "Fighting Style", one: "a Fighting Style feat", many: "Fighting Style feats",
 			total:   func(class, sub string, level int) int { return getMaxFightingStyles(class, level, sub) },
 			have:    func(c *choiceChar) int { return len(getFightingStyles(c.id)) },
+			more:    func(c *choiceChar) int { return fightingStyleFeatsTaken(c.id) },
 			request: characterRequest("/api/characters/fighting-style", `"style": "..."`, "one per request"),
 			step:    fightingStyleStep},
 		{key: "invocations", feature: "Eldritch Invocations", one: "an Eldritch Invocation", many: "Eldritch Invocations",
@@ -359,6 +365,15 @@ func init() {
 			have:    func(c *choiceChar) int { return jsonCount(c.id, "eldritch_invocations") },
 			request: characterRequest("/api/characters/invocations", `"invocation": "..."`, "one per request"),
 			step:    invocationStep},
+		{key: "lessons_feat", feature: "Lessons of the First Ones", one: "an Origin feat", many: "Origin feats",
+			state: func(c *choiceChar) (int, int) {
+				granted, used := lessonsOfTheFirstOnes(c.id)
+				return used, granted
+			},
+			request: func(id int) choiceRequest {
+				return choiceRequest{method: "POST", path: fmt.Sprintf("/api/characters/%d/feat", id), body: `{"feat": "...", "choices": {...}}`, how: "one feat per request; Skilled and Magic Initiate send their choices"}
+			},
+			step: lessonsFeatStep},
 		{key: "book_of_shadows", feature: "Pact of the Tome", one: "3 cantrips and 2 level 1 Ritual spells for your Book of Shadows",
 			state: func(c *choiceChar) (int, int) {
 				if c.levels["warlock"] > 0 && bookOfShadowsOpen(c.id) {

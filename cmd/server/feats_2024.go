@@ -150,6 +150,7 @@ func originFeatsSRD() map[string]Feat {
 		"magic_initiate": {
 			Name: "Magic Initiate", Category: "Origin", Repeatable: true,
 			ChoicesWhenTaken: "a spell list (Cleric, Druid or Wizard), two cantrips, one level 1 spell and a spellcasting ability",
+			ChoicesBody:      `{"list": "cleric, druid or wizard", "cantrips": ["two cantrips of that list"], "spell": "a level 1 spell of that list", "spellcasting_ability": "int, wis or cha"}`,
 			Description:      "You gain the following benefits.",
 			Benefits: []string{
 				"Two Cantrips. You learn two cantrips of your choice from the Cleric, Druid, or Wizard spell list. Intelligence, Wisdom, or Charisma is your spellcasting ability for this feat's spells (choose when you select this feat).",
@@ -168,6 +169,7 @@ func originFeatsSRD() map[string]Feat {
 		"skilled": {
 			Name: "Skilled", Category: "Origin", Repeatable: true,
 			ChoicesWhenTaken: "three skills or tools",
+			ChoicesBody:      `{"proficiencies": ["three skills or tools"]}`,
 			Description:      "You gain proficiency in any combination of three skills or tools of your choice.",
 			Benefits: []string{
 				"You gain proficiency in any combination of three skills or tools of your choice.",
@@ -206,7 +208,50 @@ type featTaker struct {
 	class    string
 	level    int
 	str, dex int
-	has      []string // the feats the character has
+	has      []string // the feats the character has, its Fighting Styles among them (a Fighting Style is a feat)
+}
+
+// featTakerOf loads it: the one loader for the feat request and the setup step.
+func featTakerOf(charID int) (featTaker, bool) {
+	var t featTaker
+	var featsJSON []byte
+	if db.QueryRow(`SELECT COALESCE(class,''), COALESCE(level,1), COALESCE(str,10), COALESCE(dex,10), COALESCE(feats,'[]') FROM characters WHERE id = $1`, charID).
+		Scan(&t.class, &t.level, &t.str, &t.dex, &featsJSON) != nil {
+		return t, false
+	}
+	t.class = strings.ToLower(t.class)
+	json.Unmarshal(featsJSON, &t.has)
+	for _, s := range getFightingStyles(charID) {
+		if !containsStr(t.has, s) {
+			t.has = append(t.has, s)
+		}
+	}
+	return t, true
+}
+
+// fightingStyleFeatsTaken: the Fighting Style feats taken with an Ability Score Improvement (each is one more Fighting Style,
+// counted by the Fighting Style choice in choiceDefs).
+func fightingStyleFeatsTaken(charID int) int {
+	n := 0
+	for _, slug := range jsonListOf(charID, "feats") {
+		if f, ok := availableFeats[slug]; ok && f.Category == "Fighting Style" {
+			n++
+		}
+	}
+	return n
+}
+
+// featHowTo: the feat request a feat takes, with its ability_choice and choices when it has them.
+func featHowTo(charID int, slug string) string {
+	f := availableFeats[slug]
+	body := fmt.Sprintf(`"feat": %q`, slug)
+	if len(f.AbilityChoices) > 0 {
+		body += fmt.Sprintf(`, "ability_choice": "one of %s"`, strings.Join(f.AbilityChoices, ", "))
+	}
+	if f.ChoicesBody != "" {
+		body += `, "choices": ` + f.ChoicesBody
+	}
+	return fmt.Sprintf("POST /api/characters/%d/feat {%s}", charID, body)
 }
 
 // findFeat: the feat a name means: its slug or the name the server shows ("Magic Initiate"), in any spelling.
@@ -238,14 +283,8 @@ func featRefusal(t featTaker, slug string) (code, msg string) {
 	if ok, why := featPrerequisite(f.Prerequisite, t.class, t.level, t.str, t.dex); !ok {
 		return "prerequisite_not_met", why
 	}
-	// A feat the server can't apply through this request is refused, not recorded half-made (Nov 14: Skilled and Magic Initiate
-	// were accepted here without their proficiencies or spells, and a Fighting Style feat was recorded where nothing reads it).
-	if f.ChoicesWhenTaken != "" {
-		return "feat_needs_choices", fmt.Sprintf("%s needs choices when it is taken (%s), and the server can't take them at a level-up yet: it comes with a background or the Human species at creation. Choose another feat.", f.Name, f.ChoicesWhenTaken)
-	}
-	if f.Category == "Fighting Style" {
-		return "use_fighting_style", fmt.Sprintf("%s is a Fighting Style feat: it is chosen with your class's Fighting Style feature (POST /api/characters/fighting-style), not with an Ability Score Improvement.", f.Name)
-	}
+	// Skilled and Magic Initiate take their choices in the request (choices, checked by resolveFeat as at creation); a Fighting
+	// Style feat goes with the character's Fighting Styles.
 	return "", ""
 }
 

@@ -172,10 +172,6 @@ func resistancesView(charID int, species string, rec *originRecord, hasOrigin bo
 func addOriginFeatPicks(feats []map[string]interface{}, charID int, rec *originRecord) {
 	used := make([]bool, len(rec.Feats))
 	uses := loadSpeciesUses(charID)
-	bgName := titleWords(rec.Background)
-	if bg := game.GetBackground(rec.Background); bg != nil {
-		bgName = bg.Name
-	}
 	for _, fe := range feats {
 		slug := strings.ReplaceAll(fmt.Sprint(fe["slug"]), "-", "_")
 		for i, of := range rec.Feats {
@@ -183,10 +179,7 @@ func addOriginFeatPicks(feats []map[string]interface{}, charID int, rec *originR
 				continue
 			}
 			used[i] = true
-			fe["source"] = bgName + " background"
-			if of.Source == "species" {
-				fe["source"] = rec.Species.Name + " (Versatile)"
-			}
+			fe["source"] = featSourceLabel(of, rec)
 			switch of.Slug {
 			case "magic_initiate":
 				ability := strings.ToUpper(of.Ability)

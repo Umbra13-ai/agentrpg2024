@@ -43,14 +43,12 @@ var recommendedBoon = regexp.MustCompile(`(Boon\s+of\s+(?:the\s+)?[A-Z][A-Za-z]+
 func asiSetupStep(charID int) *setupStep {
 	var pending, level, str, dex, con, intl, wis, cha int
 	var class string
-	var featsJSON []byte
-	if db.QueryRow(`SELECT COALESCE(pending_asi,0), level, COALESCE(class,''), str, dex, con, intl, wis, cha, COALESCE(feats,'[]') FROM characters WHERE id = $1`, charID).
-		Scan(&pending, &level, &class, &str, &dex, &con, &intl, &wis, &cha, &featsJSON) != nil || pending <= 0 {
+	if db.QueryRow(`SELECT COALESCE(pending_asi,0), level, COALESCE(class,''), str, dex, con, intl, wis, cha FROM characters WHERE id = $1`, charID).
+		Scan(&pending, &level, &class, &str, &dex, &con, &intl, &wis, &cha) != nil || pending <= 0 {
 		return nil
 	}
 	cl := strings.ToLower(class)
-	var have []string
-	json.Unmarshal(featsJSON, &have)
+	taker, _ := featTakerOf(charID)
 	scores := map[string]int{"str": str, "dex": dex, "con": con, "int": intl, "wis": wis, "cha": cha}
 	epic := level >= 19
 	feature := "Ability Score Improvement"
@@ -64,11 +62,15 @@ func asiSetupStep(charID int) *setupStep {
 	}
 	var feats []featOpt
 	// every feat the request would accept (featsOpenTo is the request's own rule), so the options and the check can't disagree
-	for _, slug := range featsOpenTo(featTaker{class: cl, level: level, str: str, dex: dex, has: have}) {
+	for _, slug := range featsOpenTo(taker) {
 		f := availableFeats[slug]
-		m := map[string]interface{}{"feat": slug, "name": f.Name, "category": f.Category, "prerequisite": featPrereqText(f.Prerequisite), "what_it_does": strings.Join(f.Benefits, " ")}
+		m := map[string]interface{}{"feat": slug, "name": f.Name, "category": f.Category, "prerequisite": featPrereqText(f.Prerequisite), "what_it_does": strings.Join(f.Benefits, " "),
+			"how_to_take": featHowTo(charID, slug)}
 		if len(f.AbilityChoices) > 0 {
 			m["ability_choice"] = fmt.Sprintf("send ability_choice: one of %s (the +%d increase, up to %d)", strings.Join(f.AbilityChoices, ", "), max1(f.AbilityPoints), maxScoreOr20(f.MaxScore))
+		}
+		if f.ChoicesWhenTaken != "" {
+			m["choices"] = "send choices: " + f.ChoicesWhenTaken
 		}
 		feats = append(feats, featOpt{slug, m})
 	}
@@ -85,7 +87,7 @@ func asiSetupStep(charID int) *setupStep {
 	// the suggestion: an Epic Boon the SRD recommends at 19; otherwise the class's primary ability (up to 20), then Constitution
 	order := append(append([]string{}, classPrimary[cl]...), "con", "dex", "wis", "str", "cha", "int")
 	st := setupStep{Key: "asi_or_feat", Title: "Spend your " + feature,
-		Why: fmt.Sprintf("You have %d Ability Score Improvement point(s) to spend (2 for each %s). %s Either raise your ability scores (option 1, POST /api/characters/%d/asi {\"ability\": \"...\", \"points\": 1 or 2}, as many times as you have points), or take one feat you qualify for, which costs 2 points (option 2, POST /api/characters/%d/feat {\"feat\": \"...\"}).",
+		Why: fmt.Sprintf("You have %d Ability Score Improvement point(s) to spend (2 for each %s). %s Either raise your ability scores (option 1, POST /api/characters/%d/asi {\"ability\": \"...\", \"points\": 1 or 2}, as many times as you have points), or take one feat you qualify for, which costs 2 points (option 2, POST /api/characters/%d/feat {\"feat\": \"...\"}, with the feat's ability_choice and choices when it has them: each feat's how_to_take).",
 			pending, feature, classFeatureText(cl, feature), charID, charID)}
 	choices := map[string]interface{}{
 		"points_to_spend":                    pending,

@@ -130,7 +130,7 @@ func resolveFeat(slug, source string, in *featChoiceInput, bgListNote string, us
 		return f, nil
 	case "magic_initiate":
 		if in == nil {
-			return nil, originErr("feat_choices_required", nil, "Magic Initiate needs %s_feat_choices: {list, cantrips (2), spell, spellcasting_ability}", source)
+			return nil, originErr("feat_choices_required", nil, "Magic Initiate needs %s: {list, cantrips (2), spell, spellcasting_ability}", featChoicesField(source))
 		}
 		list := strings.ToLower(strings.TrimSpace(in.List))
 		if bgListNote != "" {
@@ -192,7 +192,7 @@ func resolveFeat(slug, source string, in *featChoiceInput, bgListNote string, us
 		*known = append(*known, f.Spell)
 	case "skilled":
 		if in == nil || len(in.Proficiencies) != 3 {
-			return nil, originErr("feat_choices_required", nil, "Skilled needs %s_feat_choices.proficiencies: exactly three skills or tools", source)
+			return nil, originErr("feat_choices_required", nil, "Skilled needs %s.proficiencies: exactly three skills or tools", featChoicesField(source))
 		}
 		for _, p := range in.Proficiencies {
 			if k, ok := game.CanonSkill(p); ok { // "animal-handling" and "Sleight-of-Hand" as the builder takes them (re-check)
@@ -390,13 +390,9 @@ func resolveOrigin(in originInput) (*originOutput, *originError) {
 	}
 	for _, f := range feats {
 		out.FeatSlugs = append(out.FeatSlugs, f.Slug)
-		for _, p := range f.Proficiencies {
-			if game.IsSkill(p) {
-				out.Skills = append(out.Skills, p)
-			} else {
-				out.Tools = append(out.Tools, p)
-			}
-		}
+		skills, tools, _ := f.grants()
+		out.Skills = append(out.Skills, skills...)
+		out.Tools = append(out.Tools, tools...)
 	}
 
 	// Spells from species and feats
@@ -598,10 +594,120 @@ func originSpellName(slug string) string {
 	return titleWords(strings.ReplaceAll(slug, "-", " "))
 }
 
-// featSourceName: "your background's" or "your Human feat's".
+// Where an Origin feat comes from (originFeat.Source): a character's background or the Human's Versatile trait at creation, or a
+// feat taken later with an Ability Score Improvement or the Warlock's Lessons of the First Ones (POST /api/characters/{id}/feat).
+const (
+	featFromASI     = "asi"
+	featFromLessons = "lessons"
+)
+
+// featSourceName: whose Magic Initiate a message is about.
 func featSourceName(source string) string {
-	if source == "species" {
+	switch source {
+	case "species":
 		return "your Human feat's"
+	case "background":
+		return "your background's"
 	}
-	return "your background's"
+	return "this"
+}
+
+// featChoicesField: the field that carries a feat's choices: background_feat_choices and species_feat_choices at creation, choices
+// in the feat request.
+func featChoicesField(source string) string {
+	if source == "background" || source == "species" {
+		return source + "_feat_choices"
+	}
+	return "choices"
+}
+
+// featSourceLabel: where a feat comes from, as the character sheet shows it.
+func featSourceLabel(f originFeat, rec *originRecord) string {
+	switch f.Source {
+	case "species":
+		return rec.Species.Name + " (Versatile)"
+	case featFromASI:
+		return "Ability Score Improvement"
+	case featFromLessons:
+		return "Lessons of the First Ones"
+	}
+	if bg := game.GetBackground(rec.Background); bg != nil {
+		return bg.Name + " background"
+	}
+	return titleWords(rec.Background) + " background"
+}
+
+// grants: what an Origin feat's picks give the character: skills and tools (Skilled) and spells (Magic Initiate). Creation and
+// the feat request both apply them from here.
+func (f originFeat) grants() (skills, tools, spells []string) {
+	for _, p := range f.Proficiencies {
+		if game.IsSkill(p) {
+			skills = append(skills, p)
+		} else {
+			tools = append(tools, p)
+		}
+	}
+	spells = append(append(spells, f.Cantrips...), f.Spell)
+	if f.Spell == "" {
+		spells = spells[:len(spells)-1]
+	}
+	return
+}
+
+// takeOriginFeat: an Origin feat taken after creation (an Ability Score Improvement or Lessons of the First Ones). Its choices are
+// checked by resolveFeat, the creation check, against what the character already has: its skill and tool proficiencies, the
+// spells it has (spellsHeld), and the spell lists of its other Magic Initiate feats. It returns the feat as it is recorded and the
+// columns to write with it (origin, skill_proficiencies, tool_proficiencies, known_spells); nothing is written here.
+func takeOriginFeat(charID int, slug, source string, in *featChoiceInput) (*originFeat, map[string]interface{}, *originError) {
+	var raw []byte
+	var skills, tools string
+	if db.QueryRow(`SELECT COALESCE(origin,'{}'), COALESCE(skill_proficiencies,''), COALESCE(tool_proficiencies,'') FROM characters WHERE id = $1`, charID).
+		Scan(&raw, &skills, &tools) != nil {
+		return nil, nil, originErr("character_not_found", nil, "Character %d not found", charID)
+	}
+	rec, ok := loadOriginRecord(raw)
+	if !ok && in == nil && availableFeats[slug].ChoicesWhenTaken == "" {
+		return &originFeat{Slug: slug, Source: source}, map[string]interface{}{}, nil // nothing to record for Alert or Savage Attacker
+	}
+	if !ok {
+		return nil, nil, originErr("no_origin_record", nil, "This character was made before origins were recorded, so a feat with choices can't be added to it. Ask the server's admin.")
+	}
+	for _, f := range rec.Feats {
+		if source == featFromLessons && f.Source == featFromLessons && f.Slug == slug {
+			// SRD 5.2.1: each time you gain the invocation, choose a different Origin feat
+			return nil, nil, originErr("lessons_feat_repeated", nil, "You already took %s with Lessons of the First Ones: each copy of the invocation gives a different Origin feat", titleWords(strings.ReplaceAll(slug, "_", " ")))
+		}
+	}
+	heldSkills := game.ParseProficiencyList(skills)
+	heldTools := game.ParseProficiencyList(tools)
+	usedLists := map[string]bool{}
+	for _, f := range rec.Feats {
+		if f.Slug == "magic_initiate" {
+			usedLists[f.List] = true
+		}
+	}
+	var known []string
+	for s := range spellsHeld(charID) {
+		known = append(known, s)
+	}
+	sort.Strings(known)
+	f, err := resolveFeat(slug, source, in, "", usedLists, &heldSkills, &heldTools, &known)
+	if err != nil {
+		return nil, nil, err
+	}
+	rec.Feats = append(rec.Feats, *f)
+	newSkills, newTools, newSpells := f.grants()
+	for _, sk := range newSkills {
+		skills = addListWord(skills, sk)
+	}
+	knownSpells := jsonListOf(charID, "known_spells")
+	for _, sp := range newSpells {
+		if !containsStr(knownSpells, sp) {
+			knownSpells = append(knownSpells, sp)
+		}
+	}
+	originJSON, _ := json.Marshal(rec)
+	knownJSON, _ := json.Marshal(knownSpells)
+	return f, map[string]interface{}{"origin": string(originJSON), "skill_proficiencies": skills,
+		"tool_proficiencies": game.MergeToolList(tools, newTools), "known_spells": string(knownJSON)}, nil
 }

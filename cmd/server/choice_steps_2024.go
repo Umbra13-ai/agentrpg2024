@@ -212,3 +212,31 @@ func autoEquipStep(c *choiceChar) *setupStep {
 		Why:     "Do you want me to equip everything for you? I will put on your armor, take your weapon (and a Shield or second Light weapon) in hand and wear your clothing and jewelry. If you have a choice to make (more weapons than hands, two items for the same body place) I will ask you which. GET /api/characters/auto-equip?character_id=N shows what I would do first.",
 		Request: req("POST", "/api/characters/auto-equip", autoEquipSuggestion(c.id))}
 }
+
+// lessonsFeatStep: an Origin feat from Lessons of the First Ones not taken yet. The options are the Origin feats the feat request
+// would accept (featsOpenTo), each with its request; the suggestion is Alert, which takes no choices.
+func lessonsFeatStep(c *choiceChar) *setupStep {
+	taker, _ := featTakerOf(c.id)
+	var opts []map[string]interface{}
+	suggest := ""
+	for _, slug := range featsOpenTo(taker) {
+		f := availableFeats[slug]
+		if f.Category != "Origin" {
+			continue
+		}
+		o := map[string]interface{}{"feat": slug, "name": f.Name, "what_it_does": strings.Join(f.Benefits, " "), "how_to_take": featHowTo(c.id, slug)}
+		if f.ChoicesWhenTaken != "" {
+			o["choices"] = "send choices: " + f.ChoicesWhenTaken
+		} else if suggest == "" || slug == "alert" {
+			suggest = slug
+		}
+		opts = append(opts, o)
+	}
+	st := setupStep{Key: "lessons_feat", Title: "Choose your Origin feat (Lessons of the First Ones)",
+		Why:     "Lessons of the First Ones. " + strings.TrimPrefix(game.AvailableInvocations["lessons-of-the-first-ones"].Description, "Prerequisite: Level 2+ Warlock ") + " It costs no Ability Score Improvement points.",
+		Choices: map[string]interface{}{"origin_feats": opts}}
+	if suggest != "" {
+		st.Request = req("POST", fmt.Sprintf("/api/characters/%d/feat", c.id), map[string]interface{}{"feat": suggest})
+	}
+	return &st
+}

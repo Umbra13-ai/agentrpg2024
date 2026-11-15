@@ -178,13 +178,13 @@ func handleCharacterASI(w http.ResponseWriter, r *http.Request, charID int) {
 
 // handleCharacterFeat godoc
 // @Summary Take a feat instead of ASI
-// @Description Spend 2 ASI points to gain a feat. Each feat can only be taken once. Some feats have prerequisites (ability scores, spellcasting, etc.).
+// @Description Spend 2 ASI points to gain a feat you qualify for (the setup step lists them, each with its how_to_take); a Warlock's Lessons of the First Ones gives an Origin feat without points. A feat that raises a score takes ability_choice. Skilled and Magic Initiate take their choices in choices, as background_feat_choices at character creation: Skilled {"proficiencies": [three skills or tools]}, Magic Initiate {"list": "cleric|druid|wizard", "cantrips": [two], "spell": "a level 1 spell", "spellcasting_ability": "int|wis|cha"}; they are checked against what the character already has. A Fighting Style feat (with the Fighting Style feature) is one more Fighting Style.
 // @Tags Characters
 // @Accept json
 // @Produce json
 // @Param Authorization header string true "Basic auth"
 // @Param id path int true "Character ID"
-// @Param request body object{feat=string,ability_choice=string} true "Feat selection - feat slug required, ability_choice for feats like Resilient/Observant"
+// @Param request body object{feat=string,ability_choice=string,choices=object} true "feat (slug or name); ability_choice for a feat that raises a score; choices for Skilled or Magic Initiate"
 // @Success 200 {object} map[string]interface{} "Feat gained"
 // @Failure 400 {object} map[string]interface{} "Invalid request or prerequisite not met"
 // @Failure 401 {object} map[string]interface{} "Unauthorized"
@@ -231,12 +231,10 @@ func handleCharacterFeat(w http.ResponseWriter, r *http.Request, charID int) {
 	var ownerID, pendingASI, level int
 	var str, dex, con, intl, wis, cha, maxHP int
 	var class string
-	var featsJSON []byte
 	err = db.QueryRow(`
-		SELECT agent_id, COALESCE(pending_asi, 0), level, str, dex, con, intl, wis, cha, 
-		       class, max_hp, COALESCE(feats, '[]')
+		SELECT agent_id, COALESCE(pending_asi, 0), level, str, dex, con, intl, wis, cha, class, max_hp
 		FROM characters WHERE id = $1
-	`, charID).Scan(&ownerID, &pendingASI, &level, &str, &dex, &con, &intl, &wis, &cha, &class, &maxHP, &featsJSON)
+	`, charID).Scan(&ownerID, &pendingASI, &level, &str, &dex, &con, &intl, &wis, &cha, &class, &maxHP)
 
 	if err != nil {
 		w.WriteHeader(http.StatusNotFound)
@@ -263,17 +261,17 @@ func handleCharacterFeat(w http.ResponseWriter, r *http.Request, charID int) {
 	}
 
 	var req struct {
-		Feat          string `json:"feat"`
-		AbilityChoice string `json:"ability_choice"` // For feats like Resilient, Observant
+		Feat          string           `json:"feat"`
+		AbilityChoice string           `json:"ability_choice"` // a feat that raises an ability score
+		Choices       *featChoiceInput `json:"choices"`        // Skilled, Magic Initiate: as background_feat_choices at creation
 	}
 	if !readRequest(w, r, &req) {
 		return
 	}
 
 	// One rule decides whether the character can take the feat, and the same rule lists what it can take (feats_2024.go)
-	var held []string
-	json.Unmarshal(featsJSON, &held)
-	taker := featTaker{class: class, level: level, str: str, dex: dex, has: held}
+	taker, _ := featTakerOf(charID)
+	held := jsonListOf(charID, "feats")
 	featSlug, feat, known := findFeat(req.Feat)
 	if !known {
 		featSlug = req.Feat
@@ -343,22 +341,64 @@ func handleCharacterFeat(w http.ResponseWriter, r *http.Request, charID int) {
 		}
 	}
 
+	// Lessons of the First Ones gives an Origin feat without ASI points; every other feat costs 2
+	byLessons := viaLessons && feat.Category == "Origin"
+	if !byLessons && pendingASI < 2 {
+		writeJSONStatus(w, http.StatusBadRequest, map[string]interface{}{"error": "insufficient_asi", "message": "Lessons of the First Ones grants Origin feats only; other feats cost 2 ASI points. Nothing was changed."})
+		return
+	}
+	source := featFromASI
+	if byLessons {
+		source = featFromLessons
+	}
+
+	// The feat's choices: Skilled and Magic Initiate take theirs here, checked and applied as at creation (takeOriginFeat); a
+	// Fighting Style feat joins the character's Fighting Styles.
+	if feat.ChoicesWhenTaken == "" && req.Choices != nil {
+		writeJSONStatus(w, http.StatusBadRequest, map[string]interface{}{"error": "choices_not_used",
+			"message": fmt.Sprintf("%s takes no choices: leave choices out. Nothing was changed.", feat.Name), "how_to_take": featHowTo(charID, featSlug)})
+		return
+	}
+	more := map[string]interface{}{}
+	var taken *originFeat
+	switch feat.Category {
+	case "Origin":
+		f, cols, oerr := takeOriginFeat(charID, featSlug, source, req.Choices)
+		if oerr != nil {
+			reply := map[string]interface{}{"error": oerr.Code, "message": oerr.Message + ". Nothing was changed.", "how_to_take": featHowTo(charID, featSlug)}
+			if len(oerr.Options) > 0 {
+				reply["valid_options"] = oerr.Options
+			}
+			writeJSONStatus(w, http.StatusBadRequest, reply)
+			return
+		}
+		taken, more = f, cols
+	case "Fighting Style":
+		styles, _ := json.Marshal(append(getFightingStyles(charID), featSlug))
+		more["fighting_styles"] = string(styles)
+	}
+
 	// Apply the feat
 	held = append(held, featSlug)
 	featsBytes, _ := json.Marshal(held)
-
-	// Start building the update query
-	updates := []string{"feats = $1", "pending_asi = pending_asi - 2"}
-	if viaLessons && strings.EqualFold(feat.Category, "Origin") && pendingASI < 2 || viaLessons && strings.EqualFold(feat.Category, "Origin") {
-		updates = []string{"feats = $1"} // Lessons of the First Ones
-		setUsedResource(charID, "lessons_feats", lessonsUsed+1)
-	} else if pendingASI < 2 {
-		w.WriteHeader(http.StatusBadRequest)
-		json.NewEncoder(w).Encode(map[string]interface{}{"error": "insufficient_asi", "message": "Lessons of the First Ones grants Origin feats only; other feats cost 2 ASI points."})
-		return
+	updates := []string{"feats = $1"}
+	spent := 0
+	if !byLessons {
+		updates = append(updates, "pending_asi = pending_asi - 2")
+		spent = 2
 	}
 	args := []interface{}{featsBytes}
 	argIndex := 2
+	var cols []string
+	for col := range more {
+		cols = append(cols, col)
+	}
+	sort.Strings(cols)
+	for _, col := range cols {
+		updates = append(updates, fmt.Sprintf("%s = $%d", col, argIndex))
+		args = append(args, more[col])
+		argIndex++
+	}
 
 	// Apply ability bonuses
 	abilityIncreased := ""
@@ -465,6 +505,9 @@ func handleCharacterFeat(w http.ResponseWriter, r *http.Request, charID int) {
 		json.NewEncoder(w).Encode(map[string]interface{}{"error": "database_error", "details": publicError(err)})
 		return
 	}
+	if byLessons {
+		setUsedResource(charID, "lessons_feats", lessonsUsed+1)
+	}
 
 	response := map[string]interface{}{
 		"success":       true,
@@ -472,9 +515,29 @@ func handleCharacterFeat(w http.ResponseWriter, r *http.Request, charID int) {
 		"feat_slug":     featSlug,
 		"description":   feat.Description,
 		"benefits":      feat.Benefits,
-		"points_spent":  2,
-		"remaining_asi": pendingASI - 2,
+		"points_spent":  spent,
+		"remaining_asi": pendingASI - spent,
 		"message":       fmt.Sprintf("You gained the %s feat!", feat.Name),
+	}
+	if byLessons {
+		response["from"] = "Lessons of the First Ones"
+	}
+	if taken != nil && (len(taken.Proficiencies) > 0 || taken.List != "") {
+		chosen := map[string]interface{}{}
+		if len(taken.Proficiencies) > 0 {
+			chosen["proficiencies"] = taken.Proficiencies
+		}
+		if taken.List != "" {
+			chosen["list"], chosen["cantrips"], chosen["spell"], chosen["spellcasting_ability"] = taken.List, taken.Cantrips, taken.Spell, strings.ToUpper(taken.Ability)
+			response["message"] = fmt.Sprintf("You gained the %s feat (%s list): %s are always prepared, and you can cast %s once per Long Rest without a spell slot.",
+				feat.Name, titleWords(taken.List), skillNames(append(append([]string{}, taken.Cantrips...), taken.Spell)), originSpellName(taken.Spell))
+		} else {
+			response["message"] = fmt.Sprintf("You gained the %s feat: proficiency in %s.", feat.Name, profNames(taken.Proficiencies))
+		}
+		response["chosen"] = chosen
+	}
+	if feat.Category == "Fighting Style" {
+		response["message"] = fmt.Sprintf("You gained the %s Fighting Style feat.", feat.Name)
 	}
 
 	if abilityIncreased != "" {

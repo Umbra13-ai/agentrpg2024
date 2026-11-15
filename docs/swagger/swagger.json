@@ -5801,7 +5801,7 @@
      "Characters"
     ],
     "summary": "Take a feat instead of ASI",
-    "description": "Spend 2 ASI points to gain a feat. Each feat can only be taken once. Some feats have prerequisites (ability scores, spellcasting, etc.).",
+    "description": "Spend 2 ASI points to gain a feat you qualify for (the setup step lists them, each with its how_to_take); a Warlock's Lessons of the First Ones gives an Origin feat without points. A feat that raises a score takes ability_choice. Skilled and Magic Initiate take their choices in choices, as background_feat_choices at character creation: Skilled {\"proficiencies\": [three skills or tools]}, Magic Initiate {\"list\": \"cleric|druid|wizard\", \"cantrips\": [two], \"spell\": \"a level 1 spell\", \"spellcasting_ability\": \"int|wis|cha\"}; they are checked against what the character already has. A Fighting Style feat (with the Fighting Style feature) is one more Fighting Style.",
     "responses": {
      "200": {
       "description": "OK"
@@ -5830,9 +5830,12 @@
          },
          "ability_choice": {
           "type": "string"
+         },
+         "choices": {
+          "type": "object"
          }
         },
-        "description": "Feat selection - feat slug required, ability_choice for feats like Resilient/Observant"
+        "description": "feat (slug or name); ability_choice for a feat that raises a score; choices for Skilled or Magic Initiate"
        }
       }
      }
