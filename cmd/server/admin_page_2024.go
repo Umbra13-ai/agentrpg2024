@@ -28,6 +28,14 @@ a{color:var(--accent);font-weight:600}.link{border:0;background:none;color:var(-
 .card{background:var(--card);border:1px solid var(--line);border-radius:14px;padding:14px;margin-bottom:12px}
 .item{display:block;width:100%;text-align:left;background:var(--card);border:1px solid var(--line);border-radius:14px;padding:12px 14px;margin-bottom:10px}
 .item b{display:block;font-size:17px}.item span{color:var(--muted);font-size:15px}
+.swipe{position:relative;margin-bottom:10px;border-radius:14px;overflow:hidden}
+.swipe .item{position:relative;z-index:1;margin:0;touch-action:pan-y;transition:transform .2s ease}
+.swipe.drag .item{transition:none}
+.swipe .act{position:absolute;top:0;right:0;bottom:0;width:96px;border:0;color:#fff;font-weight:700;font-size:13px;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:3px;background:#c62828}
+.swipe:not(.shown) .act{visibility:hidden}.swipe .act.restore{background:#2f6e33}.swipe .act svg{width:24px;height:24px}
+.swipe.gone{opacity:0;margin-bottom:0;transition:height .22s ease,opacity .22s ease,margin .22s ease}
+@media (prefers-reduced-motion:reduce){.swipe .item,.swipe.gone{transition:none}}
+#toast button{margin-left:12px;background:transparent;border:1px solid currentColor;color:inherit;border-radius:8px;padding:2px 10px;font-weight:700}
 .badge{display:inline-block;font-size:13px;font-weight:700;padding:2px 8px;border-radius:99px;background:var(--chip);color:var(--muted);margin-left:6px;vertical-align:2px}
 .badge.del{color:var(--warn)}.badge.on{color:var(--ok)}
 .muted{color:var(--muted)}.small{font-size:15px}
@@ -94,12 +102,46 @@ function showList(){hideSave();pending={};M.textContent='';window.scrollTo(0,0);
   var t;i.oninput=function(){clearTimeout(t);t=setTimeout(function(){q=i.value;load()},300)};sel.onchange=function(){which=sel.value;load()};
   function load(){api('GET','/api/admin/'+tab+'?q='+encodeURIComponent(q)+'&deleted='+which).then(function(j){var list=j[tab];box.textContent='';
     if(!list.length){box.appendChild(el('p',{'class':'muted'},'Nothing found.'));return}
+    box.appendChild(el('p',{'class':'muted small'},'Swipe a row left (or drag it with the mouse) to '+(which==='only'?'restore it.':'delete it; you can undo.')));
     list.forEach(function(x){var b=el('button',{'class':'item'});var title=el('b',null,x.name);
       if(x.deleted)title.appendChild(el('span',{'class':'badge del'},'Deleted'));
       if(tab==='campaigns'&&!x.deleted)title.appendChild(el('span',{'class':'badge'+(x.status==='active'?' on':'')},x.status));
       var sub=tab==='characters'?('Level '+x.level+' '+cap(x.species)+' '+cap(x.class)+' · '+(x.owner||'no player')+(x.campaign?' · '+x.campaign:'')):('GM '+(x.gm||'none')+' · '+x.players+' of '+x.max_players+' players');
-      add(b,title,el('span',null,sub));b.onclick=function(){tab==='characters'?openCharacter(x.id):openCampaign(x.id)};box.appendChild(b)})}).catch(fail)}
+      add(b,title,el('span',null,sub));
+      box.appendChild(swipeRow(b,x.deleted,function(){tab==='characters'?openCharacter(x.id):openCampaign(x.id)},function(row){quickAction(x,row,load)}))})}).catch(fail)}
   load()}
+
+// ---------- swipe a row left: a red Delete (or, for a deleted row, a green Restore) slides out from under it
+var TRASH='<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M3 6h18M8 6V4h8v2M6 6l1 14h10l1-14M10 11v6M14 11v6"/></svg>';
+var RESTORE='<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M3 12a9 9 0 1 0 3-6.7M3 4v5h5"/></svg>';
+var openRow=null;
+document.addEventListener('pointerdown',function(e){if(openRow&&!openRow.contains(e.target))openRow.close()});
+function swipeRow(item,deleted,onOpen,onAct){var W=96;var w=el('div',{'class':'swipe'});
+  var a=el('button',{'class':'act'+(deleted?' restore':''),tabindex:'-1','aria-label':deleted?'Restore':'Delete'});a.innerHTML=deleted?RESTORE:TRASH;a.appendChild(el('span',null,deleted?'Restore':'Delete'));
+  var down=false,dragging=false,moved=false,x0=0,y0=0,base=0,dx=0;
+  function set(v){if(v)w.classList.add('shown');item.style.transform=v?'translateX('+v+'px)':''}
+  item.addEventListener('transitionend',function(){if(!base&&!down)w.classList.remove('shown')});
+  w.close=function(){set(0);base=0;a.tabIndex=-1;if(openRow===w)openRow=null};
+  function open(){if(openRow&&openRow!==w)openRow.close();set(-W);base=-W;a.tabIndex=0;openRow=w}
+  function act(){if(a.disabled)return;a.disabled=true;set(-W);onAct(w)}
+  item.addEventListener('pointerdown',function(e){if(e.pointerType==='mouse'&&e.button!==0)return;down=true;dragging=false;moved=false;x0=e.clientX;y0=e.clientY;dx=base});
+  item.addEventListener('pointermove',function(e){if(!down)return;var mx=e.clientX-x0,my=e.clientY-y0;
+    if(!dragging){if(Math.abs(mx)>8&&Math.abs(mx)>Math.abs(my)){dragging=true;moved=true;w.classList.add('drag');try{item.setPointerCapture(e.pointerId)}catch(_){}}else if(Math.abs(my)>8){down=false;return}else return}
+    dx=Math.max(-W*1.6,Math.min(0,base+mx));set(dx);e.preventDefault()});
+  function up(){if(!down)return;down=false;if(!dragging)return;w.classList.remove('drag');
+    if(dx<-W*1.35)act();else if(dx<-W/2)open();else w.close()}
+  item.addEventListener('pointerup',up);item.addEventListener('pointercancel',up);
+  item.addEventListener('click',function(e){if(moved){moved=false;e.preventDefault();return}if(base){w.close();return}onOpen()});
+  item.addEventListener('keydown',function(e){if(e.key==='Delete'||e.key==='Backspace'){e.preventDefault();open();a.focus()}});
+  a.onclick=act;add(w,a,item);return w}
+// Delete (or restore) from the list, with Undo; the row folds away and the list reloads.
+function quickAction(x,row,reload){var t=tab,kind=t==='characters'?'character':'campaign',verb=x.deleted?'restore':'delete';
+  api('POST','/api/admin/'+t+'/'+x.id+'/'+verb).then(function(r){campaignsCache=null;fold(row,reload);
+    if(verb==='delete')undoToast(cap(kind)+' '+x.name+' deleted.',function(){api('POST','/api/admin/'+t+'/'+x.id+'/restore').then(function(r2){toast(r2.message||'Restored.');campaignsCache=null;reload()}).catch(fail)});
+    else toast(r.message||'Restored.')}).catch(function(e){row.querySelector('.act').disabled=false;row.close();fail(e)})}
+function fold(row,then){row.style.height=row.offsetHeight+'px';void row.offsetHeight;row.classList.add('gone');row.style.height='0px';setTimeout(then,240)}
+function undoToast(t,undo){var b=document.getElementById('toast');b.textContent=t;b.className='';var u=el('button',null,'Undo');
+  u.onclick=function(){b.style.display='none';undo()};b.appendChild(u);b.style.display='block';clearTimeout(toastT);toastT=setTimeout(function(){b.style.display='none'},8000)}
 function cap(s){s=String(s||'');return s.charAt(0).toUpperCase()+s.slice(1)}
 
 // ---------- editing helpers
