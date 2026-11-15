@@ -36,20 +36,6 @@ import (
 
 // ---------------------------------------------------------------- shared helpers
 
-// updateInventoryItem changes one inventory item (found by id, or by name when it has none).
-func updateInventoryItem(charID int, it invItem, fn func(x invItem)) {
-	id, name := itemStr(it, "id"), itemStr(it, "name")
-	editInventory(charID, func(inv []invItem) []invItem {
-		for _, x := range inv {
-			if (id != "" && itemStr(x, "id") == id) || (id == "" && itemStr(x, "name") == name) {
-				fn(x)
-				break
-			}
-		}
-		return inv
-	})
-}
-
 var attunementItemsOnce sync.Once
 var attunementItems map[string]bool
 
@@ -673,7 +659,7 @@ func mysteriousDeck(charID int, it invItem, description string) string {
 				}
 				return inv
 			})
-			db.Exec(`UPDATE characters SET attuned_items = '[]' WHERE id = $1`, charID)
+			// the attunement to each ends with it: a destroyed item is no longer carried (inventory_2024.go)
 			line += fmt.Sprintf(" [Server: these disintegrate: %s.]", strings.Join(gone, ", "))
 			stopped = true // the deck was one of them
 		case "Gem":

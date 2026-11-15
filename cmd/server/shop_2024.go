@@ -11,6 +11,8 @@ package main
 // The shop is open from creation until the character's campaign starts; after that, buying is up to the GM.
 
 import (
+	"database/sql"
+	"errors"
 	"fmt"
 	"net/http"
 	"regexp"
@@ -396,61 +398,58 @@ func completePurchase(charID, money, total int, kit []startItem, lines []string)
 	if err != nil {
 		return http.StatusBadRequest, map[string]interface{}{"error": "cannot_add", "message": publicError(err)}
 	}
-	tx, err := db.Begin()
-	if err != nil {
-		return http.StatusInternalServerError, map[string]interface{}{"error": dbErrorCode}
+	// the money as it is now, with the character locked (one inventory change, inventory_2024.go): purchases sent together pay one
+	// after another
+	var bought []string
+	left := 0
+	_, err = changeInventory(charID, func(tx *sql.Tx, inv []invItem) ([]invItem, error) {
+		if money = walletCPIn(tx, charID); total > money {
+			return nil, refuseInv(http.StatusBadRequest, map[string]interface{}{"error": "not_enough_money",
+				"message": fmt.Sprintf("That costs %s and you have %s.", moneyText(total), moneyText(money)), "would_cost": lines})
+		}
+		base := 0
+		for _, it := range inv {
+			if id := itemStr(it, "id"); strings.HasPrefix(id, "i") {
+				var n int
+				fmt.Sscanf(id[1:], "%d", &n)
+				if n > base {
+					base = n
+				}
+			}
+		}
+		if f := freedItemIDFloor(charID); f > base { // not an id a sale just freed
+			base = f
+		}
+		remap := map[string]string{}
+		for i, it := range res.Items {
+			remap[itemStr(it, "id")] = fmt.Sprintf("i%d", base+i+1)
+		}
+		for _, it := range res.Items {
+			it["id"] = remap[itemStr(it, "id")]
+			if loc := itemStr(it, "location"); loc != "" {
+				if m, ok := remap[loc]; ok {
+					it["location"] = m
+				}
+			}
+			inv = append(inv, it)
+			bought = append(bought, fmt.Sprintf("%s (id %s)", itemStr(it, "name"), itemStr(it, "id")))
+		}
+		fillItemWeights(inv)
+		left = money - total
+		if _, err := tx.Exec(`UPDATE characters SET gold = $1, silver = $2, copper = $3, electrum = 0, platinum = 0 WHERE id = $4`, left/100, (left%100)/10, left%10, charID); err != nil {
+			return nil, err
+		}
+		return inv, nil
+	})
+	var refused *invRefusal
+	if errors.As(err, &refused) {
+		return refused.status, refused.body
 	}
-	defer tx.Rollback()
-	inv, err := loadInventoryTx(tx, charID)
 	if dbFailed(err) {
 		return http.StatusInternalServerError, map[string]interface{}{"error": dbErrorCode, "message": dbReadMessage("the character's pack")}
 	}
 	if err != nil {
 		return http.StatusNotFound, map[string]interface{}{"error": "character_not_found"}
-	}
-	// the money as it is now, with the character locked (loadInventoryTx): purchases sent together pay one after another
-	if money = walletCPIn(tx, charID); total > money {
-		return http.StatusBadRequest, map[string]interface{}{"error": "not_enough_money",
-			"message": fmt.Sprintf("That costs %s and you have %s.", moneyText(total), moneyText(money)), "would_cost": lines}
-	}
-	base := 0
-	for _, it := range inv {
-		if id := itemStr(it, "id"); strings.HasPrefix(id, "i") {
-			var n int
-			fmt.Sscanf(id[1:], "%d", &n)
-			if n > base {
-				base = n
-			}
-		}
-	}
-	if f := freedItemIDFloor(charID); f > base { // not an id a sale just freed
-		base = f
-	}
-	remap := map[string]string{}
-	for i, it := range res.Items {
-		remap[itemStr(it, "id")] = fmt.Sprintf("i%d", base+i+1)
-	}
-	var bought []string
-	for _, it := range res.Items {
-		it["id"] = remap[itemStr(it, "id")]
-		if loc := itemStr(it, "location"); loc != "" {
-			if m, ok := remap[loc]; ok {
-				it["location"] = m
-			}
-		}
-		inv = append(inv, it)
-		bought = append(bought, fmt.Sprintf("%s (id %s)", itemStr(it, "name"), itemStr(it, "id")))
-	}
-	fillItemWeights(inv)
-	if err := saveInventoryTx(tx, charID, inv); err != nil {
-		return http.StatusInternalServerError, map[string]interface{}{"error": "save_failed"}
-	}
-	left := money - total
-	if _, err := tx.Exec(`UPDATE characters SET gold = $1, silver = $2, copper = $3, electrum = 0, platinum = 0 WHERE id = $4`, left/100, (left%100)/10, left%10, charID); err != nil {
-		return http.StatusInternalServerError, map[string]interface{}{"error": "save_failed"}
-	}
-	if tx.Commit() != nil {
-		return http.StatusInternalServerError, map[string]interface{}{"error": "save_failed"}
 	}
 	refreshStoredAC(charID)
 	return http.StatusOK, map[string]interface{}{"success": true, "bought": lines, "paid": moneyText(total), "your_money": moneyText(left), "now_in_your_inventory": bought}

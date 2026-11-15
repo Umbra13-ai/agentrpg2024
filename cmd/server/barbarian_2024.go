@@ -240,21 +240,20 @@ func brutalStrikeHit(charID, level int, descLower string, crit bool) (int, strin
 // level 20 ability score capstones (Barbarian Primal Champion: Strength and Constitution +4, Monk Body and Mind: Dexterity and
 // Wisdom +4, maximum 25) are applied once.
 func classCapstones(charID int, name, class string, level int) string {
-	var usedJSON []byte
-	if db.QueryRow(`SELECT COALESCE(class_resources_used,'{}') FROM characters WHERE id = $1`, charID).Scan(&usedJSON) != nil {
-		return ""
-	}
-	used := map[string]int{}
-	json.Unmarshal(usedJSON, &used)
 	note := ""
 	var applied bool // the +4 scores are permanent: a Long Rest must not give them again
 	db.QueryRow(`SELECT COALESCE(capstone_scores_applied,false) FROM characters WHERE id = $1`, charID).Scan(&applied)
 	switch strings.ToLower(class) {
 	case "barbarian":
-		if level >= 15 && used["persistent_rage"] == 0 && used["rage"] > 0 {
-			used["rage"] = 0
-			used["persistent_rage"] = 1
-			note = fmt.Sprintf("🪓 %s: Persistent Rage: all expended uses of Rage regained", name)
+		if level >= 15 {
+			changeSpent(charID, func(s *spent) error { // once per Long Rest, on the locked counts (resources_2024.go)
+				if s.Uses["persistent_rage"] == 0 && s.Uses["rage"] > 0 {
+					s.Uses["rage"] = 0
+					s.Uses["persistent_rage"] = 1
+					note = fmt.Sprintf("🪓 %s: Persistent Rage: all expended uses of Rage regained", name)
+				}
+				return nil
+			})
 		}
 		if level >= 20 && !applied {
 			var conBefore int
@@ -268,9 +267,6 @@ func classCapstones(charID int, name, class string, level int) string {
 			db.Exec(`UPDATE characters SET dex = LEAST(25, dex + 4), wis = LEAST(25, wis + 4), capstone_scores_applied = true WHERE id = $1`, charID)
 			note = fmt.Sprintf("🥋 %s: Body and Mind: Dexterity and Wisdom rise by 4 (maximum 25)", name)
 		}
-	}
-	if note != "" {
-		writeUsed(charID, used)
 	}
 	return note
 }

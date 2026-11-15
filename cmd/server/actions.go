@@ -160,7 +160,7 @@ func getActionResourceType(actionType string) string {
 	case "attack", "cast", "dash", "disengage", "dodge", "help", "hide", "ready", "search", "study", "influence", "extinguish", "natures_sanctuary", "use_item", "stabilize", "death_save", "grapple", "shove":
 		return "action"
 	// Bonus actions (consume bonus action - class/spell specific)
-	case "drink_potion", "item_bonus", "bonus_attack", "martial_arts", "move_sanctuary", "cunning_action", "offhand_attack", "second_wind", "steady_aim", "lay_on_hands", "natures_veil", "innate_sorcery", "divine_sense", "wild_shape", "revert_wild_shape", "dragon_wings", "bardic_inspiration", "extend_rage", "rage", "bonus_cast", "frenzy_attack", "merge_with_shadows", "flurry_of_blows", "patient_defense", "step_of_the_wind", "gaze_of_two_minds":
+	case "font_of_magic", "wholeness_of_body", "holy_nimbus", "drink_potion", "item_bonus", "bonus_attack", "martial_arts", "move_sanctuary", "cunning_action", "offhand_attack", "second_wind", "steady_aim", "lay_on_hands", "natures_veil", "innate_sorcery", "divine_sense", "wild_shape", "revert_wild_shape", "dragon_wings", "bardic_inspiration", "extend_rage", "rage", "bonus_cast", "frenzy_attack", "merge_with_shadows", "flurry_of_blows", "patient_defense", "step_of_the_wind", "gaze_of_two_minds":
 		return "bonus_action"
 	// Reactions (consume reaction - used on others' turns too)
 	case "opportunity_attack", "counterspell", "shield", "countercharm", "reaction_cast":
@@ -169,7 +169,7 @@ func getActionResourceType(actionType string) string {
 	case "move", "stand":
 		return "movement"
 	// Free actions (no resource cost)
-	case "gift_of_the_protectors", "jump", "drop", "speak", "interact", "other", "frenzy", "stunning_strike", "action_surge", "wild_resurgence", "use_bardic_inspiration", "improve_fate", "concentration_check", "blink_steps", "natural_recovery", "nature_magician", "self_restoration", "disciplined_survivor", "superior_defense", "quivering_palm", "sacred_weapon": // 2024 Action Surge takes no action of its own
+	case "font_of_magic_convert", "gift_of_the_protectors", "jump", "drop", "speak", "interact", "other", "frenzy", "stunning_strike", "action_surge", "wild_resurgence", "use_bardic_inspiration", "improve_fate", "concentration_check", "blink_steps", "natural_recovery", "nature_magician", "self_restoration", "disciplined_survivor", "superior_defense", "quivering_palm", "sacred_weapon": // 2024 Action Surge takes no action of its own
 		return "free"
 	default:
 		// Default unknown actions to using the action
@@ -206,15 +206,15 @@ func checkActionEconomy(charID int, actionType string, movementCost int) (bool, 
 			return true, resourceType, ""
 		}
 		if actionUsed {
-			return false, resourceType, "You have already used your action this turn. Available: bonus action, movement, free actions."
+			return false, resourceType, turnParts[resourceType].used
 		}
 	case "bonus_action":
 		if bonusActionUsed {
-			return false, resourceType, "You have already used your bonus action this turn."
+			return false, resourceType, turnParts[resourceType].used
 		}
 	case "reaction":
 		if reactionUsed {
-			return false, resourceType, "You have already used your reaction this round."
+			return false, resourceType, turnParts[resourceType].used
 		}
 	case "movement":
 		actionType = strings.ToLower(actionType)
@@ -276,6 +276,53 @@ func checkActionEconomy(charID int, actionType string, movementCost int) (bool, 
 	return true, resourceType, ""
 }
 
+// turnParts: the parts of a turn an action can use (getActionResourceType's answers), their column and the refusal when used.
+var turnParts = map[string]struct{ column, used string }{
+	"action":       {"action_used", "You have already used your action this turn. Available: bonus action, movement, free actions."},
+	"bonus_action": {"bonus_action_used", "You have already used your bonus action this turn."},
+	"reaction":     {"reaction_used", "You have already used your reaction this round."},
+}
+
+// turnCost is what a request made outside POST /api/action (a feature route) uses of its character's turn: column is "" when
+// it uses nothing (no fight, or an action that takes none).
+type turnCost struct{ column, used string }
+
+// turnRefusal is a request refused because of whose turn it is.
+type turnRefusal struct{ Code, Msg string }
+
+// featureTurnCost: what actionType costs (getActionResourceType) for a request made outside POST /api/action. In a fight, an
+// action or a Bonus Action is taken only on the character's own turn (a Reaction on any turn); outside a fight nothing is spent.
+func featureTurnCost(charID int, actionType string) (turnCost, *turnRefusal) {
+	part, ok := turnParts[getActionResourceType(actionType)]
+	if !ok {
+		return turnCost{}, nil
+	}
+	_, current, fighting := combatRoundOf(lobbyOfChar(charID))
+	if !fighting {
+		return turnCost{}, nil
+	}
+	if part.column != "reaction_used" && current != charID {
+		return turnCost{}, &turnRefusal{"not_your_turn", "In a fight this is taken on your own turn (" + strings.ReplaceAll(getActionResourceType(actionType), "_", " ") + ")."}
+	}
+	return turnCost(part), nil
+}
+
+// spendIn uses that part of the turn in one guarded statement (q: the request's transaction or db); a refusal (notEnough)
+// when it is already used.
+func (c turnCost) spendIn(q execer, charID int) error {
+	if c.column == "" {
+		return nil
+	}
+	res, err := q.Exec(`UPDATE characters SET `+c.column+` = true WHERE id = $1 AND NOT COALESCE(`+c.column+`, false)`, charID)
+	if err != nil {
+		return err
+	}
+	if n, _ := res.RowsAffected(); n == 0 {
+		return &notEnough{c.used, 0}
+	}
+	return nil
+}
+
 func spendDashAction(charID, speed int) error {
 	var remaining int
 	return db.QueryRow(`
@@ -284,24 +331,6 @@ func spendDashAction(charID, speed int) error {
 		WHERE id = $2 AND NOT COALESCE(action_used, false)
 		RETURNING movement_remaining
 	`, speed, charID).Scan(&remaining)
-}
-
-// fleet: Fleet Step, after another Bonus Action (the Bonus Action is already spent).
-func spendBonusDash(charID, speed, kiLimit int, fleet ...bool) error {
-	var remaining int
-	ignoreBonus := len(fleet) > 0 && fleet[0]
-	return db.QueryRow(`
-		UPDATE characters
-		SET bonus_action_used = true,
-		    movement_remaining = COALESCE(movement_remaining, 30) + $1,
-		    class_resources_used = CASE WHEN $3 > 0 THEN
-		        jsonb_set(COALESCE(class_resources_used, '{}'), '{focus}',
-		            to_jsonb(COALESCE((class_resources_used->>'focus')::int, 0) + 1))
-		        ELSE class_resources_used END
-		WHERE id = $2 AND ($4 OR NOT COALESCE(bonus_action_used, false))
-		  AND ($3 = 0 OR COALESCE((class_resources_used->>'focus')::int, 0) < $3)
-		RETURNING movement_remaining
-	`, speed, charID, kiLimit, ignoreBonus).Scan(&remaining)
 }
 
 // Consume the appropriate resource after an action
@@ -1752,12 +1781,14 @@ func resolveActionWithBonusDash(action, description string, charID int, bonusDas
 		wantsSmite, smiteSlot := parseDivineSmiteSlot(description)
 		if wantsSmite {
 			canSmite, smiteErr := canUseDivineSmite(charID, smiteSlot, wantsFreeSmite(description))
+			if canSmite { // the slot (or Paladin's Smite) is spent first, guarded: a smite whose spend fails deals no damage
+				canSmite, smiteErr = consumeSpellSlotForSmite(charID, smiteSlot, wantsFreeSmite(description))
+			}
 			if canSmite {
 				isUndead := isUndeadOrFiend(targetID)
 				smiteDmg, smiteDice := calculateDivineSmiteDamage(smiteSlot, isUndead, crit)
 				dmg += smiteDmg
 				addRider(charID, "radiant", smiteDmg)
-				consumeSpellSlotForSmite(charID, smiteSlot, wantsFreeSmite(description))
 				undeadBonus := ""
 				if isUndead {
 					undeadBonus = " +undead/fiend"
@@ -2017,17 +2048,18 @@ func resolveActionWithBonusDash(action, description string, charID int, bonusDas
 				}
 
 				// Arcane Apotheosis (level 20): while Innate Sorcery is active, one Metamagic option each turn costs no Sorcery Points
-				if level >= 20 && strings.ToLower(class) == "sorcerer" && innateSorceryDC(charID, class) > 0 && classResourcesUsed(charID)["apotheosis"] == 0 {
+				if level >= 20 && strings.ToLower(class) == "sorcerer" && innateSorceryDC(charID, class) > 0 && useOnce(charID, "apotheosis", "used") == nil {
 					free := metamagicOptions[usedMetamagic[0]].Cost
 					metamagicPointsCost -= free
-					setUsedResource(charID, "apotheosis", 1)
 					metamagicEffects = append(metamagicEffects, fmt.Sprintf("Arcane Apotheosis: %s costs no Sorcery Points this turn", usedMetamagic[0]))
 				}
 
 				// Check sorcery points (the same count Font of Magic and the rests use)
-				currentPoints := getCurrentClassResources(charID)["sorcery_points"]
-				if currentPoints < metamagicPointsCost {
-					return fmt.Sprintf("Cannot cast %s with %v - it costs %d Sorcery Points and you have %d", spell.Name, usedMetamagic, metamagicPointsCost, currentPoints)
+				// spent here, guarded (resources_2024.go), before any effect of the Metamagic
+				if metamagicPointsCost > 0 {
+					if okSP, _, currentPoints := useClassResource(charID, "sorcery_points", metamagicPointsCost); !okSP {
+						return fmt.Sprintf("Cannot cast %s with %v - it costs %d Sorcery Points and you have %d", spell.Name, usedMetamagic, metamagicPointsCost, currentPoints)
+					}
 				}
 
 				// Apply metamagic effects and build notes
@@ -2071,9 +2103,6 @@ func resolveActionWithBonusDash(action, description string, charID int, bonusDas
 						metamagicEffects = append(metamagicEffects, fmt.Sprintf("Careful (%d SP): up to %d creatures auto-succeed on save", cost, max(1, game.Modifier(cha))))
 					}
 				}
-
-				// Spend sorcery points
-				useClassResource(charID, "sorcery_points", metamagicPointsCost)
 			}
 
 			// Check for once-per-rest invocation spell
@@ -2272,11 +2301,13 @@ func resolveActionWithBonusDash(action, description string, charID int, bonusDas
 					if why := slotAlreadyUsedThisTurn(charID, spell.Name); why != "" {
 						return why
 					}
-					// Use the pact slot
+					// Use the pact slot: the guarded spend on the locked counts (resources_2024.go)
+					if _, _, err := changeSpent(charID, func(sp *spent) error {
+						return spendSlotIn(sp.Pact, pactSlotLevel, pactSlotCount, fmt.Sprintf("Cannot cast %s - no pact magic slots remaining!", spell.Name))
+					}); err != nil {
+						return spendText(err, "a Pact Magic slot")
+					}
 					markSlotUsedThisTurn(charID)
-					used[usedKey] = usedSlots + 1
-					updatedJSON, _ := json.Marshal(used)
-					db.Exec("UPDATE characters SET pact_slots_used = $1 WHERE id = $2", updatedJSON, charID)
 					slotLevel = pactSlotLevel // Pact slots are always at their level
 				} else {
 					// Use regular spell slots
@@ -2309,13 +2340,15 @@ func resolveActionWithBonusDash(action, description string, charID int, bonusDas
 					if why := slotAlreadyUsedThisTurn(charID, spell.Name); why != "" {
 						return why
 					}
-					markSlotUsedThisTurn(charID)
-					// Use the slot (Boon of Spell Recall: a level 1-4 slot may stay unspent)
+					// Use the slot (Boon of Spell Recall: a level 1-4 slot may stay unspent): the guarded spend (resources_2024.go)
 					if !spellRecall(charID, slotLevel) {
-						used[usedKey] = usedSlots + 1
-						updatedJSON, _ := json.Marshal(used)
-						db.Exec("UPDATE characters SET spell_slots_used = $1 WHERE id = $2", updatedJSON, charID)
+						if _, _, err := changeSpent(charID, func(sp *spent) error {
+							return spendSlotIn(sp.Slots, slotLevel, totalSlots, fmt.Sprintf("Cannot cast %s - no level %d spell slots remaining!", spell.Name, slotLevel))
+						}); err != nil {
+							return spendText(err, "a spell slot")
+						}
 					}
+					markSlotUsedThisTurn(charID)
 				}
 			}
 
@@ -2863,13 +2896,16 @@ func resolveActionWithBonusDash(action, description string, charID int, bonusDas
 			return fmt.Sprintf("Cannot use Wild Shape: %s has a Fly Speed; such forms are allowed from Druid level 8.", beastName)
 		}
 
+		// Expend Wild Shape use: the guarded spend (resources_2024.go)
+		if _, err := spendUse(charID, "wild_shape", 1, maxUses); err != nil {
+			if _, refused := refusedSpend(err); refused {
+				return fmt.Sprintf("Cannot use Wild Shape: no uses left (%d/%d used). You regain one on a Short Rest and all on a Long Rest.", maxUses, maxUses)
+			}
+			return spendText(err, "Wild Shape")
+		}
 		if previousForm != "" {
 			leaveWildShape(charID, "")
 		}
-		// Expend Wild Shape use
-		resourcesUsed["wild_shape"] = currentUsed + 1
-		updatedResources, _ := json.Marshal(resourcesUsed)
-		db.Exec("UPDATE characters SET class_resources_used = $1 WHERE id = $2", updatedResources, charID)
 
 		// Set Wild Shape form
 		db.Exec(`UPDATE characters SET wild_shape_form = $1 WHERE id = $2`, beastSlug, charID)
@@ -3360,6 +3396,14 @@ func resolveActionWithBonusDash(action, description string, charID int, bonusDas
 			return "You've already used Second Wind! Take a short or long rest to regain this ability."
 		}
 
+		// Consume the resource first: the guarded spend (resources_2024.go)
+		if _, err := spendUse(charID, "second_wind", 1, maxUses); err != nil {
+			if _, refused := refusedSpend(err); refused {
+				return "You've already used Second Wind! Take a short or long rest to regain this ability."
+			}
+			return spendText(err, "Second Wind")
+		}
+
 		// Roll 1d10 + fighter level
 		healRoll := game.RollDie(10)
 		totalHeal := healRoll + level
@@ -3367,14 +3411,10 @@ func resolveActionWithBonusDash(action, description string, charID int, bonusDas
 		// Apply healing (the Hit Point owner: up to max HP)
 		h, err := healHP(charID, totalHeal)
 		if err != nil {
+			regainUse(charID, "second_wind", 1)
 			return "Second Wind couldn't be applied: " + notFoundOrDBError(err, "no such character") + ". Nothing was spent."
 		}
 		currentHP, newHP, actualHeal := h.Before.HP, h.After.HP, h.Healed
-
-		// Consume the resource
-		resourcesUsed["second_wind"] = currentUsed + 1
-		updatedResources, _ := json.Marshal(resourcesUsed)
-		db.Exec("UPDATE characters SET class_resources_used = $1 WHERE id = $2", updatedResources, charID)
 
 		if actualHeal == 0 {
 			return fmt.Sprintf("💪 Second Wind! Rolled 1d10 (%d) + %d (level) = %d healing. You're already at full HP!", healRoll, level, totalHeal)
@@ -3421,15 +3461,17 @@ func resolveActionWithBonusDash(action, description string, charID int, bonusDas
 		if surgedThisTurn {
 			return "You can use Action Surge only once on a turn."
 		}
+		// Consume the resource: the guarded spend (resources_2024.go)
+		if _, err := spendUse(charID, "action_surge", 1, maxUses); err != nil {
+			if _, refused := refusedSpend(err); refused {
+				return "You've already used Action Surge! Take a short or long rest to regain this ability."
+			}
+			return spendText(err, "Action Surge")
+		}
 		db.Exec("UPDATE characters SET action_surge_this_turn = true WHERE id = $1", charID)
 
 		// Grant an extra action by resetting action_used
 		db.Exec("UPDATE characters SET action_used = false WHERE id = $1", charID)
-
-		// Consume the resource
-		resourcesUsed["action_surge"] = currentUsed + 1
-		updatedResources, _ := json.Marshal(resourcesUsed)
-		db.Exec("UPDATE characters SET class_resources_used = $1 WHERE id = $2", updatedResources, charID)
 
 		remainingUses := maxUses - currentUsed - 1
 		usesNote := ""
@@ -3482,6 +3524,13 @@ func resolveActionWithBonusDash(action, description string, charID int, bonusDas
 				}
 			}
 
+			// 5 HP from the pool first (the guarded spend, resources_2024.go), given back if there is nothing to cure
+			if _, err := spendUse(charID, "lay_on_hands", 5, maxPool); err != nil {
+				if r, refused := refusedSpend(err); refused {
+					return fmt.Sprintf("Curing disease or poison costs 5 HP from your pool. You only have %d HP remaining.", r.Left)
+				}
+				return spendText(err, "Lay on Hands")
+			}
 			// the poison or condition to cure: each record of it ends (the condition owner)
 			targetName := getCharacterName(targetID)
 			cured := removeConditionsWhere(0, targetID, func(r conditionRecord) bool {
@@ -3495,6 +3544,7 @@ func resolveActionWithBonusDash(action, description string, charID int, bonusDas
 			}
 
 			if curedAilment == "" {
+				regainUse(charID, "lay_on_hands", 5) // nothing cured: the 5 HP go back to the pool
 				ailmentType := "disease or poison"
 				if strings.Contains(descLower, "disease") {
 					ailmentType = "disease"
@@ -3503,11 +3553,6 @@ func resolveActionWithBonusDash(action, description string, charID int, bonusDas
 				}
 				return fmt.Sprintf("%s has no %s to cure!", targetName, ailmentType)
 			}
-
-			// consume 5 HP from the pool
-			resourcesUsed["lay_on_hands"] = currentUsed + 5
-			updatedResources, _ := json.Marshal(resourcesUsed)
-			db.Exec("UPDATE characters SET class_resources_used = $1 WHERE id = $2", updatedResources, charID)
 
 			targetNote := ""
 			if targetID != charID {
@@ -3544,12 +3589,25 @@ func resolveActionWithBonusDash(action, description string, charID int, bonusDas
 			}
 		}
 
+		// Take the amount from the pool first (the guarded spend, resources_2024.go); what isn't healed goes back to it
+		if left, err := spendUse(charID, "lay_on_hands", healAmount, maxPool); err != nil {
+			if r, refused := refusedSpend(err); refused {
+				return fmt.Sprintf("🙌 Lay on Hands pool: %d HP remaining. Nothing was spent.", r.Left)
+			}
+			return spendText(err, "Lay on Hands")
+		} else {
+			remainingPool = left + healAmount
+		}
 		// Apply healing (the Hit Point owner: up to the maximum; from 0 the Death Saving Throws reset)
 		h, err := healHP(targetID, healAmount)
 		if err != nil {
+			regainUse(charID, "lay_on_hands", healAmount)
 			return "🙌 Lay on Hands couldn't be applied: " + notFoundOrDBError(err, "no such character") + ". Nothing was spent."
 		}
 		targetName, targetHP, newHP, actualHeal := h.Name, h.Before.HP, h.After.HP, h.Healed
+		if actualHeal < healAmount {
+			regainUse(charID, "lay_on_hands", healAmount-actualHeal)
+		}
 
 		if actualHeal == 0 {
 			switch {
@@ -3562,11 +3620,6 @@ func resolveActionWithBonusDash(action, description string, charID int, bonusDas
 			}
 			return fmt.Sprintf("🙌 Lay on Hands! %s is already at full HP. Pool: %d HP remaining.", targetName, remainingPool)
 		}
-
-		// Consume from pool
-		resourcesUsed["lay_on_hands"] = currentUsed + actualHeal
-		updatedResources, _ := json.Marshal(resourcesUsed)
-		db.Exec("UPDATE characters SET class_resources_used = $1 WHERE id = $2", updatedResources, charID)
 
 		targetNote := ""
 		if targetID != charID {
@@ -3929,54 +3982,49 @@ func consumeSpellMaterial(charID int, materialName string) {
 		return
 	}
 
-	var inventoryJSON []byte
-	db.QueryRow("SELECT COALESCE(inventory, '[]') FROM characters WHERE id = $1", charID).Scan(&inventoryJSON)
-	var inventory []map[string]interface{}
-	json.Unmarshal(inventoryJSON, &inventory)
-
-	// Find and remove/decrement the material (not one in a lost bag)
-	isLostItem := lostChecker(inventory)
-	for i, item := range inventory {
-		if isLostItem(item) {
-			continue
-		}
-		itemName := ""
-		if name, ok := item["name"].(string); ok {
-			itemName = strings.ToLower(name)
-		} else if name, ok := item["item"].(string); ok {
-			itemName = strings.ToLower(name)
-		}
-
-		if strings.Contains(itemName, materialName) {
-			// Check quantity
-			qty := 1
-			if q, ok := item["quantity"].(float64); ok {
-				qty = int(q)
-			} else if q, ok := item["qty"].(float64); ok {
-				qty = int(q)
-			} else if q, ok := item["quantity"].(int); ok {
-				qty = q
-			} else if q, ok := item["qty"].(int); ok {
-				qty = q
+	editInventory(charID, func(inventory []invItem) []invItem { // inventory_2024.go
+		// Find and remove/decrement the material (not one in a lost bag)
+		isLostItem := lostChecker(inventory)
+		for i, item := range inventory {
+			if isLostItem(item) {
+				continue
+			}
+			itemName := ""
+			if name, ok := item["name"].(string); ok {
+				itemName = strings.ToLower(name)
+			} else if name, ok := item["item"].(string); ok {
+				itemName = strings.ToLower(name)
 			}
 
-			if qty > 1 {
-				// Decrement quantity
-				if _, ok := item["quantity"]; ok {
-					item["quantity"] = qty - 1
-				} else if _, ok := item["qty"]; ok {
-					item["qty"] = qty - 1
+			if strings.Contains(itemName, materialName) {
+				// Check quantity
+				qty := 1
+				if q, ok := item["quantity"].(float64); ok {
+					qty = int(q)
+				} else if q, ok := item["qty"].(float64); ok {
+					qty = int(q)
+				} else if q, ok := item["quantity"].(int); ok {
+					qty = q
+				} else if q, ok := item["qty"].(int); ok {
+					qty = q
 				}
-			} else {
-				// Remove item entirely
-				inventory = append(inventory[:i], inventory[i+1:]...)
-			}
-			break
-		}
-	}
 
-	updatedJSON, _ := json.Marshal(inventory)
-	db.Exec("UPDATE characters SET inventory = $1 WHERE id = $2", updatedJSON, charID)
+				if qty > 1 {
+					// Decrement quantity
+					if _, ok := item["quantity"]; ok {
+						item["quantity"] = qty - 1
+					} else if _, ok := item["qty"]; ok {
+						item["qty"] = qty - 1
+					}
+				} else {
+					// Remove item entirely
+					inventory = append(inventory[:i], inventory[i+1:]...)
+				}
+				break
+			}
+		}
+		return inventory
+	})
 }
 
 // checkAndUseAmmo checks if character has ammunition and decrements it
@@ -3992,12 +4040,6 @@ func checkAndUseAmmo(charID int, ammoType string) (bool, string) {
 		return true, "" // table rule: ordinary ammunition isn't used up (magic ammunition is tracked separately)
 	}
 
-	// Get inventory
-	var inventoryJSON []byte
-	db.QueryRow("SELECT COALESCE(inventory, '[]') FROM characters WHERE id = $1", charID).Scan(&inventoryJSON)
-	var inventory []map[string]interface{}
-	json.Unmarshal(inventoryJSON, &inventory)
-
 	// Find ammo in inventory
 	ammoNames := map[string][]string{
 		"arrows":  {"arrows", "arrow", "quiver of arrows"},
@@ -4011,47 +4053,44 @@ func checkAndUseAmmo(charID int, ammoType string) (bool, string) {
 		validNames = []string{ammoType}
 	}
 
-	// Find and decrement ammo (not ammo in a lost bag)
+	// Find and decrement ammo (not ammo in a lost bag), and count it, in one locked change (inventory_2024.go)
 	found := false
-	isLostItem := lostChecker(inventory)
-	for i, item := range inventory {
-		if isLostItem(item) {
-			continue
-		}
-		if name, ok := item["name"].(string); ok {
+	changeInventory(charID, func(tx *sql.Tx, inventory []invItem) ([]invItem, error) {
+		isLostItem := lostChecker(inventory)
+		for i, item := range inventory {
+			if isLostItem(item) {
+				continue
+			}
+			name, ok := item["name"].(string)
+			if !ok {
+				continue
+			}
 			nameLower := strings.ToLower(name)
 			for _, validName := range validNames {
-				if nameLower == validName {
-					// Check quantity
-					qty := 1
-					if q, ok := item["quantity"].(float64); ok {
-						qty = int(q)
-					}
-					if qty <= 0 {
-						continue // Empty, try next
-					}
-
-					// Decrement
-					if qty == 1 {
-						// Remove item entirely
-						inventory = append(inventory[:i], inventory[i+1:]...)
-					} else {
-						inventory[i]["quantity"] = float64(qty - 1)
-					}
-
-					// Update inventory
-					updatedInv, _ := json.Marshal(inventory)
-					db.Exec("UPDATE characters SET inventory = $1, ammo_used_since_rest = ammo_used_since_rest + 1 WHERE id = $2", updatedInv, charID)
-
-					found = true
-					break
+				if nameLower != validName {
+					continue
 				}
+				qty := 1
+				if q, ok := item["quantity"].(float64); ok {
+					qty = int(q)
+				}
+				if qty <= 0 {
+					continue // Empty, try next
+				}
+				if qty == 1 {
+					inventory = append(inventory[:i], inventory[i+1:]...)
+				} else {
+					inventory[i]["quantity"] = float64(qty - 1)
+				}
+				if _, err := tx.Exec("UPDATE characters SET ammo_used_since_rest = ammo_used_since_rest + 1 WHERE id = $1", charID); err != nil {
+					return nil, err
+				}
+				found = true
+				return inventory, nil
 			}
 		}
-		if found {
-			break
-		}
-	}
+		return nil, nil
+	})
 
 	if !found && useMagicAmmo(charID, ammoType) { // only magic ammunition left: it is ammunition too (F150)
 		return true, ""
@@ -4066,43 +4105,29 @@ func checkAndUseAmmo(charID int, ammoType string) (bool, string) {
 // recoverAmmo recovers half of ammunition used since last rest
 // Returns number of ammo recovered
 func recoverAmmo(charID int, ammoType string) (int, error) {
-	// Get ammo used since rest
-	var ammoUsed int
-	err := db.QueryRow("SELECT COALESCE(ammo_used_since_rest, 0) FROM characters WHERE id = $1", charID).Scan(&ammoUsed)
-	if err != nil {
-		return 0, err
-	}
-
-	if ammoUsed == 0 {
-		return 0, nil
-	}
-
-	// Recover half (round down)
-	recovered := ammoUsed / 2
-	if recovered == 0 && ammoUsed > 0 {
-		recovered = 1 // Always recover at least 1 if any were used
-	}
-
-	// Get inventory and add recovered ammo
-	var inventoryJSON []byte
-	db.QueryRow("SELECT COALESCE(inventory, '[]') FROM characters WHERE id = $1", charID).Scan(&inventoryJSON)
-	var inventory []map[string]interface{}
-	json.Unmarshal(inventoryJSON, &inventory)
-
-	// Find existing ammo stack or create new one
 	ammoName := ammoType
 	if ammoName == "" {
 		ammoName = "arrows" // Default
 	}
-
-	found := false
-	isLostItem := lostChecker(inventory)
-	for i, item := range inventory {
-		if isLostItem(item) {
-			continue
+	// the count and the inventory in one locked change (inventory_2024.go)
+	recovered := 0
+	_, err := changeInventory(charID, func(tx *sql.Tx, inventory []invItem) ([]invItem, error) {
+		var ammoUsed int
+		if err := tx.QueryRow("SELECT COALESCE(ammo_used_since_rest, 0) FROM characters WHERE id = $1", charID).Scan(&ammoUsed); err != nil {
+			return nil, err
 		}
-		if name, ok := item["name"].(string); ok {
-			if strings.ToLower(name) == ammoName {
+		if ammoUsed == 0 {
+			return nil, nil
+		}
+		// Recover half (round down), at least 1 if any were used
+		recovered = max(1, ammoUsed/2)
+		found := false
+		isLostItem := lostChecker(inventory)
+		for i, item := range inventory {
+			if isLostItem(item) {
+				continue
+			}
+			if name, ok := item["name"].(string); ok && strings.ToLower(name) == ammoName {
 				qty := 0
 				if q, ok := item["quantity"].(float64); ok {
 					qty = int(q)
@@ -4112,20 +4137,17 @@ func recoverAmmo(charID int, ammoType string) (int, error) {
 				break
 			}
 		}
+		if !found {
+			inventory = append(inventory, map[string]interface{}{"name": ammoName, "quantity": float64(recovered)})
+		}
+		if _, err := tx.Exec("UPDATE characters SET ammo_used_since_rest = 0 WHERE id = $1", charID); err != nil {
+			return nil, err
+		}
+		return inventory, nil
+	})
+	if err != nil {
+		return 0, err
 	}
-
-	if !found {
-		// Add new stack
-		inventory = append(inventory, map[string]interface{}{
-			"name":     ammoName,
-			"quantity": float64(recovered),
-		})
-	}
-
-	// Update inventory and reset counter
-	updatedInv, _ := json.Marshal(inventory)
-	db.Exec("UPDATE characters SET inventory = $1, ammo_used_since_rest = 0 WHERE id = $2", updatedInv, charID)
-
 	return recovered, nil
 }
 
@@ -4352,27 +4374,25 @@ func canUseDivineSmite(charID int, slotLevel int, free ...bool) (bool, string) {
 	return true, ""
 }
 
-// consumeSpellSlotForSmite uses a spell slot for Divine Smite
-func consumeSpellSlotForSmite(charID int, slotLevel int, free ...bool) {
+// consumeSpellSlotForSmite spends the spell slot of a Divine Smite (or Paladin's Smite) in one guarded step (resources_2024.go),
+// noted so that a miss gives it back (hit_spends.go). It returns false and why when nothing was left to spend.
+func consumeSpellSlotForSmite(charID int, slotLevel int, free ...bool) (bool, string) {
 	if len(free) > 0 && free[0] {
-		useFreeSmite(charID)
+		if !useFreeSmite(charID) {
+			return false, "You already cast Divine Smite without a spell slot; finish a Long Rest to do it again"
+		}
 		notePendingSpend(charID, func(p *pendingSpend) { p.FreeSmite = true }) // given back if the attack misses
-		return
+		return true, ""
+	}
+	var class string
+	var level int
+	db.QueryRow("SELECT class, level FROM characters WHERE id = $1", charID).Scan(&class, &level)
+	if !spendSlot(charID, class, level, slotLevel) {
+		return false, fmt.Sprintf("No %s level spell slots remaining for Divine Smite", ordinal(slotLevel))
 	}
 	notePendingSpend(charID, func(p *pendingSpend) { p.SmiteSlot = slotLevel })
 	markSlotUsedThisTurn(charID)
-	var usedJSON []byte
-	db.QueryRow("SELECT COALESCE(spell_slots_used, '{}') FROM characters WHERE id = $1", charID).Scan(&usedJSON)
-	var used map[string]int
-	if err := json.Unmarshal(usedJSON, &used); err != nil {
-		used = make(map[string]int)
-	}
-
-	usedKey := strconv.Itoa(slotLevel)
-	used[usedKey]++
-
-	updatedJSON, _ := json.Marshal(used)
-	db.Exec("UPDATE characters SET spell_slots_used = $1 WHERE id = $2", updatedJSON, charID)
+	return true, ""
 }
 
 // ordinal returns the ordinal suffix for a number (1st, 2nd, 3rd, etc.)

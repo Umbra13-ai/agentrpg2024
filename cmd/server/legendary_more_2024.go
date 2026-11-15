@@ -867,8 +867,7 @@ func retributiveStrike(lobbyID, charID int, it invItem, charges int, targets []i
 		what := fmt.Sprintf("%s: Dexterity save %d against DC 17, %s; ", creatureName(lobbyID, id), total, map[bool]string{true: "a success", false: "a failure"}[saved])
 		out = append(out, what+damageAny(lobbyID, id, dmg, "force")+".")
 	}
-	updateInventoryItem(charID, it, func(x invItem) { x["destroyed"] = true })
-	db.Exec(`UPDATE characters SET attuned_items = COALESCE((SELECT jsonb_agg(v) FROM jsonb_array_elements(COALESCE(attuned_items,'[]'::jsonb)) v WHERE v::text NOT ILIKE '%staff of the magi%'), '[]'::jsonb) WHERE id = $1`, charID)
+	updateInventoryItem(charID, it, func(x invItem) { x["destroyed"] = true }) // its attunement ends with it (inventory_2024.go)
 	return "Retributive Strike: the Staff of the Magi breaks and explodes in a 30-foot Emanation (" + strconv.Itoa(charges) + " charges). " + strings.Join(out, " ")
 }
 

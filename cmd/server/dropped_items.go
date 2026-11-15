@@ -88,10 +88,11 @@ func copyItem(it invItem) invItem {
 }
 
 type dropResult struct {
-	DroppedID int
-	Name      string
-	Quantity  int
-	Contents  int
+	DroppedID  int
+	Name       string
+	Quantity   int
+	Contents   int
+	Attunement string // the attunement the drop ended (inventory_2024.go)
 }
 
 // dropToGround takes an item (or part of a stack) out of a character's
@@ -106,67 +107,57 @@ func dropToGround(charID int, itemRef string, quantity int) (*dropResult, string
 	if !lobby.Valid {
 		return nil, "not_in_a_campaign"
 	}
-	tx, err := db.Begin()
-	if err != nil {
-		return nil, dbErrorCode
-	}
-	defer tx.Rollback()
-	inv, err := loadInventoryTx(tx, charID)
-	if err != nil {
-		return nil, notFoundOrDBError(err, "character_not_found")
-	}
-	it, ferr := findItem(inv, itemRef)
-	if ferr != nil {
-		return nil, ferr.Error()
-	}
-	if isLost(it, indexByID(inv)) {
-		return nil, "item_is_lost"
-	}
-	if armor.Valid && armor.String != "" && itemKey(itemStr(it, "name")) == itemKey(armor.String) {
-		return nil, "take_off_your_armor_first"
-	}
-
-	rootID := itemStr(it, "id")
+	// the inventory, the ground and the log in one locked inventory change (inventory_2024.go): an attunement to the item ends
 	var bundle []invItem
-	qty := itemQty(it)
-	switch {
-	case !isContainer(it) && quantity > 0 && quantity < qty:
-		piece := copyItem(it)
-		piece["quantity"] = float64(quantity)
-		piece["location"] = ""
-		bundle = []invItem{piece}
-		it["quantity"] = float64(qty - quantity)
-		qty = quantity
-	case quantity > qty:
-		return nil, "not_enough_in_stack"
-	default:
-		bundle = collectBundle(inv, rootID)
-		root := copyItem(bundle[0])
-		root["location"] = ""
-		bundle[0] = root
-		inv = removeBundle(inv, rootID)
-	}
-
-	if err := saveInventoryTx(tx, charID, inv); err != nil {
-		return nil, "save_failed"
-	}
-	b, _ := json.Marshal(bundle)
-	var dropID int
-	if err := tx.QueryRow(`INSERT INTO dropped_items (lobby_id, name, quantity, bundle, dropped_by) VALUES ($1, $2, $3, $4, $5) RETURNING id`,
-		lobby.Int64, itemStr(bundle[0], "name"), qty, string(b), charID).Scan(&dropID); err != nil {
-		return nil, "save_failed"
-	}
-	if err := writeAction(tx, int(lobby.Int64), charID, "drop", fmt.Sprintf("%s drops %s", charName, itemStr(bundle[0], "name")), "It lies on the ground."); err != nil {
-		return nil, "save_failed"
-	}
-	if err := tx.Commit(); err != nil {
-		return nil, "save_failed"
+	var qty, dropID int
+	done, err := changeInventory(charID, func(tx *sql.Tx, inv []invItem) ([]invItem, error) {
+		it, ferr := findItem(inv, itemRef)
+		if ferr != nil {
+			return nil, codeRefusal(ferr.Error())
+		}
+		if isLost(it, indexByID(inv)) {
+			return nil, codeRefusal("item_is_lost")
+		}
+		if armor.Valid && armor.String != "" && itemKey(itemStr(it, "name")) == itemKey(armor.String) {
+			return nil, codeRefusal("take_off_your_armor_first")
+		}
+		rootID := itemStr(it, "id")
+		qty = itemQty(it)
+		switch {
+		case !isContainer(it) && quantity > 0 && quantity < qty:
+			piece := copyItem(it)
+			piece["quantity"] = float64(quantity)
+			piece["location"] = ""
+			bundle = []invItem{piece}
+			it["quantity"] = float64(qty - quantity)
+			qty = quantity
+		case quantity > qty:
+			return nil, codeRefusal("not_enough_in_stack")
+		default:
+			bundle = collectBundle(inv, rootID)
+			root := copyItem(bundle[0])
+			root["location"] = ""
+			bundle[0] = root
+			inv = removeBundle(inv, rootID)
+		}
+		b, _ := json.Marshal(bundle)
+		if err := tx.QueryRow(`INSERT INTO dropped_items (lobby_id, name, quantity, bundle, dropped_by) VALUES ($1, $2, $3, $4, $5) RETURNING id`,
+			lobby.Int64, itemStr(bundle[0], "name"), qty, string(b), charID).Scan(&dropID); err != nil {
+			return nil, err
+		}
+		if err := writeAction(tx, int(lobby.Int64), charID, "drop", fmt.Sprintf("%s drops %s", charName, itemStr(bundle[0], "name")), "It lies on the ground."); err != nil {
+			return nil, err
+		}
+		return inv, nil
+	})
+	if err != nil {
+		return nil, refusalCode(err, "character_not_found")
 	}
 
 	// a weapon that was in hand and is no longer carried leaves the hand
 	clearHandsIfGone(charID)
 	syncHeldItems(charID)
-	return &dropResult{DroppedID: dropID, Name: itemStr(bundle[0], "name"), Quantity: qty, Contents: len(bundle) - 1}, ""
+	return &dropResult{DroppedID: dropID, Name: itemStr(bundle[0], "name"), Quantity: qty, Contents: len(bundle) - 1, Attunement: strings.TrimSpace(done.Note)}, ""
 }
 
 // clearHandsIfGone empties a hand whose weapon is no longer in the inventory.
@@ -203,71 +194,66 @@ func pickUpFromGround(charID, droppedID int) (string, string) {
 	if err := db.QueryRow(`SELECT lobby_id, name FROM characters WHERE id = $1`, charID).Scan(&lobby, &charName); err != nil {
 		return "", notFoundOrDBError(err, "character_not_found")
 	}
-	tx, err := db.Begin()
-	if err != nil {
-		return "", dbErrorCode
-	}
-	defer tx.Rollback()
-
-	var dropLobby int
-	var name, bundleRaw string
-	var takenBy sql.NullInt64
-	var takenNote sql.NullString
-	if err := tx.QueryRow(`SELECT lobby_id, name, bundle, taken_by, taken_note FROM dropped_items WHERE id = $1 FOR UPDATE`, droppedID).
-		Scan(&dropLobby, &name, &bundleRaw, &takenBy, &takenNote); err != nil {
-		return "", notFoundOrDBError(err, "nothing_on_the_ground_with_that_id")
-	}
-	if !lobby.Valid || int(lobby.Int64) != dropLobby {
-		return "", "not_in_the_same_campaign"
-	}
-	if takenBy.Valid || takenNote.Valid {
-		return "", "already_taken"
-	}
-	var bundle []invItem
-	if json.Unmarshal([]byte(bundleRaw), &bundle) != nil || len(bundle) == 0 {
-		return "", "corrupt_item"
-	}
-
-	inv, err := loadInventoryTx(tx, charID)
-	if err != nil {
-		return "", notFoundOrDBError(err, "character_not_found")
-	}
-	remap := map[string]string{}
-	maxN := 0
-	for _, it := range inv {
-		var n int
-		if id := itemStr(it, "id"); strings.HasPrefix(id, "i") {
-			fmt.Sscanf(id[1:], "%d", &n)
-			if n > maxN {
-				maxN = n
+	// the character's inventory (locked first, as every inventory change: inventory_2024.go) and the item on the ground (locked)
+	// in one transaction: one character takes it
+	var name string
+	_, err := changeInventory(charID, func(tx *sql.Tx, inv []invItem) ([]invItem, error) {
+		var dropLobby int
+		var bundleRaw string
+		var takenBy sql.NullInt64
+		var takenNote sql.NullString
+		if err := tx.QueryRow(`SELECT lobby_id, name, bundle, taken_by, taken_note FROM dropped_items WHERE id = $1 FOR UPDATE`, droppedID).
+			Scan(&dropLobby, &name, &bundleRaw, &takenBy, &takenNote); err != nil {
+			if !dbFailed(err) {
+				return nil, codeRefusal("nothing_on_the_ground_with_that_id")
+			}
+			return nil, err
+		}
+		if !lobby.Valid || int(lobby.Int64) != dropLobby {
+			return nil, codeRefusal("not_in_the_same_campaign")
+		}
+		if takenBy.Valid || takenNote.Valid {
+			return nil, codeRefusal("already_taken")
+		}
+		var bundle []invItem
+		if json.Unmarshal([]byte(bundleRaw), &bundle) != nil || len(bundle) == 0 {
+			return nil, codeRefusal("corrupt_item")
+		}
+		remap := map[string]string{}
+		maxN := 0
+		for _, it := range inv {
+			var n int
+			if id := itemStr(it, "id"); strings.HasPrefix(id, "i") {
+				fmt.Sscanf(id[1:], "%d", &n)
+				if n > maxN {
+					maxN = n
+				}
 			}
 		}
-	}
-	for i, it := range bundle {
-		remap[itemStr(it, "id")] = fmt.Sprintf("i%d", maxN+i+1)
-	}
-	for i, it := range bundle {
-		it["id"] = remap[itemStr(it, "id")]
-		if i == 0 {
-			it["location"] = ""
-		} else if m, ok := remap[itemStr(it, "location")]; ok {
-			it["location"] = m
+		for i, it := range bundle {
+			remap[itemStr(it, "id")] = fmt.Sprintf("i%d", maxN+i+1)
 		}
-		delete(it, "lost")
-		inv = append(inv, it)
-	}
-	fillItemWeights(inv)
-	if err := saveInventoryTx(tx, charID, inv); err != nil {
-		return "", "save_failed"
-	}
-	if _, err := tx.Exec(`UPDATE dropped_items SET taken_by = $1, taken_at = NOW() WHERE id = $2`, charID, droppedID); err != nil {
-		return "", "save_failed"
-	}
-	if err := writeAction(tx, dropLobby, charID, "pick_up", fmt.Sprintf("%s picks up %s", charName, name), "It is now in their pack."); err != nil {
-		return "", "save_failed"
-	}
-	if err := tx.Commit(); err != nil {
-		return "", "save_failed"
+		for i, it := range bundle {
+			it["id"] = remap[itemStr(it, "id")]
+			if i == 0 {
+				it["location"] = ""
+			} else if m, ok := remap[itemStr(it, "location")]; ok {
+				it["location"] = m
+			}
+			delete(it, "lost")
+			inv = append(inv, it)
+		}
+		fillItemWeights(inv)
+		if _, err := tx.Exec(`UPDATE dropped_items SET taken_by = $1, taken_at = NOW() WHERE id = $2`, charID, droppedID); err != nil {
+			return nil, err
+		}
+		if err := writeAction(tx, dropLobby, charID, "pick_up", fmt.Sprintf("%s picks up %s", charName, name), "It is now in their pack."); err != nil {
+			return nil, err
+		}
+		return inv, nil
+	})
+	if err != nil {
+		return "", refusalCode(err, "character_not_found")
 	}
 	return name, ""
 }
@@ -317,10 +303,14 @@ func handleCharacterDrop(w http.ResponseWriter, r *http.Request, charID int) {
 		writeJSONStatus(w, status, map[string]interface{}{"error": errCode})
 		return
 	}
-	writeJSONStatus(w, http.StatusOK, map[string]interface{}{
+	reply := map[string]interface{}{
 		"success": true, "dropped_id": res.DroppedID, "name": res.Name, "quantity": res.Quantity, "items_inside": res.Contents,
 		"note": "It lies on the ground. Anyone in the campaign can pick it up (POST /api/characters/{id}/equipment/pick-up), and it stays there until someone does. Dropping is free.",
-	})
+	}
+	if res.Attunement != "" {
+		reply["attunement_ended"] = res.Attunement
+	}
+	writeJSONStatus(w, http.StatusOK, reply)
 }
 
 func handleCharacterPickUp(w http.ResponseWriter, r *http.Request, charID int) {

@@ -170,8 +170,8 @@ func giftOfTheProtectors(charID int) string {
 			continue
 		}
 		for _, id := range protectorsPage(x.id) {
-			if id == charID {
-				setUsedResource(x.id, "gift_of_the_protectors", 1) // the 1 Hit Point is written by the Hit Point owner (dropRescues)
+			if id == charID && useOnce(x.id, "gift_of_the_protectors", "used") == nil { // resources_2024.go
+				// the 1 Hit Point is written by the Hit Point owner (dropRescues)
 				return fmt.Sprintf("Gift of the Protectors: the name in %s's Book of Shadows keeps them at 1 Hit Point.", x.name)
 			}
 		}

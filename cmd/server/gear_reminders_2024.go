@@ -15,7 +15,6 @@ package main
 
 import (
 	"database/sql"
-	"encoding/json"
 	"fmt"
 	"net/http"
 	"strconv"
@@ -180,46 +179,35 @@ func markNoAutoEquip(charID int, armor string, flag bool) {
 	if armor == "" {
 		return
 	}
-	inv := inventoryRaw(charID)
-	changed := false
-	for _, it := range inv {
-		if sameArmor(itemStr(it, "name"), armor) && itemBool(it, "no_auto_equip") != flag {
-			if flag {
-				it["no_auto_equip"] = true
-			} else {
-				delete(it, "no_auto_equip")
+	changeInventory(charID, func(_ *sql.Tx, inv []invItem) ([]invItem, error) { // inventory_2024.go
+		changed := false
+		for _, it := range inv {
+			if sameArmor(itemStr(it, "name"), armor) && itemBool(it, "no_auto_equip") != flag {
+				if flag {
+					it["no_auto_equip"] = true
+				} else {
+					delete(it, "no_auto_equip")
+				}
+				changed = true
 			}
-			changed = true
 		}
-	}
-	if changed {
-		saveInventoryRaw(charID, inv)
-	}
+		if !changed {
+			return nil, nil
+		}
+		return inv, nil
+	})
 }
 
 // markAllArmorNoAutoEquip: the player took armor off, so none of the armor they carry is put on for them.
 func markAllArmorNoAutoEquip(charID int) {
-	inv := inventoryRaw(charID)
-	for _, it := range inv {
-		if _, info := armorValueFor(itemStr(it, "name")); info != nil {
-			it["no_auto_equip"] = true
+	editInventory(charID, func(inv []invItem) []invItem { // inventory_2024.go
+		for _, it := range inv {
+			if _, info := armorValueFor(itemStr(it, "name")); info != nil {
+				it["no_auto_equip"] = true
+			}
 		}
-	}
-	saveInventoryRaw(charID, inv)
-}
-
-func inventoryRaw(charID int) []invItem {
-	var raw []byte
-	db.QueryRow(`SELECT COALESCE(inventory,'[]') FROM characters WHERE id = $1`, charID).Scan(&raw)
-	var inv []invItem
-	json.Unmarshal(raw, &inv)
-	return inv
-}
-
-func saveInventoryRaw(charID int, inv []invItem) {
-	if b, err := json.Marshal(inv); err == nil {
-		db.Exec(`UPDATE characters SET inventory = $1 WHERE id = $2`, string(b), charID)
-	}
+		return inv
+	})
 }
 
 // gearReminders: carried gear that could be worn and isn't (nil when muted or nothing to say).
@@ -367,23 +355,30 @@ func handleGearReminders(w http.ResponseWriter, r *http.Request) {
 		writeJSONStatus(w, http.StatusBadRequest, map[string]interface{}{"error": "item_or_all_required", "message": "Name an item (\"item\") or send \"all\": true."})
 		return
 	}
-	inv := inventoryRaw(req.CharacterID)
 	n := 0
-	for _, it := range inv {
-		if strings.EqualFold(itemStr(it, "name"), req.Item) || itemStr(it, "id") == req.Item {
-			if mute {
-				it["remind_off"] = true
-			} else {
-				delete(it, "remind_off")
+	_, err := changeInventory(req.CharacterID, func(_ *sql.Tx, inv []invItem) ([]invItem, error) { // inventory_2024.go
+		for _, it := range inv {
+			if strings.EqualFold(itemStr(it, "name"), req.Item) || itemStr(it, "id") == req.Item {
+				if mute {
+					it["remind_off"] = true
+				} else {
+					delete(it, "remind_off")
+				}
+				n++
 			}
-			n++
 		}
+		if n == 0 {
+			return nil, nil
+		}
+		return inv, nil
+	})
+	if answerDBFailure(w, err, "the character's pack") {
+		return
 	}
 	if n == 0 {
 		writeJSONStatus(w, http.StatusBadRequest, map[string]interface{}{"error": "item_not_found", "item": req.Item})
 		return
 	}
-	saveInventoryRaw(req.CharacterID, inv)
 	writeJSONStatus(w, http.StatusOK, map[string]interface{}{"success": true, "item": req.Item, "muted": mute})
 }
 

@@ -99,7 +99,18 @@ func turnOptions2024(charID int, class, subclass string, level int, raging, wild
 	case "sorcerer":
 		bonus = append(bonus, opt("Innate Sorcery", `{"action": "innate_sorcery"}`, "For 1 minute: your Sorcerer spells' save DC +1 and Advantage on their attack rolls"+left("innate_sorcery")+"."))
 		if level >= 2 {
-			free = append(free, opt("Font of Magic", `POST /api/characters/flexible-casting {"character_id": N, "action": "create_slot", "slot_level": 1}`, "Turn Sorcery Points into a spell slot (a Bonus Action) or a slot into points"+left("sorcery_points")+"."))
+			// what each choice costs is the action economy's (fontOfMagicActions, getActionResourceType)
+			for _, c := range []struct{ action, name, text string }{
+				{"create_slot", "Font of Magic: create a spell slot", "Turn Sorcery Points into a spell slot (level 1: 2 points, 2: 3, 3: 5, 4: 6, 5: 7)"},
+				{"convert_slot", "Font of Magic: convert a spell slot", "Turn a spell slot into Sorcery Points equal to its level"},
+			} {
+				o := opt(c.name, `POST /api/characters/flexible-casting {"character_id": N, "action": "`+c.action+`", "slot_level": 1}`, c.text+left("sorcery_points")+".")
+				if getActionResourceType(fontOfMagicActions[c.action]) == "bonus_action" {
+					bonus = append(bonus, o)
+				} else {
+					free = append(free, o)
+				}
+			}
 		}
 	}
 	return

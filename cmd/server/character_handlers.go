@@ -759,9 +759,8 @@ func handleCharacters(w http.ResponseWriter, r *http.Request) {
 		}
 		ensureItemIDs(invItems)
 		fillItemWeights(invItems)
-		if len(invItems) > 0 {
-			invJSON, _ := json.Marshal(invItems)
-			db.Exec("UPDATE characters SET inventory = $1 WHERE id = $2", invJSON, id)
+		if len(invItems) > 0 { // the new character's first inventory (inventory_2024.go)
+			editInventory(id, func([]invItem) []invItem { return invItems })
 		}
 		armorSlug, mainHand, hasShield := "", "", false
 		if starting != nil {

@@ -314,25 +314,13 @@ func grantSpeciesLevelSpells(charID, level int) []string {
 	return added
 }
 
-// spendTurnResource uses the bonus action or reaction for the turn.
+// spendTurnResource uses the bonus action or reaction for the turn, in one guarded statement (turnParts, actions.go).
 func spendTurnResource(charID int, kind string) error {
-	switch kind {
-	case "bonus action":
-		var used bool
-		db.QueryRow(`SELECT COALESCE(bonus_action_used, false) FROM characters WHERE id = $1`, charID).Scan(&used)
-		if used {
-			return fmt.Errorf("you have already used your bonus action this turn")
-		}
-		db.Exec(`UPDATE characters SET bonus_action_used = true WHERE id = $1`, charID)
-	case "reaction":
-		var used bool
-		db.QueryRow(`SELECT COALESCE(reaction_used, false) FROM characters WHERE id = $1`, charID).Scan(&used)
-		if used {
-			return fmt.Errorf("you have already used your reaction this round")
-		}
-		db.Exec(`UPDATE characters SET reaction_used = true WHERE id = $1`, charID)
+	part, ok := turnParts[strings.ReplaceAll(kind, " ", "_")]
+	if !ok {
+		return nil
 	}
-	return nil
+	return turnCost(part).spendIn(db, charID)
 }
 
 // dealBoonDamage rolls dice, applies resistance and hurts a character target; monsters are left to the GM.

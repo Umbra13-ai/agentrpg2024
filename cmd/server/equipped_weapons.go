@@ -6,7 +6,6 @@ package main
 
 import (
 	"database/sql"
-	"encoding/json"
 	"fmt"
 	"strings"
 )
@@ -58,23 +57,24 @@ func notEquippedMessage(weapon string) string {
 // a weapon equipped in a hand is "held"; a weapon that was held and no longer is
 // goes back to "worn" (sheathed). Items in a lost bag are left alone.
 func syncHeldItems(charID int) {
-	tx, err := db.Begin()
-	if err != nil {
-		return
-	}
-	defer tx.Rollback()
-	inv, err := loadInventoryTx(tx, charID)
-	if err != nil {
-		return
-	}
-	var m, o sql.NullString
-	if tx.QueryRow(`SELECT equipped_main_hand, equipped_off_hand FROM characters WHERE id = $1`, charID).Scan(&m, &o) != nil {
-		return
-	}
+	changeInventory(charID, func(tx *sql.Tx, inv []invItem) ([]invItem, error) { // inventory_2024.go
+		var m, o sql.NullString
+		if err := tx.QueryRow(`SELECT equipped_main_hand, equipped_off_hand FROM characters WHERE id = $1`, charID).Scan(&m, &o); err != nil {
+			return nil, err
+		}
+		if syncHands(inv, m.String, o.String) {
+			return inv, nil
+		}
+		return nil, nil
+	})
+}
+
+// syncHands marks the items in the equipped hands held and sheathes the weapons no longer in hand; it says whether anything moved.
+func syncHands(inv []invItem, main, off string) bool {
 	isLostItem := lostChecker(inv)
 	changed := false
 	handled := map[string]bool{} // one inventory item per hand
-	for _, hand := range []string{m.String, o.String} {
+	for _, hand := range []string{main, off} {
 		if hand == "" {
 			continue
 		}
@@ -104,11 +104,5 @@ func syncHeldItems(charID int) {
 			changed = true
 		}
 	}
-	if changed {
-		if b, err := json.Marshal(inv); err == nil {
-			tx.Exec(`UPDATE characters SET inventory = $1 WHERE id = $2`, string(b), charID)
-			tx.Commit()
-		}
-	}
-	_ = strings.TrimSpace
+	return changed
 }

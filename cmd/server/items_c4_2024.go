@@ -16,6 +16,7 @@ package main
 //	                       Hit Points or fewer) (F158)
 
 import (
+	"database/sql"
 	"encoding/json"
 	"fmt"
 	"strings"
@@ -37,34 +38,36 @@ func wantsMagicAmmo(charID int) bool {
 // useMagicAmmo fires one piece of magic ammunition of the type ("arrows", "bolts"...) and remembers its bonus.
 func useMagicAmmo(charID int, ammoType string) bool {
 	word := strings.TrimSuffix(strings.ToLower(ammoType), "s")
-	var raw []byte
-	db.QueryRow(`SELECT COALESCE(inventory,'[]') FROM characters WHERE id = $1`, charID).Scan(&raw)
-	var inv []map[string]interface{}
-	json.Unmarshal(raw, &inv)
-	isLost := lostChecker(inv)
-	for i, it := range inv {
-		n := strings.ToLower(fmt.Sprint(it["name"]))
-		if isLost(it) || !strings.HasPrefix(n, "ammunition") || !strings.Contains(n, word) {
-			continue
+	used := ""
+	changeInventory(charID, func(_ *sql.Tx, inv []invItem) ([]invItem, error) { // inventory_2024.go
+		isLost := lostChecker(inv)
+		for i, it := range inv {
+			n := strings.ToLower(fmt.Sprint(it["name"]))
+			if isLost(it) || !strings.HasPrefix(n, "ammunition") || !strings.Contains(n, word) {
+				continue
+			}
+			qty := 1
+			if q, ok := it["quantity"].(float64); ok {
+				qty = int(q)
+			}
+			if qty <= 0 {
+				continue
+			}
+			if qty == 1 {
+				inv = append(inv[:i], inv[i+1:]...)
+			} else {
+				inv[i]["quantity"] = float64(qty - 1)
+			}
+			used = n
+			return inv, nil
 		}
-		qty := 1
-		if q, ok := it["quantity"].(float64); ok {
-			qty = int(q)
-		}
-		if qty <= 0 {
-			continue
-		}
-		if qty == 1 {
-			inv = append(inv[:i], inv[i+1:]...)
-		} else {
-			inv[i]["quantity"] = float64(qty - 1)
-		}
-		b, _ := json.Marshal(inv)
-		db.Exec(`UPDATE characters SET inventory = $1 WHERE id = $2`, b, charID)
-		magicAmmoPlus.Store(charID, itemPlus(n))
-		return true
+		return nil, nil
+	})
+	if used == "" {
+		return false
 	}
-	return false
+	magicAmmoPlus.Store(charID, itemPlus(used))
+	return true
 }
 
 // heldResistance: Resistance from an item that works while held (Staff of Fire, Frost Brand) or worn (the Helm of Brilliance's rubies).

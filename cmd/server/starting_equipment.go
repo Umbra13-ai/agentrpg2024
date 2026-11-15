@@ -536,10 +536,8 @@ func cleanFocusPlaceholders() {
 		if json.Unmarshal(r.raw, &inv) != nil {
 			continue
 		}
-		cleaned := removeFocusPlaceholders(inv)
-		if len(cleaned) != len(inv) {
-			b, _ := json.Marshal(cleaned)
-			db.Exec(`UPDATE characters SET inventory = $1 WHERE id = $2`, string(b), r.id)
+		if len(removeFocusPlaceholders(inv)) != len(inv) { // the change itself on the locked inventory (inventory_2024.go)
+			editInventory(r.id, removeFocusPlaceholders)
 		}
 	}
 }

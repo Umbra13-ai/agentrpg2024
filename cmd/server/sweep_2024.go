@@ -146,19 +146,31 @@ func handleWholenessOfBody2024(w http.ResponseWriter, r *http.Request) {
 	if uses < 1 {
 		uses = 1
 	}
-	spent := classResourcesUsed(req.CharacterID)["wholeness_of_body"]
-	if spent >= uses {
-		writeJSONStatus(w, 409, map[string]interface{}{"error": "no_uses_left", "message": fmt.Sprintf("All %d uses are spent; they return on a Long Rest.", uses)})
+	// the use and the Bonus Action in one step (resources_2024.go; the cost is the action economy's, featureTurnCost)
+	cost, refusal := featureTurnCost(req.CharacterID, "wholeness_of_body")
+	if refusal != nil {
+		writeJSONStatus(w, 409, map[string]interface{}{"error": refusal.Code, "message": refusal.Msg})
 		return
 	}
-	if _, fighting, _ := isCharacterInCombat(req.CharacterID); fighting {
-		if ok, _, msg := checkActionEconomy(req.CharacterID, "bonus_action", 0); !ok {
-			writeJSONStatus(w, 409, map[string]interface{}{"error": "resource_exhausted", "message": msg})
-			return
+	_, counts, err := spendWithTurn(req.CharacterID, cost, func(s *spent) error {
+		if s.Uses["wholeness_of_body"] >= uses {
+			return &notEnough{"no_uses_left", 0}
 		}
-		db.Exec(`UPDATE characters SET bonus_action_used = true WHERE id = $1`, req.CharacterID)
+		s.Uses["wholeness_of_body"]++
+		return nil
+	})
+	if r, refused := refusedSpend(err); refused {
+		if r.Msg == "no_uses_left" {
+			writeJSONStatus(w, 409, map[string]interface{}{"error": "no_uses_left", "message": fmt.Sprintf("All %d uses are spent; they return on a Long Rest.", uses)})
+		} else {
+			writeJSONStatus(w, 409, map[string]interface{}{"error": "resource_exhausted", "message": r.Msg})
+		}
+		return
 	}
-	setUsedResource(req.CharacterID, "wholeness_of_body", spent+1)
+	if answerDBFailure(w, err, "the character") {
+		return
+	}
+	spent := counts.Uses["wholeness_of_body"] - 1
 	die := getMonkDie(level)
 	roll := game.RollDamage("1"+strings.TrimPrefix(die, "1"), false)
 	heal := roll + game.Modifier(wis)
@@ -196,26 +208,42 @@ func handleHolyNimbus2024(w http.ResponseWriter, r *http.Request) {
 		dmBadRequest(w, "not_available", "Holy Nimbus is an Oath of Devotion feature at Paladin level 20.")
 		return
 	}
+	// once per Long Rest, or a level 5 spell slot, with the Bonus Action, in one step (resources_2024.go; featureTurnCost)
+	cost, refusal := featureTurnCost(req.CharacterID, "holy_nimbus")
+	if refusal != nil {
+		writeJSONStatus(w, 409, map[string]interface{}{"error": refusal.Code, "message": refusal.Msg})
+		return
+	}
+	slots := characterSpellSlots(req.CharacterID, class, level)
 	note := ""
-	if classResourcesUsed(req.CharacterID)["holy_nimbus"] > 0 {
-		if !req.UseSlot {
-			writeJSONStatus(w, 409, map[string]interface{}{"error": "already_used", "message": "Holy Nimbus returns on a Long Rest; send use_slot=true to expend a level 5 spell slot instead."})
-			return
+	_, _, err := spendWithTurn(req.CharacterID, cost, func(s *spent) error {
+		if s.Uses["holy_nimbus"] == 0 {
+			s.Uses["holy_nimbus"] = 1
+			return nil
 		}
-		if !spendSlot(req.CharacterID, class, level, 5) {
-			writeJSONStatus(w, 409, map[string]interface{}{"error": "no_spell_slot", "message": "No level 5 spell slot left."})
-			return
+		if !req.UseSlot {
+			return &notEnough{"already_used", 0}
+		}
+		if spendSlotIn(s.Slots, 5, slots[5], "") != nil {
+			return &notEnough{"no_spell_slot", 0}
 		}
 		note = " (a level 5 spell slot is expended)"
-	}
-	if _, fighting, _ := isCharacterInCombat(req.CharacterID); fighting {
-		if ok, _, msg := checkActionEconomy(req.CharacterID, "bonus_action", 0); !ok {
-			writeJSONStatus(w, 409, map[string]interface{}{"error": "resource_exhausted", "message": msg})
-			return
+		return nil
+	})
+	if r, refused := refusedSpend(err); refused {
+		switch r.Msg {
+		case "already_used":
+			writeJSONStatus(w, 409, map[string]interface{}{"error": "already_used", "message": "Holy Nimbus returns on a Long Rest; send use_slot=true to expend a level 5 spell slot instead."})
+		case "no_spell_slot":
+			writeJSONStatus(w, 409, map[string]interface{}{"error": "no_spell_slot", "message": "No level 5 spell slot left."})
+		default:
+			writeJSONStatus(w, 409, map[string]interface{}{"error": "resource_exhausted", "message": r.Msg})
 		}
-		db.Exec(`UPDATE characters SET bonus_action_used = true WHERE id = $1`, req.CharacterID)
+		return
 	}
-	setUsedResource(req.CharacterID, "holy_nimbus", 1)
+	if answerDBFailure(w, err, "the character") {
+		return
+	}
 	addSpellEffect(lobby, req.CharacterID, req.CharacterID, "Holy Nimbus", "holy_nimbus", "", 100, "", 0)
 	writeJSONStatus(w, 200, map[string]interface{}{"success": true, "result": fmt.Sprintf("%s's aura blazes with sunlight for 10 minutes%s: enemies that start their turn in it take Radiant damage, and %s has Advantage on saves forced by Fiends and Undead.", name, note, name)})
 }

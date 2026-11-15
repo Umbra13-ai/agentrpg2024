@@ -104,15 +104,12 @@ func eversmokingBottle(charID int, it invItem) string {
 
 // clearSignatureUses: a Short or Long Rest gives the Signature Spells back (F120).
 func clearSignatureUses(charID int) {
-	used := classResourcesUsed(charID)
-	changed := false
-	for k := range used {
-		if strings.HasPrefix(k, "signature_") {
-			delete(used, k)
-			changed = true
+	changeSpent(charID, func(s *spent) error { // resources_2024.go
+		for k := range s.Uses {
+			if strings.HasPrefix(k, "signature_") {
+				delete(s.Uses, k)
+			}
 		}
-	}
-	if changed {
-		writeUsed(charID, used)
-	}
+		return nil
+	})
 }

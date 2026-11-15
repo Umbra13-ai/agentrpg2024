@@ -84,42 +84,21 @@ func monkInitiativeFeatures(charID int, name, class string, level int) string {
 		return fmt.Sprintf("🥋 %s: Uncanny Metabolism: all Focus Points regained and %d Hit Points healed", name, heal)
 	}
 	if level >= 15 && used["focus"] <= 3 {
-		regain := 4 - used["focus"]
-		giveFocus(charID, regain)
+		focusMax := classResourceMax(charID, class, level, "focus", 0)
+		changeSpent(charID, func(s *spent) error { // Perfect Focus: back up to 4, on the locked counts (resources_2024.go)
+			if left := focusMax - s.Uses["focus"]; left <= 3 {
+				s.regain("focus", 4-left)
+			}
+			return nil
+		})
 		return fmt.Sprintf("🥋 %s: Perfect Focus: Focus Points regained up to 4", name)
 	}
 	return ""
 }
 
-func restoreAllFocus(charID int) { setUsedResource(charID, "focus", 0) }
-
-func giveFocus(charID, n int) {
-	var usedJSON []byte
-	db.QueryRow(`SELECT COALESCE(class_resources_used,'{}') FROM characters WHERE id = $1`, charID).Scan(&usedJSON)
-	used := map[string]int{}
-	jsonUnmarshal(usedJSON, &used)
-	used["focus"] -= n
-	if used["focus"] < 0 {
-		used["focus"] = 0
-	}
-	writeUsed(charID, used)
-}
-
-func setUsedResource(charID int, key string, v int) {
-	var usedJSON []byte
-	db.QueryRow(`SELECT COALESCE(class_resources_used,'{}') FROM characters WHERE id = $1`, charID).Scan(&usedJSON)
-	used := map[string]int{}
-	jsonUnmarshal(usedJSON, &used)
-	used[key] = v
-	writeUsed(charID, used)
-}
+func restoreAllFocus(charID int) { setUse(charID, "focus", 0) }
 
 func jsonUnmarshal(b []byte, v interface{}) { _ = json.Unmarshal(b, v) }
-
-func writeUsed(charID int, used map[string]int) {
-	b, _ := json.Marshal(used)
-	db.Exec(`UPDATE characters SET class_resources_used = $1 WHERE id = $2`, string(b), charID)
-}
 
 // unarmedDice is the damage of an Unarmed Strike: 1d6 for most, the Martial Arts die for a Monk.
 func unarmedDice(class string, level int) string {

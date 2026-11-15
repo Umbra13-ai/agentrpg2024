@@ -839,26 +839,6 @@ func sameMap(a, b invItem) bool {
 	return fmt.Sprintf("%p", a) == fmt.Sprintf("%p", b)
 }
 
-// editInventory changes a character's inventory in one transaction.
-func editInventory(charID int, fn func([]invItem) []invItem) {
-	tx, err := db.Begin()
-	if err != nil {
-		return
-	}
-	defer tx.Rollback()
-	var raw []byte
-	if tx.QueryRow(`SELECT COALESCE(inventory,'[]') FROM characters WHERE id = $1 FOR UPDATE`, charID).Scan(&raw) != nil {
-		return
-	}
-	var inv []invItem
-	json.Unmarshal(raw, &inv)
-	inv = fn(inv)
-	out, _ := json.Marshal(inv)
-	if _, err := tx.Exec(`UPDATE characters SET inventory = $1 WHERE id = $2`, out, charID); err == nil {
-		tx.Commit()
-	}
-}
-
 // ---------------------------------------------------------------- potions
 
 var giantStrengthScores = map[string]int{"hill": 21, "frost": 23, "stone": 23, "fire": 25, "cloud": 27, "storm": 29}

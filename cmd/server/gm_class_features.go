@@ -853,6 +853,29 @@ func handleGMIndomitable(w http.ResponseWriter, r *http.Request) {
 	}
 	abilityName := game.AbilityName(abilityShort)
 
+	// Track usage: the guarded spend before the reroll (resources_2024.go)
+	_, after, err := changeSpent(req.CharacterID, func(s *spent) error {
+		if s.Indomitable >= maxUses {
+			return &notEnough{"no_uses_remaining", 0}
+		}
+		s.Indomitable++
+		return nil
+	})
+	if _, refused := refusedSpend(err); refused {
+		writeJSONStatus(w, http.StatusBadRequest, map[string]interface{}{
+			"error":            "no_uses_remaining",
+			"message":          fmt.Sprintf("%s has used all Indomitable uses for this long rest (%d/%d)", charName, maxUses, maxUses),
+			"indomitable_used": maxUses,
+			"indomitable_max":  maxUses,
+			"recovery":         "long rest",
+		})
+		return
+	}
+	if answerDBFailure(w, err, "the character") {
+		return
+	}
+	newUsedCount := after.Indomitable
+
 	// the reroll is the same saving throw made again (save_2024.go), with a bonus equal to the Fighter level (2024 Indomitable);
 	// the new roll stands
 	fighterLevel := classLevelIn(req.CharacterID, class, level, "fighter")
@@ -860,10 +883,6 @@ func handleGMIndomitable(w http.ResponseWriter, r *http.Request) {
 		adjust: []game.RollAdjust{{Amount: fighterLevel, Why: fmt.Sprintf("Indomitable +%d", fighterLevel)}}}).roll()
 	_, proficient, _ := saveModifier(lobbyID, req.CharacterID, abilityShort)
 	success, newTotal := sv.Success, sv.Total
-
-	// Track usage
-	db.Exec("UPDATE characters SET indomitable_used = indomitable_used + 1 WHERE id = $1", req.CharacterID)
-	newUsedCount := usedCount + 1
 
 	label := "Indomitable reroll: " + abilityName + " saving throw"
 	if proficient {

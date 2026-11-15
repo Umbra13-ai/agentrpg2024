@@ -41,14 +41,9 @@ func freeSmiteAvailable(charID int) (bool, string) {
 	return true, ""
 }
 
-func useFreeSmite(charID int) {
-	var usedJSON []byte
-	db.QueryRow(`SELECT COALESCE(class_resources_used,'{}') FROM characters WHERE id = $1`, charID).Scan(&usedJSON)
-	used := map[string]int{}
-	json.Unmarshal(usedJSON, &used)
-	used["paladins_smite"]++
-	b, _ := json.Marshal(used)
-	db.Exec(`UPDATE characters SET class_resources_used = $1 WHERE id = $2`, string(b), charID)
+// useFreeSmite spends Paladin's Smite (once per Long Rest), guarded (resources_2024.go); false when it was already spent.
+func useFreeSmite(charID int) bool {
+	return spendUseOK(charID, "paladins_smite", 1, 1)
 }
 
 // radiantStrikes is the extra 1d8 of a Paladin of level 11+ on a melee hit (dice doubled on a critical hit).

@@ -12,7 +12,9 @@ package main
 // something in it (empty it first), and things the SRD gives no price.
 
 import (
+	"database/sql"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"net/http"
 	"regexp"
@@ -183,85 +185,89 @@ type sellReq struct {
 
 // sellItems: one transaction; priceCP turns a full price in GP into this shop's asking price in CP.
 func sellItems(charID int, def *shopTypeDef, shopName string, priceCP func(float64) int, req []sellReq) (int, map[string]interface{}) {
-	tx, err := db.Begin()
-	if err != nil {
-		return http.StatusInternalServerError, map[string]interface{}{"error": dbErrorCode}
+	// the items and the money in one locked inventory change (inventory_2024.go): an attunement to an item sold ends
+	total, money := 0, 0
+	var lines []string
+	var freed []string
+	done, err := changeInventory(charID, func(tx *sql.Tx, inv []invItem) ([]invItem, error) {
+		for _, s := range req {
+			idx := -1
+			for i, it := range inv {
+				if (s.ItemID != "" && itemStr(it, "id") == s.ItemID) || (s.ItemID == "" && s.Item != "" && strings.EqualFold(itemStr(it, "name"), s.Item)) {
+					idx = i
+					break
+				}
+			}
+			if idx < 0 {
+				return nil, refuseInv(http.StatusBadRequest, map[string]interface{}{"error": "item_not_found", "message": fmt.Sprintf("You don't carry %s%s (send item_id from your inventory).", s.ItemID, s.Item)})
+			}
+			it := inv[idx]
+			name := itemStr(it, "name")
+			if s.ItemID != "" && s.Item != "" && normalizeRef(s.Item) != normalizeRef(name) { // the two name different items (Nov 14 review)
+				return nil, refuseInv(http.StatusBadRequest, map[string]interface{}{"error": "item_mismatch", "message": fmt.Sprintf("item_id %s is %s, but item says %q: send one of them, or both for the same item. Nothing was sold.", s.ItemID, name, s.Item)})
+			}
+			have := 1
+			if v, ok := it["quantity"].(float64); ok && v > 1 {
+				have = int(v)
+			}
+			q := have
+			if s.Quantity != nil {
+				q = *s.Quantity
+			}
+			if q < 1 || q > have {
+				return nil, refuseInv(http.StatusBadRequest, map[string]interface{}{"error": "invalid_quantity", "message": fmt.Sprintf("%s: quantity must be 1 to %d (you have %d).", name, have, have)})
+			}
+			a, ok := appraiseItem(name)
+			if !ok {
+				return nil, refuseInv(http.StatusBadRequest, map[string]interface{}{"error": "no_price", "message": fmt.Sprintf("%s has no price in the SRD, so a shop can't value it; your GM can buy it.", name)})
+			}
+			if !shopBuysKind(def, a, name) {
+				return nil, refuseInv(http.StatusBadRequest, map[string]interface{}{"error": "shop_doesnt_buy", "message": fmt.Sprintf("%s doesn't buy %s: a shop buys the kinds of goods it sells.", shopName, name)})
+			}
+			if why := sellBlocked(tx, charID, inv, it, q); why != "" {
+				return nil, refuseInv(http.StatusBadRequest, map[string]interface{}{"error": "cannot_sell", "message": why})
+			}
+			// half the price of what is sold, halved on the total, not per item (Nov 14 audit re-check: 20 arrows, 1 GP, fetched 4 SP,
+			// and 10 torches nothing)
+			got := priceCP(a.ValueGP) * q / 2
+			if got == 0 {
+				return nil, refuseInv(http.StatusBadRequest, map[string]interface{}{"error": "worth_nothing", "message": fmt.Sprintf("Half the price of %d x %s is less than 1 CP, so the shop won't buy it.", q, name)})
+			}
+			total += got
+			lines = append(lines, fmt.Sprintf("%d x %s: %s", q, name, moneyText(got)))
+			if q == have {
+				freed = append(freed, itemStr(it, "id"))
+				inv = append(inv[:idx], inv[idx+1:]...)
+			} else {
+				it["quantity"] = float64(have - q)
+			}
+		}
+		money = walletCPIn(tx, charID) + total // read in the transaction, with the character locked
+		if _, err := tx.Exec(`UPDATE characters SET gold = $1, silver = $2, copper = $3, electrum = 0, platinum = 0 WHERE id = $4`, money/100, (money%100)/10, money%10, charID); err != nil {
+			return nil, err
+		}
+		return inv, nil
+	})
+	var refused *invRefusal
+	if errors.As(err, &refused) {
+		return refused.status, refused.body
 	}
-	defer tx.Rollback()
-	inv, err := loadInventoryTx(tx, charID)
 	if dbFailed(err) {
 		return http.StatusInternalServerError, map[string]interface{}{"error": dbErrorCode, "message": dbReadMessage("the character's pack")}
 	}
 	if err != nil {
 		return http.StatusNotFound, map[string]interface{}{"error": "character_not_found"}
 	}
-	total := 0
-	var lines []string
-	for _, s := range req {
-		idx := -1
-		for i, it := range inv {
-			if (s.ItemID != "" && itemStr(it, "id") == s.ItemID) || (s.ItemID == "" && s.Item != "" && strings.EqualFold(itemStr(it, "name"), s.Item)) {
-				idx = i
-				break
-			}
-		}
-		if idx < 0 {
-			return http.StatusBadRequest, map[string]interface{}{"error": "item_not_found", "message": fmt.Sprintf("You don't carry %s%s (send item_id from your inventory).", s.ItemID, s.Item)}
-		}
-		it := inv[idx]
-		name := itemStr(it, "name")
-		if s.ItemID != "" && s.Item != "" && normalizeRef(s.Item) != normalizeRef(name) { // the two name different items (Nov 14 review)
-			return http.StatusBadRequest, map[string]interface{}{"error": "item_mismatch", "message": fmt.Sprintf("item_id %s is %s, but item says %q: send one of them, or both for the same item. Nothing was sold.", s.ItemID, name, s.Item)}
-		}
-		have := 1
-		if v, ok := it["quantity"].(float64); ok && v > 1 {
-			have = int(v)
-		}
-		q := have
-		if s.Quantity != nil {
-			q = *s.Quantity
-		}
-		if q < 1 || q > have {
-			return http.StatusBadRequest, map[string]interface{}{"error": "invalid_quantity", "message": fmt.Sprintf("%s: quantity must be 1 to %d (you have %d).", name, have, have)}
-		}
-		a, ok := appraiseItem(name)
-		if !ok {
-			return http.StatusBadRequest, map[string]interface{}{"error": "no_price", "message": fmt.Sprintf("%s has no price in the SRD, so a shop can't value it; your GM can buy it.", name)}
-		}
-		if !shopBuysKind(def, a, name) {
-			return http.StatusBadRequest, map[string]interface{}{"error": "shop_doesnt_buy", "message": fmt.Sprintf("%s doesn't buy %s: a shop buys the kinds of goods it sells.", shopName, name)}
-		}
-		if why := sellBlocked(tx, charID, inv, it, q); why != "" {
-			return http.StatusBadRequest, map[string]interface{}{"error": "cannot_sell", "message": why}
-		}
-		// half the price of what is sold, halved on the total, not per item (Nov 14 audit re-check: 20 arrows, 1 GP, fetched 4 SP,
-		// and 10 torches nothing)
-		got := priceCP(a.ValueGP) * q / 2
-		if got == 0 {
-			return http.StatusBadRequest, map[string]interface{}{"error": "worth_nothing", "message": fmt.Sprintf("Half the price of %d x %s is less than 1 CP, so the shop won't buy it.", q, name)}
-		}
-		total += got
-		lines = append(lines, fmt.Sprintf("%d x %s: %s", q, name, moneyText(got)))
-		if q == have {
-			noteFreedItemID(charID, itemStr(it, "id"))
-			inv = append(inv[:idx], inv[idx+1:]...)
-		} else {
-			it["quantity"] = float64(have - q)
-		}
-	}
-	if err := saveInventoryTx(tx, charID, inv); err != nil {
-		return http.StatusInternalServerError, map[string]interface{}{"error": "save_failed"}
-	}
-	money := walletCPIn(tx, charID) + total // read in the transaction, with the character locked
-	if _, err := tx.Exec(`UPDATE characters SET gold = $1, silver = $2, copper = $3, electrum = 0, platinum = 0 WHERE id = $4`, money/100, (money%100)/10, money%10, charID); err != nil {
-		return http.StatusInternalServerError, map[string]interface{}{"error": "save_failed"}
-	}
-	if tx.Commit() != nil {
-		return http.StatusInternalServerError, map[string]interface{}{"error": "save_failed"}
+	for _, id := range freed {
+		noteFreedItemID(charID, id)
 	}
 	refreshStoredAC(charID)
-	return http.StatusOK, map[string]interface{}{"success": true, "sold": lines, "received": moneyText(total), "your_money": moneyText(money),
+	reply := map[string]interface{}{"success": true, "sold": lines, "received": moneyText(total), "your_money": moneyText(money),
 		"rule": "A shop pays half its own price for an item (SRD 5.2.1: equipment fetches half its cost when sold)."}
+	if len(done.Ended) > 0 {
+		reply["attunement_ended"] = strings.TrimSpace(done.Note)
+	}
+	return http.StatusOK, reply
 }
 
 // sellOffers: what this shop would pay for each item the character carries.

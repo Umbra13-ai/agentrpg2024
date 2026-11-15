@@ -435,73 +435,63 @@ func handleCharacterDowntime(w http.ResponseWriter, r *http.Request) {
 		helpers = 1
 	}
 
-	// Gold, progress and the inventory change together, so two requests at once can't pay twice or finish twice.
-	tx, err := db.Begin()
-	if err != nil {
-		writeJSONStatus(w, http.StatusInternalServerError, map[string]interface{}{"error": "database_error"})
-		return
-	}
-	defer tx.Rollback()
+	// Gold, progress and the inventory change together, so two requests at once can't pay twice or finish twice: one locked
+	// inventory change (inventory_2024.go) that also writes the gold and the progress.
 	var gold int
-	var progressRaw, invRaw []byte
-	if err := tx.QueryRow(`SELECT COALESCE(gold, 0), COALESCE(training_progress, '{}'), COALESCE(inventory, '[]') FROM characters WHERE id = $1 FOR UPDATE`, req.CharacterID).
-		Scan(&gold, &progressRaw, &invRaw); err != nil {
-		writeJSONStatus(w, http.StatusInternalServerError, map[string]interface{}{"error": "database_error"})
-		return
-	}
-	progress := map[string]json.RawMessage{}
-	json.Unmarshal(progressRaw, &progress)
-	if progress == nil {
-		progress = map[string]json.RawMessage{}
-	}
-	key := "craft:" + itemSlug(plan.Item)
 	var cp craftProgress
-	started := false
-	if raw, ok := progress[key]; ok && json.Unmarshal(raw, &cp) == nil && cp.DaysNeeded > 0 {
-		started = true
-	}
-	if !started {
-		if gold < plan.Materials {
-			writeJSONStatus(w, http.StatusBadRequest, map[string]interface{}{"error": "insufficient_gold",
-				"message":   fmt.Sprintf("Crafting %s takes %d GP of raw materials (half its %s GP cost); you have %d GP.", plan.Item, plan.Materials, trimFloat(plan.CostGP), gold),
-				"gold_have": gold, "gold_need": plan.Materials})
-			return
+	started, done := false, false
+	_, err := changeInventory(req.CharacterID, func(tx *sql.Tx, inv []invItem) ([]invItem, error) {
+		var progressRaw []byte
+		if err := tx.QueryRow(`SELECT COALESCE(gold, 0), COALESCE(training_progress, '{}') FROM characters WHERE id = $1`, req.CharacterID).
+			Scan(&gold, &progressRaw); err != nil {
+			return nil, err
 		}
-		gold -= plan.Materials
-		cp = craftProgress{Item: plan.Item, Qty: plan.Qty, Tool: tool, DaysNeeded: plan.Days, Materials: plan.Materials}
-	}
-	cp.Days += req.Days * (1 + helpers)
-	done := cp.Days >= cp.DaysNeeded
-
-	var inv []map[string]interface{}
-	json.Unmarshal(invRaw, &inv)
-	if done {
-		delete(progress, key)
-		b := make([]byte, 4)
-		rand.Read(b)
-		item := map[string]interface{}{"id": "c" + hex.EncodeToString(b), "name": cp.Item, "quantity": max(1, cp.Qty), "crafted": true}
-		fillItemWeights([]map[string]interface{}{item})
-		inv = append(inv, item)
-	} else {
-		v, _ := json.Marshal(cp)
-		progress[key] = v
-	}
-	progressOut, _ := json.Marshal(progress)
-	invOut, _ := json.Marshal(inv)
-	if _, err := tx.Exec(`UPDATE characters SET gold = $1, training_progress = $2, inventory = $3 WHERE id = $4`, gold, progressOut, invOut, req.CharacterID); err != nil {
-		writeJSONStatus(w, http.StatusInternalServerError, map[string]interface{}{"error": "save_failed"})
+		progress := map[string]json.RawMessage{}
+		json.Unmarshal(progressRaw, &progress)
+		if progress == nil {
+			progress = map[string]json.RawMessage{}
+		}
+		key := "craft:" + itemSlug(plan.Item)
+		if raw, ok := progress[key]; ok && json.Unmarshal(raw, &cp) == nil && cp.DaysNeeded > 0 {
+			started = true
+		}
+		if !started {
+			if gold < plan.Materials {
+				return nil, refuseInv(http.StatusBadRequest, map[string]interface{}{"error": "insufficient_gold",
+					"message":   fmt.Sprintf("Crafting %s takes %d GP of raw materials (half its %s GP cost); you have %d GP.", plan.Item, plan.Materials, trimFloat(plan.CostGP), gold),
+					"gold_have": gold, "gold_need": plan.Materials})
+			}
+			gold -= plan.Materials
+			cp = craftProgress{Item: plan.Item, Qty: plan.Qty, Tool: tool, DaysNeeded: plan.Days, Materials: plan.Materials}
+		}
+		cp.Days += req.Days * (1 + helpers)
+		done = cp.Days >= cp.DaysNeeded
+		if done {
+			delete(progress, key)
+			b := make([]byte, 4)
+			rand.Read(b)
+			item := map[string]interface{}{"id": "c" + hex.EncodeToString(b), "name": cp.Item, "quantity": max(1, cp.Qty), "crafted": true}
+			fillItemWeights([]map[string]interface{}{item})
+			inv = append(inv, item)
+		} else {
+			v, _ := json.Marshal(cp)
+			progress[key] = v
+		}
+		progressOut, _ := json.Marshal(progress)
+		if _, err := tx.Exec(`UPDATE characters SET gold = $1, training_progress = $2 WHERE id = $3`, gold, progressOut, req.CharacterID); err != nil {
+			return nil, err
+		}
+		result := fmt.Sprintf("%d of %d days of work", min(cp.Days, cp.DaysNeeded), cp.DaysNeeded)
+		if done {
+			result = fmt.Sprintf("finished after %d days of work; the item is in the inventory (unsorted)", cp.DaysNeeded)
+		}
+		writeAction(tx, lobby, req.CharacterID, "downtime", fmt.Sprintf("%s crafts %s with %s for %d day(s)", name, cp.Item, game.ToolDisplayName(cp.Tool), req.Days), result)
+		return inv, nil
+	})
+	if answerInvRefusal(w, err) {
 		return
 	}
-	result := fmt.Sprintf("%d of %d days of work", min(cp.Days, cp.DaysNeeded), cp.DaysNeeded)
-	if done {
-		result = fmt.Sprintf("finished after %d days of work; the item is in the inventory (unsorted)", cp.DaysNeeded)
-	}
-	var logLobby sql.NullInt64
-	if lobby > 0 {
-		logLobby = sql.NullInt64{Int64: int64(lobby), Valid: true}
-	}
-	writeAction(tx, int(logLobby.Int64), req.CharacterID, "downtime", fmt.Sprintf("%s crafts %s with %s for %d day(s)", name, cp.Item, game.ToolDisplayName(cp.Tool), req.Days), result)
-	if err := tx.Commit(); err != nil {
+	if err != nil {
 		writeJSONStatus(w, http.StatusInternalServerError, map[string]interface{}{"error": "save_failed"})
 		return
 	}
@@ -607,57 +597,56 @@ func scribeScroll(w http.ResponseWriter, charID int, spellRef string, days int) 
 	dc, attack := game.SpellSaveDC(level, mod), game.ProficiencyBonus(level)+mod
 	cost := scrollScribing[sp.Level]
 
-	tx, err := db.Begin()
-	if err != nil {
-		writeJSONStatus(w, http.StatusInternalServerError, map[string]interface{}{"error": "database_error"})
-		return
-	}
-	defer tx.Rollback()
+	// gold, progress and the scroll in one locked inventory change (inventory_2024.go)
 	var gold int
-	var progressRaw, inv2 []byte
-	if tx.QueryRow(`SELECT COALESCE(gold,0), COALESCE(training_progress,'{}'), COALESCE(inventory,'[]') FROM characters WHERE id = $1 FOR UPDATE`, charID).Scan(&gold, &progressRaw, &inv2) != nil {
-		writeJSONStatus(w, http.StatusInternalServerError, map[string]interface{}{"error": "database_error"})
+	var cp craftProgress
+	started, done := false, false
+	_, err := changeInventory(charID, func(tx *sql.Tx, items []invItem) ([]invItem, error) {
+		var progressRaw []byte
+		if err := tx.QueryRow(`SELECT COALESCE(gold,0), COALESCE(training_progress,'{}') FROM characters WHERE id = $1`, charID).Scan(&gold, &progressRaw); err != nil {
+			return nil, err
+		}
+		progress := map[string]json.RawMessage{}
+		json.Unmarshal(progressRaw, &progress)
+		if progress == nil {
+			progress = map[string]json.RawMessage{}
+		}
+		key := "scribe:" + slug
+		if raw, ok := progress[key]; ok && json.Unmarshal(raw, &cp) == nil && cp.DaysNeeded > 0 {
+			started = true
+		}
+		if !started {
+			if gold < cost[1] {
+				return nil, refuseInv(http.StatusBadRequest, map[string]interface{}{"error": "insufficient_gold",
+					"message": fmt.Sprintf("A Spell Scroll of a level %d spell costs %d GP to scribe; you have %d GP.", sp.Level, cost[1], gold)})
+			}
+			gold -= cost[1]
+			cp = craftProgress{Item: "Spell Scroll (" + sp.Name + ")", Tool: "scribing", DaysNeeded: cost[0], Materials: cost[1]}
+		}
+		cp.Days += days
+		done = cp.Days >= cp.DaysNeeded
+		if done {
+			delete(progress, key)
+			scroll := map[string]interface{}{"id": newItemID("s"), "name": cp.Item, "quantity": 1, "type": "scroll", "magic_item": "Spell Scroll",
+				"spell": slug, "spell_level": sp.Level, "save_dc": dc, "attack_bonus": attack, "scribed_by": name}
+			if sp.Level == 0 {
+				scroll["caster_level"] = level // a scribed cantrip works as if cast at the scribe's level
+			}
+			items = append(items, scroll)
+		} else {
+			v, _ := json.Marshal(cp)
+			progress[key] = v
+		}
+		pOut, _ := json.Marshal(progress)
+		if _, err := tx.Exec(`UPDATE characters SET gold = $1, training_progress = $2 WHERE id = $3`, gold, pOut, charID); err != nil {
+			return nil, err
+		}
+		return items, nil
+	})
+	if answerInvRefusal(w, err) {
 		return
 	}
-	progress := map[string]json.RawMessage{}
-	json.Unmarshal(progressRaw, &progress)
-	if progress == nil {
-		progress = map[string]json.RawMessage{}
-	}
-	key := "scribe:" + slug
-	var cp craftProgress
-	started := false
-	if raw, ok := progress[key]; ok && json.Unmarshal(raw, &cp) == nil && cp.DaysNeeded > 0 {
-		started = true
-	}
-	if !started {
-		if gold < cost[1] {
-			writeJSONStatus(w, http.StatusBadRequest, map[string]interface{}{"error": "insufficient_gold",
-				"message": fmt.Sprintf("A Spell Scroll of a level %d spell costs %d GP to scribe; you have %d GP.", sp.Level, cost[1], gold)})
-			return
-		}
-		gold -= cost[1]
-		cp = craftProgress{Item: "Spell Scroll (" + sp.Name + ")", Tool: "scribing", DaysNeeded: cost[0], Materials: cost[1]}
-	}
-	cp.Days += days
-	done := cp.Days >= cp.DaysNeeded
-	var items []map[string]interface{}
-	json.Unmarshal(inv2, &items)
-	if done {
-		delete(progress, key)
-		scroll := map[string]interface{}{"id": newItemID("s"), "name": cp.Item, "quantity": 1, "type": "scroll", "magic_item": "Spell Scroll",
-			"spell": slug, "spell_level": sp.Level, "save_dc": dc, "attack_bonus": attack, "scribed_by": name}
-		if sp.Level == 0 {
-			scroll["caster_level"] = level // a scribed cantrip works as if cast at the scribe's level
-		}
-		items = append(items, scroll)
-	} else {
-		v, _ := json.Marshal(cp)
-		progress[key] = v
-	}
-	pOut, _ := json.Marshal(progress)
-	iOut, _ := json.Marshal(items)
-	if _, err := tx.Exec(`UPDATE characters SET gold = $1, training_progress = $2, inventory = $3 WHERE id = $4`, gold, pOut, iOut, charID); err != nil || tx.Commit() != nil {
+	if err != nil {
 		writeJSONStatus(w, http.StatusInternalServerError, map[string]interface{}{"error": "save_failed"})
 		return
 	}
