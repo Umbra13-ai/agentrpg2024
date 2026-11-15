@@ -103,16 +103,15 @@ func unarmedOption(w http.ResponseWriter, r *http.Request, kind string) {
 		writeJSONStatus(w, http.StatusMethodNotAllowed, map[string]interface{}{"error": "POST required"})
 		return
 	}
-	_, lobby, ok := gmCampaignOf(w, r)
-	if !ok {
-		return
-	}
 	var req struct {
 		AttackerID int    `json:"attacker_id"`
 		TargetID   int    `json:"target_id"`
 		Effect     string `json:"effect"`
 	}
-	json.NewDecoder(r.Body).Decode(&req)
+	_, lobby, ok := gmRead(w, r, &req, optionalBody())
+	if !ok {
+		return
+	}
 	if req.AttackerID == 0 || req.TargetID == 0 || req.AttackerID == req.TargetID {
 		dmBadRequest(w, "ids_required", "Send attacker_id and target_id (characters, or negative monster ids).")
 		return
@@ -155,15 +154,14 @@ func handleGMEscapeGrapple2024(w http.ResponseWriter, r *http.Request) {
 		writeJSONStatus(w, http.StatusMethodNotAllowed, map[string]interface{}{"error": "POST required"})
 		return
 	}
-	_, lobby, ok := gmCampaignOf(w, r)
-	if !ok {
-		return
-	}
 	var req struct {
 		TargetID    int `json:"target_id"`
 		CharacterID int `json:"character_id"`
 	}
-	json.NewDecoder(r.Body).Decode(&req)
+	_, lobby, ok := gmRead(w, r, &req, optionalBody())
+	if !ok {
+		return
+	}
 	if req.TargetID == 0 {
 		req.TargetID = req.CharacterID
 	}
@@ -237,15 +235,14 @@ func handleGMReleaseGrapple2024(w http.ResponseWriter, r *http.Request) {
 		writeJSONStatus(w, http.StatusMethodNotAllowed, map[string]interface{}{"error": "POST required"})
 		return
 	}
-	_, lobby, ok := gmCampaignOf(w, r)
-	if !ok {
-		return
-	}
 	var req struct {
 		GrapplerID int `json:"grappler_id"`
 		TargetID   int `json:"target_id"`
 	}
-	json.NewDecoder(r.Body).Decode(&req)
+	_, lobby, ok := gmRead(w, r, &req, optionalBody())
+	if !ok {
+		return
+	}
 	res, _ := db.Exec(`DELETE FROM condition_records WHERE lobby_id = $1 AND target_id = $2 AND condition = 'grappled' AND source = $3`, lobby, req.TargetID, grappleSource(req.GrapplerID))
 	n, _ := res.RowsAffected()
 	if n == 0 {
@@ -269,16 +266,15 @@ func handleGMCounterspell2024(w http.ResponseWriter, r *http.Request) {
 		writeJSONStatus(w, http.StatusMethodNotAllowed, map[string]interface{}{"error": "POST required"})
 		return
 	}
-	_, lobby, ok := gmCampaignOf(w, r)
-	if !ok {
-		return
-	}
 	var req struct {
 		CasterID  int `json:"caster_id"`
 		TargetID  int `json:"target_id"`
 		SlotLevel int `json:"slot_level"`
 	}
-	json.NewDecoder(r.Body).Decode(&req)
+	_, lobby, ok := gmRead(w, r, &req, optionalBody())
+	if !ok {
+		return
+	}
 	if req.CasterID <= 0 || req.TargetID == 0 {
 		dmBadRequest(w, "ids_required", "Send caster_id (the character casting Counterspell) and target_id (the creature casting the spell).")
 		return
@@ -372,16 +368,15 @@ func handleGMHurlThroughHell2024(w http.ResponseWriter, r *http.Request) {
 		writeJSONStatus(w, http.StatusMethodNotAllowed, map[string]interface{}{"error": "POST required"})
 		return
 	}
-	_, lobby, ok := gmCampaignOf(w, r)
-	if !ok {
-		return
-	}
 	var req struct {
 		CharacterID int  `json:"character_id"`
 		TargetID    int  `json:"target_id"`
 		UsePactSlot bool `json:"use_pact_slot"`
 	}
-	json.NewDecoder(r.Body).Decode(&req)
+	_, lobby, ok := gmRead(w, r, &req, optionalBody())
+	if !ok {
+		return
+	}
 	var name, class, subclass string
 	var level int
 	var used bool
@@ -435,16 +430,15 @@ func handleGMSuffocation2024(w http.ResponseWriter, r *http.Request) {
 		writeJSONStatus(w, http.StatusMethodNotAllowed, map[string]interface{}{"error": "POST required"})
 		return
 	}
-	_, lobby, ok := gmCampaignOf(w, r)
-	if !ok {
-		return
-	}
 	var req struct {
 		CharacterID int    `json:"character_id"`
 		Action      string `json:"action"`
 		Underwater  bool   `json:"underwater"` // the creature is underwater (Water Breathing lets it breathe; spells_more_2024.go)
 	}
-	json.NewDecoder(r.Body).Decode(&req)
+	_, lobby, ok := gmRead(w, r, &req, optionalBody())
+	if !ok {
+		return
+	}
 	db.Exec(`ALTER TABLE characters ADD COLUMN IF NOT EXISTS suffocation_levels INTEGER DEFAULT 0`)
 	var name string
 	var con, gained int

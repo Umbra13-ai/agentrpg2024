@@ -419,28 +419,7 @@ func handleAutoEquip(w http.ResponseWriter, r *http.Request) {
 	if r.Method == http.MethodGet {
 		fmt.Sscanf(r.URL.Query().Get("character_id"), "%d", &req.CharacterID)
 	} else {
-		// unknown fields and a wrong-type choices are refused, not dropped (round 2 re-check)
-		var raw map[string]json.RawMessage
-		if err := json.NewDecoder(r.Body).Decode(&raw); err != nil {
-			writeJSONStatus(w, http.StatusBadRequest, map[string]interface{}{"error": "invalid_json", "message": "Send one JSON object: {\"character_id\": N, \"answer\": \"yes\" or \"no\", \"choices\": {...}}."})
-			return
-		}
-		for k := range raw {
-			if k != "character_id" && k != "answer" && k != "choices" {
-				writeJSONStatus(w, http.StatusBadRequest, map[string]interface{}{"error": "unknown_field", "message": fmt.Sprintf("%q is not a field auto-equip takes (character_id, answer, choices). Nothing was changed.", k)})
-				return
-			}
-		}
-		if json.Unmarshal(raw["character_id"], &req.CharacterID) != nil {
-			writeJSONStatus(w, http.StatusBadRequest, map[string]interface{}{"error": "invalid_character_id", "message": "character_id must be a number, like 12. Nothing was changed."})
-			return
-		}
-		if a, has := raw["answer"]; has && json.Unmarshal(a, &req.Answer) != nil {
-			writeJSONStatus(w, http.StatusBadRequest, map[string]interface{}{"error": "answer_must_be_yes_or_no", "message": "answer is \"yes\" or \"no\" (text). Nothing was changed."})
-			return
-		}
-		if ch, has := raw["choices"]; has && string(ch) != "null" && json.Unmarshal(ch, &req.Choices) != nil {
-			writeJSONStatus(w, http.StatusBadRequest, map[string]interface{}{"error": "invalid_choices", "message": "choices is an object: {\"<question key>\": \"<value of the option you want>\"}. Nothing was changed."})
+		if !readRequest(w, r, &req) { // unknown fields and a wrong-type choices are refused (request_body_2024.go)
 			return
 		}
 	}

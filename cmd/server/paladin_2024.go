@@ -72,15 +72,15 @@ func handleGMAbjureFoes(w http.ResponseWriter, r *http.Request) {
 		writeJSONStatus(w, http.StatusMethodNotAllowed, map[string]interface{}{"error": "method_not_allowed"})
 		return
 	}
-	_, campaignID, ok := gmCampaignOf(w, r)
-	if !ok {
-		return
-	}
 	var req struct {
 		PaladinID int   `json:"paladin_id"`
 		TargetIDs []int `json:"target_ids"`
 	}
-	if json.NewDecoder(http.MaxBytesReader(w, r.Body, 8192)).Decode(&req) != nil || req.PaladinID == 0 || len(req.TargetIDs) == 0 {
+	_, campaignID, ok := gmRead(w, r, &req)
+	if !ok {
+		return
+	}
+	if req.PaladinID == 0 || len(req.TargetIDs) == 0 {
 		writeJSONStatus(w, http.StatusBadRequest, map[string]interface{}{"error": "invalid_request", "message": "Send paladin_id and target_ids."})
 		return
 	}

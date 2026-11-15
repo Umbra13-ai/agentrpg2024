@@ -301,8 +301,7 @@ func handleBattleMap(w http.ResponseWriter, r *http.Request, campaignID int, rou
 	if r.Method == http.MethodGet {
 		req.CharacterID, _ = strconv.Atoi(r.URL.Query().Get("character_id"))
 	} else {
-		if err := json.NewDecoder(http.MaxBytesReader(w, r.Body, 65536)).Decode(&req); err != nil {
-			battleMapError(w, 400, "invalid_map_request")
+		if !readRequest(w, r, &req) {
 			return
 		}
 	}

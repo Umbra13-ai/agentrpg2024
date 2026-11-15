@@ -92,7 +92,22 @@ func resolveAttackOnObject(lobbyID, objectID int, o attackOutcome) string {
 // @Param request body object{campaign_id=int,name=string,substance=string,size=string,resilient=bool,ac=int,hp=int,threshold=int,vulnerable=string,resistant=string,object_id=int,damage=int,damage_type=string,remove=bool} true "Object"
 // @Router /gm/object [post]
 func handleGMObject(w http.ResponseWriter, r *http.Request) {
-	_, lobby, ok := gmCampaignOf(w, r)
+	var req struct {
+		Name       string `json:"name"`
+		Substance  string `json:"substance"`
+		Size       string `json:"size"`
+		Resilient  bool   `json:"resilient"`
+		AC         int    `json:"ac"`
+		HP         int    `json:"hp"`
+		Threshold  int    `json:"threshold"`
+		Vulnerable string `json:"vulnerable"`
+		Resistant  string `json:"resistant"`
+		ObjectID   int    `json:"object_id"`
+		Damage     int    `json:"damage"`
+		DamageType string `json:"damage_type"`
+		Remove     bool   `json:"remove"`
+	}
+	_, lobby, ok := gmRead(w, r, &req, optionalBody())
 	if !ok {
 		return
 	}
@@ -113,22 +128,6 @@ func handleGMObject(w http.ResponseWriter, r *http.Request) {
 		writeJSONStatus(w, 200, map[string]interface{}{"objects": list})
 		return
 	}
-	var req struct {
-		Name       string `json:"name"`
-		Substance  string `json:"substance"`
-		Size       string `json:"size"`
-		Resilient  bool   `json:"resilient"`
-		AC         int    `json:"ac"`
-		HP         int    `json:"hp"`
-		Threshold  int    `json:"threshold"`
-		Vulnerable string `json:"vulnerable"`
-		Resistant  string `json:"resistant"`
-		ObjectID   int    `json:"object_id"`
-		Damage     int    `json:"damage"`
-		DamageType string `json:"damage_type"`
-		Remove     bool   `json:"remove"`
-	}
-	json.NewDecoder(r.Body).Decode(&req)
 	if req.ObjectID != 0 {
 		obj, found := loadObject(lobby, req.ObjectID)
 		if !found {
@@ -300,7 +299,9 @@ func handleMarchingOrder(w http.ResponseWriter, r *http.Request, campaignID int)
 		var req struct {
 			Order []int `json:"order"`
 		}
-		json.NewDecoder(r.Body).Decode(&req)
+		if !readRequest(w, r, &req, optionalBody()) {
+			return
+		}
 		for _, id := range req.Order {
 			var c int
 			db.QueryRow(`SELECT count(*) FROM characters WHERE id = $1 AND lobby_id = $2`, id, campaignID).Scan(&c)
@@ -325,7 +326,14 @@ func handleMarchingOrder(w http.ResponseWriter, r *http.Request, campaignID int)
 // @Param request body object{campaign_id=int,target_id=int,description=string,source=string,curse_id=int,remove=bool} true "Curse"
 // @Router /gm/curse [post]
 func handleGMCurse(w http.ResponseWriter, r *http.Request) {
-	_, lobby, ok := gmCampaignOf(w, r)
+	var req struct {
+		TargetID    int    `json:"target_id"`
+		Description string `json:"description"`
+		Source      string `json:"source"`
+		CurseID     int    `json:"curse_id"`
+		Remove      bool   `json:"remove"`
+	}
+	_, lobby, ok := gmRead(w, r, &req, optionalBody())
 	if !ok {
 		return
 	}
@@ -334,14 +342,6 @@ func handleGMCurse(w http.ResponseWriter, r *http.Request) {
 		writeJSONStatus(w, 200, map[string]interface{}{"curses": cursesOf(lobby, 0)})
 		return
 	}
-	var req struct {
-		TargetID    int    `json:"target_id"`
-		Description string `json:"description"`
-		Source      string `json:"source"`
-		CurseID     int    `json:"curse_id"`
-		Remove      bool   `json:"remove"`
-	}
-	json.NewDecoder(r.Body).Decode(&req)
 	if req.Remove && req.CurseID != 0 {
 		db.Exec(`DELETE FROM curses WHERE id = $1 AND lobby_id = $2`, req.CurseID, lobby)
 		writeJSONStatus(w, 200, map[string]interface{}{"success": true, "result": "The curse is lifted."})
@@ -406,16 +406,15 @@ func endCursesBySpell(lobbyID int, spellSlug string, targets []int) string {
 // @Param request body object{campaign_id=int,character_id=int,level=int,gold=bool} true "Character and starting level"
 // @Router /gm/starting-level [post]
 func handleGMStartingLevel(w http.ResponseWriter, r *http.Request) {
-	_, lobby, ok := gmCampaignOf(w, r)
-	if !ok {
-		return
-	}
 	var req struct {
 		CharacterID int   `json:"character_id"`
 		Level       int   `json:"level"`
 		Gold        *bool `json:"gold"`
 	}
-	json.NewDecoder(r.Body).Decode(&req)
+	_, lobby, ok := gmRead(w, r, &req, optionalBody())
+	if !ok {
+		return
+	}
 	var cur, charLobby int
 	if db.QueryRow(`SELECT level, COALESCE(lobby_id,0) FROM characters WHERE id = $1`, req.CharacterID).Scan(&cur, &charLobby) != nil || charLobby != lobby {
 		dmBadRequest(w, "character_required", "Send the character_id of a character in this campaign.")

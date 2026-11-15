@@ -145,10 +145,6 @@ func handleGMApplyPoison2024(w http.ResponseWriter, r *http.Request) {
 		writeJSONStatus(w, http.StatusMethodNotAllowed, map[string]interface{}{"error": "POST required"})
 		return
 	}
-	_, lobby, ok := gmCampaignOf(w, r)
-	if !ok {
-		return
-	}
 	var req struct {
 		Poison      string `json:"poison"`
 		TargetID    int    `json:"target_id"`
@@ -156,7 +152,10 @@ func handleGMApplyPoison2024(w http.ResponseWriter, r *http.Request) {
 		CharacterID int    `json:"character_id"`
 		Repeat      bool   `json:"repeat"`
 	}
-	json.NewDecoder(r.Body).Decode(&req)
+	_, lobby, ok := gmRead(w, r, &req, optionalBody())
+	if !ok {
+		return
+	}
 	key := game.Key(req.Poison)
 	rule, okRule := poisonRules[key]
 	if !okRule {
@@ -249,17 +248,16 @@ func handleGMApplyContagion(w http.ResponseWriter, r *http.Request) {
 		writeJSONStatus(w, http.StatusMethodNotAllowed, map[string]interface{}{"error": "POST required"})
 		return
 	}
-	_, lobby, ok := gmCampaignOf(w, r)
-	if !ok {
-		return
-	}
 	var req struct {
 		Contagion   string `json:"contagion"`
 		TargetID    int    `json:"target_id"`
 		CharacterID int    `json:"character_id"`
 		DC          int    `json:"dc"`
 	}
-	json.NewDecoder(r.Body).Decode(&req)
+	_, lobby, ok := gmRead(w, r, &req, optionalBody())
+	if !ok {
+		return
+	}
 	key := game.Key(req.Contagion)
 	dc, known := contagionInfectDC[key]
 	if !known {
@@ -307,10 +305,6 @@ func handleGMContagionSave(w http.ResponseWriter, r *http.Request) {
 		writeJSONStatus(w, http.StatusMethodNotAllowed, map[string]interface{}{"error": "POST required"})
 		return
 	}
-	_, lobby, ok := gmCampaignOf(w, r)
-	if !ok {
-		return
-	}
 	var req struct {
 		Contagion   string `json:"contagion"`
 		TargetID    int    `json:"target_id"`
@@ -318,7 +312,10 @@ func handleGMContagionSave(w http.ResponseWriter, r *http.Request) {
 		Onset       bool   `json:"onset"`
 		Cured       bool   `json:"cured"`
 	}
-	json.NewDecoder(r.Body).Decode(&req)
+	_, lobby, ok := gmRead(w, r, &req, optionalBody())
+	if !ok {
+		return
+	}
 	if req.TargetID == 0 {
 		req.TargetID = req.CharacterID
 	}
@@ -400,10 +397,6 @@ func handleGMMentalStress(w http.ResponseWriter, r *http.Request) {
 		writeJSONStatus(w, http.StatusMethodNotAllowed, map[string]interface{}{"error": "POST required"})
 		return
 	}
-	_, lobby, ok := gmCampaignOf(w, r)
-	if !ok {
-		return
-	}
 	var req struct {
 		TargetID      int    `json:"target_id"`
 		TargetIDs     []int  `json:"target_ids"`
@@ -416,7 +409,10 @@ func handleGMMentalStress(w http.ResponseWriter, r *http.Request) {
 		Condition     string `json:"condition"`
 		Checks        string `json:"checks"`
 	}
-	json.NewDecoder(r.Body).Decode(&req)
+	_, lobby, ok := gmRead(w, r, &req, optionalBody())
+	if !ok {
+		return
+	}
 	if req.TargetID == 0 {
 		req.TargetID = req.CharacterID
 	}
@@ -527,10 +523,6 @@ func handleGMTrap2024(w http.ResponseWriter, r *http.Request) {
 		writeJSONStatus(w, http.StatusMethodNotAllowed, map[string]interface{}{"error": "POST required"})
 		return
 	}
-	_, lobby, ok := gmCampaignOf(w, r)
-	if !ok {
-		return
-	}
 	var req struct {
 		Trap        string `json:"trap"`
 		TargetID    int    `json:"target_id"`
@@ -538,7 +530,10 @@ func handleGMTrap2024(w http.ResponseWriter, r *http.Request) {
 		CharacterID int    `json:"character_id"`
 		Level       int    `json:"level"`
 	}
-	json.NewDecoder(r.Body).Decode(&req)
+	_, lobby, ok := gmRead(w, r, &req, optionalBody())
+	if !ok {
+		return
+	}
 	key := game.Key(req.Trap)
 	rule, known := trapRules[key]
 	if !known {
@@ -636,10 +631,6 @@ func handleGMEnvironmentalHazard2024(w http.ResponseWriter, r *http.Request) {
 		writeJSONStatus(w, http.StatusMethodNotAllowed, map[string]interface{}{"error": "POST required"})
 		return
 	}
-	_, lobby, ok := gmCampaignOf(w, r)
-	if !ok {
-		return
-	}
 	var req struct {
 		CharacterID int    `json:"character_id"`
 		Hazard      string `json:"hazard"`
@@ -653,7 +644,10 @@ func handleGMEnvironmentalHazard2024(w http.ResponseWriter, r *http.Request) {
 		Food        string `json:"food"`              // malnutrition: full, half, less_than_half, none
 		DaysNoFood  int    `json:"days_without_food"` // malnutrition: whole days with no food
 	}
-	json.NewDecoder(r.Body).Decode(&req)
+	_, lobby, ok := gmRead(w, r, &req, optionalBody())
+	if !ok {
+		return
+	}
 	key := game.Key(req.Hazard)
 	if key == "dehydration" || key == "malnutrition" { // Rules Glossary hazards
 		if req.CharacterID == 0 {
@@ -749,16 +743,15 @@ func handleGMMoraleCheck2024(w http.ResponseWriter, r *http.Request) {
 		writeJSONStatus(w, http.StatusMethodNotAllowed, map[string]interface{}{"error": "POST required"})
 		return
 	}
-	_, lobby, ok := gmCampaignOf(w, r)
-	if !ok {
-		return
-	}
 	var req struct {
 		TargetID  int   `json:"target_id"`
 		TargetIDs []int `json:"target_ids"`
 		DC        int   `json:"dc"`
 	}
-	json.NewDecoder(r.Body).Decode(&req)
+	_, lobby, ok := gmRead(w, r, &req, optionalBody())
+	if !ok {
+		return
+	}
 	ids := targetIDsOf(req.TargetID, req.TargetIDs)
 	if len(ids) == 0 {
 		dmBadRequest(w, "target_required", "Send target_id or target_ids.")

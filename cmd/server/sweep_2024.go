@@ -14,7 +14,6 @@ package main
 // a creature hits you, its other attack rolls against you this turn have Disadvantage) are applied to monster attacks.
 
 import (
-	"encoding/json"
 	"fmt"
 	"net/http"
 	"strings"
@@ -50,7 +49,9 @@ func handleBreathWeapon2024(w http.ResponseWriter, r *http.Request) {
 		TargetIDs   []int  `json:"target_ids"`
 		Shape       string `json:"shape"`
 	}
-	json.NewDecoder(r.Body).Decode(&req)
+	if !readRequest(w, r, &req, optionalBody()) {
+		return
+	}
 	if _, ok := playerOwns(r, req.CharacterID); !ok {
 		writeJSONStatus(w, 403, map[string]interface{}{"error": "not_your_character"})
 		return
@@ -139,7 +140,9 @@ func handleWholenessOfBody2024(w http.ResponseWriter, r *http.Request) {
 	var req struct {
 		CharacterID int `json:"character_id"`
 	}
-	json.NewDecoder(r.Body).Decode(&req)
+	if !readRequest(w, r, &req, optionalBody()) {
+		return
+	}
 	if _, ok := playerOwns(r, req.CharacterID); !ok {
 		writeJSONStatus(w, 403, map[string]interface{}{"error": "not_your_character"})
 		return
@@ -192,7 +195,9 @@ func handleHolyNimbus2024(w http.ResponseWriter, r *http.Request) {
 		CharacterID int  `json:"character_id"`
 		UseSlot     bool `json:"use_slot"`
 	}
-	json.NewDecoder(r.Body).Decode(&req)
+	if !readRequest(w, r, &req, optionalBody()) {
+		return
+	}
 	if _, ok := playerOwns(r, req.CharacterID); !ok {
 		writeJSONStatus(w, 403, map[string]interface{}{"error": "not_your_character"})
 		return
@@ -270,7 +275,9 @@ func handleOneWithShadows2024(w http.ResponseWriter, r *http.Request) {
 	var req struct {
 		CharacterID int `json:"character_id"`
 	}
-	json.NewDecoder(r.Body).Decode(&req)
+	if !readRequest(w, r, &req, optionalBody()) {
+		return
+	}
 	if _, ok := playerOwns(r, req.CharacterID); !ok {
 		writeJSONStatus(w, 403, map[string]interface{}{"error": "not_your_character"})
 		return
@@ -307,16 +314,15 @@ func handleGMSuperiorHuntersDefense(w http.ResponseWriter, r *http.Request) {
 		writeJSONStatus(w, http.StatusMethodNotAllowed, map[string]interface{}{"error": "POST required"})
 		return
 	}
-	_, lobby, ok := gmCampaignOf(w, r)
-	if !ok {
-		return
-	}
 	var req struct {
 		CharacterID int    `json:"character_id"`
 		Damage      int    `json:"damage"`
 		DamageType  string `json:"damage_type"`
 	}
-	json.NewDecoder(r.Body).Decode(&req)
+	_, lobby, ok := gmRead(w, r, &req, optionalBody())
+	if !ok {
+		return
+	}
 	var class, subclass string
 	var level int
 	var reaction bool

@@ -77,7 +77,7 @@ func handleCharacterASI(w http.ResponseWriter, r *http.Request, charID int) {
 		Ability string `json:"ability"`
 		Points  int    `json:"points"`
 	}
-	if !decodeRequest(w, r, &req, false) {
+	if !readRequest(w, r, &req) {
 		return
 	}
 
@@ -266,7 +266,7 @@ func handleCharacterFeat(w http.ResponseWriter, r *http.Request, charID int) {
 		Feat          string `json:"feat"`
 		AbilityChoice string `json:"ability_choice"` // For feats like Resilient, Observant
 	}
-	if !decodeRequest(w, r, &req, false) {
+	if !readRequest(w, r, &req) {
 		return
 	}
 
@@ -635,7 +635,7 @@ func handleCharacterSubclass(w http.ResponseWriter, r *http.Request) {
 			Subclass    string   `json:"subclass"`
 			BonusSkills []string `json:"bonus_skills"` // For subclasses that grant bonus skill proficiencies (e.g., Lore Bard)
 		}
-		if !decodeRequest(w, r, &req, false) {
+		if !readRequest(w, r, &req) {
 			return
 		}
 
@@ -949,7 +949,7 @@ func handleCharacterSubclassChoice(w http.ResponseWriter, r *http.Request) {
 		Feature     string `json:"feature"` // "hunters_prey" or "Hunter's Prey"
 		Choice      string `json:"choice"`  // "colossus_slayer" or "Colossus Slayer"
 	}
-	if !decodeRequest(w, r, &req, false) {
+	if !readRequest(w, r, &req) {
 		return
 	}
 	var ownerID int
@@ -1087,7 +1087,7 @@ func handleCharacterMulticlass(w http.ResponseWriter, r *http.Request) {
 		TargetClass string `json:"target_class"` // Class to take a level in
 		Skill       string `json:"skill"`        // the skill a first Bard, Ranger or Rogue level lets a multiclass character choose
 	}
-	if !decodeRequest(w, r, &req, false) {
+	if !readRequest(w, r, &req) {
 		return
 	}
 

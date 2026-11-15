@@ -383,7 +383,9 @@ func handleSpeciesAbility(w http.ResponseWriter, r *http.Request) {
 	if r.Method == http.MethodGet {
 		fmt.Sscanf(r.URL.Query().Get("character_id"), "%d", &req.CharacterID)
 	} else if r.Method == http.MethodPost {
-		json.NewDecoder(http.MaxBytesReader(w, r.Body, 16*1024)).Decode(&req)
+		if !readRequest(w, r, &req, optionalBody()) {
+			return
+		}
 	} else {
 		writeJSONStatus(w, http.StatusMethodNotAllowed, map[string]interface{}{"error": "method_not_allowed"})
 		return

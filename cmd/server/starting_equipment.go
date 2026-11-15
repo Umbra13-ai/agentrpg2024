@@ -364,7 +364,9 @@ func handleCharacterStartingEquipment(w http.ResponseWriter, r *http.Request, ch
 	var req struct {
 		Option string `json:"option"`
 	}
-	json.NewDecoder(r.Body).Decode(&req)
+	if !readRequest(w, r, &req, optionalBody()) {
+		return
+	}
 
 	var class, tools, marker string
 	if err := db.QueryRow(`SELECT COALESCE(class,''), COALESCE(tool_proficiencies,''), COALESCE(starting_equipment,'') FROM characters WHERE id = $1`, charID).
@@ -461,7 +463,7 @@ func handleCharacterToolProficiencies(w http.ResponseWriter, r *http.Request, ch
 		var req struct {
 			Tools []string `json:"tools"`
 		}
-		if !decodeRequest(w, r, &req, false) {
+		if !readRequest(w, r, &req) {
 			return
 		}
 		names, msg := game.ValidateToolChoices(req.Tools, pending)

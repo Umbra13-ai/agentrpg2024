@@ -142,7 +142,7 @@ func handleCharacterLevelUp(w http.ResponseWriter, r *http.Request, charID int) 
 		Skill           string `json:"skill"`            // multiclassing into Bard, Ranger or Rogue: the skill it gives
 		MulticlassSkill string `json:"multiclass_skill"` // take a skill a multiclass level gave but that wasn't chosen yet
 	}
-	if !decodeRequest(w, r, &req, true) {
+	if !readRequest(w, r, &req, optionalBody()) {
 		return
 	}
 	if req.MulticlassSkill != "" {

@@ -299,7 +299,10 @@ func handleCharacterDrop(w http.ResponseWriter, r *http.Request, charID int) {
 		Item     string `json:"item"`
 		Quantity int    `json:"quantity"`
 	}
-	if err := json.NewDecoder(r.Body).Decode(&req); err != nil || strings.TrimSpace(req.Item) == "" {
+	if !readRequest(w, r, &req) {
+		return
+	}
+	if strings.TrimSpace(req.Item) == "" {
 		writeJSONStatus(w, http.StatusBadRequest, map[string]interface{}{"error": "item_required"})
 		return
 	}
@@ -322,7 +325,10 @@ func handleCharacterPickUp(w http.ResponseWriter, r *http.Request, charID int) {
 	var req struct {
 		DroppedID int `json:"dropped_id"`
 	}
-	if err := json.NewDecoder(r.Body).Decode(&req); err != nil || req.DroppedID == 0 {
+	if !readRequest(w, r, &req) {
+		return
+	}
+	if req.DroppedID == 0 {
 		writeJSONStatus(w, http.StatusBadRequest, map[string]interface{}{"error": "dropped_id_required"})
 		return
 	}
@@ -388,7 +394,9 @@ func handleCampaignGround(w http.ResponseWriter, r *http.Request, campaignID int
 			var req struct {
 				Note string `json:"note"`
 			}
-			json.NewDecoder(r.Body).Decode(&req)
+			if !readRequest(w, r, &req, optionalBody()) {
+				return
+			}
 			note := strings.TrimSpace(req.Note)
 			if note == "" {
 				note = "taken by someone"
@@ -400,6 +408,9 @@ func handleCampaignGround(w http.ResponseWriter, r *http.Request, campaignID int
 			}
 			writeJSONStatus(w, http.StatusOK, map[string]interface{}{"success": true, "note": "It is off the ground but kept on record. Use /return to put it back."})
 		case "return":
+			if !noFields(w, r) {
+				return
+			}
 			res, _ := db.Exec(`UPDATE dropped_items SET taken_note = NULL, taken_at = NULL WHERE id = $1 AND lobby_id = $2 AND taken_by IS NULL AND taken_note IS NOT NULL`, did, campaignID)
 			if n, _ := res.RowsAffected(); n == 0 {
 				writeJSONStatus(w, http.StatusConflict, map[string]interface{}{"error": "nothing_to_return"})

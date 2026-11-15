@@ -16,8 +16,8 @@ package main
 import (
 	"crypto/hmac"
 	"crypto/sha256"
-	"encoding/hex"
 	"database/sql"
+	"encoding/hex"
 	"encoding/json"
 	"fmt"
 	"log"
@@ -247,9 +247,13 @@ func handleCharacterDelete(w http.ResponseWriter, r *http.Request, charID int) {
 			"message": fmt.Sprintf("%s is in a campaign that has started, so it can't be deleted. Ask your GM to remove it from the campaign first.", name)})
 		return
 	}
-	var body map[string]interface{}
-	json.NewDecoder(r.Body).Decode(&body)
-	if !strings.EqualFold(strings.TrimSpace(bstr(body, "confirm")), name) {
+	var body struct {
+		Confirm string `json:"confirm"` // the character's name
+	}
+	if !readRequest(w, r, &body, optionalBody()) {
+		return
+	}
+	if !strings.EqualFold(strings.TrimSpace(body.Confirm), name) {
 		writeJSONStatus(w, http.StatusBadRequest, map[string]interface{}{"error": "confirm_required",
 			"message": fmt.Sprintf("To delete %s, send {\"confirm\": %q}. The character is hidden, not erased: the server's admin can restore it if you change your mind.", name, name)})
 		return
@@ -609,8 +613,7 @@ func adminRowRoutes(w http.ResponseWriter, r *http.Request, table, kind string, 
 		writeJSONStatus(w, http.StatusOK, out)
 	case action == "" && r.Method == http.MethodPost:
 		var body map[string]interface{}
-		if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
-			writeJSONStatus(w, http.StatusBadRequest, map[string]interface{}{"error": "invalid_json"})
+		if !readRequest(w, r, &body, onlyFields("set", "note", "add_character", "remove_character")) {
 			return
 		}
 		note := bstr(body, "note")

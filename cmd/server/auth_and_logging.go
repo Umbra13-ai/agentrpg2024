@@ -5,7 +5,6 @@ import (
 	"encoding/json"
 	"fmt"
 	"github.com/lib/pq"
-	"io"
 	"log"
 	"net/http"
 	"os"
@@ -231,14 +230,7 @@ func withAPILogging(handler http.HandlerFunc) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		start := time.Now()
 
-		// Read request body (need to restore it for the handler)
-		var requestBody string
-		if r.Body != nil {
-			bodyBytes, _ := io.ReadAll(r.Body)
-			requestBody = string(bodyBytes)
-			// Restore the body so the handler can read it
-			r.Body = io.NopCloser(strings.NewReader(requestBody))
-		}
+		requestBody := string(peekBody(r)) // the handler reads the body itself (readRequest)
 
 		// Capture response
 		capture := &responseCapture{ResponseWriter: w, statusCode: 200}
@@ -341,9 +333,7 @@ func handleFeatureRequests(w http.ResponseWriter, r *http.Request) {
 			Details     string `json:"details"`
 			Type        string `json:"type"`
 		}
-		if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
-			w.WriteHeader(http.StatusBadRequest)
-			json.NewEncoder(w).Encode(map[string]interface{}{"error": "invalid_json"})
+		if !readRequest(w, r, &req) {
 			return
 		}
 		title := strings.TrimSpace(req.Title)
@@ -542,8 +532,7 @@ func handlePasswordResetConfirm(w http.ResponseWriter, r *http.Request) {
 		Token       string `json:"token"` // older name of code
 		NewPassword string `json:"new_password"`
 	}
-	if json.NewDecoder(http.MaxBytesReader(w, r.Body, 4096)).Decode(&req) != nil {
-		writeJSONStatus(w, http.StatusBadRequest, map[string]interface{}{"error": "invalid_json"})
+	if !readRequest(w, r, &req) {
 		return
 	}
 	if req.Code == "" {
@@ -614,9 +603,7 @@ func handleModAssignEmail(w http.ResponseWriter, r *http.Request) {
 		AgentID int    `json:"agent_id"`
 		Email   string `json:"email"`
 	}
-	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
-		w.WriteHeader(http.StatusBadRequest)
-		json.NewEncoder(w).Encode(map[string]interface{}{"error": "invalid_json"})
+	if !readRequest(w, r, &req) {
 		return
 	}
 
@@ -673,9 +660,7 @@ func handleModResetPassword(w http.ResponseWriter, r *http.Request) {
 	var req struct {
 		AgentID int `json:"agent_id"`
 	}
-	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
-		w.WriteHeader(http.StatusBadRequest)
-		json.NewEncoder(w).Encode(map[string]interface{}{"error": "invalid_json"})
+	if !readRequest(w, r, &req) {
 		return
 	}
 
@@ -740,9 +725,7 @@ func handleModDeleteCampaign(w http.ResponseWriter, r *http.Request) {
 	var req struct {
 		CampaignID int `json:"campaign_id"`
 	}
-	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
-		w.WriteHeader(400)
-		json.NewEncoder(w).Encode(map[string]string{"error": "invalid_request"})
+	if !readRequest(w, r, &req) {
 		return
 	}
 
@@ -806,7 +789,10 @@ func handleModArchiveCampaign(w http.ResponseWriter, r *http.Request) {
 	var req struct {
 		CampaignID int `json:"campaign_id"`
 	}
-	if err := json.NewDecoder(r.Body).Decode(&req); err != nil || req.CampaignID == 0 {
+	if !readRequest(w, r, &req) {
+		return
+	}
+	if req.CampaignID == 0 {
 		w.WriteHeader(http.StatusBadRequest)
 		json.NewEncoder(w).Encode(map[string]string{"error": "campaign_id_required"})
 		return
@@ -856,7 +842,10 @@ func handleModResolveFeatureRequests(w http.ResponseWriter, r *http.Request) {
 		RequestIDs []int  `json:"request_ids"`
 		Status     string `json:"status"`
 	}
-	if err := json.NewDecoder(r.Body).Decode(&req); err != nil || len(req.RequestIDs) == 0 {
+	if !readRequest(w, r, &req) {
+		return
+	}
+	if len(req.RequestIDs) == 0 {
 		w.WriteHeader(http.StatusBadRequest)
 		json.NewEncoder(w).Encode(map[string]string{"error": "request_ids_required"})
 		return
@@ -947,9 +936,7 @@ func handleModDeleteUser(w http.ResponseWriter, r *http.Request) {
 	var req struct {
 		UserID int `json:"user_id"`
 	}
-	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
-		w.WriteHeader(400)
-		json.NewEncoder(w).Encode(map[string]string{"error": "invalid_request"})
+	if !readRequest(w, r, &req) {
 		return
 	}
 
@@ -998,9 +985,7 @@ func handleModUpdateUser(w http.ResponseWriter, r *http.Request) {
 		UserID int    `json:"user_id"`
 		Name   string `json:"name"`
 	}
-	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
-		w.WriteHeader(400)
-		json.NewEncoder(w).Encode(map[string]string{"error": "invalid_request"})
+	if !readRequest(w, r, &req) {
 		return
 	}
 
@@ -1049,9 +1034,7 @@ func handleRegister(w http.ResponseWriter, r *http.Request) {
 		Password string `json:"password"`
 		Name     string `json:"name"`
 	}
-	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
-		w.WriteHeader(http.StatusBadRequest)
-		json.NewEncoder(w).Encode(map[string]interface{}{"error": "invalid_json"})
+	if !readRequest(w, r, &req) {
 		return
 	}
 	if req.Name == "" {
@@ -1173,9 +1156,7 @@ func handleVerify(w http.ResponseWriter, r *http.Request) {
 		Email string `json:"email"`
 		Code  string `json:"code"`
 	}
-	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
-		w.WriteHeader(http.StatusBadRequest)
-		json.NewEncoder(w).Encode(map[string]interface{}{"error": "invalid_json"})
+	if !readRequest(w, r, &req) {
 		return
 	}
 
@@ -1245,7 +1226,9 @@ func handleAdminVerify(w http.ResponseWriter, r *http.Request) {
 	var req struct {
 		Email string `json:"email"`
 	}
-	json.NewDecoder(r.Body).Decode(&req)
+	if !readRequest(w, r, &req, optionalBody()) {
+		return
+	}
 
 	_, err := db.Exec("UPDATE agents SET verified = true WHERE email = $1", req.Email)
 	if err != nil {
@@ -1315,7 +1298,9 @@ func handleAdminCreateCampaign(w http.ResponseWriter, r *http.Request) {
 		MinLevel     int    `json:"min_level"`
 		MaxLevel     int    `json:"max_level"`
 	}
-	json.NewDecoder(r.Body).Decode(&req)
+	if !readRequest(w, r, &req, optionalBody()) {
+		return
+	}
 
 	if req.TemplateSlug != "" {
 		var tName, tDesc, tSetting, tThemes, tLevels, tScene string
@@ -1392,9 +1377,7 @@ func handleLogin(w http.ResponseWriter, r *http.Request) {
 		json.NewEncoder(w).Encode(map[string]interface{}{"error": "too_many_failed_attempts", "message": "Wait a minute and try again."})
 		return
 	}
-	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
-		w.WriteHeader(http.StatusBadRequest)
-		json.NewEncoder(w).Encode(map[string]interface{}{"error": "invalid_json"})
+	if !readRequest(w, r, &req) {
 		return
 	}
 	var id int

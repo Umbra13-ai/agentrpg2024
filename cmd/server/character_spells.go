@@ -3,7 +3,6 @@ package main
 import (
 	"database/sql"
 	"encoding/json"
-	"errors"
 	"fmt"
 	"net/http"
 	"strings"
@@ -146,8 +145,7 @@ func handleCharacterSpells(w http.ResponseWriter, r *http.Request, charID int) {
 			Remove []string  `json:"remove"` // Spells to remove from existing list
 		}
 		// every answer is saved as sent or refused with the reason (F13: a replace wiped origin spells without a word)
-		if msg := decodeStrict(r, &req, "spells (the whole list), add or remove"); msg != "" {
-			writeJSONStatus(w, http.StatusBadRequest, map[string]interface{}{"error": "invalid_request", "message": msg + " Nothing was changed."})
+		if !readRequest(w, r, &req) {
 			return
 		}
 		if req.Spells == nil && len(req.Add) == 0 && len(req.Remove) == 0 {
@@ -713,8 +711,7 @@ func handlePrepareSpells(w http.ResponseWriter, r *http.Request, charID int) {
 			Spells *[]string `json:"spells"` // Spell slugs to prepare
 		}
 		// F4: {"prepared": [...]} or {} was read as an empty list and wiped every prepared spell
-		if msg := decodeStrict(r, &req, `{"spells": [...]} (your whole list of cantrips and spells)`); msg != "" {
-			writeJSONStatus(w, http.StatusBadRequest, map[string]interface{}{"error": "invalid_request", "message": msg + " Nothing was changed."})
+		if !readRequest(w, r, &req) {
 			return
 		}
 		if req.Spells == nil {
@@ -968,9 +965,7 @@ func handleUseResource(w http.ResponseWriter, r *http.Request, charID int) {
 		Resource string `json:"resource"` // Resource key: focus, rage, sorcery_points, etc.
 		Amount   int    `json:"amount"`   // Amount to spend (default 1)
 	}
-	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
-		w.WriteHeader(http.StatusBadRequest)
-		json.NewEncoder(w).Encode(map[string]interface{}{"error": "invalid_json"})
+	if !readRequest(w, r, &req) {
 		return
 	}
 
@@ -1036,29 +1031,6 @@ func preparedMessage(spells, cantrips, max int) string {
 		msg += fmt.Sprintf(", plus %d cantrips", cantrips)
 	}
 	return msg + "."
-}
-
-// decodeStrict reads a JSON body into v and refuses unknown fields: "" when it worked, else what is wrong in plain words. fields
-// names what the endpoint takes (F4: POST /prepare {"prepared": [...]} wiped every prepared spell and answered success).
-func decodeStrict(r *http.Request, v interface{}, fields string) string {
-	dec := json.NewDecoder(http.MaxBytesReader(nil, r.Body, 64*1024))
-	dec.DisallowUnknownFields()
-	err := dec.Decode(v)
-	if err == nil {
-		return ""
-	}
-	msg := err.Error()
-	switch {
-	case msg == "EOF":
-		return "Send a JSON body with " + fields + "."
-	case strings.HasPrefix(msg, "json: unknown field "):
-		return fmt.Sprintf("Unknown field %s: send %s.", strings.TrimPrefix(msg, "json: unknown field "), fields)
-	}
-	var te *json.UnmarshalTypeError
-	if errors.As(err, &te) && te.Field != "" {
-		return fmt.Sprintf("%s has the wrong type (expected %s): send %s.", te.Field, te.Type.String(), fields)
-	}
-	return "The body isn't valid JSON (" + msg + "): send " + fields + "."
 }
 
 func spellName(slug string) string {

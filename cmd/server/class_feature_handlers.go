@@ -127,7 +127,7 @@ func handleCharacterMetamagic(w http.ResponseWriter, r *http.Request) {
 		CharacterID int    `json:"character_id"`
 		Metamagic   string `json:"metamagic"` // slug: careful, distant, empowered, extended, heightened, quickened, subtle, twinned
 	}
-	if !decodeRequest(w, r, &req, false) {
+	if !readRequest(w, r, &req) {
 		return
 	}
 
@@ -450,8 +450,7 @@ func handleCharacterInvocations(w http.ResponseWriter, r *http.Request) {
 		Cantrips    []string `json:"cantrips"`   // Pact of the Tome: the Book of Shadows' three cantrips
 		Rituals     []string `json:"rituals"`    // Pact of the Tome: its two level 1 Ritual spells
 	}
-	if msg := decodeStrict(r, &req, "character_id and invocation (and replace, or cantrips and rituals for Pact of the Tome)"); msg != "" {
-		writeJSONStatus(w, http.StatusBadRequest, map[string]interface{}{"error": "invalid_request", "message": msg + " Nothing was changed."})
+	if !readRequest(w, r, &req) {
 		return
 	}
 
@@ -861,7 +860,7 @@ func handleFlexibleCasting(w http.ResponseWriter, r *http.Request) {
 		Action      string `json:"action"`     // "create_slot" or "convert_slot"
 		SlotLevel   int    `json:"slot_level"` // 1-5
 	}
-	if !decodeRequest(w, r, &req, false) {
+	if !readRequest(w, r, &req) {
 		return
 	}
 
@@ -1203,8 +1202,7 @@ func handleCharacterFightingStyle(w http.ResponseWriter, r *http.Request) {
 		Replace     string   `json:"replace"`  // Fighter: the style to swap out when gaining a Fighter level
 		Cantrips    []string `json:"cantrips"` // Blessed Warrior / Druidic Warrior: two cantrips
 	}
-	if msg := decodeStrict(r, &req, "character_id and style (and replace, or cantrips for Blessed or Druidic Warrior)"); msg != "" {
-		writeJSONStatus(w, http.StatusBadRequest, map[string]interface{}{"error": "invalid_request", "message": msg + " Nothing was changed."})
+	if !readRequest(w, r, &req) {
 		return
 	}
 
@@ -1618,7 +1616,7 @@ func handleCharacterFiendishResilience(w http.ResponseWriter, r *http.Request) {
 		CharacterID int    `json:"character_id"`
 		DamageType  string `json:"damage_type"`
 	}
-	if !decodeRequest(w, r, &req, false) {
+	if !readRequest(w, r, &req) {
 		return
 	}
 
@@ -1946,7 +1944,7 @@ func handleCharacterMysticArcanum(w http.ResponseWriter, r *http.Request) {
 		SpellLevel  int    `json:"spell_level"`
 		SpellSlug   string `json:"spell_slug"`
 	}
-	if !decodeRequest(w, r, &req, false) {
+	if !readRequest(w, r, &req) {
 		return
 	}
 	// the slug or the displayed name ("Finger of Death")
@@ -2248,7 +2246,7 @@ func handleCharacterSignatureSpells(w http.ResponseWriter, r *http.Request) {
 		Spell       string `json:"spell"`       // Spell slug
 		Description string `json:"description"` // Optional flavor
 	}
-	if !decodeRequest(w, r, &req, false) {
+	if !readRequest(w, r, &req) {
 		return
 	}
 

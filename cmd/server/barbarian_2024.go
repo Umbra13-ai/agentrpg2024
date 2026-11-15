@@ -92,16 +92,16 @@ func handleGMIntimidatingPresence(w http.ResponseWriter, r *http.Request) {
 		writeJSONStatus(w, http.StatusMethodNotAllowed, map[string]interface{}{"error": "method_not_allowed"})
 		return
 	}
-	_, campaignID, ok := gmCampaignOf(w, r)
-	if !ok {
-		return
-	}
 	var req struct {
 		BarbarianID     int   `json:"barbarian_id"`
 		TargetIDs       []int `json:"target_ids"`
 		RestoreWithRage bool  `json:"restore_with_rage"`
 	}
-	if err := json.NewDecoder(http.MaxBytesReader(w, r.Body, 16*1024)).Decode(&req); err != nil || req.BarbarianID == 0 || len(req.TargetIDs) == 0 {
+	_, campaignID, ok := gmRead(w, r, &req)
+	if !ok {
+		return
+	}
+	if req.BarbarianID == 0 || len(req.TargetIDs) == 0 {
 		writeJSONStatus(w, http.StatusBadRequest, map[string]interface{}{"error": "invalid_request", "message": "Send barbarian_id and target_ids (the creatures in the 30-foot Emanation that the Barbarian chooses)."})
 		return
 	}
@@ -145,7 +145,7 @@ func handleGMIntimidatingPresence(w http.ResponseWriter, r *http.Request) {
 		res := map[string]interface{}{"target_id": tid, "roll": roll, "total": total, "dc": dc, "saved": saved}
 		if !saved {
 			body, _ := json.Marshal(map[string]interface{}{"target_id": tid, "condition": "frightened", "source": "Intimidating Presence (" + name + ")",
-				"duration_rounds": 10, "end_save": map[string]interface{}{"ability": "wis", "dc": dc}})
+				"duration_rounds": 10, "end_save": map[string]interface{}{"ability": "wis", "dc": dc}, "campaign_id": campaignID})
 			rr := httptest.NewRecorder()
 			rq := httptest.NewRequest(http.MethodPost, "/", bytes.NewReader(body))
 			rq.Header = r.Header.Clone()

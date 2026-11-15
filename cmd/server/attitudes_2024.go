@@ -5,7 +5,6 @@ package main
 // combatant by its id, for any NPC by name); the Influence action then uses the right one, and attitude shifts persist.
 
 import (
-	"encoding/json"
 	"fmt"
 	"net/http"
 	"sort"
@@ -57,7 +56,12 @@ func attitudeFor(lobbyID, targetID int, description string) (attitude, name stri
 // @Param request body object{campaign_id=int,target_id=int,npc=string,attitude=string} true "Creature and attitude"
 // @Router /gm/attitude [post]
 func handleGMAttitude(w http.ResponseWriter, r *http.Request) {
-	_, lobby, ok := gmCampaignOf(w, r)
+	var req struct {
+		TargetID int    `json:"target_id"`
+		NPC      string `json:"npc"`
+		Attitude string `json:"attitude"`
+	}
+	_, lobby, ok := gmRead(w, r, &req, optionalBody())
 	if !ok {
 		return
 	}
@@ -78,12 +82,6 @@ func handleGMAttitude(w http.ResponseWriter, r *http.Request) {
 		writeJSONStatus(w, 200, map[string]interface{}{"attitudes": list})
 		return
 	}
-	var req struct {
-		TargetID int    `json:"target_id"`
-		NPC      string `json:"npc"`
-		Attitude string `json:"attitude"`
-	}
-	json.NewDecoder(r.Body).Decode(&req)
 	att := strings.ToLower(strings.TrimSpace(req.Attitude))
 	if (req.TargetID == 0 && strings.TrimSpace(req.NPC) == "") || (att != "friendly" && att != "indifferent" && att != "hostile" && att != "clear") {
 		dmBadRequest(w, "target_and_attitude_required", "Send target_id (a combatant) or npc (a name), and attitude: friendly, indifferent, hostile or clear.")

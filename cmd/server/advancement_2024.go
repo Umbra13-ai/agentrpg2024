@@ -1,10 +1,8 @@
 package main
 
 import (
-	"bytes"
 	"encoding/json"
 	"fmt"
-	"io"
 	"net/http"
 	"sort"
 	"strings"
@@ -89,13 +87,11 @@ func planFightXP(lobbyID int) fightXPPlan {
 // endCombatWithAdvancement wraps POST /api/campaigns/{id}/combat/end: after the fight has ended, an XP campaign gets the fight's
 // XP awarded, and a milestone campaign is told that nothing is needed.
 func endCombatWithAdvancement(w http.ResponseWriter, r *http.Request, campaignID int, more func(map[string]interface{})) {
-	var body struct {
+	var body struct { // the request of combat/end (handleCombatEnd reads no body)
 		AwardXP *bool `json:"award_xp"`
 	}
-	if r.Body != nil {
-		raw, _ := io.ReadAll(http.MaxBytesReader(w, r.Body, 32*1024))
-		json.Unmarshal(raw, &body)
-		r.Body = io.NopCloser(bytes.NewReader(raw))
+	if !readRequest(w, r, &body, optionalBody()) {
+		return
 	}
 	plan := planFightXP(campaignID) // read before the turn order is cleared
 	augmentJSON(w, func(rw http.ResponseWriter) { handleCombatEnd(rw, r, campaignID) }, func(m map[string]interface{}) {
@@ -179,31 +175,15 @@ func handleGMMilestone(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	var req struct {
-		CampaignID   int    `json:"campaign_id"`
 		CharacterIDs []int  `json:"character_ids"`
 		Reason       string `json:"reason"`
+		CampaignID   int    `json:"-"` // campaign_id picks the campaign, as for every GM command (gmRead)
 	}
-	if err := json.NewDecoder(http.MaxBytesReader(w, r.Body, 32*1024)).Decode(&req); err != nil {
-		writeJSONStatus(w, http.StatusBadRequest, map[string]interface{}{"error": "invalid_json", "message": "Send {\"campaign_id\": N} (and optionally character_ids and a reason). Nothing was changed."})
+	campaignID, ok := gmReadAs(w, r, agentID, &req)
+	if !ok {
 		return
 	}
-	if req.CampaignID == 0 { // the GM's only campaign
-		var n int
-		db.QueryRow(`SELECT count(*), COALESCE(max(id), 0) FROM lobbies WHERE dm_id = $1 AND status = 'active'`, agentID).Scan(&n, &req.CampaignID)
-		if n != 1 {
-			writeJSONStatus(w, http.StatusBadRequest, map[string]interface{}{"error": "campaign_id_required", "message": "Send campaign_id: the campaign whose party reached the milestone. Nothing was changed."})
-			return
-		}
-	}
-	var dm int
-	if db.QueryRow(`SELECT COALESCE(dm_id, 0) FROM lobbies WHERE id = $1`, req.CampaignID).Scan(&dm) != nil {
-		writeJSONStatus(w, http.StatusNotFound, map[string]interface{}{"error": "campaign_not_found"})
-		return
-	}
-	if dm != agentID {
-		writeJSONStatus(w, http.StatusForbidden, map[string]interface{}{"error": "gm_only", "message": "Only the GM of this campaign can grant a milestone level."})
-		return
-	}
+	req.CampaignID = campaignID
 	if !milestoneCampaign(req.CampaignID) {
 		writeJSONStatus(w, http.StatusConflict, map[string]interface{}{"error": "xp_campaign",
 			"message": fmt.Sprintf("This campaign uses Experience Points: levels come from XP (POST /api/gm/award-xp). To use milestones instead, set the table rule: POST /api/campaigns/%d/table-rules {\"advancement\": \"milestone\"}. Nothing was changed.", req.CampaignID)})

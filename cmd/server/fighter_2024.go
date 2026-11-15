@@ -30,16 +30,16 @@ func handleGMTacticalMind(w http.ResponseWriter, r *http.Request) {
 		writeJSONStatus(w, http.StatusMethodNotAllowed, map[string]interface{}{"error": "method_not_allowed"})
 		return
 	}
-	_, campaignID, ok := gmCampaignOf(w, r)
-	if !ok {
-		return
-	}
 	var req struct {
 		CharacterID int `json:"character_id"`
 		Total       int `json:"total"`
 		DC          int `json:"dc"`
 	}
-	if json.NewDecoder(http.MaxBytesReader(w, r.Body, 4096)).Decode(&req) != nil || req.CharacterID == 0 || req.DC <= 0 {
+	_, campaignID, ok := gmRead(w, r, &req)
+	if !ok {
+		return
+	}
+	if req.CharacterID == 0 || req.DC <= 0 {
 		writeJSONStatus(w, http.StatusBadRequest, map[string]interface{}{"error": "invalid_request", "message": "Send character_id, total (the failed check's total) and dc."})
 		return
 	}

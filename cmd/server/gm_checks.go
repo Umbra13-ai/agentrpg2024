@@ -35,19 +35,6 @@ func handleGMSkillCheck(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// Find campaign where this agent is the DM
-	var campaignID int
-	err = gmCampaignScan(agentID, r, &campaignID)
-
-	if err != nil {
-		w.WriteHeader(http.StatusForbidden)
-		json.NewEncoder(w).Encode(map[string]interface{}{
-			"error":   "not_gm",
-			"message": publicError(err),
-		})
-		return
-	}
-
 	var req struct {
 		CharacterID       int    `json:"character_id"`
 		Skill             string `json:"skill"`   // e.g., "perception", "athletics"
@@ -63,9 +50,8 @@ func handleGMSkillCheck(w http.ResponseWriter, r *http.Request) {
 		UsePeerlessSkill  bool   `json:"use_peerless_skill"`  // Lore Bard 14+ adds Bardic Inspiration die to own check
 		HalfSpeedMovement bool   `json:"half_speed_movement"` // For Supreme Sneak (Thief 9+) - moved no more than half speed this turn
 	}
-	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
-		w.WriteHeader(http.StatusBadRequest)
-		json.NewEncoder(w).Encode(map[string]interface{}{"error": "invalid_json"})
+	campaignID, ok := gmReadAs(w, r, agentID, &req)
+	if !ok {
 		return
 	}
 
@@ -700,19 +686,6 @@ func handleGMToolCheck(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// Find campaign where this agent is the DM
-	var campaignID int
-	err = gmCampaignScan(agentID, r, &campaignID)
-
-	if err != nil {
-		w.WriteHeader(http.StatusForbidden)
-		json.NewEncoder(w).Encode(map[string]interface{}{
-			"error":   "not_gm",
-			"message": publicError(err),
-		})
-		return
-	}
-
 	var req struct {
 		CharacterID      int    `json:"character_id"`
 		Tool             string `json:"tool"`    // e.g., "thieves' tools", "herbalism kit"
@@ -726,9 +699,8 @@ func handleGMToolCheck(w http.ResponseWriter, r *http.Request) {
 		UsePeerlessSkill bool   `json:"use_peerless_skill"` // Lore Bard 14+ adds Bardic Inspiration die to own check
 		Utilize          string `json:"utilize"`            // an SRD Utilize action of the tool, e.g. "pick a lock": sets the DC (and the ability) when you leave them out
 	}
-	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
-		w.WriteHeader(http.StatusBadRequest)
-		json.NewEncoder(w).Encode(map[string]interface{}{"error": "invalid_json"})
+	campaignID, ok := gmReadAs(w, r, agentID, &req)
+	if !ok {
 		return
 	}
 	if req.Utilize != "" && req.Tool != "" {
@@ -1238,19 +1210,6 @@ func handleGMSavingThrow(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// Find campaign where this agent is the DM
-	var campaignID int
-	err = gmCampaignScan(agentID, r, &campaignID)
-
-	if err != nil {
-		w.WriteHeader(http.StatusForbidden)
-		json.NewEncoder(w).Encode(map[string]interface{}{
-			"error":   "not_gm",
-			"message": publicError(err),
-		})
-		return
-	}
-
 	var req struct {
 		CharacterID       int    `json:"character_id"`
 		Ability           string `json:"ability"` // str, dex, con, int, wis, cha
@@ -1263,9 +1222,8 @@ func handleGMSavingThrow(w http.ResponseWriter, r *http.Request) {
 		FromFiendOrUndead bool   `json:"from_fiend_or_undead"` // Holy Nimbus (advantage on saves vs fiend/undead spells)
 		ChooseToFail      bool   `json:"choose_to_fail"`       // the player doesn't resist: the save fails without a roll (SRD 5.2.1)
 	}
-	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
-		w.WriteHeader(http.StatusBadRequest)
-		json.NewEncoder(w).Encode(map[string]interface{}{"error": "invalid_json"})
+	campaignID, ok := gmReadAs(w, r, agentID, &req)
+	if !ok {
 		return
 	}
 
@@ -1786,19 +1744,6 @@ func handleGMContestedCheck(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// Find campaign where this agent is the DM
-	var campaignID int
-	err = gmCampaignScan(agentID, r, &campaignID)
-
-	if err != nil {
-		w.WriteHeader(http.StatusForbidden)
-		json.NewEncoder(w).Encode(map[string]interface{}{
-			"error":   "not_gm",
-			"message": publicError(err),
-		})
-		return
-	}
-
 	var req struct {
 		InitiatorID           int    `json:"initiator_id"`    // Character ID of initiator
 		DefenderID            int    `json:"defender_id"`     // Character ID of defender
@@ -1810,9 +1755,8 @@ func handleGMContestedCheck(w http.ResponseWriter, r *http.Request) {
 		DefenderDisadvantage  bool   `json:"defender_disadvantage"`
 		Description           string `json:"description"` // e.g., "grapple attempt", "shove"
 	}
-	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
-		w.WriteHeader(http.StatusBadRequest)
-		json.NewEncoder(w).Encode(map[string]interface{}{"error": "invalid_json"})
+	campaignID, ok := gmReadAs(w, r, agentID, &req)
+	if !ok {
 		return
 	}
 

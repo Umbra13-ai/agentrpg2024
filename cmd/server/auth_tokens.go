@@ -15,7 +15,6 @@ import (
 	"crypto/sha256"
 	"encoding/base64"
 	"encoding/hex"
-	"encoding/json"
 	"fmt"
 	"log"
 	"net"
@@ -177,7 +176,9 @@ func handleTokens(w http.ResponseWriter, r *http.Request) {
 			Scope         string `json:"scope"`
 			ExpiresInDays int    `json:"expires_in_days"`
 		}
-		json.NewDecoder(http.MaxBytesReader(w, r.Body, 8*1024)).Decode(&req)
+		if !readRequest(w, r, &req, optionalBody()) {
+			return
+		}
 		scope := strings.ToLower(strings.TrimSpace(req.Scope))
 		if scope == "" {
 			scope = tokenScopeFull

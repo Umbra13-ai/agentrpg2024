@@ -34,15 +34,6 @@ func handleGMAoECast(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// Find campaign where this agent is the DM
-	var campaignID int
-	err = gmCampaignScan(agentID, r, &campaignID)
-	if err != nil {
-		w.WriteHeader(http.StatusForbidden)
-		json.NewEncoder(w).Encode(map[string]interface{}{"error": "not_gm", "message": publicError(err)})
-		return
-	}
-
 	var req struct {
 		SpellSlug     string `json:"spell_slug"`
 		CasterID      int    `json:"caster_id"`
@@ -52,9 +43,8 @@ func handleGMAoECast(w http.ResponseWriter, r *http.Request) {
 		SlotLevel     int    `json:"slot_level"`     // For upcasting
 		SculptTargets []int  `json:"sculpt_targets"` // Evocation Wizard's Sculpt Spells - allies to protect
 	}
-	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
-		w.WriteHeader(http.StatusBadRequest)
-		json.NewEncoder(w).Encode(map[string]interface{}{"error": "invalid_json"})
+	campaignID, ok := gmReadAs(w, r, agentID, &req)
+	if !ok {
 		return
 	}
 
@@ -699,9 +689,7 @@ func handleGMDispelMagic(w http.ResponseWriter, r *http.Request) {
 		SlotLevel        int    `json:"slot_level"`
 		EffectName       string `json:"effect_name"` // Optional: name of effect to dispel
 	}
-	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
-		w.WriteHeader(http.StatusBadRequest)
-		json.NewEncoder(w).Encode(map[string]interface{}{"error": "invalid_json"})
+	if _, ok := gmReadAs(w, r, agentID, &req, campaignFromTarget()); !ok {
 		return
 	}
 

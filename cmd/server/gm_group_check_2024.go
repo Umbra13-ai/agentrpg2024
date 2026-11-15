@@ -4,7 +4,6 @@ package main
 // group checks, and the Dehydration and Malnutrition hazards (handled in POST /api/gm/environmental-hazard).
 
 import (
-	"encoding/json"
 	"fmt"
 	"net/http"
 	"strings"
@@ -32,10 +31,6 @@ func handleGMGroupCheck(w http.ResponseWriter, r *http.Request) {
 		writeJSONStatus(w, http.StatusMethodNotAllowed, map[string]interface{}{"error": "POST required"})
 		return
 	}
-	_, lobby, ok := gmCampaignOf(w, r)
-	if !ok {
-		return
-	}
 	var req struct {
 		Skill        string `json:"skill"`
 		Ability      string `json:"ability"`
@@ -45,7 +40,10 @@ func handleGMGroupCheck(w http.ResponseWriter, r *http.Request) {
 		Disadvantage bool   `json:"disadvantage"`
 		Description  string `json:"description"`
 	}
-	json.NewDecoder(r.Body).Decode(&req)
+	_, lobby, ok := gmRead(w, r, &req, optionalBody())
+	if !ok {
+		return
+	}
 	skill := strings.ToLower(strings.TrimSpace(strings.ReplaceAll(req.Skill, " ", "_")))
 	ability := strings.ToLower(strings.TrimSpace(req.Ability))
 	if skill != "" {

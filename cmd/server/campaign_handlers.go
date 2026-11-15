@@ -87,7 +87,9 @@ func handleCampaigns(w http.ResponseWriter, r *http.Request) {
 			MaxLevel     int    `json:"max_level"`
 			TemplateSlug string `json:"template_slug"`
 		}
-		json.NewDecoder(r.Body).Decode(&req)
+		if !readRequest(w, r, &req, optionalBody()) {
+			return
+		}
 
 		// If template_slug provided, populate from template
 		// Template data for campaign document
@@ -515,7 +517,9 @@ func handleCampaignJoin(w http.ResponseWriter, r *http.Request, campaignID int) 
 	var req struct {
 		CharacterID int `json:"character_id"`
 	}
-	json.NewDecoder(r.Body).Decode(&req)
+	if !readRequest(w, r, &req, optionalBody()) {
+		return
+	}
 
 	// Get campaign level requirements
 	var minLevel, maxLevel int
@@ -695,6 +699,9 @@ func handleCampaignStart(w http.ResponseWriter, r *http.Request, campaignID int)
 		writeAuthError(w, err)
 		return
 	}
+	if !noFields(w, r) { // this request takes no fields
+		return
+	}
 
 	var dmID int
 	db.QueryRow("SELECT dm_id FROM lobbies WHERE id = $1", campaignID).Scan(&dmID)
@@ -733,6 +740,9 @@ func handleCampaignEnd(w http.ResponseWriter, r *http.Request, campaignID int) {
 	agentID, err := getAgentFromAuth(r)
 	if err != nil {
 		writeAuthError(w, err)
+		return
+	}
+	if !noFields(w, r) { // this request takes no fields
 		return
 	}
 
@@ -1214,9 +1224,7 @@ func handleCampaignStory(w http.ResponseWriter, r *http.Request, campaignID int)
 		Story      string `json:"story"`
 		StorySoFar string `json:"story_so_far"`
 	}
-	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
-		w.WriteHeader(http.StatusBadRequest)
-		json.NewEncoder(w).Encode(map[string]interface{}{"error": "invalid_json"})
+	if !readRequest(w, r, &req) {
 		return
 	}
 	story := campaignStoryUpdate(req.Story, req.StorySoFar)
@@ -1307,7 +1315,9 @@ func handleCampaignSections(w http.ResponseWriter, r *http.Request, campaignID i
 		Title   string `json:"title"`
 		Content string `json:"content"`
 	}
-	json.NewDecoder(r.Body).Decode(&req)
+	if !readRequest(w, r, &req, optionalBody()) {
+		return
+	}
 
 	if req.Content == "" {
 		w.WriteHeader(http.StatusBadRequest)
@@ -1416,7 +1426,9 @@ func handleCampaignNPCs(w http.ResponseWriter, r *http.Request, campaignID int) 
 		GMOnly      bool   `json:"gm_only"`
 		GMNotes     string `json:"gm_notes"`
 	}
-	json.NewDecoder(r.Body).Decode(&req)
+	if !readRequest(w, r, &req, optionalBody()) {
+		return
+	}
 
 	if req.Name == "" {
 		w.WriteHeader(http.StatusBadRequest)
@@ -1599,7 +1611,9 @@ func handleCampaignNPCByID(w http.ResponseWriter, r *http.Request, campaignID in
 		GMOnly      *bool   `json:"gm_only"`
 		GMNotes     *string `json:"gm_notes"`
 	}
-	json.NewDecoder(r.Body).Decode(&req)
+	if !readRequest(w, r, &req, optionalBody()) {
+		return
+	}
 
 	npcMap := npcs[npcIndex].(map[string]interface{})
 
@@ -1726,7 +1740,9 @@ func handleCampaignSectionByID(w http.ResponseWriter, r *http.Request, campaignI
 		Title   *string `json:"title"`
 		Content *string `json:"content"`
 	}
-	json.NewDecoder(r.Body).Decode(&req)
+	if !readRequest(w, r, &req, optionalBody()) {
+		return
+	}
 
 	sectionMap := sections[sectionIndex].(map[string]interface{})
 
@@ -1800,7 +1816,9 @@ func handleCampaignQuests(w http.ResponseWriter, r *http.Request, campaignID int
 		Status      string `json:"status"` // hidden, active, completed, failed
 		GMNotes     string `json:"gm_notes"`
 	}
-	json.NewDecoder(r.Body).Decode(&req)
+	if !readRequest(w, r, &req, optionalBody()) {
+		return
+	}
 
 	if req.Title == "" {
 		w.WriteHeader(http.StatusBadRequest)
@@ -1932,7 +1950,9 @@ func handleCampaignQuestUpdate(w http.ResponseWriter, r *http.Request, campaignI
 		Description *string `json:"description"`
 		GMNotes     *string `json:"gm_notes"`
 	}
-	json.NewDecoder(r.Body).Decode(&req)
+	if !readRequest(w, r, &req, optionalBody()) {
+		return
+	}
 
 	// Get current campaign document
 	var campaignDocRaw []byte
@@ -2021,7 +2041,9 @@ func handleCampaignObserve(w http.ResponseWriter, r *http.Request, campaignID in
 		Content string `json:"content"`
 		Type    string `json:"type"`
 	}
-	json.NewDecoder(r.Body).Decode(&req)
+	if !readRequest(w, r, &req, optionalBody()) {
+		return
+	}
 
 	// Default type to "world"
 	if req.Type == "" {
@@ -2263,7 +2285,9 @@ func handleObservationPromote(w http.ResponseWriter, r *http.Request, campaignID
 	var req struct {
 		Section string `json:"section"`
 	}
-	json.NewDecoder(r.Body).Decode(&req)
+	if !readRequest(w, r, &req, optionalBody()) {
+		return
+	}
 
 	if req.Section == "" {
 		w.WriteHeader(http.StatusBadRequest)
@@ -2458,9 +2482,7 @@ func handleCampaignMessages(w http.ResponseWriter, r *http.Request) {
 			CampaignID int    `json:"campaign_id"`
 			Message    string `json:"message"`
 		}
-		if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
-			w.WriteHeader(http.StatusBadRequest)
-			json.NewEncoder(w).Encode(map[string]interface{}{"error": "invalid_json"})
+		if !readRequest(w, r, &req) {
 			return
 		}
 		campaignID = req.CampaignID
@@ -2799,7 +2821,9 @@ func handleObserve(w http.ResponseWriter, r *http.Request) {
 		Type     string `json:"type"`
 		Content  string `json:"content"`
 	}
-	json.NewDecoder(r.Body).Decode(&req)
+	if !readRequest(w, r, &req, optionalBody()) {
+		return
+	}
 
 	// Default type to "world" for new freeform observations
 	if req.Type == "" {
@@ -3857,7 +3881,9 @@ func handleCampaignItems(w http.ResponseWriter, r *http.Request, campaignID int)
 			Data             map[string]interface{} `json:"data"`
 			CopyFromUniverse string                 `json:"copy_from_universe"`
 		}
-		json.NewDecoder(r.Body).Decode(&req)
+		if !readRequest(w, r, &req, optionalBody()) {
+			return
+		}
 
 		// If copying from universe
 		if req.CopyFromUniverse != "" {
@@ -4002,7 +4028,9 @@ func handleCampaignItemBySlug(w http.ResponseWriter, r *http.Request, campaignID
 			Name string                 `json:"name"`
 			Data map[string]interface{} `json:"data"`
 		}
-		json.NewDecoder(r.Body).Decode(&req)
+		if !readRequest(w, r, &req, optionalBody()) {
+			return
+		}
 
 		// Get existing item
 		var existingData []byte

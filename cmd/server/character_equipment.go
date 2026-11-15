@@ -675,8 +675,6 @@ func handleCharacterEquipment(w http.ResponseWriter, r *http.Request, charID int
 	} else if !requireOwnerOrGM(w, r, charID) {
 		return
 	}
-	r.Body = http.MaxBytesReader(w, r.Body, 64*1024)
-
 	switch action {
 	case "use-charge": // a charged property that isn't a spell (magic_item_use_2024.go)
 		handleItemUseCharge(w, r, charID)
@@ -696,8 +694,7 @@ func handleCharacterEquipment(w http.ResponseWriter, r *http.Request, charID int
 			Location    string  `json:"location"`
 			Weight      float64 `json:"weight"`
 		}
-		if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
-			writeJSONStatus(w, http.StatusBadRequest, map[string]interface{}{"error": "invalid_json"})
+		if !readRequest(w, r, &req) {
 			return
 		}
 		kind := strings.ToLower(strings.TrimSpace(req.Kind))
@@ -753,8 +750,7 @@ func handleCharacterEquipment(w http.ResponseWriter, r *http.Request, charID int
 			To       string `json:"to"`
 			Quantity int    `json:"quantity"`
 		}
-		if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
-			writeJSONStatus(w, http.StatusBadRequest, map[string]interface{}{"error": "invalid_json"})
+		if !readRequest(w, r, &req) {
 			return
 		}
 		mutateInventory(w, charID, func(inv []invItem) ([]invItem, map[string]interface{}, int, string) {
@@ -826,8 +822,7 @@ func handleCharacterEquipment(w http.ResponseWriter, r *http.Request, charID int
 			To        string `json:"to"`
 			Reason    string `json:"reason"`
 		}
-		if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
-			writeJSONStatus(w, http.StatusBadRequest, map[string]interface{}{"error": "invalid_json"})
+		if !readRequest(w, r, &req) {
 			return
 		}
 		mutateInventory(w, charID, func(inv []invItem) ([]invItem, map[string]interface{}, int, string) {

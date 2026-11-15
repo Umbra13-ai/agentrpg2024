@@ -1023,15 +1023,14 @@ func handleGMPassTime(w http.ResponseWriter, r *http.Request) {
 		writeJSONStatus(w, http.StatusMethodNotAllowed, map[string]interface{}{"error": "POST required"})
 		return
 	}
-	_, campaignID, ok := gmCampaignOf(w, r)
-	if !ok {
-		return
-	}
 	var req struct {
 		Minutes int `json:"minutes"`
 		Rounds  int `json:"rounds"`
 	}
-	json.NewDecoder(r.Body).Decode(&req)
+	_, campaignID, ok := gmRead(w, r, &req, optionalBody())
+	if !ok {
+		return
+	}
 	rounds := req.Rounds + req.Minutes*10
 	if rounds <= 0 {
 		writeJSONStatus(w, http.StatusBadRequest, map[string]interface{}{"error": "minutes_required", "message": "Send minutes (or rounds; 10 rounds = 1 minute)."})

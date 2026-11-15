@@ -317,8 +317,7 @@ func handleCharacterDowntime(w http.ResponseWriter, r *http.Request) {
 		HelperID    int     `json:"helper_id"`
 		Spell       string  `json:"spell"` // scribe: the spell to put on the scroll
 	}
-	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
-		writeJSONStatus(w, http.StatusBadRequest, map[string]interface{}{"error": "invalid_json"})
+	if !readRequest(w, r, &req) {
 		return
 	}
 	if req.CharacterID == 0 {

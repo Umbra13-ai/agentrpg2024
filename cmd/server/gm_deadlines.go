@@ -32,23 +32,35 @@ func handleGMDeadline(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// Find campaign where this agent is the DM
+	// the request (POST creates, DELETE removes) and the campaign it is for (campaign_id picks it: gmRead)
+	var postReq struct {
+		Description     string `json:"description"`
+		DeadlineAt      string `json:"deadline_at"`       // RFC3339 format
+		AutoAdvanceText string `json:"auto_advance_text"` // What happens if deadline passes
+	}
+	var deleteReq struct {
+		DeadlineID int `json:"deadline_id"`
+	}
 	var campaignID int
-	var campaignName string
-	err = db.QueryRow(`
-		SELECT id, name FROM lobbies 
-		WHERE dm_id = $1 AND status = 'active'
-		LIMIT 1
-	`, agentID).Scan(&campaignID, &campaignName)
-
-	if err != nil {
-		w.WriteHeader(http.StatusForbidden)
-		json.NewEncoder(w).Encode(map[string]interface{}{
-			"error":   "not_gm",
-			"message": "You are not the GM of any active campaign.",
-		})
+	ok := true
+	switch r.Method {
+	case "POST":
+		campaignID, ok = gmReadAs(w, r, agentID, &postReq)
+	case "DELETE":
+		campaignID, ok = gmReadAs(w, r, agentID, &deleteReq)
+	default:
+		id, code, msg := gmCampaignFor(agentID, r)
+		if code != "" {
+			writeGMCampaignProblem(w, code, msg)
+			return
+		}
+		campaignID = id
+	}
+	if !ok {
 		return
 	}
+	var campaignName string
+	db.QueryRow(`SELECT name FROM lobbies WHERE id = $1`, campaignID).Scan(&campaignName)
 
 	switch r.Method {
 	case "GET":
@@ -115,16 +127,7 @@ func handleGMDeadline(w http.ResponseWriter, r *http.Request) {
 
 	case "POST":
 		// Create a new deadline
-		var req struct {
-			Description     string `json:"description"`
-			DeadlineAt      string `json:"deadline_at"`       // RFC3339 format
-			AutoAdvanceText string `json:"auto_advance_text"` // What happens if deadline passes
-		}
-		if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
-			w.WriteHeader(http.StatusBadRequest)
-			json.NewEncoder(w).Encode(map[string]interface{}{"error": "invalid_json"})
-			return
-		}
+		req := postReq
 
 		if req.Description == "" {
 			w.WriteHeader(http.StatusBadRequest)
@@ -184,14 +187,7 @@ func handleGMDeadline(w http.ResponseWriter, r *http.Request) {
 
 	case "DELETE":
 		// Delete a deadline by ID
-		var req struct {
-			DeadlineID int `json:"deadline_id"`
-		}
-		if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
-			w.WriteHeader(http.StatusBadRequest)
-			json.NewEncoder(w).Encode(map[string]interface{}{"error": "invalid_json"})
-			return
-		}
+		req := deleteReq
 
 		if req.DeadlineID == 0 {
 			w.WriteHeader(http.StatusBadRequest)
@@ -312,7 +308,9 @@ func handleGMDeadlineAction(w http.ResponseWriter, r *http.Request) {
 		Action    string `json:"action"`    // "trigger" or "cancel"
 		Narration string `json:"narration"` // Custom narration text (overrides auto_advance_text)
 	}
-	json.NewDecoder(r.Body).Decode(&req)
+	if !readRequest(w, r, &req, optionalBody()) {
+		return
+	}
 
 	switch strings.ToLower(req.Action) {
 	case "trigger", "":

@@ -393,6 +393,40 @@ func actionRequiresNarrative(action string) bool {
 	return strings.ToLower(strings.TrimSpace(action)) == "other"
 }
 
+// actionFields: what an action is: the body of POST /api/action without its envelope, and each step of a pending turn
+// (pending_turns_2024.go), so both take the same fields and are read by the same rule (request_body_2024.go).
+type actionFields struct {
+	Action                 string `json:"action"`
+	Description            string `json:"description"`
+	Result                 string `json:"result"`     // Backward-compatible narrative alias used by earlier action clients.
+	SpellSlug              string `json:"spell_slug"` // Exact spell slug for cast actions; takes precedence over description.
+	Target                 string `json:"target"`
+	TargetCharacterID      int    `json:"target_character_id"`      // Explicit party member for stabilize.
+	MovementCost           int    `json:"movement_cost"`            // feet of movement for move actions
+	TowardFrightenedSource bool   `json:"toward_frightened_source"` // set true if moving toward source of fear (blocks movement)
+	CloseRange             bool   `json:"close_range"`              // set true if within 5ft of hostile creature (ranged attacks have disadvantage)
+	SlotLevel              int    `json:"slot_level"`               // cast: the spell slot level to use (upcasting); 0 means the spell's own level
+	ObjectID               int    `json:"object_id"`                // attack: an object the GM created (POST /api/gm/object), such as a door
+	CleaveTargetID         int    `json:"cleave_target_id"`         // attack with a Cleave weapon: a second creature within 5 feet of target_id
+	TargetIDs              []int  `json:"target_ids"`               // cast: more creatures hit by an area or multi-target spell (monsters have negative ids; characters are healed)
+
+	Item    string `json:"item"`    // cast: the magic item or Spell Scroll to cast from; use_item: the item (a potion ...)
+	Charges int    `json:"charges"` // cast from an item: the charges to spend (a higher version where the item allows it)
+
+	TargetID int `json:"target_id"` // attack: the id of an enemy (see situation.enemies in GET /api/my-turn); the server then decides hit or miss
+
+	CompanionID int `json:"companion_id"` // a companion of yours acts instead of you (companions_2024.go): attack, dodge, dash, disengage, help, hide, search, move
+
+	Features []string `json:"features"` // feature words for this action ("sculpt", "stunning strike", "cunning strike trip"): your_options.feature_words in GET /api/my-turn
+}
+
+// actionRequest: the body of POST /api/action: the action, and which of the player's characters acts.
+type actionRequest struct {
+	actionFields
+	CharacterID int `json:"character_id"` // Optional: which of your characters acts (when you play in several campaigns)
+	CampaignID  int `json:"campaign_id"`  // Optional: the campaign you act in (when you play in several)
+}
+
 // handleAction godoc
 // @Summary Submit an action
 // @Description Submit a game action. Server resolves mechanics (dice rolls, damage, etc.). Enforces action economy: 1 action, 1 bonus action, 1 reaction per round, movement in feet. Every action type, with what it costs, is listed on /commands. Companions: send companion_id with attack, dodge, dash, disengage, help, hide, search or move; a Draconic Spirit also takes "breath" (target_ids, type in the description), an Otherworldly Steed "healing_touch", "fey_step" or "fell_glare" by its kind. Feature words: GET /api/my-turn lists the character's own under your_options.feature_words; send them as "features": [...] (checked against that list) or in the description as whole words; Advantage can't be claimed in a description (the GM grants it: POST /api/gm/grant-advantage). Feature words in a cast description: "divine intervention" (Cleric 10; Wish at 20), "free", "wild companion", "overchannel", "delivered by my familiar". Wild Shape needs known forms first (POST /api/characters/{id}/class-options {"wild_shape_forms": [...]}). use_item with "item" resolves potions and these Legendary items: Horn of Valhalla, Ring of Djinni Summoning, Iron Flask (target_id, or "release"), Sphere of Annihilation ("control"; "move" with target_ids), Mysterious Deck ("draw N"; "star: wisdom" and the other choices), Rod of Lordly Might, Staff of the Magi, Ring of Elemental Command, Armor of Invulnerability, Plate Armor of Etherealness, Luck Blade, Sovereign Glue, Universal Solvent, Well of Many Worlds, Apparatus of the Crab ("lever 1 up") (skill.md lists the words). Spells' own actions: spiritual_weapon (Bonus Action, target_id), flame_blade (Magic action, target_id; "evoke", "let go"), gaseous_form ("end"). opportunity_attack with spell_slug: War Caster's Reactive Spell. A spell's gestures need a free hand unless the campaign's spell_hands table rule is "ignored" or the caster has War Caster. At 0 Hit Points only death_save is allowed (unconscious_at_0_hp).
@@ -418,33 +452,10 @@ func handleAction(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	var req struct {
-		Action                 string `json:"action"`
-		Description            string `json:"description"`
-		Result                 string `json:"result"`       // Backward-compatible narrative alias used by earlier action clients.
-		SpellSlug              string `json:"spell_slug"`   // Exact spell slug for cast actions; takes precedence over description.
-		CharacterID            int    `json:"character_id"` // Optional: which of your characters acts (when you play in several campaigns)
-		CampaignID             int    `json:"campaign_id"`  // Optional: the campaign you act in (when you play in several)
-		Target                 string `json:"target"`
-		TargetCharacterID      int    `json:"target_character_id"`      // Explicit party member for stabilize.
-		MovementCost           int    `json:"movement_cost"`            // feet of movement for move actions
-		TowardFrightenedSource bool   `json:"toward_frightened_source"` // set true if moving toward source of fear (blocks movement)
-		CloseRange             bool   `json:"close_range"`              // set true if within 5ft of hostile creature (ranged attacks have disadvantage)
-		SlotLevel              int    `json:"slot_level"`               // cast: the spell slot level to use (upcasting); 0 means the spell's own level
-		ObjectID               int    `json:"object_id"`                // attack: an object the GM created (POST /api/gm/object), such as a door
-		CleaveTargetID         int    `json:"cleave_target_id"`         // attack with a Cleave weapon: a second creature within 5 feet of target_id
-		TargetIDs              []int  `json:"target_ids"`               // cast: more creatures hit by an area or multi-target spell (monsters have negative ids; characters are healed)
-
-		Item    string `json:"item"`    // cast: the magic item or Spell Scroll to cast from; use_item: the item (a potion ...)
-		Charges int    `json:"charges"` // cast from an item: the charges to spend (a higher version where the item allows it)
-
-		TargetID int `json:"target_id"` // attack: the id of an enemy (see situation.enemies in GET /api/my-turn); the server then decides hit or miss
-
-		CompanionID int `json:"companion_id"` // a companion of yours acts instead of you (companions_2024.go): attack, dodge, dash, disengage, help, hide, search, move
-
-		Features []string `json:"features"` // feature words for this action ("sculpt", "stunning strike", "cunning strike trip"): your_options.feature_words in GET /api/my-turn
+	var req actionRequest
+	if !readRequest(w, r, &req, optionalBody()) {
+		return
 	}
-	json.NewDecoder(r.Body).Decode(&req)
 	// An explicit slot_level upcasts the spell; the casting code reads "at level N" from the description.
 	req.Action = canonicalAction(req.Action) // 2024 names: Magic is cast, Utilize is use_item
 	if strings.EqualFold(req.Action, "cast") && req.SlotLevel > 0 {
@@ -4325,6 +4336,9 @@ func handleTriggerReadied(w http.ResponseWriter, r *http.Request) {
 	agentID, err := getAgentFromAuth(r)
 	if err != nil {
 		writeAuthError(w, err)
+		return
+	}
+	if !noFields(w, r) { // this request takes no fields
 		return
 	}
 

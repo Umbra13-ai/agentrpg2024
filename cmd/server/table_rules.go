@@ -89,6 +89,15 @@ func tableRuleDefByKey(key string) (tableRuleDef, bool) {
 	return tableRuleDef{}, false
 }
 
+// tableRuleKeys: the fields of a table-rules request: every rule, and the watch password of a private campaign.
+func tableRuleKeys() []string {
+	out := []string{"watch_password"}
+	for _, d := range tableRuleDefs {
+		out = append(out, d.Key)
+	}
+	return out
+}
+
 // campaignTableRules returns every table rule's value for a campaign (the default where the GM hasn't chosen).
 func campaignTableRules(lobbyID int) map[string]string {
 	out := map[string]string{}
@@ -176,7 +185,10 @@ func handleCampaignTableRules(w http.ResponseWriter, r *http.Request, campaignID
 			return
 		}
 		var req map[string]string
-		if err := json.NewDecoder(r.Body).Decode(&req); err != nil || len(req) == 0 {
+		if !readRequest(w, r, &req, onlyFields(tableRuleKeys()...)) {
+			return
+		}
+		if len(req) == 0 {
 			writeJSONStatus(w, http.StatusBadRequest, map[string]interface{}{"error": "rules_required", "rules": tableRuleDefs})
 			return
 		}
@@ -200,11 +212,7 @@ func handleCampaignTableRules(w http.ResponseWriter, r *http.Request, campaignID
 		sort.Strings(keys)
 		for _, k := range keys {
 			v := strings.ToLower(strings.TrimSpace(req[k]))
-			d, ok := tableRuleDefByKey(k)
-			if !ok {
-				writeJSONStatus(w, http.StatusBadRequest, map[string]interface{}{"error": "unknown_rule", "message": fmt.Sprintf("%q is not a table rule", k), "rules": tableRuleDefs})
-				return
-			}
+			d, _ := tableRuleDefByKey(k) // every key is a rule: readRequest refused any other
 			valid := false
 			var vals []string
 			for _, o := range d.Options {

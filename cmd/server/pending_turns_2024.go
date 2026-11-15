@@ -28,7 +28,6 @@ import (
 	"fmt"
 	"net/http"
 	"net/http/httptest"
-	"sort"
 	"strings"
 	"sync"
 	"time"
@@ -177,37 +176,24 @@ func clearPendingTurns(lobbyID int) {
 
 // ---------------------------------------------------------------- checking a turn
 
+// ptStep: one step of a pending turn: an action, read with the action request's own fields (actionFields, actions.go), or a
+// map_move with its path and altitude. character_id and campaign_id go at the top of the pending turn, not in a step.
 type ptStep struct {
-	Action       string      `json:"action"`
-	Description  string      `json:"description"`
-	Result       string      `json:"result"`
-	SpellSlug    string      `json:"spell_slug"`
-	Target       string      `json:"target"`
-	TargetID     int         `json:"target_id"`
-	TargetIDs    []int       `json:"target_ids"`
-	SlotLevel    int         `json:"slot_level"`
-	MovementCost int         `json:"movement_cost"`
-	CompanionID  int         `json:"companion_id"`
-	Item         string      `json:"item"`
-	Charges      int         `json:"charges"`
-	Path         []mapSquare `json:"path"`
-	Altitude     *int        `json:"altitude"`
+	actionFields
+	Path     []mapSquare `json:"path"`
+	Altitude *int        `json:"altitude"`
 }
-
-// ptStepFields: what a step can hold: the fields of POST /api/action, and a map_move's path and altitude.
-var ptStepFields = map[string]bool{"action": true, "description": true, "result": true, "spell_slug": true, "target": true,
-	"target_character_id": true, "movement_cost": true, "toward_frightened_source": true, "close_range": true, "slot_level": true,
-	"object_id": true, "cleave_target_id": true, "target_ids": true, "item": true, "charges": true, "target_id": true,
-	"companion_id": true, "features": true, "path": true, "altitude": true}
 
 const ptMaxSteps, ptMaxFallbacks = 8, 3
 
-func ptDecodeStep(m map[string]interface{}) (ptStep, error) {
+// ptDecodeStep reads a step by the rule every request is read by (request_body_2024.go): a field that isn't an action's is
+// refused when the turn is sent, not first when it resolves.
+func ptDecodeStep(m map[string]interface{}) (ptStep, *bodyProblem) {
 	var s ptStep
 	raw, _ := json.Marshal(m)
-	err := json.Unmarshal(raw, &s)
+	p := parseRequest(raw, &s, bodySpec{hint: "character_id and campaign_id go at the top of the pending turn, not in a step."})
 	s.Action = canonicalAction(s.Action)
-	return s, err
+	return s, p
 }
 
 // ptMapToken: the fight has a battle map with this character's token on it.
@@ -322,20 +308,9 @@ func validatePendingSteps(lobbyID, charID int, steps []map[string]interface{}, s
 	uses := map[string][]string{}
 	for i, m := range steps {
 		at := fmt.Sprintf("step %d", i+1)
-		var unknown []string
-		for k := range m {
-			if !ptStepFields[k] {
-				unknown = append(unknown, k)
-			}
-		}
-		if len(unknown) > 0 {
-			sort.Strings(unknown)
-			problems = append(problems, fmt.Sprintf("%s: %s is not a field of a step (a step is a POST /api/action body; character_id and campaign_id go at the top of the request)", at, strings.Join(unknown, ", ")))
-			continue
-		}
-		s, err := ptDecodeStep(m)
-		if err != nil {
-			problems = append(problems, fmt.Sprintf("%s: a field has the wrong type (%s)", at, publicError(err)))
+		s, perr := ptDecodeStep(m)
+		if perr != nil {
+			problems = append(problems, at+": "+strings.TrimSuffix(perr.Message, " Nothing was changed."))
 			continue
 		}
 		if s.Action == "" {
@@ -804,16 +779,14 @@ func handlePendingTurn(w http.ResponseWriter, r *http.Request) {
 	}
 	ensurePendingTurns()
 	raw := map[string]json.RawMessage{}
-	if r.Method == http.MethodPost {
-		if err := json.NewDecoder(http.MaxBytesReader(w, r.Body, 256*1024)).Decode(&raw); err != nil {
-			writeJSONStatus(w, http.StatusBadRequest, map[string]interface{}{"error": "invalid_json", "message": "Send one JSON object: {\"steps\": [{\"action\": \"attack\", \"target_id\": -1}], \"fallbacks\": [[...]]}. Nothing was saved."})
+	switch r.Method {
+	case http.MethodPost:
+		if !readRequest(w, r, &raw, onlyFields("steps", "fallbacks", "character_id", "campaign_id"), bodyHint("An action goes inside steps.")) {
 			return
 		}
-		for k := range raw {
-			if k != "steps" && k != "fallbacks" && k != "character_id" && k != "campaign_id" {
-				writeJSONStatus(w, http.StatusBadRequest, map[string]interface{}{"error": "unknown_field", "message": fmt.Sprintf("%q is not a field of a pending turn (steps, fallbacks, character_id, campaign_id). An action goes inside steps. Nothing was saved.", k)})
-				return
-			}
+	case http.MethodDelete:
+		if !readRequest(w, r, &raw, onlyFields("character_id", "campaign_id"), optionalBody()) {
+			return
 		}
 	}
 	var bodyChar, bodyCampaign int
@@ -1010,6 +983,9 @@ func handleCombatResolve(w http.ResponseWriter, r *http.Request, campaignID int)
 	if !ptRequireGM(w, r, campaignID) {
 		return
 	}
+	if !noFields(w, r) { // this request takes no fields
+		return
+	}
 	rep := resolvePendingTurns(campaignID)
 	if rep == nil {
 		writeJSONStatus(w, http.StatusConflict, map[string]interface{}{"error": "no_active_combat"})
@@ -1059,7 +1035,10 @@ func handleCombatStandIn(w http.ResponseWriter, r *http.Request, campaignID int)
 	var req struct {
 		Steps []map[string]interface{} `json:"steps"`
 	}
-	if err := json.NewDecoder(http.MaxBytesReader(w, r.Body, 256*1024)).Decode(&req); err != nil || len(req.Steps) == 0 {
+	if !readRequest(w, r, &req) {
+		return
+	}
+	if len(req.Steps) == 0 {
 		writeJSONStatus(w, http.StatusBadRequest, map[string]interface{}{"error": "steps_required", "message": "Send steps: the character's turn as a list of action bodies, like [{\"action\": \"attack\", \"target_id\": -1}]. Nothing was changed."})
 		return
 	}

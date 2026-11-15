@@ -41,10 +41,6 @@ func handleGMAdjustMonster(w http.ResponseWriter, r *http.Request) {
 		writeJSONStatus(w, http.StatusMethodNotAllowed, map[string]interface{}{"error": "POST required"})
 		return
 	}
-	agentID, campaignID, ok := gmCampaignOf(w, r)
-	if !ok {
-		return
-	}
 	var req struct {
 		Target           interface{}       `json:"target"`
 		TargetID         int               `json:"target_id"`
@@ -69,8 +65,8 @@ func handleGMAdjustMonster(w http.ResponseWriter, r *http.Request) {
 		Note             string            `json:"note"`
 		Extra            map[string]string `json:"-"`
 	}
-	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
-		writeJSONStatus(w, http.StatusBadRequest, map[string]interface{}{"error": "invalid_json"})
+	agentID, campaignID, ok := gmRead(w, r, &req)
+	if !ok {
 		return
 	}
 	entries := combatEntries(campaignID)

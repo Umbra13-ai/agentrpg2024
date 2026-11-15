@@ -286,8 +286,7 @@ func handleReactionOrders(w http.ResponseWriter, r *http.Request) {
 	case http.MethodGet:
 		req.CharacterID, _ = strconv.Atoi(r.URL.Query().Get("character_id"))
 	case http.MethodPost:
-		if json.NewDecoder(r.Body).Decode(&req) != nil {
-			writeJSONStatus(w, http.StatusBadRequest, map[string]interface{}{"error": "invalid_json"})
+		if !readRequest(w, r, &req) {
 			return
 		}
 	default:

@@ -966,9 +966,7 @@ func handleGMKickCharacter(w http.ResponseWriter, r *http.Request) {
 		CharacterID int    `json:"character_id"`
 		Reason      string `json:"reason"`
 	}
-	if decodeErr := json.NewDecoder(r.Body).Decode(&req); decodeErr != nil {
-		w.WriteHeader(400)
-		json.NewEncoder(w).Encode(map[string]string{"error": "invalid_request"})
+	if !readRequest(w, r, &req) {
 		return
 	}
 
@@ -1042,9 +1040,7 @@ func handleGMRestoreAction(w http.ResponseWriter, r *http.Request) {
 		Description string `json:"description"`
 		Result      string `json:"result"`
 	}
-	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
-		w.WriteHeader(400)
-		json.NewEncoder(w).Encode(map[string]string{"error": "invalid_request"})
+	if _, ok := gmReadAs(w, r, agentID, &req, campaignFromTarget()); !ok {
 		return
 	}
 
@@ -1108,9 +1104,7 @@ func handleGMRecreateCharacter(w http.ResponseWriter, r *http.Request) {
 		AgentID    int    `json:"agent_id"`
 		CampaignID int    `json:"campaign_id"`
 	}
-	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
-		w.WriteHeader(400)
-		json.NewEncoder(w).Encode(map[string]string{"error": "invalid_request"})
+	if !readRequest(w, r, &req) {
 		return
 	}
 
@@ -1169,9 +1163,7 @@ func handleGMUpdateActionTime(w http.ResponseWriter, r *http.Request) {
 		CharacterID int    `json:"character_id"`
 		Timestamp   string `json:"timestamp"`
 	}
-	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
-		w.WriteHeader(400)
-		json.NewEncoder(w).Encode(map[string]string{"error": "invalid_request"})
+	if _, ok := gmReadAs(w, r, gmAgentID, &req, campaignFromTarget()); !ok {
 		return
 	}
 
@@ -1235,9 +1227,7 @@ func handleGMUpdateNarrationTime(w http.ResponseWriter, r *http.Request) {
 		Timestamp  string `json:"timestamp"`
 		CampaignID int    `json:"campaign_id"`
 	}
-	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
-		w.WriteHeader(400)
-		json.NewEncoder(w).Encode(map[string]string{"error": "invalid_request"})
+	if !readRequest(w, r, &req) {
 		return
 	}
 
@@ -1332,30 +1322,6 @@ func isNarrativeOnlyMonsterAction(action string) bool {
 	}
 }
 
-// resolveGMNarrationCampaignID makes campaign routing deterministic. A GM may
-// omit campaign_id only when they own exactly one active campaign.
-func resolveGMNarrationCampaignID(queryID, bodyID int, activeIDs []int) (int, error) {
-	if queryID > 0 && bodyID > 0 && queryID != bodyID {
-		return 0, fmt.Errorf("campaign_id_conflict")
-	}
-	requestedID := queryID
-	if requestedID == 0 {
-		requestedID = bodyID
-	}
-	if requestedID == 0 {
-		if len(activeIDs) == 1 {
-			return activeIDs[0], nil
-		}
-		return 0, fmt.Errorf("campaign_id_required")
-	}
-	for _, activeID := range activeIDs {
-		if requestedID == activeID {
-			return requestedID, nil
-		}
-	}
-	return 0, fmt.Errorf("campaign_not_active_or_not_owned")
-}
-
 // handleGMNarrate godoc
 // @Summary Submit GM narration and monster actions
 // @Description GM submits narrative text and optionally runs a monster action. Attacks resolve mechanically; positioning beats (for example, reposition) are narration-only. monster_action: {"monster", "action" (an action of its stat block, "Multiattack", or a named attack), "target" (a character's name or id, or a companion's name, nickname or combat id), "target_ids" (characters in a saving throw effect), "use" (a choice the entry needs, such as Command's word: approach, drop, flee, grovel or halt; or a spell the entry offers, such as the Pit Fiend's "Hold Monster" or one of a Lich's spells), "point": [x, y] (aims an area at a grid square; every character in a monster's area on the map is affected, listed or not), "apply_damage": true}. A Multiattack also resolves the actions without an attack roll it names (a Vampire's Bite).
@@ -1426,9 +1392,8 @@ func handleGMNarrate(w http.ResponseWriter, r *http.Request) {
 	}
 
 	var req gmNarrateRequest
-	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
-		w.WriteHeader(http.StatusBadRequest)
-		json.NewEncoder(w).Encode(map[string]interface{}{"error": "invalid_json"})
+	campaignID, ok := gmReadAs(w, r, agentID, &req) // campaign_id in the query or the body picks the campaign (gmCampaignFor)
+	if !ok {
 		return
 	}
 	if validationErr := validateGMNarrateRequest(req); validationErr != "" {
@@ -1441,53 +1406,6 @@ func handleGMNarrate(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	queryCampaignID := 0
-	if rawQueryCampaignID := strings.TrimSpace(r.URL.Query().Get("campaign_id")); rawQueryCampaignID != "" {
-		queryCampaignID, err = strconv.Atoi(rawQueryCampaignID)
-		if err != nil || queryCampaignID <= 0 {
-			w.WriteHeader(http.StatusBadRequest)
-			json.NewEncoder(w).Encode(map[string]interface{}{"error": "invalid_campaign_id"})
-			return
-		}
-	}
-
-	rows, err := db.Query(`SELECT id FROM lobbies WHERE dm_id = $1 AND status = 'active' ORDER BY id`, agentID)
-	if err != nil {
-		w.WriteHeader(http.StatusInternalServerError)
-		json.NewEncoder(w).Encode(map[string]interface{}{"error": "campaign_lookup_failed"})
-		return
-	}
-	defer rows.Close()
-	activeCampaignIDs := []int{}
-	for rows.Next() {
-		var id int
-		if err := rows.Scan(&id); err != nil {
-			w.WriteHeader(http.StatusInternalServerError)
-			json.NewEncoder(w).Encode(map[string]interface{}{"error": "campaign_lookup_failed"})
-			return
-		}
-		activeCampaignIDs = append(activeCampaignIDs, id)
-	}
-	if err := rows.Err(); err != nil {
-		w.WriteHeader(http.StatusInternalServerError)
-		json.NewEncoder(w).Encode(map[string]interface{}{"error": "campaign_lookup_failed"})
-		return
-	}
-	if len(activeCampaignIDs) == 0 {
-		w.WriteHeader(http.StatusForbidden)
-		json.NewEncoder(w).Encode(map[string]interface{}{"error": "not_gm"})
-		return
-	}
-
-	campaignID, resolveErr := resolveGMNarrationCampaignID(queryCampaignID, req.CampaignID, activeCampaignIDs)
-	if resolveErr != nil {
-		w.WriteHeader(http.StatusBadRequest)
-		json.NewEncoder(w).Encode(map[string]interface{}{
-			"error":   resolveErr.Error(),
-			"message": "Specify one active campaign_id in the query or JSON body; the two values must agree.",
-		})
-		return
-	}
 	if req.AdvanceTurn {
 		if advanceErr := validateGMNarratedCombatAdvance(campaignID); advanceErr != "" {
 			w.WriteHeader(http.StatusConflict)
@@ -1728,7 +1646,10 @@ func handleGMNudge(w http.ResponseWriter, r *http.Request) {
 	}
 
 	var req gmNudgeRequest
-	if err := json.NewDecoder(r.Body).Decode(&req); err != nil || req.CharacterID == 0 {
+	if !readRequest(w, r, &req) {
+		return
+	}
+	if req.CharacterID == 0 {
 		w.WriteHeader(http.StatusBadRequest)
 		json.NewEncoder(w).Encode(map[string]interface{}{
 			"error": "character_id required",

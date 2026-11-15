@@ -11,7 +11,6 @@ package main
 
 import (
 	"database/sql"
-	"encoding/json"
 	"fmt"
 	"net/http"
 	"regexp"
@@ -125,7 +124,10 @@ func handleGMMeleeRange(w http.ResponseWriter, r *http.Request) {
 		CharacterID int  `json:"character_id"`
 		InMelee     bool `json:"in_melee"`
 	}
-	if err := json.NewDecoder(r.Body).Decode(&req); err != nil || req.CharacterID == 0 {
+	if _, ok := gmReadAs(w, r, agentID, &req, campaignFromTarget()); !ok {
+		return
+	}
+	if req.CharacterID == 0 {
 		writeJSONStatus(w, http.StatusBadRequest, map[string]interface{}{"error": "character_id_required"})
 		return
 	}

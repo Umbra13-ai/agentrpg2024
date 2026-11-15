@@ -266,25 +266,12 @@ func handleWeaponMasteries(w http.ResponseWriter, r *http.Request) {
 		fmt.Sscanf(r.URL.Query().Get("character_id"), "%d", &req.CharacterID)
 	} else if r.Method == http.MethodPost {
 		// a wrong type or a missing list is refused as such, not answered "swap_not_available" (Nov 14 audit re-check)
-		var raw map[string]json.RawMessage
-		if err := json.NewDecoder(http.MaxBytesReader(w, r.Body, 16*1024)).Decode(&raw); err != nil {
-			writeJSONStatus(w, http.StatusBadRequest, map[string]interface{}{"error": "invalid_json", "message": "Send one JSON object: {\"character_id\": N, \"weapon_masteries\": [\"Longsword\", ...]}."})
+		if !readRequest(w, r, &req) {
 			return
 		}
-		if json.Unmarshal(raw["character_id"], &req.CharacterID) != nil { // "3012" as text (Nov 14 review: answered character_not_found)
-			writeJSONStatus(w, http.StatusBadRequest, map[string]interface{}{"error": "invalid_character_id", "message": "character_id must be a number, like 12. Nothing was changed."})
-			return
-		}
-		wm, has := raw["weapon_masteries"]
-		if !has || json.Unmarshal(wm, &req.WeaponMasteries) != nil || req.WeaponMasteries == nil {
+		if req.WeaponMasteries == nil {
 			writeJSONStatus(w, http.StatusBadRequest, map[string]interface{}{"error": "weapon_masteries_required", "message": "weapon_masteries must be a list of weapon names, like [\"Longsword\", \"Shortbow\"]. Nothing was changed."})
 			return
-		}
-		for k := range raw {
-			if k != "character_id" && k != "weapon_masteries" {
-				writeJSONStatus(w, http.StatusBadRequest, map[string]interface{}{"error": "unknown_field", "message": fmt.Sprintf("%q is not a field this request takes (character_id, weapon_masteries). Nothing was changed.", k)})
-				return
-			}
 		}
 	} else {
 		writeJSONStatus(w, http.StatusMethodNotAllowed, map[string]interface{}{"error": "method_not_allowed"})

@@ -837,7 +837,9 @@ func handleCompanionName(w http.ResponseWriter, r *http.Request) {
 		CompanionID int    `json:"companion_id"`
 		Name        string `json:"name"`
 	}
-	json.NewDecoder(r.Body).Decode(&req)
+	if !readRequest(w, r, &req, optionalBody()) {
+		return
+	}
 	ensureCompanions()
 	c, ok := loadCompanion(req.CompanionID)
 	var owner int
@@ -995,7 +997,17 @@ func maxHPOf(lobbyID, id int) int {
 // @Router /gm/companion [post]
 func handleGMCompanion(w http.ResponseWriter, r *http.Request) {
 	ensureCompanions()
-	_, lobbyID, ok := gmCampaignOf(w, r)
+	var req struct {
+		CharacterID int    `json:"character_id"`
+		MonsterKey  string `json:"monster_key"`
+		Name        string `json:"name"`
+		CompanionID int    `json:"companion_id"`
+		Damage      int    `json:"damage"`
+		DamageType  string `json:"damage_type"`
+		Heal        int    `json:"heal"`
+		Remove      bool   `json:"remove"`
+	}
+	_, lobbyID, ok := gmRead(w, r, &req, optionalBody())
 	if !ok {
 		return
 	}
@@ -1009,17 +1021,6 @@ func handleGMCompanion(w http.ResponseWriter, r *http.Request) {
 		writeJSONStatus(w, 200, map[string]interface{}{"campaign_id": lobbyID, "companions": list, "familiar_initiative": familiarInitiativeMode()})
 		return
 	}
-	var req struct {
-		CharacterID int    `json:"character_id"`
-		MonsterKey  string `json:"monster_key"`
-		Name        string `json:"name"`
-		CompanionID int    `json:"companion_id"`
-		Damage      int    `json:"damage"`
-		DamageType  string `json:"damage_type"`
-		Heal        int    `json:"heal"`
-		Remove      bool   `json:"remove"`
-	}
-	json.NewDecoder(r.Body).Decode(&req)
 	if req.CompanionID == 0 {
 		var charLobby int
 		if db.QueryRow(`SELECT COALESCE(lobby_id,0) FROM characters WHERE id = $1`, req.CharacterID).Scan(&charLobby) != nil || charLobby != lobbyID {

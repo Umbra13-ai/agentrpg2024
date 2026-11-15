@@ -1,12 +1,10 @@
 package main
 
 import (
-	"bytes"
 	"database/sql"
 	"encoding/json"
 	"fmt"
 	"github.com/agentrpg/agentrpg/game"
-	"io"
 	"net/http"
 	"sort"
 	"strconv"
@@ -207,7 +205,9 @@ func handleCombatStart(w http.ResponseWriter, r *http.Request, campaignID int) {
 	var startReq struct {
 		Surprised []int `json:"surprised"`
 	}
-	json.NewDecoder(r.Body).Decode(&startReq)
+	if !readRequest(w, r, &startReq, optionalBody()) {
+		return
+	}
 	surprised := map[int]bool{}
 	for _, id := range startReq.Surprised {
 		surprised[id] = true
@@ -576,8 +576,8 @@ func handleCombatNext(w http.ResponseWriter, r *http.Request, campaignID int) {
 	var nextReq struct {
 		LegendaryActions []legendaryRequest `json:"legendary_actions"`
 	}
-	if r.Body != nil {
-		json.NewDecoder(http.MaxBytesReader(w, r.Body, 32*1024)).Decode(&nextReq)
+	if !readRequest(w, r, &nextReq, optionalBody()) {
+		return
 	}
 
 	var round, turnIndex int
@@ -817,6 +817,9 @@ func handleCombatSkip(w http.ResponseWriter, r *http.Request, campaignID int) {
 	agentID, err := getAgentFromAuth(r)
 	if err != nil {
 		writeAuthError(w, err)
+		return
+	}
+	if !noFields(w, r) { // this request takes no fields
 		return
 	}
 
@@ -1146,7 +1149,10 @@ func handleExplorationSkip(w http.ResponseWriter, r *http.Request, campaignID in
 	var req struct {
 		CharacterID int `json:"character_id"`
 	}
-	if err := json.NewDecoder(r.Body).Decode(&req); err != nil || req.CharacterID == 0 {
+	if !readRequest(w, r, &req) {
+		return
+	}
+	if req.CharacterID == 0 {
 		w.WriteHeader(http.StatusBadRequest)
 		json.NewEncoder(w).Encode(map[string]interface{}{"error": "character_id required"})
 		return
@@ -1271,9 +1277,7 @@ func handleCombatAdd(w http.ResponseWriter, r *http.Request, campaignID int) {
 			InLair     bool   `json:"in_lair"`     // Optional: the monster fights in its lair (one more Legendary Action use and Legendary Resistance)
 		} `json:"combatants"`
 	}
-	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
-		w.WriteHeader(http.StatusBadRequest)
-		json.NewEncoder(w).Encode(map[string]interface{}{"error": "invalid_json"})
+	if !readRequest(w, r, &req) {
 		return
 	}
 
@@ -1558,9 +1562,7 @@ func handleCombatRemove(w http.ResponseWriter, r *http.Request, campaignID int) 
 		CombatantID   int    `json:"combatant_id"`
 		CombatantName string `json:"combatant_name"`
 	}
-	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
-		w.WriteHeader(http.StatusBadRequest)
-		json.NewEncoder(w).Encode(map[string]interface{}{"error": "invalid_json"})
+	if !readRequest(w, r, &req) {
 		return
 	}
 
@@ -1762,7 +1764,9 @@ func handleDamage(w http.ResponseWriter, r *http.Request, charID int) {
 		Critical            bool `json:"critical"` // the damage is from a Critical Hit (two Death Saving Throw failures at 0 Hit Points)
 		SameHit             bool `json:"same_hit"` // another damage type of a hit already counted (one failure per hit at 0 Hit Points)
 	}
-	json.NewDecoder(r.Body).Decode(&req)
+	if !readRequest(w, r, &req, optionalBody()) {
+		return
+	}
 	if req.Damage <= 0 && req.Amount > 0 {
 		req.Damage = req.Amount
 	}
@@ -2027,7 +2031,9 @@ func handleHeal(w http.ResponseWriter, r *http.Request, charID int) {
 	var req struct {
 		Healing int `json:"healing"`
 	}
-	json.NewDecoder(r.Body).Decode(&req)
+	if !readRequest(w, r, &req, optionalBody()) {
+		return
+	}
 
 	var hp, maxHP int
 	var isStable bool
@@ -2075,7 +2081,9 @@ func handleAddCondition(w http.ResponseWriter, r *http.Request, charID int) {
 		FromElemental    bool   `json:"from_elemental"`     // for Nature's Ward immunity
 		FromFey          bool   `json:"from_fey"`           // for Nature's Ward immunity
 	}
-	json.NewDecoder(r.Body).Decode(&req)
+	if !readRequest(w, r, &req, optionalBody()) {
+		return
+	}
 
 	condition := strings.ToLower(req.Condition)
 
@@ -2281,6 +2289,25 @@ func handleAddCondition(w http.ResponseWriter, r *http.Request, charID int) {
 	json.NewEncoder(w).Encode(response)
 }
 
+// shortRestRequest: the body of a Short Rest (POST .../short-rest, or .../rest with type "short").
+type shortRestRequest struct {
+	Type         string `json:"type"`          // "short" (on .../rest); a Long Rest takes only type
+	HitDice      int    `json:"hit_dice"`      // Hit Point Dice to spend
+	Die          string `json:"die"`           // multiclass: which Hit Point Die to spend first ("d10"); the largest first otherwise
+	RecoverSlots []int  `json:"recover_slots"` // slot levels to recover (Arcane Recovery, Natural Recovery): [1, 2] is one level 1 and one level 2 slot
+}
+
+// restKind reads a rest's type: "long" (also when none is sent), "short", or "" for anything else.
+func restKind(t string) string {
+	switch game.Key(t) {
+	case "", "long", "long_rest":
+		return "long"
+	case "short", "short_rest":
+		return "short"
+	}
+	return ""
+}
+
 // handleShortRest godoc
 // @Summary Take a Short Rest
 // @Description A Short Rest (1 hour; the spell clock passes 1 hour). Spend Hit Point Dice with hit_dice (each die is rolled and adds the Constitution modifier); what comes back on a Short Rest comes back (Pact Magic slots, class resources such as Focus Points, Second Wind, Channel Divinity, Wild Shape, species uses). A Wizard's Arcane Recovery and a Land Druid's Natural Recovery take recover_slots, the slot levels to recover (for example [1, 2]). A POST always takes the rest, with or without hit_dice; a GET only shows the Hit Point Dice left. Only the character's owner or the campaign's GM.
@@ -2291,16 +2318,15 @@ func handleAddCondition(w http.ResponseWriter, r *http.Request, charID int) {
 func handleShortRest(w http.ResponseWriter, r *http.Request, charID int) {
 	w.Header().Set("Content-Type", "application/json")
 
-	// Parse request - how many hit dice to spend, optional slot recovery
-	var req struct {
-		HitDice      int    `json:"hit_dice"`
-		Die          string `json:"die"`           // multiclass: which Hit Point Die to spend first ("d10"); the largest first otherwise
-		RecoverSlots []int  `json:"recover_slots"` // Array of slot levels to recover (e.g., [1, 2] = recover one 1st and one 2nd level slot)
+	// how many Hit Point Dice to spend, slots to recover (all optional)
+	var req shortRestRequest
+	if !readRequest(w, r, &req, optionalBody()) {
+		return
 	}
-	if r.Body == nil {
-		req.HitDice = 0
-	} else if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
-		req.HitDice = 0 // Default to 0 if not specified (don't spend hit dice unless requested)
+	if strings.TrimSpace(req.Type) != "" && restKind(req.Type) != "short" {
+		writeJSONStatus(w, http.StatusBadRequest, map[string]interface{}{"error": "invalid_rest_type",
+			"message": fmt.Sprintf("This route takes a Short Rest; type %q isn't one. Leave type out (or send \"short\"); a Long Rest is POST /api/characters/{id}/rest. Nothing was changed.", req.Type)})
+		return
 	}
 
 	// Get character info including subclass for Natural Recovery, class_levels for multiclass, and lobby_id for the spell clock
@@ -2729,17 +2755,26 @@ func handleShortRest(w http.ResponseWriter, r *http.Request, charID int) {
 // @Router /characters/{id}/rest [post]
 func handleRest(w http.ResponseWriter, r *http.Request, charID int) {
 	w.Header().Set("Content-Type", "application/json")
-	// {"type": "short"} asks for a Short Rest (F47: it used to take a Long Rest whatever the type said)
-	if r.Body != nil {
-		raw, _ := io.ReadAll(io.LimitReader(r.Body, 1<<16))
-		r.Body = io.NopCloser(bytes.NewReader(raw))
-		var kind struct {
-			Type string `json:"type"`
-		}
-		if json.Unmarshal(raw, &kind) == nil && strings.EqualFold(strings.TrimSpace(kind.Type), "short") {
-			handleShortRest(w, r, charID)
-			return
-		}
+	// {"type": "short"} asks for a Short Rest (F47: it used to take a Long Rest whatever the type said); the Short Rest's fields
+	// are refused for a Long Rest
+	var kind shortRestRequest
+	if !readRequest(w, r, &kind, optionalBody()) {
+		return
+	}
+	switch restKind(kind.Type) {
+	case "short":
+		handleShortRest(w, r, charID)
+		return
+	case "":
+		writeJSONStatus(w, http.StatusBadRequest, map[string]interface{}{"error": "invalid_rest_type",
+			"message": fmt.Sprintf("type is \"long\" (the default) or \"short\", not %q. Nothing was changed.", kind.Type)})
+		return
+	}
+	var long struct {
+		Type string `json:"type"`
+	}
+	if !readRequest(w, r, &long, optionalBody(), bodyHint(`hit_dice, die and recover_slots are for a Short Rest: send them with {"type": "short"}.`)) {
+		return
 	}
 
 	// Get character info including last long rest
@@ -2935,7 +2970,9 @@ func handleSetCover(w http.ResponseWriter, r *http.Request, charID int) {
 	var req struct {
 		Cover string `json:"cover"`
 	}
-	json.NewDecoder(r.Body).Decode(&req)
+	if !readRequest(w, r, &req, optionalBody()) {
+		return
+	}
 
 	coverType := strings.ToLower(strings.ReplaceAll(req.Cover, "-", "_"))
 	bonus, valid := coverBonuses[coverType]

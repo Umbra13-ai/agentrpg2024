@@ -33,10 +33,8 @@ package main
 // Recharge: an action marked (Recharge X–Y) used through gm/narrate is spent until a d6 at the start of the monster's turn rolls X+.
 
 import (
-	"bytes"
 	"encoding/json"
 	"fmt"
-	"io"
 	"net/http"
 	"regexp"
 	"strconv"
@@ -723,19 +721,17 @@ func monsterFeaturesInfo(lobbyID, id int) map[string]interface{} {
 // @Router /gm/monster-features [get]
 // @Router /gm/monster-features [post]
 func handleGMMonsterFeatures(w http.ResponseWriter, r *http.Request) {
-	lobbyID, ok := gmActiveCampaign(w, r)
-	if !ok {
-		return
-	}
 	var req struct {
 		CombatantID         int    `json:"combatant_id"`
 		InLair              *bool  `json:"in_lair"`
 		LegendaryResistance string `json:"legendary_resistance"`
 		Auras               *bool  `json:"auras"`
 	}
-	if r.Method == http.MethodPost {
-		json.NewDecoder(http.MaxBytesReader(w, r.Body, 8*1024)).Decode(&req)
-	} else {
+	_, lobbyID, ok := gmRead(w, r, &req, optionalBody())
+	if !ok {
+		return
+	}
+	if r.Method != http.MethodPost {
 		req.CombatantID, _ = strconv.Atoi(r.URL.Query().Get("combatant_id"))
 	}
 	e, meta, found := monsterCombatant(lobbyID, req.CombatantID)
@@ -773,25 +769,18 @@ func handleGMMonsterFeatures(w http.ResponseWriter, r *http.Request) {
 
 // gmCampaignFor picks the campaign a GM command is for: ?campaign_id=N (it must be one of the GM's active campaigns), else the
 // GM's only active campaign, else the only one with a fight going on. A GM who runs several campaigns without a fight in exactly one
-// of them must say which (before this, such commands landed in whichever campaign the database returned first).
+// of them must say which (before this, such commands landed in whichever campaign the database returned first). A command with a
+// body reads its campaign_id there too, with gmRead.
 func gmCampaignFor(agentID int, r *http.Request) (int, string, string) {
 	want := 0
-	if r != nil {
+	if r != nil && r.URL != nil {
 		want, _ = strconv.Atoi(r.URL.Query().Get("campaign_id"))
-		// campaign_id in the JSON body counts too (Nov 14: a GM skill check with {"campaign_id": N} was answered "not_gm:
-		// campaign_id_required"); the body is put back for the handler
-		if want == 0 && r.Body != nil && r.Method != http.MethodGet {
-			if b, err := io.ReadAll(io.LimitReader(r.Body, 1<<20)); err == nil {
-				r.Body = io.NopCloser(bytes.NewReader(b))
-				var probe struct {
-					CampaignID int `json:"campaign_id"`
-				}
-				if json.Unmarshal(b, &probe) == nil && probe.CampaignID > 0 {
-					want = probe.CampaignID
-				}
-			}
-		}
 	}
+	return gmCampaignPick(agentID, want)
+}
+
+// gmCampaignPick is gmCampaignFor with the campaign the request named (0: none).
+func gmCampaignPick(agentID, want int) (int, string, string) {
 	rows, err := db.Query(`SELECT id FROM lobbies WHERE dm_id = $1 AND status = 'active' ORDER BY id`, agentID)
 	if err != nil {
 		return 0, "campaign_lookup_failed", "The campaign lookup failed."
@@ -831,34 +820,58 @@ func gmCampaignFor(agentID int, r *http.Request) (int, string, string) {
 	if len(fighting) == 1 {
 		return fighting[0], "", ""
 	}
-	return 0, "campaign_id_required", fmt.Sprintf("You run %d active campaigns (%v): add ?campaign_id=N to the request.", len(ids), ids)
+	return 0, "campaign_id_required", fmt.Sprintf("You run %d active campaigns (%v): send campaign_id (in the body, or ?campaign_id=N).", len(ids), ids)
 }
 
-// gmCampaignScan is gmCampaignFor for the handlers that look the campaign up themselves; it returns an error when there is none.
-func gmCampaignScan(agentID int, r *http.Request, out *int) error {
-	id, code, msg := gmCampaignFor(agentID, r)
-	if code != "" {
-		return fmt.Errorf("%s: %s", code, msg)
+// writeGMCampaignProblem answers a GM command whose campaign couldn't be picked.
+func writeGMCampaignProblem(w http.ResponseWriter, code, msg string) {
+	status := http.StatusForbidden
+	if code == "campaign_id_required" {
+		status = http.StatusBadRequest
 	}
-	*out = id
-	return nil
+	writeJSONStatus(w, status, map[string]interface{}{"error": code, "message": msg})
 }
 
-// gmActiveCampaign finds the campaign of the GM making the request (gmCampaignFor) and writes the error reply when there is none.
-func gmActiveCampaign(w http.ResponseWriter, r *http.Request) (int, bool) {
-	w.Header().Set("Content-Type", "application/json")
+// gmRead reads a GM command: who sends it, its body (readRequest) and the campaign it is for. campaign_id may be in the body
+// or the query (it picks among the GM's campaigns; gmCampaignFor), so every GM command takes it and none needs to declare it.
+// On a problem it answers and returns false.
+func gmRead(w http.ResponseWriter, r *http.Request, v interface{}, opts ...bodyOpt) (agentID, campaignID int, ok bool) {
 	agentID, err := getAgentFromAuth(r)
 	if err != nil {
+		w.Header().Set("Content-Type", "application/json")
 		writeAuthError(w, err)
+		return 0, 0, false
+	}
+	campaignID, ok = gmReadAs(w, r, agentID, v, opts...)
+	return agentID, campaignID, ok
+}
+
+// gmReadAs is gmRead for a handler that has already found the agent. With campaignFromTarget it returns 0 when the request
+// names no campaign.
+func gmReadAs(w http.ResponseWriter, r *http.Request, agentID int, v interface{}, opts ...bodyOpt) (int, bool) {
+	var bodyCampaign int
+	if !readRequest(w, r, v, append(opts, alsoField("campaign_id", &bodyCampaign))...) {
 		return 0, false
 	}
-	id, code, msg := gmCampaignFor(agentID, r)
+	want, _ := strconv.Atoi(r.URL.Query().Get("campaign_id"))
+	if want > 0 && bodyCampaign > 0 && want != bodyCampaign {
+		writeJSONStatus(w, http.StatusBadRequest, map[string]interface{}{"error": "id_mismatch",
+			"message": fmt.Sprintf("campaign_id is %d in the body and %d in the query: send one. Nothing was changed.", bodyCampaign, want)})
+		return 0, false
+	}
+	if want == 0 {
+		want = bodyCampaign
+	}
+	var spec bodySpec
+	for _, o := range opts {
+		o(&spec)
+	}
+	if spec.byTarget && want == 0 {
+		return 0, true // the handler uses its target's campaign
+	}
+	id, code, msg := gmCampaignPick(agentID, want)
 	if code != "" {
-		status := http.StatusForbidden
-		if code == "campaign_id_required" {
-			status = http.StatusBadRequest
-		}
-		writeJSONStatus(w, status, map[string]interface{}{"error": code, "message": msg})
+		writeGMCampaignProblem(w, code, msg)
 		return 0, false
 	}
 	return id, true
@@ -875,13 +888,9 @@ func handleGMLegendaryAction(w http.ResponseWriter, r *http.Request) {
 		writeJSONStatus(w, http.StatusMethodNotAllowed, map[string]interface{}{"error": "method_not_allowed"})
 		return
 	}
-	lobbyID, ok := gmActiveCampaign(w, r)
-	if !ok {
-		return
-	}
 	var req legendaryRequest
-	if json.NewDecoder(http.MaxBytesReader(w, r.Body, 16*1024)).Decode(&req) != nil {
-		writeJSONStatus(w, http.StatusBadRequest, map[string]interface{}{"error": "invalid_json"})
+	_, lobbyID, ok := gmRead(w, r, &req)
+	if !ok {
 		return
 	}
 	window, endingID := lastTurnEnded(lobbyID)
@@ -909,14 +918,13 @@ func handleGMLegendaryResistance(w http.ResponseWriter, r *http.Request) {
 		writeJSONStatus(w, http.StatusMethodNotAllowed, map[string]interface{}{"error": "method_not_allowed"})
 		return
 	}
-	lobbyID, ok := gmActiveCampaign(w, r)
-	if !ok {
-		return
-	}
 	var req struct {
 		CombatantID int `json:"combatant_id"`
 	}
-	json.NewDecoder(http.MaxBytesReader(w, r.Body, 4*1024)).Decode(&req)
+	_, lobbyID, ok := gmRead(w, r, &req, optionalBody())
+	if !ok {
+		return
+	}
 	e, meta, found := monsterCombatant(lobbyID, req.CombatantID)
 	if !found {
 		writeJSONStatus(w, http.StatusBadRequest, map[string]interface{}{"error": "combatant_not_found"})

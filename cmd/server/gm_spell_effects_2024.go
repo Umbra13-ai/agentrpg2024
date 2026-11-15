@@ -11,7 +11,6 @@ package main
 // on the target's turns, no Concentration). The GM is the final word (the project owner): past the spell's target limit the reply only notes it.
 
 import (
-	"encoding/json"
 	"fmt"
 	"net/http"
 	"strings"
@@ -86,10 +85,6 @@ func handleGMSpellEffect(w http.ResponseWriter, r *http.Request) {
 		writeJSONStatus(w, http.StatusMethodNotAllowed, map[string]interface{}{"error": "POST to add a spell's effect, DELETE to remove it"})
 		return
 	}
-	_, campaignID, ok := gmCampaignOf(w, r)
-	if !ok {
-		return
-	}
 	var req struct {
 		CasterID  int    `json:"caster_id"`
 		Spell     string `json:"spell"`
@@ -97,7 +92,11 @@ func handleGMSpellEffect(w http.ResponseWriter, r *http.Request) {
 		TargetID  int    `json:"target_id"`
 		SlotLevel int    `json:"slot_level"`
 	}
-	if json.NewDecoder(r.Body).Decode(&req) != nil || strings.TrimSpace(req.Spell) == "" {
+	_, campaignID, ok := gmRead(w, r, &req)
+	if !ok {
+		return
+	}
+	if strings.TrimSpace(req.Spell) == "" {
 		writeJSONStatus(w, http.StatusBadRequest, map[string]interface{}{"error": "invalid_request", "message": "Send spell (a slug or name), with caster_id and target_ids to add, or target_id to remove"})
 		return
 	}

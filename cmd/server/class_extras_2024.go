@@ -351,7 +351,7 @@ func handleMemorizeSpell(w http.ResponseWriter, r *http.Request) {
 		Replace     string `json:"replace"`
 		With        string `json:"with"`
 	}
-	if !decodeRequest(w, r, &req, false) {
+	if !readRequest(w, r, &req) {
 		return
 	}
 	if req.CharacterID == 0 {
@@ -424,7 +424,7 @@ func handleSpellMastery(w http.ResponseWriter, r *http.Request) {
 	} else if r.Method != http.MethodPost {
 		writeJSONStatus(w, http.StatusMethodNotAllowed, map[string]interface{}{"error": "method_not_allowed", "message": "GET to see Spell Mastery, POST {\"character_id\", \"spells\"} to choose."})
 		return
-	} else if !decodeRequest(w, r, &req, false) {
+	} else if !readRequest(w, r, &req) {
 		return
 	}
 	if req.CharacterID == 0 {

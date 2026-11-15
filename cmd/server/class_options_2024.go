@@ -6,7 +6,6 @@ package main
 import (
 	"encoding/json"
 	"fmt"
-	"io"
 	"net/http"
 	"sort"
 	"strings"
@@ -20,6 +19,20 @@ func classOptionFieldNames() []string {
 	for _, d := range choiceDefs {
 		if d.set != nil && !containsStr(out, d.field) {
 			out = append(out, d.field)
+		}
+	}
+	return out
+}
+
+// classOptionAliases: the other names a class choice can be sent under: each one-option pick's key and feature name.
+func classOptionAliases() map[string]string {
+	out := map[string]string{}
+	for i := range featurePicks {
+		p := &featurePicks[i]
+		for _, a := range []string{p.key, p.feature} {
+			if a != "" && a != p.sendAs() {
+				out[a] = p.sendAs()
+			}
 		}
 	}
 	return out
@@ -70,28 +83,13 @@ func handleCharacterClassOptions(w http.ResponseWriter, r *http.Request, charID 
 		writeJSONStatus(w, http.StatusNotFound, map[string]interface{}{"error": "character_not_found"})
 		return
 	}
-	raw, _ := io.ReadAll(io.LimitReader(r.Body, 64*1024))
+	// a field that isn't a class choice is refused, and character_id must be the path's (request_body_2024.go)
 	var sent map[string]json.RawMessage
-	if err := json.Unmarshal(raw, &sent); err != nil {
-		writeJSONStatus(w, http.StatusBadRequest, map[string]interface{}{"error": "invalid_json", "message": "Send a JSON object with one class choice. Nothing was changed."})
+	if !readRequest(w, r, &sent, onlyFields(classOptionFieldNames()...), fieldAliases(classOptionAliases())) {
 		return
 	}
 	var fields []string
-	for k, v := range sent {
-		if k == "character_id" { // must name this character, not another one
-			var bodyID int
-			if json.Unmarshal(v, &bodyID) != nil || (bodyID != 0 && bodyID != charID) {
-				writeJSONStatus(w, http.StatusBadRequest, map[string]interface{}{"error": "character_id_mismatch",
-					"message": fmt.Sprintf("character_id in the body (%s) is not character %d in the address. Nothing was changed.", strings.TrimSpace(string(v)), charID)})
-				return
-			}
-			continue
-		}
-		if classOptionFor(c, k) == nil {
-			writeJSONStatus(w, http.StatusBadRequest, map[string]interface{}{"error": "unknown_field",
-				"message": fmt.Sprintf("Unknown field %q. Nothing was changed.", k), "valid_fields": classOptionFieldNames()})
-			return
-		}
+	for k := range sent {
 		fields = append(fields, k)
 	}
 	sort.Strings(fields)

@@ -194,7 +194,10 @@ func startRecovery(w http.ResponseWriter, r *http.Request) {
 	var req struct {
 		Email string `json:"email"`
 	}
-	if json.NewDecoder(http.MaxBytesReader(w, r.Body, 4096)).Decode(&req) != nil || strings.TrimSpace(req.Email) == "" {
+	if !readRequest(w, r, &req) {
+		return
+	}
+	if strings.TrimSpace(req.Email) == "" {
 		writeJSONStatus(w, http.StatusBadRequest, map[string]interface{}{"error": "email_required"})
 		return
 	}
@@ -238,7 +241,10 @@ func handleRecoverConfirm(w http.ResponseWriter, r *http.Request) {
 		NewPassword   string `json:"new_password"`
 		KeepOldTokens bool   `json:"keep_old_tokens"`
 	}
-	if json.NewDecoder(http.MaxBytesReader(w, r.Body, 4096)).Decode(&req) != nil || req.Email == "" || req.Code == "" {
+	if !readRequest(w, r, &req) {
+		return
+	}
+	if req.Email == "" || req.Code == "" {
 		writeJSONStatus(w, http.StatusBadRequest, map[string]interface{}{"error": "email_and_code_required"})
 		return
 	}
@@ -316,7 +322,9 @@ func handleAccountEmail(w http.ResponseWriter, r *http.Request) {
 	var req struct {
 		Email string `json:"email"`
 	}
-	json.NewDecoder(http.MaxBytesReader(w, r.Body, 4096)).Decode(&req)
+	if !readRequest(w, r, &req, optionalBody()) {
+		return
+	}
 	email, ok := validEmail(req.Email)
 	if !ok {
 		writeJSONStatus(w, http.StatusBadRequest, map[string]interface{}{"error": "invalid_email", "message": "Send one email address. " + agentMailHint})
@@ -388,7 +396,9 @@ func handleAdminIssueToken(w http.ResponseWriter, r *http.Request) {
 		Name      string `json:"name"`
 		RevokeOld *bool  `json:"revoke_old"`
 	}
-	json.NewDecoder(http.MaxBytesReader(w, r.Body, 4096)).Decode(&req)
+	if !readRequest(w, r, &req, optionalBody()) {
+		return
+	}
 	id, name, ok := adminAccount(req.AgentID, req.Name)
 	if !ok {
 		writeJSONStatus(w, http.StatusNotFound, map[string]interface{}{"error": "agent_not_found"})
@@ -434,7 +444,9 @@ func handleAdminModerator(w http.ResponseWriter, r *http.Request) {
 		Name      string `json:"name"`
 		Moderator *bool  `json:"moderator"`
 	}
-	json.NewDecoder(http.MaxBytesReader(w, r.Body, 4096)).Decode(&req)
+	if !readRequest(w, r, &req, optionalBody()) {
+		return
+	}
 	if req.Moderator == nil {
 		writeJSONStatus(w, http.StatusBadRequest, map[string]interface{}{"error": "moderator_required", "message": "Send \"moderator\": true or false."})
 		return

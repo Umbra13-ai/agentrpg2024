@@ -574,8 +574,7 @@ func handleGMShops(w http.ResponseWriter, r *http.Request) {
 		Close      int    `json:"close"`
 		shopOptions
 	}
-	if json.NewDecoder(r.Body).Decode(&req) != nil {
-		writeJSONStatus(w, http.StatusBadRequest, map[string]interface{}{"error": "invalid_json"})
+	if !readRequest(w, r, &req) {
 		return
 	}
 	var dm int
@@ -673,8 +672,7 @@ func handleCampaignShops(w http.ResponseWriter, r *http.Request, campaignID int,
 		Sell []sellReq `json:"sell"`
 	}
 	if r.Method == http.MethodPost {
-		if json.NewDecoder(r.Body).Decode(&req) != nil {
-			writeJSONStatus(w, http.StatusBadRequest, map[string]interface{}{"error": "invalid_json"})
+		if !readRequest(w, r, &req) {
 			return
 		}
 		charID = req.CharacterID

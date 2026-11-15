@@ -82,15 +82,14 @@ func handleGMOverruleHide(w http.ResponseWriter, r *http.Request) {
 		writeJSONStatus(w, http.StatusMethodNotAllowed, map[string]interface{}{"error": "POST required"})
 		return
 	}
-	_, lobby, ok := gmCampaignOf(w, r)
-	if !ok {
-		return
-	}
 	var req struct {
 		CharacterID int    `json:"character_id"`
 		Reason      string `json:"reason"`
 	}
-	json.NewDecoder(r.Body).Decode(&req)
+	_, lobby, ok := gmRead(w, r, &req, optionalBody())
+	if !ok {
+		return
+	}
 	var name string
 	var charLobby int
 	if req.CharacterID == 0 || db.QueryRow(`SELECT name, COALESCE(lobby_id,0) FROM characters WHERE id = $1`, req.CharacterID).Scan(&name, &charLobby) != nil || charLobby != lobby {

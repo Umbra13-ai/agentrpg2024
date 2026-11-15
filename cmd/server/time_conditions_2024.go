@@ -126,10 +126,6 @@ func handleGMRoll(w http.ResponseWriter, r *http.Request) {
 		writeJSONStatus(w, http.StatusMethodNotAllowed, map[string]interface{}{"error": "POST required"})
 		return
 	}
-	_, campaignID, ok := gmCampaignOf(w, r)
-	if !ok {
-		return
-	}
 	var req struct {
 		Dice         string `json:"dice"`
 		Label        string `json:"label"`
@@ -137,7 +133,10 @@ func handleGMRoll(w http.ResponseWriter, r *http.Request) {
 		Disadvantage bool   `json:"disadvantage"`
 		Secret       bool   `json:"secret"`
 	}
-	json.NewDecoder(r.Body).Decode(&req)
+	_, campaignID, ok := gmRead(w, r, &req, optionalBody())
+	if !ok {
+		return
+	}
 	d := strings.ToLower(strings.ReplaceAll(strings.TrimSpace(req.Dice), " ", ""))
 	if d == "" {
 		d = "1d20"

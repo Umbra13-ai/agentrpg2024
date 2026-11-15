@@ -33,7 +33,9 @@ func handleCopySpell2024(w http.ResponseWriter, r *http.Request) {
 		CharacterID int    `json:"character_id"`
 		Spell       string `json:"spell"`
 	}
-	json.NewDecoder(r.Body).Decode(&req)
+	if !readRequest(w, r, &req, optionalBody()) {
+		return
+	}
 	if _, ok := playerOwns(r, req.CharacterID); !ok {
 		writeJSONStatus(w, 403, map[string]interface{}{"error": "not_your_character"})
 		return

@@ -42,9 +42,7 @@ func handleGMPreserveLife(w http.ResponseWriter, r *http.Request) {
 			Amount   int `json:"amount"`    // HP to restore to this target
 		} `json:"healing"` // Distribution of healing
 	}
-	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
-		w.WriteHeader(http.StatusBadRequest)
-		json.NewEncoder(w).Encode(map[string]interface{}{"error": "invalid_json"})
+	if _, ok := gmReadAs(w, r, agentID, &req, campaignFromTarget()); !ok {
 		return
 	}
 
@@ -314,9 +312,7 @@ func handleGMSacredWeapon(w http.ResponseWriter, r *http.Request) {
 	var req struct {
 		PaladinID int `json:"paladin_id"` // Paladin character ID
 	}
-	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
-		w.WriteHeader(http.StatusBadRequest)
-		json.NewEncoder(w).Encode(map[string]interface{}{"error": "invalid_json"})
+	if _, ok := gmReadAs(w, r, agentID, &req, campaignFromTarget()); !ok {
 		return
 	}
 
@@ -498,9 +494,7 @@ func handleGMCuttingWords(w http.ResponseWriter, r *http.Request) {
 		EnemyRoll int    `json:"enemy_roll"`
 		RollType  string `json:"roll_type"` // "attack", "ability", or "damage"
 	}
-	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
-		w.WriteHeader(http.StatusBadRequest)
-		json.NewEncoder(w).Encode(map[string]interface{}{"error": "invalid_json"})
+	if _, ok := gmReadAs(w, r, agentID, &req, campaignFromTarget()); !ok {
 		return
 	}
 
@@ -684,9 +678,7 @@ func handleGMDarkOnesLuck(w http.ResponseWriter, r *http.Request) {
 		OriginalRoll int    `json:"original_roll"`
 		RollType     string `json:"roll_type"` // "ability" or "saving"
 	}
-	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
-		w.WriteHeader(http.StatusBadRequest)
-		json.NewEncoder(w).Encode(map[string]interface{}{"error": "invalid_json"})
+	if _, ok := gmReadAs(w, r, agentID, &req, campaignFromTarget()); !ok {
 		return
 	}
 
@@ -877,9 +869,7 @@ func handleGMIndomitable(w http.ResponseWriter, r *http.Request) {
 		Ability     string `json:"ability"` // str, dex, con, int, wis, cha
 		DC          int    `json:"dc"`
 	}
-	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
-		w.WriteHeader(http.StatusBadRequest)
-		json.NewEncoder(w).Encode(map[string]interface{}{"error": "invalid_json"})
+	if _, ok := gmReadAs(w, r, agentID, &req, campaignFromTarget()); !ok {
 		return
 	}
 
@@ -1144,9 +1134,7 @@ func handleGMStrokeOfLuck(w http.ResponseWriter, r *http.Request) {
 		CharacterID int    `json:"character_id"`
 		Mode        string `json:"mode"` // "attack" or "ability_check"
 	}
-	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
-		w.WriteHeader(http.StatusBadRequest)
-		json.NewEncoder(w).Encode(map[string]interface{}{"error": "invalid_json"})
+	if _, ok := gmReadAs(w, r, agentID, &req, campaignFromTarget()); !ok {
 		return
 	}
 

@@ -227,26 +227,6 @@ func conditionsDetail(lobbyID, charID, speed int, gm bool) []map[string]interfac
 	return out
 }
 
-func gmCampaignOf(w http.ResponseWriter, r *http.Request) (agentID, campaignID int, ok bool) {
-	agentID, err := getAgentFromAuth(r)
-	if err != nil {
-		w.Header().Set("Content-Type", "application/json")
-		writeAuthError(w, err)
-		return 0, 0, false
-	}
-	id, code, msg := gmCampaignFor(agentID, r) // ?campaign_id=N when the GM runs several campaigns
-	if code != "" {
-		status := http.StatusForbidden
-		if code == "campaign_id_required" {
-			status = http.StatusBadRequest
-		}
-		writeJSONStatus(w, status, map[string]interface{}{"error": code, "message": msg})
-		return 0, 0, false
-	}
-	campaignID = id
-	return agentID, campaignID, true
-}
-
 // monsterInCombat says whether a negative target id is a combatant of the lobby's combat.
 func monsterInCombat(lobbyID, id int) bool {
 	var raw []byte
@@ -325,6 +305,25 @@ func gmClearConditions(campaignID, targetID int, cond string) []string {
 	return removed
 }
 
+// gmConditionRequest: the body of POST/DELETE /api/gm/conditions, and of /api/characters/{id}/conditions (target_id from the path).
+type gmConditionRequest struct {
+	TargetID         int               `json:"target_id"`
+	Condition        string            `json:"condition"`
+	Source           string            `json:"source"`
+	Escapes          []conditionEscape `json:"escapes"`
+	EscapeDC         int               `json:"escape_dc"`
+	DurationRounds   int               `json:"duration_rounds"`
+	Notes            string            `json:"notes"`
+	RecordID         int               `json:"record_id"`
+	EndSave          *conditionSave    `json:"end_save"`
+	FromMagicalSleep bool              `json:"from_magical_sleep"`
+	FromElemental    bool              `json:"from_elemental"`
+	FromFey          bool              `json:"from_fey"`
+	Level            *int              `json:"level"`     // exhaustion: the level to set (0-6)
+	CasterID         int               `json:"caster_id"` // a spell's state (blessed): who cast it, when more than one has it in play
+	All              bool              `json:"all"`       // DELETE: every condition of the target
+}
+
 // handleGMConditions: POST /api/gm/conditions applies a condition (exhaustion: one level, or "level" sets it); DELETE removes one by
 // record_id, or by target_id with a condition name, or every condition with "all" (F230).
 func handleGMConditions(w http.ResponseWriter, r *http.Request) {
@@ -332,34 +331,14 @@ func handleGMConditions(w http.ResponseWriter, r *http.Request) {
 		writeJSONStatus(w, http.StatusMethodNotAllowed, map[string]interface{}{"error": "POST to apply a condition, DELETE to remove one"})
 		return
 	}
-	agentID, campaignID, ok := gmCampaignOf(w, r)
+	var req gmConditionRequest
+	agentID, campaignID, ok := gmRead(w, r, &req)
 	if !ok {
-		return
-	}
-	var req struct {
-		TargetID         int               `json:"target_id"`
-		Condition        string            `json:"condition"`
-		Source           string            `json:"source"`
-		Escapes          []conditionEscape `json:"escapes"`
-		EscapeDC         int               `json:"escape_dc"`
-		DurationRounds   int               `json:"duration_rounds"`
-		Notes            string            `json:"notes"`
-		RecordID         int               `json:"record_id"`
-		EndSave          *conditionSave    `json:"end_save"`
-		FromMagicalSleep bool              `json:"from_magical_sleep"`
-		FromElemental    bool              `json:"from_elemental"`
-		FromFey          bool              `json:"from_fey"`
-		Level            *int              `json:"level"` // exhaustion: the level to set (0-6)
-		CasterID         int               `json:"caster_id"` // a spell's state (blessed): who cast it, when more than one has it in play
-		All              bool              `json:"all"`   // DELETE: every condition of the target
-	}
-	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
-		writeJSONStatus(w, http.StatusBadRequest, map[string]interface{}{"error": "invalid_json"})
 		return
 	}
 	if slug, isSpell := spellConditionWords[strings.ToLower(strings.TrimSpace(req.Condition))]; isSpell && req.RecordID == 0 {
 		// Blessed, Baned, Hasted ...: the state a spell sets; it lives with the spell (and ends with its Concentration)
-		body, _ := json.Marshal(map[string]interface{}{"caster_id": req.CasterID, "spell": slug, "target_ids": []int{req.TargetID}})
+		body, _ := json.Marshal(map[string]interface{}{"caster_id": req.CasterID, "spell": slug, "target_ids": []int{req.TargetID}, "campaign_id": campaignID})
 		r2 := r.Clone(r.Context())
 		r2.Body = io.NopCloser(bytes.NewReader(body))
 		handleGMSpellEffect(w, r2)
@@ -590,8 +569,7 @@ func handleConditionEscape(w http.ResponseWriter, r *http.Request) {
 		RecordID    int `json:"record_id"`
 		Escape      int `json:"escape"`
 	}
-	if json.NewDecoder(r.Body).Decode(&req) != nil {
-		writeJSONStatus(w, http.StatusBadRequest, map[string]interface{}{"error": "invalid_json"})
+	if !readRequest(w, r, &req) {
 		return
 	}
 	var owner, lobby, level, str, dex, con, intl, wis, cha int
@@ -739,19 +717,31 @@ func handleCharacterConditions(w http.ResponseWriter, r *http.Request, charID in
 			"message": "Only the GM of this character's campaign applies or removes conditions. To end one, use POST /api/conditions/escape (see GET /api/conditions/active)."})
 		return
 	}
-	body := map[string]interface{}{}
-	json.NewDecoder(r.Body).Decode(&body)
-	if r.Method == http.MethodDelete {
-		cond, _ := body["condition"].(string)
-		all, _ := body["all"].(bool)
-		gmDeleteByName(w, lobby, charID, cond, all) // F230: by name, exhaustion one level, or "all"
+	// the same request as POST /api/gm/conditions, for this character (target_id is the path's)
+	var req gmConditionRequest
+	if !readRequest(w, r, &req, optionalBody()) {
 		return
 	}
-	body["target_id"] = charID
-	b, _ := json.Marshal(body)
-	r.Body = io.NopCloser(bytes.NewReader(b))
-	r.Method = http.MethodPost
-	handleGMConditions(w, r)
+	if req.TargetID != 0 && req.TargetID != charID {
+		writeJSONStatus(w, http.StatusBadRequest, map[string]interface{}{"error": "id_mismatch",
+			"message": fmt.Sprintf("target_id %d is not the character in the path (%d): leave target_id out. Nothing was changed.", req.TargetID, charID)})
+		return
+	}
+	if r.Method == http.MethodDelete && req.RecordID == 0 {
+		gmDeleteByName(w, lobby, charID, req.Condition, req.All) // F230: by name, exhaustion one level, or "all"
+		return
+	}
+	req.TargetID = charID
+	b, _ := json.Marshal(struct {
+		gmConditionRequest
+		CampaignID int `json:"campaign_id"`
+	}{req, lobby})
+	r2 := r.Clone(r.Context())
+	r2.Body = io.NopCloser(bytes.NewReader(b))
+	if r.Method != http.MethodDelete {
+		r2.Method = http.MethodPost
+	}
+	handleGMConditions(w, r2)
 }
 
 // clearMonsterConditions drops the condition records of monsters (negative ids) when a fight starts or ends.

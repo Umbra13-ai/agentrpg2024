@@ -181,7 +181,12 @@ func thrownFlask(charID int, description string) (string, bool) {
 // @Param request body object{campaign_id=int,target_id=int,burning=bool,source=string} true "Target"
 // @Router /gm/burning [post]
 func handleGMBurning(w http.ResponseWriter, r *http.Request) {
-	_, lobby, ok := gmCampaignOf(w, r)
+	var req struct {
+		TargetID int    `json:"target_id"`
+		Burning  *bool  `json:"burning"`
+		Source   string `json:"source"`
+	}
+	_, lobby, ok := gmRead(w, r, &req, optionalBody())
 	if !ok {
 		return
 	}
@@ -202,12 +207,6 @@ func handleGMBurning(w http.ResponseWriter, r *http.Request) {
 		writeJSONStatus(w, 200, map[string]interface{}{"burning": list})
 		return
 	}
-	var req struct {
-		TargetID int    `json:"target_id"`
-		Burning  *bool  `json:"burning"`
-		Source   string `json:"source"`
-	}
-	json.NewDecoder(r.Body).Decode(&req)
 	if req.TargetID == 0 || req.Burning == nil {
 		dmBadRequest(w, "target_and_burning_required", "Send target_id and burning (true to set it on fire, false to put it out).")
 		return

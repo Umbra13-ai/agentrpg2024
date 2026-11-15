@@ -10,11 +10,9 @@ package main
 // Kinds: turn, resources, items, rest, prep, after_battle, gear (gear_reminders_2024.go).
 
 import (
-	"bytes"
 	"database/sql"
 	"encoding/json"
 	"fmt"
-	"io"
 	"net/http"
 	"net/http/httptest"
 	"sort"
@@ -389,11 +387,7 @@ func reactionOptions(charID int, class string, level int) []string {
 // withTurnReminders adds turn_left to a successful action reply while it is still the character's turn.
 func withTurnReminders(h http.HandlerFunc) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
-		var body []byte
-		if r.Body != nil {
-			body, _ = io.ReadAll(io.LimitReader(r.Body, 1<<20))
-			r.Body = io.NopCloser(bytes.NewReader(body))
-		}
+		body := peekBody(r) // the action handler reads and checks the body
 		augmentJSON(w, func(rw http.ResponseWriter) { h(rw, r) }, func(m map[string]interface{}) {
 			var req struct {
 				CharacterID int `json:"character_id"`
@@ -655,16 +649,11 @@ func withRestReminders(h func(http.ResponseWriter, *http.Request, int), forceSho
 			h(w, r, charID)
 			return
 		}
-		var body []byte
-		if r.Body != nil {
-			body, _ = io.ReadAll(io.LimitReader(r.Body, 1<<16))
-			r.Body = io.NopCloser(bytes.NewReader(body))
-		}
 		var kind struct {
 			Type string `json:"type"`
 		}
-		json.Unmarshal(body, &kind)
-		long := !forceShort && !strings.EqualFold(strings.TrimSpace(kind.Type), "short")
+		json.Unmarshal(peekBody(r), &kind) // the rest handler reads and checks the body
+		long := !forceShort && restKind(kind.Type) != "short"
 		augmentJSON(w, func(rw http.ResponseWriter) { h(rw, r, charID) }, func(m map[string]interface{}) {
 			if rr := restReminders(charID, long); rr != nil {
 				m["reminders"] = rr
@@ -737,8 +726,7 @@ func handleReminders(w http.ResponseWriter, r *http.Request) {
 	case http.MethodGet:
 		req.CharacterID, _ = strconv.Atoi(r.URL.Query().Get("character_id"))
 	case http.MethodPost:
-		if json.NewDecoder(r.Body).Decode(&req) != nil {
-			writeJSONStatus(w, http.StatusBadRequest, map[string]interface{}{"error": "invalid_json"})
+		if !readRequest(w, r, &req) {
 			return
 		}
 	default:

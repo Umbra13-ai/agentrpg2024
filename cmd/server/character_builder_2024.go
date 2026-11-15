@@ -20,7 +20,6 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
-	"io"
 	"net/http"
 	"net/http/httptest"
 	"regexp"
@@ -2284,33 +2283,6 @@ func saveDraft(id int, body map[string]interface{}) error {
 	return err
 }
 
-// readBuilderBody: the request's JSON object (no body is an empty one).
-func readBuilderBody(r *http.Request) (map[string]interface{}, error) {
-	raw, err := io.ReadAll(io.LimitReader(r.Body, 1<<20))
-	if err != nil {
-		return nil, err
-	}
-	if strings.TrimSpace(string(raw)) == "" {
-		return map[string]interface{}{}, nil
-	}
-	dec := json.NewDecoder(bytes.NewReader(raw))
-	var v interface{}
-	if err := dec.Decode(&v); err != nil {
-		return nil, err
-	}
-	if dec.More() {
-		return nil, fmt.Errorf("there is more after the JSON object")
-	}
-	if v == nil {
-		return map[string]interface{}{}, nil
-	}
-	m, ok := v.(map[string]interface{})
-	if !ok {
-		return nil, fmt.Errorf("the body must be a JSON object, like {\"class\": \"fighter\"}")
-	}
-	return m, nil
-}
-
 var builderStepKeys = []string{"class", "class_choices", "background", "species", "ability_scores", "details", "backstory"}
 
 // joinProblems: problems as one sentence ("invalid_divine_order: Only Clerics choose a divine_order").
@@ -2827,6 +2799,9 @@ func handleCharacterBuilder(w http.ResponseWriter, r *http.Request) {
 		writeJSONStatus(w, 200, builderView(id, body, charID, agentID))
 		return
 	case http.MethodDelete:
+		if !noFields(w, r) {
+			return
+		}
 		if _, err := db.Exec(`DELETE FROM character_drafts WHERE id = $1 AND agent_id = $2`, id, agentID); err != nil {
 			writeJSONStatus(w, 500, map[string]interface{}{"error": "could_not_delete", "message": "The draft was not deleted. Try again."})
 			return
@@ -2846,15 +2821,14 @@ func handleCharacterBuilder(w http.ResponseWriter, r *http.Request) {
 		writeJSONStatus(w, http.StatusBadRequest, map[string]interface{}{"error": "already_created", "message": fmt.Sprintf("This draft made character %d. Use GET /api/characters/%d/setup.", *charID, *charID)})
 		return
 	}
-	upd, perr := readBuilderBody(r)
-	if perr != nil {
-		writeJSONStatus(w, http.StatusBadRequest, map[string]interface{}{"error": "invalid_json", "message": "Nothing was saved: " + perr.Error()})
+	upd := map[string]interface{}{} // the builder checks each field itself, with hints (unknownBuilderFields)
+	if !readRequest(w, r, &upd, optionalBody(), keysCheckedByHandler()) {
 		return
 	}
 	o := applyBuilderUpdate(body, upd, agentID)
 	if len(o.unknown) > 0 { // a typo must not look like a saved choice (Nov 13 tester)
 		writeJSONStatus(w, http.StatusBadRequest, map[string]interface{}{"error": "unknown_field", "message": strings.Join(o.unknown, "; ") + ". Nothing was saved: send the request again with the right field names.",
-			"nothing_saved": true, "draft": builderView(id, body, nil, agentID)})
+			"nothing_saved": true, "draft": builderView(id, body, nil, agentID), "fields": builderFieldNames(), "unknown": keysNotIn(upd, builderFieldNames())})
 		return
 	}
 	if o.errCode != "" {
@@ -2915,15 +2889,15 @@ func listBuilderDrafts(w http.ResponseWriter, r *http.Request, agentID int) {
 
 // startBuilderDraft: a new draft, with the fields sent checked as an update's are (Nov 14 audit: they were stored unchecked).
 func startBuilderDraft(w http.ResponseWriter, r *http.Request, agentID int) {
-	upd, perr := readBuilderBody(r)
-	if perr != nil {
-		writeJSONStatus(w, http.StatusBadRequest, map[string]interface{}{"error": "invalid_json", "message": "No draft was started: " + perr.Error()})
+	upd := map[string]interface{}{} // the builder checks each field itself, with hints (unknownBuilderFields)
+	if !readRequest(w, r, &upd, optionalBody(), keysCheckedByHandler()) {
 		return
 	}
 	body := map[string]interface{}{}
 	o := applyBuilderUpdate(body, upd, agentID)
 	if len(o.unknown) > 0 {
-		writeJSONStatus(w, http.StatusBadRequest, map[string]interface{}{"error": "unknown_field", "message": strings.Join(o.unknown, "; ") + ". No draft was started: send the request again with the right field names.", "nothing_saved": true})
+		writeJSONStatus(w, http.StatusBadRequest, map[string]interface{}{"error": "unknown_field", "message": strings.Join(o.unknown, "; ") + ". No draft was started: send the request again with the right field names.", "nothing_saved": true,
+			"fields": builderFieldNames(), "unknown": keysNotIn(upd, builderFieldNames())})
 		return
 	}
 	if o.errCode != "" {
@@ -2960,19 +2934,8 @@ func finishBuilderDraft(w http.ResponseWriter, r *http.Request, id int, body map
 			"message": fmt.Sprintf("Nothing was created: POST /api/character-builder/%d/finish creates the character. GET /api/character-builder/%d shows the draft.", id, id)})
 		return
 	}
-	extra, perr := readBuilderBody(r) // read the body: a reply sent before it is read can be reset on some systems
-	if perr != nil {
-		writeJSONStatus(w, http.StatusBadRequest, map[string]interface{}{"error": "invalid_json", "message": "Nothing was created: " + perr.Error()})
-		return
-	}
-	if len(extra) > 0 { // fields here would be ignored: say so instead (Nov 14 audit)
-		var names []string
-		for k := range extra {
-			names = append(names, k)
-		}
-		sort.Strings(names)
-		writeJSONStatus(w, http.StatusBadRequest, map[string]interface{}{"error": "finish_takes_no_fields",
-			"message": fmt.Sprintf("Nothing was created: /finish takes no fields (you sent %s). Send changes to POST /api/character-builder/%d first, then POST /api/character-builder/%d/finish with no body.", strings.Join(names, ", "), id, id)})
+	var none struct{} // /finish takes no fields (read first: a reply sent before the body is read can be reset on some systems)
+	if !readRequest(w, r, &none, optionalBody(), bodyHint(fmt.Sprintf("Send changes to POST /api/character-builder/%d first, then POST /api/character-builder/%d/finish with no body.", id, id))) {
 		return
 	}
 	if charID != nil { // finished before (a retried request): the same answer

@@ -75,6 +75,15 @@ Add to the owner, never beside it. When you give another rule one owner, add it 
   form spells and monsters are stored in; `lookupSpell` and `game.LookupSubclass`, `game.AbilityKey` and
   `game.FindTool` are built on it. Don't write another fold.
 - **The spells a character already has:** `spellsHeld` (`cmd/server/prepared_spells_2024.go`).
+- **Reading a request's body:** `readRequest` (`cmd/server/request_body_2024.go`) is the only reader. It needs one JSON
+  object (an empty body only with `optionalBody()`), reads field names with `game.Key`, refuses an unknown field (also
+  inside objects), a wrong type, malformed JSON and data after the object, takes an id that repeats the path's, and
+  answers every refusal in one shape (`unknown_field`, `wrong_type`, `invalid_json`, `body_required`, `id_mismatch`, with
+  `fields`). A map request names its fields with `onlyFields` (or `keysCheckedByHandler` where the handler explains each
+  key: creation, the builder). A GM command reads with `gmRead` / `gmReadAs`, which also take `campaign_id` and pick the
+  campaign (`gmCampaignPick`); `campaignFromTarget()` for a command that uses its target's campaign. A request that takes
+  no fields calls `noFields`; a wrapper that needs a field uses `peekBody`; a pending turn's steps are read with
+  `parseRequest` against `actionFields`, the same type `/api/action` reads. Never decode `r.Body` anywhere else.
 
 ### Before pushing
 `gofmt -l` on the files you changed, `go vet ./cmd/server ./game`, `go test ./...`, then the owner's test scripts for

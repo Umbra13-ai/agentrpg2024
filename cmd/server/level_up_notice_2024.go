@@ -7,7 +7,6 @@ package main
 // GET /api/characters/{id}/level-up-notices lists them; POST {"seen": true} marks them read.
 
 import (
-	"encoding/json"
 	"fmt"
 	"net/http"
 	"regexp"
@@ -279,7 +278,9 @@ func handleLevelUpNotices(w http.ResponseWriter, r *http.Request, charID int) {
 		var req struct {
 			Seen bool `json:"seen"`
 		}
-		json.NewDecoder(r.Body).Decode(&req)
+		if !readRequest(w, r, &req, optionalBody()) {
+			return
+		}
 		if !req.Seen {
 			writeJSONStatus(w, http.StatusBadRequest, map[string]interface{}{"error": "send_seen_true", "message": "Send {\"seen\": true} to mark your level-up notices read."})
 			return

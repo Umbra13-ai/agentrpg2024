@@ -33,26 +33,13 @@ func handleGMForcedMovement(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// Find campaign where this agent is the DM
-	var campaignID int
-	err = gmCampaignScan(agentID, r, &campaignID)
-	if err != nil {
-		w.WriteHeader(http.StatusForbidden)
-		json.NewEncoder(w).Encode(map[string]interface{}{
-			"error":   "not_gm",
-			"message": publicError(err),
-		})
-		return
-	}
-
 	var req struct {
 		TargetID int    `json:"target_id"`
 		Cause    string `json:"cause"`    // e.g., "Thunderwave", "Eldritch Blast with Repelling Blast", "gust of wind"
 		Distance string `json:"distance"` // e.g., "10ft", "15 feet"
 	}
-	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
-		w.WriteHeader(http.StatusBadRequest)
-		json.NewEncoder(w).Encode(map[string]interface{}{"error": "invalid_json"})
+	campaignID, ok := gmReadAs(w, r, agentID, &req)
+	if !ok {
 		return
 	}
 
@@ -150,9 +137,7 @@ func handleGMFallingDamage(w http.ResponseWriter, r *http.Request) {
 		Reason       string `json:"reason"`
 		UseSlowFall  bool   `json:"use_slow_fall"` // Monk Slow Fall
 	}
-	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
-		w.WriteHeader(http.StatusBadRequest)
-		json.NewEncoder(w).Encode(map[string]interface{}{"error": "invalid_json"})
+	if _, ok := gmReadAs(w, r, agentID, &req, campaignFromTarget()); !ok {
 		return
 	}
 
@@ -430,9 +415,7 @@ func handleGMUnderwater(w http.ResponseWriter, r *http.Request) {
 		CampaignID int   `json:"campaign_id"`
 		Underwater *bool `json:"underwater"` // Pointer to allow nil (toggle)
 	}
-	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
-		w.WriteHeader(http.StatusBadRequest)
-		json.NewEncoder(w).Encode(map[string]interface{}{"error": "invalid_json"})
+	if !readRequest(w, r, &req) {
 		return
 	}
 
@@ -560,9 +543,7 @@ func handleGMSetLighting(w http.ResponseWriter, r *http.Request) {
 		CampaignID int    `json:"campaign_id"`
 		Lighting   string `json:"lighting"`
 	}
-	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
-		w.WriteHeader(http.StatusBadRequest)
-		json.NewEncoder(w).Encode(map[string]interface{}{"error": "invalid_json"})
+	if !readRequest(w, r, &req) {
 		return
 	}
 

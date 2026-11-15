@@ -349,16 +349,15 @@ func handleGMGrantAdvantage(w http.ResponseWriter, r *http.Request) {
 		writeJSONStatus(w, http.StatusMethodNotAllowed, map[string]interface{}{"error": "POST required"})
 		return
 	}
-	_, lobby, ok := gmCampaignOf(w, r)
-	if !ok {
-		return
-	}
 	var req struct {
 		CharacterID int    `json:"character_id"`
 		Mode        string `json:"mode"`
 		Reason      string `json:"reason"`
 	}
-	json.NewDecoder(r.Body).Decode(&req)
+	_, lobby, ok := gmRead(w, r, &req, optionalBody())
+	if !ok {
+		return
+	}
 	if lobbyOfChar(req.CharacterID) != lobby {
 		dmBadRequest(w, "character_not_in_campaign", "That character isn't in this campaign.")
 		return

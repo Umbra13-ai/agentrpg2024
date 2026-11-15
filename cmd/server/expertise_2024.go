@@ -206,7 +206,7 @@ func handleCharacterExpertise(w http.ResponseWriter, r *http.Request, charID int
 	var req struct {
 		Skills []string `json:"skills"`
 	}
-	if !decodeRequest(w, r, &req, false) {
+	if !readRequest(w, r, &req) {
 		return
 	}
 	chosen, code, msg := game.CheckExpertise(st.levels, st.held, st.other, req.Skills, true)

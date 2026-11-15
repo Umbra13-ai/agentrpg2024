@@ -34,19 +34,6 @@ func handleGMOpportunityAttack(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// Get the GM's active campaign
-	var campaignID int
-	err = gmCampaignScan(agentID, r, &campaignID)
-
-	if err != nil {
-		w.WriteHeader(http.StatusForbidden)
-		json.NewEncoder(w).Encode(map[string]interface{}{
-			"error":   "not_gm",
-			"message": publicError(err),
-		})
-		return
-	}
-
 	var req struct {
 		AttackerID        int    `json:"attacker_id"`         // Character ID (if player) or ignored for monster
 		TargetID          int    `json:"target_id"`           // Character ID of the creature provoking
@@ -55,9 +42,8 @@ func handleGMOpportunityAttack(w http.ResponseWriter, r *http.Request) {
 		MonsterKey        string `json:"monster_key"`         // SRD slug for monster stats
 		Weapon            string `json:"weapon"`              // Optional: specific weapon to use
 	}
-	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
-		w.WriteHeader(http.StatusBadRequest)
-		json.NewEncoder(w).Encode(map[string]interface{}{"error": "invalid_json"})
+	campaignID, ok := gmReadAs(w, r, agentID, &req)
+	if !ok {
 		return
 	}
 
@@ -322,28 +308,14 @@ func handleGMRetaliation(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// Get the GM's active campaign
-	var campaignID int
-	err = gmCampaignScan(agentID, r, &campaignID)
-
-	if err != nil {
-		w.WriteHeader(http.StatusForbidden)
-		json.NewEncoder(w).Encode(map[string]interface{}{
-			"error":   "not_gm",
-			"message": publicError(err),
-		})
-		return
-	}
-
 	var req struct {
 		CharacterID        int    `json:"character_id"`         // The Berserker making the reaction attack
 		AttackerName       string `json:"attacker_name"`        // Name of attacking creature
 		AttackerMonsterKey string `json:"attacker_monster_key"` // Optional: SRD slug for AC lookup
 		Weapon             string `json:"weapon"`               // Optional: specific weapon to use
 	}
-	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
-		w.WriteHeader(http.StatusBadRequest)
-		json.NewEncoder(w).Encode(map[string]interface{}{"error": "invalid_json"})
+	campaignID, ok := gmReadAs(w, r, agentID, &req)
+	if !ok {
 		return
 	}
 
@@ -496,27 +468,13 @@ func handleGMUncannyDodge(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// Get the GM's active campaign
-	var campaignID int
-	err = gmCampaignScan(agentID, r, &campaignID)
-
-	if err != nil {
-		w.WriteHeader(http.StatusForbidden)
-		json.NewEncoder(w).Encode(map[string]interface{}{
-			"error":   "not_gm",
-			"message": publicError(err),
-		})
-		return
-	}
-
 	var req struct {
 		CharacterID  int    `json:"character_id"`  // The character using Uncanny Dodge
 		Damage       int    `json:"damage"`        // The original damage amount
 		AttackerName string `json:"attacker_name"` // Name of the attacker (for logging)
 	}
-	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
-		w.WriteHeader(http.StatusBadRequest)
-		json.NewEncoder(w).Encode(map[string]interface{}{"error": "invalid_json"})
+	campaignID, ok := gmReadAs(w, r, agentID, &req)
+	if !ok {
 		return
 	}
 
@@ -652,7 +610,9 @@ func handleGMTriggerReadied(w http.ResponseWriter, r *http.Request) {
 	var req struct {
 		CharacterID int `json:"character_id"`
 	}
-	json.NewDecoder(r.Body).Decode(&req)
+	if _, ok := gmReadAs(w, r, agentID, &req, optionalBody(), campaignFromTarget()); !ok {
+		return
+	}
 
 	// Verify agent is DM of the campaign containing this character
 	var lobbyID int

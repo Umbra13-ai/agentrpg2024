@@ -177,7 +177,7 @@ func unknownCreateFields(raw map[string]interface{}) []string {
 			msg := fmt.Sprintf("%q is not a class option: class_options takes %s", "class_options."+k, creationPickWords())
 			if h, ok := createFieldHints[strings.ToLower(k)]; ok {
 				msg += "; " + h
-			} else if c := closestName(k, creationPickNames()); c != "" {
+			} else if c := closestField(k, creationPickNames()); c != "" {
 				msg += fmt.Sprintf(" (did you mean %q?)", "class_options."+c)
 			}
 			out = append(out, msg)
@@ -186,30 +186,24 @@ func unknownCreateFields(raw map[string]interface{}) []string {
 	return out
 }
 
-func closestCreateField(s string) string {
+// createFieldNames: the fields of POST /api/characters, sorted.
+func createFieldNames() []string {
 	var names []string
 	for f := range createFields {
 		names = append(names, f)
 	}
 	sort.Strings(names) // ties go the same way every time
-	if c := closestName(s, names); c != "" {
+	return names
+}
+
+func closestCreateField(s string) string {
+	if c := closestField(s, createFieldNames()); c != "" {
 		return c
 	}
-	if c := closestName(s, creationPickNames()); c != "" {
+	if c := closestField(s, creationPickNames()); c != "" {
 		return "class_options." + c
 	}
 	return ""
-}
-
-// closestOf: the name nearest to a typo (edit distance under 4), or "".
-func closestName(s string, names []string) string {
-	best, bestD := "", 4
-	for _, f := range names {
-		if d := editDistance(strings.ToLower(s), f); d < bestD {
-			best, bestD = f, d
-		}
-	}
-	return best
 }
 
 // createTypeError says which field had the wrong kind of value.

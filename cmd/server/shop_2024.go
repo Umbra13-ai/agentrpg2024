@@ -253,8 +253,7 @@ func handleCharacterShop(w http.ResponseWriter, r *http.Request, charID int) {
 		Sell []sellReq `json:"sell"`
 	}
 	// a misspelled field (qty) is refused, not read as 1 (F17)
-	if msg := decodeStrict(r, &req, `buy [{"item", "quantity"}], sell [{"item_id", "quantity"}] or done`); msg != "" {
-		writeJSONStatus(w, http.StatusBadRequest, map[string]interface{}{"error": "invalid_request", "message": msg + " Nothing was bought or sold."})
+	if !readRequest(w, r, &req) {
 		return
 	}
 	if !req.Done && len(req.Buy) == 0 && len(req.Sell) == 0 {

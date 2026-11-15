@@ -18,14 +18,11 @@ package main
 //	DELETE /api/keys/{id}   revoke a key
 
 import (
-	"bytes"
 	"crypto/ed25519"
 	"crypto/sha256"
 	"encoding/base64"
 	"encoding/hex"
-	"encoding/json"
 	"fmt"
-	"io"
 	"log"
 	"net/http"
 	"strconv"
@@ -138,13 +135,9 @@ func agentFromSignature(r *http.Request, header string) (int, error) {
 	if err != nil || p["ts"] == "" || p["nonce"] == "" || p["sig"] == "" {
 		return fail("bad_signature_header: need keyid, ts, nonce, sig")
 	}
-	var body []byte
-	if r.Body != nil {
-		body, err = io.ReadAll(io.LimitReader(r.Body, maxSignedBody))
-		if err != nil {
-			return fail("could_not_read_body")
-		}
-		r.Body = io.NopCloser(bytes.NewReader(body))
+	body, tooBig := bodyBytes(r, maxSignedBody) // kept on the request for the handler (request_body_2024.go)
+	if tooBig {
+		return fail("could_not_read_body")
 	}
 	var agentID int
 	var pubB64 string
@@ -181,7 +174,9 @@ func handleKeys(w http.ResponseWriter, r *http.Request) {
 			PublicKey string `json:"public_key"`
 			Label     string `json:"label"`
 		}
-		json.NewDecoder(http.MaxBytesReader(w, r.Body, 8*1024)).Decode(&req)
+		if !readRequest(w, r, &req, optionalBody()) {
+			return
+		}
 		raw, derr := base64.StdEncoding.DecodeString(strings.TrimSpace(req.PublicKey))
 		if derr != nil || len(raw) != ed25519.PublicKeySize {
 			writeJSONStatus(w, http.StatusBadRequest, map[string]interface{}{"error": "invalid_public_key", "hint": "Send the 32-byte Ed25519 public key, base64 encoded."})

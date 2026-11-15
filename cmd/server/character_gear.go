@@ -40,9 +40,7 @@ func handleCharacterAttune(w http.ResponseWriter, r *http.Request) {
 		Action      string `json:"action"` // "attune" or "unattune"
 		ItemName    string `json:"item_name"`
 	}
-	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
-		w.WriteHeader(http.StatusBadRequest)
-		json.NewEncoder(w).Encode(map[string]interface{}{"error": "invalid_json"})
+	if !readRequest(w, r, &req) {
 		return
 	}
 
@@ -362,9 +360,7 @@ func handleCharacterEquipArmor(w http.ResponseWriter, r *http.Request) {
 		Armor       string `json:"armor"`  // Armor slug (e.g., "chain-mail", "leather")
 		Shield      *bool  `json:"shield"` // Optional: equip/unequip shield
 	}
-	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
-		w.WriteHeader(http.StatusBadRequest)
-		json.NewEncoder(w).Encode(map[string]interface{}{"error": "invalid_json"})
+	if !readRequest(w, r, &req) {
 		return
 	}
 
@@ -586,9 +582,7 @@ func handleCharacterUnequipArmor(w http.ResponseWriter, r *http.Request) {
 		Armor       bool `json:"armor"`  // Unequip armor
 		Shield      bool `json:"shield"` // Unequip shield
 	}
-	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
-		w.WriteHeader(http.StatusBadRequest)
-		json.NewEncoder(w).Encode(map[string]interface{}{"error": "invalid_json"})
+	if !readRequest(w, r, &req) {
 		return
 	}
 
@@ -761,9 +755,7 @@ func handleCharacterEquipWeapon(w http.ResponseWriter, r *http.Request) {
 		Slot        string `json:"slot"`        // main_hand (default) or off_hand
 		BaseWeapon  string `json:"base_weapon"` // a named magic weapon: which weapon it is ("greatsword" for a Vorpal Sword)
 	}
-	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
-		w.WriteHeader(http.StatusBadRequest)
-		json.NewEncoder(w).Encode(map[string]interface{}{"error": "invalid_json"})
+	if !readRequest(w, r, &req) {
 		return
 	}
 
@@ -1052,9 +1044,7 @@ func handleCharacterUnequipWeapon(w http.ResponseWriter, r *http.Request) {
 		Slot        string `json:"slot"` // main_hand, off_hand, or both (default)
 		Drop        bool   `json:"drop"` // If true, drop weapon instead of returning to inventory
 	}
-	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
-		w.WriteHeader(http.StatusBadRequest)
-		json.NewEncoder(w).Encode(map[string]interface{}{"error": "invalid_json"})
+	if !readRequest(w, r, &req) {
 		return
 	}
 
@@ -1204,9 +1194,7 @@ func handleCharacterMount(w http.ResponseWriter, r *http.Request) {
 		Creature    string `json:"creature"`   // slug or name of creature to mount
 		Controlled  *bool  `json:"controlled"` // nil = auto-determine based on INT
 	}
-	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
-		w.WriteHeader(http.StatusBadRequest)
-		json.NewEncoder(w).Encode(map[string]interface{}{"error": "invalid_json"})
+	if !readRequest(w, r, &req) {
 		return
 	}
 
@@ -1388,9 +1376,7 @@ func handleCharacterDismount(w http.ResponseWriter, r *http.Request) {
 		CharacterID int  `json:"character_id"`
 		Forced      bool `json:"forced"` // true = no movement cost (mount died, knocked off, etc.)
 	}
-	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
-		w.WriteHeader(http.StatusBadRequest)
-		json.NewEncoder(w).Encode(map[string]interface{}{"error": "invalid_json"})
+	if !readRequest(w, r, &req) {
 		return
 	}
 

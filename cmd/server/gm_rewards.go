@@ -64,9 +64,7 @@ func handleGMUpdateCharacter(w http.ResponseWriter, r *http.Request) {
 		Name        *string                    `json:"name"`
 		Set         map[string]json.RawMessage `json:"set"` // any field: {"gold": 500, "conditions": ["prone"]}
 	}
-	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
-		w.WriteHeader(http.StatusBadRequest)
-		json.NewEncoder(w).Encode(map[string]interface{}{"error": "invalid_json"})
+	if _, ok := gmReadAs(w, r, agentID, &req, campaignFromTarget()); !ok {
 		return
 	}
 
@@ -273,9 +271,7 @@ func handleGMAwardXP(w http.ResponseWriter, r *http.Request) {
 		Reason       string `json:"reason"`
 		AutoLevel    *bool  `json:"auto_level"` // default true; false banks the XP and the player takes the level (POST /api/characters/{id}/level-up)
 	}
-	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
-		w.WriteHeader(http.StatusBadRequest)
-		json.NewEncoder(w).Encode(map[string]interface{}{"error": "invalid_json"})
+	if _, ok := gmReadAs(w, r, agentID, &req, campaignFromTarget()); !ok {
 		return
 	}
 
@@ -473,9 +469,7 @@ func handleGMGold(w http.ResponseWriter, r *http.Request) {
 		Currency     string `json:"currency"` // cp, sp, ep, gp (default), pp
 		Reason       string `json:"reason"`
 	}
-	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
-		w.WriteHeader(http.StatusBadRequest)
-		json.NewEncoder(w).Encode(map[string]interface{}{"error": "invalid_json"})
+	if _, ok := gmReadAs(w, r, agentID, &req, campaignFromTarget()); !ok {
 		return
 	}
 
@@ -649,9 +643,7 @@ func handleGMGiveItem(w http.ResponseWriter, r *http.Request) {
 		Quantity    int                    `json:"quantity"`
 		Custom      map[string]interface{} `json:"custom"` // For non-standard items
 	}
-	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
-		w.WriteHeader(http.StatusBadRequest)
-		json.NewEncoder(w).Encode(map[string]interface{}{"error": "invalid_json"})
+	if _, ok := gmReadAs(w, r, agentID, &req, campaignFromTarget()); !ok {
 		return
 	}
 
@@ -811,26 +803,12 @@ func handleGMRecoverAmmo(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// Get the GM's active campaign
-	var campaignID int
-	err = gmCampaignScan(agentID, r, &campaignID)
-
-	if err != nil {
-		w.WriteHeader(http.StatusForbidden)
-		json.NewEncoder(w).Encode(map[string]interface{}{
-			"error":   "not_gm",
-			"message": publicError(err),
-		})
-		return
-	}
-
 	var req struct {
 		CharacterID int    `json:"character_id"`
 		AmmoType    string `json:"ammo_type"`
 	}
-	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
-		w.WriteHeader(http.StatusBadRequest)
-		json.NewEncoder(w).Encode(map[string]interface{}{"error": "invalid_json"})
+	campaignID, ok := gmReadAs(w, r, agentID, &req)
+	if !ok {
 		return
 	}
 
@@ -918,26 +896,13 @@ func handleGMInspiration(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// Find campaign where this agent is the DM
-	var campaignID int
-	err = gmCampaignScan(agentID, r, &campaignID)
-	if err != nil {
-		w.WriteHeader(http.StatusForbidden)
-		json.NewEncoder(w).Encode(map[string]interface{}{
-			"error":   "not_gm",
-			"message": publicError(err),
-		})
-		return
-	}
-
 	var req struct {
 		CharacterID int  `json:"character_id"`
 		Grant       bool `json:"grant"`   // true to grant, false to revoke
 		GiveTo      int  `json:"give_to"` // the character already has it: it goes to this player character, who lacks it (SRD: otherwise it's lost)
 	}
-	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
-		w.WriteHeader(http.StatusBadRequest)
-		json.NewEncoder(w).Encode(map[string]interface{}{"error": "invalid_json"})
+	campaignID, ok := gmReadAs(w, r, agentID, &req)
+	if !ok {
 		return
 	}
 

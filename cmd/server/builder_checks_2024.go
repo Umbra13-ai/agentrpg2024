@@ -36,24 +36,14 @@ var builderFields = map[string]bool{
 	"divine_order": true, "primal_order": true, "use_suggestion": true,
 }
 
-// closestField: the known field nearest to a typo (edit distance), or "".
-func closestField(s string) string {
-	return closestOf(s, func(yield func(string)) {
-		for f := range builderFields {
-			yield(f)
-		}
-	})
-}
-
-// closestOf: the name nearest to a typo (edit distance under 4), or "".
-func closestOf(s string, names func(func(string))) string {
-	best, bestD := "", 4
-	names(func(f string) {
-		if d := editDistance(strings.ToLower(s), f); d < bestD || d == bestD && f < best {
-			best, bestD = f, d
-		}
-	})
-	return best
+// builderFieldNames: builderFields as a sorted list.
+func builderFieldNames() []string {
+	out := make([]string, 0, len(builderFields))
+	for f := range builderFields {
+		out = append(out, f)
+	}
+	sort.Strings(out)
+	return out
 }
 
 func editDistance(a, b string) int {
@@ -100,7 +90,7 @@ func unknownBuilderFields(upd map[string]interface{}) []string {
 				msg += `: your class's spells and cantrips are chosen after creation, in GET /api/characters/{id}/setup; Magic Initiate picks go in background_feat_choices (or species_feat_choices for a Human's feat): {"cantrips": [...], "spell": "...", "spellcasting_ability": "..."}`
 			} else if h, ok := createFieldHints[nk]; ok && nk != "use_suggestion" && nk != "spellcasting_ability" { // the same true hints as POST /api/characters (round 2)
 				msg += ": " + h
-			} else if c := closestField(k); c != "" {
+			} else if c := closestField(k, builderFieldNames()); c != "" {
 				msg += fmt.Sprintf(" (did you mean %q?)", c)
 			}
 			out = append(out, msg)
@@ -739,7 +729,7 @@ func groupSubfields(upd map[string]interface{}) []string {
 				out = append(out, fmt.Sprintf("%q is not part of class_options: a subclass is chosen at level 3 (POST /api/characters/subclass)", k))
 			default:
 				msg := fmt.Sprintf("%q is not part of class_options: it takes %s", k, creationPickWords())
-				if c := closestName(k, creationPickNames()); c != "" {
+				if c := closestField(k, creationPickNames()); c != "" {
 					msg += fmt.Sprintf(" (did you mean %q?)", c)
 				}
 				out = append(out, msg)
@@ -757,11 +747,7 @@ func groupSubfields(upd map[string]interface{}) []string {
 				continue
 			}
 			msg := fmt.Sprintf("%q is not part of species_choices: it takes %s, as your species asks", k, strings.Join(speciesChoiceKeys, ", "))
-			if c := closestOf(k, func(y func(string)) {
-				for _, s := range speciesChoiceKeys {
-					y(s)
-				}
-			}); c != "" {
+			if c := closestField(k, speciesChoiceKeys); c != "" {
 				msg += fmt.Sprintf(" (did you mean %q?)", c)
 			}
 			out = append(out, msg)

@@ -94,15 +94,15 @@ func handleCharacters(w http.ResponseWriter, r *http.Request) {
 		}
 		// Every field is either used as sent or refused with the reason (Nov 14 audit: unknown, misplaced and inapplicable fields were
 		// ignored without a word, and dry_run said "Everything checks out"); every refusal has a 4xx status.
-		raw := map[string]interface{}{}
-		if err := json.NewDecoder(r.Body).Decode(&raw); err != nil {
-			writeJSONStatus(w, http.StatusBadRequest, map[string]interface{}{"error": "invalid_json", "message": "The body must be one JSON object with the creation fields. Nothing was created."})
+		raw := map[string]interface{}{} // creation checks each field itself: aliases, misplaced fields (unknownCreateFields)
+		if !readRequest(w, r, &raw, keysCheckedByHandler()) {
 			return
 		}
 		conflicts, readAs := normalizeCreateAliases(raw)
 		if bad := unknownCreateFields(raw); len(bad) > 0 {
 			writeJSONStatus(w, http.StatusBadRequest, map[string]interface{}{"error": "unknown_field", "problems": bad, "nothing_created": true,
-				"message": strings.Join(bad, "; ") + ". Nothing was created: send the request again with the right field names."})
+				"message": strings.Join(bad, "; ") + ". Nothing was created: send the request again with the right field names.",
+				"fields":  createFieldNames(), "unknown": keysNotIn(raw, createFieldNames())}) // the shared reply's fields (request_body_2024.go)
 			return
 		}
 		// wrong types named with an example that fits the request, as the builder does (round 2 re-check)

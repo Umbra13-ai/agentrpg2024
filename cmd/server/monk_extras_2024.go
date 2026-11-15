@@ -33,10 +33,6 @@ func handleGMDeflectAttacks(w http.ResponseWriter, r *http.Request) {
 		writeJSONStatus(w, http.StatusMethodNotAllowed, map[string]interface{}{"error": "method_not_allowed"})
 		return
 	}
-	_, campaignID, ok := gmCampaignOf(w, r)
-	if !ok {
-		return
-	}
 	var req struct {
 		CharacterID      int    `json:"character_id"`
 		Damage           int    `json:"damage"`
@@ -45,7 +41,11 @@ func handleGMDeflectAttacks(w http.ResponseWriter, r *http.Request) {
 		AttackerName     string `json:"attacker_name"`
 		RedirectTargetID int    `json:"redirect_target_id"`
 	}
-	if json.NewDecoder(http.MaxBytesReader(w, r.Body, 4096)).Decode(&req) != nil || req.CharacterID == 0 || req.Damage <= 0 {
+	_, campaignID, ok := gmRead(w, r, &req)
+	if !ok {
+		return
+	}
+	if req.CharacterID == 0 || req.Damage <= 0 {
 		writeJSONStatus(w, http.StatusBadRequest, map[string]interface{}{"error": "invalid_request", "message": "Send character_id and damage (a positive number)."})
 		return
 	}

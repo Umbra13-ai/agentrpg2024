@@ -19,9 +19,7 @@ import (
 	"image"
 	_ "image/jpeg"
 	_ "image/png"
-	"io"
 	"net/http"
-	"sort"
 	"strconv"
 	"strings"
 	"time"
@@ -135,9 +133,8 @@ func handleCharacterPortrait(w http.ResponseWriter, r *http.Request, charID int)
 		if !requireCharacterOwner(w, r, charID) {
 			return
 		}
-		r.Body = http.MaxBytesReader(w, r.Body, maxPortraitBodyBytes)
-		raw, err := io.ReadAll(r.Body)
-		if err != nil {
+		raw, tooBig := bodyBytes(r, maxPortraitBodyBytes) // the image's bytes, or a JSON body read by parseRequest below
+		if tooBig {
 			writeJSONStatus(w, http.StatusRequestEntityTooLarge, map[string]interface{}{
 				"error": "image_too_large", "max_bytes": maxPortraitBytes, "message": "The image is over 5 MB. Make it smaller (1024 by 1280 pixels is the best size for the sheet) and send it again."})
 			return
@@ -149,28 +146,22 @@ func handleCharacterPortrait(w http.ResponseWriter, r *http.Request, charID int)
 				ImageBase64 string `json:"image_base64"`
 				Skip        bool   `json:"-"`
 			}
-			// a field the portrait step doesn't take is refused, as the other setup steps do (Nov 14 audit re-check)
-			var keys map[string]json.RawMessage
-			if json.Unmarshal(raw, &keys) == nil {
-				var bad []string
-				for k := range keys {
-					if lk := strings.ToLower(strings.TrimSpace(k)); lk != "image_base64" && lk != "skip" {
-						bad = append(bad, k)
-					}
-				}
-				if len(bad) > 0 {
-					sort.Strings(bad)
-					writeJSONStatus(w, http.StatusBadRequest, map[string]interface{}{"error": "unknown_field",
-						"message": fmt.Sprintf("The portrait step takes image_base64 or skip; it doesn't take %s. Nothing was changed.", strings.Join(bad, ", "))})
-					return
-				}
-			}
-			// skip: true (or "yes"/"true"); any other value is refused with the reason (F24: {"skip": "yes"} got an unrelated error)
+			// skip: true (or "yes"/"true"); any other value is refused with the reason (F24: {"skip": "yes"} got an unrelated error).
+			// A field the portrait step doesn't take is refused by the shared reader, as everywhere (request_body_2024.go).
 			var probe struct {
 				ImageBase64 json.RawMessage `json:"image_base64"`
 				Skip        json.RawMessage `json:"skip"`
 			}
-			if json.Unmarshal(raw, &probe) == nil && len(probe.Skip) > 0 {
+			if p := parseRequest(raw, &probe, bodySpec{path: r.URL.Path}); p != nil {
+				writeBodyProblem(w, p)
+				return
+			}
+			if len(probe.ImageBase64) > 0 && json.Unmarshal(probe.ImageBase64, &req.ImageBase64) != nil {
+				writeJSONStatus(w, http.StatusBadRequest, map[string]interface{}{"error": "wrong_type",
+					"message": "image_base64 has the wrong type: send the image's base64 as text. Nothing was changed."})
+				return
+			}
+			if len(probe.Skip) > 0 {
 				var sv interface{}
 				json.Unmarshal(probe.Skip, &sv)
 				switch v := sv.(type) {
@@ -203,7 +194,7 @@ func handleCharacterPortrait(w http.ResponseWriter, r *http.Request, charID int)
 					return
 				}
 			}
-			if err := json.Unmarshal(raw, &req); err == nil && req.Skip && req.ImageBase64 == "" {
+			if req.Skip && req.ImageBase64 == "" {
 				portraitSkipped(charID) // makes sure the column exists
 				db.Exec(`UPDATE characters SET portrait_skipped = true WHERE id = $1`, charID)
 				writeJSONStatus(w, http.StatusOK, map[string]interface{}{"success": true, "skipped": true,
@@ -227,8 +218,9 @@ func handleCharacterPortrait(w http.ResponseWriter, r *http.Request, charID int)
 			if i := strings.Index(b64, "base64,"); i >= 0 { // tolerate data: URLs
 				b64 = b64[i+len("base64,"):]
 			}
-			imageBytes, err = base64.StdEncoding.DecodeString(b64)
-			if err != nil {
+			var decErr error
+			imageBytes, decErr = base64.StdEncoding.DecodeString(b64)
+			if decErr != nil {
 				writeJSONStatus(w, http.StatusBadRequest, map[string]interface{}{"error": "invalid_base64", "message": "image_base64 is not valid base64. Encode the image file's bytes as standard base64 (a data: URL is also accepted)."})
 				return
 			}
@@ -289,6 +281,9 @@ func handleCharacterPortrait(w http.ResponseWriter, r *http.Request, charID int)
 		})
 
 	case http.MethodDelete:
+		if !noFields(w, r) {
+			return
+		}
 		if !requireCharacterOwner(w, r, charID) {
 			return
 		}
@@ -322,14 +317,21 @@ func handleCharacterProfile(w http.ResponseWriter, r *http.Request, charID int) 
 	}
 }
 
+// profileFieldNames: the fields a profile request takes (alignment and the text fields).
+func profileFieldNames() []string {
+	keys := []string{"alignment"}
+	for _, f := range profileTextFields {
+		keys = append(keys, f.key)
+	}
+	return keys
+}
+
 func setCharacterProfile(w http.ResponseWriter, r *http.Request, charID int) {
 	if !requireCharacterOwner(w, r, charID) {
 		return
 	}
-	r.Body = http.MaxBytesReader(w, r.Body, 128*1024)
 	var req map[string]interface{}
-	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
-		writeJSONStatus(w, http.StatusBadRequest, map[string]interface{}{"error": "invalid_json"})
+	if !readRequest(w, r, &req, onlyFields(profileFieldNames()...)) { // a field the profile doesn't have is refused, not ignored
 		return
 	}
 
@@ -373,11 +375,8 @@ func setCharacterProfile(w http.ResponseWriter, r *http.Request, charID int) {
 		updated = append(updated, f.key)
 	}
 	if len(sets) == 0 {
-		keys := []string{}
-		for _, f := range profileTextFields {
-			keys = append(keys, f.key)
-		}
-		writeJSONStatus(w, http.StatusBadRequest, map[string]interface{}{"error": "no_fields", "allowed_fields": keys})
+		writeJSONStatus(w, http.StatusBadRequest, map[string]interface{}{"error": "no_fields", "allowed_fields": profileFieldNames(),
+			"message": "Send at least one of the profile's fields. Nothing was changed."})
 		return
 	}
 	args = append(args, charID)

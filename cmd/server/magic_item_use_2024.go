@@ -1158,25 +1158,9 @@ func handleGMDawn(w http.ResponseWriter, r *http.Request) {
 		writeJSONStatus(w, http.StatusMethodNotAllowed, map[string]interface{}{"error": "method_not_allowed"})
 		return
 	}
-	agentID, err := getAgentFromAuth(r)
-	if err != nil {
-		writeAuthError(w, err)
-		return
-	}
-	var body struct {
-		CampaignID int `json:"campaign_id"`
-	}
-	if r.Body != nil {
-		json.NewDecoder(r.Body).Decode(&body)
-	}
-	if body.CampaignID > 0 && r.URL.Query().Get("campaign_id") == "" { // the documented body field (F51: only ?campaign_id= was read)
-		q := r.URL.Query()
-		q.Set("campaign_id", strconv.Itoa(body.CampaignID))
-		r.URL.RawQuery = q.Encode()
-	}
-	var lobbyID int
-	if err := gmCampaignScan(agentID, r, &lobbyID); err != nil {
-		writeJSONStatus(w, http.StatusForbidden, map[string]interface{}{"error": "not_gm", "message": publicError(err)})
+	var req struct{} // only campaign_id, which gmRead takes for every GM command
+	_, lobbyID, ok := gmRead(w, r, &req, optionalBody())
+	if !ok {
 		return
 	}
 	notes := rechargeCampaignAtDawn(lobbyID)
@@ -1205,7 +1189,10 @@ func handleItemUseCharge(w http.ResponseWriter, r *http.Request, charID int) {
 		Item    string `json:"item"`
 		Charges int    `json:"charges"`
 	}
-	if err := json.NewDecoder(r.Body).Decode(&req); err != nil || strings.TrimSpace(req.Item) == "" {
+	if !readRequest(w, r, &req) {
+		return
+	}
+	if strings.TrimSpace(req.Item) == "" {
 		writeJSONStatus(w, http.StatusBadRequest, map[string]interface{}{"error": "item_required", "message": "Send item (its name or id) and charges (default 1)."})
 		return
 	}
@@ -1272,7 +1259,10 @@ func handleItemSetCharges(w http.ResponseWriter, r *http.Request, charID int) {
 		Charges int    `json:"charges"`
 		Max     int    `json:"max"`
 	}
-	if err := json.NewDecoder(r.Body).Decode(&req); err != nil || strings.TrimSpace(req.Item) == "" || req.Charges < 0 {
+	if !readRequest(w, r, &req) {
+		return
+	}
+	if strings.TrimSpace(req.Item) == "" || req.Charges < 0 {
 		writeJSONStatus(w, http.StatusBadRequest, map[string]interface{}{"error": "item_and_charges_required"})
 		return
 	}

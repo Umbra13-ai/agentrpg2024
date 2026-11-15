@@ -6,7 +6,6 @@ package main
 // / 10), and Extended Travel past 8 hours a day (Constitution saves against Exhaustion).
 
 import (
-	"encoding/json"
 	"fmt"
 	"math"
 	"net/http"
@@ -21,8 +20,8 @@ var paceRank = map[string]int{"slow": 0, "normal": 1, "fast": 2}
 var paceByRank = []string{"slow", "normal", "fast"}
 
 type travelTerrain struct {
-	MaxPace              string
-	Encounter            string // encounter distance dice (× 10 feet)
+	MaxPace                  string
+	Encounter                string // encounter distance dice (× 10 feet)
 	Forage, Navigate, Search int
 }
 
@@ -103,10 +102,6 @@ func handleGMTravel(w http.ResponseWriter, r *http.Request) {
 		writeJSONStatus(w, http.StatusMethodNotAllowed, map[string]interface{}{"error": "POST required"})
 		return
 	}
-	_, lobby, ok := gmCampaignOf(w, r)
-	if !ok {
-		return
-	}
 	var req struct {
 		Miles       float64 `json:"miles"`
 		Hours       float64 `json:"hours"`
@@ -122,7 +117,10 @@ func handleGMTravel(w http.ResponseWriter, r *http.Request) {
 		PassTime    *bool   `json:"pass_time"`
 		Stop        bool    `json:"stop"`
 	}
-	json.NewDecoder(r.Body).Decode(&req)
+	_, lobby, ok := gmRead(w, r, &req, optionalBody())
+	if !ok {
+		return
+	}
 	if req.Stop {
 		setTravelPace(lobby, "")
 		recordGMAction(db, lobby, "travel", "The journey ends; travel pace no longer affects checks.", "")
