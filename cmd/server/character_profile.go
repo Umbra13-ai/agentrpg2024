@@ -694,9 +694,8 @@ function render(d,p){
     var box=el('div','spl');
     Object.keys(by).map(Number).sort(function(a,b){return a-b}).forEach(function(lv){var q=el('p');add(q,el('span','lv',lv===0?'Cantrips (at will): ':ordinal(lv)+'-level spells: '),document.createTextNode(by[lv].join(', ')));box.appendChild(q)});
     textcol.appendChild(box)}
-  spellGroups('Spells Prepared',d.prepared_spells);
-  spellGroups(d.prepared_spells&&d.prepared_spells.length?'Spellbook':'Spells Known',d.known_spells);
-  spellGroups('Domain Spells',d.domain_spells);
+  // the server names each list (spell_groups: Spells Prepared, a feat's spells, a subclass's, a Wizard's Spellbook ...)
+  (d.spell_groups||[]).forEach(function(g){spellGroups(g.label,g.spells)});
 
   // ================= stat column: portrait, stat block, equipment
   var pw=el('div','portrait'),frame=el('div','frame');

@@ -2046,6 +2046,11 @@ func handleCharacterByID(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 
+	// the spells as the sheet shows them, each list named for what it is (prepared_spells_2024.go)
+	if groups := spellGroupsForSheet(class, level, subclassRaw.String, response); len(groups) > 0 {
+		response["spell_groups"] = groups
+	}
+
 	json.NewEncoder(w).Encode(response)
 }
 

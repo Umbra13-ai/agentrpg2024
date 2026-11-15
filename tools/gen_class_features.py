@@ -172,7 +172,7 @@ MECH = {
     ("lore", "Cutting Words"): {"cutting_words": "true"},
     ("lore", "Magical Discoveries"): {"magical_discoveries": "true"},
     ("lore", "Peerless Skill"): {"peerless_skill": "true"},
-    ("wizard", "Spellcasting"): {"spellcasting": "int"},
+    ("wizard", "Spellcasting"): {"spellcasting": "int", "spellbook": "true"},  # the Spellbook: the level 1+ spells the Wizard knows
     ("wizard", "Ritual Adept"): {"ritual_adept": "true"},
     ("wizard", "Arcane Recovery"): {"arcane_recovery": "true"},
     ("wizard", "Scholar"): {"scholar": "true"},

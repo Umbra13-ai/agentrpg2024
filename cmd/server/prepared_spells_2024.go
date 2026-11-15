@@ -367,3 +367,84 @@ func preparedListProblems(charID int) []string {
 	}
 	return out
 }
+
+// spellGroupsForSheet: the character's spells as the sheet shows them, each list named for what it is. It reads the lists the
+// sheet already built (prepared_spells, known_spells, origin_spells, invocation_spells, domain_spells) and adds:
+//   - "Spells Prepared";
+//   - one list per source of the spells species and Origin feats give ("Magic Initiate (Cleric list)") and "Eldritch Invocations";
+//   - the subclass's always-prepared spells, named for the subclass (a Cleric's domain, a Paladin's oath, a Druid's circle ...);
+//   - "Spellbook" only for a class whose features keep one (the class data's "spellbook" mechanic: the Wizard), holding the level
+//     1+ spells it knows, prepared or not (SRD 5.2.1: "The book contains the level 1+ spells you know"), but not a feat's or an
+//     invocation's spells (listed under their source, as freeSpellbookCount counts them apart);
+//   - "Spells Known" for any known spell no list above shows.
+//
+// Before Nov 15 2026 the character page named the known list itself: "Spellbook" whenever the character had prepared spells, so
+// a Cleric's Magic Initiate spells were shown as a spellbook.
+func spellGroupsForSheet(class string, level int, subclassSlug string, response map[string]interface{}) []map[string]interface{} {
+	asList := func(v interface{}) []map[string]interface{} {
+		l, _ := v.([]map[string]interface{})
+		return l
+	}
+	slugOf := func(s map[string]interface{}) string { return normalizeSpellSlug(fmt.Sprint(s["slug"])) }
+	levelOf := func(s map[string]interface{}) int { n, _ := s["level"].(int); return n }
+	shown := map[string]bool{}
+	var groups []map[string]interface{}
+	add := func(label, note string, spells []map[string]interface{}) {
+		if len(spells) == 0 {
+			return
+		}
+		for _, s := range spells {
+			shown[slugOf(s)] = true
+		}
+		g := map[string]interface{}{"label": label, "spells": spells}
+		if note != "" {
+			g["note"] = note
+		}
+		groups = append(groups, g)
+	}
+	add("Spells Prepared", "", asList(response["prepared_spells"]))
+	var sources []string
+	bySource := map[string][]map[string]interface{}{}
+	for _, s := range asList(response["origin_spells"]) {
+		src := fmt.Sprint(s["source"])
+		if _, ok := bySource[src]; !ok {
+			sources = append(sources, src)
+		}
+		bySource[src] = append(bySource[src], s)
+	}
+	for _, src := range sources {
+		add(src, "", bySource[src])
+	}
+	add("Eldritch Invocations", "", asList(response["invocation_spells"]))
+	if d := asList(response["domain_spells"]); len(d) > 0 {
+		name := "subclass"
+		if sc, ok := game.AvailableSubclasses[subclassSlug]; ok {
+			name = sc.Name
+		}
+		add("Always Prepared ("+name+")", "Always prepared; they don't count against the prepared spell limit.", d)
+	}
+	known := asList(response["known_spells"])
+	if game.HasClassFeature(class, level, "spellbook") {
+		fromOthers := map[string]bool{} // a feat's or an invocation's spell is listed under its source, not written in the book
+		for _, k := range []string{"origin_spells", "invocation_spells"} {
+			for _, s := range asList(response[k]) {
+				fromOthers[slugOf(s)] = true
+			}
+		}
+		var book []map[string]interface{}
+		for _, s := range known {
+			if levelOf(s) > 0 && !fromOthers[slugOf(s)] {
+				book = append(book, s)
+			}
+		}
+		add("Spellbook", "The level 1+ spells in the spellbook; prepare from these.", book)
+	}
+	var rest []map[string]interface{}
+	for _, s := range known {
+		if !shown[slugOf(s)] {
+			rest = append(rest, s)
+		}
+	}
+	add("Spells Known", "", rest)
+	return groups
+}
