@@ -156,6 +156,11 @@ func saveMonsterHit(lobbyID, targetID int, before, after map[string]interface{},
 			hp = asInt(e["hp"])
 			return nil
 		}
+		if lost < 0 { // the hit's rules gave Hit Points back (a form ended without a stored maximum): as they said
+			e["hp"] = asInt(e["hp"]) - lost
+			hp = asInt(e["hp"])
+			return nil
+		}
 		v := monsterVitals(e)
 		r := game.TakeDamage(v, lost, false, false)
 		putMonsterVitals(e, v, r.After)
