@@ -17,12 +17,9 @@ package main
 // Add monsters with POST /api/campaigns/{id}/combat/add. Every change is logged in the campaign feed (with the note).
 
 import (
-	"bytes"
 	"encoding/json"
 	"fmt"
 	"net/http"
-	"net/http/httptest"
-	"sort"
 	"strconv"
 	"strings"
 )
@@ -124,39 +121,26 @@ func handleGMAdjustMonster(w http.ResponseWriter, r *http.Request) {
 	var did []string
 
 	if req.Remove {
-		body, _ := json.Marshal(map[string]interface{}{"combatant_id": tid})
-		rec := httptest.NewRecorder()
-		rr := httptest.NewRequest(http.MethodPost, "/", bytes.NewReader(body))
-		rr = rr.WithContext(r.Context())
-		rr.Header = r.Header.Clone()
-		handleCombatRemove(rec, rr, campaignID)
-		out := map[string]interface{}{}
-		json.Unmarshal(rec.Body.Bytes(), &out)
+		res, code := removeFromFight(campaignID, tid, "the GM removed the monster") // the combat-state owner (combat_state_2024.go)
+		if code != "" {
+			answerTurnRefusal(w, campaignID, nil, code)
+			return
+		}
 		msg := fmt.Sprintf("%s is removed from the encounter.", name)
 		writeAction(db, campaignID, 0, "gm_adjust_monster", "GM: "+msg+gmNote(req.Note), msg)
-		writeJSONStatus(w, 200, map[string]interface{}{"success": out["error"] == nil, "message": msg, "result": out})
+		writeJSONStatus(w, 200, map[string]interface{}{"success": true, "message": msg, "result": combatRemovalReply(campaignID, res)})
 		return
 	}
 
-	// numbers in the turn order entry
-	set := func(key string, v int) {
-		upd := map[string]interface{}{key: v}
-		updateCombatEntry(campaignID, tid, upd)
-	}
-	hp := asInt(entry["hp"])
-	maxHP := asInt(entry["max_hp"])
+	// Hit Points through the monster Hit Point owner (monster_hp_2024.go), each a change of the values as they are then, under
+	// the fight's lock; the other numbers through the combat-state owner (editCombatant)
 	if req.MaxHP != nil {
-		maxHP = *req.MaxHP
-		set("max_hp", maxHP)
-		did = append(did, fmt.Sprintf("Hit Point maximum %d", maxHP))
+		setMonsterMaxHP(campaignID, tid, *req.MaxHP)
+		did = append(did, fmt.Sprintf("Hit Point maximum %d", max(*req.MaxHP, 1)))
 	}
 	if req.HP != nil {
-		hp = *req.HP
-		if hp < 0 {
-			hp = 0
-		}
-		set("hp", hp)
-		did = append(did, fmt.Sprintf("Hit Points set to %d", hp))
+		setMonsterHP(campaignID, tid, *req.HP)
+		did = append(did, fmt.Sprintf("Hit Points set to %d", max(*req.HP, 0)))
 	}
 	if req.Damage != nil && *req.Damage > 0 {
 		dtype := strings.ToLower(strings.TrimSpace(req.DamageType))
@@ -164,47 +148,26 @@ func handleGMAdjustMonster(w http.ResponseWriter, r *http.Request) {
 			text, _ := damageMonster(campaignID, tid, *req.Damage, dtype)
 			did = append(did, strings.TrimSuffix(text, "."))
 		} else {
-			d := *req.Damage
-			if t := asInt(entry["temp_hp"]); t > 0 { // Temporary Hit Points go first
-				use := t
-				if use > d {
-					use = d
-				}
-				set("temp_hp", t-use)
-				d -= use
-			}
-			hp -= d
-			if hp < 0 {
-				hp = 0
-			}
-			setMonsterHP(campaignID, tid, hp)
+			loseMonsterHP(campaignID, tid, *req.Damage) // exact: Temporary Hit Points first, never below 0
 			text := fmt.Sprintf("%s takes %d%s damage (exact)", name, *req.Damage, strings.TrimRight(" "+dtype, " "))
-			if *req.Damage > 0 {
-				text += wakeOnDamage(campaignID, tid, name)
-			}
+			text += wakeOnDamage(campaignID, tid, name)
 			did = append(did, text)
-		}
-		for _, e := range combatEntries(campaignID) {
-			if asInt(e["id"]) == tid {
-				hp = asInt(e["hp"])
-			}
 		}
 	}
 	if req.Heal != nil && *req.Heal > 0 {
-		hp += *req.Heal
-		setMonsterHP(campaignID, tid, hp)
+		healMonster(campaignID, tid, *req.Heal)
 		did = append(did, fmt.Sprintf("heals %d", *req.Heal))
 	}
 	if req.TempHP != nil {
-		set("temp_hp", *req.TempHP)
-		did = append(did, fmt.Sprintf("Temporary Hit Points %d", *req.TempHP))
+		setMonsterTempHP(campaignID, tid, *req.TempHP)
+		did = append(did, fmt.Sprintf("Temporary Hit Points %d", max(*req.TempHP, 0)))
 	}
 	if req.AC != nil {
-		set("ac", *req.AC)
+		editCombatant(campaignID, tid, func(e map[string]interface{}) { e["ac"] = *req.AC })
 		did = append(did, fmt.Sprintf("AC %d", *req.AC))
 	}
 	if strings.TrimSpace(req.Name) != "" {
-		updateCombatEntry(campaignID, tid, map[string]interface{}{"name": strings.TrimSpace(req.Name)})
+		editCombatant(campaignID, tid, func(e map[string]interface{}) { e["name"] = strings.TrimSpace(req.Name) })
 		did = append(did, "renamed "+strings.TrimSpace(req.Name))
 		name = strings.TrimSpace(req.Name)
 	}
@@ -250,7 +213,10 @@ func handleGMAdjustMonster(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 	if req.Initiative != nil {
-		reorderInitiative(campaignID, tid, *req.Initiative)
+		changeFight(campaignID, func(f *fight) error { // its new place in the order; whose turn it is doesn't change
+			f.setInitiative(tid, *req.Initiative)
+			return nil
+		})
 		did = append(did, fmt.Sprintf("initiative %d", *req.Initiative))
 	}
 	if req.Position != nil {
@@ -267,6 +233,7 @@ func handleGMAdjustMonster(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	state := ""
+	hp, maxHP := 0, 0
 	for _, e := range combatEntries(campaignID) {
 		if asInt(e["id"]) == tid {
 			hp, maxHP = asInt(e["hp"]), asInt(e["max_hp"])
@@ -288,46 +255,6 @@ func gmNote(n string) string {
 		return ""
 	}
 	return " (" + strings.TrimSpace(n) + ")"
-}
-
-// updateCombatEntry sets fields of one combatant in the turn order.
-func updateCombatEntry(lobbyID, id int, fields map[string]interface{}) {
-	entries := combatEntries(lobbyID)
-	for i, e := range entries {
-		if asInt(e["id"]) == id {
-			for k, v := range fields {
-				e[k] = v
-			}
-			entries[i] = e
-		}
-	}
-	b, _ := json.Marshal(entries)
-	db.Exec(`UPDATE combat_state SET turn_order = $1 WHERE lobby_id = $2`, b, lobbyID)
-}
-
-// reorderInitiative sets a combatant's initiative and re-sorts the order, keeping whose turn it is.
-func reorderInitiative(lobbyID, id, init int) {
-	var idx int
-	db.QueryRow(`SELECT COALESCE(current_turn_index,0) FROM combat_state WHERE lobby_id = $1`, lobbyID).Scan(&idx)
-	entries := combatEntries(lobbyID)
-	cur := 0
-	if idx >= 0 && idx < len(entries) {
-		cur = asInt(entries[idx]["id"])
-	}
-	for i, e := range entries {
-		if asInt(e["id"]) == id {
-			e["initiative"] = init
-			entries[i] = e
-		}
-	}
-	sort.SliceStable(entries, func(a, b int) bool { return asInt(entries[a]["initiative"]) > asInt(entries[b]["initiative"]) })
-	for i, e := range entries {
-		if asInt(e["id"]) == cur {
-			idx = i
-		}
-	}
-	b, _ := json.Marshal(entries)
-	db.Exec(`UPDATE combat_state SET turn_order = $1, current_turn_index = $2 WHERE lobby_id = $3`, b, idx, lobbyID)
 }
 
 // moveMapToken places a token on the encounter's battle map (the GM's say: no movement rules).

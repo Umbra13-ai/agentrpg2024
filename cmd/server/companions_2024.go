@@ -341,9 +341,7 @@ func companionFromSpell(charID int, spellKey string, slot int, description strin
 		}
 		attacks, _ := json.Marshal(formAttacks(form))
 		if existing > 0 {
-			db.Exec(`UPDATE companions SET form = $1, name = $2, creature_type = $3, hp = $4, max_hp = $4, ac = $5, speed = $6, status = 'active', lobby_id = $7, attacks = $9,
-				traits = (SELECT COALESCE(traits,'[]') FROM monsters WHERE slug = $1) WHERE id = $8`,
-				form, name, ctype, hp, ac, speed, lobbyID, existing, string(attacks))
+			companionTakesForm(existing, form, name, ctype, hp, ac, speed, lobbyID, string(attacks)) // the companion Hit Point owner (monster_hp_2024.go)
 			addOwnInitiativeEntry(lobbyID, existing)
 			return fmt.Sprintf(" Your familiar takes a new form: %s (%s, HP %d, AC %d)."+how(existing, name), mname, ctype, hp, ac)
 		}
@@ -422,38 +420,17 @@ func addOwnInitiativeEntry(lobbyID, companionID int) {
 	if !ok || c.Kind != "familiar" || c.Status != "active" {
 		return
 	}
-	var raw []byte
-	var active bool
-	if db.QueryRow(`SELECT turn_order, active FROM combat_state WHERE lobby_id = $1`, lobbyID).Scan(&raw, &active) != nil || !active {
-		return
-	}
-	var entries []map[string]interface{}
-	json.Unmarshal(raw, &entries)
-	for _, e := range entries {
-		if asInt(e["id"]) == c.CombatID {
-			return
-		}
-	}
 	var dex int
 	db.QueryRow(`SELECT COALESCE(dex,10) FROM monsters WHERE slug = $1`, c.Form).Scan(&dex)
 	init := game.RollInitiative(game.Modifier(dex), 0)
 	entry := map[string]interface{}{"id": c.CombatID, "name": c.Name, "initiative": init, "dex_score": dex, "is_companion": true, "owner_id": c.OwnerID}
-	// insert by initiative without moving the current turn
-	var idx, cur int
-	db.QueryRow(`SELECT current_turn_index FROM combat_state WHERE lobby_id = $1`, lobbyID).Scan(&cur)
-	idx = len(entries)
-	for i, e := range entries {
-		if asInt(e["initiative"]) < init {
-			idx = i
-			break
+	changeFight(lobbyID, func(f *fight) error { // its place by Initiative; whose turn it is doesn't change (combat_state_2024.go)
+		if i, _ := f.entry(c.CombatID); i >= 0 {
+			return errNoChange // already in the order
 		}
-	}
-	entries = append(entries[:idx], append([]map[string]interface{}{entry}, entries[idx:]...)...)
-	if idx <= cur && len(entries) > 1 {
-		cur++
-	}
-	b, _ := json.Marshal(entries)
-	db.Exec(`UPDATE combat_state SET turn_order = $1, current_turn_index = $2 WHERE lobby_id = $3`, b, cur, lobbyID)
+		f.place(entry)
+		return nil
+	})
 }
 
 // familiarTurnEntries: at combat start, with AGENTRPG_FAMILIAR_INITIATIVE=own, the active familiars of the campaign's characters roll
@@ -1073,12 +1050,8 @@ func handleGMCompanion(w http.ResponseWriter, r *http.Request) {
 	case req.Damage > 0:
 		text = damageCompanion(c, req.Damage, req.DamageType)
 	case req.Heal > 0:
-		hp := c.HP + req.Heal
-		if hp > c.MaxHP {
-			hp = c.MaxHP
-		}
-		db.Exec(`UPDATE companions SET hp = $1 WHERE id = $2`, hp, c.ID)
-		text = fmt.Sprintf("%s regains %d Hit Points.", c.Name, hp-c.HP)
+		got, _ := healCompanion(c.ID, req.Heal) // the companion Hit Point owner (monster_hp_2024.go): never above the maximum
+		text = fmt.Sprintf("%s regains %d Hit Points.", c.Name, got)
 	default:
 		writeJSONStatus(w, 400, map[string]interface{}{"error": "nothing_to_do", "message": "Send damage, heal or remove."})
 		return

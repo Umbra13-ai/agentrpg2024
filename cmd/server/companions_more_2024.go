@@ -34,22 +34,6 @@ import (
 	"github.com/agentrpg/agentrpg/game"
 )
 
-// damageCompanion deals damage to a companion and says what happened; at 0 Hit Points it disappears.
-func damageCompanion(c companion, dmg int, dtype string) string {
-	hp := c.HP - dmg
-	if hp <= 0 {
-		db.Exec(`UPDATE companions SET hp = 0 WHERE id = $1`, c.ID)
-		endCompanion(c.ID, "dropped to 0 Hit Points")
-		text := fmt.Sprintf("%s takes %d %s damage and drops to 0 Hit Points: it disappears.", companionDisplayName(c), dmg, dtype)
-		if c.Kind == "familiar" {
-			text += " It reappears when its owner casts Find Familiar again."
-		}
-		return text
-	}
-	db.Exec(`UPDATE companions SET hp = $1 WHERE id = $2`, hp, c.ID)
-	return fmt.Sprintf("%s takes %d %s damage (%s).", companionDisplayName(c), dmg, dtype, healthWord(hp, c.MaxHP))
-}
-
 // companionByNameOrID finds an active companion in the campaign by combat id, id, name or nickname.
 func companionByNameOrID(lobbyID int, who string) (companion, bool) {
 	who = strings.TrimSpace(strings.TrimPrefix(strings.ToLower(who), "companion "))
@@ -278,12 +262,11 @@ func lifeBond(charID, regained int) string {
 				continue
 			}
 		}
-		hp := c.HP + regained
-		if hp > c.MaxHP {
-			hp = c.MaxHP
+		got, err := healCompanion(c.ID, regained) // the companion Hit Point owner (monster_hp_2024.go)
+		if err != nil || got == 0 {
+			return ""
 		}
-		db.Exec(`UPDATE companions SET hp = $1 WHERE id = $2`, hp, c.ID)
-		return fmt.Sprintf(" Life Bond: %s regains %d Hit Points.", companionDisplayName(c), hp-c.HP)
+		return fmt.Sprintf(" Life Bond: %s regains %d Hit Points.", companionDisplayName(c), got)
 	}
 	return ""
 }

@@ -818,7 +818,7 @@ func polymorphCast(charID, lobby, target int, spell SRDSpell, saveDC int, dl str
 	db.Exec(`DELETE FROM spell_effects WHERE lobby_id = $1 AND target_id = $2 AND kind = 'polymorph'`, lobby, target)
 	if target < 0 {
 		var orig map[string]interface{}
-		editMonsterEntry(lobby, target, func(e map[string]interface{}) {
+		reshapeMonster(lobby, target, func(e map[string]interface{}) {
 			orig = map[string]interface{}{"key": e["monster_key"], "hp": e["hp"], "ac": e["ac"], "max_hp": e["max_hp"]}
 			e["monster_key"], e["hp"], e["ac"] = slug, bhp, bac
 			if _, ok := e["max_hp"]; ok {
@@ -847,31 +847,6 @@ func creatureSizeOfKey(slug string) string {
 	var size string
 	db.QueryRow(`SELECT COALESCE(size,'medium') FROM monsters WHERE slug = $1`, slug).Scan(&size)
 	return size
-}
-
-// editMonsterEntry changes a monster's entry in the turn order.
-func editMonsterEntry(lobby, id int, f func(e map[string]interface{})) {
-	tx, err := db.Begin()
-	if err != nil {
-		return
-	}
-	defer tx.Rollback()
-	var raw []byte
-	if tx.QueryRow(`SELECT turn_order FROM combat_state WHERE lobby_id = $1 AND active = true FOR UPDATE`, lobby).Scan(&raw) != nil {
-		return
-	}
-	var entries []map[string]interface{}
-	json.Unmarshal(raw, &entries)
-	for i, e := range entries {
-		if asInt(e["id"]) == id {
-			f(e)
-			entries[i] = e
-		}
-	}
-	b, _ := json.Marshal(entries)
-	if _, err := tx.Exec(`UPDATE combat_state SET turn_order = $1 WHERE lobby_id = $2`, b, lobby); err == nil {
-		tx.Commit()
-	}
 }
 
 // polymorphRevert restores a polymorphed monster's own statistics in its turn order entry e; overflow is the damage beyond the
@@ -1218,7 +1193,7 @@ func moreSpellEnds(kind string, targetID int, detail string) string {
 			p := strings.SplitN(detail, "|", 3)
 			lobby := atoiSafe(p[1])
 			name := ""
-			editMonsterEntry(lobby, targetID, func(e map[string]interface{}) {
+			reshapeMonster(lobby, targetID, func(e map[string]interface{}) {
 				name = fmt.Sprint(e["name"])
 				polymorphRevert(e, detail, 0)
 			})

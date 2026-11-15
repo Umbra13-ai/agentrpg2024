@@ -176,6 +176,10 @@ func handleGMStatus(w http.ResponseWriter, r *http.Request) {
 	if inCombat {
 		currentCombatCharacterID = actionableCombatCharacterID(turnOrderJSON, turnIndex)
 	}
+	skipAfter, skipOn := combatTurnTimeout(campaignID) // when combat/skip accepts a turn (table rule combat_turn_timeout)
+	if !skipOn {
+		skipAfter = 0
+	}
 
 	for rows.Next() {
 		var id, level, hp, maxHP, ac int
@@ -231,7 +235,10 @@ func handleGMStatus(w http.ResponseWriter, r *http.Request) {
 			activityInfo["inactive_hours"] = int(inactiveHours)
 
 			// Add countdowns to each threshold
-			combatSkipThreshold := 4 * time.Hour
+			combatSkipThreshold := 4 * time.Hour // the "active" window of the activity status
+			if skipOn {
+				combatSkipThreshold = skipAfter // the campaign's combat turn timeout
+			}
 			explorationSkipThreshold := 12 * time.Hour
 			abandonThreshold := 24 * time.Hour
 
@@ -259,17 +266,19 @@ func handleGMStatus(w http.ResponseWriter, r *http.Request) {
 				activityInfo["inactive_status"] = "abandoned"
 				// The GM combat skip endpoint requires four hours on this exact
 				// turn. Old player activity alone cannot make a fresh turn skippable.
-				if shouldAdvanceAbandonedPlayer(inCombat, currentCombatCharacterID, id, turnStartedAt, time.Now()) {
+				if shouldAdvanceAbandonedPlayer(inCombat, currentCombatCharacterID, id, turnStartedAt, time.Now(), skipAfter) {
 					mustAdvancePlayers = append(mustAdvancePlayers, name)
 				}
 			}
 			if inCombat {
 				// Skip eligibility is measured from the current turn, not the
 				// player's last action on a previous turn.
-				if currentCombatCharacterID != id {
+				if !skipOn {
+					countdowns["combat_skip_in"] = "never (table rule combat_turn_timeout is off)"
+				} else if currentCombatCharacterID != id {
 					countdowns["combat_skip_in"] = "not current turn"
 				} else if turnStartedAt.Valid {
-					remaining := 4*time.Hour - time.Since(turnStartedAt.Time)
+					remaining := skipAfter - time.Since(turnStartedAt.Time)
 					if remaining > 0 {
 						countdowns["combat_skip_in"] = formatDuration(remaining)
 					} else {
@@ -964,8 +973,7 @@ func handleGMKickCharacter(w http.ResponseWriter, r *http.Request) {
 	// The character leaves the campaign; it is not erased (live test, Nov 14: this command deleted the character and its
 	// actions for good, so a player lost the character and the server's admin could not restore it).
 	if c, fighting := ptLoadCombat(req.CampaignID); fighting && c.slotOf(req.CharacterID) >= 0 {
-		rreq, rrec := ptInternal(http.MethodPost, fmt.Sprintf("/api/campaigns/%d/combat/remove", req.CampaignID), map[string]interface{}{"combatant_id": req.CharacterID}, agentID)
-		handleCombatRemove(rrec, rreq, req.CampaignID)
+		removeFromFight(req.CampaignID, req.CharacterID, "the character left the campaign") // the combat-state owner (combat_state_2024.go)
 	}
 	ensurePendingTurns()
 	db.Exec(`UPDATE pending_turns SET status = 'withdrawn', note = 'The character left the campaign.', resolved_at = NOW()
@@ -1307,18 +1315,6 @@ func isNarrativeOnlyMonsterAction(action string) bool {
 	}
 }
 
-func advanceNarratedCombatTurn(campaignID int) error {
-	markCurrentTurnEnded(campaignID) // Legendary Actions may follow it
-	endTurnEffects(campaignID, -1)
-	_, err := db.Exec(`
-		UPDATE combat_state
-		SET current_turn_index = current_turn_index + 1,
-		    turn_started_at = CURRENT_TIMESTAMP
-		WHERE lobby_id = $1 AND active = true
-	`, campaignID)
-	return err
-}
-
 // Validate the optional initiative advance before recording any narration or
 // monster action. Otherwise a 409 can leave a successful-looking narrative
 // write behind even though no turn could be advanced.
@@ -1472,83 +1468,20 @@ func handleGMNarrate(w http.ResponseWriter, r *http.Request) {
 		response["monster_action_result"] = result
 	}
 
-	// Advance turn if requested
+	// Advance turn if requested: the one turn change (turn_advance_2024.go), with every hook of the turn that ends and the one that
+	// starts, and a fresh turn clock (the previous turn's clock made the next player look overdue at once).
 	if req.AdvanceTurn {
-		// A narration that advances initiative starts a fresh turn. Keeping the
-		// previous turn's clock makes the next player immediately appear overdue
-		// and can trigger a premature nudge or automatic skip.
-		err = advanceNarratedCombatTurn(campaignID)
-		if err != nil {
-			w.WriteHeader(http.StatusInternalServerError)
-			json.NewEncoder(w).Encode(map[string]interface{}{"error": "turn_advance_failed"})
+		t, code := advanceTurn(campaignID, turnHow{by: "the GM's narration advanced the turn order"})
+		if code != "" {
+			answerTurnRefusal(w, campaignID, t, code, map[string]interface{}{"narration_recorded": response["narration_recorded"]})
 			return
 		}
-		if opts, task := openLegendaryOptions(campaignID); len(opts) > 0 {
-			response["legendary_options"] = opts
-			response["legendary_note"] = task
-		}
-
-		// Check if we need to wrap around and increment round
-		var turnIndex int
-		var turnOrderJSON []byte
-		db.QueryRow(`
-			SELECT current_turn_index, turn_order FROM combat_state WHERE lobby_id = $1
-		`, campaignID).Scan(&turnIndex, &turnOrderJSON)
-
-		type InitEntry struct {
-			ID         int    `json:"id"`
-			Name       string `json:"name"`
-			Initiative int    `json:"initiative"`
-		}
-		var turnOrder []InitEntry
-		json.Unmarshal(turnOrderJSON, &turnOrder)
-
-		if len(turnOrder) == 0 {
-			w.WriteHeader(http.StatusConflict)
-			json.NewEncoder(w).Encode(map[string]interface{}{"error": "no_combatants"})
-			return
-		}
-		ids := make([]int, len(turnOrder))
-		for i, entry := range turnOrder {
-			ids[i] = entry.ID
-		}
-		var wraps int
-		turnIndex, wraps = nextLivingCombatTurn(turnIndex, ids, combatDeadFn(campaignID))
-		// The initial increment above may have reached the end or a dead
-		// character. Persist the eligible slot before resetting it.
-		db.Exec(`UPDATE combat_state SET current_turn_index = $1,
-			round_number = round_number + $2 WHERE lobby_id = $3`, turnIndex, wraps, campaignID)
-		startTurnEffects(campaignID)
-		if wraps > 0 {
-
-			// Reset reactions for all characters in campaign (start of new round)
-			db.Exec(`
-				UPDATE characters SET reaction_used = false 
-				WHERE lobby_id = $1
-			`, campaignID)
-
-			response["new_round"] = true
-			response["reactions_reset"] = true
-		}
-
-		// Reset action economy for the new current character
-		if turnIndex < len(turnOrder) {
-			newActiveID := turnOrder[turnIndex].ID
-			// Get character's species for movement speed
-			var species string
-			db.QueryRow("SELECT species FROM characters WHERE id = $1", newActiveID).Scan(&species)
-			speed := characterSpeed(newActiveID, species)
-
-			// Reset turn resources: action, bonus action, movement, reaction, bonus action spell tracking, horde breaker, sneak attack, foe slayer (resets on your turn)
-			resetTurnFlags(newActiveID, speed)
-
-			response["action_economy_reset_for"] = turnOrder[turnIndex].Name
-
-			if regen := survivorRegen(newActiveID, turnOrder[turnIndex].Name); regen != nil { // Champion level 18 (subclass_helpers.go)
-				response["survivor_regen"] = regen
+		for k, v := range t.reply() {
+			if k != "success" {
+				response[k] = v
 			}
 		}
-
+		response["action_economy_reset_for"] = t.NextName
 		response["turn_advanced"] = true
 	}
 

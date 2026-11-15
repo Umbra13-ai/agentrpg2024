@@ -13,7 +13,6 @@ package main
 import (
 	"encoding/json"
 	"fmt"
-	"reflect"
 	"sort"
 	"strings"
 	"sync"
@@ -510,34 +509,6 @@ func resolveAttackOnMonster(lobbyID, charID, targetID int, o attackOutcome, clea
 	return text, info, nil
 }
 
-// setMonsterHP sets a combatant's current Hit Points in the turn order.
-func setMonsterHP(lobbyID, targetID, hp int) error {
-	tx, err := db.Begin()
-	if err != nil {
-		return err
-	}
-	defer tx.Rollback()
-	var raw []byte
-	if err := tx.QueryRow(`SELECT turn_order FROM combat_state WHERE lobby_id = $1 AND active = true FOR UPDATE`, lobbyID).Scan(&raw); err != nil {
-		return err
-	}
-	var entries []map[string]interface{}
-	if err := json.Unmarshal(raw, &entries); err != nil {
-		return err
-	}
-	for i, e := range entries {
-		if asInt(e["id"]) == targetID {
-			e["hp"] = hp
-			entries[i] = e
-		}
-	}
-	b, _ := json.Marshal(entries)
-	if _, err := tx.Exec(`UPDATE combat_state SET turn_order = $1 WHERE lobby_id = $2`, b, lobbyID); err != nil {
-		return err
-	}
-	return tx.Commit()
-}
-
 // wantsKnockOut: the player says the attack is meant to knock the target out rather than kill it.
 func wantsKnockOut(description string) bool {
 	d := strings.ToLower(description)
@@ -550,64 +521,4 @@ func wantsKnockOut(description string) bool {
 		}
 	}
 	return false
-}
-
-// copyEntry: a copy of a turn-order entry (its values are JSON values).
-func copyEntry(e map[string]interface{}) map[string]interface{} {
-	b, _ := json.Marshal(e)
-	var c map[string]interface{}
-	json.Unmarshal(b, &c)
-	return c
-}
-
-// saveMonsterHit writes one hit on a monster, in a short transaction that locks the fight: the monster's Hit Points as they are
-// now, less lost (never below 0), and every other field of the entry that the hit changed (before -> after). It returns the
-// monster's Hit Points after the hit.
-func saveMonsterHit(lobbyID, targetID int, before, after map[string]interface{}, lost int) (int, error) {
-	tx, err := db.Begin()
-	if err != nil {
-		return 0, err
-	}
-	defer tx.Rollback()
-	var raw []byte
-	if err := tx.QueryRow(`SELECT turn_order FROM combat_state WHERE lobby_id = $1 AND active = true FOR UPDATE`, lobbyID).Scan(&raw); err != nil {
-		return 0, err
-	}
-	var entries []map[string]interface{}
-	if err := json.Unmarshal(raw, &entries); err != nil {
-		return 0, err
-	}
-	for i, e := range entries {
-		if asInt(e["id"]) != targetID {
-			continue
-		}
-		for k, v := range after {
-			if k == "hp" {
-				continue
-			}
-			if old, had := before[k]; !had || !reflect.DeepEqual(old, v) {
-				e[k] = v
-			}
-		}
-		for k := range before {
-			if _, still := after[k]; !still && k != "hp" {
-				delete(e, k)
-			}
-		}
-		hp := asInt(e["hp"]) - lost
-		if _, changed := after["max_hp"]; changed && asInt(after["max_hp"]) != asInt(before["max_hp"]) {
-			hp = asInt(after["hp"]) // a new form (Polymorph's end): its Hit Points are the ones the rules set
-		}
-		if hp < 0 {
-			hp = 0
-		}
-		e["hp"] = hp
-		entries[i] = e
-		b, _ := json.Marshal(entries)
-		if _, err := tx.Exec(`UPDATE combat_state SET turn_order = $1 WHERE lobby_id = $2`, b, lobbyID); err != nil {
-			return 0, err
-		}
-		return hp, tx.Commit()
-	}
-	return 0, fmt.Errorf("target_not_found")
 }

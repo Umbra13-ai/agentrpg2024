@@ -244,20 +244,6 @@ func setLastTurnEnded(lobbyID int, marker string, id int) {
 	db.Exec(`UPDATE combat_state SET last_turn_ended = $1, last_turn_ended_id = $2 WHERE lobby_id = $3`, marker, id, lobbyID)
 }
 
-// markCurrentTurnEnded records that the current turn ends (a turn advanced by gm/narrate).
-func markCurrentTurnEnded(lobbyID int) {
-	var round, idx int
-	var raw []byte
-	if db.QueryRow(`SELECT COALESCE(round_number,1), COALESCE(current_turn_index,0), turn_order FROM combat_state WHERE lobby_id = $1 AND active = true`, lobbyID).Scan(&round, &idx, &raw) != nil {
-		return
-	}
-	var entries []map[string]interface{}
-	json.Unmarshal(raw, &entries)
-	if idx >= 0 && idx < len(entries) {
-		setLastTurnEnded(lobbyID, fmt.Sprintf("%d:%d", round, idx), asInt(entries[idx]["id"]))
-	}
-}
-
 func findLegendary(meta *monsterMeta, name string) (srdMonsterEntry, bool) {
 	name = strings.ToLower(strings.TrimSpace(name))
 	for _, a := range meta.Legendary {
@@ -424,12 +410,9 @@ func monsterFeaturesTurnStart(lobbyID, id int, name string) []string {
 				s.RegenBlocked, changed = false, true
 			case hp >= 1 && hp < maxHP:
 				n, _ := strconv.Atoi(m[1])
-				newHP := hp + n
-				if newHP > maxHP {
-					newHP = maxHP
+				if before, after, err := healMonster(lobbyID, id, n); err == nil { // the monster Hit Point owner (monster_hp_2024.go)
+					log = append(log, fmt.Sprintf("%s regenerates %d Hit Points (%s).", name, after.HP-before.HP, t.Name))
 				}
-				setMonsterHP(lobbyID, id, newHP)
-				log = append(log, fmt.Sprintf("%s regenerates %d Hit Points (%s).", name, newHP-hp, t.Name))
 			}
 		}
 		// Recharge

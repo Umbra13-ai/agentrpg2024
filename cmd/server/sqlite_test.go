@@ -94,7 +94,7 @@ func TestAbandonedPlayerAdvanceRequiresSkippableCombatTurn(t *testing.T) {
 	}
 	for _, tc := range tests {
 		t.Run(tc.name, func(t *testing.T) {
-			if got := shouldAdvanceAbandonedPlayer(tc.inCombat, tc.currentID, tc.playerID, tc.started, now); got != tc.want {
+			if got := shouldAdvanceAbandonedPlayer(tc.inCombat, tc.currentID, tc.playerID, tc.started, now, 4*time.Hour); got != tc.want {
 				t.Fatalf("shouldAdvanceAbandonedPlayer() = %v, want %v", got, tc.want)
 			}
 		})
@@ -147,71 +147,6 @@ func TestSQLiteStabilizeConsumesActionAndUpdatesOnlyDyingPatient(t *testing.T) {
 	}
 	if err := db.QueryRow(`SELECT is_stable FROM characters WHERE id = 2`).Scan(&stable); err != nil || stable {
 		t.Fatalf("healed patient must not become stable at positive HP: stable=%v err=%v", stable, err)
-	}
-}
-
-func TestSQLiteCombatSkipRejectsStaleTurn(t *testing.T) {
-	originalDB := db
-	testDB, err := sql.Open("sqlite3", ":memory:")
-	if err != nil {
-		t.Fatal(err)
-	}
-	db = testDB
-	t.Cleanup(func() { _ = testDB.Close(); db = originalDB })
-	if _, err := db.Exec(`CREATE TABLE combat_state (
-		lobby_id INTEGER PRIMARY KEY, current_turn_index INTEGER,
-		round_number INTEGER, turn_started_at TIMESTAMP, active BOOLEAN
-	)`); err != nil {
-		t.Fatal(err)
-	}
-	started := time.Now().Add(-5 * time.Hour).UTC().Truncate(time.Second)
-	if _, err := db.Exec(`INSERT INTO combat_state VALUES (6, 3, 1, ?, true)`, started); err != nil {
-		t.Fatal(err)
-	}
-	advanced, err := advanceCombatSkipIfCurrent(6, 3, 0, 2, started)
-	if err != nil || !advanced {
-		t.Fatalf("expected first skip to advance: advanced=%v err=%v", advanced, err)
-	}
-	advanced, err = advanceCombatSkipIfCurrent(6, 3, 0, 2, started)
-	if err != nil || advanced {
-		t.Fatalf("stale retry must not advance: advanced=%v err=%v", advanced, err)
-	}
-	var index, round int
-	if err := db.QueryRow(`SELECT current_turn_index, round_number FROM combat_state WHERE lobby_id = 6`).Scan(&index, &round); err != nil {
-		t.Fatal(err)
-	}
-	if index != 0 || round != 2 {
-		t.Fatalf("unexpected combat state after retry: index=%d round=%d", index, round)
-	}
-}
-
-func TestSQLiteNarratedCombatTurnResetsClock(t *testing.T) {
-	originalDB := db
-	testDB, err := sql.Open("sqlite3", ":memory:")
-	if err != nil {
-		t.Fatal(err)
-	}
-	db = testDB
-	t.Cleanup(func() { _ = testDB.Close(); db = originalDB })
-	if _, err := db.Exec(`CREATE TABLE combat_state (
-		lobby_id INTEGER PRIMARY KEY, current_turn_index INTEGER,
-		turn_started_at TIMESTAMP, active BOOLEAN
-	)`); err != nil {
-		t.Fatal(err)
-	}
-	if _, err := db.Exec(`INSERT INTO combat_state VALUES (6, 1, ?, true)`, time.Now().Add(-3*time.Hour)); err != nil {
-		t.Fatal(err)
-	}
-	if err := advanceNarratedCombatTurn(6); err != nil {
-		t.Fatal(err)
-	}
-	var index int
-	var started time.Time
-	if err := db.QueryRow(`SELECT current_turn_index, turn_started_at FROM combat_state WHERE lobby_id = 6`).Scan(&index, &started); err != nil {
-		t.Fatal(err)
-	}
-	if index != 2 || time.Since(started) > time.Minute {
-		t.Fatalf("narrated turn should start now: index=%d started=%s", index, started)
 	}
 }
 
@@ -1137,7 +1072,7 @@ func TestClearCombatInitiativeRemovesStaleTurnData(t *testing.T) {
 			turn_order TEXT,
 			active BOOLEAN,
 			turn_started_at DATETIME
-		, battle_map TEXT);
+		, battle_map TEXT, last_monster_id INTEGER, turn_claim TEXT);
 		INSERT INTO combat_state (lobby_id, round_number, current_turn_index, turn_order, active)
 		VALUES (6, 176, 1, '[{"name":"Ink Wraith"}]', true);`); err != nil {
 		t.Fatalf("seed combat state: %v", err)

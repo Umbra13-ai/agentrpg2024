@@ -3,6 +3,7 @@ package main
 import (
 	"database/sql"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"github.com/agentrpg/agentrpg/game"
 	"net/http"
@@ -359,14 +360,12 @@ func handleCombatStart(w http.ResponseWriter, r *http.Request, campaignID int) {
 
 	clearMonsterConditions(campaignID) // monster ids are reused from one fight to the next
 	clearPendingTurns(campaignID)      // pending turns belong to one fight (pending_turns_2024.go)
-	// Store combat state
-	turnOrderJSON, _ := json.Marshal(entries)
-	db.Exec(`
-		INSERT INTO combat_state (lobby_id, round_number, current_turn_index, turn_order, active, turn_started_at)
-		VALUES ($1, 1, 0, $2, true, NOW())
-		ON CONFLICT (lobby_id) DO UPDATE SET
-			round_number = 1, current_turn_index = 0, turn_order = $2, active = true, turn_started_at = NOW(), battle_map = NULL
-	`, campaignID, turnOrderJSON)
+	// Store combat state (the combat-state owner, combat_state_2024.go)
+	if err := startFight(campaignID, entries); err != nil {
+		w.WriteHeader(http.StatusInternalServerError)
+		json.NewEncoder(w).Encode(map[string]interface{}{"error": "database_error"})
+		return
+	}
 
 	// Reset action economy for all characters (reactions, actions, bonus actions, movement)
 	db.Exec("UPDATE characters SET reaction_used = false, action_used = false, bonus_action_used = false, weapon_interaction_used = false, in_melee_range = false WHERE lobby_id = $1", campaignID)
@@ -422,26 +421,6 @@ func handleCombatStart(w http.ResponseWriter, r *http.Request, campaignID int) {
 	}
 
 	json.NewEncoder(w).Encode(response)
-}
-
-// clearCombatInitiative deactivates combat and clears all initiative metadata.
-// A finished encounter must not continue to present a stale current turn or
-// turn order to clients; that stale data can otherwise drive timeout loops.
-func clearCombatInitiative(campaignID int) error {
-	clearMonsterConditions(campaignID)
-	clearPendingTurns(campaignID)   // the fight is over: so are its pending turns
-	clearBurning(campaignID, false) // F69: the fight is over, so are its fires
-	_, err := db.Exec(`
-		UPDATE combat_state
-		SET active = false,
-			battle_map = NULL,
-			round_number = 0,
-			current_turn_index = 0,
-			turn_order = '[]',
-			turn_started_at = CURRENT_TIMESTAMP
-		WHERE lobby_id = $1
-	`, campaignID)
-	return err
 }
 
 // nextLivingCombatTurn advances initiative without giving a turn to a dead
@@ -547,7 +526,6 @@ func handleCombatEnd(w http.ResponseWriter, r *http.Request, campaignID int) {
 // @Success 200 {object} map[string]interface{} "Turn advanced"
 // @Router /campaigns/{id}/combat/next [post]
 func handleCombatNext(w http.ResponseWriter, r *http.Request, campaignID int) {
-	defer clearOAWindows(campaignID) // Opportunity Attack chances last until the turn order moves on (character_oa_2024.go)
 	w.Header().Set("Content-Type", "application/json")
 
 	if _, ok := requireCampaignGM(w, r, campaignID, "advance the turn"); !ok {
@@ -560,198 +538,30 @@ func handleCombatNext(w http.ResponseWriter, r *http.Request, campaignID int) {
 	if !readRequest(w, r, &nextReq, optionalBody()) {
 		return
 	}
-
-	var round, turnIndex int
-	var turnOrderJSON []byte
-	var active bool
-	err := db.QueryRow(`
-		SELECT round_number, current_turn_index, turn_order, active 
-		FROM combat_state WHERE lobby_id = $1
-	`, campaignID).Scan(&round, &turnIndex, &turnOrderJSON, &active)
-
-	if err != nil || !active {
-		w.WriteHeader(http.StatusConflict)
-		json.NewEncoder(w).Encode(map[string]interface{}{"error": "no_active_combat"})
-		return
-	}
-
-	type InitEntry struct {
-		ID                   int    `json:"id"`
-		Name                 string `json:"name"`
-		Initiative           int    `json:"initiative"`
-		DexScore             int    `json:"dex_score"`
-		IsMonster            bool   `json:"is_monster"`
-		MonsterKey           string `json:"monster_key"`
-		HP                   int    `json:"hp"`
-		MaxHP                int    `json:"max_hp"`
-		AC                   int    `json:"ac"`
-		IsThiefsReflexesTurn bool   `json:"is_thiefs_reflexes_turn,omitempty"`
-	}
-	var entries []InitEntry
-	json.Unmarshal(turnOrderJSON, &entries)
-
-	if len(entries) == 0 {
-		w.WriteHeader(http.StatusBadRequest)
-		json.NewEncoder(w).Encode(map[string]interface{}{"error": "no_combatants"})
-		return
-	}
-	// Preserve inconsistent initiative for repair instead of panicking or
-	// guessing which character's turn should be consumed.
-	if turnIndex < 0 || turnIndex >= len(entries) {
-		w.WriteHeader(http.StatusConflict)
-		json.NewEncoder(w).Encode(map[string]interface{}{"error": "invalid_combat_turn"})
-		return
-	}
-	// Clear start-of-turn conditions for current character (ending their turn)
-	currentID := entries[turnIndex].ID
-	endedRound, endedIndex := round, turnIndex
-	closePendingTurns(campaignID, currentID, endedRound, "the turn ended without it (the GM advanced the turn order)") // an unresolved pending turn of the slot that ends
-
-	// Dodge and Reckless Attack last "until the start of your next turn" (SRD 5.2.1): they are dropped when this character's next
-	// turn starts (endUntilNextTurn), not here (a Dodge ended the moment it was taken, Nov 14; Reckless Attack did the same).
-	// Decrement countercharm duration
-	var condJSON []byte
-	db.QueryRow("SELECT COALESCE(conditions, '[]') FROM characters WHERE id = $1", currentID).Scan(&condJSON)
-	var conds []string
-	json.Unmarshal(condJSON, &conds)
-	newConds := []string{}
-	for _, c := range conds {
-		// Handle countercharm duration (performing_countercharm:N)
-		if strings.HasPrefix(c, "performing_countercharm:") {
-			parts := strings.Split(c, ":")
-			if len(parts) == 2 {
-				remaining, err := strconv.Atoi(parts[1])
-				if err == nil {
-					if remaining > 0 {
-						// Decrement and keep
-						newConds = append(newConds, fmt.Sprintf("performing_countercharm:%d", remaining-1))
-					}
-					// If remaining == 0, don't add (effect expires)
-					continue
-				}
-			}
-		}
-		newConds = append(newConds, c)
-	}
-	updatedConds, _ := json.Marshal(newConds)
-	db.Exec("UPDATE characters SET conditions = $1 WHERE id = $2", updatedConds, currentID)
-
-	// Decrement Sacred Weapon duration at end of turn (if active)
-	decrementSacredWeapon(currentID)
-
-	// Decrement Holy Nimbus duration at end of turn (if active)
-	decrementHolyNimbus(currentID)
-
-	// Advance turn
-	turnIndex++
-	if turnIndex >= len(entries) {
-		turnIndex = 0
-		round++
-
-		// Remove Thief's Reflexes extra turns when advancing to round 2
-		// "You can take two turns during the first round of any combat"
-		if round == 2 {
-			originalLen := len(entries)
-			filteredEntries := []InitEntry{}
-			for _, e := range entries {
-				if !e.IsThiefsReflexesTurn {
-					filteredEntries = append(filteredEntries, e)
-				}
-			}
-			if len(filteredEntries) < originalLen {
-				entries = filteredEntries
-				// turnIndex is already 0, which is correct for round 2
-			}
-		}
-	}
-	endTurnEffects(campaignID, -1)
-	// Legendary Actions immediately after the turn that ended, before the next creature's turn starts
-	window := fmt.Sprintf("%d:%d", endedRound, endedIndex)
-	setLastTurnEnded(campaignID, window, currentID)
 	var legendaryResults []map[string]interface{}
-	for _, la := range nextReq.LegendaryActions {
-		res, code, msg := takeLegendaryAction(r, campaignID, la, window, currentID)
-		if code != "" {
-			res = map[string]interface{}{"combatant_id": la.CombatantID, "error": code, "message": msg}
-		}
-		legendaryResults = append(legendaryResults, res)
-	}
-	ids := make([]int, len(entries))
-	for i, entry := range entries {
-		ids[i] = entry.ID
-	}
-	if nextIndex, wraps := nextLivingCombatTurn(turnIndex, ids, combatDeadFn(campaignID)); nextIndex != turnIndex || wraps > 0 {
-		turnIndex = nextIndex
-		round += wraps
-	}
-
-	// Thief's Reflexes turns are removed after round 1: save the turn order without them, keeping every field of the other
-	// entries (Legendary Action uses now live in combat_monster_state and come back in turnEffects)
-	var originalEntries []InitEntry
-	json.Unmarshal(turnOrderJSON, &originalEntries)
-	needsUpdate := len(entries) != len(originalEntries) // True if Thief's Reflexes entries were removed
-	newEntry := &entries[turnIndex]
-	if needsUpdate {
-		var rawEntries, kept []map[string]interface{}
-		json.Unmarshal(turnOrderJSON, &rawEntries)
-		for _, e := range rawEntries {
-			if extra, _ := e["is_thiefs_reflexes_turn"].(bool); !extra {
-				kept = append(kept, e)
+	t, code := advanceTurn(campaignID, turnHow{by: "the GM advanced the turn order", between: func(t *turnChange) {
+		for _, la := range nextReq.LegendaryActions { // after the turn that ended, before the next creature's turn starts
+			res, code, msg := takeLegendaryAction(r, campaignID, la, t.window(), t.EndedID)
+			if code != "" {
+				res = map[string]interface{}{"combatant_id": la.CombatantID, "error": code, "message": msg}
 			}
+			legendaryResults = append(legendaryResults, res)
 		}
-		updatedTurnOrder, _ := json.Marshal(kept)
-		db.Exec("UPDATE combat_state SET current_turn_index = $1, round_number = $2, turn_started_at = NOW(), turn_order = $3 WHERE lobby_id = $4", turnIndex, round, updatedTurnOrder, campaignID)
-	} else {
-		db.Exec("UPDATE combat_state SET current_turn_index = $1, round_number = $2, turn_started_at = NOW() WHERE lobby_id = $3", turnIndex, round, campaignID)
+	}})
+	if code != "" {
+		answerTurnRefusal(w, campaignID, t, code)
+		return
 	}
-	startTurnEffects(campaignID)
-
-	// Reset action economy for the new active character (only for player characters)
-	newActiveID := entries[turnIndex].ID
-	if !newEntry.IsMonster {
-		var species string
-		db.QueryRow("SELECT species FROM characters WHERE id = $1", newActiveID).Scan(&species)
-		speed := characterSpeed(newActiveID, species)
-		resetTurnFlags(newActiveID, speed) // also ends a Dodge: "until the start of your next turn"
-	}
-
-	// Clear Multiattack Defense tracking for all characters when turn advances
-	// "...for the rest of the turn" - resets when the attacker's turn ends
-	clearAllMultiattackDefenseHits(campaignID)
-
-	response := map[string]interface{}{
-		"success":              true,
-		"round":                round,
-		"current_turn":         entries[turnIndex].Name,
-		"turn_index":           turnIndex,
-		"action_economy_reset": true,
-	}
-
+	response := t.reply()
 	if len(legendaryResults) > 0 {
 		response["legendary_actions_taken"] = legendaryResults
 	}
-	if opts := legendaryOptions(campaignID, window, currentID); len(opts) > 0 {
-		response["legendary_options"] = opts // after the turn that just ended: POST /api/gm/legendary-action
-	}
-	if notes := moreTurnHooks(campaignID, currentID, newActiveID); len(notes) > 0 { // Blink, Regenerate ... (spells_more_2024.go)
-		response["spell_turn_effects"] = notes
-		for _, n := range notes {
-			recordGMAction(db, campaignID, "spell_effect", n, n)
-		}
-	}
-
-	if !newEntry.IsMonster {
-		if regen := survivorRegen(newActiveID, entries[turnIndex].Name); regen != nil { // Champion level 18 (subclass_helpers.go)
-			response["survivor_regen"] = regen
-		}
-	}
-
 	json.NewEncoder(w).Encode(response)
 }
 
 // handleCombatSkip godoc
 // @Summary Skip a player's turn due to timeout (GM only)
-// @Description Skip the current player's turn and advance to the next combatant. Use when a player has been inactive for too long.
+// @Description Skip the current player's turn and advance to the next combatant. Use when a player has been inactive for longer than the campaign's combat turn timeout (table rule combat_turn_timeout, 4 hours by default; when it is off, turns are never skipped: end the turn with combat/next).
 // @Tags Combat
 // @Produce json
 // @Param id path int true "Campaign ID"
@@ -769,149 +579,29 @@ func handleCombatSkip(w http.ResponseWriter, r *http.Request, campaignID int) {
 	if !noFields(w, r) { // this request takes no fields
 		return
 	}
-
-	var round, turnIndex int
-	var turnOrderJSON []byte
-	var active bool
-	var turnStartedAt sql.NullTime
-	err := db.QueryRow(`
-		SELECT round_number, current_turn_index, turn_order, active, turn_started_at
-		FROM combat_state WHERE lobby_id = $1
-	`, campaignID).Scan(&round, &turnIndex, &turnOrderJSON, &active, &turnStartedAt)
-
-	if err != nil || !active {
-		w.WriteHeader(http.StatusConflict)
-		json.NewEncoder(w).Encode(map[string]interface{}{"error": "no_active_combat"})
-		return
-	}
-
-	type InitEntry struct {
-		ID         int    `json:"id"`
-		Name       string `json:"name"`
-		Initiative int    `json:"initiative"`
-	}
-	var entries []InitEntry
-	json.Unmarshal(turnOrderJSON, &entries)
-
-	if len(entries) == 0 {
-		w.WriteHeader(http.StatusBadRequest)
-		json.NewEncoder(w).Encode(map[string]interface{}{"error": "no_combatants"})
-		return
-	}
-	if turnIndex < 0 || turnIndex >= len(entries) || entries[turnIndex].ID < 0 {
-		w.WriteHeader(http.StatusConflict)
-		json.NewEncoder(w).Encode(map[string]interface{}{"error": "not_player_turn"})
-		return
-	}
-	if !turnStartedAt.Valid || time.Since(turnStartedAt.Time) < 4*time.Hour {
-		w.WriteHeader(http.StatusConflict)
-		json.NewEncoder(w).Encode(map[string]interface{}{"error": "turn_not_timed_out"})
-		return
-	}
-
-	skippedName := entries[turnIndex].Name
-	skippedID := entries[turnIndex].ID
-	closePendingTurns(campaignID, skippedID, round, "the GM skipped the turn")
-
-	// Calculate how long the turn was
-	elapsedMinutes := 0
-	if turnStartedAt.Valid {
-		elapsedMinutes = int(time.Since(turnStartedAt.Time).Minutes())
-	}
-
-	// Advance turn
-	oldTurnIndex := turnIndex
-	turnIndex++
-	ids := make([]int, len(entries))
-	for i, entry := range entries {
-		ids[i] = entry.ID
-	}
-	var wraps int
-	turnIndex, wraps = nextLivingCombatTurn(turnIndex, ids, combatDeadFn(campaignID))
-	round += wraps
-	newRound := wraps > 0
-
-	// The auto-skip worker may advance the turn after the read above. Only
-	// commit this skip if the exact turn we inspected is still current.
-	setLastTurnEnded(campaignID, fmt.Sprintf("%d:%d", round-wraps, oldTurnIndex), skippedID) // Legendary Actions may follow it
-	advanced, err := advanceCombatSkipIfCurrent(campaignID, oldTurnIndex, turnIndex, round, turnStartedAt.Time)
-	if err != nil {
-		w.WriteHeader(http.StatusInternalServerError)
-		json.NewEncoder(w).Encode(map[string]interface{}{"error": "skip_failed"})
-		return
-	}
-	if !advanced {
-		w.WriteHeader(http.StatusConflict)
-		json.NewEncoder(w).Encode(map[string]interface{}{"error": "turn_already_advanced"})
-		return
-	}
-	if newRound {
-		// Reset reactions only after the turn transition is committed.
-		db.Exec(`UPDATE characters SET reaction_used = false WHERE lobby_id = $1`, campaignID)
-	}
-	// Record only a committed skip, never a stale request.
-	writeAction(db, campaignID, skippedID, "turn_skipped", "Turn skipped by GM due to timeout", fmt.Sprintf("Inactive for %d minutes", elapsedMinutes))
-
-	// Reset action economy for the new active character
-	newActiveID := entries[turnIndex].ID
-	var species string
-	db.QueryRow("SELECT species FROM characters WHERE id = $1", newActiveID).Scan(&species)
-	speed := characterSpeed(newActiveID, species)
-	resetTurnFlags(newActiveID, speed)
-
-	// Clear Multiattack Defense tracking when turn is skipped
-	clearAllMultiattackDefenseHits(campaignID)
-
-	response := map[string]interface{}{
-		"success":              true,
-		"skipped":              skippedName,
-		"inactive_minutes":     elapsedMinutes,
-		"round":                round,
-		"current_turn":         entries[turnIndex].Name,
-		"turn_index":           turnIndex,
-		"action_economy_reset": true,
-	}
-	if opts, task := openLegendaryOptions(campaignID); len(opts) > 0 { // after the skipped turn (monster_features_2024.go)
-		response["legendary_options"] = opts
-		response["legendary_note"] = task
-	}
-
-	if newRound {
-		response["new_round"] = true
-		response["reactions_reset"] = true
-	}
-
-	if notes := moreTurnHooks(campaignID, skippedID, newActiveID); len(notes) > 0 { // Blink, Regenerate ... (spells_more_2024.go)
-		response["spell_turn_effects"] = notes
-		for _, n := range notes {
-			recordGMAction(db, campaignID, "spell_effect", n, n)
+	limit, on := combatTurnTimeout(campaignID) // the table rule, as the timeout worker reads it
+	t, code := advanceTurn(campaignID, turnHow{by: "the GM skipped the turn", allow: func(f *fight) (string, string) {
+		if id := asInt(f.current()["id"]); id < 0 {
+			return "not_player_turn", ""
 		}
-	}
-	if newActiveID > 0 {
-		if regen := survivorRegen(newActiveID, entries[turnIndex].Name); regen != nil { // Champion level 18 (subclass_helpers.go)
-			response["survivor_regen"] = regen
+		if !on {
+			return "turn_not_timed_out", fmt.Sprintf("The campaign's table rule combat_turn_timeout is off: turns are never skipped. End the turn with POST /api/campaigns/%d/combat/next.", campaignID)
 		}
+		if f.StartedAt.IsZero() || time.Since(f.StartedAt) < limit {
+			return "turn_not_timed_out", fmt.Sprintf("The turn hasn't timed out yet: it is skipped after %s (table rule combat_turn_timeout). End it with POST /api/campaigns/%d/combat/next if it is done.", limit, campaignID)
+		}
+		return "", ""
+	}})
+	if code != "" {
+		answerTurnRefusal(w, campaignID, t, code)
+		return
 	}
-
+	elapsedMinutes := int(time.Since(t.EndedStartedAt).Minutes())
+	writeAction(db, campaignID, t.EndedID, "turn_skipped", "Turn skipped by GM due to timeout", fmt.Sprintf("Inactive for %d minutes", elapsedMinutes))
+	response := t.reply()
+	response["skipped"] = t.EndedName
+	response["inactive_minutes"] = elapsedMinutes
 	json.NewEncoder(w).Encode(response)
-}
-
-// advanceCombatSkipIfCurrent prevents a GM skip racing the automatic timeout
-// worker from advancing the following combatant's turn instead.
-func advanceCombatSkipIfCurrent(campaignID, oldIndex, newIndex, round int, startedAt time.Time) (bool, error) {
-	result, err := db.Exec(`
-		UPDATE combat_state SET current_turn_index = $1, round_number = $2, turn_started_at = $3
-		WHERE lobby_id = $4 AND current_turn_index = $5 AND turn_started_at = $6 AND active = true
-	`, newIndex, round, time.Now().UTC(), campaignID, oldIndex, startedAt)
-	if err != nil {
-		return false, err
-	}
-	updated, err := result.RowsAffected()
-	if err == nil && updated == 1 {
-		endTurnEffects(campaignID, oldIndex)
-		startTurnEffects(campaignID)
-	}
-	return err == nil && updated == 1, err
 }
 
 // handleExplorationStatus godoc
@@ -1138,17 +828,7 @@ func handleCombatAdd(w http.ResponseWriter, r *http.Request, campaignID int) {
 	}
 
 	// Check combat is active
-	var round, turnIndex int
-	var turnOrderJSON []byte
-	var active bool
-	err := db.QueryRow(`
-		SELECT round_number, current_turn_index, turn_order, active 
-		FROM combat_state WHERE lobby_id = $1
-	`, campaignID).Scan(&round, &turnIndex, &turnOrderJSON, &active)
-
-	if err != nil || !active {
-		w.WriteHeader(http.StatusConflict)
-		json.NewEncoder(w).Encode(map[string]interface{}{"error": "no_active_combat", "hint": "Start combat first with POST /api/campaigns/{id}/combat/start"})
+	if _, err := readFight(db, campaignID); answerFightProblem(w, err) {
 		return
 	}
 
@@ -1174,221 +854,98 @@ func handleCombatAdd(w http.ResponseWriter, r *http.Request, campaignID int) {
 		return
 	}
 
-	// Parse current turn order
-	type InitEntry struct {
-		ID                   int    `json:"id"`
-		Name                 string `json:"name"`
-		Initiative           int    `json:"initiative"`
-		DexScore             int    `json:"dex_score"`
-		IsMonster            bool   `json:"is_monster"`
-		MonsterKey           string `json:"monster_key"`
-		HP                   int    `json:"hp"`
-		MaxHP                int    `json:"max_hp"`
-		AC                   int    `json:"ac"`
-		IsThiefsReflexesTurn bool   `json:"is_thiefs_reflexes_turn,omitempty"`
-	}
-	var entries []InitEntry
-	if err := json.Unmarshal(turnOrderJSON, &entries); err != nil || len(entries) == 0 {
-		w.WriteHeader(http.StatusConflict)
-		json.NewEncoder(w).Encode(map[string]interface{}{"error": "no_combatants"})
-		return
-	}
-	if turnIndex < 0 || turnIndex >= len(entries) {
-		w.WriteHeader(http.StatusConflict)
-		json.NewEncoder(w).Encode(map[string]interface{}{"error": "invalid_combat_turn"})
-		return
-	}
-
-	// Keep original JSON for existing combatants. The typed projection is only
-	// used for sorting; serializing it would discard conditions and future fields.
-	var originalEntries []json.RawMessage
-	if err := json.Unmarshal(turnOrderJSON, &originalEntries); err != nil {
-		w.WriteHeader(http.StatusConflict)
-		json.NewEncoder(w).Encode(map[string]interface{}{"error": "no_combatants"})
-		return
-	}
-	// A Thief with Thief's Reflexes has two entries with the same id in the first round (the normal turn and the second turn),
-	// so an entry is known by its id and whether it is the extra turn; keying by id alone overwrote the normal turn.
-	type turnKey struct {
-		id    int
-		extra bool
-	}
-	originalByID := make(map[turnKey]json.RawMessage, len(entries))
-	for i, entry := range entries {
-		originalByID[turnKey{entry.ID, entry.IsThiefsReflexesTurn}] = originalEntries[i]
-	}
-
-	// Names need not be unique (for example, several Goblins). Preserve identity.
-	currentTurnID := entries[turnIndex].ID
-	currentTurnExtra := entries[turnIndex].IsThiefsReflexesTurn
-
-	// Find highest existing monster ID (monsters use negative IDs)
-	minID := 0
-	for _, e := range entries {
-		if e.ID < minID {
-			minID = e.ID
-		}
-	}
-
-	added := []map[string]interface{}{}
+	// The new entries (their ids are given by the fight, below): stat block, Initiative, Hit Points, AC.
+	var newEntries []map[string]interface{}
+	var inLair []bool
 	groupInit := map[string]int{}
-	var lairIDs []int
-
 	for _, c := range req.Combatants {
 		if c.Name == "" {
 			continue
 		}
-
-		entry := InitEntry{
-			ID:         minID - 1, // Decrement for each new monster
-			Name:       c.Name,
-			IsMonster:  true,
-			MonsterKey: c.MonsterKey,
+		init, dex, hp, ac := c.Initiative, 0, 10, 10
+		var mdex, mhp, mac int
+		known := c.MonsterKey != "" && db.QueryRow(`SELECT COALESCE(dex, 10), COALESCE(hp, 10), COALESCE(ac, 10) FROM monsters WHERE slug = $1`, c.MonsterKey).Scan(&mdex, &mhp, &mac) == nil
+		if known {
+			dex, hp, ac = mdex, mhp, mac
 		}
-		minID--
-
-		// Look up monster stats if key provided
-		if c.MonsterKey != "" {
-			var dex, hp, ac int
-			err := db.QueryRow(`
-				SELECT COALESCE(dex, 10), COALESCE(hp, 10), COALESCE(ac, 10)
-				FROM monsters WHERE slug = $1
-			`, c.MonsterKey).Scan(&dex, &hp, &ac)
-			if err == nil {
-				// Roll initiative based on monster DEX if not provided
-				if c.Initiative == 0 {
-					// A group of identical creatures shares one Initiative roll (one roll per monster kind per request).
-					groupKey := fmt.Sprintf("%s#%v", c.MonsterKey, c.Surprised)
-					if v, ok := groupInit[groupKey]; ok {
-						entry.Initiative = v
-					} else {
-						d := game.RollDie(20)
-						if c.Surprised {
-							if d2 := game.RollDie(20); d2 < d {
-								d = d2
-							}
+		if init == 0 {
+			if known {
+				// A group of identical creatures shares one Initiative roll (one roll per monster kind per request).
+				groupKey := fmt.Sprintf("%s#%v", c.MonsterKey, c.Surprised)
+				if v, ok := groupInit[groupKey]; ok {
+					init = v
+				} else {
+					d := game.RollDie(20)
+					if c.Surprised {
+						if d2 := game.RollDie(20); d2 < d {
+							d = d2
 						}
-						entry.Initiative = d + game.Modifier(dex)
-						groupInit[groupKey] = entry.Initiative
 					}
-				} else {
-					entry.Initiative = c.Initiative
-				}
-				entry.DexScore = dex
-
-				// Use provided HP/AC or monster defaults
-				if c.HP > 0 {
-					entry.HP = c.HP
-					entry.MaxHP = c.HP
-				} else {
-					entry.HP = hp
-					entry.MaxHP = hp
-				}
-				if c.AC > 0 {
-					entry.AC = c.AC
-				} else {
-					entry.AC = ac
-				}
-
-				if c.InLair { // in its lair: the "in Lair" numbers of Legendary Actions and Legendary Resistance (monster_features_2024.go)
-					lairIDs = append(lairIDs, entry.ID)
+					init = d + game.Modifier(dex)
+					groupInit[groupKey] = init
 				}
 			} else {
-				// Monster not found, use provided or defaults
-				if c.Initiative == 0 {
-					entry.Initiative = game.RollDie(20)
-				} else {
-					entry.Initiative = c.Initiative
-				}
-				entry.HP = 10
-				entry.MaxHP = 10
-				entry.AC = 10
-				if c.HP > 0 {
-					entry.HP = c.HP
-					entry.MaxHP = c.HP
-				}
-				if c.AC > 0 {
-					entry.AC = c.AC
-				}
-			}
-		} else {
-			// No monster key, use provided values or defaults
-			if c.Initiative == 0 {
-				entry.Initiative = game.RollDie(20)
-			} else {
-				entry.Initiative = c.Initiative
-			}
-			entry.HP = 10
-			entry.MaxHP = 10
-			entry.AC = 10
-			if c.HP > 0 {
-				entry.HP = c.HP
-				entry.MaxHP = c.HP
-			}
-			if c.AC > 0 {
-				entry.AC = c.AC
+				init = game.RollDie(20)
 			}
 		}
-
-		entries = append(entries, entry)
-		added = append(added, map[string]interface{}{
-			"id":         entry.ID,
-			"name":       entry.Name,
-			"initiative": entry.Initiative,
-			"hp":         entry.HP,
-			"ac":         entry.AC,
-		})
+		if c.HP > 0 {
+			hp = c.HP
+		}
+		if c.AC > 0 {
+			ac = c.AC
+		}
+		newEntries = append(newEntries, map[string]interface{}{"name": c.Name, "initiative": init, "dex_score": dex, "is_monster": true,
+			"monster_key": c.MonsterKey, "hp": hp, "max_hp": hp, "ac": ac})
+		inLair = append(inLair, known && c.InLair) // in its lair: the "in Lair" numbers of Legendary Actions and Legendary Resistance
 	}
 
-	// Re-sort by initiative (highest first), then by DEX (highest first)
-	sort.Slice(entries, func(i, j int) bool {
-		if entries[i].Initiative != entries[j].Initiative {
-			return entries[i].Initiative > entries[j].Initiative
+	// Each new monster gets an id the fight has never given (audit AUD-39) and its place in the Initiative order; whose turn it
+	// is doesn't change; every other entry is kept as it is (the combat-state owner, combat_state_2024.go).
+	f, err := changeFight(campaignID, func(f *fight) error {
+		if len(f.Order) == 0 {
+			return errNotInFight
 		}
-		return entries[i].DexScore > entries[j].DexScore
+		if f.current() == nil {
+			return errTurnMoved
+		}
+		for _, e := range newEntries {
+			e["id"] = f.newMonsterID()
+			f.place(e)
+		}
+		return nil
 	})
-
-	// Find where the current turn holder ended up after re-sort
-	newTurnIndex := 0
-	for i, e := range entries {
-		if e.ID == currentTurnID && e.IsThiefsReflexesTurn == currentTurnExtra {
-			newTurnIndex = i
-			break
-		}
+	switch {
+	case errors.Is(err, errNotInFight):
+		writeJSONStatus(w, http.StatusConflict, map[string]interface{}{"error": "no_combatants"})
+		return
+	case errors.Is(err, errTurnMoved):
+		writeJSONStatus(w, http.StatusConflict, map[string]interface{}{"error": "invalid_combat_turn"})
+		return
+	case answerFightProblem(w, err):
+		return
 	}
 
-	// Preserve untouched entries in persistence and response after sorting.
-	preservedEntries := make([]json.RawMessage, len(entries))
-	for i, entry := range entries {
-		if original, ok := originalByID[turnKey{entry.ID, entry.IsThiefsReflexesTurn}]; ok {
-			preservedEntries[i] = original
-		} else {
-			preservedEntries[i], _ = json.Marshal(entry)
+	added := []map[string]interface{}{}
+	for i, e := range newEntries {
+		id := asInt(e["id"])
+		if inLair[i] {
+			s := loadMonsterState(campaignID, id)
+			s.InLair = true
+			saveMonsterState(campaignID, id, s)
 		}
-	}
-
-	// Update combat state
-	updatedJSON, _ := json.Marshal(preservedEntries)
-	db.Exec(`
-		UPDATE combat_state SET turn_order = $1, current_turn_index = $2 WHERE lobby_id = $3
-	`, updatedJSON, newTurnIndex, campaignID)
-	for _, id := range lairIDs {
-		s := loadMonsterState(campaignID, id)
-		s.InLair = true
-		saveMonsterState(campaignID, id, s)
-	}
-	for _, a := range added { // Legendary Actions, Legendary Resistance, auras the server runs for this monster
-		if f := monsterFeaturesInfo(campaignID, asInt(a["id"])); f != nil {
-			a["features"] = f
+		a := map[string]interface{}{"id": id, "name": e["name"], "initiative": e["initiative"], "hp": e["hp"], "ac": e["ac"]}
+		if feats := monsterFeaturesInfo(campaignID, id); feats != nil { // Legendary Actions, Legendary Resistance, auras the server runs for this monster
+			a["features"] = feats
 		}
+		added = append(added, a)
 	}
 
 	json.NewEncoder(w).Encode(map[string]interface{}{
 		"success":          true,
 		"added_count":      len(added),
 		"combatants_added": added,
-		"turn_order":       preservedEntries,
-		"current_turn":     entries[newTurnIndex].Name,
+		"turn_order":       f.Order,
+		"current_turn":     f.current()["name"],
 	})
 }
 
@@ -1419,17 +976,8 @@ func handleCombatRemove(w http.ResponseWriter, r *http.Request, campaignID int) 
 	}
 
 	// Check combat is active
-	var round, turnIndex int
-	var turnOrderJSON []byte
-	var active bool
-	err := db.QueryRow(`
-		SELECT round_number, current_turn_index, turn_order, active 
-		FROM combat_state WHERE lobby_id = $1
-	`, campaignID).Scan(&round, &turnIndex, &turnOrderJSON, &active)
-
-	if err != nil || !active {
-		w.WriteHeader(http.StatusConflict)
-		json.NewEncoder(w).Encode(map[string]interface{}{"error": "no_active_combat"})
+	f, err := readFight(db, campaignID)
+	if answerFightProblem(w, err) {
 		return
 	}
 
@@ -1447,108 +995,58 @@ func handleCombatRemove(w http.ResponseWriter, r *http.Request, campaignID int) 
 		json.NewEncoder(w).Encode(map[string]interface{}{"error": "must_provide_combatant_id_or_name"})
 		return
 	}
-
-	// Parse turn order
-	type InitEntry struct {
-		ID         int    `json:"id"`
-		Name       string `json:"name"`
-		Initiative int    `json:"initiative"`
-		DexScore   int    `json:"dex_score"`
-		IsMonster  bool   `json:"is_monster"`
-		MonsterKey string `json:"monster_key"`
-		HP         int    `json:"hp"`
-		MaxHP      int    `json:"max_hp"`
-		AC         int    `json:"ac"`
-	}
-	var entries []InitEntry
-	if err := json.Unmarshal(turnOrderJSON, &entries); err != nil || len(entries) == 0 {
-		w.WriteHeader(http.StatusConflict)
-		json.NewEncoder(w).Encode(map[string]interface{}{"error": "no_combatants"})
+	if len(f.Order) == 0 {
+		writeJSONStatus(w, http.StatusConflict, map[string]interface{}{"error": "no_combatants"})
 		return
 	}
-	if turnIndex < 0 || turnIndex >= len(entries) {
-		w.WriteHeader(http.StatusConflict)
-		json.NewEncoder(w).Encode(map[string]interface{}{"error": "invalid_combat_turn"})
+	if f.current() == nil {
+		writeJSONStatus(w, http.StatusConflict, map[string]interface{}{"error": "invalid_combat_turn"})
 		return
 	}
-
-	// Find and remove the combatant
-	// Keep the original JSON for retained combatants: the projection above
-	// omits legendary resources and may not know about future metadata.
-	var rawEntries []json.RawMessage
-	if err := json.Unmarshal(turnOrderJSON, &rawEntries); err != nil {
-		w.WriteHeader(http.StatusConflict)
-		json.NewEncoder(w).Encode(map[string]interface{}{"error": "no_combatants"})
-		return
-	}
-	retainedEntries := []json.RawMessage{}
-	var removed *InitEntry
-	var removedIdx int
-	newEntries := []InitEntry{}
-	for i, e := range entries {
-		match := false
-		if req.CombatantID != 0 && e.ID == req.CombatantID {
-			match = true
-		} else if req.CombatantName != "" && strings.EqualFold(e.Name, req.CombatantName) {
-			match = true
-		}
-
-		if match && removed == nil {
-			removed = &e
-			removedIdx = i
-		} else {
-			newEntries = append(newEntries, e)
-			retainedEntries = append(retainedEntries, rawEntries[i])
+	id := req.CombatantID
+	if id == 0 {
+		for _, e := range f.Order {
+			if strings.EqualFold(sprintAny(e["name"]), req.CombatantName) {
+				id = asInt(e["id"])
+				break
+			}
 		}
 	}
-
-	if removed == nil {
-		w.WriteHeader(http.StatusNotFound)
-		json.NewEncoder(w).Encode(map[string]interface{}{"error": "combatant_not_found"})
+	if id == 0 {
+		writeJSONStatus(w, http.StatusNotFound, map[string]interface{}{"error": "combatant_not_found"})
 		return
 	}
-
-	// Adjust turn index if needed
-	newTurnIndex := turnIndex
-	if removedIdx < turnIndex {
-		newTurnIndex-- // Removed someone before current turn
-	} else if removedIdx == turnIndex {
-		// Removed current turn holder - stay at same index (next in line becomes current)
-		if newTurnIndex >= len(newEntries) && len(newEntries) > 0 {
-			newTurnIndex = 0
-			round++ // Wrapped around
-		}
-	}
-
-	if len(newEntries) == 0 {
-		// No combatants left, end combat
-		if err := clearCombatInitiative(campaignID); err != nil {
-			w.WriteHeader(http.StatusInternalServerError)
-			json.NewEncoder(w).Encode(map[string]interface{}{"error": "combat_end_failed"})
-			return
-		}
-		json.NewEncoder(w).Encode(map[string]interface{}{
-			"success":      true,
-			"removed":      removed.Name,
-			"combat_ended": true,
-			"message":      "All combatants removed, combat ended",
-		})
+	res, code := removeFromFight(campaignID, id, "the GM removed the combatant")
+	switch {
+	case code == "combatant_not_found":
+		writeJSONStatus(w, http.StatusNotFound, map[string]interface{}{"error": code})
+		return
+	case code != "":
+		answerTurnRefusal(w, campaignID, nil, code)
 		return
 	}
+	writeJSONStatus(w, http.StatusOK, combatRemovalReply(campaignID, res))
+}
 
-	// Update combat state
-	updatedJSON, _ := json.Marshal(retainedEntries)
-	db.Exec(`
-		UPDATE combat_state SET turn_order = $1, current_turn_index = $2, round_number = $3 WHERE lobby_id = $4
-	`, updatedJSON, newTurnIndex, round, campaignID)
-
-	json.NewEncoder(w).Encode(map[string]interface{}{
-		"success":      true,
-		"removed":      removed.Name,
-		"removed_id":   removed.ID,
-		"turn_order":   retainedEntries,
-		"current_turn": newEntries[newTurnIndex].Name,
-	})
+// combatRemovalReply is the reply of a removal from the fight (POST .../combat/remove and the GM's adjust-monster remove).
+func combatRemovalReply(campaignID int, res removal) map[string]interface{} {
+	out := map[string]interface{}{"success": true, "removed": res.Removed[0]["name"], "removed_id": asInt(res.Removed[0]["id"])}
+	if res.Ended {
+		out["combat_ended"] = true
+		out["message"] = "All combatants removed, combat ended"
+		return out
+	}
+	if f, err := readFight(db, campaignID); err == nil {
+		out["turn_order"] = f.Order
+		if cur := f.current(); cur != nil {
+			out["current_turn"] = cur["name"]
+		}
+	}
+	if t := res.Turn; t != nil { // it was its turn: the next creature's turn has started
+		out["turn_passed"] = t.reply()
+		out["current_turn"] = t.NextName
+	}
+	return out
 }
 
 // handleCombatStatus godoc

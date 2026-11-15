@@ -138,22 +138,8 @@ func insertItemCompanion(charID int, kind, name, source, slug, ctype, notes, con
 }
 
 // addMonstersToFight adds monsters of one stat block to the active fight (one shared Initiative roll), keeping the current turn.
-// extra fields go on each entry. It returns the new combatant ids.
+// extra fields go on each entry. It returns the new combatant ids (given by the fight, never one given before in it).
 func addMonstersToFight(lobbyID int, slug, name string, n, hp int, extra map[string]interface{}) []int {
-	var raw []byte
-	var idx int
-	var active bool
-	if db.QueryRow(`SELECT turn_order, current_turn_index, active FROM combat_state WHERE lobby_id = $1`, lobbyID).Scan(&raw, &idx, &active) != nil || !active {
-		return nil
-	}
-	var entries []map[string]interface{}
-	if json.Unmarshal(raw, &entries) != nil || len(entries) == 0 {
-		return nil
-	}
-	cur := entries[0]
-	if idx >= 0 && idx < len(entries) {
-		cur = entries[idx]
-	}
 	var dex, mhp, ac int
 	if db.QueryRow(`SELECT COALESCE(dex,10), COALESCE(hp,10), COALESCE(ac,10) FROM monsters WHERE slug = $1`, slug).Scan(&dex, &mhp, &ac) != nil {
 		return nil
@@ -161,75 +147,38 @@ func addMonstersToFight(lobbyID int, slug, name string, n, hp int, extra map[str
 	if hp <= 0 {
 		hp = mhp
 	}
-	minID := 0
-	for _, e := range entries {
-		if id := asInt(e["id"]); id < minID {
-			minID = id
-		}
-	}
 	init := game.RollDie(20) + game.Modifier(dex)
 	var ids []int
-	for i := 1; i <= n; i++ {
-		minID--
-		label := name
-		if n > 1 {
-			label = fmt.Sprintf("%s %d", name, i)
+	_, err := changeFight(lobbyID, func(f *fight) error {
+		if len(f.Order) == 0 {
+			return errNotInFight
 		}
-		e := map[string]interface{}{"id": minID, "name": label, "initiative": init, "dex_score": dex, "is_monster": true, "monster_key": slug, "hp": hp, "max_hp": hp, "ac": ac}
-		for k, v := range extra {
-			e[k] = v
+		ids = nil
+		for i := 1; i <= n; i++ {
+			label := name
+			if n > 1 {
+				label = fmt.Sprintf("%s %d", name, i)
+			}
+			id := f.newMonsterID()
+			e := map[string]interface{}{"id": id, "name": label, "initiative": init, "dex_score": dex, "is_monster": true, "monster_key": slug, "hp": hp, "max_hp": hp, "ac": ac}
+			for k, v := range extra {
+				e[k] = v
+			}
+			f.place(e)
+			ids = append(ids, id)
 		}
-		entries = append(entries, e)
-		ids = append(ids, minID)
-	}
-	sort.SliceStable(entries, func(i, j int) bool {
-		if asInt(entries[i]["initiative"]) != asInt(entries[j]["initiative"]) {
-			return asInt(entries[i]["initiative"]) > asInt(entries[j]["initiative"])
-		}
-		return asInt(entries[i]["dex_score"]) > asInt(entries[j]["dex_score"])
+		return nil
 	})
-	newIdx := 0
-	for i, e := range entries {
-		if asInt(e["id"]) == asInt(cur["id"]) && fmt.Sprint(e["is_thiefs_reflexes_turn"]) == fmt.Sprint(cur["is_thiefs_reflexes_turn"]) {
-			newIdx = i
-			break
-		}
+	if err != nil {
+		return nil
 	}
-	b, _ := json.Marshal(entries)
-	db.Exec(`UPDATE combat_state SET turn_order = $1, current_turn_index = $2 WHERE lobby_id = $3`, b, newIdx, lobbyID)
 	return ids
 }
 
 // removeMonsterFromFight takes a monster out of the turn order (trapped in an Iron Flask), keeping the current turn.
 func removeMonsterFromFight(lobbyID, id int) bool {
-	var raw []byte
-	var idx int
-	if db.QueryRow(`SELECT turn_order, current_turn_index FROM combat_state WHERE lobby_id = $1 AND active = true`, lobbyID).Scan(&raw, &idx) != nil {
-		return false
-	}
-	var entries []map[string]interface{}
-	json.Unmarshal(raw, &entries)
-	out := entries[:0:0]
-	removed := false
-	for i, e := range entries {
-		if asInt(e["id"]) == id {
-			removed = true
-			if i < idx {
-				idx--
-			}
-			continue
-		}
-		out = append(out, e)
-	}
-	if !removed || len(out) == 0 {
-		return false
-	}
-	if idx >= len(out) {
-		idx = 0
-	}
-	b, _ := json.Marshal(out)
-	db.Exec(`UPDATE combat_state SET turn_order = $1, current_turn_index = $2 WHERE lobby_id = $3`, b, idx, lobbyID)
-	return true
+	res, code := removeFromFight(lobbyID, id, "it was trapped in an Iron Flask")
+	return code == "" && len(res.Removed) > 0
 }
 
 // ---------------------------------------------------------------- the use_item hook
@@ -530,11 +479,8 @@ func sphereOfAnnihilation(charID int, it invItem, req itemCastReq, description s
 				continue
 			}
 			got, _ := adjustMonsterDamage(fmt.Sprint(e["monster_key"]), "force", dmg)
-			hp := asInt(e["hp"]) - got
-			if hp < 0 {
-				hp = 0
-			}
-			setMonsterHP(lobby, t, hp)
+			r, _ := loseMonsterHP(lobby, t, got) // the monster Hit Point owner (monster_hp_2024.go)
+			hp := r.After.HP
 			out += fmt.Sprintf(" %s: Dexterity save %d against DC 19, a failure: the sphere touches it for %d Force damage", mname, total, got)
 			if hp == 0 {
 				out += ", and it is obliterated (its possessions stay behind; no other remains)."

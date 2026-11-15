@@ -401,65 +401,26 @@ func handleGMAoECast(w http.ResponseWriter, r *http.Request) {
 					}
 				}
 			} else {
-				// Monster in combat - apply monster damage resistance
-				// Get monster_key from turn_order
-				var turnOrderJSON []byte
-				db.QueryRow(`SELECT turn_order FROM combat_state WHERE lobby_id = $1`, campaignID).Scan(&turnOrderJSON)
-				if turnOrderJSON != nil {
-					type CombatEntry struct {
-						ID         int    `json:"id"`
-						Name       string `json:"name"`
-						MonsterKey string `json:"monster_key"`
-						HP         int    `json:"hp"`
-						MaxHP      int    `json:"max_hp"`
+				// A monster: the monster Hit Point owner (monster_hp_2024.go) applies its resistances, immunities and vulnerabilities
+				// and changes only its Hit Points, under the fight's lock. Before Nov 15 2026 this path rewrote the whole turn order
+				// through a five-field struct: every initiative, AC and is_monster flag was lost and players could no longer target any
+				// monster (audit AUD-09).
+				h, ok := hurtMonster(campaignID, targetID, damage, damageType, false)
+				if !ok {
+					result["error"] = "target_not_found"
+				} else {
+					for k, v := range monsterHitFields(h, damageType) {
+						result[k] = v
 					}
-					var entries []CombatEntry
-					json.Unmarshal(turnOrderJSON, &entries)
-
-					for i, e := range entries {
-						if e.ID == targetID {
-							targetName = e.Name
-							targetHP = e.HP
-							targetMaxHP = e.MaxHP
-
-							// Apply monster damage resistance (spells are always magical)
-							if e.MonsterKey != "" && damageType != "" {
-								dmgMod := applyMonsterDamageResistance(e.MonsterKey, damage, damageType, true, false)
-								if dmgMod.WasNegated {
-									damage = 0
-									result["immunities_applied"] = dmgMod.Immunities
-								} else if dmgMod.WasDoubled {
-									damage = dmgMod.FinalDamage
-									result["vulnerabilities_applied"] = dmgMod.Vulnerabilities
-								} else if dmgMod.WasHalved {
-									damage = dmgMod.FinalDamage
-									result["resistances_applied"] = dmgMod.Resistances
-								}
-							}
-
-							newHP := e.HP - damage
-							if newHP < 0 {
-								newHP = 0
-							}
-							entries[i].HP = newHP
-
-							// Update turn_order with new HP
-							updatedJSON, _ := json.Marshal(entries)
-							db.Exec(`UPDATE combat_state SET turn_order = $1 WHERE lobby_id = $2`, updatedJSON, campaignID)
-
-							result["target_name"] = e.Name
-							result["hp_before"] = e.HP
-							result["hp_after"] = newHP
-							result["damage"] = damage
-							totalDamageDealt += damage
-
-							// Check for kill effects when monster drops to 0 HP
-							if newHP == 0 && req.CasterID > 0 {
-								if killEffects := applyKillEffects(req.CasterID); killEffects != nil {
-									result["kill_effects"] = killEffects
-								}
-							}
-							break
+					result["target_name"] = h.Name
+					result["hp_before"] = h.Before
+					result["hp_after"] = h.After
+					result["damage"] = h.Dealt
+					result["message"] = h.Text
+					totalDamageDealt += h.Dealt
+					if h.After == 0 && h.Before > 0 && req.CasterID > 0 { // kill effects when the monster drops to 0 HP
+						if killEffects := applyKillEffects(req.CasterID); killEffects != nil {
+							result["kill_effects"] = killEffects
 						}
 					}
 				}

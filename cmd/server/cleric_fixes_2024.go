@@ -195,7 +195,7 @@ func divineWord(charID, lobby int, saveDC int, targets []int) string {
 			if id > 0 {
 				killCharacter(id) // the Hit Point owner (hit_points_2024.go)
 			} else {
-				editMonsterEntry(lobby, id, func(e map[string]interface{}) { e["hp"] = 0 })
+				setMonsterHP(lobby, id, 0) // the monster Hit Point owner (monster_hp_2024.go)
 			}
 		case hp <= 30:
 			for _, c := range []string{"blinded", "deafened", "stunned"} {

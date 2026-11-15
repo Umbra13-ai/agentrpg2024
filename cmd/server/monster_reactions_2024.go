@@ -20,7 +20,8 @@ package main
 // fighting, and notes for the player when a monster's Magic Resistance or Legendary Resistance changed a save.
 
 import (
-	"encoding/json"
+	"database/sql"
+	"errors"
 	"fmt"
 	"net/http"
 	"regexp"
@@ -113,9 +114,9 @@ func resolveMonsterReaction(r *http.Request, lobbyID, id int, meta *monsterMeta,
 		if hit.Total >= hit.AC+bonus {
 			return fmt.Sprintf(" %s: +%d AC; %s still hits.", label, bonus, desc)
 		}
-		setMonsterHP(lobbyID, id, hit.HPBefore)
+		_, after, _ := healMonster(lobbyID, id, hit.HPBefore-hit.HPAfter) // the hit's damage given back (monster_hp_2024.go)
 		lastHitOnMonster.Delete(key)
-		return fmt.Sprintf(" %s: +%d AC; %s is now a miss, its damage undone (%s is back to %d HP).", label, bonus, desc, name, hit.HPBefore)
+		return fmt.Sprintf(" %s: +%d AC; %s is now a miss, its damage undone (%s is back to %d HP).", label, bonus, desc, name, after.HP)
 	}
 	out := ""
 	switch {
@@ -169,8 +170,8 @@ func resolveMonsterReaction(r *http.Request, lobbyID, id int, meta *monsterMeta,
 		if back > taken {
 			back = taken
 		}
-		setMonsterHP(lobbyID, id, hit.HPAfter+back)
-		out = fmt.Sprintf("%s uses %s: the damage is reduced by %d (%d of %d taken back; it has %d HP).", name, base, cut, back, taken, hit.HPAfter+back)
+		_, after, _ := healMonster(lobbyID, id, back) // the part of the hit taken back (monster_hp_2024.go)
+		out = fmt.Sprintf("%s uses %s: the damage is reduced by %d (%d of %d taken back; it has %d HP).", name, base, cut, back, taken, after.HP)
 		if back >= taken {
 			out += " The damage is reduced to 0: it can redirect the force (the saving throw in its text; the GM resolves it with monster_action)."
 		}
@@ -192,7 +193,7 @@ func resolveMonsterReaction(r *http.Request, lobbyID, id int, meta *monsterMeta,
 		if ally == 0 {
 			return "", true, fmt.Sprintf("Name the ally that takes the attack (target: its name, or target_ids: [its id]); it must be a Small or Medium ally within 5 feet of %s.", name)
 		}
-		setMonsterHP(lobbyID, id, hit.HPBefore)
+		healMonster(lobbyID, id, hit.HPBefore-hit.HPAfter) // the hit goes to the ally instead (monster_hp_2024.go)
 		lastHitOnMonster.Delete(key)
 		dmg := hit.HPBefore - hit.HPAfter
 		allyAC := 0
@@ -261,50 +262,41 @@ func splitMonster(lobbyID, id int, name, base string) string {
 	if smaller == "" {
 		return fmt.Sprintf("!%s can split only while Large or Medium (it is %s).", name, size)
 	}
-	tx, err := db.Begin()
-	if err != nil {
-		return "!database error"
-	}
-	defer tx.Rollback()
-	var raw []byte
-	if tx.QueryRow(`SELECT turn_order FROM combat_state WHERE lobby_id = $1 AND active = true FOR UPDATE`, lobbyID).Scan(&raw) != nil {
+	// both halves in one change of the fight (combat_state_2024.go): the twin right after it, with an id the fight never gave before
+	var half, twinID int
+	var refusal string
+	_, err := changeFight(lobbyID, func(f *fight) error {
+		idx, e := f.entry(id)
+		if e == nil {
+			refusal = "!not in the fight"
+			return errNotInFight
+		}
+		hp := asInt(e["hp"])
+		if hp < 10 {
+			refusal = fmt.Sprintf("!%s splits only with 10 or more Hit Points (it has %d).", name, hp)
+			return errNoChange
+		}
+		half = hp / 2
+		twin := copyEntry(e)
+		e["hp"], e["size"] = half, smaller
+		twinID = f.newMonsterID()
+		twin["id"], twin["hp"], twin["size"], twin["name"] = twinID, half, smaller, name+" (split)"
+		if mh := asInt(e["max_hp"]); mh > 0 {
+			e["max_hp"], twin["max_hp"] = maxInt(half, 1), maxInt(half, 1)
+		}
+		f.insertAt(idx+1, twin)
+		return nil
+	})
+	switch {
+	case refusal != "":
+		return refusal
+	case errors.Is(err, sql.ErrNoRows):
 		return "!no active fight"
-	}
-	var entries []map[string]interface{}
-	json.Unmarshal(raw, &entries)
-	idx, minID := -1, 0
-	for i, e := range entries {
-		if asInt(e["id"]) == id {
-			idx = i
-		}
-		if asInt(e["id"]) < minID {
-			minID = asInt(e["id"])
-		}
-	}
-	if idx < 0 {
-		return "!not in the fight"
-	}
-	hp := asInt(entries[idx]["hp"])
-	if hp < 10 {
-		return fmt.Sprintf("!%s splits only with 10 or more Hit Points (it has %d).", name, hp)
-	}
-	half := hp / 2
-	twin := map[string]interface{}{}
-	for k, v := range entries[idx] {
-		twin[k] = v
-	}
-	entries[idx]["hp"], entries[idx]["size"] = half, smaller
-	twin["id"], twin["hp"], twin["size"], twin["name"] = minID-1, half, smaller, name+" (split)"
-	if mh := asInt(entries[idx]["max_hp"]); mh > 0 {
-		entries[idx]["max_hp"], twin["max_hp"] = maxInt(half, 1), maxInt(half, 1)
-	}
-	entries = append(entries[:idx+1], append([]map[string]interface{}{twin}, entries[idx+1:]...)...)
-	b, _ := json.Marshal(entries)
-	if _, err := tx.Exec(`UPDATE combat_state SET turn_order = $1 WHERE lobby_id = $2`, b, lobbyID); err != nil || tx.Commit() != nil {
+	case err != nil:
 		return "!database error"
 	}
 	return fmt.Sprintf("%s uses %s: it splits into two %s creatures of %d Hit Points each, %s and %s (id %d), both acting on its Initiative.",
-		name, base, smaller, half, name, name+" (split)", minID-1)
+		name, base, smaller, half, name, name+" (split)", twinID)
 }
 
 // ---- saves: Advantage when fighting it; notes on Magic Resistance and Legendary Resistance

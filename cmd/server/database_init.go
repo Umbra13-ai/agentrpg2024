@@ -394,6 +394,11 @@ func initDB() {
 			PRIMARY KEY (lobby_id, monster_id));
 		ALTER TABLE combat_state ADD COLUMN IF NOT EXISTS last_turn_ended TEXT DEFAULT '';
 		ALTER TABLE combat_state ADD COLUMN IF NOT EXISTS last_turn_ended_id INTEGER DEFAULT 0;
+		-- the combat-state owner (combat_state_2024.go, turn_advance_2024.go): the last monster id given in the fight (never given
+		-- twice in one fight) and the mark of a turn change under way (one change of a turn at a time)
+		ALTER TABLE combat_state ADD COLUMN IF NOT EXISTS last_monster_id INTEGER DEFAULT 0;
+		ALTER TABLE combat_state ADD COLUMN IF NOT EXISTS turn_claim TEXT DEFAULT '';
+		ALTER TABLE combat_state ADD COLUMN IF NOT EXISTS turn_claimed_at TIMESTAMP;
 		-- no Lair Actions or regional effects: a lair adds a Legendary Action and Resistance use (SRD 5.2.1)
 		ALTER TABLE combat_state DROP COLUMN IF EXISTS lair_action_used_round;
 		

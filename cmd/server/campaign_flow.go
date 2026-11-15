@@ -265,98 +265,43 @@ func autoAdvanceCampaigns() {
 // autoAdvanceCampaign handles auto-skip for a single campaign
 // Returns number of turns/players skipped
 func autoAdvanceCampaign(campaignID int, campaignName string) int {
-	// Check if in combat
-	var combatActive bool
-	var round, turnIndex int
-	var turnOrderJSON []byte
-	var turnStartedAt sql.NullTime
-
-	err := db.QueryRow(`
-		SELECT active, round_number, current_turn_index, turn_order, turn_started_at
-		FROM combat_state WHERE lobby_id = $1
-	`, campaignID).Scan(&combatActive, &round, &turnIndex, &turnOrderJSON, &turnStartedAt)
-
-	if err == nil && combatActive {
-		// Combat mode - check for 4h+ timeout
-		return autoAdvanceCombat(campaignID, campaignName, round, turnIndex, turnOrderJSON, turnStartedAt)
+	if f, err := readFight(db, campaignID); err == nil {
+		return autoAdvanceCombat(campaignID, campaignName, f) // combat mode: the combat turn timeout
 	}
-
 	// Exploration mode - check for 12h+ inactive players
 	return autoAdvanceExploration(campaignID, campaignName)
 }
 
-// autoAdvanceCombat auto-skips combat turns after 4h of inactivity
-func autoAdvanceCombat(campaignID int, campaignName string, round int, turnIndex int, turnOrderJSON []byte, turnStartedAt sql.NullTime) int {
-	if !turnStartedAt.Valid {
+// autoAdvanceCombat skips a monster's or NPC's turn once the campaign's combat turn timeout has passed (table rule
+// combat_turn_timeout, 4 hours by default; off: never). The turn change is advanceTurn's, only while the turn read here is still
+// the current one (a GM's combat/next at the same moment changes it once).
+func autoAdvanceCombat(campaignID int, campaignName string, f *fight) int {
+	cur := f.current()
+	if cur == nil || f.StartedAt.IsZero() {
 		return 0
 	}
-
-	elapsed := time.Since(turnStartedAt.Time)
-	limit, on := timeoutRule(campaignID, "combat_turn_timeout", 4*time.Hour) // table rule (F248); off: the GM holds turns
+	elapsed := time.Since(f.StartedAt)
+	limit, on := combatTurnTimeout(campaignID) // table rule (F248); off: the GM holds turns
 	if !on || elapsed < limit {
 		return 0 // Not timed out yet
 	}
-
-	type InitEntry struct {
-		ID         int    `json:"id"`
-		Name       string `json:"name"`
-		Initiative int    `json:"initiative"`
-	}
-	var entries []InitEntry
-	json.Unmarshal(turnOrderJSON, &entries)
-
-	if len(entries) == 0 || turnIndex < 0 || turnIndex >= len(entries) {
-		return 0
-	}
-
-	skippedName := entries[turnIndex].Name
-	skippedID := entries[turnIndex].ID
-	elapsedMinutes := int(elapsed.Minutes())
+	skippedName, skippedID := sprintAny(cur["name"]), asInt(cur["id"])
 	// A player's slot is never skipped (Matt, Nov 14, pending-action turns): a character with no turn in when its slot comes up
 	// has its turn taken by the GM as stand-in (GET /api/gm/status says so; POST .../combat/stand-in). A monster's or NPC's slot
 	// is still skipped as before.
 	if _, isPC := ptOwner(ptEntry{ID: skippedID, Name: skippedName}); isPC {
 		return 0
 	}
-
-	log.Printf("Auto-advance: Skipping %s's turn in %s (inactive %d min)", skippedName, campaignName, elapsedMinutes)
-
-	// Record the auto-skip as an action
+	t, code := advanceTurn(campaignID, turnHow{by: "the combat turn timeout passed", expect: &turnRef{Round: f.Round, Index: f.Index, StartedAt: f.StartedAt}})
+	if code != "" {
+		return 0
+	}
+	elapsedMinutes := int(elapsed.Minutes())
+	log.Printf("Auto-advance: Skipped %s's turn in %s (inactive %d min)", skippedName, campaignName, elapsedMinutes)
 	writeAction(db, campaignID, skippedID, "turn_auto_skipped", "Turn automatically skipped: the combat turn timeout passed (table rule combat_turn_timeout; system)", fmt.Sprintf("Inactive for %d minutes. Auto-skipped by system.", elapsedMinutes))
-
-	// Advance turn (the skipped turn ended: Legendary Actions may follow it, shown in GM status)
-	setLastTurnEnded(campaignID, fmt.Sprintf("%d:%d", round, turnIndex), skippedID)
-	turnIndex++
-	ids := make([]int, len(entries))
-	for i, entry := range entries {
-		ids[i] = entry.ID
+	if t.NewRound {
+		log.Printf("Auto-advance: %s combat advanced to round %d", campaignName, t.Round)
 	}
-	var wraps int
-	turnIndex, wraps = nextLivingCombatTurn(turnIndex, ids, combatDeadFn(campaignID))
-	round += wraps
-	newRound := wraps > 0
-	if newRound {
-		// Reset reactions for all characters (start of new round)
-		db.Exec(`UPDATE characters SET reaction_used = false WHERE lobby_id = $1`, campaignID)
-	}
-
-	endTurnEffects(campaignID, -1)
-	db.Exec("UPDATE combat_state SET current_turn_index = $1, round_number = $2, turn_started_at = NOW() WHERE lobby_id = $3", turnIndex, round, campaignID)
-	startTurnEffects(campaignID)
-
-	// Reset action economy for the new active character
-	if turnIndex < len(entries) {
-		newActiveID := entries[turnIndex].ID
-		var species string
-		db.QueryRow("SELECT species FROM characters WHERE id = $1", newActiveID).Scan(&species)
-		speed := characterSpeed(newActiveID, species)
-		resetTurnFlags(newActiveID, speed)
-	}
-
-	if newRound {
-		log.Printf("Auto-advance: %s combat advanced to round %d", campaignName, round)
-	}
-
 	return 1
 }
 
@@ -447,12 +392,14 @@ func getRecentCampaignMessages(lobbyID int, hours int) []map[string]interface{} 
 	return messages
 }
 
-func shouldAdvanceAbandonedPlayer(inCombat bool, currentCombatCharacterID, characterID int, turnStartedAt sql.NullTime, now time.Time) bool {
+// shouldAdvanceAbandonedPlayer: an abandoned player's turn may be skipped now (out of combat, or its combat turn has passed
+// skipAfter, the campaign's combat turn timeout; skipAfter 0: the rule is off and turns are never skipped).
+func shouldAdvanceAbandonedPlayer(inCombat bool, currentCombatCharacterID, characterID int, turnStartedAt sql.NullTime, now time.Time, skipAfter time.Duration) bool {
 	if !inCombat {
 		return true
 	}
-	return currentCombatCharacterID == characterID && turnStartedAt.Valid &&
-		now.Sub(turnStartedAt.Time) >= 4*time.Hour
+	return skipAfter > 0 && currentCombatCharacterID == characterID && turnStartedAt.Valid &&
+		now.Sub(turnStartedAt.Time) >= skipAfter
 }
 
 // getCampaignPlayers returns all players in a campaign with last_active

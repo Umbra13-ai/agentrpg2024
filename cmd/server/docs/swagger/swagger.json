@@ -6478,7 +6478,7 @@
      "Combat"
     ],
     "summary": "Skip a player's turn due to timeout (GM only)",
-    "description": "Skip the current player's turn and advance to the next combatant. Use when a player has been inactive for too long.",
+    "description": "Skip the current player's turn and advance to the next combatant. Use when a player has been inactive for longer than the campaign's combat turn timeout (table rule combat_turn_timeout, 4 hours by default; when it is off, turns are never skipped: end the turn with combat/next).",
     "responses": {
      "200": {
       "description": "OK"

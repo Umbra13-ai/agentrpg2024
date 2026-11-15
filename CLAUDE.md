@@ -116,6 +116,24 @@ Add to the owner, never beside it. When you give another rule one owner, add it 
   `handleDamage`, `handleHeal` and `damageCharacter` are thin wrappers. Temporary Hit Points are granted by `grantTempHP`
   (`temp_hp_2024.go`). A new feature that stops a drop to 0 is one row in `dropRescues`. `TestNoOtherHitPointWriter` checks;
   suite: `hp_rule_test.py` (audit AUD-06).
+- **A fight's state (combat_state):** `cmd/server/combat_state_2024.go`. `changeFight` is the one writer of the turn order, the
+  current turn, the round and the monster id counter: the row locked (`lockFight`), entries changed as maps (unknown fields kept),
+  written back in the same transaction. On it: `place` / `insertAt` / `remove` / `setInitiative` (whose turn it is is kept),
+  `newMonsterID` (a per-fight counter, `last_monster_id`: an id is never given twice in a fight, audit AUD-39), `editCombatant`
+  (any field but Hit Points), `removeFromFight` (the GM's remove, adjust-monster, a kick, an Iron Flask), `startFight`,
+  `clearCombatInitiative`; `readFight` / `combatEntries` read. **A turn change** is `advanceTurn` (`turn_advance_2024.go`):
+  combat/next, combat/skip, narrate's `advance_turn`, the pending-turn walk (`ptAdvance`), the timeout worker and the removal of
+  the creature whose turn it is call it. It claims the turn (`turn_claim`, under the lock: a second change of the same turn is 409
+  `turn_change_in_progress`), runs `turnEndHooks`, the caller's `between` (Legendary Actions), moves (`nextTurn`: dead and 0 HP
+  skipped, Thief's Reflexes dropped after round 1) and runs `turnStartHooks`. A rule at a turn's end or start is one row in those
+  tables. The skip timeout is `combatTurnTimeout` (table rule). `TestNoOtherTurnOrderWriter` and `TestTurnHooksRunOnlyInTheTurnOwner`
+  check (audit AUD-09, AUD-10).
+- **A monster's and a companion's Hit Points:** `cmd/server/monster_hp_2024.go`, the game rule of `game/hit_points.go` (Temporary
+  Hit Points first, 0 to the maximum, healing from 0; no Death Saving Throws): `changeMonsterVitals` under `changeFight` with
+  `setMonsterHP`, `healMonster`, `loseMonsterHP`, `setMonsterMaxHP`, `setMonsterTempHP`; `saveMonsterHit` (a hit worked out without
+  a lock, saved as a change); `hurtMonster` / `damageMonster` (resistances, Polymorph, Undead Fortitude); `reshapeMonster` (a new
+  form). Companions: `changeCompanionHP` (row locked) with `damageCompanion`, `healCompanion`, `companionTakesForm`.
+  `TestNoOtherCompanionHPWriter` checks; suite: `combat_state_rule_test.py`.
 - **Reading a request's body:** `readRequest` (`cmd/server/request_body_2024.go`) is the only reader. It needs one JSON
   object (an empty body only with `optionalBody()`), reads field names with `game.Key`, refuses an unknown field (also
   inside objects), a wrong type, malformed JSON and data after the object, takes an id that repeats the path's, and

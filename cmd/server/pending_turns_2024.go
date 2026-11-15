@@ -549,14 +549,21 @@ func ptRunSteps(lobbyID, charID, owner int, steps []map[string]interface{}) (res
 	return results, -1, ""
 }
 
-// ptAdvance ends the current turn as the GM would (POST .../combat/next).
-func ptAdvance(lobbyID int) (bool, string) {
-	var dm int
-	db.QueryRow(`SELECT COALESCE(dm_id, 0) FROM lobbies WHERE id = $1`, lobbyID).Scan(&dm)
-	req, rec := ptInternal(http.MethodPost, fmt.Sprintf("/api/campaigns/%d/combat/next", lobbyID), map[string]interface{}{}, dm)
-	handleCombatNext(rec, req, lobbyID)
-	_, ok, why := ptReply(rec)
-	return ok, why
+// ptAdvance ends the turn of slot c (the one the walk or the stand-in just took) as combat/next would: the one turn change
+// (turn_advance_2024.go), only while that slot's turn is still the current one.
+func ptAdvance(lobbyID int, c ptCombat) (bool, string) {
+	expect := &turnRef{Round: c.Round, Index: c.Index}
+	if c.StartedAt.Valid {
+		expect.StartedAt = c.StartedAt.Time
+	}
+	t, code := advanceTurn(lobbyID, turnHow{by: "the pending turn was taken", expect: expect})
+	if code == "" {
+		return true, ""
+	}
+	if t != nil && t.Message != "" {
+		return false, t.Message
+	}
+	return false, code
 }
 
 var pendingWalkLocks sync.Map
@@ -623,7 +630,7 @@ func resolvePendingTurns(lobbyID int) map[string]interface{} {
 				resolved = append(resolved, map[string]interface{}{"slot": c.Index + 1, "name": e.Name, "character_id": e.ID, "round": c.Round,
 					"used": "death saving throw (at 0 Hit Points: rolled by the server)", "steps": res})
 				recordGMAction(db, lobbyID, "pending_turn", fmt.Sprintf("%s is at 0 Hit Points: the Death Saving Throw was rolled", e.Name), "")
-				if ok, why := ptAdvance(lobbyID); !ok {
+				if ok, why := ptAdvance(lobbyID, c); !ok {
 					slot["reason"] = "advance_failed"
 					slot["message"] = fmt.Sprintf("%s's Death Saving Throw was rolled, but the turn order didn't advance (%s): POST /api/campaigns/%d/combat/next.", e.Name, why, lobbyID)
 					stop = slot
@@ -687,7 +694,7 @@ func resolvePendingTurns(lobbyID int) map[string]interface{} {
 			}
 			resolved = append(resolved, line)
 			recordGMAction(db, lobbyID, "pending_turn", fmt.Sprintf("%s's pending turn resolved (%s, %d step(s))", e.Name, attemptLabel(ai), len(results)), "")
-			if ok, why := ptAdvance(lobbyID); !ok {
+			if ok, why := ptAdvance(lobbyID, c); !ok {
 				slot["reason"] = "advance_failed"
 				slot["message"] = fmt.Sprintf("%s's turn resolved, but the turn order didn't advance (%s): POST /api/campaigns/%d/combat/next.", e.Name, why, lobbyID)
 				stop = slot
@@ -1078,7 +1085,7 @@ func handleCombatStandIn(w http.ResponseWriter, r *http.Request, campaignID int)
 	closePendingTurns(campaignID, e.ID, c.Round, "the GM took the turn as stand-in")
 	recordGMAction(db, campaignID, "stand_in", fmt.Sprintf("The GM took %s's turn as stand-in (%d step(s))", e.Name, len(results)), "")
 	out := map[string]interface{}{"success": true, "stand_in_for": e.Name, "steps": results}
-	if ok, why := ptAdvance(campaignID); !ok {
+	if ok, why := ptAdvance(campaignID, c); !ok {
 		out["turn_not_advanced"] = fmt.Sprintf("%s: POST /api/campaigns/%d/combat/next", why, campaignID)
 	} else if rep := resolvePendingTurns(campaignID); rep != nil {
 		out["pending_turns"] = rep
