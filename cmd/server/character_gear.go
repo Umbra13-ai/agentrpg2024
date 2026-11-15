@@ -245,52 +245,7 @@ func handleCharacterEncumbrance(w http.ResponseWriter, r *http.Request) {
 
 	var inventory []map[string]interface{}
 	json.Unmarshal(inventoryJSON, &inventory)
-	inventory = usableInventory(inventory) // a lost bag is not carried
-
-	// Calculate total weight from inventory
-	totalWeight := 0.0
-	itemWeights := []map[string]interface{}{}
-
-	for _, item := range inventory {
-		if inExtradimensional(item, inventory) {
-			continue // inside a Bag of Holding, Efficient Quiver...: no weight (F159)
-		}
-		itemName, _ := item["name"].(string)
-		quantity := 1
-		if q, ok := item["quantity"].(float64); ok {
-			quantity = int(q)
-		}
-
-		// Use the item's own weight, else the SRD weight, else look it up in the database
-		weight := itemUnitWeight(item)
-		if weight <= 0 {
-			// Try to look up weight from SRD
-			itemSlug := strings.ToLower(strings.ReplaceAll(itemName, " ", "-"))
-
-			// Check weapons (the weapon data), then armor
-			var dbWeight float64
-			if _, wpn, ok := findWeapon(itemName); ok && wpn.Weight > 0 {
-				weight = wpn.Weight
-			} else {
-				err := db.QueryRow(`SELECT COALESCE(weight, 0) FROM armor WHERE slug = $1`, itemSlug).Scan(&dbWeight)
-				if err == nil && dbWeight > 0 {
-					weight = dbWeight
-				}
-			}
-		}
-
-		itemTotalWeight := weight * float64(quantity)
-		totalWeight += itemTotalWeight
-
-		if weight > 0 {
-			itemWeights = append(itemWeights, map[string]interface{}{
-				"name":     itemName,
-				"quantity": quantity,
-				"weight":   weight,
-				"total":    itemTotalWeight,
-			})
-		}
-	}
+	totalWeight, itemWeights := inventoryWeight(inventory) // srd_gear.go
 
 	// 2024 Carrying Capacity (SRD 5.2.1 Rules Glossary): Strength × 15 lb for a Small or Medium creature (Tiny × 7.5, Large × 30,
 	// Huge × 60, Gargantuan × 120); drag, lift or push twice that. Carrying more than the capacity limits Speed to 5 feet.

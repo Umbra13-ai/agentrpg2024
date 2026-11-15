@@ -362,7 +362,7 @@ func buildEquipmentLayout(inv []invItem, equippedArmor string, shield bool, main
 		}
 		equippedNames[normalizeRef(name)] = true
 		entry := map[string]interface{}{"name": titleWords(name), "quantity": 1, "note": label}
-		if w, ok := catalogWeightFor(name); ok {
+		if w := itemUnitWeight(invItem{"name": name}); w > 0 {
 			entry["weight_lbs"] = w
 		}
 		*list = append(*list, entry)

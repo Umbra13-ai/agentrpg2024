@@ -341,41 +341,6 @@ func getBodyWeightBySize(size string) float64 {
 	}
 }
 
-// calculateInventoryWeight calculates total weight from a character's inventory
-func calculateInventoryWeight(inventory []map[string]interface{}) float64 {
-	totalWeight := 0.0
-
-	for _, item := range inventory {
-		itemName, _ := item["name"].(string)
-		quantity := 1
-		if q, ok := item["quantity"].(float64); ok {
-			quantity = int(q)
-		}
-
-		// Use the item's own weight, else the SRD weight, else look it up in the database
-		weight := itemUnitWeight(item)
-		if weight <= 0 {
-			// Try to look up weight from SRD
-			itemSlug := strings.ToLower(strings.ReplaceAll(itemName, " ", "-"))
-
-			// Check weapons (the weapon data), then armor
-			var dbWeight float64
-			if _, wpn, ok := findWeapon(itemName); ok && wpn.Weight > 0 {
-				weight = wpn.Weight
-			} else {
-				err := db.QueryRow(`SELECT COALESCE(weight, 0) FROM armor WHERE slug = $1`, itemSlug).Scan(&dbWeight)
-				if err == nil && dbWeight > 0 {
-					weight = dbWeight
-				}
-			}
-		}
-
-		totalWeight += weight * float64(quantity)
-	}
-
-	return totalWeight
-}
-
 // getCharacterTotalWeight returns the character's total weight (body + equipment)
 // If petrified, the weight is multiplied by 10
 func getCharacterTotalWeight(charID int) map[string]interface{} {
@@ -398,8 +363,7 @@ func getCharacterTotalWeight(charID int) map[string]interface{} {
 	// Calculate equipment weight
 	var inventory []map[string]interface{}
 	json.Unmarshal(inventoryJSON, &inventory)
-	inventory = usableInventory(inventory) // a lost bag is not carried
-	equipmentWeight := calculateInventoryWeight(inventory)
+	equipmentWeight, _ := inventoryWeight(inventory) // srd_gear.go
 
 	// Total weight
 	totalWeight := bodyWeight + equipmentWeight

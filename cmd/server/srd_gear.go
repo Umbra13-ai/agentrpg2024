@@ -124,8 +124,8 @@ func catalogWeightFor(name string) (float64, bool) {
 	return w, ok
 }
 
-// itemUnitWeight is the weight of one unit: the item's own weight if set,
-// otherwise the SRD weight, otherwise 0.
+// itemUnitWeight is the weight of one unit: the item's own weight if set, otherwise the SRD weight (the catalogue, then
+// the weapon data for a weapon written another way: "Longsword +1", "light-crossbow"), otherwise 0.
 func itemUnitWeight(it map[string]interface{}) float64 {
 	if w, ok := it["weight"].(float64); ok && w > 0 {
 		return w
@@ -134,7 +134,33 @@ func itemUnitWeight(it map[string]interface{}) float64 {
 	if w, ok := catalogWeightFor(name); ok {
 		return w
 	}
+	if _, wpn, ok := findWeapon(name); ok {
+		return wpn.Weight
+	}
 	return 0
+}
+
+// inventoryWeight is the one weight of what a character carries: every usable item (a lost bag is not carried) times its
+// quantity, except what is inside a Bag of Holding or another extradimensional container. items lists each weighed item.
+func inventoryWeight(inv []map[string]interface{}) (total float64, items []map[string]interface{}) {
+	inv = usableInventory(inv)
+	items = []map[string]interface{}{}
+	for _, it := range inv {
+		if inExtradimensional(it, inv) {
+			continue // inside a Bag of Holding, Efficient Quiver...: no weight (F159)
+		}
+		name, _ := it["name"].(string)
+		qty := 1
+		if q, ok := it["quantity"].(float64); ok {
+			qty = int(q)
+		}
+		w := itemUnitWeight(it)
+		total += w * float64(qty)
+		if w > 0 {
+			items = append(items, map[string]interface{}{"name": name, "quantity": qty, "weight": w, "total": w * float64(qty)})
+		}
+	}
+	return total, items
 }
 
 // fillItemWeights stores the SRD weight on every item that has none.
