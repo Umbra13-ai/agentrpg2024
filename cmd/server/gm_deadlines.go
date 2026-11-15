@@ -174,7 +174,7 @@ func handleGMDeadline(w http.ResponseWriter, r *http.Request) {
 		}
 
 		// Log to campaign feed
-		logAction(campaignID, 0, 0, "story_deadline", req.Description, fmt.Sprintf("Deadline set for %s", deadlineTime.Format("Mon Jan 2 15:04 MST")))
+		writeAction(db, campaignID, 0, "story_deadline", req.Description, fmt.Sprintf("Deadline set for %s", deadlineTime.Format("Mon Jan 2 15:04 MST")))
 
 		json.NewEncoder(w).Encode(map[string]interface{}{
 			"success":        true,
@@ -279,6 +279,9 @@ func handleGMDeadlineAction(w http.ResponseWriter, r *http.Request) {
 	`, deadlineID).Scan(&campaignID, &description, &autoAdvanceText, &triggered)
 
 	if err != nil {
+		if answerDBFailure(w, err, "the character") {
+			return
+		}
 		w.WriteHeader(http.StatusNotFound)
 		json.NewEncoder(w).Encode(map[string]interface{}{
 			"error":   "deadline_not_found",
@@ -327,7 +330,7 @@ func handleGMDeadlineAction(w http.ResponseWriter, r *http.Request) {
 		}
 
 		// Log to campaign feed as GM narration
-		logAction(campaignID, 0, 0, "deadline_triggered", description, narrationText)
+		writeAction(db, campaignID, 0, "deadline_triggered", description, narrationText)
 
 		json.NewEncoder(w).Encode(map[string]interface{}{
 			"success":     true,

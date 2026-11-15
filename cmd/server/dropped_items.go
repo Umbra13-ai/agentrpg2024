@@ -101,19 +101,19 @@ func dropToGround(charID int, itemRef string, quantity int) (*dropResult, string
 	var charName string
 	var armor sql.NullString
 	if err := db.QueryRow(`SELECT lobby_id, name, equipped_armor FROM characters WHERE id = $1`, charID).Scan(&lobby, &charName, &armor); err != nil {
-		return nil, "character_not_found"
+		return nil, notFoundOrDBError(err, "character_not_found")
 	}
 	if !lobby.Valid {
 		return nil, "not_in_a_campaign"
 	}
 	tx, err := db.Begin()
 	if err != nil {
-		return nil, "db_error"
+		return nil, dbErrorCode
 	}
 	defer tx.Rollback()
 	inv, err := loadInventoryTx(tx, charID)
 	if err != nil {
-		return nil, "character_not_found"
+		return nil, notFoundOrDBError(err, "character_not_found")
 	}
 	it, ferr := findItem(inv, itemRef)
 	if ferr != nil {
@@ -156,8 +156,7 @@ func dropToGround(charID int, itemRef string, quantity int) (*dropResult, string
 		lobby.Int64, itemStr(bundle[0], "name"), qty, string(b), charID).Scan(&dropID); err != nil {
 		return nil, "save_failed"
 	}
-	if _, err := tx.Exec(`INSERT INTO actions (lobby_id, character_id, action_type, description, result) VALUES ($1, $2, 'drop', $3, $4)`,
-		lobby.Int64, charID, fmt.Sprintf("%s drops %s", charName, itemStr(bundle[0], "name")), "It lies on the ground."); err != nil {
+	if err := writeAction(tx, int(lobby.Int64), charID, "drop", fmt.Sprintf("%s drops %s", charName, itemStr(bundle[0], "name")), "It lies on the ground."); err != nil {
 		return nil, "save_failed"
 	}
 	if err := tx.Commit(); err != nil {
@@ -202,11 +201,11 @@ func pickUpFromGround(charID, droppedID int) (string, string) {
 	var lobby sql.NullInt64
 	var charName string
 	if err := db.QueryRow(`SELECT lobby_id, name FROM characters WHERE id = $1`, charID).Scan(&lobby, &charName); err != nil {
-		return "", "character_not_found"
+		return "", notFoundOrDBError(err, "character_not_found")
 	}
 	tx, err := db.Begin()
 	if err != nil {
-		return "", "db_error"
+		return "", dbErrorCode
 	}
 	defer tx.Rollback()
 
@@ -216,7 +215,7 @@ func pickUpFromGround(charID, droppedID int) (string, string) {
 	var takenNote sql.NullString
 	if err := tx.QueryRow(`SELECT lobby_id, name, bundle, taken_by, taken_note FROM dropped_items WHERE id = $1 FOR UPDATE`, droppedID).
 		Scan(&dropLobby, &name, &bundleRaw, &takenBy, &takenNote); err != nil {
-		return "", "nothing_on_the_ground_with_that_id"
+		return "", notFoundOrDBError(err, "nothing_on_the_ground_with_that_id")
 	}
 	if !lobby.Valid || int(lobby.Int64) != dropLobby {
 		return "", "not_in_the_same_campaign"
@@ -231,7 +230,7 @@ func pickUpFromGround(charID, droppedID int) (string, string) {
 
 	inv, err := loadInventoryTx(tx, charID)
 	if err != nil {
-		return "", "character_not_found"
+		return "", notFoundOrDBError(err, "character_not_found")
 	}
 	remap := map[string]string{}
 	maxN := 0
@@ -264,8 +263,7 @@ func pickUpFromGround(charID, droppedID int) (string, string) {
 	if _, err := tx.Exec(`UPDATE dropped_items SET taken_by = $1, taken_at = NOW() WHERE id = $2`, charID, droppedID); err != nil {
 		return "", "save_failed"
 	}
-	if _, err := tx.Exec(`INSERT INTO actions (lobby_id, character_id, action_type, description, result) VALUES ($1, $2, 'pick_up', $3, $4)`,
-		dropLobby, charID, fmt.Sprintf("%s picks up %s", charName, name), "It is now in their pack."); err != nil {
+	if err := writeAction(tx, dropLobby, charID, "pick_up", fmt.Sprintf("%s picks up %s", charName, name), "It is now in their pack."); err != nil {
 		return "", "save_failed"
 	}
 	if err := tx.Commit(); err != nil {
@@ -312,6 +310,10 @@ func handleCharacterDrop(w http.ResponseWriter, r *http.Request, charID int) {
 		if strings.HasPrefix(errCode, "ambiguous_item") {
 			status = http.StatusConflict
 		}
+		if errCode == dbErrorCode {
+			writeDBWriteError(w, nil, "the drop")
+			return
+		}
 		writeJSONStatus(w, status, map[string]interface{}{"error": errCode})
 		return
 	}
@@ -337,6 +339,10 @@ func handleCharacterPickUp(w http.ResponseWriter, r *http.Request, charID int) {
 		status := http.StatusBadRequest
 		if errCode == "already_taken" {
 			status = http.StatusConflict
+		}
+		if errCode == dbErrorCode {
+			writeDBWriteError(w, nil, "the pick-up")
+			return
 		}
 		writeJSONStatus(w, status, map[string]interface{}{"error": errCode})
 		return
@@ -389,7 +395,11 @@ func handleCampaignGround(w http.ResponseWriter, r *http.Request, campaignID int
 			if note == "" {
 				note = "taken by someone"
 			}
-			res, _ := db.Exec(`UPDATE dropped_items SET taken_note = $1, taken_at = NOW() WHERE id = $2 AND lobby_id = $3 AND taken_by IS NULL AND taken_note IS NULL`, note, did, campaignID)
+			res, xerr := db.Exec(`UPDATE dropped_items SET taken_note = $1, taken_at = NOW() WHERE id = $2 AND lobby_id = $3 AND taken_by IS NULL AND taken_note IS NULL`, note, did, campaignID)
+			if xerr != nil {
+				writeDBWriteError(w, xerr, "the item's new place")
+				return
+			}
 			if n, _ := res.RowsAffected(); n == 0 {
 				writeJSONStatus(w, http.StatusConflict, map[string]interface{}{"error": "not_on_the_ground"})
 				return
@@ -399,7 +409,11 @@ func handleCampaignGround(w http.ResponseWriter, r *http.Request, campaignID int
 			if !noFields(w, r) {
 				return
 			}
-			res, _ := db.Exec(`UPDATE dropped_items SET taken_note = NULL, taken_at = NULL WHERE id = $1 AND lobby_id = $2 AND taken_by IS NULL AND taken_note IS NOT NULL`, did, campaignID)
+			res, xerr := db.Exec(`UPDATE dropped_items SET taken_note = NULL, taken_at = NULL WHERE id = $1 AND lobby_id = $2 AND taken_by IS NULL AND taken_note IS NOT NULL`, did, campaignID)
+			if xerr != nil {
+				writeDBWriteError(w, xerr, "the item's return")
+				return
+			}
 			if n, _ := res.RowsAffected(); n == 0 {
 				writeJSONStatus(w, http.StatusConflict, map[string]interface{}{"error": "nothing_to_return"})
 				return
@@ -423,7 +437,7 @@ func handleCampaignGround(w http.ResponseWriter, r *http.Request, campaignID int
 	}
 	rows, err := db.Query(query+` ORDER BY d.id`, campaignID)
 	if err != nil {
-		writeJSONStatus(w, http.StatusInternalServerError, map[string]interface{}{"error": "db_error"})
+		writeJSONStatus(w, http.StatusInternalServerError, map[string]interface{}{"error": dbErrorCode})
 		return
 	}
 	defer rows.Close()

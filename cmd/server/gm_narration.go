@@ -45,11 +45,7 @@ func handleGMStatus(w http.ResponseWriter, r *http.Request) {
 				},
 			}
 		}
-		status := http.StatusForbidden
-		if code == "campaign_id_required" {
-			status = http.StatusBadRequest
-		}
-		writeJSONStatus(w, status, out)
+		writeJSONStatus(w, gmProblemStatus(code), out) // 400, 403, or 500 for a database failure (gm_campaign_2024.go)
 		return
 	}
 	var campaignName, campaignStatus string
@@ -87,7 +83,7 @@ func handleGMStatus(w http.ResponseWriter, r *http.Request) {
 	// Also remove inactive players from combat turn order
 	inactiveThreshold := 4 * time.Hour
 	var inactiveCharIDs []int
-	inactiveRows, _ := db.Query(`
+	inactiveRows, qerr := db.Query(`
 		SELECT c.id, c.name FROM characters c
 		WHERE c.lobby_id = $1
 		AND c.status != 'inactive'
@@ -102,6 +98,10 @@ func handleGMStatus(w http.ResponseWriter, r *http.Request) {
 			AND (p.status IN ('pending', 'needs_gm') OR p.submitted_at > NOW() - INTERVAL '4 hours')
 		)
 	`, campaignID)
+	if qerr != nil {
+		writeDBError(w, qerr, "the pending turns")
+		return
+	}
 	if inactiveRows != nil {
 		for inactiveRows.Next() {
 			var charID int
@@ -149,7 +149,7 @@ func handleGMStatus(w http.ResponseWriter, r *http.Request) {
 	}
 
 	// Get party status with last action time per character
-	rows, _ := db.Query(`
+	rows, qerr := db.Query(`
 	SELECT c.id, c.name, c.class, c.species, c.level, c.hp, c.max_hp, c.ac,
 			COALESCE(c.conditions, '[]'), COALESCE(c.concentrating_on, ''), COALESCE(c.is_stable, false), COALESCE(c.is_dead, false),
 			(SELECT MAX(created_at) FROM actions WHERE character_id = c.id AND action_type NOT IN ('poll', 'joined', 'following')) as last_action_at,
@@ -157,6 +157,10 @@ func handleGMStatus(w http.ResponseWriter, r *http.Request) {
 		FROM characters c
 		WHERE c.lobby_id = $1
 	`, campaignID)
+	if qerr != nil {
+		writeDBError(w, qerr, "the party")
+		return
+	}
 	defer rows.Close()
 
 	partyStatus := []map[string]interface{}{}
@@ -492,7 +496,7 @@ func handleGMStatus(w http.ResponseWriter, r *http.Request) {
 
 	// DRIFT DETECTION: Check for drift_flag observations
 	driftAlerts := []map[string]interface{}{}
-	driftRows, _ := db.Query(`
+	driftRows, qerr := db.Query(`
 		SELECT o.id, c1.name as observer, c2.name as target, o.content, o.created_at
 		FROM observations o
 		JOIN characters c1 ON o.observer_id = c1.id
@@ -502,6 +506,10 @@ func handleGMStatus(w http.ResponseWriter, r *http.Request) {
 		ORDER BY o.created_at DESC
 		LIMIT 10
 	`, campaignID)
+	if qerr != nil {
+		writeDBError(w, qerr, "the campaign's clock")
+		return
+	}
 	if driftRows != nil {
 		defer driftRows.Close()
 		for driftRows.Next() {
@@ -573,12 +581,16 @@ func handleGMStatus(w http.ResponseWriter, r *http.Request) {
 	// Check story deadlines (Phase 9 Autonomous GM)
 	var storyDeadlines []map[string]interface{}
 	var overdueDeadlines []map[string]interface{}
-	deadlineRows, _ := db.Query(`
+	deadlineRows, qerr := db.Query(`
 		SELECT id, description, deadline_at, auto_advance_text, triggered
 		FROM story_deadlines
 		WHERE lobby_id = $1 AND triggered = false
 		ORDER BY deadline_at ASC
 	`, campaignID)
+	if qerr != nil {
+		writeDBError(w, qerr, "the campaign's deadlines")
+		return
+	}
 	if deadlineRows != nil {
 		for deadlineRows.Next() {
 			var id int
@@ -1016,10 +1028,7 @@ func handleGMRestoreAction(w http.ResponseWriter, r *http.Request) {
 	var err error
 
 	// Insert the action (include lobby_id for feed display)
-	_, err = db.Exec(`
-		INSERT INTO actions (lobby_id, character_id, action_type, description, result, created_at)
-		VALUES ($1, $2, $3, $4, $5, NOW())
-	`, lobbyID, req.CharacterID, req.ActionType, req.Description, req.Result)
+	err = writeAction(db, lobbyID, req.CharacterID, req.ActionType, req.Description, req.Result)
 	if err != nil {
 		w.WriteHeader(500)
 		json.NewEncoder(w).Encode(map[string]string{"error": publicError(err)})
@@ -1119,6 +1128,12 @@ func handleGMUpdateActionTime(w http.ResponseWriter, r *http.Request) {
 	if !ok {
 		return
 	}
+	ts, tsOK := parseClientTime(req.Timestamp) // action_log_2024.go
+	if strings.TrimSpace(req.Timestamp) == "" || !tsOK {
+		writeJSONStatus(w, http.StatusBadRequest, map[string]interface{}{"error": "invalid_timestamp",
+			"message": "Send timestamp as a time in RFC3339 form, such as 2026-11-15T16:05:00Z. Nothing was changed."})
+		return
+	}
 	if req.CharacterID == 0 {
 		writeJSONStatus(w, http.StatusBadRequest, map[string]interface{}{"error": "character_id_required", "message": "Send character_id. Nothing was changed."})
 		return
@@ -1130,7 +1145,7 @@ func handleGMUpdateActionTime(w http.ResponseWriter, r *http.Request) {
 		UPDATE actions SET created_at = $1
 		WHERE character_id = $2
 		AND id = (SELECT id FROM actions WHERE character_id = $2 ORDER BY created_at DESC LIMIT 1)
-	`, req.Timestamp, req.CharacterID)
+	`, ts.UTC().Format("2006-01-02 15:04:05.999999"), req.CharacterID)
 	if err != nil {
 		w.WriteHeader(500)
 		json.NewEncoder(w).Encode(map[string]string{"error": publicError(err)})
@@ -1176,13 +1191,24 @@ func handleGMUpdateNarrationTime(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	req.CampaignID = campaignID
+	ts, tsOK := parseClientTime(req.Timestamp) // action_log_2024.go
+	if strings.TrimSpace(req.Timestamp) == "" || !tsOK {
+		writeJSONStatus(w, http.StatusBadRequest, map[string]interface{}{"error": "invalid_timestamp",
+			"message": "Send timestamp as a time in RFC3339 form, such as 2026-11-15T16:05:00Z. Nothing was changed."})
+		return
+	}
+	if strings.TrimSpace(req.TextMatch) == "" {
+		writeJSONStatus(w, http.StatusBadRequest, map[string]interface{}{"error": "text_match_required",
+			"message": "Send text_match: words from the narration to change. Nothing was changed."})
+		return
+	}
 
 	// Update the action matching the text
 	result, err := db.Exec(`
 		UPDATE actions SET created_at = $1
 		WHERE lobby_id = $2 AND description LIKE '%' || $3 || '%'
 		AND action_type = 'narration'
-	`, req.Timestamp, req.CampaignID, req.TextMatch)
+	`, ts.UTC().Format("2006-01-02 15:04:05.999999"), req.CampaignID, req.TextMatch)
 	if err != nil {
 		w.WriteHeader(500)
 		json.NewEncoder(w).Encode(map[string]string{"error": publicError(err)})
@@ -1295,10 +1321,7 @@ func validateGMNarratedCombatAdvance(campaignID int) string {
 // recordGMAction only reports success after the action is durably inserted.
 // A failed insert must not be presented to a GM as a completed narration.
 func recordGMAction(database *sql.DB, campaignID int, actionType, description, result string) error {
-	_, err := database.Exec(`
-		INSERT INTO actions (lobby_id, action_type, description, result)
-		VALUES ($1, $2, $3, $4)
-	`, campaignID, actionType, description, result)
+	err := writeAction(database, campaignID, 0, actionType, description, result)
 	return err
 }
 
@@ -1600,6 +1623,9 @@ func handleGMNudge(w http.ResponseWriter, r *http.Request) {
 	`, req.CharacterID, campaignID).Scan(&charName, &charClass, &charAgentID, &playerEmail)
 
 	if err != nil {
+		if answerDBFailure(w, err, "the character") {
+			return
+		}
 		w.WriteHeader(http.StatusBadRequest)
 		json.NewEncoder(w).Encode(map[string]interface{}{
 			"error":   "character_not_found",
@@ -1664,10 +1690,7 @@ May your dice roll true!
 
 	// Always record the nudge as an action. This is visible in /api/my-turn's
 	// recent events even when the optional email provider is unavailable.
-	_, _ = db.Exec(`
-		INSERT INTO actions (lobby_id, action_type, description, result)
-		VALUES ($1, 'gm_nudge', $2, $3)
-	`, campaignID, fmt.Sprintf("Nudged %s: %s", charName, customMsg), actionResult)
+	writeAction(db, campaignID, 0, "gm_nudge", fmt.Sprintf("Nudged %s: %s", charName, customMsg), actionResult)
 
 	response := map[string]interface{}{
 		"success":  true,

@@ -223,6 +223,9 @@ func handleCharacterEncumbrance(w http.ResponseWriter, r *http.Request) {
 	var charLobby int
 	err = db.QueryRow(`SELECT name, str, COALESCE(inventory, '[]'), COALESCE(species, ''), COALESCE(lobby_id, 0) FROM characters WHERE id = $1`, characterID).Scan(&charName, &str, &inventoryJSON, &species, &charLobby)
 	if err != nil {
+		if answerDBFailure(w, err, "the character") {
+			return
+		}
 		w.WriteHeader(http.StatusNotFound)
 		json.NewEncoder(w).Encode(map[string]interface{}{"error": "character_not_found"})
 		return
@@ -319,6 +322,9 @@ func handleCharacterEquipArmor(w http.ResponseWriter, r *http.Request) {
 	err = db.QueryRow(`SELECT name, str, dex, armor_proficiencies, equipped_armor, COALESCE(equipped_shield, false), level, subclass 
 		FROM characters WHERE id = $1`, req.CharacterID).Scan(&charName, &charStr, &charDex, &armorProfs, &currentArmor, &currentShield, &charLevel, &charSubclass)
 	if err != nil {
+		if answerDBFailure(w, err, "the character") {
+			return
+		}
 		w.WriteHeader(http.StatusNotFound)
 		json.NewEncoder(w).Encode(map[string]interface{}{"error": "character_not_found"})
 		return
@@ -542,6 +548,9 @@ func handleCharacterUnequipArmor(w http.ResponseWriter, r *http.Request) {
 	err = db.QueryRow(`SELECT name, dex, equipped_armor, COALESCE(equipped_shield, false), level, subclass 
 		FROM characters WHERE id = $1`, req.CharacterID).Scan(&charName, &charDex, &currentArmor, &currentShield, &charLevel, &charSubclass)
 	if err != nil {
+		if answerDBFailure(w, err, "the character") {
+			return
+		}
 		w.WriteHeader(http.StatusNotFound)
 		json.NewEncoder(w).Encode(map[string]interface{}{"error": "character_not_found"})
 		return
@@ -715,6 +724,9 @@ func handleCharacterEquipWeapon(w http.ResponseWriter, r *http.Request) {
 		equipped_main_hand, equipped_off_hand
 		FROM characters WHERE id = $1`, req.CharacterID).Scan(&charName, &inventoryJSON, &weaponProfs, &mainHand, &offHand)
 	if err != nil {
+		if answerDBFailure(w, err, "the character") {
+			return
+		}
 		w.WriteHeader(http.StatusNotFound)
 		json.NewEncoder(w).Encode(map[string]interface{}{"error": "character_not_found"})
 		return
@@ -988,6 +1000,9 @@ func handleCharacterUnequipWeapon(w http.ResponseWriter, r *http.Request) {
 	err = db.QueryRow(`SELECT name, equipped_main_hand, equipped_off_hand
 		FROM characters WHERE id = $1`, req.CharacterID).Scan(&charName, &mainHand, &offHand)
 	if err != nil {
+		if answerDBFailure(w, err, "the character") {
+			return
+		}
 		w.WriteHeader(http.StatusNotFound)
 		json.NewEncoder(w).Encode(map[string]interface{}{"error": "character_not_found"})
 		return
@@ -1131,6 +1146,9 @@ func handleCharacterMount(w http.ResponseWriter, r *http.Request) {
 		FROM characters c WHERE c.id = $1`, req.CharacterID).Scan(
 		&charName, &lobbyID, &charSpecies, &movementRemaining, &currentMount)
 	if err != nil {
+		if answerDBFailure(w, err, "the character") {
+			return
+		}
 		w.WriteHeader(http.StatusNotFound)
 		json.NewEncoder(w).Encode(map[string]interface{}{"error": "character_not_found"})
 		return
@@ -1238,11 +1256,7 @@ func handleCharacterMount(w http.ResponseWriter, r *http.Request) {
 
 	// Log to campaign feed
 	if lobbyID != 0 {
-		db.Exec(`INSERT INTO actions (lobby_id, character_id, action_type, description, result)
-			VALUES ($1, $2, 'mount', $3, $4)`,
-			lobbyID, req.CharacterID,
-			fmt.Sprintf("%s mounts %s", charName, mountName),
-			fmt.Sprintf("%s mount, speed %dft", controlType, mountSpeed))
+		writeAction(db, lobbyID, req.CharacterID, "mount", fmt.Sprintf("%s mounts %s", charName, mountName), fmt.Sprintf("%s mount, speed %dft", controlType, mountSpeed))
 	}
 }
 
@@ -1301,6 +1315,9 @@ func handleCharacterDismount(w http.ResponseWriter, r *http.Request) {
 		FROM characters c WHERE c.id = $1`, req.CharacterID).Scan(
 		&charName, &lobbyID, &charSpecies, &movementRemaining, &currentMount)
 	if err != nil {
+		if answerDBFailure(w, err, "the character") {
+			return
+		}
 		w.WriteHeader(http.StatusNotFound)
 		json.NewEncoder(w).Encode(map[string]interface{}{"error": "character_not_found"})
 		return
@@ -1379,10 +1396,6 @@ func handleCharacterDismount(w http.ResponseWriter, r *http.Request) {
 
 	// Log to campaign feed
 	if lobbyID != 0 {
-		db.Exec(`INSERT INTO actions (lobby_id, character_id, action_type, description, result)
-			VALUES ($1, $2, 'dismount', $3, $4)`,
-			lobbyID, req.CharacterID,
-			fmt.Sprintf("%s dismounts from %s", charName, mountName),
-			dismountType)
+		writeAction(db, lobbyID, req.CharacterID, "dismount", fmt.Sprintf("%s dismounts from %s", charName, mountName), dismountType)
 	}
 }

@@ -274,9 +274,7 @@ func removeOneWithShadowsInvisibility(charID int) bool {
 		var charName string
 		db.QueryRow("SELECT lobby_id, name FROM characters WHERE id = $1", charID).Scan(&campaignID, &charName)
 		if campaignID.Valid {
-			db.Exec(`INSERT INTO actions (campaign_id, character_id, action_type, description, created_at)
-				VALUES ($1, $2, 'other', $3, NOW())`,
-				campaignID.Int64, charID, fmt.Sprintf("👁️ %s's invisibility from One with Shadows ends", charName))
+			writeAction(db, int(campaignID.Int64), charID, "other", fmt.Sprintf("👁️ %s's invisibility from One with Shadows ends", charName), "")
 		}
 	}
 	return removed

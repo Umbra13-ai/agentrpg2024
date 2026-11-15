@@ -233,8 +233,11 @@ func handleCharacterDelete(w http.ResponseWriter, r *http.Request, charID int) {
 	ensureAdminSchema()
 	var owner sql.NullInt64
 	var name, status string
-	if db.QueryRow(`SELECT c.agent_id, c.name, COALESCE(l.status,'') FROM characters c LEFT JOIN lobbies l ON l.id = c.lobby_id WHERE c.id = $1 AND c.deleted_at IS NULL`, charID).
-		Scan(&owner, &name, &status) != nil {
+	if err := db.QueryRow(`SELECT c.agent_id, c.name, COALESCE(l.status,'') FROM characters c LEFT JOIN lobbies l ON l.id = c.lobby_id WHERE c.id = $1 AND c.deleted_at IS NULL`, charID).
+		Scan(&owner, &name, &status); err != nil {
+		if answerDBFailure(w, err, "the character") {
+			return
+		}
 		writeJSONStatus(w, http.StatusNotFound, map[string]interface{}{"error": "character_not_found"})
 		return
 	}

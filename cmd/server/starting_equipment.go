@@ -371,6 +371,9 @@ func handleCharacterStartingEquipment(w http.ResponseWriter, r *http.Request, ch
 	var class, tools, marker string
 	if err := db.QueryRow(`SELECT COALESCE(class,''), COALESCE(tool_proficiencies,''), COALESCE(starting_equipment,'') FROM characters WHERE id = $1`, charID).
 		Scan(&class, &tools, &marker); err != nil {
+		if answerDBFailure(w, err, "the character") {
+			return
+		}
 		writeJSONStatus(w, http.StatusNotFound, map[string]interface{}{"error": "character_not_found"})
 		return
 	}
@@ -446,6 +449,9 @@ func handleCharacterToolProficiencies(w http.ResponseWriter, r *http.Request, ch
 	var classLevelsRaw []byte
 	if err := db.QueryRow(`SELECT COALESCE(class,''), COALESCE(class_levels,'{}'), COALESCE(tool_proficiencies,'') FROM characters WHERE id = $1`, charID).
 		Scan(&class, &classLevelsRaw, &tools); err != nil {
+		if answerDBFailure(w, err, "the character") {
+			return
+		}
 		writeJSONStatus(w, http.StatusNotFound, map[string]interface{}{"error": "character_not_found"})
 		return
 	}

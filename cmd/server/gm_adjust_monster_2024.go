@@ -133,7 +133,7 @@ func handleGMAdjustMonster(w http.ResponseWriter, r *http.Request) {
 		out := map[string]interface{}{}
 		json.Unmarshal(rec.Body.Bytes(), &out)
 		msg := fmt.Sprintf("%s is removed from the encounter.", name)
-		logAction(campaignID, 0, agentID, "gm_adjust_monster", "GM: "+msg+gmNote(req.Note), msg)
+		writeAction(db, campaignID, 0, "gm_adjust_monster", "GM: "+msg+gmNote(req.Note), msg)
 		writeJSONStatus(w, 200, map[string]interface{}{"success": out["error"] == nil, "message": msg, "result": out})
 		return
 	}
@@ -278,7 +278,7 @@ func handleGMAdjustMonster(w http.ResponseWriter, r *http.Request) {
 		state = fmt.Sprintf("%s: %d/%d Hit Points.", name, hp, maxHP)
 	}
 	msg := fmt.Sprintf("%s: %s. %s", name, strings.Join(did, "; "), state)
-	logAction(campaignID, 0, agentID, "gm_adjust_monster", "GM: "+msg+gmNote(req.Note), msg)
+	writeAction(db, campaignID, 0, "gm_adjust_monster", "GM: "+msg+gmNote(req.Note), msg)
 	writeJSONStatus(w, 200, map[string]interface{}{"success": true, "target_id": tid, "name": name, "hp": hp, "max_hp": maxHP, "changes": did,
 		"conditions": conditionNames(campaignID, tid), "riders": activeRiders(campaignID, tid), "message": msg})
 }

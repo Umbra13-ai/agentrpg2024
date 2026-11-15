@@ -275,7 +275,10 @@ func handleLevelUpNotices(w http.ResponseWriter, r *http.Request, charID int) {
 		return
 	}
 	var owner int
-	if db.QueryRow(`SELECT COALESCE(agent_id,0) FROM characters WHERE id = $1`, charID).Scan(&owner) != nil {
+	if err := db.QueryRow(`SELECT COALESCE(agent_id,0) FROM characters WHERE id = $1`, charID).Scan(&owner); err != nil {
+		if answerDBFailure(w, err, "the character") {
+			return
+		}
 		writeJSONStatus(w, http.StatusNotFound, map[string]interface{}{"error": "character_not_found"})
 		return
 	}
@@ -295,14 +298,22 @@ func handleLevelUpNotices(w http.ResponseWriter, r *http.Request, charID int) {
 			writeJSONStatus(w, http.StatusBadRequest, map[string]interface{}{"error": "send_seen_true", "message": "Send {\"seen\": true} to mark your level-up notices read."})
 			return
 		}
-		res, _ := db.Exec(`UPDATE level_up_notices SET seen_at = NOW() WHERE character_id = $1 AND seen_at IS NULL`, charID)
+		res, xerr := db.Exec(`UPDATE level_up_notices SET seen_at = NOW() WHERE character_id = $1 AND seen_at IS NULL`, charID)
+		if xerr != nil {
+			writeDBWriteError(w, xerr, "the notices' read mark")
+			return
+		}
 		n, _ := res.RowsAffected()
 		writeJSONStatus(w, http.StatusOK, map[string]interface{}{"success": true, "marked_read": n,
 			"message": fmt.Sprintf("Marked %d level-up notice(s) read. Choices still open stay on GET /api/characters/%d/setup.", n, charID)})
 		return
 	}
 	if r.URL.Query().Get("all") == "true" {
-		rows, _ := db.Query(`SELECT level, hp_gained, created_at FROM level_up_notices WHERE character_id = $1 ORDER BY level`, charID)
+		rows, qerr := db.Query(`SELECT level, hp_gained, created_at FROM level_up_notices WHERE character_id = $1 ORDER BY level`, charID)
+		if qerr != nil {
+			writeDBError(w, qerr, "the level-up notices")
+			return
+		}
 		var out []map[string]interface{}
 		if rows != nil {
 			defer rows.Close()

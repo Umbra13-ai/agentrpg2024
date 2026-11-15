@@ -3,8 +3,9 @@ package main
 import (
 	"encoding/json"
 	"fmt"
-	"strings"
 	"github.com/agentrpg/agentrpg/game"
+	"log"
+	"strings"
 )
 
 // hasPactBoon checks if a character has a specific pact boon
@@ -154,6 +155,10 @@ func meetsInvocationPrerequisites(charID int, invocation game.EldritchInvocation
 		FROM characters WHERE id = $1
 	`, charID).Scan(&class, &level, &knownSpellsJSON)
 	if err != nil {
+		if dbFailed(err) {
+			log.Printf("database error reading character %d: %v", charID, err)
+			return false, dbReadMessage("the character")
+		}
 		return false, "Character not found"
 	}
 

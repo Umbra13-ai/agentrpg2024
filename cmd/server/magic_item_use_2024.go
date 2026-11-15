@@ -1167,7 +1167,7 @@ func handleGMDawn(w http.ResponseWriter, r *http.Request) {
 	if len(notes) == 0 {
 		notes = []string{"No item needed charges."}
 	}
-	db.Exec(`INSERT INTO actions (lobby_id, action_type, description, result) VALUES ($1, 'dawn', 'Dawn: magic items regain charges', $2)`, lobbyID, strings.Join(notes, "; "))
+	writeAction(db, lobbyID, 0, "dawn", "Dawn: magic items regain charges", strings.Join(notes, "; "))
 	writeJSONStatus(w, http.StatusOK, map[string]interface{}{"success": true, "recharged": notes})
 }
 
@@ -1235,8 +1235,7 @@ func handleItemUseCharge(w http.ResponseWriter, r *http.Request, charID int) {
 	var lobby int
 	db.QueryRow(`SELECT name, COALESCE(lobby_id,0) FROM characters WHERE id = $1`, charID).Scan(&charName, &lobby)
 	if lobby > 0 {
-		db.Exec(`INSERT INTO actions (lobby_id, character_id, action_type, description, result) VALUES ($1, $2, 'item_charge', $3, $4)`,
-			lobby, charID, fmt.Sprintf("%s uses the %s", charName, name), strings.TrimSpace(note))
+		writeAction(db, lobby, charID, "item_charge", fmt.Sprintf("%s uses the %s", charName, name), strings.TrimSpace(note))
 	}
 	writeJSONStatus(w, http.StatusOK, map[string]interface{}{"success": true, "item": name, "result": strings.TrimSpace(note), "item_text": text,
 		"note": "The server spent the charges; the GM runs what the property does (the item's text is above)."})

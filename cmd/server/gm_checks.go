@@ -85,6 +85,9 @@ func handleGMSkillCheck(w http.ResponseWriter, r *http.Request) {
 	json.Unmarshal(classLevelsJSON, &classLevels)
 
 	if err != nil {
+		if answerDBFailure(w, err, "the character") {
+			return
+		}
 		w.WriteHeader(http.StatusBadRequest)
 		json.NewEncoder(w).Encode(map[string]interface{}{"error": "character_not_found"})
 		return
@@ -99,10 +102,7 @@ func handleGMSkillCheck(w http.ResponseWriter, r *http.Request) {
 		if req.Description != "" {
 			desc = fmt.Sprintf("%s: %s - %s check (DC %d) - auto-fail (deafened)", charName, req.Description, req.Skill, req.DC)
 		}
-		_, _ = db.Exec(`
-			INSERT INTO actions (lobby_id, character_id, action_type, description, result)
-			VALUES ($1, $2, 'skill_check', $3, $4)
-		`, campaignID, req.CharacterID, desc, "AUTO-FAIL (deafened)")
+		writeAction(db, campaignID, req.CharacterID, "skill_check", desc, "AUTO-FAIL (deafened)")
 
 		json.NewEncoder(w).Encode(map[string]interface{}{
 			"success":          false,
@@ -121,10 +121,7 @@ func handleGMSkillCheck(w http.ResponseWriter, r *http.Request) {
 		if req.Description != "" {
 			desc = fmt.Sprintf("%s: %s - %s check (DC %d) - auto-fail (blinded)", charName, req.Description, req.Skill, req.DC)
 		}
-		_, _ = db.Exec(`
-			INSERT INTO actions (lobby_id, character_id, action_type, description, result)
-			VALUES ($1, $2, 'skill_check', $3, $4)
-		`, campaignID, req.CharacterID, desc, "AUTO-FAIL (blinded)")
+		writeAction(db, campaignID, req.CharacterID, "skill_check", desc, "AUTO-FAIL (blinded)")
 
 		json.NewEncoder(w).Encode(map[string]interface{}{
 			"success":          false,
@@ -568,10 +565,7 @@ func handleGMSkillCheck(w http.ResponseWriter, r *http.Request) {
 		desc = fmt.Sprintf("%s: %s - %s check (DC %d)", charName, req.Description, titleCase(checkName), req.DC)
 	}
 
-	_, _ = db.Exec(`
-		INSERT INTO actions (lobby_id, character_id, action_type, description, result)
-		VALUES ($1, $2, 'skill_check', $3, $4)
-	`, campaignID, req.CharacterID, desc, fullResult)
+	writeAction(db, campaignID, req.CharacterID, "skill_check", desc, fullResult)
 
 	response := map[string]interface{}{
 		"success":    success,
@@ -750,6 +744,9 @@ func handleGMToolCheck(w http.ResponseWriter, r *http.Request) {
 	json.Unmarshal(toolClassLevelsJSON, &toolClassLevels)
 
 	if err != nil {
+		if answerDBFailure(w, err, "the character") {
+			return
+		}
 		w.WriteHeader(http.StatusBadRequest)
 		json.NewEncoder(w).Encode(map[string]interface{}{"error": "character_not_found"})
 		return
@@ -1080,10 +1077,7 @@ func handleGMToolCheck(w http.ResponseWriter, r *http.Request) {
 		desc = fmt.Sprintf("%s: %s - %s check (DC %d)", charName, req.Description, req.Tool, req.DC)
 	}
 
-	_, _ = db.Exec(`
-		INSERT INTO actions (lobby_id, character_id, action_type, description, result)
-		VALUES ($1, $2, 'tool_check', $3, $4)
-	`, campaignID, req.CharacterID, desc, fullResult)
+	writeAction(db, campaignID, req.CharacterID, "tool_check", desc, fullResult)
 
 	response := map[string]interface{}{
 		"success":    success,
@@ -1242,7 +1236,10 @@ func handleGMSavingThrow(w http.ResponseWriter, r *http.Request) {
 
 	var charName string
 	var hasInspiration bool
-	if db.QueryRow(`SELECT name, COALESCE(inspiration, false) FROM characters WHERE id = $1`, req.CharacterID).Scan(&charName, &hasInspiration) != nil {
+	if err := db.QueryRow(`SELECT name, COALESCE(inspiration, false) FROM characters WHERE id = $1`, req.CharacterID).Scan(&charName, &hasInspiration); err != nil {
+		if answerDBFailure(w, err, "the character") {
+			return
+		}
 		w.WriteHeader(http.StatusBadRequest)
 		json.NewEncoder(w).Encode(map[string]interface{}{"error": "character_not_found"})
 		return
@@ -1289,10 +1286,7 @@ func handleGMSavingThrow(w http.ResponseWriter, r *http.Request) {
 	if req.Description != "" {
 		desc = fmt.Sprintf("%s: %s - %s saving throw (DC %d)", charName, req.Description, abilityName, req.DC)
 	}
-	_, _ = db.Exec(`
-		INSERT INTO actions (lobby_id, character_id, action_type, description, result)
-		VALUES ($1, $2, 'saving_throw', $3, $4)
-	`, campaignID, req.CharacterID, desc, fullResult)
+	writeAction(db, campaignID, req.CharacterID, "saving_throw", desc, fullResult)
 
 	st := sv.Save
 	rollType := "normal"
@@ -1570,10 +1564,7 @@ func handleGMContestedCheck(w http.ResponseWriter, r *http.Request) {
 		winner, margin)
 
 	// Record the contested check
-	_, _ = db.Exec(`
-		INSERT INTO actions (lobby_id, character_id, action_type, description, result)
-		VALUES ($1, $2, 'contested_check', $3, $4)
-	`, campaignID, req.InitiatorID, desc, fullResult)
+	writeAction(db, campaignID, req.InitiatorID, "contested_check", desc, fullResult)
 
 	json.NewEncoder(w).Encode(map[string]interface{}{
 		"winner":      winner,

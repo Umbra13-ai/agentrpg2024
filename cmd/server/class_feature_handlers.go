@@ -52,6 +52,9 @@ func handleCharacterMetamagic(w http.ResponseWriter, r *http.Request) {
 		`, charID).Scan(&class, &level, &choicesJSON)
 
 		if err != nil {
+			if answerDBFailure(w, err, "the character") {
+				return
+			}
 			w.WriteHeader(http.StatusNotFound)
 			json.NewEncoder(w).Encode(map[string]interface{}{
 				"error":   "character_not_found",
@@ -165,6 +168,9 @@ func handleCharacterMetamagic(w http.ResponseWriter, r *http.Request) {
 	`, req.CharacterID).Scan(&ownerID, &charName, &class, &level, &choicesJSON)
 
 	if err != nil {
+		if answerDBFailure(w, err, "the character") {
+			return
+		}
 		w.WriteHeader(http.StatusNotFound)
 		json.NewEncoder(w).Encode(map[string]interface{}{
 			"error":   "character_not_found",
@@ -323,6 +329,9 @@ func handleCharacterInvocations(w http.ResponseWriter, r *http.Request) {
 		`, charID).Scan(&class, &level, &invocationsJSON, &knownSpellsJSON)
 
 		if err != nil {
+			if answerDBFailure(w, err, "the character") {
+				return
+			}
 			writeJSONStatus(w, http.StatusNotFound, map[string]interface{}{
 				"error":   "character_not_found",
 				"message": fmt.Sprintf("Character %d not found", charID),
@@ -496,6 +505,9 @@ func handleCharacterInvocations(w http.ResponseWriter, r *http.Request) {
 	`, req.CharacterID).Scan(&ownerID, &charName, &class, &level, &invocationsJSON)
 
 	if err != nil {
+		if answerDBFailure(w, err, "the character") {
+			return
+		}
 		writeJSONStatus(w, http.StatusNotFound, map[string]interface{}{
 			"error":   "character_not_found",
 			"message": fmt.Sprintf("Character %d not found", req.CharacterID),
@@ -940,6 +952,9 @@ func handleFlexibleCasting(w http.ResponseWriter, r *http.Request) {
 	`, req.CharacterID).Scan(&ownerID, &charName, &class, &level, &resourcesJSON, &slotsUsedJSON)
 
 	if err != nil {
+		if answerDBFailure(w, err, "the character") {
+			return
+		}
 		w.WriteHeader(http.StatusNotFound)
 		json.NewEncoder(w).Encode(map[string]interface{}{
 			"error":   "character_not_found",
@@ -1148,6 +1163,9 @@ func handleCharacterFightingStyle(w http.ResponseWriter, r *http.Request) {
 		`, charID).Scan(&class, &level, &subclass, &stylesJSON)
 
 		if err != nil {
+			if answerDBFailure(w, err, "the character") {
+				return
+			}
 			writeJSONStatus(w, http.StatusNotFound, map[string]interface{}{
 				"error":   "character_not_found",
 				"message": fmt.Sprintf("Character %d not found", charID),
@@ -1254,6 +1272,9 @@ func handleCharacterFightingStyle(w http.ResponseWriter, r *http.Request) {
 	`, req.CharacterID).Scan(&ownerID, &class, &level, &subclass, &stylesJSON)
 
 	if err != nil {
+		if answerDBFailure(w, err, "the character") {
+			return
+		}
 		writeJSONStatus(w, http.StatusNotFound, map[string]interface{}{
 			"error":   "character_not_found",
 			"message": fmt.Sprintf("Character %d not found", req.CharacterID),
@@ -1428,7 +1449,7 @@ func handleCharacterFightingStyle(w http.ResponseWriter, r *http.Request) {
 	_, err = db.Exec(`UPDATE characters SET fighting_styles = $1 WHERE id = $2`, newStylesJSON, req.CharacterID)
 	if err != nil {
 		writeJSONStatus(w, http.StatusInternalServerError, map[string]interface{}{
-			"error":   "db_error",
+			"error":   dbErrorCode,
 			"message": publicError(err),
 		})
 		return
@@ -1572,6 +1593,9 @@ func handleCharacterFiendishResilience(w http.ResponseWriter, r *http.Request) {
 		`, charID).Scan(&class, &level, &subclassNull, &fiendishResNull)
 
 		if err != nil {
+			if answerDBFailure(w, err, "the character") {
+				return
+			}
 			w.WriteHeader(http.StatusNotFound)
 			json.NewEncoder(w).Encode(map[string]interface{}{
 				"error":   "character_not_found",
@@ -1684,6 +1708,9 @@ func handleCharacterFiendishResilience(w http.ResponseWriter, r *http.Request) {
 	`, req.CharacterID).Scan(&ownerID, &class, &charName, &level, &subclassNull, &fiendishResNull, &campaignID)
 
 	if err != nil {
+		if answerDBFailure(w, err, "the character") {
+			return
+		}
 		w.WriteHeader(http.StatusNotFound)
 		json.NewEncoder(w).Encode(map[string]interface{}{
 			"error":   "character_not_found",
@@ -1758,8 +1785,7 @@ func handleCharacterFiendishResilience(w http.ResponseWriter, r *http.Request) {
 		} else {
 			actionLog = fmt.Sprintf("🔥 %s shifts their Fiendish Resilience from %s to %s damage", charName, previousResistance, damageTypeLower)
 		}
-		db.Exec(`INSERT INTO actions (campaign_id, character_id, action_type, description, created_at)
-			VALUES ($1, $2, 'other', $3, NOW())`, campaignID.Int64, req.CharacterID, actionLog)
+		writeAction(db, int(campaignID.Int64), req.CharacterID, "other", actionLog, "")
 	}
 
 	json.NewEncoder(w).Encode(map[string]interface{}{
@@ -1826,6 +1852,9 @@ func handleCharacterMysticArcanum(w http.ResponseWriter, r *http.Request) {
 		`, charID).Scan(&class, &charName, &level, &arcanumJSON, &usedJSON)
 
 		if err != nil {
+			if answerDBFailure(w, err, "the character") {
+				return
+			}
 			w.WriteHeader(http.StatusNotFound)
 			json.NewEncoder(w).Encode(map[string]interface{}{
 				"error":   "character_not_found",
@@ -2018,6 +2047,9 @@ func handleCharacterMysticArcanum(w http.ResponseWriter, r *http.Request) {
 	`, req.CharacterID).Scan(&ownerID, &class, &charName, &level, &arcanumJSON, &campaignID)
 
 	if err != nil {
+		if answerDBFailure(w, err, "the character") {
+			return
+		}
 		w.WriteHeader(http.StatusNotFound)
 		json.NewEncoder(w).Encode(map[string]interface{}{
 			"error":   "character_not_found",
@@ -2110,9 +2142,7 @@ func handleCharacterMysticArcanum(w http.ResponseWriter, r *http.Request) {
 		if oldSpell != "" {
 			actionText = fmt.Sprintf("✨ %s changes their %dth-level Mystic Arcanum to %s", charName, req.SpellLevel, spellName)
 		}
-		db.Exec(`INSERT INTO actions (campaign_id, character_id, action_type, description, created_at)
-			VALUES ($1, $2, 'other', $3, NOW())`,
-			campaignID.Int64, req.CharacterID, actionText)
+		writeAction(db, int(campaignID.Int64), req.CharacterID, "other", actionText, "")
 	}
 
 	response := map[string]interface{}{
@@ -2171,6 +2201,9 @@ func handleCharacterSignatureSpells(w http.ResponseWriter, r *http.Request) {
 		`, charID).Scan(&class, &level, &signatureSpellsJSON, &signatureSpellsUsedJSON)
 
 		if err != nil {
+			if answerDBFailure(w, err, "the character") {
+				return
+			}
 			w.WriteHeader(http.StatusNotFound)
 			json.NewEncoder(w).Encode(map[string]interface{}{
 				"error":   "character_not_found",
@@ -2200,13 +2233,17 @@ func handleCharacterSignatureSpells(w http.ResponseWriter, r *http.Request) {
 		// Get available 3rd level wizard spells if they need to choose
 		availableSpells := []map[string]interface{}{}
 		if len(signatureSpells) < 2 {
-			rows, _ := db.Query(`
+			rows, qerr := db.Query(`
 				SELECT s.slug, s.name 
 				FROM spells s
 				JOIN class_spells csl ON s.slug = csl.spell_slug
 				WHERE csl.class_slug = 'wizard' AND s.level = 3
 				ORDER BY s.name
 			`)
+			if qerr != nil {
+				writeDBError(w, qerr, "the spell list")
+				return
+			}
 			if rows != nil {
 				defer rows.Close()
 				for rows.Next() {
@@ -2308,6 +2345,9 @@ func handleCharacterSignatureSpells(w http.ResponseWriter, r *http.Request) {
 	`, req.CharacterID).Scan(&ownerID, &class, &charName, &level, &campaignID, &signatureSpellsJSON, &signatureSpellsUsedJSON)
 
 	if err != nil {
+		if answerDBFailure(w, err, "the character") {
+			return
+		}
 		w.WriteHeader(http.StatusNotFound)
 		json.NewEncoder(w).Encode(map[string]interface{}{
 			"error":   "character_not_found",
@@ -2459,8 +2499,7 @@ func handleCharacterSignatureSpells(w http.ResponseWriter, r *http.Request) {
 				desc = fmt.Sprintf("%s casts %s (signature spell)", charName, spellName)
 			}
 			actionLog := fmt.Sprintf("📜 Signature Spell — %s (3rd level, no slot)", desc)
-			db.Exec(`INSERT INTO actions (campaign_id, character_id, action_type, description, created_at)
-				VALUES ($1, $2, 'cast', $3, NOW())`, campaignID.Int64, req.CharacterID, actionLog)
+			writeAction(db, int(campaignID.Int64), req.CharacterID, "cast", actionLog, "")
 		}
 
 		json.NewEncoder(w).Encode(map[string]interface{}{

@@ -52,8 +52,11 @@ func handleGMDeflectAttacks(w http.ResponseWriter, r *http.Request) {
 	var name, class string
 	var level, dex, lobby int
 	var reactionUsed bool
-	if db.QueryRow(`SELECT name, class, level, dex, COALESCE(lobby_id,0), COALESCE(reaction_used,false) FROM characters WHERE id = $1`, req.CharacterID).
-		Scan(&name, &class, &level, &dex, &lobby, &reactionUsed) != nil {
+	if err := db.QueryRow(`SELECT name, class, level, dex, COALESCE(lobby_id,0), COALESCE(reaction_used,false) FROM characters WHERE id = $1`, req.CharacterID).
+		Scan(&name, &class, &level, &dex, &lobby, &reactionUsed); err != nil {
+		if answerDBFailure(w, err, "the character") {
+			return
+		}
 		writeJSONStatus(w, http.StatusNotFound, map[string]interface{}{"error": "character_not_found"})
 		return
 	}

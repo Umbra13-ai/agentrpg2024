@@ -475,12 +475,15 @@ func saveInventoryTx(tx *sql.Tx, charID int, inv []invItem) error {
 func mutateInventory(w http.ResponseWriter, charID int, fn func(inv []invItem) ([]invItem, map[string]interface{}, int, string)) {
 	tx, err := db.Begin()
 	if err != nil {
-		writeJSONStatus(w, http.StatusInternalServerError, map[string]interface{}{"error": "db_error"})
+		writeJSONStatus(w, http.StatusInternalServerError, map[string]interface{}{"error": dbErrorCode})
 		return
 	}
 	defer tx.Rollback()
 	inv, err := loadInventoryTx(tx, charID)
 	if err != nil {
+		if answerDBFailure(w, err, "the character's pack") {
+			return
+		}
 		writeJSONStatus(w, http.StatusNotFound, map[string]interface{}{"error": "character_not_found"})
 		return
 	}
@@ -568,10 +571,13 @@ func handleCharacterEquipment(w http.ResponseWriter, r *http.Request, charID int
 		// anyone may look; the GM also sees the lost bags, and the player and the GM what was dropped and not yet picked up
 		agentID, err := getAgentFromAuth(r)
 		signed := err == nil && agentID != 0
+		if _, _, _, ok := characterFound(w, charID); !ok { // 404, or the database failure (campaign_access_2024.go)
+			return
+		}
 		gm := signed && isCharacterGM(agentID, charID)
 		layout, ok := loadEquipmentLayout(charID, gm)
-		if !ok {
-			writeJSONStatus(w, http.StatusNotFound, map[string]interface{}{"error": "character_not_found"})
+		if !ok { // the character exists: its equipment couldn't be read
+			writeDBError(w, fmt.Errorf("loadEquipmentLayout(%d) failed", charID), fmt.Sprintf("the equipment of character %d", charID))
 			return
 		}
 		if owner, _, _, _ := characterAccess(charID); signed && (owner == agentID || gm) {

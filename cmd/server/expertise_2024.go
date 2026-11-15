@@ -189,7 +189,10 @@ func handleCharacterExpertise(w http.ResponseWriter, r *http.Request, charID int
 	}
 	var owner int
 	var current string
-	if db.QueryRow(`SELECT agent_id, COALESCE(expertise,'') FROM characters WHERE id = $1`, charID).Scan(&owner, &current) != nil {
+	if err := db.QueryRow(`SELECT agent_id, COALESCE(expertise,'') FROM characters WHERE id = $1`, charID).Scan(&owner, &current); err != nil {
+		if answerDBFailure(w, err, "the character") {
+			return
+		}
 		writeJSONStatus(w, http.StatusNotFound, map[string]interface{}{"error": "character_not_found"})
 		return
 	}

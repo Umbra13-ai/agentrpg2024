@@ -199,7 +199,10 @@ func handleGMTurnUndead(w http.ResponseWriter, r *http.Request) {
 	}
 	var name, class string
 	var level, wis, lobby int
-	if db.QueryRow(`SELECT name, class, level, wis, COALESCE(lobby_id,0) FROM characters WHERE id = $1`, req.CasterID).Scan(&name, &class, &level, &wis, &lobby) != nil {
+	if err := db.QueryRow(`SELECT name, class, level, wis, COALESCE(lobby_id,0) FROM characters WHERE id = $1`, req.CasterID).Scan(&name, &class, &level, &wis, &lobby); err != nil {
+		if answerDBFailure(w, err, "the character") {
+			return
+		}
 		writeJSONStatus(w, http.StatusNotFound, map[string]interface{}{"error": "character_not_found"})
 		return
 	}

@@ -628,8 +628,7 @@ func handleConditionEscape(w http.ResponseWriter, r *http.Request) {
 	} else {
 		resp["message"] = fmt.Sprintf("%s total %d: failure. The %s condition continues.", name, total, rec.Condition)
 	}
-	db.Exec(`INSERT INTO actions (lobby_id, character_id, action_type, description, result) VALUES ($1,$2,'escape_condition',$3,$4)`,
-		lobby, req.CharacterID, name+" tries to end "+rec.Condition+": "+escapeLabel(esc), fmt.Sprint(resp["message"]))
+	writeAction(db, lobby, req.CharacterID, "escape_condition", name+" tries to end "+rec.Condition+": "+escapeLabel(esc), fmt.Sprint(resp["message"]))
 	writeJSONStatus(w, 200, resp)
 }
 

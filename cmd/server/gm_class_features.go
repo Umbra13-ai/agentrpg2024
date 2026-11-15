@@ -83,6 +83,9 @@ func handleGMPreserveLife(w http.ResponseWriter, r *http.Request) {
 	`, req.CasterID).Scan(&casterName, &className, &casterLevel, &subclass, &lobbyID)
 
 	if err != nil {
+		if answerDBFailure(w, err, "the character") {
+			return
+		}
 		w.WriteHeader(http.StatusBadRequest)
 		json.NewEncoder(w).Encode(map[string]interface{}{
 			"error":   "character_not_found",
@@ -252,12 +255,7 @@ func handleGMPreserveLife(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 
-	db.Exec(`
-		INSERT INTO actions (lobby_id, character_id, action_type, description, result)
-		VALUES ($1, $2, $3, $4, $5)
-	`, lobbyID, req.CasterID, "preserve_life",
-		fmt.Sprintf("%s uses Channel Divinity: Preserve Life!", casterName),
-		fmt.Sprintf("Healed %d HP total: %s", totalHealed, strings.Join(targetNames, ", ")))
+	writeAction(db, lobbyID, req.CasterID, "preserve_life", fmt.Sprintf("%s uses Channel Divinity: Preserve Life!", casterName), fmt.Sprintf("Healed %d HP total: %s", totalHealed, strings.Join(targetNames, ", ")))
 
 	json.NewEncoder(w).Encode(map[string]interface{}{
 		"success":                    true,
@@ -327,6 +325,9 @@ func handleGMSacredWeapon(w http.ResponseWriter, r *http.Request) {
 	`, req.PaladinID).Scan(&paladinName, &className, &paladinLevel, &chaScore, &lobbyID, &subclassRaw)
 
 	if err != nil {
+		if answerDBFailure(w, err, "the character") {
+			return
+		}
 		w.WriteHeader(http.StatusBadRequest)
 		json.NewEncoder(w).Encode(map[string]interface{}{
 			"error":   "character_not_found",
@@ -411,12 +412,7 @@ func handleGMSacredWeapon(w http.ResponseWriter, r *http.Request) {
 	remaining := getCurrentClassResources(req.PaladinID)["channel_divinity"]
 
 	// Log the action
-	db.Exec(`
-		INSERT INTO actions (lobby_id, character_id, action, description, result)
-		VALUES ($1, $2, $3, $4, $5)
-	`, lobbyID, req.PaladinID, "sacred_weapon",
-		fmt.Sprintf("%s uses Channel Divinity: Sacred Weapon!", paladinName),
-		fmt.Sprintf("Weapon imbued with positive energy. +%d to attack rolls with it for 10 minutes; each hit deals its normal damage type or Radiant damage. Bright Light in a 20-foot radius and Dim Light 20 feet beyond.", chaBonus))
+	writeAction(db, lobbyID, req.PaladinID, "sacred_weapon", fmt.Sprintf("%s uses Channel Divinity: Sacred Weapon!", paladinName), fmt.Sprintf("Weapon imbued with positive energy. +%d to attack rolls with it for 10 minutes; each hit deals its normal damage type or Radiant damage. Bright Light in a 20-foot radius and Dim Light 20 feet beyond.", chaBonus))
 
 	json.NewEncoder(w).Encode(map[string]interface{}{
 		"success":                    true,
@@ -509,6 +505,9 @@ func handleGMCuttingWords(w http.ResponseWriter, r *http.Request) {
 		SELECT name, class, level, subclass FROM characters WHERE id = $1
 	`, req.BardID).Scan(&charName, &class, &level, &subclass)
 	if err != nil {
+		if answerDBFailure(w, err, "the character") {
+			return
+		}
 		w.WriteHeader(http.StatusBadRequest)
 		json.NewEncoder(w).Encode(map[string]interface{}{"error": "character_not_found"})
 		return
@@ -593,10 +592,7 @@ func handleGMCuttingWords(w http.ResponseWriter, r *http.Request) {
 	// Log the action
 	actionDesc := fmt.Sprintf("%s uses Cutting Words (reaction) to reduce enemy %s", charName, rollTypeDesc)
 	actionResult := fmt.Sprintf("d%d = %d subtracted. Roll reduced from %d to %d", dieSize, subtraction, req.EnemyRoll, reducedRoll)
-	db.Exec(`
-		INSERT INTO actions (lobby_id, character_id, action_type, description, result)
-		VALUES ($1, $2, $3, $4, $5)
-	`, lobbyID, req.BardID, "cutting_words", actionDesc, actionResult)
+	writeAction(db, lobbyID, req.BardID, "cutting_words", actionDesc, actionResult)
 
 	json.NewEncoder(w).Encode(response)
 }
@@ -678,6 +674,9 @@ func handleGMDarkOnesLuck(w http.ResponseWriter, r *http.Request) {
 	}
 	featureUsed = luckCount >= luckUses
 	if err != nil {
+		if answerDBFailure(w, err, "the character") {
+			return
+		}
 		w.WriteHeader(http.StatusBadRequest)
 		json.NewEncoder(w).Encode(map[string]interface{}{"error": "character_not_found"})
 		return
@@ -760,10 +759,7 @@ func handleGMDarkOnesLuck(w http.ResponseWriter, r *http.Request) {
 	// Log the action
 	actionDesc := fmt.Sprintf("%s uses Dark One's Own Luck to boost %s", charName, rollTypeDesc)
 	actionResult := fmt.Sprintf("d10 = +%d. Roll boosted from %d to %d", bonus, req.OriginalRoll, boostedRoll)
-	db.Exec(`
-		INSERT INTO actions (lobby_id, character_id, action_type, description, result)
-		VALUES ($1, $2, $3, $4, $5)
-	`, lobbyID, req.CharacterID, "dark_ones_luck", actionDesc, actionResult)
+	writeAction(db, lobbyID, req.CharacterID, "dark_ones_luck", actionDesc, actionResult)
 
 	json.NewEncoder(w).Encode(response)
 }
@@ -837,6 +833,9 @@ func handleGMIndomitable(w http.ResponseWriter, r *http.Request) {
 		FROM characters WHERE id = $1
 	`, req.CharacterID).Scan(&charName, &class, &level, &usedCount, &str, &dex, &con, &intl, &wis, &cha)
 	if err != nil {
+		if answerDBFailure(w, err, "the character") {
+			return
+		}
 		w.WriteHeader(http.StatusBadRequest)
 		json.NewEncoder(w).Encode(map[string]interface{}{"error": "character_not_found"})
 		return
@@ -895,10 +894,7 @@ func handleGMIndomitable(w http.ResponseWriter, r *http.Request) {
 
 	// Log the action
 	actionDesc := fmt.Sprintf("%s uses Indomitable to reroll failed %s save", charName, abilityName)
-	db.Exec(`
-		INSERT INTO actions (lobby_id, character_id, action_type, description, result)
-		VALUES ($1, $2, $3, $4, $5)
-	`, lobbyID, req.CharacterID, "indomitable", actionDesc, fullResult)
+	writeAction(db, lobbyID, req.CharacterID, "indomitable", actionDesc, fullResult)
 
 	response := map[string]interface{}{
 		"success":               success,
@@ -999,6 +995,9 @@ func handleGMStrokeOfLuck(w http.ResponseWriter, r *http.Request) {
 		FROM characters WHERE id = $1
 	`, req.CharacterID).Scan(&charName, &class, &level, &strokeOfLuckUsed, &classLevelsJSON)
 	if err != nil {
+		if answerDBFailure(w, err, "the character") {
+			return
+		}
 		w.WriteHeader(http.StatusBadRequest)
 		json.NewEncoder(w).Encode(map[string]interface{}{"error": "character_not_found"})
 		return
@@ -1058,10 +1057,7 @@ func handleGMStrokeOfLuck(w http.ResponseWriter, r *http.Request) {
 	}
 
 	// Log the action
-	db.Exec(`
-		INSERT INTO actions (lobby_id, character_id, action_type, description, result)
-		VALUES ($1, $2, $3, $4, $5)
-	`, lobbyID, req.CharacterID, "stroke_of_luck", actionDesc, fullResult)
+	writeAction(db, lobbyID, req.CharacterID, "stroke_of_luck", actionDesc, fullResult)
 
 	json.NewEncoder(w).Encode(map[string]interface{}{
 		"success":             true,

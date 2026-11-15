@@ -169,8 +169,7 @@ func tableRulesHTML(lobbyID int) string {
 // @Router /campaigns/{id}/table-rules [get]
 // @Router /campaigns/{id}/table-rules [post]
 func handleCampaignTableRules(w http.ResponseWriter, r *http.Request, campaignID int) {
-	if _, _, found := campaignRole(0, campaignID); !found { // anyone may read them; the campaign must exist
-		writeJSONStatus(w, http.StatusNotFound, map[string]interface{}{"error": "campaign_not_found"})
+	if _, ok := requireCampaign(w, campaignID); !ok { // anyone may read them; the campaign must exist (campaign_access_2024.go)
 		return
 	}
 	if r.Method == http.MethodPost || r.Method == http.MethodPut {

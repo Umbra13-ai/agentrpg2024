@@ -5,7 +5,8 @@ package main
 //   - a cap on the request body (2 MB; a portrait upload 9 MB), so a huge body can't exhaust memory;
 //   - headers that stop MIME sniffing, framing by other sites and full-address Referers;
 //   - per-address limits on sign-ups and on wrong passwords;
-//   - publicError: a database error is logged and reported as "database_error" (its text names tables, columns and types).
+//   - publicError: a database error is logged and reported as "database_error" (its text names tables, columns and types);
+//   - guardDB: no request answers success when a database call failed under it (db_guard_2024.go).
 
 import (
 	"log"
@@ -54,7 +55,7 @@ func withProtections(next http.Handler) http.Handler {
 		if r.Body != nil {
 			r.Body = http.MaxBytesReader(w, r.Body, limit)
 		}
-		next.ServeHTTP(w, withAuthMemo(r)) // signed in once per request (auth_and_logging.go)
+		guardDB(w, withAuthMemo(r), next) // signed in once per request (auth_and_logging.go); no success over a database failure (db_guard_2024.go)
 	})
 }
 

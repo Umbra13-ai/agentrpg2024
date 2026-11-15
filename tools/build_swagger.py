@@ -166,7 +166,6 @@ paths["/api/characters/species-ability"] = {
                              "damage_taken": S("integer", "Stone's Endurance: the damage you just took"), "end": S("boolean", "Draconic Flight: retract the wings")},
                             ["character_id", "ability"]), {"character_id": 5, "ability": "stonecunning"}))}
 paths["/api/characters/breath-weapon"] = {
-    "get": op("Characters", "Breath weapon status", "Dragonborn. Uses equal your Proficiency Bonus per long rest; 1d10 (2d10 at 5, 3d10 at 11, 4d10 at 17); Dexterity save DC 8 + Con + Proficiency.", params=[q("character_id", required=True, t="integer")]),
     "post": op("Characters", "Use the breath weapon", "Uses one of your breath weapon uses (GET shows how many are left) and rolls the Dexterity save of each creature in target_ids against your DC; failed saves take the full damage, successful ones half.",
                req=body(obj({"character_id": S("integer"), "target_ids": S("array", "Creatures in the Cone or Line", items={"type": "integer"}), "description": S()}, ["character_id", "target_ids"])))}
 paths["/api/characters/weapon-masteries"] = {
@@ -255,6 +254,15 @@ def clean(text):
     return re.sub(r"\s{2,}", " ", t).strip()
 
 
+# a method written by hand must be one the handler's godoc documents for that path: a hand entry can't invent a route
+_godoc_methods = {}
+for r in godoc_routes.routes():
+    for method, path in r["routes"]:
+        _godoc_methods.setdefault(path, set()).add(method)
+_invented = sorted("%s %s" % (m.upper(), p) for p, ops in paths.items() if p in _godoc_methods
+                   for m in ops if m not in _godoc_methods[p])
+if _invented:
+    raise SystemExit("written by hand but not in the handler's godoc (add the @Router line, or remove the entry): " + ", ".join(_invented))
 added = 0
 for r in godoc_routes.routes():
     for method, path in r["routes"]:

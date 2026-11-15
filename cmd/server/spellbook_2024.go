@@ -36,8 +36,7 @@ func handleCopySpell2024(w http.ResponseWriter, r *http.Request) {
 	if !readRequest(w, r, &req, optionalBody()) {
 		return
 	}
-	if _, ok := playerOwns(r, req.CharacterID); !ok {
-		writeJSONStatus(w, 403, map[string]interface{}{"error": "not_your_character"})
+	if _, ok := requireCharacterOwner(w, r, req.CharacterID, "copy a spell into its spellbook"); !ok { // campaign_access_2024.go
 		return
 	}
 	var class string

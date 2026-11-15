@@ -385,7 +385,7 @@ func handleBattleMap(w http.ResponseWriter, r *http.Request, campaignID int, rou
 				return
 			}
 			// GM map changes are recorded without publishing coordinates or hidden features.
-			if _, err := tx.Exec("INSERT INTO actions (lobby_id, action_type, description, result) VALUES ($1,'map_update','GM updated the battle map','Map updated')", campaignID); err != nil || tx.Commit() != nil {
+			if err := writeAction(tx, campaignID, 0, "map_update", "GM updated the battle map", "Map updated"); err != nil || tx.Commit() != nil {
 				battleMapError(w, 500, "map_write_failed")
 				return
 			}
@@ -589,7 +589,7 @@ func handleBattleMap(w http.ResponseWriter, r *http.Request, campaignID int, rou
 			return
 		}
 	}
-	if _, err := tx.Exec("INSERT INTO actions (lobby_id,character_id,action_type,description,result) VALUES ($1,$2,'map_move','Moved on the battle map',$3)", campaignID, actor.ID, fmt.Sprintf("%d ft of movement spent", cost)); err != nil || tx.Commit() != nil {
+	if err := writeAction(tx, campaignID, actor.ID, "map_move", "Moved on the battle map", fmt.Sprintf("%d ft of movement spent", cost)); err != nil || tx.Commit() != nil {
 		battleMapError(w, 500, "map_write_failed")
 		return
 	}

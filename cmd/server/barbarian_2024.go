@@ -109,8 +109,11 @@ func handleGMIntimidatingPresence(w http.ResponseWriter, r *http.Request) {
 	var sub sql.NullString
 	var level, str, lobby int
 	var used bool
-	if db.QueryRow(`SELECT name, class, subclass, level, str, COALESCE(lobby_id,0), COALESCE(intimidating_presence_used,false) FROM characters WHERE id = $1`, req.BarbarianID).
-		Scan(&name, &class, &sub, &level, &str, &lobby, &used) != nil {
+	if err := db.QueryRow(`SELECT name, class, subclass, level, str, COALESCE(lobby_id,0), COALESCE(intimidating_presence_used,false) FROM characters WHERE id = $1`, req.BarbarianID).
+		Scan(&name, &class, &sub, &level, &str, &lobby, &used); err != nil {
+		if answerDBFailure(w, err, "the character") {
+			return
+		}
 		writeJSONStatus(w, http.StatusNotFound, map[string]interface{}{"error": "character_not_found"})
 		return
 	}

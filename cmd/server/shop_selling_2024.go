@@ -181,10 +181,13 @@ type sellReq struct {
 func sellItems(charID int, def *shopTypeDef, shopName string, priceCP func(float64) int, req []sellReq) (int, map[string]interface{}) {
 	tx, err := db.Begin()
 	if err != nil {
-		return http.StatusInternalServerError, map[string]interface{}{"error": "db_error"}
+		return http.StatusInternalServerError, map[string]interface{}{"error": dbErrorCode}
 	}
 	defer tx.Rollback()
 	inv, err := loadInventoryTx(tx, charID)
+	if dbFailed(err) {
+		return http.StatusInternalServerError, map[string]interface{}{"error": dbErrorCode, "message": dbReadMessage("the character's pack")}
+	}
 	if err != nil {
 		return http.StatusNotFound, map[string]interface{}{"error": "character_not_found"}
 	}

@@ -16,6 +16,7 @@ package main
 
 import (
 	"fmt"
+	"log"
 	"net/http"
 	"strconv"
 	"strings"
@@ -93,15 +94,18 @@ func gmCampaignPick(agentID, want int, statuses ...string) (int, string, string)
 	}
 	rows, err := db.Query(`SELECT id FROM lobbies WHERE dm_id = $1 AND status = ANY($2) ORDER BY id`, agentID, pq.Array(statuses))
 	if err != nil {
-		return 0, "campaign_lookup_failed", "The campaign lookup failed."
+		log.Printf("database error finding the campaigns of GM %d: %v", agentID, err)
+		return 0, dbErrorCode, dbReadMessage("your campaigns")
 	}
 	defer rows.Close()
 	var ids []int
 	for rows.Next() {
 		var id int
-		if rows.Scan(&id) == nil {
-			ids = append(ids, id)
+		if err := rows.Scan(&id); err != nil {
+			log.Printf("database error finding the campaigns of GM %d: %v", agentID, err)
+			return 0, dbErrorCode, dbReadMessage("your campaigns")
 		}
+		ids = append(ids, id)
 	}
 	if len(ids) == 0 {
 		return 0, "not_gm", fmt.Sprintf("You are not the GM of any %s campaign.", statusWords(statuses))
@@ -112,7 +116,12 @@ func gmCampaignPick(agentID, want int, statuses ...string) (int, string, string)
 	var fighting []int
 	for _, id := range ids {
 		var active bool
-		if db.QueryRow(`SELECT COALESCE(active,false) FROM combat_state WHERE lobby_id = $1`, id).Scan(&active) == nil && active {
+		err := db.QueryRow(`SELECT COALESCE(active,false) FROM combat_state WHERE lobby_id = $1`, id).Scan(&active)
+		if dbFailed(err) {
+			log.Printf("database error reading the fight of campaign %d: %v", id, err)
+			return 0, dbErrorCode, dbReadMessage(fmt.Sprintf("campaign %d", id))
+		}
+		if err == nil && active {
 			fighting = append(fighting, id)
 		}
 	}
@@ -126,7 +135,12 @@ func gmCampaignPick(agentID, want int, statuses ...string) (int, string, string)
 func gmCampaignCheck(agentID, id int, statuses []string) (string, string) {
 	var dm int
 	var status string
-	if db.QueryRow(`SELECT COALESCE(dm_id,0), COALESCE(status,'') FROM lobbies WHERE id = $1`, id).Scan(&dm, &status) != nil || dm != agentID {
+	err := db.QueryRow(`SELECT COALESCE(dm_id,0), COALESCE(status,'') FROM lobbies WHERE id = $1`, id).Scan(&dm, &status)
+	if dbFailed(err) {
+		log.Printf("database error reading campaign %d: %v", id, err)
+		return dbErrorCode, dbReadMessage(fmt.Sprintf("campaign %d", id))
+	}
+	if err != nil || dm != agentID {
 		return "not_gm", fmt.Sprintf("You are not the GM of campaign %d.", id)
 	}
 	for _, s := range statuses {
@@ -148,7 +162,11 @@ func gmTargetCampaign(agentID, want int, chars []int, statuses []string) (int, i
 	camp, first := 0, 0
 	for _, id := range chars {
 		var lobby int
-		if db.QueryRow(`SELECT COALESCE(lobby_id,0) FROM characters WHERE id = $1`, id).Scan(&lobby) != nil {
+		if err := db.QueryRow(`SELECT COALESCE(lobby_id,0) FROM characters WHERE id = $1`, id).Scan(&lobby); err != nil {
+			if dbFailed(err) {
+				log.Printf("database error reading character %d: %v", id, err)
+				return 0, http.StatusInternalServerError, dbErrorCode, dbReadMessage(fmt.Sprintf("character %d", id))
+			}
 			return 0, http.StatusNotFound, "character_not_found", fmt.Sprintf("Character %d not found.", id)
 		}
 		if lobby == 0 {
@@ -170,7 +188,7 @@ func gmCampaignMatch(agentID, want, camp int, what string, statuses []string) (i
 		return 0, http.StatusBadRequest, "not_in_campaign", fmt.Sprintf("%s is in campaign %d, not campaign %d.", what, camp, want)
 	}
 	if code, msg := gmCampaignCheck(agentID, camp, statuses); code != "" {
-		return 0, http.StatusForbidden, code, msg
+		return 0, gmProblemStatus(code), code, msg
 	}
 	return camp, 0, "", ""
 }
@@ -198,11 +216,19 @@ func (s bodySpec) targetIDs() []int {
 
 // writeGMCampaignProblem answers a GM command whose campaign couldn't be picked.
 func writeGMCampaignProblem(w http.ResponseWriter, code, msg string) {
-	status := http.StatusForbidden
-	if code == "campaign_id_required" {
-		status = http.StatusBadRequest
+	writeJSONStatus(w, gmProblemStatus(code), map[string]interface{}{"error": code, "message": msg})
+}
+
+// gmProblemStatus: the status of a campaign problem: 400 when the request must name the campaign, 500 when the database failed,
+// else 403.
+func gmProblemStatus(code string) int {
+	switch code {
+	case "campaign_id_required":
+		return http.StatusBadRequest
+	case dbErrorCode:
+		return http.StatusInternalServerError
 	}
-	writeJSONStatus(w, status, map[string]interface{}{"error": code, "message": msg})
+	return http.StatusForbidden
 }
 
 // gmRead reads a GM command: who sends it, its body (readRequest) and the campaign it is for. campaign_id may be in the body

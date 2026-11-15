@@ -511,8 +511,7 @@ func handleGMAoECast(w http.ResponseWriter, r *http.Request) {
 	actionDesc := fmt.Sprintf("%s %s (AoE) targeting %s", castType, spellName, strings.Join(targetNames, ", "))
 	resultStr := fmt.Sprintf("DC %d %s save. Base damage: %d. Targets: %d", dc, savingThrow, baseDamage, len(results))
 
-	db.Exec(`INSERT INTO actions (lobby_id, character_id, action_type, description, result) VALUES ($1, $2, 'aoe_cast', $3, $4)`,
-		campaignID, req.CasterID, actionDesc, resultStr)
+	writeAction(db, campaignID, req.CasterID, "aoe_cast", actionDesc, resultStr)
 
 	response := map[string]interface{}{
 		"success":      true,
@@ -843,10 +842,7 @@ func handleGMDispelMagic(w http.ResponseWriter, r *http.Request) {
 
 	// Log the action
 	actionDesc := fmt.Sprintf("%s casts Dispel Magic on %s targeting %s (level %d)", casterName, targetName, effectDispelled, req.TargetSpellLevel)
-	db.Exec(`
-		INSERT INTO actions (lobby_id, character_id, action_type, description, result)
-		VALUES ($1, $2, $3, $4, $5)
-	`, lobbyID, req.CasterID, "dispel_magic", actionDesc, actionResult)
+	writeAction(db, lobbyID, req.CasterID, "dispel_magic", actionDesc, actionResult)
 
 	json.NewEncoder(w).Encode(response)
 }

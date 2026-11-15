@@ -396,7 +396,10 @@ func charmEndsOnDamage(lobbyID, id int, name string) string {
 
 // wakeOnDamageSleep: Hypnotic Pattern and Sleep end on damage, and the turning of Turn Undead.
 func wakeOnDamageSleep(lobbyID, id int, name string) string {
-	turned, _ := db.Exec(`DELETE FROM condition_records WHERE lobby_id = $1 AND target_id = $2 AND source LIKE 'Turn Undead%'`, lobbyID, id)
+	turned, terr := db.Exec(`DELETE FROM condition_records WHERE lobby_id = $1 AND target_id = $2 AND source LIKE 'Turn Undead%'`, lobbyID, id)
+	if terr != nil {
+		turned = nil // the request's database guard answers the failure (db_guard_2024.go)
+	}
 	res, err := db.Exec(`DELETE FROM condition_records WHERE lobby_id = $1 AND target_id = $2 AND source IN ('Hypnotic Pattern','Sleep')`, lobbyID, id)
 	if err != nil {
 		return ""

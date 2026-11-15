@@ -290,7 +290,7 @@ func main() {
 	dbURL := os.Getenv("DATABASE_URL")
 	if dbURL != "" {
 		var err error
-		db, err = sql.Open("postgres", withUTC(dbURL)) // store times in UTC (time_zones.go)
+		db, err = sql.Open("postgres-checked", withUTC(dbURL)) // lib/pq, with each failure told to its request (db_guard_2024.go) // store times in UTC (time_zones.go)
 		if err != nil {
 			log.Printf("Database connection failed: %v", err)
 		} else {

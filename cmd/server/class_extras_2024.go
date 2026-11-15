@@ -307,7 +307,10 @@ func wizardOwner(w http.ResponseWriter, r *http.Request, charID int) (class stri
 		return
 	}
 	var owner int
-	if db.QueryRow(`SELECT agent_id, class, level FROM characters WHERE id = $1`, charID).Scan(&owner, &class, &level) != nil {
+	if err := db.QueryRow(`SELECT agent_id, class, level FROM characters WHERE id = $1`, charID).Scan(&owner, &class, &level); err != nil {
+		if answerDBFailure(w, err, "the character") {
+			return
+		}
 		writeJSONStatus(w, http.StatusNotFound, map[string]interface{}{"error": "character_not_found"})
 		return
 	}

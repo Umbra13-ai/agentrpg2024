@@ -86,7 +86,10 @@ func handleGMAbjureFoes(w http.ResponseWriter, r *http.Request) {
 	}
 	var name, class string
 	var level, cha, lobby int
-	if db.QueryRow(`SELECT name, class, level, cha, COALESCE(lobby_id,0) FROM characters WHERE id = $1`, req.PaladinID).Scan(&name, &class, &level, &cha, &lobby) != nil {
+	if err := db.QueryRow(`SELECT name, class, level, cha, COALESCE(lobby_id,0) FROM characters WHERE id = $1`, req.PaladinID).Scan(&name, &class, &level, &cha, &lobby); err != nil {
+		if answerDBFailure(w, err, "the character") {
+			return
+		}
 		writeJSONStatus(w, http.StatusNotFound, map[string]interface{}{"error": "character_not_found"})
 		return
 	}

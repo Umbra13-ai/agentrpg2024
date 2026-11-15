@@ -77,8 +77,8 @@ type catalogRow struct {
 // buildItemCatalog gathers every SRD item from the in-memory tables.
 func buildItemCatalog() []catalogRow {
 	var rows []catalogRow
-	rows = append(rows, weaponRows()...) // the SRD weapon table, as printed
-	rows = append(rows, armorRows()...) // the SRD armor table, as printed
+	rows = append(rows, weaponRows()...)    // the SRD weapon table, as printed
+	rows = append(rows, armorRows()...)     // the SRD armor table, as printed
 	rows = append(rows, equipmentRows()...) // tools and adventuring gear, as printed in the SRD
 	rows = append(rows, magicItemRows()...)
 	rows = append(rows, mountAndVehicleRows()...)
@@ -204,7 +204,7 @@ func handleUniverseItems(w http.ResponseWriter, r *http.Request) {
 	sqlText += " ORDER BY category, name"
 	rows, err := db.Query(sqlText, args...)
 	if err != nil {
-		writeJSONStatus(w, http.StatusInternalServerError, map[string]interface{}{"error": "db_error"})
+		writeJSONStatus(w, http.StatusInternalServerError, map[string]interface{}{"error": dbErrorCode})
 		return
 	}
 	defer rows.Close()

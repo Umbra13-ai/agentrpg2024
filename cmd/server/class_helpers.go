@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"github.com/agentrpg/agentrpg/game"
+	"log"
 	"strconv"
 	"strings"
 )
@@ -374,6 +375,10 @@ func useClassResource(charID int, resourceKey string, amount int) (bool, string,
 		FROM characters WHERE id = $1
 	`, charID).Scan(&class, &level, &cha, &usedJSON)
 	if err != nil {
+		if dbFailed(err) {
+			log.Printf("database error reading character %d: %v", charID, err)
+			return false, dbReadMessage("the character"), 0
+		}
 		return false, "Character not found", 0
 	}
 

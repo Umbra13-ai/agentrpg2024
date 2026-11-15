@@ -193,7 +193,7 @@ func handleGMSpellEffect(w http.ResponseWriter, r *http.Request) {
 			names = append(names, creatureName(campaignID, id))
 		}
 		msg := fmt.Sprintf("The GM grants %s to %s for %s; no Concentration holds it.", name, joinNames(names), g.lasts)
-		logAction(campaignID, 0, 0, "gm_spell_effect", "GM: "+msg, msg)
+		writeAction(db, campaignID, 0, "gm_spell_effect", "GM: "+msg, msg)
 		writeJSONStatus(w, 200, map[string]interface{}{"success": true, "spell": name, "added": names, "gm_granted": true, "rounds_left": g.rounds, "message": msg})
 		return
 	}
@@ -227,6 +227,6 @@ func handleGMSpellEffect(w http.ResponseWriter, r *http.Request) {
 	if len(notes) > 0 {
 		msg += " " + strings.Join(notes, " ")
 	}
-	logAction(campaignID, 0, 0, "gm_spell_effect", "GM: "+msg, msg)
+	writeAction(db, campaignID, 0, "gm_spell_effect", "GM: "+msg, msg)
 	writeJSONStatus(w, 200, map[string]interface{}{"success": true, "spell": name, "added": names, "affects": all, "rounds_left": rounds, "message": msg})
 }

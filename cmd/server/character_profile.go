@@ -93,6 +93,9 @@ func handleCharacterPortrait(w http.ResponseWriter, r *http.Request, charID int)
 		err := db.QueryRow(`SELECT avatar, avatar_type, avatar_updated_at FROM characters WHERE id = $1`, charID).
 			Scan(&data, &mime, &updated)
 		if err != nil || len(data) == 0 || !mime.Valid {
+			if answerDBFailure(w, err, "the character") {
+				return
+			}
 			writeJSONStatus(w, http.StatusNotFound, map[string]interface{}{"error": "no_portrait"})
 			return
 		}
@@ -393,6 +396,9 @@ func getCharacterProfile(w http.ResponseWriter, charID int) {
 		&hasPortrait, &avatarUpdated, &isDead,
 		&persona[0], &persona[1], &persona[2], &persona[3], &persona[4], &persona[5], &persona[6], &persona[7])
 	if err != nil {
+		if answerDBFailure(w, err, "the character") {
+			return
+		}
 		writeJSONStatus(w, http.StatusNotFound, map[string]interface{}{"error": "character_not_found"})
 		return
 	}

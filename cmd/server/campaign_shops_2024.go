@@ -592,7 +592,11 @@ func handleGMShops(w http.ResponseWriter, r *http.Request) {
 	}
 	req.CampaignID = campaignID
 	if req.Close > 0 {
-		res, _ := db.Exec(`UPDATE campaign_shops SET closed_at = NOW() WHERE id = $1 AND lobby_id = $2 AND closed_at IS NULL`, req.Close, req.CampaignID)
+		res, xerr := db.Exec(`UPDATE campaign_shops SET closed_at = NOW() WHERE id = $1 AND lobby_id = $2 AND closed_at IS NULL`, req.Close, req.CampaignID)
+		if xerr != nil {
+			writeDBWriteError(w, xerr, "the shop's closing")
+			return
+		}
 		if n, _ := res.RowsAffected(); n == 0 {
 			writeJSONStatus(w, http.StatusNotFound, map[string]interface{}{"error": "shop_not_open", "message": fmt.Sprintf("Shop %d isn't open in this campaign.", req.Close)})
 			return

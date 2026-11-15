@@ -216,8 +216,11 @@ func handleCharacterShop(w http.ResponseWriter, r *http.Request, charID int) {
 	ensureShopColumn()
 	var owner int
 	var weaponProfs, armorProfs, class string
-	if db.QueryRow(`SELECT COALESCE(agent_id,0), COALESCE(weapon_proficiencies,''), COALESCE(armor_proficiencies,''), COALESCE(class,'') FROM characters WHERE id = $1`, charID).
-		Scan(&owner, &weaponProfs, &armorProfs, &class) != nil {
+	if err := db.QueryRow(`SELECT COALESCE(agent_id,0), COALESCE(weapon_proficiencies,''), COALESCE(armor_proficiencies,''), COALESCE(class,'') FROM characters WHERE id = $1`, charID).
+		Scan(&owner, &weaponProfs, &armorProfs, &class); err != nil {
+		if answerDBFailure(w, err, "the character") {
+			return
+		}
 		writeJSONStatus(w, http.StatusNotFound, map[string]interface{}{"error": "character_not_found"})
 		return
 	}
@@ -392,10 +395,13 @@ func completePurchase(charID, money, total int, kit []startItem, lines []string)
 	}
 	tx, err := db.Begin()
 	if err != nil {
-		return http.StatusInternalServerError, map[string]interface{}{"error": "db_error"}
+		return http.StatusInternalServerError, map[string]interface{}{"error": dbErrorCode}
 	}
 	defer tx.Rollback()
 	inv, err := loadInventoryTx(tx, charID)
+	if dbFailed(err) {
+		return http.StatusInternalServerError, map[string]interface{}{"error": dbErrorCode, "message": dbReadMessage("the character's pack")}
+	}
 	if err != nil {
 		return http.StatusNotFound, map[string]interface{}{"error": "character_not_found"}
 	}

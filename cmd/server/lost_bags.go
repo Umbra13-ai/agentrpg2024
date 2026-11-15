@@ -29,7 +29,7 @@ func handleCampaignLostBags(w http.ResponseWriter, r *http.Request, campaignID i
 
 	rows, err := db.Query(`SELECT id, name, COALESCE(inventory, '[]') FROM characters WHERE lobby_id = $1 ORDER BY id`, campaignID)
 	if err != nil {
-		writeJSONStatus(w, http.StatusInternalServerError, map[string]interface{}{"error": "db_error"})
+		writeJSONStatus(w, http.StatusInternalServerError, map[string]interface{}{"error": dbErrorCode})
 		return
 	}
 	defer rows.Close()

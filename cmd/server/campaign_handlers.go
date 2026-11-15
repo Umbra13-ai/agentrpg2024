@@ -279,6 +279,10 @@ func handleCampaignByID(w http.ResponseWriter, r *http.Request) {
 		writeJSONStatus(w, http.StatusNotFound, map[string]interface{}{"error": "campaign_not_found"})
 		return
 	}
+	// every /api/campaigns/{id}/... route: the campaign exists (404 otherwise), and a database failure is answered as one
+	if _, ok := requireCampaign(w, campaignID); !ok { // campaign_access_2024.go
+		return
+	}
 
 	// a private campaign: only its players, its GM and people with the watch password can read it (private_campaigns.go)
 	if r.Method == http.MethodGet && (len(parts) == 1 || parts[1] == "feed" || parts[1] == "spectate" || parts[1] == "observations" || parts[1] == "combat" || parts[1] == "battle-map") && !canWatch(r, campaignID) {
@@ -446,6 +450,9 @@ func handleCampaignByID(w http.ResponseWriter, r *http.Request) {
 		FROM lobbies l LEFT JOIN agents a ON l.dm_id = a.id WHERE l.id = $1
 	`, campaignID).Scan(&name, &status, &maxPlayers, &dmName, &setting, &minLevel, &maxLevel, &campaignDocRaw)
 	if err != nil {
+		if answerDBFailure(w, err, "the campaign") {
+			return
+		}
 		w.WriteHeader(http.StatusNotFound)
 		json.NewEncoder(w).Encode(map[string]interface{}{"error": "campaign_not_found"})
 		return
@@ -460,10 +467,14 @@ func handleCampaignByID(w http.ResponseWriter, r *http.Request) {
 	role, _, _ := campaignRole(agentID, campaignID)
 	isGM := role == "gm"
 
-	rows, _ := db.Query(`
+	rows, qerr := db.Query(`
 		SELECT c.id, c.name, c.class, c.species, c.level, c.hp, c.max_hp, c.last_active
 		FROM characters c WHERE c.lobby_id = $1
 	`, campaignID)
+	if qerr != nil {
+		writeDBError(w, qerr, "the campaign's characters")
+		return
+	}
 	defer rows.Close()
 
 	characters := []map[string]interface{}{}
@@ -539,6 +550,9 @@ func handleCampaignJoin(w http.ResponseWriter, r *http.Request, campaignID int) 
 	var minLevel, maxLevel int
 	err = db.QueryRow("SELECT COALESCE(min_level, 1), COALESCE(max_level, 1) FROM lobbies WHERE id = $1", campaignID).Scan(&minLevel, &maxLevel)
 	if err != nil {
+		if answerDBFailure(w, err, "the campaign") {
+			return
+		}
 		w.WriteHeader(http.StatusNotFound)
 		json.NewEncoder(w).Encode(map[string]interface{}{"error": "campaign_not_found"})
 		return
@@ -548,6 +562,9 @@ func handleCampaignJoin(w http.ResponseWriter, r *http.Request, campaignID int) 
 	var charLevel int
 	err = db.QueryRow("SELECT level FROM characters WHERE id = $1 AND agent_id = $2", req.CharacterID, agentID).Scan(&charLevel)
 	if err != nil {
+		if answerDBFailure(w, err, "the character") {
+			return
+		}
 		w.WriteHeader(http.StatusNotFound)
 		json.NewEncoder(w).Encode(map[string]interface{}{"error": "character_not_found"})
 		return
@@ -569,6 +586,9 @@ func handleCampaignJoin(w http.ResponseWriter, r *http.Request, campaignID int) 
 	var currentLobbyID sql.NullInt64
 	err = db.QueryRow("SELECT lobby_id FROM characters WHERE id = $1 AND agent_id = $2", req.CharacterID, agentID).Scan(&currentLobbyID)
 	if err != nil {
+		if answerDBFailure(w, err, "the character") {
+			return
+		}
 		w.WriteHeader(http.StatusNotFound)
 		json.NewEncoder(w).Encode(map[string]interface{}{"error": "character_not_found"})
 		return
@@ -624,8 +644,7 @@ func handleCampaignJoin(w http.ResponseWriter, r *http.Request, campaignID int) 
 
 	if !alreadyInCampaign {
 		// Log the join action to campaign activity feed
-		db.Exec(`INSERT INTO actions (lobby_id, character_id, action_type, description) VALUES ($1, $2, $3, $4)`,
-			campaignID, req.CharacterID, "joined", fmt.Sprintf("%s joined the campaign", charNameForLog))
+		writeAction(db, campaignID, req.CharacterID, "joined", fmt.Sprintf("%s joined the campaign", charNameForLog), "")
 	}
 
 	status := reconcileCampaignStatus(campaignID)
@@ -776,7 +795,7 @@ func handleCampaignEnd(w http.ResponseWriter, r *http.Request, campaignID int) {
 // @Failure 400 {object} map[string]interface{} "invalid_since"
 // @Router /campaigns/{id}/feed [get]
 func handleCampaignFeed(w http.ResponseWriter, r *http.Request, campaignID int) {
-	since, ok := parseSince(r.URL.Query().Get("since"))
+	since, ok := parseClientTime(r.URL.Query().Get("since"))
 	if !ok {
 		w.WriteHeader(http.StatusBadRequest)
 		json.NewEncoder(w).Encode(map[string]interface{}{"error": "invalid_since",
@@ -873,6 +892,9 @@ func handleCampaignSpectate(w http.ResponseWriter, r *http.Request, campaignID i
 		FROM lobbies l LEFT JOIN agents a ON l.dm_id = a.id WHERE l.id = $1
 	`, campaignID).Scan(&name, &status, &dmName, &setting)
 	if err != nil {
+		if answerDBFailure(w, err, "the campaign") {
+			return
+		}
 		w.WriteHeader(http.StatusNotFound)
 		json.NewEncoder(w).Encode(map[string]interface{}{"error": "campaign_not_found"})
 		return
@@ -909,12 +931,16 @@ func handleCampaignSpectate(w http.ResponseWriter, r *http.Request, campaignID i
 	}
 
 	// Get party members (spectator-safe info only)
-	rows, _ := db.Query(`
+	rows, qerr := db.Query(`
 		SELECT c.id, c.name, c.class, c.species, c.level, c.hp, c.max_hp, c.conditions, a.name as agent_name, COALESCE(c.is_dead, false)
 		FROM characters c
 		LEFT JOIN agents a ON c.agent_id = a.id
 		WHERE c.lobby_id = $1
 	`, campaignID)
+	if qerr != nil {
+		writeDBError(w, qerr, "the campaign's party")
+		return
+	}
 	defer rows.Close()
 
 	party := []map[string]interface{}{}
@@ -964,11 +990,15 @@ func handleCampaignSpectate(w http.ResponseWriter, r *http.Request, campaignID i
 	}
 
 	// Get recent messages (last 10)
-	msgRows, _ := db.Query(`
+	msgRows, qerr := db.Query(`
 		SELECT agent_name, message, created_at 
 		FROM campaign_messages WHERE lobby_id = $1 
 		ORDER BY created_at DESC LIMIT 10
 	`, campaignID)
+	if qerr != nil {
+		writeDBError(w, qerr, "the campaign's messages")
+		return
+	}
 	defer msgRows.Close()
 
 	recentMessages := []map[string]interface{}{}
@@ -1119,6 +1149,9 @@ func handleCampaignDocument(w http.ResponseWriter, r *http.Request, campaignID i
 	err := db.QueryRow(`SELECT COALESCE(campaign_document, '{}') FROM lobbies WHERE id = $1`, campaignID).Scan(&campaignDocRaw)
 
 	if err != nil {
+		if answerDBFailure(w, err, "the campaign") {
+			return
+		}
 		w.WriteHeader(http.StatusNotFound)
 		json.NewEncoder(w).Encode(map[string]interface{}{"error": "campaign_not_found"})
 		return
@@ -2053,6 +2086,9 @@ func handleCharacterObservations(w http.ResponseWriter, r *http.Request, charID 
 	var lobbyID sql.NullInt64
 	err := db.QueryRow("SELECT name, lobby_id FROM characters WHERE id = $1", charID).Scan(&charName, &lobbyID)
 	if err != nil {
+		if answerDBFailure(w, err, "the character") {
+			return
+		}
 		w.WriteHeader(http.StatusNotFound)
 		json.NewEncoder(w).Encode(map[string]interface{}{"error": "character_not_found"})
 		return
@@ -2408,11 +2444,7 @@ func handleCampaignMessages(w http.ResponseWriter, r *http.Request) {
 	`, campaignID)
 
 	if err != nil {
-		// Table might not exist
-		json.NewEncoder(w).Encode(map[string]interface{}{
-			"campaign_id": campaignID,
-			"messages":    []interface{}{},
-		})
+		writeDBError(w, err, "the campaign's messages")
 		return
 	}
 	defer rows.Close()
@@ -2422,7 +2454,10 @@ func handleCampaignMessages(w http.ResponseWriter, r *http.Request) {
 		var id, agentIDMsg int
 		var agentName, message string
 		var createdAt time.Time
-		rows.Scan(&id, &agentIDMsg, &agentName, &message, &createdAt)
+		if err := rows.Scan(&id, &agentIDMsg, &agentName, &message, &createdAt); err != nil {
+			writeDBError(w, err, "the campaign's messages")
+			return
+		}
 		messages = append(messages, map[string]interface{}{
 			"id":         id,
 			"agent_id":   agentIDMsg,
@@ -2466,7 +2501,7 @@ func handleHeartbeat(w http.ResponseWriter, r *http.Request) {
 
 	// Get all campaigns where agent is GM
 	gmCampaigns := []map[string]interface{}{}
-	gmRows, _ := db.Query(`
+	gmRows, qerr := db.Query(`
 		SELECT l.id, l.name, l.status, COALESCE(l.setting, ''), l.max_players,
 			COALESCE(l.min_level, 1), COALESCE(l.max_level, 1),
 			COALESCE(l.campaign_document, '{}'), l.created_at
@@ -2474,6 +2509,10 @@ func handleHeartbeat(w http.ResponseWriter, r *http.Request) {
 		WHERE l.dm_id = $1
 		ORDER BY l.created_at DESC
 	`, agentID)
+	if qerr != nil {
+		writeDBError(w, qerr, "your campaigns")
+		return
+	}
 	if gmRows != nil {
 		defer gmRows.Close()
 		for gmRows.Next() {
@@ -2527,7 +2566,7 @@ func handleHeartbeat(w http.ResponseWriter, r *http.Request) {
 
 	// Get all campaigns where agent is a player
 	playerCampaigns := []map[string]interface{}{}
-	playerRows, _ := db.Query(`
+	playerRows, qerr := db.Query(`
 		SELECT l.id, l.name, l.status, COALESCE(l.setting, ''), l.max_players,
 			COALESCE(l.min_level, 1), COALESCE(l.max_level, 1),
 			COALESCE(l.campaign_document, '{}'), l.created_at,
@@ -2539,6 +2578,10 @@ func handleHeartbeat(w http.ResponseWriter, r *http.Request) {
 		WHERE c.agent_id = $1
 		ORDER BY l.created_at DESC
 	`, agentID)
+	if qerr != nil {
+		writeDBError(w, qerr, "your characters' campaigns")
+		return
+	}
 	if playerRows != nil {
 		defer playerRows.Close()
 		for playerRows.Next() {
@@ -2688,6 +2731,9 @@ func handleObserve(w http.ResponseWriter, r *http.Request) {
 	`, agentID, pickCharacterID(r, 0), pickCampaignID(r, 0)).Scan(&observerID, &lobbyID)
 
 	if err != nil {
+		if answerDBFailure(w, err, "your character") {
+			return
+		}
 		w.WriteHeader(http.StatusConflict)
 		json.NewEncoder(w).Encode(map[string]interface{}{"error": "no_active_game"})
 		return
@@ -3061,13 +3107,17 @@ func handleCampaignPage(w http.ResponseWriter, r *http.Request) {
 		LastActive sql.NullTime
 	}
 	var partyMembers []PartyMember
-	partyRows, _ := db.Query(`
+	partyRows, qerr := db.Query(`
 		SELECT c.id, c.name, c.class, c.species, c.level, c.hp, c.max_hp, a.id, a.name,
 			GREATEST(c.last_active, a.last_seen)
 		FROM characters c
 		JOIN agents a ON c.agent_id = a.id
 		WHERE c.lobby_id = $1
 	`, campaignID)
+	if qerr != nil {
+		writeDBErrorPage(w, qerr, "the campaign's party")
+		return
+	}
 	playerCount := 0
 	if partyRows != nil {
 		for partyRows.Next() {
@@ -3197,7 +3247,7 @@ func handleCampaignPage(w http.ResponseWriter, r *http.Request) {
 
 	// Get observations
 	var observations strings.Builder
-	obsRows, _ := db.Query(`
+	obsRows, qerr := db.Query(`
 		SELECT o.content, COALESCE(o.observation_type, 'world'), a.name, o.created_at
 		FROM observations o
 		JOIN characters c ON o.observer_id = c.id
@@ -3205,6 +3255,10 @@ func handleCampaignPage(w http.ResponseWriter, r *http.Request) {
 		WHERE o.lobby_id = $1
 		ORDER BY o.created_at DESC LIMIT 20
 	`, campaignID)
+	if qerr != nil {
+		writeDBErrorPage(w, qerr, "the campaign's observations")
+		return
+	}
 	if obsRows != nil {
 		for obsRows.Next() {
 			var content, obsType, observerName string
@@ -3240,12 +3294,16 @@ func handleCampaignPage(w http.ResponseWriter, r *http.Request) {
 	}
 
 	// Get messages
-	msgRows, _ := db.Query(`
+	msgRows, qerr := db.Query(`
 		SELECT agent_name, message, created_at
 		FROM campaign_messages
 		WHERE lobby_id = $1
 		ORDER BY created_at DESC LIMIT 50
 	`, campaignID)
+	if qerr != nil {
+		writeDBErrorPage(w, qerr, "the campaign's messages")
+		return
+	}
 	if msgRows != nil {
 		for msgRows.Next() {
 			var agentName, message string
@@ -3622,13 +3680,11 @@ func handleCampaignLog(w http.ResponseWriter, r *http.Request, campaignID int) {
 func handleCampaignItems(w http.ResponseWriter, r *http.Request, campaignID int) {
 	w.Header().Set("Content-Type", "application/json")
 
-	agentID, _ := getAgentFromAuth(r) // the list says whether the caller is the GM; signing in is not needed to read it
-	role, _, found := campaignRole(agentID, campaignID)
-	if !found {
-		w.WriteHeader(http.StatusNotFound)
-		json.NewEncoder(w).Encode(map[string]interface{}{"error": "campaign_not_found"})
+	agentID, _ := getAgentFromAuth(r)                 // the list says whether the caller is the GM; signing in is not needed to read it
+	if _, ok := requireCampaign(w, campaignID); !ok { // campaign_access_2024.go: 404, or the database failure
 		return
 	}
+	role, _, _ := campaignRole(agentID, campaignID)
 	isGM := role == "gm"
 
 	if r.Method == "GET" {
@@ -3754,6 +3810,7 @@ func handleCampaignItems(w http.ResponseWriter, r *http.Request, campaignID int)
 
 		if err != nil {
 			if strings.Contains(err.Error(), "unique") {
+				handledDBError(err) // answered: the slug is taken (db_guard_2024.go)
 				w.WriteHeader(http.StatusConflict)
 				json.NewEncoder(w).Encode(map[string]interface{}{"error": "slug_already_exists"})
 			} else {
@@ -3779,9 +3836,7 @@ func handleCampaignItems(w http.ResponseWriter, r *http.Request, campaignID int)
 func handleCampaignItemBySlug(w http.ResponseWriter, r *http.Request, campaignID int, slug string) {
 	w.Header().Set("Content-Type", "application/json")
 
-	if _, _, found := campaignRole(0, campaignID); !found { // anyone may read an item; the campaign must exist
-		w.WriteHeader(http.StatusNotFound)
-		json.NewEncoder(w).Encode(map[string]interface{}{"error": "campaign_not_found"})
+	if _, ok := requireCampaign(w, campaignID); !ok { // anyone may read an item; the campaign must exist
 		return
 	}
 

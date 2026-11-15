@@ -558,6 +558,9 @@ func handleAction(w http.ResponseWriter, r *http.Request) {
 	`, agentID, pickCharacterID(r, req.CharacterID), pickCampaignID(r, req.CampaignID)).Scan(&charID, &lobbyID, &species)
 
 	if err != nil {
+		if answerDBFailure(w, err, "your character") {
+			return
+		}
 		w.WriteHeader(http.StatusConflict)
 		json.NewEncoder(w).Encode(map[string]interface{}{"error": "no_active_game"})
 		return
@@ -1195,10 +1198,7 @@ func handleAction(w http.ResponseWriter, r *http.Request) {
 		result = "You stand up from prone."
 	}
 
-	db.Exec(`
-		INSERT INTO actions (lobby_id, character_id, action_type, description, result)
-		VALUES ($1, $2, $3, $4, $5)
-	`, lobbyID, charID, req.Action, req.Description, result)
+	writeAction(db, lobbyID, charID, req.Action, req.Description, result)
 
 	// Build response with resource info
 	response := map[string]interface{}{
@@ -4310,6 +4310,9 @@ func handleTriggerReadied(w http.ResponseWriter, r *http.Request) {
 	`, agentID, pickCharacterID(r, 0), pickCampaignID(r, 0)).Scan(&charID, &lobbyID)
 
 	if err != nil {
+		if answerDBFailure(w, err, "your character") {
+			return
+		}
 		w.WriteHeader(http.StatusConflict)
 		json.NewEncoder(w).Encode(map[string]interface{}{"error": "no_active_game"})
 		return
@@ -4353,11 +4356,7 @@ func handleTriggerReadied(w http.ResponseWriter, r *http.Request) {
 	db.Exec("UPDATE characters SET reaction_used = true, readied_action = NULL WHERE id = $1", charID)
 
 	// Log the action
-	db.Exec(`
-		INSERT INTO actions (lobby_id, character_id, action_type, description, result)
-		VALUES ($1, $2, $3, $4, $5)
-	`, lobbyID, charID, "readied_"+readied["action"],
-		fmt.Sprintf("Triggered: %s → %s", readied["trigger"], readied["description"]), result)
+	writeAction(db, lobbyID, charID, "readied_"+readied["action"], fmt.Sprintf("Triggered: %s → %s", readied["trigger"], readied["description"]), result)
 
 	json.NewEncoder(w).Encode(map[string]interface{}{
 		"success":           true,

@@ -36,10 +36,14 @@ func handleCharacters(w http.ResponseWriter, r *http.Request) {
 	}
 
 	if r.Method == "GET" {
-		rows, _ := db.Query(`
+		rows, qerr := db.Query(`
 			SELECT id, name, class, species, level, hp, max_hp, ac
 			FROM characters WHERE agent_id = $1
 		`, agentID)
+		if qerr != nil {
+			writeDBError(w, qerr, "your characters")
+			return
+		}
 		defer rows.Close()
 
 		chars := []map[string]interface{}{}
@@ -863,6 +867,10 @@ func handleCharacterByID(w http.ResponseWriter, r *http.Request) {
 		writeJSONStatus(w, http.StatusNotFound, map[string]interface{}{"error": "character_not_found"})
 		return
 	}
+	// every /api/characters/{id}/... route: the character exists (404 otherwise), and a database failure is answered as one
+	if _, _, _, ok := characterFound(w, charID); !ok { // campaign_access_2024.go
+		return
+	}
 	if len(parts) == 1 && r.Method == http.MethodDelete || len(parts) == 2 && parts[1] == "delete" && r.Method == http.MethodPost {
 		handleCharacterDelete(w, r, charID)
 		return
@@ -1022,6 +1030,9 @@ func handleCharacterByID(w http.ResponseWriter, r *http.Request) {
 		&subclassChoicesJSON)
 
 	if err != nil {
+		if answerDBFailure(w, err, "the character") {
+			return
+		}
 		w.WriteHeader(http.StatusNotFound)
 		json.NewEncoder(w).Encode(map[string]interface{}{"error": "character_not_found"})
 		return

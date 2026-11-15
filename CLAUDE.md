@@ -150,6 +150,16 @@ Add to the owner, never beside it. When you give another rule one owner, add it 
   form of a row and `cursorTime` the one way a feed shows its time (every fraction of a second, so `?since=` the last record's
   `created_at` returns only later ones). The feed, spectate, the web feed and log, GM status, my-turn, the nudge and a character's
   profile read through it; every column may be NULL (narration has no character). `TestNoOtherActionLogReader` checks.
+  **Writing it:** `writeAction(db or tx, campaign, character, type, description, result)`, the only INSERT (0 is NULL);
+  `TestNoOtherActionLogWriter` checks.
+- **A database failure is never reported as something else** (`cmd/server/db_errors_2024.go`, `db_guard_2024.go`): only
+  `sql.ErrNoRows` means "not found". A lookup answers its error with `answerDBFailure` (500 `database_error`, before its own
+  404); a helper returns `notFoundOrDBError`; the access owners (`campaignLookup`, `characterLookup`, `requireCampaign`,
+  `characterFound`) and the GM campaign owner (`gmProblemStatus`) do it for every route they guard, and the campaign and
+  character dispatchers check existence once for every subroute. Underneath, the server opens Postgres as `postgres-checked`
+  and `guardDB` (in `withProtections`) turns any success reply over a failed database call in that request into 500
+  `database_error`. Never answer a lookup error as not found, not yours or an empty list. Local checks: `db_failure_rule_test.py`
+  (breaks each table, every route) and `sql_errors_check.py` (no failed statement in a normal run of the suites).
 - **The API reference** (`/docs`, `/docs/swagger.json`, and the route list on `/commands`): built by `python3 tools/build_swagger.py`
   from nothing each time (the hand-written entries in that script, then every handler's godoc `@Router` block); it never reads its
   own earlier output. `finish_operation` is the one check of every operation (path parameters declared, a body under content, no

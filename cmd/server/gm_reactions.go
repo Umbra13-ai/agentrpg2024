@@ -235,8 +235,7 @@ func handleGMOpportunityAttack(w http.ResponseWriter, r *http.Request) {
 	response := map[string]interface{}{"success": true, "attacker": attackerName, "target": targetName, "attack_mod": attackMod,
 		"reaction_used": true, "note": fmt.Sprintf("%s's reaction is now expended for this round", attackerName)}
 	finish := func(text string) {
-		db.Exec(`INSERT INTO actions (lobby_id, action_type, description, result) VALUES ($1, 'opportunity_attack', $2, $3)`,
-			campaignID, fmt.Sprintf("Opportunity attack by %s against %s", attackerName, targetName), text)
+		writeAction(db, campaignID, 0, "opportunity_attack", fmt.Sprintf("Opportunity attack by %s against %s", attackerName, targetName), text)
 		response["result"] = text
 		writeJSONStatus(w, http.StatusOK, response)
 	}
@@ -340,6 +339,9 @@ func handleGMRetaliation(w http.ResponseWriter, r *http.Request) {
 		&reactionUsed, &weaponProfsStr, &subclass)
 
 	if err != nil {
+		if answerDBFailure(w, err, "the character") {
+			return
+		}
 		w.WriteHeader(http.StatusBadRequest)
 		json.NewEncoder(w).Encode(map[string]interface{}{"error": "character_not_found"})
 		return
@@ -419,8 +421,7 @@ func handleGMRetaliation(w http.ResponseWriter, r *http.Request) {
 	if target == 0 {
 		result += " (That creature isn't in the turn order: the GM judges the hit and applies the damage.)"
 	}
-	db.Exec(`INSERT INTO actions (lobby_id, action_type, description, result) VALUES ($1, 'retaliation', $2, $3)`,
-		campaignID, fmt.Sprintf("Retaliation by %s against %s", charName, who), result)
+	writeAction(db, campaignID, 0, "retaliation", fmt.Sprintf("Retaliation by %s against %s", charName, who), result)
 	writeJSONStatus(w, http.StatusOK, map[string]interface{}{"success": true, "character": charName, "target": who, "hit": hit, "result": result,
 		"reaction_used": true, "note": fmt.Sprintf("%s's reaction is now expended for this round", charName)})
 }
@@ -491,6 +492,9 @@ func handleGMUncannyDodge(w http.ResponseWriter, r *http.Request) {
 	`, req.CharacterID).Scan(&charName, &charLobbyID, &class, &level, &reactionUsed, &subclass)
 
 	if err != nil {
+		if answerDBFailure(w, err, "the character") {
+			return
+		}
 		w.WriteHeader(http.StatusBadRequest)
 		json.NewEncoder(w).Encode(map[string]interface{}{"error": "character_not_found"})
 		return
@@ -539,10 +543,7 @@ func handleGMUncannyDodge(w http.ResponseWriter, r *http.Request) {
 
 	// Log the action
 	actionDesc := fmt.Sprintf("Uncanny Dodge by %s against %s's attack", charName, attackerText)
-	db.Exec(`
-		INSERT INTO actions (lobby_id, action_type, description, result)
-		VALUES ($1, 'uncanny_dodge', $2, $3)
-	`, campaignID, actionDesc, resultText)
+	writeAction(db, campaignID, 0, "uncanny_dodge", actionDesc, resultText)
 
 	response := map[string]interface{}{
 		"success":         true,
@@ -635,11 +636,7 @@ func handleGMTriggerReadied(w http.ResponseWriter, r *http.Request) {
 	db.Exec("UPDATE characters SET reaction_used = true, readied_action = NULL WHERE id = $1", req.CharacterID)
 
 	// Log the action
-	db.Exec(`
-		INSERT INTO actions (lobby_id, character_id, action_type, description, result)
-		VALUES ($1, $2, $3, $4, $5)
-	`, lobbyID, req.CharacterID, "readied_"+readied["action"],
-		fmt.Sprintf("GM triggered: %s → %s", readied["trigger"], readied["description"]), result)
+	writeAction(db, lobbyID, req.CharacterID, "readied_"+readied["action"], fmt.Sprintf("GM triggered: %s → %s", readied["trigger"], readied["description"]), result)
 
 	json.NewEncoder(w).Encode(map[string]interface{}{
 		"success":           true,

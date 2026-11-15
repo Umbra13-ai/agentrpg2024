@@ -24,16 +24,6 @@ import (
 var draconicDamage = map[string]string{"black": "acid", "blue": "lightning", "brass": "fire", "bronze": "lightning", "copper": "acid",
 	"gold": "fire", "green": "poison", "red": "fire", "silver": "cold", "white": "cold"}
 
-func playerOwns(r *http.Request, charID int) (int, bool) {
-	agentID, err := getAgentFromAuth(r)
-	if err != nil {
-		return 0, false
-	}
-	var owner int
-	db.QueryRow(`SELECT agent_id FROM characters WHERE id = $1`, charID).Scan(&owner)
-	return agentID, owner == agentID
-}
-
 // @Summary Dragonborn Breath Weapon
 // @Description When you take the Attack action, you can replace one of your attacks with an exhalation of magical energy in either a 15-foot Cone or a 30-foot Line that is 5 feet wide (shape: cone or line). Each creature in the area (target_ids) makes a Dexterity saving throw (DC 8 + Constitution modifier + Proficiency Bonus): 1d10 damage of your Draconic Ancestry type on a failure (2d10 at level 5, 3d10 at 11, 4d10 at 17), half on a success. Proficiency Bonus uses per Long Rest.
 // @Tags Characters
@@ -52,8 +42,7 @@ func handleBreathWeapon2024(w http.ResponseWriter, r *http.Request) {
 	if !readRequest(w, r, &req, optionalBody()) {
 		return
 	}
-	if _, ok := playerOwns(r, req.CharacterID); !ok {
-		writeJSONStatus(w, 403, map[string]interface{}{"error": "not_your_character"})
+	if _, ok := requireCharacterOwner(w, r, req.CharacterID, "use its Breath Weapon"); !ok { // campaign_access_2024.go
 		return
 	}
 	var name, species string
@@ -121,7 +110,7 @@ func handleBreathWeapon2024(w http.ResponseWriter, r *http.Request) {
 	result := fmt.Sprintf("%s exhales %s in a %d-foot %s (DC %d Dexterity save, %d %s damage, half on a success). %s%s", name, dtype, size,
 		map[string]string{"cone": "Cone", "line": "Line 5 feet wide"}[shape], dc, dmg, dtype, strings.Join(lines, " "), note)
 	if lobby != 0 {
-		db.Exec(`INSERT INTO actions (lobby_id, character_id, action_type, description, result) VALUES ($1,$2,'breath_weapon','Breath Weapon',$3)`, lobby, req.CharacterID, result)
+		writeAction(db, lobby, req.CharacterID, "breath_weapon", "Breath Weapon", result)
 	}
 	used, max := breathWeaponUses(req.CharacterID, level)
 	writeJSONStatus(w, 200, map[string]interface{}{"success": true, "result": playerText(result), "uses_left": max - used})
@@ -143,8 +132,7 @@ func handleWholenessOfBody2024(w http.ResponseWriter, r *http.Request) {
 	if !readRequest(w, r, &req, optionalBody()) {
 		return
 	}
-	if _, ok := playerOwns(r, req.CharacterID); !ok {
-		writeJSONStatus(w, 403, map[string]interface{}{"error": "not_your_character"})
+	if _, ok := requireCharacterOwner(w, r, req.CharacterID, "use this feature"); !ok { // campaign_access_2024.go
 		return
 	}
 	var class, subclass string
@@ -198,8 +186,7 @@ func handleHolyNimbus2024(w http.ResponseWriter, r *http.Request) {
 	if !readRequest(w, r, &req, optionalBody()) {
 		return
 	}
-	if _, ok := playerOwns(r, req.CharacterID); !ok {
-		writeJSONStatus(w, 403, map[string]interface{}{"error": "not_your_character"})
+	if _, ok := requireCharacterOwner(w, r, req.CharacterID, "use this feature"); !ok { // campaign_access_2024.go
 		return
 	}
 	var name, class, subclass string
@@ -278,8 +265,7 @@ func handleOneWithShadows2024(w http.ResponseWriter, r *http.Request) {
 	if !readRequest(w, r, &req, optionalBody()) {
 		return
 	}
-	if _, ok := playerOwns(r, req.CharacterID); !ok {
-		writeJSONStatus(w, 403, map[string]interface{}{"error": "not_your_character"})
+	if _, ok := requireCharacterOwner(w, r, req.CharacterID, "use this feature"); !ok { // campaign_access_2024.go
 		return
 	}
 	if !hasInvocation(req.CharacterID, "one-with-shadows") {

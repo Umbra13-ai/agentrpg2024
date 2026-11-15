@@ -235,7 +235,11 @@ func handleGMReleaseGrapple2024(w http.ResponseWriter, r *http.Request) {
 	if !ok {
 		return
 	}
-	res, _ := db.Exec(`DELETE FROM condition_records WHERE lobby_id = $1 AND target_id = $2 AND condition = 'grappled' AND source = $3`, lobby, req.TargetID, grappleSource(req.GrapplerID))
+	res, xerr := db.Exec(`DELETE FROM condition_records WHERE lobby_id = $1 AND target_id = $2 AND condition = 'grappled' AND source = $3`, lobby, req.TargetID, grappleSource(req.GrapplerID))
+	if xerr != nil {
+		writeDBWriteError(w, xerr, "the grapple's end")
+		return
+	}
 	n, _ := res.RowsAffected()
 	if n == 0 {
 		writeJSONStatus(w, 404, map[string]interface{}{"error": "no_such_grapple", "message": "That creature doesn't grapple the target."})
@@ -434,7 +438,10 @@ func handleGMSuffocation2024(w http.ResponseWriter, r *http.Request) {
 	db.Exec(`ALTER TABLE characters ADD COLUMN IF NOT EXISTS suffocation_levels INTEGER DEFAULT 0`)
 	var name string
 	var con, gained int
-	if db.QueryRow(`SELECT name, con, COALESCE(suffocation_levels,0) FROM characters WHERE id = $1`, req.CharacterID).Scan(&name, &con, &gained) != nil {
+	if err := db.QueryRow(`SELECT name, con, COALESCE(suffocation_levels,0) FROM characters WHERE id = $1`, req.CharacterID).Scan(&name, &con, &gained); err != nil {
+		if answerDBFailure(w, err, "the character") {
+			return
+		}
 		dmBadRequest(w, "character_not_found", "Send character_id.")
 		return
 	}

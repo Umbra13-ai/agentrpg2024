@@ -292,8 +292,7 @@ func hitDiceLeftByType(charID int) map[string]int {
 }
 
 func hitDiceSpentByType(charID int) map[string]int {
-	db.Exec(`ALTER TABLE characters ADD COLUMN IF NOT EXISTS hit_dice_spent_by_type JSONB DEFAULT '{}'`)
-	var raw []byte
+	var raw []byte // the column is made with the schema (database_init.go)
 	db.QueryRow(`SELECT COALESCE(hit_dice_spent_by_type,'{}') FROM characters WHERE id = $1`, charID).Scan(&raw)
 	m := map[string]int{}
 	json.Unmarshal(raw, &m)

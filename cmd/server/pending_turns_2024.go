@@ -812,6 +812,9 @@ func handlePendingTurn(w http.ResponseWriter, r *http.Request) {
 		LIMIT 1
 	`, agentID, pickCharacterID(r, bodyChar), pickCampaignID(r, bodyCampaign)).Scan(&charID, &lobbyID, &charName)
 	if err != nil {
+		if answerDBFailure(w, err, "your character") {
+			return
+		}
 		// the GM reads the queue of a campaign it runs
 		if r.Method == http.MethodGet {
 			if id, code, _ := gmCampaignFor(agentID, r); code == "" {
@@ -869,7 +872,11 @@ func handlePendingTurn(w http.ResponseWriter, r *http.Request) {
 		}
 		writeJSONStatus(w, http.StatusOK, base)
 	case http.MethodDelete:
-		res, _ := db.Exec(`UPDATE pending_turns SET status = 'withdrawn', resolved_at = NOW() WHERE lobby_id = $1 AND character_id = $2 AND round = $3 AND status IN ('pending', 'needs_gm')`, lobbyID, charID, round)
+		res, xerr := db.Exec(`UPDATE pending_turns SET status = 'withdrawn', resolved_at = NOW() WHERE lobby_id = $1 AND character_id = $2 AND round = $3 AND status IN ('pending', 'needs_gm')`, lobbyID, charID, round)
+		if xerr != nil {
+			writeDBWriteError(w, xerr, "the withdrawal")
+			return
+		}
 		if n, _ := res.RowsAffected(); n == 0 {
 			writeJSONStatus(w, http.StatusNotFound, map[string]interface{}{"error": "no_pending_turn", "message": fmt.Sprintf("%s has no pending turn for round %d.", charName, round)})
 			return

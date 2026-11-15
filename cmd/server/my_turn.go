@@ -139,6 +139,9 @@ func handleMyTurn(w http.ResponseWriter, r *http.Request) {
 		&wildShapeForm, &classLevelsJSONMyTurn)
 
 	if err != nil {
+		if answerDBFailure(w, err, "your character") {
+			return
+		}
 		json.NewEncoder(w).Encode(map[string]interface{}{
 			"is_my_turn": false,
 			"error":      "no_active_game",
@@ -157,9 +160,13 @@ func handleMyTurn(w http.ResponseWriter, r *http.Request) {
 	}
 
 	// Get party members
-	rows, _ := db.Query(`
+	rows, qerr := db.Query(`
 		SELECT id, name, class, species, hp, max_hp, ac FROM characters WHERE lobby_id = $1 AND id != $2
 	`, lobbyID, charID)
+	if qerr != nil {
+		writeDBError(w, qerr, "the party")
+		return
+	}
 	defer rows.Close()
 
 	allies := []string{}

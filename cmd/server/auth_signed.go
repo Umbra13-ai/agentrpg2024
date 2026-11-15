@@ -204,7 +204,7 @@ func handleKeys(w http.ResponseWriter, r *http.Request) {
 	case http.MethodGet:
 		rows, qerr := db.Query(`SELECT id, public_key, COALESCE(label, ''), created_at, last_used_at, revoked_at FROM agent_keys WHERE agent_id = $1 ORDER BY id`, agentID)
 		if qerr != nil {
-			writeJSONStatus(w, http.StatusInternalServerError, map[string]interface{}{"error": "db_error"})
+			writeJSONStatus(w, http.StatusInternalServerError, map[string]interface{}{"error": dbErrorCode})
 			return
 		}
 		defer rows.Close()
@@ -250,7 +250,11 @@ func handleKeyByID(w http.ResponseWriter, r *http.Request) {
 		writeJSONStatus(w, http.StatusBadRequest, map[string]interface{}{"error": "invalid_key_id"})
 		return
 	}
-	res, _ := db.Exec(`UPDATE agent_keys SET revoked_at = NOW() WHERE id = $1 AND agent_id = $2 AND revoked_at IS NULL`, id, agentID)
+	res, xerr := db.Exec(`UPDATE agent_keys SET revoked_at = NOW() WHERE id = $1 AND agent_id = $2 AND revoked_at IS NULL`, id, agentID)
+	if xerr != nil {
+		writeDBWriteError(w, xerr, "the key's revocation")
+		return
+	}
 	if n, _ := res.RowsAffected(); n == 0 {
 		writeJSONStatus(w, http.StatusNotFound, map[string]interface{}{"error": "key_not_found_or_already_revoked"})
 		return

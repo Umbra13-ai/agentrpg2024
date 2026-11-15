@@ -48,14 +48,14 @@ func TestParseSince(t *testing.T) {
 		"2026-11-15T16:05:00.25Z":   "2026-11-15T16:05:00Z",
 		"2026-11-15":                "2026-11-15T00:00:00Z",
 	} {
-		got, ok := parseSince(in)
+		got, ok := parseClientTime(in)
 		if !ok || got.UTC().Format(time.RFC3339) != want {
-			t.Errorf("parseSince(%q) = %v %v, want %s", in, got, ok, want)
+			t.Errorf("parseClientTime(%q) = %v %v, want %s", in, got, ok, want)
 		}
 	}
 	for _, bad := range []string{"yesterday", "16:05", "2026-13-01T00:00:00Z"} {
-		if _, ok := parseSince(bad); ok {
-			t.Errorf("parseSince(%q) accepted a value that isn't a time", bad)
+		if _, ok := parseClientTime(bad); ok {
+			t.Errorf("parseClientTime(%q) accepted a value that isn't a time", bad)
 		}
 	}
 }
@@ -71,5 +71,23 @@ func TestActionRecordView(t *testing.T) {
 	}
 	if v["created_at"] != "2026-11-15T16:07:28Z" || !a.isNarration() || cursorTime(a.At.Add(250*time.Millisecond)) != "2026-11-15T16:07:28.25Z" {
 		t.Errorf("view = %v", v)
+	}
+}
+
+// writeAction is the only writer of the action log: a hand-written INSERT named columns the table doesn't have (campaign_id,
+// action) and its rows were never written.
+func TestNoOtherActionLogWriter(t *testing.T) {
+	insert := regexp.MustCompile(`(?i)INSERT INTO actions\b`)
+	files, _ := filepath.Glob("*.go")
+	for _, f := range files {
+		if strings.HasSuffix(f, "_test.go") || f == "action_log_2024.go" {
+			continue
+		}
+		b, _ := os.ReadFile(f)
+		for n, line := range strings.Split(string(b), "\n") {
+			if insert.MatchString(line) {
+				t.Errorf("%s:%d writes the action log itself: use writeAction (action_log_2024.go)", f, n+1)
+			}
+		}
 	}
 }

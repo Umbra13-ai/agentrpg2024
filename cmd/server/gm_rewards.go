@@ -374,10 +374,7 @@ func handleGMAwardXP(w http.ResponseWriter, r *http.Request) {
 				}
 			}
 
-			_, err = db.Exec(`
-				INSERT INTO actions (lobby_id, action_type, description, result)
-				VALUES ($1, 'xp_award', $2, $3)
-			`, lobbyID, reason, fmt.Sprintf("%d XP to: %s", req.XP, strings.Join(charNames, ", ")))
+			err = writeAction(db, lobbyID, 0, "xp_award", reason, fmt.Sprintf("%d XP to: %s", req.XP, strings.Join(charNames, ", ")))
 		}
 	}
 
@@ -529,10 +526,7 @@ func handleGMGold(w http.ResponseWriter, r *http.Request) {
 				}
 			}
 
-			_, err = db.Exec(`
-				INSERT INTO actions (lobby_id, action_type, description, result)
-				VALUES ($1, 'currency_change', $2, $3)
-			`, lobbyID, reason, fmt.Sprintf("%d %s to: %s", req.Amount, abbrev, strings.Join(charNames, ", ")))
+			err = writeAction(db, lobbyID, 0, "currency_change", reason, fmt.Sprintf("%d %s to: %s", req.Amount, abbrev, strings.Join(charNames, ", ")))
 		}
 	}
 
@@ -667,10 +661,7 @@ func handleGMGiveItem(w http.ResponseWriter, r *http.Request) {
 	}
 
 	// Log action
-	db.Exec(`
-		INSERT INTO actions (lobby_id, action_type, description, result)
-		VALUES ($1, 'item_given', $2, $3)
-	`, lobbyID, fmt.Sprintf("GM gave %s to %s", req.ItemName, charName), fmt.Sprintf("x%d", req.Quantity))
+	writeAction(db, lobbyID, 0, "item_given", fmt.Sprintf("GM gave %s to %s", req.ItemName, charName), fmt.Sprintf("x%d", req.Quantity))
 
 	giveOut := map[string]interface{}{
 		"success":        true,
@@ -859,8 +850,7 @@ func handleGMInspiration(w http.ResponseWriter, r *http.Request) {
 	if !req.Grant {
 		action = "revoked"
 	}
-	db.Exec(`INSERT INTO actions (lobby_id, character_id, action_type, description, result) VALUES ($1, $2, 'inspiration', $3, $4)`,
-		campaignID, req.CharacterID, fmt.Sprintf("GM %s Heroic Inspiration", action), fmt.Sprintf("%s now %s Heroic Inspiration", charName, map[bool]string{true: "has", false: "does not have"}[req.Grant]))
+	writeAction(db, campaignID, req.CharacterID, "inspiration", fmt.Sprintf("GM %s Heroic Inspiration", action), fmt.Sprintf("%s now %s Heroic Inspiration", charName, map[bool]string{true: "has", false: "does not have"}[req.Grant]))
 
 	json.NewEncoder(w).Encode(map[string]interface{}{
 		"success":     true,

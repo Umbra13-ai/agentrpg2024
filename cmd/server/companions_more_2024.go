@@ -242,7 +242,7 @@ func companionMapMove(w http.ResponseWriter, r *http.Request, tx *sql.Tx, campai
 		battleMapError(w, 500, "map_write_failed")
 		return
 	}
-	if _, err := tx.Exec("INSERT INTO actions (lobby_id,character_id,action_type,description,result) VALUES ($1,$2,'map_move',$3,$4)", campaignID, req.CharacterID, companionDisplayName(c)+" moved on the battle map", fmt.Sprintf("%d ft of movement spent", cost)); err != nil || tx.Commit() != nil {
+	if err := writeAction(tx, campaignID, req.CharacterID, "map_move", companionDisplayName(c)+" moved on the battle map", fmt.Sprintf("%d ft of movement spent", cost)); err != nil || tx.Commit() != nil {
 		battleMapError(w, 500, "map_write_failed")
 		return
 	}

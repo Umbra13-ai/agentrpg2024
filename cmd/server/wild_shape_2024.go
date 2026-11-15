@@ -257,7 +257,7 @@ func leaveWildShape(charID int, reason string) string {
 	text := fmt.Sprintf("%s leaves the %s form", name, beast)
 	if reason != "" {
 		text += " (" + reason + ")"
-		logAction(lobbyOfChar(charID), charID, 0, "wild_shape", text+".", "")
+		writeAction(db, lobbyOfChar(charID), charID, "wild_shape", text+".", "")
 	}
 	return text + "."
 }

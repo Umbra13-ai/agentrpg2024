@@ -595,7 +595,7 @@ func handleCompanionAction(w http.ResponseWriter, charID, lobbyID, companionID i
 		if inCombat {
 			db.Exec(`UPDATE characters SET action_used = true WHERE id = $1`, charID)
 		}
-		logAction(lobbyID, charID, 0, "companion", text, "")
+		writeAction(db, lobbyID, charID, "companion", text, "")
 		reply(200, map[string]interface{}{"success": true, "result": text, "companion": companionView(mustCompanion(c.ID))})
 		return
 	}
@@ -618,7 +618,7 @@ func handleCompanionAction(w http.ResponseWriter, charID, lobbyID, companionID i
 			reply(400, map[string]interface{}{"success": false, "error": "companion_action_refused", "message": why})
 			return
 		}
-		logAction(lobbyID, charID, 0, "companion", text, "")
+		writeAction(db, lobbyID, charID, "companion", text, "")
 		reply(200, map[string]interface{}{"success": true, "result": text, "companion": companionView(mustCompanion(c.ID))})
 		return
 	}
@@ -684,7 +684,7 @@ func handleCompanionAction(w http.ResponseWriter, charID, lobbyID, companionID i
 	if inCombat {
 		db.Exec(`UPDATE companions SET last_acted_round = $1, last_acted_lobby = $2 WHERE id = $3`, round, lobbyID, c.ID)
 	}
-	logAction(lobbyID, charID, 0, "companion", strings.TrimSpace(text), "")
+	writeAction(db, lobbyID, charID, "companion", strings.TrimSpace(text), "")
 	result["success"] = true
 	result["result"] = strings.TrimSpace(text)
 	result["companion"] = companionView(mustCompanion(c.ID))
@@ -751,7 +751,7 @@ func familiarAttack(w http.ResponseWriter, c companion, charID, lobbyID, round, 
 		}
 	}
 	text := fmt.Sprintf("%s: %s. %s", c.Name, how, companionAttack(lobbyID, c, a, targetID))
-	logAction(lobbyID, charID, 0, "companion", text, "")
+	writeAction(db, lobbyID, charID, "companion", text, "")
 	reply(200, map[string]interface{}{"success": true, "result": text, "companion": companionView(mustCompanion(c.ID))})
 }
 
@@ -858,7 +858,7 @@ func handleCompanionName(w http.ResponseWriter, r *http.Request) {
 	db.Exec(`UPDATE companions SET nickname = $1 WHERE id = $2`, name, c.ID)
 	c.Nickname = name
 	if name != "" {
-		logAction(c.LobbyID, c.OwnerID, 0, "companion", fmt.Sprintf("%s is now called %s.", c.Name, name), "")
+		writeAction(db, c.LobbyID, c.OwnerID, "companion", fmt.Sprintf("%s is now called %s.", c.Name, name), "")
 	}
 	writeJSONStatus(w, http.StatusOK, map[string]interface{}{"success": true, "companion": companionView(c)})
 }

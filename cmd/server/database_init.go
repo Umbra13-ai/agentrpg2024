@@ -581,6 +581,7 @@ func initDB() {
 		ALTER TABLE api_logs ADD COLUMN IF NOT EXISTS duration_ms INTEGER;
 		-- Response body for debugging (JSONB, truncated for large responses)
 		ALTER TABLE api_logs ADD COLUMN IF NOT EXISTS response_body JSONB;
+		ALTER TABLE characters ADD COLUMN IF NOT EXISTS hit_dice_spent_by_type JSONB DEFAULT '{}'; -- read by the Hit Point Dice code, reset by a Long Rest
 		-- Query parameters for GET requests
 		ALTER TABLE api_logs ADD COLUMN IF NOT EXISTS query_params TEXT;
 		
@@ -1001,4 +1002,3 @@ func loadSRDFromDB() {
 
 // In-memory spell cache for resolveAction (separate from srdSpells which is removed)
 var srdSpellsMemory = map[string]SRDSpell{}
-

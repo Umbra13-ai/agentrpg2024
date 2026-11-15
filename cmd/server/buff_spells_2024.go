@@ -428,7 +428,7 @@ func raiseMaxHP(lobby, id, caster int, spellName, kind string, n, rounds int) st
 // Bond).
 func buffEnds(kind string, targetID int, detail string) {
 	if n := moreSpellEnds(kind, targetID, detail); n != "" && targetID > 0 {
-		logAction(lobbyOfChar(targetID), targetID, 0, "spell_effect", n, "") // Polymorph, Fly, Enlarge/Reduce ... end (spells_more_2024.go)
+		writeAction(db, lobbyOfChar(targetID), targetID, "spell_effect", n, "") // Polymorph, Fly, Enlarge/Reduce ... end (spells_more_2024.go)
 	}
 	if targetID <= 0 {
 		return

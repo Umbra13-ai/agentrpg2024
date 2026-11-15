@@ -220,7 +220,7 @@ func handleTokens(w http.ResponseWriter, r *http.Request) {
 		rows, qerr := db.Query(`SELECT id, prefix, COALESCE(label, ''), scope, created_at, last_used_at, expires_at, revoked_at
 			FROM agent_tokens WHERE agent_id = $1 ORDER BY id`, agentID)
 		if qerr != nil {
-			writeJSONStatus(w, http.StatusInternalServerError, map[string]interface{}{"error": "db_error"})
+			writeJSONStatus(w, http.StatusInternalServerError, map[string]interface{}{"error": dbErrorCode})
 			return
 		}
 		defer rows.Close()
@@ -270,7 +270,11 @@ func handleTokenByID(w http.ResponseWriter, r *http.Request) {
 		writeJSONStatus(w, http.StatusBadRequest, map[string]interface{}{"error": "invalid_token_id"})
 		return
 	}
-	res, _ := db.Exec(`UPDATE agent_tokens SET revoked_at = NOW() WHERE id = $1 AND agent_id = $2 AND revoked_at IS NULL`, id, agentID)
+	res, xerr := db.Exec(`UPDATE agent_tokens SET revoked_at = NOW() WHERE id = $1 AND agent_id = $2 AND revoked_at IS NULL`, id, agentID)
+	if xerr != nil {
+		writeDBWriteError(w, xerr, "the token's revocation")
+		return
+	}
 	if n, _ := res.RowsAffected(); n == 0 {
 		writeJSONStatus(w, http.StatusNotFound, map[string]interface{}{"error": "token_not_found_or_already_revoked"})
 		return

@@ -47,6 +47,9 @@ func handleCharacterSpells(w http.ResponseWriter, r *http.Request, charID int) {
 	`, charID).Scan(&ownerID, &knownSpellsJSON, &magicalSecretsJSON, &class, &subclass, &level)
 
 	if err != nil {
+		if answerDBFailure(w, err, "the character") {
+			return
+		}
 		writeJSONStatus(w, http.StatusNotFound, map[string]interface{}{"error": "character_not_found"})
 		return
 	}
@@ -543,6 +546,9 @@ func handlePrepareSpells(w http.ResponseWriter, r *http.Request, charID int) {
 		&subclassChoicesJSON)
 
 	if err != nil {
+		if answerDBFailure(w, err, "the character") {
+			return
+		}
 		writeJSONStatus(w, http.StatusNotFound, map[string]interface{}{"error": "character_not_found"})
 		return
 	}
@@ -952,6 +958,9 @@ func handleUseResource(w http.ResponseWriter, r *http.Request, charID int) {
 	var ownerID int
 	err = db.QueryRow(`SELECT agent_id FROM characters WHERE id = $1`, charID).Scan(&ownerID)
 	if err != nil {
+		if answerDBFailure(w, err, "the character") {
+			return
+		}
 		w.WriteHeader(http.StatusNotFound)
 		json.NewEncoder(w).Encode(map[string]interface{}{"error": "character_not_found"})
 		return

@@ -188,7 +188,7 @@ func spellEffectsOn(lobbyID, targetID int) []activeSpellEffect {
 				hasteEnds(lobbyID, e.TargetID, 0)
 			}
 			if n := moreSpellEnds(e.Kind, e.TargetID, e.Detail); n != "" { // a beast form, a size, a flight end with the Concentration (spells_more_2024.go)
-				logAction(lobbyID, maxInt(e.TargetID, 0), 0, "spell_effect", n, "")
+				writeAction(db, lobbyID, maxInt(e.TargetID, 0), "spell_effect", n, "")
 			}
 			continue
 		}

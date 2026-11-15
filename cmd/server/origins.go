@@ -661,8 +661,11 @@ func (f originFeat) grants() (skills, tools, spells []string) {
 func takeOriginFeat(charID int, slug, source string, in *featChoiceInput) (*originFeat, map[string]interface{}, *originError) {
 	var raw []byte
 	var skills, tools string
-	if db.QueryRow(`SELECT COALESCE(origin,'{}'), COALESCE(skill_proficiencies,''), COALESCE(tool_proficiencies,'') FROM characters WHERE id = $1`, charID).
-		Scan(&raw, &skills, &tools) != nil {
+	if err := db.QueryRow(`SELECT COALESCE(origin,'{}'), COALESCE(skill_proficiencies,''), COALESCE(tool_proficiencies,'') FROM characters WHERE id = $1`, charID).
+		Scan(&raw, &skills, &tools); err != nil {
+		if dbFailed(err) {
+			return nil, nil, originErr(dbErrorCode, nil, "%s", dbReadMessage(fmt.Sprintf("character %d", charID)))
+		}
 		return nil, nil, originErr("character_not_found", nil, "Character %d not found", charID)
 	}
 	rec, ok := loadOriginRecord(raw)

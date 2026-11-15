@@ -241,7 +241,10 @@ func handleWeaponMasteries(w http.ResponseWriter, r *http.Request) {
 	var owner, level int
 	var class string
 	var swapUsed bool
-	if db.QueryRow(`SELECT agent_id, class, level, COALESCE(mastery_swap_used, false) FROM characters WHERE id = $1`, req.CharacterID).Scan(&owner, &class, &level, &swapUsed) != nil {
+	if err := db.QueryRow(`SELECT agent_id, class, level, COALESCE(mastery_swap_used, false) FROM characters WHERE id = $1`, req.CharacterID).Scan(&owner, &class, &level, &swapUsed); err != nil {
+		if answerDBFailure(w, err, "the character") {
+			return
+		}
 		writeJSONStatus(w, http.StatusNotFound, map[string]interface{}{"error": "character_not_found"})
 		return
 	}

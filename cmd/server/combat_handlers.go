@@ -879,10 +879,7 @@ func handleCombatSkip(w http.ResponseWriter, r *http.Request, campaignID int) {
 		db.Exec(`UPDATE characters SET reaction_used = false WHERE lobby_id = $1`, campaignID)
 	}
 	// Record only a committed skip, never a stale request.
-	db.Exec(`
-		INSERT INTO actions (lobby_id, character_id, action_type, description, result)
-		VALUES ($1, $2, 'turn_skipped', 'Turn skipped by GM due to timeout', $3)
-	`, campaignID, skippedID, fmt.Sprintf("Inactive for %d minutes", elapsedMinutes))
+	writeAction(db, campaignID, skippedID, "turn_skipped", "Turn skipped by GM due to timeout", fmt.Sprintf("Inactive for %d minutes", elapsedMinutes))
 
 	// Reset action economy for the new active character
 	newActiveID := entries[turnIndex].ID
@@ -1120,6 +1117,9 @@ func handleExplorationSkip(w http.ResponseWriter, r *http.Request, campaignID in
 	var charLobbyID int
 	err := db.QueryRow("SELECT name, lobby_id FROM characters WHERE id = $1", req.CharacterID).Scan(&charName, &charLobbyID)
 	if err != nil || charLobbyID != campaignID {
+		if answerDBFailure(w, err, "the character") {
+			return
+		}
 		w.WriteHeader(http.StatusNotFound)
 		json.NewEncoder(w).Encode(map[string]interface{}{"error": "character_not_found"})
 		return
@@ -1155,10 +1155,7 @@ func handleExplorationSkip(w http.ResponseWriter, r *http.Request, campaignID in
 	}
 
 	// Record the skip as a "following" action
-	db.Exec(`
-		INSERT INTO actions (lobby_id, character_id, action_type, description, result)
-		VALUES ($1, $2, 'following', 'Marked as following the party (exploration skip)', $3)
-	`, campaignID, req.CharacterID, fmt.Sprintf("Inactive for %d minutes, defaulting to follow party", inactiveMinutes))
+	writeAction(db, campaignID, req.CharacterID, "following", "Marked as following the party (exploration skip)", fmt.Sprintf("Inactive for %d minutes, defaulting to follow party", inactiveMinutes))
 
 	json.NewEncoder(w).Encode(map[string]interface{}{
 		"success":          true,
@@ -1629,6 +1626,9 @@ func handleCombatStatus(w http.ResponseWriter, r *http.Request, campaignID int) 
 		FROM combat_state WHERE lobby_id = $1
 	`, campaignID).Scan(&round, &turnIndex, &turnOrderJSON, &active)
 
+	if answerDBFailure(w, err, "the campaign's fight") {
+		return
+	}
 	if err != nil {
 		json.NewEncoder(w).Encode(map[string]interface{}{
 			"in_combat": false,
@@ -1722,6 +1722,9 @@ func handleDamage(w http.ResponseWriter, r *http.Request, charID int) {
 	`, charID).Scan(&hp, &maxHP, &tempHP, &concentratingOn, &wildShapeForm)
 
 	if err != nil {
+		if answerDBFailure(w, err, "the character") {
+			return
+		}
 		w.WriteHeader(http.StatusNotFound)
 		json.NewEncoder(w).Encode(map[string]interface{}{"error": "character_not_found"})
 		return
@@ -2266,6 +2269,9 @@ func handleShortRest(w http.ResponseWriter, r *http.Request, charID int) {
 		FROM characters WHERE id = $1
 	`, charID).Scan(&class, &level, &hp, &maxHP, &con, &hitDiceSpent, &subclass, &classLevelsJSON, &lobbyID)
 	if err != nil {
+		if answerDBFailure(w, err, "the character") {
+			return
+		}
 		w.WriteHeader(http.StatusNotFound)
 		json.NewEncoder(w).Encode(map[string]interface{}{
 			"error": "Character not found",
@@ -2714,6 +2720,9 @@ func handleRest(w http.ResponseWriter, r *http.Request, charID int) {
 		FROM characters WHERE id = $1
 	`, charID).Scan(&class, &level, &con, &wis, &hitDiceSpent, &exhaustionLevel, &lastLongRest, &subclass, &isDead)
 	if err != nil {
+		if answerDBFailure(w, err, "the character") {
+			return
+		}
 		w.WriteHeader(http.StatusNotFound)
 		json.NewEncoder(w).Encode(map[string]interface{}{
 			"error": "Character not found",

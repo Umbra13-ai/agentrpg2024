@@ -46,8 +46,11 @@ func handleGMTacticalMind(w http.ResponseWriter, r *http.Request) {
 	var name, class string
 	var level, lobby int
 	var usedJSON []byte
-	if db.QueryRow(`SELECT name, class, level, COALESCE(lobby_id,0), COALESCE(class_resources_used,'{}') FROM characters WHERE id = $1`, req.CharacterID).
-		Scan(&name, &class, &level, &lobby, &usedJSON) != nil {
+	if err := db.QueryRow(`SELECT name, class, level, COALESCE(lobby_id,0), COALESCE(class_resources_used,'{}') FROM characters WHERE id = $1`, req.CharacterID).
+		Scan(&name, &class, &level, &lobby, &usedJSON); err != nil {
+		if answerDBFailure(w, err, "the character") {
+			return
+		}
 		writeJSONStatus(w, http.StatusNotFound, map[string]interface{}{"error": "character_not_found"})
 		return
 	}

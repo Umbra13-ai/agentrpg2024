@@ -184,26 +184,19 @@ func logAPIRequestAsync(agentID int, endpoint, method string, lobbyID, character
 
 	// Async insert - don't slow down request handling
 	go func() {
-		var responseBytes []byte
+		var responseDoc interface{} // NULL without a body: an empty value isn't JSON
 		if responseJSON != nil {
-			responseBytes, _ = json.Marshal(responseJSON)
+			if b, err := json.Marshal(responseJSON); err == nil {
+				responseDoc = string(b)
+			}
 		}
-
-		db.Exec(`INSERT INTO api_logs (agent_id, endpoint, method, lobby_id, character_id, request_body, query_params, response_body, response_status, duration_ms, created_at)
-			VALUES ($1, $2, $3, NULLIF($4, 0), NULLIF($5, 0), $6, NULLIF($7, ''), $8, $9, NULLIF($10, 0), NOW())`,
-			agentID, endpoint, method, lobbyID, characterID, requestBody, queryParams, responseBytes, responseStatus, durationMs)
+		// an unknown agent (0, or an account deleted since) is logged without one rather than refused by the foreign key
+		if _, err := db.Exec(`INSERT INTO api_logs (agent_id, endpoint, method, lobby_id, character_id, request_body, query_params, response_body, response_status, duration_ms, created_at)
+			VALUES ((SELECT id FROM agents WHERE id = $1), $2, $3, NULLIF($4, 0), NULLIF($5, 0), $6, NULLIF($7, ''), $8::jsonb, $9, NULLIF($10, 0), NOW())`,
+			agentID, endpoint, method, lobbyID, characterID, requestBody, queryParams, responseDoc, responseStatus, durationMs); err != nil {
+			log.Printf("request log: couldn't record %s %s: %v", method, endpoint, err)
+		}
 	}()
-}
-
-// logAction logs an action to the campaign feed (actions table)
-// Used for system events like deadline creation/triggering
-func logAction(lobbyID int, characterID int, actorID int, actionType string, description string, result string) {
-	if db == nil {
-		return
-	}
-	db.Exec(`INSERT INTO actions (lobby_id, character_id, action_type, description, result, created_at)
-		VALUES ($1, NULLIF($2, 0), $3, $4, $5, NOW())`,
-		lobbyID, characterID, actionType, description, result)
 }
 
 // cleanupOldAPILogs deletes API logs older than 30 days
@@ -321,9 +314,7 @@ func updateCharacterActivity(characterID int, activityType, description string) 
 
 	// Log to actions table if we have a lobby
 	if lobbyID > 0 && activityType != "" {
-		db.Exec(`INSERT INTO actions (lobby_id, character_id, action_type, description, result, created_at)
-			VALUES ($1, $2, $3, $4, '', NOW())`,
-			lobbyID, characterID, activityType, description)
+		writeAction(db, lobbyID, characterID, activityType, description, "")
 	}
 }
 
@@ -393,6 +384,9 @@ func handleFeatureRequests(w http.ResponseWriter, r *http.Request) {
 			var ownerAgentID int
 			var lobbyID int
 			if err := db.QueryRow("SELECT agent_id, COALESCE(lobby_id, 0) FROM characters WHERE id = $1", req.CharacterID).Scan(&ownerAgentID, &lobbyID); err != nil {
+				if answerDBFailure(w, err, "the character") {
+					return
+				}
 				w.WriteHeader(http.StatusBadRequest)
 				json.NewEncoder(w).Encode(map[string]interface{}{"error": "character_not_found"})
 				return
@@ -1102,6 +1096,7 @@ func handleRegister(w http.ResponseWriter, r *http.Request) {
 	).Scan(&id)
 	if err != nil {
 		if strings.Contains(err.Error(), "unique") {
+			handledDBError(err) // answered: the name or email is taken (db_guard_2024.go)
 			w.WriteHeader(http.StatusConflict)
 			json.NewEncoder(w).Encode(map[string]interface{}{"error": "name_or_email_already_registered"})
 		} else {

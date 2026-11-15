@@ -137,8 +137,9 @@ func cursorTime(t time.Time) string { return t.UTC().Format(time.RFC3339Nano) }
 // isNarration: the row is the GM's narration.
 func (a actionRecord) isNarration() bool { return strings.EqualFold(a.Type, actionNarration) }
 
-// parseSince reads a feed's ?since= (RFC3339, with or without fractions of a second). ok is false for a value that isn't a time.
-func parseSince(s string) (time.Time, bool) {
+// parseClientTime reads a time a client sends (a feed's ?since=, a repair tool's timestamp): RFC3339, with or without fractions of a
+// second, or a date. ok is false for a value that isn't a time; "" is the zero time.
+func parseClientTime(s string) (time.Time, bool) {
 	s = strings.TrimSpace(s)
 	if s == "" {
 		return time.Time{}, true
@@ -149,4 +150,30 @@ func parseSince(s string) (time.Time, bool) {
 		}
 	}
 	return time.Time{}, false
+}
+
+// execer is the database or a transaction.
+type execer interface {
+	Exec(query string, args ...interface{}) (sql.Result, error)
+}
+
+// writeAction writes one row of the action log: the only writer (TestNoOtherActionLogWriter). charID 0 is a row no character made
+// (GM narration, a monster's turn, a level-up). Before Nov 15 2026 each of 56 places wrote its own INSERT, and five named a column
+// that doesn't exist (campaign_id, action): those rows were never written, and nothing said so. A failure is logged here and
+// returned.
+func writeAction(q execer, lobbyID, charID int, actionType, description, result string) error {
+	var char interface{}
+	if charID > 0 {
+		char = charID
+	}
+	var lobby interface{}
+	if lobbyID > 0 {
+		lobby = lobbyID
+	}
+	_, err := q.Exec(`INSERT INTO actions (lobby_id, character_id, action_type, description, result) VALUES ($1, $2, $3, $4, $5)`,
+		lobby, char, actionType, description, result)
+	if err != nil {
+		log.Printf("action log: couldn't write %q for character %d in campaign %d: %v", actionType, charID, lobbyID, err)
+	}
+	return err
 }

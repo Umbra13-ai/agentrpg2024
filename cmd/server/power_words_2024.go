@@ -159,7 +159,10 @@ func powerWordOn(lobby int, spellKey string, id, saveDC int) string {
 		ended := []string{}
 		for _, c := range powerWordEnds {
 			if id < 0 {
-				res, _ := db.Exec(`DELETE FROM condition_records WHERE lobby_id = $1 AND target_id = $2 AND condition = $3`, lobby, id, c)
+				res, err := db.Exec(`DELETE FROM condition_records WHERE lobby_id = $1 AND target_id = $2 AND condition = $3`, lobby, id, c)
+				if err != nil {
+					continue // the request's database guard answers the failure (db_guard_2024.go)
+				}
 				if n, _ := res.RowsAffected(); n > 0 {
 					ended = append(ended, titleCase(c))
 				}

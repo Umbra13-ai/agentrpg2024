@@ -18,7 +18,7 @@ func TestRecordGMActionReportsInsertFailure(t *testing.T) {
 		t.Fatal("missing actions table must not be reported as a recorded narration")
 	}
 	if _, err := database.Exec(`CREATE TABLE actions (
-		lobby_id INTEGER, action_type TEXT, description TEXT, result TEXT
+		lobby_id INTEGER, character_id INTEGER, action_type TEXT, description TEXT, result TEXT
 	)`); err != nil {
 		t.Fatal(err)
 	}

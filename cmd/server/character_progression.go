@@ -53,6 +53,9 @@ func handleCharacterASI(w http.ResponseWriter, r *http.Request, charID int) {
 		&asiClass, &asiLevel, &asiClassLevelsJSON)
 
 	if err != nil {
+		if answerDBFailure(w, err, "the character") {
+			return
+		}
 		w.WriteHeader(http.StatusNotFound)
 		json.NewEncoder(w).Encode(map[string]interface{}{"error": "character_not_found"})
 		return
@@ -237,6 +240,9 @@ func handleCharacterFeat(w http.ResponseWriter, r *http.Request, charID int) {
 	`, charID).Scan(&ownerID, &pendingASI, &level, &str, &dex, &con, &intl, &wis, &cha, &class, &maxHP)
 
 	if err != nil {
+		if answerDBFailure(w, err, "the character") {
+			return
+		}
 		w.WriteHeader(http.StatusNotFound)
 		json.NewEncoder(w).Encode(map[string]interface{}{"error": "character_not_found"})
 		return
@@ -606,6 +612,9 @@ func handleCharacterSubclass(w http.ResponseWriter, r *http.Request) {
 		`, charID).Scan(&ownerID, &class, &level, &currentSubclass)
 
 		if err != nil {
+			if answerDBFailure(w, err, "the character") {
+				return
+			}
 			w.WriteHeader(http.StatusNotFound)
 			json.NewEncoder(w).Encode(map[string]interface{}{
 				"error":   "character_not_found",
@@ -725,6 +734,9 @@ func handleCharacterSubclass(w http.ResponseWriter, r *http.Request) {
 		`, req.CharacterID).Scan(&ownerID, &charName, &class, &level, &currentSubclass)
 
 		if err != nil {
+			if answerDBFailure(w, err, "the character") {
+				return
+			}
 			w.WriteHeader(http.StatusNotFound)
 			json.NewEncoder(w).Encode(map[string]interface{}{
 				"error":   "character_not_found",
@@ -1017,7 +1029,10 @@ func handleCharacterSubclassChoice(w http.ResponseWriter, r *http.Request) {
 	}
 	var ownerID int
 	var charName string
-	if db.QueryRow(`SELECT agent_id, name FROM characters WHERE id = $1`, req.CharacterID).Scan(&ownerID, &charName) != nil {
+	if err := db.QueryRow(`SELECT agent_id, name FROM characters WHERE id = $1`, req.CharacterID).Scan(&ownerID, &charName); err != nil {
+		if answerDBFailure(w, err, "the character") {
+			return
+		}
 		writeJSONStatus(w, http.StatusNotFound, map[string]interface{}{"error": "character_not_found", "message": fmt.Sprintf("Character %d not found", req.CharacterID)})
 		return
 	}
@@ -1123,6 +1138,9 @@ func takeClassLevel(w http.ResponseWriter, r *http.Request) {
 		&hp, &maxHP, &classLevelsJSON, &pendingASI, &armorProfsStr, &weaponProfsStr)
 
 	if err != nil {
+		if answerDBFailure(w, err, "the character") {
+			return
+		}
 		w.WriteHeader(http.StatusNotFound)
 		json.NewEncoder(w).Encode(map[string]interface{}{
 			"error":   "character_not_found",

@@ -322,10 +322,7 @@ func autoAdvanceCombat(campaignID int, campaignName string, round int, turnIndex
 	log.Printf("Auto-advance: Skipping %s's turn in %s (inactive %d min)", skippedName, campaignName, elapsedMinutes)
 
 	// Record the auto-skip as an action
-	db.Exec(`
-		INSERT INTO actions (lobby_id, character_id, action_type, description, result)
-		VALUES ($1, $2, 'turn_auto_skipped', 'Turn automatically skipped: the combat turn timeout passed (table rule combat_turn_timeout; system)', $3)
-	`, campaignID, skippedID, fmt.Sprintf("Inactive for %d minutes. Auto-skipped by system.", elapsedMinutes))
+	writeAction(db, campaignID, skippedID, "turn_auto_skipped", "Turn automatically skipped: the combat turn timeout passed (table rule combat_turn_timeout; system)", fmt.Sprintf("Inactive for %d minutes. Auto-skipped by system.", elapsedMinutes))
 
 	// Advance turn (the skipped turn ended: Legendary Actions may follow it, shown in GM status)
 	setLastTurnEnded(campaignID, fmt.Sprintf("%d:%d", round, turnIndex), skippedID)
@@ -409,10 +406,7 @@ func autoAdvanceExploration(campaignID int, campaignName string) int {
 		log.Printf("Auto-advance: Marking %s as following in %s (inactive %dh)", charName, campaignName, elapsedHours)
 
 		// Record as following
-		db.Exec(`
-			INSERT INTO actions (lobby_id, character_id, action_type, description, result)
-			VALUES ($1, $2, 'following', 'Automatically marked as following the party (12h+ inactive)', $3)
-		`, campaignID, charID, fmt.Sprintf("Inactive for %d hours. Auto-marked by system.", elapsedHours))
+		writeAction(db, campaignID, charID, "following", "Automatically marked as following the party (12h+ inactive)", fmt.Sprintf("Inactive for %d hours. Auto-marked by system.", elapsedHours))
 
 		skipped++
 	}

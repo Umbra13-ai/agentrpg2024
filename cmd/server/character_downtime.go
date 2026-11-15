@@ -358,8 +358,11 @@ func handleCharacterDowntime(w http.ResponseWriter, r *http.Request) {
 
 	var name, toolsRaw string
 	var lobby int
-	if db.QueryRow(`SELECT name, COALESCE(lobby_id, 0), COALESCE(tool_proficiencies, '') FROM characters WHERE id = $1`, req.CharacterID).
-		Scan(&name, &lobby, &toolsRaw) != nil {
+	if err := db.QueryRow(`SELECT name, COALESCE(lobby_id, 0), COALESCE(tool_proficiencies, '') FROM characters WHERE id = $1`, req.CharacterID).
+		Scan(&name, &lobby, &toolsRaw); err != nil {
+		if answerDBFailure(w, err, "the character") {
+			return
+		}
 		writeJSONStatus(w, http.StatusNotFound, map[string]interface{}{"error": "character_not_found"})
 		return
 	}
@@ -497,8 +500,7 @@ func handleCharacterDowntime(w http.ResponseWriter, r *http.Request) {
 	if lobby > 0 {
 		logLobby = sql.NullInt64{Int64: int64(lobby), Valid: true}
 	}
-	tx.Exec(`INSERT INTO actions (lobby_id, character_id, action_type, description, result) VALUES ($1, $2, 'downtime', $3, $4)`,
-		logLobby, req.CharacterID, fmt.Sprintf("%s crafts %s with %s for %d day(s)", name, cp.Item, game.ToolDisplayName(cp.Tool), req.Days), result)
+	writeAction(tx, int(logLobby.Int64), req.CharacterID, "downtime", fmt.Sprintf("%s crafts %s with %s for %d day(s)", name, cp.Item, game.ToolDisplayName(cp.Tool), req.Days), result)
 	if err := tx.Commit(); err != nil {
 		writeJSONStatus(w, http.StatusInternalServerError, map[string]interface{}{"error": "save_failed"})
 		return
@@ -549,8 +551,11 @@ func scribeScroll(w http.ResponseWriter, charID int, spellRef string, days int) 
 	}
 	var name, class, toolsRaw string
 	var lobby, level, intl, wis, cha int
-	if db.QueryRow(`SELECT name, COALESCE(lobby_id,0), COALESCE(class,''), level, intl, wis, cha, COALESCE(tool_proficiencies,'') FROM characters WHERE id = $1`, charID).
-		Scan(&name, &lobby, &class, &level, &intl, &wis, &cha, &toolsRaw) != nil {
+	if err := db.QueryRow(`SELECT name, COALESCE(lobby_id,0), COALESCE(class,''), level, intl, wis, cha, COALESCE(tool_proficiencies,'') FROM characters WHERE id = $1`, charID).
+		Scan(&name, &lobby, &class, &level, &intl, &wis, &cha, &toolsRaw); err != nil {
+		if answerDBFailure(w, err, "the character") {
+			return
+		}
 		writeJSONStatus(w, http.StatusNotFound, map[string]interface{}{"error": "character_not_found"})
 		return
 	}
@@ -660,8 +665,7 @@ func scribeScroll(w http.ResponseWriter, charID int, spellRef string, days int) 
 		consumeSpellMaterial(charID, material)
 	}
 	if lobby > 0 {
-		db.Exec(`INSERT INTO actions (lobby_id, character_id, action_type, description, result) VALUES ($1, $2, 'downtime', $3, $4)`,
-			lobby, charID, fmt.Sprintf("%s scribes a Spell Scroll of %s for %d day(s)", name, sp.Name, days), fmt.Sprintf("%d of %d days", min(cp.Days, cp.DaysNeeded), cp.DaysNeeded))
+		writeAction(db, lobby, charID, "downtime", fmt.Sprintf("%s scribes a Spell Scroll of %s for %d day(s)", name, sp.Name, days), fmt.Sprintf("%d of %d days", min(cp.Days, cp.DaysNeeded), cp.DaysNeeded))
 	}
 	resp := map[string]interface{}{"success": true, "activity": "scribe", "item": cp.Item, "days_worked": days, "progress_days": min(cp.Days, cp.DaysNeeded),
 		"days_needed": cp.DaysNeeded, "complete": done, "gold": gold}

@@ -704,29 +704,6 @@
    }
   },
   "/api/characters/breath-weapon": {
-   "get": {
-    "tags": [
-     "Characters"
-    ],
-    "summary": "Breath weapon status",
-    "description": "Dragonborn. Uses equal your Proficiency Bonus per long rest; 1d10 (2d10 at 5, 3d10 at 11, 4d10 at 17); Dexterity save DC 8 + Con + Proficiency.",
-    "responses": {
-     "200": {
-      "description": "OK"
-     }
-    },
-    "parameters": [
-     {
-      "name": "character_id",
-      "in": "query",
-      "required": true,
-      "description": "",
-      "schema": {
-       "type": "integer"
-      }
-     }
-    ]
-   },
    "post": {
     "tags": [
      "Characters"

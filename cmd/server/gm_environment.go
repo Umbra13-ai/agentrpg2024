@@ -85,10 +85,7 @@ func handleGMForcedMovement(w http.ResponseWriter, r *http.Request) {
 			targetName, distance, cause, strings.Join(brokenGrapples, ", "))
 
 		// Record the action
-		db.Exec(`INSERT INTO actions (lobby_id, character_id, action_type, description, result) VALUES ($1, $2, 'forced_movement', $3, $4)`,
-			campaignID, req.TargetID,
-			fmt.Sprintf("%s forced movement (%s)", targetName, cause),
-			fmt.Sprintf("%s moved %s, grapples broken: %s", targetName, distance, strings.Join(brokenGrapples, ", ")))
+		writeAction(db, campaignID, req.TargetID, "forced_movement", fmt.Sprintf("%s forced movement (%s)", targetName, cause), fmt.Sprintf("%s moved %s, grapples broken: %s", targetName, distance, strings.Join(brokenGrapples, ", ")))
 	} else {
 		response["grapples_broken"] = []string{}
 		response["message"] = fmt.Sprintf("%s was moved %s by %s (no grapples to break)", targetName, distance, cause)
@@ -168,6 +165,9 @@ func handleGMFallingDamage(w http.ResponseWriter, r *http.Request) {
 		FROM characters WHERE id = $1
 	`, req.CharacterID).Scan(&charName, &currentHP, &maxHP, &class, &level, &reactionUsed, &classLevelsJSON)
 	if err != nil {
+		if answerDBFailure(w, err, "the character") {
+			return
+		}
 		w.WriteHeader(http.StatusBadRequest)
 		json.NewEncoder(w).Encode(map[string]interface{}{"error": "character_not_found"})
 		return
@@ -304,10 +304,7 @@ func handleGMFallingDamage(w http.ResponseWriter, r *http.Request) {
 		actionResult += " (halved due to resistance)"
 	}
 
-	db.Exec(`
-		INSERT INTO actions (lobby_id, character_id, action_type, description, result)
-		VALUES ($1, $2, $3, $4, $5)
-	`, lobbyID, req.CharacterID, "falling_damage", actionDesc, actionResult)
+	writeAction(db, lobbyID, req.CharacterID, "falling_damage", actionDesc, actionResult)
 
 	// Build message
 	message := fmt.Sprintf("%s %s and takes %d bludgeoning damage (%dd6=%v)", charName, reason, finalDamage, diceCount, rolls)
@@ -433,11 +430,7 @@ func handleGMUnderwater(w http.ResponseWriter, r *http.Request) {
 	if currentUnderwater {
 		statusText = "The party submerges into water"
 	}
-	db.Exec(`
-		INSERT INTO actions (lobby_id, action_type, description, result)
-		VALUES ($1, $2, $3, $4)
-	`, req.CampaignID, "environment", statusText,
-		fmt.Sprintf("Underwater combat: %v", currentUnderwater))
+	writeAction(db, req.CampaignID, 0, "environment", statusText, fmt.Sprintf("Underwater combat: %v", currentUnderwater))
 
 	effects := []string{}
 	if currentUnderwater {
@@ -529,11 +522,7 @@ func handleGMSetLighting(w http.ResponseWriter, r *http.Request) {
 		statusText = "Darkness falls over the area"
 	}
 
-	db.Exec(`
-		INSERT INTO actions (lobby_id, action_type, description, result)
-		VALUES ($1, $2, $3, $4)
-	`, req.CampaignID, "environment", statusText,
-		fmt.Sprintf("Lighting set to: %s", req.Lighting))
+	writeAction(db, req.CampaignID, 0, "environment", statusText, fmt.Sprintf("Lighting set to: %s", req.Lighting))
 
 	// Describe effects
 	effects := []string{}
@@ -554,8 +543,12 @@ func handleGMSetLighting(w http.ResponseWriter, r *http.Request) {
 
 	// Get party vision capabilities for helpful info
 	partyVision := []map[string]interface{}{}
-	rows, _ := db.Query(`SELECT name, COALESCE(darkvision_range, 0), COALESCE(blindsight_range, 0), COALESCE(truesight_range, 0) 
+	rows, qerr := db.Query(`SELECT name, COALESCE(darkvision_range, 0), COALESCE(blindsight_range, 0), COALESCE(truesight_range, 0) 
 		FROM characters WHERE lobby_id = $1`, req.CampaignID)
+	if qerr != nil {
+		writeDBError(w, qerr, "the campaign's characters")
+		return
+	}
 	if rows != nil {
 		defer rows.Close()
 		for rows.Next() {

@@ -432,7 +432,14 @@ func handleAutoEquip(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 	var owner int
-	if req.CharacterID == 0 || db.QueryRow(`SELECT agent_id FROM characters WHERE id = $1`, req.CharacterID).Scan(&owner) != nil {
+	ownerErr := sql.ErrNoRows
+	if req.CharacterID != 0 {
+		ownerErr = db.QueryRow(`SELECT agent_id FROM characters WHERE id = $1`, req.CharacterID).Scan(&owner)
+	}
+	if answerDBFailure(w, ownerErr, "the character") {
+		return
+	}
+	if ownerErr != nil {
 		writeJSONStatus(w, http.StatusNotFound, map[string]interface{}{"error": "character_not_found"})
 		return
 	}

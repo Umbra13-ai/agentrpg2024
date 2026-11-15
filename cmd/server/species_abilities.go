@@ -396,8 +396,11 @@ func handleSpeciesAbility(w http.ResponseWriter, r *http.Request) {
 	var campaignID sql.NullInt64
 	var originRaw []byte
 	var temp int
-	if db.QueryRow(`SELECT agent_id, name, level, con, lobby_id, COALESCE(origin, '{}'), COALESCE(temp_hp, 0) FROM characters WHERE id = $1`, req.CharacterID).
-		Scan(&owner, &name, &level, &con, &campaignID, &originRaw, &temp) != nil {
+	if err := db.QueryRow(`SELECT agent_id, name, level, con, lobby_id, COALESCE(origin, '{}'), COALESCE(temp_hp, 0) FROM characters WHERE id = $1`, req.CharacterID).
+		Scan(&owner, &name, &level, &con, &campaignID, &originRaw, &temp); err != nil {
+		if answerDBFailure(w, err, "the character") {
+			return
+		}
 		writeJSONStatus(w, http.StatusNotFound, map[string]interface{}{"error": "character_not_found"})
 		return
 	}
@@ -578,8 +581,7 @@ func handleSpeciesAbility(w http.ResponseWriter, r *http.Request) {
 	resp["uses_left"] = ab.Max - uses.Used[key]
 
 	if campaignID.Valid {
-		db.Exec(`INSERT INTO actions (lobby_id, character_id, action_type, description, result) VALUES ($1, $2, 'species_ability', $3, $4)`,
-			campaignID.Int64, req.CharacterID, fmt.Sprintf("%s uses %s", name, ab.Name), fmt.Sprint(resp["effect"]))
+		writeAction(db, int(campaignID.Int64), req.CharacterID, "species_ability", fmt.Sprintf("%s uses %s", name, ab.Name), fmt.Sprint(resp["effect"]))
 	}
 	writeJSONStatus(w, http.StatusOK, resp)
 }

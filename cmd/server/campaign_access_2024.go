@@ -24,22 +24,48 @@ func writeAccessProblem(w http.ResponseWriter, status int, code, msg string) {
 	writeJSONStatus(w, status, map[string]interface{}{"error": code, "message": msg})
 }
 
-// campaignRole: what the account is in the campaign: "gm", "player" (it has a character in it) or "" (neither). found is
-// false when there is no such campaign.
-func campaignRole(agentID, campaignID int) (role, name string, found bool) {
+// campaignLookup: what the account is in the campaign: "gm", "player" (it has a character in it) or "" (neither). found is
+// false when there is no such campaign; err is a database failure (db_errors_2024.go), which is not "no such campaign".
+func campaignLookup(agentID, campaignID int) (role, name string, found bool, err error) {
 	var dm sql.NullInt64
-	if db.QueryRow(`SELECT dm_id, COALESCE(name,'') FROM lobbies WHERE id = $1`, campaignID).Scan(&dm, &name) != nil {
-		return "", "", false
+	if err = db.QueryRow(`SELECT dm_id, COALESCE(name,'') FROM lobbies WHERE id = $1`, campaignID).Scan(&dm, &name); err != nil {
+		if dbFailed(err) {
+			return "", "", false, err
+		}
+		return "", "", false, nil
 	}
 	if dm.Valid && int(dm.Int64) == agentID {
-		return "gm", name, true
+		return "gm", name, true, nil
 	}
 	var n int
-	db.QueryRow(`SELECT COUNT(*) FROM characters WHERE lobby_id = $1 AND agent_id = $2`, campaignID, agentID).Scan(&n)
-	if n > 0 {
-		return "player", name, true
+	if err = db.QueryRow(`SELECT COUNT(*) FROM characters WHERE lobby_id = $1 AND agent_id = $2`, campaignID, agentID).Scan(&n); err != nil {
+		return "", name, true, err
 	}
-	return "", name, true
+	if n > 0 {
+		return "player", name, true, nil
+	}
+	return "", name, true, nil
+}
+
+// campaignRole is campaignLookup for a caller that only shows more to the GM (a failure shows the least).
+func campaignRole(agentID, campaignID int) (role, name string, found bool) {
+	role, name, found, _ = campaignLookup(agentID, campaignID)
+	return
+}
+
+// requireCampaign: the campaign exists (anyone may read what the route shows); otherwise the 404, or the database failure, is
+// written.
+func requireCampaign(w http.ResponseWriter, campaignID int) (name string, ok bool) {
+	_, name, found, err := campaignLookup(0, campaignID)
+	switch {
+	case err != nil:
+		writeDBError(w, err, fmt.Sprintf("campaign %d", campaignID))
+		return "", false
+	case !found:
+		writeAccessProblem(w, http.StatusNotFound, "campaign_not_found", fmt.Sprintf("There is no campaign %d.", campaignID))
+		return "", false
+	}
+	return name, true
 }
 
 func campaignLabel(id int, name string) string {
@@ -66,8 +92,11 @@ func requireCampaignGM(w http.ResponseWriter, r *http.Request, campaignID int, w
 	if agentID, ok = signedIn(w, r); !ok {
 		return 0, false
 	}
-	role, name, found := campaignRole(agentID, campaignID)
+	role, name, found, err := campaignLookup(agentID, campaignID)
 	switch {
+	case err != nil:
+		writeDBError(w, err, fmt.Sprintf("campaign %d", campaignID))
+		return 0, false
 	case !found:
 		writeAccessProblem(w, http.StatusNotFound, "campaign_not_found", fmt.Sprintf("There is no campaign %d.", campaignID))
 		return 0, false
@@ -83,8 +112,11 @@ func requireCampaignMember(w http.ResponseWriter, r *http.Request, campaignID in
 	if agentID, ok = signedIn(w, r); !ok {
 		return 0, "", false
 	}
-	role, name, found := campaignRole(agentID, campaignID)
+	role, name, found, err := campaignLookup(agentID, campaignID)
 	switch {
+	case err != nil:
+		writeDBError(w, err, fmt.Sprintf("campaign %d", campaignID))
+		return 0, "", false
 	case !found:
 		writeAccessProblem(w, http.StatusNotFound, "campaign_not_found", fmt.Sprintf("There is no campaign %d.", campaignID))
 		return 0, "", false
@@ -95,13 +127,37 @@ func requireCampaignMember(w http.ResponseWriter, r *http.Request, campaignID in
 	return agentID, role, true
 }
 
-// characterAccess: the character's owner, name and campaign (0 when in none); found is false when there is no character.
+// characterLookup: the character's owner, name and campaign (0 when in none); found is false when there is no character; err
+// is a database failure, which is not "no such character".
+func characterLookup(charID int) (owner int, name string, campaign int, found bool, err error) {
+	var lobby, own sql.NullInt64
+	if err = db.QueryRow(`SELECT agent_id, COALESCE(name,''), lobby_id FROM characters WHERE id = $1`, charID).Scan(&own, &name, &lobby); err != nil {
+		if dbFailed(err) {
+			return 0, "", 0, false, err
+		}
+		return 0, "", 0, false, nil
+	}
+	return int(own.Int64), name, int(lobby.Int64), true, nil
+}
+
+// characterAccess is characterLookup for a caller that only decides what to show (a failure shows the least).
 func characterAccess(charID int) (owner int, name string, campaign int, found bool) {
-	var lobby sql.NullInt64
-	if db.QueryRow(`SELECT agent_id, name, lobby_id FROM characters WHERE id = $1`, charID).Scan(&owner, &name, &lobby) != nil {
+	owner, name, campaign, found, _ = characterLookup(charID)
+	return
+}
+
+// characterFound: the character exists, or its 404 (or the database failure) is written.
+func characterFound(w http.ResponseWriter, charID int) (owner int, name string, campaign int, ok bool) {
+	owner, name, campaign, found, err := characterLookup(charID)
+	switch {
+	case err != nil:
+		writeDBError(w, err, fmt.Sprintf("character %d", charID))
+		return 0, "", 0, false
+	case !found:
+		noCharacter(w, charID)
 		return 0, "", 0, false
 	}
-	return owner, name, int(lobby.Int64), true
+	return owner, name, campaign, true
 }
 
 // isCharacterGM: the account is the GM of the campaign the character is in.
@@ -114,6 +170,15 @@ func isCharacterGM(agentID, charID int) bool {
 	return role == "gm"
 }
 
+// gmOfCampaign: the account is the GM of campaign camp (false for 0, no campaign); err is a database failure.
+func gmOfCampaign(agentID, camp int) (bool, error) {
+	if camp == 0 {
+		return false, nil
+	}
+	role, _, _, err := campaignLookup(agentID, camp)
+	return role == "gm", err
+}
+
 func noCharacter(w http.ResponseWriter, charID int) {
 	writeAccessProblem(w, http.StatusNotFound, "character_not_found", fmt.Sprintf("There is no character %d.", charID))
 }
@@ -123,10 +188,9 @@ func requireCharacterOwner(w http.ResponseWriter, r *http.Request, charID int, w
 	if agentID, ok = signedIn(w, r); !ok {
 		return 0, false
 	}
-	owner, name, _, found := characterAccess(charID)
+	owner, name, _, found := characterFound(w, charID)
 	switch {
 	case !found:
-		noCharacter(w, charID)
 		return 0, false
 	case owner != agentID:
 		writeAccessProblem(w, http.StatusForbidden, "not_your_character", fmt.Sprintf("%s isn't yours: only its player can %s.", name, what))
@@ -140,12 +204,19 @@ func requireOwnerOrGM(w http.ResponseWriter, r *http.Request, charID int, what s
 	if agentID, ok = signedIn(w, r); !ok {
 		return 0, false
 	}
-	owner, name, _, found := characterAccess(charID)
+	owner, name, camp, found := characterFound(w, charID)
 	if !found {
-		noCharacter(w, charID)
 		return 0, false
 	}
-	if owner == agentID || isCharacterGM(agentID, charID) {
+	if owner == agentID {
+		return agentID, true
+	}
+	gm, err := gmOfCampaign(agentID, camp)
+	if err != nil {
+		writeDBError(w, err, fmt.Sprintf("the campaign of character %d", charID))
+		return 0, false
+	}
+	if gm {
 		return agentID, true
 	}
 	writeAccessProblem(w, http.StatusForbidden, "not_your_character", fmt.Sprintf("%s isn't yours: only its player or its campaign's GM can %s.", name, what))
@@ -157,12 +228,16 @@ func requireCharacterGM(w http.ResponseWriter, r *http.Request, charID int, what
 	if agentID, ok = signedIn(w, r); !ok {
 		return 0, false
 	}
-	_, name, camp, found := characterAccess(charID)
+	_, name, camp, found := characterFound(w, charID)
 	if !found {
-		noCharacter(w, charID)
 		return 0, false
 	}
-	if !isCharacterGM(agentID, charID) {
+	gm, err := gmOfCampaign(agentID, camp)
+	if err != nil {
+		writeDBError(w, err, fmt.Sprintf("the campaign of character %d", charID))
+		return 0, false
+	}
+	if !gm {
 		where := "its campaign"
 		if camp == 0 {
 			where = "a campaign (it is in none)"

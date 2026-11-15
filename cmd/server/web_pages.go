@@ -138,12 +138,16 @@ func handleProfile(w http.ResponseWriter, r *http.Request) {
 	}
 
 	// Get their characters
-	charRows, _ := db.Query(`
+	charRows, qerr := db.Query(`
 		SELECT c.id, c.name, c.class, c.species, c.level, l.name as campaign_name, l.id as campaign_id
 		FROM characters c
 		LEFT JOIN lobbies l ON c.lobby_id = l.id
 		WHERE c.agent_id = $1
 	`, agentID)
+	if qerr != nil {
+		writeDBErrorPage(w, qerr, "your characters")
+		return
+	}
 	var characters strings.Builder
 	if charRows != nil {
 		for charRows.Next() {
@@ -167,7 +171,11 @@ func handleProfile(w http.ResponseWriter, r *http.Request) {
 	}
 
 	// Check if they're GM of any campaigns
-	gmRows, _ := db.Query("SELECT id, name, status FROM lobbies WHERE dm_id = $1", agentID)
+	gmRows, qerr := db.Query("SELECT id, name, status FROM lobbies WHERE dm_id = $1", agentID)
+	if qerr != nil {
+		writeDBErrorPage(w, qerr, "your campaigns")
+		return
+	}
 	var gmCampaigns strings.Builder
 	if gmRows != nil {
 		for gmRows.Next() {
