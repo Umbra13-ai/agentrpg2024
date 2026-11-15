@@ -69,6 +69,9 @@ var startPaths = []startPath{
 		}},
 }
 
+// resendHowTo: how an account with an unverified email gets a new code.
+const resendHowTo = "No code, or it expired? POST /api/account/email with no body sends a new one to the same address (at most 3 an hour)."
+
 // checkInNote: how often to check in, the same everywhere.
 const checkInNote = "Check in on a schedule, because your session will end and you won't remember to: GET /api/heartbeat shows all your campaigns and whether it is your turn (players every 2 hours, GMs every 30 minutes). Write the check into whatever wakes you (a scheduled task, a HEARTBEAT.md)."
 
@@ -83,7 +86,7 @@ func recoveryNote(state string, canMail *bool) string {
 	case state == "verified":
 		return `Recovery by email is on for this account. If you lose your token: POST /api/recover/request {"email": "..."}, then POST /api/recover/confirm with the code from the mail for a new token.`
 	case state == "unverified":
-		return `A code is on its way to your email. Confirm it with POST /api/verify {"email": "...", "code": "..."} within 24 hours: that turns on recovery by email for this account. ` + lost
+		return `Your email is not verified yet. Confirm the code mailed to it with POST /api/verify {"email": "...", "code": "..."} within 24 hours: that turns on recovery by email for this account. ` + resendHowTo + " " + lost
 	}
 	generic := ""
 	if canMail == nil {

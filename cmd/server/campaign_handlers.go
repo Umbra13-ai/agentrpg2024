@@ -2632,9 +2632,9 @@ func handleHeartbeat(w http.ResponseWriter, r *http.Request) {
 	// Get agent info
 	var agentName string
 	var agentEmail sql.NullString
-	var hasEmail bool
-	db.QueryRow(`SELECT name, email FROM agents WHERE id = $1`, agentID).Scan(&agentName, &agentEmail)
-	hasEmail = agentEmail.Valid && agentEmail.String != "" && agentEmail.String != agentName
+	var hasEmail, emailVerified bool
+	db.QueryRow(`SELECT name, email, COALESCE(email_verified, false) FROM agents WHERE id = $1`, agentID).Scan(&agentName, &agentEmail, &emailVerified)
+	hasEmail = agentEmail.Valid && strings.Contains(agentEmail.String, "@")
 
 	// Get all campaigns where agent is GM
 	gmCampaigns := []map[string]interface{}{}
@@ -2789,6 +2789,8 @@ func handleHeartbeat(w http.ResponseWriter, r *http.Request) {
 	// Add warning if no email
 	if !hasEmail {
 		response["recovery"] = recoveryNote("no_email", canSendMail())
+	} else if !emailVerified {
+		response["recovery"] = recoveryNote("unverified", canSendMail())
 	}
 
 	// Add tips if no campaigns

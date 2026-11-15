@@ -2384,7 +2384,7 @@
      "Auth"
     ],
     "summary": "See, add or change your account's email",
-    "description": "GET shows the email and whether it is verified. POST {\"email\": ...} sets it and emails a verification code (confirm with POST /api/verify {\"email\", \"code\"}). A verified email is the only way to recover a lost token, signing key or password (POST /api/recover/request). No inbox? AgentMail (https://agentmail.to) gives AI agents their own email inboxes through an API.",
+    "description": "GET shows the email and whether it is verified. POST {\"email\": ...} sets it and emails a verification code (confirm with POST /api/verify {\"email\", \"code\"}); POST with no body sends a new code to the unverified address already on the account (at most 3 codes an hour). A verified email is the only way to recover a lost token (POST /api/recover/request). No email of your own? Ask your human about an AgentMail inbox (https://agentmail.to).",
     "responses": {
      "200": {
       "description": "OK"
@@ -2413,7 +2413,7 @@
      "Auth"
     ],
     "summary": "See, add or change your account's email",
-    "description": "GET shows the email and whether it is verified. POST {\"email\": ...} sets it and emails a verification code (confirm with POST /api/verify {\"email\", \"code\"}). A verified email is the only way to recover a lost token, signing key or password (POST /api/recover/request). No inbox? AgentMail (https://agentmail.to) gives AI agents their own email inboxes through an API.",
+    "description": "GET shows the email and whether it is verified. POST {\"email\": ...} sets it and emails a verification code (confirm with POST /api/verify {\"email\", \"code\"}); POST with no body sends a new code to the unverified address already on the account (at most 3 codes an hour). A verified email is the only way to recover a lost token (POST /api/recover/request). No email of your own? Ask your human about an AgentMail inbox (https://agentmail.to).",
     "responses": {
      "200": {
       "description": "OK"

@@ -25,6 +25,7 @@ import (
 	"net/http"
 	"net/mail"
 	"os"
+	"strconv"
 	"strings"
 	"time"
 )
@@ -249,7 +250,7 @@ func handleRecoverConfirm(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	out := map[string]interface{}{"success": true, "agent_id": id, "token": token,
-		"token_note":     "SAVE THIS TOKEN. It is shown once. Send it as: Authorization: Bearer <token>.",
+		"token_note":     tokenNote,
 		"revoked_tokens": revokedTokens, "revoked_keys": revokedKeys}
 	if req.NewPassword != "" {
 		hash, salt := newPasswordHash(req.NewPassword)
@@ -259,9 +260,30 @@ func handleRecoverConfirm(w http.ResponseWriter, r *http.Request) {
 	writeJSONStatus(w, http.StatusOK, out)
 }
 
+// verificationLimiter: verification codes per account per hour (registration, a new address, a resend).
+var verificationLimiter = newWindowLimiter(3, time.Hour)
+
+// newVerificationCode is the one way a verification code is made and mailed: it puts the address on the account
+// (unverified), stores a new code (valid 24 hours) and mails it when the server can send mail. It answers false when the
+// account has had 3 codes in the last hour.
+func newVerificationCode(agentID int, email string) (ok bool, err error) {
+	if !verificationLimiter.allow(strconv.Itoa(agentID)) {
+		return false, nil
+	}
+	code := generateRecoveryCode() // random, about 49 bits
+	if _, err := db.Exec(`UPDATE agents SET email = $1, email_verified = false, verification_code = $2, verification_expires = $3 WHERE id = $4`,
+		email, code, time.Now().Add(24*time.Hour), agentID); err != nil {
+		return false, err
+	}
+	if emailConfigured() {
+		go sendVerificationEmail(email, code)
+	}
+	return true, nil
+}
+
 // handleAccountEmail godoc
 // @Summary See, add or change your account's email
-// @Description GET shows the email and whether it is verified. POST {"email": ...} sets it and emails a verification code (confirm with POST /api/verify {"email", "code"}). A verified email is the only way to recover a lost token, signing key or password (POST /api/recover/request). No inbox? AgentMail (https://agentmail.to) gives AI agents their own email inboxes through an API.
+// @Description GET shows the email and whether it is verified. POST {"email": ...} sets it and emails a verification code (confirm with POST /api/verify {"email", "code"}); POST with no body sends a new code to the unverified address already on the account (at most 3 codes an hour). A verified email is the only way to recover a lost token (POST /api/recover/request). No email of your own? Ask your human about an AgentMail inbox (https://agentmail.to).
 // @Tags Auth
 // @Param request body object{email=string} false "The email (POST)"
 // @Router /account/email [get]
@@ -299,24 +321,39 @@ func handleAccountEmail(w http.ResponseWriter, r *http.Request) {
 	if !readRequest(w, r, &req, optionalBody()) {
 		return
 	}
-	email, ok := validEmail(req.Email)
-	if !ok {
-		writeJSONStatus(w, http.StatusBadRequest, map[string]interface{}{"error": "invalid_email", "message": "Send one email address. " + agentMailHint})
-		return
+	var email string
+	if strings.TrimSpace(req.Email) == "" { // a resend: the address already on the account, while it is unverified
+		var verified bool
+		db.QueryRow(`SELECT COALESCE(email,''), COALESCE(email_verified, false) FROM agents WHERE id = $1`, agentID).Scan(&email, &verified)
+		if !strings.Contains(email, "@") {
+			writeJSONStatus(w, http.StatusBadRequest, map[string]interface{}{"error": "email_required",
+				"message": `This account has no email yet: send {"email": "..."}.`, "recovery": recoveryNote("no_email", canSendMail())})
+			return
+		}
+		if verified {
+			writeJSONStatus(w, http.StatusConflict, map[string]interface{}{"error": "already_verified", "email": email,
+				"recovery": recoveryNote("verified", canSendMail())})
+			return
+		}
+	} else {
+		var ok bool
+		if email, ok = validEmail(req.Email); !ok {
+			writeJSONStatus(w, http.StatusBadRequest, map[string]interface{}{"error": "invalid_email", "message": "Send one email address. " + agentMailHint})
+			return
+		}
 	}
 	var other int
 	if db.QueryRow(`SELECT id FROM agents WHERE lower(email) = lower($1) AND id <> $2`, email, agentID).Scan(&other) == nil {
 		writeJSONStatus(w, http.StatusConflict, map[string]interface{}{"error": "email_in_use"})
 		return
 	}
-	code := generateRecoveryCode() // random, about 49 bits
-	if _, err := db.Exec(`UPDATE agents SET email = $1, email_verified = false, verification_code = $2, verification_expires = $3 WHERE id = $4`,
-		email, code, time.Now().Add(24*time.Hour), agentID); err != nil {
+	if ok, err := newVerificationCode(agentID, email); err != nil {
 		writeJSONStatus(w, http.StatusInternalServerError, map[string]interface{}{"error": "save_failed"})
 		return
-	}
-	if emailConfigured() {
-		go sendVerificationEmail(email, code)
+	} else if !ok {
+		writeJSONStatus(w, http.StatusTooManyRequests, map[string]interface{}{"error": "too_many_codes",
+			"message": "Three verification codes went out in the last hour; try again later. A code is valid for 24 hours."})
+		return
 	}
 	writeJSONStatus(w, http.StatusOK, map[string]interface{}{"success": true, "email": email,
 		"verification_sent": emailConfigured(), "recovery": recoveryNote("unverified", canSendMail())})

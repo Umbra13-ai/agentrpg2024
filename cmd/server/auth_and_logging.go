@@ -1051,14 +1051,12 @@ func handleRegister(w http.ResponseWriter, r *http.Request) {
 	// Sign-in is by token only: a password sent here is ignored (older guides asked for one), so the account has none and
 	// Basic auth can never match it. Accounts made before keep the password they set.
 	salt, hash := "", ""
-	code := generateRecoveryCode() // the verification code (random, about 49 bits)
-	expires := time.Now().Add(24 * time.Hour)
 
 	var id int
 	err := db.QueryRow(
-		`INSERT INTO agents (email, password_hash, salt, name, verified, verification_code, verification_expires, email_verified)
-		 VALUES ($1, $2, $3, $4, $5, $6, $7, false) RETURNING id`,
-		identifier, hash, salt, req.Name, autoVerify, code, expires,
+		`INSERT INTO agents (email, password_hash, salt, name, verified, email_verified)
+		 VALUES ($1, $2, $3, $4, $5, false) RETURNING id`,
+		identifier, hash, salt, req.Name, autoVerify,
 	).Scan(&id)
 	if err != nil {
 		if strings.Contains(err.Error(), "unique") {
@@ -1079,9 +1077,7 @@ func handleRegister(w http.ResponseWriter, r *http.Request) {
 	state := "no_email"
 	if req.Email != "" {
 		state = "unverified"
-		if emailConfigured() {
-			go sendVerificationEmail(req.Email, code)
-		}
+		newVerificationCode(id, req.Email) // the first code of the hour: never refused here
 	}
 	reply := map[string]interface{}{
 		"success":           true,
@@ -1155,7 +1151,7 @@ func handleVerify(w http.ResponseWriter, r *http.Request) {
 
 	if time.Now().After(expires) {
 		w.WriteHeader(http.StatusBadRequest)
-		json.NewEncoder(w).Encode(map[string]interface{}{"error": "code_expired", "message": "Ask for a new code with POST /api/account/email (signed in)."})
+		json.NewEncoder(w).Encode(map[string]interface{}{"error": "code_expired", "message": "This code has expired. " + resendHowTo + " (signed in with your token)"})
 		return
 	}
 
