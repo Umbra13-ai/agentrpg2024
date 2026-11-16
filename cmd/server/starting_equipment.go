@@ -351,7 +351,7 @@ func chosenToolForClass(class, toolProfsCSV string) string {
 // @Description For a character made before starting equipment existed: adds the class kit (option "a" or "b" of the class's Starting Equipment; items only, no gold). Once per character.
 // @Tags Characters
 // @Param id path int true "Character ID"
-// @Param request body object{option=string} true "a or b"
+// @Body a or b
 // @Router /characters/{id}/starting-equipment [post]
 func handleCharacterStartingEquipment(w http.ResponseWriter, r *http.Request, charID int) {
 	if r.Method != http.MethodPost {
@@ -362,7 +362,7 @@ func handleCharacterStartingEquipment(w http.ResponseWriter, r *http.Request, ch
 		return
 	}
 	var req struct {
-		Option string `json:"option"`
+		Option string `json:"option"` // the class kit option: a or b
 	}
 	if !readRequest(w, r, &req, optionalBody()) {
 		return
@@ -441,7 +441,7 @@ func handleCharacterStartingEquipment(w http.ResponseWriter, r *http.Request, ch
 // @Description GET shows the tool choices still open (a Bard's three Musical Instruments, a Monk's Artisan's Tools or Musical Instrument) and the options. POST sets them ({"tools": ["lute", "drum", "flute"]}).
 // @Tags Characters
 // @Param id path int true "Character ID"
-// @Param request body object{tools=[]string} false "Tools (POST)"
+// @Body Tools (POST)
 // @Router /characters/{id}/tool-proficiencies [get]
 // @Router /characters/{id}/tool-proficiencies [post]
 func handleCharacterToolProficiencies(w http.ResponseWriter, r *http.Request, charID int) {
@@ -467,7 +467,7 @@ func handleCharacterToolProficiencies(w http.ResponseWriter, r *http.Request, ch
 			return
 		}
 		var req struct {
-			Tools []string `json:"tools"`
+			Tools []string `json:"tools"` // the tools to choose (GET lists the options)
 		}
 		if !readRequest(w, r, &req) {
 			return

@@ -491,7 +491,7 @@ func validDestination(to string, inv []invItem, moving invItem) (string, error) 
 // @Description GET lists every item with its id and location (worn, held, a bag) and the weight in each bag and in total. POST /equipment/containers adds a bag the character carries ({"kind": "backpack", "location": "worn"}, with an optional "name" as a label): one of the container kinds, with that kind's capacity; a bag added this way is not one bought, so no shop pays for it. POST /equipment/move moves an item ({"item": "<id or name>", "to": "<bag id, worn or held>", "quantity": N}; worn: one pair of footwear, gloves or gauntlets, bracers, one item of headwear and one cloak at a time (a second is refused with already_wearing; rings and necklaces have no limit; table rule worn_items); the character sheet's worn_items shows each place; held weapons go through equip-weapon and its hands rule). POST /equipment/drop puts an item on the campaign's ground ({"item": ..., "quantity": N}); POST /equipment/pick-up takes it back ({"dropped_id": N}). POST /equipment/lose and /equipment/recover (GM only) mark a bag lost or found ({"container": ..., "to": ..., "reason": ...}). Owner only, except lose and recover.
 // @Tags Characters
 // @Param id path int true "Character ID"
-// @Param request body object{item=string,to=string,quantity=int,kind=string,name=string,location=string,dropped_id=int,container=string,reason=string} false "The fields of the action"
+// @Body The fields of the action
 // @Router /characters/{id}/equipment [get]
 // @Router /characters/{id}/equipment/containers [post]
 // @Router /characters/{id}/equipment/move [post]
@@ -561,9 +561,9 @@ func handleCharacterEquipment(w http.ResponseWriter, r *http.Request, charID int
 		// for it. Before Nov 15 2026 any name was accepted, so a "container" named after a magic item or a weapon was sold,
 		// equipped or attuned as that item (audit E-3).
 		var req struct {
-			Kind     string `json:"kind"`
-			Name     string `json:"name"` // a label for the bag ("the red sack"); the item keeps its kind's name
-			Location string `json:"location"`
+			Kind     string `json:"kind"`     // one of the container kinds (backpack, pouch, sack ...): its capacity comes from the kind
+			Name     string `json:"name"`     // a label for the bag ("the red sack"); the item keeps its kind's name
+			Location string `json:"location"` // where the bag goes: worn, or in another bag
 		}
 		if !readRequest(w, r, &req) {
 			return
@@ -599,9 +599,9 @@ func handleCharacterEquipment(w http.ResponseWriter, r *http.Request, charID int
 
 	case "move":
 		var req struct {
-			Item     string `json:"item"`
-			To       string `json:"to"`
-			Quantity int    `json:"quantity"`
+			Item     string `json:"item"`     // the item to move (its id from GET .../equipment, or its name)
+			To       string `json:"to"`       // where to: worn, held, or a bag's id
+			Quantity int    `json:"quantity"` // how many of a stack to move (default all)
 		}
 		if !readRequest(w, r, &req) {
 			return
@@ -671,9 +671,9 @@ func handleCharacterEquipment(w http.ResponseWriter, r *http.Request, charID int
 			defer unequipLostGear(charID)
 		}
 		var req struct {
-			Container string `json:"container"`
-			To        string `json:"to"`
-			Reason    string `json:"reason"`
+			Container string `json:"container"` // lose: the bag (its id or name) that is lost
+			To        string `json:"to"`        // recover: where the recovered bag goes (worn, or another bag)
+			Reason    string `json:"reason"`    // lose: why the bag is lost (shown in the log)
 		}
 		if !readRequest(w, r, &req) {
 			return

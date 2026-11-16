@@ -18,7 +18,7 @@ import (
 // @Accept json
 // @Produce json
 // @Security BasicAuth
-// @Param request body object{character_id=int,set=object,class=string,species=string,background=string,items=[]string,str=int,dex=int,con=int,intl=int,wis=int,cha=int,hp=int,max_hp=int,level=int,name=string} true "Character updates"
+// @Body Character updates
 // @Success 200 {object} map[string]interface{} "Updated character"
 // @Failure 401 {object} map[string]interface{} "Unauthorized"
 // @Failure 400 {object} map[string]interface{} "Bad request"
@@ -53,21 +53,21 @@ func handleGMUpdateCharacter(w http.ResponseWriter, r *http.Request) {
 
 	var req struct {
 		CharacterID int                        `json:"character_id"`
-		Class       *string                    `json:"class"`
-		Species     *string                    `json:"species"`
-		Background  *string                    `json:"background"`
-		Items       []string                   `json:"items"`
-		STR         *int                       `json:"str"`
-		DEX         *int                       `json:"dex"`
-		CON         *int                       `json:"con"`
-		INT         *int                       `json:"intl"`
-		WIS         *int                       `json:"wis"`
-		CHA         *int                       `json:"cha"`
-		HP          *int                       `json:"hp"`
-		MaxHP       *int                       `json:"max_hp"`
-		Level       *int                       `json:"level"`
-		Name        *string                    `json:"name"`
-		Set         map[string]json.RawMessage `json:"set"` // any field: {"gold": 500, "conditions": ["prone"]}
+		Class       *string                    `json:"class"`      // a new class
+		Species     *string                    `json:"species"`    // a new species
+		Background  *string                    `json:"background"` // a new background
+		Items       []string                   `json:"items"`      // items to add to the inventory, by name
+		STR         *int                       `json:"str"`        // set Strength
+		DEX         *int                       `json:"dex"`        // set Dexterity
+		CON         *int                       `json:"con"`        // set Constitution
+		INT         *int                       `json:"intl"`       // set Intelligence (the field is named intl)
+		WIS         *int                       `json:"wis"`        // set Wisdom
+		CHA         *int                       `json:"cha"`        // set Charisma
+		HP          *int                       `json:"hp"`         // set Hit Points
+		MaxHP       *int                       `json:"max_hp"`     // set the Hit Point maximum
+		Level       *int                       `json:"level"`      // set the level
+		Name        *string                    `json:"name"`       // a new name
+		Set         map[string]json.RawMessage `json:"set"`        // any field: {"gold": 500, "conditions": ["prone"]}
 	}
 	// the characters' campaign, which must be one the GM runs (gm_campaign_2024.go)
 	_, ok := gmReadAs(w, r, agentID, &req, campaignFromTarget(&req.CharacterID), campaignBeforeStart())
@@ -252,7 +252,7 @@ func handleGMUpdateCharacter(w http.ResponseWriter, r *http.Request) {
 // @Accept json
 // @Produce json
 // @Param Authorization header string true "Bearer <token>"
-// @Param request body object{character_ids=[]integer,xp=integer,reason=string,auto_level=bool} true "XP award details (auto_level false: the XP is banked and the player takes the level with POST /api/characters/{id}/level-up)"
+// @Body XP award details (auto_level false: the XP is banked and the player takes the level with POST /api/characters/{id}/level-up)
 // @Success 200 {object} map[string]interface{} "XP awarded with level-up notifications"
 // @Failure 401 {object} map[string]interface{} "Unauthorized"
 // @Failure 403 {object} map[string]interface{} "Not the GM"
@@ -273,8 +273,8 @@ func handleGMAwardXP(w http.ResponseWriter, r *http.Request) {
 
 	var req struct {
 		CharacterIDs []int  `json:"character_ids"`
-		XP           int    `json:"xp"`
-		Reason       string `json:"reason"`
+		XP           int    `json:"xp"`         // the XP to award each character
+		Reason       string `json:"reason"`     // why (shown in the feed)
 		AutoLevel    *bool  `json:"auto_level"` // default true; false banks the XP and the player takes the level (POST /api/characters/{id}/level-up)
 	}
 	// the characters' campaign, which must be one the GM runs (gm_campaign_2024.go)
@@ -416,7 +416,7 @@ func handleGMAwardXP(w http.ResponseWriter, r *http.Request) {
 // @Accept json
 // @Produce json
 // @Param Authorization header string true "Bearer <token>"
-// @Param request body object{character_ids=[]integer,amount=integer,currency=string,reason=string} true "Currency adjustment"
+// @Body Currency adjustment
 // @Success 200 {object} map[string]interface{} "Currency adjusted"
 // @Failure 401 {object} map[string]interface{} "Unauthorized"
 // @Failure 403 {object} map[string]interface{} "Not the GM"
@@ -438,9 +438,9 @@ func handleGMGold(w http.ResponseWriter, r *http.Request) {
 	var req struct {
 		CharacterIDs []int  `json:"character_ids"`
 		CharacterID  int    `json:"character_id"`
-		Amount       int    `json:"amount"`
+		Amount       int    `json:"amount"`   // the amount: positive awards, negative deducts
 		Currency     string `json:"currency"` // cp, sp, ep, gp (default), pp
-		Reason       string `json:"reason"`
+		Reason       string `json:"reason"`   // why (shown in the feed)
 	}
 	// the characters' campaign, which must be one the GM runs (gm_campaign_2024.go)
 	if _, ok := gmReadAs(w, r, agentID, &req, campaignFromTarget(&req.CharacterIDs, &req.CharacterID), campaignBeforeStart()); !ok {
@@ -561,7 +561,7 @@ func handleGMGold(w http.ResponseWriter, r *http.Request) {
 // @Accept json
 // @Produce json
 // @Security BasicAuth
-// @Param request body object{character_id=integer,item_name=string,quantity=integer,custom=object} true "Item to give"
+// @Body Item to give
 // @Success 200 {object} map[string]interface{} "Item given successfully"
 // @Failure 401 {object} map[string]interface{} "Unauthorized"
 // @Failure 403 {object} map[string]interface{} "Not GM of this campaign"
@@ -583,8 +583,8 @@ func handleGMGiveItem(w http.ResponseWriter, r *http.Request) {
 	var req struct {
 		CharacterID int                    `json:"character_id"`
 		ItemName    string                 `json:"item_name"` // an SRD item ("Wand of Fireballs", "Potion of Healing", "Spell Scroll (Fireball)") or any name
-		Quantity    int                    `json:"quantity"`
-		Custom      map[string]interface{} `json:"custom"` // For non-standard items
+		Quantity    int                    `json:"quantity"`  // how many (default 1)
+		Custom      map[string]interface{} `json:"custom"`    // For non-standard items
 	}
 	// the characters' campaign, which must be one the GM runs (gm_campaign_2024.go)
 	lobbyID, ok := gmReadAs(w, r, agentID, &req, campaignFromTarget(&req.CharacterID), campaignBeforeStart())
@@ -695,7 +695,7 @@ func handleGMGiveItem(w http.ResponseWriter, r *http.Request) {
 // @Accept json
 // @Produce json
 // @Security BasicAuth
-// @Param request body object{character_id=integer,ammo_type=string} true "Recovery details (ammo_type: arrows, bolts, needles, bullets)"
+// @Body Recovery details (ammo_type: arrows, bolts, needles, bullets)
 // @Success 200 {object} map[string]interface{} "Recovery result"
 // @Failure 401 {object} map[string]interface{} "Unauthorized"
 // @Failure 403 {object} map[string]interface{} "Not the GM"
@@ -716,7 +716,7 @@ func handleGMRecoverAmmo(w http.ResponseWriter, r *http.Request) {
 
 	var req struct {
 		CharacterID int    `json:"character_id"`
-		AmmoType    string `json:"ammo_type"`
+		AmmoType    string `json:"ammo_type"` // arrows, bolts, needles or bullets
 	}
 	// the characters' campaign, which must be one the GM runs (gm_campaign_2024.go)
 	if _, ok := gmReadAs(w, r, agentID, &req, campaignFromTarget(&req.CharacterID)); !ok {
@@ -771,7 +771,7 @@ func handleGMRecoverAmmo(w http.ResponseWriter, r *http.Request) {
 // @Accept json
 // @Produce json
 // @Param Authorization header string true "Bearer <token>"
-// @Param request body object{character_id=integer,grant=boolean} true "Grant (true) or revoke (false) Heroic Inspiration"
+// @Body Grant (true) or revoke (false) Heroic Inspiration
 // @Success 200 {object} map[string]interface{} "Inspiration updated"
 // @Failure 401 {object} map[string]interface{} "Unauthorized"
 // @Failure 403 {object} map[string]interface{} "Not the GM"

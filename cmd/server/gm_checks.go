@@ -16,7 +16,7 @@ import (
 // @Accept json
 // @Produce json
 // @Param Authorization header string true "Bearer <token>"
-// @Param request body object{character_id=integer,skill=string,ability=string,dc=integer,advantage=boolean,disadvantage=boolean} true "Skill check parameters"
+// @Body Skill check parameters
 // @Success 200 {object} map[string]interface{} "Skill check result"
 // @Failure 401 {object} map[string]interface{} "Unauthorized"
 // @Failure 403 {object} map[string]interface{} "Not the GM"
@@ -657,7 +657,7 @@ func handleGMSkillCheck(w http.ResponseWriter, r *http.Request) {
 // @Accept json
 // @Produce json
 // @Security BasicAuth
-// @Param request body object{character_id=int,tool=string,skill=string,utilize=string,ability=string,dc=int,advantage=bool,disadvantage=bool,description=string,use_inspiration=bool,use_peerless_skill=bool} true "Tool check details"
+// @Body Tool check details
 // @Success 200 {object} map[string]interface{} "Tool check result"
 // @Failure 401 {object} map[string]interface{} "Unauthorized"
 // @Failure 400 {object} map[string]interface{} "Bad request"
@@ -1176,7 +1176,7 @@ func handleGMToolCheck(w http.ResponseWriter, r *http.Request) {
 // @Accept json
 // @Produce json
 // @Security BasicAuth
-// @Param request body object{character_id=int,ability=string,dc=int,advantage=bool,disadvantage=bool,description=string,from_magic=bool} true "Saving throw details"
+// @Body Saving throw details
 // @Success 200 {object} map[string]interface{} "Saving throw result"
 // @Failure 401 {object} map[string]interface{} "Unauthorized"
 // @Failure 400 {object} map[string]interface{} "Bad request"
@@ -1347,7 +1347,7 @@ func handleGMSavingThrow(w http.ResponseWriter, r *http.Request) {
 // @Accept json
 // @Produce json
 // @Security BasicAuth
-// @Param request body object{initiator_id=int,defender_id=int,initiator_skill=string,defender_skill=string,description=string} true "Contested check details"
+// @Body Contested check details
 // @Success 200 {object} map[string]interface{} "Contested check result"
 // @Failure 401 {object} map[string]interface{} "Unauthorized"
 // @Failure 400 {object} map[string]interface{} "Bad request"
@@ -1366,15 +1366,15 @@ func handleGMContestedCheck(w http.ResponseWriter, r *http.Request) {
 	}
 
 	var req struct {
-		InitiatorID           int    `json:"initiator_id"`    // Character ID of initiator
-		DefenderID            int    `json:"defender_id"`     // Character ID of defender
-		InitiatorSkill        string `json:"initiator_skill"` // Skill or ability: athletics, acrobatics, str, dex, etc.
-		DefenderSkill         string `json:"defender_skill"`  // Skill or ability (can be "athletics_or_acrobatics" for choice)
-		InitiatorAdvantage    bool   `json:"initiator_advantage"`
-		InitiatorDisadvantage bool   `json:"initiator_disadvantage"`
-		DefenderAdvantage     bool   `json:"defender_advantage"`
-		DefenderDisadvantage  bool   `json:"defender_disadvantage"`
-		Description           string `json:"description"` // e.g., "grapple attempt", "shove"
+		InitiatorID           int    `json:"initiator_id"`           // Character ID of initiator
+		DefenderID            int    `json:"defender_id"`            // Character ID of defender
+		InitiatorSkill        string `json:"initiator_skill"`        // Skill or ability: athletics, acrobatics, str, dex, etc.
+		DefenderSkill         string `json:"defender_skill"`         // Skill or ability (can be "athletics_or_acrobatics" for choice)
+		InitiatorAdvantage    bool   `json:"initiator_advantage"`    // true: the initiator rolls with Advantage
+		InitiatorDisadvantage bool   `json:"initiator_disadvantage"` // true: the initiator rolls with Disadvantage
+		DefenderAdvantage     bool   `json:"defender_advantage"`     // true: the defender rolls with Advantage
+		DefenderDisadvantage  bool   `json:"defender_disadvantage"`  // true: the defender rolls with Disadvantage
+		Description           string `json:"description"`            // e.g., "grapple attempt", "shove"
 	}
 	campaignID, ok := gmReadAs(w, r, agentID, &req, targetsIn(&req.InitiatorID, &req.DefenderID))
 	if !ok {

@@ -159,13 +159,13 @@ func thrownFlask(charID int, description string) (string, bool) {
 // @Summary Set a creature burning, or put the fire out
 // @Description Burning (SRD 5.2.1): a burning creature takes 1d4 Fire damage at the start of each of its turns. It can put the fire out with an action (Prone, rolling on the ground; players use the action "extinguish"); it also goes out if doused, submerged or suffocated. Send burning=true to set target_id (a character, or a monster's negative id) on fire, burning=false to put it out. GET with ?campaign_id lists who is burning. Every fire goes out when the fight ends, and a character's when it finishes a Short or Long Rest.
 // @Tags GM
-// @Param request body object{campaign_id=int,target_id=int,burning=bool,source=string} true "Target"
+// @Body Target
 // @Router /gm/burning [post]
 func handleGMBurning(w http.ResponseWriter, r *http.Request) {
 	var req struct {
 		TargetID int    `json:"target_id"`
-		Burning  *bool  `json:"burning"`
-		Source   string `json:"source"`
+		Burning  *bool  `json:"burning"` // true sets the target on fire, false puts the fire out
+		Source   string `json:"source"`  // what set it on fire (shown in the log)
 	}
 	_, lobby, ok := gmRead(w, r, &req, optionalBody())
 	if !ok {

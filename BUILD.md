@@ -128,5 +128,5 @@ Inside a container, `localhost` is the container itself. To reach PostgreSQL on 
 ## For contributors
 
 - Format Go code with `gofmt` and check it with `go vet ./...`.
-- The API reference (`docs/swagger/swagger.json` and `cmd/server/docs/swagger/swagger.json`) is built from the comments above each handler: after changing them, run `python tools/build_swagger.py`. Don't run `swag init`; it would overwrite the hand-built file.
+- The API reference (`docs/swagger/swagger.json` and `cmd/server/docs/swagger/swagger.json`) is built from the godoc block above each handler and from the code itself (each route's request fields and replies, read by `TestAPIShapes`, which the script runs with Go): after changing a handler, a request type or a godoc block, run `python3 tools/build_swagger.py`; `go test ./cmd/server` fails until you do. Don't run `swag init`; it would overwrite the built file.
 - The rules data in `cmd/server/data/` is extracted from the SRD 5.2.1 by the scripts in `tools/extractors/`. The compiled program contains it, so you only need the scripts if you change the data.

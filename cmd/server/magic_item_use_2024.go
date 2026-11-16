@@ -1126,7 +1126,7 @@ func dawnOnLongRest(charID int) []string {
 // @Summary Dawn: magic items regain charges
 // @Description The GM says dawn has come: every charged magic item of the campaign's characters regains its charges (a Wand of Fireballs 1d6 + 1, Eyes of Charming all...). With the table rule dawn "long_rest" (the default) a Long Rest also counts as the next dawn; with "gm" only this command does.
 // @Tags GM
-// @Param request body object{campaign_id=int} false "Campaign (when you run several)"
+// @Body Campaign (when you run several)
 // @Router /gm/dawn [post]
 func handleGMDawn(w http.ResponseWriter, r *http.Request) {
 	if r.Method != http.MethodPost {
@@ -1157,12 +1157,12 @@ func handleGMDawn(w http.ResponseWriter, r *http.Request) {
 // @Description For a property that isn't a spell (Winged Boots, a Wand of Paralysis ray, a Cloak of Invisibility...): the item must be held or worn (as its text says) and attuned if it needs it. A Thief of level 13 rolls 1d6 and spends nothing on a 6. The last charge may destroy the item (the 1d20 roll of its text). The GM runs what the property does; spells from items go through the cast action with "item".
 // @Tags Characters
 // @Param id path int true "Character ID"
-// @Param request body object{item=string,charges=int} true "Item (name or id) and charges (default 1)"
+// @Body Item (name or id) and charges (default 1)
 // @Router /characters/{id}/equipment/use-charge [post]
 func handleItemUseCharge(w http.ResponseWriter, r *http.Request, charID int) {
 	var req struct {
-		Item    string `json:"item"`
-		Charges int    `json:"charges"`
+		Item    string `json:"item"`    // the item (its name or id)
+		Charges int    `json:"charges"` // the charges to spend (default 1)
 	}
 	if !readRequest(w, r, &req) {
 		return
@@ -1225,13 +1225,13 @@ func handleItemUseCharge(w http.ResponseWriter, r *http.Request, charID int) {
 // @Description The GM of the character's campaign sets an item's charges (and optionally its maximum); it also mends an item its last charge destroyed.
 // @Tags GM
 // @Param id path int true "Character ID"
-// @Param request body object{item=string,charges=int,max=int} true "Item, charges, max"
+// @Body Item, charges, max
 // @Router /characters/{id}/equipment/charges [post]
 func handleItemSetCharges(w http.ResponseWriter, r *http.Request, charID int) {
 	var req struct {
-		Item    string `json:"item"`
-		Charges int    `json:"charges"`
-		Max     int    `json:"max"`
+		Item    string `json:"item"`    // the item (its name or id)
+		Charges int    `json:"charges"` // the charges it has now
+		Max     int    `json:"max"`     // optional: its maximum charges
 	}
 	if !readRequest(w, r, &req) {
 		return

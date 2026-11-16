@@ -95,7 +95,7 @@ func fmtHours(h float64) string {
 // @Summary Travel
 // @Description Overland or water travel by the SRD 5.2.1 travel rules. Send miles (how far) or hours (how long; or days, 8 hours of travel each), a pace (fast, normal, slow), and optionally terrain (arctic, coastal, desert, forest, grassland, hill, mountain, swamp, underdark, urban, waterborne), road=true for a good road (raises the terrain's maximum pace one step), mode (foot, mounted, a land vehicle: cart, carriage, chariot, sled, wagon; or a ship: airship, galley, keelboat, longship, rowboat, sailing ship, warship), gallop=true (mounts move twice as far for the first hour, then need a rest), downstream=true (Keelboat or Rowboat: +3 mph), speed (special movement such as flying: miles per hour = Speed / 10; flying ignores terrain), hours_per_day (default 8; ships up to 24). The reply gives distance, time, the terrain's encounter distance, foraging, navigation and search DCs. Time passes (spells end, a Stable character can recover) unless pass_time=false. Each hour past 8 in a day: every character makes a Constitution save (DC 10 + hours past 8) or gains 1 Exhaustion level (not aboard a ship). The pace stays in effect for checks (Fast: Disadvantage on Perception, Survival and Stealth; Normal: Disadvantage on Stealth; Slow: Advantage on Perception and Survival) until {"stop": true} or combat starts. Refused during combat.
 // @Tags GM
-// @Param request body object{campaign_id=int,miles=number,hours=number,days=number,pace=string,terrain=string,road=bool,mode=string,gallop=bool,downstream=bool,speed=int,hours_per_day=number,pass_time=bool,stop=bool} true "Journey"
+// @Body Journey
 // @Router /gm/travel [post]
 func handleGMTravel(w http.ResponseWriter, r *http.Request) {
 	if r.Method != http.MethodPost {
@@ -103,19 +103,19 @@ func handleGMTravel(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	var req struct {
-		Miles       float64 `json:"miles"`
-		Hours       float64 `json:"hours"`
-		Days        float64 `json:"days"`
-		Pace        string  `json:"pace"`
-		Terrain     string  `json:"terrain"`
-		Road        bool    `json:"road"`
-		Mode        string  `json:"mode"`
-		Gallop      bool    `json:"gallop"`
-		Downstream  bool    `json:"downstream"`
-		Speed       int     `json:"speed"`
-		HoursPerDay float64 `json:"hours_per_day"`
-		PassTime    *bool   `json:"pass_time"`
-		Stop        bool    `json:"stop"`
+		Miles       float64 `json:"miles"`         // how far to travel, in miles
+		Hours       float64 `json:"hours"`         // or how long, in hours
+		Days        float64 `json:"days"`          // or days (8 hours of travel each, or hours_per_day)
+		Pace        string  `json:"pace"`          // fast, normal or slow
+		Terrain     string  `json:"terrain"`       // arctic, coastal, desert, forest, grassland, hill, mountain, swamp, underdark, urban or waterborne
+		Road        bool    `json:"road"`          // true: a good road (raises the terrain's maximum pace one step)
+		Mode        string  `json:"mode"`          // foot, mounted, a land vehicle (cart, wagon ...) or a ship (galley, rowboat ...)
+		Gallop      bool    `json:"gallop"`        // true: mounts move twice as far for the first hour, then need a rest
+		Downstream  bool    `json:"downstream"`    // Keelboat or Rowboat: +3 mph
+		Speed       int     `json:"speed"`         // a special Speed such as flying: miles per hour = Speed / 10
+		HoursPerDay float64 `json:"hours_per_day"` // hours of travel a day (default 8; ships up to 24)
+		PassTime    *bool   `json:"pass_time"`     // false: game time doesn't pass (default true)
+		Stop        bool    `json:"stop"`          // true: end the travel pace
 	}
 	_, lobby, ok := gmRead(w, r, &req, optionalBody())
 	if !ok {

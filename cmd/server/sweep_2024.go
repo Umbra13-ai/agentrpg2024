@@ -27,7 +27,7 @@ var draconicDamage = map[string]string{"black": "acid", "blue": "lightning", "br
 // @Summary Dragonborn Breath Weapon
 // @Description When you take the Attack action, you can replace one of your attacks with an exhalation of magical energy in either a 15-foot Cone or a 30-foot Line that is 5 feet wide (shape: cone or line). Each creature in the area (target_ids) makes a Dexterity saving throw (DC 8 + Constitution modifier + Proficiency Bonus): 1d10 damage of your Draconic Ancestry type on a failure (2d10 at level 5, 3d10 at 11, 4d10 at 17), half on a success. Proficiency Bonus uses per Long Rest.
 // @Tags Characters
-// @Param request body object{character_id=int,target_ids=[]int,shape=string} true "Breath Weapon"
+// @Body Breath Weapon
 // @Router /characters/breath-weapon [post]
 func handleBreathWeapon2024(w http.ResponseWriter, r *http.Request) {
 	if r.Method != http.MethodPost {
@@ -37,7 +37,7 @@ func handleBreathWeapon2024(w http.ResponseWriter, r *http.Request) {
 	var req struct {
 		CharacterID int    `json:"character_id"`
 		TargetIDs   []int  `json:"target_ids"`
-		Shape       string `json:"shape"`
+		Shape       string `json:"shape"` // cone (15 feet) or line (30 feet long, 5 feet wide)
 	}
 	if !readRequest(w, r, &req, optionalBody()) {
 		return
@@ -119,7 +119,7 @@ func handleBreathWeapon2024(w http.ResponseWriter, r *http.Request) {
 // @Summary Warrior of the Open Hand Wholeness of Body (level 6)
 // @Description As a Bonus Action, roll your Martial Arts die and regain that many Hit Points plus your Wisdom modifier (minimum 1). Uses: the Wisdom modifier (minimum once) per Long Rest.
 // @Tags Characters
-// @Param request body object{character_id=int} true "The Monk"
+// @Body The Monk
 // @Router /characters/wholeness-of-body [post]
 func handleWholenessOfBody2024(w http.ResponseWriter, r *http.Request) {
 	if r.Method != http.MethodPost {
@@ -184,7 +184,7 @@ func handleWholenessOfBody2024(w http.ResponseWriter, r *http.Request) {
 // @Summary Oath of Devotion Holy Nimbus (level 20)
 // @Description As a Bonus Action, imbue your Aura of Protection with holy power for 10 minutes: Advantage on saving throws forced by a Fiend or an Undead (Holy Ward), enemies that start their turn in the aura take Radiant damage equal to your Charisma modifier plus Proficiency Bonus, and the aura is filled with sunlight. Once per Long Rest, or expend a level 5 spell slot (use_slot=true).
 // @Tags Characters
-// @Param request body object{character_id=int,use_slot=bool} true "The Paladin"
+// @Body The Paladin
 // @Router /characters/holy-nimbus [post]
 func handleHolyNimbus2024(w http.ResponseWriter, r *http.Request) {
 	if r.Method != http.MethodPost {
@@ -193,7 +193,7 @@ func handleHolyNimbus2024(w http.ResponseWriter, r *http.Request) {
 	}
 	var req struct {
 		CharacterID int  `json:"character_id"`
-		UseSlot     bool `json:"use_slot"`
+		UseSlot     bool `json:"use_slot"` // true: spend a spell slot when the once-per-Long-Rest use is spent
 	}
 	if !readRequest(w, r, &req, optionalBody()) {
 		return
@@ -280,7 +280,7 @@ func holyNimbusDamage(lobbyID, monsterID int) []string {
 // @Summary Eldritch Invocation One with Shadows
 // @Description While you're in an area of Dim Light or Darkness, you can cast Invisibility on yourself without expending a spell slot (an action; Concentration). It ends when you make an attack roll, deal damage or cast a spell.
 // @Tags Characters
-// @Param request body object{character_id=int} true "The Warlock"
+// @Body The Warlock
 // @Router /characters/one-with-shadows [post]
 func handleOneWithShadows2024(w http.ResponseWriter, r *http.Request) {
 	if r.Method != http.MethodPost {
@@ -321,7 +321,7 @@ func handleOneWithShadows2024(w http.ResponseWriter, r *http.Request) {
 // @Summary Hunter Superior Hunter's Defense (level 15)
 // @Description When the Ranger takes damage, they can take a Reaction to give themselves Resistance to that damage and any other damage of the same type until the end of the current turn. The GM sends the damage here instead of to /api/characters/{id}/damage.
 // @Tags GM
-// @Param request body object{character_id=int,damage=int,damage_type=string} true "The Ranger and the damage"
+// @Body The Ranger and the damage
 // @Router /gm/superior-hunters-defense [post]
 func handleGMSuperiorHuntersDefense(w http.ResponseWriter, r *http.Request) {
 	if r.Method != http.MethodPost {
@@ -330,8 +330,8 @@ func handleGMSuperiorHuntersDefense(w http.ResponseWriter, r *http.Request) {
 	}
 	var req struct {
 		CharacterID int    `json:"character_id"`
-		Damage      int    `json:"damage"`
-		DamageType  string `json:"damage_type"`
+		Damage      int    `json:"damage"`      // the damage the Ranger takes
+		DamageType  string `json:"damage_type"` // its damage type (the Ranger resists it until the end of the turn)
 	}
 	_, lobby, ok := gmRead(w, r, &req, optionalBody())
 	if !ok {

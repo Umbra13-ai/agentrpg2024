@@ -22,7 +22,7 @@ import (
 // @Param Authorization header string false "Bearer <token> (required for POST)"
 // @Param open query boolean false "GET: only campaigns with an open player seat (open_seats above 0)"
 // @Param level query integer false "GET: only campaigns a character of this level may join (min_level to max_level)"
-// @Param request body object{name=string,max_players=integer,setting=string,min_level=integer,max_level=integer} false "Campaign details (POST only)"
+// @Body Campaign details (POST only)
 // @Success 200 {object} map[string]interface{} "List of campaigns or creation result"
 // @Failure 401 {object} map[string]interface{} "Unauthorized (POST only)"
 // @Router /campaigns [get]
@@ -92,12 +92,12 @@ func handleCampaigns(w http.ResponseWriter, r *http.Request) {
 		}
 
 		var req struct {
-			Name         string `json:"name"`
-			MaxPlayers   int    `json:"max_players"`
-			Setting      string `json:"setting"`
-			MinLevel     int    `json:"min_level"`
-			MaxLevel     int    `json:"max_level"`
-			TemplateSlug string `json:"template_slug"`
+			Name         string `json:"name"`          // the campaign's name
+			MaxPlayers   int    `json:"max_players"`   // player seats, 1 to 6 (default 4)
+			Setting      string `json:"setting"`       // the setting, in words
+			MinLevel     int    `json:"min_level"`     // the lowest character level that may join
+			MaxLevel     int    `json:"max_level"`     // the highest character level that may join
+			TemplateSlug string `json:"template_slug"` // optional: a campaign template to start from (GET /api/campaign-templates)
 		}
 		if !readRequest(w, r, &req, optionalBody()) {
 			return
@@ -546,7 +546,7 @@ func handleCampaignByID(w http.ResponseWriter, r *http.Request) {
 // @Produce json
 // @Param id path int true "Campaign ID"
 // @Param Authorization header string true "Bearer <token>"
-// @Param request body object{character_id=integer} true "Character to join with"
+// @Body Character to join with
 // @Success 200 {object} map[string]interface{} "Joined successfully"
 // @Failure 400 {object} map[string]interface{} "Level requirement not met"
 // @Failure 401 {object} map[string]interface{} "Unauthorized"
@@ -1175,7 +1175,7 @@ func handleCampaignDocument(w http.ResponseWriter, r *http.Request, campaignID i
 // @Produce json
 // @Param id path int true "Campaign ID"
 // @Param Authorization header string true "Bearer <token>"
-// @Param request body object{story=string} true "Story summary (max 500 words)"
+// @Body Story summary (max 500 words)
 // @Success 200 {object} map[string]interface{} "Story updated"
 // @Failure 400 {object} map[string]interface{} "Over word limit"
 // @Failure 401 {object} map[string]interface{} "Unauthorized or not GM"
@@ -1193,8 +1193,8 @@ func handleCampaignStory(w http.ResponseWriter, r *http.Request, campaignID int)
 	}
 
 	var req struct {
-		Story      string `json:"story"`
-		StorySoFar string `json:"story_so_far"`
+		Story      string `json:"story"`        // the new story_so_far: a summary of up to 500 words
+		StorySoFar string `json:"story_so_far"` // the same, under its older name (story wins when both are sent)
 	}
 	if !readRequest(w, r, &req) {
 		return
@@ -1259,7 +1259,7 @@ func campaignStoryUpdate(story, storySoFar string) string {
 // @Produce json
 // @Param id path int true "Campaign ID"
 // @Param Authorization header string true "Bearer <token>"
-// @Param request body object{type=string,title=string,content=string} true "Section to add"
+// @Body Section to add
 // @Success 200 {object} map[string]interface{} "Section added"
 // @Failure 401 {object} map[string]interface{} "Unauthorized or not GM"
 // @Router /campaigns/{id}/campaign/sections [post]
@@ -1276,9 +1276,9 @@ func handleCampaignSections(w http.ResponseWriter, r *http.Request, campaignID i
 	}
 
 	var req struct {
-		Type    string `json:"type"` // narrative, notes, lore, etc.
-		Title   string `json:"title"`
-		Content string `json:"content"`
+		Type    string `json:"type"`    // narrative, notes, lore, etc.
+		Title   string `json:"title"`   // the section's title
+		Content string `json:"content"` // the section's text
 	}
 	if !readRequest(w, r, &req, optionalBody()) {
 		return
@@ -1350,7 +1350,7 @@ func handleCampaignSections(w http.ResponseWriter, r *http.Request, campaignID i
 // @Produce json
 // @Param id path int true "Campaign ID"
 // @Param Authorization header string true "Bearer <token>"
-// @Param request body object{name=string,title=string,disposition=string,notes=string,gm_only=boolean,gm_notes=string} true "NPC to add"
+// @Body NPC to add
 // @Success 200 {object} map[string]interface{} "NPC added"
 // @Failure 401 {object} map[string]interface{} "Unauthorized or not GM"
 // @Router /campaigns/{id}/campaign/npcs [post]
@@ -1373,11 +1373,11 @@ func handleCampaignNPCs(w http.ResponseWriter, r *http.Request, campaignID int) 
 	}
 
 	var req struct {
-		Name        string `json:"name"`
-		Title       string `json:"title"`
+		Name        string `json:"name"`        // the NPC's name
+		Title       string `json:"title"`       // a title or role ("the innkeeper")
 		Disposition string `json:"disposition"` // friendly, neutral, hostile, unknown
-		Notes       string `json:"notes"`
-		GMOnly      bool   `json:"gm_only"`
+		Notes       string `json:"notes"`       // notes about the NPC
+		GMOnly      bool   `json:"gm_only"`     // true: only the GM sees this NPC
 		GMNotes     string `json:"gm_notes"`
 	}
 	if !readRequest(w, r, &req, optionalBody()) {
@@ -1544,11 +1544,11 @@ func handleCampaignNPCByID(w http.ResponseWriter, r *http.Request, campaignID in
 
 	// PUT: Update the NPC
 	var req struct {
-		Name        *string `json:"name"`
-		Title       *string `json:"title"`
-		Disposition *string `json:"disposition"`
-		Notes       *string `json:"notes"`
-		GMOnly      *bool   `json:"gm_only"`
+		Name        *string `json:"name"`        // a new name (left out: unchanged)
+		Title       *string `json:"title"`       // a new title or role (left out: unchanged)
+		Disposition *string `json:"disposition"` // the NPC's disposition toward the party (left out: unchanged)
+		Notes       *string `json:"notes"`       // new notes (left out: unchanged)
+		GMOnly      *bool   `json:"gm_only"`     // true: only the GM sees this NPC (left out: unchanged)
 		GMNotes     *string `json:"gm_notes"`
 	}
 	if !readRequest(w, r, &req, optionalBody()) {
@@ -1665,9 +1665,9 @@ func handleCampaignSectionByID(w http.ResponseWriter, r *http.Request, campaignI
 
 	// PUT: Update the section
 	var req struct {
-		Type    *string `json:"type"`
-		Title   *string `json:"title"`
-		Content *string `json:"content"`
+		Type    *string `json:"type"`    // a new type: narrative, notes, lore ... (left out: unchanged)
+		Title   *string `json:"title"`   // a new title (left out: unchanged)
+		Content *string `json:"content"` // new text (left out: unchanged)
 	}
 	if !readRequest(w, r, &req, optionalBody()) {
 		return
@@ -1729,9 +1729,9 @@ func handleCampaignQuests(w http.ResponseWriter, r *http.Request, campaignID int
 	}
 
 	var req struct {
-		Title       string `json:"title"`
-		Description string `json:"description"`
-		Status      string `json:"status"` // hidden, active, completed, failed
+		Title       string `json:"title"`       // the quest's title
+		Description string `json:"description"` // what the quest is
+		Status      string `json:"status"`      // hidden, active, completed, failed
 		GMNotes     string `json:"gm_notes"`
 	}
 	if !readRequest(w, r, &req, optionalBody()) {
@@ -1831,7 +1831,7 @@ func handleCampaignQuestsList(w http.ResponseWriter, r *http.Request, campaignID
 // @Param id path int true "Campaign ID"
 // @Param quest_id path string true "Quest ID"
 // @Param Authorization header string true "Bearer <token>"
-// @Param request body object{status=string,resolution=string,description=string} true "Fields to update"
+// @Body Fields to update
 // @Success 200 {object} map[string]interface{} "Quest updated"
 // @Failure 401 {object} map[string]interface{} "Unauthorized or not GM"
 // @Failure 404 {object} map[string]interface{} "Quest not found"
@@ -1849,9 +1849,9 @@ func handleCampaignQuestUpdate(w http.ResponseWriter, r *http.Request, campaignI
 	}
 
 	var req struct {
-		Status      *string `json:"status"`
-		Resolution  *string `json:"resolution"`
-		Description *string `json:"description"`
+		Status      *string `json:"status"`      // the quest's status (left out: unchanged)
+		Resolution  *string `json:"resolution"`  // how the quest ended (left out: unchanged)
+		Description *string `json:"description"` // a new description (left out: unchanged)
 		GMNotes     *string `json:"gm_notes"`
 	}
 	if !readRequest(w, r, &req, optionalBody()) {
@@ -1923,7 +1923,7 @@ func handleCampaignQuestUpdate(w http.ResponseWriter, r *http.Request, campaignI
 // @Produce json
 // @Param id path int true "Campaign ID"
 // @Param Authorization header string true "Bearer <token>"
-// @Param request body object{content=string,type=string} true "Observation details (type: world, party, self, meta - defaults to world)"
+// @Body Observation details (type: world, party, self, meta - defaults to world)
 // @Success 200 {object} map[string]interface{} "Observation recorded"
 // @Failure 401 {object} map[string]interface{} "Unauthorized"
 // @Failure 400 {object} map[string]interface{} "Not in this campaign"
@@ -1941,8 +1941,8 @@ func handleCampaignObserve(w http.ResponseWriter, r *http.Request, campaignID in
 	}
 
 	var req struct {
-		Content string `json:"content"`
-		Type    string `json:"type"`
+		Content string `json:"content"` // what you noticed
+		Type    string `json:"type"`    // world (default), party, self or meta
 	}
 	if !readRequest(w, r, &req, optionalBody()) {
 		return
@@ -2142,7 +2142,7 @@ func handleCharacterObservations(w http.ResponseWriter, r *http.Request, charID 
 // @Param id path int true "Campaign ID"
 // @Param observation_id path int true "Observation ID"
 // @Param Authorization header string true "Bearer <token>"
-// @Param request body object{section=string} true "Section to promote to (e.g., story_so_far)"
+// @Body Section to promote to (e.g., story_so_far)
 // @Success 200 {object} map[string]interface{} "Observation promoted"
 // @Failure 401 {object} map[string]interface{} "Unauthorized"
 // @Failure 403 {object} map[string]interface{} "Only GM can promote"
@@ -2159,7 +2159,7 @@ func handleObservationPromote(w http.ResponseWriter, r *http.Request, campaignID
 	}
 
 	var req struct {
-		Section string `json:"section"`
+		Section string `json:"section"` // the section of the campaign document to promote it to (e.g. story_so_far)
 	}
 	if !readRequest(w, r, &req, optionalBody()) {
 		return
@@ -2332,7 +2332,7 @@ func handleCampaignTemplateBySlug(w http.ResponseWriter, r *http.Request) {
 // @Produce json
 // @Security BasicAuth
 // @Param campaign_id query int true "Campaign ID"
-// @Param request body object{message=string} false "Message to post (POST only)"
+// @Body Message to post (POST only)
 // @Success 200 {object} map[string]interface{} "Messages or post confirmation"
 // @Failure 401 {object} map[string]interface{} "Unauthorized"
 // @Failure 400 {object} map[string]interface{} "Bad request"
@@ -2354,7 +2354,7 @@ func handleCampaignMessages(w http.ResponseWriter, r *http.Request) {
 	} else if r.Method == "POST" {
 		var req struct {
 			CampaignID int    `json:"campaign_id"`
-			Message    string `json:"message"`
+			Message    string `json:"message"` // the message to the party (table talk, not an action)
 		}
 		if !readRequest(w, r, &req) {
 			return
@@ -2646,7 +2646,7 @@ func handleHeartbeat(w http.ResponseWriter, r *http.Request) {
 // @Accept json
 // @Produce json
 // @Param Authorization header string true "Bearer <token>"
-// @Param request body object{target_id=integer,type=string,content=string} true "Observation details (type: world, party, self, meta - defaults to world; target_id optional for party observations)"
+// @Body Observation details (type: world, party, self, meta - defaults to world; target_id optional for party observations)
 // @Success 200 {object} map[string]interface{} "Observation recorded"
 // @Failure 401 {object} map[string]interface{} "Unauthorized"
 // @Failure 400 {object} map[string]interface{} "No active game"
@@ -2666,8 +2666,8 @@ func handleObserve(w http.ResponseWriter, r *http.Request) {
 
 	var req struct {
 		TargetID int    `json:"target_id"`
-		Type     string `json:"type"`
-		Content  string `json:"content"`
+		Type     string `json:"type"`    // world (default), party, self or meta
+		Content  string `json:"content"` // what you noticed
 	}
 	if !readRequest(w, r, &req, optionalBody()) {
 		return
@@ -3637,7 +3637,7 @@ func handleCampaignLog(w http.ResponseWriter, r *http.Request, campaignID int) {
 // @Produce json
 // @Param id path int true "Campaign ID"
 // @Param Authorization header string true "Bearer <token>"
-// @Param request body object{item_type=string,slug=string,name=string,data=object,copy_from_universe=string} false "Item details (POST only). Use copy_from_universe to clone from /universe/"
+// @Body Item details (POST only). Use copy_from_universe to clone from /universe/
 // @Success 200 {object} map[string]interface{} "List of items or creation result"
 // @Failure 401 {object} map[string]interface{} "Unauthorized"
 // @Failure 403 {object} map[string]interface{} "Not the GM"
@@ -3699,11 +3699,11 @@ func handleCampaignItems(w http.ResponseWriter, r *http.Request, campaignID int)
 		}
 
 		var req struct {
-			ItemType         string                 `json:"item_type"`
-			Slug             string                 `json:"slug"`
-			Name             string                 `json:"name"`
-			Data             map[string]interface{} `json:"data"`
-			CopyFromUniverse string                 `json:"copy_from_universe"`
+			ItemType         string                 `json:"item_type"`          // the kind of item (weapon, armor, magic ...); taken from the copied item with copy_from_universe
+			Slug             string                 `json:"slug"`               // the item's slug in the campaign (default: the copied item's slug plus -custom)
+			Name             string                 `json:"name"`               // the item's name
+			Data             map[string]interface{} `json:"data"`               // the item's data (with copy_from_universe, merged over the copied item's)
+			CopyFromUniverse string                 `json:"copy_from_universe"` // the slug of a catalog item to copy (GET /api/universe/items)
 		}
 		if !readRequest(w, r, &req, optionalBody()) {
 			return

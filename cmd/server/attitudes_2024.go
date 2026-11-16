@@ -48,13 +48,13 @@ func attitudeFor(lobbyID, targetID int, description string) (attitude, name stri
 // @Summary NPC and monster attitudes
 // @Description A creature's attitude toward the characters: friendly, indifferent (the default) or hostile. Friendly gives Advantage on Influence checks against it, Hostile Disadvantage. POST {"target_id": -2, "attitude": "friendly"} for a combatant, or {"npc": "Ismark", "attitude": "hostile"} for any named NPC (the Influence action finds the name in the player's description); attitude "clear" forgets it. GET ?campaign_id lists them. Players see the effect in their Influence result, not this list.
 // @Tags GM
-// @Param request body object{campaign_id=int,target_id=int,npc=string,attitude=string} true "Creature and attitude"
+// @Body Creature and attitude
 // @Router /gm/attitude [post]
 func handleGMAttitude(w http.ResponseWriter, r *http.Request) {
 	var req struct {
 		TargetID int    `json:"target_id"`
-		NPC      string `json:"npc"`
-		Attitude string `json:"attitude"`
+		NPC      string `json:"npc"`      // a named NPC (not a combatant), instead of target_id
+		Attitude string `json:"attitude"` // friendly, indifferent or hostile
 	}
 	_, lobby, ok := gmRead(w, r, &req, optionalBody())
 	if !ok {

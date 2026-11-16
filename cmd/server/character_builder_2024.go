@@ -2734,7 +2734,7 @@ func (o *builderOutcome) decorate(view map[string]interface{}, steps []builderSt
 // @Tags Characters
 // @Accept json
 // @Produce json
-// @Param request body object{name=string,use_suggestion=bool} false "Start a draft, or fields to set"
+// @Body Start a draft, or fields to set
 // @Success 200 {object} map[string]interface{}
 // @Router /character-builder [post]
 // @Router /character-builder [get]
@@ -2805,7 +2805,7 @@ func handleCharacterBuilder(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	upd := map[string]interface{}{} // the builder checks each field itself, with hints (unknownBuilderFields)
-	if !readRequest(w, r, &upd, optionalBody(), keysCheckedByHandler()) {
+	if !readRequest(w, r, &upd, optionalBody(), keysCheckedByHandler(builderFieldNames()...)) {
 		return
 	}
 	o := applyBuilderUpdate(body, upd, agentID)
@@ -2873,7 +2873,7 @@ func listBuilderDrafts(w http.ResponseWriter, r *http.Request, agentID int) {
 // startBuilderDraft: a new draft, with the fields sent checked as an update's are (Nov 14 audit: they were stored unchecked).
 func startBuilderDraft(w http.ResponseWriter, r *http.Request, agentID int) {
 	upd := map[string]interface{}{} // the builder checks each field itself, with hints (unknownBuilderFields)
-	if !readRequest(w, r, &upd, optionalBody(), keysCheckedByHandler()) {
+	if !readRequest(w, r, &upd, optionalBody(), keysCheckedByHandler(builderFieldNames()...)) {
 		return
 	}
 	body := map[string]interface{}{}

@@ -19,7 +19,7 @@ import (
 // @Produce json
 // @Param Authorization header string true "Bearer <token>"
 // @Param id path int true "Character ID"
-// @Param request body object{ability=string,points=integer} true "ASI application"
+// @Body ASI application
 // @Success 200 {object} map[string]interface{} "ASI applied"
 // @Failure 400 {object} map[string]interface{} "Invalid request"
 // @Failure 401 {object} map[string]interface{} "Unauthorized"
@@ -77,8 +77,8 @@ func handleCharacterASI(w http.ResponseWriter, r *http.Request, charID int) {
 	}
 
 	var req struct {
-		Ability string `json:"ability"`
-		Points  int    `json:"points"`
+		Ability string `json:"ability"` // the ability to raise (str, dex, con, int, wis or cha)
+		Points  int    `json:"points"`  // how many of the pending points to spend on it
 	}
 	if !readRequest(w, r, &req) {
 		return
@@ -186,7 +186,7 @@ func handleCharacterASI(w http.ResponseWriter, r *http.Request, charID int) {
 // @Produce json
 // @Param Authorization header string true "Bearer <token>"
 // @Param id path int true "Character ID"
-// @Param request body object{feat=string,ability_choice=string,choices=object} true "feat (slug or name); ability_choice for a feat that raises a score; choices for Skilled or Magic Initiate"
+// @Body feat (slug or name); ability_choice for a feat that raises a score; choices for Skilled or Magic Initiate
 // @Success 200 {object} map[string]interface{} "Feat gained"
 // @Failure 400 {object} map[string]interface{} "Invalid request or prerequisite not met"
 // @Failure 401 {object} map[string]interface{} "Unauthorized"
@@ -266,7 +266,7 @@ func handleCharacterFeat(w http.ResponseWriter, r *http.Request, charID int) {
 	}
 
 	var req struct {
-		Feat          string           `json:"feat"`
+		Feat          string           `json:"feat"`           // the feat to take (its name or key, as the setup step lists it)
 		AbilityChoice string           `json:"ability_choice"` // a feat that raises an ability score
 		Choices       *featChoiceInput `json:"choices"`        // Skilled, Magic Initiate: as background_feat_choices at creation
 	}
@@ -577,7 +577,7 @@ func handleCharacterFeat(w http.ResponseWriter, r *http.Request, charID int) {
 // @Produce json
 // @Param Authorization header string true "Bearer <token>"
 // @Param character_id query int true "Character ID (for GET)"
-// @Param request body object{character_id=integer,subclass=string} false "Subclass selection (for POST)"
+// @Body Subclass selection (for POST)
 // @Success 200 {object} map[string]interface{} "Subclass info or confirmation"
 // @Failure 400 {object} map[string]interface{} "Invalid request or not eligible"
 // @Failure 401 {object} map[string]interface{} "Unauthorized"
@@ -709,7 +709,7 @@ func handleCharacterSubclass(w http.ResponseWriter, r *http.Request) {
 		// Choose a subclass
 		var req struct {
 			CharacterID int      `json:"character_id"`
-			Subclass    string   `json:"subclass"`
+			Subclass    string   `json:"subclass"`     // the subclass to choose (a subclass of your class, as GET lists them)
 			BonusSkills []string `json:"bonus_skills"` // For subclasses that grant bonus skill proficiencies (e.g., Lore Bard)
 		}
 		if !readRequest(w, r, &req) {
@@ -992,7 +992,7 @@ func handleCharacterSubclass(w http.ResponseWriter, r *http.Request) {
 // @Accept json
 // @Produce json
 // @Param Authorization header string true "Bearer <token>"
-// @Param request body object{character_id=integer,feature=string,choice=string} true "Feature choice"
+// @Body Feature choice
 // @Success 200 {object} map[string]interface{} "Choice confirmation"
 // @Failure 400 {object} map[string]interface{} "Invalid request"
 // @Failure 401 {object} map[string]interface{} "Unauthorized"

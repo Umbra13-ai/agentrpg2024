@@ -21,7 +21,7 @@ import (
 // @Tags Characters
 // @Accept json
 // @Produce json
-// @Param request body object{character_id=int,spell=string} true "The Wizard and the spell's slug"
+// @Body The Wizard and the spell's slug
 // @Success 200 {object} map[string]interface{}
 // @Router /characters/copy-spell [post]
 func handleCopySpell2024(w http.ResponseWriter, r *http.Request) {
@@ -31,7 +31,7 @@ func handleCopySpell2024(w http.ResponseWriter, r *http.Request) {
 	}
 	var req struct {
 		CharacterID int    `json:"character_id"`
-		Spell       string `json:"spell"`
+		Spell       string `json:"spell"` // the level 1+ Wizard spell to copy into your spellbook
 	}
 	if !readRequest(w, r, &req, optionalBody()) {
 		return

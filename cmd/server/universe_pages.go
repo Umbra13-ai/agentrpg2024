@@ -58,6 +58,9 @@ func str(m map[string]interface{}, k string) string {
 
 // ---------------- JSON APIs (same shapes as before, now from the catalog) ----------------
 
+// handleUniverseSpeciesList godoc
+// The words of these routes are written in tools/build_swagger.py; the request and the reply come from the code.
+// @Router /universe/species [get]
 func handleUniverseSpeciesList(w http.ResponseWriter, r *http.Request) {
 	w.Header().Set("Content-Type", "application/json")
 	names := []string{}
@@ -86,6 +89,13 @@ func speciesWithText(sp game.Species) map[string]interface{} {
 	return m
 }
 
+// handleUniverseSpeciesOne godoc
+// @Summary One species
+// @Description One of the nine species of the SRD 5.2.1 with its traits and their text (404 race_not_found for another name).
+// @Tags Universe
+// @Param slug path string true "The species, for example dwarf or high-elf"
+// @Success 200 {object} map[string]interface{} "The species"
+// @Router /universe/species/{slug} [get]
 func handleUniverseSpeciesOne(w http.ResponseWriter, r *http.Request) {
 	w.Header().Set("Content-Type", "application/json")
 	id := strings.TrimPrefix(r.URL.Path, "/api/universe/species/")
@@ -98,6 +108,9 @@ func handleUniverseSpeciesOne(w http.ResponseWriter, r *http.Request) {
 	json.NewEncoder(w).Encode(speciesWithText(*sp))
 }
 
+// handleUniverseWeapons godoc
+// The words of these routes are written in tools/build_swagger.py; the request and the reply come from the code.
+// @Router /universe/weapons [get]
 func handleUniverseWeapons(w http.ResponseWriter, r *http.Request) {
 	w.Header().Set("Content-Type", "application/json")
 	weapons := map[string]interface{}{}
@@ -113,6 +126,9 @@ func handleUniverseWeapons(w http.ResponseWriter, r *http.Request) {
 	json.NewEncoder(w).Encode(map[string]interface{}{"weapons": weapons, "count": len(weapons)})
 }
 
+// handleUniverseArmor godoc
+// The words of these routes are written in tools/build_swagger.py; the request and the reply come from the code.
+// @Router /universe/armor [get]
 func handleUniverseArmor(w http.ResponseWriter, r *http.Request) {
 	w.Header().Set("Content-Type", "application/json")
 	armor := map[string]interface{}{}
@@ -134,6 +150,9 @@ func magicItemJSON(it catalogItem) map[string]interface{} {
 		"attunement": it.Data["requires_attunement"], "attunement_note": str(it.Data, "attunement_note"), "description": str(it.Data, "description")}
 }
 
+// handleUniverseMagicItems godoc
+// The words of these routes are written in tools/build_swagger.py; the request and the reply come from the code.
+// @Router /universe/magic-items [get]
 func handleUniverseMagicItems(w http.ResponseWriter, r *http.Request) {
 	w.Header().Set("Content-Type", "application/json")
 	items := map[string]interface{}{}
@@ -147,6 +166,13 @@ func handleUniverseMagicItems(w http.ResponseWriter, r *http.Request) {
 	json.NewEncoder(w).Encode(map[string]interface{}{"magic_items": items, "count": len(items), "note": "add ?full=1 for the full text"})
 }
 
+// handleUniverseMagicItem godoc
+// @Summary One magic item
+// @Description One magic item of the SRD 5.2.1: rarity, type, attunement and its text (404 for another slug).
+// @Tags Universe
+// @Param slug path string true "The item's slug, for example bag-of-holding"
+// @Success 200 {object} map[string]interface{} "The item"
+// @Router /universe/magic-items/{slug} [get]
 func handleUniverseMagicItem(w http.ResponseWriter, r *http.Request) {
 	w.Header().Set("Content-Type", "application/json")
 	slug := strings.TrimPrefix(r.URL.Path, "/api/universe/magic-items/")

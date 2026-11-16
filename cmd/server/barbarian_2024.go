@@ -77,7 +77,7 @@ func wearingHeavyArmor(charID int) bool {
 // @Summary Berserker Intimidating Presence (level 14)
 // @Description As a Bonus Action the Barbarian frightens each creature of their choice in a 30-foot Emanation: Wisdom save (DC 8 + Strength modifier + Proficiency Bonus); on a failure Frightened for 1 minute, repeating the save at the end of each of its turns. Once per Long Rest, or expend a use of Rage (restore_with_rage).
 // @Tags GM
-// @Param request body object{barbarian_id=int,target_ids=[]int,restore_with_rage=bool} true "Request"
+// @Body Request
 // @Router /gm/intimidating-presence [post]
 func handleGMIntimidatingPresence(w http.ResponseWriter, r *http.Request) {
 	if r.Method != http.MethodPost {
@@ -85,9 +85,9 @@ func handleGMIntimidatingPresence(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	var req struct {
-		BarbarianID     int   `json:"barbarian_id"`
+		BarbarianID     int   `json:"barbarian_id"` // the Berserker Barbarian
 		TargetIDs       []int `json:"target_ids"`
-		RestoreWithRage bool  `json:"restore_with_rage"`
+		RestoreWithRage bool  `json:"restore_with_rage"` // true: spend a use of Rage instead of the once-per-Long-Rest use
 	}
 	_, campaignID, ok := gmRead(w, r, &req, targetsIn(&req.BarbarianID, &req.TargetIDs))
 	if !ok {

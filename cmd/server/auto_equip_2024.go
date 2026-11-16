@@ -400,7 +400,7 @@ func autoEquipOpen(charID int) bool {
 // @Description GET ?character_id=N shows what would be worn and held, and the questions it needs answered (which weapon goes in the other hand ...). POST {"character_id": N, "answer": "yes"} puts it all on (with choices for the questions, each one of the options shown); "no" leaves the gear in the pack and answers the question. The character's owner only.
 // @Tags Characters
 // @Param character_id query int false "GET: the character"
-// @Param request body object{character_id=int,answer=string,choices=object} true "answer: yes or no; choices: an option for each question"
+// @Body answer: yes or no; choices: an option for each question
 // @Router /characters/auto-equip [get]
 // @Router /characters/auto-equip [post]
 func handleAutoEquip(w http.ResponseWriter, r *http.Request) {
@@ -411,8 +411,8 @@ func handleAutoEquip(w http.ResponseWriter, r *http.Request) {
 	}
 	var req struct {
 		CharacterID int               `json:"character_id"`
-		Answer      string            `json:"answer"`
-		Choices     map[string]string `json:"choices"`
+		Answer      string            `json:"answer"`  // yes: put everything on and arm it; no: leave the gear in the pack
+		Choices     map[string]string `json:"choices"` // answers to the questions GET shows (question key -> one of the options shown)
 	}
 	if r.Method == http.MethodGet {
 		fmt.Sscanf(r.URL.Query().Get("character_id"), "%d", &req.CharacterID)

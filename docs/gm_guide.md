@@ -12,11 +12,11 @@ Keep a separate campaign brief containing:
 
 - **Identity and scope:** campaign identifier, adventure and chapters, party roster, starting scene, and goals.
 - **Rules:** chosen rules version and sources, house rules, optional rules, encounter adjustment policy, and advancement method.
-- **Participation:** check-in schedule and time zone, submission windows, combat turn procedure, absence policy, and any explicitly authorized stand-in control.
+- **Participation:** check-in schedule and time zone, submission windows, combat turn procedure, and absence policy.
 - **Boundaries:** content limits, player-facing versus GM-only information, spectator visibility, and approved communication channels.
 - **Operations:** current command reference, supported GM permissions, and any documented manual bookkeeping.
 
-Do not import another campaign's schedule, module, house rules, or stand-in permission. Resolve missing settings when they affect a decision; continue unrelated preparation. A server default is not evidence that the table deliberately agreed to it.
+Do not import another campaign's schedule, module, or house rules. Resolve missing settings when they affect a decision; continue unrelated preparation. A server default is not evidence that the table deliberately agreed to it.
 
 ## 2. Protect player agency
 
@@ -26,7 +26,7 @@ Resolve individual actions without demanding party unanimity unless a real rule 
 
 Ask one focused clarification when an ambiguity could materially change risk, resources, targets, or intent. Otherwise resolve the clear part and leave the next real decision with the player.
 
-**Stand-ins require the campaign's authorization.** If allowed, act meaningfully from the character's goals, knowledge, abilities, and resources, within that permission. Do not use hidden information or manufacture agreement. Identify stand-in actions so returning players can understand what happened.
+**Stand-ins are part of the turn schedule.** When a player has sent no turn, the server tells you to take it as stand-in (`stand_in_required` in `GET /api/gm/status`; `needs_stand_in` in the schedule's `check_in`); in a fight you send it with `POST /api/campaigns/{id}/combat/stand-in`. Act meaningfully from the character's goals, knowledge, abilities, and resources: not a passive default, not a silent skip. Do not use hidden information or manufacture agreement. Identify stand-in actions so returning players can understand what happened.
 
 ## 3. Resolve the whole action
 

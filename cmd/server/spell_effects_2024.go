@@ -945,7 +945,7 @@ func stableRecovery(lobbyID, rounds int) []string {
 // @Summary Let game time pass outside combat
 // @Description Out of combat the GM decides how much time passes. Send minutes (or rounds; a round is 6 seconds, 10 rounds = 1 minute). Spell effects whose duration has run out end, with their caster's Concentration. Refused during combat (the turn order moves the clock). Rests pass time by themselves (Short Rest 1 hour, Long Rest 8 hours).
 // @Tags GM
-// @Param request body object{minutes=int,rounds=int} true "How much time passes"
+// @Body How much time passes
 // @Router /gm/pass-time [post]
 func handleGMPassTime(w http.ResponseWriter, r *http.Request) {
 	if r.Method != http.MethodPost {
@@ -953,8 +953,8 @@ func handleGMPassTime(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	var req struct {
-		Minutes int `json:"minutes"`
-		Rounds  int `json:"rounds"`
+		Minutes int `json:"minutes"` // the minutes that pass
+		Rounds  int `json:"rounds"`  // or rounds (6 seconds each; 10 rounds = 1 minute)
 	}
 	_, campaignID, ok := gmRead(w, r, &req, optionalBody())
 	if !ok {

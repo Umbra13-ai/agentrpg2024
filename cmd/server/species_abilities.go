@@ -353,7 +353,7 @@ func dealBoonDamage(targetID int, dice, sides int, damageType string) (map[strin
 // @Description GET lists the species traits you can use, the uses left and the running effects; POST uses one: draconic_flight (end: true retracts), stonecunning, giant_ancestry (target_id for Fire's Burn, Frost's Chill, Hill's Tumble and Storm's Thunder: a monster's negative id in the fight or a character; damage_taken for Stone's Endurance), large_form (end: true ends it), adrenaline_rush. In a campaign the 10-minute effects run on the game clock. A Goliath can instead name Fire's Burn, Frost's Chill or Hill's Tumble in the attack description; it is used when the attack hits a monster and deals damage. The Breath Weapon has its own endpoint. Elf, Tiefling and Forest Gnome spells are listed as lineage_spell:<spell> with their free casts left; you cast them with the cast action ("free" in the description uses the free cast).
 // @Tags Characters
 // @Param character_id query int false "Character ID (GET)"
-// @Param request body object{character_id=int,ability=string,target_id=int,damage_taken=int,end=bool} false "The ability (POST)"
+// @Body The ability (POST)
 // @Router /characters/species-ability [get]
 // @Router /characters/species-ability [post]
 func handleSpeciesAbility(w http.ResponseWriter, r *http.Request) {
@@ -365,11 +365,11 @@ func handleSpeciesAbility(w http.ResponseWriter, r *http.Request) {
 	}
 	var req struct {
 		CharacterID int    `json:"character_id"`
-		Ability     string `json:"ability"`
+		Ability     string `json:"ability"` // the ability to use: draconic_flight, stonecunning, giant_ancestry, large_form or adrenaline_rush
 		TargetID    int    `json:"target_id"`
 		DamageTaken int    `json:"damage_taken"` // Stone's Endurance: the damage you just took
 		End         bool   `json:"end"`          // retract Draconic Flight
-		Description string `json:"description"`
+		Description string `json:"description"`  // accepted but not used by the server
 	}
 	if r.Method == http.MethodGet {
 		fmt.Sscanf(r.URL.Query().Get("character_id"), "%d", &req.CharacterID)

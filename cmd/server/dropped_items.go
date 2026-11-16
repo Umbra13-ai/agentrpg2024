@@ -262,8 +262,8 @@ func droppedByCharacter(charID int) []map[string]interface{} {
 
 func handleCharacterDrop(w http.ResponseWriter, r *http.Request, charID int) {
 	var req struct {
-		Item     string `json:"item"`
-		Quantity int    `json:"quantity"`
+		Item     string `json:"item"`     // the item to drop (its id or name)
+		Quantity int    `json:"quantity"` // how many of a stack to drop (default all)
 	}
 	if !readRequest(w, r, &req) {
 		return
@@ -297,7 +297,7 @@ func handleCharacterDrop(w http.ResponseWriter, r *http.Request, charID int) {
 
 func handleCharacterPickUp(w http.ResponseWriter, r *http.Request, charID int) {
 	var req struct {
-		DroppedID int `json:"dropped_id"`
+		DroppedID int `json:"dropped_id"` // the dropped item to pick up (its id from GET /api/campaigns/{id}/ground)
 	}
 	if !readRequest(w, r, &req) {
 		return
@@ -330,7 +330,7 @@ func handleCharacterPickUp(w http.ResponseWriter, r *http.Request, charID int) {
 // @Tags Campaigns
 // @Param id path int true "Campaign ID"
 // @Param include query string false "claimed (GM)"
-// @Param request body object{note=string} false "Why it left the ground (claim)"
+// @Body Why it left the ground (claim)
 // @Router /campaigns/{id}/ground [get]
 // @Router /campaigns/{id}/ground/{dropped_id}/claim [post]
 // @Router /campaigns/{id}/ground/{dropped_id}/return [post]
@@ -358,7 +358,7 @@ func handleCampaignGround(w http.ResponseWriter, r *http.Request, campaignID int
 		switch rest[1] {
 		case "claim":
 			var req struct {
-				Note string `json:"note"`
+				Note string `json:"note"` // why the GM claims or returns it (shown in the log)
 			}
 			if !readRequest(w, r, &req, optionalBody()) {
 				return

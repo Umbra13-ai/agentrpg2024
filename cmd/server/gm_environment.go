@@ -15,7 +15,7 @@ import (
 // @Accept json
 // @Produce json
 // @Security BasicAuth
-// @Param request body object{target_id=int,cause=string,distance=string} true "Forced movement details"
+// @Body Forced movement details
 // @Success 200 {object} map[string]interface{} "Result with broken grapples"
 // @Failure 401 {object} map[string]interface{} "Unauthorized"
 // @Failure 400 {object} map[string]interface{} "Bad request"
@@ -103,7 +103,7 @@ func handleGMForcedMovement(w http.ResponseWriter, r *http.Request) {
 // @Accept json
 // @Produce json
 // @Param Authorization header string true "Bearer <token>"
-// @Param request body object{character_id=integer,distance_feet=integer,reason=string,use_slow_fall=boolean} true "Falling details. use_slow_fall requires Monk level 4+ and uses reaction."
+// @Body Falling details. use_slow_fall requires Monk level 4+ and uses reaction.
 // @Success 200 {object} map[string]interface{} "Damage applied"
 // @Failure 401 {object} map[string]interface{} "Unauthorized"
 // @Failure 403 {object} map[string]interface{} "Not GM"
@@ -124,8 +124,8 @@ func handleGMFallingDamage(w http.ResponseWriter, r *http.Request) {
 
 	var req struct {
 		CharacterID  int    `json:"character_id"`
-		DistanceFeet int    `json:"distance_feet"`
-		Reason       string `json:"reason"`
+		DistanceFeet int    `json:"distance_feet"` // how far the character fell, in feet
+		Reason       string `json:"reason"`        // why (shown in the log)
 		UseSlowFall  bool   `json:"use_slow_fall"` // Monk Slow Fall
 	}
 	// the character's campaign, which must be one the GM runs (gm_campaign_2024.go)
@@ -346,7 +346,7 @@ func handleGMFallingDamage(w http.ResponseWriter, r *http.Request) {
 // @Accept json
 // @Produce json
 // @Param Authorization header string true "Bearer <token>"
-// @Param request body object{campaign_id=integer,underwater=boolean} true "Underwater combat settings. If underwater is omitted, toggles current state. campaign_id: one you run, started or not (optional when you run one)."
+// @Body Underwater combat settings. If underwater is omitted, toggles current state. campaign_id: one you run, started or not (optional when you run one).
 // @Success 200 {object} map[string]interface{} "Underwater status updated"
 // @Failure 401 {object} map[string]interface{} "Unauthorized"
 // @Failure 403 {object} map[string]interface{} "Not GM"
@@ -441,7 +441,7 @@ func handleGMUnderwater(w http.ResponseWriter, r *http.Request) {
 // @Accept json
 // @Produce json
 // @Param Authorization header string true "Bearer <token>"
-// @Param request body object{campaign_id=integer,lighting=string} true "Lighting level: 'bright', 'dim', or 'darkness'. campaign_id: one you run, started or not (optional when you run one)."
+// @Body Lighting level: 'bright', 'dim', or 'darkness'. campaign_id: one you run, started or not (optional when you run one).
 // @Success 200 {object} map[string]interface{} "Lighting updated"
 // @Failure 401 {object} map[string]interface{} "Unauthorized"
 // @Failure 403 {object} map[string]interface{} "Not GM"
@@ -462,7 +462,7 @@ func handleGMSetLighting(w http.ResponseWriter, r *http.Request) {
 
 	var req struct {
 		CampaignID int    `json:"-"`
-		Lighting   string `json:"lighting"`
+		Lighting   string `json:"lighting"` // bright, dim or darkness
 	}
 	// the campaign: campaign_id, else the GM's only campaign, started or not (gm_campaign_2024.go)
 	campaignID, ok := gmReadAs(w, r, agentID, &req, campaignBeforeStart())

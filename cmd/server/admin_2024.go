@@ -263,7 +263,11 @@ func restoreCampaign(id int, by string) (string, error) {
 	return msg, nil
 }
 
+// handleCharacterDelete godoc
 // handleCharacterDelete: a player deletes their own character.
+// The words of these routes are written in tools/build_swagger.py; the request and the reply come from the code.
+// @Router /characters/{id} [delete]
+// @Router /characters/{id}/delete [post]
 func handleCharacterDelete(w http.ResponseWriter, r *http.Request, charID int) {
 	agentID, err := getAgentFromAuth(r)
 	if err != nil {
@@ -395,7 +399,12 @@ func setAdminCookie(w http.ResponseWriter, r *http.Request, value string, maxAge
 		Secure: r.TLS != nil || strings.EqualFold(r.Header.Get("X-Forwarded-Proto"), "https"), SameSite: http.SameSiteStrictMode})
 }
 
+// handleAdminSession godoc
 // handleAdminSession: POST with the X-Admin-Key header signs in (sets the cookie); DELETE signs out; GET says whether signed in.
+// The words of these routes are written in tools/build_swagger.py; the request and the reply come from the code.
+// @Router /admin/session [get]
+// @Router /admin/session [post]
+// @Router /admin/session [delete]
 func handleAdminSession(w http.ResponseWriter, r *http.Request) {
 	switch r.Method {
 	case http.MethodGet:
@@ -599,8 +608,15 @@ func adminRow(table string, id int) map[string]interface{} {
 	return out
 }
 
+// handleAdminCharacters godoc
 // handleAdminCharacters: GET /api/admin/characters[?q=&deleted=include|only], GET/POST /api/admin/characters/{id},
 // POST /api/admin/characters/{id}/delete and /restore.
+// The words of these routes are written in tools/build_swagger.py; the request and the reply come from the code.
+// @Router /admin/characters [get]
+// @Router /admin/characters/{id} [get]
+// @Router /admin/characters/{id} [post]
+// @Router /admin/characters/{id}/delete [post]
+// @Router /admin/characters/{id}/restore [post]
 func handleAdminCharacters(w http.ResponseWriter, r *http.Request) {
 	if !requireAdmin(w, r) {
 		return
@@ -648,7 +664,14 @@ func handleAdminCharacters(w http.ResponseWriter, r *http.Request) {
 	adminRowRoutes(w, r, "characters", "character", id, parts[1:])
 }
 
+// handleAdminCampaigns godoc
 // handleAdminCampaigns: the same for campaigns, plus {"add_character": id} and {"remove_character": id}.
+// The words of these routes are written in tools/build_swagger.py; the request and the reply come from the code.
+// @Router /admin/campaigns [get]
+// @Router /admin/campaigns/{id} [get]
+// @Router /admin/campaigns/{id} [post]
+// @Router /admin/campaigns/{id}/delete [post]
+// @Router /admin/campaigns/{id}/restore [post]
 func handleAdminCampaigns(w http.ResponseWriter, r *http.Request) {
 	if !requireAdmin(w, r) {
 		return
@@ -719,7 +742,12 @@ func adminRowRoutes(w http.ResponseWriter, r *http.Request, table, kind string, 
 		writeJSONStatus(w, http.StatusOK, out)
 	case action == "" && r.Method == http.MethodPost:
 		var body map[string]interface{}
-		if !readRequest(w, r, &body, onlyFields("set", "note", "add_character", "remove_character")) {
+		if !readRequest(w, r, &body, onlyFields(
+			"set",              // {"field": value}: the columns to change (the GET of the row lists field_types and locked_fields)
+			"note",             // why: written to the admin change log
+			"add_character",    // a campaign: the id of a character to put in it
+			"remove_character", // a campaign: the id of a character to take out of it
+		)) {
 			return
 		}
 		note := bstr(body, "note")
@@ -841,7 +869,10 @@ func adminCampaignMembership(id int, body map[string]interface{}, note string) (
 	return "", false, nil
 }
 
+// handleAdminChanges godoc
 // handleAdminChanges: GET /api/admin/changes[?kind=character&id=N&limit=100]
+// The words of these routes are written in tools/build_swagger.py; the request and the reply come from the code.
+// @Router /admin/changes [get]
 func handleAdminChanges(w http.ResponseWriter, r *http.Request) {
 	if !requireAdmin(w, r) {
 		return
@@ -926,7 +957,10 @@ func handleAdminPage(w http.ResponseWriter, r *http.Request) {
 	fmt.Fprint(w, adminPageHTML)
 }
 
+// handleAdminAccounts godoc
 // handleAdminAccounts: GET /api/admin/accounts?q= finds accounts by name or id (to choose a character's player or a campaign's GM).
+// The words of these routes are written in tools/build_swagger.py; the request and the reply come from the code.
+// @Router /admin/accounts [get]
 func handleAdminAccounts(w http.ResponseWriter, r *http.Request) {
 	if !requireAdmin(w, r) {
 		return

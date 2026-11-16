@@ -169,7 +169,11 @@ func createTokenFor(agentID int, label, scope string, expiresInDays int) (id int
 	return id, token, prefix, expires, err
 }
 
+// handleTokens godoc
 // handleTokens serves POST (create) and GET (list) on /api/tokens.
+// The words of these routes are written in tools/build_swagger.py; the request and the reply come from the code.
+// @Router /tokens [post]
+// @Router /tokens [get]
 func handleTokens(w http.ResponseWriter, r *http.Request) {
 	agentID, err := getAgentFromAuth(r)
 	if err != nil {
@@ -180,9 +184,9 @@ func handleTokens(w http.ResponseWriter, r *http.Request) {
 	switch r.Method {
 	case http.MethodPost:
 		var req struct {
-			Label         string `json:"label"`
-			Scope         string `json:"scope"`
-			ExpiresInDays int    `json:"expires_in_days"`
+			Label         string `json:"label"`           // a name for the token, such as the machine it runs on
+			Scope         string `json:"scope"`           // full (default) or read (GET requests only)
+			ExpiresInDays int    `json:"expires_in_days"` // 0 or left out: it does not expire (at most 3650)
 		}
 		if !readRequest(w, r, &req, optionalBody()) {
 			return
@@ -261,7 +265,10 @@ func handleTokens(w http.ResponseWriter, r *http.Request) {
 	}
 }
 
+// handleTokenByID godoc
 // handleTokenByID revokes a token: DELETE /api/tokens/{id}.
+// The words of these routes are written in tools/build_swagger.py; the request and the reply come from the code.
+// @Router /tokens/{id} [delete]
 func handleTokenByID(w http.ResponseWriter, r *http.Request) {
 	agentID, err := getAgentFromAuth(r)
 	if err != nil {

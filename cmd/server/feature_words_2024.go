@@ -329,7 +329,7 @@ func featurePattern(alt string) *regexp.Regexp {
 // the same roll cancel, as usual. Players can't claim Advantage in an action's description (F139): the server works it out from the
 // conditions, Help, features and this ruling.
 // @Tags GM
-// @Param request body object{character_id=int,mode=string,reason=string} true "The character, advantage or disadvantage, and why"
+// @Body The character, advantage or disadvantage, and why
 // @Router /gm/grant-advantage [post]
 func handleGMGrantAdvantage(w http.ResponseWriter, r *http.Request) {
 	if r.Method != http.MethodPost {
@@ -338,8 +338,8 @@ func handleGMGrantAdvantage(w http.ResponseWriter, r *http.Request) {
 	}
 	var req struct {
 		CharacterID int    `json:"character_id"`
-		Mode        string `json:"mode"`
-		Reason      string `json:"reason"`
+		Mode        string `json:"mode"`   // advantage (default) or disadvantage
+		Reason      string `json:"reason"` // why (shown in the log)
 	}
 	// the character's campaign, which must be an active one the GM runs (gm_campaign_2024.go)
 	_, lobby, ok := gmRead(w, r, &req, optionalBody(), campaignFromTarget(&req.CharacterID))

@@ -684,7 +684,7 @@ func myTurnReminders(charID int, inCombat, isMyTurn bool) map[string]interface{}
 // @Produce json
 // @Security BasicAuth
 // @Param character_id query int false "Character ID (GET)"
-// @Param request body object{character_id=int,kind=string,mode=string} false "A kind (or all) and its mode (POST)"
+// @Body A kind (or all) and its mode (POST)
 // @Success 200 {object} map[string]interface{} "The settings"
 // @Failure 400 {object} map[string]interface{} "Bad request"
 // @Router /characters/reminders [get]
@@ -693,8 +693,8 @@ func handleReminders(w http.ResponseWriter, r *http.Request) {
 	w.Header().Set("Content-Type", "application/json")
 	var req struct {
 		CharacterID int    `json:"character_id"`
-		Kind        string `json:"kind"`
-		Mode        string `json:"mode"`
+		Kind        string `json:"kind"` // turn, resources, items, rest, prep, after_battle, gear, or all
+		Mode        string `json:"mode"` // brief (default), full or off
 	}
 	switch r.Method {
 	case http.MethodGet:

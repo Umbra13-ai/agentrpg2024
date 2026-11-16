@@ -323,10 +323,10 @@ type campaignShop struct {
 }
 
 type shopOptions struct {
-	LevelRange     string `json:"level_range,omitempty"`   // "auto" (each buyer's tier) or "1-4", "5-10", "11-16", "17-20"
-	PricePercent   int    `json:"price_percent,omitempty"` // 100 = SRD prices
-	Firearms       bool   `json:"firearms,omitempty"`
-	Legendary      bool   `json:"legendary,omitempty"`
+	LevelRange     string `json:"level_range,omitempty"`      // "auto" (each buyer's tier) or "1-4", "5-10", "11-16", "17-20"
+	PricePercent   int    `json:"price_percent,omitempty"`    // 100 = SRD prices
+	Firearms       bool   `json:"firearms,omitempty"`         // true: the shop also sells firearms
+	Legendary      bool   `json:"legendary,omitempty"`        // true: a magic shop may stock Legendary items
 	StockPerRarity int    `json:"stock_per_rarity,omitempty"` // magic shop; 0 = 8; -1 = all
 }
 
@@ -533,7 +533,7 @@ func scrollPriceGP(level int) int {
 // @Description GET lists the shop types (blacksmith, leatherworker, bowyer, general_store, alchemist, temple, craftsman, stable, shipwright, magic_shop) and the campaign's open shops. POST opens one ({"campaign_id": N, "open": "blacksmith", "name": "Hammer and Tongs"}, with options level_range "auto" or "1-4", "5-10", "11-16", "17-20", price_percent, firearms, legendary, stock_per_rarity) or closes one ({"campaign_id": N, "close": shop_id}). The campaign's GM only.
 // @Tags GM
 // @Param campaign_id query int false "The campaign (needed when you run more than one)"
-// @Param request body object{campaign_id=int,open=string,name=string,close=int,level_range=string,price_percent=int,firearms=bool,legendary=bool,stock_per_rarity=int} true "Open a shop (open, name, options) or close one (close)"
+// @Body Open a shop (open, name, options) or close one (close)
 // @Router /gm/shops [get]
 // @Router /gm/shops [post]
 func handleGMShops(w http.ResponseWriter, r *http.Request) {
@@ -569,9 +569,9 @@ func handleGMShops(w http.ResponseWriter, r *http.Request) {
 	}
 	var req struct {
 		CampaignID int    `json:"-"`
-		Open       string `json:"open"`
-		Name       string `json:"name"`
-		Close      int    `json:"close"`
+		Open       string `json:"open"`  // the shop type to open (GET lists them: blacksmith, general_store, magic_shop ...)
+		Name       string `json:"name"`  // the shop's name
+		Close      int    `json:"close"` // the id of an open shop to close
 		shopOptions
 	}
 	campaignID, ok := gmReadAs(w, r, agentID, &req, campaignBeforeStart())
@@ -632,7 +632,7 @@ func handleGMShops(w http.ResponseWriter, r *http.Request) {
 // @Param id path int true "Campaign ID"
 // @Param shop_id path int true "Shop ID (from the list or my-turn's shops_open)"
 // @Param character_id query int false "GET: the character to show the stock for"
-// @Param request body object{character_id=int,buy=[]object,sell=[]object} true "What to buy and sell"
+// @Body What to buy and sell
 // @Router /campaigns/{id}/shops [get]
 // @Router /campaigns/{id}/shops/{shop_id} [get]
 // @Router /campaigns/{id}/shops/{shop_id} [post]
@@ -669,15 +669,15 @@ func handleCampaignShops(w http.ResponseWriter, r *http.Request, campaignID int,
 		fmt.Sscanf(r.URL.Query().Get("character_id"), "%d", &charID)
 	}
 	var req struct {
-		CharacterID int `json:"character_id"`
-		Buy         []struct {
+		CharacterID int        `json:"character_id"`
+		Buy         []struct { // what to buy: each item (with base, variant or spell where the item needs one) and its quantity
 			Item     string `json:"item"`
 			Quantity int    `json:"quantity"`
 			Base     string `json:"base"`
 			Variant  string `json:"variant"`
 			Spell    string `json:"spell"`
 		} `json:"buy"`
-		Sell []sellReq `json:"sell"`
+		Sell []sellReq `json:"sell"` // what to sell: each item (or item_id) and its quantity (left out: the whole stack)
 	}
 	if r.Method == http.MethodPost {
 		if !readRequest(w, r, &req) {

@@ -310,7 +310,7 @@ func gmRead(w http.ResponseWriter, r *http.Request, v interface{}, opts ...bodyO
 // names neither a character nor a campaign.
 func gmReadAs(w http.ResponseWriter, r *http.Request, agentID int, v interface{}, opts ...bodyOpt) (int, bool) {
 	var bodyCampaign int
-	if !readRequest(w, r, v, append(opts, alsoField("campaign_id", &bodyCampaign))...) {
+	if !readRequest(w, r, v, append(opts, alsoField("campaign_id", &bodyCampaign))...) { // the campaign this command is for (or ?campaign_id=); without it, the campaign of the characters it names, else your only active campaign
 		return 0, false
 	}
 	want, _ := strconv.Atoi(r.URL.Query().Get("campaign_id"))

@@ -23,7 +23,7 @@ import (
 // @Summary Fighter Tactical Mind (level 2)
 // @Description After a failed ability check (total below dc) the Fighter may spend a use of Second Wind to roll 1d10 and add it; the use is spent only if the check then succeeds.
 // @Tags GM
-// @Param request body object{character_id=int,total=int,dc=int} true "Request"
+// @Body Request
 // @Router /gm/tactical-mind [post]
 func handleGMTacticalMind(w http.ResponseWriter, r *http.Request) {
 	if r.Method != http.MethodPost {
@@ -32,7 +32,7 @@ func handleGMTacticalMind(w http.ResponseWriter, r *http.Request) {
 	}
 	var req struct {
 		CharacterID int `json:"character_id"`
-		Total       int `json:"total"`
+		Total       int `json:"total"` // the check's total before Tactical Mind
 		DC          int `json:"dc"`
 	}
 	_, _, ok := gmRead(w, r, &req, targetsIn(&req.CharacterID))

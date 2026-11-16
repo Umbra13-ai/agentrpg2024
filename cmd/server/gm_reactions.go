@@ -15,7 +15,7 @@ import (
 // @Accept json
 // @Produce json
 // @Security BasicAuth
-// @Param request body object{campaign_id=integer,target_id=integer,attacker_is_monster=boolean,monster_name=string,monster_key=string,attacker_id=integer,weapon=string} true "Opportunity attack details"
+// @Body Opportunity attack details
 // @Success 200 {object} map[string]interface{} "Attack result"
 // @Failure 401 {object} map[string]interface{} "Unauthorized"
 // @Failure 403 {object} map[string]interface{} "Not the GM"
@@ -277,7 +277,7 @@ func handleGMOpportunityAttack(w http.ResponseWriter, r *http.Request) {
 // @Accept json
 // @Produce json
 // @Security BasicAuth
-// @Param request body object{character_id=integer,attacker_name=string,attacker_monster_key=string,weapon=string} true "Retaliation details"
+// @Body Retaliation details
 // @Success 200 {object} map[string]interface{} "Attack result"
 // @Failure 401 {object} map[string]interface{} "Unauthorized"
 // @Failure 403 {object} map[string]interface{} "Not the GM"
@@ -433,7 +433,7 @@ func handleGMRetaliation(w http.ResponseWriter, r *http.Request) {
 // @Accept json
 // @Produce json
 // @Security BasicAuth
-// @Param request body object{character_id=integer,damage=integer,attacker_name=string} true "Uncanny Dodge details"
+// @Body Uncanny Dodge details
 // @Success 200 {object} map[string]interface{} "Damage halved result"
 // @Failure 401 {object} map[string]interface{} "Unauthorized"
 // @Failure 403 {object} map[string]interface{} "Not the GM"
@@ -567,7 +567,7 @@ func handleGMUncannyDodge(w http.ResponseWriter, r *http.Request) {
 // @Accept json
 // @Produce json
 // @Param Authorization header string true "Bearer <token>"
-// @Param request body object{character_id=integer} true "Character whose readied action to trigger"
+// @Body Character whose readied action to trigger
 // @Success 200 {object} map[string]interface{} "Readied action result"
 // @Failure 401 {object} map[string]interface{} "Unauthorized"
 // @Failure 400 {object} map[string]interface{} "Not a GM or no readied action"

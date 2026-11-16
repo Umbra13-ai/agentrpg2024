@@ -26,7 +26,7 @@ func martialArtsRolls(level, n int) string {
 // @Summary Monk Deflect Attacks (Reaction)
 // @Description When an attack hits a Monk (level 3) and deals Bludgeoning, Piercing or Slashing damage, the Monk reduces the damage by 1d10 + Dexterity modifier + Monk level. If the damage drops to 0, the Monk can spend 1 Focus Point to redirect it at a creature within 5 feet (melee) or 60 feet (ranged): redirect_target_id.
 // @Tags GM
-// @Param request body object{character_id=int,damage=int,damage_type=string,ranged=bool,attacker_name=string,redirect_target_id=int} true "Request"
+// @Body Request
 // @Router /gm/deflect-attacks [post]
 func handleGMDeflectAttacks(w http.ResponseWriter, r *http.Request) {
 	if r.Method != http.MethodPost {
@@ -35,11 +35,11 @@ func handleGMDeflectAttacks(w http.ResponseWriter, r *http.Request) {
 	}
 	var req struct {
 		CharacterID      int    `json:"character_id"`
-		Damage           int    `json:"damage"`
-		DamageType       string `json:"damage_type"`
-		Ranged           bool   `json:"ranged"`
-		AttackerName     string `json:"attacker_name"`
-		RedirectTargetID int    `json:"redirect_target_id"`
+		Damage           int    `json:"damage"`             // the damage of the hit
+		DamageType       string `json:"damage_type"`        // its damage type (Bludgeoning, Piercing or Slashing)
+		Ranged           bool   `json:"ranged"`             // accepted but not used by the server (the redirect's range is the GM's to judge)
+		AttackerName     string `json:"attacker_name"`      // accepted but not used by the server
+		RedirectTargetID int    `json:"redirect_target_id"` // when the damage drops to 0: the creature to redirect it at, spending 1 Focus Point
 	}
 	_, campaignID, ok := gmRead(w, r, &req, targetsIn(&req.CharacterID, &req.RedirectTargetID))
 	if !ok {

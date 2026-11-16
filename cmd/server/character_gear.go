@@ -18,7 +18,7 @@ import (
 // @Accept json
 // @Produce json
 // @Security BasicAuth
-// @Param request body object{character_id=int,action=string,item_name=string} true "Attunement action (attune/unattune)"
+// @Body Attunement action (attune/unattune)
 // @Success 200 {object} map[string]interface{} "Attunement result"
 // @Failure 401 {object} map[string]interface{} "Unauthorized"
 // @Failure 400 {object} map[string]interface{} "Bad request or max attunement reached"
@@ -38,8 +38,8 @@ func handleCharacterAttune(w http.ResponseWriter, r *http.Request) {
 
 	var req struct {
 		CharacterID int    `json:"character_id"`
-		Action      string `json:"action"` // "attune" or "unattune"
-		ItemName    string `json:"item_name"`
+		Action      string `json:"action"`    // "attune" or "unattune"
+		ItemName    string `json:"item_name"` // the magic item to attune to or unattune from (its name as the inventory shows it)
 	}
 	if !readRequest(w, r, &req) {
 		return
@@ -259,7 +259,7 @@ func handleCharacterEncumbrance(w http.ResponseWriter, r *http.Request) {
 // @Accept json
 // @Produce json
 // @Security BasicAuth
-// @Param request body object{character_id=int,armor=string,shield=bool} true "Armor to equip"
+// @Body Armor to equip
 // @Success 200 {object} map[string]interface{} "Updated AC and equipment status"
 // @Failure 401 {object} map[string]interface{} "Unauthorized"
 // @Failure 400 {object} map[string]interface{} "Bad request"
@@ -480,7 +480,7 @@ func handleCharacterEquipArmor(w http.ResponseWriter, r *http.Request) {
 // @Accept json
 // @Produce json
 // @Security BasicAuth
-// @Param request body object{character_id=int,armor=bool,shield=bool} true "What to unequip"
+// @Body What to unequip
 // @Success 200 {object} map[string]interface{} "Updated AC and equipment status"
 // @Failure 401 {object} map[string]interface{} "Unauthorized"
 // @Failure 400 {object} map[string]interface{} "Bad request"
@@ -651,7 +651,7 @@ func handleCharacterUnequipArmor(w http.ResponseWriter, r *http.Request) {
 // @Accept json
 // @Produce json
 // @Security BasicAuth
-// @Param request body object{character_id=int,weapon=string,slot=string,base_weapon=string} true "Equip weapon. slot: main_hand (default) or off_hand. base_weapon: for a named magic weapon, e.g. longsword"
+// @Body Equip weapon. slot: main_hand (default) or off_hand. base_weapon: for a named magic weapon, e.g. longsword
 // @Success 200 {object} map[string]interface{} "Equipped weapon info"
 // @Failure 401 {object} map[string]interface{} "Unauthorized"
 // @Failure 400 {object} map[string]interface{} "Bad request"
@@ -927,7 +927,7 @@ func handleCharacterEquipWeapon(w http.ResponseWriter, r *http.Request) {
 // @Accept json
 // @Produce json
 // @Security BasicAuth
-// @Param request body object{character_id=int,slot=string,drop=bool} true "Unequip options. slot: main_hand, off_hand, or both (default). drop: true to drop instead of returning to inventory"
+// @Body Unequip options. slot: main_hand, off_hand, or both (default). drop: true to drop instead of returning to inventory
 // @Success 200 {object} map[string]interface{} "Unequipped weapon info"
 // @Failure 401 {object} map[string]interface{} "Unauthorized"
 // @Failure 400 {object} map[string]interface{} "Bad request"
@@ -1075,7 +1075,7 @@ func handleCharacterUnequipWeapon(w http.ResponseWriter, r *http.Request) {
 // @Accept json
 // @Produce json
 // @Security BasicAuth
-// @Param request body object{character_id=integer,creature=string,controlled=boolean} true "Mount request"
+// @Body Mount request
 // @Success 200 {object} map[string]interface{} "Mount result"
 // @Failure 401 {object} map[string]interface{} "Unauthorized"
 // @Failure 400 {object} map[string]interface{} "Bad request"
@@ -1247,7 +1247,7 @@ func handleCharacterMount(w http.ResponseWriter, r *http.Request) {
 // @Accept json
 // @Produce json
 // @Security BasicAuth
-// @Param request body object{character_id=integer,forced=boolean} true "Dismount request"
+// @Body Dismount request
 // @Success 200 {object} map[string]interface{} "Dismount result"
 // @Failure 401 {object} map[string]interface{} "Unauthorized"
 // @Failure 400 {object} map[string]interface{} "Bad request"

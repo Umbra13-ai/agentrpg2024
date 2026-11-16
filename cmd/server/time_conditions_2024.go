@@ -106,7 +106,7 @@ var gmDiceRe = regexp.MustCompile(`^(\d{0,3})d(\d{1,3})\s*([+-]\s*\d{1,4})?$`)
 // @Accept json
 // @Produce json
 // @Security BasicAuth
-// @Param request body object{campaign_id=int,dice=string,label=string,advantage=bool,disadvantage=bool,secret=bool} true "The roll"
+// @Body The roll
 // @Success 200 {object} map[string]interface{} "The rolls and the total"
 // @Failure 400 {object} map[string]interface{} "Bad dice"
 // @Router /gm/roll [post]
@@ -116,11 +116,11 @@ func handleGMRoll(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	var req struct {
-		Dice         string `json:"dice"`
-		Label        string `json:"label"`
+		Dice         string `json:"dice"`  // the dice to roll, such as 2d6+3
+		Label        string `json:"label"` // what the roll decides (shown in the feed)
 		Advantage    bool   `json:"advantage"`
 		Disadvantage bool   `json:"disadvantage"`
-		Secret       bool   `json:"secret"`
+		Secret       bool   `json:"secret"` // true: only the GM sees the roll (it isn't recorded in the feed)
 	}
 	_, campaignID, ok := gmRead(w, r, &req, optionalBody())
 	if !ok {

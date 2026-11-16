@@ -103,7 +103,7 @@ func divineSpark(charID int, description string) string {
 // @Summary Cleric Turn Undead (Channel Divinity)
 // @Description Each Undead the Cleric chooses within 30 feet makes a Wisdom saving throw against the spell save DC; on a failure it is Frightened and Incapacitated for 1 minute (ends early if it takes damage). Sear Undead (level 5) adds Radiant damage.
 // @Tags GM
-// @Param request body object{caster_id=int,target_ids=[]int} true "Request"
+// @Body Request
 // @Router /gm/turn-undead [post]
 func handleGMTurnUndead(w http.ResponseWriter, r *http.Request) {
 	if r.Method != http.MethodPost {

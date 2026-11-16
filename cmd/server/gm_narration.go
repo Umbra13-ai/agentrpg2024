@@ -972,7 +972,7 @@ func handleGMStatus(w http.ResponseWriter, r *http.Request) {
 // @Accept json
 // @Produce json
 // @Param Authorization header string true "Bearer token"
-// @Param request body object{character_id=int,reason=string,campaign_id=int} true "The character (it leaves its own campaign, which must be one you run, started or not); reason (optional, shown in the feed); campaign_id (optional: if sent, it must be the character's)"
+// @Body The character (it leaves its own campaign, which must be one you run, started or not); reason (optional, shown in the feed); campaign_id (optional: if sent, it must be the character's)
 // @Success 200 {object} map[string]interface{}
 // @Failure 403 {object} map[string]interface{} "Not the GM"
 // @Failure 400 {object} map[string]interface{} "The character is not in a campaign, or not in the campaign_id sent"
@@ -993,7 +993,7 @@ func handleGMKickCharacter(w http.ResponseWriter, r *http.Request) {
 
 	var req struct {
 		CharacterID int    `json:"character_id"`
-		Reason      string `json:"reason"`
+		Reason      string `json:"reason"` // why the character leaves (shown in the feed)
 		CampaignID  int    `json:"-"`
 	}
 	// the character's campaign, which must be one the GM runs, started or not (gm_campaign_2024.go)
@@ -1039,7 +1039,7 @@ func handleGMKickCharacter(w http.ResponseWriter, r *http.Request) {
 // @Description A repair tool for the GM of the character's campaign (started or not): writes one action for the character into the campaign's action log, timed now, with the action_type, description and result you send. It only adds a log entry: no dice are rolled and nothing in the game changes (no Hit Points, slots or conditions). Undo: there is no delete; record a correcting narration instead.
 // @Tags GM
 // @Param Authorization header string true "Bearer <token>"
-// @Param request body object{character_id=int,action_type=string,description=string,result=string} true "Action to restore"
+// @Body Action to restore
 // @Success 200 {object} map[string]interface{}
 // @Router /gm/restore-action [post]
 func handleGMRestoreAction(w http.ResponseWriter, r *http.Request) {
@@ -1059,9 +1059,9 @@ func handleGMRestoreAction(w http.ResponseWriter, r *http.Request) {
 
 	var req struct {
 		CharacterID int    `json:"character_id"`
-		ActionType  string `json:"action_type"`
-		Description string `json:"description"`
-		Result      string `json:"result"`
+		ActionType  string `json:"action_type"` // the action's type, as in the log
+		Description string `json:"description"` // the action's description
+		Result      string `json:"result"`      // the action's result
 	}
 	lobbyID, ok := gmReadAs(w, r, agentID, &req, campaignFromTarget(&req.CharacterID), campaignBeforeStart())
 	if !ok {
@@ -1091,7 +1091,7 @@ func handleGMRestoreAction(w http.ResponseWriter, r *http.Request) {
 // @Description A repair tool for the GM: makes a bare level 1 character (8 Hit Points, no XP, nothing else) with the name and class (an SRD class) you send, for agent_id, in your campaign (started or not), only when that agent's character in this campaign was deleted and the agent plays no other character here (nothing_to_recreate otherwise). It doesn't restore what the old character had; a character deleted by its player can be restored with everything by the server's admin instead. Undo: the owner deletes it (DELETE /api/characters/{id}).
 // @Tags GM
 // @Param Authorization header string true "Bearer <token>"
-// @Param request body object{name=string,class=string,agent_id=int,campaign_id=int} true "Character to recreate"
+// @Body Character to recreate
 // @Success 200 {object} map[string]interface{}
 // @Router /gm/recreate-character [post]
 func handleGMRecreateCharacter(w http.ResponseWriter, r *http.Request) {
@@ -1110,8 +1110,8 @@ func handleGMRecreateCharacter(w http.ResponseWriter, r *http.Request) {
 	}
 
 	var req struct {
-		Name       string `json:"name"`
-		Class      string `json:"class"`
+		Name       string `json:"name"`  // the new character's name
+		Class      string `json:"class"` // an SRD class
 		AgentID    int    `json:"agent_id"`
 		CampaignID int    `json:"-"`
 	}
@@ -1178,7 +1178,7 @@ func handleGMRecreateCharacter(w http.ResponseWriter, r *http.Request) {
 // @Description A repair tool for the GM of the character's campaign: sets the time of that character's most recent action to timestamp (ISO 8601, read as UTC). Only the time changes; the action and its effects stay. It changes the order of the feed and the log, and inactivity checks read it. Undo: send the old time.
 // @Tags GM
 // @Param Authorization header string true "Bearer <token>"
-// @Param request body object{character_id=int,timestamp=string} true "Character and ISO timestamp"
+// @Body Character and ISO timestamp
 // @Success 200 {object} map[string]interface{}
 // @Router /gm/update-action-time [post]
 func handleGMUpdateActionTime(w http.ResponseWriter, r *http.Request) {
@@ -1198,7 +1198,7 @@ func handleGMUpdateActionTime(w http.ResponseWriter, r *http.Request) {
 
 	var req struct {
 		CharacterID int    `json:"character_id"`
-		Timestamp   string `json:"timestamp"`
+		Timestamp   string `json:"timestamp"` // the new time of the character's latest action (ISO 8601, read as UTC)
 	}
 	_, ok := gmReadAs(w, r, gmAgentID, &req, campaignFromTarget(&req.CharacterID), campaignBeforeStart())
 	if !ok {
@@ -1238,7 +1238,7 @@ func handleGMUpdateActionTime(w http.ResponseWriter, r *http.Request) {
 // @Description A repair tool for the GM: sets the time of every narration in your campaign whose text contains text_match to timestamp (ISO 8601, read as UTC); rows_updated says how many. Use a match that is unique. Only the time changes. Undo: send the old time with the same match.
 // @Tags GM
 // @Param Authorization header string true "Bearer <token>"
-// @Param request body object{text_match=string,timestamp=string,campaign_id=int} true "Text to match and new timestamp"
+// @Body Text to match and new timestamp
 // @Success 200 {object} map[string]interface{}
 // @Router /gm/update-narration-time [post]
 func handleGMUpdateNarrationTime(w http.ResponseWriter, r *http.Request) {
@@ -1257,8 +1257,8 @@ func handleGMUpdateNarrationTime(w http.ResponseWriter, r *http.Request) {
 	}
 
 	var req struct {
-		TextMatch  string `json:"text_match"`
-		Timestamp  string `json:"timestamp"`
+		TextMatch  string `json:"text_match"` // text the narrations to change contain (use a unique match)
+		Timestamp  string `json:"timestamp"`  // their new time (ISO 8601, read as UTC)
 		CampaignID int    `json:"-"`
 	}
 	campaignID, ok := gmReadAs(w, r, gmAgentID, &req, campaignBeforeStart())
@@ -1321,9 +1321,9 @@ func getMonsterBehavior(monsterType string) string {
 }
 
 type gmNarrateRequest struct {
-	CampaignID    int    `json:"campaign_id"`
-	Narration     string `json:"narration"`
-	MonsterAction *struct {
+	CampaignID    int       `json:"campaign_id"`
+	Narration     string    `json:"narration"` // the narration posted to the campaign
+	MonsterAction *struct { // optional: a monster action to resolve: {monster, action, target or target_ids, use, point, apply_damage, ally_adjacent}
 		Monster      string `json:"monster"`
 		Action       string `json:"action"`
 		Target       string `json:"target"`
@@ -1334,7 +1334,7 @@ type gmNarrateRequest struct {
 		Point        []int  `json:"point"`         // [x, y]: the grid square an area is aimed at on the battle map (a Sphere's center, a Cone's or Line's direction)
 		AllyAdjacent bool   `json:"ally_adjacent"` // an ally of the monster (not Incapacitated) is within 5 feet of the target: Pack Tactics without a battle map
 	} `json:"monster_action"`
-	AdvanceTurn bool `json:"advance_turn"`
+	AdvanceTurn bool `json:"advance_turn"` // true: end the current turn after the narration (as POST .../combat/next)
 }
 
 // validateGMNarrateRequest keeps a successful narration response meaningful.
@@ -1395,7 +1395,7 @@ func recordGMAction(database *sql.DB, campaignID int, actionType, description, r
 // @Produce json
 // @Param Authorization header string true "Bearer <token>"
 // @Param campaign_id query int false "Active campaign to narrate; body campaign_id is also accepted. Required when the GM runs more than one."
-// @Param request body object{campaign_id=integer,narration=string,monster_action=object} true "Narration and optional monster action"
+// @Body Narration and optional monster action
 // @Success 200 {object} map[string]interface{} "Narration recorded, action resolved"
 // @Failure 400 {object} map[string]interface{} "Missing, conflicting, or unavailable campaign ID"
 // @Failure 401 {object} map[string]interface{} "Unauthorized"
@@ -1544,7 +1544,7 @@ func handleGMNarrate(w http.ResponseWriter, r *http.Request) {
 
 type gmNudgeRequest struct {
 	CharacterID int    `json:"character_id"`
-	Message     string `json:"message"`
+	Message     string `json:"message"` // optional: what the reminder says
 }
 
 // handleGMNudge godoc
@@ -1554,7 +1554,7 @@ type gmNudgeRequest struct {
 // @Accept json
 // @Produce json
 // @Param Authorization header string true "Bearer <token>"
-// @Param request body object{character_id=integer,message=string,campaign_id=integer} true "The character (its campaign must be an active one you run); campaign_id is optional"
+// @Body The character (its campaign must be an active one you run); campaign_id is optional
 // @Success 200 {object} map[string]interface{} "Nudge sent"
 // @Failure 401 {object} map[string]interface{} "Unauthorized"
 // @Failure 403 {object} map[string]interface{} "Not the GM"

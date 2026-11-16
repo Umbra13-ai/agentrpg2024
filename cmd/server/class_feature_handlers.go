@@ -18,7 +18,7 @@ import (
 // @Accept json
 // @Produce json
 // @Param character_id query int false "Character ID (for GET)"
-// @Param request body object{character_id=int,metamagic=string} false "Learn a metamagic option"
+// @Body Learn a metamagic option
 // @Security BasicAuth
 // @Success 200 {object} object{metamagic_known=[]string,max_choices=int,can_learn_more=bool}
 // @Router /characters/metamagic [get]
@@ -270,7 +270,7 @@ func handleCharacterMetamagic(w http.ResponseWriter, r *http.Request) {
 // @Produce json
 // @Param Authorization header string true "Bearer <token>"
 // @Param character_id query integer false "Character ID (for GET)"
-// @Param request body object{character_id=integer,invocation=string} false "Learn an invocation (for POST)"
+// @Body Learn an invocation (for POST)
 // @Success 200 {object} map[string]interface{} "Invocation info"
 // @Failure 400 {object} map[string]interface{} "Invalid request"
 // @Failure 401 {object} map[string]interface{} "Unauthorized"
@@ -854,7 +854,7 @@ func countInvocationsByLevel(level int) int {
 // @Tags Characters
 // @Accept json
 // @Produce json
-// @Param request body object{character_id=int,action=string,slot_level=int} true "Action: 'create_slot' or 'convert_slot', slot_level: 1-5"
+// @Body Action: 'create_slot' or 'convert_slot', slot_level: 1-5
 // @Security BasicAuth
 // @Success 200 {object} object{success=bool,sorcery_points=int,message=string}
 // @Router /characters/flexible-casting [post]
@@ -1096,7 +1096,7 @@ var fontOfMagicActions = map[string]string{"create_slot": "font_of_magic", "conv
 // @Accept json
 // @Produce json
 // @Param character_id query int false "Character ID (for GET)"
-// @Param request body object{character_id=int,style=string} false "Fighting style choice (for POST)"
+// @Body Fighting style choice (for POST)
 // @Success 200 {object} object
 // @Router /characters/fighting-style [get]
 // @Router /characters/fighting-style [post]
@@ -1223,7 +1223,7 @@ func handleCharacterFightingStyle(w http.ResponseWriter, r *http.Request) {
 
 	var req struct {
 		CharacterID int      `json:"character_id"`
-		Style       string   `json:"style"`
+		Style       string   `json:"style"`    // the Fighting Style to choose (GET lists the ones you can take)
 		Replace     string   `json:"replace"`  // Fighter: the style to swap out when gaining a Fighter level
 		Cantrips    []string `json:"cantrips"` // Blessed Warrior / Druidic Warrior: two cantrips
 	}
@@ -1521,7 +1521,7 @@ func getBreathWeaponDamageDice(level int) string {
 // @Produce json
 // @Param Authorization header string true "Bearer <token>"
 // @Param character_id query integer false "Character ID (for GET)"
-// @Param request body object{character_id=integer,damage_type=string} false "Fiendish Resilience choice (for POST)"
+// @Body Fiendish Resilience choice (for POST)
 // @Success 200 {object} map[string]interface{} "Fiendish Resilience status or confirmation"
 // @Failure 400 {object} map[string]interface{} "Invalid request"
 // @Failure 401 {object} map[string]interface{} "Unauthorized"
@@ -1642,7 +1642,7 @@ func handleCharacterFiendishResilience(w http.ResponseWriter, r *http.Request) {
 
 	var req struct {
 		CharacterID int    `json:"character_id"`
-		DamageType  string `json:"damage_type"`
+		DamageType  string `json:"damage_type"` // the damage type to resist (any but Force)
 	}
 	if !readRequest(w, r, &req) {
 		return
@@ -1775,7 +1775,7 @@ func handleCharacterFiendishResilience(w http.ResponseWriter, r *http.Request) {
 // @Accept json
 // @Produce json
 // @Param character_id query int false "Character ID (for GET)"
-// @Param body body object{character_id=int,spell_level=int,spell_slug=string} false "Body for POST"
+// @Body Body for POST
 // @Success 200 {object} object
 // @Router /characters/mystic-arcanum [get]
 // @Router /characters/mystic-arcanum [post]
@@ -1974,8 +1974,8 @@ func handleCharacterMysticArcanum(w http.ResponseWriter, r *http.Request) {
 
 	var req struct {
 		CharacterID int    `json:"character_id"`
-		SpellLevel  int    `json:"spell_level"`
-		SpellSlug   string `json:"spell_slug"`
+		SpellLevel  int    `json:"spell_level"` // the Mystic Arcanum's spell level (6 to 9)
+		SpellSlug   string `json:"spell_slug"`  // the Warlock spell of that level to take
 	}
 	if !readRequest(w, r, &req) {
 		return
@@ -2137,7 +2137,7 @@ func handleCharacterMysticArcanum(w http.ResponseWriter, r *http.Request) {
 // @Accept json
 // @Produce json
 // @Param character_id query int false "Character ID (GET)"
-// @Param body body object{character_id=int,action=string,spell=string} false "Action: choose/cast"
+// @Body Action: choose/cast
 // @Success 200 {object} object "Signature Spells result"
 // @Failure 400 {object} object "Not a level 20 Wizard or invalid spell"
 // @Security BasicAuth
