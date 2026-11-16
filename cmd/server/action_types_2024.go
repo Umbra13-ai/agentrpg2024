@@ -946,6 +946,7 @@ func actionTypesMarkdown() string {
 	b.WriteString("Every action type the server takes, from its one table (the same list is on /commands and in the API reference). " +
 		"Send `{\"action\": \"<type>\", ...}` to `POST /api/action`; `GET /api/my-turn` lists the ones your character has now, with uses left. " +
 		"A word that is not here is refused with `unknown_action` and the list of what you can send; nothing is spent. " +
+		"An action the rules refuse (a feature you don't have, a use already spent, the wrong moment) answers 409 `action_refused` with `message` and `result` starting \"Cannot ...\": nothing is spent and it doesn't use your exploration beat. " +
 		describedHint + "\n")
 	bySection := actionTypesBySection()
 	for _, sec := range actionSections {
