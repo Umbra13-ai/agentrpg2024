@@ -121,7 +121,7 @@ var poisonRules = map[string]poisonRule{
 // @Summary Expose creatures to a poison
 // @Description One of the 14 sample poisons of the SRD 5.2.1 (assassins_blood, burnt_othur_fumes, crawler_mucus, essence_of_ether, malice, midnight_tears, oil_of_taggit, pale_tincture, purple_worm_poison, serpent_venom, spiders_sting, torpor, truth_serum, wyvern_poison). Each target makes the Constitution save; damage and conditions are applied. repeat=true is a repeated save that deals the poison's later damage (Burnt Othur Fumes 1d6 at the start of each turn, Pale Tincture 1d6 every 24 hours). Midnight Tears is resolved when midnight strikes.
 // @Tags GM
-// @Param request body object{poison=string,target_id=int,target_ids=[]int,repeat=bool} true "Poison and targets (characters or negative monster ids)"
+// @Body Poison and targets (characters or negative monster ids)
 // @Router /gm/apply-poison [post]
 func handleGMApplyPoison2024(w http.ResponseWriter, r *http.Request) {
 	if r.Method != http.MethodPost {
@@ -129,11 +129,11 @@ func handleGMApplyPoison2024(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	var req struct {
-		Poison      string `json:"poison"`
+		Poison      string `json:"poison"` // one of the 14 sample poisons (assassins_blood, malice, serpent_venom ...)
 		TargetID    int    `json:"target_id"`
 		TargetIDs   []int  `json:"target_ids"`
 		CharacterID int    `json:"character_id"`
-		Repeat      bool   `json:"repeat"`
+		Repeat      bool   `json:"repeat"` // true: a repeated save that deals the poison's later damage
 	}
 	_, lobby, ok := gmRead(w, r, &req, optionalBody())
 	if !ok {
@@ -218,7 +218,7 @@ func ensureContagionTable() {
 // @Summary Expose a creature to a magical contagion
 // @Description Cackle Fever (DC 10), Sewer Plague (DC 11) or Sight Rot (DC 15): the target makes the Constitution save (dc overrides it) or becomes infected. Sight Rot blinds at once; the others take effect 1d4 days later (POST /api/gm/contagion-save with onset=true).
 // @Tags GM
-// @Param request body object{contagion=string,target_id=int,dc=int} true "Contagion and target"
+// @Body Contagion and target
 // @Router /gm/apply-contagion [post]
 func handleGMApplyContagion(w http.ResponseWriter, r *http.Request) {
 	if r.Method != http.MethodPost {
@@ -226,7 +226,7 @@ func handleGMApplyContagion(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	var req struct {
-		Contagion   string `json:"contagion"`
+		Contagion   string `json:"contagion"` // cackle_fever, sewer_plague or sight_rot
 		TargetID    int    `json:"target_id"`
 		CharacterID int    `json:"character_id"`
 		DC          int    `json:"dc"`
@@ -275,7 +275,7 @@ func handleGMApplyContagion(w http.ResponseWriter, r *http.Request) {
 // @Summary A contagion's onset, its daily or Long Rest save, or its cure
 // @Description onset=true applies the first effects (Cackle Fever and Sewer Plague: 1 Exhaustion level). Otherwise it is "Fighting the Contagion": Cackle Fever DC 13 at the end of each Long Rest (three successes end it), Sewer Plague DC 11 daily at dawn (failure +1 Exhaustion, success -1, ends at 0). cured=true ends any contagion (Sight Rot: Heal or Lesser Restoration, or 72 hours of ointment).
 // @Tags GM
-// @Param request body object{contagion=string,target_id=int,onset=bool,cured=bool} true "Contagion and target"
+// @Body Contagion and target
 // @Router /gm/contagion-save [post]
 func handleGMContagionSave(w http.ResponseWriter, r *http.Request) {
 	if r.Method != http.MethodPost {
@@ -283,11 +283,11 @@ func handleGMContagionSave(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	var req struct {
-		Contagion   string `json:"contagion"`
+		Contagion   string `json:"contagion"` // cackle_fever, sewer_plague or sight_rot
 		TargetID    int    `json:"target_id"`
 		CharacterID int    `json:"character_id"`
-		Onset       bool   `json:"onset"`
-		Cured       bool   `json:"cured"`
+		Onset       bool   `json:"onset"` // true: apply the first effects (the onset)
+		Cured       bool   `json:"cured"` // true: the contagion ends
 	}
 	_, lobby, ok := gmRead(w, r, &req, optionalBody())
 	if !ok {
@@ -364,7 +364,7 @@ func handleGMContagionSave(w http.ResponseWriter, r *http.Request) {
 // @Summary Mental stress: Psychic damage and a prolonged effect
 // @Description SRD 5.2.1 Fear and Mental Stress. Each target makes a saving throw (ability wis by default, or int or cha) against dc, taking the Psychic damage on a failure (half on a success if half_on_success). A failure can add a prolonged effect: short (condition frightened, incapacitated or stunned for 1d10 minutes), long (Disadvantage on some or all ability checks for 1d10 x 10 hours) or indefinite (until Greater Restoration). Plain fear is the Frightened condition through POST /api/gm/conditions with an end_save.
 // @Tags GM
-// @Param request body object{target_id=int,target_ids=[]int,dc=int,ability=string,damage=string,half_on_success=bool,prolonged=string,condition=string,checks=string} true "Mental stress"
+// @Body Mental stress
 // @Router /gm/mental-stress [post]
 func handleGMMentalStress(w http.ResponseWriter, r *http.Request) {
 	if r.Method != http.MethodPost {
@@ -376,12 +376,12 @@ func handleGMMentalStress(w http.ResponseWriter, r *http.Request) {
 		TargetIDs     []int  `json:"target_ids"`
 		CharacterID   int    `json:"character_id"`
 		DC            int    `json:"dc"`
-		Ability       string `json:"ability"`
-		Damage        string `json:"damage"`
-		HalfOnSuccess bool   `json:"half_on_success"`
-		Prolonged     string `json:"prolonged"`
-		Condition     string `json:"condition"`
-		Checks        string `json:"checks"`
+		Ability       string `json:"ability"`         // the save's ability: wis (default), int or cha
+		Damage        string `json:"damage"`          // the Psychic damage dice, such as 2d10
+		HalfOnSuccess bool   `json:"half_on_success"` // true: half the damage on a successful save
+		Prolonged     string `json:"prolonged"`       // on a failure: short, long or indefinite
+		Condition     string `json:"condition"`       // prolonged short: frightened, incapacitated or stunned
+		Checks        string `json:"checks"`          // prolonged long: which ability checks have Disadvantage (default some or all)
 	}
 	_, lobby, ok := gmRead(w, r, &req, optionalBody())
 	if !ok {
@@ -490,7 +490,7 @@ func levelBand(level int) int {
 // @Summary Spring a trap
 // @Description One of the 8 example traps of the SRD 5.2.1 (collapsing_roof, falling_net, fire_casting_statue, hidden_pit, poisoned_darts, poisoned_needle, rolling_stone, spiked_pit), scaled to level (1-20, default 1) with its "At Higher Levels" table. Each target makes the trap's saving throw (pits have none); damage and conditions are applied. The response has the trap's full text, with how to detect and disarm it.
 // @Tags GM
-// @Param request body object{trap=string,target_id=int,target_ids=[]int,level=int} true "Trap and targets"
+// @Body Trap and targets
 // @Router /gm/trap [post]
 func handleGMTrap2024(w http.ResponseWriter, r *http.Request) {
 	if r.Method != http.MethodPost {
@@ -498,11 +498,11 @@ func handleGMTrap2024(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	var req struct {
-		Trap        string `json:"trap"`
+		Trap        string `json:"trap"` // one of the 8 example traps (collapsing_roof, falling_net, hidden_pit ...)
 		TargetID    int    `json:"target_id"`
 		TargetIDs   []int  `json:"target_ids"`
 		CharacterID int    `json:"character_id"`
-		Level       int    `json:"level"`
+		Level       int    `json:"level"` // the level it is scaled to (1-20, default 1)
 	}
 	_, lobby, ok := gmRead(w, r, &req, optionalBody())
 	if !ok {
@@ -598,7 +598,7 @@ func monsterKeyOfCombatant(lobbyID, id int) string {
 // @Summary Environmental effects
 // @Description SRD 5.2.1 Environmental Effects. deep_water (each hour of swimming more than 100 feet deep without a Swim Speed: DC 10 Constitution save or 1 Exhaustion level), extreme_cold (each hour at 0 F or lower: DC 10), extreme_heat (each hour at 100 F or higher without drinkable water: DC 5, +1 per further hour; Disadvantage in Medium or Heavy armor), frigid_water (each minute beyond the Constitution score: DC 10), slippery_ice (DC 10 Dexterity save or Prone). resistant=true is Resistance or Immunity to the relevant damage (Cold or Fire; automatic success) or a creature adapted to the water. heavy_precipitation, high_altitude, strong_wind and thin_ice return their rules (thin ice also rolls its weight tolerance). Rules Glossary hazards, once per day: dehydration (water less than half: 1 Exhaustion level), malnutrition (food less than half: DC 10 Constitution save or 1 Exhaustion level; after 5 days with no food: 1 level at the end of each day).
 // @Tags GM
-// @Param request body object{character_id=int,hazard=string,hours=int,minutes=int,medium_or_heavy_armor=bool,resistant=bool,swim_speed=bool,water=string,food=string,days_without_food=int} true "Hazard (also dehydration with water, malnutrition with food and days_without_food: full, half, less_than_half or none)"
+// @Body Hazard (also dehydration with water, malnutrition with food and days_without_food: full, half, less_than_half or none)
 // @Router /gm/environmental-hazard [post]
 func handleGMEnvironmentalHazard2024(w http.ResponseWriter, r *http.Request) {
 	if r.Method != http.MethodPost {
@@ -607,16 +607,16 @@ func handleGMEnvironmentalHazard2024(w http.ResponseWriter, r *http.Request) {
 	}
 	var req struct {
 		CharacterID int    `json:"character_id"`
-		Hazard      string `json:"hazard"`
-		Hours       int    `json:"hours"`
-		Minutes     int    `json:"minutes"`
-		Armor       bool   `json:"medium_or_heavy_armor"`
-		HeavyArmor  bool   `json:"heavy_armor"`
-		Resistant   bool   `json:"resistant"`
-		SwimSpeed   bool   `json:"swim_speed"`
-		Water       string `json:"water"`             // dehydration: full, half, less_than_half, none
-		Food        string `json:"food"`              // malnutrition: full, half, less_than_half, none
-		DaysNoFood  int    `json:"days_without_food"` // malnutrition: whole days with no food
+		Hazard      string `json:"hazard"`                // deep_water, extreme_cold, extreme_heat, frigid_water, slippery_ice, dehydration, malnutrition ... (the description lists them)
+		Hours       int    `json:"hours"`                 // the hours spent in it
+		Minutes     int    `json:"minutes"`               // frigid_water: the minutes spent in it
+		Armor       bool   `json:"medium_or_heavy_armor"` // extreme_heat: the creature wears Medium or Heavy armor (Disadvantage)
+		HeavyArmor  bool   `json:"heavy_armor"`           // extreme_heat: the creature wears Heavy armor (Disadvantage, as medium_or_heavy_armor)
+		Resistant   bool   `json:"resistant"`             // true: Resistance or Immunity to the damage (automatic success), or adapted to the water
+		SwimSpeed   bool   `json:"swim_speed"`            // deep_water: the creature has a Swim Speed
+		Water       string `json:"water"`                 // dehydration: full, half, less_than_half, none
+		Food        string `json:"food"`                  // malnutrition: full, half, less_than_half, none
+		DaysNoFood  int    `json:"days_without_food"`     // malnutrition: whole days with no food
 	}
 	_, lobby, ok := gmRead(w, r, &req, optionalBody())
 	if !ok {
@@ -711,7 +711,7 @@ func handleGMEnvironmentalHazard2024(w http.ResponseWriter, r *http.Request) {
 // @Summary Fight or Flight
 // @Description When it isn't clear whether a creature is willing to fight, it makes a DC 10 Wisdom saving throw before Initiative is rolled (the GM can set the DC higher). On a failure it avoids the battle: it flees, surrenders or stays out of the fight.
 // @Tags GM
-// @Param request body object{target_id=int,target_ids=[]int,dc=int} true "Creatures (negative monster ids, or characters)"
+// @Body Creatures (negative monster ids, or characters)
 // @Router /gm/morale-check [post]
 func handleGMMoraleCheck2024(w http.ResponseWriter, r *http.Request) {
 	if r.Method != http.MethodPost {

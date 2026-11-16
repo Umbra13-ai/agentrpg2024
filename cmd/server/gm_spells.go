@@ -16,7 +16,7 @@ import (
 // @Accept json
 // @Produce json
 // @Security BasicAuth
-// @Param request body object{spell_slug=string,caster_id=int,target_ids=[]int,dc=int,ritual=bool} true "AoE cast details"
+// @Body AoE cast details
 // @Success 200 {object} map[string]interface{} "Results for each target"
 // @Failure 401 {object} map[string]interface{} "Unauthorized"
 // @Failure 400 {object} map[string]interface{} "Bad request"
@@ -35,11 +35,11 @@ func handleGMAoECast(w http.ResponseWriter, r *http.Request) {
 	}
 
 	var req struct {
-		SpellSlug     string `json:"spell_slug"`
+		SpellSlug     string `json:"spell_slug"` // the spell (its slug)
 		CasterID      int    `json:"caster_id"`
 		TargetIDs     []int  `json:"target_ids"`
 		DC            int    `json:"dc"`
-		Ritual        bool   `json:"ritual"`
+		Ritual        bool   `json:"ritual"`         // true: cast as a ritual (no slot; the spell must have the Ritual tag)
 		SlotLevel     int    `json:"slot_level"`     // For upcasting
 		SculptTargets []int  `json:"sculpt_targets"` // Evocation Wizard's Sculpt Spells - allies to protect
 	}
@@ -495,7 +495,7 @@ func handleGMAoECast(w http.ResponseWriter, r *http.Request) {
 // @Accept json
 // @Produce json
 // @Param Authorization header string true "Bearer <token>"
-// @Param request body object{caster_id=integer,target_id=integer,target_spell_level=integer,slot_level=integer,effect_name=string} true "Dispel Magic details: target_id is the character/monster affected, target_spell_level required (or auto-detected from concentration), slot_level defaults to 3, effect_name optional"
+// @Body Dispel Magic details: target_id is the character/monster affected, target_spell_level required (or auto-detected from concentration), slot_level defaults to 3, effect_name optional
 // @Success 200 {object} map[string]interface{} "Dispel Magic result"
 // @Failure 401 {object} map[string]interface{} "Unauthorized"
 // @Failure 403 {object} map[string]interface{} "Not GM"
@@ -517,9 +517,9 @@ func handleGMDispelMagic(w http.ResponseWriter, r *http.Request) {
 	var req struct {
 		CasterID         int    `json:"caster_id"`
 		TargetID         int    `json:"target_id"`
-		TargetSpellLevel int    `json:"target_spell_level"`
-		SlotLevel        int    `json:"slot_level"`
-		EffectName       string `json:"effect_name"` // Optional: name of effect to dispel
+		TargetSpellLevel int    `json:"target_spell_level"` // the level of the spell to end
+		SlotLevel        int    `json:"slot_level"`         // the slot Dispel Magic is cast with (3 to 9): a spell of that level or lower ends without a check
+		EffectName       string `json:"effect_name"`        // Optional: name of effect to dispel
 	}
 	// the character's campaign, which must be one the GM runs (gm_campaign_2024.go)
 	lobbyID, ok := gmReadAs(w, r, agentID, &req, campaignFromTarget(&req.CasterID))

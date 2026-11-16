@@ -258,24 +258,26 @@ func gmClearConditions(campaignID, targetID int, cond string) []string {
 // gmConditionRequest: the body of POST/DELETE /api/gm/conditions, and of /api/characters/{id}/conditions (target_id from the path).
 type gmConditionRequest struct {
 	TargetID         int               `json:"target_id"`
-	Condition        string            `json:"condition"`
-	Source           string            `json:"source"`
-	Escapes          []conditionEscape `json:"escapes"`
-	EscapeDC         int               `json:"escape_dc"`
-	DurationRounds   int               `json:"duration_rounds"`
-	Notes            string            `json:"notes"`
-	RecordID         int               `json:"record_id"`
-	EndSave          *conditionSave    `json:"end_save"`
-	FromMagicalSleep bool              `json:"from_magical_sleep"`
-	FromElemental    bool              `json:"from_elemental"`
-	FromFey          bool              `json:"from_fey"`
-	Level            *int              `json:"level"`     // exhaustion: the level to set (0-6)
-	CasterID         int               `json:"caster_id"` // a spell's state (blessed): who cast it, when more than one has it in play
-	All              bool              `json:"all"`       // DELETE: every condition of the target
+	Condition        string            `json:"condition"`          // one of the 15 conditions, or exhaustion (DELETE: a condition's name, or all)
+	Source           string            `json:"source"`             // what caused it (GM only)
+	Escapes          []conditionEscape `json:"escapes"`            // the ways to end it, each {ability, skill, dc, label, uses_action}
+	EscapeDC         int               `json:"escape_dc"`          // Grappled: the escape DC (the Strength (Athletics) or Dexterity (Acrobatics) escapes are made for you)
+	DurationRounds   int               `json:"duration_rounds"`    // it counts down at the end of the affected creature's turns and ends at 0
+	Notes            string            `json:"notes"`              // notes (GM only)
+	RecordID         int               `json:"record_id"`          // DELETE: the record to remove (its id from GET /api/conditions/active)
+	EndSave          *conditionSave    `json:"end_save"`           // a saving throw repeated at the end (or start) of each of its turns: {ability, dc, when}; a success ends it
+	FromMagicalSleep bool              `json:"from_magical_sleep"` // true: magic puts the creature to sleep (Fey Ancestry and the like make it immune)
+	Level            *int              `json:"level"`              // exhaustion: the level to set (0-6)
+	CasterID         int               `json:"caster_id"`          // a spell's state (blessed): who cast it, when more than one has it in play
+	All              bool              `json:"all"`                // DELETE: every condition of the target
 }
 
+// handleGMConditions godoc
 // handleGMConditions: POST /api/gm/conditions applies a condition (exhaustion: one level, or "level" sets it); DELETE removes one by
 // record_id, or by target_id with a condition name, or every condition with "all" (F230).
+// The words of these routes are written in tools/build_swagger.py; the request and the reply come from the code.
+// @Router /gm/conditions [post]
+// @Router /gm/conditions [delete]
 func handleGMConditions(w http.ResponseWriter, r *http.Request) {
 	if r.Method != http.MethodPost && r.Method != http.MethodDelete {
 		writeJSONStatus(w, http.StatusMethodNotAllowed, map[string]interface{}{"error": "POST to apply a condition, DELETE to remove one"})
@@ -434,8 +436,11 @@ func gmDeleteByName(w http.ResponseWriter, campaignID, targetID int, condition s
 	writeJSONStatus(w, 200, out)
 }
 
+// handleConditionsActive godoc
 // handleConditionsActive: GET /api/conditions/active?character_id=N lists a character's conditions.
 // The character's player gets the player view; the GM of the campaign gets the GM view.
+// The words of these routes are written in tools/build_swagger.py; the request and the reply come from the code.
+// @Router /conditions/active [get]
 func handleConditionsActive(w http.ResponseWriter, r *http.Request) {
 	charID, _ := strconv.Atoi(r.URL.Query().Get("character_id"))
 	agentID, ok := requireOwnerOrGM(w, r, charID, "see its conditions")
@@ -450,7 +455,10 @@ func handleConditionsActive(w http.ResponseWriter, r *http.Request) {
 	writeJSONStatus(w, 200, map[string]interface{}{"character_id": charID, "conditions": conditionsDetail(lobby, charID, speed, gm), "exhaustion_level": exhaustionLevelOf(charID)})
 }
 
+// handleConditionEscape godoc
 // handleConditionEscape: POST /api/conditions/escape {character_id, record_id, escape} makes the check.
+// The words of these routes are written in tools/build_swagger.py; the request and the reply come from the code.
+// @Router /conditions/escape [post]
 func handleConditionEscape(w http.ResponseWriter, r *http.Request) {
 	if r.Method != http.MethodPost {
 		writeJSONStatus(w, http.StatusMethodNotAllowed, map[string]interface{}{"error": "POST required"})
@@ -463,8 +471,8 @@ func handleConditionEscape(w http.ResponseWriter, r *http.Request) {
 	}
 	var req struct {
 		CharacterID int `json:"character_id"`
-		RecordID    int `json:"record_id"`
-		Escape      int `json:"escape"`
+		RecordID    int `json:"record_id"` // the condition's record (its record_id from GET /api/conditions/active)
+		Escape      int `json:"escape"`    // which way to end it: its index in ways_to_end
 	}
 	if !readRequest(w, r, &req) {
 		return
@@ -564,7 +572,10 @@ func conditionsPage() string {
 	return b.String()
 }
 
+// handleUniverseConditions godoc
 // handleUniverseConditions: GET /api/universe/conditions returns the verbatim SRD text of each condition.
+// The words of these routes are written in tools/build_swagger.py; the request and the reply come from the code.
+// @Router /universe/conditions [get]
 func handleUniverseConditions(w http.ResponseWriter, r *http.Request) {
 	type cond struct {
 		Name        string   `json:"name"`
@@ -597,7 +608,7 @@ func endSaveJSON(s *conditionSave) interface{} {
 // @Description The same request as POST and DELETE /api/gm/conditions, with the character taken from the path (leave target_id out). Only the GM of the character's campaign; a player ends a condition with POST /api/conditions/escape.
 // @Tags GM
 // @Param id path int true "Character ID"
-// @Param request body object{condition=string,record_id=int,all=bool,source=string,notes=string,escape_dc=int,duration_rounds=int,level=int} true "As POST /api/gm/conditions (apply) or DELETE /api/gm/conditions (remove: record_id, condition, or all)"
+// @Body As POST /api/gm/conditions (apply) or DELETE /api/gm/conditions (remove: record_id, condition, or all)
 // @Router /characters/{id}/conditions [post]
 // @Router /characters/{id}/conditions [delete]
 //

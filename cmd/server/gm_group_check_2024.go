@@ -24,7 +24,7 @@ func glossaryText(name string) string {
 // @Summary Group check
 // @Description When the party tries something together and the most skilled can cover for the less adept, everyone makes the same ability check; if at least half the group succeeds, the whole group succeeds. Send a skill (or an ability) and a DC; character_ids defaults to every living character in the campaign. Proficiency, Expertise, Jack of All Trades, Reliable Talent and Guidance apply; advantage/disadvantage apply to everyone.
 // @Tags GM
-// @Param request body object{campaign_id=int,skill=string,ability=string,dc=int,character_ids=[]int,advantage=bool,disadvantage=bool,description=string} true "Group check"
+// @Body Group check
 // @Router /gm/group-check [post]
 func handleGMGroupCheck(w http.ResponseWriter, r *http.Request) {
 	if r.Method != http.MethodPost {
@@ -32,13 +32,13 @@ func handleGMGroupCheck(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	var req struct {
-		Skill        string `json:"skill"`
-		Ability      string `json:"ability"`
+		Skill        string `json:"skill"`   // the skill everyone checks (or ability)
+		Ability      string `json:"ability"` // the ability, when it isn't a skill check
 		DC           int    `json:"dc"`
 		CharacterIDs []int  `json:"character_ids"`
 		Advantage    bool   `json:"advantage"`
 		Disadvantage bool   `json:"disadvantage"`
-		Description  string `json:"description"`
+		Description  string `json:"description"` // what the group attempts (shown in the log)
 	}
 	_, lobby, ok := gmRead(w, r, &req, optionalBody(), targetsIn(&req.CharacterIDs))
 	if !ok {

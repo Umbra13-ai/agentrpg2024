@@ -33,7 +33,9 @@ var builderFields = map[string]bool{
 	"skill_proficiencies": true, "tool_proficiencies": true, "expertise": true, "weapon_masteries": true, "class_options": true,
 	"starting_equipment": true, "background_tool": true, "background_equipment": true, "background_feat_choices": true,
 	"species_choices": true, "species_feat_choices": true, "extra_languages": true, "known_spells": true, "draconic_ancestry": true,
-	"divine_order": true, "primal_order": true, "use_suggestion": true,
+	"divine_order":   true, // an older draft's field, read only to be removed (null): a Cleric's order goes in class_options
+	"primal_order":   true, // an older draft's field, read only to be removed (null): a Druid's order goes in class_options
+	"use_suggestion": true, // true: take the current step's suggestion; or a step's key: take that step's suggestion
 }
 
 // builderFieldNames: builderFields as a sorted list.

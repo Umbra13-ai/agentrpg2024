@@ -89,23 +89,23 @@ func resolveAttackOnObject(lobbyID, objectID int, o attackOutcome) string {
 // @Summary Objects and doors (breaking objects)
 // @Description SRD 5.2.1 Breaking Objects. POST {"name": "oak door", "substance": "wood", "size": "large", "resilient": true} creates an object with the Object Armor Class (cloth/paper/rope 11, crystal/glass/ice 13, wood 15, stone 17, iron/steel 19, mithral 21, adamantine 23) and Object Hit Points (fragile or resilient dice by size: tiny 1d4/2d4, small 1d6/3d6, medium 1d8/4d8, large 1d10/5d10); ac, hp, threshold (damage threshold), vulnerable and resistant (damage types) override or add. Players attack it with POST /api/action {"action":"attack","object_id": N}. POST {"object_id": N, "damage": 12, "damage_type": "fire"} damages it (Immunity to Poison and Psychic; damage below the threshold does nothing). POST {"object_id": N, "remove": true} removes it. GET ?campaign_id lists objects.
 // @Tags GM
-// @Param request body object{campaign_id=int,name=string,substance=string,size=string,resilient=bool,ac=int,hp=int,threshold=int,vulnerable=string,resistant=string,object_id=int,damage=int,damage_type=string,remove=bool} true "Object"
+// @Body Object
 // @Router /gm/object [post]
 func handleGMObject(w http.ResponseWriter, r *http.Request) {
 	var req struct {
-		Name       string `json:"name"`
-		Substance  string `json:"substance"`
-		Size       string `json:"size"`
-		Resilient  bool   `json:"resilient"`
-		AC         int    `json:"ac"`
-		HP         int    `json:"hp"`
-		Threshold  int    `json:"threshold"`
-		Vulnerable string `json:"vulnerable"`
-		Resistant  string `json:"resistant"`
-		ObjectID   int    `json:"object_id"`
-		Damage     int    `json:"damage"`
-		DamageType string `json:"damage_type"`
-		Remove     bool   `json:"remove"`
+		Name       string `json:"name"`        // the object's name (oak door)
+		Substance  string `json:"substance"`   // cloth, paper, rope, crystal, glass, ice, wood, stone, iron, steel, mithral or adamantine
+		Size       string `json:"size"`        // tiny, small, medium or large
+		Resilient  bool   `json:"resilient"`   // true: resilient Hit Points (more dice) instead of fragile
+		AC         int    `json:"ac"`          // overrides the Object Armor Class
+		HP         int    `json:"hp"`          // overrides the Object Hit Points
+		Threshold  int    `json:"threshold"`   // its damage threshold (damage below it does nothing)
+		Vulnerable string `json:"vulnerable"`  // damage types it is vulnerable to
+		Resistant  string `json:"resistant"`   // damage types it resists
+		ObjectID   int    `json:"object_id"`   // the object to damage or remove
+		Damage     int    `json:"damage"`      // damage to deal to the object
+		DamageType string `json:"damage_type"` // the damage type
+		Remove     bool   `json:"remove"`      // true: remove the object
 	}
 	_, lobby, ok := gmRead(w, r, &req, optionalBody())
 	if !ok {
@@ -273,7 +273,7 @@ func marchingOrderNames(lobbyID int) []string {
 // @Description The order the party travels in, front to back (it decides who meets a trap or an ambush first). GET shows it; POST {"order": [character ids, front first]} sets it (the GM or any player in the campaign). Travel reports show it.
 // @Tags Campaigns
 // @Param id path int true "Campaign ID"
-// @Param request body object{order=[]int} false "Character ids, front first (POST)"
+// @Body Character ids, front first (POST)
 // @Router /campaigns/{id}/marching-order [get]
 // @Router /campaigns/{id}/marching-order [post]
 // handleMarchingOrder: GET /api/campaigns/{id}/marching-order shows the order; POST {"order": [character ids, front first]} sets it
@@ -285,7 +285,7 @@ func handleMarchingOrder(w http.ResponseWriter, r *http.Request, campaignID int)
 			return
 		}
 		var req struct {
-			Order []int `json:"order"`
+			Order []int `json:"order"` // the character ids, front first
 		}
 		if !readRequest(w, r, &req, optionalBody()) {
 			return
@@ -311,15 +311,15 @@ func handleMarchingOrder(w http.ResponseWriter, r *http.Request, campaignID int)
 // @Summary Curses
 // @Description SRD 5.2.1 Curses: the effect that confers a curse says what it does; Remove Curse and Greater Restoration end curses. POST {"target_id": 5, "description": "Can't remove the cursed ring; Disadvantage on Wisdom saves", "source": "Ring of ..."} curses a character (or a monster's negative id); {"curse_id": N, "remove": true} lifts one. GET ?campaign_id lists them. Casting Remove Curse or Greater Restoration on a character (target_id or target_ids) ends its curses automatically.
 // @Tags GM
-// @Param request body object{campaign_id=int,target_id=int,description=string,source=string,curse_id=int,remove=bool} true "Curse"
+// @Body Curse
 // @Router /gm/curse [post]
 func handleGMCurse(w http.ResponseWriter, r *http.Request) {
 	var req struct {
 		TargetID    int    `json:"target_id"`
-		Description string `json:"description"`
-		Source      string `json:"source"`
-		CurseID     int    `json:"curse_id"`
-		Remove      bool   `json:"remove"`
+		Description string `json:"description"` // what the curse does
+		Source      string `json:"source"`      // what conferred it
+		CurseID     int    `json:"curse_id"`    // the curse to end
+		Remove      bool   `json:"remove"`      // true: end the curse
 	}
 	_, lobby, ok := gmRead(w, r, &req, optionalBody())
 	if !ok {
@@ -391,13 +391,13 @@ func endCursesBySpell(lobbyID int, spellSlug string, targets []int) string {
 // @Summary Start a character at a higher level
 // @Description SRD 5.2.1 Starting at Higher Levels: the character goes from its level to the new one by the level-up rules (Hit Points, Ability Score Improvements, XP set to the level's minimum, the public "Ding!" note of choices), and gets the Starting Equipment at Higher Levels money: levels 5-10 500 GP + 1d10 x 25 GP, 11-16 5,000 GP + 1d10 x 250 GP, 17-20 20,000 GP + 1d10 x 250 GP. The reply gives the suggested magic items (2-4: 1 Common; 5-10: 1 Common, 1 Uncommon; 11-16: 2 Common, 3 Uncommon, 1 Rare; 17-20: 2 Common, 4 Uncommon, 3 Rare, 1 Very Rare), which the GM gives with POST /api/gm/give-item. gold=false skips the money.
 // @Tags GM
-// @Param request body object{campaign_id=int,character_id=int,level=int,gold=bool} true "Character and starting level"
+// @Body Character and starting level
 // @Router /gm/starting-level [post]
 func handleGMStartingLevel(w http.ResponseWriter, r *http.Request) {
 	var req struct {
 		CharacterID int   `json:"character_id"`
-		Level       int   `json:"level"`
-		Gold        *bool `json:"gold"`
+		Level       int   `json:"level"` // the level the character starts at
+		Gold        *bool `json:"gold"`  // false: no Starting Equipment at Higher Levels money (default true)
 	}
 	_, _, ok := gmRead(w, r, &req, optionalBody(), targetsIn(&req.CharacterID))
 	if !ok {

@@ -18,7 +18,10 @@ func rulesetFilter(r *http.Request) string {
 	return "ruleset = '2024'"
 }
 
+// handleUniverseMonster godoc
 // handleUniverseMonster: GET /api/universe/monsters/{slug}.
+// The words of these routes are written in tools/build_swagger.py; the request and the reply come from the code.
+// @Router /universe/monsters/{slug} [get]
 func handleUniverseMonster(w http.ResponseWriter, r *http.Request) {
 	w.Header().Set("Content-Type", "application/json")
 	slug := strings.TrimPrefix(r.URL.Path, "/api/universe/monsters/")

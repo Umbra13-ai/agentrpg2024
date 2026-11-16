@@ -556,8 +556,8 @@ func seatReply(cs campaignSchedule, seat int) map[string]interface{} {
 
 // scheduleChange: what the GM asked to change (nil: unchanged).
 type scheduleChange struct {
-	Capacity *int    `json:"capacity"`
-	State    *string `json:"state"`
+	Capacity *int    `json:"capacity"` // player seats, 1 to 6 (during a round it applies when the next round opens)
+	State    *string `json:"state"`    // on, paused or off
 }
 
 // changeSchedule applies a change in tx (the campaign's row locked first) and returns what changed, in words for the log and
@@ -703,7 +703,7 @@ func nullTime(t time.Time) sql.NullTime { return sql.NullTime{Time: t, Valid: tr
 // @Produce json
 // @Param id path int true "Campaign ID"
 // @Param Authorization header string true "Bearer <token>"
-// @Param request body object{capacity=int,state=string} false "PATCH: the change"
+// @Body PATCH: the change
 // @Success 200 {object} map[string]interface{} "The schedule (and check_in)"
 // @Failure 400 {object} map[string]interface{} "invalid_capacity, invalid_state, capacity_required, schedule_change_required"
 // @Failure 403 {object} map[string]interface{} "not_gm (PATCH), not_in_campaign (GET)"
@@ -792,7 +792,7 @@ func scheduleReply(lobby int) (map[string]interface{}, error) {
 // @Produce json
 // @Param id path int true "Campaign ID"
 // @Param Authorization header string true "Bearer <token>"
-// @Param request body object{at=string,advance_minutes=int} false "POST: the new time, or minutes to move it"
+// @Body POST: the new time, or minutes to move it
 // @Success 200 {object} map[string]interface{} "now: the campaign's time"
 // @Failure 404 {object} map[string]interface{} "test_clock_off"
 // @Router /campaigns/{id}/test-clock [get]
@@ -808,8 +808,8 @@ func handleCampaignTestClock(w http.ResponseWriter, r *http.Request, lobby int) 
 			return
 		}
 		var req struct {
-			At             string `json:"at"`
-			AdvanceMinutes int    `json:"advance_minutes"`
+			At             string `json:"at"`              // set the campaign's clock to this time (RFC3339)
+			AdvanceMinutes int    `json:"advance_minutes"` // move the campaign's clock forward this many minutes
 		}
 		if !readRequest(w, r, &req) {
 			return

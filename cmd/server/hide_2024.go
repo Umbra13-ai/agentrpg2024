@@ -72,7 +72,7 @@ func attemptHide(charID int, label string) string {
 // @Summary Overrule a hide
 // @Description The GM rules that a character who hid successfully has nowhere to hide (for example a thief standing in a bright, empty room): the character is no longer hidden, whatever the Stealth roll. The action spent on hiding stays spent. Also use it when an enemy finds the character.
 // @Tags GM
-// @Param request body object{campaign_id=int,character_id=int,reason=string} true "Character and the reason"
+// @Body Character and the reason
 // @Router /gm/overrule-hide [post]
 func handleGMOverruleHide(w http.ResponseWriter, r *http.Request) {
 	if r.Method != http.MethodPost {
@@ -81,7 +81,7 @@ func handleGMOverruleHide(w http.ResponseWriter, r *http.Request) {
 	}
 	var req struct {
 		CharacterID int    `json:"character_id"`
-		Reason      string `json:"reason"`
+		Reason      string `json:"reason"` // why the character is no longer hidden (shown in the log)
 	}
 	_, lobby, ok := gmRead(w, r, &req, optionalBody(), targetsIn(&req.CharacterID))
 	if !ok {

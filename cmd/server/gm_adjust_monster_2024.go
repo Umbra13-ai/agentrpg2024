@@ -30,7 +30,7 @@ import (
 // @Tags GM
 // @Accept json
 // @Produce json
-// @Param request body object{target=string,damage=int,damage_type=string,apply_resistances=bool,heal=int,hp=int,max_hp=int,temp_hp=int,ac=int,conditions=[]string,rounds=int,source=string,remove_conditions=[]string,riders=[]string,initiative=int,name=string,remove=bool,note=string} true "What to change"
+// @Body What to change
 // @Success 200 {object} map[string]interface{}
 // @Router /gm/adjust-monster [post]
 func handleGMAdjustMonster(w http.ResponseWriter, r *http.Request) {
@@ -39,27 +39,27 @@ func handleGMAdjustMonster(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	var req struct {
-		Target           interface{}       `json:"target"`
+		Target           interface{}       `json:"target"` // the monster by name (exact, then a unique partial match) or id, instead of target_id
 		TargetID         int               `json:"target_id"`
-		Damage           *int              `json:"damage"`
-		DamageType       string            `json:"damage_type"`
-		ApplyResistances bool              `json:"apply_resistances"`
-		Heal             *int              `json:"heal"`
-		HP               *int              `json:"hp"`
-		MaxHP            *int              `json:"max_hp"`
-		TempHP           *int              `json:"temp_hp"`
-		AC               *int              `json:"ac"`
-		Conditions       []string          `json:"conditions"`
-		Rounds           int               `json:"rounds"`
-		EndSave          *conditionSave    `json:"end_save"`
-		Source           string            `json:"source"`
-		RemoveConditions []string          `json:"remove_conditions"`
-		Riders           []string          `json:"riders"`
-		Initiative       *int              `json:"initiative"`
-		Position         *mapSquare        `json:"position"`
-		Name             string            `json:"name"`
-		Remove           bool              `json:"remove"`
-		Note             string            `json:"note"`
+		Damage           *int              `json:"damage"`            // damage to deal, exactly (resistances only with apply_resistances)
+		DamageType       string            `json:"damage_type"`       // the damage type
+		ApplyResistances bool              `json:"apply_resistances"` // true: the monster's resistances, immunities and vulnerabilities apply to damage
+		Heal             *int              `json:"heal"`              // Hit Points to restore
+		HP               *int              `json:"hp"`                // set its Hit Points
+		MaxHP            *int              `json:"max_hp"`            // set its Hit Point maximum
+		TempHP           *int              `json:"temp_hp"`           // set its Temporary Hit Points
+		AC               *int              `json:"ac"`                // set its Armor Class
+		Conditions       []string          `json:"conditions"`        // conditions to apply (set even on an immune creature)
+		Rounds           int               `json:"rounds"`            // the conditions last this many of its turns
+		EndSave          *conditionSave    `json:"end_save"`          // a saving throw repeated at the end of each of its turns: {ability, dc}; a success ends the conditions
+		Source           string            `json:"source"`            // what caused the conditions (shown to the GM)
+		RemoveConditions []string          `json:"remove_conditions"` // conditions to remove ("all" for every one)
+		Riders           []string          `json:"riders"`            // riders the server applies: disadvantage_next_attack (others are noted for the GM to narrate)
+		Initiative       *int              `json:"initiative"`        // set its Initiative (its place in the turn order)
+		Position         *mapSquare        `json:"position"`          // move its token on the battle map: {x, y}
+		Name             string            `json:"name"`              // a new name
+		Remove           bool              `json:"remove"`            // true: take it out of the fight
+		Note             string            `json:"note"`              // why (shown in the log)
 		Extra            map[string]string `json:"-"`
 	}
 	agentID, campaignID, ok := gmRead(w, r, &req)

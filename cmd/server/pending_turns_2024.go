@@ -778,7 +778,7 @@ func pendingQueue(lobbyID int, c ptCombat) []map[string]interface{} {
 // @Accept json
 // @Produce json
 // @Param Authorization header string true "Bearer token"
-// @Param request body object false "steps (list of action bodies), fallbacks (list of step lists), character_id and campaign_id when you play several"
+// @Body steps (list of action bodies), fallbacks (list of step lists), character_id and campaign_id when you play several
 // @Success 200 {object} map[string]interface{} "The stored turn, its round, who is before you, warnings"
 // @Failure 400 {object} map[string]interface{} "invalid_pending_turn with problems; nothing was saved"
 // @Failure 409 {object} map[string]interface{} "no_active_combat or not_in_combat"
@@ -900,7 +900,7 @@ func handlePendingTurn(w http.ResponseWriter, r *http.Request) {
 		writeJSONStatus(w, http.StatusOK, base)
 	case http.MethodPost:
 		var steps []map[string]interface{}
-		if v, ok := raw["steps"]; !ok || json.Unmarshal(v, &steps) != nil {
+		if v, ok := raw["steps"]; !ok || json.Unmarshal(v, &steps) != nil { // your turn: action bodies in order, each with the fields of POST /api/action (map_move also path and altitude)
 			writeJSONStatus(w, http.StatusBadRequest, map[string]interface{}{"error": "steps_required", "message": "Send steps: a list of action bodies in the order you take them, like [{\"action\": \"attack\", \"target_id\": -1}]. Nothing was saved."})
 			return
 		}
@@ -908,7 +908,7 @@ func handlePendingTurn(w http.ResponseWriter, r *http.Request) {
 		var readAs []string
 		if v, ok := raw["fallbacks"]; ok && string(v) != "null" {
 			var items []json.RawMessage
-			if json.Unmarshal(v, &items) != nil {
+			if json.Unmarshal(v, &items) != nil { // other turns to take in order when a step of steps can't be taken: a list of step lists
 				writeJSONStatus(w, http.StatusBadRequest, map[string]interface{}{"error": "invalid_fallbacks", "message": "fallbacks is a list of turns, each a list of steps: [[{\"action\": \"attack\", \"target_id\": -2}], [{\"action\": \"dodge\"}]]. Nothing was saved."})
 				return
 			}
@@ -1041,7 +1041,7 @@ func ptRequireGM(w http.ResponseWriter, r *http.Request, campaignID int, what st
 // @Produce json
 // @Param id path int true "Campaign ID"
 // @Param Authorization header string true "Bearer token"
-// @Param request body object true "steps: list of action bodies"
+// @Body steps: list of action bodies
 // @Success 200 {object} map[string]interface{} "The steps' results, then the walk's report"
 // @Failure 400 {object} map[string]interface{} "A step was refused"
 // @Failure 409 {object} map[string]interface{} "gm_turn (a monster's slot), pending_turn_waiting or no_active_combat"
@@ -1052,7 +1052,7 @@ func handleCombatStandIn(w http.ResponseWriter, r *http.Request, campaignID int)
 	}
 	ensurePendingTurns()
 	var req struct {
-		Steps []map[string]interface{} `json:"steps"`
+		Steps []map[string]interface{} `json:"steps"` // the turn the character would take: action bodies in order, each with the fields of POST /api/action
 	}
 	if !readRequest(w, r, &req) {
 		return

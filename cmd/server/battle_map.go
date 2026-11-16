@@ -40,9 +40,9 @@ type encounterMap struct {
 
 type mapRequest struct {
 	CharacterID    int          `json:"character_id"`
-	Map            encounterMap `json:"map"`
-	Path           []mapSquare  `json:"path"`
-	Confirmation   string       `json:"confirmation"`
+	Map            encounterMap `json:"map"`             // GM (PUT, preview): the battle map object to check or publish
+	Path           []mapSquare  `json:"path"`            // player move: the squares to move through, in order
+	Confirmation   string       `json:"confirmation"`    // the confirmation the preview gave (the map's revision, or the move's): the change is made only when it matches
 	ForcedMovement bool         `json:"forced_movement"` // GM map update: the moves were forced or teleports (no Opportunity Attacks)
 	Disengaged     []int        `json:"disengaged"`      // GM map update: monsters that took the Disengage action this turn
 	CompanionID    int          `json:"companion_id"`    // player move: one of the character's companions instead of the character
@@ -278,7 +278,7 @@ func battleMapError(w http.ResponseWriter, status int, code string) {
 // @Tags Campaigns
 // @Param id path int true "Campaign ID"
 // @Param character_id query int false "A player's character (GET)"
-// @Param request body object{map=object,character_id=int,path=[]object,confirmation=string,forced_movement=bool,disengaged=[]int,altitude=int} false "Map (GM) or path (player)"
+// @Body Map (GM) or path (player)
 // @Router /campaigns/{id}/battle-map [get]
 // @Router /campaigns/{id}/battle-map [put]
 // @Router /campaigns/{id}/battle-map/preview [post]

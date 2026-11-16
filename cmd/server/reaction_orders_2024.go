@@ -269,7 +269,7 @@ func autoOpportunityAttacks(lobbyID int) []string {
 // @Produce json
 // @Security BasicAuth
 // @Param character_id query int false "Character ID (GET)"
-// @Param request body object{character_id=int,order=string,on=bool,min_damage=int} false "An order to set (POST)"
+// @Body An order to set (POST)
 // @Success 200 {object} map[string]interface{} "The orders"
 // @Failure 400 {object} map[string]interface{} "Bad request or the character lacks the feature"
 // @Router /characters/reaction-orders [get]
@@ -278,9 +278,9 @@ func handleReactionOrders(w http.ResponseWriter, r *http.Request) {
 	w.Header().Set("Content-Type", "application/json")
 	var req struct {
 		CharacterID int    `json:"character_id"`
-		Order       string `json:"order"`
-		On          *bool  `json:"on"`
-		MinDamage   int    `json:"min_damage"`
+		Order       string `json:"order"`      // shield, uncanny_dodge, deflect_attacks or opportunity_attack
+		On          *bool  `json:"on"`         // true sets the order, false clears it (default true)
+		MinDamage   int    `json:"min_damage"` // uncanny_dodge, deflect_attacks: keep the Reaction for hits of at least this much damage
 	}
 	switch r.Method {
 	case http.MethodGet:

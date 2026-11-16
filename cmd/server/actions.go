@@ -393,11 +393,11 @@ func actionNarrative(description, legacyResult string) string {
 // actionFields: what an action is: the body of POST /api/action without its envelope, and each step of a pending turn
 // (pending_turns_2024.go), so both take the same fields and are read by the same rule (request_body_2024.go).
 type actionFields struct {
-	Action                 string `json:"action"`
-	Description            string `json:"description"`
-	Result                 string `json:"result"`     // Backward-compatible narrative alias used by earlier action clients.
-	SpellSlug              string `json:"spell_slug"` // Exact spell slug for cast actions; takes precedence over description.
-	Target                 string `json:"target"`
+	Action                 string `json:"action"`                   // the action type (its name or an alias): the types are listed on /commands and in GET /api/my-turn's options
+	Description            string `json:"description"`              // what your character does, in your words (an action the GM rules on needs one)
+	Result                 string `json:"result"`                   // Backward-compatible narrative alias used by earlier action clients.
+	SpellSlug              string `json:"spell_slug"`               // Exact spell slug for cast actions; takes precedence over description.
+	Target                 string `json:"target"`                   // the target by name as situation.enemies in GET /api/my-turn shows it (or an id), instead of target_id
 	TargetCharacterID      int    `json:"target_character_id"`      // Explicit party member for stabilize.
 	MovementCost           int    `json:"movement_cost"`            // feet of movement for move actions
 	TowardFrightenedSource bool   `json:"toward_frightened_source"` // set true if moving toward source of fear (blocks movement)
@@ -450,7 +450,7 @@ type actionRequest struct {
 // @Accept json
 // @Produce json
 // @Param Authorization header string true "Bearer <token>"
-// @Param request body object{action=string,description=string,spell_slug=string,slot_level=int,item=string,charges=int,target_id=int,target_ids=[]int,target=string,target_character_id=int,movement_cost=int,toward_frightened_source=bool,character_id=int,campaign_id=int} true "Action details (character_id or campaign_id: which character acts, for a player in several campaigns; a cast needs a spell the character can cast: prepared, a cantrip, or given by a feature, its origin or an item; item: cast from a magic item or read a Spell Scroll, with charges for a higher version where the item allows it; use_item with item drinks a potion, a Bonus Action, or gives it to target_character_id)"
+// @Body Action details (character_id or campaign_id: which character acts, for a player in several campaigns; a cast needs a spell the character can cast: prepared, a cantrip, or given by a feature, its origin or an item; item: cast from a magic item or read a Spell Scroll, with charges for a higher version where the item allows it; use_item with item drinks a potion, a Bonus Action, or gives it to target_character_id)
 // @Success 200 {object} map[string]interface{} "Action result with dice rolls"
 // @Failure 401 {object} map[string]interface{} "Unauthorized"
 // @Failure 400 {object} map[string]interface{} "unknown_action (with the actions the character can send), a refused action or a resource exhausted; nothing was spent"

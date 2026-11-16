@@ -60,7 +60,7 @@ func radiantStrikes(charID int, class string, level int, melee, crit bool) (int,
 // @Summary Paladin Abjure Foes (Channel Divinity, level 9)
 // @Description Creatures of the Paladin's choice within 60 feet make a Wisdom saving throw; on a failure they are Frightened for 1 minute or until they take damage.
 // @Tags GM
-// @Param request body object{paladin_id=int,target_ids=[]int} true "Request"
+// @Body Request
 // @Router /gm/abjure-foes [post]
 func handleGMAbjureFoes(w http.ResponseWriter, r *http.Request) {
 	if r.Method != http.MethodPost {
@@ -68,7 +68,7 @@ func handleGMAbjureFoes(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	var req struct {
-		PaladinID int   `json:"paladin_id"`
+		PaladinID int   `json:"paladin_id"` // the Paladin who uses Abjure Foes
 		TargetIDs []int `json:"target_ids"`
 	}
 	_, campaignID, ok := gmRead(w, r, &req, targetsIn(&req.PaladinID, &req.TargetIDs))

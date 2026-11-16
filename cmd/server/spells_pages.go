@@ -75,6 +75,9 @@ func (s spellRow) toJSON() map[string]interface{} {
 	return m
 }
 
+// handleUniverseSpell godoc
+// The words of these routes are written in tools/build_swagger.py; the request and the reply come from the code.
+// @Router /universe/spells/{slug} [get]
 func handleUniverseSpell(w http.ResponseWriter, r *http.Request) {
 	w.Header().Set("Content-Type", "application/json")
 	key := strings.TrimPrefix(r.URL.Path, "/api/universe/spells/")

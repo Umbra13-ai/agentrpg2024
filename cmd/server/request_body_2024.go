@@ -40,6 +40,7 @@ type bodySpec struct {
 	extra       map[string]interface{} // envelope fields taken beside the request's own, decoded into these pointers
 	fields      []string               // a map request: the fields it takes (structs list their own)
 	anyKey      bool                   // a map request that checks its keys itself (character creation, the builder)
+	named       []string               // ... and the fields it takes, for a refusal's list
 	limit       int64                  // a larger body than maxRequestBody (none today but the portrait, which reads raw bytes)
 	aliases     map[string]string      // other names of a field (alias -> field), read as that field
 	hint        string                 // added to an unknown-field refusal: where a misplaced field goes
@@ -73,8 +74,12 @@ func onlyFields(names ...string) bodyOpt {
 }
 
 // keysCheckedByHandler: a map request whose handler checks each key itself, with reasons the reader can't know (character
-// creation's aliases and misplaced fields, the builder's steps). The reader still checks everything else.
-func keysCheckedByHandler() bodyOpt { return func(s *bodySpec) { s.anyKey = true } }
+// creation's aliases and misplaced fields, the builder's steps). The reader still checks everything else. names are the fields
+// the request takes: a refusal lists them, and the API reference documents them (api_shapes_2024_test.go); keys are matched by
+// the handler, not by them.
+func keysCheckedByHandler(names ...string) bodyOpt {
+	return func(s *bodySpec) { s.anyKey, s.named = true, append(s.named, names...) }
+}
 
 // fieldAliases: other names a field may be sent under (alias -> field), read as the field (a feature's name for its pick).
 func fieldAliases(m map[string]string) bodyOpt {
@@ -220,6 +225,9 @@ func parseRequest(raw []byte, v interface{}, spec bodySpec) *bodyProblem {
 	}
 	ids := pathIDs(spec.path)
 	shown := append([]string{}, own...) // the fields the refusal lists: the request's own and its envelope
+	if isMap && spec.anyKey {
+		shown = append(shown, spec.named...)
+	}
 	for name := range spec.extra {
 		if !hasString(shown, name) {
 			shown = append(shown, name)

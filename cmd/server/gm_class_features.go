@@ -16,7 +16,7 @@ import (
 // @Accept json
 // @Produce json
 // @Param Authorization header string true "Bearer <token>"
-// @Param request body object{caster_id=integer,healing=[]object{target_id=integer,amount=integer}} true "Preserve Life request with healing distribution"
+// @Body Preserve Life request with healing distribution
 // @Success 200 {object} map[string]interface{} "Preserve Life results"
 // @Failure 401 {object} map[string]interface{} "Unauthorized"
 // @Failure 403 {object} map[string]interface{} "Not GM or not Life Domain Cleric"
@@ -274,7 +274,7 @@ func handleGMPreserveLife(w http.ResponseWriter, r *http.Request) {
 // @Accept json
 // @Produce json
 // @Param Authorization header string true "Bearer <token>"
-// @Param request body object{paladin_id=integer} true "Sacred Weapon request"
+// @Body Sacred Weapon request
 // @Success 200 {object} map[string]interface{} "Sacred Weapon activated"
 // @Failure 401 {object} map[string]interface{} "Unauthorized"
 // @Failure 403 {object} map[string]interface{} "Not GM or not Devotion Paladin"
@@ -423,7 +423,7 @@ func handleGMSacredWeapon(w http.ResponseWriter, r *http.Request) {
 // @Accept json
 // @Produce json
 // @Param Authorization header string true "Bearer <token>"
-// @Param request body object{bard_id=integer,enemy_roll=integer,roll_type=string} true "Cutting Words: bard_id (character using the reaction), enemy_roll (the roll to reduce), roll_type (attack/ability/damage)"
+// @Body Cutting Words: bard_id (character using the reaction), enemy_roll (the roll to reduce), roll_type (attack/ability/damage)
 // @Success 200 {object} map[string]interface{} "Cutting Words result with reduced roll"
 // @Failure 401 {object} map[string]interface{} "Unauthorized"
 // @Failure 403 {object} map[string]interface{} "Not GM or not Lore Bard"
@@ -443,9 +443,9 @@ func handleGMCuttingWords(w http.ResponseWriter, r *http.Request) {
 	}
 
 	var req struct {
-		BardID    int    `json:"bard_id"`
-		EnemyRoll int    `json:"enemy_roll"`
-		RollType  string `json:"roll_type"` // "attack", "ability", or "damage"
+		BardID    int    `json:"bard_id"`    // the College of Lore Bard who uses Cutting Words
+		EnemyRoll int    `json:"enemy_roll"` // the creature's roll before Cutting Words
+		RollType  string `json:"roll_type"`  // "attack", "ability", or "damage"
 	}
 	// the character's campaign, which must be one the GM runs (gm_campaign_2024.go)
 	lobbyID, ok := gmReadAs(w, r, agentID, &req, campaignFromTarget(&req.BardID))
@@ -583,7 +583,7 @@ func handleGMCuttingWords(w http.ResponseWriter, r *http.Request) {
 // @Accept json
 // @Produce json
 // @Param Authorization header string true "Bearer <token>"
-// @Param request body object{character_id=integer,original_roll=integer,roll_type=string} true "Dark One's Own Luck: character_id (Fiend Warlock using the feature), original_roll (the roll to boost), roll_type (ability/saving)"
+// @Body Dark One's Own Luck: character_id (Fiend Warlock using the feature), original_roll (the roll to boost), roll_type (ability/saving)
 // @Success 200 {object} map[string]interface{} "Dark One's Own Luck result with boosted roll"
 // @Failure 401 {object} map[string]interface{} "Unauthorized"
 // @Failure 403 {object} map[string]interface{} "Not GM or not Fiend Warlock level 6+"
@@ -604,8 +604,8 @@ func handleGMDarkOnesLuck(w http.ResponseWriter, r *http.Request) {
 
 	var req struct {
 		CharacterID  int    `json:"character_id"`
-		OriginalRoll int    `json:"original_roll"`
-		RollType     string `json:"roll_type"` // "ability" or "saving"
+		OriginalRoll int    `json:"original_roll"` // the Warlock's roll before Dark One's Own Luck
+		RollType     string `json:"roll_type"`     // "ability" or "saving"
 	}
 	// the character's campaign, which must be one the GM runs (gm_campaign_2024.go)
 	lobbyID, ok := gmReadAs(w, r, agentID, &req, campaignFromTarget(&req.CharacterID))
@@ -750,7 +750,7 @@ func handleGMDarkOnesLuck(w http.ResponseWriter, r *http.Request) {
 // @Accept json
 // @Produce json
 // @Param Authorization header string true "Bearer <token>"
-// @Param request body object{character_id=integer,ability=string,dc=integer} true "character_id (Fighter), ability (str/dex/con/int/wis/cha), dc (difficulty class)"
+// @Body character_id (Fighter), ability (str/dex/con/int/wis/cha), dc (difficulty class)
 // @Success 200 {object} map[string]interface{} "Saving throw reroll result"
 // @Failure 401 {object} map[string]interface{} "Unauthorized"
 // @Failure 403 {object} map[string]interface{} "Not GM"
@@ -927,7 +927,7 @@ func handleGMIndomitable(w http.ResponseWriter, r *http.Request) {
 // @Accept json
 // @Produce json
 // @Param Authorization header string true "Bearer <token>"
-// @Param request body object{character_id=integer,mode=string} true "character_id (Rogue level 20), mode ('attack' to turn miss into hit, 'ability_check' to treat roll as 20)"
+// @Body character_id (Rogue level 20), mode ('attack' to turn miss into hit, 'ability_check' to treat roll as 20)
 // @Success 200 {object} map[string]interface{} "Stroke of Luck applied"
 // @Failure 401 {object} map[string]interface{} "Unauthorized"
 // @Failure 403 {object} map[string]interface{} "Not GM"

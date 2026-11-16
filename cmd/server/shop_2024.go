@@ -209,7 +209,7 @@ func shopItemView(it shopItem, weaponProfs, armorProfs string, money int) map[st
 // @Tags Characters
 // @Param id path int true "Character ID"
 // @Param category query string false "GET: weapons, armor, gear, ammunition or tools"
-// @Param request body object{buy=[]object,sell=[]object,done=bool} true "What to buy and sell, and done to finish"
+// @Body What to buy and sell, and done to finish
 // @Router /characters/{id}/shop [get]
 // @Router /characters/{id}/shop [post]
 func handleCharacterShop(w http.ResponseWriter, r *http.Request, charID int) {
@@ -262,12 +262,12 @@ func handleCharacterShop(w http.ResponseWriter, r *http.Request, charID int) {
 		return
 	}
 	var req struct {
-		Buy []struct {
+		Buy []struct { // what to buy: each item and its quantity
 			Item     string `json:"item"`
 			Quantity *int   `json:"quantity"` // missing: 1
 		} `json:"buy"`
-		Done bool      `json:"done"`
-		Sell []sellReq `json:"sell"`
+		Done bool      `json:"done"` // true: finish shopping
+		Sell []sellReq `json:"sell"` // what to sell: each item_id (or item) and its quantity (left out: the whole stack)
 	}
 	// a misspelled field (qty) is refused, not read as 1 (F17)
 	if !readRequest(w, r, &req) {

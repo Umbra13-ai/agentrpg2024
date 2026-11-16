@@ -298,7 +298,7 @@ func craftingInProgress(raw string) []map[string]interface{} {
 // @Accept json
 // @Produce json
 // @Security BasicAuth
-// @Param request body object{character_id=int,activity=string,item=string,spell=string,days=int,tool=string,item_cost=number,helper_id=int} true "activity: craft (the default) or scribe"
+// @Body activity: craft (the default) or scribe
 // @Success 200 {object} map[string]interface{} "Crafting progress"
 // @Failure 400 {object} map[string]interface{} "Bad request"
 // @Router /characters/downtime [post]
@@ -309,13 +309,13 @@ func handleCharacterDowntime(w http.ResponseWriter, r *http.Request) {
 	}
 	var req struct {
 		CharacterID int     `json:"character_id"`
-		Activity    string  `json:"activity"`
-		Item        string  `json:"item"`
-		Days        int     `json:"days"`
-		Tool        string  `json:"tool"`
-		ItemCost    float64 `json:"item_cost"`
-		HelperID    int     `json:"helper_id"`
-		Spell       string  `json:"spell"` // scribe: the spell to put on the scroll
+		Activity    string  `json:"activity"`  // craft or scribe
+		Item        string  `json:"item"`      // craft: the item to make
+		Days        int     `json:"days"`      // the days of work to spend now
+		Tool        string  `json:"tool"`      // craft an item outside the SRD tables: the tool it needs (with item_cost)
+		ItemCost    float64 `json:"item_cost"` // craft: the item's cost in GP when it isn't in the catalog
+		HelperID    int     `json:"helper_id"` // craft: one other character of your campaign, also proficient with the tool, who divides the time
+		Spell       string  `json:"spell"`     // scribe: the spell to put on the scroll
 	}
 	if !readRequest(w, r, &req) {
 		return

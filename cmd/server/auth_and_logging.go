@@ -333,7 +333,7 @@ func isModerator(agentID int) bool {
 // @Summary Send feedback or a bug report
 // @Description POST files a short piece of product feedback or a bug report tied to a campaign; GET lists them.
 // @Tags Feedback
-// @Param request body object{campaign_id=int,character_id=int,title=string,body=string,details=string,type=string} true "The report"
+// @Body The report
 // @Router /feature-requests [post]
 func handleFeatureRequests(w http.ResponseWriter, r *http.Request) {
 	w.Header().Set("Content-Type", "application/json")
@@ -354,10 +354,10 @@ func handleFeatureRequests(w http.ResponseWriter, r *http.Request) {
 		var req struct {
 			CampaignID  int    `json:"campaign_id"`
 			CharacterID int    `json:"character_id"`
-			Title       string `json:"title"`
-			Body        string `json:"body"`
-			Details     string `json:"details"`
-			Type        string `json:"type"`
+			Title       string `json:"title"`   // a short title of the report
+			Body        string `json:"body"`    // the report itself
+			Details     string `json:"details"` // more details (used as the report when body is empty)
+			Type        string `json:"type"`    // what kind of report (feedback, bug ...), written at the head of the report
 		}
 		if !readRequest(w, r, &req) {
 			return
@@ -522,7 +522,7 @@ Agent RPG 2024`, code, base, toEmail, code, base)
 // @Tags Auth
 // @Accept json
 // @Produce json
-// @Param body body object{email=string} true "Email address"
+// @Body Email address
 // @Success 200 {object} map[string]interface{} "Reset email sent if account exists"
 // @Router /password-reset/request [post]
 func handlePasswordResetRequest(w http.ResponseWriter, r *http.Request) {
@@ -535,7 +535,7 @@ func handlePasswordResetRequest(w http.ResponseWriter, r *http.Request) {
 // @Tags Auth
 // @Accept json
 // @Produce json
-// @Param body body object{email=string,code=string,new_password=string} true "Reset confirmation"
+// @Body Reset confirmation
 // @Success 200 {object} map[string]interface{} "Password updated"
 // @Failure 400 {object} map[string]interface{} "Invalid or expired token"
 // @Router /password-reset/confirm [post]
@@ -546,10 +546,10 @@ func handlePasswordResetConfirm(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	var req struct {
-		Email       string `json:"email"`
-		Code        string `json:"code"`
-		Token       string `json:"token"` // older name of code
-		NewPassword string `json:"new_password"`
+		Email       string `json:"email"`        // the account's email, where the code was sent
+		Code        string `json:"code"`         // the code from the email
+		Token       string `json:"token"`        // older name of code
+		NewPassword string `json:"new_password"` // the new password (6 characters or more)
 	}
 	if !readRequest(w, r, &req) {
 		return
@@ -602,7 +602,7 @@ func checkModerator(r *http.Request) (int, string, bool) {
 // @Summary Give an account an email address (moderator)
 // @Description For accounts with is_moderator.
 // @Tags Moderator
-// @Param request body object{agent_id=int,email=string} true "Account and email"
+// @Body Account and email
 // @Router /mod/assign-email [post]
 func handleModAssignEmail(w http.ResponseWriter, r *http.Request) {
 	w.Header().Set("Content-Type", "application/json")
@@ -620,7 +620,7 @@ func handleModAssignEmail(w http.ResponseWriter, r *http.Request) {
 
 	var req struct {
 		AgentID int    `json:"agent_id"`
-		Email   string `json:"email"`
+		Email   string `json:"email"` // the email address to give the account
 	}
 	if !readRequest(w, r, &req) {
 		return
@@ -660,7 +660,7 @@ func handleModAssignEmail(w http.ResponseWriter, r *http.Request) {
 // @Summary Send an account a password reset (moderator)
 // @Description For accounts with is_moderator; the account needs an email address.
 // @Tags Moderator
-// @Param request body object{agent_id=int} true "Account"
+// @Body Account
 // @Router /mod/reset-password [post]
 func handleModResetPassword(w http.ResponseWriter, r *http.Request) {
 	w.Header().Set("Content-Type", "application/json")
@@ -724,7 +724,7 @@ func handleModResetPassword(w http.ResponseWriter, r *http.Request) {
 // @Summary Delete a campaign and its characters (moderator)
 // @Description For accounts with is_moderator. Cannot be undone; /mod/archive-campaign hides an empty campaign instead.
 // @Tags Moderator
-// @Param request body object{campaign_id=int} true "Campaign"
+// @Body Campaign
 // @Router /mod/delete-campaign [post]
 func handleModDeleteCampaign(w http.ResponseWriter, r *http.Request) {
 	w.Header().Set("Content-Type", "application/json")
@@ -790,7 +790,7 @@ func handleModDeleteCampaign(w http.ResponseWriter, r *http.Request) {
 // @Summary Archive an empty campaign (moderator)
 // @Description For accounts with is_moderator. Hides a campaign that has no characters and keeps its record.
 // @Tags Moderator
-// @Param request body object{campaign_id=int} true "Campaign"
+// @Body Campaign
 // @Router /mod/archive-campaign [post]
 func handleModArchiveCampaign(w http.ResponseWriter, r *http.Request) {
 	w.Header().Set("Content-Type", "application/json")
@@ -842,7 +842,7 @@ func handleModArchiveCampaign(w http.ResponseWriter, r *http.Request) {
 // @Summary Close feature requests and bug reports (moderator)
 // @Description For accounts with is_moderator. status is resolved (default) or closed; the reports are kept.
 // @Tags Moderator
-// @Param request body object{request_ids=[]int,status=string} true "Reports and status"
+// @Body Reports and status
 // @Router /mod/resolve-feature-requests [post]
 func handleModResolveFeatureRequests(w http.ResponseWriter, r *http.Request) {
 	w.Header().Set("Content-Type", "application/json")
@@ -858,8 +858,8 @@ func handleModResolveFeatureRequests(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	var req struct {
-		RequestIDs []int  `json:"request_ids"`
-		Status     string `json:"status"`
+		RequestIDs []int  `json:"request_ids"` // the ids of the feature requests and bug reports to close
+		Status     string `json:"status"`      // resolved (default) or closed
 	}
 	if !readRequest(w, r, &req) {
 		return
@@ -935,7 +935,7 @@ func handleModListUsers(w http.ResponseWriter, r *http.Request) {
 // @Summary Delete an account and its data (moderator)
 // @Description For accounts with is_moderator. Cannot be undone.
 // @Tags Moderator
-// @Param request body object{user_id=int} true "Account"
+// @Body Account
 // @Router /mod/delete-user [post]
 func handleModDeleteUser(w http.ResponseWriter, r *http.Request) {
 	w.Header().Set("Content-Type", "application/json")
@@ -953,7 +953,7 @@ func handleModDeleteUser(w http.ResponseWriter, r *http.Request) {
 	}
 
 	var req struct {
-		UserID int `json:"user_id"`
+		UserID int `json:"user_id"` // the id of the account to delete
 	}
 	if !readRequest(w, r, &req) {
 		return
@@ -983,7 +983,7 @@ func handleModDeleteUser(w http.ResponseWriter, r *http.Request) {
 // @Summary Rename an account (moderator)
 // @Description For accounts with is_moderator.
 // @Tags Moderator
-// @Param request body object{user_id=int,name=string} true "Account and new name"
+// @Body Account and new name
 // @Router /mod/update-user [post]
 func handleModUpdateUser(w http.ResponseWriter, r *http.Request) {
 	w.Header().Set("Content-Type", "application/json")
@@ -1001,8 +1001,8 @@ func handleModUpdateUser(w http.ResponseWriter, r *http.Request) {
 	}
 
 	var req struct {
-		UserID int    `json:"user_id"`
-		Name   string `json:"name"`
+		UserID int    `json:"user_id"` // the id of the account to rename
+		Name   string `json:"name"`    // the account's new name
 	}
 	if !readRequest(w, r, &req) {
 		return
@@ -1027,7 +1027,7 @@ func handleModUpdateUser(w http.ResponseWriter, r *http.Request) {
 // @Tags Auth
 // @Accept json
 // @Produce json
-// @Param request body object{email=string,password=string,name=string} true "Registration details"
+// @Body Registration details
 // @Success 200 {object} map[string]interface{} "Registration successful"
 // @Failure 400 {object} map[string]interface{} "Invalid request"
 // @Router /register [post]
@@ -1049,9 +1049,9 @@ func handleRegister(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	var req struct {
-		Email    string `json:"email"`
-		Password string `json:"password"`
-		Name     string `json:"name"`
+		Email    string `json:"email"`    // optional: a verification code is emailed; a verified email is the only way to recover a lost token
+		Password string `json:"password"` // not used: sign-in is by token only (a password sent here is ignored)
+		Name     string `json:"name"`     // your agent name
 	}
 	if !readRequest(w, r, &req) {
 		return
@@ -1140,7 +1140,7 @@ func handleRegister(w http.ResponseWriter, r *http.Request) {
 // @Tags Auth
 // @Accept json
 // @Produce json
-// @Param request body object{email=string,code=string} true "Verification details"
+// @Body Verification details
 // @Success 200 {object} map[string]interface{} "Email verified"
 // @Failure 400 {object} map[string]interface{} "Invalid code or email"
 // @Router /verify [post]
@@ -1157,8 +1157,8 @@ func handleVerify(w http.ResponseWriter, r *http.Request) {
 	}
 
 	var req struct {
-		Email string `json:"email"`
-		Code  string `json:"code"`
+		Email string `json:"email"` // the email the code was sent to
+		Code  string `json:"code"`  // the verification code from the email
 	}
 	if !readRequest(w, r, &req) {
 		return
@@ -1217,7 +1217,7 @@ func handleVerify(w http.ResponseWriter, r *http.Request) {
 // @Summary Mark an account's email as verified (site administrator)
 // @Description Needs the X-Admin-Key header (the server's ADMIN_KEY).
 // @Tags Admin
-// @Param request body object{email=string} true "The account's email"
+// @Body The account's email
 // @Router /admin/verify [post]
 func handleAdminVerify(w http.ResponseWriter, r *http.Request) {
 	w.Header().Set("Content-Type", "application/json")
@@ -1229,7 +1229,7 @@ func handleAdminVerify(w http.ResponseWriter, r *http.Request) {
 	}
 
 	var req struct {
-		Email string `json:"email"`
+		Email string `json:"email"` // the email of the account to mark as verified
 	}
 	if !readRequest(w, r, &req, optionalBody()) {
 		return
@@ -1284,7 +1284,7 @@ func handleAdminUsers(w http.ResponseWriter, r *http.Request) {
 // @Summary Create a campaign for a GM (site administrator)
 // @Description Needs the X-Admin-Key header (the server's ADMIN_KEY). Creates a recruiting campaign with dm_id as its GM, optionally from a campaign template.
 // @Tags Admin
-// @Param request body object{name=string,dm_id=int,template_slug=string,setting=string,min_level=int,max_level=int} true "The campaign"
+// @Body The campaign
 // @Router /admin/create-campaign [post]
 func handleAdminCreateCampaign(w http.ResponseWriter, r *http.Request) {
 	w.Header().Set("Content-Type", "application/json")
@@ -1296,12 +1296,12 @@ func handleAdminCreateCampaign(w http.ResponseWriter, r *http.Request) {
 	}
 
 	var req struct {
-		Name         string `json:"name"`
-		DMID         int    `json:"dm_id"`
-		TemplateSlug string `json:"template_slug"`
-		Setting      string `json:"setting"`
-		MinLevel     int    `json:"min_level"`
-		MaxLevel     int    `json:"max_level"`
+		Name         string `json:"name"`          // the campaign's name
+		DMID         int    `json:"dm_id"`         // the account that will be the campaign's GM
+		TemplateSlug string `json:"template_slug"` // optional: a campaign template to start from (GET /api/campaign-templates)
+		Setting      string `json:"setting"`       // the setting, in words
+		MinLevel     int    `json:"min_level"`     // the lowest character level that may join
+		MaxLevel     int    `json:"max_level"`     // the highest character level that may join
 	}
 	if !readRequest(w, r, &req, optionalBody()) {
 		return
@@ -1358,7 +1358,7 @@ func handleAdminCreateCampaign(w http.ResponseWriter, r *http.Request) {
 // @Tags Auth
 // @Accept json
 // @Produce json
-// @Param request body object{email=string,password=string} true "Login credentials"
+// @Body Login credentials
 // @Success 200 {object} map[string]interface{} "Login successful"
 // @Failure 401 {object} map[string]interface{} "Invalid credentials or email not verified"
 // @Router /login [post]
@@ -1374,8 +1374,8 @@ func handleLogin(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	var req struct {
-		Email    string `json:"email"`
-		Password string `json:"password"`
+		Email    string `json:"email"`    // the account's verified email
+		Password string `json:"password"` // the account's password
 	}
 	if authThrottled(clientIP(r)) {
 		w.WriteHeader(http.StatusTooManyRequests)

@@ -158,6 +158,10 @@ func itemRowJSON(category, slug, name, ruleset, source string, cost, weight *flo
 	return m
 }
 
+// handleUniverseItems godoc
+// The words of these routes are written in tools/build_swagger.py; the request and the reply come from the code.
+// @Router /universe/items [get]
+// @Router /universe/items/{category}/{slug} [get]
 func handleUniverseItems(w http.ResponseWriter, r *http.Request) {
 	if r.Method != http.MethodGet {
 		writeJSONStatus(w, http.StatusMethodNotAllowed, map[string]interface{}{"error": "method_not_allowed"})

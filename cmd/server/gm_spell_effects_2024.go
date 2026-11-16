@@ -77,7 +77,7 @@ func spellLimit(slug string, slotLevel int) int {
 // @Tags GM
 // @Accept json
 // @Produce json
-// @Param request body object{caster_id=int,spell=string,target_ids=[]int,target_id=int,slot_level=int,campaign_id=int} true "the spell (slug or name), its caster and the creatures"
+// @Body the spell (slug or name), its caster and the creatures
 // @Success 200 {object} map[string]interface{}
 // @Router /gm/spell-effect [post]
 func handleGMSpellEffect(w http.ResponseWriter, r *http.Request) {
@@ -87,10 +87,10 @@ func handleGMSpellEffect(w http.ResponseWriter, r *http.Request) {
 	}
 	var req struct {
 		CasterID  int    `json:"caster_id"`
-		Spell     string `json:"spell"`
+		Spell     string `json:"spell"` // the spell already in play (its slug or name)
 		TargetIDs []int  `json:"target_ids"`
 		TargetID  int    `json:"target_id"`
-		SlotLevel int    `json:"slot_level"`
+		SlotLevel int    `json:"slot_level"` // the level it was cast at
 	}
 	// the characters' campaign (caster and targets), which must be an active one the GM runs (gm_campaign_2024.go)
 	_, campaignID, ok := gmRead(w, r, &req, targetsIn(&req.CasterID, &req.TargetIDs, &req.TargetID))

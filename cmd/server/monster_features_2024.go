@@ -224,9 +224,9 @@ func legendaryResistance(lobbyID, id int, st saveStakes) bool {
 
 type legendaryRequest struct {
 	CombatantID int    `json:"combatant_id"`
-	Action      string `json:"action"`
+	Action      string `json:"action"`      // the Legendary Action to take, by name as the stat block lists it
 	ActionName  string `json:"action_name"` // older name of the field
-	Target      string `json:"target"`
+	Target      string `json:"target"`      // the attack's target (a character's name or id)
 	TargetIDs   []int  `json:"target_ids"`
 	Use         string `json:"use"`          // "makes one Claw or Tail attack": which one
 	ApplyDamage *bool  `json:"apply_damage"` // default true
@@ -690,15 +690,15 @@ func monsterFeaturesInfo(lobbyID, id int) map[string]interface{} {
 // @Description GET ?combatant_id=N shows them (uses left, policy, automatic traits, recharging actions). POST sets them: in_lair (one more Legendary Action use and Legendary Resistance; the 2024 rules have no Lair Actions), legendary_resistance ("auto": used against effects that give a condition or damage that would drop the monster to 0 HP; "always"; "manual"), auras (false switches the monster's auras, Regeneration aside, off).
 // @Tags GM
 // @Param combatant_id query int false "Monster id (GET)"
-// @Param request body object{combatant_id=int,in_lair=bool,legendary_resistance=string,auras=bool} false "Settings (POST)"
+// @Body Settings (POST)
 // @Router /gm/monster-features [get]
 // @Router /gm/monster-features [post]
 func handleGMMonsterFeatures(w http.ResponseWriter, r *http.Request) {
 	var req struct {
 		CombatantID         int    `json:"combatant_id"`
-		InLair              *bool  `json:"in_lair"`
-		LegendaryResistance string `json:"legendary_resistance"`
-		Auras               *bool  `json:"auras"`
+		InLair              *bool  `json:"in_lair"`              // true: the monster fights in its lair (one more Legendary Action use and Legendary Resistance)
+		LegendaryResistance string `json:"legendary_resistance"` // auto (used against a condition, or damage that would drop it to 0), always or manual
+		Auras               *bool  `json:"auras"`                // false switches the monster's auras off (Regeneration aside)
 	}
 	_, lobbyID, ok := gmRead(w, r, &req, optionalBody())
 	if !ok {
@@ -744,7 +744,7 @@ func handleGMMonsterFeatures(w http.ResponseWriter, r *http.Request) {
 // @Summary Take a Legendary Action
 // @Description A monster with Legendary Actions takes one immediately after another creature's turn (the turn that ended last): one at a time, one use each (the uses come back at the start of its turn), not while Incapacitated, and an action that says so not again until the start of its next turn. The server resolves the action's text: an attack (target), a saving throw effect or spell (target or target_ids; an Emanation reaches the characters in it on the battle map), damage, another action of the stat block; movement is for the GM to do on the map. The same request can go in combat/next as legendary_actions to take it before the next turn starts.
 // @Tags GM
-// @Param request body object{combatant_id=int,action=string,target=string,target_ids=[]int,use=string,apply_damage=bool} true "The Legendary Action"
+// @Body The Legendary Action
 // @Router /gm/legendary-action [post]
 func handleGMLegendaryAction(w http.ResponseWriter, r *http.Request) {
 	if r.Method != http.MethodPost {
@@ -774,7 +774,7 @@ func handleGMLegendaryAction(w http.ResponseWriter, r *http.Request) {
 // @Summary Use Legendary Resistance by hand
 // @Description For a monster whose policy is manual (or to spend one the server didn't): counts one use of its Legendary Resistance (X/Day, one more in its lair) after it failed a saving throw. The server doesn't undo the effect: remove the condition or give back the damage with the GM tools. With the auto or always policy the server uses Legendary Resistance by itself when the monster fails a save it rolls.
 // @Tags GM
-// @Param request body object{combatant_id=int} true "Monster id"
+// @Body Monster id
 // @Router /gm/legendary-resistance [post]
 func handleGMLegendaryResistance(w http.ResponseWriter, r *http.Request) {
 	if r.Method != http.MethodPost {

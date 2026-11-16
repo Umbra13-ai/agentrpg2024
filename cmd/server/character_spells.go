@@ -19,7 +19,7 @@ import (
 // @Produce json
 // @Param id path int true "Character ID"
 // @Param Authorization header string true "Bearer <token>"
-// @Param request body object{spells=[]string} false "Spell slugs to learn (PUT only)"
+// @Body Spell slugs to learn (PUT only)
 // @Success 200 {object} map[string]interface{} "Known spells list"
 // @Failure 401 {object} map[string]interface{} "Unauthorized"
 // @Failure 403 {object} map[string]interface{} "Not your character"
@@ -515,7 +515,7 @@ func handleCharacterSpells(w http.ResponseWriter, r *http.Request, charID int) {
 // @Produce json
 // @Param id path int true "Character ID"
 // @Param Authorization header string true "Bearer <token>"
-// @Param request body object{spells=[]string} false "Spell slugs to prepare (POST only)"
+// @Body Spell slugs to prepare (POST only)
 // @Success 200 {object} map[string]interface{} "Prepared spells info"
 // @Failure 400 {object} map[string]interface{} "Not a prepared caster or exceeds limit"
 // @Failure 401 {object} map[string]interface{} "Unauthorized"
@@ -935,7 +935,7 @@ func handlePrepareSpells(w http.ResponseWriter, r *http.Request, charID int) {
 // @Accept json
 // @Produce json
 // @Param id path int true "Character ID"
-// @Param request body object true "Resource to use" example({"resource": "focus", "amount": 1})
+// @Body Resource to use" example({"resource": "focus", "amount": 1})
 // @Success 200 {object} map[string]interface{} "Resource usage result"
 // @Failure 400 {object} map[string]interface{} "Invalid request or not enough resources"
 // @Security BasicAuth

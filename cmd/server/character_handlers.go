@@ -19,7 +19,7 @@ import (
 // @Accept json
 // @Produce json
 // @Param Authorization header string true "Bearer <token>"
-// @Param request body object{name=string,class=string,species=string,background=string,str=integer,dex=integer,con=integer,int=integer,wis=integer,cha=integer,ability_method=string} false "Character details (POST only)"
+// @Body Character details (POST only)
 // @Success 200 {object} map[string]interface{} "List of characters or creation result"
 // @Failure 400 {object} map[string]interface{} "Refused: the error and message say why; nothing was created"
 // @Failure 401 {object} map[string]interface{} "Unauthorized"
@@ -62,16 +62,16 @@ func handleCharacters(w http.ResponseWriter, r *http.Request) {
 
 	if r.Method == "POST" {
 		var req struct {
-			Name                  string            `json:"name"`
-			Class                 string            `json:"class"`
-			Species               string            `json:"species"`
-			Background            string            `json:"background"`
-			Str                   int               `json:"str"`
-			Dex                   int               `json:"dex"`
-			Con                   int               `json:"con"`
-			Int                   int               `json:"int"`
-			Wis                   int               `json:"wis"`
-			Cha                   int               `json:"cha"`
+			Name                  string            `json:"name"`                    // a name no other character has
+			Class                 string            `json:"class"`                   // barbarian, bard, cleric, druid, fighter, monk, paladin, ranger, rogue, sorcerer, warlock or wizard
+			Species               string            `json:"species"`                 // Dragonborn, Dwarf, Elf, Gnome, Goliath, Halfling, Human, Orc or Tiefling
+			Background            string            `json:"background"`              // Acolyte, Criminal, Sage or Soldier
+			Str                   int               `json:"str"`                     // the ability score from the standard array, before the background's increase
+			Dex                   int               `json:"dex"`                     // the ability score from the standard array, before the background's increase
+			Con                   int               `json:"con"`                     // the ability score from the standard array, before the background's increase
+			Int                   int               `json:"int"`                     // the ability score from the standard array, before the background's increase
+			Wis                   int               `json:"wis"`                     // the ability score from the standard array, before the background's increase
+			Cha                   int               `json:"cha"`                     // the ability score from the standard array, before the background's increase
 			SkillProficiencies    []string          `json:"skill_proficiencies"`     // e.g., ["perception", "stealth"]
 			ToolProficiencies     []string          `json:"tool_proficiencies"`      // e.g., ["thieves' tools", "herbalism kit"]
 			Expertise             []string          `json:"expertise"`               // a class with Expertise at level 1 (the Rogue): its skills, e.g. ["stealth", "sleight of hand"] (double Proficiency Bonus)
@@ -94,12 +94,12 @@ func handleCharacters(w http.ResponseWriter, r *http.Request) {
 			ClassOptions          struct {
 				DivineOrder string `json:"divine_order"` // Cleric: "protector" or "thaumaturge"
 				PrimalOrder string `json:"primal_order"` // Druid: "warden" or "magician"
-			} `json:"class_options"`
+			} `json:"class_options"` // the class's level 1 choices: a Cleric's divine_order, a Druid's primal_order
 		}
 		// Every field is either used as sent or refused with the reason (Nov 14 audit: unknown, misplaced and inapplicable fields were
 		// ignored without a word, and dry_run said "Everything checks out"); every refusal has a 4xx status.
 		raw := map[string]interface{}{} // creation checks each field itself: aliases, misplaced fields (unknownCreateFields)
-		if !readRequest(w, r, &raw, keysCheckedByHandler()) {
+		if !readRequest(w, r, &raw, keysCheckedByHandler(createFieldNames()...)) {
 			return
 		}
 		conflicts, readAs := normalizeCreateAliases(raw)

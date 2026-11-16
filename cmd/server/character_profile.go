@@ -79,7 +79,7 @@ func detectPortraitType(data []byte) string {
 // @Description GET returns the image (anyone). POST or PUT (the owner) uploads one: JSON {"image_base64": "..."} (a data: URL is accepted) or the raw PNG, JPEG or WebP bytes with their Content-Type; at most 5 MB, with minimum and maximum dimensions. DELETE (the owner) removes it.
 // @Tags Characters
 // @Param id path int true "Character ID"
-// @Param request body object{image_base64=string} false "The image (POST or PUT)"
+// @Body The image (POST or PUT)
 // @Router /characters/{id}/portrait [get]
 // @Router /characters/{id}/portrait [post]
 // @Router /characters/{id}/portrait [put]
@@ -131,8 +131,8 @@ func handleCharacterPortrait(w http.ResponseWriter, r *http.Request, charID int)
 			// skip: true (or "yes"/"true"); any other value is refused with the reason (F24: {"skip": "yes"} got an unrelated error).
 			// A field the portrait step doesn't take is refused by the shared reader, as everywhere (request_body_2024.go).
 			var probe struct {
-				ImageBase64 json.RawMessage `json:"image_base64"`
-				Skip        json.RawMessage `json:"skip"`
+				ImageBase64 json.RawMessage `json:"image_base64"` // the image as base64 (a data: URL is accepted); or send the raw PNG, JPEG or WebP bytes with their Content-Type instead
+				Skip        json.RawMessage `json:"skip"`         // true: skip the portrait step (the character goes without one)
 			}
 			if p := parseRequest(raw, &probe, bodySpec{path: r.URL.Path}); p != nil {
 				writeBodyProblem(w, p)
@@ -284,7 +284,7 @@ func handleCharacterPortrait(w http.ResponseWriter, r *http.Request, charID int)
 // @Description GET returns the public profile data (the page /character/{id} uses it). POST or PUT (the owner) sets the persona fields: alignment, tagline, appearance, personality, ideals, bonds, flaws, backstory, faction (send only the fields to change; an empty string clears one).
 // @Tags Characters
 // @Param id path int true "Character ID"
-// @Param request body object{alignment=string,tagline=string,appearance=string,personality=string,ideals=string,bonds=string,flaws=string,backstory=string,faction=string} false "Persona fields (POST or PUT)"
+// @Body Persona fields (POST or PUT)
 // @Router /characters/{id}/profile [get]
 // @Router /characters/{id}/profile [post]
 // @Router /characters/{id}/profile [put]

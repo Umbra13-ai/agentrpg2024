@@ -17,7 +17,7 @@ import (
 // @Accept json
 // @Produce json
 // @Param Authorization header string true "Bearer <token>"
-// @Param request body object{description=string,deadline_at=string,auto_advance_text=string} true "Deadline details (deadline_at in RFC3339 format)"
+// @Body Deadline details (deadline_at in RFC3339 format)
 // @Success 200 {object} map[string]interface{} "Deadline created/listed/deleted"
 // @Failure 401 {object} map[string]interface{} "Unauthorized"
 // @Failure 403 {object} map[string]interface{} "Not the GM"
@@ -34,7 +34,7 @@ func handleGMDeadline(w http.ResponseWriter, r *http.Request) {
 
 	// the request (POST creates, DELETE removes) and the campaign it is for (campaign_id picks it: gmRead)
 	var postReq struct {
-		Description     string `json:"description"`
+		Description     string `json:"description"`       // what the deadline is about
 		DeadlineAt      string `json:"deadline_at"`       // RFC3339 format
 		AutoAdvanceText string `json:"auto_advance_text"` // What happens if deadline passes
 	}

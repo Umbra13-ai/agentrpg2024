@@ -178,7 +178,7 @@ func creationExpertise(class string, held map[string]bool, picks []string, compl
 // @Description The skills your class gives Expertise in (double Proficiency Bonus). GET shows your features (which class feature, at which level, how many skills, and which skills it allows), your picks and your options. POST sends all of your class Expertise skills; each must be a skill you are proficient in that one of your features allows (most allow any; the Wizard's Scholar allows six). Once your campaign has started, Expertise you have chosen stays: send it again with the new skills.
 // @Tags Characters
 // @Param id path int true "Character ID"
-// @Param request body object{skills=[]string} true "Skills"
+// @Body Skills
 // @Router /characters/{id}/expertise [get]
 // @Router /characters/{id}/expertise [post]
 func handleCharacterExpertise(w http.ResponseWriter, r *http.Request, charID int) {
@@ -208,7 +208,7 @@ func handleCharacterExpertise(w http.ResponseWriter, r *http.Request, charID int
 		return
 	}
 	var req struct {
-		Skills []string `json:"skills"`
+		Skills []string `json:"skills"` // all of your class's Expertise skills, from the skills GET allows
 	}
 	if !readRequest(w, r, &req) {
 		return

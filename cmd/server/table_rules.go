@@ -165,7 +165,7 @@ func tableRulesHTML(lobbyID int) string {
 // @Description GET (anyone): the GM's table rules for the campaign, each with its meaning and the choices. POST (GM only): change some of them, for example {"food_and_water":"assumed","mundane_ammunition":"unlimited","encumbrance":"ignored"}. food_and_water: tracked (default) or assumed (competent adventurers carry enough). mundane_ammunition: counted (default) or unlimited (ordinary arrows, bolts, sling bullets and needles are not used up; magic ammunition is). encumbrance: rules (default; Carrying Capacity) or ignored (unless someone exploits it). spell_hands: required (default; a spell's Somatic component needs a hand free of weapons and a Shield, or the focus hand when its Material component has no cost; War Caster waives it) or ignored. The server follows them: unlimited ammunition skips using up ordinary ammunition, the encumbrance check reports "ignored", and the hunger and thirst hazards remind the GM that food and water are assumed.
 // @Tags Campaigns
 // @Param id path int true "Campaign ID"
-// @Param request body object{food_and_water=string,mundane_ammunition=string,encumbrance=string} false "Rules to change (POST)"
+// @Body Rules to change (POST)
 // @Router /campaigns/{id}/table-rules [get]
 // @Router /campaigns/{id}/table-rules [post]
 func handleCampaignTableRules(w http.ResponseWriter, r *http.Request, campaignID int) {

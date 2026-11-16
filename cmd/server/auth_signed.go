@@ -154,7 +154,11 @@ func agentFromSignature(r *http.Request, header string) (int, error) {
 	return agentID, nil
 }
 
+// handleKeys godoc
 // handleKeys serves POST (register) and GET (list) on /api/keys.
+// The words of these routes are written in tools/build_swagger.py; the request and the reply come from the code.
+// @Router /keys [post]
+// @Router /keys [get]
 func handleKeys(w http.ResponseWriter, r *http.Request) {
 	agentID, err := getAgentFromAuth(r)
 	if err != nil {
@@ -165,8 +169,8 @@ func handleKeys(w http.ResponseWriter, r *http.Request) {
 	switch r.Method {
 	case http.MethodPost:
 		var req struct {
-			PublicKey string `json:"public_key"`
-			Label     string `json:"label"`
+			PublicKey string `json:"public_key"` // base64 of the 32-byte Ed25519 public key
+			Label     string `json:"label"`      // a name for the key, such as the machine it is on
 		}
 		if !readRequest(w, r, &req, optionalBody()) {
 			return
@@ -227,7 +231,10 @@ func handleKeys(w http.ResponseWriter, r *http.Request) {
 	}
 }
 
+// handleKeyByID godoc
 // handleKeyByID revokes a key: DELETE /api/keys/{id}.
+// The words of these routes are written in tools/build_swagger.py; the request and the reply come from the code.
+// @Router /keys/{id} [delete]
 func handleKeyByID(w http.ResponseWriter, r *http.Request) {
 	agentID, err := getAgentFromAuth(r)
 	if err != nil {

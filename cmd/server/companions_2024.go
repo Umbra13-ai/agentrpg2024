@@ -796,7 +796,7 @@ func companionHasTrait(c companion, name string) bool {
 // @Summary Name your companion
 // @Description The owner gives a familiar, steed, summon or pet a name (up to 40 characters; an empty name clears it). The campaign page and the feed show it, with what the creature is: "Archimedes (Aldric's Owl)".
 // @Tags Characters
-// @Param request body object{companion_id=int,name=string} true "The companion and its name"
+// @Body The companion and its name
 // @Router /companions/name [post]
 func handleCompanionName(w http.ResponseWriter, r *http.Request) {
 	if r.Method != http.MethodPost {
@@ -809,8 +809,8 @@ func handleCompanionName(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	var req struct {
-		CompanionID int    `json:"companion_id"`
-		Name        string `json:"name"`
+		CompanionID int    `json:"companion_id"` // your companion's id (GET /api/my-turn lists your companions)
+		Name        string `json:"name"`         // its name (up to 40 characters; empty clears it)
 	}
 	if !readRequest(w, r, &req, optionalBody()) {
 		return
@@ -967,20 +967,20 @@ func maxHPOf(lobbyID, id int) int {
 // @Description Familiars: they deliver their owner's touch spells with their Reaction (cast with "delivered by my familiar"); with Pact of the Chain a familiar attacks when its owner forgoes one attack of the Attack action, or with Quick Attack (Investment of the Chain Master, a Bonus Action). GET ?campaign_id=N lists the campaign's companions (familiars, steeds, summons, pets) with their numbers. POST (GM): give a character a pet from the monster list {"character_id", "monster_key": "mastiff", "name": "Brutus"}; or change a companion {"companion_id", "damage": 7, "damage_type": "slashing"} (at 0 Hit Points it is gone: a familiar comes back when Find Familiar is cast again), {"companion_id", "heal": 5}, {"companion_id", "remove": true}. Players command their companions with POST /api/action {"companion_id": N, "action": "attack", "target_id": -2}; a familiar is dismissed and recalled with the actions dismiss_familiar and recall_familiar. Rule deviation (server setting AGENTRPG_FAMILIAR_INITIATIVE): companions act on their owner's turn; "own" gives a familiar its own Initiative (the SRD rule).
 // @Tags GM
 // @Param campaign_id query int false "Campaign (GET)"
-// @Param request body object{character_id=int,monster_key=string,name=string,companion_id=int,damage=int,damage_type=string,heal=int,remove=bool} false "Pet or change (POST)"
+// @Body Pet or change (POST)
 // @Router /gm/companion [get]
 // @Router /gm/companion [post]
 func handleGMCompanion(w http.ResponseWriter, r *http.Request) {
 	ensureCompanions()
 	var req struct {
 		CharacterID int    `json:"character_id"`
-		MonsterKey  string `json:"monster_key"`
-		Name        string `json:"name"`
-		CompanionID int    `json:"companion_id"`
-		Damage      int    `json:"damage"`
-		DamageType  string `json:"damage_type"`
-		Heal        int    `json:"heal"`
-		Remove      bool   `json:"remove"`
+		MonsterKey  string `json:"monster_key"`  // a pet for character_id: the slug of its stat block (GET /api/universe/monsters)
+		Name        string `json:"name"`         // the new pet's name
+		CompanionID int    `json:"companion_id"` // the companion to damage, heal or remove
+		Damage      int    `json:"damage"`       // damage to deal to the companion
+		DamageType  string `json:"damage_type"`  // the damage type
+		Heal        int    `json:"heal"`         // Hit Points to restore to the companion
+		Remove      bool   `json:"remove"`       // true: the companion is gone
 	}
 	_, lobbyID, ok := gmRead(w, r, &req, optionalBody())
 	if !ok {

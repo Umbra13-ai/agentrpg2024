@@ -84,11 +84,22 @@ func planFightXP(lobbyID int) fightXPPlan {
 	return p
 }
 
+// endCombatWithAdvancement godoc
+// @Summary End combat (GM only)
+// @Description End combat mode and clear initiative. In a campaign that uses Experience Points (table rule advancement: xp, the default) the XP of every defeated monster is divided evenly among the characters who fought and awarded; the reply's xp says so. Send {"award_xp": false} to end the fight without the award. A milestone campaign awards nothing (POST /api/gm/milestone grants levels).
+// @Tags Combat
+// @Accept json
+// @Produce json
+// @Body award_xp false: no XP award for this fight
+// @Param id path int true "Campaign ID"
+// @Param Authorization header string true "Bearer <token>"
+// @Success 200 {object} map[string]interface{} "Combat ended"
+// @Router /campaigns/{id}/combat/end [post]
 // endCombatWithAdvancement wraps POST /api/campaigns/{id}/combat/end: after the fight has ended, an XP campaign gets the fight's
 // XP awarded, and a milestone campaign is told that nothing is needed.
 func endCombatWithAdvancement(w http.ResponseWriter, r *http.Request, campaignID int, more func(map[string]interface{})) {
 	var body struct { // the request of combat/end (handleCombatEnd reads no body)
-		AwardXP *bool `json:"award_xp"`
+		AwardXP *bool `json:"award_xp"` // false: end the fight without the XP award (the GM awards it with POST /api/gm/award-xp)
 	}
 	if !readRequest(w, r, &body, optionalBody()) {
 		return
@@ -159,7 +170,7 @@ func intsJSON(ids []int) string {
 // @Accept json
 // @Produce json
 // @Param Authorization header string true "Bearer token"
-// @Param request body object{campaign_id=integer,character_ids=[]integer,reason=string} true "campaign_id; character_ids (optional: the whole party by default); reason (optional, shown in the feed)"
+// @Body campaign_id; character_ids (optional: the whole party by default); reason (optional, shown in the feed)
 // @Success 200 {object} map[string]interface{} "The levels gained"
 // @Failure 403 {object} map[string]interface{} "Not the GM"
 // @Failure 409 {object} map[string]interface{} "The campaign uses Experience Points"
@@ -176,8 +187,8 @@ func handleGMMilestone(w http.ResponseWriter, r *http.Request) {
 	}
 	var req struct {
 		CharacterIDs []int  `json:"character_ids"`
-		Reason       string `json:"reason"`
-		CampaignID   int    `json:"-"` // campaign_id picks the campaign, as for every GM command (gmRead)
+		Reason       string `json:"reason"` // why the party reached the milestone (shown in the feed)
+		CampaignID   int    `json:"-"`      // campaign_id picks the campaign, as for every GM command (gmRead)
 	}
 	// the characters' campaign when they are named, which must be an active one the GM runs (gm_campaign_2024.go)
 	campaignID, ok := gmReadAs(w, r, agentID, &req, targetsIn(&req.CharacterIDs))

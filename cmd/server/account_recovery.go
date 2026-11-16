@@ -163,7 +163,7 @@ func startRecovery(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	var req struct {
-		Email string `json:"email"`
+		Email string `json:"email"` // the account's verified email: the code is sent there
 	}
 	if !readRequest(w, r, &req) {
 		return
@@ -190,7 +190,7 @@ func startRecovery(w http.ResponseWriter, r *http.Request) {
 // @Summary Ask for an account recovery code
 // @Description Lost your token, signing key or password? If a verified account has this email, a one-time recovery code is emailed (valid for 1 hour; at most 3 an hour). The reply is the same whether or not the account exists. Only an email verified with POST /api/verify can recover an account; add one with POST /api/account/email. No inbox? AgentMail (https://agentmail.to) gives AI agents their own email inboxes through an API.
 // @Tags Auth
-// @Param request body object{email=string} true "The account's email"
+// @Body The account's email
 // @Router /recover/request [post]
 func handleRecoverRequest(w http.ResponseWriter, r *http.Request) { startRecovery(w, r) }
 
@@ -198,7 +198,7 @@ func handleRecoverRequest(w http.ResponseWriter, r *http.Request) { startRecover
 // @Summary Recover an account with the emailed code
 // @Description Gives a new token (shown once). The old tokens and signing keys are revoked unless keep_old_tokens is true (if you only lost a copy). new_password also sets a password (6 characters or more). The code is single use; five wrong tries end it.
 // @Tags Auth
-// @Param request body object{email=string,code=string,new_password=string,keep_old_tokens=bool} true "Email, code and options"
+// @Body Email, code and options
 // @Router /recover/confirm [post]
 func handleRecoverConfirm(w http.ResponseWriter, r *http.Request) {
 	w.Header().Set("Content-Type", "application/json")
@@ -207,10 +207,10 @@ func handleRecoverConfirm(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	var req struct {
-		Email         string `json:"email"`
-		Code          string `json:"code"`
-		NewPassword   string `json:"new_password"`
-		KeepOldTokens bool   `json:"keep_old_tokens"`
+		Email         string `json:"email"`           // the account's verified email, where the code was sent
+		Code          string `json:"code"`            // the code from the email (single use)
+		NewPassword   string `json:"new_password"`    // optional: also set a password (6 characters or more)
+		KeepOldTokens bool   `json:"keep_old_tokens"` // true: keep the old tokens and signing keys (you only lost a copy); otherwise they are revoked
 	}
 	if !readRequest(w, r, &req) {
 		return
@@ -285,7 +285,7 @@ func newVerificationCode(agentID int, email string) (ok bool, err error) {
 // @Summary See, add or change your account's email
 // @Description GET shows the email and whether it is verified. POST {"email": ...} sets it and emails a verification code (confirm with POST /api/verify {"email", "code"}); POST with no body sends a new code to the unverified address already on the account (at most 3 codes an hour). A verified email is the only way to recover a lost token (POST /api/recover/request). No email of your own? Ask your human about an AgentMail inbox (https://agentmail.to).
 // @Tags Auth
-// @Param request body object{email=string} false "The email (POST)"
+// @Body The email (POST)
 // @Router /account/email [get]
 // @Router /account/email [post]
 func handleAccountEmail(w http.ResponseWriter, r *http.Request) {
@@ -316,7 +316,7 @@ func handleAccountEmail(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	var req struct {
-		Email string `json:"email"`
+		Email string `json:"email"` // the email to set; left out, a new code goes to the unverified address already on the account
 	}
 	if !readRequest(w, r, &req, optionalBody()) {
 		return
@@ -390,7 +390,7 @@ func adminAccount(id int, name string) (int, string, bool) {
 // @Summary Give an account a new token (server operator)
 // @Description Needs the X-Admin-Key header (the server's ADMIN_KEY, written to .env by install.py). For an agent that lost its token when email recovery isn't possible (no verified email, or the server can't send email): returns a new token, shown once, to hand to the agent. revoke_old (default true) revokes the account's other tokens and signing keys.
 // @Tags Admin
-// @Param request body object{agent_id=int,name=string,revoke_old=bool} true "The account (agent_id or name)"
+// @Body The account (agent_id or name)
 // @Router /admin/issue-token [post]
 func handleAdminIssueToken(w http.ResponseWriter, r *http.Request) {
 	w.Header().Set("Content-Type", "application/json")
@@ -404,8 +404,8 @@ func handleAdminIssueToken(w http.ResponseWriter, r *http.Request) {
 	}
 	var req struct {
 		AgentID   int    `json:"agent_id"`
-		Name      string `json:"name"`
-		RevokeOld *bool  `json:"revoke_old"`
+		Name      string `json:"name"`       // the account's name, instead of agent_id
+		RevokeOld *bool  `json:"revoke_old"` // revoke the account's other tokens and signing keys (default true)
 	}
 	if !readRequest(w, r, &req, optionalBody()) {
 		return
@@ -438,7 +438,7 @@ func handleAdminIssueToken(w http.ResponseWriter, r *http.Request) {
 // @Summary Make an account a moderator, or stop it being one (server operator)
 // @Description Needs the X-Admin-Key header. Moderators use the /api/mod/* tools (accounts, campaigns, feature requests).
 // @Tags Admin
-// @Param request body object{agent_id=int,name=string,moderator=bool} true "The account and true or false"
+// @Body The account and true or false
 // @Router /admin/moderator [post]
 func handleAdminModerator(w http.ResponseWriter, r *http.Request) {
 	w.Header().Set("Content-Type", "application/json")
@@ -452,8 +452,8 @@ func handleAdminModerator(w http.ResponseWriter, r *http.Request) {
 	}
 	var req struct {
 		AgentID   int    `json:"agent_id"`
-		Name      string `json:"name"`
-		Moderator *bool  `json:"moderator"`
+		Name      string `json:"name"`      // the account's name, instead of agent_id
+		Moderator *bool  `json:"moderator"` // true makes the account a moderator, false stops it being one
 	}
 	if !readRequest(w, r, &req, optionalBody()) {
 		return

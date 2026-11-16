@@ -74,7 +74,7 @@ func grappleSource(attackerID int) string { return fmt.Sprintf("Grapple #%d", at
 // @Summary Grapple (Unarmed Strike)
 // @Description The attacker uses an Unarmed Strike to grapple a creature within 5 feet that is no more than one size larger. The target makes a Strength or Dexterity saving throw (the better one) against 8 + the attacker's Strength modifier + Proficiency Bonus; on a failure it has the Grappled condition, and the same DC is its escape DC (Strength (Athletics) or Dexterity (Acrobatics) check as an action). Ids: characters, or negative monster ids.
 // @Tags GM
-// @Param request body object{attacker_id=int,target_id=int} true "Grappler and target"
+// @Body Grappler and target
 // @Router /gm/grapple [post]
 func handleGMGrapple2024(w http.ResponseWriter, r *http.Request) {
 	unarmedOption(w, r, "grapple")
@@ -83,7 +83,7 @@ func handleGMGrapple2024(w http.ResponseWriter, r *http.Request) {
 // @Summary Shove (Unarmed Strike)
 // @Description The attacker uses an Unarmed Strike to shove a creature within 5 feet that is no more than one size larger. The target makes a Strength or Dexterity saving throw (the better one) against 8 + the attacker's Strength modifier + Proficiency Bonus; on a failure it is pushed 5 feet away (effect=push, moved on the battle map) or has the Prone condition (effect=prone).
 // @Tags GM
-// @Param request body object{attacker_id=int,target_id=int,effect=string} true "Attacker, target and push or prone"
+// @Body Attacker, target and push or prone
 // @Router /gm/shove [post]
 func handleGMShove2024(w http.ResponseWriter, r *http.Request) {
 	unarmedOption(w, r, "shove")
@@ -95,9 +95,9 @@ func unarmedOption(w http.ResponseWriter, r *http.Request, kind string) {
 		return
 	}
 	var req struct {
-		AttackerID int    `json:"attacker_id"`
+		AttackerID int    `json:"attacker_id"` // the grappler or shover: a character's id, or a monster's negative id
 		TargetID   int    `json:"target_id"`
-		Effect     string `json:"effect"`
+		Effect     string `json:"effect"` // shove: push (5 feet away) or prone
 	}
 	_, lobby, ok := gmRead(w, r, &req, optionalBody())
 	if !ok {
@@ -138,7 +138,7 @@ func creatureDistance(lobbyID, a, b int) (int, bool) {
 // @Summary Escape a grapple
 // @Description The Grappled creature uses its action for a Strength (Athletics) or Dexterity (Acrobatics) check against the escape DC (the better of the two is used). Meant for monsters; a player's character uses POST /api/conditions/escape.
 // @Tags GM
-// @Param request body object{target_id=int} true "The Grappled creature"
+// @Body The Grappled creature
 // @Router /gm/escape-grapple [post]
 func handleGMEscapeGrapple2024(w http.ResponseWriter, r *http.Request) {
 	if r.Method != http.MethodPost {
@@ -219,7 +219,7 @@ func monsterSkillBonus(slug string, skills ...string) int {
 // @Summary Release a grapple
 // @Description The grappler releases the target at any time (no action required).
 // @Tags GM
-// @Param request body object{grappler_id=int,target_id=int} true "Grappler and target"
+// @Body Grappler and target
 // @Router /gm/release-grapple [post]
 func handleGMReleaseGrapple2024(w http.ResponseWriter, r *http.Request) {
 	if r.Method != http.MethodPost {
@@ -227,7 +227,7 @@ func handleGMReleaseGrapple2024(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	var req struct {
-		GrapplerID int `json:"grappler_id"`
+		GrapplerID int `json:"grappler_id"` // the creature holding the grapple
 		TargetID   int `json:"target_id"`
 	}
 	_, lobby, ok := gmRead(w, r, &req, optionalBody())
@@ -245,7 +245,7 @@ func handleGMReleaseGrapple2024(w http.ResponseWriter, r *http.Request) {
 // @Summary Counterspell
 // @Description Reaction, when the caster sees a creature within 60 feet casting a spell with Verbal, Somatic or Material components, using a level 3+ slot (slot_level, default 3). The creature makes a Constitution saving throw against the counterspeller's spell save DC. On a failure the spell dissipates with no effect, the action, Bonus Action or Reaction used to cast it is wasted, and a spell slot it used isn't expended.
 // @Tags GM
-// @Param request body object{caster_id=int,target_id=int,slot_level=int} true "The counterspelling character and the creature casting the spell"
+// @Body The counterspelling character and the creature casting the spell
 // @Router /gm/counterspell [post]
 func handleGMCounterspell2024(w http.ResponseWriter, r *http.Request) {
 	if r.Method != http.MethodPost {
@@ -255,7 +255,7 @@ func handleGMCounterspell2024(w http.ResponseWriter, r *http.Request) {
 	var req struct {
 		CasterID  int `json:"caster_id"`
 		TargetID  int `json:"target_id"`
-		SlotLevel int `json:"slot_level"`
+		SlotLevel int `json:"slot_level"` // the level of the slot spent (3 to 9, default 3)
 	}
 	_, lobby, ok := gmRead(w, r, &req, optionalBody())
 	if !ok {
@@ -325,7 +325,7 @@ func pactSlotLevel(level int) int {
 // @Summary Fiend Warlock Hurl Through Hell (level 14)
 // @Description Once per turn when the Warlock hits a creature with an attack roll. The target makes a Charisma saving throw against the spell save DC; on a failure it disappears and hurtles through the Lower Planes: 8d10 Psychic damage if it isn't a Fiend, and the Incapacitated condition until the end of the Warlock's next turn, when it returns. Once per Long Rest, unless the Warlock expends a Pact Magic spell slot (use_pact_slot=true).
 // @Tags GM
-// @Param request body object{character_id=int,target_id=int,use_pact_slot=bool} true "The Warlock and the creature hit"
+// @Body The Warlock and the creature hit
 // @Router /gm/hurl-through-hell [post]
 func handleGMHurlThroughHell2024(w http.ResponseWriter, r *http.Request) {
 	if r.Method != http.MethodPost {
@@ -335,7 +335,7 @@ func handleGMHurlThroughHell2024(w http.ResponseWriter, r *http.Request) {
 	var req struct {
 		CharacterID int  `json:"character_id"`
 		TargetID    int  `json:"target_id"`
-		UsePactSlot bool `json:"use_pact_slot"`
+		UsePactSlot bool `json:"use_pact_slot"` // true: expend a Pact Magic slot when the once-per-Long-Rest use is spent
 	}
 	_, lobby, ok := gmRead(w, r, &req, optionalBody())
 	if !ok {
@@ -387,7 +387,7 @@ func handleGMHurlThroughHell2024(w http.ResponseWriter, r *http.Request) {
 // @Summary Suffocation
 // @Description A creature can hold its breath for 1 + its Constitution modifier minutes (minimum 30 seconds) before suffocation begins (action=hold reports it). When it runs out of breath or is choking, it gains 1 Exhaustion level at the end of each of its turns (action=turn). When it can breathe again it removes all levels of Exhaustion it gained from suffocating (action=breathe).
 // @Tags GM
-// @Param request body object{character_id=int,action=string,underwater=bool} true "hold, turn or breathe; underwater: a creature with Water Breathing breathes"
+// @Body hold, turn or breathe; underwater: a creature with Water Breathing breathes
 // @Router /gm/suffocation [post]
 func handleGMSuffocation2024(w http.ResponseWriter, r *http.Request) {
 	if r.Method != http.MethodPost {
@@ -396,7 +396,7 @@ func handleGMSuffocation2024(w http.ResponseWriter, r *http.Request) {
 	}
 	var req struct {
 		CharacterID int    `json:"character_id"`
-		Action      string `json:"action"`
+		Action      string `json:"action"`     // hold (default: how long it can hold its breath), turn (a turn without air) or breathe (it can breathe again)
 		Underwater  bool   `json:"underwater"` // the creature is underwater (Water Breathing lets it breathe; spells_more_2024.go)
 	}
 	_, lobby, ok := gmRead(w, r, &req, optionalBody())

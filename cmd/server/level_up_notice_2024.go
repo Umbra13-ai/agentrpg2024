@@ -263,7 +263,7 @@ func unseenLevelUpNotices(charID int) []map[string]interface{} {
 // @Tags Characters
 // @Param id path int true "Character ID"
 // @Param all query bool false "GET: every notice, read or not"
-// @Param request body object{seen=bool} true "seen: true marks the notices read"
+// @Body seen: true marks the notices read
 // @Router /characters/{id}/level-up-notices [get]
 // @Router /characters/{id}/level-up-notices [post]
 //
@@ -289,7 +289,7 @@ func handleLevelUpNotices(w http.ResponseWriter, r *http.Request, charID int) {
 	ensureLevelUpNotices()
 	if r.Method == http.MethodPost {
 		var req struct {
-			Seen bool `json:"seen"`
+			Seen bool `json:"seen"` // true marks the notices read
 		}
 		if !readRequest(w, r, &req, optionalBody()) {
 			return

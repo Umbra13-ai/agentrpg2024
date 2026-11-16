@@ -330,7 +330,7 @@ func inSpellbook(charID int, slug string) bool {
 // @Summary Wizard Memorize Spell (level 5)
 // @Description Whenever you finish a Short Rest, you can study your spellbook and replace one of the level 1+ Wizard spells you have prepared with another level 1+ spell from the book.
 // @Tags Characters
-// @Param request body object{character_id=int,replace=string,with=string} true "The prepared spell to replace and the spellbook spell to prepare"
+// @Body The prepared spell to replace and the spellbook spell to prepare
 // @Router /characters/memorize [post]
 func handleMemorizeSpell(w http.ResponseWriter, r *http.Request) {
 	w.Header().Set("Content-Type", "application/json")
@@ -340,8 +340,8 @@ func handleMemorizeSpell(w http.ResponseWriter, r *http.Request) {
 	}
 	var req struct {
 		CharacterID int    `json:"character_id"`
-		Replace     string `json:"replace"`
-		With        string `json:"with"`
+		Replace     string `json:"replace"` // the prepared level 1+ Wizard spell to replace
+		With        string `json:"with"`    // the level 1+ spell from your spellbook to prepare instead
 	}
 	if !readRequest(w, r, &req) {
 		return
@@ -403,13 +403,13 @@ func handleMemorizeSpell(w http.ResponseWriter, r *http.Request) {
 // @Summary Wizard Spell Mastery (level 18)
 // @Description GET shows the two chosen spells; POST chooses a level 1 and a level 2 spell from your spellbook that have a casting time of an action. You can cast them at their lowest level without expending a spell slot while you have them prepared. You can change them when you finish a Long Rest.
 // @Tags Characters
-// @Param request body object{character_id=int,spells=[]string} true "A level 1 and a level 2 spell"
+// @Body A level 1 and a level 2 spell
 // @Router /characters/spell-mastery [post]
 func handleSpellMastery(w http.ResponseWriter, r *http.Request) {
 	w.Header().Set("Content-Type", "application/json")
 	var req struct {
 		CharacterID int      `json:"character_id"`
-		Spells      []string `json:"spells"`
+		Spells      []string `json:"spells"` // a level 1 and a level 2 spell from your spellbook, each with a casting time of an action
 	}
 	if r.Method == http.MethodGet {
 		req.CharacterID, _ = strconv.Atoi(r.URL.Query().Get("character_id"))

@@ -106,7 +106,7 @@ func attackWeaponKey(charID int, description string) string {
 // @Summary Say whether a character has an enemy within 5 feet
 // @Description Without a battle map the server can't measure distance: the GM says whether the character is in melee range (a ranged attack then has Disadvantage).
 // @Tags GM
-// @Param request body object{character_id=int,in_melee=bool} true "Request"
+// @Body Request
 // @Router /gm/melee-range [post]
 func handleGMMeleeRange(w http.ResponseWriter, r *http.Request) {
 	if r.Method != http.MethodPost {
@@ -121,7 +121,7 @@ func handleGMMeleeRange(w http.ResponseWriter, r *http.Request) {
 	}
 	var req struct {
 		CharacterID int  `json:"character_id"`
-		InMelee     bool `json:"in_melee"`
+		InMelee     bool `json:"in_melee"` // true: an enemy is within 5 feet of the character (a ranged attack then has Disadvantage)
 	}
 	// the character's campaign, which must be an active one the GM runs (gm_campaign_2024.go)
 	if _, ok := gmReadAs(w, r, agentID, &req, campaignFromTarget(&req.CharacterID)); !ok {

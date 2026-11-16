@@ -176,7 +176,7 @@ func handleRoll(w http.ResponseWriter, r *http.Request) {
 // @Accept json
 // @Produce json
 // @Param id path int true "Campaign ID"
-// @Param request body object{surprised=[]int} false "Optional: ids of surprised characters"
+// @Body Optional: ids of surprised characters
 // @Param Authorization header string true "Bearer <token>"
 // @Success 200 {object} map[string]interface{} "Combat started with initiative order"
 // @Failure 401 {object} map[string]interface{} "Unauthorized"
@@ -193,7 +193,7 @@ func handleCombatStart(w http.ResponseWriter, r *http.Request, campaignID int) {
 
 	// Surprise: a character surprised by combat starting has Disadvantage on the Initiative roll (optional body {"surprised": [character ids]}).
 	var startReq struct {
-		Surprised []int `json:"surprised"`
+		Surprised []int `json:"surprised"` // optional: the ids of the characters surprised (they roll Initiative with Disadvantage)
 	}
 	if !readRequest(w, r, &startReq, optionalBody()) {
 		return
@@ -463,17 +463,8 @@ func characterActionBlock(action string, hp int, stable, dead bool) string {
 	return ""
 }
 
-// handleCombatEnd godoc
-// @Summary End combat (GM only)
-// @Description End combat mode and clear initiative. In a campaign that uses Experience Points (table rule advancement: xp, the default) the XP of every defeated monster is divided evenly among the characters who fought and awarded; the reply's xp says so. Send {"award_xp": false} to end the fight without the award. A milestone campaign awards nothing (POST /api/gm/milestone grants levels).
-// @Tags Combat
-// @Accept json
-// @Produce json
-// @Param request body object{award_xp=bool} false "award_xp false: no XP award for this fight"
-// @Param id path int true "Campaign ID"
-// @Param Authorization header string true "Bearer <token>"
-// @Success 200 {object} map[string]interface{} "Combat ended"
-// @Router /campaigns/{id}/combat/end [post]
+// handleCombatEnd ends the fight: the turn order cleared, the action economy reset, the combat markers dropped. The route is
+// endCombatWithAdvancement (advancement_2024.go), which reads the request and adds the fight's XP.
 func handleCombatEnd(w http.ResponseWriter, r *http.Request, campaignID int) {
 	w.Header().Set("Content-Type", "application/json")
 
@@ -514,7 +505,7 @@ func handleCombatEnd(w http.ResponseWriter, r *http.Request, campaignID int) {
 // handleCombatNext godoc
 // @Summary Advance to next turn (GM only)
 // @Description Move to the next character in initiative order. Optional legendary_actions: Legendary Actions taken right after the turn that ends, before the next turn starts (each like POST /api/gm/legendary-action). The reply lists legendary_options: the monsters that may take one now and their actions.
-// @Param request body object{legendary_actions=[]object} false "Legendary Actions after the ending turn: combatant_id, action, target, target_ids, use"
+// @Body Legendary Actions after the ending turn: combatant_id, action, target, target_ids, use
 // @Tags Combat
 // @Produce json
 // @Param id path int true "Campaign ID"
@@ -529,7 +520,7 @@ func handleCombatNext(w http.ResponseWriter, r *http.Request, campaignID int) {
 	}
 	// Optional: Legendary Actions taken right after the turn that is ending (monster_features_2024.go)
 	var nextReq struct {
-		LegendaryActions []legendaryRequest `json:"legendary_actions"`
+		LegendaryActions []legendaryRequest `json:"legendary_actions"` // optional: Legendary Actions taken right after the ending turn, each like POST /api/gm/legendary-action
 	}
 	if !readRequest(w, r, &nextReq, optionalBody()) {
 		return
@@ -699,7 +690,7 @@ func handleExplorationStatus(w http.ResponseWriter, r *http.Request, campaignID 
 // @Produce json
 // @Param id path int true "Campaign ID"
 // @Param Authorization header string true "Bearer <token>"
-// @Param request body object{character_id=int} true "Character to skip"
+// @Body Character to skip
 // @Success 200 {object} map[string]interface{} "Player skipped"
 // @Failure 401 {object} map[string]interface{} "Unauthorized"
 // @Failure 403 {object} map[string]interface{} "Only GM can skip"
@@ -805,7 +796,7 @@ func handleExplorationSkip(w http.ResponseWriter, r *http.Request, campaignID in
 // @Produce json
 // @Param id path int true "Campaign ID"
 // @Param Authorization header string true "Bearer <token>"
-// @Param request body object{combatants=[]object} true "Combatants to add (name, monster_key, initiative, surprised, hp, ac, in_lair). Identical monsters added together share one Initiative roll; surprised gives Disadvantage on it; in_lair gives a legendary monster the in-Lair uses of Legendary Actions and Legendary Resistance."
+// @Body Combatants to add (name, monster_key, initiative, surprised, hp, ac, in_lair). Identical monsters added together share one Initiative roll; surprised gives Disadvantage on it; in_lair gives a legendary monster the in-Lair uses of Legendary Actions and Legendary Resistance.
 // @Success 200 {object} map[string]interface{} "Combatants added"
 // @Failure 401 {object} map[string]interface{} "Unauthorized"
 // @Failure 403 {object} map[string]interface{} "Only GM can add combatants"
@@ -830,7 +821,7 @@ func handleCombatAdd(w http.ResponseWriter, r *http.Request, campaignID int) {
 
 	// Parse request
 	var req struct {
-		Combatants []struct {
+		Combatants []struct { // the combatants to add: name, monster_key, initiative, surprised, hp, ac, in_lair
 			Name       string `json:"name"`
 			MonsterKey string `json:"monster_key"` // SRD monster slug (e.g., "goblin")
 			Initiative int    `json:"initiative"`  // Optional: roll if not provided
@@ -953,7 +944,7 @@ func handleCombatAdd(w http.ResponseWriter, r *http.Request, campaignID int) {
 // @Produce json
 // @Param id path int true "Campaign ID"
 // @Param Authorization header string true "Bearer <token>"
-// @Param request body object{combatant_id=integer,combatant_name=string} true "ID or name of combatant to remove"
+// @Body ID or name of combatant to remove
 // @Success 200 {object} map[string]interface{} "Combatant removed"
 // @Failure 401 {object} map[string]interface{} "Unauthorized"
 // @Failure 403 {object} map[string]interface{} "Only GM can remove combatants"
@@ -980,7 +971,7 @@ func handleCombatRemove(w http.ResponseWriter, r *http.Request, campaignID int) 
 	// Parse request
 	var req struct {
 		CombatantID   int    `json:"combatant_id"`
-		CombatantName string `json:"combatant_name"`
+		CombatantName string `json:"combatant_name"` // the combatant's name, instead of combatant_id
 	}
 	if !readRequest(w, r, &req) {
 		return
@@ -1119,23 +1110,23 @@ func handleCombatStatus(w http.ResponseWriter, r *http.Request, campaignID int) 
 // @Produce json
 // @Param id path int true "Character ID"
 // @Param Authorization header string true "Bearer <token>"
-// @Param request body object{damage=integer,damage_type=string,concentration_damage=integer,skip_concentration=boolean} true "Damage to apply. One source in several damage types makes one Concentration save: send the whole damage as concentration_damage with the first part and skip_concentration with the others"
+// @Body Damage to apply. One source in several damage types makes one Concentration save: send the whole damage as concentration_damage with the first part and skip_concentration with the others
 // @Success 200 {object} map[string]interface{} "Damage applied"
 // @Router /characters/{id}/damage [post]
 func handleDamage(w http.ResponseWriter, r *http.Request, charID int) {
 	w.Header().Set("Content-Type", "application/json")
 
 	var req struct {
-		Damage     int    `json:"damage"`
-		Amount     int    `json:"amount"`
-		DamageType string `json:"damage_type"`
+		Damage     int    `json:"damage"`      // the damage to deal
+		Amount     int    `json:"amount"`      // the same, under another name (damage wins when both are sent)
+		DamageType string `json:"damage_type"` // the damage type (resistances, immunities and vulnerabilities apply)
 		// one source of damage in several types (a hit's "plus 10 (3d6) Fire damage") makes one Concentration save: the first part
 		// carries the whole damage for its DC, the others skip the save
 		ConcentrationDamage int  `json:"concentration_damage"`
-		SkipConcentration   bool `json:"skip_concentration"`
-		NoBond              bool `json:"no_bond"`  // a Warding Bond's shared damage (not shared again)
-		Critical            bool `json:"critical"` // the damage is from a Critical Hit (two Death Saving Throw failures at 0 Hit Points)
-		SameHit             bool `json:"same_hit"` // another damage type of a hit already counted (one failure per hit at 0 Hit Points)
+		SkipConcentration   bool `json:"skip_concentration"` // true: another part of the same damage already made the Concentration save
+		NoBond              bool `json:"no_bond"`            // a Warding Bond's shared damage (not shared again)
+		Critical            bool `json:"critical"`           // the damage is from a Critical Hit (two Death Saving Throw failures at 0 Hit Points)
+		SameHit             bool `json:"same_hit"`           // another damage type of a hit already counted (one failure per hit at 0 Hit Points)
 	}
 	if !readRequest(w, r, &req, optionalBody()) {
 		return
@@ -1171,14 +1162,14 @@ func handleDamage(w http.ResponseWriter, r *http.Request, charID int) {
 // @Produce json
 // @Param id path int true "Character ID"
 // @Param Authorization header string true "Bearer <token>"
-// @Param request body object{healing=integer} true "Healing amount"
+// @Body Healing amount
 // @Success 200 {object} map[string]interface{} "Healing applied"
 // @Router /characters/{id}/heal [post]
 func handleHeal(w http.ResponseWriter, r *http.Request, charID int) {
 	w.Header().Set("Content-Type", "application/json")
 
 	var req struct {
-		Healing int `json:"healing"`
+		Healing int `json:"healing"` // the Hit Points to restore
 	}
 	if !readRequest(w, r, &req, optionalBody()) {
 		return
@@ -1226,7 +1217,7 @@ func restKind(t string) string {
 // @Description A Short Rest (1 hour; the spell clock passes 1 hour). Spend Hit Point Dice with hit_dice (each die is rolled and adds the Constitution modifier); what comes back on a Short Rest comes back (Pact Magic slots, class resources such as Focus Points, Second Wind, Channel Divinity, Wild Shape, species uses). A Wizard's Arcane Recovery and a Land Druid's Natural Recovery take recover_slots, the slot levels to recover (for example [1, 2]). A POST always takes the rest, with or without hit_dice; a GET only shows the Hit Point Dice left. Only the character's owner or the campaign's GM.
 // @Tags Characters
 // @Param id path int true "Character ID"
-// @Param request body object{hit_dice=int,recover_slots=[]int} false "Hit Point Dice to spend; slots for Arcane Recovery or Natural Recovery"
+// @Body Hit Point Dice to spend; slots for Arcane Recovery or Natural Recovery
 // @Router /characters/{id}/short-rest [get]
 // @Router /characters/{id}/short-rest [post]
 func handleShortRest(w http.ResponseWriter, r *http.Request, charID int) {
@@ -1651,7 +1642,7 @@ func handleShortRest(w http.ResponseWriter, r *http.Request, charID int) {
 // @Accept json
 // @Produce json
 // @Param id path int true "Character ID"
-// @Param request body object false "Optional: {\"type\": \"long\"} (default) or {\"type\": \"short\", \"hit_dice\": 2}"
+// @Body Optional: {\"type\": \"long\"} (default) or {\"type\": \"short\", \"hit_dice\": 2}
 // @Success 200 {object} map[string]interface{} "Long rest results"
 // @Failure 400 {object} map[string]interface{} "Long rest not available (need 24h between rests)"
 // @Security BasicAuth
@@ -1865,14 +1856,14 @@ func handleConditionsList(w http.ResponseWriter, r *http.Request) {
 // @Produce json
 // @Param id path int true "Character ID"
 // @Param Authorization header string true "Bearer <token>"
-// @Param request body object{cover=string} true "Cover type (none, half, three_quarters, full)"
+// @Body Cover type (none, half, three_quarters, full)
 // @Success 200 {object} map[string]interface{} "Cover set"
 // @Router /characters/{id}/cover [post]
 func handleSetCover(w http.ResponseWriter, r *http.Request, charID int) {
 	w.Header().Set("Content-Type", "application/json")
 
 	var req struct {
-		Cover string `json:"cover"`
+		Cover string `json:"cover"` // none, half, three_quarters or full
 	}
 	if !readRequest(w, r, &req, optionalBody()) {
 		return

@@ -212,6 +212,10 @@ var masteryText = map[string]string{
 	"Vex":    "on a hit that deals damage you have Advantage on your next attack roll against that target before the end of your next turn.",
 }
 
+// handleWeaponMasteries godoc
+// The words of these routes are written in tools/build_swagger.py; the request and the reply come from the code.
+// @Router /characters/weapon-masteries [get]
+// @Router /characters/weapon-masteries [post]
 func handleWeaponMasteries(w http.ResponseWriter, r *http.Request) {
 	w.Header().Set("Content-Type", "application/json")
 	agentID, err := getAgentFromAuth(r)
@@ -221,7 +225,7 @@ func handleWeaponMasteries(w http.ResponseWriter, r *http.Request) {
 	}
 	var req struct {
 		CharacterID     int      `json:"character_id"`
-		WeaponMasteries []string `json:"weapon_masteries"`
+		WeaponMasteries []string `json:"weapon_masteries"` // the kinds of weapon you have Mastery of (your class's count; GET lists the eligible weapons)
 	}
 	if r.Method == http.MethodGet {
 		fmt.Sscanf(r.URL.Query().Get("character_id"), "%d", &req.CharacterID)

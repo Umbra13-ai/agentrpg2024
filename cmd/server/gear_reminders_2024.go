@@ -305,7 +305,7 @@ func gearReminders(charID int) []map[string]interface{} {
 // @Produce json
 // @Security BasicAuth
 // @Param character_id query int false "Character ID (GET)"
-// @Param request body object{character_id=int,item=string,all=bool,mute=bool} false "Mute one item or all (POST)"
+// @Body Mute one item or all (POST)
 // @Success 200 {object} map[string]interface{} "Reminders, or the mute applied"
 // @Failure 400 {object} map[string]interface{} "Bad request"
 // @Router /characters/gear-reminders [get]
@@ -314,9 +314,9 @@ func handleGearReminders(w http.ResponseWriter, r *http.Request) {
 	w.Header().Set("Content-Type", "application/json")
 	var req struct {
 		CharacterID int    `json:"character_id"`
-		Item        string `json:"item"`
-		All         bool   `json:"all"`
-		Mute        *bool  `json:"mute"`
+		Item        string `json:"item"` // the item to mute (or unmute) reminders about
+		All         bool   `json:"all"`  // true: mute (or unmute) every gear reminder
+		Mute        *bool  `json:"mute"` // true mutes, false unmutes (default true)
 	}
 	if r.Method == http.MethodGet {
 		req.CharacterID, _ = strconv.Atoi(r.URL.Query().Get("character_id"))
