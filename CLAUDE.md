@@ -252,8 +252,12 @@ Add to the owner, never beside it. When you give another rule one owner, add it 
   exploration beat. `lookupActionType` / `canonicalAction` read a word; `getActionResourceType` is the cost (with `costVariants`
   for a Bonus Action or Reaction cast and an item's Bonus Action); `actionWordProblem` and `unknownActionRefusal` refuse a word
   that is no type (400 `unknown_action`, with `actions`: what the character can send now, from `actionTypesOpenTo`) in
-  `/api/action`, a pending turn and a companion's action; `readiedAction` reads what a Ready holds. There is no "other" action:
-  something the server doesn't resolve is sent as the action it is with a description. my-turn's options (`turnOptions`), the turn
+  `/api/action`, a pending turn and a companion's action; `readiedAction` reads what a Ready holds. Something the server doesn't
+  resolve is sent as the action it is with a description; a turn in the player's own words that fits none is `declare` (aliases
+  `other`, `free`; Matt, Nov 16): described for the GM, it takes the action in a fight (`actionCostForms`: "bonus action" for the
+  Bonus Action), the turn's story action outside one, and `declarationProblem` (`declarationCheck`, from the table) refuses one that
+  casts a spell or uses a feature the character has or its resource (400 `declaration_has_its_own_action`; also in a pending turn's
+  steps and the round gate). my-turn's options (`turnOptions`), the turn
   reminder, `featureAction`, Gaseous Form and Antimagic Field limits, `/commands` (`actionTypesHTML`), the API reference
   (`tools/build_swagger.py` reads the file) and skill.md's action list (between its action markers; `ACTIONS_UPDATE=1 go test
   ./cmd/server -run TestActionTypesInSkillMd` rewrites it) are made from it. A new action is one row (with its handler).

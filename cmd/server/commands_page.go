@@ -66,7 +66,7 @@ details.ep{margin:4px 0}details.ep summary{cursor:pointer}details.ep p{margin:4p
 		b.WriteString(` · <a href="#` + facetAttr(g.Title) + `">` + e(g.Title) + `</a>`)
 	}
 	b.WriteString(`</p>`)
-	b.WriteString(`<h2 id="player-actions">Player actions: POST /api/action</h2><p>Send <code>{"action": "...", "description": "what you do", "target_id": -2}</code>. In combat each uses part of your turn; out of combat the GM narrates between actions. A word that isn't listed here (there is no "other" action) is refused with <code>unknown_action</code> and the actions you can send; nothing is spent. ` + e(describedHint) + `</p><table class="cmd actions"><colgroup><col style="width:22%"><col style="width:20%"><col style="width:58%"></colgroup>`)
+	b.WriteString(`<h2 id="player-actions">Player actions: POST /api/action</h2><p>Send <code>{"action": "...", "description": "what you do", "target_id": -2}</code>. In combat each uses part of your turn; out of combat the GM narrates between actions. A word that isn't listed here is refused with <code>unknown_action</code> and the actions you can send; nothing is spent. ` + e(describedHint) + `</p><table class="cmd actions"><colgroup><col style="width:22%"><col style="width:20%"><col style="width:58%"></colgroup>`)
 	b.WriteString(actionTypesHTML()) // the action table (action_types_2024.go)
 	b.WriteString(`</table><h3>Notes</h3><table class="cmd actions"><colgroup><col style="width:22%"><col style="width:78%"></colgroup>`)
 	for _, n := range actionNotes {

@@ -15,8 +15,10 @@ func TestActionCosts(t *testing.T) {
 		"breath": "companion",
 		// cost variants (a Bonus Action or Reaction spell, an item used with a Bonus Action)
 		"bonus_cast": "bonus_action", "reaction_cast": "reaction", "item_bonus": "bonus_action",
+		// a declaration ("other") takes the action in a fight, its Bonus Action form the Bonus Action (Matt, Nov 16: no free actions)
+		"other": "action", "declare": "action", "free": "action", "declare_bonus": "bonus_action",
 		// a word that is no type is refused before anything is spent; asked anyway, it is never free
-		"other": "action", "frobnicate": "action",
+		"frobnicate": "action",
 	} {
 		if got := getActionResourceType(typ); got != want {
 			t.Errorf("getActionResourceType(%q) = %q, want %q", typ, got, want)

@@ -334,6 +334,11 @@ func validatePendingSteps(lobbyID, charID int, steps []map[string]interface{}, s
 		if t, _ := lookupActionType(s.Action); t.GM && strings.TrimSpace(actionNarrative(s.Description, s.Result)) == "" {
 			problems = append(problems, at+": "+t.Title+" is described for the GM: say what your character does or says in description")
 		}
+		if canonicalAction(s.Action) == "declare" {
+			if why := declarationProblem(charID, actionNarrative(s.Description, s.Result)); why != "" {
+				problems = append(problems, at+": declaration_has_its_own_action: "+why)
+			}
+		}
 		if s.Action == "ready" {
 			if _, _, _, ok := readiedAction(actionNarrative(s.Description, s.Result)); !ok {
 				problems = append(problems, at+": unknown_action: a Ready holds one action, \"trigger: <what happens>; action: <an action type> ...\"")

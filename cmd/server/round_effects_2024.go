@@ -295,6 +295,7 @@ type gateFields struct {
 	CharacterID int    `json:"character_id"`
 	CampaignID  int    `json:"campaign_id"`
 	Action      string `json:"action"`
+	Description string `json:"description"`
 	CompanionID int    `json:"companion_id"`
 }
 
@@ -334,6 +335,10 @@ func saveIfSubmission(w http.ResponseWriter, r *http.Request, e routeEffect, pat
 		}
 		if err != nil {
 			return false, err
+		}
+		if t, _ := lookupActionType(f.Action); (t.GM && strings.TrimSpace(f.Description) == "") ||
+			(t.Name == "declare" && declarationProblem(charID, f.Description) != "") {
+			return false, nil // the route refuses it as it is (description_required, declaration_has_its_own_action): nothing to save
 		}
 	}
 	if charID <= 0 {

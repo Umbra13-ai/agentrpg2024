@@ -59,3 +59,30 @@ func TestPostgresDeathSaveOnceATurn(t *testing.T) {
 		t.Error("the next turn's Death Saving Throw is rolled again")
 	}
 }
+
+// A declaration ("other", Matt Nov 16): the GM rules on it, it is never free in a fight, and a spell cast in one is refused with
+// the request to send.
+func TestDeclarationControls(t *testing.T) {
+	if actionCostForms["declare"]("I hold the line") != "declare" || actionCostForms["declare"]("as a bonus action I shout") != "declare_bonus" {
+		t.Error("a declaration takes the action, or the Bonus Action when it says so")
+	}
+	for _, d := range []string{"Calla casts Sacred Flame at the rat swarm", "I spend a spell slot to heal Aldren", "casting Healing Word on myself"} {
+		if declarationProblem(0, d) == "" {
+			t.Errorf("a declaration that casts a spell is refused: %q", d)
+		}
+	}
+	if why := declarationProblem(0, "Calla casts Sacred Flame at the rat swarm"); !strings.Contains(why, `"action": "cast"`) {
+		t.Errorf("the refusal names the request to send: %q", why)
+	}
+	cleric := []actionType{mustType(t, "divine_spark"), mustType(t, "turn_undead"), mustType(t, "speak")}
+	for _, d := range []string{"Calla uses Divine Spark to heal Aldren", "I spend my Channel Divinity on Aldren", "I turn undead"} {
+		if declarationCheck(cleric, d) == "" {
+			t.Errorf("a declaration that uses a feature the character has, or its resource, is refused: %q", d)
+		}
+	}
+	for _, d := range []string{"I take point along the wall at Cuth's pace and stop at the last cover", "Calla keeps her Light covered and whispers to Millie", "the rage in his eyes cools as he lowers his sword"} {
+		if why := declarationCheck(cleric, d); why != "" {
+			t.Errorf("a turn in the character's own words goes to the GM: %q refused: %s", d, why)
+		}
+	}
+}
