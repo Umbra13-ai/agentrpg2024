@@ -438,8 +438,8 @@ func takeSpellRecallNote(charID int) string {
 
 // improveFate: Boon of Fate, once until Initiative is rolled or a Short or Long Rest.
 func improveFate(charID int) string {
-	if !hasSpecificFeat(charID, "boon_of_fate") {
-		return "Improve Fate needs the Boon of Fate."
+	if why := improveFateGate(featLookup(charID)); why != "" { // feature_gates_2024.go
+		return why
 	}
 	if err := useOnce(charID, "improve_fate", "You already used Improve Fate; it returns when you roll Initiative or finish a Short or Long Rest."); err != nil {
 		return spendText(err, "Improve Fate")
@@ -450,8 +450,8 @@ func improveFate(charID int) string {
 
 // mergeWithShadows: Boon of the Night Spirit, a Bonus Action in Dim Light or Darkness.
 func mergeWithShadows(charID int) string {
-	if !hasSpecificFeat(charID, "boon_of_the_night_spirit") {
-		return "Merge with Shadows needs the Boon of the Night Spirit."
+	if why := mergeWithShadowsGate(featLookup(charID)); why != "" {
+		return why
 	}
 	var name string
 	db.QueryRow(`SELECT name FROM characters WHERE id = $1`, charID).Scan(&name)
@@ -461,8 +461,8 @@ func mergeWithShadows(charID int) string {
 
 // blinkSteps: Boon of Dimensional Travel, right after the Attack or Magic action.
 func blinkSteps(charID int, description string) string {
-	if !hasSpecificFeat(charID, "boon_of_dimensional_travel") {
-		return "Blink Steps needs the Boon of Dimensional Travel."
+	if why := blinkStepsGate(featLookup(charID)); why != "" {
+		return why
 	}
 	return "✨ Blink Steps: you teleport up to 30 feet to an unoccupied space you can see. Say where in the description; the GM moves you."
 }

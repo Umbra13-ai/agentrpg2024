@@ -241,7 +241,13 @@ Add to the owner, never beside it. When you give another rule one owner, add it 
   (`tools/build_swagger.py` reads the file) and skill.md's action list (between its action markers; `ACTIONS_UPDATE=1 go test
   ./cmd/server -run TestActionTypesInSkillMd` rewrites it) are made from it. A new action is one row (with its handler).
   `TestActionDispatchIsTheTable`, `TestActionTypesAreDocumented`, `TestCommandsAndReferenceListTheTable` and
-  `TestNoOtherActionWordList` check; suite: `action_types_rule_test.py` (HANDOFF items 19, 29).
+  `TestNoOtherActionWordList` check; suite: `action_types_rule_test.py` (HANDOFF items 19, 29). **Who has a type** is said twice
+  until the table becomes the check: by its `Who` / `While` (read by `openTo` through `actorFacts` only) and by each feature's own
+  gate, a pure function in `feature_gates_2024.go` that its resolver calls before anything else. `TestActionWhoMatchesGates`
+  (`action_who_test.go`, no database) asks both for every class at every level 1-20, with and without its SRD subclass, with each
+  feat, invocation, item, effect, companion, subclass choice and state the table names, and fails on any difference; a type the
+  table limits needs its gate in `featureGates` there, and `TestFeatureGatesAreCalled` fails on a gate no resolver uses. A change to
+  who has a feature changes both sides, settled against the SRD.
 - **How to act (`GET /api/my-turn`'s `how_to_act`):** `actionHowTo` (`cmd/server/actions.go`), made from `actionRequest`'s
   fields and the character's real enemies.
 - **Carried weight:** `inventoryWeight` and `itemUnitWeight` (`cmd/server/srd_gear.go`). **A weapon is stored** with

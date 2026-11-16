@@ -193,22 +193,8 @@ func checkActionEconomy(charID int, actionType string, movementCost int) (bool, 
 	case "movement":
 		actionType = strings.ToLower(actionType)
 
-		// Standing up from prone costs half your movement speed (5e)
+		// Standing up from Prone costs half your Speed (handleAction refused a stand when not Prone: standGate)
 		if actionType == "stand" {
-			// Check if actually prone
-			conditions := getCharConditions(charID)
-			isProne := false
-			for _, c := range conditions {
-				if strings.ToLower(c) == "prone" {
-					isProne = true
-					break
-				}
-			}
-			if !isProne {
-				return false, resourceType, "You are not prone. No need to stand up."
-			}
-
-			// Standing costs half movement speed
 			baseSpeed := characterSpeed(charID, species)
 			standCost := baseSpeed / 2
 			if standCost > movementRemaining {
@@ -865,16 +851,13 @@ func handleAction(w http.ResponseWriter, r *http.Request) {
 	isMovingWhileProne := false
 
 	if strings.ToLower(req.Action) == "move" || isStanding {
-		conditions := getCharConditions(charID)
-		isProne := false
-		for _, c := range conditions {
-			if strings.ToLower(c) == "prone" {
-				isProne = true
-				break
-			}
-		}
-
+		isProne := hasCondition(charID, "prone")
 		if isStanding {
+			if why := standGate(isProne); why != "" { // in a fight or out of one (feature_gates_2024.go)
+				w.WriteHeader(http.StatusBadRequest)
+				json.NewEncoder(w).Encode(map[string]interface{}{"success": false, "error": "not_prone", "message": why + " Nothing was spent."})
+				return
+			}
 			// Standing up costs half your movement speed
 			effectiveMovementCost = characterSpeed(charID, species) / 2
 		} else if isProne && req.MovementCost > 0 {
@@ -2678,16 +2661,12 @@ func resolveActionWithBonusDash(action, description string, charID int, bonusDas
 		// Barbarian rage - add raging condition
 		// Rage grants: advantage on STR checks/saves, +2 damage on STR melee attacks,
 		// resistance to bludgeoning/piercing/slashing damage
-		classKey := strings.ToLower(strings.ReplaceAll(class, " ", "_"))
-		if bl := classLevelIn(charID, class, level, "barbarian"); bl > 0 && classKey != "barbarian" {
-			classKey, level = "barbarian", bl // a Barbarian taken later (multiclass): Rage at the Barbarian level
+		bl := classLevelIn(charID, class, level, "barbarian")
+		if why := rageGate(class, bl, hasCondition(charID, "raging")); why != "" { // feature_gates_2024.go
+			return why
 		}
-		if classKey != "barbarian" {
-			return "Only barbarians can rage!"
-		}
-
-		if hasCondition(charID, "raging") {
-			return "You are already raging!"
+		if bl > 0 && gateClass(class) != "barbarian" {
+			level = bl // a Barbarian taken later (multiclass): Rage at the Barbarian level
 		}
 
 		// 2024: you cannot enter a Rage while wearing Heavy armor
@@ -2729,10 +2708,16 @@ func resolveActionWithBonusDash(action, description string, charID int, bonusDas
 		return rageInfo
 
 	case "frenzy":
+		if why := frenzyGate(class, subclass.String, level); why != "" {
+			return why
+		}
 		return "Frenzy works differently in the 2024 rules: while raging, if you attack recklessly (include \"reckless\" in the attack description), the first target you hit with a Strength attack on your turn takes extra damage. There is no extra attack and no Exhaustion."
 
 	case "end_rage":
 		// End rage early (the 2024 Frenzy costs no Exhaustion)
+		if why := endRageGate(class, hasCondition(charID, "raging")); why != "" {
+			return why
+		}
 		if !removeCondition(charID, "raging") {
 			return "You are not currently raging."
 		}
@@ -2743,12 +2728,8 @@ func resolveActionWithBonusDash(action, description string, charID int, bonusDas
 		// Use action to assume beast form, can do so twice per short/long rest
 		// CR limits: 1/4 at level 2, 1/2 at level 4, 1 at level 8
 		// Movement restrictions: no flying until level 8, no swimming until level 4
-		classKey := strings.ToLower(strings.ReplaceAll(class, " ", "_"))
-		if classKey != "druid" {
-			return "Cannot use Wild Shape: only Druids can."
-		}
-		if level < 2 {
-			return "Cannot use Wild Shape: it needs Druid level 2."
+		if why := wildShapeGate(class, level); why != "" {
+			return why
 		}
 
 		// Check if already in Wild Shape
@@ -2920,16 +2901,10 @@ func resolveActionWithBonusDash(action, description string, charID int, bonusDas
 	case "revert_wild_shape":
 		// Revert from Wild Shape to normal form
 		// Can be done as bonus action
-		classKey := strings.ToLower(strings.ReplaceAll(class, " ", "_"))
-		if classKey != "druid" {
-			return "Cannot revert: only Druids use Wild Shape."
-		}
-
 		var currentForm sql.NullString
 		db.QueryRow("SELECT wild_shape_form FROM characters WHERE id = $1", charID).Scan(&currentForm)
-
-		if !currentForm.Valid || currentForm.String == "" {
-			return "Cannot revert: you aren't in Wild Shape."
+		if why := revertWildShapeGate(class, level, currentForm.Valid && currentForm.String != ""); why != "" {
+			return why
 		}
 
 		// Get beast name for message
@@ -3056,25 +3031,13 @@ func resolveActionWithBonusDash(action, description string, charID int, bonusDas
 		// Once per turn, when you make a weapon attack, you can make another attack
 		// with the same weapon against a different creature within 5ft of the original target.
 
-		// Verify is hunter ranger with horde_breaker choice
-		classKey := strings.ToLower(strings.ReplaceAll(class, " ", "_"))
-		if classKey != "ranger" {
-			return "Only Rangers can use Horde Breaker!"
-		}
-		if !subclass.Valid || subclass.String != "hunter" {
-			return "Only Hunter Rangers can use Horde Breaker!"
-		}
-		if level < 3 {
-			return "Horde Breaker requires level 3+!"
-		}
-
-		// Check subclass choice
+		// a Hunter Ranger with Horde Breaker chosen for Hunter's Prey
 		var hbChoicesJSON []byte
 		db.QueryRow("SELECT COALESCE(subclass_choices, '{}') FROM characters WHERE id = $1", charID).Scan(&hbChoicesJSON)
 		var hbChoices map[string]string
 		json.Unmarshal(hbChoicesJSON, &hbChoices)
-		if hbChoices["hunters_prey"] != "horde_breaker" {
-			return "You have not chosen Horde Breaker for your Hunter's Prey feature! Your choice: " + hbChoices["hunters_prey"]
+		if why := hordeBreakerGate(class, subclass.String, level, hbChoices["hunters_prey"]); why != "" {
+			return why
 		}
 
 		// Check if already used this turn
@@ -3115,14 +3078,10 @@ func resolveActionWithBonusDash(action, description string, charID int, bonusDas
 		// Monk's Step of the Wind
 		// Spend 1 Focus Point to take Dash or Disengage as bonus action, and jump distance is doubled
 
-		classKey := strings.ToLower(strings.ReplaceAll(class, " ", "_"))
-		if classKey != "monk" {
-			return "Only monks can use Step of the Wind!"
+		if why := stepOfTheWindGate(class, level); why != "" {
+			return why
 		}
-
-		if level < 2 {
-			return "Step of the Wind requires Monk's Focus (level 2+)!"
-		}
+		classKey := gateClass(class)
 
 		// Parse whether dash or disengage from description
 		stepAction := "dash"
@@ -3163,13 +3122,8 @@ func resolveActionWithBonusDash(action, description string, charID int, bonusDas
 		// Monk's Stunning Strike
 		// When you hit with a melee weapon attack, spend 1 Focus Point to force CON save or stunned
 
-		classKey := strings.ToLower(strings.ReplaceAll(class, " ", "_"))
-		if classKey != "monk" {
-			return "Only monks can use Stunning Strike!"
-		}
-
-		if level < 5 {
-			return "Stunning Strike requires level 5+!"
+		if why := stunningStrikeGate(class, level); why != "" {
+			return why
 		}
 
 		// Spend 1 Focus Point
@@ -3190,11 +3144,8 @@ func resolveActionWithBonusDash(action, description string, charID int, bonusDas
 		// Take Dash, Disengage, or Hide as a bonus action
 		// Thief subclass (level 3+) via Fast Hands: also Sleight of Hand, Thieves' Tools, or Use Object
 
-		classKey := strings.ToLower(strings.ReplaceAll(class, " ", "_"))
-		isRogue := classKey == "rogue" && level >= 2
-
-		if !isRogue {
-			return "Cunning Action is a Rogue feature (level 2)."
+		if why := cunningActionGate(class, level); why != "" {
+			return why
 		}
 
 		// Parse which action from description
@@ -3356,9 +3307,8 @@ func resolveActionWithBonusDash(action, description string, charID int, bonusDas
 		// Fighter's Second Wind (level 1+)
 		// Bonus action to regain 1d10 + fighter level HP. Once per short rest.
 
-		classKey := strings.ToLower(strings.ReplaceAll(class, " ", "_"))
-		if classKey != "fighter" {
-			return "Only fighters can use Second Wind!"
+		if why := secondWindGate(class); why != "" {
+			return why
 		}
 
 		// Check if resource is available
@@ -3407,13 +3357,8 @@ func resolveActionWithBonusDash(action, description string, charID int, bonusDas
 		// Fighter's Action Surge (level 2+)
 		// Bonus action to gain an additional action this turn. Once per short rest (twice at level 17+).
 
-		classKey := strings.ToLower(strings.ReplaceAll(class, " ", "_"))
-		if classKey != "fighter" {
-			return "Only fighters can use Action Surge!"
-		}
-
-		if level < 2 {
-			return "Action Surge requires Fighter level 2+!"
+		if why := actionSurgeGate(class, level); why != "" {
+			return why
 		}
 
 		// Check if resource is available
@@ -3464,9 +3409,8 @@ func resolveActionWithBonusDash(action, description string, charID int, bonusDas
 		// Action to heal from your pool (paladin level × 5 HP total).
 		// Can also cure disease or poison (costs 5 HP from pool per ailment).
 
-		classKey := strings.ToLower(strings.ReplaceAll(class, " ", "_"))
-		if classKey != "paladin" {
-			return "Only paladins can use Lay on Hands!"
+		if why := layOnHandsGate(class); why != "" {
+			return why
 		}
 
 		// Check remaining pool

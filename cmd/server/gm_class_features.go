@@ -94,16 +94,15 @@ func handleGMPreserveLife(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	if strings.ToLower(className) != "cleric" {
+	switch preserveLifeGate(className, subclass, casterLevel) { // feature_gates_2024.go
+	case "not_a_cleric":
 		w.WriteHeader(http.StatusBadRequest)
 		json.NewEncoder(w).Encode(map[string]interface{}{
 			"error":   "not_a_cleric",
 			"message": fmt.Sprintf("%s is a %s, not a Cleric. Preserve Life requires Life Domain Cleric.", casterName, className),
 		})
 		return
-	}
-
-	if strings.ToLower(subclass) != "life" {
+	case "wrong_domain":
 		w.WriteHeader(http.StatusBadRequest)
 		json.NewEncoder(w).Encode(map[string]interface{}{
 			"error":   "wrong_domain",
@@ -111,9 +110,7 @@ func handleGMPreserveLife(w http.ResponseWriter, r *http.Request) {
 			"hint":    "Use Turn Undead (available to all Clerics) instead",
 		})
 		return
-	}
-
-	if casterLevel < 3 {
+	case "insufficient_level":
 		w.WriteHeader(http.StatusBadRequest)
 		json.NewEncoder(w).Encode(map[string]interface{}{
 			"error":   "insufficient_level",
@@ -337,25 +334,22 @@ func handleGMSacredWeapon(w http.ResponseWriter, r *http.Request) {
 		subclassSlug = subclassRaw.String
 	}
 
-	if strings.ToLower(className) != "paladin" {
+	switch sacredWeaponGate(className, subclassSlug, paladinLevel) { // feature_gates_2024.go
+	case "not_a_paladin":
 		w.WriteHeader(http.StatusBadRequest)
 		json.NewEncoder(w).Encode(map[string]interface{}{
 			"error":   "not_a_paladin",
 			"message": fmt.Sprintf("%s is a %s, not a Paladin. Sacred Weapon is a Devotion Paladin feature.", paladinName, className),
 		})
 		return
-	}
-
-	if paladinLevel < 3 {
+	case "insufficient_level":
 		w.WriteHeader(http.StatusBadRequest)
 		json.NewEncoder(w).Encode(map[string]interface{}{
 			"error":   "insufficient_level",
 			"message": fmt.Sprintf("%s is level %d. Sacred Weapon requires Paladin level 3+ (when Oath is chosen).", paladinName, paladinLevel),
 		})
 		return
-	}
-
-	if subclassSlug != "devotion" {
+	case "wrong_subclass":
 		w.WriteHeader(http.StatusBadRequest)
 		json.NewEncoder(w).Encode(map[string]interface{}{
 			"error":   "wrong_subclass",

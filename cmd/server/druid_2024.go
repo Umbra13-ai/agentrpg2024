@@ -58,8 +58,8 @@ func wildResurgence(charID int, description string) string {
 	if db.QueryRow(`SELECT class, level FROM characters WHERE id = $1`, charID).Scan(&class, &level) != nil {
 		return "Character not found."
 	}
-	if strings.ToLower(class) != "druid" || level < 5 {
-		return "Wild Resurgence needs a Druid of level 5 or higher."
+	if why := wildResurgenceGate(class, level); why != "" { // feature_gates_2024.go
+		return why
 	}
 	max := game.ClassTableInt(class, level, "Wild Shape")
 	slots := characterSpellSlots(charID, class, level)

@@ -277,8 +277,9 @@ func markRageExtended(charID int) {
 }
 
 func extendRage(charID int) string {
-	if !hasCondition(charID, "raging") {
-		return "You are not raging."
+	class, _, _ := subclassOf(charID)
+	if why := extendRageGate(class, hasCondition(charID, "raging")); why != "" { // feature_gates_2024.go
+		return why
 	}
 	markRageExtended(charID)
 	return "🪓 You take a Bonus Action to extend your Rage: it lasts until the end of your next turn (at most 10 minutes in all)."

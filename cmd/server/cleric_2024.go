@@ -45,8 +45,8 @@ func divineSpark(charID int, description string) string {
 	if db.QueryRow(`SELECT class, name, level, wis, COALESCE(lobby_id,0) FROM characters WHERE id = $1`, charID).Scan(&class, &name, &level, &wis, &lobby) != nil {
 		return "Character not found."
 	}
-	if strings.ToLower(class) != "cleric" || level < 2 {
-		return "Divine Spark is a Channel Divinity effect of a Cleric of level 2 or higher."
+	if why := divineSparkGate(class, level); why != "" { // feature_gates_2024.go
+		return why
 	}
 	low := strings.ToLower(description)
 	_, monster, isMonster := attackedMonster(charID)
@@ -131,8 +131,8 @@ func handleGMTurnUndead(w http.ResponseWriter, r *http.Request) {
 		writeJSONStatus(w, http.StatusNotFound, map[string]interface{}{"error": "character_not_found"})
 		return
 	}
-	if strings.ToLower(class) != "cleric" || level < 2 {
-		writeJSONStatus(w, http.StatusBadRequest, map[string]interface{}{"error": "no_turn_undead", "message": name + " is not a Cleric of level 2 or higher."})
+	if why := turnUndeadGate(class, level); why != "" { // feature_gates_2024.go
+		writeJSONStatus(w, http.StatusBadRequest, map[string]interface{}{"error": "no_turn_undead", "message": name + " " + why})
 		return
 	}
 	if okRes, msg, _ := useClassResource(req.CasterID, "channel_divinity", 1); !okRes {

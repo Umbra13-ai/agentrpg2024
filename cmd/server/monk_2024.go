@@ -126,11 +126,12 @@ func monkStrikesOnMonster(charID int, description string, flurry bool) (string, 
 		Scan(&class, &name, &sub, &level, &str, &dex, &wis, &actionUsed) != nil {
 		return "", false
 	}
-	if strings.ToLower(class) != "monk" || (flurry && level < 2) {
-		if !flurry {
-			return "Only a Monk has Martial Arts.", true
-		}
-		return "Flurry of Blows needs a Monk of level 2 or higher.", true
+	gate := martialArtsGate // feature_gates_2024.go
+	if flurry {
+		gate = flurryOfBlowsGate
+	}
+	if why := gate(class, level); why != "" {
+		return why, true
 	}
 	_ = actionUsed // 2024: Flurry of Blows is a Bonus Action of its own; it doesn't need the Attack action first
 	if flurry {

@@ -34,8 +34,8 @@ func countercharm(charID int, description string) string {
 	if db.QueryRow(`SELECT class, name, level FROM characters WHERE id = $1`, charID).Scan(&class, &name, &level) != nil {
 		return "Character not found."
 	}
-	if strings.ToLower(class) != "bard" || level < 7 {
-		return "Countercharm needs a Bard of level 7 or higher."
+	if why := countercharmGate(class, level); why != "" { // feature_gates_2024.go
+		return why
 	}
 	return fmt.Sprintf("🎵 Countercharm: %s uses a Reaction; the saving throw against the Charmed or Frightened effect is rolled again with Advantage: %s", name, rerollReportedSave(description, []string{"Countercharm"}))
 }
@@ -89,8 +89,8 @@ func landTypeOf(charID int) string {
 // landsAid: Magic action, a use of Wild Shape. "lands_aid" with target_id (a monster) and/or "heal <name>".
 func landsAid(charID int, description string) string {
 	class, sub, level := subclassOf(charID)
-	if class != "druid" || sub != "land" || level < 3 {
-		return "Land's Aid needs a Druid of the Circle of the Land, level 3 or higher."
+	if why := landsAidGate(class, sub, level); why != "" {
+		return why
 	}
 	var wis, lobby int
 	db.QueryRow(`SELECT wis, COALESCE(lobby_id,0) FROM characters WHERE id = $1`, charID).Scan(&wis, &lobby)
@@ -147,8 +147,8 @@ var reNumbers = regexp.MustCompile(`\d+`)
 // naturalRecovery: after a Short Rest, recover spell slots with a combined level up to half the Druid level (rounded up), none of level 6+.
 func naturalRecovery(charID int, description string) string {
 	class, sub, level := subclassOf(charID)
-	if class != "druid" || sub != "land" || level < 6 {
-		return "Natural Recovery needs a Druid of the Circle of the Land, level 6 or higher."
+	if why := naturalRecoveryGate(class, sub, level); why != "" {
+		return why
 	}
 	budget := (level + 1) / 2
 	var got []string
@@ -186,8 +186,8 @@ func naturalRecovery(charID int, description string) string {
 // natureMagician (Archdruid): turn unexpended Wild Shape uses into one spell slot, 2 spell levels for each use. Once per Long Rest.
 func natureMagician(charID int, description string) string {
 	class, _, level := subclassOf(charID)
-	if class != "druid" || level < 20 {
-		return "Nature Magician needs a Druid of level 20."
+	if why := natureMagicianGate(class, level); why != "" {
+		return why
 	}
 	n := 1
 	if m := reNumbers.FindString(description); m != "" {
