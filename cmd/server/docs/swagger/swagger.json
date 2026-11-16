@@ -4399,6 +4399,15 @@
                "character_id": {
                 "type": "integer"
                },
+               "idle_hours": {
+                "description": "hours since then: what the GM judges \"idle\" by before starting without the player",
+                "type": "integer"
+               },
+               "last_active": {
+                "description": "the player's last sign of life here: a record in the log, a chat message, joining",
+                "format": "date-time",
+                "type": "string"
+               },
                "name": {
                 "type": "string"
                },
@@ -11721,6 +11730,15 @@
                  "character_id": {
                   "type": "integer"
                  },
+                 "idle_hours": {
+                  "description": "hours since then: what the GM judges \"idle\" by before starting without the player",
+                  "type": "integer"
+                 },
+                 "last_active": {
+                  "description": "the player's last sign of life here: a record in the log, a chat message, joining",
+                  "format": "date-time",
+                  "type": "string"
+                 },
                  "name": {
                   "type": "string"
                  },
@@ -12152,7 +12170,7 @@
      "Campaigns"
     ],
     "summary": "Start a campaign (DM only)",
-    "description": "Start the campaign, changing its status to active. It works once every player in it has said it is ready (POST /api/campaigns/{id}/ready); until then it is refused with players_not_ready and who the start waits on. With the turn schedule, the first round outside a fight opens (round: its number and final check-in): from then on a player's game action outside a fight is saved as a submission for the round (GET /api/campaigns/{id}/round). To run a session zero first, send {\"first_round\": \"hold\"}: the campaign is active but the table is held, so players can talk (speak, the party chat) and finish their characters while every game action is refused (table_held, nothing spent); open play with POST /api/campaigns/{id}/round/open (starting a fight opens it too).",
+    "description": "Start the campaign, changing its status to active. It works once every player in it has said it is ready (POST /api/campaigns/{id}/ready); until then it is refused with players_not_ready and who the start waits on, with how long each has been idle. A player who joined and then went idle shouldn't hold the campaign up: name their characters in start_without and the start doesn't wait on them (only for an idle player; each is logged). Removing a player (POST /api/gm/kick-character) is a last resort. With the turn schedule, the first round outside a fight opens (round: its number and final check-in): from then on a player's game action outside a fight is saved as a submission for the round (GET /api/campaigns/{id}/round). To run a session zero first, send {\"first_round\": \"hold\"}: the campaign is active but the table is held, so players can talk (speak, the party chat) and finish their characters while every game action is refused (table_held, nothing spent); open play with POST /api/campaigns/{id}/round/open (starting a fight opens it too).",
     "responses": {
      "400": {
       "description": "The body was refused (nothing was changed): unknown_field, wrong_type, invalid_json, body_required or id_mismatch, with the fields the request takes",
@@ -12199,6 +12217,12 @@
           "round": {
            "type": "string"
           },
+          "started_without": {
+           "items": {
+            "type": "string"
+           },
+           "type": "array"
+          },
           "status": {
            "type": "string"
           },
@@ -12233,6 +12257,13 @@
          "first_round": {
           "type": "string",
           "description": "\"now\" (default): round 1 opens at once; \"hold\": the table is held for a session zero until POST /api/campaigns/{id}/round/open"
+         },
+         "start_without": {
+          "items": {
+           "type": "integer"
+          },
+          "type": "array",
+          "description": "characters whose players joined and went idle without saying ready: the start doesn't wait on them (only for an idle player)"
          }
         }
        }
@@ -14291,6 +14322,15 @@
                     "character_id": {
                      "type": "integer"
                     },
+                    "idle_hours": {
+                     "description": "hours since then: what the GM judges \"idle\" by before starting without the player",
+                     "type": "integer"
+                    },
+                    "last_active": {
+                     "description": "the player's last sign of life here: a record in the log, a chat message, joining",
+                     "format": "date-time",
+                     "type": "string"
+                    },
                     "name": {
                      "type": "string"
                     },
@@ -14984,6 +15024,15 @@
                "character_id": {
                 "type": "integer"
                },
+               "idle_hours": {
+                "description": "hours since then: what the GM judges \"idle\" by before starting without the player",
+                "type": "integer"
+               },
+               "last_active": {
+                "description": "the player's last sign of life here: a record in the log, a chat message, joining",
+                "format": "date-time",
+                "type": "string"
+               },
                "name": {
                 "type": "string"
                },
@@ -15091,6 +15140,15 @@
               "properties": {
                "character_id": {
                 "type": "integer"
+               },
+               "idle_hours": {
+                "description": "hours since then: what the GM judges \"idle\" by before starting without the player",
+                "type": "integer"
+               },
+               "last_active": {
+                "description": "the player's last sign of life here: a record in the log, a chat message, joining",
+                "format": "date-time",
+                "type": "string"
                },
                "name": {
                 "type": "string"

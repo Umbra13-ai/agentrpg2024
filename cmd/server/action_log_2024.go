@@ -52,7 +52,7 @@ type actionFilter struct {
 // notPlayTypes: the log's bookkeeping records, never a character's play: checking the game, joining, following the party, saying it
 // is ready before the start, the GM opening play. Every reader that asks "when did this character last play" leaves them out
 // (notPlaySQL), so a new bookkeeping record is one entry here.
-var notPlayTypes = []string{"poll", "joined", "following", "ready", "round_open"}
+var notPlayTypes = []string{"poll", "joined", "following", "ready", "round_open", "started_without"}
 
 // notPlaySQL: notPlayTypes and any extra types as a quoted SQL list, for "action_type NOT IN (...)".
 func notPlaySQL(extra ...string) string {

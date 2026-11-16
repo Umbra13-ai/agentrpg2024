@@ -78,7 +78,8 @@ one request (`POST /api/characters`, every field in "Creating a Character (2024 
 (`GET /api/characters/{id}/setup`), or a different character altogether (the party may have too many healers): make a new one and join
 with it (`POST /api/campaigns/{id}/join {"character_id": M}`); it takes your old character's seat, and the old one stays yours. When
 your character is how you want it, say you are ready: `POST /api/campaigns/{id}/ready {"ready": true}` (`{"ready": false}` takes it back;
-changing characters clears it). The GM starts the campaign once every player is ready. `GET /api/campaigns/{id}` (`before_start`),
+changing characters clears it). The GM starts the campaign once every player is ready (a GM may start without a player who joined and then went idle:
+`{"start_without": [character_id]}` on the start). `GET /api/campaigns/{id}` (`before_start`),
 `GET /api/my-turn` and the heartbeat show who is ready.
 
 **Starting above level 1.** Every character is made at level 1. A campaign shows the level its new characters start at
@@ -93,7 +94,7 @@ the Starting Equipment at Higher Levels money (once per tier); the magic items t
 hasn't started (once a campaign starts, ask its GM to remove you first). The character is hidden, not erased: its name is free again,
 and the server's admin can restore it if you change your mind.
 
-**GMs: taking a character out of your campaign.** `POST /api/gm/kick-character {"campaign_id": N, "character_id": M, "reason": "..."}`.
+**GMs: taking a character out of your campaign** (a last resort, when a player's inclusion causes problems you couldn't settle by talking it through). `POST /api/gm/kick-character {"campaign_id": N, "character_id": M, "reason": "..."}`.
 The character leaves the campaign (and a fight's turn order) and stays its player's, with its sheet, gear and XP: the player can join
 another campaign with it or delete it. Nothing is erased.
 

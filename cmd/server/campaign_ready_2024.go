@@ -17,18 +17,23 @@ import (
 	"fmt"
 	"net/http"
 	"strings"
+	"time"
 )
 
 // readyRow: one character in the campaign and whether its player is ready.
 type readyRow struct {
-	CharacterID int    `json:"character_id"`
-	Name        string `json:"name"`
-	Ready       bool   `json:"ready"`
+	CharacterID int       `json:"character_id"`
+	Name        string    `json:"name"`
+	Ready       bool      `json:"ready"`
+	LastActive  time.Time `json:"last_active"` // the player's last sign of life here: a record in the log, a chat message, joining
+	IdleHours   int       `json:"idle_hours"`  // hours since then: what the GM judges "idle" by before starting without the player
+	agent       int
+	joined      time.Time
 }
 
 // campaignReadiness: every character in the campaign, in seat order, and whether its player said it is ready.
 func campaignReadiness(lobby int) ([]readyRow, error) {
-	rows, err := db.Query(`SELECT c.id, c.name, s.ready_at IS NOT NULL FROM characters c
+	rows, err := db.Query(`SELECT c.id, c.name, s.ready_at IS NOT NULL, COALESCE(c.agent_id, 0), COALESCE(s.joined_at, c.created_at, NOW()) FROM characters c
 		LEFT JOIN campaign_seats s ON s.lobby_id = c.lobby_id AND s.character_id = c.id
 		WHERE c.lobby_id = $1 ORDER BY COALESCE(s.seat, 1000000), c.id`, lobby)
 	if err != nil {
@@ -38,12 +43,37 @@ func campaignReadiness(lobby int) ([]readyRow, error) {
 	out := []readyRow{}
 	for rows.Next() {
 		var r readyRow
-		if err := rows.Scan(&r.CharacterID, &r.Name, &r.Ready); err != nil {
+		if err := rows.Scan(&r.CharacterID, &r.Name, &r.Ready, &r.agent, &r.joined); err != nil {
 			return nil, err
 		}
 		out = append(out, r)
 	}
-	return out, rows.Err()
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	rows.Close()
+	now := time.Now()
+	for i := range out { // the last sign of life: the log (polls included), the party chat, joining
+		r := &out[i]
+		r.LastActive = r.joined
+		last, err := readActions(actionFilter{character: r.CharacterID, newestFirst: true, limit: 1})
+		if err != nil {
+			return nil, err
+		}
+		if len(last) > 0 && last[0].At.After(r.LastActive) {
+			r.LastActive = last[0].At
+		}
+		var chat sql.NullTime
+		if err := db.QueryRow(`SELECT MAX(created_at) FROM campaign_messages WHERE lobby_id = $1 AND agent_id = $2`, lobby, r.agent).Scan(&chat); err != nil {
+			return nil, err
+		}
+		if chat.Valid && chat.Time.After(r.LastActive) {
+			r.LastActive = chat.Time
+		}
+		r.LastActive = r.LastActive.UTC()
+		r.IdleHours = int(now.Sub(r.LastActive).Hours())
+	}
+	return out, nil
 }
 
 // readinessView: who is ready and who the start waits on.
@@ -65,27 +95,49 @@ func beforeStartGuide(lobby int, forGM bool) string {
 		return fmt.Sprintf("Before you start: players join, ask you and each other questions in the party chat (GET|POST /api/campaigns/messages {\"campaign_id\": %d, \"message\": \"...\"}) "+
 			"and change their characters as they like (a player can join with a new character, which takes the old one's seat). Answer their questions there. "+
 			"Each player then says it is ready (POST /api/campaigns/%d/ready); GET /api/campaigns/%d (readiness) and GET /api/gm/status show who you are waiting on. "+
-			"POST /api/campaigns/%d/start works once every player is ready (add {\"first_round\": \"hold\"} to run a session zero before round 1).", lobby, lobby, lobby, lobby)
+			"POST /api/campaigns/%d/start works once every player is ready (add {\"first_round\": \"hold\"} to run a session zero before round 1). "+
+			"A player who joined and then went idle shouldn't hold the campaign up: you can start without them, {\"start_without\": [their character id]} (readiness shows how long each player has been idle); do that only for an idle player, never to hurry one who is still deciding. "+
+			"At any time, if a player's inclusion is causing problems, you can remove their character (POST /api/gm/kick-character {\"character_id\": N, \"reason\": \"...\"}; the character stays theirs), but only as a last resort, after you have talked it through with them.", lobby, lobby, lobby, lobby)
 	}
 	return fmt.Sprintf("Before the GM starts the campaign: ask the GM and the other players anything in the party chat (POST /api/campaigns/messages {\"campaign_id\": %d, \"message\": \"...\"}; GET /api/campaigns/messages?campaign_id=%d reads it), "+
 		"and change your character as you like: its setup (GET /api/characters/{id}/setup), or a different character (make a new one and join with it, POST /api/campaigns/%d/join {\"character_id\": N}: it takes your old character's seat, and the old one stays yours). "+
 		"When your character is how you want it, say you are ready: POST /api/campaigns/%d/ready {\"ready\": true} ({\"ready\": false} takes it back). The GM starts the campaign once every player is ready.", lobby, lobby, lobby, lobby)
 }
 
-// startWaitsOn: the start's refusal while a player isn't ready (nil when every player is, or there are none).
-func startWaitsOn(lobby int) (map[string]interface{}, error) {
+// startWaitsOn: the start's refusal while a player isn't ready (nil when every player is, or there are none). without is the GM's
+// override: characters whose players joined and went idle, named in start_without, which the start doesn't wait on. It also
+// answers the characters started without (each one named and not ready), and a refusal when without names one that isn't.
+func startWaitsOn(lobby int, without []int) (refusal map[string]interface{}, skipped []readyRow, err error) {
 	rows, err := campaignReadiness(lobby)
 	if err != nil {
-		return nil, err
+		return nil, nil, err
 	}
-	v := readinessView(rows)
-	waiting := v["waiting_on"].([]string)
+	named := map[int]bool{}
+	for _, id := range without {
+		named[id] = true
+	}
+	var waiting []string
+	for _, r := range rows {
+		switch {
+		case named[r.CharacterID] && r.Ready:
+			return map[string]interface{}{"error": "invalid_start_without", "message": fmt.Sprintf("%s is ready: start_without is only for a player who isn't. Nothing was changed.", r.Name)}, nil, nil
+		case named[r.CharacterID]:
+			skipped = append(skipped, r)
+			delete(named, r.CharacterID)
+		case !r.Ready:
+			waiting = append(waiting, fmt.Sprintf("%s (character %d, last active %d hours ago)", r.Name, r.CharacterID, r.IdleHours))
+		}
+	}
+	for id := range named {
+		return map[string]interface{}{"error": "invalid_start_without", "message": fmt.Sprintf("Character %d isn't in campaign %d: start_without names characters in it. Nothing was changed.", id, lobby)}, nil, nil
+	}
 	if len(waiting) == 0 {
-		return nil, nil
+		return nil, skipped, nil
 	}
-	return map[string]interface{}{"error": "players_not_ready", "campaign_id": lobby, "readiness": v,
-		"message": fmt.Sprintf("Not every player is ready yet: waiting on %s. Each player says so with POST /api/campaigns/%d/ready {\"ready\": true}; answer their questions in the party chat meanwhile. Nothing was changed.",
-			strings.Join(waiting, ", "), lobby)}, nil
+	return map[string]interface{}{"error": "players_not_ready", "campaign_id": lobby, "readiness": readinessView(rows),
+		"message": fmt.Sprintf("Not every player is ready yet: waiting on %s. Each player says so with POST /api/campaigns/%d/ready {\"ready\": true}; answer their questions in the party chat meanwhile. "+
+			"If a player joined and then went idle, don't let them hold the table up: start without them with {\"start_without\": [character ids]} (only for a player who has gone quiet, not one still deciding). Nothing was changed.",
+			strings.Join(waiting, ", "), lobby)}, nil, nil
 }
 
 // handleCampaignReady godoc

@@ -971,7 +971,13 @@ func handleGMStatus(w http.ResponseWriter, r *http.Request) {
 			case v["all_ready"] == true:
 				task += " Every player is ready: you can start."
 			default:
-				task += " Waiting on: " + strings.Join(v["waiting_on"].([]string), ", ") + "."
+				var waiting []string
+				for _, r := range rows {
+					if !r.Ready {
+						waiting = append(waiting, fmt.Sprintf("%s (character %d, idle %d hours)", r.Name, r.CharacterID, r.IdleHours))
+					}
+				}
+				task += " Waiting on: " + strings.Join(waiting, ", ") + "."
 			}
 		}
 		gmTasks = append([]string{task}, gmTasks...)

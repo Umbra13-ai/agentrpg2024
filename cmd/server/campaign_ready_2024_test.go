@@ -23,8 +23,10 @@ func TestPostgresPlayersReadyBeforeStart(t *testing.T) {
 	a1, a2, b1 := mk(aTok, "Pg Ready A1"), mk(aTok, "Pg Ready A2"), mk(bTok, "Pg Ready B1")
 	c, j := pgCall(t, "POST", "/api/campaigns", gmTok, map[string]interface{}{"name": fmt.Sprintf("PG Ready %d", gm), "max_players": 2})
 	camp := int(j["campaign_id"].(float64))
-	if !strings.Contains(fmt.Sprint(j["before_start"]), "/ready") {
-		t.Errorf("the creation reply doesn't explain the ready flag: %v", j["before_start"])
+	for _, want := range []string{"/ready", "start_without", "kick-character", "last resort", "idle"} {
+		if !strings.Contains(fmt.Sprint(j["before_start"]), want) {
+			t.Errorf("the creation reply's guidance doesn't mention %q: %v", want, j["before_start"])
+		}
 	}
 	c, j = pgCall(t, "POST", fmt.Sprintf("/api/campaigns/%d/join", camp), aTok, map[string]interface{}{"character_id": a1})
 	if c != 200 || !strings.Contains(fmt.Sprint(j["before_start"]), "/ready") || j["next_steps"].(map[string]interface{})["set_ready"] == nil {
@@ -77,9 +79,16 @@ func TestPostgresPlayersReadyBeforeStart(t *testing.T) {
 	if c, _ = pgCall(t, "POST", fmt.Sprintf("/api/campaigns/%d/start", camp), gmTok, nil); c != 409 {
 		t.Errorf("started with B not ready: %d", c)
 	}
-	pgCall(t, "POST", fmt.Sprintf("/api/campaigns/%d/ready", camp), bTok, map[string]interface{}{"ready": true})
-	if c, j = pgCall(t, "POST", fmt.Sprintf("/api/campaigns/%d/start", camp), gmTok, nil); c != 200 {
-		t.Fatalf("start with everyone ready: %d %v", c, j)
+	// the GM's override for an idle player: only a player who isn't ready, and it is logged
+	if c, j = pgCall(t, "POST", fmt.Sprintf("/api/campaigns/%d/start", camp), gmTok, map[string]interface{}{"start_without": []int{a2}}); c != 400 || j["error"] != "invalid_start_without" {
+		t.Errorf("start_without a ready player: %d %v", c, j)
+	}
+	c, j = pgCall(t, "POST", fmt.Sprintf("/api/campaigns/%d/start", camp), gmTok, map[string]interface{}{"start_without": []int{b1}})
+	if c != 200 || !strings.Contains(fmt.Sprint(j["started_without"]), "Pg Ready B1") {
+		t.Fatalf("start without the idle player: %d %v", c, j)
+	}
+	if played, _ := characterHasPlayed(b1); played {
+		t.Error("being started without counts as having played")
 	}
 	// after the start: no more changes of character or ready flags
 	if c, j = pgCall(t, "POST", fmt.Sprintf("/api/campaigns/%d/join", camp), aTok, map[string]interface{}{"character_id": a1}); c != 409 || j["error"] != "one_character_per_player" {

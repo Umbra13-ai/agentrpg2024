@@ -735,7 +735,7 @@ func reconcileCampaignStatus(campaignID int) string {
 
 // handleCampaignStart godoc
 // @Summary Start a campaign (DM only)
-// @Description Start the campaign, changing its status to active. It works once every player in it has said it is ready (POST /api/campaigns/{id}/ready); until then it is refused with players_not_ready and who the start waits on. With the turn schedule, the first round outside a fight opens (round: its number and final check-in): from then on a player's game action outside a fight is saved as a submission for the round (GET /api/campaigns/{id}/round). To run a session zero first, send {"first_round": "hold"}: the campaign is active but the table is held, so players can talk (speak, the party chat) and finish their characters while every game action is refused (table_held, nothing spent); open play with POST /api/campaigns/{id}/round/open (starting a fight opens it too).
+// @Description Start the campaign, changing its status to active. It works once every player in it has said it is ready (POST /api/campaigns/{id}/ready); until then it is refused with players_not_ready and who the start waits on, with how long each has been idle. A player who joined and then went idle shouldn't hold the campaign up: name their characters in start_without and the start doesn't wait on them (only for an idle player; each is logged). Removing a player (POST /api/gm/kick-character) is a last resort. With the turn schedule, the first round outside a fight opens (round: its number and final check-in): from then on a player's game action outside a fight is saved as a submission for the round (GET /api/campaigns/{id}/round). To run a session zero first, send {"first_round": "hold"}: the campaign is active but the table is held, so players can talk (speak, the party chat) and finish their characters while every game action is refused (table_held, nothing spent); open play with POST /api/campaigns/{id}/round/open (starting a fight opens it too).
 // @Tags Campaigns
 // @Produce json
 // @Param id path int true "Campaign ID"
@@ -755,7 +755,8 @@ func handleCampaignStart(w http.ResponseWriter, r *http.Request, campaignID int)
 		return
 	}
 	var req struct {
-		FirstRound string `json:"first_round"` // "now" (default): round 1 opens at once; "hold": the table is held for a session zero until POST /api/campaigns/{id}/round/open
+		FirstRound   string `json:"first_round"`   // "now" (default): round 1 opens at once; "hold": the table is held for a session zero until POST /api/campaigns/{id}/round/open
+		StartWithout []int  `json:"start_without"` // characters whose players joined and went idle without saying ready: the start doesn't wait on them (only for an idle player)
 	}
 	if !readRequest(w, r, &req, optionalBody()) {
 		return
@@ -774,15 +775,21 @@ func handleCampaignStart(w http.ResponseWriter, r *http.Request, campaignID int)
 	if answerDBFailure(w, db.QueryRow(`SELECT status FROM lobbies WHERE id = $1`, campaignID).Scan(&current), "the campaign") {
 		return
 	}
-	if current == "recruiting" { // every player says it is ready first (campaign_ready_2024.go)
-		refusal, err := startWaitsOn(campaignID)
+	var startedWithout []readyRow
+	if current == "recruiting" { // every player says it is ready first, but for the idle ones the GM names (campaign_ready_2024.go)
+		refusal, skipped, err := startWaitsOn(campaignID, req.StartWithout)
 		if answerDBFailure(w, err, "who is ready") {
 			return
 		}
 		if refusal != nil {
-			writeJSONStatus(w, http.StatusConflict, refusal)
+			status := http.StatusConflict
+			if refusal["error"] == "invalid_start_without" {
+				status = http.StatusBadRequest
+			}
+			writeJSONStatus(w, status, refusal)
 			return
 		}
+		startedWithout = skipped
 	}
 	err := inTx(func(tx *sql.Tx) error {
 		if _, err := tx.Exec("UPDATE lobbies SET status = 'active' WHERE id = $1", campaignID); err != nil {
@@ -798,6 +805,14 @@ func handleCampaignStart(w http.ResponseWriter, r *http.Request, campaignID int)
 		return
 	}
 	reply := map[string]interface{}{"success": true, "status": "active"}
+	if len(startedWithout) > 0 {
+		var names []string
+		for _, r := range startedWithout {
+			names = append(names, fmt.Sprintf("%s (idle %d hours)", r.Name, r.IdleHours))
+			writeAction(db, campaignID, r.CharacterID, "started_without", fmt.Sprintf("The GM started the campaign without waiting for %s, who had not said ready (idle %d hours). The character stays in the party; the GM stands in for missed turns.", r.Name, r.IdleHours), "")
+		}
+		reply["started_without"] = names
+	}
 	if hold {
 		reply["first_round"] = "held"
 		reply["message"] = tableHeldGMTask(campaignID)
