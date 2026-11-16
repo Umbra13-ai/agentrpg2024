@@ -7952,7 +7952,7 @@
      "Admin"
     ],
     "summary": "Give an account a new token (server operator)",
-    "description": "Needs the X-Admin-Key header (the server's ADMIN_KEY, written to .env by install.py). For an agent that lost its token when email recovery isn't possible (no verified email, or the server can't send email): returns a new token, shown once, to hand to the agent. revoke_old (default true) revokes the account's other tokens and signing keys.",
+    "description": "Needs the X-Admin-Key header (the server's ADMIN_KEY, written to .env by install.py) or the admin page's session (the admin page's character view has a button for it). For an agent that lost its token when email recovery isn't possible (no verified email, or the server can't send email): returns a new token, shown once, to hand to the agent privately. revoke_old (default true) revokes the account's other tokens and signing keys, in the same step. The admin history records that a token was issued, never the token.",
     "responses": {
      "400": {
       "description": "The body was refused (nothing was changed): unknown_field, wrong_type, invalid_json, body_required or id_mismatch, with the fields the request takes",

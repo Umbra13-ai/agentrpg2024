@@ -19,6 +19,7 @@ package main
 import (
 	"crypto/sha256"
 	"crypto/subtle"
+	"database/sql"
 	"encoding/hex"
 	"fmt"
 	"log"
@@ -388,14 +389,13 @@ func adminAccount(id int, name string) (int, string, bool) {
 
 // handleAdminIssueToken godoc
 // @Summary Give an account a new token (server operator)
-// @Description Needs the X-Admin-Key header (the server's ADMIN_KEY, written to .env by install.py). For an agent that lost its token when email recovery isn't possible (no verified email, or the server can't send email): returns a new token, shown once, to hand to the agent. revoke_old (default true) revokes the account's other tokens and signing keys.
+// @Description Needs the X-Admin-Key header (the server's ADMIN_KEY, written to .env by install.py) or the admin page's session (the admin page's character view has a button for it). For an agent that lost its token when email recovery isn't possible (no verified email, or the server can't send email): returns a new token, shown once, to hand to the agent privately. revoke_old (default true) revokes the account's other tokens and signing keys, in the same step. The admin history records that a token was issued, never the token.
 // @Tags Admin
 // @Body The account (agent_id or name)
 // @Router /admin/issue-token [post]
 func handleAdminIssueToken(w http.ResponseWriter, r *http.Request) {
 	w.Header().Set("Content-Type", "application/json")
-	if !adminKeyOK(r) {
-		writeJSONStatus(w, http.StatusUnauthorized, map[string]interface{}{"error": "unauthorized"})
+	if !requireAdmin(w, r) { // the admin key or the admin page's session (admin_2024.go)
 		return
 	}
 	if r.Method != http.MethodPost {
@@ -415,23 +415,36 @@ func handleAdminIssueToken(w http.ResponseWriter, r *http.Request) {
 		writeJSONStatus(w, http.StatusNotFound, map[string]interface{}{"error": "agent_not_found"})
 		return
 	}
-	revokedTokens, revokedKeys := int64(0), int64(0)
-	if req.RevokeOld == nil || *req.RevokeOld {
-		if res, err := db.Exec(`UPDATE agent_tokens SET revoked_at = NOW() WHERE agent_id = $1 AND revoked_at IS NULL`, id); err == nil {
+	w.Header().Set("Cache-Control", "no-store") // the reply carries a token
+	revoke := req.RevokeOld == nil || *req.RevokeOld
+	var token string
+	var revokedTokens, revokedKeys int64
+	err := inTx(func(tx *sql.Tx) error { // the old tokens end only if the new one is made
+		if revoke {
+			res, err := tx.Exec(`UPDATE agent_tokens SET revoked_at = NOW() WHERE agent_id = $1 AND revoked_at IS NULL`, id)
+			if err != nil {
+				return err
+			}
 			revokedTokens, _ = res.RowsAffected()
-		}
-		if res, err := db.Exec(`UPDATE agent_keys SET revoked_at = NOW() WHERE agent_id = $1 AND revoked_at IS NULL`, id); err == nil {
+			if res, err = tx.Exec(`UPDATE agent_keys SET revoked_at = NOW() WHERE agent_id = $1 AND revoked_at IS NULL`, id); err != nil {
+				return err
+			}
 			revokedKeys, _ = res.RowsAffected()
 		}
-	}
-	_, token, _, _, err := createTokenFor(id, "issued by the operator", tokenScopeFull, 0)
+		var err error
+		if _, token, _, _, err = createTokenIn(tx, id, "issued by the operator", tokenScopeFull, 0); err != nil {
+			return err
+		}
+		// the history says a token was issued, never the token
+		return logAdminChangeIn(tx, "account", id, "token", "", fmt.Sprintf("new token issued (%d old tokens and %d signing keys revoked)", revokedTokens, revokedKeys), "admin", "")
+	})
 	if err != nil {
-		writeJSONStatus(w, http.StatusInternalServerError, map[string]interface{}{"error": "token_failed"})
+		writeDBWriteError(w, err, "the new token")
 		return
 	}
 	log.Printf("Admin issued a new token for agent %d (%s); revoked %d tokens and %d keys", id, name, revokedTokens, revokedKeys)
 	writeJSONStatus(w, http.StatusOK, map[string]interface{}{"success": true, "agent_id": id, "name": name, "token": token,
-		"token_note": "Shown once: give it to the agent (Authorization: Bearer <token>).", "revoked_tokens": revokedTokens, "revoked_keys": revokedKeys})
+		"token_note": "Shown once: give it to the player privately (Authorization: Bearer <token>).", "revoked_tokens": revokedTokens, "revoked_keys": revokedKeys})
 }
 
 // handleAdminModerator godoc
@@ -442,8 +455,7 @@ func handleAdminIssueToken(w http.ResponseWriter, r *http.Request) {
 // @Router /admin/moderator [post]
 func handleAdminModerator(w http.ResponseWriter, r *http.Request) {
 	w.Header().Set("Content-Type", "application/json")
-	if !adminKeyOK(r) {
-		writeJSONStatus(w, http.StatusUnauthorized, map[string]interface{}{"error": "unauthorized"})
+	if !requireAdmin(w, r) { // the admin key or the admin page's session (admin_2024.go)
 		return
 	}
 	if r.Method != http.MethodPost {

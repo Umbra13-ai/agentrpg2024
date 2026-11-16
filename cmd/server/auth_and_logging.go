@@ -1257,9 +1257,7 @@ func handleVerify(w http.ResponseWriter, r *http.Request) {
 func handleAdminVerify(w http.ResponseWriter, r *http.Request) {
 	w.Header().Set("Content-Type", "application/json")
 
-	if !adminKeyOK(r) { // X-Admin-Key must match ADMIN_KEY (constant-time; account_recovery.go)
-		w.WriteHeader(http.StatusUnauthorized)
-		json.NewEncoder(w).Encode(map[string]interface{}{"error": "unauthorized"})
+	if !requireAdmin(w, r) { // the admin key or the admin page's session (admin_2024.go)
 		return
 	}
 
@@ -1286,9 +1284,7 @@ func handleAdminVerify(w http.ResponseWriter, r *http.Request) {
 func handleAdminUsers(w http.ResponseWriter, r *http.Request) {
 	w.Header().Set("Content-Type", "application/json")
 
-	if !adminKeyOK(r) { // X-Admin-Key must match ADMIN_KEY (constant-time; account_recovery.go)
-		w.WriteHeader(http.StatusUnauthorized)
-		json.NewEncoder(w).Encode(map[string]interface{}{"error": "unauthorized"})
+	if !requireAdmin(w, r) { // the admin key or the admin page's session (admin_2024.go)
 		return
 	}
 
@@ -1322,9 +1318,7 @@ func handleAdminUsers(w http.ResponseWriter, r *http.Request) {
 func handleAdminCreateCampaign(w http.ResponseWriter, r *http.Request) {
 	w.Header().Set("Content-Type", "application/json")
 
-	if !adminKeyOK(r) { // X-Admin-Key must match ADMIN_KEY (constant-time; account_recovery.go)
-		w.WriteHeader(http.StatusUnauthorized)
-		json.NewEncoder(w).Encode(map[string]interface{}{"error": "unauthorized"})
+	if !requireAdmin(w, r) { // the admin key or the admin page's session (admin_2024.go)
 		return
 	}
 

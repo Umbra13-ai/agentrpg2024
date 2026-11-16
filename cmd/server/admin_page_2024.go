@@ -212,6 +212,7 @@ function openCharacter(id){curId=id;pending={};hideSave();
     ow.appendChild(finder('','Find an account by name','/api/admin/accounts?q=','accounts',function(x){return x.name+' · '+x.characters+' characters'},function(x){owName.textContent=x.name+' (account '+x.id+') — not saved yet';setField('agent_id',x.id)}));s1.appendChild(ow);
     s1.appendChild(select('Campaign','lobby_id',[['','No campaign']].concat(camps.map(function(x){return [x.id,x.name+' ('+x.status+')']})),true));
     M.appendChild(s1);
+    if(c.agent_id&&j.owner_name)M.appendChild(tokenCard(c.agent_id,j.owner_name));
     var s2=section('Health and condition',true);
     add(s2,add(el('div',{'class':'grid'}),text('Hit Points','hp',{num:true}),text('Max Hit Points','max_hp',{num:true}),text('Temporary HP','temp_hp',{num:true}),text('Armor Class','ac',{num:true}),
       select('Exhaustion','exhaustion_level',[0,1,2,3,4,5,6].map(function(n){return [n,n===0?'None':'Level '+n]}),true),text('Hit Dice spent','hit_dice_spent',{num:true})),
@@ -230,6 +231,18 @@ function openCharacter(id){curId=id;pending={};hideSave();
     var dz=el('div',{'class':'card'});dz.appendChild(el('h3',null,'Delete'));dz.appendChild(el('p',{'class':'muted small'},'Hides the character from everyone and takes it out of its campaign. Nothing is erased; you can restore it here.'));
     var db=el('button',{'class':'btn danger'},'Delete character');db.onclick=function(){if(confirm('Delete '+c.name+'? You can restore it later.'))api('POST','/api/admin/characters/'+id+'/delete').then(function(r){toast(r.message);campaignsCache=null;openCharacter(id)}).catch(fail)};dz.appendChild(db);M.appendChild(dz)
   }).catch(fail)}
+function tokenCard(aid,owner){var s=section('Player’s access (lost token)');
+  s.appendChild(el('p',{'class':'muted small'},'If '+owner+' lost their token and can’t recover it by email, make a new one here and send it to them privately. It is shown once.'));
+  var keep=el('label',{'class':'toggle'});var kc=el('input',{type:'checkbox'});kc.checked=true;add(keep,el('span',null,'End their old tokens and signing keys (recommended)'),kc);s.appendChild(keep);
+  var out=el('div');var b=el('button',{'class':'btn primary'},'Make a new token for '+owner);
+  b.onclick=function(){if(!confirm('Make a new token for '+owner+'?'+(kc.checked?' Their old tokens stop working.':'')))return;b.disabled=true;
+    api('POST','/api/admin/issue-token',{agent_id:aid,revoke_old:kc.checked}).then(function(r){out.textContent='';
+      var i=el('input',{type:'text',readonly:'readonly','aria-label':'New token'});i.value=r.token;i.style.fontFamily='monospace';i.onfocus=function(){i.select()};
+      var cp=el('button',{'class':'btn'},'Copy');cp.onclick=function(){var done=function(){cp.textContent='Copied';toast('Token copied')};
+        if(navigator.clipboard&&navigator.clipboard.writeText)navigator.clipboard.writeText(r.token).then(done,function(){i.select();document.execCommand('copy');done()});else{i.select();document.execCommand('copy');done()}};
+      add(out,add(el('div',{'class':'row'}),i,cp),el('p',{'class':'muted small'},'Shown once: copy it now and send it to '+owner+' privately. They sign in with it as Authorization: Bearer <token>.'+(r.revoked_tokens||r.revoked_keys?' Ended '+r.revoked_tokens+' old token(s) and '+r.revoked_keys+' signing key(s).':'')));
+      b.textContent='Make another new token';b.disabled=false}).catch(function(e){b.disabled=false;fail(e)})};
+  add(s,b,out);return s}
 function inventory(c){var s=section('Inventory');var w=el('div',{'data-f':'inventory'});s.appendChild(w);var inv=JSON.parse(JSON.stringify(c.inventory||[]));
   function draw(){w.textContent='';var conts=inv.filter(function(x){return x.type==='container'});
     if(!inv.length)w.appendChild(el('p',{'class':'muted small'},'No items.'));
@@ -273,8 +286,8 @@ var LABEL={hp:'Hit Points',max_hp:'Max Hit Points',temp_hp:'Temporary HP',ac:'Ar
   exhaustion_level:'Exhaustion',is_dead:'Dead',spell_slots_used:'Used spell slots',max_players:'Max players',min_level:'Lowest level',max_level:'Highest level'};
 function showHistory(){var box=el('div',{'class':'card'});M.appendChild(box);api('GET','/api/admin/changes?limit=200').then(function(j){
   if(!j.changes.length){box.appendChild(el('p',{'class':'muted'},'No admin changes yet.'));return}
-  j.changes.forEach(function(x){var d=el('div',{'class':'hist'});var who=x.name||((x.kind==='character'?'Character ':'Campaign ')+x.row_id);var what;
-    if(x.field==='deleted')what='Deleted';else if(x.field==='restored')what='Restored';else what=(LABEL[x.field]||nice(x.field))+': '+diff(x.old,x.new);
+  j.changes.forEach(function(x){var d=el('div',{'class':'hist'});var who=x.name||(({character:'Character ',account:'Account '}[x.kind]||'Campaign ')+x.row_id);var what;
+    if(x.field==='token')what=cap(x.new);else if(x.field==='deleted')what='Deleted';else if(x.field==='restored')what='Restored';else what=(LABEL[x.field]||nice(x.field))+': '+diff(x.old,x.new);
     add(d,el('div',null,who+' — '+what),el('div',{'class':'muted small'},when(x.at)+' · by '+x.by+(x.note?' · “'+x.note+'”':'')));box.appendChild(d)})}).catch(fail)}
 function diff(o,n){var a,b;try{a=JSON.parse(o);b=JSON.parse(n)}catch(e){return short(o)+' → '+short(n)}
   if(a===null)a=[];if(b===null)b=[];

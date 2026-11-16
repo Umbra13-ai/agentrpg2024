@@ -884,7 +884,8 @@ func handleAdminChanges(w http.ResponseWriter, r *http.Request) {
 	kind := r.URL.Query().Get("kind")
 	id, _ := strconv.Atoi(r.URL.Query().Get("id"))
 	rows, err := db.Query(`SELECT x.id, x.at, x.kind, x.row_id, x.field, COALESCE(x.old_value,''), COALESCE(x.new_value,''), x.by_whom, COALESCE(x.note,''),
-		COALESCE(CASE WHEN x.kind = 'character' THEN (SELECT COALESCE(deleted_name, name) FROM characters WHERE id = x.row_id)
+		COALESCE(CASE x.kind WHEN 'character' THEN (SELECT COALESCE(deleted_name, name) FROM characters WHERE id = x.row_id)
+			WHEN 'account' THEN (SELECT name FROM agents WHERE id = x.row_id)
 			ELSE (SELECT name FROM lobbies WHERE id = x.row_id) END, '')
 		FROM admin_changes x WHERE ($1 = '' OR x.kind = $1) AND ($2 = 0 OR x.row_id = $2) ORDER BY x.id DESC LIMIT $3`, kind, id, limit)
 	if err != nil {

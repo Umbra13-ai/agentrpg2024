@@ -157,6 +157,11 @@ func agentFromBearer(r *http.Request, token string) (int, error) {
 
 // createTokenFor stores a new token for an agent and returns the secret once.
 func createTokenFor(agentID int, label, scope string, expiresInDays int) (id int, token, prefix string, expires *time.Time, err error) {
+	return createTokenIn(db, agentID, label, scope, expiresInDays)
+}
+
+// createTokenIn makes the token through db or the caller's transaction (the admin's new token, with the old ones revoked).
+func createTokenIn(q rowQuerier, agentID int, label, scope string, expiresInDays int) (id int, token, prefix string, expires *time.Time, err error) {
 	token, hash, prefix := newToken()
 	var exp interface{}
 	if expiresInDays > 0 {
@@ -164,7 +169,7 @@ func createTokenFor(agentID int, label, scope string, expiresInDays int) (id int
 		expires = &t
 		exp = t
 	}
-	err = db.QueryRow(`INSERT INTO agent_tokens (agent_id, token_hash, prefix, label, scope, expires_at)
+	err = q.QueryRow(`INSERT INTO agent_tokens (agent_id, token_hash, prefix, label, scope, expires_at)
 		VALUES ($1, $2, $3, $4, $5, $6) RETURNING id`, agentID, hash, prefix, label, scope, exp).Scan(&id)
 	return id, token, prefix, expires, err
 }
