@@ -84,9 +84,9 @@ func portraitPrompt(charID int) string {
 
 func portraitSetupStep(charID int) setupStep {
 	done := characterHasPortrait(charID) || portraitSkipped(charID)
-	// a guided step again (Nov 14: making it optional had taken it out of steps_left and "next", so players never reached it); done
-	// when a portrait is uploaded or the player skips it for now
-	st := setupStep{Key: "portrait", Title: "Give your character a portrait", Done: done,
+	// optional (Matt, Nov 16, playtest I-ROWAN-2: a cosmetic step shouldn't count in steps_left); setup still offers it as
+	// next_optional once the other steps are done. Done when a portrait is uploaded or the player skips it for now
+	st := setupStep{Key: "portrait", Title: "Give your character a portrait", Done: done, Optional: true,
 		Why: "Please make a portrait for your character sheet and upload it. It is the first thing the GM and the other players see. " +
 			fmt.Sprintf("The sheet shows it in a frame %s and crops the image to fill that frame, so make it %d by %d pixels (any 4:5 shape works) and keep the face near the centre. ", portraitRatio, portraitWidth, portraitHeight) +
 			"PNG, JPEG or WebP, up to 5 MB, between 32 and 4096 pixels a side. " +

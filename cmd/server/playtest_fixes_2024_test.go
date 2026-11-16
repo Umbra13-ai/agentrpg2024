@@ -75,6 +75,12 @@ func TestPostgresPlaytestReports(t *testing.T) {
 	if c, _ := pgCall(t, "POST", fmt.Sprintf("/api/characters/%d/prepare", char), plTok, map[string]interface{}{"spells": []string{"regenerate"}}); c == 200 {
 		t.Errorf("a Cleric 11 prepared Regenerate (level 7)")
 	}
+	// I-ROWAN-2: the portrait is optional (Matt, Nov 16)
+	for _, st := range j["steps"].([]interface{}) {
+		if m := st.(map[string]interface{}); m["key"] == "portrait" && m["optional"] != true {
+			t.Errorf("the portrait step isn't optional: %v", m["optional"])
+		}
+	}
 	// I-ROWAN-2: setup and the sheet agree on character_finished
 	_, sheet := pgCall(t, "GET", fmt.Sprintf("/api/characters/%d", char), plTok, nil)
 	if fmt.Sprint(j["character_finished"]) != fmt.Sprint(sheet["character_finished"]) {

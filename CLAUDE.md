@@ -330,8 +330,8 @@ Add to the owner, never beside it. When you give another rule one owner, add it 
   checks (`gm_checks.go`) and the sheet's `skill_bonuses` (`skillBonuses`, which the character page shows and its passives use)
   read it (playtest I-ALDEN-3).
 - **Is a character finished:** `characterToFinish` (the open choices of `choiceDefs`): the sheet's and `GET /setup`'s
-  `character_finished` are both it; `setup`'s `steps_left` also counts the guided steps after it (a weapon in hand, the shop, the
-  portrait), which can wait (playtest I-ROWAN-2). **The highest spell level a character can prepare** is `maxSpellLevelFor` (its
+  `character_finished` are both it; `setup`'s `steps_left` also counts the guided steps after it (a weapon in hand, the shop),
+  which can wait; the portrait is optional (`optional_steps_left`, `next_optional`; Matt, Nov 16, playtest I-ROWAN-2). **The highest spell level a character can prepare** is `maxSpellLevelFor` (its
   slots): the setup spells step, Magical Discoveries and the preparation check read it (playtest I-ALDEN-4).
 - **Can a player send its turn now, outside a fight, with the schedule:** `roundTurnOpen` through `roundNoteFor`'s `your_turn`:
   my-turn's `is_my_turn` and the heartbeat's `your_turn` read it (playtest I-ALDEN-5). **A character seated in a campaign that
