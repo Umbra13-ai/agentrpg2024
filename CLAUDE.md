@@ -83,6 +83,9 @@ Add to the owner, never beside it. When you give another rule one owner, add it 
   Halfling Luck, Heroic Inspiration, the Luck Blade and Indomitable Might, `resist` a monster's Legendary Resistance. Every
   save (a character's, a monster's, a death save, the GM's call) builds a `saveCtx` or calls `creatureSave`. A new source is
   one row. Never roll a d20 for a save anywhere else; `TestNoOtherSaveRoll` lists every other d20 in the server.
+  `creatureSave`, `monsterSaveFor`, `monsterSaveRoll` and `monsterSpellSave(For)` return the `game.SaveResult`: a message about a
+  save uses its wordings (`LineAgainst` keeps the DC visible when the reader's own feature forces the save), never a line of its own
+  from the total and the DC, so it always says why a save had Advantage or Disadvantage; `TestNoSaveLineByHand` checks (HANDOFF item 24).
 - **The 18 skills:** `game/skills.go`.
 - **Expertise:** `game/expertise.go`, with its database side in `cmd/server/expertise_2024.go`.
 - **Which feats a character can take:** `cmd/server/feats_2024.go` (`featRefusal`, `featsOpenTo`, `featTakerOf`, `featHowTo`).

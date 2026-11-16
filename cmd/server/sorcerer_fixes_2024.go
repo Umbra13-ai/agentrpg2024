@@ -46,21 +46,20 @@ func necklaceOfFireballs(charID int, it invItem, req itemCastReq, description st
 	var lines []string
 	for _, id := range ids {
 		if id < 0 {
-			saved, _ := monsterSave(lobby, id, "dex", 15)
+			sv := creatureSave(lobby, id, "dex", 15)
 			d := dmg
-			how := "fails its DEX save"
-			if saved {
-				d, how = dmg/2, "saves"
-			}
-			res, _ := damageMonster(lobby, id, d, "fire")
-			lines = append(lines, fmt.Sprintf("%s %s. %s", monsterName(lobby, id), how, strings.TrimSpace(res)))
-		} else {
-			saved, _ := creatureSave(lobby, id, "dex", 15)
-			d := dmg
-			if saved {
+			if sv.Success {
 				d = dmg / 2
 			}
-			lines = append(lines, fmt.Sprintf("%s %s and %s.", characterNameOf(id), map[bool]string{true: "saves", false: "fails its DEX save"}[saved], damageCharacter(id, d, "fire")))
+			res, _ := damageMonster(lobby, id, d, "fire")
+			lines = append(lines, fmt.Sprintf("%s. %s", sv.LineAgainst(monsterName(lobby, id)), strings.TrimSpace(res)))
+		} else {
+			sv := creatureSave(lobby, id, "dex", 15)
+			d := dmg
+			if sv.Success {
+				d = dmg / 2
+			}
+			lines = append(lines, fmt.Sprintf("%s and %s.", sv.LineAgainst(characterNameOf(id)), damageCharacter(id, d, "fire")))
 		}
 	}
 	left -= n

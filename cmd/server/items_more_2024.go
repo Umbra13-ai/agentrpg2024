@@ -370,10 +370,10 @@ func moreItemUse(charID int, it invItem, req itemCastReq, description string) (s
 		}
 		out := "X-ray vision (a Magic action) for 1 minute: solid objects within 30 feet are transparent to you (through 1 foot of stone, 1 inch of metal, 3 feet of wood or dirt; lead blocks it)."
 		if itemBool(it, "used_since_rest") {
-			if ok, total := creatureSave(lobbyOfChar(charID), charID, "con", 15); !ok {
-				out += fmt.Sprintf(" Used again before a Long Rest: Constitution save %d vs DC 15 fails, 1 Exhaustion level: %s", total, addExhaustion(charID, 1))
+			if sv := creatureSave(lobbyOfChar(charID), charID, "con", 15); !sv.Success {
+				out += fmt.Sprintf(" Used again before a Long Rest: %s, 1 Exhaustion level: %s", sv.ForSaver(""), addExhaustion(charID, 1))
 			} else {
-				out += fmt.Sprintf(" Used again before a Long Rest: Constitution save %d vs DC 15 succeeds.", total)
+				out += " Used again before a Long Rest: " + sv.ForSaver("") + "."
 			}
 		}
 		updateInventoryItem(charID, it, func(x invItem) { x["used_since_rest"] = true })

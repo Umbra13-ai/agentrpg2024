@@ -794,11 +794,11 @@ func sanctuaryBlocks(lobbyID, monsterID int, monsterName string, targetID int) (
 		return false, ""
 	}
 	dc := atoiSafe(e.Detail)
-	saved, total := monsterSave(lobbyID, monsterID, "wis", dc)
-	if saved {
-		return false, fmt.Sprintf(" [Sanctuary: %s's Wisdom save %d vs DC %d succeeds]", monsterName, total, dc)
+	sv := creatureSave(lobbyID, monsterID, "wis", dc)
+	if sv.Success {
+		return false, " [Sanctuary: " + sv.Line(monsterName) + "]"
 	}
-	return true, fmt.Sprintf("Sanctuary: %s fails the Wisdom save (%d vs DC %d) and loses the attack (the GM may aim it at another creature)", monsterName, total, dc)
+	return true, "Sanctuary: " + sv.Line(monsterName) + " and loses the attack (the GM may aim it at another creature)"
 }
 
 // mirrorImageIntercept: a hit on a creature with Mirror Image: a d6 per duplicate; any 3+ and a duplicate takes the hit instead.
@@ -873,12 +873,12 @@ func holyAuraBlinds(lobbyID, monsterID int, monsterName string, targetID int) st
 	if !ok {
 		return ""
 	}
-	saved, total := monsterSave(lobbyID, monsterID, "con", dc)
-	if saved {
-		return fmt.Sprintf(" Holy Aura: %s's Constitution save %d vs DC %d succeeds.", monsterName, total, dc)
+	sv := creatureSave(lobbyID, monsterID, "con", dc)
+	if sv.Success {
+		return " Holy Aura: " + sv.Line(monsterName) + "."
 	}
 	applyCondition(lobbyID, monsterID, "blinded", "Holy Aura", 2, "", 0)
-	return fmt.Sprintf(" Holy Aura: %s fails the Constitution save (%d vs DC %d) and is Blinded until the end of its next turn.", monsterName, total, dc)
+	return " Holy Aura: " + sv.Line(monsterName) + " and is Blinded until the end of its next turn."
 }
 
 // wardingBondShare: the caster of a Warding Bond takes the same damage as its target (typeless: their own resistances don't apply).

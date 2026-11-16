@@ -91,16 +91,16 @@ func handleGMDeflectAttacks(w http.ResponseWriter, r *http.Request) {
 			text += " No Focus Point to redirect the force (" + msg + ")."
 		} else {
 			dc := 8 + game.ProficiencyBonus(level) + game.Modifier(dex)
-			saved, total := monsterSave(campaignID, req.RedirectTargetID, "dex", dc)
+			sv := creatureSave(campaignID, req.RedirectTargetID, "dex", dc)
 			dmg := game.RollDamage(martialArtsRolls(level, 2), false) + game.Modifier(dex)
-			if saved {
-				text += fmt.Sprintf(" The redirected force: the creature saves (%d vs DC %d) and takes nothing.", total, dc)
+			if sv.Success {
+				text += " The redirected force: " + sv.LineAgainst("the creature") + " and takes nothing."
 			} else {
 				if dt == "" {
 					dt = "bludgeoning"
 				}
 				dm, _ := damageMonster(campaignID, req.RedirectTargetID, dmg, dt)
-				text += fmt.Sprintf(" The redirected force: the creature fails its Dexterity save (%d vs DC %d). %s", total, dc, dm)
+				text += " The redirected force: " + sv.LineAgainst("the creature") + ". " + dm
 			}
 		}
 	} else if final == 0 {
@@ -237,15 +237,13 @@ func quiveringPalm(charID int, description string) string {
 			db.QueryRow(`SELECT COALESCE(lobby_id,0) FROM characters WHERE id = $1`, charID).Scan(&lobby)
 		}
 		dc := 8 + game.ProficiencyBonus(level) + game.Modifier(wis)
-		saved, total := monsterSave(lobby, target, "con", dc)
+		sv := creatureSave(lobby, target, "con", dc)
 		dmg := game.RollDamage("10d12", false)
-		how := "fails"
-		if saved {
+		if sv.Success {
 			dmg /= 2
-			how = "saves"
 		}
 		text, _ := damageMonster(lobby, target, dmg, "force")
-		return fmt.Sprintf("🌀 Quivering Palm ends: the target %s its Constitution save (%d vs DC %d). %s", how, total, dc, text)
+		return "🌀 Quivering Palm ends: " + sv.LineAgainst("the target") + ". " + text
 	case strings.Contains(low, "start"):
 		if !isMonster {
 			return "Choose the creature you hit with an Unarmed Strike with target_id."

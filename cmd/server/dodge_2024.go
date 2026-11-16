@@ -54,9 +54,9 @@ func undeadFortitudeFor(lobbyID, id int, name string, hpBefore, hp, taken int, d
 		return hp, ""
 	}
 	dc := 5 + taken
-	saved, total := monsterSaveRoll(lobbyID, id, "con", dc)
-	if saved {
-		return 1, fmt.Sprintf(" Undead Fortitude: %s makes its Constitution save (%d vs DC %d) and drops to 1 Hit Point instead.", name, total, dc)
+	sv := monsterSaveRoll(lobbyID, id, "con", dc)
+	if sv.Success {
+		return 1, " Undead Fortitude: " + sv.Line(name) + " and drops to 1 Hit Point instead."
 	}
-	return hp, fmt.Sprintf(" Undead Fortitude: %s fails its Constitution save (%d vs DC %d).", name, total, dc)
+	return hp, " Undead Fortitude: " + sv.Line(name) + "."
 }

@@ -82,22 +82,14 @@ func sneakDiceWithCunning(charID, level int, descLower string) (string, string) 
 	return fmt.Sprintf("%dd6", dice-cost), " [Cunning Strike: " + strings.Join(names, ", ") + "]"
 }
 
-// monsterSave rolls a monster's saving throw against a DC (creatureSave): a failure against an effect with a condition can be
-// turned into a success by Legendary Resistance.
-func monsterSave(lobbyID, targetID int, ability string, dc int) (bool, int) {
-	return creatureSave(lobbyID, targetID, ability, dc)
-}
-
-// monsterSaveFor: the same with the stakes of the save for Legendary Resistance (damage only, or a condition).
-func monsterSaveFor(lobbyID, targetID int, ability string, dc int, st saveStakes) (bool, int) {
-	r := (&saveCtx{lobby: lobbyID, saver: targetID, ability: ability, dc: dc}).resist(st)
-	return r.Success, r.Total
+// monsterSaveFor: creatureSave with the stakes of the save for Legendary Resistance (damage only, or a condition).
+func monsterSaveFor(lobbyID, targetID int, ability string, dc int, st saveStakes) game.SaveResult {
+	return (&saveCtx{lobby: lobbyID, saver: targetID, ability: ability, dc: dc}).resist(st)
 }
 
 // monsterSaveRoll: the save alone, without Legendary Resistance.
-func monsterSaveRoll(lobbyID, targetID int, ability string, dc int) (bool, int) {
-	r := (&saveCtx{lobby: lobbyID, saver: targetID, ability: ability, dc: dc}).roll()
-	return r.Success, r.Total
+func monsterSaveRoll(lobbyID, targetID int, ability string, dc int) game.SaveResult {
+	return (&saveCtx{lobby: lobbyID, saver: targetID, ability: ability, dc: dc}).roll()
 }
 
 // applyCunningStrike applies the chosen effects after a hit.
@@ -115,9 +107,9 @@ func applyCunningStrike(lobbyID, charID, targetID int, name, monsterKey string) 
 		case "stealth attack":
 			out += " Stealth Attack: this attack doesn't end your Invisible condition if you end the turn behind Three-Quarters or Total Cover."
 		default:
-			saved, total := monsterSave(lobbyID, targetID, e.Save, plan.DC)
-			if saved {
-				out += fmt.Sprintf(" Cunning Strike %s: %s succeeds on its %s save (%d vs DC %d).", e.Name, name, strings.ToUpper(e.Save), total, plan.DC)
+			sv := creatureSave(lobbyID, targetID, e.Save, plan.DC)
+			if sv.Success {
+				out += fmt.Sprintf(" Cunning Strike %s: %s.", e.Name, sv.LineAgainst(name))
 				continue
 			}
 			switch e.Key {
@@ -137,7 +129,7 @@ func applyCunningStrike(lobbyID, charID, targetID int, name, monsterKey string) 
 			case "obscure":
 				applyCondition(lobbyID, targetID, "blinded", "Cunning Strike: Obscure", 1, "", 0)
 			}
-			out += fmt.Sprintf(" Cunning Strike %s: %s fails its %s save (%d vs DC %d)%s.", e.Name, name, strings.ToUpper(e.Save), total, plan.DC, cunningResult[e.Key])
+			out += fmt.Sprintf(" Cunning Strike %s: %s%s.", e.Name, sv.LineAgainst(name), cunningResult[e.Key])
 		}
 	}
 	return out

@@ -458,15 +458,15 @@ func sphereOfAnnihilation(charID int, it invItem, req itemCastReq, description s
 			}
 			mname := fmt.Sprint(e["name"])
 			dmg := game.RollDamage("8d10", false)
-			saved, total := monsterSaveFor(lobby, t, "dex", 19, saveStakes{Damage: dmg})
-			if saved {
-				out += fmt.Sprintf(" %s: Dexterity save %d against DC 19, it dodges the sphere.", mname, total)
+			sv := monsterSaveFor(lobby, t, "dex", 19, saveStakes{Damage: dmg})
+			if sv.Success {
+				out += " " + sv.LineAgainst(mname) + " and dodges the sphere."
 				continue
 			}
 			got, _ := adjustMonsterDamage(fmt.Sprint(e["monster_key"]), "force", dmg)
 			r, _ := loseMonsterHP(lobby, t, got) // the monster Hit Point owner (monster_hp_2024.go)
 			hp := r.After.HP
-			out += fmt.Sprintf(" %s: Dexterity save %d against DC 19, a failure: the sphere touches it for %d Force damage", mname, total, got)
+			out += fmt.Sprintf(" %s: the sphere touches it for %d Force damage", sv.LineAgainst(mname), got)
 			if hp == 0 {
 				out += ", and it is obliterated (its possessions stay behind; no other remains)."
 			} else {

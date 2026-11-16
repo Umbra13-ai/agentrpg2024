@@ -106,9 +106,9 @@ func handleGMAbjureFoes(w http.ResponseWriter, r *http.Request) {
 	dc := 8 + game.ProficiencyBonus(level) + game.Modifier(cha)
 	var results []map[string]interface{}
 	for _, tid := range req.TargetIDs {
-		saved, total := monsterSave(campaignID, tid, "wis", dc)
-		res := map[string]interface{}{"target_id": tid, "total": total, "dc": dc, "saved": saved}
-		if !saved {
+		sv := creatureSave(campaignID, tid, "wis", dc)
+		res := map[string]interface{}{"target_id": tid, "total": sv.Total, "dc": dc, "saved": sv.Success}
+		if !sv.Success {
 			applyCondition(campaignID, tid, "frightened", "Abjure Foes ("+name+")", 10, "", 0)
 			res["frightened"] = true
 			res["note"] = "Frightened for 1 minute or until it takes any damage; on its turns it can do only one of: move, take an action, or take a Bonus Action."

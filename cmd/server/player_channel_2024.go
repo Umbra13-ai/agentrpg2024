@@ -68,9 +68,9 @@ func playerChannelDivinity(charID int, action, description string) string {
 			case m["note"] != nil:
 				parts = append(parts, fmt.Sprintf("%s: %v", name, m["note"]))
 			case m["turned"] == true:
-				parts = append(parts, fmt.Sprintf("%s fails (%v vs DC %v): turned, Frightened and Incapacitated for 1 minute (ends if it takes damage)", name, m["total"], m["dc"]))
+				parts = append(parts, fmt.Sprintf("%v: turned, Frightened and Incapacitated for 1 minute (ends if it takes damage)", m["line"]))
 			default:
-				parts = append(parts, fmt.Sprintf("%s saves (%v vs DC %v)", name, m["total"], m["dc"]))
+				parts = append(parts, fmt.Sprintf("%v", m["line"]))
 			}
 		}
 		return "Channel Divinity: Turn Undead (Wisdom save). " + strings.Join(parts, "; ") + "."

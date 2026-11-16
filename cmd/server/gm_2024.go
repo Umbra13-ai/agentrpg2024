@@ -43,13 +43,11 @@ func tooBigToGrab(attackerSize, targetSize string) bool {
 }
 
 // unarmedOptionSave: the target of a grapple or shove picks the better of its Strength and Dexterity saves.
-func unarmedOptionSave(lobbyID, id, dc int) (bool, int, string) {
+func unarmedOptionSave(lobbyID, id, dc int) game.SaveResult {
 	if savePeek(lobbyID, id, "dex") > savePeek(lobbyID, id, "str") {
-		ok, total := creatureSave(lobbyID, id, "dex", dc)
-		return ok, total, "Dexterity"
+		return creatureSave(lobbyID, id, "dex", dc)
 	}
-	ok, total := creatureSave(lobbyID, id, "str", dc)
-	return ok, total, "Strength"
+	return creatureSave(lobbyID, id, "str", dc)
 }
 
 // savePeek: how good a creature's saving throw looks before it rolls, as a sensible target compares them (an automatic failure
@@ -291,12 +289,13 @@ func handleGMCounterspell2024(w http.ResponseWriter, r *http.Request) {
 	db.Exec(`UPDATE characters SET reaction_used = true WHERE id = $1`, req.CasterID)
 	dc := spellSaveDCOf(req.CasterID)
 	tName := creatureName(lobby, req.TargetID)
-	saved, total := creatureSave(lobby, req.TargetID, "con", dc)
-	result := fmt.Sprintf("%s casts Counterspell (level %d slot). %s makes a Constitution save: %d vs DC %d, ", name, req.SlotLevel, tName, total, dc)
+	sv := creatureSave(lobby, req.TargetID, "con", dc)
+	saved, total := sv.Success, sv.Total
+	result := fmt.Sprintf("%s casts Counterspell (level %d slot). %s: ", name, req.SlotLevel, sv.Line(tName))
 	if saved {
-		result += "success: the spell is cast normally."
+		result += "the spell is cast normally."
 	} else {
-		result += "failure: the spell dissipates with no effect, and the action, Bonus Action or Reaction used to cast it is wasted. If that spell was cast with a spell slot, the slot isn't expended."
+		result += "the spell dissipates with no effect, and the action, Bonus Action or Reaction used to cast it is wasted. If that spell was cast with a spell slot, the slot isn't expended."
 	}
 	recordGMAction(db, lobby, "counterspell", result, result)
 	writeJSONStatus(w, 200, map[string]interface{}{"success": true, "countered": !saved, "save": total, "dc": dc, "result": result})
@@ -366,12 +365,12 @@ func handleGMHurlThroughHell2024(w http.ResponseWriter, r *http.Request) {
 	dc := spellSaveDCOf(req.CharacterID)
 	tName := creatureName(lobby, req.TargetID)
 	_, _, _, _, fiend := creatureStats(lobby, req.TargetID)
-	saved, total := creatureSave(lobby, req.TargetID, "cha", dc)
-	result := fmt.Sprintf("%s uses Hurl Through Hell%s. %s makes a Charisma save: %d vs DC %d, ", name, note, tName, total, dc)
-	if saved {
-		result += "success: nothing happens."
+	sv := creatureSave(lobby, req.TargetID, "cha", dc)
+	result := fmt.Sprintf("%s uses Hurl Through Hell%s. %s: ", name, note, sv.Line(tName))
+	if sv.Success {
+		result += "nothing happens."
 	} else {
-		result += "failure: it disappears and hurtles through a nightmare landscape"
+		result += "it disappears and hurtles through a nightmare landscape"
 		if fiend {
 			result += " (a Fiend takes no damage)"
 		} else {

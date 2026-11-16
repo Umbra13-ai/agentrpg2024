@@ -109,14 +109,12 @@ func spiritGuardiansSave(lobbyID int, a sgActive, monsterID int, why string) str
 	sgSavedTurn.Store(key, mark)
 	name := monsterName(lobbyID, monsterID)
 	dmg := game.RollDamage(a.D.Dice, false)
-	saved, total := monsterSpellSaveFor(lobbyID, monsterID, "wis", a.D.DC, saveStakes{Damage: dmg})
-	how := fmt.Sprintf("fails its Wisdom save (%d vs DC %d)", total, a.D.DC)
-	if saved {
+	sv := monsterSpellSaveFor(lobbyID, monsterID, "wis", a.D.DC, saveStakes{Damage: dmg})
+	if sv.Success {
 		dmg /= 2
-		how = fmt.Sprintf("saves (%d vs DC %d)", total, a.D.DC)
 	}
 	text, _ := damageMonster(lobbyID, monsterID, dmg, a.D.Type)
-	return fmt.Sprintf("👼 Spirit Guardians (%s, %s): %s %s. %s", creatureName(lobbyID, a.Caster), why, name, how, text)
+	return fmt.Sprintf("👼 Spirit Guardians (%s, %s): %s. %s", creatureName(lobbyID, a.Caster), why, sv.Line(name), text)
 }
 
 // spiritGuardiansTurnEnd: a monster that ends its turn inside an Emanation makes the save.

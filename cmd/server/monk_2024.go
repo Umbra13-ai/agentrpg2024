@@ -48,14 +48,14 @@ func applyStunningStrike(lobbyID, charID, targetID int, name string) string {
 		return " Stunning Strike: " + msg
 	}
 	db.Exec(`UPDATE characters SET stun_used = true WHERE id = $1`, charID)
-	saved, total := monsterSave(lobbyID, targetID, "con", dc)
-	if saved {
+	sv := creatureSave(lobbyID, targetID, "con", dc)
+	if sv.Success {
 		addCombatEffect(lobbyID, targetID, charID, "halved")
 		addCombatEffect(lobbyID, targetID, charID, "exposed")
-		return fmt.Sprintf(" Stunning Strike: %s saves (%d vs DC %d); its Speed is halved until the start of your next turn and the next attack roll against it has Advantage.", name, total, dc)
+		return fmt.Sprintf(" Stunning Strike: %s; its Speed is halved until the start of your next turn and the next attack roll against it has Advantage.", sv.LineAgainst(name))
 	}
 	applyCondition(lobbyID, targetID, "stunned", fmt.Sprintf("Stunning Strike #%d", charID), 0, "", 0)
-	return fmt.Sprintf(" Stunning Strike: %s fails its save (%d vs DC %d) and is Stunned until the start of your next turn.", name, total, dc)
+	return " Stunning Strike: " + sv.LineAgainst(name) + " and is Stunned until the start of your next turn."
 }
 
 // uncannyMetabolism and perfectFocus run when a Monk rolls initiative. They return a note for the GM, or "".
@@ -225,20 +225,22 @@ func openHandEffect(lobbyID, charID, monster int, effect string, dc int) string 
 		addCombatEffect(lobbyID, monster, charID, "addled")
 		return " Addle: it can't make Opportunity Attacks until the start of its next turn."
 	case "push":
-		if saved, total := monsterSave(lobbyID, monster, "str", dc); saved {
-			return fmt.Sprintf(" Push: it saves (%d vs DC %d).", total, dc)
+		sv := creatureSave(lobbyID, monster, "str", dc)
+		if sv.Success {
+			return " Push: " + sv.LineAgainst("it") + "."
 		}
 		moved, hasMap := pushToken(lobbyID, charID, monster, 15)
 		if !hasMap {
-			return " Push: it fails its save and is pushed up to 15 feet away from you (no map, the GM places it)."
+			return " Push: " + sv.LineAgainst("it") + " and is pushed up to 15 feet away from you (no map, the GM places it)."
 		}
-		return fmt.Sprintf(" Push: it fails its save and is pushed %d feet away.", moved)
+		return fmt.Sprintf(" Push: %s and is pushed %d feet away.", sv.LineAgainst("it"), moved)
 	case "topple":
-		if saved, total := monsterSave(lobbyID, monster, "dex", dc); saved {
-			return fmt.Sprintf(" Topple: it saves (%d vs DC %d).", total, dc)
+		sv := creatureSave(lobbyID, monster, "dex", dc)
+		if sv.Success {
+			return " Topple: " + sv.LineAgainst("it") + "."
 		}
 		applyCondition(lobbyID, monster, "prone", "Open Hand Technique: Topple", 0, "", 0)
-		return " Topple: it fails its save and has the Prone condition."
+		return " Topple: " + sv.LineAgainst("it") + " and has the Prone condition."
 	}
 	return ""
 }

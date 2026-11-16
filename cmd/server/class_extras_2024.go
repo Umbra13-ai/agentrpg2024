@@ -121,14 +121,12 @@ func landsAid(charID int, description string) string {
 			dmg += game.RollDie(6)
 		}
 		dc := 8 + game.ProficiencyBonus(level) + game.Modifier(wis)
-		saved, roll := monsterSave(lobby, monster, "con", dc)
-		how := "fails"
-		if saved {
+		sv := creatureSave(lobby, monster, "con", dc)
+		if sv.Success {
 			dmg /= 2
-			how = "saves"
 		}
 		text, _ := damageMonster(lobby, monster, dmg, "necrotic")
-		parts = append(parts, fmt.Sprintf("the creature %s its Constitution save (%d vs DC %d). %s", how, roll, dc, text))
+		parts = append(parts, sv.Line("the creature")+". "+text)
 	}
 	if healTarget > 0 {
 		heal := 0

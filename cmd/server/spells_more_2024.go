@@ -206,8 +206,8 @@ func resolveMoreSpell(charID, lobby int, spell SRDSpell, key string, slot, saveD
 		}
 		tname := creatureName(lobby, target)
 		if target < 0 || strings.Contains(dl, "unwilling") {
-			if saved, total := creatureSave(lobby, target, "con", saveDC); saved {
-				return fmt.Sprintf(" %s: %s succeeds on the DC %d Constitution save (%d): the spell has no effect.", spell.Name, tname, saveDC, total)
+			if sv := creatureSave(lobby, target, "con", saveDC); sv.Success {
+				return fmt.Sprintf(" %s: %s: the spell has no effect.", spell.Name, sv.LineAgainst(tname))
 			}
 		}
 		db.Exec(`DELETE FROM spell_effects WHERE lobby_id = $1 AND target_id = $2 AND kind = 'enlarge_reduce'`, lobby, target)
@@ -811,8 +811,8 @@ func polymorphCast(charID, lobby, target int, spell SRDSpell, saveDC int, dl str
 	if slug == "" {
 		return fmt.Sprintf("name the Beast in the description (any Beast of Challenge Rating %s or lower, such as \"into a Giant Ape\"); none was named, so the spell has no effect.", strconv.FormatFloat(limit, 'f', -1, 64))
 	}
-	if saved, total := creatureSave(lobby, target, "wis", saveDC); saved {
-		return fmt.Sprintf("%s succeeds on the DC %d Wisdom save (%d): the spell has no effect.", tname, saveDC, total)
+	if sv := creatureSave(lobby, target, "wis", saveDC); sv.Success {
+		return sv.LineAgainst(tname) + ": the spell has no effect."
 	}
 	db.Exec(`DELETE FROM spell_effects WHERE lobby_id = $1 AND target_id = $2 AND kind = 'polymorph'`, lobby, target)
 	if target < 0 {

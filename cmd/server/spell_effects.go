@@ -345,16 +345,16 @@ func charmEndsOnDamage(lobbyID, id int, name string) string {
 		if d.caster > 0 {
 			dc = spellSaveDCOf(d.caster)
 		}
-		saved, total := monsterSpellSave(lobbyID, id, "wis", dc)
-		if !saved {
-			out += fmt.Sprintf(" %s repeats the Wisdom save against %s (%d vs DC %d) and fails: it stays charmed.", name, d.spell, total, dc)
+		sv := monsterSpellSave(lobbyID, id, "wis", dc)
+		if !sv.Success {
+			out += fmt.Sprintf(" %s repeats the save against %s: %s: it stays charmed.", name, d.spell, sv.Line(name))
 			continue
 		}
 		removeConditionsWhere(lobbyID, id, func(r conditionRecord) bool { return r.Source == d.spell })
 		if d.caster > 0 {
 			db.Exec(`UPDATE characters SET concentrating_on = '' WHERE id = $1 AND (concentrating_on ILIKE $2 OR concentrating_on ILIKE $3)`, d.caster, d.spell, strings.ReplaceAll(strings.ToLower(d.spell), " ", "-"))
 		}
-		out += fmt.Sprintf(" %s repeats the Wisdom save against %s (%d vs DC %d) and succeeds: the spell ends.", name, d.spell, total, dc)
+		out += fmt.Sprintf(" %s repeats the save against %s: %s: the spell ends.", name, d.spell, sv.Line(name))
 	}
 	return out
 }

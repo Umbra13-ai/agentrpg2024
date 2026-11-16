@@ -22377,6 +22377,10 @@
              "dc": {
               "type": "integer"
              },
+             "line": {
+              "description": "the save in words, with what gave Advantage or Disadvantage",
+              "type": "string"
+             },
              "note": {
               "type": "string"
              },

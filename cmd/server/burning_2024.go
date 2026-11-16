@@ -144,11 +144,12 @@ func thrownFlask(charID int, description string) (string, bool) {
 	db.QueryRow(`SELECT dex, level FROM characters WHERE id = $1`, charID).Scan(&dex, &level)
 	dc := 8 + game.Modifier(dex) + game.ProficiencyBonus(level)
 	name := creatureName(lobby, target)
-	if saved, _ := monsterSave(lobby, target, "dex", dc); saved {
-		return fmt.Sprintf("You throw the %s at %s, who dodges it (Dexterity save succeeds).", item, name), true
+	sv := creatureSave(lobby, target, "dex", dc)
+	if sv.Success {
+		return fmt.Sprintf("You throw the %s at %s, who dodges it: %s.", item, name, sv.LineAgainst(name)), true
 	}
 	text, _ := damageMonster(lobby, target, game.RollDamage(dice, false), dtype)
-	out := fmt.Sprintf("You throw the %s at %s (Dexterity save fails): %s", item, name, text)
+	out := fmt.Sprintf("You throw the %s at %s (%s): %s", item, name, sv.LineAgainst(name), text)
 	if fire {
 		startBurning(lobby, target, "Alchemist's Fire")
 		out += fmt.Sprintf(" %s is burning (1d4 Fire at the start of each of its turns until it puts the fire out).", name)

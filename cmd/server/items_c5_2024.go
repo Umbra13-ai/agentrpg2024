@@ -84,11 +84,11 @@ func thunderLightningHit(lobbyID, charID, targetID int, monsterKey, name string,
 		}
 	}
 	if useT && !(dawnUsed(it, key("tl_thunder"))) {
-		if saved, _ := monsterSave(lobbyID, targetID, "con", 17); saved {
-			text += fmt.Sprintf(" Thunder: %s succeeds on the DC 17 Constitution save.", name)
+		if sv := creatureSave(lobbyID, targetID, "con", 17); sv.Success {
+			text += " Thunder: " + sv.LineAgainst(name) + "."
 		} else {
 			applyCondition(lobbyID, targetID, "stunned", "Staff of Thunder and Lightning", 2, "", 0)
-			text += fmt.Sprintf(" Thunder: %s fails the DC 17 Constitution save and is Stunned until the end of your next turn.", name)
+			text += " Thunder: " + sv.LineAgainst(name) + " and is Stunned until the end of your next turn."
 		}
 	}
 	if useL && !dawnUsed(it, key("tl_lightning")) {
@@ -128,8 +128,8 @@ func thunderLightningStaff(charID int, it invItem, req itemCastReq, description 
 	dmg := game.RollDamage(dice, false)
 	var lines []string
 	for _, id := range ids {
-		var saved bool
-		saved, _ = creatureSave(lobby, id, ability, 17)
+		sv := creatureSave(lobby, id, ability, 17)
+		saved := sv.Success
 		x := dmg
 		if saved {
 			x /= 2
@@ -140,7 +140,7 @@ func thunderLightningStaff(charID int, it invItem, req itemCastReq, description 
 		} else {
 			res = damageCharacter(id, x, dtype)
 		}
-		line := fmt.Sprintf("%s %s: %s.", creatureName(lobby, id), map[bool]string{true: "saves (half)", false: "fails"}[saved], strings.TrimSpace(res))
+		line := fmt.Sprintf("%s: %s.", sv.LineAgainst(creatureName(lobby, id)), strings.TrimSpace(res))
 		if !saved && cond != "" {
 			applyCondition(lobby, id, cond, "Staff of Thunder and Lightning", 10, "", 0)
 			line += " Deafened for 1 minute."
@@ -218,22 +218,24 @@ func venomHit(lobbyID, charID, targetID int, monsterKey, name string, crit bool)
 		return 0, ""
 	}
 	db.Exec(`DELETE FROM spell_effects WHERE id = $1`, e.ID)
-	if saved, _ := monsterSave(lobbyID, targetID, "con", 15); saved {
-		return 0, fmt.Sprintf(" Dagger of Venom: %s succeeds on the DC 15 Constitution save; the poison is spent.", name)
+	sv := creatureSave(lobbyID, targetID, "con", 15)
+	if sv.Success {
+		return 0, " Dagger of Venom: " + sv.LineAgainst(name) + "; the poison is spent."
 	}
 	d, how := adjustMonsterDamage(monsterKey, "poison", game.RollDamage("2d10", crit))
 	applyCondition(lobbyID, targetID, "poisoned", "Dagger of Venom", 10, "", 0)
-	return d, fmt.Sprintf(" Dagger of Venom: %s fails the DC 15 Constitution save: +%d Poison%s and the Poisoned condition for 1 minute.", name, d, map[string]string{"resistant": " (it resists)", "immune": " (it is immune)"}[how])
+	return d, fmt.Sprintf(" Dagger of Venom: %s: +%d Poison%s and the Poisoned condition for 1 minute.", sv.LineAgainst(name), d, map[string]string{"resistant": " (it resists)", "immune": " (it is immune)"}[how])
 }
 
 func woundingHit(lobbyID, charID, targetID int, monsterKey, name string, crit bool) (int, string) {
 	d, how := adjustMonsterDamage(monsterKey, "necrotic", game.RollDamage("2d6", crit))
 	text := fmt.Sprintf(" Sword of Wounding: +%d Necrotic%s.", d, map[string]string{"resistant": " (it resists)", "immune": " (it is immune)"}[how])
-	if saved, _ := monsterSave(lobbyID, targetID, "con", 15); saved {
-		return d, text + fmt.Sprintf(" %s succeeds on the DC 15 Constitution save.", name)
+	sv := creatureSave(lobbyID, targetID, "con", 15)
+	if sv.Success {
+		return d, text + " " + sv.LineAgainst(name) + "."
 	}
 	addSpellEffect(lobbyID, targetID, charID, "Sword of Wounding", "no_regain", "", 600, "con", 15)
-	return d, text + fmt.Sprintf(" %s fails the DC 15 Constitution save: it can't regain Hit Points for 1 hour (it repeats the save at the end of each of its turns).", name)
+	return d, text + " " + sv.LineAgainst(name) + ": it can't regain Hit Points for 1 hour (it repeats the save at the end of each of its turns)."
 }
 
 func frostBrandHit(monsterKey string, crit bool) (int, string) {
@@ -249,8 +251,8 @@ func hornOfBlasting(charID int, it invItem, req itemCastReq) string {
 	dmg := game.RollDamage("5d8", false)
 	var lines []string
 	for _, id := range ids {
-		var saved bool
-		saved, _ = creatureSave(lobby, id, "con", 15)
+		sv := creatureSave(lobby, id, "con", 15)
+		saved := sv.Success
 		x := dmg
 		if saved {
 			x /= 2
@@ -261,7 +263,7 @@ func hornOfBlasting(charID int, it invItem, req itemCastReq) string {
 		} else {
 			res = damageCharacter(id, x, "thunder")
 		}
-		line := fmt.Sprintf("%s %s: %s.", creatureName(lobby, id), map[bool]string{true: "saves (half)", false: "fails"}[saved], strings.TrimSpace(res))
+		line := fmt.Sprintf("%s: %s.", sv.LineAgainst(creatureName(lobby, id)), strings.TrimSpace(res))
 		if !saved {
 			applyCondition(lobby, id, "deafened", "Horn of Blasting", 10, "", 0)
 			line += " Deafened for 1 minute."
@@ -329,8 +331,8 @@ func wandOfWonder(charID int, it invItem, req itemCastReq) string {
 		dmg := game.RollDamage(dice, false)
 		var lines []string
 		for _, id := range targets {
-			var saved bool
-			saved, _ = creatureSave(lobby, id, ability, 15)
+			sv := creatureSave(lobby, id, ability, 15)
+			saved := sv.Success
 			x := dmg
 			if saved {
 				x /= 2
@@ -341,7 +343,7 @@ func wandOfWonder(charID int, it invItem, req itemCastReq) string {
 			} else {
 				res = damageCharacter(id, x, dtype)
 			}
-			lines = append(lines, fmt.Sprintf("%s %s: %s.", creatureName(lobby, id), map[bool]string{true: "saves (half)", false: "fails"}[saved], strings.TrimSpace(res)))
+			lines = append(lines, fmt.Sprintf("%s: %s.", sv.LineAgainst(creatureName(lobby, id)), strings.TrimSpace(res)))
 		}
 		if len(lines) == 0 {
 			return fmt.Sprintf(" (%s = %d %s; name the creatures in the area with target_ids.)", dice, dmg, titleCase(dtype))
@@ -398,12 +400,13 @@ func wandOfWonder(charID int, it invItem, req itemCastReq) string {
 		ids := areaTargets(lobby, charID, 30, itemCastReq{TargetIDs: req.TargetIDs}, false)
 		var lines []string
 		for _, id := range ids {
-			var saved bool
-			saved, _ = creatureSave(lobby, id, "con", 15)
-			if !saved {
+			sv := creatureSave(lobby, id, "con", 15)
+			line := sv.LineAgainst(creatureName(lobby, id))
+			if !sv.Success {
 				applyCondition(lobby, id, "blinded", "Wand of Wonder", 10, "con", 15)
+				line += " and is Blinded for 1 minute (a save at the end of each turn)"
 			}
-			lines = append(lines, fmt.Sprintf("%s %s.", creatureName(lobby, id), map[bool]string{true: "saves", false: "is Blinded for 1 minute (a save at the end of each turn)"}[saved]))
+			lines = append(lines, line+".")
 		}
 		effect = "nothing happens there; instead a burst of shimmering light fills a 30-foot Emanation from you (DC 15 Constitution save or Blinded). " + strings.Join(lines, " ")
 	case roll <= 87:
@@ -435,13 +438,12 @@ func wandOfWonder(charID int, it invItem, req itemCastReq) string {
 		if closest == 0 {
 			effect = "the creature closest to the point makes a DC 15 Constitution save or begins to turn to stone (name it with target_id)."
 		} else {
-			var saved bool
-			saved, _ = creatureSave(lobby, closest, "con", 15)
-			if saved {
-				effect = fmt.Sprintf("%s, closest to the point, succeeds on the DC 15 Constitution save against turning to stone.", creatureName(lobby, closest))
+			sv := creatureSave(lobby, closest, "con", 15)
+			if sv.Success {
+				effect = fmt.Sprintf("the creature closest to the point resists turning to stone: %s.", sv.LineAgainst(creatureName(lobby, closest)))
 			} else {
 				applyCondition(lobby, closest, "restrained", "Wand of Wonder (turning to stone)", 2, "", 0)
-				effect = fmt.Sprintf("%s, closest to the point, fails the DC 15 Constitution save: it is Restrained and begins to turn to stone; it repeats the save at the end of its next turn (a failure: Petrified until Greater Restoration).", creatureName(lobby, closest))
+				effect = fmt.Sprintf("the creature closest to the point begins to turn to stone: %s: it is Restrained; it repeats the save at the end of its next turn (a failure: Petrified until Greater Restoration).", sv.LineAgainst(creatureName(lobby, closest)))
 			}
 		}
 	}

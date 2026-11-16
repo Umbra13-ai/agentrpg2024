@@ -296,13 +296,13 @@ func companionSpecialAction(c companion, charID, lobbyID int, action, descriptio
 			if id >= 0 {
 				continue
 			}
-			saved, total := monsterSave(lobbyID, id, "dex", dc)
+			sv := creatureSave(lobbyID, id, "dex", dc)
 			d := dmg
-			if saved {
+			if sv.Success {
 				d /= 2
 			}
 			text, _ := damageMonster(lobbyID, id, d, dtype)
-			lines = append(lines, fmt.Sprintf("%s %s the DC %d Dexterity save (%d): %s", monsterName(lobbyID, id), map[bool]string{true: "succeeds on", false: "fails"}[saved], dc, total, text))
+			lines = append(lines, sv.LineAgainst(monsterName(lobbyID, id))+": "+text)
 		}
 		return fmt.Sprintf("%s exhales %s in a 30-foot Cone (2d6: %d). %s", companionDisplayName(c), titleCase(dtype), dmg, strings.Join(lines, " ")), ""
 	case "fey_step", "fell_glare", "healing_touch":
@@ -329,12 +329,12 @@ func companionSpecialAction(c companion, charID, lobbyID int, action, descriptio
 			return "", "Fell Glare targets one creature within 60 feet (target_id: a monster's negative id)."
 		}
 		_, _, dc := casterNumbers(charID)
-		saved, total := monsterSave(lobbyID, targetID, "wis", dc)
-		if saved {
-			return fmt.Sprintf("%s fixes %s with a Fell Glare: it succeeds on the DC %d Wisdom save (%d).", companionDisplayName(c), monsterName(lobbyID, targetID), dc, total), ""
+		sv := creatureSave(lobbyID, targetID, "wis", dc)
+		if sv.Success {
+			return fmt.Sprintf("%s fixes %s with a Fell Glare: %s.", companionDisplayName(c), monsterName(lobbyID, targetID), sv.LineAgainst("it")), ""
 		}
 		applyCondition(lobbyID, targetID, "frightened", companionDisplayName(c)+" (Fell Glare)", 2, "", 0)
-		return fmt.Sprintf("%s fixes %s with a Fell Glare: it fails the DC %d Wisdom save (%d) and has the Frightened condition until the end of your next turn.", companionDisplayName(c), monsterName(lobbyID, targetID), dc, total), ""
+		return fmt.Sprintf("%s fixes %s with a Fell Glare: %s and has the Frightened condition until the end of your next turn.", companionDisplayName(c), monsterName(lobbyID, targetID), sv.LineAgainst("it")), ""
 	}
 	return "", ""
 }

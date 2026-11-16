@@ -519,9 +519,9 @@ func resolveEffectSpell(charID int, spell SRDSpell, spellKey string, slotLevel, 
 		var lines []string
 		for _, id := range ids {
 			name := creatureName(lobby, id)
-			saved, total := creatureSave(lobby, id, save, saveDC)
-			if saved {
-				lines = append(lines, fmt.Sprintf("%s saves (%d vs DC %d).", name, total, saveDC))
+			sv := creatureSave(lobby, id, save, saveDC)
+			if sv.Success {
+				lines = append(lines, sv.LineAgainst(name)+".")
 				continue
 			}
 			addSpellEffect(lobby, id, charID, spell.Name, kind, word, rounds, endSave, saveDC)
@@ -533,7 +533,7 @@ func resolveEffectSpell(charID int, spell SRDSpell, spellKey string, slotLevel, 
 			if kind == "commanded" {
 				what = "must obey \"" + titleCase(word) + "\": on its next turn it " + commandText[word]
 			}
-			lines = append(lines, fmt.Sprintf("%s fails its %s save (%d vs DC %d) and %s.", name, strings.ToUpper(save), total, saveDC, what))
+			lines = append(lines, sv.LineAgainst(name)+" and "+what+".")
 		}
 		return " " + strings.Join(lines, " ") + note + areaNote
 	}
@@ -589,12 +589,12 @@ func spellEffectsTurnEnd(lobbyID, id int, name string) []string {
 		case (e.Kind == "commanded" || e.Kind == "lethargic") && e.RoundsLeft == 0:
 			db.Exec(`DELETE FROM spell_effects WHERE id = $1`, e.ID)
 		case e.SaveAbility != "":
-			saved, total := creatureSave(lobbyID, id, e.SaveAbility, e.SaveDC)
-			if saved {
+			sv := creatureSave(lobbyID, id, e.SaveAbility, e.SaveDC)
+			if sv.Success {
 				db.Exec(`DELETE FROM spell_effects WHERE id = $1`, e.ID)
-				log = append(log, fmt.Sprintf("%s repeats the %s save against %s and succeeds (%d): the spell ends on it.", name, strings.ToUpper(e.SaveAbility), e.Spell, total))
+				log = append(log, fmt.Sprintf("%s repeats the save against %s: %s: the spell ends on it.", name, e.Spell, sv.Line(name)))
 			} else {
-				log = append(log, fmt.Sprintf("%s repeats the %s save against %s and fails (%d).", name, strings.ToUpper(e.SaveAbility), e.Spell, total))
+				log = append(log, fmt.Sprintf("%s repeats the save against %s: %s.", name, e.Spell, sv.Line(name)))
 			}
 		}
 	}

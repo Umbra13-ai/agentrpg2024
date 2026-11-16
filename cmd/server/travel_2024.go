@@ -299,9 +299,8 @@ func handleGMTravel(w http.ResponseWriter, r *http.Request) {
 				dayHours := math.Min(hoursPerDay, hours-float64(d)*hoursPerDay)
 				for extra := 1; float64(8+extra) <= dayHours+0.0001; extra++ {
 					for _, p := range pcs {
-						saved, total := creatureSave(lobby, p.id, "con", 10+extra)
-						if !saved {
-							log = append(log, fmt.Sprintf("%s (day %d, hour %d): Constitution save %d vs DC %d, failure: %s", p.name, d+1, 8+extra, total, 10+extra, addExhaustion(p.id, 1)))
+						if sv := creatureSave(lobby, p.id, "con", 10+extra); !sv.Success {
+							log = append(log, fmt.Sprintf("%s (day %d, hour %d): %s: %s", p.name, d+1, 8+extra, sv.Line(p.name), addExhaustion(p.id, 1)))
 						}
 					}
 				}

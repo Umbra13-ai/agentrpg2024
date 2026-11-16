@@ -248,36 +248,37 @@ func resolveUnarmedOption(lobby, attackerID, targetID int, kind, effect string) 
 		return fmt.Sprintf("%s is %d feet away; an Unarmed Strike reaches 5 feet.", tName, d), false, nil
 	}
 	dc := 8 + game.Modifier(aStr) + aPB
-	saved, total, ability := unarmedOptionSave(lobby, targetID, dc)
-	result := fmt.Sprintf("%s tries to %s %s: %s saving throw %d vs DC %d, ", aName, kind, tName, ability, total, dc)
+	sv := unarmedOptionSave(lobby, targetID, dc)
+	saved, total, ability := sv.Success, sv.Total, game.AbilityName(sv.Save.Ability)
+	result := fmt.Sprintf("%s tries to %s %s: %s", aName, kind, tName, sv.LineAgainst(tName))
 	out := map[string]interface{}{"save": total, "save_ability": ability, "dc": dc}
 	switch {
 	case saved:
-		result += "success. Nothing happens."
+		result += ". Nothing happens."
 	case kind == "grapple":
 		escapes, _ := normalizeEscapes(defaultEscapes("grappled", dc))
 		res := addCondition(lobby, targetID, condAdd{Condition: "grappled", Source: grappleSource(attackerID), Escapes: escapes,
 			Notes: fmt.Sprintf("Grappled by %s; escape DC %d", aName, dc), SourceID: attackerID})
 		if res.Immune != "" { // the condition owner: Immunity (a Ghost, an Ooze, an Elemental ...)
-			result += fmt.Sprintf("%s, but %s is immune to the Grappled condition (%s).", failWord(total, dc), tName, res.Immune)
+			result += fmt.Sprintf(", but %s is immune to the Grappled condition (%s).", tName, res.Immune)
 			out["immune"] = res.Immune
 			break
 		}
-		result += fmt.Sprintf("%s. %s has the Grappled condition (escape DC %d: an action for a Strength (Athletics) or Dexterity (Acrobatics) check).", failWord(total, dc), tName, dc)
+		result += fmt.Sprintf(". %s has the Grappled condition (escape DC %d: an action for a Strength (Athletics) or Dexterity (Acrobatics) check).", tName, dc)
 		out["escape_dc"] = dc
 	case effect == "prone":
 		if res := addCondition(lobby, targetID, condAdd{Condition: "prone", Source: "Shove", SourceID: attackerID}); res.Immune != "" {
-			result += fmt.Sprintf("failure, but %s is immune to the Prone condition (%s).", tName, res.Immune)
+			result += fmt.Sprintf(", but %s is immune to the Prone condition (%s).", tName, res.Immune)
 			out["immune"] = res.Immune
 			break
 		}
-		result += fmt.Sprintf("failure. %s has the Prone condition.", tName)
+		result += fmt.Sprintf(". %s has the Prone condition.", tName)
 	default:
 		moved, onMap := pushToken(lobby, attackerID, targetID, 5)
 		if onMap {
-			result += fmt.Sprintf("failure. %s is pushed %d feet away.", tName, moved)
+			result += fmt.Sprintf(". %s is pushed %d feet away.", tName, moved)
 		} else {
-			result += fmt.Sprintf("failure. %s is pushed 5 feet away.", tName)
+			result += fmt.Sprintf(". %s is pushed 5 feet away.", tName)
 		}
 	}
 	out["success"], out["result"] = !saved, result

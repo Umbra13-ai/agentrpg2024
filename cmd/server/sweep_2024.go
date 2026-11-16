@@ -99,13 +99,12 @@ func handleBreathWeapon2024(w http.ResponseWriter, r *http.Request) {
 	var lines []string
 	for _, id := range targets {
 		tn := creatureName(lobby, id)
-		saved, _ := creatureSave(lobby, id, "dex", dc)
+		sv := creatureSave(lobby, id, "dex", dc)
 		d := dmg
-		how := "fails its Dexterity save"
-		if saved {
-			d, how = dmg/2, "succeeds on its Dexterity save"
+		if sv.Success {
+			d = dmg / 2
 		}
-		lines = append(lines, fmt.Sprintf("%s %s: %s.", tn, how, damageAny(lobby, id, d, dtype)))
+		lines = append(lines, fmt.Sprintf("%s: %s.", sv.Line(tn), damageAny(lobby, id, d, dtype)))
 	}
 	result := fmt.Sprintf("%s exhales %s in a %d-foot %s (DC %d Dexterity save, %d %s damage, half on a success). %s%s", name, dtype, size,
 		map[string]string{"cone": "Cone", "line": "Line 5 feet wide"}[shape], dc, dmg, dtype, strings.Join(lines, " "), note)

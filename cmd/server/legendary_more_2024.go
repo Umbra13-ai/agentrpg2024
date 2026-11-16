@@ -468,9 +468,9 @@ func turnSpellBack(lobbyID, charID int, source string, e saveEffect, rolled map[
 	}
 	spendReaction(charID)
 	name := creatureName(lobbyID, e.SourceID)
-	saved, total := monsterSaveFor(lobbyID, e.SourceID, e.Ability, e.DC, saveStakes{Condition: len(e.Conditions) > 0})
-	out := fmt.Sprintf(" Ring of Spell Turning (a Reaction) turns the spell back: %s makes the %s save against its own DC %d: %d, %s", name, e.AbilityName, e.DC, total,
-		map[bool]string{true: "a success", false: "a failure"}[saved])
+	sv := monsterSaveFor(lobbyID, e.SourceID, e.Ability, e.DC, saveStakes{Condition: len(e.Conditions) > 0})
+	saved := sv.Success
+	out := " Ring of Spell Turning (a Reaction) turns the spell back on its caster, against its own DC: " + sv.LineAgainst(name)
 	var parts []string
 	for i, p := range e.Damage {
 		d := rolled[i]
@@ -704,12 +704,12 @@ func weaponHitEffects(lobbyID, charID, targetID int, monsterKey, name, heldItem 
 			text += hammerThunderclap(lobbyID, charID, targetID)
 		}
 		if natural == 20 && mtype == "giant" && giantsBane(charID) && hpAfter > 0 {
-			saved, total := monsterSaveFor(lobbyID, targetID, "con", 17, saveStakes{Damage: hpAfter})
-			if saved {
-				text += fmt.Sprintf(" Giant's Bane (a roll of 20 against a Giant): %s's Constitution save %d against DC 17 succeeds.", name, total)
+			sv := monsterSaveFor(lobbyID, targetID, "con", 17, saveStakes{Damage: hpAfter})
+			if sv.Success {
+				text += " Giant's Bane (a roll of 20 against a Giant): " + sv.LineAgainst(name) + "."
 			} else {
 				dies = true
-				text += fmt.Sprintf(" Giant's Bane (a roll of 20 against a Giant): %s fails the DC 17 Constitution save (%d) and dies!", name, total)
+				text += " Giant's Bane (a roll of 20 against a Giant): " + sv.LineAgainst(name) + " and dies!"
 			}
 		}
 	}
@@ -759,21 +759,21 @@ func rodPower(lobbyID, charID, targetID int, name, monsterKey string, it invItem
 	markDawnUsed(charID, it, key)
 	if key == "drain_life" {
 		dmg := game.RollDamage("4d6", false)
-		saved, total := monsterSaveFor(lobbyID, targetID, "con", 17, saveStakes{Damage: dmg})
-		if saved {
-			return 0, fmt.Sprintf(" Drain Life: %s's Constitution save %d against DC 17 succeeds.", name, total)
+		sv := monsterSaveFor(lobbyID, targetID, "con", 17, saveStakes{Damage: dmg})
+		if sv.Success {
+			return 0, " Drain Life: " + sv.LineAgainst(name) + "."
 		}
 		d, _ := adjustMonsterDamage(monsterKey, "necrotic", dmg)
 		healed := d / 2
 		_, before, after := healCharacter(charID, healed)
-		return d, fmt.Sprintf(" Drain Life: %s fails the DC 17 Constitution save (%d) and takes %d extra Necrotic damage; you regain %d Hit Points (%d → %d).", name, total, d, healed, before, after)
+		return d, fmt.Sprintf(" Drain Life: %s and takes %d extra Necrotic damage; you regain %d Hit Points (%d → %d).", sv.LineAgainst(name), d, healed, before, after)
 	}
-	saved, total := monsterSaveFor(lobbyID, targetID, "con", 17, saveStakes{Condition: true})
-	if saved {
-		return 0, fmt.Sprintf(" Paralyze: %s's Constitution save %d against DC 17 succeeds.", name, total)
+	sv := monsterSaveFor(lobbyID, targetID, "con", 17, saveStakes{Condition: true})
+	if sv.Success {
+		return 0, " Paralyze: " + sv.LineAgainst(name) + "."
 	}
 	applyCondition(lobbyID, targetID, "paralyzed", "Rod of Lordly Might", 10, "con", 17)
-	return 0, fmt.Sprintf(" Paralyze: %s fails the DC 17 Constitution save (%d) and is Paralyzed for 1 minute (it repeats the save at the end of each of its turns).", name, total)
+	return 0, " Paralyze: " + sv.LineAgainst(name) + " and is Paralyzed for 1 minute (it repeats the save at the end of each of its turns)."
 }
 
 var rodButtonRe = regexp.MustCompile(`(?i)button\s*([1-6])`)
@@ -802,13 +802,13 @@ func rodOfLordlyMight(charID int, it invItem, req itemCastReq, description strin
 				continue
 			}
 			n := creatureName(lobby, t)
-			saved, total := monsterSaveFor(lobby, t, "wis", 17, saveStakes{Condition: true})
-			if saved {
-				lines = append(lines, fmt.Sprintf("%s saves (%d)", n, total))
+			sv := monsterSaveFor(lobby, t, "wis", 17, saveStakes{Condition: true})
+			if sv.Success {
+				lines = append(lines, sv.LineAgainst(n))
 				continue
 			}
 			applyCondition(lobby, t, "frightened", "Rod of Lordly Might", 10, "wis", 17)
-			lines = append(lines, fmt.Sprintf("%s fails (%d) and is Frightened for 1 minute (it repeats the save at the end of its turns)", n, total))
+			lines = append(lines, sv.LineAgainst(n)+" and is Frightened for 1 minute (it repeats the save at the end of its turns)")
 		}
 		if len(lines) == 0 {
 			return "Terrify (a Magic action): no creature you can see is within 30 feet (on the battle map, or name them with target_ids)."
@@ -860,11 +860,11 @@ func retributiveStrike(lobbyID, charID int, it invItem, charges int, targets []i
 			continue
 		}
 		dmg := 6 * charges
-		saved, total := creatureSave(lobbyID, id, "dex", 17)
-		if saved {
+		sv := creatureSave(lobbyID, id, "dex", 17)
+		if sv.Success {
 			dmg /= 2
 		}
-		what := fmt.Sprintf("%s: Dexterity save %d against DC 17, %s; ", creatureName(lobbyID, id), total, map[bool]string{true: "a success", false: "a failure"}[saved])
+		what := sv.LineAgainst(creatureName(lobbyID, id)) + "; "
 		out = append(out, what+damageAny(lobbyID, id, dmg, "force")+".")
 	}
 	updateInventoryItem(charID, it, func(x invItem) { x["destroyed"] = true }) // its attunement ends with it (inventory_2024.go)
@@ -898,12 +898,12 @@ func elementalRingUse(charID int, it invItem, req itemCastReq, description strin
 			return "Cannot use Elemental Compulsion: the target isn't an Elemental. Nothing was spent."
 		}
 		n := fmt.Sprint(e["name"])
-		saved, total := monsterSaveFor(lobby, req.TargetID, "wis", 18, saveStakes{Condition: true})
-		if saved {
-			return fmt.Sprintf("Elemental Compulsion (a Magic action): %s's Wisdom save %d against DC 18 succeeds.", n, total)
+		sv := monsterSaveFor(lobby, req.TargetID, "wis", 18, saveStakes{Condition: true})
+		if sv.Success {
+			return "Elemental Compulsion (a Magic action): " + sv.LineAgainst(n) + "."
 		}
 		applyCondition(lobby, req.TargetID, "charmed", "Ring of Elemental Command", 1, "", 0)
-		return fmt.Sprintf("Elemental Compulsion (a Magic action): %s fails the DC 18 Wisdom save (%d): it is Charmed until the start of your next turn, and you decide what it does with its move and action on its next turn (the GM runs it so).", n, total)
+		return fmt.Sprintf("Elemental Compulsion (a Magic action): %s: it is Charmed until the start of your next turn, and you decide what it does with its move and action on its next turn (the GM runs it so).", sv.LineAgainst(n))
 	}
 	focus := map[string]string{
 		"air":   "You know Auran, have Resistance to Lightning damage, and have a Fly Speed equal to your Speed (you can hover).",
@@ -1002,14 +1002,14 @@ func hammerThunderclap(lobbyID, charID, targetID int) string {
 			continue
 		}
 		seen[id] = true
-		saved, total := creatureSave(lobbyID, id, "con", 17)
+		sv := creatureSave(lobbyID, id, "con", 17)
 		n := creatureName(lobbyID, id)
-		if saved {
-			lines = append(lines, fmt.Sprintf("%s saves (%d)", n, total))
+		if sv.Success {
+			lines = append(lines, sv.LineAgainst(n))
 			continue
 		}
 		applyCondition(lobbyID, id, "stunned", "Hammer of Thunderbolts", 1, "", 0)
-		lines = append(lines, fmt.Sprintf("%s fails (%d) and is Stunned until the end of your next turn", n, total))
+		lines = append(lines, sv.LineAgainst(n)+" and is Stunned until the end of your next turn")
 	}
 	return " Thunderclap (audible 300 feet away): DC 17 Constitution saves: " + strings.Join(lines, "; ") + ". The hammer flies back to your hand."
 }

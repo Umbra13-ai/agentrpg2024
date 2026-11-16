@@ -67,14 +67,6 @@ func damageAny(lobbyID, id, dmg int, dtype string) string {
 	return damageCharacter(id, dmg, dtype)
 }
 
-// failWord is "failure", or "automatic failure" when a condition (Paralyzed, Stunned, Unconscious ...) made a high roll fail.
-func failWord(total, dc int) string {
-	if total >= dc {
-		return "automatic failure (a condition makes this save fail)"
-	}
-	return "failure"
-}
-
 func targetIDsOf(single int, list []int) []int {
 	if len(list) > 0 {
 		return list
@@ -245,13 +237,13 @@ func handleGMApplyContagion(w http.ResponseWriter, r *http.Request) {
 		dc = req.DC
 	}
 	name := creatureName(lobby, req.TargetID)
-	saved, total := creatureSave(lobby, req.TargetID, "con", dc)
-	out := map[string]interface{}{"success": true, "contagion": toolboxSection("contagions")[key].Name, "rule": toolboxText("contagions", key), "save": total, "dc": dc}
-	if saved {
-		out["result"] = fmt.Sprintf("%s succeeds on the Constitution save (%d vs DC %d) and is not infected.", name, total, dc)
+	sv := creatureSave(lobby, req.TargetID, "con", dc)
+	out := map[string]interface{}{"success": true, "contagion": toolboxSection("contagions")[key].Name, "rule": toolboxText("contagions", key), "save": sv.Total, "dc": dc}
+	if sv.Success {
+		out["result"] = sv.Line(name) + " and is not infected."
 	} else {
 		db.Exec(`INSERT INTO contagions (lobby_id, target_id, contagion, onset) VALUES ($1,$2,$3,$4)`, lobby, req.TargetID, key, key == "sight_rot")
-		res := fmt.Sprintf("%s fails the Constitution save (%d vs DC %d) and is infected.", name, total, dc)
+		res := sv.Line(name) + " and is infected."
 		if key == "sight_rot" {
 			applyCondition(lobby, req.TargetID, "blinded", "Sight Rot", 0, "", 0)
 			res += " It has the Blinded condition until the contagion ends."
@@ -318,30 +310,30 @@ func handleGMContagionSave(w http.ResponseWriter, r *http.Request) {
 			result = name + ": the contagion takes hold."
 		}
 	case key == "cackle_fever":
-		saved, total := creatureSave(lobby, req.TargetID, "con", 13)
-		if saved {
+		sv := creatureSave(lobby, req.TargetID, "con", 13)
+		if sv.Success {
 			successes++
 			db.Exec(`UPDATE contagions SET successes = $1 WHERE id = $2`, successes, id)
-			result = fmt.Sprintf("%s succeeds (%d vs DC 13): %d of 3 successes.", name, total, successes)
+			result = fmt.Sprintf("%s: %d of 3 successes.", sv.Line(name), successes)
 			if successes >= 3 {
 				result += " " + end("three successful saves; immune to Cackle Fever for 1 year")
 			}
 		} else {
-			result = fmt.Sprintf("%s fails (%d vs DC 13): %d of 3 successes.", name, total, successes)
+			result = fmt.Sprintf("%s: %d of 3 successes.", sv.Line(name), successes)
 		}
 	case key == "sewer_plague":
-		saved, total := creatureSave(lobby, req.TargetID, "con", 11)
+		sv := creatureSave(lobby, req.TargetID, "con", 11)
 		if req.TargetID <= 0 {
-			result = fmt.Sprintf("%s rolls %d vs DC 11.", name, total)
+			result = sv.Line(name) + "."
 			break
 		}
-		if saved {
-			result = fmt.Sprintf("%s succeeds (%d vs DC 11). %s", name, total, addExhaustion(req.TargetID, -1))
+		if sv.Success {
+			result = sv.Line(name) + ". " + addExhaustion(req.TargetID, -1)
 			if exhaustionLevelOf(req.TargetID) == 0 {
 				result += " " + end("Exhaustion reduced to 0")
 			}
 		} else {
-			result = fmt.Sprintf("%s fails (%d vs DC 11). %s", name, total, addExhaustion(req.TargetID, 1))
+			result = sv.Line(name) + ". " + addExhaustion(req.TargetID, 1)
 		}
 	default:
 		result = "Sight Rot has no daily save: it ends with Heal or Lesser Restoration, or 72 hours of ointment (cured=true)."
@@ -405,16 +397,15 @@ func handleGMMentalStress(w http.ResponseWriter, r *http.Request) {
 	var results []string
 	for _, id := range ids {
 		name := creatureName(lobby, id)
-		saved, total := creatureSave(lobby, id, ab, req.DC)
+		sv := creatureSave(lobby, id, ab, req.DC)
 		dmg := game.RollDamage(req.Damage, false)
-		line := fmt.Sprintf("%s: %s save %d vs DC %d, ", name, strings.ToUpper(ab), total, req.DC)
-		if saved {
-			line += "success"
+		line := sv.Line(name)
+		if sv.Success {
 			if req.HalfOnSuccess {
 				line += "; " + damageAny(lobby, id, dmg/2, "psychic")
 			}
 		} else {
-			line += failWord(total, req.DC) + "; " + damageAny(lobby, id, dmg, "psychic")
+			line += "; " + damageAny(lobby, id, dmg, "psychic")
 			switch req.Prolonged {
 			case "short":
 				mins := game.RollDie(10)
@@ -524,16 +515,18 @@ func handleGMTrap2024(w http.ResponseWriter, r *http.Request) {
 	var results []string
 	for _, id := range ids {
 		name := creatureName(lobby, id)
-		saved, total := false, 0
+		saved := false
 		line := name + ": "
 		if rule.Save != "" {
-			saved, total = creatureSave(lobby, id, rule.Save, band.DC)
+			sc := &saveCtx{lobby: lobby, saver: id, ability: rule.Save, dc: band.DC}
 			if key == "falling_net" && id < 0 {
 				if sb := monsterStatBlock(monsterKeyOfCombatant(lobby, id)); sb != nil && (sb["size"] == "Huge" || sb["size"] == "Gargantuan") {
-					saved = true // the target succeeds automatically if it's Huge or larger
+					sc.autoSucceed = "Huge or larger" // the target succeeds automatically if it's Huge or larger
 				}
 			}
-			line += fmt.Sprintf("%s save %d vs DC %d, %s", strings.ToUpper(rule.Save), total, band.DC, map[bool]string{true: "success", false: failWord(total, band.DC)}[saved])
+			sv := sc.resist(saveStakes{Condition: true})
+			saved = sv.Success
+			line = sv.Line(name)
 		} else {
 			line += "falls into the pit"
 		}
@@ -683,12 +676,12 @@ func handleGMEnvironmentalHazard2024(w http.ResponseWriter, r *http.Request) {
 			out["saves"] = saves(extra, one, "con", req.Resistant, false)
 		}
 	case "slippery_ice":
-		saved, total := creatureSave(lobby, id, "dex", 10)
-		if saved {
-			out["result"] = fmt.Sprintf("%s: Dexterity save %d vs DC 10, success.", name, total)
+		sv := creatureSave(lobby, id, "dex", 10)
+		if sv.Success {
+			out["result"] = sv.Line(name) + "."
 		} else {
 			applyCondition(lobby, id, "prone", "Slippery ice", 0, "", 0)
-			out["result"] = fmt.Sprintf("%s: Dexterity save %d vs DC 10, failure: Prone.", name, total)
+			out["result"] = sv.Line(name) + ": Prone."
 		}
 	case "thin_ice":
 		out["weight_tolerance_lb"] = game.RollDamage("3d10", false) * 10
@@ -728,12 +721,13 @@ func handleGMMoraleCheck2024(w http.ResponseWriter, r *http.Request) {
 	}
 	var results []string
 	for _, id := range ids {
-		saved, total := creatureSave(lobby, id, "wis", req.DC)
+		n := creatureName(lobby, id)
+		sv := creatureSave(lobby, id, "wis", req.DC)
 		verdict := "is willing to fight"
-		if !saved {
+		if !sv.Success {
 			verdict = "is not willing to fight: it tries to avoid the battle (flees, surrenders or holds back)"
 		}
-		results = append(results, fmt.Sprintf("%s: Wisdom save %d vs DC %d, %s.", creatureName(lobby, id), total, req.DC, verdict))
+		results = append(results, fmt.Sprintf("%s: %s %s.", sv.Line(n), n, verdict))
 	}
 	recordGMAction(db, lobby, "morale", "Fight or Flight", strings.Join(results, " "))
 	writeJSONStatus(w, 200, map[string]interface{}{"success": true, "results": results})

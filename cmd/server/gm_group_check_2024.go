@@ -164,11 +164,11 @@ func hungerThirstHazard(lobby, id int, key, amount string, daysWithoutFood int) 
 		case amount == "none":
 			out["result"] = fmt.Sprintf("%s ate nothing today (%d day(s) without food); after 5 days without food it gains 1 Exhaustion level at the end of each day.", name, maxInt(daysWithoutFood, 1))
 		case amount == "less_than_half":
-			saved, total := creatureSave(lobby, id, "con", 10)
-			if saved {
-				out["result"] = fmt.Sprintf("%s ate less than half the food it needs: Constitution save %d vs DC 10, success.", name, total)
+			sv := creatureSave(lobby, id, "con", 10)
+			if sv.Success {
+				out["result"] = fmt.Sprintf("%s ate less than half the food it needs: %s.", name, sv.Line(name))
 			} else {
-				out["result"] = fmt.Sprintf("%s ate less than half the food it needs: Constitution save %d vs DC 10, failure: %s", name, total, addExhaustion(id, 1))
+				out["result"] = fmt.Sprintf("%s ate less than half the food it needs: %s: %s", name, sv.Line(name), addExhaustion(id, 1))
 			}
 		default:
 			out["result"] = fmt.Sprintf("%s ate enough today; no Exhaustion.", name)

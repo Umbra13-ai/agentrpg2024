@@ -86,11 +86,10 @@ func javelinOfLightning(charID int, it invItem, req itemCastReq, description str
 		}
 		seen[id] = true
 		name := creatureName(lobby, id)
-		saved, total := creatureSave(lobby, id, "dex", 13)
+		sv := creatureSave(lobby, id, "dex", 13)
 		d := dmg
-		how := "fails"
-		if saved {
-			d, how = dmg/2, "succeeds on"
+		if sv.Success {
+			d = dmg / 2
 		}
 		var res string
 		if id < 0 {
@@ -98,7 +97,7 @@ func javelinOfLightning(charID int, it invItem, req itemCastReq, description str
 		} else {
 			res = name + " " + damageCharacter(id, d, "lightning")
 		}
-		parts = append(parts, fmt.Sprintf("%s %s the DC 13 Dexterity save (%d): %s", name, how, total, strings.TrimSpace(res)))
+		parts = append(parts, sv.LineAgainst(name)+": "+strings.TrimSpace(res))
 	}
 	markDawnUsed(charID, it, "lightning_bolt")
 	return fmt.Sprintf("⚡ Javelin of Lightning: you throw it and it becomes a bolt of lightning in a 5-foot-wide Line (4d6 = %d Lightning). %s. The javelin reappears in your hand; the bolt can't be used again until the next dawn.", dmg, strings.Join(parts, "; "))

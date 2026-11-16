@@ -127,8 +127,8 @@ func dragonOrb(charID int, it invItem, description string) string {
 	if itemBool(it, "orb_controlled") {
 		return "You already control the Dragon Orb: cast its spells with the cast action and \"item\": \"Dragon Orb\" (Cure Wounds level 9: 4 charges, Daylight 1, Death Ward 2, Detect Magic 0, Scrying 3), or \"call dragons\"."
 	}
-	saved, total := creatureSave(lobbyOfChar(charID), charID, "cha", 15)
-	if saved {
+	sv := creatureSave(lobbyOfChar(charID), charID, "cha", 15)
+	if sv.Success {
 		editInventory(charID, func(inv []invItem) []invItem {
 			for _, x := range inv {
 				if itemStr(x, "id") == itemStr(it, "id") {
@@ -137,10 +137,10 @@ func dragonOrb(charID int, it invItem, description string) string {
 			}
 			return inv
 		})
-		return fmt.Sprintf("You peer into the orb's swirling mist (a Magic action): Charisma save %d vs DC 15, success. You control the Dragon Orb while you stay attuned: its spells (cast with \"item\": \"Dragon Orb\") and its call are yours.", total)
+		return fmt.Sprintf("You peer into the orb's swirling mist (a Magic action): %s. You control the Dragon Orb while you stay attuned: its spells (cast with \"item\": \"Dragon Orb\") and its call are yours.", sv.ForSaver(""))
 	}
 	applyCondition(lobby, charID, "charmed", "Dragon Orb", 0, "", 0)
-	return fmt.Sprintf("You peer into the orb's swirling mist (a Magic action): Charisma save %d vs DC 15, failure. The orb Charms you for as long as you stay attuned to it: you can't end the attunement, and it casts Suggestion on you at will (DC 18), urging its own ends. The GM plays the dragon's will.", total)
+	return fmt.Sprintf("You peer into the orb's swirling mist (a Magic action): %s. The orb Charms you for as long as you stay attuned to it: you can't end the attunement, and it casts Suggestion on you at will (DC 18), urging its own ends. The GM plays the dragon's will.", sv.ForSaver(""))
 }
 
 // dragonOrbControl: an orb's spells only for the one who controls it.

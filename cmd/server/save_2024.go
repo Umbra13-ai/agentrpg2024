@@ -56,10 +56,11 @@ type saveCtx struct {
 
 // creatureSave rolls a saving throw for a monster or a character with no cause beyond the ability and the DC; a monster that
 // fails may use Legendary Resistance against an effect with a condition. Callers that know more about the cause (a spell, a
-// condition it would impose) fill a saveCtx themselves.
-func creatureSave(lobbyID, id int, ability string, dc int) (bool, int) {
-	r := (&saveCtx{lobby: lobbyID, saver: id, ability: ability, dc: dc}).resist(saveStakes{Condition: true})
-	return r.Success, r.Total
+// condition it would impose) fill a saveCtx themselves. The result is the owner's: a message says what happened with its
+// wordings (Line, Clause, LineAgainst), which name every source of Advantage, Disadvantage and what was added, never with a
+// line of its own built from Success and Total.
+func creatureSave(lobbyID, id int, ability string, dc int) game.SaveResult {
+	return (&saveCtx{lobby: lobbyID, saver: id, ability: ability, dc: dc}).resist(saveStakes{Condition: true})
 }
 
 // resist rolls the save; a monster that fails may then turn it into a success with Legendary Resistance (the stakes decide when

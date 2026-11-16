@@ -971,13 +971,13 @@ func usePotion(lobbyID, drinkerID, targetID int, it invItem) string {
 	case "potion of poison":
 		dmg := game.RollDamage("4d6", false)
 		res := damageCharacter(targetID, dmg, "poison")
-		saved, total := creatureSave(lobbyOfChar(targetID), targetID, "con", 13)
+		sv := creatureSave(lobbyOfChar(targetID), targetID, "con", 13)
 		out := fmt.Sprintf("🧪 %s: it was poison! %s", label, res)
-		if saved {
-			return out + fmt.Sprintf(" Constitution save %d vs DC 13: success.", total)
+		if sv.Success {
+			return out + " " + sv.ForSaver("") + "."
 		}
 		applyCondition(lobbyID, targetID, "poisoned", "Potion of Poison", 600, "", 0)
-		return out + fmt.Sprintf(" Constitution save %d vs DC 13: failure, Poisoned for 1 hour.", total)
+		return out + " " + sv.ForSaver("") + ": Poisoned for 1 hour."
 	case "potion of vitality":
 		setExhaustionLevel(targetID, 0)
 		removeCondition(targetID, "poisoned")

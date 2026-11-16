@@ -66,10 +66,9 @@ func beadOfForce(charID int, it invItem, req itemCastReq) string {
 	dmg := game.RollDamage("5d4", false)
 	var lines []string
 	for _, id := range ids {
-		saved := false
-		saved, _ = creatureSave(lobby, id, "dex", 15)
-		if saved {
-			lines = append(lines, creatureName(lobby, id)+" saves.")
+		sv := creatureSave(lobby, id, "dex", 15)
+		if sv.Success {
+			lines = append(lines, sv.LineAgainst(creatureName(lobby, id))+".")
 			continue
 		}
 		res := ""
@@ -79,7 +78,7 @@ func beadOfForce(charID int, it invItem, req itemCastReq) string {
 			res = damageCharacter(id, dmg, "force")
 		}
 		applyCondition(lobby, id, "restrained", "Bead of Force: trapped in a sphere of force", 10, "", 0)
-		lines = append(lines, fmt.Sprintf("%s fails: %s, and is trapped in the sphere of force for 1 minute.", creatureName(lobby, id), strings.TrimSpace(res)))
+		lines = append(lines, fmt.Sprintf("%s: %s, and is trapped in the sphere of force for 1 minute.", sv.LineAgainst(creatureName(lobby, id)), strings.TrimSpace(res)))
 	}
 	editInventory(charID, func(inv []invItem) []invItem {
 		for _, x := range inv {
@@ -107,18 +106,17 @@ func dustOfSneezing(charID int, it invItem, req itemCastReq) string {
 	}
 	var lines []string
 	for _, id := range ids {
+		sc := &saveCtx{lobby: lobby, saver: id, ability: "con", dc: 15}
 		if id < 0 && dustImmuneTypes[strings.ToLower(monsterTypeOf(lobby, id))] {
-			lines = append(lines, creatureName(lobby, id)+" succeeds automatically.")
-			continue
+			sc.autoSucceed = "a " + titleCase(monsterTypeOf(lobby, id)) + " doesn't breathe the dust"
 		}
-		saved := false
-		saved, _ = creatureSave(lobby, id, "con", 15)
-		if saved {
-			lines = append(lines, creatureName(lobby, id)+" saves.")
+		sv := sc.resist(saveStakes{Condition: true})
+		if sv.Success {
+			lines = append(lines, sv.LineAgainst(creatureName(lobby, id))+".")
 			continue
 		}
 		applyCondition(lobby, id, "incapacitated", "Dust of Sneezing and Choking (suffocating)", 10, "con", 15)
-		lines = append(lines, creatureName(lobby, id)+" fails: Incapacitated and suffocating (a DC 15 Con save at the end of each of its turns ends it).")
+		lines = append(lines, sv.LineAgainst(creatureName(lobby, id))+": Incapacitated and suffocating (a DC 15 Con save at the end of each of its turns ends it).")
 	}
 	editInventory(charID, func(inv []invItem) []invItem {
 		for _, x := range inv {

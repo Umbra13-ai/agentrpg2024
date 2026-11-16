@@ -103,14 +103,13 @@ var ritualWord = regexp.MustCompile(`\britual\b`)
 
 // monsterSpellSave is a monster's saving throw against a spell: Magic Resistance (a trait in its stat block) gives Advantage
 // (a row of saveSources, save_2024.go).
-func monsterSpellSave(lobbyID, id int, ability string, dc int) (bool, int) {
+func monsterSpellSave(lobbyID, id int, ability string, dc int) game.SaveResult {
 	return monsterSpellSaveFor(lobbyID, id, ability, dc, saveStakes{Condition: true})
 }
 
 // monsterSpellSaveFor: the same with the stakes of the save for Legendary Resistance (damage only, or a condition).
-func monsterSpellSaveFor(lobbyID, id int, ability string, dc int, st saveStakes) (bool, int) {
-	r := monsterSpellSaveResult(lobbyID, id, ability, dc, st, nil)
-	return r.Success, r.Total
+func monsterSpellSaveFor(lobbyID, id int, ability string, dc int, st saveStakes) game.SaveResult {
+	return monsterSpellSaveResult(lobbyID, id, ability, dc, st, nil)
 }
 
 // monsterSpellSaveResult: the whole result, with sources of Disadvantage only the caller knows (a Construct against Shatter,

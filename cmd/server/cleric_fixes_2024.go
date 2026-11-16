@@ -73,11 +73,11 @@ func maceOfDisruptionHit(lobbyID, charID, targetID int, monsterKey, name string,
 	}
 	left := hpAfter - d
 	if left > 0 && left <= 25 {
-		if saved, total := monsterSave(lobbyID, targetID, "wis", 15); saved {
+		if sv := creatureSave(lobbyID, targetID, "wis", 15); sv.Success {
 			applyCondition(lobbyID, targetID, "frightened", "Mace of Disruption", 2, "", 0)
-			text += fmt.Sprintf("; at %d Hit Points it makes the DC 15 Wisdom save (%d) and is Frightened until the end of your next turn", left, total)
+			text += fmt.Sprintf("; at %d Hit Points %s and is Frightened until the end of your next turn", left, sv.LineAgainst("it"))
 		} else {
-			text += fmt.Sprintf("; at %d Hit Points it fails the DC 15 Wisdom save (%d) and is destroyed", left, total)
+			text += fmt.Sprintf("; at %d Hit Points %s and is destroyed", left, sv.LineAgainst("it"))
 			return d, true, text + "."
 		}
 	}
@@ -171,9 +171,9 @@ func divineWord(charID, lobby int, saveDC int, targets []int) string {
 	var lines []string
 	for _, id := range targets {
 		name := creatureName(lobby, id)
-		saved, total := creatureSave(lobby, id, "cha", saveDC)
-		if saved {
-			lines = append(lines, fmt.Sprintf("%s succeeds on the Charisma save (%d vs DC %d)", name, total, saveDC))
+		sv := creatureSave(lobby, id, "cha", saveDC)
+		if sv.Success {
+			lines = append(lines, sv.Line(name))
 			continue
 		}
 		hp := 0
@@ -209,7 +209,7 @@ func divineWord(charID, lobby int, saveDC int, targets []int) string {
 			applyCondition(lobby, id, "deafened", "Divine Word", 10, "", 0)
 			effect = "has the Deafened condition for 1 minute"
 		}
-		line := fmt.Sprintf("%s fails the Charisma save (%d vs DC %d) and %s", name, total, saveDC, effect)
+		line := sv.Line(name) + " and " + effect
 		if id < 0 && planarTypes[monsterBaseType(lobby, id)] && hp > 20 {
 			applyCondition(lobby, id, "banished", "Divine Word", 14400, "", 0)
 			line += "; as a " + titleCase(monsterBaseType(lobby, id)) + " it is forced back to its plane of origin for 24 hours (the GM removes it from the fight)"

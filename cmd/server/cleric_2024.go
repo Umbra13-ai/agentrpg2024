@@ -82,18 +82,16 @@ func divineSpark(charID int, description string) string {
 		dtype = "necrotic"
 	}
 	dc := 8 + game.ProficiencyBonus(level) + game.Modifier(wis)
-	saved, roll := monsterSave(lobby, monster, "con", dc)
+	sv := creatureSave(lobby, monster, "con", dc)
 	dmg := total
-	how := "fails"
-	if saved {
+	if sv.Success {
 		dmg = total / 2
-		how = "succeeds on"
 	}
 	text, ok := damageMonster(lobby, monster, dmg, dtype)
 	if !ok {
 		return "Divine Spark could not reach that creature."
 	}
-	return fmt.Sprintf("✨ Divine Spark: the target %s its Constitution save (%d vs DC %d). %s.", how, roll, dc, text)
+	return fmt.Sprintf("✨ Divine Spark: %s. %s.", sv.Line("the target"), text)
 }
 
 // handleGMTurnUndead: POST /api/gm/turn-undead {"caster_id": N, "target_ids": [monster ids]} (Channel Divinity, level 2).
@@ -158,9 +156,10 @@ func handleGMTurnUndead(w http.ResponseWriter, r *http.Request) {
 			results = append(results, res)
 			continue
 		}
-		saved, total := monsterSave(campaignID, tid, "wis", dc)
-		res["total"], res["dc"], res["saved"] = total, dc, saved
-		if !saved {
+		sv := creatureSave(campaignID, tid, "wis", dc)
+		res["total"], res["dc"], res["saved"] = sv.Total, dc, sv.Success
+		res["line"] = sv.LineAgainst(creatureName(campaignID, tid)) // the save in words, with what gave Advantage or Disadvantage
+		if !sv.Success {
 			if level >= 5 { // Sear Undead first: its damage "doesn't end the turn effect" (other damage does, F85)
 				sear := 0
 				for i := 0; i < dice; i++ {
