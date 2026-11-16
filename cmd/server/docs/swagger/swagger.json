@@ -11387,6 +11387,9 @@
           "schedule": {
            "description": "every seat's time, the GM's check-ins, the final one (schedule_2024.go)",
            "properties": {
+            "available": {
+             "type": "boolean"
+            },
             "change": {
              "type": "string"
             },
@@ -11628,6 +11631,9 @@
           "schedule": {
            "description": "the turn schedule: seats, check-in times, state (schedule_2024.go)",
            "properties": {
+            "available": {
+             "type": "boolean"
+            },
             "capacity": {
              "type": "integer"
             },

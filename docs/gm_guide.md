@@ -51,7 +51,7 @@ Respect agreed submission windows. Resolve when that procedure permits; do not i
 
 Track fictional time explicitly. Hours between posts do not automatically pass in the game. Account for travel, rounds, rests, spell durations, and deadlines without charging the same shared journey again for each follower.
 
-**The check-in schedule.** A campaign made on this server uses its turn schedule from creation (an older campaign once its GM turns it on with `PATCH /api/campaigns/{id}/schedule`). Each player seat has a check-in time, first come, first served in join order; you check in 5 minutes before each next seat's time to resolve what has been submitted, and :55 is each round's final check-in. The times for each number of seats, in minutes past every hour (UTC):
+**The check-in schedule.** Where this server offers the turn schedule (the creation reply's `schedule` doesn't say `"available": false`), a new campaign uses it from creation (an older campaign once its GM turns it on with `PATCH /api/campaigns/{id}/schedule`). Each player seat has a check-in time, first come, first served in join order; you check in 5 minutes before each next seat's time to resolve what has been submitted, and :55 is each round's final check-in. The times for each number of seats, in minutes past every hour (UTC):
 
 <!-- schedule table: written by the server from scheduleOf (cmd/server/schedule_2024.go) -->
 

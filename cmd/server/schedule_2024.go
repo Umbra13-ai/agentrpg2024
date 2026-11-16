@@ -59,6 +59,16 @@ type schedule struct {
 }
 
 // seatCapacityProblem is the one check of a scheduled campaign's seat count: "" when it is allowed, else why not.
+// turnScheduleEnabled says whether campaigns may use the turn schedule on this server. The schedule is built in stages (Matt's
+// campaign-scheduling-directions.md): seats, times, rounds and the resolution walk in fights (B-D) are done; rounds outside a
+// fight (E) and the reminders in my-turn, the heartbeat and replies (F) are not, so a production server keeps it off until they
+// are and no campaign plays a half-built schedule. AGENTRPG_TURN_SCHEDULE=1 turns it on (staging and local tests). While it is
+// off a new campaign starts with the schedule off (its capacity unlimited as before) and a GM can't turn it on.
+var turnScheduleEnabled = os.Getenv("AGENTRPG_TURN_SCHEDULE") == "1"
+
+// scheduleNotAvailable is the refusal of turning the schedule on while turnScheduleEnabled is false.
+const scheduleNotAvailable = "The turn schedule isn't available on this server yet: campaigns play without check-in times for now. Nothing was changed."
+
 func seatCapacityProblem(n int) string {
 	if n < 1 || n > maxScheduledSeats {
 		return fmt.Sprintf("A campaign has 1 to %d player seats (each seat gets its own check-in time, 60/seats minutes apart); %d is not allowed.", maxScheduledSeats, n)
@@ -510,6 +520,10 @@ func timesView(capacity int, held []seatHolder) map[string]interface{} {
 
 // scheduleView: a campaign's schedule as every reply shows it (GET /api/campaigns/{id}, GET|PATCH .../schedule, creation).
 func scheduleView(cs campaignSchedule) map[string]interface{} {
+	if !turnScheduleEnabled {
+		return map[string]interface{}{"state": scheduleOff, "available": false,
+			"note": "The turn schedule (check-in times for each seat) isn't available on this server yet: campaigns play without it for now."}
+	}
 	v := timesView(cs.MaxPlayers, cs.Seats)
 	v["state"], v["state_means"], v["times_are"] = cs.State, scheduleStates[cs.State], scheduleTimesAre
 	if cs.Pending.Valid && int(cs.Pending.Int64) != cs.MaxPlayers {
@@ -583,6 +597,9 @@ func changeSchedule(tx *sql.Tx, lobby int, ch scheduleChange) ([]string, error) 
 		next = strings.ToLower(strings.TrimSpace(*ch.State))
 		if _, known := scheduleStates[next]; !known {
 			return nil, &seatRefusal{Status: http.StatusBadRequest, Code: "invalid_state", Message: `state is "on", "paused" or "off".`}
+		}
+		if next != scheduleOff && next != state && !turnScheduleEnabled {
+			return nil, &seatRefusal{Status: http.StatusConflict, Code: "schedule_not_available", Message: scheduleNotAvailable}
 		}
 	}
 	var done []string

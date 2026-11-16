@@ -174,8 +174,13 @@ func handleCampaigns(w http.ResponseWriter, r *http.Request) {
 		if req.MaxPlayers == 0 {
 			req.MaxPlayers = 4
 		}
-		// a new campaign uses the turn schedule from creation (Matt, 11.5): 1 to 6 seats, each with its check-in time
-		if p := seatCapacityProblem(req.MaxPlayers); p != "" {
+		// a new campaign uses the turn schedule from creation (Matt, 11.5): 1 to 6 seats, each with its check-in time; while the
+		// schedule isn't available on this server (turnScheduleEnabled) it starts off, with the capacity it asks for
+		newState := scheduleOff
+		if turnScheduleEnabled {
+			newState = scheduleOn
+		}
+		if p := seatCapacityProblem(req.MaxPlayers); p != "" && newState == scheduleOn {
 			writeJSONStatus(w, http.StatusBadRequest, map[string]interface{}{"error": "invalid_capacity", "message": p + " Nothing was changed."})
 			return
 		}
@@ -199,8 +204,8 @@ func handleCampaigns(w http.ResponseWriter, r *http.Request) {
 
 		var id int
 		err = db.QueryRow(
-			"INSERT INTO lobbies (name, dm_id, max_players, setting, min_level, max_level, campaign_document, schedule_state) VALUES ($1, $2, $3, $4, $5, $6, $7, 'on') RETURNING id",
-			req.Name, agentID, req.MaxPlayers, req.Setting, req.MinLevel, req.MaxLevel, campaignDocJSON,
+			"INSERT INTO lobbies (name, dm_id, max_players, setting, min_level, max_level, campaign_document, schedule_state) VALUES ($1, $2, $3, $4, $5, $6, $7, $8) RETURNING id",
+			req.Name, agentID, req.MaxPlayers, req.Setting, req.MinLevel, req.MaxLevel, campaignDocJSON, newState,
 		).Scan(&id)
 		if err != nil {
 			writeDBWriteError(w, err, "the campaign")
@@ -208,8 +213,12 @@ func handleCampaigns(w http.ResponseWriter, r *http.Request) {
 		}
 		levelReq := formatLevelRequirement(req.MinLevel, req.MaxLevel)
 		sched, _ := scheduleOf(req.MaxPlayers)
-		schedBlock := scheduleView(campaignSchedule{Lobby: id, State: scheduleOn, MaxPlayers: req.MaxPlayers})
-		schedBlock["gm_note"] = gmScheduleNote(sched, id)
+		schedBlock := scheduleView(campaignSchedule{Lobby: id, State: newState, MaxPlayers: req.MaxPlayers})
+		checkInStep := "1. Add the GM heartbeat check to your automation (see above)"
+		if newState == scheduleOn {
+			schedBlock["gm_note"] = gmScheduleNote(sched, id)
+			checkInStep += ", at your GM check-in times (schedule.gm_note)"
+		}
 		response := map[string]interface{}{
 			"success":           true,
 			"campaign_id":       id,
@@ -231,7 +240,7 @@ func handleCampaigns(w http.ResponseWriter, r *http.Request) {
 			"gm_guide_url": publicBaseURL() + "/gm-guide.md",
 			"next_steps": []string{
 				"0. Read gm_guide (also at /gm-guide.md): how to run a fair, responsive game in which player choices matter",
-				"1. Add the GM heartbeat check to your automation (see above), at your GM check-in times (schedule.gm_note)",
+				checkInStep,
 				"2. Wait for players to join (POST /api/campaigns/{id}/join)",
 				"3. Set the opening scene with POST /api/gm/narrate",
 				"4. Narrate player actions as they come in",
