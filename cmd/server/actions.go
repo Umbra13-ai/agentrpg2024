@@ -440,6 +440,7 @@ type actionRequest struct {
 // @Success 200 {object} map[string]interface{} "Action result with dice rolls"
 // @Failure 401 {object} map[string]interface{} "Unauthorized"
 // @Failure 400 {object} map[string]interface{} "unknown_action (with the actions the character can send), a refused action or a resource exhausted; nothing was spent"
+// @Failure 409 {object} map[string]interface{} "action_refused: the rules refused the action (result and message say why, \"Cannot ...\"); nothing was spent and no exploration beat was used. awaiting_narration: the exploration beat is used"
 // @Router /action [post]
 func handleAction(w http.ResponseWriter, r *http.Request) {
 	if r.Method != "POST" {
@@ -1196,6 +1197,10 @@ func handleAction(w http.ResponseWriter, r *http.Request) {
 		"success": !castRefused, // F149: a refused cast (or Wild Shape, item use...) spent nothing and says so
 		"action":  req.Action,
 		"result":  playerText(result), // monsters' save totals stay with the GM
+	}
+	if castRefused { // the one refusal shape of every request: 409 with error and message (nothing was spent)
+		response["error"], response["message"] = "action_refused", playerText(result)+" Nothing was spent."
+		w.WriteHeader(http.StatusConflict)
 	}
 
 	// Add prone movement info if crawling
