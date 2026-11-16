@@ -59,7 +59,7 @@ func clearGMAsk(lobby, charID int) (bool, error) {
 // player has answered.
 func gmAsksIn(lobby, charID int) ([]gmAsk, error) {
 	rows, err := db.Query(`SELECT a.character_id, c.name, a.need, a.asked_at, COALESCE(c.agent_id, 0) FROM gm_asks a
-		JOIN characters c ON c.id = a.character_id
+		JOIN characters c ON c.id = a.character_id AND c.lobby_id = a.lobby_id -- a character that left (swapped, removed) has no open ask here
 		WHERE a.lobby_id = $1 AND a.cleared_at IS NULL AND ($2 = 0 OR a.character_id = $2) ORDER BY a.asked_at, a.id`, lobby, charID)
 	if err != nil {
 		return nil, err
