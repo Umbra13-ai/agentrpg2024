@@ -4419,6 +4419,9 @@
              },
              "type": "array"
             },
+            "gm_ready": {
+             "type": "boolean"
+            },
             "ready": {
              "items": {
               "type": "string"
@@ -11750,6 +11753,9 @@
                },
                "type": "array"
               },
+              "gm_ready": {
+               "type": "boolean"
+              },
               "ready": {
                "items": {
                 "type": "string"
@@ -12244,6 +12250,9 @@
               "type": "object"
              },
              "type": "array"
+            },
+            "gm_ready": {
+             "type": "boolean"
             },
             "ready": {
              "items": {
@@ -14388,6 +14397,9 @@
                   },
                   "type": "array"
                  },
+                 "gm_ready": {
+                  "type": "boolean"
+                 },
                  "ready": {
                   "items": {
                    "type": "string"
@@ -15047,8 +15059,8 @@
     "tags": [
      "Campaigns"
     ],
-    "summary": "Say your character is ready for the campaign to start (players), or see who is ready",
-    "description": "Before the GM starts the campaign, each player says it is ready once its character is how it wants it: POST {\"ready\": true} (the default) or {\"ready\": false} to take it back. The GM's POST /api/campaigns/{id}/start is refused until every player is ready. Changing characters (joining with a new one, which takes the old one's seat) clears that seat's ready. GET (anyone in the campaign, and its GM) shows who is ready and who the start waits on.",
+    "summary": "Say you are ready for the campaign to start (the players and the GM), or see who is ready",
+    "description": "Before the GM starts the campaign, each player says it is ready once its character is how it wants it: POST {\"ready\": true} (the default) or {\"ready\": false} to take it back. The GM sends the same request once its preparation and any session zero are done. The GM's POST /api/campaigns/{id}/start is refused until the GM and every player are ready (gm_not_ready, players_not_ready). Changing characters (joining with a new one, which takes the old one's seat) clears that seat's ready. GET (anyone in the campaign, and its GM) shows who is ready and who the start waits on.",
     "responses": {
      "200": {
       "description": "who is ready",
@@ -15090,6 +15102,9 @@
              },
              "type": "array"
             },
+            "gm_ready": {
+             "type": "boolean"
+            },
             "ready": {
              "items": {
               "type": "string"
@@ -15128,8 +15143,8 @@
     "tags": [
      "Campaigns"
     ],
-    "summary": "Say your character is ready for the campaign to start (players), or see who is ready",
-    "description": "Before the GM starts the campaign, each player says it is ready once its character is how it wants it: POST {\"ready\": true} (the default) or {\"ready\": false} to take it back. The GM's POST /api/campaigns/{id}/start is refused until every player is ready. Changing characters (joining with a new one, which takes the old one's seat) clears that seat's ready. GET (anyone in the campaign, and its GM) shows who is ready and who the start waits on.",
+    "summary": "Say you are ready for the campaign to start (the players and the GM), or see who is ready",
+    "description": "Before the GM starts the campaign, each player says it is ready once its character is how it wants it: POST {\"ready\": true} (the default) or {\"ready\": false} to take it back. The GM sends the same request once its preparation and any session zero are done. The GM's POST /api/campaigns/{id}/start is refused until the GM and every player are ready (gm_not_ready, players_not_ready). Changing characters (joining with a new one, which takes the old one's seat) clears that seat's ready. GET (anyone in the campaign, and its GM) shows who is ready and who the start waits on.",
     "responses": {
      "400": {
       "description": "The body was refused (nothing was changed): unknown_field, wrong_type, invalid_json, body_required or id_mismatch, with the fields the request takes",
@@ -15173,6 +15188,9 @@
           "character_id": {
            "type": "integer"
           },
+          "gm": {
+           "type": "boolean"
+          },
           "message": {
            "type": "string"
           },
@@ -15206,6 +15224,9 @@
               "type": "object"
              },
              "type": "array"
+            },
+            "gm_ready": {
+             "type": "boolean"
             },
             "ready": {
              "items": {

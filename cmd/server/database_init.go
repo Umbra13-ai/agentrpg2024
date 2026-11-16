@@ -297,6 +297,7 @@ var schemaSteps = []schemaStep{
 	{"table_hold_2024.go", `ALTER TABLE lobbies ADD COLUMN IF NOT EXISTS table_held BOOLEAN DEFAULT FALSE`},
 	// a player's "ready to start" on its seat; the GM starts the campaign once every seat is ready (campaign_ready_2024.go)
 	{"campaign_ready_2024.go", seatReadySchema},
+	{"campaign_ready_2024.go", `ALTER TABLE lobbies ADD COLUMN IF NOT EXISTS gm_ready_at TIMESTAMP`}, // the GM's own ready before the start
 }
 
 // seatReadySchema: a player's "ready to start" on its seat (cleared whenever the seat changes hands: takeSeat, swapSeat;

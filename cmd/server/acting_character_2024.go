@@ -66,7 +66,7 @@ func answerNoActiveGame(w http.ResponseWriter, err error, status int, extra map[
 			"message":      fmt.Sprintf("%s is in %s (campaign %d), which its GM hasn't started yet: there are no turns until then.", wait.charName, wait.lobbyName, wait.lobby),
 			"before_start": beforeStartGuide(wait.lobby, false)} // questions, character changes, the ready flag (campaign_ready_2024.go)
 		if rows, rerr := campaignReadiness(wait.lobby); rerr == nil {
-			reply["readiness"] = readinessView(rows)
+			reply["readiness"] = readinessView(wait.lobby, rows)
 		}
 		for k, v := range extra {
 			reply[k] = v

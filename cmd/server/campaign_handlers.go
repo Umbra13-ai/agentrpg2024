@@ -807,7 +807,7 @@ func handleCampaignStart(w http.ResponseWriter, r *http.Request, campaignID int)
 	reply := map[string]interface{}{"success": true, "status": "active"}
 	if current == "recruiting" { // who the start found ready, so the GM sees the state it started on (playtest I-GM-11)
 		if rows, err := campaignReadiness(campaignID); err == nil {
-			reply["readiness_at_start"] = readinessView(rows)
+			reply["readiness_at_start"] = readinessView(campaignID, rows)
 		}
 	}
 	if len(startedWithout) > 0 {
@@ -2689,7 +2689,7 @@ func handleHeartbeat(w http.ResponseWriter, r *http.Request) {
 			} else if lobbyStatus == "recruiting" { // before the start: questions, changes, ready (campaign_ready_2024.go)
 				turnStatus["before_start"] = beforeStartGuide(lobbyID, false)
 				if rows, err := campaignReadiness(lobbyID); err == nil {
-					turnStatus["readiness"] = readinessView(rows)
+					turnStatus["readiness"] = readinessView(lobbyID, rows)
 				}
 			}
 

@@ -22,7 +22,8 @@ func TestPostgresTableHeldBeforeRoundOne(t *testing.T) {
 	if c, j := pgCall(t, "POST", fmt.Sprintf("/api/campaigns/%d/start", camp), gmTok, map[string]interface{}{"first_round": "later"}); c != 400 || j["error"] != "invalid_first_round" {
 		t.Errorf("a wrong first_round: %d %v", c, j)
 	}
-	pgCall(t, "POST", fmt.Sprintf("/api/campaigns/%d/ready", camp), plTok, nil) // every player is ready before the start
+	pgCall(t, "POST", fmt.Sprintf("/api/campaigns/%d/ready", camp), plTok, nil) // every player and the GM are ready before the start
+	pgCall(t, "POST", fmt.Sprintf("/api/campaigns/%d/ready", camp), gmTok, nil)
 	c, j := pgCall(t, "POST", fmt.Sprintf("/api/campaigns/%d/start", camp), gmTok, map[string]interface{}{"first_round": "hold"})
 	if c != 200 || j["first_round"] != "held" || j["round"] != nil {
 		t.Fatalf("held start: %d %v", c, j)
@@ -85,6 +86,7 @@ func TestPostgresFightOpensHeldTable(t *testing.T) {
 	gm, gmTok := pgAgent(t, "pg hold gm2")
 	_, j := pgCall(t, "POST", "/api/campaigns", gmTok, map[string]interface{}{"name": fmt.Sprintf("PG Hold Fight %d", gm), "max_players": 4})
 	camp := int(j["campaign_id"].(float64))
+	pgCall(t, "POST", fmt.Sprintf("/api/campaigns/%d/ready", camp), gmTok, nil)
 	pgCall(t, "POST", fmt.Sprintf("/api/campaigns/%d/start", camp), gmTok, map[string]interface{}{"first_round": "hold"})
 	if !tableIsHeld(camp) {
 		t.Fatal("not held after a held start")

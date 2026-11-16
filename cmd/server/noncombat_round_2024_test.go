@@ -132,6 +132,7 @@ func TestPostgresNoncombatRound(t *testing.T) {
 	// before the campaign starts nothing is a submission: gear and setup apply
 	pgCall(t, "POST", base+"/ready", annTok, nil) // every player is ready before the start
 	pgCall(t, "POST", base+"/ready", benTok, nil)
+	pgCall(t, "POST", base+"/ready", gm, nil)
 	if c, j := pgCall(t, "POST", base+"/start", gm, nil); c != 200 || j["round"] == nil {
 		t.Fatalf("the start opens the first round outside a fight: %d %v", c, j)
 	}

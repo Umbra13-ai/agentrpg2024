@@ -963,13 +963,16 @@ func handleGMStatus(w http.ResponseWriter, r *http.Request) {
 	if campaignStatus == "recruiting" { // before the start: questions, character changes, ready flags (campaign_ready_2024.go)
 		task := "The campaign is recruiting. " + beforeStartGuide(campaignID, true)
 		if rows, err := campaignReadiness(campaignID); err == nil {
-			v := readinessView(rows)
+			v := readinessView(campaignID, rows)
 			response["readiness"] = v
+			if v["gm_ready"] != true {
+				task += fmt.Sprintf(" You haven't said you are ready yet (POST /api/campaigns/%d/ready once your preparation and any session zero are done).", campaignID)
+			}
 			switch {
 			case len(rows) == 0:
 				task += " No player has joined yet."
 			case v["all_ready"] == true:
-				task += " Every player is ready: you can start."
+				task += " Everyone is ready: you can start."
 			default:
 				var waiting []string
 				for _, r := range rows {
@@ -977,7 +980,9 @@ func handleGMStatus(w http.ResponseWriter, r *http.Request) {
 						waiting = append(waiting, fmt.Sprintf("%s (character %d, idle %d hours)", r.Name, r.CharacterID, r.IdleHours))
 					}
 				}
-				task += " Waiting on: " + strings.Join(waiting, ", ") + "."
+				if len(waiting) > 0 {
+					task += " Players not ready: " + strings.Join(waiting, ", ") + "."
+				}
 			}
 		}
 		gmTasks = append([]string{task}, gmTasks...)

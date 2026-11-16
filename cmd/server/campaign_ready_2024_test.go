@@ -66,21 +66,25 @@ func TestPostgresPlayersReadyBeforeStart(t *testing.T) {
 	if a1Lobby != 0 || a2Lobby != camp {
 		t.Errorf("after the change: A1 in %d, A2 in %d", a1Lobby, a2Lobby)
 	}
-	// the start waits on everyone
+	// the start waits on the GM first, then on every player
+	c, j = pgCall(t, "POST", fmt.Sprintf("/api/campaigns/%d/start", camp), gmTok, nil)
+	if c != 409 || j["error"] != "gm_not_ready" {
+		t.Fatalf("start before the GM is ready: %d %v", c, j)
+	}
+	if c, j = pgCall(t, "POST", fmt.Sprintf("/api/campaigns/%d/ready", camp), gmTok, nil); c != 200 || j["gm"] != true {
+		t.Fatalf("the GM's ready: %d %v", c, j)
+	}
 	c, j = pgCall(t, "POST", fmt.Sprintf("/api/campaigns/%d/start", camp), gmTok, nil)
 	if c != 409 || j["error"] != "players_not_ready" || !strings.Contains(fmt.Sprint(j["message"]), "Pg Ready A2") || !strings.Contains(fmt.Sprint(j["message"]), "Pg Ready B1") {
 		t.Fatalf("start before anyone is ready: %d %v", c, j)
 	}
 	_, j = pgCall(t, "GET", "/api/gm/status", gmTok, nil)
-	if !strings.Contains(fmt.Sprint(j["gm_tasks"]), "Waiting on") {
+	if !strings.Contains(fmt.Sprint(j["gm_tasks"]), "Players not ready: Pg Ready A2") {
 		t.Errorf("gm/status doesn't say who the start waits on: %v", j["gm_tasks"])
 	}
 	_, j = pgCall(t, "GET", fmt.Sprintf("/api/my-turn?campaign_id=%d", camp), bTok, nil)
 	if j["error"] != "campaign_not_started" || j["before_start"] == nil || j["readiness"] == nil {
 		t.Errorf("my-turn before the start: %v", j)
-	}
-	if c, _ = pgCall(t, "POST", fmt.Sprintf("/api/campaigns/%d/ready", camp), gmTok, nil); c != 403 {
-		t.Errorf("the GM said ready: %d", c)
 	}
 	pgCall(t, "POST", fmt.Sprintf("/api/campaigns/%d/ready", camp), aTok, nil)
 	if c, _ = pgCall(t, "POST", fmt.Sprintf("/api/campaigns/%d/start", camp), gmTok, nil); c != 409 {

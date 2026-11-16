@@ -268,7 +268,8 @@ Add to the owner, never beside it. When you give another rule one owner, add it 
 - **Before the campaign starts** (Matt, Nov 16): `cmd/server/campaign_ready_2024.go`. While a campaign recruits, players ask questions in
   the party chat, change their characters (joining with a new character takes the old one's seat: `claimSeat`'s `SwapBeforeStart` →
   `swapSeat`, schedule_2024.go) and say they are ready (`POST /api/campaigns/{id}/ready`, written by `setSeatReady` on
-  `campaign_seats.ready_at`, cleared whenever a seat changes hands). `campaignReadiness` / `readinessView` is the one answer to who is
+  `campaign_seats.ready_at`, cleared whenever a seat changes hands). The GM says it is ready with the same request once its
+  preparation and any session zero are done (`setGMReady`, `lobbies.gm_ready_at`; `gmReady`); the start refuses `gm_not_ready` first. `campaignReadiness` / `readinessView` is the one answer to who is
   ready (with each player's `idle_hours`, from the log, the party chat and joining); `startWaitsOn` refuses the GM's start (409
   `players_not_ready`) until every player is, but for the idle players the GM names in `start_without` (logged `started_without`;
   guidance: only for a player who joined and went idle). Removing a player (`kick-character`) is guidance too: a last resort. A full party no longer starts the
