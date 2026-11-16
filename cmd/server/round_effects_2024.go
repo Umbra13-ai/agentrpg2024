@@ -429,7 +429,9 @@ func saveSubmission(s *pendingSubmission, r *http.Request, raw []byte, story boo
 	}
 	if story {
 		var what string
-		err := tx.QueryRow(`SELECT what FROM round_submissions WHERE round_id = $1 AND character_id = $2 AND status = 'pending' AND story LIMIT 1`, s.Round.ID, s.CharacterID).Scan(&what)
+		var m, p, b string
+		err := tx.QueryRow(`SELECT method, path, body FROM round_submissions WHERE round_id = $1 AND character_id = $2 AND status = 'pending' AND story LIMIT 1`, s.Round.ID, s.CharacterID).Scan(&m, &p, &b)
+		what = submissionWhat(m, p, []byte(b))
 		if err == nil {
 			return map[string]interface{}{"error": "one_story_action_per_round", "round": s.Round.Number,
 				"message": fmt.Sprintf("%s's submission for round %d already holds a story action (%s): a round is one turn, with one action. To change it, withdraw the submission (DELETE /api/campaigns/%d/round?character_id=%d) and send the turn again. Nothing was saved.",

@@ -58,6 +58,7 @@ func roundSteps(q rowsQuerier, roundID, charID int) ([]submissionStep, error) {
 			return nil, err
 		}
 		s.SubmittedAt = s.SubmittedAt.UTC()
+		s.What = submissionWhat(s.Method, s.Path, []byte(s.Body)) // from the request as sent: the whole text, also of steps saved when it was cut (playtest I-GM-9)
 		out = append(out, s)
 	}
 	return out, rows.Err()
