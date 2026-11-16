@@ -1,11 +1,9 @@
 package main
 
 import (
-	"bytes"
 	"database/sql"
 	"encoding/json"
-	"net/http/httptest"
-	"os"
+	"fmt"
 	"strings"
 	"testing"
 	"time"
@@ -63,67 +61,56 @@ func TestBattleMapConfirmationBindsExactPath(t *testing.T) {
 	}
 }
 
+// TestPostgresBattleMapRiver: the battle map on the real schema (postgres_integration_test.go): hidden tokens stay hidden from
+// players, a move stops at a trigger, a confirmation binds the exact path and the map's revision, Dash funds movement once.
 func TestPostgresBattleMapRiver(t *testing.T) {
-	url := os.Getenv("TEST_DATABASE_URL")
-	if url == "" {
-		t.Skip("TEST_DATABASE_URL not set")
-	}
-	database, err := sql.Open("postgres", url)
-	if err != nil {
+	testPostgres(t)
+	gm, gmTok := pgAgent(t, "map gm")
+	pl, plTok := pgAgent(t, "map player")
+	_, outTok := pgAgent(t, "map outsider")
+	var lobby, charID int
+	if err := db.QueryRow(`INSERT INTO lobbies (name, dm_id, status) VALUES ($1, $2, 'active') RETURNING id`, fmt.Sprintf("Map Test %d", gm), gm).Scan(&lobby); err != nil {
 		t.Fatal(err)
 	}
-	database.SetMaxOpenConns(1)
-	original := db
-	db = database
-	t.Cleanup(func() { db = original; database.Close() })
-	if _, err := db.Exec(`
- CREATE TEMP TABLE agents(id int, password_hash text, salt text, verified bool);
- CREATE TEMP TABLE lobbies(id int, dm_id int, status text);
- CREATE TEMP TABLE combat_state(lobby_id int, current_turn_index int, turn_started_at timestamp, battle_map jsonb, turn_order jsonb, active bool, round_number int);
- CREATE TEMP TABLE characters(id int, lobby_id int, agent_id int, hp int, is_dead bool, movement_remaining int, exhaustion_level int, conditions jsonb, action_used bool, bonus_action_used bool DEFAULT false, class_resources_used jsonb DEFAULT '{}');
- CREATE TEMP TABLE actions(lobby_id int, character_id int, action_type text, description text, result text);
- INSERT INTO lobbies VALUES (1, 1, 'active');
- INSERT INTO combat_state VALUES (1, 0, CURRENT_TIMESTAMP, NULL, '[{"id":10},{"id":-1}]', true, 1);
- INSERT INTO characters VALUES (10, 1, 2, 10, false, 30, 0, '[]', false);
- `); err != nil {
+	if err := db.QueryRow(`INSERT INTO characters (agent_id, lobby_id, name, class, hp, max_hp, movement_remaining, conditions, action_used, bonus_action_used)
+		VALUES ($1, $2, $3, 'fighter', 10, 10, 30, '[]', false, false) RETURNING id`, pl, lobby, fmt.Sprintf("Map Fighter %d", pl)).Scan(&charID); err != nil {
 		t.Fatal(err)
 	}
-	if _, err := db.Exec("INSERT INTO agents VALUES (1,$1,'',true),(2,$1,'',true),(3,$1,'',true)", testPasswordHash("test-password")); err != nil {
+	if _, err := db.Exec(`INSERT INTO combat_state (lobby_id, current_turn_index, turn_started_at, turn_order, active, round_number)
+		VALUES ($1, 0, CURRENT_TIMESTAMP, $2, true, 1)`, lobby, fmt.Sprintf(`[{"id":%d},{"id":-1}]`, charID)); err != nil {
 		t.Fatal(err)
 	}
+	tokens := map[string]string{"1": gmTok, "2": plTok, "3": outTok}
 	call := func(agent, method, suffix string, body any, want int) map[string]any {
 		t.Helper()
-		encoded, _ := json.Marshal(body)
-		r := httptest.NewRequest(method, "/api/campaigns/1/battle-map"+suffix, bytes.NewReader(encoded))
-		r.SetBasicAuth(agent, "test-password")
-		w := httptest.NewRecorder()
-		handleCampaignByID(w, r)
-		if w.Code != want {
-			t.Fatalf("%s %s: want %d, got %d: %s", method, suffix, want, w.Code, w.Body.String())
+		var b any
+		if body != nil {
+			b = body
 		}
-		result := map[string]any{}
-		if err := json.Unmarshal(w.Body.Bytes(), &result); err != nil {
-			t.Fatal(err)
+		c, result := pgCall(t, method, fmt.Sprintf("/api/campaigns/%d/battle-map", lobby)+suffix, tokens[agent], b)
+		if c != want {
+			t.Fatalf("%s %s: want %d, got %d: %v", method, suffix, want, c, result)
 		}
 		return result
 	}
+	cq := fmt.Sprintf("?character_id=%d", charID)
 	m := encounterMap{Grid: []string{".....", ".....", ".~..."}, Tokens: []mapToken{
-		{ID: 10, Name: "Fighter", Position: mapSquare{0, 1}, Size: 1},
+		{ID: charID, Name: "Fighter", Position: mapSquare{0, 1}, Size: 1},
 		{ID: -1, Name: "Hidden toad", Position: mapSquare{4, 0}, Size: 1, Hidden: true},
 	}, Interrupts: []mapSquare{{2, 1}}}
 	call("1", "POST", "/preview", mapRequest{Map: m}, 200)
 	published := call("1", "PUT", "", mapRequest{Map: m}, 200)
-	call("3", "GET", "?character_id=10", nil, 403)
-	player := call("2", "GET", "?character_id=10", nil, 200)
+	call("3", "GET", cq, nil, 403)
+	player := call("2", "GET", cq, nil, 200)
 	public, _ := json.Marshal(player)
 	if strings.Contains(string(public), "Hidden toad") || strings.Contains(string(public), "interrupts") {
 		t.Fatal("player view leaked hidden map data")
 	}
-	tooFar := mapRequest{CharacterID: 10, Path: []mapSquare{{1, 1}, {0, 1}, {1, 1}, {0, 1}, {1, 1}, {0, 1}, {1, 1}}}
+	tooFar := mapRequest{CharacterID: charID, Path: []mapSquare{{1, 1}, {0, 1}, {1, 1}, {0, 1}, {1, 1}, {0, 1}, {1, 1}}}
 	if result := call("2", "POST", "/preview", tooFar, 400); result["step"] != float64(7) {
 		t.Fatalf("expected the seventh step to exceed 30 feet: %v", result)
 	}
-	path := mapRequest{CharacterID: 10, Path: []mapSquare{{1, 1}, {2, 1}, {3, 1}}}
+	path := mapRequest{CharacterID: charID, Path: []mapSquare{{1, 1}, {2, 1}, {3, 1}}}
 	preview := call("2", "POST", "/preview", path, 200)
 	path.Confirmation = preview["confirmation"].(string)
 	call("1", "PUT", "", mapRequest{Map: m, Confirmation: published["revision"].(string)}, 200)
@@ -136,7 +123,7 @@ func TestPostgresBattleMapRiver(t *testing.T) {
 	}
 	call("2", "POST", "/move", path, 409)
 	var remaining, moves int
-	if err := db.QueryRow("SELECT movement_remaining,(SELECT COUNT(*) FROM actions WHERE action_type='map_move') FROM characters WHERE id=10").Scan(&remaining, &moves); err != nil || remaining != 20 || moves != 1 {
+	if err := db.QueryRow("SELECT movement_remaining,(SELECT COUNT(*) FROM actions WHERE action_type='map_move' AND character_id=$1) FROM characters WHERE id=$1", charID).Scan(&remaining, &moves); err != nil || remaining != 20 || moves != 1 {
 		t.Fatalf("retry changed movement: remaining=%d moves=%d err=%v", remaining, moves, err)
 	}
 	// GM resets the fixture position and clears the interruption, preserving the trigger.
@@ -149,12 +136,12 @@ func TestPostgresBattleMapRiver(t *testing.T) {
 	if move["interrupted"] != false || move["distance_ft"] != float64(15) || move["cost_ft"] != float64(20) || move["movement_remaining_ft"] != float64(0) || len(move["traversed"].([]any)) != 3 {
 		t.Fatalf("expected alternate route to avoid the trigger: %v", move)
 	}
-	path = mapRequest{CharacterID: 10, Path: []mapSquare{{4, 1}}}
+	path = mapRequest{CharacterID: charID, Path: []mapSquare{{4, 1}}}
 	call("2", "POST", "/preview", path, 400)
-	if err := spendDashAction(10, 30); err != nil {
+	if err := spendDashAction(charID, 30); err != nil {
 		t.Fatal(err)
 	}
-	if err := spendDashAction(10, 30); err != sql.ErrNoRows {
+	if err := spendDashAction(charID, 30); err != sql.ErrNoRows {
 		t.Fatalf("expected second Dash to be rejected, got %v", err)
 	}
 	preview = call("2", "POST", "/preview", path, 200)
@@ -163,33 +150,33 @@ func TestPostgresBattleMapRiver(t *testing.T) {
 	if move["movement_remaining_ft"] != float64(25) {
 		t.Fatalf("expected one Dash to fund the 5-foot move: %v", move)
 	}
-	if err := spendBonusDash(10, 30, 0); err != nil {
+	if err := spendBonusDash(charID, 30, 0); err != nil {
 		t.Fatal(err)
 	}
-	if err := spendBonusDash(10, 30, 0); err != sql.ErrNoRows {
+	if err := spendBonusDash(charID, 30, 0); err != sql.ErrNoRows {
 		t.Fatalf("expected a second bonus Dash to be rejected: %v", err)
 	}
 	var normalUsed, bonusUsed bool
-	if err := db.QueryRow("SELECT movement_remaining, action_used, bonus_action_used FROM characters WHERE id=10").Scan(&remaining, &normalUsed, &bonusUsed); err != nil || remaining != 55 || !normalUsed || !bonusUsed {
+	if err := db.QueryRow("SELECT movement_remaining, action_used, bonus_action_used FROM characters WHERE id=$1", charID).Scan(&remaining, &normalUsed, &bonusUsed); err != nil || remaining != 55 || !normalUsed || !bonusUsed {
 		t.Fatalf("expected action and bonus-action Dash to stack once each: %d %v %v %v", remaining, normalUsed, bonusUsed, err)
 	}
-	if _, err := db.Exec("UPDATE characters SET action_used=false, bonus_action_used=false WHERE id=10"); err != nil {
+	if _, err := db.Exec("UPDATE characters SET action_used=false, bonus_action_used=false WHERE id=$1", charID); err != nil {
 		t.Fatal(err)
 	}
-	if err := spendBonusDash(10, 30, 1); err != nil {
+	if err := spendBonusDash(charID, 30, 1); err != nil {
 		t.Fatal(err)
 	}
-	if _, err := db.Exec("UPDATE characters SET bonus_action_used=false WHERE id=10"); err != nil {
+	if _, err := db.Exec("UPDATE characters SET bonus_action_used=false WHERE id=$1", charID); err != nil {
 		t.Fatal(err)
 	}
-	if err := spendBonusDash(10, 30, 1); err != sql.ErrNoRows {
+	if err := spendBonusDash(charID, 30, 1); err != sql.ErrNoRows {
 		t.Fatalf("expected spent Focus Points to reject bonus Dash: %v", err)
 	}
-	if err := db.QueryRow("SELECT movement_remaining, action_used, bonus_action_used FROM characters WHERE id=10").Scan(&remaining, &normalUsed, &bonusUsed); err != nil || remaining != 85 || normalUsed || bonusUsed {
+	if err := db.QueryRow("SELECT movement_remaining, action_used, bonus_action_used FROM characters WHERE id=$1", charID).Scan(&remaining, &normalUsed, &bonusUsed); err != nil || remaining != 85 || normalUsed || bonusUsed {
 		t.Fatalf("expected spent Focus Points to leave movement and actions alone: %d %v %v %v", remaining, normalUsed, bonusUsed, err)
 	}
-	if err := clearCombatInitiative(1); err != nil {
+	if err := clearCombatInitiative(lobby); err != nil {
 		t.Fatal(err)
 	}
-	call("2", "GET", "?character_id=10", nil, 404)
+	call("2", "GET", cq, nil, 404)
 }

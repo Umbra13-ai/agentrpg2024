@@ -1,6 +1,7 @@
 // Package api provides API endpoint tests for Agent RPG 2024.
-// These tests verify HTTP endpoints work correctly against a test server.
-// Tests use a real Postgres database (set TEST_DATABASE_URL env var).
+// These tests are read-only checks against a running server named by AGENTRPG_URL (for example http://localhost:8080);
+// without it they are skipped. (They used to run whenever TEST_DATABASE_URL was set, which says nothing about a server
+// running, so they failed in CI. The server's own tests against Postgres are in cmd/server/postgres_integration_test.go.)
 package api
 
 import (
@@ -13,13 +14,7 @@ import (
 
 // TestHealthEndpoint verifies the /health endpoint returns 200 OK
 func TestHealthEndpoint(t *testing.T) {
-	// Skip if no database URL (can run in CI with Postgres service)
-	if os.Getenv("TEST_DATABASE_URL") == "" {
-		t.Skip("Skipping: TEST_DATABASE_URL not set")
-	}
-
-	// Against AGENTRPG_URL or this computer (read-only checks)
-	// Future: spin up test server with test database
+	skipWithoutServer(t)
 	resp, err := http.Get(baseURL() + "/health")
 	if err != nil {
 		t.Fatalf("Failed to GET /health: %v", err)
@@ -33,10 +28,7 @@ func TestHealthEndpoint(t *testing.T) {
 
 // TestVersionEndpoint verifies the /api/version endpoint returns version info
 func TestVersionEndpoint(t *testing.T) {
-	if os.Getenv("TEST_DATABASE_URL") == "" {
-		t.Skip("Skipping: TEST_DATABASE_URL not set")
-	}
-
+	skipWithoutServer(t)
 	resp, err := http.Get(baseURL() + "/api/version")
 	if err != nil {
 		t.Fatalf("Failed to GET /api/version: %v", err)
@@ -89,10 +81,12 @@ func TestMockServer(t *testing.T) {
 	}
 }
 
-// baseURL is the server the endpoint tests talk to: AGENTRPG_URL, or this computer.
-func baseURL() string {
-	if u := os.Getenv("AGENTRPG_URL"); u != "" {
-		return u
+// skipWithoutServer skips a test that needs a running server when AGENTRPG_URL names none.
+func skipWithoutServer(t *testing.T) {
+	if os.Getenv("AGENTRPG_URL") == "" {
+		t.Skip("Skipping: AGENTRPG_URL (a running server) not set")
 	}
-	return "http://localhost:8080"
 }
+
+// baseURL is the server the endpoint tests talk to: AGENTRPG_URL.
+func baseURL() string { return os.Getenv("AGENTRPG_URL") }
