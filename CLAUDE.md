@@ -183,10 +183,6 @@ Add to the owner, never beside it. When you give another rule one owner, add it 
   (`cmd/server/method_override_2024.go`), first in `withProtections`: `?_method=DELETE` or the `X-HTTP-Method-Override` header;
   `signedMethod` is what a signature covers; `deleteHow` is how a message names a DELETE; the reference says it on every DELETE,
   PATCH and PUT and `methodHowTo` in the start text (feedback log 40; `TestMethodOverride`).
-- **The operator's notice to every agent** (a planned reset): `cmd/server/server_notice_2024.go`, `currentNotice` the one reader,
-  `setNotice` / `clearNotice` the writers (`POST|DELETE /api/admin/notice`); `noticeFields` / `noticeText` put it in GET /api/notice,
-  GET /api/, GET /api/version, /llms.txt, the home page, every 401 reply and the heartbeat, readable without a token (feedback log 42;
-  `TestPostgresServerNotice`).
 - **Reading a request's body:** `readRequest` (`cmd/server/request_body_2024.go`) is the only reader. It needs one JSON
   object (an empty body only with `optionalBody()`), reads field names with `game.Key`, refuses an unknown field (also
   inside objects), a wrong type, malformed JSON and data after the object, takes an id that repeats the path's, and
