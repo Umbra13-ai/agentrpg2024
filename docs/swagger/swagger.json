@@ -23082,7 +23082,7 @@
      "Combat"
     ],
     "summary": "Skip a player's turn due to timeout (GM only)",
-    "description": "Skip the current player's turn and advance to the next combatant. Use when a player has been inactive for longer than the campaign's combat turn timeout (table rule combat_turn_timeout, 4 hours by default; when it is off, turns are never skipped: end the turn with combat/next). In a campaign with the turn schedule there is no timeout: a monster's or NPC's turn may be skipped at once; a player's turn as combat/next allows (never a submitted one: 409 pending_turn_waiting; a player with no submission is never skipped: 409 stand_in_too_early before the round's final check-in, stand_in_needed after it, when the GM takes a stand-in turn). Optional expected_turn {\"round\": R, \"turn_index\": I}: the turn you mean to skip, as GET /api/campaigns/{id}/combat shows it (round, current_turn_index); once it has ended the reply is 409 turn_already_moved with the turn it is now (round, turn_index, current_turn, current_turn_id) and nothing is changed.",
+    "description": "Skip the current player's turn and advance to the next combatant. Use when a player has been inactive for longer than the campaign's combat turn timeout (table rule combat_turn_timeout, 4 hours by default; when it is off, turns are never skipped: end the turn with combat/next). In a campaign with the turn schedule there is no timeout and skip is for a monster's or NPC's turn only (at once): a player's turn is never skipped (409 player_turn_not_skipped, pointing to combat/resolve, combat/stand-in, or combat/next for a player who acted in the slot). Optional expected_turn {\"round\": R, \"turn_index\": I}: the turn you mean to skip, as GET /api/campaigns/{id}/combat shows it (round, current_turn_index); once it has ended the reply is 409 turn_already_moved with the turn it is now (round, turn_index, current_turn, current_turn_id) and nothing is changed.",
     "responses": {
      "400": {
       "description": "The body was refused (nothing was changed): unknown_field, wrong_type, invalid_json, body_required or id_mismatch, with the fields the request takes",
@@ -23125,9 +23125,6 @@
           },
           "inactive_minutes": {
            "type": "integer"
-          },
-          "note": {
-           "type": "string"
           },
           "pending_turns": {
            "properties": {

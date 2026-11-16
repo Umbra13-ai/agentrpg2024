@@ -561,7 +561,7 @@ func handleCombatNext(w http.ResponseWriter, r *http.Request, campaignID int) {
 
 // handleCombatSkip godoc
 // @Summary Skip a player's turn due to timeout (GM only)
-// @Description Skip the current player's turn and advance to the next combatant. Use when a player has been inactive for longer than the campaign's combat turn timeout (table rule combat_turn_timeout, 4 hours by default; when it is off, turns are never skipped: end the turn with combat/next). In a campaign with the turn schedule there is no timeout: a monster's or NPC's turn may be skipped at once; a player's turn as combat/next allows (never a submitted one: 409 pending_turn_waiting; a player with no submission is never skipped: 409 stand_in_too_early before the round's final check-in, stand_in_needed after it, when the GM takes a stand-in turn). Optional expected_turn {"round": R, "turn_index": I}: the turn you mean to skip, as GET /api/campaigns/{id}/combat shows it (round, current_turn_index); once it has ended the reply is 409 turn_already_moved with the turn it is now (round, turn_index, current_turn, current_turn_id) and nothing is changed.
+// @Description Skip the current player's turn and advance to the next combatant. Use when a player has been inactive for longer than the campaign's combat turn timeout (table rule combat_turn_timeout, 4 hours by default; when it is off, turns are never skipped: end the turn with combat/next). In a campaign with the turn schedule there is no timeout and skip is for a monster's or NPC's turn only (at once): a player's turn is never skipped (409 player_turn_not_skipped, pointing to combat/resolve, combat/stand-in, or combat/next for a player who acted in the slot). Optional expected_turn {"round": R, "turn_index": I}: the turn you mean to skip, as GET /api/campaigns/{id}/combat shows it (round, current_turn_index); once it has ended the reply is 409 turn_already_moved with the turn it is now (round, turn_index, current_turn, current_turn_id) and nothing is changed.
 // @Tags Combat
 // @Body expected_turn: the turn you mean to skip
 // @Produce json
@@ -570,6 +570,7 @@ func handleCombatNext(w http.ResponseWriter, r *http.Request, campaignID int) {
 // @Success 200 {object} map[string]interface{} "Turn skipped"
 // @Failure 401 {object} map[string]interface{} "Unauthorized"
 // @Failure 403 {object} map[string]interface{} "Only GM can skip turns"
+// @Failure 409 {object} map[string]interface{} "player_turn_not_skipped (turn schedule), turn_already_moved, turn_change_in_progress"
 // @Router /campaigns/{id}/combat/skip [post]
 func handleCombatSkip(w http.ResponseWriter, r *http.Request, campaignID int) {
 	w.Header().Set("Content-Type", "application/json")
@@ -627,6 +628,11 @@ func skipScheduledTurn(w http.ResponseWriter, campaignID int, named *turnRef) {
 	if answerDBFailure(w, err, "the campaign's turn schedule") {
 		return
 	}
+	if end.Player { // Matt, 11.11: with the schedule a player's turn is resolved, stood in for or automatic, never skipped
+		writeJSONStatus(w, http.StatusConflict, map[string]interface{}{"error": "player_turn_not_skipped",
+			"message": fmt.Sprintf("With the turn schedule a player's turn is never skipped: a submitted turn resolves (POST /api/campaigns/%d/combat/resolve, which also rolls a dying character's Death Saving Throw and passes a turn with nothing to choose), a missed turn gets a stand-in at the round's final check-in, and a turn paused for you (needs_gm) is finished with a stand-in at any check-in (POST /api/campaigns/%d/combat/stand-in). A player who acted in the slot ends it with POST /api/campaigns/%d/combat/next. combat/skip is for a monster's or NPC's turn. Nothing was changed.", campaignID, campaignID, campaignID)})
+		return
+	}
 	if end.Reply != nil {
 		writeJSONStatus(w, http.StatusConflict, end.Reply)
 		return
@@ -636,16 +642,9 @@ func skipScheduledTurn(w http.ResponseWriter, campaignID int, named *turnRef) {
 		answerTurnRefusal(w, campaignID, t, code)
 		return
 	}
-	note := "Turn skipped by the GM"
-	if end.Player {
-		note = "Turn skipped by the GM (turn schedule: at or after the round's final check-in, or the player's paused turn)"
-	}
-	writeAction(db, campaignID, t.EndedID, "turn_skipped", note, "")
+	writeAction(db, campaignID, t.EndedID, "turn_skipped", "Turn skipped by the GM", "")
 	response := t.reply()
 	response["skipped"] = t.EndedName
-	if end.Player {
-		response["note"] = fmt.Sprintf("%s's turn is recorded as skipped. For a player with no submission the turn schedule asks for a stand-in (POST /api/campaigns/%d/combat/stand-in), not a skip.", t.EndedName, campaignID)
-	}
 	json.NewEncoder(w).Encode(response)
 }
 

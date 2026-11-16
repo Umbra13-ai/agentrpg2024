@@ -222,8 +222,8 @@ Add to the owner, never beside it. When you give another rule one owner, add it 
   `turn_already_resolved`); only the GM's POSTs run the walk `resolvePendingTurns` (resolve, stand-in, next, skip; GET
   `/api/gm/status` only reads); `standInAllowed` is the one check of when a stand-in may be taken (the final check-in, none while
   paused, or finishing a `needs_gm` turn), read by the walk, combat/stand-in and `gmEndsTurn`; `gmEndsTurn` is when the GM may end
-  a player's turn itself (combat/next, combat/skip, narrate's `advance_turn`: never a submitted turn, never before the final
-  check-in); `turn_results` records how each turn ended, once (UNIQUE), written only by `recordResult` (the turn-end hook
+  a player's turn itself (combat/next, narrate's `advance_turn`: never a submitted turn, never before the final check-in;
+  combat/skip never ends a player's turn with the schedule: `player_turn_not_skipped`, Matt 11.11); `turn_results` records how each turn ended, once (UNIQUE), written only by `recordResult` (the turn-end hook
   `recordTurnResult`, and stage E's resolve and stand-in; `turnHow.result` names how; `checkInAt` reads it); the round opens with the fight's round (`scheduleFightRound`) and replies say
   `round_complete`. `TestNoOtherTurnResultWriter` and `TestOnlyTheGMsRequestsRunTheWalk` check. **Stage E, rounds outside a fight:** `routeEffects`
   (`cmd/server/round_effects_2024.go`) is the one table of every player write route and what it is under the schedule: a game action
