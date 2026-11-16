@@ -805,6 +805,11 @@ func handleCampaignStart(w http.ResponseWriter, r *http.Request, campaignID int)
 		return
 	}
 	reply := map[string]interface{}{"success": true, "status": "active"}
+	if current == "recruiting" { // who the start found ready, so the GM sees the state it started on (playtest I-GM-11)
+		if rows, err := campaignReadiness(campaignID); err == nil {
+			reply["readiness_at_start"] = readinessView(rows)
+		}
+	}
 	if len(startedWithout) > 0 {
 		var names []string
 		for _, r := range startedWithout {

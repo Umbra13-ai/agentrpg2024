@@ -12214,6 +12214,52 @@
           "message": {
            "type": "string"
           },
+          "readiness_at_start": {
+           "properties": {
+            "all_ready": {
+             "type": "boolean"
+            },
+            "characters": {
+             "items": {
+              "properties": {
+               "character_id": {
+                "type": "integer"
+               },
+               "idle_hours": {
+                "description": "hours since then: what the GM judges \"idle\" by before starting without the player",
+                "type": "integer"
+               },
+               "last_active": {
+                "description": "the player's last sign of life here: a record in the log, a chat message, joining",
+                "format": "date-time",
+                "type": "string"
+               },
+               "name": {
+                "type": "string"
+               },
+               "ready": {
+                "type": "boolean"
+               }
+              },
+              "type": "object"
+             },
+             "type": "array"
+            },
+            "ready": {
+             "items": {
+              "type": "string"
+             },
+             "type": "array"
+            },
+            "waiting_on": {
+             "items": {
+              "type": "string"
+             },
+             "type": "array"
+            }
+           },
+           "type": "object"
+          },
           "round": {
            "type": "string"
           },

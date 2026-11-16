@@ -91,7 +91,7 @@ func TestPostgresPlayersReadyBeforeStart(t *testing.T) {
 		t.Errorf("start_without a ready player: %d %v", c, j)
 	}
 	c, j = pgCall(t, "POST", fmt.Sprintf("/api/campaigns/%d/start", camp), gmTok, map[string]interface{}{"start_without": []int{b1}})
-	if c != 200 || !strings.Contains(fmt.Sprint(j["started_without"]), "Pg Ready B1") {
+	if c != 200 || !strings.Contains(fmt.Sprint(j["started_without"]), "Pg Ready B1") || j["readiness_at_start"] == nil {
 		t.Fatalf("start without the idle player: %d %v", c, j)
 	}
 	if played, _ := characterHasPlayed(b1); played {
