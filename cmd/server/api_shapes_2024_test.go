@@ -473,8 +473,9 @@ type routeWalk struct {
 	ctypes   map[string]bool
 	text     bool               // writes bytes or text, not JSON
 	calls    map[token.Pos]bool // every call reached
-	forwards []string           // other routes' handlers it calls (a route that forwards its request answers with their reply)
-	unfollow []string           // calls through a value (a map of handlers, a parameter): not followed
+	pathVars map[types.Object]pathVar
+	forwards []string // other routes' handlers it calls (a route that forwards its request answers with their reply)
+	unfollow []string // calls through a value (a map of handlers, a parameter): not followed
 }
 
 // readerFuncs: the request body readers (request_body_2024.go, gm_campaign_2024.go).
@@ -491,7 +492,7 @@ func segments(path string) []string {
 }
 
 func (p *apiPkg) walkRoute(fn string, rt apiRoute, start ...*ast.FuncDecl) *routeWalk {
-	w := &routeWalk{p: p, route: rt, segs: map[string]bool{}, distinct: map[string]bool{}, visited: map[*ast.FuncDecl]bool{}, ctypes: map[string]bool{}, calls: map[token.Pos]bool{}}
+	w := &routeWalk{p: p, route: rt, segs: map[string]bool{}, distinct: map[string]bool{}, visited: map[*ast.FuncDecl]bool{}, ctypes: map[string]bool{}, calls: map[token.Pos]bool{}, pathVars: map[types.Object]pathVar{}}
 	for _, s := range segments(rt.Path) {
 		w.segs[s] = true
 	}
@@ -659,6 +660,22 @@ func (w *routeWalk) walkStmt(s ast.Stmt) bool {
 	case *ast.RangeStmt:
 		w.inspect(s.X)
 		w.walkStmts(s.Body.List)
+		return false
+	case *ast.AssignStmt:
+		if len(s.Lhs) == len(s.Rhs) {
+			for i, l := range s.Lhs {
+				if id, ok := l.(*ast.Ident); ok {
+					obj := w.p.info.Defs[id]
+					if obj == nil {
+						obj = w.p.info.Uses[id]
+					}
+					if pv, ok := w.pathExpr(s.Rhs[i]); ok && obj != nil {
+						w.pathVars[obj] = pv
+					}
+				}
+			}
+		}
+		w.inspect(s)
 		return false
 	case *ast.ExprStmt:
 		w.inspect(s)
@@ -844,9 +861,17 @@ func (w *routeWalk) eval(e ast.Expr) tri {
 			}
 			return triUnknown
 		case token.EQL:
+			if t := w.evalLen(x); t != triUnknown {
+				return t
+			}
 			return w.evalEq(x.X, x.Y)
 		case token.NEQ:
+			if t := w.evalLen(x); t != triUnknown {
+				return t
+			}
 			return w.evalEq(x.X, x.Y).not()
+		case token.GTR, token.LSS, token.GEQ, token.LEQ:
+			return w.evalLen(x)
 		}
 	case *ast.CallExpr:
 		if sel, ok := x.Fun.(*ast.SelectorExpr); ok && len(x.Args) == 2 {
@@ -895,9 +920,143 @@ func (w *routeWalk) evalEq(a, b ast.Expr) tri {
 		return triNo
 	}
 	if c == "" {
+		if id, ok := a.(*ast.Ident); ok { // rest == "": the path has nothing after the prefix
+			if pv, ok := w.pathVars[w.p.info.Uses[id]]; ok && !pv.split {
+				if rem, ok := pv.remainder(w.route.Path); ok {
+					return triOf(len(rem) == 0)
+				}
+			}
+		}
+		if ix, ok := a.(*ast.IndexExpr); ok { // parts[0] == ""
+			if id, ok := ix.X.(*ast.Ident); ok && w.p.constInt(ix.Index) == 0 {
+				if pv, ok := w.pathVars[w.p.info.Uses[id]]; ok && pv.split {
+					if rem, ok := pv.remainder(w.route.Path); ok {
+						return triOf(len(rem) == 0)
+					}
+				}
+			}
+		}
 		return triUnknown
 	}
 	return w.segTri(c)
+}
+
+func triOf(b bool) tri {
+	if b {
+		return triYes
+	}
+	return triNo
+}
+
+// pathVar: a variable holding the request's path after a prefix (rest := strings.TrimPrefix(r.URL.Path, "/api/x")), or that
+// remainder split into segments (parts := strings.Split(rest, "/")).
+type pathVar struct {
+	prefix string
+	split  bool
+}
+
+// remainder: the segments of a route's path after the prefix ({id} counts as one).
+func (pv pathVar) remainder(path string) ([]string, bool) {
+	pre := strings.TrimRight(pv.prefix, "/")
+	if pre == "" || !strings.HasPrefix(path, pre) {
+		return nil, false
+	}
+	var out []string
+	for _, s := range strings.Split(strings.Trim(path[len(pre):], "/"), "/") {
+		if s != "" {
+			out = append(out, s)
+		}
+	}
+	return out, true
+}
+
+// pathExpr: whether an expression is the request's path (r.URL.Path), trimmed of a prefix, or split.
+func (w *routeWalk) pathExpr(e ast.Expr) (pathVar, bool) {
+	switch x := e.(type) {
+	case *ast.ParenExpr:
+		return w.pathExpr(x.X)
+	case *ast.Ident:
+		pv, ok := w.pathVars[w.p.info.Uses[x]]
+		return pv, ok
+	case *ast.SelectorExpr:
+		if x.Sel.Name == "Path" {
+			if inner, ok := x.X.(*ast.SelectorExpr); ok && inner.Sel.Name == "URL" && w.p.isHTTPType(w.p.info.TypeOf(inner.X)) {
+				return pathVar{}, true
+			}
+		}
+	case *ast.CallExpr:
+		sel, ok := x.Fun.(*ast.SelectorExpr)
+		if !ok || len(x.Args) == 0 {
+			return pathVar{}, false
+		}
+		if pkg, ok := sel.X.(*ast.Ident); !ok || pkg.Name != "strings" {
+			return pathVar{}, false
+		}
+		inner, ok := w.pathExpr(x.Args[0])
+		if !ok || inner.split {
+			return pathVar{}, false
+		}
+		switch sel.Sel.Name {
+		case "Trim", "TrimSpace", "TrimLeft", "TrimRight", "TrimSuffix", "ToLower":
+			return inner, true
+		case "TrimPrefix":
+			if c, ok := w.p.constString(x.Args[1]); ok && inner.prefix == "" {
+				return pathVar{prefix: c}, true
+			}
+		case "Split", "SplitN":
+			if inner.prefix != "" {
+				return pathVar{prefix: inner.prefix, split: true}, true
+			}
+		}
+	}
+	return pathVar{}, false
+}
+
+// evalLen: len(parts) compared with a number, where parts is the path split after a prefix.
+func (w *routeWalk) evalLen(x *ast.BinaryExpr) tri {
+	call, ok := x.X.(*ast.CallExpr)
+	if !ok || len(call.Args) != 1 {
+		return triUnknown
+	}
+	if id, ok := call.Fun.(*ast.Ident); !ok || id.Name != "len" {
+		return triUnknown
+	}
+	id, ok := call.Args[0].(*ast.Ident)
+	if !ok {
+		return triUnknown
+	}
+	pv, ok := w.pathVars[w.p.info.Uses[id]]
+	if !ok || !pv.split {
+		return triUnknown
+	}
+	cv := w.p.constValue(x.Y)
+	if cv == nil || cv.Kind() != constant.Int {
+		return triUnknown
+	}
+	rem, ok := pv.remainder(w.route.Path)
+	if !ok {
+		return triUnknown
+	}
+	n := len(rem)
+	if n == 0 {
+		n = 1 // strings.Split("", "/") is [""]
+	}
+	k, _ := constant.Int64Val(cv)
+	switch x.Op {
+	case token.EQL:
+		return triOf(int64(n) == k)
+	case token.NEQ:
+		return triOf(int64(n) != k)
+	case token.GTR:
+		return triOf(int64(n) > k)
+	case token.LSS:
+		return triOf(int64(n) < k)
+	case token.GEQ:
+		return triOf(int64(n) >= k)
+	case token.LEQ:
+		return triOf(int64(n) <= k)
+	}
+	return triUnknown
 }
 
 // segTri: a path text that names a segment telling the handler's routes apart holds only on the routes with it.

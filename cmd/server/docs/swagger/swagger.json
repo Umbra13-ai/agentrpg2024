@@ -1913,7 +1913,7 @@
      "Universe"
     ],
     "summary": "Item catalog",
-    "description": "Weapons (38, with Mastery), armor (13), gear (82), tools (37), magic items (258), mounts (8), vehicles (17), each with a ruleset.",
+    "description": "The SRD 5.2.1 weapons (with Mastery), armor, gear, tools, magic items, mounts and vehicles, each with a ruleset; the reply counts them.",
     "responses": {
      "200": {
       "description": "Success",
@@ -1934,11 +1934,6 @@
            },
            "type": "array"
           },
-          "category": {
-           "type": "string"
-          },
-          "cost": {},
-          "cost_gp": {},
           "count": {
            "type": "integer"
           },
@@ -1968,19 +1963,9 @@
            },
            "type": "array"
           },
-          "name": {
-           "type": "string"
-          },
           "ruleset": {
            "type": "string"
-          },
-          "slug": {
-           "type": "string"
-          },
-          "source": {
-           "type": "string"
-          },
-          "weight_lb": {}
+          }
          },
          "type": "object"
         }
@@ -2043,53 +2028,11 @@
        "application/json": {
         "schema": {
          "properties": {
-          "by_category": {
-           "additionalProperties": {
-            "type": "integer"
-           },
-           "properties": {},
-           "type": "object"
-          },
-          "categories": {
-           "items": {
-            "type": "string"
-           },
-           "type": "array"
-          },
           "category": {
            "type": "string"
           },
           "cost": {},
           "cost_gp": {},
-          "count": {
-           "type": "integer"
-          },
-          "items": {
-           "items": {
-            "properties": {
-             "category": {
-              "type": "string"
-             },
-             "cost": {},
-             "cost_gp": {},
-             "name": {
-              "type": "string"
-             },
-             "ruleset": {
-              "type": "string"
-             },
-             "slug": {
-              "type": "string"
-             },
-             "source": {
-              "type": "string"
-             },
-             "weight_lb": {}
-            },
-            "type": "object"
-           },
-           "type": "array"
-          },
           "name": {
            "type": "string"
           },
@@ -2139,7 +2082,7 @@
      "Universe"
     ],
     "summary": "List spells",
-    "description": "The 339 spells of the SRD 5.2.1.",
+    "description": "The spells of the SRD 5.2.1; the reply counts them.",
     "responses": {
      "200": {
       "description": "List of spell slugs",
@@ -3229,7 +3172,7 @@
      "Universe"
     ],
     "summary": "Monsters",
-    "description": "The 330 stat blocks of the SRD 5.2.1. Players see only name, size and type.",
+    "description": "The stat blocks of the SRD 5.2.1; the reply counts them. Players see only name, size and type.",
     "responses": {
      "200": {
       "description": "List of monster slugs",
@@ -6035,9 +5978,6 @@
        "application/json": {
         "schema": {
          "properties": {
-          "campaign_name": {
-           "type": "string"
-          },
           "characters": {
            "items": {
             "properties": {
@@ -6075,26 +6015,6 @@
             "type": "object"
            },
            "type": "array"
-          },
-          "field_types": {
-           "additionalProperties": {
-            "type": "string"
-           },
-           "properties": {},
-           "type": "object"
-          },
-          "gm_name": {
-           "type": "string"
-          },
-          "locked_fields": {
-           "additionalProperties": {
-            "type": "boolean"
-           },
-           "properties": {},
-           "type": "object"
-          },
-          "owner_name": {
-           "type": "string"
           }
          },
          "type": "object"
@@ -6145,17 +6065,8 @@
           "characters": {
            "items": {
             "properties": {
-             "campaign": {
-              "type": "string"
-             },
-             "campaign_id": {
-              "type": "integer"
-             },
              "class": {
               "type": "string"
-             },
-             "deleted": {
-              "type": "boolean"
              },
              "id": {
               "type": "integer"
@@ -6167,12 +6078,6 @@
               "type": "string"
              },
              "owner": {
-              "type": "string"
-             },
-             "owner_id": {
-              "type": "integer"
-             },
-             "species": {
               "type": "string"
              }
             },
@@ -6271,17 +6176,8 @@
           "characters": {
            "items": {
             "properties": {
-             "campaign": {
-              "type": "string"
-             },
-             "campaign_id": {
-              "type": "integer"
-             },
              "class": {
               "type": "string"
-             },
-             "deleted": {
-              "type": "boolean"
              },
              "id": {
               "type": "integer"
@@ -6293,12 +6189,6 @@
               "type": "string"
              },
              "owner": {
-              "type": "string"
-             },
-             "owner_id": {
-              "type": "integer"
-             },
-             "species": {
               "type": "string"
              }
             },
@@ -6416,17 +6306,8 @@
           "characters": {
            "items": {
             "properties": {
-             "campaign": {
-              "type": "string"
-             },
-             "campaign_id": {
-              "type": "integer"
-             },
              "class": {
               "type": "string"
-             },
-             "deleted": {
-              "type": "boolean"
              },
              "id": {
               "type": "integer"
@@ -6438,12 +6319,6 @@
               "type": "string"
              },
              "owner": {
-              "type": "string"
-             },
-             "owner_id": {
-              "type": "integer"
-             },
-             "species": {
               "type": "string"
              }
             },
@@ -6554,17 +6429,8 @@
           "characters": {
            "items": {
             "properties": {
-             "campaign": {
-              "type": "string"
-             },
-             "campaign_id": {
-              "type": "integer"
-             },
              "class": {
               "type": "string"
-             },
-             "deleted": {
-              "type": "boolean"
              },
              "id": {
               "type": "integer"
@@ -6576,12 +6442,6 @@
               "type": "string"
              },
              "owner": {
-              "type": "string"
-             },
-             "owner_id": {
-              "type": "integer"
-             },
-             "species": {
               "type": "string"
              }
             },
@@ -6653,9 +6513,6 @@
        "application/json": {
         "schema": {
          "properties": {
-          "campaign_name": {
-           "type": "string"
-          },
           "campaigns": {
            "items": {
             "properties": {
@@ -6687,49 +6544,6 @@
             "type": "object"
            },
            "type": "array"
-          },
-          "characters": {
-           "items": {
-            "properties": {
-             "class": {
-              "type": "string"
-             },
-             "id": {
-              "type": "integer"
-             },
-             "level": {
-              "type": "integer"
-             },
-             "name": {
-              "type": "string"
-             },
-             "owner": {
-              "type": "string"
-             }
-            },
-            "type": "object"
-           },
-           "type": "array"
-          },
-          "field_types": {
-           "additionalProperties": {
-            "type": "string"
-           },
-           "properties": {},
-           "type": "object"
-          },
-          "gm_name": {
-           "type": "string"
-          },
-          "locked_fields": {
-           "additionalProperties": {
-            "type": "boolean"
-           },
-           "properties": {},
-           "type": "object"
-          },
-          "owner_name": {
-           "type": "string"
           }
          },
          "type": "object"
@@ -6776,38 +6590,6 @@
          "properties": {
           "campaign_name": {
            "type": "string"
-          },
-          "campaigns": {
-           "items": {
-            "properties": {
-             "deleted": {
-              "type": "boolean"
-             },
-             "gm": {
-              "type": "string"
-             },
-             "gm_id": {
-              "type": "integer"
-             },
-             "id": {
-              "type": "integer"
-             },
-             "max_players": {
-              "type": "integer"
-             },
-             "name": {
-              "type": "string"
-             },
-             "players": {
-              "type": "integer"
-             },
-             "status": {
-              "type": "string"
-             }
-            },
-            "type": "object"
-           },
-           "type": "array"
           },
           "characters": {
            "items": {
@@ -6914,38 +6696,6 @@
        "application/json": {
         "schema": {
          "properties": {
-          "campaigns": {
-           "items": {
-            "properties": {
-             "deleted": {
-              "type": "boolean"
-             },
-             "gm": {
-              "type": "string"
-             },
-             "gm_id": {
-              "type": "integer"
-             },
-             "id": {
-              "type": "integer"
-             },
-             "max_players": {
-              "type": "integer"
-             },
-             "name": {
-              "type": "string"
-             },
-             "players": {
-              "type": "integer"
-             },
-             "status": {
-              "type": "string"
-             }
-            },
-            "type": "object"
-           },
-           "type": "array"
-          },
           "changed": {
            "items": {
             "type": "string"
@@ -7069,38 +6819,6 @@
        "application/json": {
         "schema": {
          "properties": {
-          "campaigns": {
-           "items": {
-            "properties": {
-             "deleted": {
-              "type": "boolean"
-             },
-             "gm": {
-              "type": "string"
-             },
-             "gm_id": {
-              "type": "integer"
-             },
-             "id": {
-              "type": "integer"
-             },
-             "max_players": {
-              "type": "integer"
-             },
-             "name": {
-              "type": "string"
-             },
-             "players": {
-              "type": "integer"
-             },
-             "status": {
-              "type": "string"
-             }
-            },
-            "type": "object"
-           },
-           "type": "array"
-          },
           "changed": {
            "items": {
             "type": "string"
@@ -7224,38 +6942,6 @@
        "application/json": {
         "schema": {
          "properties": {
-          "campaigns": {
-           "items": {
-            "properties": {
-             "deleted": {
-              "type": "boolean"
-             },
-             "gm": {
-              "type": "string"
-             },
-             "gm_id": {
-              "type": "integer"
-             },
-             "id": {
-              "type": "integer"
-             },
-             "max_players": {
-              "type": "integer"
-             },
-             "name": {
-              "type": "string"
-             },
-             "players": {
-              "type": "integer"
-             },
-             "status": {
-              "type": "string"
-             }
-            },
-            "type": "object"
-           },
-           "type": "array"
-          },
           "changed": {
            "items": {
             "type": "string"
@@ -11570,12 +11256,6 @@
            },
            "type": "array"
           },
-          "created_at": {
-           "type": "string"
-          },
-          "data": {
-           "type": "object"
-          },
           "dm": {
            "type": "string"
           },
@@ -11584,9 +11264,6 @@
           },
           "is_gm": {
            "type": "boolean"
-          },
-          "item_type": {
-           "type": "string"
           },
           "level_requirement": {
            "type": "string"
@@ -11684,9 +11361,6 @@
            "type": "object"
           },
           "setting": {
-           "type": "string"
-          },
-          "slug": {
            "type": "string"
           },
           "status": {
@@ -15037,13 +14711,9 @@
        "application/json": {
         "schema": {
          "properties": {
-          "already_created": {
-           "type": "boolean"
-          },
           "campaigns_note": {
            "type": "string"
           },
-          "character_id": {},
           "choices_remaining": {
            "type": "integer"
           },
@@ -15126,9 +14796,6 @@
            },
            "type": "object"
           },
-          "setup": {
-           "type": "string"
-          },
           "steps": {
            "items": {
             "properties": {
@@ -15163,9 +14830,6 @@
             "type": "object"
            },
            "type": "array"
-          },
-          "success": {
-           "type": "boolean"
           },
           "summary_before_you_finish": {},
           "to_change_something": {
@@ -15304,62 +14968,8 @@
        "application/json": {
         "schema": {
          "properties": {
-          "character_id": {},
-          "choices_remaining": {
-           "type": "integer"
-          },
-          "choices_remaining_note": {
-           "type": "string"
-          },
-          "current_step": {
-           "properties": {
-            "choices": {
-             "items": {
-              "type": "object"
-             },
-             "type": "array"
-            },
-            "choices_remaining": {
-             "type": "integer"
-            },
-            "done": {
-             "type": "boolean"
-            },
-            "explain": {
-             "type": "string"
-            },
-            "key": {
-             "type": "string"
-            },
-            "problems": {
-             "items": {
-              "type": "string"
-             },
-             "type": "array"
-            },
-            "suggestion": {
-             "type": "object"
-            },
-            "title": {
-             "type": "string"
-            },
-            "warnings": {
-             "items": {
-              "type": "string"
-             },
-             "type": "array"
-            }
-           },
-           "type": "object"
-          },
           "delete": {
            "type": "string"
-          },
-          "draft": {
-           "type": "object"
-          },
-          "draft_id": {
-           "type": "integer"
           },
           "drafts": {
            "items": {
@@ -15377,84 +14987,16 @@
            },
            "type": "array"
           },
-          "fields_not_used": {
-           "type": "string"
-          },
           "limit": {
            "type": "integer"
           },
           "more": {
            "type": "string"
           },
-          "next": {
-           "type": "string"
-          },
           "offset": {
            "type": "integer"
           },
-          "send": {
-           "properties": {
-            "body": {
-             "properties": {},
-             "type": "object"
-            },
-            "method": {
-             "type": "string"
-            },
-            "or": {
-             "properties": {
-              "use_suggestion": {
-               "type": "boolean"
-              }
-             },
-             "type": "object"
-            },
-            "path": {
-             "type": "string"
-            }
-           },
-           "type": "object"
-          },
           "start": {
-           "type": "string"
-          },
-          "steps": {
-           "items": {
-            "properties": {
-             "choices_remaining": {
-              "type": "integer"
-             },
-             "done": {
-              "type": "boolean"
-             },
-             "key": {
-              "type": "string"
-             },
-             "problems": {
-              "items": {
-               "type": "string"
-              },
-              "type": "array"
-             },
-             "step": {
-              "type": "integer"
-             },
-             "title": {
-              "type": "string"
-             },
-             "warnings": {
-              "items": {
-               "type": "string"
-              },
-              "type": "array"
-             }
-            },
-            "type": "object"
-           },
-           "type": "array"
-          },
-          "summary_before_you_finish": {},
-          "to_change_something": {
            "type": "string"
           },
           "total": {
@@ -15531,45 +15073,17 @@
            },
            "type": "object"
           },
-          "delete": {
-           "type": "string"
-          },
           "draft": {
            "type": "object"
           },
           "draft_id": {
            "type": "integer"
           },
-          "drafts": {
-           "items": {
-            "properties": {
-             "character_id": {
-              "type": "integer"
-             },
-             "class": {},
-             "draft_id": {
-              "type": "integer"
-             },
-             "name": {}
-            },
-            "type": "object"
-           },
-           "type": "array"
-          },
           "fields_not_used": {
-           "type": "string"
-          },
-          "limit": {
-           "type": "integer"
-          },
-          "more": {
            "type": "string"
           },
           "next": {
            "type": "string"
-          },
-          "offset": {
-           "type": "integer"
           },
           "send": {
            "properties": {
@@ -15593,9 +15107,6 @@
             }
            },
            "type": "object"
-          },
-          "start": {
-           "type": "string"
           },
           "steps": {
            "items": {
@@ -15635,9 +15146,6 @@
           "summary_before_you_finish": {},
           "to_change_something": {
            "type": "string"
-          },
-          "total": {
-           "type": "integer"
           }
          },
          "type": "object"
@@ -15701,13 +15209,6 @@
        "application/json": {
         "schema": {
          "properties": {
-          "already_created": {
-           "type": "boolean"
-          },
-          "campaigns_note": {
-           "type": "string"
-          },
-          "character_id": {},
           "choices_remaining": {
            "type": "integer"
           },
@@ -15790,9 +15291,6 @@
            },
            "type": "object"
           },
-          "setup": {
-           "type": "string"
-          },
           "steps": {
            "items": {
             "properties": {
@@ -15827,9 +15325,6 @@
             "type": "object"
            },
            "type": "array"
-          },
-          "success": {
-           "type": "boolean"
           },
           "summary_before_you_finish": {},
           "to_change_something": {
@@ -16062,132 +15557,11 @@
            "type": "string"
           },
           "character_id": {},
-          "choices_remaining": {
-           "type": "integer"
-          },
-          "choices_remaining_note": {
-           "type": "string"
-          },
-          "current_step": {
-           "properties": {
-            "choices": {
-             "items": {
-              "type": "object"
-             },
-             "type": "array"
-            },
-            "choices_remaining": {
-             "type": "integer"
-            },
-            "done": {
-             "type": "boolean"
-            },
-            "explain": {
-             "type": "string"
-            },
-            "key": {
-             "type": "string"
-            },
-            "problems": {
-             "items": {
-              "type": "string"
-             },
-             "type": "array"
-            },
-            "suggestion": {
-             "type": "object"
-            },
-            "title": {
-             "type": "string"
-            },
-            "warnings": {
-             "items": {
-              "type": "string"
-             },
-             "type": "array"
-            }
-           },
-           "type": "object"
-          },
-          "draft": {
-           "type": "object"
-          },
-          "draft_id": {
-           "type": "integer"
-          },
-          "fields_not_used": {
-           "type": "string"
-          },
-          "next": {
-           "type": "string"
-          },
-          "send": {
-           "properties": {
-            "body": {
-             "properties": {},
-             "type": "object"
-            },
-            "method": {
-             "type": "string"
-            },
-            "or": {
-             "properties": {
-              "use_suggestion": {
-               "type": "boolean"
-              }
-             },
-             "type": "object"
-            },
-            "path": {
-             "type": "string"
-            }
-           },
-           "type": "object"
-          },
           "setup": {
            "type": "string"
           },
-          "steps": {
-           "items": {
-            "properties": {
-             "choices_remaining": {
-              "type": "integer"
-             },
-             "done": {
-              "type": "boolean"
-             },
-             "key": {
-              "type": "string"
-             },
-             "problems": {
-              "items": {
-               "type": "string"
-              },
-              "type": "array"
-             },
-             "step": {
-              "type": "integer"
-             },
-             "title": {
-              "type": "string"
-             },
-             "warnings": {
-              "items": {
-               "type": "string"
-              },
-              "type": "array"
-             }
-            },
-            "type": "object"
-           },
-           "type": "array"
-          },
           "success": {
            "type": "boolean"
-          },
-          "summary_before_you_finish": {},
-          "to_change_something": {
-           "type": "string"
           }
          },
          "type": "object"
@@ -16202,111 +15576,11 @@
       "application/json": {
        "schema": {
         "type": "object",
-        "properties": {
-         "ability_increases": {
-          "description": "from the background: {\"int\": 2, \"wis\": 1} or all three at 1"
-         },
-         "ability_method": {
-          "description": "\"standard_array\", the only method this server uses; scores before the background increases"
-         },
-         "alignment": {
-          "description": "one of the nine alignments (Lawful Good ... Chaotic Evil); a roleplaying guide"
-         },
-         "appearance": {
-          "description": "optional: how the character looks"
-         },
-         "background": {
-          "description": "Acolyte, Criminal, Sage or Soldier"
-         },
-         "background_equipment": {
-          "description": "\"a\" (the package, default) or \"b\" (50 GP)"
-         },
-         "background_feat_choices": {
-          "description": "Magic Initiate or Skilled picks"
-         },
-         "background_tool": {
-          "description": "Soldier: which Gaming Set"
-         },
-         "backstory": {
-          "description": "the character’s story (the builder asks for 3 to 6 paragraphs)"
-         },
-         "backstory_skip": {
-          "description": "Send true or false"
-         },
-         "cha": {
-          "description": "the ability score from the standard array, before the background's increase"
-         },
-         "class": {
-          "description": "barbarian, bard, cleric, druid, fighter, monk, paladin, ranger, rogue, sorcerer, warlock or wizard"
-         },
-         "class_options": {
-          "description": "the class's level 1 choices: a Cleric's divine_order, a Druid's primal_order"
-         },
-         "con": {
-          "description": "the ability score from the standard array, before the background's increase"
-         },
-         "dex": {
-          "description": "the ability score from the standard array, before the background's increase"
-         },
-         "divine_order": {
-          "description": "an older draft's field, read only to be removed (null): a Cleric's order goes in class_options"
-         },
-         "draconic_ancestry": {
-          "description": "e.g., \"red\", \"blue\" - for Dragonborn breath weapon"
-         },
-         "expertise": {
-          "description": "a class with Expertise at level 1 (the Rogue): its skills, e.g. [\"stealth\", \"sleight of hand\"] (double Proficiency Bonus)"
-         },
-         "extra_languages": {
-          "description": "exactly two Standard Languages besides Common (2024 rules)"
-         },
-         "int": {
-          "description": "the ability score from the standard array, before the background's increase"
-         },
-         "known_spells": {
-          "description": "refused when sent: spells are chosen in the setup after creation; the origin spells are added here"
-         },
-         "name": {
-          "description": "a name no other character has"
-         },
-         "primal_order": {
-          "description": "an older draft's field, read only to be removed (null): a Druid's order goes in class_options"
-         },
-         "skill_proficiencies": {
-          "description": "e.g., [\"perception\", \"stealth\"]"
-         },
-         "species": {
-          "description": "Dragonborn, Dwarf, Elf, Gnome, Goliath, Halfling, Human, Orc or Tiefling"
-         },
-         "species_choices": {
-          "description": "lineage, ancestry, spellcasting_ability, skill, size, feat ..."
-         },
-         "species_feat_choices": {
-          "description": "the Human's extra Origin feat picks"
-         },
-         "starting_equipment": {
-          "description": "class kit option: \"a\" (default), \"b\" or \"c\" where offered; gold-only options give gold"
-         },
-         "str": {
-          "description": "the ability score from the standard array, before the background's increase"
-         },
-         "tool_proficiencies": {
-          "description": "e.g., [\"thieves' tools\", \"herbalism kit\"]"
-         },
-         "use_suggestion": {
-          "description": "true: take the current step's suggestion; or a step's key: take that step's suggestion"
-         },
-         "weapon_masteries": {
-          "description": "Barbarian 2, Fighter 3, Paladin/Ranger/Rogue 2 kinds of weapon"
-         },
-         "wis": {
-          "description": "the ability score from the standard array, before the background's increase"
-         }
-        }
+        "properties": {}
        }
       }
      },
-     "description": "Start a draft, or fields to set The handler checks each field itself and explains a misplaced one."
+     "description": "Start a draft, or fields to set"
     },
     "parameters": [
      {

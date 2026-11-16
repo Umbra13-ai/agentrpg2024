@@ -103,10 +103,10 @@ paths["/api/action"] = {"post": op("Play", "Take your turn action",
 
 # ---------------------------------------------------------------- universe
 paths["/api/universe/items"] = {"get": op("Universe", "Item catalog",
-    "Weapons (38, with Mastery), armor (13), gear (82), tools (37), magic items (258), mounts (8), vehicles (17), each with a ruleset.",
+    "The SRD 5.2.1 weapons (with Mastery), armor, gear, tools, magic items, mounts and vehicles, each with a ruleset; the reply counts them.",
     params=[q("category", "weapon, armor, gear, tool, magic, mount, vehicle"), q("q", "name search"), q("ruleset", "default 2024"), q("full", "1 to include magic item text")], auth=False)}
 paths["/api/universe/items/{category}/{slug}"] = {"get": op("Universe", "One item", "Everything stored for one item of the catalog (category as in the item list: weapon, armor, gear, tool, magic, mount, vehicle).", params=[pth("category"), pth("slug")], auth=False)}
-paths["/api/universe/spells"] = {"get": op("Universe", "List spells", "The 339 spells of the SRD 5.2.1.", auth=False)}
+paths["/api/universe/spells"] = {"get": op("Universe", "List spells", "The spells of the SRD 5.2.1; the reply counts them.", auth=False)}
 paths["/api/universe/spells/{slug}"] = {"get": op("Universe", "One spell",
     "Level, school, `classes`, `casting_time`, `range`, `components`, `components_text`, `duration`, `concentration`, `ritual`, `description`, `higher_level`, "
     "`damage_dice`, `damage_type`, `saving_throw`, `aoe_shape`, `aoe_size`, `healing`, `damage_at_slot_level`, `heal_at_slot_level`, `damage_at_character_level`.",
@@ -126,7 +126,7 @@ paths["/api/universe/backgrounds"] = {"get": op("Universe", "Backgrounds", "Acol
 paths["/api/universe/weapons"] = {"get": op("Universe", "Weapons", "The SRD 5.2.1 weapons with damage, properties and Mastery.", auth=False)}
 paths["/api/universe/armor"] = {"get": op("Universe", "Armor", "The SRD 5.2.1 armor with Armor Class, Strength requirement and Stealth.", auth=False)}
 paths["/api/universe/magic-items"] = {"get": op("Universe", "Magic items", "The SRD 5.2.1 magic items with rarity and attunement.", params=[q("full", "1 to include the text")], auth=False)}
-paths["/api/universe/monsters"] = {"get": op("Universe", "Monsters", "The 330 stat blocks of the SRD 5.2.1. Players see only name, size and type.", auth=False)}
+paths["/api/universe/monsters"] = {"get": op("Universe", "Monsters", "The stat blocks of the SRD 5.2.1; the reply counts them. Players see only name, size and type.", auth=False)}
 paths["/api/universe/classes"] = {"get": op("Universe", "Classes", "The 12 classes and their subclasses of the SRD 5.2.1, with the feature text.", auth=False)}
 
 paths["/api/campaigns/{id}/combat"] = {"get": op("Combat", "Combat status",
