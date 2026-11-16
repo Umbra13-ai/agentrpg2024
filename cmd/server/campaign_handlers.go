@@ -539,6 +539,7 @@ func handleCampaignByID(w http.ResponseWriter, r *http.Request) {
 		"min_level": minLevel, "max_level": maxLevel,
 		"level_requirement": levelReq,
 		"levels":            levelRangeView(campaignID, minLevel, maxLevel), // where new characters start, and how the GM changes it
+		"table_held":        tableIsHeld(campaignID),                        // started with round 1 held for a session zero (table_hold_2024.go)
 		"campaign_document": campaignDoc,
 		"is_gm":             isGM,
 		"table_rules":       tableRulesView(campaignID),
@@ -722,11 +723,12 @@ func reconcileCampaignStatus(campaignID int) string {
 
 // handleCampaignStart godoc
 // @Summary Start a campaign (DM only)
-// @Description Start the campaign, changing its status to active. With the turn schedule, the first round outside a fight opens (round: its number and final check-in): from then on a player's game action outside a fight is saved as a submission for the round (GET /api/campaigns/{id}/round).
+// @Description Start the campaign, changing its status to active. With the turn schedule, the first round outside a fight opens (round: its number and final check-in): from then on a player's game action outside a fight is saved as a submission for the round (GET /api/campaigns/{id}/round). To run a session zero first, send {"first_round": "hold"}: the campaign is active but the table is held, so players can talk (speak, the party chat) and finish their characters while every game action is refused (table_held, nothing spent); open play with POST /api/campaigns/{id}/round/open (starting a fight opens it too).
 // @Tags Campaigns
 // @Produce json
 // @Param id path int true "Campaign ID"
 // @Param Authorization header string true "Bearer <token>"
+// @Body Optional: whether round 1 opens now or waits for a session zero
 // @Success 200 {object} map[string]interface{} "Campaign started"
 // @Failure 401 {object} map[string]interface{} "Unauthorized"
 // @Failure 403 {object} map[string]interface{} "Only DM can start"
@@ -740,17 +742,43 @@ func handleCampaignStart(w http.ResponseWriter, r *http.Request, campaignID int)
 	if _, ok := requireCampaignGM(w, r, campaignID, "start the campaign"); !ok {
 		return
 	}
-	if !noFields(w, r) { // this request takes no fields
+	var req struct {
+		FirstRound string `json:"first_round"` // "now" (default): round 1 opens at once; "hold": the table is held for a session zero until POST /api/campaigns/{id}/round/open
+	}
+	if !readRequest(w, r, &req, optionalBody()) {
 		return
 	}
-
-	_, err := db.Exec("UPDATE lobbies SET status = 'active' WHERE id = $1", campaignID)
+	hold := false
+	switch req.FirstRound {
+	case "", "now":
+	case "hold":
+		hold = true
+	default:
+		writeJSONStatus(w, http.StatusBadRequest, map[string]interface{}{"error": "invalid_first_round",
+			"message": `first_round is "now" (round 1 opens at once) or "hold" (a session zero first; open play with POST /api/campaigns/{id}/round/open). Nothing was changed.`})
+		return
+	}
+	err := inTx(func(tx *sql.Tx) error {
+		if _, err := tx.Exec("UPDATE lobbies SET status = 'active' WHERE id = $1", campaignID); err != nil {
+			return err
+		}
+		if hold {
+			return holdTable(tx, campaignID) // table_hold_2024.go
+		}
+		return nil
+	})
 	if err != nil {
 		writeDBWriteError(w, err, "the campaign's start")
 		return
 	}
-	scheduleCampaignStarts(campaignID) // with the turn schedule, the first round outside a fight opens (noncombat_round_2024.go)
 	reply := map[string]interface{}{"success": true, "status": "active"}
+	if hold {
+		reply["first_round"] = "held"
+		reply["message"] = tableHeldGMTask(campaignID)
+		json.NewEncoder(w).Encode(reply)
+		return
+	}
+	scheduleCampaignStarts(campaignID) // with the turn schedule, the first round outside a fight opens (noncombat_round_2024.go)
 	if r, err := openRoundOf(db, campaignID); err == nil && r != nil {
 		reply["round"] = r.opened()
 	}

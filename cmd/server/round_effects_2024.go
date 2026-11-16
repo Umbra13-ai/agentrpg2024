@@ -185,6 +185,7 @@ var routeEffects = []routeEffect{
 	{"POST", "/api/campaigns/{id}/combat/start", effectImmediate, "", whyGM},
 	{"POST", "/api/campaigns/{id}/round/resolve", effectImmediate, "", whyGM},
 	{"POST", "/api/campaigns/{id}/round/stand-in", effectImmediate, "", whyGM},
+	{"POST", "/api/campaigns/{id}/round/open", effectImmediate, "", whyGM},
 	{"POST", "/api/campaigns/{id}/end", effectImmediate, "", whyGM},
 	{"POST", "/api/campaigns/{id}/start", effectImmediate, "", whyGM},
 	{"POST", "/api/campaigns/{id}/exploration/skip", effectImmediate, "", whyGM},
@@ -348,6 +349,11 @@ func saveIfSubmission(w http.ResponseWriter, r *http.Request, e routeEffect, pat
 		return false, nil // not the character's own player (the GM, or a refusal the route makes), or in no campaign
 	}
 	lobby = int(at.Int64)
+	if e.Effect == effectSubmission { // a game action while the GM holds the table for a session zero (table_hold_2024.go)
+		if refused, err := refuseWhileHeld(w, lobby); err != nil || refused {
+			return refused, err
+		}
+	}
 	sub, err := submissionFor(lobby, charID, e)
 	if err != nil || sub == nil {
 		return false, err

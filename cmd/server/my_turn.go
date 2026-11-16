@@ -356,6 +356,10 @@ func handleMyTurn(w http.ResponseWriter, r *http.Request) {
 			isMyTurn = open // sent or resolved this round: wait for the next one (check_in_2024.go)
 		}
 	}
+	heldNote := "" // the GM holds the table before round 1 (table_hold_2024.go)
+	if !inCombat && tableIsHeld(lobbyID) {
+		isMyTurn, heldNote = false, tableHeldMessage(lobbyID)
+	}
 	awaitingGMNarration := false
 	awaitingGMNarrationMessage := ""
 	if !inCombat && beatApplies(lobbyID) {
@@ -886,6 +890,7 @@ func handleMyTurn(w http.ResponseWriter, r *http.Request) {
 
 	// Build response
 	response := map[string]interface{}{
+		"table_held": nilIfEmpty(heldNote),
 		"round":      roundNote, // with the turn schedule: the open round, your status in it, your next check-in (check_in_2024.go)
 		"is_my_turn": isMyTurn,
 		"character":  characterInfo,

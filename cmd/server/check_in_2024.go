@@ -197,6 +197,9 @@ func notFoundIsNothing(err error) error {
 
 // The fight's hooks (combat_state_2024.go, turn_advance_2024.go): the round record follows the fight's round.
 func scheduleFightStarts(lobby int) {
+	if _, err := releaseTable(lobby); err != nil { // a fight opens play after a held start (table_hold_2024.go)
+		logScheduleProblem(lobby, "a fight started", err)
+	}
 	_, err := roundOpens(lobby, roundCombat, 1, false, "")
 	logScheduleProblem(lobby, "a fight started", err)
 }
@@ -295,6 +298,7 @@ type checkInInputs struct {
 	Round *roundRecord
 	Fight *checkInFight // nil outside a fight
 	Turns map[int]charTurn
+	Held  bool // the GM holds the table before round 1 (table_hold_2024.go)
 }
 
 // Character statuses (never "blocked" or "missing": Matt, 11.1).
@@ -414,6 +418,9 @@ func checkInAt(in checkInInputs, now time.Time) checkIn {
 	switch {
 	case in.State == scheduleOff:
 		out.Message = "The turn schedule is off: the campaign plays as before."
+		return out
+	case in.Round == nil && in.Held:
+		out.Message = "No round is open: the GM is holding the table before round 1 (a session zero). Players can talk and finish their characters; round 1 opens when the GM opens play."
 		return out
 	case in.Round == nil:
 		out.Message = "No round is open: one opens when the GM starts the campaign (or turns the schedule on), when a fight starts and when a fight ends."
@@ -651,6 +658,9 @@ func loadCheckIn(lobby int) (checkInInputs, time.Time, error) {
 		return in, time.Time{}, err
 	}
 	in.State, in.Seats = cs.State, cs.Seats
+	if in.Held, err = tableHeld(db, lobby); err != nil {
+		return in, time.Time{}, err
+	}
 	in.Sched, in.Timed = scheduleOf(cs.MaxPlayers)
 	if in.Round, err = openRoundOf(db, lobby); err != nil || in.Round == nil || cs.State == scheduleOff {
 		return in, clock.now(), err

@@ -94,8 +94,10 @@ func handleCampaignRound(w http.ResponseWriter, r *http.Request, lobby int, rest
 			handleRoundResolve(w, r, lobby)
 		case "stand-in":
 			handleRoundStandIn(w, r, lobby)
+		case "open":
+			handleRoundOpen(w, r, lobby) // play opens after a held start (table_hold_2024.go)
 		default:
-			writeJSONStatus(w, http.StatusNotFound, map[string]interface{}{"error": "unknown_round_action", "actions": []string{"resolve", "stand-in"}})
+			writeJSONStatus(w, http.StatusNotFound, map[string]interface{}{"error": "unknown_round_action", "actions": []string{"resolve", "stand-in", "open"}})
 		}
 		return
 	}

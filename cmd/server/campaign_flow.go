@@ -350,6 +350,9 @@ func autoAdvanceExploration(campaignID int, campaignName string) int {
 
 	skipped := 0
 	exLimit, exOn := timeoutRule(campaignID, "exploration_timeout", 12*time.Hour) // table rule (F248)
+	if tableIsHeld(campaignID) {
+		exOn = false // no one is skipped while the GM holds the table: no one can act yet (table_hold_2024.go)
+	}
 	for rows.Next() {
 		var charID int
 		var charName string
@@ -469,6 +472,9 @@ func getCampaignPlayers(lobbyID int) []map[string]interface{} {
 // getTurnStatus returns turn information for a campaign
 func getTurnStatus(lobbyID int, characterID int) map[string]interface{} {
 	result := turnOrderStatus(lobbyID, characterID)
+	if result["in_combat"] != true && tableIsHeld(lobbyID) { // a session zero before round 1 (table_hold_2024.go)
+		result["your_turn"], result["table_held"] = false, tableHeldMessage(lobbyID)
+	}
 	// with the turn schedule, where the open round stands for this character (or the GM) is the check-in status's answer
 	// (roundNoteFor): waiting_on is only the earlier player whose submission is needed, never everyone before the character
 	if note, _ := roundNoteFor(lobbyID, characterID); note != nil {

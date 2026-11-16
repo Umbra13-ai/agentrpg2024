@@ -293,6 +293,8 @@ var schemaSteps = []schemaStep{
 	{"noncombat_round_2024.go", roundSubmissionsSchema},
 	// the Starting Equipment at Higher Levels money a character has had, so a second start higher doesn't pay it twice (campaign_levels_2024.go)
 	{"campaign_levels_2024.go", `ALTER TABLE characters ADD COLUMN IF NOT EXISTS starting_money INTEGER DEFAULT 0`},
+	// a campaign started with its first round held for a session zero (table_hold_2024.go)
+	{"table_hold_2024.go", `ALTER TABLE lobbies ADD COLUMN IF NOT EXISTS table_held BOOLEAN DEFAULT FALSE`},
 }
 
 // migrate runs schemaSteps in order; the first failure stops it and is returned with the step that failed.

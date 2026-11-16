@@ -956,6 +956,10 @@ func handleGMStatus(w http.ResponseWriter, r *http.Request) {
 		sort.Strings(names)
 		gmTasks = append(gmTasks, fmt.Sprintf("Unfinished characters: %s still have choices to make (unfinished_characters lists them; remind the players).", strings.Join(names, ", ")))
 	}
+	if tableIsHeld(campaignID) {
+		gmTasks = append([]string{tableHeldGMTask(campaignID)}, gmTasks...)
+		response["table_held"] = true
+	}
 	if campaignStatus == "recruiting" {
 		gmTasks = append([]string{fmt.Sprintf("The campaign is recruiting: players join it now (GET /api/campaigns/%d lists them). Prepare the story and the characters' starting level, then start it with POST /api/campaigns/%d/start when the party is ready.", campaignID, campaignID)}, gmTasks...)
 	}

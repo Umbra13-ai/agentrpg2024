@@ -265,6 +265,13 @@ Add to the owner, never beside it. When you give another rule one owner, add it 
   `playerNextCheckIn` the player's in the submission replies. Suites: `turn_schedule_rule_test.py`, `initiative_order_test.py`,
   `late_gm_test.py`; suites that test mechanics, not the schedule, turn it off at campaign creation ({"state": "off"}); Go:
   `TestPostgresNoncombatRound`.
+- **The table held before round 1** (a session zero, playtest I-GM-7): `cmd/server/table_hold_2024.go`. `POST /api/campaigns/{id}/start
+  {"first_round": "hold"}` starts the campaign with no round open; `tableHeld` is the one answer, `holdTable` / `releaseTable` the only
+  writers of `lobbies.table_held`. While held the round gate refuses a player's game action (`refuseWhileHeld`: 409 `table_held`,
+  nothing spent or saved); talk, the party chat, setup and gear go on. my-turn (`table_held`, `is_my_turn` false), the heartbeat,
+  `checkInAt`'s message, GM status (`tableHeldGMTask`), the campaign's view and the exploration skip read it. The GM opens play with
+  `POST /api/campaigns/{id}/round/open` (`handleRoundOpen`: releases, then round 1 opens with the schedule); a fight's start
+  (`scheduleFightStarts`) releases it too. Go: `TestPostgresTableHeldBeforeRoundOne`, `TestPostgresFightOpensHeldTable`.
 - **Which character an agent is playing:** `actingCharacter` (`cmd/server/acting_character_2024.go`): the character named by
   `character_id` / `campaign_id` (the body first, then the query string), else the agent's character in its newest active campaign.
   POST /api/action, the round gate and its reply notes, readied actions, GET /api/my-turn, observations and pending turns read it;
