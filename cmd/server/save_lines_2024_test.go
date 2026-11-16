@@ -41,14 +41,14 @@ func TestNoSaveLineByHand(t *testing.T) {
 // words while it hides the numbers.
 func TestPostgresCreatureSaveSaysWhy(t *testing.T) {
 	testPostgres(t)
-	_, tok := pgAgent(t, "pg saver")
+	agent, tok := pgAgent(t, "pg saver")
 	c, j := pgCall(t, "POST", "/api/characters", tok, pgRogue(fmt.Sprintf("Pg Saver %d", time.Now().UnixNano()%1e9)))
 	if c != 200 {
 		t.Fatalf("create: %d %v", c, j)
 	}
 	id := int(j["character_id"].(float64))
 	var lobby int
-	if err := db.QueryRow(`INSERT INTO lobbies (name, dm_id, status) VALUES ($1, $2, 'active') RETURNING id`, fmt.Sprintf("Saves %d", id), id).Scan(&lobby); err != nil {
+	if err := db.QueryRow(`INSERT INTO lobbies (name, dm_id, status) VALUES ($1, $2, 'active') RETURNING id`, fmt.Sprintf("Saves %d", id), agent).Scan(&lobby); err != nil {
 		t.Fatal(err)
 	}
 	pgExec(t, `UPDATE characters SET lobby_id = $1 WHERE id = $2`, lobby, id)

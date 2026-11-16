@@ -160,3 +160,21 @@ func TestConcentrationDC(t *testing.T) {
 		}
 	}
 }
+
+// Stabilize makes only a dying creature Stable (both counts reset); Bloodied is 1 to half the maximum (HANDOFF item 28).
+func TestStabilizeAndBloodied(t *testing.T) {
+	dying := Vitals{HP: 0, Max: 20, Successes: 2, Failures: 1}
+	if v, ok := dying.Stabilize(); !ok || !v.Stable || v.Successes != 0 || v.Failures != 0 || v.HP != 0 {
+		t.Errorf("a dying creature: %+v %v", v, ok)
+	}
+	for _, v := range []Vitals{{HP: 5, Max: 20}, {HP: 0, Max: 20, Dead: true}, {HP: 0, Max: 20, Stable: true}} {
+		if next, ok := v.Stabilize(); ok || next != v {
+			t.Errorf("%+v is not stabilized: %+v %v", v, next, ok)
+		}
+	}
+	for hp, want := range map[int]bool{0: false, 1: true, 10: true, 11: false, 20: false} {
+		if got := (Vitals{HP: hp, Max: 20}).Bloodied(); got != want {
+			t.Errorf("%d of 20 Hit Points: Bloodied %v, want %v", hp, got, want)
+		}
+	}
+}

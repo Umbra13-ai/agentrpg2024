@@ -377,15 +377,19 @@ func (d *hpDamage) concentration(charID int, spell string, taken int) {
 // ---------------------------------------------------------------- healing
 
 type healSpec struct {
-	ceilingHalf bool // Preserve Life: not above half the Hit Point maximum
-	onlyAtZero  bool // only a character at 0 Hit Points (Aura of Life, a natural 20 on a Death Saving Throw, a Stable creature's rest)
-	giveBack    bool // damage undone, not Hit Points regained (Shield, Stone's Endurance): the Sword of Wounding doesn't stop it
+	ceilingHalf  bool // Preserve Life: not above half the Hit Point maximum
+	onlyAtZero   bool // only a character at 0 Hit Points (Aura of Life, a natural 20 on a Death Saving Throw, a Stable creature's rest)
+	onlyBloodied bool // only a Bloodied character (Survivor)
+	giveBack     bool // damage undone, not Hit Points regained (Shield, Stone's Endurance): the Sword of Wounding doesn't stop it
 }
 
 type healOpt func(*healSpec)
 
 func healUpToHalf() healOpt   { return func(s *healSpec) { s.ceilingHalf = true } }
 func healOnlyAtZero() healOpt { return func(s *healSpec) { s.onlyAtZero = true } }
+
+// healOnlyBloodied: only a Bloodied character (game.Vitals.Bloodied) heals, decided on the locked row (Survivor).
+func healOnlyBloodied() healOpt { return func(s *healSpec) { s.onlyBloodied = true } }
 
 // hpHeal is what healing did.
 type hpHeal struct {
@@ -411,7 +415,7 @@ func healHP(charID, amount int, opts ...healOpt) (hpHeal, error) {
 	}
 	var err error
 	h.Before, h.After, err = changeVitals(charID, func(_ *sql.Tx, v game.Vitals) (game.Vitals, error) {
-		if s.onlyAtZero && v.HP > 0 {
+		if (s.onlyAtZero && v.HP > 0) || (s.onlyBloodied && !v.Bloodied()) {
 			return v, nil
 		}
 		ceiling := v.Max
@@ -471,7 +475,7 @@ func recordDeathSave(charID, natural int, success bool) (before, after game.Vita
 		var next game.Vitals
 		next, out = v.DeathSave(natural, success)
 		if out == game.DeathSaveStable {
-			if _, err := tx.Exec(`UPDATE characters SET stable_rounds_left = `+stableRounds()+` WHERE id = $1`, charID); err != nil {
+			if err := startStableHours(tx, charID); err != nil {
 				return v, err
 			}
 		}
@@ -481,6 +485,30 @@ func recordDeathSave(charID, natural int, success bool) (before, after game.Vita
 		hpChanged(charID, before, after)
 	}
 	return before, after, out, err
+}
+
+// stabilizeCharacter makes a dying character Stable (game.Vitals.Stabilize: the Medicine action, Spare the Dying) with the row
+// locked, so a Death Saving Throw or damage at the same moment is counted first. changed is false when the character wasn't
+// dying (healed, dead) or was Stable already: nothing is written.
+func stabilizeCharacter(charID int) (changed bool, err error) {
+	before, after, err := changeVitals(charID, func(tx *sql.Tx, v game.Vitals) (game.Vitals, error) {
+		next, ok := v.Stabilize()
+		if !ok {
+			return v, nil
+		}
+		changed = true
+		return next, startStableHours(tx, charID)
+	})
+	if err == nil && changed {
+		hpChanged(charID, before, after)
+	}
+	return changed, err
+}
+
+// startStableHours: a creature that becomes Stable regains 1 Hit Point after 1d4 hours (stableRounds).
+func startStableHours(tx execer, charID int) error {
+	_, err := tx.Exec(`UPDATE characters SET stable_rounds_left = `+stableRounds()+` WHERE id = $1`, charID)
+	return err
 }
 
 // ---------------------------------------------------------------- set values, death, return to life

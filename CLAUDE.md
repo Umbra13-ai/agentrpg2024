@@ -114,8 +114,9 @@ Add to the owner, never beside it. When you give another rule one owner, add it 
   after resistance). `cmd/server/hit_points_2024.go` is the only writer: each change locks the row (`changeVitals`, `SELECT ...
   FOR UPDATE`) and writes in one transaction, so changes at once are all counted. `damageHP` (one hit, in one or more damage
   types: resistances, Death Ward inside the transaction, the `dropRescues` table after it, Concentration), `healHP` (options
-  `healUpToHalf`, `healOnlyAtZero`), `healCharacter`, `undoDamage` (a hit undone or reduced afterwards), `setHP`, `restoreAllHP`,
-  `killCharacter`, `reviveCharacter`, `recordDeathSave`, and `changeMaxHP` / `maxHPChange` (the SQL a progression claim includes).
+  `healUpToHalf`, `healOnlyAtZero`, `healOnlyBloodied`: Survivor, `Vitals.Bloodied` read on the locked row), `healCharacter`, `undoDamage` (a hit undone or reduced afterwards), `setHP`, `restoreAllHP`,
+  `killCharacter`, `reviveCharacter`, `recordDeathSave`, `stabilizeCharacter` (`Vitals.Stabilize`: the Medicine action, Spare the
+  Dying; the 1d4 hours start, `startStableHours`), and `changeMaxHP` / `maxHPChange` (the SQL a progression claim includes).
   `handleDamage`, `handleHeal` and `damageCharacter` are thin wrappers. Temporary Hit Points are granted by `grantTempHP`
   (`temp_hp_2024.go`). A new feature that stops a drop to 0 is one row in `dropRescues`. `TestNoOtherHitPointWriter` checks;
   suite: `hp_rule_test.py` (audit AUD-06).

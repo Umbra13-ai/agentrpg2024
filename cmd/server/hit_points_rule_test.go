@@ -12,9 +12,10 @@ import (
 // (hit_points_2024.go; grantTempHP and loseTempHP in temp_hp_2024.go). Before Nov 15 2026 about 55 statements in 26 files wrote
 // characters.hp, each its own read-compute-write without a lock, and many without the rules that come with a change (audit AUD-06).
 // The rule of a change of the maximum is maxHPChange, which a statement that claims a progression step includes.
+// (also Stable, dead and the Death Saving Throw counts: HANDOFF item 28, stabilizing wrote them itself)
 func TestNoOtherHitPointWriter(t *testing.T) {
 	update := regexp.MustCompile(`(?is)UPDATE\s+characters\b(.*?)\bWHERE\b`)
-	assign := regexp.MustCompile(`(?i)(\bSET\s+|,\s*)(temp_)?hp\s*=`)
+	assign := regexp.MustCompile(`(?i)(\bSET\s+|,\s*)((temp_)?hp|is_stable|is_dead|death_save_successes|death_save_failures)\s*=`)
 	built := regexp.MustCompile(`"(temp_)?hp = `) // a SET clause put together in Go ("hp = $%d")
 	owners := map[string]bool{"hit_points_2024.go": true, "temp_hp_2024.go": true}
 	files, _ := filepath.Glob("*.go")

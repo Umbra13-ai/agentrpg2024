@@ -382,10 +382,9 @@ func resolveEffectSpell(charID int, spell SRDSpell, spellKey string, slotLevel, 
 			}
 		}
 		for _, id := range ids {
-			var hp int
-			var dead bool
-			if db.QueryRow(`SELECT COALESCE(hp,0), COALESCE(is_dead,false) FROM characters WHERE id = $1`, id).Scan(&hp, &dead) == nil && hp <= 0 && !dead {
-				db.Exec(`UPDATE characters SET is_stable = true, death_save_successes = 0, death_save_failures = 0 WHERE id = $1`, id)
+			if changed, err := stabilizeCharacter(id); err != nil {
+				return " Spare the Dying: " + dbFailureError(err, "the target's Hit Points").Error()
+			} else if changed {
 				return fmt.Sprintf(" Spare the Dying: %s is Stable (no more death saves; 1 Hit Point after 1d4 hours).", creatureName(lobby, id))
 			}
 		}

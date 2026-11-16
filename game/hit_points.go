@@ -22,6 +22,10 @@ type Vitals struct {
 // Dying: at 0 Hit Points and not dead.
 func (v Vitals) Dying() bool { return v.HP <= 0 && !v.Dead }
 
+// Bloodied: at least 1 Hit Point and no more than half the maximum (SRD 5.2.1 "Bloodied": half its Hit Points or fewer; a creature
+// at 0 is dying, not Bloodied, for the features that read it here: Survivor).
+func (v Vitals) Bloodied() bool { return v.HP > 0 && !v.Dead && v.HP <= v.Max/2 }
+
 // DamageOutcome says what a hit did.
 type DamageOutcome string
 
@@ -159,6 +163,17 @@ func (v Vitals) Revive(hp int) Vitals {
 func (v Vitals) Kill() Vitals {
 	v.HP, v.Dead, v.Stable = 0, true, false
 	return v
+}
+
+// Stabilize is a dying creature made Stable (a DC 10 Wisdom (Medicine) check, Spare the Dying; SRD 5.2.1 "Stabilizing a
+// Character"): it stays at 0 Hit Points, makes no more Death Saving Throws and both counts reset. ok is false, and nothing
+// changes, for a creature that isn't dying (above 0, dead) or is Stable already.
+func (v Vitals) Stabilize() (next Vitals, ok bool) {
+	if !v.Dying() || v.Stable {
+		return v, false
+	}
+	v.Successes, v.Failures, v.Stable = 0, 0, true
+	return v, true
 }
 
 // Woke: Hit Points went from 0 to above 0 (the creature regains consciousness).

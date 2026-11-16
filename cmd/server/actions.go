@@ -1290,17 +1290,11 @@ func resolveStabilizeAction(actorID, targetID int, targetName string) (string, e
 	if total < 10 {
 		return fmt.Sprintf("Medicine check for %s: %d %+d = %d vs DC 10; failed. They remain dying.", targetName, roll, mod, total), nil
 	}
-	// F211: the backtick string held the Go text " + stableRounds() + " itself (the query failed); F210: Stable resets both tallies
-	res, err := db.Exec(`UPDATE characters SET is_stable = true, death_save_successes = 0, death_save_failures = 0, stable_rounds_left = `+stableRounds()+` WHERE id = $1 AND hp = 0
-		AND COALESCE(is_stable, false) = false AND COALESCE(is_dead, false) = false`, targetID)
+	changed, err := stabilizeCharacter(targetID) // the Hit Point owner (hit_points_2024.go)
 	if err != nil {
 		return "", err
 	}
-	changed, err := res.RowsAffected()
-	if err != nil {
-		return "", err
-	}
-	if changed == 0 {
+	if !changed {
 		return fmt.Sprintf("Medicine check for %s: %d %+d = %d vs DC 10; target already recovered or stabilized. No state changed.", targetName, roll, mod, total), nil
 	}
 	return fmt.Sprintf("Medicine check for %s: %d %+d = %d vs DC 10; success. They are stable at 0 HP and no longer make death saves.", targetName, roll, mod, total), nil

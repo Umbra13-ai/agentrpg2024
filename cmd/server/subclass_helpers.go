@@ -9,14 +9,14 @@ import (
 	"strings"
 )
 
-// survivorRegen: a Champion of level 18 (Survivor) who starts a turn with at least 1 Hit Point and no more than half of them
-// regains 5 + its Constitution modifier (at least 1), through the Hit Point owner. It returns the reply's survivor_regen, or nil.
+// survivorRegen: a Champion of level 18 (Survivor) who starts a turn Bloodied (at least 1 Hit Point and no more than half of them)
+// regains 5 + its Constitution modifier (at least 1), through the Hit Point owner, which checks Bloodied with the row locked. It returns the reply's survivor_regen, or nil.
 // The three turn-advance paths each had their own copy until Nov 15 2026.
 func survivorRegen(charID int, name string) map[string]interface{} {
 	var subclass string
-	var level, hp, maxHP, con int
-	if db.QueryRow(`SELECT COALESCE(subclass, ''), level, hp, max_hp, con FROM characters WHERE id = $1`, charID).
-		Scan(&subclass, &level, &hp, &maxHP, &con) != nil || subclass != "champion" || level < 18 || hp <= 0 || hp > maxHP/2 {
+	var level, con int
+	if db.QueryRow(`SELECT COALESCE(subclass, ''), level, con FROM characters WHERE id = $1`, charID).
+		Scan(&subclass, &level, &con) != nil || subclass != "champion" || level < 18 {
 		return nil
 	}
 	if _, ok := getSubclassMechanic("champion", level, "survivor_regen"); !ok {
@@ -24,8 +24,8 @@ func survivorRegen(charID int, name string) map[string]interface{} {
 	}
 	conMod := game.Modifier(con)
 	heal := max(1, 5+conMod)
-	h, err := healHP(charID, heal)
-	if err != nil {
+	h, err := healHP(charID, heal, healOnlyBloodied()) // Bloodied is read on the locked row (the Hit Point owner)
+	if err != nil || h.Before == h.After {
 		return nil
 	}
 	return map[string]interface{}{
