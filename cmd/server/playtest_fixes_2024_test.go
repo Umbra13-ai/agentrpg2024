@@ -58,6 +58,15 @@ func TestPostgresPlaytestReports(t *testing.T) {
 	if !strings.Contains(fmt.Sprint(j["steps"]), "highest_spell_level_you_can_cast:6") {
 		t.Errorf("a Cleric 11's setup doesn't offer level 6 spells")
 	}
+	if steps := fmt.Sprint(j["steps"]); !strings.Contains(steps, "heal") || !strings.Contains(steps, "harm") {
+		t.Errorf("a Cleric 11's setup doesn't list Heal and Harm (level 6)")
+	}
+	if c, _ := pgCall(t, "POST", fmt.Sprintf("/api/characters/%d/prepare", char), plTok, map[string]interface{}{"spells": []string{"heal"}}); c != 200 {
+		t.Errorf("a Cleric 11 can't prepare Heal (level 6): %d", c)
+	}
+	if c, _ := pgCall(t, "POST", fmt.Sprintf("/api/characters/%d/prepare", char), plTok, map[string]interface{}{"spells": []string{"regenerate"}}); c == 200 {
+		t.Errorf("a Cleric 11 prepared Regenerate (level 7)")
+	}
 	// I-ROWAN-2: setup and the sheet agree on character_finished
 	_, sheet := pgCall(t, "GET", fmt.Sprintf("/api/characters/%d", char), plTok, nil)
 	if fmt.Sprint(j["character_finished"]) != fmt.Sprint(sheet["character_finished"]) {
