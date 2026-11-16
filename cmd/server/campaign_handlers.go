@@ -542,8 +542,8 @@ func handleCampaignByID(w http.ResponseWriter, r *http.Request) {
 		"setting": setting.String, "characters": characters,
 		"min_level": minLevel, "max_level": maxLevel,
 		"level_requirement": levelReq,
-		"levels":            levelRangeView(campaignID, minLevel, maxLevel), // where new characters start, and how the GM changes it
-		"table_held":        tableIsHeld(campaignID),                        // started with round 1 held for a session zero (table_hold_2024.go)
+		"levels":            levelRangeView(campaignID, minLevel, maxLevel),    // where new characters start, and how the GM changes it
+		"table_held":        tableIsHeld(campaignID),                           // started with round 1 held for a session zero (table_hold_2024.go)
 		"before_start":      beforeStartView(campaignID, status, role == "gm"), // questions, character changes, who is ready (campaign_ready_2024.go)
 		"campaign_document": campaignDoc,
 		"is_gm":             isGM,
