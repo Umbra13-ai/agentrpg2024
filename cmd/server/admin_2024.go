@@ -19,6 +19,7 @@ import (
 	"database/sql"
 	"encoding/hex"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"log"
 	"net/http"
@@ -128,20 +129,40 @@ func restoreCharacter(charID int, by string) (string, error) {
 		newName = fmt.Sprintf("%s (restored %d)", name.String, charID)
 		note = fmt.Sprintf(" Another character now has the name %q, so it is called %q: edit the name if you like.", name.String, newName)
 	}
-	var lobbyArg interface{}
+	backTo := 0
 	if lobby.Valid {
 		var status string
 		db.QueryRow(`SELECT COALESCE(status,'') FROM lobbies WHERE id = $1`, lobby.Int64).Scan(&status)
 		if status != "" && status != "deleted" && status != "completed" {
-			lobbyArg = lobby.Int64
-			note += fmt.Sprintf(" It is back in campaign %d.", lobby.Int64)
+			backTo = int(lobby.Int64)
 		} else {
 			note += " Its old campaign is gone or finished, so it is in no campaign."
 		}
 	}
-	if _, err := db.Exec(`UPDATE characters SET agent_id = $1, lobby_id = $2, name = $3, deleted_at = NULL, deleted_owner = NULL,
-		deleted_name = NULL, deleted_lobby = NULL, deleted_by = NULL WHERE id = $4`, owner, lobbyArg, newName, charID); err != nil {
+	tx, err := db.Begin()
+	if err != nil {
 		return "", fmt.Errorf("could not restore: %v", publicError(err))
+	}
+	defer tx.Rollback()
+	if _, err := tx.Exec(`UPDATE characters SET agent_id = $1, lobby_id = NULL, name = $2, deleted_at = NULL, deleted_owner = NULL,
+		deleted_name = NULL, deleted_lobby = NULL, deleted_by = NULL WHERE id = $3`, owner, newName, charID); err != nil {
+		return "", fmt.Errorf("could not restore: %v", publicError(err))
+	}
+	if backTo != 0 { // back into its campaign through its one way in: a free seat (schedule_2024.go)
+		var ref *seatRefusal
+		if _, err := claimSeat(tx, seatClaim{Lobby: backTo, Character: charID}); errors.As(err, &ref) {
+			note += fmt.Sprintf(" It couldn't go back into campaign %d (%s), so it is in no campaign.", backTo, ref.Message)
+		} else if err != nil {
+			return "", fmt.Errorf("could not restore: %v", publicError(err))
+		} else {
+			note += fmt.Sprintf(" It is back in campaign %d.", backTo)
+		}
+	}
+	if err := tx.Commit(); err != nil {
+		return "", fmt.Errorf("could not restore: %v", publicError(err))
+	}
+	if backTo != 0 {
+		reconcileCampaignStatus(backTo)
 	}
 	logAdminChange("character", charID, "restored", "deleted", newName, by, "")
 	return "Restored " + newName + "." + note, nil
@@ -205,12 +226,20 @@ func restoreCampaign(id int, by string) (string, error) {
 	json.Unmarshal(membersRaw, &members)
 	var back, notBack []string
 	for _, c := range members {
-		res, err := db.Exec(`UPDATE characters SET lobby_id = $1 WHERE id = $2 AND lobby_id IS NULL AND deleted_at IS NULL`, id, c)
-		if n, _ := res.RowsAffected(); err == nil && n == 1 {
+		var deleted bool
+		if db.QueryRow(`SELECT deleted_at IS NOT NULL FROM characters WHERE id = $1`, c).Scan(&deleted) != nil || deleted {
+			notBack = append(notBack, strconv.Itoa(c))
+			continue
+		}
+		// a free character only, through the one way into a campaign (schedule_2024.go)
+		if _, err := enterCampaign(seatClaim{Lobby: id, Character: c, OnlyFromNone: true}); err == nil {
 			back = append(back, strconv.Itoa(c))
 		} else {
 			notBack = append(notBack, strconv.Itoa(c))
 		}
+	}
+	if len(back) > 0 {
+		reconcileCampaignStatus(id)
 	}
 	logAdminChange("campaign", id, "restored", "deleted", status, by, "")
 	msg := fmt.Sprintf("Restored %s (%s).", name, status)
@@ -403,6 +432,25 @@ var editorColumns = map[string]string{
 	"deleted_dm": "never", "deleted_status": "never", "deleted_members": "never",
 	"class_levels": "never", "subclasses": "never", "hit_dice_spent_by_type": "never",
 	"agent_id": "admin", "lobby_id": "admin", "class": "admin", "subclass": "admin",
+	"schedule_state": "never", "pending_capacity": "never", // the GM's PATCH /api/campaigns/{id}/schedule (schedule_2024.go)
+}
+
+// adminCapacityProblem: a campaign using the turn schedule keeps 1 to 6 seats (seatCapacityProblem), whoever edits it.
+func adminCapacityProblem(tx *sql.Tx, lobby int, text string) error {
+	var state string
+	if err := tx.QueryRow(`SELECT COALESCE(schedule_state, 'off') FROM lobbies WHERE id = $1`, lobby).Scan(&state); err != nil {
+		return fmt.Errorf("campaign %d not found", lobby)
+	}
+	n, err := strconv.Atoi(text)
+	if err != nil {
+		return fmt.Errorf("max_players: %q isn't a number", text)
+	}
+	if state != scheduleOff {
+		if p := seatCapacityProblem(n); p != "" {
+			return fmt.Errorf("max_players: %s", p)
+		}
+	}
+	return nil
 }
 
 // adminMayEdit / gmMayEdit: may this editor write the column (editorColumns)?
@@ -469,7 +517,22 @@ func adminSet(table, kind string, id int, set map[string]interface{}, note strin
 			return nil, fmt.Errorf("%s %d not found", kind, id)
 		}
 		val, text := adminValueText(set[k])
-		if kind == "character" && conditionColumns[k] { // the condition owner writes them (condition_owner_2024.go)
+		if kind == "character" && k == "lobby_id" && val != nil { // into a campaign: its one way in (schedule_2024.go)
+			lobby, err := strconv.Atoi(text)
+			if err != nil {
+				return nil, fmt.Errorf("lobby_id: %q isn't a campaign id", text)
+			}
+			if _, err := claimSeat(tx, seatClaim{Lobby: lobby, Character: id}); err != nil {
+				return nil, fmt.Errorf("lobby_id: %s", publicError(err))
+			}
+		} else if kind == "campaign" && k == "max_players" {
+			if err := adminCapacityProblem(tx, id, text); err != nil {
+				return nil, err
+			}
+			if _, err := tx.Exec(`UPDATE lobbies SET max_players = $1 WHERE id = $2`, val, id); err != nil {
+				return nil, fmt.Errorf("%s: %q doesn't fit this field (its type is %s)", k, text, cols[k])
+			}
+		} else if kind == "character" && conditionColumns[k] { // the condition owner writes them (condition_owner_2024.go)
 			if err := setConditionColumnIn(tx, id, k, set[k]); err != nil {
 				return nil, fmt.Errorf("%s: %v", k, err)
 			}
@@ -735,7 +798,9 @@ func adminCampaignMembership(id int, body map[string]interface{}, note string) (
 		if cur.Valid && int(cur.Int64) == id {
 			return "", true, fmt.Errorf("%s is already in this campaign", name)
 		}
-		db.Exec(`UPDATE characters SET lobby_id = $1 WHERE id = $2`, id, cid)
+		if _, err := enterCampaign(seatClaim{Lobby: id, Character: cid}); err != nil { // a free seat, the capacity checked (schedule_2024.go)
+			return "", true, fmt.Errorf("%s can't join campaign %d: %s", name, id, publicError(err))
+		}
 		logAdminChange("character", cid, "lobby_id", fmt.Sprint(cur.Int64), strconv.Itoa(id), "admin", note)
 		reconcileCampaignStatus(id)
 		msg := fmt.Sprintf("%s joined the campaign.", name)

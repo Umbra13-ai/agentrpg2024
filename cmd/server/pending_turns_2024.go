@@ -247,16 +247,6 @@ func ptEnemiesDown(lobbyID int) bool {
 	return monsters > 0 && up == 0
 }
 
-// ptDying: at 0 Hit Points, not stable and not dead: the character's turn is a Death Saving Throw.
-func ptDying(charID int) bool {
-	var hp int
-	var stable, dead bool
-	if db.QueryRow(`SELECT COALESCE(hp, 0), COALESCE(is_stable, false), COALESCE(is_dead, false) FROM characters WHERE id = $1`, charID).Scan(&hp, &stable, &dead) != nil {
-		return false
-	}
-	return hp <= 0 && !stable && !dead
-}
-
 // spellHarms: the spell deals damage or forces a saving throw, so its target has to be a creature still in the fight.
 func spellHarms(sp SRDSpell) bool {
 	return sp.DamageDice != "" || sp.SavingThrow != "" || len(sp.DamageParts) > 0
@@ -318,7 +308,7 @@ func validatePendingSteps(lobbyID, charID int, steps []map[string]interface{}, s
 			continue
 		}
 		at += " (" + s.Action + ")"
-		if s.Action == "death_save" { // the server rolls it at a dying character's slot (ptDying): a held turn is what you do when up
+		if s.Action == "death_save" { // the server rolls it at a dying character's slot (needsDeathSave): a held turn is what you do when up
 			problems = append(problems, at+": no need: if you are at 0 Hit Points when your slot comes, the server rolls your Death Saving Throw itself. A pending turn holds what you do when you are up")
 			continue
 		}
@@ -618,7 +608,7 @@ func resolvePendingTurns(lobbyID int) map[string]interface{} {
 			break
 		}
 		slot["character_id"] = e.ID
-		if ptDying(e.ID) {
+		if needsDeathSave(e.ID) {
 			// at 0 Hit Points and not stable: the rules give this turn no choice ("whenever you start your turn with 0 Hit Points,
 			// you must make a Death Saving Throw"), so the server rolls it and the fight goes on. A held turn can't be taken.
 			out, ok, why := ptRunStep(lobbyID, e.ID, owner, map[string]interface{}{"action": "death_save"})
@@ -1110,7 +1100,7 @@ func pendingTurnForMyTurn(lobbyID, charID int) map[string]interface{} {
 	round := c.roundFor(slot)
 	out := map[string]interface{}{"round": round,
 		"how": "You don't have to wait for your slot: POST /api/pending-turn {\"steps\": [{\"action\": \"attack\", \"target_id\": -1}], \"fallbacks\": [[{\"action\": \"dodge\"}]]} holds your whole turn (each step is a POST /api/action body) and it resolves in initiative order. GET /api/pending-turn shows the table's queue."}
-	if ptDying(charID) {
+	if needsDeathSave(charID) {
 		out["at_0_hit_points"] = "You are at 0 Hit Points. When your slot comes the server rolls your Death Saving Throw for you; a turn you send is held and is taken only if you are back up by then."
 	}
 	if row, has := ptOpenRow(lobbyID, charID, round); has {

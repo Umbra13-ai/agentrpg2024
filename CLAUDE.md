@@ -199,7 +199,22 @@ Add to the owner, never beside it. When you give another rule one owner, add it 
 - **Outgoing mail:** `sendMail` (`cmd/server/mail_2024.go`), through AgentMail or Resend. Never call a mail service anywhere
   else.
 - **A campaign's player seats:** `openSeats` / `campaignFull` (`cmd/server/campaign_flow.go`): the campaign list's
-  `open_seats` and `?open=`, joining's `campaign_full` and the recruiting check.
+  `open_seats` and `?open=`, joining's `campaign_full` and the recruiting check. **The way into a campaign** is `claimSeat(tx, ...)`
+  (`cmd/server/schedule_2024.go`): the campaign's row locked, the owner, one character per player and the capacity checked, the
+  lowest free seat taken (`campaign_seats`, join order), in one transaction, so parallel joins for the last seat can't both win.
+  Joining, the admin's add, restore and editor (`lobby_id`) and the GM's recreate call it; leaving is setting `lobby_id` to NULL
+  (a seat is held only while its character is in the campaign). `TestNoOtherWayIntoACampaign` checks.
+- **The turn schedule** (Matt's `campaign-scheduling-directions.md`, stages B and C): `scheduleOf(capacity)` is the times (1 to 6
+  seats, 60/N minutes apart from :00; the GM 5 minutes before each next seat; :55 the final check-in) and `seatCapacityProblem`
+  the one capacity check; every reply's times (creation, join, `GET /api/campaigns/{id}`, `GET|PATCH .../schedule`) and the GM
+  guide's table (`withScheduleTable` at its marker) come from it. `campaignNow` / `campaignClock` is the only clock (a test
+  clock only with `AGENTRPG_TEST_CLOCK=1`, `POST .../test-clock`; `clock.at` turns another table's NOW() into campaign time);
+  `TestScheduleReadsOneClock` checks. `changeSchedule` is the GM's change (state on/paused/off, capacity; a capacity set during a
+  round waits in `pending_capacity`). The round record (`cmd/server/check_in_2024.go`): `openRound` is the one way a round opens
+  (closes the open one, applies a pending capacity, `roundDeadline`); `turnNeeds` (choose / death_save / none, from the Hit Points
+  and condition owners) is what a turn needs (`needsDeathSave` for the pending-turn walk and my-turn); `loadCheckIn` + the pure
+  `checkInAt` are the one status answer (never "blocked"; GM overdue from the first GM check-in at which a turn could resolve,
+  plus 5 minutes). Suite: `turn_schedule_rule_test.py`.
 - **A weapon's data:** `findWeapon` (`cmd/server/character_attacks.go`) over `srdWeapons`: any spelling of a weapon (key, name,
   hyphens or underscores, a magic +N, a named weapon's base in parentheses). Never index `srdWeapons` with a key built by
   hand and never read a weapon from the `weapons` table (a copy for the universe catalogue); `TestNoOtherWeaponLookup` checks.
@@ -252,7 +267,8 @@ Add to the owner, never beside it. When you give another rule one owner, add it 
   subclasses and invocations, each with `from`), and "Spellbook" only for a class whose features have the `spellbook` mechanic
   (the Wizard, in the class data). The character page shows `spell_groups`; it never names a list itself.
 - **The GM guide:** `docs/gm_guide.md` (`docs.GMGuide`), sent as `gm_guide` when a campaign is created and served at
-  `/gm-guide.md`, with this server's address where it says `https://YOUR-SERVER`.
+  `/gm-guide.md`, with this server's address where it says `https://YOUR-SERVER` and the schedule table from `scheduleOf` at
+  its marker (`gmGuide`).
 - **The guide served to agents:** `docs/skill.md`, built into the program by the `docs` package (`docs.Skill`).
 
 ### Before pushing

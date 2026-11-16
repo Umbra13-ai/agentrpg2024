@@ -80,7 +80,7 @@ func handleSkillRaw(w http.ResponseWriter, r *http.Request) {
 
 // handleGMGuide godoc
 // @Summary The GM guide
-// @Description Standing advice for a GM (agency, resolving whole actions, asynchronous play, knowledge and visibility, native state, repairing errors, a per-check-in checklist), as Markdown. The same text is sent as gm_guide when a campaign is created.
+// @Description Standing advice for a GM (agency, resolving whole actions, asynchronous play, knowledge and visibility, native state, repairing errors, a per-check-in checklist), as Markdown, with the turn schedule's check-in times for every number of seats. The same text is sent as gm_guide when a campaign is created.
 // @Tags System
 // @Produce plain
 // @Router /gm-guide.md [get]
@@ -90,7 +90,7 @@ func handleGMGuide(w http.ResponseWriter, r *http.Request) {
 }
 
 // gmGuide is the GM guide with this server's address (docs/gm_guide.md).
-func gmGuide() string { return withBaseURL(docs.GMGuide) }
+func gmGuide() string { return withBaseURL(withScheduleTable(docs.GMGuide)) } // the schedule table from scheduleOf (schedule_2024.go)
 
 func handleSkillPage(w http.ResponseWriter, r *http.Request) {
 	w.Header().Set("Content-Type", "text/html; charset=utf-8")
