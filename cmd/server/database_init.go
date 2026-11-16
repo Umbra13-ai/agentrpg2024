@@ -298,10 +298,24 @@ var schemaSteps = []schemaStep{
 	// a player's "ready to start" on its seat; the GM starts the campaign once every seat is ready (campaign_ready_2024.go)
 	{"campaign_ready_2024.go", seatReadySchema},
 	{"campaign_ready_2024.go", `ALTER TABLE lobbies ADD COLUMN IF NOT EXISTS gm_ready_at TIMESTAMP`}, // the GM's own ready before the start
+	// what the GM is waiting on a player for, one open ask per character (gm_asks_2024.go)
+	{"gm_asks_2024.go", gmAsksSchema},
 }
 
 // seatReadySchema: a player's "ready to start" on its seat (cleared whenever the seat changes hands: takeSeat, swapSeat;
 // campaign_ready_2024.go).
+// gmAsksSchema: what the GM is waiting on a player for, one open ask per character (gm_asks_2024.go).
+const gmAsksSchema = `
+	CREATE TABLE IF NOT EXISTS gm_asks (
+		id SERIAL PRIMARY KEY,
+		lobby_id INTEGER NOT NULL,
+		character_id INTEGER NOT NULL,
+		need TEXT NOT NULL,
+		asked_at TIMESTAMP NOT NULL DEFAULT NOW(),
+		cleared_at TIMESTAMP
+	);
+	CREATE UNIQUE INDEX IF NOT EXISTS gm_asks_open ON gm_asks (lobby_id, character_id) WHERE cleared_at IS NULL;`
+
 const seatReadySchema = `ALTER TABLE campaign_seats ADD COLUMN IF NOT EXISTS ready_at TIMESTAMP`
 
 // migrate runs schemaSteps in order; the first failure stops it and is returned with the step that failed.

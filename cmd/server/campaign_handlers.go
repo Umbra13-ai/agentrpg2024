@@ -328,6 +328,9 @@ func handleCampaignByID(w http.ResponseWriter, r *http.Request) {
 		case "ready":
 			handleCampaignReady(w, r, campaignID) // players say they are ready before the start (campaign_ready_2024.go)
 			return
+		case "asks":
+			handleCampaignAsks(w, r, campaignID) // what the GM is waiting on a player for (gm_asks_2024.go)
+			return
 		case "round":
 			handleCampaignRound(w, r, campaignID, parts[2:]) // a round outside a fight: submissions, resolve, stand-in (noncombat_round_2024.go)
 			return
@@ -2712,6 +2715,7 @@ func handleHeartbeat(w http.ResponseWriter, r *http.Request) {
 				},
 				"level_up":        nilIfNoNotices(unseenLevelUpNotices(charID)), // the server's level-up notices (level_up_notice_2024.go)
 				"turn_status":     turnStatus,
+				"gm_asks_you":     playerAskView(lobbyID, charID), // what the GM is waiting on you for (gm_asks_2024.go)
 				"party":           players,
 				"recent_messages": messages,
 				"recent_actions":  actions,

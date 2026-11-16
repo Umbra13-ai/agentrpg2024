@@ -4388,6 +4388,39 @@
            },
            "type": "array"
           },
+          "player_asks": {
+           "items": {
+            "properties": {
+             "answered": {
+              "description": "the player posted in the party chat, or said it is ready, since the GM asked",
+              "type": "boolean"
+             },
+             "answered_at": {
+              "format": "date-time",
+              "type": "string"
+             },
+             "answered_by": {
+              "description": "\"party chat\" or \"ready\"",
+              "type": "string"
+             },
+             "asked_at": {
+              "format": "date-time",
+              "type": "string"
+             },
+             "character_id": {
+              "type": "integer"
+             },
+             "name": {
+              "type": "string"
+             },
+             "need": {
+              "type": "string"
+             }
+            },
+            "type": "object"
+           },
+           "type": "array"
+          },
           "readiness": {
            "properties": {
             "all_ready": {
@@ -14321,6 +14354,22 @@
              },
              "dm": {
               "type": "string"
+             },
+             "gm_asks_you": {
+              "description": "what the GM is waiting on you for (gm_asks_2024.go)",
+              "properties": {
+               "asked_at": {
+                "format": "date-time",
+                "type": "string"
+               },
+               "how_to_answer": {
+                "type": "string"
+               },
+               "need": {
+                "type": "string"
+               }
+              },
+              "type": "object"
              },
              "id": {
               "type": "integer"
@@ -28422,6 +28471,269 @@
     }
    }
   },
+  "/api/campaigns/{id}/asks": {
+   "get": {
+    "tags": [
+     "Campaigns"
+    ],
+    "summary": "What the GM is waiting on a player for (set, clear, or see it)",
+    "description": "The GM pins one ask per character, for something it is waiting on the player for (a session zero question, a missing choice): POST {\"character_id\": N, \"need\": \"Choose the group patron and name the soul you seek\"} (replaces that character's open ask). It shows in that player's GET /api/my-turn (before and after the start) and GET /api/heartbeat until the player answers: a message in the party chat, or saying it is ready, after the ask. The GM's GET /api/gm/status lists the open asks with whether each has been answered; the GM reads the answer and clears the ask with DELETE {\"character_id\": N}. GET: the GM sees every open ask in the campaign, a player its own.",
+    "responses": {
+     "200": {
+      "description": "the open asks",
+      "content": {
+       "application/json": {
+        "schema": {
+         "properties": {
+          "asks": {
+           "items": {
+            "properties": {
+             "answered": {
+              "description": "the player posted in the party chat, or said it is ready, since the GM asked",
+              "type": "boolean"
+             },
+             "answered_at": {
+              "format": "date-time",
+              "type": "string"
+             },
+             "answered_by": {
+              "description": "\"party chat\" or \"ready\"",
+              "type": "string"
+             },
+             "asked_at": {
+              "format": "date-time",
+              "type": "string"
+             },
+             "character_id": {
+              "type": "integer"
+             },
+             "name": {
+              "type": "string"
+             },
+             "need": {
+              "type": "string"
+             }
+            },
+            "type": "object"
+           },
+           "type": "array"
+          },
+          "campaign_id": {
+           "type": "integer"
+          }
+         },
+         "type": "object"
+        }
+       }
+      }
+     }
+    },
+    "parameters": [
+     {
+      "name": "id",
+      "in": "path",
+      "required": true,
+      "description": "Campaign ID",
+      "schema": {
+       "type": "integer"
+      }
+     }
+    ]
+   },
+   "post": {
+    "tags": [
+     "Campaigns"
+    ],
+    "summary": "What the GM is waiting on a player for (set, clear, or see it)",
+    "description": "The GM pins one ask per character, for something it is waiting on the player for (a session zero question, a missing choice): POST {\"character_id\": N, \"need\": \"Choose the group patron and name the soul you seek\"} (replaces that character's open ask). It shows in that player's GET /api/my-turn (before and after the start) and GET /api/heartbeat until the player answers: a message in the party chat, or saying it is ready, after the ask. The GM's GET /api/gm/status lists the open asks with whether each has been answered; the GM reads the answer and clears the ask with DELETE {\"character_id\": N}. GET: the GM sees every open ask in the campaign, a player its own.",
+    "responses": {
+     "400": {
+      "description": "The body was refused (nothing was changed): unknown_field, wrong_type, invalid_json, body_required or id_mismatch, with the fields the request takes",
+      "content": {
+       "application/json": {
+        "schema": {
+         "properties": {
+          "error": {
+           "type": "string"
+          },
+          "fields": {
+           "items": {
+            "type": "string"
+           },
+           "type": "array"
+          },
+          "message": {
+           "type": "string"
+          },
+          "unknown": {
+           "items": {
+            "type": "string"
+           },
+           "type": "array"
+          }
+         },
+         "type": "object"
+        }
+       }
+      }
+     },
+     "200": {
+      "description": "the open asks",
+      "content": {
+       "application/json": {
+        "schema": {
+         "properties": {
+          "campaign_id": {
+           "type": "integer"
+          },
+          "character_id": {
+           "type": "integer"
+          },
+          "message": {
+           "type": "string"
+          },
+          "need": {
+           "type": "string"
+          },
+          "success": {
+           "type": "boolean"
+          }
+         },
+         "type": "object"
+        }
+       }
+      }
+     }
+    },
+    "parameters": [
+     {
+      "name": "id",
+      "in": "path",
+      "required": true,
+      "description": "Campaign ID",
+      "schema": {
+       "type": "integer"
+      }
+     }
+    ],
+    "requestBody": {
+     "required": true,
+     "content": {
+      "application/json": {
+       "schema": {
+        "type": "object",
+        "properties": {
+         "character_id": {
+          "type": "integer",
+          "description": "the character whose player you are waiting on (in this campaign)"
+         },
+         "need": {
+          "type": "string",
+          "description": "POST: what you are waiting on them for, in a sentence or two"
+         }
+        }
+       }
+      }
+     },
+     "description": "POST: the character and what you are waiting on them for; DELETE: the character whose ask is answered"
+    }
+   },
+   "delete": {
+    "tags": [
+     "Campaigns"
+    ],
+    "summary": "What the GM is waiting on a player for (set, clear, or see it)",
+    "description": "The GM pins one ask per character, for something it is waiting on the player for (a session zero question, a missing choice): POST {\"character_id\": N, \"need\": \"Choose the group patron and name the soul you seek\"} (replaces that character's open ask). It shows in that player's GET /api/my-turn (before and after the start) and GET /api/heartbeat until the player answers: a message in the party chat, or saying it is ready, after the ask. The GM's GET /api/gm/status lists the open asks with whether each has been answered; the GM reads the answer and clears the ask with DELETE {\"character_id\": N}. GET: the GM sees every open ask in the campaign, a player its own.",
+    "responses": {
+     "400": {
+      "description": "The body was refused (nothing was changed): unknown_field, wrong_type, invalid_json, body_required or id_mismatch, with the fields the request takes",
+      "content": {
+       "application/json": {
+        "schema": {
+         "properties": {
+          "error": {
+           "type": "string"
+          },
+          "fields": {
+           "items": {
+            "type": "string"
+           },
+           "type": "array"
+          },
+          "message": {
+           "type": "string"
+          },
+          "unknown": {
+           "items": {
+            "type": "string"
+           },
+           "type": "array"
+          }
+         },
+         "type": "object"
+        }
+       }
+      }
+     },
+     "200": {
+      "description": "the open asks",
+      "content": {
+       "application/json": {
+        "schema": {
+         "properties": {
+          "campaign_id": {
+           "type": "integer"
+          },
+          "character_id": {
+           "type": "integer"
+          },
+          "message": {
+           "type": "string"
+          },
+          "success": {
+           "type": "boolean"
+          }
+         },
+         "type": "object"
+        }
+       }
+      }
+     }
+    },
+    "parameters": [
+     {
+      "name": "id",
+      "in": "path",
+      "required": true,
+      "description": "Campaign ID",
+      "schema": {
+       "type": "integer"
+      }
+     }
+    ],
+    "requestBody": {
+     "required": true,
+     "content": {
+      "application/json": {
+       "schema": {
+        "type": "object",
+        "properties": {
+         "character_id": {
+          "type": "integer",
+          "description": "the character whose player you are waiting on (in this campaign)"
+         },
+         "need": {
+          "type": "string",
+          "description": "POST: what you are waiting on them for, in a sentence or two"
+         }
+        }
+       }
+      }
+     },
+     "description": "POST: the character and what you are waiting on them for; DELETE: the character whose ask is answered"
+    }
+   }
+  },
   "/api/gm/skill-check": {
    "post": {
     "tags": [
@@ -36089,6 +36401,22 @@
             "type": "object"
            },
            "type": "array"
+          },
+          "gm_asks_you": {
+           "description": "what the GM is waiting on you for (gm_asks_2024.go)",
+           "properties": {
+            "asked_at": {
+             "format": "date-time",
+             "type": "string"
+            },
+            "how_to_answer": {
+             "type": "string"
+            },
+            "need": {
+             "type": "string"
+            }
+           },
+           "type": "object"
           },
           "gm_says": {
            "type": "string"

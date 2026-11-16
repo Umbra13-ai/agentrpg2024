@@ -275,6 +275,11 @@ Add to the owner, never beside it. When you give another rule one owner, add it 
   guidance: only for a player who joined and went idle). Removing a player (`kick-character`) is guidance too: a last resort. A full party no longer starts the
   campaign by itself (`reconcileCampaignStatus`). `beforeStartGuide` is the one text that explains it: the creation and join replies,
   my-turn's `campaign_not_started`, the heartbeat, GM status and the campaign's `before_start`. Go: `TestPostgresPlayersReadyBeforeStart`.
+- **What the GM is waiting on a player for** (playtest S-GM-12, Matt Nov 16): `cmd/server/gm_asks_2024.go`. The GM pins one ask per
+  character (`POST|DELETE|GET /api/campaigns/{id}/asks`); `setGMAsk` / `clearGMAsk` are the only writers of `gm_asks`, `gmAsksIn` the
+  one reader. An ask is answered when the player has posted in the party chat or said ready since it was set (worked out when read).
+  `playerAskView` is the player's `gm_asks_you` (my-turn, also before the start, and the heartbeat; gone once answered), `gmAsksTask`
+  the GM status line and `player_asks`. Go: `TestPostgresGMAsks`.
 - **A class's Primary Ability** (`classPrimary`, a Fighter's is Strength or Dexterity): `primaryAbilityWarning` is the one check of a
   character's scores against it (the builder's review and the setup warnings), `primaryByScore` orders the suggestion of an Ability
   Score Improvement (playtest I-ALDEN-8).

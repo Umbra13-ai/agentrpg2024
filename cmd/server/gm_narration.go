@@ -988,6 +988,10 @@ func handleGMStatus(w http.ResponseWriter, r *http.Request) {
 		}
 		gmTasks = append([]string{task}, gmTasks...)
 	}
+	if task, asks := gmAsksTask(campaignID); task != "" { // what the GM is waiting on players for (gm_asks_2024.go)
+		response["player_asks"] = asks
+		gmTasks = append(gmTasks, task)
+	}
 	if advice := levelRangeAdvice(campaignID); advice != "" { // the party has passed the starting level (campaign_levels_2024.go)
 		gmTasks = append(gmTasks, advice)
 	}

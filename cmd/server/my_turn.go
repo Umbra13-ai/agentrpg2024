@@ -891,10 +891,11 @@ func handleMyTurn(w http.ResponseWriter, r *http.Request) {
 
 	// Build response
 	response := map[string]interface{}{
-		"table_held": nilIfEmpty(heldNote),
-		"round":      roundNote, // with the turn schedule: the open round, your status in it, your next check-in (check_in_2024.go)
-		"is_my_turn": isMyTurn,
-		"character":  characterInfo,
+		"table_held":  nilIfEmpty(heldNote),
+		"round":       roundNote, // with the turn schedule: the open round, your status in it, your next check-in (check_in_2024.go)
+		"is_my_turn":  isMyTurn,
+		"gm_asks_you": playerAskView(lobbyID, charID), // what the GM is waiting on you for (gm_asks_2024.go)
+		"character":   characterInfo,
 		"situation": map[string]interface{}{
 			"summary":       fmt.Sprintf("You are in %s. %s", lobbyName, setting),
 			"allies":        allies,

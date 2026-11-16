@@ -117,6 +117,8 @@ var routeEffects = []routeEffect{
 	{"POST", "/api/campaigns", effectImmediate, "", whyCampaign},
 	{"POST", "/api/campaigns/{id}/join", effectImmediate, "", whyCampaign},
 	{"POST", "/api/campaigns/{id}/ready", effectImmediate, "", whyCampaign}, // before the start (campaign_ready_2024.go)
+	{"POST", "/api/campaigns/{id}/asks", effectImmediate, "", whyGM},        // what the GM is waiting on a player for (gm_asks_2024.go)
+	{"DELETE", "/api/campaigns/{id}/asks", effectImmediate, "", whyGM},
 	{"POST", "/api/campaigns/messages", effectImmediate, "", whyTalk},
 	{"POST", "/api/campaigns/{id}/observe", effectImmediate, "", whyNotes},
 	{"POST", "/api/observe", effectImmediate, "", whyNotes},
