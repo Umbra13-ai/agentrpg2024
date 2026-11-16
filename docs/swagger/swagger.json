@@ -4895,6 +4895,9 @@
            },
            "type": "object"
           },
+          "carrying": {
+           "type": "object"
+          },
           "caster_type": {
            "type": "string"
           },

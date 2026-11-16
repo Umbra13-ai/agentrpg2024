@@ -279,7 +279,9 @@ Add to the owner, never beside it. When you give another rule one owner, add it 
   action through the server.
 - **How to act (`GET /api/my-turn`'s `how_to_act`):** `actionHowTo` (`cmd/server/actions.go`), made from `actionRequest`'s
   fields and the character's real enemies.
-- **Carried weight:** `inventoryWeight` and `itemUnitWeight` (`cmd/server/srd_gear.go`). **A weapon is stored** with
+- **Carried weight:** `inventoryWeight` and `itemUnitWeight` (`cmd/server/srd_gear.go`). **Carrying Capacity:** `carryingCapacity` (size and
+  Powerful Build) with `carryingOf` (`character_gear.go`): GET /characters/encumbrance and the sheet's `carrying`, which the character
+  page shows (it computes nothing itself). **A weapon is stored** with
   `setWeapon` (one property spelling); `hasProperty` is the one property check.
 - **An ally within 5 feet of the target** (Sneak Attack, Pack Tactics): `allyNextToTarget` (`cmd/server/ally_adjacent_2024.go`):
   the battle map, or the attacker's `ally_adjacent` without one; nothing is assumed.

@@ -171,6 +171,51 @@ func handleCharacterAttune(w http.ResponseWriter, r *http.Request) {
 	}
 }
 
+// carryingRulesNote: Carrying Capacity as the SRD 5.2.1 Rules Glossary gives it (carryingCapacity).
+const carryingRulesNote = "Carrying Capacity (SRD 5.2.1): Strength x 15 lb for Small or Medium (Tiny x 7.5, Large x 30, Huge x 60, Gargantuan x 120); drag, lift or push twice that. More than the capacity: Speed at most 5 feet."
+
+// carryingCapacity is the one Carrying Capacity (SRD 5.2.1 Rules Glossary): Strength × 15 lb for a Small or Medium creature
+// (Tiny × 7.5, Large × 30, Huge × 60, Gargantuan × 120), the size as Powerful Build counts it (F96).
+func carryingCapacity(str int, species string) float64 {
+	mult := map[string]float64{"tiny": 7.5, "small": 15, "medium": 15, "large": 30, "huge": 60, "gargantuan": 120}[strings.ToLower(powerfulBuildSize(species, getSpeciesSize(species)))]
+	if mult == 0 {
+		mult = 15
+	}
+	return float64(str) * mult
+}
+
+// carrying is what a character carries against what it can: GET /characters/encumbrance and the sheet's "carrying" read it.
+type carrying struct {
+	Weight    float64                  // inventoryWeight: every carried item, nothing inside a Bag of Holding
+	Capacity  float64                  // carryingCapacity
+	Status    string                   // within_capacity, over_capacity, or ignored (the campaign's table rule)
+	SpeedNote string                   // over the capacity: Speed at most 5 feet
+	TableRule string                   // the table rule that ignores encumbrance, when it does
+	Items     []map[string]interface{} // each weighed item
+}
+
+func carryingOf(str int, species string, inventory []map[string]interface{}, lobby int) carrying {
+	c := carrying{Capacity: carryingCapacity(str, species), Status: "within_capacity"}
+	c.Weight, c.Items = inventoryWeight(inventory) // srd_gear.go
+	if c.Weight > c.Capacity {
+		c.Status, c.SpeedNote = "over_capacity", "Carrying more than its capacity: Speed can be no more than 5 feet."
+	}
+	if lobby > 0 && tableRule(lobby, "encumbrance") == "ignored" {
+		c.Status, c.SpeedNote = "ignored", ""
+		c.TableRule = "This campaign's table rules ignore encumbrance unless a player tries to exploit it."
+	}
+	return c
+}
+
+// view: the sheet's "carrying".
+func (c carrying) view() map[string]interface{} {
+	out := map[string]interface{}{"total_weight": c.Weight, "carrying_capacity": c.Capacity, "status": c.Status}
+	if c.SpeedNote != "" {
+		out["speed_note"] = c.SpeedNote
+	}
+	return out
+}
+
 // handleCharacterEncumbrance godoc
 // @Summary Calculate character encumbrance
 // @Description Calculate equipment weight and encumbrance status based on STR score.
@@ -216,38 +261,22 @@ func handleCharacterEncumbrance(w http.ResponseWriter, r *http.Request) {
 
 	var inventory []map[string]interface{}
 	json.Unmarshal(inventoryJSON, &inventory)
-	totalWeight, itemWeights := inventoryWeight(inventory) // srd_gear.go
-
-	// 2024 Carrying Capacity (SRD 5.2.1 Rules Glossary): Strength × 15 lb for a Small or Medium creature (Tiny × 7.5, Large × 30,
-	// Huge × 60, Gargantuan × 120); drag, lift or push twice that. Carrying more than the capacity limits Speed to 5 feet.
-	mult := map[string]float64{"tiny": 7.5, "small": 15, "medium": 15, "large": 30, "huge": 60, "gargantuan": 120}[strings.ToLower(powerfulBuildSize(species, getSpeciesSize(species)))] // Powerful Build (F96)
-	if mult == 0 {
-		mult = 15
-	}
-	carryingCapacity := float64(str) * mult
-	status := "within_capacity"
-	speedNote := ""
-	if totalWeight > carryingCapacity {
-		status = "over_capacity"
-		speedNote = "Carrying more than its capacity: Speed can be no more than 5 feet."
-	}
+	c := carryingOf(str, species, inventory, charLobby)
 	out := map[string]interface{}{
 		"character":         charName,
 		"strength":          str,
-		"total_weight":      totalWeight,
-		"carrying_capacity": carryingCapacity,
-		"drag_lift_push":    carryingCapacity * 2,
-		"status":            status,
-		"item_weights":      itemWeights,
-		"rules_note":        "Carrying Capacity (SRD 5.2.1): Strength x 15 lb for Small or Medium (Tiny x 7.5, Large x 30, Huge x 60, Gargantuan x 120); drag, lift or push twice that. More than the capacity: Speed at most 5 feet.",
+		"total_weight":      c.Weight,
+		"carrying_capacity": c.Capacity,
+		"drag_lift_push":    c.Capacity * 2,
+		"status":            c.Status,
+		"item_weights":      c.Items,
+		"rules_note":        carryingRulesNote,
 	}
-	if speedNote != "" {
-		out["speed_note"] = speedNote
+	if c.SpeedNote != "" {
+		out["speed_note"] = c.SpeedNote
 	}
-	if tableRule(charLobby, "encumbrance") == "ignored" {
-		out["status"] = "ignored"
-		out["table_rule"] = "This campaign's table rules ignore encumbrance unless a player tries to exploit it."
-		delete(out, "speed_note")
+	if c.TableRule != "" {
+		out["table_rule"] = c.TableRule
 	}
 	json.NewEncoder(w).Encode(out)
 }

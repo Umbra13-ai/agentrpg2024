@@ -1155,7 +1155,12 @@ func handleCharacterByID(w http.ResponseWriter, r *http.Request) {
 			"str": game.Modifier(effectiveStr), "dex": game.Modifier(dex), "con": game.Modifier(effectiveCon),
 			"int": game.Modifier(intl), "wis": game.Modifier(wis), "cha": game.Modifier(cha),
 		},
-		"conditions":        conditions,
+		"conditions": conditions,
+		"carrying": func() map[string]interface{} { // what it carries against its Carrying Capacity (carryingOf, character_gear.go)
+			var inv []map[string]interface{}
+			json.Unmarshal(inventoryJSON, &inv)
+			return carryingOf(str, species, inv, lobbyOfChar(charID)).view()
+		}(),
 		"proficiency_bonus": game.ProficiencyBonus(level),
 		"skill_proficiencies": func() []string {
 			if skillProfsRaw == "" {

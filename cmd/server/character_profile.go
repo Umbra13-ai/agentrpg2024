@@ -619,7 +619,6 @@ Promise.all([
 ]).then(function(res){render(res[0],res[1])}).catch(function(){document.getElementById('err').textContent='Could not load this character.'});
 
 function pips(total,rem){var s=el('span','pips');for(var i=0;i<total&&i<20;i++)s.appendChild(el('span',i<rem?'on':''));return s}
-function weightOf(items){var t=0;(items||[]).forEach(function(it){t+=(it.weight_lbs||0)*(it.quantity||1);if(it.contents)t+=weightOf(it.contents)});return t}
 function itemList(items){
   var ul=el('ul','items');
   items.forEach(function(it){
@@ -802,8 +801,7 @@ function render(d,p){
   group('Not yet sorted','not assigned to the body or a bag',lay.unsorted);
   var cur=d.currency,cs=[];if(cur){[['pp','Platinum'],['gp','Gold'],['ep','Electrum'],['sp','Silver'],['cp','Copper']].forEach(function(k){if(cur[k[0]])cs.push(cur[k[0]]+' '+k[1])})}
   var q2=el('p');add(q2,el('b','l','Coin '),document.createTextNode(cs.length?cs.join(', '):'None'));eb.appendChild(q2);
-  var total=weightOf(lay.worn)+weightOf(lay.held)+weightOf(lay.containers)+weightOf(lay.unsorted);
-  var q3=el('p');add(q3,el('b','l','Weight carried '),document.createTextNode(Math.round(total*100)/100+' pounds'+(d.stats&&d.stats.str?' of '+d.stats.str*15+' pound capacity':'')));eb.appendChild(q3);
+  var ca=d.carrying;if(ca){var q3=el('p');add(q3,el('b','l','Weight carried '),document.createTextNode(Math.round(ca.total_weight*100)/100+' of '+ca.carrying_capacity+' pounds'+(ca.speed_note?' ('+ca.speed_note+')':'')));eb.appendChild(q3)}
   statcol.appendChild(eb);
 
   add(sheet,textcol,statcol);root.appendChild(sheet);
