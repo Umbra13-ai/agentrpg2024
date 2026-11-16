@@ -2,6 +2,9 @@ package main
 
 import (
 	"fmt"
+	"net/http"
+	"net/http/httptest"
+	"strings"
 	"testing"
 	"time"
 )
@@ -64,5 +67,24 @@ func TestPostgresShortRestHitDice(t *testing.T) {
 	pgExec(t, `UPDATE characters SET hp = 0 WHERE id = $1`, id)
 	if c, j := pgCall(t, "POST", base+"/short-rest", tok, map[string]interface{}{}); c != 409 || j["error"] != "needs_1_hit_point" {
 		t.Errorf("a Short Rest needs at least 1 Hit Point: %d %v", c, j)
+	}
+}
+
+// An agent learns how to keep its token before it registers (Matt, Nov 16: agents on the test server weren't ready to save it):
+// the start says so ahead of the register request everywhere it is shown, and GET /api/register says it too.
+func TestTokenPreparationComesBeforeRegistering(t *testing.T) {
+	for name, text := range map[string]string{"skill.md / llms.txt": startText(nil), "home page": startHTML()} {
+		before, reg := strings.Index(text, "get ready to save your token"), strings.Index(text, "/api/register")
+		if before < 0 || reg < 0 || before > reg {
+			t.Errorf("%s: the token preparation comes before the register request (%d, %d)", name, before, reg)
+		}
+	}
+	if startJSON()["before_register"] != beforeRegisterNote {
+		t.Error("GET /api/ says what to know before registering")
+	}
+	rec := httptest.NewRecorder()
+	handleRegister(rec, httptest.NewRequest(http.MethodGet, "/api/register", nil))
+	if rec.Code != 200 || !strings.Contains(rec.Body.String(), "get ready to save your token") {
+		t.Errorf("GET /api/register says how to prepare: %d %s", rec.Code, rec.Body.String())
 	}
 }
