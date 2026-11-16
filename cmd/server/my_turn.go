@@ -897,6 +897,7 @@ func handleMyTurn(w http.ResponseWriter, r *http.Request) {
 			"bonus_actions": featBonus,
 			"free_actions":  featFree, // movement, speaking, one object, Action Surge, Font of Magic ... (action_types_2024.go)
 			"movement":      buildMovementInfo(characterSpeed(charID, species), movementRemaining, conditions),
+			"rests":         restGuide(charID), // Short and Long Rest: Hit Point Dice, what comes back, the requests (rests_2024.go)
 			"reaction":      reactionStatus,
 			"action_economy": buildActionEconomy(charID, class, level, actionUsed, bonusActionUsed, reactionUsed,
 				movementRemaining, species, bonusActionSpellCast, cantripsOnlyWarning, conditions,

@@ -983,8 +983,8 @@ func TestDescribedActionNarrativeValidationAndLegacyResultAlias(t *testing.T) {
 	if t2, _ := lookupActionType("dodge"); t2.GM {
 		t.Fatal("mechanical actions should retain their optional description")
 	}
-	if _, ok := lookupActionType("other"); ok {
-		t.Fatal("there is no \"other\" action")
+	if at, _ := lookupActionType("other"); !at.GM {
+		t.Fatal("\"other\" (declare) is described for the GM and must require a narrative")
 	}
 	if actionNarrative("", "") != "" {
 		t.Fatal("empty narrative inputs should remain empty for validation")

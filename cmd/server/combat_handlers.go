@@ -1338,62 +1338,41 @@ func handleShortRest(w http.ResponseWriter, r *http.Request, charID int) {
 			"hp":                 hp,
 			"max_hp":             maxHP,
 			"message":            "POST to take a Short Rest (1 hour); add hit_dice to spend Hit Point Dice.",
+			"rest":               restGuide(charID), // what resting gives and how to ask (rests_2024.go)
 		})
 		return
 	}
 	if req.HitDice < 0 {
 		req.HitDice = 0
 	}
+	// checked before anything changes: SRD 5.2.1 "To start a Short Rest, you must have at least 1 Hit Point"; the dice asked for
+	if hp < 1 {
+		writeJSONStatus(w, http.StatusConflict, map[string]interface{}{"error": "needs_1_hit_point",
+			"message": "A Short Rest needs at least 1 Hit Point to start: at 0 you are dying or stable, not resting. Nothing was changed."})
+		return
+	}
+	if req.HitDice > hitDiceAvailable {
+		writeJSONStatus(w, http.StatusBadRequest, map[string]interface{}{"error": "not_enough_hit_dice", "hit_dice_available": hitDiceAvailable,
+			"hit_dice_requested": req.HitDice, "message": fmt.Sprintf("You have %d Hit Point Dice left. Nothing was changed.", hitDiceAvailable)})
+		return
+	}
 	if lobbyID.Valid {
 		passSpellTimeOn(int(lobbyID.Int64), 600, charID) // a Short Rest is 1 hour: this character's shorter spell effects end (F72)
 	}
 	stopCharacterBurning(charID) // F69
 
-	// Validate hit dice to spend
-	if req.HitDice > hitDiceAvailable {
-		w.WriteHeader(http.StatusBadRequest)
-		json.NewEncoder(w).Encode(map[string]interface{}{
-			"error":              "Not enough hit dice available",
-			"hit_dice_available": hitDiceAvailable,
-			"hit_dice_requested": req.HitDice,
-		})
+	// the Hit Point Dice spent as the rest finishes (rests_2024.go: one guarded claim, rolled, healed by the Hit Point owner)
+	dice, err := rollHitDice(charID, req.HitDice, req.Die)
+	if errors.Is(err, errNotEnoughHitDice) {
+		writeJSONStatus(w, http.StatusConflict, map[string]interface{}{"error": "not_enough_hit_dice", "hit_dice_available": dice.Left,
+			"message": "Another request spent Hit Point Dice at the same moment; send the rest again."})
 		return
 	}
-
-	// Roll hit dice and heal. A multiclass character's dice come from its pools (d10 x6, d6 x12 ...): the die named first, then the
-	// largest left (SRD 5.2.1: Hit Point Dice of different types are tracked separately).
-	hitDieSize := game.HitDie(class)
-	conMod := game.Modifier(con)
-	totalHealing := 0
-	rolls := []int{}
-	dieSizes := spendHitDiceByType(charID, req.HitDice, req.Die)
-
-	for i := 0; i < req.HitDice; i++ {
-		if i < len(dieSizes) {
-			hitDieSize = dieSizes[i]
-		}
-		roll := game.RollDie(hitDieSize)
-		healing := roll + conMod
-		if healing < 1 {
-			healing = 1 // Minimum 1 HP per die
-		}
-		if periaptActive(charID) {
-			healing *= 2 // Periapt of Wound Closure: a Hit Point Die heals double (F142)
-		}
-		rolls = append(rolls, roll)
-		totalHealing += healing
+	if answerDBFailure(w, err, "the character") {
+		return
 	}
-
-	// Apply healing (the Hit Point owner, hit_points_2024.go: can't exceed max HP)
-	newHP, actualHealing := hp, 0
-	if totalHealing > 0 {
-		h, err := healHP(charID, totalHealing)
-		if answerDBFailure(w, err, "the character") {
-			return
-		}
-		newHP, maxHP, actualHealing = h.After.HP, h.After.Max, h.Healed
-	}
-	db.Exec(`UPDATE characters SET hit_dice_spent = hit_dice_spent + $1 WHERE id = $2`, req.HitDice, charID)
+	hitDieSize, conMod, rolls, totalHealing, actualHealing, newHP := dice.Die, dice.ConMod, dice.Rolls, dice.Healing, dice.Healed, dice.HP
+	maxHP = dice.MaxHP
 	clearUses(charID, "improve_fate") // Boon of Fate returns on a Short Rest
 	restStudy(charID, false)
 
@@ -1650,8 +1629,10 @@ func handleShortRest(w http.ResponseWriter, r *http.Request, charID int) {
 		"periapt_of_wound_closure": map[bool]string{true: "Periapt of Wound Closure: each Hit Point Die healed double", false: ""}[periaptActive(charID) && req.HitDice > 0],
 		"hp":                       newHP,
 		"max_hp":                   maxHP,
-		"message":                  fmt.Sprintf("Short rest complete. Spent %d hit dice, healed %d HP.", req.HitDice, actualHealing),
+		"message":                  "Short rest complete. " + hitDiceMessage(charID, dice),
+		"rest":                     restGuide(charID), // what resting gives and how to ask (rests_2024.go)
 	}
+	writeAction(db, int(lobbyID.Int64), charID, "short_rest", fmt.Sprintf("%s finishes a Short Rest", getCharacterName(charID)), fmt.Sprintf("spent %d Hit Point Dice, regained %d Hit Points", req.HitDice, actualHealing))
 
 	if warlockRecovery != "" {
 		response["warlock_recovery"] = warlockRecovery

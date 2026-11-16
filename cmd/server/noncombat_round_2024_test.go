@@ -124,7 +124,7 @@ func TestPostgresNoncombatRound(t *testing.T) {
 		return id, tok
 	}
 	ann, annTok := join("Ann")
-	ben, _ := join("Ben")
+	ben, benTok := join("Ben")
 	base := fmt.Sprintf("/api/campaigns/%d", lobby)
 	if c, j := pgCall(t, "POST", base+"/test-clock", gm, map[string]interface{}{"at": "2026-11-16T10:00:00Z"}); c != 200 {
 		t.Fatalf("test clock: %d %v", c, j)
@@ -149,6 +149,9 @@ func TestPostgresNoncombatRound(t *testing.T) {
 	if c, j := pgCall(t, "POST", "/api/action", annTok, map[string]interface{}{"action": "study", "description": "I study the runes"}); c != 409 || j["error"] != "one_story_action_per_round" {
 		t.Errorf("a second story action in the round: %d %v", c, j)
 	}
+	if c, j := pgCall(t, "POST", "/api/action", annTok, map[string]interface{}{"action": "other", "description": "I cast Sacred Flame at the shadow"}); c != 400 || j["error"] != "declaration_has_its_own_action" {
+		t.Errorf("a declaration that casts a spell is refused, not saved: %d %v", c, j)
+	}
 	if c, j := pgCall(t, "POST", "/api/characters/unequip-armor", annTok, map[string]interface{}{"character_id": ann}); c == 202 {
 		t.Errorf("gear is setup until the character has played a round (Matt 11.9): %d %v", c, j)
 	}
@@ -164,6 +167,13 @@ func TestPostgresNoncombatRound(t *testing.T) {
 	}
 	if c, j := pgCall(t, "POST", base+"/round/stand-in", gm, map[string]interface{}{"character_id": ben, "description": "Ben keeps watch"}); c != 409 || j["error"] != "stand_in_too_early" {
 		t.Errorf("a stand-in before the final check-in: %d %v", c, j)
+	}
+	c, j = pgCall(t, "POST", "/api/action", benTok, map[string]interface{}{"action": "other", "description": "I keep watch at the door and whisper to Ann"})
+	if c != 202 || j["submitted"] != true {
+		t.Fatalf("a declaration (\"other\") outside a fight is saved for the GM: %d %v", c, j)
+	}
+	if c, j := pgCall(t, "DELETE", fmt.Sprintf("%s/round?character_id=%d", base, ben), benTok, nil); c != 200 {
+		t.Fatalf("withdrawing it (so the round reaches its stand-in): %d %v", c, j)
 	}
 
 	c, j = pgCall(t, "POST", base+"/round/resolve", gm, map[string]interface{}{"character_id": ann})

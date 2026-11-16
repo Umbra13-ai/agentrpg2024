@@ -3,9 +3,10 @@ package main
 // The action types a player can send (HANDOFF items 19 and 29). The server had one list of costs (getActionResourceType's switch),
 // another of the words it resolves (knownActionWord), a hand-written table on /commands, a list in skill.md, a list in the API
 // reference, my-turn's options and a catch-all "other" that cost nothing and resolved nothing (live, "Tyranny of Dragons": a
-// Cleric's Sacred Flame and Divine Spark were sent as "other" because divine_spark was missing from the documented list). D&D has
-// no "other" action: everything a character does is one of the SRD's actions or a feature's, and something the server can't
-// resolve itself is sent as the action it is, with a description, for the GM to rule on.
+// Cleric's Sacred Flame and Divine Spark were sent as "other" because divine_spark was missing from the documented list). Most of
+// the 148 "other" turns there were whole in-character turns outside a fight for the GM to narrate, so that stays (Matt, Nov 16):
+// "declare" (aliases "other", "free") is described for the GM and costs the action in a fight, and declarationProblem refuses a
+// declaration that casts a spell or uses a feature, which have actions of their own.
 //
 // actionTypes is the one definition. Everything reads it: the request's check (unknown words, "other", a Ready's held action, a
 // pending turn's steps, a companion's action), the costs (getActionResourceType), the feature-word group (featureAction), what
@@ -17,6 +18,7 @@ package main
 import (
 	"encoding/json"
 	"fmt"
+	"regexp"
 	"sort"
 	"strings"
 	"time"
@@ -51,6 +53,7 @@ const (
 // The sections the docs group the types in, in order.
 var actionSections = []string{
 	"SRD actions",
+	"In your own words",
 	"Moving and the free parts of a turn",
 	"Class features",
 	"Feats and Epic Boons",
@@ -156,6 +159,9 @@ var actionTypes = []actionType{
 		Example: `{"action": "opportunity_attack", "target_id": -1}`},
 
 	// ---------------------------------------------------------------- moving, talking and the free parts of a turn
+	{Name: "declare", Aliases: []string{"other", "free"}, Title: "Declare (your own words, the GM rules)", Section: "In your own words", Cost: costAction, GM: true, Fields: []string{"description"},
+		What:    "What your character does, in your own words, when no other action type fits: leading the group along a wall, a whispered plan, waiting at a corner, scouting a route. The GM rules on it and narrates; nothing is rolled. Outside a fight it is your turn's story action (with the turn schedule, saved for the GM). In a fight it takes your action (say \"bonus action\" in the description for your Bonus Action) and the GM decides what it achieves. A spell is cast with cast and a feature with its own action: a declaration that casts a spell or uses a feature or its resource (a spell slot, Channel Divinity, Focus Points ...) is refused with the request to send.",
+		Example: `{"action": "declare", "description": "I take point along the wall at the children's pace and stop at the last cover before the crossing"}`},
 	{Name: "move", Title: "Move", Section: "Moving and the free parts of a turn", Cost: costMovement, Family: true, Fields: []string{"movement_cost", "toward_frightened_source", "description"},
 		What:    "Move without a battle map: movement_cost is the feet you use (crawling while Prone costs double). On a battle map use POST /api/campaigns/{id}/battle-map/move instead.",
 		Example: `{"action": "move", "movement_cost": 30, "description": "I run to the pillar"}`},
@@ -387,6 +393,7 @@ var actionTypes = []actionType{
 // costVariants: how a variant of an action is costed (an economy word, never sent by a player): a spell whose casting time is a
 // Bonus Action or a Reaction, an item used with a Bonus Action. Their feature-word group is the action's.
 var costVariants = map[string]struct{ cost, group string }{
+	"declare_bonus": {costBonus, "declare"},
 	"bonus_cast":    {costBonus, "cast"},
 	"reaction_cast": {costReaction, "cast"},
 	"item_bonus":    {costBonus, "use_item"},
@@ -397,6 +404,12 @@ var costVariants = map[string]struct{ cost, group string }{
 // one attack forgone when you take the Attack action (spent as an attack of the Attack action); ending it harmlessly takes no
 // action.
 var actionCostForms = map[string]func(description string) string{
+	"declare": func(d string) string { // a declaration takes the action, or the Bonus Action when it says so
+		if strings.Contains(strings.ToLower(d), "bonus action") {
+			return "declare_bonus"
+		}
+		return "declare"
+	},
 	"quivering_palm": func(d string) string {
 		low := strings.ToLower(d)
 		if strings.Contains(low, "end") && !strings.Contains(low, "harmless") {
@@ -404,6 +417,55 @@ var actionCostForms = map[string]func(description string) string{
 		}
 		return "quivering_palm"
 	},
+}
+
+// castingWords: a description that casts a spell or spends a spell slot.
+var castingWords = regexp.MustCompile(`(?i)\b(cast|casts|casting|spell slot)\b`)
+
+// resourceWords: how a description names a resource a feature spends (the Uses keys of the table), where the key alone is an
+// ordinary word.
+var resourceWords = map[string]string{"focus": "focus point", "rage": "use of rage"}
+
+// declarationProblem is the control on a declaration (declare, "other"): the GM rules on what the character does, but nothing with a
+// cost of its own rides along for free. A description that casts a spell, or names a feature the character has from the action
+// table's limited ones (Divine Spark, Second Wind ...) or the resource such a feature spends (Channel Divinity, Focus Points ...),
+// is refused with the request to send. Everything it reads is the action table. "" when the declaration may go to the GM.
+func declarationProblem(charID int, description string) string {
+	if castingWords.MatchString(description) {
+		return declarationCheck(nil, description)
+	}
+	return declarationCheck(actionTypesOpenTo(charID), description)
+}
+
+// declarationCheck is declarationProblem's rule, given the action types the character has now.
+func declarationCheck(open []actionType, description string) string {
+	low := strings.ToLower(description)
+	if castingWords.MatchString(description) {
+		send := `{"action": "cast", "spell_slug": "<slug>"}`
+		if slug, _, _ := resolveCastSpellSlug("", description); slug != "" {
+			send = fmt.Sprintf(`{"action": "cast", "spell_slug": %q}`, slug)
+		}
+		return "a spell is cast with the Magic action, which spends its slot and rolls what it does: send " + send + " (a declaration is only for what has no action of its own)."
+	}
+	for _, t := range open {
+		if t.Who == (actionWho{}) || t.Send == sendFamily {
+			continue
+		}
+		names := []string{strings.ToLower(strings.SplitN(t.Title, " (", 2)[0]), strings.ReplaceAll(t.Name, "_", " ")}
+		if t.Uses != "" {
+			u := strings.ReplaceAll(t.Uses, "_", " ")
+			if w, ok := resourceWords[t.Uses]; ok {
+				u = w
+			}
+			names = append(names, u)
+		}
+		for _, n := range names {
+			if len(n) > 3 && regexp.MustCompile(`\b`+regexp.QuoteMeta(n)+`s?\b`).MatchString(low) {
+				return fmt.Sprintf("%q is %s, its own action (it spends what it spends and rolls what it does): send %s.", n, t.Title, t.Example)
+			}
+		}
+	}
+	return ""
 }
 
 // actionTypeIndex: every name and alias, folded by game.Key, to its type.
@@ -733,7 +795,7 @@ func actionOptionsFor(charID int) []map[string]interface{} {
 // ---------------------------------------------------------------- refusing a word that is no action
 
 // describedHint: how to send what the server doesn't resolve itself.
-const describedHint = "There is no \"other\" action: everything a character does is one of these. Something the server doesn't resolve itself is sent as the action it is, with a description, and the GM rules on it: pulling a lever or forcing a door is use_item (Utilize), persuading or threatening is influence, looking around is search, recalling lore is study, a shouted warning is speak, opening a door on your way is interact. Every action type: /commands."
+const describedHint = "Something the server doesn't resolve itself is sent as the action it is, with a description, and the GM rules on it: pulling a lever or forcing a door is use_item (Utilize), persuading or threatening is influence, looking around is search, recalling lore is study, a shouted warning is speak, opening a door on your way is interact. A turn in your own words that fits none of them is declare (\"other\" is accepted): the GM rules on it, and in a fight it takes your action; a spell or a feature is sent with its own action, never declared. Every action type: /commands."
 
 // unknownActionRefusal: the reply to a word that is no action type (400 unknown_action): what the character can send now, each with
 // its request. Nothing was spent or changed.
@@ -825,9 +887,10 @@ func readiedAction(description string) (trigger, action, desc string, ok bool) {
 	return trigger, "", desc, false
 }
 
-// readyable: a Ready holds an action (or a move); not another Ready, and not a feature's own request or a companion's action.
+// readyable: a Ready holds an action (or a move); not another Ready, not a declaration (a Ready names the action it holds), and
+// not a feature's own request or a companion's action.
 func readyable(t actionType) bool {
-	return t.Send == sendAction && t.Name != "ready" && (t.Cost == costAction || t.Cost == costMovement)
+	return t.Send == sendAction && t.Name != "ready" && t.Name != "declare" && (t.Cost == costAction || t.Cost == costMovement)
 }
 
 // readiedActionRefusal: a Ready that names no action it can hold (400 unknown_action), with the actions it can hold.

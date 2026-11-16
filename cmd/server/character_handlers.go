@@ -890,7 +890,7 @@ func handleCharacterByID(w http.ResponseWriter, r *http.Request) {
 			if _, ok := requireCharacterGM(w, r, charID, "deal it damage or heal it this way"); !ok {
 				return
 			}
-		case "rest", "short-rest", "cover", "setup":
+		case "rest", "short-rest", "hit-dice", "cover", "setup":
 			if _, ok := requireOwnerOrGM(w, r, charID, "rest it, give it cover or change its setup"); !ok {
 				return
 			}
@@ -910,6 +910,9 @@ func handleCharacterByID(w http.ResponseWriter, r *http.Request) {
 			return
 		case "short-rest":
 			withRestReminders(handleShortRest, true)(w, r, charID)
+			return
+		case "hit-dice":
+			handleHitDice(w, r, charID) // Hit Point Dice right after a Short Rest (rests_2024.go)
 			return
 		case "cover":
 			handleSetCover(w, r, charID)

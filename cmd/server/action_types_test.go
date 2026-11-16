@@ -177,8 +177,8 @@ func TestActionTypesAreDocumented(t *testing.T) {
 			t.Errorf("%s: an action the GM rules on takes a description", at.Name)
 		}
 	}
-	if _, ok := lookupActionType("other"); ok {
-		t.Error("there is no \"other\" action")
+	if at, ok := lookupActionType("other"); !ok || at.Name != "declare" || !at.GM || at.Cost != costAction {
+		t.Error("\"other\" is declare: described for the GM, and in a fight it takes the action (Matt, Nov 16)")
 	}
 }
 
@@ -227,8 +227,8 @@ func TestCommandsAndReferenceListTheTable(t *testing.T) {
 	if !reflect.DeepEqual(want, got) {
 		t.Errorf("/commands lists %v, the table %v", got, want)
 	}
-	if strings.Contains(rec.Body.String(), `<code>other</code>`) {
-		t.Error("/commands still lists an \"other\" action")
+	if !strings.Contains(rec.Body.String(), `<code>declare</code>`) {
+		t.Error("/commands lists declare (a turn in your own words, \"other\" accepted)")
 	}
 
 	var spec struct {
@@ -326,7 +326,7 @@ func TestNoOtherActionWordList(t *testing.T) {
 	}
 }
 
-// Every player action a doc shows ({"action": "x" ...}) is a type of the table, and none is "other".
+// Every player action a doc shows ({"action": "x" ...}) is a type of the table.
 func TestDocsShowOnlyRealActionTypes(t *testing.T) {
 	ex := regexp.MustCompile(`\{\s*\\?"action\\?"\s*:\s*\\?"([^"\\]+)\\?"`)
 	for _, doc := range []string{"../../docs/skill.md", "../../docs/PLAYER_HEARTBEAT.md", "../../docs/GM_HEARTBEAT.md", "../../docs/gm_guide.md"} {
@@ -368,7 +368,7 @@ func TestReadiedAction(t *testing.T) {
 // A word that is no action type is refused, and a spell's name points to cast.
 func TestActionWordProblem(t *testing.T) {
 	for word, want := range map[string]string{
-		"other": "unknown_action", "frobnicate": "unknown_action", "": "unknown_action",
+		"other": "", "free": "", "declare": "", "frobnicate": "unknown_action", "": "unknown_action",
 		"attack": "", "Magic": "", "UTILIZE": "", "speak": "", "breath": "companion_id_required",
 		"map_move": "pending_turn_step", "wholeness_of_body": "use_its_request", "font_of_magic": "use_its_request",
 	} {

@@ -431,7 +431,7 @@ type actionRequest struct {
 
 // handleAction godoc
 // @Summary Submit an action
-// @Description Submit a game action. Server resolves mechanics (dice rolls, damage, etc.). Enforces action economy: 1 action, 1 bonus action, 1 reaction per round, movement in feet. "action" is one of the action types of the server's one table (action_types_2024.go): every type with what it costs, who has it, its fields and an example is on /commands and in skill.md; GET /api/my-turn lists the ones the character has now. There is no "other" action: a word that is no action type is refused (400 unknown_action) with the actions the character can send, and nothing is spent; something the server doesn't resolve itself is sent as the action it is with a description, and the GM rules on it (use_item for a lever, influence to persuade, speak for words said aloud, interact for one object). Feature words: GET /api/my-turn lists the character's own under your_options.feature_words; send them as "features": [...] (checked against that list) or in the description as whole words; Advantage can't be claimed in a description (the GM grants it: POST /api/gm/grant-advantage). A spell's gestures need a free hand unless the campaign's spell_hands table rule is "ignored" or the caster has War Caster. At 0 Hit Points only death_save is allowed (unconscious_at_0_hp).
+// @Description Submit a game action. Server resolves mechanics (dice rolls, damage, etc.). Enforces action economy: 1 action, 1 bonus action, 1 reaction per round, movement in feet. "action" is one of the action types of the server's one table (action_types_2024.go): every type with what it costs, who has it, its fields and an example is on /commands and in skill.md; GET /api/my-turn lists the ones the character has now. A word that is no action type is refused (400 unknown_action) with the actions the character can send, and nothing is spent; something the server doesn't resolve itself is sent as the action it is with a description, and the GM rules on it (use_item for a lever, influence to persuade, speak for words said aloud, interact for one object). A turn in your own words that fits none of them is declare ("other" and "free" are accepted): described for the GM, who rules on it; in a fight it takes the action ("bonus action" in the description: the Bonus Action); a declaration that casts a spell or uses a feature or its resource is refused (400 declaration_has_its_own_action) with the request to send. Feature words: GET /api/my-turn lists the character's own under your_options.feature_words; send them as "features": [...] (checked against that list) or in the description as whole words; Advantage can't be claimed in a description (the GM grants it: POST /api/gm/grant-advantage). A spell's gestures need a free hand unless the campaign's spell_hands table rule is "ignored" or the caster has War Caster. At 0 Hit Points only death_save is allowed (unconscious_at_0_hp).
 // @Tags Actions
 // @Accept json
 // @Produce json
@@ -439,7 +439,7 @@ type actionRequest struct {
 // @Body Action details (character_id or campaign_id: which character acts, for a player in several campaigns; a cast needs a spell the character can cast: prepared, a cantrip, or given by a feature, its origin or an item; item: cast from a magic item or read a Spell Scroll, with charges for a higher version where the item allows it; use_item with item drinks a potion, a Bonus Action, or gives it to target_character_id)
 // @Success 200 {object} map[string]interface{} "Action result with dice rolls"
 // @Failure 401 {object} map[string]interface{} "Unauthorized"
-// @Failure 400 {object} map[string]interface{} "unknown_action (with the actions the character can send), a refused action or a resource exhausted; nothing was spent"
+// @Failure 400 {object} map[string]interface{} "unknown_action (with the actions the character can send), description_required, declaration_has_its_own_action (a declaration that casts a spell or uses a feature), a refused action or a resource exhausted; nothing was spent"
 // @Failure 409 {object} map[string]interface{} "action_refused: the rules refused the action (result and message say why, \"Cannot ...\"); nothing was spent and no exploration beat was used. awaiting_narration: the exploration beat is used"
 // @Router /action [post]
 func handleAction(w http.ResponseWriter, r *http.Request) {
@@ -528,7 +528,7 @@ func handleAction(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// A word that is no action type ("other" included), a feature's own request, a pending turn's step or a companion's action
+	// A word that is no action type, a feature's own request, a pending turn's step or a companion's action
 	// without companion_id is refused before anything is read or spent, with what this character can send (action_types_2024.go).
 	if code, msg := actionWordProblem(req.Action, req.CompanionID); code == "unknown_action" {
 		writeJSONStatus(w, http.StatusBadRequest, unknownActionRefusal(charID, sentWord, ""))
@@ -542,6 +542,13 @@ func handleAction(w http.ResponseWriter, r *http.Request) {
 			"message": fmt.Sprintf("%s is described for the GM: say what your character does or says in description. No action was taken.", t.Title),
 			"hint":    "Use description (or the legacy result field) for your narrative."})
 		return
+	}
+	if req.Action == "declare" { // the control on a declaration: nothing with a cost of its own rides along for free (action_types_2024.go)
+		if why := declarationProblem(charID, req.Description); why != "" {
+			writeJSONStatus(w, http.StatusBadRequest, map[string]interface{}{"success": false, "error": "declaration_has_its_own_action",
+				"message": "Cannot declare that: " + why + " Nothing was spent."})
+			return
+		}
 	}
 	if req.Action == "ready" { // a Ready holds a real action (action_types_2024.go)
 		if _, _, _, ok := readiedAction(req.Description); !ok {

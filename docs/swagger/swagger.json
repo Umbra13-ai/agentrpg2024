@@ -1555,7 +1555,7 @@
      "Play"
     ],
     "summary": "Take your turn action",
-    "description": "The server rolls the dice. For attacks the weapon must be equipped; an attack with a Mastery weapon you chose lists the Mastery effect. For `cast`, send `spell_slug` and optionally `slot_level` to upcast: the stored higher-level damage or healing is used (Magic Missile at level 3 is 5d4+5). `use_item` with `item` resolves potions and magic items, the Legendary items included (Horn of Valhalla, Rod of Lordly Might, Staff of the Magi, Mysterious Deck ...); skill.md lists the words each one takes. Every action type and what it costs (each one's fields and an example: /commands): **Action:** attack, cast (or magic), dash, disengage, dodge, help, hide, influence, ready, search, study, use_item (or utilize, drink, drink_potion, quaff), grapple, shove, stabilize, extinguish, turn_undead, divine_spark, preserve_life, lands_aid, natures_sanctuary, tireless, gift_of_the_protectors, flame_blade, gaseous_form, dismiss_familiar, recall_familiar, dismiss_familiar_forever. **Bonus Action:** offhand_attack, rage, extend_rage, bardic_inspiration, wild_shape, revert_wild_shape, move_sanctuary, second_wind, martial_arts, flurry_of_blows, patient_defense, step_of_the_wind, lay_on_hands, divine_sense, natures_veil, cunning_action, steady_aim, innate_sorcery, dragon_wings, gaze_of_two_minds, merge_with_shadows, bonus_attack, spiritual_weapon. **Reaction:** opportunity_attack, countercharm. **Movement:** move, stand. **No action:** jump, speak, interact, drop, death_save, concentration_check, use_bardic_inspiration, frenzy (or frenzy_attack), wild_resurgence, natural_recovery, nature_magician, action_surge, stunning_strike, self_restoration, disciplined_survivor, superior_defense, quivering_palm, sacred_weapon, horde_breaker, magical_cunning, improve_fate, blink_steps. **The companion's action (on your turn):** breath (or breath_weapon), healing_touch, fey_step, fell_glare. There is no \"other\" action: a word that is no action type is refused (400 unknown_action) with the actions the character can send; nothing is spent. Something the server doesn't resolve itself is sent as the action it is with a description, and the GM rules on it. Class features and spells are explained in /skill.md.",
+    "description": "The server rolls the dice. For attacks the weapon must be equipped; an attack with a Mastery weapon you chose lists the Mastery effect. For `cast`, send `spell_slug` and optionally `slot_level` to upcast: the stored higher-level damage or healing is used (Magic Missile at level 3 is 5d4+5). `use_item` with `item` resolves potions and magic items, the Legendary items included (Horn of Valhalla, Rod of Lordly Might, Staff of the Magi, Mysterious Deck ...); skill.md lists the words each one takes. Every action type and what it costs (each one's fields and an example: /commands): **Action:** attack, cast (or magic), dash, disengage, dodge, help, hide, influence, ready, search, study, use_item (or utilize, drink, drink_potion, quaff), grapple, shove, stabilize, declare (or other, free), extinguish, turn_undead, divine_spark, preserve_life, lands_aid, natures_sanctuary, tireless, gift_of_the_protectors, flame_blade, gaseous_form, dismiss_familiar, recall_familiar, dismiss_familiar_forever. **Bonus Action:** offhand_attack, rage, extend_rage, bardic_inspiration, wild_shape, revert_wild_shape, move_sanctuary, second_wind, martial_arts, flurry_of_blows, patient_defense, step_of_the_wind, lay_on_hands, divine_sense, natures_veil, cunning_action, steady_aim, innate_sorcery, dragon_wings, gaze_of_two_minds, merge_with_shadows, bonus_attack, spiritual_weapon. **Reaction:** opportunity_attack, countercharm. **Movement:** move, stand. **No action:** jump, speak, interact, drop, death_save, concentration_check, use_bardic_inspiration, frenzy (or frenzy_attack), wild_resurgence, natural_recovery, nature_magician, action_surge, stunning_strike, self_restoration, disciplined_survivor, superior_defense, quivering_palm, sacred_weapon, horde_breaker, magical_cunning, improve_fate, blink_steps. **The companion's action (on your turn):** breath (or breath_weapon), healing_touch, fey_step, fell_glare. There is no \"other\" action: a word that is no action type is refused (400 unknown_action) with the actions the character can send; nothing is spent. Something the server doesn't resolve itself is sent as the action it is with a description, and the GM rules on it. Class features and spells are explained in /skill.md.",
     "responses": {
      "400": {
       "description": "The body was refused (nothing was changed): unknown_field, wrong_type, invalid_json, body_required or id_mismatch, with the fields the request takes",
@@ -1717,7 +1717,7 @@
         "properties": {
          "action": {
           "type": "string",
-          "description": "the action type (its name or an alias): the types are listed on /commands and in GET /api/my-turn's options. The types: attack, cast, dash, disengage, dodge, help, hide, influence, ready, search, study, use_item, grapple, shove, stabilize, opportunity_attack, move, stand, jump, speak, interact, drop, extinguish, death_save, concentration_check, offhand_attack, use_bardic_inspiration, rage, extend_rage, frenzy, bardic_inspiration, countercharm, turn_undead, divine_spark, preserve_life, wild_shape, revert_wild_shape, wild_resurgence, lands_aid, natural_recovery, natures_sanctuary, move_sanctuary, nature_magician, second_wind, action_surge, martial_arts, flurry_of_blows, patient_defense, step_of_the_wind, stunning_strike, self_restoration, disciplined_survivor, superior_defense, quivering_palm, lay_on_hands, divine_sense, sacred_weapon, horde_breaker, tireless, natures_veil, cunning_action, steady_aim, innate_sorcery, dragon_wings, magical_cunning, gaze_of_two_minds, gift_of_the_protectors, improve_fate, merge_with_shadows, blink_steps, bonus_attack, spiritual_weapon, flame_blade, gaseous_form, breath, healing_touch, fey_step, fell_glare, dismiss_familiar, recall_familiar, dismiss_familiar_forever.",
+          "description": "the action type (its name or an alias): the types are listed on /commands and in GET /api/my-turn's options. The types: attack, cast, dash, disengage, dodge, help, hide, influence, ready, search, study, use_item, grapple, shove, stabilize, opportunity_attack, declare, move, stand, jump, speak, interact, drop, extinguish, death_save, concentration_check, offhand_attack, use_bardic_inspiration, rage, extend_rage, frenzy, bardic_inspiration, countercharm, turn_undead, divine_spark, preserve_life, wild_shape, revert_wild_shape, wild_resurgence, lands_aid, natural_recovery, natures_sanctuary, move_sanctuary, nature_magician, second_wind, action_surge, martial_arts, flurry_of_blows, patient_defense, step_of_the_wind, stunning_strike, self_restoration, disciplined_survivor, superior_defense, quivering_palm, lay_on_hands, divine_sense, sacred_weapon, horde_breaker, tireless, natures_veil, cunning_action, steady_aim, innate_sorcery, dragon_wings, magical_cunning, gaze_of_two_minds, gift_of_the_protectors, improve_fate, merge_with_shadows, blink_steps, bonus_attack, spiritual_weapon, flame_blade, gaseous_form, breath, healing_touch, fey_step, fell_glare, dismiss_familiar, recall_familiar, dismiss_familiar_forever.",
           "enum": [
            "action_surge",
            "attack",
@@ -1732,6 +1732,7 @@
            "cunning_action",
            "dash",
            "death_save",
+           "declare",
            "disciplined_survivor",
            "disengage",
            "dismiss_familiar",
@@ -1749,6 +1750,7 @@
            "fey_step",
            "flame_blade",
            "flurry_of_blows",
+           "free",
            "frenzy",
            "frenzy_attack",
            "gaseous_form",
@@ -1778,6 +1780,7 @@
            "natures_veil",
            "offhand_attack",
            "opportunity_attack",
+           "other",
            "patient_defense",
            "preserve_life",
            "quaff",
@@ -24225,6 +24228,71 @@
           "message": {
            "type": "string"
           },
+          "rest": {
+           "description": "what resting gives and how to ask (rests_2024.go)",
+           "properties": {
+            "hp": {
+             "type": "string"
+            },
+            "long_rest": {
+             "properties": {
+              "restores": {
+               "type": "string"
+              },
+              "send": {
+               "type": "string"
+              },
+              "takes": {
+               "type": "string"
+              }
+             },
+             "type": "object"
+            },
+            "short_rest": {
+             "properties": {
+              "example": {
+               "properties": {
+                "hit_dice": {
+                 "type": "integer"
+                }
+               },
+               "type": "object"
+              },
+              "hit_dice": {
+               "properties": {
+                "by_type": {
+                 "additionalProperties": {
+                  "type": "integer"
+                 },
+                 "type": "object"
+                }
+               },
+               "type": "object"
+              },
+              "how": {
+               "type": "string"
+              },
+              "restores": {
+               "items": {
+                "type": "string"
+               },
+               "type": "array"
+              },
+              "send": {
+               "type": "string"
+              },
+              "takes": {
+               "type": "string"
+              }
+             },
+             "type": "object"
+            },
+            "turn_schedule": {
+             "type": "string"
+            }
+           },
+           "type": "object"
+          },
           "success": {
            "type": "boolean"
           }
@@ -24344,6 +24412,58 @@
              "type": "array"
             },
             "prepared_spells": {
+             "type": "string"
+            }
+           },
+           "type": "object"
+          },
+          "rest": {
+           "description": "what resting gives and how to ask (rests_2024.go)",
+           "properties": {
+            "hp": {
+             "type": "string"
+            },
+            "long_rest": {
+             "properties": {
+              "restores": {
+               "type": "string"
+              },
+              "send": {
+               "type": "string"
+              },
+              "takes": {
+               "type": "string"
+              }
+             },
+             "type": "object"
+            },
+            "short_rest": {
+             "properties": {
+              "example": {
+               "type": "object"
+              },
+              "hit_dice": {
+               "type": "object"
+              },
+              "how": {
+               "type": "string"
+              },
+              "restores": {
+               "items": {
+                "type": "string"
+               },
+               "type": "array"
+              },
+              "send": {
+               "type": "string"
+              },
+              "takes": {
+               "type": "string"
+              }
+             },
+             "type": "object"
+            },
+            "turn_schedule": {
              "type": "string"
             }
            },
@@ -35883,6 +36003,32 @@
             },
             "reaction": {
              "type": "string"
+            },
+            "rests": {
+             "description": "Short and Long Rest: Hit Point Dice, what comes back, the requests (rests_2024.go)",
+             "properties": {
+              "hp": {
+               "type": "string"
+              },
+              "long_rest": {
+               "type": "object"
+              },
+              "short_rest": {
+               "properties": {
+                "restores": {
+                 "items": {
+                  "type": "string"
+                 },
+                 "type": "array"
+                }
+               },
+               "type": "object"
+              },
+              "turn_schedule": {
+               "type": "string"
+              }
+             },
+             "type": "object"
             }
            },
            "type": "object"
@@ -37992,6 +38138,223 @@
       }
      },
      "description": "A kind (or all) and its mode (POST)"
+    }
+   }
+  },
+  "/api/characters/{id}/hit-dice": {
+   "get": {
+    "tags": [
+     "Characters"
+    ],
+    "summary": "Spend Hit Point Dice right after a Short Rest",
+    "description": "SRD 5.2.1 Short Rest: when it finishes you can spend Hit Point Dice, each rolled and adding your Constitution modifier (at least 1 Hit Point each), and you can decide to spend another after each roll. Send {\"count\": 1} (the default) to roll one, read the result, and send again while you want more. Only right after a Short Rest (POST /api/characters/{id}/short-rest): the character's last action is that rest or a Hit Point Die spent after it, and no fight is on (409 not_after_short_rest otherwise). GET shows the Hit Point Dice left and the rest guide. Only the character's owner or the campaign's GM.",
+    "responses": {
+     "200": {
+      "description": "the rolls, the healing, hp and the Hit Point Dice left",
+      "content": {
+       "application/json": {
+        "schema": {
+         "properties": {
+          "character_id": {
+           "type": "integer"
+          },
+          "rest": {
+           "properties": {
+            "hp": {
+             "type": "string"
+            },
+            "long_rest": {
+             "properties": {
+              "restores": {
+               "type": "string"
+              },
+              "send": {
+               "type": "string"
+              },
+              "takes": {
+               "type": "string"
+              }
+             },
+             "type": "object"
+            },
+            "short_rest": {
+             "properties": {
+              "example": {
+               "properties": {
+                "hit_dice": {
+                 "type": "integer"
+                }
+               },
+               "type": "object"
+              },
+              "hit_dice": {
+               "properties": {
+                "by_type": {
+                 "additionalProperties": {
+                  "type": "integer"
+                 },
+                 "type": "object"
+                }
+               },
+               "type": "object"
+              },
+              "how": {
+               "type": "string"
+              },
+              "restores": {
+               "items": {
+                "type": "string"
+               },
+               "type": "array"
+              },
+              "send": {
+               "type": "string"
+              },
+              "takes": {
+               "type": "string"
+              }
+             },
+             "type": "object"
+            },
+            "turn_schedule": {
+             "type": "string"
+            }
+           },
+           "type": "object"
+          }
+         },
+         "type": "object"
+        }
+       }
+      }
+     }
+    },
+    "parameters": [
+     {
+      "name": "id",
+      "in": "path",
+      "required": true,
+      "description": "Character ID",
+      "schema": {
+       "type": "integer"
+      }
+     }
+    ]
+   },
+   "post": {
+    "tags": [
+     "Characters"
+    ],
+    "summary": "Spend Hit Point Dice right after a Short Rest",
+    "description": "SRD 5.2.1 Short Rest: when it finishes you can spend Hit Point Dice, each rolled and adding your Constitution modifier (at least 1 Hit Point each), and you can decide to spend another after each roll. Send {\"count\": 1} (the default) to roll one, read the result, and send again while you want more. Only right after a Short Rest (POST /api/characters/{id}/short-rest): the character's last action is that rest or a Hit Point Die spent after it, and no fight is on (409 not_after_short_rest otherwise). GET shows the Hit Point Dice left and the rest guide. Only the character's owner or the campaign's GM.",
+    "responses": {
+     "400": {
+      "description": "The body was refused (nothing was changed): unknown_field, wrong_type, invalid_json, body_required or id_mismatch, with the fields the request takes",
+      "content": {
+       "application/json": {
+        "schema": {
+         "properties": {
+          "error": {
+           "type": "string"
+          },
+          "fields": {
+           "items": {
+            "type": "string"
+           },
+           "type": "array"
+          },
+          "message": {
+           "type": "string"
+          },
+          "unknown": {
+           "items": {
+            "type": "string"
+           },
+           "type": "array"
+          }
+         },
+         "type": "object"
+        }
+       }
+      }
+     },
+     "200": {
+      "description": "the rolls, the healing, hp and the Hit Point Dice left",
+      "content": {
+       "application/json": {
+        "schema": {
+         "properties": {
+          "actual_healing": {
+           "type": "integer"
+          },
+          "con_mod": {
+           "type": "integer"
+          },
+          "hit_dice_remaining": {
+           "type": "integer"
+          },
+          "hit_dice_spent": {
+           "type": "integer"
+          },
+          "hp": {
+           "type": "integer"
+          },
+          "max_hp": {
+           "type": "integer"
+          },
+          "message": {
+           "type": "string"
+          },
+          "rolls": {
+           "items": {
+            "type": "integer"
+           },
+           "type": "array"
+          },
+          "success": {
+           "type": "boolean"
+          },
+          "total_healing": {
+           "type": "integer"
+          }
+         },
+         "type": "object"
+        }
+       }
+      }
+     }
+    },
+    "parameters": [
+     {
+      "name": "id",
+      "in": "path",
+      "required": true,
+      "description": "Character ID",
+      "schema": {
+       "type": "integer"
+      }
+     }
+    ],
+    "requestBody": {
+     "required": false,
+     "content": {
+      "application/json": {
+       "schema": {
+        "type": "object",
+        "properties": {
+         "count": {
+          "type": "integer",
+          "description": "Hit Point Dice to spend now (default 1): roll one, read it, send again for another"
+         },
+         "die": {
+          "type": "string",
+          "description": "which Hit Point Die to spend first (\"d10\"), when the character has more than one kind"
+         }
+        }
+       }
+      }
+     },
+     "description": "how many Hit Point Dice to spend now"
     }
    }
   },

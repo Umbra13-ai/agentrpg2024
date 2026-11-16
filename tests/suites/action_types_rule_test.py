@@ -1,16 +1,17 @@
-# HANDOFF items 19 and 29: one definition of the action types a player can send, and no "other" action.
+# HANDOFF items 19 and 29: one definition of the action types a player can send. "other" is declare (Matt, Nov 16): the GM rules
+# on it, it takes the action in a fight, and a declaration that casts a spell or uses a feature is refused.
 # The server has one table of action types (cmd/server/action_types_2024.go); the request's check, the costs, my-turn's options, the
-# refusal's list, /commands, the API reference and skill.md all read it. A word that is no action type ("other" included) is refused
+# refusal's list, /commands, the API reference and skill.md all read it. A word that is no action type is refused
 # with 400 unknown_action and the actions the character can send now; nothing is spent. Something the server doesn't resolve is sent
 # as the SRD action it is with a description (Utilize, Influence, speak) and the GM rules on it.
-#   - "other" refused, with options, nothing spent: a direct action (out of and in a fight), a pending turn's step, a Ready, a
+#   - an unknown word refused, with options, nothing spent: a direct action (out of and in a fight), a pending turn's step, a Ready, a
 #     companion's action; an unknown word likewise; a spell's name points to cast; a feature's own request points to its route
 #   - every type a level 1 character of each class has (the refusal's list) passes the check (probed with a target in another
 #     campaign: the check comes first, then the campaign rule refuses with 404, so nothing happens)
 #   - speak and interact are free, need a description and are logged as the character's words; speaking doesn't use the
 #     exploration beat
 #   - a level 2 Cleric has divine_spark and turn_undead (my-turn and the refusal's list); a level 1 Cleric doesn't
-#   - /commands and /docs/swagger.json list the same types, divine_spark, speak and interact among them, never "other"
+#   - /commands and /docs/swagger.json list the same types, divine_spark, speak, interact and declare among them
 #   - Utilize and Magic are use_item and cast
 # Requests only: local, or staging (ARPG_TARGET=staging python3 action_types_rule_test.py).
 import json, random, re
@@ -63,11 +64,13 @@ join_start(other_camp, GV, [(victim, PV)])
 
 # ---------------------------------------------------------------- level 1: no Channel Divinity yet
 c, j = act(PC, cleric, {"action": "other", "description": "I cast Sacred Flame at the cultist"})
-check(f"'other' is refused out of a fight: 400 unknown_action ({c} {j.get('error')})", c == 400 and j.get("error") == "unknown_action", j)
+check(f"'other' (declare) that casts a spell is refused, pointing to cast ({c} {j.get('error')})", c == 400 and j.get("error") == "declaration_has_its_own_action" and '"cast"' in j.get("message", ""), j)
+c, j = act(PC, cleric, {"action": "frobnicate", "description": "I cast Sacred Flame at the cultist"})
+check(f"a word that is no action is refused out of a fight: 400 unknown_action ({c} {j.get('error')})", c == 400 and j.get("error") == "unknown_action", j)
 check("the refusal lists the actions the character can send, each with an example request", options_ok(j) and "attack" in names(j.get("actions")) and "cast" in names(j.get("actions")), names(j.get("actions")))
 check("the refusal says how to send what the server doesn't resolve (Utilize, Influence, speak)", all(w in j.get("message", "") for w in ("use_item", "influence", "speak")), j.get("message"))
 check("a level 1 Cleric has no Divine Spark or Turn Undead yet", "divine_spark" not in names(j.get("actions")) and "turn_undead" not in names(j.get("actions")), names(j.get("actions")))
-check("nothing was recorded for the refused 'other'", not any("Sacred Flame at the cultist" in json.dumps(e) for e in feed(camp, GM)), None)
+check("nothing was recorded for the refused requests", not any("Sacred Flame at the cultist" in json.dumps(e) for e in feed(camp, GM)), None)
 c2, j2 = act(PC, cleric, {"action": "search", "description": "I look for tracks"})
 check(f"after the refusal the exploration beat is still unused (search answers {c2})", c2 == 200, j2)
 
@@ -75,7 +78,7 @@ c, j = call("POST", "/api/gm/update-character", {"character_id": cleric, "level"
 check("the GM sets the Cleric to level 2", c == 200 and not j.get("error"), j)
 call("POST", "/api/gm/narrate", {"campaign_id": camp, "narration": "The cultists turn toward you."}, GM)
 
-c, j = act(PC, cleric, {"action": "other", "description": "Channel Divinity heal"})
+c, j = act(PC, cleric, {"action": "frobnicate", "description": "Channel Divinity heal"})
 opts = names(j.get("actions"))
 check("a level 2 Cleric's refusal lists divine_spark and turn_undead", c == 400 and "divine_spark" in opts and "turn_undead" in opts, opts)
 spark = next((o for o in j.get("actions", []) if o["action"] == "divine_spark"), {})
@@ -87,7 +90,7 @@ check("my-turn lists Divine Spark and Turn Undead with the request to send", any
 free = (mt.get("your_options") or {}).get("free_actions") or []
 check("my-turn lists speak and interact among the things that take no action", {"speak", "interact"} <= {o.get("action") for o in free}, [o.get("action") for o in free])
 
-for word in ("frobnicate", "OTHER", "Other "):
+for word in ("frobnicate", "Nonsense "):
     c, j = act(PC, cleric, {"action": word, "description": "x"})
     check(f"{word!r} is refused with unknown_action and the options ({c})", c == 400 and j.get("error") == "unknown_action" and options_ok(j), j.get("error"))
 c, j = act(PC, cleric, {"action": "fireball"})
@@ -96,8 +99,8 @@ c, j = act(PC, cleric, {"action": "wholeness_of_body"})
 check(f"a feature with its own request is pointed to it ({j.get('error')})", c == 400 and j.get("error") == "use_its_request" and "/api/characters/wholeness-of-body" in j.get("message", ""), j)
 c, j = act(PC, cleric, {"action": "map_move"})
 check(f"a pending turn's step sent alone is pointed to the battle map ({j.get('error')})", c == 400 and j.get("error") == "pending_turn_step", j)
-c, j = act(PC, cleric, {"action": "other", "companion_id": 999999})
-check(f"a companion's 'other' is refused as unknown_action ({j.get('error')})", c == 400 and j.get("error") == "unknown_action", j)
+c, j = act(PC, cleric, {"action": "frobnicate", "companion_id": 999999})
+check(f"a companion's unknown word is refused as unknown_action ({j.get('error')})", c == 400 and j.get("error") == "unknown_action", j)
 c, j = act(PC, cleric, {"action": "speak", "companion_id": 999999, "description": "hi"})
 check(f"a companion can't be sent speak ({j.get('error')})", c == 400 and j.get("error") == "invalid_companion_action" and "attack" in j.get("message", ""), j)
 c, j = act(PC, cleric, {"action": "breath", "target_ids": [-1]})
@@ -139,15 +142,15 @@ for _ in range(4):
     cur = (order[st.get("current_turn_index", 0)] if order else {}).get("id")
 me, tok = (cleric, PC) if cur == cleric else (fighter, PF)
 check("it is a character's turn", cur in (cleric, fighter), st)
-c, j = act(tok, me, {"action": "other", "description": "I do something"})
-check(f"'other' is refused in a fight ({c} {j.get('error')})", c == 400 and j.get("error") == "unknown_action" and options_ok(j), j)
+c, j = act(tok, me, {"action": "frobnicate", "description": "I do something"})
+check(f"a word that is no action is refused in a fight ({c} {j.get('error')})", c == 400 and j.get("error") == "unknown_action" and options_ok(j), j)
 line = f"For the dawn! {random.randint(1000, 9999)}"
 c, j = act(tok, me, {"action": "speak", "description": line})
 check(f"speak in a fight is free ({j.get('resource_consumed')})", c == 200 and j.get("resource_consumed") == "free", j)
 c, j = act(tok, me, {"action": "interact", "description": "I kick the fallen torch toward the cultist"})
 check(f"interact in a fight is free ({j.get('resource_consumed')})", c == 200 and j.get("resource_consumed") == "free", j)
-c, j = call("POST", "/api/pending-turn", {"steps": [{"action": "other", "description": "x"}], "character_id": me, "campaign_id": camp}, tok)
-check(f"a pending turn with an 'other' step is refused, with the options ({c} {j.get('error')})", c == 400 and j.get("error") == "invalid_pending_turn"
+c, j = call("POST", "/api/pending-turn", {"steps": [{"action": "frobnicate", "description": "x"}], "character_id": me, "campaign_id": camp}, tok)
+check(f"a pending turn with an unknown step is refused, with the options ({c} {j.get('error')})", c == 400 and j.get("error") == "invalid_pending_turn"
       and any("unknown_action" in p for p in j.get("problems", [])) and "attack" in names(j.get("actions")), j)
 c, j = call("POST", "/api/pending-turn", {"steps": [{"action": "ready", "description": "trigger: x; action: other"}], "character_id": me, "campaign_id": camp}, tok)
 check(f"a pending turn whose Ready holds no action is refused ({c})", c == 400 and any("unknown_action" in p for p in j.get("problems", [])), j)
@@ -157,6 +160,8 @@ c, j = act(tok, me, {"action": "dodge"})
 check(f"after every refusal and the free actions, the action is still there: Dodge works ({c} {j.get('resource_consumed')})", c == 200 and j.get("resource_consumed") == "action", j)
 c, j = act(tok, me, {"action": "dash"})
 check(f"and now the action is used ({c} {j.get('error')})", c == 409 and j.get("error") == "resource_exhausted", j)
+c, j = act(tok, me, {"action": "other", "description": "I shove the table over between us"})
+check(f"a declaration ('other') in a fight takes the action: with it used, it is refused, never free ({c} {j.get('error')})", c == 409 and j.get("error") == "resource_exhausted", j)
 words = [e for e in feed(camp, GM) if line in json.dumps(e)]
 check("the words said in the fight are in the log", bool(words), None)
 call("POST", B + "/end", {"award_xp": False}, GM)
@@ -176,10 +181,10 @@ for cls, bg, sp in CLASSES:
 for half in (members[:6], members[6:]):
     join_start(campaign(GC, "Every class"), GC, [(cid, tok) for cid, tok, _ in half])
 for cid, tok, cls in members:
-    c, j = act(tok, cid, {"action": "other", "description": "x"})
+    c, j = act(tok, cid, {"action": "frobnicate", "description": "x"})
     opts = j.get("actions") or []
     have = names(opts)
-    check(f"{cls} 1: 'other' refused with {len(have)} options", c == 400 and j.get("error") == "unknown_action" and len(have) >= 15, j.get("error"))
+    check(f"{cls} 1: an unknown word refused with {len(have)} options", c == 400 and j.get("error") == "unknown_action" and len(have) >= 15, j.get("error"))
     if cls in EXPECT:
         check(f"{cls} 1: its feature {EXPECT[cls]} is listed", EXPECT[cls] in have, have)
     if cls in NOT_YET:
