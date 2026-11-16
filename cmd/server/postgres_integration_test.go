@@ -12,7 +12,6 @@ import (
 	"database/sql"
 	"encoding/json"
 	"fmt"
-	"net/http"
 	"net/http/httptest"
 	"net/url"
 	"os"
@@ -286,6 +285,9 @@ func TestPostgresModDeleteUser(t *testing.T) {
 	camp := int(j["campaign_id"].(float64))
 	_, j = pgCall(t, "POST", "/api/characters", plTok, pgRogue(fmt.Sprintf("Pg Leaver %d", pl)))
 	char := int(j["character_id"].(float64))
+	if c, j := pgCall(t, "POST", fmt.Sprintf("/api/campaigns/%d/join", camp), plTok, map[string]interface{}{"character_id": char}); c != 200 {
+		t.Fatalf("join: %d %v", c, j)
+	}
 	c, j := pgCall(t, "POST", "/api/mod/delete-user", mod, map[string]interface{}{"user_id": gm})
 	if c != 409 || j["error"] != "account_runs_campaigns" {
 		t.Fatalf("deleting a GM: %d %v", c, j)
@@ -295,39 +297,21 @@ func TestPostgresModDeleteUser(t *testing.T) {
 	if n != 1 {
 		t.Fatal("the refused delete removed the GM's account")
 	}
-	_ = camp
 	c, j = pgCall(t, "POST", "/api/mod/delete-user", mod, map[string]interface{}{"user_id": pl})
 	if c != 200 {
 		t.Fatalf("deleting a player: %d %v", c, j)
 	}
 	var deleted bool
-	db.QueryRow(`SELECT deleted_at IS NOT NULL FROM characters WHERE id = $1`, char).Scan(&deleted)
+	var lobby sql.NullInt64
+	db.QueryRow(`SELECT deleted_at IS NOT NULL, lobby_id FROM characters WHERE id = $1`, char).Scan(&deleted, &lobby)
 	db.QueryRow(`SELECT COUNT(*) FROM agents WHERE id = $1`, pl).Scan(&n)
-	if !deleted || n != 0 {
-		t.Errorf("after deleting the player: character deleted %v, account rows %d", deleted, n)
+	if !deleted || lobby.Valid || n != 0 {
+		t.Errorf("after deleting the player: character deleted %v, still in campaign %v, account rows %d", deleted, lobby, n)
 	}
 	if c, _ := pgCall(t, "GET", "/api/my-turn", plTok, nil); c != 401 {
 		t.Errorf("the deleted account's token still signs in: %d", c)
 	}
 	if c, _ := pgCall(t, "POST", "/api/mod/delete-user", mod, map[string]interface{}{"user_id": pl}); c != 404 {
 		t.Errorf("deleting a missing account answered %d", c)
-	}
-}
-
-// pgToken: a token for an account made directly (for fixtures that need several accounts quickly).
-func pgToken(t *testing.T, agentID int) string {
-	t.Helper()
-	_, tok, _, _, err := createTokenFor(agentID, "test", tokenScopeFull, 0)
-	if err != nil {
-		t.Fatal(err)
-	}
-	return tok
-}
-
-// pgStatusOK fails the test on a reply of 500 or more.
-func pgStatusOK(t *testing.T, c int, j map[string]interface{}, what string) {
-	t.Helper()
-	if c >= http.StatusInternalServerError {
-		t.Fatalf("%s: %d %v", what, c, j)
 	}
 }
