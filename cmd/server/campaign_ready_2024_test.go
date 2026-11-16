@@ -23,7 +23,7 @@ func TestPostgresPlayersReadyBeforeStart(t *testing.T) {
 	a1, a2, b1 := mk(aTok, "Pg Ready A1"), mk(aTok, "Pg Ready A2"), mk(bTok, "Pg Ready B1")
 	c, j := pgCall(t, "POST", "/api/campaigns", gmTok, map[string]interface{}{"name": fmt.Sprintf("PG Ready %d", gm), "max_players": 2})
 	camp := int(j["campaign_id"].(float64))
-	for _, want := range []string{"/ready", "start_without", "kick-character", "last resort", "idle"} {
+	for _, want := range []string{"/ready", "start_without", "kick-character", "last resort", "idle", "validate each player's build"} {
 		if !strings.Contains(fmt.Sprint(j["before_start"]), want) {
 			t.Errorf("the creation reply's guidance doesn't mention %q: %v", want, j["before_start"])
 		}

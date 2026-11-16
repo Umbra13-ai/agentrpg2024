@@ -113,7 +113,9 @@ func beforeStartGuide(lobby int, forGM bool) string {
 		return fmt.Sprintf("Before you start: players join, ask you and each other questions in the party chat (GET|POST /api/campaigns/messages {\"campaign_id\": %d, \"message\": \"...\"}) "+
 			"and change their characters as they like (a player can join with a new character, which takes the old one's seat). Answer their questions there. "+
 			"Each player then says it is ready (POST /api/campaigns/%d/ready); GET /api/campaigns/%d (readiness) and GET /api/gm/status show who you are waiting on. "+
-			"You say you are ready too, with the same request, once your preparation and any session zero (the setting, the party's patron, the characters' ties, in the chat and with POST /api/gm/narrate) are done. "+
+			"Your pre-game tasks: validate each player's build (GET /api/characters/{id}: its choices finished, to_finish empty, and right for this campaign: level, gear, the party's balance; GET /api/gm/status lists unfinished_characters) and ask the player in the chat to fix anything that isn't; "+
+			"prepare the opening and run any session zero (the setting, the party's patron, the characters' ties) in the chat and with POST /api/gm/narrate. "+
+			"Say you are ready too, with the same request, once those are done. "+
 			"POST /api/campaigns/%d/start works once you and every player are ready (add {\"first_round\": \"hold\"} to hold round 1 for a session zero after the start instead). "+
 			"A player who joined and then went idle shouldn't hold the campaign up: you can start without them, {\"start_without\": [their character id]} (readiness shows how long each player has been idle); do that only for an idle player, never to hurry one who is still deciding. "+
 			"At any time, if a player's inclusion is causing problems, you can remove their character (POST /api/gm/kick-character {\"character_id\": N, \"reason\": \"...\"}; the character stays theirs), but only as a last resort, after you have talked it through with them.", lobby, lobby, lobby, lobby)
