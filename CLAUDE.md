@@ -270,12 +270,27 @@ Add to the owner, never beside it. When you give another rule one owner, add it 
   (`rowQuerier`, `execer`), never through `db`: a second connection waits behind the transaction's own locks, which froze the
   server once (audit AUD-02). The checked driver logs `query outside its transaction` with where it came from and where the
   transaction began; `tx_outside_check.py` (the batch) fails on any.
-- **The API reference** (`/docs`, `/docs/swagger.json`, and the route list on `/commands`): built by `python3 tools/build_swagger.py`
-  from nothing each time (the hand-written entries in that script, then every handler's godoc `@Router` block); it never reads its
-  own earlier output. `finish_operation` is the one check of every operation (path parameters declared, a body under content, no
-  body on a GET); the version is `const version`, the server is the one serving it. A route the router serves needs a godoc block
-  directly above its handler. `TestAPIReference` checks it against the router, skill.md and the commands page;
-  `TestGodocBlocksSitAboveTheirHandlers` checks the blocks. Rebuild after changing a godoc or a route.
+- **Every command is documented, from the code that serves it** (Matt, Nov 16: "All commands should always be documented"). The API
+  reference (`/docs`, `/docs/swagger.json`, the route list on `/commands`) is built by `python3 tools/build_swagger.py` from nothing
+  each time; it never reads its own earlier output. The words of an operation are its handler's godoc block (`@Summary`,
+  `@Description`, `@Param` for query and path, `@Body` for what the body is for, `@Success` for what the reply is, `@Router`) or a
+  hand entry in that script for the few routes whose words live there. Everything else is read from the code by `TestAPIShapes`
+  (`cmd/server/api_shapes_2024_test.go`, run by the script with `API_SHAPES_OUT`), which follows each route through its handler for
+  its method and path: the **request body** is what its reader takes (`readRequest` / `gmRead` / `gmReadAs` / `noFields` /
+  `parseRequest`: the type's fields with their comments, `campaign_id` of a GM command, `optionalBody`, the fields the handler
+  refuses when missing; a map request's fields from `onlyFields` / `keysCheckedByHandler(names...)` and the tables in
+  `dynamicFieldLists`; no reader: "Takes no request body."); the **reply** is every JSON success reply it writes (map keys and value
+  types through variables and helpers, the keys `augmentJSON` wrappers add, or the content type of a file). So a request field needs
+  a comment where its type declares it, and a new route needs a godoc block directly above the function that serves it; then
+  rebuild. Without the variable `TestAPIShapes` fails on any gap: a field, type, required list or reply that differs from the code,
+  an operation, parameter or field without a description, a `@Body` on routes that read none, a served prefix with no documented
+  route. `finish_operation` (in the script) is the one check of every operation (path parameters declared, a body under content, no
+  body on a GET). `TestAPIReference` checks the reference against the router, skill.md and the commands page;
+  `TestGodocBlocksSitAboveTheirHandlers` checks the blocks. **The guides** (`docs/*.md`): `TestDocsNameRealRequests` fails on a
+  request they name that the reference doesn't have and on a body field they show that the request doesn't take;
+  `TestCheckInNoteInGuides` keeps `checkInNote` between the check-in markers of the heartbeat and experience guides
+  (`START_UPDATE=1` rewrites them); `TestDocsTableRuleDefaults` checks the table rule defaults they name. Lists the server defines
+  (routes, fields, action types) are generated or pointed to (/commands, /docs), not copied.
 - **A character's spell lists as the sheet shows them:** `spellGroupsForSheet` (`cmd/server/prepared_spells_2024.go`) builds
   `spell_groups`: one "Spells Prepared" list (prepared spells and cantrips, plus always-prepared spells from feats, species,
   subclasses and invocations, each with `from`), and "Spellbook" only for a class whose features have the `spellbook` mechanic

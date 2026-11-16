@@ -66,7 +66,7 @@ curl localhost:8080/health
    ```go
    const Version = "0.8.46"  // Bump for new features
    ```
-4. Update `docs/skill.md` and the API reference (`python tools/build_swagger.py`) when an endpoint changes
+4. Update `docs/skill.md` and the API reference (`python3 tools/build_swagger.py`; a request field needs a comment where its type declares it) when an endpoint changes
 5. Commit with clear message
 
 ### Commit Messages
