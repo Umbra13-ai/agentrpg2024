@@ -38,10 +38,6 @@ var reactionOrderKinds = []struct{ Key, What string }{
 	{"opportunity_attack", "make an Opportunity Attack when a monster leaves your reach by its own movement"},
 }
 
-func ensureReactionOrdersColumn() {
-	db.Exec(`ALTER TABLE characters ADD COLUMN IF NOT EXISTS reaction_orders JSONB DEFAULT '{}'`)
-}
-
 func reactionOrdersOf(charID int) map[string]reactionOrder {
 	var raw []byte
 	db.QueryRow(`SELECT COALESCE(reaction_orders,'{}') FROM characters WHERE id = $1`, charID).Scan(&raw)

@@ -508,8 +508,7 @@ func handleCharacterFeat(w http.ResponseWriter, r *http.Request, charID int) {
 
 	res, err := db.Exec(query, args...)
 	if err != nil {
-		w.WriteHeader(http.StatusInternalServerError)
-		json.NewEncoder(w).Encode(map[string]interface{}{"error": "database_error", "details": publicError(err)})
+		writeDBWriteError(w, err, "the feat or Ability Score Improvement")
 		return
 	}
 	if n, _ := res.RowsAffected(); n == 0 { // another feat or ASI was taken meanwhile (audit D-2)
@@ -591,7 +590,7 @@ func handleCharacterSubclass(w http.ResponseWriter, r *http.Request) {
 	agentID, err := getAgentFromAuth(r)
 	if err != nil {
 		w.WriteHeader(http.StatusUnauthorized)
-		json.NewEncoder(w).Encode(map[string]interface{}{"error": "unauthorized", "message": publicError(err)})
+		json.NewEncoder(w).Encode(map[string]interface{}{"error": "unauthorized", "message": err.Error()})
 		return
 	}
 
@@ -889,11 +888,7 @@ func handleCharacterSubclass(w http.ResponseWriter, r *http.Request) {
 			}
 		}
 		if err != nil {
-			w.WriteHeader(http.StatusInternalServerError)
-			json.NewEncoder(w).Encode(map[string]interface{}{
-				"error":   "database_error",
-				"message": publicError(err),
-			})
+			writeDBWriteError(w, err, "the subclass")
 			return
 		}
 
@@ -1096,7 +1091,7 @@ func takeClassLevel(w http.ResponseWriter, r *http.Request) {
 	agentID, err := getAgentFromAuth(r)
 	if err != nil {
 		w.WriteHeader(http.StatusUnauthorized)
-		json.NewEncoder(w).Encode(map[string]interface{}{"error": "unauthorized", "message": publicError(err)})
+		json.NewEncoder(w).Encode(map[string]interface{}{"error": "unauthorized", "message": err.Error()})
 		return
 	}
 
@@ -1280,11 +1275,7 @@ func takeClassLevel(w http.ResponseWriter, r *http.Request) {
 	`, newTotalLevel, classLevelsJSON, hpGain, asiEarned, armorProfsStr, weaponProfsStr, req.CharacterID, level)
 
 	if err != nil {
-		w.WriteHeader(http.StatusInternalServerError)
-		json.NewEncoder(w).Encode(map[string]interface{}{
-			"error":   "database_error",
-			"message": publicError(err),
-		})
+		writeDBWriteError(w, err, "the new level")
 		return
 	}
 	if n, _ := res.RowsAffected(); n == 0 {

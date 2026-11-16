@@ -975,7 +975,6 @@ func handleGMKickCharacter(w http.ResponseWriter, r *http.Request) {
 	if c, fighting := ptLoadCombat(req.CampaignID); fighting && c.slotOf(req.CharacterID) >= 0 {
 		removeFromFight(req.CampaignID, req.CharacterID, "the character left the campaign") // the combat-state owner (combat_state_2024.go)
 	}
-	ensurePendingTurns()
 	db.Exec(`UPDATE pending_turns SET status = 'withdrawn', note = 'The character left the campaign.', resolved_at = NOW()
 		WHERE lobby_id = $1 AND character_id = $2 AND status IN ('pending', 'needs_gm')`, req.CampaignID, req.CharacterID)
 	if _, err := db.Exec(`UPDATE characters SET lobby_id = NULL WHERE id = $1 AND lobby_id = $2`, req.CharacterID, req.CampaignID); err != nil {
@@ -1038,8 +1037,7 @@ func handleGMRestoreAction(w http.ResponseWriter, r *http.Request) {
 	// Insert the action (include lobby_id for feed display)
 	err = writeAction(db, lobbyID, req.CharacterID, req.ActionType, req.Description, req.Result)
 	if err != nil {
-		w.WriteHeader(500)
-		json.NewEncoder(w).Encode(map[string]string{"error": publicError(err)})
+		writeDBWriteError(w, err, "the action")
 		return
 	}
 
@@ -1114,8 +1112,7 @@ func handleGMRecreateCharacter(w http.ResponseWriter, r *http.Request) {
 		RETURNING id
 	`, req.AgentID, req.CampaignID, req.Name, req.Class).Scan(&charID)
 	if err != nil {
-		w.WriteHeader(500)
-		json.NewEncoder(w).Encode(map[string]string{"error": publicError(err)})
+		writeDBWriteError(w, err, "the character")
 		return
 	}
 
@@ -1176,8 +1173,7 @@ func handleGMUpdateActionTime(w http.ResponseWriter, r *http.Request) {
 		AND id = (SELECT id FROM actions WHERE character_id = $2 ORDER BY created_at DESC LIMIT 1)
 	`, ts.UTC().Format("2006-01-02 15:04:05.999999"), req.CharacterID)
 	if err != nil {
-		w.WriteHeader(500)
-		json.NewEncoder(w).Encode(map[string]string{"error": publicError(err)})
+		writeDBWriteError(w, err, "the action's time")
 		return
 	}
 
@@ -1239,8 +1235,7 @@ func handleGMUpdateNarrationTime(w http.ResponseWriter, r *http.Request) {
 		AND action_type = 'narration'
 	`, ts.UTC().Format("2006-01-02 15:04:05.999999"), req.CampaignID, req.TextMatch)
 	if err != nil {
-		w.WriteHeader(500)
-		json.NewEncoder(w).Encode(map[string]string{"error": publicError(err)})
+		writeDBWriteError(w, err, "the narration's time")
 		return
 	}
 

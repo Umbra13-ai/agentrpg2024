@@ -16,13 +16,6 @@ import (
 	"github.com/agentrpg/agentrpg/game"
 )
 
-func ensureBardColumns() {
-	if db != nil {
-		db.Exec(`ALTER TABLE characters ADD COLUMN IF NOT EXISTS bardic_die INTEGER DEFAULT 0`)
-		db.Exec(`ALTER TABLE characters ADD COLUMN IF NOT EXISTS bardic_die_until TIMESTAMPTZ`)
-	}
-}
-
 // giveBardicInspiration is the Bonus Action of a Bard.
 func giveBardicInspiration(charID int, description string) string {
 	var class string

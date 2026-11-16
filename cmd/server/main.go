@@ -287,43 +287,13 @@ func main() {
 		port = "8080"
 	}
 
-	dbURL := os.Getenv("DATABASE_URL")
-	if dbURL != "" {
-		var err error
-		db, err = openDB(dbURL) // lib/pq with each failure told to its request, the session settings (UTC, timeouts) and the pool limits (db_guard_2024.go)
-		if err != nil {
-			log.Printf("Database connection failed: %v", err)
-		} else {
-			if err = db.Ping(); err != nil {
-				log.Printf("Database ping failed: %v", err)
-			} else {
-				log.Println("Connected to Postgres")
-				initDB()
-				ensureAdminSchema() // deleting characters and campaigns, the admin's change log (admin_2024.go)
-				seedCampaignTemplates()
-				seedClasses2024()     // the 12 classes of the SRD 5.2.1
-				ensureAvatarOfDeath() // the Mysterious Deck's Skull card and the Figurine's Ebony Fly as monsters the GM can add (F207)
-				ensureGiantFly()
-				ensureGearReminderColumn()   // gear_reminders_off (F214)
-				ensureAutoEquipColumn()      // auto_equip_answered
-				ensureReminderColumns()      // reminder_settings, after_battle, fight_start_resources (F216)
-				ensureReactionOrdersColumn() // standing reaction orders (F220)
-				syncArmorToSRDTable()
-				loadArmorInfoCache()    // the armor table, read once (armor_and_weight.go)
-				applyLocalBackgrounds() // a private server's background narratives (local_content.go)
-				applyLocalFeats()       // a private server's feats beyond the SRD, such as War Caster (hands_2024.go)
-				seedSpells2024()
-				seedMonsters2024()
-				loadSRDFromDB()
-				seedItemCatalog()
-				backfillPreparedLists()          // 2024: every caster has a prepared list (prepared_spells_2024.go)
-				startAPILogCleanupWorker()       // Clean up old API logs every 24h
-				startCampaignAutoAdvanceWorker() // Auto-advance stalled campaigns
-			}
-		}
-	} else {
-		log.Println("No DATABASE_URL - running without persistence")
+	// The database first: the server refuses to start without it, and serves nothing until the schema and the SRD data are in
+	// place (startup_2024.go, audit AUD-13).
+	if err := startDatabase(os.Getenv("DATABASE_URL")); err != nil {
+		log.Fatalf("Not starting: %v", err)
 	}
+	startAPILogCleanupWorker()       // Clean up old API logs every 24h
+	startCampaignAutoAdvanceWorker() // Auto-advance stalled campaigns
 
 	setupRoutes()
 

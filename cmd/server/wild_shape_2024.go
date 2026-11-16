@@ -25,20 +25,7 @@ import (
 	"regexp"
 	"strconv"
 	"strings"
-	"sync"
 )
-
-var wildShapeColsOnce sync.Once
-
-func ensureWildShapeColumns() {
-	wildShapeColsOnce.Do(func() {
-		db.Exec(`ALTER TABLE characters ADD COLUMN IF NOT EXISTS wild_shape_saved JSONB`)
-		db.Exec(`ALTER TABLE characters ADD COLUMN IF NOT EXISTS wild_shape_known JSONB DEFAULT '[]'`)
-		db.Exec(`ALTER TABLE characters ADD COLUMN IF NOT EXISTS wild_shape_swap_ready BOOLEAN DEFAULT FALSE`)
-		db.Exec(`ALTER TABLE characters ADD COLUMN IF NOT EXISTS wild_shape_equipment TEXT DEFAULT ''`)
-		db.Exec(`ALTER TABLE characters ADD COLUMN IF NOT EXISTS wild_shape_rounds_left INT`)
-	})
-}
 
 // wildShapeLimits: known forms, maximum CR and whether a Fly Speed is allowed (the Beast Shapes table).
 func wildShapeLimits(level int) (known int, maxCR float64, fly bool) {
@@ -66,7 +53,6 @@ func crValue(cr string) float64 {
 }
 
 func knownWildShapes(charID int) []string {
-	ensureWildShapeColumns()
 	var raw []byte
 	db.QueryRow(`SELECT COALESCE(wild_shape_known,'[]') FROM characters WHERE id = $1`, charID).Scan(&raw)
 	var out []string
@@ -76,7 +62,6 @@ func knownWildShapes(charID int) []string {
 
 // setWildShapeForms checks and stores a druid's known forms (class-options "wild_shape_forms"); "" when it worked.
 func setWildShapeForms(charID int, forms []string) string {
-	ensureWildShapeColumns()
 	class, _, level := subclassOf(charID)
 	if class != "druid" || level < 2 {
 		return "Only a Druid of level 2 or higher knows Wild Shape forms."
@@ -129,14 +114,12 @@ func setWildShapeForms(charID int, forms []string) string {
 // wildShapeRest: a Long Rest lets the druid replace one known form.
 func wildShapeRest(charID int, long bool) {
 	if long {
-		ensureWildShapeColumns()
 		db.Exec(`UPDATE characters SET wild_shape_swap_ready = true WHERE id = $1 AND class = 'druid'`, charID)
 	}
 }
 
 // enterWildShapeStats swaps in the beast's Strength, Dexterity, Constitution and AC, keeping the druid's own to restore.
 func enterWildShapeStats(charID int, slug, description string) string {
-	ensureWildShapeColumns()
 	var str, dex, con, ac int
 	db.QueryRow(`SELECT str, dex, con, COALESCE(ac,10) FROM characters WHERE id = $1`, charID).Scan(&str, &dex, &con, &ac)
 	saved, _ := json.Marshal(map[string]int{"str": str, "dex": dex, "con": con, "ac": ac})
@@ -170,7 +153,6 @@ func enterWildShapeStats(charID int, slug, description string) string {
 // wildShapeTick counts down the form's time by a number of rounds (600 rounds = 1 hour); when it runs out the form ends (posted to the
 // feed). It returns the text, or "" when the form goes on.
 func wildShapeTick(charID, rounds int) string {
-	ensureWildShapeColumns()
 	var left int
 	if db.QueryRow(`UPDATE characters SET wild_shape_rounds_left = wild_shape_rounds_left - $2
 		WHERE id = $1 AND COALESCE(wild_shape_form,'') <> '' AND wild_shape_rounds_left IS NOT NULL RETURNING wild_shape_rounds_left`,
@@ -182,7 +164,6 @@ func wildShapeTick(charID, rounds int) string {
 
 // wildShapeTickLobby: time passes outside combat (a rest, travel or the GM's pass-time) for every druid in the campaign.
 func wildShapeTickLobby(lobbyID, rounds int) {
-	ensureWildShapeColumns()
 	rows, err := db.Query(`SELECT id FROM characters WHERE lobby_id = $1 AND COALESCE(wild_shape_form,'') <> ''`, lobbyID)
 	if err != nil {
 		return
@@ -239,7 +220,6 @@ func wildShapeHigher(charID int, key string, mod int) int {
 
 // leaveWildShape ends the form: the druid's own scores and AC come back. reason "" means the druid chose to.
 func leaveWildShape(charID int, reason string) string {
-	ensureWildShapeColumns()
 	var form, name string
 	var saved []byte
 	db.QueryRow(`SELECT COALESCE(wild_shape_form,''), COALESCE(wild_shape_saved,'null'), name FROM characters WHERE id = $1`, charID).Scan(&form, &saved, &name)

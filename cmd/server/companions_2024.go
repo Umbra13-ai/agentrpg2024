@@ -82,29 +82,6 @@ type companion struct {
 	lastLobby     int
 }
 
-var companionsOnce sync.Once
-
-func ensureCompanions() {
-	companionsOnce.Do(func() {
-		if db == nil {
-			return
-		}
-		db.Exec(`CREATE TABLE IF NOT EXISTS companions (
-			id SERIAL PRIMARY KEY, owner_id INTEGER NOT NULL, lobby_id INTEGER, kind TEXT NOT NULL, name TEXT NOT NULL, source TEXT DEFAULT '',
-			form TEXT DEFAULT '', creature_type TEXT DEFAULT '', status TEXT DEFAULT 'active', slot_level INTEGER DEFAULT 0,
-			hp INTEGER DEFAULT 1, max_hp INTEGER DEFAULT 1, ac INTEGER DEFAULT 10, speed TEXT DEFAULT '', attacks JSONB DEFAULT '[]',
-			notes TEXT DEFAULT '', concentration TEXT DEFAULT '', last_acted_round INTEGER DEFAULT 0, last_acted_lobby INTEGER DEFAULT 0,
-			end_reason TEXT DEFAULT '', created_at TIMESTAMP DEFAULT NOW(), ended_at TIMESTAMP)`)
-		db.Exec(`CREATE INDEX IF NOT EXISTS companions_owner ON companions (owner_id)`)
-		db.Exec(`ALTER TABLE companions ADD COLUMN IF NOT EXISTS reaction_round INTEGER DEFAULT 0`)
-		db.Exec(`ALTER TABLE companions ADD COLUMN IF NOT EXISTS reaction_lobby INTEGER DEFAULT 0`)
-		db.Exec(`ALTER TABLE companions ADD COLUMN IF NOT EXISTS nickname TEXT DEFAULT ''`)  // the name its owner gives it
-		db.Exec(`ALTER TABLE companions ADD COLUMN IF NOT EXISTS traits JSONB DEFAULT '[]'`) // the stat block's traits (an owl's Flyby)
-		// companions made before traits were stored take their form's traits
-		db.Exec(`UPDATE companions c SET traits = m.traits FROM monsters m WHERE m.slug = c.form AND (c.traits IS NULL OR c.traits = '[]'::jsonb) AND m.traits IS NOT NULL`)
-	})
-}
-
 // familiarInitiativeMode is the server setting: "owner" (default: a familiar acts on its owner's turn) or "own" (the SRD rule).
 func familiarInitiativeMode() string {
 	if strings.EqualFold(strings.TrimSpace(os.Getenv("AGENTRPG_FAMILIAR_INITIATIVE")), "own") {
@@ -129,14 +106,12 @@ func scanCompanion(row interface{ Scan(...interface{}) error }) (companion, erro
 }
 
 func loadCompanion(id int) (companion, bool) {
-	ensureCompanions()
 	c, err := scanCompanion(db.QueryRow(`SELECT `+companionCols+` FROM companions WHERE id = $1`, id))
 	return c, err == nil
 }
 
 // companionsOf lists a character's companions that still exist (active or dismissed), after checking their endings.
 func companionsOf(ownerID int) []companion {
-	ensureCompanions()
 	syncCompanionEndings(ownerID)
 	rows, err := db.Query(`SELECT `+companionCols+` FROM companions WHERE owner_id = $1 AND status <> 'gone' ORDER BY id`, ownerID)
 	if err != nil {
@@ -299,7 +274,6 @@ func companionFromSpell(charID int, spellKey string, slot int, description strin
 	default:
 		return ""
 	}
-	ensureCompanions()
 	var lobbyID int
 	var owner string
 	db.QueryRow(`SELECT COALESCE(lobby_id,0), name FROM characters WHERE id = $1`, charID).Scan(&lobbyID, &owner)
@@ -436,7 +410,6 @@ func addOwnInitiativeEntry(lobbyID, companionID int) {
 // familiarTurnEntries: at combat start, with AGENTRPG_FAMILIAR_INITIATIVE=own, the active familiars of the campaign's characters roll
 // Initiative (combat_handlers.go adds them to the turn order).
 func familiarTurnEntries(lobbyID int) []map[string]interface{} {
-	ensureCompanions()
 	// a new fight: rounds count from 1 again, so no companion has acted or used its Reaction yet (F50: the Reaction stayed used)
 	db.Exec(`UPDATE companions SET last_acted_round = 0 WHERE last_acted_lobby = $1`, lobbyID)
 	db.Exec(`UPDATE companions SET reaction_round = 0 WHERE reaction_lobby = $1`, lobbyID)
@@ -509,7 +482,6 @@ var companionActions = map[string]bool{"attack": true, "dodge": true, "dash": tr
 
 // handleCompanionAction runs POST /api/action for a companion ("companion_id") or a familiar command of its owner.
 func handleCompanionAction(w http.ResponseWriter, charID, lobbyID, companionID int, action, description string, targetID int, targetIDs ...int) {
-	ensureCompanions()
 	reply := func(code int, m map[string]interface{}) { writeJSONStatus(w, code, m) }
 	var c companion
 	ok := false
@@ -744,7 +716,6 @@ func familiarTouchCheck(charID, lobbyID int, spellSlug, description string) stri
 	if sp, ok := srdSpellsMemory[spellSlug]; !ok || !strings.HasPrefix(strings.ToLower(strings.TrimSpace(sp.Range)), "touch") {
 		return "Only a spell with a range of Touch can be delivered by your familiar."
 	}
-	ensureCompanions()
 	var id int
 	db.QueryRow(`SELECT id FROM companions WHERE owner_id = $1 AND kind = 'familiar' AND status = 'active' ORDER BY id DESC LIMIT 1`, charID).Scan(&id)
 	if id == 0 {
@@ -817,7 +788,6 @@ func handleCompanionName(w http.ResponseWriter, r *http.Request) {
 	if !readRequest(w, r, &req, optionalBody()) {
 		return
 	}
-	ensureCompanions()
 	c, ok := loadCompanion(req.CompanionID)
 	var owner int
 	if ok {
@@ -973,7 +943,6 @@ func maxHPOf(lobbyID, id int) int {
 // @Router /gm/companion [get]
 // @Router /gm/companion [post]
 func handleGMCompanion(w http.ResponseWriter, r *http.Request) {
-	ensureCompanions()
 	var req struct {
 		CharacterID int    `json:"character_id"`
 		MonsterKey  string `json:"monster_key"`

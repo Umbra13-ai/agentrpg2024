@@ -35,14 +35,6 @@ func withdrawHitEffects(charID int, rollInfo string) string {
 	return hitOnlyNotes.ReplaceAllString(rollInfo, "")
 }
 
-func ensureBarbarianColumns() {
-	if db != nil {
-		db.Exec(`ALTER TABLE characters ADD COLUMN IF NOT EXISTS frenzy_used BOOLEAN DEFAULT FALSE`)
-		db.Exec(`ALTER TABLE characters ADD COLUMN IF NOT EXISTS intimidating_presence_used BOOLEAN DEFAULT FALSE`)
-		db.Exec(`ALTER TABLE characters ADD COLUMN IF NOT EXISTS capstone_scores_applied BOOLEAN DEFAULT FALSE`)
-	}
-}
-
 // frenzyDamage rolls the extra damage of the Berserker's Frenzy for the first Strength hit of the turn.
 // The dice double on a critical hit. It returns 0 and "" when Frenzy does not apply.
 func frenzyDamage(charID int, class string, subclass sql.NullString, level int, strengthAttack, crit bool) (int, string) {
@@ -274,13 +266,6 @@ func classCapstones(charID int, name, class string, level int) string {
 // Rage duration (2024): a Rage lasts until the end of your next turn. It is extended for another round when you make an attack roll
 // against an enemy, force an enemy to make a saving throw, or take a Bonus Action to extend it ("extend_rage"). From level 15
 // (Persistent Rage) it lasts 10 minutes without needing to be extended.
-
-func ensureRageColumns() {
-	if db != nil {
-		db.Exec(`ALTER TABLE characters ADD COLUMN IF NOT EXISTS rage_age INTEGER DEFAULT 0`)
-		db.Exec(`ALTER TABLE characters ADD COLUMN IF NOT EXISTS rage_extended BOOLEAN DEFAULT FALSE`)
-	}
-}
 
 func startRageClock(charID int) {
 	db.Exec(`UPDATE characters SET rage_age = 0, rage_extended = false WHERE id = $1`, charID)

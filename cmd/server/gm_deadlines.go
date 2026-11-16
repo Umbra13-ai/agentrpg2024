@@ -72,8 +72,7 @@ func handleGMDeadline(w http.ResponseWriter, r *http.Request) {
 			ORDER BY deadline_at ASC
 		`, campaignID)
 		if err != nil {
-			w.WriteHeader(http.StatusInternalServerError)
-			json.NewEncoder(w).Encode(map[string]interface{}{"error": publicError(err)})
+			writeDBError(w, err, "the deadlines")
 			return
 		}
 		defer rows.Close()
@@ -168,8 +167,7 @@ func handleGMDeadline(w http.ResponseWriter, r *http.Request) {
 		`, campaignID, req.Description, deadlineTime, nullString(req.AutoAdvanceText)).Scan(&deadlineID)
 
 		if err != nil {
-			w.WriteHeader(http.StatusInternalServerError)
-			json.NewEncoder(w).Encode(map[string]interface{}{"error": publicError(err)})
+			writeDBWriteError(w, err, "the deadline")
 			return
 		}
 

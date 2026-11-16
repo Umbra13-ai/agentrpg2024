@@ -83,13 +83,6 @@ func protectorsPage(warlockID int) []int {
 	return ids
 }
 
-func ensureInvocationColumns() {
-	if db != nil {
-		db.Exec(`ALTER TABLE characters ADD COLUMN IF NOT EXISTS protectors_page JSONB DEFAULT '[]'`)
-		db.Exec(`ALTER TABLE characters ADD COLUMN IF NOT EXISTS invocation_cantrips JSONB DEFAULT '{}'`) // invocation_repeats_2024.go
-	}
-}
-
 // giftOfTheProtectorsAction handles "gift_of_the_protectors add <name>" and "... erase <name>".
 func giftOfTheProtectorsAction(charID int, description string) string {
 	if !hasInvocation(charID, "gift-of-the-protectors") {

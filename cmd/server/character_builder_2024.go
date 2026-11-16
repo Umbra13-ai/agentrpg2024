@@ -26,26 +26,10 @@ import (
 	"sort"
 	"strconv"
 	"strings"
-	"sync"
 	"time"
 
 	"github.com/agentrpg/agentrpg/game"
 )
-
-var builderTableOnce sync.Once
-
-func ensureBuilderTable() {
-	builderTableOnce.Do(func() {
-		db.Exec(`CREATE TABLE IF NOT EXISTS character_drafts (
-			id SERIAL PRIMARY KEY,
-			agent_id INTEGER NOT NULL,
-			body JSONB NOT NULL DEFAULT '{}',
-			character_id INTEGER,
-			created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
-			updated_at TIMESTAMPTZ NOT NULL DEFAULT now()
-		)`)
-	})
-}
 
 // phbArray is the 2024 Player's Handbook's Standard Array by Class table (Str, Dex, Con, Int, Wis, Cha).
 var phbArray = map[string][6]int{
@@ -2765,7 +2749,6 @@ func handleCharacterBuilder(w http.ResponseWriter, r *http.Request) {
 		writeAuthError(w, err)
 		return
 	}
-	ensureBuilderTable()
 	rest := strings.Trim(strings.TrimPrefix(r.URL.Path, "/api/character-builder"), "/")
 	if rest == "" {
 		switch r.Method {

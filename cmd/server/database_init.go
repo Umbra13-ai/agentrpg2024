@@ -2,21 +2,309 @@ package main
 
 import (
 	"encoding/json"
+	"fmt"
 	"log"
 	"strings"
 )
 
-func initDB() {
+// The schema: every table, column and index the server uses is made here, at start, before the server answers a request,
+// and never by a request (audit AUD-11: about 130 ALTER TABLE / CREATE statements ran inside handlers, GET /api/my-turn
+// among them; each ALTER takes an ACCESS EXCLUSIVE lock on its table even when the column exists, so one open transaction
+// queued every request behind it).
+//
+// schemaSteps is the one list, run in order by migrate() on every start. Each step is idempotent (IF NOT EXISTS, or a DO block
+// that checks first), so a start on a new database makes everything and a start on an existing one adds what is missing.
+// A new column or table is one more step at the end of the list, named by the file whose feature needs it; the code that reads
+// it never creates it. A failed step fails the start (main.go retries, then refuses to serve).
+// TestNoSchemaChangeOutsideTheMigrations checks the source; the checked driver logs "schema change outside startup" if a
+// statement like these is sent once the server is serving (db_guard_2024.go).
+
+// schemaStep is one statement of the schema and the file whose feature needs it.
+type schemaStep struct {
+	feature string
+	sql     string
+}
+
+var schemaSteps = []schemaStep{
 	// 2024 calls it species: rename the old characters.race column once (no-op when it is already species)
-	db.Exec(`DO $$ BEGIN
+	{"database_init.go", `DO $$ BEGIN
 		IF EXISTS (SELECT 1 FROM information_schema.columns WHERE table_name = 'characters' AND column_name = 'race')
 		   AND NOT EXISTS (SELECT 1 FROM information_schema.columns WHERE table_name = 'characters' AND column_name = 'species') THEN
 			ALTER TABLE characters RENAME COLUMN race TO species;
 		END IF;
-	END $$`)
-	db.Exec(`DROP TABLE IF EXISTS races`)
-	db.Exec(`DROP TABLE IF EXISTS traits`) // the species traits come from data/srd521_origins.json
-	schema := `
+	END $$`},
+	{"database_init.go", `DROP TABLE IF EXISTS races`},
+	{"database_init.go", `DROP TABLE IF EXISTS traits`}, // the species traits come from data/srd521_origins.json
+	{"database_init.go", baseSchema},
+	{"admin_2024.go", `ALTER TABLE characters ADD COLUMN IF NOT EXISTS deleted_at TIMESTAMP`},
+	{"admin_2024.go", `ALTER TABLE characters ADD COLUMN IF NOT EXISTS deleted_owner INTEGER`},
+	{"admin_2024.go", `ALTER TABLE characters ADD COLUMN IF NOT EXISTS deleted_name TEXT`},
+	{"admin_2024.go", `ALTER TABLE characters ADD COLUMN IF NOT EXISTS deleted_lobby INTEGER`},
+	{"admin_2024.go", `ALTER TABLE characters ADD COLUMN IF NOT EXISTS deleted_by TEXT`},
+	{"admin_2024.go", `ALTER TABLE lobbies ADD COLUMN IF NOT EXISTS deleted_at TIMESTAMP`},
+	{"admin_2024.go", `ALTER TABLE lobbies ADD COLUMN IF NOT EXISTS deleted_dm INTEGER`},
+	{"admin_2024.go", `ALTER TABLE lobbies ADD COLUMN IF NOT EXISTS deleted_status TEXT`},
+	{"admin_2024.go", `ALTER TABLE lobbies ADD COLUMN IF NOT EXISTS deleted_members JSONB`},
+	{"admin_2024.go", `CREATE TABLE IF NOT EXISTS admin_changes (
+			id SERIAL PRIMARY KEY,
+			at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+			kind TEXT NOT NULL,
+			row_id INTEGER NOT NULL,
+			field TEXT NOT NULL,
+			old_value TEXT,
+			new_value TEXT,
+			by_whom TEXT NOT NULL,
+			note TEXT DEFAULT ''
+		)`},
+	{"item_catalog.go", `CREATE TABLE IF NOT EXISTS items (
+			id SERIAL PRIMARY KEY,
+			category VARCHAR(20) NOT NULL,
+			slug VARCHAR(100) NOT NULL,
+			name VARCHAR(120) NOT NULL,
+			ruleset VARCHAR(10) NOT NULL DEFAULT '2024',
+			source VARCHAR(60) NOT NULL DEFAULT 'SRD 5.2.1',
+			cost_gp DECIMAL(10,2),
+			cost_text VARCHAR(30),
+			weight_lb DECIMAL(7,2),
+			data JSONB DEFAULT '{}',
+			UNIQUE (category, slug, ruleset)
+		)`},
+	{"condition_records.go", `CREATE TABLE IF NOT EXISTS condition_records (
+			id SERIAL PRIMARY KEY,
+			lobby_id INTEGER NOT NULL,
+			target_id INTEGER NOT NULL,
+			condition TEXT NOT NULL,
+			source TEXT NOT NULL DEFAULT '',
+			escapes JSONB NOT NULL DEFAULT '[]',
+			duration_rounds INTEGER NOT NULL DEFAULT 0,
+			end_save JSONB,
+			notes TEXT NOT NULL DEFAULT '',
+			created_by INTEGER,
+			created_at TIMESTAMPTZ NOT NULL DEFAULT now()
+		)`},
+	{"condition_records.go", `ALTER TABLE condition_records ADD COLUMN IF NOT EXISTS end_save JSONB`},
+	{"condition_records.go", `ALTER TABLE condition_records ADD COLUMN IF NOT EXISTS detail TEXT NOT NULL DEFAULT ''`}, // the one store (condition_owner_2024.go)
+	{"condition_records.go", `CREATE INDEX IF NOT EXISTS condition_records_target ON condition_records (lobby_id, target_id)`},
+	{"barbarian_2024.go", `ALTER TABLE characters ADD COLUMN IF NOT EXISTS frenzy_used BOOLEAN DEFAULT FALSE`},
+	{"barbarian_2024.go", `ALTER TABLE characters ADD COLUMN IF NOT EXISTS intimidating_presence_used BOOLEAN DEFAULT FALSE`},
+	{"barbarian_2024.go", `ALTER TABLE characters ADD COLUMN IF NOT EXISTS capstone_scores_applied BOOLEAN DEFAULT FALSE`},
+	{"combat_effects.go", `CREATE TABLE IF NOT EXISTS combat_effects (
+			id SERIAL PRIMARY KEY,
+			lobby_id INTEGER NOT NULL,
+			target_id INTEGER NOT NULL,
+			source_id INTEGER NOT NULL,
+			kind TEXT NOT NULL,
+			text TEXT NOT NULL DEFAULT '',
+			created_at TIMESTAMPTZ NOT NULL DEFAULT now()
+		)`},
+	{"combat_effects.go", `CREATE INDEX IF NOT EXISTS combat_effects_target ON combat_effects (lobby_id, target_id)`},
+	{"spell_effects_2024.go", `CREATE TABLE IF NOT EXISTS spell_effects (
+			id SERIAL PRIMARY KEY,
+			lobby_id INTEGER NOT NULL,
+			target_id INTEGER NOT NULL,
+			caster_id INTEGER NOT NULL,
+			spell TEXT NOT NULL,
+			kind TEXT NOT NULL,
+			detail TEXT NOT NULL DEFAULT '',
+			rounds_left INTEGER NOT NULL DEFAULT 10,
+			save_ability TEXT NOT NULL DEFAULT '',
+			save_dc INTEGER NOT NULL DEFAULT 0,
+			created_at TIMESTAMPTZ NOT NULL DEFAULT now()
+		)`},
+	{"spell_effects_2024.go", `CREATE INDEX IF NOT EXISTS spell_effects_target ON spell_effects (lobby_id, target_id)`},
+	{"invocations_2024.go", `ALTER TABLE characters ADD COLUMN IF NOT EXISTS protectors_page JSONB DEFAULT '[]'`},
+	{"invocations_2024.go", `ALTER TABLE characters ADD COLUMN IF NOT EXISTS invocation_cantrips JSONB DEFAULT '{}'`}, // invocation_repeats_2024.go
+	{"weapon_mastery_effects.go", `ALTER TABLE characters ADD COLUMN IF NOT EXISTS nick_used BOOLEAN DEFAULT FALSE`},
+	{"weapon_mastery_effects.go", `ALTER TABLE characters ADD COLUMN IF NOT EXISTS cleave_used BOOLEAN DEFAULT FALSE`},
+	{"weapon_mastery_effects.go", `ALTER TABLE characters ADD COLUMN IF NOT EXISTS action_surge_this_turn BOOLEAN DEFAULT FALSE`},
+	{"rogue_2024.go", `ALTER TABLE characters ADD COLUMN IF NOT EXISTS steady_aim BOOLEAN DEFAULT FALSE`},
+	{"monk_2024.go", `ALTER TABLE characters ADD COLUMN IF NOT EXISTS stun_used BOOLEAN DEFAULT FALSE`},
+	{"monk_2024.go", `ALTER TABLE characters ADD COLUMN IF NOT EXISTS uncanny_metabolism_used BOOLEAN DEFAULT FALSE`},
+	{"druid_2024.go", `ALTER TABLE characters ADD COLUMN IF NOT EXISTS primal_strike_used BOOLEAN DEFAULT FALSE`},
+	{"feats_2024.go", `ALTER TABLE characters ADD COLUMN IF NOT EXISTS savage_attacker_used BOOLEAN DEFAULT FALSE`},
+	{"class_extras_2024.go", `ALTER TABLE characters ADD COLUMN IF NOT EXISTS spell_mastery JSONB DEFAULT '[]'`},
+	{"class_extras_2024.go", `ALTER TABLE characters ADD COLUMN IF NOT EXISTS memorize_ready BOOLEAN DEFAULT FALSE`},
+	{"class_extras_2024.go", `ALTER TABLE characters ADD COLUMN IF NOT EXISTS mastery_swap_ready BOOLEAN DEFAULT FALSE`},
+	{"class_extras_2024.go", `ALTER TABLE characters ADD COLUMN IF NOT EXISTS land_ready BOOLEAN DEFAULT FALSE`},
+	{"class_extras_2024.go", `ALTER TABLE characters ADD COLUMN IF NOT EXISTS hunter_swaps TEXT DEFAULT ''`},
+	{"sorcerer_warlock_2024.go", `ALTER TABLE characters ADD COLUMN IF NOT EXISTS innate_sorcery_rounds INTEGER DEFAULT 0`},
+	{"sorcerer_warlock_2024.go", `ALTER TABLE characters ADD COLUMN IF NOT EXISTS magical_cunning_used BOOLEAN DEFAULT FALSE`},
+	{"bard_2024.go", `ALTER TABLE characters ADD COLUMN IF NOT EXISTS bardic_die INTEGER DEFAULT 0`},
+	{"bard_2024.go", `ALTER TABLE characters ADD COLUMN IF NOT EXISTS bardic_die_until TIMESTAMPTZ`},
+	{"barbarian_2024.go", `ALTER TABLE characters ADD COLUMN IF NOT EXISTS rage_age INTEGER DEFAULT 0`},
+	{"barbarian_2024.go", `ALTER TABLE characters ADD COLUMN IF NOT EXISTS rage_extended BOOLEAN DEFAULT FALSE`},
+	{"gear_reminders_2024.go", `ALTER TABLE characters ADD COLUMN IF NOT EXISTS gear_reminders_off BOOLEAN DEFAULT false`},
+	{"auto_equip_2024.go", `ALTER TABLE characters ADD COLUMN IF NOT EXISTS auto_equip_answered BOOLEAN DEFAULT false`},
+	{"reminders_2024.go", `ALTER TABLE characters ADD COLUMN IF NOT EXISTS reminder_settings JSONB DEFAULT '{}'`},
+	{"reminders_2024.go", `ALTER TABLE characters ADD COLUMN IF NOT EXISTS after_battle JSONB`},
+	{"reminders_2024.go", `ALTER TABLE characters ADD COLUMN IF NOT EXISTS fight_start_resources JSONB`},
+	{"reaction_orders_2024.go", `ALTER TABLE characters ADD COLUMN IF NOT EXISTS reaction_orders JSONB DEFAULT '{}'`},
+	// makes the spells table able to hold every field of a 2024 spell.
+	{"spells_2024.go", `ALTER TABLE spells ALTER COLUMN casting_time TYPE TEXT`},
+	{"spells_2024.go", `ALTER TABLE spells ALTER COLUMN range TYPE TEXT`},
+	{"spells_2024.go", `ALTER TABLE spells ALTER COLUMN components TYPE TEXT`},
+	{"spells_2024.go", `ALTER TABLE spells ALTER COLUMN duration TYPE TEXT`},
+	{"spells_2024.go", `ALTER TABLE spells ALTER COLUMN damage_dice TYPE VARCHAR(40)`},
+	{"spells_2024.go", `ALTER TABLE spells ALTER COLUMN healing TYPE VARCHAR(40)`},
+	{"spells_2024.go", `ALTER TABLE spells ALTER COLUMN source TYPE VARCHAR(60)`},
+	{"spells_2024.go", `ALTER TABLE spells ADD COLUMN IF NOT EXISTS material TEXT DEFAULT ''`},
+	{"spells_2024.go", `ALTER TABLE spells ALTER COLUMN material TYPE TEXT`},
+	{"spells_2024.go", `ALTER TABLE spells ADD COLUMN IF NOT EXISTS classes JSONB DEFAULT '[]'`},
+	{"spells_2024.go", `ALTER TABLE spells ADD COLUMN IF NOT EXISTS concentration BOOLEAN DEFAULT FALSE`},
+	{"spells_2024.go", `ALTER TABLE spells ADD COLUMN IF NOT EXISTS higher_level TEXT DEFAULT ''`},
+	{"spells_2024.go", `ALTER TABLE spells ADD COLUMN IF NOT EXISTS components_text TEXT DEFAULT ''`},
+	{"spells_2024.go", `ALTER TABLE spells ADD COLUMN IF NOT EXISTS ruleset VARCHAR(10) DEFAULT '2024'`},
+	{"spells_2024.go", `ALTER TABLE spells ADD COLUMN IF NOT EXISTS description_blocks JSONB`},
+	{"spells_2024.go", `ALTER TABLE spells ADD COLUMN IF NOT EXISTS statblock JSONB`},
+	{"spells_2024.go", `ALTER TABLE spells ADD COLUMN IF NOT EXISTS damage_parts JSONB`},
+	{"spells_2024.go", `CREATE INDEX IF NOT EXISTS idx_spells_ruleset ON spells(ruleset)`},
+	{"monsters_2024.go", `ALTER TABLE monsters ADD COLUMN IF NOT EXISTS ruleset TEXT DEFAULT '2024'`},
+	{"monsters_2024.go", `ALTER TABLE monsters ADD COLUMN IF NOT EXISTS alignment TEXT DEFAULT ''`},
+	{"monsters_2024.go", `ALTER TABLE monsters ADD COLUMN IF NOT EXISTS speed_text TEXT DEFAULT ''`},
+	{"monsters_2024.go", `ALTER TABLE monsters ADD COLUMN IF NOT EXISTS initiative_mod INTEGER`},
+	{"monsters_2024.go", `ALTER TABLE monsters ADD COLUMN IF NOT EXISTS proficiency_bonus INTEGER`},
+	{"monsters_2024.go", `ALTER TABLE monsters ADD COLUMN IF NOT EXISTS saves JSONB`},
+	{"monsters_2024.go", `ALTER TABLE monsters ADD COLUMN IF NOT EXISTS skills TEXT DEFAULT ''`},
+	{"monsters_2024.go", `ALTER TABLE monsters ADD COLUMN IF NOT EXISTS senses TEXT DEFAULT ''`},
+	{"monsters_2024.go", `ALTER TABLE monsters ADD COLUMN IF NOT EXISTS languages TEXT DEFAULT ''`},
+	{"monsters_2024.go", `ALTER TABLE monsters ADD COLUMN IF NOT EXISTS gear TEXT DEFAULT ''`},
+	{"monsters_2024.go", `ALTER TABLE monsters ADD COLUMN IF NOT EXISTS hp_formula TEXT DEFAULT ''`},
+	{"monsters_2024.go", `ALTER TABLE monsters ADD COLUMN IF NOT EXISTS xp_lair INTEGER`},
+	{"monsters_2024.go", `ALTER TABLE monsters ADD COLUMN IF NOT EXISTS group_name TEXT DEFAULT ''`},
+	{"monsters_2024.go", `ALTER TABLE monsters ADD COLUMN IF NOT EXISTS traits JSONB`},
+	{"monsters_2024.go", `ALTER TABLE monsters ADD COLUMN IF NOT EXISTS action_entries JSONB`},
+	{"monsters_2024.go", `ALTER TABLE monsters ADD COLUMN IF NOT EXISTS bonus_actions JSONB`},
+	{"monsters_2024.go", `ALTER TABLE monsters ADD COLUMN IF NOT EXISTS reactions JSONB`},
+	{"monsters_2024.go", `ALTER TABLE monsters ADD COLUMN IF NOT EXISTS legendary_intro TEXT DEFAULT ''`},
+	{"monsters_2024.go", `ALTER TABLE monsters ADD COLUMN IF NOT EXISTS description TEXT DEFAULT ''`},
+	{"monsters_2024.go", `ALTER TABLE monsters ADD COLUMN IF NOT EXISTS lore TEXT DEFAULT ''`},
+	{"auth_tokens.go", `CREATE TABLE IF NOT EXISTS agent_tokens (
+			id SERIAL PRIMARY KEY,
+			agent_id INTEGER NOT NULL,
+			token_hash VARCHAR(64) UNIQUE NOT NULL,
+			prefix VARCHAR(16) NOT NULL,
+			label TEXT DEFAULT '',
+			scope VARCHAR(10) NOT NULL DEFAULT 'full',
+			created_at TIMESTAMP DEFAULT NOW(),
+			last_used_at TIMESTAMP,
+			expires_at TIMESTAMP,
+			revoked_at TIMESTAMP
+		)`},
+	{"auth_signed.go", `CREATE TABLE IF NOT EXISTS agent_keys (
+			id SERIAL PRIMARY KEY,
+			agent_id INTEGER NOT NULL,
+			public_key VARCHAR(64) UNIQUE NOT NULL,
+			label TEXT DEFAULT '',
+			created_at TIMESTAMP DEFAULT NOW(),
+			last_used_at TIMESTAMP,
+			revoked_at TIMESTAMP
+		)`},
+	{"dropped_items.go", `CREATE TABLE IF NOT EXISTS dropped_items (
+			id SERIAL PRIMARY KEY,
+			lobby_id INTEGER NOT NULL,
+			name TEXT NOT NULL,
+			quantity INTEGER NOT NULL DEFAULT 1,
+			bundle TEXT NOT NULL,
+			dropped_by INTEGER,
+			dropped_at TIMESTAMP DEFAULT NOW(),
+			taken_by INTEGER,
+			taken_at TIMESTAMP,
+			taken_note TEXT
+		)`},
+	{"attitudes_2024.go", `CREATE TABLE IF NOT EXISTS attitudes (lobby_id INTEGER NOT NULL, target_key TEXT NOT NULL, name TEXT NOT NULL, attitude TEXT NOT NULL, PRIMARY KEY (lobby_id, target_key))`},
+	{"burning_2024.go", `CREATE TABLE IF NOT EXISTS burning (lobby_id INTEGER NOT NULL, target_id INTEGER NOT NULL, source TEXT DEFAULT '', PRIMARY KEY (lobby_id, target_id))`},
+	{"campaign_shops_2024.go", `CREATE TABLE IF NOT EXISTS campaign_shops (id SERIAL PRIMARY KEY, lobby_id INT NOT NULL, shop_type TEXT NOT NULL, name TEXT NOT NULL,
+		options JSONB NOT NULL DEFAULT '{}', opened_at TIMESTAMPTZ NOT NULL DEFAULT NOW(), closed_at TIMESTAMPTZ)`},
+	{"character_builder_2024.go", `CREATE TABLE IF NOT EXISTS character_drafts (
+			id SERIAL PRIMARY KEY,
+			agent_id INTEGER NOT NULL,
+			body JSONB NOT NULL DEFAULT '{}',
+			character_id INTEGER,
+			created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+			updated_at TIMESTAMPTZ NOT NULL DEFAULT now()
+		)`},
+	{"character_spells.go", `ALTER TABLE characters ADD COLUMN IF NOT EXISTS spellbook_copied JSONB DEFAULT '[]'`},
+	{"companions_2024.go", `CREATE TABLE IF NOT EXISTS companions (
+		id SERIAL PRIMARY KEY, owner_id INTEGER NOT NULL, lobby_id INTEGER, kind TEXT NOT NULL, name TEXT NOT NULL, source TEXT DEFAULT '',
+		form TEXT DEFAULT '', creature_type TEXT DEFAULT '', status TEXT DEFAULT 'active', slot_level INTEGER DEFAULT 0,
+		hp INTEGER DEFAULT 1, max_hp INTEGER DEFAULT 1, ac INTEGER DEFAULT 10, speed TEXT DEFAULT '', attacks JSONB DEFAULT '[]',
+		notes TEXT DEFAULT '', concentration TEXT DEFAULT '', last_acted_round INTEGER DEFAULT 0, last_acted_lobby INTEGER DEFAULT 0,
+		end_reason TEXT DEFAULT '', created_at TIMESTAMP DEFAULT NOW(), ended_at TIMESTAMP)`},
+	{"companions_2024.go", `CREATE INDEX IF NOT EXISTS companions_owner ON companions (owner_id)`},
+	{"companions_2024.go", `ALTER TABLE companions ADD COLUMN IF NOT EXISTS reaction_round INTEGER DEFAULT 0`},
+	{"companions_2024.go", `ALTER TABLE companions ADD COLUMN IF NOT EXISTS reaction_lobby INTEGER DEFAULT 0`},
+	{"companions_2024.go", `ALTER TABLE companions ADD COLUMN IF NOT EXISTS nickname TEXT DEFAULT ''`},  // the name its owner gives it
+	{"companions_2024.go", `ALTER TABLE companions ADD COLUMN IF NOT EXISTS traits JSONB DEFAULT '[]'`}, // the stat block's traits (an owl's Flyby)
+	// data, once: companions made before traits were stored take their form's traits
+	{"companions_2024.go", `UPDATE companions c SET traits = m.traits FROM monsters m WHERE m.slug = c.form AND (c.traits IS NULL OR c.traits = '[]'::jsonb) AND m.traits IS NOT NULL`},
+	{"toolbox_2024.go", `CREATE TABLE IF NOT EXISTS contagions (id SERIAL PRIMARY KEY, lobby_id INTEGER NOT NULL, target_id INTEGER NOT NULL,
+		contagion TEXT NOT NULL, successes INTEGER NOT NULL DEFAULT 0, onset BOOLEAN NOT NULL DEFAULT false, created_at TIMESTAMPTZ DEFAULT now())`},
+	{"legendary_items_2024.go", `ALTER TABLE characters ADD COLUMN IF NOT EXISTS deck_boons TEXT DEFAULT ''`},
+	// the expertise column holds every skill the character has Expertise in (rolls read it); expertise_other
+	// names the ones that didn't come from a class feature, so the class's choices can be counted and changed without losing them.
+	{"expertise_2024.go", `ALTER TABLE characters ADD COLUMN IF NOT EXISTS expertise_other TEXT DEFAULT ''`},
+	{"level_up_notice_2024.go", `CREATE TABLE IF NOT EXISTS level_up_notices (id SERIAL PRIMARY KEY, character_id INT NOT NULL, level INT NOT NULL,
+		hp_gained INT NOT NULL DEFAULT 0, created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(), seen_at TIMESTAMPTZ)`},
+	{"magical_discoveries_2024.go", `ALTER TABLE characters ADD COLUMN IF NOT EXISTS magical_discoveries JSONB DEFAULT '[]'`},
+	{"multiclass_2024.go", `ALTER TABLE characters ADD COLUMN IF NOT EXISTS subclasses JSONB DEFAULT '{}'`},
+	{"pact_of_the_tome_2024.go", `ALTER TABLE characters ADD COLUMN IF NOT EXISTS book_of_shadows JSONB DEFAULT '{}'`},
+	{"pending_turns_2024.go", `CREATE TABLE IF NOT EXISTS pending_turns (
+		id SERIAL PRIMARY KEY,
+		lobby_id INTEGER NOT NULL,
+		character_id INTEGER NOT NULL,
+		round INTEGER NOT NULL,
+		steps JSONB NOT NULL,
+		fallbacks JSONB NOT NULL DEFAULT '[]',
+		status TEXT NOT NULL DEFAULT 'pending',
+		note TEXT NOT NULL DEFAULT '',
+		result JSONB,
+		submitted_at TIMESTAMP NOT NULL DEFAULT NOW(),
+		resolved_at TIMESTAMP)`},
+	{"pending_turns_2024.go", `CREATE UNIQUE INDEX IF NOT EXISTS pending_turns_open ON pending_turns (lobby_id, character_id, round) WHERE status IN ('pending', 'needs_gm')`},
+	{"prepared_spells_2024.go", `ALTER TABLE characters ADD COLUMN IF NOT EXISTS spell_swaps INTEGER DEFAULT 0`},
+	{"prepared_spells_2024.go", `ALTER TABLE characters ADD COLUMN IF NOT EXISTS cantrip_swaps INTEGER DEFAULT 0`},
+	{"prepared_spells_2024.go", `ALTER TABLE characters ADD COLUMN IF NOT EXISTS prepare_ready BOOLEAN DEFAULT false`},
+	{"shop_2024.go", `ALTER TABLE characters ADD COLUMN IF NOT EXISTS shop_done BOOLEAN DEFAULT false`},
+	{"shop_2024.go", `ALTER TABLE characters ADD COLUMN IF NOT EXISTS took_both_packages BOOLEAN`}, // set at creation: both equipment packages taken
+	{"toolbox_more_2024.go", `CREATE TABLE IF NOT EXISTS campaign_objects (id SERIAL PRIMARY KEY, lobby_id INTEGER NOT NULL, name TEXT NOT NULL, ac INTEGER NOT NULL,
+		hp INTEGER NOT NULL, max_hp INTEGER NOT NULL, threshold INTEGER DEFAULT 0, vulnerable TEXT DEFAULT '', resistant TEXT DEFAULT '', created_at TIMESTAMP DEFAULT NOW())`},
+	{"toolbox_more_2024.go", `CREATE TABLE IF NOT EXISTS curses (id SERIAL PRIMARY KEY, lobby_id INTEGER NOT NULL, target_id INTEGER NOT NULL, description TEXT NOT NULL, source TEXT DEFAULT '')`},
+	{"toolbox_more_2024.go", `ALTER TABLE lobbies ADD COLUMN IF NOT EXISTS marching_order JSONB DEFAULT '[]'`},
+	{"wild_shape_2024.go", `ALTER TABLE characters ADD COLUMN IF NOT EXISTS wild_shape_saved JSONB`},
+	{"wild_shape_2024.go", `ALTER TABLE characters ADD COLUMN IF NOT EXISTS wild_shape_known JSONB DEFAULT '[]'`},
+	{"wild_shape_2024.go", `ALTER TABLE characters ADD COLUMN IF NOT EXISTS wild_shape_swap_ready BOOLEAN DEFAULT FALSE`},
+	{"wild_shape_2024.go", `ALTER TABLE characters ADD COLUMN IF NOT EXISTS wild_shape_equipment TEXT DEFAULT ''`},
+	{"wild_shape_2024.go", `ALTER TABLE characters ADD COLUMN IF NOT EXISTS wild_shape_rounds_left INT`},
+	// data, once: hunter_swaps lists the picks a character may make again (its name is from when only the Hunter's two were
+	// kept there). A land type that was waiting in the old land_ready column moves into it.
+	{"feature_picks_2024.go", `UPDATE characters SET hunter_swaps = trim(both ',' from COALESCE(hunter_swaps,'') || ',circle_land'), land_ready = false WHERE land_ready`},
+	{"gm_2024.go", `ALTER TABLE characters ADD COLUMN IF NOT EXISTS suffocation_levels INTEGER DEFAULT 0`},                   // handleGMSuffocation2024
+	{"portrait_step_2024.go", `ALTER TABLE characters ADD COLUMN IF NOT EXISTS portrait_skipped BOOLEAN DEFAULT FALSE`},      // portraitSkipped
+	{"gm_class_features.go", `ALTER TABLE characters ADD COLUMN IF NOT EXISTS dark_ones_luck_count INTEGER DEFAULT 0`},       // handleGMDarkOnesLuck
+	{"prepared_spells_2024.go", `ALTER TABLE characters ADD COLUMN IF NOT EXISTS slot_spent_turn TEXT DEFAULT ''`},           // slotAlreadyUsedThisTurn
+	{"ranger_2024.go", `ALTER TABLE characters ADD COLUMN IF NOT EXISTS divine_intervention_rests INT DEFAULT 0`},            // divineInterventionRestsLeft
+	{"magic_items_2024.go", `ALTER TABLE characters ADD COLUMN IF NOT EXISTS item_base_scores JSONB DEFAULT '{}'`},           // applyAttunementScore
+	{"class_feature_handlers.go", `ALTER TABLE characters ADD COLUMN IF NOT EXISTS invocation_swap_level INTEGER DEFAULT 0`}, // handleCharacterInvocations
+}
+
+// migrate runs schemaSteps in order; the first failure stops it and is returned with the step that failed.
+func migrate() error {
+	schemaChangesAllowed.Store(true) // the checked driver's check (db_guard_2024.go)
+	defer schemaChangesAllowed.Store(false)
+	for i, st := range schemaSteps {
+		if _, err := db.Exec(st.sql); err != nil {
+			first := strings.TrimSpace(st.sql)
+			if n := strings.IndexByte(first, '\n'); n > 0 {
+				first = first[:n]
+			}
+			return fmt.Errorf("schema step %d of %d (%s: %s): %w", i+1, len(schemaSteps), st.feature, first, err)
+		}
+	}
+	return nil
+}
+
+// baseSchema: the tables of the first versions and their later columns.
+const baseSchema = `
 	CREATE TABLE IF NOT EXISTS agents (
 		id SERIAL PRIMARY KEY,
 		email VARCHAR(255) UNIQUE NOT NULL,
@@ -825,13 +1113,6 @@ func initDB() {
 		END IF;
 	END $$;
 	`
-	_, err := db.Exec(schema)
-	if err != nil {
-		log.Printf("Schema error: %v", err)
-	} else {
-		log.Println("Database schema initialized")
-	}
-}
 
 // Seed campaign templates if empty
 func seedCampaignTemplates() {
@@ -915,10 +1196,15 @@ func seedCampaignTemplates() {
 
 // Seed extended equipment beyond the 5e SRD
 // Load SRD data from Postgres into in-memory maps for fast access
-func loadSRDFromDB() {
+// A failed read is returned (startup retries it, then refuses to start: audit AUD-13), and so is an empty spell table: the server
+// would treat every spell as unknown.
+func loadSRDFromDB() error {
 	// Load classes
 	rows, err := db.Query("SELECT slug, name, hit_die, saving_throws, spellcasting_ability FROM classes")
-	if err == nil {
+	if err != nil {
+		return fmt.Errorf("reading the classes: %w", err)
+	}
+	{
 		defer rows.Close()
 		for rows.Next() {
 			var slug, name, saves, spellcasting string
@@ -934,14 +1220,14 @@ func loadSRDFromDB() {
 	log.Printf("Loaded %d species", len(srdSpecies))
 
 	// Load weapons (SRD 5.2.1 corrections and the new firearms are applied first)
-	ensureAgentTokensTable()
-	ensureAgentKeysTable()
-	ensureDroppedItemsTable()
 	applyClassSkillChoices2024()
 	applySRD521Weapons()
 	ensureAvatarOfDeath() // the Mysterious Deck's Avatar of Death stat block (legendary_items_2024.go)
 	rows, err = db.Query("SELECT slug, name, type, damage, damage_type, COALESCE(weight, 0), COALESCE(properties, '') FROM weapons")
-	if err == nil {
+	if err != nil {
+		return fmt.Errorf("reading the weapons: %w", err)
+	}
+	{
 		defer rows.Close()
 		for rows.Next() {
 			var slug, name, wtype, damage, damageType, props string
@@ -976,7 +1262,10 @@ func loadSRDFromDB() {
 	// Added material, material_cost, material_consumed for costly/consumed components
 	// Added damage_at_character_level for cantrip scaling
 	rows, err = db.Query("SELECT slug, name, level, school, damage_dice, damage_type, saving_throw, healing, description, COALESCE(is_ritual, false), COALESCE(aoe_shape, ''), COALESCE(aoe_size, 0), COALESCE(components, ''), COALESCE(damage_at_slot_level, '{}'), COALESCE(heal_at_slot_level, '{}'), COALESCE(casting_time, '1 action'), COALESCE(material, ''), COALESCE(material_cost, 0), COALESCE(material_consumed, false), COALESCE(damage_at_character_level, '{}'), COALESCE(range, ''), COALESCE(duration, ''), COALESCE(components_text, ''), COALESCE(concentration, false), COALESCE(higher_level, ''), COALESCE(classes, '[]'), COALESCE(damage_parts, '[]') FROM spells")
-	if err == nil {
+	if err != nil {
+		return fmt.Errorf("reading the spells: %w", err)
+	}
+	{
 		defer rows.Close()
 		for rows.Next() {
 			var slug, name, school, damageDice, damageType, save, healing, desc, aoeShape, components, castingTime, material string
@@ -1001,6 +1290,10 @@ func loadSRDFromDB() {
 		}
 		log.Printf("Loaded %d spells from DB", len(srdSpellsMemory))
 	}
+	if len(srdSpellsMemory) == 0 {
+		return fmt.Errorf("the spells table is empty after seeding")
+	}
+	return nil
 }
 
 // In-memory spell cache for resolveAction (separate from srdSpells which is removed)

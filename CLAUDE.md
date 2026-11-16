@@ -241,6 +241,27 @@ Add to the owner, never beside it. When you give another rule one owner, add it 
   (`rowQuerier`, `execer`), never through `db`: a second connection waits behind the transaction's own locks, which froze the
   server once (audit AUD-02). The checked driver logs `query outside its transaction` with where it came from and where the
   transaction began; `tx_outside_check.py` (the batch) fails on any.
+  **No reply carries a database or driver error's text** ("pq: ...", "dial tcp ...: connection refused", HANDOFF item 27): it
+  goes to the log only. A handler answers with `writeDBError` / `writeDBWriteError`; a helper whose other errors are refusals
+  returns `dbFailureError(err, what)` (its text is the owner's words) and the handler answers it with `answerHelperDBFailure`.
+  `guardDB` also replaces a 5xx a handler wrote itself over a failed call (only the owner's replies keep their words).
+  `publicError` (a guess from the error's text) is gone; `TestNoDatabaseErrorTextInReplies` scans every function (go/ast).
+- **The schema:** `schemaSteps` (`cmd/server/database_init.go`) is the one list of every table, column and index, run in order and
+  idempotent by `migrate()` at each start, before the server serves. A new column or table is one step at the end; no request
+  creates or alters anything (audit AUD-11: ~130 lazy `ALTER TABLE` / `CREATE` in handlers, each an ACCESS EXCLUSIVE lock).
+  `TestNoSchemaChangeOutsideTheMigrations` reads every string literal; the checked driver logs `schema change outside startup`
+  for one sent while `migrate()` isn't running.
+- **Starting the server:** `startDatabase` (`cmd/server/startup_2024.go`): no `DATABASE_URL`, no start; reaching Postgres, the
+  schema and the SRD data (`seedAndLoad`, `loadSRDFromDB` returns its errors) are each tried `startupAttempts` times with a log
+  line per failure, then the server exits; the port opens only after all of them. `/health` pings the database (503 when it
+  doesn't answer), so the platform's health check sees a broken database (audit AUD-13).
+- **Changes that must happen whole** run in one transaction through `inTx` (`cmd/server/db_errors_2024.go`): character creation (the
+  row with its choices and first inventory, `changeInventoryIn`), the soft deletes (`admin_2024.go`: `softDeleteCharacterIn`,
+  `softDeleteCampaign`: deleting hides, never erases) and the moderator's deletes, which use them (audit AUD-27, AUD-28).
+- **Tests against Postgres:** `cmd/server/postgres_integration_test.go` (`testPostgres`, `pgCall`): the server's own start on a
+  throwaway database named by `TEST_DATABASE_URL` only (never `DATABASE_URL`; its name must contain "test"), requests through
+  the whole server with real tokens. CI (`.github/workflows/test.yml`, every push to `agentrpg2024`, `staging`, `claude/**`)
+  runs vet, gofmt on the changed files and `go test -race ./...` with a Postgres service and `REQUIRE_TEST_DATABASE=1`.
 - **The API reference** (`/docs`, `/docs/swagger.json`, and the route list on `/commands`): built by `python3 tools/build_swagger.py`
   from nothing each time (the hand-written entries in that script, then every handler's godoc `@Router` block); it never reads its
   own earlier output. `finish_operation` is the one check of every operation (path parameters declared, a body under content, no

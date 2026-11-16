@@ -26,12 +26,6 @@ var cantripSwapClasses = map[string]bool{"bard": true, "cleric": true, "druid": 
 // listInKnownSpells: the classes whose prepared list lives in known_spells (a Wizard's known_spells is the spellbook).
 var listInKnownSpells = map[string]bool{"bard": true, "ranger": true, "sorcerer": true, "warlock": true}
 
-func ensurePrepColumns() {
-	db.Exec(`ALTER TABLE characters ADD COLUMN IF NOT EXISTS spell_swaps INTEGER DEFAULT 0`)
-	db.Exec(`ALTER TABLE characters ADD COLUMN IF NOT EXISTS cantrip_swaps INTEGER DEFAULT 0`)
-	db.Exec(`ALTER TABLE characters ADD COLUMN IF NOT EXISTS prepare_ready BOOLEAN DEFAULT false`)
-}
-
 func splitByLevel(list []string) (cantrips, leveled map[string]bool) {
 	cantrips, leveled = map[string]bool{}, map[string]bool{}
 	for _, s := range list {
@@ -47,7 +41,6 @@ func splitByLevel(list []string) (cantrips, leveled map[string]bool) {
 // checkSpellListChange checks a new prepared list against the 2024 limits and when-to-change rules. It returns an error message, or ""
 // and a function that records the changes used (call it after saving).
 func checkSpellListChange(charID int, class string, level int, oldList, newList []string) (string, func()) {
-	ensurePrepColumns()
 	c := strings.ToLower(class)
 	oldC, oldL := splitByLevel(oldList)
 	newC, newL := splitByLevel(newList)
@@ -106,7 +99,6 @@ func grantSpellChangesOnLevelUp(charID int, class string, levels int) {
 	if levels <= 0 {
 		return
 	}
-	ensurePrepColumns()
 	c := strings.ToLower(class)
 	if swapOnLevelUp[c] {
 		db.Exec(`UPDATE characters SET spell_swaps = COALESCE(spell_swaps,0) + $1 WHERE id = $2`, levels, charID)
@@ -118,7 +110,6 @@ func grantSpellChangesOnLevelUp(charID int, class string, levels int) {
 
 // grantSpellChangesOnLongRest: a Cleric, Druid or Wizard may prepare a new list; a Paladin or Ranger may replace one spell.
 func grantSpellChangesOnLongRest(charID int, class string) {
-	ensurePrepColumns()
 	c := strings.ToLower(class)
 	switch {
 	case changeAllOnLongRest[c]:
@@ -133,7 +124,6 @@ func backfillPreparedLists() {
 	if db == nil {
 		return
 	}
-	ensurePrepColumns()
 	db.Exec(`UPDATE characters SET prepared_spells = known_spells WHERE lower(class) IN ('bard','ranger','sorcerer','warlock')
 		AND COALESCE(jsonb_array_length(prepared_spells),0) = 0 AND COALESCE(jsonb_array_length(known_spells),0) > 0`)
 }
@@ -180,7 +170,6 @@ func slotAlreadyUsedThisTurn(charID int, spellName string) string {
 	if m == "" {
 		return ""
 	}
-	db.Exec(`ALTER TABLE characters ADD COLUMN IF NOT EXISTS slot_spent_turn TEXT DEFAULT ''`)
 	var last string
 	db.QueryRow(`SELECT COALESCE(slot_spent_turn,'') FROM characters WHERE id = $1`, charID).Scan(&last)
 	if last == m {

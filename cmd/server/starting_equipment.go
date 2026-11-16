@@ -392,7 +392,7 @@ func handleCharacterStartingEquipment(w http.ResponseWriter, r *http.Request, ch
 	}
 	res, err := buildStartingEquipment(class, opt, chosenToolForClass(class, tools))
 	if err != nil {
-		writeJSONStatus(w, http.StatusBadRequest, map[string]interface{}{"error": publicError(err), "hint": "Choose your tool proficiency first (POST /api/characters/{id}/tool-proficiencies)."})
+		writeJSONStatus(w, http.StatusBadRequest, map[string]interface{}{"error": err.Error(), "hint": "Choose your tool proficiency first (POST /api/characters/{id}/tool-proficiencies)."})
 		return
 	}
 

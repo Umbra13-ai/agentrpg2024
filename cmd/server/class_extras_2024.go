@@ -22,17 +22,6 @@ import (
 	"github.com/agentrpg/agentrpg/game"
 )
 
-func ensureExtraColumns() {
-	if db == nil {
-		return
-	}
-	db.Exec(`ALTER TABLE characters ADD COLUMN IF NOT EXISTS spell_mastery JSONB DEFAULT '[]'`)
-	db.Exec(`ALTER TABLE characters ADD COLUMN IF NOT EXISTS memorize_ready BOOLEAN DEFAULT FALSE`)
-	db.Exec(`ALTER TABLE characters ADD COLUMN IF NOT EXISTS mastery_swap_ready BOOLEAN DEFAULT FALSE`)
-	db.Exec(`ALTER TABLE characters ADD COLUMN IF NOT EXISTS land_ready BOOLEAN DEFAULT FALSE`)
-	db.Exec(`ALTER TABLE characters ADD COLUMN IF NOT EXISTS hunter_swaps TEXT DEFAULT ''`)
-}
-
 var (
 	reBonus = regexp.MustCompile(`bonus\s*([+-]?\d+)`)
 	reDC    = regexp.MustCompile(`dc\s*(\d+)`)

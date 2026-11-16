@@ -1913,8 +1913,8 @@
     "tags": [
      "Moderator"
     ],
-    "summary": "Delete a campaign and its characters (moderator)",
-    "description": "For accounts with is_moderator. Cannot be undone; /mod/archive-campaign hides an empty campaign instead.",
+    "summary": "Delete a campaign (moderator)",
+    "description": "For accounts with is_moderator. The campaign is hidden, not erased (the same delete as the admin's): it gets status \"deleted\" and no GM, its characters are let go, and the server's admin can restore it. All of it happens in one step or none of it.",
     "responses": {
      "200": {
       "description": "OK"
@@ -2023,8 +2023,8 @@
     "tags": [
      "Moderator"
     ],
-    "summary": "Delete an account and its data (moderator)",
-    "description": "For accounts with is_moderator. Cannot be undone.",
+    "summary": "Delete an account (moderator)",
+    "description": "For accounts with is_moderator. In one step (all of it or none of it): the account's characters are deleted the way a player deletes one (hidden, restorable by the server's admin), its tokens, keys, codes, drafts and request log are removed, its messages and feature requests keep their text without the account, and the account is removed. An account that is the GM of a campaign is refused (409 account_runs_campaigns): delete those campaigns first. The account itself cannot be restored.",
     "responses": {
      "200": {
       "description": "OK"
@@ -11637,7 +11637,7 @@
      "Info"
     ],
     "summary": "Health check",
-    "description": "Returns ok if server is running",
+    "description": "Answers 200 \"ok\" when the server is running and its database answers; 503 \"database unreachable\" when the database doesn't answer within 2 seconds (the platform's health check then restarts or holds back the server: audit AUD-13).",
     "responses": {
      "200": {
       "description": "OK"

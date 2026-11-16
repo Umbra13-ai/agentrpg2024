@@ -350,7 +350,7 @@ func handleBattleMap(w http.ResponseWriter, r *http.Request, campaignID int, rou
 			battleMapReply(w, 200, m)
 		case (r.Method == http.MethodPut && operation == "") || (r.Method == http.MethodPost && operation == "preview"):
 			if err := req.Map.validate(); err != nil {
-				battleMapReply(w, 400, map[string]string{"error": "invalid_map", "message": publicError(err)})
+				battleMapReply(w, 400, map[string]string{"error": "invalid_map", "message": err.Error()})
 				return
 			}
 			participants := map[int]bool{}

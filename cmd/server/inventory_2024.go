@@ -111,27 +111,32 @@ func changeInventory(charID int, change func(tx *sql.Tx, inv []invItem) ([]invIt
 		return done, err
 	}
 	defer tx.Rollback()
-	inv, err := loadInventoryTx(tx, charID)
-	if err != nil {
-		return done, err
-	}
-	out, err := change(tx, inv)
-	if err != nil {
-		return done, err
-	}
-	if out != nil {
-		if err = saveInventoryTx(tx, charID, out); err != nil {
-			return done, err
-		}
-		if done.Ended, err = endAttunementNotCarried(tx, charID, out); err != nil {
-			return done, err
-		}
+	if done.Ended, err = changeInventoryIn(tx, charID, change); err != nil {
+		return invChange{}, err
 	}
 	if err = tx.Commit(); err != nil {
 		return invChange{}, err
 	}
 	done.Note = attunementEnded(charID, done.Ended)
 	return done, nil
+}
+
+// changeInventoryIn is changeInventory inside the caller's transaction (character creation writes the new row and its first
+// inventory in one): the row locked, the change, the save and the attunements it ended. The caller commits, then tells the
+// player what attunementEnded says.
+func changeInventoryIn(tx *sql.Tx, charID int, change func(tx *sql.Tx, inv []invItem) ([]invItem, error)) ([]string, error) {
+	inv, err := loadInventoryTx(tx, charID)
+	if err != nil {
+		return nil, err
+	}
+	out, err := change(tx, inv)
+	if err != nil || out == nil {
+		return nil, err
+	}
+	if err = saveInventoryTx(tx, charID, out); err != nil {
+		return nil, err
+	}
+	return endAttunementNotCarried(tx, charID, out)
 }
 
 // editInventory changes a character's inventory (changeInventory) for a caller with nothing to refuse.

@@ -94,7 +94,7 @@ func gmSetCharacterFields(charID int, set map[string]json.RawMessage) ([]string,
 	if len(parts) > 0 {
 		args = append(args, charID)
 		if _, err := db.Exec(fmt.Sprintf("UPDATE characters SET %s WHERE id = $%d", strings.Join(parts, ", "), len(args)), args...); err != nil {
-			return nil, fmt.Errorf("the update failed: %v", err)
+			return nil, dbFailureError(err, "the character")
 		}
 	}
 	for _, k := range keys {

@@ -9,22 +9,12 @@ package main
 import (
 	"encoding/json"
 	"fmt"
-	"sync"
 )
-
-var magicalDiscoveriesOnce sync.Once
-
-func ensureMagicalDiscoveries() {
-	magicalDiscoveriesOnce.Do(func() {
-		db.Exec(`ALTER TABLE characters ADD COLUMN IF NOT EXISTS magical_discoveries JSONB DEFAULT '[]'`)
-	})
-}
 
 func magicalDiscoveriesOf(charID int) []string {
 	if db == nil {
 		return nil
 	}
-	ensureMagicalDiscoveries()
 	var raw []byte
 	db.QueryRow(`SELECT COALESCE(magical_discoveries,'[]') FROM characters WHERE id = $1`, charID).Scan(&raw)
 	var out []string
@@ -84,7 +74,6 @@ func setMagicalDiscoveries(charID int, picks []string) string {
 		keys = append(keys, k)
 	}
 	b, _ := json.Marshal(keys)
-	ensureMagicalDiscoveries()
 	db.Exec(`UPDATE characters SET magical_discoveries = $1 WHERE id = $2`, b, charID)
 	return ""
 }

@@ -80,7 +80,6 @@ func tickItemCooldown(charID int, it invItem) string {
 // insertItemCompanion makes a companion from an SRD stat block (the monsters table): its HP, AC, Speed, attacks (with the
 // Multiattack counts) and traits.
 func insertItemCompanion(charID int, kind, name, source, slug, ctype, notes, concentration string, hp int) (int, string) {
-	ensureCompanions()
 	var mname, speed, mtype string
 	var mhp, ac int
 	if db.QueryRow(`SELECT name, hp, ac, COALESCE(speed_text,''), COALESCE(type,'') FROM monsters WHERE slug = $1`, slug).Scan(&mname, &mhp, &ac, &speed, &mtype) != nil {
@@ -717,20 +716,7 @@ func mysteriousDeck(charID int, it invItem, description string) string {
 	return fmt.Sprintf("You declare %d draw(s) from the %s%s and draw: %s", n, name, sizeNote, strings.Join(lines, " "))
 }
 
-// deck_boons: lasting effects of Mysterious Deck cards on a character ("euryale": -2 to saving throws; "sun": 10 Temporary Hit
-// Points at each dawn).
-var deckBoonsOnce sync.Once
-
-func ensureDeckBoons() {
-	deckBoonsOnce.Do(func() {
-		if db != nil {
-			db.Exec(`ALTER TABLE characters ADD COLUMN IF NOT EXISTS deck_boons TEXT DEFAULT ''`)
-		}
-	})
-}
-
 func addDeckBoon(charID int, boon string) {
-	ensureDeckBoons()
 	if !deckBoon(charID, boon) {
 		db.Exec(`UPDATE characters SET deck_boons = TRIM(BOTH ',' FROM COALESCE(deck_boons,'') || ',' || $1) WHERE id = $2`, boon, charID)
 	}
@@ -740,7 +726,6 @@ func deckBoon(charID int, boon string) bool {
 	if charID <= 0 || db == nil {
 		return false
 	}
-	ensureDeckBoons()
 	var b string
 	db.QueryRow(`SELECT COALESCE(deck_boons,'') FROM characters WHERE id = $1`, charID).Scan(&b)
 	for _, x := range strings.Split(b, ",") {

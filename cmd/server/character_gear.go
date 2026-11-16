@@ -1207,8 +1207,7 @@ func handleCharacterMount(w http.ResponseWriter, r *http.Request) {
 		WHERE id = $4`,
 		creatureSlug, isControlled, newMovement, req.CharacterID)
 	if err != nil {
-		w.WriteHeader(http.StatusInternalServerError)
-		json.NewEncoder(w).Encode(map[string]interface{}{"error": "database_error", "detail": publicError(err)})
+		writeDBWriteError(w, err, "the mount")
 		return
 	}
 
@@ -1345,8 +1344,7 @@ func handleCharacterDismount(w http.ResponseWriter, r *http.Request) {
 		WHERE id = $2`,
 		newMovement, req.CharacterID)
 	if err != nil {
-		w.WriteHeader(http.StatusInternalServerError)
-		json.NewEncoder(w).Encode(map[string]interface{}{"error": "database_error", "detail": publicError(err)})
+		writeDBWriteError(w, err, "the dismount")
 		return
 	}
 

@@ -13,27 +13,20 @@ import (
 	"github.com/agentrpg/agentrpg/game"
 )
 
-func ensureBurningTable() {
-	db.Exec(`CREATE TABLE IF NOT EXISTS burning (lobby_id INTEGER NOT NULL, target_id INTEGER NOT NULL, source TEXT DEFAULT '', PRIMARY KEY (lobby_id, target_id))`)
-}
-
 func isBurning(lobbyID, targetID int) bool {
 	if db == nil || lobbyID == 0 {
 		return false
 	}
-	ensureBurningTable()
 	var n int
 	db.QueryRow(`SELECT count(*) FROM burning WHERE lobby_id = $1 AND target_id = $2`, lobbyID, targetID).Scan(&n)
 	return n > 0
 }
 
 func startBurning(lobbyID, targetID int, source string) {
-	ensureBurningTable()
 	db.Exec(`INSERT INTO burning (lobby_id, target_id, source) VALUES ($1,$2,$3) ON CONFLICT DO NOTHING`, lobbyID, targetID, source)
 }
 
 func stopBurning(lobbyID, targetID int) bool {
-	ensureBurningTable()
 	res, err := db.Exec(`DELETE FROM burning WHERE lobby_id = $1 AND target_id = $2`, lobbyID, targetID)
 	if err != nil {
 		return false
@@ -49,7 +42,6 @@ func clearBurning(lobbyID int, monstersOnly bool) {
 	if db == nil || lobbyID == 0 {
 		return
 	}
-	ensureBurningTable()
 	if monstersOnly {
 		db.Exec(`DELETE FROM burning WHERE lobby_id = $1 AND target_id < 0`, lobbyID)
 		return
@@ -62,7 +54,6 @@ func stopCharacterBurning(charID int) {
 	if db == nil || charID <= 0 {
 		return
 	}
-	ensureBurningTable()
 	db.Exec(`DELETE FROM burning WHERE target_id = $1`, charID)
 }
 
@@ -177,7 +168,6 @@ func handleGMBurning(w http.ResponseWriter, r *http.Request) {
 	if !ok {
 		return
 	}
-	ensureBurningTable()
 	if r.Method == http.MethodGet {
 		var list []map[string]interface{}
 		rows, err := db.Query(`SELECT target_id, source FROM burning WHERE lobby_id = $1`, lobby)

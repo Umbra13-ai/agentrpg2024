@@ -21,13 +21,6 @@ import (
 
 var pendingStun sync.Map // character id -> save DC
 
-func ensureMonkColumns() {
-	if db != nil {
-		db.Exec(`ALTER TABLE characters ADD COLUMN IF NOT EXISTS stun_used BOOLEAN DEFAULT FALSE`)
-		db.Exec(`ALTER TABLE characters ADD COLUMN IF NOT EXISTS uncanny_metabolism_used BOOLEAN DEFAULT FALSE`)
-	}
-}
-
 // noteStunningStrike remembers a Stunning Strike asked for in the attack description.
 func noteStunningStrike(charID int, class string, level int, descLower string) {
 	pendingStun.Delete(charID)

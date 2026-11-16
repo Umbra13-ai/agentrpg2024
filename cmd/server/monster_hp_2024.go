@@ -250,7 +250,6 @@ func damageMonster(lobbyID, targetID, dmg int, dtype string, critical ...bool) (
 // changeCompanionHP is the one change of a companion's Hit Points: its row locked, change computes the new values from the
 // current ones. A companion that is gone doesn't change (errNotInFight).
 func changeCompanionHP(id int, change func(v game.Vitals) game.Vitals) (before, after game.Vitals, err error) {
-	ensureCompanions()
 	tx, err := db.Begin()
 	if err != nil {
 		return before, after, err

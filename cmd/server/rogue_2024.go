@@ -186,9 +186,3 @@ func takeSteadyAim(charID int) bool {
 	n, _ := res.RowsAffected()
 	return n > 0
 }
-
-func ensureRogueColumns() {
-	if db != nil {
-		db.Exec(`ALTER TABLE characters ADD COLUMN IF NOT EXISTS steady_aim BOOLEAN DEFAULT FALSE`)
-	}
-}

@@ -13,13 +13,6 @@ import (
 	"github.com/agentrpg/agentrpg/game"
 )
 
-func ensureMoreTables() {
-	db.Exec(`CREATE TABLE IF NOT EXISTS campaign_objects (id SERIAL PRIMARY KEY, lobby_id INTEGER NOT NULL, name TEXT NOT NULL, ac INTEGER NOT NULL,
-		hp INTEGER NOT NULL, max_hp INTEGER NOT NULL, threshold INTEGER DEFAULT 0, vulnerable TEXT DEFAULT '', resistant TEXT DEFAULT '', created_at TIMESTAMP DEFAULT NOW())`)
-	db.Exec(`CREATE TABLE IF NOT EXISTS curses (id SERIAL PRIMARY KEY, lobby_id INTEGER NOT NULL, target_id INTEGER NOT NULL, description TEXT NOT NULL, source TEXT DEFAULT '')`)
-	db.Exec(`ALTER TABLE lobbies ADD COLUMN IF NOT EXISTS marching_order JSONB DEFAULT '[]'`)
-}
-
 // ---- breaking objects
 
 // The Object Armor Class table.
@@ -35,7 +28,6 @@ type campaignObject struct {
 }
 
 func loadObject(lobbyID, id int) (campaignObject, bool) {
-	ensureMoreTables()
 	var o campaignObject
 	err := db.QueryRow(`SELECT id, name, ac, hp, max_hp, COALESCE(threshold,0), COALESCE(vulnerable,''), COALESCE(resistant,'') FROM campaign_objects WHERE id = $1 AND lobby_id = $2`, id, lobbyID).
 		Scan(&o.ID, &o.Name, &o.AC, &o.HP, &o.MaxHP, &o.Threshold, &o.Vulnerable, &o.Resistant)
@@ -111,7 +103,6 @@ func handleGMObject(w http.ResponseWriter, r *http.Request) {
 	if !ok {
 		return
 	}
-	ensureMoreTables()
 	if r.Method == http.MethodGet {
 		var list []map[string]interface{}
 		rows, err := db.Query(`SELECT id, name, ac, hp, max_hp, COALESCE(threshold,0) FROM campaign_objects WHERE lobby_id = $1 ORDER BY id`, lobby)
@@ -253,7 +244,6 @@ func jumpAction(charID int, description string) string {
 // ---- marching order
 
 func marchingOrderNames(lobbyID int) []string {
-	ensureMoreTables()
 	var raw []byte
 	db.QueryRow(`SELECT COALESCE(marching_order,'[]') FROM lobbies WHERE id = $1`, lobbyID).Scan(&raw)
 	var ids []int
@@ -279,7 +269,6 @@ func marchingOrderNames(lobbyID int) []string {
 // handleMarchingOrder: GET /api/campaigns/{id}/marching-order shows the order; POST {"order": [character ids, front first]} sets it
 // (the GM or any player in the campaign).
 func handleMarchingOrder(w http.ResponseWriter, r *http.Request, campaignID int) {
-	ensureMoreTables()
 	if r.Method == http.MethodPost {
 		if _, _, ok := requireCampaignMember(w, r, campaignID, "set its marching order"); !ok {
 			return
@@ -325,7 +314,6 @@ func handleGMCurse(w http.ResponseWriter, r *http.Request) {
 	if !ok {
 		return
 	}
-	ensureMoreTables()
 	if r.Method == http.MethodGet {
 		writeJSONStatus(w, 200, map[string]interface{}{"curses": cursesOf(lobby, 0)})
 		return
@@ -345,7 +333,6 @@ func handleGMCurse(w http.ResponseWriter, r *http.Request) {
 }
 
 func cursesOf(lobbyID, targetID int) []map[string]interface{} {
-	ensureMoreTables()
 	q := `SELECT id, target_id, description, COALESCE(source,'') FROM curses WHERE lobby_id = $1`
 	args := []interface{}{lobbyID}
 	if targetID != 0 {
@@ -373,7 +360,6 @@ func endCursesBySpell(lobbyID int, spellSlug string, targets []int) string {
 	if spellSlug != "remove-curse" && spellSlug != "greater-restoration" || len(targets) == 0 {
 		return ""
 	}
-	ensureMoreTables()
 	var out []string
 	for _, t := range targets {
 		res, err := db.Exec(`DELETE FROM curses WHERE lobby_id = $1 AND target_id = $2`, lobbyID, t)

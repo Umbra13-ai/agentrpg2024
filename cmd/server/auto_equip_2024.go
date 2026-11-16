@@ -22,16 +22,7 @@ import (
 	"net/http/httptest"
 	"sort"
 	"strings"
-	"sync"
 )
-
-var autoEquipOnce sync.Once
-
-func ensureAutoEquipColumn() {
-	autoEquipOnce.Do(func() {
-		db.Exec(`ALTER TABLE characters ADD COLUMN IF NOT EXISTS auto_equip_answered BOOLEAN DEFAULT false`)
-	})
-}
 
 type equipAction struct {
 	Kind  string // armor, main_hand, off_hand, shield, worn
@@ -390,7 +381,6 @@ func runEquip(charID, agentID int, actions []equipAction) []map[string]interface
 }
 
 func autoEquipAnswered(charID int) bool {
-	ensureAutoEquipColumn()
 	var done bool
 	db.QueryRow(`SELECT COALESCE(auto_equip_answered,false) FROM characters WHERE id = $1`, charID).Scan(&done)
 	return done
@@ -447,7 +437,6 @@ func handleAutoEquip(w http.ResponseWriter, r *http.Request) {
 		writeJSONStatus(w, http.StatusForbidden, map[string]interface{}{"error": "not_your_character"})
 		return
 	}
-	ensureAutoEquipColumn()
 	question := "Do you want me to equip everything for you? I will put on your armor, take your weapon (and Shield or a second Light weapon) in hand, and wear your clothing and jewelry. If you have more than one choice (more weapons than hands, two items for the same place), I will ask you which to use."
 	answer := strings.ToLower(strings.TrimSpace(req.Answer))
 	auto, questions, actions := equipPlan(req.CharacterID, req.Choices)

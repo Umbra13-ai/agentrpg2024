@@ -34,7 +34,6 @@ func freeCastResource(class string, level int, spellKey string) (string, int, bo
 
 // divineInterventionRestsLeft: Long Rests still needed after Greater Divine Intervention (Wish) before Divine Intervention returns.
 func divineInterventionRestsLeft(charID int) int {
-	db.Exec(`ALTER TABLE characters ADD COLUMN IF NOT EXISTS divine_intervention_rests INT DEFAULT 0`)
 	var n int
 	db.QueryRow(`SELECT COALESCE(divine_intervention_rests,0) FROM characters WHERE id = $1`, charID).Scan(&n)
 	return n

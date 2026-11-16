@@ -833,7 +833,6 @@ func polymorphCast(charID, lobby, target int, spell SRDSpell, saveDC int, dl str
 		setTokenSize(lobby, target, sizeSquares(creatureSizeOfKey(slug)))
 		return fmt.Sprintf("%s fails the DC %d Wisdom save and becomes a %s (CR %s) while you keep Concentration: its statistics are the beast's (AC %d, %d Hit Points as Temporary Hit Points; its own Hit Points are kept). It can't speak or cast spells; its gear melds into the form. When the beast's Hit Points are gone the spell ends and extra damage carries over.", tname, saveDC, beast, bcr, bac, bhp)
 	}
-	ensureWildShapeColumns()
 	leaveWildShape(target, "Polymorph")
 	db.Exec(`UPDATE characters SET wild_shape_form = $1 WHERE id = $2`, slug, target)
 	enterWildShapeStats(target, slug, "equipment: merge")

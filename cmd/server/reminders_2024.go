@@ -32,12 +32,6 @@ var reminderKinds = []struct{ Key, What string }{
 	{"gear", "gear you carry that could be worn (gear_reminders)"},
 }
 
-func ensureReminderColumns() {
-	db.Exec(`ALTER TABLE characters ADD COLUMN IF NOT EXISTS reminder_settings JSONB DEFAULT '{}'`)
-	db.Exec(`ALTER TABLE characters ADD COLUMN IF NOT EXISTS after_battle JSONB`)
-	db.Exec(`ALTER TABLE characters ADD COLUMN IF NOT EXISTS fight_start_resources JSONB`)
-}
-
 func reminderSettings(charID int) map[string]string {
 	var raw []byte
 	db.QueryRow(`SELECT COALESCE(reminder_settings,'{}') FROM characters WHERE id = $1`, charID).Scan(&raw)

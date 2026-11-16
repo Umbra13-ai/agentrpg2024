@@ -391,8 +391,7 @@ func handleGMUnderwater(w http.ResponseWriter, r *http.Request) {
 			ON CONFLICT (lobby_id) DO UPDATE SET underwater = $2
 		`, req.CampaignID, newState)
 		if err != nil {
-			w.WriteHeader(http.StatusInternalServerError)
-			json.NewEncoder(w).Encode(map[string]interface{}{"error": "database_error", "message": publicError(err)})
+			writeDBWriteError(w, err, "the underwater setting")
 			return
 		}
 		currentUnderwater = newState
@@ -405,8 +404,7 @@ func handleGMUnderwater(w http.ResponseWriter, r *http.Request) {
 
 		_, err = db.Exec("UPDATE combat_state SET underwater = $1 WHERE lobby_id = $2", newState, req.CampaignID)
 		if err != nil {
-			w.WriteHeader(http.StatusInternalServerError)
-			json.NewEncoder(w).Encode(map[string]interface{}{"error": "database_error", "message": publicError(err)})
+			writeDBWriteError(w, err, "the underwater setting")
 			return
 		}
 		currentUnderwater = newState
@@ -493,8 +491,7 @@ func handleGMSetLighting(w http.ResponseWriter, r *http.Request) {
 		ON CONFLICT (lobby_id) DO UPDATE SET lighting = $2
 	`, req.CampaignID, req.Lighting)
 	if err != nil {
-		w.WriteHeader(http.StatusInternalServerError)
-		json.NewEncoder(w).Encode(map[string]interface{}{"error": "database_error", "message": publicError(err)})
+		writeDBWriteError(w, err, "the lighting")
 		return
 	}
 
