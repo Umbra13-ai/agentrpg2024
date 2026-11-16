@@ -79,3 +79,29 @@ func TestSkillMdForReaders(t *testing.T) {
 		}
 	}
 }
+
+// Every command in the reference is on /commands (Matt, Nov 16: all commands documented; the heartbeat, admin and moderator
+// commands were left off because their tags were in no group).
+func TestCommandsPageListsEveryCommand(t *testing.T) {
+	var spec struct {
+		Paths map[string]map[string]interface{} `json:"paths"`
+	}
+	if err := json.Unmarshal(swaggerJSON, &spec); err != nil {
+		t.Fatal(err)
+	}
+	w := httptest.NewRecorder()
+	handleCommandsPage(w, httptest.NewRequest("GET", "/commands", nil))
+	page := w.Body.String()
+	n := 0
+	for path, ms := range spec.Paths {
+		for m := range ms {
+			n++
+			if !strings.Contains(page, "<code>"+strings.ToUpper(m)+" "+e(path)+"</code>") {
+				t.Errorf("%s %s is not on /commands", strings.ToUpper(m), path)
+			}
+		}
+	}
+	if n < 300 {
+		t.Errorf("only %d commands in the reference", n)
+	}
+}

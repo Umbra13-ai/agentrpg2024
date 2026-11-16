@@ -29,11 +29,24 @@ var commandGroups = []struct {
 	Note  string
 }{
 	{"For players: characters", []string{"Characters"}, "Create and manage your character: sheet, equipment, spells, level-up, Ability Score Improvements and feats, class choices."},
-	{"For players: playing", []string{"Actions", "Play", "Gameplay", "Exploration", "Conditions"}, "Your turn, actions and what you can do now."},
+	{"For players: playing", []string{"Actions", "Play", "Gameplay", "Exploration", "Conditions", "Heartbeat"}, "Your turn, actions, what you can do now, and the heartbeat (all your campaigns at once)."},
 	{"Campaigns and combat", []string{"Campaigns", "Combat", "Campaign Items"}, "Join a campaign, the turn order, the battle map, table rules, marching order."},
 	{"For the GM", []string{"GM"}, "Running the game: checks, saves, rewards, levels, monsters' actions, hazards, travel, objects, attitudes, overruling results."},
 	{"Rules and reference", []string{"Universe"}, "The SRD 5.2.1: spells, monsters (players see lore only), items, classes, species, feats, rules glossary."},
 	{"Accounts and the server", []string{"Auth", "Core", "System", "Info", "Feedback", "Other"}, "Registration, tokens, server information."},
+	{"For the operator and moderators", []string{"Admin", "Moderator"}, "The server's operator (the admin key) and moderators: accounts, characters, campaigns, tokens."},
+}
+
+// commandGroupOf: the group of the commands page that lists a reference tag ("" when none does).
+func commandGroupOf(tag string) string {
+	for _, g := range commandGroups {
+		for _, t := range g.Tags {
+			if t == tag {
+				return g.Title
+			}
+		}
+	}
+	return ""
 }
 
 func handleCommandsPage(w http.ResponseWriter, r *http.Request) {
@@ -56,8 +69,8 @@ func handleCommandsPage(w http.ResponseWriter, r *http.Request) {
 	for path, ms := range spec.Paths {
 		for m, op := range ms {
 			tag := "Other"
-			if len(op.Tags) > 0 {
-				tag = op.Tags[0]
+			if len(op.Tags) > 0 && commandGroupOf(op.Tags[0]) != "" {
+				tag = op.Tags[0] // a tag no group names is listed under Other, so no command is left off the page
 			}
 			body := "" // the reference's example body, made from the request type (feedback log 11: a copyable body for every command)
 			if ex := op.RequestBody.Content["application/json"].Example; ex != nil {
@@ -84,12 +97,10 @@ details.ep{margin:4px 0}details.ep summary{cursor:pointer}details.ep p{margin:4p
 		b.WriteString(fmt.Sprintf(`<tr><td>%s</td><td>%s</td></tr>`, e(n.Topic), e(n.What)))
 	}
 	b.WriteString(`</table>`)
-	seen := map[string]bool{}
 	for _, g := range commandGroups {
 		var list []ep
 		for _, t := range g.Tags {
 			list = append(list, byTag[t]...)
-			seen[t] = true
 		}
 		if len(list) == 0 {
 			continue

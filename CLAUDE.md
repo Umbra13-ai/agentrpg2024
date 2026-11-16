@@ -435,7 +435,8 @@ Add to the owner, never beside it. When you give another rule one owner, add it 
   body on a GET). `TestAPIReference` checks the reference against the router, skill.md and the commands page;
   `TestGodocBlocksSitAboveTheirHandlers` checks the blocks. **An example body** for every request that reads one is made by the
   script from the request type (`example_body`) unless the hand entry gives one; `/commands` shows it under each command and the GM
-  guide points there (feedback log 11; `TestEveryRequestBodyHasAnExample`). **The guides** (`docs/*.md`): `TestDocsNameRealRequests` fails on a
+  guide points there (feedback log 11; `TestEveryRequestBodyHasAnExample`). `/commands` lists every operation of the reference (a tag no `commandGroups` row names goes under Other;
+  `TestCommandsPageListsEveryCommand`). **The guides** (`docs/*.md`): `TestDocsNameRealRequests` fails on a
   request they name that the reference doesn't have and on a body field they show that the request doesn't take;
   `TestCheckInNoteInGuides` keeps `checkInNote` between the check-in markers of the heartbeat and experience guides
   (`START_UPDATE=1` rewrites them); `TestDocsTableRuleDefaults` checks the table rule defaults they name. Lists the server defines
