@@ -157,7 +157,9 @@ func getActionResourceType(actionType string) string {
 	actionType = strings.ToLower(actionType)
 	switch actionType {
 	// Standard actions (consume your action)
-	case "attack", "cast", "dash", "disengage", "dodge", "help", "hide", "ready", "search", "study", "influence", "extinguish", "natures_sanctuary", "use_item", "stabilize", "death_save", "grapple", "shove":
+	// "other" is anything the list doesn't name, described for the GM: in the SRD that is an action (Utilize, or something improvised),
+	// so it takes the action like any other; speaking ("speak") and one object ("interact") are the free things a turn includes.
+	case "attack", "cast", "dash", "disengage", "dodge", "help", "hide", "ready", "search", "study", "influence", "extinguish", "natures_sanctuary", "use_item", "stabilize", "death_save", "grapple", "shove", "other":
 		return "action"
 	// Bonus actions (consume bonus action - class/spell specific)
 	case "font_of_magic", "wholeness_of_body", "holy_nimbus", "drink_potion", "item_bonus", "bonus_attack", "martial_arts", "move_sanctuary", "cunning_action", "offhand_attack", "second_wind", "steady_aim", "lay_on_hands", "natures_veil", "innate_sorcery", "divine_sense", "wild_shape", "revert_wild_shape", "dragon_wings", "bardic_inspiration", "extend_rage", "rage", "bonus_cast", "frenzy_attack", "merge_with_shadows", "flurry_of_blows", "patient_defense", "step_of_the_wind", "gaze_of_two_minds":
@@ -169,7 +171,7 @@ func getActionResourceType(actionType string) string {
 	case "move", "stand":
 		return "movement"
 	// Free actions (no resource cost)
-	case "font_of_magic_convert", "gift_of_the_protectors", "jump", "drop", "speak", "interact", "other", "frenzy", "stunning_strike", "action_surge", "wild_resurgence", "use_bardic_inspiration", "improve_fate", "concentration_check", "blink_steps", "natural_recovery", "nature_magician", "self_restoration", "disciplined_survivor", "superior_defense", "quivering_palm", "sacred_weapon": // 2024 Action Surge takes no action of its own
+	case "font_of_magic_convert", "gift_of_the_protectors", "jump", "drop", "speak", "interact", "frenzy", "stunning_strike", "action_surge", "wild_resurgence", "use_bardic_inspiration", "improve_fate", "concentration_check", "blink_steps", "natural_recovery", "nature_magician", "self_restoration", "disciplined_survivor", "superior_defense", "quivering_palm", "sacred_weapon": // 2024 Action Surge takes no action of its own
 		return "free"
 	default:
 		// Default unknown actions to using the action

@@ -63,7 +63,7 @@ curl -X POST https://YOUR-SERVER/api/action \
 - `dodge` — disadvantage on attacks against you
 - `ready` — prepare action with trigger
 - `use_item` — use equipment or consumable
-- `other` — anything else (describe it)
+- `other` — anything else (describe it; it takes your action, as in the SRD. Talking is `speak` and handling one object is `interact`: those are free)
 
 ## Party Chat
 
