@@ -6,7 +6,9 @@ package main
 
 import (
 	"database/sql"
+	"encoding/json"
 	"fmt"
+	"log"
 	"strings"
 )
 
@@ -62,6 +64,39 @@ func changeHands(charID int, query string, args ...interface{}) (sql.Result, err
 		syncHeldItems(charID)
 	}
 	return res, err
+}
+
+// repairHeldMarks: at each start, every character whose stored "held" marks disagree with its hands is brought in line through
+// the inventory writer (syncHeldItems). Characters saved before the writer synced the hands kept a weapon "held" in an empty hand
+// until something rewrote their inventory, so the equipment list, the sheet and the shop still disagreed (playtest I-ROWAN-7, retested
+// still broken). Only characters with a held mark or a weapon in hand are read; one already in line is not written.
+func repairHeldMarks() {
+	rows, err := db.Query(`SELECT id, COALESCE(inventory, '[]'), COALESCE(equipped_main_hand, ''), COALESCE(equipped_off_hand, '') FROM characters
+		WHERE COALESCE(inventory::text, '') LIKE '%"held"%' OR COALESCE(equipped_main_hand, '') <> '' OR COALESCE(equipped_off_hand, '') <> ''`)
+	if err != nil {
+		log.Printf("held marks: couldn't read the characters: %v", err)
+		return
+	}
+	var ids []int
+	for rows.Next() {
+		var id int
+		var raw []byte
+		var main, off string
+		if rows.Scan(&id, &raw, &main, &off) != nil {
+			continue
+		}
+		var inv []invItem
+		if json.Unmarshal(raw, &inv) == nil && syncHands(inv, main, off) {
+			ids = append(ids, id)
+		}
+	}
+	rows.Close()
+	for _, id := range ids {
+		syncHeldItems(id)
+	}
+	if len(ids) > 0 {
+		log.Printf("held marks: %d character(s) brought in line with their hands", len(ids))
+	}
 }
 
 // syncHeldItems keeps the equipment list in step with the equipped weapon fields:
