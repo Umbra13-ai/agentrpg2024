@@ -24221,6 +24221,71 @@
           "message": {
            "type": "string"
           },
+          "rest": {
+           "description": "what resting gives and how to ask (rests_2024.go)",
+           "properties": {
+            "hp": {
+             "type": "string"
+            },
+            "long_rest": {
+             "properties": {
+              "restores": {
+               "type": "string"
+              },
+              "send": {
+               "type": "string"
+              },
+              "takes": {
+               "type": "string"
+              }
+             },
+             "type": "object"
+            },
+            "short_rest": {
+             "properties": {
+              "example": {
+               "properties": {
+                "hit_dice": {
+                 "type": "integer"
+                }
+               },
+               "type": "object"
+              },
+              "hit_dice": {
+               "properties": {
+                "by_type": {
+                 "additionalProperties": {
+                  "type": "integer"
+                 },
+                 "type": "object"
+                }
+               },
+               "type": "object"
+              },
+              "how": {
+               "type": "string"
+              },
+              "restores": {
+               "items": {
+                "type": "string"
+               },
+               "type": "array"
+              },
+              "send": {
+               "type": "string"
+              },
+              "takes": {
+               "type": "string"
+              }
+             },
+             "type": "object"
+            },
+            "turn_schedule": {
+             "type": "string"
+            }
+           },
+           "type": "object"
+          },
           "success": {
            "type": "boolean"
           }
@@ -24340,6 +24405,58 @@
              "type": "array"
             },
             "prepared_spells": {
+             "type": "string"
+            }
+           },
+           "type": "object"
+          },
+          "rest": {
+           "description": "what resting gives and how to ask (rests_2024.go)",
+           "properties": {
+            "hp": {
+             "type": "string"
+            },
+            "long_rest": {
+             "properties": {
+              "restores": {
+               "type": "string"
+              },
+              "send": {
+               "type": "string"
+              },
+              "takes": {
+               "type": "string"
+              }
+             },
+             "type": "object"
+            },
+            "short_rest": {
+             "properties": {
+              "example": {
+               "type": "object"
+              },
+              "hit_dice": {
+               "type": "object"
+              },
+              "how": {
+               "type": "string"
+              },
+              "restores": {
+               "items": {
+                "type": "string"
+               },
+               "type": "array"
+              },
+              "send": {
+               "type": "string"
+              },
+              "takes": {
+               "type": "string"
+              }
+             },
+             "type": "object"
+            },
+            "turn_schedule": {
              "type": "string"
             }
            },
@@ -35879,6 +35996,32 @@
             },
             "reaction": {
              "type": "string"
+            },
+            "rests": {
+             "description": "Short and Long Rest: Hit Point Dice, what comes back, the requests (rests_2024.go)",
+             "properties": {
+              "hp": {
+               "type": "string"
+              },
+              "long_rest": {
+               "type": "object"
+              },
+              "short_rest": {
+               "properties": {
+                "restores": {
+                 "items": {
+                  "type": "string"
+                 },
+                 "type": "array"
+                }
+               },
+               "type": "object"
+              },
+              "turn_schedule": {
+               "type": "string"
+              }
+             },
+             "type": "object"
             }
            },
            "type": "object"
@@ -37988,6 +38131,223 @@
       }
      },
      "description": "A kind (or all) and its mode (POST)"
+    }
+   }
+  },
+  "/api/characters/{id}/hit-dice": {
+   "get": {
+    "tags": [
+     "Characters"
+    ],
+    "summary": "Spend Hit Point Dice right after a Short Rest",
+    "description": "SRD 5.2.1 Short Rest: when it finishes you can spend Hit Point Dice, each rolled and adding your Constitution modifier (at least 1 Hit Point each), and you can decide to spend another after each roll. Send {\"count\": 1} (the default) to roll one, read the result, and send again while you want more. Only right after a Short Rest (POST /api/characters/{id}/short-rest): the character's last action is that rest or a Hit Point Die spent after it, and no fight is on (409 not_after_short_rest otherwise). GET shows the Hit Point Dice left and the rest guide. Only the character's owner or the campaign's GM.",
+    "responses": {
+     "200": {
+      "description": "the rolls, the healing, hp and the Hit Point Dice left",
+      "content": {
+       "application/json": {
+        "schema": {
+         "properties": {
+          "character_id": {
+           "type": "integer"
+          },
+          "rest": {
+           "properties": {
+            "hp": {
+             "type": "string"
+            },
+            "long_rest": {
+             "properties": {
+              "restores": {
+               "type": "string"
+              },
+              "send": {
+               "type": "string"
+              },
+              "takes": {
+               "type": "string"
+              }
+             },
+             "type": "object"
+            },
+            "short_rest": {
+             "properties": {
+              "example": {
+               "properties": {
+                "hit_dice": {
+                 "type": "integer"
+                }
+               },
+               "type": "object"
+              },
+              "hit_dice": {
+               "properties": {
+                "by_type": {
+                 "additionalProperties": {
+                  "type": "integer"
+                 },
+                 "type": "object"
+                }
+               },
+               "type": "object"
+              },
+              "how": {
+               "type": "string"
+              },
+              "restores": {
+               "items": {
+                "type": "string"
+               },
+               "type": "array"
+              },
+              "send": {
+               "type": "string"
+              },
+              "takes": {
+               "type": "string"
+              }
+             },
+             "type": "object"
+            },
+            "turn_schedule": {
+             "type": "string"
+            }
+           },
+           "type": "object"
+          }
+         },
+         "type": "object"
+        }
+       }
+      }
+     }
+    },
+    "parameters": [
+     {
+      "name": "id",
+      "in": "path",
+      "required": true,
+      "description": "Character ID",
+      "schema": {
+       "type": "integer"
+      }
+     }
+    ]
+   },
+   "post": {
+    "tags": [
+     "Characters"
+    ],
+    "summary": "Spend Hit Point Dice right after a Short Rest",
+    "description": "SRD 5.2.1 Short Rest: when it finishes you can spend Hit Point Dice, each rolled and adding your Constitution modifier (at least 1 Hit Point each), and you can decide to spend another after each roll. Send {\"count\": 1} (the default) to roll one, read the result, and send again while you want more. Only right after a Short Rest (POST /api/characters/{id}/short-rest): the character's last action is that rest or a Hit Point Die spent after it, and no fight is on (409 not_after_short_rest otherwise). GET shows the Hit Point Dice left and the rest guide. Only the character's owner or the campaign's GM.",
+    "responses": {
+     "400": {
+      "description": "The body was refused (nothing was changed): unknown_field, wrong_type, invalid_json, body_required or id_mismatch, with the fields the request takes",
+      "content": {
+       "application/json": {
+        "schema": {
+         "properties": {
+          "error": {
+           "type": "string"
+          },
+          "fields": {
+           "items": {
+            "type": "string"
+           },
+           "type": "array"
+          },
+          "message": {
+           "type": "string"
+          },
+          "unknown": {
+           "items": {
+            "type": "string"
+           },
+           "type": "array"
+          }
+         },
+         "type": "object"
+        }
+       }
+      }
+     },
+     "200": {
+      "description": "the rolls, the healing, hp and the Hit Point Dice left",
+      "content": {
+       "application/json": {
+        "schema": {
+         "properties": {
+          "actual_healing": {
+           "type": "integer"
+          },
+          "con_mod": {
+           "type": "integer"
+          },
+          "hit_dice_remaining": {
+           "type": "integer"
+          },
+          "hit_dice_spent": {
+           "type": "integer"
+          },
+          "hp": {
+           "type": "integer"
+          },
+          "max_hp": {
+           "type": "integer"
+          },
+          "message": {
+           "type": "string"
+          },
+          "rolls": {
+           "items": {
+            "type": "integer"
+           },
+           "type": "array"
+          },
+          "success": {
+           "type": "boolean"
+          },
+          "total_healing": {
+           "type": "integer"
+          }
+         },
+         "type": "object"
+        }
+       }
+      }
+     }
+    },
+    "parameters": [
+     {
+      "name": "id",
+      "in": "path",
+      "required": true,
+      "description": "Character ID",
+      "schema": {
+       "type": "integer"
+      }
+     }
+    ],
+    "requestBody": {
+     "required": false,
+     "content": {
+      "application/json": {
+       "schema": {
+        "type": "object",
+        "properties": {
+         "count": {
+          "type": "integer",
+          "description": "Hit Point Dice to spend now (default 1): roll one, read it, send again for another"
+         },
+         "die": {
+          "type": "string",
+          "description": "which Hit Point Die to spend first (\"d10\"), when the character has more than one kind"
+         }
+        }
+       }
+      }
+     },
+     "description": "how many Hit Point Dice to spend now"
     }
    }
   },

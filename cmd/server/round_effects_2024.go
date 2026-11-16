@@ -63,14 +63,16 @@ const (
 	whyGM       = "the GM's request (the GM resolves rounds; its requests are never submissions)"
 	whyFeedback = "feedback to the server's owner"
 	whyBags     = "bookkeeping: which bag an item is in"
+	whyRestEnd  = "the end of a Short Rest already taken: Hit Point Dice spent one at a time, deciding after each roll (SRD 5.2.1)"
 )
 
 var routeEffects = []routeEffect{
 	// ---------------------------------------------------------------- game actions
 	{"POST", "/api/action", effectSubmission, byActor, ""}, // speak (talk) stays immediate: actionIsImmediate
 	{"POST", "/api/campaigns/{id}/battle-map/move", effectSubmission, byBody, ""},
-	{"POST", "/api/characters/{id}/rest", effectSubmission, byPath, ""},       // Matt 11.6: a rest is a submission; the GM resolves it
-	{"POST", "/api/characters/{id}/short-rest", effectSubmission, byPath, ""}, // the same
+	{"POST", "/api/characters/{id}/rest", effectSubmission, byPath, ""},        // Matt 11.6: a rest is a submission; the GM resolves it
+	{"POST", "/api/characters/{id}/short-rest", effectSubmission, byPath, ""},  // the same
+	{"POST", "/api/characters/{id}/hit-dice", effectImmediate, "", whyRestEnd}, // only right after a Short Rest (rests_2024.go)
 	{"POST", "/api/characters/{id}/use-resource", effectSubmission, byPath, ""},
 	{"POST", "/api/characters/{id}/equipment/use-charge", effectSubmission, byPath, ""},
 	{"POST", "/api/characters/{id}/equipment/drop", effectSubmission, byPath, ""},

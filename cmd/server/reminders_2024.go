@@ -521,12 +521,9 @@ func afterBattleReminders(charID int) map[string]interface{} {
 	json.Unmarshal(raw, &note)
 	out := map[string]interface{}{}
 	if reminderMode(charID, "rest") != "off" {
-		rest := map[string]interface{}{"hp": fmt.Sprintf("%d/%d", hp, maxHP),
-			"long_rest": fmt.Sprintf("8 hours, when the GM allows it (the GM keeps time): all Hit Points, spell slots and half your Hit Point Dice. POST /api/characters/%d/rest", charID)}
-		if sr := shortRestRestores(charID); len(sr) > 0 {
-			rest["short_rest"] = fmt.Sprintf("1 hour: %s. POST /api/characters/%d/short-rest {\"hit_dice\": N}", strings.Join(sr, ", "), charID)
+		if rest := restGuide(charID); rest != nil { // the one rest guide (rests_2024.go)
+			out["rest"] = rest
 		}
-		out["rest"] = rest
 	}
 	if reminderMode(charID, "resources") != "off" && len(note.Unused) > 0 {
 		out["unused_this_fight"] = note.Unused
