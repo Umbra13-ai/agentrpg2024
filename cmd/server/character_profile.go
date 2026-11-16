@@ -705,7 +705,7 @@ function render(d,p){
   pw.appendChild(frame);statcol.appendChild(pw);
 
   var sb=el('div','box');
-  // pipRow: a row of a two-column grid (the label, then the bubbles), so every row's bubbles start at the same place
+  // pipRow: a spell slot row of a two-column grid (the label, then the bubbles), so the slot rows' bubbles start at the same place
   var pipGrid=null,pipRow=function(label,total,rem,note){if(!pipGrid){pipGrid=el('div','pipgrid');sb.appendChild(pipGrid)}
     add(pipGrid,el('b','l',label),add(el('span','pv'),pips(total,rem),note?document.createTextNode(' '+note):null))};
   add(sb,el('h3','boxname',d.name));
@@ -780,7 +780,7 @@ function render(d,p){
     if(d.concentrating_on)line(sb,'Concentrating on',title(d.concentrating_on));
     [['Spell Slots',d.spell_slots],['Pact Magic Slots',d.pact_magic]].forEach(function(pair){var o=pair[1];if(!o||!o.total)return;
       Object.keys(o.total).sort(function(a,b){return a-b}).forEach(function(k){pipRow(pair[0]==='Spell Slots'?ordinal(+k)+'-level slots':'Pact '+ordinal(+k)+'-level slots',o.total[k],(o.remaining||{})[k],'')})})}
-  (d.class_resources||[]).forEach(function(rs){pipRow(rs.name,rs.max||0,rs.current||0,'('+(rs.current||0)+' of '+(rs.max||0)+')')});
+  (d.class_resources||[]).forEach(function(rs){var q=el('p');add(q,el('b','l',rs.name+' '),pips(rs.max||0,rs.current||0),document.createTextNode(' ('+(rs.current||0)+' of '+(rs.max||0)+')'));sb.appendChild(q)}); // own lines: a long feature name doesn't widen the slots' column
 
   // Actions, Bonus Actions, Reactions, Options
   sb.appendChild(el('div','sbh','Actions'));
