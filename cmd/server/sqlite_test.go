@@ -1042,18 +1042,21 @@ func TestClearCombatInitiativeRemovesStaleTurnData(t *testing.T) {
 	}
 }
 
-func TestOtherActionNarrativeValidationAndLegacyResultAlias(t *testing.T) {
+func TestDescribedActionNarrativeValidationAndLegacyResultAlias(t *testing.T) {
 	if got := actionNarrative("  description wins  ", "legacy result"); got != "description wins" {
 		t.Fatalf("actionNarrative() = %q, want trimmed description", got)
 	}
 	if got := actionNarrative(" \t", "  preserve this narrative  "); got != "preserve this narrative" {
 		t.Fatalf("actionNarrative() = %q, want trimmed legacy result", got)
 	}
-	if !actionRequiresNarrative(" OTHER ") {
-		t.Fatal("other actions must require a narrative")
+	if t2, ok := lookupActionType(" SPEAK "); !ok || !t2.GM {
+		t.Fatal("an action described for the GM (speak) must require a narrative")
 	}
-	if actionRequiresNarrative("dodge") {
+	if t2, _ := lookupActionType("dodge"); t2.GM {
 		t.Fatal("mechanical actions should retain their optional description")
+	}
+	if _, ok := lookupActionType("other"); ok {
+		t.Fatal("there is no \"other\" action")
 	}
 	if actionNarrative("", "") != "" {
 		t.Fatal("empty narrative inputs should remain empty for validation")

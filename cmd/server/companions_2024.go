@@ -505,8 +505,6 @@ func combatRoundOf(lobbyID int) (round, currentID int, active bool) {
 	return
 }
 
-var companionActions = map[string]bool{"attack": true, "dodge": true, "dash": true, "disengage": true, "help": true, "hide": true, "search": true, "move": true}
-
 // handleCompanionAction runs POST /api/action for a companion ("companion_id") or a familiar command of its owner.
 func handleCompanionAction(w http.ResponseWriter, charID, lobbyID, companionID int, action, description string, targetID int, targetIDs ...int) {
 	ensureCompanions()
@@ -599,8 +597,8 @@ func handleCompanionAction(w http.ResponseWriter, charID, lobbyID, companionID i
 		reply(200, map[string]interface{}{"success": true, "result": text, "companion": companionView(mustCompanion(c.ID))})
 		return
 	}
-	if !companionActions[action] {
-		reply(400, map[string]interface{}{"success": false, "error": "invalid_companion_action", "message": "A companion can attack, dodge, dash, disengage, help, hide, search or move; a Draconic Spirit also \"breath\"; an Otherworldly Steed \"fey_step\", \"fell_glare\" or \"healing_touch\" by its kind."})
+	if !companionCanTake(action) { // the action table says what a companion can take (action_types_2024.go)
+		reply(400, map[string]interface{}{"success": false, "error": "invalid_companion_action", "message": companionActionsText()})
 		return
 	}
 	if c.Status != "active" || c.HP <= 0 {

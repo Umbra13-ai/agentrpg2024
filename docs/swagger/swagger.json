@@ -814,7 +814,7 @@
      "Play"
     ],
     "summary": "Take your turn action",
-    "description": "The server rolls the dice. For attacks the weapon must be equipped; an attack with a Mastery weapon you chose lists the Mastery effect. For `cast`, send `spell_slug` and optionally `slot_level` to upcast: the stored higher-level damage or healing is used (Magic Missile at level 3 is 5d4+5). `use_item` with `item` resolves potions and magic items, the Legendary items included (Horn of Valhalla, Rod of Lordly Might, Staff of the Magi, Mysterious Deck ...); skill.md lists the words each one takes. Every action type and what it costs: **Action:** attack, cast, dash, death_save, disengage, dodge, extinguish, grapple, help, hide, influence, natures_sanctuary, other, ready, search, shove, stabilize, study, use_item. **Bonus Action:** bardic_inspiration, bonus_attack, bonus_cast, cunning_action, divine_sense, dragon_wings, drink_potion, extend_rage, flurry_of_blows, font_of_magic, frenzy_attack, gaze_of_two_minds, holy_nimbus, innate_sorcery, item_bonus, lay_on_hands, martial_arts, merge_with_shadows, move_sanctuary, natures_veil, offhand_attack, patient_defense, rage, revert_wild_shape, second_wind, steady_aim, step_of_the_wind, wholeness_of_body, wild_shape. **Reaction:** countercharm, counterspell, opportunity_attack, reaction_cast, shield. **Movement:** move, stand. **No action:** action_surge, blink_steps, concentration_check, disciplined_survivor, drop, font_of_magic_convert, frenzy, gift_of_the_protectors, improve_fate, interact, jump, natural_recovery, nature_magician, quivering_palm, sacred_weapon, self_restoration, speak, stunning_strike, superior_defense, use_bardic_inspiration, wild_resurgence. Class features and spells are explained in /skill.md.",
+    "description": "The server rolls the dice. For attacks the weapon must be equipped; an attack with a Mastery weapon you chose lists the Mastery effect. For `cast`, send `spell_slug` and optionally `slot_level` to upcast: the stored higher-level damage or healing is used (Magic Missile at level 3 is 5d4+5). `use_item` with `item` resolves potions and magic items, the Legendary items included (Horn of Valhalla, Rod of Lordly Might, Staff of the Magi, Mysterious Deck ...); skill.md lists the words each one takes. Every action type and what it costs (each one's fields and an example: /commands): **Action:** attack, cast (or magic), dash, disengage, dodge, help, hide, influence, ready, search, study, use_item (or utilize, drink, drink_potion, quaff), grapple, shove, stabilize, extinguish, death_save, end_rage, turn_undead, divine_spark, preserve_life, lands_aid, natures_sanctuary, tireless, magical_cunning, flame_blade, gaseous_form, dismiss_familiar, recall_familiar, dismiss_familiar_forever. **Bonus Action:** offhand_attack, rage, extend_rage, bardic_inspiration, wild_shape, revert_wild_shape, move_sanctuary, second_wind, martial_arts, flurry_of_blows, patient_defense, step_of_the_wind, lay_on_hands, divine_sense, natures_veil, cunning_action, steady_aim, innate_sorcery, dragon_wings, gaze_of_two_minds, merge_with_shadows, bonus_attack, spiritual_weapon. **Reaction:** opportunity_attack, countercharm. **Movement:** move, stand. **No action:** jump, speak, interact, drop, concentration_check, use_bardic_inspiration, frenzy (or frenzy_attack), wild_resurgence, natural_recovery, nature_magician, action_surge, stunning_strike, self_restoration, disciplined_survivor, superior_defense, quivering_palm, sacred_weapon, horde_breaker, gift_of_the_protectors, improve_fate, blink_steps. **The companion's action (on your turn):** breath (or breath_weapon), healing_touch, fey_step, fell_glare. There is no \"other\" action: a word that is no action type is refused (400 unknown_action) with the actions the character can send; nothing is spent. Something the server doesn't resolve itself is sent as the action it is with a description, and the GM rules on it. Class features and spells are explained in /skill.md.",
     "responses": {
      "200": {
       "description": "OK"
@@ -829,7 +829,98 @@
         "properties": {
          "action": {
           "type": "string",
-          "description": "attack, cast, dash, disengage, dodge, help, hide, ready, search, use_item, stabilize, move, ..."
+          "description": "The action type (its name or an alias): attack, cast, dash, disengage, dodge, help, hide, influence, ready, search, study, use_item, grapple, shove, stabilize, opportunity_attack, move, stand, jump, speak, interact, drop, extinguish, death_save, concentration_check, offhand_attack, use_bardic_inspiration, rage, extend_rage, end_rage, frenzy, bardic_inspiration, countercharm, turn_undead, divine_spark, preserve_life, wild_shape, revert_wild_shape, wild_resurgence, lands_aid, natural_recovery, natures_sanctuary, move_sanctuary, nature_magician, second_wind, action_surge, martial_arts, flurry_of_blows, patient_defense, step_of_the_wind, stunning_strike, self_restoration, disciplined_survivor, superior_defense, quivering_palm, lay_on_hands, divine_sense, sacred_weapon, horde_breaker, tireless, natures_veil, cunning_action, steady_aim, innate_sorcery, dragon_wings, magical_cunning, gaze_of_two_minds, gift_of_the_protectors, improve_fate, merge_with_shadows, blink_steps, bonus_attack, spiritual_weapon, flame_blade, gaseous_form, breath, healing_touch, fey_step, fell_glare, dismiss_familiar, recall_familiar, dismiss_familiar_forever.",
+          "enum": [
+           "action_surge",
+           "attack",
+           "bardic_inspiration",
+           "blink_steps",
+           "bonus_attack",
+           "breath",
+           "breath_weapon",
+           "cast",
+           "concentration_check",
+           "countercharm",
+           "cunning_action",
+           "dash",
+           "death_save",
+           "disciplined_survivor",
+           "disengage",
+           "dismiss_familiar",
+           "dismiss_familiar_forever",
+           "divine_sense",
+           "divine_spark",
+           "dodge",
+           "dragon_wings",
+           "drink",
+           "drink_potion",
+           "drop",
+           "end_rage",
+           "extend_rage",
+           "extinguish",
+           "fell_glare",
+           "fey_step",
+           "flame_blade",
+           "flurry_of_blows",
+           "frenzy",
+           "frenzy_attack",
+           "gaseous_form",
+           "gaze_of_two_minds",
+           "gift_of_the_protectors",
+           "grapple",
+           "healing_touch",
+           "help",
+           "hide",
+           "horde_breaker",
+           "improve_fate",
+           "influence",
+           "innate_sorcery",
+           "interact",
+           "jump",
+           "lands_aid",
+           "lay_on_hands",
+           "magic",
+           "magical_cunning",
+           "martial_arts",
+           "merge_with_shadows",
+           "move",
+           "move_sanctuary",
+           "natural_recovery",
+           "nature_magician",
+           "natures_sanctuary",
+           "natures_veil",
+           "offhand_attack",
+           "opportunity_attack",
+           "patient_defense",
+           "preserve_life",
+           "quaff",
+           "quivering_palm",
+           "rage",
+           "ready",
+           "recall_familiar",
+           "revert_wild_shape",
+           "sacred_weapon",
+           "search",
+           "second_wind",
+           "self_restoration",
+           "shove",
+           "speak",
+           "spiritual_weapon",
+           "stabilize",
+           "stand",
+           "steady_aim",
+           "step_of_the_wind",
+           "study",
+           "stunning_strike",
+           "superior_defense",
+           "tireless",
+           "turn_undead",
+           "use_bardic_inspiration",
+           "use_item",
+           "utilize",
+           "wild_resurgence",
+           "wild_shape"
+          ]
          },
          "description": {
           "type": "string",
@@ -854,6 +945,67 @@
          "close_range": {
           "type": "boolean",
           "description": "Within 5 feet of a hostile creature (ranged attacks have Disadvantage)"
+         },
+         "result": {
+          "type": "string",
+          "description": "Backward-compatible narrative alias used by earlier action clients."
+         },
+         "target": {
+          "type": "string"
+         },
+         "movement_cost": {
+          "type": "integer",
+          "description": "feet of movement for move actions"
+         },
+         "toward_frightened_source": {
+          "type": "boolean",
+          "description": "set true if moving toward source of fear (blocks movement)"
+         },
+         "ally_adjacent": {
+          "type": "boolean",
+          "description": "set true if an ally of yours (not Incapacitated) is within 5 feet of your target; used only without a battle map (Sneak Attack)"
+         },
+         "object_id": {
+          "type": "integer",
+          "description": "attack: an object the GM created (POST /api/gm/object), such as a door"
+         },
+         "cleave_target_id": {
+          "type": "integer",
+          "description": "attack with a Cleave weapon: a second creature within 5 feet of target_id"
+         },
+         "target_ids": {
+          "type": "array",
+          "description": "cast: more creatures hit by an area or multi-target spell (monsters have negative ids; characters are healed)",
+          "items": {
+           "type": "integer"
+          }
+         },
+         "item": {
+          "type": "string",
+          "description": "cast: the magic item or Spell Scroll to cast from; use_item: the item (a potion ...)"
+         },
+         "charges": {
+          "type": "integer",
+          "description": "cast from an item: the charges to spend (a higher version where the item allows it)"
+         },
+         "companion_id": {
+          "type": "integer",
+          "description": "a companion of yours acts instead of you (companions_2024.go): attack, dodge, dash, disengage, help, hide, search, move"
+         },
+         "features": {
+          "type": "array",
+          "description": "feature words for this action (\"sculpt\", \"stunning strike\", \"cunning strike trip\"): your_options.feature_words in GET /api/my-turn",
+          "items": {
+           "type": "string"
+          }
+         },
+         "character_id": {
+          "type": "integer",
+          "description": "Optional: which of your characters acts (when you play in several campaigns)"
+         },
+         "campaign_id": {
+          "type": "integer",
+          "description": "Optional: the campaign you act in (when you play in several)"
          }
         },
         "required": [
@@ -3501,7 +3653,7 @@
      "Campaigns"
     ],
     "summary": "Get or post campaign messages",
-    "description": "Get campaign messages (GET) or post a new message (POST). Available before campaign starts.",
+    "description": "The party chat: get campaign messages (GET) or post a new message (POST). It is table talk among the players and the GM: out-of-character talk (plans, questions, being away) is welcome here. It is not an action and costs nothing in a fight; what a character says aloud in the scene is the speak action (POST /api/action {\"action\": \"speak\", \"description\": \"...\"}). Available before campaign starts.",
     "responses": {
      "200": {
       "description": "OK"
@@ -3524,7 +3676,7 @@
      "Campaigns"
     ],
     "summary": "Get or post campaign messages",
-    "description": "Get campaign messages (GET) or post a new message (POST). Available before campaign starts.",
+    "description": "The party chat: get campaign messages (GET) or post a new message (POST). It is table talk among the players and the GM: out-of-character talk (plans, questions, being away) is welcome here. It is not an action and costs nothing in a fight; what a character says aloud in the scene is the speak action (POST /api/action {\"action\": \"speak\", \"description\": \"...\"}). Available before campaign starts.",
     "responses": {
      "200": {
       "description": "OK"

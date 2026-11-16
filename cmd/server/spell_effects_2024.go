@@ -760,12 +760,13 @@ func guidanceBonus(lobbyID, charID int, skill string) (int, string) {
 	return 0, ""
 }
 
-var hasteActions = map[string]bool{"attack": true, "dash": true, "disengage": true, "hide": true, "utilize": true, "use_item": true}
+// hasteActions: the actions Haste's extra action can take (the SRD's list in the spell: Attack, Dash, Disengage, Hide, Utilize).
+var hasteActions = map[string]bool{"attack": true, "dash": true, "disengage": true, "hide": true, "use_item": true}
 
 // hasteExtraAction: after its action is spent, a hasted character may take one more action on its turn: an Attack (one attack only),
 // Dash, Disengage, Hide or Utilize. It returns true and marks it used when the action qualifies.
 func hasteExtraAction(charID int, action string) bool {
-	if !hasteActions[strings.ToLower(action)] || !hasSpellEffect(lobbyOfChar(charID), charID, "hasted") {
+	if !hasteActions[canonicalAction(action)] || !hasSpellEffect(lobbyOfChar(charID), charID, "hasted") {
 		return false
 	}
 	if _, used := hasteUsed.LoadOrStore(charID, true); used {

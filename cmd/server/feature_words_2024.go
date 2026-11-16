@@ -323,19 +323,6 @@ func featurePattern(alt string) *regexp.Regexp {
 	return regexp.MustCompile("^" + p + "$")
 }
 
-// featureAction: the feature-word group of an action (a bonus or reaction cast is a cast; an opportunity attack an attack).
-func featureAction(action string) string {
-	switch action {
-	case "cast", "bonus_cast", "reaction_cast":
-		return "cast"
-	case "attack", "opportunity_attack", "bonus_attack", "offhand_attack", "flurry_of_blows", "martial_arts", "frenzy_attack":
-		return "attack"
-	case "use_item", "item_bonus":
-		return "use_item"
-	}
-	return action
-}
-
 // @Summary GM: Advantage or Disadvantage on a character's next attack roll
 // @Description A GM ruling the server doesn't track itself (an unseen attacker the map doesn't know about, a distracting trick, cover
 // broken by the scenery): the character's next attack roll has Advantage (mode "advantage") or Disadvantage ("disadvantage"). Both on

@@ -1764,7 +1764,7 @@ func handleCharacterFiendishResilience(w http.ResponseWriter, r *http.Request) {
 		} else {
 			actionLog = fmt.Sprintf("🔥 %s shifts their Fiendish Resilience from %s to %s damage", charName, previousResistance, damageTypeLower)
 		}
-		writeAction(db, int(campaignID.Int64), req.CharacterID, "other", actionLog, "")
+		writeAction(db, int(campaignID.Int64), req.CharacterID, "fiendish_resilience", actionLog, "")
 	}
 
 	json.NewEncoder(w).Encode(map[string]interface{}{
@@ -2121,7 +2121,7 @@ func handleCharacterMysticArcanum(w http.ResponseWriter, r *http.Request) {
 		if oldSpell != "" {
 			actionText = fmt.Sprintf("✨ %s changes their %dth-level Mystic Arcanum to %s", charName, req.SpellLevel, spellName)
 		}
-		writeAction(db, int(campaignID.Int64), req.CharacterID, "other", actionText, "")
+		writeAction(db, int(campaignID.Int64), req.CharacterID, "mystic_arcanum", actionText, "")
 	}
 
 	response := map[string]interface{}{

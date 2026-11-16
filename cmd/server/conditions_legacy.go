@@ -185,7 +185,7 @@ func removeOneWithShadowsInvisibility(charID int) bool {
 		return false
 	}
 	if lobby := lobbyOfChar(charID); lobby != 0 {
-		writeAction(db, lobby, charID, "other", fmt.Sprintf("👁️ %s's invisibility from One with Shadows ends", getCharacterName(charID)), "")
+		writeAction(db, lobby, charID, "one_with_shadows", fmt.Sprintf("👁️ %s's invisibility from One with Shadows ends", getCharacterName(charID)), "")
 	}
 	return true
 }

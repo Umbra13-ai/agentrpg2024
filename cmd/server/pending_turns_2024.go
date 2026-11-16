@@ -318,6 +318,13 @@ func validatePendingSteps(lobbyID, charID int, steps []map[string]interface{}, s
 			continue
 		}
 		at += " (" + s.Action + ")"
+		if code, msg := actionWordProblem(s.Action, s.CompanionID); code == "unknown_action" {
+			problems = append(problems, fmt.Sprintf("%s: unknown_action: %q is not an action (the actions you can send are listed under actions)", at, s.Action))
+			continue
+		} else if code != "" && code != "pending_turn_step" {
+			problems = append(problems, at+": "+code+": "+strings.TrimSuffix(msg, " Nothing was spent."))
+			continue
+		}
 		if s.Action == "death_save" { // the server rolls it at a dying character's slot (ptDying): a held turn is what you do when up
 			problems = append(problems, at+": no need: if you are at 0 Hit Points when your slot comes, the server rolls your Death Saving Throw itself. A pending turn holds what you do when you are up")
 			continue
@@ -355,12 +362,12 @@ func validatePendingSteps(lobbyID, charID int, steps []map[string]interface{}, s
 		if s.MovementCost < 0 || s.MovementCost > 10000 {
 			problems = append(problems, at+": movement_cost is the feet of movement you use, 0 or more")
 		}
-		if actionRequiresNarrative(s.Action) && strings.TrimSpace(actionNarrative(s.Description, s.Result)) == "" {
-			problems = append(problems, at+": an \"other\" action needs a description")
+		if t, _ := lookupActionType(s.Action); t.GM && strings.TrimSpace(actionNarrative(s.Description, s.Result)) == "" {
+			problems = append(problems, at+": "+t.Title+" is described for the GM: say what your character does or says in description")
 		}
-		if slug := normalizeSpellSlug(strings.ReplaceAll(s.Action, "_", "-")); s.Action != "cast" && kind == "action" && !knownActionWord(s.Action) {
-			if sp, isSpell := srdSpellsMemory[slug]; isSpell {
-				problems = append(problems, fmt.Sprintf("%s: %s is a spell: cast it with {\"action\": \"cast\", \"spell_slug\": \"%s\"}", at, sp.Name, slug))
+		if s.Action == "ready" {
+			if _, _, _, ok := readiedAction(actionNarrative(s.Description, s.Result)); !ok {
+				problems = append(problems, at+": unknown_action: a Ready holds one action, \"trigger: <what happens>; action: <an action type> ...\"")
 				continue
 			}
 		}
@@ -387,7 +394,7 @@ func validatePendingSteps(lobbyID, charID int, steps []map[string]interface{}, s
 			}
 		}
 		switch s.Action {
-		case "attack", "offhand_attack", "frenzy_attack":
+		case "attack", "offhand_attack":
 			if targetID != 0 {
 				if ok, why := validateAttackTarget(lobbyID, targetID); !ok {
 					problems = append(problems, at+": "+why)
@@ -460,6 +467,17 @@ func validatePendingSteps(lobbyID, charID int, steps []map[string]interface{}, s
 		warnings = append(warnings, fmt.Sprintf("%d steps take your action (%s): the later ones resolve only if you have an action left then (Extra Attack, Action Surge)", n, strings.Join(uses["action"], ", ")))
 	}
 	return problems, warnings
+}
+
+// withActionOptions adds what the character can send (actions) to a refused turn whose problems include a word that is no action.
+func withActionOptions(charID int, problems []string, reply map[string]interface{}) map[string]interface{} {
+	for _, p := range problems {
+		if strings.Contains(p, "unknown_action") {
+			reply["actions"] = actionOptionsFor(charID)
+			break
+		}
+	}
+	return reply
 }
 
 // ---------------------------------------------------------------- running a turn
@@ -938,7 +956,7 @@ func handlePendingTurn(w http.ResponseWriter, r *http.Request) {
 			if hadOne {
 				msg += " (the turn you sent before is still pending)"
 			}
-			writeJSONStatus(w, http.StatusBadRequest, map[string]interface{}{"error": "invalid_pending_turn", "problems": problems, "message": msg + "."})
+			writeJSONStatus(w, http.StatusBadRequest, withActionOptions(charID, problems, map[string]interface{}{"error": "invalid_pending_turn", "problems": problems, "message": msg + "."}))
 			return
 		}
 		var hp int
@@ -1073,7 +1091,7 @@ func handleCombatStandIn(w http.ResponseWriter, r *http.Request, campaignID int)
 		}
 	}
 	if problems, _ := validatePendingSteps(campaignID, e.ID, req.Steps, true); len(problems) > 0 {
-		writeJSONStatus(w, http.StatusBadRequest, map[string]interface{}{"error": "invalid_pending_turn", "problems": problems, "message": "This turn can't work as things stand: " + strings.Join(problems, "; ") + ". Nothing was changed."})
+		writeJSONStatus(w, http.StatusBadRequest, withActionOptions(e.ID, problems, map[string]interface{}{"error": "invalid_pending_turn", "problems": problems, "message": "This turn can't work as things stand: " + strings.Join(problems, "; ") + ". Nothing was changed."}))
 		return
 	}
 	results, failedAt, why := ptRunSteps(campaignID, e.ID, owner, req.Steps)

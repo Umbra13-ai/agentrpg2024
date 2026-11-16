@@ -86,7 +86,7 @@ func hasCharacterActedSinceLastNarration(charID, lobbyID int) (bool, string, str
 		FROM actions
 		WHERE lobby_id = $1
 		  AND character_id = $2
-		  AND action_type NOT IN ('poll', 'joined', 'following', 'drop', 'pick_up', 'species_ability')
+		  AND action_type NOT IN ('poll', 'joined', 'following', 'drop', 'pick_up', 'species_ability'` + beatFreeTypesSQL() + `)
 		  AND COALESCE(result, '') NOT LIKE 'Cannot %' -- a refused action spent nothing: it doesn't use the exploration turn
 	`
 	args := []interface{}{lobbyID, charID}
@@ -134,13 +134,23 @@ func actionReplaySinceLastNarration(charID, lobbyID int, actionType, description
 	return true, result.String, createdAt.Time
 }
 
-func shouldAllowExplorationFollowup(actionType string) bool {
-	switch strings.ToLower(strings.TrimSpace(actionType)) {
-	case "speak", "interact", "drop", "death_save":
-		return true
-	default:
-		return false
+// beatFreeTypesSQL: the action types that don't use up the exploration beat (speaking, one object ...), as more entries of a SQL
+// NOT IN list: they are the action table's own names, never a player's text.
+func beatFreeTypesSQL() string {
+	var b strings.Builder
+	for _, t := range actionTypes {
+		if t.Beat {
+			b.WriteString(", '" + t.Name + "'")
+		}
 	}
+	return b.String()
+}
+
+// shouldAllowExplorationFollowup: outside a fight, this action doesn't use up the character's beat between the GM's narrations
+// (speaking, one object, dropping something, a Death Saving Throw): the action table's Beat (action_types_2024.go).
+func shouldAllowExplorationFollowup(actionType string) bool {
+	t, ok := lookupActionType(actionType)
+	return ok && t.Beat
 }
 
 // openSeats is the rule of a campaign's player seats, for the campaign list and for joining: the seats left, or nil when

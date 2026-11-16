@@ -154,9 +154,9 @@ Add to the owner, never beside it. When you give another rule one owner, add it 
   `regainUse`, `setUse`, `useOnce`, `countUse`, `clearUses`, `spendSlot`, `spent.spend` / `regain` /
   `addSlot`, `spendSlotIn` / `regainSlotIn`, `restoreSpent` (rests); `useClassResource` is built on them. Work out the maximum
   before the change (it reads other tables). A feature route's use and its Bonus Action (or action) are spent together with
-  `spendWithTurn`; what an action costs in a fight is `getActionResourceType` with `featureTurnCost` / `turnCost.spendIn`
-  (`actions.go`; Font of Magic: `fontOfMagicActions`). `TestNoOtherResourceWriter` checks (a reset to `'{}'` or 0 on a rest is
-  allowed); suite: `resources_rule_test.py` (audit AUD-24, B-4, E-13).
+  `spendWithTurn`; what an action costs in a fight is `getActionResourceType` (the action table, `action_types_2024.go`) with
+  `featureTurnCost` / `turnCost.spendIn` (`actions.go`; Font of Magic: `fontOfMagicActions`). `TestNoOtherResourceWriter` checks
+  (a reset to `'{}'` or 0 on a rest is allowed); suite: `resources_rule_test.py` (audit AUD-24, B-4, E-13).
 - **A character's inventory and attunement:** `cmd/server/inventory_2024.go` is the only writer. `changeInventory(charID, change)`
   locks the row, gives the change the inventory as it is now and the transaction (for the other columns of the same change: the
   money of a purchase or sale, the ground of a drop), saves the result and, in the same transaction, ends the attunement to any
@@ -203,6 +203,20 @@ Add to the owner, never beside it. When you give another rule one owner, add it 
 - **A weapon's data:** `findWeapon` (`cmd/server/character_attacks.go`) over `srdWeapons`: any spelling of a weapon (key, name,
   hyphens or underscores, a magic +N, a named weapon's base in parentheses). Never index `srdWeapons` with a key built by
   hand and never read a weapon from the `weapons` table (a copy for the universe catalogue); `TestNoOtherWeaponLookup` checks.
+- **The action types a player can send:** `actionTypes` (`cmd/server/action_types_2024.go`), the one table: each type's name and
+  aliases (Magic is `cast`, Utilize is `use_item`), cost, who has it, the fields it reads, what it does, an example, whether the GM
+  rules on it (`GM`: a description is required and recorded), its feature-word group and kind tags (attack, spell, object, talk),
+  where it is sent (POST /api/action, a companion, a pending turn's step, a feature's own request) and whether it uses up the
+  exploration beat. `lookupActionType` / `canonicalAction` read a word; `getActionResourceType` is the cost (with `costVariants`
+  for a Bonus Action or Reaction cast and an item's Bonus Action); `actionWordProblem` and `unknownActionRefusal` refuse a word
+  that is no type (400 `unknown_action`, with `actions`: what the character can send now, from `actionTypesOpenTo`) in
+  `/api/action`, a pending turn and a companion's action; `readiedAction` reads what a Ready holds. There is no "other" action:
+  something the server doesn't resolve is sent as the action it is with a description. my-turn's options (`turnOptions`), the turn
+  reminder, `featureAction`, Gaseous Form and Antimagic Field limits, `/commands` (`actionTypesHTML`), the API reference
+  (`tools/build_swagger.py` reads the file) and skill.md's action list (between its action markers; `ACTIONS_UPDATE=1 go test
+  ./cmd/server -run TestActionTypesInSkillMd` rewrites it) are made from it. A new action is one row (with its handler).
+  `TestActionDispatchIsTheTable`, `TestActionTypesAreDocumented`, `TestCommandsAndReferenceListTheTable` and
+  `TestNoOtherActionWordList` check; suite: `action_types_rule_test.py` (HANDOFF items 19, 29).
 - **How to act (`GET /api/my-turn`'s `how_to_act`):** `actionHowTo` (`cmd/server/actions.go`), made from `actionRequest`'s
   fields and the character's real enemies.
 - **Carried weight:** `inventoryWeight` and `itemUnitWeight` (`cmd/server/srd_gear.go`). **A weapon is stored** with

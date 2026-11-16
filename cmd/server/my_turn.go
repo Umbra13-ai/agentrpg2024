@@ -225,45 +225,18 @@ func handleMyTurn(w http.ResponseWriter, r *http.Request) {
 		charStatus = "wounded"
 	}
 
-	// Build available actions based on class
-	actions := []map[string]interface{}{
-		{"name": "Attack", "description": "Make a weapon attack against a target."},
-		{"name": "Dodge", "description": "Focus on defense. Attacks against you have disadvantage until your next turn."},
-		{"name": "Help", "description": "Aid an ally. They gain advantage on their next ability check or attack."},
-	}
-
-	// Add class-specific actions
+	// Every action type this character has now, by part of the turn, with the request to send and the uses left (action_types_2024.go)
+	actions, featBonus, featFree := turnOptions(charID)
 	classKey := strings.ToLower(class)
-
-	// Check if prone - add stand action
-	if hasCondition(charID, "prone") {
-		standCost := characterSpeed(charID, species) / 2
-		actions = append([]map[string]interface{}{
-			{"name": "Stand", "description": fmt.Sprintf("Stand up from prone (costs %dft movement). While prone, attacks against you from 5ft have advantage, and your attacks have disadvantage.", standCost)},
-		}, actions...)
-	}
-	if c, ok := srdClasses[classKey]; ok && c.Spellcasting != "" {
-		actions = append(actions, map[string]interface{}{
-			"name": "Cast", "description": fmt.Sprintf("Cast a spell using %s as your spellcasting ability.", c.Spellcasting),
-		})
-	}
-	if classKey == "barbarian" {
-		actions = append(actions, map[string]interface{}{
-			"name": "Rage", "description": "Enter a rage for advantage on STR checks and bonus damage.",
-		})
-		actions = append(actions, map[string]interface{}{
-			"name": "Reckless Attack", "description": "Attack with advantage, but attacks against you also have advantage.",
-		})
+	// two ways of attacking that aren't action types of their own
+	if classKey == "barbarian" && level >= 2 {
+		actions = append(actions, map[string]interface{}{"name": "Reckless Attack", "action": "attack", "use": `{"action": "attack", "target_id": -1, "description": "reckless attack"}`,
+			"description": "Advantage on your Strength attack rolls this turn; attack rolls against you have Advantage until your next turn."})
 	}
 	if classKey == "rogue" {
-		actions = append(actions, map[string]interface{}{
-			"name": "Sneak Attack", "description": "Deal extra damage when you have advantage or an ally is adjacent to your target.",
-		})
+		actions = append(actions, map[string]interface{}{"name": "Sneak Attack", "action": "attack", "use": `{"action": "attack", "target_id": -1}`,
+			"description": "Once a turn, extra damage when you have Advantage or an ally is within 5 feet of your target (the server applies it on a hit)."})
 	}
-	// Wild Shape is a Bonus Action in 2024: turnOptions2024 lists it with the other class features (F241)
-	actions = append(actions, standardActions2024()...)
-	featActions, featBonus, featFree := turnOptions2024(charID, class, charSubclass.String, level, hasCondition(charID, "raging"), wildShapeForm.Valid && wildShapeForm.String != "")
-	actions = append(actions, featActions...)
 	if bonusActionUsed {
 		featBonus = nil
 	}
@@ -836,10 +809,6 @@ func handleMyTurn(w http.ResponseWriter, r *http.Request) {
 	// Get recent campaign messages (last 6 hours)
 	recentMessages := getRecentCampaignMessages(lobbyID, 6)
 
-	// Parse subclass choices for Horde Breaker
-	var subclassChoices map[string]string
-	json.Unmarshal(subclassChoicesJSON, &subclassChoices)
-
 	// Extract enemy information from combat turn_order
 	enemies := []map[string]interface{}{}
 	if inCombat && len(turnOrderJSON) > 0 {
@@ -934,8 +903,8 @@ func handleMyTurn(w http.ResponseWriter, r *http.Request) {
 		"your_options": map[string]interface{}{
 			"feature_words": featureWordsFor(charID), // the words that switch on this character's features: put them in "features" or the description
 			"actions":       actions,
-			"bonus_actions": append(buildBonusActions(classKey, actionUsed, bonusActionUsed, conditions, charSubclass.String, level, subclassChoices, hordeUsed), featBonus...),
-			"free_actions":  featFree, // Action Surge, Sacred Weapon, Font of Magic ... (turn_options_2024.go)
+			"bonus_actions": featBonus,
+			"free_actions":  featFree, // movement, speaking, one object, Action Surge, Font of Magic ... (action_types_2024.go)
 			"movement":      buildMovementInfo(characterSpeed(charID, species), movementRemaining, conditions),
 			"reaction":      reactionStatus,
 			"action_economy": buildActionEconomy(charID, class, level, actionUsed, bonusActionUsed, reactionUsed,
@@ -1696,105 +1665,6 @@ func parseStorySoFar(campaignDocRaw []byte) string {
 		return s
 	}
 	return ""
-}
-
-// buildBonusActions returns available bonus actions based on class and current state
-// Added conditions, subclass, level params for frenzy support
-// Added subclassChoices and hordeUsed for Horde Breaker support
-func buildBonusActions(classKey string, actionUsed, bonusActionUsed bool, conditions []string, subclass string, level int, subclassChoices map[string]string, hordeUsed bool) []map[string]interface{} {
-	bonusActions := []map[string]interface{}{}
-
-	if bonusActionUsed {
-		return bonusActions // Already used bonus action
-	}
-
-	// Check conditions for raging/frenzying
-	isRaging := false
-	for _, c := range conditions {
-		if c == "raging" {
-			isRaging = true
-		}
-	}
-
-	// Two-Weapon Fighting: available after using Attack action
-	if actionUsed {
-		bonusActions = append(bonusActions, map[string]interface{}{
-			"name":        "offhand_attack",
-			"description": "Two-Weapon Fighting: Attack with a light melee weapon in your other hand. Light weapons: dagger, handaxe, shortsword, scimitar, sickle, light hammer. No ability modifier to damage.",
-			"requires":    "Must have used Attack action first. Weapon must have 'light' property.",
-		})
-	} else {
-		// Show it as an option but explain it needs Attack first
-		bonusActions = append(bonusActions, map[string]interface{}{
-			"name":        "offhand_attack",
-			"description": "Two-Weapon Fighting: Attack with a light melee weapon. Available after using your Attack action.",
-			"available":   false,
-		})
-	}
-
-	// Class-specific bonus actions
-	switch classKey {
-	case "rogue":
-		// Enhanced Cunning Action for Thieves
-		cunningDesc := "Dash, Disengage, or Hide as a bonus action."
-		if subclass == "thief" && level >= 3 {
-			cunningDesc = "Dash, Disengage, Hide, OR (Fast Hands) Sleight of Hand check, Thieves' Tools to disarm trap/pick lock, or Use an Object as a bonus action."
-		}
-		bonusActions = append(bonusActions, map[string]interface{}{
-			"name":        "cunning_action",
-			"description": cunningDesc,
-		})
-	case "barbarian":
-		// Show rage if not already raging
-		if !isRaging {
-			bonusActions = append(bonusActions, map[string]interface{}{
-				"name":        "rage",
-				"description": "Enter a rage. Gain resistance to bludgeoning, piercing, and slashing damage, a damage bonus on Strength attacks. Berserkers gain Mindless Rage (immune to charm/frighten) at level 6.",
-			})
-		}
-	case "fighter": // Second Wind is in turnOptions2024 (uses left; 2 at level 1 in 2024)
-	case "monk":
-		bonusActions = append(bonusActions, map[string]interface{}{
-			"name":        "flurry_of_blows",
-			"description": "Spend 1 Focus Point to make two unarmed strikes.",
-		})
-		bonusActions = append(bonusActions, map[string]interface{}{
-			"name":        "patient_defense",
-			"description": "Spend 1 Focus Point to take the Dodge action.",
-		})
-		bonusActions = append(bonusActions, map[string]interface{}{
-			"name":        "step_of_the_wind",
-			"description": "Spend 1 Focus Point to take the Dash or Disengage action, and your jump distance is doubled.",
-		})
-	case "ranger":
-		// Hunter Ranger's Horde Breaker (free extra attack, not bonus action)
-		if subclass == "hunter" && level >= 3 {
-			if subclassChoices["hunters_prey"] == "horde_breaker" {
-				if actionUsed && !hordeUsed {
-					bonusActions = append(bonusActions, map[string]interface{}{
-						"name":        "horde_breaker",
-						"description": "🏹 Free extra attack against a different creature within 5ft of your original target. Uses same weapon.",
-						"example":     "horde_breaker with longbow against goblin B",
-						"action_type": "free",
-					})
-				} else if !actionUsed {
-					bonusActions = append(bonusActions, map[string]interface{}{
-						"name":        "horde_breaker",
-						"description": "🏹 Free extra attack against a creature within 5ft of your target. Available after using Attack action.",
-						"available":   false,
-					})
-				} else if hordeUsed {
-					bonusActions = append(bonusActions, map[string]interface{}{
-						"name":        "horde_breaker",
-						"description": "🏹 Horde Breaker already used this turn.",
-						"available":   false,
-					})
-				}
-			}
-		}
-	}
-
-	return bonusActions
 }
 
 // getMovementSpeed returns base movement speed for a species

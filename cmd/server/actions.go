@@ -151,34 +151,6 @@ func parseTargetsFromDescription(description string, casterID int) []int {
 	return out
 }
 
-// Action Economy: which resource each action type consumes
-// Returns: "action", "bonus_action", "reaction", "movement", "free", or "none"
-func getActionResourceType(actionType string) string {
-	actionType = strings.ToLower(actionType)
-	switch actionType {
-	// Standard actions (consume your action)
-	// "other" is anything the list doesn't name, described for the GM: in the SRD that is an action (Utilize, or something improvised),
-	// so it takes the action like any other; speaking ("speak") and one object ("interact") are the free things a turn includes.
-	case "attack", "cast", "dash", "disengage", "dodge", "help", "hide", "ready", "search", "study", "influence", "extinguish", "natures_sanctuary", "use_item", "stabilize", "death_save", "grapple", "shove", "other":
-		return "action"
-	// Bonus actions (consume bonus action - class/spell specific)
-	case "font_of_magic", "wholeness_of_body", "holy_nimbus", "drink_potion", "item_bonus", "bonus_attack", "martial_arts", "move_sanctuary", "cunning_action", "offhand_attack", "second_wind", "steady_aim", "lay_on_hands", "natures_veil", "innate_sorcery", "divine_sense", "wild_shape", "revert_wild_shape", "dragon_wings", "bardic_inspiration", "extend_rage", "rage", "bonus_cast", "frenzy_attack", "merge_with_shadows", "flurry_of_blows", "patient_defense", "step_of_the_wind", "gaze_of_two_minds":
-		return "bonus_action"
-	// Reactions (consume reaction - used on others' turns too)
-	case "opportunity_attack", "counterspell", "shield", "countercharm", "reaction_cast":
-		return "reaction"
-	// Movement (consumes movement speed) - includes stand (costs half movement)
-	case "move", "stand":
-		return "movement"
-	// Free actions (no resource cost)
-	case "font_of_magic_convert", "gift_of_the_protectors", "jump", "drop", "speak", "interact", "frenzy", "stunning_strike", "action_surge", "wild_resurgence", "use_bardic_inspiration", "improve_fate", "concentration_check", "blink_steps", "natural_recovery", "nature_magician", "self_restoration", "disciplined_survivor", "superior_defense", "quivering_palm", "sacred_weapon": // 2024 Action Surge takes no action of its own
-		return "free"
-	default:
-		// Default unknown actions to using the action
-		return "action"
-	}
-}
-
 // Check if character has the required resource for an action
 // Returns: canAct bool, resourceType string, errorMsg string
 func checkActionEconomy(charID int, actionType string, movementCost int) (bool, string, string) {
@@ -418,12 +390,6 @@ func actionNarrative(description, legacyResult string) string {
 	return strings.TrimSpace(legacyResult)
 }
 
-// actionRequiresNarrative identifies actions that have no mechanical default
-// and must not silently consume a turn with an empty action log.
-func actionRequiresNarrative(action string) bool {
-	return strings.ToLower(strings.TrimSpace(action)) == "other"
-}
-
 // actionFields: what an action is: the body of POST /api/action without its envelope, and each step of a pending turn
 // (pending_turns_2024.go), so both take the same fields and are read by the same rule (request_body_2024.go).
 type actionFields struct {
@@ -479,7 +445,7 @@ type actionRequest struct {
 
 // handleAction godoc
 // @Summary Submit an action
-// @Description Submit a game action. Server resolves mechanics (dice rolls, damage, etc.). Enforces action economy: 1 action, 1 bonus action, 1 reaction per round, movement in feet. Every action type, with what it costs, is listed on /commands. Companions: send companion_id with attack, dodge, dash, disengage, help, hide, search or move; a Draconic Spirit also takes "breath" (target_ids, type in the description), an Otherworldly Steed "healing_touch", "fey_step" or "fell_glare" by its kind. Feature words: GET /api/my-turn lists the character's own under your_options.feature_words; send them as "features": [...] (checked against that list) or in the description as whole words; Advantage can't be claimed in a description (the GM grants it: POST /api/gm/grant-advantage). Feature words in a cast description: "divine intervention" (Cleric 10; Wish at 20), "free", "wild companion", "overchannel", "delivered by my familiar". Wild Shape needs known forms first (POST /api/characters/{id}/class-options {"wild_shape_forms": [...]}). use_item with "item" resolves potions and these Legendary items: Horn of Valhalla, Ring of Djinni Summoning, Iron Flask (target_id, or "release"), Sphere of Annihilation ("control"; "move" with target_ids), Mysterious Deck ("draw N"; "star: wisdom" and the other choices), Rod of Lordly Might, Staff of the Magi, Ring of Elemental Command, Armor of Invulnerability, Plate Armor of Etherealness, Luck Blade, Sovereign Glue, Universal Solvent, Well of Many Worlds, Apparatus of the Crab ("lever 1 up") (skill.md lists the words). Spells' own actions: spiritual_weapon (Bonus Action, target_id), flame_blade (Magic action, target_id; "evoke", "let go"), gaseous_form ("end"). opportunity_attack with spell_slug: War Caster's Reactive Spell. A spell's gestures need a free hand unless the campaign's spell_hands table rule is "ignored" or the caster has War Caster. At 0 Hit Points only death_save is allowed (unconscious_at_0_hp).
+// @Description Submit a game action. Server resolves mechanics (dice rolls, damage, etc.). Enforces action economy: 1 action, 1 bonus action, 1 reaction per round, movement in feet. "action" is one of the action types of the server's one table (action_types_2024.go): every type with what it costs, who has it, its fields and an example is on /commands and in skill.md; GET /api/my-turn lists the ones the character has now. There is no "other" action: a word that is no action type is refused (400 unknown_action) with the actions the character can send, and nothing is spent; something the server doesn't resolve itself is sent as the action it is with a description, and the GM rules on it (use_item for a lever, influence to persuade, speak for words said aloud, interact for one object). Feature words: GET /api/my-turn lists the character's own under your_options.feature_words; send them as "features": [...] (checked against that list) or in the description as whole words; Advantage can't be claimed in a description (the GM grants it: POST /api/gm/grant-advantage). A spell's gestures need a free hand unless the campaign's spell_hands table rule is "ignored" or the caster has War Caster. At 0 Hit Points only death_save is allowed (unconscious_at_0_hp).
 // @Tags Actions
 // @Accept json
 // @Produce json
@@ -487,7 +453,7 @@ type actionRequest struct {
 // @Param request body object{action=string,description=string,spell_slug=string,slot_level=int,item=string,charges=int,target_id=int,target_ids=[]int,target=string,target_character_id=int,movement_cost=int,toward_frightened_source=bool,character_id=int,campaign_id=int} true "Action details (character_id or campaign_id: which character acts, for a player in several campaigns; a cast needs a spell the character can cast: prepared, a cantrip, or given by a feature, its origin or an item; item: cast from a magic item or read a Spell Scroll, with charges for a higher version where the item allows it; use_item with item drinks a potion, a Bonus Action, or gives it to target_character_id)"
 // @Success 200 {object} map[string]interface{} "Action result with dice rolls"
 // @Failure 401 {object} map[string]interface{} "Unauthorized"
-// @Failure 400 {object} map[string]interface{} "No active game or resource exhausted"
+// @Failure 400 {object} map[string]interface{} "unknown_action (with the actions the character can send), a refused action or a resource exhausted; nothing was spent"
 // @Router /action [post]
 func handleAction(w http.ResponseWriter, r *http.Request) {
 	if r.Method != "POST" {
@@ -506,9 +472,11 @@ func handleAction(w http.ResponseWriter, r *http.Request) {
 	if !readRequest(w, r, &req, optionalBody()) {
 		return
 	}
+	// The action is one of the action types (action_types_2024.go): its own name for any alias (Magic is cast, Utilize is use_item).
+	sentWord := strings.TrimSpace(req.Action)
+	req.Action = canonicalAction(req.Action)
 	// An explicit slot_level upcasts the spell; the casting code reads "at level N" from the description.
-	req.Action = canonicalAction(req.Action) // 2024 names: Magic is cast, Utilize is use_item
-	if strings.EqualFold(req.Action, "cast") && req.SlotLevel > 0 {
+	if req.Action == "cast" && req.SlotLevel > 0 {
 		if req.SlotLevel > 9 {
 			w.WriteHeader(http.StatusBadRequest)
 			json.NewEncoder(w).Encode(map[string]interface{}{"error": "invalid_slot_level", "message": "slot_level must be 1 to 9"})
@@ -516,33 +484,19 @@ func handleAction(w http.ResponseWriter, r *http.Request) {
 		}
 		req.Description = strings.TrimSpace(req.Description) + fmt.Sprintf(" (cast at level %d)", req.SlotLevel)
 	}
-	req.Action = strings.ToLower(strings.TrimSpace(req.Action))
 	req.Description = actionNarrative(req.Description, req.Result)
-	// F245: a spell's name sent as the action ("fireball") was recorded as narration; say how to cast it, nothing spent
-	if slug := normalizeSpellSlug(strings.ReplaceAll(req.Action, "_", "-")); req.Action != "cast" && getActionResourceType(req.Action) == "action" && !knownActionWord(req.Action) {
-		if sp, isSpell := srdSpellsMemory[slug]; isSpell {
-			writeJSONStatus(w, http.StatusBadRequest, map[string]interface{}{"success": false, "error": "spell_as_action",
-				"message": fmt.Sprintf("%s is a spell. Cast it with {\"action\": \"cast\", \"spell_slug\": \"%s\", \"target_id\": ...}. Nothing was spent.", sp.Name, slug)})
-			return
-		}
-	}
 	if req.Action == "" {
 		w.WriteHeader(http.StatusBadRequest)
 		json.NewEncoder(w).Encode(map[string]interface{}{
 			"success": false,
 			"error":   "action_required",
-			"message": "Provide an action, such as attack, dodge, cast, or help.",
+			"message": "Provide an action, such as attack, dodge, cast, or help. Every action type: /commands.",
 		})
 		return
 	}
-	if actionRequiresNarrative(req.Action) && req.Description == "" {
-		w.WriteHeader(http.StatusBadRequest)
-		json.NewEncoder(w).Encode(map[string]interface{}{
-			"success": false,
-			"error":   "description_required",
-			"message": "Provide a non-empty description for an other action; no action was taken.",
-			"hint":    "Use description (or the legacy result field) for your narrative.",
-		})
+	// F245: a spell's name sent as the action ("fireball"): say how to cast it, nothing spent
+	if code, msg := actionWordProblem(req.Action, req.CompanionID); code == "spell_as_action" {
+		writeJSONStatus(w, http.StatusBadRequest, map[string]interface{}{"success": false, "error": code, "message": msg})
 		return
 	}
 
@@ -595,6 +549,28 @@ func handleAction(w http.ResponseWriter, r *http.Request) {
 		w.WriteHeader(http.StatusConflict)
 		json.NewEncoder(w).Encode(map[string]interface{}{"error": "no_active_game"})
 		return
+	}
+
+	// A word that is no action type ("other" included), a feature's own request, a pending turn's step or a companion's action
+	// without companion_id is refused before anything is read or spent, with what this character can send (action_types_2024.go).
+	if code, msg := actionWordProblem(req.Action, req.CompanionID); code == "unknown_action" {
+		writeJSONStatus(w, http.StatusBadRequest, unknownActionRefusal(charID, sentWord, ""))
+		return
+	} else if code != "" {
+		writeJSONStatus(w, http.StatusBadRequest, map[string]interface{}{"success": false, "error": code, "message": msg})
+		return
+	}
+	if t, _ := lookupActionType(req.Action); t.GM && req.Description == "" {
+		writeJSONStatus(w, http.StatusBadRequest, map[string]interface{}{"success": false, "error": "description_required",
+			"message": fmt.Sprintf("%s is described for the GM: say what your character does or says in description. No action was taken.", t.Title),
+			"hint":    "Use description (or the legacy result field) for your narrative."})
+		return
+	}
+	if req.Action == "ready" { // a Ready holds a real action (action_types_2024.go)
+		if _, _, _, ok := readiedAction(req.Description); !ok {
+			writeJSONStatus(w, http.StatusBadRequest, readiedActionRefusal(charID))
+			return
+		}
 	}
 
 	endWildShapeIfDown(charID) // a druid that dropped to 0 HP or became Incapacitated is no longer in its form (wild_shape_2024.go)
@@ -885,7 +861,7 @@ func handleAction(w http.ResponseWriter, r *http.Request) {
 	}
 	// Calculate effective movement cost (prone mechanics - 5e)
 	effectiveMovementCost := req.MovementCost
-	isStanding := strings.ToLower(req.Action) == "stand"
+	isStanding := req.Action == "stand"
 	isMovingWhileProne := false
 
 	if strings.ToLower(req.Action) == "move" || isStanding {
@@ -909,7 +885,7 @@ func handleAction(w http.ResponseWriter, r *http.Request) {
 	}
 
 	// An attack must use an equipped weapon. Refuse before anything is recorded or spent.
-	if req.Action == "attack" || req.Action == "offhand_attack" || req.Action == "frenzy_attack" {
+	if req.Action == "attack" || req.Action == "offhand_attack" {
 		if wk := parseWeaponFromDescription(req.Description); wk != "" {
 			equipped := weaponEquippedForChar(charID, wk)
 			if req.Action == "offhand_attack" {
@@ -938,7 +914,7 @@ func handleAction(w http.ResponseWriter, r *http.Request) {
 		}
 		speedAttack = true
 	}
-	attackAction := req.Action == "attack" || req.Action == "offhand_attack" || req.Action == "frenzy_attack" || req.Action == "opportunity_attack" || req.Action == "horde_breaker" || speedAttack
+	attackAction := req.Action == "attack" || req.Action == "offhand_attack" || req.Action == "opportunity_attack" || req.Action == "horde_breaker" || speedAttack
 	if req.Action == "opportunity_attack" && !hasOAWindow(lobbyID, charID, req.TargetID) {
 		w.WriteHeader(http.StatusBadRequest)
 		json.NewEncoder(w).Encode(map[string]interface{}{"success": false, "error": "no_opportunity",
@@ -1020,7 +996,7 @@ func handleAction(w http.ResponseWriter, r *http.Request) {
 			econAction = e // Expeditious Retreat's Dash, the Spiritual Weapon, the Flame Blade (spells_more_2024.go)
 		}
 		if req.Action == "use_item" && potionInUse(charID, req.Item, req.Description) {
-			econAction = "drink_potion" // drinking a potion or giving it to a creature within 5 feet is a Bonus Action
+			econAction = "item_bonus" // drinking a potion or giving it to a creature within 5 feet is a Bonus Action
 		}
 		if req.Action == "use_item" && legendaryItemBonusAction(charID, req.Item, req.Description) {
 			econAction = "item_bonus" // moving a controlled Sphere of Annihilation (legendary_items_2024.go)
@@ -2752,7 +2728,7 @@ func resolveActionWithBonusDash(action, description string, charID int, bonusDas
 
 		return rageInfo
 
-	case "frenzy", "frenzy_attack":
+	case "frenzy":
 		return "Frenzy works differently in the 2024 rules: while raging, if you attack recklessly (include \"reckless\" in the attack description), the first target you hit with a Strength attack on your turn takes extra damage. There is no extra attack and no Exhaustion."
 
 	case "end_rage":
@@ -3630,52 +3606,11 @@ func resolveActionWithBonusDash(action, description string, charID int, bonusDas
 		return fmt.Sprintf("🙌 Lay on Hands!%s HP %d → %d (+%d). Pool: %d → %d HP remaining.", targetNote, targetHP, newHP, actualHeal, remainingPool, remainingPool-actualHeal)
 
 	case "ready":
-		// Ready action: hold your action for a trigger condition
-		// Parse trigger from description (format: "trigger: X, action: Y" or just describe it)
-		trigger := ""
-		readyAction := ""
-		readyDesc := description
-
-		// Try to parse structured format: "trigger: when goblin attacks; action: attack with sword"
-		descLower := strings.ToLower(description)
-		if strings.Contains(descLower, "trigger:") {
-			parts := strings.SplitN(description, ";", 2)
-			if len(parts) >= 1 {
-				triggerPart := strings.TrimPrefix(strings.TrimPrefix(parts[0], "trigger:"), "Trigger:")
-				trigger = strings.TrimSpace(triggerPart)
-			}
-			if len(parts) >= 2 {
-				actionPart := strings.TrimPrefix(strings.TrimPrefix(parts[1], "action:"), "Action:")
-				actionPart = strings.TrimSpace(actionPart)
-				// Parse action type from description
-				for _, aType := range []string{"attack", "cast", "dash", "disengage", "help", "hide"} {
-					if strings.Contains(strings.ToLower(actionPart), aType) {
-						readyAction = aType
-						readyDesc = actionPart
-						break
-					}
-				}
-			}
-		}
-
-		if trigger == "" {
-			trigger = description
-		}
-		if readyAction == "" {
-			// Default to "other" action type if not specified
-			readyAction = "other"
-		}
-
-		// Store the readied action
-		readiedData := map[string]string{
-			"trigger":     trigger,
-			"action":      readyAction,
-			"description": readyDesc,
-		}
-		readiedJSON, _ := json.Marshal(readiedData)
+		// Ready: hold one action (an action type, action_types_2024.go) for a trigger; handleAction refused a Ready that names none
+		trigger, readyAction, readyDesc, _ := readiedAction(description)
+		readiedJSON, _ := json.Marshal(map[string]string{"trigger": trigger, "action": readyAction, "description": readyDesc})
 		db.Exec("UPDATE characters SET readied_action = $1 WHERE id = $2", readiedJSON, charID)
-
-		return fmt.Sprintf("Readied action: When '%s' → %s (%s). Use your REACTION to trigger when the condition occurs, or it will be lost at the start of your next turn.",
+		return fmt.Sprintf("Readied action: When '%s' → %s (%s). Use your REACTION to trigger when the condition occurs (POST /api/trigger-readied), or it will be lost at the start of your next turn.",
 			trigger, readyAction, readyDesc)
 
 	case "hide":

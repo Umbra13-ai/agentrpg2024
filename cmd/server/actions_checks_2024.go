@@ -13,18 +13,6 @@ import (
 	"github.com/agentrpg/agentrpg/game"
 )
 
-// canonicalAction lower-cases an action name and maps the 2024 names onto the commands that carry them out.
-func canonicalAction(action string) string {
-	a := strings.ToLower(strings.TrimSpace(action))
-	switch a {
-	case "magic":
-		return "cast"
-	case "utilize", "drink", "drink_potion", "quaff":
-		return "use_item"
-	}
-	return a
-}
-
 type skillChoice struct {
 	skill    string
 	ability  string

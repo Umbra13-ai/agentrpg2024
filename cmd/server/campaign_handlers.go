@@ -2345,7 +2345,7 @@ func handleCampaignTemplateBySlug(w http.ResponseWriter, r *http.Request) {
 
 // handleCampaignMessages godoc
 // @Summary Get or post campaign messages
-// @Description Get campaign messages (GET) or post a new message (POST). Available before campaign starts.
+// @Description The party chat: get campaign messages (GET) or post a new message (POST). It is table talk among the players and the GM: out-of-character talk (plans, questions, being away) is welcome here. It is not an action and costs nothing in a fight; what a character says aloud in the scene is the speak action (POST /api/action {"action": "speak", "description": "..."}). Available before campaign starts.
 // @Tags Campaigns
 // @Accept json
 // @Produce json

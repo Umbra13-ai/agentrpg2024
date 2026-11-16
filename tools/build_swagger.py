@@ -283,17 +283,44 @@ for r in godoc_routes.routes():
 print("from godoc:", added)
 
 # ---------------------------------------------------------------- every action type of POST /api/action
-_src = open(os.path.join(ROOT, "cmd", "server", "actions.go"), encoding="utf-8").read()
-_fn = _src[_src.index("func getActionResourceType"):]
-_fn = _fn[:_fn.index("\n}\n")]
-_groups = {}
-for _cases, _kind in re.findall(r'case ([^:]+):(?:\s*//[^\n]*)?\s*return "(\w+)"', _fn):
-    _groups.setdefault(_kind, []).extend(re.findall(r'"([a-z_]+)"', _cases))
-_labels = {"action": "Action", "bonus_action": "Bonus Action", "reaction": "Reaction", "movement": "Movement", "free": "No action"}
-_text = " ".join("**%s:** %s." % (_labels.get(k, k), ", ".join(sorted(set(v)))) for k, v in _groups.items())
+# From the action table (cmd/server/action_types_2024.go), the one definition: the "action" field's values and what each costs, and the
+# request's fields from actionFields' own comments. TestAPIReference checks the result against the table.
+_src = open(os.path.join(ROOT, "cmd", "server", "action_types_2024.go"), encoding="utf-8").read()
+_table = _src[_src.index("var actionTypes = []actionType{"):]
+_table = _table[:_table.index("\n}\n")]
+_gostr = r'"((?:[^"\\]|\\.)*)"'
+_labels = dict(re.findall(r'(cost\w+):\s*' + _gostr, _src[_src.index("var costLabels"):_src.index("// Where a type is sent")]))
+_types = []
+for _row in re.split(r"\n\t\{Name: ", _table)[1:]:
+    _name = json.loads('"' + re.match(_gostr, _row).group(1) + '"')
+    _send = re.search(r"Send: (send\w+)", _row)
+    _send = _send.group(1) if _send else "sendAction"
+    _aliases = re.search(r"Aliases: \[\]string\{([^}]*)\}", _row)
+    _aliases = [json.loads('"' + x + '"') for x in re.findall(_gostr, _aliases.group(1))] if _aliases else []
+    _cost = re.search(r"Cost: (cost\w+)", _row).group(1)
+    _types.append({"name": _name, "aliases": _aliases, "cost": _cost, "send": _send})
+_sent = [t for t in _types if t["send"] in ("sendAction", "sendFamily")]
+_groups = {_labels[c]: [] for c in ("costAction", "costBonus", "costReaction", "costMovement", "costFree", "costCompanion")}
+for t in _sent:
+    _groups[_labels[t["cost"]]].append(t["name"] + (" (or %s)" % ", ".join(t["aliases"]) if t["aliases"] else ""))
+_text = " ".join("**%s:** %s." % (k, ", ".join(v)) for k, v in _groups.items() if v)
+_fieldsrc = open(os.path.join(ROOT, "cmd", "server", "actions.go"), encoding="utf-8").read()
+_fieldsrc = _fieldsrc[_fieldsrc.index("type actionFields struct {"):]
+_fieldsrc = _fieldsrc[:_fieldsrc.index("\n}\n")] + "\n" + _fieldsrc[_fieldsrc.index("type actionRequest struct {"):][:600]
+_gotypes = {"string": "string", "int": "integer", "bool": "boolean", "[]int": "array", "[]string": "array"}
 if "/api/action" in paths and "post" in paths["/api/action"]:
     _o = paths["/api/action"]["post"]
-    _o["description"] = _o["description"].split(" Every action type")[0] + " Every action type and what it costs: " + _text + " Class features and spells are explained in /skill.md."
+    _o["description"] = _o["description"].split(" Every action type")[0] + " Every action type and what it costs (each one's fields and an example: /commands): " + _text + \
+        " There is no \"other\" action: a word that is no action type is refused (400 unknown_action) with the actions the character can send; nothing is spent. Something the server doesn't resolve itself is sent as the action it is with a description, and the GM rules on it. Class features and spells are explained in /skill.md."
+    _schema = _o["requestBody"]["content"]["application/json"]["schema"]
+    for _fname, _gt, _json, _comment in re.findall(r"^\t(\w+)\s+(\[\]\w+|\w+)\s+`json:\"(\w+)\"`(?:\s*//\s*(.*))?$", _fieldsrc, re.M):
+        if _json not in _schema["properties"] and _gt in _gotypes:
+            _prop = S(_gotypes[_gt], _comment.strip())
+            if _gt.startswith("[]"):
+                _prop["items"] = {"type": _gotypes[_gt[2:]]}
+            _schema["properties"][_json] = _prop
+    _schema["properties"]["action"] = S(desc="The action type (its name or an alias): " + ", ".join(t["name"] for t in _sent) + ".")
+    _schema["properties"]["action"]["enum"] = sorted({n for t in _sent for n in [t["name"]] + t["aliases"]})
 
 # ---------------------------------------------------------------- deleting characters, admin tools (admin_2024.go)
 paths.setdefault("/api/characters/{id}", {})["delete"] = op("Characters", "Delete your character",

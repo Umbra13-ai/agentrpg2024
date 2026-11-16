@@ -252,8 +252,6 @@ func itemReminders(charID, hp, maxHP int, full bool) map[string]interface{} {
 
 // ---------------------------------------------------------------- turn_left
 
-var basicActions2024 = "Attack, Dash, Disengage, Dodge, Help, Hide, Influence, Magic, Ready, Search, Study, Utilize"
-
 // turnLeft: what the character can still do this turn (nil when it isn't their turn in combat, or turn reminders are off).
 func turnLeft(charID int) map[string]interface{} {
 	mode := reminderMode(charID, "turn")
@@ -307,7 +305,7 @@ func turnLeft(charID int) map[string]interface{} {
 		out["reaction"] = rx
 	}
 	if !actionUsed && (mode == "full" || round <= 1) {
-		out["actions"] = basicActions2024 + " (POST /api/action)"
+		out["actions"] = srdActionTitles() + " (POST /api/action; every action type: /commands)"
 	}
 	if rm := reminderMode(charID, "resources"); rm != "off" && (rm == "full" || mode == "full" || round <= 1) {
 		if rl := resourceLines(charID); len(rl) > 0 {
@@ -323,36 +321,18 @@ func turnLeft(charID int) map[string]interface{} {
 }
 
 func bonusOptions(charID int, class, subclass string, level int, actionUsed bool, conditions []string, choices map[string]string, hordeUsed bool, hp, maxHP int) []string {
-	cur := getCurrentClassResources(charID)
-	needs := map[string]string{"rage": "rage", "second_wind": "second_wind", "flurry_of_blows": "focus"}
 	var out []string
-	for _, b := range buildBonusActions(strings.ToLower(class), actionUsed, false, conditions, subclass, level, choices, hordeUsed) {
-		name := fmt.Sprint(b["name"])
-		if av, ok := b["available"].(bool); ok && !av {
-			continue
-		}
-		if key, ok := needs[name]; ok && cur[key] <= 0 {
+	// the Bonus Actions the character has now (action_types_2024.go), without those with no use left or that need the Attack action first
+	_, bonus, _ := turnOptions(charID)
+	for _, b := range bonus {
+		name := fmt.Sprint(b["action"])
+		if strings.Contains(fmt.Sprint(b["description"]), "(0 of ") || (name == "martial_arts" || name == "offhand_attack") && !actionUsed {
 			continue
 		}
 		if name == "offhand_attack" {
 			if mh, oh := equippedWeapons(charID); mh == "" || oh == "" {
 				continue
 			}
-		}
-		out = append(out, name)
-	}
-	if strings.EqualFold(class, "bard") && cur["bardic_inspiration"] > 0 {
-		out = append(out, "Bardic Inspiration")
-	}
-	// the class features my-turn lists (turn_options_2024.go): Second Wind, Lay on Hands, Innate Sorcery, Steady Aim, Wild Shape ...
-	_, featBonus, _ := turnOptions2024(charID, class, subclass, level, containsStr(conditions, "raging"), false)
-	for _, fb := range featBonus {
-		name := fmt.Sprint(fb["name"])
-		if strings.Contains(fmt.Sprint(fb["description"]), "(0 of ") || name == "Bardic Inspiration" || name == "Martial Arts strike" && !actionUsed {
-			continue
-		}
-		if strings.HasPrefix(name, "Second Wind") {
-			name = "second_wind"
 		}
 		out = append(out, name)
 	}

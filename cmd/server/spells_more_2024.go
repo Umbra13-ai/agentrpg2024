@@ -420,21 +420,20 @@ func moreSpellEconomy(charID int, action, description string) string {
 	return ""
 }
 
-// moreActionBlock: what a character can't do now (Gaseous Form, inside an Antimagic Field); "" when it can.
+// moreActionBlock: what a character can't do now (Gaseous Form, inside an Antimagic Field); "" when it can. What kind of thing an
+// action is (an attack, a spell, an object, speech) is the action table's (action_types_2024.go).
 func moreActionBlock(charID int, action string) string {
+	t, _ := lookupActionType(action)
 	lobby := lobbyOfChar(charID)
-	if _, ok := charBuff(charID, "gaseous_form"); ok {
-		switch action {
-		case "attack", "offhand_attack", "opportunity_attack", "cast", "bonus_cast", "use_item", "grapple", "shove", "frenzy_attack",
-			"martial_arts", "flurry_of_blows", "spiritual_weapon", "flame_blade", "drink_potion", "help":
-			return "You are a misty cloud (Gaseous Form): you can't attack, cast spells or use objects. End the form with a Magic action: {\"action\": \"gaseous_form\", \"description\": \"end\"}. Nothing was spent."
-		}
+	if _, ok := charBuff(charID, "gaseous_form"); ok && (t.hasTag("attack") || t.hasTag("spell") || t.hasTag("object") || t.hasTag("talk")) {
+		// "The target can't talk or manipulate objects ... Finally, the target can't attack or cast spells." (SRD 5.2.1)
+		return "You are a misty cloud (Gaseous Form): you can't attack, cast spells, talk or handle objects. End the form with a Magic action: {\"action\": \"gaseous_form\", \"description\": \"end\"}. Nothing was spent."
 	}
 	if antimagicCovers(lobby, charID) {
-		switch action {
-		case "cast", "bonus_cast", "spiritual_weapon", "flame_blade":
+		switch {
+		case t.hasTag("spell"):
 			return "You are inside an Antimagic Field: no one can cast spells or take Magic actions there. Nothing was spent."
-		case "use_item":
+		case t.Group == "use_item":
 			return "You are inside an Antimagic Field: magic items' properties don't work there (a mundane item works: use it with \"interact\"). Nothing was spent."
 		}
 	}
