@@ -144,6 +144,9 @@ func startFight(lobby int, order interface{}) error {
 		ON CONFLICT (lobby_id) DO UPDATE SET
 			round_number = 1, current_turn_index = 0, turn_order = $2, active = true, turn_started_at = NOW(), battle_map = NULL,
 			last_monster_id = 0, turn_claim = ''`, lobby, raw)
+	if err == nil {
+		scheduleFightStarts(lobby) // the turn schedule's combat round 1 opens (check_in_2024.go)
+	}
 	return err
 }
 
@@ -166,6 +169,9 @@ func clearCombatInitiative(campaignID int) error {
 			turn_claim = ''
 		WHERE lobby_id = $1
 	`, campaignID)
+	if err == nil {
+		scheduleFightEnds(campaignID) // the turn schedule's next round is a noncombat one (check_in_2024.go)
+	}
 	return err
 }
 

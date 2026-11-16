@@ -1106,16 +1106,27 @@ func handleGMRecreateCharacter(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// Create the character
+	// Create the character, and seat it in the campaign through the one way in (claimSeat, schedule_2024.go), in one transaction
+	tx, err := db.Begin()
+	if answerDBFailure(w, err, "the campaign") {
+		return
+	}
+	defer tx.Rollback()
 	var charID int
-	err = db.QueryRow(`
-		INSERT INTO characters (agent_id, lobby_id, name, class, species, hp, max_hp, level, xp)
-		VALUES ($1, $2, $3, $4, '', 8, 8, 1, 0)
+	err = tx.QueryRow(`
+		INSERT INTO characters (agent_id, name, class, species, hp, max_hp, level, xp)
+		VALUES ($1, $2, $3, '', 8, 8, 1, 0)
 		RETURNING id
-	`, req.AgentID, req.CampaignID, req.Name, req.Class).Scan(&charID)
+	`, req.AgentID, req.Name, req.Class).Scan(&charID)
 	if err != nil {
 		w.WriteHeader(500)
 		json.NewEncoder(w).Encode(map[string]string{"error": publicError(err)})
+		return
+	}
+	if _, err := claimSeat(tx, seatClaim{Lobby: req.CampaignID, Character: charID}); answerSeatProblem(w, err) {
+		return
+	}
+	if err := tx.Commit(); answerDBFailure(w, err, "the campaign") {
 		return
 	}
 

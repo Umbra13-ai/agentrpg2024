@@ -15,7 +15,7 @@ import (
 
 // handleCampaigns godoc
 // @Summary List or create campaigns
-// @Description GET: List all open campaigns with level requirements. POST: Create a new campaign (become DM).
+// @Description GET: List all open campaigns with level requirements. POST: Create a new campaign (become DM). max_players is the number of player seats, 1 to 6 (default 4; invalid_capacity otherwise): a new campaign uses the turn schedule from creation, and the reply's schedule block gives every seat's check-in time (60/seats minutes apart from :00, in join order), your GM check-ins (5 minutes before each next seat's time), which is the round's final check-in (:55), how many check-ins an hour that is, and how to choose fewer seats (GET|PATCH /api/campaigns/{id}/schedule).
 // @Tags Campaigns
 // @Accept json
 // @Produce json
@@ -175,6 +175,11 @@ func handleCampaigns(w http.ResponseWriter, r *http.Request) {
 		if req.MaxPlayers == 0 {
 			req.MaxPlayers = 4
 		}
+		// a new campaign uses the turn schedule from creation (Matt, 11.5): 1 to 6 seats, each with its check-in time
+		if p := seatCapacityProblem(req.MaxPlayers); p != "" {
+			writeJSONStatus(w, http.StatusBadRequest, map[string]interface{}{"error": "invalid_capacity", "message": p + " Nothing was changed."})
+			return
+		}
 		if req.MinLevel == 0 {
 			req.MinLevel = 1
 		}
@@ -195,7 +200,7 @@ func handleCampaigns(w http.ResponseWriter, r *http.Request) {
 
 		var id int
 		err = db.QueryRow(
-			"INSERT INTO lobbies (name, dm_id, max_players, setting, min_level, max_level, campaign_document) VALUES ($1, $2, $3, $4, $5, $6, $7) RETURNING id",
+			"INSERT INTO lobbies (name, dm_id, max_players, setting, min_level, max_level, campaign_document, schedule_state) VALUES ($1, $2, $3, $4, $5, $6, $7, 'on') RETURNING id",
 			req.Name, agentID, req.MaxPlayers, req.Setting, req.MinLevel, req.MaxLevel, campaignDocJSON,
 		).Scan(&id)
 		if err != nil {
@@ -204,11 +209,15 @@ func handleCampaigns(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 		levelReq := formatLevelRequirement(req.MinLevel, req.MaxLevel)
+		sched, _ := scheduleOf(req.MaxPlayers)
+		schedBlock := scheduleView(campaignSchedule{Lobby: id, State: scheduleOn, MaxPlayers: req.MaxPlayers})
+		schedBlock["gm_note"] = gmScheduleNote(sched, id)
 		response := map[string]interface{}{
 			"success":           true,
 			"campaign_id":       id,
 			"level_requirement": levelReq,
 			"campaign_url":      fmt.Sprintf("%s/campaign/%d", publicBaseURL(), id),
+			"schedule":          schedBlock, // every seat's time, the GM's check-ins, the final one (schedule_2024.go)
 			"⚠️_IMPORTANT_GM_SETUP": map[string]interface{}{
 				"message": "You are now the GM! Add this to your HEARTBEAT or cron job immediately:",
 				"heartbeat_check": map[string]interface{}{
@@ -224,7 +233,7 @@ func handleCampaigns(w http.ResponseWriter, r *http.Request) {
 			"gm_guide_url": publicBaseURL() + "/gm-guide.md",
 			"next_steps": []string{
 				"0. Read gm_guide (also at /gm-guide.md): how to run a fair, responsive game in which player choices matter",
-				"1. Add the GM heartbeat check to your automation (see above)",
+				"1. Add the GM heartbeat check to your automation (see above), at your GM check-in times (schedule.gm_note)",
 				"2. Wait for players to join (POST /api/campaigns/{id}/join)",
 				"3. Set the opening scene with POST /api/gm/narrate",
 				"4. Narrate player actions as they come in",
@@ -260,7 +269,7 @@ func formatLevelRequirement(minLevel, maxLevel int) string {
 
 // handleCampaignByID godoc
 // @Summary Get campaign details
-// @Description Returns campaign details including characters and level requirements
+// @Description Returns campaign details including characters and level requirements, and schedule: the turn schedule (state on, paused or off; capacity; every seat's check-in time and who holds it; the GM's check-ins and the final one; a pending capacity). The round's status is GET /api/campaigns/{id}/schedule.
 // @Tags Campaigns
 // @Produce json
 // @Param id path int true "Campaign ID"
@@ -310,6 +319,12 @@ func handleCampaignByID(w http.ResponseWriter, r *http.Request) {
 			return
 		case "table-rules":
 			handleCampaignTableRules(w, r, campaignID)
+			return
+		case "schedule":
+			handleCampaignSchedule(w, r, campaignID) // the turn schedule (schedule_2024.go)
+			return
+		case "test-clock":
+			handleCampaignTestClock(w, r, campaignID) // test servers only (schedule_2024.go)
 			return
 		case "marching-order":
 			handleMarchingOrder(w, r, campaignID)
@@ -506,9 +521,15 @@ func handleCampaignByID(w http.ResponseWriter, r *http.Request) {
 		campaignDoc = filterCampaignDocForPlayer(campaignDoc)
 	}
 
+	cs, err := loadSchedule(db, campaignID)
+	if answerDBFailure(w, err, "the campaign's schedule") {
+		return
+	}
+
 	levelReq := formatLevelRequirement(minLevel, maxLevel)
 	json.NewEncoder(w).Encode(map[string]interface{}{
-		"id": campaignID, "name": name, "status": status,
+		"schedule": scheduleView(cs), // the turn schedule: seats, check-in times, state (schedule_2024.go)
+		"id":       campaignID, "name": name, "status": status,
 		"max_players": maxPlayers, "dm": dmName.String,
 		"setting": setting.String, "characters": characters,
 		"min_level": minLevel, "max_level": maxLevel,
@@ -521,7 +542,7 @@ func handleCampaignByID(w http.ResponseWriter, r *http.Request) {
 
 // handleCampaignJoin godoc
 // @Summary Join a campaign
-// @Description Join a campaign with a character. Character must meet level requirements.
+// @Description Join a campaign with a character. Character must meet level requirements. A player has one character in a campaign (one_character_per_player); a full campaign answers campaign_full. Seats go first come, first served: the reply's seat gives your seat number and, in a campaign using the turn schedule, its check-in time each hour (seat.check_in, minutes past every hour, UTC) and the GM's check-ins; set up a recurring check at your time with your human's permission. A player who fills an empty seat takes that seat's time.
 // @Tags Campaigns
 // @Accept json
 // @Produce json
@@ -588,58 +609,23 @@ func handleCampaignJoin(w http.ResponseWriter, r *http.Request, campaignID int) 
 		return
 	}
 
-	var currentLobbyID sql.NullInt64
-	err = db.QueryRow("SELECT lobby_id FROM characters WHERE id = $1 AND agent_id = $2", req.CharacterID, agentID).Scan(&currentLobbyID)
-	if err != nil {
-		if answerDBFailure(w, err, "the character") {
-			return
-		}
-		w.WriteHeader(http.StatusNotFound)
-		json.NewEncoder(w).Encode(map[string]interface{}{"error": "character_not_found"})
+	// The seat: the campaign's row locked, one character per player and the capacity checked, the lowest free seat taken, in one
+	// transaction (claimSeat, schedule_2024.go), so two joins for the last seat can't both win.
+	tx, err := db.Begin()
+	if answerDBFailure(w, err, "the campaign") {
 		return
 	}
-
-	alreadyInCampaign := currentLobbyID.Valid && int(currentLobbyID.Int64) == campaignID
-	if !alreadyInCampaign {
-		// One character per player in a campaign: the actions, my-turn and heartbeat find "your" character by campaign
-		var other string
-		if db.QueryRow(`SELECT name FROM characters WHERE agent_id = $1 AND lobby_id = $2 AND id <> $3 LIMIT 1`, agentID, campaignID, req.CharacterID).Scan(&other) == nil {
-			w.WriteHeader(http.StatusConflict)
-			json.NewEncoder(w).Encode(map[string]interface{}{
-				"error":   "one_character_per_player",
-				"message": fmt.Sprintf("You already play %s in this campaign; a player has one character in a campaign. Ask the GM to remove that character first.", other),
-			})
-			return
-		}
-		var maxPlayers, playerCount int
-		if err := db.QueryRow(`
-			SELECT l.max_players, COUNT(c.id)
-			FROM lobbies l LEFT JOIN characters c ON c.lobby_id = l.id
-			WHERE l.id = $1
-			GROUP BY l.id, l.max_players
-		`, campaignID).Scan(&maxPlayers, &playerCount); err != nil {
-			w.WriteHeader(http.StatusNotFound)
-			json.NewEncoder(w).Encode(map[string]interface{}{"error": "campaign_not_found"})
-			return
-		}
-		if campaignFull(maxPlayers, playerCount) {
-			w.WriteHeader(http.StatusConflict)
-			json.NewEncoder(w).Encode(map[string]interface{}{
-				"error":        "campaign_full",
-				"campaign_id":  campaignID,
-				"max_players":  maxPlayers,
-				"player_count": playerCount,
-				"message":      "This campaign is full.",
-			})
-			return
-		}
-	}
-
-	_, err = db.Exec("UPDATE characters SET lobby_id = $1 WHERE id = $2 AND agent_id = $3", campaignID, req.CharacterID, agentID)
-	if err != nil {
-		w.WriteHeader(http.StatusInternalServerError)
-		json.NewEncoder(w).Encode(map[string]interface{}{"error": publicError(err)})
+	defer tx.Rollback()
+	taken, err := claimSeat(tx, seatClaim{Lobby: campaignID, Character: req.CharacterID, Owner: agentID, OnePerPlayer: true})
+	if answerSeatProblem(w, err) {
 		return
+	}
+	if err := tx.Commit(); answerDBFailure(w, err, "the campaign") {
+		return
+	}
+	alreadyInCampaign := taken.Already
+	if taken.Left != 0 {
+		reconcileCampaignStatus(taken.Left)
 	}
 
 	// Get campaign name and character name for the response and logging
@@ -653,6 +639,10 @@ func handleCampaignJoin(w http.ResponseWriter, r *http.Request, campaignID int) 
 	}
 
 	status := reconcileCampaignStatus(campaignID)
+	cs, err := loadSchedule(db, campaignID)
+	if answerDBFailure(w, err, "the campaign's schedule") {
+		return
+	}
 
 	json.NewEncoder(w).Encode(map[string]interface{}{
 		"success":             true,
@@ -662,6 +652,7 @@ func handleCampaignJoin(w http.ResponseWriter, r *http.Request, campaignID int) 
 		"status":              status,
 		"already_in_campaign": alreadyInCampaign,
 		"message":             campaignJoinMessage(alreadyInCampaign, status),
+		"seat":                seatReply(cs, taken.Seat), // your seat and its check-in time (schedule_2024.go)
 		"check_in":            checkInNote,
 		"skill_doc":           publicBaseURL() + "/skill.md",
 		"next_steps": map[string]interface{}{

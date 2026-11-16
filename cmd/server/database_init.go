@@ -831,7 +831,66 @@ func initDB() {
 	} else {
 		log.Println("Database schema initialized")
 	}
+	initTurnScheduleTables()
 }
+
+// ==== the campaign turn schedule (schedule_2024.go, check_in_2024.go): seats, rounds and the test clock ====
+// schedule_state: on / paused / off. A campaign made before the schedule existed is off until its GM turns it on; a new campaign
+// is made with 'on' (handleCampaigns). pending_capacity: a seat count the GM set while a round was open, applied when the next
+// round opens. campaign_seats: the seats in join order (a seat is held while its character is in the campaign; claimSeat is the
+// one way in). campaign_rounds: the round record, one open row per campaign; its times are campaign time (campaignNow).
+// campaign_test_clock: each setting of a campaign's test clock (at real_at it read campaign_at), read only when AGENTRPG_TEST_CLOCK=1.
+const turnScheduleSchema = `
+	ALTER TABLE lobbies ADD COLUMN IF NOT EXISTS schedule_state TEXT NOT NULL DEFAULT 'off';
+	ALTER TABLE lobbies ADD COLUMN IF NOT EXISTS pending_capacity INTEGER;
+	CREATE TABLE IF NOT EXISTS campaign_seats (
+		lobby_id INTEGER NOT NULL REFERENCES lobbies(id) ON DELETE CASCADE,
+		seat INTEGER NOT NULL CHECK (seat >= 1),
+		character_id INTEGER REFERENCES characters(id) ON DELETE SET NULL,
+		joined_at TIMESTAMP NOT NULL DEFAULT NOW(),
+		PRIMARY KEY (lobby_id, seat));
+	CREATE UNIQUE INDEX IF NOT EXISTS campaign_seats_character ON campaign_seats (lobby_id, character_id);
+	CREATE TABLE IF NOT EXISTS campaign_rounds (
+		id SERIAL PRIMARY KEY,
+		lobby_id INTEGER NOT NULL REFERENCES lobbies(id) ON DELETE CASCADE,
+		kind TEXT NOT NULL CHECK (kind IN ('combat', 'noncombat')),
+		number INTEGER NOT NULL,
+		opened_at TIMESTAMP NOT NULL,
+		clock_from TIMESTAMP NOT NULL,
+		deadline TIMESTAMP,
+		closed_at TIMESTAMP);
+	CREATE UNIQUE INDEX IF NOT EXISTS campaign_rounds_open ON campaign_rounds (lobby_id) WHERE closed_at IS NULL;
+	CREATE TABLE IF NOT EXISTS campaign_test_clock (
+		id SERIAL PRIMARY KEY,
+		lobby_id INTEGER NOT NULL REFERENCES lobbies(id) ON DELETE CASCADE,
+		real_at TIMESTAMP NOT NULL,
+		campaign_at TIMESTAMP NOT NULL);`
+
+// turnScheduleSeatsBackfill gives every character already in a campaign a seat, in join order (its first "joined" entry in the
+// log, else its id). Its own statement: a failure here doesn't undo the tables.
+const turnScheduleSeatsBackfill = `
+	INSERT INTO campaign_seats (lobby_id, seat, character_id, joined_at)
+	SELECT c.lobby_id,
+		COALESCE((SELECT MAX(s.seat) FROM campaign_seats s WHERE s.lobby_id = c.lobby_id), 0)
+			+ ROW_NUMBER() OVER (PARTITION BY c.lobby_id ORDER BY
+				(SELECT MIN(a.created_at) FROM actions a WHERE a.lobby_id = c.lobby_id AND a.character_id = c.id AND a.action_type = 'joined') NULLS LAST, c.id),
+		c.id, NOW()
+	FROM characters c
+	WHERE c.lobby_id IS NOT NULL
+		AND NOT EXISTS (SELECT 1 FROM campaign_seats s WHERE s.lobby_id = c.lobby_id AND s.character_id = c.id)
+	ON CONFLICT DO NOTHING;`
+
+func initTurnScheduleTables() {
+	if _, err := db.Exec(turnScheduleSchema); err != nil {
+		log.Printf("Schema error (turn schedule): %v", err)
+		return
+	}
+	if _, err := db.Exec(turnScheduleSeatsBackfill); err != nil {
+		log.Printf("Schema error (turn schedule seats): %v", err)
+	}
+}
+
+// ==== end of the campaign turn schedule block ====
 
 // Seed campaign templates if empty
 func seedCampaignTemplates() {

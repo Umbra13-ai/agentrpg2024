@@ -128,6 +128,11 @@ func init() {
 		}},
 		{"Multiattack Defense marks end", func(t *turnChange) { clearAllMultiattackDefenseHits(t.Lobby) }},
 		{"Opportunity Attack chances end", func(t *turnChange) { clearOAWindows(t.Lobby) }},
+		{"a new round of the fight opens the turn schedule's next round", func(t *turnChange) {
+			if t.NewRound {
+				scheduleFightRound(t.Lobby, t.Round) // check_in_2024.go
+			}
+		}},
 	}
 }
 
