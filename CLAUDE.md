@@ -226,8 +226,7 @@ Add to the owner, never beside it. When you give another rule one owner, add it 
   check-in); `turn_results` records how each turn ended, once (UNIQUE), written only by the turn-end hook `recordTurnResult`
   (`turnHow.result` names how; `checkInAt` reads it); the round opens with the fight's round (`scheduleFightRound`) and replies say
   `round_complete`. `TestNoOtherTurnResultWriter` and `TestOnlyTheGMsRequestsRunTheWalk` check. Suites: `turn_schedule_rule_test.py`,
-  `initiative_order_test.py`, `late_gm_test.py`; `schedule_off_run.py <suite>` runs a suite written before the schedule on
-  campaigns with it off.
+  `initiative_order_test.py`, `late_gm_test.py`; suites that test mechanics, not the schedule, turn it off at campaign creation ({"state": "off"}).
 - **A weapon's data:** `findWeapon` (`cmd/server/character_attacks.go`) over `srdWeapons`: any spelling of a weapon (key, name,
   hyphens or underscores, a magic +N, a named weapon's base in parentheses). Never index `srdWeapons` with a key built by
   hand and never read a weapon from the `weapons` table (a copy for the universe catalogue); `TestNoOtherWeaponLookup` checks.
