@@ -170,7 +170,9 @@ func masterySetupStep(charID int) *setupStep {
 	for _, it := range inventoryOf(charID) {
 		carried = append(carried, strings.ToLower(itemStr(it, "name")))
 	}
-	pick := ""
+	// the suggestion fills every pick still open (playtest I-ALDEN-7: a Fighter 11 owing 2 got a list with 1): the weapons it
+	// carries first, then the list's order
+	var carriedPicks, otherPicks []string
 	for _, w := range eligibleMasteryWeapons(cl) {
 		if containsStr(cur, w.Key) {
 			continue
@@ -178,14 +180,15 @@ func masterySetupStep(charID int) *setupStep {
 		o := map[string]interface{}{"weapon": w.Name, "mastery": w.Mastery, "mastery_does": srdMasteryText[w.Mastery]}
 		if containsStr(carried, strings.ToLower(w.Name)) {
 			o["you_carry_one"] = true
-			if pick == "" {
-				pick = w.Name
-			}
+			carriedPicks = append(carriedPicks, w.Name)
+		} else {
+			otherPicks = append(otherPicks, w.Name)
 		}
 		opts = append(opts, o)
 	}
-	if pick == "" && len(opts) > 0 {
-		pick = fmt.Sprint(opts[0]["weapon"])
+	picks := append(carriedPicks, otherPicks...)
+	if len(picks) > want-len(cur) {
+		picks = picks[:want-len(cur)]
 	}
 	var names []string
 	for _, k := range cur {
@@ -199,8 +202,8 @@ func masterySetupStep(charID int) *setupStep {
 		Why: fmt.Sprintf("%s You can use the mastery property of %d kinds of weapon; you have chosen %d (%s). Send the whole list, the ones you have and the new ones.",
 			classFeatureText(cl, "Weapon Mastery"), want, len(cur), strings.Join(names, ", "))}
 	st.Choices = map[string]interface{}{"you_have": names, "choose_this_many_more": want - len(cur), "options": opts}
-	if pick != "" {
-		st.Request = req("POST", "/api/characters/weapon-masteries", map[string]interface{}{"character_id": charID, "weapon_masteries": append(append([]string{}, names...), pick)})
+	if len(picks) > 0 {
+		st.Request = req("POST", "/api/characters/weapon-masteries", map[string]interface{}{"character_id": charID, "weapon_masteries": append(append([]string{}, names...), picks...)})
 	}
 	return &st
 }

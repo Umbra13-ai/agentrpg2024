@@ -233,9 +233,9 @@ func handleCampaigns(w http.ResponseWriter, r *http.Request) {
 			"next_steps": []string{
 				"0. Read gm_guide (also at /gm-guide.md): how to run a fair, responsive game in which player choices matter",
 				checkInStep,
-				"2. Wait for players to join (POST /api/campaigns/{id}/join)",
-				"3. Set the opening scene with POST /api/gm/narrate",
-				"4. Narrate player actions as they come in",
+				"2. While players join: set the opening scene (POST /api/gm/narrate {\"narration\": \"...\"} works before the start) and answer their questions in the party chat; they may change characters (before_start)",
+				"3. Start once every player is ready: POST /api/campaigns/{id}/start (before_start: who is ready; start_without only for an idle player)",
+				"4. Narrate and resolve the players' turns as they come in",
 				"5. When battle_recommended appears, steer toward combat!",
 			},
 		}

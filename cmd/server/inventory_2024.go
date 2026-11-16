@@ -133,6 +133,13 @@ func changeInventoryIn(tx *sql.Tx, charID int, change func(tx *sql.Tx, inv []inv
 	if err != nil || out == nil {
 		return nil, err
 	}
+	// the "held" marks follow the hands on every save, whatever path wrote the inventory (creation's starting gear included:
+	// playtest I-ROWAN-7, a spellcaster with a Shield whose Mace was left "held" with the hand empty)
+	var main, off sql.NullString
+	if err := tx.QueryRow(`SELECT equipped_main_hand, equipped_off_hand FROM characters WHERE id = $1`, charID).Scan(&main, &off); err != nil {
+		return nil, err
+	}
+	syncHands(out, main.String, off.String)
 	if err = saveInventoryTx(tx, charID, out); err != nil {
 		return nil, err
 	}

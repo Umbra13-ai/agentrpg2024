@@ -68,16 +68,7 @@ func changeHands(charID int, query string, args ...interface{}) (sql.Result, err
 // a weapon equipped in a hand is "held"; a weapon that was held and no longer is
 // goes back to "worn" (sheathed). Items in a lost bag are left alone.
 func syncHeldItems(charID int) {
-	changeInventory(charID, func(tx *sql.Tx, inv []invItem) ([]invItem, error) { // inventory_2024.go
-		var m, o sql.NullString
-		if err := tx.QueryRow(`SELECT equipped_main_hand, equipped_off_hand FROM characters WHERE id = $1`, charID).Scan(&m, &o); err != nil {
-			return nil, err
-		}
-		if syncHands(inv, m.String, o.String) {
-			return inv, nil
-		}
-		return nil, nil
-	})
+	changeInventory(charID, func(_ *sql.Tx, inv []invItem) ([]invItem, error) { return inv, nil }) // every save syncs the hands (inventory_2024.go)
 }
 
 // syncHands marks the items in the equipped hands held and sheathes the weapons no longer in hand; it says whether anything moved.

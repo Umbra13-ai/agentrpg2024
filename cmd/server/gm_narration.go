@@ -1402,7 +1402,7 @@ func recordGMAction(database *sql.DB, campaignID int, actionType, description, r
 
 // handleGMNarrate godoc
 // @Summary Submit GM narration and monster actions
-// @Description GM submits narrative text and optionally runs a monster action. Attacks resolve mechanically; positioning beats (for example, reposition) are narration-only. monster_action: {"monster", "action" (an action of its stat block, "Multiattack", or a named attack), "target" (a character's name or id, or a companion's name, nickname or combat id), "target_ids" (characters in a saving throw effect), "use" (a choice the entry needs, such as Command's word: approach, drop, flee, grovel or halt; or a spell the entry offers, such as the Pit Fiend's "Hold Monster" or one of a Lich's spells), "point": [x, y] (aims an area at a grid square; every character in a monster's area on the map is affected, listed or not), "apply_damage": true}. A Multiattack also resolves the actions without an attack roll it names (a Vampire's Bite). advance_turn: true ends the current turn after the narration (as POST /api/campaigns/{id}/combat/next); with it, optional expected_turn {"round": R, "turn_index": I} names the turn to end, as GET /api/campaigns/{id}/combat shows it (round, current_turn_index; GET /api/gm/status: combat.round, combat.current_turn_index). Once that turn has ended (a retry after the first request finished) the reply is 409 turn_already_moved with the turn it is now (round, turn_index, current_turn, current_turn_id), narration_recorded false: nothing is recorded or changed.
+// @Description GM submits narrative text and optionally runs a monster action. Before the campaign starts (recruiting) a narration sets the opening scene; monster actions and advance_turn wait for the start (campaign_not_active). Attacks resolve mechanically; positioning beats (for example, reposition) are narration-only. monster_action: {"monster", "action" (an action of its stat block, "Multiattack", or a named attack), "target" (a character's name or id, or a companion's name, nickname or combat id), "target_ids" (characters in a saving throw effect), "use" (a choice the entry needs, such as Command's word: approach, drop, flee, grovel or halt; or a spell the entry offers, such as the Pit Fiend's "Hold Monster" or one of a Lich's spells), "point": [x, y] (aims an area at a grid square; every character in a monster's area on the map is affected, listed or not), "apply_damage": true}. A Multiattack also resolves the actions without an attack roll it names (a Vampire's Bite). advance_turn: true ends the current turn after the narration (as POST /api/campaigns/{id}/combat/next); with it, optional expected_turn {"round": R, "turn_index": I} names the turn to end, as GET /api/campaigns/{id}/combat shows it (round, current_turn_index; GET /api/gm/status: combat.round, combat.current_turn_index). Once that turn has ended (a retry after the first request finished) the reply is 409 turn_already_moved with the turn it is now (round, turn_index, current_turn, current_turn_id), narration_recorded false: nothing is recorded or changed.
 // @Tags GM
 // @Accept json
 // @Produce json
@@ -1428,8 +1428,17 @@ func handleGMNarrate(w http.ResponseWriter, r *http.Request) {
 	}
 
 	var req gmNarrateRequest
-	campaignID, ok := gmReadAs(w, r, agentID, &req) // campaign_id in the query or the body picks the campaign (gmCampaignFor)
+	campaignID, ok := gmReadAs(w, r, agentID, &req, campaignBeforeStart()) // campaign_id in the query or the body picks the campaign (gmCampaignFor); the opening scene may come before the start (playtest I-GM-10)
 	if !ok {
+		return
+	}
+	var status string
+	if answerDBFailure(w, db.QueryRow(`SELECT status FROM lobbies WHERE id = $1`, campaignID).Scan(&status), "the campaign") {
+		return
+	}
+	if status != "active" && (req.MonsterAction != nil || req.AdvanceTurn) {
+		writeJSONStatus(w, http.StatusConflict, map[string]interface{}{"error": "campaign_not_active",
+			"message": fmt.Sprintf("Campaign %d is %s: before the start a narration sets the scene, but monster actions and turns wait until the campaign starts (POST /api/campaigns/%d/start). Nothing was changed.", campaignID, status, campaignID)})
 		return
 	}
 	if validationErr := validateGMNarrateRequest(req); validationErr != "" {

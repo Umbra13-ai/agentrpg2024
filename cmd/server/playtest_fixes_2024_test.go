@@ -29,6 +29,14 @@ func TestPostgresPlaytestReports(t *testing.T) {
 		t.Fatalf("cleric: %d %v", c, j)
 	}
 	char := int(j["character_id"].(float64))
+	// I-ROWAN-7: a spellcaster with a Shield keeps the hand free, and no weapon is left "held" (sheet, equipment and shop agree)
+	var mainHand string
+	db.QueryRow(`SELECT COALESCE(equipped_main_hand, '') FROM characters WHERE id = $1`, char).Scan(&mainHand)
+	for _, it := range inventoryOf(char) {
+		if _, _, isWeapon := findWeapon(itemStr(it, "name")); isWeapon && itemStr(it, "location") == "held" && mainHand == "" {
+			t.Errorf("%s is held while the main hand is empty", itemStr(it, "name"))
+		}
+	}
 	_, j = pgCall(t, "POST", "/api/campaigns", gmTok, map[string]interface{}{"name": fmt.Sprintf("PG Playtest %d", gm), "max_players": 4})
 	camp := int(j["campaign_id"].(float64))
 	if c, j = pgCall(t, "POST", fmt.Sprintf("/api/campaigns/%d/join", camp), plTok, map[string]interface{}{"character_id": char}); c != 200 {
@@ -132,5 +140,65 @@ func TestSubmissionTextAndRoundTurn(t *testing.T) {
 		if roundTurnOpen(status) != open {
 			t.Errorf("roundTurnOpen(%s) = %v", status, !open)
 		}
+	}
+}
+
+// I-ALDEN-7: a Weapon Mastery step's suggested request fills every open pick, and sending it closes the choice; I-ALDEN-6: the
+// builder's note says a new character takes the seat in a campaign that hasn't started.
+func TestPostgresMasterySuggestionFillsTheChoice(t *testing.T) {
+	testPostgres(t)
+	gm, gmTok := pgAgent(t, "pg mastery gm")
+	_, tok := pgAgent(t, "pg mastery player")
+	body := pgRogue(fmt.Sprintf("Pg Fighter %d", gm))
+	body["class"], body["skill_proficiencies"], body["weapon_masteries"] = "fighter", []string{"acrobatics", "perception"}, []string{"greatsword", "javelin", "dagger"}
+	c, j := pgCall(t, "POST", "/api/characters", tok, body)
+	if c != 200 {
+		t.Fatalf("fighter: %d %v", c, j)
+	}
+	id := int(j["character_id"].(float64))
+	if c, j = pgCall(t, "POST", fmt.Sprintf("/api/characters/%d/starting-level", id), tok, map[string]interface{}{"level": 11}); c != 200 {
+		t.Fatalf("starting level: %d %v", c, j)
+	}
+	_, j = pgCall(t, "GET", fmt.Sprintf("/api/characters/%d/setup", id), tok, nil)
+	var step map[string]interface{}
+	for _, s := range j["steps"].([]interface{}) {
+		if m := s.(map[string]interface{}); m["key"] == "weapon_mastery" {
+			step = m
+		}
+	}
+	if step == nil {
+		t.Fatal("no Weapon Mastery step for a Fighter 11 with 3 masteries")
+	}
+	rq := step["request"].(map[string]interface{})
+	b := rq["body"]
+	if b == nil {
+		b = rq["body_like"]
+	}
+	list := b.(map[string]interface{})["weapon_masteries"].([]interface{})
+	if len(list) != 5 {
+		t.Fatalf("the suggestion lists %d masteries, a Fighter 11 has 5: %v", len(list), list)
+	}
+	if c, j = pgCall(t, "POST", "/api/characters/weapon-masteries", tok, b); c != 200 {
+		t.Fatalf("sending the suggestion: %d %v", c, j)
+	}
+	_, j = pgCall(t, "GET", fmt.Sprintf("/api/characters/%d/setup", id), tok, nil)
+	for _, s := range j["steps"].([]interface{}) {
+		if m := s.(map[string]interface{}); m["key"] == "weapon_mastery" && m["done"] != true {
+			t.Errorf("the suggestion didn't close the choice: %v", m["why"])
+		}
+	}
+
+	// the builder's note before the start
+	_, j = pgCall(t, "POST", "/api/campaigns", gmTok, map[string]interface{}{"name": fmt.Sprintf("PG Note %d", gm), "max_players": 2, "min_level": 11, "max_level": 11})
+	camp := int(j["campaign_id"].(float64))
+	if c, j := pgCall(t, "POST", fmt.Sprintf("/api/campaigns/%d/join", camp), tok, map[string]interface{}{"character_id": id}); c != 200 {
+		t.Fatalf("join: %d %v", c, j)
+	}
+	if note := campaignsNote(func() int {
+		var a int
+		db.QueryRow(`SELECT agent_id FROM characters WHERE id = $1`, id).Scan(&a)
+		return a
+	}()); !strings.Contains(note, "takes") || strings.Contains(note, "GM removes") {
+		t.Errorf("the builder's note before the start: %q", note)
 	}
 }

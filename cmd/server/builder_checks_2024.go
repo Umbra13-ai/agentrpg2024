@@ -1588,18 +1588,32 @@ func countParagraphs(s string) int {
 
 // campaignSeats: the campaigns where this player already has a character (one character per player in a campaign).
 func campaignSeats(agentID int) []string {
-	rows, err := db.Query(`SELECT c.name, l.name FROM characters c JOIN lobbies l ON l.id = c.lobby_id WHERE c.agent_id = $1 AND COALESCE(l.status,'') <> 'completed'`, agentID)
+	rows, err := db.Query(`SELECT c.name, l.name, l.id, COALESCE(l.status, '') FROM characters c JOIN lobbies l ON l.id = c.lobby_id WHERE c.agent_id = $1 AND COALESCE(l.status,'') <> 'completed'`, agentID)
 	if err != nil {
 		return nil
 	}
 	defer rows.Close()
 	var out []string
 	for rows.Next() {
-		var cn, ln string
-		rows.Scan(&cn, &ln)
-		out = append(out, fmt.Sprintf("%s in %s", cn, ln))
+		var cn, ln, status string
+		var id int
+		rows.Scan(&cn, &ln, &id, &status)
+		if status == "recruiting" { // before the start a new character takes the old one's seat (claimSeat's SwapBeforeStart)
+			out = append(out, fmt.Sprintf("%s in %s, which hasn't started: join it with this character (POST /api/campaigns/%d/join) and it takes %s's seat", cn, ln, id, cn))
+		} else {
+			out = append(out, fmt.Sprintf("%s in %s, which has started: this character can take that seat only if its GM removes %s", cn, ln, cn))
+		}
 	}
 	return out
+}
+
+// campaignsNote: what a new character means for the campaigns its player is in (the builder's draft and finish replies).
+func campaignsNote(agentID int) string {
+	seats := campaignSeats(agentID)
+	if len(seats) == 0 {
+		return ""
+	}
+	return fmt.Sprintf("You already play %s. A player has one character in a campaign; this character can also join a different campaign.", strings.Join(seats, "; "))
 }
 
 // featChoiceAliases: names an answer may use for the Origin feat's choices (some are the names the options were once listed under).

@@ -28,6 +28,13 @@ func TestPostgresPlayersReadyBeforeStart(t *testing.T) {
 			t.Errorf("the creation reply's guidance doesn't mention %q: %v", want, j["before_start"])
 		}
 	}
+	// I-GM-10: the opening scene before the start; turns wait for it
+	if c, j = pgCall(t, "POST", "/api/gm/narrate", gmTok, map[string]interface{}{"campaign_id": camp, "narration": "Dawn over the cathedral."}); c != 200 {
+		t.Errorf("the opening narration before the start: %d %v", c, j)
+	}
+	if c, j = pgCall(t, "POST", "/api/gm/narrate", gmTok, map[string]interface{}{"campaign_id": camp, "narration": "Next.", "advance_turn": true}); c != 409 || j["error"] != "campaign_not_active" {
+		t.Errorf("advance_turn before the start: %d %v", c, j)
+	}
 	c, j = pgCall(t, "POST", fmt.Sprintf("/api/campaigns/%d/join", camp), aTok, map[string]interface{}{"character_id": a1})
 	if c != 200 || !strings.Contains(fmt.Sprint(j["before_start"]), "/ready") || j["next_steps"].(map[string]interface{})["set_ready"] == nil {
 		t.Fatalf("join A1: %d %v", c, j)

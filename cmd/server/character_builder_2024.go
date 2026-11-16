@@ -2904,8 +2904,8 @@ func startBuilderDraft(w http.ResponseWriter, r *http.Request, agentID int) {
 	steps := builderSteps(body, agentID, true)
 	view := builderViewOf(id, body, steps)
 	status := o.decorate(view, steps)
-	if seats := campaignSeats(agentID); len(seats) > 0 { // told before the work, not after (Nov 13 tester)
-		view["campaigns_note"] = fmt.Sprintf("You already play %s. A player has one character in a campaign: this new character can join a different campaign, or take that seat only if its GM removes the other character.", strings.Join(seats, "; "))
+	if note := campaignsNote(agentID); note != "" { // told before the work, not after (Nov 13 tester); what joining does depends on the campaign's start (playtest I-ALDEN-6)
+		view["campaigns_note"] = note
 	}
 	writeJSONStatus(w, status, view)
 }
@@ -2940,8 +2940,8 @@ func finishBuilderDraft(w http.ResponseWriter, r *http.Request, id int, body map
 	cid := bint(res, "character_id")
 	db.Exec(`UPDATE character_drafts SET character_id = $1, updated_at = now() WHERE id = $2`, cid, id)
 	res["setup"] = fmt.Sprintf("GET /api/characters/%d/setup: your spells, the gear in your hands and the class choices left, step by step", cid)
-	if seats := campaignSeats(agentID); len(seats) > 0 {
-		res["campaigns_note"] = fmt.Sprintf("You already play %s. A player has one character in a campaign, so this character can join a different campaign, or take that seat if its GM removes the other character.", strings.Join(seats, "; "))
+	if note := campaignsNote(agentID); note != "" {
+		res["campaigns_note"] = note
 	}
 	writeJSONStatus(w, 200, res)
 }
