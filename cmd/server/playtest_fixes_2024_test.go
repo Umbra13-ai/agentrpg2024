@@ -208,3 +208,52 @@ func TestPostgresMasterySuggestionFillsTheChoice(t *testing.T) {
 		t.Errorf("the builder's note before the start: %q", note)
 	}
 }
+
+// I-ALDEN-8: the warning and the Ability Score Improvement suggestion read the class's every Primary Ability.
+func TestPrimaryAbilityWarning(t *testing.T) {
+	dexFighter := map[string]int{"str": 10, "dex": 17, "con": 15, "int": 12, "wis": 13, "cha": 8}
+	if w := primaryAbilityWarning("fighter", dexFighter); w != "" {
+		t.Errorf("a Dexterity Fighter is warned: %q", w)
+	}
+	if p := primaryByScore("fighter", dexFighter); p[0] != "dex" {
+		t.Errorf("a Dexterity Fighter's suggestion raises %s first", p[0])
+	}
+	strWizard := map[string]int{"str": 17, "dex": 13, "con": 14, "int": 12, "wis": 10, "cha": 8}
+	if w := primaryAbilityWarning("wizard", strWizard); !strings.Contains(w, "Intelligence") {
+		t.Errorf("a Wizard whose best score is Strength isn't warned: %q", w)
+	}
+	for class := range classPrimary { // every class: its primary ability highest means no warning
+		sc := map[string]int{"str": 10, "dex": 10, "con": 10, "int": 10, "wis": 10, "cha": 10}
+		for _, p := range classPrimary[class] {
+			sc[p] = 16
+		}
+		if w := primaryAbilityWarning(class, sc); w != "" {
+			t.Errorf("%s with its primary abilities highest is warned: %q", class, w)
+		}
+	}
+}
+
+// I-ALDEN-9 and I-ROWAN-11: a skipped portrait isn't described as a portrait; the join reply names the GM's ready too.
+func TestPostgresPortraitSkipAndJoinWording(t *testing.T) {
+	testPostgres(t)
+	gm, gmTok := pgAgent(t, "pg word gm")
+	_, tok := pgAgent(t, "pg word player")
+	_, j := pgCall(t, "POST", "/api/characters", tok, pgRogue(fmt.Sprintf("Pg Words %d", gm)))
+	id := int(j["character_id"].(float64))
+	if c, j := pgCall(t, "POST", fmt.Sprintf("/api/characters/%d/portrait", id), tok, map[string]interface{}{"skip": true}); c != 200 {
+		t.Fatalf("skip: %d %v", c, j)
+	}
+	if st := portraitSetupStep(id); !st.Done || strings.Contains(st.Why, "has a portrait") {
+		t.Errorf("after a skip: done %v, %q", st.Done, st.Why)
+	}
+	_, j = pgCall(t, "POST", "/api/campaigns", gmTok, map[string]interface{}{"name": fmt.Sprintf("PG Words %d", gm), "max_players": 2})
+	camp := int(j["campaign_id"].(float64))
+	_, j = pgCall(t, "POST", fmt.Sprintf("/api/campaigns/%d/join", camp), tok, map[string]interface{}{"character_id": id})
+	if !strings.Contains(fmt.Sprint(j["message"]), startCondition) || !strings.Contains(fmt.Sprint(j["next_steps"]), startCondition) {
+		t.Errorf("the join reply doesn't say the GM must be ready too: %v / %v", j["message"], j["next_steps"])
+	}
+	_, j = pgCall(t, "GET", fmt.Sprintf("/api/gm/status?campaign_id=%d", camp), gmTok, nil)
+	if j["battle_recommended"] == true {
+		t.Error("a battle is recommended while the campaign recruits")
+	}
+}

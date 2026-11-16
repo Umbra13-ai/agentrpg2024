@@ -871,8 +871,9 @@ func handleGMStatus(w http.ResponseWriter, r *http.Request) {
 	}
 
 	// Battle recommendation: check if we should nudge GM toward combat
-	// Conditions: 3+ RECENTLY active players (last 4 hours), 5+ actions since last combat
-	if !inCombat {
+	// Conditions: 3+ RECENTLY active players (last 4 hours), 5+ actions since last combat; only once play is open (playtest
+	// I-GM-12: it fired while the campaign was recruiting)
+	if !inCombat && campaignStatus == "active" && !tableIsHeld(campaignID) {
 		// Count distinct active players (those with actions in last 4 hours)
 		var activePlayerCount int
 		db.QueryRow(`

@@ -408,6 +408,35 @@ func abilityGuidance(class string) map[string]interface{} {
 	}
 }
 
+// primaryAbilityWarning: the one check of a character's scores against its class's Primary Ability (classPrimary: a Fighter's is
+// Strength or Dexterity), for the builder's review and the setup warnings (playtest I-ALDEN-8: a Dexterity Fighter was told it
+// relies on Strength). It warns only when the highest score is none of the class's primary abilities ("" otherwise).
+func primaryAbilityWarning(class string, scores map[string]int) string {
+	prim := classPrimary[class]
+	if len(prim) == 0 {
+		return ""
+	}
+	best := primaryByScore(class, scores)[0]
+	for _, k := range abilityKeys6 {
+		if scores[k] > scores[best] && !containsStr(prim, k) {
+			names := make([]string, len(prim))
+			for i, p := range prim {
+				names[i] = abilityFullNames[p]
+			}
+			return fmt.Sprintf("Your highest score is %s (%d), but a %s's Primary Ability is %s (your best of those: %s %d): most of its attacks, spells or features use it.",
+				abilityFullNames[k], scores[k], class, strings.Join(names, " or "), abilityFullNames[best], scores[best])
+		}
+	}
+	return ""
+}
+
+// primaryByScore: the class's primary abilities, the character's highest first (a Dexterity Fighter's suggestions raise Dexterity).
+func primaryByScore(class string, scores map[string]int) []string {
+	prim := append([]string{}, classPrimary[class]...)
+	sort.SliceStable(prim, func(a, b int) bool { return scores[prim[a]] > scores[prim[b]] })
+	return prim
+}
+
 func classAbilityOrder(class string) []string {
 	arr, ok := phbArray[class]
 	if !ok {
@@ -1604,14 +1633,8 @@ func builderSteps(body map[string]interface{}, agentID int, withCheck bool) []bu
 				final[k] = scores[k] + inc[k]
 			}
 			s5.Choices = append(s5.Choices, map[string]interface{}{"field": "(result)", "what": "your scores after the background", "current": final})
-			if order := classAbilityOrder(class); len(order) > 0 && classOK {
-				top := order[0]
-				for _, k := range abilityKeys6 {
-					if final[k] > final[top] {
-						s5.Warnings = append(s5.Warnings, fmt.Sprintf("your highest score is %s (%d), but a %s's main ability is %s (%d): most of your attacks, spells or features use %s", strings.ToUpper(k), final[k], class, strings.ToUpper(top), final[top], strings.ToUpper(top)))
-						break
-					}
-				}
+			if w := primaryAbilityWarning(class, final); w != "" && classOK {
+				s5.Warnings = append(s5.Warnings, w+" If that isn't what you want, change your scores before you finish.")
 			}
 		}
 	} else {
@@ -3141,15 +3164,8 @@ func handleCharacterSetup(w http.ResponseWriter, r *http.Request, charID int) {
 	}
 	// warnings
 	var warnings []string
-	if order := classAbilityOrder(cl); len(order) > 0 {
-		sc := map[string]int{"str": str, "dex": dex, "con": con, "int": intl, "wis": wis, "cha": cha}
-		top := order[0]
-		for _, k := range abilityKeys6 {
-			if sc[k] > sc[top] {
-				warnings = append(warnings, fmt.Sprintf("Your highest score is %s (%d) but a %s relies on %s (%d). The GM can correct scores with POST /api/gm/update-character.", strings.ToUpper(k), sc[k], cl, strings.ToUpper(top), sc[top]))
-				break
-			}
-		}
+	if w := primaryAbilityWarning(cl, map[string]int{"str": str, "dex": dex, "con": con, "int": intl, "wis": wis, "cha": cha}); w != "" {
+		warnings = append(warnings, w+" The GM can correct scores with POST /api/gm/update-character.")
 	}
 	left, optLeft := 0, 0
 	var next, nextOpt *setupStep

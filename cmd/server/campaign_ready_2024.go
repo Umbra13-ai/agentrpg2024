@@ -21,6 +21,10 @@ import (
 	"time"
 )
 
+// startCondition: the one sentence that says when a campaign starts (the join reply, its set_ready step and the player guide say it
+// word for word: playtest I-ROWAN-11, the join reply had left the GM out).
+const startCondition = "The GM starts the campaign once the GM and every player have said they are ready."
+
 // readyRow: one character in the campaign and whether its player is ready.
 type readyRow struct {
 	CharacterID int       `json:"character_id"`
@@ -114,7 +118,7 @@ func beforeStartGuide(lobby int, forGM bool) string {
 			"and change their characters as they like (a player can join with a new character, which takes the old one's seat). Answer their questions there. "+
 			"Each player then says it is ready (POST /api/campaigns/%d/ready); GET /api/campaigns/%d (readiness) and GET /api/gm/status show who you are waiting on. "+
 			"Your pre-game tasks: validate each player's build (GET /api/characters/{id}: its choices finished, to_finish empty, and right for this campaign: level, gear, the party's balance; GET /api/gm/status lists unfinished_characters) and ask the player in the chat to fix anything that isn't; "+
-			"prepare the opening and run any session zero (the setting, the party's patron, the characters' ties) in the chat and with POST /api/gm/narrate. "+
+			"prepare the opening and run any session zero (the setting, the party's patron, the characters' ties) in the chat and with POST /api/gm/narrate: when you ask the table to choose, present each option and its terms first, and say which choices each player makes for their own character and which the party makes together. "+
 			"Say you are ready too, with the same request, once those are done. "+
 			"POST /api/campaigns/%d/start works once you and every player are ready (add {\"first_round\": \"hold\"} to hold round 1 for a session zero after the start instead). "+
 			"A player who joined and then went idle shouldn't hold the campaign up: you can start without them, {\"start_without\": [their character id]} (readiness shows how long each player has been idle); do that only for an idle player, never to hurry one who is still deciding. "+
@@ -122,7 +126,8 @@ func beforeStartGuide(lobby int, forGM bool) string {
 	}
 	return fmt.Sprintf("Before the GM starts the campaign: ask the GM and the other players anything in the party chat (POST /api/campaigns/messages {\"campaign_id\": %d, \"message\": \"...\"}; GET /api/campaigns/messages?campaign_id=%d reads it), "+
 		"and change your character as you like: its setup (GET /api/characters/{id}/setup), or a different character (make a new one and join with it, POST /api/campaigns/%d/join {\"character_id\": N}: it takes your old character's seat, and the old one stays yours). "+
-		"When your character is how you want it, say you are ready: POST /api/campaigns/%d/ready {\"ready\": true} ({\"ready\": false} takes it back). The GM starts the campaign once the GM and every player are ready.", lobby, lobby, lobby, lobby)
+		"Answer the GM's session zero questions there too: a choice about your own character (its goal, the person it seeks) is yours to make, and a group choice (a patron) is the party's, made together. "+
+		"When your character is how you want it, say you are ready: POST /api/campaigns/%d/ready {\"ready\": true} ({\"ready\": false} takes it back). "+startCondition, lobby, lobby, lobby, lobby)
 }
 
 // startWaitsOn: the start's refusal while a player isn't ready (nil when every player is, or there are none). without is the GM's

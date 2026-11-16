@@ -85,7 +85,7 @@ func asiSetupStep(charID int) *setupStep {
 		featList = append(featList, f.m)
 	}
 	// the suggestion: an Epic Boon the SRD recommends at 19; otherwise the class's primary ability (up to 20), then Constitution
-	order := append(append([]string{}, classPrimary[cl]...), "con", "dex", "wis", "str", "cha", "int")
+	order := append(primaryByScore(cl, scores), "con", "dex", "wis", "str", "cha", "int") // the character's best primary ability first
 	st := setupStep{Key: "asi_or_feat", Title: "Spend your " + feature,
 		Why: fmt.Sprintf("You have %d Ability Score Improvement point(s) to spend (2 for each %s). %s Either raise your ability scores (option 1, POST /api/characters/%d/asi {\"ability\": \"...\", \"points\": 1 or 2}, as many times as you have points), or take one feat you qualify for, which costs 2 points (option 2, POST /api/characters/%d/feat {\"feat\": \"...\"}, with the feat's ability_choice and choices when it has them: each feat's how_to_take).",
 			pending, feature, classFeatureText(cl, feature), charID, charID)}

@@ -691,7 +691,7 @@ func handleCampaignJoin(w http.ResponseWriter, r *http.Request, campaignID int) 
 	}
 	if status == "recruiting" { // questions, character changes and the ready flag before the start (campaign_ready_2024.go)
 		reply["before_start"] = beforeStartGuide(campaignID, false)
-		reply["next_steps"].(map[string]interface{})["set_ready"] = fmt.Sprintf("POST /api/campaigns/%d/ready {\"ready\": true} - when your character is how you want it; the GM starts once every player is ready", campaignID)
+		reply["next_steps"].(map[string]interface{})["set_ready"] = fmt.Sprintf("POST /api/campaigns/%d/ready {\"ready\": true} - when your character is how you want it. %s GET /api/campaigns/%d (before_start.readiness) shows who the start waits on.", campaignID, startCondition, campaignID)
 	}
 	json.NewEncoder(w).Encode(reply)
 }
@@ -706,7 +706,7 @@ func campaignJoinMessage(alreadyInCampaign bool, status string) string {
 	if status == "active" {
 		return "You've joined the campaign! It is under way: check your turn and jump in."
 	}
-	return "You've joined the campaign! It starts when the GM starts it, once every player has said it is ready (before_start)."
+	return "You've joined the campaign! " + startCondition + " before_start says how, and who is ready so far."
 }
 
 func reconcileCampaignStatus(campaignID int) string {

@@ -83,7 +83,8 @@ func portraitPrompt(charID int) string {
 }
 
 func portraitSetupStep(charID int) setupStep {
-	done := characterHasPortrait(charID) || portraitSkipped(charID)
+	has := characterHasPortrait(charID)
+	done := has || portraitSkipped(charID)
 	// optional (Matt, Nov 16, playtest I-ROWAN-2: a cosmetic step shouldn't count in steps_left); setup still offers it as
 	// next_optional once the other steps are done. Done when a portrait is uploaded or the player skips it for now
 	st := setupStep{Key: "portrait", Title: "Give your character a portrait", Done: done, Optional: true,
@@ -91,8 +92,11 @@ func portraitSetupStep(charID int) setupStep {
 			fmt.Sprintf("The sheet shows it in a frame %s and crops the image to fill that frame, so make it %d by %d pixels (any 4:5 shape works) and keep the face near the centre. ", portraitRatio, portraitWidth, portraitHeight) +
 			"PNG, JPEG or WebP, up to 5 MB, between 32 and 4096 pixels a side. " +
 			"If you can generate images, use the prompt below. If you cannot, ask your human to generate one for you with that prompt, then upload it (or ask them to upload it)."}
-	if done {
+	switch { // what is true now: an image, or a skip (playtest I-ALDEN-9: a skip was described as a portrait)
+	case has:
 		st.Why = "Your character has a portrait. To replace it, upload another image the same way."
+	case done:
+		st.Why = "Portrait skipped for now: the sheet shows a placeholder. Upload one any time the same way."
 	}
 	st.Request = req("POST", fmt.Sprintf("/api/characters/%d/portrait", charID), map[string]string{"image_base64": "<your PNG, JPEG or WebP image, base64 encoded; or send the raw image bytes with a matching Content-Type>"})
 	st.Choices = map[string]interface{}{

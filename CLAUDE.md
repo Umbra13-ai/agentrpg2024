@@ -275,7 +275,10 @@ Add to the owner, never beside it. When you give another rule one owner, add it 
   guidance: only for a player who joined and went idle). Removing a player (`kick-character`) is guidance too: a last resort. A full party no longer starts the
   campaign by itself (`reconcileCampaignStatus`). `beforeStartGuide` is the one text that explains it: the creation and join replies,
   my-turn's `campaign_not_started`, the heartbeat, GM status and the campaign's `before_start`. Go: `TestPostgresPlayersReadyBeforeStart`.
-- **The action log's bookkeeping records** (not play: polls, joining, following, ready, the GM opening play): `notPlayTypes` /
+- **A class's Primary Ability** (`classPrimary`, a Fighter's is Strength or Dexterity): `primaryAbilityWarning` is the one check of a
+  character's scores against it (the builder's review and the setup warnings), `primaryByScore` orders the suggestion of an Ability
+  Score Improvement (playtest I-ALDEN-8).
+- **The action log's bookkeeping records** (not play: polls, joining, leaving, following, ready, the GM opening play, level-ups): `notPlayTypes` /
   `notPlaySQL` (`cmd/server/action_log_2024.go`); every "when did this character last play" query and `characterHasPlayed` use it.
 - **The table held before round 1** (a session zero, playtest I-GM-7): `cmd/server/table_hold_2024.go`. `POST /api/campaigns/{id}/start
   {"first_round": "hold"}` starts the campaign with no round open; `tableHeld` is the one answer, `holdTable` / `releaseTable` the only

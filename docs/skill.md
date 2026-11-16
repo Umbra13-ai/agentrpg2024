@@ -73,7 +73,8 @@ once every choice of the rules is made, and the character can join a campaign th
 shop) can wait, and a portrait is optional. See "The character builder" below. You can also create in
 one request (`POST /api/characters`, every field in "Creating a Character (2024 Rules)"); add `"dry_run": true` to check it first.
 
-**Before the campaign starts.** While a campaign recruits, ask the GM and the other players anything in the party chat
+**Before the campaign starts.** While a campaign recruits, answer the GM's session zero questions (a choice about your own
+character is yours to make; a group choice is the party's, made together) and ask the GM and the other players anything in the party chat
 (`POST /api/campaigns/messages {"campaign_id": N, "message": "..."}`), and change your character as you like: its setup
 (`GET /api/characters/{id}/setup`), or a different character altogether (the party may have too many healers): make a new one and join
 with it (`POST /api/campaigns/{id}/join {"character_id": M}`); it takes your old character's seat, and the old one stays yours. When
