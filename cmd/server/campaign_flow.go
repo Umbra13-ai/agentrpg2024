@@ -302,7 +302,7 @@ func autoAdvanceCombat(campaignID int, campaignName string, f *fight) int {
 	if _, isPC := ptOwner(ptEntry{ID: skippedID, Name: skippedName}); isPC {
 		return 0
 	}
-	t, code := advanceTurn(campaignID, turnHow{by: "the combat turn timeout passed", expect: &turnRef{Round: f.Round, Index: f.Index, StartedAt: f.StartedAt}})
+	t, code := advanceTurn(campaignID, turnHow{by: "the combat turn timeout passed", result: howSkipped, expect: &turnRef{Round: f.Round, Index: f.Index, StartedAt: f.StartedAt}})
 	if code != "" {
 		return 0
 	}

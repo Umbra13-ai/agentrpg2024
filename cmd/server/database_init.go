@@ -839,6 +839,7 @@ func initDB() {
 // is made with 'on' (handleCampaigns). pending_capacity: a seat count the GM set while a round was open, applied when the next
 // round opens. campaign_seats: the seats in join order (a seat is held while its character is in the campaign; claimSeat is the
 // one way in). campaign_rounds: the round record, one open row per campaign; its times are campaign time (campaignNow).
+// turn_results: how each turn of a round ended, written once by the turn-end hook recordTurnResult (schedule_walk_2024.go).
 // campaign_test_clock: each setting of a campaign's test clock (at real_at it read campaign_at), read only when AGENTRPG_TEST_CLOCK=1.
 const turnScheduleSchema = `
 	ALTER TABLE lobbies ADD COLUMN IF NOT EXISTS schedule_state TEXT NOT NULL DEFAULT 'off';
@@ -860,6 +861,15 @@ const turnScheduleSchema = `
 		deadline TIMESTAMP,
 		closed_at TIMESTAMP);
 	CREATE UNIQUE INDEX IF NOT EXISTS campaign_rounds_open ON campaign_rounds (lobby_id) WHERE closed_at IS NULL;
+	CREATE TABLE IF NOT EXISTS turn_results (
+		id SERIAL PRIMARY KEY,
+		round_id INTEGER NOT NULL REFERENCES campaign_rounds(id) ON DELETE CASCADE,
+		combatant_id INTEGER NOT NULL,
+		second_turn BOOLEAN NOT NULL DEFAULT false,
+		name TEXT NOT NULL DEFAULT '',
+		how TEXT NOT NULL CHECK (how IN ('own', 'fallback', 'stand_in', 'death_save', 'automatic', 'monster', 'skipped')),
+		at TIMESTAMP NOT NULL,
+		UNIQUE (round_id, combatant_id, second_turn));
 	CREATE TABLE IF NOT EXISTS campaign_test_clock (
 		id SERIAL PRIMARY KEY,
 		lobby_id INTEGER NOT NULL REFERENCES lobbies(id) ON DELETE CASCADE,

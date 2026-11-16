@@ -44,6 +44,7 @@ type turnHow struct {
 	allow   func(f *fight) (code, message string) // a check of the turn under the lock (skip: a player's turn that has timed out)
 	between func(t *turnChange)                   // after the ending creature's hooks, before the next one's turn starts (Legendary Actions)
 	remove  int                                   // this creature, whose turn it is, leaves the fight: no end-of-turn hooks; the next one starts
+	result  string                                // how the turn ended, for the turn schedule's record (turn_results; "": read from the turn, endedHow)
 }
 
 // turnChange is what a turn change did; the hooks and the callers' replies read it.
@@ -55,6 +56,9 @@ type turnChange struct {
 	EndedRound     int
 	EndedIndex     int
 	EndedStartedAt time.Time
+	EndedSecond    bool                     // the ended turn is a Thief's Reflexes second turn
+	Recorded       string                   // how the turn schedule recorded the ended turn ("" when it didn't: no schedule, or already recorded)
+	RoundOpened    *roundRecord             // the turn schedule's round the change opened (the fight's round went up)
 	Removed        []map[string]interface{} // the entries taken out (remove)
 	Round, Index   int
 	NextID         int
@@ -88,6 +92,7 @@ func init() {
 				closePendingTurns(t.Lobby, t.EndedID, t.EndedRound, "the turn ended without it ("+t.how.by+")")
 			}
 		}},
+		{"the turn schedule records how the turn ended, once (turn_results)", recordTurnResult}, // schedule_walk_2024.go
 		{"countercharm, Sacred Weapon and Holy Nimbus count down", func(t *turnChange) {
 			if characterTurn(t.EndedID) {
 				decrementCountercharm(t.EndedID)
@@ -130,7 +135,7 @@ func init() {
 		{"Opportunity Attack chances end", func(t *turnChange) { clearOAWindows(t.Lobby) }},
 		{"a new round of the fight opens the turn schedule's next round", func(t *turnChange) {
 			if t.NewRound {
-				scheduleFightRound(t.Lobby, t.Round) // check_in_2024.go
+				t.RoundOpened = scheduleFightRound(t.Lobby, t.Round) // check_in_2024.go
 			}
 		}},
 	}
@@ -198,6 +203,7 @@ func claimTurn(lobby int, how turnHow) (*turnChange, string, string) {
 	}
 	t.EndedID, t.EndedName = asInt(cur["id"]), sprintAny(cur["name"])
 	t.EndedRound, t.EndedIndex, t.EndedStartedAt = f.Round, f.Index, f.StartedAt
+	t.EndedSecond = keyOf(cur).extra
 	return t, token, ""
 }
 
@@ -375,6 +381,9 @@ func (t *turnChange) reply() map[string]interface{} {
 	m := map[string]interface{}{"success": true, "round": t.Round, "current_turn": t.NextName, "turn_index": t.Index, "action_economy_reset": true}
 	if t.NewRound {
 		m["new_round"] = true
+	}
+	if t.RoundOpened != nil {
+		m["round_complete"] = roundCompleteText(t.EndedRound, t.RoundOpened)
 	}
 	if len(t.SpellNotes) > 0 {
 		m["spell_turn_effects"] = t.SpellNotes
