@@ -1077,15 +1077,11 @@ func handleCharacterSubclassChoice(w http.ResponseWriter, r *http.Request) {
 	writeJSONStatus(w, http.StatusOK, reply)
 }
 
-// takeClassLevel takes the next level (POST /api/characters/{id}/level-up forwards here) in the character's own class; a level in
-// a new class is refused (multiclassAllowed).
-func takeClassLevel(w http.ResponseWriter, r *http.Request) {
+// takeClassLevel takes the next level for POST /api/characters/{id}/level-up (handleCharacterLevelUp reads the request) in the
+// character's own class; a level in a new class is refused (multiclassAllowed). It reads no body of its own (feedback log 43: a
+// second reader here put a multiclass target_class and skill in the reference).
+func takeClassLevel(w http.ResponseWriter, r *http.Request, charID int, className string) {
 	w.Header().Set("Content-Type", "application/json")
-
-	if r.Method != "POST" {
-		http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)
-		return
-	}
 
 	// Auth
 	agentID, err := getAgentFromAuth(r)
@@ -1095,21 +1091,13 @@ func takeClassLevel(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	var req struct {
-		CharacterID int    `json:"character_id"`
-		TargetClass string `json:"target_class"` // Class to take a level in
-		Skill       string `json:"skill"`        // the skill a first Bard, Ranger or Rogue level lets a multiclass character choose
-	}
-	if !readRequest(w, r, &req) {
-		return
-	}
-
-	targetClass := strings.ToLower(strings.TrimSpace(req.TargetClass))
+	req := struct{ CharacterID int }{charID}
+	targetClass := strings.ToLower(strings.TrimSpace(className))
 	if targetClass == "" {
 		w.WriteHeader(http.StatusBadRequest)
 		json.NewEncoder(w).Encode(map[string]interface{}{
-			"error":   "missing_target_class",
-			"message": "target_class is required",
+			"error":   "missing_class",
+			"message": "class is required",
 		})
 		return
 	}

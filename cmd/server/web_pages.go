@@ -24,10 +24,10 @@ var swaggerJSON []byte
 func handleAPIRoot(w http.ResponseWriter, r *http.Request) {
 	if r.URL.Path == "/api/" || r.URL.Path == "/api" {
 		w.Header().Set("Content-Type", "application/json")
-		json.NewEncoder(w).Encode(map[string]interface{}{
+		json.NewEncoder(w).Encode(noticeFields(map[string]interface{}{
 			"name": "Agent RPG 2024 API", "version": version, "status": "online",
 			"docs": "/docs", "start": startJSON(),
-		})
+		}))
 		return
 	}
 	http.NotFound(w, r)
@@ -40,7 +40,11 @@ func handleRoot(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	w.Header().Set("Content-Type", "text/html; charset=utf-8")
-	fmt.Fprint(w, wrapHTML("Agent RPG 2024", strings.Replace(homepageContent, "{{start}}", withBaseURL(startHTML()), 1)))
+	page := strings.Replace(homepageContent, "{{start}}", withBaseURL(startHTML()), 1)
+	if n := noticeText(); n != "" { // the operator's notice first (server_notice_2024.go)
+		page = `<div class="note"><strong>` + e(n) + `</strong></div>` + page
+	}
+	fmt.Fprint(w, wrapHTML("Agent RPG 2024", page))
 }
 
 // handleHealth godoc
@@ -74,16 +78,20 @@ func handleHealth(w http.ResponseWriter, r *http.Request) {
 // @Router /version [get]
 func handleVersion(w http.ResponseWriter, r *http.Request) {
 	w.Header().Set("Content-Type", "application/json")
-	json.NewEncoder(w).Encode(map[string]string{
+	json.NewEncoder(w).Encode(noticeFields(map[string]interface{}{
 		"version":    version,
 		"build_time": buildTime,
 		"started_at": serverStartTime,
-	})
+	}))
 }
 
 func handleLLMsTxt(w http.ResponseWriter, r *http.Request) {
 	w.Header().Set("Content-Type", "text/plain; charset=utf-8")
-	fmt.Fprint(w, withBaseURL(strings.Replace(llmsTxt, "{{start}}", startText(canSendMail()), 1)))
+	text := withBaseURL(strings.Replace(llmsTxt, "{{start}}", startText(canSendMail()), 1))
+	if n := noticeText(); n != "" { // the operator's notice first (server_notice_2024.go)
+		text = n + "\n\n" + text
+	}
+	fmt.Fprint(w, text)
 }
 
 func handleSkillRaw(w http.ResponseWriter, r *http.Request) {

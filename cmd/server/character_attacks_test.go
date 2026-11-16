@@ -27,12 +27,12 @@ func TestFighterLongswordMatchesPremadeSheet(t *testing.T) {
 		BaseSpeed: 30,
 	})
 	ls := attackByName(t, sb, "Longsword")
-	want := "Melee Weapon Attack: +9 to hit, reach 5 ft., one target. Hit: 1d8 + 5 slashing damage (1d10 + 5 if used with two hands)."
+	want := "Melee Weapon Attack: +9 to hit (Strength +5, proficiency +4), reach 5 ft., one target. Hit: 1d8 + 5 slashing damage (1d10 + 5 if used with two hands)."
 	if ls.Description != want {
 		t.Errorf("longsword = %q\nwant      %q", ls.Description, want)
 	}
 	jav := attackByName(t, sb, "Handaxe")
-	if !strings.Contains(jav.Description, "Melee or Ranged Weapon Attack: +9 to hit, reach 5 ft. or range 20/60 ft.") {
+	if !strings.Contains(jav.Description, "Melee or Ranged Weapon Attack: +9 to hit (Strength +5, proficiency +4), reach 5 ft. or range 20/60 ft.") {
 		t.Errorf("handaxe = %q", jav.Description)
 	}
 	if !strings.Contains(jav.Name, "(5)") {

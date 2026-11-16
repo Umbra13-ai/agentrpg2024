@@ -161,6 +161,18 @@ func handleGMStatus(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 
+	// each player's last sign of life in the campaign, the same answer as the readiness view (feedback log 39: player_activity read
+	// only game actions and called players who had talked in the party chat "never acted")
+	readiness, rerr := campaignReadiness(campaignID)
+	if rerr != nil {
+		writeDBError(w, rerr, "the party's activity")
+		return
+	}
+	lastActive := map[int]time.Time{}
+	for _, r := range readiness {
+		lastActive[r.CharacterID] = r.LastActive
+	}
+
 	// Get party status with last action time per character
 	rows, qerr := db.Query(`
 	SELECT c.id, c.name, c.class, c.species, c.level, c.hp, c.max_hp, c.ac,
@@ -227,6 +239,13 @@ func handleGMStatus(w http.ResponseWriter, r *http.Request) {
 			"name": name,
 			"id":   id,
 		}
+		active := lastActionAt // the activity status counts from the last sign of life: a game action, a request, the party chat
+		if t, ok := lastActive[id]; ok && (!active.Valid || t.After(active.Time)) {
+			active = sql.NullTime{Time: t, Valid: true}
+		}
+		if active.Valid {
+			activityInfo["last_active"] = active.Time.UTC().Format(time.RFC3339)
+		}
 		if isFollowingParty(lastActionAt, lastFollowingAt) {
 			if lastActionAt.Valid {
 				activityInfo["last_action_at"] = lastActionAt.Time.Format(time.RFC3339)
@@ -241,10 +260,13 @@ func handleGMStatus(w http.ResponseWriter, r *http.Request) {
 				"exploration_skip_in": "not needed (following party)",
 				"abandon_in":          "not needed (following party)",
 			}
-		} else if lastActionAt.Valid {
-			inactiveDuration := time.Since(lastActionAt.Time)
+		} else if active.Valid {
+			inactiveDuration := time.Since(active.Time)
 			inactiveHours := inactiveDuration.Hours()
-			activityInfo["last_action_at"] = lastActionAt.Time.Format(time.RFC3339)
+			activityInfo["last_action_at"] = nil // the last game action; last_active is the last sign of life
+			if lastActionAt.Valid {
+				activityInfo["last_action_at"] = lastActionAt.Time.Format(time.RFC3339)
+			}
 			activityInfo["inactive_hours"] = int(inactiveHours)
 
 			// Add countdowns to each threshold

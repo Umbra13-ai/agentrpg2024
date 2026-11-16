@@ -721,7 +721,44 @@ func adminRowRoutes(w http.ResponseWriter, r *http.Request, table, kind string, 
 	if len(rest) > 0 {
 		action = rest[0]
 	}
-	switch {
+	switch { // delete and restore first: a route with more segments is told apart before the row's own GET and POST
+	case action == "delete" && r.Method == http.MethodPost:
+		if !noFields(w, r) { // takes no body (feedback log 43: the reference showed the editor's fields here)
+			return
+		}
+		var err error
+		if kind == "character" {
+			err = softDeleteCharacter(id, "admin")
+		} else {
+			err = softDeleteCampaign(id, "admin")
+		}
+		if answerHelperDBFailure(w, err) {
+			return
+		}
+		if err != nil {
+			writeJSONStatus(w, http.StatusBadRequest, map[string]interface{}{"error": "not_deleted", "message": err.Error()})
+			return
+		}
+		writeJSONStatus(w, http.StatusOK, map[string]interface{}{"success": true, "message": fmt.Sprintf("Deleted %s %d. It can be restored.", kind, id)})
+	case action == "restore" && r.Method == http.MethodPost:
+		if !noFields(w, r) {
+			return
+		}
+		var msg string
+		var err error
+		if kind == "character" {
+			msg, err = restoreCharacter(id, "admin")
+		} else {
+			msg, err = restoreCampaign(id, "admin")
+		}
+		if answerHelperDBFailure(w, err) {
+			return
+		}
+		if err != nil {
+			writeJSONStatus(w, http.StatusBadRequest, map[string]interface{}{"error": "not_restored", "message": err.Error()})
+			return
+		}
+		writeJSONStatus(w, http.StatusOK, map[string]interface{}{"success": true, "message": msg})
 	case action == "" && r.Method == http.MethodGet:
 		row := adminRow(table, id)
 		if row == nil {
@@ -775,37 +812,6 @@ func adminRowRoutes(w http.ResponseWriter, r *http.Request, table, kind string, 
 			reconcileCampaignStatus(id)
 		}
 		writeJSONStatus(w, http.StatusOK, map[string]interface{}{"success": true, "changed": changed, kind: adminRow(table, id)})
-	case action == "delete" && r.Method == http.MethodPost:
-		var err error
-		if kind == "character" {
-			err = softDeleteCharacter(id, "admin")
-		} else {
-			err = softDeleteCampaign(id, "admin")
-		}
-		if answerHelperDBFailure(w, err) {
-			return
-		}
-		if err != nil {
-			writeJSONStatus(w, http.StatusBadRequest, map[string]interface{}{"error": "not_deleted", "message": err.Error()})
-			return
-		}
-		writeJSONStatus(w, http.StatusOK, map[string]interface{}{"success": true, "message": fmt.Sprintf("Deleted %s %d. It can be restored.", kind, id)})
-	case action == "restore" && r.Method == http.MethodPost:
-		var msg string
-		var err error
-		if kind == "character" {
-			msg, err = restoreCharacter(id, "admin")
-		} else {
-			msg, err = restoreCampaign(id, "admin")
-		}
-		if answerHelperDBFailure(w, err) {
-			return
-		}
-		if err != nil {
-			writeJSONStatus(w, http.StatusBadRequest, map[string]interface{}{"error": "not_restored", "message": err.Error()})
-			return
-		}
-		writeJSONStatus(w, http.StatusOK, map[string]interface{}{"success": true, "message": msg})
 	default:
 		writeJSONStatus(w, http.StatusNotFound, map[string]interface{}{"error": "unknown_admin_request"})
 	}

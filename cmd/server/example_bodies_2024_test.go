@@ -2,10 +2,14 @@ package main
 
 import (
 	"encoding/json"
+	"fmt"
 	"net/http/httptest"
 	"os"
+	"regexp"
+	"sort"
 	"strings"
 	"testing"
+	"time"
 )
 
 // Every request that reads a body has a copyable example in the reference, sending only fields the request takes, and the commands
@@ -103,5 +107,71 @@ func TestCommandsPageListsEveryCommand(t *testing.T) {
 	}
 	if n < 300 {
 		t.Errorf("only %d commands in the reference", n)
+	}
+}
+
+// Every example body in the reference is a body its request takes: sent to the server (path ids 1, a fresh account), none is refused
+// for its shape (unknown_field, wrong_type, invalid_json, body_required, id_mismatch), and the character creation example creates a
+// character (feedback log 43: it was refused with skill_choices_required).
+func TestPostgresEveryExampleBodyIsTaken(t *testing.T) {
+	testPostgres(t)
+	raw, err := os.ReadFile("../../docs/swagger/swagger.json")
+	if err != nil {
+		t.Fatal(err)
+	}
+	var spec struct {
+		Paths map[string]map[string]struct {
+			RequestBody *struct {
+				Content map[string]struct {
+					Example map[string]interface{} `json:"example"`
+				} `json:"content"`
+			} `json:"requestBody"`
+		} `json:"paths"`
+	}
+	if err := json.Unmarshal(raw, &spec); err != nil {
+		t.Fatal(err)
+	}
+	shape := map[string]bool{"unknown_field": true, "wrong_type": true, "invalid_json": true, "body_required": true, "id_mismatch": true}
+	_, tok := pgAgent(t, "pg examples")
+	ids := regexp.MustCompile(`\{[a-z_]+\}`)
+	var keys []string
+	for path, ms := range spec.Paths {
+		for m := range ms {
+			keys = append(keys, m+" "+path)
+		}
+	}
+	sort.Strings(keys)
+	tried := 0
+	for _, k := range keys {
+		m, path, _ := strings.Cut(k, " ")
+		op := spec.Paths[path][m]
+		if op.RequestBody == nil || op.RequestBody.Content["application/json"].Example == nil || strings.HasPrefix(path, "/api/admin/") {
+			continue
+		}
+		ex := op.RequestBody.Content["application/json"].Example
+		if path == "/api/characters" && m == "post" { // a name of its own: the test database keeps earlier runs' characters
+			copied := map[string]interface{}{}
+			for k, v := range ex {
+				copied[k] = v
+			}
+			copied["name"] = fmt.Sprintf("Example %d", time.Now().UnixNano()%1e9)
+			ex = copied
+		}
+		target := ids.ReplaceAllString(path, "1")
+		c, j := pgCall(t, strings.ToUpper(m), target, tok, ex)
+		if c == 401 { // an example that ended the account (deleting it): sign up again and send it once more
+			_, tok = pgAgent(t, "pg examples")
+			c, j = pgCall(t, strings.ToUpper(m), target, tok, ex)
+		}
+		tried++
+		if e, _ := j["error"].(string); shape[e] {
+			t.Errorf("%s %s: the example is refused for its shape: %d %v", strings.ToUpper(m), path, c, j)
+		}
+		if path == "/api/characters" && m == "post" && c != 200 {
+			t.Errorf("the character creation example creates nothing: %d %v", c, j)
+		}
+	}
+	if tried < 100 {
+		t.Errorf("only %d examples sent", tried)
 	}
 }

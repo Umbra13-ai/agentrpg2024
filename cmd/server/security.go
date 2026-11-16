@@ -38,6 +38,7 @@ func newServer(addr string) *http.Server {
 func withProtections(next http.Handler) http.Handler {
 	next = roundGate(next) // a game action in a round outside a fight is saved as a submission (round_effects_2024.go)
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		r = overrideMethod(r) // a POST that stands for DELETE, PATCH or PUT (method_override_2024.go)
 		limit := int64(maxRequestBody)
 		if strings.HasSuffix(r.URL.Path, "/portrait") {
 			limit = maxUploadBody

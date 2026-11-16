@@ -189,33 +189,25 @@ func handleGMOpportunityAttack(w http.ResponseWriter, r *http.Request) {
 		db.Exec(`UPDATE characters SET reaction_used = true WHERE id = $1`, req.AttackerID)
 
 		// Determine weapon and modifiers
-		attackMod = game.Modifier(str)
-		damageMod = game.Modifier(str)
 		var attackerClass string
 		db.QueryRow(`SELECT COALESCE(class,'') FROM characters WHERE id = $1`, req.AttackerID).Scan(&attackerClass)
 		damageDice = unarmedDice(attackerClass, level) // an Unarmed Strike: 1 + the Strength modifier (a Monk's Martial Arts die)
 		weaponName = "unarmed strike"
 		weaponKey := ""
-
-		// Check for weapon in request or default to equipped weapon
+		var weapon SRDWeapon
+		hasWeapon := false
 		if req.Weapon != "" {
-			weaponKey = strings.ToLower(strings.ReplaceAll(req.Weapon, " ", "-"))
-			if slug, weapon, ok := findWeapon(req.Weapon); ok {
-				weaponKey = slug
-				weaponName = weapon.Name
-				damageDice = weapon.Damage
-				damageType = attackDamageType(true, weapon)
-				if weapon.Type == "ranged" || hasProperty(weapon.Properties, "finesse") {
-					attackMod = game.Modifier(dex)
-					damageMod = game.Modifier(dex)
-				}
+			if slug, wpn, ok := findWeapon(req.Weapon); ok {
+				weaponKey, weapon, hasWeapon = slug, wpn, true
+				weaponName = wpn.Name
+				damageDice = wpn.Damage
+				damageType = attackDamageType(true, wpn)
 			}
 		}
-
-		// Add proficiency bonus only if proficient with the weapon
-		if weaponKey == "" || isWeaponProficient(weaponProfsStr, weaponKey) {
-			attackMod += game.ProficiencyBonus(level)
-		}
+		// the lasting bonuses (weapon_attack_2024.go, the one rule): the ability, proficiency, a magic weapon, Archery
+		mods := weaponAttackMods(weaponUse{charID: req.AttackerID, class: attackerClass, level: level, str: str, dex: dex, profs: weaponProfsStr,
+			key: weaponKey, weapon: weapon, hasWeapon: hasWeapon})
+		attackMod, damageMod = mods.Attack, mods.Damage
 
 		// Sacred Weapon (Devotion Paladin Channel Divinity)
 		oaSacredBonus, _ := getSacredWeaponBonus(req.AttackerID)

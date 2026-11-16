@@ -133,8 +133,8 @@ func gmAsksTask(lobby int) (string, []gmAsk) {
 		parts = append(parts, "Waiting on players: "+strings.Join(waiting, "; ")+".")
 	}
 	if len(answered) > 0 {
-		parts = append(parts, fmt.Sprintf("Answered: %s: read the party chat, then clear each with DELETE /api/campaigns/%d/asks {\"character_id\": N} (or ask again).",
-			strings.Join(answered, ", "), lobby))
+		parts = append(parts, fmt.Sprintf("Answered: %s: read the party chat, then clear each with %s (or ask again).",
+			strings.Join(answered, ", "), deleteHow(fmt.Sprintf("/api/campaigns/%d/asks", lobby), `{"character_id": N}`)))
 	}
 	return strings.Join(parts, " "), asks
 }
@@ -224,7 +224,7 @@ func handleCampaignAsks(w http.ResponseWriter, r *http.Request, lobby int) {
 			return
 		}
 		writeJSONStatus(w, http.StatusOK, map[string]interface{}{"success": true, "campaign_id": lobby, "character_id": req.CharacterID, "need": need,
-			"message": fmt.Sprintf("%s's player sees this in my-turn and the heartbeat until they answer in the party chat or say they are ready; GET /api/gm/status shows when they have. Clear it with DELETE /api/campaigns/%d/asks {\"character_id\": %d}.", name, lobby, req.CharacterID)})
+			"message": fmt.Sprintf("%s's player sees this in my-turn and the heartbeat until they answer in the party chat or say they are ready; GET /api/gm/status shows when they have. Clear it with %s.", name, deleteHow(fmt.Sprintf("/api/campaigns/%d/asks", lobby), fmt.Sprintf(`{"character_id": %d}`, req.CharacterID)))})
 	default:
 		writeJSONStatus(w, http.StatusMethodNotAllowed, map[string]interface{}{"error": "method_not_allowed", "message": "GET, POST or DELETE."})
 	}

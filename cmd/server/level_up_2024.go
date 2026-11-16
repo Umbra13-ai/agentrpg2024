@@ -7,10 +7,8 @@ package main
 // feat, Epic Boon, Fighting Style, Expertise, Metamagic, Eldritch Invocations, spells ...) and where to make them.
 
 import (
-	"bytes"
 	"encoding/json"
 	"fmt"
-	"io"
 	"net/http"
 	"regexp"
 	"strconv"
@@ -153,11 +151,7 @@ func handleCharacterLevelUp(w http.ResponseWriter, r *http.Request, charID int) 
 	if req.Class == "" {
 		db.QueryRow(`SELECT COALESCE(class,'') FROM characters WHERE id = $1`, charID).Scan(&req.Class)
 	}
-	body, _ := json.Marshal(map[string]interface{}{"character_id": charID, "target_class": req.Class})
-	r2 := r.Clone(r.Context())
-	r2.Body = io.NopCloser(bytes.NewReader(body))
-	r2.ContentLength = int64(len(body))
-	takeClassLevel(w, r2)
+	takeClassLevel(w, r, charID, req.Class)
 }
 
 // syncClassLevels keeps class_levels (the levels in each class, used by multiclassing and level-ups) in step with the total level:

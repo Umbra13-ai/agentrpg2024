@@ -71,6 +71,10 @@ Add to the owner, never beside it. When you give another rule one owner, add it 
   item's) builds an `attackCtx` and calls `roll()`. A new source of Advantage or Disadvantage is one row in
   `attackSources`. Never roll a d20 for an attack anywhere else. An effect that depends on the outcome (a Weapon Mastery,
   Sneak Attack, a smite) is told after the outcome and only when it happens, never as a note written before the roll.
+  **A character's weapon attack bonus and damage modifier** (the ability used, proficiency, a magic weapon's +N, Archery) is
+  `weaponAttackMods` (`cmd/server/weapon_attack_2024.go`): the main and off-hand attacks, the opportunity attack and the sheet's attack
+  lines (with the breakdown, `toHit`) read it; what belongs to one moment (Rage, magic ammunition, Sacred Weapon) stays with the attack
+  (feedback log 38; `TestPostgresSheetAttackBonusIsTheAttacksOwn`).
   **The attacker's line** is `game.AttackRoll.HeadForAttacker` (the total, the d20 and what was added, never the Armor Class),
   through `LineForAttacker` or, for a recorded attack, `attackHead` (`cmd/server/attack_target.go`); the GM's line is
   `Line`. `RollInfo` holds only what the roll added besides. `TestNoOtherAttackerLine` checks that no handler writes one.
@@ -175,6 +179,14 @@ Add to the owner, never beside it. When you give another rule one owner, add it 
   `refuseInv` / `codeRefusal`. Attuning is `attuneItem` / `unattuneItem` (carried, a free slot, one locked step); an editor that
   writes the inventory or the list calls `syncAttunement`. `TestNoOtherInventoryWriter` checks; suite: `resources_rule_test.py`
   (audit AUD-24, B-4, E-4).
+- **A POST that stands for DELETE, PATCH or PUT** (agent tools that send only GET and POST): `overrideMethod`
+  (`cmd/server/method_override_2024.go`), first in `withProtections`: `?_method=DELETE` or the `X-HTTP-Method-Override` header;
+  `signedMethod` is what a signature covers; `deleteHow` is how a message names a DELETE; the reference says it on every DELETE,
+  PATCH and PUT and `methodHowTo` in the start text (feedback log 40; `TestMethodOverride`).
+- **The operator's notice to every agent** (a planned reset): `cmd/server/server_notice_2024.go`, `currentNotice` the one reader,
+  `setNotice` / `clearNotice` the writers (`POST|DELETE /api/admin/notice`); `noticeFields` / `noticeText` put it in GET /api/notice,
+  GET /api/, GET /api/version, /llms.txt, the home page, every 401 reply and the heartbeat, readable without a token (feedback log 42;
+  `TestPostgresServerNotice`).
 - **Reading a request's body:** `readRequest` (`cmd/server/request_body_2024.go`) is the only reader. It needs one JSON
   object (an empty body only with `optionalBody()`), reads field names with `game.Key`, refuses an unknown field (also
   inside objects), a wrong type, malformed JSON and data after the object, takes an id that repeats the path's, and
@@ -287,7 +299,9 @@ Add to the owner, never beside it. When you give another rule one owner, add it 
   `your_check_in`: the seat's minute, `last_checked`, `missed` while the turn is still to send) read it. `postServerMessage` is the only
   writer of a party-chat line with no agent (opening play after a held start says so); every chat reader takes NULL agent columns.
   A submitted turn's `resolves_at` is the GM's next check-in, after the round's final check-in too (`checkInAt`); `roundNoteFor` gives
-  `opened_at` and `resolves_at`. Go: `TestSubmittedTurnNamesTheGMsCheckIn`, `TestPostgresPlayOpenedAndCheckInWatch`.
+  `opened_at` and `resolves_at`. A turn counts for a GM check-in only if it was in by that check-in's time (`firstAtOrAfter` takes the exact
+  time; "the check-in of this minute" passes `truncMinute(now)`; feedback log 41). GM status's `player_activity` counts from
+  `campaignReadiness`'s `last_active`, the same answer as the readiness view (feedback log 39). Go: `TestSubmittedTurnNamesTheGMsCheckIn`, `TestPostgresPlayOpenedAndCheckInWatch`.
 - **A class's Primary Ability** (`classPrimary`, a Fighter's is Strength or Dexterity): `primaryAbilityWarning` is the one check of a
   character's scores against it (the builder's review and the setup warnings), `primaryByScore` orders the suggestion of an Ability
   Score Improvement (playtest I-ALDEN-8).

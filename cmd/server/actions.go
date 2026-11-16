@@ -1420,25 +1420,10 @@ func resolveActionWithBonusDash(action, description string, charID int, bonusDas
 			}
 		}
 
-		// Determine attack modifier (STR for melee, DEX for ranged/finesse)
-		attackMod := game.Modifier(str)
-		damageMod := game.Modifier(str)
-		usesStrength := true
-		if hasWeapon {
-			// Finesse lets the attacker use the better of Strength and Dexterity; a ranged weapon uses Dexterity
-			if weapon.Type == "ranged" || (hasProperty(weapon.Properties, "finesse") && game.Modifier(dex) > game.Modifier(str)) {
-				attackMod = game.Modifier(dex)
-				damageMod = game.Modifier(dex)
-				usesStrength = false
-			}
-		}
-		// Martial Arts: a Monk's Unarmed Strike and Monk weapons use the better of Strength and Dexterity
-		if martialArtsApplies(charID, class, hasWeapon, weapon) && game.Modifier(dex) > game.Modifier(str) {
-			attackMod = game.Modifier(dex)
-			damageMod = game.Modifier(dex)
-			usesStrength = false
-		}
-		pactBlade := pactBladeWeapon(charID, class, hasWeapon, weapon) // F133: Pact of the Blade uses Charisma and gives proficiency
+		// the lasting bonuses: the ability, proficiency, a magic weapon, Archery (weapon_attack_2024.go, the one rule; the sheet reads it)
+		mods := weaponAttackMods(weaponUse{charID: charID, class: class, level: level, str: str, dex: dex, profs: weaponProfsStr, key: weaponKey,
+			weapon: weapon, hasWeapon: hasWeapon, improvised: improvised, description: description})
+		attackMod, damageMod, usesStrength, pactBlade := mods.Attack, mods.Damage, mods.UsesStrength, mods.PactBlade
 		if hasWeapon && sunBladeHeld(charID) {
 			weapon.DamageType = "radiant" // the Sun Blade's blade of radiance (F205)
 		}
@@ -1447,33 +1432,12 @@ func resolveActionWithBonusDash(action, description string, charID int, bonusDas
 				weapon.DamageType = t // F200: the bonded weapon deals Necrotic, Psychic or Radiant damage if you choose
 			}
 		}
-		if pactBlade && game.Modifier(spellModScore(charID)) > attackMod {
-			attackMod = game.Modifier(spellModScore(charID))
-			damageMod = attackMod
-			usesStrength = false
-		}
-		masteryMod := damageMod // the plain ability modifier, for Graze and Cleave
+		masteryMod := mods.Ability // the plain ability modifier, for Graze and Cleave
 		// 2024 Rage Damage: a bonus to the damage of attacks that use Strength while the Rage is active
 		rageNote := ""
 		if usesStrength && strings.ToLower(class) == "barbarian" && hasCondition(charID, "raging") {
 			damageMod += game.RageDamageBonus(level)
 			rageNote = fmt.Sprintf(" [Rage +%d damage]", game.RageDamageBonus(level)) // F243: the bonus was added without a word
-		}
-
-		// Add proficiency bonus only if proficient with the weapon
-		isProficient := isWeaponProficient(weaponProfsStr, weaponKey)
-		if !hasWeapon {
-			isProficient = true // every creature adds its Proficiency Bonus to an Unarmed Strike
-		}
-		if improvised {
-			isProficient = false // no Proficiency Bonus with an improvised weapon
-		}
-		if pactBlade {
-			isProficient = true // proficient with the pact weapon (F133)
-		}
-		if plus := weaponPlusFor(charID, description, weaponKey, false); plus > 0 && hasWeapon && !improvised { // Weapon, +1, +2, or +3; a named weapon's bonus (named_weapons_2024.go)
-			attackMod += plus
-			damageMod += plus
 		}
 		magicAmmoNote := ""
 		if v, ok := magicAmmoPlus.LoadAndDelete(charID); ok && hasWeapon { // Ammunition, +N (F150)
@@ -1483,19 +1447,11 @@ func resolveActionWithBonusDash(action, description string, charID int, bonusDas
 				magicAmmoNote = fmt.Sprintf(" [magic ammunition +%d]", p)
 			}
 		}
-		if isProficient {
-			attackMod += game.ProficiencyBonus(level)
-		}
 
 		// Determine if ranged attack (for proper prone handling)
 		isRangedAttack := hasWeapon && weapon.Type == "ranged"
-
-		// Archery Fighting Style (+2 to ranged attack rolls)
-		archeryBonus := 0
 		archeryNote := ""
-		if isRangedAttack && hasFightingStyle(charID, "archery") {
-			archeryBonus = 2
-			attackMod += archeryBonus
+		if mods.Archery {
 			archeryNote = " (Archery +2)"
 		}
 
@@ -2919,41 +2875,30 @@ func resolveActionWithBonusDash(action, description string, charID int, bonusDas
 			return fmt.Sprintf("Two-Weapon Fighting requires melee weapons! %s is a ranged weapon.", weapon.Name)
 		}
 
-		// Determine attack modifier (DEX for finesse, STR otherwise)
-		attackMod := game.Modifier(str)
-		if hasProperty(weapon.Properties, "finesse") && game.Modifier(dex) > game.Modifier(str) {
-			attackMod = game.Modifier(dex) // finesse: the better of Strength and Dexterity
-		}
+		// the lasting bonuses (weapon_attack_2024.go, the one rule): the ability, proficiency, a magic weapon in the off hand
+		mods := weaponAttackMods(weaponUse{charID: charID, class: class, level: level, str: str, dex: dex, profs: weaponProfsStr, key: weaponKey,
+			weapon: weapon, hasWeapon: true, offHand: true})
 		masteryUses.Delete(charID)
-		noteMasteryUse(charID, weaponKey, weapon, attackMod, level)
-
-		// Add proficiency bonus only if proficient
-		isProficient := isWeaponProficient(weaponProfsStr, weaponKey)
-		if isProficient {
-			attackMod += game.ProficiencyBonus(level)
-		}
-
+		noteMasteryUse(charID, weaponKey, weapon, mods.Ability, level)
+		attackMod := mods.Attack
+		isProficient := mods.Proficient
 		profInfo := ""
 		if !isProficient {
 			profInfo = " (not proficient)"
 		}
-		// Two-Weapon Fighting style allows adding ability modifier to off-hand damage
-		hasTWFStyle := hasFightingStyle(charID, "two_weapon_fighting")
-		damageMod := 0
+		// the off-hand attack adds no ability modifier to its damage unless a negative one, or with the Two-Weapon Fighting style
+		damageMod := mods.Plus
 		twfNote := " (TWF - no ability modifier)"
-		if hasTWFStyle {
-			// the ability modifier used for the attack: the better of Strength and Dexterity with a Finesse weapon
-			damageMod = game.Modifier(str)
-			if hasProperty(weapon.Properties, "finesse") && game.Modifier(dex) > game.Modifier(str) {
-				damageMod = game.Modifier(dex)
-			}
-			twfNote = fmt.Sprintf(" (TWF Style +%d)", damageMod)
+		if hasFightingStyle(charID, "two_weapon_fighting") {
+			damageMod += mods.Ability
+			twfNote = fmt.Sprintf(" (TWF Style %s)", signedBonus(mods.Ability))
+		} else if mods.Ability < 0 {
+			damageMod += mods.Ability // SRD 5.2.1 Light: a negative modifier is still added
+			twfNote = fmt.Sprintf(" (TWF - ability modifier %d)", mods.Ability)
 		}
 		attackHeldItem.Store(charID, heldItemFor(charID, weaponKey, true))
-		if offPlus := weaponPlusFor(charID, "", weaponKey, true); offPlus > 0 { // a magic weapon in the off hand: +N to attack and damage
-			attackMod += offPlus
-			damageMod += offPlus
-			twfNote += fmt.Sprintf(" (+%d magic weapon)", offPlus)
+		if mods.Plus > 0 {
+			twfNote += fmt.Sprintf(" (+%d magic weapon)", mods.Plus)
 		}
 		// the roll: the one attack function (attack_2024.go), as for the main attack
 		atk := characterWeaponAttack(charID, attackMod, weapon, true, weaponKey, description)

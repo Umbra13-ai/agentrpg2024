@@ -128,7 +128,7 @@ func agentFromSignature(r *http.Request, header string) (int, error) {
 		return fail("unknown_key")
 	}
 	now := time.Now()
-	if err := verifySignature(ed25519.PublicKey(raw), r.Method, r.URL.RequestURI(), p["ts"], p["nonce"], body, p["sig"], now); err != nil {
+	if err := verifySignature(ed25519.PublicKey(raw), signedMethod(r), r.URL.RequestURI(), p["ts"], p["nonce"], body, p["sig"], now); err != nil {
 		return fail(err.Error())
 	}
 	if !useNonce(fmt.Sprintf("%d:%s", keyID, p["nonce"]), now) {

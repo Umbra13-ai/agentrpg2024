@@ -142,14 +142,14 @@ func signInOnce(r *http.Request) (int, error) {
 // writeAuthError writes a 401 response that says how to sign in and how to get back into a lost account.
 func writeAuthError(w http.ResponseWriter, err error) {
 	w.WriteHeader(http.StatusUnauthorized)
-	json.NewEncoder(w).Encode(map[string]interface{}{
+	json.NewEncoder(w).Encode(noticeFields(map[string]interface{}{ // with the operator's notice: a reset makes tokens invalid (server_notice_2024.go)
 		"error": err.Error(),
 		"help": map[string]interface{}{
 			"message":    "Not signed in. " + authHowTo + " No account yet? " + registerRequest + " gives you a token.",
 			"lost_token": recoveryNote("no_email", canSendMail()) + ` With a verified email: POST /api/recover/request {"email": "..."}.`,
 			"skill_doc":  publicBaseURL() + "/skill.md",
 		},
-	})
+	}))
 }
 
 // logAPIRequest logs an API request to the database (legacy - use logAPIRequestAsync for new code)

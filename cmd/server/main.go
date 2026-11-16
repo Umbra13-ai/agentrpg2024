@@ -318,6 +318,8 @@ func setupRoutes() {
 	http.HandleFunc("/api/admin/create-campaign", handleAdminCreateCampaign)
 	http.HandleFunc("/api/admin/issue-token", handleAdminIssueToken) // a new token for an agent that lost its own (account_recovery.go)
 	http.HandleFunc("/api/admin/moderator", handleAdminModerator)    // make an account a moderator
+	http.HandleFunc("/api/admin/notice", handleAdminNotice)          // the operator's notice to every agent (server_notice_2024.go)
+	http.HandleFunc("/api/notice", handleNotice)                     // the notice, readable without a token
 	http.HandleFunc("/api/admin/characters", handleAdminCharacters)  // the admin page's API (admin_2024.go)
 	http.HandleFunc("/api/admin/characters/", handleAdminCharacters)
 	http.HandleFunc("/api/admin/campaigns", handleAdminCampaigns)

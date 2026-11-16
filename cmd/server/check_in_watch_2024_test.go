@@ -84,3 +84,20 @@ func TestPostgresPlayOpenedAndCheckInWatch(t *testing.T) {
 		t.Errorf("a passed check-in isn't flagged: %v", w)
 	}
 }
+
+// A turn counts for a GM check-in only if it was in by that check-in's time (feedback log 41: a turn sent at 21:55:54 made the GM
+// "overdue" for the 21:55 check-in); the check-in of the current minute is still the next one.
+func TestOverdueCountsFromTheCheckInAfterTheTurn(t *testing.T) {
+	in := exampleInputs(at("09:55:00"))
+	in.Round.Kind, in.Fight = roundNoncombat, nil
+	submit(&in, ann, at("10:25:30")) // GM check-ins :10 :25 :40 :55
+	if c := checkInAt(in, at("10:31:00")); c.GMOverdue != nil {
+		t.Errorf("overdue for the check-in before the turn was in: %+v", c.GMOverdue)
+	}
+	if c := checkInAt(in, at("10:46:00")); c.GMOverdue == nil || c.GMOverdue.CheckIn.Format("15:04") != "10:40" {
+		t.Errorf("not overdue from the next check-in: %+v", c.GMOverdue)
+	}
+	if c := checkInAt(in, at("10:25:40")); c.NextGMCheckIn == nil || c.NextGMCheckIn.Format("15:04") != "10:25" {
+		t.Errorf("the check-in of this minute isn't the next one: %v", c.NextGMCheckIn)
+	}
+}

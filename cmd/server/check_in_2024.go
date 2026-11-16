@@ -398,11 +398,11 @@ func gmCheckInsOf(s schedule, from, deadline time.Time) []time.Time {
 	return out
 }
 
-// firstAtOrAfter: the first time in ts at or after t's minute.
+// firstAtOrAfter: the first time in ts at or after t. A caller that means "the check-in going on now" passes truncMinute(now); a turn
+// counts for a check-in only if it was in by that check-in's time (feedback log 41: a turn sent at 21:55:54 was called due at 21:55).
 func firstAtOrAfter(ts []time.Time, t time.Time) (time.Time, bool) {
-	m := truncMinute(t)
 	for _, x := range ts {
-		if !x.Before(m) {
+		if !x.Before(t) {
 			return x, true
 		}
 	}
@@ -440,7 +440,7 @@ func checkInAt(in checkInInputs, now time.Time) checkIn {
 	if !paused && in.Timed {
 		gm = gmCheckInsOf(in.Sched, r.ClockFrom, deadline)
 		out.GMCheckIns = gm
-		if next, ok := firstAtOrAfter(gm, now); ok {
+		if next, ok := firstAtOrAfter(gm, truncMinute(now)); ok { // the check-in of this minute is still the next one
 			out.NextGMCheckIn = tp(next)
 		}
 	}

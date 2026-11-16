@@ -103,8 +103,8 @@ func TestPostgresGMAsks(t *testing.T) {
 		t.Errorf("the player still sees an answered ask: %v", j["gm_asks_you"])
 	}
 
-	// the GM clears it; clearing again is 404
-	if c, j := pgCall(t, "DELETE", asks, gmTok, map[string]interface{}{"character_id": a}); c != 200 {
+	// the GM clears it (here with the POST form a tool without DELETE sends: feedback log 40); clearing again is 404
+	if c, j := pgCall(t, "POST", asks+"?_method=DELETE", gmTok, map[string]interface{}{"character_id": a}); c != 200 || j["need"] != nil {
 		t.Errorf("clear: %d %v", c, j)
 	}
 	if c, j := pgCall(t, "DELETE", asks, gmTok, map[string]interface{}{"character_id": a}); c != 404 || j["error"] != "no_open_ask" {

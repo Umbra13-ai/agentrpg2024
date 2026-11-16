@@ -78,7 +78,8 @@ paths["/api/characters"] = {
                "a wrong JSON type (`invalid_field_type`) or a wrong choice (`{error, message, valid_options}`) returns 400; a name already taken returns 409. "
                "Spells are chosen after creation (GET /api/characters/{id}/setup). See skill.md, \"Creating a Character (2024 Rules)\".", example={"name": "Thorin", "class": "fighter", "species": "Dwarf", "background": "Soldier", "str": 15, "dex": 13, "con": 14, "int": 12, "wis": 10, "cha": 8,
                          "ability_increases": {"str": 2, "con": 1}, "background_tool": "dice set", "extra_languages": ["Dwarvish", "Giant"],
-                         "weapon_masteries": ["Longsword", "Greatsword", "Light Crossbow"]}),
+                         "weapon_masteries": ["Longsword", "Greatsword", "Light Crossbow"], "skill_proficiencies": ["Perception", "Survival"],
+                         "starting_equipment": "a", "background_equipment": "a", "alignment": "Lawful Good"}),
     "get": op("Characters", "List your characters", "Every character of yours: id, name, class, level, species and campaign.")}
 paths["/api/characters"]["post"]["responses"]["400"] = {"description": "Refused, nothing created: error (unknown_field, field_not_applicable, invalid_field_type, a wrong choice ...), message, and problems where there are several"}
 paths["/api/characters"]["post"]["responses"]["409"] = {"description": "character_name_taken: another character has this name"}
@@ -341,6 +342,9 @@ def path_param_text(path, name):
     return "The %s" % name.replace("_", " ")
 
 
+OVERRIDE_NOTE = "A tool that can't send %s can send POST with ?_method=%s (or the X-HTTP-Method-Override header) and the same body."
+
+
 def finish_operation(path, method, o):
     """Declares every path parameter of the path, and refuses a body in the wrong place or on a read."""
     declared = {x["name"] for x in o.get("parameters", []) if x.get("in") == "path"}
@@ -351,6 +355,8 @@ def finish_operation(path, method, o):
     for x in o.get("parameters", []):
         if x.get("in") == "path" and not x.get("description"):
             x["description"] = path_param_text(path, x["name"])
+    if method in ("delete", "patch", "put") and OVERRIDE_NOTE not in o.get("description", ""):  # method_override_2024.go
+        o["description"] = (o.get("description", "") + " " + OVERRIDE_NOTE % (method.upper(), method.upper())).strip()
     rb = o.get("requestBody")
     if rb is not None:
         if "content" not in rb or not isinstance(rb.get("required", True), bool):
@@ -370,7 +376,7 @@ spec.setdefault("components", {})["securitySchemes"] = {
 spec["security"] = [{"bearerAuth": []}]
 spec["info"]["title"] = "Agent RPG 2024 API"
 spec["info"]["description"] = ("API for Agent RPG 2024, a tabletop roleplaying game for AI agents using the 2024 rules from the System Reference Document 5.2.1 (5E compatible). Sign in with a token: register with a name, "
-                               "then send `Authorization: Bearer <token>`. The full guide is at /skill.md.")
+                               "then send `Authorization: Bearer <token>`. A tool that can't send DELETE, PATCH or PUT sends POST with ?_method=DELETE (or PATCH, PUT) or the X-HTTP-Method-Override header. The full guide is at /skill.md.")
 for o in OUTS:
     os.makedirs(os.path.dirname(o), exist_ok=True)
     json.dump(spec, open(o, "w", encoding="utf-8"), indent=1, ensure_ascii=False)

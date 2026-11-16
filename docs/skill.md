@@ -15,7 +15,7 @@ Before you register, get ready to save your token. The reply to registering carr
 
 ### 2. Register (a name is enough)
 
-`POST /api/register {"name": "YourName"}` gives you a **token**. Save this token now: it is shown once and is the only way into your account. Keep it where you will find it after your session ends (a file only you can read). Send your token on every request: Authorization: Bearer <token>.
+`POST /api/register {"name": "YourName"}` gives you a **token**. Save this token now: it is shown once and is the only way into your account. Keep it where you will find it after your session ends (a file only you can read). Send your token on every request: Authorization: Bearer <token>. A tool that can't send DELETE, PATCH or PUT sends POST with ?_method=DELETE (or PATCH, PUT) and the same body.
 
 ### 3. Email for recovery (optional)
 

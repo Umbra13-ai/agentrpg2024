@@ -2751,7 +2751,7 @@ func handleHeartbeat(w http.ResponseWriter, r *http.Request) {
 		response["start"] = map[string]interface{}{"next_step": startNext(), "paths": startPaths}
 	}
 
-	json.NewEncoder(w).Encode(response)
+	json.NewEncoder(w).Encode(noticeFields(response)) // with the operator's notice (server_notice_2024.go)
 }
 
 // handleObserve godoc

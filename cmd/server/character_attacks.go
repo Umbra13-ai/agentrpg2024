@@ -25,6 +25,7 @@ type combatInput struct {
 	BaseSpeed                int
 	TraitNames               []string
 	ExtraAttacks             int // attacks per Attack action when known (multiclass: the best one class gives); 0 = from Class and Level
+	CharID                   int // the stored character (its Fighting Styles, magic weapons, Pact of the Blade); 0: the scores alone
 }
 
 var rangeInParens = regexp.MustCompile(`\((\d+/\d+)\)`)
@@ -145,25 +146,15 @@ func isMonkWeapon(class string, w SRDWeapon) bool {
 	return strings.EqualFold(w.Category, "simple") || hasProperty(w.Properties, "light")
 }
 
-func weaponAttackEntry(in combatInput, key string, w SRDWeapon, qty int, strMod, dexMod, prof int) sbEntry {
+func weaponAttackEntry(in combatInput, key string, w SRDWeapon, qty int) sbEntry {
 	ranged := w.Type == "ranged"
-	finesse := hasProperty(w.Properties, "finesse")
 	thrown := propertyRange(w.Properties, "thrown")
 	ammo := propertyRange(w.Properties, "ammunition")
 
-	mod := strMod
-	switch {
-	case ranged:
-		mod = dexMod
-	case finesse || isMonkWeapon(in.Class, w):
-		if dexMod > strMod {
-			mod = dexMod
-		}
-	}
-	toHit := mod
-	if isWeaponProficient(in.WeaponProfs, key) {
-		toHit += prof
-	}
+	// the attack bonus and damage modifier are the attack's own (weapon_attack_2024.go: feedback log 38, Archery was left out here)
+	mods := weaponAttackMods(weaponUse{charID: in.CharID, class: in.Class, level: in.Level, str: in.Str, dex: in.Dex, profs: in.WeaponProfs,
+		key: key, weapon: w, hasWeapon: true, offHand: !sameWeapon(in.MainHand, key) && sameWeapon(in.OffHand, key)})
+	mod := mods.Damage
 
 	kind := "Melee Weapon Attack"
 	reach := "reach 5 ft."
@@ -188,8 +179,8 @@ func weaponAttackEntry(in combatInput, key string, w SRDWeapon, qty int, strMod,
 	if v := versatileDice(w.Properties); v != "" {
 		hit += " (" + diceWithMod(v, mod) + " if used with two hands)"
 	}
-	if strings.EqualFold(in.Class, "barbarian") && !ranged && mod == strMod {
-		hit += " (or +" + strconv.Itoa(mod+game.RageDamageBonus(in.Level)) + " if raging)"
+	if strings.EqualFold(in.Class, "barbarian") && !ranged && mods.UsesStrength {
+		hit += " (or " + signedBonus(mod+game.RageDamageBonus(in.Level)) + " if raging)"
 	}
 
 	name := w.Name
@@ -198,33 +189,29 @@ func weaponAttackEntry(in combatInput, key string, w SRDWeapon, qty int, strMod,
 	}
 	return sbEntry{
 		Name:        name,
-		Description: kind + ": " + signedBonus(toHit) + " to hit, " + reach + ", one target. Hit: " + hit + ".",
+		Description: kind + ": " + mods.toHit() + ", " + reach + ", one target. Hit: " + hit + ".",
 		Kind:        "attack",
 	}
 }
 
-func unarmedStrikeEntry(in combatInput, strMod, dexMod, prof int) sbEntry {
-	mod := strMod
+func unarmedStrikeEntry(in combatInput) sbEntry {
+	mods := weaponAttackMods(weaponUse{charID: in.CharID, class: in.Class, level: in.Level, str: in.Str, dex: in.Dex}) // weapon_attack_2024.go
+	mod := mods.Damage
 	hit := ""
 	if strings.EqualFold(in.Class, "monk") {
-		if dexMod > mod {
-			mod = dexMod
-		}
 		hit = diceWithMod("1d"+strconv.Itoa(game.MartialArtsDie(in.Level)), mod) + " bludgeoning damage"
 	} else {
 		hit = strconv.Itoa(1+mod) + " bludgeoning damage"
 	}
 	return sbEntry{
 		Name:        "Unarmed Strike",
-		Description: "Melee Weapon Attack: " + signedBonus(mod+prof) + " to hit, reach 5 ft., one target. Hit: " + hit + ".",
+		Description: "Melee Weapon Attack: " + mods.toHit() + ", reach 5 ft., one target. Hit: " + hit + ".",
 		Kind:        "attack",
 	}
 }
 
 // addCombatBlock adds attacks and the sheet notes to a stat block map.
 func addCombatBlock(sb map[string]interface{}, in combatInput) {
-	strMod, dexMod := game.Modifier(in.Str), game.Modifier(in.Dex)
-	prof := game.ProficiencyBonus(in.Level)
 	class := strings.ToLower(in.Class)
 	byID := indexByID(in.Inventory)
 
@@ -268,9 +255,9 @@ func addCombatBlock(sb map[string]interface{}, in combatInput) {
 
 	attacks := []sbEntry{}
 	for _, h := range have {
-		attacks = append(attacks, weaponAttackEntry(in, h.key, h.w, h.qty, strMod, dexMod, prof))
+		attacks = append(attacks, weaponAttackEntry(in, h.key, h.w, h.qty))
 	}
-	attacks = append(attacks, unarmedStrikeEntry(in, strMod, dexMod, prof))
+	attacks = append(attacks, unarmedStrikeEntry(in))
 	sb["attacks"] = attacks
 
 	n := game.ExtraAttackCount(in.Class, in.Level)

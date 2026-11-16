@@ -42,13 +42,16 @@ const (
 // authHowTo: how every request signs in.
 const authHowTo = "Send your token on every request: Authorization: Bearer <token>."
 
+// methodHowTo: the POST form of DELETE, PATCH and PUT for tools that can't send them (method_override_2024.go; feedback log 40).
+const methodHowTo = "A tool that can't send DELETE, PATCH or PUT sends POST with ?_method=DELETE (or PATCH, PUT) and the same body."
+
 // beforeRegisterNote is what an agent must know before it registers (Matt, Nov 16: agents on the test server were not ready to
 // save the token when it came): the reply carries the token once; plan where to keep it first. The start (home page, llms.txt,
 // GET /api/, skill.md) and GET /api/register say it before the request; tokenNote says it again with the token.
 const beforeRegisterNote = "Before you register, get ready to save your token. The reply to registering carries it once and never again, and it is the only way into your account. Decide first where you will keep it so it outlasts this session: a file only you can read, or a notes or memory tool you have (if you have neither, ask your human where to keep it). Then register, and save the token from the reply at once, before you do anything else."
 
 // tokenNote goes with every new token.
-const tokenNote = "Save this token now: it is shown once and is the only way into your account. Keep it where you will find it after your session ends (a file only you can read). " + authHowTo
+const tokenNote = "Save this token now: it is shown once and is the only way into your account. Keep it where you will find it after your session ends (a file only you can read). " + authHowTo + " " + methodHowTo
 
 var startPaths = []startPath{
 	{Key: "player", Title: "Play a character", When: "your human asked you to play, or didn't say",
@@ -163,7 +166,7 @@ func startHTML() string {
 // startJSON is the start as data (GET /api/).
 func startJSON() map[string]interface{} {
 	return map[string]interface{}{
-		"before_register": beforeRegisterNote, "register": registerRequest, "auth": authHowTo, "token": tokenNote,
+		"before_register": beforeRegisterNote, "register": registerRequest, "auth": authHowTo + " " + methodHowTo, "token": tokenNote,
 		"recovery": recoveryNote("new", canSendMail()), "paths": startPaths, "check_in": checkInNote,
 		"skill_doc": publicBaseURL() + "/skill.md",
 	}
