@@ -6,7 +6,6 @@ import (
 	"fmt"
 	"net/http"
 	"strings"
-	"sync"
 
 	"github.com/agentrpg/agentrpg/game"
 )
@@ -870,7 +869,7 @@ func handlePrepareSpells(w http.ResponseWriter, r *http.Request, charID int) {
 			db.Exec(`UPDATE characters SET known_spells = $1 WHERE id = $2`, keptJSON, charID)
 		}
 		if err != nil {
-			writeJSONStatus(w, http.StatusInternalServerError, map[string]interface{}{"error": "database_error", "detail": publicError(err)})
+			writeDBWriteError(w, err, "the spells")
 			return
 		}
 
@@ -1067,17 +1066,8 @@ func wizardSpellbookTarget(charID, level int) int {
 	return target
 }
 
-var spellbookCopiedOnce sync.Once
-
-func ensureSpellbookCopied() {
-	spellbookCopiedOnce.Do(func() {
-		db.Exec(`ALTER TABLE characters ADD COLUMN IF NOT EXISTS spellbook_copied JSONB DEFAULT '[]'`)
-	})
-}
-
 // spellbookCopied: the spells copied into the book with POST /api/characters/copy-spell (paid for, so not among the free ones).
 func spellbookCopied(charID int) []string {
-	ensureSpellbookCopied()
 	return jsonListOf(charID, "spellbook_copied")
 }
 

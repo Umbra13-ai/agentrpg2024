@@ -351,12 +351,6 @@ func asiLevelsFor(class string) []int {
 	return []int{4, 8, 12, 16, 19}
 }
 
-func ensureFeatColumns() {
-	if db != nil {
-		db.Exec(`ALTER TABLE characters ADD COLUMN IF NOT EXISTS savage_attacker_used BOOLEAN DEFAULT FALSE`)
-	}
-}
-
 // savageAttackerReroll: once per turn on a weapon hit, roll the damage dice again and keep the higher base result.
 func savageAttackerReroll(charID int, dice string, crit bool, mod, current int) (int, string) {
 	if dice == "" || !hasSpecificFeat(charID, "savage_attacker") {

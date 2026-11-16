@@ -41,8 +41,7 @@ func handleCampaigns(w http.ResponseWriter, r *http.Request) {
 			ORDER BY l.created_at DESC
 		`)
 		if err != nil {
-			w.WriteHeader(http.StatusInternalServerError)
-			json.NewEncoder(w).Encode(map[string]interface{}{"error": publicError(err)})
+			writeDBError(w, err, "the campaigns")
 			return
 		}
 		defer rows.Close()
@@ -204,8 +203,7 @@ func handleCampaigns(w http.ResponseWriter, r *http.Request) {
 			req.Name, agentID, req.MaxPlayers, req.Setting, req.MinLevel, req.MaxLevel, campaignDocJSON,
 		).Scan(&id)
 		if err != nil {
-			w.WriteHeader(http.StatusInternalServerError)
-			json.NewEncoder(w).Encode(map[string]interface{}{"error": publicError(err)})
+			writeDBWriteError(w, err, "the campaign")
 			return
 		}
 		levelReq := formatLevelRequirement(req.MinLevel, req.MaxLevel)
@@ -731,8 +729,7 @@ func handleCampaignStart(w http.ResponseWriter, r *http.Request, campaignID int)
 
 	_, err := db.Exec("UPDATE lobbies SET status = 'active' WHERE id = $1", campaignID)
 	if err != nil {
-		w.WriteHeader(http.StatusInternalServerError)
-		json.NewEncoder(w).Encode(map[string]interface{}{"error": publicError(err)})
+		writeDBWriteError(w, err, "the campaign's start")
 		return
 	}
 	json.NewEncoder(w).Encode(map[string]interface{}{"success": true, "status": "active"})
@@ -770,8 +767,7 @@ func handleCampaignEnd(w http.ResponseWriter, r *http.Request, campaignID int) {
 	}
 
 	if _, err := db.Exec("UPDATE lobbies SET status = 'completed' WHERE id = $1", campaignID); err != nil {
-		w.WriteHeader(http.StatusInternalServerError)
-		json.NewEncoder(w).Encode(map[string]interface{}{"error": "end_failed", "details": publicError(err)})
+		writeDBWriteError(w, err, "the campaign's end")
 		return
 	}
 	json.NewEncoder(w).Encode(map[string]interface{}{
@@ -800,8 +796,7 @@ func handleCampaignFeed(w http.ResponseWriter, r *http.Request, campaignID int) 
 	}
 	recs, err := readActions(actionFilter{lobby: campaignID, since: since}) // action_log_2024.go
 	if err != nil {
-		w.WriteHeader(http.StatusInternalServerError)
-		json.NewEncoder(w).Encode(map[string]interface{}{"error": publicError(err)})
+		writeDBError(w, err, "the campaign's feed")
 		return
 	}
 	actions := []map[string]interface{}{}
@@ -1999,8 +1994,7 @@ func handleCampaignObserve(w http.ResponseWriter, r *http.Request, campaignID in
 	}
 
 	if err != nil {
-		w.WriteHeader(http.StatusInternalServerError)
-		json.NewEncoder(w).Encode(map[string]interface{}{"error": publicError(err)})
+		writeDBWriteError(w, err, "the observation")
 		return
 	}
 
@@ -2031,8 +2025,7 @@ func handleCampaignObservations(w http.ResponseWriter, r *http.Request, campaign
 		ORDER BY o.created_at DESC
 	`, campaignID)
 	if err != nil {
-		w.WriteHeader(http.StatusInternalServerError)
-		json.NewEncoder(w).Encode(map[string]interface{}{"error": publicError(err)})
+		writeDBError(w, err, "the observations")
 		return
 	}
 	defer rows.Close()
@@ -2102,8 +2095,7 @@ func handleCharacterObservations(w http.ResponseWriter, r *http.Request, charID 
 		ORDER BY o.created_at DESC
 	`, charID)
 	if err != nil {
-		w.WriteHeader(http.StatusInternalServerError)
-		json.NewEncoder(w).Encode(map[string]interface{}{"error": publicError(err)})
+		writeDBError(w, err, "the observations")
 		return
 	}
 	defer rows.Close()
@@ -2191,8 +2183,7 @@ func handleObservationPromote(w http.ResponseWriter, r *http.Request, campaignID
 	// Mark observation as promoted
 	_, err = db.Exec("UPDATE observations SET promoted = true, promoted_to = $1 WHERE id = $2", req.Section, obsID)
 	if err != nil {
-		w.WriteHeader(http.StatusInternalServerError)
-		json.NewEncoder(w).Encode(map[string]interface{}{"error": publicError(err)})
+		writeDBWriteError(w, err, "the promotion")
 		return
 	}
 
@@ -2242,8 +2233,7 @@ func handleCampaignTemplates(w http.ResponseWriter, r *http.Request) {
 			FROM campaign_templates ORDER BY name
 		`)
 		if err != nil {
-			w.WriteHeader(http.StatusInternalServerError)
-			json.NewEncoder(w).Encode(map[string]interface{}{"error": publicError(err)})
+			writeDBError(w, err, "the campaign templates")
 			return
 		}
 		defer rows.Close()
@@ -2394,26 +2384,7 @@ func handleCampaignMessages(w http.ResponseWriter, r *http.Request) {
 		`, campaignID, agentID, agentName, req.Message).Scan(&msgID)
 
 		if err != nil {
-			// Table might not exist, create it
-			db.Exec(`CREATE TABLE IF NOT EXISTS campaign_messages (
-				id SERIAL PRIMARY KEY,
-				lobby_id INTEGER REFERENCES lobbies(id),
-				agent_id INTEGER REFERENCES agents(id),
-				agent_name VARCHAR(255),
-				message TEXT,
-				created_at TIMESTAMP DEFAULT NOW()
-			)`)
-			// Try again
-			err = db.QueryRow(`
-				INSERT INTO campaign_messages (lobby_id, agent_id, agent_name, message, created_at)
-				VALUES ($1, $2, $3, $4, NOW())
-				RETURNING id
-			`, campaignID, agentID, agentName, req.Message).Scan(&msgID)
-		}
-
-		if err != nil {
-			w.WriteHeader(http.StatusInternalServerError)
-			json.NewEncoder(w).Encode(map[string]interface{}{"error": "failed to post message", "details": publicError(err)})
+			writeDBWriteError(w, err, "the message")
 			return
 		}
 
@@ -2758,8 +2729,7 @@ func handleObserve(w http.ResponseWriter, r *http.Request) {
 	}
 
 	if err != nil {
-		w.WriteHeader(http.StatusInternalServerError)
-		json.NewEncoder(w).Encode(map[string]interface{}{"error": publicError(err)})
+		writeDBWriteError(w, err, "the observation")
 		return
 	}
 
@@ -3692,8 +3662,7 @@ func handleCampaignItems(w http.ResponseWriter, r *http.Request, campaignID int)
 			ORDER BY item_type, name
 		`, campaignID)
 		if err != nil {
-			w.WriteHeader(http.StatusInternalServerError)
-			json.NewEncoder(w).Encode(map[string]interface{}{"error": publicError(err)})
+			writeDBError(w, err, "the campaign's items")
 			return
 		}
 		defer rows.Close()
@@ -3810,8 +3779,7 @@ func handleCampaignItems(w http.ResponseWriter, r *http.Request, campaignID int)
 				w.WriteHeader(http.StatusConflict)
 				json.NewEncoder(w).Encode(map[string]interface{}{"error": "slug_already_exists"})
 			} else {
-				w.WriteHeader(http.StatusInternalServerError)
-				json.NewEncoder(w).Encode(map[string]interface{}{"error": publicError(err)})
+				writeDBWriteError(w, err, "the item")
 			}
 			return
 		}
@@ -3911,8 +3879,7 @@ func handleCampaignItemBySlug(w http.ResponseWriter, r *http.Request, campaignID
 		`, name, dataJSON, campaignID, slug)
 
 		if err != nil {
-			w.WriteHeader(http.StatusInternalServerError)
-			json.NewEncoder(w).Encode(map[string]interface{}{"error": publicError(err)})
+			writeDBWriteError(w, err, "the item")
 			return
 		}
 
@@ -3932,8 +3899,7 @@ func handleCampaignItemBySlug(w http.ResponseWriter, r *http.Request, campaignID
 
 		result, err := db.Exec("DELETE FROM campaign_items WHERE lobby_id = $1 AND slug = $2", campaignID, slug)
 		if err != nil {
-			w.WriteHeader(http.StatusInternalServerError)
-			json.NewEncoder(w).Encode(map[string]interface{}{"error": publicError(err)})
+			writeDBWriteError(w, err, "the item's deletion")
 			return
 		}
 

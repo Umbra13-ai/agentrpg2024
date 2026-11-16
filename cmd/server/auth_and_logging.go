@@ -2,8 +2,10 @@ package main
 
 import (
 	"context"
+	"database/sql"
 	"encoding/base64"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"github.com/lib/pq"
 	"log"
@@ -141,7 +143,7 @@ func signInOnce(r *http.Request) (int, error) {
 func writeAuthError(w http.ResponseWriter, err error) {
 	w.WriteHeader(http.StatusUnauthorized)
 	json.NewEncoder(w).Encode(map[string]interface{}{
-		"error": publicError(err),
+		"error": err.Error(),
 		"help": map[string]interface{}{
 			"message":    "Not signed in. " + authHowTo + " No account yet? " + registerRequest + " gives you a token.",
 			"lost_token": recoveryNote("no_email", canSendMail()) + ` With a verified email: POST /api/recover/request {"email": "..."}.`,
@@ -411,8 +413,7 @@ func handleFeatureRequests(w http.ResponseWriter, r *http.Request) {
 			RETURNING id
 		`, agentID, req.CampaignID, req.CharacterID, title, body).Scan(&id)
 		if err != nil {
-			w.WriteHeader(http.StatusInternalServerError)
-			json.NewEncoder(w).Encode(map[string]interface{}{"error": publicError(err)})
+			writeDBWriteError(w, err, "the feature request")
 			return
 		}
 		json.NewEncoder(w).Encode(map[string]interface{}{
@@ -457,8 +458,7 @@ func handleFeatureRequests(w http.ResponseWriter, r *http.Request) {
 		args = append(args, limit)
 		rows, err := db.Query(query, args...)
 		if err != nil {
-			w.WriteHeader(http.StatusInternalServerError)
-			json.NewEncoder(w).Encode(map[string]interface{}{"error": publicError(err)})
+			writeDBError(w, err, "the feature requests")
 			return
 		}
 		defer rows.Close()
@@ -721,8 +721,8 @@ func handleModResetPassword(w http.ResponseWriter, r *http.Request) {
 }
 
 // handleModDeleteCampaign godoc
-// @Summary Delete a campaign and its characters (moderator)
-// @Description For accounts with is_moderator. Cannot be undone; /mod/archive-campaign hides an empty campaign instead.
+// @Summary Delete a campaign (moderator)
+// @Description For accounts with is_moderator. The campaign is hidden, not erased (the same delete as the admin's): it gets status "deleted" and no GM, its characters are let go, and the server's admin can restore it. All of it happens in one step or none of it.
 // @Tags Moderator
 // @Param request body object{campaign_id=int} true "Campaign"
 // @Router /mod/delete-campaign [post]
@@ -734,7 +734,7 @@ func handleModDeleteCampaign(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	_, _, isMod := checkModerator(r)
+	modID, _, isMod := checkModerator(r)
 	if !isMod {
 		w.WriteHeader(403)
 		json.NewEncoder(w).Encode(map[string]string{"error": "not_authorized"})
@@ -747,40 +747,16 @@ func handleModDeleteCampaign(w http.ResponseWriter, r *http.Request) {
 	if !readRequest(w, r, &req) {
 		return
 	}
-
-	// Delete actions by lobby_id (FK to lobbies)
-	db.Exec("DELETE FROM actions WHERE lobby_id = $1", req.CampaignID)
-	// Delete actions by character_id
-	db.Exec("DELETE FROM actions WHERE character_id IN (SELECT id FROM characters WHERE lobby_id = $1)", req.CampaignID)
-	// Delete characters first, then campaign
-	// Delete combat entries first
-	db.Exec("DELETE FROM combat_entries WHERE lobby_id = $1", req.CampaignID)
-	// Delete action logs
-	db.Exec("DELETE FROM action_log WHERE lobby_id = $1", req.CampaignID)
-	// Delete observations
-	db.Exec("DELETE FROM party_observations WHERE campaign_id = $1", req.CampaignID)
-	// Delete actions by lobby_id (FK to lobbies)
-	db.Exec("DELETE FROM actions WHERE lobby_id = $1", req.CampaignID)
-	// Delete actions by character_id
-	db.Exec("DELETE FROM actions WHERE character_id IN (SELECT id FROM characters WHERE lobby_id = $1)", req.CampaignID)
-	// Delete characters
-	_, err := db.Exec("DELETE FROM characters WHERE lobby_id = $1", req.CampaignID)
-	if err != nil {
-		w.WriteHeader(500)
-		json.NewEncoder(w).Encode(map[string]string{"error": "delete_characters_failed", "details": publicError(err)})
+	// the soft delete (admin_2024.go): one transaction; nothing is erased
+	if err := softDeleteCampaign(req.CampaignID, fmt.Sprintf("moderator %d", modID)); answerHelperDBFailure(w, err) {
+		return
+	} else if err != nil {
+		writeJSONStatus(w, http.StatusBadRequest, map[string]interface{}{"error": "not_deleted", "message": err.Error()})
 		return
 	}
-	// Now delete the campaign
-	_, err = db.Exec("DELETE FROM lobbies WHERE id = $1", req.CampaignID)
-	if err != nil {
-		w.WriteHeader(500)
-		json.NewEncoder(w).Encode(map[string]string{"error": "delete_failed", "details": publicError(err)})
-		return
-	}
-
 	json.NewEncoder(w).Encode(map[string]interface{}{
 		"success": true,
-		"message": fmt.Sprintf("Campaign %d deleted", req.CampaignID),
+		"message": fmt.Sprintf("Campaign %d deleted: hidden, with its characters let go. The server's admin can restore it.", req.CampaignID),
 	})
 }
 
@@ -823,8 +799,7 @@ func handleModArchiveCampaign(w http.ResponseWriter, r *http.Request) {
 		)
 	`, req.CampaignID)
 	if err != nil {
-		w.WriteHeader(http.StatusInternalServerError)
-		json.NewEncoder(w).Encode(map[string]string{"error": "archive_failed", "details": publicError(err)})
+		writeDBWriteError(w, err, "the archive")
 		return
 	}
 	updated, _ := result.RowsAffected()
@@ -879,8 +854,7 @@ func handleModResolveFeatureRequests(w http.ResponseWriter, r *http.Request) {
 	}
 	result, err := db.Exec(`UPDATE feature_requests SET status = $1, updated_at = NOW() WHERE id = ANY($2)`, req.Status, pq.Array(req.RequestIDs))
 	if err != nil {
-		w.WriteHeader(http.StatusInternalServerError)
-		json.NewEncoder(w).Encode(map[string]string{"error": "update_failed", "details": publicError(err)})
+		writeDBWriteError(w, err, "the feature requests")
 		return
 	}
 	updated, _ := result.RowsAffected()
@@ -910,8 +884,7 @@ func handleModListUsers(w http.ResponseWriter, r *http.Request) {
 
 	rows, err := db.Query("SELECT id, email, name, COALESCE(verified, false), created_at FROM agents ORDER BY id")
 	if err != nil {
-		w.WriteHeader(500)
-		json.NewEncoder(w).Encode(map[string]string{"error": publicError(err)})
+		writeDBError(w, err, "the users")
 		return
 	}
 	defer rows.Close()
@@ -930,10 +903,9 @@ func handleModListUsers(w http.ResponseWriter, r *http.Request) {
 	json.NewEncoder(w).Encode(map[string]interface{}{"users": users, "count": len(users)})
 }
 
-// handleModDeleteUser allows moderators to delete a user and associated data
 // handleModDeleteUser godoc
-// @Summary Delete an account and its data (moderator)
-// @Description For accounts with is_moderator. Cannot be undone.
+// @Summary Delete an account (moderator)
+// @Description For accounts with is_moderator. In one step (all of it or none of it): the account's characters are deleted the way a player deletes one (hidden, restorable by the server's admin), its tokens, keys, codes, drafts and request log are removed, its messages and feature requests keep their text without the account, and the account is removed. An account that is the GM of a campaign is refused (409 account_runs_campaigns): delete those campaigns first. The account itself cannot be restored.
 // @Tags Moderator
 // @Param request body object{user_id=int} true "Account"
 // @Router /mod/delete-user [post]
@@ -945,7 +917,7 @@ func handleModDeleteUser(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	_, _, isMod := checkModerator(r)
+	modID, _, isMod := checkModerator(r)
 	if !isMod {
 		w.WriteHeader(403)
 		json.NewEncoder(w).Encode(map[string]string{"error": "not_authorized"})
@@ -958,25 +930,82 @@ func handleModDeleteUser(w http.ResponseWriter, r *http.Request) {
 	if !readRequest(w, r, &req) {
 		return
 	}
-
-	// Delete user's characters first (and their related data)
-	db.Exec("DELETE FROM actions WHERE character_id IN (SELECT id FROM characters WHERE agent_id = $1)", req.UserID)
-	db.Exec("DELETE FROM characters WHERE agent_id = $1", req.UserID)
-	// Delete api_logs
-	db.Exec("DELETE FROM api_logs WHERE agent_id = $1", req.UserID)
-	// Delete the user
-	_, err := db.Exec("DELETE FROM agents WHERE id = $1", req.UserID)
-	if err != nil {
-		w.WriteHeader(500)
-		json.NewEncoder(w).Encode(map[string]string{"error": "delete_failed", "details": publicError(err)})
-		return
-	}
-
-	json.NewEncoder(w).Encode(map[string]interface{}{
-		"success": true,
-		"message": fmt.Sprintf("User %d deleted", req.UserID),
+	var campaigns []int
+	err := inTx(func(tx *sql.Tx) error {
+		var one int
+		if err := tx.QueryRow(`SELECT id FROM agents WHERE id = $1 FOR UPDATE`, req.UserID).Scan(&one); err != nil {
+			if dbFailed(err) {
+				return dbFailureError(err, "the account's deletion")
+			}
+			return errModUserNotFound
+		}
+		rows, err := tx.Query(`SELECT id FROM lobbies WHERE dm_id = $1 ORDER BY id`, req.UserID)
+		if err != nil {
+			return dbFailureError(err, "the account's deletion")
+		}
+		for rows.Next() {
+			var c int
+			rows.Scan(&c)
+			campaigns = append(campaigns, c)
+		}
+		rows.Close()
+		if len(campaigns) > 0 {
+			return errModUserRunsCampaigns
+		}
+		var chars []int
+		rows, err = tx.Query(`SELECT id FROM characters WHERE agent_id = $1 AND deleted_at IS NULL ORDER BY id`, req.UserID)
+		if err != nil {
+			return dbFailureError(err, "the account's deletion")
+		}
+		for rows.Next() {
+			var c int
+			rows.Scan(&c)
+			chars = append(chars, c)
+		}
+		rows.Close()
+		for _, c := range chars {
+			if _, err := softDeleteCharacterIn(tx, c, fmt.Sprintf("moderator %d", modID)); err != nil {
+				return err
+			}
+		}
+		for _, q := range []string{
+			`DELETE FROM agent_tokens WHERE agent_id = $1`,
+			`DELETE FROM agent_keys WHERE agent_id = $1`,
+			`DELETE FROM account_codes WHERE agent_id = $1`,
+			`DELETE FROM password_reset_tokens WHERE agent_id = $1`,
+			`DELETE FROM character_drafts WHERE agent_id = $1`,
+			`DELETE FROM api_logs WHERE agent_id = $1`,
+			`UPDATE campaign_messages SET agent_id = NULL WHERE agent_id = $1`,
+			`UPDATE feature_requests SET agent_id = NULL WHERE agent_id = $1`,
+			`DELETE FROM agents WHERE id = $1`,
+		} {
+			if _, err := tx.Exec(q, req.UserID); err != nil {
+				return dbFailureError(err, "the account's deletion")
+			}
+		}
+		return nil
 	})
+	switch {
+	case answerHelperDBFailure(w, err):
+	case err == errModUserNotFound:
+		writeJSONStatus(w, http.StatusNotFound, map[string]interface{}{"error": "user_not_found", "message": fmt.Sprintf("There is no account %d.", req.UserID)})
+	case err == errModUserRunsCampaigns:
+		writeJSONStatus(w, http.StatusConflict, map[string]interface{}{"error": "account_runs_campaigns", "campaign_ids": campaigns,
+			"message": "The account is the GM of these campaigns: delete them first (POST /api/mod/delete-campaign). Nothing was changed."})
+	case err != nil:
+		writeJSONStatus(w, http.StatusBadRequest, map[string]interface{}{"error": "not_deleted", "message": err.Error() + " Nothing was changed."})
+	default:
+		json.NewEncoder(w).Encode(map[string]interface{}{
+			"success": true,
+			"message": fmt.Sprintf("User %d deleted. Its characters are hidden, not erased: the server's admin can restore them.", req.UserID),
+		})
+	}
 }
+
+var (
+	errModUserNotFound      = errors.New("user_not_found")
+	errModUserRunsCampaigns = errors.New("account_runs_campaigns")
+)
 
 // handleModUpdateUser allows moderators to update user fields
 // handleModUpdateUser godoc
@@ -1010,8 +1039,7 @@ func handleModUpdateUser(w http.ResponseWriter, r *http.Request) {
 
 	_, err := db.Exec("UPDATE agents SET name = $1 WHERE id = $2", req.Name, req.UserID)
 	if err != nil {
-		w.WriteHeader(500)
-		json.NewEncoder(w).Encode(map[string]string{"error": "update_failed", "details": publicError(err)})
+		writeDBWriteError(w, err, "the user's name")
 		return
 	}
 
@@ -1100,8 +1128,7 @@ func handleRegister(w http.ResponseWriter, r *http.Request) {
 			w.WriteHeader(http.StatusConflict)
 			json.NewEncoder(w).Encode(map[string]interface{}{"error": "name_or_email_already_registered"})
 		} else {
-			w.WriteHeader(http.StatusInternalServerError)
-			json.NewEncoder(w).Encode(map[string]interface{}{"error": publicError(err)})
+			writeDBWriteError(w, err, "the new account")
 		}
 		return
 	}
@@ -1201,8 +1228,7 @@ func handleVerify(w http.ResponseWriter, r *http.Request) {
 
 	_, err = db.Exec("UPDATE agents SET verified = true, email_verified = true, verification_code = NULL WHERE id = $1", agentID)
 	if err != nil {
-		w.WriteHeader(http.StatusInternalServerError)
-		json.NewEncoder(w).Encode(map[string]interface{}{"error": publicError(err)})
+		writeDBWriteError(w, err, "the verification")
 		return
 	}
 
@@ -1237,8 +1263,7 @@ func handleAdminVerify(w http.ResponseWriter, r *http.Request) {
 
 	_, err := db.Exec("UPDATE agents SET verified = true WHERE email = $1", req.Email)
 	if err != nil {
-		w.WriteHeader(http.StatusInternalServerError)
-		json.NewEncoder(w).Encode(map[string]interface{}{"error": publicError(err)})
+		writeDBWriteError(w, err, "the verification")
 		return
 	}
 	json.NewEncoder(w).Encode(map[string]interface{}{"success": true, "verified": req.Email})
@@ -1260,8 +1285,7 @@ func handleAdminUsers(w http.ResponseWriter, r *http.Request) {
 
 	rows, err := db.Query("SELECT id, email, name, verified, created_at FROM agents ORDER BY created_at DESC LIMIT 50")
 	if err != nil {
-		w.WriteHeader(http.StatusInternalServerError)
-		json.NewEncoder(w).Encode(map[string]interface{}{"error": publicError(err)})
+		writeDBError(w, err, "the users")
 		return
 	}
 	defer rows.Close()
@@ -1345,8 +1369,7 @@ func handleAdminCreateCampaign(w http.ResponseWriter, r *http.Request) {
 		req.Name, req.DMID, req.Setting, req.MinLevel, req.MaxLevel,
 	).Scan(&id)
 	if err != nil {
-		w.WriteHeader(http.StatusInternalServerError)
-		json.NewEncoder(w).Encode(map[string]interface{}{"error": publicError(err)})
+		writeDBWriteError(w, err, "the campaign")
 		return
 	}
 	json.NewEncoder(w).Encode(map[string]interface{}{"success": true, "campaign_id": id})

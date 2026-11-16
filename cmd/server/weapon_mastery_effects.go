@@ -153,14 +153,6 @@ func pushText(lobbyID, charID, targetID int, name, monsterKey string, feet int) 
 	return fmt.Sprintf(" Push: %s is pushed %d feet straight away from you.", name, moved)
 }
 
-func ensureMasteryColumns() {
-	if db != nil {
-		db.Exec(`ALTER TABLE characters ADD COLUMN IF NOT EXISTS nick_used BOOLEAN DEFAULT FALSE`)
-		db.Exec(`ALTER TABLE characters ADD COLUMN IF NOT EXISTS cleave_used BOOLEAN DEFAULT FALSE`)
-		db.Exec(`ALTER TABLE characters ADD COLUMN IF NOT EXISTS action_surge_this_turn BOOLEAN DEFAULT FALSE`)
-	}
-}
-
 // nickAvailable says whether the off-hand attack with this weapon is the Nick extra attack: a Light weapon whose
 // Nick mastery the character has, once per turn. It then is made as part of the Attack action, not with the Bonus Action.
 func nickAvailable(charID int, description string) bool {

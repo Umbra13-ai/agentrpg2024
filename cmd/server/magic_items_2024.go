@@ -192,7 +192,6 @@ func applyAttunementScore(charID int, item string, attuned bool) string {
 	if col == "" {
 		return ""
 	}
-	db.Exec(`ALTER TABLE characters ADD COLUMN IF NOT EXISTS item_base_scores JSONB DEFAULT '{}'`)
 	var raw []byte
 	db.QueryRow(`SELECT COALESCE(item_base_scores,'{}') FROM characters WHERE id = $1`, charID).Scan(&raw)
 	base := map[string]int{}

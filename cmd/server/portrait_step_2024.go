@@ -110,7 +110,6 @@ func portraitSetupStep(charID int) setupStep {
 
 // portraitSkipped: the player chose to go without a portrait for now (POST .../portrait {"skip": true}); uploading one later works.
 func portraitSkipped(charID int) bool {
-	db.Exec(`ALTER TABLE characters ADD COLUMN IF NOT EXISTS portrait_skipped BOOLEAN DEFAULT FALSE`)
 	var skipped bool
 	db.QueryRow(`SELECT COALESCE(portrait_skipped,false) FROM characters WHERE id = $1`, charID).Scan(&skipped)
 	return skipped

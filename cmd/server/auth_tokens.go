@@ -16,7 +16,6 @@ import (
 	"encoding/base64"
 	"encoding/hex"
 	"fmt"
-	"log"
 	"net"
 	"net/http"
 	"os"
@@ -34,24 +33,6 @@ const (
 	tokenScopeReadOnly  = "read"
 	registrationTokenID = "registration"
 )
-
-func ensureAgentTokensTable() {
-	_, err := db.Exec(`CREATE TABLE IF NOT EXISTS agent_tokens (
-		id SERIAL PRIMARY KEY,
-		agent_id INTEGER NOT NULL,
-		token_hash VARCHAR(64) UNIQUE NOT NULL,
-		prefix VARCHAR(16) NOT NULL,
-		label TEXT DEFAULT '',
-		scope VARCHAR(10) NOT NULL DEFAULT 'full',
-		created_at TIMESTAMP DEFAULT NOW(),
-		last_used_at TIMESTAMP,
-		expires_at TIMESTAMP,
-		revoked_at TIMESTAMP
-	)`)
-	if err != nil {
-		log.Printf("agent_tokens table: %v", err)
-	}
-}
 
 // hashToken is the SHA-256 of the whole token. The token has 256 bits of
 // randomness, so a fast hash is fine here.

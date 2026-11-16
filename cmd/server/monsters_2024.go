@@ -18,6 +18,7 @@ var srd521MonstersJSON []byte
 
 // monster_lore.json: original appearance and lore text for players (the SRD has none), written for this project
 // (tools/monster_lore). Keyed by slug.
+//
 //go:embed data/monster_lore.json
 var monsterLoreJSON []byte
 
@@ -81,35 +82,6 @@ func monsterSlug(name string) string {
 	return strings.Trim(s, "-")
 }
 
-func ensureMonsterColumns() {
-	for _, q := range []string{
-		`ALTER TABLE monsters ADD COLUMN IF NOT EXISTS ruleset TEXT DEFAULT '2024'`,
-		`ALTER TABLE monsters ADD COLUMN IF NOT EXISTS alignment TEXT DEFAULT ''`,
-		`ALTER TABLE monsters ADD COLUMN IF NOT EXISTS speed_text TEXT DEFAULT ''`,
-		`ALTER TABLE monsters ADD COLUMN IF NOT EXISTS initiative_mod INTEGER`,
-		`ALTER TABLE monsters ADD COLUMN IF NOT EXISTS proficiency_bonus INTEGER`,
-		`ALTER TABLE monsters ADD COLUMN IF NOT EXISTS saves JSONB`,
-		`ALTER TABLE monsters ADD COLUMN IF NOT EXISTS skills TEXT DEFAULT ''`,
-		`ALTER TABLE monsters ADD COLUMN IF NOT EXISTS senses TEXT DEFAULT ''`,
-		`ALTER TABLE monsters ADD COLUMN IF NOT EXISTS languages TEXT DEFAULT ''`,
-		`ALTER TABLE monsters ADD COLUMN IF NOT EXISTS gear TEXT DEFAULT ''`,
-		`ALTER TABLE monsters ADD COLUMN IF NOT EXISTS hp_formula TEXT DEFAULT ''`,
-		`ALTER TABLE monsters ADD COLUMN IF NOT EXISTS xp_lair INTEGER`,
-		`ALTER TABLE monsters ADD COLUMN IF NOT EXISTS group_name TEXT DEFAULT ''`,
-		`ALTER TABLE monsters ADD COLUMN IF NOT EXISTS traits JSONB`,
-		`ALTER TABLE monsters ADD COLUMN IF NOT EXISTS action_entries JSONB`,
-		`ALTER TABLE monsters ADD COLUMN IF NOT EXISTS bonus_actions JSONB`,
-		`ALTER TABLE monsters ADD COLUMN IF NOT EXISTS reactions JSONB`,
-		`ALTER TABLE monsters ADD COLUMN IF NOT EXISTS legendary_intro TEXT DEFAULT ''`,
-		`ALTER TABLE monsters ADD COLUMN IF NOT EXISTS description TEXT DEFAULT ''`,
-		`ALTER TABLE monsters ADD COLUMN IF NOT EXISTS lore TEXT DEFAULT ''`,
-	} {
-		if _, err := db.Exec(q); err != nil {
-			log.Printf("monsters columns: %v", err)
-		}
-	}
-}
-
 var (
 	atkBonusRe     = regexp.MustCompile(`Attack Roll: ([+-]\d+)`)
 	hitDmgRe       = regexp.MustCompile(`Hit: \d+ \(([^)]+)\) ([A-Za-z]+) damage`)
@@ -141,7 +113,6 @@ func seedMonsters2024() {
 	if db == nil {
 		return
 	}
-	ensureMonsterColumns()
 	if res, err := db.Exec(`DELETE FROM monsters WHERE ruleset IS DISTINCT FROM '2024'`); err == nil { // SRD 5.2.1 monsters only
 		if n, _ := res.RowsAffected(); n > 0 {
 			log.Printf("Removed %d monsters that are not in the SRD 5.2.1", n)

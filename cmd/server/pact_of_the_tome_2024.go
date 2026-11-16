@@ -13,16 +13,7 @@ import (
 	"fmt"
 	"sort"
 	"strings"
-	"sync"
 )
-
-var bookOfShadowsOnce sync.Once
-
-func ensureBookOfShadows() {
-	bookOfShadowsOnce.Do(func() {
-		db.Exec(`ALTER TABLE characters ADD COLUMN IF NOT EXISTS book_of_shadows JSONB DEFAULT '{}'`)
-	})
-}
 
 type bookOfShadows struct {
 	Cantrips []string `json:"cantrips"`
@@ -35,7 +26,6 @@ func bookOfShadowsOf(charID int) bookOfShadows {
 	if db == nil || !hasPactBoon(charID, "tome") {
 		return b
 	}
-	ensureBookOfShadows()
 	var raw []byte
 	db.QueryRow(`SELECT COALESCE(book_of_shadows,'{}') FROM characters WHERE id = $1`, charID).Scan(&raw)
 	json.Unmarshal(raw, &b)
@@ -134,7 +124,6 @@ func checkBookOfShadows(charID int, cantrips, rituals []string) (bookOfShadows, 
 }
 
 func saveBookOfShadows(charID int, b bookOfShadows) {
-	ensureBookOfShadows()
 	raw, _ := json.Marshal(b)
 	db.Exec(`UPDATE characters SET book_of_shadows = $1 WHERE id = $2`, raw, charID)
 }

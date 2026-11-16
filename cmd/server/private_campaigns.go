@@ -98,7 +98,7 @@ var unlockNext = regexp.MustCompile(`^/character/[0-9]+$`)
 func setWatchPassword(campaignID int, password string) error {
 	if password == "" {
 		_, err := db.Exec(`UPDATE lobbies SET watch_password_hash = '' WHERE id = $1`, campaignID)
-		return err
+		return dbFailureError(err, "the watch password")
 	}
 	if len(password) < 4 {
 		return fmt.Errorf("the watch password needs at least 4 characters")
@@ -108,7 +108,7 @@ func setWatchPassword(campaignID int, password string) error {
 		return fmt.Errorf("the password could not be stored")
 	}
 	_, err := db.Exec(`UPDATE lobbies SET watch_password_hash = $1 WHERE id = $2`, h, campaignID)
-	return err
+	return dbFailureError(err, "the watch password")
 }
 
 // writeWatchGate answers a request for a private campaign the caller may not see: a password form for pages, a 401 for the API.

@@ -647,7 +647,6 @@ func loadCheckIn(lobby int) (checkInInputs, time.Time, error) {
 				cf.Slots = append(cf.Slots, checkInSlot{ID: id, Name: fmt.Sprint(e["name"]), Player: !monster && seated[id]})
 			}
 			in.Fight = cf
-			ensurePendingTurns()
 			rows, err := db.Query(`SELECT character_id, status, submitted_at FROM pending_turns WHERE lobby_id = $1 AND round = $2 AND status IN ('pending', 'needs_gm')`, lobby, f.Round)
 			if err != nil {
 				return in, time.Time{}, err

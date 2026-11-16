@@ -208,13 +208,8 @@ func refreshStoredAC(charID int) {
 // ---- subclasses: one per class (SRD 5.2.1: each class's subclass at that class's own level). The first class's is the subclass column;
 // the others are in subclasses {"sorcerer": "draconic", ...}.
 
-func ensureSubclassesColumn() {
-	db.Exec(`ALTER TABLE characters ADD COLUMN IF NOT EXISTS subclasses JSONB DEFAULT '{}'`)
-}
-
 // subclassesByClass: every class's subclass, the main class's included.
 func subclassesByClass(charID int) map[string]string {
-	ensureSubclassesColumn()
 	var raw []byte
 	var class, sub string
 	db.QueryRow(`SELECT COALESCE(subclasses,'{}'), COALESCE(class,''), COALESCE(subclass,'') FROM characters WHERE id = $1`, charID).Scan(&raw, &class, &sub)
@@ -227,7 +222,6 @@ func subclassesByClass(charID int) map[string]string {
 }
 
 func setSecondarySubclass(charID int, class, slug string) {
-	ensureSubclassesColumn()
 	m := subclassesByClass(charID)
 	var main string
 	db.QueryRow(`SELECT COALESCE(class,'') FROM characters WHERE id = $1`, charID).Scan(&main)

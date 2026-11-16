@@ -211,8 +211,7 @@ func handleCombatStart(w http.ResponseWriter, r *http.Request, campaignID int) {
 		FROM characters c WHERE c.lobby_id = $1
 	`, campaignID)
 	if err != nil {
-		w.WriteHeader(http.StatusInternalServerError)
-		json.NewEncoder(w).Encode(map[string]interface{}{"error": publicError(err)})
+		writeDBError(w, err, "the campaign's characters")
 		return
 	}
 	defer rows.Close()

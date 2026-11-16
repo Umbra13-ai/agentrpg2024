@@ -11,10 +11,6 @@ import (
 	"strings"
 )
 
-func ensureAttitudeTable() {
-	db.Exec(`CREATE TABLE IF NOT EXISTS attitudes (lobby_id INTEGER NOT NULL, target_key TEXT NOT NULL, name TEXT NOT NULL, attitude TEXT NOT NULL, PRIMARY KEY (lobby_id, target_key))`)
-}
-
 func attitudeKey(targetID int, npc string) string {
 	if targetID != 0 {
 		return fmt.Sprintf("id:%d", targetID)
@@ -28,7 +24,6 @@ func attitudeFor(lobbyID, targetID int, description string) (attitude, name stri
 	if db == nil || lobbyID == 0 {
 		return "", "", false
 	}
-	ensureAttitudeTable()
 	if targetID != 0 {
 		if db.QueryRow(`SELECT attitude, name FROM attitudes WHERE lobby_id = $1 AND target_key = $2`, lobbyID, attitudeKey(targetID, "")).Scan(&attitude, &name) == nil {
 			return attitude, name, true
@@ -65,7 +60,6 @@ func handleGMAttitude(w http.ResponseWriter, r *http.Request) {
 	if !ok {
 		return
 	}
-	ensureAttitudeTable()
 	if r.Method == http.MethodGet {
 		var list []map[string]interface{}
 		rows, err := db.Query(`SELECT target_key, name, attitude FROM attitudes WHERE lobby_id = $1`, lobby)

@@ -15,13 +15,6 @@ import (
 	"github.com/agentrpg/agentrpg/game"
 )
 
-func ensureCasterColumns() {
-	if db != nil {
-		db.Exec(`ALTER TABLE characters ADD COLUMN IF NOT EXISTS innate_sorcery_rounds INTEGER DEFAULT 0`)
-		db.Exec(`ALTER TABLE characters ADD COLUMN IF NOT EXISTS magical_cunning_used BOOLEAN DEFAULT FALSE`)
-	}
-}
-
 // innateSorcery is the Bonus Action that turns Innate Sorcery on.
 func innateSorcery(charID int) string {
 	var class string

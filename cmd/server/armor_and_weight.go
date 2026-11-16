@@ -18,7 +18,7 @@ type ArmorInfo struct {
 	StrengthRequirement int
 }
 
-// armorInfoCache: the armor table is written only at start (initDB, syncArmorToSRDTable), so what getArmorInfo found is kept:
+// armorInfoCache: the armor table is written only at start (migrate, syncArmorToSRDTable), so what getArmorInfo found is kept:
 // no read of reference data on a second connection inside a request's transaction (db_guard_2024.go), and one my-turn no
 // longer reads the same armor dozens of times (audit B-8).
 var armorInfoCache sync.Map // slug -> ArmorInfo, or notArmor for a name the table doesn't have

@@ -23,7 +23,6 @@ import (
 	"encoding/base64"
 	"encoding/hex"
 	"fmt"
-	"log"
 	"net/http"
 	"strconv"
 	"strings"
@@ -36,21 +35,6 @@ const (
 	maxActiveKeys   = 10
 	maxSignedBody   = 10 << 20
 )
-
-func ensureAgentKeysTable() {
-	_, err := db.Exec(`CREATE TABLE IF NOT EXISTS agent_keys (
-		id SERIAL PRIMARY KEY,
-		agent_id INTEGER NOT NULL,
-		public_key VARCHAR(64) UNIQUE NOT NULL,
-		label TEXT DEFAULT '',
-		created_at TIMESTAMP DEFAULT NOW(),
-		last_used_at TIMESTAMP,
-		revoked_at TIMESTAMP
-	)`)
-	if err != nil {
-		log.Printf("agent_keys table: %v", err)
-	}
-}
 
 // signingString is the exact text that is signed.
 func signingString(method, uri, ts, nonce string, body []byte) string {

@@ -10,7 +10,6 @@ import (
 	"fmt"
 	"net/http"
 	"strings"
-	"sync"
 
 	"github.com/agentrpg/agentrpg/game"
 )
@@ -22,16 +21,6 @@ type expertiseState struct {
 	other  map[string]bool // Expertise that isn't a class choice (a magic item's gift): kept as it is, never a class pick
 	picks  []string        // the class Expertise chosen so far
 	total  int             // how many skills the classes give Expertise in
-}
-
-var expertiseOtherOnce sync.Once
-
-// ensureExpertiseOther: the expertise column holds every skill the character has Expertise in (rolls read it); expertise_other
-// names the ones that didn't come from a class feature, so the class's choices can be counted and changed without losing them.
-func ensureExpertiseOther() {
-	expertiseOtherOnce.Do(func() {
-		db.Exec(`ALTER TABLE characters ADD COLUMN IF NOT EXISTS expertise_other TEXT DEFAULT ''`)
-	})
 }
 
 func skillSet(csv string) (map[string]bool, []string) {
@@ -47,7 +36,6 @@ func skillSet(csv string) (map[string]bool, []string) {
 }
 
 func loadExpertise(charID int) expertiseState {
-	ensureExpertiseOther()
 	var exp, other string
 	db.QueryRow(`SELECT COALESCE(expertise,''), COALESCE(expertise_other,'') FROM characters WHERE id = $1`, charID).Scan(&exp, &other)
 	st := expertiseState{levels: classLevelsOrSingle(charID)}

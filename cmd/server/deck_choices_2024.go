@@ -134,7 +134,6 @@ func deckEffects(charID int) []string {
 	if charID <= 0 || db == nil {
 		return nil
 	}
-	ensureDeckBoons()
 	var b string
 	db.QueryRow(`SELECT COALESCE(deck_boons,'') FROM characters WHERE id = $1`, charID).Scan(&b)
 	var out []string
@@ -311,7 +310,6 @@ func addListWord(list, word string) string {
 // ---- lasting boons with a dawn countdown ("fool:3")
 
 func addDeckBoonN(charID int, boon string, dawns int) {
-	ensureDeckBoons()
 	var b string
 	db.QueryRow(`SELECT COALESCE(deck_boons,'') FROM characters WHERE id = $1`, charID).Scan(&b)
 	var keep []string
@@ -326,7 +324,6 @@ func addDeckBoonN(charID int, boon string, dawns int) {
 
 // deckDawn counts a dawn off the timed boons (the Fool's and the Jester's 72 hours).
 func deckDawn(charID int) []string {
-	ensureDeckBoons()
 	var b string
 	db.QueryRow(`SELECT COALESCE(deck_boons,'') FROM characters WHERE id = $1`, charID).Scan(&b)
 	if !strings.Contains(b, ":") {

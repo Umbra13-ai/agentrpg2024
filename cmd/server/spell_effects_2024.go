@@ -114,26 +114,6 @@ var commandTextYou = map[string]string{
 	"halt":     "don't move and take no action or Bonus Action",
 }
 
-func ensureSpellEffectsTable() {
-	if db == nil {
-		return
-	}
-	db.Exec(`CREATE TABLE IF NOT EXISTS spell_effects (
-		id SERIAL PRIMARY KEY,
-		lobby_id INTEGER NOT NULL,
-		target_id INTEGER NOT NULL,
-		caster_id INTEGER NOT NULL,
-		spell TEXT NOT NULL,
-		kind TEXT NOT NULL,
-		detail TEXT NOT NULL DEFAULT '',
-		rounds_left INTEGER NOT NULL DEFAULT 10,
-		save_ability TEXT NOT NULL DEFAULT '',
-		save_dc INTEGER NOT NULL DEFAULT 0,
-		created_at TIMESTAMPTZ NOT NULL DEFAULT now()
-	)`)
-	db.Exec(`CREATE INDEX IF NOT EXISTS spell_effects_target ON spell_effects (lobby_id, target_id)`)
-}
-
 // addSpellEffect puts an effect on a creature. The same spell from the same caster replaces its earlier effect on that creature.
 func addSpellEffect(lobbyID, targetID, casterID int, spell, kind, detail string, rounds int, saveAbility string, saveDC int) {
 	rounds = extendRounds(casterID, rounds) // Extended Spell (F194)

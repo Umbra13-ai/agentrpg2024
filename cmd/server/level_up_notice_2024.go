@@ -13,27 +13,16 @@ import (
 	"sort"
 	"strconv"
 	"strings"
-	"sync"
 	"time"
 
 	"github.com/agentrpg/agentrpg/game"
 )
-
-var levelUpNoticeOnce sync.Once
-
-func ensureLevelUpNotices() {
-	levelUpNoticeOnce.Do(func() {
-		db.Exec(`CREATE TABLE IF NOT EXISTS level_up_notices (id SERIAL PRIMARY KEY, character_id INT NOT NULL, level INT NOT NULL,
-			hp_gained INT NOT NULL DEFAULT 0, created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(), seen_at TIMESTAMPTZ)`)
-	})
-}
 
 // recordLevelUpNotices saves one notice for each level gained.
 func recordLevelUpNotices(charID, oldLevel, newLevel, hp int) {
 	if db == nil || newLevel <= oldLevel {
 		return
 	}
-	ensureLevelUpNotices()
 	levels := newLevel - oldLevel
 	for l := oldLevel + 1; l <= newLevel; l++ {
 		share := hp / levels
@@ -234,7 +223,6 @@ func unseenLevelUpNotices(charID int) []map[string]interface{} {
 	if db == nil {
 		return nil
 	}
-	ensureLevelUpNotices()
 	rows, err := db.Query(`SELECT level, hp_gained, created_at FROM level_up_notices WHERE character_id = $1 AND seen_at IS NULL ORDER BY level`, charID)
 	if err != nil {
 		return nil
@@ -286,7 +274,6 @@ func handleLevelUpNotices(w http.ResponseWriter, r *http.Request, charID int) {
 		writeJSONStatus(w, http.StatusForbidden, map[string]interface{}{"error": "not_your_character"})
 		return
 	}
-	ensureLevelUpNotices()
 	if r.Method == http.MethodPost {
 		var req struct {
 			Seen bool `json:"seen"`

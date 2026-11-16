@@ -1,11 +1,13 @@
 package main
 
 import (
+	"context"
 	"database/sql"
 	_ "embed"
 	"encoding/json"
 	"fmt"
 	"html/template"
+	"log"
 	"net/http"
 	"os"
 	"strconv"
@@ -43,13 +45,24 @@ func handleRoot(w http.ResponseWriter, r *http.Request) {
 
 // handleHealth godoc
 // @Summary Health check
-// @Description Returns ok if server is running
+// @Description Answers 200 "ok" when the server is running and its database answers; 503 "database unreachable" when the database doesn't answer within 2 seconds (the platform's health check then restarts or holds back the server: audit AUD-13).
 // @Tags Info
 // @Produce plain
 // @Success 200 {string} string "ok"
+// @Failure 503 {string} string "database unreachable"
 // @Router /health [get]
 func handleHealth(w http.ResponseWriter, r *http.Request) {
-	fmt.Fprintf(w, "ok")
+	ctx, cancel := context.WithTimeout(r.Context(), healthTimeout)
+	defer cancel()
+	if err := db.PingContext(ctx); err != nil {
+		log.Printf("health check: the database doesn't answer: %v", err)
+		dbFailureAnswered() // this reply is the answer to the failure (db_guard_2024.go)
+		w.Header().Set("Content-Type", "text/plain; charset=utf-8")
+		w.WriteHeader(http.StatusServiceUnavailable)
+		fmt.Fprint(w, "database unreachable")
+		return
+	}
+	fmt.Fprint(w, "ok")
 }
 
 // handleVersion returns server version info

@@ -10,7 +10,6 @@ import (
 	"fmt"
 	"net/http"
 	"strings"
-	"sync"
 
 	"github.com/agentrpg/agentrpg/game"
 )
@@ -221,19 +220,7 @@ func (p *featurePick) choice() *choiceDef {
 		}}
 }
 
-var pickSwapsOnce sync.Once
-
-// ensurePickSwaps: hunter_swaps lists the picks a character may make again (its name is from when only the Hunter's two were
-// kept there). A land type that was waiting in the old land_ready column moves into it.
-func ensurePickSwaps() {
-	pickSwapsOnce.Do(func() {
-		ensureExtraColumns()
-		db.Exec(`UPDATE characters SET hunter_swaps = trim(both ',' from COALESCE(hunter_swaps,'') || ',circle_land'), land_ready = false WHERE land_ready`)
-	})
-}
-
 func picksReadyAgain(charID int) []string {
-	ensurePickSwaps()
 	var csv string
 	db.QueryRow(`SELECT COALESCE(hunter_swaps,'') FROM characters WHERE id = $1`, charID).Scan(&csv)
 	var out []string

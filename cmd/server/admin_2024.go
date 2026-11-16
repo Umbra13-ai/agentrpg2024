@@ -31,44 +31,19 @@ import (
 	"time"
 )
 
-var adminSchemaOnce sync.Once
-
-func ensureAdminSchema() {
-	adminSchemaOnce.Do(func() {
-		if db == nil {
-			return
-		}
-		db.Exec(`ALTER TABLE characters ADD COLUMN IF NOT EXISTS deleted_at TIMESTAMP`)
-		db.Exec(`ALTER TABLE characters ADD COLUMN IF NOT EXISTS deleted_owner INTEGER`)
-		db.Exec(`ALTER TABLE characters ADD COLUMN IF NOT EXISTS deleted_name TEXT`)
-		db.Exec(`ALTER TABLE characters ADD COLUMN IF NOT EXISTS deleted_lobby INTEGER`)
-		db.Exec(`ALTER TABLE characters ADD COLUMN IF NOT EXISTS deleted_by TEXT`)
-		db.Exec(`ALTER TABLE lobbies ADD COLUMN IF NOT EXISTS deleted_at TIMESTAMP`)
-		db.Exec(`ALTER TABLE lobbies ADD COLUMN IF NOT EXISTS deleted_dm INTEGER`)
-		db.Exec(`ALTER TABLE lobbies ADD COLUMN IF NOT EXISTS deleted_status TEXT`)
-		db.Exec(`ALTER TABLE lobbies ADD COLUMN IF NOT EXISTS deleted_members JSONB`)
-		db.Exec(`CREATE TABLE IF NOT EXISTS admin_changes (
-			id SERIAL PRIMARY KEY,
-			at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-			kind TEXT NOT NULL,
-			row_id INTEGER NOT NULL,
-			field TEXT NOT NULL,
-			old_value TEXT,
-			new_value TEXT,
-			by_whom TEXT NOT NULL,
-			note TEXT DEFAULT ''
-		)`)
-	})
+func logAdminChange(kind string, id int, field, oldV, newV, by, note string) {
+	logAdminChangeIn(db, kind, id, field, oldV, newV, by, note)
 }
 
-func logAdminChange(kind string, id int, field, oldV, newV, by, note string) {
-	db.Exec(`INSERT INTO admin_changes (kind, row_id, field, old_value, new_value, by_whom, note) VALUES ($1,$2,$3,$4,$5,$6,$7)`,
+// logAdminChangeIn writes one admin_changes row through db or the caller's transaction.
+func logAdminChangeIn(ex execer, kind string, id int, field, oldV, newV, by, note string) error {
+	_, err := ex.Exec(`INSERT INTO admin_changes (kind, row_id, field, old_value, new_value, by_whom, note) VALUES ($1,$2,$3,$4,$5,$6,$7)`,
 		kind, id, field, oldV, newV, by, note)
+	return err
 }
 
 // characterIsDeleted: the character exists and was deleted.
 func characterIsDeleted(charID int) bool {
-	ensureAdminSchema()
 	var deleted bool
 	db.QueryRow(`SELECT deleted_at IS NOT NULL FROM characters WHERE id = $1`, charID).Scan(&deleted)
 	return deleted
@@ -76,7 +51,6 @@ func characterIsDeleted(charID int) bool {
 
 // campaignIsDeleted: the campaign exists and was deleted.
 func campaignIsDeleted(id int) bool {
-	ensureAdminSchema()
 	var deleted bool
 	db.QueryRow(`SELECT deleted_at IS NOT NULL FROM lobbies WHERE id = $1`, id).Scan(&deleted)
 	return deleted
@@ -84,33 +58,51 @@ func campaignIsDeleted(id int) bool {
 
 // softDeleteCharacter hides a character: no owner, no campaign, a placeholder name.
 func softDeleteCharacter(charID int, by string) error {
-	ensureAdminSchema()
-	var owner, lobby sql.NullInt64
-	var name string
-	var deleted bool
-	if err := db.QueryRow(`SELECT agent_id, lobby_id, name, deleted_at IS NOT NULL FROM characters WHERE id = $1`, charID).
-		Scan(&owner, &lobby, &name, &deleted); err != nil {
-		return fmt.Errorf("character %d not found", charID)
-	}
-	if deleted {
-		return fmt.Errorf("%s is already deleted", name)
-	}
-	placeholder := fmt.Sprintf("deleted character %d", charID)
-	if _, err := db.Exec(`UPDATE characters SET deleted_at = NOW(), deleted_owner = $1, deleted_name = $2, deleted_lobby = $3, deleted_by = $4,
-		agent_id = NULL, lobby_id = NULL, name = $5 WHERE id = $6`, owner, name, lobby, by, placeholder, charID); err != nil {
-		return fmt.Errorf("could not delete: %v", publicError(err))
+	var lobby sql.NullInt64
+	err := inTx(func(tx *sql.Tx) error {
+		var e error
+		lobby, e = softDeleteCharacterIn(tx, charID, by)
+		return e
+	})
+	if err != nil {
+		return err
 	}
 	if lobby.Valid {
 		reconcileCampaignStatus(int(lobby.Int64))
 	}
-	logAdminChange("character", charID, "deleted", name, "deleted", by, "")
 	return nil
+}
+
+// softDeleteCharacterIn deletes a character inside the caller's transaction (the row locked, the change and its admin_changes
+// row together) and returns the campaign it was in. A refusal is an error a player reads; a database failure is a dbFailure.
+func softDeleteCharacterIn(tx *sql.Tx, charID int, by string) (sql.NullInt64, error) {
+	var owner, lobby sql.NullInt64
+	var name string
+	var deleted bool
+	if err := tx.QueryRow(`SELECT agent_id, lobby_id, name, deleted_at IS NOT NULL FROM characters WHERE id = $1 FOR UPDATE`, charID).
+		Scan(&owner, &lobby, &name, &deleted); err != nil {
+		if dbFailed(err) {
+			return lobby, dbFailureError(err, "the deletion")
+		}
+		return lobby, fmt.Errorf("character %d not found", charID)
+	}
+	if deleted {
+		return lobby, fmt.Errorf("%s is already deleted", name)
+	}
+	placeholder := fmt.Sprintf("deleted character %d", charID)
+	if _, err := tx.Exec(`UPDATE characters SET deleted_at = NOW(), deleted_owner = $1, deleted_name = $2, deleted_lobby = $3, deleted_by = $4,
+		agent_id = NULL, lobby_id = NULL, name = $5 WHERE id = $6`, owner, name, lobby, by, placeholder, charID); err != nil {
+		return lobby, dbFailureError(err, "the deletion")
+	}
+	if err := logAdminChangeIn(tx, "character", charID, "deleted", name, "deleted", by, ""); err != nil {
+		return lobby, dbFailureError(err, "the deletion")
+	}
+	return lobby, nil
 }
 
 // restoreCharacter gives a deleted character back its owner and name (and campaign, when that campaign still exists and isn't
 // deleted). It returns what happened.
 func restoreCharacter(charID int, by string) (string, error) {
-	ensureAdminSchema()
 	var owner, lobby sql.NullInt64
 	var name sql.NullString
 	var deleted bool
@@ -123,6 +115,16 @@ func restoreCharacter(charID int, by string) (string, error) {
 	}
 	newName := name.String
 	note := ""
+	if owner.Valid {
+		var exists bool
+		if err := db.QueryRow(`SELECT EXISTS (SELECT 1 FROM agents WHERE id = $1)`, owner.Int64).Scan(&exists); err != nil {
+			return "", dbFailureError(err, "the restore")
+		}
+		if !exists { // a moderator deleted the account (auth_and_logging.go): the character comes back without an owner
+			owner = sql.NullInt64{}
+			note += " Its account was deleted, so it has no owner: set one with the editor."
+		}
+	}
 	var n int
 	db.QueryRow(`SELECT COUNT(*) FROM characters WHERE LOWER(name) = LOWER($1) AND id <> $2`, newName, charID).Scan(&n)
 	if n > 0 || newName == "" {
@@ -141,25 +143,25 @@ func restoreCharacter(charID int, by string) (string, error) {
 	}
 	tx, err := db.Begin()
 	if err != nil {
-		return "", fmt.Errorf("could not restore: %v", publicError(err))
+		return "", dbFailureError(err, "the restore")
 	}
 	defer tx.Rollback()
 	if _, err := tx.Exec(`UPDATE characters SET agent_id = $1, lobby_id = NULL, name = $2, deleted_at = NULL, deleted_owner = NULL,
 		deleted_name = NULL, deleted_lobby = NULL, deleted_by = NULL WHERE id = $3`, owner, newName, charID); err != nil {
-		return "", fmt.Errorf("could not restore: %v", publicError(err))
+		return "", dbFailureError(err, "the restore")
 	}
 	if backTo != 0 { // back into its campaign through its one way in: a free seat (schedule_2024.go)
 		var ref *seatRefusal
 		if _, err := claimSeat(tx, seatClaim{Lobby: backTo, Character: charID}); errors.As(err, &ref) {
 			note += fmt.Sprintf(" It couldn't go back into campaign %d (%s), so it is in no campaign.", backTo, ref.Message)
 		} else if err != nil {
-			return "", fmt.Errorf("could not restore: %v", publicError(err))
+			return "", dbFailureError(err, "the restore")
 		} else {
 			note += fmt.Sprintf(" It is back in campaign %d.", backTo)
 		}
 	}
 	if err := tx.Commit(); err != nil {
-		return "", fmt.Errorf("could not restore: %v", publicError(err))
+		return "", dbFailureError(err, "the restore")
 	}
 	if backTo != 0 {
 		reconcileCampaignStatus(backTo)
@@ -168,40 +170,49 @@ func restoreCharacter(charID int, by string) (string, error) {
 	return "Restored " + newName + "." + note, nil
 }
 
-// softDeleteCampaign hides a campaign and lets its characters go.
+// softDeleteCampaign hides a campaign and lets its characters go, in one transaction (the campaign row locked): either all of
+// it happens or none of it.
 func softDeleteCampaign(id int, by string) error {
-	ensureAdminSchema()
-	var dm sql.NullInt64
-	var status, name string
-	if err := db.QueryRow(`SELECT dm_id, COALESCE(status,''), name FROM lobbies WHERE id = $1`, id).Scan(&dm, &status, &name); err != nil {
-		return fmt.Errorf("campaign %d not found", id)
-	}
-	if status == "deleted" {
-		return fmt.Errorf("%s is already deleted", name)
-	}
-	var members []int
-	rows, err := db.Query(`SELECT id FROM characters WHERE lobby_id = $1`, id)
-	if err == nil {
+	return inTx(func(tx *sql.Tx) error {
+		var dm sql.NullInt64
+		var status, name string
+		if err := tx.QueryRow(`SELECT dm_id, COALESCE(status,''), name FROM lobbies WHERE id = $1 FOR UPDATE`, id).Scan(&dm, &status, &name); err != nil {
+			if dbFailed(err) {
+				return dbFailureError(err, "the deletion")
+			}
+			return fmt.Errorf("campaign %d not found", id)
+		}
+		if status == "deleted" {
+			return fmt.Errorf("%s is already deleted", name)
+		}
+		members := []int{}
+		rows, err := tx.Query(`SELECT id FROM characters WHERE lobby_id = $1 ORDER BY id`, id)
+		if err != nil {
+			return dbFailureError(err, "the deletion")
+		}
 		for rows.Next() {
 			var c int
-			rows.Scan(&c)
+			if err := rows.Scan(&c); err != nil {
+				rows.Close()
+				return dbFailureError(err, "the deletion")
+			}
 			members = append(members, c)
 		}
 		rows.Close()
-	}
-	mj, _ := json.Marshal(members)
-	if _, err := db.Exec(`UPDATE lobbies SET deleted_at = NOW(), deleted_dm = $1, deleted_status = $2, deleted_members = $3, dm_id = NULL,
-		status = 'deleted' WHERE id = $4`, dm, status, string(mj), id); err != nil {
-		return fmt.Errorf("could not delete: %v", publicError(err))
-	}
-	db.Exec(`UPDATE characters SET lobby_id = NULL WHERE lobby_id = $1`, id)
-	logAdminChange("campaign", id, "deleted", name, fmt.Sprintf("deleted (characters let go: %v)", members), by, "")
-	return nil
+		mj, _ := json.Marshal(members)
+		if _, err := tx.Exec(`UPDATE lobbies SET deleted_at = NOW(), deleted_dm = $1, deleted_status = $2, deleted_members = $3, dm_id = NULL,
+			status = 'deleted' WHERE id = $4`, dm, status, string(mj), id); err != nil {
+			return dbFailureError(err, "the deletion")
+		}
+		if _, err := tx.Exec(`UPDATE characters SET lobby_id = NULL WHERE lobby_id = $1`, id); err != nil {
+			return dbFailureError(err, "the deletion")
+		}
+		return dbFailureError(logAdminChangeIn(tx, "campaign", id, "deleted", name, fmt.Sprintf("deleted (characters let go: %v)", members), by, ""), "the deletion")
+	})
 }
 
 // restoreCampaign gives a deleted campaign back its GM and status, and brings back its characters that are free and not deleted.
 func restoreCampaign(id int, by string) (string, error) {
-	ensureAdminSchema()
 	var dm sql.NullInt64
 	var prev sql.NullString
 	var membersRaw []byte
@@ -220,7 +231,7 @@ func restoreCampaign(id int, by string) (string, error) {
 	}
 	if _, err := db.Exec(`UPDATE lobbies SET dm_id = $1, status = $2, deleted_at = NULL, deleted_dm = NULL, deleted_status = NULL,
 		deleted_members = NULL WHERE id = $3`, dm, status, id); err != nil {
-		return "", fmt.Errorf("could not restore: %v", publicError(err))
+		return "", dbFailureError(err, "the restore")
 	}
 	var members []int
 	json.Unmarshal(membersRaw, &members)
@@ -259,7 +270,6 @@ func handleCharacterDelete(w http.ResponseWriter, r *http.Request, charID int) {
 		writeAuthError(w, err)
 		return
 	}
-	ensureAdminSchema()
 	var owner sql.NullInt64
 	var name, status string
 	if err := db.QueryRow(`SELECT c.agent_id, c.name, COALESCE(l.status,'') FROM characters c LEFT JOIN lobbies l ON l.id = c.lobby_id WHERE c.id = $1 AND c.deleted_at IS NULL`, charID).
@@ -290,7 +300,9 @@ func handleCharacterDelete(w http.ResponseWriter, r *http.Request, charID int) {
 			"message": fmt.Sprintf("To delete %s, send {\"confirm\": %q}. The character is hidden, not erased: the server's admin can restore it if you change your mind.", name, name)})
 		return
 	}
-	if err := softDeleteCharacter(charID, fmt.Sprintf("player %d", agentID)); err != nil {
+	if err := softDeleteCharacter(charID, fmt.Sprintf("player %d", agentID)); answerHelperDBFailure(w, err) {
+		return
+	} else if err != nil {
 		writeJSONStatus(w, http.StatusInternalServerError, map[string]interface{}{"error": "delete_failed", "message": err.Error()})
 		return
 	}
@@ -328,7 +340,6 @@ func requireAdmin(w http.ResponseWriter, r *http.Request) bool {
 		return false
 	}
 	if adminKeyOK(r) || adminCookieOK(r) {
-		ensureAdminSchema()
 		return true
 	}
 	if r.Header.Get("X-Admin-Key") != "" {
@@ -523,7 +534,7 @@ func adminSet(table, kind string, id int, set map[string]interface{}, note strin
 				return nil, fmt.Errorf("lobby_id: %q isn't a campaign id", text)
 			}
 			if _, err := claimSeat(tx, seatClaim{Lobby: lobby, Character: id}); err != nil {
-				return nil, fmt.Errorf("lobby_id: %s", publicError(err))
+				return nil, fmt.Errorf("lobby_id: %w", dbFailureError(err, "the seat"))
 			}
 		} else if kind == "campaign" && k == "max_players" {
 			if err := adminCapacityProblem(tx, id, text); err != nil {
@@ -610,7 +621,7 @@ func handleAdminCharacters(w http.ResponseWriter, r *http.Request) {
 			WHERE `+cond+` AND (LOWER(c.name) LIKE $1 OR LOWER(COALESCE(c.deleted_name,'')) LIKE $1 OR LOWER(COALESCE(a.name, da.name, '')) LIKE $1 OR c.id::text = TRIM(BOTH '%' FROM $1))
 			ORDER BY c.id DESC LIMIT 200`, q)
 		if err != nil {
-			writeJSONStatus(w, http.StatusInternalServerError, map[string]interface{}{"error": publicError(err)})
+			writeDBError(w, err, "the characters")
 			return
 		}
 		defer rows.Close()
@@ -658,7 +669,7 @@ func handleAdminCampaigns(w http.ResponseWriter, r *http.Request) {
 			WHERE `+cond+` AND (LOWER(l.name) LIKE $1 OR LOWER(COALESCE(a.name, da.name, '')) LIKE $1 OR l.id::text = TRIM(BOTH '%' FROM $1))
 			ORDER BY l.id DESC LIMIT 200`, q)
 		if err != nil {
-			writeJSONStatus(w, http.StatusInternalServerError, map[string]interface{}{"error": publicError(err)})
+			writeDBError(w, err, "the campaigns")
 			return
 		}
 		defer rows.Close()
@@ -743,6 +754,9 @@ func adminRowRoutes(w http.ResponseWriter, r *http.Request, table, kind string, 
 		} else {
 			err = softDeleteCampaign(id, "admin")
 		}
+		if answerHelperDBFailure(w, err) {
+			return
+		}
 		if err != nil {
 			writeJSONStatus(w, http.StatusBadRequest, map[string]interface{}{"error": "not_deleted", "message": err.Error()})
 			return
@@ -755,6 +769,9 @@ func adminRowRoutes(w http.ResponseWriter, r *http.Request, table, kind string, 
 			msg, err = restoreCharacter(id, "admin")
 		} else {
 			msg, err = restoreCampaign(id, "admin")
+		}
+		if answerHelperDBFailure(w, err) {
+			return
 		}
 		if err != nil {
 			writeJSONStatus(w, http.StatusBadRequest, map[string]interface{}{"error": "not_restored", "message": err.Error()})
@@ -799,7 +816,7 @@ func adminCampaignMembership(id int, body map[string]interface{}, note string) (
 			return "", true, fmt.Errorf("%s is already in this campaign", name)
 		}
 		if _, err := enterCampaign(seatClaim{Lobby: id, Character: cid}); err != nil { // a free seat, the capacity checked (schedule_2024.go)
-			return "", true, fmt.Errorf("%s can't join campaign %d: %s", name, id, publicError(err))
+			return "", true, fmt.Errorf("%s can't join campaign %d: %w", name, id, dbFailureError(err, "the seat"))
 		}
 		logAdminChange("character", cid, "lobby_id", fmt.Sprint(cur.Int64), strconv.Itoa(id), "admin", note)
 		reconcileCampaignStatus(id)
@@ -840,7 +857,7 @@ func handleAdminChanges(w http.ResponseWriter, r *http.Request) {
 			ELSE (SELECT name FROM lobbies WHERE id = x.row_id) END, '')
 		FROM admin_changes x WHERE ($1 = '' OR x.kind = $1) AND ($2 = 0 OR x.row_id = $2) ORDER BY x.id DESC LIMIT $3`, kind, id, limit)
 	if err != nil {
-		writeJSONStatus(w, http.StatusInternalServerError, map[string]interface{}{"error": publicError(err)})
+		writeDBError(w, err, "the change log")
 		return
 	}
 	defer rows.Close()
@@ -918,7 +935,7 @@ func handleAdminAccounts(w http.ResponseWriter, r *http.Request) {
 	rows, err := db.Query(`SELECT id, name, (SELECT COUNT(*) FROM characters WHERE agent_id = agents.id) FROM agents
 		WHERE LOWER(name) LIKE '%' || LOWER($1) || '%' OR id::text = $1 ORDER BY (LOWER(name) = LOWER($1)) DESC, id DESC LIMIT 20`, q)
 	if err != nil {
-		writeJSONStatus(w, http.StatusInternalServerError, map[string]interface{}{"error": publicError(err)})
+		writeDBError(w, err, "the accounts")
 		return
 	}
 	defer rows.Close()

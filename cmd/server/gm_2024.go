@@ -403,7 +403,6 @@ func handleGMSuffocation2024(w http.ResponseWriter, r *http.Request) {
 	if !ok {
 		return
 	}
-	db.Exec(`ALTER TABLE characters ADD COLUMN IF NOT EXISTS suffocation_levels INTEGER DEFAULT 0`)
 	var name string
 	var con, gained int
 	if err := db.QueryRow(`SELECT name, con, COALESCE(suffocation_levels,0) FROM characters WHERE id = $1`, req.CharacterID).Scan(&name, &con, &gained); err != nil {

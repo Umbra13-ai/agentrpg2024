@@ -1,18 +1,20 @@
 name: Tests
 
+# Every push to the branches in use and every pull request to them (audit AUD-47: the workflow ran only on main, which isn't
+# developed or deployed). The Postgres service is a throwaway database for cmd/server/postgres_integration_test.go.
 on:
   push:
-    branches: [main]
+    branches: [agentrpg2024, staging, 'claude/**']
   pull_request:
-    branches: [main]
+    branches: [agentrpg2024, staging]
 
 jobs:
   test:
     runs-on: ubuntu-latest
-    
+
     services:
       postgres:
-        image: postgres:15
+        image: postgres:16
         env:
           POSTGRES_USER: postgres
           POSTGRES_PASSWORD: postgres
@@ -27,49 +29,51 @@ jobs:
 
     steps:
       - uses: actions/checkout@v4
-      
-      - name: Set up Go
-        uses: actions/setup-go@v5
         with:
-          go-version: '1.26'
-          cache: true
-          
-      - name: Wait for Postgres
-        run: |
-          until pg_isready -h localhost -p 5432; do
-            echo "Waiting for postgres..."
-            sleep 2
-          done
-          
-      - name: Run tests
-        env:
-          TEST_DATABASE_URL: postgres://postgres:postgres@localhost:5432/agentrpg_test?sslmode=disable
-        run: go test ./cmd/server/... -v -cover -coverprofile=coverage.out
-        
-      - name: Upload coverage
-        uses: codecov/codecov-action@v3
-        with:
-          files: ./coverage.out
-          fail_ci_if_error: false
+          fetch-depth: 0 # the gofmt step compares with the commit before the push
 
-  build:
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v4
-      
       - name: Set up Go
         uses: actions/setup-go@v5
         with:
-          go-version: '1.26'
+          go-version-file: go.mod
           cache: true
-          
+
       - name: Build
-        run: go build -v ./cmd/server/...
-        
-      - name: Check formatting
+        run: go build ./...
+
+      - name: Vet
+        run: go vet ./cmd/server ./game
+
+      # Only the Go files this push or pull request changed: many files were unformatted before this check existed, and each
+      # is formatted when it is next changed (CLAUDE.md, "Before pushing").
+      - name: gofmt (changed files)
+        env:
+          EVENT: ${{ github.event_name }}
+          BEFORE: ${{ github.event.before }}
+          BASE_REF: ${{ github.base_ref }}
         run: |
-          if [ "$(gofmt -s -l . | wc -l)" -gt 0 ]; then
-            echo "Files need formatting:"
-            gofmt -s -l .
+          if [ "$EVENT" = "pull_request" ]; then
+            base="$(git merge-base HEAD "origin/$BASE_REF")"
+          elif [ -n "$BEFORE" ] && git cat-file -e "$BEFORE^{commit}" 2>/dev/null; then
+            base="$BEFORE"
+          else
+            # a new branch: compare with where it left agentrpg2024
+            base="$(git merge-base HEAD origin/agentrpg2024 2>/dev/null || git rev-parse HEAD~1)"
+          fi
+          files="$(git diff --name-only --diff-filter=ACMR "$base" HEAD -- '*.go')"
+          if [ -z "$files" ]; then
+            echo "No Go files changed."
+            exit 0
+          fi
+          bad="$(gofmt -l $files)"
+          if [ -n "$bad" ]; then
+            echo "These changed files need gofmt -w:"
+            echo "$bad"
             exit 1
           fi
+
+      - name: Test (race detector, with Postgres)
+        env:
+          TEST_DATABASE_URL: postgres://postgres:postgres@localhost:5432/agentrpg_test?sslmode=disable
+          REQUIRE_TEST_DATABASE: "1"
+        run: go test -race -count=1 ./...

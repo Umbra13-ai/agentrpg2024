@@ -292,7 +292,7 @@ func handleUniverseMonsters(w http.ResponseWriter, r *http.Request) {
 	w.Header().Set("Content-Type", "application/json")
 	rows, err := db.Query("SELECT slug FROM monsters WHERE " + rulesetFilter(r) + " ORDER BY slug")
 	if err != nil {
-		writeJSONStatus(w, http.StatusInternalServerError, map[string]interface{}{"error": publicError(err)})
+		writeDBError(w, err, "the monsters")
 		return
 	}
 	defer rows.Close()
@@ -324,7 +324,7 @@ func handleUniverseSpells(w http.ResponseWriter, r *http.Request) {
 	where, args := spellFilterSQL(class, level, 1)
 	rows, err := db.Query("SELECT s.slug FROM spells s WHERE 1=1"+where+" ORDER BY s.slug", args...)
 	if err != nil {
-		writeJSONStatus(w, http.StatusInternalServerError, map[string]interface{}{"error": publicError(err)})
+		writeDBError(w, err, "the spells")
 		return
 	}
 	defer rows.Close()
@@ -348,7 +348,7 @@ func handleUniverseClasses(w http.ResponseWriter, r *http.Request) {
 	w.Header().Set("Content-Type", "application/json")
 	rows, err := db.Query("SELECT slug FROM classes ORDER BY slug")
 	if err != nil {
-		writeJSONStatus(w, http.StatusInternalServerError, map[string]interface{}{"error": publicError(err)})
+		writeDBError(w, err, "the classes")
 		return
 	}
 	defer rows.Close()
@@ -413,7 +413,7 @@ func handleUniverseClassSpells(w http.ResponseWriter, r *http.Request) {
 		ORDER BY class_slug
 	`)
 	if err != nil {
-		writeJSONStatus(w, http.StatusInternalServerError, map[string]interface{}{"error": publicError(err)})
+		writeDBError(w, err, "the class spell lists")
 		return
 	}
 	defer rows.Close()
@@ -454,7 +454,7 @@ func handleUniverseClassSpellList(w http.ResponseWriter, r *http.Request) {
 	where, args := spellFilterSQL(class, level, 1)
 	rows, err := db.Query("SELECT s.slug, s.name, s.level, s.school FROM spells s WHERE 1=1"+where+" ORDER BY s.level, s.name", args...)
 	if err != nil {
-		writeJSONStatus(w, http.StatusInternalServerError, map[string]interface{}{"error": publicError(err)})
+		writeDBError(w, err, "the spells")
 		return
 	}
 	defer rows.Close()
@@ -870,7 +870,7 @@ func handleUniverseMonsterSearch(w http.ResponseWriter, r *http.Request) {
 
 	rows, err := db.Query(query, args...)
 	if err != nil {
-		writeJSONStatus(w, http.StatusInternalServerError, map[string]interface{}{"error": publicError(err)})
+		writeDBError(w, err, "the monsters")
 		return
 	}
 	defer rows.Close()
@@ -946,7 +946,7 @@ func handleUniverseSpellSearch(w http.ResponseWriter, r *http.Request) {
 
 	rows, err := db.Query(query, args...)
 	if err != nil {
-		writeJSONStatus(w, http.StatusInternalServerError, map[string]interface{}{"error": publicError(err)})
+		writeDBError(w, err, "the spells")
 		return
 	}
 	defer rows.Close()
@@ -1006,7 +1006,7 @@ func handleUniverseWeaponSearch(w http.ResponseWriter, r *http.Request) {
 
 	rows, err := db.Query(query, args...)
 	if err != nil {
-		writeJSONStatus(w, http.StatusInternalServerError, map[string]interface{}{"error": publicError(err)})
+		writeDBError(w, err, "the weapons")
 		return
 	}
 	defer rows.Close()

@@ -316,15 +316,6 @@ func variantRarity(base, variant string) string {
 
 // ---------------------------------------------------------------- the campaign's shops
 
-var campaignShopsOnce sync.Once
-
-func ensureCampaignShops() {
-	campaignShopsOnce.Do(func() {
-		db.Exec(`CREATE TABLE IF NOT EXISTS campaign_shops (id SERIAL PRIMARY KEY, lobby_id INT NOT NULL, shop_type TEXT NOT NULL, name TEXT NOT NULL,
-			options JSONB NOT NULL DEFAULT '{}', opened_at TIMESTAMPTZ NOT NULL DEFAULT NOW(), closed_at TIMESTAMPTZ)`)
-	})
-}
-
 type campaignShop struct {
 	ID, Lobby  int
 	Type, Name string
@@ -340,7 +331,6 @@ type shopOptions struct {
 }
 
 func loadShop(lobby, id int) (*campaignShop, bool) {
-	ensureCampaignShops()
 	var s campaignShop
 	var raw []byte
 	err := db.QueryRow(`SELECT id, lobby_id, shop_type, name, options FROM campaign_shops WHERE id = $1 AND lobby_id = $2 AND closed_at IS NULL`, id, lobby).
@@ -353,7 +343,6 @@ func loadShop(lobby, id int) (*campaignShop, bool) {
 }
 
 func openShops(lobby int) []campaignShop {
-	ensureCampaignShops()
 	rows, err := db.Query(`SELECT id, lobby_id, shop_type, name, options FROM campaign_shops WHERE lobby_id = $1 AND closed_at IS NULL ORDER BY id`, lobby)
 	if err != nil {
 		return nil
@@ -553,7 +542,6 @@ func handleGMShops(w http.ResponseWriter, r *http.Request) {
 		writeAuthError(w, err)
 		return
 	}
-	ensureCampaignShops()
 	var types []map[string]interface{}
 	for _, t := range shopTypes {
 		types = append(types, map[string]interface{}{"shop": t.Key, "name": t.Name, "sells": t.Sells})
@@ -656,7 +644,6 @@ func handleCampaignShops(w http.ResponseWriter, r *http.Request, campaignID int,
 		writeAuthError(w, err)
 		return
 	}
-	ensureCampaignShops()
 	if len(parts) == 0 || parts[0] == "" {
 		var list []map[string]interface{}
 		for _, s := range openShops(campaignID) {

@@ -18,7 +18,6 @@ func attuneCurse(charID int, item string) string {
 	if !strings.HasPrefix(strings.ToLower(strings.TrimSpace(item)), "shield of missile attraction") {
 		return ""
 	}
-	ensureMoreTables()
 	lobby := lobbyOfChar(charID)
 	var n int
 	db.QueryRow(`SELECT COUNT(*) FROM curses WHERE lobby_id = $1 AND target_id = $2 AND source = $3`, lobby, charID, missileAttractionSource).Scan(&n)
@@ -48,7 +47,6 @@ func missileShieldResists(charID int) bool {
 // missileAttractionRedirect: a cursed character within 10 feet of the target (other than the target) becomes the target of a Ranged
 // weapon attack. It returns that character and a note, or 0.
 func missileAttractionRedirect(lobbyID, targetID int) (int, string) {
-	ensureMoreTables()
 	rows, err := db.Query(`SELECT DISTINCT cu.target_id FROM curses cu JOIN characters c ON c.id = cu.target_id
 		WHERE cu.lobby_id = $1 AND cu.source = $2 AND cu.target_id > 0 AND cu.target_id <> $3 AND c.hp > 0 AND NOT COALESCE(c.is_dead,false)
 		ORDER BY cu.target_id`, lobbyID, missileAttractionSource, targetID)

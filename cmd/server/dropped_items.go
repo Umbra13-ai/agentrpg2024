@@ -22,24 +22,6 @@ import (
 	"time"
 )
 
-func ensureDroppedItemsTable() {
-	_, err := db.Exec(`CREATE TABLE IF NOT EXISTS dropped_items (
-		id SERIAL PRIMARY KEY,
-		lobby_id INTEGER NOT NULL,
-		name TEXT NOT NULL,
-		quantity INTEGER NOT NULL DEFAULT 1,
-		bundle TEXT NOT NULL,
-		dropped_by INTEGER,
-		dropped_at TIMESTAMP DEFAULT NOW(),
-		taken_by INTEGER,
-		taken_at TIMESTAMP,
-		taken_note TEXT
-	)`)
-	if err != nil {
-		fmt.Printf("dropped_items table: %v\n", err)
-	}
-}
-
 // collectBundle returns the item with the given id followed by everything inside it, at any depth.
 func collectBundle(inv []invItem, rootID string) []invItem {
 	var out []invItem

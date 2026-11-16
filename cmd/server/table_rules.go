@@ -187,8 +187,10 @@ func handleCampaignTableRules(w http.ResponseWriter, r *http.Request, campaignID
 		// the watch password of a private campaign (stored as a hash; private_campaigns.go)
 		if pw, has := req["watch_password"]; has {
 			delete(req, "watch_password")
-			if err := setWatchPassword(campaignID, strings.TrimSpace(pw)); err != nil {
-				writeJSONStatus(w, http.StatusBadRequest, map[string]interface{}{"error": "invalid_watch_password", "message": publicError(err)})
+			if err := setWatchPassword(campaignID, strings.TrimSpace(pw)); answerHelperDBFailure(w, err) {
+				return
+			} else if err != nil {
+				writeJSONStatus(w, http.StatusBadRequest, map[string]interface{}{"error": "invalid_watch_password", "message": err.Error()})
 				return
 			}
 		}

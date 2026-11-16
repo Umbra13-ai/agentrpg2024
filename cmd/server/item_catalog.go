@@ -19,25 +19,6 @@ import (
 
 const catalogRuleset2024 = "2024"
 
-func ensureItemCatalogTable() {
-	_, err := db.Exec(`CREATE TABLE IF NOT EXISTS items (
-		id SERIAL PRIMARY KEY,
-		category VARCHAR(20) NOT NULL,
-		slug VARCHAR(100) NOT NULL,
-		name VARCHAR(120) NOT NULL,
-		ruleset VARCHAR(10) NOT NULL DEFAULT '2024',
-		source VARCHAR(60) NOT NULL DEFAULT 'SRD 5.2.1',
-		cost_gp DECIMAL(10,2),
-		cost_text VARCHAR(30),
-		weight_lb DECIMAL(7,2),
-		data JSONB DEFAULT '{}',
-		UNIQUE (category, slug, ruleset)
-	)`)
-	if err != nil {
-		log.Printf("items table: %v", err)
-	}
-}
-
 var slugJunk = regexp.MustCompile(`[^a-z0-9]+`)
 
 // itemSlug makes "Armor, +1, +2, or +3" into "armor-1-2-or-3" and "Thieves' Tools" into "thieves-tools".
@@ -87,22 +68,7 @@ func buildItemCatalog() []catalogRow {
 
 // seedItemCatalog rebuilds the 2024 rows of the items table.
 func seedItemCatalog() {
-	ensureItemCatalogTable()
-	ensureConditionRecordsTable()
 	migrateConditionLists() // condition_records is the one store of conditions (condition_owner_2024.go)
-	ensureBarbarianColumns()
-	ensureCombatEffectsTable()
-	ensureSpellEffectsTable()
-	ensureInvocationColumns()
-	ensureMasteryColumns()
-	ensureRogueColumns()
-	ensureMonkColumns()
-	ensureDruidColumns()
-	ensureFeatColumns()
-	ensureExtraColumns()
-	ensureCasterColumns()
-	ensureBardColumns()
-	ensureRageColumns()
 	if _, err := db.Exec(`DELETE FROM items WHERE ruleset = $1`, catalogRuleset2024); err != nil {
 		log.Printf("item catalog: %v", err)
 		return

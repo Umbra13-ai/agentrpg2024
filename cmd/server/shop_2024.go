@@ -18,17 +18,7 @@ import (
 	"regexp"
 	"sort"
 	"strings"
-	"sync"
 )
-
-var shopOnce sync.Once
-
-func ensureShopColumn() {
-	shopOnce.Do(func() {
-		db.Exec(`ALTER TABLE characters ADD COLUMN IF NOT EXISTS shop_done BOOLEAN DEFAULT false`)
-		db.Exec(`ALTER TABLE characters ADD COLUMN IF NOT EXISTS took_both_packages BOOLEAN`) // set at creation: both equipment packages taken
-	})
-}
 
 type shopItem struct {
 	row      catalogRow
@@ -218,7 +208,6 @@ func handleCharacterShop(w http.ResponseWriter, r *http.Request, charID int) {
 		writeAuthError(w, err)
 		return
 	}
-	ensureShopColumn()
 	var owner int
 	var weaponProfs, armorProfs, class string
 	if err := db.QueryRow(`SELECT COALESCE(agent_id,0), COALESCE(weapon_proficiencies,''), COALESCE(armor_proficiencies,''), COALESCE(class,'') FROM characters WHERE id = $1`, charID).
@@ -396,7 +385,7 @@ func completePurchase(charID, money, total int, kit []startItem, lines []string)
 	}
 	res, err := buildKit(kit, 0, "", "s", "shop", false)
 	if err != nil {
-		return http.StatusBadRequest, map[string]interface{}{"error": "cannot_add", "message": publicError(err)}
+		return http.StatusBadRequest, map[string]interface{}{"error": "cannot_add", "message": err.Error()}
 	}
 	// the money as it is now, with the character locked (one inventory change, inventory_2024.go): purchases sent together pay one
 	// after another
@@ -463,7 +452,6 @@ func craftMagicItem(name string) bool {
 
 // shopSetupStep: offered after creation while the character has money, the shop is open and the player hasn't said done.
 func shopSetupStep(charID int) *setupStep {
-	ensureShopColumn()
 	var done bool
 	db.QueryRow(`SELECT COALESCE(shop_done,false) FROM characters WHERE id = $1`, charID).Scan(&done)
 	money := walletCP(charID)

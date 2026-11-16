@@ -11,8 +11,10 @@ package main
 //   - withProtections runs each request through guardDB: the request's goroutine is watched, its reply is held until the handler
 //     returns, and if a database call failed during it, any reply below 500 (a success, or a 4xx such as "not found" or "no fight"
 //     that the server couldn't actually know) is replaced by 500 {"error": "database_error"}, saying that part of the request may
-//     have been saved. The failing statements are logged. A handler that catches a failure on purpose and answers it (a name
-//     already taken: 409) says so with handledDBError(err), and its reply stays.
+//     have been saved. So is a 5xx the handler wrote itself (it could carry the driver's text: registration once answered
+//     "dial tcp ...: connection refused", HANDOFF item 27); only a reply written by the owner (db_errors_2024.go: writeDBError,
+//     writeDBWriteError, writeDBErrorPage) stays, with its own words. The failing statements are logged. A handler that catches
+//     a failure on purpose and answers it (a name already taken: 409) says so with handledDBError(err), and its reply stays.
 //
 // Work a request starts in another goroutine (the request log) isn't watched; background workers aren't either: they log.
 // A missing row (sql.ErrNoRows) is not a failure and never reaches the driver as one. A NULL scanned into a Go string is not a
@@ -27,10 +29,12 @@ import (
 	"log"
 	"net/http"
 	"net/url"
+	"regexp"
 	"runtime"
 	"strconv"
 	"strings"
 	"sync"
+	"sync/atomic"
 	"time"
 
 	"github.com/lib/pq"
@@ -41,8 +45,9 @@ func init() { sql.Register("postgres-checked", checkedDriver{&pq.Driver{}}) }
 // ---------------------------------------------------------------- which goroutine is serving which request
 
 type dbWatch struct {
-	mu     sync.Mutex
-	errors []string
+	mu       sync.Mutex
+	errors   []string
+	answered bool // the handler answered a database failure through the owner (db_errors_2024.go)
 }
 
 var (
@@ -68,10 +73,7 @@ func noteDBError(err error, what string) {
 		errors.Is(err, context.Canceled) || errors.Is(err, context.DeadlineExceeded) {
 		return
 	}
-	id := goroutineID()
-	watchMu.Lock()
-	wch := watching[id]
-	watchMu.Unlock()
+	wch := watchOf()
 	if wch == nil {
 		return
 	}
@@ -83,16 +85,30 @@ func noteDBError(err error, what string) {
 	wch.mu.Unlock()
 }
 
+// watchOf: the watch of the request the calling goroutine serves (nil: none).
+func watchOf() *dbWatch {
+	id := goroutineID()
+	watchMu.Lock()
+	defer watchMu.Unlock()
+	return watching[id]
+}
+
+// dbFailureAnswered: the calling handler answered a database failure through the owner (db_errors_2024.go), so its reply stays.
+func dbFailureAnswered() {
+	if wch := watchOf(); wch != nil {
+		wch.mu.Lock()
+		wch.answered = true
+		wch.mu.Unlock()
+	}
+}
+
 // handledDBError: the calling handler caught this database failure on purpose and answers it itself (a unique name already taken:
 // 409), so it doesn't turn the reply into a database_error.
 func handledDBError(err error) {
 	if err == nil {
 		return
 	}
-	id := goroutineID()
-	watchMu.Lock()
-	wch := watching[id]
-	watchMu.Unlock()
+	wch := watchOf()
 	if wch == nil {
 		return
 	}
@@ -146,11 +162,12 @@ func guardDB(w http.ResponseWriter, r *http.Request, next http.Handler) {
 	}
 	wch.mu.Lock()
 	failed := append([]string(nil), wch.errors...)
+	answered := wch.answered
 	wch.mu.Unlock()
 	if len(failed) > 0 {
 		log.Printf("database error during %s %s (reply %d): %s", r.Method, r.URL.Path, held.status, strings.Join(failed, " || "))
 	}
-	if len(failed) > 0 && held.status < 500 {
+	if len(failed) > 0 && (held.status < 500 || !answered) {
 		h := w.Header()
 		for _, k := range []string{"Content-Length", "Content-Disposition", "Content-Encoding", "ETag", "Last-Modified"} {
 			h.Del(k)
@@ -259,7 +276,32 @@ func (c *checkedConn) checkOutside(q string) {
 	}
 }
 
+// ---------------------------------------------------------------- a schema change outside startup
+//
+// The schema is made at start by migrate() (database_init.go), never by a request (audit AUD-11): an ALTER TABLE takes an ACCESS
+// EXCLUSIVE lock even when there is nothing to change, and every request on that table queues behind it. While migrate() runs,
+// schemaChangesAllowed is set; any other statement that changes the schema is logged as "schema change outside startup" with
+// where it came from (TestNoSchemaChangeOutsideTheMigrations checks the source; this catches what a scan of the source can't).
+var (
+	schemaChangesAllowed atomic.Bool
+	schemaChangeWord     = regexp.MustCompile(`(?is)^\s*(ALTER|CREATE|DROP|TRUNCATE|COMMENT\s+ON|GRANT|REVOKE)\b|^\s*DO\b.*\b(ALTER|CREATE|DROP)\s+(TABLE|INDEX|COLUMN)\b`)
+	schemaChangeOutside  = func(q, from string) {
+		log.Printf("schema change outside startup: %s (from %s)", strings.Join(strings.Fields(q), " "), from)
+	}
+)
+
+// isSchemaChange: the statement changes the schema (DDL).
+func isSchemaChange(q string) bool { return schemaChangeWord.MatchString(q) }
+
+// checkSchemaChange: a schema change sent while the migrations aren't running is logged.
+func checkSchemaChange(q string) {
+	if !schemaChangesAllowed.Load() && isSchemaChange(q) {
+		schemaChangeOutside(q, serverCaller())
+	}
+}
+
 func (c *checkedConn) Prepare(q string) (driver.Stmt, error) {
+	checkSchemaChange(q)
 	c.checkOutside(q)
 	s, err := c.c.Prepare(q)
 	noteDBError(err, q)
@@ -270,6 +312,7 @@ func (c *checkedConn) Prepare(q string) (driver.Stmt, error) {
 }
 
 func (c *checkedConn) PrepareContext(ctx context.Context, q string) (driver.Stmt, error) {
+	checkSchemaChange(q)
 	c.checkOutside(q)
 	var s driver.Stmt
 	var err error
@@ -319,6 +362,7 @@ func (c *checkedConn) ExecContext(ctx context.Context, q string, args []driver.N
 	if !ok {
 		return nil, driver.ErrSkip
 	}
+	checkSchemaChange(q)
 	c.checkOutside(q)
 	res, err := e.ExecContext(ctx, q, args)
 	noteDBError(err, q)
@@ -330,6 +374,7 @@ func (c *checkedConn) QueryContext(ctx context.Context, q string, args []driver.
 	if !ok {
 		return nil, driver.ErrSkip
 	}
+	checkSchemaChange(q)
 	c.checkOutside(q)
 	rows, err := qc.QueryContext(ctx, q, args)
 	noteDBError(err, q)

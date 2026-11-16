@@ -122,7 +122,7 @@ func handleCharacterMetamagic(w http.ResponseWriter, r *http.Request) {
 	agentID, err := getAgentFromAuth(r)
 	if err != nil {
 		w.WriteHeader(http.StatusUnauthorized)
-		json.NewEncoder(w).Encode(map[string]interface{}{"error": "unauthorized", "message": publicError(err)})
+		json.NewEncoder(w).Encode(map[string]interface{}{"error": "unauthorized", "message": err.Error()})
 		return
 	}
 
@@ -242,11 +242,7 @@ func handleCharacterMetamagic(w http.ResponseWriter, r *http.Request) {
 
 	_, err = db.Exec("UPDATE characters SET metamagic_choices = $1 WHERE id = $2", updatedJSON, req.CharacterID)
 	if err != nil {
-		w.WriteHeader(http.StatusInternalServerError)
-		json.NewEncoder(w).Encode(map[string]interface{}{
-			"error":   "database_error",
-			"message": publicError(err),
-		})
+		writeDBWriteError(w, err, "the Metamagic choices")
 		return
 	}
 
@@ -461,7 +457,7 @@ func handleCharacterInvocations(w http.ResponseWriter, r *http.Request) {
 	agentID, err := getAgentFromAuth(r)
 	if err != nil {
 		w.WriteHeader(http.StatusUnauthorized)
-		json.NewEncoder(w).Encode(map[string]interface{}{"error": "unauthorized", "message": publicError(err)})
+		json.NewEncoder(w).Encode(map[string]interface{}{"error": "unauthorized", "message": err.Error()})
 		return
 	}
 
@@ -606,7 +602,6 @@ func handleCharacterInvocations(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 		if open, _ := shopOpen(req.CharacterID); !open {
-			db.Exec(`ALTER TABLE characters ADD COLUMN IF NOT EXISTS invocation_swap_level INTEGER DEFAULT 0`)
 			var swapLevel int
 			db.QueryRow(`SELECT COALESCE(invocation_swap_level,0) FROM characters WHERE id = $1`, req.CharacterID).Scan(&swapLevel)
 			if level < 2 || swapLevel >= level {
@@ -668,10 +663,7 @@ func handleCharacterInvocations(w http.ResponseWriter, r *http.Request) {
 
 	_, err = db.Exec("UPDATE characters SET eldritch_invocations = $1 WHERE id = $2", updatedJSON, req.CharacterID)
 	if err != nil {
-		writeJSONStatus(w, http.StatusInternalServerError, map[string]interface{}{
-			"error":   "database_error",
-			"message": publicError(err),
-		})
+		writeDBWriteError(w, err, "the invocations")
 		return
 	}
 	if replacing != "" {
@@ -902,7 +894,7 @@ func handleFlexibleCasting(w http.ResponseWriter, r *http.Request) {
 	agentID, err := getAgentFromAuth(r)
 	if err != nil {
 		w.WriteHeader(http.StatusUnauthorized)
-		json.NewEncoder(w).Encode(map[string]interface{}{"error": "unauthorized", "message": publicError(err)})
+		json.NewEncoder(w).Encode(map[string]interface{}{"error": "unauthorized", "message": err.Error()})
 		return
 	}
 
@@ -1226,7 +1218,7 @@ func handleCharacterFightingStyle(w http.ResponseWriter, r *http.Request) {
 	agentID, err := getAgentFromAuth(r)
 	if err != nil {
 		w.WriteHeader(http.StatusUnauthorized)
-		json.NewEncoder(w).Encode(map[string]interface{}{"error": "unauthorized", "message": publicError(err)})
+		json.NewEncoder(w).Encode(map[string]interface{}{"error": "unauthorized", "message": err.Error()})
 		return
 	}
 
@@ -1427,10 +1419,7 @@ func handleCharacterFightingStyle(w http.ResponseWriter, r *http.Request) {
 	}
 	_, err = db.Exec(`UPDATE characters SET fighting_styles = $1 WHERE id = $2`, newStylesJSON, req.CharacterID)
 	if err != nil {
-		writeJSONStatus(w, http.StatusInternalServerError, map[string]interface{}{
-			"error":   dbErrorCode,
-			"message": publicError(err),
-		})
+		writeDBWriteError(w, err, "the Fighting Styles")
 		return
 	}
 
@@ -1648,7 +1637,7 @@ func handleCharacterFiendishResilience(w http.ResponseWriter, r *http.Request) {
 	agentID, err := getAgentFromAuth(r)
 	if err != nil {
 		w.WriteHeader(http.StatusUnauthorized)
-		json.NewEncoder(w).Encode(map[string]interface{}{"error": "unauthorized", "message": publicError(err)})
+		json.NewEncoder(w).Encode(map[string]interface{}{"error": "unauthorized", "message": err.Error()})
 		return
 	}
 
@@ -1980,7 +1969,7 @@ func handleCharacterMysticArcanum(w http.ResponseWriter, r *http.Request) {
 	agentID, err := getAgentFromAuth(r)
 	if err != nil {
 		w.WriteHeader(http.StatusUnauthorized)
-		json.NewEncoder(w).Encode(map[string]interface{}{"error": "unauthorized", "message": publicError(err)})
+		json.NewEncoder(w).Encode(map[string]interface{}{"error": "unauthorized", "message": err.Error()})
 		return
 	}
 
@@ -2289,7 +2278,7 @@ func handleCharacterSignatureSpells(w http.ResponseWriter, r *http.Request) {
 	agentID, err := getAgentFromAuth(r)
 	if err != nil {
 		w.WriteHeader(http.StatusUnauthorized)
-		json.NewEncoder(w).Encode(map[string]interface{}{"error": "unauthorized", "message": publicError(err)})
+		json.NewEncoder(w).Encode(map[string]interface{}{"error": "unauthorized", "message": err.Error()})
 		return
 	}
 

@@ -208,13 +208,6 @@ func handleGMApplyPoison2024(w http.ResponseWriter, r *http.Request) {
 
 var contagionInfectDC = map[string]int{"cackle_fever": 10, "sewer_plague": 11, "sight_rot": 15}
 
-func ensureContagionTable() {
-	if db != nil {
-		db.Exec(`CREATE TABLE IF NOT EXISTS contagions (id SERIAL PRIMARY KEY, lobby_id INTEGER NOT NULL, target_id INTEGER NOT NULL,
-			contagion TEXT NOT NULL, successes INTEGER NOT NULL DEFAULT 0, onset BOOLEAN NOT NULL DEFAULT false, created_at TIMESTAMPTZ DEFAULT now())`)
-	}
-}
-
 // @Summary Expose a creature to a magical contagion
 // @Description Cackle Fever (DC 10), Sewer Plague (DC 11) or Sight Rot (DC 15): the target makes the Constitution save (dc overrides it) or becomes infected. Sight Rot blinds at once; the others take effect 1d4 days later (POST /api/gm/contagion-save with onset=true).
 // @Tags GM
@@ -251,7 +244,6 @@ func handleGMApplyContagion(w http.ResponseWriter, r *http.Request) {
 	if req.DC > 0 {
 		dc = req.DC
 	}
-	ensureContagionTable()
 	name := creatureName(lobby, req.TargetID)
 	saved, total := creatureSave(lobby, req.TargetID, "con", dc)
 	out := map[string]interface{}{"success": true, "contagion": toolboxSection("contagions")[key].Name, "rule": toolboxText("contagions", key), "save": total, "dc": dc}
@@ -297,7 +289,6 @@ func handleGMContagionSave(w http.ResponseWriter, r *http.Request) {
 		req.TargetID = req.CharacterID
 	}
 	key := game.Key(req.Contagion)
-	ensureContagionTable()
 	var id, successes int
 	var onset bool
 	if db.QueryRow(`SELECT id, successes, onset FROM contagions WHERE lobby_id = $1 AND target_id = $2 AND contagion = $3 ORDER BY id DESC LIMIT 1`, lobby, req.TargetID, key).Scan(&id, &successes, &onset) != nil {

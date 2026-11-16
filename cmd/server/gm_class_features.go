@@ -642,7 +642,6 @@ func handleGMDarkOnesLuck(w http.ResponseWriter, r *http.Request) {
 	var subclass sql.NullString
 	var featureUsed bool
 	var luckCha, luckCount int
-	db.Exec(`ALTER TABLE characters ADD COLUMN IF NOT EXISTS dark_ones_luck_count INTEGER DEFAULT 0`)
 	err = db.QueryRow(`
 		SELECT name, class, level, subclass, COALESCE(dark_ones_luck_used, false), cha, COALESCE(dark_ones_luck_count, 0)
 		FROM characters WHERE id = $1

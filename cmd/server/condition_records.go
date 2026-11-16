@@ -78,27 +78,6 @@ type conditionRecord struct {
 	CreatedBy      int               `json:"-"` // a Concentration spell's caster (notes "concentration"), or the GM who set it
 }
 
-func ensureConditionRecordsTable() {
-	_, err := db.Exec(`CREATE TABLE IF NOT EXISTS condition_records (
-		id SERIAL PRIMARY KEY,
-		lobby_id INTEGER NOT NULL,
-		target_id INTEGER NOT NULL,
-		condition TEXT NOT NULL,
-		source TEXT NOT NULL DEFAULT '',
-		escapes JSONB NOT NULL DEFAULT '[]',
-		duration_rounds INTEGER NOT NULL DEFAULT 0,
-		end_save JSONB,
-		notes TEXT NOT NULL DEFAULT '',
-		created_by INTEGER,
-		created_at TIMESTAMPTZ NOT NULL DEFAULT now()
-	)`)
-	db.Exec(`ALTER TABLE condition_records ADD COLUMN IF NOT EXISTS end_save JSONB`)
-	db.Exec(`ALTER TABLE condition_records ADD COLUMN IF NOT EXISTS detail TEXT NOT NULL DEFAULT ''`) // the one store (condition_owner_2024.go)
-	if err == nil {
-		db.Exec(`CREATE INDEX IF NOT EXISTS condition_records_target ON condition_records (lobby_id, target_id)`)
-	}
-}
-
 var abilityNames = map[string]string{"str": "Strength", "strength": "Strength", "dex": "Dexterity", "dexterity": "Dexterity",
 	"con": "Constitution", "constitution": "Constitution", "int": "Intelligence", "intelligence": "Intelligence",
 	"wis": "Wisdom", "wisdom": "Wisdom", "cha": "Charisma", "charisma": "Charisma"}

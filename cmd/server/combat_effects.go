@@ -42,22 +42,6 @@ var effectText = map[string]string{
 	"wisp_lit":    "Can't benefit from the Invisible condition; sheds Dim Light (Starry Wisp)",
 }
 
-func ensureCombatEffectsTable() {
-	if db == nil {
-		return
-	}
-	db.Exec(`CREATE TABLE IF NOT EXISTS combat_effects (
-		id SERIAL PRIMARY KEY,
-		lobby_id INTEGER NOT NULL,
-		target_id INTEGER NOT NULL,
-		source_id INTEGER NOT NULL,
-		kind TEXT NOT NULL,
-		text TEXT NOT NULL DEFAULT '',
-		created_at TIMESTAMPTZ NOT NULL DEFAULT now()
-	)`)
-	db.Exec(`CREATE INDEX IF NOT EXISTS combat_effects_target ON combat_effects (lobby_id, target_id)`)
-}
-
 // addCombatEffect puts an effect on a creature; slow and hamstring replace each other (only the newest applies).
 func addCombatEffect(lobbyID, targetID, sourceID int, kind string) {
 	if kind == "slow" || kind == "hamstring" {

@@ -705,32 +705,7 @@ func handleCharacters(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 
-		var id int
-		err := db.QueryRow(`
-			INSERT INTO characters (agent_id, name, class, species, background, str, dex, con, intl, wis, cha, hp, max_hp, ac, gold, skill_proficiencies, tool_proficiencies, weapon_proficiencies, armor_proficiencies, expertise, language_proficiencies, darkvision_range, known_spells, draconic_ancestry)
-			VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $12, $13, $14, $15, $16, $17, $18, $19, $20, $21, $22, $23) RETURNING id
-		`, agentID, req.Name, req.Class, req.Species, req.Background, req.Str, req.Dex, req.Con, req.Int, req.Wis, req.Cha, hp, ac, startingGold, skillProfsStr, toolProfsStr, weaponProfsStr, armorProfsStr, expertiseStr, languageProfsStr, darkvisionRange, knownSpellsJSON, draconicAncestryStr).Scan(&id)
-
-		if err != nil {
-			writeJSONStatus(w, http.StatusInternalServerError, map[string]interface{}{"error": publicError(err)})
-			return
-		}
-
-		masteryJSON, _ := json.Marshal(masteryPicks)
-		db.Exec(`UPDATE characters SET weapon_masteries = $1 WHERE id = $2`, masteryJSON, id)
-		if alignment != "" {
-			db.Exec(`UPDATE characters SET alignment = $1 WHERE id = $2`, alignment, id)
-		}
-		if backstory != "" {
-			db.Exec(`UPDATE characters SET backstory = $1 WHERE id = $2`, backstory, id)
-		}
-		if appearance != "" {
-			db.Exec(`UPDATE characters SET appearance = $1 WHERE id = $2`, appearance, id)
-		}
-		originJSON, _ := json.Marshal(origin.Record)
-		featsJSON, _ := json.Marshal(origin.FeatSlugs)
-		db.Exec(`UPDATE characters SET origin = $1, feats = $2 WHERE id = $3`, originJSON, featsJSON, id)
-
+		// The inventory the new character starts with (built before the transaction: it reads only the request and the data).
 		// Seed the equipment required for core class features. In particular,
 		// casters need a focus to use spells with ordinary material components.
 		invItems := []map[string]interface{}{}
@@ -759,9 +734,6 @@ func handleCharacters(w http.ResponseWriter, r *http.Request) {
 		}
 		ensureItemIDs(invItems)
 		fillItemWeights(invItems)
-		if len(invItems) > 0 { // the new character's first inventory (inventory_2024.go)
-			editInventory(id, func([]invItem) []invItem { return invItems })
-		}
 		armorSlug, mainHand, hasShield := "", "", false
 		if starting != nil {
 			armorSlug, mainHand, hasShield = starting.EquippedArmor, starting.MainHand, starting.Shield
@@ -769,11 +741,37 @@ func handleCharacters(w http.ResponseWriter, r *http.Request) {
 		if hasShield && mainHand != "" && game.ClassTableInt(classKey, 1, "Cantrips") > 0 {
 			mainHand = "" // a caster with a Shield keeps the other hand free for spells with gestures (Nov 13); the setup asks whether to draw the weapon
 		}
-		ensureShopColumn() // the shop prompt reads this: both equipment packages taken, or gold for either
-		db.Exec(`UPDATE characters SET took_both_packages = $1 WHERE id = $2`, hasClassOption && len(classOption.Items) > 0 && origin.Record.BackgroundEquipment != "b", id)
-		db.Exec(`UPDATE characters SET starting_equipment = $1, equipped_armor = NULLIF($2, ''), equipped_shield = $3,
-			equipped_main_hand = NULLIF($4, ''), divine_order = NULLIF($5, ''), primal_order = NULLIF($6, '') WHERE id = $7`,
-			startOption, armorSlug, hasShield, mainHand, divineOrder, primalOrder, id)
+		masteryJSON, _ := json.Marshal(masteryPicks)
+		originJSON, _ := json.Marshal(origin.Record)
+		featsJSON, _ := json.Marshal(origin.FeatSlugs)
+
+		// The character is made in one transaction: the row, its choices, its first inventory and its gear, or nothing (audit
+		// AUD-27: a failed step left a half-made character whose name blocked a retry).
+		var id int
+		err := inTx(func(tx *sql.Tx) error {
+			if err := tx.QueryRow(`
+			INSERT INTO characters (agent_id, name, class, species, background, str, dex, con, intl, wis, cha, hp, max_hp, ac, gold, skill_proficiencies, tool_proficiencies, weapon_proficiencies, armor_proficiencies, expertise, language_proficiencies, darkvision_range, known_spells, draconic_ancestry,
+				weapon_masteries, alignment, backstory, appearance, origin, feats, took_both_packages, starting_equipment, equipped_armor, equipped_shield, equipped_main_hand, divine_order, primal_order)
+			VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $12, $13, $14, $15, $16, $17, $18, $19, $20, $21, $22, $23,
+				$24, NULLIF($25, ''), NULLIF($26, ''), NULLIF($27, ''), $28, $29, $30, $31, NULLIF($32, ''), $33, NULLIF($34, ''), NULLIF($35, ''), NULLIF($36, '')) RETURNING id
+		`, agentID, req.Name, req.Class, req.Species, req.Background, req.Str, req.Dex, req.Con, req.Int, req.Wis, req.Cha, hp, ac, startingGold, skillProfsStr, toolProfsStr, weaponProfsStr, armorProfsStr, expertiseStr, languageProfsStr, darkvisionRange, knownSpellsJSON, draconicAncestryStr,
+				masteryJSON, alignment, backstory, appearance, originJSON, featsJSON, hasClassOption && len(classOption.Items) > 0 && origin.Record.BackgroundEquipment != "b",
+				startOption, armorSlug, hasShield, mainHand, divineOrder, primalOrder).Scan(&id); err != nil {
+				return dbFailureError(err, "the new character")
+			}
+			if len(invItems) > 0 { // the new character's first inventory (inventory_2024.go)
+				if _, err := changeInventoryIn(tx, id, func(*sql.Tx, []invItem) ([]invItem, error) { return invItems, nil }); err != nil {
+					return dbFailureError(err, "the new character")
+				}
+			}
+			return nil
+		})
+		if err != nil {
+			if !answerHelperDBFailure(w, err) {
+				writeDBWriteError(w, err, "the new character")
+			}
+			return
+		}
 		refreshStoredAC(id) // the starting armor and Shield, Unarmored Defense (the stored AC was 10 + Dexterity until the sheet was opened)
 		db.QueryRow(`SELECT ac FROM characters WHERE id = $1`, id).Scan(&ac)
 

@@ -5,11 +5,11 @@ package main
 //   - a cap on the request body (2 MB; a portrait upload 9 MB), so a huge body can't exhaust memory;
 //   - headers that stop MIME sniffing, framing by other sites and full-address Referers;
 //   - per-address limits on sign-ups and on wrong passwords;
-//   - publicError: a database error is logged and reported as "database_error" (its text names tables, columns and types);
-//   - guardDB: no request answers success when a database call failed under it (db_guard_2024.go).
+//   - guardDB: no request answers success, or any reply but the one database_error shape, when a database call failed under it;
+//     a database error's text (it names tables, columns, types and the database's address) goes to the log only
+//     (db_guard_2024.go, db_errors_2024.go).
 
 import (
-	"log"
 	"net/http"
 	"strings"
 	"sync"
@@ -99,19 +99,3 @@ func (l *windowLimiter) allow(key string) bool {
 
 // registerLimiter: new accounts per address per hour.
 var registerLimiter = newWindowLimiter(20, time.Hour)
-
-// publicError is what a client may see of an error: database errors are logged and replaced.
-func publicError(err error) string {
-	if err == nil {
-		return ""
-	}
-	msg := err.Error()
-	if strings.Contains(msg, "pq: ") || strings.HasPrefix(msg, "sql: ") || strings.Contains(msg, "SQLSTATE") {
-		log.Printf("database error: %v", err)
-		if strings.Contains(msg, "no rows in result set") {
-			return "not_found"
-		}
-		return "database_error"
-	}
-	return msg
-}

@@ -33,26 +33,6 @@ import (
 	"time"
 )
 
-var pendingTurnsOnce sync.Once
-
-func ensurePendingTurns() {
-	pendingTurnsOnce.Do(func() {
-		db.Exec(`CREATE TABLE IF NOT EXISTS pending_turns (
-			id SERIAL PRIMARY KEY,
-			lobby_id INTEGER NOT NULL,
-			character_id INTEGER NOT NULL,
-			round INTEGER NOT NULL,
-			steps JSONB NOT NULL,
-			fallbacks JSONB NOT NULL DEFAULT '[]',
-			status TEXT NOT NULL DEFAULT 'pending',
-			note TEXT NOT NULL DEFAULT '',
-			result JSONB,
-			submitted_at TIMESTAMP NOT NULL DEFAULT NOW(),
-			resolved_at TIMESTAMP)`)
-		db.Exec(`CREATE UNIQUE INDEX IF NOT EXISTS pending_turns_open ON pending_turns (lobby_id, character_id, round) WHERE status IN ('pending', 'needs_gm')`)
-	})
-}
-
 // ---------------------------------------------------------------- the fight as the walk sees it
 
 type ptEntry struct {
@@ -160,7 +140,6 @@ func closePendingTurns(lobbyID, charID, round int, how string) {
 	if db == nil {
 		return
 	}
-	ensurePendingTurns()
 	db.Exec(`UPDATE pending_turns SET status = 'closed', note = $4, resolved_at = NOW()
 		WHERE lobby_id = $1 AND character_id = $2 AND round <= $3 AND status IN ('pending', 'needs_gm')`, lobbyID, charID, round, how)
 }
@@ -170,7 +149,6 @@ func clearPendingTurns(lobbyID int) {
 	if db == nil {
 		return
 	}
-	ensurePendingTurns()
 	db.Exec(`DELETE FROM pending_turns WHERE lobby_id = $1`, lobbyID)
 }
 
@@ -596,7 +574,6 @@ func resolvePendingTurns(lobbyID int) map[string]interface{} {
 	if db == nil {
 		return nil
 	}
-	ensurePendingTurns()
 	defer lockPendingWalk(lobbyID)()
 	if _, ok := ptLoadCombat(lobbyID); !ok {
 		return nil
@@ -733,7 +710,6 @@ func resolvePendingTurns(lobbyID int) map[string]interface{} {
 // pendingQueue: the slots still to come this round, in initiative order, each with its pending turn if one is in; then the turns
 // already sent for the next round. Open to everyone at the table (Matt, Nov 14: pending turns are not hidden).
 func pendingQueue(lobbyID int, c ptCombat) []map[string]interface{} {
-	ensurePendingTurns()
 	var out []map[string]interface{}
 	dead := combatDeadFn(lobbyID)
 	add := func(i, round int) {
@@ -796,7 +772,6 @@ func handlePendingTurn(w http.ResponseWriter, r *http.Request) {
 		writeJSONStatus(w, http.StatusMethodNotAllowed, map[string]interface{}{"error": "method_not_allowed", "message": "GET reads the queue, POST sends your turn, DELETE withdraws it."})
 		return
 	}
-	ensurePendingTurns()
 	raw := map[string]json.RawMessage{}
 	switch r.Method {
 	case http.MethodPost:
@@ -1050,7 +1025,6 @@ func handleCombatStandIn(w http.ResponseWriter, r *http.Request, campaignID int)
 	if !ptRequireGM(w, r, campaignID, "take a turn as stand-in") {
 		return
 	}
-	ensurePendingTurns()
 	var req struct {
 		Steps []map[string]interface{} `json:"steps"`
 	}
@@ -1114,7 +1088,6 @@ func pendingTurnForMyTurn(lobbyID, charID int) map[string]interface{} {
 	if slot < 0 {
 		return nil
 	}
-	ensurePendingTurns()
 	round := c.roundFor(slot)
 	out := map[string]interface{}{"round": round,
 		"how": "You don't have to wait for your slot: POST /api/pending-turn {\"steps\": [{\"action\": \"attack\", \"target_id\": -1}], \"fallbacks\": [[{\"action\": \"dodge\"}]]} holds your whole turn (each step is a POST /api/action body) and it resolves in initiative order. GET /api/pending-turn shows the table's queue."}

@@ -14,12 +14,6 @@ import (
 	"github.com/agentrpg/agentrpg/game"
 )
 
-func ensureDruidColumns() {
-	if db != nil {
-		db.Exec(`ALTER TABLE characters ADD COLUMN IF NOT EXISTS primal_strike_used BOOLEAN DEFAULT FALSE`)
-	}
-}
-
 // primalStrike rolls the extra elemental damage of a Druid of level 7+ once per turn.
 func primalStrike(charID int, class string, level int, descLower string, crit bool) (int, string) {
 	if strings.ToLower(class) != "druid" || level < 7 {

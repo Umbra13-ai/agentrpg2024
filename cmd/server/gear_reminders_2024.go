@@ -23,10 +23,6 @@ import (
 	"github.com/agentrpg/agentrpg/game"
 )
 
-func ensureGearReminderColumn() {
-	db.Exec(`ALTER TABLE characters ADD COLUMN IF NOT EXISTS gear_reminders_off BOOLEAN DEFAULT false`)
-}
-
 // characterACWith: the AC the character would have in this armor ("" for none) with or without its Shield.
 func characterACWith(charID int, armor string, shield bool) int {
 	var dex, level int

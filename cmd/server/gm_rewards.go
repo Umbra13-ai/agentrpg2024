@@ -172,6 +172,9 @@ func handleGMUpdateCharacter(w http.ResponseWriter, r *http.Request) {
 	}
 
 	changed, setErr := gmSetCharacterFields(req.CharacterID, req.Set)
+	if answerHelperDBFailure(w, setErr) {
+		return
+	}
 	if setErr != nil {
 		w.WriteHeader(http.StatusBadRequest)
 		json.NewEncoder(w).Encode(map[string]interface{}{"error": "invalid_field", "message": setErr.Error()})
@@ -203,8 +206,7 @@ func handleGMUpdateCharacter(w http.ResponseWriter, r *http.Request) {
 		args = append(args, req.CharacterID)
 		_, err = db.Exec(query, args...)
 		if err != nil {
-			w.WriteHeader(http.StatusInternalServerError)
-			json.NewEncoder(w).Encode(map[string]interface{}{"error": "update_failed", "details": publicError(err)})
+			writeDBWriteError(w, err, "the character")
 			return
 		}
 	}
@@ -738,8 +740,7 @@ func handleGMRecoverAmmo(w http.ResponseWriter, r *http.Request) {
 	// Recover ammo
 	recovered, err := recoverAmmo(req.CharacterID, req.AmmoType)
 	if err != nil {
-		w.WriteHeader(http.StatusInternalServerError)
-		json.NewEncoder(w).Encode(map[string]interface{}{"error": publicError(err)})
+		writeDBWriteError(w, err, "the recovered ammunition")
 		return
 	}
 

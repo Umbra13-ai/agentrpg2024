@@ -31,8 +31,8 @@ type srdSpell2024 struct {
 	Duration               string            `json:"duration"`
 	Description            string            `json:"description"`
 	DescriptionBlocks      json.RawMessage   `json:"description_blocks"` // paragraphs and tables as printed
-	Statblock              json.RawMessage   `json:"statblock"`           // the stat block some summoning spells print
-	DamageParts            json.RawMessage   `json:"damage_parts"`        // spells that deal damage in more than one part
+	Statblock              json.RawMessage   `json:"statblock"`          // the stat block some summoning spells print
+	DamageParts            json.RawMessage   `json:"damage_parts"`       // spells that deal damage in more than one part
 	HigherLevel            string            `json:"higher_level"`
 	Ritual                 bool              `json:"ritual"`
 	Concentration          bool              `json:"concentration"`
@@ -47,37 +47,6 @@ type srdSpell2024 struct {
 	HealAtSlotLevel        map[string]string `json:"heal_at_slot_level"`
 }
 
-// ensureSpellColumns makes the spells table able to hold every field of a 2024 spell.
-func ensureSpellColumns() {
-	stmts := []string{
-		// 2024 text is longer than the old limits ("Reaction, which you take when ...")
-		`ALTER TABLE spells ALTER COLUMN casting_time TYPE TEXT`,
-		`ALTER TABLE spells ALTER COLUMN range TYPE TEXT`,
-		`ALTER TABLE spells ALTER COLUMN components TYPE TEXT`,
-		`ALTER TABLE spells ALTER COLUMN duration TYPE TEXT`,
-		`ALTER TABLE spells ALTER COLUMN damage_dice TYPE VARCHAR(40)`,
-		`ALTER TABLE spells ALTER COLUMN healing TYPE VARCHAR(40)`,
-		`ALTER TABLE spells ALTER COLUMN source TYPE VARCHAR(60)`,
-		`ALTER TABLE spells ADD COLUMN IF NOT EXISTS material TEXT DEFAULT ''`,
-		`ALTER TABLE spells ALTER COLUMN material TYPE TEXT`,
-		// new fields
-		`ALTER TABLE spells ADD COLUMN IF NOT EXISTS classes JSONB DEFAULT '[]'`,
-		`ALTER TABLE spells ADD COLUMN IF NOT EXISTS concentration BOOLEAN DEFAULT FALSE`,
-		`ALTER TABLE spells ADD COLUMN IF NOT EXISTS higher_level TEXT DEFAULT ''`,
-		`ALTER TABLE spells ADD COLUMN IF NOT EXISTS components_text TEXT DEFAULT ''`,
-		`ALTER TABLE spells ADD COLUMN IF NOT EXISTS ruleset VARCHAR(10) DEFAULT '2024'`,
-		`ALTER TABLE spells ADD COLUMN IF NOT EXISTS description_blocks JSONB`,
-		`ALTER TABLE spells ADD COLUMN IF NOT EXISTS statblock JSONB`,
-		`ALTER TABLE spells ADD COLUMN IF NOT EXISTS damage_parts JSONB`,
-		`CREATE INDEX IF NOT EXISTS idx_spells_ruleset ON spells(ruleset)`,
-	}
-	for _, s := range stmts {
-		if _, err := db.Exec(s); err != nil {
-			log.Printf("spell columns: %v (%s)", err, s)
-		}
-	}
-}
-
 // jsonArg passes JSON to a jsonb column as text (a []byte would be sent as bytea); nil becomes NULL.
 func jsonArg(b []byte) interface{} {
 	if len(b) == 0 {
@@ -88,7 +57,6 @@ func jsonArg(b []byte) interface{} {
 
 // seedSpells2024 replaces the spells table with the SRD 5.2.1 spells and rebuilds the class spell lists.
 func seedSpells2024() {
-	ensureSpellColumns()
 	var spells []srdSpell2024
 	if err := json.Unmarshal(srd521SpellsJSON, &spells); err != nil {
 		log.Printf("spells 2024: %v", err)
