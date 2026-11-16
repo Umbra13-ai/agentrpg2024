@@ -24,7 +24,7 @@ func TestHandsTwoHandsOnly(t *testing.T) {
 		{"shield alone", "", "", true, true},
 	}
 	for _, c := range cases {
-		ok, why := handsAllow(c.main, c.off, c.shield)
+		ok, why := handsAllow(0, c.main, c.off, c.shield)
 		if ok != c.ok {
 			t.Errorf("%s: handsAllow(%q, %q, %v) = %v (%s), want %v", c.name, c.main, c.off, c.shield, ok, why, c.ok)
 		}

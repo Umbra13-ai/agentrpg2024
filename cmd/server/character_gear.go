@@ -422,7 +422,7 @@ func handleCharacterEquipArmor(w http.ResponseWriter, r *http.Request) {
 		newShield = *req.Shield
 		if newShield && !currentShield {
 			if mh, oh := equippedWeapons(req.CharacterID); mh != "" || oh != "" {
-				if ok, why := handsAllow(mh, oh, true); !ok {
+				if ok, why := handsAllow(req.CharacterID, mh, oh, true); !ok {
 					w.WriteHeader(http.StatusBadRequest)
 					json.NewEncoder(w).Encode(map[string]interface{}{"error": "hands_full", "message": why})
 					return
@@ -825,15 +825,7 @@ func handleCharacterEquipWeapon(w http.ResponseWriter, r *http.Request) {
 			})
 			return
 		}
-		// A two-handed weapon needs both hands: nothing else may be held
-		if (offHand.Valid && offHand.String != "") || shieldInHand(req.CharacterID) {
-			w.WriteHeader(http.StatusBadRequest)
-			json.NewEncoder(w).Encode(map[string]interface{}{
-				"error":   "hands_full",
-				"message": "A two-handed weapon needs both hands, but your other hand is holding something (a weapon or a shield). Put it away or drop it first.",
-			})
-			return
-		}
+		// a two-handed weapon needs both hands: handsAllow below refuses it while the other hand holds something, and names it
 	}
 
 	// Handle off-hand restrictions
@@ -884,7 +876,7 @@ func handleCharacterEquipWeapon(w http.ResponseWriter, r *http.Request) {
 		} else {
 			testMain = req.Weapon
 		}
-		if ok, why := handsAllow(testMain, testOff, shieldInHand(req.CharacterID)); !ok {
+		if ok, why := handsAllow(req.CharacterID, testMain, testOff, shieldInHand(req.CharacterID)); !ok {
 			w.WriteHeader(http.StatusBadRequest)
 			json.NewEncoder(w).Encode(map[string]interface{}{"error": "hands_full", "message": why})
 			return

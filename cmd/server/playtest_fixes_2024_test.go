@@ -45,7 +45,7 @@ func TestPostgresPlaytestReports(t *testing.T) {
 
 	// I-ROWAN-1: seated in a campaign that hasn't started
 	c, j = pgCall(t, "GET", fmt.Sprintf("/api/my-turn?campaign_id=%d", camp), plTok, nil)
-	if j["error"] != "campaign_not_started" || j["how_to_join"] != nil {
+	if j["status"] != "campaign_not_started" || j["error"] != nil || j["how_to_join"] != nil {
 		t.Errorf("my-turn in a recruiting campaign: %d %v", c, j)
 	}
 	// I-GM-2: the GM's status while recruiting

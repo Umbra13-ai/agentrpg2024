@@ -43,10 +43,15 @@ func handleCommandsPage(w http.ResponseWriter, r *http.Request) {
 			Summary     string   `json:"summary"`
 			Description string   `json:"description"`
 			Tags        []string `json:"tags"`
+			RequestBody struct {
+				Content map[string]struct {
+					Example interface{} `json:"example"`
+				} `json:"content"`
+			} `json:"requestBody"`
 		} `json:"paths"`
 	}
 	json.Unmarshal(swaggerJSON, &spec)
-	type ep struct{ Method, Path, Summary, Desc string }
+	type ep struct{ Method, Path, Summary, Desc, Body string }
 	byTag := map[string][]ep{}
 	for path, ms := range spec.Paths {
 		for m, op := range ms {
@@ -54,12 +59,18 @@ func handleCommandsPage(w http.ResponseWriter, r *http.Request) {
 			if len(op.Tags) > 0 {
 				tag = op.Tags[0]
 			}
-			byTag[tag] = append(byTag[tag], ep{strings.ToUpper(m), path, op.Summary, op.Description}) // the reference's paths are whole (/api/...)
+			body := "" // the reference's example body, made from the request type (feedback log 11: a copyable body for every command)
+			if ex := op.RequestBody.Content["application/json"].Example; ex != nil {
+				if raw, err := json.Marshal(ex); err == nil {
+					body = string(raw)
+				}
+			}
+			byTag[tag] = append(byTag[tag], ep{strings.ToUpper(m), path, op.Summary, op.Description, body}) // the reference's paths are whole (/api/...)
 		}
 	}
 	var b strings.Builder
 	b.WriteString(`<style>.cmd td{vertical-align:top;padding:4px 8px;border-bottom:1px solid rgba(128,128,128,.25)}.cmd code{white-space:nowrap}table.actions{table-layout:fixed;width:100%}table.actions td:first-child code{white-space:normal;overflow-wrap:anywhere}
-details.ep{margin:4px 0}details.ep summary{cursor:pointer}details.ep p{margin:4px 0 8px 1.5em;opacity:.85}</style>`)
+details.ep{margin:4px 0}details.ep summary{cursor:pointer}details.ep p{margin:4px 0 8px 1.5em;opacity:.85}details.ep pre{margin:0 0 8px 1.5em;white-space:pre-wrap;overflow-wrap:anywhere}</style>`)
 	b.WriteString(`<h1>📜 Commands</h1><p>Every command in the game, for players and for the GM. Send them to the server with your token (<code>Authorization: Bearer ...</code>). Full request fields: <a href="/docs">API reference</a>; how to play and run games: <a href="/skill.md">the guide</a>. Search with your browser's find (Ctrl+F).</p>`)
 	b.WriteString(`<p><a href="#player-actions">Player actions</a>`)
 	for _, g := range commandGroups {
@@ -95,8 +106,12 @@ details.ep{margin:4px 0}details.ep summary{cursor:pointer}details.ep p{margin:4p
 			if summary == "" {
 				summary = "(no summary)"
 			}
-			if x.Desc != "" && x.Desc != x.Summary {
-				b.WriteString(fmt.Sprintf(`<details class="ep"><summary><code>%s %s</code> %s</summary><p>%s</p></details>`, x.Method, e(x.Path), e(summary), e(x.Desc)))
+			body := ""
+			if x.Body != "" {
+				body = `<p>Example body (leave out the fields you don't need; each field: <a href="/docs">API reference</a>):</p><pre>` + e(x.Body) + `</pre>`
+			}
+			if (x.Desc != "" && x.Desc != x.Summary) || body != "" {
+				b.WriteString(fmt.Sprintf(`<details class="ep"><summary><code>%s %s</code> %s</summary><p>%s</p>%s</details>`, x.Method, e(x.Path), e(summary), e(x.Desc), body))
 			} else {
 				b.WriteString(fmt.Sprintf(`<div class="ep"><code>%s %s</code> %s</div>`, x.Method, e(x.Path), e(summary)))
 			}

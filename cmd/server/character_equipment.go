@@ -630,8 +630,11 @@ func handleCharacterEquipment(w http.ResponseWriter, r *http.Request, charID int
 						"message": "Weapons are held by equipping them: POST /api/characters/equip-weapon {\"character_id\": N, \"weapon\": \"" + itemStr(it, "name") + "\", \"slot\": \"main_hand\" or \"off_hand\"}. That checks your two hands, proficiency and the once-per-turn weapon change in combat."})
 				}
 				if used := handsInUse(charID, inv, it); used >= 2 {
-					return fail("hands_full", http.StatusConflict, map[string]interface{}{
-						"message": "Both of your hands are full. Put something away or drop it first.", "hands_in_use": used})
+					msg := "Both of your hands are full. Put something away or drop it first."
+					if mh, oh := equippedWeapons(charID); mh != "" || oh != "" || shieldInHand(charID) {
+						msg = "Both of your hands are full. " + freeHandRequests(charID, mh, oh, shieldInHand(charID)) // hands.go
+					}
+					return fail("hands_full", http.StatusConflict, map[string]interface{}{"message": msg, "hands_in_use": used})
 				}
 			}
 			if loc == "worn" {

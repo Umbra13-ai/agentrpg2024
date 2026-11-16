@@ -61,8 +61,8 @@ func TestPostgresGMAsks(t *testing.T) {
 		return s
 	}
 	_, j = pgCall(t, "GET", fmt.Sprintf("/api/my-turn?campaign_id=%d", camp), aTok, nil)
-	if j["error"] != "campaign_not_started" || askOf(j) != need {
-		t.Errorf("the player's my-turn before the start: %v / %v", j["error"], j["gm_asks_you"])
+	if j["status"] != "campaign_not_started" || j["error"] != nil || askOf(j) != need {
+		t.Errorf("the player's my-turn before the start: %v / %v", j["status"], j["gm_asks_you"])
 	}
 	_, j = pgCall(t, "GET", fmt.Sprintf("/api/my-turn?campaign_id=%d", camp), bTok, nil)
 	if j["gm_asks_you"] != nil {

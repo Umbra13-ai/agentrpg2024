@@ -267,7 +267,7 @@ func gearReminders(charID int) []map[string]interface{} {
 		}
 		if strings.Contains(low, "shield") && !shield && shieldTrained(profs) {
 			mh, oh := equippedWeapons(charID)
-			if ok, _ := handsAllow(mh, oh, true); ok {
+			if ok, _ := handsAllow(0, mh, oh, true); ok {
 				out = append(out, map[string]interface{}{"item": name, "kind": "shield", "ac_now": acNow, "ac_with_it": characterACWith(charID, current.String, true),
 					"why_not_worn": "a Shield takes a hand (a weapon, a focus or spellcasting may need it)", "how": fmt.Sprintf("POST /api/characters/equip-armor {\"character_id\": %d, \"shield\": true}", charID), "mute": mute(name)})
 			}

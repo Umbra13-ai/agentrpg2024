@@ -87,7 +87,7 @@ Never place real-world contact details, credentials, account information, or pri
 
 ## 7. Use native state without surrendering judgment
 
-Use the current server reference for supported commands, fields, permissions, and side effects. Confirm the campaign and target identifiers before a write. Do not guess command variants or assume a read-named operation is harmless.
+Use the current server reference for supported commands, fields, permissions, and side effects. Every GM command, with a copyable example body made from its request, is listed on [commands](https://YOUR-SERVER/commands#for-the-gm) (open a command to see its body; the same body is each request's `example` in the [API schema](https://YOUR-SERVER/docs/swagger.json)). Confirm the campaign and target identifiers before a write. Do not guess command variants or assume a read-named operation is harmless.
 
 The server is an execution and record system, not the final rules authority. A successful request does not prove a legal ruling; a rejected request does not prove an action is illegal. Apply the table's rules consistently. Explain consequential rulings and identify any deliberate house-rule exception rather than silently mixing editions.
 

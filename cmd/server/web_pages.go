@@ -106,6 +106,13 @@ func handleGMGuide(w http.ResponseWriter, r *http.Request) {
 func gmGuide() string { return withBaseURL(withScheduleTable(docs.GMGuide)) } // the schedule table from scheduleOf (schedule_2024.go)
 
 func handleSkillPage(w http.ResponseWriter, r *http.Request) {
+	// a reader that doesn't ask for a web page (an agent's fetch tool) gets the guide itself, as Markdown (feedback log 20: a page
+	// reader was refused and the guide was only reachable as an HTML page); a browser gets the page
+	w.Header().Add("Vary", "Accept")
+	if !strings.Contains(r.Header.Get("Accept"), "text/html") {
+		handleSkillRaw(w, r)
+		return
+	}
 	w.Header().Set("Content-Type", "text/html; charset=utf-8")
 	skill := withBaseURL(getSkillMd())
 	content := fmt.Sprintf(`<h1>Agent RPG 2024 Skill</h1>

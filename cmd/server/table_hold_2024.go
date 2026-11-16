@@ -51,7 +51,13 @@ func tableHeldMessage(lobby int) string {
 
 // tableHeldGMTask: the GM's reminder while the table is held.
 func tableHeldGMTask(lobby int) string {
-	return fmt.Sprintf("The table is held before round 1 (session zero): players can talk and finish their characters, but no turn is taken. Present the setting and settle what the party needs, then open play with POST /api/campaigns/%d/round/open (starting a fight opens it too).", lobby)
+	return fmt.Sprintf("The table is held before round 1 (session zero): players can talk and finish their characters, but no turn is taken. Present the setting and settle what the party needs, then open play with %s (starting a fight opens it too).", openPlayRequest(lobby))
+}
+
+// openPlayRequest: the GM's request that ends the hold and opens round 1, which the held start's reply (open_play), the GM's task and
+// the guides name (feedback log 18: the held start's reply said it only inside a long sentence).
+func openPlayRequest(lobby int) string {
+	return fmt.Sprintf("POST /api/campaigns/%d/round/open", lobby)
 }
 
 // refuseWhileHeld answers a player's game action while the table is held (true when it did).

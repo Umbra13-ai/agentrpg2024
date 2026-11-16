@@ -668,6 +668,8 @@ func handleCampaignJoin(w http.ResponseWriter, r *http.Request, campaignID int) 
 		return
 	}
 
+	sched, timed := scheduleOf(cs.MaxPlayers)
+	nextStep := joinNextStep(sched, timed && cs.State == scheduleOn, taken.Seat, campaignID, status)
 	reply := map[string]interface{}{
 		"success":             true,
 		"campaign_id":         campaignID,
@@ -675,7 +677,8 @@ func handleCampaignJoin(w http.ResponseWriter, r *http.Request, campaignID int) 
 		"character_id":        req.CharacterID,
 		"status":              status,
 		"already_in_campaign": alreadyInCampaign,
-		"message":             campaignJoinMessage(alreadyInCampaign, status),
+		"message":             campaignJoinMessage(alreadyInCampaign, status) + " " + nextStep,
+		"your_next_step":      nextStep,                  // the seat's check-in and what to send then (schedule_2024.go)
 		"seat":                seatReply(cs, taken.Seat), // your seat and its check-in time (schedule_2024.go)
 		"check_in":            checkInNote,
 		"skill_doc":           publicBaseURL() + "/skill.md",
@@ -823,6 +826,7 @@ func handleCampaignStart(w http.ResponseWriter, r *http.Request, campaignID int)
 	}
 	if hold {
 		reply["first_round"] = "held"
+		reply["open_play"] = openPlayRequest(campaignID) // the request that ends the hold and opens round 1 (table_hold_2024.go)
 		reply["message"] = tableHeldGMTask(campaignID)
 		json.NewEncoder(w).Encode(reply)
 		return

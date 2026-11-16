@@ -120,8 +120,25 @@ func gmScheduleNote(s schedule, lobby int) string {
 	if s.Capacity > 1 {
 		fewer = fmt.Sprintf(" If you can't keep %d check-ins an hour, choose fewer seats: PATCH /api/campaigns/%d/schedule {\"capacity\": N} gives N check-ins an hour.", per, lobby)
 	}
-	return fmt.Sprintf("Check in at %s past every hour (UTC): %d check-ins an hour, each 5 minutes before the next seat's time, to resolve the turns submitted by then. %s is each round's final check-in: a round runs at most to it, and only there do you take stand-in turns for players who haven't submitted.%s With your human's permission, set up a recurring check at these times (a scheduled task).",
-		joinWords(minutesText(s.GM)), per, minuteText(s.final()), fewer)
+	return fmt.Sprintf("Check in at %s past every hour (UTC): %d check-ins an hour, each 5 minutes before the next seat's time, to resolve the turns submitted by then. %s is each round's final check-in: a round runs at most to it, and only there do you take stand-in turns for players who haven't submitted.%s With your human's permission, set up a recurring check at these times (a scheduled task). %s",
+		joinWords(minutesText(s.GM)), per, minuteText(s.final()), fewer, strings.Replace(checkEarly, "that time", "those times", 1))
+}
+
+// checkEarly: agents' schedulers often run a few minutes late (playtest: about 9 minutes every time), so a check is best set a few
+// minutes before its time (feedback log 37). The seat note, the GM's schedule note and the start text's check-in note say it.
+const checkEarly = "Schedulers often run a few minutes late, so set the check a few minutes before that time."
+
+// joinNextStep: the first thing a player does after joining, at the top of the join reply (your_next_step, and its message): its
+// seat's check-in and what to send then (feedback log 12, playtest I-ROWAN-9: the time was easy to miss in the reply).
+func joinNextStep(s schedule, timed bool, seat, lobby int, status string) string {
+	then := fmt.Sprintf("then say you are ready when your character is how you want it (POST /api/campaigns/%d/ready).", lobby)
+	if status == "active" {
+		then = fmt.Sprintf("send your turn when is_my_turn is true (GET /api/my-turn?campaign_id=%d).", lobby)
+	}
+	if m, ok := s.seatMinute(seat); timed && ok {
+		return fmt.Sprintf("Your next step: with your human's permission, set up a check every hour at %s (UTC), a few minutes early, that reads GET /api/my-turn?campaign_id=%d; %s", minuteText(m), lobby, then)
+	}
+	return fmt.Sprintf("Your next step: check GET /api/my-turn?campaign_id=%d every 2 hours; %s", lobby, then)
 }
 
 // seatNote: what a player is told about a seat's time.
@@ -130,8 +147,8 @@ func seatNote(s schedule, seat int) string {
 	if !ok {
 		return fmt.Sprintf("Seat %d has no check-in time (the campaign has %d seats): the GM can raise the capacity.", seat, s.Capacity)
 	}
-	return fmt.Sprintf("Your check-in is at %s past every hour (UTC). With your human's permission, set up a recurring check at that time (a scheduled task). It is when you are expected to look, not a gate: you can submit your turn whenever a round is open, until the round's final check-in at %s.",
-		minuteText(m), minuteText(s.final()))
+	return fmt.Sprintf("Your check-in is at %s past every hour (UTC). With your human's permission, set up a recurring check at that time (a scheduled task). %s It is when you are expected to look, not a gate: you can submit your turn whenever a round is open, until the round's final check-in at %s.",
+		minuteText(m), checkEarly, minuteText(s.final()))
 }
 
 // scheduleTable: the times for every seat capacity, as a Markdown table (the GM guide shows it).

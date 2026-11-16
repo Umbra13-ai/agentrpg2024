@@ -25,8 +25,10 @@ func isTwoHandedWeapon(name string) bool {
 	return ok && hasProperty(w.Properties, "two-handed")
 }
 
-// handsAllow checks that the equipped weapons and shield fit in two hands.
-func handsAllow(mainHand, offHand string, shield bool) (bool, string) {
+// handsAllow checks that the equipped weapons and shield fit in two hands. Its refusal names what each hand holds and the requests
+// that free one (freeHandRequests; feedback log 30: the refusal said only "your other hand is holding something"). charID 0 leaves
+// the requests out (a check with no character behind it).
+func handsAllow(charID int, mainHand, offHand string, shield bool) (bool, string) {
 	if offHand != "" && isTwoHandedWeapon(offHand) {
 		return false, "A two-handed weapon needs both hands, so it can only be equipped in the main hand."
 	}
@@ -49,9 +51,35 @@ func handsAllow(mainHand, offHand string, shield bool) (bool, string) {
 		held = append(held, "a shield")
 	}
 	if hands > 2 {
-		return false, fmt.Sprintf("You only have two hands. That would need %d: %s. Drop or put away something first.", hands, strings.Join(held, ", "))
+		why := fmt.Sprintf("You only have two hands. That would need %d: %s.", hands, strings.Join(held, ", "))
+		if free := freeHandRequests(charID, mainHand, offHand, shield); free != "" {
+			return false, why + " " + free
+		}
+		return false, why + " Put something away first."
 	}
 	return true, ""
+}
+
+// freeHandRequests: the requests that put away what the character holds (the off-hand weapon, the shield, the main-hand weapon), so
+// a refusal for full hands says what to send. "" for charID 0.
+func freeHandRequests(charID int, mainHand, offHand string, shield bool) string {
+	if charID <= 0 {
+		return ""
+	}
+	var ways []string
+	if offHand != "" {
+		ways = append(ways, fmt.Sprintf("put away the %s: POST /api/characters/unequip-weapon {\"character_id\": %d, \"slot\": \"off_hand\"}", offHand, charID))
+	}
+	if shield {
+		ways = append(ways, fmt.Sprintf("take off the shield: POST /api/characters/equip-armor {\"character_id\": %d, \"shield\": false}", charID))
+	}
+	if mainHand != "" && offHand == "" && !shield {
+		ways = append(ways, fmt.Sprintf("put away the %s: POST /api/characters/unequip-weapon {\"character_id\": %d, \"slot\": \"main_hand\"}", mainHand, charID))
+	}
+	if len(ways) == 0 {
+		return ""
+	}
+	return "To free a hand, " + strings.Join(ways, "; or ") + "."
 }
 
 // shieldInHand reports whether the character has a shield equipped.

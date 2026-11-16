@@ -1337,7 +1337,11 @@ func builderSteps(body map[string]interface{}, agentID int, withCheck bool) []bu
 				s4.Remaining++
 			}
 		}
-		if sp.Key == "human" && (humanFeat == "" || humanFeat == "skilled") {
+		// Skilled's picks are asked once Skilled is the chosen feat (feedback log 25: they showed before any feat was chosen); while no
+		// feat is chosen they are only part of the suggestion, when the suggested feat is Skilled, so use_suggestion fills both
+		skilledChosen := humanFeat == "skilled"
+		skilledSuggested := humanFeat == "" && sugc["feat"] == "skilled"
+		if sp.Key == "human" && (skilledChosen || skilledSuggested) {
 			// Skilled: 3 skills or tools the character doesn't have, checked as creation checks them (Nov 14 tester: unknown names,
 			// the background's tool and one skill in two spellings were accepted here and refused by the review)
 			heldSk := map[string]bool{}
@@ -1414,7 +1418,9 @@ func builderSteps(body map[string]interface{}, agentID int, withCheck bool) []bu
 			if len(picks) > 0 {
 				cur = picks
 			}
-			s4.Choices = append(s4.Choices, choice("species_feat_choices.proficiencies", "Skilled: 3 skills or tools you don't already have", 3, skOpts, cur, len(picks) == 3 && skProb == "", skProb))
+			if skilledChosen {
+				s4.Choices = append(s4.Choices, choice("species_feat_choices.proficiencies", "Skilled: 3 skills or tools you don't already have", 3, skOpts, cur, len(picks) == 3 && skProb == "", skProb))
+			}
 			avoid := map[string]bool{}
 			for k := range heldSk {
 				avoid[k] = true
@@ -1427,7 +1433,7 @@ func builderSteps(body map[string]interface{}, agentID int, withCheck bool) []bu
 			}
 			// three picks, falling back to any skill not held (round 3: the fixed preferences ran out and the shown body had 2)
 			sug4["species_feat_choices"] = map[string]interface{}{"proficiencies": pickFrom([]string{"perception", "stealth", "insight", "athletics", "persuasion", "survival", "investigation", "medicine"}, game.SkillNames(), avoid, 3)}
-			if len(picks) != 3 || skProb != "" {
+			if skilledChosen && (len(picks) != 3 || skProb != "") {
 				s4.Remaining++
 			}
 		}

@@ -223,6 +223,35 @@ for r in GODOC:
 print("from godoc:", added)
 
 # ---------------------------------------------------------------- every request body and every reply, from the code
+
+
+def example_value(schema, name):
+    """A value of a field's type for a copyable example: the first allowed value, 1 for a number or an id, true, "..." for words."""
+    if schema.get("enum"):
+        return schema["enum"][0]
+    t = schema.get("type")
+    if t in ("integer", "number"):
+        return 1
+    if t == "boolean":
+        return True
+    if t == "array":
+        return [example_value(schema.get("items") or {}, name)]
+    if t == "object":
+        props = schema.get("properties") or {}
+        return {k: example_value(v, k) for k, v in props.items() if k in (schema.get("required") or props)}
+    return "..."
+
+
+def example_body(fields):
+    """The example body of a request without one written by hand: the fields it needs (all of them when it needs none in
+    particular), each with a value of its type. The commands page shows it; a GM copies it and fills it in."""
+    if not fields:
+        return None
+    use = [f for f in fields if f.get("required")]
+    if not use:  # none needed in particular: the plain fields (a nested object is optional detail the reference describes)
+        use = [f for f in fields if f["schema"].get("type") != "object"] or fields
+    return {f["name"]: example_value(f["schema"], f["name"]) for f in use}
+
 _ops = {(o["method"], o["path"]): o for o in SHAPES["operations"]}
 _refusal = {"description": "The body was refused (nothing was changed): unknown_field, wrong_type, invalid_json, body_required or id_mismatch, with the fields the request takes",
             "content": {"application/json": {"schema": SHAPES["body_refusal"]}}}
@@ -251,6 +280,8 @@ for _p, _pops in paths.items():
             if rq.get("aliases"):
                 note = (note + " Also read under these names: " + ", ".join(rq["aliases"]) + ".").strip()
             content = {"schema": sc}
+            if example is None:
+                example = example_body(rq["fields"])  # every body has a copyable example (feedback log 11), made from the request type
             if example is not None:
                 unknown = sorted(set(example) - set(props))
                 if unknown:

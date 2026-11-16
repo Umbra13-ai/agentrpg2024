@@ -248,7 +248,8 @@ Add to the owner, never beside it. When you give another rule one owner, add it 
   a player's turn itself (combat/next, narrate's `advance_turn`: never a submitted turn, never before the final check-in;
   combat/skip never ends a player's turn with the schedule: `player_turn_not_skipped`, Matt 11.11); `turn_results` records how each turn ended, once (UNIQUE), written only by `recordResult` (the turn-end hook
   `recordTurnResult`, and stage E's resolve and stand-in; `turnHow.result` names how; `checkInAt` reads it); the round opens with the fight's round (`scheduleFightRound`) and replies say
-  `round_complete`. `TestNoOtherTurnResultWriter` and `TestOnlyTheGMsRequestsRunTheWalk` check. **Stage E, rounds outside a fight:** `routeEffects`
+  `round_complete`. A player's seat time is said by `seatNote`, the join reply's `your_next_step` by `joinNextStep` (the seat's
+  check-in, set a few minutes early: `checkEarly`, also in `checkInNote`; feedback log 12, 37). `TestNoOtherTurnResultWriter` and `TestOnlyTheGMsRequestsRunTheWalk` check. **Stage E, rounds outside a fight:** `routeEffects`
   (`cmd/server/round_effects_2024.go`) is the one table of every player write route and what it is under the schedule: a game action
   (a submission), gear (setup until the character has played a round, then a submission: Matt 11.9) or immediate with its reason
   (talk, choices, settings, creation, account, a fight's own submission, the GM's requests); `/api/action` is a game action except
@@ -297,7 +298,7 @@ Add to the owner, never beside it. When you give another rule one owner, add it 
   writers of `lobbies.table_held`. While held the round gate refuses a player's game action (`refuseWhileHeld`: 409 `table_held`,
   nothing spent or saved); talk, the party chat, setup and gear go on. my-turn (`table_held`, `is_my_turn` false), the heartbeat,
   `checkInAt`'s message, GM status (`tableHeldGMTask`), the campaign's view and the exploration skip read it. The GM opens play with
-  `POST /api/campaigns/{id}/round/open` (`handleRoundOpen`: releases, then round 1 opens with the schedule); a fight's start
+  `POST /api/campaigns/{id}/round/open` (`openPlayRequest` names it in the held start's `open_play` and the GM task; `handleRoundOpen`: releases, then round 1 opens with the schedule); a fight's start
   (`scheduleFightStarts`) releases it too. Go: `TestPostgresTableHeldBeforeRoundOne`, `TestPostgresFightOpensHeldTable`.
 - **Which character an agent is playing:** `actingCharacter` (`cmd/server/acting_character_2024.go`): the character named by
   `character_id` / `campaign_id` (the body first, then the query string), else the agent's character in its newest active campaign.
@@ -338,7 +339,8 @@ Add to the owner, never beside it. When you give another rule one owner, add it 
   fields and the character's real enemies.
 - **The equipped hands:** `changeHands` (`cmd/server/equipped_weapons.go`) is the one writer of `equipped_main_hand` /
   `equipped_off_hand`: it runs the change, then `syncHeldItems`, so the inventory's "held" marks, the shop and the sheet agree
-  (playtest I-ROWAN-7). The inventory writer (`changeInventoryIn`) also runs `syncHands` on every save, so a path that writes the
+  (playtest I-ROWAN-7). **How many hands a change needs** is `handsAllow` (`hands.go`); its refusal names what fills the hands and
+  the request that frees one, from `freeHandRequests` (the held-item refusal uses it too; feedback log 30). The inventory writer (`changeInventoryIn`) also runs `syncHands` on every save, so a path that writes the
   hands another way (creation's row) can't leave a weapon "held" in an empty hand. `TestNoOtherHandWriter` checks.
 - **A skill check's bonus:** `checkBonus` (`cmd/server/actions_checks_2024.go`): the ability modifier, proficiency or Expertise, Jack
   of All Trades, the Thaumaturge or Magician bonus (`orderSkillBonus`), items and Wild Shape. The player's checks, the GM's skill
@@ -429,7 +431,9 @@ Add to the owner, never beside it. When you give another rule one owner, add it 
   an operation, parameter or field without a description, a `@Body` on routes that read none, a served prefix with no documented
   route. `finish_operation` (in the script) is the one check of every operation (path parameters declared, a body under content, no
   body on a GET). `TestAPIReference` checks the reference against the router, skill.md and the commands page;
-  `TestGodocBlocksSitAboveTheirHandlers` checks the blocks. **The guides** (`docs/*.md`): `TestDocsNameRealRequests` fails on a
+  `TestGodocBlocksSitAboveTheirHandlers` checks the blocks. **An example body** for every request that reads one is made by the
+  script from the request type (`example_body`) unless the hand entry gives one; `/commands` shows it under each command and the GM
+  guide points there (feedback log 11; `TestEveryRequestBodyHasAnExample`). **The guides** (`docs/*.md`): `TestDocsNameRealRequests` fails on a
   request they name that the reference doesn't have and on a body field they show that the request doesn't take;
   `TestCheckInNoteInGuides` keeps `checkInNote` between the check-in markers of the heartbeat and experience guides
   (`START_UPDATE=1` rewrites them); `TestDocsTableRuleDefaults` checks the table rule defaults they name. Lists the server defines

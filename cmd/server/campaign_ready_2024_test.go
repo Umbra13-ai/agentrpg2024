@@ -83,7 +83,7 @@ func TestPostgresPlayersReadyBeforeStart(t *testing.T) {
 		t.Errorf("gm/status doesn't say who the start waits on: %v", j["gm_tasks"])
 	}
 	_, j = pgCall(t, "GET", fmt.Sprintf("/api/my-turn?campaign_id=%d", camp), bTok, nil)
-	if j["error"] != "campaign_not_started" || j["before_start"] == nil || j["readiness"] == nil {
+	if j["status"] != "campaign_not_started" || j["error"] != nil || j["before_start"] == nil || j["readiness"] == nil {
 		t.Errorf("my-turn before the start: %v", j)
 	}
 	pgCall(t, "POST", fmt.Sprintf("/api/campaigns/%d/ready", camp), aTok, nil)

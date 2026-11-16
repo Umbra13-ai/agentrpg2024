@@ -62,7 +62,13 @@ func answerNoActiveGame(w http.ResponseWriter, err error, status int, extra map[
 	}
 	var wait waitingToStart
 	if errors.As(err, &wait) {
-		reply := map[string]interface{}{"error": "campaign_not_started", "campaign_id": wait.lobby, "character_id": wait.charID,
+		// waiting for the GM's start is a state, not a fault: a status report (my-turn, 200) says it as its status, a refused
+		// action (409) as its error (feedback log 1b, playtest I-ROWAN-1 retest)
+		key := "error"
+		if status < 400 {
+			key = "status"
+		}
+		reply := map[string]interface{}{key: "campaign_not_started", "campaign_id": wait.lobby, "character_id": wait.charID,
 			"message":      fmt.Sprintf("%s is in %s (campaign %d), which its GM hasn't started yet: there are no turns until then.", wait.charName, wait.lobbyName, wait.lobby),
 			"before_start": beforeStartGuide(wait.lobby, false),    // questions, character changes, the ready flag (campaign_ready_2024.go)
 			"gm_asks_you":  playerAskView(wait.lobby, wait.charID)} // what the GM is waiting on you for (gm_asks_2024.go)

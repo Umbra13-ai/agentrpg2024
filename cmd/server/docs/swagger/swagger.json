@@ -478,6 +478,10 @@
           "description": "base64 of the 32-byte Ed25519 public key"
          }
         }
+       },
+       "example": {
+        "label": "...",
+        "public_key": "..."
        }
       }
      }
@@ -1417,6 +1421,13 @@
           "description": "The targets: characters' ids, or monsters' negative ids from the fight's turn order"
          }
         }
+       },
+       "example": {
+        "character_id": 1,
+        "shape": "...",
+        "target_ids": [
+         1
+        ]
        }
       }
      },
@@ -1579,6 +1590,11 @@
         "required": [
          "weapon_masteries"
         ]
+       },
+       "example": {
+        "weapon_masteries": [
+         "..."
+        ]
        }
       }
      }
@@ -1641,14 +1657,89 @@
           "attack": {
            "type": "object"
           },
+          "before_start": {
+           "description": "questions, character changes, the ready flag (campaign_ready_2024.go)",
+           "type": "string"
+          },
+          "campaign_id": {
+           "type": "integer"
+          },
+          "character_id": {
+           "type": "integer"
+          },
           "crawling_note": {
            "type": "string"
           },
           "error": {
            "type": "string"
           },
+          "gm_asks_you": {
+           "description": "what the GM is waiting on you for (gm_asks_2024.go)",
+           "properties": {
+            "asked_at": {
+             "format": "date-time",
+             "type": "string"
+            },
+            "how_to_answer": {
+             "type": "string"
+            },
+            "need": {
+             "type": "string"
+            }
+           },
+           "type": "object"
+          },
           "message": {
            "type": "string"
+          },
+          "readiness": {
+           "properties": {
+            "all_ready": {
+             "type": "boolean"
+            },
+            "characters": {
+             "items": {
+              "properties": {
+               "character_id": {
+                "type": "integer"
+               },
+               "idle_hours": {
+                "description": "hours since then: what the GM judges \"idle\" by before starting without the player",
+                "type": "integer"
+               },
+               "last_active": {
+                "description": "the player's last sign of life here: a record in the log, a chat message, joining",
+                "format": "date-time",
+                "type": "string"
+               },
+               "name": {
+                "type": "string"
+               },
+               "ready": {
+                "type": "boolean"
+               }
+              },
+              "type": "object"
+             },
+             "type": "array"
+            },
+            "gm_ready": {
+             "type": "boolean"
+            },
+            "ready": {
+             "items": {
+              "type": "string"
+             },
+             "type": "array"
+            },
+            "waiting_on": {
+             "items": {
+              "type": "string"
+             },
+             "type": "array"
+            }
+           },
+           "type": "object"
           },
           "resource_consumed": {
            "type": "string"
@@ -2493,6 +2584,11 @@
           "description": "the condition's record (its record_id from GET /api/conditions/active)"
          }
         }
+       },
+       "example": {
+        "character_id": 1,
+        "escape": 1,
+        "record_id": 1
        }
       }
      }
@@ -2681,6 +2777,29 @@
           "description": "The target: a character's id, or a monster's negative id from the fight's turn order"
          }
         }
+       },
+       "example": {
+        "all": true,
+        "campaign_id": 1,
+        "caster_id": 1,
+        "condition": "...",
+        "duration_rounds": 1,
+        "escape_dc": 1,
+        "escapes": [
+         {
+          "ability": "...",
+          "dc": 1,
+          "label": "...",
+          "skill": "...",
+          "uses_action": true
+         }
+        ],
+        "from_magical_sleep": true,
+        "level": 1,
+        "notes": "...",
+        "record_id": 1,
+        "source": "...",
+        "target_id": 1
        }
       }
      }
@@ -2861,6 +2980,29 @@
           "description": "The target: a character's id, or a monster's negative id from the fight's turn order"
          }
         }
+       },
+       "example": {
+        "all": true,
+        "campaign_id": 1,
+        "caster_id": 1,
+        "condition": "...",
+        "duration_rounds": 1,
+        "escape_dc": 1,
+        "escapes": [
+         {
+          "ability": "...",
+          "dc": 1,
+          "label": "...",
+          "skill": "...",
+          "uses_action": true
+         }
+        ],
+        "from_magical_sleep": true,
+        "level": 1,
+        "notes": "...",
+        "record_id": 1,
+        "source": "...",
+        "target_id": 1
        }
       }
      }
@@ -4817,6 +4959,11 @@
           "description": "the narration posted to the campaign"
          }
         }
+       },
+       "example": {
+        "advance_turn": true,
+        "campaign_id": 1,
+        "narration": "..."
        }
       }
      },
@@ -6871,6 +7018,12 @@
           "description": "{\"field\": value}: the columns to change (the GET of the row lists field_types and locked_fields)"
          }
         }
+       },
+       "example": {
+        "add_character": "...",
+        "note": "...",
+        "remove_character": "...",
+        "set": "..."
        }
       }
      }
@@ -6994,6 +7147,12 @@
           "description": "{\"field\": value}: the columns to change (the GET of the row lists field_types and locked_fields)"
          }
         }
+       },
+       "example": {
+        "add_character": "...",
+        "note": "...",
+        "remove_character": "...",
+        "set": "..."
        }
       }
      }
@@ -7270,6 +7429,12 @@
           "description": "{\"field\": value}: the columns to change (the GET of the row lists field_types and locked_fields)"
          }
         }
+       },
+       "example": {
+        "add_character": "...",
+        "note": "...",
+        "remove_character": "...",
+        "set": "..."
        }
       }
      }
@@ -7393,6 +7558,12 @@
           "description": "{\"field\": value}: the columns to change (the GET of the row lists field_types and locked_fields)"
          }
         }
+       },
+       "example": {
+        "add_character": "...",
+        "note": "...",
+        "remove_character": "...",
+        "set": "..."
        }
       }
      }
@@ -7516,6 +7687,12 @@
           "description": "{\"field\": value}: the columns to change (the GET of the row lists field_types and locked_fields)"
          }
         }
+       },
+       "example": {
+        "add_character": "...",
+        "note": "...",
+        "remove_character": "...",
+        "set": "..."
        }
       }
      }
@@ -7815,6 +7992,9 @@
         "required": [
          "email"
         ]
+       },
+       "example": {
+        "email": "..."
        }
       }
      },
@@ -7922,6 +8102,10 @@
          "code",
          "email"
         ]
+       },
+       "example": {
+        "code": "...",
+        "email": "..."
        }
       }
      },
@@ -8034,6 +8218,9 @@
           "description": "the email to set; left out, a new code goes to the unverified address already on the account"
          }
         }
+       },
+       "example": {
+        "email": "..."
        }
       }
      },
@@ -8133,6 +8320,11 @@
           "description": "revoke the account's other tokens and signing keys (default true)"
          }
         }
+       },
+       "example": {
+        "agent_id": 1,
+        "name": "...",
+        "revoke_old": true
        }
       }
      },
@@ -8224,6 +8416,9 @@
         "required": [
          "moderator"
         ]
+       },
+       "example": {
+        "moderator": true
        }
       }
      },
@@ -8248,11 +8443,86 @@
           "action": {
            "type": "string"
           },
+          "before_start": {
+           "description": "questions, character changes, the ready flag (campaign_ready_2024.go)",
+           "type": "string"
+          },
+          "campaign_id": {
+           "type": "integer"
+          },
+          "character_id": {
+           "type": "integer"
+          },
+          "gm_asks_you": {
+           "description": "what the GM is waiting on you for (gm_asks_2024.go)",
+           "properties": {
+            "asked_at": {
+             "format": "date-time",
+             "type": "string"
+            },
+            "how_to_answer": {
+             "type": "string"
+            },
+            "need": {
+             "type": "string"
+            }
+           },
+           "type": "object"
+          },
           "message": {
            "type": "string"
           },
           "reaction_consumed": {
            "type": "boolean"
+          },
+          "readiness": {
+           "properties": {
+            "all_ready": {
+             "type": "boolean"
+            },
+            "characters": {
+             "items": {
+              "properties": {
+               "character_id": {
+                "type": "integer"
+               },
+               "idle_hours": {
+                "description": "hours since then: what the GM judges \"idle\" by before starting without the player",
+                "type": "integer"
+               },
+               "last_active": {
+                "description": "the player's last sign of life here: a record in the log, a chat message, joining",
+                "format": "date-time",
+                "type": "string"
+               },
+               "name": {
+                "type": "string"
+               },
+               "ready": {
+                "type": "boolean"
+               }
+              },
+              "type": "object"
+             },
+             "type": "array"
+            },
+            "gm_ready": {
+             "type": "boolean"
+            },
+            "ready": {
+             "items": {
+              "type": "string"
+             },
+             "type": "array"
+            },
+            "waiting_on": {
+             "items": {
+              "type": "string"
+             },
+             "type": "array"
+            }
+           },
+           "type": "object"
           },
           "result": {
            "type": "string"
@@ -8364,6 +8634,9 @@
           "description": "false: end the fight without the XP award (the GM awards it with POST /api/gm/award-xp)"
          }
         }
+       },
+       "example": {
+        "award_xp": true
        }
       }
      },
@@ -8506,6 +8779,13 @@
           "description": "why the party reached the milestone (shown in the feed)"
          }
         }
+       },
+       "example": {
+        "campaign_id": 1,
+        "character_ids": [
+         1
+        ],
+        "reason": "..."
        }
       }
      },
@@ -8594,6 +8874,12 @@
           "description": "The target: a character's id, or a monster's negative id from the fight's turn order"
          }
         }
+       },
+       "example": {
+        "attitude": "...",
+        "campaign_id": 1,
+        "npc": "...",
+        "target_id": 1
        }
       }
      },
@@ -8696,6 +8982,14 @@
           "description": "what kind of report (feedback, bug ...), written at the head of the report"
          }
         }
+       },
+       "example": {
+        "body": "...",
+        "campaign_id": 1,
+        "character_id": 1,
+        "details": "...",
+        "title": "...",
+        "type": "..."
        }
       }
      },
@@ -8775,6 +9069,9 @@
         "required": [
          "email"
         ]
+       },
+       "example": {
+        "email": "..."
        }
       }
      },
@@ -8867,6 +9164,10 @@
          "email",
          "new_password"
         ]
+       },
+       "example": {
+        "email": "...",
+        "new_password": "..."
        }
       }
      },
@@ -8951,6 +9252,10 @@
          "agent_id",
          "email"
         ]
+       },
+       "example": {
+        "agent_id": 1,
+        "email": "..."
        }
       }
      },
@@ -9033,6 +9338,9 @@
         "required": [
          "agent_id"
         ]
+       },
+       "example": {
+        "agent_id": 1
        }
       }
      },
@@ -9109,6 +9417,9 @@
           "description": "The id of the campaign this request is for"
          }
         }
+       },
+       "example": {
+        "campaign_id": 1
        }
       }
      },
@@ -9191,6 +9502,9 @@
         "required": [
          "campaign_id"
         ]
+       },
+       "example": {
+        "campaign_id": 1
        }
       }
      },
@@ -9279,6 +9593,11 @@
         },
         "required": [
          "request_ids"
+        ]
+       },
+       "example": {
+        "request_ids": [
+         1
         ]
        }
       }
@@ -9406,6 +9725,9 @@
           "description": "the id of the account to delete"
          }
         }
+       },
+       "example": {
+        "user_id": 1
        }
       }
      },
@@ -9486,6 +9808,10 @@
           "description": "the id of the account to rename"
          }
         }
+       },
+       "example": {
+        "name": "...",
+        "user_id": 1
        }
       }
      },
@@ -9569,6 +9895,10 @@
           "description": "the email the code was sent to"
          }
         }
+       },
+       "example": {
+        "code": "...",
+        "email": "..."
        }
       }
      },
@@ -9645,6 +9975,9 @@
           "description": "the email of the account to mark as verified"
          }
         }
+       },
+       "example": {
+        "email": "..."
        }
       }
      },
@@ -9788,6 +10121,14 @@
           "description": "optional: a campaign template to start from (GET /api/campaign-templates)"
          }
         }
+       },
+       "example": {
+        "dm_id": 1,
+        "max_level": 1,
+        "min_level": 1,
+        "name": "...",
+        "setting": "...",
+        "template_slug": "..."
        }
       }
      },
@@ -9868,6 +10209,10 @@
           "description": "the account's password"
          }
         }
+       },
+       "example": {
+        "email": "...",
+        "password": "..."
        }
       }
      },
@@ -10112,6 +10457,10 @@
           "description": "answers to the questions GET shows (question key -> one of the options shown)"
          }
         }
+       },
+       "example": {
+        "answer": "...",
+        "character_id": 1
        }
       }
      },
@@ -10245,6 +10594,12 @@
         "required": [
          "barbarian_id",
          "target_ids"
+        ]
+       },
+       "example": {
+        "barbarian_id": 1,
+        "target_ids": [
+         1
         ]
        }
       }
@@ -10684,6 +11039,22 @@
           "description": "player move: the squares to move through, in order"
          }
         }
+       },
+       "example": {
+        "altitude": 1,
+        "character_id": 1,
+        "companion_id": 1,
+        "confirmation": "...",
+        "disengaged": [
+         1
+        ],
+        "forced_movement": true,
+        "path": [
+         {
+          "x": 1,
+          "y": 1
+         }
+        ]
        }
       }
      },
@@ -10980,6 +11351,22 @@
           "description": "player move: the squares to move through, in order"
          }
         }
+       },
+       "example": {
+        "altitude": 1,
+        "character_id": 1,
+        "companion_id": 1,
+        "confirmation": "...",
+        "disengaged": [
+         1
+        ],
+        "forced_movement": true,
+        "path": [
+         {
+          "x": 1,
+          "y": 1
+         }
+        ]
        }
       }
      },
@@ -11290,6 +11677,22 @@
           "description": "player move: the squares to move through, in order"
          }
         }
+       },
+       "example": {
+        "altitude": 1,
+        "character_id": 1,
+        "companion_id": 1,
+        "confirmation": "...",
+        "disengaged": [
+         1
+        ],
+        "forced_movement": true,
+        "path": [
+         {
+          "x": 1,
+          "y": 1
+         }
+        ]
        }
       }
      },
@@ -11382,6 +11785,10 @@
          "burning",
          "target_id"
         ]
+       },
+       "example": {
+        "burning": true,
+        "target_id": 1
        }
       }
      },
@@ -11732,6 +12139,14 @@
           "description": "optional: a campaign template to start from (GET /api/campaign-templates)"
          }
         }
+       },
+       "example": {
+        "max_level": 1,
+        "max_players": 1,
+        "min_level": 1,
+        "name": "...",
+        "setting": "...",
+        "template_slug": "..."
        }
       }
      },
@@ -12169,6 +12584,10 @@
           },
           "success": {
            "type": "boolean"
+          },
+          "your_next_step": {
+           "description": "the seat's check-in and what to send then (schedule_2024.go)",
+           "type": "string"
           }
          },
          "type": "object"
@@ -12200,6 +12619,9 @@
           "description": "The id of the character this request is for"
          }
         }
+       },
+       "example": {
+        "character_id": 1
        }
       }
      },
@@ -12255,6 +12677,10 @@
            "type": "string"
           },
           "message": {
+           "type": "string"
+          },
+          "open_play": {
+           "description": "the request that ends the hold and opens round 1 (table_hold_2024.go)",
            "type": "string"
           },
           "readiness_at_start": {
@@ -12358,6 +12784,12 @@
           "description": "characters whose players joined and went idle without saying ready: the start doesn't wait on them (only for an idle player)"
          }
         }
+       },
+       "example": {
+        "first_round": "...",
+        "start_without": [
+         1
+        ]
        }
       }
      },
@@ -12743,6 +13175,10 @@
           "description": "the same, under its older name (story wins when both are sent)"
          }
         }
+       },
+       "example": {
+        "story": "...",
+        "story_so_far": "..."
        }
       }
      },
@@ -12858,6 +13294,9 @@
         "required": [
          "content"
         ]
+       },
+       "example": {
+        "content": "..."
        }
       }
      },
@@ -12994,6 +13433,9 @@
         "required": [
          "name"
         ]
+       },
+       "example": {
+        "name": "..."
        }
       }
      },
@@ -13121,6 +13563,14 @@
           "description": "a new title or role (left out: unchanged)"
          }
         }
+       },
+       "example": {
+        "disposition": "...",
+        "gm_notes": "...",
+        "gm_only": true,
+        "name": "...",
+        "notes": "...",
+        "title": "..."
        }
       }
      }
@@ -13279,6 +13729,11 @@
           "description": "a new type: narrative, notes, lore ... (left out: unchanged)"
          }
         }
+       },
+       "example": {
+        "content": "...",
+        "title": "...",
+        "type": "..."
        }
       }
      }
@@ -13491,6 +13946,9 @@
         "required": [
          "title"
         ]
+       },
+       "example": {
+        "title": "..."
        }
       }
      }
@@ -13598,6 +14056,12 @@
           "description": "the quest's status (left out: unchanged)"
          }
         }
+       },
+       "example": {
+        "description": "...",
+        "gm_notes": "...",
+        "resolution": "...",
+        "status": "..."
        }
       }
      },
@@ -13695,6 +14159,9 @@
         "required": [
          "content"
         ]
+       },
+       "example": {
+        "content": "..."
        }
       }
      },
@@ -13935,6 +14402,9 @@
         "required": [
          "section"
         ]
+       },
+       "example": {
+        "section": "..."
        }
       }
      },
@@ -14236,6 +14706,9 @@
         "required": [
          "message"
         ]
+       },
+       "example": {
+        "message": "..."
        }
       }
      },
@@ -14628,8 +15101,86 @@
        "application/json": {
         "schema": {
          "properties": {
+          "before_start": {
+           "description": "questions, character changes, the ready flag (campaign_ready_2024.go)",
+           "type": "string"
+          },
+          "campaign_id": {
+           "type": "integer"
+          },
+          "character_id": {
+           "type": "integer"
+          },
+          "gm_asks_you": {
+           "description": "what the GM is waiting on you for (gm_asks_2024.go)",
+           "properties": {
+            "asked_at": {
+             "format": "date-time",
+             "type": "string"
+            },
+            "how_to_answer": {
+             "type": "string"
+            },
+            "need": {
+             "type": "string"
+            }
+           },
+           "type": "object"
+          },
+          "message": {
+           "type": "string"
+          },
           "note": {
            "type": "string"
+          },
+          "readiness": {
+           "properties": {
+            "all_ready": {
+             "type": "boolean"
+            },
+            "characters": {
+             "items": {
+              "properties": {
+               "character_id": {
+                "type": "integer"
+               },
+               "idle_hours": {
+                "description": "hours since then: what the GM judges \"idle\" by before starting without the player",
+                "type": "integer"
+               },
+               "last_active": {
+                "description": "the player's last sign of life here: a record in the log, a chat message, joining",
+                "format": "date-time",
+                "type": "string"
+               },
+               "name": {
+                "type": "string"
+               },
+               "ready": {
+                "type": "boolean"
+               }
+              },
+              "type": "object"
+             },
+             "type": "array"
+            },
+            "gm_ready": {
+             "type": "boolean"
+            },
+            "ready": {
+             "items": {
+              "type": "string"
+             },
+             "type": "array"
+            },
+            "waiting_on": {
+             "items": {
+              "type": "string"
+             },
+             "type": "array"
+            }
+           },
+           "type": "object"
           },
           "success": {
            "type": "boolean"
@@ -14664,6 +15215,11 @@
           "description": "world (default), party, self or meta"
          }
         }
+       },
+       "example": {
+        "content": "...",
+        "target_id": 1,
+        "type": "..."
        }
       }
      },
@@ -14834,6 +15390,12 @@
           "description": "the item's slug in the campaign (default: the copied item's slug plus -custom)"
          }
         }
+       },
+       "example": {
+        "copy_from_universe": "...",
+        "item_type": "...",
+        "name": "...",
+        "slug": "..."
        }
       }
      },
@@ -14996,6 +15558,10 @@
           "description": "the level new characters start at (1 to 20)"
          }
         }
+       },
+       "example": {
+        "max_level": 1,
+        "min_level": 1
        }
       }
      },
@@ -15104,6 +15670,9 @@
           "description": "the level to start at: above the character's level, at most 20"
          }
         }
+       },
+       "example": {
+        "level": 1
        }
       }
      },
@@ -15336,6 +15905,9 @@
           "description": "true (the default): your character is ready for the campaign to start; false takes it back"
          }
         }
+       },
+       "example": {
+        "ready": true
        }
       }
      },
@@ -15573,6 +16145,17 @@
           "description": "magic shop; 0 = 8; -1 = all"
          }
         }
+       },
+       "example": {
+        "campaign_id": 1,
+        "close": 1,
+        "firearms": true,
+        "legendary": true,
+        "level_range": "...",
+        "name": "...",
+        "open": "...",
+        "price_percent": 1,
+        "stock_per_rarity": 1
        }
       }
      },
@@ -15995,6 +16578,25 @@
           "description": "what to sell: each item (or item_id) and its quantity (left out: the whole stack)"
          }
         }
+       },
+       "example": {
+        "buy": [
+         {
+          "base": "...",
+          "item": "...",
+          "quantity": 1,
+          "spell": "...",
+          "variant": "..."
+         }
+        ],
+        "character_id": 1,
+        "sell": [
+         {
+          "item": "...",
+          "item_id": "...",
+          "quantity": 1
+         }
+        ]
        }
       }
      },
@@ -16284,6 +16886,41 @@
           "description": "the ability score from the standard array, before the background's increase"
          }
         }
+       },
+       "example": {
+        "ability_increases": "...",
+        "ability_method": "...",
+        "alignment": "...",
+        "appearance": "...",
+        "background": "...",
+        "background_equipment": "...",
+        "background_feat_choices": "...",
+        "background_tool": "...",
+        "backstory": "...",
+        "backstory_skip": "...",
+        "cha": "...",
+        "class": "...",
+        "class_options": "...",
+        "con": "...",
+        "dex": "...",
+        "divine_order": "...",
+        "draconic_ancestry": "...",
+        "expertise": "...",
+        "extra_languages": "...",
+        "int": "...",
+        "known_spells": "...",
+        "name": "...",
+        "primal_order": "...",
+        "skill_proficiencies": "...",
+        "species": "...",
+        "species_choices": "...",
+        "species_feat_choices": "...",
+        "starting_equipment": "...",
+        "str": "...",
+        "tool_proficiencies": "...",
+        "use_suggestion": "...",
+        "weapon_masteries": "...",
+        "wis": "..."
        }
       }
      },
@@ -16779,6 +17416,41 @@
           "description": "the ability score from the standard array, before the background's increase"
          }
         }
+       },
+       "example": {
+        "ability_increases": "...",
+        "ability_method": "...",
+        "alignment": "...",
+        "appearance": "...",
+        "background": "...",
+        "background_equipment": "...",
+        "background_feat_choices": "...",
+        "background_tool": "...",
+        "backstory": "...",
+        "backstory_skip": "...",
+        "cha": "...",
+        "class": "...",
+        "class_options": "...",
+        "con": "...",
+        "dex": "...",
+        "divine_order": "...",
+        "draconic_ancestry": "...",
+        "expertise": "...",
+        "extra_languages": "...",
+        "int": "...",
+        "known_spells": "...",
+        "name": "...",
+        "primal_order": "...",
+        "skill_proficiencies": "...",
+        "species": "...",
+        "species_choices": "...",
+        "species_feat_choices": "...",
+        "starting_equipment": "...",
+        "str": "...",
+        "tool_proficiencies": "...",
+        "use_suggestion": "...",
+        "weapon_masteries": "...",
+        "wis": "..."
        }
       }
      },
@@ -17250,6 +17922,9 @@
         "required": [
          "character_id"
         ]
+       },
+       "example": {
+        "character_id": 1
        }
       }
      },
@@ -17402,6 +18077,11 @@
           "description": "a label for the bag (\"the red sack\"); the item keeps its kind's name"
          }
         }
+       },
+       "example": {
+        "kind": "...",
+        "location": "...",
+        "name": "..."
        }
       }
      },
@@ -17500,6 +18180,11 @@
           "description": "where to: worn, held, or a bag's id"
          }
         }
+       },
+       "example": {
+        "item": "...",
+        "quantity": 1,
+        "to": "..."
        }
       }
      },
@@ -17609,6 +18294,9 @@
         "required": [
          "item"
         ]
+       },
+       "example": {
+        "item": "..."
        }
       }
      },
@@ -17702,6 +18390,9 @@
         "required": [
          "dropped_id"
         ]
+       },
+       "example": {
+        "dropped_id": 1
        }
       }
      },
@@ -17800,6 +18491,11 @@
           "description": "recover: where the recovered bag goes (worn, or another bag)"
          }
         }
+       },
+       "example": {
+        "container": "...",
+        "reason": "...",
+        "to": "..."
        }
       }
      },
@@ -17898,6 +18594,11 @@
           "description": "recover: where the recovered bag goes (worn, or another bag)"
          }
         }
+       },
+       "example": {
+        "container": "...",
+        "reason": "...",
+        "to": "..."
        }
       }
      },
@@ -18004,6 +18705,10 @@
          "character_id",
          "item_name"
         ]
+       },
+       "example": {
+        "character_id": 1,
+        "item_name": "..."
        }
       }
      },
@@ -18205,6 +18910,9 @@
         "required": [
          "character_id"
         ]
+       },
+       "example": {
+        "character_id": 1
        }
       }
      },
@@ -18327,6 +19035,9 @@
         "required": [
          "character_id"
         ]
+       },
+       "example": {
+        "character_id": 1
        }
       }
      },
@@ -18457,6 +19168,10 @@
          "character_id",
          "weapon"
         ]
+       },
+       "example": {
+        "character_id": 1,
+        "weapon": "..."
        }
       }
      },
@@ -18571,6 +19286,9 @@
         "required": [
          "character_id"
         ]
+       },
+       "example": {
+        "character_id": 1
        }
       }
      },
@@ -18691,6 +19409,10 @@
          "character_id",
          "creature"
         ]
+       },
+       "example": {
+        "character_id": 1,
+        "creature": "..."
        }
       }
      },
@@ -18792,6 +19514,9 @@
         "required": [
          "character_id"
         ]
+       },
+       "example": {
+        "character_id": 1
        }
       }
      },
@@ -18929,6 +19654,10 @@
           "description": "true: skip the portrait step (the character goes without one)"
          }
         }
+       },
+       "example": {
+        "image_base64": "...",
+        "skip": "..."
        }
       }
      },
@@ -19034,6 +19763,10 @@
           "description": "true: skip the portrait step (the character goes without one)"
          }
         }
+       },
+       "example": {
+        "image_base64": "...",
+        "skip": "..."
        }
       }
      },
@@ -19499,6 +20232,17 @@
           "description": "The character's tagline: text of up to 160 characters"
          }
         }
+       },
+       "example": {
+        "alignment": "...",
+        "appearance": "...",
+        "backstory": "...",
+        "bonds": "...",
+        "faction": "...",
+        "flaws": "...",
+        "ideals": "...",
+        "personality": "...",
+        "tagline": "..."
        }
       }
      },
@@ -19613,6 +20357,17 @@
           "description": "The character's tagline: text of up to 160 characters"
          }
         }
+       },
+       "example": {
+        "alignment": "...",
+        "appearance": "...",
+        "backstory": "...",
+        "bonds": "...",
+        "faction": "...",
+        "flaws": "...",
+        "ideals": "...",
+        "personality": "...",
+        "tagline": "..."
        }
       }
      },
@@ -19719,6 +20474,10 @@
           "description": "how many of the pending points to spend on it"
          }
         }
+       },
+       "example": {
+        "ability": "...",
+        "points": 1
        }
       }
      },
@@ -19901,6 +20660,10 @@
           "description": "the feat to take (its name or key, as the setup step lists it)"
          }
         }
+       },
+       "example": {
+        "ability_choice": "...",
+        "feat": "..."
        }
       }
      },
@@ -20192,6 +20955,9 @@
         "required": [
          "character_id"
         ]
+       },
+       "example": {
+        "character_id": 1
        }
       }
      },
@@ -20297,6 +21063,11 @@
           "description": "\"hunters_prey\" or \"Hunter's Prey\""
          }
         }
+       },
+       "example": {
+        "character_id": 1,
+        "choice": "...",
+        "feature": "..."
        }
       }
      },
@@ -20582,6 +21353,17 @@
           "description": "Spell slugs to set"
          }
         }
+       },
+       "example": {
+        "add": [
+         "..."
+        ],
+        "remove": [
+         "..."
+        ],
+        "spells": [
+         "..."
+        ]
        }
       }
      },
@@ -20948,6 +21730,11 @@
         "required": [
          "spells"
         ]
+       },
+       "example": {
+        "spells": [
+         "..."
+        ]
        }
       }
      },
@@ -21054,6 +21841,9 @@
         "required": [
          "resource"
         ]
+       },
+       "example": {
+        "resource": "..."
        }
       }
      },
@@ -21147,6 +21937,9 @@
         "required": [
          "character_id"
         ]
+       },
+       "example": {
+        "character_id": 1
        }
       }
      },
@@ -21236,6 +22029,9 @@
         "required": [
          "character_id"
         ]
+       },
+       "example": {
+        "character_id": 1
        }
       }
      },
@@ -21488,6 +22284,10 @@
           "description": "slug: careful, distant, empowered, extended, heightened, quickened, subtle, twinned"
          }
         }
+       },
+       "example": {
+        "character_id": 1,
+        "metamagic": "..."
        }
       }
      },
@@ -21848,6 +22648,18 @@
           "description": "Pact of the Tome: its two level 1 Ritual spells"
          }
         }
+       },
+       "example": {
+        "cantrip": "...",
+        "cantrips": [
+         "..."
+        ],
+        "character_id": 1,
+        "invocation": "...",
+        "replace": "...",
+        "rituals": [
+         "..."
+        ]
        }
       }
      },
@@ -22054,6 +22866,11 @@
           "description": "1-5"
          }
         }
+       },
+       "example": {
+        "action": "...",
+        "character_id": 1,
+        "slot_level": 1
        }
       }
      },
@@ -22333,6 +23150,14 @@
           "description": "the Fighting Style to choose (GET lists the ones you can take)"
          }
         }
+       },
+       "example": {
+        "cantrips": [
+         "..."
+        ],
+        "character_id": 1,
+        "replace": "...",
+        "style": "..."
        }
       }
      },
@@ -22516,6 +23341,10 @@
           "description": "the damage type to resist (any but Force)"
          }
         }
+       },
+       "example": {
+        "character_id": 1,
+        "damage_type": "..."
        }
       }
      },
@@ -22777,6 +23606,9 @@
         "required": [
          "character_id"
         ]
+       },
+       "example": {
+        "character_id": 1
        }
       }
      },
@@ -23023,6 +23855,9 @@
         "required": [
          "action"
         ]
+       },
+       "example": {
+        "action": "..."
        }
       }
      },
@@ -23291,6 +24126,21 @@
           "description": "Wild Shape: choose known Beast forms (GET /api/characters/{id}/setup shows the options)"
          }
         }
+       },
+       "example": {
+        "blessed_strikes": "...",
+        "bonus_proficiencies": "...",
+        "class_languages": "...",
+        "defensive_tactics": "...",
+        "divine_order": "...",
+        "elemental_affinity": "...",
+        "elemental_fury": "...",
+        "hunters_prey": "...",
+        "land_type": "...",
+        "magical_discoveries": "...",
+        "primal_knowledge": "...",
+        "primal_order": "...",
+        "wild_shape_forms": "..."
        }
       }
      },
@@ -23420,6 +24270,12 @@
         "required": [
          "caster_id",
          "target_ids"
+        ]
+       },
+       "example": {
+        "caster_id": 1,
+        "target_ids": [
+         1
         ]
        }
       }
@@ -23614,6 +24470,11 @@
           "description": "optional: the ids of the characters surprised (they roll Initiative with Disadvantage)"
          }
         }
+       },
+       "example": {
+        "surprised": [
+         1
+        ]
        }
       }
      },
@@ -24050,6 +24911,21 @@
           "description": "optional: Legendary Actions taken right after the ending turn, each like POST /api/gm/legendary-action"
          }
         }
+       },
+       "example": {
+        "legendary_actions": [
+         {
+          "action": "...",
+          "action_name": "...",
+          "apply_damage": true,
+          "combatant_id": 1,
+          "target": "...",
+          "target_ids": [
+           1
+          ],
+          "use": "..."
+         }
+        ]
        }
       }
      },
@@ -24437,6 +25313,12 @@
           "description": "the turn to skip: a retry after it ended is turn_already_moved"
          }
         }
+       },
+       "example": {
+        "expected_turn": {
+         "round": 1,
+         "turn_index": 1
+        }
        }
       }
      },
@@ -24624,6 +25506,9 @@
         "required": [
          "character_id"
         ]
+       },
+       "example": {
+        "character_id": 1
        }
       }
      },
@@ -24837,6 +25722,19 @@
         "required": [
          "combatants"
         ]
+       },
+       "example": {
+        "combatants": [
+         {
+          "ac": 1,
+          "hp": 1,
+          "in_lair": true,
+          "initiative": 1,
+          "monster_key": "...",
+          "name": "...",
+          "surprised": true
+         }
+        ]
        }
       }
      },
@@ -24947,6 +25845,10 @@
           "description": "the combatant's name, instead of combatant_id"
          }
         }
+       },
+       "example": {
+        "combatant_id": 1,
+        "combatant_name": "..."
        }
       }
      },
@@ -25054,6 +25956,16 @@
           "description": "true: another part of the same damage already made the Concentration save"
          }
         }
+       },
+       "example": {
+        "amount": 1,
+        "concentration_damage": 1,
+        "critical": true,
+        "damage": 1,
+        "damage_type": "...",
+        "no_bond": true,
+        "same_hit": true,
+        "skip_concentration": true
        }
       }
      },
@@ -25153,6 +26065,9 @@
           "description": "the Hit Points to restore"
          }
         }
+       },
+       "example": {
+        "healing": 1
        }
       }
      },
@@ -25537,6 +26452,14 @@
           "description": "\"short\" (on .../rest); a Long Rest takes only type"
          }
         }
+       },
+       "example": {
+        "die": "...",
+        "hit_dice": 1,
+        "recover_slots": [
+         1
+        ],
+        "type": "..."
        }
       }
      },
@@ -25708,6 +26631,14 @@
           "description": "\"short\" (on .../rest); a Long Rest takes only type"
          }
         }
+       },
+       "example": {
+        "die": "...",
+        "hit_dice": 1,
+        "recover_slots": [
+         1
+        ],
+        "type": "..."
        }
       }
      },
@@ -25850,6 +26781,9 @@
           "description": "none, half, three_quarters or full"
          }
         }
+       },
+       "example": {
+        "cover": "..."
        }
       }
      },
@@ -26023,6 +26957,10 @@
           "description": "its name (up to 40 characters; empty clears it)"
          }
         }
+       },
+       "example": {
+        "companion_id": 1,
+        "name": "..."
        }
       }
      },
@@ -26381,6 +27319,9 @@
         "required": [
          "companion_id"
         ]
+       },
+       "example": {
+        "companion_id": 1
        }
       }
      },
@@ -26581,6 +27522,29 @@
           "description": "The target: a character's id, or a monster's negative id from the fight's turn order"
          }
         }
+       },
+       "example": {
+        "all": true,
+        "campaign_id": 1,
+        "caster_id": 1,
+        "condition": "...",
+        "duration_rounds": 1,
+        "escape_dc": 1,
+        "escapes": [
+         {
+          "ability": "...",
+          "dc": 1,
+          "label": "...",
+          "skill": "...",
+          "uses_action": true
+         }
+        ],
+        "from_magical_sleep": true,
+        "level": 1,
+        "notes": "...",
+        "record_id": 1,
+        "source": "...",
+        "target_id": 1
        }
       }
      },
@@ -26778,6 +27742,29 @@
           "description": "The target: a character's id, or a monster's negative id from the fight's turn order"
          }
         }
+       },
+       "example": {
+        "all": true,
+        "campaign_id": 1,
+        "caster_id": 1,
+        "condition": "...",
+        "duration_rounds": 1,
+        "escape_dc": 1,
+        "escapes": [
+         {
+          "ability": "...",
+          "dc": 1,
+          "label": "...",
+          "skill": "...",
+          "uses_action": true
+         }
+        ],
+        "from_magical_sleep": true,
+        "level": 1,
+        "notes": "...",
+        "record_id": 1,
+        "source": "...",
+        "target_id": 1
        }
       }
      },
@@ -26955,6 +27942,9 @@
           "description": "why the GM claims or returns it (shown in the log)"
          }
         }
+       },
+       "example": {
+        "note": "..."
        }
       }
      },
@@ -27185,6 +28175,11 @@
           "description": "all of your class's Expertise skills, from the skills GET allows"
          }
         }
+       },
+       "example": {
+        "skills": [
+         "..."
+        ]
        }
       }
      },
@@ -27282,6 +28277,9 @@
         "required": [
          "character_id"
         ]
+       },
+       "example": {
+        "character_id": 1
        }
       }
      },
@@ -27389,6 +28387,10 @@
          "character_id",
          "dc"
         ]
+       },
+       "example": {
+        "character_id": 1,
+        "dc": 1
        }
       }
      },
@@ -27567,6 +28569,12 @@
           "description": "true mutes, false unmutes (default true)"
          }
         }
+       },
+       "example": {
+        "all": true,
+        "character_id": 1,
+        "item": "...",
+        "mute": true
        }
       }
      },
@@ -27655,6 +28663,12 @@
           "description": "The target: a character's id, or a monster's negative id from the fight's turn order"
          }
         }
+       },
+       "example": {
+        "attacker_id": 1,
+        "campaign_id": 1,
+        "effect": "...",
+        "target_id": 1
        }
       }
      },
@@ -27743,6 +28757,12 @@
           "description": "The target: a character's id, or a monster's negative id from the fight's turn order"
          }
         }
+       },
+       "example": {
+        "attacker_id": 1,
+        "campaign_id": 1,
+        "effect": "...",
+        "target_id": 1
        }
       }
      },
@@ -27827,6 +28847,11 @@
           "description": "The target: a character's id, or a monster's negative id from the fight's turn order"
          }
         }
+       },
+       "example": {
+        "campaign_id": 1,
+        "character_id": 1,
+        "target_id": 1
        }
       }
      },
@@ -27911,6 +28936,11 @@
           "description": "The target: a character's id, or a monster's negative id from the fight's turn order"
          }
         }
+       },
+       "example": {
+        "campaign_id": 1,
+        "grappler_id": 1,
+        "target_id": 1
        }
       }
      },
@@ -28015,6 +29045,10 @@
          "caster_id",
          "target_id"
         ]
+       },
+       "example": {
+        "caster_id": 1,
+        "target_id": 1
        }
       }
      },
@@ -28103,6 +29137,12 @@
           "description": "true: expend a Pact Magic slot when the once-per-Long-Rest use is spent"
          }
         }
+       },
+       "example": {
+        "campaign_id": 1,
+        "character_id": 1,
+        "target_id": 1,
+        "use_pact_slot": true
        }
       }
      },
@@ -28191,6 +29231,12 @@
           "description": "the creature is underwater (Water Breathing lets it breathe; spells_more_2024.go)"
          }
         }
+       },
+       "example": {
+        "action": "...",
+        "campaign_id": 1,
+        "character_id": 1,
+        "underwater": true
        }
       }
      },
@@ -28468,6 +29514,34 @@
           "description": "set its Temporary Hit Points"
          }
         }
+       },
+       "example": {
+        "ac": 1,
+        "apply_resistances": true,
+        "campaign_id": 1,
+        "conditions": [
+         "..."
+        ],
+        "damage": 1,
+        "damage_type": "...",
+        "heal": 1,
+        "hp": 1,
+        "initiative": 1,
+        "max_hp": 1,
+        "name": "...",
+        "note": "...",
+        "remove": true,
+        "remove_conditions": [
+         "..."
+        ],
+        "riders": [
+         "..."
+        ],
+        "rounds": 1,
+        "source": "...",
+        "target": "...",
+        "target_id": 1,
+        "temp_hp": 1
        }
       }
      },
@@ -28636,6 +29710,10 @@
           "description": "POST: what you are waiting on them for, in a sentence or two"
          }
         }
+       },
+       "example": {
+        "character_id": 1,
+        "need": "..."
        }
       }
      },
@@ -28731,6 +29809,10 @@
           "description": "POST: what you are waiting on them for, in a sentence or two"
          }
         }
+       },
+       "example": {
+        "character_id": 1,
+        "need": "..."
        }
       }
      },
@@ -28985,6 +30067,9 @@
         "required": [
          "character_id"
         ]
+       },
+       "example": {
+        "character_id": 1
        }
       }
      },
@@ -29231,6 +30316,10 @@
          "character_id",
          "tool"
         ]
+       },
+       "example": {
+        "character_id": 1,
+        "tool": "..."
        }
       }
      },
@@ -29441,6 +30530,10 @@
          "ability",
          "character_id"
         ]
+       },
+       "example": {
+        "ability": "...",
+        "character_id": 1
        }
       }
      },
@@ -29637,6 +30730,10 @@
          "defender_id",
          "initiator_id"
         ]
+       },
+       "example": {
+        "defender_id": 1,
+        "initiator_id": 1
        }
       }
      },
@@ -29797,6 +30894,15 @@
          "caster_id",
          "healing"
         ]
+       },
+       "example": {
+        "caster_id": 1,
+        "healing": [
+         {
+          "amount": 1,
+          "target_id": 1
+         }
+        ]
        }
       }
      },
@@ -29913,6 +31019,9 @@
         "required": [
          "paladin_id"
         ]
+       },
+       "example": {
+        "paladin_id": 1
        }
       }
      },
@@ -30031,6 +31140,9 @@
         "required": [
          "bard_id"
         ]
+       },
+       "example": {
+        "bard_id": 1
        }
       }
      },
@@ -30152,6 +31264,9 @@
         "required": [
          "character_id"
         ]
+       },
+       "example": {
+        "character_id": 1
        }
       }
      },
@@ -30302,6 +31417,10 @@
          "ability",
          "character_id"
         ]
+       },
+       "example": {
+        "ability": "...",
+        "character_id": 1
        }
       }
      },
@@ -30407,6 +31526,9 @@
         "required": [
          "character_id"
         ]
+       },
+       "example": {
+        "character_id": 1
        }
       }
      },
@@ -30507,6 +31629,12 @@
           "description": "what the deadline is about"
          }
         }
+       },
+       "example": {
+        "auto_advance_text": "...",
+        "campaign_id": 1,
+        "deadline_at": "...",
+        "description": "..."
        }
       }
      },
@@ -30685,6 +31813,11 @@
           "description": "Custom narration text (overrides auto_advance_text)"
          }
         }
+       },
+       "example": {
+        "action": "...",
+        "campaign_id": 1,
+        "narration": "..."
        }
       }
      }
@@ -30793,6 +31926,9 @@
         "required": [
          "target_id"
         ]
+       },
+       "example": {
+        "target_id": 1
        }
       }
      },
@@ -30961,6 +32097,10 @@
          "character_id",
          "distance_feet"
         ]
+       },
+       "example": {
+        "character_id": 1,
+        "distance_feet": 1
        }
       }
      },
@@ -31056,6 +32196,10 @@
           "description": "Pointer to allow nil (toggle)"
          }
         }
+       },
+       "example": {
+        "campaign_id": 1,
+        "underwater": true
        }
       }
      },
@@ -31174,6 +32318,10 @@
           "description": "bright, dim or darkness"
          }
         }
+       },
+       "example": {
+        "campaign_id": 1,
+        "lighting": "..."
        }
       }
      },
@@ -31310,6 +32458,18 @@
           "description": "the skill everyone checks (or ability)"
          }
         }
+       },
+       "example": {
+        "ability": "...",
+        "advantage": true,
+        "campaign_id": 1,
+        "character_ids": [
+         1
+        ],
+        "dc": 1,
+        "description": "...",
+        "disadvantage": true,
+        "skill": "..."
        }
       }
      },
@@ -31400,6 +32560,9 @@
         "required": [
          "character_id"
         ]
+       },
+       "example": {
+        "character_id": 1
        }
       }
      },
@@ -31495,6 +32658,9 @@
         "required": [
          "character_id"
         ]
+       },
+       "example": {
+        "character_id": 1
        }
       }
      },
@@ -31586,6 +32752,12 @@
           "description": "the new character's name"
          }
         }
+       },
+       "example": {
+        "agent_id": 1,
+        "campaign_id": 1,
+        "class": "...",
+        "name": "..."
        }
       }
      },
@@ -31673,6 +32845,9 @@
         "required": [
          "character_id"
         ]
+       },
+       "example": {
+        "character_id": 1
        }
       }
      },
@@ -31760,6 +32935,9 @@
         "required": [
          "text_match"
         ]
+       },
+       "example": {
+        "text_match": "..."
        }
       }
      },
@@ -31857,6 +33035,9 @@
         "required": [
          "character_id"
         ]
+       },
+       "example": {
+        "character_id": 1
        }
       }
      },
@@ -31996,6 +33177,9 @@
         "required": [
          "target_id"
         ]
+       },
+       "example": {
+        "target_id": 1
        }
       }
      },
@@ -32107,6 +33291,10 @@
          "attacker_name",
          "character_id"
         ]
+       },
+       "example": {
+        "attacker_name": "...",
+        "character_id": 1
        }
       }
      },
@@ -32220,6 +33408,10 @@
          "character_id",
          "damage"
         ]
+       },
+       "example": {
+        "character_id": 1,
+        "damage": 1
        }
       }
      },
@@ -32318,6 +33510,9 @@
         "required": [
          "character_id"
         ]
+       },
+       "example": {
+        "character_id": 1
        }
       }
      },
@@ -32536,6 +33731,9 @@
         "required": [
          "character_id"
         ]
+       },
+       "example": {
+        "character_id": 1
        }
       }
      },
@@ -32711,6 +33909,12 @@
          "character_ids",
          "xp"
         ]
+       },
+       "example": {
+        "character_ids": [
+         1
+        ],
+        "xp": 1
        }
       }
      },
@@ -32868,6 +34072,9 @@
         "required": [
          "amount"
         ]
+       },
+       "example": {
+        "amount": 1
        }
       }
      },
@@ -32997,6 +34204,10 @@
          "character_id",
          "item_name"
         ]
+       },
+       "example": {
+        "character_id": 1,
+        "item_name": "..."
        }
       }
      },
@@ -33093,6 +34304,9 @@
         "required": [
          "character_id"
         ]
+       },
+       "example": {
+        "character_id": 1
        }
       }
      },
@@ -33199,6 +34413,9 @@
         "required": [
          "character_id"
         ]
+       },
+       "example": {
+        "character_id": 1
        }
       }
      },
@@ -33322,6 +34539,9 @@
         "required": [
          "spell"
         ]
+       },
+       "example": {
+        "spell": "..."
        }
       }
      },
@@ -33606,6 +34826,12 @@
          "spell_slug",
          "target_ids"
         ]
+       },
+       "example": {
+        "spell_slug": "...",
+        "target_ids": [
+         1
+        ]
        }
       }
      },
@@ -33764,6 +34990,10 @@
          "caster_id",
          "target_id"
         ]
+       },
+       "example": {
+        "caster_id": 1,
+        "target_id": 1
        }
       }
      },
@@ -33851,6 +35081,11 @@
           "description": "why the character is no longer hidden (shown in the log)"
          }
         }
+       },
+       "example": {
+        "campaign_id": 1,
+        "character_id": 1,
+        "reason": "..."
        }
       }
      },
@@ -34004,6 +35239,12 @@
           "description": "Class to take a level in"
          }
         }
+       },
+       "example": {
+        "character_id": 1,
+        "class": "...",
+        "skill": "...",
+        "target_class": "..."
        }
       }
      }
@@ -34216,6 +35457,9 @@
           "description": "true marks the notices read"
          }
         }
+       },
+       "example": {
+        "seen": true
        }
       }
      },
@@ -34355,6 +35599,9 @@
           "description": "the campaign this command is for (or ?campaign_id=); without it, the campaign of the characters it names, else your only active campaign"
          }
         }
+       },
+       "example": {
+        "campaign_id": 1
        }
       }
      },
@@ -34458,6 +35705,9 @@
         "required": [
          "item"
         ]
+       },
+       "example": {
+        "item": "..."
        }
       }
      },
@@ -34559,6 +35809,11 @@
           "description": "optional: its maximum charges"
          }
         }
+       },
+       "example": {
+        "charges": 1,
+        "item": "...",
+        "max": 1
        }
       }
      },
@@ -34681,6 +35936,10 @@
          "character_id",
          "damage"
         ]
+       },
+       "example": {
+        "character_id": 1,
+        "damage": 1
        }
       }
      },
@@ -35130,6 +36389,13 @@
           "description": "auto (used against a condition, or damage that would drop it to 0), always or manual"
          }
         }
+       },
+       "example": {
+        "auras": true,
+        "campaign_id": 1,
+        "combatant_id": 1,
+        "in_lair": true,
+        "legendary_resistance": "..."
        }
       }
      },
@@ -35234,6 +36500,18 @@
           "description": "\"makes one Claw or Tail attack\": which one"
          }
         }
+       },
+       "example": {
+        "action": "...",
+        "action_name": "...",
+        "apply_damage": true,
+        "campaign_id": 1,
+        "combatant_id": 1,
+        "target": "...",
+        "target_ids": [
+         1
+        ],
+        "use": "..."
        }
       }
      },
@@ -35323,6 +36601,10 @@
           "description": "A combatant: a character's id, or a monster's negative id from the fight's turn order"
          }
         }
+       },
+       "example": {
+        "campaign_id": 1,
+        "combatant_id": 1
        }
       }
      },
@@ -35396,6 +36678,10 @@
           "battle_map_url": {
            "type": "string"
           },
+          "before_start": {
+           "description": "questions, character changes, the ready flag (campaign_ready_2024.go)",
+           "type": "string"
+          },
           "breath_weapon": {
            "properties": {
             "ancestry_required": {
@@ -35451,6 +36737,9 @@
           },
           "burning": {
            "type": "string"
+          },
+          "campaign_id": {
+           "type": "integer"
           },
           "campaign_messages": {
            "items": {
@@ -35969,6 +37258,9 @@
           },
           "character_finished": {
            "type": "boolean"
+          },
+          "character_id": {
+           "type": "integer"
           },
           "combat": {
            "properties": {
@@ -36787,6 +38079,55 @@
             },
             "trigger": {
              "type": "string"
+            }
+           },
+           "type": "object"
+          },
+          "readiness": {
+           "properties": {
+            "all_ready": {
+             "type": "boolean"
+            },
+            "characters": {
+             "items": {
+              "properties": {
+               "character_id": {
+                "type": "integer"
+               },
+               "idle_hours": {
+                "description": "hours since then: what the GM judges \"idle\" by before starting without the player",
+                "type": "integer"
+               },
+               "last_active": {
+                "description": "the player's last sign of life here: a record in the log, a chat message, joining",
+                "format": "date-time",
+                "type": "string"
+               },
+               "name": {
+                "type": "string"
+               },
+               "ready": {
+                "type": "boolean"
+               }
+              },
+              "type": "object"
+             },
+             "type": "array"
+            },
+            "gm_ready": {
+             "type": "boolean"
+            },
+            "ready": {
+             "items": {
+              "type": "string"
+             },
+             "type": "array"
+            },
+            "waiting_on": {
+             "items": {
+              "type": "string"
+             },
+             "type": "array"
             }
            },
            "type": "object"
@@ -37684,6 +39025,10 @@
           "description": "decide the submission yourself instead of applying it (needs character_id)"
          }
         }
+       },
+       "example": {
+        "character_id": 1,
+        "ruling": "..."
        }
       }
      },
@@ -37797,6 +39142,10 @@
           "description": "what the character does: a meaningful in-character turn, from what it knows"
          }
         }
+       },
+       "example": {
+        "character_id": 1,
+        "description": "..."
        }
       }
      },
@@ -37920,6 +39269,12 @@
          "paladin_id",
          "target_ids"
         ]
+       },
+       "example": {
+        "paladin_id": 1,
+        "target_ids": [
+         1
+        ]
        }
       }
      },
@@ -37971,6 +39326,10 @@
        "application/json": {
         "schema": {
          "properties": {
+          "before_start": {
+           "description": "questions, character changes, the ready flag (campaign_ready_2024.go)",
+           "type": "string"
+          },
           "before_you": {
            "items": {
             "type": "string"
@@ -37988,6 +39347,22 @@
           },
           "done_this_round": {
            "type": "string"
+          },
+          "gm_asks_you": {
+           "description": "what the GM is waiting on you for (gm_asks_2024.go)",
+           "properties": {
+            "asked_at": {
+             "format": "date-time",
+             "type": "string"
+            },
+            "how_to_answer": {
+             "type": "string"
+            },
+            "need": {
+             "type": "string"
+            }
+           },
+           "type": "object"
           },
           "how": {
            "type": "string"
@@ -38039,6 +39414,55 @@
             "type": "string"
            },
            "type": "array"
+          },
+          "readiness": {
+           "properties": {
+            "all_ready": {
+             "type": "boolean"
+            },
+            "characters": {
+             "items": {
+              "properties": {
+               "character_id": {
+                "type": "integer"
+               },
+               "idle_hours": {
+                "description": "hours since then: what the GM judges \"idle\" by before starting without the player",
+                "type": "integer"
+               },
+               "last_active": {
+                "description": "the player's last sign of life here: a record in the log, a chat message, joining",
+                "format": "date-time",
+                "type": "string"
+               },
+               "name": {
+                "type": "string"
+               },
+               "ready": {
+                "type": "boolean"
+               }
+              },
+              "type": "object"
+             },
+             "type": "array"
+            },
+            "gm_ready": {
+             "type": "boolean"
+            },
+            "ready": {
+             "items": {
+              "type": "string"
+             },
+             "type": "array"
+            },
+            "waiting_on": {
+             "items": {
+              "type": "string"
+             },
+             "type": "array"
+            }
+           },
+           "type": "object"
           },
           "replaced": {
            "type": "boolean"
@@ -38100,6 +39524,17 @@
           "description": "your turn: action bodies in order, each with the fields of POST /api/action (map_move also path and altitude)"
          }
         }
+       },
+       "example": {
+        "campaign_id": 1,
+        "character_id": 1,
+        "fallbacks": [
+         "..."
+        ],
+        "round": 1,
+        "steps": [
+         {}
+        ]
        }
       }
      },
@@ -38119,6 +39554,10 @@
        "application/json": {
         "schema": {
          "properties": {
+          "before_start": {
+           "description": "questions, character changes, the ready flag (campaign_ready_2024.go)",
+           "type": "string"
+          },
           "before_you": {
            "items": {
             "type": "string"
@@ -38136,6 +39575,22 @@
           },
           "done_this_round": {
            "type": "string"
+          },
+          "gm_asks_you": {
+           "description": "what the GM is waiting on you for (gm_asks_2024.go)",
+           "properties": {
+            "asked_at": {
+             "format": "date-time",
+             "type": "string"
+            },
+            "how_to_answer": {
+             "type": "string"
+            },
+            "need": {
+             "type": "string"
+            }
+           },
+           "type": "object"
           },
           "how": {
            "type": "string"
@@ -38190,6 +39645,55 @@
             "type": "string"
            },
            "type": "array"
+          },
+          "readiness": {
+           "properties": {
+            "all_ready": {
+             "type": "boolean"
+            },
+            "characters": {
+             "items": {
+              "properties": {
+               "character_id": {
+                "type": "integer"
+               },
+               "idle_hours": {
+                "description": "hours since then: what the GM judges \"idle\" by before starting without the player",
+                "type": "integer"
+               },
+               "last_active": {
+                "description": "the player's last sign of life here: a record in the log, a chat message, joining",
+                "format": "date-time",
+                "type": "string"
+               },
+               "name": {
+                "type": "string"
+               },
+               "ready": {
+                "type": "boolean"
+               }
+              },
+              "type": "object"
+             },
+             "type": "array"
+            },
+            "gm_ready": {
+             "type": "boolean"
+            },
+            "ready": {
+             "items": {
+              "type": "string"
+             },
+             "type": "array"
+            },
+            "waiting_on": {
+             "items": {
+              "type": "string"
+             },
+             "type": "array"
+            }
+           },
+           "type": "object"
           },
           "replaced": {
            "type": "boolean"
@@ -38263,6 +39767,10 @@
        "application/json": {
         "schema": {
          "properties": {
+          "before_start": {
+           "description": "questions, character changes, the ready flag (campaign_ready_2024.go)",
+           "type": "string"
+          },
           "before_you": {
            "items": {
             "type": "string"
@@ -38280,6 +39788,22 @@
           },
           "done_this_round": {
            "type": "string"
+          },
+          "gm_asks_you": {
+           "description": "what the GM is waiting on you for (gm_asks_2024.go)",
+           "properties": {
+            "asked_at": {
+             "format": "date-time",
+             "type": "string"
+            },
+            "how_to_answer": {
+             "type": "string"
+            },
+            "need": {
+             "type": "string"
+            }
+           },
+           "type": "object"
           },
           "how": {
            "type": "string"
@@ -38332,6 +39856,55 @@
            },
            "type": "array"
           },
+          "readiness": {
+           "properties": {
+            "all_ready": {
+             "type": "boolean"
+            },
+            "characters": {
+             "items": {
+              "properties": {
+               "character_id": {
+                "type": "integer"
+               },
+               "idle_hours": {
+                "description": "hours since then: what the GM judges \"idle\" by before starting without the player",
+                "type": "integer"
+               },
+               "last_active": {
+                "description": "the player's last sign of life here: a record in the log, a chat message, joining",
+                "format": "date-time",
+                "type": "string"
+               },
+               "name": {
+                "type": "string"
+               },
+               "ready": {
+                "type": "boolean"
+               }
+              },
+              "type": "object"
+             },
+             "type": "array"
+            },
+            "gm_ready": {
+             "type": "boolean"
+            },
+            "ready": {
+             "items": {
+              "type": "string"
+             },
+             "type": "array"
+            },
+            "waiting_on": {
+             "items": {
+              "type": "string"
+             },
+             "type": "array"
+            }
+           },
+           "type": "object"
+          },
           "replaced": {
            "type": "boolean"
           },
@@ -38380,6 +39953,11 @@
           "description": "optional: the round of the turn to withdraw (the round now open when left out)"
          }
         }
+       },
+       "example": {
+        "campaign_id": 1,
+        "character_id": 1,
+        "round": 1
        }
       }
      },
@@ -39053,6 +40631,11 @@
         "required": [
          "steps"
         ]
+       },
+       "example": {
+        "steps": [
+         {}
+        ]
        }
       }
      },
@@ -39143,6 +40726,9 @@
         "required": [
          "character_id"
         ]
+       },
+       "example": {
+        "character_id": 1
        }
       }
      },
@@ -39269,6 +40855,12 @@
           "description": "shield, uncanny_dodge, deflect_attacks or opportunity_attack"
          }
         }
+       },
+       "example": {
+        "character_id": 1,
+        "min_damage": 1,
+        "on": true,
+        "order": "..."
        }
       }
      },
@@ -39391,6 +40983,11 @@
           "description": "brief (default), full or off"
          }
         }
+       },
+       "example": {
+        "character_id": 1,
+        "kind": "...",
+        "mode": "..."
        }
       }
      },
@@ -39608,6 +41205,10 @@
           "description": "which Hit Point Die to spend first (\"d10\"), when the character has more than one kind"
          }
         }
+       },
+       "example": {
+        "count": 1,
+        "die": "..."
        }
       }
      },
@@ -39732,6 +41333,10 @@
           "description": "on, paused or off"
          }
         }
+       },
+       "example": {
+        "capacity": 1,
+        "state": "..."
        }
       }
      },
@@ -39861,6 +41466,10 @@
           "description": "set the campaign's clock to this time (RFC3339)"
          }
         }
+       },
+       "example": {
+        "advance_minutes": 1,
+        "at": "..."
        }
       }
      },
@@ -40147,6 +41756,14 @@
         "required": [
          "buy"
         ]
+       },
+       "example": {
+        "buy": [
+         {
+          "item": "...",
+          "quantity": 1
+         }
+        ]
        }
       }
      },
@@ -40243,6 +41860,11 @@
           "description": "or rounds (6 seconds each; 10 rounds = 1 minute)"
          }
         }
+       },
+       "example": {
+        "campaign_id": 1,
+        "minutes": 1,
+        "rounds": 1
        }
       }
      },
@@ -40338,6 +41960,10 @@
           "description": "the level 1+ Wizard spell to copy into your spellbook"
          }
         }
+       },
+       "example": {
+        "character_id": 1,
+        "spell": "..."
        }
       }
      },
@@ -40428,6 +42054,9 @@
           "description": "the class kit option: a or b"
          }
         }
+       },
+       "example": {
+        "option": "..."
        }
       }
      },
@@ -40611,6 +42240,11 @@
           "description": "the tools to choose (GET lists the options)"
          }
         }
+       },
+       "example": {
+        "tools": [
+         "..."
+        ]
        }
       }
      },
@@ -40690,6 +42324,9 @@
           "description": "The id of the character this request is for"
          }
         }
+       },
+       "example": {
+        "character_id": 1
        }
       }
      },
@@ -40770,6 +42407,10 @@
           "description": "true: spend a spell slot when the once-per-Long-Rest use is spent"
          }
         }
+       },
+       "example": {
+        "character_id": 1,
+        "use_slot": true
        }
       }
      },
@@ -40846,6 +42487,9 @@
           "description": "The id of the character this request is for"
          }
         }
+       },
+       "example": {
+        "character_id": 1
        }
       }
      },
@@ -40934,6 +42578,12 @@
           "description": "its damage type (the Ranger resists it until the end of the turn)"
          }
         }
+       },
+       "example": {
+        "campaign_id": 1,
+        "character_id": 1,
+        "damage": 1,
+        "damage_type": "..."
        }
       }
      },
@@ -41284,6 +42934,21 @@
           "description": "Worn magic items: rules (One of each kind), no_limit (The GM allows more); the default is rules"
          }
         }
+       },
+       "example": {
+        "advancement": "...",
+        "auto_equip": "...",
+        "combat_turn_timeout": "...",
+        "dawn": "...",
+        "encumbrance": "...",
+        "exploration_timeout": "...",
+        "food_and_water": "...",
+        "mundane_ammunition": "...",
+        "spell_hands": "...",
+        "time_zone": "...",
+        "visibility": "...",
+        "watch_password": "...",
+        "worn_items": "..."
        }
       }
      },
@@ -41398,6 +43063,14 @@
           "description": "true: only the GM sees the roll (it isn't recorded in the feed)"
          }
         }
+       },
+       "example": {
+        "advantage": true,
+        "campaign_id": 1,
+        "dice": "...",
+        "disadvantage": true,
+        "label": "...",
+        "secret": true
        }
       }
      },
@@ -41509,6 +43182,16 @@
           "description": "The targets: characters' ids, or monsters' negative ids from the fight's turn order"
          }
         }
+       },
+       "example": {
+        "campaign_id": 1,
+        "character_id": 1,
+        "poison": "...",
+        "repeat": true,
+        "target_id": 1,
+        "target_ids": [
+         1
+        ]
        }
       }
      },
@@ -41613,6 +43296,13 @@
           "description": "The target: a character's id, or a monster's negative id from the fight's turn order"
          }
         }
+       },
+       "example": {
+        "campaign_id": 1,
+        "character_id": 1,
+        "contagion": "...",
+        "dc": 1,
+        "target_id": 1
        }
       }
      },
@@ -41712,6 +43402,14 @@
           "description": "The target: a character's id, or a monster's negative id from the fight's turn order"
          }
         }
+       },
+       "example": {
+        "campaign_id": 1,
+        "character_id": 1,
+        "contagion": "...",
+        "cured": true,
+        "onset": true,
+        "target_id": 1
        }
       }
      },
@@ -41837,6 +43535,21 @@
           "description": "The targets: characters' ids, or monsters' negative ids from the fight's turn order"
          }
         }
+       },
+       "example": {
+        "ability": "...",
+        "campaign_id": 1,
+        "character_id": 1,
+        "checks": "...",
+        "condition": "...",
+        "damage": "...",
+        "dc": 1,
+        "half_on_success": true,
+        "prolonged": "...",
+        "target_id": 1,
+        "target_ids": [
+         1
+        ]
        }
       }
      },
@@ -41951,6 +43664,16 @@
           "description": "one of the 8 example traps (collapsing_roof, falling_net, hidden_pit ...)"
          }
         }
+       },
+       "example": {
+        "campaign_id": 1,
+        "character_id": 1,
+        "level": 1,
+        "target_id": 1,
+        "target_ids": [
+         1
+        ],
+        "trap": "..."
        }
       }
      },
@@ -42089,6 +43812,20 @@
           "description": "dehydration: full, half, less_than_half, none"
          }
         }
+       },
+       "example": {
+        "campaign_id": 1,
+        "character_id": 1,
+        "days_without_food": 1,
+        "food": "...",
+        "hazard": "...",
+        "heavy_armor": true,
+        "hours": 1,
+        "medium_or_heavy_armor": true,
+        "minutes": 1,
+        "resistant": true,
+        "swim_speed": true,
+        "water": "..."
        }
       }
      },
@@ -42183,6 +43920,14 @@
           "description": "The targets: characters' ids, or monsters' negative ids from the fight's turn order"
          }
         }
+       },
+       "example": {
+        "campaign_id": 1,
+        "dc": 1,
+        "target_id": 1,
+        "target_ids": [
+         1
+        ]
        }
       }
      },
@@ -42329,6 +44074,9 @@
         "required": [
          "name"
         ]
+       },
+       "example": {
+        "name": "..."
        }
       }
      },
@@ -42463,6 +44211,11 @@
           "description": "the character ids, front first"
          }
         }
+       },
+       "example": {
+        "order": [
+         1
+        ]
        }
       }
      },
@@ -42566,6 +44319,10 @@
          "description",
          "target_id"
         ]
+       },
+       "example": {
+        "description": "...",
+        "target_id": 1
        }
       }
      },
@@ -42669,6 +44426,12 @@
           "description": "the level the character starts at"
          }
         }
+       },
+       "example": {
+        "campaign_id": 1,
+        "character_id": 1,
+        "gold": true,
+        "level": 1
        }
       }
      },
@@ -42847,6 +44610,22 @@
           "description": "arctic, coastal, desert, forest, grassland, hill, mountain, swamp, underdark, urban or waterborne"
          }
         }
+       },
+       "example": {
+        "campaign_id": 1,
+        "days": 1,
+        "downstream": true,
+        "gallop": true,
+        "hours": 1,
+        "hours_per_day": 1,
+        "miles": 1,
+        "mode": "...",
+        "pace": "...",
+        "pass_time": true,
+        "road": true,
+        "speed": 1,
+        "stop": true,
+        "terrain": "..."
        }
       }
      },
