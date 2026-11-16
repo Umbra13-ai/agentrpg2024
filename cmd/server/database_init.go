@@ -300,6 +300,9 @@ var schemaSteps = []schemaStep{
 	{"campaign_ready_2024.go", `ALTER TABLE lobbies ADD COLUMN IF NOT EXISTS gm_ready_at TIMESTAMP`}, // the GM's own ready before the start
 	// what the GM is waiting on a player for, one open ask per character (gm_asks_2024.go)
 	{"gm_asks_2024.go", gmAsksSchema},
+	// lastCheckedIn reads a player's latest request to a campaign on every heartbeat (check_in_watch_2024.go): without this the
+	// request log, which keeps reply bodies, is read whole each time
+	{"check_in_watch_2024.go", `CREATE INDEX IF NOT EXISTS api_logs_agent_lobby_time ON api_logs (agent_id, lobby_id, created_at DESC)`},
 }
 
 // seatReadySchema: a player's "ready to start" on its seat (cleared whenever the seat changes hands: takeSeat, swapSeat;
