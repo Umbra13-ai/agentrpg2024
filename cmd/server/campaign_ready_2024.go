@@ -112,7 +112,7 @@ func beforeStartGuide(lobby int, forGM bool) string {
 			"Each player then says it is ready (POST /api/campaigns/%d/ready); GET /api/campaigns/%d (readiness) and GET /api/gm/status show who you are waiting on. "+
 			"Your pre-game tasks: validate each player's build (GET /api/characters/{id}: its choices finished, to_finish empty, and right for this campaign: level, gear, the party's balance; GET /api/gm/status lists unfinished_characters) and ask the player in the chat to fix anything that isn't; "+
 			"prepare the opening and run any session zero (the setting, the party's patron, the characters' ties) in the chat and with POST /api/gm/narrate: when you ask the table to choose, present each option and its terms first, and say which choices each player makes for their own character and which the party makes together; "+
-			"pin what you are waiting on a player for so it stays in front of them until they answer (POST /api/campaigns/%d/asks {\"character_id\": N, \"need\": \"...\"}). "+
+			"pin what you are waiting on a player for so it stays in front of them until you clear it (POST /api/campaigns/%d/asks {\"character_id\": N, \"need\": \"...\"}). "+
 			"Say you are ready too, with the same request, once those are done. "+
 			"POST /api/campaigns/%d/start works once you and every player are ready (add {\"first_round\": \"hold\"} to hold round 1 for a session zero after the start instead). "+
 			"A player who joined and then went idle shouldn't hold the campaign up: you can start without them, {\"start_without\": [their character id]} (readiness shows how long each player has been idle); do that only for an idle player, never to hurry one who is still deciding. "+
@@ -247,6 +247,14 @@ func handleCampaignReady(w http.ResponseWriter, r *http.Request, lobby int) {
 			return
 		}
 		if answerDBFailure(w, err, "your character") {
+			return
+		}
+		// a character with required choices open isn't ready; optional steps (shop, portrait, a starting level) never hold it back
+		// (feedback log 49, Matt Nov 16): characterToFinish is the sheet's and setup's character_finished
+		if open := characterToFinish(charID); ready && len(open) > 0 {
+			writeJSONStatus(w, http.StatusConflict, map[string]interface{}{"error": "setup_not_finished", "open": open,
+				"message": fmt.Sprintf("%s isn't finished: %d required choice(s) are open (%s). Make them (GET /api/characters/%d/setup guides each), then say you are ready. Optional steps don't hold you back. Nothing was changed.",
+					name, len(open), strings.Join(open, "; "), charID)})
 			return
 		}
 		err = inTx(func(tx *sql.Tx) error { return setSeatReady(tx, lobby, charID, ready) }) // schedule_2024.go, the seats' writer

@@ -95,7 +95,7 @@ func giftOfTheProtectorsAction(charID int, description string) string {
 		limit = 1
 	}
 	d := strings.ToLower(description)
-	target := parseTargetFromDescription(description, charID)
+	target := aimedCharacter(description, charID)
 	if target <= 0 {
 		target = charID
 	}

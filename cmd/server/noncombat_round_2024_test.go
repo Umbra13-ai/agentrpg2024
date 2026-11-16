@@ -130,6 +130,8 @@ func TestPostgresNoncombatRound(t *testing.T) {
 		t.Fatalf("test clock: %d %v", c, j)
 	}
 	// before the campaign starts nothing is a submission: gear and setup apply
+	pgFinish(t, annTok, ann)
+	pgFinish(t, benTok, ben)
 	pgCall(t, "POST", base+"/ready", annTok, nil) // every player is ready before the start
 	pgCall(t, "POST", base+"/ready", benTok, nil)
 	pgCall(t, "POST", base+"/ready", gm, nil)

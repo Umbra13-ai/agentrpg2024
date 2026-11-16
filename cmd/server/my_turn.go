@@ -185,6 +185,7 @@ func handleMyTurn(w http.ResponseWriter, r *http.Request) {
 	recs, _ := readActions(actionFilter{lobby: lobbyID, newestFirst: true, limit: 10}) // action_log_2024.go
 	recentEvents := []string{}
 	var latestNarration string
+	var narrationAt time.Time
 	for _, rec := range recs {
 		aname, atype, adesc, aresult := rec.Actor, rec.Type, rec.Description, rec.Result
 		if atype == "level_up" { // posted by the server, not the DM
@@ -193,7 +194,7 @@ func handleMyTurn(w http.ResponseWriter, r *http.Request) {
 		}
 		if rec.isNarration() {
 			if latestNarration == "" {
-				latestNarration = adesc // Capture the most recent DM narration
+				latestNarration, narrationAt = adesc, rec.At // Capture the most recent DM narration
 			}
 			recentEvents = append(recentEvents, fmt.Sprintf("[DM]: %s", adesc))
 		} else if aresult != "" {
@@ -926,12 +927,21 @@ func handleMyTurn(w http.ResponseWriter, r *http.Request) {
 		"party_status":         partyStatus,
 		"how_to_act":           actionHowTo(enemies), // made from the action request (actions.go)
 	}
+	if latestNarration != "" { // when the GM said it, and the round it belongs to (feedback log 56: last round's words read as the new round's)
+		response["gm_says_at"] = narrationAt
+		if n, ok := roundAtTime(lobbyID, narrationAt); ok {
+			response["gm_says_round"] = n
+		}
+	}
 	if autoEquipped != nil {
 		response["auto_equipped"] = autoEquipped
 	}
 	if inCombat {
 		if pt := pendingTurnForMyTurn(lobbyID, charID); pt != nil {
-			response["pending_turn"] = pt // send your whole turn ahead of your slot (pending_turns_2024.go)
+			response["pending_turn"] = pt                                        // send your whole turn ahead of your slot (pending_turns_2024.go)
+			if _, howTo := pt["how"]; howTo && pt["yours"] == nil && !isMyTurn { // feedback log 48: is_my_turn false read as "wait"
+				response["is_my_turn_note"] = "It isn't your initiative yet, but you can send your turn now: it is held and taken when the initiatives before yours are done (pending_turn.how shows the request)."
+			}
 		}
 	}
 	if rem := myTurnReminders(charID, inCombat, isMyTurn); rem != nil {

@@ -1075,14 +1075,8 @@ func handleGMKickCharacter(w http.ResponseWriter, r *http.Request) {
 
 	// The character leaves the campaign; it is not erased (live test, Nov 14: this command deleted the character and its
 	// actions for good, so a player lost the character and the server's admin could not restore it).
-	if c, fighting := ptLoadCombat(req.CampaignID); fighting && c.slotOf(req.CharacterID) >= 0 {
-		removeFromFight(req.CampaignID, req.CharacterID, "the character left the campaign") // the combat-state owner (combat_state_2024.go)
-	}
-	db.Exec(`UPDATE pending_turns SET status = 'withdrawn', note = 'The character left the campaign.', resolved_at = NOW()
-		WHERE lobby_id = $1 AND character_id = $2 AND status IN ('pending', 'needs_gm')`, req.CampaignID, req.CharacterID)
-	if _, err := db.Exec(`UPDATE characters SET lobby_id = NULL WHERE id = $1 AND lobby_id = $2`, req.CharacterID, req.CampaignID); err != nil {
-		w.WriteHeader(500)
-		json.NewEncoder(w).Encode(map[string]string{"error": "remove_failed"})
+	if _, err := leaveCampaign(req.CampaignID, req.CharacterID, "the character left the campaign"); err != nil { // campaign_leave_2024.go
+		writeDBWriteError(w, err, "the campaign")
 		return
 	}
 	text := fmt.Sprintf("%s has left the campaign (removed by the GM).", name)

@@ -167,14 +167,18 @@ func handleCharacterASI(w http.ResponseWriter, r *http.Request, charID int) {
 	// For now we'll leave AC calculation to be handled by equipment system
 
 	remainingASI := pendingASI - req.Points
+	key := column // the ability as players name it (feedback log 54: Intelligence's database column is "intl")
+	if k, ok := game.AbilityKey(column); ok {
+		key = k
+	}
 	json.NewEncoder(w).Encode(map[string]interface{}{
 		"success":       true,
-		"ability":       column,
+		"ability":       key,
 		"old_value":     currentVal,
 		"new_value":     newVal,
 		"points_spent":  req.Points,
 		"remaining_asi": remainingASI,
-		"message":       fmt.Sprintf("Increased %s from %d to %d! %d ASI points remaining.", strings.ToUpper(column), currentVal, newVal, remainingASI),
+		"message":       fmt.Sprintf("Increased %s from %d to %d! %d ASI points remaining.", game.AbilityName(key), currentVal, newVal, remainingASI),
 	})
 }
 

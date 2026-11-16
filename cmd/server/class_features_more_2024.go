@@ -61,7 +61,7 @@ func gazeOfTwoMinds(charID int, description string) string {
 	if why := actionRefusal("gaze_of_two_minds", charID).text(); why != "" { // the action table's Who (action_types_2024.go)
 		return why
 	}
-	target := parseTargetFromDescription(description, charID)
+	target := aimedCharacter(description, charID)
 	if target <= 0 || target == charID {
 		return "Gaze of Two Minds: name the willing creature you touch (an ally's name in the description). Nothing was spent."
 	}

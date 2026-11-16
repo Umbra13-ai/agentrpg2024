@@ -173,7 +173,7 @@ func monsterName(lobbyID, id int) string {
 func applySpellHealing(charID, heal, healMax int, description string) string {
 	targets := spellCharacterTargets(charID)
 	if len(targets) == 0 {
-		if id := parseTargetFromDescription(description, charID); id > 0 {
+		if id := aimedCharacter(description, charID); id > 0 {
 			targets = []int{id}
 		} else {
 			targets = []int{charID}

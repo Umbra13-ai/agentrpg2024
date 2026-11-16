@@ -435,7 +435,7 @@ func lesserRestoration(charID, lobby int, description string) string {
 	id := charID
 	if t := spellCharacterTargets(charID); len(t) > 0 {
 		id = t[0]
-	} else if t := parseTargetFromDescription(description, charID); t > 0 {
+	} else if t := aimedCharacter(description, charID); t > 0 {
 		id = t
 	}
 	dl := strings.ToLower(description)

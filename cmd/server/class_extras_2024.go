@@ -98,7 +98,7 @@ func landsAid(charID int, description string) string {
 	_, monster, isMonster := attackedMonster(charID)
 	healTarget := 0
 	if strings.Contains(low, "heal") || strings.Contains(low, "restore") {
-		if healTarget = parseTargetFromDescription(description, charID); healTarget <= 0 {
+		if healTarget = aimedCharacter(description, charID); healTarget <= 0 {
 			healTarget = charID
 		}
 	}

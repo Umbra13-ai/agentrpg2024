@@ -377,7 +377,7 @@ func resolveEffectSpell(charID int, spell SRDSpell, spellKey string, slotLevel, 
 	case "spare-the-dying": // F242: the spell's text only; the creature never became Stable
 		ids := spellCharacterTargets(charID)
 		if len(ids) == 0 {
-			if id := parseTargetFromDescription(description, charID); id > 0 {
+			if id := aimedCharacter(description, charID); id > 0 {
 				ids = []int{id}
 			}
 		}
@@ -431,7 +431,7 @@ func resolveEffectSpell(charID int, spell SRDSpell, spellKey string, slotLevel, 
 			ids = append(ids, spellMonsterTargets(charID)...)
 		}
 		if len(ids) == 0 {
-			if id := parseTargetFromDescription(description, charID); id > 0 {
+			if id := aimedCharacter(description, charID); id > 0 {
 				ids = []int{id}
 			} else {
 				ids = []int{charID}

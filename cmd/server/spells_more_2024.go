@@ -119,7 +119,7 @@ func resolveMoreSpell(charID, lobby int, spell SRDSpell, key string, slot, saveD
 	if !b.Self {
 		if t := spellCharacterTargets(charID); len(t) > 0 {
 			ids = t
-		} else if t := parseTargetFromDescription(description, charID); t > 0 {
+		} else if t := aimedCharacter(description, charID); t > 0 {
 			ids = []int{t}
 		}
 	}

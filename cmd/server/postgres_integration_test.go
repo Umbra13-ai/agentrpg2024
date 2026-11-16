@@ -315,3 +315,24 @@ func TestPostgresModDeleteUser(t *testing.T) {
 		t.Errorf("deleting a missing account answered %d", c)
 	}
 }
+
+// pgFinish makes a pgRogue character's required choices (equipment, Expertise, Thieves' Cant), so its player may say it is ready
+// (a character with required choices open isn't: feedback log 49).
+func pgFinish(t *testing.T, tok string, id int) {
+	t.Helper()
+	for _, step := range []struct {
+		path string
+		body map[string]interface{}
+	}{
+		{"/api/characters/auto-equip", map[string]interface{}{"character_id": id, "answer": "no"}},
+		{fmt.Sprintf("/api/characters/%d/expertise", id), map[string]interface{}{"skills": []string{"stealth", "perception"}}},
+		{fmt.Sprintf("/api/characters/%d/class-options", id), map[string]interface{}{"class_languages": []string{"Halfling"}}},
+	} {
+		if c, j := pgCall(t, "POST", step.path, tok, step.body); c != 200 {
+			t.Fatalf("finishing character %d: %s: %d %v", id, step.path, c, j)
+		}
+	}
+	if open := characterToFinish(id); len(open) > 0 {
+		t.Fatalf("character %d still has open choices: %v", id, open)
+	}
+}

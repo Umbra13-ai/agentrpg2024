@@ -328,6 +328,9 @@ func handleCampaignByID(w http.ResponseWriter, r *http.Request) {
 		case "ready":
 			handleCampaignReady(w, r, campaignID) // players say they are ready before the start (campaign_ready_2024.go)
 			return
+		case "leave":
+			handleCampaignLeave(w, r, campaignID) // a player's character leaves the campaign (campaign_leave_2024.go)
+			return
 		case "asks":
 			handleCampaignAsks(w, r, campaignID) // what the GM is waiting on a player for (gm_asks_2024.go)
 			return
@@ -2609,10 +2612,10 @@ func handleHeartbeat(w http.ResponseWriter, r *http.Request) {
 			maxPlayers = displayedMaxPlayers(maxPlayers, len(players))
 
 			// Get recent messages
-			messages := getRecentCampaignMessages(id, 24)
+			messages, moreMessages := heartbeatRecent(getRecentCampaignMessages(id, 24), heartbeatMessages, fmt.Sprintf("GET /api/campaigns/messages?campaign_id=%d", id))
 
 			// Get recent actions
-			actions := getRecentCampaignActions(id, 24)
+			actions, moreActions := heartbeatRecent(getRecentCampaignActions(id, 24), heartbeatActions, fmt.Sprintf("GET /api/campaigns/%d/feed", id)) // heartbeat_digest_2024.go
 
 			// Get combat status for active campaigns
 			combatStatus := map[string]interface{}{"in_combat": false}
@@ -2633,6 +2636,8 @@ func handleHeartbeat(w http.ResponseWriter, r *http.Request) {
 				"players":           players,
 				"recent_messages":   messages,
 				"recent_actions":    actions,
+				"more_messages":     moreMessages,
+				"more_actions":      moreActions,
 				"created_at":        createdAt.Format(time.RFC3339),
 				"your_role":         "gm",
 			})
@@ -2686,8 +2691,9 @@ func handleHeartbeat(w http.ResponseWriter, r *http.Request) {
 			// Get recent messages
 			messages := getRecentCampaignMessages(lobbyID, 24)
 
-			// Get recent actions
-			actions := getRecentCampaignActions(lobbyID, 24)
+			// Get recent actions: the newest, with how many more (heartbeat_digest_2024.go)
+			actions, moreActions := heartbeatRecent(getRecentCampaignActions(lobbyID, 24), heartbeatActions, fmt.Sprintf("GET /api/campaigns/%d/feed", lobbyID))
+			messages, moreMessages := heartbeatRecent(messages, heartbeatMessages, fmt.Sprintf("GET /api/campaigns/messages?campaign_id=%d", lobbyID))
 
 			// Get turn status for active campaigns
 			turnStatus := map[string]interface{}{"in_combat": false, "your_turn": false}
@@ -2717,13 +2723,15 @@ func handleHeartbeat(w http.ResponseWriter, r *http.Request) {
 					"hp":      charHP,
 					"max_hp":  charMaxHP,
 				},
-				"level_up":        nilIfNoNotices(unseenLevelUpNotices(charID)), // the server's level-up notices (level_up_notice_2024.go)
+				"level_up":        heartbeatLevelUp(charID), // a digest of the level-up notices (heartbeat_digest_2024.go)
 				"turn_status":     turnStatus,
 				"gm_asks_you":     playerAskView(lobbyID, charID),              // what the GM is waiting on you for (gm_asks_2024.go)
 				"your_check_in":   checkInWatchOrNil(lobbyID, agentID, charID), // your seat's check-in and whether you missed it (check_in_watch_2024.go)
 				"party":           players,
 				"recent_messages": messages,
 				"recent_actions":  actions,
+				"more_messages":   moreMessages,
+				"more_actions":    moreActions,
 				"created_at":      createdAt.Format(time.RFC3339),
 				"your_role":       "player",
 			})

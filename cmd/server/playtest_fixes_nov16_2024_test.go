@@ -1,6 +1,8 @@
 package main
 
 import (
+	"database/sql"
+	"encoding/json"
 	"fmt"
 	"net/http/httptest"
 	"strings"
@@ -181,5 +183,141 @@ func TestPostgresSheetAttackBonusIsTheAttacksOwn(t *testing.T) {
 	_, sheet := pgCall(t, "GET", fmt.Sprintf("/api/characters/%d/profile", id), tok, nil) // the stat block the character page shows
 	if !strings.Contains(fmt.Sprint(sheet["statblock"]), "Ranged Weapon Attack: "+m.toHit()) || !strings.Contains(m.toHit(), "Archery +2") {
 		t.Errorf("the sheet's Longbow line isn't the attack's own %q: %v", m.toHit(), sheet["statblock"])
+	}
+}
+
+// Feedback log 52: the join reply's next step says what a check-in reads and what a missed turn costs.
+func TestJoinNextStepSaysWhatAMissCosts(t *testing.T) {
+	s, _ := scheduleOf(4)
+	got := joinNextStep(s, true, 1, 9, "recruiting")
+	for _, w := range []string{"/api/campaigns/messages?campaign_id=9", "stand-in", minuteText(s.final())} {
+		if !strings.Contains(got, w) {
+			t.Errorf("%q lacks %q", got, w)
+		}
+	}
+}
+
+// Feedback log 53: my-turn for a campaign that doesn't exist is 404 campaign_not_found, not no_active_game.
+func TestPostgresMyTurnForAGoneCampaign(t *testing.T) {
+	testPostgres(t)
+	_, tok := pgAgent(t, "pg gone campaign")
+	if c, j := pgCall(t, "GET", "/api/my-turn?campaign_id=987654321", tok, nil); c != 404 || j["error"] != "campaign_not_found" {
+		t.Errorf("%d %v", c, j)
+	}
+	if c, j := pgCall(t, "GET", "/api/my-turn", tok, nil); c != 200 || j["error"] != "no_active_game" {
+		t.Errorf("no campaign named: %d %v", c, j)
+	}
+}
+
+// Feedback log 51: a choice made several times says how many are left, from the choice table's counts, for every counted choice.
+func TestCountedStepTitles(t *testing.T) {
+	var inv *choiceDef
+	for _, d := range choiceDefs {
+		if d.key == "invocations" {
+			inv = d
+		}
+		if d.many != "" {
+			if got := countedTitle(d, 1, 4); !strings.Contains(got, "3 more "+d.many) || !strings.Contains(got, "(1 of 4 chosen)") {
+				t.Errorf("%s: %q", d.key, got)
+			}
+			if countedTitle(d, 4, 4) != "" {
+				t.Errorf("%s: a finished choice has a counted title", d.key)
+			}
+		}
+	}
+	if inv == nil || countedTitle(inv, 2, 7) != "Choose 5 more Eldritch Invocations (2 of 7 chosen)" {
+		t.Errorf("invocations: %q", countedTitle(inv, 2, 7))
+	}
+}
+
+// Feedback log 57a: a player's character leaves its campaign (its seat is freed, the character stays the player's); leaving again,
+// or a campaign it isn't in, is 404 not_in_campaign. The GM's removal goes the same way (leaveCampaign).
+func TestPostgresPlayerLeavesACampaign(t *testing.T) {
+	testPostgres(t)
+	gm, gmTok := pgAgent(t, "pg leave gm")
+	_, tok := pgAgent(t, "pg leave player")
+	_, j := pgCall(t, "POST", "/api/characters", tok, pgRogue(fmt.Sprintf("Pg Leaver %d", time.Now().UnixNano()%1e9)))
+	id := int(j["character_id"].(float64))
+	_, j = pgCall(t, "POST", "/api/campaigns", gmTok, map[string]interface{}{"name": fmt.Sprintf("PG Leave %d", gm), "max_players": 1})
+	camp := int(j["campaign_id"].(float64))
+	leave := fmt.Sprintf("/api/campaigns/%d/leave", camp)
+	if c, j := pgCall(t, "POST", leave, tok, nil); c != 404 || j["error"] != "not_in_campaign" {
+		t.Errorf("leave before joining: %d %v", c, j)
+	}
+	pgCall(t, "POST", fmt.Sprintf("/api/campaigns/%d/join", camp), tok, map[string]interface{}{"character_id": id})
+	if c, j := pgCall(t, "POST", leave, tok, map[string]interface{}{"character_id": id}); c != 200 {
+		t.Fatalf("leave: %d %v", c, j)
+	}
+	var lobby sql.NullInt64
+	db.QueryRow(`SELECT lobby_id FROM characters WHERE id = $1`, id).Scan(&lobby)
+	if lobby.Valid {
+		t.Errorf("still in campaign %d", lobby.Int64)
+	}
+	_, other := pgAgent(t, "pg leave other")
+	_, j = pgCall(t, "POST", "/api/characters", other, pgRogue(fmt.Sprintf("Pg Seat Taker %d", time.Now().UnixNano()%1e9)))
+	if c, j := pgCall(t, "POST", fmt.Sprintf("/api/campaigns/%d/join", camp), other, map[string]interface{}{"character_id": int(j["character_id"].(float64))}); c != 200 {
+		t.Errorf("the freed seat (capacity 1) can't be taken: %d %v", c, j)
+	}
+}
+
+// Feedback log 50: the heartbeat is a digest. A level-1 character raised to 11 on joining (Kestrel's case: 36 KB, 20 KB of level-up
+// notices) gets the count, the levels and the newest notice; the join reply's start text is a summary pointing to setup.
+func TestPostgresHeartbeatIsADigest(t *testing.T) {
+	testPostgres(t)
+	gm, gmTok := pgAgent(t, "pg digest gm")
+	_, tok := pgAgent(t, "pg digest player")
+	_, j := pgCall(t, "POST", "/api/characters", tok, pgRogue(fmt.Sprintf("Pg Raised %d", time.Now().UnixNano()%1e9)))
+	id := int(j["character_id"].(float64))
+	_, j = pgCall(t, "POST", "/api/campaigns", gmTok, map[string]interface{}{"name": fmt.Sprintf("PG Digest %d", gm), "max_players": 2, "min_level": 11, "max_level": 11})
+	camp := int(j["campaign_id"].(float64))
+	c, j := pgCall(t, "POST", fmt.Sprintf("/api/campaigns/%d/join", camp), tok, map[string]interface{}{"character_id": id})
+	if c != 200 {
+		t.Fatalf("join: %d %v", c, j)
+	}
+	if s := fmt.Sprint(j["started_at_campaign_level"]); len(s) > 600 || !strings.Contains(s, "/setup") {
+		t.Errorf("the start text (%d chars): %s", len(s), s)
+	}
+	w := httptest.NewRecorder()
+	r := httptest.NewRequest("GET", "/api/heartbeat", nil)
+	r.Header.Set("Authorization", "Bearer "+tok)
+	newServer("").Handler.ServeHTTP(w, r)
+	var hb map[string]interface{}
+	json.Unmarshal(w.Body.Bytes(), &hb)
+	var entry map[string]interface{}
+	for _, x := range asList(hb["campaigns_as_player"]) {
+		if m, _ := x.(map[string]interface{}); asInt(m["id"]) == camp {
+			entry = m
+		}
+	}
+	lu, _ := entry["level_up"].(map[string]interface{})
+	if lu == nil || asInt(lu["unseen"]) != 10 || lu["latest"] == nil || len(asList(lu["levels"])) != 10 {
+		t.Errorf("level_up digest: %v", lu)
+	}
+	if n := w.Body.Len(); n > 15000 {
+		sizes := map[string]int{}
+		for k, v := range entry {
+			b, _ := json.Marshal(v)
+			sizes[k] = len(b)
+		}
+		for k, v := range hb {
+			b, _ := json.Marshal(v)
+			sizes["top:"+k] = len(b)
+		}
+		t.Errorf("the heartbeat is %d bytes for one campaign: %v", n, sizes)
+	}
+}
+
+// Feedback log 46: outside a fight a move isn't the story action (Dash is); 56: every round's opening has its party-chat line.
+func TestMoveIsNotTheBeatAndRoundLines(t *testing.T) {
+	if actionUsesBeat("move") || !actionUsesBeat("dash") || !actionUsesBeat("search") {
+		t.Errorf("move %v, dash %v, search %v", actionUsesBeat("move"), actionUsesBeat("dash"), actionUsesBeat("search"))
+	}
+	r := &roundRecord{Number: 2, Kind: roundNoncombat, OpenedAt: at("10:00:00"), Deadline: nullTime(at("10:55:00"))}
+	if l := roundOpenedLine(r); !strings.Contains(l, "Round 2 (outside a fight) began at") || !strings.Contains(l, "final check-in") {
+		t.Errorf("%q", l)
+	}
+	r.Number = 1
+	if l := roundOpenedLine(r); !strings.HasPrefix(l, "Play is open") {
+		t.Errorf("%q", l)
 	}
 }

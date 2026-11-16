@@ -50,9 +50,25 @@ func divineSpark(charID int, description string) string {
 	}
 	low := strings.ToLower(description)
 	_, monster, isMonster := attackedMonster(charID)
-	healing := strings.Contains(low, "heal") || strings.Contains(low, "restore")
+	ally := aimedCharacter(description, charID) // the character the request names (target_character_id or target_id), or one named
+	healing := (ally > 0 && !isMonster) || strings.Contains(low, "heal") || strings.Contains(low, "restore")
 	if !healing && !isMonster {
-		return "Name a creature to hurt with target_id, or say \"heal <name>\" to restore Hit Points."
+		return "Cannot use Divine Spark: name a creature to hurt with target_id, or an ally to heal with target_character_id."
+	}
+	// SRD 5.2.1: the Cleric points the Holy Symbol at another creature. A heal needs that ally, and one that has Hit Points to regain,
+	// before Channel Divinity is spent (feedback log 44: it healed the caster, at full Hit Points, and spent the use)
+	var allyName string
+	if healing {
+		if ally <= 0 || ally == charID {
+			return "Cannot use Divine Spark: it heals another creature, so name the ally with target_character_id (or target_id, the ally's character id)."
+		}
+		var hp, maxHP int
+		if err := db.QueryRow(`SELECT name, COALESCE(hp,0), COALESCE(max_hp,0) FROM characters WHERE id = $1`, ally).Scan(&allyName, &hp, &maxHP); err != nil {
+			return "Cannot use Divine Spark: that ally couldn't be found."
+		}
+		if hp >= maxHP {
+			return fmt.Sprintf("Cannot use Divine Spark: %s is at full Hit Points (%d/%d), so it would heal nothing.", allyName, hp, maxHP)
+		}
 	}
 	if okRes, msg, _ := useClassResource(charID, "channel_divinity", 1); !okRes {
 		return msg
@@ -70,11 +86,7 @@ func divineSpark(charID int, description string) string {
 		total = 1
 	}
 	if healing {
-		tid := parseTargetFromDescription(description, charID)
-		if tid <= 0 {
-			tid = charID
-		}
-		tname, hp, nh := healCharacter(tid, total) // the Hit Point owner (hit_points_2024.go): from 0 the Death Saving Throws reset
+		tname, hp, nh := healCharacter(ally, total) // the Hit Point owner (hit_points_2024.go): from 0 the Death Saving Throws reset
 		return fmt.Sprintf("✨ Divine Spark: %s regains %d Hit Points (%d → %d).", tname, nh-hp, hp, nh)
 	}
 	dtype := "radiant"

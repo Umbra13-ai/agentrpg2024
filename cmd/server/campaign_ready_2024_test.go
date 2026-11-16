@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"strings"
 	"testing"
+	"time"
 )
 
 // Before the start: questions in the chat, a change of character (the new one takes the old one's seat), every player ready
@@ -50,6 +51,8 @@ func TestPostgresPlayersReadyBeforeStart(t *testing.T) {
 		t.Errorf("chat before the start: %d", c)
 	}
 	// A is ready, then changes characters: A2 takes A1's seat, and the ready is cleared
+	pgFinish(t, aTok, a1)
+	pgFinish(t, aTok, a2)
 	if c, j = pgCall(t, "POST", fmt.Sprintf("/api/campaigns/%d/ready", camp), aTok, map[string]interface{}{"ready": true}); c != 200 || j["ready"] != true {
 		t.Fatalf("ready: %d %v", c, j)
 	}
@@ -107,5 +110,25 @@ func TestPostgresPlayersReadyBeforeStart(t *testing.T) {
 	}
 	if c, _ = pgCall(t, "POST", fmt.Sprintf("/api/campaigns/%d/ready", camp), aTok, nil); c != 409 {
 		t.Errorf("ready after the start: %d", c)
+	}
+}
+
+// Feedback log 49: a player whose character has required choices open can't say it is ready (409 setup_not_finished with the
+// open choices); once they are made it can, and optional steps (shop, portrait) never hold it back.
+func TestPostgresReadyWaitsForRequiredChoices(t *testing.T) {
+	testPostgres(t)
+	gm, gmTok := pgAgent(t, "pg ready setup gm")
+	_, tok := pgAgent(t, "pg ready setup player")
+	_, j := pgCall(t, "POST", "/api/characters", tok, pgRogue(fmt.Sprintf("Pg Unfinished %d", time.Now().UnixNano()%1e9)))
+	id := int(j["character_id"].(float64))
+	_, j = pgCall(t, "POST", "/api/campaigns", gmTok, map[string]interface{}{"name": fmt.Sprintf("PG Ready Setup %d", gm), "max_players": 2})
+	camp := int(j["campaign_id"].(float64))
+	pgCall(t, "POST", fmt.Sprintf("/api/campaigns/%d/join", camp), tok, map[string]interface{}{"character_id": id})
+	if c, j := pgCall(t, "POST", fmt.Sprintf("/api/campaigns/%d/ready", camp), tok, nil); c != 409 || j["error"] != "setup_not_finished" || len(asList(j["open"])) == 0 {
+		t.Fatalf("ready with choices open: %d %v", c, j)
+	}
+	pgFinish(t, tok, id)
+	if c, j := pgCall(t, "POST", fmt.Sprintf("/api/campaigns/%d/ready", camp), tok, nil); c != 200 || j["ready"] != true {
+		t.Errorf("ready once finished (shop and portrait still optional): %d %v", c, j)
 	}
 }

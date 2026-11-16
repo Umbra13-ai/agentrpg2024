@@ -55,13 +55,17 @@ func levelTier(level int) int {
 
 // levelStart: what a start at a higher level gave.
 type levelStart struct {
-	From, To, HP, ASI, Gold int
-	Items, Note             string
+	CharID, From, To, HP, ASI, Gold int
+	Items, Note                     string // Note: each level's gains (applyLevelGain); the level-up notices hold them too
 }
 
 // text: the start in words, for the player, the GM and the log.
 func (s levelStart) text(name string) string {
-	out := fmt.Sprintf("%s starts at level %d (from level %d). %s", name, s.To, s.From, s.Note)
+	// a summary, not every level's gains (feedback log 50: a 4 KB text for levels 2 to 11); those are the level-up notices
+	out := fmt.Sprintf("%s starts at level %d (from level %d): +%d Hit Points, %d Ability Score Improvement points to spend.", name, s.To, s.From, s.HP, s.ASI)
+	if open := characterToFinish(s.CharID); len(open) > 0 {
+		out += fmt.Sprintf(" %d choices these levels bring are open: GET /api/characters/%d/setup guides each (each level's gains: GET /api/characters/%d/level-up-notices).", len(open), s.CharID, s.CharID)
+	}
 	if s.Gold > 0 {
 		out += fmt.Sprintf(" Starting money for level %d: +%d GP.", s.To, s.Gold)
 	}
@@ -74,7 +78,7 @@ func (s levelStart) text(name string) string {
 // startAtLevel raises a character from its level to level by the level-up rules, with the table's money when money is true. The
 // money is paid once per tier: a character already given a tier's money (starting_money) gets only what a higher tier adds.
 func startAtLevel(charID, from, to int, how string, money bool) levelStart {
-	st := levelStart{From: from, To: to}
+	st := levelStart{CharID: charID, From: from, To: to}
 	st.HP, st.ASI, st.Note = applyLevelGain(charID, from, to, how)
 	gold, items := higherLevelStart(to)
 	st.Items = items

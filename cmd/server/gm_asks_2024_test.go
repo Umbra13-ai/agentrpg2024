@@ -8,7 +8,7 @@ import (
 )
 
 // What the GM is waiting on a player for (S-GM-12): the GM pins an ask; the player sees it in my-turn (before the start) and the
-// heartbeat until answering in the party chat; the GM's status shows it waiting, then answered; the GM clears it. Only the GM sets or
+// heartbeat until the GM clears it, its reply noted; the GM's status shows it waiting, then replied; the GM clears it. Only the GM sets or
 // clears, only for a character in the campaign; another player sees nothing of it.
 func TestPostgresGMAsks(t *testing.T) {
 	testPostgres(t)
@@ -95,12 +95,13 @@ func TestPostgresGMAsks(t *testing.T) {
 	if c, _ := pgCall(t, "POST", "/api/campaigns/messages", aTok, map[string]interface{}{"campaign_id": camp, "message": "The Hellriders; I seek my brother."}); c != 200 {
 		t.Fatalf("chat: %d", c)
 	}
-	if tasks, list := gmStatus(); !strings.Contains(tasks, "Answered") || len(list) != 1 || list[0].(map[string]interface{})["answered_by"] != "party chat" {
+	if tasks, list := gmStatus(); !strings.Contains(tasks, "Replied") || len(list) != 1 || list[0].(map[string]interface{})["answered_by"] != "party chat" {
 		t.Errorf("GM status after the answer: %v / %v", tasks, list)
 	}
+	// the GM runs the game (feedback log 57c): the ask stays, with the reply noted, until the GM clears it
 	_, j = pgCall(t, "GET", fmt.Sprintf("/api/my-turn?campaign_id=%d", camp), aTok, nil)
-	if j["gm_asks_you"] != nil {
-		t.Errorf("the player still sees an answered ask: %v", j["gm_asks_you"])
+	if m, _ := j["gm_asks_you"].(map[string]interface{}); m == nil || m["you_replied_at"] == nil {
+		t.Errorf("the player's ask after replying: %v", j["gm_asks_you"])
 	}
 
 	// the GM clears it (here with the POST form a tool without DELETE sends: feedback log 40); clearing again is 404

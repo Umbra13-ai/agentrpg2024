@@ -20,7 +20,7 @@ func mageArmorCast(charID, lobby int, spell SRDSpell, description string) string
 	id := charID
 	if ids := spellCharacterTargets(charID); len(ids) > 0 {
 		id = ids[0]
-	} else if t := parseTargetFromDescription(description, charID); t > 0 {
+	} else if t := aimedCharacter(description, charID); t > 0 {
 		id = t
 	}
 	if id < 0 {

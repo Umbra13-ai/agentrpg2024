@@ -41,6 +41,7 @@ func TestPostgresPlayOpenedAndCheckInWatch(t *testing.T) {
 	if c, j := pgCall(t, "POST", base+"/test-clock", gmTok, map[string]interface{}{"at": "2026-11-16T09:50:00Z"}); c != 200 {
 		t.Fatalf("test clock: %d %v", c, j)
 	}
+	pgFinish(t, plTok, char)
 	pgCall(t, "POST", base+"/ready", plTok, nil)
 	pgCall(t, "POST", base+"/ready", gmTok, nil)
 	if c, j := pgCall(t, "POST", base+"/start", gmTok, map[string]interface{}{"first_round": "hold"}); c != 200 {
@@ -99,5 +100,17 @@ func TestOverdueCountsFromTheCheckInAfterTheTurn(t *testing.T) {
 	}
 	if c := checkInAt(in, at("10:25:40")); c.NextGMCheckIn == nil || c.NextGMCheckIn.Format("15:04") != "10:25" {
 		t.Errorf("the check-in of this minute isn't the next one: %v", c.NextGMCheckIn)
+	}
+}
+
+// Feedback log 55: a turn submitted in a GM check-in's minute, after that minute began, resolves at the next GM check-in, never at
+// one already past.
+func TestSubmittedTurnResolvesAtTheCheckInAfterIt(t *testing.T) {
+	in := exampleInputs(at("09:55:00"))
+	in.Round.Kind, in.Fight = roundNoncombat, nil
+	submit(&in, ann, at("10:10:54")) // GM check-ins :10 :25 :40 :55
+	s := statusOfChar(t, checkInAt(in, at("10:10:58")), ann)
+	if s.ResolvesAt == nil || s.ResolvesAt.Format("15:04") != "10:25" || !strings.Contains(s.Message, "10:25") {
+		t.Errorf("resolves at %v: %q", s.ResolvesAt, s.Message)
 	}
 }

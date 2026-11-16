@@ -11,6 +11,7 @@ import (
 	"sort"
 	"strconv"
 	"strings"
+	"sync"
 	"time"
 )
 
@@ -42,9 +43,35 @@ func isCharacterInCombat(characterID int) (campaignID int, inCombat bool, err er
 	return int(campID.Int64), inCombat, nil
 }
 
-// parseTargetFromDescription tries to find a character ID from action description
-// Looks for character names in the description (e.g., "attack goblin" → finds goblin's ID)
-func parseTargetFromDescription(description string, attackerID int) int {
+// aimedTargets: the character a request names (target_character_id, or a positive target_id), set once per action in handleAction for
+// every action type (feedback log 44: Divine Spark aimed at an ally by id healed the caster, because only the description was read).
+var aimedTargets sync.Map
+
+// requestCharacterTarget: the character the request itself names: target_character_id, else a positive target_id (0: none).
+func requestCharacterTarget(req actionRequest) int {
+	if req.TargetCharacterID > 0 {
+		return req.TargetCharacterID
+	}
+	if req.TargetID > 0 {
+		return req.TargetID
+	}
+	return 0
+}
+
+// aimedCharacter is the one answer to "which character is this action aimed at": the character the request names (target_character_id
+// or a positive target_id, checked to be in the campaign by namedCharactersIn), else a character of the campaign named in the
+// description, else 0. Every feature that heals, buffs or otherwise picks a character reads it.
+func aimedCharacter(description string, attackerID int) int {
+	if v, ok := aimedTargets.Load(attackerID); ok {
+		if id, _ := v.(int); id > 0 {
+			return id
+		}
+	}
+	return characterNamedIn(description, attackerID)
+}
+
+// characterNamedIn: a character of the attacker's campaign whose name appears in the description (0: none).
+func characterNamedIn(description string, attackerID int) int {
 	// Get the lobby ID for this attacker
 	var lobbyID int
 	err := db.QueryRow("SELECT lobby_id FROM characters WHERE id = $1", attackerID).Scan(&lobbyID)
@@ -390,6 +417,7 @@ type actionFields struct {
 	CloseRange             bool   `json:"close_range"`              // set true if within 5ft of hostile creature (ranged attacks have disadvantage)
 	AllyAdjacent           bool   `json:"ally_adjacent"`            // set true if an ally of yours (not Incapacitated) is within 5 feet of your target; used only without a battle map (Sneak Attack)
 	SlotLevel              int    `json:"slot_level"`               // cast: the spell slot level to use (upcasting); 0 means the spell's own level
+	Skill                  string `json:"skill"`                    // search, study, influence: the skill to use, one of that action's skills (the GM may rule another fits)
 	ObjectID               int    `json:"object_id"`                // attack: an object the GM created (POST /api/gm/object), such as a door
 	CleaveTargetID         int    `json:"cleave_target_id"`         // attack with a Cleave weapon: a second creature within 5 feet of target_id
 	TargetIDs              []int  `json:"target_ids"`               // cast: more creatures hit by an area or multi-target spell (monsters have negative ids; characters are healed)
@@ -1086,6 +1114,14 @@ func handleAction(w http.ResponseWriter, r *http.Request) {
 				return speed, dashErr
 			}
 		}
+		if req.Skill != "" { // a check action's named skill (checkSkillFor, actions_checks_2024.go)
+			namedSkills.Store(charID, req.Skill)
+			defer namedSkills.Delete(charID)
+		}
+		if t := requestCharacterTarget(req); t > 0 { // the character the request names, for every action (aimedCharacter)
+			aimedTargets.Store(charID, t)
+			defer aimedTargets.Delete(charID)
+		}
 		if (attackAction || req.Action == "grapple" || req.Action == "shove" || req.Action == "cast" || req.Action == "spiritual_weapon" || req.Action == "flame_blade" || req.Action == "influence" || req.Action == "divine_spark" || req.Action == "lands_aid" || req.Action == "quivering_palm" || req.Action == "flurry_of_blows" || req.Action == "martial_arts") && req.TargetID != 0 {
 			attackTargets.Store(charID, req.TargetID)
 			defer attackTargets.Delete(charID)
@@ -1210,6 +1246,15 @@ func handleAction(w http.ResponseWriter, r *http.Request) {
 		response["crawling_note"] = fmt.Sprintf("Crawling while prone: %dft of movement used for %dft of distance.", effectiveMovementCost, req.MovementCost)
 	}
 
+	if !inCombat && !castRefused { // outside a fight: what the action took, from the action table's Beat (feedback log 47: a declare read as free)
+		response["resource_consumed"] = "your story action until the GM narrates (one between narrations outside a fight)"
+		if !actionUsesBeat(req.Action) {
+			response["resource_consumed"] = "nothing: outside a fight this doesn't use your story action"
+		}
+		if t, ok := lookupActionType(req.Action); ok && t.GM {
+			response["gm_rules"] = "The GM rules on what this does and narrates it."
+		}
+	}
 	if inCombat {
 		response["resource_consumed"] = resourceUsed
 		if castRefused {
@@ -1511,7 +1556,7 @@ func resolveActionWithBonusDash(action, description string, charID int, bonusDas
 		// 2024 Brutal Strike (level 9): forgo the Advantage of this reckless Strength attack for extra damage and an effect
 		brutalStrike := brutalStrikeWanted(class, level, descLower, strings.Contains(recklessNote, "RECKLESS!"))
 		// a character named in the description (a target_id names a monster)
-		targetID := parseTargetFromDescription(description, charID)
+		targetID := aimedCharacter(description, charID)
 		// Charmed: Can't attack the charmer
 		if targetID > 0 && isCharmedBy(charID, targetID) {
 			var targetName string
@@ -2273,7 +2318,7 @@ func resolveActionWithBonusDash(action, description string, charID int, bonusDas
 				concentrationValue := spell.Name
 				if isMarkSpell(spellKey) {
 					// Parse target from description (e.g., "cast hex on goblin" or "hunter's mark the orc")
-					castTargetID := parseTargetFromDescription(description, charID)
+					castTargetID := aimedCharacter(description, charID)
 					if _, mid, isMonster := attackedMonster(charID); castTargetID <= 0 && isMonster {
 						castTargetID = mid // a monster picked with target_id
 					}
@@ -2514,7 +2559,7 @@ func resolveActionWithBonusDash(action, description string, charID int, bonusDas
 				blessedHealerInfo := ""
 				if slotLevel >= 1 && hasSubclassFeature(subclassSlug, level, "blessed_healer") {
 					// Parse target from description to see if healing someone else
-					targetID := parseTargetFromDescription(description, charID)
+					targetID := aimedCharacter(description, charID)
 					descLower := strings.ToLower(description)
 					healingSelf := targetID == charID || targetID == 0 ||
 						strings.Contains(descLower, "self") || strings.Contains(descLower, "myself")
@@ -3335,7 +3380,7 @@ func resolveActionWithBonusDash(action, description string, charID int, bonusDas
 			// Determine target (self or another character)
 			targetID := charID // default to self
 			if !strings.Contains(descLower, "self") && !strings.Contains(descLower, "myself") {
-				parsedTarget := parseTargetFromDescription(description, charID)
+				parsedTarget := aimedCharacter(description, charID)
 				if parsedTarget > 0 {
 					targetID = parsedTarget
 				}
@@ -3400,7 +3445,7 @@ func resolveActionWithBonusDash(action, description string, charID int, bonusDas
 		// Determine target
 		targetID := charID
 		if !strings.Contains(descLower, "self") && !strings.Contains(descLower, "myself") {
-			parsedTarget := parseTargetFromDescription(description, charID)
+			parsedTarget := aimedCharacter(description, charID)
 			if parsedTarget > 0 {
 				targetID = parsedTarget
 			}

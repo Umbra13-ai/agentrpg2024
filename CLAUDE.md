@@ -225,8 +225,9 @@ Add to the owner, never beside it. When you give another rule one owner, add it 
   `open_seats` and `?open=`, joining's `campaign_full` and the recruiting check. **The way into a campaign** is `claimSeat(tx, ...)`
   (`cmd/server/schedule_2024.go`): the campaign's row locked, the owner, one character per player and the capacity checked, the
   lowest free seat taken (`campaign_seats`, join order), in one transaction, so parallel joins for the last seat can't both win.
-  Joining, the admin's add, restore and editor (`lobby_id`) and the GM's recreate call it; leaving is setting `lobby_id` to NULL
-  (a seat is held only while its character is in the campaign). `TestNoOtherWayIntoACampaign` checks.
+  Joining, the admin's add, restore and editor (`lobby_id`) and the GM's recreate call it. **Leaving** is `leaveCampaign`
+  (`campaign_leave_2024.go`): out of a fight, pending turns withdrawn, `lobby_id` NULL (a seat is held only while its character is in the
+  campaign); the player's `POST /api/campaigns/{id}/leave` and the GM's kick call it (feedback log 57a). `TestNoOtherWayIntoACampaign` checks.
 - **A campaign's level range and a start above level 1** (Matt, Nov 16): `cmd/server/campaign_levels_2024.go`. `newLevelRange` is the
   one rule of a range the GM sets (creation, from a template's range or 1-1; `PATCH /api/campaigns/{id}/levels`); `levelMayJoin` the
   one rule of who may join by level (within min_level to max_level, or a new character below it), read by joining and
@@ -287,17 +288,21 @@ Add to the owner, never beside it. When you give another rule one owner, add it 
 - **What the GM is waiting on a player for** (playtest S-GM-12, Matt Nov 16): `cmd/server/gm_asks_2024.go`. The GM pins one ask per
   character (`POST|DELETE|GET /api/campaigns/{id}/asks`); `setGMAsk` / `clearGMAsk` are the only writers of `gm_asks`, `gmAsksIn` the
   one reader. An ask is answered when the player has posted in the party chat or said ready since it was set (worked out when read).
-  `playerAskView` is the player's `gm_asks_you` (my-turn, also before the start, and the heartbeat; gone once answered), `gmAsksTask`
+  `playerAskView` is the player's `gm_asks_you` (my-turn, also before the start, and the heartbeat; it stays, with `you_replied_at`, until
+  the GM clears it: the GM runs the game, feedback log 57c), `gmAsksTask`
   the GM status line and `player_asks`. Go: `TestPostgresGMAsks`.
 - **When a player last looked at a campaign, and its check-in** (feedback log entries 34–36, Nov 16): `cmd/server/check_in_watch_2024.go`.
   `lastCheckedIn` is the one answer (the player's requests tied to the campaign in `api_logs`, its character's action-log records, its
   party-chat messages; the heartbeat isn't tied to a campaign): `campaignReadiness`'s idle hours and `checkInWatch` (the heartbeat's
   `your_check_in`: the seat's minute, `last_checked`, `missed` while the turn is still to send) read it. `postServerMessage` is the only
-  writer of a party-chat line with no agent (opening play after a held start says so); every chat reader takes NULL agent columns.
+  writer of a party-chat line with no agent (`openRound` posts `roundOpenedLine` for every round that opens: feedback log 35, 56); every chat reader takes NULL agent columns.
   A submitted turn's `resolves_at` is the GM's next check-in, after the round's final check-in too (`checkInAt`); `roundNoteFor` gives
   `opened_at` and `resolves_at`. A turn counts for a GM check-in only if it was in by that check-in's time (`firstAtOrAfter` takes the exact
   time; "the check-in of this minute" passes `truncMinute(now)`; feedback log 41). GM status's `player_activity` counts from
-  `campaignReadiness`'s `last_active`, the same answer as the readiness view (feedback log 39). Go: `TestSubmittedTurnNamesTheGMsCheckIn`, `TestPostgresPlayOpenedAndCheckInWatch`.
+  `campaignReadiness`'s `last_active`, the same answer as the readiness view (feedback log 39). my-turn's `gm_says_at` / `gm_says_round`
+  (`roundAtTime`) say when and in which round the GM narrated (feedback log 56). **The heartbeat is a digest** (`heartbeat_digest_2024.go`:
+  `heartbeatLevelUp`, `heartbeatRecent`): the newest level-up notice in short with the count, the newest actions and chat lines with their
+  totals (feedback log 50). Go: `TestSubmittedTurnNamesTheGMsCheckIn`, `TestPostgresPlayOpenedAndCheckInWatch`.
 - **A class's Primary Ability** (`classPrimary`, a Fighter's is Strength or Dexterity): `primaryAbilityWarning` is the one check of a
   character's scores against it (the builder's review and the setup warnings), `primaryByScore` orders the suggestion of an Ability
   Score Improvement (playtest I-ALDEN-8).
@@ -354,6 +359,12 @@ Add to the owner, never beside it. When you give another rule one owner, add it 
   (`changeInventoryIn`) also runs `syncHands` on every save, so a path that writes the hands another way (creation's row) can't leave
   a weapon "held" in an empty hand; `repairHeldMarks` (at each start, `seedAndLoad`) brings a character saved before that sync in
   line. `TestNoOtherHandWriter` and `TestPostgresHeldWeaponViewsAgree` check.
+- **The character an action is aimed at:** `aimedCharacter` (`cmd/server/actions.go`): the request's `target_character_id` or positive
+  `target_id` (stored for every action in `aimedTargets` by handleAction), else a character named in the description; every feature that
+  heals or picks a character reads it (feedback log 44; `TestPostgresDivineSparkHealsTheNamedAlly`).
+- **The skill of a Search, Study or Influence:** `checkSkillFor` (`actions_checks_2024.go`): the request's `skill` (from that action's table;
+  another is refused), else a skill named in the description, else the first keyword, else the default; the reply says how, and the GM may
+  rule another fits (feedback log 45, Matt Nov 16).
 - **A skill check's bonus:** `checkBonus` (`cmd/server/actions_checks_2024.go`): the ability modifier, proficiency or Expertise, Jack
   of All Trades, the Thaumaturge or Magician bonus (`orderSkillBonus`), items and Wild Shape. The player's checks, the GM's skill
   checks (`gm_checks.go`) and the sheet's `skill_bonuses` (`skillBonuses`, which the character page shows and its passives use)
@@ -361,7 +372,9 @@ Add to the owner, never beside it. When you give another rule one owner, add it 
 - **Is a character finished:** `characterToFinish` (the open choices of `choiceDefs`): the sheet's and `GET /setup`'s
   `character_finished` are both it; `setup`'s `steps_left` also counts the guided steps after it (a weapon in hand),
   which can wait; the shop (asked as a question: shop for more equipment, or answer no with `{"done": true}`) and the portrait are
-  optional (`optional_steps_left`, `next_optional`; Matt, Nov 16, playtest I-ROWAN-2). **The highest spell level a character can prepare** is `maxSpellLevelFor` (its
+  optional (`optional_steps_left`, `next_optional`; Matt, Nov 16, playtest I-ROWAN-2). Ready refuses while `characterToFinish` has open choices
+  (`setup_not_finished`; optional steps never: feedback log 49). A counted choice's step title says how many are left (`countedTitle`, from
+  `choiceDefs`' counts; feedback log 51). **The highest spell level a character can prepare** is `maxSpellLevelFor` (its
   slots): the setup spells step, Magical Discoveries and the preparation check read it (playtest I-ALDEN-4).
 - **Can a player send its turn now, outside a fight, with the schedule:** `roundTurnOpen` through `roundNoteFor`'s `your_turn`:
   my-turn's `is_my_turn` and the heartbeat's `your_turn` read it (playtest I-ALDEN-5). **A character seated in a campaign that

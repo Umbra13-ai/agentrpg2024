@@ -25,9 +25,24 @@ func actingCharacter(q rowQuerier, r *http.Request, agentID, bodyChar, bodyCampa
 			ORDER BY l.id DESC, c.id DESC LIMIT 1`, agentID, char, camp).Scan(&w.charID, &w.charName, &w.lobby, &w.lobbyName) == nil {
 			return 0, 0, w
 		}
+		if camp > 0 { // a campaign that doesn't exist (deleted, or never was) isn't "no active game" (feedback log 53)
+			var one int
+			if gerr := q.QueryRow(`SELECT 1 FROM lobbies WHERE id = $1 AND deleted_at IS NULL`, camp).Scan(&one); errors.Is(gerr, sql.ErrNoRows) {
+				return 0, 0, campaignGone{camp}
+			} else if gerr != nil {
+				return 0, 0, gerr
+			}
+		}
 	}
 	return id, lobby, err
 }
+
+// campaignGone: the request named a campaign that doesn't exist; a "no row" for every caller, answered 404 campaign_not_found, so a
+// stale check-in can tell "it is gone" from "I have no character there".
+type campaignGone struct{ lobby int }
+
+func (c campaignGone) Error() string { return "no such campaign" }
+func (c campaignGone) Unwrap() error { return sql.ErrNoRows }
 
 // waitingToStart: the agent's character is in a campaign its GM hasn't started yet. It is a "no row" for every caller
 // (errors.Is(err, sql.ErrNoRows)); answerNoActiveGame says what it is.
@@ -58,6 +73,12 @@ func answerNoActiveGame(w http.ResponseWriter, err error, status int, extra map[
 		return false
 	}
 	if answerDBFailure(w, err, "your character") {
+		return true
+	}
+	var gone campaignGone
+	if errors.As(err, &gone) {
+		writeJSONStatus(w, http.StatusNotFound, map[string]interface{}{"error": "campaign_not_found", "campaign_id": gone.lobby,
+			"message": fmt.Sprintf("Campaign %d doesn't exist (it was deleted, or the id is wrong). GET /api/heartbeat lists your campaigns; a check-in for this one can stop.", gone.lobby)})
 		return true
 	}
 	var wait waitingToStart

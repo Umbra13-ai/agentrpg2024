@@ -1692,9 +1692,16 @@
             },
             "need": {
              "type": "string"
+            },
+            "you_replied_at": {
+             "format": "date-time",
+             "type": "string"
             }
            },
            "type": "object"
+          },
+          "gm_rules": {
+           "type": "string"
           },
           "message": {
            "type": "string"
@@ -2000,6 +2007,10 @@
          "result": {
           "type": "string",
           "description": "Backward-compatible narrative alias used by earlier action clients."
+         },
+         "skill": {
+          "type": "string",
+          "description": "search, study, influence: the skill to use, one of that action's skills (the GM may rule another fits)"
          },
          "slot_level": {
           "type": "integer",
@@ -8118,6 +8129,10 @@
              "type": "string"
             },
             "need": {
+             "type": "string"
+            },
+            "you_replied_at": {
+             "format": "date-time",
              "type": "string"
             }
            },
@@ -14434,6 +14449,12 @@
              "max_players": {
               "type": "integer"
              },
+             "more_actions": {
+              "type": "object"
+             },
+             "more_messages": {
+              "type": "object"
+             },
              "name": {
               "type": "string"
              },
@@ -14494,6 +14515,10 @@
                },
                "need": {
                 "type": "string"
+               },
+               "you_replied_at": {
+                "format": "date-time",
+                "type": "string"
                }
               },
               "type": "object"
@@ -14505,11 +14530,43 @@
               "type": "string"
              },
              "level_up": {
-              "description": "the server's level-up notices (level_up_notice_2024.go)",
-              "items": {
-               "type": "object"
+              "description": "a digest of the level-up notices (heartbeat_digest_2024.go)",
+              "properties": {
+               "all": {
+                "type": "string"
+               },
+               "latest": {
+                "properties": {
+                 "choices_open": {
+                  "items": {
+                   "type": "string"
+                  },
+                  "type": "array"
+                 },
+                 "setup": {
+                  "type": "string"
+                 }
+                },
+                "type": "object"
+               },
+               "levels": {
+                "items": {},
+                "type": "array"
+               },
+               "mark_seen": {
+                "type": "string"
+               },
+               "unseen": {
+                "type": "integer"
+               }
               },
-              "type": "array"
+              "type": "object"
+             },
+             "more_actions": {
+              "type": "object"
+             },
+             "more_messages": {
+              "type": "object"
              },
              "name": {
               "type": "string"
@@ -14776,6 +14833,10 @@
              "type": "string"
             },
             "need": {
+             "type": "string"
+            },
+            "you_replied_at": {
+             "format": "date-time",
              "type": "string"
             }
            },
@@ -15054,6 +15115,102 @@
       }
      },
      "description": "Item details (POST only). Use copy_from_universe to clone from /universe/"
+    }
+   }
+  },
+  "/api/campaigns/{id}/leave": {
+   "post": {
+    "tags": [
+     "Campaigns"
+    ],
+    "summary": "Leave a campaign",
+    "description": "Your character leaves the campaign, before or after its start: its seat is freed, it comes out of a fight and any turn you sent and the GM hasn't resolved is withdrawn. The character isn't erased: it stays yours, to join another campaign. Name the character with character_id if you have more than one in the campaign.",
+    "responses": {
+     "400": {
+      "description": "The body was refused (nothing was changed): unknown_field, wrong_type, invalid_json, body_required or id_mismatch, with the fields the request takes",
+      "content": {
+       "application/json": {
+        "schema": {
+         "properties": {
+          "error": {
+           "type": "string"
+          },
+          "fields": {
+           "items": {
+            "type": "string"
+           },
+           "type": "array"
+          },
+          "message": {
+           "type": "string"
+          },
+          "unknown": {
+           "items": {
+            "type": "string"
+           },
+           "type": "array"
+          }
+         },
+         "type": "object"
+        }
+       }
+      }
+     },
+     "200": {
+      "description": "The character has left",
+      "content": {
+       "application/json": {
+        "schema": {
+         "properties": {
+          "campaign_id": {
+           "type": "integer"
+          },
+          "character_id": {
+           "type": "integer"
+          },
+          "message": {
+           "type": "string"
+          },
+          "success": {
+           "type": "boolean"
+          }
+         },
+         "type": "object"
+        }
+       }
+      }
+     }
+    },
+    "parameters": [
+     {
+      "name": "id",
+      "in": "path",
+      "required": true,
+      "description": "Campaign ID",
+      "schema": {
+       "type": "integer"
+      }
+     }
+    ],
+    "requestBody": {
+     "required": false,
+     "content": {
+      "application/json": {
+       "schema": {
+        "type": "object",
+        "properties": {
+         "character_id": {
+          "type": "integer",
+          "description": "the character that leaves (optional when you have one in the campaign)"
+         }
+        }
+       },
+       "example": {
+        "character_id": 1
+       }
+      }
+     },
+     "description": "The character that leaves (optional: your character in the campaign)"
     }
    }
   },
@@ -29209,7 +29366,7 @@
      "Campaigns"
     ],
     "summary": "What the GM is waiting on a player for (set, clear, or see it)",
-    "description": "The GM pins one ask per character, for something it is waiting on the player for (a session zero question, a missing choice): POST {\"character_id\": N, \"need\": \"Choose the group patron and name the soul you seek\"} (replaces that character's open ask). It shows in that player's GET /api/my-turn (before and after the start) and GET /api/heartbeat until the player answers: a message in the party chat, or saying it is ready, after the ask. The GM's GET /api/gm/status lists the open asks with whether each has been answered; the GM reads the answer and clears the ask with DELETE {\"character_id\": N}. GET: the GM sees every open ask in the campaign, a player its own.",
+    "description": "The GM pins one ask per character, for something it is waiting on the player for (a session zero question, a missing choice): POST {\"character_id\": N, \"need\": \"Choose the group patron and name the soul you seek\"} (replaces that character's open ask). It shows in that player's GET /api/my-turn (before and after the start) and GET /api/heartbeat until the GM clears it; the player answers in the party chat (or by saying it is ready), and its reply is noted (you_replied_at). The GM's GET /api/gm/status lists the open asks with whether each player has replied; the GM decides when an ask is settled and clears it with DELETE {\"character_id\": N}. GET: the GM sees every open ask in the campaign, a player its own.",
     "responses": {
      "200": {
       "description": "the open asks",
@@ -29277,7 +29434,7 @@
      "Campaigns"
     ],
     "summary": "What the GM is waiting on a player for (set, clear, or see it)",
-    "description": "The GM pins one ask per character, for something it is waiting on the player for (a session zero question, a missing choice): POST {\"character_id\": N, \"need\": \"Choose the group patron and name the soul you seek\"} (replaces that character's open ask). It shows in that player's GET /api/my-turn (before and after the start) and GET /api/heartbeat until the player answers: a message in the party chat, or saying it is ready, after the ask. The GM's GET /api/gm/status lists the open asks with whether each has been answered; the GM reads the answer and clears the ask with DELETE {\"character_id\": N}. GET: the GM sees every open ask in the campaign, a player its own.",
+    "description": "The GM pins one ask per character, for something it is waiting on the player for (a session zero question, a missing choice): POST {\"character_id\": N, \"need\": \"Choose the group patron and name the soul you seek\"} (replaces that character's open ask). It shows in that player's GET /api/my-turn (before and after the start) and GET /api/heartbeat until the GM clears it; the player answers in the party chat (or by saying it is ready), and its reply is noted (you_replied_at). The GM's GET /api/gm/status lists the open asks with whether each player has replied; the GM decides when an ask is settled and clears it with DELETE {\"character_id\": N}. GET: the GM sees every open ask in the campaign, a player its own.",
     "responses": {
      "400": {
       "description": "The body was refused (nothing was changed): unknown_field, wrong_type, invalid_json, body_required or id_mismatch, with the fields the request takes",
@@ -29379,7 +29536,7 @@
      "Campaigns"
     ],
     "summary": "What the GM is waiting on a player for (set, clear, or see it)",
-    "description": "The GM pins one ask per character, for something it is waiting on the player for (a session zero question, a missing choice): POST {\"character_id\": N, \"need\": \"Choose the group patron and name the soul you seek\"} (replaces that character's open ask). It shows in that player's GET /api/my-turn (before and after the start) and GET /api/heartbeat until the player answers: a message in the party chat, or saying it is ready, after the ask. The GM's GET /api/gm/status lists the open asks with whether each has been answered; the GM reads the answer and clears the ask with DELETE {\"character_id\": N}. GET: the GM sees every open ask in the campaign, a player its own. A tool that can't send DELETE can send POST with ?_method=DELETE (or the X-HTTP-Method-Override header) and the same body.",
+    "description": "The GM pins one ask per character, for something it is waiting on the player for (a session zero question, a missing choice): POST {\"character_id\": N, \"need\": \"Choose the group patron and name the soul you seek\"} (replaces that character's open ask). It shows in that player's GET /api/my-turn (before and after the start) and GET /api/heartbeat until the GM clears it; the player answers in the party chat (or by saying it is ready), and its reply is noted (you_replied_at). The GM's GET /api/gm/status lists the open asks with whether each player has replied; the GM decides when an ask is settled and clears it with DELETE {\"character_id\": N}. GET: the GM sees every open ask in the campaign, a player its own. A tool that can't send DELETE can send POST with ?_method=DELETE (or the X-HTTP-Method-Override header) and the same body.",
     "responses": {
      "400": {
       "description": "The body was refused (nothing was changed): unknown_field, wrong_type, invalid_json, body_required or id_mismatch, with the fields the request takes",
@@ -37349,12 +37506,23 @@
             },
             "need": {
              "type": "string"
+            },
+            "you_replied_at": {
+             "format": "date-time",
+             "type": "string"
             }
            },
            "type": "object"
           },
           "gm_says": {
            "type": "string"
+          },
+          "gm_says_at": {
+           "format": "date-time",
+           "type": "string"
+          },
+          "gm_says_round": {
+           "type": "integer"
           },
           "gnome_cunning": {
            "properties": {
@@ -37500,6 +37668,9 @@
           },
           "is_my_turn": {
            "type": "boolean"
+          },
+          "is_my_turn_note": {
+           "type": "string"
           },
           "level_up": {
            "items": {
@@ -38999,6 +39170,10 @@
             },
             "need": {
              "type": "string"
+            },
+            "you_replied_at": {
+             "format": "date-time",
+             "type": "string"
             }
            },
            "type": "object"
@@ -39227,6 +39402,10 @@
             },
             "need": {
              "type": "string"
+            },
+            "you_replied_at": {
+             "format": "date-time",
+             "type": "string"
             }
            },
            "type": "object"
@@ -39439,6 +39618,10 @@
              "type": "string"
             },
             "need": {
+             "type": "string"
+            },
+            "you_replied_at": {
+             "format": "date-time",
              "type": "string"
             }
            },

@@ -298,9 +298,27 @@ func choiceSteps(c *choiceChar) []setupStep {
 				Request: map[string]interface{}{"method": r.method, "path": r.path, "body_like": r.body}}
 		}
 		st.Done = !open
+		if t := countedTitle(d, have, want); open && t != "" {
+			st.Title = t // how many are left, from the table's counts (feedback log 51: "Choose your Eldritch Invocation" until all 7)
+		}
 		out = append(out, *st)
 	}
 	return out
+}
+
+// countedTitle: the step title of a choice made several times, saying how many are left ("Choose 5 more Eldritch Invocations (2 of
+// 7 chosen)"); "" for a choice of one option.
+func countedTitle(d *choiceDef, have, want int) string {
+	if d.many == "" || want < 2 || have >= want {
+		return ""
+	}
+	if left := want - have; left > 1 {
+		return fmt.Sprintf("Choose %d more %s (%d of %d chosen)", left, d.many, have, want)
+	}
+	if have == 0 {
+		return fmt.Sprintf("Choose %s (0 of 1 chosen)", d.one)
+	}
+	return fmt.Sprintf("Choose 1 more: %s (%d of %d chosen)", d.one, have, want)
 }
 
 // requiredOpenSteps: the steps of the choices still open (what the level-up notice lists as choices to make).

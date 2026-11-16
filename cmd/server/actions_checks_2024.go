@@ -9,6 +9,7 @@ package main
 import (
 	"fmt"
 	"strings"
+	"sync"
 
 	"github.com/agentrpg/agentrpg/game"
 )
@@ -47,26 +48,66 @@ var influenceSkills = []skillChoice{
 }
 
 // pickSkill takes the first skill named outright in the description, then the first whose keywords appear, then the default.
-func pickSkill(description string, choices []skillChoice, def string) skillChoice {
+// checkSkills: each check action's skills and its default (the SRD's Search and Areas of Knowledge tables, the Influence Checks table).
+var checkSkills = map[string]struct {
+	list []skillChoice
+	def  string
+}{
+	"search":    {searchSkills, "perception"},
+	"study":     {studySkills, "investigation"},
+	"influence": {influenceSkills, "persuasion"},
+}
+
+// checkSkillNames: an action's skills, for the options and a refusal.
+func checkSkillNames(action string) []string {
+	var out []string
+	for _, c := range checkSkills[action].list {
+		out = append(out, c.skill)
+	}
+	return out
+}
+
+// namedSkills: the skill a check action's request names (its skill field), set in handleAction for the action.
+var namedSkills sync.Map
+
+// checkSkillFor is the one choice of a check action's skill (feedback log 45: a question about a cult rolled Nature): the skill the
+// player named (skill), else a skill named in the description, else the keyword that comes first in the description, else the default.
+// It says how it chose; a named skill outside the action's table is a refusal (nothing spent). The GM can still rule that another
+// skill fits and call for that check (Matt, Nov 16).
+func checkSkillFor(action, description, named string) (skillChoice, string, string) {
+	t := checkSkills[action]
+	if named != "" {
+		k := game.SkillName(named)
+		for _, c := range t.list {
+			if game.Key(c.skill) == game.Key(k) || game.Key(c.skill) == game.Key(named) {
+				return c, "you named " + titleSkill(c.skill), ""
+			}
+		}
+		return skillChoice{}, "", fmt.Sprintf("Cannot use %s: skill %q isn't one of its skills (%s).", titleSkill(action), named, strings.Join(checkSkillNames(action), ", "))
+	}
 	d := " " + strings.ToLower(description) + " "
-	for _, c := range choices {
+	for _, c := range t.list {
 		if strings.Contains(d, c.skill) {
-			return c
+			return c, "your description names " + titleSkill(c.skill), ""
 		}
 	}
-	for _, c := range choices {
+	best, at, word := skillChoice{}, -1, ""
+	for _, c := range t.list {
 		for _, k := range c.keywords {
-			if strings.Contains(d, k) {
-				return c
+			if i := strings.Index(d, k); i >= 0 && (at < 0 || i < at) {
+				best, at, word = c, i, strings.TrimSpace(k)
 			}
 		}
 	}
-	for _, c := range choices {
-		if c.skill == def {
-			return c
+	if at >= 0 {
+		return best, fmt.Sprintf("from %q in your description (name another with skill)", word), ""
+	}
+	for _, c := range t.list {
+		if c.skill == t.def {
+			return c, "the default (name another with skill)", ""
 		}
 	}
-	return choices[0]
+	return t.list[0], "the default", ""
 }
 
 // checkBonus is the character's bonus to an ability check with one skill: the ability modifier plus proficiency (doubled by
@@ -151,15 +192,15 @@ func titleSkill(s string) string {
 // resolveCheckAction rolls the Search, Study or Influence action.
 func resolveCheckAction(action, description string, charID int, class string, level, intl, wis, cha int) string {
 	scores := map[string]int{"int": intl, "wis": wis, "cha": cha}
-	var c skillChoice
-	switch action {
-	case "search":
-		c = pickSkill(description, searchSkills, "perception")
-	case "study":
-		c = pickSkill(description, studySkills, "investigation")
-	default:
-		c = pickSkill(description, influenceSkills, "persuasion")
+	named := ""
+	if v, ok := namedSkills.Load(charID); ok {
+		named, _ = v.(string)
 	}
+	c, how, refusal := checkSkillFor(action, description, named)
+	if refusal != "" {
+		return refusal
+	}
+	description = strings.TrimSpace(description + fmt.Sprintf(" (Skill: %s; the GM may rule another skill fits.)", how))
 	ab := strings.ToUpper(c.ability)
 	mod, prof, profNote, reliable := checkBonus(charID, class, level, c.skill, scores[c.ability])
 	guide, guideNote := guidanceBonus(lobbyOfChar(charID), charID, c.skill)

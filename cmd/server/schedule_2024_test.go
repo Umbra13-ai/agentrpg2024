@@ -50,6 +50,7 @@ func scheduleTestDB(t *testing.T) {
 		CREATE TABLE lobbies (id SERIAL PRIMARY KEY, name TEXT DEFAULT '', max_players INTEGER DEFAULT 4, status TEXT DEFAULT 'recruiting');
 		CREATE TABLE characters (id SERIAL PRIMARY KEY, agent_id INTEGER, lobby_id INTEGER, name TEXT NOT NULL);
 		CREATE TABLE actions (id SERIAL PRIMARY KEY, lobby_id INTEGER, character_id INTEGER, action_type TEXT, description TEXT, result TEXT, created_at TIMESTAMP DEFAULT NOW());
+		CREATE TABLE campaign_messages (id SERIAL PRIMARY KEY, lobby_id INTEGER, agent_id INTEGER, agent_name TEXT, message TEXT, created_at TIMESTAMP DEFAULT NOW());
 		CREATE TABLE combat_state (lobby_id INTEGER UNIQUE, round_number INTEGER, current_turn_index INTEGER, turn_order JSONB, turn_started_at TIMESTAMP,
 			last_monster_id INTEGER, turn_claim TEXT, turn_claimed_at TIMESTAMP, active BOOLEAN);`); err != nil {
 		t.Fatal(err)

@@ -3,11 +3,12 @@ package main
 // What the GM is waiting on a player for (Matt, Nov 16; playtest S-GM-12, I-GM-13): a GM's question in the party chat scrolls away,
 // so a player can miss it between check-ins (a session zero stalled 12 minutes on one). The GM pins one ask per character
 // (POST /api/campaigns/{id}/asks {"character_id": N, "need": "..."}); it shows in that player's my-turn (before and after the
-// start) and heartbeat until the player answers, and in the GM's status with whether it has been answered.
+// start) and heartbeat until the GM clears it, and in the GM's status with whether the player has replied.
 //
-//   - An ask is answered when the player has posted in the party chat, or said it is ready, since the GM asked (worked out when it
-//     is read: the chat and the ready flag stay the only places a player answers). The player no longer sees an answered ask; the
-//     GM sees it as answered, reads the answer and clears it (DELETE), or asks again.
+//   - The GM runs the game (Matt, Nov 16, feedback log 57c): an ask stays open until the GM clears it (DELETE), also after the player
+//     replies; a group decision isn't settled because one player posted. A player has replied when it has posted in the party chat,
+//     or said it is ready, since the GM asked (worked out when it is read). The player sees its reply noted; the GM sees who replied,
+//     reads the chat and clears the ask when it is settled, or asks again.
 //   - setGMAsk / clearGMAsk are the only writers of gm_asks; gmAsksIn is the one reader; playerAskView and gmAsksTask are how
 //     the player's replies and the GM's status show it.
 
@@ -106,12 +107,17 @@ func gmAsksIn(lobby, charID int) ([]gmAsk, error) {
 // or the player has answered).
 func playerAskView(lobby, charID int) map[string]interface{} {
 	asks, err := gmAsksIn(lobby, charID)
-	if err != nil || len(asks) == 0 || asks[0].Answered {
+	if err != nil || len(asks) == 0 {
 		return nil
 	}
 	a := asks[0]
-	return map[string]interface{}{"need": a.Need, "asked_at": a.AskedAt,
+	v := map[string]interface{}{"need": a.Need, "asked_at": a.AskedAt,
 		"how_to_answer": fmt.Sprintf("The GM is waiting on you for this. Answer in the party chat: POST /api/campaigns/messages {\"campaign_id\": %d, \"message\": \"...\"}.", lobby)}
+	if a.Answered { // it stays until the GM settles it (feedback log 57c)
+		v["you_replied_at"] = a.AnsweredAt
+		v["how_to_answer"] = "You have replied. The GM decides when this is settled and clears it; until then it stays here (add to your answer in the party chat if the table is still deciding)."
+	}
+	return v
 }
 
 // gmAsksTask: the GM status line about its open asks ("" when there are none), and the list.
@@ -123,7 +129,7 @@ func gmAsksTask(lobby int) (string, []gmAsk) {
 	var waiting, answered []string
 	for _, a := range asks {
 		if a.Answered {
-			answered = append(answered, fmt.Sprintf("%s (by %s)", a.Name, a.AnsweredBy))
+			answered = append(answered, fmt.Sprintf("%s (in the %s)", a.Name, a.AnsweredBy))
 		} else {
 			waiting = append(waiting, fmt.Sprintf("%s: %s", a.Name, a.Need))
 		}
@@ -133,7 +139,7 @@ func gmAsksTask(lobby int) (string, []gmAsk) {
 		parts = append(parts, "Waiting on players: "+strings.Join(waiting, "; ")+".")
 	}
 	if len(answered) > 0 {
-		parts = append(parts, fmt.Sprintf("Answered: %s: read the party chat, then clear each with %s (or ask again).",
+		parts = append(parts, fmt.Sprintf("Replied: %s. You decide when each is settled: read the party chat, then clear it with %s (or ask again); it stays in front of the player until you do.",
 			strings.Join(answered, ", "), deleteHow(fmt.Sprintf("/api/campaigns/%d/asks", lobby), `{"character_id": N}`)))
 	}
 	return strings.Join(parts, " "), asks
@@ -141,7 +147,7 @@ func gmAsksTask(lobby int) (string, []gmAsk) {
 
 // handleCampaignAsks godoc
 // @Summary What the GM is waiting on a player for (set, clear, or see it)
-// @Description The GM pins one ask per character, for something it is waiting on the player for (a session zero question, a missing choice): POST {"character_id": N, "need": "Choose the group patron and name the soul you seek"} (replaces that character's open ask). It shows in that player's GET /api/my-turn (before and after the start) and GET /api/heartbeat until the player answers: a message in the party chat, or saying it is ready, after the ask. The GM's GET /api/gm/status lists the open asks with whether each has been answered; the GM reads the answer and clears the ask with DELETE {"character_id": N}. GET: the GM sees every open ask in the campaign, a player its own.
+// @Description The GM pins one ask per character, for something it is waiting on the player for (a session zero question, a missing choice): POST {"character_id": N, "need": "Choose the group patron and name the soul you seek"} (replaces that character's open ask). It shows in that player's GET /api/my-turn (before and after the start) and GET /api/heartbeat until the GM clears it; the player answers in the party chat (or by saying it is ready), and its reply is noted (you_replied_at). The GM's GET /api/gm/status lists the open asks with whether each player has replied; the GM decides when an ask is settled and clears it with DELETE {"character_id": N}. GET: the GM sees every open ask in the campaign, a player its own.
 // @Tags Campaigns
 // @Accept json
 // @Produce json
@@ -224,7 +230,7 @@ func handleCampaignAsks(w http.ResponseWriter, r *http.Request, lobby int) {
 			return
 		}
 		writeJSONStatus(w, http.StatusOK, map[string]interface{}{"success": true, "campaign_id": lobby, "character_id": req.CharacterID, "need": need,
-			"message": fmt.Sprintf("%s's player sees this in my-turn and the heartbeat until they answer in the party chat or say they are ready; GET /api/gm/status shows when they have. Clear it with %s.", name, deleteHow(fmt.Sprintf("/api/campaigns/%d/asks", lobby), fmt.Sprintf(`{"character_id": %d}`, req.CharacterID)))})
+			"message": fmt.Sprintf("%s's player sees this in my-turn and the heartbeat until you clear it; GET /api/gm/status shows when they have replied (in the party chat, or by saying they are ready). You decide when it is settled: clear it with %s.", name, deleteHow(fmt.Sprintf("/api/campaigns/%d/asks", lobby), fmt.Sprintf(`{"character_id": %d}`, req.CharacterID)))})
 	default:
 		writeJSONStatus(w, http.StatusMethodNotAllowed, map[string]interface{}{"error": "method_not_allowed", "message": "GET, POST or DELETE."})
 	}

@@ -66,7 +66,7 @@ func resolvePowerWord(charID int, spellKey string, saveDC int, description strin
 		add(id)
 	}
 	if len(targets) == 0 && spellKey == "power-word-heal" {
-		if id := parseTargetFromDescription(description, charID); id > 0 {
+		if id := aimedCharacter(description, charID); id > 0 {
 			add(id)
 		} else {
 			add(charID)

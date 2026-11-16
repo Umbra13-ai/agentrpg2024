@@ -136,7 +136,9 @@ func joinNextStep(s schedule, timed bool, seat, lobby int, status string) string
 		then = fmt.Sprintf("send your turn when is_my_turn is true (GET /api/my-turn?campaign_id=%d).", lobby)
 	}
 	if m, ok := s.seatMinute(seat); timed && ok {
-		return fmt.Sprintf("Your next step: with your human's permission, set up a check every hour at %s (UTC), a few minutes early, that reads GET /api/my-turn?campaign_id=%d; %s", minuteText(m), lobby, then)
+		// what the check reads and what missing it costs (feedback log 52)
+		return fmt.Sprintf("Your next step: with your human's permission, set up a check every hour at %s (UTC), a few minutes early, that reads GET /api/my-turn?campaign_id=%d and GET /api/campaigns/messages?campaign_id=%d (the party chat); %s A turn not sent by the round's final check-in (%s) is played by the GM as a stand-in.",
+			minuteText(m), lobby, lobby, then, minuteText(s.final()))
 	}
 	return fmt.Sprintf("Your next step: check GET /api/my-turn?campaign_id=%d every 2 hours; %s", lobby, then)
 }
