@@ -340,8 +340,10 @@ Add to the owner, never beside it. When you give another rule one owner, add it 
 - **The equipped hands:** `changeHands` (`cmd/server/equipped_weapons.go`) is the one writer of `equipped_main_hand` /
   `equipped_off_hand`: it runs the change, then `syncHeldItems`, so the inventory's "held" marks, the shop and the sheet agree
   (playtest I-ROWAN-7). **How many hands a change needs** is `handsAllow` (`hands.go`); its refusal names what fills the hands and
-  the request that frees one, from `freeHandRequests` (the held-item refusal uses it too; feedback log 30). The inventory writer (`changeInventoryIn`) also runs `syncHands` on every save, so a path that writes the
-  hands another way (creation's row) can't leave a weapon "held" in an empty hand. `TestNoOtherHandWriter` checks.
+  the request that frees one, from `freeHandRequests` (the held-item refusal uses it too; feedback log 30). The inventory writer
+  (`changeInventoryIn`) also runs `syncHands` on every save, so a path that writes the hands another way (creation's row) can't leave
+  a weapon "held" in an empty hand; `repairHeldMarks` (at each start, `seedAndLoad`) brings a character saved before that sync in
+  line. `TestNoOtherHandWriter` and `TestPostgresHeldWeaponViewsAgree` check.
 - **A skill check's bonus:** `checkBonus` (`cmd/server/actions_checks_2024.go`): the ability modifier, proficiency or Expertise, Jack
   of All Trades, the Thaumaturge or Magician bonus (`orderSkillBonus`), items and Wild Shape. The player's checks, the GM's skill
   checks (`gm_checks.go`) and the sheet's `skill_bonuses` (`skillBonuses`, which the character page shows and its passives use)

@@ -7,6 +7,7 @@ import (
 	"regexp"
 	"strings"
 	"testing"
+	"time"
 )
 
 // The play-test reports of Nov 16 (Drive Issue Tracker), each through the server where it can be.
@@ -256,4 +257,39 @@ func TestPostgresPortraitSkipAndJoinWording(t *testing.T) {
 	if j["battle_recommended"] == true {
 		t.Error("a battle is recommended while the campaign recruits")
 	}
+}
+
+// I-ROWAN-7 (retested still broken): every view that says what is in hand (the equipment list, the sheet, the shop) agrees with the
+// hands through creation, auto-equip with an empty hand, equipping and unequipping; and a character saved before the inventory writer
+// synced the hands is brought in line at the server's start (repairHeldMarks).
+func TestPostgresHeldWeaponViewsAgree(t *testing.T) {
+	testPostgres(t)
+	_, tok := pgAgent(t, "pg held views")
+	_, j := pgCall(t, "POST", "/api/characters", tok, pgCleric(fmt.Sprintf("Pg Held %d", time.Now().UnixNano()%1e9)))
+	id := int(j["character_id"].(float64))
+	check := func(step string, wantHeld bool) {
+		t.Helper()
+		_, e := pgCall(t, "GET", fmt.Sprintf("/api/characters/%d/equipment", id), tok, nil)
+		_, s := pgCall(t, "GET", fmt.Sprintf("/api/characters/%d", id), tok, nil)
+		_, sh := pgCall(t, "GET", fmt.Sprintf("/api/characters/%d/shop?category=gear", id), tok, nil)
+		listed := strings.Contains(fmt.Sprint(e["held"]), "Mace")
+		inHand := s["equipment"].(map[string]interface{})["main_hand"] != nil
+		shopSaysHeld := strings.Contains(fmt.Sprint(sh["offers_for_your_items"]), "You hold Mace")
+		if listed != wantHeld || inHand != wantHeld || shopSaysHeld != wantHeld {
+			t.Errorf("%s: equipment lists it held %v, sheet has it in hand %v, shop says held %v (want %v)", step, listed, inHand, shopSaysHeld, wantHeld)
+		}
+	}
+	check("after creation", false)
+	pgCall(t, "POST", "/api/characters/auto-equip", tok, map[string]interface{}{"answer": "yes", "character_id": id, "choices": map[string]interface{}{"main_hand": "none"}})
+	check("after auto-equip with the hand empty", false)
+	pgCall(t, "POST", "/api/characters/equip-weapon", tok, map[string]interface{}{"character_id": id, "weapon": "mace", "slot": "main_hand"})
+	check("after equipping the Mace", true)
+	pgCall(t, "POST", "/api/characters/unequip-weapon", tok, map[string]interface{}{"character_id": id, "slot": "main_hand"})
+	check("after unequipping it", false)
+
+	// a character saved before the sync: the Mace stored "held", the hand empty (written as the old server left it)
+	pgExec(t, `UPDATE characters SET inventory = (SELECT jsonb_agg(CASE WHEN e->>'name' = 'Mace' THEN jsonb_set(e, '{location}', '"held"') ELSE e END)
+		FROM jsonb_array_elements(inventory::jsonb) e), equipped_main_hand = NULL WHERE id = $1`, id)
+	repairHeldMarks()
+	check("after the start-up repair of a stale character", false)
 }
