@@ -236,12 +236,17 @@ Add to the owner, never beside it. When you give another rule one owner, add it 
   request, or rules on it; a turn whose every step is refused stays unresolved) and `.../round/stand-in` (`standInAllowed`);
   `closeRoundIfDone` opens the next round; the campaign's start opens the first (`scheduleCampaignStarts`); `closeOpenRound` withdraws
   a closing round's unresolved submissions. With the schedule the round is the
-  exploration beat (`beatApplies`) and the exploration skip gives way to stand-ins. `actingCharacter` is the character
-  `/api/action` acts for. **Stage F, what everyone is told:** `roundNoteFor` (`check_in_2024.go`), a view of `checkInAt`, is my-turn's
+  exploration beat (`beatApplies`) and the exploration skip gives way to stand-ins. The gate reads the acting character
+  with `actingCharacter` (next rule). **Stage F, what everyone is told:** `roundNoteFor` (`check_in_2024.go`), a view of `checkInAt`, is my-turn's
   `round` and the heartbeat's `turn_status.round_status`; `gmReminder` is the GM's next and final check-in in the resolve replies;
   `playerNextCheckIn` the player's in the submission replies. Suites: `turn_schedule_rule_test.py`, `initiative_order_test.py`,
   `late_gm_test.py`; suites that test mechanics, not the schedule, turn it off at campaign creation ({"state": "off"}); Go:
   `TestPostgresNoncombatRound`.
+- **Which character an agent is playing:** `actingCharacter` (`cmd/server/acting_character_2024.go`): the character named by
+  `character_id` / `campaign_id` (the body first, then the query string), else the agent's character in its newest active campaign.
+  POST /api/action, the round gate and its reply notes, readied actions, GET /api/my-turn, observations and pending turns read it;
+  `answerNoActiveGame` is the one `no_active_game` refusal (409; my-turn 200 as a status report). `TestNoOtherActingCharacterQuery`
+  checks; Go: `TestPostgresActingCharacter` (HANDOFF item 22).
 - **A weapon's data:** `findWeapon` (`cmd/server/character_attacks.go`) over `srdWeapons`: any spelling of a weapon (key, name,
   hyphens or underscores, a magic +N, a named weapon's base in parentheses). Never index `srdWeapons` with a key built by
   hand and never read a weapon from the `weapons` table (a copy for the universe catalogue); `TestNoOtherWeaponLookup` checks.

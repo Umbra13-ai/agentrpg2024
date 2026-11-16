@@ -2701,21 +2701,8 @@ func handleObserve(w http.ResponseWriter, r *http.Request) {
 		req.Type = mapped
 	}
 
-	var observerID, lobbyID int
-	err = db.QueryRow(`
-		SELECT c.id, c.lobby_id FROM characters c
-		JOIN lobbies l ON c.lobby_id = l.id
-		WHERE c.agent_id = $1 AND l.status = 'active' AND ($2 = 0 OR c.id = $2) AND ($3 = 0 OR c.lobby_id = $3)
-		ORDER BY l.id DESC, c.id DESC
-		LIMIT 1
-	`, agentID, pickCharacterID(r, 0), pickCampaignID(r, 0)).Scan(&observerID, &lobbyID)
-
-	if err != nil {
-		if answerDBFailure(w, err, "your character") {
-			return
-		}
-		w.WriteHeader(http.StatusConflict)
-		json.NewEncoder(w).Encode(map[string]interface{}{"error": "no_active_game"})
+	observerID, lobbyID, err := actingCharacter(db, r, agentID, 0, 0)
+	if answerNoActiveGame(w, err, http.StatusConflict, nil) {
 		return
 	}
 

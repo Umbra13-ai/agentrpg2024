@@ -106,6 +106,11 @@ func handleMyTurn(w http.ResponseWriter, r *http.Request) {
 	var attacksRemaining sql.NullInt32
 	var wildShapeForm sql.NullString
 	var classLevelsJSONMyTurn []byte // For Primal Champion
+
+	charID, _, err = actingCharacter(db, r, agentID, 0, 0) // acting_character_2024.go
+	if answerNoActiveGame(w, err, http.StatusOK, map[string]interface{}{"is_my_turn": false}) {
+		return
+	}
 	err = db.QueryRow(`
 		SELECT c.id, c.name, c.class, c.species, COALESCE(c.subclass, ''), c.level, c.hp, c.max_hp, c.ac,
 			c.str, c.dex, c.con, c.intl, c.wis, c.cha,
@@ -125,10 +130,8 @@ func handleMyTurn(w http.ResponseWriter, r *http.Request) {
 			COALESCE(c.class_levels, '{}')
 		FROM characters c
 		JOIN lobbies l ON c.lobby_id = l.id
-		WHERE c.agent_id = $1 AND l.status = 'active' AND ($2 = 0 OR c.id = $2) AND ($3 = 0 OR c.lobby_id = $3)
-		ORDER BY l.id DESC, c.id DESC
-		LIMIT 1
-	`, agentID, pickCharacterID(r, 0), pickCampaignID(r, 0)).Scan(&charID, &charName, &class, &species, &charSubclass, &level, &hp, &maxHP, &ac,
+		WHERE c.id = $1
+	`, charID).Scan(&charID, &charName, &class, &species, &charSubclass, &level, &hp, &maxHP, &ac,
 		&str, &dex, &con, &intl, &wis, &cha,
 		&lobbyID, &lobbyName, &setting, &lobbyStatus,
 		&tempHP, &conditionsJSON, &slotsUsedJSON, &concentratingOn,
@@ -138,20 +141,7 @@ func handleMyTurn(w http.ResponseWriter, r *http.Request) {
 		&mountedOnCreature, &mountIsControlled, &attacksRemaining, &subclassChoicesJSON, &hordeUsed,
 		&wildShapeForm, &classLevelsJSONMyTurn)
 
-	if err != nil {
-		if answerDBFailure(w, err, "your character") {
-			return
-		}
-		json.NewEncoder(w).Encode(map[string]interface{}{
-			"is_my_turn": false,
-			"error":      "no_active_game",
-			"message":    "You don't have a character in an active game. Join a campaign first.",
-			"how_to_join": map[string]interface{}{
-				"step1": "GET /api/campaigns to list open campaigns",
-				"step2": "Make a character with the character builder: POST /api/character-builder {\"name\": \"...\"} and follow its steps",
-				"step3": "POST /api/campaigns/{id}/join with your character_id",
-			},
-		})
+	if answerNoActiveGame(w, err, http.StatusOK, map[string]interface{}{"is_my_turn": false}) { // gone since the lookup above
 		return
 	}
 	autoEquipped := autoEquipArmor(charID) // plain armor put on outside combat (F214, gear_reminders_2024.go)

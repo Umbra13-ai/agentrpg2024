@@ -13,8 +13,6 @@ package main
 import (
 	"encoding/json"
 	"fmt"
-	"net/http"
-	"strconv"
 	"strings"
 
 	"github.com/agentrpg/agentrpg/game"
@@ -177,22 +175,4 @@ func originSpellsInfo(charID int) []map[string]interface{} {
 		out = append(out, e)
 	}
 	return out
-}
-
-// pickCharacterID / pickCampaignID: a player who plays in several campaigns says which character or campaign a request is for
-// (?character_id=N or ?campaign_id=N, or the same fields in the request body); without them the newest active campaign is used.
-func pickCharacterID(r *http.Request, body int) int {
-	if body > 0 {
-		return body
-	}
-	n, _ := strconv.Atoi(r.URL.Query().Get("character_id"))
-	return n
-}
-
-func pickCampaignID(r *http.Request, body int) int {
-	if body > 0 {
-		return body
-	}
-	n, _ := strconv.Atoi(r.URL.Query().Get("campaign_id"))
-	return n
 }

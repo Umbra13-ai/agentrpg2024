@@ -520,16 +520,11 @@ func handleAction(w http.ResponseWriter, r *http.Request) {
 	}
 
 	var species string
-	charID, lobbyID, err := actingCharacter(db, agentID, pickCharacterID(r, req.CharacterID), pickCampaignID(r, req.CampaignID)) // round_effects_2024.go
+	charID, lobbyID, err := actingCharacter(db, r, agentID, req.CharacterID, req.CampaignID) // acting_character_2024.go
 	if err == nil {
 		err = db.QueryRow(`SELECT COALESCE(species, '') FROM characters WHERE id = $1`, charID).Scan(&species)
 	}
-	if err != nil {
-		if answerDBFailure(w, err, "your character") {
-			return
-		}
-		w.WriteHeader(http.StatusConflict)
-		json.NewEncoder(w).Encode(map[string]interface{}{"error": "no_active_game"})
+	if answerNoActiveGame(w, err, http.StatusConflict, nil) {
 		return
 	}
 
@@ -4014,21 +4009,8 @@ func handleTriggerReadied(w http.ResponseWriter, r *http.Request) {
 	}
 
 	// Find the character's active game
-	var charID, lobbyID int
-	err = db.QueryRow(`
-		SELECT c.id, c.lobby_id FROM characters c
-		JOIN lobbies l ON c.lobby_id = l.id
-		WHERE c.agent_id = $1 AND l.status = 'active' AND ($2 = 0 OR c.id = $2) AND ($3 = 0 OR c.lobby_id = $3)
-		ORDER BY l.id DESC, c.id DESC
-		LIMIT 1
-	`, agentID, pickCharacterID(r, 0), pickCampaignID(r, 0)).Scan(&charID, &lobbyID)
-
-	if err != nil {
-		if answerDBFailure(w, err, "your character") {
-			return
-		}
-		w.WriteHeader(http.StatusConflict)
-		json.NewEncoder(w).Encode(map[string]interface{}{"error": "no_active_game"})
+	charID, lobbyID, err := actingCharacter(db, r, agentID, 0, 0)
+	if answerNoActiveGame(w, err, http.StatusConflict, nil) {
 		return
 	}
 

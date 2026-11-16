@@ -902,15 +902,11 @@ func handlePendingTurn(w http.ResponseWriter, r *http.Request) {
 		writeJSONStatus(w, http.StatusBadRequest, map[string]interface{}{"error": "invalid_campaign_id", "message": "campaign_id must be a number. Nothing was saved."})
 		return
 	}
-	var charID, lobbyID int
 	var charName string
-	err = db.QueryRow(`
-		SELECT c.id, c.lobby_id, c.name FROM characters c
-		JOIN lobbies l ON c.lobby_id = l.id
-		WHERE c.agent_id = $1 AND l.status = 'active' AND ($2 = 0 OR c.id = $2) AND ($3 = 0 OR c.lobby_id = $3)
-		ORDER BY l.id DESC, c.id DESC
-		LIMIT 1
-	`, agentID, pickCharacterID(r, bodyChar), pickCampaignID(r, bodyCampaign)).Scan(&charID, &lobbyID, &charName)
+	charID, lobbyID, err := actingCharacter(db, r, agentID, bodyChar, bodyCampaign)
+	if err == nil {
+		err = db.QueryRow(`SELECT name FROM characters WHERE id = $1`, charID).Scan(&charName)
+	}
 	if err != nil {
 		if answerDBFailure(w, err, "your character") {
 			return
@@ -926,7 +922,7 @@ func handlePendingTurn(w http.ResponseWriter, r *http.Request) {
 				return
 			}
 		}
-		writeJSONStatus(w, http.StatusConflict, map[string]interface{}{"error": "no_active_game", "message": "You have no character in an active campaign."})
+		answerNoActiveGame(w, err, http.StatusConflict, nil)
 		return
 	}
 	if r.Method != http.MethodGet { // a change waits for a walk under way, so it never lands on a turn being resolved

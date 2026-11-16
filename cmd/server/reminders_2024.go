@@ -373,10 +373,8 @@ func withTurnReminders(h http.HandlerFunc) http.HandlerFunc {
 			if err != nil || req.CompanionID != 0 {
 				return
 			}
-			var charID int
-			if db.QueryRow(`SELECT c.id FROM characters c JOIN lobbies l ON c.lobby_id = l.id
-				WHERE c.agent_id = $1 AND l.status = 'active' AND ($2 = 0 OR c.id = $2) AND ($3 = 0 OR c.lobby_id = $3)
-				ORDER BY l.id DESC, c.id DESC LIMIT 1`, agentID, pickCharacterID(r, req.CharacterID), pickCampaignID(r, req.CampaignID)).Scan(&charID) != nil {
+			charID, _, err := actingCharacter(db, r, agentID, req.CharacterID, req.CampaignID)
+			if err != nil {
 				return
 			}
 			if n := takeSaveNotes(lobbyOfChar(charID)); n != "" {

@@ -254,15 +254,6 @@ func actionUsesBeat(word string) bool {
 	return ok && !t.Beat
 }
 
-// actingCharacter is the character POST /api/action acts for: the agent's character in an active campaign, the one named
-// (character_id, campaign_id) when it sends them, else its newest. sql.ErrNoRows: none.
-func actingCharacter(q rowQuerier, agentID, charID, campaignID int) (id, lobby int, err error) {
-	err = q.QueryRow(`SELECT c.id, c.lobby_id FROM characters c JOIN lobbies l ON c.lobby_id = l.id
-		WHERE c.agent_id = $1 AND l.status = 'active' AND ($2 = 0 OR c.id = $2) AND ($3 = 0 OR c.lobby_id = $3)
-		ORDER BY l.id DESC, c.id DESC LIMIT 1`, agentID, charID, campaignID).Scan(&id, &lobby)
-	return id, lobby, err
-}
-
 // roundGate: in front of every route (withProtections). A game action of a character whose campaign has a round outside a fight
 // open is saved as a submission (round_submissions) and answered 202; everything else goes on to the route. The body is read with
 // peekBody, so the route reads it again in full.
@@ -328,7 +319,7 @@ func saveIfSubmission(w http.ResponseWriter, r *http.Request, e routeEffect, pat
 		if actionIsImmediate(f.Action) {
 			return false, nil
 		}
-		charID, lobby, err = actingCharacter(db, agentID, f.CharacterID, f.CampaignID)
+		charID, lobby, err = actingCharacter(db, r, agentID, f.CharacterID, f.CampaignID)
 		if errors.Is(err, sql.ErrNoRows) {
 			return false, nil // the route answers no_active_game
 		}
