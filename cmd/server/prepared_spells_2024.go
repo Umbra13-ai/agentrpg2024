@@ -1,11 +1,7 @@
 package main
 
 // 2024 spell preparation (SRD 5.2.1): every spellcaster prepares spells, as many level 1+ spells as the Prepared Spells column of its
-// class's Features table, plus the cantrips of the Cantrips column. What changes is when the list may change:
-//   Cleric, Druid, Wizard: any number of spells after a Long Rest (a Wizard from the spellbook).
-//   Paladin, Ranger: one spell after a Long Rest.
-//   Bard, Sorcerer, Warlock: one spell when the character gains a level in the class.
-//   Cantrips (Bard, Cleric, Druid, Sorcerer, Warlock, Wizard): one cantrip when the character gains a level in the class.
+// class's Features table, plus the cantrips of the Cantrips column. When the list may change is each class's row of spellChanges.
 // Filling empty places (a new level gives more prepared spells) is always allowed; replacing a spell uses up one of the changes. The GM
 // can grant changes with POST /api/gm/update-character {"set": {"spell_swaps": 1, "cantrip_swaps": 1, "prepare_ready": true}}.
 // Bard, Ranger, Sorcerer and Warlock lists are kept in known_spells as before (the cast code reads them) and mirrored in prepared_spells.
@@ -18,10 +14,72 @@ import (
 	"github.com/agentrpg/agentrpg/game"
 )
 
-var swapOnLevelUp = map[string]bool{"bard": true, "sorcerer": true, "warlock": true}
-var swapOneOnLongRest = map[string]bool{"paladin": true, "ranger": true}
-var changeAllOnLongRest = map[string]bool{"cleric": true, "druid": true, "wizard": true}
-var cantripSwapClasses = map[string]bool{"bard": true, "cleric": true, "druid": true, "sorcerer": true, "warlock": true, "wizard": true}
+// When a class may change what it has prepared (SRD 5.2.1 class features: "Spellcasting", "Cantrips").
+const (
+	allOnLongRest = "all_on_long_rest" // any number of prepared spells after a Long Rest
+	oneOnLongRest = "one_on_long_rest" // one after a Long Rest
+	oneOnLevelUp  = "one_on_level_up"  // one when the character gains a level in the class
+)
+
+// spellChanges is the one table of when each class changes its prepared spells and its cantrips (HANDOFF item 9: the Wizard, who
+// replaces a cantrip after a Long Rest, was given one on each level instead). The grants (level-up, Long Rest), the refusal of a
+// change too many and the summary in the prepare request's reply and guides are made from it.
+var spellChanges = map[string]struct{ Spells, Cantrips string }{
+	"bard":     {oneOnLevelUp, oneOnLevelUp},
+	"cleric":   {allOnLongRest, oneOnLevelUp},
+	"druid":    {allOnLongRest, oneOnLevelUp},
+	"paladin":  {oneOnLongRest, ""},
+	"ranger":   {oneOnLongRest, ""},
+	"sorcerer": {oneOnLevelUp, oneOnLevelUp},
+	"warlock":  {oneOnLevelUp, oneOnLevelUp},
+	"wizard":   {allOnLongRest, oneOnLongRest},
+}
+
+// changeWords: how a rule of spellChanges reads ("one when you gain a level").
+var changeWords = map[string]string{allOnLongRest: "any number after a Long Rest", oneOnLongRest: "one after a Long Rest", oneOnLevelUp: "one when you gain a level"}
+
+// spellChangeRule: the class's rule for its spells or its cantrips, in words ("a Wizard replaces one cantrip after a Long Rest").
+func spellChangeRule(class string, cantrips bool) string {
+	ch := spellChanges[strings.ToLower(class)]
+	rule, what := ch.Spells, "prepared spell"
+	if cantrips {
+		rule, what = ch.Cantrips, "cantrip"
+	}
+	if rule == "" {
+		return ""
+	}
+	switch rule {
+	case allOnLongRest:
+		return fmt.Sprintf("a %s changes any number of prepared spells after a Long Rest", titleCase(class))
+	case oneOnLongRest:
+		return fmt.Sprintf("a %s replaces one %s after a Long Rest", titleCase(class), what)
+	}
+	return fmt.Sprintf("a %s replaces one %s on gaining a level", titleCase(class), what)
+}
+
+// spellChangeSummary: every class's rules, for the prepare request's reply and the guides (TestSpellChangeSummaryInGuides).
+func spellChangeSummary() string {
+	group := func(cantrips bool) string {
+		by := map[string][]string{}
+		for _, c := range []string{"bard", "cleric", "druid", "paladin", "ranger", "sorcerer", "warlock", "wizard"} {
+			r := spellChanges[c].Spells
+			if cantrips {
+				r = spellChanges[c].Cantrips
+			}
+			if r != "" {
+				by[r] = append(by[r], titleCase(c))
+			}
+		}
+		var parts []string
+		for _, r := range []string{allOnLongRest, oneOnLongRest, oneOnLevelUp} {
+			if len(by[r]) > 0 {
+				parts = append(parts, strings.Join(by[r], ", ")+": "+changeWords[r])
+			}
+		}
+		return strings.Join(parts, "; ")
+	}
+	return "Prepared spells: " + group(false) + ". Cantrips: " + group(true) + "."
+}
 
 // listInKnownSpells: the classes whose prepared list lives in known_spells (a Wizard's known_spells is the spellbook).
 var listInKnownSpells = map[string]bool{"bard": true, "ranger": true, "sorcerer": true, "warlock": true}
@@ -69,53 +127,51 @@ func checkSpellListChange(charID int, class string, level int, oldList, newList 
 	var swaps, cswaps int
 	var ready bool
 	db.QueryRow(`SELECT COALESCE(spell_swaps,0), COALESCE(cantrip_swaps,0), COALESCE(prepare_ready,false) FROM characters WHERE id = $1`, charID).Scan(&swaps, &cswaps, &ready)
-	if changeAllOnLongRest[c] && ready {
-		removedL = 0 // after a Long Rest a Cleric, Druid or Wizard may prepare a new list
+	allNow := spellChanges[c].Spells == allOnLongRest && ready // after a Long Rest a Cleric, Druid or Wizard may prepare a new list
+	if allNow {
+		removedL = 0
 	}
 	if removedL > swaps {
-		rule := map[bool]string{true: "a Cleric, Druid or Wizard changes prepared spells after a Long Rest"}[changeAllOnLongRest[c]]
-		switch {
-		case swapOneOnLongRest[c]:
-			rule = "a Paladin or Ranger replaces one prepared spell after a Long Rest"
-		case swapOnLevelUp[c]:
-			rule = "a Bard, Sorcerer or Warlock replaces one prepared spell when gaining a level"
-		}
-		return fmt.Sprintf("This replaces %d prepared spell(s), and you can replace %d now (%s). You can always fill empty places; the GM can allow more changes.", removedL, swaps, rule), nil
+		return fmt.Sprintf("This replaces %d prepared spell(s), and you can replace %d now (%s). You can always fill empty places; the GM can allow more changes.", removedL, swaps, spellChangeRule(class, false)), nil
 	}
 	if removedC > cswaps {
-		return fmt.Sprintf("This replaces %d cantrip(s), and you can replace %d now (one cantrip when you gain a level). The GM can allow more changes.", removedC, cswaps), nil
+		return fmt.Sprintf("This replaces %d cantrip(s), and you can replace %d now (%s). The GM can allow more changes.", removedC, cswaps, spellChangeRule(class, true)), nil
 	}
 	return "", func() {
 		useL := removedL
-		if changeAllOnLongRest[c] && ready {
+		if allNow {
 			useL = 0
 		}
 		db.Exec(`UPDATE characters SET spell_swaps = GREATEST(0, COALESCE(spell_swaps,0) - $1), cantrip_swaps = GREATEST(0, COALESCE(cantrip_swaps,0) - $2) WHERE id = $3`, useL, removedC, charID)
 	}
 }
 
-// grantSpellChangesOnLevelUp: a Bard, Sorcerer or Warlock may replace one prepared spell per level gained; casters with cantrips one cantrip.
+// grantSpellChangesOnLevelUp: one change per level gained for each rule of spellChanges that is oneOnLevelUp.
 func grantSpellChangesOnLevelUp(charID int, class string, levels int) {
 	if levels <= 0 {
 		return
 	}
-	c := strings.ToLower(class)
-	if swapOnLevelUp[c] {
+	ch := spellChanges[strings.ToLower(class)]
+	if ch.Spells == oneOnLevelUp {
 		db.Exec(`UPDATE characters SET spell_swaps = COALESCE(spell_swaps,0) + $1 WHERE id = $2`, levels, charID)
 	}
-	if cantripSwapClasses[c] {
+	if ch.Cantrips == oneOnLevelUp {
 		db.Exec(`UPDATE characters SET cantrip_swaps = COALESCE(cantrip_swaps,0) + $1 WHERE id = $2`, levels, charID)
 	}
 }
 
-// grantSpellChangesOnLongRest: a Cleric, Druid or Wizard may prepare a new list; a Paladin or Ranger may replace one spell.
+// grantSpellChangesOnLongRest: a new list (allOnLongRest), or one change that doesn't add up over several rests (oneOnLongRest),
+// for the class's spells and its cantrips.
 func grantSpellChangesOnLongRest(charID int, class string) {
-	c := strings.ToLower(class)
-	switch {
-	case changeAllOnLongRest[c]:
+	ch := spellChanges[strings.ToLower(class)]
+	switch ch.Spells {
+	case allOnLongRest:
 		db.Exec(`UPDATE characters SET prepare_ready = true WHERE id = $1`, charID)
-	case swapOneOnLongRest[c]:
+	case oneOnLongRest:
 		db.Exec(`UPDATE characters SET spell_swaps = GREATEST(COALESCE(spell_swaps,0), 1) WHERE id = $1`, charID)
+	}
+	if ch.Cantrips == oneOnLongRest {
+		db.Exec(`UPDATE characters SET cantrip_swaps = GREATEST(COALESCE(cantrip_swaps,0), 1) WHERE id = $1`, charID)
 	}
 }
 

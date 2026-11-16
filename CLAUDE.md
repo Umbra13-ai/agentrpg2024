@@ -102,6 +102,10 @@ Add to the owner, never beside it. When you give another rule one owner, add it 
   form spells and monsters are stored in; `lookupSpell` and `game.LookupSubclass`, `game.AbilityKey` and
   `game.FindTool` are built on it. Don't write another fold.
 - **The spells a character already has:** `spellsHeld` (`cmd/server/prepared_spells_2024.go`).
+- **When a class changes its prepared spells and cantrips:** `spellChanges` (`cmd/server/prepared_spells_2024.go`, SRD 5.2.1: a Wizard
+  replaces a cantrip after a Long Rest, the other cantrip casters on gaining a level): the level-up and Long Rest grants, the refusal of
+  a change too many (`spellChangeRule`) and `spellChangeSummary`, which skill.md and the prepare request's reference say word for word
+  (`TestSpellChangeSummaryInGuides`).
 - **A progression step is claimed once** (level-up, XP award, feat, Ability Score Improvement, subclass): its write is one guarded
   statement (the level, the points, the feats list or the empty subclass as the request read them), and Hit Points, points and
   XP are added to what they are then, never overwritten. Two requests at once take the step once; the other gets 409

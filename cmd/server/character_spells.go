@@ -505,7 +505,7 @@ func handleCharacterSpells(w http.ResponseWriter, r *http.Request, charID int) {
 
 // handlePrepareSpells godoc
 // @Summary Prepare spells (every spellcaster, 2024)
-// @Description Every caster prepares as many level 1+ spells as the Prepared Spells column of its class table, plus its cantrips; always-prepared subclass spells don't count. When the list may change: Cleric, Druid, Wizard (from the spellbook) after a Long Rest; Paladin, Ranger one spell after a Long Rest; Bard, Sorcerer, Warlock one spell when they gain a level; one cantrip on gaining a level. Filling empty places is always allowed; the GM can allow more changes (set spell_swaps, cantrip_swaps, prepare_ready).
+// @Description Every caster prepares as many level 1+ spells as the Prepared Spells column of its class table, plus its cantrips; always-prepared subclass spells don't count. When the list may change (a Wizard prepares from the spellbook): Prepared spells: Cleric, Druid, Wizard: any number after a Long Rest; Paladin, Ranger: one after a Long Rest; Bard, Sorcerer, Warlock: one when you gain a level. Cantrips: Wizard: one after a Long Rest; Bard, Cleric, Druid, Sorcerer, Warlock: one when you gain a level. Filling empty places is always allowed; the GM can allow more changes (set spell_swaps, cantrip_swaps, prepare_ready).
 // @Description GET: View currently prepared spells and preparation limits.
 // @Description POST: Set the prepared list. Validates against the Prepared Spells and Cantrips columns.
 // @Description Domain/subclass spells are always prepared and don't count against the limit.
@@ -826,6 +826,14 @@ func handlePrepareSpells(w http.ResponseWriter, r *http.Request, charID int) {
 			} else if !containsStr(skippedTwice, spell.Name) {
 				skippedTwice = append(skippedTwice, spell.Name)
 			}
+		}
+
+		// A list whose every spell is always prepared would replace the real list with nothing while answering success ("Prepared
+		// 0 of 4", HANDOFF item 9): it is refused, nothing changed. (An empty list, sent on purpose, still clears the list.)
+		if len(*req.Spells) > 0 && len(newPrepared) == 0 {
+			writeJSONStatus(w, http.StatusBadRequest, map[string]interface{}{"error": "only_always_prepared",
+				"message": fmt.Sprintf("%s: always prepared for you already (it doesn't count against your limit), so this list holds no spell to prepare. Send the spells you choose to prepare, as your whole list. Nothing was changed.", strings.Join(skippedAlways, ", "))})
+			return
 		}
 
 		// F234: a list without cantrips keeps the cantrips the character knows (Bard, Ranger, Sorcerer, Warlock lost them: their list
