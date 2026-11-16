@@ -385,7 +385,7 @@ func handleGMStartingLevel(w http.ResponseWriter, r *http.Request) {
 		Level       int   `json:"level"` // the level the character starts at
 		Gold        *bool `json:"gold"`  // false: no Starting Equipment at Higher Levels money (default true)
 	}
-	_, _, ok := gmRead(w, r, &req, optionalBody(), targetsIn(&req.CharacterID))
+	_, _, ok := gmRead(w, r, &req, optionalBody(), targetsIn(&req.CharacterID), campaignBeforeStart()) // before the start too: a party set up at its level (playtest I-GM-3)
 	if !ok {
 		return
 	}

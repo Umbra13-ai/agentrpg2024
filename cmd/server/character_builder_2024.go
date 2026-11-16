@@ -3076,6 +3076,12 @@ func handleCharacterSetup(w http.ResponseWriter, r *http.Request, charID int) {
 	// the character's choices, each made from its definition (choices_2024.go); then the steps that aren't choices of the
 	// rules: a weapon in hand, the shop, the portrait, and reminders about gear
 	steps := choiceSteps(c)
+	choicesLeft := 0 // the choices of the rules (choiceDefs): what character_finished means here and on the sheet (playtest I-ROWAN-2)
+	for _, st := range steps {
+		if !st.Done {
+			choicesLeft++
+		}
+	}
 	extra := func(st setupStep) { steps = append(steps, st) }
 	// a weapon in hand
 	if mainHand == "" && shield && (cl == "cleric" || cl == "druid") {
@@ -3165,9 +3171,19 @@ func handleCharacterSetup(w http.ResponseWriter, r *http.Request, charID int) {
 			next = &steps[i]
 		}
 	}
-	// finished and steps_left agree: only the optional steps (gear reminders) don't count
-	out := map[string]interface{}{"character_id": charID, "character_finished": left == 0, "steps": steps, "steps_left": left,
-		"optional_steps_left": optLeft}
+	// character_finished is the sheet's (characterToFinish: the choices of the rules); steps_left also counts the guided steps
+	// after them (a weapon in hand, the shop, the portrait), which the player may finish before or after joining
+	out := map[string]interface{}{"character_id": charID, "character_finished": choicesLeft == 0, "steps": steps, "steps_left": left,
+		"choices_left": choicesLeft, "optional_steps_left": optLeft}
+	if choicesLeft == 0 && left > 0 {
+		var guided []string
+		for _, st := range steps {
+			if !st.Done && !st.Optional {
+				guided = append(guided, st.Key)
+			}
+		}
+		out["ready_to_play"] = fmt.Sprintf("Your character is finished and can join a campaign. The guided steps left (%s) are best done now, but they can wait.", strings.Join(guided, ", "))
+	}
 	if next == nil && nextOpt != nil {
 		out["optional"] = fmt.Sprintf("Your character is finished. Optional, when you like: %s.", strings.Join(optNames, ", "))
 	}

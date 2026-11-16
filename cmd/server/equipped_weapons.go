@@ -53,6 +53,17 @@ func notEquippedMessage(weapon string) string {
 		"Equip it first with POST /api/characters/equip-weapon (a weapon in a bag or on your belt must be equipped before you attack).", name)
 }
 
+// changeHands is the one writer of the equipped hands (equipped_main_hand, equipped_off_hand): it runs the statement, then
+// syncHeldItems, so the inventory's "held" marks always match the hands (playtest I-ROWAN-7: a hand emptied without the sync
+// left the weapon "held" in the inventory and the shop). TestNoOtherHandWriter checks.
+func changeHands(charID int, query string, args ...interface{}) (sql.Result, error) {
+	res, err := db.Exec(query, args...)
+	if err == nil {
+		syncHeldItems(charID)
+	}
+	return res, err
+}
+
 // syncHeldItems keeps the equipment list in step with the equipped weapon fields:
 // a weapon equipped in a hand is "held"; a weapon that was held and no longer is
 // goes back to "worn" (sheathed). Items in a lost bag are left alone.

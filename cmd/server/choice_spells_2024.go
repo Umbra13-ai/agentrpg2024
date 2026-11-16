@@ -205,13 +205,7 @@ func spellsStep(ch *choiceChar) *setupStep {
 		}
 	}
 	spellsDone := wantCantrips == 0 && len(leveled) >= sc.maxPrep && len(sc.problems) == 0 && sc.bookShort == 0
-	maxLvl := (level + 1) / 2 // full casters and Pact Magic: level 2 spells from level 3
-	if cl == "paladin" || cl == "ranger" {
-		maxLvl = (level + 3) / 4
-	}
-	if maxLvl > 5 {
-		maxLvl = 5
-	}
+	maxLvl := maxSpellLevelFor(ch.id, cl, level) // the highest level the character has slots for (playtest I-ALDEN-4: a cap of 5 hid a Cleric 11's level 6 spells)
 	var pick []string
 	for _, list := range [][]string{spell2Prefs[cl], spellPrefs[cl], getClassSpellList(cl)} { // the suggestions first, then the class list
 		for _, s := range list {

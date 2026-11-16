@@ -735,7 +735,8 @@ function render(d,p){
   var sub=el('div','sub');
   var saveList=saves.map(function(k){return ABNAME[k].slice(0,3)+' '+sgn((mods[k]||0)+prof)});
   var sv=el('p');add(sv,el('b','l','Saving Throws '),document.createTextNode(saveList.join(', ')+((S.save_notes||[]).length?'; '+S.save_notes.join('; '):'')));sub.appendChild(sv);
-  var skl=[];SKILLS.forEach(function(s){var key=norm(s[0]),isP=sp.indexOf(key)>=0,isE=ex.indexOf(key)>=0;if(isP||isE)skl.push(s[0]+' '+sgn((mods[s[1]]||0)+(isE?prof*2:prof)))});
+  var SB=d.skill_bonuses||{},sbOf=function(name,ab){var k=norm(name).replace(/ /g,'_');return k in SB?SB[k]:(mods[ab]||0)};
+  var skl=[];SKILLS.forEach(function(s){var key=norm(s[0]),isP=sp.indexOf(key)>=0,isE=ex.indexOf(key)>=0,b=sbOf(s[0],s[1]);if(isP||isE||b!==(mods[s[1]]||0))skl.push(s[0]+' '+sgn(b))});
   line(sub,'Skills',skl.join(', '));
   line(sub,'Armor',(d.armor_proficiencies||[]).map(title).join(', '));
   var wl=(d.weapon_proficiencies||[]).map(function(x){return String(x).trim()}).filter(Boolean);
@@ -749,7 +750,7 @@ function render(d,p){
   line(sb,'Immunities',imm.join('; '));
   var senses=[],vis=d.vision;
   if(vis&&typeof vis==='object')Object.keys(vis).forEach(function(k){if(vis[k]&&/range|dark|blind|true|tremor/i.test(k))senses.push(title(k.replace(/_?range/,''))+' '+vis[k]+' feet')});
-  var pas=function(sk,ab){return 10+(mods[ab]||0)+(sp.indexOf(sk)>=0?(ex.indexOf(sk)>=0?prof*2:prof):0)};
+  var pas=function(sk,ab){return 10+sbOf(sk,ab)};
   senses.push('Passive Perception '+pas('perception','wis'));
   senses.push('Passive Insight '+pas('insight','wis'));
   senses.push('Passive Investigation '+pas('investigation','int'));

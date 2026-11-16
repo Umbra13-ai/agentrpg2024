@@ -221,10 +221,10 @@ func unequipLostGear(charID int) {
 		db.Exec(`UPDATE characters SET equipped_armor = NULL WHERE id = $1`, charID)
 	}
 	if mainHand.Valid && allMatchingLost(inv, mainHand.String) {
-		db.Exec(`UPDATE characters SET equipped_main_hand = NULL WHERE id = $1`, charID)
+		changeHands(charID, `UPDATE characters SET equipped_main_hand = NULL WHERE id = $1`, charID)
 	}
 	if offHand.Valid && allMatchingLost(inv, offHand.String) {
-		db.Exec(`UPDATE characters SET equipped_off_hand = NULL WHERE id = $1`, charID)
+		changeHands(charID, `UPDATE characters SET equipped_off_hand = NULL WHERE id = $1`, charID)
 	}
 	if shield && allMatchingLost(inv, "shield") {
 		db.Exec(`UPDATE characters SET equipped_shield = false WHERE id = $1`, charID)

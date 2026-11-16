@@ -5859,7 +5859,8 @@
            "type": "object"
           },
           "preparations_left": {
-           "description": "the clearer name: spells you can still prepare (not spell slots)"
+           "description": "spells you can still prepare (not spell slots: playtest I-ROWAN-3)",
+           "type": "integer"
           },
           "prepared_count": {
            "type": "integer"
@@ -6003,14 +6004,19 @@
            },
            "type": "object"
           },
+          "skill_bonuses": {
+           "additionalProperties": {
+            "type": "integer"
+           },
+           "description": "each skill's check bonus as the rolls work it out (checkBonus): the character page shows these (playtest I-ALDEN-3)",
+           "properties": {},
+           "type": "object"
+          },
           "skill_proficiencies": {
            "items": {
             "type": "string"
            },
            "type": "array"
-          },
-          "slots_remaining": {
-           "type": "integer"
           },
           "species": {
            "type": "string"
@@ -11827,6 +11833,9 @@
           "table_rules": {
            "items": {
             "properties": {
+             "applies": {
+              "type": "boolean"
+             },
              "is_default": {
               "type": "boolean"
              },
@@ -13843,8 +13852,8 @@
      {
       "name": "campaign_id",
       "in": "query",
-      "required": true,
-      "description": "Campaign ID",
+      "required": false,
+      "description": "Campaign ID (GET: required; POST: here or in the body)",
       "schema": {
        "type": "integer"
       }
@@ -13914,8 +13923,8 @@
      {
       "name": "campaign_id",
       "in": "query",
-      "required": true,
-      "description": "Campaign ID",
+      "required": false,
+      "description": "Campaign ID (GET: required; POST: here or in the body)",
       "schema": {
        "type": "integer"
       }
@@ -13930,7 +13939,7 @@
         "properties": {
          "campaign_id": {
           "type": "integer",
-          "description": "The id of the campaign this request is for"
+          "description": "the campaign (or ?campaign_id=N in the query string)"
          },
          "message": {
           "type": "string",
@@ -13986,6 +13995,9 @@
                  "type": "string"
                 },
                 "type": "array"
+               },
+               "your_turn": {
+                "type": "boolean"
                }
               },
               "type": "object"
@@ -16341,6 +16353,9 @@
           "character_id": {
            "type": "integer"
           },
+          "choices_left": {
+           "type": "integer"
+          },
           "how": {
            "type": "string"
           },
@@ -16419,6 +16434,9 @@
           },
           "optional_steps_left": {
            "type": "integer"
+          },
+          "ready_to_play": {
+           "type": "string"
           },
           "steps": {
            "items": {
@@ -20120,7 +20138,7 @@
            "type": "string"
           },
           "preparations_left": {
-           "description": "spells you can still prepare (slots_remaining: the old name)",
+           "description": "spells you can still prepare (not spell slots: playtest I-ROWAN-3)",
            "type": "integer"
           },
           "prepared_count": {
@@ -20154,9 +20172,6 @@
             "type": "object"
            },
            "type": "array"
-          },
-          "slots_remaining": {
-           "type": "integer"
           },
           "spellcasting_ability": {
            "type": "string"
@@ -20271,7 +20286,7 @@
            "type": "array"
           },
           "preparations_left": {
-           "description": "spells you can still prepare (slots_remaining: the old name)",
+           "description": "spells you can still prepare (not spell slots: playtest I-ROWAN-3)",
            "type": "integer"
           },
           "prepared_count": {
@@ -20296,9 +20311,6 @@
             "type": "object"
            },
            "type": "array"
-          },
-          "slots_remaining": {
-           "type": "integer"
           },
           "success": {
            "type": "boolean"
@@ -40091,6 +40103,10 @@
              },
              "title": {
               "type": "string"
+             },
+             "with_schedule": {
+              "description": "WithSchedule: what the rule is instead while the campaign's turn schedule is on or paused (\"\" when it applies the same)",
+              "type": "string"
              }
             },
             "type": "object"
@@ -40100,6 +40116,9 @@
           "table_rules": {
            "items": {
             "properties": {
+             "applies": {
+              "type": "boolean"
+             },
              "is_default": {
               "type": "boolean"
              },
@@ -40216,6 +40235,10 @@
              },
              "title": {
               "type": "string"
+             },
+             "with_schedule": {
+              "description": "WithSchedule: what the rule is instead while the campaign's turn schedule is on or paused (\"\" when it applies the same)",
+              "type": "string"
              }
             },
             "type": "object"
@@ -40225,6 +40248,9 @@
           "table_rules": {
            "items": {
             "properties": {
+             "applies": {
+              "type": "boolean"
+             },
              "is_default": {
               "type": "boolean"
              },

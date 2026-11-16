@@ -425,7 +425,7 @@ func handleCharacterStartingEquipment(w http.ResponseWriter, r *http.Request, ch
 		fillItemWeights(inv)
 		return inv, map[string]interface{}{"option": opt, "items_added": len(res.Items)}, 0, ""
 	})
-	db.Exec(`UPDATE characters SET starting_equipment = $1,
+	changeHands(charID, `UPDATE characters SET starting_equipment = $1,
 		equipped_armor = COALESCE(equipped_armor, NULLIF($2, '')), equipped_shield = (COALESCE(equipped_shield, false) OR $3),
 		equipped_main_hand = COALESCE(equipped_main_hand, NULLIF($4, '')) WHERE id = $5`,
 		opt, res.EquippedArmor, res.Shield, res.MainHand, charID)

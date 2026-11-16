@@ -1,6 +1,9 @@
 package main
 
 import (
+	"database/sql"
+	"errors"
+	"fmt"
 	"net/http"
 	"strconv"
 )
@@ -11,12 +14,30 @@ import (
 // newest active campaign. sql.ErrNoRows means the agent plays no character in an active campaign (answerNoActiveGame).
 // POST /api/action, the round gate, its reply notes, readied actions, GET /api/my-turn, observations and pending turns read it.
 func actingCharacter(q rowQuerier, r *http.Request, agentID, bodyChar, bodyCampaign int) (id, lobby int, err error) {
+	char, camp := requestOrQuery(r, bodyChar, "character_id"), requestOrQuery(r, bodyCampaign, "campaign_id")
 	err = q.QueryRow(`SELECT c.id, c.lobby_id FROM characters c JOIN lobbies l ON c.lobby_id = l.id
 		WHERE c.agent_id = $1 AND l.status = 'active' AND ($2 = 0 OR c.id = $2) AND ($3 = 0 OR c.lobby_id = $3)
-		ORDER BY l.id DESC, c.id DESC LIMIT 1`,
-		agentID, requestOrQuery(r, bodyChar, "character_id"), requestOrQuery(r, bodyCampaign, "campaign_id")).Scan(&id, &lobby)
+		ORDER BY l.id DESC, c.id DESC LIMIT 1`, agentID, char, camp).Scan(&id, &lobby)
+	if errors.Is(err, sql.ErrNoRows) { // seated in a campaign that hasn't started: the answer says so (playtest I-ROWAN-1)
+		var w waitingToStart
+		if q.QueryRow(`SELECT c.id, c.name, l.id, l.name FROM characters c JOIN lobbies l ON c.lobby_id = l.id
+			WHERE c.agent_id = $1 AND l.status = 'recruiting' AND ($2 = 0 OR c.id = $2) AND ($3 = 0 OR c.lobby_id = $3)
+			ORDER BY l.id DESC, c.id DESC LIMIT 1`, agentID, char, camp).Scan(&w.charID, &w.charName, &w.lobby, &w.lobbyName) == nil {
+			return 0, 0, w
+		}
+	}
 	return id, lobby, err
 }
+
+// waitingToStart: the agent's character is in a campaign its GM hasn't started yet. It is a "no row" for every caller
+// (errors.Is(err, sql.ErrNoRows)); answerNoActiveGame says what it is.
+type waitingToStart struct {
+	charID, lobby       int
+	charName, lobbyName string
+}
+
+func (w waitingToStart) Error() string { return "the campaign hasn't started" }
+func (w waitingToStart) Unwrap() error { return sql.ErrNoRows }
 
 // requestOrQuery: the body's value when it has one, else the query parameter's.
 func requestOrQuery(r *http.Request, body int, param string) int {
@@ -37,6 +58,18 @@ func answerNoActiveGame(w http.ResponseWriter, err error, status int, extra map[
 		return false
 	}
 	if answerDBFailure(w, err, "your character") {
+		return true
+	}
+	var wait waitingToStart
+	if errors.As(err, &wait) {
+		reply := map[string]interface{}{"error": "campaign_not_started", "campaign_id": wait.lobby, "character_id": wait.charID,
+			"message": fmt.Sprintf("%s is in %s (campaign %d), which its GM hasn't started yet: there is nothing to do in play until then. "+
+				"You can finish your character (GET /api/characters/%d/setup) and talk with the party (POST /api/campaigns/messages {\"campaign_id\": %d, \"message\": \"...\"}). "+
+				"GET /api/campaigns/%d shows when it starts.", wait.charName, wait.lobbyName, wait.lobby, wait.charID, wait.lobby, wait.lobby)}
+		for k, v := range extra {
+			reply[k] = v
+		}
+		writeJSONStatus(w, status, reply)
 		return true
 	}
 	reply := map[string]interface{}{

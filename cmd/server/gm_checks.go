@@ -191,51 +191,26 @@ func handleGMSkillCheck(w http.ResponseWriter, r *http.Request) {
 		abilityName = "Wisdom"
 	}
 
-	// Add proficiency bonus if proficient in the skill
-	// Double proficiency bonus if the character has expertise
+	// The skill's bonus has one owner, checkBonus (actions_checks_2024.go): proficiency or Expertise, Jack of All Trades, the
+	// Thaumaturge or Magician bonus, items and Wild Shape. A check without a skill: Jack of All Trades and items.
 	totalMod := abilityMod
 	totalMod -= game.ExhaustionD20Penalty(exhaustionLevelOf(req.CharacterID)) // SRD 5.2.1: -2 per Exhaustion level
-	isProficient := false
-	hasExpertise := false
-	if skillUsed != "" && skillProfs[skillUsed] {
-		if expertiseSkills[skillUsed] {
-			// Expertise: double proficiency bonus
-			totalMod += game.ProficiencyBonus(level) * 2
-			hasExpertise = true
-		} else {
-			totalMod += game.ProficiencyBonus(level)
+	isProficient, hasExpertise := false, false
+	remarkableAthleteBonus, jackOfAllTradesBonus := 0, 0 // 2024 Remarkable Athlete is Advantage (below), not a bonus
+	if skillUsed != "" {
+		score := map[string]int{"Strength": str, "Dexterity": dex, "Constitution": con, "Intelligence": intl, "Wisdom": wis, "Charisma": cha}[abilityName]
+		m, p, note, _ := checkBonus(req.CharacterID, class, level, skillUsed, score)
+		totalMod += m - abilityMod + p
+		isProficient, hasExpertise = note == " (proficient)" || note == " (expertise)", note == " (expertise)"
+		if note == " (Jack of All Trades)" {
+			jackOfAllTradesBonus = p
 		}
-		isProficient = true
-	}
-
-	// Remarkable Athlete (Champion Fighter level 7+)
-	// Add half proficiency bonus (rounded up) to STR, DEX, or CON checks when not proficient
-	remarkableAthleteBonus := 0
-	isPhysicalCheck := abilityUsed == "str" || abilityUsed == "strength" ||
-		abilityUsed == "dex" || abilityUsed == "dexterity" ||
-		abilityUsed == "con" || abilityUsed == "constitution"
-	if !isProficient && subclassRaw.Valid && subclassRaw.String != "" {
-		// 2024 Remarkable Athlete is Advantage on Initiative and Athletics checks (below), not a proficiency bonus
-		_ = isPhysicalCheck
-	}
-
-	// Jack of All Trades (Bard level 2+)
-	// Add half proficiency bonus (rounded down) to ability checks not already using proficiency
-	// Does not stack with Remarkable Athlete - RA is better for physical checks (rounds up)
-	jackOfAllTradesBonus := 0
-	if !isProficient && remarkableAthleteBonus == 0 && game.HasClassFeature(class, level, "jack_of_all_trades") {
-		// Half proficiency bonus, rounded down
-		jackOfAllTradesBonus = game.ProficiencyBonus(level) / 2
-		totalMod += jackOfAllTradesBonus
-	}
-
-	// 2024 Divine Order (Thaumaturge) / Primal Order (Magician): bonus to Arcana and Religion / Nature checks = Wisdom modifier (minimum +1)
-	totalMod += orderSkillBonus(req.CharacterID, skillUsed, wis)
-	totalMod += magicCheckBonus(req.CharacterID)             // Stone of Good Luck (F111: missing from the GM's checks)
-	totalMod += glovesOfThievery(req.CharacterID, skillUsed) // F165 (items_c5_2024.go)
-	if skillUsed != "" {                                     // Wild Shape: the beast's skill modifier when it's higher (Exhaustion still applies)
-		exh := game.ExhaustionD20Penalty(exhaustionLevelOf(req.CharacterID))
-		totalMod = wildShapeHigher(req.CharacterID, skillUsed, totalMod+exh) - exh
+	} else {
+		if game.HasClassFeature(class, level, "jack_of_all_trades") {
+			jackOfAllTradesBonus = game.ProficiencyBonus(level) / 2
+			totalMod += jackOfAllTradesBonus
+		}
+		totalMod += magicCheckBonus(req.CharacterID) // Stone of Good Luck
 	}
 
 	// Handle Heroic Inspiration (2024): reroll after a failure

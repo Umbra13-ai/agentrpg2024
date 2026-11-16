@@ -496,7 +496,8 @@ func playerNextCheckIn(lobby, charID int, round *roundRecord, now time.Time) (ti
 	return time.Time{}, false
 }
 
-// submissionWhat: a submission's step in a few words for the log and the replies ("action search: I search the room").
+// submissionWhat: a submission's step for the log, the round view and the replies ("action search: I search the room"), with the
+// player's whole description: the GM decides on it before resolving it (playtest I-GM-9).
 func submissionWhat(method, path string, raw []byte) string {
 	var m map[string]interface{}
 	json.Unmarshal(raw, &m)
@@ -505,11 +506,7 @@ func submissionWhat(method, path string, raw []byte) string {
 		what = "action " + canonicalAction(a)
 	}
 	if d, ok := m["description"].(string); ok && strings.TrimSpace(d) != "" {
-		d = strings.TrimSpace(d)
-		if len([]rune(d)) > 120 {
-			d = string([]rune(d)[:120]) + "..."
-		}
-		what += ": " + d
+		what += ": " + strings.TrimSpace(d)
 	}
 	return what
 }

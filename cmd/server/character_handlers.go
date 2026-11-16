@@ -1168,6 +1168,8 @@ func handleCharacterByID(w http.ResponseWriter, r *http.Request) {
 			return carryingOf(str, species, inv, lobbyOfChar(charID)).view()
 		}(),
 		"proficiency_bonus": game.ProficiencyBonus(level),
+		// each skill's check bonus as the rolls work it out (checkBonus): the character page shows these (playtest I-ALDEN-3)
+		"skill_bonuses": skillBonuses(charID, class, level, map[string]int{"str": effectiveStr, "dex": dex, "con": effectiveCon, "int": intl, "wis": wis, "cha": cha}),
 		"skill_proficiencies": func() []string {
 			if skillProfsRaw == "" {
 				return []string{}
@@ -1617,8 +1619,7 @@ func handleCharacterByID(w http.ResponseWriter, r *http.Request) {
 		response["prepared_spells"] = preparedSpellsInfo
 		response["prepared_count"] = len(preparedSpells)
 		response["max_prepared"] = maxPrepared
-		response["slots_remaining"] = maxPrepared - len(preparedSpells)
-		response["preparations_left"] = response["slots_remaining"] // the clearer name: spells you can still prepare (not spell slots)
+		response["preparations_left"] = maxPrepared - len(preparedSpells) // spells you can still prepare (not spell slots: playtest I-ROWAN-3)
 		response["caster_type"] = "prepared"
 		response["prepared_spells_tip"] = fmt.Sprintf("Use POST /api/characters/%d/prepare to change prepared spells (Cleric, Druid, Wizard: after a Long Rest; Paladin, Ranger: one after a Long Rest; Bard, Sorcerer, Warlock: one when you gain a level).", charID)
 	}

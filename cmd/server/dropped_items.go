@@ -138,7 +138,7 @@ func dropToGround(charID int, itemRef string, quantity int) (*dropResult, string
 
 	// a weapon that was in hand and is no longer carried leaves the hand
 	clearHandsIfGone(charID)
-	syncHeldItems(charID)
+	syncHeldItems(charID) // the dropped item's own "held" mark, also when the hands didn't change
 	return &dropResult{DroppedID: dropID, Name: itemStr(bundle[0], "name"), Quantity: qty, Contents: len(bundle) - 1, Attunement: strings.TrimSpace(done.Note)}, ""
 }
 
@@ -162,10 +162,10 @@ func clearHandsIfGone(charID int) {
 		return false
 	}
 	if mainHand.Valid && mainHand.String != "" && !carried(mainHand.String) {
-		db.Exec(`UPDATE characters SET equipped_main_hand = NULL WHERE id = $1`, charID)
+		changeHands(charID, `UPDATE characters SET equipped_main_hand = NULL WHERE id = $1`, charID)
 	}
 	if offHand.Valid && offHand.String != "" && !carried(offHand.String) {
-		db.Exec(`UPDATE characters SET equipped_off_hand = NULL WHERE id = $1`, charID)
+		changeHands(charID, `UPDATE characters SET equipped_off_hand = NULL WHERE id = $1`, charID)
 	}
 }
 

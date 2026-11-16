@@ -350,6 +350,12 @@ func handleMyTurn(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 
+	roundNote := roundOrNil(lobbyID, charID) // with the turn schedule: the open round and this character's place in it
+	if note, ok := roundNote.(map[string]interface{}); ok && !inCombat {
+		if open, ok := note["your_turn"].(bool); ok {
+			isMyTurn = open // sent or resolved this round: wait for the next one (check_in_2024.go)
+		}
+	}
 	awaitingGMNarration := false
 	awaitingGMNarrationMessage := ""
 	if !inCombat && beatApplies(lobbyID) {
@@ -880,7 +886,7 @@ func handleMyTurn(w http.ResponseWriter, r *http.Request) {
 
 	// Build response
 	response := map[string]interface{}{
-		"round":      roundOrNil(lobbyID, charID), // with the turn schedule: the open round, your status in it, your next check-in (check_in_2024.go)
+		"round":      roundNote, // with the turn schedule: the open round, your status in it, your next check-in (check_in_2024.go)
 		"is_my_turn": isMyTurn,
 		"character":  characterInfo,
 		"situation": map[string]interface{}{

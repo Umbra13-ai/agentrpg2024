@@ -28,14 +28,6 @@ func hasMagicalDiscoveries(charID int) bool {
 	return want > 0
 }
 
-func bardMaxSpellLevel(level int) int {
-	m := (level + 1) / 2
-	if m > 9 {
-		m = 9
-	}
-	return m
-}
-
 const srdMagicalDiscoveries = "You learn two spells of your choice. These spells can come from the Cleric, Druid, or Wizard spell list or any combination thereof (see a class’s section for its spell list). A spell you choose must be a cantrip or a spell for which you have spell slots, as shown in the Bard Features table. You always have the chosen spells prepared, and whenever you gain a Bard level, you can replace one of the spells with another spell that meets these requirements."
 
 // setMagicalDiscoveries checks and saves the two spells ("" on success, else what is wrong).
@@ -62,8 +54,8 @@ func setMagicalDiscoveries(charID int, picks []string) string {
 		if !isSpellOnClassList(k, "cleric") && !isSpellOnClassList(k, "druid") && !isSpellOnClassList(k, "wizard") {
 			return fmt.Sprintf("%s is not on the Cleric, Druid or Wizard spell list", sp.Name)
 		}
-		if sp.Level > bardMaxSpellLevel(level) {
-			return fmt.Sprintf("%s is a level %d spell; a level %d Bard has spell slots up to level %d", sp.Name, sp.Level, level, bardMaxSpellLevel(level))
+		if sp.Level > maxSpellLevelFor(charID, "bard", level) {
+			return fmt.Sprintf("%s is a level %d spell; a level %d Bard has spell slots up to level %d", sp.Name, sp.Level, level, maxSpellLevelFor(charID, "bard", level))
 		}
 		if containsStr(keys, k) {
 			return "you chose " + sp.Name + " twice: choose 2 different spells"
@@ -85,7 +77,7 @@ func magicalDiscoveriesStep(charID int) *setupStep {
 	}
 	var level int
 	db.QueryRow(`SELECT COALESCE(level,1) FROM characters WHERE id = $1`, charID).Scan(&level)
-	maxL := bardMaxSpellLevel(level)
+	maxL := maxSpellLevelFor(charID, "bard", level)
 	var opts []map[string]interface{}
 	seen := spellsHeld(charID, magicalDiscoveriesOf(charID)...) // spells the Bard already has aren't options
 	for _, list := range []string{"cleric", "druid", "wizard"} {

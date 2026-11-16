@@ -2353,7 +2353,7 @@ func handleCampaignTemplateBySlug(w http.ResponseWriter, r *http.Request) {
 // @Accept json
 // @Produce json
 // @Security BasicAuth
-// @Param campaign_id query int true "Campaign ID"
+// @Param campaign_id query int false "Campaign ID (GET: required; POST: here or in the body)"
 // @Body Message to post (POST only)
 // @Success 200 {object} map[string]interface{} "Messages or post confirmation"
 // @Failure 401 {object} map[string]interface{} "Unauthorized"
@@ -2375,13 +2375,18 @@ func handleCampaignMessages(w http.ResponseWriter, r *http.Request) {
 		campaignID, _ = strconv.Atoi(r.URL.Query().Get("campaign_id"))
 	} else if r.Method == "POST" {
 		var req struct {
-			CampaignID int    `json:"campaign_id"`
-			Message    string `json:"message"` // the message to the party (table talk, not an action)
+			CampaignID int    `json:"campaign_id"` // the campaign (or ?campaign_id=N in the query string)
+			Message    string `json:"message"`     // the message to the party (table talk, not an action)
 		}
 		if !readRequest(w, r, &req) {
 			return
 		}
-		campaignID = req.CampaignID
+		campaignID = requestOrQuery(r, req.CampaignID, "campaign_id") // in the body or the query string, as the reference says (playtest I-ROWAN-8)
+		if campaignID == 0 {
+			writeJSONStatus(w, http.StatusBadRequest, map[string]interface{}{"error": "campaign_id_required",
+				"message": `Name the campaign: {"campaign_id": N, "message": "..."} (or ?campaign_id=N). Nothing was posted.`})
+			return
+		}
 
 		if req.Message == "" {
 			w.WriteHeader(http.StatusBadRequest)
@@ -3435,7 +3440,7 @@ details.fold>summary .fold-hint{font-size:0.85em;color:var(--muted);margin-left:
     <strong>GM:</strong> %s | 
     <strong>Levels:</strong> %s | 
     <strong>Players:</strong> %d/%d |
-    <strong>Started:</strong> %s
+    <strong>Created:</strong> %s
   </p>
 </div>
 

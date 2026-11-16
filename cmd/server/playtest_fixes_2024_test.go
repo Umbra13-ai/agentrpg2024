@@ -1,0 +1,127 @@
+package main
+
+import (
+	"fmt"
+	"os"
+	"path/filepath"
+	"regexp"
+	"strings"
+	"testing"
+)
+
+// The play-test reports of Nov 16 (Drive Issue Tracker), each through the server where it can be.
+
+func pgCleric(name string) map[string]interface{} {
+	return map[string]interface{}{"name": name, "class": "cleric", "background": "sage", "species": "dwarf", "ability_method": "standard_array",
+		"str": 13, "dex": 10, "con": 14, "int": 12, "wis": 15, "cha": 8, "ability_increases": map[string]int{"wis": 2, "con": 1},
+		"skill_proficiencies": []string{"insight", "medicine"}, "class_options": map[string]interface{}{"divine_order": "thaumaturge"},
+		"background_feat_choices": map[string]interface{}{"list": "wizard", "cantrips": []string{"light", "mage-hand"}, "spell": "magic-missile", "spellcasting_ability": "int"},
+		"background_equipment":    "a", "starting_equipment": "a", "extra_languages": []string{"Elvish", "Goblin"},
+		"alignment": "Neutral Good", "backstory": "One.\n\nTwo.\n\nThree."}
+}
+
+func TestPostgresPlaytestReports(t *testing.T) {
+	testPostgres(t)
+	gm, gmTok := pgAgent(t, "pg pt gm")
+	_, plTok := pgAgent(t, "pg pt player")
+	c, j := pgCall(t, "POST", "/api/characters", plTok, pgCleric(fmt.Sprintf("Pg Thaum %d", gm)))
+	if c != 200 {
+		t.Fatalf("cleric: %d %v", c, j)
+	}
+	char := int(j["character_id"].(float64))
+	_, j = pgCall(t, "POST", "/api/campaigns", gmTok, map[string]interface{}{"name": fmt.Sprintf("PG Playtest %d", gm), "max_players": 4})
+	camp := int(j["campaign_id"].(float64))
+	if c, j = pgCall(t, "POST", fmt.Sprintf("/api/campaigns/%d/join", camp), plTok, map[string]interface{}{"character_id": char}); c != 200 {
+		t.Fatalf("join: %d %v", c, j)
+	}
+
+	// I-ROWAN-1: seated in a campaign that hasn't started
+	c, j = pgCall(t, "GET", fmt.Sprintf("/api/my-turn?campaign_id=%d", camp), plTok, nil)
+	if j["error"] != "campaign_not_started" || j["how_to_join"] != nil {
+		t.Errorf("my-turn in a recruiting campaign: %d %v", c, j)
+	}
+	// I-GM-2: the GM's status while recruiting
+	c, j = pgCall(t, "GET", "/api/gm/status", gmTok, nil)
+	if c != 200 || !strings.Contains(fmt.Sprint(j["gm_tasks"]), "recruiting") {
+		t.Errorf("gm/status while recruiting: %d %v", c, j)
+	}
+	// I-GM-3: the GM starts a character higher before the start
+	if c, j = pgCall(t, "POST", "/api/gm/starting-level", gmTok, map[string]interface{}{"character_id": char, "level": 11}); c != 200 {
+		t.Fatalf("starting-level while recruiting: %d %v", c, j)
+	}
+	// I-GM-5/6: the GM sees what is left to choose
+	if _, j = pgCall(t, "GET", "/api/gm/status", gmTok, nil); j["unfinished_characters"] == nil {
+		t.Errorf("gm/status doesn't list the unfinished level 11 character: %v", j["gm_tasks"])
+	}
+	// I-ALDEN-4: the setup's spell ceiling is the character's slots
+	_, j = pgCall(t, "GET", fmt.Sprintf("/api/characters/%d/setup", char), plTok, nil)
+	if !strings.Contains(fmt.Sprint(j["steps"]), "highest_spell_level_you_can_cast:6") {
+		t.Errorf("a Cleric 11's setup doesn't offer level 6 spells")
+	}
+	// I-ROWAN-2: setup and the sheet agree on character_finished
+	_, sheet := pgCall(t, "GET", fmt.Sprintf("/api/characters/%d", char), plTok, nil)
+	if fmt.Sprint(j["character_finished"]) != fmt.Sprint(sheet["character_finished"]) {
+		t.Errorf("setup says finished %v, the sheet %v", j["character_finished"], sheet["character_finished"])
+	}
+	// I-ALDEN-3: the sheet's Arcana includes the Thaumaturge bonus (Int 12: +1, proficiency +4 at 11, Wisdom 17: +3)
+	sb, _ := sheet["skill_bonuses"].(map[string]interface{})
+	if sb["arcana"] != float64(1+4+3) || sb["religion"] != float64(1+3) {
+		t.Errorf("skill_bonuses: arcana %v, religion %v", sb["arcana"], sb["religion"])
+	}
+	// I-ROWAN-3: a prepare reply has no slots_remaining
+	_, j = pgCall(t, "POST", fmt.Sprintf("/api/characters/%d/prepare", char), plTok, map[string]interface{}{"spells": []string{"bless"}})
+	if _, has := j["slots_remaining"]; has {
+		t.Errorf("prepare still answers slots_remaining: %v", j)
+	}
+	// I-ROWAN-8: party chat with the campaign in the query string
+	if c, j = pgCall(t, "POST", fmt.Sprintf("/api/campaigns/messages?campaign_id=%d", camp), plTok, map[string]interface{}{"message": "hello"}); c != 200 {
+		t.Errorf("chat with ?campaign_id: %d %v", c, j)
+	}
+	if c, j = pgCall(t, "POST", "/api/campaigns/messages", plTok, map[string]interface{}{"message": "hello"}); c != 400 || j["error"] != "campaign_id_required" {
+		t.Errorf("chat naming no campaign: %d %v", c, j)
+	}
+	// I-ROWAN-6: the exploration timeout isn't advertised while the schedule is on
+	_, j = pgCall(t, "GET", fmt.Sprintf("/api/campaigns/%d/table-rules", camp), "", nil)
+	if strings.Contains(fmt.Sprint(j["table_rules"]), "inactive for 12 hours is skipped") || !strings.Contains(fmt.Sprint(j["table_rules"]), "stand-in") {
+		t.Errorf("table rules still say a player is skipped after 12 hours under the schedule")
+	}
+}
+
+// I-ROWAN-7: the equipped hands have one writer, which keeps the inventory's "held" marks in step.
+func TestNoOtherHandWriter(t *testing.T) {
+	re := regexp.MustCompile(`(?i)equipped_(main|off)_hand\s*=\s*(\$|NULL|COALESCE)`)
+	files, _ := filepath.Glob("*.go")
+	for _, f := range files {
+		if strings.HasSuffix(f, "_test.go") {
+			continue
+		}
+		src, _ := os.ReadFile(f)
+		for i, line := range strings.Split(string(src), "\n") {
+			if re.MatchString(line) && !strings.Contains(line, "changeHands(") && !strings.Contains(strings.TrimSpace(line), "//") {
+				// a statement continued from a changeHands( line above is fine
+				prev := strings.Split(string(src), "\n")
+				near := false
+				for k := i - 1; k >= 0 && k >= i-3; k-- {
+					near = near || strings.Contains(prev[k], "changeHands(")
+				}
+				if near {
+					continue
+				}
+				t.Errorf("%s:%d writes a hand without changeHands: %s", f, i+1, strings.TrimSpace(line))
+			}
+		}
+	}
+}
+
+// I-GM-9 and I-ALDEN-5: the whole submission text; a round turn is open only until it is sent.
+func TestSubmissionTextAndRoundTurn(t *testing.T) {
+	long := strings.Repeat("Alden studies the circle. ", 20)
+	if w := submissionWhat("POST", "/api/action", []byte(`{"action":"declare","description":"`+long+`"}`)); !strings.Contains(w, strings.TrimSpace(long)) {
+		t.Errorf("the submission text is cut: %q", w)
+	}
+	for status, open := range map[string]bool{statusNotSubmitted: true, statusStandIn: true, statusSubmitted: false, statusResolved: false, statusWaiting: false} {
+		if roundTurnOpen(status) != open {
+			t.Errorf("roundTurnOpen(%s) = %v", status, !open)
+		}
+	}
+}

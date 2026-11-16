@@ -25,6 +25,8 @@ type tableRuleDef struct {
 	Title   string            `json:"title"`
 	Default string            `json:"default"`
 	Options []tableRuleOption `json:"options"`
+	// WithSchedule: what the rule is instead while the campaign's turn schedule is on or paused ("" when it applies the same)
+	WithSchedule string `json:"with_schedule,omitempty"`
 }
 
 var tableRuleDefs = []tableRuleDef{
@@ -65,7 +67,7 @@ func init() {
 			{"24h", "24 hours", "Skipped after 24 hours."},
 			{"48h", "48 hours", "Skipped after 48 hours."},
 			{"off", "Off", "Players are never skipped automatically outside combat."},
-		}})
+		}, WithSchedule: "Not used while the turn schedule is on: outside a fight, a player who sends nothing in a round has the GM take a stand-in turn at the round's final check-in, never a skip."})
 }
 
 // timeoutRule: the campaign's timeout for a table rule ("4h" ...); ok is false when it is "off".
@@ -133,11 +135,17 @@ func tableRule(lobbyID int, key string) string {
 // tableRulesView is the readable form: each rule with the chosen option's label and text.
 func tableRulesView(lobbyID int) []map[string]interface{} {
 	vals := campaignTableRules(lobbyID)
+	state, _ := scheduleStateOf(db, lobbyID)
+	scheduled := usesSchedule(state)
 	var out []map[string]interface{}
 	for _, d := range tableRuleDefs {
 		for _, o := range d.Options {
 			if o.Value == vals[d.Key] {
-				out = append(out, map[string]interface{}{"key": d.Key, "title": d.Title, "value": o.Value, "label": o.Label, "text": o.Text, "is_default": o.Value == d.Default})
+				v := map[string]interface{}{"key": d.Key, "title": d.Title, "value": o.Value, "label": o.Label, "text": o.Text, "is_default": o.Value == d.Default}
+				if scheduled && d.WithSchedule != "" { // what the rule is while the schedule is on (playtest I-ROWAN-6)
+					v["label"], v["text"], v["applies"] = o.Label+" (not used with the turn schedule)", d.WithSchedule, false
+				}
+				out = append(out, v)
 			}
 		}
 	}

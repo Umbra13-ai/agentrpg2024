@@ -124,7 +124,7 @@ func dancingSword(charID int, it invItem, req itemCastReq) string {
 	if hovering {
 		attacks = atoiSafe(e.Detail)
 	} else {
-		db.Exec(`UPDATE characters SET equipped_main_hand = NULL WHERE id = $1 AND equipped_main_hand = $2`, charID, name)
+		changeHands(charID, `UPDATE characters SET equipped_main_hand = NULL WHERE id = $1 AND equipped_main_hand = $2`, charID, name)
 	}
 	attacks++
 	// "The sword uses your attack roll": the owner's roll by the one attack function (attack_2024.go); the sword is next to its target
@@ -145,7 +145,7 @@ func dancingSword(charID int, it invItem, req itemCastReq) string {
 	}
 	db.Exec(`DELETE FROM spell_effects WHERE lobby_id = $1 AND target_id = $2 AND kind = 'dancing_sword'`, lobby, charID)
 	if attacks >= 4 {
-		db.Exec(`UPDATE characters SET equipped_main_hand = $1 WHERE id = $2 AND COALESCE(equipped_main_hand,'') = ''`, name, charID)
+		changeHands(charID, `UPDATE characters SET equipped_main_hand = $1 WHERE id = $2 AND COALESCE(equipped_main_hand,'') = ''`, name, charID)
 		return text + " That was its fourth attack: it flies back to your hand (or falls in your space if no hand is free)."
 	}
 	addSpellEffect(lobby, charID, charID, "Dancing Sword", "dancing_sword", strconv.Itoa(attacks), 999999, "", 0)

@@ -416,7 +416,7 @@ func checkInAt(in checkInInputs, now time.Time) checkIn {
 		out.Message = "The turn schedule is off: the campaign plays as before."
 		return out
 	case in.Round == nil:
-		out.Message = "No round is open: a round opens when a fight starts or when the GM turns the schedule on."
+		out.Message = "No round is open: one opens when the GM starts the campaign (or turns the schedule on), when a fight starts and when a fight ends."
 		return out
 	}
 	r := in.Round
@@ -753,6 +753,9 @@ func roundNoteFor(lobby, charID int) (map[string]interface{}, error) {
 			continue
 		}
 		v["status"], v["message"] = c.Status, c.Message
+		if ci.Round.Kind != roundCombat { // outside a fight, the round says whether the player can still send its turn (playtest I-ALDEN-5)
+			v["your_turn"] = roundTurnOpen(c.Status)
+		}
 		if c.WaitingOn != nil {
 			v["waiting_on"] = c.WaitingOn.Name
 		}
@@ -766,6 +769,12 @@ func roundNoteFor(lobby, charID int) (map[string]interface{}, error) {
 		v["how_to_send"] = fmt.Sprintf("Send your turn as usual (POST /api/action, a rest, a feature, buying or changing gear once you have played a round): outside a fight it is saved as your submission for this round (202) and the GM applies it at a check-in. Speech and campaign messages are immediate. DELETE /api/campaigns/%d/round?character_id=%d withdraws it.", lobby, charID)
 	}
 	return v, nil
+}
+
+// roundTurnOpen: a player can still send this round's turn (nothing sent and nothing resolved yet). my-turn's is_my_turn and the
+// heartbeat's your_turn outside a fight read it through roundNoteFor's your_turn.
+func roundTurnOpen(status string) bool {
+	return status == statusNotSubmitted || status == statusStandIn
 }
 
 // roundOrNil: roundNoteFor as a reply field (nil without the schedule; a database failure in it is answered by guardDB).

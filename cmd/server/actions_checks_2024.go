@@ -74,9 +74,13 @@ func pickSkill(description string, choices []skillChoice, def string) skillChoic
 func checkBonus(charID int, class string, level int, skill string, abilityScore int) (mod, prof int, profNote string, reliable bool) {
 	mod = game.Modifier(abilityScore)
 	var profs, expertise string
-	db.QueryRow("SELECT COALESCE(skill_proficiencies, ''), COALESCE(expertise, '') FROM characters WHERE id = $1", charID).Scan(&profs, &expertise)
+	var wis int
+	db.QueryRow("SELECT COALESCE(skill_proficiencies, ''), COALESCE(expertise, ''), COALESCE(wis, 10) FROM characters WHERE id = $1", charID).Scan(&profs, &expertise, &wis)
 	profs, expertise = strings.ReplaceAll(strings.ToLower(profs), "_", " "), strings.ReplaceAll(strings.ToLower(expertise), "_", " ")
 	skill = strings.ReplaceAll(skill, "_", " ")
+	if skill == "" {
+		return mod, 0, "", false
+	}
 	proficient := strings.Contains(profs, skill)
 	switch {
 	case proficient && strings.Contains(expertise, skill):
@@ -90,9 +94,22 @@ func checkBonus(charID int, class string, level int, skill string, abilityScore 
 	if v, ok := wildShapeBeastMod(charID, skill); ok && v > mod+prof {
 		mod = v - prof // Wild Shape: the beast's skill modifier when it's higher
 	}
-	mod += magicCheckBonus(charID)         // Stone of Good Luck
-	mod += glovesOfThievery(charID, skill) // F165 (items_c5_2024.go)
+	mod += orderSkillBonus(charID, skill, wis) // Thaumaturge / Magician (class_orders.go; playtest I-ALDEN-3)
+	mod += magicCheckBonus(charID)             // Stone of Good Luck
+	mod += glovesOfThievery(charID, skill)     // F165 (items_c5_2024.go)
 	return
+}
+
+// skillBonuses: each of the 18 skills' check bonus as checkBonus works it out (the sheet's skill_bonuses, which the character
+// page shows, so the page and the rolls agree). Exhaustion is not in it: the sheet shows that separately.
+func skillBonuses(charID int, class string, level int, scores map[string]int) map[string]int {
+	out := map[string]int{}
+	for _, name := range game.SkillNames() {
+		sk, _ := game.LookupSkill(name)
+		mod, prof, _, _ := checkBonus(charID, class, level, sk.Name, scores[sk.Ability])
+		out[game.SkillSlug(sk.Name)] = mod + prof
+	}
+	return out
 }
 
 // characterSkillProficiency reports whether a character is proficient in a skill, and whether they have Expertise in it.

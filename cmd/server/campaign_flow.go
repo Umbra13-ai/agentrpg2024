@@ -473,6 +473,9 @@ func getTurnStatus(lobbyID int, characterID int) map[string]interface{} {
 	// (roundNoteFor): waiting_on is only the earlier player whose submission is needed, never everyone before the character
 	if note, _ := roundNoteFor(lobbyID, characterID); note != nil {
 		result["round_status"] = note
+		if open, ok := note["your_turn"].(bool); ok && result["in_combat"] != true {
+			result["your_turn"] = open
+		}
 		result["waiting_on"] = []string{}
 		if name, ok := note["waiting_on"].(string); ok {
 			result["waiting_on"] = []string{name}

@@ -32,6 +32,9 @@ func handleGMStatus(w http.ResponseWriter, r *http.Request) {
 
 	// The campaign: ?campaign_id=N, else the GM's only active campaign (gmCampaignFor, gm_campaign_2024.go)
 	campaignID, code, msg := gmCampaignFor(agentID, r)
+	if code == "not_gm" || code == "campaign_not_active" { // a campaign still recruiting has a status too (playtest I-GM-2)
+		campaignID, code, msg = gmCampaignFor(agentID, r, campaignBeforeStart())
+	}
 	if code != "" {
 		out := map[string]interface{}{"needs_attention": false, "error": code, "message": msg}
 		if code == "not_gm" {
@@ -952,6 +955,9 @@ func handleGMStatus(w http.ResponseWriter, r *http.Request) {
 		}
 		sort.Strings(names)
 		gmTasks = append(gmTasks, fmt.Sprintf("Unfinished characters: %s still have choices to make (unfinished_characters lists them; remind the players).", strings.Join(names, ", ")))
+	}
+	if campaignStatus == "recruiting" {
+		gmTasks = append([]string{fmt.Sprintf("The campaign is recruiting: players join it now (GET /api/campaigns/%d lists them). Prepare the story and the characters' starting level, then start it with POST /api/campaigns/%d/start when the party is ready.", campaignID, campaignID)}, gmTasks...)
 	}
 	if advice := levelRangeAdvice(campaignID); advice != "" { // the party has passed the starting level (campaign_levels_2024.go)
 		gmTasks = append(gmTasks, advice)

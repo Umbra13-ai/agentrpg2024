@@ -302,6 +302,21 @@ Add to the owner, never beside it. When you give another rule one owner, add it 
   action through the server.
 - **How to act (`GET /api/my-turn`'s `how_to_act`):** `actionHowTo` (`cmd/server/actions.go`), made from `actionRequest`'s
   fields and the character's real enemies.
+- **The equipped hands:** `changeHands` (`cmd/server/equipped_weapons.go`) is the one writer of `equipped_main_hand` /
+  `equipped_off_hand`: it runs the change, then `syncHeldItems`, so the inventory's "held" marks, the shop and the sheet agree
+  (playtest I-ROWAN-7). `TestNoOtherHandWriter` checks.
+- **A skill check's bonus:** `checkBonus` (`cmd/server/actions_checks_2024.go`): the ability modifier, proficiency or Expertise, Jack
+  of All Trades, the Thaumaturge or Magician bonus (`orderSkillBonus`), items and Wild Shape. The player's checks, the GM's skill
+  checks (`gm_checks.go`) and the sheet's `skill_bonuses` (`skillBonuses`, which the character page shows and its passives use)
+  read it (playtest I-ALDEN-3).
+- **Is a character finished:** `characterToFinish` (the open choices of `choiceDefs`): the sheet's and `GET /setup`'s
+  `character_finished` are both it; `setup`'s `steps_left` also counts the guided steps after it (a weapon in hand, the shop, the
+  portrait), which can wait (playtest I-ROWAN-2). **The highest spell level a character can prepare** is `maxSpellLevelFor` (its
+  slots): the setup spells step, Magical Discoveries and the preparation check read it (playtest I-ALDEN-4).
+- **Can a player send its turn now, outside a fight, with the schedule:** `roundTurnOpen` through `roundNoteFor`'s `your_turn`:
+  my-turn's `is_my_turn` and the heartbeat's `your_turn` read it (playtest I-ALDEN-5). **A character seated in a campaign that
+  hasn't started** is `actingCharacter`'s `waitingToStart` (a no-row error), answered `campaign_not_started` by
+  `answerNoActiveGame` (playtest I-ROWAN-1).
 - **Carried weight:** `inventoryWeight` and `itemUnitWeight` (`cmd/server/srd_gear.go`). **Carrying Capacity:** `carryingCapacity` (size and
   Powerful Build) with `carryingOf` (`character_gear.go`): GET /characters/encumbrance and the sheet's `carrying`, which the character
   page shows (it computes nothing itself). **A weapon is stored** with

@@ -916,8 +916,8 @@ func handleCharacterEquipWeapon(w http.ResponseWriter, r *http.Request) {
 	}
 
 	// Update database
-	_, err = db.Exec(`UPDATE characters SET equipped_main_hand = $1, equipped_off_hand = $2 WHERE id = $3`,
-		newMainHand, newOffHand, req.CharacterID)
+	_, err = changeHands(req.CharacterID, `UPDATE characters SET equipped_main_hand = $1, equipped_off_hand = $2 WHERE id = $3`,
+		newMainHand, newOffHand, req.CharacterID) // the equipped weapon is now held; the one it replaced is sheathed
 	if err != nil {
 		w.WriteHeader(http.StatusInternalServerError)
 		json.NewEncoder(w).Encode(map[string]interface{}{"error": "database_error"})
@@ -927,7 +927,6 @@ func handleCharacterEquipWeapon(w http.ResponseWriter, r *http.Request) {
 		weaponInfo["base_weapon"] = baseKey
 		updateInventoryItem(req.CharacterID, weaponInfo, func(x invItem) { x["base_weapon"] = baseKey }) // inventory_2024.go
 	}
-	syncHeldItems(req.CharacterID) // the equipped weapon is now held; the one it replaced is sheathed
 
 	response := map[string]interface{}{
 		"success":            true,
@@ -1060,14 +1059,13 @@ func handleCharacterUnequipWeapon(w http.ResponseWriter, r *http.Request) {
 	}
 
 	// Update database
-	_, err = db.Exec(`UPDATE characters SET equipped_main_hand = $1, equipped_off_hand = $2 WHERE id = $3`,
-		newMainHand, newOffHand, req.CharacterID)
+	_, err = changeHands(req.CharacterID, `UPDATE characters SET equipped_main_hand = $1, equipped_off_hand = $2 WHERE id = $3`,
+		newMainHand, newOffHand, req.CharacterID) // the equipped weapon is now held; the one it replaced is sheathed
 	if err != nil {
 		w.WriteHeader(http.StatusInternalServerError)
 		json.NewEncoder(w).Encode(map[string]interface{}{"error": "database_error"})
 		return
 	}
-	syncHeldItems(req.CharacterID) // the equipped weapon is now held; the one it replaced is sheathed
 
 	action := "stowed"
 	groundIDs := []int{}

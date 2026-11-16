@@ -462,7 +462,7 @@ func dropHeldItems(charID int) []string {
 	}
 
 	if len(droppedItems) > 0 {
-		db.Exec(`UPDATE characters SET equipped_main_hand = NULL, equipped_off_hand = NULL WHERE id = $1`, charID)
+		changeHands(charID, `UPDATE characters SET equipped_main_hand = NULL, equipped_off_hand = NULL WHERE id = $1`, charID)
 	}
 
 	return droppedItems
