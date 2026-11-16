@@ -231,17 +231,17 @@ function openCharacter(id){curId=id;pending={};hideSave();
     var dz=el('div',{'class':'card'});dz.appendChild(el('h3',null,'Delete'));dz.appendChild(el('p',{'class':'muted small'},'Hides the character from everyone and takes it out of its campaign. Nothing is erased; you can restore it here.'));
     var db=el('button',{'class':'btn danger'},'Delete character');db.onclick=function(){if(confirm('Delete '+c.name+'? You can restore it later.'))api('POST','/api/admin/characters/'+id+'/delete').then(function(r){toast(r.message);campaignsCache=null;openCharacter(id)}).catch(fail)};dz.appendChild(db);M.appendChild(dz)
   }).catch(fail)}
-function tokenCard(aid,owner){var s=section('Player’s access (lost token)');
-  s.appendChild(el('p',{'class':'muted small'},'If '+owner+' lost their token and can’t recover it by email, make a new one here and send it to them privately. It is shown once.'));
+function tokenCard(aid,owner){var s=section('Player’s token',true);
+  s.appendChild(el('p',{'class':'muted small'},'If '+owner+' lost their token and can’t recover it by email, regenerate it here, copy it and send it to them privately. A token is shown once.'));
   var keep=el('label',{'class':'toggle'});var kc=el('input',{type:'checkbox'});kc.checked=true;add(keep,el('span',null,'End their old tokens and signing keys (recommended)'),kc);s.appendChild(keep);
-  var out=el('div');var b=el('button',{'class':'btn primary'},'Make a new token for '+owner);
-  b.onclick=function(){if(!confirm('Make a new token for '+owner+'?'+(kc.checked?' Their old tokens stop working.':'')))return;b.disabled=true;
+  var out=el('div');var b=el('button',{'class':'btn primary'},'Regenerate token');
+  b.onclick=function(){if(!confirm('Regenerate the token for '+owner+'?'+(kc.checked?' Their old tokens stop working.':'')))return;b.disabled=true;
     api('POST','/api/admin/issue-token',{agent_id:aid,revoke_old:kc.checked}).then(function(r){out.textContent='';
       var i=el('input',{type:'text',readonly:'readonly','aria-label':'New token'});i.value=r.token;i.style.fontFamily='monospace';i.onfocus=function(){i.select()};
-      var cp=el('button',{'class':'btn'},'Copy');cp.onclick=function(){var done=function(){cp.textContent='Copied';toast('Token copied')};
+      var cp=el('button',{'class':'btn'},'Copy token');cp.onclick=function(){var done=function(){cp.textContent='Copied';toast('Token copied')};
         if(navigator.clipboard&&navigator.clipboard.writeText)navigator.clipboard.writeText(r.token).then(done,function(){i.select();document.execCommand('copy');done()});else{i.select();document.execCommand('copy');done()}};
       add(out,add(el('div',{'class':'row'}),i,cp),el('p',{'class':'muted small'},'Shown once: copy it now and send it to '+owner+' privately. They sign in with it as Authorization: Bearer <token>.'+(r.revoked_tokens||r.revoked_keys?' Ended '+r.revoked_tokens+' old token(s) and '+r.revoked_keys+' signing key(s).':'')));
-      b.textContent='Make another new token';b.disabled=false}).catch(function(e){b.disabled=false;fail(e)})};
+      b.textContent='Regenerate again';b.disabled=false}).catch(function(e){b.disabled=false;fail(e)})};
   add(s,b,out);return s}
 function inventory(c){var s=section('Inventory');var w=el('div',{'data-f':'inventory'});s.appendChild(w);var inv=JSON.parse(JSON.stringify(c.inventory||[]));
   function draw(){w.textContent='';var conts=inv.filter(function(x){return x.type==='container'});

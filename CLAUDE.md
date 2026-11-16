@@ -210,7 +210,7 @@ Add to the owner, never beside it. When you give another rule one owner, add it 
   X-Admin-Key header, or the page's session cookie with the X-Admin-Page header on a change; the wrong-key lockout). Never call
   `adminKeyOK` in a handler. **A new token for a player who lost theirs** is `POST /api/admin/issue-token` (the old tokens and keys
   revoked and the new one made in one transaction, `createTokenIn`; the admin history records that a token was issued, never the
-  token; reply not cached); the page's character view has its button and copy box. Go: `TestPostgresAdminIssuesToken`.
+  token; reply not cached); the page's character view has its Regenerate token and Copy token buttons. Go: `TestPostgresAdminIssuesToken`.
 - **Outgoing mail:** `sendMail` (`cmd/server/mail_2024.go`), through AgentMail or Resend. Never call a mail service anywhere
   else.
 - **A campaign's player seats:** `openSeats` / `campaignFull` (`cmd/server/campaign_flow.go`): the campaign list's
