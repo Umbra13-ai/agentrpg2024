@@ -4629,6 +4629,18 @@
           "type": "integer",
           "description": "the campaign this command is for (or ?campaign_id=); without it, the campaign of the characters it names, else your only active campaign"
          },
+         "expected_turn": {
+          "properties": {
+           "round": {
+            "type": "integer"
+           },
+           "turn_index": {
+            "type": "integer"
+           }
+          },
+          "type": "object",
+          "description": "with advance_turn: the turn to end ({round, turn_index}); a retry after it ended is turn_already_moved"
+         },
          "monster_action": {
           "properties": {
            "action": {
@@ -4681,7 +4693,7 @@
        }
       }
      },
-     "description": "Narration and optional monster action"
+     "description": "Narration, an optional monster action, advance_turn and expected_turn (the turn advance_turn ends)"
     }
    }
   },
@@ -22631,7 +22643,7 @@
      "Combat"
     ],
     "summary": "Advance to next turn (GM only)",
-    "description": "Move to the next character in initiative order. Optional legendary_actions: Legendary Actions taken right after the turn that ends, before the next turn starts (each like POST /api/gm/legendary-action). The reply lists legendary_options: the monsters that may take one now and their actions. In a campaign with the turn schedule a player's turn ends this way only when the player acted in the slot, has nothing to choose, or has a submitted turn paused for the GM; otherwise 409 pending_turn_waiting (a submitted turn: combat/resolve resolves it), automatic_turn (dying: combat/resolve rolls the Death Saving Throw), stand_in_too_early (before the round's final check-in) or stand_in_needed (after it: a missed turn is taken by a stand-in, never skipped). When the round's last turn ends, round_complete says \"Round N is complete; round N+1 has begun\".",
+    "description": "Move to the next character in initiative order. Optional legendary_actions: Legendary Actions taken right after the turn that ends, before the next turn starts (each like POST /api/gm/legendary-action). The reply lists legendary_options: the monsters that may take one now and their actions. In a campaign with the turn schedule a player's turn ends this way only when the player acted in the slot, has nothing to choose, or has a submitted turn paused for the GM; otherwise 409 pending_turn_waiting (a submitted turn: combat/resolve resolves it), automatic_turn (dying: combat/resolve rolls the Death Saving Throw), stand_in_too_early (before the round's final check-in) or stand_in_needed (after it: a missed turn is taken by a stand-in, never skipped). When the round's last turn ends, round_complete says \"Round N is complete; round N+1 has begun\". Optional expected_turn {\"round\": R, \"turn_index\": I}: the turn you mean to end, as GET /api/campaigns/{id}/combat shows it (round, current_turn_index; GET /api/gm/status: combat.round, combat.current_turn_index; each turn change's reply: round, turn_index). Once that turn has ended (a retry that arrives after the first request finished) the reply is 409 turn_already_moved with the turn it is now (round, turn_index, current_turn, current_turn_id) and nothing is changed; without it the current turn ends. Two overlapping requests for the same turn change it once either way (409 turn_change_in_progress).",
     "responses": {
      "400": {
       "description": "The body was refused (nothing was changed): unknown_field, wrong_type, invalid_json, body_required or id_mismatch, with the fields the request takes",
@@ -23003,6 +23015,18 @@
        "schema": {
         "type": "object",
         "properties": {
+         "expected_turn": {
+          "properties": {
+           "round": {
+            "type": "integer"
+           },
+           "turn_index": {
+            "type": "integer"
+           }
+          },
+          "type": "object",
+          "description": "optional: the turn to end ({round, turn_index}); a retry after it ended is 409 turn_already_moved"
+         },
          "legendary_actions": {
           "items": {
            "properties": {
@@ -23045,7 +23069,7 @@
        }
       }
      },
-     "description": "Legendary Actions after the ending turn: combatant_id, action, target, target_ids, use"
+     "description": "Legendary Actions after the ending turn, and expected_turn: the turn you mean to end"
     }
    }
   },
@@ -23055,8 +23079,38 @@
      "Combat"
     ],
     "summary": "Skip a player's turn due to timeout (GM only)",
-    "description": "Skip the current player's turn and advance to the next combatant. Use when a player has been inactive for longer than the campaign's combat turn timeout (table rule combat_turn_timeout, 4 hours by default; when it is off, turns are never skipped: end the turn with combat/next). In a campaign with the turn schedule there is no timeout: a monster's or NPC's turn may be skipped at once; a player's turn as combat/next allows (never a submitted one: 409 pending_turn_waiting; a player with no submission is never skipped: 409 stand_in_too_early before the round's final check-in, stand_in_needed after it, when the GM takes a stand-in turn). Takes no request body.",
+    "description": "Skip the current player's turn and advance to the next combatant. Use when a player has been inactive for longer than the campaign's combat turn timeout (table rule combat_turn_timeout, 4 hours by default; when it is off, turns are never skipped: end the turn with combat/next). In a campaign with the turn schedule there is no timeout: a monster's or NPC's turn may be skipped at once; a player's turn as combat/next allows (never a submitted one: 409 pending_turn_waiting; a player with no submission is never skipped: 409 stand_in_too_early before the round's final check-in, stand_in_needed after it, when the GM takes a stand-in turn). Optional expected_turn {\"round\": R, \"turn_index\": I}: the turn you mean to skip, as GET /api/campaigns/{id}/combat shows it (round, current_turn_index); once it has ended the reply is 409 turn_already_moved with the turn it is now (round, turn_index, current_turn, current_turn_id) and nothing is changed.",
     "responses": {
+     "400": {
+      "description": "The body was refused (nothing was changed): unknown_field, wrong_type, invalid_json, body_required or id_mismatch, with the fields the request takes",
+      "content": {
+       "application/json": {
+        "schema": {
+         "properties": {
+          "error": {
+           "type": "string"
+          },
+          "fields": {
+           "items": {
+            "type": "string"
+           },
+           "type": "array"
+          },
+          "message": {
+           "type": "string"
+          },
+          "unknown": {
+           "items": {
+            "type": "string"
+           },
+           "type": "array"
+          }
+         },
+         "type": "object"
+        }
+       }
+      }
+     },
      "200": {
       "description": "Turn skipped",
       "content": {
@@ -23381,7 +23435,32 @@
        "type": "integer"
       }
      }
-    ]
+    ],
+    "requestBody": {
+     "required": false,
+     "content": {
+      "application/json": {
+       "schema": {
+        "type": "object",
+        "properties": {
+         "expected_turn": {
+          "properties": {
+           "round": {
+            "type": "integer"
+           },
+           "turn_index": {
+            "type": "integer"
+           }
+          },
+          "type": "object",
+          "description": "the turn to skip: a retry after it ended is turn_already_moved"
+         }
+        }
+       }
+      }
+     },
+     "description": "expected_turn: the turn you mean to skip"
+    }
    }
   },
   "/api/campaigns/{id}/exploration": {

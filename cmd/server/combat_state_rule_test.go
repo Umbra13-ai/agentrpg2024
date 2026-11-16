@@ -98,17 +98,31 @@ func TestTurnCheck(t *testing.T) {
 	if code, _ := (turnHow{}).check(base()); code != "" {
 		t.Errorf("a usable turn: %q", code)
 	}
-	for name, ref := range map[string]turnRef{"round": {1, 1, started}, "index": {2, 2, started}, "clock": {2, 1, started.Add(time.Second)}} {
+	for name, ref := range map[string]turnRef{"round": {Round: 1, Index: 1, StartedAt: started}, "index": {Round: 2, Index: 2, StartedAt: started},
+		"clock": {Round: 2, Index: 1, StartedAt: started.Add(time.Second)}} {
 		ref := ref
 		if code, _ := (turnHow{expect: &ref}).check(base()); code != "turn_already_advanced" {
 			t.Errorf("another %s: %q", name, code)
 		}
+		ref.Named = true // the request named it (expected_turn): the refusal says the turn has moved, and to which turn
+		if code, msg := (turnHow{expect: &ref}).check(base()); code != "turn_already_moved" || !strings.Contains(msg, `expected_turn {"round": 2, "turn_index": 1}`) {
+			t.Errorf("another %s, named: %q %q", name, code, msg)
+		}
 	}
-	if code, _ := (turnHow{expect: &turnRef{2, 1, started}}).check(base()); code != "" {
+	if code, _ := (turnHow{expect: &turnRef{Round: 2, Index: 1, StartedAt: started}}).check(base()); code != "" {
 		t.Errorf("the expected turn: %q", code)
+	}
+	if code, _ := (turnHow{expect: &turnRef{Round: 2, Index: 1, Named: true}}).check(base()); code != "" {
+		t.Errorf("the named turn, still current: %q", code)
 	}
 	held := base()
 	held.claimHeld = true
+	if code, _ := (turnHow{expect: &turnRef{Round: 2, Index: 1, Named: true}}).check(held); code != "turn_change_in_progress" {
+		t.Errorf("the named turn while its change is under way (an overlapping retry): %q", code)
+	}
+	if code, _ := (turnHow{expect: &turnRef{Round: 1, Index: 2, Named: true}}).check(held); code != "turn_already_moved" {
+		t.Errorf("a named turn that has ended, while the next change is under way: %q", code)
+	}
 	if code, _ := (turnHow{}).check(held); code != "turn_change_in_progress" {
 		t.Errorf("a change under way: %q", code)
 	}

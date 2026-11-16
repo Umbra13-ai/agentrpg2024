@@ -1334,7 +1334,8 @@ type gmNarrateRequest struct {
 		Point        []int  `json:"point"`         // [x, y]: the grid square an area is aimed at on the battle map (a Sphere's center, a Cone's or Line's direction)
 		AllyAdjacent bool   `json:"ally_adjacent"` // an ally of the monster (not Incapacitated) is within 5 feet of the target: Pack Tactics without a battle map
 	} `json:"monster_action"`
-	AdvanceTurn bool `json:"advance_turn"` // true: end the current turn after the narration (as POST .../combat/next)
+	AdvanceTurn  bool          `json:"advance_turn"`  // true: end the current turn after the narration (as POST .../combat/next)
+	ExpectedTurn *expectedTurn `json:"expected_turn"` // with advance_turn: the turn to end ({round, turn_index}); a retry after it ended is turn_already_moved
 }
 
 // validateGMNarrateRequest keeps a successful narration response meaningful.
@@ -1360,26 +1361,6 @@ func isNarrativeOnlyMonsterAction(action string) bool {
 	}
 }
 
-// Validate the optional initiative advance before recording any narration or
-// monster action. Otherwise a 409 can leave a successful-looking narrative
-// write behind even though no turn could be advanced.
-func validateGMNarratedCombatAdvance(campaignID int) string {
-	var active bool
-	var turnIndex int
-	var orderJSON []byte
-	if err := db.QueryRow(`SELECT active, turn_order, current_turn_index FROM combat_state WHERE lobby_id = $1`, campaignID).Scan(&active, &orderJSON, &turnIndex); err != nil || !active {
-		return "combat_not_active"
-	}
-	var order []json.RawMessage
-	if err := json.Unmarshal(orderJSON, &order); err != nil || len(order) == 0 {
-		return "no_combatants"
-	}
-	if turnIndex < 0 || turnIndex >= len(order) {
-		return "invalid_combat_turn"
-	}
-	return ""
-}
-
 // recordGMAction only reports success after the action is durably inserted.
 // A failed insert must not be presented to a GM as a completed narration.
 func recordGMAction(database *sql.DB, campaignID int, actionType, description, result string) error {
@@ -1389,13 +1370,13 @@ func recordGMAction(database *sql.DB, campaignID int, actionType, description, r
 
 // handleGMNarrate godoc
 // @Summary Submit GM narration and monster actions
-// @Description GM submits narrative text and optionally runs a monster action. Attacks resolve mechanically; positioning beats (for example, reposition) are narration-only. monster_action: {"monster", "action" (an action of its stat block, "Multiattack", or a named attack), "target" (a character's name or id, or a companion's name, nickname or combat id), "target_ids" (characters in a saving throw effect), "use" (a choice the entry needs, such as Command's word: approach, drop, flee, grovel or halt; or a spell the entry offers, such as the Pit Fiend's "Hold Monster" or one of a Lich's spells), "point": [x, y] (aims an area at a grid square; every character in a monster's area on the map is affected, listed or not), "apply_damage": true}. A Multiattack also resolves the actions without an attack roll it names (a Vampire's Bite).
+// @Description GM submits narrative text and optionally runs a monster action. Attacks resolve mechanically; positioning beats (for example, reposition) are narration-only. monster_action: {"monster", "action" (an action of its stat block, "Multiattack", or a named attack), "target" (a character's name or id, or a companion's name, nickname or combat id), "target_ids" (characters in a saving throw effect), "use" (a choice the entry needs, such as Command's word: approach, drop, flee, grovel or halt; or a spell the entry offers, such as the Pit Fiend's "Hold Monster" or one of a Lich's spells), "point": [x, y] (aims an area at a grid square; every character in a monster's area on the map is affected, listed or not), "apply_damage": true}. A Multiattack also resolves the actions without an attack roll it names (a Vampire's Bite). advance_turn: true ends the current turn after the narration (as POST /api/campaigns/{id}/combat/next); with it, optional expected_turn {"round": R, "turn_index": I} names the turn to end, as GET /api/campaigns/{id}/combat shows it (round, current_turn_index; GET /api/gm/status: combat.round, combat.current_turn_index). Once that turn has ended (a retry after the first request finished) the reply is 409 turn_already_moved with the turn it is now (round, turn_index, current_turn, current_turn_id), narration_recorded false: nothing is recorded or changed.
 // @Tags GM
 // @Accept json
 // @Produce json
 // @Param Authorization header string true "Bearer <token>"
 // @Param campaign_id query int false "Active campaign to narrate; body campaign_id is also accepted. Required when the GM runs more than one."
-// @Body Narration and optional monster action
+// @Body Narration, an optional monster action, advance_turn and expected_turn (the turn advance_turn ends)
 // @Success 200 {object} map[string]interface{} "Narration recorded, action resolved"
 // @Failure 400 {object} map[string]interface{} "Missing, conflicting, or unavailable campaign ID"
 // @Failure 401 {object} map[string]interface{} "Unauthorized"
@@ -1429,10 +1410,18 @@ func handleGMNarrate(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	if req.AdvanceTurn {
-		if advanceErr := validateGMNarratedCombatAdvance(campaignID); advanceErr != "" {
-			w.WriteHeader(http.StatusConflict)
-			json.NewEncoder(w).Encode(map[string]interface{}{"error": advanceErr, "narration_recorded": false})
+	if req.ExpectedTurn != nil && !req.AdvanceTurn {
+		writeJSONStatus(w, http.StatusBadRequest, map[string]interface{}{"error": "invalid_expected_turn",
+			"message": "expected_turn names the turn advance_turn ends: send it with \"advance_turn\": true. Nothing was changed."})
+		return
+	}
+	named, ok := namedTurn(w, campaignID, req.ExpectedTurn)
+	if !ok {
+		return
+	}
+	if req.AdvanceTurn { // a turn change refused anyway refuses the whole request before the narration is recorded
+		if t, code := precheckTurn(campaignID, turnHow{expect: named}); code != "" {
+			answerTurnRefusal(w, campaignID, t, code, map[string]interface{}{"narration_recorded": false})
 			return
 		}
 	}
@@ -1516,7 +1505,7 @@ func handleGMNarrate(w http.ResponseWriter, r *http.Request) {
 	// Advance turn if requested: the one turn change (turn_advance_2024.go), with every hook of the turn that ends and the one that
 	// starts, and a fresh turn clock (the previous turn's clock made the next player look overdue at once).
 	if req.AdvanceTurn {
-		end, _, err := gmEndsTurn(campaignID) // with the turn schedule, a player's turn ends only as the schedule allows
+		end, _, err := gmEndsTurn(campaignID, named) // with the turn schedule, a player's turn ends only as the schedule allows
 		if answerDBFailure(w, err, "the campaign's turn schedule") {
 			return
 		}

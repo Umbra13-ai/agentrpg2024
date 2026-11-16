@@ -13,7 +13,9 @@ package main
 // A change runs in four steps:
 //  1. claim: with the fight's row locked, the turn is checked (an expected turn, a timeout) and marked as being changed
 //     (turn_claim). A second change of the same fight while the mark stands is refused (turn_change_in_progress), so a double
-//     submit or the timeout worker racing the GM changes the turn once.
+//     submit or the timeout worker racing the GM changes the turn once. A request that names the turn it means to end
+//     (expected_turn: combat/next, combat/skip, narrate's advance_turn) is refused once that turn has ended (turn_already_moved,
+//     with the turn it is now), so a retry that arrives after the first change finished doesn't end the next turn too.
 //  2. the ending creature's hooks run (the turn order still points at it), then the caller's between step (Legendary Actions);
 //  3. move: with the row locked again, the next creature that has a turn is chosen (dead characters and monsters at 0 Hit Points
 //     have none; a Thief's Reflexes second turn is dropped after round 1) and the round, index and turn clock are written;
@@ -35,12 +37,41 @@ import (
 type turnRef struct {
 	Round, Index int
 	StartedAt    time.Time // compared when set
+	Named        bool      // the request named this turn (expected_turn): once it has moved the change is refused as turn_already_moved
+}
+
+// isCurrent is whether f is still at this turn.
+func (e *turnRef) isCurrent(f *fight) bool {
+	return f.Round == e.Round && f.Index == e.Index && (e.StartedAt.IsZero() || f.StartedAt.Equal(e.StartedAt))
+}
+
+// expectedTurn is the turn a request means to end (expected_turn on combat/next, combat/skip and narrate's advance_turn): the
+// round and the turn's place in the turn order, as GET /api/campaigns/{id}/combat (round, current_turn_index), GET /api/gm/status
+// (combat.round, combat.current_turn_index) and every turn change's reply (round, turn_index) show them. A retry of a turn change
+// that already happened then answers turn_already_moved instead of ending the next creature's turn too.
+type expectedTurn struct {
+	Round     int  `json:"round"`
+	TurnIndex *int `json:"turn_index"`
+}
+
+// namedTurn is a request's expected_turn as the turn change reads it: nil when it wasn't sent. An incomplete one is answered 400
+// invalid_expected_turn here and ok is false.
+func namedTurn(w http.ResponseWriter, lobby int, e *expectedTurn) (named *turnRef, ok bool) {
+	if e == nil {
+		return nil, true
+	}
+	if e.Round < 1 || e.TurnIndex == nil || *e.TurnIndex < 0 {
+		writeJSONStatus(w, http.StatusBadRequest, map[string]interface{}{"error": "invalid_expected_turn",
+			"message": fmt.Sprintf("expected_turn names the turn to end: {\"round\": 1 or more, \"turn_index\": 0 or more}, as GET /api/campaigns/%d/combat shows them (round, current_turn_index). Nothing was changed.", lobby)})
+		return nil, false
+	}
+	return &turnRef{Round: e.Round, Index: *e.TurnIndex, Named: true}, true
 }
 
 // turnHow is how a turn ends.
 type turnHow struct {
 	by      string                                // who or what ends it, for the note of a pending turn it closes ("the GM skipped the turn")
-	expect  *turnRef                              // advance only while this is still the current turn (the timeout worker, the pending-turn walk)
+	expect  *turnRef                              // advance only while this is still the current turn (the timeout worker, the pending-turn walk, gmEndsTurn, expected_turn)
 	allow   func(f *fight) (code, message string) // a check of the turn under the lock (skip: a player's turn that has timed out)
 	between func(t *turnChange)                   // after the ending creature's hooks, before the next one's turn starts (Legendary Actions)
 	remove  int                                   // this creature, whose turn it is, leaves the fight: no end-of-turn hooks; the next one starts
@@ -68,6 +99,7 @@ type turnChange struct {
 	SpellNotes     []string               // Blink, Regenerate, Aura of Life ... (moreTurnHooks)
 	Survivor       map[string]interface{} // Champion level 18
 	Message        string                 // why a change was refused
+	Now            map[string]interface{} // a refusal because the turn has moved: the turn it is now (round, turn_index, current_turn, current_turn_id)
 }
 
 // window is the Legendary Action window the ended turn opens ("round:index").
@@ -183,23 +215,13 @@ func newClaimToken() string {
 
 // claimTurn checks the turn with the row locked and marks it as being changed.
 func claimTurn(lobby int, how turnHow) (*turnChange, string, string) {
-	t := &turnChange{Lobby: lobby, how: how}
 	tx, err := db.Begin()
 	if err != nil {
-		return t, "", "database_error"
+		return &turnChange{Lobby: lobby, how: how}, "", "database_error"
 	}
 	defer tx.Rollback()
-	f, err := lockFight(tx, lobby)
-	switch {
-	case errors.Is(err, sql.ErrNoRows):
-		return t, "", "no_active_combat"
-	case errors.Is(err, errBadOrder):
-		return t, "", "invalid_combat_turn"
-	case err != nil:
-		return t, "", "database_error"
-	}
-	if code, msg := how.check(f); code != "" {
-		t.Message = msg
+	t, f, code := checkTurn(lobby, how, func() (*fight, error) { return lockFight(tx, lobby) })
+	if code != "" {
 		return t, "", code
 	}
 	cur := f.current()
@@ -216,6 +238,38 @@ func claimTurn(lobby int, how turnHow) (*turnChange, string, string) {
 	return t, token, ""
 }
 
+// precheckTurn is whether how could change the turn now, read without the lock: for a request that does something before its
+// turn change (narrate records the narration and runs a monster action first), so that a turn change refused anyway refuses the
+// whole request before anything is changed. The change itself still checks under the lock (claimTurn).
+func precheckTurn(lobby int, how turnHow) (*turnChange, string) {
+	t, _, code := checkTurn(lobby, how, func() (*fight, error) { return readFight(db, lobby) })
+	return t, code
+}
+
+// checkTurn reads the fight with read and runs how.check on it: the change so far, the fight, and "" or a refusal code (with
+// t.Message, and t.Now when the turn has moved).
+func checkTurn(lobby int, how turnHow, read func() (*fight, error)) (*turnChange, *fight, string) {
+	t := &turnChange{Lobby: lobby, how: how}
+	f, err := read()
+	switch {
+	case errors.Is(err, sql.ErrNoRows):
+		return t, nil, "no_active_combat"
+	case errors.Is(err, errBadOrder):
+		return t, nil, "invalid_combat_turn"
+	case err != nil:
+		return t, nil, "database_error"
+	}
+	code, msg := how.check(f)
+	if code == "" {
+		return t, f, ""
+	}
+	t.Message = msg
+	if cur := f.current(); cur != nil && (code == "turn_already_moved" || code == "turn_already_advanced") {
+		t.Now = map[string]interface{}{"round": f.Round, "turn_index": f.Index, "current_turn": sprintAny(cur["name"]), "current_turn_id": asInt(cur["id"])}
+	}
+	return t, f, code
+}
+
 // check is whether this turn of f may change now: the turn order is usable, the turn is the one expected, no other change of it
 // is under way, and the caller's own check passes. A code and a message when it may not.
 func (how turnHow) check(f *fight) (string, string) {
@@ -225,7 +279,15 @@ func (how turnHow) check(f *fight) (string, string) {
 	case f.current() == nil:
 		return "invalid_combat_turn", "" // kept for repair rather than guessing whose turn is consumed
 	}
-	if e := how.expect; e != nil && (f.Round != e.Round || f.Index != e.Index || (!e.StartedAt.IsZero() && !f.StartedAt.Equal(e.StartedAt))) {
+	if e := how.expect; e != nil && !e.isCurrent(f) {
+		if e.Named { // the turn the request named (expected_turn) has ended: a retry of a change that already happened
+			msg := fmt.Sprintf("The turn you named (round %d, turn_index %d) has already ended; nothing was changed.", e.Round, e.Index)
+			if cur := f.current(); cur != nil {
+				msg += fmt.Sprintf(" It is now %s's turn (round %d, turn_index %d): to end it, send expected_turn {\"round\": %d, \"turn_index\": %d}.",
+					sprintAny(cur["name"]), f.Round, f.Index, f.Round, f.Index)
+			}
+			return "turn_already_moved", msg
+		}
 		return "turn_already_advanced", ""
 	}
 	if f.claimHeld {
@@ -360,6 +422,7 @@ var turnRefusals = map[string]struct {
 	"no_combatants":           {http.StatusConflict, "The turn order is empty: add combatants with POST /api/campaigns/%d/combat/add, or end the fight."},
 	"invalid_combat_turn":     {http.StatusConflict, "The current turn points outside the turn order; nothing was changed. GET /api/campaigns/%d/combat shows the order."},
 	"turn_already_advanced":   {http.StatusConflict, "That turn has already ended; nothing was changed. GET /api/campaigns/%d/combat shows whose turn it is."},
+	"turn_already_moved":      {http.StatusConflict, "The turn named in expected_turn has already ended; nothing was changed. GET /api/campaigns/%d/combat shows whose turn it is."},
 	"turn_change_in_progress": {http.StatusConflict, "Another request is changing this turn right now (it counts once); nothing more was changed. GET /api/campaigns/%d/combat shows whose turn it is."},
 	"not_player_turn":         {http.StatusConflict, "It is a monster's or NPC's turn: only a player's turn is skipped. Resolve it and POST /api/campaigns/%d/combat/next."},
 	"turn_not_timed_out":      {http.StatusConflict, "The turn hasn't timed out yet (table rule combat_turn_timeout); end it with POST /api/campaigns/%d/combat/next if it is done."},
@@ -377,6 +440,11 @@ func answerTurnRefusal(w http.ResponseWriter, lobby int, t *turnChange, code str
 		msg = t.Message
 	}
 	out := map[string]interface{}{"error": code, "message": msg}
+	if t != nil {
+		for k, v := range t.Now { // the turn it is now (round, turn_index, current_turn, current_turn_id)
+			out[k] = v
+		}
+	}
 	for _, x := range extra {
 		for k, v := range x {
 			out[k] = v

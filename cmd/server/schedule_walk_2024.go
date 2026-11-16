@@ -335,7 +335,10 @@ type turnEndCheck struct {
 // recorded as skipped). It is refused while the player's submitted turn hasn't been tried (pending_turn_waiting: combat/resolve
 // resolves it), for a dying character's turn (automatic_turn: combat/resolve rolls the Death Saving Throw) and before the final
 // check-in (stand_in_too_early). scheduled is false for a campaign without the schedule: its callers end the turn as before.
-func gmEndsTurn(lobby int) (check turnEndCheck, scheduled bool, err error) {
+// named is the turn the request means to end (expected_turn), nil when it named none: once that turn has ended nothing here
+// judges the turn it is now; check.Expect carries the named turn and the turn change refuses it (turn_already_moved).
+func gmEndsTurn(lobby int, named *turnRef) (check turnEndCheck, scheduled bool, err error) {
+	check.Expect = named
 	state, err := scheduleStateOf(db, lobby)
 	if err != nil || !usesSchedule(state) {
 		return check, false, err
@@ -345,10 +348,10 @@ func gmEndsTurn(lobby int) (check turnEndCheck, scheduled bool, err error) {
 		return check, true, notFoundIsNothing(err) // no fight: the turn change itself answers no_active_combat
 	}
 	cur := f.current()
-	if cur == nil {
+	if cur == nil || (named != nil && !named.isCurrent(f)) {
 		return check, true, nil
 	}
-	check.Expect = &turnRef{Round: f.Round, Index: f.Index, StartedAt: f.StartedAt}
+	check.Expect = &turnRef{Round: f.Round, Index: f.Index, StartedAt: f.StartedAt, Named: named != nil}
 	id, name := asInt(cur["id"]), sprintAny(cur["name"])
 	if !characterTurn(id) {
 		return check, true, nil

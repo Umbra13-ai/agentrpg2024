@@ -1,7 +1,9 @@
 name: Tests
 
 # Every push to the branches in use and every pull request to them (audit AUD-47: the workflow ran only on main, which isn't
-# developed or deployed). The Postgres service is a throwaway database for cmd/server/postgres_integration_test.go.
+# developed or deployed). Two jobs, side by side, each with a throwaway Postgres: "test" builds, vets, checks gofmt and runs the
+# Go tests (cmd/server/postgres_integration_test.go uses the database); "suites" starts the server on its database and runs the
+# request suites in tests/suites against it (tests/README.md).
 on:
   push:
     branches: [agentrpg2024, staging, 'claude/**']
@@ -77,3 +79,54 @@ jobs:
           TEST_DATABASE_URL: postgres://postgres:postgres@localhost:5432/agentrpg_test?sslmode=disable
           REQUIRE_TEST_DATABASE: "1"
         run: go test -race -count=1 ./...
+
+  suites:
+    runs-on: ubuntu-latest
+    timeout-minutes: 40
+
+    services:
+      postgres:
+        image: postgres:16
+        env:
+          POSTGRES_USER: postgres
+          POSTGRES_PASSWORD: postgres
+          POSTGRES_DB: agentrpg_suites
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd pg_isready
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Go
+        uses: actions/setup-go@v5
+        with:
+          go-version-file: go.mod
+          cache: true
+
+      - name: Build the server
+        run: go build -o "$RUNNER_TEMP/agentrpg" ./cmd/server
+
+      # Every suite in tests/suites (they only send requests), all of them each run: the 48 builds and the 12 level runs too.
+      # run_suites.sh starts the server with AGENTRPG_TEST_CLOCK=1, restarts it between groups (20 new accounts an hour from
+      # one address) and fails on a failed suite or a query outside its transaction in the server log.
+      - name: Request suites
+        env:
+          SERVER_BIN: ${{ runner.temp }}/agentrpg
+          DATABASE_URL: postgres://postgres:postgres@localhost:5432/agentrpg_suites?sslmode=disable
+          PORT: "8099"
+          OUT: ${{ runner.temp }}/suite-results
+          ARPG_LOG_DIR: ${{ runner.temp }}/suite-logs # the request logs hold the test accounts' tokens: not kept
+        run: tests/suites/run_suites.sh
+
+      - name: Keep the results (each suite's output, the summary and the server log)
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: suite-results
+          path: ${{ runner.temp }}/suite-results
+          retention-days: 7

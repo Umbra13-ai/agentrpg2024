@@ -124,7 +124,9 @@ Add to the owner, never beside it. When you give another rule one owner, add it 
   `clearCombatInitiative`; `readFight` / `combatEntries` read. **A turn change** is `advanceTurn` (`turn_advance_2024.go`):
   combat/next, combat/skip, narrate's `advance_turn`, the pending-turn walk (`ptAdvance`), the timeout worker and the removal of
   the creature whose turn it is call it. It claims the turn (`turn_claim`, under the lock: a second change of the same turn is 409
-  `turn_change_in_progress`), runs `turnEndHooks`, the caller's `between` (Legendary Actions), moves (`nextTurn`: dead and 0 HP
+  `turn_change_in_progress`; a turn the request named in `expected_turn` {round, turn_index} that has ended is 409 `turn_already_moved`
+  with the turn it is now: `turnRef.Named`, checked in `turnHow.check`; `gmEndsTurn` passes it on, narrate checks first with
+  `precheckTurn`), runs `turnEndHooks`, the caller's `between` (Legendary Actions), moves (`nextTurn`: dead and 0 HP
   skipped, Thief's Reflexes dropped after round 1) and runs `turnStartHooks`. A rule at a turn's end or start is one row in those
   tables. The skip timeout is `combatTurnTimeout` (table rule). `TestNoOtherTurnOrderWriter` and `TestTurnHooksRunOnlyInTheTurnOwner`
   check (audit AUD-09, AUD-10).
