@@ -204,10 +204,8 @@ Add to the owner, never beside it. When you give another rule one owner, add it 
   lowest free seat taken (`campaign_seats`, join order), in one transaction, so parallel joins for the last seat can't both win.
   Joining, the admin's add, restore and editor (`lobby_id`) and the GM's recreate call it; leaving is setting `lobby_id` to NULL
   (a seat is held only while its character is in the campaign). `TestNoOtherWayIntoACampaign` checks.
-- **The turn schedule** (Matt's `campaign-scheduling-directions.md`, stages B and C; **switched off on a server without
-  `AGENTRPG_TURN_SCHEDULE=1`** (`turnScheduleEnabled`, `schedule_2024.go`): new campaigns start off, `PATCH .../schedule` can't turn
-  it on and every schedule view says `available: false`, until stages E (rounds outside fights) and F (reminders) are built; staging
-  and local tests set it): `scheduleOf(capacity)` is the times (1 to 6
+- **The turn schedule** (Matt's `campaign-scheduling-directions.md`; on for every server: a new campaign uses it from creation, an
+  older one plays as before until its GM turns it on): `scheduleOf(capacity)` is the times (1 to 6
   seats, 60/N minutes apart from :00; the GM 5 minutes before each next seat; :55 the final check-in) and `seatCapacityProblem`
   the one capacity check; every reply's times (creation, join, `GET /api/campaigns/{id}`, `GET|PATCH .../schedule`) and the GM
   guide's table (`withScheduleTable` at its marker) come from it. `campaignNow` / `campaignClock` is the only clock (a test
@@ -223,10 +221,25 @@ Add to the owner, never beside it. When you give another rule one owner, add it 
   `/api/gm/status` only reads); `standInAllowed` is the one check of when a stand-in may be taken (the final check-in, none while
   paused, or finishing a `needs_gm` turn), read by the walk, combat/stand-in and `gmEndsTurn`; `gmEndsTurn` is when the GM may end
   a player's turn itself (combat/next, combat/skip, narrate's `advance_turn`: never a submitted turn, never before the final
-  check-in); `turn_results` records how each turn ended, once (UNIQUE), written only by the turn-end hook `recordTurnResult`
-  (`turnHow.result` names how; `checkInAt` reads it); the round opens with the fight's round (`scheduleFightRound`) and replies say
-  `round_complete`. `TestNoOtherTurnResultWriter` and `TestOnlyTheGMsRequestsRunTheWalk` check. Suites: `turn_schedule_rule_test.py`,
-  `initiative_order_test.py`, `late_gm_test.py`; suites that test mechanics, not the schedule, turn it off at campaign creation ({"state": "off"}).
+  check-in); `turn_results` records how each turn ended, once (UNIQUE), written only by `recordResult` (the turn-end hook
+  `recordTurnResult`, and stage E's resolve and stand-in; `turnHow.result` names how; `checkInAt` reads it); the round opens with the fight's round (`scheduleFightRound`) and replies say
+  `round_complete`. `TestNoOtherTurnResultWriter` and `TestOnlyTheGMsRequestsRunTheWalk` check. **Stage E, rounds outside a fight:** `routeEffects`
+  (`cmd/server/round_effects_2024.go`) is the one table of every player write route and what it is under the schedule: a game action
+  (a submission), gear (setup until the character has played a round, then a submission: Matt 11.9) or immediate with its reason
+  (talk, choices, settings, creation, account, a fight's own submission, the GM's requests); `/api/action` is a game action except
+  talk (`actionIsImmediate`). `roundGate` (in `withProtections`) is the one place a request becomes a submission (`round_submissions`,
+  202, one story action a round); requests the server makes for a player (`internalCall`, `replayAsPlayer`) go straight to the routes.
+  A new player write route is one row; `TestEveryPlayerWriteRouteHasAnEffect` fails on a route of the reference without one.
+  `noncombat_round_2024.go`: `GET|DELETE /api/campaigns/{id}/round`, `.../round/resolve` (the GM applies each step as the player's own
+  request, or rules on it; a turn whose every step is refused stays unresolved) and `.../round/stand-in` (`standInAllowed`);
+  `closeRoundIfDone` opens the next round; the campaign's start opens the first (`scheduleCampaignStarts`); `closeOpenRound` withdraws
+  a closing round's unresolved submissions. With the schedule the round is the
+  exploration beat (`beatApplies`) and the exploration skip gives way to stand-ins. `actingCharacter` is the character
+  `/api/action` acts for. **Stage F, what everyone is told:** `roundNoteFor` (`check_in_2024.go`), a view of `checkInAt`, is my-turn's
+  `round` and the heartbeat's `turn_status.round_status`; `gmReminder` is the GM's next and final check-in in the resolve replies;
+  `playerNextCheckIn` the player's in the submission replies. Suites: `turn_schedule_rule_test.py`, `initiative_order_test.py`,
+  `late_gm_test.py`; suites that test mechanics, not the schedule, turn it off at campaign creation ({"state": "off"}); Go:
+  `TestPostgresNoncombatRound`.
 - **A weapon's data:** `findWeapon` (`cmd/server/character_attacks.go`) over `srdWeapons`: any spelling of a weapon (key, name,
   hyphens or underscores, a magic +N, a named weapon's base in parentheses). Never index `srdWeapons` with a key built by
   hand and never read a weapon from the `weapons` table (a copy for the universe catalogue); `TestNoOtherWeaponLookup` checks.

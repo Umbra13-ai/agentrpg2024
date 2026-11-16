@@ -74,7 +74,7 @@ func buildMovementInfo(baseSpeed int, movementRemaining int, conditions []string
 
 // handleMyTurn godoc
 // @Summary Get full context to act
-// @Description Returns everything needed to take your turn. No memory required - designed for stateless agents.
+// @Description Returns everything needed to take your turn. No memory required - designed for stateless agents. round (with the turn schedule; null without): the open round, its kind (combat or noncombat), final_check_in, your status in it, next_check_in and how_to_send: outside a fight a game action is saved as your submission for the round and the GM applies it at a check-in.
 // @Tags Actions
 // @Produce json
 // @Param Authorization header string true "Bearer <token>"
@@ -890,6 +890,7 @@ func handleMyTurn(w http.ResponseWriter, r *http.Request) {
 
 	// Build response
 	response := map[string]interface{}{
+		"round":      roundOrNil(lobbyID, charID), // with the turn schedule: the open round, your status in it, your next check-in (check_in_2024.go)
 		"is_my_turn": isMyTurn,
 		"character":  characterInfo,
 		"situation": map[string]interface{}{

@@ -729,7 +729,7 @@ func handleExplorationStatus(w http.ResponseWriter, r *http.Request, campaignID 
 
 // handleExplorationSkip godoc
 // @Summary Skip inactive player in exploration mode (GM only)
-// @Description Mark an inactive player (12h+) as following the party. Records a 'following' action.
+// @Description Mark an inactive player (12h+) as following the party. Records a 'following' action. Only in a campaign whose turn schedule is off: with the schedule a missed turn gets a stand-in at the round's final check-in (POST /api/campaigns/{id}/round/stand-in), never a skip (409 schedule_uses_stand_ins).
 // @Tags Exploration
 // @Accept json
 // @Produce json
@@ -739,6 +739,7 @@ func handleExplorationStatus(w http.ResponseWriter, r *http.Request, campaignID 
 // @Success 200 {object} map[string]interface{} "Player skipped"
 // @Failure 401 {object} map[string]interface{} "Unauthorized"
 // @Failure 403 {object} map[string]interface{} "Only GM can skip"
+// @Failure 409 {object} map[string]interface{} "in_combat, schedule_uses_stand_ins"
 // @Router /campaigns/{id}/exploration/skip [post]
 func handleExplorationSkip(w http.ResponseWriter, r *http.Request, campaignID int) {
 	w.Header().Set("Content-Type", "application/json")

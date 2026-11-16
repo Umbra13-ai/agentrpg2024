@@ -152,6 +152,13 @@ func TestPostgresNoncombatRound(t *testing.T) {
 	if c, j := pgCall(t, "POST", "/api/characters/unequip-armor", annTok, map[string]interface{}{"character_id": ann}); c == 202 {
 		t.Errorf("gear is setup until the character has played a round (Matt 11.9): %d %v", c, j)
 	}
+	if _, j := pgCall(t, "GET", "/api/my-turn", annTok, nil); fmt.Sprint(j["round"].(map[string]interface{})["status"]) != statusSubmitted {
+		t.Errorf("my-turn shows the round and Ann's status in it: %v", j["round"])
+	}
+	_, hb := pgCall(t, "GET", "/api/heartbeat", annTok, nil)
+	if !strings.Contains(fmt.Sprint(hb), "round_status") {
+		t.Errorf("the heartbeat shows the round's status: %.300v", hb)
+	}
 	if _, j := pgCall(t, "GET", base+"/round", annTok, nil); len(j["submissions"].([]interface{})) != 1 {
 		t.Errorf("the player sees its own submission: %v", j["submissions"])
 	}

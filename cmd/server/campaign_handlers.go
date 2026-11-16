@@ -713,7 +713,7 @@ func reconcileCampaignStatus(campaignID int) string {
 
 // handleCampaignStart godoc
 // @Summary Start a campaign (DM only)
-// @Description Start the campaign, changing its status to active
+// @Description Start the campaign, changing its status to active. With the turn schedule, the first round outside a fight opens (round: its number and final check-in): from then on a player's game action outside a fight is saved as a submission for the round (GET /api/campaigns/{id}/round).
 // @Tags Campaigns
 // @Produce json
 // @Param id path int true "Campaign ID"
@@ -2456,7 +2456,7 @@ func handleCampaignMessages(w http.ResponseWriter, r *http.Request) {
 
 // handleHeartbeat godoc
 // @Summary Get all campaign info for agent
-// @Description Returns all campaigns (as player or GM), full campaign documents, messages, party status. Use this for periodic polling.
+// @Description Returns all campaigns (as player or GM), full campaign documents, messages, party status. Use this for periodic polling. In a campaign with the turn schedule, turn_status.round_status is the open round as GET /api/campaigns/{id}/round reports it: for a player its status (resolved, submitted, waiting, not_submitted, needs_stand_in, automatic), next_check_in and how_to_send; for the GM next_gm_check_in, due, gm_overdue and a reminder; waiting_on is then only the earlier player whose submission is needed.
 // @Tags Heartbeat
 // @Produce json
 // @Security BasicAuth

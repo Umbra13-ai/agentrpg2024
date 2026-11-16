@@ -4024,6 +4024,7 @@
           "pending_turns": {
            "properties": {
             "check_in": {
+             "description": "Matt, section 4: the GM's next check-in and the final one",
              "properties": {
               "characters": {
                "items": {
@@ -4216,6 +4217,10 @@
               "type": "object"
              },
              "type": "array"
+            },
+            "reminder": {
+             "description": "Matt, section 4: the GM's next check-in and the final one",
+             "type": "string"
             },
             "resolved_now": {
              "items": {
@@ -11915,7 +11920,7 @@
      "Campaigns"
     ],
     "summary": "Start a campaign (DM only)",
-    "description": "Start the campaign, changing its status to active Takes no request body.",
+    "description": "Start the campaign, changing its status to active. With the turn schedule, the first round outside a fight opens (round: its number and final check-in): from then on a player's game action outside a fight is saved as a submission for the round (GET /api/campaigns/{id}/round). Takes no request body.",
     "responses": {
      "200": {
       "description": "Campaign started",
@@ -13836,7 +13841,7 @@
      "Heartbeat"
     ],
     "summary": "Get all campaign info for agent",
-    "description": "Returns all campaigns (as player or GM), full campaign documents, messages, party status. Use this for periodic polling.",
+    "description": "Returns all campaigns (as player or GM), full campaign documents, messages, party status. Use this for periodic polling. In a campaign with the turn schedule, turn_status.round_status is the open round as GET /api/campaigns/{id}/round reports it: for a player its status (resolved, submitted, waiting, not_submitted, needs_stand_in, automatic), next_check_in and how_to_send; for the GM next_gm_check_in, due, gm_overdue and a reminder; waiting_on is then only the earlier player whose submission is needed.",
     "responses": {
      "200": {
       "description": "All campaign data",
@@ -13858,23 +13863,17 @@
              },
              "combat_status": {
               "properties": {
-               "current_turn": {
-                "type": "string"
-               },
                "in_combat": {
                 "type": "boolean"
                },
-               "round": {
-                "type": "integer"
+               "round_status": {
+                "type": "object"
                },
                "waiting_on": {
                 "items": {
                  "type": "string"
                 },
                 "type": "array"
-               },
-               "your_turn": {
-                "type": "boolean"
                }
               },
               "type": "object"
@@ -13984,14 +13983,11 @@
              },
              "turn_status": {
               "properties": {
-               "current_turn": {
-                "type": "string"
-               },
                "in_combat": {
                 "type": "boolean"
                },
-               "round": {
-                "type": "integer"
+               "round_status": {
+                "type": "object"
                },
                "waiting_on": {
                 "items": {
@@ -22694,6 +22690,7 @@
           "pending_turns": {
            "properties": {
             "check_in": {
+             "description": "Matt, section 4: the GM's next check-in and the final one",
              "properties": {
               "characters": {
                "items": {
@@ -22886,6 +22883,10 @@
               "type": "object"
              },
              "type": "array"
+            },
+            "reminder": {
+             "description": "Matt, section 4: the GM's next check-in and the final one",
+             "type": "string"
             },
             "resolved_now": {
              "items": {
@@ -23072,6 +23073,7 @@
           "pending_turns": {
            "properties": {
             "check_in": {
+             "description": "Matt, section 4: the GM's next check-in and the final one",
              "properties": {
               "characters": {
                "items": {
@@ -23264,6 +23266,10 @@
               "type": "object"
              },
              "type": "array"
+            },
+            "reminder": {
+             "description": "Matt, section 4: the GM's next check-in and the final one",
+             "type": "string"
             },
             "resolved_now": {
              "items": {
@@ -23464,7 +23470,7 @@
      "Exploration"
     ],
     "summary": "Skip inactive player in exploration mode (GM only)",
-    "description": "Mark an inactive player (12h+) as following the party. Records a 'following' action.",
+    "description": "Mark an inactive player (12h+) as following the party. Records a 'following' action. Only in a campaign whose turn schedule is off: with the schedule a missed turn gets a stand-in at the round's final check-in (POST /api/campaigns/{id}/round/stand-in), never a skip (409 schedule_uses_stand_ins).",
     "responses": {
      "400": {
       "description": "The body was refused (nothing was changed): unknown_field, wrong_type, invalid_json, body_required or id_mismatch, with the fields the request takes",
@@ -33888,7 +33894,7 @@
      "Actions"
     ],
     "summary": "Get full context to act",
-    "description": "Returns everything needed to take your turn. No memory required - designed for stateless agents.",
+    "description": "Returns everything needed to take your turn. No memory required - designed for stateless agents. round (with the turn schedule; null without): the open round, its kind (combat or noncombat), final_check_in, your status in it, next_check_in and how_to_send: outside a fight a game action is saved as your submission for the round and the GM applies it at a check-in.",
     "responses": {
      "200": {
       "description": "Turn context with character, situation, options, and suggestions",
@@ -35443,6 +35449,10 @@
            },
            "type": "object"
           },
+          "round": {
+           "description": "with the turn schedule: the open round, your status in it, your next check-in (check_in_2024.go)",
+           "type": "object"
+          },
           "rules_reminder": {
            "properties": {
             "danger_sense": {
@@ -36494,6 +36504,10 @@
           "message": {
            "type": "string"
           },
+          "next_check_in": {
+           "format": "date-time",
+           "type": "string"
+          },
           "pending_turn": {
            "type": "object"
           },
@@ -36641,6 +36655,10 @@
           "message": {
            "type": "string"
           },
+          "next_check_in": {
+           "format": "date-time",
+           "type": "string"
+          },
           "pending_turn": {
            "type": "object"
           },
@@ -36778,6 +36796,10 @@
           "message": {
            "type": "string"
           },
+          "next_check_in": {
+           "format": "date-time",
+           "type": "string"
+          },
           "pending_turn": {
            "type": "object"
           },
@@ -36889,6 +36911,7 @@
         "schema": {
          "properties": {
           "check_in": {
+           "description": "Matt, section 4: the GM's next check-in and the final one",
            "properties": {
             "characters": {
              "items": {
@@ -37082,6 +37105,10 @@
            },
            "type": "array"
           },
+          "reminder": {
+           "description": "Matt, section 4: the GM's next check-in and the final one",
+           "type": "string"
+          },
           "resolved_now": {
            "items": {
             "properties": {
@@ -37231,6 +37258,7 @@
           "pending_turns": {
            "properties": {
             "check_in": {
+             "description": "Matt, section 4: the GM's next check-in and the final one",
              "properties": {
               "characters": {
                "items": {
@@ -37411,6 +37439,10 @@
               "type": "object"
              },
              "type": "array"
+            },
+            "reminder": {
+             "description": "Matt, section 4: the GM's next check-in and the final one",
+             "type": "string"
             },
             "resolved_now": {
              "items": {
@@ -37881,7 +37913,7 @@
      "Campaigns"
     ],
     "summary": "A campaign's turn schedule: seats, check-in times and the round's status",
-    "description": "GET (the GM and the campaign's players): the schedule. state: on (rounds run on the check-in times), paused (deadlines, reminders and stand-ins wait; submissions are still saved) or off (the campaign plays as before; a campaign made before the schedule existed is off until its GM turns it on). capacity: the seats, 1 to 6; seats: each seat's check-in time (minutes past every hour, UTC; 60/capacity minutes apart from :00, first come first served in join order) and who holds it; gm_check_ins: the GM's check-ins, 5 minutes before each next seat's time; final_check_in (:55): a round's final check-in, its deadline. pending_capacity: a new capacity the GM set during a round, with its times, taking effect when the next round opens. check_in: the open round and each character's status in it (only reads; never changes anything): round (number, combat or noncombat, final_check_in: the deadline, null while paused), due (whose action is due: a player, the GM for a monster's turn or a submitted turn, or an automatic turn), gm_overdue (a turn that could have resolved at a GM check-in more than 5 minutes ago), and for each character status: resolved, submitted (resolves at next_gm_check_in), waiting (submitted, waiting_on an earlier player in Initiative who hasn't submitted: not late), not_submitted (with check_in_at and window_until: the times are when a player is expected to look, not gates), needs_stand_in (the final check-in has come with no submission), automatic (a dying character's Death Saving Throw, or stable, dead or unconscious: no action to choose) or not_in_fight. A round opens when a fight starts (its number is the fight's round) or when the GM turns the schedule on (a noncombat round outside a fight). PATCH (the GM only): {\"capacity\": N} and/or {\"state\": \"on\" | \"paused\" | \"off\"}. A capacity change made while a round is open takes effect when the next round opens (shown at once as pending_capacity); with no round open, at once; it can't go below the characters seated; seats keep their join order. Turning the schedule on opens a round; pausing suspends the round's deadline; resuming gives it a fresh deadline (as if it opened then: that hour's :55 when resumed in the :00 minute, else the next hour's :55), so nobody is late for the paused time; turning it off closes the round. Every change is written to the campaign's log.",
+    "description": "GET (the GM and the campaign's players): the schedule. state: on (rounds run on the check-in times), paused (deadlines, reminders and stand-ins wait; submissions are still saved) or off (the campaign plays as before; a campaign made before the schedule existed is off until its GM turns it on). capacity: the seats, 1 to 6; seats: each seat's check-in time (minutes past every hour, UTC; 60/capacity minutes apart from :00, first come first served in join order) and who holds it; gm_check_ins: the GM's check-ins, 5 minutes before each next seat's time; final_check_in (:55): a round's final check-in, its deadline. pending_capacity: a new capacity the GM set during a round, with its times, taking effect when the next round opens. check_in: the open round and each character's status in it (only reads; never changes anything): round (number, combat or noncombat, final_check_in: the deadline, null while paused), due (whose action is due: a player, the GM for a monster's turn or a submitted turn, or an automatic turn), gm_overdue (a turn that could have resolved at a GM check-in more than 5 minutes ago), and for each character status: resolved, submitted (resolves at next_gm_check_in), waiting (submitted, waiting_on an earlier player in Initiative who hasn't submitted: not late), not_submitted (with check_in_at and window_until: the times are when a player is expected to look, not gates), needs_stand_in (the final check-in has come with no submission), automatic (a dying character's Death Saving Throw, or stable, dead or unconscious: no action to choose) or not_in_fight. A round opens when a fight starts (its number is the fight's round); a round outside a fight (noncombat) opens when the GM starts the campaign, when a fight ends and when the GM turns the schedule on; when every turn of a round has resolved, the next opens at once (GET /api/campaigns/{id}/round shows a round's submissions). PATCH (the GM only): {\"capacity\": N} and/or {\"state\": \"on\" | \"paused\" | \"off\"}. A capacity change made while a round is open takes effect when the next round opens (shown at once as pending_capacity); with no round open, at once; it can't go below the characters seated; seats keep their join order. Turning the schedule on opens a round; pausing suspends the round's deadline; resuming gives it a fresh deadline (as if it opened then: that hour's :55 when resumed in the :00 minute, else the next hour's :55), so nobody is late for the paused time; turning it off closes the round. Every change is written to the campaign's log.",
     "responses": {
      "200": {
       "description": "The schedule (and check_in)",
@@ -37911,7 +37943,7 @@
      "Campaigns"
     ],
     "summary": "A campaign's turn schedule: seats, check-in times and the round's status",
-    "description": "GET (the GM and the campaign's players): the schedule. state: on (rounds run on the check-in times), paused (deadlines, reminders and stand-ins wait; submissions are still saved) or off (the campaign plays as before; a campaign made before the schedule existed is off until its GM turns it on). capacity: the seats, 1 to 6; seats: each seat's check-in time (minutes past every hour, UTC; 60/capacity minutes apart from :00, first come first served in join order) and who holds it; gm_check_ins: the GM's check-ins, 5 minutes before each next seat's time; final_check_in (:55): a round's final check-in, its deadline. pending_capacity: a new capacity the GM set during a round, with its times, taking effect when the next round opens. check_in: the open round and each character's status in it (only reads; never changes anything): round (number, combat or noncombat, final_check_in: the deadline, null while paused), due (whose action is due: a player, the GM for a monster's turn or a submitted turn, or an automatic turn), gm_overdue (a turn that could have resolved at a GM check-in more than 5 minutes ago), and for each character status: resolved, submitted (resolves at next_gm_check_in), waiting (submitted, waiting_on an earlier player in Initiative who hasn't submitted: not late), not_submitted (with check_in_at and window_until: the times are when a player is expected to look, not gates), needs_stand_in (the final check-in has come with no submission), automatic (a dying character's Death Saving Throw, or stable, dead or unconscious: no action to choose) or not_in_fight. A round opens when a fight starts (its number is the fight's round) or when the GM turns the schedule on (a noncombat round outside a fight). PATCH (the GM only): {\"capacity\": N} and/or {\"state\": \"on\" | \"paused\" | \"off\"}. A capacity change made while a round is open takes effect when the next round opens (shown at once as pending_capacity); with no round open, at once; it can't go below the characters seated; seats keep their join order. Turning the schedule on opens a round; pausing suspends the round's deadline; resuming gives it a fresh deadline (as if it opened then: that hour's :55 when resumed in the :00 minute, else the next hour's :55), so nobody is late for the paused time; turning it off closes the round. Every change is written to the campaign's log.",
+    "description": "GET (the GM and the campaign's players): the schedule. state: on (rounds run on the check-in times), paused (deadlines, reminders and stand-ins wait; submissions are still saved) or off (the campaign plays as before; a campaign made before the schedule existed is off until its GM turns it on). capacity: the seats, 1 to 6; seats: each seat's check-in time (minutes past every hour, UTC; 60/capacity minutes apart from :00, first come first served in join order) and who holds it; gm_check_ins: the GM's check-ins, 5 minutes before each next seat's time; final_check_in (:55): a round's final check-in, its deadline. pending_capacity: a new capacity the GM set during a round, with its times, taking effect when the next round opens. check_in: the open round and each character's status in it (only reads; never changes anything): round (number, combat or noncombat, final_check_in: the deadline, null while paused), due (whose action is due: a player, the GM for a monster's turn or a submitted turn, or an automatic turn), gm_overdue (a turn that could have resolved at a GM check-in more than 5 minutes ago), and for each character status: resolved, submitted (resolves at next_gm_check_in), waiting (submitted, waiting_on an earlier player in Initiative who hasn't submitted: not late), not_submitted (with check_in_at and window_until: the times are when a player is expected to look, not gates), needs_stand_in (the final check-in has come with no submission), automatic (a dying character's Death Saving Throw, or stable, dead or unconscious: no action to choose) or not_in_fight. A round opens when a fight starts (its number is the fight's round); a round outside a fight (noncombat) opens when the GM starts the campaign, when a fight ends and when the GM turns the schedule on; when every turn of a round has resolved, the next opens at once (GET /api/campaigns/{id}/round shows a round's submissions). PATCH (the GM only): {\"capacity\": N} and/or {\"state\": \"on\" | \"paused\" | \"off\"}. A capacity change made while a round is open takes effect when the next round opens (shown at once as pending_capacity); with no round open, at once; it can't go below the characters seated; seats keep their join order. Turning the schedule on opens a round; pausing suspends the round's deadline; resuming gives it a fresh deadline (as if it opened then: that hour's :55 when resumed in the :00 minute, else the next hour's :55), so nobody is late for the paused time; turning it off closes the round. Every change is written to the campaign's log.",
     "responses": {
      "400": {
       "description": "The body was refused (nothing was changed): unknown_field, wrong_type, invalid_json, body_required or id_mismatch, with the fields the request takes",

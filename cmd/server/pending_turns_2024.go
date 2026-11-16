@@ -791,7 +791,8 @@ func resolvePendingTurns(lobbyID int) map[string]interface{} {
 	}
 	if scheduled { // where the round stands now: the GM's next check-in and the round's final check-in (check_in_2024.go)
 		if in, now, err := loadCheckIn(lobbyID); err == nil {
-			report["check_in"] = checkInAt(in, now)
+			ci := checkInAt(in, now)
+			report["check_in"], report["reminder"] = ci, gmReminder(ci) // Matt, section 4: the GM's next check-in and the final one
 		}
 	}
 	return report
@@ -1082,6 +1083,14 @@ func handlePendingTurn(w http.ResponseWriter, r *http.Request) {
 			base["message"] = fmt.Sprintf("Your submission is saved for round %d (nothing is rolled or spent yet). Only the GM resolves turns, at its check-ins, in initiative order: %s. Send again to replace it, DELETE to withdraw it, until it resolves.", round, strings.TrimPrefix(when, "when the GM next checks in"))
 			if len(before) == 0 {
 				base["message"] = fmt.Sprintf("Your submission is saved for round %d (nothing is rolled or spent yet). Only the GM resolves turns, at its check-ins, in initiative order; yours is next. Send again to replace it, DELETE to withdraw it, until it resolves.", round)
+			}
+			if r, err := openRoundOf(db, lobbyID); err == nil && r != nil { // Matt, section 4: the player's next check-in
+				if now, err := campaignNow(db, lobbyID); err == nil {
+					if next, ok := playerNextCheckIn(lobbyID, charID, r, now); ok {
+						base["message"] = fmt.Sprintf("%s Your next check-in is %s.", base["message"], clockText(next))
+						base["next_check_in"] = next
+					}
+				}
 			}
 		}
 		if len(warnings) > 0 {

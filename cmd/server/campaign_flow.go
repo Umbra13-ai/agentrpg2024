@@ -464,6 +464,22 @@ func getCampaignPlayers(lobbyID int) []map[string]interface{} {
 
 // getTurnStatus returns turn information for a campaign
 func getTurnStatus(lobbyID int, characterID int) map[string]interface{} {
+	result := turnOrderStatus(lobbyID, characterID)
+	// with the turn schedule, where the open round stands for this character (or the GM) is the check-in status's answer
+	// (roundNoteFor): waiting_on is only the earlier player whose submission is needed, never everyone before the character
+	if note, _ := roundNoteFor(lobbyID, characterID); note != nil {
+		result["round_status"] = note
+		result["waiting_on"] = []string{}
+		if name, ok := note["waiting_on"].(string); ok {
+			result["waiting_on"] = []string{name}
+		}
+	}
+	return result
+}
+
+// turnOrderStatus: the fight's turn order as the heartbeat shows it without the turn schedule (whose turn it is, and the
+// combatants before the character).
+func turnOrderStatus(lobbyID int, characterID int) map[string]interface{} {
 	result := map[string]interface{}{
 		"in_combat":  false,
 		"your_turn":  false,

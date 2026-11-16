@@ -727,3 +727,51 @@ func loadCheckIn(lobby int) (checkInInputs, time.Time, error) {
 	}
 	return in, clock.now(), nil
 }
+
+// roundNoteFor is the open round as the heartbeat and my-turn show it, a view of checkInAt: for a character (charID > 0) its own
+// status, its next check-in and how to send its turn; for the GM (charID 0) its next check-in, whose action is due and whether it
+// is overdue. nil when the campaign doesn't use the schedule or no round is open.
+func roundNoteFor(lobby, charID int) (map[string]interface{}, error) {
+	state, err := scheduleStateOf(db, lobby)
+	if err != nil || !usesSchedule(state) {
+		return nil, notFoundIsNothing(err)
+	}
+	in, now, err := loadCheckIn(lobby)
+	if err != nil || in.Round == nil {
+		return nil, err
+	}
+	ci := checkInAt(in, now)
+	v := map[string]interface{}{"round": ci.Round.Number, "kind": ci.Round.Kind, "final_check_in": ci.Round.FinalCheckIn,
+		"paused": ci.Round.Paused, "details": fmt.Sprintf("GET /api/campaigns/%d/round", lobby)}
+	if charID == 0 {
+		v["next_gm_check_in"], v["due"], v["gm_overdue"] = ci.NextGMCheckIn, ci.Due, ci.GMOverdue
+		v["reminder"] = gmReminder(ci)
+		return v, nil
+	}
+	for _, c := range ci.Characters {
+		if c.CharacterID != charID {
+			continue
+		}
+		v["status"], v["message"] = c.Status, c.Message
+		if c.WaitingOn != nil {
+			v["waiting_on"] = c.WaitingOn.Name
+		}
+	}
+	if next, ok := playerNextCheckIn(lobby, charID, in.Round, now); ok {
+		v["next_check_in"] = next
+	}
+	if ci.Round.Kind == roundCombat {
+		v["how_to_send"] = "POST /api/pending-turn {\"steps\": [...]}: your turn is saved for this round and the GM resolves it at a check-in, in Initiative order."
+	} else {
+		v["how_to_send"] = fmt.Sprintf("Send your turn as usual (POST /api/action, a rest, a feature, buying or changing gear once you have played a round): outside a fight it is saved as your submission for this round (202) and the GM applies it at a check-in. Speech and campaign messages are immediate. DELETE /api/campaigns/%d/round?character_id=%d withdraws it.", lobby, charID)
+	}
+	return v, nil
+}
+
+// roundOrNil: roundNoteFor as a reply field (nil without the schedule; a database failure in it is answered by guardDB).
+func roundOrNil(lobby, charID int) interface{} {
+	if v, err := roundNoteFor(lobby, charID); err == nil && v != nil {
+		return v
+	}
+	return nil
+}
