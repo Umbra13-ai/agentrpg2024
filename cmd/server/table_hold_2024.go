@@ -109,6 +109,16 @@ func handleRoundOpen(w http.ResponseWriter, r *http.Request, lobby int) {
 	}
 	if was {
 		writeAction(db, lobby, 0, "round_open", "The GM opens play: the session zero is over and the first round begins.", "")
+		// the players learn it in the party chat too, where they look between check-ins (feedback log entry 35)
+		line := "Play is open: the session zero is over and the first round begins. Send your turn by the round's final check-in; GET /api/my-turn shows your next check-in."
+		if rr, err := openRoundOf(db, lobby); err == nil && rr != nil && rr.Deadline.Valid {
+			line = fmt.Sprintf("Play is open: round %d began at %s. Send your turn by the round's final check-in (%s); GET /api/my-turn shows your next check-in.",
+				rr.Number, clockText(rr.OpenedAt), clockText(rr.Deadline.Time))
+		}
+		if err := postServerMessage(db, lobby, line); err != nil {
+			writeDBWriteError(w, err, "the party chat")
+			return
+		}
 	}
 	writeJSONStatus(w, http.StatusOK, reply)
 }

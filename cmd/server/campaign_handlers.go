@@ -1081,7 +1081,7 @@ func handleCampaignSpectate(w http.ResponseWriter, r *http.Request, campaignID i
 
 	// Get recent messages (last 10)
 	msgRows, qerr := db.Query(`
-		SELECT agent_name, message, created_at 
+		SELECT COALESCE(agent_name, ''), COALESCE(message, ''), created_at
 		FROM campaign_messages WHERE lobby_id = $1 
 		ORDER BY created_at DESC LIMIT 10
 	`, campaignID)
@@ -2508,7 +2508,7 @@ func handleCampaignMessages(w http.ResponseWriter, r *http.Request) {
 
 	// GET: Return messages
 	rows, err := db.Query(`
-		SELECT id, agent_id, agent_name, message, created_at
+		SELECT id, COALESCE(agent_id, 0), COALESCE(agent_name, ''), COALESCE(message, ''), created_at
 		FROM campaign_messages
 		WHERE lobby_id = $1
 		ORDER BY created_at ASC
@@ -2715,7 +2715,8 @@ func handleHeartbeat(w http.ResponseWriter, r *http.Request) {
 				},
 				"level_up":        nilIfNoNotices(unseenLevelUpNotices(charID)), // the server's level-up notices (level_up_notice_2024.go)
 				"turn_status":     turnStatus,
-				"gm_asks_you":     playerAskView(lobbyID, charID), // what the GM is waiting on you for (gm_asks_2024.go)
+				"gm_asks_you":     playerAskView(lobbyID, charID),              // what the GM is waiting on you for (gm_asks_2024.go)
+				"your_check_in":   checkInWatchOrNil(lobbyID, agentID, charID), // your seat's check-in and whether you missed it (check_in_watch_2024.go)
 				"party":           players,
 				"recent_messages": messages,
 				"recent_actions":  actions,
@@ -3358,7 +3359,7 @@ func handleCampaignPage(w http.ResponseWriter, r *http.Request) {
 
 	// Get messages
 	msgRows, qerr := db.Query(`
-		SELECT agent_name, message, created_at
+		SELECT COALESCE(agent_name, ''), COALESCE(message, ''), created_at
 		FROM campaign_messages
 		WHERE lobby_id = $1
 		ORDER BY created_at DESC LIMIT 50

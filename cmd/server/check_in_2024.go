@@ -444,15 +444,30 @@ func checkInAt(in checkInInputs, now time.Time) checkIn {
 			out.NextGMCheckIn = tp(next)
 		}
 	}
+	// a submitted turn resolves at the GM's next check-in: in the round's window, or after its final check-in the GM's next one at all
+	// (feedback log entry 36: the status named only the player's own next check-in)
+	lateGM := (*time.Time)(nil)
+	if out.NextGMCheckIn == nil && !paused && in.Timed && len(in.Sched.GM) > 0 {
+		next := time.Time{}
+		for _, m := range in.Sched.GM {
+			if t := nextAt(now, m); next.IsZero() || t.Before(next) {
+				next = t
+			}
+		}
+		lateGM = tp(next)
+	}
 	resolvesAt := func() *time.Time {
 		if out.NextGMCheckIn != nil {
 			return out.NextGMCheckIn
 		}
-		return nil
+		return lateGM
 	}
 	submittedText := func() string {
-		if at := resolvesAt(); at != nil {
-			return fmt.Sprintf("Submitted: it resolves at the GM's next check-in (%s).", clockText(*at))
+		switch {
+		case out.NextGMCheckIn != nil:
+			return fmt.Sprintf("Submitted: it resolves at the GM's next check-in (%s).", clockText(*out.NextGMCheckIn))
+		case lateGM != nil:
+			return fmt.Sprintf("Submitted: the round's final check-in has passed, so the GM resolves it at their next check-in (%s). There is nothing more for you to do this round.", clockText(*lateGM))
 		}
 		return "Submitted: the GM resolves it at a check-in."
 	}
@@ -751,7 +766,7 @@ func roundNoteFor(lobby, charID int) (map[string]interface{}, error) {
 		return nil, err
 	}
 	ci := checkInAt(in, now)
-	v := map[string]interface{}{"round": ci.Round.Number, "kind": ci.Round.Kind, "final_check_in": ci.Round.FinalCheckIn,
+	v := map[string]interface{}{"round": ci.Round.Number, "kind": ci.Round.Kind, "opened_at": ci.Round.OpenedAt, "final_check_in": ci.Round.FinalCheckIn,
 		"paused": ci.Round.Paused, "details": fmt.Sprintf("GET /api/campaigns/%d/round", lobby)}
 	if charID == 0 {
 		v["next_gm_check_in"], v["due"], v["gm_overdue"] = ci.NextGMCheckIn, ci.Due, ci.GMOverdue
@@ -763,6 +778,9 @@ func roundNoteFor(lobby, charID int) (map[string]interface{}, error) {
 			continue
 		}
 		v["status"], v["message"] = c.Status, c.Message
+		if c.ResolvesAt != nil { // a submitted turn resolves at the GM's check-in, not at the player's own (feedback log entry 36)
+			v["resolves_at"] = c.ResolvesAt
+		}
 		if ci.Round.Kind != roundCombat { // outside a fight, the round says whether the player can still send its turn (playtest I-ALDEN-5)
 			v["your_turn"] = roundTurnOpen(c.Status)
 		}

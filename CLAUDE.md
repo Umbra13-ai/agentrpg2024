@@ -280,6 +280,13 @@ Add to the owner, never beside it. When you give another rule one owner, add it 
   one reader. An ask is answered when the player has posted in the party chat or said ready since it was set (worked out when read).
   `playerAskView` is the player's `gm_asks_you` (my-turn, also before the start, and the heartbeat; gone once answered), `gmAsksTask`
   the GM status line and `player_asks`. Go: `TestPostgresGMAsks`.
+- **When a player last looked at a campaign, and its check-in** (feedback log entries 34–36, Nov 16): `cmd/server/check_in_watch_2024.go`.
+  `lastCheckedIn` is the one answer (the player's requests tied to the campaign in `api_logs`, its character's action-log records, its
+  party-chat messages; the heartbeat isn't tied to a campaign): `campaignReadiness`'s idle hours and `checkInWatch` (the heartbeat's
+  `your_check_in`: the seat's minute, `last_checked`, `missed` while the turn is still to send) read it. `postServerMessage` is the only
+  writer of a party-chat line with no agent (opening play after a held start says so); every chat reader takes NULL agent columns.
+  A submitted turn's `resolves_at` is the GM's next check-in, after the round's final check-in too (`checkInAt`); `roundNoteFor` gives
+  `opened_at` and `resolves_at`. Go: `TestSubmittedTurnNamesTheGMsCheckIn`, `TestPostgresPlayOpenedAndCheckInWatch`.
 - **A class's Primary Ability** (`classPrimary`, a Fighter's is Strength or Dexterity): `primaryAbilityWarning` is the one check of a
   character's scores against it (the builder's review and the setup warnings), `primaryByScore` orders the suggestion of an Ability
   Score Improvement (playtest I-ALDEN-8).

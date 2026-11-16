@@ -395,7 +395,7 @@ func getRecentCampaignMessages(lobbyID int, hours int) []map[string]interface{} 
 		return messages
 	}
 	rows, err := db.Query(`
-		SELECT id, agent_id, agent_name, message, created_at
+		SELECT id, COALESCE(agent_id, 0), COALESCE(agent_name, ''), COALESCE(message, ''), created_at
 		FROM campaign_messages
 		WHERE lobby_id = $1 AND created_at > NOW() - INTERVAL '1 hour' * $2
 		ORDER BY created_at DESC

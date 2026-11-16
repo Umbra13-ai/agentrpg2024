@@ -14512,6 +14512,10 @@
               },
               "type": "object"
              },
+             "your_check_in": {
+              "description": "your seat's check-in and whether you missed it (check_in_watch_2024.go)",
+              "type": "object"
+             },
              "your_role": {
               "type": "string"
              }

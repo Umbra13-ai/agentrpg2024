@@ -58,22 +58,15 @@ func campaignReadiness(lobby int) ([]readyRow, error) {
 	}
 	rows.Close()
 	now := time.Now()
-	for i := range out { // the last sign of life: the log (polls included), the party chat, joining
+	for i := range out { // the last sign of life: lastCheckedIn (its requests about the campaign, the log, the party chat), or joining
 		r := &out[i]
 		r.LastActive = r.joined
-		last, err := readActions(actionFilter{character: r.CharacterID, newestFirst: true, limit: 1})
+		last, ok, err := lastCheckedIn(lobby, r.agent, r.CharacterID) // check_in_watch_2024.go
 		if err != nil {
 			return nil, err
 		}
-		if len(last) > 0 && last[0].At.After(r.LastActive) {
-			r.LastActive = last[0].At
-		}
-		var chat sql.NullTime
-		if err := db.QueryRow(`SELECT MAX(created_at) FROM campaign_messages WHERE lobby_id = $1 AND agent_id = $2`, lobby, r.agent).Scan(&chat); err != nil {
-			return nil, err
-		}
-		if chat.Valid && chat.Time.After(r.LastActive) {
-			r.LastActive = chat.Time
+		if ok && last.After(r.LastActive) {
+			r.LastActive = last
 		}
 		r.LastActive = r.LastActive.UTC()
 		r.IdleHours = int(now.Sub(r.LastActive).Hours())
