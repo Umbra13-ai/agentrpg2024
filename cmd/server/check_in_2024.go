@@ -102,6 +102,15 @@ func roundToOpen(q rowQuerier, lobby int) (kind string, number int, err error) {
 	return roundNoncombat, number, err
 }
 
+// closeOpenRound closes the campaign's open round (if any); its submissions still waiting are withdrawn, saying why.
+func closeOpenRound(tx *sql.Tx, lobby int, now time.Time, why string) error {
+	if err := withdrawOpenSubmissions(tx, lobby, why); err != nil {
+		return err
+	}
+	_, err := tx.Exec(`UPDATE campaign_rounds SET closed_at = $1 WHERE lobby_id = $2 AND closed_at IS NULL`, now.UTC(), lobby)
+	return err
+}
+
 // openRound opens a round in tx (the caller has locked the campaign's row and the schedule isn't off): the open round closes, a
 // capacity set for the next round takes effect, and the new round gets its deadline (none while paused).
 func openRound(tx *sql.Tx, lobby int, kind string, number int, now time.Time) (*roundRecord, error) {
@@ -111,7 +120,7 @@ func openRound(tx *sql.Tx, lobby int, kind string, number int, now time.Time) (*
 		return nil, err
 	}
 	now = now.UTC()
-	if _, err := tx.Exec(`UPDATE campaign_rounds SET closed_at = $1 WHERE lobby_id = $2 AND closed_at IS NULL`, now, lobby); err != nil {
+	if err := closeOpenRound(tx, lobby, now, "the round closed before it was resolved"); err != nil {
 		return nil, err
 	}
 	if pending.Valid {
@@ -127,6 +136,9 @@ func openRound(tx *sql.Tx, lobby int, kind string, number int, now time.Time) (*
 		lobby, kind, number, now, r.Deadline).Scan(&r.ID)
 	return r, err
 }
+
+// openOnlyIfNone: roundOpens's onlyAfter for a round that opens only when none is open (the campaign starting).
+const openOnlyIfNone = "none"
 
 // roundOpens opens a round for a fight's change (it starts, its round goes up, it ends) in its own transaction, in a campaign
 // whose schedule isn't off. onlyIfNew: not when the open round is already this one (a hook that may run twice); onlyAfter: only
@@ -152,7 +164,12 @@ func roundOpens(lobby int, kind string, number int, onlyIfNew bool, onlyAfter st
 	if onlyIfNew && open != nil && open.Kind == kind && open.Number == number {
 		return nil, nil
 	}
-	if onlyAfter != "" && (open == nil || open.Kind != onlyAfter) {
+	switch {
+	case onlyAfter == openOnlyIfNone:
+		if open != nil {
+			return nil, nil
+		}
+	case onlyAfter != "" && (open == nil || open.Kind != onlyAfter):
 		return nil, nil
 	}
 	if kind == roundNoncombat {
@@ -656,6 +673,18 @@ func loadCheckIn(lobby int) (checkInInputs, time.Time, error) {
 		if t, ok := in.Turns[id]; ok {
 			t.How = how
 			in.Turns[id] = t
+		}
+	}
+	if in.Round.Kind == roundNoncombat { // a round outside a fight: a character has submitted while a step of it waits
+		steps, err := roundSteps(db, in.Round.ID, 0)
+		if err != nil {
+			return in, time.Time{}, err
+		}
+		for _, s := range steps {
+			if t, ok := in.Turns[s.CharacterID]; ok && s.Status == "pending" && !t.Submitted {
+				t.Submitted, t.SubmittedAt = true, s.SubmittedAt // stored in campaign time
+				in.Turns[s.CharacterID] = t
+			}
 		}
 	}
 	if in.Round.Kind == roundCombat {

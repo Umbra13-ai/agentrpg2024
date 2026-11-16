@@ -362,7 +362,7 @@ func handleMyTurn(w http.ResponseWriter, r *http.Request) {
 
 	awaitingGMNarration := false
 	awaitingGMNarrationMessage := ""
-	if !inCombat {
+	if !inCombat && beatApplies(lobbyID) {
 		if acted, actionType, actionDesc, actedAt := hasCharacterActedSinceLastNarration(charID, lobbyID); acted {
 			awaitingGMNarration = true
 			isMyTurn = false

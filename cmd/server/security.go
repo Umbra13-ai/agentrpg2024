@@ -36,6 +36,7 @@ func newServer(addr string) *http.Server {
 
 // withProtections caps the request body and sets the security headers.
 func withProtections(next http.Handler) http.Handler {
+	next = roundGate(next) // a game action in a round outside a fight is saved as a submission (round_effects_2024.go)
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		limit := int64(maxRequestBody)
 		if strings.HasSuffix(r.URL.Path, "/portrait") {

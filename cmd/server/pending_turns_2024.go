@@ -462,28 +462,34 @@ func ptInternal(method, path string, body interface{}, agentID int) (*http.Reque
 func ptReply(rec *httptest.ResponseRecorder) (map[string]interface{}, bool, string) {
 	out := map[string]interface{}{}
 	json.Unmarshal(rec.Body.Bytes(), &out)
-	ok := rec.Code < 400 && out["error"] == nil && out["success"] != false
-	why := ""
-	if !ok {
-		why = strings.TrimSpace(fmt.Sprint(out["message"]))
-		if out["message"] == nil {
-			why = strings.TrimSpace(fmt.Sprint(out["reason"]))
-			if out["reason"] == nil {
-				why = ""
-				if res, isText := out["result"].(string); isText { // a cast that can't be made answers 200 with success false and says why in result
-					why = strings.TrimSpace(res)
-				}
+	ok, why := replyOutcome(rec.Code, out)
+	return out, ok, why
+}
+
+// replyOutcome: whether a route's reply (its status and decoded body) did what was asked, and if not, why, in its own words.
+func replyOutcome(code int, out map[string]interface{}) (bool, string) {
+	ok := code < 400 && out["error"] == nil && out["success"] != false
+	if ok {
+		return true, ""
+	}
+	why := strings.TrimSpace(fmt.Sprint(out["message"]))
+	if out["message"] == nil {
+		why = strings.TrimSpace(fmt.Sprint(out["reason"]))
+		if out["reason"] == nil {
+			why = ""
+			if res, isText := out["result"].(string); isText { // a cast that can't be made answers 200 with success false and says why in result
+				why = strings.TrimSpace(res)
 			}
 		}
-		if code := fmt.Sprint(out["error"]); out["error"] != nil && !strings.Contains(why, code) {
-			why = strings.TrimSpace(code + ": " + why)
-			why = strings.TrimSuffix(why, ": ")
-		}
-		if why == "" {
-			why = fmt.Sprintf("refused (HTTP %d)", rec.Code)
-		}
 	}
-	return out, ok, why
+	if c := fmt.Sprint(out["error"]); out["error"] != nil && !strings.Contains(why, c) {
+		why = strings.TrimSpace(c + ": " + why)
+		why = strings.TrimSuffix(why, ": ")
+	}
+	if why == "" {
+		why = fmt.Sprintf("refused (HTTP %d)", code)
+	}
+	return false, why
 }
 
 // ptRunStep runs one step as the player's own action (POST /api/action; a map_move is the battle map's preview and move).

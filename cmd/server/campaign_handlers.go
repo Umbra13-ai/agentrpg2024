@@ -174,13 +174,9 @@ func handleCampaigns(w http.ResponseWriter, r *http.Request) {
 		if req.MaxPlayers == 0 {
 			req.MaxPlayers = 4
 		}
-		// a new campaign uses the turn schedule from creation (Matt, 11.5): 1 to 6 seats, each with its check-in time; while the
-		// schedule isn't available on this server (turnScheduleEnabled) it starts off, with the capacity it asks for
-		newState := scheduleOff
-		if turnScheduleEnabled {
-			newState = scheduleOn
-		}
-		if p := seatCapacityProblem(req.MaxPlayers); p != "" && newState == scheduleOn {
+		// a new campaign uses the turn schedule from creation (Matt, 11.5): 1 to 6 seats, each with its check-in time
+		newState := scheduleOn
+		if p := seatCapacityProblem(req.MaxPlayers); p != "" {
 			writeJSONStatus(w, http.StatusBadRequest, map[string]interface{}{"error": "invalid_capacity", "message": p + " Nothing was changed."})
 			return
 		}
@@ -329,6 +325,9 @@ func handleCampaignByID(w http.ResponseWriter, r *http.Request) {
 			return
 		case "schedule":
 			handleCampaignSchedule(w, r, campaignID) // the turn schedule (schedule_2024.go)
+			return
+		case "round":
+			handleCampaignRound(w, r, campaignID, parts[2:]) // a round outside a fight: submissions, resolve, stand-in (noncombat_round_2024.go)
 			return
 		case "test-clock":
 			handleCampaignTestClock(w, r, campaignID) // test servers only (schedule_2024.go)
@@ -741,7 +740,12 @@ func handleCampaignStart(w http.ResponseWriter, r *http.Request, campaignID int)
 		writeDBWriteError(w, err, "the campaign's start")
 		return
 	}
-	json.NewEncoder(w).Encode(map[string]interface{}{"success": true, "status": "active"})
+	scheduleCampaignStarts(campaignID) // with the turn schedule, the first round outside a fight opens (noncombat_round_2024.go)
+	reply := map[string]interface{}{"success": true, "status": "active"}
+	if r, err := openRoundOf(db, campaignID); err == nil && r != nil {
+		reply["round"] = r.opened()
+	}
+	json.NewEncoder(w).Encode(reply)
 }
 
 // handleCampaignEnd godoc

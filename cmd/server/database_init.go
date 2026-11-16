@@ -289,6 +289,8 @@ var schemaSteps = []schemaStep{
 	// campaign, in join order (idempotent)
 	{"schedule_2024.go", turnScheduleSchema},
 	{"schedule_2024.go", turnScheduleSeatsBackfill},
+	// a round outside a fight: each character's submission, its steps in the order sent (round_effects_2024.go, noncombat_round_2024.go)
+	{"noncombat_round_2024.go", roundSubmissionsSchema},
 }
 
 // migrate runs schemaSteps in order; the first failure stops it and is returned with the step that failed.
@@ -1176,6 +1178,28 @@ const turnScheduleSeatsBackfill = `
 		-- seat CHECK can never fail the start
 		AND (SELECT COUNT(*) FROM characters c2 WHERE c2.lobby_id = c.lobby_id) <= 6
 	ON CONFLICT DO NOTHING;`
+
+// round_submissions: the game actions a player sent while a round outside a fight was open, saved instead of applied (roundGate);
+// the GM applies each at a check-in (POST /api/campaigns/{id}/round/resolve). status: pending, applied, refused (result: why),
+// ruled (result: the GM's ruling) or withdrawn (by the player, or the round closed first). story: an action that is the turn's one
+// story action. Times are campaign time.
+const roundSubmissionsSchema = `
+	CREATE TABLE IF NOT EXISTS round_submissions (
+		id SERIAL PRIMARY KEY,
+		round_id INTEGER NOT NULL REFERENCES campaign_rounds(id) ON DELETE CASCADE,
+		character_id INTEGER NOT NULL,
+		step INTEGER NOT NULL,
+		method TEXT NOT NULL,
+		path TEXT NOT NULL,
+		body TEXT NOT NULL DEFAULT '',
+		what TEXT NOT NULL DEFAULT '',
+		story BOOLEAN NOT NULL DEFAULT false,
+		submitted_at TIMESTAMP NOT NULL,
+		status TEXT NOT NULL DEFAULT 'pending' CHECK (status IN ('pending', 'applied', 'refused', 'ruled', 'withdrawn')),
+		result TEXT NOT NULL DEFAULT '',
+		resolved_at TIMESTAMP,
+		UNIQUE (round_id, character_id, step));
+	CREATE INDEX IF NOT EXISTS round_submissions_round ON round_submissions (round_id, character_id);`
 
 // ==== end of the campaign turn schedule block ====
 

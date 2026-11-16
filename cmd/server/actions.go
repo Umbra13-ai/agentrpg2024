@@ -518,16 +518,11 @@ func handleAction(w http.ResponseWriter, r *http.Request) {
 		req.SpellSlug = spellSlug
 	}
 
-	var charID, lobbyID int
 	var species string
-	err = db.QueryRow(`
-		SELECT c.id, c.lobby_id, c.species FROM characters c
-		JOIN lobbies l ON c.lobby_id = l.id
-		WHERE c.agent_id = $1 AND l.status = 'active' AND ($2 = 0 OR c.id = $2) AND ($3 = 0 OR c.lobby_id = $3)
-		ORDER BY l.id DESC, c.id DESC
-		LIMIT 1
-	`, agentID, pickCharacterID(r, req.CharacterID), pickCampaignID(r, req.CampaignID)).Scan(&charID, &lobbyID, &species)
-
+	charID, lobbyID, err := actingCharacter(db, agentID, pickCharacterID(r, req.CharacterID), pickCampaignID(r, req.CampaignID)) // round_effects_2024.go
+	if err == nil {
+		err = db.QueryRow(`SELECT COALESCE(species, '') FROM characters WHERE id = $1`, charID).Scan(&species)
+	}
 	if err != nil {
 		if answerDBFailure(w, err, "your character") {
 			return
@@ -796,7 +791,7 @@ func handleAction(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 
-	if !inCombat && !shouldAllowExplorationFollowup(req.Action) {
+	if !inCombat && !shouldAllowExplorationFollowup(req.Action) && beatApplies(lobbyID) {
 		if acted, actionType, actionDesc, actedAt := hasCharacterActedSinceLastNarration(charID, lobbyID); acted {
 			if actionType == req.Action && actionDesc == req.Description {
 				if replayed, result, replayedAt := actionReplaySinceLastNarration(charID, lobbyID, req.Action, req.Description); replayed {

@@ -146,6 +146,14 @@ func beatFreeTypesSQL() string {
 	return b.String()
 }
 
+// beatApplies: outside a fight a character takes one story action between the GM's narrations (the exploration beat), unless
+// the campaign uses the turn schedule: there the round is the beat (one submission a round, round_effects_2024.go). A campaign
+// whose schedule can't be read keeps the beat.
+func beatApplies(lobbyID int) bool {
+	state, err := scheduleStateOf(db, lobbyID)
+	return err != nil || !usesSchedule(state)
+}
+
 // shouldAllowExplorationFollowup: outside a fight, this action doesn't use up the character's beat between the GM's narrations
 // (speaking, one object, dropping something, a Death Saving Throw): the action table's Beat (action_types_2024.go).
 func shouldAllowExplorationFollowup(actionType string) bool {
@@ -278,7 +286,11 @@ func autoAdvanceCampaign(campaignID int, campaignName string) int {
 	if f, err := readFight(db, campaignID); err == nil {
 		return autoAdvanceCombat(campaignID, campaignName, f) // combat mode: the combat turn timeout
 	}
-	// Exploration mode - check for 12h+ inactive players
+	// Exploration mode - check for 12h+ inactive players; with the turn schedule a missed turn gets a stand-in at the round's final
+	// check-in instead (Matt, section 6: no missed turn is skipped or waved through)
+	if state, err := scheduleStateOf(db, campaignID); err != nil || usesSchedule(state) {
+		return 0
+	}
 	return autoAdvanceExploration(campaignID, campaignName)
 }
 

@@ -192,15 +192,27 @@ func recordTurnResult(t *turnChange) {
 		log.Printf("turn schedule: campaign %d: the clock: %v", t.Lobby, err)
 		return
 	}
-	res, err := db.Exec(`INSERT INTO turn_results (round_id, combatant_id, second_turn, name, how, at) VALUES ($1, $2, $3, $4, $5, $6)
-		ON CONFLICT (round_id, combatant_id, second_turn) DO NOTHING`, roundID, t.EndedID, t.EndedSecond, t.EndedName, how, now)
+	recorded, err := recordResult(db, roundID, t.EndedID, t.EndedSecond, t.EndedName, how, now)
 	if err != nil {
 		log.Printf("turn schedule: campaign %d: recording %s's turn: %v", t.Lobby, t.EndedName, err)
 		return
 	}
-	if n, _ := res.RowsAffected(); n == 1 {
+	if recorded {
 		t.Recorded = how
 	}
+}
+
+// recordResult is the one write of turn_results: how a turn of a round ended, once (a second end of the same turn is not counted:
+// recorded is false). The turn-end hook (a fight's turns) and the resolve and stand-in of a round outside a fight
+// (noncombat_round_2024.go) call it.
+func recordResult(q execer, roundID, id int, second bool, name, how string, at time.Time) (recorded bool, err error) {
+	res, err := q.Exec(`INSERT INTO turn_results (round_id, combatant_id, second_turn, name, how, at) VALUES ($1, $2, $3, $4, $5, $6)
+		ON CONFLICT (round_id, combatant_id, second_turn) DO NOTHING`, roundID, id, second, name, how, at)
+	if err != nil {
+		return false, err
+	}
+	n, _ := res.RowsAffected()
+	return n == 1, nil
 }
 
 // endedHow: how a turn ended that its caller didn't name (the GM's combat/next or a narration that advances the turn): a
@@ -282,15 +294,26 @@ func scheduleTasks(ci checkIn, lobby int) []string {
 			out = append(out, fmt.Sprintf("%s POST /api/campaigns/%d/combat/resolve resolves the turns that can resolve now, in initiative order.", d.Message, lobby))
 		}
 	}
-	var standIns []string
+	var standIns, submitted []string
 	for _, ch := range ci.Characters {
-		if ch.Status == statusStandIn {
+		switch ch.Status {
+		case statusStandIn:
 			standIns = append(standIns, ch.Name)
+		case statusSubmitted:
+			submitted = append(submitted, ch.Name)
 		}
 	}
-	if len(standIns) > 0 && combat {
+	switch {
+	case len(standIns) > 0 && combat:
 		out = append(out, fmt.Sprintf("⚠️ The round's final check-in has come with no submission from %s: when each one's turn comes, take it as stand-in (a meaningful in-character action from what the character knows, not a default Dodge and not a skip): POST /api/campaigns/%d/combat/resolve, then POST /api/campaigns/%d/combat/stand-in {\"steps\": [...]}.",
 			joinWords(standIns), lobby, lobby))
+	case len(standIns) > 0:
+		out = append(out, fmt.Sprintf("⚠️ The round's final check-in has come with no submission from %s: take a meaningful in-character turn for each (what the character would do, knowing only what it knows; not a default and not a skip): POST /api/campaigns/%d/round/stand-in {\"character_id\": N, \"description\": \"...\"}.",
+			joinWords(standIns), lobby))
+	}
+	if len(submitted) > 0 && !combat {
+		out = append(out, fmt.Sprintf("Submitted turns are waiting in round %d (%s): resolve them in an order that suits the story, POST /api/campaigns/%d/round/resolve {\"character_id\": N} (or {} for all, in the order sent; GET /api/campaigns/%d/round shows each submission). A ruling decides one yourself: {\"character_id\": N, \"ruling\": \"...\"}.",
+			ci.Round.Number, joinWords(submitted), lobby, lobby))
 	}
 	return out
 }

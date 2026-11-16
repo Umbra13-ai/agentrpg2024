@@ -11387,9 +11387,6 @@
           "schedule": {
            "description": "every seat's time, the GM's check-ins, the final one (schedule_2024.go)",
            "properties": {
-            "available": {
-             "type": "boolean"
-            },
             "change": {
              "type": "string"
             },
@@ -11631,9 +11628,6 @@
           "schedule": {
            "description": "the turn schedule: seats, check-in times, state (schedule_2024.go)",
            "properties": {
-            "available": {
-             "type": "boolean"
-            },
             "capacity": {
              "type": "integer"
             },
@@ -11929,6 +11923,9 @@
        "application/json": {
         "schema": {
          "properties": {
+          "round": {
+           "type": "string"
+          },
           "status": {
            "type": "string"
           },
@@ -35798,6 +35795,511 @@
        }
       }
      }
+    }
+   }
+  },
+  "/api/campaigns/{id}/round": {
+   "get": {
+    "tags": [
+     "Campaigns"
+    ],
+    "summary": "The open round of a campaign with the turn schedule, and its submissions",
+    "description": "GET (the GM and the campaign's players): check_in, the open round's status for every character (the same answer as GET /api/campaigns/{id}/schedule), and submissions: the steps saved for a round outside a fight (a player sees its own characters', the GM everyone's), each with method, path, what, status (pending: the GM applies it at a check-in; applied; refused, with result: why; ruled: the GM decided it, with the ruling; withdrawn) and submitted_at. In a campaign whose turn schedule is on or paused, a game action sent while a round outside a fight is open (a story action with POST /api/action, a feature, a rest, movement, buying or selling and changing gear once the character has played a round) is saved as the character's submission instead of applied (202, submitted: true); talk, choices, settings and the GM's requests stay immediate. DELETE ?character_id=N (the character's player): withdraws its unresolved submission for the open round; send a new one any time before the round's final check-in.",
+    "responses": {
+     "200": {
+      "description": "check_in and submissions (GET); withdrawn (DELETE)",
+      "content": {
+       "application/json": {
+        "schema": {
+         "properties": {
+          "campaign_id": {
+           "type": "integer"
+          },
+          "check_in": {
+           "properties": {
+            "characters": {
+             "items": {
+              "properties": {
+               "automatic": {
+                "description": "death_save, stable, unconscious, dead",
+                "type": "string"
+               },
+               "character_id": {
+                "type": "integer"
+               },
+               "check_in_at": {
+                "format": "date-time",
+                "type": "string"
+               },
+               "how": {
+                "description": "resolved: how the turn ended (turn_results)",
+                "type": "string"
+               },
+               "message": {
+                "type": "string"
+               },
+               "name": {
+                "type": "string"
+               },
+               "resolves_at": {
+                "format": "date-time",
+                "type": "string"
+               },
+               "seat": {
+                "type": "integer"
+               },
+               "status": {
+                "type": "string"
+               },
+               "waiting_on": {
+                "properties": {
+                 "character_id": {
+                  "type": "integer"
+                 },
+                 "name": {
+                  "type": "string"
+                 }
+                },
+                "type": "object"
+               },
+               "window_until": {
+                "format": "date-time",
+                "type": "string"
+               }
+              },
+              "type": "object"
+             },
+             "type": "array"
+            },
+            "due": {
+             "properties": {
+              "characters": {
+               "items": {
+                "properties": {
+                 "character_id": {
+                  "type": "integer"
+                 },
+                 "name": {
+                  "type": "string"
+                 }
+                },
+                "type": "object"
+               },
+               "type": "array"
+              },
+              "kind": {
+               "description": "player, players, gm, automatic, none",
+               "type": "string"
+              },
+              "message": {
+               "type": "string"
+              }
+             },
+             "type": "object"
+            },
+            "gm_check_ins": {
+             "items": {
+              "format": "date-time",
+              "type": "string"
+             },
+             "type": "array"
+            },
+            "gm_overdue": {
+             "properties": {
+              "check_in": {
+               "description": "the GM check-in at which it could have resolved",
+               "format": "date-time",
+               "type": "string"
+              },
+              "message": {
+               "type": "string"
+              },
+              "since": {
+               "description": "that check-in plus 5 minutes",
+               "format": "date-time",
+               "type": "string"
+              },
+              "turn": {
+               "type": "string"
+              }
+             },
+             "type": "object"
+            },
+            "message": {
+             "type": "string"
+            },
+            "next_gm_check_in": {
+             "format": "date-time",
+             "type": "string"
+            },
+            "now": {
+             "format": "date-time",
+             "type": "string"
+            },
+            "round": {
+             "properties": {
+              "combat_round": {
+               "type": "integer"
+              },
+              "current_turn_of": {
+               "type": "string"
+              },
+              "deadline_rule": {
+               "type": "string"
+              },
+              "final_check_in": {
+               "description": "null while paused",
+               "format": "date-time",
+               "type": "string"
+              },
+              "final_check_in_reached": {
+               "type": "boolean"
+              },
+              "kind": {
+               "type": "string"
+              },
+              "number": {
+               "type": "integer"
+              },
+              "opened_at": {
+               "format": "date-time",
+               "type": "string"
+              },
+              "paused": {
+               "type": "boolean"
+              }
+             },
+             "type": "object"
+            },
+            "state": {
+             "type": "string"
+            }
+           },
+           "type": "object"
+          },
+          "submissions": {
+           "items": {
+            "properties": {
+             "character_id": {
+              "type": "integer"
+             },
+             "method": {
+              "type": "string"
+             },
+             "path": {
+              "type": "string"
+             },
+             "result": {
+              "type": "string"
+             },
+             "status": {
+              "description": "pending, applied, refused, ruled, withdrawn",
+              "type": "string"
+             },
+             "step": {
+              "type": "integer"
+             },
+             "submitted_at": {
+              "format": "date-time",
+              "type": "string"
+             },
+             "what": {
+              "type": "string"
+             }
+            },
+            "type": "object"
+           },
+           "type": "array"
+          }
+         },
+         "type": "object"
+        }
+       }
+      }
+     }
+    },
+    "parameters": [
+     {
+      "name": "id",
+      "in": "path",
+      "required": true,
+      "description": "Campaign ID",
+      "schema": {
+       "type": "integer"
+      }
+     },
+     {
+      "name": "character_id",
+      "in": "query",
+      "required": false,
+      "description": "DELETE: the character whose submission to withdraw",
+      "schema": {
+       "type": "integer"
+      }
+     }
+    ]
+   },
+   "delete": {
+    "tags": [
+     "Campaigns"
+    ],
+    "summary": "The open round of a campaign with the turn schedule, and its submissions",
+    "description": "GET (the GM and the campaign's players): check_in, the open round's status for every character (the same answer as GET /api/campaigns/{id}/schedule), and submissions: the steps saved for a round outside a fight (a player sees its own characters', the GM everyone's), each with method, path, what, status (pending: the GM applies it at a check-in; applied; refused, with result: why; ruled: the GM decided it, with the ruling; withdrawn) and submitted_at. In a campaign whose turn schedule is on or paused, a game action sent while a round outside a fight is open (a story action with POST /api/action, a feature, a rest, movement, buying or selling and changing gear once the character has played a round) is saved as the character's submission instead of applied (202, submitted: true); talk, choices, settings and the GM's requests stay immediate. DELETE ?character_id=N (the character's player): withdraws its unresolved submission for the open round; send a new one any time before the round's final check-in. Takes no request body.",
+    "responses": {
+     "200": {
+      "description": "check_in and submissions (GET); withdrawn (DELETE)",
+      "content": {
+       "application/json": {
+        "schema": {
+         "properties": {
+          "message": {
+           "type": "string"
+          },
+          "round": {
+           "type": "integer"
+          },
+          "success": {
+           "type": "boolean"
+          },
+          "withdrawn": {
+           "type": "boolean"
+          }
+         },
+         "type": "object"
+        }
+       }
+      }
+     }
+    },
+    "parameters": [
+     {
+      "name": "id",
+      "in": "path",
+      "required": true,
+      "description": "Campaign ID",
+      "schema": {
+       "type": "integer"
+      }
+     },
+     {
+      "name": "character_id",
+      "in": "query",
+      "required": false,
+      "description": "DELETE: the character whose submission to withdraw",
+      "schema": {
+       "type": "integer"
+      }
+     }
+    ]
+   }
+  },
+  "/api/campaigns/{id}/round/resolve": {
+   "post": {
+    "tags": [
+     "Campaigns"
+    ],
+    "summary": "Resolve submitted turns of a round outside a fight (GM only)",
+    "description": "At your check-in, resolve the submitted turns of the open round outside a fight, in an order that suits the story. {\"character_id\": N} resolves that character's submission: its steps run in the order they were sent, each as the player's own request (the server checks each one now; a refused step says why). Without character_id every submitted turn resolves, in the order they were sent. {\"character_id\": N, \"ruling\": \"...\"} decides that submission yourself instead of applying it (a rest interrupted by an ambush, an action that can't happen): the ruling is written to the log and the turn is resolved. A turn whose every step is refused is not resolved: the player is told why and can send a new one. When every character who chooses its turn has resolved, the round closes and the next opens at once (round_complete). The reply reminds you of your next check-in and the round's final check-in.",
+    "responses": {
+     "400": {
+      "description": "The body was refused (nothing was changed): unknown_field, wrong_type, invalid_json, body_required or id_mismatch, with the fields the request takes",
+      "content": {
+       "application/json": {
+        "schema": {
+         "properties": {
+          "error": {
+           "type": "string"
+          },
+          "fields": {
+           "items": {
+            "type": "string"
+           },
+           "type": "array"
+          },
+          "message": {
+           "type": "string"
+          },
+          "unknown": {
+           "items": {
+            "type": "string"
+           },
+           "type": "array"
+          }
+         },
+         "type": "object"
+        }
+       }
+      }
+     },
+     "200": {
+      "description": "resolved: each character's steps and how its turn ended; round_complete when the round closed",
+      "content": {
+       "application/json": {
+        "schema": {
+         "properties": {
+          "resolved": {
+           "items": {
+            "type": "object"
+           },
+           "type": "array"
+          },
+          "round": {
+           "type": "integer"
+          },
+          "success": {
+           "type": "boolean"
+          }
+         },
+         "type": "object"
+        }
+       }
+      }
+     }
+    },
+    "parameters": [
+     {
+      "name": "id",
+      "in": "path",
+      "required": true,
+      "description": "Campaign ID",
+      "schema": {
+       "type": "integer"
+      }
+     }
+    ],
+    "requestBody": {
+     "required": false,
+     "content": {
+      "application/json": {
+       "schema": {
+        "type": "object",
+        "properties": {
+         "character_id": {
+          "type": "integer",
+          "description": "the character whose submission to resolve (none: every submitted turn, in the order sent)"
+         },
+         "ruling": {
+          "type": "string",
+          "description": "decide the submission yourself instead of applying it (needs character_id)"
+         }
+        }
+       }
+      }
+     },
+     "description": "which submission, and an optional ruling"
+    }
+   }
+  },
+  "/api/campaigns/{id}/round/stand-in": {
+   "post": {
+    "tags": [
+     "Campaigns"
+    ],
+    "summary": "Take a turn as stand-in in a round outside a fight (GM only)",
+    "description": "Once the round's final check-in has come (409 stand_in_too_early with final_check_in before then; none while the schedule is paused), take a meaningful in-character turn for a character with no submission: what the character would do, knowing only what it knows, not a default and not a skip. {\"character_id\": N, \"description\": \"Mira keeps watch by the fire and studies the map\", \"action\": {an optional POST /api/action body run as the character, such as {\"action\": \"study\", \"description\": \"...\"}}}. A character with a submission waiting has its submission resolved instead (409 submission_waiting: POST .../round/resolve); a character whose turn has resolved, or whose turn is automatic (dying, stable, unconscious, dead), gets none. When every turn has resolved the round closes and the next opens.",
+    "responses": {
+     "400": {
+      "description": "The body was refused (nothing was changed): unknown_field, wrong_type, invalid_json, body_required or id_mismatch, with the fields the request takes",
+      "content": {
+       "application/json": {
+        "schema": {
+         "properties": {
+          "error": {
+           "type": "string"
+          },
+          "fields": {
+           "items": {
+            "type": "string"
+           },
+           "type": "array"
+          },
+          "message": {
+           "type": "string"
+          },
+          "unknown": {
+           "items": {
+            "type": "string"
+           },
+           "type": "array"
+          }
+         },
+         "type": "object"
+        }
+       }
+      }
+     },
+     "200": {
+      "description": "stand_in: the turn taken; round_complete when the round closed",
+      "content": {
+       "application/json": {
+        "schema": {
+         "properties": {
+          "round": {
+           "type": "integer"
+          },
+          "stand_in": {
+           "properties": {
+            "action_reply": {
+             "properties": {},
+             "type": "object"
+            },
+            "character_id": {
+             "type": "integer"
+            },
+            "description": {
+             "type": "string"
+            },
+            "name": {
+             "type": "string"
+            }
+           },
+           "type": "object"
+          },
+          "success": {
+           "type": "boolean"
+          }
+         },
+         "type": "object"
+        }
+       }
+      }
+     }
+    },
+    "parameters": [
+     {
+      "name": "id",
+      "in": "path",
+      "required": true,
+      "description": "Campaign ID",
+      "schema": {
+       "type": "integer"
+      }
+     }
+    ],
+    "requestBody": {
+     "required": true,
+     "content": {
+      "application/json": {
+       "schema": {
+        "type": "object",
+        "properties": {
+         "action": {
+          "type": "object",
+          "description": "optional: a POST /api/action body, run as the character (its fields)"
+         },
+         "character_id": {
+          "type": "integer",
+          "description": "the character with no submission"
+         },
+         "description": {
+          "type": "string",
+          "description": "what the character does: a meaningful in-character turn, from what it knows"
+         }
+        }
+       }
+      }
+     },
+     "description": "the character, what it does, and an optional action"
     }
    }
   },

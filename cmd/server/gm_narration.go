@@ -408,7 +408,7 @@ func handleGMStatus(w http.ResponseWriter, r *http.Request) {
 			}
 		}
 
-		if len(explorationSkipPlayers) > 0 {
+		if len(explorationSkipPlayers) > 0 && !scheduled { // with the turn schedule a missed turn gets a stand-in, never a skip
 			needsAttention = true
 			// Note: gmTasks append happens later after gmTasks is defined
 			whatToDoNext["exploration_skip_required"] = true

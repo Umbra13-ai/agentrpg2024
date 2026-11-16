@@ -54,8 +54,10 @@ func scheduleTestDB(t *testing.T) {
 			last_monster_id INTEGER, turn_claim TEXT, turn_claimed_at TIMESTAMP, active BOOLEAN);`); err != nil {
 		t.Fatal(err)
 	}
-	if _, err := db.Exec(turnScheduleSchema); err != nil {
-		t.Fatal(err)
+	for _, step := range []string{turnScheduleSchema, roundSubmissionsSchema} {
+		if _, err := db.Exec(step); err != nil {
+			t.Fatal(err)
+		}
 	}
 }
 

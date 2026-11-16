@@ -752,6 +752,13 @@ func handleExplorationSkip(w http.ResponseWriter, r *http.Request, campaignID in
 	if _, ok := requireCampaignGM(w, r, campaignID, "skip a player's exploration turn"); !ok {
 		return
 	}
+	if state, err := scheduleStateOf(db, campaignID); answerDBFailure(w, err, "the campaign's turn schedule") {
+		return
+	} else if usesSchedule(state) { // Matt, section 6: with the turn schedule no missed turn is skipped
+		writeJSONStatus(w, http.StatusConflict, map[string]interface{}{"error": "schedule_uses_stand_ins",
+			"message": fmt.Sprintf("This campaign uses the turn schedule: a player who hasn't submitted gets a stand-in turn at the round's final check-in, never a skip. POST /api/campaigns/%d/round/stand-in (or resolve their submission with POST /api/campaigns/%d/round/resolve). Nothing was changed.", campaignID, campaignID)})
+		return
+	}
 
 	// Check not in combat
 	var combatActive bool
