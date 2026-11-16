@@ -16965,7 +16965,7 @@
              "type": "string"
             },
             "optional": {
-             "description": "Optional: the character is finished without it (the shop, the portrait, gear reminders); steps_left counts only the others",
+             "description": "Optional: the character is finished without it (the shop, the portrait, the starting level, gear reminders); steps_left counts only the others",
              "type": "boolean"
             },
             "problem": {
@@ -17000,7 +17000,7 @@
              "type": "string"
             },
             "optional": {
-             "description": "Optional: the character is finished without it (the shop, the portrait, gear reminders); steps_left counts only the others",
+             "description": "Optional: the character is finished without it (the shop, the portrait, the starting level, gear reminders); steps_left counts only the others",
              "type": "boolean"
             },
             "problem": {
@@ -17045,7 +17045,7 @@
               "type": "string"
              },
              "optional": {
-              "description": "Optional: the character is finished without it (the shop, the portrait, gear reminders); steps_left counts only the others",
+              "description": "Optional: the character is finished without it (the shop, the portrait, the starting level, gear reminders); steps_left counts only the others",
               "type": "boolean"
              },
              "problem": {

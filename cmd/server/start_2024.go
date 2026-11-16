@@ -56,7 +56,7 @@ var startPaths = []startPath{
 			{Do: "Make a character with the builder", Request: `POST /api/character-builder {"name": "..."}`,
 				Then: "Answer each step with POST /api/character-builder/{draft_id} (every step lists its options and a suggestion), then POST /api/character-builder/{draft_id}/finish."},
 			{Do: "Finish the character's setup", Request: "GET /api/characters/{id}/setup",
-				Then: "Send each request it lists until steps_left is 0. Once character_finished is true the character can join a campaign; the shop step after it can wait, and a portrait is optional."},
+				Then: "Send each request it lists until steps_left is 0. Once character_finished is true the character can join a campaign; the shop and a portrait are optional."},
 			{Do: "Find a campaign with an open seat at your level", Request: "GET /api/campaigns?open=true&level=N",
 				Then: "N is your character's level; each campaign shows open_seats, level_requirement and new_characters_start_at_level. A new character below a campaign's starting level may join it: it is raised to that level as it joins (or start it higher first: POST /api/characters/{id}/starting-level)."},
 			{Do: "Join it", Request: `POST /api/campaigns/{id}/join {"character_id": N}`,

@@ -450,37 +450,38 @@ func craftMagicItem(name string) bool {
 	return craftMagic[itemKey(name)]
 }
 
-// shopSetupStep: offered after creation while the character has money, the shop is open and the player hasn't said done.
+// shopSetupStep: an optional step (Matt, Nov 16, playtest I-ROWAN-2): while the shop is open and the player hasn't answered, setup
+// asks whether it wants to shop for more equipment. "Yes": the shop's requests; "no": POST .../shop {"done": true}, which completes
+// the step. It never counts in steps_left, whatever the character took at creation; only the question's wording depends on that
+// (a character who took gold instead of an equipment package has its gear to buy, Matt, Nov 14).
 func shopSetupStep(charID int) *setupStep {
 	var done bool
 	db.QueryRow(`SELECT COALESCE(shop_done,false) FROM characters WHERE id = $1`, charID).Scan(&done)
-	money := walletCP(charID)
-	// offered to every character while the shop is open and they haven't said done, with or without money (selling works with an
-	// empty purse); only the wording depends on what they chose (Matt, Nov 14: gold-option characters got no prompt while an
-	// equipment-pack fighter did)
 	if open, _ := shopOpen(charID); done || !open {
 		return nil
 	}
-	// decided once, at creation: did the character take both equipment packages (class kit and background package)?
-	var bothPackages bool
+	money := walletCP(charID)
+	var bothPackages bool // decided once, at creation: did the character take both equipment packages (class kit and background package)?
 	db.QueryRow(`SELECT COALESCE(took_both_packages, false) FROM characters WHERE id = $1`, charID).Scan(&bothPackages)
 	shop := fmt.Sprintf("GET /api/characters/%d/shop", charID)
-	buySell := fmt.Sprintf("Buy with POST /api/characters/%d/shop {\"buy\": [{\"item\": \"Longsword\", \"quantity\": 1}]}; sell with {\"sell\": [{\"item_id\": \"<id from your inventory>\"}]} (a shop pays half the price).", charID)
-	// two wordings (Matt, Nov 14): a character who didn't take both equipment packages is told to shop for its gear; one who took
-	// both may buy extras or sell items from its pack
-	title := "Visit the shop: buy extras or sell items from your pack"
-	why := fmt.Sprintf("You took your equipment packages, and you have %s. You may visit the shop to buy extras or to sell items from your pack. %s lists everything (add ?category=weapons, armor, gear, ammunition or tools) with what each item does and whether you can afford it. %s ", moneyText(money), shop, buySell)
+	no := map[string]interface{}{"done": true}
+	title := "Do you want to shop for additional equipment?"
+	why := fmt.Sprintf("You took your equipment packages and have %s. Do you want to visit the shop to buy more equipment or sell items from your pack? ", moneyText(money))
 	if !bothPackages {
-		title = "Visit the shop: buy your starting gear"
-		why = fmt.Sprintf("You took gold instead of an equipment package, so you have %s: visit the shop to buy your starting gear (weapons, armor, a pack, tools, ammunition) at the SRD's prices. You can also sell items you have. %s lists everything (add ?category=weapons, armor, gear, ammunition or tools) with what each item does, whether you are proficient with it and whether you can afford it. %s ", moneyText(money), shop, buySell)
+		why = fmt.Sprintf("You took gold instead of an equipment package, so you have %s and your gear still to buy (weapons, armor, a pack, tools). Do you want to shop for it now? ", moneyText(money))
 	}
-	why += "When you have finished shopping (or want nothing), send the request below to continue setup. The shop closes when your campaign starts; after that, buying and selling are up to your GM."
-	st := setupStep{Key: "shop", Title: title, Why: why,
-		Request: req("POST", fmt.Sprintf("/api/characters/%d/shop", charID), map[string]interface{}{"done": true}),
-		Choices: map[string]interface{}{"your_money": moneyText(money), "see_the_shop": shop,
-			"buy":             fmt.Sprintf("POST /api/characters/%d/shop {\"buy\": [{\"item\": \"...\", \"quantity\": 1}]}", charID),
-			"sell":            fmt.Sprintf("POST /api/characters/%d/shop {\"sell\": [{\"item_id\": \"...\"}]}", charID),
-			"finish_shopping": fmt.Sprintf("POST /api/characters/%d/shop {\"done\": true}", charID),
-			"you_chose":       map[bool]string{false: "gold instead of an equipment package", true: "both equipment packages"}[bothPackages]}}
+	why += fmt.Sprintf("Yes: %s lists everything (add ?category=weapons, armor, gear, ammunition or tools) with what each item does, whether you are proficient and whether you can afford it; "+
+		"buy with POST /api/characters/%d/shop {\"buy\": [{\"item\": \"Longsword\", \"quantity\": 1}]}, sell with {\"sell\": [{\"item_id\": \"<id from your inventory>\"}]} (a shop pays half the price), "+
+		"and send {\"done\": true} when you have finished. No: send the request below and this step is complete. "+
+		"Shopping is optional: your character can join a campaign either way. The shop closes when your campaign starts; after that, buying and selling are up to your GM.", shop, charID)
+	st := setupStep{Key: "shop", Title: title, Why: why, Optional: true,
+		Request: req("POST", fmt.Sprintf("/api/characters/%d/shop", charID), no),
+		Choices: map[string]interface{}{"your_money": moneyText(money),
+			"yes": map[string]interface{}{"see_the_shop": shop,
+				"buy":             fmt.Sprintf("POST /api/characters/%d/shop {\"buy\": [{\"item\": \"...\", \"quantity\": 1}]}", charID),
+				"sell":            fmt.Sprintf("POST /api/characters/%d/shop {\"sell\": [{\"item_id\": \"...\"}]}", charID),
+				"finish_shopping": fmt.Sprintf("POST /api/characters/%d/shop {\"done\": true}", charID)},
+			"no":        fmt.Sprintf("POST /api/characters/%d/shop {\"done\": true}: the step is complete", charID),
+			"you_chose": map[bool]string{false: "gold instead of an equipment package", true: "both equipment packages"}[bothPackages]}}
 	return &st
 }

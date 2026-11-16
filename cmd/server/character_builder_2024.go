@@ -3013,7 +3013,7 @@ type setupStep struct {
 	Request map[string]interface{} `json:"request,omitempty"`
 	Then    *setupStep             `json:"then,omitempty"`
 	Choices map[string]interface{} `json:"choices,omitempty"` // what the player can choose from, each option explained (spells)
-	// Optional: the character is finished without it (the shop, the portrait, gear reminders); steps_left counts only the others
+	// Optional: the character is finished without it (the shop, the portrait, the starting level, gear reminders); steps_left counts only the others
 	Optional bool `json:"optional,omitempty"`
 
 	Problem string `json:"problem,omitempty"` // what is wrong with what is stored, and what the request fixes
@@ -3139,7 +3139,7 @@ func handleCharacterSetup(w http.ResponseWriter, r *http.Request, charID int) {
 	} else {
 		extra(setupStep{Key: "weapon_in_hand", Title: "Hold a weapon", Done: true, Why: "In your main hand: " + mainHand})
 	}
-	// the starting shop, for every character while it is open: buy gear, sell from the pack, then done (shop_2024.go)
+	// the starting shop, an optional question while it is open: shop for more equipment, or answer no (shop_2024.go)
 	if st := shopSetupStep(charID); st != nil {
 		extra(*st)
 	}
@@ -3188,7 +3188,7 @@ func handleCharacterSetup(w http.ResponseWriter, r *http.Request, charID int) {
 		}
 	}
 	// character_finished is the sheet's (characterToFinish: the choices of the rules); steps_left also counts the guided steps
-	// after them (a weapon in hand, the shop, the portrait), which the player may finish before or after joining
+	// after them (a weapon in hand), which the player may finish before or after joining; the shop and the portrait are optional
 	out := map[string]interface{}{"character_id": charID, "character_finished": choicesLeft == 0, "steps": steps, "steps_left": left,
 		"choices_left": choicesLeft, "optional_steps_left": optLeft}
 	if choicesLeft == 0 && left > 0 {
