@@ -269,7 +269,9 @@ Add to the owner, never beside it. When you give another rule one owner, add it 
   the party chat, change their characters (joining with a new character takes the old one's seat: `claimSeat`'s `SwapBeforeStart` →
   `swapSeat`, schedule_2024.go) and say they are ready (`POST /api/campaigns/{id}/ready`, written by `setSeatReady` on
   `campaign_seats.ready_at`, cleared whenever a seat changes hands). `campaignReadiness` / `readinessView` is the one answer to who is
-  ready; `startWaitsOn` refuses the GM's start (409 `players_not_ready`) until every player is. A full party no longer starts the
+  ready (with each player's `idle_hours`, from the log, the party chat and joining); `startWaitsOn` refuses the GM's start (409
+  `players_not_ready`) until every player is, but for the idle players the GM names in `start_without` (logged `started_without`;
+  guidance: only for a player who joined and went idle). Removing a player (`kick-character`) is guidance too: a last resort. A full party no longer starts the
   campaign by itself (`reconcileCampaignStatus`). `beforeStartGuide` is the one text that explains it: the creation and join replies,
   my-turn's `campaign_not_started`, the heartbeat, GM status and the campaign's `before_start`. Go: `TestPostgresPlayersReadyBeforeStart`.
 - **The action log's bookkeeping records** (not play: polls, joining, following, ready, the GM opening play): `notPlayTypes` /
