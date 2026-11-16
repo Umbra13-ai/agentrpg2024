@@ -18,6 +18,8 @@ type monsterTraitRule struct {
 	Match *regexp.Regexp // the wording that marks the trait when its name varies (auras, Regeneration)
 	Does  string         // what the server does, as the GM reads it
 	Where string         // the rule's owner in the code
+	Aura  bool           // it acts on its own timing around the monster: the GM's monster-features view lists it under
+	// automatic_traits, and gm/monster-features {"auras": false} switches it off (Regeneration aside)
 }
 
 var monsterTraitRules = []monsterTraitRule{
@@ -28,10 +30,10 @@ var monsterTraitRules = []monsterTraitRule{
 		Where: "monster_features_2024.go, saveCtx.resist"},
 	{Name: "Undead Fortitude", Does: "damage that drops it to 0 Hit Points (not Radiant, not a Critical Hit) gets a Constitution save, DC 5 + the damage, to stay at 1 Hit Point",
 		Where: "undeadFortitude (dodge_2024.go)"},
-	{Name: "Aura of Authority", Does: "it and its allies within 10 feet have Advantage on attack rolls and saving throws", Where: "attackSources, saveSources"},
-	{Match: regenRe, Does: "regains Hit Points at the start of each of its turns (not after the damage the trait names)", Where: "monster_features_2024.go"},
-	{Match: startAuraRe, Does: "an aura: each enemy that starts its turn in it makes the saving throw", Where: "monster_features_2024.go"},
-	{Match: endAuraRe, Does: "an aura: each creature in it takes the damage at the end of the monster's turn", Where: "monster_features_2024.go"},
+	{Name: "Aura of Authority", Does: "it and its allies within 10 feet have Advantage on attack rolls and saving throws", Where: "attackSources, saveSources", Aura: true},
+	{Match: regenRe, Does: "regains Hit Points at the start of each of its turns (not after the damage the trait names)", Where: "monster_features_2024.go", Aura: true},
+	{Match: startAuraRe, Does: "an aura: each enemy that starts its turn in it makes the saving throw", Where: "monster_features_2024.go", Aura: true},
+	{Match: endAuraRe, Does: "an aura: each creature in it takes the damage at the end of the monster's turn", Where: "monster_features_2024.go", Aura: true},
 }
 
 // traitName: a trait's name without its parenthesis ("Legendary Resistance (3/Day, or 4/Day in Lair)" -> "Legendary Resistance").
@@ -52,11 +54,9 @@ func traitRuleFor(t srdMonsterEntry) (monsterTraitRule, bool) {
 	return monsterTraitRule{}, false
 }
 
-// monsterHasTrait: the monster in this fight (its combat id) has the trait in its stat block. trait is a Name of
-// monsterTraitRules (TestMonsterTraitsHaveOneOwner checks).
-func monsterHasTrait(lobbyID, id int, trait string) bool {
-	_, meta, ok := monsterCombatant(lobbyID, id)
-	if !ok || meta == nil {
+// metaHasTrait: the stat block has the trait (a Name of monsterTraitRules).
+func metaHasTrait(meta *monsterMeta, trait string) bool {
+	if meta == nil {
 		return false
 	}
 	for _, t := range meta.Traits {
@@ -65,6 +65,24 @@ func monsterHasTrait(lobbyID, id int, trait string) bool {
 		}
 	}
 	return false
+}
+
+// auraTraits: the names of a stat block's traits whose rule acts on its own timing around the monster (Aura rows).
+func auraTraits(meta *monsterMeta) []string {
+	var out []string
+	for _, t := range meta.Traits {
+		if r, ok := traitRuleFor(t); ok && r.Aura {
+			out = append(out, t.Name)
+		}
+	}
+	return out
+}
+
+// monsterHasTrait: the monster in this fight (its combat id) has the trait in its stat block. trait is a Name of
+// monsterTraitRules (TestMonsterTraitsHaveOneOwner checks).
+func monsterHasTrait(lobbyID, id int, trait string) bool {
+	_, meta, ok := monsterCombatant(lobbyID, id)
+	return ok && metaHasTrait(meta, trait)
 }
 
 // traitsForGM: a monster's traits as the GM's stat block shows them: each with what the server does about it, or that the GM

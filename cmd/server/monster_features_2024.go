@@ -557,13 +557,7 @@ func auraOfAuthority(lobbyID, monsterID int) bool {
 		if cid >= 0 || meta == nil || asInt(e["hp"]) <= 0 || loadMonsterState(lobbyID, cid).AurasOff {
 			continue
 		}
-		has := false
-		for _, t := range meta.Traits {
-			if t.Name == "Aura of Authority" {
-				has = true
-			}
-		}
-		if !has || monsterIncapacitated(lobbyID, cid) {
+		if !metaHasTrait(meta, "Aura of Authority") || monsterIncapacitated(lobbyID, cid) {
 			continue
 		}
 		if cid == monsterID || !hasMap {
@@ -659,13 +653,7 @@ func monsterFeaturesInfo(lobbyID, id int) map[string]interface{} {
 	if lr > 0 {
 		out["legendary_resistance"] = map[string]interface{}{"per_day": lr, "used": s.LRUsed, "left": lr - s.LRUsed, "policy": s.LRPolicy}
 	}
-	var auras []string
-	for _, t := range meta.Traits {
-		if startAuraRe.MatchString(t.Text) || endAuraRe.MatchString(t.Text) || t.Name == "Aura of Authority" || regenRe.MatchString(t.Text) {
-			auras = append(auras, t.Name)
-		}
-	}
-	if len(auras) > 0 {
+	if auras := auraTraits(meta); len(auras) > 0 {
 		out["automatic_traits"] = auras
 		out["auras_on"] = !s.AurasOff
 	}

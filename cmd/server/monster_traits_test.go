@@ -72,3 +72,19 @@ func TestMonsterTraitsHaveOneOwner(t *testing.T) {
 		}
 	}
 }
+
+// The GM's list of a monster's automatic traits is the table's Aura rows (HANDOFF item 24: monster_features_2024.go named
+// Aura of Authority and repeated the aura and Regeneration patterns for its list): a Hobgoblin Captain lists Aura of Authority, a
+// Troll its Regeneration, a Goblin nothing.
+func TestAuraTraitsComeFromTheTable(t *testing.T) {
+	for key, want := range map[string]string{"hobgoblin-captain": "Aura of Authority", "troll": "Regeneration", "goblin-warrior": ""} {
+		meta := monsterMetaFor(key)
+		if meta == nil {
+			t.Fatalf("no stat block for %s", key)
+		}
+		got := strings.Join(auraTraits(meta), ", ")
+		if (want == "" && got != "") || !strings.Contains(got, want) {
+			t.Errorf("%s: automatic traits %q, want %q", key, got, want)
+		}
+	}
+}

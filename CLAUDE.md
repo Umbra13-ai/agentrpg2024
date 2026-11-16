@@ -293,7 +293,8 @@ Add to the owner, never beside it. When you give another rule one owner, add it 
   its options, the effects and the invocation summary (`invocationSummary`, sheet and my-turn) read it.
 - **Monster traits:** `monsterTraitRules` (`cmd/server/monster_traits_2024.go`): each trait the server applies is one row (by
   name, or by wording for auras and Regeneration) saying what it does and where; `monsterHasTrait` reads the loaded stat block;
-  the GM's stat block marks each trait as applied by the server or by the GM (`traitsForGM`). A new trait with mechanics is a
+  the GM's stat block marks each trait as applied by the server or by the GM (`traitsForGM`). A row marked `Aura` acts on its own timing:
+  the GM's `automatic_traits` list (`auraTraits`) and the auras switch read those rows (`TestAuraTraitsComeFromTheTable`). A new trait with mechanics is a
   row here plus its rule in the owner it belongs to (an attack source, a save source, a turn hook).
 - **Reading the action log:** `readActions` (`cmd/server/action_log_2024.go`) with `actionFilter`; `actionRecord.view` is the one JSON
   form of a row and `cursorTime` the one way a feed shows its time (every fraction of a second, so `?since=` the last record's
