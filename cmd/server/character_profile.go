@@ -584,6 +584,8 @@ const characterProfilePage = `
 .cp .pips{white-space:nowrap}
 .cp .pips span{display:inline-block;width:.7em;height:.7em;border:1px solid var(--accent);border-radius:50%;margin-right:.18em;vertical-align:-.05em}
 .cp .pips span.on{background:var(--accent)}
+.cp .pipgrid{display:grid;grid-template-columns:max-content 1fr;column-gap:.6em;row-gap:.35em;align-items:center;margin:.4em 0}
+.cp .pipgrid .pv{white-space:nowrap}
 .cp .loc{margin:.5em 0 .2em;font-variant:small-caps;color:var(--accent);font-weight:bold;border-bottom:1px solid var(--accent)}
 .cp .loc small{font-variant:normal;font-weight:normal;color:var(--muted)}
 .cp ul.items{margin:.1em 0 .3em 1.2em;padding:0}
@@ -703,6 +705,9 @@ function render(d,p){
   pw.appendChild(frame);statcol.appendChild(pw);
 
   var sb=el('div','box');
+  // pipRow: a row of a two-column grid (the label, then the bubbles), so every row's bubbles start at the same place
+  var pipGrid=null,pipRow=function(label,total,rem,note){if(!pipGrid){pipGrid=el('div','pipgrid');sb.appendChild(pipGrid)}
+    add(pipGrid,el('b','l',label),add(el('span','pv'),pips(total,rem),note?document.createTextNode(' '+note):null))};
   add(sb,el('h3','boxname',d.name));
   var tl='Level '+d.level+' '+title(d.species)+' '+title(d.class)+(scName?' ('+title(scName)+')':'');
   if(S.alignment)tl+=', '+S.alignment;
@@ -774,8 +779,8 @@ function render(d,p){
     if(d.spell_attack_bonus!==undefined)line(sb,'Spell Attack Modifier',sgn(d.spell_attack_bonus));
     if(d.concentrating_on)line(sb,'Concentrating on',title(d.concentrating_on));
     [['Spell Slots',d.spell_slots],['Pact Magic Slots',d.pact_magic]].forEach(function(pair){var o=pair[1];if(!o||!o.total)return;
-      Object.keys(o.total).sort().forEach(function(k){var q=el('p');add(q,el('b','l',pair[0]==='Spell Slots'?ordinal(+k)+'-level slots ':'Pact '+ordinal(+k)+'-level slots '),pips(o.total[k],(o.remaining||{})[k]));sb.appendChild(q)})})}
-  (d.class_resources||[]).forEach(function(rs){var q=el('p');add(q,el('b','l',rs.name+' '),pips(rs.max||0,rs.current||0),document.createTextNode(' ('+(rs.current||0)+' of '+(rs.max||0)+')'));sb.appendChild(q)});
+      Object.keys(o.total).sort(function(a,b){return a-b}).forEach(function(k){pipRow(pair[0]==='Spell Slots'?ordinal(+k)+'-level slots':'Pact '+ordinal(+k)+'-level slots',o.total[k],(o.remaining||{})[k],'')})})}
+  (d.class_resources||[]).forEach(function(rs){pipRow(rs.name,rs.max||0,rs.current||0,'('+(rs.current||0)+' of '+(rs.max||0)+')')});
 
   // Actions, Bonus Actions, Reactions, Options
   sb.appendChild(el('div','sbh','Actions'));
