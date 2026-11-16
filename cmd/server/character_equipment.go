@@ -36,10 +36,10 @@ var containerKinds = map[string]struct {
 	Capacity string
 	Lbs      float64
 }{
-	"backpack":    {"Backpack", "30 pounds, 1 cubic foot", 30},
-	"sack":        {"Sack", "30 pounds, 1 cubic foot", 30},
-	"basket":      {"Basket", "40 pounds, 2 cubic feet", 40},
-	"pouch":       {"Pouch", "6 pounds, one-fifth of a cubic foot", 6},
+	"backpack":    {"Backpack", "30 lb., 1 cubic foot", 30},
+	"sack":        {"Sack", "30 lb., 1 cubic foot", 30},
+	"basket":      {"Basket", "40 lb., 2 cubic feet", 40},
+	"pouch":       {"Pouch", "6 lb., one-fifth of a cubic foot", 6},
 	"chest":       {"Chest", "12 cubic feet", 0},
 	"bucket":      {"Bucket", "half a cubic foot", 0},
 	"quiver":      {"Quiver", "20 Arrows", 0},

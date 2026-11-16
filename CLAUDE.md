@@ -73,7 +73,7 @@ Add to the owner, never beside it. When you give another rule one owner, add it 
   Sneak Attack, a smite) is told after the outcome and only when it happens, never as a note written before the roll.
   **A character's weapon attack bonus and damage modifier** (the ability used, proficiency, a magic weapon's +N, Archery) is
   `weaponAttackMods` (`cmd/server/weapon_attack_2024.go`): the main and off-hand attacks, the opportunity attack and the sheet's attack
-  lines (with the breakdown, `toHit`) read it; what belongs to one moment (Rage, magic ammunition, Sacred Weapon) stays with the attack
+  lines (with the breakdown, `toHit`; every weapon the character has, the ones in hand first, the others marked carried: Matt, Nov 16) read it; what belongs to one moment (Rage, magic ammunition, Sacred Weapon) stays with the attack
   (feedback log 38; `TestPostgresSheetAttackBonusIsTheAttacksOwn`).
   **The attacker's line** is `game.AttackRoll.HeadForAttacker` (the total, the d20 and what was added, never the Armor Class),
   through `LineForAttacker` or, for a recorded attack, `attackHead` (`cmd/server/attack_target.go`); the GM's line is

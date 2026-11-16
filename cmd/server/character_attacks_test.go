@@ -157,3 +157,25 @@ func TestParseWeaponPrefersTheLongestName(t *testing.T) {
 		}
 	}
 }
+
+// Every weapon a character has is on the sheet with its attack (Matt, Nov 16): the ones in hand first, then the carried ones, marked
+// "(carried)" with how to equip them; a weapon in a lost bag isn't.
+func TestSheetListsEveryCarriedWeapon(t *testing.T) {
+	sb := map[string]interface{}{"speed_feet": 30}
+	addCombatBlock(sb, combatInput{
+		Class: "fighter", Level: 11, Str: 12, Dex: 20, WeaponProfs: "simple, martial",
+		Inventory: []invItem{{"id": "i1", "name": "longbow"}, {"id": "i2", "name": "handaxe"}, {"id": "i3", "name": "dagger", "quantity": 2.0}},
+		MainHand:  "longbow", BaseSpeed: 30,
+	})
+	attacks, _ := sb["attacks"].([]sbEntry)
+	var names []string
+	for _, a := range attacks {
+		names = append(names, a.Name)
+	}
+	if len(names) != 4 || names[0] != "Longbow" || names[1] != "Handaxe (carried)" || names[2] != "Dagger (2) (carried)" || names[3] != "Unarmed Strike" {
+		t.Fatalf("attacks: %v", names)
+	}
+	if d := attackByName(t, sb, "Handaxe (carried)").Description; !strings.Contains(d, "+5 to hit (Strength +1, proficiency +4)") || !strings.Contains(d, "equip-weapon") {
+		t.Errorf("a carried weapon's line: %q", d)
+	}
+}

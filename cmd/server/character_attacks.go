@@ -217,13 +217,14 @@ func addCombatBlock(sb map[string]interface{}, in combatInput) {
 
 	// ---- attacks: carried weapons, then equipped ones not in the pack, then Unarmed Strike
 	type haveWeapon struct {
-		key string
-		w   SRDWeapon
-		qty int
+		key  string
+		w    SRDWeapon
+		qty  int
+		held bool
 	}
 	var have []haveWeapon
 	seen := map[string]int{}
-	add := func(name string, qty int) {
+	add := func(name string, qty int, held bool) {
 		key, w, ok := findWeapon(name)
 		if !ok {
 			return
@@ -235,10 +236,10 @@ func addCombatBlock(sb map[string]interface{}, in combatInput) {
 			return
 		}
 		seen[key] = len(have)
-		have = append(have, haveWeapon{key, w, qty})
+		have = append(have, haveWeapon{key, w, qty, held})
 	}
-	// Only equipped weapons can attack: the main hand and off hand, if the weapon
-	// is not in a lost bag. The quantity comes from the inventory when it is there.
+	// Every weapon the character has (Matt, Nov 16: a player sees what each attack would be): the ones in hand first, then the
+	// carried ones (not in a lost bag), marked "carried" (equip one to attack with it). The quantity comes from the inventory.
 	qtyOf := func(name string) int {
 		for _, it := range in.Inventory {
 			if !isContainer(it) && !isLost(it, byID) && sameWeapon(itemStr(it, "name"), name) {
@@ -249,13 +250,23 @@ func addCombatBlock(sb map[string]interface{}, in combatInput) {
 	}
 	for _, hand := range []string{in.MainHand, in.OffHand} {
 		if hand != "" && !allMatchingLost(in.Inventory, hand) {
-			add(hand, qtyOf(hand))
+			add(hand, qtyOf(hand), true)
+		}
+	}
+	for _, it := range in.Inventory {
+		if !isContainer(it) && !isLost(it, byID) {
+			add(itemStr(it, "name"), itemQty(it), false)
 		}
 	}
 
 	attacks := []sbEntry{}
 	for _, h := range have {
-		attacks = append(attacks, weaponAttackEntry(in, h.key, h.w, h.qty))
+		e := weaponAttackEntry(in, h.key, h.w, h.qty)
+		if !h.held {
+			e.Name += " (carried)"
+			e.Description += " Equip it to attack with it: POST /api/characters/equip-weapon."
+		}
+		attacks = append(attacks, e)
 	}
 	attacks = append(attacks, unarmedStrikeEntry(in))
 	sb["attacks"] = attacks

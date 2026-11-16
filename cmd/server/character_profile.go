@@ -602,6 +602,8 @@ const characterProfilePage = `
 (function(){
 var ID=__CHAR_ID__;
 var root=document.getElementById('cp');
+function lb(n){return n+' lb.'}
+function lbText(t){return String(t).replace(/(\d) pounds?\b/g,'$1 lb.')}
 function el(tag,cls,text){var e=document.createElement(tag);if(cls)e.className=cls;if(text!==undefined&&text!==null)e.textContent=String(text);return e}
 function add(p){for(var i=1;i<arguments.length;i++){if(arguments[i])p.appendChild(arguments[i])}return p}
 function sgn(n){return (n>=0?'+':'−')+Math.abs(n)}
@@ -628,12 +630,12 @@ function itemList(items){
     var label=title(it.name)+(it.quantity>1?' ('+it.quantity+')':'');
     if(it.contents){
       li.appendChild(el('span','bag',label));
-      var meta=[];if(it.capacity)meta.push('holds '+it.capacity);if(it.capacity_lbs&&it.carried_lbs!==undefined)meta.push(it.carried_lbs+' of '+it.capacity_lbs+' pounds used');
+      var meta=[];if(it.capacity)meta.push('holds '+lbText(it.capacity));if(it.capacity_lbs&&it.carried_lbs!==undefined)meta.push(it.carried_lbs+' of '+lb(it.capacity_lbs)+' used');
       if(meta.length)li.appendChild(el('span','muted',' — '+meta.join('; ')));
       li.appendChild(it.contents.length?itemList(it.contents):el('div','muted','Empty.'));
     } else {
       li.appendChild(document.createTextNode(label));
-      if(it.weight_lbs){var tw=Math.round(it.weight_lbs*(it.quantity||1)*100)/100;li.appendChild(el('span','muted',' — '+tw+(tw===1?' pound':' pounds')))};
+      if(it.weight_lbs){var tw=Math.round(it.weight_lbs*(it.quantity||1)*100)/100;li.appendChild(el('span','muted',' — '+lb(tw)))};
     }
     ul.appendChild(li)});
   return ul}
@@ -801,13 +803,13 @@ function render(d,p){
   group('Worn or carried','on the body: worn, sheathed, slung or on the belt, not in hand',lay.worn);
   if(lay.held&&lay.held.length){group('Held','in hand',lay.held)}else{var hh=el('div','loc','Held');hh.appendChild(el('small',null,' — in hand: nothing (both hands free)'));eb.appendChild(hh)}
   (lay.containers||[]).forEach(function(c){
-    var h=el('div','loc',title(c.name));var meta=[];if(c.carried)meta.push(c.carried);if(c.capacity)meta.push('holds '+c.capacity);if(c.capacity_lbs&&c.carried_lbs!==undefined)meta.push(c.carried_lbs+' of '+c.capacity_lbs+' pounds used');if(!c.carried)meta.push('not on the body');
+    var h=el('div','loc',title(c.name));var meta=[];if(c.carried)meta.push(c.carried);if(c.capacity)meta.push('holds '+lbText(c.capacity));if(c.capacity_lbs&&c.carried_lbs!==undefined)meta.push(c.carried_lbs+' of '+lb(c.capacity_lbs)+' used');if(!c.carried)meta.push('not on the body');
     h.appendChild(el('small',null,' — '+meta.join('; ')));eb.appendChild(h);
     eb.appendChild(c.contents.length?itemList(c.contents):el('p','muted','Empty.'))});
   group('Not yet sorted','not assigned to the body or a bag',lay.unsorted);
   var cur=d.currency,cs=[];if(cur){[['pp','Platinum'],['gp','Gold'],['ep','Electrum'],['sp','Silver'],['cp','Copper']].forEach(function(k){if(cur[k[0]])cs.push(cur[k[0]]+' '+k[1])})}
   var q2=el('p');add(q2,el('b','l','Coin '),document.createTextNode(cs.length?cs.join(', '):'None'));eb.appendChild(q2);
-  var ca=d.carrying;if(ca){var q3=el('p');add(q3,el('b','l','Weight carried '),document.createTextNode(Math.round(ca.total_weight*100)/100+' of '+ca.carrying_capacity+' pounds'+(ca.speed_note?' ('+ca.speed_note+')':'')));eb.appendChild(q3)}
+  var ca=d.carrying;if(ca){var q3=el('p');add(q3,el('b','l','Weight carried '),document.createTextNode(Math.round(ca.total_weight*100)/100+' of '+lb(ca.carrying_capacity)+(ca.speed_note?' ('+ca.speed_note+')':'')));eb.appendChild(q3)}
   statcol.appendChild(eb);
 
   add(sheet,textcol,statcol);root.appendChild(sheet);
