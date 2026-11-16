@@ -134,6 +134,10 @@ func actionReplaySinceLastNarration(charID, lobbyID int, actionType, description
 	return true, result.String, createdAt.Time
 }
 
+// isRefusalResult: an action's result that is a refusal ("Cannot ..."): it spends nothing in a fight and uses no exploration beat
+// (hasCharacterActedSinceLastNarration's NOT LIKE 'Cannot %' is the same rule in SQL).
+func isRefusalResult(result string) bool { return strings.HasPrefix(result, "Cannot ") }
+
 // beatFreeTypesSQL: the action types that don't use up the exploration beat (speaking, one object ...), as more entries of a SQL
 // NOT IN list: they are the action table's own names, never a player's text.
 func beatFreeTypesSQL() string {

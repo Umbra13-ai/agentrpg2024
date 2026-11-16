@@ -99,6 +99,9 @@ func giftOfTheProtectorsAction(charID int, description string) string {
 	if target <= 0 {
 		target = charID
 	}
+	if !strings.Contains(d, "erase") && target != charID && inActiveCombat(lobby) {
+		return "Cannot use Gift of the Protectors that way in a fight: writing a name takes the writer's own action (PHB 2024), so in a fight you write only your own; " + creatureName(lobby, target) + " can write theirs outside the fight. Nothing was spent."
+	}
 	page := protectorsPage(charID)
 	has := false
 	var kept []int

@@ -81,6 +81,9 @@ func magicalCunning(charID int) string {
 	if why := actionRefusal("magical_cunning", charID).text(); why != "" {
 		return why
 	}
+	if inActiveCombat(lobbyOfChar(charID)) { // PHB 2024: "you can perform an esoteric rite for 1 minute": not within a fight's rounds
+		return "Cannot use Magical Cunning: it is a 1-minute rite, too long to perform during a fight. Nothing was spent."
+	}
 	col := pactSlotColumn(charID) // F132: a single-class Warlock spends its Pact slots from spell_slots_used
 	total := 0
 	for _, n := range game.SpellSlots("warlock", level) {

@@ -254,7 +254,7 @@ func resetTurnFlags(charID, speed int) {
 		movement_remaining = $1, reaction_used = false WHERE id = $2`, speed, charID)
 	// Champion level 10, Heroic Warrior: in combat you can give yourself Heroic Inspiration whenever you start your turn without it
 	db.Exec(`UPDATE characters SET inspiration = true WHERE id = $1 AND class = 'fighter' AND subclass = 'champion' AND level >= 10 AND COALESCE(inspiration,false) = false`, charID)
-	clearUses(charID, "peerless_aim", "apotheosis", "eldritch_smite") // Boon of Combat Prowess returns at the start of your turn
+	clearUses(charID, "peerless_aim", "apotheosis", "eldritch_smite", deathSaveTurnKey) // Boon of Combat Prowess returns at the start of your turn; a new turn's Death Saving Throw
 	for _, set := range []string{
 		"bonus_action_spell_cast = false",
 		"attacks_remaining = NULL",

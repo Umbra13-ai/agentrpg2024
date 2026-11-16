@@ -116,6 +116,15 @@ func init() {
 				resetTurnFlags(t.NextID, characterSpeedOf(t.NextID)) // also ends a Dodge: "until the start of your next turn"
 			}
 		}},
+		{"a dying character's Death Saving Throw, once, at the start of its turn (SRD 5.2.1; it takes no action)", func(t *turnChange) {
+			if characterTurn(t.NextID) && needsDeathSave(t.NextID) {
+				text, already := rollDeathSave(t.NextID) // death_save_2024.go
+				if !already {
+					t.Log = append(t.Log, fmt.Sprintf("%s: %s", t.NextName, text))
+					recordGMAction(db, t.Lobby, "death_save", fmt.Sprintf("%s starts the turn at 0 Hit Points: the Death Saving Throw is rolled", t.NextName), text)
+				}
+			}
+		}},
 		{"spells at the turn change (Blink, Regenerate, Aura of Life, Cloak of Displacement)", func(t *turnChange) {
 			ended := t.EndedID
 			if t.how.remove != 0 {

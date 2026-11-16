@@ -470,6 +470,10 @@ func handleCharacterEquipArmor(w http.ResponseWriter, r *http.Request) {
 		response["time_required"] = timeInfo
 	}
 
+	if wearingHeavyArmor(req.CharacterID) && removeCondition(req.CharacterID, "raging") { // SRD 5.2.1 Rage: it ends early if you don Heavy armor
+		response["rage_ended"] = "Donning Heavy armor ends your Rage."
+	}
+
 	json.NewEncoder(w).Encode(response)
 }
 

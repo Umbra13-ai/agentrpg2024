@@ -180,8 +180,8 @@ var actionTypes = []actionType{
 	{Name: "extinguish", Title: "Put out the fire on you", Section: "Moving and the free parts of a turn", Cost: costAction, While: "burning",
 		What:    "You are burning: drop Prone and roll to put the fire out.",
 		Example: `{"action": "extinguish"}`},
-	{Name: "death_save", Title: "Death Saving Throw", Section: "Moving and the free parts of a turn", Cost: costAction, Beat: true, While: "dying",
-		What:    "At 0 Hit Points and not Stable: roll your Death Saving Throw on your turn (once a turn).",
+	{Name: "death_save", Title: "Death Saving Throw", Section: "Moving and the free parts of a turn", Cost: costFree, Beat: true, While: "dying",
+		What:    "At 0 Hit Points and not Stable: the Death Saving Throw takes no action and is made once a turn, at its start. In a fight the server rolls it when your turn starts; send it yourself only where no fight's turn has rolled it.",
 		Example: `{"action": "death_save"}`},
 	{Name: "concentration_check", Title: "Concentration check", Section: "Moving and the free parts of a turn", Cost: costFree, Fields: []string{"description"},
 		What:    "Roll a Constitution save to keep Concentration after damage the server didn't apply itself (the damage taken first in the description). Damage the server applies rolls it for you.",
@@ -200,9 +200,6 @@ var actionTypes = []actionType{
 	{Name: "extend_rage", Title: "Extend your Rage", Section: "Class features", Cost: costBonus, Who: actionWho{Class: "barbarian", Level: 1}, While: "raging",
 		What:    "Keep your Rage going until the end of your next turn (attacking an enemy or forcing a save extends it too).",
 		Example: `{"action": "extend_rage"}`},
-	{Name: "end_rage", Title: "End your Rage", Section: "Class features", Cost: costAction, Who: actionWho{Class: "barbarian", Level: 1}, While: "raging",
-		What:    "End your Rage now.",
-		Example: `{"action": "end_rage"}`},
 	{Name: "frenzy", Aliases: []string{"frenzy_attack"}, Title: "Frenzy (how it works)", Section: "Class features", Cost: costFree, Who: actionWho{Class: "barbarian", Subclass: "berserker", Level: 3},
 		What:    "Explains the 2024 Frenzy: while raging, a Reckless Attack's first Strength hit on your turn deals extra d6s equal to your Rage Damage (write \"reckless\" in the attack). There is no extra attack.",
 		Example: `{"action": "frenzy"}`},
@@ -276,7 +273,7 @@ var actionTypes = []actionType{
 		What:    "At the start of your turn, 3 Focus Points: Resistance to every damage type but Force for 1 minute.",
 		Example: `{"action": "superior_defense"}`},
 	{Name: "quivering_palm", Title: "Quivering Palm", Section: "Class features", Cost: costFree, Who: actionWho{Class: "monk", Subclass: "open-hand", Level: 17}, Fields: []string{"target_id", "description"},
-		What:    "\"start\" after an Unarmed Strike hits (4 Focus Points), \"end\" later: the target makes a Constitution save, 10d12 Force damage (half on a success).",
+		What:    "\"start\" after an Unarmed Strike hits (4 Focus Points; no action), \"end\" later (an action, or one attack of your Attack action): the target makes a Constitution save, 10d12 Force damage (half on a success). \"end harmlessly\" takes no action.",
 		Example: `{"action": "quivering_palm", "target_id": -1, "description": "start"}`},
 	{Name: "lay_on_hands", Title: "Lay on Hands", Section: "Class features", Cost: costBonus, Who: actionWho{Class: "paladin", Level: 1}, Uses: "lay_on_hands", Fields: []string{"description"},
 		What:    "Restore Hit Points from your pool (five times your Paladin level), or spend 5 to end the Poisoned condition: the amount and the creature in the description.",
@@ -308,14 +305,14 @@ var actionTypes = []actionType{
 	{Name: "dragon_wings", Title: "Dragon Wings", Section: "Class features", Cost: costBonus, Who: actionWho{Class: "sorcerer", Subclass: "draconic", Level: 14},
 		What:    "Sprout draconic wings: a Fly Speed of 60 feet for 1 hour.",
 		Example: `{"action": "dragon_wings"}`},
-	{Name: "magical_cunning", Title: "Magical Cunning", Section: "Class features", Cost: costAction, Who: actionWho{Class: "warlock", Level: 2},
-		What:    "A 1-minute rite: regain expended Pact Magic slots, up to half your maximum (round up). Once per Long Rest.",
+	{Name: "magical_cunning", Title: "Magical Cunning", Section: "Class features", Cost: costFree, Who: actionWho{Class: "warlock", Level: 2},
+		What:    "A 1-minute rite (not during a fight; it takes no action of a turn): regain expended Pact Magic slots, up to half your maximum (round up; all of them at level 20, Eldritch Master). Once per Long Rest.",
 		Example: `{"action": "magical_cunning"}`},
 	{Name: "gaze_of_two_minds", Title: "Gaze of Two Minds", Section: "Class features", Cost: costBonus, Who: actionWho{Class: "warlock", Invocation: "gaze-of-two-minds"}, Fields: []string{"description"},
 		What:    "Touch a willing ally (named in the description) and perceive through its senses until the end of your next turn; again on a later turn to keep the link.",
 		Example: `{"action": "gaze_of_two_minds", "description": "Millie"}`},
-	{Name: "gift_of_the_protectors", Title: "Gift of the Protectors", Section: "Class features", Cost: costFree, Who: actionWho{Class: "warlock", Invocation: "gift-of-the-protectors"}, Fields: []string{"description"},
-		What:    "Your Book of Shadows' page: \"add <name>\" (a creature writes its name) or \"erase <name>\". A creature on it that drops to 0 Hit Points drops to 1 instead, once per Long Rest.",
+	{Name: "gift_of_the_protectors", Title: "Gift of the Protectors", Section: "Class features", Cost: costAction, Who: actionWho{Class: "warlock", Invocation: "gift-of-the-protectors"}, Fields: []string{"description"},
+		What:    "Your Book of Shadows' page: \"add <name>\" (writing a name takes the writer's action: in a fight you write your own; another creature writes its own outside a fight) or \"erase <name>\" (a Magic action, touching it). A creature on it that drops to 0 Hit Points drops to 1 instead, once per Long Rest.",
 		Example: `{"action": "gift_of_the_protectors", "description": "add Aldren"}`},
 
 	// ---------------------------------------------------------------- feats and Epic Boons
@@ -395,6 +392,20 @@ var costVariants = map[string]struct{ cost, group string }{
 	"item_bonus":    {costBonus, "use_item"},
 }
 
+// actionCostForms: a feature whose cost depends on what is done with it (PHB 2024), from the request's description, as the economy
+// word it is spent as. Quivering Palm: starting it is part of the Unarmed Strike that hit (no action); ending it is an action, or
+// one attack forgone when you take the Attack action (spent as an attack of the Attack action); ending it harmlessly takes no
+// action.
+var actionCostForms = map[string]func(description string) string{
+	"quivering_palm": func(d string) string {
+		low := strings.ToLower(d)
+		if strings.Contains(low, "end") && !strings.Contains(low, "harmless") {
+			return "attack"
+		}
+		return "quivering_palm"
+	},
+}
+
 // actionTypeIndex: every name and alias, folded by game.Key, to its type.
 var actionTypeIndex = func() map[string]int {
 	idx := map[string]int{}
@@ -449,8 +460,8 @@ func featureAction(action string) string {
 
 // ---------------------------------------------------------------- who can take what
 
-// actorFacts: what decides which types a character has now. openTo reads nothing else, so TestActionWhoMatchesGates can describe a
-// character without a database and ask the table and each feature's own gate (feature_gates_2024.go) the same question.
+// actorFacts: what decides which types a character has now. refusal reads nothing else, so a test can describe a character
+// without a database.
 type actorFacts struct {
 	class, subclass                                     string
 	level                                               int

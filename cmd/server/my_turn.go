@@ -630,7 +630,7 @@ func handleMyTurn(w http.ResponseWriter, r *http.Request) {
 		// If dying, main action should be death save
 		suggestions = []string{"You are dying! Make a death save with action: death_save"}
 		actions = []map[string]interface{}{
-			{"name": "death_save", "description": "Roll a d20. 10+ = success, <10 = failure. 3 successes = stable. 3 failures = death. Nat 20 = regain 1 HP. Nat 1 = 2 failures."},
+			{"name": "death_save", "description": "Made once at the start of your turn, no action (in a fight the server rolls it). A d20: 10+ = success, <10 = failure. 3 successes = stable. 3 failures = death. Nat 20 = regain 1 HP. Nat 1 = 2 failures."},
 		}
 	}
 

@@ -79,7 +79,7 @@ func TestWhoRefusalCodes(t *testing.T) {
 			}
 			return f
 		}},
-		{"end_rage", "wrong_state", func() actorFacts { return whoFacts("barbarian", "", 1) }},
+		{"extend_rage", "wrong_state", func() actorFacts { return whoFacts("barbarian", "", 1) }},
 		{"rage", "wrong_state", func() actorFacts {
 			f := whoFacts("barbarian", "", 1)
 			f.raging = true

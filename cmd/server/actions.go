@@ -964,6 +964,7 @@ func handleAction(w http.ResponseWriter, r *http.Request) {
 	// Check action economy (only in combat)
 	fleetNote := ""
 	resourceUsed := ""
+	spentAs := req.Action // the economy word the turn is spent as (an Attack action's attack, a Bonus Action cast ...)
 	if inCombat {
 		// Command, Haste's lethargy and Slow limit what the character can do this turn
 		econAction := spellEconomyAction(req.Action, req.SpellSlug, req.Description)
@@ -984,6 +985,10 @@ func handleAction(w http.ResponseWriter, r *http.Request) {
 				econAction = e // a Rod of Lordly Might button (a Bonus Action), the Luck Blade's Luck (no action)
 			}
 		}
+		if form, ok := actionCostForms[req.Action]; ok {
+			econAction = form(req.Description) // what a feature costs depends on what is done with it (action_types_2024.go)
+		}
+		spentAs = econAction
 		if why := turnLimitProblem(charID, econAction); why != "" {
 			w.WriteHeader(http.StatusBadRequest)
 			json.NewEncoder(w).Encode(map[string]interface{}{"success": false, "error": "spell_effect_limit", "message": why, "hint": "Nothing was spent."})
@@ -1173,13 +1178,9 @@ func handleAction(w http.ResponseWriter, r *http.Request) {
 		takeOAWindow(lobbyID, charID, req.TargetID) // the Opportunity Attack chance is used
 		result = "War Caster (Reactive Spell, your Reaction): " + result
 	}
-	castRefused := (req.Action == "cast" && strings.HasPrefix(result, "Cannot cast ")) ||
-		((req.Action == "spiritual_weapon" || req.Action == "flame_blade" || req.Action == "gaseous_form") && strings.HasPrefix(result, "Cannot ")) || (req.Action == "use_item" && strings.HasPrefix(result, "Cannot ")) ||
-		(req.Action == "attack" && strings.HasPrefix(result, "Cannot attack with your ")) || // a named weapon without its base weapon (named_weapons_2024.go)
-		((req.Action == "wild_shape" || req.Action == "revert_wild_shape") && strings.HasPrefix(result, "Cannot ")) || // a refused Wild Shape spends no Bonus Action
-		(req.Action == "bardic_inspiration" && strings.HasPrefix(result, "Cannot inspire")) // F251: a refused Bardic Inspiration spends nothing
+	castRefused := isRefusalResult(result) // a refused action spends nothing (the same rule as the exploration beat)
 	if inCombat && resourceUsed != "" && resourceUsed != "free" && req.Action != "dash" && !resourceAlreadySpent && !castRefused {
-		consumeActionResource(charID, resourceUsed, effectiveMovementCost, req.Action)
+		consumeActionResource(charID, resourceUsed, effectiveMovementCost, spentAs)
 	}
 
 	// Handle prone condition removal when standing up
@@ -2593,38 +2594,8 @@ func resolveActionWithBonusDash(action, description string, charID int, bonusDas
 		return fmt.Sprintf("Cast spell: %s (Save DC: %d)", description, saveDC)
 
 	case "death_save":
-		// a Death Saving Throw: the one saving throw function (save_2024.go) rolls it with everything that applies to a save
-		// (Foresight, Beacon of Hope, Defy Death, Bless, Aura of Protection, Exhaustion, Halfling Luck); the natural roll
-		// decides what the SRD gives a 20 or a 1
-		ds := (&saveCtx{saver: charID, ability: game.DeathSave}).roll()
-		if championDefyDeath(charID) && ds.Natural >= 18 && ds.Natural < 20 { // Champion 18, Defy Death: 18-20 counts as a 20
-			ds = ds.Replace(20, fmt.Sprintf("Defy Death: %d counts as a 20", ds.Natural))
-		}
-		if ds.Natural <= 9 && periaptActive(charID) { // Periapt of Wound Closure: a 9 or lower becomes a 10 (F142)
-			ds = ds.Replace(10, fmt.Sprintf("Periapt of Wound Closure: %d becomes 10", ds.Natural))
-		}
-		roll := ds.ForSaver("Death saving throw")
-
-		// the result is written by the Hit Point owner with the row locked (hit_points_2024.go): a hit at 0 Hit Points at the same
-		// moment still counts. F210: "The number of both is reset to zero when you ... become Stable" (SRD 5.2.1).
-		before, after, out, err := recordDeathSave(charID, ds.Natural, ds.Success)
-		if err != nil {
-			return fmt.Sprintf("%s. The result couldn't be recorded (%s); try again.", roll, notFoundOrDBError(err, "no such character"))
-		}
-		nat1 := map[bool]string{true: "Natural 1 (2 failures)!", false: "Failure!"}[ds.Natural == 1]
-		switch out {
-		case game.DeathSaveRegained:
-			return fmt.Sprintf("%s. Natural 20! You regain consciousness with 1 HP!", roll)
-		case game.DeathSaveDied:
-			return fmt.Sprintf("%s. %s Total: %d failures. YOU HAVE DIED.", roll, nat1, after.Failures)
-		case game.DeathSaveFailure:
-			return fmt.Sprintf("%s. %s Total: %d successes, %d failures.", roll, nat1, after.Successes, after.Failures)
-		case game.DeathSaveStable:
-			return fmt.Sprintf("%s. Success! Total: %d successes. You are STABLE.", roll, before.Successes+1)
-		case game.DeathSaveSuccess:
-			return fmt.Sprintf("%s. Success! Total: %d successes, %d failures.", roll, after.Successes, after.Failures)
-		}
-		return fmt.Sprintf("%s. You aren't dying (at 0 Hit Points and alive), so nothing is recorded.", roll)
+		text, _ := rollDeathSave(charID) // free, once a turn (SRD 5.2.1; the turn-start hook rolls it for a dying character)
+		return text
 
 	case "concentration_check":
 		// Concentration check when taking damage (the damage taken is the first word of the description): game.ConcentrationDC
@@ -2703,16 +2674,6 @@ func resolveActionWithBonusDash(action, description string, charID int, bonusDas
 			return why
 		}
 		return "Frenzy works differently in the 2024 rules: while raging, if you attack recklessly (include \"reckless\" in the attack description), the first target you hit with a Strength attack on your turn takes extra damage. There is no extra attack and no Exhaustion."
-
-	case "end_rage":
-		// End rage early (the 2024 Frenzy costs no Exhaustion)
-		if why := actionRefusal("end_rage", charID).text(); why != "" {
-			return why
-		}
-		if !removeCondition(charID, "raging") {
-			return "You are not currently raging."
-		}
-		return "Your rage ends."
 
 	case "wild_shape":
 		// Druid Wild Shape - transform into a beast
@@ -3023,10 +2984,6 @@ func resolveActionWithBonusDash(action, description string, charID int, bonusDas
 		// with the same weapon against a different creature within 5ft of the original target.
 
 		// a Hunter Ranger with Horde Breaker chosen for Hunter's Prey
-		var hbChoicesJSON []byte
-		db.QueryRow("SELECT COALESCE(subclass_choices, '{}') FROM characters WHERE id = $1", charID).Scan(&hbChoicesJSON)
-		var hbChoices map[string]string
-		json.Unmarshal(hbChoicesJSON, &hbChoices)
 		if why := actionRefusal("horde_breaker", charID).text(); why != "" {
 			return why
 		}
@@ -3038,11 +2995,12 @@ func resolveActionWithBonusDash(action, description string, charID int, bonusDas
 			return "Horde Breaker already used this turn! It can only be used once per turn."
 		}
 
-		// Check that we've made an attack this turn (action_used should be true from Attack action)
-		var hbActionUsed bool
-		db.QueryRow("SELECT COALESCE(action_used, false) FROM characters WHERE id = $1", charID).Scan(&hbActionUsed)
-		if !hbActionUsed {
-			return "Horde Breaker requires making a weapon attack first! Use 'attack' action, then 'horde_breaker' against a different creature within 5ft of the original target."
+		// a weapon attack made this turn: the Attack action used, or begun (Extra Attack: attacks_remaining set by its first attack;
+		// PHB 2024 "when you make an attack with a weapon": after any of its attacks, not only the last)
+		var hbActionUsed, hbAttackBegun bool
+		db.QueryRow("SELECT COALESCE(action_used, false), attacks_remaining IS NOT NULL FROM characters WHERE id = $1", charID).Scan(&hbActionUsed, &hbAttackBegun)
+		if !hbActionUsed && !hbAttackBegun {
+			return "Cannot use Horde Breaker yet: it follows a weapon attack you make this turn. Attack first, then send horde_breaker against a different creature within 5 feet of that target."
 		}
 
 		// Mark horde_breaker as used

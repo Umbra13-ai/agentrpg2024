@@ -676,9 +676,14 @@ func resolvePendingTurns(lobbyID int) map[string]interface{} {
 		if need.Kind == needDeathSave {
 			// at 0 Hit Points and not stable: the rules give this turn no choice ("whenever you start your turn with 0 Hit Points,
 			// you must make a Death Saving Throw"), so the server rolls it and the fight goes on. A held turn can't be taken.
-			out, ok, why := ptRunStep(lobbyID, e.ID, owner, map[string]interface{}{"action": "death_save"})
+			// the turn-start hook rolled it when the turn began (rollDeathSave, once a turn); it is rolled here only if it hasn't been
+			text, already := rollDeathSave(e.ID)
+			if already {
+				text = "rolled at the start of the turn (the log has the roll)"
+			}
+			ok, why := !strings.HasPrefix(text, "Cannot roll the Death Saving Throw now"), text
 			if ok {
-				res := []map[string]interface{}{{"step": 1, "action": "death_save", "result": out["result"]}}
+				res := []map[string]interface{}{{"step": 1, "action": "death_save", "result": text}}
 				raw, _ := json.Marshal(map[string]interface{}{"used": "death saving throw", "steps": res})
 				db.Exec(`UPDATE pending_turns SET status = 'closed', note = 'At 0 Hit Points when the slot came: the server rolled the Death Saving Throw instead.', result = $4, resolved_at = NOW()
 					WHERE lobby_id = $1 AND character_id = $2 AND round = $3 AND status IN ('pending', 'needs_gm')`, lobbyID, e.ID, c.Round, raw)

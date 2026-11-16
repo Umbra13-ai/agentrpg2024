@@ -425,7 +425,7 @@ func addCondition(lobbyID, targetID int, a condAdd) condResult {
 }
 
 // conditionTakesHold: what a condition sets off once it is applied (after its transaction).
-//   - SRD 5.2.1 Incapacitated: Concentration ends; a druid's Wild Shape ends; a grapple ends when the grappler is Incapacitated
+//   - SRD 5.2.1 Incapacitated: Concentration ends; a druid's Wild Shape ends; a Barbarian's Rage ends; a grapple ends when the grappler is Incapacitated
 //     ("Ending a Grapple"). Paralyzed, Petrified, Stunned and Unconscious include it. Dodge's benefit is lost (dodgeActive asks).
 //   - Unconscious: the creature has the Prone condition and drops whatever it's holding.
 func conditionTakesHold(lobbyID, targetID int, cond, source string) map[string]interface{} {
@@ -439,6 +439,9 @@ func conditionTakesHold(lobbyID, targetID int, cond, source string) map[string]i
 			}
 			if note := endWildShapeIfDown(targetID); note != "" {
 				notes["wild_shape_ended"] = note
+			}
+			if removeCondition(targetID, "raging") { // SRD 5.2.1 Rage: it ends early if you have the Incapacitated condition
+				notes["rage_ended"] = "Incapacitated: the Rage ends"
 			}
 		}
 		if released := releaseAllGrapplesFrom(lobbyID, targetID); len(released) > 0 {
