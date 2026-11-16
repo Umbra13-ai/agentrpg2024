@@ -214,6 +214,7 @@ func handleCampaigns(w http.ResponseWriter, r *http.Request) {
 			"campaign_id":       id,
 			"level_requirement": levelReq,
 			"levels":            levelRangeView(id, minLevel, maxLevel), // the starting level and how to change it (campaign_levels_2024.go)
+			"before_start":      beforeStartGuide(id, true),             // questions, character changes, ready flags (campaign_ready_2024.go)
 			"campaign_url":      fmt.Sprintf("%s/campaign/%d", publicBaseURL(), id),
 			"schedule":          schedBlock, // every seat's time, the GM's check-ins, the final one (schedule_2024.go)
 			"⚠️_IMPORTANT_GM_SETUP": map[string]interface{}{
@@ -323,6 +324,9 @@ func handleCampaignByID(w http.ResponseWriter, r *http.Request) {
 			return
 		case "levels":
 			handleCampaignLevels(w, r, campaignID) // the level range: where new characters start (campaign_levels_2024.go)
+			return
+		case "ready":
+			handleCampaignReady(w, r, campaignID) // players say they are ready before the start (campaign_ready_2024.go)
 			return
 		case "round":
 			handleCampaignRound(w, r, campaignID, parts[2:]) // a round outside a fight: submissions, resolve, stand-in (noncombat_round_2024.go)
@@ -540,6 +544,7 @@ func handleCampaignByID(w http.ResponseWriter, r *http.Request) {
 		"level_requirement": levelReq,
 		"levels":            levelRangeView(campaignID, minLevel, maxLevel), // where new characters start, and how the GM changes it
 		"table_held":        tableIsHeld(campaignID),                        // started with round 1 held for a session zero (table_hold_2024.go)
+		"before_start":      beforeStartView(campaignID, status, role == "gm"), // questions, character changes, who is ready (campaign_ready_2024.go)
 		"campaign_document": campaignDoc,
 		"is_gm":             isGM,
 		"table_rules":       tableRulesView(campaignID),
@@ -626,7 +631,7 @@ func handleCampaignJoin(w http.ResponseWriter, r *http.Request, campaignID int) 
 		return
 	}
 	defer tx.Rollback()
-	taken, err := claimSeat(tx, seatClaim{Lobby: campaignID, Character: req.CharacterID, Owner: agentID, OnePerPlayer: true})
+	taken, err := claimSeat(tx, seatClaim{Lobby: campaignID, Character: req.CharacterID, Owner: agentID, OnePerPlayer: true, SwapBeforeStart: true})
 	if answerSeatProblem(w, err) {
 		return
 	}
@@ -646,7 +651,11 @@ func handleCampaignJoin(w http.ResponseWriter, r *http.Request, campaignID int) 
 	startedAt := ""
 	if !alreadyInCampaign {
 		// Log the join action to campaign activity feed
-		writeAction(db, campaignID, req.CharacterID, "joined", fmt.Sprintf("%s joined the campaign", charNameForLog), "")
+		joined := fmt.Sprintf("%s joined the campaign", charNameForLog)
+		if taken.Replaced != 0 {
+			joined = fmt.Sprintf("%s takes %s's place in the party (the player changed characters before the start)", charNameForLog, taken.ReplacedName)
+		}
+		writeAction(db, campaignID, req.CharacterID, "joined", joined, "")
 		startedAt = startAtCampaignLevel(req.CharacterID, campaignID, minLevel, played) // a new character starts at the campaign's level
 	}
 
@@ -676,6 +685,14 @@ func handleCampaignJoin(w http.ResponseWriter, r *http.Request, campaignID int) 
 	if startedAt != "" {
 		reply["started_at_campaign_level"] = startedAt // the level-up choices it brings: GET /api/characters/{id} (to_finish)
 	}
+	if taken.Replaced != 0 {
+		reply["replaced"] = map[string]interface{}{"character_id": taken.Replaced, "name": taken.ReplacedName,
+			"note": fmt.Sprintf("%s takes %s's seat; %s left the campaign and is still yours (DELETE /api/characters/%d removes it). Say you are ready again when you are.", charNameForLog, taken.ReplacedName, taken.ReplacedName, taken.Replaced)}
+	}
+	if status == "recruiting" { // questions, character changes and the ready flag before the start (campaign_ready_2024.go)
+		reply["before_start"] = beforeStartGuide(campaignID, false)
+		reply["next_steps"].(map[string]interface{})["set_ready"] = fmt.Sprintf("POST /api/campaigns/%d/ready {\"ready\": true} - when your character is how you want it; the GM starts once every player is ready", campaignID)
+	}
 	json.NewEncoder(w).Encode(reply)
 }
 
@@ -687,9 +704,9 @@ func campaignJoinMessage(alreadyInCampaign bool, status string) string {
 		return "You're already in this campaign. Check messages and get ready for it to start."
 	}
 	if status == "active" {
-		return "You've joined the campaign! The party is full and the campaign is now live."
+		return "You've joined the campaign! It is under way: check your turn and jump in."
 	}
-	return "You've joined the campaign!"
+	return "You've joined the campaign! It starts when the GM starts it, once every player has said it is ready (before_start)."
 }
 
 func reconcileCampaignStatus(campaignID int) string {
@@ -706,12 +723,7 @@ func reconcileCampaignStatus(campaignID int) string {
 		return ""
 	}
 
-	if status == "recruiting" && campaignFull(maxPlayers, playerCount) {
-		if _, err := db.Exec("UPDATE lobbies SET status = 'active' WHERE id = $1", campaignID); err == nil {
-			return "active"
-		}
-	}
-
+	// a full party doesn't start the campaign: the GM starts it once every player is ready (campaign_ready_2024.go)
 	if status == "active" && playerCount == 0 {
 		if _, err := db.Exec("UPDATE lobbies SET status = 'recruiting' WHERE id = $1", campaignID); err == nil {
 			return "recruiting"
@@ -723,7 +735,7 @@ func reconcileCampaignStatus(campaignID int) string {
 
 // handleCampaignStart godoc
 // @Summary Start a campaign (DM only)
-// @Description Start the campaign, changing its status to active. With the turn schedule, the first round outside a fight opens (round: its number and final check-in): from then on a player's game action outside a fight is saved as a submission for the round (GET /api/campaigns/{id}/round). To run a session zero first, send {"first_round": "hold"}: the campaign is active but the table is held, so players can talk (speak, the party chat) and finish their characters while every game action is refused (table_held, nothing spent); open play with POST /api/campaigns/{id}/round/open (starting a fight opens it too).
+// @Description Start the campaign, changing its status to active. It works once every player in it has said it is ready (POST /api/campaigns/{id}/ready); until then it is refused with players_not_ready and who the start waits on. With the turn schedule, the first round outside a fight opens (round: its number and final check-in): from then on a player's game action outside a fight is saved as a submission for the round (GET /api/campaigns/{id}/round). To run a session zero first, send {"first_round": "hold"}: the campaign is active but the table is held, so players can talk (speak, the party chat) and finish their characters while every game action is refused (table_held, nothing spent); open play with POST /api/campaigns/{id}/round/open (starting a fight opens it too).
 // @Tags Campaigns
 // @Produce json
 // @Param id path int true "Campaign ID"
@@ -757,6 +769,20 @@ func handleCampaignStart(w http.ResponseWriter, r *http.Request, campaignID int)
 		writeJSONStatus(w, http.StatusBadRequest, map[string]interface{}{"error": "invalid_first_round",
 			"message": `first_round is "now" (round 1 opens at once) or "hold" (a session zero first; open play with POST /api/campaigns/{id}/round/open). Nothing was changed.`})
 		return
+	}
+	var current string
+	if answerDBFailure(w, db.QueryRow(`SELECT status FROM lobbies WHERE id = $1`, campaignID).Scan(&current), "the campaign") {
+		return
+	}
+	if current == "recruiting" { // every player says it is ready first (campaign_ready_2024.go)
+		refusal, err := startWaitsOn(campaignID)
+		if answerDBFailure(w, err, "who is ready") {
+			return
+		}
+		if refusal != nil {
+			writeJSONStatus(w, http.StatusConflict, refusal)
+			return
+		}
 	}
 	err := inTx(func(tx *sql.Tx) error {
 		if _, err := tx.Exec("UPDATE lobbies SET status = 'active' WHERE id = $1", campaignID); err != nil {
@@ -2640,6 +2666,11 @@ func handleHeartbeat(w http.ResponseWriter, r *http.Request) {
 			turnStatus := map[string]interface{}{"in_combat": false, "your_turn": false}
 			if lobbyStatus == "active" {
 				turnStatus = getTurnStatus(lobbyID, charID)
+			} else if lobbyStatus == "recruiting" { // before the start: questions, changes, ready (campaign_ready_2024.go)
+				turnStatus["before_start"] = beforeStartGuide(lobbyID, false)
+				if rows, err := campaignReadiness(lobbyID); err == nil {
+					turnStatus["readiness"] = readinessView(rows)
+				}
 			}
 
 			playerCampaigns = append(playerCampaigns, map[string]interface{}{

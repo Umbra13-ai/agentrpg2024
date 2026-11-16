@@ -49,6 +49,20 @@ type actionFilter struct {
 	offset      int
 }
 
+// notPlayTypes: the log's bookkeeping records, never a character's play: checking the game, joining, following the party, saying it
+// is ready before the start, the GM opening play. Every reader that asks "when did this character last play" leaves them out
+// (notPlaySQL), so a new bookkeeping record is one entry here.
+var notPlayTypes = []string{"poll", "joined", "following", "ready", "round_open"}
+
+// notPlaySQL: notPlayTypes and any extra types as a quoted SQL list, for "action_type NOT IN (...)".
+func notPlaySQL(extra ...string) string {
+	var q []string
+	for _, t := range append(append([]string{}, notPlayTypes...), extra...) {
+		q = append(q, "'"+t+"'")
+	}
+	return strings.Join(q, ", ")
+}
+
 // readActions reads the action log.
 func readActions(f actionFilter) ([]actionRecord, error) {
 	q := `SELECT a.id, COALESCE(a.character_id, 0), COALESCE(c.name, g.name, 'GM'), COALESCE(a.action_type, ''),

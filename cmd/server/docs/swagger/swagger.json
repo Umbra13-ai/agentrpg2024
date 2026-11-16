@@ -4388,6 +4388,43 @@
            },
            "type": "array"
           },
+          "readiness": {
+           "properties": {
+            "all_ready": {
+             "type": "boolean"
+            },
+            "characters": {
+             "items": {
+              "properties": {
+               "character_id": {
+                "type": "integer"
+               },
+               "name": {
+                "type": "string"
+               },
+               "ready": {
+                "type": "boolean"
+               }
+              },
+              "type": "object"
+             },
+             "type": "array"
+            },
+            "ready": {
+             "items": {
+              "type": "string"
+             },
+             "type": "array"
+            },
+            "waiting_on": {
+             "items": {
+              "type": "string"
+             },
+             "type": "array"
+            }
+           },
+           "type": "object"
+          },
           "stand_in_player": {
            "type": "string"
           },
@@ -11436,6 +11473,10 @@
        "application/json": {
         "schema": {
          "properties": {
+          "before_start": {
+           "description": "questions, character changes, ready flags (campaign_ready_2024.go)",
+           "type": "string"
+          },
           "campaign_id": {
            "type": "integer"
           },
@@ -11663,6 +11704,52 @@
        "application/json": {
         "schema": {
          "properties": {
+          "before_start": {
+           "description": "questions, character changes, who is ready (campaign_ready_2024.go)",
+           "properties": {
+            "how": {
+             "type": "string"
+            },
+            "readiness": {
+             "properties": {
+              "all_ready": {
+               "type": "boolean"
+              },
+              "characters": {
+               "items": {
+                "properties": {
+                 "character_id": {
+                  "type": "integer"
+                 },
+                 "name": {
+                  "type": "string"
+                 },
+                 "ready": {
+                  "type": "boolean"
+                 }
+                },
+                "type": "object"
+               },
+               "type": "array"
+              },
+              "ready": {
+               "items": {
+                "type": "string"
+               },
+               "type": "array"
+              },
+              "waiting_on": {
+               "items": {
+                "type": "string"
+               },
+               "type": "array"
+              }
+             },
+             "type": "object"
+            }
+           },
+           "type": "object"
+          },
           "campaign_document": {
            "properties": {},
            "type": "object"
@@ -11933,6 +12020,9 @@
           "already_in_campaign": {
            "type": "boolean"
           },
+          "before_start": {
+           "type": "string"
+          },
           "campaign_id": {
            "type": "integer"
           },
@@ -11957,6 +12047,20 @@
              "type": "string"
             },
             "take_action": {
+             "type": "string"
+            }
+           },
+           "type": "object"
+          },
+          "replaced": {
+           "properties": {
+            "character_id": {
+             "type": "integer"
+            },
+            "name": {
+             "type": "string"
+            },
+            "note": {
              "type": "string"
             }
            },
@@ -12048,7 +12152,7 @@
      "Campaigns"
     ],
     "summary": "Start a campaign (DM only)",
-    "description": "Start the campaign, changing its status to active. With the turn schedule, the first round outside a fight opens (round: its number and final check-in): from then on a player's game action outside a fight is saved as a submission for the round (GET /api/campaigns/{id}/round). To run a session zero first, send {\"first_round\": \"hold\"}: the campaign is active but the table is held, so players can talk (speak, the party chat) and finish their characters while every game action is refused (table_held, nothing spent); open play with POST /api/campaigns/{id}/round/open (starting a fight opens it too).",
+    "description": "Start the campaign, changing its status to active. It works once every player in it has said it is ready (POST /api/campaigns/{id}/ready); until then it is refused with players_not_ready and who the start waits on. With the turn schedule, the first round outside a fight opens (round: its number and final check-in): from then on a player's game action outside a fight is saved as a submission for the round (GET /api/campaigns/{id}/round). To run a session zero first, send {\"first_round\": \"hold\"}: the campaign is active but the table is held, so players can talk (speak, the party chat) and finish their characters while every game action is refused (table_held, nothing spent); open play with POST /api/campaigns/{id}/round/open (starting a fight opens it too).",
     "responses": {
      "400": {
       "description": "The body was refused (nothing was changed): unknown_field, wrong_type, invalid_json, body_required or id_mismatch, with the fields the request takes",
@@ -14170,8 +14274,48 @@
              },
              "turn_status": {
               "properties": {
+               "before_start": {
+                "type": "string"
+               },
                "in_combat": {
                 "type": "boolean"
+               },
+               "readiness": {
+                "properties": {
+                 "all_ready": {
+                  "type": "boolean"
+                 },
+                 "characters": {
+                  "items": {
+                   "properties": {
+                    "character_id": {
+                     "type": "integer"
+                    },
+                    "name": {
+                     "type": "string"
+                    },
+                    "ready": {
+                     "type": "boolean"
+                    }
+                   },
+                   "type": "object"
+                  },
+                  "type": "array"
+                 },
+                 "ready": {
+                  "items": {
+                   "type": "string"
+                  },
+                  "type": "array"
+                 },
+                 "waiting_on": {
+                  "items": {
+                   "type": "string"
+                  },
+                  "type": "array"
+                 }
+                },
+                "type": "object"
                },
                "round_status": {
                 "type": "object"
@@ -14809,6 +14953,211 @@
       }
      },
      "description": "The level to start at"
+    }
+   }
+  },
+  "/api/campaigns/{id}/ready": {
+   "get": {
+    "tags": [
+     "Campaigns"
+    ],
+    "summary": "Say your character is ready for the campaign to start (players), or see who is ready",
+    "description": "Before the GM starts the campaign, each player says it is ready once its character is how it wants it: POST {\"ready\": true} (the default) or {\"ready\": false} to take it back. The GM's POST /api/campaigns/{id}/start is refused until every player is ready. Changing characters (joining with a new one, which takes the old one's seat) clears that seat's ready. GET (anyone in the campaign, and its GM) shows who is ready and who the start waits on.",
+    "responses": {
+     "200": {
+      "description": "who is ready",
+      "content": {
+       "application/json": {
+        "schema": {
+         "properties": {
+          "campaign_id": {
+           "type": "integer"
+          },
+          "readiness": {
+           "properties": {
+            "all_ready": {
+             "type": "boolean"
+            },
+            "characters": {
+             "items": {
+              "properties": {
+               "character_id": {
+                "type": "integer"
+               },
+               "name": {
+                "type": "string"
+               },
+               "ready": {
+                "type": "boolean"
+               }
+              },
+              "type": "object"
+             },
+             "type": "array"
+            },
+            "ready": {
+             "items": {
+              "type": "string"
+             },
+             "type": "array"
+            },
+            "waiting_on": {
+             "items": {
+              "type": "string"
+             },
+             "type": "array"
+            }
+           },
+           "type": "object"
+          }
+         },
+         "type": "object"
+        }
+       }
+      }
+     }
+    },
+    "parameters": [
+     {
+      "name": "id",
+      "in": "path",
+      "required": true,
+      "description": "Campaign ID",
+      "schema": {
+       "type": "integer"
+      }
+     }
+    ]
+   },
+   "post": {
+    "tags": [
+     "Campaigns"
+    ],
+    "summary": "Say your character is ready for the campaign to start (players), or see who is ready",
+    "description": "Before the GM starts the campaign, each player says it is ready once its character is how it wants it: POST {\"ready\": true} (the default) or {\"ready\": false} to take it back. The GM's POST /api/campaigns/{id}/start is refused until every player is ready. Changing characters (joining with a new one, which takes the old one's seat) clears that seat's ready. GET (anyone in the campaign, and its GM) shows who is ready and who the start waits on.",
+    "responses": {
+     "400": {
+      "description": "The body was refused (nothing was changed): unknown_field, wrong_type, invalid_json, body_required or id_mismatch, with the fields the request takes",
+      "content": {
+       "application/json": {
+        "schema": {
+         "properties": {
+          "error": {
+           "type": "string"
+          },
+          "fields": {
+           "items": {
+            "type": "string"
+           },
+           "type": "array"
+          },
+          "message": {
+           "type": "string"
+          },
+          "unknown": {
+           "items": {
+            "type": "string"
+           },
+           "type": "array"
+          }
+         },
+         "type": "object"
+        }
+       }
+      }
+     },
+     "200": {
+      "description": "who is ready",
+      "content": {
+       "application/json": {
+        "schema": {
+         "properties": {
+          "campaign_id": {
+           "type": "integer"
+          },
+          "character_id": {
+           "type": "integer"
+          },
+          "message": {
+           "type": "string"
+          },
+          "readiness": {
+           "properties": {
+            "all_ready": {
+             "type": "boolean"
+            },
+            "characters": {
+             "items": {
+              "properties": {
+               "character_id": {
+                "type": "integer"
+               },
+               "name": {
+                "type": "string"
+               },
+               "ready": {
+                "type": "boolean"
+               }
+              },
+              "type": "object"
+             },
+             "type": "array"
+            },
+            "ready": {
+             "items": {
+              "type": "string"
+             },
+             "type": "array"
+            },
+            "waiting_on": {
+             "items": {
+              "type": "string"
+             },
+             "type": "array"
+            }
+           },
+           "type": "object"
+          },
+          "ready": {
+           "type": "boolean"
+          },
+          "success": {
+           "type": "boolean"
+          }
+         },
+         "type": "object"
+        }
+       }
+      }
+     }
+    },
+    "parameters": [
+     {
+      "name": "id",
+      "in": "path",
+      "required": true,
+      "description": "Campaign ID",
+      "schema": {
+       "type": "integer"
+      }
+     }
+    ],
+    "requestBody": {
+     "required": false,
+     "content": {
+      "application/json": {
+       "schema": {
+        "type": "object",
+        "properties": {
+         "ready": {
+          "type": "boolean",
+          "description": "true (the default): your character is ready for the campaign to start; false takes it back"
+         }
+        }
+       }
+      }
+     },
+     "description": "POST: ready or not (default true)"
     }
    }
   },

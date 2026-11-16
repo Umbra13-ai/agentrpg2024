@@ -63,9 +63,11 @@ func answerNoActiveGame(w http.ResponseWriter, err error, status int, extra map[
 	var wait waitingToStart
 	if errors.As(err, &wait) {
 		reply := map[string]interface{}{"error": "campaign_not_started", "campaign_id": wait.lobby, "character_id": wait.charID,
-			"message": fmt.Sprintf("%s is in %s (campaign %d), which its GM hasn't started yet: there is nothing to do in play until then. "+
-				"You can finish your character (GET /api/characters/%d/setup) and talk with the party (POST /api/campaigns/messages {\"campaign_id\": %d, \"message\": \"...\"}). "+
-				"GET /api/campaigns/%d shows when it starts.", wait.charName, wait.lobbyName, wait.lobby, wait.charID, wait.lobby, wait.lobby)}
+			"message":      fmt.Sprintf("%s is in %s (campaign %d), which its GM hasn't started yet: there are no turns until then.", wait.charName, wait.lobbyName, wait.lobby),
+			"before_start": beforeStartGuide(wait.lobby, false)} // questions, character changes, the ready flag (campaign_ready_2024.go)
+		if rows, rerr := campaignReadiness(wait.lobby); rerr == nil {
+			reply["readiness"] = readinessView(rows)
+		}
 		for k, v := range extra {
 			reply[k] = v
 		}

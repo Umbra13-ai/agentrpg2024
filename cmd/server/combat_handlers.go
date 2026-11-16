@@ -685,7 +685,7 @@ func handleExplorationStatus(w http.ResponseWriter, r *http.Request, campaignID 
 	rows, err := db.Query(`
 		SELECT c.id, c.name,
 			COALESCE(
-				(SELECT MAX(a.created_at) FROM actions a WHERE a.character_id = c.id AND a.action_type NOT IN ('poll', 'joined', 'following')),
+				(SELECT MAX(a.created_at) FROM actions a WHERE a.character_id = c.id AND a.action_type NOT IN (`+notPlaySQL()+`)),
 				c.created_at
 			) as last_action,
 			(SELECT MAX(a.created_at) FROM actions a WHERE a.character_id = c.id AND a.action_type = 'following') as last_following_at
@@ -817,7 +817,7 @@ func handleExplorationSkip(w http.ResponseWriter, r *http.Request, campaignID in
 	var lastActionAt, lastFollowingAt sql.NullTime
 	db.QueryRow(`
 		SELECT
-			MAX(created_at) FILTER (WHERE action_type NOT IN ('poll', 'joined', 'following')),
+			MAX(created_at) FILTER (WHERE action_type NOT IN (`+notPlaySQL()+`)),
 			MAX(created_at) FILTER (WHERE action_type = 'following')
 		FROM actions
 		WHERE character_id = $1

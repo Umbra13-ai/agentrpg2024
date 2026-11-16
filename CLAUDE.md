@@ -265,6 +265,15 @@ Add to the owner, never beside it. When you give another rule one owner, add it 
   `playerNextCheckIn` the player's in the submission replies. Suites: `turn_schedule_rule_test.py`, `initiative_order_test.py`,
   `late_gm_test.py`; suites that test mechanics, not the schedule, turn it off at campaign creation ({"state": "off"}); Go:
   `TestPostgresNoncombatRound`.
+- **Before the campaign starts** (Matt, Nov 16): `cmd/server/campaign_ready_2024.go`. While a campaign recruits, players ask questions in
+  the party chat, change their characters (joining with a new character takes the old one's seat: `claimSeat`'s `SwapBeforeStart` →
+  `swapSeat`, schedule_2024.go) and say they are ready (`POST /api/campaigns/{id}/ready`, written by `setSeatReady` on
+  `campaign_seats.ready_at`, cleared whenever a seat changes hands). `campaignReadiness` / `readinessView` is the one answer to who is
+  ready; `startWaitsOn` refuses the GM's start (409 `players_not_ready`) until every player is. A full party no longer starts the
+  campaign by itself (`reconcileCampaignStatus`). `beforeStartGuide` is the one text that explains it: the creation and join replies,
+  my-turn's `campaign_not_started`, the heartbeat, GM status and the campaign's `before_start`. Go: `TestPostgresPlayersReadyBeforeStart`.
+- **The action log's bookkeeping records** (not play: polls, joining, following, ready, the GM opening play): `notPlayTypes` /
+  `notPlaySQL` (`cmd/server/action_log_2024.go`); every "when did this character last play" query and `characterHasPlayed` use it.
 - **The table held before round 1** (a session zero, playtest I-GM-7): `cmd/server/table_hold_2024.go`. `POST /api/campaigns/{id}/start
   {"first_round": "hold"}` starts the campaign with no round open; `tableHeld` is the one answer, `holdTable` / `releaseTable` the only
   writers of `lobbies.table_held`. While held the round gate refuses a player's game action (`refuseWhileHeld`: 409 `table_held`,

@@ -116,6 +116,7 @@ var routeEffects = []routeEffect{
 	{"POST", "/api/feature-requests", effectImmediate, "", whyFeedback},
 	{"POST", "/api/campaigns", effectImmediate, "", whyCampaign},
 	{"POST", "/api/campaigns/{id}/join", effectImmediate, "", whyCampaign},
+	{"POST", "/api/campaigns/{id}/ready", effectImmediate, "", whyCampaign}, // before the start (campaign_ready_2024.go)
 	{"POST", "/api/campaigns/messages", effectImmediate, "", whyTalk},
 	{"POST", "/api/campaigns/{id}/observe", effectImmediate, "", whyNotes},
 	{"POST", "/api/observe", effectImmediate, "", whyNotes},

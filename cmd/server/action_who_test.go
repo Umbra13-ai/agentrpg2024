@@ -177,6 +177,7 @@ func TestPostgresFeatActionsAskTheTable(t *testing.T) {
 	if c, j := pgCall(t, "POST", fmt.Sprintf("/api/campaigns/%d/join", lobby), tok, map[string]interface{}{"character_id": id}); c != 200 {
 		t.Fatalf("join: %d %v", c, j)
 	}
+	pgCall(t, "POST", fmt.Sprintf("/api/campaigns/%d/ready", lobby), tok, nil) // every player is ready before the start
 	if c, j := pgCall(t, "POST", fmt.Sprintf("/api/campaigns/%d/start", lobby), gm, nil); c != 200 {
 		t.Fatalf("start: %d %v", c, j)
 	}

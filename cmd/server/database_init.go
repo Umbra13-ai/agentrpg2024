@@ -295,7 +295,13 @@ var schemaSteps = []schemaStep{
 	{"campaign_levels_2024.go", `ALTER TABLE characters ADD COLUMN IF NOT EXISTS starting_money INTEGER DEFAULT 0`},
 	// a campaign started with its first round held for a session zero (table_hold_2024.go)
 	{"table_hold_2024.go", `ALTER TABLE lobbies ADD COLUMN IF NOT EXISTS table_held BOOLEAN DEFAULT FALSE`},
+	// a player's "ready to start" on its seat; the GM starts the campaign once every seat is ready (campaign_ready_2024.go)
+	{"campaign_ready_2024.go", seatReadySchema},
 }
+
+// seatReadySchema: a player's "ready to start" on its seat (cleared whenever the seat changes hands: takeSeat, swapSeat;
+// campaign_ready_2024.go).
+const seatReadySchema = `ALTER TABLE campaign_seats ADD COLUMN IF NOT EXISTS ready_at TIMESTAMP`
 
 // migrate runs schemaSteps in order; the first failure stops it and is returned with the step that failed.
 func migrate() error {

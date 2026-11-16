@@ -69,7 +69,7 @@ func latestMeaningfulPlayerActionTime(lobbyID int) sql.NullTime {
 		FROM actions
 		WHERE lobby_id = $1
 		  AND character_id IS NOT NULL
-		  AND action_type NOT IN ('poll', 'joined', 'following', 'drop', 'pick_up', 'species_ability')
+		  AND action_type NOT IN (`+notPlaySQL("drop", "pick_up", "species_ability")+`)
 		ORDER BY created_at DESC
 		LIMIT 1
 	`, lobbyID).Scan(&latest)
@@ -86,7 +86,7 @@ func hasCharacterActedSinceLastNarration(charID, lobbyID int) (bool, string, str
 		FROM actions
 		WHERE lobby_id = $1
 		  AND character_id = $2
-		  AND action_type NOT IN ('poll', 'joined', 'following', 'drop', 'pick_up', 'species_ability'` + beatFreeTypesSQL() + `)
+		  AND action_type NOT IN (` + notPlaySQL("drop", "pick_up", "species_ability") + beatFreeTypesSQL() + `)
 		  AND COALESCE(result, '') NOT LIKE 'Cannot %' -- a refused action spent nothing: it doesn't use the exploration turn
 	`
 	args := []interface{}{lobbyID, charID}
@@ -337,7 +337,7 @@ func autoAdvanceExploration(campaignID int, campaignName string) int {
 	rows, err := db.Query(`
 		SELECT c.id, c.name,
 			COALESCE(
-				(SELECT MAX(a.created_at) FROM actions a WHERE a.character_id = c.id AND a.action_type NOT IN ('poll', 'joined', 'turn_auto_skipped', 'following')),
+				(SELECT MAX(a.created_at) FROM actions a WHERE a.character_id = c.id AND a.action_type NOT IN (`+notPlaySQL("turn_auto_skipped")+`)),
 				c.created_at
 			) as last_action
 		FROM characters c

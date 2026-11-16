@@ -244,6 +244,9 @@ type seatClaim struct {
 	Owner            int  // when set, the character must be this agent's (a player's join)
 	OnePerPlayer     bool // refuse when the owner already plays another character in the campaign (a player's join)
 	OnlyFromNone     bool // refuse when the character is in another campaign (restoring a deleted campaign's members)
+	// SwapBeforeStart: with OnePerPlayer, before the campaign starts a player's second character takes the place (and the seat) of
+	// the one it plays there, which leaves the campaign and stays the player's (campaign_ready_2024.go: the party changes its mind)
+	SwapBeforeStart bool
 }
 
 // seatTaken: what claimSeat did.
@@ -251,6 +254,9 @@ type seatTaken struct {
 	Seat    int
 	Already bool // the character was already in the campaign
 	Left    int  // the campaign it left to come here (0: none)
+	// Replaced: the player's character this one replaced before the start (0: none), with its name
+	Replaced     int
+	ReplacedName string
 }
 
 // seatRefusal: why a character can't enter. Status is the HTTP status a request answers with.
@@ -300,7 +306,8 @@ func claimSeat(tx *sql.Tx, c seatClaim) (seatTaken, error) {
 	var out seatTaken
 	var maxPlayers int
 	var pending sql.NullInt64
-	if err := tx.QueryRow(`SELECT COALESCE(max_players, 0), pending_capacity FROM lobbies WHERE id = $1 FOR UPDATE`, c.Lobby).Scan(&maxPlayers, &pending); err != nil {
+	var status string
+	if err := tx.QueryRow(`SELECT COALESCE(max_players, 0), pending_capacity, COALESCE(status, '') FROM lobbies WHERE id = $1 FOR UPDATE`, c.Lobby).Scan(&maxPlayers, &pending, &status); err != nil {
 		if errors.Is(err, sql.ErrNoRows) {
 			return out, &seatRefusal{Status: http.StatusNotFound, Code: "campaign_not_found", Message: fmt.Sprintf("There is no campaign %d.", c.Lobby)}
 		}
@@ -331,10 +338,14 @@ func claimSeat(tx *sql.Tx, c seatClaim) (seatTaken, error) {
 	}
 	if c.OnePerPlayer && owner.Valid {
 		var other string
-		err := tx.QueryRow(`SELECT name FROM characters WHERE agent_id = $1 AND lobby_id = $2 AND id <> $3 LIMIT 1`, owner.Int64, c.Lobby, c.Character).Scan(&other)
+		var otherID int
+		err := tx.QueryRow(`SELECT name, id FROM characters WHERE agent_id = $1 AND lobby_id = $2 AND id <> $3 LIMIT 1`, owner.Int64, c.Lobby, c.Character).Scan(&other, &otherID)
+		if err == nil && c.SwapBeforeStart && status == "recruiting" {
+			return swapSeat(tx, c.Lobby, otherID, other, c.Character, current) // campaign_ready_2024.go
+		}
 		if err == nil {
 			return out, &seatRefusal{Status: http.StatusConflict, Code: "one_character_per_player",
-				Message: fmt.Sprintf("You already play %s in this campaign; a player has one character in a campaign. Ask the GM to remove that character first.", other)}
+				Message: fmt.Sprintf("You already play %s in this campaign; a player has one character in a campaign, and the campaign has started. Ask the GM to remove that character first.", other)}
 		} else if !errors.Is(err, sql.ErrNoRows) {
 			return out, err
 		}
@@ -356,6 +367,44 @@ func claimSeat(tx *sql.Tx, c seatClaim) (seatTaken, error) {
 	return out, err
 }
 
+// swapSeat: before the start, a player's new character takes the place and the seat of the one it plays in the campaign (part of
+// claimSeat, in its transaction). The old character leaves the campaign and stays the player's; the seat is no longer ready.
+func swapSeat(tx *sql.Tx, lobby, oldID int, oldName string, newID, newFrom int) (seatTaken, error) {
+	out := seatTaken{Replaced: oldID, ReplacedName: oldName, Left: newFrom}
+	if _, err := tx.Exec(`UPDATE characters SET lobby_id = NULL WHERE id = $1`, oldID); err != nil {
+		return out, err
+	}
+	if _, err := tx.Exec(`UPDATE characters SET lobby_id = $1 WHERE id = $2`, lobby, newID); err != nil {
+		return out, err
+	}
+	err := tx.QueryRow(`UPDATE campaign_seats SET character_id = $1, ready_at = NULL WHERE lobby_id = $2 AND character_id = $3 RETURNING seat`, newID, lobby, oldID).Scan(&out.Seat)
+	if errors.Is(err, sql.ErrNoRows) { // the old character had no seat: the new one takes the lowest free seat
+		out.Seat, err = takeSeat(tx, lobby, newID)
+	}
+	return out, err
+}
+
+// setSeatReady marks the character's seat ready (or not) for the campaign's start; a character in the campaign without a seat (it
+// joined before seats existed) takes one first.
+func setSeatReady(tx *sql.Tx, lobby, char int, ready bool) error {
+	set := func() (int64, error) {
+		res, err := tx.Exec(`UPDATE campaign_seats SET ready_at = CASE WHEN $3 THEN NOW() ELSE NULL END WHERE lobby_id = $1 AND character_id = $2`, lobby, char, ready)
+		if err != nil {
+			return 0, err
+		}
+		return res.RowsAffected()
+	}
+	n, err := set()
+	if err != nil || n > 0 {
+		return err
+	}
+	if _, err := takeSeat(tx, lobby, char); err != nil {
+		return err
+	}
+	_, err = set()
+	return err
+}
+
 // takeSeat gives a character (in the campaign, its row locked by the caller) the lowest free seat: one whose character has left,
 // or the next seat number.
 func takeSeat(tx *sql.Tx, lobby, char int) (int, error) {
@@ -372,8 +421,8 @@ func takeSeat(tx *sql.Tx, lobby, char int) (int, error) {
 	if err != nil {
 		return 0, err
 	}
-	_, err = tx.Exec(`INSERT INTO campaign_seats (lobby_id, seat, character_id, joined_at) VALUES ($1, $2, $3, NOW())
-		ON CONFLICT (lobby_id, seat) DO UPDATE SET character_id = EXCLUDED.character_id, joined_at = EXCLUDED.joined_at`, lobby, seat, char)
+	_, err = tx.Exec(`INSERT INTO campaign_seats (lobby_id, seat, character_id, joined_at, ready_at) VALUES ($1, $2, $3, NOW(), NULL)
+		ON CONFLICT (lobby_id, seat) DO UPDATE SET character_id = EXCLUDED.character_id, joined_at = EXCLUDED.joined_at, ready_at = NULL`, lobby, seat, char)
 	return seat, err
 }
 

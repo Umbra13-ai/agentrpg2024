@@ -165,7 +165,7 @@ func handleGMStatus(w http.ResponseWriter, r *http.Request) {
 	rows, qerr := db.Query(`
 	SELECT c.id, c.name, c.class, c.species, c.level, c.hp, c.max_hp, c.ac,
 			COALESCE(c.conditions, '[]'), COALESCE(c.concentrating_on, ''), COALESCE(c.is_stable, false), COALESCE(c.is_dead, false),
-			(SELECT MAX(created_at) FROM actions WHERE character_id = c.id AND action_type NOT IN ('poll', 'joined', 'following')) as last_action_at,
+			(SELECT MAX(created_at) FROM actions WHERE character_id = c.id AND action_type NOT IN (`+notPlaySQL()+`)) as last_action_at,
 			(SELECT MAX(created_at) FROM actions WHERE character_id = c.id AND action_type = 'following') as last_following_at
 		FROM characters c
 		WHERE c.lobby_id = $1
@@ -881,7 +881,7 @@ func handleGMStatus(w http.ResponseWriter, r *http.Request) {
 			JOIN characters c ON a.character_id = c.id 
 			WHERE a.lobby_id = $1 
 			AND a.created_at > NOW() - INTERVAL '4 hours'
-			AND a.action_type NOT IN ('poll', 'joined', 'following')
+			AND a.action_type NOT IN (`+notPlaySQL()+`)
 		`, campaignID).Scan(&activePlayerCount)
 
 		// Count players active in last 12 hours (for dormancy check)
@@ -892,7 +892,7 @@ func handleGMStatus(w http.ResponseWriter, r *http.Request) {
 			JOIN characters c ON a.character_id = c.id 
 			WHERE a.lobby_id = $1 
 			AND a.created_at > NOW() - INTERVAL '12 hours'
-			AND a.action_type NOT IN ('poll', 'joined', 'following')
+			AND a.action_type NOT IN (`+notPlaySQL()+`)
 		`, campaignID).Scan(&recentPlayerCount)
 
 		// Count actions since last combat ended (or since campaign start)
@@ -900,7 +900,7 @@ func handleGMStatus(w http.ResponseWriter, r *http.Request) {
 		db.QueryRow(`
 			SELECT COUNT(*) FROM actions 
 			WHERE lobby_id = $1 
-			AND action_type NOT IN ('poll', 'joined', 'following', 'narration')
+			AND action_type NOT IN (`+notPlaySQL("narration")+`)
 			AND created_at > COALESCE(
 				(SELECT MAX(created_at) FROM actions WHERE lobby_id = $1 AND action_type = 'combat_end'),
 				(SELECT created_at FROM lobbies WHERE id = $1)
@@ -960,8 +960,21 @@ func handleGMStatus(w http.ResponseWriter, r *http.Request) {
 		gmTasks = append([]string{tableHeldGMTask(campaignID)}, gmTasks...)
 		response["table_held"] = true
 	}
-	if campaignStatus == "recruiting" {
-		gmTasks = append([]string{fmt.Sprintf("The campaign is recruiting: players join it now (GET /api/campaigns/%d lists them). Prepare the story and the characters' starting level, then start it with POST /api/campaigns/%d/start when the party is ready.", campaignID, campaignID)}, gmTasks...)
+	if campaignStatus == "recruiting" { // before the start: questions, character changes, ready flags (campaign_ready_2024.go)
+		task := "The campaign is recruiting. " + beforeStartGuide(campaignID, true)
+		if rows, err := campaignReadiness(campaignID); err == nil {
+			v := readinessView(rows)
+			response["readiness"] = v
+			switch {
+			case len(rows) == 0:
+				task += " No player has joined yet."
+			case v["all_ready"] == true:
+				task += " Every player is ready: you can start."
+			default:
+				task += " Waiting on: " + strings.Join(v["waiting_on"].([]string), ", ") + "."
+			}
+		}
+		gmTasks = append([]string{task}, gmTasks...)
 	}
 	if advice := levelRangeAdvice(campaignID); advice != "" { // the party has passed the starting level (campaign_levels_2024.go)
 		gmTasks = append(gmTasks, advice)

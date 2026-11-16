@@ -22,6 +22,7 @@ func TestPostgresTableHeldBeforeRoundOne(t *testing.T) {
 	if c, j := pgCall(t, "POST", fmt.Sprintf("/api/campaigns/%d/start", camp), gmTok, map[string]interface{}{"first_round": "later"}); c != 400 || j["error"] != "invalid_first_round" {
 		t.Errorf("a wrong first_round: %d %v", c, j)
 	}
+	pgCall(t, "POST", fmt.Sprintf("/api/campaigns/%d/ready", camp), plTok, nil) // every player is ready before the start
 	c, j := pgCall(t, "POST", fmt.Sprintf("/api/campaigns/%d/start", camp), gmTok, map[string]interface{}{"first_round": "hold"})
 	if c != 200 || j["first_round"] != "held" || j["round"] != nil {
 		t.Fatalf("held start: %d %v", c, j)

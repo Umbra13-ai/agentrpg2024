@@ -97,7 +97,7 @@ func startAtLevel(charID, from, to int, how string, money bool) levelStart {
 // characterHasPlayed: the character has a record in a campaign's log besides joining, leaving, checking the game and starting
 // at the campaign's level.
 func characterHasPlayed(charID int) (bool, error) {
-	rows, err := readActions(actionFilter{character: charID, inCampaign: true, hidePolls: true, skipTypes: []string{"joined", "left", "level_up", "poll"}, limit: 1})
+	rows, err := readActions(actionFilter{character: charID, inCampaign: true, hidePolls: true, skipTypes: append([]string{"left", "level_up"}, notPlayTypes...), limit: 1})
 	return len(rows) > 0, err
 }
 
