@@ -399,31 +399,12 @@ func handleGMStartingLevel(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	hp, asi, note := applyLevelGain(req.CharacterID, cur, req.Level, "starting at a higher level")
-	gold := 0
-	switch {
-	case req.Level >= 17:
-		gold = 20000 + game.RollDie(10)*250
-	case req.Level >= 11:
-		gold = 5000 + game.RollDie(10)*250
-	case req.Level >= 5:
-		gold = 500 + game.RollDie(10)*25
-	}
+	gold, items := higherLevelStart(req.Level) // the Starting Equipment at Higher Levels table (campaign_levels_2024.go)
 	if req.Gold != nil && !*req.Gold {
 		gold = 0
 	}
 	if gold > 0 {
 		db.Exec(`UPDATE characters SET gold = COALESCE(gold,0) + $1 WHERE id = $2`, gold, req.CharacterID)
-	}
-	var items string
-	switch {
-	case req.Level >= 17:
-		items = "2 Common, 4 Uncommon, 3 Rare and 1 Very Rare magic item"
-	case req.Level >= 11:
-		items = "2 Common, 3 Uncommon and 1 Rare magic item"
-	case req.Level >= 5:
-		items = "1 Common and 1 Uncommon magic item"
-	default:
-		items = "1 Common magic item"
 	}
 	writeJSONStatus(w, 200, map[string]interface{}{"success": true, "hp_gained": hp, "asi_points": asi, "gold_added": gold, "suggested_magic_items": items,
 		"note": note, "result": fmt.Sprintf("%s Starting money: +%d GP. Suggested magic items: %s (POST /api/gm/give-item).", note, gold, items)})

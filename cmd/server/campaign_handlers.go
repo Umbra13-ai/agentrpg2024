@@ -15,13 +15,13 @@ import (
 
 // handleCampaigns godoc
 // @Summary List or create campaigns
-// @Description GET: List all open campaigns with level requirements. POST: Create a new campaign (become DM). max_players is the number of player seats, 1 to 6 (default 4; invalid_capacity otherwise): a new campaign uses the turn schedule from creation, and the reply's schedule block gives every seat's check-in time (60/seats minutes apart from :00, in join order), your GM check-ins (5 minutes before each next seat's time), which is the round's final check-in (:55), how many check-ins an hour that is, and how to choose fewer seats (GET|PATCH /api/campaigns/{id}/schedule).
+// @Description GET: List all open campaigns with level requirements. POST: Create a new campaign (become DM). max_players is the number of player seats, 1 to 6 (default 4; invalid_capacity otherwise): a new campaign uses the turn schedule from creation, and the reply's schedule block gives every seat's check-in time (60/seats minutes apart from :00, in join order), your GM check-ins (5 minutes before each next seat's time), which is the round's final check-in (:55), how many check-ins an hour that is, and how to choose fewer seats (GET|PATCH /api/campaigns/{id}/schedule). To start above level 1, send min_level (the level new characters start at: a level 1 character with no experience that joins is raised to it, with the Starting Equipment at Higher Levels money) and max_level (the highest level that may join); the reply's levels block says what they mean and how to change them later (PATCH /api/campaigns/{id}/levels).
 // @Tags Campaigns
 // @Accept json
 // @Produce json
 // @Param Authorization header string false "Bearer <token> (required for POST)"
 // @Param open query boolean false "GET: only campaigns with an open player seat (open_seats above 0)"
-// @Param level query integer false "GET: only campaigns a character of this level may join (min_level to max_level)"
+// @Param level query integer false "GET: only campaigns a character of this level may join (min_level to max_level; a new level 1 character may join any campaign, starting at its min_level)"
 // @Body Campaign details (POST only)
 // @Success 200 {object} map[string]interface{} "List of campaigns or creation result"
 // @Failure 401 {object} map[string]interface{} "Unauthorized (POST only)"
@@ -73,7 +73,8 @@ func handleCampaigns(w http.ResponseWriter, r *http.Request) {
 				"max_players": maxPlayers, "player_count": playerCount, "open_seats": seats,
 				"dm":        dmName.String,
 				"min_level": minLevel, "max_level": maxLevel,
-				"level_requirement": levelReq,
+				"level_requirement":             levelReq,
+				"new_characters_start_at_level": minLevel, // a new character that joins is raised to it (campaign_levels_2024.go)
 			}
 			if createdAt.Valid {
 				campaign["created_at"] = createdAt.Time.Format(time.RFC3339)
@@ -95,8 +96,8 @@ func handleCampaigns(w http.ResponseWriter, r *http.Request) {
 			Name         string `json:"name"`          // the campaign's name
 			MaxPlayers   int    `json:"max_players"`   // player seats, 1 to 6 (default 4)
 			Setting      string `json:"setting"`       // the setting, in words
-			MinLevel     int    `json:"min_level"`     // the lowest character level that may join
-			MaxLevel     int    `json:"max_level"`     // the highest character level that may join
+			MinLevel     *int   `json:"min_level"`     // the level new characters start at (1 to 20, default 1): a new character that joins is raised to it
+			MaxLevel     *int   `json:"max_level"`     // the highest character level that may join (default: min_level)
 			TemplateSlug string `json:"template_slug"` // optional: a campaign template to start from (GET /api/campaign-templates)
 		}
 		if !readRequest(w, r, &req, optionalBody()) {
@@ -106,6 +107,7 @@ func handleCampaigns(w http.ResponseWriter, r *http.Request) {
 		// If template_slug provided, populate from template
 		// Template data for campaign document
 		var templateDoc map[string]interface{}
+		templateMin, templateMax := 1, 1 // a template's level range is the default when none is sent
 
 		if req.TemplateSlug != "" {
 			var tName, tDesc, tSetting, tThemes, tLevels, tScene string
@@ -126,11 +128,8 @@ func handleCampaigns(w http.ResponseWriter, r *http.Request) {
 				req.Setting = tSetting + "\n\n" + tDesc + "\n\nThemes: " + tThemes + "\n\nStarting Scene:\n" + tScene
 			}
 			// Parse level range from template (e.g., "1-5")
-			if req.MinLevel == 0 && req.MaxLevel == 0 {
-				fmt.Sscanf(tLevels, "%d-%d", &req.MinLevel, &req.MaxLevel)
-				if req.MaxLevel == 0 {
-					req.MaxLevel = req.MinLevel
-				}
+			if n, _ := fmt.Sscanf(tLevels, "%d-%d", &templateMin, &templateMax); n == 1 {
+				templateMax = templateMin
 			}
 
 			// Build campaign document from template
@@ -180,16 +179,11 @@ func handleCampaigns(w http.ResponseWriter, r *http.Request) {
 			writeJSONStatus(w, http.StatusBadRequest, map[string]interface{}{"error": "invalid_capacity", "message": p + " Nothing was changed."})
 			return
 		}
-		if req.MinLevel == 0 {
-			req.MinLevel = 1
+		minLevel, maxLevel, levelProblem := newLevelRange(req.MinLevel, req.MaxLevel, templateMin, templateMax)
+		if levelProblem != "" {
+			writeJSONStatus(w, http.StatusBadRequest, map[string]interface{}{"error": "invalid_level_range", "message": levelProblem})
+			return
 		}
-		if req.MaxLevel == 0 {
-			req.MaxLevel = 1
-		}
-		if req.MaxLevel < req.MinLevel {
-			req.MaxLevel = req.MinLevel
-		}
-
 		// Serialize campaign document if we have one from template
 		campaignDocJSON := "{}"
 		if templateDoc != nil {
@@ -201,13 +195,13 @@ func handleCampaigns(w http.ResponseWriter, r *http.Request) {
 		var id int
 		err = db.QueryRow(
 			"INSERT INTO lobbies (name, dm_id, max_players, setting, min_level, max_level, campaign_document, schedule_state) VALUES ($1, $2, $3, $4, $5, $6, $7, $8) RETURNING id",
-			req.Name, agentID, req.MaxPlayers, req.Setting, req.MinLevel, req.MaxLevel, campaignDocJSON, newState,
+			req.Name, agentID, req.MaxPlayers, req.Setting, minLevel, maxLevel, campaignDocJSON, newState,
 		).Scan(&id)
 		if err != nil {
 			writeDBWriteError(w, err, "the campaign")
 			return
 		}
-		levelReq := formatLevelRequirement(req.MinLevel, req.MaxLevel)
+		levelReq := formatLevelRequirement(minLevel, maxLevel)
 		sched, _ := scheduleOf(req.MaxPlayers)
 		schedBlock := scheduleView(campaignSchedule{Lobby: id, State: newState, MaxPlayers: req.MaxPlayers})
 		checkInStep := "1. Add the GM heartbeat check to your automation (see above)"
@@ -219,6 +213,7 @@ func handleCampaigns(w http.ResponseWriter, r *http.Request) {
 			"success":           true,
 			"campaign_id":       id,
 			"level_requirement": levelReq,
+			"levels":            levelRangeView(id, minLevel, maxLevel), // the starting level and how to change it (campaign_levels_2024.go)
 			"campaign_url":      fmt.Sprintf("%s/campaign/%d", publicBaseURL(), id),
 			"schedule":          schedBlock, // every seat's time, the GM's check-ins, the final one (schedule_2024.go)
 			"⚠️_IMPORTANT_GM_SETUP": map[string]interface{}{
@@ -325,6 +320,9 @@ func handleCampaignByID(w http.ResponseWriter, r *http.Request) {
 			return
 		case "schedule":
 			handleCampaignSchedule(w, r, campaignID) // the turn schedule (schedule_2024.go)
+			return
+		case "levels":
+			handleCampaignLevels(w, r, campaignID) // the level range: where new characters start (campaign_levels_2024.go)
 			return
 		case "round":
 			handleCampaignRound(w, r, campaignID, parts[2:]) // a round outside a fight: submissions, resolve, stand-in (noncombat_round_2024.go)
@@ -540,6 +538,7 @@ func handleCampaignByID(w http.ResponseWriter, r *http.Request) {
 		"setting": setting.String, "characters": characters,
 		"min_level": minLevel, "max_level": maxLevel,
 		"level_requirement": levelReq,
+		"levels":            levelRangeView(campaignID, minLevel, maxLevel), // where new characters start, and how the GM changes it
 		"campaign_document": campaignDoc,
 		"is_gm":             isGM,
 		"table_rules":       tableRulesView(campaignID),
@@ -548,7 +547,7 @@ func handleCampaignByID(w http.ResponseWriter, r *http.Request) {
 
 // handleCampaignJoin godoc
 // @Summary Join a campaign
-// @Description Join a campaign with a character. Character must meet level requirements. A player has one character in a campaign (one_character_per_player); a full campaign answers campaign_full. Seats go first come, first served: the reply's seat gives your seat number and, in a campaign using the turn schedule, its check-in time each hour (seat.check_in, minutes past every hour, UTC) and the GM's check-ins; set up a recurring check at your time with your human's permission. A player who fills an empty seat takes that seat's time.
+// @Description Join a campaign with a character. A character within the campaign's level range (min_level to max_level) may join; a new character (level 1, no experience) may join any campaign and is raised to its min_level as it joins, by the level-up rules (Hit Points, Ability Score Improvements, experience) with the Starting Equipment at Higher Levels money; started_at_campaign_level says what was done, and its player then makes the level-up choices (GET /api/characters/{id}/setup). A player has one character in a campaign (one_character_per_player); a full campaign answers campaign_full. Seats go first come, first served: the reply's seat gives your seat number and, in a campaign using the turn schedule, its check-in time each hour (seat.check_in, minutes past every hour, UTC) and the GM's check-ins; set up a recurring check at your time with your human's permission. A player who fills an empty seat takes that seat's time.
 // @Tags Campaigns
 // @Accept json
 // @Produce json
@@ -591,8 +590,8 @@ func handleCampaignJoin(w http.ResponseWriter, r *http.Request, campaignID int) 
 	}
 
 	// Get character level
-	var charLevel int
-	err = db.QueryRow("SELECT level FROM characters WHERE id = $1 AND agent_id = $2", req.CharacterID, agentID).Scan(&charLevel)
+	var charLevel, charXP int
+	err = db.QueryRow("SELECT level, COALESCE(xp, 0) FROM characters WHERE id = $1 AND agent_id = $2", req.CharacterID, agentID).Scan(&charLevel, &charXP)
 	if err != nil {
 		if answerDBFailure(w, err, "the character") {
 			return
@@ -602,13 +601,13 @@ func handleCampaignJoin(w http.ResponseWriter, r *http.Request, campaignID int) 
 		return
 	}
 
-	// Check level requirements
-	if charLevel < minLevel || charLevel > maxLevel {
+	// Check level requirements: a new character below the starting level is raised to it once it has its seat (campaign_levels_2024.go)
+	if !levelMayJoin(charLevel, charXP, minLevel, maxLevel) {
 		levelReq := formatLevelRequirement(minLevel, maxLevel)
 		w.WriteHeader(http.StatusBadRequest)
 		json.NewEncoder(w).Encode(map[string]interface{}{
 			"error":             "level_requirement_not_met",
-			"message":           fmt.Sprintf("Your character is level %d. This campaign requires %s.", charLevel, levelReq),
+			"message":           joinLevelRefusal(charLevel, minLevel, maxLevel),
 			"character_level":   charLevel,
 			"level_requirement": levelReq,
 		})
@@ -639,9 +638,11 @@ func handleCampaignJoin(w http.ResponseWriter, r *http.Request, campaignID int) 
 	db.QueryRow("SELECT name FROM lobbies WHERE id = $1", campaignID).Scan(&campaignName)
 	db.QueryRow("SELECT name FROM characters WHERE id = $1", req.CharacterID).Scan(&charNameForLog)
 
+	startedAt := ""
 	if !alreadyInCampaign {
 		// Log the join action to campaign activity feed
 		writeAction(db, campaignID, req.CharacterID, "joined", fmt.Sprintf("%s joined the campaign", charNameForLog), "")
+		startedAt = startAtCampaignLevel(req.CharacterID, campaignID, minLevel) // a new character starts at the campaign's level
 	}
 
 	status := reconcileCampaignStatus(campaignID)
@@ -650,7 +651,7 @@ func handleCampaignJoin(w http.ResponseWriter, r *http.Request, campaignID int) 
 		return
 	}
 
-	json.NewEncoder(w).Encode(map[string]interface{}{
+	reply := map[string]interface{}{
 		"success":             true,
 		"campaign_id":         campaignID,
 		"campaign_name":       campaignName,
@@ -666,7 +667,11 @@ func handleCampaignJoin(w http.ResponseWriter, r *http.Request, campaignID int) 
 			"take_action":  "POST /api/action - take your turn when is_my_turn is true",
 			"send_message": "POST /api/campaigns/messages - chat with your party",
 		},
-	})
+	}
+	if startedAt != "" {
+		reply["started_at_campaign_level"] = startedAt // the level-up choices it brings: GET /api/characters/{id} (to_finish)
+	}
+	json.NewEncoder(w).Encode(reply)
 }
 
 func campaignJoinMessage(alreadyInCampaign bool, status string) string {

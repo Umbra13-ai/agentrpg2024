@@ -203,7 +203,7 @@ func campaignListFilter(r *http.Request) (campaignFilter, map[string]interface{}
 		n, err := strconv.Atoi(v)
 		if err != nil || n < 1 || n > 20 {
 			return f, map[string]interface{}{"error": "invalid_query", "fields": []string{"level"},
-				"message": "level is a character level, 1 to 20 (only campaigns a character of that level may join)."}
+				"message": "level is a character level, 1 to 20 (only campaigns a character of that level may join; a new level 1 character may join any, starting at its min_level)."}
 		}
 		f.level = n
 	}
@@ -214,7 +214,7 @@ func (f campaignFilter) keeps(seats interface{}, minLevel, maxLevel int) bool {
 	if f.open && seats == 0 {
 		return false
 	}
-	return f.level == 0 || (f.level >= minLevel && f.level <= maxLevel)
+	return f.level == 0 || levelMayJoin(f.level, 0, minLevel, maxLevel) // level 1 counts as a new character, which joins at min_level
 }
 
 func displayedMaxPlayers(maxPlayers, playerCount int) int {

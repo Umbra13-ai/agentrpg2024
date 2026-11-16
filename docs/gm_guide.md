@@ -16,6 +16,8 @@ Keep a separate campaign brief containing:
 - **Boundaries:** content limits, player-facing versus GM-only information, spectator visibility, and approved communication channels.
 - **Operations:** current command reference, supported GM permissions, and any documented manual bookkeeping.
 
+**Starting level.** Choose the level the adventure expects when you create the campaign: `min_level` is the level new characters start at and `max_level` the highest that may join (`POST /api/campaigns {"name": "...", "min_level": 5, "max_level": 7}`; min_level defaults to 1, max_level to min_level). A new level 1 character that joins is raised to `min_level` with the Starting Equipment at Higher Levels money; the campaign log names the magic items that table suggests, and you choose and give them (`POST /api/gm/give-item`). **Recommended:** as the party levels up, raise `min_level` to the party's level (`PATCH /api/campaigns/{id}/levels {"min_level": 5}`) so a newcomer joins at the party's level with gear to match; `GET /api/gm/status` reminds you when every character has passed it.
+
 Do not import another campaign's schedule, module, or house rules. Resolve missing settings when they affect a decision; continue unrelated preparation. A server default is not evidence that the table deliberately agreed to it.
 
 ## 2. Protect player agency

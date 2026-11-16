@@ -953,6 +953,9 @@ func handleGMStatus(w http.ResponseWriter, r *http.Request) {
 		sort.Strings(names)
 		gmTasks = append(gmTasks, fmt.Sprintf("Unfinished characters: %s still have choices to make (unfinished_characters lists them; remind the players).", strings.Join(names, ", ")))
 	}
+	if advice := levelRangeAdvice(campaignID); advice != "" { // the party has passed the starting level (campaign_levels_2024.go)
+		gmTasks = append(gmTasks, advice)
+	}
 	response["what_to_do_next"] = whatToDoNext
 	if len(gmTasks) > 0 {
 		response["gm_tasks"] = gmTasks
