@@ -58,8 +58,9 @@ func fleetStep(charID int) bool {
 // end of your next turn; a Bonus Action on later turns keeps the link going. While you perceive through it you have its special
 // senses, and you can cast spells as if you were in your space or its space if the two of you are within 60 feet of each other.
 func gazeOfTwoMinds(charID int, description string) string {
-	if !hasInvocation(charID, "gaze-of-two-minds") {
-		return "You don't have the Gaze of Two Minds invocation."
+	class, _, _ := subclassOf(charID)
+	if why := gazeOfTwoMindsGate(class, invocationLookup(charID)); why != "" { // feature_gates_2024.go
+		return why
 	}
 	target := parseTargetFromDescription(description, charID)
 	if target <= 0 || target == charID {

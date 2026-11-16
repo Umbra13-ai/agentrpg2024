@@ -138,8 +138,8 @@ func handleWholenessOfBody2024(w http.ResponseWriter, r *http.Request) {
 	var class, subclass string
 	var level, wis int
 	db.QueryRow(`SELECT class, COALESCE(subclass,''), level, wis FROM characters WHERE id = $1`, req.CharacterID).Scan(&class, &subclass, &level, &wis)
-	if !strings.EqualFold(class, "monk") || !strings.Contains(strings.ToLower(subclass), "open") || level < 6 {
-		dmBadRequest(w, "not_available", "Wholeness of Body is a Warrior of the Open Hand feature from Monk level 6.")
+	if why := wholenessOfBodyGate(class, subclass, level); why != "" { // feature_gates_2024.go
+		dmBadRequest(w, "not_available", why)
 		return
 	}
 	uses := game.Modifier(wis)
@@ -204,8 +204,8 @@ func handleHolyNimbus2024(w http.ResponseWriter, r *http.Request) {
 	var name, class, subclass string
 	var level, lobby int
 	db.QueryRow(`SELECT name, class, COALESCE(subclass,''), level, COALESCE(lobby_id,0) FROM characters WHERE id = $1`, req.CharacterID).Scan(&name, &class, &subclass, &level, &lobby)
-	if !strings.EqualFold(class, "paladin") || !strings.EqualFold(subclass, "devotion") || level < 20 {
-		dmBadRequest(w, "not_available", "Holy Nimbus is an Oath of Devotion feature at Paladin level 20.")
+	if why := holyNimbusGate(class, subclass, level); why != "" { // feature_gates_2024.go
+		dmBadRequest(w, "not_available", why)
 		return
 	}
 	// once per Long Rest, or a level 5 spell slot, with the Bonus Action, in one step (resources_2024.go; featureTurnCost)

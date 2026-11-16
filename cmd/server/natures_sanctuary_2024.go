@@ -91,8 +91,8 @@ func parseSquare(description string) (mapSquare, bool) {
 // naturesSanctuary is the Magic action (move=false) or the Bonus Action that moves the Cube (move=true).
 func naturesSanctuary(charID int, description string, move bool) string {
 	class, sub, level := subclassOf(charID)
-	if class != "druid" || sub != "land" || level < 14 {
-		return "Nature's Sanctuary is a feature of a level 14 Druid of the Circle of the Land."
+	if why := naturesSanctuaryGate(class, sub, level); why != "" { // feature_gates_2024.go
+		return why
 	}
 	lobby := lobbyOfChar(charID)
 	m, hasMap := activeEncounterMap(lobby)

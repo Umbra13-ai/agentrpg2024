@@ -166,8 +166,8 @@ func steadyAim(charID int) string {
 	if db.QueryRow(`SELECT class, level, COALESCE(movement_remaining,0), COALESCE(species,'') FROM characters WHERE id = $1`, charID).Scan(&class, &level, &moveLeft, &species) != nil {
 		return "Character not found."
 	}
-	if strings.ToLower(class) != "rogue" || level < 3 {
-		return "Only a Rogue of level 3 or higher can take Steady Aim."
+	if why := steadyAimGate(class, level); why != "" { // feature_gates_2024.go
+		return why
 	}
 	speed = characterSpeed(charID, species)
 	if moveLeft < speed {

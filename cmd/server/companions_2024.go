@@ -502,8 +502,8 @@ func handleCompanionAction(w http.ResponseWriter, charID, lobbyID, companionID i
 
 	// the owner's familiar commands: a Magic action in combat
 	if action == "dismiss_familiar" || action == "recall_familiar" || action == "dismiss_familiar_forever" {
-		if c.Kind != "familiar" {
-			reply(400, map[string]interface{}{"success": false, "error": "not_a_familiar", "message": "Only a familiar can be dismissed and recalled."})
+		if why := familiarCommandGate(c); why != "" { // feature_gates_2024.go
+			reply(400, map[string]interface{}{"success": false, "error": "not_a_familiar", "message": why})
 			return
 		}
 		if inCombat {

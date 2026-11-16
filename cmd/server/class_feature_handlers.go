@@ -961,16 +961,15 @@ func handleFlexibleCasting(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	if strings.ToLower(class) != "sorcerer" {
+	switch fontOfMagicGate(class, level) { // feature_gates_2024.go
+	case "not_a_sorcerer":
 		w.WriteHeader(http.StatusBadRequest)
 		json.NewEncoder(w).Encode(map[string]interface{}{
 			"error":   "not_a_sorcerer",
 			"message": "Only Sorcerers have Font of Magic",
 		})
 		return
-	}
-
-	if level < 2 {
+	case "level_too_low":
 		w.WriteHeader(http.StatusBadRequest)
 		json.NewEncoder(w).Encode(map[string]interface{}{
 			"error":   "level_too_low",

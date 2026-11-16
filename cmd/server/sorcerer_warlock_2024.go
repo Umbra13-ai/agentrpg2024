@@ -22,8 +22,8 @@ func innateSorcery(charID int) string {
 	if db.QueryRow(`SELECT class, level FROM characters WHERE id = $1`, charID).Scan(&class, &level) != nil {
 		return "Character not found."
 	}
-	if strings.ToLower(class) != "sorcerer" {
-		return "Only a Sorcerer has Innate Sorcery."
+	if why := innateSorceryGate(class); why != "" { // feature_gates_2024.go
+		return why
 	}
 	extra := ""
 	pointsMax := classResourceMax(charID, class, level, "sorcery_points", 0)
@@ -78,8 +78,8 @@ func magicalCunning(charID int) string {
 	if db.QueryRow(`SELECT class, level FROM characters WHERE id = $1`, charID).Scan(&class, &level) != nil {
 		return "Character not found."
 	}
-	if strings.ToLower(class) != "warlock" || level < 2 {
-		return "Magical Cunning needs a Warlock of level 2 or higher."
+	if why := magicalCunningGate(class, level); why != "" {
+		return why
 	}
 	col := pactSlotColumn(charID) // F132: a single-class Warlock spends its Pact slots from spell_slots_used
 	total := 0
@@ -171,8 +171,8 @@ func dragonWings(charID int) string {
 	if db.QueryRow(`SELECT class, COALESCE(subclass,''), level FROM characters WHERE id = $1`, charID).Scan(&class, &sub, &level) != nil {
 		return "Character not found."
 	}
-	if strings.ToLower(class) != "sorcerer" || strings.ToLower(sub) != "draconic" || level < 14 {
-		return "Dragon Wings needs a Draconic Sorcerer of level 14 or higher."
+	if why := dragonWingsGate(class, sub, level); why != "" {
+		return why
 	}
 	pointsMax := classResourceMax(charID, class, level, "sorcery_points", 0)
 	again := false

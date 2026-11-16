@@ -278,8 +278,8 @@ func companionSpecialAction(c companion, charID, lobbyID int, action, descriptio
 	low := strings.ToLower(description)
 	switch action {
 	case "breath", "breath_weapon":
-		if c.Form != "draconic-spirit" {
-			return "", "Only a Draconic Spirit (Summon Dragon) has a Breath Weapon."
+		if why := companionSpecialGate(action, c); why != "" { // feature_gates_2024.go
+			return "", why
 		}
 		_, _, dc := casterNumbers(charID)
 		dtype := pickWord(low, breathTypes, "fire")
@@ -306,12 +306,8 @@ func companionSpecialAction(c companion, charID, lobbyID int, action, descriptio
 		}
 		return fmt.Sprintf("%s exhales %s in a 30-foot Cone (2d6: %d). %s", companionDisplayName(c), titleCase(dtype), dmg, strings.Join(lines, " ")), ""
 	case "fey_step", "fell_glare", "healing_touch":
-		if c.Kind != "steed" {
-			return "", "Only an Otherworldly Steed has Fey Step, Fell Glare and Healing Touch."
-		}
-		want := map[string]string{"fey_step": "fey", "fell_glare": "fiend", "healing_touch": "celestial"}[action]
-		if c.CreatureType != want {
-			return "", fmt.Sprintf("%s is a %s steed; %s belongs to a %s steed.", companionDisplayName(c), titleCase(c.CreatureType), titleCase(strings.ReplaceAll(action, "_", " ")), titleCase(want))
+		if why := companionSpecialGate(action, c); why != "" {
+			return "", why
 		}
 		key := "steed_" + action
 		if err := useOnce(charID, key, "Used already; it comes back when you finish a Long Rest."); err != nil { // resources_2024.go

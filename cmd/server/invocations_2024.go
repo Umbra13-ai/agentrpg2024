@@ -85,8 +85,9 @@ func protectorsPage(warlockID int) []int {
 
 // giftOfTheProtectorsAction handles "gift_of_the_protectors add <name>" and "... erase <name>".
 func giftOfTheProtectorsAction(charID int, description string) string {
-	if !hasInvocation(charID, "gift-of-the-protectors") {
-		return "You don't have the Gift of the Protectors invocation."
+	class, _, _ := subclassOf(charID)
+	if why := giftOfTheProtectorsGate(class, invocationLookup(charID)); why != "" { // feature_gates_2024.go
+		return why
 	}
 	var cha, lobby int
 	db.QueryRow(`SELECT cha, COALESCE(lobby_id,0) FROM characters WHERE id = $1`, charID).Scan(&cha, &lobby)

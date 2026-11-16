@@ -151,7 +151,7 @@ func relentlessHunter(charID int, concentratingOn string) bool {
 
 // tireless is the Magic action of Tireless (level 10): Temporary Hit Points 1d8 + Wisdom modifier, Wisdom-modifier uses per Long Rest.
 func tireless(charID int) string {
-	return useWisdomFeature(charID, "tireless", 10, func(wis, level int) string {
+	return useWisdomFeature(charID, "tireless", tirelessGate, func(wis, level int) string {
 		hp := game.RollDie(8) + game.Modifier(wis)
 		if hp < 1 {
 			hp = 1
@@ -163,20 +163,20 @@ func tireless(charID int) string {
 
 // naturesVeil is the Bonus Action of Nature's Veil (level 14): Invisible until the end of your next turn.
 func naturesVeil(charID int) string {
-	return useWisdomFeature(charID, "natures_veil", 14, func(wis, level int) string {
+	return useWisdomFeature(charID, "natures_veil", naturesVeilGate, func(wis, level int) string {
 		addCharacterCondition(charID, "invisible")
 		return "🌿 Nature's Veil: you have the Invisible condition until the end of your next turn."
 	})
 }
 
-func useWisdomFeature(charID int, key string, minLevel int, run func(wis, level int) string) string {
+func useWisdomFeature(charID int, key string, gate func(class string, level int) string, run func(wis, level int) string) string {
 	var class string
 	var level, wis int
 	if db.QueryRow(`SELECT class, level, wis FROM characters WHERE id = $1`, charID).Scan(&class, &level, &wis) != nil {
 		return "Character not found."
 	}
-	if strings.ToLower(class) != "ranger" || level < minLevel {
-		return fmt.Sprintf("This needs a Ranger of level %d or higher.", minLevel)
+	if why := gate(class, level); why != "" { // feature_gates_2024.go
+		return why
 	}
 	max := game.Modifier(wis)
 	if max < 1 {
@@ -253,8 +253,10 @@ func potentSpellcastingBonus(charID int, class string, level, spellLevel int) in
 func divineSense(charID int) string {
 	var class string
 	var level int
-	if db.QueryRow(`SELECT class, level FROM characters WHERE id = $1`, charID).Scan(&class, &level) != nil || strings.ToLower(class) != "paladin" || level < 3 {
-		return "Divine Sense is a Channel Divinity effect of a Paladin of level 3 or higher."
+	// no row: no class, refused by the gate (feature_gates_2024.go)
+	db.QueryRow(`SELECT class, level FROM characters WHERE id = $1`, charID).Scan(&class, &level)
+	if why := divineSenseGate(class, level); why != "" {
+		return why
 	}
 	if okRes, msg, _ := useClassResource(charID, "channel_divinity", 1); !okRes {
 		return msg

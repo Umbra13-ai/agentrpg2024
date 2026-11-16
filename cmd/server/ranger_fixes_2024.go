@@ -24,14 +24,15 @@ func viciousHit(monsterKey, heldItem string, crit bool) (int, string) {
 
 // scimitarOfSpeedReady: "" when the character holds an attuned Scimitar of Speed, else why not.
 func scimitarOfSpeedReady(charID int) string {
-	h := handsOf(charID)
-	if !strings.HasPrefix(strings.ToLower(h.Main), "scimitar of speed") && !strings.HasPrefix(strings.ToLower(h.Off), "scimitar of speed") {
-		return "A Bonus Action attack (bonus_attack) needs a Scimitar of Speed in hand. Nothing was spent."
-	}
-	if _, ok := attunedTo(charID, "scimitar of speed"); !ok {
-		return "The Scimitar of Speed's Bonus Action attack needs attunement (POST /api/characters/attune). Nothing was spent."
-	}
-	return ""
+	return scimitarOfSpeedGate(func(item string) (bool, bool) { return heldAndAttuned(charID, item) }) // feature_gates_2024.go
+}
+
+// heldAndAttuned: a magic item (its name, or the start of it) is in one of the character's hands, and the character is attuned to it.
+func heldAndAttuned(charID int, item string) (held, attuned bool) {
+	h, name := handsOf(charID), strings.ToLower(item)
+	held = strings.HasPrefix(strings.ToLower(h.Main), name) || strings.HasPrefix(strings.ToLower(h.Off), name)
+	_, attuned = attunedTo(charID, name)
+	return held, attuned
 }
 
 // cloakOfTheBatStealth: Advantage on Stealth while the cloak is worn and attuned.

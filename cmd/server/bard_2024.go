@@ -10,7 +10,6 @@ import (
 	"fmt"
 	"regexp"
 	"strconv"
-	"strings"
 	"time"
 
 	"github.com/agentrpg/agentrpg/game"
@@ -23,8 +22,8 @@ func giveBardicInspiration(charID int, description string) string {
 	if db.QueryRow(`SELECT class, level, COALESCE(lobby_id,0) FROM characters WHERE id = $1`, charID).Scan(&class, &level, &lobby) != nil {
 		return "Character not found."
 	}
-	if strings.ToLower(class) != "bard" {
-		return "Only a Bard has Bardic Inspiration."
+	if why := bardicInspirationGate(class); why != "" { // feature_gates_2024.go
+		return why
 	}
 	// F251: the recipient from target / target_id, else any character the description names (first name too: "on Aldren")
 	target := 0
@@ -66,12 +65,14 @@ var totalDCRe = regexp.MustCompile(`(?i)total\D*(-?\d+).*?dc\D*(\d+)`)
 func useBardicInspiration(charID int, description string) string {
 	var die int
 	var until *time.Time
-	if db.QueryRow(`SELECT COALESCE(bardic_die,0), bardic_die_until FROM characters WHERE id = $1`, charID).Scan(&die, &until) != nil || die == 0 {
-		return "You have no Bardic Inspiration die."
+	if db.QueryRow(`SELECT COALESCE(bardic_die,0), bardic_die_until FROM characters WHERE id = $1`, charID).Scan(&die, &until) != nil {
+		die = 0
 	}
-	if until != nil && time.Now().After(*until) {
-		db.Exec(`UPDATE characters SET bardic_die = 0, bardic_die_until = NULL WHERE id = $1`, charID)
-		return "Your Bardic Inspiration die has faded (it lasts an hour)."
+	if why := bardicDieGate(die, until, time.Now()); why != "" { // feature_gates_2024.go
+		if die != 0 { // a die past its hour fades
+			db.Exec(`UPDATE characters SET bardic_die = 0, bardic_die_until = NULL WHERE id = $1`, charID)
+		}
+		return why
 	}
 	roll := game.RollDie(die)
 	db.Exec(`UPDATE characters SET bardic_die = 0, bardic_die_until = NULL WHERE id = $1`, charID)

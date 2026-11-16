@@ -19,6 +19,7 @@ import (
 	"fmt"
 	"sort"
 	"strings"
+	"time"
 
 	"github.com/agentrpg/agentrpg/game"
 )
@@ -65,7 +66,7 @@ type actionWho struct {
 	Level      int    // the class level it comes at
 	Feat       string // a feat or Epic Boon slug
 	Invocation string // an Eldritch Invocation slug
-	Item       string // a magic item the character carries (its name)
+	Item       string // a magic item the character holds in a hand and is attuned to (its name)
 	Effect     string // a spell effect on the character (charBuff kind)
 	Companion  string // a companion of the character: "any", "familiar", "draconic-spirit", or a steed's kind ("celestial")
 	Choice     string // a subclass choice it needs, "key=value" (Hunter's Prey: hunters_prey=horde_breaker)
@@ -91,7 +92,7 @@ type actionType struct {
 	Beat    bool     // outside a fight it doesn't use up the exploration beat (the GM narrates between actions)
 	SRD     bool     // one of the SRD's twelve actions (Attack, Dash ... Utilize), named by the turn reminder
 	Uses    string   // the class resource it spends, shown as uses left (my-turn)
-	While   string   // shown only while: raging, not_raging, wild_shaped, not_wild_shaped, prone, dying
+	While   string   // shown only while: raging, not_raging, wild_shaped, prone, dying, burning, inspired (holds a Bardic Inspiration die)
 }
 
 func (t actionType) takes(field string) bool { return containsStr(t.Fields, field) }
@@ -176,7 +177,7 @@ var actionTypes = []actionType{
 	{Name: "drop", Title: "Drop something", Section: "Moving and the free parts of a turn", Cost: costFree, GM: true, Beat: true, Tags: []string{"object"}, Fields: []string{"description"},
 		What:    "Let go of something you hold (no action). Recorded for the GM; to leave an item of your inventory on the ground use POST /api/characters/{id}/equipment/drop.",
 		Example: `{"action": "drop", "description": "I drop the torch"}`},
-	{Name: "extinguish", Title: "Put out the fire on you", Section: "Moving and the free parts of a turn", Cost: costAction,
+	{Name: "extinguish", Title: "Put out the fire on you", Section: "Moving and the free parts of a turn", Cost: costAction, While: "burning",
 		What:    "You are burning: drop Prone and roll to put the fire out.",
 		Example: `{"action": "extinguish"}`},
 	{Name: "death_save", Title: "Death Saving Throw", Section: "Moving and the free parts of a turn", Cost: costAction, Beat: true, While: "dying",
@@ -188,7 +189,7 @@ var actionTypes = []actionType{
 	{Name: "offhand_attack", Title: "Light weapon's extra attack", Section: "Moving and the free parts of a turn", Cost: costBonus, Group: "attack", Tags: []string{"attack"}, Fields: []string{"target_id", "description"},
 		What:    "After you take the Attack action with a Light weapon, one attack with a different Light weapon in your other hand (no ability modifier to its damage unless negative). With the Nick mastery it is part of the Attack action instead.",
 		Example: `{"action": "offhand_attack", "target_id": -1, "description": "dagger"}`},
-	{Name: "use_bardic_inspiration", Title: "Use a Bardic Inspiration die", Section: "Moving and the free parts of a turn", Cost: costFree, Fields: []string{"description"},
+	{Name: "use_bardic_inspiration", Title: "Use a Bardic Inspiration die", Section: "Moving and the free parts of a turn", Cost: costFree, While: "inspired", Fields: []string{"description"},
 		What:    "Add the Bardic Inspiration die a Bard gave you to a D20 Test you failed: the total and the DC in the description.",
 		Example: `{"action": "use_bardic_inspiration", "description": "total 11 dc 14"}`},
 
@@ -220,7 +221,7 @@ var actionTypes = []actionType{
 	{Name: "preserve_life", Title: "Preserve Life (Channel Divinity)", Section: "Class features", Cost: costAction, Who: actionWho{Class: "cleric", Subclass: "life", Level: 3}, Uses: "channel_divinity", Fields: []string{"target_ids", "description"},
 		What:    "A Magic action: share five times your Cleric level in Hit Points among Bloodied creatures within 30 feet (up to half each one's maximum).",
 		Example: `{"action": "preserve_life", "description": "Aldren 8, Millie 7"}`},
-	{Name: "wild_shape", Title: "Wild Shape", Section: "Class features", Cost: costBonus, Who: actionWho{Class: "druid", Level: 2}, Uses: "wild_shape", While: "not_wild_shaped", Fields: []string{"description"},
+	{Name: "wild_shape", Title: "Wild Shape", Section: "Class features", Cost: costBonus, Who: actionWho{Class: "druid", Level: 2}, Uses: "wild_shape", Fields: []string{"description"},
 		What:    "Shape-shift into one of your known Beast forms (choose them first: POST /api/characters/{id}/class-options {\"wild_shape_forms\": [...]}); Temporary Hit Points equal to your Druid level.",
 		Example: `{"action": "wild_shape", "description": "wolf"}`},
 	{Name: "revert_wild_shape", Title: "Leave Wild Shape", Section: "Class features", Cost: costBonus, Who: actionWho{Class: "druid", Level: 2}, While: "wild_shaped",
@@ -448,39 +449,49 @@ func featureAction(action string) string {
 
 // ---------------------------------------------------------------- who can take what
 
-// actorFacts: what decides which types a character has now.
+// actorFacts: what decides which types a character has now. openTo reads nothing else, so TestActionWhoMatchesGates can describe a
+// character without a database and ask the table and each feature's own gate (feature_gates_2024.go) the same question.
 type actorFacts struct {
-	id                               int
-	class, subclass                  string
-	level                            int
-	raging, wildShaped, prone, dying bool
-	companions                       []companion
-	choices                          map[string]string
-	companionsRead                   bool
+	class, subclass                                     string
+	level                                               int
+	raging, wildShaped, prone, dying, burning, inspired bool
+	choices                                             map[string]string
+	// asked only when a type names one: a feat or Epic Boon, an Eldritch Invocation, a spell effect on the character (by slug or
+	// kind), whether a magic item is in hand and attuned, the character's companions (not gone)
+	hasFeat, hasInvocation, hasEffect func(string) bool
+	heldAttuned                       func(item string) (held, attuned bool)
+	companions                        func() []companion
 }
 
 func actorFactsOf(charID int) actorFacts {
-	f := actorFacts{id: charID}
+	f := actorFacts{hasFeat: featLookup(charID), hasInvocation: invocationLookup(charID), hasEffect: effectLookup(charID),
+		heldAttuned: func(item string) (bool, bool) { return heldAndAttuned(charID, item) }}
 	f.class, f.subclass, f.level = subclassOf(charID)
-	var hp int
-	var stable, dead bool
+	var hp, die int
+	var stable, dead, burning bool
 	var form *string
+	var dieUntil *time.Time
 	var choices []byte
-	db.QueryRow(`SELECT COALESCE(hp, 0), COALESCE(is_stable, false), COALESCE(is_dead, false), wild_shape_form, COALESCE(subclass_choices, '{}')
-		FROM characters WHERE id = $1`, charID).Scan(&hp, &stable, &dead, &form, &choices)
+	db.QueryRow(`SELECT COALESCE(hp, 0), COALESCE(is_stable, false), COALESCE(is_dead, false), wild_shape_form, COALESCE(subclass_choices, '{}'),
+		COALESCE(bardic_die, 0), bardic_die_until,
+		EXISTS (SELECT 1 FROM burning b WHERE b.target_id = characters.id AND b.lobby_id = characters.lobby_id)
+		FROM characters WHERE id = $1`, charID).Scan(&hp, &stable, &dead, &form, &choices, &die, &dieUntil, &burning)
 	json.Unmarshal(choices, &f.choices)
 	f.dying = hp <= 0 && !stable && !dead
 	f.wildShaped = form != nil && *form != ""
 	f.raging = hasCondition(charID, "raging")
 	f.prone = hasCondition(charID, "prone")
-	return f
-}
-
-func (f *actorFacts) companionList() []companion {
-	if !f.companionsRead {
-		f.companions, f.companionsRead = companionsOf(f.id), true
+	f.burning = burning
+	f.inspired = bardicDieGate(die, dieUntil, time.Now()) == ""
+	var list []companion
+	read := false
+	f.companions = func() []companion {
+		if !read {
+			list, read = companionsOf(charID), true
+		}
+		return list
 	}
-	return f.companions
+	return f
 }
 
 // openTo: the character has this type now (its class, level and subclass, feat, invocation, item, spell effect or companion, and
@@ -506,10 +517,6 @@ func (t actionType) openTo(f *actorFacts) bool {
 		if !f.wildShaped {
 			return false
 		}
-	case "not_wild_shaped":
-		if f.wildShaped {
-			return false
-		}
 	case "prone":
 		if !f.prone {
 			return false
@@ -518,29 +525,35 @@ func (t actionType) openTo(f *actorFacts) bool {
 		if !f.dying {
 			return false
 		}
+	case "burning":
+		if !f.burning {
+			return false
+		}
+	case "inspired":
+		if !f.inspired {
+			return false
+		}
 	}
 	if k, v, ok := strings.Cut(w.Choice, "="); ok && f.choices[k] != v {
 		return false
 	}
-	if w.Feat != "" && !hasSpecificFeat(f.id, w.Feat) {
+	if w.Feat != "" && !f.hasFeat(w.Feat) {
 		return false
 	}
-	if w.Invocation != "" && !hasInvocation(f.id, w.Invocation) {
+	if w.Invocation != "" && !f.hasInvocation(w.Invocation) {
 		return false
 	}
 	if w.Item != "" {
-		if it, _ := itemInUse(f.id, w.Item, ""); it == nil {
+		if held, attuned := f.heldAttuned(w.Item); !held || !attuned {
 			return false
 		}
 	}
-	if w.Effect != "" {
-		if _, ok := charBuff(f.id, w.Effect); !ok {
-			return false
-		}
+	if w.Effect != "" && !f.hasEffect(w.Effect) {
+		return false
 	}
 	if w.Companion != "" {
 		found := false
-		for _, c := range f.companionList() {
+		for _, c := range f.companions() {
 			if c.Status == "gone" {
 				continue
 			}

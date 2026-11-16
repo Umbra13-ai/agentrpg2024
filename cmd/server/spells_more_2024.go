@@ -446,10 +446,10 @@ func moreSpellAction(charID int, action, description string, targetID int) strin
 	d := strings.ToLower(description)
 	switch action {
 	case "spiritual_weapon":
-		e, ok := charBuff(charID, "spiritual_weapon")
-		if !ok {
-			return "Cannot use the Spiritual Weapon: you have none (cast Spiritual Weapon; it lasts while you keep Concentration). Nothing was spent."
+		if why := spiritualWeaponGate(effectLookup(charID)); why != "" { // feature_gates_2024.go
+			return why
 		}
+		e, _ := charBuff(charID, "spiritual_weapon")
 		if targetID >= 0 {
 			return "Cannot use the Spiritual Weapon: name the monster with target_id (a negative id). Nothing was spent."
 		}
@@ -476,10 +476,10 @@ func moreSpellAction(charID int, action, description string, targetID int) strin
 		}
 		return "The spectral force moves and strikes (Bonus Action). " + text
 	case "flame_blade":
-		e, ok := charBuff(charID, "flame_blade")
-		if !ok {
-			return "Cannot use the Flame Blade: you have none (cast Flame Blade; it lasts while you keep Concentration). Nothing was spent."
+		if why := flameBladeGate(effectLookup(charID)); why != "" {
+			return why
 		}
+		e, _ := charBuff(charID, "flame_blade")
 		parts := strings.Split(e.Detail, "|")
 		slot := atoiSafe(parts[0])
 		held := len(parts) > 1 && parts[1] == "held"
@@ -511,8 +511,8 @@ func moreSpellAction(charID int, action, description string, targetID int) strin
 		}
 		return "Flame Blade (Magic action). " + spellMeleeAttack(charID, lobby, targetID, fmt.Sprintf("%dd6", 3+maxInt(0, slot-2)), "fire", "Flame Blade")
 	case "gaseous_form":
-		if _, ok := charBuff(charID, "gaseous_form"); !ok {
-			return "Cannot end Gaseous Form: you aren't in it. Nothing was spent."
+		if why := endGaseousFormGate(effectLookup(charID)); why != "" {
+			return why
 		}
 		db.Exec(`DELETE FROM spell_effects WHERE lobby_id = $1 AND target_id = $2 AND kind = 'gaseous_form'`, lobby, charID)
 		return "You end Gaseous Form on yourself (a Magic action) and take your normal form."
