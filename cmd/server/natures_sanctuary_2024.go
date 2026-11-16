@@ -90,8 +90,8 @@ func parseSquare(description string) (mapSquare, bool) {
 
 // naturesSanctuary is the Magic action (move=false) or the Bonus Action that moves the Cube (move=true).
 func naturesSanctuary(charID int, description string, move bool) string {
-	class, sub, level := subclassOf(charID)
-	if why := naturesSanctuaryGate(class, sub, level); why != "" { // feature_gates_2024.go
+	_, _, level := subclassOf(charID)
+	if why := actionRefusal(map[bool]string{false: "natures_sanctuary", true: "move_sanctuary"}[move], charID).text(); why != "" { // the action table's Who (action_types_2024.go)
 		return why
 	}
 	lobby := lobbyOfChar(charID)

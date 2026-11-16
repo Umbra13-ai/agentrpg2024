@@ -961,20 +961,12 @@ func handleFlexibleCasting(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	switch fontOfMagicGate(class, level) { // feature_gates_2024.go
-	case "not_a_sorcerer":
-		w.WriteHeader(http.StatusBadRequest)
-		json.NewEncoder(w).Encode(map[string]interface{}{
-			"error":   "not_a_sorcerer",
-			"message": "Only Sorcerers have Font of Magic",
-		})
-		return
-	case "level_too_low":
-		w.WriteHeader(http.StatusBadRequest)
-		json.NewEncoder(w).Encode(map[string]interface{}{
-			"error":   "level_too_low",
-			"message": "Sorcerers gain Font of Magic at level 2",
-		})
+	feature := "font_of_magic" // create_slot; convert_slot is its own type (the action table)
+	if action == "convert_slot" {
+		feature = "font_of_magic_convert"
+	}
+	if ref := actionRefusal(feature, req.CharacterID); ref != nil { // the action table's Who (action_types_2024.go)
+		writeJSONStatus(w, http.StatusBadRequest, ref.reply())
 		return
 	}
 

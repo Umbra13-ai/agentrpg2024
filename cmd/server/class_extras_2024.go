@@ -34,7 +34,7 @@ func countercharm(charID int, description string) string {
 	if db.QueryRow(`SELECT class, name, level FROM characters WHERE id = $1`, charID).Scan(&class, &name, &level) != nil {
 		return "Character not found."
 	}
-	if why := countercharmGate(class, level); why != "" { // feature_gates_2024.go
+	if why := actionRefusal("countercharm", charID).text(); why != "" { // the action table's Who (action_types_2024.go)
 		return why
 	}
 	return fmt.Sprintf("🎵 Countercharm: %s uses a Reaction; the saving throw against the Charmed or Frightened effect is rolled again with Advantage: %s", name, rerollReportedSave(description, []string{"Countercharm"}))
@@ -88,8 +88,8 @@ func landTypeOf(charID int) string {
 
 // landsAid: Magic action, a use of Wild Shape. "lands_aid" with target_id (a monster) and/or "heal <name>".
 func landsAid(charID int, description string) string {
-	class, sub, level := subclassOf(charID)
-	if why := landsAidGate(class, sub, level); why != "" {
+	_, _, level := subclassOf(charID)
+	if why := actionRefusal("lands_aid", charID).text(); why != "" {
 		return why
 	}
 	var wis, lobby int
@@ -146,8 +146,8 @@ var reNumbers = regexp.MustCompile(`\d+`)
 
 // naturalRecovery: after a Short Rest, recover spell slots with a combined level up to half the Druid level (rounded up), none of level 6+.
 func naturalRecovery(charID int, description string) string {
-	class, sub, level := subclassOf(charID)
-	if why := naturalRecoveryGate(class, sub, level); why != "" {
+	_, _, level := subclassOf(charID)
+	if why := actionRefusal("natural_recovery", charID).text(); why != "" {
 		return why
 	}
 	budget := (level + 1) / 2
@@ -185,8 +185,8 @@ func naturalRecovery(charID int, description string) string {
 
 // natureMagician (Archdruid): turn unexpended Wild Shape uses into one spell slot, 2 spell levels for each use. Once per Long Rest.
 func natureMagician(charID int, description string) string {
-	class, _, level := subclassOf(charID)
-	if why := natureMagicianGate(class, level); why != "" {
+	_, _, level := subclassOf(charID)
+	if why := actionRefusal("nature_magician", charID).text(); why != "" {
 		return why
 	}
 	n := 1

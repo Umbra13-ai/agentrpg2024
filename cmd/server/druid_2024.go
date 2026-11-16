@@ -58,7 +58,7 @@ func wildResurgence(charID int, description string) string {
 	if db.QueryRow(`SELECT class, level FROM characters WHERE id = $1`, charID).Scan(&class, &level) != nil {
 		return "Character not found."
 	}
-	if why := wildResurgenceGate(class, level); why != "" { // feature_gates_2024.go
+	if why := actionRefusal("wild_resurgence", charID).text(); why != "" { // the action table's Who (action_types_2024.go)
 		return why
 	}
 	max := game.ClassTableInt(class, level, "Wild Shape")

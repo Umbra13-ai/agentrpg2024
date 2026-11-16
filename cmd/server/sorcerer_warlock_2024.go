@@ -22,7 +22,7 @@ func innateSorcery(charID int) string {
 	if db.QueryRow(`SELECT class, level FROM characters WHERE id = $1`, charID).Scan(&class, &level) != nil {
 		return "Character not found."
 	}
-	if why := innateSorceryGate(class); why != "" { // feature_gates_2024.go
+	if why := actionRefusal("innate_sorcery", charID).text(); why != "" { // the action table's Who (action_types_2024.go)
 		return why
 	}
 	extra := ""
@@ -78,7 +78,7 @@ func magicalCunning(charID int) string {
 	if db.QueryRow(`SELECT class, level FROM characters WHERE id = $1`, charID).Scan(&class, &level) != nil {
 		return "Character not found."
 	}
-	if why := magicalCunningGate(class, level); why != "" {
+	if why := actionRefusal("magical_cunning", charID).text(); why != "" {
 		return why
 	}
 	col := pactSlotColumn(charID) // F132: a single-class Warlock spends its Pact slots from spell_slots_used
@@ -171,7 +171,7 @@ func dragonWings(charID int) string {
 	if db.QueryRow(`SELECT class, COALESCE(subclass,''), level FROM characters WHERE id = $1`, charID).Scan(&class, &sub, &level) != nil {
 		return "Character not found."
 	}
-	if why := dragonWingsGate(class, sub, level); why != "" {
+	if why := actionRefusal("dragon_wings", charID).text(); why != "" {
 		return why
 	}
 	pointsMax := classResourceMax(charID, class, level, "sorcery_points", 0)

@@ -126,11 +126,11 @@ func monkStrikesOnMonster(charID int, description string, flurry bool) (string, 
 		Scan(&class, &name, &sub, &level, &str, &dex, &wis, &actionUsed) != nil {
 		return "", false
 	}
-	gate := martialArtsGate // feature_gates_2024.go
+	feature := "martial_arts"
 	if flurry {
-		gate = flurryOfBlowsGate
+		feature = "flurry_of_blows"
 	}
-	if why := gate(class, level); why != "" {
+	if why := actionRefusal(feature, charID).text(); why != "" { // the action table's Who (action_types_2024.go)
 		return why, true
 	}
 	_ = actionUsed // 2024: Flurry of Blows is a Bonus Action of its own; it doesn't need the Attack action first

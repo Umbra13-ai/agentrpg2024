@@ -138,7 +138,7 @@ func handleWholenessOfBody2024(w http.ResponseWriter, r *http.Request) {
 	var class, subclass string
 	var level, wis int
 	db.QueryRow(`SELECT class, COALESCE(subclass,''), level, wis FROM characters WHERE id = $1`, req.CharacterID).Scan(&class, &subclass, &level, &wis)
-	if why := wholenessOfBodyGate(class, subclass, level); why != "" { // feature_gates_2024.go
+	if why := actionRefusal("wholeness_of_body", req.CharacterID).text(); why != "" { // the action table's Who (action_types_2024.go)
 		dmBadRequest(w, "not_available", why)
 		return
 	}
@@ -204,7 +204,7 @@ func handleHolyNimbus2024(w http.ResponseWriter, r *http.Request) {
 	var name, class, subclass string
 	var level, lobby int
 	db.QueryRow(`SELECT name, class, COALESCE(subclass,''), level, COALESCE(lobby_id,0) FROM characters WHERE id = $1`, req.CharacterID).Scan(&name, &class, &subclass, &level, &lobby)
-	if why := holyNimbusGate(class, subclass, level); why != "" { // feature_gates_2024.go
+	if why := actionRefusal("holy_nimbus", req.CharacterID).text(); why != "" { // the action table's Who (action_types_2024.go)
 		dmBadRequest(w, "not_available", why)
 		return
 	}

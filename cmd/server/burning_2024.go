@@ -77,11 +77,11 @@ func burningTurnStart(lobbyID, id int, name string) string {
 // extinguishSelf is the action that puts out the fire on yourself: you give yourself the Prone condition and roll on the ground.
 func extinguishSelf(charID int) string {
 	lobby := lobbyOfChar(charID)
-	if why := extinguishGate(isBurning(lobby, charID)); why != "" { // feature_gates_2024.go
+	if why := actionRefusal("extinguish", charID).text(); why != "" { // the action table's Who (action_types_2024.go)
 		return why
 	}
 	if !stopBurning(lobby, charID) {
-		return extinguishGate(false)
+		return actionRefusal("extinguish", charID).text()
 	}
 	applyCondition(lobby, charID, "prone", "", 0, "", 0)
 	return "🔥 You drop and roll on the ground: the fire goes out. You have the Prone condition."

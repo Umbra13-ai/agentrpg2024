@@ -278,7 +278,7 @@ func companionSpecialAction(c companion, charID, lobbyID int, action, descriptio
 	low := strings.ToLower(description)
 	switch action {
 	case "breath", "breath_weapon":
-		if why := companionSpecialGate(action, c); why != "" { // feature_gates_2024.go
+		if why := companionRefusal(action, c).text(); why != "" { // the action table's Who (action_types_2024.go)
 			return "", why
 		}
 		_, _, dc := casterNumbers(charID)
@@ -306,7 +306,7 @@ func companionSpecialAction(c companion, charID, lobbyID int, action, descriptio
 		}
 		return fmt.Sprintf("%s exhales %s in a 30-foot Cone (2d6: %d). %s", companionDisplayName(c), titleCase(dtype), dmg, strings.Join(lines, " ")), ""
 	case "fey_step", "fell_glare", "healing_touch":
-		if why := companionSpecialGate(action, c); why != "" {
+		if why := companionRefusal(action, c).text(); why != "" {
 			return "", why
 		}
 		key := "steed_" + action

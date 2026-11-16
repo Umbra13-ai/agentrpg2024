@@ -112,8 +112,8 @@ func handleGMDeflectAttacks(w http.ResponseWriter, r *http.Request) {
 
 // patientDefense: Disengage as a Bonus Action; with 1 Focus Point (write "focus" or "dodge") Disengage and Dodge.
 func patientDefense(charID int, description string) string {
-	class, _, level := subclassOf(charID)
-	if why := patientDefenseGate(class, level); why != "" { // feature_gates_2024.go
+	_, _, level := subclassOf(charID)
+	if why := actionRefusal("patient_defense", charID).text(); why != "" { // the action table's Who (action_types_2024.go)
 		return why
 	}
 	low := strings.ToLower(description)
@@ -138,8 +138,7 @@ func patientDefense(charID int, description string) string {
 
 // selfRestoration (level 10): remove Charmed, Frightened or Poisoned.
 func selfRestoration(charID int, description string) string {
-	class, _, level := subclassOf(charID)
-	if why := selfRestorationGate(class, level); why != "" {
+	if why := actionRefusal("self_restoration", charID).text(); why != "" {
 		return why
 	}
 	low := strings.ToLower(description)
@@ -160,8 +159,7 @@ func selfRestoration(charID int, description string) string {
 
 // disciplinedSurvivor (level 14): after a failed saving throw, 1 Focus Point to roll it again ("bonus 5 dc 15").
 func disciplinedSurvivor(charID int, description string) string {
-	class, _, level := subclassOf(charID)
-	if why := disciplinedSurvivorGate(class, level); why != "" {
+	if why := actionRefusal("disciplined_survivor", charID).text(); why != "" {
 		return why
 	}
 	okFP, msg, left := useClassResource(charID, "focus", 1)
@@ -173,8 +171,7 @@ func disciplinedSurvivor(charID int, description string) string {
 
 // superiorDefense (level 18): 3 Focus Points, Resistance to all damage except Force for 1 minute.
 func superiorDefense(charID int) string {
-	class, _, level := subclassOf(charID)
-	if why := superiorDefenseGate(class, level); why != "" {
+	if why := actionRefusal("superior_defense", charID).text(); why != "" {
 		return why
 	}
 	if hasCondition(charID, "superior_defense") {
@@ -210,8 +207,8 @@ func superiorDefenseTick(charID int) {
 // quiveringPalm: "quivering_palm start" (4 Focus Points, after an Unarmed Strike hit) with target_id; "quivering_palm end" with target_id
 // (or "end harmlessly").
 func quiveringPalm(charID int, description string) string {
-	class, sub, level := subclassOf(charID)
-	if why := quiveringPalmGate(class, sub, level); why != "" { // Warrior of the Open Hand 17
+	class, _, level := subclassOf(charID)
+	if why := actionRefusal("quivering_palm", charID).text(); why != "" { // Warrior of the Open Hand 17
 		return why
 	}
 	lobby, mid, isMonster := attackedMonster(charID)

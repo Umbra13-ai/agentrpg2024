@@ -166,7 +166,7 @@ func steadyAim(charID int) string {
 	if db.QueryRow(`SELECT class, level, COALESCE(movement_remaining,0), COALESCE(species,'') FROM characters WHERE id = $1`, charID).Scan(&class, &level, &moveLeft, &species) != nil {
 		return "Character not found."
 	}
-	if why := steadyAimGate(class, level); why != "" { // feature_gates_2024.go
+	if why := actionRefusal("steady_aim", charID).text(); why != "" { // the action table's Who (action_types_2024.go)
 		return why
 	}
 	speed = characterSpeed(charID, species)

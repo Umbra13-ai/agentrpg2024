@@ -22,7 +22,7 @@ func giveBardicInspiration(charID int, description string) string {
 	if db.QueryRow(`SELECT class, level, COALESCE(lobby_id,0) FROM characters WHERE id = $1`, charID).Scan(&class, &level, &lobby) != nil {
 		return "Character not found."
 	}
-	if why := bardicInspirationGate(class); why != "" { // feature_gates_2024.go
+	if why := actionRefusal("bardic_inspiration", charID).text(); why != "" { // the action table's Who (action_types_2024.go)
 		return why
 	}
 	// F251: the recipient from target / target_id, else any character the description names (first name too: "on Aldren")
@@ -68,7 +68,7 @@ func useBardicInspiration(charID int, description string) string {
 	if db.QueryRow(`SELECT COALESCE(bardic_die,0), bardic_die_until FROM characters WHERE id = $1`, charID).Scan(&die, &until) != nil {
 		die = 0
 	}
-	if why := bardicDieGate(die, until, time.Now()); why != "" { // feature_gates_2024.go
+	if why := actionRefusal("use_bardic_inspiration", charID).text(); why != "" { // the action table's Who (action_types_2024.go)
 		if die != 0 { // a die past its hour fades
 			db.Exec(`UPDATE characters SET bardic_die = 0, bardic_die_until = NULL WHERE id = $1`, charID)
 		}

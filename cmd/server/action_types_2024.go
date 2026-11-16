@@ -463,6 +463,25 @@ type actorFacts struct {
 	companions                        func() []companion
 }
 
+// featLookup, invocationLookup and effectLookup: what the rule asks about a character's feats (and Epic Boons, by slug),
+// Eldritch Invocations and the spell effects on it.
+func featLookup(charID int) func(string) bool {
+	return func(slug string) bool { return hasSpecificFeat(charID, slug) }
+}
+
+func invocationLookup(charID int) func(string) bool {
+	return func(slug string) bool { return hasInvocation(charID, slug) }
+}
+
+func effectLookup(charID int) func(string) bool {
+	return func(kind string) bool { _, ok := charBuff(charID, kind); return ok }
+}
+
+// bardicDieHeld: a Bardic Inspiration die is held and hasn't faded (it lasts an hour).
+func bardicDieHeld(die int, until *time.Time, now time.Time) bool {
+	return die != 0 && (until == nil || !now.After(*until))
+}
+
 func actorFactsOf(charID int) actorFacts {
 	f := actorFacts{hasFeat: featLookup(charID), hasInvocation: invocationLookup(charID), hasEffect: effectLookup(charID),
 		heldAttuned: func(item string) (bool, bool) { return heldAndAttuned(charID, item) }}
@@ -482,7 +501,7 @@ func actorFactsOf(charID int) actorFacts {
 	f.raging = hasCondition(charID, "raging")
 	f.prone = hasCondition(charID, "prone")
 	f.burning = burning
-	f.inspired = bardicDieGate(die, dieUntil, time.Now()) == ""
+	f.inspired = bardicDieHeld(die, dieUntil, time.Now())
 	var list []companion
 	read := false
 	f.companions = func() []companion {
@@ -494,81 +513,156 @@ func actorFactsOf(charID int) actorFacts {
 	return f
 }
 
-// openTo: the character has this type now (its class, level and subclass, feat, invocation, item, spell effect or companion, and
-// the state it is shown in).
-func (t actionType) openTo(f *actorFacts) bool {
-	w := t.Who
-	if w.Class != "" && (f.class != w.Class || f.level < w.Level) {
-		return false
+// openTo: the character has this type now (refusal is the rule).
+func (t actionType) openTo(f *actorFacts) bool { return t.refusal(f) == nil }
+
+// whoRefusal: why a character can't use an action type now: the first thing the table's Who or While asks for that it lacks.
+type whoRefusal struct {
+	Code    string // wrong_class, level_too_low, wrong_subclass, choice_required, feat_required, invocation_required, item_not_in_hand, not_attuned, effect_required, companion_required, wrong_state
+	Message string
+}
+
+// text: the refusal's words ("" when there is none), for a resolver that answers in words.
+func (r *whoRefusal) text() string {
+	if r == nil {
+		return ""
 	}
-	if w.Subclass != "" && f.subclass != w.Subclass {
-		return false
+	return r.Message
+}
+
+// reply: the refusal as a request's answer (400).
+func (r *whoRefusal) reply() map[string]interface{} {
+	return map[string]interface{}{"success": false, "error": r.Code, "message": r.Message + " Nothing was spent."}
+}
+
+// refusal is the rule of who has an action type (HANDOFF item 31, Who step 2, Matt Nov 16): the class, its level and subclass,
+// a subclass choice, a feat or Epic Boon, an Eldritch Invocation, a magic item in hand and attuned, a spell effect, a companion,
+// and the state it is used in (While). Every feature's resolver asks it (actionRefusal), the turn's options and the refusal of an
+// unknown action list what it allows (actionTypesOpenTo), so who has a feature is said once. nil: the character may use it.
+func (t actionType) refusal(f *actorFacts) *whoRefusal {
+	w, title := t.Who, t.Title
+	if title == "" {
+		title = t.Name
 	}
-	switch t.While {
-	case "raging":
-		if !f.raging {
-			return false
+	// every refusal reads "Cannot use <feature>: <why>.", the form the server treats as a refusal (it spends nothing and uses
+	// no exploration beat: hasCharacterActedSinceLastNarration)
+	no := func(code, format string, args ...interface{}) *whoRefusal {
+		return &whoRefusal{Code: code, Message: "Cannot use " + title + ": " + fmt.Sprintf(format, args...)}
+	}
+	if w.Class != "" {
+		feature := fmt.Sprintf("a %s feature from level %d", titleCase(w.Class), maxInt(w.Level, 1))
+		if w.Subclass != "" {
+			feature = fmt.Sprintf("a %s %s feature from level %d", subclassTitle(w.Subclass), titleCase(w.Class), maxInt(w.Level, 1))
 		}
-	case "not_raging":
-		if f.raging {
-			return false
-		}
-	case "wild_shaped":
-		if !f.wildShaped {
-			return false
-		}
-	case "prone":
-		if !f.prone {
-			return false
-		}
-	case "dying":
-		if !f.dying {
-			return false
-		}
-	case "burning":
-		if !f.burning {
-			return false
-		}
-	case "inspired":
-		if !f.inspired {
-			return false
+		switch {
+		case f.class != w.Class:
+			return no("wrong_class", "it is %s.", feature)
+		case f.level < w.Level:
+			return no("level_too_low", "it is %s; you are level %d.", feature, f.level)
+		case w.Subclass != "" && f.subclass != w.Subclass:
+			return no("wrong_subclass", "it is %s.", feature)
 		}
 	}
 	if k, v, ok := strings.Cut(w.Choice, "="); ok && f.choices[k] != v {
-		return false
+		return no("choice_required", "it needs the %s option of %s (POST /api/characters/subclass-choice).", titleCase(strings.ReplaceAll(v, "_", " ")), titleCase(strings.ReplaceAll(k, "_", " ")))
 	}
 	if w.Feat != "" && !f.hasFeat(w.Feat) {
-		return false
+		return no("feat_required", "it needs the %s feat.", titleCase(strings.ReplaceAll(strings.ReplaceAll(w.Feat, "_", " "), "-", " ")))
 	}
 	if w.Invocation != "" && !f.hasInvocation(w.Invocation) {
-		return false
+		return no("invocation_required", "it needs the %s Eldritch Invocation.", titleCase(strings.ReplaceAll(w.Invocation, "-", " ")))
 	}
 	if w.Item != "" {
-		if held, attuned := f.heldAttuned(w.Item); !held || !attuned {
-			return false
+		switch held, attuned := f.heldAttuned(w.Item); {
+		case !held:
+			return no("item_not_in_hand", "it needs a %s in hand.", w.Item)
+		case !attuned:
+			return no("not_attuned", "it needs you attuned to the %s (POST /api/characters/attune).", w.Item)
 		}
 	}
 	if w.Effect != "" && !f.hasEffect(w.Effect) {
-		return false
+		return no("effect_required", "it needs the %s spell in effect on you (cast it first; it lasts while you keep Concentration).", titleCase(strings.ReplaceAll(w.Effect, "_", " ")))
 	}
 	if w.Companion != "" {
 		found := false
 		for _, c := range f.companions() {
-			if c.Status == "gone" {
-				continue
-			}
-			k := strings.ToLower(w.Companion)
-			if k == "any" || c.Kind == k || c.Form == k || (c.Kind == "steed" && strings.EqualFold(c.CreatureType, k)) {
-				found = true
-				break
-			}
+			found = found || (c.Status != "gone" && companionFits(w.Companion, c))
 		}
 		if !found {
-			return false
+			return no("companion_required", "it needs %s.", companionKindText(w.Companion))
 		}
 	}
-	return true
+	if why := whileProblem(t.While, f); why != "" {
+		return no("wrong_state", "%s", why)
+	}
+	return nil
 }
+
+// whileProblem: the state a type is used in (While), and what is wrong when the character isn't in it ("" when it is).
+func whileProblem(while string, f *actorFacts) string {
+	switch {
+	case while == "raging" && !f.raging:
+		return "you are not raging."
+	case while == "not_raging" && f.raging:
+		return "you are already raging."
+	case while == "wild_shaped" && !f.wildShaped:
+		return "you are not in a Wild Shape form."
+	case while == "prone" && !f.prone:
+		return "you are not Prone."
+	case while == "dying" && !f.dying:
+		return "you are not dying."
+	case while == "burning" && !f.burning:
+		return "you are not burning."
+	case while == "inspired" && !f.inspired:
+		return "you hold no Bardic Inspiration die (a Bard gives one; it fades after an hour)."
+	}
+	return ""
+}
+
+// companionFits: a companion is of the kind a type's Who names: "any", a kind (familiar, steed, summon), a form
+// (draconic-spirit), or a steed's creature type (celestial, fey, fiend).
+func companionFits(kind string, c companion) bool {
+	k := strings.ToLower(kind)
+	return k == "any" || c.Kind == k || c.Form == k || (c.Kind == "steed" && strings.EqualFold(c.CreatureType, k))
+}
+
+// companionKindText: a companion kind in words.
+func companionKindText(kind string) string {
+	switch strings.ToLower(kind) {
+	case "any":
+		return "a companion"
+	case "familiar":
+		return "a familiar"
+	case "draconic-spirit":
+		return "a Draconic Spirit (Summon Dragon)"
+	case "celestial", "fey", "fiend":
+		return "an Otherworldly Steed of the " + titleCase(kind) + " type"
+	}
+	return "a " + strings.ReplaceAll(kind, "-", " ")
+}
+
+// actionRefusal is the one check a feature's resolver makes of who may use it: the action table's Who and While for the character
+// now (refusal). nil: it may go on.
+func actionRefusal(name string, charID int) *whoRefusal {
+	t, ok := lookupActionType(name)
+	if !ok {
+		return &whoRefusal{Code: "unknown_action", Message: fmt.Sprintf("%q is not an action type.", name)}
+	}
+	f := actorFactsOf(charID)
+	return t.refusal(&f)
+}
+
+// companionRefusal: the resolver of a companion's own action checks the companion it was sent for against the type's Who.
+func companionRefusal(name string, c companion) *whoRefusal {
+	t, ok := lookupActionType(name)
+	if !ok || t.Who.Companion == "" || companionFits(t.Who.Companion, c) {
+		return nil
+	}
+	return &whoRefusal{Code: "companion_required", Message: fmt.Sprintf("Cannot use %s: %s is not %s.", t.Title, companionDisplayName(c), companionKindText(t.Who.Companion))}
+}
+
+// subclassTitle: a subclass slug as a name ("open-hand": "Open Hand").
+func subclassTitle(slug string) string { return titleCase(strings.ReplaceAll(slug, "-", " ")) }
 
 // actionTypesOpenTo: the types a character has now, in the table's order.
 func actionTypesOpenTo(charID int) []actionType {

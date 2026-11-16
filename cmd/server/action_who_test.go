@@ -1,362 +1,192 @@
 package main
 
-// TestActionWhoMatchesGates: the action table (action_types_2024.go) says who has each action type (Who) and in what state (While);
-// each feature's resolver checks the same thing in its own gate (feature_gates_2024.go). The test asks both the same question, "may
-// this character use this action type?", for every class at every level 1-20 with and without its SRD subclass, each with every
-// feat, invocation, magic item, spell effect, companion, subclass choice and state the table names, and fails on every answer that
-// differs (the type, the character, what the table says, what the resolver says). No database: the table is asked through
-// actorFacts, each gate with what its resolver reads.
+// Who may use an action type is said once (HANDOFF item 31, Who step 2, approved by Matt on Nov 16): the action table's Who and
+// While (actionType.refusal, action_types_2024.go). Every feature's resolver asks it (actionRefusal, or companionRefusal for a
+// companion's own action), and the turn's options and the refusal of an unknown action list what it allows. Before step 2 each
+// resolver had its own gate (feature_gates_2024.go, deleted); step 1's comparison proved the table and the 61 gates agreed for every
+// class at every level, every SRD subclass and every feat, invocation, item, effect, companion, choice and state the table names.
 
 import (
 	"fmt"
-	"go/ast"
-	"go/parser"
-	"go/token"
 	"os"
 	"path/filepath"
-	"sort"
+	"regexp"
 	"strings"
 	"testing"
 	"time"
-
-	"github.com/agentrpg/agentrpg/game"
 )
 
-// whoChar: a character as the comparison describes it.
-type whoChar struct {
-	class, sub                                          string
-	level                                               int
-	feats, invocations, effects                         map[string]bool
-	held, attuned                                       map[string]bool // magic items by lower-case name
-	companions                                          []companion
-	choices                                             map[string]string
-	raging, wildShaped, prone, dying, burning, inspired bool
-	extra                                               string // what the variant adds, for the report
+// whoFacts: a character as the rule reads it, for the tests.
+func whoFacts(class, sub string, level int) actorFacts {
+	no := func(string) bool { return false }
+	return actorFacts{class: class, subclass: sub, level: level, choices: map[string]string{}, hasFeat: no, hasInvocation: no,
+		hasEffect: no, heldAttuned: func(string) (bool, bool) { return false, false }, companions: func() []companion { return nil }}
 }
 
-func (c whoChar) String() string {
-	s := fmt.Sprintf("%s %d", c.class, c.level)
-	if c.sub != "" {
-		s += " (" + c.sub + ")"
+func mustType(t *testing.T, name string) actionType {
+	t.Helper()
+	at, ok := lookupActionType(name)
+	if !ok {
+		t.Fatalf("%s is not in the action table", name)
 	}
-	if c.extra != "" {
-		s += " + " + c.extra
-	}
-	return s
+	return at
 }
 
-func (c whoChar) hasFeat(slug string) bool       { return c.feats[slug] }
-func (c whoChar) hasInvocation(slug string) bool { return c.invocations[slug] }
-func (c whoChar) hasEffect(kind string) bool     { return c.effects[kind] }
-func (c whoChar) heldAttuned(item string) (bool, bool) {
-	return c.held[strings.ToLower(item)], c.attuned[strings.ToLower(item)]
-}
-
-// levelIn: the character's level in a class (classLevelIn for a single-class character).
-func (c whoChar) levelIn(class string) int {
-	if c.class == class {
-		return c.level
-	}
-	return 0
-}
-
-// facts: the character as the table reads it.
-func (c whoChar) facts() actorFacts {
-	return actorFacts{class: c.class, subclass: c.sub, level: c.level, raging: c.raging, wildShaped: c.wildShaped, prone: c.prone,
-		dying: c.dying, burning: c.burning, inspired: c.inspired, choices: c.choices, hasFeat: c.hasFeat, hasInvocation: c.hasInvocation,
-		hasEffect: c.hasEffect, heldAttuned: c.heldAttuned, companions: func() []companion { return c.companions }}
-}
-
-// anyCompanion: a companion's own action is open when one of the character's companions passes the gate.
-func anyCompanion(c whoChar, gate func(companion) string) string {
-	why := "no companion"
-	for _, co := range c.companions {
-		if w := gate(co); w == "" {
+// The refusal names the first thing the character lacks, with a code for each kind of condition the table can set.
+func TestWhoRefusalCodes(t *testing.T) {
+	code := func(name string, f actorFacts) string {
+		r := mustType(t, name).refusal(&f)
+		if r == nil {
 			return ""
-		} else {
-			why = w
+		}
+		if !strings.Contains(r.Message, mustType(t, name).Title) {
+			t.Errorf("%s: the refusal doesn't name the feature: %q", name, r.Message)
+		}
+		return r.Code
+	}
+	cases := []struct {
+		name, want string
+		f          func() actorFacts
+	}{
+		{"frenzy", "wrong_class", func() actorFacts { return whoFacts("fighter", "", 5) }},
+		{"frenzy", "level_too_low", func() actorFacts { return whoFacts("barbarian", "berserker", 2) }},
+		{"frenzy", "wrong_subclass", func() actorFacts { return whoFacts("barbarian", "", 3) }},
+		{"frenzy", "", func() actorFacts { return whoFacts("barbarian", "berserker", 3) }},
+		{"horde_breaker", "choice_required", func() actorFacts { return whoFacts("ranger", "hunter", 3) }},
+		{"horde_breaker", "", func() actorFacts {
+			f := whoFacts("ranger", "hunter", 3)
+			f.choices = map[string]string{"hunters_prey": "horde_breaker"}
+			return f
+		}},
+		{"improve_fate", "feat_required", func() actorFacts { return whoFacts("rogue", "", 19) }},
+		{"improve_fate", "", func() actorFacts {
+			f := whoFacts("rogue", "", 19)
+			f.hasFeat = func(s string) bool { return s == "boon_of_fate" }
+			return f
+		}},
+		{"gaze_of_two_minds", "invocation_required", func() actorFacts { return whoFacts("warlock", "", 5) }},
+		{"bonus_attack", "item_not_in_hand", func() actorFacts { return whoFacts("fighter", "", 5) }},
+		{"bonus_attack", "not_attuned", func() actorFacts {
+			f := whoFacts("fighter", "", 5)
+			f.heldAttuned = func(string) (bool, bool) { return true, false }
+			return f
+		}},
+		{"flame_blade", "effect_required", func() actorFacts { return whoFacts("druid", "", 5) }},
+		{"healing_touch", "companion_required", func() actorFacts {
+			f := whoFacts("paladin", "", 5)
+			f.companions = func() []companion {
+				return []companion{{Kind: "steed", Form: "otherworldly-steed", CreatureType: "fey", Status: "active"}}
+			}
+			return f
+		}},
+		{"end_rage", "wrong_state", func() actorFacts { return whoFacts("barbarian", "", 1) }},
+		{"rage", "wrong_state", func() actorFacts {
+			f := whoFacts("barbarian", "", 1)
+			f.raging = true
+			return f
+		}},
+		{"use_bardic_inspiration", "wrong_state", func() actorFacts { return whoFacts("fighter", "", 1) }},
+	}
+	for _, c := range cases {
+		if got := code(c.name, c.f()); got != c.want {
+			t.Errorf("%s: refusal code %q, want %q", c.name, got, c.want)
 		}
 	}
-	return why
+	steed := companion{Kind: "steed", Name: "Steed", Form: "otherworldly-steed", CreatureType: "fey", Status: "active"}
+	if companionRefusal("fey_step", steed) != nil || companionRefusal("healing_touch", steed) == nil || companionRefusal("dismiss_familiar", steed) == nil {
+		t.Error("a companion's own action is checked against the companion it was sent for")
+	}
+	until := time.Now().Add(-time.Minute)
+	if bardicDieHeld(0, nil, time.Now()) || bardicDieHeld(8, &until, time.Now()) || !bardicDieHeld(8, nil, time.Now()) {
+		t.Error("a Bardic Inspiration die is held until it fades")
+	}
 }
 
-// featureGates: each type's own gate, given what its resolver reads. Every type the table limits (Who or While) is here or in
-// gatesNotCompared.
-var featureGates = map[string]func(c whoChar) string{
-	"rage":        func(c whoChar) string { return rageGate(c.class, c.levelIn("barbarian"), c.raging) },
-	"extend_rage": func(c whoChar) string { return extendRageGate(c.class, c.raging) },
-	"end_rage":    func(c whoChar) string { return endRageGate(c.class, c.raging) },
-	"frenzy":      func(c whoChar) string { return frenzyGate(c.class, c.sub, c.level) },
-
-	"bardic_inspiration":     func(c whoChar) string { return bardicInspirationGate(c.class) },
-	"countercharm":           func(c whoChar) string { return countercharmGate(c.class, c.level) },
-	"use_bardic_inspiration": func(c whoChar) string { return bardicDieGate(map[bool]int{true: 8}[c.inspired], nil, time.Now()) },
-
-	"turn_undead":    func(c whoChar) string { return turnUndeadGate(c.class, c.level) },
-	"divine_spark":   func(c whoChar) string { return divineSparkGate(c.class, c.level) },
-	"preserve_life":  func(c whoChar) string { return preserveLifeGate(c.class, c.sub, c.level) },
-	"sacred_weapon":  func(c whoChar) string { return sacredWeaponGate(c.class, c.sub, c.level) },
-	"divine_sense":   func(c whoChar) string { return divineSenseGate(c.class, c.level) },
-	"lay_on_hands":   func(c whoChar) string { return layOnHandsGate(c.class) },
-	"holy_nimbus":    func(c whoChar) string { return holyNimbusGate(c.class, c.sub, c.level) },
-	"horde_breaker":  func(c whoChar) string { return hordeBreakerGate(c.class, c.sub, c.level, c.choices["hunters_prey"]) },
-	"tireless":       func(c whoChar) string { return tirelessGate(c.class, c.level) },
-	"natures_veil":   func(c whoChar) string { return naturesVeilGate(c.class, c.level) },
-	"cunning_action": func(c whoChar) string { return cunningActionGate(c.class, c.level) },
-	"steady_aim":     func(c whoChar) string { return steadyAimGate(c.class, c.level) },
-
-	"wild_shape":        func(c whoChar) string { return wildShapeGate(c.class, c.level) },
-	"revert_wild_shape": func(c whoChar) string { return revertWildShapeGate(c.class, c.level, c.wildShaped) },
-	"wild_resurgence":   func(c whoChar) string { return wildResurgenceGate(c.class, c.level) },
-	"lands_aid":         func(c whoChar) string { return landsAidGate(c.class, c.sub, c.level) },
-	"natural_recovery":  func(c whoChar) string { return naturalRecoveryGate(c.class, c.sub, c.level) },
-	"natures_sanctuary": func(c whoChar) string { return naturesSanctuaryGate(c.class, c.sub, c.level) },
-	"move_sanctuary":    func(c whoChar) string { return naturesSanctuaryGate(c.class, c.sub, c.level) },
-	"nature_magician":   func(c whoChar) string { return natureMagicianGate(c.class, c.level) },
-
-	"second_wind":  func(c whoChar) string { return secondWindGate(c.class) },
-	"action_surge": func(c whoChar) string { return actionSurgeGate(c.class, c.level) },
-
-	"martial_arts":         func(c whoChar) string { return martialArtsGate(c.class, c.level) },
-	"flurry_of_blows":      func(c whoChar) string { return flurryOfBlowsGate(c.class, c.level) },
-	"patient_defense":      func(c whoChar) string { return patientDefenseGate(c.class, c.level) },
-	"step_of_the_wind":     func(c whoChar) string { return stepOfTheWindGate(c.class, c.level) },
-	"stunning_strike":      func(c whoChar) string { return stunningStrikeGate(c.class, c.level) },
-	"self_restoration":     func(c whoChar) string { return selfRestorationGate(c.class, c.level) },
-	"disciplined_survivor": func(c whoChar) string { return disciplinedSurvivorGate(c.class, c.level) },
-	"superior_defense":     func(c whoChar) string { return superiorDefenseGate(c.class, c.level) },
-	"quivering_palm":       func(c whoChar) string { return quiveringPalmGate(c.class, c.sub, c.level) },
-	"wholeness_of_body":    func(c whoChar) string { return wholenessOfBodyGate(c.class, c.sub, c.level) },
-
-	"innate_sorcery":        func(c whoChar) string { return innateSorceryGate(c.class) },
-	"font_of_magic":         func(c whoChar) string { return fontOfMagicGate(c.class, c.level) },
-	"font_of_magic_convert": func(c whoChar) string { return fontOfMagicGate(c.class, c.level) },
-	"dragon_wings":          func(c whoChar) string { return dragonWingsGate(c.class, c.sub, c.level) },
-
-	"magical_cunning":        func(c whoChar) string { return magicalCunningGate(c.class, c.level) },
-	"gaze_of_two_minds":      func(c whoChar) string { return gazeOfTwoMindsGate(c.class, c.hasInvocation) },
-	"gift_of_the_protectors": func(c whoChar) string { return giftOfTheProtectorsGate(c.class, c.hasInvocation) },
-
-	"improve_fate":       func(c whoChar) string { return improveFateGate(c.hasFeat) },
-	"merge_with_shadows": func(c whoChar) string { return mergeWithShadowsGate(c.hasFeat) },
-	"blink_steps":        func(c whoChar) string { return blinkStepsGate(c.hasFeat) },
-
-	"bonus_attack": func(c whoChar) string { return scimitarOfSpeedGate(c.heldAttuned) },
-
-	"spiritual_weapon": func(c whoChar) string { return spiritualWeaponGate(c.hasEffect) },
-	"flame_blade":      func(c whoChar) string { return flameBladeGate(c.hasEffect) },
-	"gaseous_form":     func(c whoChar) string { return endGaseousFormGate(c.hasEffect) },
-
-	"breath":                   func(c whoChar) string { return companionAction(c, "breath") },
-	"healing_touch":            func(c whoChar) string { return companionAction(c, "healing_touch") },
-	"fey_step":                 func(c whoChar) string { return companionAction(c, "fey_step") },
-	"fell_glare":               func(c whoChar) string { return companionAction(c, "fell_glare") },
-	"dismiss_familiar":         func(c whoChar) string { return anyCompanion(c, familiarCommandGate) },
-	"recall_familiar":          func(c whoChar) string { return anyCompanion(c, familiarCommandGate) },
-	"dismiss_familiar_forever": func(c whoChar) string { return anyCompanion(c, familiarCommandGate) },
-
-	"stand":      func(c whoChar) string { return standGate(c.prone) },
-	"extinguish": func(c whoChar) string { return extinguishGate(c.burning) },
-}
-
-func companionAction(c whoChar, action string) string {
-	return anyCompanion(c, func(co companion) string { return companionSpecialGate(action, co) })
-}
-
-// gatesNotCompared: types the table limits whose resolver is outside this comparison, and why.
-var gatesNotCompared = map[string]string{
-	"death_save": "the dying state is the Hit Points owner's (recordDeathSave) and the turn schedule's (turnNeeds); not a feature gate",
-}
-
-// whoChars: every class at every level 1-20, without a subclass and with its SRD subclass, each plain and with each feat,
-// invocation, item, effect, companion, subclass choice and state the table names.
-func whoChars() []whoChar {
-	feats, invocations, effects, items := map[string]bool{}, map[string]bool{}, map[string]bool{}, map[string]bool{}
-	choices := map[string][]string{"hunters_prey": {"colossus_slayer"}}
-	for _, t := range actionTypes {
-		w := t.Who
-		feats[w.Feat], invocations[w.Invocation], effects[w.Effect], items[strings.ToLower(w.Item)] = true, true, true, true
-		if k, v, ok := strings.Cut(w.Choice, "="); ok {
-			choices[k] = append(choices[k], v)
+// Feats work through the table: every feat or Epic Boon the table names is a feat a character can take (availableFeats), stored
+// under the same slug the rule asks for (hasSpecificFeat).
+func TestWhoFeatsAreRealFeats(t *testing.T) {
+	n := 0
+	for _, at := range actionTypes {
+		if f := at.Who.Feat; f != "" {
+			n++
+			if _, ok := availableFeats[f]; !ok {
+				t.Errorf("%s: the table asks for the feat %q, which is not in availableFeats (feats_2024.go)", at.Name, f)
+			}
 		}
 	}
-	type variant struct {
-		name string
-		add  func(c *whoChar)
+	if n == 0 {
+		t.Fatal("the table names no feat")
 	}
-	variants := []variant{{"", func(*whoChar) {}}}
-	for _, f := range sortedTrue(feats) {
-		f := f
-		variants = append(variants, variant{"feat " + f, func(c *whoChar) { c.feats = map[string]bool{f: true} }})
-	}
-	for _, i := range sortedTrue(invocations) {
-		i := i
-		variants = append(variants, variant{"invocation " + i, func(c *whoChar) { c.invocations = map[string]bool{i: true} }})
-	}
-	for _, e := range sortedTrue(effects) {
-		e := e
-		variants = append(variants, variant{"effect " + e, func(c *whoChar) { c.effects = map[string]bool{e: true} }})
-	}
-	for _, it := range sortedTrue(items) {
-		it := it
-		variants = append(variants,
-			variant{it + " in hand, attuned", func(c *whoChar) { c.held, c.attuned = map[string]bool{it: true}, map[string]bool{it: true} }},
-			variant{it + " in hand, not attuned", func(c *whoChar) { c.held = map[string]bool{it: true} }},
-			variant{it + " attuned, not in hand", func(c *whoChar) { c.attuned = map[string]bool{it: true} }})
-	}
-	companions := []companion{
-		{Kind: "familiar", Name: "Owl", Form: "owl", CreatureType: "fey", Status: "active"},
-		{Kind: "familiar", Name: "Imp", Form: "imp", CreatureType: "fiend", Status: "dismissed"},
-		{Kind: "steed", Name: "Steed", Form: "otherworldly-steed", CreatureType: "celestial", Status: "active"},
-		{Kind: "steed", Name: "Steed", Form: "otherworldly-steed", CreatureType: "fey", Status: "active"},
-		{Kind: "steed", Name: "Steed", Form: "otherworldly-steed", CreatureType: "fiend", Status: "active"},
-		{Kind: "summon", Name: "Draconic Spirit", Form: "draconic-spirit", CreatureType: "dragon", Status: "active"},
-		{Kind: "summon", Name: "Giant Insect", Form: "giant-insect", CreatureType: "beast", Status: "active"},
-	}
-	for _, co := range companions {
-		co := co
-		variants = append(variants, variant{fmt.Sprintf("%s %s (%s, %s)", co.Kind, co.Form, co.CreatureType, co.Status),
-			func(c *whoChar) { c.companions = []companion{co} }})
-	}
-	for k, vs := range choices {
-		for _, v := range vs {
-			k, v := k, v
-			variants = append(variants, variant{k + "=" + v, func(c *whoChar) { c.choices = map[string]string{k: v} }})
-		}
-	}
-	states := map[string]func(c *whoChar){
-		"raging": func(c *whoChar) { c.raging = true }, "wild shaped": func(c *whoChar) { c.wildShaped = true },
-		"prone": func(c *whoChar) { c.prone = true }, "dying": func(c *whoChar) { c.dying = true },
-		"burning": func(c *whoChar) { c.burning = true }, "holding a Bardic Inspiration die": func(c *whoChar) { c.inspired = true },
-	}
-	for name, add := range states {
-		variants = append(variants, variant{name, add})
-	}
+}
 
-	var out []whoChar
-	for sub, s := range game.AvailableSubclasses {
-		for level := 1; level <= 20; level++ {
-			for _, withSub := range []string{"", sub} {
-				for _, v := range variants {
-					c := whoChar{class: s.Class, sub: withSub, level: level, extra: v.name}
-					v.add(&c)
-					out = append(out, c)
+// Every type the table limits is checked by its resolver through the table: its name is asked of actionRefusal (or passed to the
+// helper that asks it), or it is a companion's own action, checked with companionRefusal. No other gate remains.
+func TestEveryLimitedActionAsksTheTable(t *testing.T) {
+	asked := map[string]bool{}
+	quoted := regexp.MustCompile(`"([a-z_]+)"`)
+	files, _ := filepath.Glob("*.go")
+	for _, f := range files {
+		if strings.HasSuffix(f, "_test.go") {
+			continue
+		}
+		b, _ := os.ReadFile(f)
+		for _, line := range strings.Split(string(b), "\n") {
+			if strings.Contains(line, "actionRefusal(") || strings.Contains(line, "useWisdomFeature(") || strings.Contains(line, `feature = "`) || strings.Contains(line, `feature := "`) {
+				for _, m := range quoted.FindAllStringSubmatch(line, -1) {
+					asked[m[1]] = true
 				}
 			}
 		}
 	}
-	return out
-}
-
-func sortedTrue(m map[string]bool) []string {
-	var out []string
-	for k, v := range m {
-		if v && k != "" {
-			out = append(out, k)
-		}
+	notAFeatureGate := map[string]string{
+		"death_save": "the dying state is the Hit Points owner's (recordDeathSave) and the turn schedule's (turnNeeds)",
 	}
-	sort.Strings(out)
-	return out
-}
-
-func TestActionWhoMatchesGates(t *testing.T) {
 	for _, at := range actionTypes {
 		limited := at.Who != (actionWho{}) || at.While != ""
-		_, compared := featureGates[at.Name]
-		_, skipped := gatesNotCompared[at.Name]
-		if limited && !compared && !skipped {
-			t.Errorf("%s: the table limits who has it (Who or While) but featureGates has no gate for it: extract its resolver's gate into feature_gates_2024.go and add it", at.Name)
-		}
-	}
-	for name := range featureGates {
-		if _, ok := lookupActionType(name); !ok {
-			t.Errorf("featureGates names %q, which is not in the action table", name)
-		}
-	}
-
-	chars := whoChars()
-	if len(chars) < 10000 {
-		t.Fatalf("only %d characters described", len(chars))
-	}
-	type disagreement struct{ char, table, resolver string }
-	found := map[string][]disagreement{}
-	for _, at := range actionTypes {
-		gate, ok := featureGates[at.Name]
-		if !ok {
+		if !limited || notAFeatureGate[at.Name] != "" || at.Who.Companion != "" {
 			continue
 		}
-		for _, c := range chars {
-			f := c.facts()
-			tableSays, why := at.openTo(&f), gate(c)
-			if tableSays != (why == "") {
-				d := disagreement{c.String(), "no", "yes"}
-				if tableSays {
-					d = disagreement{c.String(), "yes", "no: " + why}
-				}
-				found[at.Name] = append(found[at.Name], d)
-			}
+		if !asked[at.Name] {
+			t.Errorf("%s: the table limits who has it, but no resolver asks actionRefusal(%q, ...)", at.Name, at.Name)
 		}
 	}
-	var names []string
-	for n := range found {
-		names = append(names, n)
-	}
-	sort.Strings(names)
-	for _, n := range names {
-		ds := found[n]
-		var lines []string
-		for i, d := range ds {
-			if i == 5 {
-				lines = append(lines, fmt.Sprintf("    ... and %d more", len(ds)-5))
-				break
-			}
-			lines = append(lines, fmt.Sprintf("    %s: table says %s, resolver says %s", d.char, d.table, d.resolver))
-		}
-		t.Errorf("%s: the table's Who/While and the resolver's gate disagree for %d characters:\n%s", n, len(ds), strings.Join(lines, "\n"))
+	if _, err := os.Stat("feature_gates_2024.go"); err == nil {
+		t.Error("feature_gates_2024.go is back: who has a feature is the action table's Who, asked through actionRefusal")
 	}
 }
 
-// TestFeatureGatesAreCalled: every gate in feature_gates_2024.go is used by the server outside its own declaration (a resolver calls
-// it, or passes it to the helper that does), so the comparison above reads the gate the resolver really applies.
-func TestFeatureGatesAreCalled(t *testing.T) {
-	fset := token.NewFileSet()
-	gates := map[string]bool{}
-	src, err := parser.ParseFile(fset, "feature_gates_2024.go", nil, 0)
-	if err != nil {
-		t.Fatal(err)
+// Feats through the whole server: a character with an Epic Boon in its feats uses the Boon's action; one without it is refused by
+// the table's rule, saying which feat it needs, and nothing is spent.
+func TestPostgresFeatActionsAskTheTable(t *testing.T) {
+	testPostgres(t)
+	_, gm := pgAgent(t, "pg feat gm")
+	c, j := pgCall(t, "POST", "/api/campaigns", gm, map[string]interface{}{"name": "Pg Feats", "max_players": 2})
+	if c != 200 {
+		t.Fatalf("create: %d %v", c, j)
 	}
-	for _, d := range src.Decls {
-		if fd, ok := d.(*ast.FuncDecl); ok && strings.HasSuffix(fd.Name.Name, "Gate") {
-			gates[fd.Name.Name] = false
-		}
+	lobby := int(j["campaign_id"].(float64))
+	if c, j := pgCall(t, "PATCH", fmt.Sprintf("/api/campaigns/%d/schedule", lobby), gm, map[string]interface{}{"state": "off"}); c != 200 {
+		t.Fatalf("schedule off: %d %v", c, j)
 	}
-	files, _ := filepath.Glob("*.go")
-	for _, file := range files {
-		if strings.HasSuffix(file, "_test.go") {
-			continue
-		}
-		f, err := parser.ParseFile(fset, file, nil, 0)
-		if err != nil {
-			t.Fatal(err)
-		}
-		for _, d := range f.Decls {
-			fd, isFunc := d.(*ast.FuncDecl)
-			ast.Inspect(d, func(n ast.Node) bool {
-				if id, ok := n.(*ast.Ident); ok {
-					if _, isGate := gates[id.Name]; isGate && !(isFunc && fd.Name == id) {
-						gates[id.Name] = true
-					}
-				}
-				return true
-			})
-		}
+	_, tok := pgAgent(t, "pg feat player")
+	c, j = pgCall(t, "POST", "/api/characters", tok, pgRogue(fmt.Sprintf("Pg Boon %d", time.Now().UnixNano()%1e9)))
+	if c != 200 {
+		t.Fatalf("create character: %d %v", c, j)
 	}
-	for g, used := range gates {
-		if !used {
-			t.Errorf("%s (feature_gates_2024.go) is used nowhere: its resolver must call it", g)
-		}
+	id := int(j["character_id"].(float64))
+	if c, j := pgCall(t, "POST", fmt.Sprintf("/api/campaigns/%d/join", lobby), tok, map[string]interface{}{"character_id": id}); c != 200 {
+		t.Fatalf("join: %d %v", c, j)
 	}
-	if _, err := os.Stat("feature_gates_2024.go"); err != nil {
-		t.Fatal(err)
+	if c, j := pgCall(t, "POST", fmt.Sprintf("/api/campaigns/%d/start", lobby), gm, nil); c != 200 {
+		t.Fatalf("start: %d %v", c, j)
+	}
+	c, j = pgCall(t, "POST", "/api/action", tok, map[string]interface{}{"action": "improve_fate", "description": "I bend fate"})
+	if !strings.Contains(fmt.Sprint(j), "needs the Boon Of Fate feat.") {
+		t.Errorf("without the Boon, the table's rule refuses Improve Fate: %d %v", c, j)
+	}
+	pgExec(t, `UPDATE characters SET feats = '["boon_of_fate"]'::jsonb, level = 19 WHERE id = $1`, id)
+	c, j = pgCall(t, "POST", "/api/action", tok, map[string]interface{}{"action": "improve_fate", "description": "I bend fate"})
+	if c >= 400 || strings.Contains(fmt.Sprint(j), "needs the Boon") {
+		t.Errorf("with the Boon in its feats the character uses Improve Fate: %d %v", c, j)
 	}
 }

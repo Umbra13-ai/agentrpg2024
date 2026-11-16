@@ -45,7 +45,7 @@ func divineSpark(charID int, description string) string {
 	if db.QueryRow(`SELECT class, name, level, wis, COALESCE(lobby_id,0) FROM characters WHERE id = $1`, charID).Scan(&class, &name, &level, &wis, &lobby) != nil {
 		return "Character not found."
 	}
-	if why := divineSparkGate(class, level); why != "" { // feature_gates_2024.go
+	if why := actionRefusal("divine_spark", charID).text(); why != "" { // the action table's Who (action_types_2024.go)
 		return why
 	}
 	low := strings.ToLower(description)
@@ -131,8 +131,8 @@ func handleGMTurnUndead(w http.ResponseWriter, r *http.Request) {
 		writeJSONStatus(w, http.StatusNotFound, map[string]interface{}{"error": "character_not_found"})
 		return
 	}
-	if why := turnUndeadGate(class, level); why != "" { // feature_gates_2024.go
-		writeJSONStatus(w, http.StatusBadRequest, map[string]interface{}{"error": "no_turn_undead", "message": name + " " + why})
+	if ref := actionRefusal("turn_undead", req.CasterID); ref != nil { // the action table's Who (action_types_2024.go)
+		writeJSONStatus(w, http.StatusBadRequest, map[string]interface{}{"error": "no_turn_undead", "message": name + ": " + ref.Message})
 		return
 	}
 	if okRes, msg, _ := useClassResource(req.CasterID, "channel_divinity", 1); !okRes {

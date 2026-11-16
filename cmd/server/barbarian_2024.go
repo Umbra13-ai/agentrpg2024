@@ -277,8 +277,7 @@ func markRageExtended(charID int) {
 }
 
 func extendRage(charID int) string {
-	class, _, _ := subclassOf(charID)
-	if why := extendRageGate(class, hasCondition(charID, "raging")); why != "" { // feature_gates_2024.go
+	if why := actionRefusal("extend_rage", charID).text(); why != "" { // the action table's Who (action_types_2024.go)
 		return why
 	}
 	markRageExtended(charID)

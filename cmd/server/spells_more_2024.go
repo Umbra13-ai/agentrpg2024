@@ -446,7 +446,7 @@ func moreSpellAction(charID int, action, description string, targetID int) strin
 	d := strings.ToLower(description)
 	switch action {
 	case "spiritual_weapon":
-		if why := spiritualWeaponGate(effectLookup(charID)); why != "" { // feature_gates_2024.go
+		if why := actionRefusal("spiritual_weapon", charID).text(); why != "" { // the action table's Who (action_types_2024.go)
 			return why
 		}
 		e, _ := charBuff(charID, "spiritual_weapon")
@@ -476,7 +476,7 @@ func moreSpellAction(charID int, action, description string, targetID int) strin
 		}
 		return "The spectral force moves and strikes (Bonus Action). " + text
 	case "flame_blade":
-		if why := flameBladeGate(effectLookup(charID)); why != "" {
+		if why := actionRefusal("flame_blade", charID).text(); why != "" {
 			return why
 		}
 		e, _ := charBuff(charID, "flame_blade")
@@ -511,7 +511,7 @@ func moreSpellAction(charID int, action, description string, targetID int) strin
 		}
 		return "Flame Blade (Magic action). " + spellMeleeAttack(charID, lobby, targetID, fmt.Sprintf("%dd6", 3+maxInt(0, slot-2)), "fire", "Flame Blade")
 	case "gaseous_form":
-		if why := endGaseousFormGate(effectLookup(charID)); why != "" {
+		if why := actionRefusal("gaseous_form", charID).text(); why != "" {
 			return why
 		}
 		db.Exec(`DELETE FROM spell_effects WHERE lobby_id = $1 AND target_id = $2 AND kind = 'gaseous_form'`, lobby, charID)

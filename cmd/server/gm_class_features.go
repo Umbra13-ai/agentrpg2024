@@ -94,28 +94,8 @@ func handleGMPreserveLife(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	switch preserveLifeGate(className, subclass, casterLevel) { // feature_gates_2024.go
-	case "not_a_cleric":
-		w.WriteHeader(http.StatusBadRequest)
-		json.NewEncoder(w).Encode(map[string]interface{}{
-			"error":   "not_a_cleric",
-			"message": fmt.Sprintf("%s is a %s, not a Cleric. Preserve Life requires Life Domain Cleric.", casterName, className),
-		})
-		return
-	case "wrong_domain":
-		w.WriteHeader(http.StatusBadRequest)
-		json.NewEncoder(w).Encode(map[string]interface{}{
-			"error":   "wrong_domain",
-			"message": fmt.Sprintf("%s is a %s Domain Cleric. Preserve Life is only available to Life Domain Clerics.", casterName, subclass),
-			"hint":    "Use Turn Undead (available to all Clerics) instead",
-		})
-		return
-	case "insufficient_level":
-		w.WriteHeader(http.StatusBadRequest)
-		json.NewEncoder(w).Encode(map[string]interface{}{
-			"error":   "insufficient_level",
-			"message": fmt.Sprintf("%s is level %d. Preserve Life is a Life Domain feature from Cleric level 3.", casterName, casterLevel),
-		})
+	if ref := actionRefusal("preserve_life", req.CasterID); ref != nil { // the action table's Who (action_types_2024.go)
+		writeJSONStatus(w, http.StatusBadRequest, map[string]interface{}{"error": ref.Code, "message": casterName + ": " + ref.Message})
 		return
 	}
 
@@ -308,15 +288,14 @@ func handleGMSacredWeapon(w http.ResponseWriter, r *http.Request) {
 	}
 
 	// Verify character is a Devotion Paladin level 3+ in GM's campaign
-	var paladinName, className, subclassSlug string
+	var paladinName, className string
 	var paladinLevel, chaScore int
 	var lobbyID int
-	var subclassRaw sql.NullString
 	err = db.QueryRow(`
-		SELECT c.name, c.class, c.level, c.cha, c.lobby_id, c.subclass
+		SELECT c.name, c.class, c.level, c.cha, c.lobby_id
 		FROM characters c
 		WHERE c.id = $1
-	`, req.PaladinID).Scan(&paladinName, &className, &paladinLevel, &chaScore, &lobbyID, &subclassRaw)
+	`, req.PaladinID).Scan(&paladinName, &className, &paladinLevel, &chaScore, &lobbyID)
 
 	if err != nil {
 		if answerDBFailure(w, err, "the character") {
@@ -330,32 +309,8 @@ func handleGMSacredWeapon(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	if subclassRaw.Valid {
-		subclassSlug = subclassRaw.String
-	}
-
-	switch sacredWeaponGate(className, subclassSlug, paladinLevel) { // feature_gates_2024.go
-	case "not_a_paladin":
-		w.WriteHeader(http.StatusBadRequest)
-		json.NewEncoder(w).Encode(map[string]interface{}{
-			"error":   "not_a_paladin",
-			"message": fmt.Sprintf("%s is a %s, not a Paladin. Sacred Weapon is a Devotion Paladin feature.", paladinName, className),
-		})
-		return
-	case "insufficient_level":
-		w.WriteHeader(http.StatusBadRequest)
-		json.NewEncoder(w).Encode(map[string]interface{}{
-			"error":   "insufficient_level",
-			"message": fmt.Sprintf("%s is level %d. Sacred Weapon requires Paladin level 3+ (when Oath is chosen).", paladinName, paladinLevel),
-		})
-		return
-	case "wrong_subclass":
-		w.WriteHeader(http.StatusBadRequest)
-		json.NewEncoder(w).Encode(map[string]interface{}{
-			"error":   "wrong_subclass",
-			"message": fmt.Sprintf("%s has the %s oath. Sacred Weapon requires Oath of Devotion.", paladinName, subclassSlug),
-			"note":    "Devotion Paladins choose their Oath at level 3.",
-		})
+	if ref := actionRefusal("sacred_weapon", req.PaladinID); ref != nil { // the action table's Who (action_types_2024.go)
+		writeJSONStatus(w, http.StatusBadRequest, map[string]interface{}{"error": ref.Code, "message": paladinName + ": " + ref.Message})
 		return
 	}
 

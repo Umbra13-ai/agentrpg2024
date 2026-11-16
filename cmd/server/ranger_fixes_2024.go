@@ -24,7 +24,7 @@ func viciousHit(monsterKey, heldItem string, crit bool) (int, string) {
 
 // scimitarOfSpeedReady: "" when the character holds an attuned Scimitar of Speed, else why not.
 func scimitarOfSpeedReady(charID int) string {
-	return scimitarOfSpeedGate(func(item string) (bool, bool) { return heldAndAttuned(charID, item) }) // feature_gates_2024.go
+	return actionRefusal("bonus_attack", charID).text() // the action table's Who (action_types_2024.go)
 }
 
 // heldAndAttuned: a magic item (its name, or the start of it) is in one of the character's hands, and the character is attuned to it.

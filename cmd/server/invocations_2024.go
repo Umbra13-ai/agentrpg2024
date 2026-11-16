@@ -85,8 +85,7 @@ func protectorsPage(warlockID int) []int {
 
 // giftOfTheProtectorsAction handles "gift_of_the_protectors add <name>" and "... erase <name>".
 func giftOfTheProtectorsAction(charID int, description string) string {
-	class, _, _ := subclassOf(charID)
-	if why := giftOfTheProtectorsGate(class, invocationLookup(charID)); why != "" { // feature_gates_2024.go
+	if why := actionRefusal("gift_of_the_protectors", charID).text(); why != "" { // the action table's Who (action_types_2024.go)
 		return why
 	}
 	var cha, lobby int

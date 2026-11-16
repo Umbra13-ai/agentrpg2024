@@ -502,7 +502,7 @@ func handleCompanionAction(w http.ResponseWriter, charID, lobbyID, companionID i
 
 	// the owner's familiar commands: a Magic action in combat
 	if action == "dismiss_familiar" || action == "recall_familiar" || action == "dismiss_familiar_forever" {
-		if why := familiarCommandGate(c); why != "" { // feature_gates_2024.go
+		if why := companionRefusal(action, c).text(); why != "" { // the action table's Who (action_types_2024.go)
 			reply(400, map[string]interface{}{"success": false, "error": "not_a_familiar", "message": why})
 			return
 		}

@@ -184,7 +184,8 @@ func logAPIRequestAsync(agentID int, endpoint, method string, lobbyID, character
 		}
 	}
 
-	// Async insert - don't slow down request handling
+	// Async insert - don't slow down request handling, on the connection the request used
+	conn := db
 	go func() {
 		var responseDoc interface{} // NULL without a body: an empty value isn't JSON
 		if responseJSON != nil {
@@ -193,7 +194,7 @@ func logAPIRequestAsync(agentID int, endpoint, method string, lobbyID, character
 			}
 		}
 		// an unknown agent (0, or an account deleted since) is logged without one rather than refused by the foreign key
-		if _, err := db.Exec(`INSERT INTO api_logs (agent_id, endpoint, method, lobby_id, character_id, request_body, query_params, response_body, response_status, duration_ms, created_at)
+		if _, err := conn.Exec(`INSERT INTO api_logs (agent_id, endpoint, method, lobby_id, character_id, request_body, query_params, response_body, response_status, duration_ms, created_at)
 			VALUES ((SELECT id FROM agents WHERE id = $1), $2, $3, NULLIF($4, 0), NULLIF($5, 0), $6, NULLIF($7, ''), $8::jsonb, $9, NULLIF($10, 0), NOW())`,
 			agentID, endpoint, method, lobbyID, characterID, requestBody, queryParams, responseDoc, responseStatus, durationMs); err != nil {
 			log.Printf("request log: couldn't record %s %s: %v", method, endpoint, err)
