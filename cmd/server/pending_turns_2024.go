@@ -40,6 +40,7 @@ type ptEntry struct {
 	Name       string `json:"name"`
 	Initiative int    `json:"initiative"`
 	IsMonster  bool   `json:"is_monster"`
+	Second     bool   `json:"is_thiefs_reflexes_turn"`
 }
 
 type ptCombat struct {
@@ -536,20 +537,21 @@ func ptRunSteps(lobbyID, charID, owner int, steps []map[string]interface{}) (res
 }
 
 // ptAdvance ends the turn of slot c (the one the walk or the stand-in just took) as combat/next would: the one turn change
-// (turn_advance_2024.go), only while that slot's turn is still the current one.
-func ptAdvance(lobbyID int, c ptCombat) (bool, string) {
+// (turn_advance_2024.go), only while that slot's turn is still the current one. how is how the turn ended, for the turn
+// schedule's record (schedule_walk_2024.go). The change is answered too (nil when it was refused).
+func ptAdvance(lobbyID int, c ptCombat, how string) (*turnChange, bool, string) {
 	expect := &turnRef{Round: c.Round, Index: c.Index}
 	if c.StartedAt.Valid {
 		expect.StartedAt = c.StartedAt.Time
 	}
-	t, code := advanceTurn(lobbyID, turnHow{by: "the pending turn was taken", expect: expect})
+	t, code := advanceTurn(lobbyID, turnHow{by: "the pending turn was taken", expect: expect, result: how})
 	if code == "" {
-		return true, ""
+		return t, true, ""
 	}
 	if t != nil && t.Message != "" {
-		return false, t.Message
+		return nil, false, t.Message
 	}
-	return false, code
+	return nil, false, code
 }
 
 var pendingWalkLocks sync.Map
@@ -569,7 +571,11 @@ func attemptLabel(i int) string {
 }
 
 // resolvePendingTurns walks the initiative order from the current slot and resolves every pending turn it can, in order. It stops
-// at the first slot it can't resolve and says why (stopped_at). nil when there is no fight.
+// at the first slot it can't resolve and says why (stopped_at). nil when there is no fight. Only the GM's requests run it
+// (combat/resolve, combat/stand-in, combat/next, combat/skip; GET /api/gm/status only for a campaign without the turn schedule).
+// In a campaign with the turn schedule (schedule_walk_2024.go) a turn that has ended is never run again, an automatic turn
+// (turnNeeds) is processed at its place, and a character with no submission is stood in for only once standInAllowed says so;
+// before that the walk stops there with awaiting_submission.
 func resolvePendingTurns(lobbyID int) map[string]interface{} {
 	if db == nil {
 		return nil
@@ -578,8 +584,28 @@ func resolvePendingTurns(lobbyID int) map[string]interface{} {
 	if _, ok := ptLoadCombat(lobbyID); !ok {
 		return nil
 	}
+	state, serr := scheduleStateOf(db, lobbyID)
+	scheduled := usesSchedule(state)
 	resolved := []map[string]interface{}{}
+	var roundsDone []string
 	var stop map[string]interface{}
+	// advance ends the walked slot's turn; a round that completed with it is told in the report
+	advance := func(c ptCombat, how string, slot map[string]interface{}, done string) bool {
+		t, ok, why := ptAdvance(lobbyID, c, how)
+		if !ok {
+			slot["reason"] = "advance_failed"
+			slot["message"] = fmt.Sprintf("%s, but the turn order didn't advance (%s): POST /api/campaigns/%d/combat/next.", done, why, lobbyID)
+			stop = slot
+			return false
+		}
+		if t.RoundOpened != nil {
+			roundsDone = append(roundsDone, roundCompleteText(t.EndedRound, t.RoundOpened))
+		}
+		return true
+	}
+	if serr != nil {
+		stop = map[string]interface{}{"reason": "database_error", "message": "The campaign's turn schedule couldn't be read; nothing was resolved."}
+	}
 	for guard := 0; guard < 80 && stop == nil; guard++ {
 		c, ok := ptLoadCombat(lobbyID)
 		if !ok {
@@ -597,13 +623,51 @@ func resolvePendingTurns(lobbyID int) map[string]interface{} {
 		}
 		owner, isPC := ptOwner(e)
 		if !isPC {
+			// monster turns are never queued: the GM chooses the action when its turn comes
 			slot["reason"] = "gm_turn"
 			slot["message"] = fmt.Sprintf("%s is a monster or NPC: its turn is yours to resolve. Then POST /api/campaigns/%d/combat/next; the pending turns after it resolve in order.", e.Name, lobbyID)
 			stop = slot
 			break
 		}
 		slot["character_id"] = e.ID
-		if needsDeathSave(e.ID) {
+		var need turnNeed
+		if scheduled {
+			// a turn that has already ended this round is never run again (a second resolve re-runs nothing)
+			how, err := slotRecorded(lobbyID, c.Round, e.ID, e.Second)
+			if err != nil {
+				slot["reason"], slot["message"] = "database_error", "The round's record couldn't be read; nothing more was resolved."
+				stop = slot
+				break
+			}
+			if how != "" {
+				if !advance(c, how, slot, fmt.Sprintf("%s's turn had already ended (%s)", e.Name, turnResultHows[how])) {
+					break
+				}
+				continue
+			}
+			if need, err = turnNeeds(e.ID); err != nil {
+				slot["reason"], slot["message"] = "database_error", "The character's Hit Points couldn't be read; nothing more was resolved."
+				stop = slot
+				break
+			}
+			if need.Kind == needNothing {
+				// stable or unconscious: nothing to choose (Matt, 11.3): the turn passes once, at its place, and never waits
+				closePendingTurns(lobbyID, e.ID, c.Round, "The character couldn't act when the slot came ("+need.Why+"): the turn passed automatically.")
+				resolved = append(resolved, map[string]interface{}{"slot": c.Index + 1, "name": e.Name, "character_id": e.ID, "round": c.Round,
+					"used": "automatic (" + need.Why + ": no action to choose)", "steps": []map[string]interface{}{}})
+				recordGMAction(db, lobbyID, "pending_turn", fmt.Sprintf("%s is %s: the turn passed automatically", e.Name, need.Why), "")
+				if !advance(c, howAutomatic, slot, fmt.Sprintf("%s's turn passed automatically", e.Name)) {
+					break
+				}
+				continue
+			}
+		} else {
+			need = turnNeed{Kind: needChoose}
+			if needsDeathSave(e.ID) {
+				need = turnNeed{Kind: needDeathSave}
+			}
+		}
+		if need.Kind == needDeathSave {
 			// at 0 Hit Points and not stable: the rules give this turn no choice ("whenever you start your turn with 0 Hit Points,
 			// you must make a Death Saving Throw"), so the server rolls it and the fight goes on. A held turn can't be taken.
 			out, ok, why := ptRunStep(lobbyID, e.ID, owner, map[string]interface{}{"action": "death_save"})
@@ -615,10 +679,8 @@ func resolvePendingTurns(lobbyID int) map[string]interface{} {
 				resolved = append(resolved, map[string]interface{}{"slot": c.Index + 1, "name": e.Name, "character_id": e.ID, "round": c.Round,
 					"used": "death saving throw (at 0 Hit Points: rolled by the server)", "steps": res})
 				recordGMAction(db, lobbyID, "pending_turn", fmt.Sprintf("%s is at 0 Hit Points: the Death Saving Throw was rolled", e.Name), "")
-				if ok, why := ptAdvance(lobbyID, c); !ok {
-					slot["reason"] = "advance_failed"
-					slot["message"] = fmt.Sprintf("%s's Death Saving Throw was rolled, but the turn order didn't advance (%s): POST /api/campaigns/%d/combat/next.", e.Name, why, lobbyID)
-					stop = slot
+				if !advance(c, howDeathSave, slot, fmt.Sprintf("%s's Death Saving Throw was rolled", e.Name)) {
+					break
 				}
 				continue
 			}
@@ -626,15 +688,29 @@ func resolvePendingTurns(lobbyID int) map[string]interface{} {
 		}
 		row, has := ptOpenRow(lobbyID, e.ID, c.Round)
 		if !has {
-			// no waiting on a timer (Matt, Nov 14: a fight must not stall for hours on an agent whose scheduler is broken): a
-			// character with no turn in when its slot comes up has its turn taken by the GM. A player who is acting directly in
-			// this slot (POST /api/action) is left to it.
+			// a character with no turn in when its slot comes up has its turn taken by the GM as stand-in: at once without the turn
+			// schedule (Matt, Nov 14: a fight must not stall for hours on an agent whose scheduler is broken), once the round's final
+			// check-in has come with it (Matt, Nov 15). A player who is acting directly in this slot (POST /api/action) is left to it.
 			var acted bool
 			db.QueryRow(`SELECT COALESCE(action_used, false) OR COALESCE(bonus_action_used, false) FROM characters WHERE id = $1`, e.ID).Scan(&acted)
-			if acted {
+			sc, err := standInNow(lobbyID, false)
+			switch {
+			case err != nil:
+				slot["reason"], slot["message"] = "database_error", "The turn schedule couldn't be read; nothing more was resolved."
+			case acted:
 				slot["reason"] = "player_acted"
 				slot["message"] = fmt.Sprintf("%s acted directly in this slot (POST /api/action) and sent no pending turn. End the turn when it is done: POST /api/campaigns/%d/combat/next; the pending turns after it resolve in order.", e.Name, lobbyID)
-			} else {
+			case !sc.Allowed:
+				slot["reason"] = "awaiting_submission"
+				slot["message"] = fmt.Sprintf("%s hasn't submitted a turn for round %d. %s Resolve again at a later check-in (POST /api/campaigns/%d/combat/resolve).", e.Name, c.Round, sc.tooEarly(e.Name), lobbyID)
+				if sc.Deadline != nil {
+					slot["final_check_in"] = sc.Deadline.UTC().Format(time.RFC3339)
+				}
+			case scheduled:
+				slot["reason"] = "stand_in"
+				slot["final_check_in"] = sc.Deadline.UTC().Format(time.RFC3339)
+				slot["message"] = fmt.Sprintf("The round's final check-in (%s) has come and %s has no turn in for round %d: take the turn as stand-in now, a meaningful in-character action from what the character knows and its situation, not a default Dodge and not a skip: POST /api/campaigns/%d/combat/stand-in {\"steps\": [...]} (each step is a POST /api/action body). The pending turns after it then resolve in order.", clockText(*sc.Deadline), e.Name, c.Round, lobbyID)
+			default:
 				slot["reason"] = "stand_in"
 				slot["message"] = fmt.Sprintf("%s has no turn in for this round, and the fight doesn't wait: take the turn as stand-in now, from the character's established intent and situation, not a passive default: POST /api/campaigns/%d/combat/stand-in {\"steps\": [...]} (each step is a POST /api/action body). The pending turns after it then resolve in order.", e.Name, lobbyID)
 			}
@@ -679,11 +755,11 @@ func resolvePendingTurns(lobbyID int) map[string]interface{} {
 			}
 			resolved = append(resolved, line)
 			recordGMAction(db, lobbyID, "pending_turn", fmt.Sprintf("%s's pending turn resolved (%s, %d step(s))", e.Name, attemptLabel(ai), len(results)), "")
-			if ok, why := ptAdvance(lobbyID, c); !ok {
-				slot["reason"] = "advance_failed"
-				slot["message"] = fmt.Sprintf("%s's turn resolved, but the turn order didn't advance (%s): POST /api/campaigns/%d/combat/next.", e.Name, why, lobbyID)
-				stop = slot
+			how := howOwn
+			if ai > 0 {
+				how = howFallback
 			}
+			advance(c, how, slot, fmt.Sprintf("%s's turn resolved", e.Name))
 			done = true
 			break
 		}
@@ -701,8 +777,16 @@ func resolvePendingTurns(lobbyID int) map[string]interface{} {
 	if stop != nil {
 		report["stopped_at"] = stop
 	}
+	if len(roundsDone) > 0 {
+		report["round_complete"] = roundsDone
+	}
 	if c, ok := ptLoadCombat(lobbyID); ok {
 		report["queue"] = pendingQueue(lobbyID, c)
+	}
+	if scheduled { // where the round stands now: the GM's next check-in and the round's final check-in (check_in_2024.go)
+		if in, now, err := loadCheckIn(lobbyID); err == nil {
+			report["check_in"] = checkInAt(in, now)
+		}
 	}
 	return report
 }
@@ -749,15 +833,15 @@ func pendingQueue(lobbyID int, c ptCombat) []map[string]interface{} {
 
 // handlePendingTurn godoc
 // @Summary Submit, read or withdraw your pending combat turn
-// @Description During a fight, send your whole turn whenever you are there: the server holds it and resolves it in initiative order once every slot before yours is done (when the GM checks in). POST {"steps": [...], "fallbacks": [[...], ...]}: each step is a POST /api/action body (attack, cast, dodge, move ...), or {"action": "map_move", "path": [{"x": 3, "y": 4}, ...]} on a battle map; at most 8 steps and 3 fallbacks. It is checked at once (the action, the spell and its slot, the target, the range on the map) and refused with the reasons if it can't work; nothing is rolled or spent until it resolves. Sending again replaces it. Fallbacks are tried in order if the main turn no longer works when your slot comes; if none works the slot is paused for the GM. GET shows the table's queue (pending turns are open to the table); DELETE withdraws yours. If no turn is in when your slot comes up, the fight doesn't wait: the GM takes your turn as stand-in. Reactions are not part of a turn: set standing orders with POST /api/characters/reaction-orders.
+// @Description During a fight, send your whole turn whenever you are there: the server holds it and resolves it in initiative order once every slot before yours is done (when the GM checks in). POST {"steps": [...], "fallbacks": [[...], ...]}: each step is a POST /api/action body (attack, cast, dodge, move ...), or {"action": "map_move", "path": [{"x": 3, "y": 4}, ...]} on a battle map; at most 8 steps and 3 fallbacks. It is checked at once (the action, the spell and its slot, the target, the range on the map) and refused with the reasons if it can't work; nothing is rolled or spent until it resolves. Sending again replaces it. Fallbacks are tried in order if the main turn no longer works when your slot comes; if none works the slot is paused for the GM. GET shows the table's queue (pending turns are open to the table); DELETE withdraws yours. If no turn is in when your slot comes up, the fight doesn't wait: the GM takes your turn as stand-in. Reactions are not part of a turn: set standing orders with POST /api/characters/reaction-orders. In a campaign that uses the turn schedule (GET /api/campaigns/{id}/schedule) a turn is only for the round now open: sending it only saves it (only the GM resolves turns, at its check-ins); a character whose turn in the open round has resolved is done for that round (409 turn_already_resolved: submit when the next round begins), and the optional "round" names the round you mean (409 round_not_open when it isn't the open one); nothing is saved on a refusal. If nothing is in by the round's final check-in, the GM takes your turn as stand-in. Without the schedule a turn sent after your slot has passed is held for the next round.
 // @Tags Combat
 // @Accept json
 // @Produce json
 // @Param Authorization header string true "Bearer token"
-// @Param request body object false "steps (list of action bodies), fallbacks (list of step lists), character_id and campaign_id when you play several"
+// @Param request body object false "steps (list of action bodies), fallbacks (list of step lists), round (optional: the round the turn is for), character_id and campaign_id when you play several"
 // @Success 200 {object} map[string]interface{} "The stored turn, its round, who is before you, warnings"
 // @Failure 400 {object} map[string]interface{} "invalid_pending_turn with problems; nothing was saved"
-// @Failure 409 {object} map[string]interface{} "no_active_combat or not_in_combat"
+// @Failure 409 {object} map[string]interface{} "no_active_combat, not_in_combat, round_not_open or turn_already_resolved (with open_round)"
 // @Router /pending-turn [post]
 // @Router /pending-turn [get]
 // @Router /pending-turn [delete]
@@ -775,15 +859,19 @@ func handlePendingTurn(w http.ResponseWriter, r *http.Request) {
 	raw := map[string]json.RawMessage{}
 	switch r.Method {
 	case http.MethodPost:
-		if !readRequest(w, r, &raw, onlyFields("steps", "fallbacks", "character_id", "campaign_id"), bodyHint("An action goes inside steps.")) {
+		if !readRequest(w, r, &raw, onlyFields("steps", "fallbacks", "round", "character_id", "campaign_id"), bodyHint("An action goes inside steps.")) {
 			return
 		}
 	case http.MethodDelete:
-		if !readRequest(w, r, &raw, onlyFields("character_id", "campaign_id"), optionalBody()) {
+		if !readRequest(w, r, &raw, onlyFields("round", "character_id", "campaign_id"), optionalBody()) {
 			return
 		}
 	}
-	var bodyChar, bodyCampaign int
+	var bodyChar, bodyCampaign, askedRound int
+	if v, ok := raw["round"]; ok && (json.Unmarshal(v, &askedRound) != nil || askedRound < 1) {
+		writeJSONStatus(w, http.StatusBadRequest, map[string]interface{}{"error": "invalid_round", "message": "round is the number of the round the turn is for (1 or more); leave it out for the round now open. Nothing was saved."})
+		return
+	}
 	if v, ok := raw["character_id"]; ok && json.Unmarshal(v, &bodyChar) != nil {
 		writeJSONStatus(w, http.StatusBadRequest, map[string]interface{}{"error": "invalid_character_id", "message": "character_id must be a number. Nothing was saved."})
 		return
@@ -819,6 +907,14 @@ func handlePendingTurn(w http.ResponseWriter, r *http.Request) {
 		writeJSONStatus(w, http.StatusConflict, map[string]interface{}{"error": "no_active_game", "message": "You have no character in an active campaign."})
 		return
 	}
+	if r.Method != http.MethodGet { // a change waits for a walk under way, so it never lands on a turn being resolved
+		defer lockPendingWalk(lobbyID)()
+	}
+	state, serr := scheduleStateOf(db, lobbyID)
+	if answerDBFailure(w, serr, "the campaign's turn schedule") {
+		return
+	}
+	scheduled := usesSchedule(state)
 	c, inCombat := ptLoadCombat(lobbyID)
 	if !inCombat {
 		if r.Method == http.MethodGet {
@@ -834,7 +930,11 @@ func handlePendingTurn(w http.ResponseWriter, r *http.Request) {
 		writeJSONStatus(w, http.StatusConflict, map[string]interface{}{"error": "not_in_combat", "message": charName + " is not in this fight's initiative order. Nothing was saved."})
 		return
 	}
-	round := c.roundFor(slot)
+	round, refusal, why := pendingRoundFor(c, slot, scheduled, askedRound) // schedule_walk_2024.go
+	if refusal != "" && r.Method != http.MethodGet {
+		writeJSONStatus(w, http.StatusConflict, map[string]interface{}{"error": refusal, "message": why, "open_round": round, "character_id": charID, "campaign_id": lobbyID})
+		return
+	}
 	var before []string // slots that must be done before this one
 	if round == c.Round {
 		for i := c.Index; i < slot; i++ {
@@ -854,6 +954,11 @@ func handlePendingTurn(w http.ResponseWriter, r *http.Request) {
 	switch r.Method {
 	case http.MethodGet:
 		base["queue"] = pendingQueue(lobbyID, c)
+		if refusal == codeTurnAlreadyResolve {
+			base["your_pending_turn"], base["done_this_round"], base["before_you"] = nil, why, []string{}
+			writeJSONStatus(w, http.StatusOK, base)
+			return
+		}
 		if row, has := ptOpenRow(lobbyID, charID, round); has {
 			base["your_pending_turn"] = row.view()
 		} else {
@@ -957,6 +1062,12 @@ func handlePendingTurn(w http.ResponseWriter, r *http.Request) {
 			when = "once these slots are done: " + strings.Join(before, ", ")
 		}
 		base["message"] = fmt.Sprintf("%s's turn for round %d is held (nothing is rolled or spent yet). It resolves in initiative order, %s. Send again to replace it, DELETE to withdraw it.", charName, round, when)
+		if scheduled {
+			base["message"] = fmt.Sprintf("Your submission is saved for round %d (nothing is rolled or spent yet). Only the GM resolves turns, at its check-ins, in initiative order: %s. Send again to replace it, DELETE to withdraw it, until it resolves.", round, strings.TrimPrefix(when, "when the GM next checks in"))
+			if len(before) == 0 {
+				base["message"] = fmt.Sprintf("Your submission is saved for round %d (nothing is rolled or spent yet). Only the GM resolves turns, at its check-ins, in initiative order; yours is next. Send again to replace it, DELETE to withdraw it, until it resolves.", round)
+			}
+		}
 		if len(warnings) > 0 {
 			base["warnings"] = warnings
 		}
@@ -971,7 +1082,7 @@ func handlePendingTurn(w http.ResponseWriter, r *http.Request) {
 
 // handleCombatResolve godoc
 // @Summary Resolve the pending turns (GM only)
-// @Description Walks the initiative order from the current slot and resolves every pending player turn it can, in order; stops at the first slot it can't resolve and says why (stopped_at: gm_turn, stand_in, player_acted, needs_gm, enemies_down). A character at 0 Hit Points has its Death Saving Throw rolled by the server. GET /api/gm/status and POST .../combat/next do the same walk.
+// @Description Walks the initiative order from the current slot and resolves every pending player turn it can, in order; stops at the first slot it can't resolve and says why (stopped_at: gm_turn, stand_in, player_acted, needs_gm, enemies_down, awaiting_submission). A character at 0 Hit Points has its Death Saving Throw rolled by the server. POST .../combat/next, .../combat/skip and .../combat/stand-in do the same walk after their change; GET /api/gm/status does it only in a campaign without the turn schedule. With the turn schedule: a turn that has ended is never run again (a second resolve re-runs nothing); a stable or unconscious character's turn passes automatically at its place; a monster's turn stops the walk for the GM; a player with no submission stops it with awaiting_submission until the round's final check-in (final_check_in), then with stand_in. When the round's last turn ends the next round opens and round_complete says "Round N is complete; round N+1 has begun"; check_in is where the round stands now (the GM's next check-in, the final check-in, each character's status).
 // @Tags Combat
 // @Produce json
 // @Param id path int true "Campaign ID"
@@ -1010,7 +1121,7 @@ func ptRequireGM(w http.ResponseWriter, r *http.Request, campaignID int, what st
 
 // handleCombatStandIn godoc
 // @Summary Take a player's turn as stand-in (GM only)
-// @Description The current slot is a player's character with no turn in for this round (the fight doesn't wait for it), or whose pending turn is paused for you (needs_gm). Send the turn the character would take, from its established intent and situation, not a passive default: {"steps": [...]}, each step a POST /api/action body run as that character. When the steps have run the turn ends and the pending turns after it resolve in order.
+// @Description The current slot is a player's character with no turn in for this round, or whose pending turn is paused for you (needs_gm). Send the turn the character would take, from its established intent and situation, not a passive default: {"steps": [...]}, each step a POST /api/action body run as that character. When the steps have run the turn ends and the pending turns after it resolve in order. Without the turn schedule the fight doesn't wait: a stand-in may be taken at once. With it, a stand-in for a character with no submission waits for the round's final check-in (409 stand_in_too_early with final_check_in; none while the schedule is paused); a turn paused for you (needs_gm) may be finished at any check-in; an automatic turn (dying, stable, unconscious) is the server's (409 automatic_turn) and a turn that has already ended is never taken again (409 turn_already_resolved).
 // @Tags Combat
 // @Accept json
 // @Produce json
@@ -1019,7 +1130,7 @@ func ptRequireGM(w http.ResponseWriter, r *http.Request, campaignID int, what st
 // @Param request body object true "steps: list of action bodies"
 // @Success 200 {object} map[string]interface{} "The steps' results, then the walk's report"
 // @Failure 400 {object} map[string]interface{} "A step was refused"
-// @Failure 409 {object} map[string]interface{} "gm_turn (a monster's slot), pending_turn_waiting or no_active_combat"
+// @Failure 409 {object} map[string]interface{} "gm_turn (a monster's slot), pending_turn_waiting, stand_in_too_early, automatic_turn, turn_already_resolved or no_active_combat"
 // @Router /campaigns/{id}/combat/stand-in [post]
 func handleCombatStandIn(w http.ResponseWriter, r *http.Request, campaignID int) {
 	if !ptRequireGM(w, r, campaignID, "take a turn as stand-in") {
@@ -1035,44 +1146,89 @@ func handleCombatStandIn(w http.ResponseWriter, r *http.Request, campaignID int)
 		writeJSONStatus(w, http.StatusBadRequest, map[string]interface{}{"error": "steps_required", "message": "Send steps: the character's turn as a list of action bodies, like [{\"action\": \"attack\", \"target_id\": -1}]. Nothing was changed."})
 		return
 	}
+	out, ok := standInTurn(w, campaignID, req.Steps) // the walk's lock is held while the turn is taken, and let go before the walk
+	if !ok {
+		return
+	}
+	if rep := resolvePendingTurns(campaignID); rep != nil && out["turn_not_advanced"] == nil {
+		out["pending_turns"] = rep
+	}
+	writeJSONStatus(w, http.StatusOK, out)
+}
+
+// standInTurn takes the current slot's turn as stand-in (handleCombatStandIn), with the walk's lock held: a stand-in and a walk,
+// or two stand-ins, never take the same turn twice. It writes any refusal itself.
+func standInTurn(w http.ResponseWriter, campaignID int, steps []map[string]interface{}) (map[string]interface{}, bool) {
+	defer lockPendingWalk(campaignID)()
 	c, ok := ptLoadCombat(campaignID)
 	if !ok {
 		writeJSONStatus(w, http.StatusConflict, map[string]interface{}{"error": "no_active_combat"})
-		return
+		return nil, false
 	}
 	e := c.Entries[c.Index]
 	owner, isPC := ptOwner(e)
 	if !isPC {
 		writeJSONStatus(w, http.StatusConflict, map[string]interface{}{"error": "gm_turn", "message": fmt.Sprintf("The current slot is %s, a monster or NPC: resolve its turn with your GM tools, then POST /api/campaigns/%d/combat/next.", e.Name, campaignID)})
-		return
+		return nil, false
+	}
+	state, err := scheduleStateOf(db, campaignID)
+	if answerDBFailure(w, err, "the campaign's turn schedule") {
+		return nil, false
 	}
 	row, has := ptOpenRow(campaignID, e.ID, c.Round)
 	paused := has && row.Status == "needs_gm"
 	if !paused {
 		if has {
 			writeJSONStatus(w, http.StatusConflict, map[string]interface{}{"error": "pending_turn_waiting", "message": fmt.Sprintf("%s has a pending turn that hasn't been tried yet: POST /api/campaigns/%d/combat/resolve resolves it.", e.Name, campaignID)})
-			return
+			return nil, false
 		}
 	}
-	if problems, _ := validatePendingSteps(campaignID, e.ID, req.Steps, true); len(problems) > 0 {
-		writeJSONStatus(w, http.StatusBadRequest, withActionOptions(e.ID, problems, map[string]interface{}{"error": "invalid_pending_turn", "problems": problems, "message": "This turn can't work as things stand: " + strings.Join(problems, "; ") + ". Nothing was changed."}))
-		return
+	if usesSchedule(state) {
+		// a turn that has ended is never taken again, and an automatic turn is the server's (schedule_walk_2024.go)
+		how, err := slotRecorded(campaignID, c.Round, e.ID, e.Second)
+		if answerDBFailure(w, err, "the round's record") {
+			return nil, false
+		}
+		if how != "" {
+			writeJSONStatus(w, http.StatusConflict, map[string]interface{}{"error": codeTurnAlreadyResolve, "message": fmt.Sprintf("%s's turn in round %d has already ended (%s): a character never takes a second turn in a round. POST /api/campaigns/%d/combat/resolve moves on.", e.Name, c.Round, turnResultHows[how], campaignID)})
+			return nil, false
+		}
+		need, err := turnNeeds(e.ID)
+		if answerDBFailure(w, err, "the character's Hit Points") {
+			return nil, false
+		}
+		if need.Kind != needChoose {
+			writeJSONStatus(w, http.StatusConflict, map[string]interface{}{"error": "automatic_turn", "message": fmt.Sprintf("%s's turn is automatic (%s): no submission or stand-in; POST /api/campaigns/%d/combat/resolve processes it. Nothing was changed.", e.Name, need.Why, campaignID)})
+			return nil, false
+		}
 	}
-	results, failedAt, why := ptRunSteps(campaignID, e.ID, owner, req.Steps)
+	sc, err := standInNow(campaignID, paused)
+	if answerDBFailure(w, err, "the campaign's turn schedule") {
+		return nil, false
+	}
+	if !sc.Allowed {
+		writeJSONStatus(w, http.StatusConflict, sc.refusal(e.Name))
+		return nil, false
+	}
+	if problems, _ := validatePendingSteps(campaignID, e.ID, steps, true); len(problems) > 0 {
+		writeJSONStatus(w, http.StatusBadRequest, withActionOptions(e.ID, problems, map[string]interface{}{"error": "invalid_pending_turn", "problems": problems, "message": "This turn can't work as things stand: " + strings.Join(problems, "; ") + ". Nothing was changed."}))
+		return nil, false
+	}
+	results, failedAt, why := ptRunSteps(campaignID, e.ID, owner, steps)
 	if failedAt >= 0 {
 		writeJSONStatus(w, http.StatusBadRequest, map[string]interface{}{"error": "step_refused", "steps_done": results, "failed_step": failedAt + 1,
 			"message": fmt.Sprintf("Step %d was refused: %s. The steps before it happened; the turn has not ended. Send the rest again, or end the turn with POST /api/campaigns/%d/combat/next.", failedAt+1, strings.TrimRight(why, "."), campaignID)})
-		return
+		return nil, false
 	}
 	closePendingTurns(campaignID, e.ID, c.Round, "the GM took the turn as stand-in")
 	recordGMAction(db, campaignID, "stand_in", fmt.Sprintf("The GM took %s's turn as stand-in (%d step(s))", e.Name, len(results)), "")
 	out := map[string]interface{}{"success": true, "stand_in_for": e.Name, "steps": results}
-	if ok, why := ptAdvance(campaignID, c); !ok {
+	if t, ok, why := ptAdvance(campaignID, c, howStandIn); !ok {
 		out["turn_not_advanced"] = fmt.Sprintf("%s: POST /api/campaigns/%d/combat/next", why, campaignID)
-	} else if rep := resolvePendingTurns(campaignID); rep != nil {
-		out["pending_turns"] = rep
+	} else if t.RoundOpened != nil {
+		out["round_complete"] = roundCompleteText(t.EndedRound, t.RoundOpened)
 	}
-	writeJSONStatus(w, http.StatusOK, out)
+	return out, true
 }
 
 // pendingTurnForMyTurn: what GET /api/my-turn says about pending turns during a fight.
@@ -1088,7 +1244,11 @@ func pendingTurnForMyTurn(lobbyID, charID int) map[string]interface{} {
 	if slot < 0 {
 		return nil
 	}
-	round := c.roundFor(slot)
+	state, _ := scheduleStateOf(db, lobbyID)
+	round, refusal, why := pendingRoundFor(c, slot, usesSchedule(state), 0) // schedule_walk_2024.go
+	if refusal == codeTurnAlreadyResolve {
+		return map[string]interface{}{"round": round, "yours": nil, "done_this_round": why}
+	}
 	out := map[string]interface{}{"round": round,
 		"how": "You don't have to wait for your slot: POST /api/pending-turn {\"steps\": [{\"action\": \"attack\", \"target_id\": -1}], \"fallbacks\": [[{\"action\": \"dodge\"}]]} holds your whole turn (each step is a POST /api/action body) and it resolves in initiative order. GET /api/pending-turn shows the table's queue."}
 	if needsDeathSave(charID) {
@@ -1099,6 +1259,9 @@ func pendingTurnForMyTurn(lobbyID, charID int) map[string]interface{} {
 	} else {
 		out["yours"] = nil
 		out["if_you_send_nothing"] = "The fight doesn't wait: if no turn is in when your slot comes up, the GM takes your turn as stand-in. Send your turn for the round as soon as you can."
+		if usesSchedule(state) {
+			out["if_you_send_nothing"] = "The GM resolves submitted turns at its check-ins, in initiative order; if you have sent nothing by the round's final check-in, the GM takes your turn as stand-in. GET /api/campaigns/{id}/schedule shows your check-in and the round's final check-in."
+		}
 		if slot == c.Index {
 			out["your_slot_is_now"] = true
 		}

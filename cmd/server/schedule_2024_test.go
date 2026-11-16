@@ -237,7 +237,7 @@ func TestScheduleChanges(t *testing.T) {
 	}
 	// B leaves: seats 1 and 3 held; the next round opens with 6 seats, numbered in join order
 	db.Exec(`UPDATE characters SET lobby_id = NULL WHERE id = $1`, chars[1])
-	if err := roundOpens(lobby, roundNoncombat, 0, false, ""); err != nil {
+	if _, err := roundOpens(lobby, roundNoncombat, 0, false, ""); err != nil {
 		t.Fatal(err)
 	}
 	cs, _ = loadSchedule(db, lobby)

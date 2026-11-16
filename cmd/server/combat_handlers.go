@@ -512,7 +512,7 @@ func handleCombatEnd(w http.ResponseWriter, r *http.Request, campaignID int) {
 
 // handleCombatNext godoc
 // @Summary Advance to next turn (GM only)
-// @Description Move to the next character in initiative order. Optional legendary_actions: Legendary Actions taken right after the turn that ends, before the next turn starts (each like POST /api/gm/legendary-action). The reply lists legendary_options: the monsters that may take one now and their actions.
+// @Description Move to the next character in initiative order. Optional legendary_actions: Legendary Actions taken right after the turn that ends, before the next turn starts (each like POST /api/gm/legendary-action). The reply lists legendary_options: the monsters that may take one now and their actions. In a campaign with the turn schedule a player's turn ends this way only when the player acted in the slot, has nothing to choose, has a submitted turn paused for the GM, or once the round's final check-in has come; otherwise 409 pending_turn_waiting (a submitted turn: combat/resolve resolves it), automatic_turn (dying: combat/resolve rolls the Death Saving Throw) or stand_in_too_early. When the round's last turn ends, round_complete says "Round N is complete; round N+1 has begun".
 // @Param request body object{legendary_actions=[]object} false "Legendary Actions after the ending turn: combatant_id, action, target, target_ids, use"
 // @Tags Combat
 // @Produce json
@@ -533,8 +533,17 @@ func handleCombatNext(w http.ResponseWriter, r *http.Request, campaignID int) {
 	if !readRequest(w, r, &nextReq, optionalBody()) {
 		return
 	}
+	// with the turn schedule, a player's turn ends only as the schedule allows (gmEndsTurn, schedule_walk_2024.go)
+	end, _, err := gmEndsTurn(campaignID)
+	if answerDBFailure(w, err, "the campaign's turn schedule") {
+		return
+	}
+	if end.Reply != nil {
+		writeJSONStatus(w, http.StatusConflict, end.Reply)
+		return
+	}
 	var legendaryResults []map[string]interface{}
-	t, code := advanceTurn(campaignID, turnHow{by: "the GM advanced the turn order", between: func(t *turnChange) {
+	t, code := advanceTurn(campaignID, turnHow{by: "the GM advanced the turn order", expect: end.Expect, between: func(t *turnChange) {
 		for _, la := range nextReq.LegendaryActions { // after the turn that ended, before the next creature's turn starts
 			res, code, msg := takeLegendaryAction(r, campaignID, la, t.window(), t.EndedID)
 			if code != "" {
@@ -556,7 +565,7 @@ func handleCombatNext(w http.ResponseWriter, r *http.Request, campaignID int) {
 
 // handleCombatSkip godoc
 // @Summary Skip a player's turn due to timeout (GM only)
-// @Description Skip the current player's turn and advance to the next combatant. Use when a player has been inactive for longer than the campaign's combat turn timeout (table rule combat_turn_timeout, 4 hours by default; when it is off, turns are never skipped: end the turn with combat/next).
+// @Description Skip the current player's turn and advance to the next combatant. Use when a player has been inactive for longer than the campaign's combat turn timeout (table rule combat_turn_timeout, 4 hours by default; when it is off, turns are never skipped: end the turn with combat/next). In a campaign with the turn schedule there is no timeout: a monster's or NPC's turn may be skipped at once; a player's turn as combat/next allows (never a submitted one: 409 pending_turn_waiting; a player with no submission only once the round's final check-in has come, 409 stand_in_too_early before; the schedule asks for a stand-in then, and a skip is recorded as skipped).
 // @Tags Combat
 // @Produce json
 // @Param id path int true "Campaign ID"
@@ -574,8 +583,16 @@ func handleCombatSkip(w http.ResponseWriter, r *http.Request, campaignID int) {
 	if !noFields(w, r) { // this request takes no fields
 		return
 	}
+	state, err := scheduleStateOf(db, campaignID)
+	if answerDBFailure(w, err, "the campaign's turn schedule") {
+		return
+	}
+	if usesSchedule(state) {
+		skipScheduledTurn(w, campaignID)
+		return
+	}
 	limit, on := combatTurnTimeout(campaignID) // the table rule, as the timeout worker reads it
-	t, code := advanceTurn(campaignID, turnHow{by: "the GM skipped the turn", allow: func(f *fight) (string, string) {
+	t, code := advanceTurn(campaignID, turnHow{by: "the GM skipped the turn", result: howSkipped, allow: func(f *fight) (string, string) {
 		if id := asInt(f.current()["id"]); id < 0 {
 			return "not_player_turn", ""
 		}
@@ -596,6 +613,35 @@ func handleCombatSkip(w http.ResponseWriter, r *http.Request, campaignID int) {
 	response := t.reply()
 	response["skipped"] = t.EndedName
 	response["inactive_minutes"] = elapsedMinutes
+	json.NewEncoder(w).Encode(response)
+}
+
+// skipScheduledTurn is combat/skip in a campaign with the turn schedule: no timeout; the turn ends as gmEndsTurn allows (a
+// monster's or NPC's turn at once; a player's turn never quietly), recorded as skipped.
+func skipScheduledTurn(w http.ResponseWriter, campaignID int) {
+	end, _, err := gmEndsTurn(campaignID)
+	if answerDBFailure(w, err, "the campaign's turn schedule") {
+		return
+	}
+	if end.Reply != nil {
+		writeJSONStatus(w, http.StatusConflict, end.Reply)
+		return
+	}
+	t, code := advanceTurn(campaignID, turnHow{by: "the GM skipped the turn", result: howSkipped, expect: end.Expect})
+	if code != "" {
+		answerTurnRefusal(w, campaignID, t, code)
+		return
+	}
+	note := "Turn skipped by the GM"
+	if end.Player {
+		note = "Turn skipped by the GM (turn schedule: at or after the round's final check-in, or the player's paused turn)"
+	}
+	writeAction(db, campaignID, t.EndedID, "turn_skipped", note, "")
+	response := t.reply()
+	response["skipped"] = t.EndedName
+	if end.Player {
+		response["note"] = fmt.Sprintf("%s's turn is recorded as skipped. For a player with no submission the turn schedule asks for a stand-in (POST /api/campaigns/%d/combat/stand-in), not a skip.", t.EndedName, campaignID)
+	}
 	json.NewEncoder(w).Encode(response)
 }
 

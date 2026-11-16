@@ -131,42 +131,44 @@ func openRound(tx *sql.Tx, lobby int, kind string, number int, now time.Time) (*
 // roundOpens opens a round for a fight's change (it starts, its round goes up, it ends) in its own transaction, in a campaign
 // whose schedule isn't off. onlyIfNew: not when the open round is already this one (a hook that may run twice); onlyAfter: only
 // when the open round is of that kind (a fight's end opens a noncombat round only after a combat round).
-func roundOpens(lobby int, kind string, number int, onlyIfNew bool, onlyAfter string) error {
+// It answers the round it opened (nil when it opened none).
+func roundOpens(lobby int, kind string, number int, onlyIfNew bool, onlyAfter string) (*roundRecord, error) {
 	tx, err := db.Begin()
 	if err != nil {
-		return err
+		return nil, err
 	}
 	defer tx.Rollback()
 	var state string
 	if err := tx.QueryRow(`SELECT COALESCE(schedule_state, 'off') FROM lobbies WHERE id = $1 FOR UPDATE`, lobby).Scan(&state); err != nil {
-		return notFoundIsNothing(err)
+		return nil, notFoundIsNothing(err)
 	}
 	if state == scheduleOff {
-		return nil
+		return nil, nil
 	}
 	open, err := openRoundOf(tx, lobby)
 	if err != nil {
-		return err
+		return nil, err
 	}
 	if onlyIfNew && open != nil && open.Kind == kind && open.Number == number {
-		return nil
+		return nil, nil
 	}
 	if onlyAfter != "" && (open == nil || open.Kind != onlyAfter) {
-		return nil
+		return nil, nil
 	}
 	if kind == roundNoncombat {
 		if err := tx.QueryRow(`SELECT COALESCE(MAX(number), 0) + 1 FROM campaign_rounds WHERE lobby_id = $1 AND kind = $2`, lobby, roundNoncombat).Scan(&number); err != nil {
-			return err
+			return nil, err
 		}
 	}
 	now, err := campaignNow(tx, lobby)
 	if err != nil {
-		return err
+		return nil, err
 	}
-	if _, err := openRound(tx, lobby, kind, number, now); err != nil {
-		return err
+	r, err := openRound(tx, lobby, kind, number, now)
+	if err != nil {
+		return nil, err
 	}
-	return tx.Commit()
+	return r, tx.Commit()
 }
 
 func notFoundIsNothing(err error) error {
@@ -178,13 +180,20 @@ func notFoundIsNothing(err error) error {
 
 // The fight's hooks (combat_state_2024.go, turn_advance_2024.go): the round record follows the fight's round.
 func scheduleFightStarts(lobby int) {
-	logScheduleProblem(lobby, "a fight started", roundOpens(lobby, roundCombat, 1, false, ""))
+	_, err := roundOpens(lobby, roundCombat, 1, false, "")
+	logScheduleProblem(lobby, "a fight started", err)
 }
-func scheduleFightRound(lobby, round int) {
-	logScheduleProblem(lobby, "a new combat round", roundOpens(lobby, roundCombat, round, true, ""))
+
+// scheduleFightRound: the fight's round went up because its last turn ended: the open round closes and the next opens (the
+// round it opened; nil when the campaign has no schedule).
+func scheduleFightRound(lobby, round int) *roundRecord {
+	r, err := roundOpens(lobby, roundCombat, round, true, "")
+	logScheduleProblem(lobby, "a new combat round", err)
+	return r
 }
 func scheduleFightEnds(lobby int) {
-	logScheduleProblem(lobby, "a fight ended", roundOpens(lobby, roundNoncombat, 0, false, roundCombat))
+	_, err := roundOpens(lobby, roundNoncombat, 0, false, roundCombat)
+	logScheduleProblem(lobby, "a fight ended", err)
 }
 
 // ---------------------------------------------------------------- what a turn needs
@@ -257,6 +266,7 @@ type charTurn struct {
 	SubmittedAt time.Time // campaign time
 	PausedForGM bool      // its submitted turn no longer worked: paused for the GM to decide
 	Resolved    bool      // outside a fight: its turn has resolved (in a fight the turn order says it)
+	How         string    // how its turn ended this round, from turn_results (own, fallback, stand_in, death_save, automatic, skipped)
 }
 
 // checkInInputs: everything checkInAt reads.
@@ -288,6 +298,7 @@ type charStatus struct {
 	Status      string     `json:"status"`
 	Message     string     `json:"message"`
 	Automatic   string     `json:"automatic,omitempty"` // death_save, stable, unconscious, dead
+	How         string     `json:"how,omitempty"`       // resolved: how the turn ended (turn_results)
 	WaitingOn   *nameRef   `json:"waiting_on,omitempty"`
 	CheckInAt   *time.Time `json:"check_in_at,omitempty"`
 	WindowUntil *time.Time `json:"window_until,omitempty"`
@@ -472,6 +483,12 @@ func checkInAt(in checkInInputs, now time.Time) checkIn {
 			st.Message = "Dead: no turn to take."
 		}
 	}
+	resolved := func(st *charStatus, how string) {
+		st.Status, st.How, st.Message = statusResolved, how, "Done for this round."
+		if w, ok := turnResultHows[how]; ok {
+			st.Message = "Done for this round: " + w + "."
+		}
+	}
 	statusOf := map[int]*charStatus{}
 	for _, s := range in.Seats {
 		statusOf[s.CharacterID] = &charStatus{CharacterID: s.CharacterID, Name: s.Name, Seat: s.Seat}
@@ -491,8 +508,8 @@ func checkInAt(in checkInInputs, now time.Time) checkIn {
 			inFight[slot.ID] = true
 			t := in.Turns[slot.ID]
 			switch {
-			case i < f.Current:
-				st.Status, st.Message = statusResolved, "Done for this round."
+			case t.How != "" || (i < f.Current && t.Needs.Why != "dead"): // a dead character has no turn to resolve
+				resolved(st, t.How)
 			case t.Needs.Kind != needChoose:
 				automatic(st, t.Needs)
 			case t.Submitted:
@@ -555,8 +572,8 @@ func checkInAt(in checkInInputs, now time.Time) checkIn {
 		for _, s := range in.Seats {
 			st, t := statusOf[s.CharacterID], in.Turns[s.CharacterID]
 			switch {
-			case t.Resolved:
-				st.Status, st.Message = statusResolved, "Done for this round."
+			case t.Resolved || t.How != "":
+				resolved(st, t.How)
 			case t.Needs.Kind != needChoose:
 				automatic(st, t.Needs)
 			case t.Submitted:
@@ -630,6 +647,16 @@ func loadCheckIn(lobby int) (checkInInputs, time.Time, error) {
 			return in, time.Time{}, err
 		}
 		in.Turns[s.CharacterID] = charTurn{Needs: n}
+	}
+	done, err := roundResults(db, in.Round.ID) // how each turn has ended (schedule_walk_2024.go)
+	if err != nil {
+		return in, time.Time{}, err
+	}
+	for id, how := range done {
+		if t, ok := in.Turns[id]; ok {
+			t.How = how
+			in.Turns[id] = t
+		}
 	}
 	if in.Round.Kind == roundCombat {
 		f, err := readFight(db, lobby)

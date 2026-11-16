@@ -13,7 +13,7 @@ import (
 
 // handleGMStatus godoc
 // @Summary Get GM status and guidance
-// @Description Returns everything the GM needs to know: what happened, who's waiting, what to do next, monster tactics.
+// @Description Returns everything the GM needs to know: what happened, who's waiting, what to do next, monster tactics. In a campaign with the turn schedule it only reads (it resolves and writes nothing): check_in is where the round stands (each character's status, whose action is due, gm_overdue), pending_turns.queue the turns held; the GM resolves with POST .../combat/resolve, stand-in, next and skip. Without the schedule it resolves the pending turns next in line first (pending_turns.resolved_now).
 // @Tags GM
 // @Produce json
 // @Param Authorization header string true "Bearer <token>"
@@ -54,9 +54,18 @@ func handleGMStatus(w http.ResponseWriter, r *http.Request) {
 	db.QueryRow(`SELECT name, status, COALESCE(setting, ''), COALESCE(campaign_document, '{}') FROM lobbies WHERE id = $1`, campaignID).
 		Scan(&campaignName, &campaignStatus, &campaignSetting, &campaignDocRaw)
 
-	// The GM checks in: the pending turns that are next in the initiative order resolve now, before the state is read
-	// (pending_turns_2024.go)
-	pendingReport := resolvePendingTurns(campaignID)
+	// Checking status with the turn schedule only reads (Matt, section 3): the GM resolves turns with its POSTs
+	// (combat/resolve, stand-in, next, skip). Without the schedule the GM's check-in resolves the pending turns that are next in
+	// the initiative order, before the state is read, as before (pending_turns_2024.go).
+	scheduleState, err := scheduleStateOf(db, campaignID)
+	if answerDBFailure(w, err, "the campaign's turn schedule") {
+		return
+	}
+	scheduled := usesSchedule(scheduleState)
+	var pendingReport map[string]interface{}
+	if !scheduled {
+		pendingReport = resolvePendingTurns(campaignID)
+	}
 
 	// Get combat state
 	var combatRound, turnIndex int
@@ -79,8 +88,8 @@ func handleGMStatus(w http.ResponseWriter, r *http.Request) {
 		gameState = "combat"
 	}
 
-	// Lazy inactivity check: mark players inactive if no activity in 4+ hours
-	// Also remove inactive players from combat turn order
+	// Lazy inactivity check: mark players inactive if no activity in 4+ hours. Not with the turn schedule: there reading the
+	// status changes nothing, and the schedule says who is due (check_in).
 	inactiveThreshold := 4 * time.Hour
 	var inactiveCharIDs []int
 	inactiveRows, qerr := db.Query(`
@@ -97,7 +106,8 @@ func handleGMStatus(w http.ResponseWriter, r *http.Request) {
 			WHERE p.character_id = c.id AND p.lobby_id = c.lobby_id
 			AND (p.status IN ('pending', 'needs_gm') OR p.submitted_at > NOW() - INTERVAL '4 hours')
 		)
-	`, campaignID)
+		AND NOT $2
+	`, campaignID, scheduled)
 	if qerr != nil {
 		writeDBError(w, qerr, "the pending turns")
 		return
@@ -770,6 +780,35 @@ func handleGMStatus(w http.ResponseWriter, r *http.Request) {
 		}
 
 		response["combat"] = combatInfo
+	}
+	if scheduled { // where the round stands, read only (check_in_2024.go), and the queue
+		in, now, err := loadCheckIn(campaignID)
+		if answerDBFailure(w, err, "the round's status") {
+			return
+		}
+		ci := checkInAt(in, now)
+		response["check_in"] = ci
+		if c, ok := ptLoadCombat(campaignID); ok {
+			response["pending_turns"] = map[string]interface{}{"queue": pendingQueue(campaignID, c)}
+			if ptEnemiesDown(campaignID) {
+				gmTasks = append(gmTasks, fmt.Sprintf("⚠️ Every enemy in this fight is down. End the fight: POST /api/campaigns/%d/combat/end (or bring in more with POST /api/campaigns/%d/combat/add).", campaignID, campaignID))
+				needsAttention = true
+			}
+		}
+		for _, task := range scheduleTasks(ci, campaignID) {
+			gmTasks = append(gmTasks, task)
+			needsAttention = true
+		}
+		var standIns []string
+		for _, ch := range ci.Characters {
+			if ch.Status == statusStandIn {
+				standIns = append(standIns, ch.Name)
+			}
+		}
+		if inCombat && len(standIns) > 0 {
+			response["stand_in_required"] = true
+			response["stand_in_player"] = standIns[0]
+		}
 	}
 	if pendingReport != nil { // what the walk resolved just now, where it stopped and why, and the queue
 		response["pending_turns"] = pendingReport
@@ -1477,7 +1516,16 @@ func handleGMNarrate(w http.ResponseWriter, r *http.Request) {
 	// Advance turn if requested: the one turn change (turn_advance_2024.go), with every hook of the turn that ends and the one that
 	// starts, and a fresh turn clock (the previous turn's clock made the next player look overdue at once).
 	if req.AdvanceTurn {
-		t, code := advanceTurn(campaignID, turnHow{by: "the GM's narration advanced the turn order"})
+		end, _, err := gmEndsTurn(campaignID) // with the turn schedule, a player's turn ends only as the schedule allows
+		if answerDBFailure(w, err, "the campaign's turn schedule") {
+			return
+		}
+		if end.Reply != nil {
+			end.Reply["narration_recorded"] = response["narration_recorded"]
+			writeJSONStatus(w, http.StatusConflict, end.Reply)
+			return
+		}
+		t, code := advanceTurn(campaignID, turnHow{by: "the GM's narration advanced the turn order", expect: end.Expect})
 		if code != "" {
 			answerTurnRefusal(w, campaignID, t, code, map[string]interface{}{"narration_recorded": response["narration_recorded"]})
 			return
