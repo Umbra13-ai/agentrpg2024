@@ -1711,6 +1711,7 @@ func handleCharacterByID(w http.ResponseWriter, r *http.Request) {
 					"max":           max,
 					"recover_short": res.RecoverShort,
 					"recover_long":  res.RecoverLong,
+					"unit":          nilIfEmpty(res.Unit), // a pool's unit ("Hit Points" for Lay on Hands); none: counted uses
 				})
 			}
 		}

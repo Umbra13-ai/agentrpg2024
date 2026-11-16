@@ -5058,6 +5058,10 @@
              },
              "recover_short": {
               "type": "boolean"
+             },
+             "unit": {
+              "description": "a pool's unit (\"Hit Points\" for Lay on Hands); none: counted uses",
+              "type": "string"
              }
             },
             "type": "object"
@@ -35213,6 +35217,10 @@
                },
                "recover_short": {
                 "type": "boolean"
+               },
+               "unit": {
+                "description": "a pool's unit (\"Hit Points\" for Lay on Hands); none: counted uses",
+                "type": "string"
                }
               },
               "type": "object"

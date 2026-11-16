@@ -198,6 +198,9 @@ type ClassResource struct {
 	Key          string // JSON key (e.g., "focus")
 	RecoverShort bool   // Recovers on short rest
 	RecoverLong  bool   // Recovers on long rest
+	// Unit: what a pool counts when it isn't uses ("Hit Points" for Lay on Hands: 5 x Paladin level of healing, spent in any
+	// amount); "" for counted uses. The sheet shows a pool as its count in this unit, uses as bubbles.
+	Unit string
 }
 
 // ClassResources returns the resource types available for a class.
@@ -227,7 +230,7 @@ func ClassResources(class string) []ClassResource {
 	case "paladin":
 		return []ClassResource{
 			{Name: "Channel Divinity", Key: "channel_divinity", RecoverShort: true, RecoverLong: true},
-			{Name: "Lay on Hands", Key: "lay_on_hands", RecoverShort: false, RecoverLong: true},
+			{Name: "Lay on Hands", Key: "lay_on_hands", RecoverShort: false, RecoverLong: true, Unit: "Hit Points"},
 		}
 	case "fighter":
 		return []ClassResource{

@@ -488,6 +488,7 @@ func handleMyTurn(w http.ResponseWriter, r *http.Request) {
 					"current":       current,
 					"max":           max,
 					"recover_short": res.RecoverShort,
+					"unit":          nilIfEmpty(res.Unit), // a pool's unit ("Hit Points" for Lay on Hands); none: counted uses
 				})
 			}
 		}
