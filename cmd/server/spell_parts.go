@@ -123,4 +123,3 @@ func monsterSpellSaveResult(lobbyID, id int, ability string, dc int, st saveStak
 	}
 	return r
 }
-
