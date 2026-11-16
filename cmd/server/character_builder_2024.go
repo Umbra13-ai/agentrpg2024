@@ -3116,6 +3116,9 @@ func handleCharacterSetup(w http.ResponseWriter, r *http.Request, charID int) {
 	}
 	// a portrait for the character sheet (portrait_step_2024.go)
 	extra(portraitSetupStep(charID))
+	if st := startingLevelSetupStep(charID); st != nil { // starting above level 1, before joining (campaign_levels_2024.go)
+		extra(*st)
+	}
 	// armor and gear
 	for _, g := range gearReminders(charID) {
 		why, _ := g["why_not_worn"].(string)

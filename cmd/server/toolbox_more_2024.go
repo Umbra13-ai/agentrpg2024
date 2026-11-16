@@ -375,7 +375,7 @@ func endCursesBySpell(lobbyID int, spellSlug string, targets []int) string {
 // ---- starting at a higher level
 
 // @Summary Start a character at a higher level
-// @Description SRD 5.2.1 Starting at Higher Levels: the character goes from its level to the new one by the level-up rules (Hit Points, Ability Score Improvements, XP set to the level's minimum, the public "Ding!" note of choices), and gets the Starting Equipment at Higher Levels money: levels 5-10 500 GP + 1d10 x 25 GP, 11-16 5,000 GP + 1d10 x 250 GP, 17-20 20,000 GP + 1d10 x 250 GP. The reply gives the suggested magic items (2-4: 1 Common; 5-10: 1 Common, 1 Uncommon; 11-16: 2 Common, 3 Uncommon, 1 Rare; 17-20: 2 Common, 4 Uncommon, 3 Rare, 1 Very Rare), which the GM gives with POST /api/gm/give-item. gold=false skips the money.
+// @Description SRD 5.2.1 Starting at Higher Levels: the character goes from its level to the new one by the level-up rules (Hit Points, Ability Score Improvements, XP set to the level's minimum, the public "Ding!" note of choices), and gets the Starting Equipment at Higher Levels money: levels 5-10 500 GP + 1d10 x 25 GP, 11-16 5,000 GP + 1d10 x 250 GP, 17-20 20,000 GP + 1d10 x 250 GP. The reply gives the suggested magic items (2-4: 1 Common; 5-10: 1 Common, 1 Uncommon; 11-16: 2 Common, 3 Uncommon, 1 Rare; 17-20: 2 Common, 4 Uncommon, 3 Rare, 1 Very Rare), which the GM gives with POST /api/gm/give-item. gold=false skips the money. The money is paid once per tier: a character that already had a tier's money (from POST /api/characters/{id}/starting-level or joining a campaign that starts higher) gets only what a higher tier adds.
 // @Tags GM
 // @Body Character and starting level
 // @Router /gm/starting-level [post]
@@ -398,14 +398,7 @@ func handleGMStartingLevel(w http.ResponseWriter, r *http.Request) {
 		dmBadRequest(w, "invalid_level", fmt.Sprintf("level must be higher than the character's level (%d) and at most 20.", cur))
 		return
 	}
-	hp, asi, note := applyLevelGain(req.CharacterID, cur, req.Level, "starting at a higher level")
-	gold, items := higherLevelStart(req.Level) // the Starting Equipment at Higher Levels table (campaign_levels_2024.go)
-	if req.Gold != nil && !*req.Gold {
-		gold = 0
-	}
-	if gold > 0 {
-		db.Exec(`UPDATE characters SET gold = COALESCE(gold,0) + $1 WHERE id = $2`, gold, req.CharacterID)
-	}
-	writeJSONStatus(w, 200, map[string]interface{}{"success": true, "hp_gained": hp, "asi_points": asi, "gold_added": gold, "suggested_magic_items": items,
-		"note": note, "result": fmt.Sprintf("%s Starting money: +%d GP. Suggested magic items: %s (POST /api/gm/give-item).", note, gold, items)})
+	st := startAtLevel(req.CharacterID, cur, req.Level, "starting at a higher level", req.Gold == nil || *req.Gold) // campaign_levels_2024.go
+	writeJSONStatus(w, 200, map[string]interface{}{"success": true, "hp_gained": st.HP, "asi_points": st.ASI, "gold_added": st.Gold, "suggested_magic_items": st.Items,
+		"note": st.Note, "result": fmt.Sprintf("%s Starting money: +%d GP. Suggested magic items: %s (POST /api/gm/give-item).", st.Note, st.Gold, st.Items)})
 }

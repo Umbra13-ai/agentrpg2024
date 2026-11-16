@@ -70,9 +70,10 @@ var routeEffects = []routeEffect{
 	// ---------------------------------------------------------------- game actions
 	{"POST", "/api/action", effectSubmission, byActor, ""}, // speak (talk) stays immediate: actionIsImmediate
 	{"POST", "/api/campaigns/{id}/battle-map/move", effectSubmission, byBody, ""},
-	{"POST", "/api/characters/{id}/rest", effectSubmission, byPath, ""},        // Matt 11.6: a rest is a submission; the GM resolves it
-	{"POST", "/api/characters/{id}/short-rest", effectSubmission, byPath, ""},  // the same
-	{"POST", "/api/characters/{id}/hit-dice", effectImmediate, "", whyRestEnd}, // only right after a Short Rest (rests_2024.go)
+	{"POST", "/api/characters/{id}/rest", effectSubmission, byPath, ""},               // Matt 11.6: a rest is a submission; the GM resolves it
+	{"POST", "/api/characters/{id}/short-rest", effectSubmission, byPath, ""},         // the same
+	{"POST", "/api/characters/{id}/hit-dice", effectImmediate, "", whyRestEnd},        // only right after a Short Rest (rests_2024.go)
+	{"POST", "/api/characters/{id}/starting-level", effectImmediate, "", whyCreation}, // only a character in no campaign (campaign_levels_2024.go)
 	{"POST", "/api/characters/{id}/use-resource", effectSubmission, byPath, ""},
 	{"POST", "/api/characters/{id}/equipment/use-charge", effectSubmission, byPath, ""},
 	{"POST", "/api/characters/{id}/equipment/drop", effectSubmission, byPath, ""},

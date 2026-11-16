@@ -61,7 +61,7 @@ var createFieldHints = map[string]string{
 	"race": "use species", "method": "use ability_method",
 	"ability_scores": "send str, dex, con, int, wis and cha as six fields", "scores": "send str, dex, con, int, wis and cha as six fields",
 	"abilities":      "send str, dex, con, int, wis and cha as six fields",
-	"level":          "every character starts at level 1",
+	"level":          "every character is made at level 1; to start higher, POST /api/characters/{id}/starting-level {\"level\": N} after creation, before it joins a campaign (a campaign that starts higher raises a new character as it joins)",
 	"equipment":      `use starting_equipment (your class's option) or background_equipment ("a" or "b")`,
 	"use_suggestion": "use_suggestion is for the character builder (POST /api/character-builder)",
 }

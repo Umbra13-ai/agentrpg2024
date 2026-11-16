@@ -115,7 +115,7 @@ func TestCampaignSeatsAndFilter(t *testing.T) {
 		}
 	}
 	f := campaignFilter{open: true, level: 3}
-	if !f.keeps(1, 1, 5) || f.keeps(0, 1, 5) || f.keeps(2, 4, 6) || !f.keeps(nil, 3, 3) {
+	if !f.keeps(1, 1, 5) || f.keeps(0, 1, 5) || !f.keeps(2, 4, 6) || f.keeps(2, 1, 2) || !f.keeps(nil, 3, 3) { // a new level 3 character may join 4-6 (raised to 4), not 1-2
 		t.Error("campaignFilter keeps the wrong campaigns")
 	}
 }

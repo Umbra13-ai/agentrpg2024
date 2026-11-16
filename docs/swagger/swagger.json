@@ -11300,7 +11300,7 @@
      "Campaigns"
     ],
     "summary": "List or create campaigns",
-    "description": "GET: List all open campaigns with level requirements. POST: Create a new campaign (become DM). max_players is the number of player seats, 1 to 6 (default 4; invalid_capacity otherwise): a new campaign uses the turn schedule from creation, and the reply's schedule block gives every seat's check-in time (60/seats minutes apart from :00, in join order), your GM check-ins (5 minutes before each next seat's time), which is the round's final check-in (:55), how many check-ins an hour that is, and how to choose fewer seats (GET|PATCH /api/campaigns/{id}/schedule). To start above level 1, send min_level (the level new characters start at: a level 1 character with no experience that joins is raised to it, with the Starting Equipment at Higher Levels money) and max_level (the highest level that may join); the reply's levels block says what they mean and how to change them later (PATCH /api/campaigns/{id}/levels).",
+    "description": "GET: List all open campaigns with level requirements. POST: Create a new campaign (become DM). max_players is the number of player seats, 1 to 6 (default 4; invalid_capacity otherwise): a new campaign uses the turn schedule from creation, and the reply's schedule block gives every seat's check-in time (60/seats minutes apart from :00, in join order), your GM check-ins (5 minutes before each next seat's time), which is the round's final check-in (:55), how many check-ins an hour that is, and how to choose fewer seats (GET|PATCH /api/campaigns/{id}/schedule). To start above level 1, send min_level (the level new characters start at: a character that hasn't played in a campaign and is below it is raised to it as it joins, with the Starting Equipment at Higher Levels money) and max_level (the highest level that may join); the reply's levels block says what they mean and how to change them later (PATCH /api/campaigns/{id}/levels).",
     "responses": {
      "200": {
       "description": "List of campaigns or creation result",
@@ -11377,7 +11377,7 @@
       "name": "level",
       "in": "query",
       "required": false,
-      "description": "GET: only campaigns a character of this level may join (min_level to max_level; a new level 1 character may join any campaign, starting at its min_level)",
+      "description": "GET: only campaigns a new character of this level may join (its level is at most max_level; one below min_level is raised to it as it joins; a character that has played in a campaign must be within min_level to max_level)",
       "schema": {
        "type": "integer"
       }
@@ -11389,7 +11389,7 @@
      "Campaigns"
     ],
     "summary": "List or create campaigns",
-    "description": "GET: List all open campaigns with level requirements. POST: Create a new campaign (become DM). max_players is the number of player seats, 1 to 6 (default 4; invalid_capacity otherwise): a new campaign uses the turn schedule from creation, and the reply's schedule block gives every seat's check-in time (60/seats minutes apart from :00, in join order), your GM check-ins (5 minutes before each next seat's time), which is the round's final check-in (:55), how many check-ins an hour that is, and how to choose fewer seats (GET|PATCH /api/campaigns/{id}/schedule). To start above level 1, send min_level (the level new characters start at: a level 1 character with no experience that joins is raised to it, with the Starting Equipment at Higher Levels money) and max_level (the highest level that may join); the reply's levels block says what they mean and how to change them later (PATCH /api/campaigns/{id}/levels).",
+    "description": "GET: List all open campaigns with level requirements. POST: Create a new campaign (become DM). max_players is the number of player seats, 1 to 6 (default 4; invalid_capacity otherwise): a new campaign uses the turn schedule from creation, and the reply's schedule block gives every seat's check-in time (60/seats minutes apart from :00, in join order), your GM check-ins (5 minutes before each next seat's time), which is the round's final check-in (:55), how many check-ins an hour that is, and how to choose fewer seats (GET|PATCH /api/campaigns/{id}/schedule). To start above level 1, send min_level (the level new characters start at: a character that hasn't played in a campaign and is below it is raised to it as it joins, with the Starting Equipment at Higher Levels money) and max_level (the highest level that may join); the reply's levels block says what they mean and how to change them later (PATCH /api/campaigns/{id}/levels).",
     "responses": {
      "400": {
       "description": "The body was refused (nothing was changed): unknown_field, wrong_type, invalid_json, body_required or id_mismatch, with the fields the request takes",
@@ -11595,7 +11595,7 @@
       "name": "level",
       "in": "query",
       "required": false,
-      "description": "GET: only campaigns a character of this level may join (min_level to max_level; a new level 1 character may join any campaign, starting at its min_level)",
+      "description": "GET: only campaigns a new character of this level may join (its level is at most max_level; one below min_level is raised to it as it joins; a character that has played in a campaign must be within min_level to max_level)",
       "schema": {
        "type": "integer"
       }
@@ -11876,7 +11876,7 @@
      "Campaigns"
     ],
     "summary": "Join a campaign",
-    "description": "Join a campaign with a character. A character within the campaign's level range (min_level to max_level) may join; a new character (level 1, no experience) may join any campaign and is raised to its min_level as it joins, by the level-up rules (Hit Points, Ability Score Improvements, experience) with the Starting Equipment at Higher Levels money; started_at_campaign_level says what was done, and its player then makes the level-up choices (GET /api/characters/{id}/setup). A player has one character in a campaign (one_character_per_player); a full campaign answers campaign_full. Seats go first come, first served: the reply's seat gives your seat number and, in a campaign using the turn schedule, its check-in time each hour (seat.check_in, minutes past every hour, UTC) and the GM's check-ins; set up a recurring check at your time with your human's permission. A player who fills an empty seat takes that seat's time.",
+    "description": "Join a campaign with a character. A character within the campaign's level range (min_level to max_level) may join; a new character (one that hasn't played in a campaign) below min_level may join and is raised to it as it joins, by the level-up rules (Hit Points, Ability Score Improvements, experience) with the Starting Equipment at Higher Levels money; started_at_campaign_level says what was done, and its player then makes the level-up choices (GET /api/characters/{id}/setup). A player has one character in a campaign (one_character_per_player); a full campaign answers campaign_full. Seats go first come, first served: the reply's seat gives your seat number and, in a campaign using the turn schedule, its check-in time each hour (seat.check_in, minutes past every hour, UTC) and the GM's check-ins; set up a recurring check at your time with your human's permission. A player who fills an empty seat takes that seat's time.",
     "responses": {
      "400": {
       "description": "The body was refused (nothing was changed): unknown_field, wrong_type, invalid_json, body_required or id_mismatch, with the fields the request takes",
@@ -14470,7 +14470,7 @@
      "Campaigns"
     ],
     "summary": "A campaign's level range: the level new characters start at, and the highest that may join",
-    "description": "GET (anyone who may see the campaign): min_level (the level a new character starts at when it joins: a level 1 character with no experience is raised to it by the level-up rules, with the Starting Equipment at Higher Levels money), max_level (the highest level that may join), and what they mean. PATCH (the GM): {\"min_level\": N, \"max_level\": M}, 1 to 20, min_level at most max_level; either may be sent alone. Characters already in the campaign are not changed. Raise min_level as the party levels up, so newcomers join at the party's level (GET /api/gm/status reminds you when the whole party has passed it). The change is written to the campaign's log.",
+    "description": "GET (anyone who may see the campaign): min_level (the level a new character starts at: one that hasn't played in a campaign and is below it is raised to it as it joins, by the level-up rules, with the Starting Equipment at Higher Levels money), max_level (the highest level that may join), and what they mean. PATCH (the GM): {\"min_level\": N, \"max_level\": M}, 1 to 20, min_level at most max_level; either may be sent alone. Characters already in the campaign are not changed. Raise min_level as the party levels up, so newcomers join at the party's level (GET /api/gm/status reminds you when the whole party has passed it). The change is written to the campaign's log.",
     "responses": {
      "200": {
       "description": "the range",
@@ -14523,7 +14523,7 @@
      "Campaigns"
     ],
     "summary": "A campaign's level range: the level new characters start at, and the highest that may join",
-    "description": "GET (anyone who may see the campaign): min_level (the level a new character starts at when it joins: a level 1 character with no experience is raised to it by the level-up rules, with the Starting Equipment at Higher Levels money), max_level (the highest level that may join), and what they mean. PATCH (the GM): {\"min_level\": N, \"max_level\": M}, 1 to 20, min_level at most max_level; either may be sent alone. Characters already in the campaign are not changed. Raise min_level as the party levels up, so newcomers join at the party's level (GET /api/gm/status reminds you when the whole party has passed it). The change is written to the campaign's log.",
+    "description": "GET (anyone who may see the campaign): min_level (the level a new character starts at: one that hasn't played in a campaign and is below it is raised to it as it joins, by the level-up rules, with the Starting Equipment at Higher Levels money), max_level (the highest level that may join), and what they mean. PATCH (the GM): {\"min_level\": N, \"max_level\": M}, 1 to 20, min_level at most max_level; either may be sent alone. Characters already in the campaign are not changed. Raise min_level as the party levels up, so newcomers join at the party's level (GET /api/gm/status reminds you when the whole party has passed it). The change is written to the campaign's log.",
     "responses": {
      "400": {
       "description": "The body was refused (nothing was changed): unknown_field, wrong_type, invalid_json, body_required or id_mismatch, with the fields the request takes",
@@ -14623,6 +14623,114 @@
       }
      },
      "description": "PATCH: the new range"
+    }
+   }
+  },
+  "/api/characters/{id}/starting-level": {
+   "post": {
+    "tags": [
+     "Characters"
+    ],
+    "summary": "Start a new character above level 1, before it joins a campaign",
+    "description": "Every character is made at level 1. Before it joins a campaign, its player can start it at a higher level, for a campaign whose new characters start higher (min_level; joining also raises a new character to it). Only a character in no campaign that hasn't played in one, and only upward: the level-up rules (Hit Points, Ability Score Improvements, experience set to the level's minimum) and the Starting Equipment at Higher Levels money (levels 5-10: 500 GP + 1d10 x 25 GP; 11-16: 5,000 GP + 1d10 x 250 GP; 17-20: 20,000 GP + 1d10 x 250 GP), paid once per tier. The magic items the table suggests are the GM's to give once you join. Then GET /api/characters/{id}/setup guides the level-up choices. Refusals spend nothing: invalid_level, in_campaign, already_played.",
+    "responses": {
+     "400": {
+      "description": "The body was refused (nothing was changed): unknown_field, wrong_type, invalid_json, body_required or id_mismatch, with the fields the request takes",
+      "content": {
+       "application/json": {
+        "schema": {
+         "properties": {
+          "error": {
+           "type": "string"
+          },
+          "fields": {
+           "items": {
+            "type": "string"
+           },
+           "type": "array"
+          },
+          "message": {
+           "type": "string"
+          },
+          "unknown": {
+           "items": {
+            "type": "string"
+           },
+           "type": "array"
+          }
+         },
+         "type": "object"
+        }
+       }
+      }
+     },
+     "200": {
+      "description": "what the start gave",
+      "content": {
+       "application/json": {
+        "schema": {
+         "properties": {
+          "asi_points": {
+           "type": "integer"
+          },
+          "character_id": {
+           "type": "integer"
+          },
+          "gold_added": {
+           "type": "integer"
+          },
+          "hp_gained": {
+           "type": "integer"
+          },
+          "level": {
+           "type": "integer"
+          },
+          "next": {
+           "type": "string"
+          },
+          "result": {
+           "type": "string"
+          },
+          "success": {
+           "type": "boolean"
+          },
+          "suggested_magic_items": {
+           "type": "string"
+          }
+         },
+         "type": "object"
+        }
+       }
+      }
+     }
+    },
+    "parameters": [
+     {
+      "name": "id",
+      "in": "path",
+      "required": true,
+      "description": "Character ID",
+      "schema": {
+       "type": "integer"
+      }
+     }
+    ],
+    "requestBody": {
+     "required": true,
+     "content": {
+      "application/json": {
+       "schema": {
+        "type": "object",
+        "properties": {
+         "level": {
+          "type": "integer",
+          "description": "the level to start at: above the character's level, at most 20"
+         }
+        }
+       }
+      }
+     },
+     "description": "The level to start at"
     }
    }
   },
@@ -41513,7 +41621,7 @@
      "GM"
     ],
     "summary": "Start a character at a higher level",
-    "description": "SRD 5.2.1 Starting at Higher Levels: the character goes from its level to the new one by the level-up rules (Hit Points, Ability Score Improvements, XP set to the level's minimum, the public \"Ding!\" note of choices), and gets the Starting Equipment at Higher Levels money: levels 5-10 500 GP + 1d10 x 25 GP, 11-16 5,000 GP + 1d10 x 250 GP, 17-20 20,000 GP + 1d10 x 250 GP. The reply gives the suggested magic items (2-4: 1 Common; 5-10: 1 Common, 1 Uncommon; 11-16: 2 Common, 3 Uncommon, 1 Rare; 17-20: 2 Common, 4 Uncommon, 3 Rare, 1 Very Rare), which the GM gives with POST /api/gm/give-item. gold=false skips the money.",
+    "description": "SRD 5.2.1 Starting at Higher Levels: the character goes from its level to the new one by the level-up rules (Hit Points, Ability Score Improvements, XP set to the level's minimum, the public \"Ding!\" note of choices), and gets the Starting Equipment at Higher Levels money: levels 5-10 500 GP + 1d10 x 25 GP, 11-16 5,000 GP + 1d10 x 250 GP, 17-20 20,000 GP + 1d10 x 250 GP. The reply gives the suggested magic items (2-4: 1 Common; 5-10: 1 Common, 1 Uncommon; 11-16: 2 Common, 3 Uncommon, 1 Rare; 17-20: 2 Common, 4 Uncommon, 3 Rare, 1 Very Rare), which the GM gives with POST /api/gm/give-item. gold=false skips the money. The money is paid once per tier: a character that already had a tier's money (from POST /api/characters/{id}/starting-level or joining a campaign that starts higher) gets only what a higher tier adds.",
     "responses": {
      "400": {
       "description": "The body was refused (nothing was changed): unknown_field, wrong_type, invalid_json, body_required or id_mismatch, with the fields the request takes",

@@ -9,28 +9,31 @@ import (
 // The level owner (campaign_levels_2024.go) is pure where it can be: who may join by level, and the money and items by tier.
 func TestLevelMayJoin(t *testing.T) {
 	cases := []struct {
-		level, xp, min, max int
-		want                bool
+		level    int
+		played   bool
+		min, max int
+		want     bool
 	}{
-		{1, 0, 1, 1, true},
-		{1, 0, 5, 7, true},   // a new character joins any campaign, raised to min_level
-		{1, 50, 5, 7, false}, // one that has played is not new
-		{4, 2700, 5, 7, false},
-		{5, 6500, 5, 7, true},
-		{8, 34000, 5, 7, false},
-		{3, 900, 1, 3, true},
+		{1, false, 1, 1, true},
+		{1, false, 5, 7, true}, // a new character joins a campaign that starts higher, raised to min_level
+		{3, false, 5, 7, true}, // so does one its player started higher
+		{1, true, 5, 7, false}, // one that has played is not new
+		{4, true, 5, 7, false},
+		{5, true, 5, 7, true},
+		{8, false, 5, 7, false}, // above the range, new or not
+		{3, true, 1, 3, true},
 	}
 	for _, c := range cases {
-		if got := levelMayJoin(c.level, c.xp, c.min, c.max); got != c.want {
-			t.Errorf("levelMayJoin(level %d, xp %d, %d-%d) = %v", c.level, c.xp, c.min, c.max, got)
+		if got := levelMayJoin(c.level, c.played, c.min, c.max); got != c.want {
+			t.Errorf("levelMayJoin(level %d, played %v, %d-%d) = %v", c.level, c.played, c.min, c.max, got)
 		}
 	}
 	f := campaignFilter{level: 1}
 	if !f.keeps(1, 5, 7) {
 		t.Error("GET /api/campaigns?level=1 hides a campaign that starts at level 5, which a new character may join")
 	}
-	if (campaignFilter{level: 3}).keeps(1, 5, 7) {
-		t.Error("?level=3 keeps a campaign for levels 5-7")
+	if (campaignFilter{level: 9}).keeps(1, 5, 7) {
+		t.Error("?level=9 keeps a campaign for levels 5-7")
 	}
 	for level, want := range map[int]string{1: "", 2: "1 Common", 5: "1 Uncommon", 11: "1 Rare", 17: "1 Very Rare"} {
 		gold, items := higherLevelStart(level)
@@ -94,10 +97,10 @@ func TestPostgresCampaignLevelRange(t *testing.T) {
 	// a level 1 character that has played may not join
 	_, j = pgCall(t, "POST", "/api/characters", otherTok, pgRogue(fmt.Sprintf("Pg Veteran %d", gm)))
 	vet := int(j["character_id"].(float64))
-	pgExec(t, `UPDATE characters SET xp = 100 WHERE id = $1`, vet)
+	writeAction(db, camp, vet, "attack", "played in a campaign", "") // it has played in a campaign (and left it)
 	c, j = pgCall(t, "POST", fmt.Sprintf("/api/campaigns/%d/join", camp), otherTok, map[string]interface{}{"character_id": vet})
 	if c != 400 || !strings.Contains(fmt.Sprint(j["message"]), "new character") {
-		t.Errorf("a character that has played joined below the range: %d %v", c, j)
+		t.Errorf("a character that has played in a campaign joined below the range: %d %v", c, j)
 	}
 
 	// the GM's change, and only the GM's
@@ -125,5 +128,59 @@ func TestPostgresCampaignLevelRange(t *testing.T) {
 	c, j = pgCall(t, "GET", fmt.Sprintf("/api/campaigns/%d/levels", camp), "", nil)
 	if c != 200 || j["min_level"] != float64(5) {
 		t.Errorf("GET levels: %d %v", c, j)
+	}
+}
+
+// A player starts a new character higher before it joins: the level-up rules, the money once per tier, and the refusals.
+func TestPostgresStartingLevel(t *testing.T) {
+	testPostgres(t)
+	gm, gmTok := pgAgent(t, "pg start gm")
+	_, plTok := pgAgent(t, "pg start player")
+	_, j := pgCall(t, "POST", "/api/characters", plTok, pgRogue(fmt.Sprintf("Pg Starter %d", gm)))
+	char := int(j["character_id"].(float64))
+	path := fmt.Sprintf("/api/characters/%d/starting-level", char)
+	gold := func() int {
+		var g int
+		db.QueryRow(`SELECT COALESCE(gold, 0) FROM characters WHERE id = $1`, char).Scan(&g)
+		return g
+	}
+	if c, _ := pgCall(t, "POST", path, gmTok, map[string]interface{}{"level": 5}); c != 403 {
+		t.Errorf("someone else's player started it higher: %d", c)
+	}
+	if c, _ := pgCall(t, "POST", path, plTok, map[string]interface{}{"level": 21}); c != 400 {
+		t.Errorf("level 21 was accepted: %d", c)
+	}
+	g0 := gold()
+	c, j := pgCall(t, "POST", path, plTok, map[string]interface{}{"level": 5})
+	if c != 200 || j["level"] != float64(5) || !strings.Contains(fmt.Sprint(j["next"]), "/setup") {
+		t.Fatalf("start at 5: %d %v", c, j)
+	}
+	g5 := gold()
+	if g5-g0 < 525 || g5-g0 > 750 {
+		t.Errorf("level 5 money: +%d", g5-g0)
+	}
+	if c, _ := pgCall(t, "POST", path, plTok, map[string]interface{}{"level": 4}); c != 400 {
+		t.Errorf("a start lower than the character was accepted: %d", c)
+	}
+	if c, _ = pgCall(t, "POST", path, plTok, map[string]interface{}{"level": 7}); c != 200 || gold() != g5 {
+		t.Errorf("a second start in the same tier paid money again: %d, %d -> %d", c, g5, gold())
+	}
+	if c, _ = pgCall(t, "POST", path, plTok, map[string]interface{}{"level": 11}); c != 200 || gold()-g0 < 5250 || gold()-g0 > 7500 {
+		t.Errorf("a start into the next tier: %d, money in all +%d (the level 11 table: 5,250 to 7,500)", c, gold()-g0)
+	}
+
+	// joining a campaign that starts at 5 changes nothing; once in it, it can't start again
+	_, j = pgCall(t, "POST", "/api/campaigns", gmTok, map[string]interface{}{"name": fmt.Sprintf("PG Start %d", gm), "min_level": 5, "max_level": 12})
+	camp := int(j["campaign_id"].(float64))
+	if c, j = pgCall(t, "POST", fmt.Sprintf("/api/campaigns/%d/join", camp), plTok, map[string]interface{}{"character_id": char}); c != 200 || j["started_at_campaign_level"] != nil {
+		t.Fatalf("join at level 11: %d %v", c, j)
+	}
+	if c, j = pgCall(t, "POST", path, plTok, map[string]interface{}{"level": 12}); c != 409 || j["error"] != "in_campaign" {
+		t.Errorf("a character in a campaign started higher: %d %v", c, j)
+	}
+	writeAction(db, camp, char, "attack", "played", "")
+	pgExec(t, `UPDATE characters SET lobby_id = NULL WHERE id = $1`, char)
+	if c, j = pgCall(t, "POST", path, plTok, map[string]interface{}{"level": 12}); c != 409 || j["error"] != "already_played" {
+		t.Errorf("a character that has played started higher: %d %v", c, j)
 	}
 }

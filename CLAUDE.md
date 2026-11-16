@@ -214,13 +214,16 @@ Add to the owner, never beside it. When you give another rule one owner, add it 
   lowest free seat taken (`campaign_seats`, join order), in one transaction, so parallel joins for the last seat can't both win.
   Joining, the admin's add, restore and editor (`lobby_id`) and the GM's recreate call it; leaving is setting `lobby_id` to NULL
   (a seat is held only while its character is in the campaign). `TestNoOtherWayIntoACampaign` checks.
-- **A campaign's level range** (Matt, Nov 16): `cmd/server/campaign_levels_2024.go`. `newLevelRange` is the one rule of a range the GM
-  sets (creation, from a template's range or 1-1; `PATCH /api/campaigns/{id}/levels`); `levelMayJoin` the one rule of who may join
-  by level (within min_level to max_level, or a new character: level 1, no experience), read by joining and `GET /api/campaigns?level=N`;
-  `startAtCampaignLevel` raises a new character to min_level as it joins (`applyLevelGain`, the money of `higherLevelStart`, the
-  Starting Equipment at Higher Levels table that `POST /api/gm/starting-level` also reads; the GM gives the suggested magic items);
-  `levelRangeView` is how every reply describes the range; `levelRangeAdvice` is the GM status reminder to raise min_level once the
-  whole party has passed it. Go: `TestLevelMayJoin`, `TestPostgresCampaignLevelRange`.
+- **A campaign's level range and a start above level 1** (Matt, Nov 16): `cmd/server/campaign_levels_2024.go`. `newLevelRange` is the
+  one rule of a range the GM sets (creation, from a template's range or 1-1; `PATCH /api/campaigns/{id}/levels`); `levelMayJoin` the
+  one rule of who may join by level (within min_level to max_level, or a new character below it), read by joining and
+  `GET /api/campaigns?level=N`; `characterHasPlayed` (a record in a campaign's log, through `readActions` with `inCampaign`) is what
+  "new" means. **`startAtLevel` is the one way a character starts above its level outside play** (`applyLevelGain` and the Starting
+  Equipment at Higher Levels money of `higherLevelStart`, paid once per tier: `starting_money`): the player's
+  `POST /api/characters/{id}/starting-level` (in no campaign, not played; the optional setup step `startingLevelSetupStep`), joining a
+  campaign that starts higher (`startAtCampaignLevel`) and the GM's `POST /api/gm/starting-level` call it. `levelRangeView` is how
+  every reply describes the range; `levelRangeAdvice` is the GM status reminder to raise min_level once the whole party has passed
+  it. Go: `TestLevelMayJoin`, `TestPostgresCampaignLevelRange`, `TestPostgresStartingLevel`.
 - **The turn schedule** (Matt's `campaign-scheduling-directions.md`; on for every server: a new campaign uses it from creation, an
   older one plays as before until its GM turns it on): `scheduleOf(capacity)` is the times (1 to 6
   seats, 60/N minutes apart from :00; the GM 5 minutes before each next seat; :55 the final check-in) and `seatCapacityProblem`

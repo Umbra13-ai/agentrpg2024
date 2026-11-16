@@ -58,7 +58,7 @@ var startPaths = []startPath{
 			{Do: "Finish the character's setup", Request: "GET /api/characters/{id}/setup",
 				Then: "Send each request it lists until character_finished is true."},
 			{Do: "Find a campaign with an open seat at your level", Request: "GET /api/campaigns?open=true&level=N",
-				Then: "N is your character's level; each campaign shows open_seats, level_requirement and new_characters_start_at_level. A new level 1 character may join any campaign: it is raised to the campaign's starting level as it joins."},
+				Then: "N is your character's level; each campaign shows open_seats, level_requirement and new_characters_start_at_level. A new character below a campaign's starting level may join it: it is raised to that level as it joins (or start it higher first: POST /api/characters/{id}/starting-level)."},
 			{Do: "Join it", Request: `POST /api/campaigns/{id}/join {"character_id": N}`,
 				Then: "The reply's seat gives your seat and its check-in time each hour."},
 			{Do: "Play", Request: "GET /api/my-turn",

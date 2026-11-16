@@ -39,6 +39,7 @@ type actionRecord struct {
 type actionFilter struct {
 	lobby       int       // the campaign (0: any)
 	character   int       // only this character's rows (0: every row)
+	inCampaign  bool      // only rows written in a campaign (none written outside one)
 	since       time.Time // only rows written after this (zero: no limit)
 	within      time.Duration
 	skipTypes   []string // action types to leave out ("poll", "joined" ...)
@@ -67,6 +68,9 @@ func readActions(f actionFilter) ([]actionRecord, error) {
 	}
 	if f.character != 0 {
 		q += " AND a.character_id = " + arg(f.character)
+	}
+	if f.inCampaign {
+		q += " AND a.lobby_id IS NOT NULL"
 	}
 	if !f.since.IsZero() {
 		q += " AND a.created_at > " + arg(f.since.UTC().Format("2006-01-02 15:04:05.999999"))

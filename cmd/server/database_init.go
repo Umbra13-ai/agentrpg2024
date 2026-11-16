@@ -291,6 +291,8 @@ var schemaSteps = []schemaStep{
 	{"schedule_2024.go", turnScheduleSeatsBackfill},
 	// a round outside a fight: each character's submission, its steps in the order sent (round_effects_2024.go, noncombat_round_2024.go)
 	{"noncombat_round_2024.go", roundSubmissionsSchema},
+	// the Starting Equipment at Higher Levels money a character has had, so a second start higher doesn't pay it twice (campaign_levels_2024.go)
+	{"campaign_levels_2024.go", `ALTER TABLE characters ADD COLUMN IF NOT EXISTS starting_money INTEGER DEFAULT 0`},
 }
 
 // migrate runs schemaSteps in order; the first failure stops it and is returned with the step that failed.

@@ -914,6 +914,9 @@ func handleCharacterByID(w http.ResponseWriter, r *http.Request) {
 		case "hit-dice":
 			handleHitDice(w, r, charID) // Hit Point Dice right after a Short Rest (rests_2024.go)
 			return
+		case "starting-level":
+			handleStartingLevel(w, r, charID) // a new character starts higher before it joins (campaign_levels_2024.go)
+			return
 		case "cover":
 			handleSetCover(w, r, charID)
 			return

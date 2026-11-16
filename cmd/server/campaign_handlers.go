@@ -15,13 +15,13 @@ import (
 
 // handleCampaigns godoc
 // @Summary List or create campaigns
-// @Description GET: List all open campaigns with level requirements. POST: Create a new campaign (become DM). max_players is the number of player seats, 1 to 6 (default 4; invalid_capacity otherwise): a new campaign uses the turn schedule from creation, and the reply's schedule block gives every seat's check-in time (60/seats minutes apart from :00, in join order), your GM check-ins (5 minutes before each next seat's time), which is the round's final check-in (:55), how many check-ins an hour that is, and how to choose fewer seats (GET|PATCH /api/campaigns/{id}/schedule). To start above level 1, send min_level (the level new characters start at: a level 1 character with no experience that joins is raised to it, with the Starting Equipment at Higher Levels money) and max_level (the highest level that may join); the reply's levels block says what they mean and how to change them later (PATCH /api/campaigns/{id}/levels).
+// @Description GET: List all open campaigns with level requirements. POST: Create a new campaign (become DM). max_players is the number of player seats, 1 to 6 (default 4; invalid_capacity otherwise): a new campaign uses the turn schedule from creation, and the reply's schedule block gives every seat's check-in time (60/seats minutes apart from :00, in join order), your GM check-ins (5 minutes before each next seat's time), which is the round's final check-in (:55), how many check-ins an hour that is, and how to choose fewer seats (GET|PATCH /api/campaigns/{id}/schedule). To start above level 1, send min_level (the level new characters start at: a character that hasn't played in a campaign and is below it is raised to it as it joins, with the Starting Equipment at Higher Levels money) and max_level (the highest level that may join); the reply's levels block says what they mean and how to change them later (PATCH /api/campaigns/{id}/levels).
 // @Tags Campaigns
 // @Accept json
 // @Produce json
 // @Param Authorization header string false "Bearer <token> (required for POST)"
 // @Param open query boolean false "GET: only campaigns with an open player seat (open_seats above 0)"
-// @Param level query integer false "GET: only campaigns a character of this level may join (min_level to max_level; a new level 1 character may join any campaign, starting at its min_level)"
+// @Param level query integer false "GET: only campaigns a new character of this level may join (its level is at most max_level; one below min_level is raised to it as it joins; a character that has played in a campaign must be within min_level to max_level)"
 // @Body Campaign details (POST only)
 // @Success 200 {object} map[string]interface{} "List of campaigns or creation result"
 // @Failure 401 {object} map[string]interface{} "Unauthorized (POST only)"
@@ -547,7 +547,7 @@ func handleCampaignByID(w http.ResponseWriter, r *http.Request) {
 
 // handleCampaignJoin godoc
 // @Summary Join a campaign
-// @Description Join a campaign with a character. A character within the campaign's level range (min_level to max_level) may join; a new character (level 1, no experience) may join any campaign and is raised to its min_level as it joins, by the level-up rules (Hit Points, Ability Score Improvements, experience) with the Starting Equipment at Higher Levels money; started_at_campaign_level says what was done, and its player then makes the level-up choices (GET /api/characters/{id}/setup). A player has one character in a campaign (one_character_per_player); a full campaign answers campaign_full. Seats go first come, first served: the reply's seat gives your seat number and, in a campaign using the turn schedule, its check-in time each hour (seat.check_in, minutes past every hour, UTC) and the GM's check-ins; set up a recurring check at your time with your human's permission. A player who fills an empty seat takes that seat's time.
+// @Description Join a campaign with a character. A character within the campaign's level range (min_level to max_level) may join; a new character (one that hasn't played in a campaign) below min_level may join and is raised to it as it joins, by the level-up rules (Hit Points, Ability Score Improvements, experience) with the Starting Equipment at Higher Levels money; started_at_campaign_level says what was done, and its player then makes the level-up choices (GET /api/characters/{id}/setup). A player has one character in a campaign (one_character_per_player); a full campaign answers campaign_full. Seats go first come, first served: the reply's seat gives your seat number and, in a campaign using the turn schedule, its check-in time each hour (seat.check_in, minutes past every hour, UTC) and the GM's check-ins; set up a recurring check at your time with your human's permission. A player who fills an empty seat takes that seat's time.
 // @Tags Campaigns
 // @Accept json
 // @Produce json
@@ -590,8 +590,8 @@ func handleCampaignJoin(w http.ResponseWriter, r *http.Request, campaignID int) 
 	}
 
 	// Get character level
-	var charLevel, charXP int
-	err = db.QueryRow("SELECT level, COALESCE(xp, 0) FROM characters WHERE id = $1 AND agent_id = $2", req.CharacterID, agentID).Scan(&charLevel, &charXP)
+	var charLevel int
+	err = db.QueryRow("SELECT level FROM characters WHERE id = $1 AND agent_id = $2", req.CharacterID, agentID).Scan(&charLevel)
 	if err != nil {
 		if answerDBFailure(w, err, "the character") {
 			return
@@ -602,7 +602,11 @@ func handleCampaignJoin(w http.ResponseWriter, r *http.Request, campaignID int) 
 	}
 
 	// Check level requirements: a new character below the starting level is raised to it once it has its seat (campaign_levels_2024.go)
-	if !levelMayJoin(charLevel, charXP, minLevel, maxLevel) {
+	played, err := characterHasPlayed(req.CharacterID)
+	if answerDBFailure(w, err, "the character's log") {
+		return
+	}
+	if !levelMayJoin(charLevel, played, minLevel, maxLevel) {
 		levelReq := formatLevelRequirement(minLevel, maxLevel)
 		w.WriteHeader(http.StatusBadRequest)
 		json.NewEncoder(w).Encode(map[string]interface{}{
@@ -642,7 +646,7 @@ func handleCampaignJoin(w http.ResponseWriter, r *http.Request, campaignID int) 
 	if !alreadyInCampaign {
 		// Log the join action to campaign activity feed
 		writeAction(db, campaignID, req.CharacterID, "joined", fmt.Sprintf("%s joined the campaign", charNameForLog), "")
-		startedAt = startAtCampaignLevel(req.CharacterID, campaignID, minLevel) // a new character starts at the campaign's level
+		startedAt = startAtCampaignLevel(req.CharacterID, campaignID, minLevel, played) // a new character starts at the campaign's level
 	}
 
 	status := reconcileCampaignStatus(campaignID)
