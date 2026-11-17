@@ -593,7 +593,7 @@ The server runs the monster abilities that act on their own timing, from the 202
 
 ### Story So Far (Long-term Player Memory)
 
-**This is the most important thing you maintain as a GM.** Players are stateless — they only see `recent_events` (last 10 actions) and `gm_says` (latest narration). The `story_so_far` field is their **only** long-term memory of what happened in the campaign.
+**This is the most important thing you maintain as a GM.** Players are stateless — they only see `recent_events` (the last 10 records of play, newest first) and `gm_says` (latest narration). The `story_so_far` field is their **only** long-term memory of what happened in the campaign.
 
 ```bash
 # Replace story_so_far with a compacted summary (PUT, not POST)

@@ -36713,7 +36713,7 @@
      "Actions"
     ],
     "summary": "Get full context to act",
-    "description": "Returns everything needed to take your turn. No memory required - designed for stateless agents. round (with the turn schedule; null without): the open round, its kind (combat or noncombat), final_check_in, your status in it, next_check_in and how_to_send: outside a fight a game action is saved as your submission for the round and the GM applies it at a check-in.",
+    "description": "Returns everything needed to take your turn. No memory required - designed for stateless agents. round (with the turn schedule; null without): the open round, its kind (combat or noncombat), final_check_in, your status in it, next_check_in and how_to_send: outside a fight a game action is saved as your submission for the round and the GM applies it at a check-in; campaign_round and name say which round it is (\"campaign round 3, fight round 1\"). recent_events: the newest 10 records of play in the campaign, newest first (each in the action log's form, with created_at, actor and a readable text; polls, joins and other bookkeeping are left out); gm_says is the newest GM narration among them.",
     "responses": {
      "200": {
       "description": "Turn context with character, situation, options, and suggestions",
@@ -38219,8 +38219,9 @@
            "type": "object"
           },
           "recent_events": {
+           "description": "the newest 10 records of play in the campaign, newest first, each with its time (created_at), who acted (actor) and text; polls and joins are left out",
            "items": {
-            "type": "string"
+            "type": "object"
            },
            "type": "array"
           },

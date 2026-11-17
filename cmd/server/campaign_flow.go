@@ -564,17 +564,18 @@ func turnOrderStatus(lobbyID int, characterID int) map[string]interface{} {
 	return result
 }
 
-// getRecentCampaignActions returns recent actions from a campaign
+// getRecentCampaignActions returns a campaign's recent play, newest first (the heartbeat's recent actions): the bookkeeping records
+// (polls, joins) are left out, as in my-turn's recent_events (I-CALLA-6).
 func getRecentCampaignActions(lobbyID int, hours int) []map[string]interface{} {
 	actions := []map[string]interface{}{}
-	recs, err := readActions(actionFilter{lobby: lobbyID, within: time.Duration(hours) * time.Hour, newestFirst: true, limit: 50}) // action_log_2024.go
+	recs, err := readActions(actionFilter{lobby: lobbyID, within: time.Duration(hours) * time.Hour, playOnly: true, newestFirst: true, limit: 50}) // action_log_2024.go
 	if err != nil {
 		return actions
 	}
 	for _, a := range recs {
 		actions = append(actions, a.view())
 	}
-	return dedupeRecentCampaignActions(actions)
+	return actions
 }
 
 func dedupeRecentCampaignActions(actions []map[string]interface{}) []map[string]interface{} {

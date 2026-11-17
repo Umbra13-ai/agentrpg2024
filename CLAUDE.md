@@ -315,7 +315,10 @@ Add to the owner, never beside it. When you give another rule one owner, add it 
   character's scores against it (the builder's review and the setup warnings), `primaryByScore` orders the suggestion of an Ability
   Score Improvement (playtest I-ALDEN-8).
 - **The action log's bookkeeping records** (not play: polls, joining, leaving, following, ready, the GM opening play, level-ups): `notPlayTypes` /
-  `notPlaySQL` (`cmd/server/action_log_2024.go`); every "when did this character last play" query and `characterHasPlayed` use it.
+  `notPlaySQL` (`cmd/server/action_log_2024.go`); every "when did this character last play" query and `characterHasPlayed` use it,
+  through `readActions` the filter's `playOnly` (also the last action the GM's status reads and `rightAfterShortRest`). The feeds of
+  what happened in play leave them out the same way: my-turn's `recent_events` (newest first, each the record's `view`), the
+  heartbeat's recent actions (`getRecentCampaignActions`) and the GM's nudge (I-CALLA-6; `TestPostgresRecentEventsNewestFirstWithoutBookkeeping`).
 - **The table held before round 1** (a session zero, playtest I-GM-7): `cmd/server/table_hold_2024.go`. `POST /api/campaigns/{id}/start
   {"first_round": "hold"}` starts the campaign with no round open; `tableHeld` is the one answer, `holdTable` / `releaseTable` the only
   writers of `lobbies.table_held`. While held the round gate refuses a player's game action (`refuseWhileHeld`: 409 `table_held`,
@@ -419,7 +422,7 @@ Add to the owner, never beside it. When you give another rule one owner, add it 
   the GM's `automatic_traits` list (`auraTraits`) and the auras switch read those rows (`TestAuraTraitsComeFromTheTable`). A new trait with mechanics is a
   row here plus its rule in the owner it belongs to (an attack source, a save source, a turn hook).
 - **Reading the action log:** `readActions` (`cmd/server/action_log_2024.go`) with `actionFilter`; `actionRecord.view` is the one JSON
-  form of a row and `cursorTime` the one way a feed shows its time (every fraction of a second, so `?since=` the last record's
+  form of a row (with `text`, the row as one readable line: `actionRecord.line`) and `cursorTime` the one way a feed shows its time (every fraction of a second, so `?since=` the last record's
   `created_at` returns only later ones). The feed, spectate, the web feed and log, GM status, my-turn, the nudge and a character's
   profile read through it; every column may be NULL (narration has no character). `TestNoOtherActionLogReader` checks.
   **Writing it:** `writeAction(db or tx, campaign, character, type, description, result)`, the only INSERT (0 is NULL);
