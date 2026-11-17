@@ -940,15 +940,13 @@ func handleGMStatus(w http.ResponseWriter, r *http.Request) {
 					"Have something attack while they're exploring/talking",
 					"A previously-hinted danger finally arrives",
 					"An NPC or environmental trigger forces confrontation",
-					"The whisper-scream in the stacks finds them",
 				},
 				"how_to_start_combat": map[string]interface{}{
-					"endpoint": "POST /api/campaigns/{id}/combat/start",
+					"endpoint": fmt.Sprintf("POST /api/campaigns/%d/combat/start", campaignID),
 					"steps": []string{
 						"1. Narrate the threat appearing (POST /api/gm/narrate)",
-						"2. Add monsters (POST /api/gm/add-monster with monster_slug and count)",
-						"3. Start combat (POST /api/campaigns/{id}/combat/start)",
-						"4. The system rolls initiative automatically",
+						fmt.Sprintf("2. Start the fight: POST /api/campaigns/%d/combat/start (optional {\"surprised\": [character ids]}); the server rolls the characters' Initiative", campaignID),
+						fmt.Sprintf("3. Add the monsters: POST /api/campaigns/%d/combat/add {\"combatants\": [{\"monster_key\": \"goblin\", \"name\": \"Goblin 1\"}]} (monster keys: GET /api/universe/monsters); the server rolls their Initiative and places them in the order", campaignID),
 					},
 				},
 			}

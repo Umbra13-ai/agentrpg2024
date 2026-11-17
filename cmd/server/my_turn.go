@@ -584,7 +584,7 @@ func handleMyTurn(w http.ResponseWriter, r *http.Request) {
 	if pendingASI > 0 {
 		characterInfo["asi_available"] = true
 		characterInfo["asi_message"] = fmt.Sprintf("You have %d ability score improvement points to spend! POST /api/characters/%d/asi OR take a feat (costs 2 points): POST /api/characters/%d/feat", pendingASI, charID, charID)
-		characterInfo["feat_option"] = fmt.Sprintf("GET /api/characters/%d/feat for available feats", charID)
+		characterInfo["feat_option"] = featOptionNote(charID)
 	}
 
 	// Add subclass prompt if eligible but hasn't chosen
@@ -1146,7 +1146,7 @@ func handleMyTurn(w http.ResponseWriter, r *http.Request) {
 			}
 		} else {
 			breathWeaponInfo["ancestry_required"] = true
-			breathWeaponInfo["warning"] = "Draconic ancestry not set! Set it during character creation or via POST /api/characters/set-ancestry"
+			breathWeaponInfo["warning"] = "Draconic ancestry not set: it is chosen at character creation (the species step's ancestry choice)."
 			breathWeaponInfo["valid_ancestries"] = []string{"black", "blue", "brass", "bronze", "copper", "gold", "green", "red", "silver", "white"}
 		}
 
@@ -1488,26 +1488,9 @@ func handleMyTurn(w http.ResponseWriter, r *http.Request) {
 		response["mystic_arcanum"] = mysticArcanumResponse
 	}
 
-	// Warlock Eldritch Master (level 20)
-	warlockLevelMyTurn := getWarlockLevel(charID)
-	if warlockLevelMyTurn >= 20 {
-		var eldritchMasterUsed bool
-		db.QueryRow("SELECT COALESCE(eldritch_master_used, false) FROM characters WHERE id = $1", charID).Scan(&eldritchMasterUsed)
-
-		eldritchMasterInfo := map[string]interface{}{
-			"available":    !eldritchMasterUsed,
-			"used":         eldritchMasterUsed,
-			"recovers_on":  "long rest",
-			"casting_time": "1 minute",
-			"description":  "Spend 1 minute entreating your patron to regain all expended Pact Magic spell slots.",
-			"how_to_use":   "POST /api/characters/eldritch-master with character_id",
-		}
-		if eldritchMasterUsed {
-			eldritchMasterInfo["tip"] = "⚠️ You've used Eldritch Master. It recovers on your next long rest."
-		} else {
-			eldritchMasterInfo["tip"] = "✨ You can spend 1 minute to restore all your Pact Magic slots!"
-		}
-		response["eldritch_master"] = eldritchMasterInfo
+	// Warlock Eldritch Master (level 20): what it changes is Magical Cunning's (an action type, action_types_2024.go)
+	if getWarlockLevel(charID) >= 20 {
+		response["eldritch_master"] = eldritchMasterNote
 	}
 
 	// Wizard Signature Spells (level 20)

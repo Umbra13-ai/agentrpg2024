@@ -3906,7 +3906,16 @@ func handleCampaignItems(w http.ResponseWriter, r *http.Request, campaignID int)
 	http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)
 }
 
-// handleCampaignItemBySlug handles GET/PUT/DELETE for a specific campaign item
+// handleCampaignItemBySlug godoc
+// @Summary Read, change or delete one campaign item
+// @Description GET (anyone): one of the campaign's custom items. PUT (the GM): change its name and merge fields into its data. DELETE (the GM): delete it.
+// @Tags Campaign Items
+// @Param id path int true "Campaign ID"
+// @Param slug path string true "The item's slug (from GET /campaigns/{id}/items)"
+// @Body PUT: the new name and the data fields to merge in
+// @Router /campaigns/{id}/items/{slug} [get]
+// @Router /campaigns/{id}/items/{slug} [put]
+// @Router /campaigns/{id}/items/{slug} [delete]
 func handleCampaignItemBySlug(w http.ResponseWriter, r *http.Request, campaignID int, slug string) {
 	w.Header().Set("Content-Type", "application/json")
 
@@ -3949,8 +3958,8 @@ func handleCampaignItemBySlug(w http.ResponseWriter, r *http.Request, campaignID
 		}
 
 		var req struct {
-			Name string                 `json:"name"`
-			Data map[string]interface{} `json:"data"`
+			Name string                 `json:"name"` // optional: the item's new name
+			Data map[string]interface{} `json:"data"` // optional: fields merged into the item's data (a field sent replaces that field)
 		}
 		if !readRequest(w, r, &req, optionalBody()) {
 			return

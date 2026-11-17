@@ -547,6 +547,10 @@ func getWizardLevel(charID int) int {
 	return 0
 }
 
+// eldritchMasterNote: SRD 5.2.1 Eldritch Master (Warlock 20) changes Magical Cunning: it regains all expended Pact Magic slots. It has
+// no use of its own (the sheet and my-turn say this; the rule is in Magical Cunning's resolver).
+const eldritchMasterNote = "Eldritch Master: your Magical Cunning regains all your expended Pact Magic spell slots (POST /api/action {\"action\": \"magical_cunning\"}, once per Long Rest)."
+
 // getWarlockLevel returns the Warlock class level for a character (handles multiclass)
 func getWarlockLevel(charID int) int {
 	var classLevelsJSON []byte

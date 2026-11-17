@@ -1286,7 +1286,7 @@ func handleCharacterByID(w http.ResponseWriter, r *http.Request) {
 	if pendingASI > 0 {
 		response["asi_available"] = true
 		response["asi_message"] = fmt.Sprintf("You have %d ability score improvement points to spend! POST /api/characters/%d/asi with {\"ability\": \"str|dex|con|int|wis|cha\", \"points\": 1-2} OR take a feat (costs 2 points): POST /api/characters/%d/feat with {\"feat\": \"slug\"}", pendingASI, charID, charID)
-		response["feat_option"] = fmt.Sprintf("Instead of ability increases, you can take a feat for 2 ASI points. GET /api/characters/%d/feat for available feats.", charID)
+		response["feat_option"] = featOptionNote(charID)
 	}
 
 	// Add exhaustion effects if exhausted
@@ -1919,20 +1919,9 @@ func handleCharacterByID(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 
-	// Warlock Eldritch Master (level 20)
-	warlockLevel = getWarlockLevel(charID)
-	if warlockLevel >= 20 {
-		var eldritchMasterUsed bool
-		db.QueryRow("SELECT COALESCE(eldritch_master_used, false) FROM characters WHERE id = $1", charID).Scan(&eldritchMasterUsed)
-
-		response["eldritch_master"] = map[string]interface{}{
-			"available":    !eldritchMasterUsed,
-			"used":         eldritchMasterUsed,
-			"recovers_on":  "long rest",
-			"casting_time": "1 minute",
-			"description":  "Spend 1 minute entreating your patron to regain all expended Pact Magic spell slots.",
-			"how_to_use":   "POST /api/characters/eldritch-master with character_id",
-		}
+	// Warlock Eldritch Master (level 20): what it changes is Magical Cunning's (an action type, action_types_2024.go)
+	if warlockLevel = getWarlockLevel(charID); warlockLevel >= 20 {
+		response["eldritch_master"] = eldritchMasterNote
 	}
 
 	// Wizard Signature Spells (level 20)

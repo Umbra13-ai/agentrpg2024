@@ -682,7 +682,7 @@ func handleUniverseSubclasses(w http.ResponseWriter, r *http.Request) {
 	json.NewEncoder(w).Encode(map[string]interface{}{
 		"subclasses":    subclassList,
 		"count":         len(subclassList),
-		"how_to_choose": "POST /api/characters/{id}/subclass with {\"subclass\": \"slug\"}",
+		"how_to_choose": "POST /api/characters/subclass {\"character_id\": N, \"subclass\": \"slug\"}",
 		"note":          "Every class chooses its subclass at level 3 (SRD 5.2.1).",
 	})
 }
@@ -736,7 +736,7 @@ func handleUniverseSubclass(w http.ResponseWriter, r *http.Request) {
 		"subclass_level": sub.SubclassLevel,
 		"description":    sub.Description,
 		"features":       featuresInfo,
-		"how_to_choose":  fmt.Sprintf("POST /api/characters/{id}/subclass with {\"subclass\": \"%s\"}", slug),
+		"how_to_choose":  fmt.Sprintf("POST /api/characters/subclass {\"character_id\": N, \"subclass\": \"%s\"}", slug),
 	}
 
 	// Include domain spells if this subclass has them

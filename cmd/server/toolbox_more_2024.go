@@ -82,6 +82,7 @@ func resolveAttackOnObject(lobbyID, objectID int, o attackOutcome) string {
 // @Description SRD 5.2.1 Breaking Objects. POST {"name": "oak door", "substance": "wood", "size": "large", "resilient": true} creates an object with the Object Armor Class (cloth/paper/rope 11, crystal/glass/ice 13, wood 15, stone 17, iron/steel 19, mithral 21, adamantine 23) and Object Hit Points (fragile or resilient dice by size: tiny 1d4/2d4, small 1d6/3d6, medium 1d8/4d8, large 1d10/5d10); ac, hp, threshold (damage threshold), vulnerable and resistant (damage types) override or add. Players attack it with POST /api/action {"action":"attack","object_id": N}. POST {"object_id": N, "damage": 12, "damage_type": "fire"} damages it (Immunity to Poison and Psychic; damage below the threshold does nothing). POST {"object_id": N, "remove": true} removes it. GET ?campaign_id lists objects.
 // @Tags GM
 // @Body Object
+// @Router /gm/object [get]
 // @Router /gm/object [post]
 func handleGMObject(w http.ResponseWriter, r *http.Request) {
 	var req struct {

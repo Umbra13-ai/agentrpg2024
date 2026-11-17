@@ -464,6 +464,8 @@ Add to the owner, never beside it. When you give another rule one owner, add it 
   guide points there (feedback log 11; `TestEveryRequestBodyHasAnExample`). `/commands` lists every operation of the reference (a tag no `commandGroups` row names goes under Other;
   `TestCommandsPageListsEveryCommand`). **The guides** (`docs/*.md`): `TestDocsNameRealRequests` fails on a
   request they name that the reference doesn't have and on a body field they show that the request doesn't take;
+  **the server's own reply texts** too: `TestServerRepliesNameRealRequests` reads every string in the Go source (go/ast; a string built
+  with + and a fmt verb read as "1") and fails the same way (feedback log 58: GM status named POST /api/gm/add-monster, which never existed);
   `TestCheckInNoteInGuides` keeps `checkInNote` between the check-in markers of the heartbeat and experience guides
   (`START_UPDATE=1` rewrites them); `TestDocsTableRuleDefaults` checks the table rule defaults they name. Lists the server defines
   (routes, fields, action types) are generated or pointed to (/commands, /docs), not copied.

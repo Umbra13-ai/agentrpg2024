@@ -2,6 +2,7 @@ package main
 
 import (
 	"encoding/json"
+	"fmt"
 	"os"
 	"path/filepath"
 	"regexp"
@@ -146,7 +147,10 @@ func topLevelKeys(obj string) []string {
 	return keys
 }
 
-func TestDocsNameRealRequests(t *testing.T) {
+// namedRequestCheck builds the check of a named request against the API reference: the route with that method must exist, and
+// every top-level field of a body shown with it must be one its reader takes (the analysis of TestAPIShapes). check returns the
+// problems ("" when none) and whether the route was found.
+func namedRequestCheck(t *testing.T) func(method, path, body string) []string {
 	var spec struct {
 		Paths map[string]map[string]json.RawMessage `json:"paths"`
 	}
@@ -182,6 +186,42 @@ func TestDocsNameRealRequests(t *testing.T) {
 		}
 		fields[strings.ToUpper(sh.Method)+" "+sh.Path] = f
 	}
+	return func(method, path, body string) []string {
+		path = strings.SplitN(path, "?", 2)[0]
+		path = strings.TrimRight(path, ".:,)`")
+		path = regexp.MustCompile(`<[^>]+>`).ReplaceAllString(path, "x")
+		var hit *route
+		for i := range routes {
+			if routes[i].method == method && routes[i].rx.MatchString(path) {
+				hit = &routes[i]
+				break
+			}
+		}
+		if hit == nil {
+			return []string{fmt.Sprintf("names %s %s, which the API reference doesn't have", method, path)}
+		}
+		if body == "" || method == "GET" {
+			return nil
+		}
+		takes, ok := fields[method+" "+hit.path]
+		if !ok {
+			return nil
+		}
+		var out []string
+		for _, k := range topLevelKeys(body) {
+			if strings.Contains(k, "...") || strings.HasPrefix(k, "<") {
+				continue
+			}
+			if !takes[game.Key(k)] {
+				out = append(out, fmt.Sprintf("shows %s %s with field %q, which that request doesn't take", method, hit.path, k))
+			}
+		}
+		return out
+	}
+}
+
+func TestDocsNameRealRequests(t *testing.T) {
+	check := namedRequestCheck(t)
 	docs, _ := filepath.Glob("../../docs/*.md")
 	if len(docs) < 5 {
 		t.Fatalf("found %d guides", len(docs))
@@ -195,34 +235,8 @@ func TestDocsNameRealRequests(t *testing.T) {
 		name := filepath.Base(doc)
 		for _, rq := range docRequests(name, string(b)) {
 			n++
-			path := strings.SplitN(rq.path, "?", 2)[0]
-			path = strings.TrimRight(path, ".:,)`")
-			path = regexp.MustCompile(`<[^>]+>`).ReplaceAllString(path, "x")
-			var hit *route
-			for i := range routes {
-				if routes[i].method == rq.method && routes[i].rx.MatchString(path) {
-					hit = &routes[i]
-					break
-				}
-			}
-			if hit == nil {
-				t.Errorf("%s:%d names %s %s, which the API reference doesn't have", name, rq.line, rq.method, path)
-				continue
-			}
-			if rq.body == "" || rq.method == "GET" {
-				continue
-			}
-			takes, ok := fields[rq.method+" "+hit.path]
-			if !ok {
-				continue
-			}
-			for _, k := range topLevelKeys(rq.body) {
-				if strings.Contains(k, "...") || strings.HasPrefix(k, "<") {
-					continue
-				}
-				if !takes[game.Key(k)] {
-					t.Errorf("%s:%d shows %s %s with field %q, which that request doesn't take", name, rq.line, rq.method, hit.path, k)
-				}
+			for _, p := range check(rq.method, rq.path, rq.body) {
+				t.Errorf("%s:%d %s", name, rq.line, p)
 			}
 		}
 	}

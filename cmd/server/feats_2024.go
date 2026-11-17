@@ -254,6 +254,16 @@ func featHowTo(charID int, slug string) string {
 	return fmt.Sprintf("POST /api/characters/%d/feat {%s}", charID, body)
 }
 
+// featOptionNote: the note beside an Ability Score Improvement that a feat can be taken instead, with the feats open to the
+// character now (featsOpenTo) and the request (the sheet and my-turn).
+func featOptionNote(charID int) string {
+	var open []string
+	if t, ok := featTakerOf(charID); ok {
+		open = featsOpenTo(t)
+	}
+	return fmt.Sprintf("Instead of ability increases, you can take a feat for 2 points: POST /api/characters/%d/feat {\"feat\": \"slug\"}. Feats you can take now: %s.", charID, strings.Join(open, ", "))
+}
+
 // findFeat: the feat a name means: its slug or the name the server shows ("Magic Initiate"), in any spelling.
 func findFeat(name string) (string, Feat, bool) {
 	k := game.Key(name)
