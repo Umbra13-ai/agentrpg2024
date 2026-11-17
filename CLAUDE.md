@@ -71,6 +71,11 @@ Add to the owner, never beside it. When you give another rule one owner, add it 
   item's) builds an `attackCtx` and calls `roll()`. A new source of Advantage or Disadvantage is one row in
   `attackSources`. Never roll a d20 for an attack anywhere else. An effect that depends on the outcome (a Weapon Mastery,
   Sneak Attack, a smite) is told after the outcome and only when it happens, never as a note written before the roll.
+  **Damage a hit adds** (Hunter's Mark, Hex, Divine Favor, Divine Strike, Enlarge/Reduce, the Helm of Brilliance's flames, the Bracers
+  of Archery) is one row of `hitRiders` (`cmd/server/hit_riders_2024.go`: which attacks it applies to, its dice and its own damage
+  type); every character attack that hits asks `hitRiderDamage` once after the outcome (`resolveAttackOnMonster` for the weapon
+  routes, `dealHitRiders` for spell attacks, each beam, the Dancing Sword and the Ring of the Ram). Each beam of a beam spell is
+  said by the attack owner (feedback log 63, 64; `TestPostgresHitRiders`).
   **A character's weapon attack bonus and damage modifier** (the ability used, proficiency, a magic weapon's +N, Archery) is
   `weaponAttackMods` (`cmd/server/weapon_attack_2024.go`): the main and off-hand attacks, the opportunity attack and the sheet's attack
   lines (with the breakdown, `toHit`; every weapon the character has, the ones in hand first, the others marked carried: Matt, Nov 16) read it; what belongs to one moment (Rage, magic ammunition, Sacred Weapon) stays with the attack

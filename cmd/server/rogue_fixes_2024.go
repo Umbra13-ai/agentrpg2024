@@ -140,6 +140,7 @@ func dancingSword(charID int, it invItem, req itemCastReq) string {
 		}
 		res, _ := damageMonster(lobby, req.TargetID, dmg, dtype, out.Critical)
 		text += "! " + strings.TrimRight(strings.TrimSpace(res), ".") + "."
+		text += dealHitRiders(hitInfo{lobby: lobby, char: charID, target: req.TargetID, crit: out.Critical, attack: hitAttack{weapon: name}, damage: dmg, damageType: dtype}) // the owner's attack roll: Hex, Hunter's Mark, Divine Favor
 	} else {
 		text += "."
 	}

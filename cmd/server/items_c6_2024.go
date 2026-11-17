@@ -168,6 +168,7 @@ func ringOfTheRam(charID int, it invItem, req itemCastReq, description string) s
 	var res string
 	if req.TargetID < 0 {
 		res, _ = damageMonster(lobby, req.TargetID, dmg, "force", out.Critical)
+		res = strings.TrimRight(strings.TrimSpace(res), ".") + "." + dealHitRiders(hitInfo{lobby: lobby, char: charID, target: req.TargetID, crit: out.Critical, attack: hitAttack{item: true}, damage: dmg, damageType: "force"}) // the wearer's attack roll: Hex, Hunter's Mark
 	} else {
 		res = damageCharacter(req.TargetID, dmg, "force", out.Critical)
 	}

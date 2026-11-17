@@ -389,6 +389,7 @@ func spellMeleeAttack(charID, lobby, monster int, dice, dtype, what string) stri
 		dmg = 0
 	}
 	res, _ := damageMonster(lobby, monster, dmg, dtype)
+	res += dealHitRiders(hitInfo{lobby: lobby, char: charID, target: monster, crit: out.Critical, attack: hitAttack{spell: true}, damage: dmg, damageType: dtype}) // Hex, Hunter's Mark
 	return fmt.Sprintf("%s%s! %s takes %d %s damage. %s", ar.LineForAttacker(sa.name, out), rollNote, tname, dmg, titleCase(dtype), strings.TrimSpace(res))
 }
 

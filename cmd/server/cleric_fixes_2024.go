@@ -23,38 +23,6 @@ import (
 
 var divineStrikeUsed sync.Map // charID -> the combat turn marker of the turn the Divine Strike was dealt
 
-// divineStrikeHit: Blessed Strikes (Divine Strike), once on each of the Cleric's turns when a weapon attack hits: 1d8 Radiant (or
-// Necrotic, "necrotic" in the description) from level 7, 2d8 from level 14. Out of combat each attack counts as its own turn.
-func divineStrikeHit(lobbyID, charID int, monsterKey string, crit bool, description string) (int, string) {
-	class, _, level := subclassOf(charID)
-	if !strings.EqualFold(class, "cleric") || level < 7 || !choseBlessedStrikesDivine(charID) {
-		return 0, ""
-	}
-	if marker := combatTurnMarker(lobbyID); marker != "" {
-		if v, ok := divineStrikeUsed.Load(charID); ok && v.(string) == marker {
-			return 0, ""
-		}
-		divineStrikeUsed.Store(charID, marker)
-	}
-	dice := "1d8"
-	if level >= 14 {
-		dice = "2d8"
-	}
-	dtype := "radiant"
-	if strings.Contains(strings.ToLower(description), "necrotic") {
-		dtype = "necrotic"
-	}
-	d, how := adjustMonsterDamage(monsterKey, dtype, game.RollDamage(dice, crit))
-	note := fmt.Sprintf(" Divine Strike: +%d %s (%s)", d, titleCase(dtype), dice)
-	if how == "immune" {
-		return 0, fmt.Sprintf(" Divine Strike: it is immune to %s damage.", titleCase(dtype))
-	}
-	if how == "resistant" {
-		note += ", resisted"
-	}
-	return d, note
-}
-
 // maceOfDisruptionHit: a hit on a Fiend or an Undead with the Mace of Disruption (attuned) deals 2d6 Radiant more; if the target has 25
 // Hit Points or fewer after that, it makes a DC 15 Wisdom save or is destroyed; on a success it is Frightened until the end of the
 // attacker's next turn.

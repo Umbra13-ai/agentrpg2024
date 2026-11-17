@@ -173,15 +173,6 @@ func helmOfBrilliance(charID int, it invItem, description string) string {
 		g["fire opal"], g["diamond"], g["ruby"], g["opal"])
 }
 
-// helmFlamesHit: +1d6 Fire on a hit with the blazing weapon.
-func helmFlamesHit(charID int, monsterKey string, crit bool) (int, string) {
-	if _, on := charBuff(charID, "helm_flames"); !on {
-		return 0, ""
-	}
-	d, how := adjustMonsterDamage(monsterKey, "fire", game.RollDamage("1d6", crit))
-	return d, fmt.Sprintf(" Helm of Brilliance flames: +%d Fire%s.", d, map[string]string{"resistant": " (it resists)", "immune": " (it is immune)", "vulnerable": " (it is vulnerable)"}[how])
-}
-
 // ---------------------------------------------------------------- weapons
 
 func giantSlayerHit(lobbyID, targetID int, monsterKey, name, heldItem string, crit bool) (int, string) {
@@ -371,18 +362,6 @@ func weaponOfWarning(lobbyID, id int) bool {
 		}
 	}
 	return false
-}
-
-// bracersOfArchery: +2 damage with a Longbow or Shortbow while the bracers are worn and attuned.
-func bracersOfArchery(charID int, weapon string) (int, string) {
-	w := strings.ToLower(weapon)
-	if !strings.Contains(w, "longbow") && !strings.Contains(w, "shortbow") {
-		return 0, ""
-	}
-	if _, ok := itemActive(charID, "bracers of archery", "worn"); !ok {
-		return 0, ""
-	}
-	return 2, " Bracers of Archery: +2."
 }
 
 var swornEnemy sync.Map // charID -> the Oathbow's sworn enemy (a monster id)

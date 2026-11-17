@@ -682,18 +682,6 @@ func buffWeaponPlus(charID int, weapon string) int {
 	return atoiSafe(parts[0])
 }
 
-// divineFavorHit: Divine Favor adds 1d4 Radiant damage to a weapon hit.
-func divineFavorHit(charID int, monsterKey, weapon string, crit bool) (int, string) {
-	if strings.Contains(strings.ToLower(weapon), "unarmed") {
-		return 0, ""
-	}
-	if _, ok := charBuff(charID, "divine_favor"); !ok {
-		return 0, ""
-	}
-	d, how := adjustMonsterDamage(monsterKey, "radiant", game.RollDamage("1d4", crit))
-	return d, fmt.Sprintf(" Divine Favor: +%d Radiant%s.", d, map[string]string{"resistant": " (it resists)", "immune": " (it is immune)", "vulnerable": " (it is vulnerable)"}[how])
-}
-
 // buffDamageGuard: Mind Blank (Psychic immunity); Stoneskin, Fire Shield, Protection from Energy, Protection from Poison, Heroes'
 // Feast, Warding Bond (resistances).
 func buffDamageGuard(charID int, damageType string) (immune, resist bool, why string) {

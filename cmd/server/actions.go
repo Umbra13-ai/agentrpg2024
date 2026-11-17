@@ -1698,22 +1698,6 @@ func resolveActionWithBonusDash(action, description string, charID int, bonusDas
 			}
 		}
 
-		// Check for Life Cleric's Divine Strike
-		// Extra 1d8 radiant damage once per turn on weapon attacks (level 8+), 2d8 at level 14+
-		divineStrikeNote := ""
-		if strings.ToLower(class) == "cleric" && level >= 7 && choseBlessedStrikesDivine(charID) {
-			var divineStrikeDmg int
-			if level >= 14 {
-				divineStrikeDmg = game.RollDamage("2d8", crit)
-				dmg += divineStrikeDmg
-				divineStrikeNote = fmt.Sprintf(" (+%d Divine Strike, %s radiant)", divineStrikeDmg, critDice("2d8", crit))
-			} else {
-				divineStrikeDmg = game.RollDamage("1d8", crit)
-				dmg += divineStrikeDmg
-				divineStrikeNote = fmt.Sprintf(" (+%d Divine Strike, %s radiant)", divineStrikeDmg, critDice("1d8", crit))
-			}
-		}
-
 		// Check for Rogue's Sneak Attack
 		// Extra damage once per turn with finesse/ranged weapon when have advantage or ally adjacent to target
 		sneakAttackNote := ""
@@ -1764,14 +1748,19 @@ func resolveActionWithBonusDash(action, description string, charID int, bonusDas
 		ldDmg, lifedrinkerNote := lifedrinker2024(charID, class, level, isRangedAttack, crit, description) // Lifedrinker (2024)
 		dmg += ldDmg
 
-		// Hunter's Mark / Hex bonus damage on normal hit
-		// +1d6 damage to attacks against marked target
-		markDmg, markNote := getMarkBonusDamage(charID, targetID, crit)
-		dmg += markDmg
+		// The riders of a hit (Hunter's Mark, Hex, Divine Strike ...: hit_riders_2024.go) are dealt by resolveAttackOnMonster once the
+		// monster is known; at a character, or a roll the GM judges (no target), they are said with the damage, before resistances.
+		markNote := ""
+		if atk.target >= 0 {
+			rd, rnote, _ := hitRiderDamage(hitInfo{lobby: lobbyID, char: charID, target: atk.target, crit: crit, attack: hitAttack{unarmed: !hasWeapon, weapon: weaponName},
+				damage: dmg, damageType: attackDamageType(hasWeapon, weapon)})
+			dmg += rd
+			markNote = rnote
+		}
 
 		// Include power attack note in normal hit result
-		recordAttackOutcome(charID, attackOutcome{Weapon: weaponName, Total: totalAttack, Natural: attackRoll, Crit: crit, Fumble: attackRoll == 1, Roll: rolled, Out: out, Judged: atk.target != 0, Hit: out.Hit, Damage: dmg, DamageType: attackDamageType(hasWeapon, weapon), RollInfo: archeryNote + powerAttackNote + rollExtra, SneakUsed: sneakAttackNote != "", SneakNote: gwfNote + duelingNote + sneakAttackNote + colossusSlayerNote + divineStrikeNote + divineSmiteNote + lifedrinkerNote + markNote, Dice: damageDice, DiceMod: damageMod})
-		extras := gwfNote + duelingNote + colossusSlayerNote + divineStrikeNote + sneakAttackNote + divineSmiteNote + lifedrinkerNote + markNote
+		recordAttackOutcome(charID, attackOutcome{Weapon: weaponName, Total: totalAttack, Natural: attackRoll, Crit: crit, Fumble: attackRoll == 1, Roll: rolled, Out: out, Judged: atk.target != 0, Hit: out.Hit, Damage: dmg, DamageType: attackDamageType(hasWeapon, weapon), RollInfo: archeryNote + powerAttackNote + rollExtra, SneakUsed: sneakAttackNote != "", SneakNote: gwfNote + duelingNote + sneakAttackNote + colossusSlayerNote + divineSmiteNote + lifedrinkerNote + markNote, Dice: damageDice, DiceMod: damageMod})
+		extras := gwfNote + duelingNote + colossusSlayerNote + sneakAttackNote + divineSmiteNote + lifedrinkerNote + markNote
 		head := rolled.HeadForAttacker("Attack with "+weaponName, out) + archeryNote + powerAttackNote + rollExtra
 		switch {
 		case autoCritReason != "":
@@ -2338,6 +2327,7 @@ func resolveActionWithBonusDash(action, description string, charID int, bonusDas
 				materialConsumedNote = fmt.Sprintf(" [Consumed: %s]", materialToConsume)
 			}
 			materialConsumedNote += takeSpellRecallNote(charID)
+			materialConsumedNote += markCastNote(charID, spellKey, description) // Hunter's Mark, Hex (hit_riders_2024.go)
 
 			// Mark once-per-rest invocation spell as used
 			if oncePerRestInvocation != "" {

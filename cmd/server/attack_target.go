@@ -385,32 +385,14 @@ func resolveAttackOnMonster(lobbyID, charID, targetID int, o attackOutcome, clea
 		vorpalNote += wtext
 	}
 	if hp > 0 {
-		vorpalNote += remarkableAthleteNote(charID, o.Crit)                                                           // Champion (fighter_fixes_2024.go, F94)
-		if dx, dt := divineStrikeHit(lobbyID, charID, fmt.Sprint(t["monster_key"]), o.Crit, ""); dx > 0 || dt != "" { // Blessed Strikes (cleric_fixes_2024.go, F82)
-			hp -= dx
-			extraDmg += dx
-			vorpalNote += dt
-		}
-		if dx, dt := enlargeHit(lobbyID, charID, dmg+extraDmg); dx != 0 { // Enlarge/Reduce (spells_more_2024.go)
-			hp -= dx
-			extraDmg += dx
-			vorpalNote += dt
-		}
-		if dx, dt := divineFavorHit(charID, fmt.Sprint(t["monster_key"]), o.Weapon, o.Crit); dx > 0 { // Divine Favor (buff_spells_2024.go)
-			hp -= dx
-			extraDmg += dx
-			vorpalNote += dt
-		}
-		if dx, dt := helmFlamesHit(charID, fmt.Sprint(t["monster_key"]), o.Crit); dx > 0 { // Helm of Brilliance (F152)
-			hp -= dx
-			extraDmg += dx
-			vorpalNote += dt
-		}
-		if dx, dt := bracersOfArchery(charID, o.Weapon); dx > 0 { // Bracers of Archery (items_c4_2024.go)
-			hp -= dx
-			extraDmg += dx
-			vorpalNote += dt
-		}
+		vorpalNote += remarkableAthleteNote(charID, o.Crit) // Champion (fighter_fixes_2024.go, F94)
+		// the riders of a hit: Hunter's Mark, Hex, Divine Favor, Divine Strike, Enlarge, the Helm's flames ... (hit_riders_2024.go)
+		rx, rtext, _ := hitRiderDamage(hitInfo{lobby: lobbyID, char: charID, target: targetID, monsterKey: fmt.Sprint(t["monster_key"]), crit: o.Crit,
+			attack: hitAttack{unarmed: strings.Contains(strings.ToLower(o.Weapon), "unarmed"), weapon: o.Weapon},
+			damage: dmg + extraDmg, damageType: o.DamageType})
+		hp -= rx
+		extraDmg += rx
+		vorpalNote += rtext
 	}
 	if v, ok := attackExtraNote.LoadAndDelete(charID); ok {
 		vorpalNote += v.(string)
@@ -472,6 +454,7 @@ func resolveAttackOnMonster(lobbyID, charID, targetID int, o attackOutcome, clea
 			applyCondition(lobbyID, targetID, "unconscious", "knocked out", 600, "", 0)
 		}
 	}
+	text = strings.TrimSuffix(strings.TrimSpace(text), ".") // a note that ends its own sentence (Hex: +3 Necrotic.)
 	if knockedOut {
 		text += fmt.Sprintf(". %s is knocked out: it drops Unconscious at 1 Hit Point (it wakes after a Short Rest, if it regains Hit Points, or with first aid: DC 10 Wisdom (Medicine)).", name)
 	} else if hp == 0 {

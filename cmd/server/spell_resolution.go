@@ -87,28 +87,39 @@ func resolveSpellOnMonster(charID int, spellKey string, spell SRDSpell, damageDi
 	var lines []string
 
 	if count, beamDice, auto := beamPlan(spellKey, spell.Level, slotLevel, charLevel); count > 0 {
+		// Each beam is its own attack roll, said by the attack owner (its d20, total and every reason for Advantage or
+		// Disadvantage), and each hit gets the hit riders (Hex, Hunter's Mark: hit_riders_2024.go).
 		total, hits := 0, 0
+		var beams []string
 		for i := 0; i < count; i++ {
 			crit := false
+			label := fmt.Sprintf("Beam %d", i+1)
 			if !auto { // Magic Missile hits without a roll
-				_, out, _ := spellAttack()
+				ar, out, rollNote := spellAttack()
 				if !out.Hit {
+					beams = append(beams, fmt.Sprintf("%s: %s%s.", label, ar.LineForAttacker(attackName, out), rollNote))
 					continue
 				}
 				crit = out.Critical
+				label = fmt.Sprintf("%s: %s%s", label, ar.LineForAttacker(attackName, out), rollNote)
 			}
 			d := game.RollDamage(beamDice, crit)
 			if invocationOn(charID, "agonizing-blast", spellKey) && game.Modifier(spellModScore(charID)) > 0 {
 				d += game.Modifier(spellModScore(charID))
 			}
+			riders := ""
+			if !auto {
+				riders = dealHitRiders(hitInfo{lobby: lobbyID, char: charID, target: monster, crit: crit, attack: hitAttack{spell: true}, damage: d, damageType: dtype})
+			}
+			beams = append(beams, fmt.Sprintf("%s, %d %s damage.%s", label, d, dtype, riders))
 			total += d
 			hits++
 		}
 		if total == 0 {
-			return fmt.Sprintf(" Against %s: all %d missed.", name, count)
+			return fmt.Sprintf(" Against %s: all %d missed. %s", name, count, strings.Join(beams, " "))
 		}
 		text, _ := damageMonster(lobbyID, monster, total, dtype)
-		return fmt.Sprintf(" Against %s: %d of %d hit for %d %s damage. %s", name, hits, count, total, dtype, text)
+		return fmt.Sprintf(" Against %s: %d of %d hit for %d %s damage. %s %s", name, hits, count, total, dtype, strings.Join(beams, " "), text)
 	}
 
 	switch {
@@ -134,6 +145,8 @@ func resolveSpellOnMonster(charID int, spellKey string, spell SRDSpell, damageDi
 			text += killEffectNote(charID) // Dark One's Blessing (F134)
 		}
 		text += spellRider(lobbyID, charID, monster, spellKey) // Guiding Bolt, Ray of Frost, Chill Touch ... (F250)
+		// Hex, Hunter's Mark (hit_riders_2024.go)
+		text += dealHitRiders(hitInfo{lobby: lobbyID, char: charID, target: monster, crit: out.Critical, attack: hitAttack{spell: true}, damage: d, damageType: dtype})
 		lines = append(lines, fmt.Sprintf(" %s%s, %d %s damage. %s", ar.LineForAttacker(attackName, out), rollNote, d, dtype, text))
 	case spell.SavingThrow != "" || len(spell.DamageParts) > 0:
 		ability := saveAbilityKey(spell.SavingThrow)
