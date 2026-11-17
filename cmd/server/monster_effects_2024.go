@@ -6,8 +6,11 @@ package main
 //	                     Frightened condition until the end of its next turn. Success: Half damage." Each target rolls its save
 //	                     (saveCtx, save_2024.go: proficiency, Aura of Protection, Bless, Exhaustion ...); the damage is rolled once; Evasion
 //	                     halves or cancels Dexterity save damage; conditions get their duration ("until the start of its next turn",
-//	                     "until the end of its next turn", "for 1 minute", a repeated save at the end of each turn); Exhaustion levels
-//	                     are added; anything else in the Failure text is shown to the GM.
+//	                     "until the end of its next turn", "for 1 minute", "After 1 minute, it succeeds automatically", a repeated save
+//	                     at the end of each turn); what lasts with the first condition (damage at the start or end of each of the
+//	                     target's turns, "can't regain Hit Points", a grapple's escape DC) is recorded on its condition record, where the
+//	                     turn hooks and the Hit Point owner act on it (feedback log 66); Exhaustion levels are added; anything else in
+//	                     the Failure text is shown to the GM.
 //	attack               "makes one Rend attack" (or "one Claw or Tail attack": use picks one) -> the stat block's attack.
 //	another action       "uses Lightning Strike" -> that action of the stat block.
 //	spell                "uses Spellcasting to cast Scorching Ray (level 3 version)" / "casts Fear" -> the spell from the SRD data,
@@ -40,12 +43,27 @@ var (
 	mfxEmanRe     = regexp.MustCompile(`(\d+)\s*-?\s*foot Emanation`)
 	mfxDurationRe = regexp.MustCompile(`(?i)(?:until the (?:start|end) of (?:its|the [^ ]+) next turn|for 1 (?:minute|hour)|for 24 hours)`)
 	mfxPlainDmgRe = regexp.MustCompile(`takes (\d+) \((\d+d\d+(?:\s*[+−-]\s*\d+)?)\) ([A-Za-z]+) damage`)
-	mfxConditions = map[string]bool{"blinded": true, "charmed": true, "deafened": true, "frightened": true, "grappled": true, "incapacitated": true,
+	// the lasting parts of a Failure (feedback log 66): damage at the start or the end of each of the target's turns, written either way
+	// round ("takes 21 (6d6) Poison damage at the start of each of its turns"; "At the start of each of its turns, the Restrained target
+	// takes 21 (6d6) Thunder damage"), no healing, the repeated save, and an end after 1 minute
+	mfxTurnDmgRe     = regexp.MustCompile(`takes (\d+) \((\d+d\d+(?:\s*[+−-]\s*\d+)?)\) ([A-Za-z]+) damage at the (start|end) of each of its turns`)
+	mfxTurnDmgLeadRe = regexp.MustCompile(`At the (start|end) of each of its turns, the [^.,]*?takes (\d+) \((\d+d\d+(?:\s*[+−-]\s*\d+)?)\) ([A-Za-z]+) damage`)
+	mfxNoHealRe      = regexp.MustCompile(`can[’']t regain Hit Points( unless)?`)
+	mfxEndSaveRe     = regexp.MustCompile(`(?:(?:,? and )?(?:it )?repeats the save at the end of each of its turns|At the end of each of its turns, the target repeats the save)(?:, ending the effect on itself on a success)?`)
+	mfxAutoEndRe     = regexp.MustCompile(`After 1 (minute|hour), it succeeds automatically`)
+	mfxEscapeRe      = regexp.MustCompile(`\(escape DC (\d+)\)`)
+	mfxWhileRe       = regexp.MustCompile(`(?:While|Until) (?:[A-Z][a-z]+|this poison ends|the grapple ends),\s*`)
+	mfxConditions    = map[string]bool{"blinded": true, "charmed": true, "deafened": true, "frightened": true, "grappled": true, "incapacitated": true,
 		"invisible": true, "paralyzed": true, "petrified": true, "poisoned": true, "prone": true, "restrained": true, "stunned": true, "unconscious": true}
 )
 
 func normDice(d string) string {
 	return strings.ReplaceAll(strings.ReplaceAll(d, " ", ""), "−", "-")
+}
+
+// withoutTurnDamage is a text without its damage at the start or the end of each of the target's turns.
+func withoutTurnDamage(s string) string {
+	return mfxTurnDmgLeadRe.ReplaceAllString(mfxTurnDmgRe.ReplaceAllString(s, ""), "")
 }
 
 // mfxSection cuts the text after a label up to the next label.
@@ -71,7 +89,7 @@ type saveEffect struct {
 	Damage        []damagePart
 	HalfOnSuccess bool
 	Conditions    []string
-	Rounds        int    // condition duration in rounds (0: until removed)
+	Rounds        int    // condition duration in rounds (0: until removed; "After 1 minute, it succeeds automatically": 10)
 	UntilStart    bool   // "until the start of its next turn"
 	EndSave       bool   // repeats the save at the end of each of its turns
 	Exhaustion    int    // Exhaustion levels on a failure
@@ -84,6 +102,12 @@ type saveEffect struct {
 	SingleTarget  bool   // aimed only at one creature, no area (Spell Absorption, Ring of Spell Turning's Reaction)
 	SourceID      int    // the monster it comes from
 	FromUndead    bool   // it comes from an Undead (the Scarab of Protection)
+
+	// what lasts with the first condition (feedback log 66), recorded on its condition record and applied by the turn hooks and the
+	// Hit Point owner; without a condition to carry them they stay in Extra for the GM
+	TurnDamage []conditionTurnDamage // damage at the start or the end of each of the target's turns
+	NoHealing  bool                  // the target can't regain Hit Points
+	EscapeDC   int                   // "(escape DC 14)": a Grappled target's escape checks
 }
 
 // parseSaveEffect reads a saving throw effect from a stat block text. ok is false when there is none.
@@ -102,17 +126,37 @@ func parseSaveEffect(text string) (saveEffect, bool) {
 	if strings.Contains(text, "Failure or Success:") && strings.Index(text, "Success:") == strings.Index(text, "Failure or Success:")+len("Failure or ") {
 		succ = "" // the only "Success:" is the one of "Failure or Success:"
 	}
-	for _, d := range mfxDamageRe.FindAllStringSubmatch(fail, -1) {
+	// damage at the start or the end of each of the target's turns is not dealt now
+	var turnDmg []conditionTurnDamage
+	for _, d := range mfxTurnDmgRe.FindAllStringSubmatch(fail, -1) {
+		turnDmg = append(turnDmg, conditionTurnDamage{Dice: normDice(d[2]), Type: strings.ToLower(d[3]), When: d[4] + "_of_turn"})
+	}
+	for _, d := range mfxTurnDmgLeadRe.FindAllStringSubmatch(fail, -1) {
+		turnDmg = append(turnDmg, conditionTurnDamage{Dice: normDice(d[3]), Type: strings.ToLower(d[4]), When: d[1] + "_of_turn"})
+	}
+	for _, d := range mfxDamageRe.FindAllStringSubmatch(withoutTurnDamage(fail), -1) {
 		e.Damage = append(e.Damage, damagePart{Dice: normDice(d[2]), Type: strings.ToLower(d[3])})
 	}
 	low := strings.ToLower(succ)
 	e.HalfOnSuccess = strings.Contains(low, "half damage") || strings.Contains(low, "half as much damage")
 	e.Immunity = strings.Contains(low, "immune to this")
+	firstCond := "" // the clause of the conditions applied
 	if c := mfxCondRe.FindStringSubmatch(fail); c != nil {
+		firstCond = c[0]
 		for _, name := range regexp.MustCompile(`, | and | or `).Split(c[1], -1) {
 			if n := strings.ToLower(strings.TrimSpace(name)); mfxConditions[n] {
 				e.Conditions = append(e.Conditions, n)
 			}
+		}
+	}
+	lasting := len(e.Conditions) > 0 // the lasting parts need a condition record to carry them
+	if lasting {
+		e.TurnDamage = turnDmg
+		if m := mfxNoHealRe.FindStringSubmatch(fail); m != nil && m[1] == "" { // "can't regain Hit Points unless ...": the GM's
+			e.NoHealing = true
+		}
+		if x := mfxEscapeRe.FindStringSubmatch(fail); x != nil && e.Conditions[0] == "grappled" {
+			e.EscapeDC, _ = strconv.Atoi(x[1])
 		}
 	}
 	lf := strings.ToLower(fail)
@@ -126,22 +170,42 @@ func parseSaveEffect(text string) (saveEffect, bool) {
 	case strings.Contains(lf, "for 1 hour"):
 		e.Rounds = 600
 	}
-	e.EndSave = strings.Contains(lf, "repeats the save at the end of each of its turns")
+	if x := mfxAutoEndRe.FindStringSubmatch(fail); x != nil && e.Rounds == 0 && !e.UntilStart {
+		e.Rounds = map[string]int{"minute": 10, "hour": 600}[x[1]] // "After 1 minute, it succeeds automatically"
+	}
+	e.EndSave = mfxEndSaveRe.MatchString(fail)
 	if x := mfxExhaustRe.FindStringSubmatch(fail); x != nil {
 		e.Exhaustion, _ = strconv.Atoi(x[1])
 	}
 	if x := mfxEmanRe.FindStringSubmatch(text); x != nil {
 		e.Emanation, _ = strconv.Atoi(x[1])
 	}
-	// what the server doesn't apply, for the GM: the Failure sentences that are not only damage or a condition
+	// what the server doesn't apply, for the GM: the Failure sentences with more in them than what is applied above (the damage,
+	// the first condition with its duration and repeated save, and what lasts with it)
 	var extra []string
 	for _, s := range strings.Split(fail, ". ") {
 		ls := strings.ToLower(s)
-		plain := mfxDamageRe.ReplaceAllString(s, "")
-		plain = mfxCondRe.ReplaceAllString(plain, "")
+		plain := s
+		if lasting {
+			plain = withoutTurnDamage(plain)
+		}
+		plain = mfxDamageRe.ReplaceAllString(plain, "")
+		if firstCond != "" && strings.Contains(plain, firstCond) { // only the conditions applied: a later "has the ... condition" is the GM's
+			plain, firstCond = strings.Replace(plain, firstCond, "", 1), ""
+		}
+		if lasting {
+			if e.NoHealing {
+				plain = mfxNoHealRe.ReplaceAllString(plain, "")
+			}
+			if e.EscapeDC > 0 {
+				plain = mfxEscapeRe.ReplaceAllString(plain, "")
+			}
+			plain = mfxWhileRe.ReplaceAllString(plain, "") // "While Poisoned, ...": the record lasts as long as the condition
+		}
+		plain = mfxAutoEndRe.ReplaceAllString(mfxEndSaveRe.ReplaceAllString(plain, ""), "")
 		plain = mfxDurationRe.ReplaceAllString(plain, "")
 		plain = strings.Trim(strings.NewReplacer("The target", "", "and the target", "", "damage", "", ",", "", ".", "").Replace(plain), " ")
-		if strings.Contains(ls, "repeats the save") || strings.Contains(ls, "exhaustion level") || len(plain) < 25 {
+		if strings.Contains(ls, "exhaustion level") || len(plain) < 25 {
 			continue
 		}
 		extra = append(extra, strings.TrimSuffix(strings.TrimSpace(s), "."))
@@ -235,7 +299,7 @@ func applySaveEffect(lobbyID int, source string, e saveEffect, targets []int, ap
 			parts = append(parts, "Evasion")
 		}
 		if !saved {
-			for _, c := range e.Conditions {
+			for i, c := range e.Conditions {
 				a := condAdd{Condition: c, Source: source, Rounds: e.Rounds, SourceID: e.SourceID, Magical: e.IsSpell}
 				if e.EndSave {
 					a.EndSave = &conditionSave{Ability: e.Ability, DC: e.DC}
@@ -243,11 +307,19 @@ func applySaveEffect(lobbyID int, source string, e saveEffect, targets []int, ap
 				if e.UntilStart {
 					a.Notes = "until_start_of_next_turn"
 				}
+				if i == 0 { // what lasts with the effect is carried once, by its first condition, and ends with it
+					a.TurnDamage, a.NoHealing, a.Escapes = e.TurnDamage, e.NoHealing, defaultEscapes(c, e.EscapeDC)
+				}
 				if res := addCondition(lobbyID, tid, a); res.Immune != "" { // the condition owner: Immunity (auras, Mind Blank ...)
 					parts = append(parts, fmt.Sprintf("not %s (%s)", c, res.Immune))
 					continue
 				}
-				parts = append(parts, titleCase(c))
+				said := titleCase(c)
+				rec := conditionRecord{Condition: c, DurationRounds: a.Rounds, EndSave: a.EndSave, TurnDamage: a.TurnDamage, NoHealing: a.NoHealing}
+				if clauses := rec.effectClauses("its", false); len(clauses) > 0 && rec.lasting() {
+					said += " (" + strings.Join(clauses, "; ") + ")" // what lasts with it, as conditions_detail says it
+				}
+				parts = append(parts, said)
 			}
 			if e.Exhaustion > 0 {
 				parts = append(parts, addExhaustion(tid, e.Exhaustion))

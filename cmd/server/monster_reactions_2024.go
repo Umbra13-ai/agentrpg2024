@@ -114,7 +114,7 @@ func resolveMonsterReaction(r *http.Request, lobbyID, id int, meta *monsterMeta,
 		if hit.Total >= hit.AC+bonus {
 			return fmt.Sprintf(" %s: +%d AC; %s still hits.", label, bonus, desc)
 		}
-		_, after, _ := healMonster(lobbyID, id, hit.HPBefore-hit.HPAfter) // the hit's damage given back (monster_hp_2024.go)
+		_, after, _ := undoMonsterDamage(lobbyID, id, hit.HPBefore-hit.HPAfter) // the hit's damage given back (monster_hp_2024.go)
 		lastHitOnMonster.Delete(key)
 		return fmt.Sprintf(" %s: +%d AC; %s is now a miss, its damage undone (%s is back to %d HP).", label, bonus, desc, name, after.HP)
 	}
@@ -170,7 +170,7 @@ func resolveMonsterReaction(r *http.Request, lobbyID, id int, meta *monsterMeta,
 		if back > taken {
 			back = taken
 		}
-		_, after, _ := healMonster(lobbyID, id, back) // the part of the hit taken back (monster_hp_2024.go)
+		_, after, _ := undoMonsterDamage(lobbyID, id, back) // the part of the hit taken back (monster_hp_2024.go)
 		out = fmt.Sprintf("%s uses %s: the damage is reduced by %d (%d of %d taken back; it has %d HP).", name, base, cut, back, taken, after.HP)
 		if back >= taken {
 			out += " The damage is reduced to 0: it can redirect the force (the saving throw in its text; the GM resolves it with monster_action)."
@@ -193,7 +193,7 @@ func resolveMonsterReaction(r *http.Request, lobbyID, id int, meta *monsterMeta,
 		if ally == 0 {
 			return "", true, fmt.Sprintf("Name the ally that takes the attack (target: its name, or target_ids: [its id]); it must be a Small or Medium ally within 5 feet of %s.", name)
 		}
-		healMonster(lobbyID, id, hit.HPBefore-hit.HPAfter) // the hit goes to the ally instead (monster_hp_2024.go)
+		undoMonsterDamage(lobbyID, id, hit.HPBefore-hit.HPAfter) // the hit goes to the ally instead (monster_hp_2024.go)
 		lastHitOnMonster.Delete(key)
 		dmg := hit.HPBefore - hit.HPAfter
 		allyAC := 0

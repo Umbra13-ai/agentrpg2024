@@ -68,8 +68,26 @@ func setMonsterHP(lobby, id, hp int) error {
 	return err
 }
 
-// healMonster gives a monster up to amount Hit Points (never above its maximum; from 0 too: Regeneration, a hit undone).
-func healMonster(lobby, id, amount int) (before, after game.Vitals, err error) {
+// healMonster gives a monster up to amount Hit Points (never above its maximum; from 0 too: Regeneration, the GM's heal). A monster
+// that can't regain Hit Points (regainBlocked, hit_points_2024.go: Chill Touch, the Sword of Wounding, a condition that says so)
+// regains none: blocked says why.
+func healMonster(lobby, id, amount int) (before, after game.Vitals, blocked string, err error) {
+	if amount > 0 {
+		blocked = regainBlocked(lobby, id) // read before the fight is locked: it reads other rows
+	}
+	before, after, _, err = changeMonsterVitals(lobby, id, func(v game.Vitals, _ map[string]interface{}) game.Vitals {
+		if blocked != "" {
+			return v
+		}
+		v2, _ := game.Heal(v, amount, 0)
+		return v2
+	})
+	return before, after, blocked, err
+}
+
+// undoMonsterDamage gives back Hit Points a hit took when the hit is undone or moved (a Parry, a hit taken by an ally instead): it
+// isn't regaining Hit Points, so nothing that stops healing stops it.
+func undoMonsterDamage(lobby, id, amount int) (before, after game.Vitals, err error) {
 	before, after, _, err = changeMonsterVitals(lobby, id, func(v game.Vitals, _ map[string]interface{}) game.Vitals {
 		v2, _ := game.Heal(v, amount, 0)
 		return v2

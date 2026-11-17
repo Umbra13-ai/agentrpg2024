@@ -8,6 +8,8 @@ import (
 	"encoding/json"
 	"fmt"
 	"strings"
+
+	"github.com/agentrpg/agentrpg/game"
 )
 
 // validateEndSave checks the end_save the GM sent and fills in the ability name.
@@ -30,6 +32,48 @@ func validateEndSave(s *conditionSave) string {
 	}
 	s.Ability = ab
 	return ""
+}
+
+// dealConditionTurnDamage: the damage a creature's condition records deal at the start or the end of each of its turns (when), through
+// the Hit Point owner of a character (damageHP: resistances, Temporary Hit Points, damage at 0 Hit Points, Concentration) or of a
+// monster (damageMonster). It runs from the turn hooks (turn_advance_2024.go) and returns the lines, which go to the action log.
+func dealConditionTurnDamage(lobbyID, id int, name, when string) []string {
+	if id == 0 || isCompanionCombatID(id) {
+		return nil
+	}
+	var log []string
+	for _, rec := range loadConditionRecords(lobbyID, id) {
+		for _, d := range rec.TurnDamage {
+			if d.When != when {
+				continue
+			}
+			n := game.RollDamage(d.Dice, false)
+			var took string
+			if id > 0 {
+				hit, err := damageHP(id, oneHit(n, d.Type))
+				if err != nil {
+					logConditionFailure("turn damage", id, err)
+					continue
+				}
+				took = name + " " + hit.Sentence(d.Type)
+			} else {
+				text, ok := damageMonster(lobbyID, id, n, d.Type)
+				if !ok {
+					continue
+				}
+				took = text
+			}
+			phase := "At the end of its turn"
+			if when == "start_of_turn" {
+				phase = "At the start of its turn"
+			}
+			log = append(log, strings.TrimSuffix(fmt.Sprintf("%s, %s deals %s %s damage: %s", phase, rec.phrase(), d.Dice, titleCase(d.Type), took), ".")+".")
+		}
+	}
+	for _, line := range log {
+		recordGMAction(db, lobbyID, "condition", line, line)
+	}
+	return log
 }
 
 // endTurnEffects runs at the end of a turn. endingIndex is the position in the turn order of the creature

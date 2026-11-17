@@ -398,6 +398,17 @@ Add to the owner, never beside it. When you give another rule one owner, add it 
 - **Whether a monster action the GM sends deals its damage:** `damageApplies` (`monster_attacks.go`): yes unless the request says
   `"apply_damage": false` (narrate's `monster_action`, a Legendary Action); a hit's own saving throw is rolled by `parseSaveEffect` /
   `applySaveEffect` (feedback log 62, I-GM-19; `TestPostgresMonsterHitAppliesByDefault`).
+- **What lasts after a monster's effect, and whether a creature can regain Hit Points** (feedback log 66): `parseSaveEffect` reads a
+  Failure's lasting parts (damage at the start or end of each of the target's turns, never dealt at once; "can't regain Hit Points";
+  the repeated save in either wording; "After 1 minute, it succeeds automatically"; a grapple's escape DC) and `applySaveEffect` records
+  them on the first condition's record (`condAdd.TurnDamage` / `NoHealing`, columns `turn_damage` / `no_healing`), so they end with it;
+  without a condition they stay in `Extra` for the GM. `dealConditionTurnDamage` (one row in `turnStartHooks`, after the Death Saving
+  Throw, and one in `turnEndHooks`) deals the damage through `damageHP` / `damageMonster`; `conditionRecord.effectClauses` is the one
+  wording (conditions_detail's `effect`, the line that applies it). **Can a creature regain Hit Points** is `regainBlocked` over the
+  `noRegainSources` table (`hit_points_2024.go`: a record's `no_healing`, the Sword of Wounding, Chill Touch): `healHP`, `restoreAllHP`
+  and `healMonster` ask it (damage undone, `undoDamage` / `undoMonsterDamage`, isn't regaining); a refusal is `noRegainLine` in the log
+  and in the reply (`hpHeal.Blocked`, the heal request's `cannot_regain_hp`). A new source is one row. Go:
+  `TestParseSaveEffectLastingPartsInEverySRDStatBlock`, `TestPostgresPitFiendBiteLasts`.
 - **Monster traits:** `monsterTraitRules` (`cmd/server/monster_traits_2024.go`): each trait the server applies is one row (by
   name, or by wording for auras and Regeneration) saying what it does and where; `monsterHasTrait` reads the loaded stat block;
   the GM's stat block marks each trait as applied by the server or by the GM (`traitsForGM`). A row marked `Aura` acts on its own timing:

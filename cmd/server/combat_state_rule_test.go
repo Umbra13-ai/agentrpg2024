@@ -287,7 +287,8 @@ func TestNoOtherTurnOrderWriter(t *testing.T) {
 // turn_advance_2024.go, so every way a turn changes runs all of them, once (audit AUD-10: each of the four paths had its own subset).
 func TestTurnHooksRunOnlyInTheTurnOwner(t *testing.T) {
 	hooks := []string{"endTurnEffects", "startTurnEffects", "moreTurnHooks", "survivorRegen", "decrementSacredWeapon", "decrementHolyNimbus",
-		"decrementCountercharm", "clearAllMultiattackDefenseHits", "clearOAWindows", "setLastTurnEnded", "nextLivingCombatTurn"}
+		"decrementCountercharm", "clearAllMultiattackDefenseHits", "clearOAWindows", "setLastTurnEnded", "nextLivingCombatTurn",
+		"dealConditionTurnDamage"}
 	for f, src := range serverSources(t) {
 		if f == "turn_advance_2024.go" {
 			continue

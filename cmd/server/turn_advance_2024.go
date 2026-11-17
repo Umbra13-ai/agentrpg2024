@@ -132,6 +132,9 @@ func init() {
 				decrementHolyNimbus(t.EndedID)
 			}
 		}},
+		{"a condition's damage at the end of each of the creature's turns, while the condition lasts", func(t *turnChange) {
+			t.Log = append(t.Log, dealConditionTurnDamage(t.Lobby, t.EndedID, t.EndedName, "end_of_turn")...)
+		}},
 		{"conditions and effects at the end of the turn", func(t *turnChange) {
 			t.Log = append(t.Log, endTurnEffects(t.Lobby, -1)...) // -1: the current turn, still the ending one
 		}},
@@ -156,6 +159,10 @@ func init() {
 					recordGMAction(db, t.Lobby, "death_save", fmt.Sprintf("%s starts the turn at 0 Hit Points: the Death Saving Throw is rolled", t.NextName), text)
 				}
 			}
+		}},
+		// after the Death Saving Throw: a creature the damage drops to 0 didn't start its turn at 0 (Pit Fiend's Bite, Vrock's Spores)
+		{"a condition's damage at the start of each of the creature's turns, while the condition lasts", func(t *turnChange) {
+			t.Log = append(t.Log, dealConditionTurnDamage(t.Lobby, t.NextID, t.NextName, "start_of_turn")...)
 		}},
 		{"spells at the turn change (Blink, Regenerate, Aura of Life, Cloak of Displacement)", func(t *turnChange) {
 			ended := t.EndedID

@@ -2435,17 +2435,58 @@
              "duration_rounds": {
               "type": "integer"
              },
+             "effect": {
+              "type": "string"
+             },
+             "ends_on_save": {
+              "properties": {
+               "ability": {
+                "type": "string"
+               },
+               "dc": {
+                "type": "integer"
+               },
+               "when": {
+                "type": "string"
+               }
+              },
+              "type": "object"
+             },
              "id": {
               "type": "integer"
+             },
+             "no_healing": {
+              "type": "boolean"
              },
              "notes": {
               "type": "string"
              },
              "source": {
+              "description": "what caused the condition (everyone sees the source of damage each turn or no healing; the GM sees every source)",
               "type": "string"
              },
              "target_id": {
               "type": "integer"
+             },
+             "turn_damage": {
+              "items": {
+               "properties": {
+                "dice": {
+                 "description": "the damage dice, such as 6d6",
+                 "type": "string"
+                },
+                "type": {
+                 "description": "the damage type, such as poison",
+                 "type": "string"
+                },
+                "when": {
+                 "description": "start_of_turn or end_of_turn: at the start or the end of each of the creature's turns",
+                 "type": "string"
+                }
+               },
+               "type": "object"
+              },
+              "type": "array"
              },
              "ways_to_end": {
               "items": {
@@ -26087,6 +26128,9 @@
        "application/json": {
         "schema": {
          "properties": {
+          "cannot_regain_hp": {
+           "type": "string"
+          },
           "dead": {
            "type": "boolean"
           },
@@ -26098,6 +26142,9 @@
           },
           "max_hp": {
            "type": "integer"
+          },
+          "message": {
+           "type": "string"
           },
           "regained_consciousness": {
            "type": "boolean"

@@ -380,7 +380,7 @@ type healSpec struct {
 	ceilingHalf  bool // Preserve Life: not above half the Hit Point maximum
 	onlyAtZero   bool // only a character at 0 Hit Points (Aura of Life, a natural 20 on a Death Saving Throw, a Stable creature's rest)
 	onlyBloodied bool // only a Bloodied character (Survivor)
-	giveBack     bool // damage undone, not Hit Points regained (Shield, Stone's Endurance): the Sword of Wounding doesn't stop it
+	giveBack     bool // damage undone, not Hit Points regained (Shield, Stone's Endurance): nothing that stops healing stops it (regainBlocked)
 }
 
 type healOpt func(*healSpec)
@@ -395,12 +395,61 @@ func healOnlyBloodied() healOpt { return func(s *healSpec) { s.onlyBloodied = tr
 type hpHeal struct {
 	Name          string
 	Before, After game.Vitals
-	Healed        int  // the Hit Points regained
-	Woke          bool // from 0 to above 0: conscious again, Death Saving Throws reset
+	Healed        int    // the Hit Points regained
+	Woke          bool   // from 0 to above 0: conscious again, Death Saving Throws reset
+	Blocked       string // what kept the character from regaining Hit Points it would have regained (regainBlocked), or ""
+}
+
+// noRegainSources: every effect that keeps a creature from regaining Hit Points (SRD 5.2.1: "can't regain Hit Points"), each
+// answering what it is, or "". One table, asked through regainBlocked by every way a character or a monster regains Hit Points
+// (healHP, restoreAllHP, healMonster). Damage undone afterwards (undoDamage, undoMonsterDamage) is not regaining. Before feedback log
+// 66 only the Sword of Wounding was asked, by healHP alone: a Pit Fiend's Bite and Chill Touch never stopped any healing.
+var noRegainSources = []func(lobbyID, targetID int) string{
+	func(lobbyID, targetID int) string { // a condition that says so: the Pit Fiend's Bite (condition_records, monster_effects_2024.go)
+		for _, r := range loadConditionRecords(lobbyID, targetID) {
+			if r.NoHealing {
+				return r.phrase()
+			}
+		}
+		return ""
+	},
+	func(lobbyID, targetID int) string { // the Sword of Wounding (items_c5_2024.go)
+		if _, wounded := buffEffect(lobbyID, targetID, "no_regain"); wounded {
+			return "Sword of Wounding"
+		}
+		return ""
+	},
+	func(lobbyID, targetID int) string { // Chill Touch (spell_riders_2024.go)
+		for _, e := range combatEffectsOn(lobbyID, targetID) {
+			if e.Kind == "no_healing" {
+				return "Chill Touch"
+			}
+		}
+		return ""
+	},
+}
+
+// regainBlocked answers what keeps a creature (a character, or a monster's negative id in its campaign) from regaining Hit Points, or "".
+func regainBlocked(lobbyID, targetID int) string {
+	if targetID > 0 {
+		lobbyID = lobbyOfChar(targetID)
+	}
+	for _, src := range noRegainSources {
+		if why := src(lobbyID, targetID); why != "" {
+			return why
+		}
+	}
+	return ""
+}
+
+// noRegainLine is the line a refused healing writes in the campaign's log: every path that heals says why it did nothing.
+func noRegainLine(name, why string) string {
+	return fmt.Sprintf("%s can't regain Hit Points (%s): the healing has no effect.", name, why)
 }
 
 // healHP gives a character amount Hit Points (game.Heal: never above the maximum, nothing for the dead; from 0 the Death Saving
-// Throws reset). A creature that can't regain Hit Points (the Sword of Wounding) gets none. The error is the database's.
+// Throws reset). A creature that can't regain Hit Points (regainBlocked) gets none: Blocked says why, and the campaign's log has the
+// line. The error is the database's.
 func healHP(charID, amount int, opts ...healOpt) (hpHeal, error) {
 	var s healSpec
 	for _, o := range opts {
@@ -410,8 +459,9 @@ func healHP(charID, amount int, opts ...healOpt) (hpHeal, error) {
 	if err := db.QueryRow(`SELECT name FROM characters WHERE id = $1`, charID).Scan(&h.Name); err != nil {
 		return h, err
 	}
-	if _, wounded := charBuff(charID, "no_regain"); wounded && !s.giveBack {
-		amount = 0 // Sword of Wounding: can't regain Hit Points (F171)
+	blocked := ""
+	if !s.giveBack && amount > 0 {
+		blocked = regainBlocked(0, charID) // read before the transaction: it reads other rows
 	}
 	var err error
 	h.Before, h.After, err = changeVitals(charID, func(_ *sql.Tx, v game.Vitals) (game.Vitals, error) {
@@ -423,11 +473,18 @@ func healHP(charID, amount int, opts ...healOpt) (hpHeal, error) {
 			ceiling = v.Max / 2
 		}
 		after, healed := game.Heal(v, amount, ceiling)
+		if healed > 0 && blocked != "" { // it would have regained them
+			h.Blocked = blocked
+			return v, nil
+		}
 		h.Healed = healed
 		return after, nil
 	})
 	if err != nil {
 		return h, err
+	}
+	if lobby := lobbyOfChar(charID); h.Blocked != "" && lobby > 0 {
+		recordGMAction(db, lobby, "condition", noRegainLine(h.Name, h.Blocked), "")
 	}
 	h.Woke = game.Woke(h.Before, h.After)
 	hpChanged(charID, h.Before, h.After)
@@ -523,17 +580,29 @@ func setHP(charID, hp int) (game.Vitals, error) {
 	return after, err
 }
 
-// restoreAllHP is a Long Rest's: all Hit Points back, no Temporary Hit Points, the Death Saving Throws reset (not for the dead).
+// restoreAllHP is a Long Rest's: all Hit Points back, no Temporary Hit Points, the Death Saving Throws reset (not for the dead). A
+// character that can't regain Hit Points (regainBlocked) keeps the Hit Points it has; the campaign's log says why.
 func restoreAllHP(charID int) (game.Vitals, error) {
+	blocked := regainBlocked(0, charID)
 	before, after, err := changeVitals(charID, func(_ *sql.Tx, v game.Vitals) (game.Vitals, error) {
 		if v.Dead {
 			return v, nil
 		}
-		v = v.SetHP(v.Max)
+		if blocked == "" {
+			v = v.SetHP(v.Max)
+		}
+		if blocked != "" && v.HP <= 0 {
+			return v, nil // still dying: its Death Saving Throws stand
+		}
 		v.Temp, v.Successes, v.Failures, v.Stable = 0, 0, 0, false
 		return v, nil
 	})
 	if err == nil {
+		if blocked != "" && !before.Dead && before.HP < before.Max {
+			if lobby := lobbyOfChar(charID); lobby > 0 {
+				recordGMAction(db, lobby, "condition", noRegainLine(characterNameOf(charID), blocked), "")
+			}
+		}
 		hpChanged(charID, before, after)
 	}
 	return after, err

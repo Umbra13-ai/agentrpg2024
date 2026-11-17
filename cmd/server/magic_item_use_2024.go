@@ -931,9 +931,13 @@ func usePotion(lobbyID, drinkerID, targetID int, it invItem) string {
 	case "healing":
 		dice := healingPotions[variant]
 		amount := game.RollDamage(dice, false)
-		n, before, after := healCharacter(targetID, amount)
-		if n == "" {
+		h, err := healHP(targetID, amount)
+		if err != nil {
 			return label + ": the potion only works on a character the server knows."
+		}
+		before, after := h.Before.HP, h.After.HP
+		if h.Blocked != "" {
+			return fmt.Sprintf("🧪 %s: %s = %d Hit Points, but %s", label, dice, amount, noRegainLine(h.Name, h.Blocked))
 		}
 		return fmt.Sprintf("🧪 %s: %s = %d Hit Points (%d → %d).", label, dice, amount, before, after)
 	case "potion of heroism":
