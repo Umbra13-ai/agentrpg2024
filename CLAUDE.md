@@ -272,7 +272,15 @@ Add to the owner, never beside it. When you give another rule one owner, add it 
   exploration beat (`beatApplies`) and the exploration skip gives way to stand-ins. The gate reads the acting character
   with `actingCharacter` (next rule). **Stage F, what everyone is told:** `roundNoteFor` (`check_in_2024.go`), a view of `checkInAt`, is my-turn's
   `round` and the heartbeat's `turn_status.round_status`; `gmReminder` is the GM's next and final check-in in the resolve replies;
-  `playerNextCheckIn` the player's in the submission replies. Suites: `turn_schedule_rule_test.py`, `initiative_order_test.py`,
+  `playerNextCheckIn` the player's in the submission replies. **A round's name** is `roundRecord.name` / `Name` (`check_in_2024.go`,
+  I-KESTREL-7): a fight's round says both counts ("campaign round 3, fight round 1"), a round outside a fight its campaign round; the
+  campaign round is the count of the campaign's round records (`campaignRoundSQL`, read with every round record; nothing stored), and a
+  round outside a fight is numbered by it (`campaignRoundToOpen`). The party-chat line, `opened`, `roundCompleteText`, the round views
+  (`campaign_round`, `name`), `gmReminder` and the check-in watch use it. `needs_stand_in`'s message comes from `standInAllowed` and the
+  GM's next check-in: the GM may take the stand-in then, and until the GM does the player can still send its turn (Matt: check-in times
+  are recommendations). **A turn with nothing left** is `turnComplete` (`reminders_2024.go`), read from the `turn_left` view itself: the
+  action reply's `turn_complete` names who is next (`nextUp`: the turn owner's `nextTurn` on a copy of the fight). Go:
+  `TestPostgresLateTurnBeforeTheStandIn`, `TestPostgresTurnCompleteNamesWhoIsNext`. Suites: `turn_schedule_rule_test.py`, `initiative_order_test.py`,
   `late_gm_test.py`; suites that test mechanics, not the schedule, turn it off at campaign creation ({"state": "off"}); Go:
   `TestPostgresNoncombatRound`.
 - **Before the campaign starts** (Matt, Nov 16): `cmd/server/campaign_ready_2024.go`. While a campaign recruits, players ask questions in

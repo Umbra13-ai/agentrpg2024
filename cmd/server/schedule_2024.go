@@ -673,8 +673,8 @@ func changeSchedule(tx *sql.Tx, lobby int, ch scheduleChange) ([]string, error) 
 			if _, err := tx.Exec(`UPDATE lobbies SET pending_capacity = $1 WHERE id = $2`, n, lobby); err != nil {
 				return nil, err
 			}
-			done = append(done, fmt.Sprintf("From round %d (when it opens) the campaign has %d seats: players check in at %s, the GM at %s.",
-				round.Number+1, n, joinWords(minutesText(s.Seats)), joinWords(minutesText(s.GM))))
+			done = append(done, fmt.Sprintf("From campaign round %d (when it opens) the campaign has %d seats: players check in at %s, the GM at %s.",
+				round.CampaignRound+1, n, joinWords(minutesText(s.Seats)), joinWords(minutesText(s.GM))))
 		case round != nil && n == maxPlayers && pending.Valid:
 			if _, err := tx.Exec(`UPDATE lobbies SET pending_capacity = NULL WHERE id = $1`, lobby); err != nil {
 				return nil, err
@@ -738,7 +738,7 @@ func changeSchedule(tx *sql.Tx, lobby int, ch scheduleChange) ([]string, error) 
 			if _, err := tx.Exec(`UPDATE campaign_rounds SET clock_from = $1, deadline = $2 WHERE id = $3`, r.ClockFrom, r.Deadline, r.ID); err != nil {
 				return nil, err
 			}
-			done = append(done, fmt.Sprintf("The turn schedule is on again. Round %d has a fresh deadline: its final check-in is %s, and every player has a check-in before it.", r.Number, clockText(r.Deadline.Time)))
+			done = append(done, fmt.Sprintf("The turn schedule is on again. %s has a fresh deadline: its final check-in is %s, and every player has a check-in before it.", r.Name(), clockText(r.Deadline.Time)))
 		} else {
 			done = append(done, "The turn schedule is on again.")
 		}

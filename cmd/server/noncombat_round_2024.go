@@ -516,7 +516,7 @@ func gmReminder(ci checkIn) string {
 	if ci.Round == nil {
 		return ""
 	}
-	parts := []string{fmt.Sprintf("Round %d", ci.Round.Number)}
+	parts := []string{titleFirst(ci.Round.Name)}
 	if ci.NextGMCheckIn != nil {
 		parts = append(parts, fmt.Sprintf("your next check-in is %s", clockText(*ci.NextGMCheckIn)))
 	}

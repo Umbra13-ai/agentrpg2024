@@ -1801,6 +1801,10 @@
           "tip": {
            "type": "string"
           },
+          "turn_complete": {
+           "description": "nothing of your turn is left: who the GM moves on to",
+           "type": "string"
+          },
           "turn_left": {
            "properties": {
             "action": {
@@ -3881,6 +3885,10 @@
             },
             "round": {
              "properties": {
+              "campaign_round": {
+               "description": "the rounds the campaign has opened up to this one, in and out of fights",
+               "type": "integer"
+              },
               "combat_round": {
                "type": "integer"
               },
@@ -3901,7 +3909,12 @@
               "kind": {
                "type": "string"
               },
+              "name": {
+               "description": "the round as messages name it (\"campaign round 3, fight round 1\")",
+               "type": "string"
+              },
               "number": {
+               "description": "in a fight the fight's round; outside one the campaign round",
                "type": "integer"
               },
               "opened_at": {
@@ -4348,6 +4361,10 @@
               },
               "round": {
                "properties": {
+                "campaign_round": {
+                 "description": "the rounds the campaign has opened up to this one, in and out of fights",
+                 "type": "integer"
+                },
                 "combat_round": {
                  "type": "integer"
                 },
@@ -4368,7 +4385,12 @@
                 "kind": {
                  "type": "string"
                 },
+                "name": {
+                 "description": "the round as messages name it (\"campaign round 3, fight round 1\")",
+                 "type": "string"
+                },
                 "number": {
+                 "description": "in a fight the fight's round; outside one the campaign round",
                  "type": "integer"
                 },
                 "opened_at": {
@@ -24742,6 +24764,10 @@
               },
               "round": {
                "properties": {
+                "campaign_round": {
+                 "description": "the rounds the campaign has opened up to this one, in and out of fights",
+                 "type": "integer"
+                },
                 "combat_round": {
                  "type": "integer"
                 },
@@ -24762,7 +24788,12 @@
                 "kind": {
                  "type": "string"
                 },
+                "name": {
+                 "description": "the round as messages name it (\"campaign round 3, fight round 1\")",
+                 "type": "string"
+                },
                 "number": {
+                 "description": "in a fight the fight's round; outside one the campaign round",
                  "type": "integer"
                 },
                 "opened_at": {
@@ -25179,6 +25210,10 @@
               },
               "round": {
                "properties": {
+                "campaign_round": {
+                 "description": "the rounds the campaign has opened up to this one, in and out of fights",
+                 "type": "integer"
+                },
                 "combat_round": {
                  "type": "integer"
                 },
@@ -25199,7 +25234,12 @@
                 "kind": {
                  "type": "string"
                 },
+                "name": {
+                 "description": "the round as messages name it (\"campaign round 3, fight round 1\")",
+                 "type": "string"
+                },
                 "number": {
+                 "description": "in a fight the fight's round; outside one the campaign round",
                  "type": "integer"
                 },
                 "opened_at": {
@@ -38826,6 +38866,10 @@
             },
             "round": {
              "properties": {
+              "campaign_round": {
+               "description": "the rounds the campaign has opened up to this one, in and out of fights",
+               "type": "integer"
+              },
               "combat_round": {
                "type": "integer"
               },
@@ -38846,7 +38890,12 @@
               "kind": {
                "type": "string"
               },
+              "name": {
+               "description": "the round as messages name it (\"campaign round 3, fight round 1\")",
+               "type": "string"
+              },
               "number": {
+               "description": "in a fight the fight's round; outside one the campaign round",
                "type": "integer"
               },
               "opened_at": {
@@ -40161,6 +40210,10 @@
             },
             "round": {
              "properties": {
+              "campaign_round": {
+               "description": "the rounds the campaign has opened up to this one, in and out of fights",
+               "type": "integer"
+              },
               "combat_round": {
                "type": "integer"
               },
@@ -40181,7 +40234,12 @@
               "kind": {
                "type": "string"
               },
+              "name": {
+               "description": "the round as messages name it (\"campaign round 3, fight round 1\")",
+               "type": "string"
+              },
               "number": {
+               "description": "in a fight the fight's round; outside one the campaign round",
                "type": "integer"
               },
               "opened_at": {
@@ -40508,6 +40566,10 @@
               },
               "round": {
                "properties": {
+                "campaign_round": {
+                 "description": "the rounds the campaign has opened up to this one, in and out of fights",
+                 "type": "integer"
+                },
                 "combat_round": {
                  "type": "integer"
                 },
@@ -40528,7 +40590,12 @@
                 "kind": {
                  "type": "string"
                 },
+                "name": {
+                 "description": "the round as messages name it (\"campaign round 3, fight round 1\")",
+                 "type": "string"
+                },
                 "number": {
+                 "description": "in a fight the fight's round; outside one the campaign round",
                  "type": "integer"
                 },
                 "opened_at": {

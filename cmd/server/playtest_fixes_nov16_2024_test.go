@@ -312,12 +312,16 @@ func TestMoveIsNotTheBeatAndRoundLines(t *testing.T) {
 	if actionUsesBeat("move") || !actionUsesBeat("dash") || !actionUsesBeat("search") {
 		t.Errorf("move %v, dash %v, search %v", actionUsesBeat("move"), actionUsesBeat("dash"), actionUsesBeat("search"))
 	}
-	r := &roundRecord{Number: 2, Kind: roundNoncombat, OpenedAt: at("10:00:00"), Deadline: nullTime(at("10:55:00"))}
-	if l := roundOpenedLine(r); !strings.Contains(l, "Round 2 (outside a fight) began at") || !strings.Contains(l, "final check-in") {
+	r := &roundRecord{Number: 2, CampaignRound: 2, Kind: roundNoncombat, OpenedAt: at("10:00:00"), Deadline: nullTime(at("10:55:00"))}
+	if l := roundOpenedLine(r); !strings.Contains(l, "Campaign round 2 (outside a fight) began at") || !strings.Contains(l, "final check-in") || strings.HasPrefix(l, "Play is open") {
 		t.Errorf("%q", l)
 	}
-	r.Number = 1
+	r.Number, r.CampaignRound = 1, 1
 	if l := roundOpenedLine(r); !strings.HasPrefix(l, "Play is open") {
+		t.Errorf("%q", l)
+	}
+	r.Kind = roundCombat // a fight's round says both counts (I-KESTREL-7)
+	if l := roundOpenedLine(r); !strings.HasPrefix(l, "Campaign round 1, fight round 1 began at") {
 		t.Errorf("%q", l)
 	}
 }

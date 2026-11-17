@@ -285,7 +285,7 @@ func turnLeft(charID int) map[string]interface{} {
 	} else if opts := bonusOptions(charID, class, subclass, level, actionUsed, conditions, choices, hordeUsed, hp, maxHP); len(opts) > 0 {
 		out["bonus_action"] = opts
 	} else {
-		out["bonus_action"] = "available (nothing you have uses it right now)"
+		out["bonus_action"] = bonusNothingUses
 	}
 	out["movement_ft"] = movement
 	if reactionUsed {
@@ -386,9 +386,47 @@ func withTurnReminders(h http.HandlerFunc) http.HandlerFunc {
 			}
 			if t := turnLeft(charID); t != nil {
 				m["turn_left"] = t
+				if done := turnComplete(lobbyOfChar(charID), t); done != "" {
+					m["turn_complete"] = done // nothing of your turn is left: who the GM moves on to
+				}
 			}
 		})
 	}
+}
+
+// bonusNothingUses: turn_left's Bonus Action when it is unspent but nothing the character has uses it now.
+const bonusNothingUses = "available (nothing you have uses it right now)"
+
+// turnComplete: the line that says a turn is complete, read from the turn_left view itself (I-KESTREL-7): no Action left (nor an
+// attack of it) and no Bonus Action anything uses. Movement left is said, not waited for. The GM then moves on, to the creature the
+// turn order gives next (the turn owner's nextTurn). "" while something is left.
+func turnComplete(lobby int, left map[string]interface{}) string {
+	if left["action"] != "used" || (left["bonus_action"] != "used" && left["bonus_action"] != bonusNothingUses) {
+		return ""
+	}
+	line := "Your turn is complete: your Action and Bonus Action are spent"
+	if ft, _ := left["movement_ft"].(int); ft > 0 {
+		line += fmt.Sprintf(" (you can still move up to %d ft first)", ft)
+	}
+	if next := nextUp(lobby); next != "" {
+		return line + fmt.Sprintf(". The GM moves on to %s, next in the turn order.", next)
+	}
+	return line + ". The GM moves on to the next creature in the turn order."
+}
+
+// nextUp: the creature whose turn comes after the current one, as the turn owner would move to it (nextTurn on a copy of the
+// fight: the dead and those at 0 Hit Points are passed); "" when there is no fight.
+func nextUp(lobby int) string {
+	f, err := readFight(db, lobby)
+	if err != nil || len(f.Order) == 0 {
+		return ""
+	}
+	next := *f
+	next.nextTurn(f.Index+1, noTurnFor(lobby)(f.Order))
+	if cur := next.current(); cur != nil {
+		return sprintAny(cur["name"])
+	}
+	return ""
 }
 
 // augmentJSON runs a handler into a recorder; a 200 JSON object reply without "error" goes through add before it is written.
