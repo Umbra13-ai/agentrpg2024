@@ -128,37 +128,6 @@ func hasEvasion(characterID int) bool {
 	return false
 }
 
-// hasUncannyDodge checks if a character has the Uncanny Dodge feature
-// Rogue 5+ or Hunter Ranger 15+ with uncanny_dodge choice
-func hasUncannyDodge(characterID int) bool {
-	var class, subclass string
-	var level int
-	var choicesJSON []byte
-	err := db.QueryRow(`
-		SELECT class, level, COALESCE(subclass, ''), COALESCE(subclass_choices, '{}') 
-		FROM characters WHERE id = $1
-	`, characterID).Scan(&class, &level, &subclass, &choicesJSON)
-	if err != nil {
-		return false
-	}
-
-	classLower := strings.ToLower(class)
-
-	// Rogue gets Uncanny Dodge at level 5
-	if classLower == "rogue" && level >= 5 {
-		return true
-	}
-
-	// Hunter Ranger can choose Uncanny Dodge at level 15 (Superior Hunter's Defense)
-	if classLower == "ranger" && strings.ToLower(subclass) == "hunter" && level >= 15 {
-		var choices map[string]string
-		if err := json.Unmarshal(choicesJSON, &choices); err == nil {
-		}
-	}
-
-	return false
-}
-
 // hasElusive checks if a character has the Elusive feature (Rogue 18+)
 // No attack roll has advantage against you while you aren't incapacitated
 func hasElusive(characterID int) bool {

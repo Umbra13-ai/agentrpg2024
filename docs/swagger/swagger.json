@@ -33418,7 +33418,7 @@
      "GM"
     ],
     "summary": "Use Uncanny Dodge to halve attack damage",
-    "description": "When a character with Uncanny Dodge (Rogue 5+, or Hunter Ranger 15+ with the choice) is hit by an attack from an attacker they can see, they can use their reaction to halve the damage.",
+    "description": "When a character with Uncanny Dodge (Rogue 5+: the action table's uncanny_dodge) is hit by an attack from an attacker they can see, they can use their reaction to halve the damage.",
     "responses": {
      "400": {
       "description": "The body was refused (nothing was changed): unknown_field, wrong_type, invalid_json, body_required or id_mismatch, with the fields the request takes",

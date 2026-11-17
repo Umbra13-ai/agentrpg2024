@@ -420,7 +420,7 @@ func handleGMRetaliation(w http.ResponseWriter, r *http.Request) {
 
 // handleGMUncannyDodge godoc
 // @Summary Use Uncanny Dodge to halve attack damage
-// @Description When a character with Uncanny Dodge (Rogue 5+, or Hunter Ranger 15+ with the choice) is hit by an attack from an attacker they can see, they can use their reaction to halve the damage.
+// @Description When a character with Uncanny Dodge (Rogue 5+: the action table's uncanny_dodge) is hit by an attack from an attacker they can see, they can use their reaction to halve the damage.
 // @Tags GM
 // @Accept json
 // @Produce json
@@ -473,15 +473,13 @@ func handleGMUncannyDodge(w http.ResponseWriter, r *http.Request) {
 	}
 
 	// Get character info
-	var charName, class, subclass string
-	var charLobbyID, level int
+	var charName string
+	var charLobbyID int
 	var reactionUsed bool
 	err = db.QueryRow(`
-		SELECT name, lobby_id, class, level, 
-		       COALESCE(reaction_used, false),
-		       COALESCE(subclass, '')
+		SELECT name, lobby_id, COALESCE(reaction_used, false)
 		FROM characters WHERE id = $1
-	`, req.CharacterID).Scan(&charName, &charLobbyID, &class, &level, &reactionUsed, &subclass)
+	`, req.CharacterID).Scan(&charName, &charLobbyID, &reactionUsed)
 
 	if err != nil {
 		if answerDBFailure(w, err, "the character") {
@@ -492,18 +490,12 @@ func handleGMUncannyDodge(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// Check if character has Uncanny Dodge
-	if !hasUncannyDodge(req.CharacterID) {
-		classNote := ""
-		if strings.ToLower(class) == "rogue" && level < 5 {
-			classNote = fmt.Sprintf(" (Rogue level %d, needs level 5+)", level)
-		} else if strings.ToLower(class) == "ranger" && strings.ToLower(subclass) == "hunter" && level < 15 {
-			classNote = fmt.Sprintf(" (Hunter Ranger level %d, needs level 15+ with Uncanny Dodge choice)", level)
-		}
+	// Who has Uncanny Dodge is the action table's Who (action_types_2024.go)
+	if why := actionRefusal("uncanny_dodge", req.CharacterID).text(); why != "" {
 		w.WriteHeader(http.StatusBadRequest)
 		json.NewEncoder(w).Encode(map[string]interface{}{
 			"error":   "no_uncanny_dodge",
-			"message": fmt.Sprintf("%s does not have the Uncanny Dodge feature%s", charName, classNote),
+			"message": fmt.Sprintf("%s: %s", charName, why),
 		})
 		return
 	}

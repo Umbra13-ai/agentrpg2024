@@ -291,8 +291,11 @@ func turnLeft(charID int) map[string]interface{} {
 	if reactionUsed {
 		out["reaction"] = "used"
 	} else {
-		rx := map[string]interface{}{"available": true, "options": reactionOptions(charID, class, level),
-			"note": fmt.Sprintf("A Reaction is taken when its trigger happens, often on another creature's turn. Set standing orders so the server takes it for you: POST /api/characters/reaction-orders {\"character_id\": %d, \"order\": \"shield\", \"on\": true}.", charID)}
+		note := "A Reaction is taken when its trigger happens, often on another creature's turn. " + noReactionOrder
+		if ex := reactionOrderExample(charID); ex != "" { // an order this character can hold (reaction_orders_2024.go)
+			note = "A Reaction is taken when its trigger happens, often on another creature's turn. Set standing orders so the server takes it for you: " + ex + "."
+		}
+		rx := map[string]interface{}{"available": true, "options": reactionOptions(charID), "note": note}
 		if on := activeOrderNames(charID); len(on) > 0 {
 			rx["standing_orders"] = on
 		}
@@ -342,15 +345,14 @@ func bonusOptions(charID int, class, subclass string, level int, actionUsed bool
 	return out
 }
 
-func reactionOptions(charID int, class string, level int) []string {
-	out := []string{"Opportunity Attack (an enemy leaves your reach)"}
-	c := strings.ToLower(class)
-	levels := classLevelsOf(charID)
-	if c == "rogue" && level >= 5 || levels["rogue"] >= 5 {
-		out = append(out, "Uncanny Dodge (halve an attack's damage)")
-	}
-	if c == "monk" && level >= 3 || levels["monk"] >= 3 {
-		out = append(out, "Deflect Attacks")
+// reactionOptions: the Reactions the character has now: the action table's Reaction types it has (Who: Opportunity Attack,
+// Uncanny Dodge, Deflect Attacks, Countercharm ...) and the Reaction spells it can cast.
+func reactionOptions(charID int) []string {
+	var out []string
+	for _, t := range actionTypesOpenTo(charID) {
+		if t.Cost == costReaction && t.Send != sendFamily {
+			out = append(out, t.Title)
+		}
 	}
 	for _, s := range castableSpellsWhere(charID, castingTimeHas("reaction")) {
 		out = append(out, "cast "+s)

@@ -360,7 +360,12 @@ Add to the owner, never beside it. When you give another rule one owner, add it 
   companion, choice and state. A new limited feature is one row plus `actionRefusal` in its resolver;
   `TestEveryLimitedActionAsksTheTable` fails on a limited type no resolver asks, `TestWhoRefusalCodes` checks each kind of refusal,
   `TestWhoFeatsAreRealFeats` that every feat the table names is in `availableFeats`, `TestPostgresFeatActionsAskTheTable` a Boon's
-  action through the server.
+  action through the server. **Standing reaction orders** (`reaction_orders_2024.go`): `reactionOrderKinds` names each order's owner
+  (Shield: the spells the character has; Uncanny Dodge, Deflect Attacks, Opportunity Attack: their action-table rows, asked with
+  `actionRefusal` in `reactionOrderProblem`; the GM's uncanny-dodge and deflect-attacks requests ask the same rows).
+  `reactionOrderExample` (the first order the character can hold) is the one example: turn_left's reaction note and the orders' reply
+  `how` read it; turn_left's Reaction options are the table's Reaction types the character has (I-CALLA-8;
+  `TestPostgresReactionOrderExampleIsHoldable`).
 - **How to act (`GET /api/my-turn`'s `how_to_act`):** `actionHowTo` (`cmd/server/actions.go`), made from `actionRequest`'s
   fields and the character's real enemies.
 - **How many attacks one Attack action gives:** `attacksPerAttackAction` (`cmd/server/actions.go`: Extra Attack or a pact weapon's
