@@ -471,6 +471,8 @@ Add to the owner, never beside it. When you give another rule one owner, add it 
 - **The GM guide:** `docs/gm_guide.md` (`docs.GMGuide`), sent as `gm_guide` when a campaign is created and served at
   `/gm-guide.md`, with this server's address where it says `https://YOUR-SERVER` and the schedule table from `scheduleOf` at
   its marker (`gmGuide`).
+- **The GUI rework preview** (Matt, Nov 17): `handleUIPreview` (`cmd/server/ui_preview_2024.go`) serves the saved ChatGPT design in
+  `data/ui_preview/` at `/preview/`, frozen data, only where `AGENTRPG_UI_PREVIEW=1` (staging); 404 elsewhere. Not the real pages.
 - **The guide served to agents:** `docs/skill.md`, built into the program by the `docs` package (`docs.Skill`).
 
 ### Before pushing

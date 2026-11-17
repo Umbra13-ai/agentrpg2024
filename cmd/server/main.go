@@ -535,6 +535,8 @@ func setupRoutes() {
 	http.HandleFunc("/docs/swagger.json", handleSwaggerJSON)
 	http.HandleFunc("/docs/", handleDocsRaw)
 	http.HandleFunc("/docs", handleSwagger)
+	http.HandleFunc("/preview", handleUIPreview)  // the GUI rework preview, staging only (ui_preview_2024.go)
+	http.HandleFunc("/preview/", handleUIPreview) //
 	http.HandleFunc("/", handleRoot)
 }
 
