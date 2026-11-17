@@ -52,18 +52,33 @@ const finalMinute = 60 - gmLeadMinutes
 
 // roundRecord: a round as stored. Its times are campaign time.
 type roundRecord struct {
-	ID, Number int
-	Kind       string
-	OpenedAt   time.Time
-	ClockFrom  time.Time    // when the round opened, or when the schedule was last resumed: seats' check-ins count from here
-	Deadline   sql.NullTime // the final check-in; not set while paused
+	ID            int
+	Number        int // a fight's round: the fight's own count; outside a fight: the campaign round it opened as (campaignRoundToOpen)
+	CampaignRound int // the rounds the campaign has opened up to this one, combat and noncombat (campaignRoundSQL)
+	Kind          string
+	OpenedAt      time.Time
+	ClockFrom     time.Time    // when the round opened, or when the schedule was last resumed: seats' check-ins count from here
+	Deadline      sql.NullTime // the final check-in; not set while paused
+}
+
+// campaignRoundSQL: the campaign round of the round record r, the rounds its campaign has opened up to it. The GM counts rounds
+// across fights and the time between them while a fight's own round starts again at 1 (I-KESTREL-7); the round records are that
+// count, so nothing else is stored.
+const campaignRoundSQL = `(SELECT COUNT(*) FROM campaign_rounds e WHERE e.lobby_id = r.lobby_id AND e.id <= r.id)`
+
+// campaignRoundToOpen: the campaign round of the round a campaign opens next. A round outside a fight is numbered by it, so
+// "round N" outside a fight is the campaign round; a fight's round keeps the fight's count, and its name says both (name).
+func campaignRoundToOpen(q rowQuerier, lobby int) (int, error) {
+	var n int
+	err := q.QueryRow(`SELECT COUNT(*) + 1 FROM campaign_rounds WHERE lobby_id = $1`, lobby).Scan(&n)
+	return n, err
 }
 
 // openRoundOf reads a campaign's open round (nil when none).
 func openRoundOf(q rowQuerier, lobby int) (*roundRecord, error) {
 	r := &roundRecord{}
-	err := q.QueryRow(`SELECT id, number, kind, opened_at, clock_from, deadline FROM campaign_rounds WHERE lobby_id = $1 AND closed_at IS NULL`, lobby).
-		Scan(&r.ID, &r.Number, &r.Kind, &r.OpenedAt, &r.ClockFrom, &r.Deadline)
+	err := q.QueryRow(`SELECT r.id, r.number, `+campaignRoundSQL+`, r.kind, r.opened_at, r.clock_from, r.deadline FROM campaign_rounds r WHERE r.lobby_id = $1 AND r.closed_at IS NULL`, lobby).
+		Scan(&r.ID, &r.Number, &r.CampaignRound, &r.Kind, &r.OpenedAt, &r.ClockFrom, &r.Deadline)
 	if errors.Is(err, sql.ErrNoRows) {
 		return nil, nil
 	}
@@ -80,16 +95,32 @@ func openRoundOf(q rowQuerier, lobby int) (*roundRecord, error) {
 // clockText: a time as messages show it ("10:55 UTC"); the replies' fields carry the full time.
 func clockText(t time.Time) string { return t.UTC().Format("15:04") + " UTC" }
 
+// name is how every message names a round (I-KESTREL-7; Matt: both counts in a fight): "campaign round 3, fight round 1" in a
+// fight, "campaign round 4 (outside a fight)" outside one. Name starts a sentence.
+func (r *roundRecord) name() string {
+	if r.Kind == roundCombat {
+		return fmt.Sprintf("campaign round %d, fight round %d", r.CampaignRound, r.Number)
+	}
+	return fmt.Sprintf("campaign round %d (outside a fight)", r.CampaignRound)
+}
+func (r *roundRecord) Name() string { return titleFirst(r.name()) }
+
+// endedBefore: the round that ended when next opened (the one before it in the campaign, of the same kind: a fight's round ends
+// into the fight's next round, a round outside a fight into the next one outside it), numbered ended.
+func (next *roundRecord) endedBefore(ended int) *roundRecord {
+	return &roundRecord{Number: ended, Kind: next.Kind, CampaignRound: next.CampaignRound - 1}
+}
+
 // opened: the sentence that says a round opened.
 func (r *roundRecord) opened() string {
-	what := fmt.Sprintf("Round %d (%s) is open", r.Number, r.Kind)
+	what := r.Name() + " is open"
 	if !r.Deadline.Valid {
 		return what + "; the schedule is paused, so it has no deadline until the GM resumes it."
 	}
 	return what + fmt.Sprintf("; its final check-in is %s.", clockText(r.Deadline.Time))
 }
 
-// roundToOpen: the round a campaign opens now: the fight's round in a fight, else the next noncombat round.
+// roundToOpen: the round a campaign opens now: the fight's round in a fight, else the next campaign round outside one.
 func roundToOpen(q rowQuerier, lobby int) (kind string, number int, err error) {
 	f, err := readFight(q, lobby)
 	if err == nil {
@@ -98,7 +129,7 @@ func roundToOpen(q rowQuerier, lobby int) (kind string, number int, err error) {
 	if !errors.Is(err, sql.ErrNoRows) {
 		return "", 0, err
 	}
-	err = q.QueryRow(`SELECT COALESCE(MAX(number), 0) + 1 FROM campaign_rounds WHERE lobby_id = $1 AND kind = $2`, lobby, roundNoncombat).Scan(&number)
+	number, err = campaignRoundToOpen(q, lobby)
 	return roundNoncombat, number, err
 }
 
@@ -137,18 +168,17 @@ func openRound(tx *sql.Tx, lobby int, kind string, number int, now time.Time) (*
 	if err != nil {
 		return r, err
 	}
+	if err := tx.QueryRow(`SELECT `+campaignRoundSQL+` FROM campaign_rounds r WHERE r.id = $1`, r.ID).Scan(&r.CampaignRound); err != nil {
+		return r, err
+	}
 	// every player learns that a round opened in the party chat, where they look between check-ins (feedback log 35, 56)
 	return r, postServerMessage(tx, lobby, roundOpenedLine(r))
 }
 
 // roundOpenedLine: the server's party-chat line when a round opens.
 func roundOpenedLine(r *roundRecord) string {
-	where := "outside a fight"
-	if r.Kind == roundCombat {
-		where = "in the fight"
-	}
-	line := fmt.Sprintf("Round %d (%s) began at %s.", r.Number, where, clockText(r.OpenedAt))
-	if r.Number == 1 && r.Kind != roundCombat {
+	line := fmt.Sprintf("%s began at %s.", r.Name(), clockText(r.OpenedAt))
+	if r.CampaignRound == 1 && r.Kind != roundCombat {
 		line = "Play is open: " + line
 	}
 	if r.Deadline.Valid {
@@ -193,7 +223,7 @@ func roundOpens(lobby int, kind string, number int, onlyIfNew bool, onlyAfter st
 		return nil, nil
 	}
 	if kind == roundNoncombat {
-		if err := tx.QueryRow(`SELECT COALESCE(MAX(number), 0) + 1 FROM campaign_rounds WHERE lobby_id = $1 AND kind = $2`, lobby, roundNoncombat).Scan(&number); err != nil {
+		if number, err = campaignRoundToOpen(tx, lobby); err != nil {
 			return nil, err
 		}
 	}
@@ -352,7 +382,9 @@ type nameRef struct {
 }
 
 type roundView struct {
-	Number        int        `json:"number"`
+	Number        int        `json:"number"`         // in a fight the fight's round; outside one the campaign round
+	CampaignRound int        `json:"campaign_round"` // the rounds the campaign has opened up to this one, in and out of fights
+	Name          string     `json:"name"`           // the round as messages name it ("campaign round 3, fight round 1")
 	Kind          string     `json:"kind"`
 	OpenedAt      time.Time  `json:"opened_at"`
 	FinalCheckIn  *time.Time `json:"final_check_in"` // null while paused
@@ -448,7 +480,7 @@ func checkInAt(in checkInInputs, now time.Time) checkIn {
 	}
 	r := in.Round
 	paused := in.State == schedulePaused || !r.Deadline.Valid
-	rv := &roundView{Number: r.Number, Kind: r.Kind, OpenedAt: r.OpenedAt, Paused: paused, DeadlineRule: deadlineRuleText}
+	rv := &roundView{Number: r.Number, CampaignRound: r.CampaignRound, Name: r.name(), Kind: r.Kind, OpenedAt: r.OpenedAt, Paused: paused, DeadlineRule: deadlineRuleText}
 	var deadline time.Time
 	if !paused {
 		deadline = r.Deadline.Time
@@ -500,11 +532,23 @@ func checkInAt(in checkInInputs, now time.Time) checkIn {
 		}
 		return "Submitted: the GM resolves it at a check-in."
 	}
+	// the GM's next check-in at all: in the round's window, else after its final check-in
+	nextGM := out.NextGMCheckIn
+	if nextGM == nil {
+		nextGM = lateGM
+	}
 	// a character who still has to submit: its expected check-in, its window, the final check-in
 	notSubmitted := func(st *charStatus) {
-		if !paused && rv.FinalReached {
+		if sc := standInAllowed(in.State, r, now, false); sc.Allowed {
+			// check-in times are recommendations (Matt, I-KESTREL-7): a late turn is taken until the GM takes the stand-in, so the
+			// status says when the GM may, and that the player can still send its turn until then
 			st.Status = statusStandIn
-			st.Message = fmt.Sprintf("The round's final check-in (%s) has come with no submission: the GM takes a stand-in turn for %s.", clockText(deadline), st.Name)
+			when := "at a check-in"
+			if nextGM != nil {
+				when = fmt.Sprintf("at the GM's next check-in (%s)", clockText(*nextGM))
+			}
+			st.Message = fmt.Sprintf("The round's final check-in (%s) has come with no submission: the GM may take a stand-in turn for %s %s. Until the GM does, %s can still send the turn.",
+				clockText(*sc.Deadline), st.Name, when, st.Name)
 			return
 		}
 		st.Status = statusNotSubmitted
@@ -808,8 +852,8 @@ func roundNoteFor(lobby, charID int) (map[string]interface{}, error) {
 		return nil, err
 	}
 	ci := checkInAt(in, now)
-	v := map[string]interface{}{"round": ci.Round.Number, "kind": ci.Round.Kind, "opened_at": ci.Round.OpenedAt, "final_check_in": ci.Round.FinalCheckIn,
-		"paused": ci.Round.Paused, "details": fmt.Sprintf("GET /api/campaigns/%d/round", lobby)}
+	v := map[string]interface{}{"round": ci.Round.Number, "campaign_round": ci.Round.CampaignRound, "name": ci.Round.Name, "kind": ci.Round.Kind,
+		"opened_at": ci.Round.OpenedAt, "final_check_in": ci.Round.FinalCheckIn, "paused": ci.Round.Paused, "details": fmt.Sprintf("GET /api/campaigns/%d/round", lobby)}
 	if charID == 0 {
 		v["next_gm_check_in"], v["due"], v["gm_overdue"] = ci.NextGMCheckIn, ci.Due, ci.GMOverdue
 		v["reminder"] = gmReminder(ci)
@@ -830,7 +874,7 @@ func roundNoteFor(lobby, charID int) (map[string]interface{}, error) {
 			v["waiting_on"] = c.WaitingOn.Name
 		}
 		if ci.Round.FinalReached && c.Status == statusResolved && ci.Round.Kind != roundCombat { // feedback log 56
-			v["next_round"] = fmt.Sprintf("Round %d is over for you. Round %d opens when the GM has resolved the round's last turns; the server says so in the party chat.", ci.Round.Number, ci.Round.Number+1)
+			v["next_round"] = fmt.Sprintf("%s is over for you. The next round opens when the GM has resolved this round's last turns; the server says so in the party chat.", in.Round.Name())
 		}
 	}
 	if next, ok := playerNextCheckIn(lobby, charID, in.Round, now); ok {

@@ -172,7 +172,7 @@ check("status: own, stand_in, own, own", [status(ci, p).get("how") for p in P] =
 c, j = call("POST", B + "/stand-in", {"steps": [{"action": "dodge"}]}, G)
 check("a second stand-in now meets Tank's turn (the GM's): nobody gets a second action", c == 409 and j.get("error") == "gm_turn", j)
 c, j = call("POST", B + "/next", {}, G)
-check("Tank's turn ends at 10:55: 'Round 1 is complete; round 2 has begun (its final check-in is 11:55 UTC)'", c == 200 and "Round 1 is complete; round 2 has begun (its final check-in is 11:55 UTC)" in (j.get("round_complete") or ""), j.get("round_complete"))
+check("Tank's turn ends at 10:55: '... fight round 1 is complete; ... fight round 2 has begun (its final check-in is 11:55 UTC)'", c == 200 and "fight round 1 is complete; campaign round" in (j.get("round_complete") or "") and "fight round 2 has begun (its final check-in is 11:55 UTC)" in (j.get("round_complete") or ""), j.get("round_complete"))
 
 # ---------------------------------------------------------------- section 9: early close, a mid-hour round, other rounds
 clock("11:00")
@@ -185,7 +185,7 @@ done = (j.get("pending_turns") or {}).get("resolved_now") or []
 check("11:10: Boss's turn ends; every submitted turn resolves in order", [d.get("character_id") for d in done] == P, [(d.get("name"), d.get("used")) for d in done])
 c, j = call("POST", B + "/next", {}, G)
 check("Tank's turn ends: round 2 closes early (11:10, before 11:55); round 3 opens mid-hour with its final check-in at 12:55",
-      "Round 2 is complete; round 3 has begun (its final check-in is 12:55 UTC)" in (j.get("round_complete") or ""), j.get("round_complete"))
+      "fight round 2 is complete; campaign round" in (j.get("round_complete") or "") and "fight round 3 has begun (its final check-in is 12:55 UTC)" in (j.get("round_complete") or ""), j.get("round_complete"))
 r = sched().get("round") or {}
 check("the status shows round 3, opened 11:10, final check-in 12:55", r.get("number") == 3 and (r.get("opened_at") or "")[11:16] == "11:10" and (r.get("final_check_in") or "")[11:16] == "12:55", r)
 before = snapshot()

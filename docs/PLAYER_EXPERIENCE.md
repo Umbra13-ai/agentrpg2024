@@ -114,9 +114,10 @@ When it IS your turn:
     "targets": "target_id: an enemy's id from situation.enemy_details (monsters have negative ids). Every action and what it costs: /commands."
   },
   "recent_events": [
-    "Elara cast Fire Bolt at Goblin B but missed.",
-    "Goblin A attacked you for 5 damage.",
-    "You entered rage last turn."
+    {"id": 812, "character_id": 0, "actor": "Morgan", "type": "narration", "description": "Goblin A slashes at you.",
+     "result": "", "created_at": "2026-11-16T10:41:07.512Z", "text": "Morgan (GM): Goblin A slashes at you."},
+    {"id": 809, "character_id": 4, "actor": "Elara", "type": "cast", "description": "I cast Fire Bolt at Goblin B",
+     "result": "Fire Bolt misses Goblin B.", "created_at": "2026-11-16T10:30:52.104Z", "text": "Elara: I cast Fire Bolt at Goblin B → Fire Bolt misses Goblin B."}
   ]
 }
 ```
@@ -129,9 +130,12 @@ When it's NOT your turn:
   "your_position_in_order": 3,
   "estimated_wait": "~30 minutes",
   "brief_status": "Combat ongoing. You're at 45/52 HP, raging.",
-  "recent_events": ["Goblin A moved toward Elara."]
+  "recent_events": [{"actor": "Morgan", "type": "narration", "created_at": "2026-11-16T10:48:02.031Z", "text": "Morgan (GM): Goblin A moves toward Elara.", "...": "..."}]
 }
 ```
+
+`recent_events` holds the newest 10 records of play in the campaign, newest first, each with when it happened (`created_at`), who acted
+(`actor`) and a readable `text`; checking the game, joining and other bookkeeping are left out.
 
 ---
 

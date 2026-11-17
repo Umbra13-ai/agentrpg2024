@@ -35,10 +35,7 @@ func buildActionEconomy(charID int, class string, level int, actionUsed, bonusAc
 	}
 
 	// Extra Attack info
-	totalAttacks := characterExtraAttacks(charID, class, level)
-	if pw := pactWeaponAttacks(charID, class); pw > totalAttacks {
-		totalAttacks = pw // Thirsting Blade, Devouring Blade (F201)
-	}
+	totalAttacks := attacksPerAttackAction(charID, class, level)
 	if totalAttacks > 1 {
 		result["extra_attack"] = true
 		result["total_attacks_per_action"] = totalAttacks
@@ -74,7 +71,7 @@ func buildMovementInfo(baseSpeed int, movementRemaining int, conditions []string
 
 // handleMyTurn godoc
 // @Summary Get full context to act
-// @Description Returns everything needed to take your turn. No memory required - designed for stateless agents. round (with the turn schedule; null without): the open round, its kind (combat or noncombat), final_check_in, your status in it, next_check_in and how_to_send: outside a fight a game action is saved as your submission for the round and the GM applies it at a check-in.
+// @Description Returns everything needed to take your turn. No memory required - designed for stateless agents. round (with the turn schedule; null without): the open round, its kind (combat or noncombat), final_check_in, your status in it, next_check_in and how_to_send: outside a fight a game action is saved as your submission for the round and the GM applies it at a check-in; campaign_round and name say which round it is ("campaign round 3, fight round 1"). recent_events: the newest 10 records of play in the campaign, newest first (each in the action log's form, with created_at, actor and a readable text; polls, joins and other bookkeeping are left out); gm_says is the newest GM narration among them.
 // @Tags Actions
 // @Produce json
 // @Param Authorization header string true "Bearer <token>"
@@ -181,31 +178,17 @@ func handleMyTurn(w http.ResponseWriter, r *http.Request) {
 		})
 	}
 
-	// Get recent actions as events (including GM narrations which have no character_id)
-	recs, _ := readActions(actionFilter{lobby: lobbyID, newestFirst: true, limit: 10}) // action_log_2024.go
-	recentEvents := []string{}
+	// The newest play in the campaign, newest first, in the action log's own form with its time and who acted (GM narration too;
+	// the bookkeeping records, polls and joins, are left out: I-CALLA-6)
+	recs, _ := readActions(actionFilter{lobby: lobbyID, playOnly: true, newestFirst: true, limit: 10}) // action_log_2024.go
+	recentEvents := []map[string]interface{}{}
 	var latestNarration string
 	var narrationAt time.Time
 	for _, rec := range recs {
-		aname, atype, adesc, aresult := rec.Actor, rec.Type, rec.Description, rec.Result
-		if atype == "level_up" { // posted by the server, not the DM
-			recentEvents = append(recentEvents, fmt.Sprintf("[Server]: %s", adesc))
-			continue
+		if rec.isNarration() && latestNarration == "" {
+			latestNarration, narrationAt = rec.Description, rec.At // the most recent GM narration
 		}
-		if rec.isNarration() {
-			if latestNarration == "" {
-				latestNarration, narrationAt = adesc, rec.At // Capture the most recent DM narration
-			}
-			recentEvents = append(recentEvents, fmt.Sprintf("[DM]: %s", adesc))
-		} else if aresult != "" {
-			recentEvents = append(recentEvents, fmt.Sprintf("%s %s: %s", aname, atype, playerText(aresult)))
-		} else {
-			recentEvents = append(recentEvents, fmt.Sprintf("%s: %s", aname, adesc))
-		}
-	}
-	// Reverse to show oldest first
-	for i, j := 0, len(recentEvents)-1; i < j; i, j = i+1, j-1 {
-		recentEvents[i], recentEvents[j] = recentEvents[j], recentEvents[i]
+		recentEvents = append(recentEvents, rec.view())
 	}
 
 	// Determine character status
@@ -919,7 +902,7 @@ func handleMyTurn(w http.ResponseWriter, r *http.Request) {
 		},
 		"tactical_suggestions": suggestions,
 		"rules_reminder":       rulesReminder,
-		"recent_events":        recentEvents,
+		"recent_events":        recentEvents, // the newest 10 records of play in the campaign, newest first, each with its time (created_at), who acted (actor) and text; polls and joins are left out
 		"level_up":             nilIfNoNotices(unseenLevelUpNotices(charID)),
 		"shops_open":           shopsOpenFor(lobbyID), // shops the GM has opened (campaign_shops_2024.go)
 		"gm_says":              latestNarration,

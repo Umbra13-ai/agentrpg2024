@@ -329,7 +329,7 @@ func consumeActionResource(charID int, resourceType string, movementCost int, ac
 	case "action":
 		removeOneWithShadowsInvisibility(charID)
 		// Special handling for Extra Attack
-		if len(actionType) > 0 && (strings.ToLower(actionType[0]) == "attack" || strings.ToLower(actionType[0]) == "grapple" || strings.ToLower(actionType[0]) == "shove") {
+		if len(actionType) > 0 && isStrike(actionType[0]) {
 			consumeAttackAction(charID) // a Grapple or Shove replaces one attack of the Attack action (F180)
 		} else {
 			db.Exec("UPDATE characters SET action_used = true WHERE id = $1", charID)
@@ -348,8 +348,19 @@ func consumeActionResource(charID int, resourceType string, movementCost int, ac
 	}
 }
 
+// attacksPerAttackAction is how many attacks one Attack action gives the character: Extra Attack (characterExtraAttacks) or a pact
+// weapon's Thirsting Blade (2) or Devouring Blade (3), whichever is more, at least 1. consumeAttackAction, the action economy views
+// (my-turn's and the action reply's), the sheet and the pending-turn budget (turnBudgetFor) read it.
+func attacksPerAttackAction(charID int, class string, level int) int {
+	n := characterExtraAttacks(charID, class, level) // multiclass: Extra Attack doesn't stack
+	if pw := pactWeaponAttacks(charID, class); pw > n {
+		n = pw
+	}
+	return maxInt(n, 1)
+}
+
 // consumeAttackAction handles Extra Attack
-// - If attacks_remaining is NULL, initialize it based on class/level
+// - If attacks_remaining is NULL, initialize it from attacksPerAttackAction
 // - Decrement attacks_remaining
 // - When attacks_remaining hits 0, mark action_used = true
 func consumeAttackAction(charID int) {
@@ -369,10 +380,7 @@ func consumeAttackAction(charID int) {
 
 	if !attacksRemaining.Valid {
 		// Starting a new Attack action - initialize attacks based on Extra Attack
-		totalAttacks := characterExtraAttacks(charID, class, level) // multiclass: Extra Attack doesn't stack
-		if pw := pactWeaponAttacks(charID, class); pw > totalAttacks {
-			totalAttacks = pw // Thirsting Blade (2), Devouring Blade (3)
-		}
+		totalAttacks := attacksPerAttackAction(charID, class, level)
 		if totalAttacks <= 1 {
 			// No Extra Attack, just mark action as used
 			db.Exec("UPDATE characters SET action_used = true, attacks_remaining = 0 WHERE id = $1", charID)
@@ -1283,10 +1291,7 @@ func handleAction(w http.ResponseWriter, r *http.Request) {
 		}
 
 		// Extra Attack info
-		totalAttacks := characterExtraAttacks(charID, charClass, charLevel)
-		if pw := pactWeaponAttacks(charID, charClass); pw > totalAttacks {
-			totalAttacks = pw // Thirsting Blade, Devouring Blade (F201)
-		}
+		totalAttacks := attacksPerAttackAction(charID, charClass, charLevel)
 		if totalAttacks > 1 {
 			resources["extra_attack"] = true
 			resources["total_attacks_per_action"] = totalAttacks
@@ -3326,8 +3331,9 @@ func resolveActionWithBonusDash(action, description string, charID int, bonusDas
 		}
 		db.Exec("UPDATE characters SET action_surge_this_turn = true WHERE id = $1", charID)
 
-		// Grant an extra action by resetting action_used
-		db.Exec("UPDATE characters SET action_used = false WHERE id = $1", charID)
+		// Grant an extra action by resetting action_used; once the first action was spent, an Attack action taken with the new one
+		// starts afresh with every attack attacksPerAttackAction gives (the finished one left attacks_remaining at 0)
+		db.Exec("UPDATE characters SET attacks_remaining = CASE WHEN COALESCE(action_used, false) THEN NULL ELSE attacks_remaining END, action_used = false WHERE id = $1", charID)
 
 		remainingUses := maxUses - currentUsed - 1
 		usesNote := ""

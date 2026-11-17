@@ -94,6 +94,8 @@ type actionType struct {
 	Family  bool     // a companion can take it too (POST /api/action with companion_id)
 	Beat    bool     // outside a fight it doesn't use up the exploration beat (the GM narrates between actions)
 	SRD     bool     // one of the SRD's twelve actions (Attack, Dash ... Utilize), named by the turn reminder
+	Strike  bool     // one attack of the Attack action: Extra Attack gives more of them per action (a Grapple or Shove replaces one: SRD 5.2.1 Unarmed Strike)
+	Adds    string   // a part of the turn it gives besides the usual ones (Action Surge: costAction, one more action): the pending-turn budget
 	Uses    string   // the class resource it spends, shown as uses left (my-turn)
 	While   string   // shown only while: raging, not_raging, wild_shaped, prone, dying, burning, inspired (holds a Bardic Inspiration die)
 }
@@ -106,7 +108,7 @@ func (t actionType) sentToAction() bool { return t.Send == sendAction || t.Send 
 
 var actionTypes = []actionType{
 	// ---------------------------------------------------------------- the SRD's actions
-	{Name: "attack", SRD: true, Title: "Attack", Section: "SRD actions", Cost: costAction, Group: "attack", Tags: []string{"attack"}, Family: true,
+	{Name: "attack", SRD: true, Strike: true, Title: "Attack", Section: "SRD actions", Cost: costAction, Group: "attack", Tags: []string{"attack"}, Family: true,
 		Fields:  []string{"target_id", "target", "object_id", "cleave_target_id", "description", "close_range", "ally_adjacent", "features"},
 		What:    "Attack with your equipped weapon or an Unarmed Strike: target_id is an enemy (situation.enemies in GET /api/my-turn), object_id an object such as a door. The server rolls and answers hit or miss. With Extra Attack each request is one attack of the Attack action. Improvised weapons, Alchemist's Fire and Acid flasks; \"knock out\" for a nonlethal blow. Words of magic weapons go in the description (\"luck\", \"hurl\", \"2 to AC\").",
 		Example: `{"action": "attack", "target_id": -1, "description": "I swing my longsword at the goblin"}`},
@@ -145,10 +147,10 @@ var actionTypes = []actionType{
 		Fields:  []string{"item", "target_character_id", "target_id", "target_ids", "charges", "description"},
 		What:    "The Utilize action: use an object that needs an action. With item, the server resolves potions (drinking one, or giving it to target_character_id within 5 feet, is a Bonus Action) and magic items (the Legendary items' words are in skill.md). Anything else (pull a lever, force a stuck door, light a fuse) is described and the GM rules on it. A Spell Scroll or a wand is read with cast and item.",
 		Example: `{"action": "use_item", "item": "Potion of Healing"}`},
-	{Name: "grapple", Title: "Grapple", Section: "SRD actions", Cost: costAction, Tags: []string{"attack"}, Fields: []string{"target_id", "description"},
+	{Name: "grapple", Strike: true, Title: "Grapple", Section: "SRD actions", Cost: costAction, Tags: []string{"attack"}, Fields: []string{"target_id", "description"},
 		What:    "An Unarmed Strike option, one attack of the Attack action: the target (no more than one size larger, within 5 feet) makes a Strength or Dexterity save against 8 + your Strength modifier + Proficiency Bonus or has the Grappled condition.",
 		Example: `{"action": "grapple", "target_id": -2}`},
-	{Name: "shove", Title: "Shove", Section: "SRD actions", Cost: costAction, Tags: []string{"attack"}, Fields: []string{"target_id", "description"},
+	{Name: "shove", Strike: true, Title: "Shove", Section: "SRD actions", Cost: costAction, Tags: []string{"attack"}, Fields: []string{"target_id", "description"},
 		What:    "An Unarmed Strike option, one attack of the Attack action: the target saves (as for a grapple) or is pushed 5 feet or knocked Prone (\"prone\" or \"push\" in the description).",
 		Example: `{"action": "shove", "target_id": -2, "description": "prone"}`},
 	{Name: "stabilize", Title: "Stabilize (first aid)", Section: "SRD actions", Cost: costAction, Fields: []string{"target_character_id", "description"},
@@ -251,7 +253,7 @@ var actionTypes = []actionType{
 	{Name: "second_wind", Title: "Second Wind", Section: "Class features", Cost: costBonus, Who: actionWho{Class: "fighter", Level: 1}, Uses: "second_wind",
 		What:    "Regain 1d10 + your Fighter level Hit Points; one use comes back on a Short Rest, all on a Long Rest.",
 		Example: `{"action": "second_wind"}`},
-	{Name: "action_surge", Title: "Action Surge", Section: "Class features", Cost: costFree, Who: actionWho{Class: "fighter", Level: 2}, Uses: "action_surge",
+	{Name: "action_surge", Adds: costAction, Title: "Action Surge", Section: "Class features", Cost: costFree, Who: actionWho{Class: "fighter", Level: 2}, Uses: "action_surge",
 		What:    "Take one more action this turn (not the Magic action).",
 		Example: `{"action": "action_surge"}`},
 	{Name: "martial_arts", Title: "Martial Arts strike", Section: "Class features", Cost: costBonus, Group: "attack", Tags: []string{"attack"}, Who: actionWho{Class: "monk", Level: 1}, Fields: []string{"target_id", "description"},
@@ -384,6 +386,14 @@ var actionTypes = []actionType{
 		Who: actionWho{Class: "monk", Subclass: "open-hand", Level: 6}, Fields: []string{"character_id"},
 		What:    "Roll your Martial Arts die and regain that many Hit Points plus your Wisdom modifier.",
 		Example: `POST /api/characters/wholeness-of-body {"character_id": 7}`},
+	{Name: "uncanny_dodge", Title: "Uncanny Dodge", Section: "Class features", Cost: costReaction, Send: sendRoute, Route: "POST /api/characters/reaction-orders",
+		Who: actionWho{Class: "rogue", Level: 5}, Fields: []string{"character_id", "order", "on", "min_damage"},
+		What:    "When an attacker you can see hits you with an attack roll, halve the attack's damage against you. Taken on another creature's turn, so it is a standing order the server takes for you at the trigger (min_damage keeps it for bigger hits).",
+		Example: `POST /api/characters/reaction-orders {"character_id": 7, "order": "uncanny_dodge", "on": true}`},
+	{Name: "deflect_attacks", Title: "Deflect Attacks", Section: "Class features", Cost: costReaction, Send: sendRoute, Route: "POST /api/characters/reaction-orders",
+		Who: actionWho{Class: "monk", Level: 3}, Fields: []string{"character_id", "order", "on", "min_damage"},
+		What:    "When an attack roll hits you and its damage includes Bludgeoning, Piercing or Slashing damage, reduce the attack's total damage by 1d10 + your Dexterity modifier + your Monk level. A standing order the server takes for you at the trigger (min_damage keeps it for bigger hits).",
+		Example: `POST /api/characters/reaction-orders {"character_id": 7, "order": "deflect_attacks", "on": true}`},
 	{Name: "holy_nimbus", Title: "Holy Nimbus", Section: "Class features", Cost: costBonus, Send: sendRoute, Route: "POST /api/characters/holy-nimbus",
 		Who: actionWho{Class: "paladin", Subclass: "devotion", Level: 20}, Fields: []string{"character_id"},
 		What:    "For 10 minutes your Aura of Protection is Bright Light: Advantage on saves against Fiends and Undead, and Radiant damage to enemies that start their turn in it.",
@@ -507,6 +517,12 @@ func getActionResourceType(actionType string) string {
 		return t.Cost
 	}
 	return costAction
+}
+
+// isStrike: the action is one attack of the Attack action (the table's Strike): Extra Attack gives more of them per action.
+func isStrike(action string) bool {
+	t, ok := lookupActionType(action)
+	return ok && t.Strike
 }
 
 // featureAction: the feature-word group of an action (a bonus or reaction cast is a cast; an opportunity attack an attack).

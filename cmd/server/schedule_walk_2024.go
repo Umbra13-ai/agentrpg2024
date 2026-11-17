@@ -268,7 +268,7 @@ func roundResults(q rowsQuerier, roundID int) (map[int]string, error) {
 
 // roundCompleteText: what a reply says when the last turn of a round ended and the next round opened.
 func roundCompleteText(ended int, next *roundRecord) string {
-	s := fmt.Sprintf("Round %d is complete; round %d has begun", ended, next.Number)
+	s := fmt.Sprintf("%s is complete; %s has begun", next.endedBefore(ended).Name(), next.name())
 	if next.Deadline.Valid {
 		return s + fmt.Sprintf(" (its final check-in is %s).", clockText(next.Deadline.Time))
 	}
@@ -312,8 +312,8 @@ func scheduleTasks(ci checkIn, lobby int) []string {
 			joinWords(standIns), lobby))
 	}
 	if len(submitted) > 0 && !combat {
-		out = append(out, fmt.Sprintf("Submitted turns are waiting in round %d (%s): resolve them in an order that suits the story, POST /api/campaigns/%d/round/resolve {\"character_id\": N} (or {} for all, in the order sent; GET /api/campaigns/%d/round shows each submission). A ruling decides one yourself: {\"character_id\": N, \"ruling\": \"...\"}.",
-			ci.Round.Number, joinWords(submitted), lobby, lobby))
+		out = append(out, fmt.Sprintf("Submitted turns are waiting in %s (%s): resolve them in an order that suits the story, POST /api/campaigns/%d/round/resolve {\"character_id\": N} (or {} for all, in the order sent; GET /api/campaigns/%d/round shows each submission). A ruling decides one yourself: {\"character_id\": N, \"ruling\": \"...\"}.",
+			ci.Round.Name, joinWords(submitted), lobby, lobby))
 	}
 	return out
 }

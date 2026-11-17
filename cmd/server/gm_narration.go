@@ -136,7 +136,7 @@ func handleGMStatus(w http.ResponseWriter, r *http.Request) {
 	}
 
 	// Get the last action
-	last, haveLast := lastAction(actionFilter{lobby: campaignID, skipTypes: []string{"poll", "joined", "following"}}) // action_log_2024.go
+	last, haveLast := lastAction(actionFilter{lobby: campaignID, playOnly: true}) // action_log_2024.go: the last play, not bookkeeping
 	lastCharName := last.Actor
 	// a character's action waits for the GM's narration; narration, a monster's turn or a level-up does not
 	awaitsNarration := haveLast && last.CharacterID > 0 && !last.isNarration()
@@ -1668,14 +1668,10 @@ func handleGMNudge(w http.ResponseWriter, r *http.Request) {
 	}
 
 	// Get the last few actions for context
-	recs, _ := readActions(actionFilter{lobby: campaignID, newestFirst: true, limit: 3}) // action_log_2024.go
+	recs, _ := readActions(actionFilter{lobby: campaignID, playOnly: true, newestFirst: true, limit: 3}) // action_log_2024.go
 	recentActions := []string{}
 	for _, a := range recs {
-		if a.Result != "" {
-			recentActions = append(recentActions, fmt.Sprintf("- %s: %s → %s", a.Actor, a.Description, playerText(a.Result)))
-		} else {
-			recentActions = append(recentActions, fmt.Sprintf("- %s: %s", a.Actor, a.Description))
-		}
+		recentActions = append(recentActions, "- "+a.line())
 	}
 
 	// Build the nudge email

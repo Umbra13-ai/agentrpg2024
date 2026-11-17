@@ -31,11 +31,14 @@ type reactionOrder struct {
 	MinDamage int  `json:"min_damage,omitempty"`
 }
 
-var reactionOrderKinds = []struct{ Key, What string }{
-	{"shield", "cast Shield (lowest free spell slot) when an attack roll hits you and +5 AC would make it miss"},
-	{"uncanny_dodge", "Uncanny Dodge (Rogue 5+): halve the damage when an attacker you can see hits you; min_damage keeps it for bigger hits"},
-	{"deflect_attacks", "Deflect Attacks (Monk 3+): reduce Bludgeoning, Piercing or Slashing attack damage by 1d10 + Dexterity modifier + Monk level; min_damage keeps it for bigger hits"},
-	{"opportunity_attack", "make an Opportunity Attack when a monster leaves your reach by its own movement"},
+// reactionOrderKinds: the orders a character can set, in the order they are tried and suggested. Who can hold one is asked of its
+// owner: Shield of the spells the character has (spellAvailableNatively), a feature's of the action table's Who (actionRefusal with
+// the order's Feature, the type's name there).
+var reactionOrderKinds = []struct{ Key, Spell, Feature, What string }{
+	{"shield", "shield", "", "cast Shield (lowest free spell slot) when an attack roll hits you and +5 AC would make it miss"},
+	{"uncanny_dodge", "", "uncanny_dodge", "Uncanny Dodge (Rogue 5+): halve the damage when an attacker you can see hits you; min_damage keeps it for bigger hits"},
+	{"deflect_attacks", "", "deflect_attacks", "Deflect Attacks (Monk 3+): reduce Bludgeoning, Piercing or Slashing attack damage by 1d10 + Dexterity modifier + Monk level; min_damage keeps it for bigger hits"},
+	{"opportunity_attack", "", "opportunity_attack", "make an Opportunity Attack when a monster leaves your reach by its own movement"},
 }
 
 func reactionOrdersOf(charID int) map[string]reactionOrder {
@@ -59,35 +62,38 @@ func activeOrderNames(charID int) []string {
 
 // reactionOrderProblem: why the character can't hold this order ("" when it can).
 func reactionOrderProblem(charID int, key string) string {
-	var class string
-	var level int
-	db.QueryRow(`SELECT COALESCE(class,''), COALESCE(level,1) FROM characters WHERE id = $1`, charID).Scan(&class, &level)
-	levels := classLevelsOf(charID)
-	lv := func(c string) int {
-		if l := levels[c]; l > 0 {
-			return l
+	var keys []string
+	for _, k := range reactionOrderKinds {
+		keys = append(keys, k.Key)
+		if k.Key != key {
+			continue
 		}
-		if strings.EqualFold(class, c) {
-			return level
+		if k.Spell != "" {
+			if ok, _ := spellAvailableNatively(charID, k.Spell, ""); !ok {
+				return fmt.Sprintf("You don't have the %s spell prepared or known.", titleCase(k.Spell))
+			}
 		}
-		return 0
+		if k.Feature != "" {
+			return actionRefusal(k.Feature, charID).text() // the action table's Who: "uncanny_dodge", "deflect_attacks"
+		}
+		return ""
 	}
-	switch key {
-	case "shield":
-		if ok, _ := spellAvailableNatively(charID, "shield", ""); !ok {
-			return "You don't have the Shield spell prepared or known."
+	return reactionOrderUnknown + strings.Join(keys, ", ") + "."
+}
+
+// reactionOrderUnknown: how the refusal of a word that is no order starts.
+const reactionOrderUnknown = "Unknown order: "
+
+// noReactionOrder: what the replies say instead of an example when the character can hold no order.
+const noReactionOrder = "No standing reaction order is available to this character now."
+
+// reactionOrderExample: the request that sets the first standing order the character can hold ("" when it can hold none), for the
+// reaction note of turn_left and the orders' own reply, so a suggestion is always an order the character can set.
+func reactionOrderExample(charID int) string {
+	for _, k := range reactionOrderKinds {
+		if reactionOrderProblem(charID, k.Key) == "" {
+			return fmt.Sprintf(`POST /api/characters/reaction-orders {"character_id": %d, "order": "%s", "on": true}`, charID, k.Key)
 		}
-	case "uncanny_dodge":
-		if lv("rogue") < 5 {
-			return "Uncanny Dodge is a Rogue feature of level 5."
-		}
-	case "deflect_attacks":
-		if lv("monk") < 3 {
-			return "Deflect Attacks is a Monk feature of level 3."
-		}
-	case "opportunity_attack":
-	default:
-		return "Unknown order: shield, uncanny_dodge, deflect_attacks or opportunity_attack."
 	}
 	return ""
 }
@@ -310,8 +316,11 @@ func handleReactionOrders(w http.ResponseWriter, r *http.Request) {
 			}
 			list = append(list, e)
 		}
-		return map[string]interface{}{"character_id": req.CharacterID, "orders": list,
-			"how": fmt.Sprintf("POST /api/characters/reaction-orders {\"character_id\": %d, \"order\": \"shield\", \"on\": true}", req.CharacterID)}
+		how := reactionOrderExample(req.CharacterID) // an order this character can hold
+		if how == "" {
+			how = noReactionOrder
+		}
+		return map[string]interface{}{"character_id": req.CharacterID, "orders": list, "how": how}
 	}
 	if r.Method == http.MethodGet {
 		writeJSONStatus(w, http.StatusOK, view())
@@ -319,7 +328,7 @@ func handleReactionOrders(w http.ResponseWriter, r *http.Request) {
 	}
 	key := strings.ToLower(strings.TrimSpace(req.Order))
 	on := req.On == nil || *req.On
-	if p := reactionOrderProblem(req.CharacterID, key); p != "" && (on || strings.HasPrefix(p, "Unknown")) {
+	if p := reactionOrderProblem(req.CharacterID, key); p != "" && (on || strings.HasPrefix(p, reactionOrderUnknown)) {
 		writeJSONStatus(w, http.StatusBadRequest, map[string]interface{}{"error": "order_not_available", "message": p})
 		return
 	}

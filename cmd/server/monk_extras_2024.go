@@ -49,19 +49,19 @@ func handleGMDeflectAttacks(w http.ResponseWriter, r *http.Request) {
 		writeJSONStatus(w, http.StatusBadRequest, map[string]interface{}{"error": "invalid_request", "message": "Send character_id and damage (a positive number)."})
 		return
 	}
-	var name, class string
+	var name string
 	var level, dex, lobby int
 	var reactionUsed bool
-	if err := db.QueryRow(`SELECT name, class, level, dex, COALESCE(lobby_id,0), COALESCE(reaction_used,false) FROM characters WHERE id = $1`, req.CharacterID).
-		Scan(&name, &class, &level, &dex, &lobby, &reactionUsed); err != nil {
+	if err := db.QueryRow(`SELECT name, level, dex, COALESCE(lobby_id,0), COALESCE(reaction_used,false) FROM characters WHERE id = $1`, req.CharacterID).
+		Scan(&name, &level, &dex, &lobby, &reactionUsed); err != nil {
 		if answerDBFailure(w, err, "the character") {
 			return
 		}
 		writeJSONStatus(w, http.StatusNotFound, map[string]interface{}{"error": "character_not_found"})
 		return
 	}
-	if strings.ToLower(class) != "monk" || level < 3 {
-		writeJSONStatus(w, http.StatusBadRequest, map[string]interface{}{"error": "no_deflect_attacks", "message": name + " is not a Monk of level 3 or higher."})
+	if why := actionRefusal("deflect_attacks", req.CharacterID).text(); why != "" { // the action table's Who
+		writeJSONStatus(w, http.StatusBadRequest, map[string]interface{}{"error": "no_deflect_attacks", "message": name + ": " + why})
 		return
 	}
 	dt := strings.ToLower(req.DamageType)

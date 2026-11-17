@@ -42,8 +42,9 @@ type actionFilter struct {
 	inCampaign  bool      // only rows written in a campaign (none written outside one)
 	since       time.Time // only rows written after this (zero: no limit)
 	within      time.Duration
-	skipTypes   []string // action types to leave out ("poll", "joined" ...)
+	skipTypes   []string // action types to leave out besides
 	hidePolls   bool     // leave out the routine "Checked game status" polls
+	playOnly    bool     // only play: leave out the bookkeeping records (notPlayTypes)
 	newestFirst bool
 	limit       int // 0: 100
 	offset      int
@@ -51,7 +52,8 @@ type actionFilter struct {
 
 // notPlayTypes: the log's bookkeeping records, never a character's play: checking the game, joining, following the party, saying it
 // is ready before the start, the GM opening play. Every reader that asks "when did this character last play" leaves them out
-// (notPlaySQL), so a new bookkeeping record is one entry here.
+// (notPlaySQL, or readActions with playOnly), and so do the feeds of what happened in play (my-turn's recent_events, the heartbeat's
+// recent actions, the GM's nudge), so a new bookkeeping record is one entry here.
 var notPlayTypes = []string{"poll", "joined", "left", "following", "ready", "round_open", "started_without", "level_up", "level_range"}
 
 // notPlaySQL: notPlayTypes and any extra types as a quoted SQL list, for "action_type NOT IN (...)".
@@ -94,6 +96,9 @@ func readActions(f actionFilter) ([]actionRecord, error) {
 	}
 	for _, t := range f.skipTypes {
 		q += " AND COALESCE(a.action_type, '') <> " + arg(t)
+	}
+	if f.playOnly {
+		q += " AND COALESCE(a.action_type, '') NOT IN (" + notPlaySQL() + ")"
 	}
 	if f.hidePolls {
 		q += " AND NOT (COALESCE(a.action_type, '') = 'poll' AND COALESCE(a.description, '') = 'Checked game status')"
@@ -139,12 +144,30 @@ func lastAction(f actionFilter) (actionRecord, bool) {
 	return rows[0], true
 }
 
-// view is the JSON form of a row, the same in every reply: the result as players read it (no monster AC or save numbers).
+// view is the JSON form of a row, the same in every reply: the result as players read it (no monster AC or save numbers), and the
+// row as one readable line (text).
 func (a actionRecord) view() map[string]interface{} {
 	return map[string]interface{}{
 		"id": a.ID, "character_id": a.CharacterID, "actor": a.Actor, "type": a.Type,
-		"description": a.Description, "result": playerText(a.Result), "created_at": cursorTime(a.At),
+		"description": a.Description, "result": playerText(a.Result), "created_at": cursorTime(a.At), "text": a.line(),
 	}
+}
+
+// line: the row as one readable line, as players read it: who acted, what it did and what came of it ("Mirelle: I cast Fire Bolt
+// → hit"); the GM's narration is marked as the GM's.
+func (a actionRecord) line() string {
+	who := a.Actor
+	if a.isNarration() {
+		who += " (GM)"
+	}
+	what, result := strings.TrimSpace(a.Description), strings.TrimSpace(playerText(a.Result))
+	switch {
+	case what == "":
+		return who + ": " + result
+	case result == "":
+		return who + ": " + what
+	}
+	return who + ": " + what + " → " + result
 }
 
 // cursorTime is how a feed shows when a record was written: RFC3339 with every fraction of a second the database keeps, so that

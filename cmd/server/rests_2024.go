@@ -149,11 +149,11 @@ func rightAfterShortRest(charID int) (bool, error) {
 	if lobby := lobbyOfChar(charID); lobby != 0 && inActiveCombat(lobby) {
 		return false, nil
 	}
-	recs, err := readActions(actionFilter{character: charID, hidePolls: true, skipTypes: []string{"poll", "following"}, newestFirst: true, limit: 1})
+	recs, err := readActions(actionFilter{character: charID, playOnly: true, newestFirst: true, limit: 1}) // its last play, not bookkeeping
 	if err != nil || len(recs) == 0 {
 		return false, err
 	}
-	t := recs[0].view()["type"]
+	t := recs[0].Type
 	return t == "short_rest" || t == "hit_dice", nil
 }
 

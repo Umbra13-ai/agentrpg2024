@@ -277,7 +277,15 @@ Add to the owner, never beside it. When you give another rule one owner, add it 
   exploration beat (`beatApplies`) and the exploration skip gives way to stand-ins. The gate reads the acting character
   with `actingCharacter` (next rule). **Stage F, what everyone is told:** `roundNoteFor` (`check_in_2024.go`), a view of `checkInAt`, is my-turn's
   `round` and the heartbeat's `turn_status.round_status`; `gmReminder` is the GM's next and final check-in in the resolve replies;
-  `playerNextCheckIn` the player's in the submission replies. Suites: `turn_schedule_rule_test.py`, `initiative_order_test.py`,
+  `playerNextCheckIn` the player's in the submission replies. **A round's name** is `roundRecord.name` / `Name` (`check_in_2024.go`,
+  I-KESTREL-7): a fight's round says both counts ("campaign round 3, fight round 1"), a round outside a fight its campaign round; the
+  campaign round is the count of the campaign's round records (`campaignRoundSQL`, read with every round record; nothing stored), and a
+  round outside a fight is numbered by it (`campaignRoundToOpen`). The party-chat line, `opened`, `roundCompleteText`, the round views
+  (`campaign_round`, `name`), `gmReminder` and the check-in watch use it. `needs_stand_in`'s message comes from `standInAllowed` and the
+  GM's next check-in: the GM may take the stand-in then, and until the GM does the player can still send its turn (Matt: check-in times
+  are recommendations). **A turn with nothing left** is `turnComplete` (`reminders_2024.go`), read from the `turn_left` view itself: the
+  action reply's `turn_complete` names who is next (`nextUp`: the turn owner's `nextTurn` on a copy of the fight). Go:
+  `TestPostgresLateTurnBeforeTheStandIn`, `TestPostgresTurnCompleteNamesWhoIsNext`. Suites: `turn_schedule_rule_test.py`, `initiative_order_test.py`,
   `late_gm_test.py`; suites that test mechanics, not the schedule, turn it off at campaign creation ({"state": "off"}); Go:
   `TestPostgresNoncombatRound`.
 - **Before the campaign starts** (Matt, Nov 16): `cmd/server/campaign_ready_2024.go`. While a campaign recruits, players ask questions in
@@ -312,7 +320,10 @@ Add to the owner, never beside it. When you give another rule one owner, add it 
   character's scores against it (the builder's review and the setup warnings), `primaryByScore` orders the suggestion of an Ability
   Score Improvement (playtest I-ALDEN-8).
 - **The action log's bookkeeping records** (not play: polls, joining, leaving, following, ready, the GM opening play, level-ups): `notPlayTypes` /
-  `notPlaySQL` (`cmd/server/action_log_2024.go`); every "when did this character last play" query and `characterHasPlayed` use it.
+  `notPlaySQL` (`cmd/server/action_log_2024.go`); every "when did this character last play" query and `characterHasPlayed` use it,
+  through `readActions` the filter's `playOnly` (also the last action the GM's status reads and `rightAfterShortRest`). The feeds of
+  what happened in play leave them out the same way: my-turn's `recent_events` (newest first, each the record's `view`), the
+  heartbeat's recent actions (`getRecentCampaignActions`) and the GM's nudge (I-CALLA-6; `TestPostgresRecentEventsNewestFirstWithoutBookkeeping`).
 - **The table held before round 1** (a session zero, playtest I-GM-7): `cmd/server/table_hold_2024.go`. `POST /api/campaigns/{id}/start
   {"first_round": "hold"}` starts the campaign with no round open; `tableHeld` is the one answer, `holdTable` / `releaseTable` the only
   writers of `lobbies.table_held`. While held the round gate refuses a player's game action (`refuseWhileHeld`: 409 `table_held`,
@@ -354,9 +365,21 @@ Add to the owner, never beside it. When you give another rule one owner, add it 
   companion, choice and state. A new limited feature is one row plus `actionRefusal` in its resolver;
   `TestEveryLimitedActionAsksTheTable` fails on a limited type no resolver asks, `TestWhoRefusalCodes` checks each kind of refusal,
   `TestWhoFeatsAreRealFeats` that every feat the table names is in `availableFeats`, `TestPostgresFeatActionsAskTheTable` a Boon's
-  action through the server.
+  action through the server. **Standing reaction orders** (`reaction_orders_2024.go`): `reactionOrderKinds` names each order's owner
+  (Shield: the spells the character has; Uncanny Dodge, Deflect Attacks, Opportunity Attack: their action-table rows, asked with
+  `actionRefusal` in `reactionOrderProblem`; the GM's uncanny-dodge and deflect-attacks requests ask the same rows).
+  `reactionOrderExample` (the first order the character can hold) is the one example: turn_left's reaction note and the orders' reply
+  `how` read it; turn_left's Reaction options are the table's Reaction types the character has (I-CALLA-8;
+  `TestPostgresReactionOrderExampleIsHoldable`).
 - **How to act (`GET /api/my-turn`'s `how_to_act`):** `actionHowTo` (`cmd/server/actions.go`), made from `actionRequest`'s
   fields and the character's real enemies.
+- **How many attacks one Attack action gives:** `attacksPerAttackAction` (`cmd/server/actions.go`: Extra Attack or a pact weapon's
+  Thirsting/Devouring Blade, whichever is more): `consumeAttackAction`, my-turn's and the action reply's action economy, the sheet and the
+  pending-turn budget read it. Which actions are one attack of it is the action table's `Strike` (attack, grapple, shove: `isStrike`); a
+  feature that gives one more action is its `Adds` (Action Surge). **What one turn holds** is `turnBudget` (`pending_turns_2024.go`:
+  `turnBudgetFor` / `check`, walked as the turn resolves): the pending-turn check warns only beyond it, refuses a second Bonus Action, and
+  the reply shows it as `budget` (S-ALDEN-11; `TestTurnBudgetCheck`, `TestPostgresPendingTurnBudget`). Action Surge after a spent
+  Attack action starts a new one with every attack.
 - **The equipped hands:** `changeHands` (`cmd/server/equipped_weapons.go`) is the one writer of `equipped_main_hand` /
   `equipped_off_hand`: it runs the change, then `syncHeldItems`, so the inventory's "held" marks, the shop and the sheet agree
   (playtest I-ROWAN-7). **How many hands a change needs** is `handsAllow` (`hands.go`); its refusal names what fills the hands and
@@ -420,7 +443,7 @@ Add to the owner, never beside it. When you give another rule one owner, add it 
   the GM's `automatic_traits` list (`auraTraits`) and the auras switch read those rows (`TestAuraTraitsComeFromTheTable`). A new trait with mechanics is a
   row here plus its rule in the owner it belongs to (an attack source, a save source, a turn hook).
 - **Reading the action log:** `readActions` (`cmd/server/action_log_2024.go`) with `actionFilter`; `actionRecord.view` is the one JSON
-  form of a row and `cursorTime` the one way a feed shows its time (every fraction of a second, so `?since=` the last record's
+  form of a row (with `text`, the row as one readable line: `actionRecord.line`) and `cursorTime` the one way a feed shows its time (every fraction of a second, so `?since=` the last record's
   `created_at` returns only later ones). The feed, spectate, the web feed and log, GM status, my-turn, the nudge and a character's
   profile read through it; every column may be NULL (narration has no character). `TestNoOtherActionLogReader` checks.
   **Writing it:** `writeAction(db or tx, campaign, character, type, description, result)`, the only INSERT (0 is NULL);

@@ -174,7 +174,7 @@ for cid, tok in players:
     if cid not in (first, second):
         call("POST", "/api/pending-turn", {"steps": [{"action": "dodge"}]}, tok)
 c, j = call("POST", f"/api/campaigns/{C}/combat/resolve", {}, G)
-check("every player submitted: the GM's resolve ends round 1 ('Round 1 is complete; round 2 has begun')", "Round 1 is complete; round 2 has begun" in " ".join(j.get("round_complete") or []), j.get("round_complete"))
+check("every player submitted: the GM's resolve ends round 1 ('... fight round 1 is complete; ... fight round 2 has begun')", "fight round 1 is complete; campaign round" in " ".join(j.get("round_complete") or []) and "fight round 2 has begun" in " ".join(j.get("round_complete") or []), j.get("round_complete"))
 j = sched()
 r = (j.get("check_in") or {}).get("round") or {}
 check("round 2 opens with the fight's round, and the new capacity takes effect", r.get("number") == 2 and r.get("kind") == "combat" and j.get("capacity") == 6 and not j.get("pending_capacity"), [r, j.get("capacity")])
@@ -201,12 +201,16 @@ check("13:55, the final check-in: only those still without a submission need a s
 # ---------------------------------------------------------------- the fight ends: a noncombat round; off closes it
 c, j = call("POST", f"/api/campaigns/{C}/combat/end", {"award_xp": False}, G)
 r = ((sched().get("check_in") or {}).get("round") or {})
-check("the fight ends: a noncombat round opens", c == 200 and r.get("kind") == "noncombat" and r.get("number") == 1, r)
+# a round outside a fight is numbered by the campaign's count of rounds (I-KESTREL-7): the fight's rounds count too
+fight_ended_round = r.get("campaign_round") or 0
+check("the fight ends: a noncombat round opens, numbered by the campaign round", c == 200 and r.get("kind") == "noncombat" and fight_ended_round >= 2
+      and r.get("number") == fight_ended_round and r.get("name") == "campaign round %d (outside a fight)" % fight_ended_round, r)
 c, j = call("PATCH", f"/api/campaigns/{C}/schedule", {"state": "off"}, G)
 check("off: no round, and GET /api/campaigns/{id} says off", c == 200 and (j.get("check_in") or {}).get("round") is None and (call("GET", f"/api/campaigns/{C}", None, G)[1].get("schedule") or {}).get("state") == "off", j.get("check_in"))
 c, j = call("PATCH", f"/api/campaigns/{C}/schedule", {"state": "on"}, G)
 r = ((j.get("check_in") or {}).get("round") or {})
-check("on again outside a fight: noncombat round 2", c == 200 and r.get("kind") == "noncombat" and r.get("number") == 2, r)
+check("on again outside a fight: the next campaign round", c == 200 and r.get("kind") == "noncombat" and r.get("number") == fight_ended_round + 1
+      and r.get("campaign_round") == fight_ended_round + 1, r)
 
 # ---------------------------------------------------------------- the last seat: parallel joins, exactly one wins
 c, j = call("POST", "/api/campaigns", {"name": f"TsRace {random.randint(1000,9999)}", "setting": "t", "max_players": 2}, G)
