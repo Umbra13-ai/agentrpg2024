@@ -273,8 +273,8 @@ func validatePendingSteps(lobbyID, charID int, steps []map[string]interface{}, s
 		return []string{fmt.Sprintf("a turn has at most %d steps (you sent %d)", ptMaxSteps, len(steps))}, nil
 	}
 	hasMap := ptMapToken(lobbyID, charID)
-	moved := false // a step that moves the character came earlier: a later range can't be judged from where it stands now
-	uses := map[string][]string{}
+	moved := false         // a step that moves the character came earlier: a later range can't be judged from where it stands now
+	var spent []budgetStep // the steps that take part of the turn, in order, for the turn's budget
 	for i, m := range steps {
 		at := fmt.Sprintf("step %d", i+1)
 		s, perr := ptDecodeStep(m)
@@ -322,8 +322,8 @@ func validatePendingSteps(lobbyID, charID int, steps []map[string]interface{}, s
 			problems = append(problems, at+": this is a Reaction, taken on another creature's turn, so it isn't part of your turn. Standing reaction orders (Shield, Opportunity Attack ...) are set with POST /api/characters/reaction-orders")
 			continue
 		}
-		if (kind == "action" || kind == "bonus_action") && s.Action != "use_item" { // an item's use may be a Bonus Action (a potion): not counted
-			uses[kind] = append(uses[kind], s.Action)
+		if s.CompanionID == 0 && s.Action != "use_item" { // an item's use may be a Bonus Action (a potion): not counted; a companion acts with its own
+			spent = append(spent, budgetStep{at: at, action: s.Action, kind: kind})
 		}
 		if kind == "movement" {
 			moved = true
@@ -434,13 +434,100 @@ func validatePendingSteps(lobbyID, charID int, steps []map[string]interface{}, s
 			}
 		}
 	}
-	if len(uses["bonus_action"]) > 1 {
-		problems = append(problems, fmt.Sprintf("a turn has one Bonus Action; this one has %d steps that take it (%s)", len(uses["bonus_action"]), strings.Join(uses["bonus_action"], ", ")))
+	p, w := turnBudgetFor(charID, steps).check(spent)
+	return append(problems, p...), append(warnings, w...)
+}
+
+// ---------------------------------------------------------------- the turn's budget
+
+// turnBudget: what one turn holds (SRD 5.2.1): one action, one more when a step uses a feature that adds one (the action table's
+// Adds: Action Surge) and the character has it; in an Attack action as many attacks as attacksPerAttackAction gives; one Bonus Action.
+// The pending-turn check warns only beyond it (a turn that is over it in Bonus Actions is refused) and the reply shows it; when the
+// turn resolves each step is checked again.
+type turnBudget struct {
+	Actions          int      `json:"actions"`            // actions this turn: 1, and 1 more for each step that adds one (Action Surge)
+	AttacksPerAction int      `json:"attacks_per_action"` // the attacks one Attack action gives (Extra Attack, Thirsting Blade)
+	BonusActions     int      `json:"bonus_actions"`      // a turn has one Bonus Action
+	AddedBy          []string `json:"added_by,omitempty"` // the steps that add an action (Action Surge)
+}
+
+// budgetStep: one step that takes part of the turn: where it is in the turn, its action and what it costs (getActionResourceType).
+type budgetStep struct {
+	at, action, kind string
+}
+
+// turnBudgetFor: the budget of a turn of these steps for the character now.
+func turnBudgetFor(charID int, steps []map[string]interface{}) turnBudget {
+	var class string
+	var level int
+	db.QueryRow(`SELECT COALESCE(class, ''), COALESCE(level, 1) FROM characters WHERE id = $1`, charID).Scan(&class, &level)
+	b := turnBudget{Actions: 1, AttacksPerAction: attacksPerAttackAction(charID, class, level), BonusActions: 1}
+	for _, m := range steps {
+		s, err := ptDecodeStep(m)
+		if err != nil || s.CompanionID != 0 {
+			continue
+		}
+		if t, ok := lookupActionType(s.Action); ok && t.Adds == costAction && !containsStr(b.AddedBy, t.Name) && actionRefusal(t.Name, charID) == nil {
+			b.Actions++
+			b.AddedBy = append(b.AddedBy, t.Name)
+		}
 	}
-	if n := len(uses["action"]); n > 1 {
-		warnings = append(warnings, fmt.Sprintf("%d steps take your action (%s): the later ones resolve only if you have an action left then (Extra Attack, Action Surge)", n, strings.Join(uses["action"], ", ")))
+	return b
+}
+
+// check walks the steps in order against the budget as the turn will be spent when it resolves: an attack (the table's Strike)
+// begins an Attack action or is one more attack of it; any other step that takes the action takes a whole one (and ends an Attack
+// action); a step that adds an action (Action Surge) gives a new one once the first is spent. A Bonus Action beyond the budget is a
+// problem; an action beyond it a warning (it resolves only if the turn has one left then).
+func (b turnBudget) check(spent []budgetStep) (problems, warnings []string) {
+	actionsLeft, strikesLeft := 1, 0
+	surges := len(b.AddedBy)
+	var bonus, over []string
+	for _, s := range spent {
+		t, _ := lookupActionType(s.action)
+		switch {
+		case t.Adds == costAction && surges > 0:
+			surges--
+			if actionsLeft > 0 || strikesLeft > 0 { // the action isn't spent yet: Action Surge only gives it back (resolveActionWithBonusDash)
+				warnings = append(warnings, fmt.Sprintf("%s: it comes before your first action is spent, so it gives you no second action when the turn resolves: send it after the steps of your first action", s.at))
+				continue
+			}
+			actionsLeft++
+		case s.kind == costBonus:
+			bonus = append(bonus, s.action)
+		case s.kind != costAction:
+		case t.Strike && strikesLeft > 0:
+			strikesLeft--
+		case actionsLeft > 0:
+			actionsLeft--
+			strikesLeft = 0
+			if t.Strike {
+				strikesLeft = b.AttacksPerAction - 1
+			}
+		default:
+			over = append(over, s.at)
+		}
+	}
+	if len(bonus) > b.BonusActions {
+		problems = append(problems, fmt.Sprintf("a turn has one Bonus Action; this one has %d steps that take it (%s)", len(bonus), strings.Join(bonus, ", ")))
+	}
+	if len(over) > 0 {
+		warnings = append(warnings, fmt.Sprintf("beyond your turn (%s): %s, which resolve(s) only if you have an action left then", b.text(), strings.Join(over, ", ")))
 	}
 	return problems, warnings
+}
+
+// text: the budget in words.
+func (b turnBudget) text() string {
+	actions := "1 action"
+	if b.Actions > 1 {
+		actions = fmt.Sprintf("%d actions (with %s)", b.Actions, strings.Join(b.AddedBy, ", "))
+	}
+	attacks := "1 attack"
+	if b.AttacksPerAction > 1 {
+		attacks = fmt.Sprintf("%d attacks", b.AttacksPerAction)
+	}
+	return fmt.Sprintf("%s, %s in each Attack action, 1 Bonus Action", actions, attacks)
 }
 
 // withActionOptions adds what the character can send (actions) to a refused turn whose problems include a word that is no action.
@@ -850,7 +937,7 @@ func pendingQueue(lobbyID int, c ptCombat) []map[string]interface{} {
 
 // handlePendingTurn godoc
 // @Summary Submit, read or withdraw your pending combat turn
-// @Description During a fight, send your whole turn whenever you are there: the server holds it and resolves it in initiative order once every slot before yours is done (when the GM checks in). POST {"steps": [...], "fallbacks": [[...], ...]}: each step is a POST /api/action body (attack, cast, dodge, move ...), or {"action": "map_move", "path": [{"x": 3, "y": 4}, ...]} on a battle map; at most 8 steps and 3 fallbacks. It is checked at once (the action, the spell and its slot, the target, the range on the map) and refused with the reasons if it can't work; nothing is rolled or spent until it resolves. Sending again replaces it. Fallbacks are tried in order if the main turn no longer works when your slot comes; if none works the slot is paused for the GM. GET shows the table's queue (pending turns are open to the table); DELETE withdraws yours. If no turn is in when your slot comes up, the fight doesn't wait: the GM takes your turn as stand-in. Reactions are not part of a turn: set standing orders with POST /api/characters/reaction-orders. In a campaign that uses the turn schedule (GET /api/campaigns/{id}/schedule) a turn is only for the round now open: sending it only saves it (only the GM resolves turns, at its check-ins); a character whose turn in the open round has resolved is done for that round (409 turn_already_resolved: submit when the next round begins), and the optional "round" names the round you mean (409 round_not_open when it isn't the open one); nothing is saved on a refusal. If nothing is in by the round's final check-in, the GM takes your turn as stand-in. Without the schedule a turn sent after your slot has passed is held for the next round.
+// @Description During a fight, send your whole turn whenever you are there: the server holds it and resolves it in initiative order once every slot before yours is done (when the GM checks in). POST {"steps": [...], "fallbacks": [[...], ...]}: each step is a POST /api/action body (attack, cast, dodge, move ...), or {"action": "map_move", "path": [{"x": 3, "y": 4}, ...]} on a battle map; at most 8 steps and 3 fallbacks. It is checked at once (the action, the spell and its slot, the target, the range on the map) and refused with the reasons if it can't work; nothing is rolled or spent until it resolves. The reply's budget is what one turn holds: actions (1, or 2 with a step of Action Surge you have), attacks_per_action (Extra Attack, Thirsting Blade) and one Bonus Action; steps beyond it are warned about (more than one Bonus Action is refused), and each step is checked again when it resolves. Sending again replaces it. Fallbacks are tried in order if the main turn no longer works when your slot comes; if none works the slot is paused for the GM. GET shows the table's queue (pending turns are open to the table); DELETE withdraws yours. If no turn is in when your slot comes up, the fight doesn't wait: the GM takes your turn as stand-in. Reactions are not part of a turn: set standing orders with POST /api/characters/reaction-orders. In a campaign that uses the turn schedule (GET /api/campaigns/{id}/schedule) a turn is only for the round now open: sending it only saves it (only the GM resolves turns, at its check-ins); a character whose turn in the open round has resolved is done for that round (409 turn_already_resolved: submit when the next round begins), and the optional "round" names the round you mean (409 round_not_open when it isn't the open one); nothing is saved on a refusal. After the round's final check-in the GM may take your turn as stand-in at its next check-in; until it does, you can still send your turn. Without the schedule a turn sent after your slot has passed is held for the next round.
 // @Tags Combat
 // @Accept json
 // @Produce json
@@ -1080,6 +1167,7 @@ func handlePendingTurn(w http.ResponseWriter, r *http.Request) {
 		}
 		row, _ := ptOpenRow(lobbyID, charID, round)
 		base["success"], base["replaced"], base["pending_turn"] = true, replaced, row.view()
+		base["budget"] = turnBudgetFor(charID, steps) // what the turn holds: the steps are warned about only beyond it
 		when := "when the GM next checks in"
 		if len(before) > 0 {
 			when = "once these slots are done: " + strings.Join(before, ", ")

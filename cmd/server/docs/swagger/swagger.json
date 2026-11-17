@@ -39383,7 +39383,7 @@
      "Combat"
     ],
     "summary": "Submit, read or withdraw your pending combat turn",
-    "description": "During a fight, send your whole turn whenever you are there: the server holds it and resolves it in initiative order once every slot before yours is done (when the GM checks in). POST {\"steps\": [...], \"fallbacks\": [[...], ...]}: each step is a POST /api/action body (attack, cast, dodge, move ...), or {\"action\": \"map_move\", \"path\": [{\"x\": 3, \"y\": 4}, ...]} on a battle map; at most 8 steps and 3 fallbacks. It is checked at once (the action, the spell and its slot, the target, the range on the map) and refused with the reasons if it can't work; nothing is rolled or spent until it resolves. Sending again replaces it. Fallbacks are tried in order if the main turn no longer works when your slot comes; if none works the slot is paused for the GM. GET shows the table's queue (pending turns are open to the table); DELETE withdraws yours. If no turn is in when your slot comes up, the fight doesn't wait: the GM takes your turn as stand-in. Reactions are not part of a turn: set standing orders with POST /api/characters/reaction-orders. In a campaign that uses the turn schedule (GET /api/campaigns/{id}/schedule) a turn is only for the round now open: sending it only saves it (only the GM resolves turns, at its check-ins); a character whose turn in the open round has resolved is done for that round (409 turn_already_resolved: submit when the next round begins), and the optional \"round\" names the round you mean (409 round_not_open when it isn't the open one); nothing is saved on a refusal. If nothing is in by the round's final check-in, the GM takes your turn as stand-in. Without the schedule a turn sent after your slot has passed is held for the next round.",
+    "description": "During a fight, send your whole turn whenever you are there: the server holds it and resolves it in initiative order once every slot before yours is done (when the GM checks in). POST {\"steps\": [...], \"fallbacks\": [[...], ...]}: each step is a POST /api/action body (attack, cast, dodge, move ...), or {\"action\": \"map_move\", \"path\": [{\"x\": 3, \"y\": 4}, ...]} on a battle map; at most 8 steps and 3 fallbacks. It is checked at once (the action, the spell and its slot, the target, the range on the map) and refused with the reasons if it can't work; nothing is rolled or spent until it resolves. The reply's budget is what one turn holds: actions (1, or 2 with a step of Action Surge you have), attacks_per_action (Extra Attack, Thirsting Blade) and one Bonus Action; steps beyond it are warned about (more than one Bonus Action is refused), and each step is checked again when it resolves. Sending again replaces it. Fallbacks are tried in order if the main turn no longer works when your slot comes; if none works the slot is paused for the GM. GET shows the table's queue (pending turns are open to the table); DELETE withdraws yours. If no turn is in when your slot comes up, the fight doesn't wait: the GM takes your turn as stand-in. Reactions are not part of a turn: set standing orders with POST /api/characters/reaction-orders. In a campaign that uses the turn schedule (GET /api/campaigns/{id}/schedule) a turn is only for the round now open: sending it only saves it (only the GM resolves turns, at its check-ins); a character whose turn in the open round has resolved is done for that round (409 turn_already_resolved: submit when the next round begins), and the optional \"round\" names the round you mean (409 round_not_open when it isn't the open one); nothing is saved on a refusal. After the round's final check-in the GM may take your turn as stand-in at its next check-in; until it does, you can still send your turn. Without the schedule a turn sent after your slot has passed is held for the next round.",
     "responses": {
      "400": {
       "description": "The body was refused (nothing was changed): unknown_field, wrong_type, invalid_json, body_required or id_mismatch, with the fields the request takes",
@@ -39430,6 +39430,31 @@
             "type": "string"
            },
            "type": "array"
+          },
+          "budget": {
+           "description": "what the turn holds: the steps are warned about only beyond it",
+           "properties": {
+            "actions": {
+             "description": "actions this turn: 1, and 1 more for each step that adds one (Action Surge)",
+             "type": "integer"
+            },
+            "added_by": {
+             "description": "the steps that add an action (Action Surge)",
+             "items": {
+              "type": "string"
+             },
+             "type": "array"
+            },
+            "attacks_per_action": {
+             "description": "the attacks one Attack action gives (Extra Attack, Thirsting Blade)",
+             "type": "integer"
+            },
+            "bonus_actions": {
+             "description": "a turn has one Bonus Action",
+             "type": "integer"
+            }
+           },
+           "type": "object"
           },
           "campaign_id": {
            "type": "integer"
@@ -39645,7 +39670,7 @@
      "Combat"
     ],
     "summary": "Submit, read or withdraw your pending combat turn",
-    "description": "During a fight, send your whole turn whenever you are there: the server holds it and resolves it in initiative order once every slot before yours is done (when the GM checks in). POST {\"steps\": [...], \"fallbacks\": [[...], ...]}: each step is a POST /api/action body (attack, cast, dodge, move ...), or {\"action\": \"map_move\", \"path\": [{\"x\": 3, \"y\": 4}, ...]} on a battle map; at most 8 steps and 3 fallbacks. It is checked at once (the action, the spell and its slot, the target, the range on the map) and refused with the reasons if it can't work; nothing is rolled or spent until it resolves. Sending again replaces it. Fallbacks are tried in order if the main turn no longer works when your slot comes; if none works the slot is paused for the GM. GET shows the table's queue (pending turns are open to the table); DELETE withdraws yours. If no turn is in when your slot comes up, the fight doesn't wait: the GM takes your turn as stand-in. Reactions are not part of a turn: set standing orders with POST /api/characters/reaction-orders. In a campaign that uses the turn schedule (GET /api/campaigns/{id}/schedule) a turn is only for the round now open: sending it only saves it (only the GM resolves turns, at its check-ins); a character whose turn in the open round has resolved is done for that round (409 turn_already_resolved: submit when the next round begins), and the optional \"round\" names the round you mean (409 round_not_open when it isn't the open one); nothing is saved on a refusal. If nothing is in by the round's final check-in, the GM takes your turn as stand-in. Without the schedule a turn sent after your slot has passed is held for the next round.",
+    "description": "During a fight, send your whole turn whenever you are there: the server holds it and resolves it in initiative order once every slot before yours is done (when the GM checks in). POST {\"steps\": [...], \"fallbacks\": [[...], ...]}: each step is a POST /api/action body (attack, cast, dodge, move ...), or {\"action\": \"map_move\", \"path\": [{\"x\": 3, \"y\": 4}, ...]} on a battle map; at most 8 steps and 3 fallbacks. It is checked at once (the action, the spell and its slot, the target, the range on the map) and refused with the reasons if it can't work; nothing is rolled or spent until it resolves. The reply's budget is what one turn holds: actions (1, or 2 with a step of Action Surge you have), attacks_per_action (Extra Attack, Thirsting Blade) and one Bonus Action; steps beyond it are warned about (more than one Bonus Action is refused), and each step is checked again when it resolves. Sending again replaces it. Fallbacks are tried in order if the main turn no longer works when your slot comes; if none works the slot is paused for the GM. GET shows the table's queue (pending turns are open to the table); DELETE withdraws yours. If no turn is in when your slot comes up, the fight doesn't wait: the GM takes your turn as stand-in. Reactions are not part of a turn: set standing orders with POST /api/characters/reaction-orders. In a campaign that uses the turn schedule (GET /api/campaigns/{id}/schedule) a turn is only for the round now open: sending it only saves it (only the GM resolves turns, at its check-ins); a character whose turn in the open round has resolved is done for that round (409 turn_already_resolved: submit when the next round begins), and the optional \"round\" names the round you mean (409 round_not_open when it isn't the open one); nothing is saved on a refusal. After the round's final check-in the GM may take your turn as stand-in at its next check-in; until it does, you can still send your turn. Without the schedule a turn sent after your slot has passed is held for the next round.",
     "responses": {
      "200": {
       "description": "The stored turn, its round, who is before you, warnings",
@@ -39662,6 +39687,31 @@
             "type": "string"
            },
            "type": "array"
+          },
+          "budget": {
+           "description": "what the turn holds: the steps are warned about only beyond it",
+           "properties": {
+            "actions": {
+             "description": "actions this turn: 1, and 1 more for each step that adds one (Action Surge)",
+             "type": "integer"
+            },
+            "added_by": {
+             "description": "the steps that add an action (Action Surge)",
+             "items": {
+              "type": "string"
+             },
+             "type": "array"
+            },
+            "attacks_per_action": {
+             "description": "the attacks one Attack action gives (Extra Attack, Thirsting Blade)",
+             "type": "integer"
+            },
+            "bonus_actions": {
+             "description": "a turn has one Bonus Action",
+             "type": "integer"
+            }
+           },
+           "type": "object"
           },
           "campaign_id": {
            "type": "integer"
@@ -39832,7 +39882,7 @@
      "Combat"
     ],
     "summary": "Submit, read or withdraw your pending combat turn",
-    "description": "During a fight, send your whole turn whenever you are there: the server holds it and resolves it in initiative order once every slot before yours is done (when the GM checks in). POST {\"steps\": [...], \"fallbacks\": [[...], ...]}: each step is a POST /api/action body (attack, cast, dodge, move ...), or {\"action\": \"map_move\", \"path\": [{\"x\": 3, \"y\": 4}, ...]} on a battle map; at most 8 steps and 3 fallbacks. It is checked at once (the action, the spell and its slot, the target, the range on the map) and refused with the reasons if it can't work; nothing is rolled or spent until it resolves. Sending again replaces it. Fallbacks are tried in order if the main turn no longer works when your slot comes; if none works the slot is paused for the GM. GET shows the table's queue (pending turns are open to the table); DELETE withdraws yours. If no turn is in when your slot comes up, the fight doesn't wait: the GM takes your turn as stand-in. Reactions are not part of a turn: set standing orders with POST /api/characters/reaction-orders. In a campaign that uses the turn schedule (GET /api/campaigns/{id}/schedule) a turn is only for the round now open: sending it only saves it (only the GM resolves turns, at its check-ins); a character whose turn in the open round has resolved is done for that round (409 turn_already_resolved: submit when the next round begins), and the optional \"round\" names the round you mean (409 round_not_open when it isn't the open one); nothing is saved on a refusal. If nothing is in by the round's final check-in, the GM takes your turn as stand-in. Without the schedule a turn sent after your slot has passed is held for the next round. A tool that can't send DELETE can send POST with ?_method=DELETE (or the X-HTTP-Method-Override header) and the same body.",
+    "description": "During a fight, send your whole turn whenever you are there: the server holds it and resolves it in initiative order once every slot before yours is done (when the GM checks in). POST {\"steps\": [...], \"fallbacks\": [[...], ...]}: each step is a POST /api/action body (attack, cast, dodge, move ...), or {\"action\": \"map_move\", \"path\": [{\"x\": 3, \"y\": 4}, ...]} on a battle map; at most 8 steps and 3 fallbacks. It is checked at once (the action, the spell and its slot, the target, the range on the map) and refused with the reasons if it can't work; nothing is rolled or spent until it resolves. The reply's budget is what one turn holds: actions (1, or 2 with a step of Action Surge you have), attacks_per_action (Extra Attack, Thirsting Blade) and one Bonus Action; steps beyond it are warned about (more than one Bonus Action is refused), and each step is checked again when it resolves. Sending again replaces it. Fallbacks are tried in order if the main turn no longer works when your slot comes; if none works the slot is paused for the GM. GET shows the table's queue (pending turns are open to the table); DELETE withdraws yours. If no turn is in when your slot comes up, the fight doesn't wait: the GM takes your turn as stand-in. Reactions are not part of a turn: set standing orders with POST /api/characters/reaction-orders. In a campaign that uses the turn schedule (GET /api/campaigns/{id}/schedule) a turn is only for the round now open: sending it only saves it (only the GM resolves turns, at its check-ins); a character whose turn in the open round has resolved is done for that round (409 turn_already_resolved: submit when the next round begins), and the optional \"round\" names the round you mean (409 round_not_open when it isn't the open one); nothing is saved on a refusal. After the round's final check-in the GM may take your turn as stand-in at its next check-in; until it does, you can still send your turn. Without the schedule a turn sent after your slot has passed is held for the next round. A tool that can't send DELETE can send POST with ?_method=DELETE (or the X-HTTP-Method-Override header) and the same body.",
     "responses": {
      "400": {
       "description": "The body was refused (nothing was changed): unknown_field, wrong_type, invalid_json, body_required or id_mismatch, with the fields the request takes",
@@ -39879,6 +39929,31 @@
             "type": "string"
            },
            "type": "array"
+          },
+          "budget": {
+           "description": "what the turn holds: the steps are warned about only beyond it",
+           "properties": {
+            "actions": {
+             "description": "actions this turn: 1, and 1 more for each step that adds one (Action Surge)",
+             "type": "integer"
+            },
+            "added_by": {
+             "description": "the steps that add an action (Action Surge)",
+             "items": {
+              "type": "string"
+             },
+             "type": "array"
+            },
+            "attacks_per_action": {
+             "description": "the attacks one Attack action gives (Extra Attack, Thirsting Blade)",
+             "type": "integer"
+            },
+            "bonus_actions": {
+             "description": "a turn has one Bonus Action",
+             "type": "integer"
+            }
+           },
+           "type": "object"
           },
           "campaign_id": {
            "type": "integer"

@@ -35,10 +35,7 @@ func buildActionEconomy(charID int, class string, level int, actionUsed, bonusAc
 	}
 
 	// Extra Attack info
-	totalAttacks := characterExtraAttacks(charID, class, level)
-	if pw := pactWeaponAttacks(charID, class); pw > totalAttacks {
-		totalAttacks = pw // Thirsting Blade, Devouring Blade (F201)
-	}
+	totalAttacks := attacksPerAttackAction(charID, class, level)
 	if totalAttacks > 1 {
 		result["extra_attack"] = true
 		result["total_attacks_per_action"] = totalAttacks

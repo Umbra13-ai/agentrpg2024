@@ -360,6 +360,13 @@ Add to the owner, never beside it. When you give another rule one owner, add it 
   action through the server.
 - **How to act (`GET /api/my-turn`'s `how_to_act`):** `actionHowTo` (`cmd/server/actions.go`), made from `actionRequest`'s
   fields and the character's real enemies.
+- **How many attacks one Attack action gives:** `attacksPerAttackAction` (`cmd/server/actions.go`: Extra Attack or a pact weapon's
+  Thirsting/Devouring Blade, whichever is more): `consumeAttackAction`, my-turn's and the action reply's action economy, the sheet and the
+  pending-turn budget read it. Which actions are one attack of it is the action table's `Strike` (attack, grapple, shove: `isStrike`); a
+  feature that gives one more action is its `Adds` (Action Surge). **What one turn holds** is `turnBudget` (`pending_turns_2024.go`:
+  `turnBudgetFor` / `check`, walked as the turn resolves): the pending-turn check warns only beyond it, refuses a second Bonus Action, and
+  the reply shows it as `budget` (S-ALDEN-11; `TestTurnBudgetCheck`, `TestPostgresPendingTurnBudget`). Action Surge after a spent
+  Attack action starts a new one with every attack.
 - **The equipped hands:** `changeHands` (`cmd/server/equipped_weapons.go`) is the one writer of `equipped_main_hand` /
   `equipped_off_hand`: it runs the change, then `syncHeldItems`, so the inventory's "held" marks, the shop and the sheet agree
   (playtest I-ROWAN-7). **How many hands a change needs** is `handsAllow` (`hands.go`); its refusal names what fills the hands and

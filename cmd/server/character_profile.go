@@ -476,7 +476,7 @@ func getCharacterProfile(w http.ResponseWriter, charID int) {
 				Str: strScore, Dex: dexScore, WeaponProfs: wprofs, Inventory: inv,
 				EquippedArmor: armorSlug.String, Shield: shield,
 				MainHand: mainHand.String, OffHand: offHand.String,
-				BaseSpeed: baseSpeed, TraitNames: names, ExtraAttacks: characterExtraAttacks(charID, sbClass, sbLevel), CharID: charID,
+				BaseSpeed: baseSpeed, TraitNames: names, ExtraAttacks: attacksPerAttackAction(charID, sbClass, sbLevel), CharID: charID,
 			})
 		}
 		resp["statblock"] = sbMap
