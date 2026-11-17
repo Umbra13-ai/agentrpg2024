@@ -1248,14 +1248,19 @@ func handleHeal(w http.ResponseWriter, r *http.Request, charID int) {
 		json.NewEncoder(w).Encode(map[string]interface{}{"error": "character_not_found"})
 		return
 	}
-	json.NewEncoder(w).Encode(map[string]interface{}{
+	reply := map[string]interface{}{
 		"success":                true,
 		"hp":                     h.After.HP,
 		"max_hp":                 h.After.Max,
 		"healing_applied":        h.Healed,
 		"regained_consciousness": h.Woke,
 		"dead":                   h.After.Dead,
-	})
+	}
+	if h.Blocked != "" { // what keeps the character from regaining Hit Points (regainBlocked)
+		reply["cannot_regain_hp"] = h.Blocked
+		reply["message"] = noRegainLine(h.Name, h.Blocked)
+	}
+	json.NewEncoder(w).Encode(reply)
 }
 
 // shortRestRequest: the body of a Short Rest (POST .../short-rest, or .../rest with type "short").

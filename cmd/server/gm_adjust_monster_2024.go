@@ -155,8 +155,11 @@ func handleGMAdjustMonster(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 	if req.Heal != nil && *req.Heal > 0 {
-		healMonster(campaignID, tid, *req.Heal)
-		did = append(did, fmt.Sprintf("heals %d", *req.Heal))
+		if _, _, blocked, _ := healMonster(campaignID, tid, *req.Heal); blocked != "" {
+			did = append(did, fmt.Sprintf("can't regain Hit Points (%s): no healing", blocked))
+		} else {
+			did = append(did, fmt.Sprintf("heals %d", *req.Heal))
+		}
 	}
 	if req.TempHP != nil {
 		setMonsterTempHP(campaignID, tid, *req.TempHP)

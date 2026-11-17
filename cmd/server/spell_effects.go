@@ -185,8 +185,13 @@ func applySpellHealing(charID, heal, healMax int, description string) string {
 		if healMax > heal && beaconMaxHealing(id) {
 			amount, beacon = healMax, " (Beacon of Hope: the maximum)" // buff_spells_2024.go
 		}
-		name, before, after := healCharacter(id, amount)
-		if name == "" {
+		h, err := healHP(id, amount)
+		if err != nil {
+			continue
+		}
+		name, before, after := h.Name, h.Before.HP, h.After.HP
+		if h.Blocked != "" {
+			parts = append(parts, strings.TrimSuffix(noRegainLine(name, h.Blocked), "."))
 			continue
 		}
 		parts = append(parts, fmt.Sprintf("%s regains %d Hit Points (%d → %d)%s", name, after-before, before, after, beacon)+strings.TrimSuffix(lifeBond(id, after-before), ".")) // Life Bond: a Paladin's steed within 5 feet

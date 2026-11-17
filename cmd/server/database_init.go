@@ -303,6 +303,9 @@ var schemaSteps = []schemaStep{
 	// lastCheckedIn reads a player's latest request to a campaign on every heartbeat (check_in_watch_2024.go): without this the
 	// request log, which keeps reply bodies, is read whole each time
 	{"check_in_watch_2024.go", `CREATE INDEX IF NOT EXISTS api_logs_agent_lobby_time ON api_logs (agent_id, lobby_id, created_at DESC)`},
+	// what lasts with a condition (feedback log 66: the Pit Fiend's Bite): damage at the start or end of each of the creature's turns
+	// and no healing (condition_owner_2024.go)
+	{"condition_records.go", `ALTER TABLE condition_records ADD COLUMN IF NOT EXISTS turn_damage JSONB, ADD COLUMN IF NOT EXISTS no_healing BOOLEAN NOT NULL DEFAULT false`},
 }
 
 // seatReadySchema: a player's "ready to start" on its seat (cleared whenever the seat changes hands: takeSeat, swapSeat;

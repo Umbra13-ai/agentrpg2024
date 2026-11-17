@@ -400,8 +400,12 @@ func monsterFeaturesTurnStart(lobbyID, id int, name string) []string {
 				s.RegenBlocked, changed = false, true
 			case hp >= 1 && hp < maxHP:
 				n, _ := strconv.Atoi(m[1])
-				if before, after, err := healMonster(lobbyID, id, n); err == nil { // the monster Hit Point owner (monster_hp_2024.go)
-					log = append(log, fmt.Sprintf("%s regenerates %d Hit Points (%s).", name, after.HP-before.HP, t.Name))
+				if before, after, blocked, err := healMonster(lobbyID, id, n); err == nil { // the monster Hit Point owner (monster_hp_2024.go)
+					if blocked != "" {
+						log = append(log, fmt.Sprintf("%s doesn't regenerate (%s): it can't regain Hit Points (%s).", name, t.Name, blocked))
+					} else {
+						log = append(log, fmt.Sprintf("%s regenerates %d Hit Points (%s).", name, after.HP-before.HP, t.Name))
+					}
 				}
 			}
 		}

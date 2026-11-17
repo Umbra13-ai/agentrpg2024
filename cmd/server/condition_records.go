@@ -76,6 +76,71 @@ type conditionRecord struct {
 	Notes          string            `json:"notes,omitempty"`
 	Detail         string            `json:"-"` // what follows the condition's name in the list entry ("charmed:12": 12)
 	CreatedBy      int               `json:"-"` // a Concentration spell's caster (notes "concentration"), or the GM who set it
+	// what lasts with the condition (feedback log 66: the Pit Fiend's Bite): damage at the start or the end of each of the creature's
+	// turns (conditionTurnDamage, a turn hook) and no healing (regainBlocked, the Hit Point owner); both end with the record
+	TurnDamage []conditionTurnDamage `json:"turn_damage,omitempty"`
+	NoHealing  bool                  `json:"no_healing,omitempty"`
+}
+
+// conditionTurnDamage is damage a condition deals at the start or the end of each of the creature's turns ("While Poisoned, the
+// target ... takes 21 (6d6) Poison damage at the start of each of its turns").
+type conditionTurnDamage struct {
+	Dice string `json:"dice"` // the damage dice, such as 6d6
+	Type string `json:"type"` // the damage type, such as poison
+	When string `json:"when"` // start_of_turn or end_of_turn: at the start or the end of each of the creature's turns
+}
+
+// lasting: the record carries effects of its own besides the condition (damage each turn, no healing).
+func (r conditionRecord) lasting() bool { return len(r.TurnDamage) > 0 || r.NoHealing }
+
+// phrase is the record as its effects name it: "the Poisoned condition (Pit Fiend's Bite)".
+func (r conditionRecord) phrase() string {
+	s := "the " + titleCase(r.Condition) + " condition"
+	if r.Source != "" {
+		s += " (" + r.Source + ")"
+	}
+	return s
+}
+
+// turnPhrase: "at the start of each of your turns" (whose: "your", "its").
+func turnPhrase(when, whose string) string {
+	if when == "start_of_turn" {
+		return "at the start of each of " + whose + " turns"
+	}
+	return "at the end of each of " + whose + " turns"
+}
+
+// saveWhen is when a repeated save is made (end_of_turn unless it says start_of_turn).
+func (s conditionSave) saveWhen() string {
+	if s.When == "start_of_turn" {
+		return s.When
+	}
+	return "end_of_turn"
+}
+
+// effectClauses say what a record does besides its condition's own rules, in the stat block's terms: no healing, damage each turn,
+// the save that ends it and the rounds left. whose is "your" in the creature's own view, "its" in a log line; withDC adds the
+// save's DC (the GM's view: a player isn't told a DC, player_text.go). Every view of a record (conditions_detail, the line that
+// applies it) says it with these.
+func (r conditionRecord) effectClauses(whose string, withDC bool) []string {
+	var out []string
+	if r.NoHealing {
+		out = append(out, "can't regain Hit Points")
+	}
+	for _, d := range r.TurnDamage {
+		out = append(out, fmt.Sprintf("%s %s damage %s", d.Dice, titleCase(d.Type), turnPhrase(d.When, whose)))
+	}
+	if s := r.EndSave; s != nil {
+		save := abilityNames[strings.ToLower(s.Ability)] + " saving throw"
+		if withDC {
+			save = fmt.Sprintf("DC %d %s", s.DC, save)
+		}
+		out = append(out, fmt.Sprintf("ends on a successful %s %s", save, turnPhrase(s.saveWhen(), whose)))
+	}
+	if r.DurationRounds > 0 {
+		out = append(out, fmt.Sprintf("%d round(s) left at most", r.DurationRounds))
+	}
+	return out
 }
 
 var abilityNames = map[string]string{"str": "Strength", "strength": "Strength", "dex": "Dexterity", "dexterity": "Dexterity",
@@ -163,6 +228,26 @@ func conditionView(rec conditionRecord, speed int, gm bool) map[string]interface
 	}
 	if rec.DurationRounds > 0 {
 		v["duration_rounds"] = rec.DurationRounds
+	}
+	// what the record does besides the condition's rules (feedback log 66): everyone sees it, a DC only the GM
+	if rec.NoHealing {
+		v["no_healing"] = true
+	}
+	if len(rec.TurnDamage) > 0 {
+		v["turn_damage"] = rec.TurnDamage
+	}
+	if s := rec.EndSave; s != nil {
+		save := map[string]interface{}{"ability": abilityNames[strings.ToLower(s.Ability)], "when": s.saveWhen()}
+		if gm {
+			save["dc"] = s.DC
+		}
+		v["ends_on_save"] = save
+	}
+	if clauses := rec.effectClauses("your", gm); len(clauses) > 0 {
+		v["effect"] = strings.Join(clauses, "; ")
+	}
+	if rec.lasting() && rec.Source != "" {
+		v["source"] = rec.Source // what caused the condition (everyone sees the source of damage each turn or no healing; the GM sees every source)
 	}
 	if gm {
 		if rec.Source != "" {

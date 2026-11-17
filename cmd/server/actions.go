@@ -3274,6 +3274,9 @@ func resolveActionWithBonusDash(action, description string, charID int, bonusDas
 		}
 		currentHP, newHP, actualHeal := h.Before.HP, h.After.HP, h.Healed
 
+		if actualHeal == 0 && h.Blocked != "" {
+			return fmt.Sprintf("💪 Second Wind! Rolled 1d10 (%d) + %d (level) = %d healing, but %s", healRoll, level, totalHeal, noRegainLine("you", h.Blocked))
+		}
 		if actualHeal == 0 {
 			return fmt.Sprintf("💪 Second Wind! Rolled 1d10 (%d) + %d (level) = %d healing. You're already at full HP!", healRoll, level, totalHeal)
 		}
@@ -3465,6 +3468,8 @@ func resolveActionWithBonusDash(action, description string, charID int, bonusDas
 			switch {
 			case h.After.Dead:
 				return fmt.Sprintf("🙌 Lay on Hands! %s is dead: Hit Points can't be restored. Pool: %d HP remaining.", targetName, remainingPool)
+			case h.Blocked != "":
+				return fmt.Sprintf("🙌 Lay on Hands! %s Pool: %d HP remaining.", noRegainLine(targetName, h.Blocked), remainingPool)
 			case newHP < h.After.Max:
 				return fmt.Sprintf("🙌 Lay on Hands! %s can't regain Hit Points right now. Pool: %d HP remaining.", targetName, remainingPool)
 			case targetID == charID:

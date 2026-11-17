@@ -68,7 +68,7 @@ func (r conditionRecord) entry() string {
 
 // bare: the record says only that the condition is there (no source, duration, save, escape or note).
 func (r conditionRecord) bare() bool {
-	return r.Source == "" && r.DurationRounds == 0 && r.EndSave == nil && len(r.Escapes) == 0 && r.Notes == ""
+	return r.Source == "" && r.DurationRounds == 0 && r.EndSave == nil && len(r.Escapes) == 0 && r.Notes == "" && !r.lasting()
 }
 
 // conditionList is a character's conditions list made from its records: each entry once, in the order added, then its
@@ -98,11 +98,11 @@ type rowsQuerier interface {
 // readConditionRecords reads a creature's rows: a character's by its id, a monster's by its campaign and id.
 func readConditionRecords(q rowsQuerier, lobbyID, targetID int) ([]conditionRecord, error) {
 	query := `SELECT id, lobby_id, target_id, condition, detail, source, escapes, duration_rounds, COALESCE(end_save, 'null'::jsonb), notes,
-		COALESCE(created_by, 0) FROM condition_records WHERE target_id = $1 ORDER BY id`
+		COALESCE(created_by, 0), COALESCE(turn_damage, 'null'::jsonb), no_healing FROM condition_records WHERE target_id = $1 ORDER BY id`
 	args := []interface{}{targetID}
 	if targetID < 0 {
 		query = `SELECT id, lobby_id, target_id, condition, detail, source, escapes, duration_rounds, COALESCE(end_save, 'null'::jsonb), notes,
-		COALESCE(created_by, 0) FROM condition_records WHERE target_id = $1 AND lobby_id = $2 ORDER BY id`
+		COALESCE(created_by, 0), COALESCE(turn_damage, 'null'::jsonb), no_healing FROM condition_records WHERE target_id = $1 AND lobby_id = $2 ORDER BY id`
 		args = append(args, lobbyID)
 	}
 	rows, err := q.Query(query, args...)
@@ -113,12 +113,14 @@ func readConditionRecords(q rowsQuerier, lobbyID, targetID int) ([]conditionReco
 	var out []conditionRecord
 	for rows.Next() {
 		var r conditionRecord
-		var esc, es []byte
-		if err := rows.Scan(&r.ID, &r.LobbyID, &r.TargetID, &r.Condition, &r.Detail, &r.Source, &esc, &r.DurationRounds, &es, &r.Notes, &r.CreatedBy); err != nil {
+		var esc, es, td []byte
+		if err := rows.Scan(&r.ID, &r.LobbyID, &r.TargetID, &r.Condition, &r.Detail, &r.Source, &esc, &r.DurationRounds, &es, &r.Notes, &r.CreatedBy,
+			&td, &r.NoHealing); err != nil {
 			return nil, err
 		}
 		json.Unmarshal(esc, &r.Escapes)
 		json.Unmarshal(es, &r.EndSave)
+		json.Unmarshal(td, &r.TurnDamage)
 		out = append(out, r)
 	}
 	return out, rows.Err()
@@ -204,9 +206,14 @@ func (c *conditionChange) insert(r conditionRecord) (int, error) {
 	if r.CreatedBy != 0 {
 		createdBy = r.CreatedBy
 	}
-	err := c.tx.QueryRow(`INSERT INTO condition_records (lobby_id, target_id, condition, detail, source, escapes, duration_rounds, end_save, notes, created_by)
-		VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10) RETURNING id`, c.lobby, c.target, r.Condition, r.Detail, r.Source, string(esc), r.DurationRounds,
-		endSaveJSON(r.EndSave), r.Notes, createdBy).Scan(&r.ID)
+	var turnDamage interface{}
+	if len(r.TurnDamage) > 0 {
+		b, _ := json.Marshal(r.TurnDamage)
+		turnDamage = string(b)
+	}
+	err := c.tx.QueryRow(`INSERT INTO condition_records (lobby_id, target_id, condition, detail, source, escapes, duration_rounds, end_save, notes, created_by,
+		turn_damage, no_healing) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12) RETURNING id`, c.lobby, c.target, r.Condition, r.Detail, r.Source,
+		string(esc), r.DurationRounds, endSaveJSON(r.EndSave), r.Notes, createdBy, turnDamage, r.NoHealing).Scan(&r.ID)
 	if err != nil {
 		return 0, err
 	}
@@ -286,10 +293,13 @@ type condAdd struct {
 	MagicalSleep bool // magic putting the creature to sleep (Fey Ancestry)
 	Replace      bool // the GM's word: the creature's other records of this condition go
 	Force        bool // the GM's word: set even on a creature immune to it
+	// what lasts with the condition (a monster's effect: monster_effects_2024.go)
+	TurnDamage []conditionTurnDamage // damage at the start or the end of each of its turns
+	NoHealing  bool                  // it can't regain Hit Points
 }
 
 func (a condAdd) bare() bool {
-	return a.Source == "" && a.Rounds == 0 && a.EndSave == nil && len(a.Escapes) == 0 && a.Notes == ""
+	return a.Source == "" && a.Rounds == 0 && a.EndSave == nil && len(a.Escapes) == 0 && a.Notes == "" && len(a.TurnDamage) == 0 && !a.NoHealing
 }
 
 // condResult is what applying a condition did.
@@ -413,7 +423,7 @@ func addCondition(lobbyID, targetID int, a condAdd) condResult {
 			return err
 		}
 		id, err := c.insert(conditionRecord{Condition: cond, Detail: detail, Source: a.Source, Escapes: a.Escapes, DurationRounds: a.Rounds,
-			EndSave: a.EndSave, Notes: a.Notes, CreatedBy: a.CreatedBy})
+			EndSave: a.EndSave, Notes: a.Notes, CreatedBy: a.CreatedBy, TurnDamage: a.TurnDamage, NoHealing: a.NoHealing})
 		res.ID, res.Added = id, err == nil
 		return err
 	})
