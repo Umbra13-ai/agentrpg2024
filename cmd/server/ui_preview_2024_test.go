@@ -18,7 +18,7 @@ func TestUIPreviewOnlyWhenSwitchedOn(t *testing.T) {
 		t.Fatalf("preview off: got %d, want 404", w.Code)
 	}
 	t.Setenv("AGENTRPG_UI_PREVIEW", "1")
-	for _, p := range []string{"/preview/", "/preview/campaign-220.html", "/preview/spectator/site.css", "/preview/spectator/banner.webp"} {
+	for _, p := range []string{"/preview/", "/preview/campaign-220.html", "/preview/spectator/site.css", "/preview/spectator/banner.webp", "/preview/homepage/hero.webp", "/preview/homepage/campaign.webp", "/preview/homepage/home.css"} {
 		if w := get(p); w.Code != http.StatusOK {
 			t.Fatalf("%s: got %d, want 200", p, w.Code)
 		}

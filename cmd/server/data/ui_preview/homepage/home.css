@@ -1,0 +1,44 @@
+body { max-width: 72rem; padding: 0 clamp(1rem, 3vw, 2rem) 1.5rem; }
+.home-header { display: flex; align-items: center; justify-content: space-between; gap: .6rem; min-height: 3.6rem; border-bottom: 1px solid var(--border); position: relative; z-index: 1; }
+.home-header a, .home-header a:visited { color: var(--fg); text-decoration: none; }
+.home-brand { display: flex; align-items: center; gap: .55rem; font: 700 clamp(.95rem, 4vw, 1.3rem)/1.1 var(--font-sheet); }
+.home-brand img { flex: none; }
+.home-header .home-nav { display: flex; flex-wrap: nowrap; align-items: center; gap: .55rem; border: 0; padding: 0; margin: 0; font: 550 .9rem system-ui, sans-serif; }
+.home-header .home-nav a { margin: 0; }
+.home-nav > a, .home-menu > summary { display: flex; align-items: center; min-height: 44px; padding-inline: .35rem; cursor: pointer; white-space: nowrap; }
+.home-menu-panel { position: absolute; right: 0; top: 100%; width: min(16rem, 100%); box-sizing: border-box; padding: .45rem; border: 1px solid var(--panel-border); background: var(--surface); border-radius: .6rem; box-shadow: 0 .6rem 1.6rem #0004; }
+.home-menu-panel a { display: flex; align-items: center; min-height: 44px; padding-inline: .65rem; }
+.home-menu-panel a:hover { background: var(--panel); }
+.home-menu-panel label { display: flex; align-items: center; flex-wrap: wrap; gap: .4rem; padding: .45rem .65rem; color: var(--fg); white-space: normal; }
+.home-menu-panel select { min-height: 44px; max-width: 100%; }
+.home-header :focus-visible, .home-page :focus-visible { outline: 2px solid var(--accent); outline-offset: 3px; }
+.home-hero { display: grid; }
+.home-art { display: block; width: 100%; height: auto; aspect-ratio: 505 / 324; object-fit: cover; }
+.home-intro { text-align: center; padding-top: .9rem; }
+.home-intro h1 { color: var(--heading); margin: 0; font: 700 clamp(1.85rem, 8vw, 3.6rem)/1.05 var(--font-sheet); }
+.home-intro p { margin: .55rem 0 1.35rem; font-size: clamp(1rem, 4.7vw, 1.35rem); line-height: 1.35; }
+.home-actions { display: grid; gap: .65rem; max-width: 31rem; margin-inline: auto; }
+.home-button, .home-button:visited { display: flex; justify-content: center; align-items: center; gap: .65rem; min-height: 46px; padding: 0 .6rem; border: 1px solid var(--link); border-radius: .55rem; color: var(--fg); text-decoration: none; font: 650 .95rem system-ui, sans-serif; }
+.home-button.home-primary { background: var(--accent); border-color: var(--accent); color: var(--accent-fg); }
+.home-playing, .home-guide { max-width: 48rem; margin: clamp(1.65rem, 5vw, 2.7rem) auto 0; }
+.home-playing h2 { border: 0; margin: 0 0 .6rem; font: 700 1.4rem var(--font-sheet); }
+.home-campaign, .home-campaign:visited { display: grid; grid-template-columns: clamp(3.9rem, 23vw, 5.75rem) minmax(0, 1fr) auto; align-items: center; gap: .75rem; padding: .65rem; border: 1px solid var(--panel-border); border-radius: .65rem; background: var(--panel); color: var(--fg); text-decoration: none; }
+.home-campaign:hover { border-color: var(--accent); }
+.home-campaign img { display: block; width: 100%; height: auto; aspect-ratio: 1; object-fit: cover; border-radius: .35rem; }
+.home-campaign-copy { display: grid; justify-items: start; gap: .25rem; overflow-wrap: anywhere; font: .81rem/1.4 system-ui, sans-serif; }
+.home-campaign-copy strong { color: var(--heading); font: 700 1.14rem/1.2 var(--font-sheet); }
+.home-phase { border-radius: 1rem; padding: .12rem .55rem; background: var(--info-bg); color: var(--info); font-weight: 650; }
+.home-guide { scroll-margin-top: 1rem; overflow-wrap: anywhere; }
+@media (max-width: 47.99rem) {
+  .home-art { width: calc(100% + 2 * clamp(1rem, 3vw, 2rem)); max-width: none; margin-inline: calc(-1 * clamp(1rem, 3vw, 2rem)); }
+}
+@media (min-width: 48rem) {
+  .home-hero { grid-template-columns: minmax(0, 1.1fr) minmax(0, 1fr); align-items: center; gap: clamp(1rem, 4vw, 3rem); padding-top: 1.5rem; }
+  .home-art { border-radius: .7rem; }
+  .home-intro { padding: 0; text-align: start; }
+  .home-intro p { margin-bottom: 1.1rem; }
+  .home-actions { margin-inline: 0; }
+}
+@media (min-width: 64rem) {
+  .home-actions { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+}
