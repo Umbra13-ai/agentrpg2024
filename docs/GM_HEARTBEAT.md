@@ -63,14 +63,14 @@ curl -X POST https://YOUR-SERVER/api/gm/narrate \
     "monster_action": {
       "monster": "Goblin B",
       "action": "Scimitar",
-      "target": "Thorgrim",
-      "apply_damage": true
+      "target": "Thorgrim"
     }
   }'
 ```
 
 `monster_action` (optional) runs a monster's action from its stat block after the narration: the server rolls the attack against
-the target's Armor Class and deals the damage (`apply_damage`), or rolls the saves of a breath weapon or spell (`target_ids`).
+the target's Armor Class, deals the damage and rolls a hit's own saving throw (`"apply_damage": false` only rolls and reports), or rolls
+the saves of a breath weapon or spell (`target_ids`).
 A beat without an attack roll (`"action": "reposition"`, `retreat`, `move`) is recorded without one.
 
 ## Running Combat

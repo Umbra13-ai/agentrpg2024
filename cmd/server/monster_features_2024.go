@@ -229,7 +229,7 @@ type legendaryRequest struct {
 	Target      string `json:"target"`      // the attack's target (a character's name or id)
 	TargetIDs   []int  `json:"target_ids"`
 	Use         string `json:"use"`          // "makes one Claw or Tail attack": which one
-	ApplyDamage *bool  `json:"apply_damage"` // default true
+	ApplyDamage *bool  `json:"apply_damage"` // default true (damageApplies)
 }
 
 // lastTurnEnded is the turn after which Legendary Actions may be taken now ("round:index") and whose turn it was.
@@ -303,7 +303,7 @@ func takeLegendaryAction(r *http.Request, lobbyID int, req legendaryRequest, win
 	if containsStr(s.LAOnce, act.Name) {
 		return nil, "not_again_yet", fmt.Sprintf("%s can't take %s again until the start of its next turn.", name, act.Name)
 	}
-	apply := req.ApplyDamage == nil || *req.ApplyDamage
+	apply := damageApplies(req.ApplyDamage)
 	targets := targetIDsFrom(lobbyID, req.Target, req.TargetIDs)
 	lines := resolveMonsterEffectText(r, lobbyID, req.CombatantID, meta, act.Name, act.Text, targets, req.Use, apply, 0)
 	s.LAUsed++

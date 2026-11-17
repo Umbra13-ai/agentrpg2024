@@ -1386,7 +1386,7 @@ type gmNarrateRequest struct {
 		Action       string `json:"action"`
 		Target       string `json:"target"`
 		Description  string `json:"description"`
-		ApplyDamage  bool   `json:"apply_damage"`  // deal the damage of a hit to the target character
+		ApplyDamage  *bool  `json:"apply_damage"`  // default true: a hit's damage and effects are dealt to the target; false only rolls and reports
 		TargetIDs    []int  `json:"target_ids"`    // characters in a saving throw effect (breath weapon, spell ...)
 		Use          string `json:"use"`           // a choice the entry needs: Command's word (approach, drop, flee, grovel, halt)
 		Point        []int  `json:"point"`         // [x, y]: the grid square an area is aimed at on the battle map (a Sphere's center, a Cone's or Line's direction)
@@ -1428,7 +1428,7 @@ func recordGMAction(database *sql.DB, campaignID int, actionType, description, r
 
 // handleGMNarrate godoc
 // @Summary Submit GM narration and monster actions
-// @Description GM submits narrative text and optionally runs a monster action. Before the campaign starts (recruiting) a narration sets the opening scene; monster actions and advance_turn wait for the start (campaign_not_active). Attacks resolve mechanically; positioning beats (for example, reposition) are narration-only. monster_action: {"monster", "action" (an action of its stat block, "Multiattack", or a named attack), "target" (a character's name or id, or a companion's name, nickname or combat id), "target_ids" (characters in a saving throw effect), "use" (a choice the entry needs, such as Command's word: approach, drop, flee, grovel or halt; or a spell the entry offers, such as the Pit Fiend's "Hold Monster" or one of a Lich's spells), "point": [x, y] (aims an area at a grid square; every character in a monster's area on the map is affected, listed or not), "apply_damage": true}. A Multiattack also resolves the actions without an attack roll it names (a Vampire's Bite). advance_turn: true ends the current turn after the narration (as POST /api/campaigns/{id}/combat/next); with it, optional expected_turn {"round": R, "turn_index": I} names the turn to end, as GET /api/campaigns/{id}/combat shows it (round, current_turn_index; GET /api/gm/status: combat.round, combat.current_turn_index). Once that turn has ended (a retry after the first request finished) the reply is 409 turn_already_moved with the turn it is now (round, turn_index, current_turn, current_turn_id), narration_recorded false: nothing is recorded or changed.
+// @Description GM submits narrative text and optionally runs a monster action. Before the campaign starts (recruiting) a narration sets the opening scene; monster actions and advance_turn wait for the start (campaign_not_active). Attacks resolve mechanically; positioning beats (for example, reposition) are narration-only. monster_action: {"monster", "action" (an action of its stat block, "Multiattack", or a named attack), "target" (a character's name or id, or a companion's name, nickname or combat id), "target_ids" (characters in a saving throw effect), "use" (a choice the entry needs, such as Command's word: approach, drop, flee, grovel or halt; or a spell the entry offers, such as the Pit Fiend's "Hold Monster" or one of a Lich's spells), "point": [x, y] (aims an area at a grid square; every character in a monster's area on the map is affected, listed or not), "apply_damage" (default true: hits and effects are dealt to the targets; false only rolls and reports)}. A Multiattack also resolves the actions without an attack roll it names (a Vampire's Bite). advance_turn: true ends the current turn after the narration (as POST /api/campaigns/{id}/combat/next); with it, optional expected_turn {"round": R, "turn_index": I} names the turn to end, as GET /api/campaigns/{id}/combat shows it (round, current_turn_index; GET /api/gm/status: combat.round, combat.current_turn_index). Once that turn has ended (a retry after the first request finished) the reply is 409 turn_already_moved with the turn it is now (round, turn_index, current_turn, current_turn_id), narration_recorded false: nothing is recorded or changed.
 // @Tags GM
 // @Accept json
 // @Produce json
@@ -1516,13 +1516,13 @@ func handleGMNarrate(w http.ResponseWriter, r *http.Request) {
 			// it faithfully without inventing damage for the target.
 			result = "Narration-only monster action recorded; no attack resolved."
 			response["monster_action_narrative_only"] = true
-		} else if text, handled, refusal := resolveMonsterActionByNameAt(r, campaignID, req.MonsterAction.Point, req.MonsterAction.Monster, req.MonsterAction.Action, req.MonsterAction.Target, req.MonsterAction.TargetIDs, req.MonsterAction.ApplyDamage, req.MonsterAction.Use); refusal != "" {
+		} else if text, handled, refusal := resolveMonsterActionByNameAt(r, campaignID, req.MonsterAction.Point, req.MonsterAction.Monster, req.MonsterAction.Action, req.MonsterAction.Target, req.MonsterAction.TargetIDs, damageApplies(req.MonsterAction.ApplyDamage), req.MonsterAction.Use); refusal != "" {
 			result = refusal // a Recharge action not recharged, an Incapacitated monster
 			response["monster_action_refused"] = refusal
 		} else if handled {
 			result = text // a saving throw effect, a spell or another action of the stat block (monster_effects_2024.go)
 			response["monster_effect"] = true
-		} else if text, info, ok := resolveMonsterAttack(withAllySaid(r, req.MonsterAction.AllyAdjacent), campaignID, req.MonsterAction.Monster, req.MonsterAction.Action, req.MonsterAction.Target, req.MonsterAction.ApplyDamage); ok {
+		} else if text, info, ok := resolveMonsterAttack(withAllySaid(r, req.MonsterAction.AllyAdjacent), campaignID, req.MonsterAction.Monster, req.MonsterAction.Action, req.MonsterAction.Target, damageApplies(req.MonsterAction.ApplyDamage)); ok {
 			// the stat block's own attack bonus and damage, against the target's Armor Class
 			result = text
 			response["monster_attack"] = info

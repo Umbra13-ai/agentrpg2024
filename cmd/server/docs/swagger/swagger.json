@@ -4941,7 +4941,7 @@
             "type": "boolean"
            },
            "apply_damage": {
-            "description": "deal the damage of a hit to the target character",
+            "description": "default true: a hit's damage and effects are dealt to the target; false only rolls and reports",
             "type": "boolean"
            },
            "description": {
@@ -24695,7 +24695,7 @@
              "type": "string"
             },
             "apply_damage": {
-             "description": "default true",
+             "description": "default true (damageApplies)",
              "type": "boolean"
             },
             "combatant_id": {
@@ -36270,7 +36270,7 @@
          },
          "apply_damage": {
           "type": "boolean",
-          "description": "default true"
+          "description": "default true (damageApplies)"
          },
          "campaign_id": {
           "type": "integer",

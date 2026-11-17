@@ -2,11 +2,12 @@ package main
 
 // A monster's attack on a character, resolved by the server from the monster's own stat block (2024 data).
 // POST /api/gm/narrate with "monster_action": {"monster": "goblin-warrior" (or its name in the fight), "action":
-// "Scimitar" (an action of the stat block, or "Multiattack"), "target": "<character name or id>", "apply_damage": true}.
+// "Scimitar" (an action of the stat block, or "Multiattack"), "target": "<character name or id>"}.
 // The server rolls the attack bonus printed in the stat block against the target's Armor Class, with Advantage and
 // Disadvantage from the conditions of both sides (Prone, Restrained, Paralyzed, Poisoned, Sap, ...), doubles the damage
-// dice on a critical hit (a natural 20, or a hit on a Paralyzed or Unconscious target within 5 feet) and, with
-// apply_damage, deals the damage to the character through the same code as /api/characters/{id}/damage.
+// dice on a critical hit (a natural 20, or a hit on a Paralyzed or Unconscious target within 5 feet) and deals the damage to the
+// character through the Hit Point owner, then the hit's own saving throw if its text has one (unless "apply_damage": false:
+// damageApplies is the default of every monster action).
 // Without a known target the old behaviour remains: the roll and the damage if it hits.
 
 import (
@@ -117,6 +118,11 @@ func characterByNameOrID(campaignID int, who string) (id int, name string, ac in
 }
 
 // resolveMonsterAttack returns the result text and a structured summary; ok is false when the stat block could not be used.
+// damageApplies is the one default of every monster action the GM sends (narrate's monster_action, a Legendary Action): its damage
+// and effects are dealt to the targets unless the request says "apply_damage": false (feedback log 62: narrate's default was false,
+// so a boss's Multiattack reported 85 damage and the character's Hit Points didn't move, while a Legendary Action dealt its damage).
+func damageApplies(p *bool) bool { return p == nil || *p }
+
 func resolveMonsterAttack(r *http.Request, campaignID int, monster, action, target string, apply bool) (string, map[string]interface{}, bool) {
 	ids := monsterIDsByKeyOrName(campaignID, monster)
 	if n, err := strconv.Atoi(strings.TrimPrefix(monster, "#")); err == nil && strings.HasPrefix(monster, "#") {
@@ -364,6 +370,14 @@ func resolveMonsterAttack(r *http.Request, campaignID int, monster, action, targ
 			}
 			if isMelee && withinFive { // Fire Shield; a Fiend or Undead hitting into a Holy Aura (buff_spells_2024.go)
 				line += fireShieldBack(campaignID, attackerID, attackerName, tid) + holyAuraBlinds(campaignID, attackerID, attackerName, tid)
+			}
+			// a hit's own saving throw ("If the target is a creature, it must make the following saving throw. Constitution Saving Throw:
+			// DC 21. Failure: ... Poisoned"): rolled and applied by the save-effect owner (monster_effects_2024.go; feedback log 62)
+			if e, ok := parseSaveEffect(a.Desc); ok {
+				e.SourceID = attackerID
+				if rl, _ := applySaveEffect(campaignID, attackerName+"'s "+stripUsage(a.Name), e, []int{tid}, true); len(rl) > 0 {
+					line += " [" + strings.Join(rl, " ") + "]"
+				}
 			}
 		}
 		lines = append(lines, line)

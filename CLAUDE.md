@@ -395,6 +395,9 @@ Add to the owner, never beside it. When you give another rule one owner, add it 
 - **Repeatable invocations:** `game.InvocationRepeats` (`game/invocation_repeats.go`), with `invocation_repeats_2024.go`: which
   invocations a Warlock may take again and what each copy chooses (a different cantrip, or a different Origin feat); the request,
   its options, the effects and the invocation summary (`invocationSummary`, sheet and my-turn) read it.
+- **Whether a monster action the GM sends deals its damage:** `damageApplies` (`monster_attacks.go`): yes unless the request says
+  `"apply_damage": false` (narrate's `monster_action`, a Legendary Action); a hit's own saving throw is rolled by `parseSaveEffect` /
+  `applySaveEffect` (feedback log 62, I-GM-19; `TestPostgresMonsterHitAppliesByDefault`).
 - **Monster traits:** `monsterTraitRules` (`cmd/server/monster_traits_2024.go`): each trait the server applies is one row (by
   name, or by wording for auras and Regeneration) saying what it does and where; `monsterHasTrait` reads the loaded stat block;
   the GM's stat block marks each trait as applied by the server or by the GM (`traitsForGM`). A row marked `Aura` acts on its own timing:
