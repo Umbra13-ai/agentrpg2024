@@ -7,9 +7,8 @@ package main
 // unequip), then equip the new one. A dropped item is not gone: it lies on the
 // ground of the campaign where anyone can pick it up, or it can be forgotten.
 //	POST /api/characters/{id}/equipment/drop      {"item": "scimitar", "quantity": 1}
-//	POST /api/characters/{id}/equipment/pick-up   {"dropped_id": 12}  an ask: the GM approves it
-//	POST /api/campaigns/{id}/ground/{id}/approve  GM: the character that asked takes it
-//	POST /api/campaigns/{id}/ground/{id}/refuse   GM: not now {"note": "you are too far away now"}
+//	POST /api/characters/{id}/equipment/pick-up   {"dropped_id": 12}
+//	POST /api/campaigns/{id}/ground/{id}/veto     GM: undo a pick-up that doesn't fit the story {"note": "you are too far away now"}
 //	POST /api/gm/take-item                        GM: the narration leaves a character's item somewhere {"character_id": 3, "item": "blanket", "where": "in the bedroll as a decoy"}
 //	GET  /api/campaigns/{id}/ground               items on the ground (members and GM)
 //	POST /api/campaigns/{id}/ground/{id}/claim    GM: someone or something took it {"note": "..."}
@@ -236,7 +235,7 @@ func pickUpFromGround(charID, droppedID int) (string, string) {
 			inv = append(inv, it)
 		}
 		fillItemWeights(inv)
-		if _, err := tx.Exec(`UPDATE dropped_items SET taken_by = $1, taken_at = NOW(), pickup_by = NULL, pickup_refused = NULL WHERE id = $2`, charID, droppedID); err != nil {
+		if _, err := tx.Exec(`UPDATE dropped_items SET taken_by = $1, taken_at = NOW() WHERE id = $2`, charID, droppedID); err != nil {
 			return nil, err
 		}
 		if err := writeAction(tx, dropLobby, charID, "pick_up", fmt.Sprintf("%s picks up %s", charName, name), "It is now in their pack."); err != nil {
@@ -250,46 +249,13 @@ func pickUpFromGround(charID, droppedID int) (string, string) {
 	return name, ""
 }
 
-// Picking an item up from the ground is the GM's call (S-CALLA-9): the character may be nowhere near where it was left. A player
-// asks (askToPickUp, the pick-up request); the GM approves (pickUpFromGround for the character that asked) or refuses with a note
-// (POST /api/campaigns/{id}/ground/{dropped_id}/approve | refuse). One ask per item at a time.
-
-// askToPickUp records the character's ask to pick the item up and answers its name, or a refusal code.
-func askToPickUp(charID, droppedID int) (string, string) {
-	var name string
-	err := db.QueryRow(`UPDATE dropped_items d SET pickup_by = $1, pickup_asked_at = NOW(), pickup_refused = NULL
-		FROM characters c
-		WHERE d.id = $2 AND c.id = $1 AND c.lobby_id = d.lobby_id AND d.taken_by IS NULL AND d.taken_note IS NULL
-		  AND (d.pickup_by IS NULL OR d.pickup_by = $1)
-		RETURNING d.name`, charID, droppedID).Scan(&name)
-	if err == nil {
-		return name, ""
-	}
-	if dbFailed(err) {
-		return "", dbErrorCode
-	}
-	// why not: the item is gone, another character asked first, or it lies in another campaign
-	var lobby, charLobby sql.NullInt64
-	var takenBy, pickupBy sql.NullInt64
-	var takenNote sql.NullString
-	if qerr := db.QueryRow(`SELECT lobby_id, taken_by, taken_note, pickup_by FROM dropped_items WHERE id = $1`, droppedID).Scan(&lobby, &takenBy, &takenNote, &pickupBy); qerr != nil {
-		return "", notFoundOrDBError(qerr, "nothing_on_the_ground_with_that_id")
-	}
-	db.QueryRow(`SELECT lobby_id FROM characters WHERE id = $1`, charID).Scan(&charLobby)
-	switch {
-	case !charLobby.Valid || charLobby.Int64 != lobby.Int64:
-		return "", "not_in_the_same_campaign"
-	case takenBy.Valid || takenNote.Valid:
-		return "", "already_taken"
-	}
-	return "", "another_character_asked_first"
-}
-
-// pickUpAsks: the open asks of a campaign, for the GM (GM status and the ground list).
-func pickUpAsks(lobbyID int) []map[string]interface{} {
+// A pick-up is immediate (the game shouldn't wait); the GM can veto one that doesn't fit the story, such as a character nowhere near
+// the item now: POST /api/campaigns/{id}/ground/{dropped_id}/veto puts it back where it was (S-CALLA-9). recentPickUps lists the
+// pick-ups of the last day for the GM, with that request.
+func recentPickUps(lobbyID int) []map[string]interface{} {
 	out := []map[string]interface{}{}
-	rows, err := db.Query(`SELECT d.id, d.name, COALESCE(d.left_where, ''), c.id, c.name, d.pickup_asked_at FROM dropped_items d JOIN characters c ON c.id = d.pickup_by
-		WHERE d.lobby_id = $1 AND d.taken_by IS NULL AND d.taken_note IS NULL ORDER BY d.pickup_asked_at`, lobbyID)
+	rows, err := db.Query(`SELECT d.id, d.name, COALESCE(d.left_where, ''), c.id, c.name, d.taken_at FROM dropped_items d JOIN characters c ON c.id = d.taken_by
+		WHERE d.lobby_id = $1 AND d.taken_note IS NULL AND d.taken_at > NOW() - INTERVAL '24 hours' ORDER BY d.taken_at`, lobbyID)
 	if err != nil {
 		return out
 	}
@@ -302,10 +268,8 @@ func pickUpAsks(lobbyID int) []map[string]interface{} {
 			if where == "" {
 				where = "on the ground"
 			}
-			out = append(out, map[string]interface{}{"dropped_id": id, "item": name, "where": where, "character_id": cid, "character": cname,
-				"asked_at": at.Format(time.RFC3339),
-				"approve":  fmt.Sprintf("POST /api/campaigns/%d/ground/%d/approve", lobbyID, id),
-				"refuse":   fmt.Sprintf(`POST /api/campaigns/%d/ground/%d/refuse {"note": "you are too far away now"}`, lobbyID, id)})
+			out = append(out, map[string]interface{}{"dropped_id": id, "item": name, "was": where, "character_id": cid, "character": cname,
+				"picked_up_at": at.Format(time.RFC3339), "veto": fmt.Sprintf(`POST /api/campaigns/%d/ground/%d/veto {"note": "you are too far away now"}`, lobbyID, id)})
 		}
 	}
 	return out
@@ -314,24 +278,22 @@ func pickUpAsks(lobbyID int) []map[string]interface{} {
 // droppedByCharacter lists what a character dropped that is still on the ground.
 func droppedByCharacter(charID int) []map[string]interface{} {
 	out := []map[string]interface{}{}
-	rows, err := db.Query(`SELECT id, name, quantity, dropped_at, COALESCE(left_where, ''),
-			CASE WHEN pickup_by = $1 THEN 'asked: waiting for the GM' WHEN pickup_by IS NOT NULL THEN 'another character asked for it'
-			     WHEN pickup_refused IS NOT NULL THEN 'the GM refused: ' || pickup_refused ELSE 'not asked' END
-		FROM dropped_items WHERE dropped_by = $1 AND taken_by IS NULL AND taken_note IS NULL ORDER BY id`, charID)
+	rows, err := db.Query(`SELECT id, name, quantity, dropped_at, COALESCE(left_where, '') FROM dropped_items
+		WHERE dropped_by = $1 AND taken_by IS NULL AND taken_note IS NULL ORDER BY id`, charID)
 	if err != nil {
 		return out
 	}
 	defer rows.Close()
 	for rows.Next() {
 		var id, qty int
-		var name, where, status string
+		var name, where string
 		var at time.Time
-		if rows.Scan(&id, &name, &qty, &at, &where, &status) == nil {
+		if rows.Scan(&id, &name, &qty, &at, &where) == nil {
 			if where == "" {
 				where = "on the ground"
 			}
 			out = append(out, map[string]interface{}{"dropped_id": id, "name": name, "quantity": qty, "dropped_at": at.Format(time.RFC3339),
-				"where": where, "pick_up_status": status, "ask_to_pick_up": fmt.Sprintf(`POST /api/characters/%d/equipment/pick-up {"dropped_id": %d}`, charID, id)})
+				"where": where, "pick_up": fmt.Sprintf(`POST /api/characters/%d/equipment/pick-up {"dropped_id": %d}`, charID, id)})
 		}
 	}
 	return out
@@ -354,7 +316,7 @@ func leftBehindNote(charID int) map[string]interface{} {
 		return nil
 	}
 	return map[string]interface{}{"items": items,
-		"note": "These items are no longer in your inventory. If you want to keep them, ask to pick them up (each item's ask_to_pick_up request) while your character is still where they were left: the GM approves it, and it is back in your pack."}
+		"note": "These items are no longer in your inventory. If you want to keep them, pick them up (each item's pick_up request) while your character is still where they were left; the GM can undo a pick-up that doesn't fit the story."}
 }
 
 func handleCharacterDrop(w http.ResponseWriter, r *http.Request, charID int) {
@@ -403,27 +365,27 @@ func handleCharacterPickUp(w http.ResponseWriter, r *http.Request, charID int) {
 		writeJSONStatus(w, http.StatusBadRequest, map[string]interface{}{"error": "dropped_id_required"})
 		return
 	}
-	name, errCode := askToPickUp(charID, req.DroppedID) // the GM approves it (S-CALLA-9)
+	name, errCode := pickUpFromGround(charID, req.DroppedID)
 	if errCode != "" {
 		status := http.StatusBadRequest
-		if errCode == "already_taken" || errCode == "another_character_asked_first" {
+		if errCode == "already_taken" {
 			status = http.StatusConflict
 		}
 		if errCode == dbErrorCode {
-			writeDBWriteError(w, nil, "the ask to pick it up")
+			writeDBWriteError(w, nil, "the pick-up")
 			return
 		}
 		writeJSONStatus(w, status, map[string]interface{}{"error": errCode})
 		return
 	}
-	writeJSONStatus(w, http.StatusAccepted, map[string]interface{}{"success": true, "asked_to_pick_up": name, "status": "waiting for the GM",
-		"note": "The GM approves a pick-up when your character is where the item is: once approved it is in your pack (GET /api/my-turn's left_behind shows the answer). Nothing is in your pack yet."})
+	writeJSONStatus(w, http.StatusOK, map[string]interface{}{"success": true, "picked_up": name,
+		"note": "It is in your pack, not yet equipped or sorted into a bag. The GM can undo a pick-up that doesn't fit the story (your character nowhere near the item)."})
 }
 
 // handleCampaignGround lists and manages the items lying on the ground of a campaign.
 // handleCampaignGround godoc
 // @Summary The items lying on the ground of a campaign
-// @Description GET lists what lies on the ground (dropped with /characters/{id}/equipment/drop or left by the GM's /gm/take-item; the GM adds ?include=claimed to see items taken away too, and pick_up_asks lists the open asks). A player asks to pick an item up with /characters/{id}/equipment/pick-up; the GM decides, since the character may be nowhere near it now: POST /ground/{dropped_id}/approve gives it to the character that asked, POST /ground/{dropped_id}/refuse {"note": "you are too far away now"} says no. GM only too: POST /ground/{dropped_id}/claim takes an item off the ground with a note ({"note": "the troll took it"}), POST /ground/{dropped_id}/return puts it back.
+// @Description GET lists what lies on the ground (dropped with /characters/{id}/equipment/drop or left by the GM's /gm/take-item; the GM adds ?include=claimed to see items taken away too, and recent_pick_ups lists the last day's pick-ups). Players in the campaign pick an item up with /characters/{id}/equipment/pick-up, at once; the GM can veto a pick-up that doesn't fit the story (the character nowhere near the item): POST /ground/{dropped_id}/veto {"note": "you are too far away now"} puts it back where it was. GM only too: POST /ground/{dropped_id}/claim takes an item off the ground with a note ({"note": "the troll took it"}), POST /ground/{dropped_id}/return puts it back.
 // @Tags Campaigns
 // @Param id path int true "Campaign ID"
 // @Param include query string false "claimed (GM)"
@@ -431,8 +393,7 @@ func handleCharacterPickUp(w http.ResponseWriter, r *http.Request, charID int) {
 // @Router /campaigns/{id}/ground [get]
 // @Router /campaigns/{id}/ground/{dropped_id}/claim [post]
 // @Router /campaigns/{id}/ground/{dropped_id}/return [post]
-// @Router /campaigns/{id}/ground/{dropped_id}/approve [post]
-// @Router /campaigns/{id}/ground/{dropped_id}/refuse [post]
+// @Router /campaigns/{id}/ground/{dropped_id}/veto [post]
 func handleCampaignGround(w http.ResponseWriter, r *http.Request, campaignID int, rest []string) {
 	_, role, ok := requireCampaignMember(w, r, campaignID, "see what lies on its ground")
 	if !ok {
@@ -490,56 +451,47 @@ func handleCampaignGround(w http.ResponseWriter, r *http.Request, campaignID int
 				return
 			}
 			writeJSONStatus(w, http.StatusOK, map[string]interface{}{"success": true})
-		case "approve": // the character that asked takes it (S-CALLA-9)
-			if !noFields(w, r) {
-				return
-			}
-			var asker sql.NullInt64
-			if err := db.QueryRow(`SELECT pickup_by FROM dropped_items WHERE id = $1 AND lobby_id = $2`, did, campaignID).Scan(&asker); err != nil {
-				if answerDBFailure(w, err, "the item") {
-					return
-				}
-				writeJSONStatus(w, http.StatusNotFound, map[string]interface{}{"error": "nothing_on_the_ground_with_that_id"})
-				return
-			}
-			if !asker.Valid {
-				writeJSONStatus(w, http.StatusConflict, map[string]interface{}{"error": "no_pick_up_asked", "message": "No character has asked to pick this item up. Nothing was changed."})
-				return
-			}
-			name, code := pickUpFromGround(int(asker.Int64), did)
-			if code == dbErrorCode {
-				writeDBWriteError(w, nil, "the pick-up")
-				return
-			}
-			if code != "" {
-				writeJSONStatus(w, http.StatusConflict, map[string]interface{}{"error": code})
-				return
-			}
-			writeJSONStatus(w, http.StatusOK, map[string]interface{}{"success": true, "picked_up": name, "character_id": asker.Int64,
-				"note": "It is in the character's pack, not yet equipped or sorted into a bag."})
-		case "refuse":
+		case "veto": // the GM undoes a pick-up that doesn't fit the story: the item goes back where it was (S-CALLA-9)
 			var req struct {
-				Note string `json:"note"` // why not (the player sees it), such as "you are too far away now"
+				Note string `json:"note"` // why (the player sees it in the log), such as "you are too far away now"
 			}
 			if !readRequest(w, r, &req, optionalBody()) {
 				return
 			}
+			var taker sql.NullInt64
+			var name, where string
+			var qty int
+			if err := db.QueryRow(`SELECT taken_by, name, quantity, COALESCE(left_where, '') FROM dropped_items WHERE id = $1 AND lobby_id = $2 AND taken_note IS NULL`, did, campaignID).
+				Scan(&taker, &name, &qty, &where); err != nil {
+				if answerDBFailure(w, err, "the item") {
+					return
+				}
+				writeJSONStatus(w, http.StatusNotFound, map[string]interface{}{"error": "nothing_with_that_id"})
+				return
+			}
+			if !taker.Valid {
+				writeJSONStatus(w, http.StatusConflict, map[string]interface{}{"error": "not_picked_up", "message": "Nobody has picked this item up. Nothing was changed."})
+				return
+			}
+			res, code := dropToGround(int(taker.Int64), name, qty, where) // back where it was (dropped_items.go)
+			if code == dbErrorCode {
+				writeDBWriteError(w, nil, "the veto")
+				return
+			}
+			if code != "" {
+				writeJSONStatus(w, http.StatusConflict, map[string]interface{}{"error": code, "message": "The item couldn't be taken back from the character (" + code + "); it may have been used or moved. Nothing was changed."})
+				return
+			}
 			note := strings.TrimSpace(req.Note)
 			if note == "" {
-				note = "not now"
+				note = "it doesn't fit the story"
 			}
-			res, xerr := db.Exec(`UPDATE dropped_items SET pickup_by = NULL, pickup_refused = $1 WHERE id = $2 AND lobby_id = $3 AND pickup_by IS NOT NULL`, note, did, campaignID)
-			if xerr != nil {
-				writeDBWriteError(w, xerr, "the refusal")
-				return
-			}
-			if n, _ := res.RowsAffected(); n == 0 {
-				writeJSONStatus(w, http.StatusConflict, map[string]interface{}{"error": "no_pick_up_asked"})
-				return
-			}
-			writeJSONStatus(w, http.StatusOK, map[string]interface{}{"success": true, "note": "Refused: the item stays where it is and the player sees why."})
+			db.Exec(`UPDATE dropped_items SET taken_note = $1 WHERE id = $2`, "vetoed by the GM: "+note, did)
+			line := fmt.Sprintf("The GM undoes %s's pick-up of %s: %s. It is back where it was.", getCharacterName(int(taker.Int64)), name, note)
+			writeAction(db, campaignID, 0, "gm_veto", line, line)
+			writeJSONStatus(w, http.StatusOK, map[string]interface{}{"success": true, "dropped_id": res.DroppedID, "note": "The item is back where it was; the player sees why in the log."})
 		default:
-			writeJSONStatus(w, http.StatusNotFound, map[string]interface{}{"error": "unknown_ground_action", "actions": []string{"claim", "return", "approve", "refuse"}})
+			writeJSONStatus(w, http.StatusNotFound, map[string]interface{}{"error": "unknown_ground_action", "actions": []string{"claim", "return", "veto"}})
 		}
 		return
 	}
@@ -577,7 +529,7 @@ func handleCampaignGround(w http.ResponseWriter, r *http.Request, campaignID int
 	}
 	reply := map[string]interface{}{"campaign_id": campaignID, "on_the_ground": items}
 	if isGM {
-		reply["pick_up_asks"] = pickUpAsks(campaignID) // the asks waiting for the GM (S-CALLA-9)
+		reply["recent_pick_ups"] = recentPickUps(campaignID) // what the GM can still veto (S-CALLA-9)
 	}
 	writeJSONStatus(w, http.StatusOK, reply)
 }

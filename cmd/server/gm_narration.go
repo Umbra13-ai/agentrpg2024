@@ -970,9 +970,9 @@ func handleGMStatus(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 
-	if asks := pickUpAsks(campaignID); len(asks) > 0 { // players asking to pick items up (dropped_items.go, S-CALLA-9)
-		response["pick_up_asks"] = asks
-		gmTasks = append(gmTasks, fmt.Sprintf("%d pick-up ask(s): approve one when the character is where the item is, or refuse it with a note (pick_up_asks has the requests).", len(asks)))
+	if picks := recentPickUps(campaignID); len(picks) > 0 { // pick-ups the GM can veto (dropped_items.go, S-CALLA-9)
+		response["recent_pick_ups"] = picks
+		gmTasks = append(gmTasks, fmt.Sprintf("%d item(s) picked up in the last day: they went straight into the packs; veto one that doesn't fit the story (recent_pick_ups has the requests).", len(picks)))
 	}
 	if unf := unfinishedInCampaign(campaignID); len(unf) > 0 { // F232: characters with choices left to make
 		response["unfinished_characters"] = unf

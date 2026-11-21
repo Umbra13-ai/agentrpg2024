@@ -309,8 +309,6 @@ var schemaSteps = []schemaStep{
 		AND NOT EXISTS (SELECT 1 FROM combat_state s WHERE s.lobby_id = c.lobby_id AND s.active = true)`},
 	// where the GM's narration left a character's item (dropped_items.go: the GM's take-item, S-CALLA-9)
 	{"dropped_items.go", `ALTER TABLE dropped_items ADD COLUMN IF NOT EXISTS left_where TEXT`},
-	// a player's ask to pick an item up, which the GM approves or refuses (dropped_items.go, S-CALLA-9)
-	{"dropped_items.go", `ALTER TABLE dropped_items ADD COLUMN IF NOT EXISTS pickup_by INTEGER, ADD COLUMN IF NOT EXISTS pickup_asked_at TIMESTAMP, ADD COLUMN IF NOT EXISTS pickup_refused TEXT`},
 }
 
 // seatReadySchema: a player's "ready to start" on its seat (cleared whenever the seat changes hands: takeSeat, swapSeat;

@@ -9,7 +9,7 @@ import (
 )
 
 // S-CALLA-9: the GM's narration uses a character's gear: POST /api/gm/take-item takes it out of the inventory and leaves it where
-// the story put it; the player's my-turn lists it under left_behind; a pick-up is an ask the GM approves or refuses.
+// the story put it; the player's my-turn lists it under left_behind; a pick-up is immediate and the GM can veto it.
 func TestPostgresGMTakeItemLeavesItWhereTheStoryPutIt(t *testing.T) {
 	testPostgres(t)
 	_, gm := pgAgent(t, "pg take gm")
@@ -59,28 +59,33 @@ func TestPostgresGMTakeItemLeavesItWhereTheStoryPutIt(t *testing.T) {
 		return pgCall(t, "POST", fmt.Sprintf("/api/characters/%d/equipment/pick-up", char), tok, map[string]interface{}{"dropped_id": id})
 	}
 	ground := fmt.Sprintf("/api/campaigns/%d/ground/%d/", lobby, id)
-	// a pick-up is an ask: nothing comes back until the GM approves; a refusal is shown to the player
-	if c, j := pick(); c != 202 || carries() {
-		t.Fatalf("the ask: %d %v (carried %v)", c, j, carries())
+	// a pick-up is immediate; the GM sees it and can veto it: the item goes back where it was
+	if c, j := pick(); c != 200 || !carries() {
+		t.Fatalf("pick-up: %d %v", c, j)
 	}
-	if _, st := pgCall(t, "GET", fmt.Sprintf("/api/gm/status?campaign_id=%d", lobby), gm, nil); !strings.Contains(fmt.Sprint(st["pick_up_asks"]), "Blanket") {
-		t.Errorf("GM status doesn't list the ask: %v", st["pick_up_asks"])
+	if _, st := pgCall(t, "GET", fmt.Sprintf("/api/gm/status?campaign_id=%d", lobby), gm, nil); !strings.Contains(fmt.Sprint(st["recent_pick_ups"]), "veto") {
+		t.Errorf("GM status doesn't list the pick-up: %v", st["recent_pick_ups"])
 	}
-	if c, _ := pgCall(t, "POST", ground+"approve", tok, nil); c < 400 {
-		t.Errorf("a player approved its own pick-up: %d", c)
+	if c, _ := pgCall(t, "POST", ground+"veto", tok, nil); c < 400 {
+		t.Errorf("a player vetoed: %d", c)
 	}
-	if c, j := pgCall(t, "POST", ground+"refuse", gm, map[string]interface{}{"note": "you are a mile away now"}); c != 200 || carries() {
-		t.Fatalf("refuse: %d %v", c, j)
+	c, v := pgCall(t, "POST", ground+"veto", gm, map[string]interface{}{"note": "you are a mile away now"})
+	if c != 200 || carries() {
+		t.Fatalf("veto: %d %v (carried %v)", c, v, carries())
 	}
-	if _, mt = pgCall(t, "GET", "/api/my-turn", tok, nil); !strings.Contains(fmt.Sprint(mt["left_behind"]), "the GM refused: you are a mile away now") {
-		t.Errorf("the refusal isn't shown: %v", mt["left_behind"])
+	_, mt = pgCall(t, "GET", "/api/my-turn", tok, nil)
+	if lb := fmt.Sprint(mt["left_behind"]); !strings.Contains(lb, "in the bedroll as a decoy") {
+		t.Errorf("after the veto the item isn't back where it was: %s", lb)
 	}
-	if c, j := pgCall(t, "POST", ground+"approve", gm, nil); c != 409 || carries() {
-		t.Errorf("approve with no ask: %d %v", c, j)
+	if ev, _ := json.Marshal(mt["recent_events"]); !strings.Contains(string(ev), "you are a mile away now") {
+		t.Errorf("the player isn't told why: %s", ev)
 	}
-	pick()
-	if c, j := pgCall(t, "POST", ground+"approve", gm, nil); c != 200 || !carries() {
-		t.Fatalf("approve: %d %v", c, j)
+	if c, _ := pgCall(t, "POST", ground+"veto", gm, nil); c != 404 && c != 409 {
+		t.Errorf("a second veto of the same pick-up: %d", c)
+	}
+	id = int(v["dropped_id"].(float64))
+	if c, j := pick(); c != 200 || !carries() {
+		t.Fatalf("the pick-up after the veto: %d %v", c, j)
 	}
 	if _, mt = pgCall(t, "GET", "/api/my-turn", tok, nil); !strings.Contains(fmt.Sprint(mt["left_behind"]), "items:[]") {
 		t.Errorf("left_behind after the pick-up (an empty list): %v", mt["left_behind"])
