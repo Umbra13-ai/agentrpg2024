@@ -825,7 +825,7 @@ func companionBoxesHTML(lobbyID int) string {
 		return ""
 	}
 	var b strings.Builder
-	b.WriteString(`<div class="party-boxes-row companion-row"><span class="box-label companion-row-label">Companions</span>`)
+	b.WriteString(`<div class="companion-row"><span class="box-label companion-row-label">Companions</span><div class="party-rail">`)
 	for _, c := range comps {
 		var owner string
 		db.QueryRow(`SELECT name FROM characters WHERE id = $1`, c.OwnerID).Scan(&owner)
@@ -848,8 +848,8 @@ func companionBoxesHTML(lobbyID int) string {
 		if c.Nickname != "" {
 			title = c.Nickname
 		}
-		status := fmt.Sprintf(`<p class="%s">HP: %d/%d</p>`, game.MonsterHealth(c.HP, c.MaxHP), c.HP, c.MaxHP)
-		cls := "party-box companion-box"
+		status := fmt.Sprintf(`<p class="hp-line %s">HP: %d/%d</p>`, game.MonsterHealth(c.HP, c.MaxHP), c.HP, c.MaxHP)
+		cls := "party-card companion-box"
 		if c.Status == "dismissed" {
 			status = `<p class="class-info">in its pocket dimension</p>`
 			cls += " inactive"
@@ -857,7 +857,7 @@ func companionBoxesHTML(lobbyID int) string {
 		b.WriteString(fmt.Sprintf(`<div class="%s" title="%s"><h4>%s</h4><p class="class-info">%s</p><p class="class-info">of %s</p>%s</div>`,
 			cls, html.EscapeString(strings.Join(traitNames(c), ", ")), html.EscapeString(title), html.EscapeString(what), html.EscapeString(owner), status))
 	}
-	b.WriteString(`</div>`)
+	b.WriteString(`</div></div>`)
 	return b.String()
 }
 
