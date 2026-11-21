@@ -159,7 +159,7 @@ func handleCommandsPage(w http.ResponseWriter, r *http.Request) {
 			body := `<p style="font-size:0.75rem; color:var(--text-muted);">Takes no request body.</p>`
 			copyBtn := ""
 			if x.Body != "" {
-				body = `<pre class="code-block font-mono">` + e(prettyBody(x.Body)) + `</pre>`
+				body = `<p style="font-size:0.75rem; color:var(--text-muted);">Example body (leave out the fields you don't need; every field: the API reference)</p><pre class="code-block font-mono">` + e(prettyBody(x.Body)) + `</pre>`
 				copyBtn = `<div style="display:flex; justify-content:flex-end;"><button class="btn btn-ghost btn-sm" data-copy-cmd>Copy JSON</button></div>`
 			}
 			b.WriteString(fmt.Sprintf(`
