@@ -43,7 +43,7 @@ var (
 	mfxExhaustRe                 = regexp.MustCompile(`gains? (\d+) Exhaustion levels?`)
 	mfxAttackRe                  = regexp.MustCompile(`makes one ([A-Z][A-Za-z’' -]+?)(?: or ([A-Z][A-Za-z’' -]+?))? attack`)
 	mfxUsesRe                    = regexp.MustCompile(`uses (?:its )?([A-Z][A-Za-z’' -]+?)(?:[.,]| and | to |$)`)
-	mfxSpellRe                   = regexp.MustCompile(`(?:uses Spellcasting to cast|casts) ([A-Z][A-Za-z’' /-]+?)(?: \(level (\d) version\))?(?: on itself)?(?: twice)?(?:[.,;]| requiring| using| on |$)`)
+	mfxSpellRe                   = regexp.MustCompile(`(?:uses Spellcasting to cast|casts) (?:the )?([A-Z][A-Za-z’' /-]+?)(?: spell)?(?: \(level (\d) version\))?(?: on itself)?(?: twice)?(?:[.,;]| requiring| using| on |$)`)
 	mfxSpellDCRe                 = regexp.MustCompile(`spell save DC (\d+)`)
 	mfxSpellAtkRe                = regexp.MustCompile(`([+−-]\d+) to hit with spell attacks`)
 	mfxEmanRe                    = regexp.MustCompile(`(\d+)\s*-?\s*foot Emanation`)
@@ -91,6 +91,7 @@ type saveEffect struct {
 	EndSave            bool                // repeats the save at the end of each of its turns
 	Exhaustion         int                 // Exhaustion levels on a failure
 	EscapeDC           int                 // "the Grappled condition (escape DC 16)": the DC of the escape checks
+	Escapes            []conditionEscape   // a spell's escape checks (conditionSpell.escapes: Entangle, Web)
 	RestrainedToo      bool                // "and it has the Restrained condition until the grapple ends": Restrained that ends with the Grappled record
 	SpeedMode          string              // "halved", "zero" or "minus": a Speed rider of the text (speed_owner_2024.go), applied as a marker for SpeedEnd
 	SpeedEnd           riderEnd            // the Speed rider's duration (rider_duration_2024.go)
@@ -129,6 +130,9 @@ func (e saveEffect) conditionAdd(cond, source string) condAdd {
 	}
 	if e.UntilEnd {
 		a.Notes = notesUntilEndOfSourceTurn
+	}
+	if len(e.Escapes) > 0 {
+		a.Escapes = e.Escapes
 	}
 	if cond == "grappled" && e.EscapeDC > 0 {
 		a.Escapes, _ = normalizeEscapes(defaultEscapes("grappled", e.EscapeDC))
@@ -905,6 +909,10 @@ func resolveMonsterSpell(r *http.Request, lobbyID, monsterID int, monsterName, s
 	if why := monsterCastBlocked(lobbyID, monsterID); why != "" { // Antimagic Field (spells_more_2024.go)
 		return []string{fmt.Sprintf("%s tries to cast %s, but %s.", monsterName, spellName, why)}
 	}
+	wardNote := ""
+	if apply {
+		wardNote = strings.TrimSpace(endWardsOnOffenseOf(lobbyID, monsterID)) // casting a spell ends its Invisibility and Sanctuary
+	}
 	spellLevel := level
 	if sp, ok := srdSpellsMemory[normalizeSpellSlug(spellName)]; ok && spellLevel < sp.Level {
 		spellLevel = sp.Level
@@ -921,6 +929,9 @@ func resolveMonsterSpell(r *http.Request, lobbyID, monsterID int, monsterName, s
 		return append([]string{fmt.Sprintf("%s casts %s.", monsterName, spellName)}, notes...)
 	}
 	out := append(resolveMonsterSpellRules(r, lobbyID, monsterID, monsterName, spellName, level, dc, atk, kept, selfCast, apply, use), notes...)
+	if wardNote != "" {
+		out = append(out, wardNote)
+	}
 	return out
 }
 
@@ -937,12 +948,15 @@ func resolveMonsterSpellRules(r *http.Request, lobbyID, monsterID int, monsterNa
 	if level > sp.Level {
 		head += fmt.Sprintf(" (level %d)", level)
 	}
+	// a lasting effect or a heal: the effect a character's cast of the spell has (monster_cast_effects_2024.go)
+	if lines, handled := monsterCastLasting(r, lobbyID, monsterID, sp, slug, head, level, dc, targets, selfCast, apply); handled {
+		return lines
+	}
+	if lines, handled := monsterCastHealing(r, lobbyID, monsterID, sp, slug, head, level, targets, selfCast, apply); handled {
+		return lines
+	}
 	if selfCast {
-		if slug == "invisibility" {
-			applyCondition(lobbyID, monsterID, "invisible", sp.Name, 0, "", 0)
-			return []string{head + " on itself: it has the Invisible condition (until it attacks, deals damage or casts a spell, or its Concentration ends)."}
-		}
-		return []string{head + " on itself."}
+		return []string{head + " on itself. The GM resolves the spell's effect."}
 	}
 	areaAimed := false
 	if v, pt := monsterAreaPoint.Load(lobbyID); pt && sp.AoEShape != "" && !isSpellAttack(sp) { // aimed at a point (O-5)
@@ -1060,7 +1074,7 @@ func resolveMonsterSpellRules(r *http.Request, lobbyID, monsterID int, monsterNa
 			e.HalfOnSuccess = strings.Contains(strings.ToLower(sp.Description), "half as much damage")
 		}
 		if cs, ok := conditionSpells[slug]; ok {
-			e.Conditions, e.Rounds, e.EndSave = cs.Conditions, cs.Rounds, cs.EndSave
+			e.Conditions, e.Rounds, e.EndSave, e.Escapes = cs.Conditions, cs.Rounds, cs.EndSave, cs.escapes(dc)
 		}
 		if len(e.Damage) == 0 && len(e.Conditions) == 0 {
 			e.Extra = sp.Name + ": apply the spell's effect on a failed save"
@@ -1180,6 +1194,14 @@ func resolveMonsterEffectText(r *http.Request, lobbyID, monsterID int, meta *mon
 		}
 		lines = append(lines, resolveMonsterSpell(r, lobbyID, monsterID, name, spName, lvl, dc, atk, targets, false, apply, use)...)
 		return append(lines, notes...)
+	}
+	// an entry that offers several spells ("casts Bless, Healing Word, or Sanctuary"): the GM names the one cast with use; none is guessed
+	if choices := castChoiceList(text); len(choices) >= 2 && depth == 0 {
+		why := ""
+		if u := strings.TrimSpace(use); u != "" {
+			why = fmt.Sprintf(" %q isn't one of them.", u)
+		}
+		return append([]string{fmt.Sprintf("%s casts one of %s.%s Name the spell cast in use. Nothing was cast.", entryName, strings.Join(choices, ", "), why)}, notes...)
 	}
 	// a spell
 	if m := mfxSpellRe.FindStringSubmatch(text); m != nil && !strings.Contains(m[1], "Spellcasting") {

@@ -462,6 +462,15 @@ Add to the owner, never beside it. When you give another rule one owner, add it 
   the GM's stat block marks each trait as applied by the server or by the GM (`traitsForGM`). A row marked `Aura` acts on its own timing:
   the GM's `automatic_traits` list (`auraTraits`) and the auras switch read those rows (`TestAuraTraitsComeFromTheTable`). A new trait with mechanics is a
   row here plus its rule in the owner it belongs to (an attack source, a save source, a turn hook).
+- **What a monster's cast of a spell does** when it is neither a spell attack nor a saving throw: `monster_cast_effects_2024.go`.
+  - `lastingSpellEffect` (`buffSpells` and `gmSpellKinds`) gives the effect's kind, duration and number of targets. A character's
+    Bless and Shield of Faith read it too.
+  - `castEffectAnyCreature` lists the kinds a monster's cast applies.
+  - `spellHealDice` is a healing spell's dice and modifier, for characters and monsters.
+  - `monsterSpellcastingMod` / `monsterSpellDC` read a monster's casting ability and DC.
+  - `castChoiceList`: an entry that offers several spells waits for the GM's `use`.
+  - `endWardsOnOffenseOf`: Invisibility and Sanctuary end when their creature, a character or a monster, attacks or casts.
+  - A new spell effect for monsters is a row in those tables plus a kind its readers serve for any creature.
 - **Reading the action log:** `readActions` (`cmd/server/action_log_2024.go`) with `actionFilter`; `actionRecord.view` is the one JSON
   form of a row and `cursorTime` the one way a feed shows its time (every fraction of a second, so `?since=` the last record's
   `created_at` returns only later ones). The feed, spectate, the web feed and log, GM status, my-turn, the nudge and a character's

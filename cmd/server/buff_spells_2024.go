@@ -933,14 +933,25 @@ func endWardsOnOffense(charID int) string {
 	if charID <= 0 {
 		return ""
 	}
-	lobby := lobbyOfChar(charID)
+	return endWardsOnOffenseOf(lobbyOfChar(charID), charID)
+}
+
+// endWardsOnOffenseOf is endWardsOnOffense for any creature: a character, or a monster of the campaign (its attack roll, its cast).
+func endWardsOnOffenseOf(lobby, id int) string {
+	if id == 0 || (id < 0 && lobby == 0) {
+		return ""
+	}
 	var notes []string
-	if _, ok := buffEffect(lobby, charID, "sanctuary"); ok {
-		db.Exec(`DELETE FROM spell_effects WHERE lobby_id = $1 AND target_id = $2 AND kind = 'sanctuary'`, lobby, charID)
+	if _, ok := buffEffect(lobby, id, "sanctuary"); ok {
+		db.Exec(`DELETE FROM spell_effects WHERE lobby_id = $1 AND target_id = $2 AND kind = 'sanctuary'`, lobby, id)
 		notes = append(notes, "Sanctuary")
 	}
-	if len(endCondition(lobby, charID, "invisible", "Invisibility")) > 0 {
-		db.Exec(`DELETE FROM spell_effects WHERE target_id = $1 AND kind = 'invisibility'`, charID)
+	if len(endCondition(lobby, id, "invisible", "Invisibility")) > 0 {
+		if id < 0 {
+			db.Exec(`DELETE FROM spell_effects WHERE lobby_id = $1 AND target_id = $2 AND kind = 'invisibility'`, lobby, id)
+		} else {
+			db.Exec(`DELETE FROM spell_effects WHERE target_id = $1 AND kind = 'invisibility'`, id)
+		}
 		notes = append(notes, "Invisibility")
 	}
 	if len(notes) == 0 {

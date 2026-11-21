@@ -218,6 +218,45 @@ Open adjudication (not decided by the supplied rules, so nothing is shortened by
 ## Spellcasting entries (route-played)
 `TestPostgresBookSpellcastingRoute` plays every spell listed in the CR 10+ Spellcasting entries (323 spells) through POST /api/gm/narrate with `monster_action.use`: 104 rolled by the shared spell rules (a save or an attack roll), 219 handed to the GM with the spell named and "GM" in the reply, 0 refused, 0 silent. This proves nothing was dropped silently; it does not prove the 219 are automated (utility, buff and out-of-combat spells stay with the GM), nor that the 104 effects are right beyond what the spell tests cover. The rolled/GM split moves by a few spells between runs (the reply text depends on the dice), so only the 0-silent result is a fixed claim. Report: SPELLCASTING_ROUTE_REPORT_CR10plus.md.
 
+## What a monster's cast does (`cmd/server/monster_cast_effects_2024.go`)
+A monster casts through `resolveMonsterSpell` (`monster_effects_2024.go`). A spell attack goes to the attack owner and a saving throw
+spell to the save owner, as before. A spell that is neither now has the effect a character's cast of it has, read from the same tables:
+- **Lasting effects** come from `lastingSpellEffect` (`buffSpells` and `gmSpellKinds`: kind, duration, creatures reached at the level), the
+  table a character's Bless and Shield of Faith and the GM's grant read too. A monster's cast applies only the kinds whose readers serve any
+  creature (`castEffectAnyCreature`: Bless, Shield of Faith, Invisibility, Greater Invisibility, Sanctuary). Any other kind is named in the
+  reply as the GM's to resolve. A new casting by the same monster ends its earlier effect of that kind.
+- **Invisibility and Greater Invisibility** give the Invisible condition through the condition owner, recorded with the caster (`SourceID`).
+  The end of the monster's Concentration ends it (`endMonsterConcentrationIn` matches the spell's name as the source).
+  Invisibility and Sanctuary also end when their creature makes an attack roll or casts a spell (`endWardsOnOffenseOf`, called from the
+  monster attack roll after the roll and from `resolveMonsterSpell` before the new cast). Characters already used it.
+- **Healing spells** heal through each target's own Hit Point owner (`healHP`, `healMonster`, `healCompanion`). The dice at the level
+  and whether the modifier is added come from `spellHealDice`, which a character's cast reads too. The modifier comes from the stat
+  block's "using <Ability> as the spellcasting ability" (`monsterSpellcastingMod`). The number of targets is from "up to N
+  creatures", else one.
+- **A save DC the entry omits** ("using the same spellcasting ability as Spellcasting") is the Spellcasting entry's DC
+  (`monsterSpellNumbers`). With no DC anywhere it is 8 + Proficiency Bonus (by CR) + the modifier (`monsterSpellDC`).
+- **Reading the entry:** "casts the Sleep spell" names the spell (`mfxSpellRe`). An entry that offers several spells ("casts Bless,
+  Healing Word, or Sanctuary") is a choice (`castChoiceList`). Nothing is cast and no use is spent until the GM names one in `use`.
+  Before, the first spell was always cast.
+- **Shared spell table corrections** (`conditionSpells`, read by characters' and monsters' casts):
+  - Entangle and Web free a creature with a Strength (Athletics) check against the spell save DC (`conditionSpell.Escape`, an escape
+    on the record). Before, it was a repeated save.
+  - Web lasts 1 hour.
+  - Animal Friendship charms a Beast for 24 hours.
+- **The GM's (named, Concentration started, the day use left for the GM to count, as every hand-off):**
+  - Utility and information spells: Light, Thaumaturgy, Druidcraft, Dancing Lights, Mage Hand, Minor Illusion, Detect Magic, Detect
+    Evil and Good, Clairvoyance, the effects of Detect Thoughts after its save.
+  - Fly (movement is deferred).
+  - Fog Cloud (no obscured-area owner for a point-anchored sphere yet).
+  - Pass without Trace (its Stealth bonus is read for characters only).
+  - Lesser Restoration (the condition-ending table belongs to the Heal/Restoration work).
+  - Suggestion's course of action (the Charmed condition is applied).
+- **Not yet:** Sleep's second failed save (Unconscious) needs a condition follow-up in the condition owner. Today the Incapacitated
+  condition repeats its save each turn.
+
+Tests: `TestPostgresMonsterCastEffects` checks narrate at a character, a monster and a companion. `TestPostgresMonsterCastReading`
+checks the reading and the tables.
+
 ## Per-day uses (new, tested)
 Before: nothing counted "(1/Day)" actions or the "2/Day Each" / "1/Day" lists of a Spellcasting entry (only reactions, in memory). Now `monster_day_uses.go` reads the tiers (`spellTiersOf`): "At Will" is unlimited, "N/Day Each" counts each spell, "N/Day" is one count for the whole list, and "(N/Day)" in an action name counts that action. The counts live in a ledger per creature (`monster_day_uses` table, keyed by campaign and `creature_id`), so they last from one fight to the next and through a restart. Identity is explicit: `combat/add` gives every monster a fresh `creature_id` (returned in `combatants_added`, shown by monster-features). Two creatures with one name never share uses, and a rename changes nothing. A returning creature is linked on purpose: give its `creature_id` in `combat/add` (same stat block, known to the campaign, not already in the fight; otherwise 400 `unknown_creature_id` / `creature_already_in_fight`). A monster added without one is a NEW creature, so forgetting to link gives it fresh uses (GET /api/gm/monster-features without combatant_id lists the known creatures). Monsters the fight makes by itself (no creature_id) are counted for that fight only.
 Counting is explicit and atomic. The limit is checked and the use reserved in ONE database transaction (`reserveDayUse`, row locked), so two requests cannot both take the last use (eight concurrent requests spend exactly one; removing the lock fails the test). A reserved use stays counted only when the code that carried it out says so, not from the reply text or the damage: the executors call `markExecuted` on a per-request execution record (`monster_day_uses.go`): a saving throw effect applied to its targets (a success, zero damage, an immune target and a condition-only effect all count), a Command or spell save rolled, a spell attack made, a reaction that took effect; a limited-use attack counts once the attack code made it against a target (it may miss, be blocked or deal nothing). Anything else gives the reservation back (`releaseDayUse`): a refusal, a target the fight does not know, a hand-off where the server rolled nothing and the reply only tells the GM what to do, a reaction that found no trigger. `apply_damage:false` is a preview (the word "apply" means only this execution mode): it reads the count and reserves nothing. "Day use counted for <name>: n of N/Day" is said for an effect; the reply for a hand-off says "Not counted as a day use" and names the key so the GM can count it (`day_uses` {key: n}). The state save never overwrites the counts (they belong to the ledger). A Multiattack counts no day use itself; its single chosen limited sub-attack counts under its own name, and a plan with several attacks is not counted (open). Other controls: `new_day: true` (every count in the campaign comes back; the server does not track days). Reactions with "(N/Day)" use the same ledger now (the in-memory count is gone). Tests: `TestPostgresMonsterReactionDayUses` (a refused Split and a reaction with no trigger are not counted, an executed one is, and it outlasts the fight; mutation checked) and `TestPostgresMonsterDayUses` (a missed attack, a save that succeeds for no damage and a condition-only effect each spend the use; 1/Day action, 2/Day Each, At Will, shared 1/Day, stored counts, second fight, same name not linked = new creature, link under another name, bad link refused, one creature twice, two same-name creatures in one fight, preview and hand-off not counted, GM count and give-back, new_day; mutations (one shared id, counting hand-offs, counting previews) each fail it). The save and spell sweeps reset the counts between tries.

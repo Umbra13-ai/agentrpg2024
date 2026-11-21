@@ -441,10 +441,7 @@ func resolveEffectSpell(charID int, spell SRDSpell, spellKey string, slotLevel, 
 				ids = []int{charID}
 			}
 		}
-		limit, kind, rounds := spellExtraTargets(slotLevel, 1, 3), "bless", 10
-		if spellKey == "shield-of-faith" {
-			limit, kind, rounds = 1, "shield_of_faith", 100
-		}
+		kind, rounds, limit, _, _ := lastingSpellEffect(spellKey, slotLevel) // gmSpellKinds (monster_cast_effects_2024.go)
 		note := ""
 		if len(ids) > limit {
 			note = fmt.Sprintf(" (only the first %d targets: the spell affects %d at this level)", limit, limit)

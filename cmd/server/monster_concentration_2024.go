@@ -128,7 +128,9 @@ func endMonsterConcentrationIn(tx *sql.Tx, lobby, id int, s monsterConcentration
 	ended := 0
 	for _, tid := range targets {
 		err = changeConditionsIn(tx, lobby, tid, func(c *conditionChange) error {
-			gone, err := c.remove(func(r conditionRecord) bool { return r.SourceID == id && strings.HasSuffix(r.Source, "("+s.Spell+")") })
+			gone, err := c.remove(func(r conditionRecord) bool {
+				return r.SourceID == id && (strings.HasSuffix(r.Source, "("+s.Spell+")") || strings.EqualFold(r.Source, s.Spell))
+			})
 			ended += len(gone)
 			return err
 		})

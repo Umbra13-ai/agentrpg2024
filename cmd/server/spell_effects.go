@@ -59,33 +59,44 @@ type conditionSpell struct {
 	Conditions []string // conditions applied on a failure
 	Rounds     int      // duration in rounds (10 = 1 minute)
 	EndSave    bool     // the creature repeats the save at the end of its turns
+	Escape     string   // the skill of the check (Strength) that frees it, against the spell save DC, as an action (Entangle, Web)
 }
 
 var conditionSpells = map[string]conditionSpell{
-	"hold-person":             {"wis", []string{"paralyzed"}, 10, true},
-	"hold-monster":            {"wis", []string{"paralyzed"}, 10, true},
-	"sleep":                   {"wis", []string{"incapacitated"}, 10, true},
-	"blindness-deafness":      {"con", []string{"blinded"}, 10, true},
-	"fear":                    {"wis", []string{"frightened"}, 10, true},
-	"charm-person":            {"wis", []string{"charmed"}, 600, false},
-	"charm-monster":           {"wis", []string{"charmed"}, 600, false},
-	"hypnotic-pattern":        {"wis", []string{"charmed", "incapacitated"}, 10, false},
-	"entangle":                {"str", []string{"restrained"}, 10, true},
-	"web":                     {"dex", []string{"restrained"}, 10, true},
-	"tashas-hideous-laughter": {"wis", []string{"prone", "incapacitated"}, 10, true},
-	"hideous-laughter":        {"wis", []string{"prone", "incapacitated"}, 10, true}, // the 2024 name (F203)
-	"dominate-person":         {"wis", []string{"charmed"}, 10, false},               // F203: Charmed (a repeat save when it takes damage)
-	"dominate-beast":          {"wis", []string{"charmed"}, 10, false},
-	"dominate-monster":        {"wis", []string{"charmed"}, 600, false},
-	"compulsion":              {"wis", []string{"charmed"}, 10, false},
-	"suggestion":              {"wis", []string{"charmed"}, 4800, false},
-	"mass-suggestion":         {"wis", []string{"charmed"}, 14400, false},
-	"modify-memory":           {"wis", []string{"charmed", "incapacitated"}, 10, false},
-	"grease":                  {"dex", []string{"prone"}, 0, false},      // the creatures in the square when the grease appears
-	"weird":                   {"wis", []string{"frightened"}, 10, true}, // after its damage
-	"color-spray":             {"con", []string{"blinded"}, 1, false},
-	"ray-of-sickness":         {"con", []string{"poisoned"}, 2, false}, // after its damage
-	"stinking-cloud":          {"con", []string{"poisoned"}, 2, false}, // after its damage
+	"hold-person":             {"wis", []string{"paralyzed"}, 10, true, ""},
+	"hold-monster":            {"wis", []string{"paralyzed"}, 10, true, ""},
+	"sleep":                   {"wis", []string{"incapacitated"}, 10, true, ""},
+	"blindness-deafness":      {"con", []string{"blinded"}, 10, true, ""},
+	"fear":                    {"wis", []string{"frightened"}, 10, true, ""},
+	"charm-person":            {"wis", []string{"charmed"}, 600, false, ""},
+	"charm-monster":           {"wis", []string{"charmed"}, 600, false, ""},
+	"hypnotic-pattern":        {"wis", []string{"charmed", "incapacitated"}, 10, false, ""},
+	"entangle":                {"str", []string{"restrained"}, 10, false, "athletics"},
+	"web":                     {"dex", []string{"restrained"}, 600, false, "athletics"},
+	"animal-friendship":       {"wis", []string{"charmed"}, 14400, false, ""}, // a Beast (spellCreatureType), 24 hours
+	"tashas-hideous-laughter": {"wis", []string{"prone", "incapacitated"}, 10, true, ""},
+	"hideous-laughter":        {"wis", []string{"prone", "incapacitated"}, 10, true, ""}, // the 2024 name (F203)
+	"dominate-person":         {"wis", []string{"charmed"}, 10, false, ""},               // F203: Charmed (a repeat save when it takes damage)
+	"dominate-beast":          {"wis", []string{"charmed"}, 10, false, ""},
+	"dominate-monster":        {"wis", []string{"charmed"}, 600, false, ""},
+	"compulsion":              {"wis", []string{"charmed"}, 10, false, ""},
+	"suggestion":              {"wis", []string{"charmed"}, 4800, false, ""},
+	"mass-suggestion":         {"wis", []string{"charmed"}, 14400, false, ""},
+	"modify-memory":           {"wis", []string{"charmed", "incapacitated"}, 10, false, ""},
+	"grease":                  {"dex", []string{"prone"}, 0, false, ""},      // the creatures in the square when the grease appears
+	"weird":                   {"wis", []string{"frightened"}, 10, true, ""}, // after its damage
+	"color-spray":             {"con", []string{"blinded"}, 1, false, ""},
+	"ray-of-sickness":         {"con", []string{"poisoned"}, 2, false, ""}, // after its damage
+	"stinking-cloud":          {"con", []string{"poisoned"}, 2, false, ""}, // after its damage
+}
+
+// escapes: the check that frees a creature from the spell's condition, against the spell save DC (none: nil).
+func (cs conditionSpell) escapes(dc int) []conditionEscape {
+	if cs.Escape == "" || dc <= 0 {
+		return nil
+	}
+	e, _ := normalizeEscapes([]conditionEscape{{Ability: "Strength", Skill: titleCase(cs.Escape), DC: dc}})
+	return e
 }
 
 // damageSpellConditions are the spells that deal damage and also apply a condition on a failed save.
@@ -146,6 +157,7 @@ func resolveConditionSpell(charID int, spellKey string, saveDC int, spellName st
 			if endSave != "" {
 				a.EndSave = &conditionSave{Ability: endSave, DC: saveDC}
 			}
+			a.Escapes = cs.escapes(saveDC)
 			if sp, ok := srdSpellsMemory[spellKey]; ok && strings.Contains(strings.ToLower(sp.Duration), "concentration") {
 				a.Notes, a.CreatedBy = "concentration", charID // F56: it lasts while the caster keeps Concentration (loadConditionRecords drops it when that ends)
 			}
