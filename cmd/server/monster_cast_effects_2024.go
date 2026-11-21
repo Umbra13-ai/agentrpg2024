@@ -29,7 +29,8 @@ import (
 // castEffectAnyCreature: the lasting effect kinds whose readers serve any creature, character or monster (spellRollAdjust,
 // spellACAdjust, sanctuaryBlocks, the Invisible condition). A kind not listed is read for characters only, so a monster's cast of it
 // stays the GM's.
-var castEffectAnyCreature = map[string]bool{"bless": true, "shield_of_faith": true, "invisibility": true, "greater_invisibility": true, "sanctuary": true}
+var castEffectAnyCreature = map[string]bool{"bless": true, "shield_of_faith": true, "invisibility": true, "greater_invisibility": true, "sanctuary": true,
+	"pass_without_trace": true} // passWithoutTraceOn reads any creature (the monster Hide action, attemptMonsterHide)
 
 // castInvisibleKinds: the kinds that give the Invisible condition while they last.
 var castInvisibleKinds = map[string]bool{"invisibility": true, "greater_invisibility": true}

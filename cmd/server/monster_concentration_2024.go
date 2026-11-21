@@ -101,7 +101,8 @@ func endMonsterConcentrationIn(tx *sql.Tx, lobby, id int, s monsterConcentration
 	if _, err := tx.Exec(`DELETE FROM monster_concentration WHERE lobby_id=$1 AND monster_id=$2`, lobby, id); err != nil {
 		return 0, err
 	}
-	if _, err := tx.Exec(`DELETE FROM combat_effects WHERE lobby_id=$1 AND kind='magical_darkness' AND source_id=$2`, lobby, id); err != nil {
+	if _, err := tx.Exec(`DELETE FROM combat_effects WHERE lobby_id=$1 AND source_id=$2 AND (kind='magical_darkness'
+		OR (kind='obscured_area' AND text::jsonb->>'concentration' = 'true'))`, lobby, id); err != nil { // its areas (obscured_areas_2024.go)
 		return 0, err
 	}
 	if _, err := tx.Exec(`DELETE FROM spell_effects WHERE lobby_id=$1 AND caster_id=$2 AND LOWER(spell)=LOWER($3)`, lobby, id, s.Spell); err != nil {

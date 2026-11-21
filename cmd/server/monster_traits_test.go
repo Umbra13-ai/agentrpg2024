@@ -14,6 +14,7 @@ func TestMonsterTraitsHaveOneOwner(t *testing.T) {
 	importedExamples := []srdMonsterEntry{
 		{Name: "Agile", Text: "Its movement doesn't provoke Opportunity Attacks."},
 		{Name: "Thunder Daze", Text: "If the creature takes Thunder damage, it has Disadvantage on attack rolls and ability checks until the end of its next turn."},
+		{Name: "Devil's Sight", Text: "Magical Darkness doesn't impede the creature's Darkvision."}, // the Monster Manual's wording pattern, invented text
 	}
 	all := map[string]int{}
 	applied := map[string]bool{}

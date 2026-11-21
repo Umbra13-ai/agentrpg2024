@@ -113,6 +113,11 @@ func piercesMagicalDarknessWithin(lobbyID, creatureID, distFeet int) bool {
 		_, blindsight, truesight := getCharacterVision(creatureID)
 		return blindsight >= distFeet || truesight >= distFeet || (hasInvocation(creatureID, "devils-sight") && distFeet <= 120)
 	}
+	if creatureDevilsSight(lobbyID, creatureID) { // a stat block's Devil's Sight: its Darkvision isn't impeded (creature_senses_2024.go)
+		if darkvision, _, _ := creatureVision(lobbyID, creatureID); darkvision >= distFeet {
+			return true
+		}
+	}
 	if creatureID < 0 {
 		key := ""
 		for _, entry := range combatEntries(lobbyID) {
@@ -200,6 +205,11 @@ func piercesMagicalDarkness(lobbyID, creatureID int) bool {
 	if creatureID > 0 && !isCompanionCombatID(creatureID) {
 		_, blindsight, truesight := getCharacterVision(creatureID)
 		return blindsight > 0 || truesight > 0 || hasInvocation(creatureID, "devils-sight")
+	}
+	if creatureDevilsSight(lobbyID, creatureID) {
+		if darkvision, _, _ := creatureVision(lobbyID, creatureID); darkvision > 0 {
+			return true
+		}
 	}
 	if creatureID < 0 {
 		key := ""

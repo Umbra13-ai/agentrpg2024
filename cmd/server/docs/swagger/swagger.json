@@ -33555,7 +33555,7 @@
      "GM"
     ],
     "summary": "Set area lighting level",
-    "description": "Set the lighting level for a campaign area. Lighting affects visibility and attack rolls: bright (normal), dim (disadvantage on Perception), darkness (heavily obscured - effectively blinded without darkvision/blindsight/truesight).",
+    "description": "Set the lighting level for a campaign area. Lighting affects visibility and attack rolls: bright (normal), dim (disadvantage on Perception), darkness (heavily obscured - effectively blinded without darkvision/blindsight/truesight), sunlight (Bright Light that is sunlight: a creature with Sunlight Sensitivity has Disadvantage on attack rolls and ability checks, and on saving throws where its trait says D20 Tests).",
     "responses": {
      "400": {
       "description": "The body was refused (nothing was changed): unknown_field, wrong_type, invalid_json, body_required or id_mismatch, with the fields the request takes",
@@ -33657,7 +33657,7 @@
          },
          "lighting": {
           "type": "string",
-          "description": "bright, dim or darkness"
+          "description": "bright, dim, darkness or sunlight (Bright Light that is sunlight: Sunlight Sensitivity reads it)"
          }
         }
        },
@@ -33667,7 +33667,7 @@
        }
       }
      },
-     "description": "Lighting level: 'bright', 'dim', or 'darkness'. campaign_id: one you run, started or not (optional when you run one)."
+     "description": "Lighting level: 'bright', 'dim', 'darkness' or 'sunlight'. campaign_id: one you run, started or not (optional when you run one)."
     }
    }
   },
@@ -41441,6 +41441,143 @@
       }
      },
      "description": "the character, what it does, and an optional action"
+    }
+   }
+  },
+  "/api/gm/obscured-area": {
+   "post": {
+    "tags": [
+     "GM"
+    ],
+    "summary": "The obscured areas of a fight (GM)",
+    "description": "Lists the campaign's obscured areas (fog, ink: Heavily Obscured spaces made by a spell or a stat block) and lets the GM change one: \"end\": true ends it (a strong wind or current dispersed it); \"inside\": [ids] names the creatures in it, for a fight without a battle map (on a battle map the area's square decides). A creature in a Heavily Obscured area, or looking through one, can't see past it: attack rolls and the actions that need a creature it can see read it.",
+    "responses": {
+     "400": {
+      "description": "The body was refused (nothing was changed): unknown_field, wrong_type, invalid_json, body_required or id_mismatch, with the fields the request takes",
+      "content": {
+       "application/json": {
+        "schema": {
+         "properties": {
+          "error": {
+           "type": "string"
+          },
+          "fields": {
+           "items": {
+            "type": "string"
+           },
+           "type": "array"
+          },
+          "message": {
+           "type": "string"
+          },
+          "unknown": {
+           "items": {
+            "type": "string"
+           },
+           "type": "array"
+          }
+         },
+         "type": "object"
+        }
+       }
+      }
+     },
+     "200": {
+      "description": "The areas, after the change",
+      "content": {
+       "application/json": {
+        "schema": {
+         "properties": {
+          "areas": {
+           "items": {
+            "properties": {
+             "area_id": {
+              "type": "integer"
+             },
+             "concentration": {
+              "type": "string"
+             },
+             "heavily_obscured": {
+              "type": "boolean"
+             },
+             "label": {
+              "type": "string"
+             },
+             "radius": {
+              "type": "integer"
+             },
+             "rounds_left": {
+              "type": "integer"
+             },
+             "shape": {
+              "type": "string"
+             },
+             "source": {
+              "type": "string"
+             },
+             "where": {
+              "type": "string"
+             }
+            },
+            "type": "object"
+           },
+           "type": "array"
+          },
+          "campaign_id": {
+           "type": "integer"
+          },
+          "message": {
+           "type": "string"
+          },
+          "success": {
+           "type": "boolean"
+          }
+         },
+         "type": "object"
+        }
+       }
+      }
+     }
+    },
+    "requestBody": {
+     "required": true,
+     "content": {
+      "application/json": {
+       "schema": {
+        "type": "object",
+        "properties": {
+         "area_id": {
+          "type": "integer",
+          "description": "the area to change (GET-like without it: the reply lists the areas)"
+         },
+         "campaign_id": {
+          "type": "integer",
+          "description": "the campaign this command is for (or ?campaign_id=); without it, the campaign of the characters it names, else your only active campaign"
+         },
+         "end": {
+          "type": "boolean",
+          "description": "true: the area ends (a strong wind or current dispersed it)"
+         },
+         "inside": {
+          "items": {
+           "type": "integer"
+          },
+          "type": "array",
+          "description": "the creatures in the area, for a fight without a battle map (characters' ids, monsters' negative ids)"
+         }
+        }
+       },
+       "example": {
+        "area_id": 1,
+        "campaign_id": 1,
+        "end": true,
+        "inside": [
+         1
+        ]
+       }
+      }
+     },
+     "description": "The area (area_id) and the change; no area_id only lists them"
     }
    }
   },

@@ -2634,6 +2634,11 @@ func resolveActionWithBonusDash(action, description string, charID int, bonusDas
 				return fmt.Sprintf("Cast %s%s! Heals %d HP%s.%s%s%s%s%s%s %s", spell.Name, upcastInfo, heal, bonusInfo, healText, metamagicNote, materialConsumedNote, invocationUsedNote, atWillInvocationNote, blessedHealerInfo, spell.Description)
 			}
 			conditionText := companionFromSpell(charID, spellKey, slotLevel, description) // Find Familiar, Find Steed, summons (companions_2024.go)
+			if conditionText == "" {                                                      // Fog Cloud: the area on the target's square, else the caster's (obscured_areas_2024.go)
+				if line, handled := castObscuringSpell(lobbyOfChar(charID), charID, spellKey, spell.Name, slotLevel, nil, spellAreaTargets(charID), true); handled {
+					conditionText = " " + line
+				}
+			}
 			if conditionText == "" {
 				conditionText = resolveEffectSpell(charID, spell, spellKey, slotLevel, saveDC, description) // Bless, Bane, Faerie Fire, Slow, Command...
 			}

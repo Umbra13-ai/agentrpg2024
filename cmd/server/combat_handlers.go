@@ -27,9 +27,16 @@ func isUnderwaterCombat(lobbyID int) bool {
 // getCampaignLighting returns the current lighting level for a campaign
 // Returns: "bright" (default), "dim", or "darkness"
 func getCampaignLighting(lobbyID int) string {
+	if l := sceneLighting(lobbyID); l != "sunlight" {
+		return l
+	}
+	return "bright" // sunlight is Bright Light for sight; inSunlight reads the difference (creature_senses_2024.go)
+}
+
+// sceneLighting: the lighting the GM set, as stored: bright (the default), dim, darkness or sunlight.
+func sceneLighting(lobbyID int) string {
 	var lighting string
-	err := db.QueryRow("SELECT COALESCE(lighting, 'bright') FROM combat_state WHERE lobby_id = $1", lobbyID).Scan(&lighting)
-	if err != nil {
+	if err := db.QueryRow("SELECT COALESCE(lighting, 'bright') FROM combat_state WHERE lobby_id = $1", lobbyID).Scan(&lighting); err != nil {
 		return "bright" // Default to bright light
 	}
 	return lighting

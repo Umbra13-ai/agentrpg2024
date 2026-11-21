@@ -235,7 +235,7 @@ var attackSources = []attackSource{
 	// ---- Advantage: the attacker's state
 	{true, "the target can't see the attacker", func(c *attackCtx) (bool, string) { // an Invisible or hidden attacker, or one the dark hides
 		return yes((hasCond(c.attackerConds, "invisible") || hasCond(c.attackerConds, "hidden")) && !seesUnseen(c.lobby, c.target) ||
-			c.target != 0 && c.lobby > 0 && (magicalDarknessBlocksSight(c.lobby, c.target, c.attacker) ||
+			c.target != 0 && c.lobby > 0 && (areaBlocksSight(c.lobby, c.target, c.attacker) ||
 				!creatureSeesInLighting(c.lobby, c.target, monsterLightingAt(c.lobby, c.attacker), c.distanceFeet())))
 	}},
 	{true, "Aura of Authority", func(c *attackCtx) (bool, string) { return yes(c.attacker < 0 && auraOfAuthority(c.lobby, c.attacker)) }}, // Hobgoblin Captain
@@ -305,10 +305,14 @@ var attackSources = []attackSource{
 		if c.attacker == 0 || c.lobby <= 0 {
 			return false, ""
 		}
-		if magicalDarknessBlocksSight(c.lobby, c.attacker, c.target) {
+		if areaBlocksSight(c.lobby, c.attacker, c.target) { // Magical Darkness, fog, ink (obscured_areas_2024.go)
 			return yes(true)
 		}
 		return yes(!creatureSeesInLighting(c.lobby, c.attacker, monsterLightingAt(c.lobby, c.target), c.distanceFeet()))
+	}},
+	{false, "Sunlight Sensitivity", func(c *attackCtx) (bool, string) { // the attacker's own trait, in sunlight (creature_senses_2024.go)
+		on, _ := sunlightPenalty(c.lobby, c.attacker)
+		return yes(on)
 	}},
 	{false, "the attacker is Grappled by another creature", func(c *attackCtx) (bool, string) {
 		return yes(c.attacker != 0 && c.target != 0 && grappledAttackPenalty(c.lobby, c.attacker, c.target))
@@ -544,6 +548,9 @@ func (c *attackCtx) roll() (game.AttackRoll, game.AttackOutcome, string) {
 			o = a.Judge(rerolled)
 			note = fmt.Sprintf(" 🍀[Lucky: %d→%d]", was, rerolled)
 		}
+	}
+	if c.attacker != 0 && hasCond(c.attackerConds, "hidden") { // the attack roll gave its Advantage; now the attacker is found (hide_2024.go)
+		endHidden(c.lobby, c.attacker)
 	}
 	if o.Hit && c.target > 0 && c.attacker != 0 && hasMultiattackDefense(c.target) {
 		recordMultiattackDefenseHit(c.target, c.attacker) // its other attack rolls against the Hunter this turn have Disadvantage
