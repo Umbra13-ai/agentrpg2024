@@ -57,6 +57,14 @@ func companionByNameOrID(lobbyID int, who string) (companion, bool) {
 
 // monsterAttacksCompanion rolls a monster's chosen attacks against a companion.
 func monsterAttacksCompanion(lobbyID, attackerID int, attackerName string, chosen []monsterActionRow, c companion, apply bool) (string, map[string]interface{}) {
+	for i, a := range chosen {
+		prepared, problem := prepareUnconditionalAttack(a, a.DamageType)
+		if problem != "" {
+			return problem, map[string]interface{}{"refused": true}
+		}
+		chosen[i] = prepared
+	}
+
 	var lines []string
 	total, hits := 0, 0
 	for _, a := range chosen {
@@ -66,8 +74,27 @@ func monsterAttacksCompanion(lobbyID, attackerID int, attackerName string, chose
 		}
 		// the one attack function (attack_2024.go); the companion's own Armor Class is the one it has now
 		isMelee := meleeRe.MatchString(a.Desc) && !rangedOnlyRe.MatchString(a.Desc)
+		// the battle map decides reach, long range and "within 5 feet" as it does for a character target (monster_attacks.go); without a
+		// map (or a token for either side) a melee attack is within 5 feet
+		withinFive, longRange := isMelee, false
+		if _, inReach := opportunityInReach.Load(fmt.Sprintf("%d:%d", lobbyID, attackerID)); attackerID != 0 && !inReach {
+			if dist, onMap := monsterDistance(lobbyID, attackerID, cur.CombatID); onMap {
+				if n := monsterNormalRange(a.Desc); n > 0 && dist > n {
+					longRange = true
+				}
+				if reachFt, ranged := monsterAttackReach(a.Desc); dist > reachFt {
+					what := "reach"
+					if ranged {
+						what = "range"
+					}
+					lines = append(lines, fmt.Sprintf("%s: %s is %d ft away, beyond its %d ft %s - no attack (move the monster on the battle map first)", a.Name, companionDisplayName(cur), dist, reachFt, what))
+					continue
+				}
+				withinFive = dist <= 5
+			}
+		}
 		atk := attackCtx{lobby: lobbyID, attacker: attackerID, target: cur.CombatID, name: a.Name, bonus: a.AttackBonus, melee: isMelee, weapon: true,
-			ac: &cur.AC, autoHit: autoHitRe.MatchString(a.Desc)}
+			ac: &cur.AC, statBlockAttack: a.Desc, autoHit: autoHitRe.MatchString(a.Desc), within5: &withinFive, longRange: longRange}
 		rolled, out, rollNote := atk.roll()
 		if !out.Hit {
 			lines = append(lines, rolled.Line(a.Name, out)+rollNote)
@@ -82,10 +109,14 @@ func monsterAttacksCompanion(lobbyID, attackerID int, attackerName string, chose
 			parts = append(parts, x)
 		}
 		var said []string
-		for _, p := range parts {
-			d := game.RollDamage(p.Dice, out.Critical)
-			if d < 1 {
-				d = 1
+		for i, p := range parts {
+			flat := p.Flat
+			if i == 0 {
+				flat = a.FlatDamage
+			}
+			d := rollStatBlockDamage(p.Dice, flat, out.Critical)
+			if d < 0 {
+				d = 0
 			}
 			total += d
 			if apply {
@@ -97,7 +128,13 @@ func monsterAttacksCompanion(lobbyID, attackerID int, attackerName string, chose
 				said = append(said, fmt.Sprintf("%d %s damage", d, p.Type))
 			}
 		}
-		lines = append(lines, rolled.Line(a.Name, out)+rollNote+", "+strings.Join(said, " "))
+		line := rolled.Line(a.Name, out) + rollNote + ", " + strings.Join(said, " ")
+		if apply {
+			line += companionHitRiders(lobbyID, attackerID, attackerName, a, c.ID, rolled.HasAdvantage())
+		} else {
+			line += companionHitRidersNote(a)
+		}
+		lines = append(lines, line)
 	}
 	text := fmt.Sprintf("%s attacks %s. %s.", attackerName, companionDisplayName(c), strings.Join(lines, "; "))
 	return text, map[string]interface{}{"attacks": len(chosen), "hits": hits, "damage": total, "applied": apply, "target": c.Name, "companion_id": c.ID}
@@ -220,6 +257,7 @@ func companionMapMove(w http.ResponseWriter, r *http.Request, tx *sql.Tx, campai
 	}
 	opportunity := opportunityTriggers(campaignID, m, startToken, traversed)
 	m.Tokens[idx] = actor
+	carried := carryAttachedTokens(tx, campaignID, &m, actor.ID, actor.Name, startToken.Position, actor.Position, actor.Altitude) // an attached monster moves with it
 	m.Revision = mapRevision()
 	updated, _ := json.Marshal(m)
 	if _, err := tx.Exec("UPDATE combat_state SET battle_map=$1 WHERE lobby_id=$2", updated, campaignID); err != nil {
@@ -232,6 +270,9 @@ func companionMapMove(w http.ResponseWriter, r *http.Request, tx *sql.Tx, campai
 	}
 	companionMoved.Store(c.ID, fmt.Sprintf("%s|%d", marker, companionMoveUsed(c.ID, marker)+cost))
 	reply := map[string]any{"position": actor.Position, "traversed": traversed, "cost_ft": cost, "movement_remaining_ft": movement - cost, "companion": c.Name, "map": m.playerView(actor)}
+	if len(carried) > 0 {
+		reply["carried"] = carried
+	}
 	if len(opportunity) > 0 && !companionHasTrait(c, "Flyby") {
 		var names []string
 		for _, id := range opportunity {

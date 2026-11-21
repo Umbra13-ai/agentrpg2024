@@ -102,11 +102,32 @@ func monsterAreaAim(lobbyID int, m encounterMap, targets []int) (mapToken, bool)
 	return m.token(targets[0])
 }
 
-// areaCharacters lists the living characters on the map (not companions) that stand in an area.
-func areaCharacters(m encounterMap, in func(mapToken) bool) []mapToken {
+// activeCompanionInCampaign: the companion with this combat id belongs to THIS campaign (its owner is a character of the lobby), is
+// active and has Hit Points left. A companion of another campaign is never one, however its id reached a target list or a map token.
+func activeCompanionInCampaign(lobbyID, id int) (companion, bool) {
+	if id < companionIDBase {
+		return companion{}, false
+	}
+	for _, c := range campaignCompanions(lobbyID) {
+		if c.CombatID == id {
+			return c, c.Status == "active" && c.HP > 0
+		}
+	}
+	return companion{}, false
+}
+
+// areaCharacters lists the living characters and the active companions on the map that stand in an area (a companion's save is made
+// with its stat block: applySaveEffectOnCompanion).
+func areaCharacters(lobbyID int, m encounterMap, in func(mapToken) bool) []mapToken {
 	var out []mapToken
 	for _, t := range m.Tokens {
-		if t.ID <= 0 || t.ID >= companionIDBase {
+		if t.ID <= 0 {
+			continue
+		}
+		if t.ID >= companionIDBase {
+			if _, ok := activeCompanionInCampaign(lobbyID, t.ID); ok && in(t) {
+				out = append(out, t)
+			}
 			continue
 		}
 		var dead bool
@@ -144,7 +165,7 @@ func monsterSpellArea(lobbyID, monsterID int, sp SRDSpell, aim mapToken, listed 
 	for _, id := range listed {
 		seen[id] = true
 	}
-	for _, t := range areaCharacters(m, func(t mapToken) bool { return spellAreaContains(sp, caster, aim, t) }) {
+	for _, t := range areaCharacters(lobbyID, m, func(t mapToken) bool { return spellAreaContains(sp, caster, aim, t) }) {
 		all = append(all, t.ID)
 		if !seen[t.ID] {
 			added = append(added, t.Name)
@@ -204,7 +225,7 @@ func monsterAreaFilter(lobbyID, monsterID int, text string, targets []int) ([]in
 		listed[id] = true
 	}
 	var added []string
-	for _, t := range areaCharacters(m, func(t mapToken) bool {
+	for _, t := range areaCharacters(lobbyID, m, func(t mapToken) bool {
 		if shape == "sphere" {
 			return tokenDistanceFeet(aim, t) <= int(length)
 		}

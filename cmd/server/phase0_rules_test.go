@@ -62,7 +62,9 @@ func equalInts(a, b []int) bool {
 var notCharacterFields = map[string]bool{
 	"campaign_id": true, "record_id": true, "deadline_id": true, "object_id": true, "curse_id": true, "combat_id": true,
 	"companion_id": true, "agent_id": true, "item_id": true, "shop_id": true, "draft_id": true, "action_id": true,
+	"resume_id":  true, // opaque saved combat work id; the resume owner scopes it to the GM campaign
 	"monster_id": true, "npc_id": true, "quest_id": true, "map_id": true, "note_id": true, "effect_id": true,
+	"attacher_id": true, // the attached creature (usually a monster's combat id), not the acting character
 }
 
 func TestEveryGMRequestCharacterFieldIsKnown(t *testing.T) {

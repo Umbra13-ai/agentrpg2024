@@ -7,7 +7,17 @@ import (
 	"testing"
 )
 
-func seedTestSpells() {
+// seedTestSpells gives the test minimal spell entries and no class spell lists, and puts both back when the test ends: the spell cache
+// and classSpellListFn are shared with every other test, and an entry left behind (a bare magic-missile with no damage) once made a later
+// test that casts through the route fail depending on shuffle order.
+func seedTestSpells(t *testing.T) {
+	t.Helper()
+	savedSpells, savedList := srdSpellsMemory, classSpellListFn
+	srdSpellsMemory = make(map[string]SRDSpell, len(savedSpells)+6)
+	for k, v := range savedSpells {
+		srdSpellsMemory[k] = v
+	}
+	t.Cleanup(func() { srdSpellsMemory, classSpellListFn = savedSpells, savedList })
 	classSpellListFn = func(string) []string { return nil } // no database in unit tests
 	for slug, lvl := range map[string]int{"light": 0, "mage-hand": 0, "guidance": 0, "shield": 1, "bless": 1, "magic-missile": 1} {
 		srdSpellsMemory[slug] = SRDSpell{Name: slug, Level: lvl}
@@ -110,7 +120,7 @@ func TestResolveOriginDuplicateSkill(t *testing.T) {
 }
 
 func TestResolveOriginMagicInitiate(t *testing.T) {
-	seedTestSpells()
+	seedTestSpells(t)
 	in := originInput{
 		Background: "Sage", Species: "Dwarf", AbilityIncreases: map[string]int{"int": 2, "wis": 1}, Languages: []string{"Elvish", "Gnomish"},
 		BackgroundFeat: &featChoiceInput{List: "wizard", Cantrips: []string{"light", "mage-hand"}, Spell: "shield", SpellcastingAbility: "int"},

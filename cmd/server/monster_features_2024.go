@@ -35,6 +35,7 @@ package main
 import (
 	"encoding/json"
 	"fmt"
+	"log"
 	"net/http"
 	"regexp"
 	"strconv"
@@ -48,6 +49,7 @@ import (
 
 type monsterMeta struct {
 	Key, Name                      string
+	Senses                         string
 	Traits, Actions, BonusActions  []srdMonsterEntry
 	Reactions, Legendary           []srdMonsterEntry
 	LAUses, LAUsesLair, LR, LRLair int
@@ -68,27 +70,21 @@ var (
 )
 
 func monsterMetaFor(key string) *monsterMeta {
+	if strings.HasPrefix(key, "custom:") {
+		var raw []byte
+		if db.QueryRow(`SELECT definition FROM custom_monsters WHERE key = $1`, key).Scan(&raw) != nil {
+			return nil
+		}
+		var m srdMonster2024
+		if json.Unmarshal(raw, &m) != nil {
+			return nil
+		}
+		return metaFromMonster(key, m)
+	}
 	monsterMetaOnce.Do(func() {
 		monsterMetaMap = map[string]*monsterMeta{}
 		for _, m := range srdMonsters2024() {
-			mm := &monsterMeta{Key: monsterSlug(m.Name), Name: m.Name, Traits: m.Traits, Actions: m.Actions, BonusActions: m.BonusActions,
-				Reactions: m.Reactions, Legendary: m.Legendary, XP: m.XP, XPLair: m.XPLair}
-			if x := laUsesRe.FindStringSubmatch(m.LegendaryIn); x != nil {
-				mm.LAUses, _ = strconv.Atoi(x[1])
-				mm.LAUsesLair = mm.LAUses
-				if x[2] != "" {
-					mm.LAUsesLair, _ = strconv.Atoi(x[2])
-				}
-			}
-			for _, t := range m.Traits {
-				if x := lrRe.FindStringSubmatch(t.Name); x != nil {
-					mm.LR, _ = strconv.Atoi(x[1])
-					mm.LRLair = mm.LR
-					if x[2] != "" {
-						mm.LRLair, _ = strconv.Atoi(x[2])
-					}
-				}
-			}
+			mm := metaFromMonster(monsterSlug(m.Name), m)
 			monsterMetaMap[mm.Key] = mm
 		}
 	})
@@ -98,16 +94,17 @@ func monsterMetaFor(key string) *monsterMeta {
 // ---- per-fight state
 
 type monsterState struct {
-	InLair        bool     `json:"in_lair"`
-	LRPolicy      string   `json:"legendary_resistance_policy"`
-	LRUsed        int      `json:"legendary_resistances_used"`
-	LAUsed        int      `json:"legendary_actions_used"`
-	LAWindow      string   `json:"-"`
-	LAOnce        []string `json:"-"`
-	AurasOff      bool     `json:"auras_off"`
-	RechargeSpent []string `json:"recharge_spent"`
-	AuraImmune    []int    `json:"aura_immune"`
-	RegenBlocked  bool     `json:"-"`
+	InLair        bool           `json:"in_lair"`
+	LRPolicy      string         `json:"legendary_resistance_policy"`
+	LRUsed        int            `json:"legendary_resistances_used"`
+	LAUsed        int            `json:"legendary_actions_used"`
+	LAWindow      string         `json:"-"`
+	LAOnce        []string       `json:"-"`
+	AurasOff      bool           `json:"auras_off"`
+	RechargeSpent []string       `json:"recharge_spent"`
+	AuraImmune    []int          `json:"aura_immune"`
+	RegenBlocked  bool           `json:"-"`
+	DayUses       map[string]int `json:"day_uses"` // the creature's per-day uses, kept across fights (monster_day_uses.go)
 }
 
 func loadMonsterState(lobbyID, id int) monsterState {
@@ -120,6 +117,7 @@ func loadMonsterState(lobbyID, id int) monsterState {
 		FROM combat_monster_state WHERE lobby_id = $1 AND monster_id = $2`, lobbyID, id).
 		Scan(&s.InLair, &s.LRPolicy, &s.LRUsed, &s.LAUsed, &s.LAWindow, &once, &s.AurasOff, &spent, &immune, &s.RegenBlocked)
 	json.Unmarshal(once, &s.LAOnce)
+	s.DayUses = loadDayUses(lobbyID, id)
 	json.Unmarshal(spent, &s.RechargeSpent)
 	json.Unmarshal(immune, &s.AuraImmune)
 	if s.LRPolicy == "" {
@@ -128,22 +126,25 @@ func loadMonsterState(lobbyID, id int) monsterState {
 	return s
 }
 
-func saveMonsterState(lobbyID, id int, s monsterState) {
+func saveMonsterState(lobbyID, id int, s monsterState) error {
 	if db == nil {
-		return
+		return nil
 	}
 	once, _ := json.Marshal(nonNil(s.LAOnce))
 	spent, _ := json.Marshal(nonNil(s.RechargeSpent))
 	immune, _ := json.Marshal(s.AuraImmune)
+	// Resistance counts belong to monster_resistance_2024.go. A general
+	// snapshot cannot restore a use spent after that snapshot was read.
 	if s.AuraImmune == nil {
 		immune = []byte("[]")
 	}
-	db.Exec(`INSERT INTO combat_monster_state (lobby_id, monster_id, in_lair, lr_policy, lr_used, la_used, la_window, la_once, auras_off, recharge_spent, aura_immune, regen_blocked)
+	_, err := db.Exec(`INSERT INTO combat_monster_state (lobby_id, monster_id, in_lair, lr_policy, lr_used, la_used, la_window, la_once, auras_off, recharge_spent, aura_immune, regen_blocked)
 		VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12)
-		ON CONFLICT (lobby_id, monster_id) DO UPDATE SET in_lair=EXCLUDED.in_lair, lr_policy=EXCLUDED.lr_policy, lr_used=EXCLUDED.lr_used,
+		ON CONFLICT (lobby_id, monster_id) DO UPDATE SET in_lair=EXCLUDED.in_lair, lr_policy=EXCLUDED.lr_policy,
 			la_used=EXCLUDED.la_used, la_window=EXCLUDED.la_window, la_once=EXCLUDED.la_once, auras_off=EXCLUDED.auras_off,
 			recharge_spent=EXCLUDED.recharge_spent, aura_immune=EXCLUDED.aura_immune, regen_blocked=EXCLUDED.regen_blocked`,
-		lobbyID, id, s.InLair, s.LRPolicy, s.LRUsed, s.LAUsed, s.LAWindow, string(once), s.AurasOff, string(spent), string(immune), s.RegenBlocked)
+		lobbyID, id, s.InLair, s.LRPolicy, 0, s.LAUsed, s.LAWindow, string(once), s.AurasOff, string(spent), string(immune), s.RegenBlocked)
+	return err
 }
 
 func nonNil(l []string) []string {
@@ -157,6 +158,7 @@ func nonNil(l []string) []string {
 func clearMonsterStates(lobbyID int) {
 	if db != nil {
 		db.Exec(`DELETE FROM combat_monster_state WHERE lobby_id = $1`, lobbyID)
+		forgetFightCreatures(lobbyID) // the day counts of linked creatures stay (monster_day_uses.go)
 	}
 	clearMonsterReactionState(lobbyID) // Reaction uses per day and the last hits (monster_reactions_2024.go)
 }
@@ -212,24 +214,31 @@ func legendaryResistance(lobbyID, id int, st saveStakes) bool {
 			return false
 		}
 	}
-	s.LRUsed++
-	saveMonsterState(lobbyID, id, s)
+	left, spent, err := spendMonsterResistance(lobbyID, id, meta)
+	if err != nil {
+		log.Printf("Legendary Resistance could not be spent: %v", err)
+		return false
+	}
+	if !spent {
+		return false
+	}
 	line := fmt.Sprintf("🛡️ %s fails the saving throw and chooses to succeed instead (Legendary Resistance).", sprintAny(e["name"]))
-	addSaveNote(lobbyID, fmt.Sprintf("[%s fails the save but uses Legendary Resistance to succeed: %d of %d left today.]", sprintAny(e["name"]), total-s.LRUsed, total))
-	recordGMAction(db, lobbyID, "legendary_resistance", line, fmt.Sprintf("%d of %d Legendary Resistance uses left today.", total-s.LRUsed, total))
+	addSaveNote(lobbyID, fmt.Sprintf("[%s fails the save but uses Legendary Resistance to succeed: %d of %d left today.]", sprintAny(e["name"]), left, total))
+	recordGMAction(db, lobbyID, "legendary_resistance", line, fmt.Sprintf("%d of %d Legendary Resistance uses left today.", left, total))
 	return true
 }
 
 // ---- Legendary Actions
 
 type legendaryRequest struct {
-	CombatantID int    `json:"combatant_id"`
-	Action      string `json:"action"`      // the Legendary Action to take, by name as the stat block lists it
-	ActionName  string `json:"action_name"` // older name of the field
-	Target      string `json:"target"`      // the attack's target (a character's name or id)
-	TargetIDs   []int  `json:"target_ids"`
-	Use         string `json:"use"`          // "makes one Claw or Tail attack": which one
-	ApplyDamage *bool  `json:"apply_damage"` // default true (damageApplies)
+	CombatantID      int    `json:"combatant_id"`
+	Action           string `json:"action"`      // the Legendary Action to take, by name as the stat block lists it
+	ActionName       string `json:"action_name"` // older name of the field
+	Target           string `json:"target"`      // the attack's target (a character's name or id)
+	TargetIDs        []int  `json:"target_ids"`
+	Use              string `json:"use"`               // the chosen attack, spell, or attack damage type
+	ApplyDamage      *bool  `json:"apply_damage"`      // defaults to true; false previews without spending this use or closing the window
+	ConfirmTargeting bool   `json:"confirm_targeting"` // the GM confirmed required sight or distance the server cannot determine
 }
 
 // lastTurnEnded is the turn after which Legendary Actions may be taken now ("round:index") and whose turn it was.
@@ -303,9 +312,57 @@ func takeLegendaryAction(r *http.Request, lobbyID int, req legendaryRequest, win
 	if containsStr(s.LAOnce, act.Name) {
 		return nil, "not_again_yet", fmt.Sprintf("%s can't take %s again until the start of its next turn.", name, act.Name)
 	}
+	// An action that calls an attack must not spend its use on an invalid damage choice.
+	if match := mfxAttackRe.FindStringSubmatch(act.Text); match != nil {
+		attack := match[1]
+		if match[2] != "" && strings.EqualFold(strings.TrimSpace(req.Use), match[2]) {
+			attack = match[2]
+		}
+		if problem := preflightMonsterAction(meta, attack, req.Use, nil); problem != "" {
+			return nil, "invalid_attack_damage", problem
+		}
+	}
+	if match := mfxUsesRe.FindStringSubmatch(act.Text); match != nil {
+		if problem := preflightMonsterAction(meta, strings.TrimSpace(match[1]), req.Use, nil); problem != "" {
+			return nil, "invalid_attack_damage", problem
+		}
+	}
 	apply := damageApplies(req.ApplyDamage)
 	targets := targetIDsFrom(lobbyID, req.Target, req.TargetIDs)
+	// a Legendary Action with its own "(N/Day)" limit: checked and reserved here, counted only when the server executed it
+	if r == nil {
+		r = &http.Request{} // a saved turn can resume without the original HTTP request
+	}
+	r, rec := withExecution(r)
+	rec.confirmTargeting = req.ConfirmTargeting
+	if key, limit := monsterDayUse(act, ""); key != "" {
+		if apply {
+			if !reserveDayUse(lobbyID, req.CombatantID, key, limit) {
+				return nil, "day_limit", dayUseRefusal(loadMonsterState(lobbyID, req.CombatantID), name, act, "", key, limit)
+			}
+			defer func() {
+				if !rec.wasExecuted() {
+					releaseDayUse(lobbyID, req.CombatantID, key)
+				}
+			}()
+		} else if why := dayUseRefusal(s, name, act, "", key, limit); why != "" {
+			return nil, "day_limit", why
+		}
+	}
 	lines := resolveMonsterEffectText(r, lobbyID, req.CombatantID, meta, act.Name, act.Text, targets, req.Use, apply, 0)
+	if rec.targetBlocked {
+		text := strings.Join(lines, " ")
+		_, private := splitGMNotes(text)
+		for _, note := range private {
+			addGMNotice(lobbyID, note)
+		}
+		return nil, "target_ineligible", text
+	}
+	if !apply {
+		text := fmt.Sprintf("Legendary Action preview: %s would use %s. %s", name, act.Name, strings.Join(lines, " "))
+		return map[string]interface{}{"combatant": name, "action": act.Name, "result": text, "uses_left": total - s.LAUsed, "uses": total, "preview": true}, "", ""
+	}
+
 	s.LAUsed++
 	s.LAWindow = window
 	if legendaryOnceRe.MatchString(act.Text) {
@@ -313,7 +370,11 @@ func takeLegendaryAction(r *http.Request, lobbyID int, req legendaryRequest, win
 	}
 	saveMonsterState(lobbyID, req.CombatantID, s)
 	text := fmt.Sprintf("⚡ Legendary Action: %s uses %s. %s", name, act.Name, strings.Join(lines, " "))
-	recordGMAction(db, lobbyID, "legendary_action", text, fmt.Sprintf("%d of %d Legendary Action uses left.", total-s.LAUsed, total))
+	public, private := splitGMNotes(text)
+	recordGMAction(db, lobbyID, "legendary_action", public, fmt.Sprintf("%d of %d Legendary Action uses left.", total-s.LAUsed, total))
+	for _, note := range private {
+		addGMNotice(lobbyID, note)
+	}
 	return map[string]interface{}{"combatant": name, "action": act.Name, "result": text, "uses_left": total - s.LAUsed, "uses": total}, "", ""
 }
 
@@ -375,10 +436,7 @@ func monsterFeaturesTurnStart(lobbyID, id int, name string) []string {
 	if db == nil {
 		return nil
 	}
-	var log []string
-	for _, r := range removeConditionsWhere(lobbyID, id, func(r conditionRecord) bool { return r.Notes == "until_start_of_next_turn" }) {
-		log = append(log, fmt.Sprintf("The %s condition on %s ends (start of its turn).", r.Condition, name))
-	}
+	log := expireSourceTurnConditions(lobbyID, id, name, "start")
 	if id < 0 {
 		e, meta, ok := monsterCombatant(lobbyID, id)
 		if !ok || meta == nil {
@@ -400,8 +458,14 @@ func monsterFeaturesTurnStart(lobbyID, id int, name string) []string {
 				s.RegenBlocked, changed = false, true
 			case hp >= 1 && hp < maxHP:
 				n, _ := strconv.Atoi(m[1])
-				if before, after, err := healMonster(lobbyID, id, n); err == nil { // the monster Hit Point owner (monster_hp_2024.go)
+				before, after, err := healMonster(lobbyID, id, n) // the monster Hit Point owner (monster_hp_2024.go)
+				switch {
+				case err != nil:
+					log = append(log, fmt.Sprintf("%s's regeneration could not be applied (the server could not read its form's traits).", name))
+				case after.HP > before.HP:
 					log = append(log, fmt.Sprintf("%s regenerates %d Hit Points (%s).", name, after.HP-before.HP, t.Name))
+				default: // the form forbids regaining Hit Points (a Construct's or Undead's trait)
+					log = append(log, fmt.Sprintf("%s doesn't regenerate: it can't regain Hit Points.", name))
 				}
 			}
 		}
@@ -454,31 +518,67 @@ func monsterFeaturesTurnStart(lobbyID, id int, name string) []string {
 			if strings.Contains(t.Text, "Incapacitated") && monsterIncapacitated(lobbyID, mid) {
 				continue
 			}
-			if containsInt(s.AuraImmune, id) || !inMonsterAura(lobbyID, mid, id, rng) {
+			if containsInt(s.AuraImmune, id) || effectImmune(lobbyID, id, mid, t.Name) || !inMonsterAura(lobbyID, mid, id, rng) {
 				continue
 			}
-			lines, immune := applySaveEffect(lobbyID, sprintAny(e["name"])+" ("+t.Name+")", eff, []int{id}, true)
-			if len(immune) > 0 {
-				s.AuraImmune = append(s.AuraImmune, immune...)
-				saveMonsterState(lobbyID, mid, s)
-			}
+			eff.SourceID, eff.ImmunityName = mid, t.Name
+			lines, _ := applySaveEffect(lobbyID, sprintAny(e["name"])+" ("+t.Name+")", eff, []int{id}, true)
 			log = append(log, fmt.Sprintf("%s starts its turn in %s's %s: %s", name, sprintAny(e["name"]), t.Name, strings.Join(lines, " ")))
 		}
 	}
 	return log
 }
 
-// monsterFeaturesTurnEnd: the end of a monster's turn: auras that deal damage around it.
+// monsterFeaturesTurnEnd expires source-timed conditions before the monster's auras act.
 func monsterFeaturesTurnEnd(lobbyID, id int, name string) []string {
+	ended := expireSourceTurnConditions(lobbyID, id, name, "end")
 	if id >= 0 {
-		return nil
+		return ended
 	}
+	return append(ended, monsterAuraTurnEnd(lobbyID, id, name)...)
+}
+
+// monsterAuraTurnEnd: the end of a monster's turn: auras that deal damage around it.
+func monsterAuraTurnEnd(lobbyID, id int, name string) []string {
+	return runMonsterEndAuras(lobbyID, monsterEndAuraCursor{Source: id, Name: name})
+}
+
+type monsterEndAuraCursor struct {
+	Source, Next int
+	Name         string
+}
+
+func init() {
+	combatResumeHandlers["monster-end-auras"] = func(lobby int, raw json.RawMessage) (map[string]interface{}, error) {
+		var cursor monsterEndAuraCursor
+		if err := json.Unmarshal(raw, &cursor); err != nil {
+			return nil, err
+		}
+		lines := runMonsterEndAuras(lobby, cursor)
+		for _, line := range lines {
+			public, private := splitGMNotes(line)
+			for _, note := range private {
+				addGMNotice(lobby, note)
+			}
+			if public != "" {
+				if err := recordGMAction(db, lobby, "monster_effect", public, public); err != nil {
+					return nil, err
+				}
+			}
+		}
+		return map[string]interface{}{"result": lines}, nil
+	}
+}
+
+func runMonsterEndAuras(lobbyID int, cursor monsterEndAuraCursor) []string {
+	id, name := cursor.Source, cursor.Name
 	e, meta, ok := monsterCombatant(lobbyID, id)
-	if !ok || meta == nil || asInt(e["hp"]) <= 0 || loadMonsterState(lobbyID, id).AurasOff {
+	if !ok || meta == nil || asInt(e["hp"]) <= 0 || loadMonsterState(lobbyID, id).AurasOff || cursor.Next < 0 || cursor.Next > len(meta.Traits) {
 		return nil
 	}
 	var log []string
-	for _, t := range meta.Traits {
+	for i := cursor.Next; i < len(meta.Traits); i++ {
+		t := meta.Traits[i]
 		m := endAuraRe.FindStringSubmatch(t.Text)
 		if m == nil {
 			continue
@@ -487,8 +587,50 @@ func monsterFeaturesTurnEnd(lobbyID, id int, name string) []string {
 			continue
 		}
 		rng, _ := strconv.Atoi(m[2])
-		dmg := game.RollDamage(normDice(m[4]), false)
+		dice := normDice(m[4])
 		dtype := strings.ToLower(m[5])
+		tail := strings.TrimSpace(strings.TrimPrefix(strings.TrimSpace(t.Text), m[0]))
+		incapacitatedException := strings.HasPrefix(tail, "unless ") && strings.HasSuffix(tail, " has the Incapacitated condition.")
+		if m[1] == "" && (tail == "" || tail == "." || incapacitatedException) && validStatBlockDamage(dice, dtype, nil) {
+			targets, placed, unplaced := monsterEndAuraTargets(lobbyID, id, rng)
+			if !placed {
+				log = append(log, fmt.Sprintf("[GM: %s's %s needs the source and affected creatures placed on the map. No aura damage was rolled.]", name, t.Name))
+				continue
+			}
+			if unplaced {
+				log = append(log, fmt.Sprintf("[GM: check any unplaced creatures for %s's %s and resolve their exposure if needed.]", name, t.Name))
+			}
+			if len(targets) == 0 {
+				continue
+			}
+			next := cursor
+			next.Next = i + 1
+			restore, err := armCombatFrame(lobbyID, "monster-end-auras", next)
+			if err != nil {
+				return append(log, "[GM: the aura could not save its continuation. No additional aura effects were resolved.]")
+			}
+			damage := monsterDirectDamage{Targets: targets, Amount: game.RollDamage(dice, false), Type: dtype}
+			lines, _, err := runMonsterDirectDamage(lobbyID, damage)
+			restore()
+			if len(lines) > 0 {
+				log = append(log, fmt.Sprintf("%s's %s: %s", name, t.Name, strings.Join(lines, " ")))
+			}
+			if err != nil {
+				noteDBError(err, "resolving a monster aura")
+				return append(log, "[GM: the aura damage sequence could not finish. Review its state.]")
+			}
+			if combatResolutionPaused(lobbyID) {
+				return log
+			}
+			continue
+		}
+		// The legacy Burning rider retains its existing character delivery.
+		// Its compound action and object handling need separate coverage.
+		if !strings.Contains(tail, "start burning") {
+			log = append(log, fmt.Sprintf("[GM: resolve the targeting and additional rules of %s's %s as described in the compendium.]", name, t.Name))
+			continue
+		}
+		dmg := game.RollDamage(dice, false)
 		var hit []string
 		for _, cid := range charactersInFight(lobbyID) {
 			if !inMonsterAura(lobbyID, id, cid, rng) {
@@ -506,6 +648,41 @@ func monsterFeaturesTurnEnd(lobbyID, id int, name string) []string {
 		}
 	}
 	return log
+}
+
+func monsterEndAuraTargets(lobby, source, radius int) (targets []int, placed, unplaced bool) {
+	battle, ok := activeEncounterMap(lobby)
+	if !ok {
+		return nil, false, false
+	}
+	origin, ok := battle.token(source)
+	if !ok {
+		return nil, false, false
+	}
+	for _, token := range battle.Tokens {
+		if token.ID == source || tokenDistanceFeet(origin, token) > radius || !battle.canSee(origin, token) {
+			continue
+		}
+		if token.ID < 0 && !monsterAlive(lobby, token.ID) {
+			continue
+		}
+		if isCompanionCombatID(token.ID) {
+			if _, active := activeCompanionInCampaign(lobby, token.ID); !active {
+				continue
+			}
+		}
+		targets = append(targets, token.ID)
+	}
+	for _, entry := range combatEntries(lobby) {
+		id := asInt(entry["id"])
+		if id != 0 && id != source {
+			if _, known := battle.token(id); !known {
+				unplaced = true
+				break
+			}
+		}
+	}
+	return targets, true, unplaced
 }
 
 // charactersInFight: each character in the turn order once (a Thief's Reflexes second turn is a second entry with the same id;
@@ -660,7 +837,11 @@ func monsterFeaturesInfo(lobbyID, id int) map[string]interface{} {
 	if len(s.RechargeSpent) > 0 {
 		out["recharging"] = s.RechargeSpent
 	}
-	if len(out) == 1 && !s.InLair {
+	out["creature_id"] = dayCreatureID(lobbyID, id)
+	if len(s.DayUses) > 0 {
+		out["day_uses"] = s.DayUses // kept per creature across fights until the GM ends the day
+	}
+	if len(out) <= 2 && !s.InLair && len(s.DayUses) == 0 {
 		return nil // nothing the server runs on its own for this monster
 	}
 	if meta.XPLair > 0 {
@@ -675,7 +856,7 @@ func monsterFeaturesInfo(lobbyID, id int) map[string]interface{} {
 
 // handleGMMonsterFeatures godoc
 // @Summary A monster's Legendary Actions, Legendary Resistance, lair and auras in the fight
-// @Description GET ?combatant_id=N shows them (uses left, policy, automatic traits, recharging actions). POST sets them: in_lair (one more Legendary Action use and Legendary Resistance; the 2024 rules have no Lair Actions), legendary_resistance ("auto": used against effects that give a condition or damage that would drop the monster to 0 HP; "always"; "manual"), auras (false switches the monster's auras, Regeneration aside, off).
+// @Description GET ?combatant_id=N shows them (uses left, policy, automatic traits, recharging actions). POST sets them: in_lair (one more Legendary Action use and Legendary Resistance; the 2024 rules have no Lair Actions), legendary_resistance ("auto": used against effects that give a condition or damage that would drop the monster to 0 HP; "always"; "manual"), auras (false switches the monster's auras, Regeneration aside, off), new_day (true: every creature's per-day uses in the campaign come back; the server does not track days by itself), day_uses (sets this creature's counts by key, 0 gives one back). Per-day uses (\"(1/Day)\", Spellcasting \"2/Day Each\") are kept per creature (creature_id) across fights; GET without combatant_id lists the known creatures. Send spend_recharge with the name of a Recharge action the GM has already resolved to record that use.
 // @Tags GM
 // @Param combatant_id query int false "Monster id (GET)"
 // @Body Settings (POST)
@@ -683,10 +864,13 @@ func monsterFeaturesInfo(lobbyID, id int) map[string]interface{} {
 // @Router /gm/monster-features [post]
 func handleGMMonsterFeatures(w http.ResponseWriter, r *http.Request) {
 	var req struct {
-		CombatantID         int    `json:"combatant_id"`
-		InLair              *bool  `json:"in_lair"`              // true: the monster fights in its lair (one more Legendary Action use and Legendary Resistance)
-		LegendaryResistance string `json:"legendary_resistance"` // auto (used against a condition, or damage that would drop it to 0), always or manual
-		Auras               *bool  `json:"auras"`                // false switches the monster's auras off (Regeneration aside)
+		CombatantID         int            `json:"combatant_id"`
+		InLair              *bool          `json:"in_lair"`              // true: the monster fights in its lair (one more Legendary Action use and Legendary Resistance)
+		LegendaryResistance string         `json:"legendary_resistance"` // auto (used against a condition, or damage that would drop it to 0), always or manual
+		Auras               *bool          `json:"auras"`                // false switches the monster's auras off (Regeneration aside)
+		NewDay              bool           `json:"new_day"`              // a new day begins: every creature's per-day uses in the campaign come back
+		DayUses             map[string]int `json:"day_uses"`             // sets this monster's per-day counts by key (action:<name>, spell:<name>, tier:<head>); 0 gives a use back
+		SpendRecharge       string         `json:"spend_recharge"`       // records the use of a named Recharge action the GM has already resolved
 	}
 	_, lobbyID, ok := gmRead(w, r, &req, optionalBody())
 	if !ok {
@@ -696,18 +880,41 @@ func handleGMMonsterFeatures(w http.ResponseWriter, r *http.Request) {
 		req.CombatantID, _ = strconv.Atoi(r.URL.Query().Get("combatant_id"))
 	}
 	e, meta, found := monsterCombatant(lobbyID, req.CombatantID)
+	entryName := ""
+	if r.Method == http.MethodPost && req.SpendRecharge != "" {
+		if !found || meta == nil {
+			writeJSONStatus(w, http.StatusBadRequest, map[string]interface{}{"error": "combatant_not_found", "message": "Give the combatant_id of a monster in this fight."})
+			return
+		}
+		entry, _, known := findMonsterEntry(meta, strings.TrimSpace(req.SpendRecharge))
+		entryName = stripUsage(entry.Name)
+		if !known || rechargeNeed(meta, entryName) == 0 {
+			writeJSONStatus(w, http.StatusBadRequest, map[string]interface{}{"error": "invalid_recharge_action", "message": "Name a Recharge action, Bonus Action or Reaction on this creature's stat block."})
+			return
+		}
+	}
 	if !found {
+		if r.Method == http.MethodPost && req.NewDay {
+			newDay(lobbyID)
+		}
 		var list []map[string]interface{}
 		for _, c := range combatEntries(lobbyID) {
 			if id := asInt(c["id"]); id < 0 {
 				list = append(list, map[string]interface{}{"combatant_id": id, "name": c["name"], "features": monsterFeaturesInfo(lobbyID, id)})
 			}
 		}
-		writeJSONStatus(w, http.StatusOK, map[string]interface{}{"monsters": list, "hint": "Give combatant_id to see or change one monster."})
+		writeJSONStatus(w, http.StatusOK, map[string]interface{}{"monsters": list, "creatures": creatureLedger(lobbyID), "hint": "Give combatant_id to see or change one monster. creatures are the campaign's known creatures: give a creature_id in combat/add to link a returning one."})
 		return
 	}
 	if r.Method == http.MethodPost {
 		s := loadMonsterState(lobbyID, req.CombatantID)
+		if entryName != "" {
+			if containsStr(s.RechargeSpent, entryName) {
+				writeJSONStatus(w, http.StatusConflict, map[string]interface{}{"error": "recharge_spent", "message": "That use is already spent. It can be used again when it recharges."})
+				return
+			}
+			s.RechargeSpent = append(s.RechargeSpent, entryName)
+		}
 		if req.InLair != nil {
 			s.InLair = *req.InLair
 		}
@@ -722,15 +929,35 @@ func handleGMMonsterFeatures(w http.ResponseWriter, r *http.Request) {
 		if req.Auras != nil {
 			s.AurasOff = !*req.Auras
 		}
-		saveMonsterState(lobbyID, req.CombatantID, s)
+		if len(req.DayUses) > 0 {
+			if s.DayUses == nil {
+				s.DayUses = map[string]int{}
+			}
+			for k, v := range req.DayUses {
+				if v <= 0 {
+					delete(s.DayUses, k)
+				} else {
+					s.DayUses[k] = v
+				}
+			}
+		}
+		if err := saveMonsterState(lobbyID, req.CombatantID, s); err != nil {
+			writeDBWriteError(w, err, "the monster's features")
+			return
+		}
+		if req.NewDay {
+			newDay(lobbyID)
+		}
+		if len(req.DayUses) > 0 {
+			saveDayUses(lobbyID, req.CombatantID, s.DayUses)
+		}
 	}
-	_ = meta
 	writeJSONStatus(w, http.StatusOK, map[string]interface{}{"success": true, "combatant_id": req.CombatantID, "name": e["name"], "features": monsterFeaturesInfo(lobbyID, req.CombatantID)})
 }
 
 // handleGMLegendaryAction godoc
 // @Summary Take a Legendary Action
-// @Description A monster with Legendary Actions takes one immediately after another creature's turn (the turn that ended last): one at a time, one use each (the uses come back at the start of its turn), not while Incapacitated, and an action that says so not again until the start of its next turn. The server resolves the action's text: an attack (target), a saving throw effect or spell (target or target_ids; an Emanation reaches the characters in it on the battle map), damage, another action of the stat block; movement is for the GM to do on the map. The same request can go in combat/next as legendary_actions to take it before the next turn starts.
+// @Description A monster with Legendary Actions takes one immediately after another creature's turn (the turn that ended last): one at a time, one use each (the uses come back at the start of its turn), not while Incapacitated, and an action that says so not again until the start of its next turn. The server resolves the action's text: an attack (target), a saving throw effect or spell (target or target_ids; an Emanation reaches the characters in it on the battle map), damage, another action of the stat block; movement is for the GM to do on the map. Set apply_damage=false to preview while keeping the use and timing window available. Set confirm_targeting=true after verifying required sight or distance the server cannot determine. The same request can go in combat/next as legendary_actions to take it before the next turn starts.
 // @Tags GM
 // @Body The Legendary Action
 // @Router /gm/legendary-action [post]
@@ -770,7 +997,8 @@ func handleGMLegendaryResistance(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	var req struct {
-		CombatantID int `json:"combatant_id"`
+		CombatantID   int    `json:"combatant_id"`   // the monster's negative combat id
+		DecisionToken string `json:"decision_token"` // required when answering a new pending Concentration decision: token from its private notice
 	}
 	_, lobbyID, ok := gmRead(w, r, &req, optionalBody())
 	if !ok {
@@ -791,11 +1019,31 @@ func handleGMLegendaryResistance(w http.ResponseWriter, r *http.Request) {
 		writeJSONStatus(w, http.StatusBadRequest, map[string]interface{}{"error": "no_uses_left", "message": fmt.Sprintf("%s has used all %d uses today.", e["name"], total)})
 		return
 	}
-	s.LRUsed++
-	saveMonsterState(lobbyID, req.CombatantID, s)
+	if req.DecisionToken != "" || monsterConcentrationPending(lobbyID, req.CombatantID) != "" { // the use answers the pending Concentration decision (monster_concentration_2024.go)
+		msg, code := resolveMonsterConcentration(lobbyID, req.CombatantID, "legendary_resistance", req.DecisionToken)
+		if code == dbErrorCode {
+			writeDBWriteError(w, nil, "the Concentration decision")
+			return
+		}
+		if code != "" {
+			writeJSONStatus(w, http.StatusBadRequest, map[string]interface{}{"error": code, "message": msg})
+			return
+		}
+		writeJSONStatus(w, http.StatusOK, map[string]interface{}{"success": true, "message": msg, "left": total - s.LRUsed - 1, "per_day": total})
+		return
+	}
+	left, spent, err := spendMonsterResistance(lobbyID, req.CombatantID, meta)
+	if err != nil {
+		writeDBWriteError(w, err, "Legendary Resistance")
+		return
+	}
+	if !spent {
+		writeJSONStatus(w, 400, map[string]interface{}{"error": "no_uses_left", "message": "No Legendary Resistance use is left."})
+		return
+	}
 	line := fmt.Sprintf("🛡️ %s fails the saving throw and chooses to succeed instead (Legendary Resistance).", e["name"])
-	recordGMAction(db, lobbyID, "legendary_resistance", line, fmt.Sprintf("%d of %d left today.", total-s.LRUsed, total))
-	writeJSONStatus(w, http.StatusOK, map[string]interface{}{"success": true, "message": line, "left": total - s.LRUsed, "per_day": total,
+	recordGMAction(db, lobbyID, "legendary_resistance", line, fmt.Sprintf("%d of %d left today.", left, total))
+	writeJSONStatus(w, http.StatusOK, map[string]interface{}{"success": true, "message": line, "left": left, "per_day": total,
 		"note": "Undo the failed save's effect yourself (remove the condition, give back damage)."})
 }
 
@@ -815,6 +1063,9 @@ func resolveMonsterActionByNameAt(r *http.Request, lobbyID int, point []int, mon
 // use is the GM's choice where the entry needs one (Command's word; Claw or Tail).
 func resolveMonsterActionByName(r *http.Request, lobbyID int, monster, action, target string, targetIDs []int, apply bool, use string) (string, bool, string) {
 	ids := monsterIDsByKeyOrName(lobbyID, monster)
+	if n, err := strconv.Atoi(strings.TrimPrefix(monster, "#")); err == nil && strings.HasPrefix(monster, "#") {
+		ids = []int{n} // one particular monster of the fight, resolveMonsterAttack's convention: the same action, addressed by combat id, must resolve the same way
+	}
 	id := 0
 	entries := combatEntries(lobbyID)
 	for _, x := range ids { // the best match first (F208)
@@ -839,28 +1090,84 @@ func resolveMonsterActionByName(r *http.Request, lobbyID int, monster, action, t
 	base := stripUsage(entry.Name)
 	recharge := rechargeRe.MatchString(entry.Name)
 	if recharge && containsStr(s.RechargeSpent, base) {
-		return "", true, fmt.Sprintf("%s's %s hasn't recharged yet (it rolls at the start of each of its turns).", creatureName(lobbyID, id), base)
+		name := creatureName(lobbyID, id)
+		return "", true, refusalAudiences(fmt.Sprintf("%s's %s is not available. Nothing was rolled.", name, base), fmt.Sprintf("%s's %s hasn't recharged yet (it rolls at the start of each of its turns)", name, base))
 	}
 	if monsterIncapacitated(lobbyID, id) {
 		return "", true, creatureName(lobbyID, id) + " is Incapacitated and can't act."
+	}
+	// "Failure or Success: The dragon can't take this action again until the start of its next turn" (a breath that lingers): the
+	// use is kept in the same list as a Legendary Action's (LAOnce, cleared at the start of the monster's turn)
+	once := kind != "legendary action" && legendaryOnceRe.MatchString(entry.Text)
+	if once && containsStr(s.LAOnce, entry.Name) {
+		return "", true, fmt.Sprintf("%s can't take %s again until the start of its next turn. Nothing was rolled.", creatureName(lobbyID, id), base)
+	}
+	dayKey, dayLimit := "", 0
+	attackEntry := isAttackEntry(entry.Text) || strings.EqualFold(base, "Multiattack") // the attack code checks and counts an attack's day use itself (resolveMonsterAttack)
+	reserved, settled := false, false
+	if dayKey, dayLimit = monsterDayUse(entry, use); dayKey != "" && !attackEntry {
+		// the limit is checked and the use reserved in one step in the database (two requests cannot both take the last use); a use that
+		// is not executed (hand-off, refusal, rejected target) gives the reservation back below. A preview only reads the count.
+		if apply {
+			if !reserveDayUse(lobbyID, id, dayKey, dayLimit) {
+				return "", true, dayUseRefusal(loadMonsterState(lobbyID, id), creatureName(lobbyID, id), entry, use, dayKey, dayLimit)
+			}
+			reserved = true
+		} else if why := dayUseRefusal(s, creatureName(lobbyID, id), entry, use, dayKey, dayLimit); why != "" {
+			return "", true, why
+		}
+		defer func() {
+			if reserved && !settled {
+				releaseDayUse(lobbyID, id, dayKey)
+			}
+		}()
+	}
+	// spendDay settles a use the server executed (the reservation stays). apply_damage false is a preview: nothing is counted. An actual
+	// miss, a save that succeeds, immunity or no damage still counts: they are executed. A hand-off to the GM (the reply only tells the GM
+	// what to do) is not a confirmed use: it says so and gives the reservation back.
+	r, rec := ensureExecution(r)
+	rec.dayHandled = true
+	spendDay := func(executed bool) string {
+		if dayKey == "" || attackEntry {
+			return ""
+		}
+		if !apply {
+			return "Not counted as a day use: apply_damage is false (a preview)."
+		}
+		if !executed {
+			return fmt.Sprintf("Not counted as a day use: the server executed nothing (it is the GM's to resolve). When it happens, count it with POST /api/gm/monster-features day_uses {\"%s\": n}.", dayKey)
+		}
+		settled = true
+		return dayUseCounted(creatureName(lobbyID, id), dayKey, loadDayUses(lobbyID, id)[dayKey], dayLimit)
 	}
 	if kind == "reaction" { // Parry, Protective Magic, Split ... (monster_reactions_2024.go, F224)
 		text, handled, why := resolveMonsterReaction(r, lobbyID, id, meta, entry, target, targetIDs, apply)
 		if why != "" {
 			return "", true, why
 		}
-		if recharge {
+		if handled && apply && recharge {
 			s = loadMonsterState(lobbyID, id)
 			s.RechargeSpent = append(s.RechargeSpent, base)
 			saveMonsterState(lobbyID, id, s)
 		}
 		if handled {
+			// a reaction that found no trigger ("no character hit it this turn") is answered but not used: it is counted only when it took effect
+			used := false
+			if v, ok := monsterReactionRound.Load(fmt.Sprintf("%d:%d", lobbyID, id)); ok && v.(int) == currentRound(lobbyID) {
+				used = true
+			}
+			if note := spendDay(used); note != "" {
+				text = strings.TrimSpace(text + " " + note)
+			}
 			return text, true, ""
 		}
-		monsterReactionRound.Store(fmt.Sprintf("%d:%d", lobbyID, id), currentRound(lobbyID)) // a saving throw reaction: its text below
 	}
 	if isAttackEntry(entry.Text) || strings.EqualFold(base, "Multiattack") {
-		if recharge {
+		if problem := preflightMonsterAction(meta, base, use, multiattackDeclaredIn(r)); problem != "" {
+			return "", true, problem
+		}
+
+		if apply && recharge {
 			s.RechargeSpent = append(s.RechargeSpent, base)
 			saveMonsterState(lobbyID, id, s)
 		}
@@ -868,9 +1175,48 @@ func resolveMonsterActionByName(r *http.Request, lobbyID int, monster, action, t
 	}
 	targets := targetIDsFrom(lobbyID, target, targetIDs)
 	lines := resolveMonsterEffectText(r, lobbyID, id, meta, entry.Name, entry.Text, targets, use, apply, 0)
-	if recharge {
-		s.RechargeSpent = append(s.RechargeSpent, base)
+	if rec.targetBlocked {
+		return strings.Join(lines, " "), true, ""
+	}
+	if kind == "reaction" && apply {
+		monsterReactionRound.Store(fmt.Sprintf("%d:%d", lobbyID, id), currentRound(lobbyID))
+	}
+	if joined := strings.Join(lines, " "); !strings.Contains(joined, "Nothing was rolled") { // a refusal does not use it up
+		if note := spendDay(rec.wasExecuted()); note != "" {
+			lines = append(lines, note)
+		}
+	}
+	s = loadMonsterState(lobbyID, id)
+	if apply && (recharge || once) {
+		if apply && recharge {
+			s.RechargeSpent = append(s.RechargeSpent, base)
+		}
+		if once {
+			s.LAOnce = append(s.LAOnce, entry.Name)
+		}
 		saveMonsterState(lobbyID, id, s)
 	}
 	return strings.Join(lines, " "), true, ""
+}
+
+func metaFromMonster(key string, m srdMonster2024) *monsterMeta {
+	mm := &monsterMeta{Key: key, Name: m.Name, Senses: m.Senses, Traits: m.Traits, Actions: m.Actions, BonusActions: m.BonusActions,
+		Reactions: m.Reactions, Legendary: m.Legendary, XP: m.XP, XPLair: m.XPLair}
+	if x := laUsesRe.FindStringSubmatch(m.LegendaryIn); x != nil {
+		mm.LAUses, _ = strconv.Atoi(x[1])
+		mm.LAUsesLair = mm.LAUses
+		if x[2] != "" {
+			mm.LAUsesLair, _ = strconv.Atoi(x[2])
+		}
+	}
+	for _, t := range m.Traits {
+		if x := lrRe.FindStringSubmatch(t.Name); x != nil {
+			mm.LR, _ = strconv.Atoi(x[1])
+			mm.LRLair = mm.LR
+			if x[2] != "" {
+				mm.LRLair, _ = strconv.Atoi(x[2])
+			}
+		}
+	}
+	return mm
 }

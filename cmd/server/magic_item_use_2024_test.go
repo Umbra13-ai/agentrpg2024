@@ -104,6 +104,13 @@ func TestItemChargeState(t *testing.T) {
 }
 
 func TestSpellScrolls(t *testing.T) {
+	// the shared spell cache is put back afterwards (this test's two bare entries must not stand in for the real Fireball and Fire Bolt)
+	savedSpells := srdSpellsMemory
+	srdSpellsMemory = make(map[string]SRDSpell, len(savedSpells)+2)
+	for k, v := range savedSpells {
+		srdSpellsMemory[k] = v
+	}
+	t.Cleanup(func() { srdSpellsMemory = savedSpells })
 	srdSpellsMemory["fireball"] = SRDSpell{Name: "Fireball", Level: 3}
 	srdSpellsMemory["fire-bolt"] = SRDSpell{Name: "Fire Bolt", Level: 0}
 	loadItemUses()

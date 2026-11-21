@@ -263,6 +263,7 @@ func turnLeft(charID int) map[string]interface{} {
 		Scan(&class, &subclass, &level, &hp, &maxHP, &movement, &lobby, &actionUsed, &bonusUsed, &reactionUsed, &hordeUsed, &attacks, &condRaw, &choicesRaw) != nil {
 		return nil
 	}
+	reactionUsed = reactionUsed || charCantTakeReactions(charID) // shown as used while "can't take Reactions" stands
 	if lobby == 0 || currentTurnID(lobby) != charID || hp <= 0 {
 		return nil
 	}

@@ -187,6 +187,7 @@ func checkActionEconomy(charID int, actionType string, movementCost int) (bool, 
 	var movementRemaining int
 	var species string
 	var attacksRemaining sql.NullInt32
+	settleMovement(charID) // a Speed effect that arrived or ended during the turn (speed_owner_2024.go)
 	err := db.QueryRow(`
 		SELECT COALESCE(action_used, false), COALESCE(bonus_action_used, false), 
 		       COALESCE(reaction_used, false), COALESCE(movement_remaining, 30), COALESCE(species, 'human'),
@@ -197,6 +198,7 @@ func checkActionEconomy(charID int, actionType string, movementCost int) (bool, 
 	if err != nil {
 		return false, resourceType, "Failed to check action economy"
 	}
+	movementRemaining = max(movementRemaining, 0) // a negative budget is movement already spent beyond a lowered Speed (speed_owner_2024.go)
 
 	switch resourceType {
 	case "action":
@@ -216,6 +218,9 @@ func checkActionEconomy(charID int, actionType string, movementCost int) (bool, 
 	case "reaction":
 		if reactionUsed {
 			return false, resourceType, turnParts[resourceType].used
+		}
+		if charCantTakeReactions(charID) { // the shared Reaction check (disadvantage_riders_2024.go)
+			return false, resourceType, cantTakeReactionsMsg
 		}
 	case "movement":
 		actionType = strings.ToLower(actionType)
@@ -288,6 +293,9 @@ func featureTurnCost(charID int, actionType string) (turnCost, *turnRefusal) {
 	if !fighting {
 		return turnCost{}, nil
 	}
+	if part.column == "reaction_used" && charCantTakeReactions(charID) { // the shared Reaction check (disadvantage_riders_2024.go)
+		return turnCost{}, &turnRefusal{"cant_take_reactions", cantTakeReactionsMsg}
+	}
 	if part.column != "reaction_used" && current != charID {
 		return turnCost{}, &turnRefusal{"not_your_turn", "In a fight this is taken on your own turn (" + strings.ReplaceAll(getActionResourceType(actionType), "_", " ") + ")."}
 	}
@@ -299,6 +307,9 @@ func featureTurnCost(charID int, actionType string) (turnCost, *turnRefusal) {
 func (c turnCost) spendIn(q execer, charID int) error {
 	if c.column == "" {
 		return nil
+	}
+	if c.column == "reaction_used" && charCantTakeReactions(charID) { // every route that spends the Reaction through here
+		return &notEnough{cantTakeReactionsMsg, 0}
 	}
 	res, err := q.Exec(`UPDATE characters SET `+c.column+` = true WHERE id = $1 AND NOT COALESCE(`+c.column+`, false)`, charID)
 	if err != nil {
@@ -556,6 +567,10 @@ func handleAction(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	if !gateCampaignRequest(w, r, lobbyID, &req) {
+		return
+	}
+
 	// A word that is no action type, a feature's own request, a pending turn's step or a companion's action
 	// without companion_id is refused before anything is read or spent, with what this character can send (action_types_2024.go).
 	if code, msg := actionWordProblem(req.Action, req.CompanionID); code == "unknown_action" {
@@ -588,7 +603,14 @@ func handleAction(w http.ResponseWriter, r *http.Request) {
 	endWildShapeIfDown(charID) // a druid that dropped to 0 HP or became Incapacitated is no longer in its form (wild_shape_2024.go)
 
 	// Every character the action names must be in the actor's campaign (campaign_access_2024.go)
-	if !namedCharactersIn(w, lobbyID, append([]int{req.TargetID, req.TargetCharacterID}, req.TargetIDs...)) {
+	named := append([]int{req.TargetID, req.TargetCharacterID}, req.TargetIDs...)
+	if req.Action == "cast" && hasCompanionID(named) { // a companion is no character: companion_spell_targets_2024.go decides what a cast may do to one
+		var ok bool
+		if named, ok = companionSpellTargetsIn(w, lobbyID, req, named); !ok {
+			return
+		}
+	}
+	if !namedCharactersIn(w, lobbyID, named) {
 		return
 	}
 
@@ -1178,6 +1200,9 @@ func handleAction(w http.ResponseWriter, r *http.Request) {
 				out.KnockOut = wantsKnockOut(req.Description) && isMeleeAttackAction(charID, req.Description)
 				if text, info, rerr := resolveAttackOnMonster(lobbyID, charID, req.TargetID, out, req.CleaveTargetID); rerr == nil {
 					result, attackInfo = text, info
+				} else {
+					writeDBWriteError(w, rerr, "the monster hit")
+					return
 				}
 			}
 		} else if attackAction && len(enemyTargets(lobbyID)) > 0 {
@@ -1274,6 +1299,7 @@ func handleAction(w http.ResponseWriter, r *http.Request) {
 			FROM characters WHERE id = $1
 		`, charID).Scan(&actionUsed, &bonusActionUsed, &reactionUsed, &movementRemaining,
 			&attacksRemainingDB, &charClass, &charLevel)
+		reactionUsed = reactionUsed || charCantTakeReactions(charID) // the Reaction is not available while "can't take Reactions" stands
 
 		resources := map[string]interface{}{
 			"action":       !actionUsed,
@@ -2765,7 +2791,7 @@ func resolveActionWithBonusDash(action, description string, charID int, bonusDas
 		var beastName, beastSize, beastType, beastCR string
 		var beastAC, beastHP, beastSpeed, beastStr, beastDex, beastCon int
 		var actionsJSON []byte
-		err := db.QueryRow(`
+		err := monsterQueryRow(`
 			SELECT name, size, type, ac, hp, speed, str, dex, con, cr, COALESCE(actions, '[]')
 			FROM monsters WHERE slug = $1
 		`, beastSlug).Scan(&beastName, &beastSize, &beastType, &beastAC, &beastHP, &beastSpeed, &beastStr, &beastDex, &beastCon, &beastCR, &actionsJSON)
@@ -2804,7 +2830,7 @@ func resolveActionWithBonusDash(action, description string, charID int, bonusDas
 
 		// 2024 Beast Shapes: a form with a Fly Speed needs Druid level 8
 		var speedText string
-		db.QueryRow(`SELECT COALESCE(speed_text,'') FROM monsters WHERE slug = $1`, beastSlug).Scan(&speedText)
+		monsterQueryRow(`SELECT COALESCE(speed_text,'') FROM monsters WHERE slug = $1`, beastSlug).Scan(&speedText)
 		if level < 8 && strings.Contains(strings.ToLower(speedText), "fly") {
 			return fmt.Sprintf("Cannot use Wild Shape: %s has a Fly Speed; such forms are allowed from Druid level 8.", beastName)
 		}
@@ -2863,7 +2889,7 @@ func resolveActionWithBonusDash(action, description string, charID int, bonusDas
 
 		// Get beast name for message
 		var beastName string
-		db.QueryRow("SELECT name FROM monsters WHERE slug = $1", currentForm.String).Scan(&beastName)
+		monsterQueryRow("SELECT name FROM monsters WHERE slug = $1", currentForm.String).Scan(&beastName)
 		if beastName == "" {
 			beastName = currentForm.String
 		}
@@ -4024,6 +4050,7 @@ func handleTriggerReadied(w http.ResponseWriter, r *http.Request) {
 	// Check if reaction is available
 	var reactionUsed bool
 	db.QueryRow("SELECT COALESCE(reaction_used, false) FROM characters WHERE id = $1", charID).Scan(&reactionUsed)
+	reactionUsed = reactionUsed || charCantTakeReactions(charID)
 	if reactionUsed {
 		w.WriteHeader(http.StatusConflict)
 		json.NewEncoder(w).Encode(map[string]interface{}{
@@ -4069,7 +4096,7 @@ func getTargetCreatureType(targetID int) string {
 	if err == nil && monsterKey.Valid && monsterKey.String != "" {
 		// Look up monster type from monsters table
 		var monsterType string
-		db.QueryRow("SELECT COALESCE(type, '') FROM monsters WHERE slug = $1", monsterKey.String).Scan(&monsterType)
+		monsterQueryRow("SELECT COALESCE(type, '') FROM monsters WHERE slug = $1", monsterKey.String).Scan(&monsterType)
 		return strings.ToLower(monsterType)
 	}
 

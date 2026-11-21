@@ -97,7 +97,7 @@ func reactionReady(charID int) bool {
 	var used, dead bool
 	var hp int
 	db.QueryRow(`SELECT COALESCE(reaction_used,false), COALESCE(is_dead,false), hp FROM characters WHERE id = $1`, charID).Scan(&used, &dead, &hp)
-	if used || dead || hp <= 0 {
+	if used || dead || hp <= 0 || charCantTakeReactions(charID) {
 		return false
 	}
 	for _, c := range []string{"incapacitated", "unconscious", "paralyzed", "stunned", "petrified"} {

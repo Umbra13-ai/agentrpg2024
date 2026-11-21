@@ -18,7 +18,10 @@ func viciousHit(monsterKey, heldItem string, crit bool) (int, string) {
 	if _, w, ok := findWeapon(baseWeaponOf(heldItem)); ok {
 		dtype = strings.ToLower(w.DamageType)
 	}
-	d, how := adjustMonsterDamage(monsterKey, dtype, game.RollDamage("2d6", crit))
+	d, how := adjustMonsterExtra(monsterKey, dtype, game.RollDamage("2d6", crit))
+	if how == "absorbed" {
+		return d, absorbedExtraText("Vicious Weapon", dtype, d)
+	}
 	return d, fmt.Sprintf(" Vicious Weapon: +%d %s%s.", d, titleCase(dtype), map[string]string{"resistant": " (it resists)", "immune": " (it is immune)", "vulnerable": " (it is vulnerable)"}[how])
 }
 

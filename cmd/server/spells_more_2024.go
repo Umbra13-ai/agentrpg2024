@@ -552,7 +552,7 @@ func sizeSquares(size string) int {
 func creatureSize(lobby, id int) string {
 	if id < 0 {
 		var size string
-		db.QueryRow(`SELECT COALESCE(size,'medium') FROM monsters WHERE slug = $1`, monsterKeyOfCombatant(lobby, id)).Scan(&size)
+		monsterQueryRow(`SELECT COALESCE(size,'medium') FROM monsters WHERE slug = $1`, monsterKeyOfCombatant(lobby, id)).Scan(&size)
 		return strings.ToLower(size)
 	}
 	var species string
@@ -784,8 +784,14 @@ func polymorphCast(charID, lobby, target int, spell SRDSpell, saveDC int, dl str
 	tname := creatureName(lobby, target)
 	limit := 0.0
 	if target < 0 {
+		// SRD 5.2.1 pp. 153, 302: Polymorph shape-shifts its target, and
+		// Immutable Form prevents shape-shifting.
+		if monsterHasTrait(lobby, target, "Immutable Form") {
+			return tname + " cannot shape-shift. Polymorph has no effect on it."
+		}
+
 		var cr string
-		db.QueryRow(`SELECT COALESCE(cr,'0') FROM monsters WHERE slug = $1`, monsterKeyOfCombatant(lobby, target)).Scan(&cr)
+		monsterQueryRow(`SELECT COALESCE(cr,'0') FROM monsters WHERE slug = $1`, monsterKeyOfCombatant(lobby, target)).Scan(&cr)
 		limit = crValue(cr)
 		if strings.EqualFold(monsterTypeOf(lobby, target), "shapechanger") {
 			return tname + " is a Shapechanger: the spell has no effect."
@@ -843,19 +849,35 @@ func polymorphCast(charID, lobby, target int, spell SRDSpell, saveDC int, dl str
 
 func creatureSizeOfKey(slug string) string {
 	var size string
-	db.QueryRow(`SELECT COALESCE(size,'medium') FROM monsters WHERE slug = $1`, slug).Scan(&size)
+	monsterQueryRow(`SELECT COALESCE(size,'medium') FROM monsters WHERE slug = $1`, slug).Scan(&size)
 	return size
+}
+
+// decodeMonsterPolymorph reads the original form stored by polymorphCast.
+func decodeMonsterPolymorph(detail string) (int, map[string]interface{}, bool) {
+	parts := strings.SplitN(detail, "|", 3)
+	if len(parts) != 3 || parts[0] != "m" {
+		return 0, nil, false
+	}
+	lobby, err := strconv.Atoi(parts[1])
+	if err != nil || lobby <= 0 {
+		return 0, nil, false
+	}
+	var original map[string]interface{}
+	if json.Unmarshal([]byte(parts[2]), &original) != nil || original == nil {
+		return 0, nil, false
+	}
+	return lobby, original, true
 }
 
 // polymorphRevert restores a polymorphed monster's own statistics in its turn order entry e; overflow is the damage beyond the
 // beast's Hit Points (it carries over). It returns the monster's Hit Points now.
 func polymorphRevert(e map[string]interface{}, detail string, overflow int) int {
-	parts := strings.SplitN(detail, "|", 3)
-	if len(parts) < 3 {
+	_, orig, ok := decodeMonsterPolymorph(detail)
+	if !ok {
 		return asInt(e["hp"])
 	}
-	var orig map[string]interface{}
-	json.Unmarshal([]byte(parts[2]), &orig)
+
 	e["monster_key"], e["ac"] = orig["key"], orig["ac"]
 	if orig["max_hp"] != nil {
 		e["max_hp"] = orig["max_hp"]

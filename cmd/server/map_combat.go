@@ -128,7 +128,7 @@ func monsterMeleeAttack(lobbyID, id int) (string, int) {
 // monsterMeleeAttackOfKey: the same for a stat block by its key.
 func monsterMeleeAttackOfKey(key string) (string, int) {
 	var raw []byte
-	db.QueryRow(`SELECT COALESCE(actions,'[]') FROM monsters WHERE slug = $1`, key).Scan(&raw)
+	monsterQueryRow(`SELECT COALESCE(actions,'[]') FROM monsters WHERE slug = $1`, key).Scan(&raw)
 	var actions []monsterActionRow
 	json.Unmarshal(raw, &actions)
 	for _, a := range actions {
@@ -194,13 +194,15 @@ func resolveOpportunityAttacks(r *http.Request, lobbyID, charID int, monsters []
 		if action == "" {
 			continue
 		}
-		monsterReactionRound.Store(fmt.Sprintf("%d:%d", lobbyID, id), round)
 		key := fmt.Sprintf("%d:%d", lobbyID, id)
 		opportunityInReach.Store(key, true) // the attack happens just before the character leaves its reach
-		text, _, ok := resolveMonsterAttack(r, lobbyID, monsterName(lobbyID, id), action, fmt.Sprint(charID), true)
+		text, info, ok := resolveMonsterAttack(r, lobbyID, monsterName(lobbyID, id), action, fmt.Sprint(charID), true)
 		opportunityInReach.Delete(key)
 		if !ok {
 			continue
+		}
+		if refused, _ := info["refused"].(bool); !refused {
+			monsterReactionRound.Store(key, round)
 		}
 		line := "Opportunity Attack: " + text
 		out = append(out, line)

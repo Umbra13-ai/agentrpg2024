@@ -9,6 +9,8 @@ package main
 //	                    (condition_records, with the end-of-turn saving throw where the spell allows one).
 
 import (
+	"database/sql"
+	"errors"
 	"fmt"
 	"strings"
 	"sync"
@@ -184,6 +186,10 @@ func applySpellHealing(charID, heal, healMax int, description string) string {
 		amount, beacon := heal, ""
 		if healMax > heal && beaconMaxHealing(id) {
 			amount, beacon = healMax, " (Beacon of Hope: the maximum)" // buff_spells_2024.go
+		}
+		if isCompanionCombatID(id) { // a companion's Hit Points have their own owner (healCompanion); the route let it through only for a healing spell
+			parts = append(parts, healCompanionByCast(charID, id, amount))
+			continue
 		}
 		name, before, after := healCharacter(id, amount)
 		if name == "" {
@@ -361,52 +367,102 @@ func charmEndsOnDamage(lobbyID, id int, name string) string {
 
 // wakeOnDamageSleep: Hypnotic Pattern and Sleep end on damage, and the turning of Turn Undead.
 func wakeOnDamageSleep(lobbyID, id int, name string) string {
-	n, tn := 0, 0
+	n, tn, poison := 0, 0, 0
 	for _, r := range removeConditionsWhere(lobbyID, id, func(r conditionRecord) bool {
-		return strings.HasPrefix(r.Source, "Turn Undead") || r.Source == "Hypnotic Pattern" || r.Source == "Sleep"
+		return strings.HasPrefix(r.Source, "Turn Undead") || r.Source == "Hypnotic Pattern" || r.Source == "Sleep" ||
+			(r.Condition == "unconscious" && r.Notes == notesEndsWithPoisonOrDamage)
 	}) {
 		if strings.HasPrefix(r.Source, "Turn Undead") {
 			tn++
+		} else if r.Notes == notesEndsWithPoisonOrDamage {
+			poison++
 		} else {
 			n++
 		}
 	}
-	if n == 0 && tn == 0 {
-		return ""
+	var note string
+	if n > 0 {
+		note = fmt.Sprintf(" The damage snaps %s out of the spell.", name)
+	} else if tn > 0 {
+		note = fmt.Sprintf(" The damage ends the turning of %s (Turn Undead).", name) // F85
 	}
-	if n == 0 {
-		return fmt.Sprintf(" The damage ends the turning of %s (Turn Undead).", name) // F85
+	if poison > 0 {
+		note += fmt.Sprintf(" The damage wakes %s.", name)
 	}
-	return fmt.Sprintf(" The damage snaps %s out of the spell.", name)
+	return note
 }
 
 // spellCreatureType: spells that affect only one creature type (SRD 5.2.1): a target of another type is unaffected.
 var spellCreatureType = map[string]string{"hold-person": "humanoid", "charm-person": "humanoid", "dominate-person": "humanoid", "animal-friendship": "beast", "dominate-beast": "beast"}
 
-// monsterTypeOf is a combatant's creature type from its stat block ("humanoid", "undead" ...).
-func monsterTypeOf(lobbyID, id int) string {
-	for _, e := range combatEntries(lobbyID) {
-		if asInt(e["id"]) == id {
-			var t string
-			db.QueryRow(`SELECT COALESCE(type,'') FROM monsters WHERE slug = $1`, fmt.Sprint(e["monster_key"])).Scan(&t)
-			t = strings.ToLower(strings.TrimSpace(t))
-			if i := strings.IndexAny(t, " ("); i > 0 {
-				t = t[:i] // "humanoid (goblinoid)" -> "humanoid"
-			}
-			return t
+func catalogCreatureType(key string) string {
+	if key == "" {
+		return ""
+	}
+	var kind string
+	if err := monsterQueryRow(`SELECT COALESCE(type,'') FROM monsters WHERE slug=$1`, key).Scan(&kind); err != nil {
+		return ""
+	}
+	kind = strings.ToLower(strings.TrimSpace(kind))
+	if words := strings.Fields(kind); len(words) >= 4 && words[0] == "swarm" && words[1] == "of" {
+		switch plural := strings.TrimSuffix(words[3], "("); plural {
+		case "monstrosities":
+			return "monstrosity"
+		case "undead":
+			return plural
+		case "aberrations", "beasts", "celestials", "constructs", "dragons", "elementals", "feys",
+			"fiends", "giants", "humanoids", "oozes", "plants":
+			return strings.TrimSuffix(plural, "s")
+		case "fey":
+			return plural
 		}
 	}
-	return ""
+	if i := strings.IndexAny(kind, " ("); i > 0 {
+		kind = kind[:i]
+	}
+	return kind
 }
 
-// monsterConditionImmune: the monster's stat block lists Immunity to the condition.
-func monsterConditionImmune(lobbyID, id int, cond string) bool {
-	for _, e := range combatEntries(lobbyID) {
-		if asInt(e["id"]) == id {
-			var imm string
-			db.QueryRow(`SELECT COALESCE(condition_immunities,'') FROM monsters WHERE slug = $1`, fmt.Sprint(e["monster_key"])).Scan(&imm)
-			return cond != "" && strings.Contains(strings.ToLower(imm), strings.ToLower(conditionBase(cond)))
-		}
+// Polymorph retains the target's type (SRD 5.2.1 p.153). When a monster's
+// current key holds the Beast form, its pre-transformation key lives in the
+// stored spell snapshot. Read that snapshot without advancing spell effects.
+func monsterTypeOf(lobbyID, id int) string {
+	if id >= 0 {
+		return ""
 	}
-	return false
+	kind := catalogCreatureType(monsterKeyOfCombatant(lobbyID, id))
+	if kind != "beast" {
+		return kind
+	}
+	var detail string
+	err := db.QueryRow(`SELECT detail FROM spell_effects WHERE lobby_id=$1 AND target_id=$2 AND kind='polymorph' ORDER BY id DESC LIMIT 1`, lobbyID, id).Scan(&detail)
+	if errors.Is(err, sql.ErrNoRows) {
+		return kind
+	}
+	if err != nil {
+		return ""
+	}
+	snapshotLobby, original, valid := decodeMonsterPolymorph(detail)
+	if !valid || snapshotLobby != lobbyID {
+		return ""
+	}
+	key, _ := original["key"].(string)
+	return catalogCreatureType(key)
+}
+
+// A fight entry and a companion form read their condition defenses from the
+// same catalog data (custom compendium or SRD).
+func catalogConditionImmune(key, cond string) bool {
+	if key == "" || cond == "" {
+		return false
+	}
+	var immunities string
+	if err := monsterQueryRow(`SELECT COALESCE(condition_immunities,'') FROM monsters WHERE slug=$1`, key).Scan(&immunities); err != nil {
+		return false
+	}
+	return strings.Contains(strings.ToLower(immunities), conditionBase(cond))
+}
+
+func monsterConditionImmune(lobbyID, id int, cond string) bool {
+	return catalogConditionImmune(monsterKeyOfCombatant(lobbyID, id), cond)
 }

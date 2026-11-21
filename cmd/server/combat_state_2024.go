@@ -96,6 +96,12 @@ func writeFight(tx *sql.Tx, f *fight) error {
 // changeFight is the one transaction every change of the turn order runs in: the row locked, change edits f (its entries are
 // maps: fields it doesn't touch are written back as they were), and f is written back. An error from change writes nothing.
 func changeFight(lobby int, change func(f *fight) error) (*fight, error) {
+	return changeFightWithTx(lobby, func(_ *sql.Tx, f *fight) error { return change(f) })
+}
+
+// changeFightWithTx lets another state owner join this exact short transaction.
+// The callback must use tx, never a second connection to the database.
+func changeFightWithTx(lobby int, change func(*sql.Tx, *fight) error) (*fight, error) {
 	tx, err := db.Begin()
 	if err != nil {
 		return nil, err
@@ -105,7 +111,7 @@ func changeFight(lobby int, change func(f *fight) error) (*fight, error) {
 	if err != nil {
 		return nil, err
 	}
-	if err := change(f); err != nil {
+	if err := change(tx, f); err != nil {
 		return f, err
 	}
 	if err := writeFight(tx, f); err != nil {

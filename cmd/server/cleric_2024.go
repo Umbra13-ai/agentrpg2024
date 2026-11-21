@@ -160,7 +160,7 @@ func handleGMTurnUndead(w http.ResponseWriter, r *http.Request) {
 		var typ string
 		for _, e := range combatEntries(campaignID) {
 			if asInt(e["id"]) == tid {
-				db.QueryRow(`SELECT COALESCE(type,'') FROM monsters WHERE slug = $1`, sprintAny(e["monster_key"])).Scan(&typ)
+				monsterQueryRow(`SELECT COALESCE(type,'') FROM monsters WHERE slug = $1`, sprintAny(e["monster_key"])).Scan(&typ)
 			}
 		}
 		if typ != "undead" {

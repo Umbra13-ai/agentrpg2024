@@ -10,7 +10,30 @@ package main
 //	"repeats the Wisdom saving throw ... and fails (2)" -> "... and fails"
 //	"tries to escape: 15 (d20 13 + 2) vs DC 17, ..."    -> "tries to escape: ..."
 
-import "regexp"
+import (
+	"regexp"
+	"strings"
+)
+
+// gmNoteRe: a bracketed note the server writes for the GM inside a result ("[GM, not applied automatically: ...]", "[GM: ...]",
+// "[GM, not automated: ...]"). It can carry stat-block text the players must not read (a rider's wording, an alternative damage
+// condition), so playerText removes it and the GM keeps it in the notices (gmNotesIn). Notes do not nest brackets.
+var gmNoteRe = regexp.MustCompile(`\s?\[GM[,:][^\]]*\]`)
+
+// splitGMNotes separates a result into the text the shared log may keep and the GM's private notes. The result's owner calls it
+// BEFORE anything is stored in the shared log (the stored text is what every reader sees); playerText stays as defense in depth.
+func splitGMNotes(s string) (public string, notes []string) {
+	return strings.TrimSpace(gmNoteRe.ReplaceAllString(s, "")), gmNotesIn(s)
+}
+
+// gmNotesIn lists the GM notes inside a result, without their brackets.
+func gmNotesIn(s string) []string {
+	var out []string
+	for _, m := range gmNoteRe.FindAllString(s, -1) {
+		out = append(out, strings.TrimSuffix(strings.TrimPrefix(strings.TrimSpace(m), "["), "]"))
+	}
+	return out
+}
 
 var playerTextRules = []struct {
 	re   *regexp.Regexp
@@ -35,6 +58,7 @@ var playerTextRules = []struct {
 
 // playerText removes monster attack totals, Armor Class numbers and saving throw totals from a result.
 func playerText(s string) string {
+	s = gmNoteRe.ReplaceAllString(s, "")
 	for _, r := range playerTextRules {
 		s = r.re.ReplaceAllString(s, r.repl)
 	}

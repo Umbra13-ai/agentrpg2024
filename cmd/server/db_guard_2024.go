@@ -45,9 +45,10 @@ func init() { sql.Register("postgres-checked", checkedDriver{&pq.Driver{}}) }
 // ---------------------------------------------------------------- which goroutine is serving which request
 
 type dbWatch struct {
-	mu       sync.Mutex
-	errors   []string
-	answered bool // the handler answered a database failure through the owner (db_errors_2024.go)
+	mu         sync.Mutex
+	errors     []string
+	combatWork map[string]int // work captured by THIS request, not earlier interrupted commands
+	answered   bool           // the handler answered a database failure through the owner (db_errors_2024.go)
 }
 
 var (
@@ -159,6 +160,12 @@ func guardDB(w http.ResponseWriter, r *http.Request, next http.Handler) {
 	next.ServeHTTP(held, r)
 	if held.status == 0 {
 		held.status = http.StatusOK
+	}
+	wch.mu.Lock()
+	hasFailure := len(wch.errors) > 0
+	wch.mu.Unlock()
+	if !hasFailure {
+		finishCapturedRequestWork(held.status)
 	}
 	wch.mu.Lock()
 	failed := append([]string(nil), wch.errors...)

@@ -20,8 +20,8 @@ func TestParseSaveEffect(t *testing.T) {
 	if len(e.Damage) != 1 || e.Damage[0].Dice != "4d10" || e.Damage[0].Type != "poison" || !e.HalfOnSuccess || e.Ability != "dex" {
 		t.Errorf("Cloud of Insects: %+v", e)
 	}
-	if !strings.Contains(e.Extra, "Concentration") {
-		t.Errorf("the Concentration rider is for the GM: %q", e.Extra)
+	if strings.Join(e.DisadvMode, ",") != "concentration" || strings.Contains(e.Extra, "Concentration") {
+		t.Errorf("the Concentration rider is applied by the save owner (disadvantage_riders_2024.go), not left for the GM: %v %q", e.DisadvMode, e.Extra)
 	}
 	lich := "Constitution Saving Throw: DC 20, each creature that isn’t an Undead in a 20-foot Emanation originating from the lich. Failure: 31 (9d6) Necrotic damage. Success: Half damage. Failure or Success: The lich can’t take this action again until the start of its next turn."
 	e, _ = parseSaveEffect(lich)
@@ -40,7 +40,7 @@ func TestParseSaveEffect(t *testing.T) {
 		t.Errorf("Weight of Years: %+v", e)
 	}
 	rakshasa := "Wisdom Saving Throw: DC 18, each enemy in a 30-foot Emanation originating from the rakshasa. Failure: 28 (8d6) Psychic damage, and the target has the Frightened and Incapacitated conditions until the start of the rakshasa’s next turn."
-	if e, _ := parseSaveEffect(rakshasa); len(e.Conditions) != 2 || e.Rounds != 1 {
+	if e, _ := parseSaveEffect(rakshasa); len(e.Conditions) != 2 || !e.UntilStart || e.Rounds != 0 { // "until the start of the rakshasa’s next turn" is the monster's turn start, like "its"
 		t.Errorf("Baleful Command: %+v", e)
 	}
 }

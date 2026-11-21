@@ -19,6 +19,7 @@ package main
 
 import (
 	"fmt"
+	"regexp"
 	"strings"
 
 	"github.com/agentrpg/agentrpg/game"
@@ -32,17 +33,18 @@ type attackCtx struct {
 	name     string // the attack's name on the result line ("Scimitar", "Ray of Sickness")
 	bonus    int    // the attack bonus
 
-	melee       bool // made within reach; false: a ranged attack
-	spell       bool // a spell attack
-	weapon      bool // made with a weapon or an Unarmed Strike (it uses Strength or Dexterity)
-	opportunity bool // an Opportunity Attack
-	longRange   bool // beyond the attack's normal range (the caller knows the attack's ranges)
-	within5     *bool
-	desc        string // the player's description of the action, where a rule reads it (close_range, the Oathbow's "swift death")
-	weaponKey   string // the weapon used, where a rule reads it (the Oathbow)
-	piercing    bool   // the weapon deals Piercing damage (underwater)
-	closeRange  bool   // the player said an enemy is within 5 feet
-	allySaid    bool   // the attacker said an ally is within 5 feet of the target (used only without a battle map: ally_adjacent_2024.go)
+	melee           bool // made within reach; false: a ranged attack
+	spell           bool // a spell attack
+	weapon          bool // made with a weapon or an Unarmed Strike (it uses Strength or Dexterity)
+	opportunity     bool // an Opportunity Attack
+	longRange       bool // beyond the attack's normal range (the caller knows the attack's ranges)
+	within5         *bool
+	desc            string // the player's description of the action, where a rule reads it (close_range, the Oathbow's "swift death")
+	statBlockAttack string // the stat-block wording for attack-specific roll modifiers
+	weaponKey       string // the weapon used, where a rule reads it (the Oathbow)
+	piercing        bool   // the weapon deals Piercing damage (underwater)
+	closeRange      bool   // the player said an enemy is within 5 feet
+	allySaid        bool   // the attacker said an ally is within 5 feet of the target (used only without a battle map: ally_adjacent_2024.go)
 
 	ac       *int // the Armor Class to use when the caller holds the target itself (a companion, an object); else armorClassOf
 	critFrom int  // the lowest natural roll that is a Critical Hit; 0: 20
@@ -87,7 +89,7 @@ func hasCond(conds []string, name string) bool {
 func creatureConditions(lobbyID, id int) []string {
 	var conds []string
 	switch {
-	case id > 0:
+	case id > 0 && !isCompanionCombatID(id):
 		refreshConcentrationConditions(id) // Invisibility whose caster lost Concentration
 		conds = getCharConditions(id)      // the character's condition records, as its list (condition_owner_2024.go)
 		if charAtZeroHP(id) {
@@ -97,7 +99,7 @@ func creatureConditions(lobbyID, id int) []string {
 				}
 			}
 		}
-	case id < 0:
+	case id < 0, isCompanionCombatID(id): // a companion's records are kept like a monster's (the condition owner), and were not read here: a Paralyzed companion gave attackers nothing
 		conds = append(conditionNames(lobbyID, id), combatEffectNames(lobbyID, id)...)
 	}
 	return withoutInvisible(lobbyID, id, conds)
@@ -107,6 +109,10 @@ func creatureConditions(lobbyID, id int) []string {
 // Warding Bond) and, for a character, cover (the most protective source only).
 func armorClassOf(lobbyID, id int) int {
 	switch {
+	case id >= companionIDBase: // a companion: its own Armor Class (before this branch the characters table was read: AC 0, no row)
+		if c, ok := activeCompanionInCampaign(lobbyID, id); ok {
+			return c.AC + halfCoverBonus(lobbyID, id) + spellACAdjust(lobbyID, id)
+		}
 	case id > 0:
 		var ac, cover int
 		db.QueryRow(`SELECT COALESCE(ac,10), COALESCE(cover_bonus,0) FROM characters WHERE id = $1`, id).Scan(&ac, &cover)
@@ -119,9 +125,6 @@ func armorClassOf(lobbyID, id int) int {
 			if asInt(e["id"]) == id {
 				return asInt(e["ac"]) + spellACAdjust(lobbyID, id)
 			}
-		}
-		if c, ok := loadCompanion(id); ok {
-			return c.AC + spellACAdjust(lobbyID, id)
 		}
 	}
 	return 10
@@ -179,7 +182,31 @@ func yes(b bool) (bool, string) { return b, "" }
 // attackSources: every source of Advantage and Disadvantage on an attack roll (SRD 5.2.1). Each row decides from the attacker,
 // the target and the kind of attack whether it applies; a row that is used up by the attack (Help, a GM's grant, Sap) is used
 // up here and nowhere else.
+var woundedTargetAdvantage = regexp.MustCompile(`(?i)\bwith Advantage if the target (?:doesn['’]t|does not) have all its Hit Points\b`)
+
+// targetMissingHitPoints reads current and maximum Hit Points from the target's
+// owner. Temporary Hit Points do not count toward either amount.
+func targetMissingHitPoints(lobby, target int) bool {
+	switch {
+	case isCompanionCombatID(target):
+		c, ok := activeCompanionInCampaign(lobby, target)
+		return ok && c.MaxHP > 0 && c.HP < c.MaxHP
+	case target < 0:
+		v := monsterEntryVitals(lobby, target)
+		return v.Max > 0 && v.HP < v.Max
+	case target > 0:
+		var hp, maximum int
+		err := db.QueryRow(`SELECT hp,max_hp FROM characters WHERE id=$1 AND lobby_id=$2`, target, lobby).Scan(&hp, &maximum)
+		return err == nil && maximum > 0 && hp < maximum
+	}
+	return false
+}
+
 var attackSources = []attackSource{
+	{true, "target is missing Hit Points", func(c *attackCtx) (bool, string) {
+		header, _, _ := strings.Cut(c.statBlockAttack, "Hit:")
+		return yes(woundedTargetAdvantage.MatchString(header) && targetMissingHitPoints(c.lobby, c.target))
+	}},
 	// ---- Advantage: the attacker's traits
 	{true, "Pack Tactics", func(c *attackCtx) (bool, string) { // an ally of the monster, not Incapacitated, within 5 feet of the target
 		return yes(c.attacker < 0 && monsterHasTrait(c.lobby, c.attacker, "Pack Tactics") && allyNextToTarget(c.lobby, c.attacker, c.target, c.allySaid))
@@ -206,10 +233,19 @@ var attackSources = []attackSource{
 		return yes(c.target != 0 && takeCombatEffect(c.lobby, c.target, "exposed", 0))
 	}},
 	// ---- Advantage: the attacker's state
-	{true, "the target can't see the attacker", func(c *attackCtx) (bool, string) { // an Invisible or hidden attacker
-		return yes((hasCond(c.attackerConds, "invisible") || hasCond(c.attackerConds, "hidden")) && !seesUnseen(c.lobby, c.target))
+	{true, "the target can't see the attacker", func(c *attackCtx) (bool, string) { // an Invisible or hidden attacker, or one the dark hides
+		return yes((hasCond(c.attackerConds, "invisible") || hasCond(c.attackerConds, "hidden")) && !seesUnseen(c.lobby, c.target) ||
+			c.target != 0 && c.lobby > 0 && (magicalDarknessBlocksSight(c.lobby, c.target, c.attacker) ||
+				!creatureSeesInLighting(c.lobby, c.target, monsterLightingAt(c.lobby, c.attacker), c.distanceFeet())))
 	}},
 	{true, "Aura of Authority", func(c *attackCtx) (bool, string) { return yes(c.attacker < 0 && auraOfAuthority(c.lobby, c.attacker)) }}, // Hobgoblin Captain
+	{true, "it is attached to the target", func(c *attackCtx) (bool, string) { // "While attached to a target, it ... has Advantage on its attack rolls" (the attach owner's rider, monster_attach_2024.go)
+		if c.attacker == 0 || c.target == 0 {
+			return false, ""
+		}
+		tid, ok := attachOnlyTarget(c.lobby, c.attacker)
+		return yes(ok && tid == c.target)
+	}},
 	{true, "Foresight", func(c *attackCtx) (bool, string) { return yes(c.attacker > 0 && buffAttackAdvantage(c.attacker)) }},
 	{true, "the Jester card", func(c *attackCtx) (bool, string) {
 		if c.attacker <= 0 {
@@ -254,7 +290,18 @@ var attackSources = []attackSource{
 		return len(why) > 0, "the attacker is " + strings.Join(why, ", ")
 	}},
 	{false, "the attacker can't see in this light", func(c *attackCtx) (bool, string) {
-		return yes(c.attacker > 0 && c.lobby > 0 && canSeeInLighting(c.attacker, getCampaignLighting(c.lobby)) == "blind")
+		// The unseen-target leg of the shared model: the opaque emanation (either endpoint inside,
+		// or the line crossing it) or the light on the target's square leaves the target unseen -
+		// for a monster attacker too, with its senses and the map distance (creatureSeesInLighting).
+		// The matching unseen-attacker Advantage lives above, so two creatures unable to see each
+		// other cancel to a straight roll (SRD 5.2.1 "Blinded").
+		if c.attacker == 0 || c.lobby <= 0 {
+			return false, ""
+		}
+		if magicalDarknessBlocksSight(c.lobby, c.attacker, c.target) {
+			return yes(true)
+		}
+		return yes(!creatureSeesInLighting(c.lobby, c.attacker, monsterLightingAt(c.lobby, c.target), c.distanceFeet()))
 	}},
 	{false, "the attacker is Grappled by another creature", func(c *attackCtx) (bool, string) {
 		return yes(c.attacker != 0 && c.target != 0 && grappledAttackPenalty(c.lobby, c.attacker, c.target))
@@ -262,6 +309,13 @@ var attackSources = []attackSource{
 	{false, "Sap", func(c *attackCtx) (bool, string) {
 		return yes(c.attacker != 0 && takeCombatEffect(c.lobby, c.attacker, "sap", 0))
 	}}, // the Sap mastery: its next attack roll
+	{false, "a Disadvantage rider on its attack rolls", func(c *attackCtx) (bool, string) { // "Disadvantage on attack rolls until the end of its next turn"
+		return yes(c.attacker != 0 && c.lobby > 0 && hasCondMarker(c.lobby, c.attacker, "disadv_attacks"))
+	}},
+	{false, "", func(c *attackCtx) (bool, string) {
+		reason := damageDisadvantageForAttack(c.lobby, c.attacker)
+		return reason != "", reason
+	}},
 	{false, "armor the attacker isn't trained in", func(c *attackCtx) (bool, string) { // any D20 Test that uses Strength or Dexterity
 		return yes(c.attacker > 0 && c.weapon && isWearingNonProficientArmor(c.attacker))
 	}},
@@ -354,6 +408,21 @@ var attackSources = []attackSource{
 	}},
 }
 
+// distanceFeet: the map distance between attacker and target, 0 when the combat has no map (the
+// vision helpers then count any positive range, the pre-existing convention).
+func (c *attackCtx) distanceFeet() int {
+	m, ok := activeEncounterMap(c.lobby)
+	if !ok {
+		return 0
+	}
+	a, okA := m.token(c.attacker)
+	b, okB := m.token(c.target)
+	if !okA || !okB {
+		return 0
+	}
+	return tokenDistanceFeet(a, b)
+}
+
 // gather collects everything the attack rule needs: both sides' conditions, the Armor Class, every source of Advantage and
 // Disadvantage, what is added to the roll, and whether a hit is automatically a Critical Hit.
 func (c *attackCtx) gather() game.AttackRoll {
@@ -409,10 +478,12 @@ func (c *attackCtx) gather() game.AttackRoll {
 			a.Adjust = append(a.Adjust, game.RollAdjust{Amount: adj, Why: strings.Trim(note, " []")})
 		}
 	}
-	if c.attacker > 0 {
-		if p := game.ExhaustionD20Penalty(exhaustionLevelOf(c.attacker)); p > 0 {
+	if c.attacker != 0 { // every D20 Test: 2 per Exhaustion level, whatever the attacker's kind (exhaustion_any_2024.go)
+		if p := game.ExhaustionD20Penalty(exhaustionLevelOfAny(c.lobby, c.attacker)); p > 0 {
 			a.Adjust = append(a.Adjust, game.RollAdjust{Amount: -p, Why: fmt.Sprintf("Exhaustion -%d", p)})
 		}
+	}
+	if c.attacker > 0 {
 		if c.weapon && c.target < 0 {
 			if n := maceOfSmitingAttack(c.attacker, c.monsterKey(c.target)); n != 0 { // +3 in all against a Construct
 				a.Adjust = append(a.Adjust, game.RollAdjust{Amount: n, Why: fmt.Sprintf("Mace of Smiting +%d against a Construct", n)})

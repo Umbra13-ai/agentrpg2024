@@ -13,6 +13,7 @@ package main
 import (
 	"encoding/json"
 	"fmt"
+	"regexp"
 	"sort"
 	"strings"
 	"sync"
@@ -172,7 +173,7 @@ func adjustMonsterDamage(monsterKey, damageType string, dmg int) (int, string) {
 		return dmg, ""
 	}
 	var resist, immune, vuln string
-	if db.QueryRow(`SELECT COALESCE(damage_resistances,''), COALESCE(damage_immunities,''), COALESCE(damage_vulnerabilities,'') FROM monsters WHERE slug = $1`, monsterKey).
+	if monsterQueryRow(`SELECT COALESCE(damage_resistances,''), COALESCE(damage_immunities,''), COALESCE(damage_vulnerabilities,'') FROM monsters WHERE slug = $1`, monsterKey).
 		Scan(&resist, &immune, &vuln) != nil {
 		return dmg, ""
 	}
@@ -188,6 +189,43 @@ func adjustMonsterDamage(monsterKey, damageType string, dmg int) (int, string) {
 	return dmg, ""
 }
 
+// adjustMonsterExtra is adjustMonsterDamage for the extra damage a weapon hit carries (a magic weapon's rider, a Divine Strike, a
+// buff): the same resistances, immunities and vulnerabilities, plus absorption. Damage an absorbing monster turns into Hit Points
+// comes back NEGATIVE with how "absorbed"; the hit adds it to the extra damage, so the monster's Hit Points rise by that much
+// (resolveAttackOnMonster caps them). Every helper that returns an amount for a hit must use this, not adjustMonsterDamage.
+// grazeHP: the Hit Points after a Graze. gd is what adjustMonsterExtra returned: positive is damage, negative is damage the monster
+// absorbed (it heals by that much, never above its maximum).
+func grazeHP(hp, maxHP, gd int) (newHP int, absorbed bool) {
+	if gd < 0 {
+		return min(hp-gd, maxHP), true
+	}
+	return max(hp-gd, 0), false
+}
+
+func adjustMonsterExtra(monsterKey, damageType string, dmg int) (int, string) {
+	d, how := adjustMonsterDamage(monsterKey, damageType, dmg)
+	if how == "immune" && dmg > 0 {
+		// an absorption trait turns the damage into Hit Points unless the form forbids regaining them; an unreadable
+		// catalog answers "not absorbed" (never a silent regain)
+		if heals, err := absorptionHealsHP(db, monsterKey, strings.ToLower(damageType)); err == nil && heals {
+			return -dmg, "absorbed"
+		}
+	}
+	return d, how
+}
+
+// absorbedExtraText is what the reply says when extra damage was absorbed (d is the negative amount adjustMonsterExtra returned).
+func absorbedExtraText(label, damageType string, d int) string {
+	return fmt.Sprintf(" %s: it absorbs %d %s damage and regains that many Hit Points.", label, -d, titleCase(damageType))
+}
+
+var absorptionTraitRe = regexp.MustCompile(`(?i)whenever [^.]*? is subjected to ([a-z]+) damage,[^.]*?regains a number of hit points equal to the ([a-z]+) damage dealt`)
+
+// absorptionTraitRe is the one definition of an absorption trait ("Whenever the golem is subjected to Fire damage, it
+// regains a number of Hit Points equal to the Fire damage dealt"), so no monster is named in code. The decision itself
+// (the traits read, the Hit Point gain prohibition check) is absorptionHealsHP's (monster_hp_2024.go): every path that
+// deals damage to a monster in the fight decides through it.
+
 // resolveAttackOnMonster compares the attack with the target's AC, applies the damage and
 // returns the text a player may see and a small structured summary.
 //
@@ -196,6 +234,7 @@ func adjustMonsterDamage(monsterKey, damageType string, dmg int) (int, string) {
 // then, so two attacks at once both count) and any field the rules changed on the target. Before Nov 15 2026 a transaction
 // held the fight's row for the whole hit while helpers read and wrote through other connections (audit AUD-02, B-19).
 func resolveAttackOnMonster(lobbyID, charID, targetID int, o attackOutcome, cleaveTarget ...int) (string, map[string]interface{}, error) {
+	defer directConcentrationJournalScope(lobbyID)()
 	var raw []byte
 	if err := db.QueryRow(`SELECT turn_order FROM combat_state WHERE lobby_id = $1 AND active = true`, lobbyID).Scan(&raw); err != nil {
 		return "", nil, err
@@ -217,7 +256,8 @@ func resolveAttackOnMonster(lobbyID, charID, targetID int, o attackOutcome, clea
 	t0 := copyEntry(t) // the target as read: saveMonsterHit writes only what this hit changed
 	name := fmt.Sprint(t["name"])
 	hp, maxHP := asInt(t["hp"]), asInt(t["max_hp"])
-	hpStart := hp // for a monster's Reaction to this hit (Parry, Shield, Deflect Missile: monster_reactions_2024.go)
+	snap := snapshotTarget(lobbyID, targetID) // what this hit changes, for taking it back (monster_hit_undo_2024.go)
+	hpStart := hp                             // for a monster's Reaction to this hit (Parry, Shield, Deflect Missile: monster_reactions_2024.go)
 	// Hit or miss was decided by the one attack function when the roll was made (attack_2024.go): the Armor Class, Help,
 	// "exposed", Sundering Blow and the Mace of Smiting are its business, not this stage's. A roll that was made without a
 	// target is judged here by the same rule.
@@ -295,26 +335,30 @@ func resolveAttackOnMonster(lobbyID, charID, targetID int, o attackOutcome, clea
 			db.Exec(`UPDATE characters SET sneak_attack_used = false WHERE id = $1`, charID)
 		}
 		if hasMastery && mu.Name == "Graze" && mu.Mod > 0 {
-			gd, gh := adjustMonsterDamage(fmt.Sprint(t["monster_key"]), o.DamageType, mu.Mod)
-			if gd > 0 {
-				hp -= gd
+			gd, gh := adjustMonsterExtra(fmt.Sprint(t["monster_key"]), o.DamageType, mu.Mod) // a monster that absorbs this type heals instead
+			if gd != 0 {
+				newHP, absorbed := grazeHP(hp, maxHP, gd)
 				grazeNote := ""
-				if hp <= 0 {
-					hp, grazeNote = undeadFortitude(lobbyID, t, hp, gd, o.DamageType, false) // Zombie (dodge_2024.go)
+				if newHP <= 0 {
+					newHP, grazeNote = undeadFortitude(lobbyID, t, newHP, gd, o.DamageType, false) // Zombie (dodge_2024.go)
+					newHP = max(newHP, 0)
 				}
-				if hp < 0 {
-					hp = 0
-				}
+				hp = newHP
 				t["hp"] = hp
-				saved, err := saveMonsterHit(lobbyID, targetID, t0, t, hpStart-hp)
+				saved, err := saveMonsterHit(lobbyID, targetID, t0, t, hpStart-hp, map[string]int{o.DamageType: max(0, gd)})
 				if err != nil {
 					return "", nil, err
 				}
 				hp = saved
-				text += fmt.Sprintf(" Graze: %s still takes %d %s damage%s.", name, gd, o.DamageType, map[string]string{"resistant": " (it resists)", "vulnerable": " (it is vulnerable)"}[gh]) + grazeNote
-				info["graze_damage"] = gd
-				if hp == 0 {
-					text += fmt.Sprintf(" %s is defeated!", name)
+				if absorbed {
+					text += absorbedExtraText("Graze", o.DamageType, gd)
+					info["graze_damage"] = 0
+				} else {
+					text += fmt.Sprintf(" Graze: %s still takes %d %s damage%s.", name, gd, o.DamageType, map[string]string{"resistant": " (it resists)", "vulnerable": " (it is vulnerable)"}[gh]) + grazeNote
+					info["graze_damage"] = gd
+					if hp == 0 {
+						text += fmt.Sprintf(" %s is defeated!", name)
+					}
 				}
 			}
 		}
@@ -344,7 +388,15 @@ func resolveAttackOnMonster(lobbyID, charID, targetID int, o attackOutcome, clea
 		}
 	}
 	dmg, how = petrifiedDamage(lobbyID, targetID, dmg, how) // a Petrified creature resists all damage (F196)
-	if ignoreRes && how == "resistant" {                    // Overcome Defenses
+	absorbed := false
+	if how == "immune" && base > 0 {
+		heals, aerr := absorptionHealsHP(db, fmt.Sprint(t["monster_key"]), o.DamageType)
+		absorbed = aerr == nil && heals // an unreadable catalog answers "not absorbed" (never a silent regain)
+	}
+	if absorbed {
+		hp = min(hp+base, max(maxHP, hp)) // Hit Points equal to the damage dealt, up to its maximum
+	}
+	if ignoreRes && how == "resistant" { // Overcome Defenses
 		dmg, how = base, ""
 	}
 	heldV, _ := attackHeldItem.LoadAndDelete(charID)
@@ -354,15 +406,23 @@ func resolveAttackOnMonster(lobbyID, charID, targetID int, o attackOutcome, clea
 	if vorpal && how == "resistant" && o.DamageType == "slashing" { // the Vorpal Sword ignores Resistance to Slashing damage
 		dmg, how = base, ""
 	}
-	extraDmg, riderText := adjustRiders(fmt.Sprint(t["monster_key"]), riders)
+	extraDmg, riderText, damageAmounts := adjustRiders(fmt.Sprint(t["monster_key"]), riders)
 	if extraDmg > 0 && monsterPetrified(lobbyID, targetID) {
 		extraDmg /= 2 // F196
+		for kind, riderAmount := range damageAmounts {
+			damageAmounts[kind] = riderAmount / 2
+		}
 	}
+	damageAmounts[o.DamageType] += dmg
 	defer noteRegenerationBlock(lobbyID, targetID, o.DamageType) // Troll: no Regeneration on its next turn after Acid or Fire
 	for rt := range riders {
 		defer noteRegenerationBlock(lobbyID, targetID, rt)
 	}
+	hpBeforeRiders := hp
 	hp -= dmg + extraDmg
+	if extraDmg < 0 { // riders absorbed (adjustRiders): healing never goes past the maximum or the Hit Points it had
+		hp = min(hp, max(maxHP, hpBeforeRiders))
+	}
 	vorpalNote := ""
 	if vorpal && o.Natural == 20 && hp > 0 { // a roll of 20: the beheading (named_weapons_2024.go)
 		cut, killed, note := vorpalBehead(lobbyID, targetID, fmt.Sprint(t["monster_key"]), name)
@@ -396,14 +456,15 @@ func resolveAttackOnMonster(lobbyID, charID, targetID int, o attackOutcome, clea
 			extraDmg += dx
 			vorpalNote += dt
 		}
-		if dx, dt := divineFavorHit(charID, fmt.Sprint(t["monster_key"]), o.Weapon, o.Crit); dx > 0 { // Divine Favor (buff_spells_2024.go)
+		if dx, dt := divineFavorHit(charID, fmt.Sprint(t["monster_key"]), o.Weapon, o.Crit); dx != 0 { // Divine Favor (buff_spells_2024.go)
 			hp -= dx
 			extraDmg += dx
 			vorpalNote += dt
 		}
-		if dx, dt := helmFlamesHit(charID, fmt.Sprint(t["monster_key"]), o.Crit); dx > 0 { // Helm of Brilliance (F152)
+		if dx, dt := helmFlamesHit(charID, fmt.Sprint(t["monster_key"]), o.Crit); dx != 0 { // Helm of Brilliance (F152)
 			hp -= dx
 			extraDmg += dx
+			damageAmounts["fire"] += max(0, dx)
 			vorpalNote += dt
 		}
 		if dx, dt := bracersOfArchery(charID, o.Weapon); dx > 0 { // Bracers of Archery (items_c4_2024.go)
@@ -415,6 +476,7 @@ func resolveAttackOnMonster(lobbyID, charID, targetID int, o attackOutcome, clea
 	if v, ok := attackExtraNote.LoadAndDelete(charID); ok {
 		vorpalNote += v.(string)
 	}
+	hp = min(hp, max(maxHP, hpBeforeRiders)) // damage an absorbing monster turned into Hit Points never takes it past its maximum
 	wakeNote := ""
 	if dmg+extraDmg > 0 {
 		wakeNote = wakeOnDamage(lobbyID, targetID, name) // Hypnotic Pattern, Sleep
@@ -438,7 +500,7 @@ func resolveAttackOnMonster(lobbyID, charID, targetID int, o attackOutcome, clea
 		hp = 0
 	}
 	t["hp"] = hp
-	saved, err := saveMonsterHit(lobbyID, targetID, t0, t, hpStart-hp)
+	saved, err := saveMonsterHit(lobbyID, targetID, t0, t, hpStart-hp, damageAmounts)
 	if err != nil {
 		return "", nil, err
 	}
@@ -456,6 +518,9 @@ func resolveAttackOnMonster(lobbyID, charID, targetID int, o attackOutcome, clea
 	switch how {
 	case "immune":
 		text = fmt.Sprintf("%s. %s But %s is immune to %s damage", attackHead(weaponLabel, o), label, name, o.DamageType)
+		if absorbed {
+			text = fmt.Sprintf("%s. %s %s absorbs the %s damage and regains Hit Points (now %d)", attackHead(weaponLabel, o), label, name, o.DamageType, hp)
+		}
 	case "resistant":
 		text += " (it resists)"
 	case "vulnerable":
@@ -474,8 +539,10 @@ func resolveAttackOnMonster(lobbyID, charID, targetID int, o attackOutcome, clea
 	}
 	if knockedOut {
 		text += fmt.Sprintf(". %s is knocked out: it drops Unconscious at 1 Hit Point (it wakes after a Short Rest, if it regains Hit Points, or with first aid: DC 10 Wisdom (Medicine)).", name)
+		gmNoteMonsterConcentrationEnds(lobbyID, targetID, name, "has the Unconscious condition, which includes Incapacitated")
 	} else if hp == 0 {
 		text += fmt.Sprintf(". %s is defeated!", name)
+		gmNoteMonsterConcentrationEnds(lobbyID, targetID, name, "is dead")
 	} else {
 		text += fmt.Sprintf(". %s looks %s.", name, status)
 	}
@@ -483,29 +550,34 @@ func resolveAttackOnMonster(lobbyID, charID, targetID int, o attackOutcome, clea
 	if knockedOut {
 		info["knocked_out"] = true
 	}
-	if hasMastery && hp > 0 {
-		text += masteryOnHit(lobbyID, charID, targetID, name, fmt.Sprint(t["monster_key"]), mu, dmg)
+	tail := characterHitTail{Char: charID, Target: targetID, Name: name, Key: fmt.Sprint(t["monster_key"]), HP: hp, Damage: dmg + extraDmg, BaseDamage: dmg, Outcome: o, HasMastery: hasMastery, Mastery: mu, Snapshot: snap,
+		Record: charHitOnMonster{CharID: charID, Total: o.Total, AC: ac, Nat20: o.Natural == 20 && !peerless, Melee: weaponIsMelee(o.Weapon), DamageType: o.DamageType, Weapon: o.Weapon, HPBefore: hpStart, HPAfter: hp}}
+	if len(cleaveTarget) > 0 {
+		tail.CleaveTarget = cleaveTarget[0]
 	}
-	if hasMastery && mu.Name == "Cleave" {
-		if len(cleaveTarget) > 0 && cleaveTarget[0] != 0 {
-			text += cleaveAttack(lobbyID, charID, targetID, cleaveTarget[0], o, mu)
-		} else if !cleaveUsedThisTurn(charID) {
-			text += " (Cleave: with this weapon a hit lets you attack a second creature within 5 feet of the first, once per turn: send cleave_target_id with the attack.)"
-		}
+	tail.takePlans()
+	restore, err := armCombatFrame(lobbyID, "character-hit-tail", tail)
+	if err != nil {
+		return text, info, err
 	}
-	text += superiorHuntersPrey(lobbyID, charID, targetID)
-	text += applyGiantBoon(lobbyID, charID, targetID, dmg+extraDmg, hp > 0) // Goliath: Fire's Burn, Frost's Chill, Hill's Tumble
-	if hp <= 0 {
-		pendingCunning.Delete(charID)
-		pendingBrutal.Delete(charID)
+	// Preserve the actual damage-time save context before any later rider can
+	// change conditions or consume a resource. A pending decision saves the tail.
+	if !knockedOut && hp > 0 {
+		gmNoteMonsterConcentration(lobbyID, targetID, name, max(0, dmg+extraDmg), hp)
 	}
-	if hp > 0 {
-		text += applyCunningStrike(lobbyID, charID, targetID, name, fmt.Sprint(t["monster_key"]))
-		text += applyStunningStrike(lobbyID, charID, targetID, name)
-		text += applyBrutalEffects(lobbyID, charID, targetID, name, fmt.Sprint(t["monster_key"]))
+	restore()
+	if combatResolutionPaused(lobbyID) {
+		info["combat_paused"] = true
+		return text, info, nil
 	}
-	noteCharHitOnMonster(lobbyID, targetID, charHitOnMonster{CharID: charID, Total: o.Total, AC: ac, Nat20: o.Natural == 20 && !peerless,
-		Melee: weaponIsMelee(o.Weapon), DamageType: o.DamageType, Weapon: o.Weapon, HPBefore: hpStart, HPAfter: hp})
+	extra, err := runCharacterHitTail(lobbyID, tail)
+	text += extra
+	if combatResolutionPaused(lobbyID) {
+		info["combat_paused"] = true
+	}
+	if err != nil {
+		return text, info, err
+	}
 	return text, info, nil
 }
 

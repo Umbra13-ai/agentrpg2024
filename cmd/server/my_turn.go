@@ -111,6 +111,7 @@ func handleMyTurn(w http.ResponseWriter, r *http.Request) {
 	if answerNoActiveGame(w, err, http.StatusOK, map[string]interface{}{"is_my_turn": false}) {
 		return
 	}
+	settleMovement(charID) // a Speed effect that arrived or ended during the turn (speed_owner_2024.go)
 	err = db.QueryRow(`
 		SELECT c.id, c.name, c.class, c.species, COALESCE(c.subclass, ''), c.level, c.hp, c.max_hp, c.ac,
 			c.str, c.dex, c.con, c.intl, c.wis, c.cha,
@@ -140,6 +141,7 @@ func handleMyTurn(w http.ResponseWriter, r *http.Request) {
 		&actionUsed, &bonusActionUsed, &movementRemaining, &bonusActionSpellCast, &campaignDocRaw,
 		&mountedOnCreature, &mountIsControlled, &attacksRemaining, &subclassChoicesJSON, &hordeUsed,
 		&wildShapeForm, &classLevelsJSONMyTurn)
+	reactionUsed = reactionUsed || charCantTakeReactions(charID) // shown as unavailable while "can't take Reactions" stands
 
 	if answerNoActiveGame(w, err, http.StatusOK, map[string]interface{}{"is_my_turn": false}) { // gone since the lookup above
 		return
@@ -502,7 +504,7 @@ func handleMyTurn(w http.ResponseWriter, r *http.Request) {
 		var beastName, beastSize, beastType string
 		var beastAC, beastSpeed, beastStr, beastDex, beastCon int
 		var beastActionsJSON []byte
-		db.QueryRow(`
+		monsterQueryRow(`
 			SELECT name, size, type, ac, speed, str, dex, con, COALESCE(actions, '[]')
 			FROM monsters WHERE slug = $1
 		`, wildShapeForm.String).Scan(&beastName, &beastSize, &beastType, &beastAC, &beastSpeed,
@@ -856,7 +858,7 @@ func handleMyTurn(w http.ResponseWriter, r *http.Request) {
 				// Add monster type info if available
 				if e.MonsterKey != "" {
 					var mType string
-					db.QueryRow("SELECT COALESCE(type, '') FROM monsters WHERE slug = $1", e.MonsterKey).Scan(&mType)
+					monsterQueryRow("SELECT COALESCE(type, '') FROM monsters WHERE slug = $1", e.MonsterKey).Scan(&mType)
 					if mType != "" {
 						enemy["type"] = mType
 					}
@@ -910,7 +912,7 @@ func handleMyTurn(w http.ResponseWriter, r *http.Request) {
 			"actions":       actions,
 			"bonus_actions": featBonus,
 			"free_actions":  featFree, // movement, speaking, one object, Action Surge, Font of Magic ... (action_types_2024.go)
-			"movement":      buildMovementInfo(characterSpeed(charID, species), movementRemaining, conditions),
+			"movement":      buildMovementInfo(characterSpeed(charID, species), max(movementRemaining, 0), conditions) + speedNoteFor(lobbyID, charID),
 			"rests":         restGuide(charID), // Short and Long Rest: Hit Point Dice, what comes back, the requests (rests_2024.go)
 			"reaction":      reactionStatus,
 			"action_economy": buildActionEconomy(charID, class, level, actionUsed, bonusActionUsed, reactionUsed,
@@ -1035,7 +1037,7 @@ func handleMyTurn(w http.ResponseWriter, r *http.Request) {
 		// Get mount details from monsters table
 		var mountName string
 		var mountSpeed, mountHP, mountAC int
-		err := db.QueryRow(`SELECT name, COALESCE(speed, 60), COALESCE(hp, 20), COALESCE(ac, 10) 
+		err := monsterQueryRow(`SELECT name, COALESCE(speed, 60), COALESCE(hp, 20), COALESCE(ac, 10)
 			FROM monsters WHERE slug = $1`, mountedOnCreature.String).Scan(&mountName, &mountSpeed, &mountHP, &mountAC)
 		if err != nil {
 			mountName = mountedOnCreature.String

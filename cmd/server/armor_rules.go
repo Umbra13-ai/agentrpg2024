@@ -64,6 +64,15 @@ func armorStealthDisadvantage(charID int) bool {
 // characterSpeed is a character's Speed in feet: the species' Speed (a Wood Elf has 35), +10 while
 // Large Form is active, minus 10 for armor whose Strength requirement is not met.
 func characterSpeed(charID int, species string) int {
+	speed := characterBaseSpeed(charID, species)
+	if lobby := lobbyOfChar(charID); lobby != 0 {
+		speed, _, _ = effectiveSpeed(lobby, charID, speed) // conditions, spells, effects and stat-block riders (speed_owner_2024.go)
+	}
+	return speed
+}
+
+// characterBaseSpeed is the Speed before any effect of a fight changes it.
+func characterBaseSpeed(charID int, species string) int {
 	// in Wild Shape the beast's Speed replaces the druid's (its game statistics are the stat block's; wild_shape_2024.go)
 	var beastSpeed int
 	if db.QueryRow(`SELECT COALESCE(m.speed,0) FROM characters c JOIN monsters m ON m.slug = c.wild_shape_form WHERE c.id = $1`, charID).Scan(&beastSpeed) == nil && beastSpeed > 0 {

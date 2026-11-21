@@ -94,6 +94,7 @@ func TestNoOtherSaveRoll(t *testing.T) {
 		"spell_resolution.go:resolveSpellOnMonster":    "Seeking Spell's reroll of an attack roll, judged by game.AttackRoll",
 		"time_conditions_2024.go:handleGMRoll":         "the GM's dice roller",
 		"toolbox_more_2024.go:jumpAction":              "a Strength (Athletics) check",
+		"monster_attach_2024.go:handleAttachDetach2024": "the published detach action's ability check",
 	}
 	d20 := regexp.MustCompile(`RollDie\(20\)|RollWith(Dis)?[Aa]dvantage\(`)
 	funcName := regexp.MustCompile(`^func (?:\([^)]*\) )?(\w+)`)

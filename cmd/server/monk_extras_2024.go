@@ -60,6 +60,7 @@ func handleGMDeflectAttacks(w http.ResponseWriter, r *http.Request) {
 		writeJSONStatus(w, http.StatusNotFound, map[string]interface{}{"error": "character_not_found"})
 		return
 	}
+	reactionUsed = reactionUsed || charCantTakeReactions(req.CharacterID)
 	if strings.ToLower(class) != "monk" || level < 3 {
 		writeJSONStatus(w, http.StatusBadRequest, map[string]interface{}{"error": "no_deflect_attacks", "message": name + " is not a Monk of level 3 or higher."})
 		return

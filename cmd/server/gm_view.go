@@ -42,7 +42,7 @@ func monsterStatBlock(slug string) map[string]interface{} {
 	var name, size, mtype, hitDice, cr, resist, immune, vuln, condImm string
 	var ac, hp, speed, str, dex, con, intl, wis, cha, xp int
 	var actions []byte
-	err := db.QueryRow(`SELECT name, COALESCE(size,''), COALESCE(type,''), COALESCE(ac,0), COALESCE(hp,0), COALESCE(hit_dice,''), COALESCE(speed,0),
+	err := monsterQueryRow(`SELECT name, COALESCE(size,''), COALESCE(type,''), COALESCE(ac,0), COALESCE(hp,0), COALESCE(hit_dice,''), COALESCE(speed,0),
 		COALESCE(str,10), COALESCE(dex,10), COALESCE(con,10), COALESCE(intl,10), COALESCE(wis,10), COALESCE(cha,10), COALESCE(cr,''), COALESCE(xp,0), COALESCE(actions,'[]'),
 		COALESCE(damage_resistances,''), COALESCE(damage_immunities,''), COALESCE(damage_vulnerabilities,''), COALESCE(condition_immunities,'')
 		FROM monsters WHERE slug = $1`, slug).
@@ -54,7 +54,7 @@ func monsterStatBlock(slug string) map[string]interface{} {
 		"str": str, "dex": dex, "con": con, "int": intl, "wis": wis, "cha": cha, "cr": cr, "xp": xp, "actions": json.RawMessage(actions)}
 	// the rest of the stat block: traits (Pack Tactics, Magic Resistance ...), bonus actions, reactions, Legendary Actions
 	var traits, bonus, reactions, legendary []byte
-	db.QueryRow(`SELECT COALESCE(traits,'[]'), COALESCE(bonus_actions,'[]'), COALESCE(reactions,'[]'), COALESCE(legendary_actions,'[]') FROM monsters WHERE slug = $1`, slug).
+	monsterQueryRow(`SELECT COALESCE(traits,'[]'), COALESCE(bonus_actions,'[]'), COALESCE(reactions,'[]'), COALESCE(legendary_actions,'[]') FROM monsters WHERE slug = $1`, slug).
 		Scan(&traits, &bonus, &reactions, &legendary)
 	if t := traitsForGM(slug); len(t) > 0 { // each trait with what the server does about it, or that the GM applies it
 		m["traits"] = t

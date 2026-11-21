@@ -23,13 +23,22 @@ type monsterTraitRule struct {
 }
 
 var monsterTraitRules = []monsterTraitRule{
+	{Name: "Agile", Does: "Its movement does not provoke Opportunity Attacks when the GM updates the battle map.",
+		Where: "noteMonstersLeavingReach (character_oa_2024.go)"},
+	{Name: "Flyby", Does: "Its flight does not provoke Opportunity Attacks when the GM includes its combat ID in flying on the battle map update.",
+		Where: "noteMonstersLeavingReach (character_oa_2024.go)"},
 	{Name: "Pack Tactics", Does: "Advantage on its attack rolls when one of its allies (not Incapacitated) is within 5 feet of the target: the battle map, or ally_adjacent in the monster_action",
 		Where: "attackSources (attack_2024.go), allyNextToTarget"},
-	{Name: "Magic Resistance", Does: "Advantage on saving throws against spells", Where: "saveSources (save_2024.go)"},
+	{Name: "Immutable Form", Does: "Cannot be shape-shifted by Polymorph", Where: "polymorphCast (spells_more_2024.go)"},
+	{Match: damageDisadvantageRe, Does: "Taking the specified damage imposes Disadvantage on attack rolls until the end of its next turn. The GM is notified if ability checks also have Disadvantage.", Where: "monster_damage_traits_2024.go and the shared Hit Point and attack owners"},
+	{Match: monsterLightRe, Does: "Adds the listed Bright and Dim Light to mapped attack targets. For an unplaced creature or other checks, the GM resolves its lighting.", Where: "monsterLightingAt (monster_lighting_2024.go)"},
+	{Name: "Magic Resistance", Does: "Advantage on saving throws against spells and stat-block effects explicitly labeled magical", Where: "saveSources (save_2024.go)"},
 	{Name: "Legendary Resistance", Does: "a failed saving throw can succeed instead, a number of times a day (policy: POST /api/gm/monster-features)",
 		Where: "monster_features_2024.go, saveCtx.resist"},
 	{Name: "Undead Fortitude", Does: "damage that drops it to 0 Hit Points (not Radiant, not a Critical Hit) gets a Constitution save, DC 5 + the damage, to stay at 1 Hit Point",
 		Where: "undeadFortitude (dodge_2024.go)"},
+	{Name: "Evasion", Does: "a Dexterity saving throw against an effect that halves damage on a success: a success takes none, a failure half",
+		Where: "applySaveEffectOnMonster (monster_save_targets.go) for a monster that is the target of a monster's save effect"},
 	{Name: "Aura of Authority", Does: "it and its allies within 10 feet have Advantage on attack rolls and saving throws", Where: "attackSources, saveSources", Aura: true},
 	{Match: regenRe, Does: "regains Hit Points at the start of each of its turns (not after the damage the trait names)", Where: "monster_features_2024.go", Aura: true},
 	{Match: startAuraRe, Does: "an aura: each enemy that starts its turn in it makes the saving throw", Where: "monster_features_2024.go", Aura: true},

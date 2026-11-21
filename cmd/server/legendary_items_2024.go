@@ -82,7 +82,7 @@ func tickItemCooldown(charID int, it invItem) string {
 func insertItemCompanion(charID int, kind, name, source, slug, ctype, notes, concentration string, hp int) (int, string) {
 	var mname, speed, mtype string
 	var mhp, ac int
-	if db.QueryRow(`SELECT name, hp, ac, COALESCE(speed_text,''), COALESCE(type,'') FROM monsters WHERE slug = $1`, slug).Scan(&mname, &mhp, &ac, &speed, &mtype) != nil {
+	if monsterQueryRow(`SELECT name, hp, ac, COALESCE(speed_text,''), COALESCE(type,'') FROM monsters WHERE slug = $1`, slug).Scan(&mname, &mhp, &ac, &speed, &mtype) != nil {
 		return 0, ""
 	}
 	if hp <= 0 {
@@ -93,13 +93,14 @@ func insertItemCompanion(charID int, kind, name, source, slug, ctype, notes, con
 	}
 	attacks := formAttacks(slug)
 	var raw []byte
-	db.QueryRow(`SELECT COALESCE(actions,'[]') FROM monsters WHERE slug = $1`, slug).Scan(&raw)
+	monsterQueryRow(`SELECT COALESCE(actions,'[]') FROM monsters WHERE slug = $1`, slug).Scan(&raw)
 	var rows []monsterActionRow
 	json.Unmarshal(raw, &rows)
 	for _, r := range rows {
 		if strings.EqualFold(stripUsage(r.Name), "Multiattack") {
 			counts := map[string]int{}
-			for _, p := range multiattackPlan(r.Desc, rows) {
+			plan, _ := multiattackPlan(r.Desc, rows) // a refused plan only means no counts here: the attack itself is refused when made
+			for _, p := range plan {
 				counts[p.Name]++
 			}
 			for i := range attacks {
@@ -116,7 +117,7 @@ func insertItemCompanion(charID int, kind, name, source, slug, ctype, notes, con
 	b, _ := json.Marshal(attacks)
 	var lobbyID, id int
 	db.QueryRow(`SELECT COALESCE(lobby_id,0) FROM characters WHERE id = $1`, charID).Scan(&lobbyID)
-	db.QueryRow(`INSERT INTO companions (owner_id, lobby_id, kind, name, source, form, creature_type, slot_level, hp, max_hp, ac, speed, attacks, notes, concentration, traits)
+	monsterQueryRow(`INSERT INTO companions (owner_id, lobby_id, kind, name, source, form, creature_type, slot_level, hp, max_hp, ac, speed, attacks, notes, concentration, traits)
 		VALUES ($1,$2,$3,$4,$5,$6,$7,0,$8,$8,$9,$10,$11,$12,$13,(SELECT COALESCE(traits,'[]') FROM monsters WHERE slug = $6)) RETURNING id`,
 		charID, lobbyID, kind, name, source, slug, ctype, hp, ac, speed, string(b), notes, concentration).Scan(&id)
 	return id, mname
@@ -126,7 +127,7 @@ func insertItemCompanion(charID int, kind, name, source, slug, ctype, notes, con
 // extra fields go on each entry. It returns the new combatant ids (given by the fight, never one given before in it).
 func addMonstersToFight(lobbyID int, slug, name string, n, hp int, extra map[string]interface{}) []int {
 	var dex, mhp, ac int
-	if db.QueryRow(`SELECT COALESCE(dex,10), COALESCE(hp,10), COALESCE(ac,10) FROM monsters WHERE slug = $1`, slug).Scan(&dex, &mhp, &ac) != nil {
+	if monsterQueryRow(`SELECT COALESCE(dex,10), COALESCE(hp,10), COALESCE(ac,10) FROM monsters WHERE slug = $1`, slug).Scan(&dex, &mhp, &ac) != nil {
 		return nil
 	}
 	if hp <= 0 {
@@ -369,7 +370,7 @@ func ironFlask(charID int, it invItem, req itemCastReq, description string) stri
 	}
 	mname, key := fmt.Sprint(e["name"]), fmt.Sprint(e["monster_key"])
 	var mtype string
-	db.QueryRow(`SELECT LOWER(COALESCE(type,'')) FROM monsters WHERE slug = $1`, key).Scan(&mtype)
+	monsterQueryRow(`SELECT LOWER(COALESCE(type,'')) FROM monsters WHERE slug = $1`, key).Scan(&mtype)
 	if !otherPlaneTypes[mtype] {
 		return fmt.Sprintf("You aim the %s at %s, but it is native to this plane of existence (a %s): nothing happens.", name, mname, mtype)
 	}
@@ -463,8 +464,22 @@ func sphereOfAnnihilation(charID int, it invItem, req itemCastReq, description s
 				out += " " + sv.LineAgainst(mname) + " and dodges the sphere."
 				continue
 			}
+			heals, aerr := absorptionHealsHP(db, fmt.Sprint(e["monster_key"]), "force")
+			if aerr != nil {
+				addGMNotice(lobby, fmt.Sprintf("The Sphere's damage to %s couldn't be applied. Review the hit before continuing.", mname))
+				continue
+			}
+			if heals { // an absorption trait turns the Force damage into Hit Points (unless the form forbids regaining them)
+				h, _ := hurtMonster(lobby, t, dmg, "force", false)
+				out += fmt.Sprintf(" %s: the sphere touches it, and it absorbs %d Force damage and regains that many Hit Points (now %d).", sv.LineAgainst(mname), dmg, h.After)
+				continue
+			}
 			got, _ := adjustMonsterDamage(fmt.Sprint(e["monster_key"]), "force", dmg)
-			r, _ := loseMonsterHP(lobby, t, got) // the monster Hit Point owner (monster_hp_2024.go)
+			r, err := loseMonsterHP(lobby, t, got, "force") // the monster Hit Point owner (monster_hp_2024.go)
+			if err != nil {
+				addGMNotice(lobby, fmt.Sprintf("The Sphere's damage to %s couldn't be applied. Review the hit before continuing.", mname))
+				continue
+			}
 			hp := r.After.HP
 			out += fmt.Sprintf(" %s: the sphere touches it for %d Force damage", sv.LineAgainst(mname), got)
 			if hp == 0 {

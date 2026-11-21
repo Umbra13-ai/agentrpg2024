@@ -35,7 +35,8 @@ type saveCtx struct {
 	dc      int
 
 	// the cause, where a rule reads it
-	spell         bool     // a save against a spell (Magic Resistance, a Mantle of Spell Resistance, a Holy Avenger)
+	spell         bool     // a spell can also activate effects specifically limited to spells
+	magical       bool     // the nonspell effect is explicitly magical (SRD 5.2.1 p. 185)
 	against       []string // the conditions the effect would impose, or the one the save would end ("poisoned", "charmed")
 	source        int      // the creature that forces the save, when known (Holy Nimbus reads its creature type)
 	fiendOrUndead bool     // the GM says a Fiend or an Undead forces it (Holy Nimbus)
@@ -159,6 +160,14 @@ func saveModifier(lobbyID, id int, ability string) (mod int, proficient bool, fe
 	if short == "" || db == nil {
 		return 0, false, ""
 	}
+	if isCompanionCombatID(id) { // a companion saves with the stat block it was made from (its form), like a monster: its listed save bonus or its ability modifier
+		if c, ok := loadCompanion(id - companionIDBase); ok {
+			if sb := monsterStatBlock(c.Form); sb != nil {
+				return monsterSaveBonus(c.Form, short, asInt(sb[short])), false, ""
+			}
+		}
+		return 0, false, ""
+	}
 	if id > 0 {
 		var class string
 		var level int
@@ -266,6 +275,9 @@ var saveSourceRows = []saveSource{
 		_, dis := game.SaveConditions(c.conds, c.ability)
 		return len(dis) > 0, strings.Join(dis, ", ")
 	}},
+	{saveDis, "a Disadvantage rider on its Concentration saves", func(c *saveCtx) (bool, string) {
+		return yes(c.concentration && c.saver != 0 && c.lobby > 0 && hasCondMarker(c.lobby, c.saver, "disadv_concentration"))
+	}},
 	{saveDis, "armor the saver isn't trained in", func(c *saveCtx) (bool, string) { // any D20 Test that uses Strength or Dexterity
 		return yes(c.saver > 0 && c.is("str", "dex") && isWearingNonProficientArmor(c.saver))
 	}},
@@ -363,8 +375,15 @@ var saveSourceRows = []saveSource{
 
 	// ---- Advantage: monsters
 	{saveAdv, "Aura of Authority", func(c *saveCtx) (bool, string) { return yes(c.saver < 0 && auraOfAuthority(c.lobby, c.saver)) }}, // Hobgoblin Captain
-	{saveAdv, "Magic Resistance", func(c *saveCtx) (bool, string) { // a trait in its stat block: saves against spells
-		return yes(c.saver < 0 && c.spell && monsterHasTrait(c.lobby, c.saver, "Magic Resistance"))
+	{saveAdv, "Magic Resistance", func(c *saveCtx) (bool, string) { // against spells and other magical effects
+		if !c.spell && !c.magical {
+			return yes(false)
+		}
+		if isCompanionCombatID(c.saver) { // a companion's traits are kept on it (the stat block it was made from)
+			cp, ok := loadCompanion(c.saver - companionIDBase)
+			return yes(ok && companionHasTrait(cp, "Magic Resistance"))
+		}
+		return yes(c.saver < 0 && monsterHasTrait(c.lobby, c.saver, "Magic Resistance"))
 	}},
 }
 
@@ -406,11 +425,14 @@ var saveAdjustRows = []func(c *saveCtx) (int, string){
 		}
 		return cover, fmt.Sprintf("cover +%d", cover)
 	},
-	func(c *saveCtx) (int, string) { // Exhaustion: -2 per level on every D20 Test
-		if c.saver <= 0 {
+	func(c *saveCtx) (int, string) { // Exhaustion: -2 per level on every D20 Test, whatever the saver's kind (exhaustion_any_2024.go)
+		if c.saver == 0 {
 			return 0, ""
 		}
-		p := game.ExhaustionD20Penalty(exhaustionLevelOf(c.saver))
+		p := game.ExhaustionD20Penalty(exhaustionLevelOfAny(c.lobby, c.saver))
+		if p == 0 {
+			return 0, ""
+		}
 		return -p, fmt.Sprintf("Exhaustion -%d", p)
 	},
 }

@@ -282,13 +282,29 @@ func spellEconomyAction(action, slug, description string) string {
 	if key == "" {
 		key = parseSpellFromDescription(description)
 	}
-	if sp, ok := srdSpellsMemory[key]; ok && strings.HasPrefix(strings.ToLower(sp.CastingTime), "bonus action") {
-		return "bonus_cast"
-	}
-	if sp, ok := srdSpellsMemory[key]; ok && strings.HasPrefix(strings.ToLower(sp.CastingTime), "reaction") {
-		return "reaction_cast" // Shield, Counterspell, Feather Fall...: the Reaction, not the action (F54)
+	if sp, ok := srdSpellsMemory[key]; ok {
+		switch castingTimeKind(sp.CastingTime) {
+		case "bonus action":
+			return "bonus_cast"
+		case "reaction":
+			return "reaction_cast" // Shield, Counterspell, Feather Fall...: the Reaction, not the action (F54)
+		}
 	}
 	return action
+}
+
+// castingTimeKind: "bonus action" or "reaction" when the casting time starts with that word, with or without a leading "1 " or "one "
+// ("Reaction, which you take when ...", "1 reaction"); "" for anything else (an Action, a duration, a ritual). The SRD data writes
+// "Reaction" and "Bonus Action"; the tolerant form keeps another spelling of the same casting time from being costed as an Action.
+func castingTimeKind(castingTime string) string {
+	ct := strings.ToLower(strings.TrimSpace(castingTime))
+	ct = strings.TrimPrefix(strings.TrimPrefix(ct, "1 "), "one ")
+	for _, k := range []string{"bonus action", "reaction"} {
+		if strings.HasPrefix(ct, k) {
+			return k
+		}
+	}
+	return ""
 }
 
 // withSpellResolution appends the result against a targeted monster to the cast text.

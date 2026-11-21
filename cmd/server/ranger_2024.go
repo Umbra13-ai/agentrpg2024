@@ -273,7 +273,7 @@ func hunterLore(charID, targetID int, monsterKey string) string {
 		return ""
 	}
 	var res, imm, vul, cimm string
-	db.QueryRow(`SELECT COALESCE(damage_resistances,''), COALESCE(damage_immunities,''), COALESCE(damage_vulnerabilities,''), COALESCE(condition_immunities,'') FROM monsters WHERE slug = $1`, monsterKey).Scan(&res, &imm, &vul, &cimm)
+	monsterQueryRow(`SELECT COALESCE(damage_resistances,''), COALESCE(damage_immunities,''), COALESCE(damage_vulnerabilities,''), COALESCE(condition_immunities,'') FROM monsters WHERE slug = $1`, monsterKey).Scan(&res, &imm, &vul, &cimm)
 	var parts []string
 	if res != "" {
 		parts = append(parts, "Resistances: "+res)

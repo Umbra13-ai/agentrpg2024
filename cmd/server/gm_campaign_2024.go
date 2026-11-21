@@ -200,7 +200,7 @@ func gmCampaignMatch(agentID, want, camp int, what string, statuses []string) (i
 // its targets (campaignFromTarget, targetsIn) can't act on another campaign's characters. A new field that names a character
 // is one entry here.
 var characterIDFields = map[string]bool{
-	"character_id": true, "character_ids": true, "target_id": true, "target_ids": true, "caster_id": true,
+	"character_id": true, "character_ids": true, "target_id": true, "target_ids": true, "caster_id": true, "source_id": true,
 	"attacker_id": true, "defender_id": true, "initiator_id": true, "grappler_id": true, "combatant_id": true,
 	"redirect_target_id": true, "sculpt_targets": true, "paladin_id": true, "bard_id": true, "barbarian_id": true,
 	"owner_id": true, "give_to": true,
@@ -344,7 +344,7 @@ func gmReadAs(w http.ResponseWriter, r *http.Request, agentID int, v interface{}
 			writeJSONStatus(w, status, map[string]interface{}{"error": code, "message": msg + " Nothing was changed."})
 			return 0, false
 		}
-		return id, true
+		return id, completeGMRead(w, r, v, id)
 	}
 	if spec.byTarget && want == 0 {
 		return 0, true // no character named: the handler says what is missing
@@ -357,7 +357,7 @@ func gmReadAs(w http.ResponseWriter, r *http.Request, agentID int, v interface{}
 		writeGMCampaignProblem(w, code, msg)
 		return 0, false
 	}
-	return id, true
+	return id, completeGMRead(w, r, v, id)
 }
 
 // gmCampaignList: "4 (The Sunken Keep), 7 (Ashfall)".

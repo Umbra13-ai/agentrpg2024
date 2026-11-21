@@ -98,11 +98,11 @@ type rowsQuerier interface {
 // readConditionRecords reads a creature's rows: a character's by its id, a monster's by its campaign and id.
 func readConditionRecords(q rowsQuerier, lobbyID, targetID int) ([]conditionRecord, error) {
 	query := `SELECT id, lobby_id, target_id, condition, detail, source, escapes, duration_rounds, COALESCE(end_save, 'null'::jsonb), notes,
-		COALESCE(created_by, 0) FROM condition_records WHERE target_id = $1 ORDER BY id`
+		COALESCE(created_by, 0), COALESCE(source_id, 0) FROM condition_records WHERE target_id = $1 ORDER BY id`
 	args := []interface{}{targetID}
-	if targetID < 0 {
+	if noCharacterRow(targetID) {
 		query = `SELECT id, lobby_id, target_id, condition, detail, source, escapes, duration_rounds, COALESCE(end_save, 'null'::jsonb), notes,
-		COALESCE(created_by, 0) FROM condition_records WHERE target_id = $1 AND lobby_id = $2 ORDER BY id`
+		COALESCE(created_by, 0), COALESCE(source_id, 0) FROM condition_records WHERE target_id = $1 AND lobby_id = $2 ORDER BY id`
 		args = append(args, lobbyID)
 	}
 	rows, err := q.Query(query, args...)
@@ -114,7 +114,7 @@ func readConditionRecords(q rowsQuerier, lobbyID, targetID int) ([]conditionReco
 	for rows.Next() {
 		var r conditionRecord
 		var esc, es []byte
-		if err := rows.Scan(&r.ID, &r.LobbyID, &r.TargetID, &r.Condition, &r.Detail, &r.Source, &esc, &r.DurationRounds, &es, &r.Notes, &r.CreatedBy); err != nil {
+		if err := rows.Scan(&r.ID, &r.LobbyID, &r.TargetID, &r.Condition, &r.Detail, &r.Source, &esc, &r.DurationRounds, &es, &r.Notes, &r.CreatedBy, &r.SourceID); err != nil {
 			return nil, err
 		}
 		json.Unmarshal(esc, &r.Escapes)
@@ -133,6 +133,10 @@ type conditionChange struct {
 	recs       []conditionRecord
 	changed    bool
 }
+
+// noCharacterRow: a creature whose conditions live only in condition_records, with no characters row to keep in step: a monster (negative
+// id) or a companion (combat id from companionIDBase up).
+func noCharacterRow(id int) bool { return id < 0 || isCompanionCombatID(id) }
 
 var errNoConditionTarget = errors.New("conditions: no creature named")
 
@@ -157,12 +161,24 @@ func changeConditions(lobbyID, targetID int, change func(c *conditionChange) err
 func changeConditionsIn(tx *sql.Tx, lobbyID, targetID int, change func(c *conditionChange) error) error {
 	c := &conditionChange{tx: tx, lobby: lobbyID, target: targetID}
 	switch {
-	case targetID > 0:
+	case targetID > 0 && !isCompanionCombatID(targetID):
 		if err := tx.QueryRow(`SELECT COALESCE(lobby_id, 0), COALESCE(exhaustion_level, 0) FROM characters WHERE id = $1 FOR UPDATE`, targetID).
 			Scan(&c.lobby, &c.exhaustion); err != nil {
 			return err
 		}
-	case targetID < 0:
+	case isCompanionCombatID(targetID):
+		// A companion has no characters row. Its campaign is the companions table's (lobby_id), and a caller naming another campaign (or a
+		// companion that is not there) is refused, so a numeric id never reaches another campaign's creature, and the combat id (companion id
+		// plus companionIDBase) never matches a character's id.
+		var cl int
+		if err := tx.QueryRow(`SELECT COALESCE(lobby_id, 0) FROM companions WHERE id = $1 FOR UPDATE`, targetID-companionIDBase).Scan(&cl); err != nil {
+			return err
+		}
+		if lobbyID != 0 && cl != lobbyID {
+			return errNoConditionTarget
+		}
+		c.lobby = cl
+	case targetID < 0: // a monster (its id is the fight's, so the campaign is the lock's)
 		if _, err := tx.Exec(`SELECT pg_advisory_xact_lock($1, $2)`, lobbyID, targetID); err != nil {
 			return err
 		}
@@ -177,7 +193,7 @@ func changeConditionsIn(tx *sql.Tx, lobbyID, targetID int, change func(c *condit
 	if err := change(c); err != nil {
 		return err
 	}
-	if targetID < 0 || !c.changed {
+	if noCharacterRow(targetID) || !c.changed {
 		return nil
 	}
 	for _, r := range c.recs {
@@ -204,11 +220,16 @@ func (c *conditionChange) insert(r conditionRecord) (int, error) {
 	if r.CreatedBy != 0 {
 		createdBy = r.CreatedBy
 	}
-	err := c.tx.QueryRow(`INSERT INTO condition_records (lobby_id, target_id, condition, detail, source, escapes, duration_rounds, end_save, notes, created_by)
-		VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10) RETURNING id`, c.lobby, c.target, r.Condition, r.Detail, r.Source, string(esc), r.DurationRounds,
-		endSaveJSON(r.EndSave), r.Notes, createdBy).Scan(&r.ID)
+	err := c.tx.QueryRow(`INSERT INTO condition_records (lobby_id, target_id, condition, detail, source, escapes, duration_rounds, end_save, notes, created_by, source_id)
+		VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11) RETURNING id`, c.lobby, c.target, r.Condition, r.Detail, r.Source, string(esc), r.DurationRounds,
+		endSaveJSON(r.EndSave), r.Notes, createdBy, r.SourceID).Scan(&r.ID)
 	if err != nil {
 		return 0, err
+	}
+	if c.target < 0 && game.IsIncapacitatingCondition(r.Condition) {
+		if err := journalMonsterConcentrationIn(c.tx, c.lobby, c.target, map[string]interface{}{"event": "incapacitated_condition", "condition": r.Condition}); err != nil {
+			return 0, err
+		}
 	}
 	r.LobbyID, r.TargetID = c.lobby, c.target
 	c.recs = append(c.recs, r)
@@ -229,11 +250,43 @@ func (c *conditionChange) remove(match func(conditionRecord) bool) ([]conditionR
 		}
 		gone = append(gone, r)
 	}
+	// End dependent conditions from the same source when their parent ends.
+	for _, g := range append([]conditionRecord{}, gone...) {
+		var linked string
+		switch g.Condition {
+		case "grappled":
+			linked = notesEndsWithGrapple
+		case "poisoned":
+			linked = notesEndsWithPoisonOrDamage
+		default:
+			continue
+		}
+		var still []conditionRecord
+		for _, r := range kept {
+			if r.Notes == linked && r.Source == g.Source && r.Source != "" &&
+				(r.SourceID == 0 || g.SourceID == 0 || r.SourceID == g.SourceID) {
+				if _, err := c.tx.Exec(`DELETE FROM condition_records WHERE id = $1`, r.ID); err != nil {
+					return nil, err
+				}
+				gone = append(gone, r)
+				continue
+			}
+			still = append(still, r)
+		}
+		kept = still
+	}
 	if len(gone) > 0 {
 		c.recs, c.changed = kept, true
 	}
 	return gone, nil
 }
+
+// notesEndsWithGrapple marks a Restrained record that ends when the Grappled record of the same source ends (a Constrict: "the target has
+// the Grappled condition (escape DC 16), and it has the Restrained condition until the grapple ends").
+const notesEndsWithGrapple = "ends_with_grapple"
+
+// notesEndsWithPoisonOrDamage marks sleep linked to an existing Poisoned record.
+const notesEndsWithPoisonOrDamage = "ends_with_poison_or_damage"
 
 // set changes one row's remaining rounds and detail (a countdown).
 func (c *conditionChange) set(id, rounds int, detail string) error {
@@ -253,7 +306,7 @@ func (c *conditionChange) set(id, rounds int, detail string) error {
 // setExhaustion sets a character's Exhaustion level (0-6) with its list.
 func (c *conditionChange) setExhaustion(level int) error {
 	level = max(0, min(6, level))
-	if c.target <= 0 {
+	if c.target <= 0 || isCompanionCombatID(c.target) {
 		return nil
 	}
 	if _, err := c.tx.Exec(`UPDATE characters SET exhaustion_level = $1 WHERE id = $2`, level, c.target); err != nil {
@@ -315,9 +368,14 @@ func init() { conditionImmunities = conditionImmunityRows() }
 
 func conditionImmunityRows() []conditionImmunity {
 	return []conditionImmunity{
-		func(lobbyID, targetID int, cond string, _ condAdd) string { // the monster's stat block
+		func(lobbyID, targetID int, cond string, _ condAdd) string { // the creature's stat block
 			if targetID < 0 && monsterConditionImmune(lobbyID, targetID, cond) {
 				return "its stat block"
+			}
+			if isCompanionCombatID(targetID) {
+				if c, ok := activeCompanionInCampaign(lobbyID, targetID); ok && catalogConditionImmune(c.Form, cond) {
+					return "its stat block"
+				}
 			}
 			return ""
 		},
@@ -367,7 +425,9 @@ func mindlessRage(charID int) bool {
 // immuneToCondition answers what makes the creature immune to a rules condition, or "" (markers have no Immunity).
 func immuneToCondition(lobbyID, targetID int, a condAdd) string {
 	cond, _ := splitConditionEntry(a.Condition)
-	if !ruleConditions[cond] || a.Force {
+	// Exhaustion has a dedicated level store. It shares the immunity rules
+	// without becoming a second record-based Exhaustion condition.
+	if (!ruleConditions[cond] && cond != "exhaustion") || a.Force {
 		return ""
 	}
 	for _, imm := range conditionImmunities {
@@ -380,6 +440,7 @@ func immuneToCondition(lobbyID, targetID int, a condAdd) string {
 
 // addCondition applies a condition to a character or a monster (negative id): the one way a condition is applied.
 func addCondition(lobbyID, targetID int, a condAdd) condResult {
+	defer directConcentrationJournalScope(lobbyID)()
 	var res condResult
 	cond, detail := splitConditionEntry(a.Condition)
 	if cond == "" || targetID == 0 {
@@ -388,6 +449,11 @@ func addCondition(lobbyID, targetID int, a condAdd) condResult {
 	}
 	if res.Immune = immuneToCondition(lobbyID, targetID, a); res.Immune != "" {
 		return res
+	}
+	// This read belongs before the write transaction. If applied on the source's
+	// turn, the current turn end is not the next turn end named by the effect.
+	if a.Notes == notesUntilEndOfSourceTurn && a.SourceID != 0 && currentTurnID(lobbyID) == a.SourceID {
+		a.Notes += notesSkipSuffix
 	}
 	rule := ruleConditions[cond]
 	res.Err = changeConditions(lobbyID, targetID, func(c *conditionChange) error {
@@ -401,7 +467,8 @@ func addCondition(lobbyID, targetID int, a condAdd) condResult {
 			if r.Condition != cond || !strings.EqualFold(r.Detail, detail) {
 				continue
 			}
-			if !rule || r.Source == a.Source || a.bare() { // one copy per source; a marker once
+			sameSource := r.Source == a.Source && (r.SourceID == 0 || a.SourceID == 0 || r.SourceID == a.SourceID)
+			if !rule || sameSource || a.bare() { // one copy per source; a marker once
 				res.ID, res.Already = r.ID, true
 				return nil
 			}
@@ -412,8 +479,9 @@ func addCondition(lobbyID, targetID int, a condAdd) condResult {
 		if _, err := c.remove(func(r conditionRecord) bool { return containsInt(bare, r.ID) }); err != nil {
 			return err
 		}
+
 		id, err := c.insert(conditionRecord{Condition: cond, Detail: detail, Source: a.Source, Escapes: a.Escapes, DurationRounds: a.Rounds,
-			EndSave: a.EndSave, Notes: a.Notes, CreatedBy: a.CreatedBy})
+			EndSave: a.EndSave, Notes: a.Notes, CreatedBy: a.CreatedBy, SourceID: a.SourceID})
 		res.ID, res.Added = id, err == nil
 		return err
 	})
@@ -421,7 +489,34 @@ func addCondition(lobbyID, targetID int, a condAdd) condResult {
 	if res.Added && rule {
 		res.Notes = conditionTakesHold(lobbyID, targetID, cond, a.Source)
 	}
+	if res.Err == nil && res.Added {
+		noticeIfCompanionSourceHasNoTurn(lobbyID, targetID, a.SourceID, cond, a.Notes)
+	}
 	return res
+}
+
+// recordDamageDisadvantageIn joins a hit transaction to refresh its own marker only.
+func recordDamageDisadvantageIn(tx *sql.Tx, lobby, id int, isCurrent bool, penalties []damageDisadvantage) error {
+	if len(penalties) == 0 {
+		return nil
+	}
+	notes := notesUntilEndOfSourceTurn
+	if isCurrent {
+		notes += notesSkipSuffix
+	}
+	return changeConditionsIn(tx, lobby, id, func(c *conditionChange) error {
+		for _, penalty := range penalties {
+			if _, err := c.remove(func(r conditionRecord) bool {
+				return r.Condition == damageDisadvantageMarker && r.Source == penalty.name
+			}); err != nil {
+				return err
+			}
+			if _, err := c.insert(conditionRecord{Condition: damageDisadvantageMarker, Source: penalty.name, SourceID: id, Notes: notes}); err != nil {
+				return err
+			}
+		}
+		return nil
+	})
 }
 
 // conditionTakesHold: what a condition sets off once it is applied (after its transaction).
@@ -442,6 +537,11 @@ func conditionTakesHold(lobbyID, targetID int, cond, source string) map[string]i
 			}
 			if removeCondition(targetID, "raging") { // SRD 5.2.1 Rage: it ends early if you have the Incapacitated condition
 				notes["rage_ended"] = "Incapacitated: the Rage ends"
+			}
+		}
+		if targetID < 0 && !monsterConcentrationEnds(lobbyID, targetID, creatureName(lobbyID, targetID), "it became Incapacitated ("+cond+")") { // untracked effects still require a private GM reminder
+			if _, meta, ok := monsterCombatant(lobbyID, targetID); ok && metaCastsSpells(meta) {
+				addGMNotice(lobbyID, fmt.Sprintf("%s is now Incapacitated (%s). Concentration ends while a creature has the Incapacitated condition, so if it was concentrating on an effect, end that effect now. The server does not track a monster's Concentration.", creatureName(lobbyID, targetID), cond))
 			}
 		}
 		if released := releaseAllGrapplesFrom(lobbyID, targetID); len(released) > 0 {
@@ -606,12 +706,31 @@ func endConditionRecords(recs []conditionRecord) []conditionRecord {
 	return gone
 }
 
+// renoteConditionRecords changes the notes of the given records (the condition owner is the only writer of condition_records).
+func renoteConditionRecords(recs []conditionRecord, notes string) {
+	for _, r := range recs {
+		id := r.ID
+		changeConditions(r.LobbyID, r.TargetID, func(c *conditionChange) error {
+			for i := range c.recs {
+				if c.recs[i].ID == id {
+					if _, err := c.tx.Exec(`UPDATE condition_records SET notes = $1 WHERE id = $2`, notes, id); err != nil {
+						return err
+					}
+					c.recs[i].Notes = notes
+					c.changed = true
+				}
+			}
+			return nil
+		})
+	}
+}
+
 // findConditionRecords reads the records across creatures that a filter picks (where is SQL over condition_records' columns).
 func findConditionRecords(where string, args ...interface{}) []conditionRecord {
 	if db == nil {
 		return nil
 	}
-	rows, err := db.Query(`SELECT id, lobby_id, target_id, condition, detail, source, duration_rounds, notes, COALESCE(created_by, 0)
+	rows, err := db.Query(`SELECT id, lobby_id, target_id, condition, detail, source, duration_rounds, notes, COALESCE(created_by, 0), COALESCE(source_id, 0)
 		FROM condition_records WHERE `+where+` ORDER BY id`, args...)
 	if err != nil {
 		return nil
@@ -620,7 +739,7 @@ func findConditionRecords(where string, args ...interface{}) []conditionRecord {
 	var out []conditionRecord
 	for rows.Next() {
 		var r conditionRecord
-		if rows.Scan(&r.ID, &r.LobbyID, &r.TargetID, &r.Condition, &r.Detail, &r.Source, &r.DurationRounds, &r.Notes, &r.CreatedBy) == nil {
+		if rows.Scan(&r.ID, &r.LobbyID, &r.TargetID, &r.Condition, &r.Detail, &r.Source, &r.DurationRounds, &r.Notes, &r.CreatedBy, &r.SourceID) == nil {
 			out = append(out, r)
 		}
 	}
@@ -628,8 +747,9 @@ func findConditionRecords(where string, args ...interface{}) []conditionRecord {
 }
 
 // inCampaignSQL picks the records of a campaign's creatures ($1 is the campaign): its characters' (wherever their records were
-// written) and its monsters'.
-const inCampaignSQL = `((target_id > 0 AND target_id IN (SELECT id FROM characters WHERE lobby_id = $1)) OR (target_id < 0 AND lobby_id = $1))`
+// written), its monsters' and its companions' (combat ids from companionIDBase up, kept with the campaign's lobby_id, never matched
+// against the characters table). 1000000000 is companionIDBase (TestCompanionConditionIDBase keeps the two equal).
+const inCampaignSQL = `((target_id > 0 AND target_id < 1000000000 AND target_id IN (SELECT id FROM characters WHERE lobby_id = $1)) OR (target_id < 0 AND lobby_id = $1) OR (target_id >= 1000000000 AND lobby_id = $1))`
 
 // endConditionsFromSource ends the conditions one source put on the campaign's creatures (Stunning Strike at the start of the
 // Monk's next turn).
@@ -637,11 +757,17 @@ func endConditionsFromSource(lobbyID int, source string) []conditionRecord {
 	return endConditionRecords(findConditionRecords(inCampaignSQL+` AND source = $2`, lobbyID, source))
 }
 
+// goneSourceID marks a record whose causing creature belonged to an earlier fight: it matches no creature.
+const goneSourceID = -1000000000
+
 // clearMonsterConditionRecords drops the records of a campaign's monsters (negative ids) when a fight starts or ends: their ids
 // are the fight's. Monsters have no list, so one statement is the whole change.
 func clearMonsterConditionRecords(lobbyID int) {
 	if db != nil {
 		db.Exec(`DELETE FROM condition_records WHERE lobby_id = $1 AND target_id < 0`, lobbyID)
+		// a character's condition caused by one of those monsters keeps its text but loses the id: the next fight reuses the numbers, and a
+		// new monster must not inherit the old one's conditions (the GM is told the source is gone, conditionSourceFighting)
+		db.Exec(`UPDATE condition_records SET source_id = $2 WHERE lobby_id = $1 AND target_id > 0 AND source_id < 0 AND source_id <> $2`, lobbyID, goneSourceID)
 	}
 }
 
@@ -672,6 +798,11 @@ func passConditionTime(lobbyID, rounds, onlyTarget int) {
 	if rounds <= 0 {
 		return
 	}
+	release, ok := claimCampaignClock(lobbyID)
+	if !ok {
+		return
+	}
+	defer release()
 	targets := map[int]bool{}
 	for _, r := range findConditionRecords(inCampaignSQL+` AND duration_rounds > 0 AND ($2 = 0 OR target_id = $2)`, lobbyID, onlyTarget) {
 		targets[r.TargetID] = true

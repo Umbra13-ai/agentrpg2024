@@ -84,6 +84,7 @@ var schemaSteps = []schemaStep{
 		)`},
 	{"condition_records.go", `ALTER TABLE condition_records ADD COLUMN IF NOT EXISTS end_save JSONB`},
 	{"condition_records.go", `ALTER TABLE condition_records ADD COLUMN IF NOT EXISTS detail TEXT NOT NULL DEFAULT ''`}, // the one store (condition_owner_2024.go)
+	{"condition_records.go", `ALTER TABLE condition_records ADD COLUMN IF NOT EXISTS source_id INTEGER`},
 	{"condition_records.go", `CREATE INDEX IF NOT EXISTS condition_records_target ON condition_records (lobby_id, target_id)`},
 	{"barbarian_2024.go", `ALTER TABLE characters ADD COLUMN IF NOT EXISTS frenzy_used BOOLEAN DEFAULT FALSE`},
 	{"barbarian_2024.go", `ALTER TABLE characters ADD COLUMN IF NOT EXISTS intimidating_presence_used BOOLEAN DEFAULT FALSE`},
@@ -97,6 +98,15 @@ var schemaSteps = []schemaStep{
 			text TEXT NOT NULL DEFAULT '',
 			created_at TIMESTAMPTZ NOT NULL DEFAULT now()
 		)`},
+	{"monster_attach_2024.go", `CREATE TABLE IF NOT EXISTS pending_attach_endings (
+			id SERIAL PRIMARY KEY,
+			lobby_id INTEGER NOT NULL,
+			attacher_id INTEGER NOT NULL,
+			target_id INTEGER NOT NULL,
+			row_text TEXT NOT NULL DEFAULT '',
+			created_at TIMESTAMPTZ NOT NULL DEFAULT now()
+		)`},
+	{"monster_attach_2024.go", `ALTER TABLE pending_attach_endings ADD COLUMN IF NOT EXISTS suffocation_gained INTEGER NOT NULL DEFAULT 0`},
 	{"combat_effects.go", `CREATE INDEX IF NOT EXISTS combat_effects_target ON combat_effects (lobby_id, target_id)`},
 	{"spell_effects_2024.go", `CREATE TABLE IF NOT EXISTS spell_effects (
 			id SERIAL PRIMARY KEY,
@@ -111,6 +121,31 @@ var schemaSteps = []schemaStep{
 			save_dc INTEGER NOT NULL DEFAULT 0,
 			created_at TIMESTAMPTZ NOT NULL DEFAULT now()
 		)`},
+	{"gm_notices_2024.go", `CREATE TABLE IF NOT EXISTS gm_notices (
+			id SERIAL PRIMARY KEY,
+			lobby_id INTEGER NOT NULL,
+			text TEXT NOT NULL,
+			acknowledged BOOLEAN NOT NULL DEFAULT FALSE,
+			created_at TIMESTAMPTZ NOT NULL DEFAULT now()
+		)`},
+	{"monster_concentration_2024.go", `CREATE TABLE IF NOT EXISTS monster_concentration (
+			lobby_id INTEGER NOT NULL,
+			monster_id INTEGER NOT NULL,
+			spell TEXT NOT NULL,
+			PRIMARY KEY (lobby_id, monster_id)
+		)`},
+	{"monster_concentration_2024.go", `ALTER TABLE monster_concentration ADD COLUMN IF NOT EXISTS pending TEXT NOT NULL DEFAULT ''`},
+	{"monster_concentration_2024.go", `ALTER TABLE monster_concentration ADD COLUMN IF NOT EXISTS queue TEXT NOT NULL DEFAULT ''`},
+	{"monster_concentration_2024.go", `ALTER TABLE monster_concentration ADD COLUMN IF NOT EXISTS cast_token TEXT NOT NULL DEFAULT ''`},
+	{"monster_concentration_2024.go", `ALTER TABLE monster_concentration ADD COLUMN IF NOT EXISTS decision_token TEXT NOT NULL DEFAULT ''`},
+	{"monster_concentration_2024.go", `ALTER TABLE monster_concentration ADD COLUMN IF NOT EXISTS pending_save JSONB NOT NULL DEFAULT 'null'::jsonb`},
+	{"combat_continuation_2024.go", `CREATE TABLE IF NOT EXISTS combat_paused_work(id TEXT PRIMARY KEY,lobby_id INTEGER NOT NULL,status TEXT NOT NULL,frames JSONB NOT NULL,result JSONB NOT NULL DEFAULT '{}',created_at TIMESTAMPTZ NOT NULL DEFAULT now())`},
+	{"combat_continuation_2024.go", `ALTER TABLE combat_paused_work ADD COLUMN IF NOT EXISTS reconciliation_note TEXT NOT NULL DEFAULT ''`},
+	{"monster_concentration_journal_2024.go", `ALTER TABLE combat_paused_work ADD COLUMN IF NOT EXISTS context JSONB NOT NULL DEFAULT '{}'`},
+	{"monster_concentration_journal_2024.go", `ALTER TABLE combat_paused_work ADD COLUMN IF NOT EXISTS review_token TEXT NOT NULL DEFAULT ''`},
+	{"combat_continuation_2024.go", `CREATE INDEX IF NOT EXISTS combat_paused_work_lobby ON combat_paused_work(lobby_id,status)`},
+	{"monster_concentration_2024.go", `ALTER TABLE monster_concentration ADD COLUMN IF NOT EXISTS work_id TEXT NOT NULL DEFAULT ''`},
+	{"gm_notices_2024.go", `CREATE INDEX IF NOT EXISTS gm_notices_lobby ON gm_notices (lobby_id, acknowledged)`},
 	{"spell_effects_2024.go", `CREATE INDEX IF NOT EXISTS spell_effects_target ON spell_effects (lobby_id, target_id)`},
 	{"invocations_2024.go", `ALTER TABLE characters ADD COLUMN IF NOT EXISTS protectors_page JSONB DEFAULT '[]'`},
 	{"invocations_2024.go", `ALTER TABLE characters ADD COLUMN IF NOT EXISTS invocation_cantrips JSONB DEFAULT '{}'`}, // invocation_repeats_2024.go
@@ -303,6 +338,10 @@ var schemaSteps = []schemaStep{
 	// lastCheckedIn reads a player's latest request to a campaign on every heartbeat (check_in_watch_2024.go): without this the
 	// request log, which keeps reply bodies, is read whole each time
 	{"check_in_watch_2024.go", `CREATE INDEX IF NOT EXISTS api_logs_agent_lobby_time ON api_logs (agent_id, lobby_id, created_at DESC)`},
+	{"custom_monsters.go", `CREATE TABLE IF NOT EXISTS custom_monsters (
+ key TEXT PRIMARY KEY,
+ definition JSONB NOT NULL, stats JSONB NOT NULL, source_note TEXT NOT NULL,
+ created_at TIMESTAMPTZ NOT NULL DEFAULT NOW())`},
 }
 
 // seatReadySchema: a player's "ready to start" on its seat (cleared whenever the seat changes hands: takeSeat, swapSeat;
@@ -676,6 +715,7 @@ const baseSchema = `
 		ALTER TABLE characters ADD COLUMN IF NOT EXISTS action_used BOOLEAN DEFAULT FALSE;
 		ALTER TABLE characters ADD COLUMN IF NOT EXISTS bonus_action_used BOOLEAN DEFAULT FALSE;
 		ALTER TABLE characters ADD COLUMN IF NOT EXISTS movement_remaining INTEGER DEFAULT 30;
+		ALTER TABLE characters ADD COLUMN IF NOT EXISTS movement_speed_base INTEGER;
 		
 		-- Bonus Action Spell tracking - PHB rule:
 		-- "If you cast a spell as a bonus action, you can only cast a cantrip with your action"
@@ -714,6 +754,12 @@ const baseSchema = `
 			auras_off BOOLEAN DEFAULT false, recharge_spent JSONB DEFAULT '[]', aura_immune JSONB DEFAULT '[]',
 			regen_blocked BOOLEAN DEFAULT false,
 			PRIMARY KEY (lobby_id, monster_id));
+		-- per-day uses of a stat block, kept per creature (the creature_id a monster is given when it is added to a fight, or the one the GM
+		-- links a returning creature to) so they last from one fight to the next (monster_day_uses.go)
+		CREATE TABLE IF NOT EXISTS monster_day_uses (
+			campaign_id INTEGER NOT NULL, creature_id TEXT NOT NULL, name TEXT NOT NULL DEFAULT '', monster_key TEXT NOT NULL DEFAULT '',
+			uses JSONB NOT NULL DEFAULT '{}',
+			PRIMARY KEY (campaign_id, creature_id));
 		ALTER TABLE combat_state ADD COLUMN IF NOT EXISTS last_turn_ended TEXT DEFAULT '';
 		ALTER TABLE combat_state ADD COLUMN IF NOT EXISTS last_turn_ended_id INTEGER DEFAULT 0;
 		-- the combat-state owner (combat_state_2024.go, turn_advance_2024.go): the last monster id given in the fight (never given

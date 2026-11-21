@@ -178,14 +178,22 @@ func sunBladeHit(monsterKey string, crit bool) (int, string) {
 	if monsterKind(monsterKey) != "undead" {
 		return 0, ""
 	}
-	d := game.RollDamage("1d8", crit)
+	d, how := adjustMonsterExtra(monsterKey, "radiant", game.RollDamage("1d8", crit)) // a defense of the target applies to the blade's damage
+	switch how {
+	case "absorbed":
+		return d, absorbedExtraText("Sun Blade", "radiant", d)
+	case "immune":
+		return 0, " Sun Blade: it is immune to Radiant damage."
+	case "resistant":
+		return d, fmt.Sprintf(" Sun Blade: +%d Radiant against an Undead (it resists).", d)
+	}
 	return d, fmt.Sprintf(" Sun Blade: +%d Radiant against an Undead.", d)
 }
 
 var chargesWordRe = regexp.MustCompile(`(?i)\b([123])\s+charges?\b`)
 
 // staffOfStrikingHit: "N charges" (up to 3) in the attack: N d6 Force damage more.
-func staffOfStrikingHit(charID int, crit bool) (int, string) {
+func staffOfStrikingHit(charID int, monsterKey string, crit bool) (int, string) {
 	v, _ := attackDescriptions.Load(charID)
 	d, _ := v.(string)
 	m := chargesWordRe.FindStringSubmatch(d)
@@ -201,7 +209,15 @@ func staffOfStrikingHit(charID int, crit bool) (int, string) {
 	if refusal != "" {
 		return 0, " Staff of Striking: " + refusal
 	}
-	x := game.RollDamage(fmt.Sprintf("%dd6", n), crit)
+	x, how := adjustMonsterExtra(monsterKey, "force", game.RollDamage(fmt.Sprintf("%dd6", n), crit))
+	switch how {
+	case "absorbed":
+		return x, absorbedExtraText("Staff of Striking", "force", x) + note
+	case "immune":
+		return 0, fmt.Sprintf(" Staff of Striking: %d charge(s) spent, but it is immune to Force damage.%s", n, note)
+	case "resistant":
+		return x, fmt.Sprintf(" Staff of Striking: %d charge(s), +%d Force (it resists).%s", n, x, note)
+	}
 	return x, fmt.Sprintf(" Staff of Striking: %d charge(s), +%d Force.%s", n, x, note)
 }
 

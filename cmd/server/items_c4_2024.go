@@ -178,7 +178,10 @@ func helmFlamesHit(charID int, monsterKey string, crit bool) (int, string) {
 	if _, on := charBuff(charID, "helm_flames"); !on {
 		return 0, ""
 	}
-	d, how := adjustMonsterDamage(monsterKey, "fire", game.RollDamage("1d6", crit))
+	d, how := adjustMonsterExtra(monsterKey, "fire", game.RollDamage("1d6", crit))
+	if how == "absorbed" {
+		return d, absorbedExtraText("Helm of Brilliance flames", "fire", d)
+	}
 	return d, fmt.Sprintf(" Helm of Brilliance flames: +%d Fire%s.", d, map[string]string{"resistant": " (it resists)", "immune": " (it is immune)", "vulnerable": " (it is vulnerable)"}[how])
 }
 
@@ -192,8 +195,11 @@ func giantSlayerHit(lobbyID, targetID int, monsterKey, name, heldItem string, cr
 	if _, w, ok := findWeapon(baseWeaponOf(heldItem)); ok {
 		dtype = strings.ToLower(w.DamageType)
 	}
-	d, _ := adjustMonsterDamage(monsterKey, dtype, game.RollDamage("2d6", crit))
+	d, how := adjustMonsterExtra(monsterKey, dtype, game.RollDamage("2d6", crit))
 	text := fmt.Sprintf(" Giant Slayer: +%d %s against the Giant.", d, titleCase(dtype))
+	if how == "absorbed" {
+		text = absorbedExtraText("Giant Slayer", dtype, d)
+	}
 	if sv := creatureSave(lobbyID, targetID, "str", 15); sv.Success {
 		text += " " + sv.LineAgainst(name) + " and keeps its footing."
 	} else if sizeAtMost(monsterKey, "gargantuan") {
@@ -431,7 +437,10 @@ func oathbowHit(charID, targetID int, monsterKey string, crit bool) (int, string
 	if sworn, alive := swornEnemyAlive(charID); !alive || sworn != targetID {
 		return 0, ""
 	}
-	d, _ := adjustMonsterDamage(monsterKey, "piercing", game.RollDamage("3d6", crit))
+	d, how := adjustMonsterExtra(monsterKey, "piercing", game.RollDamage("3d6", crit))
+	if how == "absorbed" {
+		return d, absorbedExtraText("Oathbow", "piercing", d)
+	}
 	return d, fmt.Sprintf(" Oathbow: +%d Piercing against your sworn enemy.", d)
 }
 

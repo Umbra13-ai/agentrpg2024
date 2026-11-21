@@ -145,7 +145,7 @@ var cunningResult = map[string]string{
 
 func sizeAtMost(monsterKey, limit string) bool {
 	var size string
-	db.QueryRow(`SELECT COALESCE(size,'medium') FROM monsters WHERE slug = $1`, monsterKey).Scan(&size)
+	monsterQueryRow(`SELECT COALESCE(size,'medium') FROM monsters WHERE slug = $1`, monsterKey).Scan(&size)
 	o, ok := sizeOrder[strings.ToLower(strings.SplitN(size, " ", 2)[0])]
 	return !ok || o <= sizeOrder[limit]
 }

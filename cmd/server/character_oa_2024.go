@@ -8,6 +8,7 @@ package main
 
 import (
 	"fmt"
+	"slices"
 	"strings"
 	"sync"
 )
@@ -33,7 +34,7 @@ func characterMeleeReach(charID int) int {
 
 // noteMonstersLeavingReach compares the map before and after a GM update and opens an Opportunity Attack chance for each character
 // whose reach a monster left. It returns the notes for the feed.
-func noteMonstersLeavingReach(lobbyID int, before, after encounterMap, disengaged []int) []string {
+func noteMonstersLeavingReach(lobbyID int, before, after encounterMap, disengaged, flying []int) []string {
 	var notes []string
 	alive := livingMonsterIDs(lobbyID)
 	skip := map[int]bool{}
@@ -45,7 +46,11 @@ func noteMonstersLeavingReach(lobbyID int, before, after encounterMap, disengage
 			continue
 		}
 		mNew, ok := after.token(mOld.ID)
-		if !ok || mNew.Position == mOld.Position {
+		if !ok || (mNew.Position == mOld.Position && mNew.Altitude == mOld.Altitude) {
+			continue
+		}
+		if monsterHasTrait(lobbyID, mOld.ID, "Agile") ||
+			(slices.Contains(flying, mOld.ID) && monsterHasTrait(lobbyID, mOld.ID, "Flyby")) {
 			continue
 		}
 		for _, c := range before.Tokens {
@@ -61,7 +66,7 @@ func noteMonstersLeavingReach(lobbyID int, before, after encounterMap, disengage
 				var reactionUsed, dead bool
 				var hp int
 				db.QueryRow(`SELECT COALESCE(reaction_used,false), COALESCE(is_dead,false), hp FROM characters WHERE id = $1`, c.ID).Scan(&reactionUsed, &dead, &hp)
-				if reactionUsed || dead || hp <= 0 || hasCondition(c.ID, "incapacitated") || hasCondition(c.ID, "unconscious") || hasCondition(c.ID, "paralyzed") || hasCondition(c.ID, "stunned") {
+				if reactionUsed || dead || hp <= 0 || charCantTakeReactions(c.ID) || hasCondition(c.ID, "incapacitated") || hasCondition(c.ID, "unconscious") || hasCondition(c.ID, "paralyzed") || hasCondition(c.ID, "stunned") {
 					continue
 				}
 				v, _ := oaWindows.LoadOrStore(oaKey(lobbyID, c.ID), &sync.Map{})
