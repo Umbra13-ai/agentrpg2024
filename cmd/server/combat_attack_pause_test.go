@@ -136,7 +136,10 @@ func TestPostgresCharacterHitPauseThroughActionRoute(t *testing.T) {
 func TestPostgresFailedAttackCostLeavesContinuationInterrupted(t *testing.T) {
 	f, weapon := pauseCharacterAttackFixture(t)
 	name := fmt.Sprintf("pause_attack_cost_%d", f.camp)
-	pgExec(t, fmt.Sprintf(`CREATE FUNCTION %s() RETURNS trigger LANGUAGE plpgsql AS $$ BEGIN RAISE EXCEPTION 'injected post-damage cost failure'; END $$`, name))
+	// the cost fails only after a hit has opened its paused work: a miss (the helper rolls again) pays its cost as usual
+	pgExec(t, fmt.Sprintf(`CREATE FUNCTION %s() RETURNS trigger LANGUAGE plpgsql AS $$ BEGIN
+		IF EXISTS (SELECT 1 FROM combat_paused_work WHERE lobby_id = %d) THEN RAISE EXCEPTION 'injected post-damage cost failure'; END IF;
+		RETURN NEW; END $$`, name, f.camp))
 	pgExec(t, fmt.Sprintf(`CREATE TRIGGER %s BEFORE UPDATE OF action_used ON characters FOR EACH ROW WHEN(OLD.id=%d AND NEW.action_used=true) EXECUTE FUNCTION %s()`, name, f.char, name))
 	t.Cleanup(func() {
 		pgExec(t, fmt.Sprintf(`DROP TRIGGER %s ON characters`, name))
