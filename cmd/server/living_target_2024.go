@@ -3,6 +3,8 @@ package main
 import (
 	"fmt"
 	"strings"
+
+	"github.com/agentrpg/agentrpg/game"
 )
 
 // A spell or feature that heals or restores works on a living creature (SRD 5.2.1: a dead creature is no longer a creature but an
@@ -32,16 +34,92 @@ func spellRestores(key string, sp SRDSpell) bool {
 	return sp.Healing != "" || restoringSpells[key]
 }
 
-// spellAllyTargets: the characters a spell that helps is aimed at: target_id / target_ids (characters), else the character the
-// request or the description names, else the caster.
-func spellAllyTargets(charID int, description string) []int {
-	if t := spellCharacterTargets(charID); len(t) > 0 {
-		return t
+// allyAim is whom a spell that helps is aimed at (spellAllyAim).
+type allyAim struct {
+	IDs        []int // characters and companions: target_id / target_ids, else every character the description names
+	Combatants []int // creatures of the fight a negative target_id names (an NPC ally the GM added): their own Hit Point owner
+	Others     bool  // the description names creatures that are none of these (NPCs the server doesn't track): the GM applies it to them
+}
+
+// spellAllyAim: whom a spell that helps is aimed at, the one answer for every such spell (healing, Lesser and Greater Restoration,
+// Spare the Dying, the conditions a spell ends, the dead-target refusal). The request's targets first; else every character the
+// description names (Prayer of Healing's five, in order); else the caster, but only when the description names no one else
+// (empty, "myself", or the spell's own words): a description that names creatures the server doesn't know (rescued prisoners)
+// is never turned into a heal on the caster (playtest I-CALLA-24).
+func spellAllyAim(charID int, description string) allyAim {
+	var a allyAim
+	a.IDs = spellCharacterTargets(charID)
+	if v, ok := castTargets.Load(charID); ok {
+		for _, id := range v.([]int) {
+			if id < 0 {
+				a.Combatants = append(a.Combatants, id)
+			}
+		}
+	}
+	if v, ok := attackTargets.Load(charID); ok { // a cast's negative target_id is kept with the attack's (handleAction)
+		if id, _ := v.(int); id < 0 && !containsInt(a.Combatants, id) {
+			a.Combatants = append(a.Combatants, id)
+		}
+	}
+	if len(a.IDs) > 0 || len(a.Combatants) > 0 {
+		return a
+	}
+	if named := parseTargetsFromDescription(description, charID); len(named) > 0 {
+		a.IDs = named
+		return a
 	}
 	if id := aimedCharacter(description, charID); id > 0 {
-		return []int{id}
+		a.IDs = []int{id}
+		return a
 	}
-	return []int{charID}
+	if describesOthers(description) {
+		a.Others = true
+		return a
+	}
+	a.IDs = []int{charID}
+	return a
+}
+
+// spellAllyTargets: the characters (and companions) a spell that helps is aimed at (spellAllyAim's IDs; none when the description
+// names only creatures the server doesn't track).
+func spellAllyTargets(charID int, description string) []int {
+	return spellAllyAim(charID, description).IDs
+}
+
+// othersNote: what the reply says when a helping spell names creatures the server doesn't track.
+const othersNote = " No character or creature of the fight was named, so the GM applies it to the creatures the description names" +
+	" (to aim at a character, send target_character_id or target_ids; at a creature of the fight, its target_id)."
+
+// describesOthers: the description names someone, once the casting words are taken away ("I cast Cure Wounds at 2nd level" names no
+// one; "over the five freed prisoners" does). "myself", "own" and the like name the caster.
+func describesOthers(description string) bool {
+	casting := map[string]bool{"i": true, "cast": true, "casts": true, "casting": true, "a": true, "an": true, "the": true, "at": true,
+		"on": true, "to": true, "with": true, "using": true, "use": true, "uses": true, "level": true, "slot": true, "spell": true,
+		"upcast": true, "upcasting": true, "1st": true, "2nd": true, "3rd": true, "4th": true, "5th": true, "6th": true, "7th": true,
+		"8th": true, "9th": true, "of": true, "as": true, "and": true, "my": true, "bonus": true, "action": true, "reaction": true,
+		"heal": true, "healing": true, "cure": true, "wounds": true, "word": true, "prayer": true, "mass": true, "restoration": true,
+		"lesser": true, "greater": true, "spare": true, "dying": true, "aid": true, "power": true, "for": true, "it": true, "now": true,
+		// what a restoring spell does, not whom: "cure the poison", "end the deafness", "remove the curse"
+		"cures": true, "end": true, "ends": true, "remove": true, "removes": true, "restore": true, "restores": true, "lift": true,
+		"break": true, "stop": true, "curse": true, "disease": true, "condition": true, "reduction": true, "effect": true, "this": true}
+	namesCondition := func(w string) bool { // "poison", "deafness", "paralysis": a condition's stem (conditionStem)
+		for _, c := range game.AllConditions {
+			if st := conditionStem(c); len(st) >= 4 && strings.HasPrefix(w, st[:4]) {
+				return true
+			}
+		}
+		return false
+	}
+	for _, w := range strings.FieldsFunc(strings.ToLower(description), func(r rune) bool { return !(r >= 'a' && r <= 'z' || r >= '0' && r <= '9') }) {
+		switch {
+		case casting[w] || len(w) == 1 || (w[0] >= '0' && w[0] <= '9') || namesCondition(w):
+		case w == "myself" || w == "me" || w == "self" || w == "own" || w == "herself" || w == "himself" || w == "themself" || w == "itself":
+			return false
+		default:
+			return true
+		}
+	}
+	return false
 }
 
 // healFeatureTarget: the character a feature that heals is aimed at: the request's target_character_id (or a positive target_id),

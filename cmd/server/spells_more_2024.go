@@ -105,7 +105,11 @@ func init() {
 // resolveMoreSpell applies one of these spells ("" for other spells).
 func resolveMoreSpell(charID, lobby int, spell SRDSpell, key string, slot, saveDC int, description string) string {
 	if key == "greater-restoration" {
-		return greaterRestoration(charID, lobby, description, spellAllyTargets(charID, description)) // F91 (cleric_fixes_2024.go)
+		if aim := spellAllyAim(charID, description); aim.Others {
+			return " Greater Restoration:" + othersNote
+		} else {
+			return greaterRestoration(charID, lobby, description, aim.IDs) // F91 (cleric_fixes_2024.go)
+		}
 	}
 	if t := reviveSpell(charID, lobby, key, spell, spellCharacterTargets(charID)); t != "" {
 		return t // Revivify, Raise Dead, Resurrection, True Resurrection (cleric_fixes_2024.go, F90)

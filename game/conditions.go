@@ -25,6 +25,11 @@ const (
 	ConditionExhaustion    = "exhaustion"
 )
 
+// AllConditions: the 15 conditions, in the order above.
+var AllConditions = []string{ConditionBlinded, ConditionCharmed, ConditionDeafened, ConditionFrightened, ConditionGrappled,
+	ConditionIncapacitated, ConditionInvisible, ConditionParalyzed, ConditionPetrified, ConditionPoisoned, ConditionProne,
+	ConditionRestrained, ConditionStunned, ConditionUnconscious, ConditionExhaustion}
+
 // ConditionInfo describes the mechanical effects of a condition.
 type ConditionInfo struct {
 	Name        string

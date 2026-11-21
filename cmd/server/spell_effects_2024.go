@@ -422,6 +422,9 @@ func resolveEffectSpell(charID int, spell SRDSpell, spellKey string, slotLevel, 
 				return fmt.Sprintf(" Spare the Dying: %s is Stable (no more death saves; 1 Hit Point after 1d4 hours).", creatureName(lobby, id))
 			}
 		}
+		if spellAllyAim(charID, description).Others {
+			return " Spare the Dying:" + othersNote
+		}
 		return " Spare the Dying: no creature at 0 Hit Points was named (target_id), so nothing happens."
 	case "bless", "shield-of-faith":
 		ids := spellCharacterTargets(charID)

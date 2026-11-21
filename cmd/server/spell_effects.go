@@ -209,10 +209,25 @@ func monsterName(lobbyID, id int) string {
 
 // applySpellHealing heals the characters a healing spell is aimed at and says who got what.
 func applySpellHealing(charID int, spellKey string, heal, healMax int, description string) string {
-	targets := spellAllyTargets(charID, description) // living_target_2024.go
+	aim := spellAllyAim(charID, description) // living_target_2024.go
 	var parts []string
 	lobby := lobbyOfChar(charID)
-	for _, id := range targets {
+	for _, id := range aim.Combatants { // an NPC ally of the fight: the monster Hit Point owner (monster_hp_2024.go)
+		if cant, why := cantRegainHP(lobby, id); cant {
+			parts = append(parts, fmt.Sprintf("%s can't regain Hit Points (%s)", creatureName(lobby, id), why))
+			continue
+		}
+		before, after, err := healMonster(lobby, id, heal)
+		if err != nil {
+			parts = append(parts, fmt.Sprintf("%s: not healed (%s)", creatureName(lobby, id), notFoundOrDBError(err, "not in the fight")))
+			continue
+		}
+		parts = append(parts, fmt.Sprintf("%s regains %d Hit Points (%s)", creatureName(lobby, id), after.HP-before.HP, game.MonsterHealth(after.HP, after.Max)))
+	}
+	if aim.Others {
+		return othersNote
+	}
+	for _, id := range aim.IDs {
 		// the conditions the spell ends (Heal: Blinded, Deafened, Poisoned), first: a poison that stops healing ends before the healing
 		ended, _ := endSpellConditions(lobby, id, spellKey, description)
 		endedText := ""

@@ -2614,12 +2614,10 @@ func resolveActionWithBonusDash(action, description string, charID int, bonusDas
 				// When you cast a healing spell on a creature other than yourself, you regain 2 + spell level HP
 				blessedHealerInfo := ""
 				if slotLevel >= 1 && hasSubclassFeature(subclassSlug, level, "blessed_healer") {
-					// Parse target from description to see if healing someone else
-					targetID := aimedCharacter(description, charID)
-					descLower := strings.ToLower(description)
-					healingSelf := targetID == charID || targetID == 0 ||
-						strings.Contains(descLower, "self") || strings.Contains(descLower, "myself")
-					for _, t := range spellCharacterTargets(charID) { // target_id / target_ids name another creature (F83)
+					// another creature healed: the same aim the healing reads (spellAllyAim, living_target_2024.go: F83, I-CALLA-24)
+					aim := spellAllyAim(charID, description)
+					healingSelf := !aim.Others && len(aim.Combatants) == 0
+					for _, t := range aim.IDs {
 						if t != charID {
 							healingSelf = false
 						}

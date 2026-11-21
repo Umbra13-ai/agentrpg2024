@@ -432,7 +432,11 @@ func buffEnds(kind string, targetID int, detail string) {
 
 // lesserRestoration ends one condition of the table's row (spellEndsConditions: the one named, else the first the target has).
 func lesserRestoration(charID, lobby int, description string) string {
-	id := spellAllyTargets(charID, description)[0] // living_target_2024.go
+	ids := spellAllyTargets(charID, description) // living_target_2024.go
+	if len(ids) == 0 {
+		return " Lesser Restoration:" + othersNote
+	}
+	id := ids[0]
 	name := creatureName(lobby, id)
 	ended, named := endSpellConditions(lobby, id, "lesser-restoration", description)
 	switch {

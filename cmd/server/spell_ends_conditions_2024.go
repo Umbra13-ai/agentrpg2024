@@ -70,7 +70,11 @@ func spellEndsOnTargets(charID int, spellKey, description string) string {
 	if _, ok := spellEndsConditions[spellKey]; !ok {
 		return ""
 	}
-	targets := spellAllyTargets(charID, description) // living_target_2024.go, as a healing spell's
+	aim := spellAllyAim(charID, description) // living_target_2024.go, as a healing spell's
+	if aim.Others {
+		return othersNote
+	}
+	targets := aim.IDs
 	lobby := lobbyOfChar(charID)
 	var parts []string
 	for _, id := range targets {
