@@ -1095,7 +1095,7 @@ func monsterEntryRefusal(lobbyID, id int, entry srdMonsterEntry) string {
 	if monsterIncapacitated(lobbyID, id) {
 		return creatureName(lobbyID, id) + " is Incapacitated and can't act."
 	}
-	return ""
+	return movementEntryRefusal(lobbyID, id, entry) // when it may be used (Rampage: creature_movement_2024.go)
 }
 
 // resolveMonsterActionByName resolves a stat block action that is not a plain attack (a saving throw effect, a spell, a Recharge

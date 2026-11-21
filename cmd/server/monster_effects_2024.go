@@ -533,6 +533,9 @@ func parseHitRider(desc string) (saveEffect, bool) {
 	if stripped := stripBurnForCreatures(e.Extra); stripped != e.Extra {
 		e.Extra = strings.Trim(stripped, " .")
 	}
+	if stripped := stripForcedMoves(e.Extra); stripped != e.Extra { // a push or pull: applied by hitAfterDamage
+		e.Extra = strings.Trim(stripped, " .")
+	}
 	return e, len(e.Conditions) > 0 || e.SpeedMode != "" || len(e.DisadvMode) > 0
 }
 
@@ -1260,8 +1263,10 @@ func resolveMonsterEffectText(r *http.Request, lobbyID, monsterID int, meta *mon
 	name := creatureName(lobbyID, monsterID)
 	var lines []string
 	var notes []string
-	if strings.Contains(text, "moves up to") || strings.Contains(text, "fly up to") || strings.Contains(text, "teleports") {
-		notes = append(notes, "Movement: move its token on the battle map (PUT /api/campaigns/{id}/battle-map) as the text says.")
+	if depth == 0 {
+		if note := grantSpecialMove(lobbyID, monsterID, entryName, text, apply); note != "" { // the entry's own move (creature_movement_2024.go)
+			notes = append(notes, note)
+		}
 	}
 	// one action that offers several saving throw effects ("one of the following rays", "at random"): the GM names the one that happened
 	// with use; none is guessed, and nothing is rolled until it is named

@@ -108,3 +108,146 @@ func TestPostgresChargeOnEveryTarget(t *testing.T) {
 		t.Errorf("no map, nothing said: %s", res)
 	}
 }
+
+// A hit that pushes its target (the Satyr's Hooves) on every target route: on the map the target's token moves 10 feet straight
+// away; a target too big stays; without a map the GM is told.
+func TestPostgresHitPushOnEveryTarget(t *testing.T) {
+	testPostgres(t)
+	gm, _, camp, charID, petID, _ := companionReactionFixture(t)
+	pet := companionIDBase + petID
+	cp := fmt.Sprintf("/api/campaigns/%d", camp)
+	pgCall(t, "POST", cp+"/combat/add", gm, map[string]interface{}{"combatants": []map[string]interface{}{
+		{"name": "Push Satyr", "monster_key": "satyr", "hp": 1000, "ac": 1, "initiative": -500},
+		{"name": "Push Victim", "monster_key": "goblin-warrior", "hp": 100000, "ac": 1, "initiative": -502},
+		{"name": "Push Ogre", "monster_key": "ogre", "hp": 100000, "ac": 1, "initiative": -503}}})
+	pgExec(t, `UPDATE characters SET hp=100000, max_hp=100000, ac=1 WHERE id=$1`, charID)
+	pgExec(t, `UPDATE companions SET hp=100000, max_hp=100000, ac=1 WHERE id=$1`, petID)
+	id := func(name string) int { return monsterIDsByKeyOrName(camp, name)[0] }
+	satyr := id("Push Satyr")
+	putMap := func(target, size int) {
+		t.Helper()
+		_, state := pgCall(t, "GET", cp+"/battle-map", gm, nil)
+		req := map[string]interface{}{"map": encounterMap{Grid: []string{"..........", "..........", ".........."}, Tokens: []mapToken{
+			{ID: satyr, Name: "satyr", Position: mapSquare{0, 0}, Size: 1}, {ID: target, Name: "target", Position: mapSquare{1, 0}, Size: size}}},
+			"forced_movement": true}
+		if rev, ok := state["revision"].(string); ok {
+			req["confirmation"] = rev
+		}
+		if c, r := pgCall(t, "PUT", cp+"/battle-map", gm, req); c != 200 {
+			t.Fatalf("put map: %d %v", c, r)
+		}
+	}
+	at := func(target int) mapSquare {
+		m, _ := activeEncounterMap(camp)
+		tk, _ := m.token(target)
+		return tk.Position
+	}
+	hit := func(targetName string, setup func()) string {
+		t.Helper()
+		for i := 0; i < 20; i++ {
+			setup()
+			_, r := pgCall(t, "POST", "/api/gm/narrate", gm, map[string]interface{}{"campaign_id": camp, "narration": "x",
+				"monster_action": map[string]interface{}{"monster": "Push Satyr", "action": "Hooves", "target": targetName}})
+			if res := fmt.Sprint(r["monster_action_result"]); strings.Contains(res, "HIT") {
+				return res
+			}
+		}
+		t.Fatal("the Hooves never hit")
+		return ""
+	}
+	for _, tg := range []struct {
+		id   int
+		name string
+	}{{charID, fmt.Sprint(charID)}, {id("Push Victim"), "Push Victim"}, {pet, "React Pet"}} {
+		res := hit(tg.name, func() { putMap(tg.id, 1) })
+		if p := at(tg.id); p != (mapSquare{3, 0}) || !strings.Contains(res, "pushed 10 feet") || strings.Contains(res, "pushes the target") {
+			t.Errorf("%s: pushed to %v: %s", tg.name, p, res)
+		}
+	}
+	ogre := id("Push Ogre") // Large: the push is for a Medium or smaller target
+	res := hit("Push Ogre", func() { putMap(ogre, 2) })
+	if p := at(ogre); p != (mapSquare{1, 0}) || strings.Contains(res, "pushed") {
+		t.Errorf("a Large target was pushed to %v: %s", p, res)
+	}
+	pgExec(t, `UPDATE combat_state SET battle_map = NULL WHERE lobby_id = $1`, camp)
+	if res := hit(fmt.Sprint(charID), func() {}); !strings.Contains(res, "no battle map: the GM places it") {
+		t.Errorf("no map: %s", res)
+	}
+}
+
+// An entry's own move through narrate and the GM's map update: the Blink Dog's Teleport opens no Opportunity Attack where its walk
+// away does; the Gnoll Warrior's Rampage is refused until its last hit damaged a creature that was already Bloodied, then gives
+// its half-Speed move.
+func TestPostgresEntryMovesAndRampageGate(t *testing.T) {
+	testPostgres(t)
+	gm, _, camp, charID, _, _ := companionReactionFixture(t)
+	cp := fmt.Sprintf("/api/campaigns/%d", camp)
+	pgCall(t, "POST", cp+"/combat/add", gm, map[string]interface{}{"combatants": []map[string]interface{}{
+		{"name": "Move Dog", "monster_key": "blink-dog", "hp": 1000, "ac": 1, "initiative": -500},
+		{"name": "Move Gnoll", "monster_key": "gnoll-warrior", "hp": 1000, "ac": 1, "initiative": -501}}})
+	pgExec(t, `UPDATE characters SET hp=5000, max_hp=5000, ac=1, reaction_used=false WHERE id=$1`, charID)
+	id := func(name string) int { return monsterIDsByKeyOrName(camp, name)[0] }
+	dog, gnoll := id("Move Dog"), id("Move Gnoll")
+	putMap := func(mover, moverX int, forced bool) {
+		t.Helper()
+		_, state := pgCall(t, "GET", cp+"/battle-map", gm, nil)
+		req := map[string]interface{}{"map": encounterMap{Grid: []string{"............"}, Tokens: []mapToken{
+			{ID: charID, Name: "hero", Position: mapSquare{0, 0}, Size: 1}, {ID: mover, Name: "mover", Position: mapSquare{moverX, 0}, Size: 1}}},
+			"forced_movement": forced}
+		if rev, ok := state["revision"].(string); ok {
+			req["confirmation"] = rev
+		}
+		if c, r := pgCall(t, "PUT", cp+"/battle-map", gm, req); c != 200 {
+			t.Fatalf("put map: %d %v", c, r)
+		}
+	}
+	oaNotes := func() (n int) {
+		db.QueryRow(`SELECT COUNT(*) FROM actions WHERE lobby_id = $1 AND action_type = 'opportunity_attack_available'`, camp).Scan(&n)
+		return
+	}
+	narrate := func(monster, action, target string) (int, map[string]interface{}) {
+		return pgCall(t, "POST", "/api/gm/narrate", gm, map[string]interface{}{"campaign_id": camp, "narration": "x",
+			"monster_action": map[string]interface{}{"monster": monster, "action": action, "target": target}})
+	}
+	// control: the dog walks away from the hero: an Opportunity Attack opens
+	putMap(dog, 1, true)
+	before := oaNotes()
+	putMap(dog, 9, false)
+	if oaNotes() != before+1 {
+		t.Fatalf("control: walking away opened %d Opportunity Attacks", oaNotes()-before)
+	}
+	// the Teleport: the same move opens none
+	pgExec(t, `UPDATE characters SET reaction_used=false WHERE id=$1`, charID)
+	putMap(dog, 1, true)
+	c, r := narrate("Move Dog", "Teleport", "")
+	if c != 200 || !strings.Contains(fmt.Sprint(r["monster_action_result"]), "Movement (Teleport): up to 40 ft, teleporting") {
+		t.Fatalf("teleport: %d %v", c, r)
+	}
+	before = oaNotes()
+	putMap(dog, 9, false)
+	if oaNotes() != before {
+		t.Errorf("the Teleport opened an Opportunity Attack")
+	}
+
+	// Rampage: refused after a hit on a healthy hero, allowed after a hit on a Bloodied one
+	putMap(gnoll, 1, true)
+	rend := func() {
+		t.Helper()
+		for i := 0; i < 20; i++ {
+			if _, r := narrate("Move Gnoll", "Rend", fmt.Sprint(charID)); strings.Contains(fmt.Sprint(r["monster_action_result"]), "HIT") {
+				return
+			}
+		}
+		t.Fatal("Rend never hit")
+	}
+	rend()
+	if c, r := narrate("Move Gnoll", "Rampage", fmt.Sprint(charID)); c == 200 || !strings.Contains(fmt.Sprint(r["message"]), "already Bloodied") {
+		t.Errorf("Rampage after a hit on a healthy hero: %d %v", c, r)
+	}
+	pgExec(t, `UPDATE characters SET hp=2000 WHERE id=$1`, charID)
+	rend()
+	c, r = narrate("Move Gnoll", "Rampage", fmt.Sprint(charID))
+	if res := fmt.Sprint(r["monster_action_result"]); c != 200 || !strings.Contains(res, "Movement (Rampage): up to 15 ft") {
+		t.Errorf("Rampage after a hit on a Bloodied hero: %d %v", c, r)
+	}
+}

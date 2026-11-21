@@ -455,10 +455,28 @@ func handleBattleMap(w http.ResponseWriter, r *http.Request, campaignID int, rou
 				battleMapError(w, 500, "map_write_failed")
 				return
 			}
+			// a stat-block entry's own move (Teleport, Bubble Dash, Aquatic Charge, Rampage ...): spent by this update (creature_movement_2024.go)
+			specialNoOA, teleported, notSpeed, specialNotes := takeSpecialMoves(campaignID, m, req.Map)
+			for _, note := range specialNotes {
+				recordGMAction(db, campaignID, "monster_move", note, note)
+			}
+			ownMoves := req.Map // the moves that are the creatures' own walking (a teleport is not; an entry's move isn't counted against the Speed)
+			ownMoves.Tokens = append([]mapToken(nil), req.Map.Tokens...)
+			for i, tk := range ownMoves.Tokens {
+				if notSpeed[tk.ID] || teleported[tk.ID] {
+					if old, ok := m.token(tk.ID); ok {
+						ownMoves.Tokens[i].Position, ownMoves.Tokens[i].Altitude = old.Position, old.Altitude
+					}
+				}
+			}
+			noOA := append([]int(nil), req.Disengaged...)
+			for id := range specialNoOA {
+				noOA = append(noOA, id)
+			}
 			// a monster that moved out of a character's reach by its own movement lets that character make an Opportunity Attack;
 			// forced movement (pushed, knocked back), teleporting and Disengage don't provoke (character_oa_2024.go)
 			if !req.ForcedMovement {
-				for _, note := range noteMonstersLeavingReach(campaignID, m, req.Map, req.Disengaged, req.Flying) {
+				for _, note := range noteMonstersLeavingReach(campaignID, m, req.Map, noOA, req.Flying) {
 					recordGMAction(db, campaignID, "opportunity_attack_available", note, note)
 				}
 				for _, note := range autoOpportunityAttacks(campaignID) { // standing reaction orders (F220)
@@ -466,8 +484,8 @@ func handleBattleMap(w http.ResponseWriter, r *http.Request, campaignID int, rou
 				}
 			}
 			if !req.ForcedMovement { // a monster's own movement against its Speed (monster_move_2024.go)
-				recordMapMoves(campaignID, m, req.Map) // each token's own move of this turn: a charge reads it (creature_movement_2024.go)
-				for _, note := range noteMonsterMoves(campaignID, m, req.Map) {
+				recordMapMoves(campaignID, m, withoutTeleports(req.Map, m, teleported)) // each token's own move of this turn: a charge reads it (creature_movement_2024.go)
+				for _, note := range noteMonsterMoves(campaignID, m, ownMoves) {
 					recordGMAction(db, campaignID, "monster_move", note, note)
 				}
 			}

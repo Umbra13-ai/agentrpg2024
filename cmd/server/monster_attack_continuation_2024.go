@@ -211,8 +211,8 @@ func runMonsterHit(lobby int, c *monsterHitCursor) (string, error) {
 							}
 						}
 					}
-					line += hitAfterDamage(lobby, c.Target, c.Action.Desc, c.AttackerName+"'s "+stripUsage(c.Action.Name), c.HPBefore-monsterHPNow(lobby, c.Target), c.Dealt) // Life Drain, burning (hit_after_damage_2024.go)
-					coverOK := true                                                                                                                                           // the cover clause the conditions and suffocating hang on fired (its gates held)
+					line += hitAfterDamage(lobby, c.Attacker, c.Target, c.Action.Desc, c.AttackerName+"'s "+stripUsage(c.Action.Name), c.HPBefore-monsterHPNow(lobby, c.Target), c.Dealt) // Life Drain, burning (hit_after_damage_2024.go)
+					coverOK := true                                                                                                                                                       // the cover clause the conditions and suffocating hang on fired (its gates held)
 					if e, ok := parseHitRider(c.Action.Desc); ok {
 						_, gated := e.conditionsFor(lobby, c.Target)
 						coverOK = gated == "" && !(e.CondIfAdvantage && !c.Roll.HasAdvantage())

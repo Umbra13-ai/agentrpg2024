@@ -155,7 +155,7 @@ func companionHitRiders(lobbyID, attackerID int, attackerName string, a monsterA
 			}
 		}
 	}
-	if d := hitAfterDamage(lobbyID, cur.CombatID, a.Desc, source, taken, dealtByType); d != "" { // Life Drain, burning (hit_after_damage_2024.go)
+	if d := hitAfterDamage(lobbyID, attackerID, cur.CombatID, a.Desc, source, taken, dealtByType); d != "" { // Life Drain, burning (hit_after_damage_2024.go)
 		applied = append(applied, strings.Trim(d, " []"))
 	}
 	if e, ok := parseSaveEffect(a.Desc); ok { // the hit's own saving throw: rolled with the companion's stat block (applySaveEffectOnCompanion)

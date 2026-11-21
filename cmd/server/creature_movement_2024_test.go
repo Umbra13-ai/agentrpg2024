@@ -115,3 +115,85 @@ func TestChargeRewrite(t *testing.T) {
 		t.Errorf("a charge's alternative still goes to the GM: %q", gmJudgedAlternatives(ram.monsterActionRow))
 	}
 }
+
+// Every hit that pushes or pulls its target in the SRD catalog is read by hitForcedMove, and the GM's residual leaves it out.
+func TestHitForcedMovesOverTheCatalog(t *testing.T) {
+	var got []string
+	for _, m := range srdMonsters2024() {
+		for _, list := range [][]srdMonsterEntry{m.Actions, m.BonusActions, m.Reactions, m.Legendary} {
+			for _, e := range list {
+				i := strings.Index(e.Text, "Hit:")
+				if i < 0 {
+					continue
+				}
+				for _, f := range hitForcedMoveRe.FindAllStringSubmatch(e.Text[i:], -1) {
+					got = append(got, fmt.Sprintf("%s|%s|%s %s %s|%s", m.Name, e.Name, f[2], f[3], f[4], f[1]))
+					if strings.Contains(unappliedHitRider(e.Text), f[0]) {
+						t.Errorf("%s %s: the applied movement is still the GM's: %q", m.Name, e.Name, unappliedHitRider(e.Text))
+					}
+				}
+			}
+		}
+	}
+	sort.Strings(got)
+	joined := strings.Join(got, "\n")
+	for _, want := range []string{"Satyr|Hooves|pushes 10 away from|Medium", "Merrow|Harpoon|pulls 15 toward|Large", "Shambling Mound|Charged Tendril|pulls 5 toward|Medium"} {
+		if !strings.Contains(joined, want) {
+			t.Errorf("not read: %s\n%s", want, joined)
+		}
+	}
+	t.Logf("hit forced moves: %d\n%s", len(got), joined)
+}
+
+// The movement of the CR 0-1 entries that move their creature, read from their wording with the stat block's Speeds.
+func TestSpecialMovesOfTheCatalog(t *testing.T) {
+	speeds := map[string]map[string]int{}
+	entries := map[string]string{}
+	for _, m := range srdMonsters2024() {
+		sp := map[string]int{}
+		var walk int
+		fmt.Sscanf(m.Speed, "%d", &walk)
+		sp[""] = walk
+		for _, k := range speedKindRe.FindAllStringSubmatch(m.Speed, -1) {
+			var n int
+			fmt.Sscanf(k[2], "%d", &n)
+			sp[strings.ToLower(k[1])] = n
+		}
+		speeds[m.Name] = sp
+		for _, list := range [][]srdMonsterEntry{m.Actions, m.BonusActions, m.Reactions} {
+			for _, e := range list {
+				entries[m.Name+"|"+stripUsage(e.Name)] = e.Text
+			}
+		}
+	}
+	for _, c := range []struct {
+		key                      string
+		feet                     int
+		teleport, noOA, straight bool
+	}{
+		{"Blink Dog|Teleport", 40, true, true, false},
+		{"Dryad|Tree Stride", 60, true, true, false},
+		{"Sahuagin Warrior|Aquatic Charge", 40, false, false, true},
+		{"Giant Seahorse|Bubble Dash", 20, false, true, false},
+		{"Seahorse|Bubble Dash", 20, false, true, false},
+		{"Gnoll Warrior|Rampage", 15, false, false, false},
+		{"Giant Hyena|Rampage", 25, false, false, false},
+		{"Octopus|Ink Cloud", 30, false, false, false},
+	} {
+		text, ok := entries[c.key]
+		if !ok {
+			t.Errorf("%s: not in the catalog", c.key)
+			continue
+		}
+		name := strings.SplitN(c.key, "|", 2)[0]
+		mv, ok := readSpecialMove(text, func(kind string) int { return speeds[name][kind] })
+		if !ok || mv.Feet != c.feet || mv.Teleport != c.teleport || mv.NoOA != c.noOA || mv.Straight != c.straight {
+			t.Errorf("%s: read %+v (ok %v), want %d ft teleport=%v noOA=%v straight=%v; speeds %v", c.key, mv, ok, c.feet, c.teleport, c.noOA, c.straight, speeds[name])
+		}
+	}
+	for _, key := range []string{"Gnoll Warrior|Rampage", "Giant Hyena|Rampage"} {
+		if !afterBloodiedHitRe.MatchString(entries[key]) {
+			t.Errorf("%s: its Bloodied gate isn't read", key)
+		}
+	}
+}

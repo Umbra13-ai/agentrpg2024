@@ -16,6 +16,7 @@ package main
 
 import (
 	"context"
+	"encoding/json"
 	"fmt"
 	"net/http"
 	"regexp"
@@ -239,4 +240,332 @@ func targetAtMostSize(lobby, target int, size string) bool {
 		theirs = sizeOrder["medium"]
 	}
 	return theirs <= max
+}
+
+// forceToken moves the target's token up to feet feet straight away from the mover (toward false) or straight toward it (toward
+// true) on the encounter's battle map: the one forced movement of a token (a push, a pull, a Weapon Mastery's Push, a monster's
+// hit). A wall, a closed door or another creature stops it; a pull stops next to the mover. It returns how many feet it moved and
+// whether there was a map with both tokens; the map's revision changes so stale path submissions are refused.
+func forceToken(lobbyID, moverID, targetID, feet int, toward bool) (int, bool) {
+	var raw []byte
+	if db.QueryRow(`SELECT battle_map FROM combat_state WHERE lobby_id = $1 AND active = true`, lobbyID).Scan(&raw) != nil || len(raw) == 0 {
+		return 0, false
+	}
+	var m encounterMap
+	if json.Unmarshal(raw, &m) != nil {
+		return 0, false
+	}
+	var a, b *mapToken
+	for i := range m.Tokens {
+		switch m.Tokens[i].ID {
+		case moverID:
+			a = &m.Tokens[i]
+		case targetID:
+			b = &m.Tokens[i]
+		}
+	}
+	if a == nil || b == nil {
+		return 0, false
+	}
+	sign := func(n int) int {
+		switch {
+		case n > 0:
+			return 1
+		case n < 0:
+			return -1
+		}
+		return 0
+	}
+	dx, dy := sign(b.Position.X-a.Position.X), sign(b.Position.Y-a.Position.Y)
+	if toward {
+		dx, dy = -dx, -dy
+	}
+	if dx == 0 && dy == 0 {
+		return 0, true
+	}
+	moved := 0
+	for step := 0; step < feet/battleMapStepFeet; step++ {
+		if toward && tokenDistanceFeet(*a, *b) <= battleMapStepFeet {
+			break // next to the creature that pulls it
+		}
+		next := mapSquare{b.Position.X + dx, b.Position.Y + dy}
+		free := true
+		for _, sq := range b.footprint(next) {
+			if blockedTile(m.tile(sq)) {
+				free = false
+			}
+			for i := range m.Tokens {
+				if m.Tokens[i].ID == b.ID {
+					continue
+				}
+				for _, o := range m.Tokens[i].footprint(m.Tokens[i].Position) {
+					if o == sq {
+						free = false
+					}
+				}
+			}
+		}
+		if !free {
+			break
+		}
+		b.Position = next
+		moved += battleMapStepFeet
+	}
+	if moved > 0 {
+		m.Revision = mapRevision()
+		out, _ := json.Marshal(m)
+		db.Exec(`UPDATE combat_state SET battle_map = $1 WHERE lobby_id = $2`, string(out), lobbyID)
+	}
+	return moved, true
+}
+
+// A stat-block hit that moves its target ("If the target is a Medium or smaller creature, the satyr pushes the target up to 10 feet
+// straight away from itself." / "... pulls the target up to 15 feet straight toward itself." / "... the devil moves the target up
+// to 30 feet straight toward itself."): applied by every hit route through hitAfterDamage; the GM's residual leaves it out.
+var hitForcedMoveRe = regexp.MustCompile(`(?i)(?:If (?:the )?target is (?:an? )?(Tiny|Small|Medium|Large|Huge|Gargantuan) or smaller(?: creature)?, )?(?:the|it) [\w' -]*?(pushes|pulls|moves) the target (?:up to )?(\d+) (?:feet|ft\.?) straight (away from|toward) (?:itself|it|the [\w' -]+)(?:\.|$)`)
+
+// stripForcedMoves: the text without the movement sentences hitForcedMove applies.
+func stripForcedMoves(text string) string { return hitForcedMoveRe.ReplaceAllString(text, "") }
+
+// hitForcedMove moves the target of a hit as the hit's text says, on the battle map, and answers the clause; without a map the GM
+// is told the distance and places the creature.
+func hitForcedMove(lobby, attacker, target int, desc string) string {
+	if attacker == 0 {
+		return ""
+	}
+	i := strings.Index(desc, "Hit:")
+	if i < 0 {
+		return ""
+	}
+	hit := desc[i:]
+	if j := strings.Index(hit, "Hit or Miss:"); j >= 0 {
+		hit = hit[:j]
+	}
+	var out []string
+	for _, m := range hitForcedMoveRe.FindAllStringSubmatch(hit, -1) {
+		if m[1] != "" && !targetAtMostSize(lobby, target, strings.ToLower(m[1])) {
+			continue
+		}
+		feet, _ := strconv.Atoi(m[3])
+		toward := strings.EqualFold(m[4], "toward")
+		verb := map[bool]string{false: "pushed", true: "pulled"}[toward]
+		name := creatureName(lobby, target)
+		moved, onMap := forceToken(lobby, attacker, target, feet, toward)
+		switch {
+		case !onMap:
+			out = append(out, fmt.Sprintf("%s is %s up to %d feet straight %s %s (no battle map: the GM places it)", name, verb, feet, strings.ToLower(m[4]), creatureName(lobby, attacker)))
+		case moved == 0:
+			out = append(out, fmt.Sprintf("%s can't be %s: something is in the way", name, verb))
+		default:
+			out = append(out, fmt.Sprintf("%s is %s %d feet straight %s %s", name, verb, moved, strings.ToLower(m[4]), creatureName(lobby, attacker)))
+		}
+	}
+	if len(out) == 0 {
+		return ""
+	}
+	return " [" + strings.Join(out, "; ") + "]"
+}
+
+// ---- a stat-block entry's own movement (Teleport, Tree Stride, Bubble Dash, Aquatic Charge, Rampage's move, Ink Cloud's move ...)
+//
+// When the GM uses such an entry (narrate's monster_action), the monster gets a move allowance for the turn, read from the entry's
+// wording: how far (feet, or its Speed, half of it, its Swim, Fly, Climb or Burrow Speed), whether it teleports (no path, no
+// Opportunity Attacks, an unoccupied space at the end), whether it provokes none ("without provoking Opportunity Attacks") and
+// whether it goes straight toward an enemy (a charge then counts). The GM's next map update that moves the monster spends it
+// (takeSpecialMoves): the move doesn't count against its Speed, a teleport or a move without Opportunity Attacks opens none, a
+// teleport is not a move toward anything (no charge), and a move beyond the allowance is noted.
+
+type specialMove struct {
+	Marker   string
+	Entry    string
+	Feet     int
+	Teleport bool
+	NoOA     bool
+	Straight bool
+}
+
+var specialMoves sync.Map // creatureMoveKey -> specialMove
+
+var (
+	teleportUpToRe   = regexp.MustCompile(`(?i)\bteleports?(?:,? along with [^,.]+,)? up to (\d+) (?:feet|ft)`)
+	teleportWithinRe = regexp.MustCompile(`(?i)\bteleports? to an unoccupied space within \d+ feet of [^.]*? within (\d+) feet of`)
+	moveUpToRe       = regexp.MustCompile(`(?i)\b(?:moves?|swims?|flies|fly|climbs?|burrows?) up to (half )?(?:its|their) (Swim |Fly |Climb |Burrow )?Speed(?: or (Swim|Fly|Climb|Burrow) Speed)?`)
+	moveFeetRe       = regexp.MustCompile(`(?i)\b(?:moves?|swims?|flies|fly|climbs?|burrows?) up to (\d+) (?:feet|ft)`)
+	noOARe           = regexp.MustCompile(`(?i)without provoking Opportunity Attacks`)
+	straightEnemyRe  = regexp.MustCompile(`(?i)straight toward an enemy`)
+	// an entry usable only right after the creature damaged a creature that was already Bloodied (Rampage)
+	afterBloodiedHitRe = regexp.MustCompile(`(?i)^\s*Immediately after dealing damage to a creature that (?:is|was) already Bloodied\b`)
+)
+
+// readSpecialMove reads an entry's movement (ok false: it moves nothing). speed answers a Speed of the monster by kind ("", "swim" ...).
+func readSpecialMove(text string, speed func(kind string) int) (specialMove, bool) {
+	mv := specialMove{NoOA: noOARe.MatchString(text), Straight: straightEnemyRe.MatchString(text)}
+	switch {
+	case teleportUpToRe.MatchString(text):
+		mv.Feet, _ = strconv.Atoi(teleportUpToRe.FindStringSubmatch(text)[1])
+		mv.Teleport, mv.NoOA = true, true
+	case teleportWithinRe.MatchString(text):
+		mv.Feet, _ = strconv.Atoi(teleportWithinRe.FindStringSubmatch(text)[1])
+		mv.Teleport, mv.NoOA = true, true
+	case moveUpToRe.MatchString(text):
+		m := moveUpToRe.FindStringSubmatch(text)
+		mv.Feet = speed(strings.ToLower(strings.TrimSpace(m[2])))
+		if m[3] != "" {
+			mv.Feet = max(mv.Feet, speed(strings.ToLower(m[3])))
+		}
+		if m[1] != "" {
+			mv.Feet /= 2
+		}
+	case moveFeetRe.MatchString(text):
+		mv.Feet, _ = strconv.Atoi(moveFeetRe.FindStringSubmatch(text)[1])
+	default:
+		return specialMove{}, false
+	}
+	return mv, mv.Feet > 0
+}
+
+var speedKindRe = regexp.MustCompile(`(?i)\b(swim|fly|climb|burrow) (\d+) ft`)
+
+// monsterSpeedOfKind: the monster's Speed of a kind ("" walking) from its stat block, 0 when it has none.
+func monsterSpeedOfKind(lobby, id int, kind string) int {
+	if kind == "" {
+		s, _ := monsterWalkSpeed(id, lobby)
+		return s
+	}
+	var text string
+	monsterQueryRow(`SELECT COALESCE(speed_text,'') FROM monsters WHERE slug = $1`, monsterKeyOfCombatant(lobby, id)).Scan(&text)
+	for _, m := range speedKindRe.FindAllStringSubmatch(text, -1) {
+		if strings.EqualFold(m[1], kind) {
+			n, _ := strconv.Atoi(m[2])
+			return n
+		}
+	}
+	return 0
+}
+
+// grantSpecialMove gives the monster its entry's move for this turn (apply) and answers the GM's note ("" when the entry moves
+// nothing).
+func grantSpecialMove(lobby, id int, entry, text string, apply bool) string {
+	mv, ok := readSpecialMove(text, func(kind string) int { return monsterSpeedOfKind(lobby, id, kind) })
+	if !ok {
+		return ""
+	}
+	mv.Marker, mv.Entry = combatTurnMarker(lobby), stripUsage(entry)
+	if apply {
+		specialMoves.Store(creatureMoveKey{lobby, id}, mv)
+	}
+	how := fmt.Sprintf("up to %d ft", mv.Feet)
+	switch {
+	case mv.Teleport:
+		how += ", teleporting (no path, no Opportunity Attacks; it ends in an unoccupied space)"
+	case mv.NoOA:
+		how += " without provoking Opportunity Attacks"
+	}
+	if mv.Straight {
+		how += ", straight toward an enemy"
+	}
+	if _, onMap := activeEncounterMap(lobby); !onMap {
+		return fmt.Sprintf("Movement (%s): %s, not counted against its Speed; there is no battle map, so the GM places it.", mv.Entry, how)
+	}
+	return fmt.Sprintf("Movement (%s): %s, not counted against its Speed. Move its token with your next battle map update (PUT /api/campaigns/{id}/battle-map); the server applies this move to it.", mv.Entry, how)
+}
+
+// takeSpecialMoves spends the move allowances of the monsters this GM map update moved. It answers the ids whose move provokes no
+// Opportunity Attacks, the ids that teleported, the ids whose move doesn't count against their Speed, and the notes.
+func takeSpecialMoves(lobby int, before, after encounterMap) (noOA, teleported, notSpeed map[int]bool, notes []string) {
+	noOA, teleported, notSpeed = map[int]bool{}, map[int]bool{}, map[int]bool{}
+	marker := combatTurnMarker(lobby)
+	for _, old := range before.Tokens {
+		now, ok := after.token(old.ID)
+		if !ok || (now.Position == old.Position && now.Altitude == old.Altitude) {
+			continue
+		}
+		k := creatureMoveKey{lobby, old.ID}
+		v, ok := specialMoves.Load(k)
+		if !ok {
+			continue
+		}
+		mv := v.(specialMove)
+		specialMoves.Delete(k)
+		if mv.Marker != marker {
+			continue
+		}
+		notSpeed[old.ID] = true
+		if mv.NoOA {
+			noOA[old.ID] = true
+		}
+		if mv.Teleport {
+			teleported[old.ID] = true
+		}
+		if feet := tokenDistanceFeet(old, mapToken{Position: now.Position, Size: old.Size, Altitude: now.Altitude}); feet > mv.Feet {
+			notes = append(notes, fmt.Sprintf("%s moved %d ft with %s, which allows %d ft.", old.Name, feet, mv.Entry, mv.Feet))
+		}
+	}
+	return
+}
+
+// lastHit: the last hit a creature made this turn, and whether its target was already Bloodied before it (Rampage's gate).
+type lastHit struct {
+	Marker         string
+	Target         int
+	BloodiedBefore bool
+}
+
+var lastHits sync.Map // creatureMoveKey -> lastHit
+
+// recordLastHit: called by every hit route after its damage (hitAfterDamage): taken is what the hit took from the target.
+func recordLastHit(lobby, attacker, target, taken int) {
+	if attacker == 0 || taken <= 0 {
+		return
+	}
+	hp, max := creatureHP(lobby, target)
+	lastHits.Store(creatureMoveKey{lobby, attacker}, lastHit{Marker: combatTurnMarker(lobby), Target: target, BloodiedBefore: max > 0 && 2*(hp+taken) <= max})
+}
+
+// creatureHP: a creature's Hit Points and maximum (a character, a monster of the fight, a companion).
+func creatureHP(lobby, id int) (hp, max int) {
+	switch {
+	case isCompanionCombatID(id):
+		if c, ok := loadCompanion(id - companionIDBase); ok {
+			return c.HP, c.MaxHP
+		}
+	case id > 0:
+		db.QueryRow(`SELECT COALESCE(hp,0), COALESCE(max_hp,0) FROM characters WHERE id = $1`, id).Scan(&hp, &max)
+	default:
+		for _, e := range combatEntries(lobby) {
+			if asInt(e["id"]) == id {
+				v := monsterVitals(e)
+				return v.HP, v.Max
+			}
+		}
+	}
+	return
+}
+
+// movementEntryRefusal: an entry the monster can't use now because of when it may be used (Rampage: right after it damaged a
+// creature that was already Bloodied). "" when it can.
+func movementEntryRefusal(lobby, id int, entry srdMonsterEntry) string {
+	if !afterBloodiedHitRe.MatchString(entry.Text) {
+		return ""
+	}
+	if v, ok := lastHits.Load(creatureMoveKey{lobby, id}); ok {
+		if h := v.(lastHit); h.Marker == combatTurnMarker(lobby) && h.BloodiedBefore {
+			return ""
+		}
+	}
+	return fmt.Sprintf("%s's %s works only right after it deals damage to a creature that was already Bloodied (its last hit this turn wasn't one). Nothing was spent.", creatureName(lobby, id), stripUsage(entry.Name))
+}
+
+// withoutTeleports: the map update with the teleported tokens back where they were (a teleport is not a move toward anything).
+func withoutTeleports(after, before encounterMap, teleported map[int]bool) encounterMap {
+	out := after
+	out.Tokens = append([]mapToken(nil), after.Tokens...)
+	for i, tk := range out.Tokens {
+		if teleported[tk.ID] {
+			if old, ok := before.token(tk.ID); ok {
+				out.Tokens[i].Position = old.Position
+			}
+		}
+	}
+	return out
 }
