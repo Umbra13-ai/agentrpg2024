@@ -2747,6 +2747,20 @@
            "dc": {
             "type": "integer"
            },
+           "then": {
+            "description": "Then: the condition a failed repeated save turns the record into (Sleep: Unconscious), for ThenRounds; that one isn't repeated",
+            "type": "string"
+           },
+           "then_ends_on_damage": {
+            "type": "boolean"
+           },
+           "then_magical_sleep": {
+            "description": "magic puts it to sleep: a creature that can't be is immune",
+            "type": "boolean"
+           },
+           "then_rounds": {
+            "type": "integer"
+           },
            "when": {
             "description": "\"end_of_turn\" (default) or \"start_of_turn\"",
             "type": "string"
@@ -2965,6 +2979,20 @@
             "type": "string"
            },
            "dc": {
+            "type": "integer"
+           },
+           "then": {
+            "description": "Then: the condition a failed repeated save turns the record into (Sleep: Unconscious), for ThenRounds; that one isn't repeated",
+            "type": "string"
+           },
+           "then_ends_on_damage": {
+            "type": "boolean"
+           },
+           "then_magical_sleep": {
+            "description": "magic puts it to sleep: a creature that can't be is immune",
+            "type": "boolean"
+           },
+           "then_rounds": {
             "type": "integer"
            },
            "when": {
@@ -28151,6 +28179,20 @@
            "dc": {
             "type": "integer"
            },
+           "then": {
+            "description": "Then: the condition a failed repeated save turns the record into (Sleep: Unconscious), for ThenRounds; that one isn't repeated",
+            "type": "string"
+           },
+           "then_ends_on_damage": {
+            "type": "boolean"
+           },
+           "then_magical_sleep": {
+            "description": "magic puts it to sleep: a creature that can't be is immune",
+            "type": "boolean"
+           },
+           "then_rounds": {
+            "type": "integer"
+           },
            "when": {
             "description": "\"end_of_turn\" (default) or \"start_of_turn\"",
             "type": "string"
@@ -28384,6 +28426,20 @@
             "type": "string"
            },
            "dc": {
+            "type": "integer"
+           },
+           "then": {
+            "description": "Then: the condition a failed repeated save turns the record into (Sleep: Unconscious), for ThenRounds; that one isn't repeated",
+            "type": "string"
+           },
+           "then_ends_on_damage": {
+            "type": "boolean"
+           },
+           "then_magical_sleep": {
+            "description": "magic puts it to sleep: a creature that can't be is immune",
+            "type": "boolean"
+           },
+           "then_rounds": {
             "type": "integer"
            },
            "when": {
@@ -30676,6 +30732,20 @@
             "type": "string"
            },
            "dc": {
+            "type": "integer"
+           },
+           "then": {
+            "description": "Then: the condition a failed repeated save turns the record into (Sleep: Unconscious), for ThenRounds; that one isn't repeated",
+            "type": "string"
+           },
+           "then_ends_on_damage": {
+            "type": "boolean"
+           },
+           "then_magical_sleep": {
+            "description": "magic puts it to sleep: a creature that can't be is immune",
+            "type": "boolean"
+           },
+           "then_rounds": {
             "type": "integer"
            },
            "when": {
