@@ -469,7 +469,7 @@ Add to the owner, never beside it. When you give another rule one owner, add it 
   `character_finished` are both it; `setup`'s `steps_left` also counts the guided steps after it (a weapon in hand),
   which can wait; the shop (asked as a question: shop for more equipment, or answer no with `{"done": true}`) and the portrait are
   optional (`optional_steps_left`, `next_optional`; Matt, Nov 16, playtest I-ROWAN-2). Ready refuses while `characterToFinish` has open choices
-  (`setup_not_finished`; optional steps never: feedback log 49). A counted choice's step title says how many are left (`countedTitle`, from
+  (`setup_not_finished`; optional steps never: feedback log 49). A step whose options another open choice changes waits for it (`choiceDef.waitsFor`, the step's `waits_for`, no suggestion until then: the spells step waits for a subclass that gives always-prepared spells, I-CALLA-21). A counted choice's step title says how many are left (`countedTitle`, from
   `choiceDefs`' counts; feedback log 51). **The highest spell level a character can prepare** is `maxSpellLevelFor` (its
   slots): the setup spells step, Magical Discoveries and the preparation check read it (playtest I-ALDEN-4).
 - **Can a player send its turn now, outside a fight, with the schedule:** `roundTurnOpen` through `roundNoteFor`'s `your_turn`:

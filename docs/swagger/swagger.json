@@ -18024,6 +18024,10 @@
             "title": {
              "type": "string"
             },
+            "waits_for": {
+             "description": "WaitsFor: the key of another open step to finish first, because its result changes this step's options (choiceDef.waitsFor)",
+             "type": "string"
+            },
             "why": {
              "type": "string"
             }
@@ -18057,6 +18061,10 @@
              "type": "object"
             },
             "title": {
+             "type": "string"
+            },
+            "waits_for": {
+             "description": "WaitsFor: the key of another open step to finish first, because its result changes this step's options (choiceDef.waitsFor)",
              "type": "string"
             },
             "why": {
@@ -18102,6 +18110,10 @@
               "type": "object"
              },
              "title": {
+              "type": "string"
+             },
+             "waits_for": {
+              "description": "WaitsFor: the key of another open step to finish first, because its result changes this step's options (choiceDef.waitsFor)",
               "type": "string"
              },
              "why": {

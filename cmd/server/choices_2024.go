@@ -116,6 +116,10 @@ type choiceDef struct {
 	gain func(charID int, class, subclass string, level int) string
 	// always: the step is listed (as done) even when nothing is open.
 	always func(c *choiceChar) bool
+	// waitsFor: another open choice whose result changes this one's options (the subclass adds always-prepared spells to the
+	// spells a character prepares): its key and why, or "". The step then gives no suggestion until that choice is made
+	// (playtest I-CALLA-21: a prepare list suggested before Life Domain held Aid, which the domain then made always prepared).
+	waitsFor func(c *choiceChar) (key, why string)
 
 	// field and set: a choice made with POST /api/characters/{id}/class-options is sent under this field name, and set checks
 	// and saves the value (class_options_2024.go). A choice with a request of its own has neither.
@@ -298,6 +302,13 @@ func choiceSteps(c *choiceChar) []setupStep {
 				Request: map[string]interface{}{"method": r.method, "path": r.path, "body_like": r.body}}
 		}
 		st.Done = !open
+		if open && d.waitsFor != nil {
+			if key, why := d.waitsFor(c); key != "" {
+				st.WaitsFor, st.Why = key, strings.TrimSpace(why+" "+st.Why+" The options are listed; a suggested request comes once that choice is made.")
+				st.Request, st.Then = nil, nil // no suggestion yet: it would be computed without the other choice
+				unsuggest(st.Choices)
+			}
+		}
 		if t := countedTitle(d, have, want); open && t != "" {
 			st.Title = t // how many are left, from the table's counts (feedback log 51: "Choose your Eldritch Invocation" until all 7)
 		}
@@ -568,4 +579,36 @@ func pickCount(c *choiceChar, key string) int {
 		}
 	}
 	return n
+}
+
+// choiceOpen: the choice with this key has picks still to make.
+func choiceOpen(c *choiceChar, key string) bool {
+	for _, d := range choiceDefs {
+		if d.key == key {
+			have, want := d.status(c)
+			return have < want
+		}
+	}
+	return false
+}
+
+// unsuggest clears the "suggested" marks of a step's options (a waiting step lists them without a suggestion).
+func unsuggest(v interface{}) {
+	switch x := v.(type) {
+	case map[string]interface{}:
+		if _, ok := x["suggested"]; ok {
+			x["suggested"] = false
+		}
+		for _, e := range x {
+			unsuggest(e)
+		}
+	case []map[string]interface{}:
+		for _, e := range x {
+			unsuggest(e)
+		}
+	case []interface{}:
+		for _, e := range x {
+			unsuggest(e)
+		}
+	}
 }

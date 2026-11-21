@@ -85,6 +85,13 @@ func spellChoiceState(ch *choiceChar) *spellChoice {
 // spellsChoice: a spellcaster's cantrips and prepared spells, as an entry of choiceDefs.
 func spellsChoice() *choiceDef {
 	return &choiceDef{key: "spells", feature: "Spells",
+		// a subclass still to choose that gives always-prepared spells at this level changes what is left to prepare
+		waitsFor: func(ch *choiceChar) (string, string) {
+			if !choiceOpen(ch, "subclass") || !subclassesGiveSpells(ch.class, ch.level) {
+				return "", ""
+			}
+			return "subclass", "Choose your subclass first: its spells are always prepared and don't count against your limit, so the list to prepare depends on it."
+		},
 		// what the class's Features table gives at a level: cantrips, prepared spells, and a Wizard's spellbook spells
 		total: func(class, _ string, level int) int {
 			n := game.ClassTableInt(class, level, "Cantrips") + game.ClassTableInt(class, level, "Prepared Spells")
@@ -330,4 +337,23 @@ func spellsStep(ch *choiceChar) *setupStep {
 		}
 	}
 	return &st
+}
+
+// subclassesGiveSpells: some subclass of the class gives always-prepared spells at this class level (a Cleric's domain, a Land
+// Druid's circle spells ...).
+func subclassesGiveSpells(class string, level int) bool {
+	for slug, sub := range game.AvailableSubclasses {
+		if !strings.EqualFold(sub.Class, class) {
+			continue
+		}
+		if slug == "land" && level >= sub.SubclassLevel && sub.SubclassLevel > 0 {
+			return true
+		}
+		for at := range sub.DomainSpells {
+			if at <= level {
+				return true
+			}
+		}
+	}
+	return false
 }

@@ -3023,6 +3023,8 @@ type setupStep struct {
 	Optional bool `json:"optional,omitempty"`
 
 	Problem string `json:"problem,omitempty"` // what is wrong with what is stored, and what the request fixes
+	// WaitsFor: the key of another open step to finish first, because its result changes this step's options (choiceDef.waitsFor)
+	WaitsFor string `json:"waits_for,omitempty"`
 }
 
 // spellOptionInfo: one spell explained for the player choosing it.
