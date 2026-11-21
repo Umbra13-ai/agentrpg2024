@@ -301,46 +301,30 @@ func greaterRestoration(charID, lobby int, description string, targets []int) st
 	}
 	var ex int
 	db.QueryRow(`SELECT COALESCE(exhaustion_level,0) FROM characters WHERE id = $1`, id).Scan(&ex)
-	conds := getCharConditions(id)
-	has := func(c string) bool {
-		for _, x := range conds {
-			if strings.EqualFold(strings.SplitN(x, ":", 2)[0], c) {
-				return true
-			}
-		}
-		return false
-	}
-	pick := ""
-	switch {
-	case strings.Contains(d, "exhaust"):
-		pick = "exhaustion"
-	case strings.Contains(d, "charm"):
-		pick = "charmed"
-	case strings.Contains(d, "petrif"):
-		pick = "petrified"
-	case strings.Contains(d, "curse") || strings.Contains(d, "score") || strings.Contains(d, "maximum"):
-		return " Greater Restoration: " + name + "'s curse, ability score reduction or Hit Point maximum reduction is removed (the GM restores the number)."
-	case ex > 0:
-		pick = "exhaustion"
-	case has("charmed"):
-		pick = "charmed"
-	case has("petrified"):
-		pick = "petrified"
-	}
-	switch pick {
-	case "exhaustion":
+	exhaustion := func() string {
 		if ex <= 0 {
 			return " Greater Restoration: " + name + " has no Exhaustion level to remove."
 		}
 		return " Greater Restoration: one Exhaustion level removed from " + name + " (" + strings.TrimSpace(addExhaustion(id, -1)) + ")."
-	case "charmed", "petrified":
-		if !has(pick) {
-			return fmt.Sprintf(" Greater Restoration: %s doesn't have the %s condition.", name, titleCase(pick))
-		}
-		endCondition(0, id, pick, "")
-		return fmt.Sprintf(" Greater Restoration: the %s condition on %s ends.", titleCase(pick), name)
 	}
-	return " Greater Restoration: " + name + " has none of the effects the spell removes (Exhaustion, Charmed, Petrified; name a curse or a reduction for the GM)."
+	// the conditions it ends are the table's (spell_ends_conditions_2024.go); the caster names one, or the first the target has
+	namesCondition := strings.Contains(d, "charm") || strings.Contains(d, "petrif")
+	switch {
+	case strings.Contains(d, "exhaust"):
+		return exhaustion()
+	case !namesCondition && (strings.Contains(d, "curse") || strings.Contains(d, "score") || strings.Contains(d, "maximum")):
+		return " Greater Restoration: " + name + "'s curse, ability score reduction or Hit Point maximum reduction is removed (the GM restores the number)."
+	case !namesCondition && ex > 0:
+		return exhaustion()
+	}
+	ended, named := endSpellConditions(lobby, id, "greater-restoration", description)
+	switch {
+	case len(ended) > 0:
+		return fmt.Sprintf(" Greater Restoration: the %s condition on %s ends.", ended[0], name)
+	case named != "":
+		return fmt.Sprintf(" Greater Restoration: %s doesn't have the %s condition.", name, titleCase(named))
+	}
+	return " Greater Restoration: " + name + " has none of the effects the spell removes (Exhaustion, " + spellEndsWords("greater-restoration") + "; name a curse or a reduction for the GM)."
 }
 
 func init() {

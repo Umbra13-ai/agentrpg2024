@@ -313,6 +313,26 @@ riders). Catalog-wide parse diff: exactly those entries changed. Tested: `TestSa
 (POST /api/gm/narrate: the Frightened record has the repeated save at its DC and 10 rounds). Mutation-checked: the reversed wording not read,
 no limit, the whole sentence to the GM.
 
+## What a condition does while it lasts (`cmd/server/condition_lasting_effects_2024.go`, play-test feedback log 63)
+
+A Failure's damage "at the start (or end) of each of ... turns" is not damage taken now (`immediateDamage`): the save reader counted it as
+such, so the Pit Fiend's Bite dealt its 6d6 poison at once and never again, and the Vrock's Spores, the swallows (Behir, Kraken, Purple
+Worm, Remorhaz, Tarrasque), the engulfs (Shambling Mound, Gelatinous Cube) and the Invisible Stalker's and Water Elemental's grapples
+dealt their recurring damage on the save. Catalog-wide parse diff: those 13 entries changed, plus the Bone and Bearded Devils' sentences
+leaving the GM's text. The recurring sentences of the swallows and engulfs stay the GM's (no recurring row reads them yet).
+
+"While Poisoned, the target can't regain Hit Points and takes ... at the start of each of its turns" (Pit Fiend Bite), "While Poisoned, the
+target can't regain Hit Points" (Bone Devil), "While Poisoned, the target takes ..." (Vrock), "Until this poison ends, the target can't
+regain Hit Points" (Bearded Devil): `readLastingEffects` reads the sentence of a condition the same text gives, and `addLastingEffects`
+writes it for a target that got the condition (character, monster or companion: `giveConditions`), as combat_effects rows with
+`gate_condition` and the record's source: a `no_healing` row (read by `cantRegainHP`, the one answer for `healHP`, `healMonster`,
+`healCompanion`) and a `recurring_damage` row the turn pipeline ticks at the start of the target's turn through the Hit Point owners, the
+roll shown ("6d6 = 19"). They last while the record does (the repeated save, "After 1 minute, it succeeds automatically", Lesser
+Restoration, Heal): a row whose record is gone is deleted when read; the source's turn start doesn't end them. The fight's end clears
+combat_effects, so the effects end with the fight (the poison lasts a minute at most). `conditions_detail` lists them under `effects`
+with the repeated save. Tested: `TestLastingEffectsAreReadNotDealtNow` (the SRD entries and the whole catalog),
+`TestPostgresPoisonThatStopsHealing` (POST /api/gm/narrate Bite: no poison damage now, no healing, the tick with its dice, the end).
+
 ## A hit's Hit Point maximum drain (`cmd/server/hp_max_drain_2024.go`)
 
 "If the target is a creature, its Hit Point maximum decreases by an amount equal to the damage taken" (SRD 5.2.1 Specter and Wraith Life

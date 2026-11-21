@@ -2614,7 +2614,7 @@ func resolveActionWithBonusDash(action, description string, charID int, bonusDas
 					}
 				}
 
-				healText := applySpellHealing(charID, heal, healMax, description)
+				healText := applySpellHealing(charID, spellKey, heal, healMax, description)
 				return fmt.Sprintf("Cast %s%s! Heals %d HP%s.%s%s%s%s%s%s %s", spell.Name, upcastInfo, heal, bonusInfo, healText, metamagicNote, materialConsumedNote, invocationUsedNote, atWillInvocationNote, blessedHealerInfo, spell.Description)
 			}
 			conditionText := companionFromSpell(charID, spellKey, slotLevel, description) // Find Familiar, Find Steed, summons (companions_2024.go)
@@ -2623,6 +2623,9 @@ func resolveActionWithBonusDash(action, description string, charID int, bonusDas
 			}
 			if conditionText == "" {
 				conditionText = resolveConditionSpell(charID, spellKey, saveDC, spell.Name)
+			}
+			if conditionText == "" {
+				conditionText = spellEndsOnTargets(charID, spellKey, description) // Mass Heal's conditions (spell_ends_conditions_2024.go)
 			}
 			dcNote := "" // only a spell with a saving throw has a DC to show (F229: Bless showed "DC 13")
 			if spell.SavingThrow != "" {

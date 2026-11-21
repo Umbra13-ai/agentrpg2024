@@ -106,6 +106,7 @@ type saveEffect struct {
 	CondDamageImmunity string              // a damage Immunity excludes its condition rider
 	CondMaxSize        string              // "If the target is a Huge or smaller creature, ... has the Prone condition": the conditions apply only to a target of this size or smaller
 	CondIfAdvantage    bool                // "... and the darkmantle had Advantage on the attack roll": the conditions apply only when the roll had Advantage (enforced by the hit caller, which has the roll)
+	Lasting            *lastingEffects     // "While Poisoned, the target can't regain Hit Points and takes ... at the start of each of its turns" (condition_lasting_effects_2024.go)
 	Extra              string              // Failure text the server doesn't apply (for the GM)
 	Emanation          int                 // feet, when the targets are in an Emanation from the monster
 	IsMagical          bool                // a nonspell effect explicitly labeled magical by its stat block
@@ -280,6 +281,15 @@ func (e *saveEffect) readRider(fail string) (extra []string) {
 	// what the server doesn't apply, for the GM: the Failure sentences that are not only damage or a condition
 	for _, s := range sentenceSplitRe.Split(fail, -1) {
 		ls := strings.ToLower(s)
+		// What the target suffers while it has the condition this text gives ("While Poisoned, the target can't regain Hit Points and
+		// takes ... at the start of each of its turns"): recorded with the condition (giveConditions → addLastingEffects), not the GM's.
+		if l, rest := readLastingEffects(s, e.Conditions); l != nil {
+			e.Lasting = l
+			if rest != "" {
+				extra = append(extra, strings.TrimSuffix(rest, "."))
+			}
+			continue
+		}
 		// Recurring damage the turn pipeline ticks (addRecurringDamage recorded it when its gate - the
 		// grapple or the attach - held): the clause, the enforced lockout sharing its sentence and the
 		// gate lead-in are not the GM's.
@@ -432,6 +442,9 @@ func (e saveEffect) giveConditions(lobbyID, tid int, source string) []string {
 			continue
 		}
 		parts = append(parts, titleCase(c))
+		if e.Lasting != nil && e.Lasting.Condition == c { // what it suffers while it has it, ended with the record
+			parts = append(parts, addLastingEffects(lobbyID, tid, e.SourceID, *e.Lasting, source))
+		}
 		if l, ok := e.linkedCondition(c, source); ok {
 			if res := addCondition(lobbyID, tid, l); res.Immune != "" {
 				parts = append(parts, fmt.Sprintf("not %s (%s)", l.Condition, res.Immune))
@@ -547,7 +560,7 @@ func parseSaveEffect(text string) (saveEffect, bool) {
 	if strings.Contains(text, "Failure or Success:") && strings.Index(text, "Success:") == strings.Index(text, "Failure or Success:")+len("Failure or ") {
 		succ = "" // the only "Success:" is the one of "Failure or Success:"
 	}
-	for _, d := range mfxDamageRe.FindAllStringSubmatch(fail, -1) {
+	for _, d := range immediateDamage(fail) { // never the damage "at the start of each of its turns": that ticks later (entry 63)
 		e.Damage = append(e.Damage, damagePart{Dice: normDice(d[2]), Type: strings.ToLower(d[3])})
 	}
 	low := strings.ToLower(succ)

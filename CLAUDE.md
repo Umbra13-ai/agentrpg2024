@@ -169,7 +169,9 @@ Add to the owner, never beside it. When you give another rule one owner, add it 
   Dying; the 1d4 hours start, `startStableHours`), and `changeMaxHP` / `maxHPChange` (the SQL a progression claim includes).
   `handleDamage`, `handleHeal` and `damageCharacter` are thin wrappers. Temporary Hit Points are granted by `grantTempHP`
   (`temp_hp_2024.go`). A new feature that stops a drop to 0 is one row in `dropRescues`. `TestNoOtherHitPointWriter` checks;
-  suite: `hp_rule_test.py` (audit AUD-06).
+  suite: `hp_rule_test.py` (audit AUD-06). **A creature that can't regain Hit Points** is `cantRegainHP`
+  (`condition_lasting_effects_2024.go`: a condition's lasting effect, Chill Touch, the Sword of Wounding), read by `healHP`,
+  `healMonster` and `healCompanion`; a monster form's own trait stays `catalogForbidsHPGain` (feedback log 63).
 - **A fight's state (combat_state):** `cmd/server/combat_state_2024.go`. `changeFight` is the one writer of the turn order, the
   current turn, the round and the monster id counter: the row locked (`lockFight`), entries changed as maps (unknown fields kept),
   written back in the same transaction. On it: `place` / `insertAt` / `remove` / `setInitiative` (whose turn it is is kept),
@@ -203,6 +205,14 @@ Add to the owner, never beside it. When you give another rule one owner, add it 
   `addExhaustion`; the editors send `conditionColumns` to `setConditionColumn(In)`. `game.IsIncapacitatingCondition` is the one
   "is it Incapacitating" rule. A new source of Immunity is one row. `TestNoOtherConditionWriter` and
   `TestConditionImmunitiesAreOneTable` check; suite: `conditions_rule_test.py` (audit AUD-08, AUD-34, AUD-38).
+  **What a condition does while it lasts** ("While Poisoned, the target can't regain Hit Points and takes 21 (6d6) Poison damage at
+  the start of each of its turns"): `readLastingEffects` reads it with the save or hit (`readRider`), `addLastingEffects` writes it
+  with the record as combat_effects rows gated on that record (`gate_condition`: a no_healing row and a recurring_damage row the
+  recurring owner ticks, `monster_recurring_damage_2024.go`); the record's end ends them; `conditionView`'s `effects` shows them.
+  A text's damage dealt now is `immediateDamage`: never a damage "at the start (or end) of each of ... turns" (feedback log 63).
+  **The conditions a spell ends** (Heal, Mass Heal, Power Word Heal, Protection from Poison, Lesser and Greater Restoration's
+  pick): the table `spellEndsConditions` with `endSpellConditions` (`spell_ends_conditions_2024.go`); a healing spell ends them
+  before it heals (feedback log 64). A new spell that ends conditions is one row.
 - **What a character has expended** (spell slots, Pact Magic slots, class resources and other counted uses in
   `class_resources_used`, Indomitable): `cmd/server/resources_2024.go` is the only writer. `changeSpent` (or `changeSpentTx` in a
   caller's transaction) locks the row, the change checks what is left on the locked counts and changes them, and they are written

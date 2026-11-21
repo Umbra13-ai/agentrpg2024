@@ -2435,6 +2435,12 @@
              "duration_rounds": {
               "type": "integer"
              },
+             "effects": {
+              "items": {
+               "type": "string"
+              },
+              "type": "array"
+             },
              "id": {
               "type": "integer"
              },

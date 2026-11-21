@@ -400,7 +400,8 @@ type hpHeal struct {
 }
 
 // healHP gives a character amount Hit Points (game.Heal: never above the maximum, nothing for the dead; from 0 the Death Saving
-// Throws reset). A creature that can't regain Hit Points (the Sword of Wounding) gets none. The error is the database's.
+// Throws reset). A creature that can't regain Hit Points (cantRegainHP: a poison's lasting effect, the Sword of Wounding) gets none.
+// The error is the database's.
 func healHP(charID, amount int, opts ...healOpt) (hpHeal, error) {
 	var s healSpec
 	for _, o := range opts {
@@ -410,8 +411,8 @@ func healHP(charID, amount int, opts ...healOpt) (hpHeal, error) {
 	if err := db.QueryRow(`SELECT name FROM characters WHERE id = $1`, charID).Scan(&h.Name); err != nil {
 		return h, err
 	}
-	if _, wounded := charBuff(charID, "no_regain"); wounded && !s.giveBack {
-		amount = 0 // Sword of Wounding: can't regain Hit Points (F171)
+	if cant, _ := cantRegainHP(lobbyOfChar(charID), charID); cant && !s.giveBack {
+		amount = 0 // can't regain Hit Points: a condition's lasting effect, the Sword of Wounding (condition_lasting_effects_2024.go)
 	}
 	var err error
 	h.Before, h.After, err = changeVitals(charID, func(_ *sql.Tx, v game.Vitals) (game.Vitals, error) {

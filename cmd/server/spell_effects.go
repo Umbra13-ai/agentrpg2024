@@ -172,7 +172,7 @@ func monsterName(lobbyID, id int) string {
 }
 
 // applySpellHealing heals the characters a healing spell is aimed at and says who got what.
-func applySpellHealing(charID, heal, healMax int, description string) string {
+func applySpellHealing(charID int, spellKey string, heal, healMax int, description string) string {
 	targets := spellCharacterTargets(charID)
 	if len(targets) == 0 {
 		if id := aimedCharacter(description, charID); id > 0 {
@@ -182,13 +182,23 @@ func applySpellHealing(charID, heal, healMax int, description string) string {
 		}
 	}
 	var parts []string
+	lobby := lobbyOfChar(charID)
 	for _, id := range targets {
-		amount, beacon := heal, ""
+		// the conditions the spell ends (Heal: Blinded, Deafened, Poisoned), first: a poison that stops healing ends before the healing
+		ended, _ := endSpellConditions(lobby, id, spellKey, description)
+		endedText := ""
+		if len(ended) > 0 {
+			endedText = fmt.Sprintf(" (the %s condition ends)", joinNames(ended))
+		}
+		amount, beacon := heal, endedText
 		if healMax > heal && beaconMaxHealing(id) {
-			amount, beacon = healMax, " (Beacon of Hope: the maximum)" // buff_spells_2024.go
+			amount, beacon = healMax, endedText+" (Beacon of Hope: the maximum)" // buff_spells_2024.go
+		}
+		if cant, why := cantRegainHP(lobby, id); cant { // what still stops the healing says so (condition_lasting_effects_2024.go)
+			beacon += " (it can't regain Hit Points: " + why + ")"
 		}
 		if isCompanionCombatID(id) { // a companion's Hit Points have their own owner (healCompanion); the route let it through only for a healing spell
-			parts = append(parts, healCompanionByCast(charID, id, amount))
+			parts = append(parts, healCompanionByCast(charID, id, amount)+beacon)
 			continue
 		}
 		name, before, after := healCharacter(id, amount)

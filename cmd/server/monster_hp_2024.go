@@ -185,8 +185,12 @@ func setMonsterHP(lobby, id, hp int) error {
 }
 
 // healMonster gives a monster up to amount Hit Points (never above its maximum; from 0 too: Regeneration, a hit undone).
-// A form that forbids regaining Hit Points is left unchanged; an unreadable catalog is an error, not a heal.
+// A form that forbids regaining Hit Points is left unchanged, and so is a monster under an effect that does (cantRegainHP: Chill Touch,
+// a poison's lasting effect); an unreadable catalog is an error, not a heal.
 func healMonster(lobby, id, amount int) (before, after game.Vitals, err error) {
+	if cant, _ := cantRegainHP(lobby, id); cant { // read before the fight's lock: a read inside it must go through its transaction
+		amount = 0
+	}
 	before, after, _, err = changeMonsterVitalsE(lobby, id, func(tx *sql.Tx, v game.Vitals, entry map[string]interface{}) (game.Vitals, error) {
 		forbidden, cerr := catalogForbidsHPGain(tx, sprintAny(entry["monster_key"]))
 		if cerr != nil {
@@ -619,6 +623,11 @@ func damageCompanion(c companion, dmg int, dtype string) string {
 
 // healCompanion gives a companion up to amount Hit Points (never above its maximum); it returns the Hit Points regained.
 func healCompanion(id, amount int) (int, error) {
+	var lobby int
+	db.QueryRow(`SELECT COALESCE(lobby_id, 0) FROM companions WHERE id = $1`, id).Scan(&lobby)
+	if cant, _ := cantRegainHP(lobby, companionIDBase+id); cant { // the one rule of every creature (condition_lasting_effects_2024.go)
+		return 0, nil
+	}
 	var got int
 	_, _, err := changeCompanionHP(id, func(v game.Vitals) game.Vitals {
 		var v2 game.Vitals
