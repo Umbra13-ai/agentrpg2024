@@ -50,9 +50,14 @@ func TestPostgresBurningOnHitEveryTarget(t *testing.T) {
 			t.Errorf("%s: burning %v: %s", tg.name, isBurning(camp, tg.id), res)
 		}
 	}
+	// the pet resists Fire: a 1 on the 1d4 halves to 0, so a few turn starts are rolled (it keeps burning) until one deals damage
 	before, _ := loadCompanion(petID)
-	line := burningTurnStart(camp, pet, "React Pet")
-	after, _ := loadCompanion(petID)
+	var line string
+	after := before
+	for n := 0; n < 12 && after.HP >= before.HP; n++ {
+		line = burningTurnStart(camp, pet, "React Pet")
+		after, _ = loadCompanion(petID)
+	}
 	if after.HP >= before.HP || !strings.Contains(line, "is burning") {
 		t.Errorf("a burning companion's turn start dealt no fire damage: %d -> %d (%s)", before.HP, after.HP, line)
 	}
