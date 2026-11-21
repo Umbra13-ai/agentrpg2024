@@ -115,7 +115,13 @@ func monsterSpellSaveFor(lobbyID, id int, ability string, dc int, st saveStakes)
 // monsterSpellSaveResult: the whole result, with sources of Disadvantage only the caller knows (a Construct against Shatter,
 // Heightened Spell). A monster with Magic Resistance gets a note for the GM.
 func monsterSpellSaveResult(lobbyID, id int, ability string, dc int, st saveStakes, dis []string) game.SaveResult {
-	r := (&saveCtx{lobby: lobbyID, saver: id, ability: ability, dc: dc, spell: true, extraDis: dis}).resist(st)
+	return monsterSpellSaveBy(lobbyID, id, ability, dc, st, dis, 0)
+}
+
+// monsterSpellSaveBy: the same, with the caster (its id: a character, a monster or a companion), so a Reaction to the failed save can
+// answer it (Mind Corrosion, monster_save_reactions_2024.go).
+func monsterSpellSaveBy(lobbyID, id int, ability string, dc int, st saveStakes, dis []string, caster int) game.SaveResult {
+	r := (&saveCtx{lobby: lobbyID, saver: id, ability: ability, dc: dc, spell: true, extraDis: dis, source: caster}).resist(st)
 	for _, a := range r.Save.Advantage {
 		if a == "Magic Resistance" {
 			addSaveNote(lobbyID, fmt.Sprintf("[%s has Magic Resistance: Advantage on saving throws against spells.]", creatureName(lobbyID, id)))

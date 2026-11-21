@@ -258,12 +258,10 @@ func (c *conditionChange) remove(match func(conditionRecord) bool) ([]conditionR
 			linked = notesEndsWithGrapple
 		case "poisoned":
 			linked = notesEndsWithPoisonOrDamage
-		default:
-			continue
 		}
 		var still []conditionRecord
 		for _, r := range kept {
-			if r.Notes == linked && r.Source == g.Source && r.Source != "" &&
+			if (r.Notes == linked && linked != "" || r.Notes == notesEndsWith+g.Condition) && r.Source == g.Source && r.Source != "" &&
 				(r.SourceID == 0 || g.SourceID == 0 || r.SourceID == g.SourceID) {
 				if _, err := c.tx.Exec(`DELETE FROM condition_records WHERE id = $1`, r.ID); err != nil {
 					return nil, err
@@ -284,6 +282,10 @@ func (c *conditionChange) remove(match func(conditionRecord) bool) ([]conditionR
 // notesEndsWithGrapple marks a Restrained record that ends when the Grappled record of the same source ends (a Constrict: "the target has
 // the Grappled condition (escape DC 16), and it has the Restrained condition until the grapple ends").
 const notesEndsWithGrapple = "ends_with_grapple"
+
+// notesEndsWith + a condition marks a record that lasts while the record of that condition from the same source lasts ("While Frightened,
+// the target has the Paralyzed condition": a Paralyzed record noted "ends_with:frightened"), ended with it by remove.
+const notesEndsWith = "ends_with:"
 
 // notesEndsWithPoisonOrDamage marks sleep linked to an existing Poisoned record.
 const notesEndsWithPoisonOrDamage = "ends_with_poison_or_damage"
@@ -563,6 +565,11 @@ func conditionTakesHold(lobbyID, targetID int, cond, source string) map[string]i
 				notes["dropped_items"] = dropped
 				notes["drop_note"] = fmt.Sprintf("%s drops held items (unconscious creatures drop whatever they're holding)", creatureName(lobbyID, targetID))
 			}
+		}
+	}
+	if targetID < 0 || isCompanionCombatID(targetID) { // a trait that acts when the creature receives the condition (Prone Deficiency)
+		if n := conditionTraitReaction(lobbyID, targetID, cond); n != "" {
+			notes["trait"] = n
 		}
 	}
 	if len(notes) == 0 {

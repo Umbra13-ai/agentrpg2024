@@ -209,11 +209,11 @@ func TestShapeFormsLeapAbductAndFallDice(t *testing.T) {
 			}
 		}
 	}
-	imp := shapeForms(texts["Imp|Shape-Shift"])
+	imp := formSpeeds(texts["Imp|Shape-Shift"])
 	if imp["rat"] != "20 ft." || imp["raven"] != "20 ft., Fly 60 ft." || imp["spider"] != "20 ft., Climb 20 ft." || len(imp) != 3 {
 		t.Errorf("Imp's forms: %v", imp)
 	}
-	quasit := shapeForms(texts["Quasit|Shape-Shift"])
+	quasit := formSpeeds(texts["Quasit|Shape-Shift"])
 	if quasit["bat"] != "Speed 10 ft., Fly 40 ft." && quasit["bat"] != "10 ft., Fly 40 ft." || len(quasit) != 3 {
 		t.Errorf("Quasit's forms: %v", quasit)
 	}

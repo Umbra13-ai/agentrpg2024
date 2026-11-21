@@ -74,6 +74,24 @@ Report: "Wizard Scholar accepts any skill for Expertise."
   An action that offers several named effects (splitSaveOptions) is refused until the GM names one in `use`; a size-gated
   condition (saveEffect.conditionsFor) and a staged "Second Failure" go through the same owner, never a per-monster branch.
   The conditions a stat-block hit gives (parseHitRider, giveConditions) are read and applied by that same owner.
+  A condition's time is read once (`readRider`): "for N minutes/hours" and a rolled "for 1d4 hours" (`conditionDuration`, rolled for each
+  target in `conditionAdd`; never an immunity's "for 24 hours"), "or until it takes damage" (an Unconscious ended by `wakeOnDamageSleep`);
+  "(Constructs and Undead succeed automatically)" is `AutoSucceedTypes`, read by `rollForTarget` for every target kind. **An aura at the end
+  of the monster's turn** (`runMonsterEndAuras`): damage (`endAuraRe`) or a saving throw (`saveEndAuraRe`, `endSaveAura`, a success's
+  immunity honored); "of its choice" is its enemies (`chosenAuraTargets`). Go: `TestPostgresBookTimedAndLinkedConditions`,
+  `TestPostgresBookEndOfTurnAuras`.
+- **A monster's form** (`cmd/server/monster_shape_shift_2024.go`): `shapeShiftForms` reads a Shape-Shift entry (its forms and true form);
+  the entry with `use` naming a form records it (`resolveShapeShift`, combat effect `shape_form` = "form|its Speed line", kept across its
+  turns; `shapeShiftUseRefusal` refuses another word before anything runs); the form's own Speed (`formSpeeds`, read back by
+  `formSpeedText` for `monsterWalkSpeed`, the Speed list and the movement owner) is part of the same record; an entry named
+  "(Wolf or Hybrid Form Only)" is refused in another form by `formRefusal`, read by `monsterEntryRefusal` and the Multiattack plan.
+  **A trait that acts when the creature receives a condition** (Prone Deficiency) is `conditionTraitReaction`
+  (`monster_condition_traits_2024.go`), called by `conditionTakesHold`. Go: `TestPostgresBookShapeShiftAndConditionTriggers`.
+  **A creature's trait that gives attacks against it Disadvantage** (Blurred Form) is `attackedWithDisadvantage`, one row of
+  `attackSources`. **A light a monster switches on and off** (Ignited Illumination) is `resolveLightToggle` (combat effect `ablaze`), read
+  by `monsterLightRadii` in the lighting owner. **A Reaction to the creature's own failed save** (Mind Corrosion) is `failedSaveReaction`
+  (`monster_save_reactions_2024.go`), called by `saveCtx.resist` with the save's `source` (a character's spell: `monsterSpellSaveBy`).
+  Go: `TestPostgresBookDefensesLightAndSaveReactions`, `TestPostgresBookEscapeCheck`.
 - **A creature's Speed** (`cmd/server/speed_owner_2024.go`): `characterSpeed` asks the one owner for conditions (Speed 0), spells (Slow, Haste),
   weapon-mastery effects and stat-block Speed riders (`speed_halved`, `speed_zero`, `speed_minus` markers); a character's movement budget
   follows a Speed that changes mid-turn (`settleMovement`). Effects whose result depends on an order the rules supplied do not give are never computed: the GM rules
@@ -119,7 +137,7 @@ Report: "Wizard Scholar accepts any skill for Expertise."
   - "Immediately after dealing damage to a creature that is already Bloodied" is `movementEntryRefusal`.
   - Dragging a grappled creature is `dragCost` (Abduct).
   - A fall is `monsterFalls` with `fallDamageDice` (also the GM's falling damage).
-  - Shape-Shift Speeds are `shapeShift` / `shapeShiftRefusal` / `formSpeedText`.
+  - Shape-Shift Speeds are the form owner's (`formSpeeds` / `formSpeedText`, `monster_shape_shift_2024.go`).
   - Sharing space (Swarm, Incorporeal Movement) is `markMapSpaces` in `map_spaces_2024.go`, with the turn-end hook
     `objectEndDamage`.
   - Go: `TestChargeWordingsOverTheCatalog`, `TestPostgresChargeOnEveryTarget`, `TestPostgresHitPushOnEveryTarget`,
@@ -276,6 +294,8 @@ Add to the owner, never beside it. When you give another rule one owner, add it 
   with the record as combat_effects rows gated on that record (`gate_condition`: a no_healing row and a recurring_damage row the
   recurring owner ticks, `monster_recurring_damage_2024.go`); the record's end ends them; `conditionView`'s `effects` shows them.
   A text's damage dealt now is `immediateDamage`: never a damage "at the start (or end) of each of ... turns" (feedback log 63).
+  "While Frightened, the target has the Paralyzed condition" (`lastingEffects.Also`) is a record noted `notesEndsWith`+"frightened",
+  ended with that record by `conditionChange.remove` (the one place every record ends); Grappled's Restrained stays `linkedCondition`.
   **The conditions a spell ends** (Heal, Mass Heal, Power Word Heal, Protection from Poison, Lesser and Greater Restoration's
   pick): the table `spellEndsConditions` with `endSpellConditions` (`spell_ends_conditions_2024.go`); a healing spell ends them
   before it heals (feedback log 64). A new spell that ends conditions is one row.

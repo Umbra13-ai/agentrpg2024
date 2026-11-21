@@ -552,6 +552,26 @@ Redirect Attack (supplied wording: "The goblin chooses a Small or Medium ally wi
 
 Protection ("An attack roll hits the wearer of the guardian's amulet while the wearer is within 5 feet of the guardian. Response: The wearer gains a +5 bonus to AC ...") is a monster guardian (defender-side Reaction) for a CHARACTER wearer hit by a MONSTER attacker. `TestPostgresProtectionVersusMonsterAttacker` covers it: a hit the +5 turns into a miss is undone (Hit Points and the hit's rider conditions, by id), a hit that still beats AC + 5 is left alone (mutation-checked on the rider removal). The same applies to a cast Shield (`shieldReaction`). Found by this work: a hit's conditions were applied after the hit was recorded, so a Shield or Protection that made it a miss left them on the wearer; and a Shield cast by standing order still got the hit's riders applied. Both are fixed and both are route-tested (the standing-order case with a wizard that has a Shield standing order; mutation-checked on the "hit became a miss" guard). Not covered: a wearer that is a monster hit by a character or monster (the wearer must be a character today: a monster wearer is not supported and not tested).
 
+## CR 0-1 Monster Manual entries outside the SRD (2026-11-21)
+
+Read from the 2024 Monster Manual Word documents (no book text is committed; tests use invented wording with the same pattern; such monsters enter through the GM compendium import). Rules added to the owners, each for every target kind (character, monster, companion):
+
+- **A condition's time** (`readRider`): "for 10 minutes", and a rolled "for 1d4 hours" / "for 1d12 hours" (Flumph Stench Spray, Gas Spore Fungus Death Burst: `conditionDuration`, rolled per target in `conditionAdd`). An immunity's "for 24 hours" is never taken as the condition's time (Ghost Possession, found by the catalog diff).
+- **"or until it takes damage"** (Jackalwere Sleep Gaze): the Unconscious record ends on damage (`notesEndsOnDamage`, `wakeOnDamageSleep`); "or a creature within 5 feet of it takes an action to wake it" is the GM's.
+- **"(Constructs and Undead succeed automatically)"**: `AutoSucceedTypes`, an automatic success in `rollForTarget` for a target of that creature type (`creatureTypeOf`).
+- **"While Frightened, the target has the Paralyzed condition"** (Scarecrow Terrifying Glare; SRD Chuul Paralyzing Tentacles and Harpy Luring Song too): `lastingEffects.Also`, a record noted `ends_with:<condition>` that `conditionChange.remove` ends with the first record. The Harpy's "ignores the Luring Song of other harpies" and its movement stay the GM's.
+- **A saving throw aura at the end of the monster's turn** (Manes Vaporspawn Sickening Vapors): `saveEndAuraRe` / `endSaveAura`, the save effect owner for every creature in the Emanation on the battle map, a success's immunity honored. A trait that opens with its own condition ("While underwater, the aboleth ...") stays the GM's.
+- **An aura "of its choice"** (Salamander Fire Snake, SRD Azer and Salamander Fire Aura): its enemies (characters and companions), never the monsters of its side (`chosenAuraTargets`); before, the whole aura went to the GM.
+
+Verified as already handled (probe of the book text through the readers): Mud and Smoke Mephit (Death Burst, breath conditions until the end of the mephit's next turn), Myconid Adult Pacifying Spores (Stunned, repeat save, 1-minute limit), Kuo-toa Whip Pincer Staff (size-gated grapple, lockout) and Shield of Faith, Faerie Dragon Youth (Magic Resistance, Euphoria Breath's Incapacitated; its random movement is the GM's), Gas Spore Tendril, Modron Multiattacks, Winged Kobold Chromatic Spittle. Go: `TestPostgresBookTimedAndLinkedConditions`, `TestPostgresBookEndOfTurnAuras`.
+
+## A monster's form (Shape-Shift) and form-limited entries
+
+`monster_shape_shift_2024.go`. A Shape-Shift entry ("shape-shifts into ... or it returns to its (true) ... form") is read by `shapeShiftForms`: its forms and its true form (Jackalwere: human, hybrid, true form jackal; Werewolf: hybrid, wolf, true humanoid; Imp: rat, raven, spider; Vampire: bat, mist, true vampire; Mimic: object, true blob). Sent with `use` naming a form, the entry records it (combat effect `shape_form`, kept across the monster's turns, ended with the fight); another word is refused. An entry named "(X or Y Form Only)" is refused in another form, alone or inside a Multiattack, before anything is rolled (`formRefusal`, read by `monsterEntryRefusal` and the Multiattack plan); the monster starts in its true form. What a form changes besides (size, a Speed, "can't speak in bat form") stays the GM's, as the reply says. Effect on the SRD: a lycanthrope's beast or hybrid attacks (and its Longbow or Handaxe in hybrid or humanoid form) now follow its form; the Vampire's Multiattack and Grave Strike need its vampire form.
+
+## A trait that acts when the creature receives a condition
+
+`monster_condition_traits_2024.go`: "If the flumph receives the Prone condition, roll a die. On an odd number, it has the Incapacitated condition. At the end of each of its turns, ... a DC 10 Dexterity saving throw, ending the Incapacitated condition on a success" (Flumph, Prone Deficiency). `conditionTakesHold` calls `conditionTraitReaction` for a monster or a companion once the condition took hold; the die is rolled and the second condition, with its repeated save, goes through `addCondition`. Go: `TestPostgresBookShapeShiftAndConditionTriggers`.
 
 ## Obscured areas, senses and light (CR 0-1, 2026-11-21)
 
@@ -617,7 +637,18 @@ One owner of movement that isn't plain walking, every rule read from the entry's
 - **A fall** ("The X falls."): falling damage is `fallDamageDice` d6 Bludgeoning, the one rule of a fall's dice, also read by the
   GM's falling damage. It is taken less what the entry reduces ("reduces any damage it takes from the fall by 20"), from the
   token's altitude, and the token lands. Without a height the GM is told.
-- **Shape-Shift Speeds:** the forms come from the entry. The GM names one in `use` (`shapeShiftRefusal` refuses any other), and
-  its Speeds stand for the monster's (`formSpeedText`, read by `monsterWalkSpeed` and the Speed list) until it shifts again.
+- **Shape-Shift Speeds:** part of the one form owner (`monster_shape_shift_2024.go`): the GM names a form in `use`
+  (`shapeShiftUseRefusal` refuses any other), and its Speeds (`formSpeeds`) stand for the monster's (`formSpeedText`, read by
+  `monsterWalkSpeed` and the Speed list) until it shifts again.
 - **Not modelled:** Standing Leap, Running Leap and Jumper. The battle map has no pits or gaps a jump could cross, so a jump is
   just part of the move's distance; their traits stay in the GM's stat block.
+
+## The rest of the CR 0-1 entries (2026-11-21, after the areas work)
+
+- **Blurred Form** (SRD Steam Mephit): "Attack rolls against the mephit are made with Disadvantage unless the mephit has the Incapacitated condition": `attackedWithDisadvantage`, one row of `attackSources`, for every attacker (character, monster, companion); no Disadvantage while the mephit has any condition that includes Incapacitated.
+- **Ignited Illumination** (SRD Magmin): a light the monster switches on and off (`use` "ignite" or "extinguish", else the other state): combat effect `ablaze` (kept across its turns), read by the lighting owner's `monsterLightRadii`.
+- **Mind Corrosion** (Monster Manual Psychic Gray Ooze): its Reaction after it fails a save against a spell or a magical effect: `failedSaveReaction`, called by `saveCtx.resist` when the save's source is known (a character's spell through `monsterSpellSaveBy`; a monster's magical effect through `rollForTarget`), once a round, none while it can't take Reactions; the damage goes through the Hit Point owner of the creature that caused the save.
+- **Eldritch Lantern** (Monster Manual Kenku): "casts Faerie Fire" is the monster cast owner's (already handled).
+- **Rapport Spores** (Monster Manual Myconids): telepathy, no server state: the GM's, and the reply says so.
+- **Sticky Net** (Kuo-toa): the escape check "A creature can take an action to make a DC 10 Strength (Athletics) check to free itself" is the condition record's (`saveEffect.Escapes`, POST /api/conditions/escape); destroying the net (an object) and freeing another creature stay the GM's.
+- **Not built**: Sticky Shield (Kuo-toa: a Reaction to a missed melee weapon attack that sticks the weapon) needs a miss trigger and item state; Myconid Sun Sickness ("dies if it spends more than 1 hour in sunlight") needs a clock of time spent in sunlight (its D20 Tests Disadvantage reads the areas work's Sunlight owner where the wording matches).

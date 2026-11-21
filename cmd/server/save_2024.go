@@ -72,6 +72,11 @@ func (c *saveCtx) resist(st saveStakes) game.SaveResult {
 		r.Success = true
 		r.Changed = append(r.Changed, "Legendary Resistance")
 	}
+	if !r.Success && !c.peek && (c.spell || c.magical) && c.source != 0 { // Mind Corrosion: a Reaction to its own failed save (monster_save_reactions_2024.go)
+		if note := failedSaveReaction(c.lobby, c.saver, c.source); note != "" {
+			addSaveNote(c.lobby, note)
+		}
+	}
 	return r
 }
 

@@ -378,7 +378,7 @@ func TestPostgresShapeShiftFallAndDrag(t *testing.T) {
 	if c, r := narrate("Form Quasit", "Shape-Shift", ""); c == 200 || !strings.Contains(fmt.Sprint(r["message"]), "bat") {
 		t.Errorf("Shape-Shift with no form: %d %v", c, r)
 	}
-	if c, r := narrate("Form Quasit", "Shape-Shift", "bat"); c != 200 || !strings.Contains(fmt.Sprint(r["monster_action_result"]), "form of a bat") {
+	if c, r := narrate("Form Quasit", "Shape-Shift", "bat"); c != 200 || !strings.Contains(fmt.Sprint(r["monster_action_result"]), "its bat form") || !strings.Contains(fmt.Sprint(r["monster_action_result"]), "Fly 40 ft") {
 		t.Fatalf("Shape-Shift into a bat: %d %v", c, r)
 	}
 	turnOf(quasit)

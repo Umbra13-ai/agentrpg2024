@@ -217,7 +217,7 @@ func resolveSpellOnMonster(charID int, spellKey string, spell SRDSpell, damageDi
 				if disWhy != "" {
 					dis = []string{disWhy}
 				}
-				sv := monsterSpellSaveResult(lobbyID, id, ability, saveDC, stakes, dis)
+				sv := monsterSpellSaveBy(lobbyID, id, ability, saveDC, stakes, dis, charID)
 				saved = sv.Success
 				how = sv.Clause()
 			}

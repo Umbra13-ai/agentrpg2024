@@ -69,6 +69,11 @@ var (
 	regenFromZeroRe = regexp.MustCompile(`(?i)dies only if it starts its turn with 0 Hit Points and doesn['’]t regenerate`)
 	startAuraRe     = regexp.MustCompile(`(?:any|each) (enemy|creature|Beast or Humanoid)[^.]*?starts its turn (?:in the aura|in an? (\d+)-foot Emanation|within (\d+) feet)`)
 	endAuraRe       = regexp.MustCompile(`At the end of each of the [^,]+ turns, each creature( of the [^ ]+ choice)? in an? (\d+)-foot Emanation originating from the [^ ]+ takes (\d+) \(([^)]+)\) ([A-Za-z]+) damage`)
+	// saveEndAuraRe: a saving throw aura at the end of the monster's turn ("Constitution Saving Throw: DC 12, each creature in a 5-foot
+	// Emanation originating from the manes at the end of the manes's turn": Sickening Vapors)
+	// The save opens the trait: one that begins with a condition of its own ("While underwater, the aboleth is surrounded by mucus.
+	// Constitution Saving Throw ...") is the GM's, who judges the condition.
+	saveEndAuraRe   = regexp.MustCompile(`^[A-Z][a-z]+ Saving Throw: DC \d+, each (?:creature|enemy)( of the [^ ]+ choice)? in an? (\d+)-foot Emanation originating from the [^ ]+ at the end of the [^ ]+ turns?\b`)
 	legendaryOnceRe = regexp.MustCompile(`can’t take this action again until the start of its next turn|can't take this action again until the start of its next turn`)
 )
 
@@ -594,6 +599,13 @@ func runMonsterEndAuras(lobbyID int, cursor monsterEndAuraCursor) []string {
 	var log []string
 	for i := cursor.Next; i < len(meta.Traits); i++ {
 		t := meta.Traits[i]
+		if sm := saveEndAuraRe.FindStringSubmatch(t.Text); sm != nil {
+			log = append(log, endSaveAura(lobbyID, id, name, t, sm)...)
+			if combatResolutionPaused(lobbyID) {
+				return log
+			}
+			continue
+		}
 		m := endAuraRe.FindStringSubmatch(t.Text)
 		if m == nil {
 			continue
@@ -606,8 +618,11 @@ func runMonsterEndAuras(lobbyID int, cursor monsterEndAuraCursor) []string {
 		dtype := strings.ToLower(m[5])
 		tail := strings.TrimSpace(strings.TrimPrefix(strings.TrimSpace(t.Text), m[0]))
 		incapacitatedException := strings.HasPrefix(tail, "unless ") && strings.HasSuffix(tail, " has the Incapacitated condition.")
-		if m[1] == "" && (tail == "" || tail == "." || incapacitatedException) && validStatBlockDamage(dice, dtype, nil) {
+		if (tail == "" || tail == "." || incapacitatedException) && validStatBlockDamage(dice, dtype, nil) {
 			targets, placed, unplaced := monsterEndAuraTargets(lobbyID, id, rng)
+			if m[1] != "" { // "each creature of the salamander's choice": its enemies
+				targets = chosenAuraTargets(targets)
+			}
 			if !placed {
 				log = append(log, fmt.Sprintf("[GM: %s's %s needs the source and affected creatures placed on the map. No aura damage was rolled.]", name, t.Name))
 				continue
@@ -663,6 +678,55 @@ func runMonsterEndAuras(lobbyID int, cursor monsterEndAuraCursor) []string {
 		}
 	}
 	return log
+}
+
+// endSaveAura: a saving throw aura at the end of the monster's turn (saveEndAuraRe): every creature in the Emanation on the battle map
+// (of its choice: its enemies, chosenAuraTargets) rolls the save through the save effect owner; a creature immune to it (a success's
+// "immune to this manes's Sickening Vapors for 24 hours") is left out.
+func endSaveAura(lobbyID, id int, name string, t srdMonsterEntry, sm []string) []string {
+	if strings.Contains(t.Text, "Incapacitated condition") && strings.Contains(t.Text, "unless") && monsterIncapacitated(lobbyID, id) {
+		return nil
+	}
+	eff, ok := parseSaveEffect(t.Text)
+	if !ok {
+		return nil
+	}
+	rng, _ := strconv.Atoi(sm[2])
+	targets, placed, unplaced := monsterEndAuraTargets(lobbyID, id, rng)
+	if !placed {
+		return []string{fmt.Sprintf("[GM: %s's %s needs the source and affected creatures placed on the map. No saving throw was rolled.]", name, t.Name)}
+	}
+	if sm[1] != "" {
+		targets = chosenAuraTargets(targets)
+	}
+	var in []int
+	for _, tid := range targets {
+		if !effectImmune(lobbyID, tid, id, t.Name) {
+			in = append(in, tid)
+		}
+	}
+	var log []string
+	if unplaced {
+		log = append(log, fmt.Sprintf("[GM: check any unplaced creatures for %s's %s and resolve their exposure if needed.]", name, t.Name))
+	}
+	if len(in) == 0 {
+		return log
+	}
+	eff.SourceID, eff.ImmunityName = id, t.Name
+	lines, _ := applySaveEffect(lobbyID, name+" ("+t.Name+")", eff, in, true)
+	return append(log, fmt.Sprintf("%s's %s: %s", name, t.Name, strings.Join(lines, " ")))
+}
+
+// chosenAuraTargets: the creatures an aura "of its choice" affects: its enemies (the characters and their companions), never the other
+// monsters of the fight (its side).
+func chosenAuraTargets(targets []int) []int {
+	var out []int
+	for _, tid := range targets {
+		if tid > 0 {
+			out = append(out, tid)
+		}
+	}
+	return out
 }
 
 func monsterEndAuraTargets(lobby, source, radius int) (targets []int, placed, unplaced bool) {
@@ -1095,6 +1159,10 @@ func monsterEntryRefusal(lobbyID, id int, entry srdMonsterEntry) string {
 	if monsterIncapacitated(lobbyID, id) {
 		return creatureName(lobbyID, id) + " is Incapacitated and can't act."
 	}
+	if formGateRe.MatchString(entry.Name) { // "(Wolf or Hybrid Form Only)" in another form (monster_shape_shift_2024.go)
+		_, meta, _ := monsterCombatant(lobbyID, id)
+		return formRefusal(lobbyID, id, meta, entry.Name)
+	}
 	return movementEntryRefusal(lobbyID, id, entry) // when it may be used (Rampage: creature_movement_2024.go)
 }
 
@@ -1132,7 +1200,7 @@ func resolveMonsterActionByName(r *http.Request, lobbyID int, monster, action, t
 	if why := replaceRefusal(entry, use); why != "" { // a "use" the entry's replacement sentence doesn't offer (monster_replace_2024.go)
 		return "", true, why
 	}
-	if why := shapeShiftRefusal(entry.Text, use); why != "" { // a Shape-Shift form it doesn't offer (creature_movement_2024.go)
+	if why := shapeShiftUseRefusal(entry.Name, entry.Text, use); why != "" { // a Shape-Shift form it doesn't offer (monster_shape_shift_2024.go)
 		return "", true, why
 	}
 	s := loadMonsterState(lobbyID, id)

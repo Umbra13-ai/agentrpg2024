@@ -371,6 +371,13 @@ var attackSources = []attackSource{
 		return yes(hasCond(c.targetConds, "prone") && !c.withinFive())
 	}},
 	{false, "the target is Dodging", func(c *attackCtx) (bool, string) { return yes(c.target > 0 && dodgeActive(c.target)) }}, // the Dodge action (dodge_2024.go)
+	{false, "", func(c *attackCtx) (bool, string) { // Blurred Form: the target's own trait (attackedWithDisadvantage)
+		if c.lobby <= 0 || c.target == 0 {
+			return false, ""
+		}
+		name := attackedWithDisadvantage(c.lobby, c.target, c.targetConds)
+		return name != "", name
+	}},
 	{false, "Foresight", func(c *attackCtx) (bool, string) {
 		if c.target <= 0 {
 			return false, ""

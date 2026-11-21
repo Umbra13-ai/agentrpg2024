@@ -52,6 +52,8 @@ type lastingEffects struct {
 	Condition string
 	NoRegain  bool
 	Tick      *recurringDamageSpec
+	Also      []string // conditions the target also has while it has Condition ("While Frightened, the target has the Paralyzed condition")
+	AlsoNotes string   // the note of those records (notesEndsWith + Condition; Unconscious that also ends on damage: notesEndsWithPoisonOrDamage)
 }
 
 var (
@@ -60,6 +62,10 @@ var (
 	lastingTickRe     = regexp.MustCompile(`(?i)takes (\d+) \((\d+d\d+(?:\s*[+−-]\s*\d+)?)\) ([A-Za-z]+) damage at the start of each of its turns`)
 	lastingRepeatRe   = regexp.MustCompile(`(?i),?\s*and it repeats the save at the end of each of its turns, ending the effect on itself on a success`)
 	lastingJoinRe     = regexp.MustCompile(`(?i)^[\s,.]*(?:and[\s,.]*)*$`)
+	// lastingAlsoRe: "(also) has the Paralyzed condition" in a "While <Condition>, the target ..." sentence
+	lastingAlsoRe = regexp.MustCompile(`(?:also )?has the ([A-Z][a-z]+(?:(?:, | and )[A-Z][a-z]+)*) conditions?`)
+	// lastingWakeRe: ", which ends early if the target takes (any) damage": an Unconscious that also ends on damage
+	lastingWakeRe = regexp.MustCompile(`(?i),?\s*which ends early if the target takes (?:any )?damage`)
 )
 
 // readLastingEffects reads sentence as the lasting effects of one of conds (the conditions the same text gives). rest is the part of
@@ -92,7 +98,25 @@ func readLastingEffects(sentence string, conds []string) (l *lastingEffects, res
 		l.Tick = spec
 		body = lastingTickRe.ReplaceAllString(body, "")
 	}
-	if !l.NoRegain && l.Tick == nil {
+	// "While Frightened, the target has the Paralyzed condition" (Scarecrow Terrifying Glare), "While Charmed, the target has the
+	// Incapacitated condition" (Harpy): records that last as long as the condition's record (notesEndsWith). Grappled's Restrained is
+	// the grapple's linked record (saveEffect.RestrainedToo), not read here.
+	if a := lastingAlsoRe.FindStringSubmatch(body); a != nil && cond != "grappled" {
+		for _, n := range regexp.MustCompile(`, | and `).Split(a[1], -1) {
+			if c := strings.ToLower(strings.TrimSpace(n)); mfxConditions[c] && c != cond {
+				l.Also = append(l.Also, c)
+			}
+		}
+		if len(l.Also) > 0 {
+			l.AlsoNotes = notesEndsWith + cond
+			body = strings.Replace(body, a[0], "", 1)
+			if cond == "poisoned" && len(l.Also) == 1 && l.Also[0] == "unconscious" && lastingWakeRe.MatchString(body) {
+				l.AlsoNotes = notesEndsWithPoisonOrDamage // ends with the Poisoned record or when it takes damage (wakeOnDamageSleep)
+				body = lastingWakeRe.ReplaceAllString(body, "")
+			}
+		}
+	}
+	if !l.NoRegain && l.Tick == nil && len(l.Also) == 0 {
 		return nil, sentence
 	}
 	body = lastingRepeatRe.ReplaceAllString(body, "") // the repeated save is the condition record's (EndSave)
@@ -112,7 +136,19 @@ func (l lastingEffects) words() string {
 	if l.Tick != nil {
 		parts = append(parts, fmt.Sprintf("takes %d (%s) %s damage at the start of each of its turns", l.Tick.Average, l.Tick.Dice, l.Tick.Type))
 	}
+	if len(l.Also) > 0 {
+		parts = append(parts, "has the "+joinNames(titleWordsAll(l.Also))+" condition")
+	}
 	return strings.Join(parts, " and ") + " while " + titleCase(l.Condition)
+}
+
+// titleWordsAll: each condition name in title case.
+func titleWordsAll(cs []string) []string {
+	out := make([]string, len(cs))
+	for i, c := range cs {
+		out[i] = titleCase(c)
+	}
+	return out
 }
 
 // addLastingEffects writes the effects for a target that has the condition from sourceID (rows replace the same source's earlier ones).
