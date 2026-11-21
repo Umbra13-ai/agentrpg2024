@@ -49,6 +49,9 @@ var (
 	mfxEmanRe                    = regexp.MustCompile(`(\d+)\s*-?\s*foot Emanation`)
 	mfxUntilStartRe              = regexp.MustCompile(`until the start of (?:its|the (?:[^ ]+?)['’]s) next turn`) // the attacker's turn ("the empyrean's"); "the target's" is the target's own
 	mfxUntilEndRe                = regexp.MustCompile(`until the end of the ([^ ]+?)['’]s next turn`)             // an end anchored to a named creature's turn; "the target's" is the target's own
+	mfxEndSaveRe                 = regexp.MustCompile(`(?i)repeats the save at the end of each of its turns|at the end of each of its turns, (?:the target|it) repeats the save`)
+	mfxAutoSucceedRe             = regexp.MustCompile(`(?i)\bAfter (\d+) minutes?, it succeeds automatically`)
+	targetIsCreatureGateRe       = regexp.MustCompile(`(?i)\bIf the target is a creature,?(?:\s+(?:its|it)\b)?`)
 	mfxDurationRe                = regexp.MustCompile(`(?i)(?:until the (?:start|end) of (?:its|the [^ ]+) next turn|for 1 (?:minute|hour)|for 24 hours)`)
 	mfxConditions                = map[string]bool{"blinded": true, "charmed": true, "deafened": true, "frightened": true, "grappled": true, "incapacitated": true,
 		"invisible": true, "paralyzed": true, "petrified": true, "poisoned": true, "prone": true, "restrained": true, "stunned": true, "unconscious": true}
@@ -82,34 +85,36 @@ type saveEffect struct {
 	HalfOnSuccess      bool
 	SeverePoison       *severePoisonEffect
 	Conditions         []string
-	Rounds             int         // condition duration in rounds (0: until removed)
-	UntilStart         bool        // "until the start of its next turn"
-	UntilEnd           bool        // "until the end of the <creature>'s next turn": ends at the end of the SOURCE creature's turn (monsterFeaturesTurnEnd)
-	EndSave            bool        // repeats the save at the end of each of its turns
-	Exhaustion         int         // Exhaustion levels on a failure
-	EscapeDC           int         // "the Grappled condition (escape DC 16)": the DC of the escape checks
-	RestrainedToo      bool        // "and it has the Restrained condition until the grapple ends": Restrained that ends with the Grappled record
-	SpeedMode          string      // "halved", "zero" or "minus": a Speed rider of the text (speed_owner_2024.go), applied as a marker until the end of the target's next turn
-	Always             *saveEffect // the conditions, Speed and Disadvantage of "Failure or Success:": given to every target that rolled the save
-	DisadvMode         []string    // "sap", "attacks", "concentration": Disadvantage riders of the text (disadvantage_riders_2024.go)
-	SpeedMinus         int         // the feet of "its Speed decreases by 10 feet"
-	ImmunityName       string      // stat-block entry key for persisted success immunity (set by the effect caller)
-	Immunity           bool        // success grants immunity to this source and entry
-	ImmunityAllSources bool        // "immune to the <entry> of all <kind>s": the immunity covers every source of the entry, not only the grantor
-	ImmunityRounds     int         // source duration, in combat rounds
-	ImmunityDuration   string      // the parsed numeric duration for the result
-	CondDamageImmunity string      // a damage Immunity excludes its condition rider
-	CondMaxSize        string      // "If the target is a Huge or smaller creature, ... has the Prone condition": the conditions apply only to a target of this size or smaller
-	CondIfAdvantage    bool        // "... and the darkmantle had Advantage on the attack roll": the conditions apply only when the roll had Advantage (enforced by the hit caller, which has the roll)
-	Extra              string      // Failure text the server doesn't apply (for the GM)
-	Emanation          int         // feet, when the targets are in an Emanation from the monster
-	IsMagical          bool        // a nonspell effect explicitly labeled magical by its stat block
-	IsSpell            bool        // a spell: items that guard against spells work (legendary_more_2024.go)
-	SpellLevel         int         // its level (0: a cantrip)
-	School             string      // its school (Necromancy: the Scarab of Protection)
-	SingleTarget       bool        // aimed only at one creature, no area (Spell Absorption, Ring of Spell Turning's Reaction)
-	SourceID           int         // the monster it comes from
-	FromUndead         bool        // it comes from an Undead (the Scarab of Protection)
+	Rounds             int                 // condition duration in rounds (0: until removed)
+	UntilStart         bool                // "until the start of its next turn"
+	UntilEnd           bool                // "until the end of the <creature>'s next turn": ends at the end of the SOURCE creature's turn (monsterFeaturesTurnEnd)
+	EndSave            bool                // repeats the save at the end of each of its turns
+	Exhaustion         int                 // Exhaustion levels on a failure
+	EscapeDC           int                 // "the Grappled condition (escape DC 16)": the DC of the escape checks
+	RestrainedToo      bool                // "and it has the Restrained condition until the grapple ends": Restrained that ends with the Grappled record
+	SpeedMode          string              // "halved", "zero" or "minus": a Speed rider of the text (speed_owner_2024.go), applied as a marker for SpeedEnd
+	SpeedEnd           riderEnd            // the Speed rider's duration (rider_duration_2024.go)
+	Always             *saveEffect         // the conditions, Speed and Disadvantage of "Failure or Success:": given to every target that rolled the save
+	DisadvMode         []string            // the roll riders of the text: "sap", "exposed", "attacks", "concentration", "save:int", "noreactions" (disadvantage_riders_2024.go)
+	RollRiderEnd       map[string]riderEnd // the duration of each DisadvMode rider
+	SpeedMinus         int                 // the feet of "its Speed decreases by 10 feet"
+	ImmunityName       string              // stat-block entry key for persisted success immunity (set by the effect caller)
+	Immunity           bool                // success grants immunity to this source and entry
+	ImmunityAllSources bool                // "immune to the <entry> of all <kind>s": the immunity covers every source of the entry, not only the grantor
+	ImmunityRounds     int                 // source duration, in combat rounds
+	ImmunityDuration   string              // the parsed numeric duration for the result
+	CondDamageImmunity string              // a damage Immunity excludes its condition rider
+	CondMaxSize        string              // "If the target is a Huge or smaller creature, ... has the Prone condition": the conditions apply only to a target of this size or smaller
+	CondIfAdvantage    bool                // "... and the darkmantle had Advantage on the attack roll": the conditions apply only when the roll had Advantage (enforced by the hit caller, which has the roll)
+	Extra              string              // Failure text the server doesn't apply (for the GM)
+	Emanation          int                 // feet, when the targets are in an Emanation from the monster
+	IsMagical          bool                // a nonspell effect explicitly labeled magical by its stat block
+	IsSpell            bool                // a spell: items that guard against spells work (legendary_more_2024.go)
+	SpellLevel         int                 // its level (0: a cantrip)
+	School             string              // its school (Necromancy: the Scarab of Protection)
+	SingleTarget       bool                // aimed only at one creature, no area (Spell Absorption, Ring of Spell Turning's Reaction)
+	SourceID           int                 // the monster it comes from
+	FromUndead         bool                // it comes from an Undead (the Scarab of Protection)
 }
 
 // conditionAdd is the condition record a failed save leaves (character or monster target): its duration, the repeated save, the note
@@ -259,7 +264,12 @@ func (e *saveEffect) readRider(fail string) (extra []string) {
 	e.readSpeed(fail)
 	_, gmDisadv := e.readDisadvantage(fail)
 	extra = append(extra, gmDisadv...)
-	e.EndSave = strings.Contains(lf, "repeats the save at the end of each of its turns")
+	e.EndSave = mfxEndSaveRe.MatchString(lf)
+	autoLimit := false // the condition's limit was read from "After N minutes, it succeeds automatically"
+	if m := mfxAutoSucceedRe.FindStringSubmatch(fail); m != nil && e.EndSave && e.Rounds == 0 && len(e.Conditions) > 0 {
+		n, _ := strconv.Atoi(m[1])
+		e.Rounds, autoLimit = n*10, true // the repeated save ends it at the latest then
+	}
 	if x := mfxEscapeRe.FindStringSubmatch(fail); x != nil {
 		e.EscapeDC, _ = strconv.Atoi(x[1])
 	}
@@ -352,6 +362,7 @@ func (e *saveEffect) readRider(fail string) (extra []string) {
 		}
 		plain = mfxCondRe.ReplaceAllString(plain, "")
 		plain = mfxDurationRe.ReplaceAllString(plain, "")
+		plain = targetIsCreatureGateRe.ReplaceAllString(plain, "") // every target of these routes is a creature: the gate always holds
 		plain = strings.Trim(strings.NewReplacer("The target", "", "and the target", "", "damage", "", ",", "", ".", "").Replace(plain), " ")
 		if strings.Contains(ls, "suffocat") {
 			extra = append(extra, strings.TrimSuffix(strings.TrimSpace(s), ".")) // suffocation is the GM's (gm_2024.go suffocation; its while-attached end with it): never dropped as short
@@ -365,12 +376,45 @@ func (e *saveEffect) readRider(fail string) (extra []string) {
 			extra = append(extra, strings.TrimSuffix(strings.TrimSpace(s), ".")) // a Speed effect that is not applied is the GM's, never dropped as short
 			continue
 		}
+		if autoLimit && mfxAutoSucceedRe.MatchString(s) {
+			autoLimit = false // that one sentence is applied as the condition's duration (Rounds); a later one is another effect's
+			continue
+		}
 		if strings.Contains(ls, "repeats the save") || strings.Contains(ls, "exhaustion level") || len(plain) < 25 {
 			continue
 		}
-		extra = append(extra, strings.TrimSuffix(strings.TrimSpace(s), "."))
+		extra = append(extra, e.unappliedPart(s)) // the applied riders of the sentence are not repeated to the GM
 	}
 	return extra
+}
+
+// unappliedPart is a residual sentence without the Speed and roll riders the server applies from it ("The target can't take
+// Reactions; its Speed is halved; and it can take either an action or a Bonus Action on its turn, not both" leaves the last clause),
+// so the GM never reads an applied rider as one to apply. A sentence with nothing applied is kept whole.
+func (e *saveEffect) unappliedPart(s string) string {
+	r := strings.TrimSuffix(strings.TrimSpace(s), ".")
+	if e.SpeedMode != "" {
+		for _, re := range []*regexp.Regexp{speedZeroRe, speedHalvedRe, speedMinusRe} {
+			r = re.ReplaceAllString(r, "")
+		}
+	}
+	if len(e.DisadvMode) > 0 {
+		for _, re := range []*regexp.Regexp{disadvSapRe, exposedRe, disadvAttackRe, disadvConcRe, disadvSaveRe, noReactRe} {
+			r = re.ReplaceAllString(r, "")
+		}
+	}
+	if r == strings.TrimSuffix(strings.TrimSpace(s), ".") {
+		return r
+	}
+	var kept []string
+	for _, part := range regexp.MustCompile(`\s*[;,]\s*`).Split(r, -1) {
+		part = strings.TrimSpace(strings.TrimPrefix(strings.TrimSpace(part), "and "))
+		if part == "" || strings.EqualFold(part, "its") || strings.EqualFold(part, "and") || strings.EqualFold(part, "the target’s") || strings.EqualFold(part, "the target's") {
+			continue
+		}
+		kept = append(kept, part)
+	}
+	return strings.Join(kept, ", ")
 }
 
 // giveConditions gives a character target what a failed save or a hit gives besides damage: its conditions (not a size-gated one to a
@@ -448,6 +492,12 @@ func parseHitRider(desc string) (saveEffect, bool) {
 	}
 	var e saveEffect
 	e.Extra = strings.Join(e.readRider(hit), ". ")
+	if hpMaxDrainSentenceRe.MatchString(e.Extra) { // a hit's own: applied by hitAfterDamage on every hit route
+		e.Extra = strings.Trim(hpMaxDrainSentenceRe.ReplaceAllString(e.Extra, ""), " .")
+	}
+	if stripped := stripBurnForCreatures(e.Extra); stripped != e.Extra {
+		e.Extra = strings.Trim(stripped, " .")
+	}
 	return e, len(e.Conditions) > 0 || e.SpeedMode != "" || len(e.DisadvMode) > 0
 }
 
@@ -1235,6 +1285,10 @@ func resolveMonsterEffectText(r *http.Request, lobbyID, monsterID int, meta *mon
 		}
 	}
 
+	// a standard action the entry takes: Disengage recorded, a choice named in use (monster_standard_actions_2024.go)
+	if line, ok := resolveMonsterStandardAction(lobbyID, monsterID, name, entryName, text, use, apply); ok {
+		return append([]string{line}, notes...)
+	}
 	// Magical Darkness: a token-anchored emanation the visibility owner reads (monster_darkness_2024.go)
 	if magicalDarknessRe.MatchString(text) {
 		return resolveMagicalDarkness(r, lobbyID, monsterID, entryName, text, apply, notes)

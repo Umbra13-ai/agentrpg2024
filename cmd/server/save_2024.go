@@ -278,6 +278,12 @@ var saveSourceRows = []saveSource{
 	{saveDis, "a Disadvantage rider on its Concentration saves", func(c *saveCtx) (bool, string) {
 		return yes(c.concentration && c.saver != 0 && c.lobby > 0 && hasCondMarker(c.lobby, c.saver, "disadv_concentration"))
 	}},
+	{saveDis, "", func(c *saveCtx) (bool, string) { // "Disadvantage on Intelligence saving throws until ..." (a hit's or failed save's rider)
+		if saveDisadvantageRider(c.lobby, c.saver, c.ability) {
+			return true, "a Disadvantage rider on its " + game.AbilityName(c.ability) + " saves"
+		}
+		return false, ""
+	}},
 	{saveDis, "armor the saver isn't trained in", func(c *saveCtx) (bool, string) { // any D20 Test that uses Strength or Dexterity
 		return yes(c.saver > 0 && c.is("str", "dex") && isWearingNonProficientArmor(c.saver))
 	}},

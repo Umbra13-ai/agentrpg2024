@@ -85,21 +85,10 @@ func runMonsterAttackSequence(lobby int, c monsterAttackCursor) (string, map[str
 		a := c.Chosen[i].Action
 		a.Alts = c.Chosen[i].Alternatives
 		melee := meleeRe.MatchString(a.Desc) && !rangedOnlyRe.MatchString(a.Desc)
-		withinFive, longRange := melee, false
-		if distance, onMap := monsterDistance(lobby, c.Attacker, c.Target); onMap {
-			if n := monsterNormalRange(a.Desc); n > 0 && distance > n {
-				longRange = true
-			}
-			reach, ranged := monsterAttackReach(a.Desc)
-			if distance > reach {
-				what := "reach"
-				if ranged {
-					what = "range"
-				}
-				lines = append(lines, fmt.Sprintf("%s: %s is %d ft away, beyond its %d ft %s - no attack (move the monster on the battle map first)", a.Name, name, distance, reach, what))
-				continue
-			}
-			withinFive = distance <= 5
+		withinFive, longRange, refusal := monsterAttackRange(lobby, c.Attacker, c.Target, a.Desc, a.Name, name, melee)
+		if refusal != "" {
+			lines = append(lines, refusal)
+			continue
 		}
 		atk := attackCtx{lobby: lobby, attacker: c.Attacker, target: c.Target, name: a.Name, bonus: a.AttackBonus, melee: melee, weapon: true, longRange: longRange, within5: &withinFive, statBlockAttack: a.Desc, autoHit: autoHitRe.MatchString(a.Desc)}
 		rolled, out, note := atk.roll()
@@ -214,7 +203,8 @@ func runMonsterHit(lobby int, c *monsterHitCursor) (string, error) {
 							}
 						}
 					}
-					coverOK := true // the cover clause the conditions and suffocating hang on fired (its gates held)
+					line += hitAfterDamage(lobby, c.Target, c.Action.Desc, c.AttackerName+"'s "+stripUsage(c.Action.Name), c.HPBefore-monsterHPNow(lobby, c.Target)) // Life Drain, burning (hit_after_damage_2024.go)
+					coverOK := true                                                                                                                                  // the cover clause the conditions and suffocating hang on fired (its gates held)
 					if e, ok := parseHitRider(c.Action.Desc); ok {
 						_, gated := e.conditionsFor(lobby, c.Target)
 						coverOK = gated == "" && !(e.CondIfAdvantage && !c.Roll.HasAdvantage())

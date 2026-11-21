@@ -37,6 +37,8 @@ var monsterTraitRules = []monsterTraitRule{
 		Where: "monster_features_2024.go, saveCtx.resist"},
 	{Name: "Undead Fortitude", Does: "damage that drops it to 0 Hit Points (not Radiant, not a Critical Hit) gets a Constitution save, DC 5 + the damage, to stay at 1 Hit Point",
 		Where: "undeadFortitude (dodge_2024.go)"},
+	{Match: deathTriggerRe, Does: "when it dies, its saving throw effect is rolled for every creature in its Emanation on the battle map (monsters too), after the request that killed it or at the next turn start; without a map the GM is told",
+		Where: "recordDeathTriggerIn, drainDeathTriggers (monster_death_trigger_2024.go)"},
 	{Name: "Evasion", Does: "a Dexterity saving throw against an effect that halves damage on a success: a success takes none, a failure half",
 		Where: "applySaveEffectOnMonster (monster_save_targets.go) for a monster that is the target of a monster's save effect"},
 	{Name: "Aura of Authority", Does: "it and its allies within 10 feet have Advantage on attack rolls and saving throws", Where: "attackSources, saveSources", Aura: true},

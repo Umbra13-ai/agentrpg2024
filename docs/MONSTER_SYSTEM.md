@@ -201,7 +201,7 @@ Not done: choosing the random effect (the GM rolls or picks), the second stage o
 
 ## Conditions a hit gives (new: applied, not left to the GM)
 Before this change a stat-block attack applied only its damage; every rider ("If the target is a Large or smaller creature, it has the Prone condition", "Grappled (escape DC 14)", "Stunned until the start of the empyrean's next turn") was shown to the GM as "not applied automatically". Now `parseHitRider` (monster_effects_2024.go) reads the conditions of a hit with the same rule as a failed save (`readRider`), and `saveEffect.giveConditions` gives them to the target (condition records with the monster as the source; immunity honoured; size gate; escape DC; Restrained that ends with the grapple). The monster attack path (monster_attacks.go) calls it after the damage; the shared owners are unchanged (one condition builder, one size rule).
-- Still the GM's, shown in the reply with "[GM, not applied automatically: ...]": a choice or a roll of the condition ("the githzerai's choice of (A) ... or (B)", "determined by rolling 1d4"), curses, a second condition sentence ("Until the grapple ends, the target has the Restrained condition and can't teleport"), "While Poisoned, the target can't regain Hit Points", pushes and pulls, Speed and Disadvantage riders, Hit Point maximum changes.
+- Still the GM's, shown in the reply with "[GM, not applied automatically: ...]": a choice or a roll of the condition ("the githzerai's choice of (A) ... or (B)", "determined by rolling 1d4"), curses, a second condition sentence ("Until the grapple ends, the target has the Restrained condition and can't teleport"), "While Poisoned, the target can't regain Hit Points", pushes and pulls, a Speed or roll rider with no duration the server can count, Hit Point maximum changes. Speed and roll riders with a countable duration are applied (rider durations, below). "If the target is a creature" is a gate every target of these routes meets: it is not repeated to the GM once the rest of its sentence is applied.
 - "until the start of the <monster>'s next turn" is now the monster's turn start (same as "its"); before it was a one-round duration. `TestParseSaveEffect` was updated for that.
 - Tests: `TestPostgresMonsterHitRiders` (invented attacks: Prone stored from the monster, size gate with the reason in the reply, Grappled escape DC 17 + linked Restrained, Stunned until start of its next turn, a choice of conditions left to the GM, Poisoned applied while the remaining sentence stays with the GM; mutation switching the apply off fails it) and the route sweep (123 book attack actions hit; 23 hit-rider conditions checked as stored or explained). The sweep clears the character's conditions between attacks (stored riders would otherwise give Advantage and critical hits).
 - Not covered: monsters as the target of a monster attack's riders (this path is for characters); end-of-turn expiry of the hit-given Stunned was not replayed (the condition owner's time passing is tested in condition_records_test.go and in the save sweep).
@@ -226,7 +226,7 @@ Limits: a mixed Spellcasting reply (part rolled, part GM) is counted as executed
 ## Monster targets and the Speed owner (built; tiers stated)
 **Monster attacks on monster targets** (`monster_vs_monster.go`). A monster's attack action naming another monster or NPC of the fight ("Goblin 2", "#-3") now resolves through the same owners as a character target: the roll is `attackCtx` (Advantage and Disadvantage from both sides' conditions, the target's Armor Class from the fight), damage is `hurtMonster` (resistance, immunity, absorption, Undead Fortitude), conditions a hit gives are `giveConditions` (now the one function for characters and monsters; Exhaustion on a monster goes to the GM), a hit's own saving throw is `applySaveEffect`, and conditional damage (Bloodied, Grappled) reads the monster target. A limited-use attack counts when it is made against a monster target. Tested: `TestPostgresMonsterAttacksMonster` (resistance, stored condition with source, source-timed Stunned, the hit's save, preview changes nothing, Bloodied damage choice, no self-attack). A test found and fixed one bug: damage type must be lower case for resistance. Reactions of the target: a hit on a monster target is recorded like a character's hit on a monster (`noteCharHitOnMonster`, with the attacker's name), so the target's stat-block Reactions that answer a hit (Parry, Protective Magic's Shield, Deflect Missile, Redirect Attack, Protection) resolve against it when the GM calls them with POST /api/gm/narrate monster_action right after the hit; the reply names the target's Reactions and whether its Reaction is spent (`monsterTargetReactionNote`). Route-tested with Parry: the hit becomes a miss and its damage is given back, a natural 20 stays a hit, a second Reaction the same round is refused; mutation-checked (without the recording, Parry finds no hit). The server does NOT choose to react by itself (the GM chooses when a monster reacts, as for character attackers), and standing orders and Opportunity Attacks of this path stay the GM's; Shield, Deflect Missile, Redirect Attack and Protection use the same recorded hit but have no test of their own here. NOT covered, and the reply says so: Multiattack's non-attack parts, total cover on the map, a day limit is now tested for this path: a (1/Day) attack aimed at a monster target is counted when made, and the second try is refused before rolling (mutation-checked on the `daySettled` line in `resolveMonsterAttack`; the `markExecuted` call in `monsterAttacksMonster` is redundant for this count, so a mutation on it alone is not caught and nothing is claimed for it).
 
-**Speed owner** (`speed_owner_2024.go`; `characterSpeed` asks it). Sources: Grappled and Restrained (Speed 0), the Slow spell (halved, not against Freedom of Movement), Haste (doubled), Haste's lethargy (0), Slow and Hamstring Blow masteries and Frost's Chill (flat reductions, now enforced; before they were text), and stat-block riders ("Speed is halved", "Speed is 0 / reduced to 0", "Speed decreases by N feet") stored as markers `speed_halved`, `speed_zero`, `speed_minus` that end at the end of the target's next turn (counted down at the end of each of its turns, twice when the target is acting when it is applied). A rider is applied only when the text gives that duration; one that ends on the attacker's turn or has no duration stays in the GM text (a short Speed sentence used to be dropped silently there; fixed).
+**Speed owner** (`speed_owner_2024.go`; `characterSpeed` asks it). Sources: Grappled and Restrained (Speed 0), the Slow spell (halved, not against Freedom of Movement), Haste (doubled), Haste's lethargy (0), Slow and Hamstring Blow masteries and Frost's Chill (flat reductions, now enforced; before they were text), and stat-block riders ("Speed is halved", "Speed is 0 / reduced to 0", "Speed decreases by N feet") stored as markers `speed_halved`, `speed_zero`, `speed_minus` for the duration the text names (rider durations, below): the end of the target's next turn (counted down at the end of each of its turns, twice when the target is acting when it is applied), or the start or end of the source's next turn (ended by `expireSourceTurnConditions` on that creature's turn). A rider with no duration the server can count stays in the GM text (a short Speed sentence used to be dropped silently there; fixed).
 
 *Base Speed is not an effect.* `characterBaseSpeed` is one calculation (species or Wild Shape form, Large Form, class bonuses, Longstrider, Boots, armor Strength penalty, Exhaustion, a Fly Speed from a spell). Exhaustion's reduction is the glossary's own ("Your Speed is reduced by 5 times your Exhaustion level"). Before the owner, the Slow spell halved and Haste doubled the budget after that calculation (`spellTurnStart`, now removed); the owner keeps that order, so ordinary combinations (Slow with Exhaustion, Haste with Longstrider, Slow on a Fly Speed) are applied and never refused (tested with Exhaustion; the other bases are by the same code path).
 
@@ -235,21 +235,135 @@ Concrete ambiguity, left to the GM, only when the result depends on it: the serv
 
 *Mid-turn.* `movement_speed_base` remembers the Speed the budget came from; `settleMovement` (my-turn, action checks, map move) moves the budget by the change, so effects that arrive or end during the turn count. The budget may go below 0 internally and shows as 0: movement already spent stays spent, and effects that come and go give nothing back (tested: 25 of 30 spent, Slow arrives and ends). Dash under a halving is tested through the route (the halved budget plus the halved Speed).
 
-Tested: `TestSpeedFactorsCombine` (settled and unsettled combinations, the GM ruling), `TestSpeedRiderParsing`, `TestPostgresSpeedOwner` (marker stored and read, halved/0/-10, mid-turn budget, settle twice, effect ending mid-turn, spent movement not returned by toggling, turn start at Speed 0, attacker-turn rider kept for the GM, timing on another creature's turn and on its own, baseline Slow and Haste with Exhaustion never refused, Grappled with other effects, Slow, Slow with Hamstring Blow refused until the GM rules through the route and back, Haste); the ambiguity table and the own-turn rounds branch are mutation-checked. NOT covered: a monster's Speed is not a budget (the GM moves tokens; `monsterSpeedNote` lists the markers and a needed ruling, not yet shown on the map move); mounts reset the budget baseline; separate Fly/Swim budgets (one pool, effects applied to it); Beholder-style "can't take Reactions / action or Bonus Action, not both" parts stay with the GM; "Failure or Success" Speed text is still the GM's.
+Tested: `TestSpeedFactorsCombine` (settled and unsettled combinations, the GM ruling), `TestSpeedRiderParsing`, `TestPostgresSpeedOwner` (marker stored and read, halved/0/-10, mid-turn budget, settle twice, effect ending mid-turn, spent movement not returned by toggling, turn start at Speed 0, attacker-turn rider recorded for the attacker's turn end and ended there, timing on another creature's turn and on its own, baseline Slow and Haste with Exhaustion never refused, Grappled with other effects, Slow, Slow with Hamstring Blow refused until the GM rules through the route and back, Haste); the ambiguity table and the own-turn rounds branch are mutation-checked. NOT covered: a monster's Speed is not a budget (the GM moves tokens; `monsterSpeedNote` lists the markers and a needed ruling, not yet shown on the map move); mounts reset the budget baseline; separate Fly/Swim budgets (one pool, effects applied to it); Beholder-style "can't take Reactions / action or Bonus Action, not both" parts stay with the GM; "Failure or Success" Speed text is still the GM's.
 
-## Disadvantage riders (`cmd/server/disadvantage_riders_2024.go`)
+## Rider durations (`cmd/server/rider_duration_2024.go`)
 
-Read by `readRider` from a hit or a failed save, applied by `giveConditions`, by the one owner for characters and monsters.
+The duration of a Speed rider, a roll rider (below) and "can't take Reactions" is read in one place (`riderUntil`, `readRiderEnd`,
+`riderEndFor`: the rider's own sentence, else the effect's, as in "This effect lasts until the end of its next turn") and applied in one
+place (`riderEnd.markerAdd`):
+
+| Text | Ends | How |
+|---|---|---|
+| "until the end of its / the target's next turn" | the end of the target's next turn | `DurationRounds` 1, counted down at the end of the target's turns (2 when the target is acting now) |
+| "until the start of the worg's next turn" | the start of the source's next turn | note `until_start_of_next_turn`, `expireSourceTurnConditions` |
+| "until the end of the ooze's next turn" | the end of the source's next turn | note `until_end_of_next_turn` (`:skip_current` when given on the source's own turn) |
+| "until the start of its next turn" | not counted: whose turn is not said | left to the GM |
+
+A source-anchored rider needs its source creature; without it the reply names it as not applied (`riderNotApplied`). Conditions keep
+their own duration reader (`readRider`'s `UntilStart` / `UntilEnd` / `Rounds`), which ends on the same notes. Before this owner, the Speed,
+Disadvantage and Reaction riders each carried their own copy of "until the end of its next turn" and left every rider that ends on the
+attacker's turn to the GM (Lacedon Ghoul Icy Bite, Psychic Gray Ooze Pseudopod, Steam Mephit Steam Breath's Speed, Balor Lightning
+Blade).
+
+## A monster attack's range on the battle map (`monsterAttackRange`, `cmd/server/map_rules.go`)
+
+One rule for every target route (a character, `monster_attacks.go`; a monster, `monster_attack_continuation_2024.go`; a companion,
+`companions_more_2024.go`; before, each route had its own copy): beyond the attack's reach, or beyond its long range (or the single range of
+an attack with none, "range 320 ft."), no attack: the reply says so and nothing is rolled; beyond its normal range, Disadvantage ("long
+range"); within 5 feet read from the map. The distance is `tokenDistanceFeet`, a flying creature's altitude included, which is how a map
+of at most 40 squares (200 ft) reaches a bow's 600 ft. Tested: `TestPostgresMonsterAttackRangeOnEveryTarget` (POST /api/gm/narrate: the
+eight SRD 5.2.1 ranged attacks of the CR 0-1 roster with their published ranges checked against the catalog text, and a single-range attack
+with the Gears Launcher pattern, at the normal range, just past it, at the long range and just past it, against a character; a bow and the
+single-range attack against a monster, the bow against a companion). Mutation-checked: no refusal, no long-range Disadvantage, an
+off-by-one at the long range.
+
+## Traits that act on the monster's death (`cmd/server/monster_death_trigger_2024.go`)
+
+"The magmin explodes when it dies. Dexterity Saving Throw: DC 11, each creature in a 10-foot Emanation originating from the magmin. ..."
+(SRD 5.2.1 Death Burst of the Magmin and the Dust, Ice, Magma and Steam Mephits; the Balor's Death Throes; any imported stat block with
+the same wording). The three writers of a monster's Hit Points (`changeMonsterVitalsE`, `loseMonsterHP`, `saveMonsterHit`) call one
+`monsterDiedIn`, which records the death in the same transaction when the form has such a trait (`pending_death_triggers`). The
+trigger is resolved after the request that killed the monster has finished (`withProtections` calls `drainDeathTriggers`) and at every
+turn start (a turn hook, the backstop for a crash between the death's commit and the drain), never inside the damage transaction.
+Each row is claimed by one DELETE: resolved once; a crash in the middle of the resolution loses that burst (at most once, not at
+least once: the damage it deals is not idempotent). The save is the save owner's (`applySaveEffect`) for every creature within the
+Emanation of the monster's token on the battle map: characters, companions and living monsters (one burst can kill another monster and
+set off its burst). The result is a `monster_trait` record of the campaign's log and a GM notice. Without a battle map or without the
+monster's token nothing is rolled and the GM is told; text the server does not apply (the Balor's revival) goes to the GM.
+
+Tested: `TestPostgresDeathBurst` (POST /api/gm/adjust-monster kills; the burst damages the character, the companion and a monster
+within 10 feet, not one at 30 feet; it kills a second burst monster whose own burst follows; log and notices; a monster without the
+trait records nothing; no token: nothing rolled, the GM told; a pending row resolved at POST combat/next). Mutation-checked: a writer
+not recording the death, no drain after the request, no turn-start backstop. Not covered: a companion made from a form with the trait
+(the companion Hit Point owner records no death trigger), and conditions in a death trait's Failure (same owner as any save effect).
+
+## Standard actions a stat-block entry takes (`cmd/server/monster_standard_actions_2024.go`)
+
+"The goblin takes the Disengage or Hide action" (SRD 5.2.1 Nimble Escape: Goblin Minion, Warrior and Boss, Panther, Tiger; Cunning
+Action "takes the Dash, Disengage, or Hide action"). One reader (`monsterStandardActions`) for every such entry, in the monster effect
+resolver: an entry that offers several actions is refused until the GM names one in `monster_action.use` ("Nothing was done");
+Disengage is recorded as the combat effect `disengaged` on the monster, read by `noteMonstersLeavingReach` beside the GM's own
+`disengaged` list (no Opportunity Attack chance from its movement on a GM map update), ended at the start of its next turn by
+`expireCombatEffectsOf`; Hide, Dash and Dodge are the GM's and the reply says so (Hide with its DC 15 Stealth check and its
+requirements). Tested: `TestPostgresMonsterNimbleEscape` (narrate without use refused, nothing recorded; hide is the GM's; disengage
+recorded; PUT battle-map moving it out of a character's reach opens no chance, while the same move without it does; POST combat/next
+to its turn ends it). Mutation-checked on the Opportunity Attack owner's read.
+
+## A failed save's follow-up (`readRider`, `cmd/server/monster_effects_2024.go`)
+
+The repeated save is read in both word orders (`mfxEndSaveRe`: "repeats the save at the end of each of its turns" and "At the end of each
+of its turns, the target repeats the save": SRD 5.2.1 Quasit Scare, Djinni Create Whirlwind, whose Frightened or Restrained used to last
+until the GM removed it). "After 1 minute, it succeeds automatically" is the condition's limit when the text gives no other duration
+(`mfxAutoSucceedRe`: 10 rounds; Quasit, Doppelganger, Chuul, Pit Fiend), and that sentence is no longer given to the GM; a limit sentence
+of another effect of the same text stays with the GM (Sphinx of Valor's Roar). A residual sentence that shares a clause with an applied
+Speed or roll rider gives the GM only the unapplied part (`unappliedPart`: Slowing Breath leaves "it can take either an action or a Bonus
+Action on its turn, not both"; the Ice Devil's Ice Spear and the Dretch's Fetid Cloud no longer repeat their applied Speed and Reaction
+riders). Catalog-wide parse diff: exactly those entries changed. Tested: `TestSaveFollowUpParsing`, `TestPostgresRepeatedSaveWording`
+(POST /api/gm/narrate: the Frightened record has the repeated save at its DC and 10 rounds). Mutation-checked: the reversed wording not read,
+no limit, the whole sentence to the GM.
+
+## A hit's Hit Point maximum drain (`cmd/server/hp_max_drain_2024.go`)
+
+"If the target is a creature, its Hit Point maximum decreases by an amount equal to the damage taken" (SRD 5.2.1 Specter and Wraith Life
+Drain). One reader (`hpMaxDrainRe`) and one writer per target kind: `reduceMaxHP` (a character: locked row, never below 1, the reduction
+recorded in `max_hp_reduced`; `restoreAllHP`, the Long Rest, gives it back: SRD 5.2.1 glossary, Long Rest), `reduceMonsterMaxHP`,
+`reduceCompanionMaxHP` (`changeCompanionHP` now writes the maximum too). Every hit route calls `drainHPMaximum` with the damage the hit
+dealt (Temporary Hit Points included, as the Concentration DC counts it): the character route, the monster route and the companion route;
+the clause is no longer given to the GM on a hit. Not automated, still the GM's text: the same clause in a save effect (Wight, Succubus,
+Vampire, Vampire Spawn) and the typed "Acid damage taken" (Clay Golem); a maximum reduced to 0 (never below 1 here). Tested:
+`TestPostgresLifeDrainOnEveryTarget` (POST /api/gm/narrate at a character, a monster and a companion; the save form left to the GM; POST
+/api/characters/{id}/rest restores). Mutation-checked: each route's call, the Long Rest restore. Catalog parse diff: only Specter and
+Wraith changed.
+
+## What a hit does after its damage (`hitAfterDamage`, `cmd/server/hit_after_damage_2024.go`)
+
+Every hit route (character, monster, companion) calls `hitAfterDamage` once with the damage the hit dealt: the Hit Point maximum drain
+(above) and "it starts burning" (SRD 5.2.1 Magmin Touch, Fire Elemental Burn), which sets the target burning through the Burning owner
+(`burning_2024.go`: 1d4 Fire at the start of each of its turns, the `extinguish` action, a fight's end). A burning sentence applies to a
+creature only without a gate or with a gate that names a creature (`burnSentenceForCreatures`); "If the target is a flammable object ...,
+it starts burning" (Barbed and Horned Devil) stays in the GM's text. Found on the way: a burning companion's turn start went into the
+character branch and dealt nothing; it now takes the damage through `damageCompanion` (a companion without its own turn entry has no
+turn start: the GM's). Tested: `TestPostgresBurningOnHitEveryTarget`, `TestBurnSentenceForCreatures`; mutation-checked (no burning
+rider, the companion branch removed). Catalog parse diff: only Magmin and Fire Elemental changed.
+
+## Roll riders (`cmd/server/disadvantage_riders_2024.go`)
+
+Read by `readRider` from a hit or a failed save, applied by `giveConditions`, by the one owner for characters, monsters and companions
+(a companion's hit, `companionHitRiders`, and its failed save, `finishTarget`, both call it).
 
 | Text | What the server stores | Read by | Ends |
 |---|---|---|---|
-| "Disadvantage on its next attack roll before the start of the X's next turn" | combat effect `sap` | `attackSources` (the Sap row), consumed by the next attack roll | the source's next turn start (`expireCombatEffectsOf`) |
-| "Disadvantage on attack rolls until the end of its/the target's next turn" | marker condition `disadv_attacks` | `attackSources` | end of the target's next turn (2 rounds if it is acting now) |
-| "Disadvantage on saving throws to maintain Concentration until the end of its/the target's next turn" | marker `disadv_concentration` | `saveSources`, only for Concentration saves | as above |
+| "Disadvantage on its next attack roll before the start of the X's next turn" | combat effect `sap` | `attackSources` (the Sap row), consumed by the next attack roll it makes | the source's next turn start (`expireCombatEffectsOf`) |
+| "the next attack roll made against the target before the start of the X's next turn has Advantage" (Worg Bite) | combat effect `exposed` (the effect Guiding Bolt gives) | `attackSources` ("the target is exposed"), consumed by the next attack roll against it | the source's next turn start |
+| "Disadvantage on attack rolls until ..." | marker `disadv_attacks` | `attackSources` | its duration (rider durations) |
+| "Disadvantage on saving throws to maintain Concentration until ..." | marker `disadv_concentration` | `saveSources`, only for Concentration saves | its duration |
+| "Disadvantage on Intelligence saving throws until ..." (one ability or several) | marker `disadv_save:int` | `saveSources`, only for those abilities | its duration |
 
-Left to the GM, listed in the reply's Extra and never dropped: Disadvantage on ability checks (including the second half of "attack rolls and ability checks"), an end anchored to the attacker's turn for a Speed or Disadvantage rider ("until the end of the cyclops's next turn"; a CONDITION with such an end is applied, see MONSTER_REMAINING_WORK.md), a rider with no duration, and Disadvantage on Strength-based D20 Tests (Weakening Breath).
+A rider used up by one roll is applied only with the end the combat effects keep (the start of the source's next turn). Left to the GM,
+listed in the reply's Extra and never dropped: Disadvantage on ability checks (including the second half of "attack rolls and ability
+checks"), "Disadvantage on the next attack roll it makes before the end of its next turn" (Ettin, Fire Giant), a next-attack Advantage
+with any other end, a rider with no duration, and Disadvantage on Strength-based D20 Tests (Weakening Breath).
 
-Tested (`TestDisadvantageRiderParsing`, `TestPostgresSpeedOwner`): parsing of each text including the GM-left parts; the stored marker; the attack and Concentration saves reading it (an ordinary Constitution save does not); ending with the target's next turn; the Sap-like rider consumed once. Mutation-checked on the Concentration row. Not tested through a monster attack route end to end; not tested for source-anchored ends (GM).
+Tested: `TestDisadvantageRiderParsing`, `TestSpeedRiderParsing` (each text, each duration, the GM-left parts), `TestPostgresSpeedOwner`
+(the stored marker, the attack and Concentration saves reading it, ending with the target's next turn, the Sap-like rider consumed once,
+an attacker-anchored Speed rider ended at the attacker's turn end), `TestPostgresCantTakeReactionsRider` (an attacker-anchored "can't
+take Reactions" ended at the attacker's turn start), and `TestPostgresRiderDurationsOnEveryTarget` (POST /api/gm/narrate monster_action
+at a character, a monster and a companion: a source-start Speed rider read by the Speed owner, a source-end Intelligence-save
+Disadvantage read by an Intelligence save and not a Wisdom save, the "exposed" Advantage used by the next attack roll and only that one,
+the creature gate not repeated to the GM; then POST combat/next ends each on the source's turn, the save rider not at the end of the turn
+it was given in). Mutation-checked: the source-anchored ends not read, the saveSources row, the `exposed` reader, the companion route's
+old copy restored, the creature gate kept, a source-end rider stored as source-start.
 
 ## "Failure or Success:" riders
 
@@ -292,7 +406,7 @@ Deflect Missile ("reduces the damage it takes from the attack by ...") goes thro
 
 ## "The target can't take Reactions"
 
-Read in `disadvantage_riders_2024.go` (`noReactRe`): applied only when the same effect text gives an end of the TARGET's next turn (Slowing Ray, Slowing Breath style). It is a marker condition `no_reactions`, counted down like the Speed and Disadvantage markers. An end anchored to the attacker ("until the start of the balor's next turn", "until the curse ends") is not applied and is listed for the GM; before this change such a sentence was dropped silently when it was short (found by `TestPostgresCantTakeReactionsRider`, fixed in `readRider`'s remainder).
+Read in `disadvantage_riders_2024.go` (`noReactRe`) with the duration of its own sentence, else of the effect's text (rider durations): the end of the target's next turn (Slowing Ray, Slowing Breath style) or the start or end of the source's next turn ("until the start of the balor's next turn"). It is a marker condition `no_reactions`, ended like the Speed and roll markers. An end the server cannot count ("until the curse ends") is not applied and is listed for the GM; before an earlier change such a sentence was dropped silently when it was short (found by `TestPostgresCantTakeReactionsRider`, fixed in `readRider`'s remainder).
 
 Enforced through shared checks: `checkActionEconomy` (POST /api/action), `featureTurnCost` and `turnCost.spendIn` (every feature route that spends the Reaction through them, e.g. `spendTurnResource`), `reactionReady` and `reactionSpent`, plus the monster Reaction resolver, the Opportunity Attack window and the routes that read `reaction_used` themselves (readied actions in actions.go and gm_reactions.go, Uncanny Dodge / Retaliation routes in gm_reactions.go, counterspell in gm_2024.go, Deflect Attacks in monk_extras_2024.go, Superior Hunter's Defense in sweep_2024.go, Slow Fall in gm_environment.go). Entry-point proof: `TestPostgresCantTakeReactionsRider` exercises the monster resolver, `reactionReady`, `checkActionEconomy`, `featureTurnCost` and `spendTurnResource` (a refused Reaction is not marked used). The individual routes in the second list are wired by one line each and are NOT individually route-tested. Companions' own Reactions are not covered. The GM remainder of a handled sentence still repeats the whole sentence (applied parts included); the non-applied part, e.g. "it can take either an action or a Bonus Action, not both", is in it.
 

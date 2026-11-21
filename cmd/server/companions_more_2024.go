@@ -78,19 +78,10 @@ func monsterAttacksCompanion(lobbyID, attackerID int, attackerName string, chose
 		// map (or a token for either side) a melee attack is within 5 feet
 		withinFive, longRange := isMelee, false
 		if _, inReach := opportunityInReach.Load(fmt.Sprintf("%d:%d", lobbyID, attackerID)); attackerID != 0 && !inReach {
-			if dist, onMap := monsterDistance(lobbyID, attackerID, cur.CombatID); onMap {
-				if n := monsterNormalRange(a.Desc); n > 0 && dist > n {
-					longRange = true
-				}
-				if reachFt, ranged := monsterAttackReach(a.Desc); dist > reachFt {
-					what := "reach"
-					if ranged {
-						what = "range"
-					}
-					lines = append(lines, fmt.Sprintf("%s: %s is %d ft away, beyond its %d ft %s - no attack (move the monster on the battle map first)", a.Name, companionDisplayName(cur), dist, reachFt, what))
-					continue
-				}
-				withinFive = dist <= 5
+			var refusal string
+			if withinFive, longRange, refusal = monsterAttackRange(lobbyID, attackerID, cur.CombatID, a.Desc, a.Name, companionDisplayName(cur), isMelee); refusal != "" {
+				lines = append(lines, refusal)
+				continue
 			}
 		}
 		atk := attackCtx{lobby: lobbyID, attacker: attackerID, target: cur.CombatID, name: a.Name, bonus: a.AttackBonus, melee: isMelee, weapon: true,
@@ -109,6 +100,10 @@ func monsterAttacksCompanion(lobbyID, attackerID int, attackerName string, chose
 			parts = append(parts, x)
 		}
 		var said []string
+		hpStart := cur.HP
+		if fresh, ok := loadCompanion(c.ID); ok {
+			hpStart = fresh.HP
+		}
 		for i, p := range parts {
 			flat := p.Flat
 			if i == 0 {
@@ -130,7 +125,11 @@ func monsterAttacksCompanion(lobbyID, attackerID int, attackerName string, chose
 		}
 		line := rolled.Line(a.Name, out) + rollNote + ", " + strings.Join(said, " ")
 		if apply {
-			line += companionHitRiders(lobbyID, attackerID, attackerName, a, c.ID, rolled.HasAdvantage())
+			taken := 0
+			if after, ok := loadCompanion(c.ID); ok {
+				taken = hpStart - after.HP
+			}
+			line += companionHitRiders(lobbyID, attackerID, attackerName, a, c.ID, rolled.HasAdvantage(), taken)
 		} else {
 			line += companionHitRidersNote(a)
 		}

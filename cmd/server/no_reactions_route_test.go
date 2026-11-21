@@ -10,7 +10,7 @@ import (
 // "The target can't take Reactions" with the end of the target's own next turn (disadvantage_riders_2024.go): applied as the marker
 // no_reactions through the narrate route on a monster and a character target, with the save failed and passed, read by the monster
 // Reaction resolver and by the character's reactionReady, and gone at the end of the target's next turn. An end anchored to the
-// attacker ("until the start of the brute's next turn") is not applied and stays with the GM in the reply.
+// attacker ("until the start of the caster's next turn") is the same marker, ended at the start of the attacker's next turn.
 func TestPostgresCantTakeReactionsRider(t *testing.T) {
 	testPostgres(t)
 	_, gm := pgAgent(t, "noreact gm")
@@ -150,9 +150,28 @@ func TestPostgresCantTakeReactionsRider(t *testing.T) {
 	if _, used := monsterReactionRound.Load(fmt.Sprintf("%d:%d", camp, vid)); used {
 		t.Fatal("a refused Reaction was counted as used")
 	}
-	// an end anchored to the attacker is not applied, and the GM is told
+	// an end anchored to the attacker is the attacker's marker: it ends at the start of the attacker's next turn
+	// (expireSourceTurnConditions), not on the target's turns, and nothing of it is left for the GM
 	clear(vid)
-	if res := cast("Brute Blade", "Slow Ray Victim"); hasCondMarker(camp, vid, "no_reactions") || !strings.Contains(res, "can't take Reactions") {
-		t.Fatalf("an attacker-anchored end was applied or dropped: %s", res)
+	res := cast("Brute Blade", "Slow Ray Victim")
+	var rec *conditionRecord
+	for _, r := range loadConditionRecords(camp, vid) {
+		if r.Condition == "no_reactions" {
+			r := r
+			rec = &r
+		}
+	}
+	if rec == nil || rec.SourceID != ids["Slow Ray Caster"] || rec.Notes != notesUntilStartOfSourceTurn ||
+		!strings.Contains(res, "can't take Reactions until the start of Slow Ray Caster's next turn") || strings.Contains(res, "not applied") {
+		t.Fatalf("the attacker-anchored end was not recorded for the attacker's turn start: %+v %s", rec, res)
+	}
+	turnEffects(camp, idx["Slow Ray Victim"], "end_of_turn")
+	expireSourceTurnConditions(camp, ids["Slow Ray Caster"], "Slow Ray Caster", "end")
+	if !hasCondMarker(camp, vid, "no_reactions") {
+		t.Fatal("the marker ended on the target's turn end or the attacker's turn end")
+	}
+	expireSourceTurnConditions(camp, ids["Slow Ray Caster"], "Slow Ray Caster", "start")
+	if hasCondMarker(camp, vid, "no_reactions") {
+		t.Fatal("the marker outlived the start of the attacker's next turn")
 	}
 }

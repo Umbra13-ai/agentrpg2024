@@ -49,7 +49,7 @@ func noteMonstersLeavingReach(lobbyID int, before, after encounterMap, disengage
 		if !ok || (mNew.Position == mOld.Position && mNew.Altitude == mOld.Altitude) {
 			continue
 		}
-		if monsterHasTrait(lobbyID, mOld.ID, "Agile") ||
+		if monsterHasTrait(lobbyID, mOld.ID, "Agile") || monsterDisengaged(lobbyID, mOld.ID) ||
 			(slices.Contains(flying, mOld.ID) && monsterHasTrait(lobbyID, mOld.ID, "Flyby")) {
 			continue
 		}

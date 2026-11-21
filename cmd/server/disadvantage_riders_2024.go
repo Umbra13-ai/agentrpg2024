@@ -2,78 +2,147 @@ package main
 
 import (
 	"regexp"
+	"slices"
 	"strings"
+
+	"github.com/agentrpg/agentrpg/game"
 )
 
-// Disadvantage riders of a stat-block hit or failed save (monster_effects_2024.go readRider). What is applied, by tier:
-//   - "Disadvantage on its next attack roll before the start of the <source>'s next turn": the Sap effect (combat_effects kind "sap"),
-//     consumed by the next attack roll (attackSources), removed at the start of the source's next turn (expireCombatEffectsOf).
-//   - "Disadvantage on attack rolls until the end of its/the target's next turn": a marker condition "disadv_attacks" on the target,
-//     counted down at the end of the target's turns like the Speed markers (giveSpeed); attackSources reads it for every attack roll.
-//   - "Disadvantage on saving throws to maintain Concentration until the end of its/the target's next turn": the marker
-//     "disadv_concentration", read by the save sources when the save is a Concentration save.
+// The roll riders of a stat-block hit or failed save (monster_effects_2024.go readRider), each read with its duration (riderEnd,
+// rider_duration_2024.go):
+//   - "Disadvantage on its next attack roll before the start of the <source>'s next turn": the Sap effect (combat_effects kind
+//     "sap"), used up by the next attack roll it makes (attackSources), removed at the start of the source's next turn
+//     (expireCombatEffectsOf).
+//   - "the next attack roll made against the target before the start of the <source>'s next turn has Advantage": the "exposed"
+//     effect (the same one Guiding Bolt gives), used up by the next attack roll against it, removed the same way.
+//   - "Disadvantage on attack rolls until ...": the marker "disadv_attacks", read by attackSources for every attack roll it makes.
+//   - "Disadvantage on saving throws to maintain Concentration until ...": the marker "disadv_concentration" (saveSources).
+//   - "Disadvantage on Intelligence saving throws until ...": the marker "disadv_save:<abilities>" (saveSources).
+//   - "the target can't take Reactions" with a duration in its sentence (or the effect's text): the marker "no_reactions".
 //
-// Not applied, always left in Extra for the GM: Disadvantage on ability checks, an end anchored to the ATTACKER's turn ("until the end
-// of the cyclops's next turn"), no duration given, Disadvantage on Strength-based D20 Tests. Never dropped, never guessed.
+// A marker lasts for its duration (riderEnd.markerAdd); a rider used up by one roll is applied only when it ends at the start of
+// the source's next turn, the end the combat effects keep.
+//
+// Not applied, always left in Extra for the GM: Disadvantage on ability checks, Disadvantage on the next attack roll before the end
+// of its next turn, no duration given, Disadvantage on Strength-based D20 Tests. Never dropped, never guessed.
+const saveAbilityNames = `(?:Strength|Dexterity|Constitution|Intelligence|Wisdom|Charisma)`
+
 var (
-	disadvSapRe    = regexp.MustCompile(`(?i)Disadvantage on its next attack roll before the start of the [^.]*?next turn`)
-	disadvAttackRe = regexp.MustCompile(`(?i)Disadvantage on attack rolls( and ability checks)? until the end of (?:its|the target['’]s|the creature['’]s) next turn`)
-	// "the target can't take Reactions" with a duration of the TARGET's next turn anywhere in the same effect text (Slowing Ray, Slowing
-	// Breath). An end anchored to the attacker ("until the start of the balor's next turn", "until the curse ends") is not applied.
-	noReactRe      = regexp.MustCompile(`(?i)(?:the target|it) can['’]t take Reactions;?`)
-	noReactUntilRe = regexp.MustCompile(`(?i)until the end of (?:its|the target['’]s|the creature['’]s) next turn`)
-	disadvConcRe   = regexp.MustCompile(`(?i)Disadvantage on saving throws to maintain Concentration until the end of (?:its|the target['’]s|the creature['’]s) next turn`)
+	disadvSapRe     = riderPattern(`Disadvantage on its next attack roll`)
+	exposedRe       = regexp.MustCompile(`(?i)the next attack roll (?:made )?against (?:the target|it),? ` + riderUntil + `,? has Advantage`)
+	disadvAttackRe  = riderPattern(`Disadvantage on attack rolls( and ability checks)?`)
+	disadvConcRe    = riderPattern(`Disadvantage on saving throws to maintain Concentration`)
+	disadvSaveRe    = riderPattern(`Disadvantage on (` + saveAbilityNames + `(?:(?:,|,? and|,? or) ` + saveAbilityNames + `)*) saving throws`)
+	noReactRe       = regexp.MustCompile(`(?i)(?:the target|it) can['’]t take Reactions;?`)
+	abilityNameList = regexp.MustCompile(saveAbilityNames)
 )
 
-// readDisadvantage reads the applied Disadvantage riders of a text. handled is what readRider must not list for the GM again;
+// readDisadvantage reads the applied roll riders of a text. handled is what readRider must not list for the GM again;
 // gm is the part of a handled sentence the server does not apply.
 func (e *saveEffect) readDisadvantage(text string) (handled []string, gm []string) {
-	if m := disadvSapRe.FindString(text); m != "" {
-		e.DisadvMode = append(e.DisadvMode, "sap")
+	add := func(mode string, end riderEnd, m string) {
+		if e.RollRiderEnd == nil {
+			e.RollRiderEnd = map[string]riderEnd{}
+		}
+		e.DisadvMode = append(e.DisadvMode, mode)
+		e.RollRiderEnd[mode] = end
 		handled = append(handled, m)
 	}
-	if m := disadvAttackRe.FindStringSubmatch(text); m != nil {
-		e.DisadvMode = append(e.DisadvMode, "attacks")
-		handled = append(handled, m[0])
+	// used up by one roll: only with the end the combat effects keep (the start of the source's next turn)
+	if m := disadvSapRe.FindStringSubmatch(text); m != nil && riderEndIn(m) == riderEndSourceTurnStart {
+		add("sap", riderEndSourceTurnStart, m[0])
+	}
+	if m := exposedRe.FindStringSubmatch(text); m != nil && riderEndIn(m) == riderEndSourceTurnStart {
+		add("exposed", riderEndSourceTurnStart, m[0])
+	}
+	if m := disadvAttackRe.FindStringSubmatch(text); m != nil && riderEndIn(m) != riderEndNone {
+		add("attacks", riderEndIn(m), m[0])
 		if m[1] != "" {
-			gm = append(gm, "Disadvantage on ability checks until the end of its next turn (ability checks are the GM's)")
+			gm = append(gm, "Disadvantage on ability checks "+riderEndIn(m).describe(0, 0)+" (ability checks are the GM's)")
 		}
 	}
-	if m := disadvConcRe.FindString(text); m != "" {
-		e.DisadvMode = append(e.DisadvMode, "concentration")
-		handled = append(handled, m)
+	if m := disadvConcRe.FindStringSubmatch(text); m != nil && riderEndIn(m) != riderEndNone {
+		add("concentration", riderEndIn(m), m[0])
 	}
-	if m := noReactRe.FindString(text); m != "" && noReactUntilRe.MatchString(text) {
-		e.DisadvMode = append(e.DisadvMode, "noreactions")
-		handled = append(handled, m)
+	if m := disadvSaveRe.FindStringSubmatch(text); m != nil && riderEndIn(m) != riderEndNone {
+		var abilities []string
+		for _, a := range abilityNameList.FindAllString(m[1], -1) {
+			abilities = append(abilities, shortAbility(strings.ToLower(a)))
+		}
+		add("save:"+strings.Join(abilities, ","), riderEndIn(m), m[0])
+	}
+	if m := noReactRe.FindString(text); m != "" {
+		end := readRiderEnd(text)
+		for _, sentence := range sentenceSplitRe.Split(text, -1) {
+			if strings.Contains(sentence, strings.TrimSuffix(m, ";")) {
+				end = riderEndFor(sentence, text)
+				break
+			}
+		}
+		if end != riderEndNone {
+			add("noreactions", end, m)
+		}
 	}
 	return
 }
 
-// giveDisadvantage puts the riders on the target. sourceID is the creature the text comes from (the Sap effect ends at its turn).
+// rollRiderWords: the marker condition and the words of each marker rider.
+func rollRiderWords(mode string) (cond, what string) {
+	switch {
+	case mode == "concentration":
+		return "disadv_concentration", "Disadvantage on saves to maintain Concentration"
+	case mode == "noreactions":
+		return "no_reactions", "can't take Reactions"
+	case strings.HasPrefix(mode, "save:"):
+		abilities := strings.Split(strings.TrimPrefix(mode, "save:"), ",")
+		var names []string
+		for _, a := range abilities {
+			names = append(names, game.AbilityName(a))
+		}
+		return "disadv_save:" + strings.Join(abilities, ","), "Disadvantage on " + strings.Join(names, " and ") + " saving throws"
+	}
+	return "disadv_attacks", "Disadvantage on attack rolls"
+}
+
+// giveDisadvantage puts the roll riders on the target. e.SourceID is the creature the text comes from (the riders anchored to its
+// turn end on it).
 func (e saveEffect) giveDisadvantage(lobbyID, tid int, source string) []string {
 	var parts []string
 	for _, mode := range e.DisadvMode {
-		if mode == "sap" {
-			addCombatEffect(lobbyID, tid, e.SourceID, "sap")
-			parts = append(parts, "Disadvantage on its next attack roll")
+		end := e.RollRiderEnd[mode]
+		if mode == "sap" || mode == "exposed" {
+			what := effectText[mode]
+			if e.SourceID == 0 {
+				parts = append(parts, riderNotApplied(what))
+				continue
+			}
+			addCombatEffect(lobbyID, tid, e.SourceID, mode)
+			parts = append(parts, what+" "+strings.Replace(end.describe(lobbyID, e.SourceID), "until", "before", 1))
 			continue
 		}
-		rounds := 1
-		if currentTurnID(lobbyID) == tid {
-			rounds = 2 // the current turn is not its "next turn"
+		cond, what := rollRiderWords(mode)
+		a, ok := end.markerAdd(lobbyID, tid, e.SourceID, cond, source, e.IsSpell)
+		if !ok {
+			parts = append(parts, riderNotApplied(what))
+			continue
 		}
-		cond, what := "disadv_attacks", "Disadvantage on attack rolls"
-		if mode == "concentration" {
-			cond, what = "disadv_concentration", "Disadvantage on saves to maintain Concentration"
-		}
-		if mode == "noreactions" {
-			cond, what = "no_reactions", "can't take Reactions"
-		}
-		addCondition(lobbyID, tid, condAdd{Condition: cond, Source: source, Rounds: rounds, SourceID: e.SourceID, Replace: true})
-		parts = append(parts, what+" until the end of its next turn")
+		addCondition(lobbyID, tid, a)
+		parts = append(parts, what+" "+end.describe(lobbyID, e.SourceID))
 	}
 	return parts
+}
+
+// saveDisadvantageRider: the saver has a "disadv_save" marker for this ability (a hit or failed save gave it, rollRiderWords).
+func saveDisadvantageRider(lobbyID, saver int, ability string) bool {
+	if lobbyID <= 0 || saver == 0 {
+		return false
+	}
+	for _, r := range loadConditionRecords(lobbyID, saver) {
+		if r.Condition == "disadv_save" && slices.Contains(strings.Split(r.Detail, ","), ability) {
+			return true
+		}
+	}
+	return false
 }
 
 // hasCondMarker: the creature has the marker condition now.
@@ -88,7 +157,7 @@ func hasCondMarker(lobbyID, id int, cond string) bool {
 
 // stripDisadvantage removes the handled sentences from a sentence (what is left is for the GM).
 func stripDisadvantage(s string) string {
-	for _, re := range []*regexp.Regexp{disadvSapRe, disadvAttackRe, disadvConcRe, noReactRe} {
+	for _, re := range []*regexp.Regexp{disadvSapRe, exposedRe, disadvAttackRe, disadvConcRe, disadvSaveRe, noReactRe} {
 		s = re.ReplaceAllString(s, "")
 	}
 	return strings.NewReplacer("the target has", "", "and the target has", "", "The target has", "").Replace(s)

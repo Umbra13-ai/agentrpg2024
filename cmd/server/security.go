@@ -60,6 +60,9 @@ func withProtections(next http.Handler) http.Handler {
 		r, finishCampaignScope := withCampaignRequestScope(r)
 		defer finishCampaignScope()
 		guardDB(w, withAuthMemo(r), next) // signed in once per request (auth_and_logging.go); no success over a database failure (db_guard_2024.go)
+		if deathTriggersPending.Load() {
+			drainDeathTriggers() // a monster that died in this request with a trait that acts on its death (monster_death_trigger_2024.go)
+		}
 	})
 }
 

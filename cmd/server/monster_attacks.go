@@ -695,20 +695,10 @@ func resolveMonsterAttack(r *http.Request, campaignID int, monster, action, targ
 		longRange := false
 		_, inReach := opportunityInReach.Load(fmt.Sprintf("%d:%d", campaignID, attackerID))
 		if found && attackerID != 0 && !inReach {
-			if dist, onMap := monsterDistance(campaignID, attackerID, tid); onMap {
-				if n := monsterNormalRange(a.Desc); n > 0 && dist > n {
-					longRange = true // beyond the normal range: Disadvantage
-				}
-				reachFt, ranged := monsterAttackReach(a.Desc)
-				if dist > reachFt {
-					what := "reach"
-					if ranged {
-						what = "range"
-					}
-					lines = append(lines, fmt.Sprintf("%s: %s is %d ft away, beyond its %d ft %s - no attack (move the monster on the battle map first)", a.Name, tname, dist, reachFt, what))
-					continue
-				}
-				withinFive = dist <= 5
+			var refusal string
+			if withinFive, longRange, refusal = monsterAttackRange(campaignID, attackerID, tid, a.Desc, a.Name, tname, isMelee); refusal != "" {
+				lines = append(lines, refusal)
+				continue
 			}
 		}
 		// The attack roll: every source of Advantage and Disadvantage, the Armor Class, Bless and Bane, Sanctuary and the
@@ -844,6 +834,7 @@ func resolveMonsterAttack(r *http.Request, campaignID int, monster, action, targ
 						}
 					}
 				}
+				line += hitAfterDamage(campaignID, tid, a.Desc, attackerName+"'s "+stripUsage(a.Name), (hpB+tempB)-(hpA+tempA)) // Life Drain, burning (hit_after_damage_2024.go)
 				// the attach the hit starts ("and the stirge attaches to the target"): before the recurring
 				// damage, whose gate reads the attach row (monster_attach_2024.go). Outside the parseHitRider
 				// branch: an attach rider (Stirge Proboscis) carries no condition for it to match.

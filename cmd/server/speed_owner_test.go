@@ -41,18 +41,28 @@ func TestSpeedFactorsCombine(t *testing.T) {
 }
 
 func TestSpeedRiderParsing(t *testing.T) {
-	for _, c := range []struct{ text, mode string }{
-		{"Failure: 27 (6d8) Fire damage, and the target's Speed is halved until the end of its next turn.", "halved"},
-		{"Failure: 7 (2d6) Cold damage, and the target's Speed is 0 until the end of the target's next turn.", "zero"},
-		{"Failure or Success: The target's Speed is reduced to 0 until the end of its next turn.", "zero"},
-		{"Hit: 18 (3d8 + 5) Piercing damage, and the target's Speed decreases by 10 feet until the end of the target's next turn.", "minus"},
-		{"Failure: The target's Speed is halved until the end of the dragon's next turn.", ""}, // the attacker's turn: not counted here
-		{"Failure: The target's Speed is halved.", ""},                                         // no duration given: the GM's
+	for _, c := range []struct {
+		text string
+		mode string
+		end  riderEnd
+	}{
+		{"Failure: 27 (6d8) Fire damage, and the target's Speed is halved until the end of its next turn.", "halved", riderEndTargetTurnEnd},
+		{"Failure: 7 (2d6) Cold damage, and the target's Speed is 0 until the end of the target's next turn.", "zero", riderEndTargetTurnEnd},
+		{"Failure or Success: The target's Speed is reduced to 0 until the end of its next turn.", "zero", riderEndTargetTurnEnd},
+		{"Hit: 18 (3d8 + 5) Piercing damage, and the target's Speed decreases by 10 feet until the end of the target's next turn.", "minus", riderEndTargetTurnEnd},
+		// the source's turn: ended by expireSourceTurnConditions on that creature's turn (rider_duration_2024.go)
+		{"Failure: The target's Speed is halved until the end of the dragon's next turn.", "halved", riderEndSourceTurnEnd},
+		{"Hit: 6 (1d8 + 2) Cold damage, and the target's Speed decreases by 5 feet until the start of the raider's next turn.", "minus", riderEndSourceTurnStart},
+		{"Failure: 5 (2d4) Fire damage, and the target’s Speed decreases by 10 feet until the end of the mephit’s next turn.", "minus", riderEndSourceTurnEnd},
+		// the duration in its own sentence of the effect (Slowing Breath)
+		{"Failure: The target can’t take Reactions; its Speed is halved; and it can take either an action or a Bonus Action on its turn, not both. This effect lasts until the end of its next turn.", "halved", riderEndTargetTurnEnd},
+		{"Failure: The target's Speed is halved until the start of its next turn.", "", riderEndNone}, // whose turn is not said: the GM's
+		{"Failure: The target's Speed is halved.", "", riderEndNone},                                  // no duration given: the GM's
 	} {
 		var e saveEffect
 		e.readSpeed(c.text)
-		if e.SpeedMode != c.mode {
-			t.Errorf("%q: mode %q, want %q", c.text, e.SpeedMode, c.mode)
+		if e.SpeedMode != c.mode || e.SpeedEnd != c.end {
+			t.Errorf("%q: mode %q end %d, want %q end %d", c.text, e.SpeedMode, e.SpeedEnd, c.mode, c.end)
 		}
 	}
 	e, ok := parseHitRider("Melee Attack Roll: +5, reach 5 ft. Hit: 18 (3d8 + 5) Piercing damage, and the target's Speed decreases by 10 feet until the end of the target's next turn.")
@@ -190,15 +200,37 @@ func TestPostgresSpeedOwner(t *testing.T) {
 	if m == nil || m.Detail != "10" || characterSpeedOf(char) != base-10 {
 		t.Fatalf("Shot: -10 not stored or not read: %+v %s", m, res)
 	}
-	// a rider that ends on the attacker's turn is not counted here: the GM keeps it
+	// a rider that ends on the attacker's turn is the attacker's marker: it ends at the end of the attacker's next turn, not on the
+	// target's turns (expireSourceTurnConditions), and nothing of it is left for the GM
 	reset()
+	f, _ := readFight(db, camp)
+	bruteID, charIdx := 0, -1
+	for i, e := range f.Order {
+		if sprintAny(e["name"]) == "Speed Brute" {
+			bruteID = asInt(e["id"])
+		}
+		if asInt(e["id"]) == char {
+			charIdx = i
+		}
+	}
+	pgExec(t, `UPDATE combat_state SET current_turn_index=$1 WHERE lobby_id=$2`, charIdx, camp) // another creature is acting
 	_, r := pgCall(t, "POST", "/api/gm/narrate", gm, map[string]interface{}{"campaign_id": camp, "narration": "x",
 		"monster_action": map[string]interface{}{"monster": "Speed Brute", "action": "Drag", "target": fmt.Sprint(char)}})
-	if res := fmt.Sprint(r["monster_action_result"]); marker("speed_halved") != nil || (strings.Contains(res, "Speed") && !strings.Contains(res, "GM")) {
-		t.Fatalf("Drag: a Speed effect with the attacker's turn as its end was applied or not given to the GM: %s", res)
+	res = fmt.Sprint(r["monster_action_result"])
+	if m := marker("speed_halved"); m == nil || m.SourceID != bruteID || m.Notes != notesUntilEndOfSourceTurn || m.DurationRounds != 0 ||
+		!strings.Contains(res, "Speed halved until the end of Speed Brute's next turn") || strings.Contains(res, "not applied") {
+		t.Fatalf("Drag: the attacker-anchored Speed rider was not recorded for the attacker's turn end: %+v %s", m, res)
+	}
+	turnEffects(camp, charIdx, "end_of_turn") // the target's own turn end: not its end
+	expireSourceTurnConditions(camp, bruteID, "Speed Brute", "start")
+	if marker("speed_halved") == nil {
+		t.Fatal("Drag: the marker ended on the target's turn end or the attacker's turn start")
+	}
+	expireSourceTurnConditions(camp, bruteID, "Speed Brute", "end")
+	if marker("speed_halved") != nil {
+		t.Fatal("Drag: the marker outlived the end of the attacker's next turn")
 	}
 	// timing: the marker runs out at the end of the target's next turn, not at the end of the turn it is acting now
-	f, _ := readFight(db, camp)
 	idx := -1
 	for i, e := range f.Order {
 		if asInt(e["id"]) == char {
@@ -212,7 +244,7 @@ func TestPostgresSpeedOwner(t *testing.T) {
 	setTurn := func(i int) { pgExec(t, `UPDATE combat_state SET current_turn_index=$1 WHERE lobby_id=$2`, i, camp) }
 	reset()
 	setTurn(other) // another creature is acting: the target's next turn is its coming one
-	e := saveEffect{SpeedMode: "halved"}
+	e := saveEffect{SpeedMode: "halved", SpeedEnd: riderEndTargetTurnEnd}
 	e.giveSpeed(camp, char, "t")
 	if m := marker("speed_halved"); m == nil || m.DurationRounds != 1 {
 		t.Fatalf("applied on another creature's turn: %+v, want 1 round", m)
@@ -238,7 +270,7 @@ func TestPostgresSpeedOwner(t *testing.T) {
 	// Disadvantage riders: stored state, read by the attack and save owners, ended with the target's next turn
 	reset()
 	setTurn(other)
-	d := saveEffect{DisadvMode: []string{"attacks", "concentration"}}
+	d := saveEffect{DisadvMode: []string{"attacks", "concentration"}, RollRiderEnd: map[string]riderEnd{"attacks": riderEndTargetTurnEnd, "concentration": riderEndTargetTurnEnd}}
 	d.giveConditions(camp, char, "t")
 	if !hasCondMarker(camp, char, "disadv_attacks") || !hasCondMarker(camp, char, "disadv_concentration") {
 		t.Fatal("the Disadvantage markers were not stored")
@@ -261,7 +293,7 @@ func TestPostgresSpeedOwner(t *testing.T) {
 	}
 	// the Sap-like text: the next attack roll only, once
 	reset()
-	saveEffect{DisadvMode: []string{"sap"}, SourceID: -5}.giveConditions(camp, char, "t")
+	saveEffect{DisadvMode: []string{"sap"}, RollRiderEnd: map[string]riderEnd{"sap": riderEndSourceTurnStart}, SourceID: -5}.giveConditions(camp, char, "t")
 	if r := (&attackCtx{attacker: char, lobby: camp, target: -1}).gather(); !strings.Contains(strings.Join(r.Disadvantage, ","), "Sap") {
 		t.Fatalf("Sap-like rider not read: %v", r.Disadvantage)
 	}
@@ -398,8 +430,17 @@ func TestDisadvantageRiderParsing(t *testing.T) {
 		{"Hit: 17 (2d10) Radiant damage, and the target has Disadvantage on attack rolls until the end of its next turn.", "attacks", false, ""},
 		{"Failure: The target has Disadvantage on attack rolls and ability checks until the end of its next turn.", "attacks", true, "ability checks"},
 		{"Hit: 9 (2d6) Piercing damage. The target has Disadvantage on its next attack roll before the start of the warrior\u2019s next turn.", "sap", false, ""},
-		{"Hit: 17 (2d10) Radiant damage, and the target has Disadvantage on attack rolls until the end of the cyclops\u2019s next turn.", "", true, "cyclops"}, // the source's turn: the GM's
+		{"Hit: 17 (2d10) Radiant damage, and the target has Disadvantage on attack rolls until the end of the cyclops\u2019s next turn.", "attacks", false, ""}, // the source's turn: its marker
 		{"Failure: The target has Disadvantage on Strength-based D20 Tests and loses 1d6 damage.", "", true, "Strength-based"},
+		// Disadvantage on one ability's saving throws, or several
+		{"Hit: 8 (2d6 + 1) Acid damage, and the target has Disadvantage on Intelligence saving throws until the end of the raider's next turn.", "save:int", false, ""},
+		{"Failure: The target has Disadvantage on Wisdom and Charisma saving throws until the end of its next turn.", "save:wis,cha", false, ""},
+		{"Failure: The target has Disadvantage on Intelligence saving throws.", "", true, "Intelligence saving throws"}, // no duration: the GM's
+		// the next attack roll against the target (the Worg's Bite; the effect Guiding Bolt gives)
+		{"Hit: 7 (1d8 + 3) Piercing damage, and the next attack roll made against the target before the start of the worg\u2019s next turn has Advantage.", "exposed", false, ""},
+		// a rider used up by one roll is kept only until the start of the source's turn: any other end is the GM's
+		{"Hit: 7 (1d8 + 3) Piercing damage, and the next attack roll made against the target before the end of its next turn has Advantage.", "", true, "Advantage"},
+		{"Hit: 9 (2d6) Piercing damage, and the target has Disadvantage on the next attack roll it makes before the end of its next turn.", "", true, "next attack roll"},
 	} {
 		var e saveEffect
 		extra := strings.Join(e.readRider(c.text), ". ")

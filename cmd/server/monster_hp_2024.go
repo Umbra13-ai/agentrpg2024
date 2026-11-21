@@ -29,24 +29,38 @@ import (
 // The same rule governs healing for encounter monsters and companions. An unreadable catalog is an error, never
 // permission: only a missing catalog row (sql.ErrNoRows) is "no prohibition on record".
 func catalogForbidsHPGain(q rowQuerier, key string) (bool, error) {
+	traits, err := catalogTraits(q, key)
+	if err != nil {
+		return false, err
+	}
+	return traitsForbidHPGain(traits), nil
+}
+
+// catalogTraits reads a monster form's traits from the catalog (in the caller's transaction when q is one). Only sql.ErrNoRows is
+// "no traits on record"; any other failure is an error, never an empty list.
+func catalogTraits(q rowQuerier, key string) ([]srdMonsterEntry, error) {
 	var raw []byte
 	if err := q.QueryRow(monsterSQL(`SELECT COALESCE(traits,'[]') FROM monsters WHERE slug=$1`, []interface{}{key}), key).Scan(&raw); err != nil {
 		if errors.Is(err, sql.ErrNoRows) {
-			return false, nil
+			return nil, nil
 		}
-		return false, err
+		return nil, err
 	}
 	var traits []srdMonsterEntry
 	if err := json.Unmarshal(raw, &traits); err != nil {
-		return false, err
+		return nil, err
 	}
+	return traits, nil
+}
+
+func traitsForbidHPGain(traits []srdMonsterEntry) bool {
 	for _, trait := range traits {
 		text := strings.ToLower(strings.ReplaceAll(trait.Text, "’", "'"))
 		if strings.Contains(text, "can't regain hit points or gain temporary hit points") {
-			return true, nil
+			return true
 		}
 	}
-	return false, nil
+	return false
 }
 
 // absorptionHealsHP decides whether damage of damageType that a monster is immune to becomes Hit Points: its absorption
@@ -58,28 +72,19 @@ func absorptionHealsHP(q rowQuerier, key, damageType string) (bool, error) {
 	if key == "" || damageType == "" {
 		return false, nil
 	}
-	var raw []byte
-	if err := q.QueryRow(monsterSQL(`SELECT COALESCE(traits,'[]') FROM monsters WHERE slug=$1`, []interface{}{key}), key).Scan(&raw); err != nil {
-		if errors.Is(err, sql.ErrNoRows) {
-			return false, nil
-		}
+	traits, err := catalogTraits(q, key)
+	if err != nil {
 		return false, err
 	}
-	var traits []srdMonsterEntry
-	if err := json.Unmarshal(raw, &traits); err != nil {
-		return false, err
+	if traitsForbidHPGain(traits) {
+		return false, nil
 	}
-	absorbs := false
 	for _, trait := range traits {
 		if m := absorptionTraitRe.FindStringSubmatch(trait.Text); m != nil && strings.EqualFold(m[1], damageType) && strings.EqualFold(m[2], damageType) {
-			absorbs = true
-		}
-		text := strings.ToLower(strings.ReplaceAll(trait.Text, "’", "'"))
-		if strings.Contains(text, "can't regain hit points or gain temporary hit points") {
-			return false, nil
+			return true, nil
 		}
 	}
-	return absorbs, nil
+	return false, nil
 }
 
 // monsterVitals: an entry's Hit Points as game.Vitals. An entry without a maximum is held at its Hit Points.
@@ -131,9 +136,42 @@ func changeMonsterVitalsE(lobby, id int, change func(tx *sql.Tx, v game.Vitals, 
 			}
 		}
 		putMonsterVitals(e, before, after)
-		return nil
+		return monsterDiedIn(tx, lobby, id, e, before.HP)
 	})
 	return before, after, name, err
+}
+
+// monsterDiedIn is the one "this change killed the monster" of the three writers of a monster's Hit Points (changeMonsterVitalsE and
+// loseMonsterHP and saveMonsterHit), in their transaction: a trait that acts on its death is recorded (recordDeathTriggerIn).
+func monsterDiedIn(tx *sql.Tx, lobby, id int, e map[string]interface{}, hpBefore int) error {
+	if hpBefore <= 0 || asInt(e["hp"]) > 0 {
+		return nil
+	}
+	return recordDeathTriggerIn(tx, lobby, id, sprintAny(e["name"]), sprintAny(e["monster_key"]))
+}
+
+// reduceMonsterMaxHP lowers a monster's Hit Point maximum by amount (never below 1; its Hit Points follow). It returns how much was taken.
+func reduceMonsterMaxHP(lobby, id, amount int) (int, error) {
+	cut := 0
+	_, _, _, err := changeMonsterVitals(lobby, id, func(_ *sql.Tx, v game.Vitals, _ map[string]interface{}) game.Vitals {
+		cut = max(0, min(amount, v.Max-1))
+		v.Max -= cut
+		v.HP = min(v.HP, v.Max)
+		return v
+	})
+	return cut, err
+}
+
+// reduceCompanionMaxHP is the same for a companion (its row locked by changeCompanionHP).
+func reduceCompanionMaxHP(companionID, amount int) (int, error) {
+	cut := 0
+	_, _, err := changeCompanionHP(companionID, func(v game.Vitals) game.Vitals {
+		cut = max(0, min(amount, v.Max-1))
+		v.Max -= cut
+		v.HP = min(v.HP, v.Max)
+		return v
+	}, nil)
+	return cut, err
 }
 
 // setMonsterHP sets a monster's Hit Points (0 to its maximum): a kill, a knock-out at 1, the GM's value, all of them back.
@@ -189,7 +227,7 @@ func loseMonsterHP(lobby, id, amount int, dtype string) (game.DamageResult, erro
 			return err
 		}
 		putMonsterVitals(entry, r.Before, r.After)
-		return nil
+		return monsterDiedIn(tx, lobby, id, entry, r.Before.HP)
 	})
 	if err == nil {
 		damageTraitGMNotices(lobby, id, name, penalties)
@@ -268,6 +306,7 @@ func saveMonsterHit(lobbyID, targetID int, before, after map[string]interface{},
 		if e == nil {
 			return errNotInFight
 		}
+		hpBefore := asInt(e["hp"])
 		if lost > 0 || (asInt(before["hp"]) > 0 && asInt(after["hp"]) <= 0) {
 			if err := journalMonsterConcentrationIn(tx, lobbyID, targetID, map[string]interface{}{"event": "damage", "damage": max(0, lost), "hp_before": asInt(e["hp"]), "hp_after_requested": asInt(after["hp"]), "target_name": sprintAny(e["name"])}); err != nil {
 				return err
@@ -310,6 +349,9 @@ func saveMonsterHit(lobbyID, targetID int, before, after map[string]interface{},
 		hp = asInt(e["hp"])
 		if hp <= 0 {
 			penalties = nil
+		}
+		if err := monsterDiedIn(tx, lobbyID, targetID, e, hpBefore); err != nil {
+			return err
 		}
 		return recordDamageDisadvantageIn(tx, lobbyID, targetID, asInt(f.current()["id"]) == targetID, penalties)
 	})
@@ -500,8 +542,8 @@ func changeCompanionHP(id int, change func(v game.Vitals) game.Vitals, recordDam
 			return before, before, err
 		}
 	}
-	if after.HP != before.HP {
-		if _, err = tx.Exec(`UPDATE companions SET hp = $1 WHERE id = $2`, after.HP, id); err != nil {
+	if after.HP != before.HP || after.Max != before.Max {
+		if _, err = tx.Exec(`UPDATE companions SET hp = $1, max_hp = $2 WHERE id = $3`, after.HP, max(after.Max, 1), id); err != nil {
 			return before, before, err
 		}
 	}

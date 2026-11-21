@@ -549,6 +549,8 @@ func unappliedHitRider(desc string) string {
 	// keeps a condition-less rider (Stirge Proboscis) out of the residual; a recurring clause whose gate
 	// did not hold still reaches the GM through addRecurringDamage's note, never duplicated from here.
 	text = attachOnHitRe.ReplaceAllString(text, "")
+	text = hpMaxDrainSentenceRe.ReplaceAllString(text, "") // applied by every hit route (hitAfterDamage)
+	text = stripBurnForCreatures(text)
 	kept := []string{}
 	for _, s := range sentenceSplitRe.Split(text, -1) {
 		stripped := s

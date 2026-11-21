@@ -263,41 +263,47 @@ var (
 	speedHalvedRe = regexp.MustCompile(`(?i)\bSpeed (?:is|becomes) halved`)
 	speedZeroRe   = regexp.MustCompile(`(?i)\bSpeed (?:is|becomes) (?:reduced to )?0\b`)
 	speedMinusRe  = regexp.MustCompile(`(?i)\bSpeed (?:decreases|is reduced|is decreased) by (\d+) f(?:ee|oo)t`)
-	// the end of the TARGET's next turn: "until the end of its next turn", "of the target's next turn". The end of the attacker's
-	// turn ("of the dragon's next turn") counts on another creature's turns and is not applied.
-	speedUntilRe = regexp.MustCompile(`(?i)until the end of (?:its|the target['’]s|the creature['’]s) next turn`)
 )
 
-// readSpeed reads a Speed rider out of a failure or hit text. It is applied only when the text gives the duration the server can
-// count (the end of the target's next turn); a Speed effect without one stays with the GM, in the text it came from.
+// readSpeed reads a Speed rider out of a failure or hit text with its duration (riderEndFor, rider_duration_2024.go): the one in the
+// rider's own sentence ("its Speed decreases by 5 feet until the start of the ghoul's next turn"), else the effect's ("This effect
+// lasts until the end of its next turn"). A Speed effect without a duration the server can count stays with the GM, in the text it
+// came from.
 func (e *saveEffect) readSpeed(text string) {
-	if !speedUntilRe.MatchString(text) {
-		return
-	}
-	switch {
-	case speedZeroRe.MatchString(text):
-		e.SpeedMode = "zero"
-	case speedHalvedRe.MatchString(text):
-		e.SpeedMode = "halved"
-	default:
-		if m := speedMinusRe.FindStringSubmatch(text); m != nil {
-			e.SpeedMode = "minus"
-			fmt.Sscanf(m[1], "%d", &e.SpeedMinus)
+	for _, sentence := range sentenceSplitRe.Split(text, -1) {
+		mode, minus := "", 0
+		switch {
+		case speedZeroRe.MatchString(sentence):
+			mode = "zero"
+		case speedHalvedRe.MatchString(sentence):
+			mode = "halved"
+		default:
+			if m := speedMinusRe.FindStringSubmatch(sentence); m != nil {
+				mode = "minus"
+				fmt.Sscanf(m[1], "%d", &minus)
+			}
 		}
+		if mode == "" {
+			continue
+		}
+		if end := riderEndFor(sentence, text); end != riderEndNone {
+			e.SpeedMode, e.SpeedMinus, e.SpeedEnd = mode, minus, end
+		}
+		return // the first Speed rider decides; one without a duration is the GM's
 	}
 }
 
 // stripSpeedRider removes the Speed effect and its duration from a sentence (what is left is not applied).
 func stripSpeedRider(s string) string {
-	s = speedUntilRe.ReplaceAllString(s, "")
+	s = riderEndRe.ReplaceAllString(s, "")
 	for _, re := range []*regexp.Regexp{speedZeroRe, speedHalvedRe, speedMinusRe} {
 		s = re.ReplaceAllString(s, "")
 	}
 	return strings.NewReplacer("the target’s", "", "the target's", "", "target’s", "", "target's", "").Replace(s)
 }
 
-// giveSpeed puts the Speed rider on the target as a marker that ends with the end of the target's next turn (counted down at the end
-// of each of its turns: twice when the target is the creature acting now, whose current turn is not its "next turn").
+// giveSpeed puts the Speed rider on the target as a marker for the rider's duration (riderEnd.markerAdd: the end of the target's
+// next turn, or the start or end of the source's next turn).
 func (e saveEffect) giveSpeed(lobbyID, tid int, source string) string {
 	cond, what := "speed_halved", "Speed halved"
 	switch e.SpeedMode {
@@ -306,12 +312,12 @@ func (e saveEffect) giveSpeed(lobbyID, tid int, source string) string {
 	case "minus":
 		cond, what = fmt.Sprintf("speed_minus:%d", e.SpeedMinus), fmt.Sprintf("Speed -%d ft", e.SpeedMinus)
 	}
-	rounds := 1
-	if currentTurnID(lobbyID) == tid {
-		rounds = 2
+	a, ok := e.SpeedEnd.markerAdd(lobbyID, tid, e.SourceID, cond, source, e.IsSpell)
+	if !ok {
+		return riderNotApplied(what)
 	}
-	addCondition(lobbyID, tid, condAdd{Condition: cond, Source: source, Rounds: rounds, SourceID: e.SourceID, Magical: e.IsSpell, Replace: true})
-	return what + " until the end of its next turn"
+	addCondition(lobbyID, tid, a)
+	return what + " " + e.SpeedEnd.describe(lobbyID, e.SourceID)
 }
 
 // speedNoteFor is what a player reads beside its movement: the effects on its Speed, and that the GM must rule when they meet in a

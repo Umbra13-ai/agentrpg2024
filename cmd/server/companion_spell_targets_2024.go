@@ -108,7 +108,7 @@ func companionHitRidersNote(a monsterActionRow) string {
 	return ""
 }
 
-func companionHitRiders(lobbyID, attackerID int, attackerName string, a monsterActionRow, companionID int, hadAdvantage bool) string {
+func companionHitRiders(lobbyID, attackerID int, attackerName string, a monsterActionRow, companionID int, hadAdvantage bool, taken int) string {
 	cur, ok := loadCompanion(companionID)
 	if !ok || cur.Status != "active" || cur.HP <= 0 {
 		return " [the companion is gone: the hit's other effects are not applied]"
@@ -137,18 +137,9 @@ func companionHitRiders(lobbyID, attackerID int, attackerName string, a monsterA
 			}
 		default:
 			if !(e.CondIfAdvantage && !hadAdvantage) { // "... and the darkmantle had Advantage on the attack roll": without it the clause triggers nothing
-				for _, c := range e.Conditions {
-					if res := addCondition(lobbyID, cur.CombatID, e.conditionAdd(c, source)); res.Immune != "" {
-						applied = append(applied, fmt.Sprintf("not %s (%s)", c, res.Immune))
-						continue
-					}
-					applied = append(applied, titleCase(c))
-					if l, ok := e.linkedCondition(c, source); ok {
-						if res := addCondition(lobbyID, cur.CombatID, l); res.Immune == "" {
-							applied = append(applied, titleCase(l.Condition)+" until the grapple ends")
-						}
-					}
-				}
+				// the same writer as every other target and as a companion's failed save (finishTarget): the conditions, the
+				// Restrained a grapple brings, the Speed and roll riders for their durations
+				applied = append(applied, e.giveConditions(lobbyID, cur.CombatID, source)...)
 			}
 			// the attach the hit starts: before the recurring damage, whose gate reads the attach row
 			if attached := addAttach(lobbyID, attackerID, cur.CombatID, a.Desc, source, !(e.CondIfAdvantage && !hadAdvantage)); attached != "" {
@@ -163,9 +154,9 @@ func companionHitRiders(lobbyID, attackerID int, attackerName string, a monsterA
 				gm = append(gm, gmNote)
 			}
 		}
-		if e.SpeedMode != "" || len(e.DisadvMode) > 0 || e.Exhaustion > 0 {
-			gm = append(gm, "the hit's Speed, Disadvantage or Exhaustion effect is not applied to a companion")
-		}
+	}
+	if d := hitAfterDamage(lobbyID, cur.CombatID, a.Desc, source, taken); d != "" { // Life Drain, burning (hit_after_damage_2024.go)
+		applied = append(applied, strings.Trim(d, " []"))
 	}
 	if e, ok := parseSaveEffect(a.Desc); ok { // the hit's own saving throw: rolled with the companion's stat block (applySaveEffectOnCompanion)
 		e.SourceID = attackerID

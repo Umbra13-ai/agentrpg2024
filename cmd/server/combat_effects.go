@@ -40,6 +40,7 @@ var effectText = map[string]string{
 	"no_healing":  "Can't regain Hit Points (Chill Touch)",
 	"mind_sliver": "Subtracts 1d4 from its next saving throw (Mind Sliver)",
 	"wisp_lit":    "Can't benefit from the Invisible condition; sheds Dim Light (Starry Wisp)",
+	"disengaged":  "Took the Disengage action: its movement doesn't provoke Opportunity Attacks this turn",
 }
 
 // addCombatEffect puts an effect on a creature; slow and hamstring replace each other (only the newest applies).
@@ -93,7 +94,7 @@ func expireCombatEffectsOf(lobbyID, sourceID int) {
 		return
 	}
 	db.Exec(`DELETE FROM combat_effects WHERE lobby_id = $1 AND source_id = $2 AND kind NOT IN ('recurring_damage','attached','suffocating','swallowed')`, lobbyID, sourceID) // the attach kinds, its suffocating and the swallow outlive a turn boundary: their owners end them
-	endConditionsFromSource(lobbyID, fmt.Sprintf("Stunning Strike #%d", sourceID)) // Stunned until the start of the Monk's next turn
+	endConditionsFromSource(lobbyID, fmt.Sprintf("Stunning Strike #%d", sourceID))                                                                                            // Stunned until the start of the Monk's next turn
 }
 
 func clearCombatEffects(lobbyID int) {

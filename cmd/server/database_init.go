@@ -342,6 +342,12 @@ var schemaSteps = []schemaStep{
  key TEXT PRIMARY KEY,
  definition JSONB NOT NULL, stats JSONB NOT NULL, source_note TEXT NOT NULL,
  created_at TIMESTAMPTZ NOT NULL DEFAULT NOW())`},
+	// a monster's death recorded with the trait that acts on it (Death Burst), resolved after the request (monster_death_trigger_2024.go)
+	{"monster_death_trigger_2024.go", `CREATE TABLE IF NOT EXISTS pending_death_triggers (
+ id SERIAL PRIMARY KEY, lobby_id INTEGER NOT NULL, monster_id INTEGER NOT NULL, name TEXT NOT NULL DEFAULT '',
+ trait_name TEXT NOT NULL DEFAULT '', trait_text TEXT NOT NULL DEFAULT '', created_at TIMESTAMPTZ NOT NULL DEFAULT NOW())`},
+	// how much of a character's Hit Point maximum an effect took (Life Drain); a Long Rest gives it back (hit_points_2024.go)
+	{"hit_points_2024.go", `ALTER TABLE characters ADD COLUMN IF NOT EXISTS max_hp_reduced INTEGER NOT NULL DEFAULT 0`},
 }
 
 // seatReadySchema: a player's "ready to start" on its seat (cleared whenever the seat changes hands: takeSeat, swapSeat;

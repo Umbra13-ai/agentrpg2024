@@ -173,6 +173,30 @@ func monsterNormalRange(desc string) int {
 	return 0
 }
 
+// monsterAttackRange is the one range rule of a monster's attack on the battle map, for every target (a character, monster_attacks.go;
+// a monster, monster_attack_continuation_2024.go; a companion, companions_more_2024.go): beyond its reach or long range there is no
+// attack (refusal is the line that says so, and nothing is rolled); beyond its normal range it has Disadvantage (longRange); within 5 feet
+// is read from the map. Distance is tokenDistanceFeet, a flying creature's altitude included. Without a map, or without a token for either,
+// nothing is refused and a melee attack is within 5 feet.
+func monsterAttackRange(lobbyID, attackerID, targetID int, desc, attackName, targetName string, melee bool) (withinFive, longRange bool, refusal string) {
+	withinFive = melee
+	dist, onMap := monsterDistance(lobbyID, attackerID, targetID)
+	if !onMap {
+		return
+	}
+	if n := monsterNormalRange(desc); n > 0 && dist > n {
+		longRange = true
+	}
+	if reach, ranged := monsterAttackReach(desc); dist > reach {
+		what := "reach"
+		if ranged {
+			what = "range"
+		}
+		return false, false, fmt.Sprintf("%s: %s is %d ft away, beyond its %d ft %s - no attack (move the monster on the battle map first)", attackName, targetName, dist, reach, what)
+	}
+	return dist <= 5, longRange, ""
+}
+
 // monsterSeesTarget: on the battle map, a wall or closed door between a monster and a character gives Total Cover (it can't be targeted).
 // ok is false without a map.
 func monsterSeesTarget(lobbyID, attackerID, targetID int) (sees, ok bool) {

@@ -79,6 +79,24 @@ Report: "Wizard Scholar accepts any skill for Expertise."
   follows a Speed that changes mid-turn (`settleMovement`). Effects whose result depends on an order the rules supplied do not give are never computed: the GM rules
   (`speed_ruling` on POST /api/gm/conditions). A monster attack on another monster is `monsterAttacksMonster` (same attack, damage and
   condition owners as for a character target).
+- **A stat-block rider's duration** (`cmd/server/rider_duration_2024.go`): `riderUntil` / `readRiderEnd` / `riderEndFor` read "until the end of its
+  next turn", "until the start (or end) of the <source>'s next turn" once, and `riderEnd.markerAdd` records it, for every Speed rider
+  (`readSpeed` / `giveSpeed`), roll rider (`readDisadvantage` / `giveDisadvantage`: Sap, the "exposed" next-attack Advantage, Disadvantage on
+  attack rolls, Concentration saves or named abilities' saves, read by `attackSources` / `saveSources`) and "can't take Reactions". A new
+  rider kind is one pattern built with `riderPattern` plus the owner that reads its marker; never write the duration into its pattern.
+  Every target kind gets them through `giveConditions` (a companion's hit too). Go: `TestPostgresRiderDurationsOnEveryTarget`.
+- **A trait that acts on a monster's death** (Death Burst, `cmd/server/monster_death_trigger_2024.go`): the writers of a monster's Hit Points
+  call `monsterDiedIn`, which records the trigger in their transaction; `drainDeathTriggers` resolves it after the request (`withProtections`)
+  and at each turn start, through `applySaveEffect`. Never roll a death effect inside a damage transaction. Go: `TestPostgresDeathBurst`.
+- **A standard action a stat-block entry takes** ("takes the Disengage or Hide action", `cmd/server/monster_standard_actions_2024.go`):
+  `resolveMonsterStandardAction` (a choice named in `use`; Disengage recorded as the `disengaged` combat effect that
+  `noteMonstersLeavingReach` reads). Go: `TestPostgresMonsterNimbleEscape`.
+- **A monster attack's range on the battle map:** `monsterAttackRange` (`cmd/server/map_rules.go`) for every target route (character, monster,
+  companion): refusal beyond reach or long range, Disadvantage beyond normal range, within 5 feet. Go: `TestPostgresMonsterAttackRangeOnEveryTarget`.
+- **What a hit does after its damage:** `hitAfterDamage` (`cmd/server/hit_after_damage_2024.go`), called once by every hit route: the drain
+  below and "it starts burning" (the Burning owner, `burning_2024.go`). A new effect of this kind is one call there. Go: `TestPostgresBurningOnHitEveryTarget`.
+- **A hit's Hit Point maximum drain** (Life Drain, `cmd/server/hp_max_drain_2024.go`): `drainHPMaximum` on every hit route; writers
+  `reduceMaxHP` (character, restored by `restoreAllHP`), `reduceMonsterMaxHP`, `reduceCompanionMaxHP`. Go: `TestPostgresLifeDrainOnEveryTarget`.
 - **Monster attack damage definitions:** parseMonsterAttack and prepareMonsterAttack
   in cmd/server/monster_damage_choice_2024.go: fixed dice, flat damage, type choices,
   secondary damage, validation and refusal. oldStyleActions is a storage adapter;

@@ -160,6 +160,9 @@ func init() {
 				t.Failure = l.Err.Error()
 			}
 		}},
+		{"a monster's trait that acts on its death and is still pending (the backstop of monster_death_trigger_2024.go)", func(t *turnChange) {
+			t.Log = append(t.Log, drainDeathTriggers()...)
+		}},
 		{"the turn's action, Bonus Action, Reaction, movement and once-per-turn features return", func(t *turnChange) {
 			if characterTurn(t.NextID) {
 				resetTurnFlags(t.NextID, characterSpeedOf(t.NextID)) // also ends a Dodge: "until the start of your next turn"
