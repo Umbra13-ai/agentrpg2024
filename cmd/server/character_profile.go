@@ -504,9 +504,9 @@ func getCharacterProfile(w http.ResponseWriter, charID int) {
 	writeJSONStatus(w, http.StatusOK, resp)
 }
 
-// handleCharacterSheet serves the public character profile page. The page is a
-// static shell; all character data is fetched from the JSON endpoints and
-// inserted with textContent, so agent-written text can never run as HTML.
+// handleCharacterSheet serves the Character view (the mock-up's Character Sheet, #view-character) for one character. The page is a
+// frame: the character's numbers are read from its own JSON (GET /api/characters/{id} and .../profile) and put in with textContent,
+// so agent-written text can never run as HTML. The party switcher's chips are the characters of the same campaign.
 func handleCharacterSheet(w http.ResponseWriter, r *http.Request) {
 	idStr := strings.TrimPrefix(r.URL.Path, "/character/")
 	charID, err := strconv.Atoi(strings.Trim(idStr, "/"))
@@ -524,297 +524,352 @@ func handleCharacterSheet(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	w.Header().Set("Content-Type", "text/html; charset=utf-8")
-	title := name + " - Agent RPG 2024"
-	page := strings.Replace(characterProfilePage, "__CHAR_ID__", strconv.Itoa(charID), -1)
-	fmt.Fprint(w, wrapHTML(title, page)) // wrapHTML escapes the title
+	fmt.Fprint(w, wrapView(name+" - Agent RPG 2024", characterViewHTML(charID, name)))
+}
+
+// handleCharacterView: the Character view without a character named (/character): the featured campaign's turn holder or first
+// party member (the Live Table's campaign, site_views_2024.go).
+func handleCharacterView(w http.ResponseWriter, r *http.Request) {
+	if id := featuredCampaign(r); id > 0 {
+		var charID int
+		db.QueryRow(`SELECT id FROM characters WHERE lobby_id = $1 ORDER BY id LIMIT 1`, id).Scan(&charID)
+		if charID > 0 {
+			http.Redirect(w, r, fmt.Sprintf("/character/%d", charID), http.StatusFound)
+			return
+		}
+	}
+	w.Header().Set("Content-Type", "text/html; charset=utf-8")
+	fmt.Fprint(w, wrapView("Character - Agent RPG 2024", `<section id="view-character" class="view-section">
+  <div style="display:flex; flex-wrap:wrap; align-items:center; justify-content:space-between; gap:0.75rem; margin-bottom:1rem;">
+    <h1 class="font-rpg" style="font-size:1.35rem; color:var(--accent-gold);">Character Sheet</h1>
+  </div>
+  <div class="rpg-panel panel-pad">No character is playing at a table right now. <a href="/campaigns">Campaigns</a></div>
+</section>`))
+}
+
+// characterViewHTML: the mock-up's Character Sheet view for charID, with the party switcher of its campaign.
+func characterViewHTML(charID int, name string) string {
+	type chip struct {
+		ID   int    `json:"id"`
+		Name string `json:"name"`
+		Icon string `json:"icon"`
+	}
+	party := []chip{}
+	if lobby := lobbyOfChar(charID); lobby > 0 {
+		if rows, err := db.Query(`SELECT id, name, COALESCE(class, '') FROM characters WHERE lobby_id = $1 ORDER BY id`, lobby); err == nil {
+			for rows.Next() {
+				var c chip
+				var class string
+				if rows.Scan(&c.ID, &c.Name, &class) == nil && !characterIsDeleted(c.ID) {
+					c.Icon = classIcon(class)
+					party = append(party, c)
+				}
+			}
+			rows.Close()
+		}
+	}
+	if len(party) == 0 {
+		var class string
+		db.QueryRow(`SELECT COALESCE(class, '') FROM characters WHERE id = $1`, charID).Scan(&class)
+		party = append(party, chip{charID, name, classIcon(class)})
+	}
+	var chips strings.Builder
+	for _, c := range party {
+		active := ""
+		if c.ID == charID {
+			active = " active"
+		}
+		chips.WriteString(fmt.Sprintf(`
+    <a class="pill-btn%s" href="/character/%d" data-select-char="%d">%s %s</a>`, active, c.ID, c.ID, c.Icon, htmlEscape(c.Name)))
+	}
+	return `<section id="view-character" class="view-section">
+  <div style="display:flex; flex-wrap:wrap; align-items:center; justify-content:space-between; gap:0.75rem; margin-bottom:1rem;">
+    <h1 class="font-rpg" style="font-size:1.35rem; color:var(--accent-gold);">Character Sheet</h1>
+    <div class="filter-row" id="character-switcher">` + chips.String() + `
+    </div>
+  </div>
+  <div id="character-sheet-container"><div class="rpg-panel panel-pad" id="cs-loading" style="color:var(--text-secondary); font-size:0.85rem;">Loading character…</div></div>
+</section>
+` + strings.Replace(characterProfileScript, "__CHAR_ID__", strconv.Itoa(charID), 1)
 }
 
 func htmlEscape(s string) string {
 	return strings.NewReplacer("&", "&amp;", "<", "&lt;", ">", "&gt;", "\"", "&quot;", "'", "&#39;").Replace(s)
 }
 
-const characterProfilePage = `
-<style>
-.cp{max-width:1180px;margin:0 auto;padding:1.4em 1.8em 2em;background:var(--surface);color:var(--fg);border:1px solid var(--panel-border);border-radius:var(--radius-lg,0);box-shadow:var(--shadow,0 2px 10px rgba(0,0,0,.25));font-family:var(--font-sheet);font-size:1rem;line-height:1.42}
-.cp a{color:var(--accent)}
-.cp *{box-sizing:border-box}
-.cp .muted{color:var(--muted)}
-.cp .sheet{display:grid;grid-template-columns:minmax(0,1fr) minmax(340px,44%);gap:1.6em;align-items:start}
-.cp .textcol h1{font-family:var(--font-heading,inherit);font-variant:small-caps;font-size:clamp(1.8em,5vw,2.5em);color:var(--heading);margin:0;line-height:1.05;font-weight:bold}
-.cp .quote{font-style:italic;color:var(--muted);margin:.1em 0 .6em}
-.cp .lore p{margin:.5em 0;white-space:pre-wrap}
-.cp .lore b.n,.cp .persona b.n{font-style:italic}
-.cp h2{font-variant:small-caps;font-size:1.45em;font-weight:normal;color:var(--heading);border-bottom:1px solid var(--rule);margin:1.1em 0 .4em;line-height:1.2}
-.cp h2 small{font-size:.7em;color:var(--muted);font-variant:normal}
-.cp .feat{margin:.45em 0;white-space:pre-wrap}
-.cp .feat b.n{font-style:italic;font-weight:bold}
-.cp .persona p{margin:.45em 0;white-space:pre-wrap}
-.cp .spl p{margin:.25em 0}
-.cp .spl .lv{font-weight:bold;font-style:italic}
-.cp .portrait{border:1px solid var(--accent);padding:5px;background:var(--surface);box-shadow:0 1px 4px rgba(0,0,0,.3);margin-bottom:1em}
-.cp .portrait .frame{width:100%;aspect-ratio:4/5;background:var(--panel-strong);display:flex;align-items:center;justify-content:center;overflow:hidden}
-.cp .portrait img{width:100%;height:100%;object-fit:cover;display:block}
-.cp .portrait .ph{font-size:5em;color:var(--muted);font-weight:bold}
-.cp .box{background:var(--panel);border:1px solid var(--panel-border);box-shadow:0 1px 4px rgba(0,0,0,.25);padding:.6em .9em .8em;margin-bottom:1em}
-.cp .box p{margin:.14em 0}
-.cp .box b.l{color:var(--fg)}
-.cp .boxname{font-variant:small-caps;font-size:1.5em;color:var(--heading);font-weight:bold;line-height:1.1;margin:0;border-bottom:2px solid var(--accent);padding-bottom:.05em}
-.cp .boxname.eq{font-size:1.25em}
-.cp .typeline{font-style:italic;color:var(--muted);margin:.15em 0 .35em}
-.cp .abgrid{display:flex;flex-wrap:wrap;gap:.3em 1em;margin:.45em 0}
-.cp .abgroup{display:grid;grid-template-columns:max-content repeat(3,minmax(2.6em,max-content));font-size:.92em}
-.cp .abgroup .hd{font-size:.75rem;padding:0 .2em;color:var(--muted);text-align:center;letter-spacing:.05em;font-style:italic}
-.cp .abgroup .nm{white-space:nowrap;min-width:7.4em;background:var(--panel-strong);color:var(--accent);font-variant:small-caps;font-weight:bold;padding:0 .3em;border-bottom:1px solid var(--panel)}
-.cp .abgroup .vl{background:var(--panel-strong);text-align:center;border-bottom:1px solid var(--panel)}
-.cp .abgroup .vl.p{font-weight:bold}
-.cp .sbh{font-variant:small-caps;color:var(--heading);font-size:1.2em;border-bottom:1px solid var(--accent);margin:.8em 0 .3em;line-height:1.2}
-.cp .sub{margin-left:0}
-.cp .statgrid{display:grid;grid-template-columns:max-content 1fr;column-gap:2.4em;row-gap:.2em;margin:.3em 0 .5em}
-.cp .statgrid .cell{white-space:nowrap}
-.cp .sbh2{font-variant:small-caps;font-weight:bold;color:var(--muted);margin:.6em 0 .2em}
-.cp .ent{margin:.28em 0}
-.cp .ent b.n{font-style:italic}
-.cp .ent .src{color:var(--muted)}
-.cp ul.atk{margin:.2em 0 .3em 1.1em;padding:0}
-.cp ul.atk li{margin:.25em 0}
-.cp .tag{display:inline-block;border:1px solid var(--accent);color:var(--accent);border-radius:3px;padding:0 .45em;margin:.2em .3em 0 0;font-size:.82em}
-.cp .tag.bad{background:var(--accent);color:var(--accent-fg)}
-.cp .bar{height:.45em;background:var(--panel-strong);border:1px solid var(--panel-border);margin:.15em 0 .2em;max-width:14em}
-.cp .bar>div{height:100%;background:var(--accent)}
-.cp .pips{white-space:nowrap}
-.cp .pips span{display:inline-block;width:.7em;height:.7em;border:1px solid var(--accent);border-radius:50%;margin-right:.18em;vertical-align:-.05em}
-.cp .pips span.on{background:var(--accent)}
-.cp .pipgrid{display:grid;grid-template-columns:max-content 1fr;column-gap:.6em;row-gap:.35em;align-items:center;margin:.4em 0}
-.cp .pipgrid .pv{white-space:nowrap}
-.cp .loc{margin:.5em 0 .2em;font-variant:small-caps;color:var(--accent);font-weight:bold;border-bottom:1px solid var(--accent)}
-.cp .loc small{font-variant:normal;font-weight:normal;color:var(--muted)}
-.cp ul.items{margin:.1em 0 .3em 1.2em;padding:0}
-.cp ul.items ul.items{margin-left:1.1em}
-.cp .bag{font-weight:bold}
-.cp .lostbox .loc{color:var(--bad);border-color:var(--bad)}
-.cp #err{color:var(--bad)}
-.cp .sheet>*{min-width:0}
-.cp .box,.cp .feat,.cp .persona p,.cp .lore p,.cp .spl p{overflow-wrap:anywhere}
-@media (max-width:480px){.cp .statgrid{grid-template-columns:minmax(0,1fr)}.cp .statgrid .cell{white-space:normal}}
-@media (max-width:860px){.cp{padding:1em}.cp .sheet{grid-template-columns:minmax(0,1fr)}.cp .statcol{order:-1}.cp .portrait{max-width:300px}}
-@media (max-width:640px){.cp .portrait{max-width:160px;margin:0 auto 1em}.cp .portrait .ph{font-size:3em}} /* a phone sees the sheet first, the portrait small (Nov 21) */
-</style>
-<div class="cp" id="cp"><p class="muted" id="loading">Loading character…</p><p id="err"></p></div>
-<script>
-(function(){
-var ID=__CHAR_ID__;
-var root=document.getElementById('cp');
-function lb(n){return n+' lb.'}
-function lbText(t){return String(t).replace(/(\d) pounds?\b/g,'$1 lb.')}
-function el(tag,cls,text){var e=document.createElement(tag);if(cls)e.className=cls;if(text!==undefined&&text!==null)e.textContent=String(text);return e}
-function add(p){for(var i=1;i<arguments.length;i++){if(arguments[i])p.appendChild(arguments[i])}return p}
-function sgn(n){return (n>=0?'+':'−')+Math.abs(n)}
-function title(s){return String(s||'').replace(/[_-]+/g,' ').replace(/(^|\s)\w/g,function(c){return c.toUpperCase()})}
-function norm(s){return String(s||'').toLowerCase().replace(/[_-]+/g,' ').trim()}
-function toolTitle(s){return String(s||'').replace(/_/g,' ').replace(/(^|[\s(-])([a-z])/g,function(m,p,c){return p+c.toUpperCase()})}
-function line(parent,label,value,note){if(value===undefined||value===null||value==='')return;var p=el('p');add(p,el('b','l',label+' '),document.createTextNode(value+(note?' ('+note+')':'')));parent.appendChild(p)}
-function ordinal(n){return n===1?'1st':n===2?'2nd':n===3?'3rd':n+'th'}
-var SKILLS=[['Acrobatics','dex'],['Animal Handling','wis'],['Arcana','int'],['Athletics','str'],['Deception','cha'],['History','int'],['Insight','wis'],['Intimidation','cha'],['Investigation','int'],['Medicine','wis'],['Nature','int'],['Perception','wis'],['Performance','cha'],['Persuasion','cha'],['Religion','int'],['Sleight of Hand','dex'],['Stealth','dex'],['Survival','wis']];
-var SAVES={barbarian:['str','con'],bard:['dex','cha'],cleric:['wis','cha'],druid:['int','wis'],fighter:['str','con'],monk:['str','dex'],paladin:['wis','cha'],ranger:['str','dex'],rogue:['dex','int'],sorcerer:['con','cha'],warlock:['wis','cha'],wizard:['int','wis']};
-var ABNAME={str:'Strength',dex:'Dexterity',con:'Constitution',int:'Intelligence',wis:'Wisdom',cha:'Charisma'};
-var ROWS=[['str','dex','con'],['int','wis','cha']];
+// characterProfileScript fills the Character Sheet from the character's sheet (GET /api/characters/{id}) and profile (.../profile),
+// in the mock-up's components: the hero (portrait, name, the class line, alignment and background, the tagline), the vitals strip, the
+// six ability shields, the saving throws, the senses, then the tabs (Actions & Spells, Skills & Traits, Equipment & Coin, Story & RP).
+// What the sheet holds that the mock-up has no place for (conditions, class resources, resistances, the party's observations) comes
+// after its sections, in its components.
+const characterProfileScript = `<script>
+(function () {
+var ID = __CHAR_ID__;
+var box = document.getElementById('character-sheet-container');
+function el(tag, cls, text) { var e = document.createElement(tag); if (cls) e.className = cls; if (text !== undefined && text !== null) e.textContent = String(text); return e; }
+function add(p) { for (var i = 1; i < arguments.length; i++) { if (arguments[i]) p.appendChild(arguments[i]); } return p; }
+function css(e, s) { e.style.cssText = s; return e; }
+function sgn(n) { return (n >= 0 ? '+' : '−') + Math.abs(n); }
+function title(s) { return String(s || '').replace(/[_-]+/g, ' ').replace(/(^|\s)\w/g, function (c) { return c.toUpperCase(); }); }
+function norm(s) { return String(s || '').toLowerCase().replace(/[_-]+/g, ' ').trim(); }
+function lb(n) { return n + ' lb'; }
+function lbText(t) { return String(t).replace(/(\d) pounds?\b/g, '$1 lb'); }
+function ordinal(n) { return n === 1 ? '1st' : n === 2 ? '2nd' : n === 3 ? '3rd' : n + 'th'; }
+var SKILLS = [['Acrobatics','dex'],['Animal Handling','wis'],['Arcana','int'],['Athletics','str'],['Deception','cha'],['History','int'],['Insight','wis'],['Intimidation','cha'],['Investigation','int'],['Medicine','wis'],['Nature','int'],['Perception','wis'],['Performance','cha'],['Persuasion','cha'],['Religion','int'],['Sleight of Hand','dex'],['Stealth','dex'],['Survival','wis']];
+var SAVES = {barbarian:['str','con'],bard:['dex','cha'],cleric:['wis','cha'],druid:['int','wis'],fighter:['str','con'],monk:['str','dex'],paladin:['wis','cha'],ranger:['str','dex'],rogue:['dex','int'],sorcerer:['con','cha'],warlock:['wis','cha'],wizard:['int','wis']};
+var FULL = {str:'STRENGTH',dex:'DEXTERITY',con:'CONSTITUTION',int:'INTELLIGENCE',wis:'WISDOM',cha:'CHARISMA'};
+var tabKey = 'char-tab';
+var tab = 'actions';
+try { tab = sessionStorage.getItem(tabKey) || 'actions'; } catch (e) {}
 
 Promise.all([
-  fetch('/api/characters/'+ID).then(function(r){return r.json()}),
-  fetch('/api/characters/'+ID+'/profile').then(function(r){return r.json()})
-]).then(function(res){render(res[0],res[1])}).catch(function(){document.getElementById('err').textContent='Could not load this character.'});
+  fetch('/api/characters/' + ID).then(function (r) { return r.json(); }),
+  fetch('/api/characters/' + ID + '/profile').then(function (r) { return r.json(); })
+]).then(function (res) { render(res[0], res[1]); }).catch(function () { document.getElementById('cs-loading').textContent = 'Could not load this character.'; });
 
-function pips(total,rem){var s=el('span','pips');for(var i=0;i<total&&i<20;i++)s.appendChild(el('span',i<rem?'on':''));return s}
-function itemList(items){
-  var ul=el('ul','items');
-  items.forEach(function(it){
-    var li=el('li');
-    var label=title(it.name)+(it.quantity>1?' ('+it.quantity+')':'');
-    if(it.contents){
-      li.appendChild(el('span','bag',label));
-      var meta=[];if(it.capacity)meta.push('holds '+lbText(it.capacity));if(it.capacity_lbs&&it.carried_lbs!==undefined)meta.push(it.carried_lbs+' of '+lb(it.capacity_lbs)+' used');
-      if(meta.length)li.appendChild(el('span','muted',' — '+meta.join('; ')));
-      li.appendChild(it.contents.length?itemList(it.contents):el('div','muted','Empty.'));
+function panel(heading) {
+  var p = css(el('div', 'rpg-panel panel-pad'), 'display:flex; flex-direction:column; gap:0.65rem;');
+  if (heading) p.appendChild(css(el('h3', 'font-rpg', heading), 'font-size:0.98rem; color:var(--accent-gold);'));
+  return p;
+}
+function item(text, strong) {
+  var d = el('div', 'dnd-list-item');
+  if (strong) { d.appendChild(el('strong', null, strong + ' ')); }
+  d.appendChild(document.createTextNode(text));
+  return d;
+}
+function itemList(parent, items, depth) {
+  (items || []).forEach(function (it) {
+    var label = title(it.name) + (it.quantity > 1 ? ' x' + it.quantity : '');
+    var w = it.weight_lbs ? ' (' + lb(Math.round(it.weight_lbs * (it.quantity || 1) * 100) / 100) + ')' : '';
+    var d = item(label + w);
+    if (depth) d.style.marginLeft = (depth * 1) + 'rem';
+    parent.appendChild(d);
+    if (it.contents && it.contents.length) itemList(parent, it.contents, (depth || 0) + 1);
+  });
+}
+
+function render(d, p) {
+  document.getElementById('cs-loading').remove();
+  if (d.error || p.error) { box.appendChild(css(el('div', 'rpg-panel panel-pad', 'Character not found.'), 'font-size:0.85rem;')); return; }
+  var prof = d.proficiency_bonus || 2, mods = d.modifiers || {}, stats = d.stats || {}, S = p.statblock || {};
+  var sc = d.subclass, scName = sc && typeof sc === 'object' ? sc.name : sc;
+  var saves = SAVES[norm(d.class)] || [];
+  var SB = d.skill_bonuses || {};
+  var sbOf = function (name, ab) { var k = norm(name).replace(/ /g, '_'); return k in SB ? SB[k] : (mods[ab] || 0); };
+  var features = S.features || [];
+
+  // ===== the hero panel
+  var hero = css(el('div', 'rpg-panel panel-pad'), 'margin-bottom:1rem;');
+  var top = el('div', 'char-hero');
+  var pc = el('div', 'char-portrait-col'), frame = el('div', 'char-portrait-frame');
+  function ph() { frame.textContent = ''; frame.appendChild(css(el('span', null, (d.name || '?').charAt(0).toUpperCase()), 'font-size:2.5rem; color:var(--accent-gold);')); }
+  if (p.portrait_url) { var img = el('img'); img.alt = d.name; img.onerror = ph; img.src = p.portrait_url; frame.appendChild(img); } else ph();
+  pc.appendChild(frame);
+  var who = css(el('div'), 'flex:1; min-width:0;');
+  who.appendChild(css(el('h2', 'font-rpg', d.name), 'font-size: clamp(1.15rem, 3vw, 1.6rem); color:var(--accent-gold); line-height:1.2;'));
+  who.appendChild(css(el('p', null, 'Level ' + d.level + ' ' + title(d.species) + ' ' + title(d.class) + (scName ? ' (' + title(scName) + ')' : '')), 'font-size:0.84rem; color:var(--text-primary); font-weight:500; margin-top:0.2rem;'));
+  var al = [];
+  if (S.alignment || d.alignment) al.push(S.alignment || d.alignment);
+  if (d.background) al.push(title(d.background));
+  who.appendChild(css(el('p', null, al.join(' · ')), 'font-size:0.78rem; color:var(--text-secondary); margin-top:0.1rem;'));
+  add(top, pc, who); hero.appendChild(top);
+  if (p.tagline) hero.appendChild(css(el('p', null, '"' + p.tagline.replace(/^["“]|["”]$/g, '') + '"'), 'font-size:0.82rem; font-style:italic; color:var(--text-muted); margin-bottom:0.85rem;'));
+
+  var vit = el('div', 'vitals-strip');
+  function mini(label, val, color) {
+    var m = el('div', 'mini-vital');
+    m.appendChild(el('span', 'mini-vital-lbl', label));
+    var v = el('span', 'mini-vital-val font-mono', val); if (color) v.style.color = color; m.appendChild(v);
+    vit.appendChild(m);
+  }
+  mini('AC', d.effective_ac !== undefined ? d.effective_ac : d.ac, 'var(--accent-gold)');
+  mini('HP', d.hp + '/' + d.max_hp, 'var(--accent-emerald)');
+  mini('Hit Dice', d.hit_dice ? (d.hit_dice.total + d.hit_dice.die_type) : '—');
+  mini('Init', sgn(mods.dex || 0) + ' (' + (10 + (mods.dex || 0)) + ')');
+  mini('Speed', S.speed_feet ? S.speed_feet + ' ft' : (d.speed ? d.speed + ' ft' : '—'));
+  mini('Size', S.size || d.size || '—');
+  hero.appendChild(vit);
+
+  var ab = el('div', 'abilities-3x2');
+  ['str', 'dex', 'con', 'int', 'wis', 'cha'].forEach(function (k) {
+    var a = el('div', 'ddb-ability');
+    add(a, el('div', 'ddb-ability-name', FULL[k]), el('div', 'ddb-ability-mod font-mono', sgn(mods[k] || 0)), el('div', 'ddb-ability-score font-mono', stats[k]));
+    ab.appendChild(a);
+  });
+  hero.appendChild(ab);
+
+  hero.appendChild(el('h3', 'saves-section-title font-rpg', 'Saving Throws'));
+  var sv = el('div', 'saves-2col');
+  ['str', 'int', 'dex', 'wis', 'con', 'cha'].forEach(function (k) {
+    var isP = saves.indexOf(k) >= 0, s = el('div', 'save-pill');
+    add(s, el('span', 'save-dot' + (isP ? ' prof' : '')), el('span', 'save-name', FULL[k]), el('span', 'save-val font-mono', sgn((mods[k] || 0) + (isP ? prof : 0))));
+    sv.appendChild(s);
+  });
+  hero.appendChild(sv);
+  (S.save_notes || []).forEach(function (n) { hero.appendChild(css(el('p', null, '★ ' + n.charAt(0).toUpperCase() + n.slice(1)), 'font-size:0.75rem; color:var(--accent-gold); margin-top:0.5rem;')); });
+
+  hero.appendChild(el('h3', 'saves-section-title font-rpg', 'Senses'));
+  var sn = el('div', 'senses-stack');
+  [['PASSIVE PERCEPTION', 'perception', 'wis'], ['PASSIVE INVESTIGATION', 'investigation', 'int'], ['PASSIVE INSIGHT', 'insight', 'wis']].forEach(function (x) {
+    var s = el('div', 'sense-pill');
+    add(s, el('span', 'sense-num font-mono', 10 + sbOf(x[1], x[2])), el('span', 'sense-lbl', x[0]));
+    sn.appendChild(s);
+  });
+  var vis = d.vision;
+  if (vis && typeof vis === 'object') Object.keys(vis).forEach(function (k) { if (vis[k] && /range|dark|blind|true|tremor/i.test(k)) { var s = el('div', 'sense-pill'); add(s, el('span', 'sense-num font-mono', vis[k]), el('span', 'sense-lbl', title(k.replace(/_?range/, '')).toUpperCase() + ' (FT)')); sn.appendChild(s); } });
+  if (S.darkvision_feet && !(vis && vis.darkvision)) { var s2 = el('div', 'sense-pill'); add(s2, el('span', 'sense-num font-mono', S.darkvision_feet), el('span', 'sense-lbl', 'DARKVISION (FT)')); sn.appendChild(s2); }
+  hero.appendChild(sn);
+
+  // what the sheet says of the character's state now (after the mock-up's sections)
+  var tags = [];
+  if (p.is_dead || d.is_dead) tags.push(['Dead', 'badge-combat']);
+  if (d.inspiration) tags.push(['Heroic Inspiration', 'badge-recruiting']);
+  (d.conditions || []).forEach(function (c) { tags.push([title(c), 'badge-combat']); });
+  if (d.exhaustion_level) tags.push(['Exhaustion ' + d.exhaustion_level, 'badge-combat']);
+  if (d.concentrating_on) tags.push(['Concentrating: ' + title(d.concentrating_on), 'badge-arcane']);
+  if (tags.length) {
+    hero.appendChild(el('h3', 'saves-section-title font-rpg', 'Condition'));
+    var tg = css(el('div'), 'display:flex; flex-wrap:wrap; gap:0.4rem;');
+    tags.forEach(function (t) { tg.appendChild(el('span', 'badge ' + t[1], t[0])); });
+    hero.appendChild(tg);
+  }
+  box.appendChild(hero);
+
+  // ===== the tabs
+  var tabs = el('div', 'char-tabs'); tabs.id = 'char-subtabs';
+  var body = el('div');
+  [['actions', 'Actions & Spells'], ['skills', 'Skills & Traits'], ['equipment', 'Equipment & Coin'], ['story', 'Story & RP']].forEach(function (t) {
+    var b = el('button', 'pill-btn' + (t[0] === tab ? ' active' : ''), t[1]); b.setAttribute('data-char-tab', t[0]);
+    b.addEventListener('click', function () { tab = t[0]; try { sessionStorage.setItem(tabKey, tab); } catch (e) {} tabs.querySelectorAll('.pill-btn').forEach(function (x) { x.classList.toggle('active', x === b); }); show(); });
+    tabs.appendChild(b);
+  });
+  box.appendChild(tabs); box.appendChild(body);
+
+  function grid() { var g = el('div', 'char-grid'); body.appendChild(g); return g; }
+  function show() {
+    body.textContent = '';
+    var g = grid();
+    if (tab === 'actions') {
+      var a = panel('Combat Actions & Features');
+      if (S.attack_action) a.appendChild(item(S.attack_action, 'Attack.'));
+      (S.attacks || []).forEach(function (x) { a.appendChild(item(attackLine(x.name, x.description))); });
+      features.filter(function (f) { return f.kind === 'action' || f.kind === 'bonus_action' || f.kind === 'reaction'; }).forEach(function (f) {
+        a.appendChild(item((f.kind === 'bonus_action' ? 'Bonus Action. ' : f.kind === 'reaction' ? 'Reaction. ' : 'Action. ') + (f.description || ''), f.name + ':'));
+      });
+      (d.class_resources || []).forEach(function (rs) {
+        var r = item(rs.unit ? (rs.current || 0) + '/' + (rs.max || 0) + ' ' + rs.unit : '', rs.name);
+        if (!rs.unit) { var pip = el('span'); for (var i = 0; i < (rs.max || 0) && i < 20; i++) pip.appendChild(el('span', 'slot-pip' + (i < (rs.current || 0) ? '' : ' empty'))); r.appendChild(pip); }
+        a.appendChild(r);
+      });
+      g.appendChild(a);
+      var s = panel('Spellcasting');
+      var caster = d.spell_slots || d.pact_magic || (d.spell_groups && d.spell_groups.length) || d.spellcasting_ability;
+      if (caster) {
+        var ab = {INT: 'INT', WIS: 'WIS', CHA: 'CHA'}[String(d.spellcasting_ability || '').toUpperCase()] || String(d.spellcasting_ability || '—').toUpperCase();
+        var bd = css(el('div'), 'display:grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap:0.4rem;');
+        [['Ability: ' + ab, 'badge-arcane'], ['Save DC: ' + (d.spell_save_dc || '—'), 'badge-recruiting'], ['Spell Atk: ' + (d.spell_attack_bonus !== undefined ? sgn(d.spell_attack_bonus) : '—'), 'badge-active']].forEach(function (x) {
+          bd.appendChild(css(el('span', 'badge ' + x[1], x[0]), 'justify-content:center; padding:0.22rem 0.25rem; font-size:0.75rem; white-space:normal; text-align:center;'));
+        });
+        s.appendChild(bd);
+        [['Spell Slots', d.spell_slots], ['Pact Magic', d.pact_magic]].forEach(function (pair) {
+          var o = pair[1]; if (!o || !o.total) return;
+          Object.keys(o.total).sort(function (x, y) { return x - y; }).forEach(function (k) {
+            var tot = o.total[k], rem = (o.remaining || {})[k] || 0;
+            var row = css(el('div', 'dnd-list-item'), 'display:flex; align-items:center; justify-content:space-between; gap:0.5rem;');
+            row.appendChild(el('span', null, (pair[0] === 'Pact Magic' ? 'Pact ' : '') + ordinal(+k) + '-Level Slots (' + rem + '/' + tot + ')'));
+            var pips = el('span'); for (var i = 0; i < tot && i < 20; i++) pips.appendChild(el('span', 'slot-pip' + (i < rem ? '' : ' empty')));
+            row.appendChild(pips); s.appendChild(row);
+          });
+        });
+        (d.spell_groups || []).forEach(function (grp) {
+          var by = {};
+          (grp.spells || []).forEach(function (sp) { var lv = typeof sp === 'object' && sp.level !== undefined ? sp.level : 0; (by[lv] = by[lv] || []).push(title(typeof sp === 'object' ? (sp.name || sp.slug) : sp) + (sp && sp.from ? ' (' + sp.from + ')' : '')); });
+          Object.keys(by).map(Number).sort(function (x, y) { return x - y; }).forEach(function (lv) {
+            s.appendChild(item(by[lv].join(', '), (lv === 0 ? 'Cantrips (At Will)' : ordinal(lv) + '-Level ' + (grp.label === 'Spellbook' ? 'Spellbook' : 'Prepared')) + ':'));
+          });
+        });
+      } else {
+        s.appendChild(item('Martial / non-caster combatant.'));
+      }
+      g.appendChild(s);
+    } else if (tab === 'skills') {
+      var k = panel('Skills & Senses');
+      var sp = (d.skill_proficiencies || []).map(norm), ex = (d.expertise || []).map(norm);
+      var sk = css(el('div'), 'display:flex; flex-wrap:wrap; gap:0.45rem;');
+      SKILLS.forEach(function (s) { var key = norm(s[0]), b = sbOf(s[0], s[1]); if (sp.indexOf(key) >= 0 || ex.indexOf(key) >= 0 || b !== (mods[s[1]] || 0)) sk.appendChild(el('span', 'badge badge-arcane font-mono', s[0] + ' ' + sgn(b))); });
+      if (sk.childNodes.length) k.appendChild(sk);
+      var senses = ['Passive Perception ' + (10 + sbOf('perception', 'wis')), 'Insight ' + (10 + sbOf('insight', 'wis')), 'Investigation ' + (10 + sbOf('investigation', 'int'))];
+      k.appendChild(item(senses.join(' · ')));
+      var pr = css(el('div', 'dnd-list-item'), 'display:flex; flex-direction:column; gap:0.35rem;');
+      function prl(label, val) { if (!val) return; var x = el('div'); add(x, css(el('strong', null, label + ': '), 'color:var(--accent-gold);'), document.createTextNode(val)); pr.appendChild(x); }
+      prl('Armor', (d.armor_proficiencies || []).map(title).join(', '));
+      prl('Weapons', (d.weapon_proficiencies || []).map(function (x) { var l = String(x).trim().toLowerCase(); return (l === 'simple' || l === 'martial') ? title(l) + ' weapons' : title(l); }).join(', '));
+      prl('Tools', (d.tool_proficiencies || []).map(title).join(', '));
+      var langs = ['Common']; (d.language_proficiencies || []).forEach(function (x) { if (norm(x) !== 'common') langs.push(title(x)); });
+      prl('Languages', langs.join(', '));
+      prl('Resistances', (S.resistances || []).join(', '));
+      prl('Vulnerabilities', (S.vulnerabilities || []).join(', '));
+      var imm = []; if ((S.immunities_damage || []).length) imm.push(S.immunities_damage.join(', ')); if ((S.immunities_conditions || []).length) imm.push(S.immunities_conditions.join(', '));
+      prl('Immunities', imm.join('; '));
+      k.appendChild(pr);
+      g.appendChild(k);
+      var t = css(panel('Traits & Feats'), 'display:flex; flex-direction:column; gap:0.55rem;');
+      function src(f) { if (f.group === 'species') return title(d.species); if (f.group === 'class') return title(d.class); if (f.group === 'subclass') return f.label || title(scName); if (f.group === 'feat') return 'Feat'; if (f.group === 'background') return 'Background'; return f.source || ''; }
+      features.filter(function (f) { return f.kind !== 'action' && f.kind !== 'bonus_action' && f.kind !== 'reaction'; }).forEach(function (f) {
+        t.appendChild(item(f.description || '', (src(f) ? src(f) + ' — ' : '') + f.name + ':'));
+      });
+      (d.class_choices || []).forEach(function (c) { t.appendChild(item(c.choice, c.feature + ':')); });
+      if (t.childNodes.length === 1) t.appendChild(item('Standard SRD 5.2.1 class & species features.'));
+      g.appendChild(t);
+    } else if (tab === 'equipment') {
+      var lay = p.equipment_layout || {worn: [], held: [], containers: [], unsorted: []};
+      var cur = d.currency, cs = [];
+      if (cur) [['pp', 'PP'], ['gp', 'GP'], ['ep', 'EP'], ['sp', 'SP'], ['cp', 'CP']].forEach(function (x) { if (cur[x[0]]) cs.push(cur[x[0]] + ' ' + x[1]); });
+      var ca = d.carrying;
+      var w = panel(null);
+      var wh = css(el('div'), 'display:flex; justify-content:space-between; align-items:center; gap:0.5rem; flex-wrap:wrap;');
+      wh.appendChild(css(el('h3', 'font-rpg', 'Worn or Carried'), 'font-size:0.98rem; color:var(--accent-gold);'));
+      wh.appendChild(el('span', 'badge badge-recruiting font-mono', (cs.length ? cs.join(' ') : '0 GP') + (ca ? ' · ' + Math.round(ca.total_weight * 100) / 100 + ' / ' + lb(ca.carrying_capacity) : '')));
+      w.appendChild(wh);
+      w.appendChild(item(lay.held && lay.held.length ? lay.held.map(function (i) { return title(i.name); }).join(', ') : 'Nothing (both hands free)', 'Held:'));
+      itemList(w, lay.worn, 0);
+      if (lay.unsorted && lay.unsorted.length) { w.appendChild(item('not assigned to the body or a bag', 'Not yet sorted:')); itemList(w, lay.unsorted, 0); }
+      if (ca && ca.speed_note) w.appendChild(item(ca.speed_note));
+      g.appendChild(w);
+      var bp = panel(null);
+      (lay.containers || []).forEach(function (c, i) {
+        var hh = css(el('div'), 'display:flex; justify-content:space-between; align-items:center; gap:0.5rem; flex-wrap:wrap;' + (i ? ' margin-top:0.4rem;' : ''));
+        hh.appendChild(css(el('h3', 'font-rpg', title(c.name)), 'font-size:0.98rem; color:var(--accent-gold);'));
+        var meta = []; if (c.capacity_lbs && c.carried_lbs !== undefined) meta.push(c.carried_lbs + ' / ' + lb(c.capacity_lbs)); else if (c.capacity) meta.push(lbText(c.capacity));
+        if (meta.length) hh.appendChild(el('span', 'badge badge-arcane font-mono', meta.join(' ')));
+        bp.appendChild(hh);
+        if (c.contents && c.contents.length) itemList(bp, c.contents, 0); else bp.appendChild(item('Empty.'));
+      });
+      if (!(lay.containers || []).length) { bp.appendChild(css(el('h3', 'font-rpg', 'Backpack'), 'font-size:0.98rem; color:var(--accent-gold);')); bp.appendChild(item('No bag carried.')); }
+      g.appendChild(bp);
     } else {
-      li.appendChild(document.createTextNode(label));
-      if(it.weight_lbs){var tw=Math.round(it.weight_lbs*(it.quantity||1)*100)/100;li.appendChild(el('span','muted',' — '+lb(tw)))};
+      var st = panel('Appearance & Backstory');
+      if (p.appearance) st.appendChild(item(p.appearance, 'Appearance:'));
+      if (p.backstory) st.appendChild(item(p.backstory, 'Backstory:'));
+      if (!p.appearance && !p.backstory) st.appendChild(item('The player has not written a character description yet.'));
+      g.appendChild(st);
+      var rp = panel((d.background ? title(d.background) : 'Background') + ' & Roleplay');
+      var persona = [['Faction', p.faction], ['Personality', p.personality], ['Ideal', p.ideals], ['Bond', p.bonds], ['Flaw', p.flaws]].filter(function (x) { return x[1]; });
+      persona.forEach(function (x) { rp.appendChild(item(x[1], x[0] + ':')); });
+      var bgf = features.filter(function (f) { return f.group === 'background'; })[0];
+      if (bgf) rp.appendChild(item(bgf.description || '', bgf.name + ':'));
+      if (!persona.length && !bgf) rp.appendChild(item(p.tagline ? '"' + p.tagline + '"' : 'No roleplay notes yet.'));
+      g.appendChild(rp);
     }
-    ul.appendChild(li)});
-  return ul}
-
-function sourceTag(e){
-  if(e.group==='species')return (e.label||'Species')+' trait';
-  if(e.group==='class'||e.group==='subclass')return (e.label||'Class')+' feature';
-  if(e.group==='feat')return 'Feat';
-  if(e.group==='background')return 'Background feature';
-  return e.source||''}
-
-function render(d,p){
-  document.getElementById('loading').remove();
-  if(d.error||p.error){document.getElementById('err').textContent='Character not found.';return}
-  var prof=d.proficiency_bonus||2,mods=d.modifiers||{},stats=d.stats||{},S=p.statblock||{};
-  var sc=d.subclass,scName=sc&&typeof sc==='object'?sc.name:sc;
-  var saves=SAVES[norm(d.class)]||[];
-  var sp=(d.skill_proficiencies||[]).map(norm),ex=(d.expertise||[]).map(norm);
-  var features=S.features||[];
-
-  var sheet=el('div','sheet'),textcol=el('div','textcol'),statcol=el('div','statcol');
-
-  // ================= text column: name, quote, backstory, background, features, spells
-  add(textcol,el('h1',null,d.name));
-  if(p.tagline)add(textcol,el('div','quote','“'+p.tagline.replace(/^["“]|["”]$/g,'')+'”'));
-  var lore=el('div','lore');
-  [['Backstory',p.backstory],['Appearance',p.appearance]].forEach(function(x,i){if(!x[1])return;var q=el('p');if(x[0]!=='Backstory')q.appendChild(el('b','n',x[0]+'. '));q.appendChild(document.createTextNode(x[1]));lore.appendChild(q)});
-  if(!p.backstory&&!p.appearance)lore.appendChild(el('p','muted','The player has not written a character description yet.'));
-  textcol.appendChild(lore);
-
-  // Background section: feature, faction, personality trait, ideal, bond, flaw
-  var bgFeat=features.filter(function(f){return f.group==='background'})[0];
-  var persona=[['Faction',p.faction],['Personality Trait',p.personality],['Ideal',p.ideals],['Bond',p.bonds],['Flaw',p.flaws]].filter(function(x){return x[1]});
-  if(d.background||bgFeat||persona.length){
-    textcol.appendChild(el('h2',null,'Background: '+title(d.background||'')));
-    var pb=el('div','persona');
-    if(bgFeat){(bgFeat.description||'').split('\n').forEach(function(line){if(!line)return;var q=el('p');var m=line.match(/^(Feats|Skill Proficiencies|Tool Proficiency): (.*)$/);if(m){add(q,el('b','l',m[1]+': '),document.createTextNode(m[2]))}else{add(q,document.createTextNode(line))}pb.appendChild(q)})}
-    persona.forEach(function(x){var q=el('p');add(q,el('b','n',x[0]+'. '),document.createTextNode(x[1]));pb.appendChild(q)});
-    textcol.appendChild(pb)}
-
-  // features grouped like the sheets: class, subclass, species, feats
-  function featureSection(heading,list){
-    if(!list.length)return;
-    textcol.appendChild(el('h2',null,heading));
-    list.forEach(function(f){var q=el('div','feat');add(q,el('b','n',f.name+'. '),document.createTextNode(f.description||''));textcol.appendChild(q)})}
-  featureSection(title(d.class)+' Features',features.filter(function(f){return f.group==='class'}));
-  var subs={};features.filter(function(f){return f.group==='subclass'}).forEach(function(f){(subs[f.label]=subs[f.label]||[]).push(f)});
-  Object.keys(subs).forEach(function(k){featureSection(k,subs[k])});
-  featureSection(title(d.species)+' Traits',features.filter(function(f){return f.group==='species'}));
-  featureSection('Feats',features.filter(function(f){return f.group==='feat'}));
-  // level-up choices: subclass choices, Metamagic, Wild Shape forms, Magical Discoveries
-  if(d.class_choices&&d.class_choices.length){featureSection('Choices',d.class_choices.map(function(c){return {name:c.feature,description:c.choice}}))}
-
-  // spells by level
-  function spellGroups(label,arr){
-    if(!arr||!arr.length)return;
-    textcol.appendChild(el('h2',null,label));
-    var by={};arr.forEach(function(s){var lv=typeof s==='object'&&s.level!==undefined?s.level:0;(by[lv]=by[lv]||[]).push(title(typeof s==='object'?(s.name||s.slug):s)+(s&&s.from?' ('+s.from+')':''))});
-    var box=el('div','spl');
-    Object.keys(by).map(Number).sort(function(a,b){return a-b}).forEach(function(lv){var q=el('p');add(q,el('span','lv',lv===0?'Cantrips (at will): ':ordinal(lv)+'-level spells: '),document.createTextNode(by[lv].join(', ')));box.appendChild(q)});
-    textcol.appendChild(box)}
-  // the server names each list (spell_groups: Spells Prepared, with where an always-prepared spell comes from; a Wizard's Spellbook)
-  (d.spell_groups||[]).forEach(function(g){spellGroups(g.label,g.spells)});
-
-  // ================= stat column: portrait, stat block, equipment
-  var pw=el('div','portrait'),frame=el('div','frame');
-  function ph(){frame.textContent='';frame.appendChild(el('div','ph',(d.name||'?').charAt(0).toUpperCase()))}
-  if(p.portrait_url){var img=el('img');img.alt='Portrait of '+d.name;img.onerror=ph;img.src=p.portrait_url;frame.appendChild(img)}else ph();
-  pw.appendChild(frame);statcol.appendChild(pw);
-
-  var sb=el('div','box');
-  // pipRow: a spell slot row of a two-column grid (the label, then the bubbles), so the slot rows' bubbles start at the same place
-  var pipGrid=null,pipRow=function(label,total,rem,note){if(!pipGrid){pipGrid=el('div','pipgrid');sb.appendChild(pipGrid)}
-    add(pipGrid,el('b','l',label),add(el('span','pv'),pips(total,rem),note?document.createTextNode(' '+note):null))};
-  add(sb,el('h3','boxname',d.name));
-  var tl='Level '+d.level+' '+title(d.species)+' '+title(d.class)+(scName?' ('+title(scName)+')':'');
-  if(S.alignment)tl+=', '+S.alignment;
-  if(d.background)tl+=', '+title(d.background);
-  add(sb,el('div','typeline',tl));
-  // two aligned columns: Armor Class / Initiative, Hit Points / Hit Dice, Size / Speed
-  var sg=el('div','statgrid');
-  function cell(label,value,note){var c=el('div','cell');add(c,el('b','l',label+' '),document.createTextNode(String(value)+(note?' ('+note+')':'')));sg.appendChild(c)}
-  function blank(){sg.appendChild(el('div','cell'))}
-  cell('Armor Class',d.effective_ac!==undefined?d.effective_ac:d.ac);
-  cell('Initiative',sgn(mods.dex||0)+' ('+(10+(mods.dex||0))+')',S.initiative_note);
-  cell('Hit Points',d.max_hp);
-  if(d.hit_dice)cell('Hit Dice',d.hit_dice.total+d.hit_dice.die_type);else blank();
-  if(S.size)cell('Size',S.size);else blank();
-  if(S.speed_feet)cell('Speed',S.speed_feet+' feet',S.speed_note);else blank();
-  sb.appendChild(sg);
-
-  var abg=el('div','abgrid');
-  ROWS.forEach(function(row){
-    var g=el('div','abgroup');
-    add(g,el('div','hd',''),el('div','hd','SCORE'),el('div','hd','MOD'),el('div','hd','SAVE'));
-    row.forEach(function(k){
-      var isS=saves.indexOf(k)>=0,save=(mods[k]||0)+(isS?prof:0);
-      add(g,el('div','nm',ABNAME[k]),el('div','vl',stats[k]),el('div','vl',sgn(mods[k]||0)),el('div','vl'+(isS?' p':''),sgn(save)))});
-    abg.appendChild(g)});
-  sb.appendChild(abg);
-
-  // Proficiencies block, as on the premade sheets
-  sb.appendChild(el('div','sbh','Proficiencies'));
-  var sub=el('div','sub');
-  var saveList=saves.map(function(k){return ABNAME[k].slice(0,3)+' '+sgn((mods[k]||0)+prof)});
-  var sv=el('p');add(sv,el('b','l','Saving Throws '),document.createTextNode(saveList.join(', ')+((S.save_notes||[]).length?'; '+S.save_notes.join('; '):'')));sub.appendChild(sv);
-  var SB=d.skill_bonuses||{},sbOf=function(name,ab){var k=norm(name).replace(/ /g,'_');return k in SB?SB[k]:(mods[ab]||0)};
-  var skl=[];SKILLS.forEach(function(s){var key=norm(s[0]),isP=sp.indexOf(key)>=0,isE=ex.indexOf(key)>=0,b=sbOf(s[0],s[1]);if(isP||isE||b!==(mods[s[1]]||0))skl.push(s[0]+' '+sgn(b))});
-  line(sub,'Skills',skl.join(', '));
-  line(sub,'Armor',(d.armor_proficiencies||[]).map(title).join(', '));
-  var wl=(d.weapon_proficiencies||[]).map(function(x){return String(x).trim()}).filter(Boolean);
-  if(wl.some(function(x){return /^martial weapons that/i.test(x)}))wl=wl.filter(function(x){return x.toLowerCase()!=='martial'});
-  line(sub,'Weapons',wl.map(function(x){var l=x.toLowerCase();if(l==='simple'||l==='martial')return title(l)+' weapons';return l.charAt(0).toUpperCase()+l.slice(1).replace(/\b(finesse|light|heavy)\b/g,function(m){return m.charAt(0).toUpperCase()+m.slice(1)})}).join(', '));
-  line(sub,'Tools',(d.tool_proficiencies||[]).map(toolTitle).join(', '));
-  sb.appendChild(sub);
-  line(sb,'Resistances',(S.resistances||[]).join(', '));
-  line(sb,'Vulnerabilities',(S.vulnerabilities||[]).join(', '));
-  var imm=[];if((S.immunities_damage||[]).length)imm.push(S.immunities_damage.join(', '));if((S.immunities_conditions||[]).length)imm.push(S.immunities_conditions.join(', '));
-  line(sb,'Immunities',imm.join('; '));
-  var senses=[],vis=d.vision;
-  if(vis&&typeof vis==='object')Object.keys(vis).forEach(function(k){if(vis[k]&&/range|dark|blind|true|tremor/i.test(k))senses.push(title(k.replace(/_?range/,''))+' '+vis[k]+' feet')});
-  var pas=function(sk,ab){return 10+sbOf(sk,ab)};
-  senses.push('Passive Perception '+pas('perception','wis'));
-  senses.push('Passive Insight '+pas('insight','wis'));
-  senses.push('Passive Investigation '+pas('investigation','int'));
-  line(sb,'Senses',senses.join('; '));
-  var langs=['Common'];(d.language_proficiencies||[]).forEach(function(x){if(norm(x)!=='common')langs.push(title(x))});
-  line(sb,'Languages',langs.join(', '));
-  var tags=el('div');
-  if(p.is_dead||d.is_dead)tags.appendChild(el('span','tag bad','Dead'));
-  if(d.inspiration)tags.appendChild(el('span','tag','Heroic Inspiration'));
-  (d.conditions||[]).forEach(function(c){tags.appendChild(el('span','tag bad',title(c)))});
-  if(d.exhaustion_level)tags.appendChild(el('span','tag bad','Exhaustion '+d.exhaustion_level));
-  if(tags.childNodes.length)sb.appendChild(tags);
-
-  // Spellcasting and resources
-  var hasCaster=d.spell_slots||d.pact_magic||d.known_spells||d.prepared_spells;
-  if(hasCaster){
-    sb.appendChild(el('div','sbh','Spellcasting'));
-    var abil=d.spellcasting_ability?({INT:'Intelligence',WIS:'Wisdom',CHA:'Charisma'}[String(d.spellcasting_ability).toUpperCase()]||title(d.spellcasting_ability)):'';
-    line(sb,'Spellcasting Ability',abil);
-    if(d.spell_save_dc)line(sb,'Spell Save DC',d.spell_save_dc);
-    if(d.spell_attack_bonus!==undefined)line(sb,'Spell Attack Modifier',sgn(d.spell_attack_bonus));
-    if(d.concentrating_on)line(sb,'Concentrating on',title(d.concentrating_on));
-    [['Spell Slots',d.spell_slots],['Pact Magic Slots',d.pact_magic]].forEach(function(pair){var o=pair[1];if(!o||!o.total)return;
-      Object.keys(o.total).sort(function(a,b){return a-b}).forEach(function(k){pipRow(pair[0]==='Spell Slots'?ordinal(+k)+'-level slots':'Pact '+ordinal(+k)+'-level slots',o.total[k],(o.remaining||{})[k],'')})})}
-  (d.class_resources||[]).forEach(function(rs){var q=el('p'),cur=rs.current||0,mx=rs.max||0;add(q,el('b','l',rs.name+' '),rs.unit?null:pips(mx,cur),document.createTextNode(rs.unit?cur+'/'+mx+' '+rs.unit:' ('+cur+' of '+mx+')'));sb.appendChild(q)}); // a pool (its unit: Lay on Hands' Hit Points) shows its count; uses show bubbles // own lines: a long feature name doesn't widen the slots' column
-
-  // Actions, Bonus Actions, Reactions, Options
-  sb.appendChild(el('div','sbh','Actions'));
-  var ap2=el('p');add(ap2,el('b','n','Attack. '),document.createTextNode(S.attack_action||'You can make one attack when you take this action.'));sb.appendChild(ap2);
-  var ul=el('ul','atk');(S.attacks||[]).forEach(function(a){var li=el('li');add(li,el('b','n',a.name+'. '),document.createTextNode(a.description));ul.appendChild(li)});sb.appendChild(ul);
-  function names(list){list.forEach(function(e){var q=el('div','ent');add(q,el('b','n',e.name+'. '),el('span','src',sourceTag(e)));sb.appendChild(q)})}
-  names(features.filter(function(f){return f.kind==='action'}));
-  var bon=features.filter(function(f){return f.kind==='bonus_action'});
-  if(bon.length){sb.appendChild(el('div','sbh','Bonus Actions'));names(bon)}
-  var rea=features.filter(function(f){return f.kind==='reaction'});
-  if(rea.length){sb.appendChild(el('div','sbh','Reactions'));names(rea)}
-  statcol.appendChild(sb);
-
-  // Equipment by location, with total weight
-  var eb=el('div','box');eb.appendChild(el('h3','boxname eq','Equipment'));
-  var lay=p.equipment_layout||{worn:[],held:[],containers:[],unsorted:[],lost:[]};
-  function group(label,note,items){if(!items||!items.length)return;var h=el('div','loc',label);if(note)h.appendChild(el('small',null,' — '+note));eb.appendChild(h);eb.appendChild(itemList(items))}
-  group('Worn or carried','on the body: worn, sheathed, slung or on the belt, not in hand',lay.worn);
-  if(lay.held&&lay.held.length){group('Held','in hand',lay.held)}else{var hh=el('div','loc','Held');hh.appendChild(el('small',null,' — in hand: nothing (both hands free)'));eb.appendChild(hh)}
-  (lay.containers||[]).forEach(function(c){
-    var h=el('div','loc',title(c.name));var meta=[];if(c.carried)meta.push(c.carried);if(c.capacity)meta.push('holds '+lbText(c.capacity));if(c.capacity_lbs&&c.carried_lbs!==undefined)meta.push(c.carried_lbs+' of '+lb(c.capacity_lbs)+' used');if(!c.carried)meta.push('not on the body');
-    h.appendChild(el('small',null,' — '+meta.join('; ')));eb.appendChild(h);
-    eb.appendChild(c.contents.length?itemList(c.contents):el('p','muted','Empty.'))});
-  group('Not yet sorted','not assigned to the body or a bag',lay.unsorted);
-  var cur=d.currency,cs=[];if(cur){[['pp','Platinum'],['gp','Gold'],['ep','Electrum'],['sp','Silver'],['cp','Copper']].forEach(function(k){if(cur[k[0]])cs.push(cur[k[0]]+' '+k[1])})}
-  var q2=el('p');add(q2,el('b','l','Coin '),document.createTextNode(cs.length?cs.join(', '):'None'));eb.appendChild(q2);
-  var ca=d.carrying;if(ca){var q3=el('p');add(q3,el('b','l','Weight carried '),document.createTextNode(Math.round(ca.total_weight*100)/100+' of '+lb(ca.carrying_capacity)+(ca.speed_note?' ('+ca.speed_note+')':'')));eb.appendChild(q3)}
-  statcol.appendChild(eb);
-
-  add(sheet,textcol,statcol);root.appendChild(sheet);
+    // the party's observations of this character, after the tabs (the mock-up has no place for them)
+    if ((p.observations || []).length) {
+      var ob = css(panel('Party Observations'), 'margin-top:1rem;');
+      p.observations.forEach(function (o) { ob.appendChild(item(o.content, o.observer + (o.type ? ' [' + o.type + ']' : '') + ':')); });
+      body.appendChild(ob);
+    }
+  }
+  show();
 }
 })();
 </script>

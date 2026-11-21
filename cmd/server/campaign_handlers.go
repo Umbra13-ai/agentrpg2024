@@ -3053,6 +3053,13 @@ func handleCampaignPage(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 	}
+	serveCampaignPage(w, r, campaignID)
+}
+
+// serveCampaignPage writes a campaign's Live Table view (the caller checked the campaign may be watched).
+func serveCampaignPage(w http.ResponseWriter, r *http.Request, campaignID int) {
+	w.Header().Set("Content-Type", "text/html; charset=utf-8")
+	var err error
 
 	// Get campaign details
 	var name, status, setting string
@@ -3113,12 +3120,13 @@ func handleCampaignPage(w http.ResponseWriter, r *http.Request) {
 		// the portrait, for the encounter stage's token (its URL changes with the image)
 		HasPortrait bool
 		PortraitAt  int64
+		AC          int
 	}
 	var partyMembers []PartyMember
 	partyRows, qerr := db.Query(`
 		SELECT c.id, c.name, c.class, c.species, c.level, c.hp, c.max_hp, a.id, a.name,
 			GREATEST(c.last_active, a.last_seen), COALESCE(c.is_stable, false), COALESCE(c.is_dead, false),
-			COALESCE(length(c.avatar), 0) > 0, COALESCE(EXTRACT(EPOCH FROM c.avatar_updated_at)::bigint, 0)
+			COALESCE(length(c.avatar), 0) > 0, COALESCE(EXTRACT(EPOCH FROM c.avatar_updated_at)::bigint, 0), COALESCE(c.ac, 10)
 		FROM characters c
 		JOIN agents a ON c.agent_id = a.id
 		WHERE c.lobby_id = $1
@@ -3132,7 +3140,7 @@ func handleCampaignPage(w http.ResponseWriter, r *http.Request) {
 		for partyRows.Next() {
 			var pm PartyMember
 			partyRows.Scan(&pm.CharID, &pm.CharName, &pm.Class, &pm.Species, &pm.Level, &pm.HP, &pm.MaxHP, &pm.AgentID, &pm.AgentName, &pm.LastActive, &pm.Stable, &pm.Dead,
-				&pm.HasPortrait, &pm.PortraitAt)
+				&pm.HasPortrait, &pm.PortraitAt, &pm.AC)
 			playerCount++
 			partyMembers = append(partyMembers, pm)
 		}
@@ -3173,83 +3181,27 @@ func handleCampaignPage(w http.ResponseWriter, r *http.Request) {
 		return "just now"
 	}
 
-	// The party: a token on the encounter stage and a card in the party rail for the GM and each character (the health label from
-	// the health owner, game.Vitals.Health; the Hit Points the page has always shown)
-	var partyBoxes, tokens strings.Builder
-
-	// GM first
-	if dmName.Valid && dmID.Valid {
-		gmTooltip := ""
-		var gmLastSeen sql.NullTime
-		_ = db.QueryRow(`SELECT last_seen FROM agents WHERE id = $1`, dmID.Int64).Scan(&gmLastSeen)
-		if gmLastSeen.Valid {
-			gmTooltip = fmt.Sprintf(` title="Active %s"`, formatTimeAgo(gmLastSeen.Time))
-		}
-		gm := template.HTMLEscapeString(dmName.String)
-		partyBoxes.WriteString(fmt.Sprintf(`
-<div class="party-card gm-box"%s>
-  <div class="box-label">GM</div>
-  <h4><a href="/profile/%d">%s</a></h4>
-  <p class="class-info">Game Master</p>
-</div>`, gmTooltip, dmID.Int64, gm))
-		tokens.WriteString(fmt.Sprintf(`<a class="map-token is-gm" href="/profile/%d"><span class="token-ring" aria-hidden="true">🎲</span><span class="token-label">%s · GM</span></a>`,
-			dmID.Int64, gm))
-	}
-
-	// the characters, most recently active first
+	// The party: the encounter stage's tokens, the Party & Initiative rail's cards and the quick sheet's list, from the health owner
+	// (game.Vitals.Health) and the stored Hit Points and Armor Class; the order of the turn holder first, then the most recently active.
+	var cards []liveCard
 	for _, pm := range partyMembers {
-		hpStatus := game.Vitals{HP: pm.HP, Max: pm.MaxHP, Stable: pm.Stable, Dead: pm.Dead}.Health() // the health owner
-
-		isCurrentTurn := combatActive && pm.CharName == currentTurnName
-		isOpenEnded := !combatActive // exploration: every player can act
-
-		// activity: more than 5 hours without a request dims the card
-		isInactive := true
-		activityTooltip := ""
+		health := game.Vitals{HP: pm.HP, Max: pm.MaxHP, Stable: pm.Stable, Dead: pm.Dead}.Health() // the health owner
+		activity := "No activity recorded"
 		if pm.LastActive.Valid {
-			isInactive = time.Since(pm.LastActive.Time).Hours() > 5
-			activityTooltip = fmt.Sprintf(` title="Active %s"`, formatTimeAgo(pm.LastActive.Time))
-		} else {
-			activityTooltip = ` title="No activity recorded"`
+			activity = "Active " + formatTimeAgo(pm.LastActive.Time)
 		}
-
-		highlightClass, turnLabel, tokenClass := "", "", ""
-		switch {
-		case isCurrentTurn:
-			highlightClass, turnLabel, tokenClass = " current-turn", `<div class="turn-label">Current Turn</div>`, " is-turn"
-		case isInactive:
-			highlightClass = " inactive"
-		case isOpenEnded:
-			highlightClass = " can-act"
-		}
-		if game.AtZero(hpStatus) {
-			tokenClass += " is-down"
-		}
-		name := template.HTMLEscapeString(pm.CharName)
-		pct := 0
-		if pm.MaxHP > 0 {
-			pct = max(0, min(100, pm.HP*100/pm.MaxHP))
-		}
-		partyBoxes.WriteString(fmt.Sprintf(`
-<div class="party-card%s"%s>
-  %s
-  <h4><a href="/character/%d">%s</a></h4>
-  <p class="class-info">Level %d %s %s</p>
-  <p class="hp-line %s">HP: %d/%d · %s</p>
-  <div class="hp-bar" aria-hidden="true"><div class="hp-fill %s" style="width:%d%%"></div></div>
-</div>`, highlightClass, activityTooltip, turnLabel, pm.CharID, name, pm.Level, template.HTMLEscapeString(pm.Species), template.HTMLEscapeString(pm.Class),
-			hpStatus, pm.HP, pm.MaxHP, hpStatus, hpStatus, pct))
-
-		face := fmt.Sprintf(`<span class="token-ring" aria-hidden="true">%s</span>`, classIcon(pm.Class))
-		if pm.HasPortrait {
-			face = fmt.Sprintf(`<span class="token-ring"><img src="/api/characters/%d/portrait?v=%d" alt="" loading="lazy"></span>`, pm.CharID, pm.PortraitAt)
-		}
-		tokens.WriteString(fmt.Sprintf(`<a class="map-token%s" href="/character/%d">%s<span class="token-label">%s · %d/%d</span></a>`,
-			tokenClass, pm.CharID, face, name, pm.HP, pm.MaxHP))
+		cards = append(cards, liveCard{ID: pm.CharID, Name: pm.CharName, Icon: classIcon(pm.Class),
+			Meta: fmt.Sprintf("Level %d %s %s", pm.Level, titleCase(pm.Species), titleCase(pm.Class)), HP: pm.HP, MaxHP: pm.MaxHP, AC: pm.AC,
+			Health: health, IsTurn: combatActive && pm.CharName == currentTurnName, HasPortrait: pm.HasPortrait, PortraitAt: pm.PortraitAt,
+			Activity: activity})
+	}
+	gm := liveGM{}
+	if dmName.Valid && dmID.Valid {
+		gm = liveGM{ID: int(dmID.Int64), Name: dmName.String}
 	}
 
 	// Get observations
-	var observations strings.Builder
+	var observations []liveObservation
 	obsRows, qerr := db.Query(`
 		SELECT o.content, COALESCE(o.observation_type, 'world'), a.name, o.created_at
 		FROM observations o
@@ -3262,41 +3214,21 @@ func handleCampaignPage(w http.ResponseWriter, r *http.Request) {
 		writeDBErrorPage(w, qerr, "the campaign's observations")
 		return
 	}
-	if obsRows != nil {
-		for obsRows.Next() {
-			var content, obsType, observerName string
-			var obsTime time.Time
-			obsRows.Scan(&content, &obsType, &observerName, &obsTime)
-			observations.WriteString(fmt.Sprintf(`
-<div class="observation">
-  <span class="observer">%s</span> <span class="type">[%s]</span>
-  <p>%s</p>
-  <span class="time">%s</span>
-</div>`, template.HTMLEscapeString(observerName), template.HTMLEscapeString(obsType), template.HTMLEscapeString(content), feedTime(obsTime, campaignID)))
-		}
-		obsRows.Close()
+	for obsRows.Next() {
+		var o liveObservation
+		var obsTime time.Time
+		obsRows.Scan(&o.Content, &o.Type, &o.Observer, &obsTime)
+		o.Time = feedTime(obsTime, campaignID)
+		observations = append(observations, o)
 	}
+	obsRows.Close()
 
-	// Get combined activity feed (actions + messages + polls)
-	type FeedItem struct {
-		Time    time.Time
-		Type    string
-		Actor   string
-		Content string
-		Result  string
-	}
-	var feedItems []FeedItem
-
-	// Get actions, but hide routine status-check polls from the default web feed
+	// The chronicle: the log's records (what players read of it: playerText) and the party chat, newest first, 50 at most
+	var feed []liveFeedItem
 	recs, _ := readActions(actionFilter{lobby: campaignID, newestFirst: true, limit: 50}) // action_log_2024.go
 	for _, a := range recs {
-		feedItems = append(feedItems, FeedItem{
-			Time: a.At, Type: a.Type, Actor: a.Actor,
-			Content: a.Description, Result: playerText(a.Result),
-		})
+		feed = append(feed, liveFeedItem{At: a.At, Type: a.Type, Actor: a.Actor, Text: a.Description, Result: playerText(a.Result)})
 	}
-
-	// Get messages
 	msgRows, qerr := db.Query(`
 		SELECT COALESCE(agent_name, ''), COALESCE(message, ''), created_at
 		FROM campaign_messages
@@ -3307,201 +3239,41 @@ func handleCampaignPage(w http.ResponseWriter, r *http.Request) {
 		writeDBErrorPage(w, qerr, "the campaign's messages")
 		return
 	}
-	if msgRows != nil {
-		for msgRows.Next() {
-			var agentName, message string
-			var msgTime time.Time
-			msgRows.Scan(&agentName, &message, &msgTime)
-			feedItems = append(feedItems, FeedItem{
-				Time: msgTime, Type: "message", Actor: agentName,
-				Content: message, Result: "",
-			})
-		}
-		msgRows.Close()
+	for msgRows.Next() {
+		var it liveFeedItem
+		msgRows.Scan(&it.Actor, &it.Text, &it.At)
+		it.Type = "message"
+		feed = append(feed, it)
+	}
+	msgRows.Close()
+	sort.Slice(feed, func(i, j int) bool { return feed[i].At.After(feed[j].At) })
+	if len(feed) > 50 {
+		feed = feed[:50]
+	}
+	for i := range feed {
+		feed[i].Time = feedTime(feed[i].At, campaignID)
 	}
 
-	// Sort by time descending
-	sort.Slice(feedItems, func(i, j int) bool {
-		return feedItems[i].Time.After(feedItems[j].Time)
+	var doc map[string]interface{}
+	var docRaw []byte
+	db.QueryRow(`SELECT COALESCE(campaign_document, '{}') FROM lobbies WHERE id = $1`, campaignID).Scan(&docRaw)
+	json.Unmarshal(docRaw, &doc)
+	location := ""
+	for _, k := range []string{"current_location", "location"} {
+		if s, ok := doc[k].(string); ok && strings.TrimSpace(s) != "" {
+			location = strings.TrimSpace(s)
+			break
+		}
+	}
+
+	page := liveTablePage(liveTable{
+		ID: campaignID, Name: name, Status: status, Levels: formatLevelRequirement(minLevel, maxLevel), Setting: setting,
+		GM: gm, Players: playerCount, MaxPlayers: maxPlayers, Created: createdAt.Format("January 2, 2006"), Location: location,
+		Combat: combatActive, Round: combatRound, TurnName: currentTurnName, Enemies: liveEnemies(turnOrderJSON, combatActive),
+		Party: cards, Feed: feed, Observations: observations, TableRules: tableRulesHTML(campaignID),
+		Companions: companionBoxesHTML(campaignID), // familiars, steeds, summons and pets (companions_2024.go)
 	})
-
-	// Limit to 50 most recent
-	if len(feedItems) > 50 {
-		feedItems = feedItems[:50]
-	}
-
-	// Render feed: each entry's kind (feedKind) colors it and lets the viewer filter the chronicle
-	var actions strings.Builder
-	for _, item := range feedItems {
-		kind := feedKind(item.Type)
-		switch item.Type {
-		case "message":
-			actions.WriteString(fmt.Sprintf(`
-<div class="feed-entry message" data-kind="%s">
-  <span class="time">%s</span>
-  <strong>%s</strong> <span class="type">💬</span>
-  <p>%s</p>
-</div>`, kind, feedTime(item.Time, campaignID), template.HTMLEscapeString(item.Actor), template.HTMLEscapeString(item.Content)))
-		case "poll":
-			actions.WriteString(fmt.Sprintf(`
-<div class="feed-entry poll" data-kind="%s">
-  <span class="time">%s</span>
-  <strong>%s</strong> <span class="type">📡</span>
-  <p class="muted">%s</p>
-</div>`, kind, feedTime(item.Time, campaignID), template.HTMLEscapeString(item.Actor), template.HTMLEscapeString(item.Content)))
-		default:
-			resultHTML := ""
-			// Skip showing result if it just echoes the description (narrative actions)
-			if item.Result != "" && !strings.HasPrefix(item.Result, "Action:") {
-				resultHTML = fmt.Sprintf(`<span class="result">→ %s</span>`, template.HTMLEscapeString(item.Result))
-			}
-			actions.WriteString(fmt.Sprintf(`
-<div class="feed-entry %s" data-kind="%s">
-  <span class="time">%s</span>
-  <strong>%s</strong> <span class="type">[%s]</span>
-  <p>%s</p>
-  %s
-</div>`, kind, kind, feedTime(item.Time, campaignID), template.HTMLEscapeString(item.Actor), template.HTMLEscapeString(item.Type), template.HTMLEscapeString(item.Content), resultHTML))
-		}
-	}
-
-	dmLink := "No GM assigned"
-	if dmName.Valid && dmID.Valid {
-		dmLink = fmt.Sprintf(`<a href="/profile/%d">%s</a>`, dmID.Int64, template.HTMLEscapeString(dmName.String))
-	}
-
-	levelReq := formatLevelRequirement(minLevel, maxLevel)
-
-	statusBadge := `<span class="badge">` + template.HTMLEscapeString(status) + `</span>`
-	if status == "recruiting" {
-		statusBadge = `<span class="badge recruiting">🎯 Recruiting</span>`
-	} else if status == "active" {
-		statusBadge = `<span class="badge active">🎮 Active</span>`
-	} else if status == "completed" {
-		statusBadge = `<span class="badge completed">Completed</span>`
-	}
-	modeBadge, turnNote := "", ""
-	if combatActive {
-		modeBadge = fmt.Sprintf(`<span class="badge combat">⚔️ Combat · Round %d</span>`, combatRound)
-		if currentTurnName != "" {
-			turnNote = `<span class="turn">Current turn: ` + template.HTMLEscapeString(currentTurnName) + `</span>`
-		}
-	} else if status == "active" {
-		modeBadge = `<span class="badge exploration">🧭 Exploration</span>`
-	}
-
-	obsHTML := "<p class='muted'>No observations recorded.</p>"
-	if observations.Len() > 0 {
-		obsHTML = observations.String()
-	}
-
-	actionsHTML := "<p class='muted'>No actions yet. The adventure awaits!</p>"
-	if actions.Len() > 0 {
-		actionsHTML = actions.String()
-	}
-
-	partyHTML := `<div class="party-rail">` + partyBoxes.String() + `</div>`
-	partyHTML += companionBoxesHTML(campaignID) // familiars, steeds, summons and pets (companions_2024.go)
-
-	content := fmt.Sprintf(`
-<style>
-.setting{background:var(--note-bg);padding:1em;border-radius:var(--radius-md);margin:0.5em 0;white-space:pre-wrap;line-height:1.5;max-height:240px;overflow-y:auto;font-size:0.9375rem}
-.companion-row{margin-top:.7rem}
-.companion-row-label{display:block;margin-bottom:.35rem}
-.observation{background:var(--elev,var(--note-bg));padding:.75rem 1rem;margin:0.5em 0;border-radius:var(--radius-md);border-left:3px solid var(--link)}
-.observation .observer{font-weight:bold}
-.observation .type,.observation .time{color:var(--muted);font-size:0.8125rem}
-.observation p{margin:.3rem 0}
-.table-rules{margin:0.5em 0;padding-left:1.2em;line-height:1.5}
-.table-rules li{margin:0.4em 0}
-details.fold{margin:.25rem 0 .75rem}
-details.fold>summary{cursor:pointer;list-style:none;min-height:44px;display:flex;align-items:center;gap:.4rem}
-details.fold>summary::-webkit-details-marker{display:none}
-details.fold>summary .section-title{margin:0}
-details.fold>summary::before{content:"\25B8";color:var(--muted)}
-details.fold[open]>summary::before{content:"\25BE"}
-.campaign-links{display:flex;flex-wrap:wrap;gap:.5rem;margin-top:.75rem}
-</style>
-
-<div class="vtt-stage">
-  <img class="vtt-bg" src="/assets/hero.webp" alt="">
-  <div class="vtt-grid-overlay"></div>
-  <div class="vtt-hud-top">
-    <div class="vtt-badges">%s %s <span class="badge arcane">%s</span></div>
-    <h1>%s</h1>
-  </div>
-  <div class="vtt-tokens-row">%s</div>
-  <div class="vtt-hud-bottom">
-    <span><strong>GM:</strong> %s · <strong>Players:</strong> %d/%d · <strong>Created:</strong> %s</span>
-    %s
-  </div>
-</div>
-
-<div class="vtt-grid">
-  <section aria-label="Party">
-    <h2 class="section-title">Party &amp; Initiative</h2>
-    %s
-  </section>
-  <section class="rpg-panel" aria-label="Activity feed">
-    <h2 class="section-title">📋 Activity Feed</h2>
-    <div class="filter-row" role="group" aria-label="Filter the activity feed">
-      <button class="pill-btn active" data-filter="all">All</button>
-      <button class="pill-btn" data-filter="narration">Narration</button>
-      <button class="pill-btn" data-filter="check">Checks &amp; Rolls</button>
-      <button class="pill-btn" data-filter="combat">Combat</button>
-      <button class="pill-btn" data-filter="message">Chat</button>
-    </div>
-    <div id="feed">%s</div>
-    <div class="campaign-links"><a class="btn btn-ghost" href="/campaign/%d/log">View full action log →</a></div>
-  </section>
-  <section aria-label="Campaign details">
-    <div class="rpg-panel">
-      <details class="fold" id="fold-setting">
-        <summary><h2 class="section-title">📜 Setting</h2></summary>
-        <div class="setting">%s</div>
-      </details>
-      <details class="fold" id="fold-rules">
-        <summary><h2 class="section-title">⚖️ Table Rules</h2></summary>
-        %s
-        <p class="muted">Chosen by the GM (<a href="/api/campaigns/%d/table-rules">table rules API</a>).</p>
-      </details>
-    </div>
-    <div class="rpg-panel" style="margin-top:1rem">
-      <h2 class="section-title">👁️ Observations</h2>
-      %s
-    </div>
-    <p class="muted"><a href="/api/campaigns/%d">View raw API data →</a> · 🔄 Auto-refresh: 30s</p>
-  </section>
-</div>
-<script>
-// Setting and Table Rules start folded, and the feed's filter starts at All; the page reloads every 30 seconds, so remember what this
-// viewer chose (per campaign).
-(function(){
-  var key = "campaign-folds-" + location.pathname;
-  var open = {};
-  try { open = JSON.parse(localStorage.getItem(key) || "{}"); } catch (e) {}
-  document.querySelectorAll("details.fold").forEach(function(d){
-    if (open[d.id]) { d.open = true; }
-    d.addEventListener("toggle", function(){
-      open[d.id] = d.open;
-      try { localStorage.setItem(key, JSON.stringify(open)); } catch (e) {}
-    });
-  });
-  function show(f){
-    document.querySelectorAll("[data-filter]").forEach(function(b){ b.classList.toggle("active", b.getAttribute("data-filter") === f); });
-    document.querySelectorAll("#feed [data-kind]").forEach(function(e){ e.style.display = (f === "all" || e.getAttribute("data-kind") === f) ? "" : "none"; });
-    open.filter = f;
-    try { localStorage.setItem(key, JSON.stringify(open)); } catch (e) {}
-  }
-  document.querySelectorAll("[data-filter]").forEach(function(b){ b.addEventListener("click", function(){ show(b.getAttribute("data-filter")); }); });
-  if (open.filter) { show(open.filter); }
-})();
-setTimeout(function(){location.reload()},30000);
-</script>
-`, statusBadge, modeBadge, levelReq, template.HTMLEscapeString(name), tokens.String(), dmLink, playerCount, maxPlayers, createdAt.Format("January 2, 2006"), turnNote,
-		partyHTML, actionsHTML, campaignID, template.HTMLEscapeString(setting), tableRulesHTML(campaignID), campaignID, obsHTML, campaignID)
-
-	fmt.Fprint(w, wrapHTML(name+" - Agent RPG 2024", content))
+	fmt.Fprint(w, wrapView(name+" - Agent RPG 2024", page))
 }
 
 // handleCampaignLog shows the full action log for a campaign with pagination

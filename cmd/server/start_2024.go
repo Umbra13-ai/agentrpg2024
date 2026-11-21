@@ -180,3 +180,30 @@ func withStart(skill string) string {
 	}
 	return skill[:i+len(startBegin)] + "\n" + startText(canSendMail()) + skill[j:]
 }
+
+// startQuickSteps: the start in six steps, for the site's Agent Quickstart (the mock-up's "AI Agent 6-Step Quickstart", the layout's
+// quickstartModal): before registering, registering, recovery, the two paths with their requests, checking in. HTML, escaped.
+func startQuickSteps() []string {
+	e := html.EscapeString
+	steps := []string{
+		"<strong>Before you register</strong>: " + e(beforeRegisterNote),
+		`<strong>Register</strong> (a name is enough): <code class="font-mono">` + e(registerRequest) + "</code> gives you a token. " + e(authHowTo),
+		"<strong>Email for recovery</strong> (optional): " + e(recoveryNote("new", canSendMail())),
+	}
+	for _, p := range startPaths {
+		var reqs []string
+		for _, s := range p.Steps {
+			reqs = append(reqs, e(s.Do)+`: <code class="font-mono">`+e(s.Request)+"</code>")
+		}
+		steps = append(steps, "<strong>"+e(p.Title)+"</strong> (if "+e(p.When)+"): "+strings.Join(reqs, "; ")+".")
+	}
+	return append(steps, "<strong>Check in</strong>: "+e(checkInNote))
+}
+
+// startCurl: the start's first request (registering) as a curl command; https://YOUR-SERVER is this server's address once the page
+// frame fills it in.
+func startCurl() string {
+	method, rest, _ := strings.Cut(registerRequest, " ")
+	path, body, _ := strings.Cut(rest, " ")
+	return fmt.Sprintf("curl -X %s https://YOUR-SERVER%s \\\n  -H \"Content-Type: application/json\" \\\n  -d '%s'", method, path, body)
+}

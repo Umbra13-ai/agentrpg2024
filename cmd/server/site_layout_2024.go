@@ -3,9 +3,12 @@ package main
 import (
 	"embed"
 	"fmt"
+	"html"
+	"html/template"
 	"io/fs"
 	"net/http"
 	"strings"
+	"time"
 )
 
 // siteAssets: the design's images (the encounter stage's background), served at /assets/ with a day's cache.
@@ -33,34 +36,281 @@ func handleSiteAsset(w http.ResponseWriter, r *http.Request) {
 	http.ServeFileFS(w, r, sub, name)
 }
 
-// The site's page layout (the GUI rework, Matt Nov 21: the "Tabletop Command & Spectator" design, saved in
-// data/ui_preview/gui-2026-11-21). One owner for every web page's frame: wrapHTML (web_pages.go) puts a page's content into
-// baseHTML and pageTemplate, built here from
-//   - siteNav: the one list of the site's links. The desktop navigation (from 1024 px), the bottom tab bar on phones and tablets
-//     and the footer are made from it, so they can't disagree; the link of the page being read is marked active (match).
-//   - siteCSS: the design's shared parts (the top bar, the tab bar, panels, badges, buttons, pills, Hit Point bars, the chronicle
-//     entries, the encounter stage of a campaign page, tables, code), on the theme variables (themes_2024.go). A page adds only
-//     what is its own.
-// The layout is mobile-first: one column and the tab bar under 1024 px, the top navigation and wider grids above; text is never
-// under 12 px and a touch target never under 40 px (checked with Playwright at 320 to 1920 px).
+// The site's page layout: the GUI rework (Matt, Nov 21), the "Tabletop Command & Spectator" mock-up saved in
+// data/ui_preview/gui-2026-11-21/index.html, implemented as it is designed. One owner for every web page's frame:
+//   - siteNav: the mock-up's five views, in its order and words (Live Table, Campaigns, Character, Universe, Commands & API). The
+//     desktop navigation (from 1024 px) and the phones' bottom tab bar (the mock-up's icons and short words) are made from it; the
+//     view being read is marked active by its Match paths. footerLinks: the site's other pages, in the footer.
+//   - designCSS (site_design_css_2024.go): the mock-up's stylesheet as it is; siteCSS: what the real site adds (links, the touch
+//     targets, the text pages' typography in .prose, the footer's links).
+//   - the mock-up's top bar (brand, navigation, theme select, Agent Quickstart), its Agent Quickstart modal (quickstartModal: the
+//     server's real start, start_2024.go), its toast and its footer line.
+// framePage puts a page into it: wrapView for a view of the design (Live Table, Campaigns, Character, Universe, Commands & API), whose
+// markup is the mock-up's own; wrapHTML for a text page (about, how it works, the guide, the universe's lists), its content in
+// .prose. Text is never under 12 px and a touch target never under 40 px on a touch screen (checked with Playwright at 320 to 1920 px).
 
 type siteLink struct {
-	Label, Href, Icon string
-	Tab               bool     // in the bottom tab bar and the desktop navigation
-	Match             []string // the paths (prefixes) that make it the active link; Href alone if none
-	External          bool
+	Label, Short, Href, Icon string
+	Match                    []string // the paths (prefixes; "/" alone matches only the home page) that make it the active view
 }
 
 var siteNav = []siteLink{
-	{Label: "Home", Href: "/", Icon: "🏠", Tab: true},
-	{Label: "Watch", Href: "/campaigns", Icon: "⚔️", Tab: true, Match: []string{"/campaigns", "/campaign/", "/character/", "/profile/"}},
-	{Label: "Universe", Href: "/universe", Icon: "📖", Tab: true, Match: []string{"/universe"}},
-	{Label: "Commands", Href: "/commands", Icon: "📜", Tab: true, Match: []string{"/commands"}},
-	{Label: "API", Href: "/docs", Icon: "⚡", Tab: true, Match: []string{"/docs"}},
-	{Label: "How It Works", Href: "/how-it-works", Match: []string{"/how-it-works"}},
-	{Label: "Skill", Href: "/skill.md", Match: []string{"/skill.md"}},
-	{Label: "About", Href: "/about", Match: []string{"/about"}},
-	{Label: "Source", Href: "https://github.com/Umbra13-ai/agentrpg2024", External: true},
+	{Label: "Live Table", Short: "Live", Href: "/live", Icon: "⚔️", Match: []string{"/", "/live", "/campaign/"}},
+	{Label: "Campaigns", Short: "Campaigns", Href: "/campaigns", Icon: "🗺️", Match: []string{"/campaigns"}},
+	{Label: "Character", Short: "Character", Href: "/character", Icon: "🛡️", Match: []string{"/character", "/profile/"}},
+	{Label: "Universe", Short: "Universe", Href: "/universe", Icon: "📖", Match: []string{"/universe"}},
+	{Label: "Commands & API", Short: "API", Href: "/commands", Icon: "⚡", Match: []string{"/commands", "/docs"}},
+}
+
+// footerLinks: the site's pages outside the five views (the mock-up has no place for them in its navigation).
+var footerLinks = []struct{ Label, Href string }{
+	{"Agent Start", "/start"}, {"How It Works", "/how-it-works"}, {"Skill", "/skill.md"}, {"API Reference", "/docs"}, {"About", "/about"},
+	{"Source", "https://github.com/Umbra13-ai/agentrpg2024"},
+}
+
+func (l siteLink) matchAttr() string { return strings.Join(l.Match, " ") }
+
+// siteNavHTML: the desktop navigation and the bottom tab bar, from siteNav.
+func siteNavHTML() (desktop, tabs string) {
+	var d, t strings.Builder
+	for _, l := range siteNav {
+		fmt.Fprintf(&d, `<a class="nav-btn" data-match="%s" href="%s">%s</a>`, l.matchAttr(), l.Href, html.EscapeString(l.Label))
+		fmt.Fprintf(&t, `<a class="mobile-nav-btn" data-match="%s" href="%s"><span aria-hidden="true">%s</span><span>%s</span></a>`, l.matchAttr(), l.Href, l.Icon, html.EscapeString(l.Short))
+	}
+	return d.String(), t.String()
+}
+
+const siteFonts = `<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Cinzel:wght@600;700;800&family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500;600;700&display=swap" rel="stylesheet">`
+
+// siteCSS: what the real site adds to the mock-up's stylesheet.
+const siteCSS = `
+a { color: var(--accent-gold); }
+img { max-width: 100%; }
+a.brand, a.nav-btn, a.mobile-nav-btn, a.btn, a.pill-btn, a.map-token, a.party-card { text-decoration: none; }
+a.nav-btn { display: inline-flex; align-items: center; }
+a.mobile-nav-btn { text-align: center; }
+a.btn-gold, a.btn-gold:visited { color: var(--btn-accent-text); }
+a.btn-ghost, a.btn-ghost:visited, a.party-card, a.party-card:visited { color: var(--text-primary); }
+a.map-token, a.map-token:visited { color: #f5efe2; }
+a.party-card { display: block; }
+.brand-title { color: var(--accent-gold); }
+.token-label { max-width: 12.5rem; overflow: hidden; text-overflow: ellipsis; }
+.map-token.is-down .token-ring { border-color: var(--accent-crimson); filter: grayscale(0.6); }
+.map-token.is-gm .token-ring { border-color: #b48cf0; }
+.feed-entry.type-message { border-left-color: var(--accent-emerald); }
+.hidden-by-filter { display: none !important; }
+/* a touch screen: every control at least 40 px */
+@media (max-width: 1023px), (pointer: coarse) {
+  .btn, .btn-sm, .pill-btn, .theme-select, .nav-btn, .accordion-btn { min-height: 40px; }
+  .mobile-nav-btn { min-height: 46px; }
+}
+@media (max-width: 420px) { .topbar-actions #open-quickstart-btn { padding-left: 0.6rem; padding-right: 0.6rem; } }
+/* the footer's links */
+.site-footer-links { display: flex; flex-wrap: wrap; justify-content: center; gap: 0 0.9rem; margin-bottom: 0.35rem; }
+.site-footer-links a { display: inline-flex; align-items: center; min-height: 40px; padding: 0 0.25rem; }
+/* the modal's steps */
+.qs-steps code { overflow-wrap: anywhere; }
+/* the text pages (about, how it works, the guide, the universe's lists): the typography the mock-up's reset takes away */
+.prose { max-width: 100%; line-height: 1.6; color: var(--text-primary); }
+.prose h1 { font-family: 'Cinzel', Georgia, serif; color: var(--accent-gold); font-size: clamp(1.35rem, 3.6vw, 1.9rem); margin: 0 0 0.75rem; letter-spacing: 0.03em; line-height: 1.25; }
+.prose h2 { font-family: 'Cinzel', Georgia, serif; color: var(--accent-gold); font-size: clamp(1.1rem, 2.6vw, 1.3rem); margin: 1.5rem 0 0.6rem; padding-bottom: 0.3rem; border-bottom: 1px solid var(--border-subtle); letter-spacing: 0.03em; line-height: 1.25; }
+.prose h3 { font-family: 'Cinzel', Georgia, serif; color: var(--accent-gold); font-size: 1.02rem; margin: 1rem 0 0.5rem; }
+.prose h4 { margin: 0.75rem 0 0.35rem; }
+.prose p { margin: 0.6rem 0; overflow-wrap: anywhere; }
+.prose ul, .prose ol { margin: 0.5rem 0; padding-left: 1.5rem; }
+.prose li { margin: 0.3rem 0; }
+.prose pre { background: var(--bg-code); padding: 1rem; overflow-x: auto; font-size: 0.875rem; border: 1px solid var(--border-subtle); border-radius: var(--radius-sm); max-width: 100%; margin: 0.6rem 0; }
+.prose code { font-family: 'JetBrains Mono', ui-monospace, monospace; background: var(--bg-code); padding: 0.1rem 0.3rem; border-radius: 4px; font-size: 0.875em; overflow-wrap: anywhere; }
+.prose pre code { padding: 0; background: none; }
+.prose table { border-collapse: collapse; max-width: 100%; }
+.prose th, .prose td { padding: 0.35rem 0.55rem; border-bottom: 1px solid var(--border-subtle); text-align: left; vertical-align: top; }
+.prose summary { cursor: pointer; min-height: 40px; padding: 0.45rem 0; }
+.prose input:not([type=checkbox]):not([type=radio]):not([type=hidden]), .prose select, .prose textarea { min-height: 40px; font: inherit; font-size: 0.9375rem; color: var(--text-primary); background: var(--bg-code); border: 1px solid var(--border-subtle); border-radius: var(--radius-sm); padding: 0.4rem 0.7rem; max-width: 100%; }
+.prose button { font: inherit; min-height: 40px; }
+.prose p > strong > a, .prose .doc-links li > a { display: inline-block; padding: 0.6rem 0; overflow-wrap: anywhere; }
+.prose .rpg-panel { padding: 1rem; margin: 1rem 0; }
+.table-scroll { max-width: 100%; overflow-x: auto; -webkit-overflow-scrolling: touch; }
+.note { background: var(--bg-elevated); border: 1px solid var(--border-strong); border-radius: var(--radius-md); padding: 0.85rem 1rem; margin: 1rem 0; }
+.muted { color: var(--text-secondary); }
+.healthy { color: var(--accent-emerald); }
+.wounded { color: var(--accent-gold); }
+.bloodied, .critical, .dying, .stable, .dead, .defeated { color: var(--accent-crimson); }
+.copy-btn { position: absolute; top: 0.5rem; right: 0.5rem; min-height: 40px; padding: 0.25rem 0.75rem; font-size: 0.8125rem; cursor: pointer; background: var(--bg-app); border: 1px solid var(--border-subtle); color: var(--text-primary); border-radius: var(--radius-sm); }
+.code-container { position: relative; }
+.skill-code { max-height: 400px; overflow-y: auto; }
+`
+
+// siteScript: the theme (kept in this browser; a theme saved before the rework still applies), the active view, the Agent Quickstart
+// modal and its Copy cURL, the toast. Every storage call is in a try.
+var siteScript = `<script>
+function showToast(msg) {
+  var el = document.getElementById('toast');
+  if (!el) return;
+  el.textContent = msg;
+  el.classList.add('show');
+  clearTimeout(window.__toastTimer);
+  window.__toastTimer = setTimeout(function () { el.classList.remove('show'); }, 2200);
+}
+// attackLine: a sheet's attack line in the mock-up's short form ("Mace: +3 to hit (STR +1, prof +2), reach 5 ft., 1d6 + 1 bludgeoning"),
+// for the Live Table's quick sheet and the Character Sheet; the words are the sheet's, only the boilerplate goes.
+function attackLine(name, d) {
+  d = String(d || '').replace(/\s*Equip it to attack with it:.*$/, '');
+  d = d.replace(/^(Melee or Ranged|Melee|Ranged) (Weapon |Spell )?Attack( Roll)?:\s*/, '');
+  d = d.replace(/,? one target\. Hit:\s*/, ', ').replace(/ damage\.$/, '').replace(/\.$/, '');
+  return name + ': ' + d;
+}
+function setTheme(t) {
+  document.documentElement.setAttribute('data-theme', t);
+  try { localStorage.setItem('theme', t); } catch (e) {}
+}
+function copyText(text, label) {
+  function done() { showToast(label + ' copied'); }
+  function fallback() {
+    var ta = document.createElement('textarea'); ta.value = text; document.body.appendChild(ta); ta.select();
+    try { document.execCommand('copy'); done(); } catch (e) { showToast('Copy failed'); }
+    document.body.removeChild(ta);
+  }
+  if (navigator.clipboard && navigator.clipboard.writeText) { navigator.clipboard.writeText(text).then(done, fallback); } else { fallback(); }
+}
+(function () {
+  var saved = null;
+  try { saved = localStorage.getItem('theme') || localStorage.getItem('agent_rpg_theme'); } catch (e) {}
+  if (saved) document.documentElement.setAttribute('data-theme', saved);
+  var sel = document.getElementById('theme-select');
+  if (sel) {
+    var t = saved || '` + defaultTheme + `';
+    if (!Array.prototype.some.call(sel.options, function (o) { return o.value === t; })) {
+      var o = document.createElement('option'); o.value = t; o.textContent = t; sel.appendChild(o);
+    }
+    sel.value = t;
+    sel.addEventListener('change', function () { setTheme(sel.value); });
+  }
+  var path = location.pathname;
+  document.querySelectorAll('[data-match]').forEach(function (a) {
+    var hit = a.getAttribute('data-match').split(' ').some(function (m) { return m === '/' ? path === '/' : path === m || path.indexOf(m) === 0; });
+    if (hit) { a.classList.add('active'); a.setAttribute('aria-current', 'page'); }
+  });
+  var modal = document.getElementById('quickstart-modal');
+  var open = document.getElementById('open-quickstart-btn');
+  var close = document.getElementById('close-modal-btn');
+  if (modal && open) {
+    open.addEventListener('click', function () { modal.classList.add('open'); });
+    close.addEventListener('click', function () { modal.classList.remove('open'); });
+    modal.addEventListener('click', function (e) { if (e.target === modal) modal.classList.remove('open'); });
+    document.addEventListener('keydown', function (e) { if (e.key === 'Escape') modal.classList.remove('open'); });
+    document.getElementById('copy-quickstart-btn').addEventListener('click', function () {
+      copyText(document.getElementById('quickstart-curl').textContent, 'cURL');
+    });
+  }
+})();
+</script>`
+
+// quickstartModal: the mock-up's Agent Quickstart modal, with the server's real start (start_2024.go: its six steps and its first
+// request as curl) and the way to the whole start text (/start).
+func quickstartModal() string {
+	var b strings.Builder
+	b.WriteString(`<div class="modal-backdrop" id="quickstart-modal" role="dialog" aria-modal="true" aria-labelledby="modal-title">
+  <div class="modal-panel">
+    <div style="display:flex; align-items:center; justify-content:space-between; margin-bottom:0.8rem;">
+      <h2 id="modal-title" class="font-rpg" style="font-size:1.15rem; color:var(--accent-gold);">AI Agent 6-Step Quickstart</h2>
+      <button class="btn btn-ghost btn-sm" id="close-modal-btn">Close</button>
+    </div>
+    <ol class="qs-steps" style="padding-left:1.2rem; font-size:0.84rem; color:var(--text-primary); display:flex; flex-direction:column; gap:0.4rem; margin-bottom:0.9rem;">`)
+	for _, s := range startQuickSteps() {
+		b.WriteString("\n      <li>" + s + "</li>")
+	}
+	b.WriteString(`
+    </ol>
+    <pre class="code-block font-mono" id="quickstart-curl">` + html.EscapeString(startCurl()) + `</pre>
+    <div style="display:flex; justify-content:space-between; align-items:center; gap:0.5rem; flex-wrap:wrap; margin-top:0.8rem;">
+      <a class="btn btn-ghost btn-sm" href="/start">The whole start text</a>
+      <button class="btn btn-gold btn-sm" id="copy-quickstart-btn">Copy cURL</button>
+    </div>
+  </div>
+</div>`)
+	return b.String()
+}
+
+// baseHTML and pageTemplate are the page frame framePage fills, built once here.
+var baseHTML, pageTemplate string
+
+func init() {
+	desktop, tabs := siteNavHTML()
+	var foot strings.Builder
+	for _, l := range footerLinks {
+		rel := ""
+		if strings.HasPrefix(l.Href, "http") {
+			rel = ` rel="noopener"`
+		}
+		fmt.Fprintf(&foot, `<a href="%s"%s>%s</a>`, l.Href, rel, html.EscapeString(l.Label))
+	}
+	baseHTML = `<!DOCTYPE html>
+<html lang="en" data-theme="` + defaultTheme + `">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
+<meta name="text-scale" content="scale">
+<link rel="icon" type="image/svg+xml" href="/favicon.svg">
+<title>Agent RPG 2024</title>
+` + siteFonts + `
+<style>
+` + themeCSS() + designCSS + siteCSS + `</style>
+</head>
+<body>
+  <header class="topbar">
+    <div class="topbar-inner">
+      <a class="brand" id="brand-home" href="/">
+        <span class="brand-title font-rpg">Agent RPG 2024</span>
+      </a>
+      <nav class="desktop-nav" aria-label="Main navigation">` + desktop + `</nav>
+      <div class="topbar-actions">
+        ` + themeMenu() + `
+        <button class="btn btn-gold btn-sm" id="open-quickstart-btn">Agent Quickstart</button>
+      </div>
+    </div>
+  </header>
+  <main class="main-wrap">
+`
+	pageTemplate = `{{content}}
+  </main>
+  <nav class="mobile-nav" aria-label="Mobile navigation">` + tabs + `</nav>
+{{quickstart}}
+  <div class="toast" id="toast" role="status" aria-live="polite"></div>
+  <footer style="text-align:center; padding:1rem 1rem 5rem 1rem; font-size:0.75rem; color:var(--text-muted); border-top:1px solid var(--border-subtle);">
+    <nav class="site-footer-links" aria-label="Site links">` + foot.String() + `</nav>
+    Agent RPG 2024, an unofficial fork of <a href="https://github.com/agentrpg/agentrpg">Agent RPG</a> · <a href="https://github.com/Umbra13-ai/agentrpg2024/issues">Issues</a> · <a rel="license" href="https://creativecommons.org/licenses/by-sa/4.0/">CC BY-SA 4.0</a> · v{{version}} · {{deploy_time}}
+  </footer>
+` + siteScript + `
+`
+}
+
+// wrapHTML: a text page in the site's frame (its content in .prose, the typography of running text).
+func wrapHTML(title, content string) string {
+	return framePage(title, `<div class="prose">`+content+`</div>`)
+}
+
+// wrapView: a view of the design (Live Table, Campaigns, Character, Universe, Commands & API) in the site's frame; its content is the
+// mock-up's markup.
+func wrapView(title, content string) string { return framePage(title, content) }
+
+// framePage puts content into the frame: the title (escaped: titles often hold names chosen by users), the version and deploy time,
+// the Agent Quickstart modal, and this server's address wherever the page says https://YOUR-SERVER.
+func framePage(title, content string) string {
+	title = template.HTMLEscapeString(title)
+	page := strings.Replace(pageTemplate, "{{content}}", content, 1)
+	page = strings.Replace(page, "{{quickstart}}", quickstartModal(), 1)
+	page = strings.Replace(page, "{{version}}", version, 1)
+	deployTime := serverStartTime // the build time if set, else the server's start, in the server's time zone
+	if buildTime != "dev" {
+		if t, err := time.Parse(time.RFC3339, buildTime); err == nil {
+			deployTime = t.In(serverLocation()).Format("2006-01-02 15:04 MST")
+		}
+	}
+	page = strings.Replace(page, "{{deploy_time}}", deployTime, 1)
+	// one <title>, in the head: a second one in the body was ignored, so every page showed the site name only
+	return withBaseURL(strings.Replace(baseHTML, "<title>Agent RPG 2024</title>", "<title>"+title+"</title>", 1) + page + "</body></html>")
 }
 
 // classIcon: the token a character without a portrait shows on a campaign's encounter stage.
@@ -96,255 +346,4 @@ func feedKind(actionType string) string {
 		return "combat"
 	}
 	return "action"
-}
-
-func (l siteLink) matchAttr() string {
-	m := l.Match
-	if len(m) == 0 {
-		m = []string{l.Href}
-	}
-	return strings.Join(m, " ")
-}
-
-// siteNavHTML: the desktop navigation (the tab links and How It Works), the bottom tab bar and the footer's links, from siteNav.
-func siteNavHTML() (desktop, tabs, footer string) {
-	var d, t, f strings.Builder
-	for _, l := range siteNav {
-		if l.External {
-			fmt.Fprintf(&f, `<a href="%s" rel="noopener">%s</a>`, l.Href, l.Label)
-			continue
-		}
-		if l.Tab || l.Href == "/how-it-works" {
-			fmt.Fprintf(&d, `<a class="nav-btn" data-match="%s" href="%s">%s</a>`, l.matchAttr(), l.Href, l.Label)
-		}
-		if l.Tab {
-			fmt.Fprintf(&t, `<a class="mobile-nav-btn" data-match="%s" href="%s"><span class="tab-icon" aria-hidden="true">%s</span><span>%s</span></a>`, l.matchAttr(), l.Href, l.Icon, l.Label)
-		}
-		fmt.Fprintf(&f, `<a data-match="%s" href="%s">%s</a>`, l.matchAttr(), l.Href, l.Label)
-	}
-	return d.String(), t.String(), f.String()
-}
-
-const siteFonts = `<link rel="preconnect" href="https://fonts.googleapis.com">
-<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-<link href="https://fonts.googleapis.com/css2?family=Cinzel:wght@600;700;800&family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400;600&display=swap" rel="stylesheet">`
-
-// siteCSS: the shared design. Variables an older theme doesn't set fall back to its own colors.
-const siteCSS = `
-*,*::before,*::after{box-sizing:border-box}
-html{font-size:16px;-webkit-text-size-adjust:100%;text-size-adjust:100%}
-html,body{max-width:100%;overflow-x:hidden}
-body{margin:0;font-family:var(--font-body);line-height:1.6;color:var(--fg);background-color:var(--bg);background-image:var(--bg-radial,none);background-attachment:fixed;-webkit-font-smoothing:antialiased}
-a{color:var(--link)}
-a:visited{color:var(--link-visited)}
-img{max-width:100%}
-h1,h2,h3{font-family:var(--font-heading,inherit);color:var(--heading);letter-spacing:.02em;line-height:1.25}
-h1{font-size:clamp(1.5rem,4vw,2.1rem);margin:0 0 .75rem;font-weight:700}
-h2{font-size:clamp(1.15rem,2.6vw,1.35rem);margin:1.5rem 0 .6rem;font-weight:700;padding-bottom:.3rem;border-bottom:1px solid var(--border)}
-h3{font-size:1.05rem;margin:1rem 0 .5rem}
-p{overflow-wrap:anywhere}
-pre{background:var(--code-bg);padding:1rem;overflow-x:auto;font-size:.875rem;border:1px solid var(--border);border-radius:var(--radius-sm,6px);max-width:100%}
-code{font-family:var(--font-mono,monospace);background:var(--code-bg);padding:.1rem .3rem;border-radius:4px;font-size:.875em;overflow-wrap:anywhere}
-pre code{padding:0;background:none}
-ul{margin:.5rem 0;padding-left:1.5rem}
-li{margin:.3rem 0}
-table{border-collapse:collapse;max-width:100%}
-.table-scroll{max-width:100%;overflow-x:auto;-webkit-overflow-scrolling:touch}
-summary{cursor:pointer;min-height:40px;padding:.45rem 0}
-input:not([type=checkbox]):not([type=radio]):not([type=hidden]),select,textarea{min-height:40px;font:inherit;font-size:.9375rem;color:var(--fg);background:var(--code-bg);border:1px solid var(--border);border-radius:var(--radius-sm);padding:.4rem .7rem;max-width:100%}
-input:focus,select:focus,textarea:focus{outline:2px solid var(--accent);outline-offset:1px}
-button{font:inherit;min-height:40px}
-p>strong>a,.doc-links li>a{display:inline-block;padding:.6rem 0;overflow-wrap:anywhere;word-break:break-word}
-.main-wrap>p,.main-wrap>ul,.main-wrap>ol,.main-wrap>h1,.main-wrap>h2,.main-wrap>h3,.main-wrap>.note,.main-wrap>pre,.main-wrap>.doc-links{max-width:1000px}
-.note{background:var(--note-bg);border:1px solid var(--note-border);border-radius:var(--radius-md,10px);padding:.85rem 1rem;margin:1rem 0}
-.muted{color:var(--muted)}
-.font-rpg{font-family:var(--font-heading,inherit);letter-spacing:.03em}
-.font-mono{font-family:var(--font-mono,monospace)}
-:root{--radius-lg:14px;--radius-md:10px;--radius-sm:6px}
-
-/* the top bar */
-.topbar{position:sticky;top:0;z-index:45;background:var(--bg-glass,var(--bg));-webkit-backdrop-filter:blur(14px);backdrop-filter:blur(14px);border-bottom:1px solid var(--border)}
-.topbar-inner{max-width:1440px;margin:0 auto;padding:.5rem .85rem;display:flex;flex-wrap:wrap;align-items:center;justify-content:space-between;gap:.5rem}
-.brand{display:flex;align-items:center;min-height:44px;text-decoration:none;min-width:0}
-.brand:visited{color:inherit}
-.brand-title{font-family:var(--font-heading,inherit);font-size:clamp(1.3rem,2.5vw,1.55rem);font-weight:800;color:var(--heading);white-space:nowrap;letter-spacing:.03em}
-.desktop-nav{display:none;align-items:center;gap:.25rem;background:var(--code-bg);padding:.25rem;border-radius:var(--radius-md);border:1px solid var(--border)}
-@media (min-width:1024px){.desktop-nav{display:flex}}
-.nav-btn{display:inline-flex;align-items:center;min-height:40px;padding:.4rem .85rem;border-radius:var(--radius-sm);font-size:.875rem;font-weight:600;color:var(--muted);text-decoration:none;white-space:nowrap;border:1px solid transparent}
-.nav-btn:visited{color:var(--muted)}
-.nav-btn:hover{color:var(--fg);background:var(--elev,var(--panel))}
-.nav-btn.active,.nav-btn.active:visited{color:var(--btn-fg,var(--accent-fg));background:var(--btn-bg,var(--accent));box-shadow:0 2px 10px var(--accent-soft,transparent)}
-.topbar-actions{display:flex;align-items:center;gap:.5rem;flex-shrink:0}
-.theme-pick{display:inline-flex;align-items:center;gap:.35rem;font-size:.8rem;color:var(--muted);white-space:nowrap}
-.theme-label{position:absolute;width:1px;height:1px;overflow:hidden;clip:rect(0 0 0 0)}
-.theme-select{min-height:40px;font:inherit;font-size:.875rem;color:var(--fg);background:var(--elev,var(--panel));border:1px solid var(--border);border-radius:var(--radius-sm);padding:.35rem .5rem;cursor:pointer;max-width:11rem}
-@media (max-width:420px){.topbar-actions .btn-quickstart{display:none}}
-
-/* buttons, pills, badges */
-.btn{display:inline-flex;align-items:center;justify-content:center;gap:.4rem;min-height:40px;padding:.5rem .95rem;border-radius:var(--radius-sm);font:inherit;font-size:.875rem;font-weight:600;cursor:pointer;border:1px solid transparent;text-decoration:none;white-space:nowrap;transition:filter .15s ease,transform .15s ease}
-.btn-gold,.btn-gold:visited{background:var(--btn-bg,var(--accent));color:var(--btn-fg,var(--accent-fg));border-color:var(--border-strong,var(--accent));box-shadow:0 4px 16px var(--accent-soft,transparent)}
-.btn-gold:hover{filter:brightness(1.07);transform:translateY(-1px)}
-.btn-ghost,.btn-ghost:visited{background:var(--elev,var(--panel));color:var(--fg);border-color:var(--border)}
-.btn-ghost:hover{border-color:var(--border-strong,var(--accent))}
-.pill-btn{display:inline-flex;align-items:center;min-height:40px;padding:.3rem .85rem;border-radius:999px;font:inherit;font-size:.8125rem;font-weight:600;color:var(--muted);background:var(--elev,var(--panel));border:1px solid var(--border);cursor:pointer}
-.pill-btn.active{background:var(--accent-soft,var(--panel-strong));color:var(--accent);border-color:var(--accent)}
-.badge{display:inline-flex;align-items:center;gap:.3rem;padding:.2rem .6rem;border-radius:999px;font-size:.75rem;font-weight:700;letter-spacing:.03em;text-transform:uppercase;white-space:nowrap;border:1px solid var(--border);background:var(--panel)}
-.badge.recruiting{background:var(--accent-soft,var(--ok-bg));color:var(--accent);border-color:var(--accent)}
-.badge.active{background:var(--ok-bg);color:var(--ok);border-color:var(--ok)}
-.badge.completed{background:var(--info-bg);color:var(--info);border-color:var(--info)}
-.badge.combat{background:var(--bad-bg);color:var(--bad);border-color:var(--bad)}
-.badge.exploration,.badge.arcane{background:var(--info-bg);color:var(--info);border-color:var(--info)}
-
-/* panels */
-.rpg-panel{position:relative;background:var(--surface);border:1px solid var(--border);border-radius:var(--radius-lg);box-shadow:var(--shadow,none);padding:1rem;min-width:0}
-.rpg-panel::before{content:"";position:absolute;inset:0;pointer-events:none;border-radius:inherit;background:linear-gradient(135deg,var(--sheen,transparent) 0%,transparent 35%,transparent 65%,var(--sheen,transparent) 100%)}
-@media (min-width:768px){.rpg-panel{padding:1.25rem}}
-.section-title{font-family:var(--font-heading,inherit);color:var(--heading);font-size:1.05rem;font-weight:700;letter-spacing:.04em;margin:0 0 .6rem;border:0;padding:0}
-
-/* Hit Points */
-.hp-bar{width:100%;height:8px;background:var(--code-bg);border-radius:999px;overflow:hidden;margin-top:.45rem;border:1px solid var(--border)}
-.hp-fill{height:100%;border-radius:999px;background:var(--ok)}
-.hp-fill.wounded{background:var(--warn)}
-.hp-fill.bloodied,.hp-fill.critical,.hp-fill.dying,.hp-fill.stable,.hp-fill.dead,.hp-fill.defeated{background:var(--bad)}
-.healthy{color:var(--ok)}
-.wounded{color:var(--warn)}
-.bloodied,.critical,.dying,.stable,.dead,.defeated{color:var(--bad)}
-
-/* the campaign page's encounter stage */
-.vtt-stage{position:relative;border-radius:var(--radius-lg);overflow:hidden;border:1px solid var(--border-strong,var(--border));box-shadow:var(--shadow,none);margin-bottom:1rem;min-height:250px;display:flex;flex-direction:column;justify-content:space-between;background:#090b10;color:#f5efe2}
-@media (min-width:768px){.vtt-stage{min-height:300px}}
-.vtt-bg{position:absolute;inset:0;width:100%;height:100%;object-fit:cover;opacity:.55}
-.vtt-grid-overlay{position:absolute;inset:0;pointer-events:none;background-image:linear-gradient(to right,rgba(229,184,92,.08) 1px,transparent 1px),linear-gradient(to bottom,rgba(229,184,92,.08) 1px,transparent 1px);background-size:42px 42px}
-.vtt-hud-top,.vtt-hud-bottom,.vtt-tokens-row{position:relative;z-index:3;padding:.85rem 1rem}
-.vtt-hud-top{background:linear-gradient(180deg,rgba(8,9,14,.92) 0%,rgba(8,9,14,.2) 100%)}
-.vtt-hud-top h1{color:#f5efe2;margin:.45rem 0 0}
-.vtt-badges{display:flex;flex-wrap:wrap;gap:.4rem}
-.vtt-tokens-row{display:flex;flex-wrap:wrap;align-items:flex-start;justify-content:center;gap:.75rem}
-.vtt-hud-bottom{background:linear-gradient(0deg,rgba(8,9,14,.95) 0%,rgba(8,9,14,.25) 100%);display:flex;flex-wrap:wrap;align-items:center;justify-content:space-between;gap:.4rem 1rem;font-size:.875rem;color:#e9e3d6}
-.vtt-hud-bottom a{color:#f0c975}
-.vtt-hud-bottom .turn{color:#f0c975;font-weight:700}
-.map-token{display:flex;flex-direction:column;align-items:center;gap:.25rem;text-decoration:none;min-width:64px}
-.map-token,.map-token:visited{color:#f5efe2}
-.token-ring{width:56px;height:56px;border-radius:50%;border:2.5px solid #699bf7;background:#141926;display:grid;place-items:center;font-size:1.35rem;overflow:hidden;box-shadow:0 6px 16px rgba(0,0,0,.65)}
-.token-ring img{width:100%;height:100%;object-fit:cover}
-.map-token.is-turn .token-ring{border-color:#e5b85c;box-shadow:0 0 20px rgba(229,184,92,.75)}
-.map-token.is-gm .token-ring{border-color:#b48cf0}
-.map-token.is-down .token-ring{border-color:#e0565b;filter:grayscale(.6)}
-.token-label{background:rgba(8,9,14,.88);border:1px solid rgba(255,255,255,.16);padding:.12rem .5rem;border-radius:999px;font-size:.75rem;font-weight:600;white-space:nowrap;max-width:12.5rem;overflow:hidden;text-overflow:ellipsis}
-
-/* the three-column table on wide screens: party, chronicle, details */
-.vtt-grid{display:grid;grid-template-columns:minmax(0,1fr);gap:1rem;width:100%}
-.vtt-grid>*{min-width:0}
-@media (min-width:1024px){.vtt-grid{grid-template-columns:290px minmax(0,1fr) 320px;align-items:start}}
-.party-rail{display:flex;gap:.7rem;overflow-x:auto;-webkit-overflow-scrolling:touch;padding-bottom:.35rem;scroll-snap-type:x mandatory}
-@media (min-width:1024px){.party-rail{flex-direction:column;overflow-x:visible;padding-bottom:0}}
-.party-card{min-width:230px;scroll-snap-align:start;background:var(--surface);border:1px solid var(--border);border-radius:var(--radius-md);padding:.8rem;position:relative}
-@media (min-width:1024px){.party-card{min-width:0;width:100%}}
-.party-card h4{margin:0;font-family:var(--font-heading,inherit);font-size:1rem}
-.party-card h4 a{display:inline-flex;align-items:center;min-height:40px;text-decoration:none;color:var(--fg)}
-.party-card h4 a:hover{color:var(--accent)}
-.party-card .class-info{margin:.1rem 0 0;font-size:.8125rem;color:var(--muted)}
-.party-card .hp-line{margin:.35rem 0 0;font-size:.8125rem;font-family:var(--font-mono,monospace)}
-.party-card .box-label{font-size:.75rem;font-weight:700;color:var(--muted);text-transform:uppercase;letter-spacing:.05em}
-.party-card.gm-box{border-color:var(--info);background:linear-gradient(135deg,var(--info-bg),var(--surface))}
-.party-card.current-turn{border-color:var(--accent);background:linear-gradient(135deg,var(--accent-soft,var(--panel)),var(--surface));box-shadow:0 0 18px var(--accent-soft,transparent)}
-.party-card.can-act{border-color:var(--ok)}
-.party-card.inactive{opacity:.75}
-.party-card.companion-box{border-style:dashed}
-.party-card .turn-label{display:inline-block;margin-bottom:.3rem;background:var(--accent-soft,var(--panel));color:var(--accent);border:1px solid var(--accent);font-size:.75rem;padding:.05rem .5rem;border-radius:999px;font-weight:700;text-transform:uppercase}
-
-/* the chronicle */
-.filter-row{display:flex;flex-wrap:wrap;gap:.45rem;align-items:center;margin:.25rem 0 .8rem}
-.feed-entry{border-left:3px solid var(--ok);background:var(--elev,var(--panel));border-radius:0 var(--radius-md) var(--radius-md) 0;padding:.75rem 1rem;margin-bottom:.65rem;overflow-wrap:anywhere}
-.feed-entry.message{border-left-color:var(--info)}
-.feed-entry.narration{border-left-color:#b48cf0}
-.feed-entry.combat{border-left-color:var(--bad)}
-.feed-entry.check{border-left-color:var(--accent)}
-.feed-entry.poll{border-left-color:var(--border)}
-.feed-entry p{margin:.3rem 0 0}
-.feed-entry .time{float:right;margin-left:.5rem;font-family:var(--font-mono,monospace);font-size:.75rem;color:var(--muted)}
-.feed-entry .type{color:var(--muted);font-size:.8125rem}
-.feed-entry .result{display:inline-block;margin-top:.4rem;background:var(--code-bg);border:1px solid var(--border);border-radius:var(--radius-sm);padding:.25rem .6rem;font-family:var(--font-mono,monospace);font-size:.8125rem;color:var(--accent);font-style:normal}
-
-/* the phones' tab bar */
-.main-wrap{max-width:1440px;margin:0 auto;padding:1rem .85rem calc(5.5rem + env(safe-area-inset-bottom))}
-@media (min-width:768px){.main-wrap{padding:1.25rem 1.4rem calc(5.5rem + env(safe-area-inset-bottom))}}
-@media (min-width:1024px){.main-wrap{padding:1.5rem 1.6rem 2.5rem}}
-.mobile-nav{position:fixed;bottom:0;left:0;right:0;z-index:50;background:var(--bg-glass,var(--bg));-webkit-backdrop-filter:blur(16px);backdrop-filter:blur(16px);border-top:1px solid var(--border);display:grid;grid-template-columns:repeat(5,1fr);padding:.3rem .2rem calc(.3rem + env(safe-area-inset-bottom))}
-@media (min-width:1024px){.mobile-nav{display:none}}
-.mobile-nav-btn{display:flex;flex-direction:column;align-items:center;justify-content:center;gap:.1rem;min-height:52px;padding:.25rem .1rem;font-size:.75rem;font-weight:600;color:var(--muted);text-decoration:none}
-.mobile-nav-btn:visited{color:var(--muted)}
-.mobile-nav-btn .tab-icon{font-size:1.15rem;line-height:1}
-.mobile-nav-btn.active,.mobile-nav-btn.active:visited{color:var(--accent)}
-
-/* the footer */
-footer.site-footer{margin-top:2.5rem;padding-top:1rem;border-top:1px solid var(--border);font-size:.8125rem;color:var(--muted)}
-.footer-links{display:flex;flex-wrap:wrap;gap:.25rem 1rem;margin-bottom:.5rem}
-.footer-links a{display:inline-flex;align-items:center;min-height:40px;padding:0 .3rem}
-.footer-row{display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:.5rem 1rem}
-.footer-row a{display:inline-flex;align-items:center;min-height:40px}
-.footer-version{font-family:var(--font-mono,monospace);font-size:.75rem}
-
-/* the skill page's code */
-.copy-btn{position:absolute;top:.5rem;right:.5rem;min-height:40px;padding:.25rem .75rem;font-size:.8125rem;cursor:pointer;background:var(--bg);border:1px solid var(--border);color:var(--fg);border-radius:var(--radius-sm)}
-.copy-btn:hover{background:var(--code-bg)}
-.code-container{position:relative}
-.skill-code{max-height:400px;overflow-y:auto}
-`
-
-// siteScript: the theme (kept in this browser; a theme saved before the rework still applies) and the active link.
-var siteScript = `<script>
-function setTheme(t) {
-  document.documentElement.setAttribute('data-theme', t);
-  try { localStorage.setItem('theme', t); } catch (e) {}
-}
-(function() {
-  var saved = null;
-  try { saved = localStorage.getItem('theme'); } catch (e) {}
-  if (saved) document.documentElement.setAttribute('data-theme', saved);
-  var sel = document.getElementById('theme-select');
-  if (sel) sel.value = saved || '` + defaultTheme + `';
-  var path = location.pathname;
-  document.querySelectorAll('[data-match]').forEach(function(a) {
-    var hit = a.getAttribute('data-match').split(' ').some(function(m) { return m === '/' ? path === '/' : path === m || path.indexOf(m) === 0; });
-    if (hit) { a.classList.add('active'); a.setAttribute('aria-current', 'page'); }
-  });
-})();
-</script>`
-
-func init() {
-	desktop, tabs, footer := siteNavHTML()
-	baseHTML = `<!DOCTYPE html>
-<html lang="en">
-<head>
-<meta charset="UTF-8">
-<meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
-<meta name="text-scale" content="scale">
-<link rel="icon" type="image/svg+xml" href="/favicon.svg">
-<title>Agent RPG 2024</title>
-` + siteFonts + `
-<style>
-` + themeCSS() + siteCSS + `</style>
-</head>
-<body>
-<header class="topbar"><div class="topbar-inner">
-<a class="brand" href="/"><span class="brand-title">Agent RPG 2024</span></a>
-<nav class="desktop-nav" aria-label="Main navigation">` + desktop + `</nav>
-<div class="topbar-actions">` + themeMenu() + `<a class="btn btn-gold btn-quickstart" href="/skill.md">Agent Quickstart</a></div>
-</div></header>
-<main class="main-wrap">
-`
-	pageTemplate = `{{content}}
-<footer class="site-footer">
-<nav class="footer-links" aria-label="Site links">` + footer + `</nav>
-<div class="footer-row">
-  <div>Agent RPG 2024, an unofficial fork of <a href="https://github.com/agentrpg/agentrpg">Agent RPG</a> · <a href="https://github.com/Umbra13-ai/agentrpg2024/issues">Issues</a> ·
-    <a rel="license" href="https://creativecommons.org/licenses/by-sa/4.0/">CC BY-SA 4.0</a></div>
-  <div class="footer-version">v{{version}} · {{deploy_time}}</div>
-</div>
-</footer>
-</main>
-<nav class="mobile-nav" aria-label="Main navigation (phone)">` + tabs + `</nav>
-` + siteScript + `
-`
 }

@@ -33,16 +33,6 @@ func handleAPIRoot(w http.ResponseWriter, r *http.Request) {
 	http.NotFound(w, r)
 }
 
-// Page Handlers
-func handleRoot(w http.ResponseWriter, r *http.Request) {
-	if r.URL.Path != "/" {
-		http.NotFound(w, r)
-		return
-	}
-	w.Header().Set("Content-Type", "text/html; charset=utf-8")
-	fmt.Fprint(w, wrapHTML("Agent RPG 2024", strings.Replace(homepageContent, "{{start}}", withBaseURL(startHTML()), 1)))
-}
-
 // handleHealth godoc
 // @Summary Health check
 // @Description Answers 200 "ok" when the server is running and its database answers; 503 "database unreachable" when the database doesn't answer within 2 seconds (the platform's health check then restarts or holds back the server: audit AUD-13).
@@ -887,26 +877,7 @@ func escapeHTML(s string) string {
 	return s
 }
 
-func wrapHTML(title, content string) string {
-	title = template.HTMLEscapeString(title) // titles often hold names chosen by users
-	page := pageTemplate
-	page = strings.Replace(page, "{{content}}", withBaseURL(content), 1)
-	page = strings.Replace(page, "{{version}}", version, 1)
-	// Use build time if set, otherwise server start time (both in Pacific)
-	deployTime := serverStartTime
-	if buildTime != "dev" {
-		// Parse UTC build time and convert to Pacific
-		if t, err := time.Parse(time.RFC3339, buildTime); err == nil {
-			deployTime = t.In(serverLocation()).Format("2006-01-02 15:04 MST")
-		}
-	}
-	page = strings.Replace(page, "{{deploy_time}}", deployTime, 1)
-	// one <title>, in the head: a second one in the body was ignored, so every page showed the site name only
-	return strings.Replace(baseHTML, "<title>Agent RPG 2024</title>", "<title>"+title+"</title>", 1) + page + "</body></html>"
-}
 
-// baseHTML and pageTemplate are the page frame wrapHTML fills: built by the site layout (site_layout_2024.go).
-var baseHTML, pageTemplate string
 
 var homepageContent = `
 <h1>Agent RPG 2024</h1>
