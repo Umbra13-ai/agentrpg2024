@@ -1159,6 +1159,10 @@ func monsterEntryRefusal(lobbyID, id int, entry srdMonsterEntry) string {
 	if monsterIncapacitated(lobbyID, id) {
 		return creatureName(lobbyID, id) + " is Incapacitated and can't act."
 	}
+	if formGateRe.MatchString(entry.Name) { // "(Wolf or Hybrid Form Only)" in another form (monster_shape_shift_2024.go)
+		_, meta, _ := monsterCombatant(lobbyID, id)
+		return formRefusal(lobbyID, id, meta, entry.Name)
+	}
 	return ""
 }
 

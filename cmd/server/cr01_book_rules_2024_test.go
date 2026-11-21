@@ -196,3 +196,90 @@ func TestPostgresBookEndOfTurnAuras(t *testing.T) {
 		t.Errorf("the aura of its choice still went to the GM: %v", lines)
 	}
 }
+
+// Shape-Shift (Jackalwere; SRD lycanthropes, Imp, Quasit, Vampire, Mimic): the form named in use is recorded; an entry "(Jackal or
+// Hybrid Form Only)" is refused in another form, alone or in a Multiattack, before anything is rolled; a use the entry doesn't offer
+// is refused. A trait that acts when the creature receives a condition (Flumph, Prone Deficiency): the die decides, and the second
+// condition comes with its repeated save.
+func TestPostgresBookShapeShiftAndConditionTriggers(t *testing.T) {
+	testPostgres(t)
+	gm, _, camp, charID, _, _ := companionReactionFixture(t)
+	pgExec(t, `UPDATE characters SET hp=1000,max_hp=1000,ac=1 WHERE id=$1`, charID)
+	were := bookFixture("Dune Trickster", "Fiend", nil, []srdMonsterEntry{
+		{Name: "Multiattack", Text: "The trickster makes two Rend or Slam attacks."},
+		{Name: "Rend (Jackal or Hybrid Form Only)", Text: "Melee Attack Roll: +30, reach 5 ft. Hit: 5 (1d6 + 2) Piercing damage."},
+		{Name: "Slam (Human or Hybrid Form Only)", Text: "Melee Attack Roll: +30, reach 5 ft. Hit: 4 (1d4 + 2) Bludgeoning damage."}})
+	were.BonusActions = []srdMonsterEntry{{Name: "Shape-Shift", Text: "The trickster shape-shifts into a Medium human or a Medium jackal-humanoid hybrid, or it returns to its true form (that of a Small jackal). Other than its size, its game statistics are the same in each form. Any equipment it is wearing or carrying isn't transformed."}}
+	bobber := bookFixture("Gas Bobber", "Aberration", []srdMonsterEntry{{Name: "Topple Daze", Text: "If the bobber receives the Prone condition, roll a die. On an odd number, it has the Incapacitated condition. At the end of each of its turns, the bobber makes a DC 10 Dexterity saving throw, ending the Incapacitated condition on a success."}},
+		[]srdMonsterEntry{{Name: "Tentacle", Text: "Melee Attack Roll: +1, reach 5 ft. Hit: 1 (1d1) Acid damage."}})
+	ids := importBookFixtures(t, gm, camp, were, bobber)
+	tr := ids["Dune Trickster"]
+	narrate := func(action, use string, attacks []string) (int, map[string]interface{}) {
+		t.Helper()
+		ma := map[string]interface{}{"monster": "Dune Trickster", "action": action, "target": fmt.Sprint(charID)}
+		if use != "" {
+			ma["use"] = use
+		}
+		if attacks != nil {
+			ma["attacks"] = attacks
+		}
+		return pgCall(t, "POST", "/api/gm/narrate", gm, map[string]interface{}{"campaign_id": camp, "narration": "x", "monster_action": ma})
+	}
+	hp := func() (h int) { db.QueryRow(`SELECT hp FROM characters WHERE id=$1`, charID).Scan(&h); return }
+	form := func() string { return monsterForm(camp, tr, creatureMetaOf(camp, tr)) }
+
+	// its true form is the jackal: Slam is refused (nothing rolled), Rend works
+	h0 := hp()
+	if c, j := narrate("Slam", "", nil); c != 409 || !strings.Contains(fmt.Sprint(j["monster_action_refused"]), "only in its human or hybrid form") || hp() != h0 {
+		t.Fatalf("Slam in jackal form: %d %v", c, j)
+	}
+	if c, j := narrate("Rend", "", nil); c != 200 || hp() >= h0 {
+		t.Fatalf("Rend in jackal form: %d %v (hp %d -> %d)", c, j, h0, hp())
+	}
+	// a form the entry doesn't offer is refused; then the human form
+	if c, j := narrate("Shape-Shift", "dragon", nil); !strings.Contains(fmt.Sprint(j["monster_action_result"]), "name the form in use") || form() != "jackal" {
+		t.Fatalf("a form it doesn't have: %d %v (form %q)", c, j, form())
+	}
+	if c, j := narrate("Shape-Shift", "human", nil); c != 200 || !strings.Contains(fmt.Sprint(j["monster_action_result"]), "human form now") {
+		t.Fatalf("Shape-Shift to human: %d %v", c, j)
+	}
+	h1 := hp()
+	if c, j := narrate("Rend", "", nil); c != 409 || hp() != h1 {
+		t.Fatalf("Rend in human form: %d %v", c, j)
+	}
+	// a Multiattack that declares an attack of another form is refused whole; the hybrid form takes both
+	if c, j := narrate("Multiattack", "", []string{"Rend", "Slam"}); hp() != h1 || !strings.Contains(fmt.Sprint(j), "only in its jackal or hybrid form") {
+		t.Fatalf("Multiattack with Rend in human form: %d %v", c, j)
+	}
+	narrate("Shape-Shift", "hybrid", nil)
+	if c, j := narrate("Multiattack", "", []string{"Rend", "Slam"}); c != 200 || hp() >= h1 {
+		t.Fatalf("Multiattack in hybrid form: %d %v", c, j)
+	}
+	// its turn's start keeps the form
+	expireCombatEffectsOf(camp, tr)
+	if f := form(); f != "hybrid" {
+		t.Errorf("the form after its turn's start: %q", f)
+	}
+
+	// Topple Daze: Prone, then the die: an odd number brings Incapacitated with a DC 10 Dexterity repeat save; an even one nothing
+	b := ids["Gas Bobber"]
+	odd, even := false, false
+	for i := 0; i < 40 && !(odd && even); i++ {
+		endCondition(camp, b, "prone", "")
+		endCondition(camp, b, "incapacitated", "")
+		res := addCondition(camp, b, condAdd{Condition: "prone", Source: "test shove"})
+		inc := recordsOf(camp, b, "incapacitated")
+		note := fmt.Sprint(res.Notes)
+		switch {
+		case len(inc) == 1 && inc[0].EndSave != nil && inc[0].EndSave.DC == 10 && inc[0].EndSave.Ability == "dex" && strings.Contains(note, "Topple Daze"):
+			odd = true
+		case len(inc) == 0 && strings.Contains(note, "nothing more happens"):
+			even = true
+		default:
+			t.Fatalf("Topple Daze: %+v %s", inc, note)
+		}
+	}
+	if !odd || !even {
+		t.Errorf("the die never gave both outcomes in 40 tries: odd %v even %v", odd, even)
+	}
+}

@@ -1517,6 +1517,10 @@ func resolveMonsterEffectText(r *http.Request, lobbyID, monsterID int, meta *mon
 		}
 	}
 
+	// Shape-Shift: the form named in use is recorded; entries limited to a form read it (monster_shape_shift_2024.go)
+	if line, ok := resolveShapeShift(lobbyID, monsterID, name, entryName, text, use, apply); ok {
+		return append([]string{line}, notes...)
+	}
 	// a standard action the entry takes: Disengage recorded, a choice named in use (monster_standard_actions_2024.go)
 	if line, ok := resolveMonsterStandardAction(lobbyID, monsterID, name, entryName, text, use, apply); ok {
 		return append([]string{line}, notes...)

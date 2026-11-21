@@ -551,6 +551,16 @@ func resolveMonsterAttack(r *http.Request, campaignID int, monster, action, targ
 			}
 		}
 	}
+	// An attack limited to a form ("Rend (Jackal or Hybrid Form Only)") the monster isn't in refuses the whole request before any
+	// roll (monster_shape_shift_2024.go)
+	if attackerID != 0 {
+		_, meta, _ := monsterCombatant(campaignID, attackerID)
+		for _, a := range chosen {
+			if why := formRefusal(campaignID, attackerID, meta, a.Name); why != "" {
+				return why, map[string]interface{}{"refused": true, "reason": why}, true
+			}
+		}
+	}
 	// Validate the whole Multiattack before any part can deal damage.
 	for i, a := range chosen {
 		prepared, problem := prepareMonsterAttack(a, monsterUseIn(r))

@@ -80,6 +80,11 @@ Report: "Wizard Scholar accepts any skill for Expertise."
   of the monster's turn** (`runMonsterEndAuras`): damage (`endAuraRe`) or a saving throw (`saveEndAuraRe`, `endSaveAura`, a success's
   immunity honored); "of its choice" is its enemies (`chosenAuraTargets`). Go: `TestPostgresBookTimedAndLinkedConditions`,
   `TestPostgresBookEndOfTurnAuras`.
+- **A monster's form** (`cmd/server/monster_shape_shift_2024.go`): `shapeShiftForms` reads a Shape-Shift entry (its forms and true form);
+  the entry with `use` naming a form records it (`resolveShapeShift`, combat effect `shape_form`, kept across its turns); an entry named
+  "(Wolf or Hybrid Form Only)" is refused in another form by `formRefusal`, read by `monsterEntryRefusal` and the Multiattack plan.
+  **A trait that acts when the creature receives a condition** (Prone Deficiency) is `conditionTraitReaction`
+  (`monster_condition_traits_2024.go`), called by `conditionTakesHold`. Go: `TestPostgresBookShapeShiftAndConditionTriggers`.
 - **A creature's Speed** (`cmd/server/speed_owner_2024.go`): `characterSpeed` asks the one owner for conditions (Speed 0), spells (Slow, Haste),
   weapon-mastery effects and stat-block Speed riders (`speed_halved`, `speed_zero`, `speed_minus` markers); a character's movement budget
   follows a Speed that changes mid-turn (`settleMovement`). Effects whose result depends on an order the rules supplied do not give are never computed: the GM rules
