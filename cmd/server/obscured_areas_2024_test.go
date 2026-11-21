@@ -256,6 +256,26 @@ func TestPostgresObscuredAreasAndSenses(t *testing.T) {
 	if !passWithoutTraceOn(camp, shadow) { // the dryad has no token: without a distance the aura counts (as for a character's cast)
 		t.Error("an ally of the caster doesn't get Pass without Trace")
 	}
+
+	// ---- Devil's Sight in a stat block (invented wording with the Monster Manual's pattern): its Darkvision sees into Magical Darkness
+	imp := compendiumFixture()
+	imp.Name, imp.Size, imp.Type, imp.Senses = "Gloom Imp", "Tiny", "Fiend", "Darkvision 120 ft.; Passive Perception 11"
+	imp.Traits = []srdMonsterEntry{{Name: "Devil's Sight", Text: "Magical Darkness doesn't impede the imp's Darkvision."}}
+	imp.Legendary, imp.LegendaryIn = nil, ""
+	c, ij := pgCall(t, "POST", "/api/gm/compendium/monsters", gm, map[string]interface{}{"source_note": "invented Devil's Sight fixture", "monsters": []srdMonster2024{imp}})
+	if c != 201 {
+		t.Fatalf("import: %d %v", c, ij)
+	}
+	impKey := fmt.Sprint(ij["monsters"].([]interface{})[0].(map[string]interface{})["monster_key"])
+	t.Cleanup(func() { db.Exec(`DELETE FROM custom_monsters WHERE key=$1`, impKey) })
+	pgCall(t, "POST", cp+"/combat/add", gm, map[string]interface{}{"combatants": []map[string]interface{}{{"name": "Gloom Imp", "monster_key": impKey, "hp": 50, "initiative": 0}}})
+	impID := id("Gloom Imp")
+	if !piercesMagicalDarknessWithin(camp, impID, 60) || piercesMagicalDarknessWithin(camp, impID, 130) {
+		t.Error("Devil's Sight: its 120-foot Darkvision sees into Magical Darkness, not beyond it")
+	}
+	if piercesMagicalDarknessWithin(camp, kobold, 30) {
+		t.Error("a kobold's Darkvision sees into Magical Darkness")
+	}
 }
 
 // The wording readers over the SRD catalog: Ink Cloud (Octopus, Giant Octopus) fills an area; Shadow Stealth is light-gated;
