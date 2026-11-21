@@ -165,6 +165,23 @@ func conditionView(rec conditionRecord, speed int, gm bool) map[string]interface
 	if rec.DurationRounds > 0 {
 		v["duration_rounds"] = rec.DurationRounds
 	}
+	// what this record does besides the condition ("Can't regain Hit Points while Poisoned", a poison's damage at the start of each of
+	// its turns) and how it ends on its own: what the stat block already says, for the player and the GM (S-ALDEN-10)
+	effects := lastingEffectsOf(rec)
+	if s := rec.EndSave; s != nil && s.Ability != "" {
+		when := "end"
+		if s.When == "start_of_turn" {
+			when = "start"
+		}
+		save := fmt.Sprintf("Repeats the %s saving throw at the %s of each of its turns; a success ends it", abilityNames[strings.ToLower(s.Ability)], when)
+		if gm && s.DC > 0 {
+			save = fmt.Sprintf("Repeats the DC %d %s saving throw at the %s of each of its turns; a success ends it", s.DC, abilityNames[strings.ToLower(s.Ability)], when)
+		}
+		effects = append(effects, save)
+	}
+	if len(effects) > 0 {
+		v["effects"] = effects
+	}
 	if gm {
 		if rec.Source != "" {
 			v["source"] = rec.Source

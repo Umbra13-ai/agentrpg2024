@@ -177,9 +177,13 @@ func TestPostgresMonsterHitRiders(t *testing.T) {
 	if len(recs) != 0 || !strings.Contains(res, "[GM, not applied automatically:") || !strings.Contains(res, "choice of") {
 		t.Fatalf("Whim: a choice of conditions was applied or not shown to the GM: %s %+v", res, recs)
 	}
-	// the condition is applied; the sentence the server does not apply is still the GM's
+	// the condition is applied with what it does while it lasts ("While Poisoned, the target can't regain Hit Points": the server's
+	// since feedback log entry 63, condition_lasting_effects_2024.go), so nothing of the sentence is left to the GM
 	res, recs = play("Rot")
-	if has(recs, "poisoned") == nil || !strings.Contains(res, "While Poisoned") || !strings.Contains(res, "[GM, not applied automatically:") {
-		t.Fatalf("Rot: Poisoned not stored, or the rest of the text is not shown to the GM: %s %+v", res, recs)
+	if has(recs, "poisoned") == nil || !strings.Contains(res, "can't regain Hit Points while Poisoned") || strings.Contains(res, "[GM, not applied automatically:") {
+		t.Fatalf("Rot: Poisoned or its lasting effect not stored, or an applied effect still shown to the GM: %s %+v", res, recs)
+	}
+	if cant, _ := cantRegainHP(camp, char); !cant {
+		t.Fatal("Rot: the target can still regain Hit Points while Poisoned")
 	}
 }

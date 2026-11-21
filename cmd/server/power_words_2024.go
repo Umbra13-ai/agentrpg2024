@@ -17,8 +17,6 @@ import (
 	"github.com/agentrpg/agentrpg/game"
 )
 
-var powerWordEnds = []string{"charmed", "frightened", "paralyzed", "poisoned", "stunned"}
-
 // wordsOfCreation: a level 20 Bard casting Power Word Heal or Power Word Kill.
 func wordsOfCreation(charID int, spellKey string) bool {
 	if spellKey != "power-word-kill" && spellKey != "power-word-heal" {
@@ -155,12 +153,7 @@ func powerWordOn(lobby int, spellKey string, id, saveDC int) string {
 		}
 		return name + " has more than 150 Hit Points: its Speed is 0 until the start of your next turn."
 	case "power-word-heal":
-		ended := []string{}
-		for _, c := range powerWordEnds {
-			if len(endCondition(lobby, id, c, "")) > 0 {
-				ended = append(ended, titleCase(c))
-			}
-		}
+		ended, _ := endSpellConditions(lobby, id, spellKey, "") // the table (spell_ends_conditions_2024.go), before the healing
 		if id < 0 {
 			setMonsterHP(lobby, id, maxHP)
 		} else {

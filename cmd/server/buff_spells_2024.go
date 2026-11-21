@@ -297,7 +297,7 @@ func resolveBuffSpell(charID, lobby int, spell SRDSpell, spellKey string, slotLe
 	case "protection-from-poison":
 		add(ids[0], "")
 		ended := ""
-		if removeCondition(ids[0], "poisoned") {
+		if e, _ := endSpellConditions(lobby, ids[0], spellKey, description); len(e) > 0 { // the table (spell_ends_conditions_2024.go)
 			ended = " The Poisoned condition ends."
 		}
 		out = fmt.Sprintf("For 1 hour %s has Resistance to Poison damage and Advantage on saves against being Poisoned.%s", who, ended)
@@ -430,32 +430,18 @@ func buffEnds(kind string, targetID int, detail string) {
 	}
 }
 
-// lesserRestoration ends one condition: Blinded, Deafened, Paralyzed or Poisoned (the one named, else the first the target has).
+// lesserRestoration ends one condition of the table's row (spellEndsConditions: the one named, else the first the target has).
 func lesserRestoration(charID, lobby int, description string) string {
 	id := spellAllyTargets(charID, description)[0] // living_target_2024.go
-	dl := strings.ToLower(description)
-	have := strings.ToLower(strings.Join(getCharConditions(id), " "))
-	order := []string{"paralyzed", "poisoned", "blinded", "deafened"}
-	pick := ""
-	for _, c := range order {
-		if strings.Contains(dl, c) && strings.Contains(have, c) {
-			pick = c
-		}
-	}
-	if pick == "" {
-		for _, c := range order {
-			if strings.Contains(have, c) {
-				pick = c
-				break
-			}
-		}
-	}
 	name := creatureName(lobby, id)
-	if pick == "" {
-		return fmt.Sprintf(" Lesser Restoration: %s has none of Blinded, Deafened, Paralyzed or Poisoned, so nothing ends.", name)
+	ended, named := endSpellConditions(lobby, id, "lesser-restoration", description)
+	switch {
+	case len(ended) > 0:
+		return fmt.Sprintf(" Lesser Restoration: the %s condition on %s ends.", ended[0], name)
+	case named != "":
+		return fmt.Sprintf(" Lesser Restoration: %s doesn't have the %s condition, so nothing ends.", name, titleCase(named))
 	}
-	endCondition(lobby, id, pick, "")
-	return fmt.Sprintf(" Lesser Restoration: the %s condition on %s ends.", titleCase(pick), name)
+	return fmt.Sprintf(" Lesser Restoration: %s has none of %s, so nothing ends.", name, spellEndsWords("lesser-restoration"))
 }
 
 // ---- reads for the hooks

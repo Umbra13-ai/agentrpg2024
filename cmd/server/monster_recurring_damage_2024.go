@@ -28,11 +28,12 @@ var recurringDamageRe = regexp.MustCompile(`(?i)the target takes (\d+) \(([^)]+)
 
 // recurringDamageSpec is one parsed recurring-damage clause.
 type recurringDamageSpec struct {
-	Average int
-	Dice    string
-	Type    string
-	Source  bool // true: ticks at the start of the SOURCE's turns; false: the target's
-	Attach  bool // true: gated on the attacker staying attached; false: on its grapple lasting
+	Average   int
+	Dice      string
+	Type      string
+	Source    bool   // true: ticks at the start of the SOURCE's turns; false: the target's
+	Attach    bool   // true: gated on the attacker staying attached; false: on its grapple lasting
+	Condition string // set: gated on the condition record the same source gave the target ("While Poisoned, ...": readLastingEffects)
 }
 
 // readRecurringDamage reads the recurring-damage clause of a hit-rider sentence, if it declares one with a
@@ -66,14 +67,21 @@ func recurringDamageText(spec recurringDamageSpec) string {
 	if spec.Source {
 		when = "the attacker's"
 	}
-	gate := "grapple"
-	if spec.Attach {
-		gate = "attach"
-	}
-	return fmt.Sprintf("%d (%s) %s damage at the start of each of %s turns, while the %s lasts", spec.Average, spec.Dice, spec.Type, when, gate)
+	return fmt.Sprintf("%d (%s) %s damage at the start of each of %s turns, while the %s lasts", spec.Average, spec.Dice, spec.Type, when, spec.gate())
 }
 
-var recurringFromTextRe = regexp.MustCompile(`^(\d+) \(([^)]+)\) (\w+) damage at the start of each of (its|the attacker's) turns, while the (grapple|attach) lasts$`)
+// gate names what keeps the row running: "grapple", "attach" or "poisoned condition".
+func (spec recurringDamageSpec) gate() string {
+	switch {
+	case spec.Condition != "":
+		return spec.Condition + " condition"
+	case spec.Attach:
+		return "attach"
+	}
+	return "grapple"
+}
+
+var recurringFromTextRe = regexp.MustCompile(`^(\d+) \(([^)]+)\) (\w+) damage at the start of each of (its|the attacker's) turns, while the (grapple|attach|[a-z]+ condition) lasts$`)
 
 func recurringFromText(text string) *recurringDamageSpec {
 	m := recurringFromTextRe.FindStringSubmatch(text)
@@ -86,6 +94,9 @@ func recurringFromText(text string) *recurringDamageSpec {
 		Source: m[4] != "its",
 		Attach: m[5] == "attach",
 	}
+	if c, ok := strings.CutSuffix(m[5], " condition"); ok {
+		spec.Condition = c
+	}
 	fmt.Sscanf(m[1], "%d", &spec.Average)
 	return spec
 }
@@ -94,6 +105,9 @@ func recurringFromText(text string) *recurringDamageSpec {
 // row rides on exists AND its source is still up - a dead creature's constrict or drain stops (the server's
 // grapple records outlive a dead grappler: releaseAllGrapplesFrom runs on Incapacitated, not death).
 func recurringDamageLive(lobbyID, rowID, targetID, sourceID int, spec recurringDamageSpec) bool {
+	if spec.Condition != "" { // the condition its source gave: it lasts whether or not that source still stands (a Pit Fiend's poison)
+		return conditionHeldFrom(lobbyID, targetID, spec.Condition, sourceID)
+	}
 	if sourceID < 0 && !monsterAlive(lobbyID, sourceID) {
 		return false
 	}
@@ -170,18 +184,24 @@ func init() {
 
 // recurringApplyOne deals one row's damage through the target's own Hit Point owner (defenses included).
 func recurringApplyOne(lobbyID, targetID int, spec recurringDamageSpec) string {
+	text, _ := recurringDeal(lobbyID, targetID, spec)
+	return text
+}
+
+// recurringDeal rolls the row's dice and deals them (recurringApplyOne); rolled is the roll before defenses, for the line.
+func recurringDeal(lobbyID, targetID int, spec recurringDamageSpec) (text string, rolled int) {
 	dmg := game.RollDamage(spec.Dice, false)
 	switch {
 	case targetID < 0:
 		text, _ := damageMonster(lobbyID, targetID, dmg, spec.Type)
-		return text
+		return text, dmg
 	case isCompanionCombatID(targetID):
 		if c, active := activeCompanionInCampaign(lobbyID, targetID); active {
-			return damageCompanion(c, dmg, spec.Type)
+			return damageCompanion(c, dmg, spec.Type), dmg
 		}
-		return ""
+		return "", dmg
 	default:
-		return damageCharacter(targetID, dmg, spec.Type)
+		return damageCharacter(targetID, dmg, spec.Type), dmg
 	}
 }
 
@@ -201,11 +221,11 @@ func recurringDamageRows(lobbyID int, ids []int) []string {
 		}
 		if !recurringDamageLive(lobbyID, rowID, target, source, *spec) {
 			db.Exec(`DELETE FROM combat_effects WHERE id=$1`, rowID)
-			log = append(log, fmt.Sprintf("The recurring damage on %s ends: the %s is over.", creatureName(lobbyID, target), map[bool]string{true: "attach", false: "grapple"}[spec.Attach]))
+			log = append(log, fmt.Sprintf("The recurring damage on %s ends: the %s is over.", creatureName(lobbyID, target), spec.gate()))
 			continue
 		}
-		if applied := recurringApplyOne(lobbyID, target, *spec); applied != "" {
-			log = append(log, fmt.Sprintf("%s %s (%s's recurring damage).", creatureName(lobbyID, target), applied, creatureName(lobbyID, source)))
+		if applied, rolled := recurringDeal(lobbyID, target, *spec); applied != "" {
+			log = append(log, fmt.Sprintf("%s %s (%s = %d: %s's recurring damage).", creatureName(lobbyID, target), applied, spec.Dice, rolled, creatureName(lobbyID, source)))
 		}
 	}
 	return log

@@ -354,6 +354,9 @@ var schemaSteps = []schemaStep{
  trait_name TEXT NOT NULL DEFAULT '', trait_text TEXT NOT NULL DEFAULT '', created_at TIMESTAMPTZ NOT NULL DEFAULT NOW())`},
 	// how much of a character's Hit Point maximum an effect took (Life Drain); a Long Rest gives it back (hit_points_2024.go)
 	{"hit_points_2024.go", `ALTER TABLE characters ADD COLUMN IF NOT EXISTS max_hp_reduced INTEGER NOT NULL DEFAULT 0`},
+	// a combat effect that lasts while its source's condition lasts on the target ("While Poisoned, ..."): the condition's name
+	// (condition_lasting_effects_2024.go); '' for the rest
+	{"condition_lasting_effects_2024.go", `ALTER TABLE combat_effects ADD COLUMN IF NOT EXISTS gate_condition TEXT NOT NULL DEFAULT ''`},
 }
 
 // seatReadySchema: a player's "ready to start" on its seat (cleared whenever the seat changes hands: takeSeat, swapSeat;
