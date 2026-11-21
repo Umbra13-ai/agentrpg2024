@@ -100,6 +100,9 @@ func runMonsterAttackSequence(lobby int, c monsterAttackCursor) (string, map[str
 		if len(a.Alts) > 0 {
 			a = applyDamageAlternatives(a, monsterHitCondition(lobby, c.Attacker, true, c.Target, rolled.HasAdvantage()))
 		}
+		chargeNote := ""
+		a.Desc, chargeNote = hitChargeDesc(lobby, c.Attacker, c.Target, a.Desc) // a charge's effect for this hit (creature_movement_2024.go)
+		note += chargeNote
 		dmg := rollStatBlockDamage(a.DamageDice, a.FlatDamage, out.Critical)
 		if dx, _ := enlargeHit(lobby, c.Attacker, dmg); dx != 0 {
 			dmg += dx

@@ -1403,6 +1403,7 @@ type gmNarrateRequest struct {
 		Use              string   `json:"use"`               // a choice the entry needs: Command's word, or the damage type for an attack that offers one (its own choice, or an extra amount "of the type chosen for the ... trait")
 		Point            []int    `json:"point"`             // [x, y]: the grid square an area is aimed at on the battle map (a Sphere's center, a Cone's or Line's direction)
 		AllyAdjacent     bool     `json:"ally_adjacent"`     // an ally of the monster (not Incapacitated) is within 5 feet of the target: Pack Tactics without a battle map
+		Charged          bool     `json:"charged"`           // the monster moved straight toward the target right before this attack, as far as its charge asks (20+ feet): used only without a battle map (with one, the server reads its move)
 		ConfirmTargeting bool     `json:"confirm_targeting"` // the GM confirmed required sight or distance that the server cannot determine
 		Attacks          []string `json:"attacks"`           // a choice Multiattack's declared composition: the named attacks in order, as many as the text makes ("Scimitar", "Shortbow"); validated against the text before anything is rolled
 	} `json:"monster_action"`
@@ -1516,6 +1517,7 @@ func handleGMNarrate(w http.ResponseWriter, r *http.Request) {
 		r, rec = withExecution(r) // what the server carries out is said by the code that does it (monster_day_uses.go)
 		rec.confirmTargeting = req.MonsterAction.ConfirmTargeting
 		r = withMultiattackDeclared(r, req.MonsterAction.Attacks) // a choice Multiattack's declared composition, validated against its text
+		r = withChargeSaid(r, req.MonsterAction.Charged)          // a charge said by the GM (no battle map: creature_movement_2024.go)
 		refused := func(status int, code, msg string, extra map[string]interface{}) {
 			reply := map[string]interface{}{"success": false, "error": code, "message": msg + " Nothing was recorded: the narration wasn't posted.",
 				"narration_recorded": false, "monster_action_refused": msg, "monster_action_result": msg}

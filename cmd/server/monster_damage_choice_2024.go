@@ -95,7 +95,8 @@ const (
 	condTargetBloodied                             // "if the target is Bloodied"
 	condTargetGrappled                             // "if the target is Grappled"
 	condTargetGrappledByUser                       // "if the target is Grappled by the mimic"
-	condGMJudged                                   // any other condition ("if the goat moved 20+ feet straight toward the target"): the primary damage is dealt and the GM is told
+	condCharged                                    // "if the goat moved 20+ feet straight toward the target immediately before the hit" (creature_movement_2024.go)
+	condGMJudged                                   // any other condition: the primary damage is dealt and the GM is told
 )
 
 // damageAlt replaces a hit's primary damage when Cond holds.
@@ -121,6 +122,9 @@ var damageConditionTexts = []struct {
 // classifyDamageCondition reads the condition text of an alternative damage amount; ok is false when the server cannot judge it.
 func classifyDamageCondition(tail string) (damageCond, bool) {
 	tail = strings.TrimSpace(strings.Trim(strings.TrimSpace(tail), ".,;—–-"))
+	if _, ok := chargeAltFeet(tail); ok {
+		return condCharged, true
+	}
 	for _, c := range damageConditionTexts {
 		if c.re.MatchString(tail) {
 			return c.cond, true
@@ -132,6 +136,7 @@ func classifyDamageCondition(tail string) (damageCond, bool) {
 // hitCondition is what the server knows about one hit when it picks between the primary and an alternative amount.
 type hitCondition struct {
 	Advantage, AttackerBloodied, TargetBloodied, TargetGrappled, TargetGrappledByAttacker bool
+	ChargedFeet                                                                           int // the attack's straight approach toward the target (chargedFeet)
 }
 
 func (h hitCondition) holds(c damageCond) bool {
@@ -153,6 +158,10 @@ func (h hitCondition) holds(c damageCond) bool {
 // applyDamageAlternatives returns the attack with the first alternative whose condition holds as its damage.
 func applyDamageAlternatives(a monsterActionRow, h hitCondition) monsterActionRow {
 	for _, alt := range a.Alts {
+		if n, ok := chargeAltFeet(alt.Text); ok && alt.Cond == condCharged && h.ChargedFeet >= n {
+			a.DamageDice, a.FlatDamage, a.DamageType = alt.Dice, alt.Flat, alt.Type
+			break
+		}
 		if h.holds(alt.Cond) {
 			a.DamageDice, a.FlatDamage, a.DamageType = alt.Dice, alt.Flat, alt.Type
 			break
@@ -164,7 +173,7 @@ func applyDamageAlternatives(a monsterActionRow, h hitCondition) monsterActionRo
 // monsterHitCondition gathers the facts alternatives ask about, for a monster (attackerID, 0 when it is outside the turn order)
 // hitting a target character (tid) in the campaign.
 func monsterHitCondition(lobbyID, attackerID int, haveTarget bool, tid int, advantage bool) hitCondition {
-	h := hitCondition{Advantage: advantage}
+	h := hitCondition{Advantage: advantage, ChargedFeet: chargedFeet(lobbyID, attackerID, tid)}
 	if attackerID != 0 {
 		for _, e := range combatEntries(lobbyID) {
 			if asInt(e["id"]) == attackerID {
@@ -401,8 +410,10 @@ func prepareMonsterAttack(a monsterActionRow, use string) (monsterActionRow, str
 // Wild Shape form's attack): a stat block whose damage depends on one is refused instead of dealt at its primary amount.
 func prepareUnconditionalAttack(a monsterActionRow, use string) (monsterActionRow, string) {
 	prepared, problem := prepareMonsterAttack(a, use)
-	if problem == "" && len(prepared.Alts) > 0 {
-		return prepared, a.Name + " has damage that depends on a condition (Advantage, Bloodied, Grappled) this path cannot judge; the GM must resolve it. Nothing was rolled."
+	for _, alt := range prepared.Alts {
+		if problem == "" && alt.Cond != condCharged { // a charge is judged on every path (creature_movement_2024.go)
+			return prepared, a.Name + " has damage that depends on a condition (Advantage, Bloodied, Grappled) this path cannot judge; the GM must resolve it. Nothing was rolled."
+		}
 	}
 	return prepared, problem
 }

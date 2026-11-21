@@ -155,11 +155,17 @@ func TestConditionalAlternativeDamage(t *testing.T) {
 	if _, problem := prepareUnconditionalAttack(attackRow(chimera), ""); problem == "" {
 		t.Error("an attack with conditional damage was accepted by a path that cannot judge it")
 	}
-	// what the server cannot judge is reported, not dropped
+	// a charge's alternative is judged from the attack's approach (condCharged, creature_movement_2024.go), not the GM's
 	ram := "Melee Attack Roll: +3, reach 5 ft. Hit: 4 (1d4 + 2) Bludgeoning damage, or 6 (1d8 + 2) Bludgeoning damage if the goat moved 20+ feet straight toward the target immediately before the hit."
 	p, problem := prepareMonsterAttack(attackRow(ram), "")
-	if problem != "" || !strings.Contains(gmJudgedAlternatives(p), "moved 20+ feet") || unappliedHitRider(ram) != "" {
-		t.Errorf("GM-judged alternative: %q %q %q", problem, gmJudgedAlternatives(p), unappliedHitRider(ram))
+	if problem != "" || gmJudgedAlternatives(p) != "" || len(p.Alts) != 1 || p.Alts[0].Cond != condCharged || unappliedHitRider(ram) != "" {
+		t.Errorf("a charge's alternative: %q %q %+v %q", problem, gmJudgedAlternatives(p), p.Alts, unappliedHitRider(ram))
+	}
+	// what the server cannot judge is reported, not dropped (invented wording)
+	wade := "Melee Attack Roll: +3, reach 5 ft. Hit: 4 (1d4 + 2) Bludgeoning damage, or 6 (1d8 + 2) Bludgeoning damage if the target is standing in water."
+	p, problem = prepareMonsterAttack(attackRow(wade), "")
+	if problem != "" || !strings.Contains(gmJudgedAlternatives(p), "standing in water") {
+		t.Errorf("GM-judged alternative: %q %q", problem, gmJudgedAlternatives(p))
 	}
 	// the typed drain is applied on every hit route now (hp_max_drain_2024.go): nothing is left for the GM; a sentence nothing applies is
 	clay := "Melee Attack Roll: +9, reach 5 ft. Hit: 10 (1d10 + 5) Bludgeoning damage plus 6 (1d12) Acid damage, and the target's Hit Point maximum decreases by an amount equal to the Acid damage taken."

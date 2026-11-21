@@ -931,6 +931,14 @@ func companionAttack(lobbyID int, c companion, a compAttack, targetID int) strin
 	if !out.Hit {
 		return ar.LineForAttacker(a.Name, out) + rollNote + "."
 	}
+	// a charge (creature_movement_2024.go): its alternative amount, then its sentences for this hit
+	if alts := parseMonsterAttack(a.Name, a.StatBlockText).Alts; len(alts) > 0 {
+		row := applyDamageAlternatives(monsterActionRow{DamageDice: a.Dice, FlatDamage: a.FlatDamage, DamageType: a.Type, Alts: alts}, hitCondition{ChargedFeet: chargedFeet(lobbyID, c.CombatID, targetID)})
+		a.Dice, a.FlatDamage, a.Type = row.DamageDice, row.FlatDamage, row.DamageType
+	}
+	chargeNote := ""
+	a.StatBlockText, chargeNote = hitChargeDesc(lobbyID, c.CombatID, targetID, a.StatBlockText)
+	rollNote += chargeNote
 	parts := []hitDamagePart{{Amount: rollStatBlockDamage(a.Dice, a.FlatDamage, out.Critical), Type: a.Type}}
 	for _, extra := range attackExtraDamage(a.StatBlockText) {
 		if extra.IfAdvantage && !ar.HasAdvantage() {

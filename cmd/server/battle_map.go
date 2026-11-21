@@ -466,6 +466,7 @@ func handleBattleMap(w http.ResponseWriter, r *http.Request, campaignID int, rou
 				}
 			}
 			if !req.ForcedMovement { // a monster's own movement against its Speed (monster_move_2024.go)
+				recordMapMoves(campaignID, m, req.Map) // each token's own move of this turn: a charge reads it (creature_movement_2024.go)
 				for _, note := range noteMonsterMoves(campaignID, m, req.Map) {
 					recordGMAction(db, campaignID, "monster_move", note, note)
 				}
@@ -677,6 +678,7 @@ func handleBattleMap(w http.ResponseWriter, r *http.Request, campaignID int, rou
 		battleMapError(w, 500, "map_write_failed")
 		return
 	}
+	recordCreatureMove(campaignID, actor.ID, startToken.Position, actor.Position, actor.Size, len(traversed)*battleMapStepFeet) // a charge reads it (creature_movement_2024.go)
 	reply := map[string]any{"position": actor.Position, "traversed": traversed, "interrupted": actor.Paused, "distance_ft": len(traversed) * battleMapStepFeet, "cost_ft": cost, "movement_remaining_ft": movement - cost, "map": m.playerView(actor)}
 	if len(carried) > 0 {
 		reply["carried"] = carried
