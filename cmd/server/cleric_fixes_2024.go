@@ -312,8 +312,10 @@ func greaterRestoration(charID, lobby int, description string, targets []int) st
 	switch {
 	case strings.Contains(d, "exhaust"):
 		return exhaustion()
-	case !namesCondition && (strings.Contains(d, "curse") || strings.Contains(d, "score") || strings.Contains(d, "maximum")):
-		return " Greater Restoration: " + name + "'s curse, ability score reduction or Hit Point maximum reduction is removed (the GM restores the number)."
+	case !namesCondition && (strings.Contains(d, "score") || namesAbility(d) != ""):
+		return restoreAbilityScore(lobby, id, name, namesAbility(d))
+	case !namesCondition && (strings.Contains(d, "curse") || strings.Contains(d, "maximum")):
+		return " Greater Restoration: " + name + "'s curse or Hit Point maximum reduction is removed (the GM restores the number)."
 	case !namesCondition && ex > 0:
 		return exhaustion()
 	}
@@ -324,7 +326,35 @@ func greaterRestoration(charID, lobby int, description string, targets []int) st
 	case named != "":
 		return fmt.Sprintf(" Greater Restoration: %s doesn't have the %s condition.", name, titleCase(named))
 	}
-	return " Greater Restoration: " + name + " has none of the effects the spell removes (Exhaustion, " + spellEndsWords("greater-restoration") + "; name a curse or a reduction for the GM)."
+	if len(openAbilityReductions(lobby, id, "")) > 0 { // nothing else named or present: a reduced score
+		return restoreAbilityScore(lobby, id, name, "")
+	}
+	return " Greater Restoration: " + name + " has none of the effects the spell removes (Exhaustion, " + spellEndsWords("greater-restoration") + ", a reduced ability score; name a curse or a Hit Point maximum reduction for the GM)."
+}
+
+// namesAbility: the ability a description names ("restore her Strength"), "" for none.
+func namesAbility(d string) string {
+	for _, w := range strings.FieldsFunc(d, func(r rune) bool { return r == ' ' || r == ',' || r == '.' || r == ':' || r == '\'' }) {
+		if len(w) >= 3 && (len(w) > 3 || w == "str" || w == "dex" || w == "con" || w == "int" || w == "wis" || w == "cha") {
+			if k := abilityKeyOf(w); k != "" {
+				return k
+			}
+		}
+	}
+	return ""
+}
+
+// restoreAbilityScore: Greater Restoration's "any reduction to one of the target's ability scores": the ability score owner ends
+// the reductions of the named ability (or the first reduced one) and gives the score back (ability_owner_2024.go).
+func restoreAbilityScore(lobby, id int, name, ability string) string {
+	short, by, err := endAbilityReductions(lobby, id, ability)
+	switch {
+	case err != nil:
+		return " Greater Restoration: " + name + "'s ability score couldn't be restored (" + notFoundOrDBError(err, "no such creature") + ")."
+	case by == 0:
+		return " Greater Restoration: " + name + " has no reduced ability score."
+	}
+	return fmt.Sprintf(" Greater Restoration: the reduction of %s's %s ends (+%d, now %d).", name, abilityLabels[abilityColumn[short]], by, creatureAbilityScore(lobby, id, short))
 }
 
 func init() {

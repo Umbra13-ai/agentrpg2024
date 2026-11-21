@@ -19,6 +19,7 @@ package main
 //     bring: Unconscious), when the druid dies, or early as a Bonus Action (revert_wild_shape).
 
 import (
+	"database/sql"
 	"encoding/json"
 	"fmt"
 	"github.com/agentrpg/agentrpg/game"
@@ -120,9 +121,6 @@ func wildShapeRest(charID int, long bool) {
 
 // enterWildShapeStats swaps in the beast's Strength, Dexterity, Constitution and AC, keeping the druid's own to restore.
 func enterWildShapeStats(charID int, slug, description string) string {
-	var str, dex, con, ac int
-	db.QueryRow(`SELECT str, dex, con, COALESCE(ac,10) FROM characters WHERE id = $1`, charID).Scan(&str, &dex, &con, &ac)
-	saved, _ := json.Marshal(map[string]int{"str": str, "dex": dex, "con": con, "ac": ac})
 	var bstr, bdex, bcon, bac int
 	db.QueryRow(`SELECT str, dex, con, ac FROM monsters WHERE slug = $1`, slug).Scan(&bstr, &bdex, &bcon, &bac)
 	low := strings.ToLower(description)
@@ -145,8 +143,18 @@ func enterWildShapeStats(charID int, slug, description string) string {
 	if hours < 1 {
 		hours = 1
 	}
-	db.Exec(`UPDATE characters SET wild_shape_saved = $1, str = $2, dex = $3, con = $4, ac = $5, wild_shape_equipment = $6, wild_shape_rounds_left = $7 WHERE id = $8`,
-		string(saved), bstr, bdex, bcon, bac, equip, hours*600, charID)
+	// the form's scores through the ability score owner (ability_owner_2024.go); the druid keeps its Hit Points (SRD 5.2.1 Wild Shape)
+	changeAbilities(charID, abilityHow{KeepHP: true}, func(tx *sql.Tx, a *abilityRow) error {
+		var ac int
+		if err := tx.QueryRow(`SELECT COALESCE(ac,10) FROM characters WHERE id = $1`, charID).Scan(&ac); err != nil {
+			return err
+		}
+		saved, _ := json.Marshal(map[string]int{"str": a.Scores["str"], "dex": a.Scores["dex"], "con": a.Scores["con"], "ac": ac})
+		a.Scores["str"], a.Scores["dex"], a.Scores["con"] = bstr, bdex, bcon
+		_, err := tx.Exec(`UPDATE characters SET wild_shape_saved = $1, ac = $2, wild_shape_equipment = $3, wild_shape_rounds_left = $4 WHERE id = $5`,
+			string(saved), bac, equip, hours*600, charID)
+		return err
+	})
 	return note + fmt.Sprintf(" The form lasts up to %d hour%s.", hours, map[bool]string{true: "", false: "s"}[hours == 1])
 }
 
@@ -228,8 +236,12 @@ func leaveWildShape(charID int, reason string) string {
 	}
 	var s map[string]int
 	json.Unmarshal(saved, &s)
-	if s != nil {
-		db.Exec(`UPDATE characters SET str = $1, dex = $2, con = $3, ac = $4 WHERE id = $5`, s["str"], s["dex"], s["con"], s["ac"], charID)
+	if s != nil { // the druid's own scores back (ability_owner_2024.go; its Hit Points were never changed)
+		changeAbilities(charID, abilityHow{KeepHP: true}, func(tx *sql.Tx, a *abilityRow) error {
+			a.Scores["str"], a.Scores["dex"], a.Scores["con"] = s["str"], s["dex"], s["con"]
+			_, err := tx.Exec(`UPDATE characters SET ac = $1 WHERE id = $2`, s["ac"], charID)
+			return err
+		})
 	}
 	db.Exec(`UPDATE characters SET wild_shape_form = NULL, wild_shape_saved = NULL, wild_shape_rounds_left = NULL WHERE id = $1`, charID)
 	var beast string

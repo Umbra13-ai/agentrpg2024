@@ -373,6 +373,37 @@ combat_effects, so the effects end with the fight (the poison lasts a minute at 
 with the repeated save. Tested: `TestLastingEffectsAreReadNotDealtNow` (the SRD entries and the whole catalog),
 `TestPostgresPoisonThatStopsHealing` (POST /api/gm/narrate Bite: no poison damage now, no healing, the tick with its dice, the end).
 
+## A hit's ability score decrease (`cmd/server/ability_owner_2024.go`, `hitAfterDamage`)
+
+"Hit: ... and the target's Strength score decreases by 1d4. The target dies if this reduces that score to 0." (SRD 5.2.1 Shadow
+Draining Swipe). `abilityDecreaseRe` reads the ability, the amount and the death clause; `abilityDecreaseOnHit` (in `hitAfterDamage`, so
+every hit route: character, monster, companion) rolls the amount and lowers the score through the ability score owner (`reduceAbility`:
+a character's column, a monster's or companion's open reductions read by its saves and checks). A score of 0 kills when the text says so
+(a character through the Hit Point owner; a monster or companion at 0 Hit Points). The 2024 text gives the decrease no end of its own (the
+2014 "until a Short or Long Rest" is gone): it lasts until an effect removes it, Greater Restoration's "any reduction to one of the
+target's ability scores" (`restoreAbilityScore`). The residual no longer gives the clause to the GM; "a Shadow rises from the corpse 1d4
+hours later" stays the GM's. Catalog parse diff: only the Shadow. Tested: `TestPostgresAbilityDrainOnEveryTarget` (POST /api/gm/narrate at
+a character, a monster and a companion; the sheet and saves; Greater Restoration; Strength 0 kills).
+
+## Corroded and stuck items (`cmd/server/item_state_2024.go`)
+
+One owner of an item's state, kept on the item in the inventory and written through the inventory writer:
+- Gray Ooze Pseudopod, Black Pudding Dissolving Pseudopod (a hit, `hitAfterDamage`): "Nonmagical armor worn by the target takes a -1
+  penalty to the AC it offers. The armor is destroyed if the penalty reduces its AC to 10." The worn armor's corrosion is read by the AC;
+  destroyed armor comes off.
+- Corrosive Form (Gray Ooze, Black Pudding; a trait the attacker meets): a character's weapon hit that dealt damage corrodes the weapon
+  (-1 to attack rolls, read by `weaponAttackMods`; destroyed at -5) or destroys the nonmagical ammunition (not recovered after the fight).
+  Stage 8 of the character's hit continuation. A monster's or companion's weapon is part of its stat block: no item.
+- Rust Monster Antennae (a saving throw on "one nonmagical metal object"): on a failure, the worn nonmagical metal armor, else the
+  nonmagical metal weapon in hand (`saveEffect.ItemPenalty`). Destroy Metal touches an object nobody wears or carries: the GM's.
+- Mending removes the penalty (`mendItem`: the item named, or the only corroded one).
+- Kuo-toa Sticky Shield (a Reaction to a melee weapon attack that missed, recorded this turn): the Strength save is the attacker's; on a
+  failure the weapon sticks fast (an attack with it is refused), the wielder who holds on is Grappled (escape DC 11), and use_item on the
+  weapon is the action of the DC 11 Strength (Athletics) check that frees it and ends that grapple.
+None of these sentences reaches the GM's residual any more. Catalog parse diff: Gray Ooze, Black Pudding, Rust Monster (the Kuo-toa is
+not SRD; its rule is read from the same wording). Tested: `TestPostgresItemCorrosion` (POST /api/gm/narrate and POST /api/action, invented
+creatures with the published sentences).
+
 ## A hit's Hit Point maximum drain (`cmd/server/hp_max_drain_2024.go`)
 
 "If the target is a creature, its Hit Point maximum decreases by an amount equal to the damage taken" (SRD 5.2.1 Specter and Wraith Life

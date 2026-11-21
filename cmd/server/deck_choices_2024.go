@@ -11,6 +11,7 @@ package main
 // 72 hours count as three dawns). The Moon leaves a "Moon card: Wish" entry with 1d3 charges to cast Wish from.
 
 import (
+	"database/sql"
 	"fmt"
 	"regexp"
 	"strconv"
@@ -188,28 +189,28 @@ func resolveDeckChoice(charID int, it invItem, description string) (string, bool
 		if up == "" || down == "" || up == down {
 			return "Cannot settle Balance: say which score goes up and which goes down, \"balance: +dex -str\" (or \"balance: none\"). Nothing changed.", true
 		}
-		cu, cd := abilityScoreCol(charID, up), abilityScoreCol(charID, down)
-		if cd <= 5 {
-			return fmt.Sprintf("Cannot lower your %s: it is %d (a score of 5 or lower can't be decreased). Nothing changed.", abilityLabels[down], cd), true
+		var cu, cd, nu int
+		refused := ""
+		changeAbilities(charID, abilityHow{}, func(_ *sql.Tx, a *abilityRow) error { // the ability score owner (ability_owner_2024.go)
+			cu, cd = a.Scores[abilityKeyOf(up)], a.Scores[abilityKeyOf(down)]
+			if cd <= 5 {
+				refused = fmt.Sprintf("Cannot lower your %s: it is %d (a score of 5 or lower can't be decreased). Nothing changed.", abilityLabels[down], cd)
+				return errNoAbilityChange
+			}
+			nu = min(22, cu+2)
+			a.Scores[abilityKeyOf(up)], a.Scores[abilityKeyOf(down)] = nu, cd-2
+			return nil
+		})
+		if refused != "" {
+			return refused, true
 		}
-		nu := cu + 2
-		if nu > 22 {
-			nu = 22
-		}
-		setAbilityScore(charID, up, nu)
-		setAbilityScore(charID, down, cd-2)
 		out = fmt.Sprintf("Balance: your %s is %d (from %d) and your %s %d (from %d).", abilityLabels[up], nu, cu, abilityLabels[down], cd-2, cd)
 	case "Star":
 		col := abilityFromText(arg)
 		if col == "" {
 			return "Cannot settle the Star: name the score, \"star: wisdom\". Nothing changed.", true
 		}
-		cur := abilityScoreCol(charID, col)
-		n := cur + 2
-		if n > 24 {
-			n = 24
-		}
-		setAbilityScore(charID, col, n)
+		cur, n := addAbilityScore(charID, col, 2, 24)
 		out = fmt.Sprintf("Star: your %s is %d (from %d; 24 at most).", abilityLabels[col], n, cur)
 	case "Throne":
 		skill := ""
@@ -232,12 +233,13 @@ func resolveDeckChoice(charID int, it invItem, description string) (string, bool
 		if col != "intl" && col != "wis" {
 			return "Cannot settle the Puzzle: choose Intelligence or Wisdom, \"puzzle: wisdom\". Nothing changed.", true
 		}
-		cur := abilityScoreCol(charID, col)
-		v := cur - n
-		if v < 1 {
-			v = 1
-		}
-		setAbilityScore(charID, col, v)
+		var cur, v int
+		changeAbilities(charID, abilityHow{}, func(_ *sql.Tx, a *abilityRow) error { // ability_owner_2024.go
+			cur = a.Scores[abilityKeyOf(col)]
+			v = max(1, cur-n)
+			a.Scores[abilityKeyOf(col)] = v
+			return nil
+		})
 		out = fmt.Sprintf("Puzzle: your %s drops permanently to %d (from %d).", abilityLabels[col], v, cur)
 	case "Jester":
 		switch {
@@ -275,24 +277,6 @@ func abilityFromText(arg string) string {
 		}
 	}
 	return ""
-}
-
-func abilityScoreCol(charID int, col string) int {
-	var v int
-	db.QueryRow(`SELECT `+col+` FROM characters WHERE id = $1`, charID).Scan(&v)
-	return v
-}
-
-// setAbilityScore changes a score; a new Constitution modifier changes the Hit Point maximum by the level for each point of modifier.
-func setAbilityScore(charID int, col string, v int) {
-	if col == "con" {
-		var old, level int
-		db.QueryRow(`SELECT con, level FROM characters WHERE id = $1`, charID).Scan(&old, &level)
-		if d := (game.Modifier(v) - game.Modifier(old)) * level; d != 0 {
-			changeMaxHP(charID, d, true) // the Hit Point owner (hit_points_2024.go)
-		}
-	}
-	db.Exec(`UPDATE characters SET `+col+` = $1 WHERE id = $2`, v, charID)
 }
 
 func addListWord(list, word string) string {

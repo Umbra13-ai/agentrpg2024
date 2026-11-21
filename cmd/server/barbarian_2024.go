@@ -248,19 +248,37 @@ func classCapstones(charID int, name, class string, level int) string {
 			})
 		}
 		if level >= 20 && !applied {
-			var conBefore int
-			db.QueryRow(`SELECT con FROM characters WHERE id = $1`, charID).Scan(&conBefore)
-			db.Exec(`UPDATE characters SET str = LEAST(25, str + 4), con = LEAST(25, con + 4), capstone_scores_applied = true WHERE id = $1`, charID)
-			conHitPoints(charID, "con", conBefore, minInt(25, conBefore+4)) // a higher Constitution modifier raises the Hit Point maximum for every level
+			capstoneScores(charID, "str", "con") // the ability score owner: a higher Constitution modifier raises the Hit Point maximum
 			note = strings.TrimSpace(note + fmt.Sprintf(" Primal Champion: %s's Strength and Constitution rise by 4 (maximum 25)", name))
 		}
 	case "monk":
 		if level >= 20 && !applied {
-			db.Exec(`UPDATE characters SET dex = LEAST(25, dex + 4), wis = LEAST(25, wis + 4), capstone_scores_applied = true WHERE id = $1`, charID)
+			capstoneScores(charID, "dex", "wis")
 			note = fmt.Sprintf("🥋 %s: Body and Mind: Dexterity and Wisdom rise by 4 (maximum 25)", name)
 		}
 	}
 	return note
+}
+
+// capstoneScores: Primal Champion (Barbarian 20) and Body and Mind (Monk 20) raise two scores by 4, to a maximum of 25, once
+// (capstone_scores_applied), in one step of the ability score owner (ability_owner_2024.go).
+func capstoneScores(charID int, abilities ...string) {
+	changeAbilities(charID, abilityHow{}, func(tx *sql.Tx, a *abilityRow) error {
+		var applied bool
+		if err := tx.QueryRow(`SELECT COALESCE(capstone_scores_applied, false) FROM characters WHERE id = $1`, charID).Scan(&applied); err != nil {
+			return err
+		}
+		if applied {
+			return errNoAbilityChange
+		}
+		for _, ab := range abilities {
+			if a.Scores[ab] < 25 {
+				a.Scores[ab] = min(25, a.Scores[ab]+4)
+			}
+		}
+		_, err := tx.Exec(`UPDATE characters SET capstone_scores_applied = true WHERE id = $1`, charID)
+		return err
+	})
 }
 
 // Rage duration (2024): a Rage lasts until the end of your next turn. It is extended for another round when you make an attack roll

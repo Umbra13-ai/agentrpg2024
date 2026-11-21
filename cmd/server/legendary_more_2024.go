@@ -968,11 +968,16 @@ func refreshMightOfGiants(charID int) string {
 		}
 	}
 	var cur int
-	db.QueryRow(`SELECT str FROM characters WHERE id = $1`, charID).Scan(&cur)
+	changeAbilities(charID, abilityHow{}, func(_ *sql.Tx, a *abilityRow) error { // ability_owner_2024.go
+		if cur = a.Scores["str"]; cur == want || (cur > want && cur > best+4) {
+			return errNoAbilityChange
+		}
+		a.Scores["str"] = want
+		return nil
+	})
 	if cur == want || (cur > want && cur > best+4) {
 		return ""
 	}
-	db.Exec(`UPDATE characters SET str = $1 WHERE id = $2`, want, charID)
 	if want > best {
 		return fmt.Sprintf(" Might of Giants (Hammer of Thunderbolts): your Strength is %d.", want)
 	}

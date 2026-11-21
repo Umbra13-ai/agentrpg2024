@@ -106,35 +106,12 @@ func handleGMUpdateCharacter(w http.ResponseWriter, r *http.Request) {
 		args = append(args, *req.Name)
 		argNum++
 	}
-	if req.STR != nil {
-		updates = append(updates, fmt.Sprintf("str = $%d", argNum))
-		args = append(args, *req.STR)
-		argNum++
-	}
-	if req.DEX != nil {
-		updates = append(updates, fmt.Sprintf("dex = $%d", argNum))
-		args = append(args, *req.DEX)
-		argNum++
-	}
-	if req.CON != nil {
-		updates = append(updates, fmt.Sprintf("con = $%d", argNum))
-		args = append(args, *req.CON)
-		argNum++
-	}
-	if req.INT != nil {
-		updates = append(updates, fmt.Sprintf("intl = $%d", argNum))
-		args = append(args, *req.INT)
-		argNum++
-	}
-	if req.WIS != nil {
-		updates = append(updates, fmt.Sprintf("wis = $%d", argNum))
-		args = append(args, *req.WIS)
-		argNum++
-	}
-	if req.CHA != nil {
-		updates = append(updates, fmt.Sprintf("cha = $%d", argNum))
-		args = append(args, *req.CHA)
-		argNum++
+	// the scores go through the ability score owner (ability_owner_2024.go), after the other fields
+	scores := map[string]int{}
+	for short, v := range map[string]*int{"str": req.STR, "dex": req.DEX, "con": req.CON, "int": req.INT, "wis": req.WIS, "cha": req.CHA} {
+		if v != nil {
+			scores[short] = *v
+		}
 	}
 	// Hit Points are set by the Hit Point owner (hit_points_2024.go), after the other fields (a new max_hp first): 0 to the maximum,
 	// from 0 the Death Saving Throws reset, to 0 the character is dying. The shortcut and set's "hp" both go there.
@@ -194,7 +171,7 @@ func handleGMUpdateCharacter(w http.ResponseWriter, r *http.Request) {
 		changed = append(changed, "level")
 	}
 
-	if len(updates) == 0 && len(req.Items) == 0 && len(changed) == 0 && hpTo == nil {
+	if len(updates) == 0 && len(req.Items) == 0 && len(changed) == 0 && hpTo == nil && len(scores) == 0 {
 		w.WriteHeader(http.StatusBadRequest)
 		json.NewEncoder(w).Encode(map[string]interface{}{"error": "no_updates", "message": "No fields to update"})
 		return
@@ -207,6 +184,12 @@ func handleGMUpdateCharacter(w http.ResponseWriter, r *http.Request) {
 		_, err = db.Exec(query, args...)
 		if err != nil {
 			writeDBWriteError(w, err, "the character")
+			return
+		}
+	}
+	if len(scores) > 0 {
+		if _, err := setAbilityScores(req.CharacterID, scores); err != nil {
+			writeDBWriteError(w, err, "the character's ability scores")
 			return
 		}
 	}

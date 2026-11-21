@@ -125,6 +125,10 @@ type saveEffect struct {
 	CondMaxSize        string              // "If the target is a Huge or smaller creature, ... has the Prone condition": the conditions apply only to a target of this size or smaller
 	CondIfAdvantage    bool                // "... and the darkmantle had Advantage on the attack roll": the conditions apply only when the roll had Advantage (enforced by the hit caller, which has the roll)
 	Lasting            *lastingEffects     // "While Poisoned, the target can't regain Hit Points and takes ... at the start of each of its turns" (condition_lasting_effects_2024.go)
+	ItemPenalty        string              // "The object takes a -1 penalty to the AC it offers (armor) or to its attack rolls (weapon)": "metal" (a metal object only) or "any" (item_state_2024.go)
+	StickEscapeDC      int                 // the escape DC of the grapple while the wielder holds on to the stuck weapon (item_state_2024.go)
+	StickFreeDC        int                 // "The attack's weapon sticks to the kuo-toa's shield ... a DC 11 Strength (Athletics) check, freeing the weapon": the check's DC (item_state_2024.go)
+	StuckWeapon        string              // the weapon that missed (set by the Reaction that answers the miss): what a failure sticks fast
 	Extra              string              // Failure text the server doesn't apply (for the GM)
 	Emanation          int                 // feet, when the targets are in an Emanation from the monster
 	IsMagical          bool                // a nonspell effect explicitly labeled magical by its stat block
@@ -591,6 +595,12 @@ func parseHitRider(desc string) (saveEffect, bool) {
 	if stripped := stripBurnForCreatures(e.Extra); stripped != e.Extra {
 		e.Extra = strings.Trim(stripped, " .")
 	}
+	if stripped := stripAbilityDecrease(e.Extra); stripped != e.Extra { // hitAfterDamage applies it
+		e.Extra = strings.Trim(stripped, " .")
+	}
+	if stripped := stripItemPenalties(e.Extra); stripped != e.Extra { // hitAfterDamage corrodes the armor (item_state_2024.go)
+		e.Extra = strings.Trim(stripped, " .")
+	}
 	if stripped := stripForcedMoves(e.Extra); stripped != e.Extra { // a push or pull: applied by hitAfterDamage
 		e.Extra = strings.Trim(stripped, " .")
 	}
@@ -719,6 +729,16 @@ func parseSaveEffect(text string) (saveEffect, bool) {
 		if dtype, ok := hpMaxDrainOf(both); ok {
 			e.Drain = &hpDrain{Type: dtype, OnSuccess: true, Regain: drainRegainRe.MatchString(both)}
 		}
+	}
+	if objectOnFailureRe.MatchString(fail) { // the item state owner corrodes the object (item_state_2024.go): not the GM's text
+		e.ItemPenalty = "any"
+		if metalObjectOnlyRe.MatchString(text) {
+			e.ItemPenalty = "metal"
+		}
+		fail = strings.TrimSpace(objectOnFailureRe.ReplaceAllString(fail, ""))
+	}
+	if dc, escape, rest, ok := readStuckWeapon(fail); ok { // the weapon stuck fast and the grapple of the wielder who holds on: the item state owner (item_state_2024.go)
+		e.StickFreeDC, e.StickEscapeDC, fail = dc, escape, rest
 	}
 	extra := e.readRider(fail)
 	if branch := e.readSevereFailure(text); branch != "" {
@@ -878,6 +898,16 @@ func (e saveEffect) finishTarget(lobby, target int, source string, apply, saved 
 		return nil, false
 	}
 	parts = e.giveAlways(lobby, target, source)
+	if !saved && e.StickFreeDC > 0 && e.StuckWeapon != "" { // the weapon that missed sticks fast (item_state_2024.go)
+		if line := strings.TrimSpace(stickWeapon(lobby, target, e.SourceID, e.StuckWeapon, e.StickFreeDC, e.StickEscapeDC)); line != "" {
+			parts = append(parts, line)
+		}
+	}
+	if !saved && e.ItemPenalty != "" { // the creature's armor or weapon corrodes (item_state_2024.go)
+		if line := strings.TrimSpace(corrodeCarriedObject(lobby, target, e.ItemPenalty == "metal")); line != "" {
+			parts = append(parts, line)
+		}
+	}
 	if !saved {
 		if e.SeverePoison != nil && failedBy >= e.SeverePoison.Margin {
 			return append(parts, e.giveSeverePoison(lobby, target, source)...), false

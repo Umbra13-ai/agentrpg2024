@@ -42,6 +42,7 @@ func characterACWith(charID int, armor string, shield bool) int {
 		}
 	} // armor only being weighed (auto-equip, reminders) leaves Mage Armor alone
 	ac := calculateArmorACWithNatural(game.Modifier(dex), armor, shieldCounts(charID, shield), natural)
+	ac -= armorCorrosionOf(charID, armor) // a corroded armor offers less (item_state_2024.go)
 	ac += magicACBonus(charID, armor, shieldCounts(charID, shield))
 	if armor != "" && hasFightingStyle(charID, "defense") {
 		ac++

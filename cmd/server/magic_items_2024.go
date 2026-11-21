@@ -14,12 +14,11 @@ package main
 //     score goes back when the attunement ends.
 
 import (
+	"database/sql"
 	"encoding/json"
 	"regexp"
 	"strconv"
 	"strings"
-
-	"github.com/agentrpg/agentrpg/game"
 )
 
 var plusRe = regexp.MustCompile(`\+\s*([123])\b`)
@@ -192,40 +191,43 @@ func applyAttunementScore(charID int, item string, attuned bool) string {
 	if col == "" {
 		return ""
 	}
-	var raw []byte
-	db.QueryRow(`SELECT COALESCE(item_base_scores,'{}') FROM characters WHERE id = $1`, charID).Scan(&raw)
-	base := map[string]int{}
-	json.Unmarshal(raw, &base)
-	var cur int
-	db.QueryRow(`SELECT `+col+` FROM characters WHERE id = $1`, charID).Scan(&cur)
 	label := map[string]string{"str": "Strength", "con": "Constitution", "intl": "Intelligence"}[col]
-	if score == 0 { // Belt of Dwarvenkind, Ioun Stone of Fortitude: +2 to a maximum of 20
-		if old, kept := base[col]; kept {
-			score = min(20, old+2)
-		} else {
-			score = min(20, cur+2)
+	short := abilityKeyOf(col)
+	reply := ""
+	// one step of the ability score owner (ability_owner_2024.go): the kept score and the new one together; a new Constitution
+	// modifier changes the Hit Point maximum there
+	changeAbilities(charID, abilityHow{}, func(_ *sql.Tx, a *abilityRow) error {
+		cur := a.Scores[short]
+		want := score
+		if want == 0 { // Belt of Dwarvenkind, Ioun Stone of Fortitude: +2 to a maximum of 20
+			if old, kept := a.Base[col]; kept {
+				want = min(20, old+2)
+			} else {
+				want = min(20, cur+2)
+			}
 		}
-	}
-	if attuned {
-		if cur >= score {
-			return " Your " + label + " is already " + strconv.Itoa(cur) + ", so it has no effect on the score."
+		if attuned {
+			if cur >= want {
+				reply = " Your " + label + " is already " + strconv.Itoa(cur) + ", so it has no effect on the score."
+				return errNoAbilityChange
+			}
+			if _, kept := a.Base[col]; !kept {
+				a.Base[col] = cur
+			}
+			a.Scores[short] = want
+			reply = " Your " + label + " is now " + strconv.Itoa(want) + "."
+			return nil
 		}
-		if _, kept := base[col]; !kept {
-			base[col] = cur
+		old, kept := a.Base[col]
+		if !kept {
+			return errNoAbilityChange
 		}
-		b, _ := json.Marshal(base)
-		db.Exec(`UPDATE characters SET `+col+` = $1, item_base_scores = $2 WHERE id = $3`, score, b, charID)
-		conHitPoints(charID, col, cur, score)
-		return " Your " + label + " is now " + strconv.Itoa(score) + "."
-	}
-	if old, kept := base[col]; kept {
-		delete(base, col)
-		b, _ := json.Marshal(base)
-		db.Exec(`UPDATE characters SET `+col+` = $1, item_base_scores = $2 WHERE id = $3`, old, b, charID)
-		conHitPoints(charID, col, cur, old)
-		return " Your " + label + " goes back to " + strconv.Itoa(old) + "."
-	}
-	return ""
+		delete(a.Base, col)
+		a.Scores[short] = old
+		reply = " Your " + label + " goes back to " + strconv.Itoa(old) + "."
+		return nil
+	})
+	return reply
 }
 
 func asString(v interface{}) string {
@@ -233,21 +235,6 @@ func asString(v interface{}) string {
 		return s
 	}
 	return ""
-}
-
-// conHitPoints: when the Constitution modifier changes, the Hit Point maximum changes by that much for every level.
-func conHitPoints(charID int, col string, from, to int) {
-	if col != "con" {
-		return
-	}
-	d := game.Modifier(to) - game.Modifier(from)
-	if d == 0 {
-		return
-	}
-	var level int
-	if db.QueryRow(`SELECT level FROM characters WHERE id = $1`, charID).Scan(&level) == nil {
-		changeMaxHP(charID, d*level, true) // the Hit Point owner (hit_points_2024.go)
-	}
 }
 
 // minInt is the smaller of two ints.

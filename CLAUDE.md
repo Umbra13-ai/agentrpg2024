@@ -151,6 +151,26 @@ Report: "Wizard Scholar accepts any skill for Expertise."
   (`hpDamage.ByType`, the monster cursor's `Dealt`, the companion route's). A saving throw effect: `saveEffect.Drain`, applied by
   `drainAfterDamage` after each damage part on the character, monster and companion save routes, with the source's regain
   (`drainRegain`, the monster HP owner). Go: `TestPostgresLifeDrainOnEveryTarget`.
+- **A creature's ability scores** (`cmd/server/ability_owner_2024.go`): `changeAbilities` (`changeAbilitiesIn` in a caller's transaction,
+  then `abilitiesChanged`) is the one writer of a character's six score columns and `item_base_scores`: the row locked, the scores
+  changed and written in one transaction; a new Constitution modifier changes the Hit Point maximum by the level (the Hit Point owner)
+  unless `abilityHow.KeepHP` (Wild Shape). On it: the Ability Score Improvement and the feat claim (their guarded claims run inside the
+  change), the capstones (`capstoneScores`), potions, tomes and attunement items, the Deck's cards, Wild Shape, the GM's and the admin's
+  editors (`setAbilityScores`). **A reduction** (Shadow Draining Swipe: "the target's Strength score decreases by 1d4. The target dies if
+  this reduces that score to 0") is `reduceAbility`: an `ability_reductions` row with its source; a character's column is lowered (every
+  reader of the column reads the reduced score); a monster's or companion's score is its stat block's less its open reductions
+  (`creatureAbilityScore`, `monsterAbilityShift`: read by `saveModifier`, `creatureStats` and the grapple escape). The 2024 text gives it
+  no end: Greater Restoration ends it (`endAbilityReductions`, `restoreAbilityScore`). A hit's decrease is read by `abilityDecreaseOnHit`
+  through `hitAfterDamage`. `TestNoOtherAbilityScoreWriter` checks; Go: `TestPostgresAbilityDrainOnEveryTarget`.
+- **The state of one item a character carries** (`cmd/server/item_state_2024.go`), kept on the item in the inventory and written only
+  through the inventory writer: **corrosion** (`corrodeItem`: -1 to a weapon's attack rolls, read by `weaponAttackMods`; -1 to the AC an
+  armor offers, read by `characterACWith`; destroyed at -5 or at AC 10; a magic item spared, `itemIsMagic`; `metalArmor` /
+  `nonMetalWeapons` for "a nonmagical metal object") from a hit (`corrodeArmorOnHit` in `hitAfterDamage`: Gray Ooze, Black Pudding), a
+  trait the attacker touches (`corrodeOnContact`, stage 8 of `runCharacterHitTail`: Corrosive Form, the ammunition destroyed) and a
+  failed save (`saveEffect.ItemPenalty`, `corrodeCarriedObject`: Rust Monster Antennae); Mending removes it (`itemRepairSpells`,
+  `mendItem`). **A weapon stuck fast** (Kuo-toa Sticky Shield: `readStuckWeapon`, `stickWeapon` with the wielder Grappled, refused by
+  `stuckWeaponRefusal` in the attack, freed by use_item: `freeStuckWeapon`); the Reaction that answers a miss reads the miss recorded this
+  turn (`noteCharMissOnMonster` / `thisTurnMissOnMonster`, `reactMissWeaponRe`). Go: `TestPostgresItemCorrosion`.
 - **A condition's second stage** (SRD 5.2.1 Sleep; a monster's "Second Failure:"): `conditionSave.Then` / `ThenRounds` /
   `ThenEndsOnDamage` / `ThenMagicalSleep` on the record's repeated save; `condition_turns.go` turns the record into the second condition
   on a failed repeat. A spell's stage is a row of `spellStages` (`endSaveFor`, `spell_effects.go`), read by a character's and a monster's

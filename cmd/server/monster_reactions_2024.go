@@ -76,6 +76,32 @@ func thisTurnHitOnMonster(lobbyID, monsterID int) (charHitOnMonster, bool) {
 	return h, true
 }
 
+// charMissOnMonster: a character's attack roll that missed a monster this turn, for a Reaction whose trigger is that miss (Sticky
+// Shield: "Trigger: A creature misses the kuo-toa with a melee attack roll using a weapon").
+type charMissOnMonster struct {
+	Marker string
+	CharID int
+	Weapon string // the weapon's key ("" or "unarmed": no weapon)
+}
+
+var lastMissOnMonster sync.Map // "lobby:monster" -> charMissOnMonster (the latest character miss this turn)
+
+func noteCharMissOnMonster(lobbyID, monsterID, charID int, weapon string) {
+	lastMissOnMonster.Store(fmt.Sprintf("%d:%d", lobbyID, monsterID), charMissOnMonster{Marker: combatTurnMarker(lobbyID), CharID: charID, Weapon: weapon})
+}
+
+func thisTurnMissOnMonster(lobbyID, monsterID int) (charMissOnMonster, bool) {
+	v, ok := lastMissOnMonster.Load(fmt.Sprintf("%d:%d", lobbyID, monsterID))
+	if !ok {
+		return charMissOnMonster{}, false
+	}
+	m := v.(charMissOnMonster)
+	return m, m.Marker != "" && m.Marker == combatTurnMarker(lobbyID)
+}
+
+// reactMissWeaponRe: a Reaction that answers a melee weapon attack roll that missed the monster.
+var reactMissWeaponRe = regexp.MustCompile(`(?i)^Trigger: A creature misses the [^.]+? with a melee attack roll using a weapon\.`)
+
 func weaponIsMelee(weapon string) bool {
 	if weapon == "" || strings.EqualFold(weapon, "unarmed") {
 		return true
@@ -320,6 +346,24 @@ func resolveMonsterReaction(r *http.Request, lobbyID, id int, meta *monsterMeta,
 			}
 		}
 		out = fmt.Sprintf("%s uses %s: %s.", name, base, act) + " " + t
+	case reactMissWeaponRe.MatchString(strings.TrimSpace(entry.Text)):
+		// a melee weapon attack that missed it this turn: the save is the triggering creature's, and a failure sticks that weapon fast
+		// (the item state owner, item_state_2024.go)
+		miss, ok := thisTurnMissOnMonster(lobbyID, id)
+		if !ok || miss.Weapon == "" || strings.EqualFold(miss.Weapon, "unarmed") || !weaponIsMelee(miss.Weapon) {
+			return "", true, fmt.Sprintf("%s's %s answers a melee weapon attack that missed it, and none did this turn. Nothing was used.", name, base)
+		}
+		e, ok := parseSaveEffect(entry.Text)
+		if !ok {
+			return "", false, ""
+		}
+		e.SourceID = id
+		e.StuckWeapon = miss.Weapon
+		lines, _ := applySaveEffect(lobbyID, name, e, []int{miss.CharID}, apply)
+		if apply {
+			lastMissOnMonster.Delete(key)
+		}
+		out = fmt.Sprintf("%s uses %s against %s. %s", name, base, getCharacterName(miss.CharID), strings.Join(lines, " "))
 	default:
 		return "", false, ""
 	}

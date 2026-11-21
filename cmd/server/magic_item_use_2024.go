@@ -26,6 +26,7 @@ package main
 
 import (
 	"crypto/rand"
+	"database/sql"
 	"encoding/hex"
 	"encoding/json"
 	"fmt"
@@ -943,11 +944,16 @@ func usePotion(lobbyID, drinkerID, targetID int, it invItem) string {
 	case "giant strength":
 		score := giantStrengthScores[variant]
 		var str int
-		db.QueryRow(`SELECT str FROM characters WHERE id = $1`, targetID).Scan(&str)
+		changeAbilities(targetID, abilityHow{}, func(_ *sql.Tx, a *abilityRow) error { // ability_owner_2024.go
+			if str = a.Scores["str"]; str >= score {
+				return errNoAbilityChange
+			}
+			a.Scores["str"] = score
+			return nil
+		})
 		if str >= score {
 			return fmt.Sprintf("🧪 %s: no effect, Strength %d is already %d or more.", label, str, score)
 		}
-		db.Exec(`UPDATE characters SET str = $1 WHERE id = $2`, score, targetID)
 		addSpellEffect(lobbyID, targetID, targetID, "Potion of Giant Strength", "giant_strength", fmt.Sprintf("orig=%d;set=%d", str, score), 600, "", 0)
 		return fmt.Sprintf("🧪 %s: Strength %d for 1 hour (it was %d).", label, score, str)
 	case "resistance":
@@ -1035,7 +1041,13 @@ func endItemEffect(kind string, targetID int, detail string) {
 	var orig, set int
 	fmt.Sscanf(detail, "orig=%d;set=%d", &orig, &set)
 	if orig > 0 {
-		db.Exec(`UPDATE characters SET str = $1 WHERE id = $2 AND str = $3`, orig, targetID, set)
+		changeAbilities(targetID, abilityHow{}, func(_ *sql.Tx, a *abilityRow) error { // ability_owner_2024.go: only while the potion's score holds
+			if a.Scores["str"] != set {
+				return errNoAbilityChange
+			}
+			a.Scores["str"] = orig
+			return nil
+		})
 	}
 }
 
@@ -1416,20 +1428,20 @@ func studyBook(charID int, it invItem, name, col, ability string) string {
 		return "Cannot study the " + name + " in combat: it takes 48 hours over 6 days or fewer. Nothing was spent."
 	}
 	var cur int
-	db.QueryRow(`SELECT `+col+` FROM characters WHERE id = $1`, charID).Scan(&cur)
+	changeAbilities(charID, abilityHow{}, func(_ *sql.Tx, a *abilityRow) error { // ability_owner_2024.go (a new Constitution modifier: Hit Points)
+		short := abilityKeyOf(col)
+		if cur = a.Scores[short]; cur >= 30 {
+			return errNoAbilityChange
+		}
+		a.Scores[short] = min(30, cur+2)
+		// an item that sets this score while attuned (Belt of Giant Strength, Amulet of Health) keeps the base it restores: raise it too
+		if b, kept := a.Base[col]; kept {
+			a.Base[col] = b + 2
+		}
+		return nil
+	})
 	if cur >= 30 {
 		return fmt.Sprintf("Cannot gain from the %s: your %s is already 30. Nothing was spent.", name, ability)
-	}
-	newVal := cur + 2
-	if newVal > 30 {
-		newVal = 30
-	}
-	db.Exec(`UPDATE characters SET `+col+` = $1 WHERE id = $2`, newVal, charID)
-	// an item that sets this score while attuned (Belt of Giant Strength, Amulet of Health) keeps the base it restores: raise it too
-	db.Exec(`UPDATE characters SET item_base_scores = jsonb_set(item_base_scores, ARRAY[$1], to_jsonb((item_base_scores->>$1)::int + 2))
-		WHERE id = $2 AND item_base_scores ? $1`, col, charID)
-	if col == "con" {
-		conHitPoints(charID, "con", cur, newVal)
 	}
 	editInventory(charID, func(inv []invItem) []invItem {
 		for _, x := range inv {
@@ -1440,7 +1452,7 @@ func studyBook(charID int, it invItem, name, col, ability string) string {
 		}
 		return inv
 	})
-	return fmt.Sprintf("After 48 hours of study over 6 days or fewer, your %s rises from %d to %d (maximum 30). The %s loses its magic for a century.", ability, cur, newVal, name)
+	return fmt.Sprintf("After 48 hours of study over 6 days or fewer, your %s rises from %d to %d (maximum 30). The %s loses its magic for a century.", ability, cur, min(30, cur+2), name)
 }
 
 func useItemAction(charID int, description string) string {
@@ -1456,6 +1468,9 @@ func useItemAction(charID int, description string) string {
 	name := itemStr(it, "name")
 	if itemBool(it, "destroyed") {
 		return "Cannot use the " + name + ": it is destroyed. Nothing was spent."
+	}
+	if out, ok := freeStuckWeapon(charID, it); ok { // a weapon stuck fast: the action frees it (item_state_2024.go)
+		return out
 	}
 	if out, ok := legendaryItemUse(charID, it, req, description); ok { // Horn of Valhalla, Ring of Djinni Summoning, Iron Flask, Sphere, Deck
 		return out
