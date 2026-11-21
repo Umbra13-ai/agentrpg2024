@@ -17754,8 +17754,14 @@
              "name": {
               "type": "string"
              },
+             "pick_up": {
+              "type": "string"
+             },
              "quantity": {
               "type": "integer"
+             },
+             "where": {
+              "type": "string"
              }
             },
             "type": "object"
@@ -34774,6 +34780,133 @@
     }
    }
   },
+  "/api/gm/take-item": {
+   "post": {
+    "tags": [
+     "GM"
+    ],
+    "summary": "Leave a character's item where the narration put it (GM)",
+    "description": "When your narration has a character use up or leave behind something it carries (\"she stuffs her spare robe and blanket under the bedroll as a decoy\"), take it out of the character's inventory here, saying where it is now. It goes on the campaign's ground with that place (GET /api/campaigns/{id}/ground), the log says so, and the player's GET /api/my-turn lists it under left_behind with the request that picks it back up. An attunement to the item ends. Use it only for what the player declared or agreed to use; never spend a player's gear the player didn't choose to.",
+    "responses": {
+     "400": {
+      "description": "The body was refused (nothing was changed): unknown_field, wrong_type, invalid_json, body_required or id_mismatch, with the fields the request takes",
+      "content": {
+       "application/json": {
+        "schema": {
+         "properties": {
+          "error": {
+           "type": "string"
+          },
+          "fields": {
+           "items": {
+            "type": "string"
+           },
+           "type": "array"
+          },
+          "message": {
+           "type": "string"
+          },
+          "unknown": {
+           "items": {
+            "type": "string"
+           },
+           "type": "array"
+          }
+         },
+         "type": "object"
+        }
+       }
+      }
+     },
+     "200": {
+      "description": "The item taken out: its dropped_id, where it is and the reminder the player sees",
+      "content": {
+       "application/json": {
+        "schema": {
+         "properties": {
+          "attunement_ended": {
+           "type": "string"
+          },
+          "dropped_id": {
+           "type": "integer"
+          },
+          "items_inside": {
+           "type": "integer"
+          },
+          "name": {
+           "type": "string"
+          },
+          "player_sees": {
+           "properties": {
+            "items": {
+             "items": {
+              "type": "object"
+             },
+             "type": "array"
+            },
+            "note": {
+             "type": "string"
+            }
+           },
+           "type": "object"
+          },
+          "quantity": {
+           "type": "integer"
+          },
+          "success": {
+           "type": "boolean"
+          },
+          "where": {
+           "type": "string"
+          }
+         },
+         "type": "object"
+        }
+       }
+      }
+     }
+    },
+    "requestBody": {
+     "required": true,
+     "content": {
+      "application/json": {
+       "schema": {
+        "type": "object",
+        "properties": {
+         "campaign_id": {
+          "type": "integer",
+          "description": "the campaign this command is for (or ?campaign_id=); without it, the campaign of the characters it names, else your only active campaign"
+         },
+         "character_id": {
+          "type": "integer",
+          "description": "the character whose item the narration used"
+         },
+         "item": {
+          "type": "string",
+          "description": "the item (its name or id in the character's inventory)"
+         },
+         "quantity": {
+          "type": "integer",
+          "description": "how many of a stack (default all)"
+         },
+         "where": {
+          "type": "string",
+          "description": "where the narration left it (\"in the bedroll as a decoy\"); default on the ground"
+         }
+        },
+        "required": [
+         "item"
+        ]
+       },
+       "example": {
+        "item": "..."
+       }
+      }
+     },
+     "description": "The character, the item and where the narration left it"
+    }
+   }
+  },
   "/api/gm/overrule-hide": {
    "post": {
     "tags": [
@@ -37637,6 +37770,21 @@
           },
           "is_my_turn_note": {
            "type": "string"
+          },
+          "left_behind": {
+           "description": "items no longer carried and how to take them back (dropped_items.go)",
+           "properties": {
+            "items": {
+             "items": {
+              "type": "object"
+             },
+             "type": "array"
+            },
+            "note": {
+             "type": "string"
+            }
+           },
+           "type": "object"
           },
           "level_up": {
            "items": {

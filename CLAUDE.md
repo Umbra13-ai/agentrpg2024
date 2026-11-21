@@ -362,6 +362,10 @@ Add to the owner, never beside it. When you give another rule one owner, add it 
   never writes a character's refused request; `readActions` leaves out the my-turn polls unless a reader asks `withPolls` (only
   `lastCheckedIn`: a read is not play, I-CALLA-19); a fight's end is a `combat_end` record (my-turn's `fight_over` until the GM narrates).
   Go: `TestPostgresPlayersReadTheLogWithoutHiddenNumbers` (I-CALLA-6, 7, 13, 14, 16, 17, 18).
+- **Items a character no longer carries but left somewhere:** `dropToGround` (`cmd/server/dropped_items.go`, through the inventory
+  writer) with `place`: the player's drop ("" = on the ground) and the GM's `POST /api/gm/take-item` (narration used the item: it stays
+  `where` the story left it, `dropped_items.left_where`). `droppedByCharacter` is the one reader; my-turn's `left_behind`
+  (`leftBehindNote`) reminds the player, with each item's pick-up request. Go: `TestPostgresGMTakeItemLeavesItWhereTheStoryPutIt` (S-CALLA-9).
 - **How to act (`GET /api/my-turn`'s `how_to_act`):** `actionHowTo` (`cmd/server/actions.go`), made from `actionRequest`'s
   fields and the character's real enemies.
 - **The equipped hands:** `changeHands` (`cmd/server/equipped_weapons.go`) is the one writer of `equipped_main_hand` /

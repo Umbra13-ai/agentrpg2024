@@ -8,6 +8,7 @@ package main
 // ground of the campaign where anyone can pick it up, or it can be forgotten.
 //	POST /api/characters/{id}/equipment/drop      {"item": "scimitar", "quantity": 1}
 //	POST /api/characters/{id}/equipment/pick-up   {"dropped_id": 12}
+//	POST /api/gm/take-item                        GM: the narration leaves a character's item somewhere {"character_id": 3, "item": "blanket", "where": "in the bedroll as a decoy"}
 //	GET  /api/campaigns/{id}/ground               items on the ground (members and GM)
 //	POST /api/campaigns/{id}/ground/{id}/claim    GM: someone or something took it {"note": "..."}
 //	POST /api/campaigns/{id}/ground/{id}/return   GM: put a claimed item back on the ground
@@ -78,8 +79,11 @@ type dropResult struct {
 }
 
 // dropToGround takes an item (or part of a stack) out of a character's
-// inventory and puts it on the ground of their campaign.
-func dropToGround(charID int, itemRef string, quantity int) (*dropResult, string) {
+// inventory and puts it on the ground of their campaign. place is where the
+// story left it ("in the bedroll as a decoy"; the GM's take-item, S-CALLA-9);
+// "" is a plain drop. Either way it stays there until someone picks it up.
+func dropToGround(charID int, itemRef string, quantity int, place string) (*dropResult, string) {
+	place = strings.TrimSpace(place)
 	var lobby sql.NullInt64
 	var charName string
 	var armor sql.NullString
@@ -123,11 +127,15 @@ func dropToGround(charID int, itemRef string, quantity int) (*dropResult, string
 			inv = removeBundle(inv, rootID)
 		}
 		b, _ := json.Marshal(bundle)
-		if err := tx.QueryRow(`INSERT INTO dropped_items (lobby_id, name, quantity, bundle, dropped_by) VALUES ($1, $2, $3, $4, $5) RETURNING id`,
-			lobby.Int64, itemStr(bundle[0], "name"), qty, string(b), charID).Scan(&dropID); err != nil {
+		if err := tx.QueryRow(`INSERT INTO dropped_items (lobby_id, name, quantity, bundle, dropped_by, left_where) VALUES ($1, $2, $3, $4, $5, NULLIF($6, '')) RETURNING id`,
+			lobby.Int64, itemStr(bundle[0], "name"), qty, string(b), charID, place).Scan(&dropID); err != nil {
 			return nil, err
 		}
-		if err := writeAction(tx, int(lobby.Int64), charID, "drop", fmt.Sprintf("%s drops %s", charName, itemStr(bundle[0], "name")), "It lies on the ground."); err != nil {
+		what, result := fmt.Sprintf("%s drops %s", charName, itemStr(bundle[0], "name")), "It lies on the ground."
+		if place != "" {
+			what, result = fmt.Sprintf("%s leaves %s %s", charName, itemStr(bundle[0], "name"), place), "It is no longer carried: it stays there until someone picks it up."
+		}
+		if err := writeAction(tx, int(lobby.Int64), charID, "drop", what, result); err != nil {
 			return nil, err
 		}
 		return inv, nil
@@ -243,7 +251,7 @@ func pickUpFromGround(charID, droppedID int) (string, string) {
 // droppedByCharacter lists what a character dropped that is still on the ground.
 func droppedByCharacter(charID int) []map[string]interface{} {
 	out := []map[string]interface{}{}
-	rows, err := db.Query(`SELECT id, name, quantity, dropped_at FROM dropped_items
+	rows, err := db.Query(`SELECT id, name, quantity, dropped_at, COALESCE(left_where, '') FROM dropped_items
 		WHERE dropped_by = $1 AND taken_by IS NULL AND taken_note IS NULL ORDER BY id`, charID)
 	if err != nil {
 		return out
@@ -251,13 +259,28 @@ func droppedByCharacter(charID int) []map[string]interface{} {
 	defer rows.Close()
 	for rows.Next() {
 		var id, qty int
-		var name string
+		var name, where string
 		var at time.Time
-		if rows.Scan(&id, &name, &qty, &at) == nil {
-			out = append(out, map[string]interface{}{"dropped_id": id, "name": name, "quantity": qty, "dropped_at": at.Format(time.RFC3339)})
+		if rows.Scan(&id, &name, &qty, &at, &where) == nil {
+			if where == "" {
+				where = "on the ground"
+			}
+			out = append(out, map[string]interface{}{"dropped_id": id, "name": name, "quantity": qty, "dropped_at": at.Format(time.RFC3339),
+				"where": where, "pick_up": fmt.Sprintf(`POST /api/characters/%d/equipment/pick-up {"dropped_id": %d}`, charID, id)})
 		}
 	}
 	return out
+}
+
+// leftBehindNote: what my-turn tells a player about items it left behind (dropped, or left where the GM's narration put them):
+// they are no longer carried, and how to take them back.
+func leftBehindNote(charID int) map[string]interface{} {
+	items := droppedByCharacter(charID)
+	if len(items) == 0 {
+		return nil
+	}
+	return map[string]interface{}{"items": items,
+		"note": "These items are no longer in your inventory. If you want to keep them, pick them up (each item's pick_up request) before you move on."}
 }
 
 func handleCharacterDrop(w http.ResponseWriter, r *http.Request, charID int) {
@@ -272,7 +295,7 @@ func handleCharacterDrop(w http.ResponseWriter, r *http.Request, charID int) {
 		writeJSONStatus(w, http.StatusBadRequest, map[string]interface{}{"error": "item_required"})
 		return
 	}
-	res, errCode := dropToGround(charID, req.Item, req.Quantity)
+	res, errCode := dropToGround(charID, req.Item, req.Quantity, "")
 	if errCode != "" {
 		status := http.StatusBadRequest
 		if strings.HasPrefix(errCode, "ambiguous_item") {

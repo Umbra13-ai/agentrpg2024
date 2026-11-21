@@ -307,6 +307,8 @@ var schemaSteps = []schemaStep{
 	// going on, is over
 	{"readied_2024.go", `UPDATE characters c SET readied_action = NULL WHERE c.readied_action IS NOT NULL
 		AND NOT EXISTS (SELECT 1 FROM combat_state s WHERE s.lobby_id = c.lobby_id AND s.active = true)`},
+	// where the GM's narration left a character's item (dropped_items.go: the GM's take-item, S-CALLA-9)
+	{"dropped_items.go", `ALTER TABLE dropped_items ADD COLUMN IF NOT EXISTS left_where TEXT`},
 }
 
 // seatReadySchema: a player's "ready to start" on its seat (cleared whenever the seat changes hands: takeSeat, swapSeat;

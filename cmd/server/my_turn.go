@@ -933,6 +933,9 @@ func handleMyTurn(w http.ResponseWriter, r *http.Request) {
 	if autoEquipped != nil {
 		response["auto_equipped"] = autoEquipped
 	}
+	if lb := leftBehindNote(charID); lb != nil {
+		response["left_behind"] = lb // items no longer carried and how to take them back (dropped_items.go)
+	}
 	if inCombat {
 		if pt := pendingTurnForMyTurn(lobbyID, charID); pt != nil {
 			response["pending_turn"] = pt                                        // send your whole turn ahead of your slot (pending_turns_2024.go)

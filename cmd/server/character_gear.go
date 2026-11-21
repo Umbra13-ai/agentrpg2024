@@ -1064,7 +1064,7 @@ func handleCharacterUnequipWeapon(w http.ResponseWriter, r *http.Request) {
 	if req.Drop {
 		action = "dropped"
 		for _, name := range droppedItems {
-			if res, errCode := dropToGround(req.CharacterID, name, 1); errCode == "" {
+			if res, errCode := dropToGround(req.CharacterID, name, 1, ""); errCode == "" {
 				groundIDs = append(groundIDs, res.DroppedID)
 			}
 		}
