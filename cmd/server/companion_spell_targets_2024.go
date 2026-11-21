@@ -108,7 +108,7 @@ func companionHitRidersNote(a monsterActionRow) string {
 	return ""
 }
 
-func companionHitRiders(lobbyID, attackerID int, attackerName string, a monsterActionRow, companionID int, hadAdvantage bool, taken int) string {
+func companionHitRiders(lobbyID, attackerID int, attackerName string, a monsterActionRow, companionID int, hadAdvantage bool, taken int, dealtByType map[string]int) string {
 	cur, ok := loadCompanion(companionID)
 	if !ok || cur.Status != "active" || cur.HP <= 0 {
 		return " [the companion is gone: the hit's other effects are not applied]"
@@ -155,7 +155,7 @@ func companionHitRiders(lobbyID, attackerID int, attackerName string, a monsterA
 			}
 		}
 	}
-	if d := hitAfterDamage(lobbyID, cur.CombatID, a.Desc, source, taken); d != "" { // Life Drain, burning (hit_after_damage_2024.go)
+	if d := hitAfterDamage(lobbyID, cur.CombatID, a.Desc, source, taken, dealtByType); d != "" { // Life Drain, burning (hit_after_damage_2024.go)
 		applied = append(applied, strings.Trim(d, " []"))
 	}
 	if e, ok := parseSaveEffect(a.Desc); ok { // the hit's own saving throw: rolled with the companion's stat block (applySaveEffectOnCompanion)
@@ -226,6 +226,11 @@ func applySaveEffectOnCompanion(lobbyID int, source string, e saveEffect, tid in
 			break
 		}
 		parts = append(parts, damageCompanion(cur, d, strings.ToLower(p.Type)))
+		if after, ok := loadCompanion(c.ID); ok && after.HP < cur.HP {
+			if drained := e.drainAfterDamage(lobbyID, tid, saved, p.Type, cur.HP-after.HP); drained != "" {
+				parts = append(parts, drained)
+			}
+		}
 	}
 	if evasion {
 		parts = append(parts, "Evasion")

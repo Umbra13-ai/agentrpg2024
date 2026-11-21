@@ -288,6 +288,10 @@ const notesEndsWithGrapple = "ends_with_grapple"
 // notesEndsWithPoisonOrDamage marks sleep linked to an existing Poisoned record.
 const notesEndsWithPoisonOrDamage = "ends_with_poison_or_damage"
 
+// notesEndsOnDamage marks an Unconscious record that ends when the creature takes damage (wakeOnDamageSleep): the second stage of a
+// monster's "Second Failure: ... Unconscious ... This effect ends for the target if it takes damage" (Brass Dragon Wyrmling Sleep Breath).
+const notesEndsOnDamage = "ends_on_damage"
+
 // set changes one row's remaining rounds and detail (a countdown).
 func (c *conditionChange) set(id, rounds int, detail string) error {
 	for i, r := range c.recs {

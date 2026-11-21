@@ -197,7 +197,8 @@ Audit of every CR 10+ save action found two silent over-simplifications in the s
 1. **Actions that offer several effects** (Beholder and Death Tyrant Eye Rays, 10 rays each; Elemental Cataclysm, 4 effects). The parser read the first listed ray and rolled it as if it had been chosen, with the rest not shown. Now `splitSaveOptions` splits the text by named effect, and `resolveMonsterEffectText` refuses the action before rolling ("offers N effects ... name the one that happened in use. Nothing was rolled.") until the GM names one in `monster_action.use`; the named effect is then resolved alone through the same save rules. Tests: `TestSplitSaveOptionsAndStages`, `TestPostgresSaveEffectOnMonsterTargets` (refusal, no HP change, no condition; named effect applied alone; mutation fails), and the route sweep (3 actions refused, each option played).
 2. **Staged effects** ("Failure: Incapacitated ... repeats the save. Second Failure: Unconscious / Paralyzed", Brass and Silver dragon breaths). Only the first stage was applied and the Second Failure text was dropped without a note. Now it goes to the GM in the reply ("Second Failure (after the repeat save the first Failure gives): ..."). The repeat save and second stage are not automated.
 Parse sweep after the change: 141 save entries (multi-effect actions counted per effect): 55 represented, 86 flagged to the GM, 0 lost. Route sweep: 79 played (each ray/effect separately).
-Not done: choosing the random effect (the GM rolls or picks), the second stage of a staged effect, and area targeting without a battle map.
+Not done: choosing the random effect (the GM rolls or picks) and area targeting without a battle map. The second stage is now automated
+(2026-11-21, below: "A condition's second stage").
 
 ## Conditions a hit gives (new: applied, not left to the GM)
 Before this change a stat-block attack applied only its damage; every rider ("If the target is a Large or smaller creature, it has the Prone condition", "Grappled (escape DC 14)", "Stunned until the start of the empyrean's next turn") was shown to the GM as "not applied automatically". Now `parseHitRider` (monster_effects_2024.go) reads the conditions of a hit with the same rule as a failed save (`readRider`), and `saveEffect.giveConditions` gives them to the target (condition records with the monster as the source; immunity honoured; size gate; escape DC; Restrained that ends with the grapple). The monster attack path (monster_attacks.go) calls it after the damage; the shared owners are unchanged (one condition builder, one size rule).
@@ -384,6 +385,41 @@ Vampire, Vampire Spawn) and the typed "Acid damage taken" (Clay Golem); a maximu
 `TestPostgresLifeDrainOnEveryTarget` (POST /api/gm/narrate at a character, a monster and a companion; the save form left to the GM; POST
 /api/characters/{id}/rest restores). Mutation-checked: each route's call, the Long Rest restore. Catalog parse diff: only Specter and
 Wraith changed.
+
+**2026-11-21, the save form and the typed form.** One reader `hpMaxDrainOf` reads both "the damage taken" and one type ("the Necrotic
+damage taken", "the Acid damage taken"); one writer `reduceHPMaximum`. A save effect's clause is `saveEffect.Drain` (under "Failure:" a
+success drains nothing; under "Failure or Success:" a success's half damage drains: Succubus); every save route (character, monster,
+companion) calls `drainAfterDamage` after each damage part with what it dealt, and "the vampire regains Hit Points equal to that amount"
+heals the source through the monster HP owner (`drainRegain`). A typed hit counts what that type dealt (`hpDamage.ByType`, the monster
+hit cursor's `Dealt`, the companion route's per-type loss). Tested: `TestPostgresLifeDrainOnEveryTarget` (Wight, Vampire, Succubus and
+Clay Golem patterns at a character, a monster and a companion). Catalog parse diff: Wight, Succubus, Vampire Spawn, Vampire (the clause
+leaves the GM's text) and Clay Golem (its residual). Not automated: a drain to 0 that kills; the Vampire's regain on a source that is a
+companion.
+
+## A condition's second stage (SRD 5.2.1 Sleep; "Second Failure:")
+
+The Sleep spell was one minute of Incapacitated with a save at the end of each turn; SRD 5.2.1 says Incapacitated until the end of the
+target's next turn, then one repeated save, and a second failure is Unconscious for the rest of the spell (ends on damage). The record's
+repeated save now carries a second stage (`conditionSave.Then`, `ThenRounds`, `ThenEndsOnDamage`, `ThenMagicalSleep`):
+`condition_turns.go` deletes the record and adds the second condition, with the same source, on a failed repeat; a success ends it. Sleep
+is a row of `spellStages` read by a character's cast and a monster's ("casts the Sleep spell": Pixie, Dust Mephit). A monster text's
+"Second Failure: The target has the X condition [instead of the Y condition] for N minutes/hours [This effect ends ... if it takes damage
+...]" after a single repeat ("repeats the save at the end of its next turn" / "until the end of its next turn, at which point it repeats
+the save") is read by `readSecondFailure` (the Brass dragons' Sleep Breath, the Cockatrice). An Unconscious that ends on damage is
+`notesEndsOnDamage`; `wakeOnDamageSleep` ends it and a monster's Sleep (`sourceIsSpell`: "Pixie (Sleep)" was never woken before). A
+severe branch that only adds Unconscious to the Failure's Poisoned (Pseudodragon Sting) is the severe-poison owner (`severeSleepText`).
+A monster's Lesser Restoration (Empyrean Iota) and a monster's Heal end conditions through `spellEndsConditions`
+(`monsterCastEndsConditions`; `monsterCastHealing` ends them before healing). Tested: `TestPostgresSleepSecondFailure`,
+`TestPostgresSecondFailureStages`, `TestPostgresMonsterCastEndsConditions` (character, monster and companion targets),
+`TestCR01SaveActionTimingGuards` (the CR 0-1 save actions' timing, Recharge and N/Day tags from the SRD data). Catalog parse diff: the
+four Brass dragons' Sleep Breath, Cockatrice, Pseudodragon. Not automated: the waking action of a creature within 5 feet (the GM ends the
+condition), the elf's "magic can't put you to sleep" against a monster breath (only the spell is magical sleep here).
+
+## Residual GM notes that the owners apply (2026-11-21)
+
+The GM is no longer asked to apply what an owner already applies: a Darkmantle's attach-tied suffocating (the suffocation owner starts
+it with the cover and ends it with the attach; when the cover's Advantage gate fails, the rules apply nothing) and a hit's lead-in to its
+own saving throw ("and the target is subjected to the following effect", Homunculus). Catalog residual diff: Darkmantle, Homunculus.
 
 ## What a hit does after its damage (`hitAfterDamage`, `cmd/server/hit_after_damage_2024.go`)
 

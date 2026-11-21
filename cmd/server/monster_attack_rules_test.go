@@ -161,7 +161,12 @@ func TestConditionalAlternativeDamage(t *testing.T) {
 	if problem != "" || !strings.Contains(gmJudgedAlternatives(p), "moved 20+ feet") || unappliedHitRider(ram) != "" {
 		t.Errorf("GM-judged alternative: %q %q %q", problem, gmJudgedAlternatives(p), unappliedHitRider(ram))
 	}
-	if got := unappliedHitRider("Melee Attack Roll: +9, reach 5 ft. Hit: 10 (1d10 + 5) Bludgeoning damage plus 6 (1d12) Acid damage, and the target's Hit Point maximum decreases by an amount equal to the Acid damage taken."); !strings.Contains(got, "Hit Point maximum") {
+	// the typed drain is applied on every hit route now (hp_max_drain_2024.go): nothing is left for the GM; a sentence nothing applies is
+	clay := "Melee Attack Roll: +9, reach 5 ft. Hit: 10 (1d10 + 5) Bludgeoning damage plus 6 (1d12) Acid damage, and the target's Hit Point maximum decreases by an amount equal to the Acid damage taken."
+	if got := unappliedHitRider(clay); got != "" {
+		t.Errorf("an applied drain was reported to the GM: %q", got)
+	}
+	if got := unappliedHitRider("Melee Attack Roll: +9, reach 5 ft. Hit: 10 (1d10 + 5) Bludgeoning damage, and the target's armor rusts away."); !strings.Contains(got, "rusts") {
 		t.Errorf("rider text not reported: %q", got)
 	}
 }

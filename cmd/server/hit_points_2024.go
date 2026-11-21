@@ -101,9 +101,10 @@ func oneHit(amount int, dtype string) hpHit {
 type hpDamage struct {
 	game.DamageResult
 	Name   string
-	Dealt  int    // after resistance, immunity and reductions; before Temporary Hit Points
-	Status string // damaged, unconscious, dead, INSTANT_DEATH, already_dead, death_ward, relentless_rage ...
-	Down   bool   // the character went from above 0 Hit Points to 0 with this hit (dying or dead)
+	Dealt  int            // after resistance, immunity and reductions; before Temporary Hit Points
+	ByType map[string]int // Dealt by damage type (a typed Hit Point maximum drain: "the Acid damage taken", hp_max_drain_2024.go)
+	Status string         // damaged, unconscious, dead, INSTANT_DEATH, already_dead, death_ward, relentless_rage ...
+	Down   bool           // the character went from above 0 Hit Points to 0 with this hit (dying or dead)
 	view   map[string]interface{}
 }
 
@@ -160,9 +161,12 @@ func damageHP(charID int, hit hpHit) (hpDamage, error) {
 	}
 	original, dealt := 0, 0
 	var resisted []string
+	d.ByType = map[string]int{}
 	for _, p := range hit.Parts {
 		original += p.Amount
-		dealt += d.reduce(charID, p, hit.Raw, &resisted)
+		n := d.reduce(charID, p, hit.Raw, &resisted)
+		dealt += n
+		d.ByType[strings.ToLower(p.Type)] += n
 	}
 	d.Dealt = dealt
 	d.view["original_damage"] = original

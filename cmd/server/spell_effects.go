@@ -65,7 +65,7 @@ type conditionSpell struct {
 var conditionSpells = map[string]conditionSpell{
 	"hold-person":             {"wis", []string{"paralyzed"}, 10, true, ""},
 	"hold-monster":            {"wis", []string{"paralyzed"}, 10, true, ""},
-	"sleep":                   {"wis", []string{"incapacitated"}, 10, true, ""},
+	"sleep":                   {"wis", []string{"incapacitated"}, 1, true, ""}, // until the end of its next turn; the second stage is spellStages
 	"blindness-deafness":      {"con", []string{"blinded"}, 10, true, ""},
 	"fear":                    {"wis", []string{"frightened"}, 10, true, ""},
 	"charm-person":            {"wis", []string{"charmed"}, 600, false, ""},
@@ -97,6 +97,30 @@ func (cs conditionSpell) escapes(dc int) []conditionEscape {
 	}
 	e, _ := normalizeEscapes([]conditionEscape{{Ability: "Strength", Skill: titleCase(cs.Escape), DC: dc}})
 	return e
+}
+
+// spellStage: what a condition spell's repeated save does on a failure besides going on (SRD 5.2.1 Sleep: "Incapacitated until the end
+// of its next turn, at which point it must repeat the save. If the target fails the second save, the target has the Unconscious
+// condition for the duration"). The condition owner's repeated save reads it (conditionSave.Then), for a character's cast and a
+// monster's alike. MagicalSleep: magic puts the creature to sleep (a creature that can't be put to sleep is immune: Fey Ancestry).
+type spellStage struct {
+	Then         string // the condition a failed repeated save turns it into; the save is not repeated after that
+	ThenRounds   int    // how long that lasts (the rest of the spell's duration)
+	MagicalSleep bool
+	EndsOnDamage bool // the second stage ends if the creature takes damage (a monster's "Second Failure": Sleep Breath)
+}
+
+var spellStages = map[string]spellStage{
+	"sleep": {Then: "unconscious", ThenRounds: 9, MagicalSleep: true},
+}
+
+// endSaveFor: the repeated save of a condition spell's record, with its second stage.
+func endSaveFor(spellKey, ability string, dc int) *conditionSave {
+	s := &conditionSave{Ability: ability, DC: dc}
+	if st, ok := spellStages[spellKey]; ok {
+		s.Then, s.ThenRounds, s.ThenEndsOnDamage, s.ThenMagicalSleep = st.Then, st.ThenRounds, st.EndsOnDamage, st.MagicalSleep
+	}
+	return s
 }
 
 // damageSpellConditions are the spells that deal damage and also apply a condition on a failed save.
@@ -153,9 +177,9 @@ func resolveConditionSpell(charID int, spellKey string, saveDC int, spellName st
 			endSave = cs.Save
 		}
 		for _, c := range cs.Conditions {
-			a := condAdd{Condition: c, Source: spellName, Rounds: extendRounds(charID, cs.Rounds), SourceID: charID, Magical: true} // Extended Spell doubles it (F194)
+			a := condAdd{Condition: c, Source: spellName, Rounds: extendRounds(charID, cs.Rounds), SourceID: charID, Magical: true, MagicalSleep: spellStages[spellKey].MagicalSleep} // Extended Spell doubles it (F194)
 			if endSave != "" {
-				a.EndSave = &conditionSave{Ability: endSave, DC: saveDC}
+				a.EndSave = endSaveFor(spellKey, endSave, saveDC)
 			}
 			a.Escapes = cs.escapes(saveDC)
 			if sp, ok := srdSpellsMemory[spellKey]; ok && strings.Contains(strings.ToLower(sp.Duration), "concentration") {
@@ -233,16 +257,22 @@ func abilityScoreOf(charID int, ability string) int {
 // damageCharacter deals damage of one type to a character (the Hit Point owner, hit_points_2024.go) and returns the clause a reply
 // shows: "takes 7 fire damage (now 5 HP) [Concentration: ...]".
 func damageCharacter(targetID, dmg int, dtype string, critical ...bool) string {
+	text, _ := damageCharacterDealt(targetID, dmg, dtype, critical...)
+	return text
+}
+
+// damageCharacterDealt: damageCharacter, and the damage it dealt (after resistance; Temporary Hit Points included).
+func damageCharacterDealt(targetID, dmg int, dtype string, critical ...bool) (string, int) {
 	hit := oneHit(dmg, dtype)
 	hit.Critical = len(critical) > 0 && critical[0] // at 0 Hit Points a Critical Hit is two death save failures
 	d, err := damageHP(targetID, hit)
 	if dbFailed(err) {
-		return fmt.Sprintf("takes no damage (%s)", notFoundOrDBError(err, ""))
+		return fmt.Sprintf("takes no damage (%s)", notFoundOrDBError(err, "")), 0
 	}
 	if err != nil {
-		return fmt.Sprintf("takes 0 %s damage", dtype)
+		return fmt.Sprintf("takes 0 %s damage", dtype), 0
 	}
-	return d.Sentence(dtype)
+	return d.Sentence(dtype), d.Dealt
 }
 
 // resolveSpellOnCharacters applies a damaging spell to the characters in target_ids (or a character target_id): a spell attack against
@@ -381,16 +411,21 @@ func charmEndsOnDamage(lobbyID, id int, name string) string {
 	return out
 }
 
+// sourceIsSpell: a condition record's source is the spell, cast by a character ("Sleep") or a monster ("Pixie (Sleep)").
+func sourceIsSpell(source, spell string) bool {
+	return strings.EqualFold(source, spell) || strings.HasSuffix(strings.ToLower(source), " ("+strings.ToLower(spell)+")")
+}
+
 // wakeOnDamageSleep: Hypnotic Pattern and Sleep end on damage, and the turning of Turn Undead.
 func wakeOnDamageSleep(lobbyID, id int, name string) string {
 	n, tn, poison := 0, 0, 0
 	for _, r := range removeConditionsWhere(lobbyID, id, func(r conditionRecord) bool {
-		return strings.HasPrefix(r.Source, "Turn Undead") || r.Source == "Hypnotic Pattern" || r.Source == "Sleep" ||
-			(r.Condition == "unconscious" && r.Notes == notesEndsWithPoisonOrDamage)
+		return strings.HasPrefix(r.Source, "Turn Undead") || sourceIsSpell(r.Source, "Hypnotic Pattern") || sourceIsSpell(r.Source, "Sleep") ||
+			(r.Condition == "unconscious" && (r.Notes == notesEndsWithPoisonOrDamage || r.Notes == notesEndsOnDamage))
 	}) {
 		if strings.HasPrefix(r.Source, "Turn Undead") {
 			tn++
-		} else if r.Notes == notesEndsWithPoisonOrDamage {
+		} else if r.Notes == notesEndsWithPoisonOrDamage || r.Notes == notesEndsOnDamage {
 			poison++
 		} else {
 			n++

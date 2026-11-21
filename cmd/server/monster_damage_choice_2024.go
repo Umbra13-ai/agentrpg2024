@@ -526,6 +526,10 @@ func prepareCompanionPlan(c companion, description string) ([]compAttack, string
 // ...", "The target has the Grappled condition (escape DC 14)") and that no rule of the server applies for a stat-block hit: it is
 // shown to the GM with the hit instead of being dropped. A saving throw's own text is applied by the save-effect owner and is not
 // repeated here.
+// subjectedLeadRe: the lead-in of a hit's own saving throw effect ("..., and the target is subjected to the following effect",
+// Homunculus Bite): the effect is the save owner's (applySaveEffect), so the lead-in is nothing for the GM.
+var subjectedLeadRe = regexp.MustCompile(`(?i)^(?:and\s+)?(?:the target|it)\s+is subjected to the following effect\.?`)
+
 func unappliedHitRider(desc string) string {
 	sentence := hitDamageSentence(desc)
 	if sentence == "" {
@@ -548,6 +552,7 @@ func unappliedHitRider(desc string) string {
 	// lockout sharing its sentence, and the gate lead-ins are not the GM's. Stripping them here is what
 	// keeps a condition-less rider (Stirge Proboscis) out of the residual; a recurring clause whose gate
 	// did not hold still reaches the GM through addRecurringDamage's note, never duplicated from here.
+	text = subjectedLeadRe.ReplaceAllString(text, "") // "and the target is subjected to the following effect": the save owner applies that effect
 	text = attachOnHitRe.ReplaceAllString(text, "")
 	text = hpMaxDrainSentenceRe.ReplaceAllString(text, "") // applied by every hit route (hitAfterDamage)
 	text = stripBurnForCreatures(text)

@@ -116,8 +116,11 @@ func runMonsterSaveEffect(lobby int, c monsterSaveCursor) (line string, immune b
 			addGMNotice(lobby, "A save effect could not save its continuation; no further automatic effects were run.")
 			return strings.Join(parts, "; "), false
 		}
-		text, _ := damageMonster(lobby, c.Target, d, e.Damage[i].Type)
-		parts = append(parts, text)
+		h, _ := hurtMonster(lobby, c.Target, d, e.Damage[i].Type, false)
+		parts = append(parts, h.Text)
+		if drained := e.drainAfterDamage(lobby, c.Target, c.Saved, e.Damage[i].Type, h.Dealt); drained != "" {
+			parts = append(parts, drained)
+		}
 		restore()
 		if combatResolutionPaused(lobby) {
 			return saveEffectLine(c.Line, creatureName(lobby, c.Target), parts), false

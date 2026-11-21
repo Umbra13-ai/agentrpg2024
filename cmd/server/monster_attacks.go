@@ -804,7 +804,9 @@ func resolveMonsterAttack(r *http.Request, campaignID int, monster, action, targ
 			for i, p := range parts {
 				hit.Parts = append(hit.Parts, hpPart{amounts[i], strings.ToLower(p.Type)})
 			}
+			var dealtByType map[string]int // what each damage type dealt (a typed Hit Point maximum drain, hitAfterDamage)
 			if d, err := damageHP(tid, hit); err == nil {
+				dealtByType = d.ByType
 				if c, ok := d.View()["concentration"].(string); ok {
 					line += " [" + c + "]" // the Concentration save the damage called for (F55)
 				}
@@ -837,7 +839,7 @@ func resolveMonsterAttack(r *http.Request, campaignID int, monster, action, targ
 						}
 					}
 				}
-				line += hitAfterDamage(campaignID, tid, a.Desc, attackerName+"'s "+stripUsage(a.Name), (hpB+tempB)-(hpA+tempA)) // Life Drain, burning (hit_after_damage_2024.go)
+				line += hitAfterDamage(campaignID, tid, a.Desc, attackerName+"'s "+stripUsage(a.Name), (hpB+tempB)-(hpA+tempA), dealtByType) // Life Drain, burning (hit_after_damage_2024.go)
 				// the attach the hit starts ("and the stirge attaches to the target"): before the recurring
 				// damage, whose gate reads the attach row (monster_attach_2024.go). Outside the parseHitRider
 				// branch: an attach rider (Stirge Proboscis) carries no condition for it to match.

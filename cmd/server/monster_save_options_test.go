@@ -25,7 +25,13 @@ func TestSplitSaveOptionsAndStages(t *testing.T) {
 	}
 	staged := "Constitution Saving Throw: DC 18, each creature in a 60-foot Cone. Failure: The target has the Incapacitated condition until the end of its next turn, at which point it repeats the save. Second Failure: The target has the Unconscious condition for 10 minutes."
 	s, _ := parseSaveEffect(staged)
-	if len(s.Conditions) != 1 || s.Conditions[0] != "incapacitated" || !strings.Contains(s.Extra, "Second Failure") || !strings.Contains(s.Extra, "Unconscious") {
-		t.Fatalf("a staged effect lost its second stage: conditions %v, GM text %q", s.Conditions, s.Extra)
+	// the second stage is the condition owner's now (readSecondFailure): applied on the failed repeat, not given to the GM
+	if len(s.Conditions) != 1 || s.Conditions[0] != "incapacitated" || !s.EndSave || s.Stage == nil || s.Stage.Then != "unconscious" || s.Stage.ThenRounds != 100 || strings.Contains(s.Extra, "Second Failure") {
+		t.Fatalf("a staged effect lost its second stage: conditions %v, stage %+v, GM text %q", s.Conditions, s.Stage, s.Extra)
+	}
+	// a second stage the reader can't apply still reaches the GM
+	odd := "Constitution Saving Throw: DC 18, each creature in a 60-foot Cone. Failure: The target has the Incapacitated condition until the end of its next turn, at which point it repeats the save. Second Failure: The target is banished to another plane."
+	if s, _ := parseSaveEffect(odd); s.Stage != nil || !strings.Contains(s.Extra, "Second Failure") {
+		t.Fatalf("an unread second stage: stage %+v, GM text %q", s.Stage, s.Extra)
 	}
 }
