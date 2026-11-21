@@ -1,7 +1,7 @@
 package main
 
 // Themes (Nov 10). Every page draws its colors and fonts from these variables, so a theme changes the whole site, the character sheet
-// included (its parchment colors were fixed in the page, so other themes didn't reach it). Dark is the default; Parchment, the look of the character
+// included (its parchment colors were fixed in the page, so other themes didn't reach it). Obsidian Gold is the default (defaultTheme); Parchment, the look of the character
 // sheets, is one of the named themes. The theme menu lists the themes by
 // name; the choice is kept in the browser (localStorage).
 //
@@ -39,7 +39,46 @@ func themeVars(base map[string]string, status map[string]string, body, sheet str
 	return out
 }
 
+// The tabletop themes of the GUI rework (Matt, Nov 21: the "Tabletop Command & Spectator" design): Obsidian Gold is the default;
+// each also sets the design's own variables (--bg-glass, --btn-bg, --btn-fg, --accent-soft, --sheen, --shadow, --bg-radial,
+// --elev, --border-strong, --font-heading, --font-mono). The older themes leave those to the fallbacks in siteCSS.
+const interStack = `Inter, -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif`
+const cinzelStack = `Cinzel, Georgia, serif`
+const monoStack = `"JetBrains Mono", ui-monospace, SFMono-Regular, Menlo, monospace`
+
+func tabletopTheme(accent, accentSoft, borderStrong, btnBG, btnFG, radial string) map[string]string {
+	return themeVars(map[string]string{
+		"--bg": "#0b0d13", "--fg": "#f3efe8", "--muted": "#a8a296", "--link": accent, "--link-visited": accent,
+		"--border": "rgba(255, 255, 255, 0.12)", "--code-bg": "#0a0c12", "--note-bg": "#141826", "--note-border": borderStrong,
+		"--surface": "#121520", "--panel": "#191e2d", "--panel-strong": "#202638", "--panel-border": "rgba(255, 255, 255, 0.16)",
+		"--rule": borderStrong, "--heading": accent, "--accent": accent, "--accent-fg": btnFG,
+		"--bg-glass": "rgba(18, 21, 32, 0.9)", "--btn-bg": btnBG, "--btn-fg": btnFG, "--accent-soft": accentSoft,
+		"--border-strong": borderStrong, "--elev": "#191e2d", "--sheen": accentSoft, "--bg-radial": radial,
+		"--shadow":       "inset 0 1px 0 rgba(255, 255, 255, 0.06), 0 14px 36px rgba(0, 0, 0, 0.55)",
+		"--font-heading": cinzelStack, "--font-mono": monoStack}, darkStatus, interStack, interStack)
+}
+
+// obsidianTheme: Obsidian Gold, the design's own colors.
+func obsidianTheme() map[string]string {
+	v := tabletopTheme("#e5b85c", "rgba(229, 184, 92, 0.16)", "rgba(214, 173, 86, 0.62)", "linear-gradient(135deg, #f0c975, #b48224)", "#140f06",
+		"radial-gradient(circle at 50% 0%, rgba(212, 162, 58, 0.11) 0%, rgba(11, 13, 22, 0) 58%)")
+	for k, x := range map[string]string{"--bg": "#08090e", "--fg": "#f5efe2", "--muted": "#a9a294", "--surface": "#111420", "--panel": "#181d2e",
+		"--elev": "#181d2e", "--border": "rgba(214, 173, 86, 0.24)", "--panel-border": "rgba(214, 173, 86, 0.3)", "--bg-glass": "rgba(17, 20, 32, 0.86)",
+		"--shadow": "inset 0 1px 0 rgba(255, 225, 155, 0.12), 0 14px 36px rgba(0, 0, 0, 0.55)", "--ok": "#46c284", "--bad": "#e0565b", "--info": "#699bf7",
+		"--warn": "#e5b85c"} {
+		v[k] = x
+	}
+	return v
+}
+
 var siteThemes = []siteTheme{
+	{"obsidian", "Obsidian Gold", obsidianTheme()},
+	{"maroon", "Crimson Maroon", tabletopTheme("#d95b76", "rgba(217, 91, 118, 0.15)", "rgba(196, 62, 92, 0.55)", "linear-gradient(135deg, #9e2a45, #731a30)", "#fff5f7",
+		"radial-gradient(circle at 50% 0%, rgba(168, 44, 68, 0.14) 0%, rgba(11, 13, 19, 0) 55%)")},
+	{"emerald", "Forest Emerald", tabletopTheme("#46b87c", "rgba(70, 184, 124, 0.15)", "rgba(56, 168, 108, 0.55)", "linear-gradient(135deg, #24784c, #175233)", "#f2fff7",
+		"radial-gradient(circle at 50% 0%, rgba(34, 128, 78, 0.14) 0%, rgba(11, 13, 19, 0) 55%)")},
+	{"royal", "Royal Sapphire", tabletopTheme("#5d92f5", "rgba(93, 146, 245, 0.15)", "rgba(76, 128, 235, 0.55)", "linear-gradient(135deg, #2a56b8, #1b3a82)", "#f3f7ff",
+		"radial-gradient(circle at 50% 0%, rgba(44, 92, 196, 0.15) 0%, rgba(11, 13, 19, 0) 55%)")},
 	{"parchment", "Parchment", themeVars(map[string]string{
 		"--bg": "#f4ecd8", "--fg": "#1f1b16", "--muted": "#6b645a", "--link": "#58180d", "--link-visited": "#7a2a18",
 		"--border": "#c9b994", "--code-bg": "#ece2c8", "--note-bg": "#f1e8d4", "--note-border": "#c9a24a",
@@ -102,10 +141,17 @@ func themeBlock(selector string, vars map[string]string) string {
 	return b.String()
 }
 
-// themeCSS: Dark on :root (the default, the project owner Nov 10), then each theme by name.
+// defaultTheme: the theme of a viewer who chose none (Obsidian Gold since the GUI rework, Matt Nov 21; Dark before).
+const defaultTheme = "obsidian"
+
+// themeCSS: the default theme on :root, then each theme by name.
 func themeCSS() string {
 	var b strings.Builder
-	b.WriteString(themeBlock(":root", siteThemes[2].Vars))
+	for _, t := range siteThemes {
+		if t.Key == defaultTheme {
+			b.WriteString(themeBlock(":root", t.Vars))
+		}
+	}
 	for _, t := range siteThemes {
 		b.WriteString(themeBlock(fmt.Sprintf(`[data-theme="%s"]`, t.Key), t.Vars))
 	}
@@ -115,15 +161,10 @@ func themeCSS() string {
 // themeMenu: the theme picker, by name.
 func themeMenu() string {
 	var b strings.Builder
-	b.WriteString(`<label class="theme-pick">Theme <select id="theme-select" onchange="setTheme(this.value)" aria-label="Theme">`)
+	b.WriteString(`<label class="theme-pick"><span class="theme-label">Theme</span> <select id="theme-select" class="theme-select" onchange="setTheme(this.value)" aria-label="Theme">`)
 	for _, t := range siteThemes {
 		b.WriteString(fmt.Sprintf(`<option value="%s">%s</option>`, t.Key, t.Name))
 	}
 	b.WriteString(`</select></label>`)
 	return b.String()
-}
-
-func init() {
-	baseHTML = strings.Replace(baseHTML, "/*THEMES*/", themeCSS(), 1)
-	baseHTML = strings.Replace(baseHTML, "<!--THEME-MENU-->", themeMenu(), 1)
 }

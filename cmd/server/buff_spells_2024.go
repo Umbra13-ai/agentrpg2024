@@ -513,7 +513,7 @@ func holyAuraOn(lobbyID, targetID int) (bool, int) {
 
 // passWithoutTraceOn: within 30 feet of a caster of Pass without Trace.
 func passWithoutTraceOn(lobbyID, charID int) bool {
-	if lobbyID == 0 || charID <= 0 {
+	if lobbyID == 0 || charID == 0 { // any creature: a character, a monster (negative id), a companion
 		return false
 	}
 	rows, err := db.Query(`SELECT DISTINCT target_id FROM spell_effects WHERE lobby_id = $1 AND kind = 'pass_without_trace'`, lobbyID)

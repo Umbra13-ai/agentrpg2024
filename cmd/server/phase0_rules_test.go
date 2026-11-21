@@ -60,6 +60,7 @@ func equalInts(a, b []int) bool {
 // notCharacterFields: id fields of GM requests that name something other than a character. Every *_id / *_ids field of a GM
 // request must be in characterIDFields or here, so a new field that names a character can't be missed by gmReadAs.
 var notCharacterFields = map[string]bool{
+	"area_id":     true, // an obscured area (obscured_areas_2024.go)
 	"campaign_id": true, "record_id": true, "deadline_id": true, "object_id": true, "curse_id": true, "combat_id": true,
 	"companion_id": true, "agent_id": true, "item_id": true, "shop_id": true, "draft_id": true, "action_id": true,
 	"resume_id":  true, // opaque saved combat work id; the resume owner scopes it to the GM campaign

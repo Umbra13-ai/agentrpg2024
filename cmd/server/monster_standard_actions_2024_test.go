@@ -65,7 +65,7 @@ func TestPostgresMonsterNimbleEscape(t *testing.T) {
 	if r := use(""); !strings.Contains(r, "name the action in use (Disengage, Hide). Nothing was done.") || monsterDisengaged(camp, raider) {
 		t.Fatalf("an unnamed choice was not refused or recorded something: %s", r)
 	}
-	if r := use("hide"); !strings.Contains(r, "Hide action (the GM resolves it") || monsterDisengaged(camp, raider) {
+	if r := use("hide"); !strings.Contains(r, "the Hide action, Dexterity (Stealth)") || monsterDisengaged(camp, raider) { // rolled (hide_2024.go)
 		t.Errorf("Hide: %s", r)
 	}
 	if r := use("disengage"); !strings.Contains(r, "takes the Disengage action") || !monsterDisengaged(camp, raider) {

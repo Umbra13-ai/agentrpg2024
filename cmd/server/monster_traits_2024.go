@@ -22,6 +22,7 @@ type monsterTraitRule struct {
 	Where string         // the rule's owner in the code
 	Aura  bool           // it acts on its own timing around the monster: the GM's monster-features view lists it under
 	// automatic_traits, and gm/monster-features {"auras": false} switches it off (Regeneration aside)
+	GM bool // the trait is the GM's by design (communication, a sense the server keeps no state for): Does says why
 }
 
 var monsterTraitRules = []monsterTraitRule{
@@ -54,6 +55,14 @@ var monsterTraitRules = []monsterTraitRule{
 		Where: "conditionTraitReaction (monster_condition_traits_2024.go), called by conditionTakesHold"},
 	{Match: saveEndAuraRe, Does: "an aura: each creature in it (of its choice: its enemies) makes the saving throw at the end of the monster's turn; one that is immune to it after a success is left out",
 		Where: "endSaveAura (monster_features_2024.go)", Aura: true},
+	{Match: devilsSightRe, Does: "its Darkvision sees into Magical Darkness: attack rolls and the actions that need a creature it can see read it",
+		Where: "piercesMagicalDarknessWithin (monster_darkness_2024.go), creatureDevilsSight (creature_senses_2024.go)"},
+	{Match: sunlightRe, Does: "while it stands in sunlight (the GM's lighting set to sunlight): Disadvantage on its attack rolls and its Hide check, and on its saving throws where the trait says D20 Tests",
+		Where: "attackSources, saveSources, attemptMonsterHide; sunlightPenalty (creature_senses_2024.go)"},
+	// the GM's by design: no server state to apply them to (asserted, so the GM's stat block says so plainly)
+	{Match: regexp.MustCompile(`(?i)\btelepath`), Does: "telepathic communication or a mind link: the GM plays it (the server keeps no messages between creatures)", Where: "the GM", GM: true},
+	{Match: regexp.MustCompile(`(?i)\bcan pinpoint the location of\b`), Does: "a sense that finds things (ferrous metal, a scent): the GM tells what it finds", Where: "the GM", GM: true},
+	{Match: regexp.MustCompile(`(?i)\bcan communicate with\b|\bcan speak with\b`), Does: "speaking with creatures: the GM plays it", Where: "the GM", GM: true},
 }
 
 // traitName: a trait's name without its parenthesis ("Legendary Resistance (3/Day, or 4/Day in Lair)" -> "Legendary Resistance").
@@ -115,8 +124,10 @@ func traitsForGM(key string) []map[string]interface{} {
 	out := []map[string]interface{}{}
 	for _, t := range meta.Traits {
 		e := map[string]interface{}{"name": t.Name, "text": t.Text}
-		if r, ok := traitRuleFor(t); ok {
+		if r, ok := traitRuleFor(t); ok && !r.GM {
 			e["server_applies"], e["server_does"] = true, r.Does
+		} else if ok {
+			e["server_applies"], e["server_does"] = false, "the GM applies this trait: "+r.Does
 		} else {
 			e["server_applies"], e["server_does"] = false, "the server doesn't apply this trait: the GM does"
 		}

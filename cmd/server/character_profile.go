@@ -535,12 +535,12 @@ func htmlEscape(s string) string {
 
 const characterProfilePage = `
 <style>
-.cp{max-width:1080px;margin:0 auto;padding:1.4em 1.8em 2em;background:var(--surface);color:var(--fg);border:1px solid var(--panel-border);box-shadow:0 2px 10px rgba(0,0,0,.25);font-family:var(--font-sheet);font-size:1rem;line-height:1.42}
+.cp{max-width:1180px;margin:0 auto;padding:1.4em 1.8em 2em;background:var(--surface);color:var(--fg);border:1px solid var(--panel-border);border-radius:var(--radius-lg,0);box-shadow:var(--shadow,0 2px 10px rgba(0,0,0,.25));font-family:var(--font-sheet);font-size:1rem;line-height:1.42}
 .cp a{color:var(--accent)}
 .cp *{box-sizing:border-box}
 .cp .muted{color:var(--muted)}
 .cp .sheet{display:grid;grid-template-columns:minmax(0,1fr) minmax(340px,44%);gap:1.6em;align-items:start}
-.cp .textcol h1{font-variant:small-caps;font-size:2.5em;color:var(--heading);margin:0;line-height:1.05;font-weight:bold}
+.cp .textcol h1{font-family:var(--font-heading,inherit);font-variant:small-caps;font-size:clamp(1.8em,5vw,2.5em);color:var(--heading);margin:0;line-height:1.05;font-weight:bold}
 .cp .quote{font-style:italic;color:var(--muted);margin:.1em 0 .6em}
 .cp .lore p{margin:.5em 0;white-space:pre-wrap}
 .cp .lore b.n,.cp .persona b.n{font-style:italic}
@@ -562,8 +562,8 @@ const characterProfilePage = `
 .cp .boxname.eq{font-size:1.25em}
 .cp .typeline{font-style:italic;color:var(--muted);margin:.15em 0 .35em}
 .cp .abgrid{display:flex;flex-wrap:wrap;gap:.3em 1em;margin:.45em 0}
-.cp .abgroup{display:grid;grid-template-columns:max-content 2.3em 2.3em 2.3em;font-size:.92em}
-.cp .abgroup .hd{font-size:.58em;color:var(--muted);text-align:center;letter-spacing:.05em;font-style:italic}
+.cp .abgroup{display:grid;grid-template-columns:max-content repeat(3,minmax(2.6em,max-content));font-size:.92em}
+.cp .abgroup .hd{font-size:.75rem;padding:0 .2em;color:var(--muted);text-align:center;letter-spacing:.05em;font-style:italic}
 .cp .abgroup .nm{white-space:nowrap;min-width:7.4em;background:var(--panel-strong);color:var(--accent);font-variant:small-caps;font-weight:bold;padding:0 .3em;border-bottom:1px solid var(--panel)}
 .cp .abgroup .vl{background:var(--panel-strong);text-align:center;border-bottom:1px solid var(--panel)}
 .cp .abgroup .vl.p{font-weight:bold}
@@ -595,7 +595,9 @@ const characterProfilePage = `
 .cp #err{color:var(--bad)}
 .cp .sheet>*{min-width:0}
 .cp .box,.cp .feat,.cp .persona p,.cp .lore p,.cp .spl p{overflow-wrap:anywhere}
+@media (max-width:480px){.cp .statgrid{grid-template-columns:minmax(0,1fr)}.cp .statgrid .cell{white-space:normal}}
 @media (max-width:860px){.cp{padding:1em}.cp .sheet{grid-template-columns:minmax(0,1fr)}.cp .statcol{order:-1}.cp .portrait{max-width:300px}}
+@media (max-width:640px){.cp .portrait{max-width:160px;margin:0 auto 1em}.cp .portrait .ph{font-size:3em}} /* a phone sees the sheet first, the portrait small (Nov 21) */
 </style>
 <div class="cp" id="cp"><p class="muted" id="loading">Loading character…</p><p id="err"></p></div>
 <script>

@@ -572,3 +572,22 @@ Verified as already handled (probe of the book text through the readers): Mud an
 ## A trait that acts when the creature receives a condition
 
 `monster_condition_traits_2024.go`: "If the flumph receives the Prone condition, roll a die. On an odd number, it has the Incapacitated condition. At the end of each of its turns, ... a DC 10 Dexterity saving throw, ending the Incapacitated condition on a success" (Flumph, Prone Deficiency). `conditionTakesHold` calls `conditionTraitReaction` for a monster or a companion once the condition took hold; the die is rolled and the second condition, with its repeated save, goes through `addCondition`. Go: `TestPostgresBookShapeShiftAndConditionTriggers`.
+
+## Obscured areas, senses and light (CR 0-1, 2026-11-21)
+
+- **Heavily Obscured areas** (`obscured_areas_2024.go`): Fog Cloud (Ice Mephit, any caster: `obscuringSpells`) and an entry that "fills a
+  N-foot Cube centered on itself ... is Heavily Obscured for 1 minute" (Octopus and Giant Octopus Ink Cloud: `obscuringTextRe`) make an
+  `obscured_area` row: on the battle map a Sphere around the GM's point (else the first target, else the caster) or a Cube on the
+  creature's space; without a map the creatures named inside (the action's target_ids; the GM's `POST /api/gm/obscured-area`). It ends
+  with its duration, its source's Concentration or the GM (`end`: a strong wind or current). `areaBlocksSight` reads it (and Magical
+  Darkness) for attack rolls (both unseen legs) and for "a creature it can see" targeting; only Blindsight perceives through fog and ink.
+  The Ink Cloud's move ("moves up to its Swim Speed") and its underwater trigger stay the GM's (no underwater or movement state).
+- **Devil's Sight** ("Magical Darkness doesn't impede the X's Darkvision"): the creature's Darkvision sees into Magical Darkness.
+- **Sunlight Sensitivity / Sunlight Weakness**: while the GM's lighting is `sunlight` (POST /api/gm/set-lighting), Disadvantage on the
+  creature's attack rolls and Hide check, and on its saving throws where the trait says D20 Tests (the Shadow).
+- **Shadow Stealth** and every stat block "takes the Hide action": rolled (`attemptMonsterHide`), refused outside the light the entry
+  names; the hidden condition ends when the creature makes an attack roll. Pass without Trace cast by a monster gives any creature in its
+  aura +10 to that check.
+- **GM by design, asserted**: telepathy and mind links (Probing Telepathy, Telepathic Bond, Shark Telepathy, Bound, Vampiric Connection,
+  Shielded Mind; the book's Advanced Telepathy and Telepathic Shroud; any trait worded with telepathy), senses that find things (Iron Scent, Treasure
+  Sense), speaking with creatures: `GM` rows of `monsterTraitRules`, shown to the GM as theirs to apply.

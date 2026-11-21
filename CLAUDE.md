@@ -102,6 +102,20 @@ Report: "Wizard Scholar accepts any skill for Expertise."
 - **A standard action a stat-block entry takes** ("takes the Disengage or Hide action", `cmd/server/monster_standard_actions_2024.go`):
   `resolveMonsterStandardAction` (a choice named in `use`; Disengage recorded as the `disengaged` combat effect that
   `noteMonstersLeavingReach` reads). Go: `TestPostgresMonsterNimbleEscape`.
+- **An area that blocks sight** (SRD 5.2.1 Heavily Obscured; Magical Darkness): `areaBlocksSight` (`cmd/server/obscured_areas_2024.go`)
+  is the one answer to "an area keeps the viewer from seeing the target", read by the attack roll's unseen-attacker and unseen-target
+  rows and by a monster action that needs a creature it can see. Fog, ink and smoke are `obscured_area` rows (`obscuredAreas` reads and
+  sweeps them, `startObscuredArea` writes): a Sphere on a point or a Cube on its maker, on the battle map, else the creatures named
+  inside (the cast's targets, `POST /api/gm/obscured-area` `inside`); they end with their time, their source's Concentration
+  (`endMonsterConcentrationIn` deletes them; a character's `concentrating_on`) or the GM (`end`: a strong wind or current); Blindsight
+  perceives through them. A spell that makes one is a row of `obscuringSpells` (a character's and a monster's cast); a stat block entry
+  is read by `obscuringTextRe` (Ink Cloud). Magical Darkness keeps its rows (`monster_darkness_2024.go`), read through the same answer.
+  **A creature's own senses and light traits** (`creature_senses_2024.go`): Devil's Sight (`creatureDevilsSight`, read by the Magical
+  Darkness sight model), Sunlight Sensitivity (`sunlightPenalty` while `inSunlight`: the GM's lighting `sunlight`; rows in
+  `attackSources` and `saveSources`, and the monster Hide). **A monster's Hide** is rolled by `attemptMonsterHide` (`hide_2024.go`: a
+  light-gated Hide such as Shadow Stealth, its Stealth, Pass without Trace for any creature); a creature stops being hidden when it
+  makes an attack roll (`endHidden`, in `attackCtx.roll`). Telepathy and other communication or sense-only traits are `GM` rows of
+  `monsterTraitRules`. Go: `TestPostgresObscuredAreasAndSenses`, `TestObscuringAndSenseWordings`.
 - **A monster attack's range on the battle map:** `monsterAttackRange` (`cmd/server/map_rules.go`) for every target route (character, monster,
   companion): refusal beyond reach or long range, Disadvantage beyond normal range, within 5 feet. Go: `TestPostgresMonsterAttackRangeOnEveryTarget`.
 - **What a hit does after its damage:** `hitAfterDamage` (`cmd/server/hit_after_damage_2024.go`), called once by every hit route: the drain
@@ -621,8 +635,18 @@ Add to the owner, never beside it. When you give another rule one owner, add it 
 - **The GM guide:** `docs/gm_guide.md` (`docs.GMGuide`), sent as `gm_guide` when a campaign is created and served at
   `/gm-guide.md`, with this server's address where it says `https://YOUR-SERVER` and the schedule table from `scheduleOf` at
   its marker (`gmGuide`).
-- **The GUI rework preview** (Matt, Nov 17): `handleUIPreview` (`cmd/server/ui_preview_2024.go`) serves the saved ChatGPT design in
-  `data/ui_preview/` at `/preview/`, frozen data, only where `AGENTRPG_UI_PREVIEW=1` (staging); 404 elsewhere. Not the real pages.
+- **Every web page's frame** (the GUI rework, Matt Nov 21: the "Tabletop Command & Spectator" design, saved in
+  `data/ui_preview/gui-2026-11-21/`): `cmd/server/site_layout_2024.go`. `wrapHTML` (web_pages.go) puts a page into `baseHTML` /
+  `pageTemplate`, built there from `siteNav` (the one list of the site's links: the desktop navigation from 1024 px, the phones' bottom
+  tab bar and the footer are made from it; the page being read is marked active by its `Match` paths) and `siteCSS` (the shared parts:
+  top bar, tab bar, panels, badges, buttons, pills, Hit Point bars, chronicle entries, a campaign's encounter stage and three-column
+  table, form controls), on the theme variables of `themes_2024.go` (`siteThemes`; `defaultTheme` is Obsidian Gold). A page adds only
+  its own CSS; never paste the shared parts into a page. Mobile first: text never under 12 px, a touch target never under 40 px.
+  The design's images are served from `data/site_assets` at `/assets/` (`handleSiteAsset`). `classIcon` is a character's token
+  without a portrait, `feedKind` a feed entry's kind (its color and the chronicle's filter).
+- **The GUI rework previews** (Matt, Nov 17 and 21): `handleUIPreview` (`cmd/server/ui_preview_2024.go`) serves the saved designs in
+  `data/ui_preview/` at `/preview/` (the Nov 21 one at `/preview/gui-2026-11-21/`), frozen data, only where `AGENTRPG_UI_PREVIEW=1`
+  (staging); 404 elsewhere. The real pages are built from the layout above.
 - **The guide served to agents:** `docs/skill.md`, built into the program by the `docs` package (`docs.Skill`).
 - **A monster attack's damage and a Multiattack's plan** (`parseMonsterAttack`, `prepareMonsterAttack`, `multiattackPlan`): every damage amount of a
   Hit is represented or the attack is refused before any roll; a Multiattack is capped at 20 attacks and an either/or choice is never

@@ -54,7 +54,7 @@ func resolveMonsterStandardAction(lobbyID, monsterID int, name, entryName, text,
 		}
 		return fmt.Sprintf("%s uses %s: it takes the Disengage action; its movement doesn't provoke Opportunity Attacks for the rest of the turn.", name, entryName), true
 	case "Hide":
-		return fmt.Sprintf("%s uses %s: it takes the Hide action (the GM resolves it: a DC 15 Dexterity (Stealth) check, possible only while Heavily Obscured or behind Three-Quarters or Total Cover and out of any enemy's line of sight; on a success it has the Invisible condition).", name, entryName), true
+		return attemptMonsterHide(lobbyID, monsterID, name, entryName, text, apply), true
 	}
 	return fmt.Sprintf("%s uses %s: it takes the %s action (the GM resolves it).", name, entryName, chosen), true
 }

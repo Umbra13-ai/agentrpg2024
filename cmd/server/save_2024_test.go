@@ -87,6 +87,7 @@ func TestNoOtherSaveRoll(t *testing.T) {
 		"gm_group_check_2024.go:handleGMGroupCheck":     "group checks",
 		"gm_spells.go:handleGMDispelMagic":              "Dispel Magic's ability check",
 		"hide_2024.go:attemptHide":                      "a Dexterity (Stealth) check",
+		"hide_2024.go:attemptMonsterHide":               "a monster's Dexterity (Stealth) check",
 		"legendary_items_2024.go:addMonstersToFight":    "Initiative",
 		"legendary_items_2024.go:sphereOfAnnihilation":  "an Intelligence (Arcana) check",
 		"magic_item_use_2024.go:planItemCast":           "a Spell Scroll's ability check",

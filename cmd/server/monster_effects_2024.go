@@ -1135,6 +1135,18 @@ func resolveMonsterSpellRules(r *http.Request, lobbyID, monsterID int, monsterNa
 	if level > sp.Level {
 		head += fmt.Sprintf(" (level %d)", level)
 	}
+	// a spell that fills an area with fog (obscured_areas_2024.go): at the GM's point, else on its first target, else on the monster
+	var point *mapSquare
+	if v, pt := monsterAreaPoint.Load(lobbyID); pt {
+		sq := v.(mapSquare)
+		point = &sq
+	}
+	if line, handled := castObscuringSpell(lobbyID, monsterID, slug, sp.Name, level, point, targets, apply); handled {
+		if apply && !strings.Contains(line, "could not be recorded") {
+			markExecuted(r)
+		}
+		return []string{head + ". " + line}
+	}
 	// a lasting effect or a heal: the effect a character's cast of the spell has (monster_cast_effects_2024.go)
 	if lines, handled := monsterCastLasting(r, lobbyID, monsterID, sp, slug, head, level, dc, targets, selfCast, apply); handled {
 		return lines
@@ -1539,6 +1551,10 @@ func resolveMonsterEffectText(r *http.Request, lobbyID, monsterID int, meta *mon
 	// Magical Darkness: a token-anchored emanation the visibility owner reads (monster_darkness_2024.go)
 	if magicalDarknessRe.MatchString(text) {
 		return resolveMagicalDarkness(r, lobbyID, monsterID, entryName, text, apply, notes)
+	}
+	// fog, ink, smoke that fills a Cube or Sphere centered on the monster (obscured_areas_2024.go)
+	if obscuringTextRe.MatchString(text) {
+		return append(resolveObscuringText(r, lobbyID, monsterID, entryName, text, targets, apply), notes...)
 	}
 	return append([]string{fmt.Sprintf("%s uses %s: %s (the GM resolves it).", name, entryName, text)}, notes...)
 }
