@@ -385,6 +385,25 @@ target's ability scores" (`restoreAbilityScore`). The residual no longer gives t
 hours later" stays the GM's. Catalog parse diff: only the Shadow. Tested: `TestPostgresAbilityDrainOnEveryTarget` (POST /api/gm/narrate at
 a character, a monster and a companion; the sheet and saves; Greater Restoration; Strength 0 kills).
 
+## Corroded and stuck items (`cmd/server/item_state_2024.go`)
+
+One owner of an item's state, kept on the item in the inventory and written through the inventory writer:
+- Gray Ooze Pseudopod, Black Pudding Dissolving Pseudopod (a hit, `hitAfterDamage`): "Nonmagical armor worn by the target takes a -1
+  penalty to the AC it offers. The armor is destroyed if the penalty reduces its AC to 10." The worn armor's corrosion is read by the AC;
+  destroyed armor comes off.
+- Corrosive Form (Gray Ooze, Black Pudding; a trait the attacker meets): a character's weapon hit that dealt damage corrodes the weapon
+  (-1 to attack rolls, read by `weaponAttackMods`; destroyed at -5) or destroys the nonmagical ammunition (not recovered after the fight).
+  Stage 8 of the character's hit continuation. A monster's or companion's weapon is part of its stat block: no item.
+- Rust Monster Antennae (a saving throw on "one nonmagical metal object"): on a failure, the worn nonmagical metal armor, else the
+  nonmagical metal weapon in hand (`saveEffect.ItemPenalty`). Destroy Metal touches an object nobody wears or carries: the GM's.
+- Mending removes the penalty (`mendItem`: the item named, or the only corroded one).
+- Kuo-toa Sticky Shield (a Reaction to a melee weapon attack that missed, recorded this turn): the Strength save is the attacker's; on a
+  failure the weapon sticks fast (an attack with it is refused), the wielder who holds on is Grappled (escape DC 11), and use_item on the
+  weapon is the action of the DC 11 Strength (Athletics) check that frees it and ends that grapple.
+None of these sentences reaches the GM's residual any more. Catalog parse diff: Gray Ooze, Black Pudding, Rust Monster (the Kuo-toa is
+not SRD; its rule is read from the same wording). Tested: `TestPostgresItemCorrosion` (POST /api/gm/narrate and POST /api/action, invented
+creatures with the published sentences).
+
 ## A hit's Hit Point maximum drain (`cmd/server/hp_max_drain_2024.go`)
 
 "If the target is a creature, its Hit Point maximum decreases by an amount equal to the damage taken" (SRD 5.2.1 Specter and Wraith Life

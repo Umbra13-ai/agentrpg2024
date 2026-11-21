@@ -88,6 +88,12 @@ func weaponAttackMods(u weaponUse) weaponMods {
 			m.Parts = append(m.Parts, fmt.Sprintf("magic weapon %s", signedBonus(m.Plus)))
 		}
 	}
+	if stored && u.hasWeapon && !u.improvised { // a corroded weapon: -1 to attack rolls for each point (item_state_2024.go)
+		if c := weaponCorrosionOf(u.charID, u.key, u.offHand); c > 0 {
+			m.Attack -= c
+			m.Parts = append(m.Parts, fmt.Sprintf("corroded -%d", c))
+		}
+	}
 	if stored && u.hasWeapon && u.weapon.Type == "ranged" && hasFightingStyle(u.charID, "archery") {
 		m.Archery = true // Archery: +2 to attack rolls with Ranged weapons
 		m.Attack += 2

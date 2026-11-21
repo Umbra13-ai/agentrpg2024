@@ -53,7 +53,7 @@ func init() {
 }
 func runCharacterHitTail(lobby int, c characterHitTail) (string, error) {
 	text := ""
-	for c.Stage < 8 {
+	for c.Stage < 9 {
 		next := c
 		next.Stage++
 		restore, err := armCombatFrame(lobby, "character-hit-tail", next)
@@ -98,6 +98,8 @@ func runCharacterHitTail(lobby int, c characterHitTail) (string, error) {
 		case 7:
 			c.Record.recordChanges(lobby, c.Target, c.Snapshot)
 			noteCharHitOnMonster(lobby, c.Target, c.Record)
+		case 8: // a trait that corrodes what touches it (Corrosive Form): the weapon or the ammunition (item_state_2024.go)
+			text += corrodeOnContact(lobby, c.Char, c.Target, c.Record.Weapon, c.Damage)
 		}
 		restore()
 		c = next

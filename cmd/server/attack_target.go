@@ -297,6 +297,7 @@ func resolveAttackOnMonster(lobbyID, charID, targetID int, o attackOutcome, clea
 		riderDamage.Delete(charID)
 		pendingGiantBoon.Delete(charID)
 		refundMissedSpends(charID) // Divine Smite, Paladin's Smite, Eldritch Smite are cast on a hit
+		noteCharMissOnMonster(lobbyID, targetID, charID, o.Weapon) // for a Reaction to a miss (Sticky Shield: monster_reactions_2024.go)
 	} else {
 		frenzyPending.Delete(charID)
 		keepOnceAttack(charID) // the hit keeps Lifedrinker's and Primal Strike's once-a-turn use (F147)

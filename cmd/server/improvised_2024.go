@@ -16,7 +16,7 @@ var improvisedObjects = []string{"improvised", "chair", "stool", "bottle", "brok
 // weapon the description named or the character holds.
 func improvisedWeapon(description, weaponKey string, weapon SRDWeapon, hasWeapon bool) (SRDWeapon, bool) {
 	d := " " + strings.ToLower(description) + " "
-	throws := strings.Contains(d, "throw") || strings.Contains(d, "hurl") || strings.Contains(d, "toss") || strings.Contains(d, "lob ")
+	throws := strings.Contains(d, "throw") || strings.Contains(d, "hurl") || strings.Contains(d, "toss") || strings.Contains(d, " lob ") // " lob ": a whole word ("the blob" is no throw)
 	thrownProp := false
 	if hasWeapon {
 		for _, p := range weapon.Properties {

@@ -1469,6 +1469,9 @@ func useItemAction(charID int, description string) string {
 	if itemBool(it, "destroyed") {
 		return "Cannot use the " + name + ": it is destroyed. Nothing was spent."
 	}
+	if out, ok := freeStuckWeapon(charID, it); ok { // a weapon stuck fast: the action frees it (item_state_2024.go)
+		return out
+	}
 	if out, ok := legendaryItemUse(charID, it, req, description); ok { // Horn of Valhalla, Ring of Djinni Summoning, Iron Flask, Sphere, Deck
 		return out
 	}

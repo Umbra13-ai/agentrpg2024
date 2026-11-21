@@ -14,7 +14,8 @@ import (
 // call here, never one more call in each route. taken is the damage the hit dealt; byType what each damage type of it dealt (a typed
 // drain: "the Acid damage taken").
 func hitAfterDamage(lobby, target int, desc, source string, taken int, byType map[string]int) string {
-	return drainHPMaximum(lobby, target, desc, taken, byType) + burnOnHit(lobby, target, desc, source) + abilityDecreaseOnHit(lobby, target, desc, source)
+	return drainHPMaximum(lobby, target, desc, taken, byType) + burnOnHit(lobby, target, desc, source) + abilityDecreaseOnHit(lobby, target, desc, source) +
+		corrodeArmorOnHit(lobby, target, desc) // item_state_2024.go
 }
 
 // abilityDecreaseRe: "and the target's Strength score decreases by 1d4. The target dies if this reduces that score to 0." (SRD 5.2.1
@@ -37,7 +38,7 @@ func abilityDecreaseOnHit(lobby, target int, desc, source string) string {
 	if err != nil {
 		return fmt.Sprintf(" [%s's %s score decreases by %s: not recorded (%s); the GM applies it]", name, m[1], m[2], notFoundOrDBError(err, "no such creature"))
 	}
-	text := fmt.Sprintf(" %s's %s score decreases by %d (%s), to %d until an effect such as Greater Restoration ends the reduction.", name, m[1], n, m[2], now)
+	text := fmt.Sprintf(" [%s's %s score decreases by %d (%s), to %d until an effect such as Greater Restoration ends the reduction", name, m[1], n, m[2], now)
 	if now == 0 && m[3] != "" {
 		switch {
 		case target > 0 && !isCompanionCombatID(target):
@@ -49,9 +50,9 @@ func abilityDecreaseOnHit(lobby, target int, desc, source string) string {
 		default:
 			setMonsterHP(lobby, target, 0) // monster_hp_2024.go
 		}
-		text += fmt.Sprintf(" %s dies: its %s is 0.", name, m[1])
+		text += fmt.Sprintf("; %s dies: its %s is 0", name, m[1])
 	}
-	return text
+	return text + "]"
 }
 
 // burnOnHitRe: "If the target is a creature or a flammable object that isn't being worn or carried, it starts burning." A sentence with
