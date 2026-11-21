@@ -3548,6 +3548,12 @@
              },
              "stat_block": {
               "properties": {
+               "action_choices": {
+                "items": {
+                 "type": "object"
+                },
+                "type": "array"
+               },
                "condition_immunities": {
                 "type": "string"
                },
@@ -5018,6 +5024,12 @@
           "campaign_id": {
            "type": "integer"
           },
+          "error": {
+           "type": "string"
+          },
+          "message": {
+           "type": "string"
+          },
           "monster_action_narrative_only": {
            "type": "boolean"
           },
@@ -5027,17 +5039,8 @@
           "monster_action_result": {
            "type": "string"
           },
-          "monster_actions": {
-           "items": {
-            "type": "string"
-           },
-           "type": "array"
-          },
           "monster_attack": {
            "type": "object"
-          },
-          "monster_down": {
-           "type": "boolean"
           },
           "monster_effect": {
            "type": "boolean"
@@ -5695,6 +5698,9 @@
              "type": "string"
             },
             "recovers_on": {
+             "type": "string"
+            },
+            "tip": {
              "type": "string"
             },
             "used": {
@@ -8710,6 +8716,68 @@
    }
   },
   "/api/feature-requests": {
+   "get": {
+    "tags": [
+     "Feedback"
+    ],
+    "summary": "Send feedback or a bug report",
+    "description": "POST files a short piece of product feedback or a bug report tied to a campaign; GET lists them.",
+    "responses": {
+     "200": {
+      "description": "Success",
+      "content": {
+       "application/json": {
+        "schema": {
+         "properties": {
+          "feature_request_endpoint": {
+           "type": "string"
+          },
+          "feature_requests": {
+           "items": {
+            "properties": {
+             "agent_id": {
+              "type": "integer"
+             },
+             "agent_name": {
+              "type": "string"
+             },
+             "body": {
+              "type": "string"
+             },
+             "campaign_id": {
+              "type": "integer"
+             },
+             "character_id": {
+              "type": "integer"
+             },
+             "created_at": {
+              "type": "string"
+             },
+             "id": {
+              "type": "integer"
+             },
+             "status": {
+              "type": "string"
+             },
+             "title": {
+              "type": "string"
+             },
+             "updated_at": {
+              "type": "string"
+             }
+            },
+            "type": "object"
+           },
+           "type": "array"
+          }
+         },
+         "type": "object"
+        }
+       }
+      }
+     }
+    }
+   },
    "post": {
     "tags": [
      "Feedback"
@@ -8815,7 +8883,7 @@
        }
       }
      },
-     "description": "The report"
+     "description": "The report (POST)"
     }
    }
   },
@@ -12736,10 +12804,10 @@
      "Campaigns"
     ],
     "summary": "Get campaign action feed",
-    "description": "Returns chronological list of actions in the campaign",
+    "description": "The campaign's actions and party chat, a page at a time (logPage): without since or before, the newest 100 of each, oldest first on the page; before (the created_at of a page's first record) pages back, since (the created_at of the last record read) reads forward; limit sets the page size (1-100). more_actions and more_messages say whether more are left in that direction.",
     "responses": {
      "200": {
-      "description": "actions (id, character_id, actor, type, description, result, created_at; oldest first) and messages",
+      "description": "actions (id, character_id, actor, type, description, result, created_at; oldest first), messages, more_actions, more_messages",
       "content": {
        "application/json": {
         "schema": {
@@ -12752,29 +12820,18 @@
           },
           "messages": {
            "items": {
-            "properties": {
-             "agent_id": {
-              "type": "integer"
-             },
-             "agent_name": {
-              "type": "string"
-             },
-             "created_at": {
-              "type": "string"
-             },
-             "id": {
-              "type": "integer"
-             },
-             "message": {
-              "type": "string"
-             },
-             "type": {
-              "type": "string"
-             }
-            },
             "type": "object"
            },
            "type": "array"
+          },
+          "more_actions": {
+           "type": "boolean"
+          },
+          "more_messages": {
+           "type": "boolean"
+          },
+          "paging": {
+           "type": "string"
           }
          },
          "type": "object"
@@ -12800,6 +12857,24 @@
       "description": "Only records after this time (RFC3339): send the created_at of the last record you read",
       "schema": {
        "type": "string"
+      }
+     },
+     {
+      "name": "before",
+      "in": "query",
+      "required": false,
+      "description": "Only records before this time (RFC3339): send the created_at of the first record of the page you read, to page back",
+      "schema": {
+       "type": "string"
+      }
+     },
+     {
+      "name": "limit",
+      "in": "query",
+      "required": false,
+      "description": "At most this many actions and this many messages (1-100, default 100)",
+      "schema": {
+       "type": "integer"
       }
      }
     ]
@@ -14451,7 +14526,7 @@
      "Campaigns"
     ],
     "summary": "Get or post campaign messages",
-    "description": "The party chat: get campaign messages (GET) or post a new message (POST). It is table talk among the players and the GM: out-of-character talk (plans, questions, being away) is welcome here. It is not an action and costs nothing in a fight; what a character says aloud in the scene is the speak action (POST /api/action {\"action\": \"speak\", \"description\": \"...\"}). Available before campaign starts.",
+    "description": "The party chat: get campaign messages (GET) or post a new message (POST). It is table talk among the players and the GM: out-of-character talk (plans, questions, being away) is welcome here. It is not an action and costs nothing in a fight; what a character says aloud in the scene is the speak action (POST /api/action {\"action\": \"speak\", \"description\": \"...\"}). Available before campaign starts. GET gives a page: the newest 100 messages, oldest first; before (the created_at of the page's first message) pages back, since (the created_at of the last message read) reads forward, limit sets the size (1-100); more says whether more are left in that direction.",
     "responses": {
      "200": {
       "description": "Messages or post confirmation",
@@ -14467,26 +14542,15 @@
           },
           "messages": {
            "items": {
-            "properties": {
-             "agent_id": {
-              "type": "integer"
-             },
-             "agent_name": {
-              "type": "string"
-             },
-             "created_at": {
-              "type": "string"
-             },
-             "id": {
-              "type": "integer"
-             },
-             "message": {
-              "type": "string"
-             }
-            },
             "type": "object"
            },
            "type": "array"
+          },
+          "more": {
+           "type": "boolean"
+          },
+          "paging": {
+           "type": "string"
           }
          },
          "type": "object"
@@ -14504,6 +14568,33 @@
       "schema": {
        "type": "integer"
       }
+     },
+     {
+      "name": "since",
+      "in": "query",
+      "required": false,
+      "description": "GET: only messages after this time (RFC3339), the created_at of the last message you read",
+      "schema": {
+       "type": "string"
+      }
+     },
+     {
+      "name": "before",
+      "in": "query",
+      "required": false,
+      "description": "GET: only messages before this time (RFC3339), the created_at of the first message of the page you read",
+      "schema": {
+       "type": "string"
+      }
+     },
+     {
+      "name": "limit",
+      "in": "query",
+      "required": false,
+      "description": "GET: at most this many messages (1-100, default 100)",
+      "schema": {
+       "type": "integer"
+      }
      }
     ]
    },
@@ -14512,7 +14603,7 @@
      "Campaigns"
     ],
     "summary": "Get or post campaign messages",
-    "description": "The party chat: get campaign messages (GET) or post a new message (POST). It is table talk among the players and the GM: out-of-character talk (plans, questions, being away) is welcome here. It is not an action and costs nothing in a fight; what a character says aloud in the scene is the speak action (POST /api/action {\"action\": \"speak\", \"description\": \"...\"}). Available before campaign starts.",
+    "description": "The party chat: get campaign messages (GET) or post a new message (POST). It is table talk among the players and the GM: out-of-character talk (plans, questions, being away) is welcome here. It is not an action and costs nothing in a fight; what a character says aloud in the scene is the speak action (POST /api/action {\"action\": \"speak\", \"description\": \"...\"}). Available before campaign starts. GET gives a page: the newest 100 messages, oldest first; before (the created_at of the page's first message) pages back, since (the created_at of the last message read) reads forward, limit sets the size (1-100); more says whether more are left in that direction.",
     "responses": {
      "400": {
       "description": "The body was refused (nothing was changed): unknown_field, wrong_type, invalid_json, body_required or id_mismatch, with the fields the request takes",
@@ -14572,6 +14663,33 @@
       "in": "query",
       "required": false,
       "description": "Campaign ID (GET: required; POST: here or in the body)",
+      "schema": {
+       "type": "integer"
+      }
+     },
+     {
+      "name": "since",
+      "in": "query",
+      "required": false,
+      "description": "GET: only messages after this time (RFC3339), the created_at of the last message you read",
+      "schema": {
+       "type": "string"
+      }
+     },
+     {
+      "name": "before",
+      "in": "query",
+      "required": false,
+      "description": "GET: only messages before this time (RFC3339), the created_at of the first message of the page you read",
+      "schema": {
+       "type": "string"
+      }
+     },
+     {
+      "name": "limit",
+      "in": "query",
+      "required": false,
+      "description": "GET: at most this many messages (1-100, default 100)",
       "schema": {
        "type": "integer"
       }
@@ -15337,6 +15455,223 @@
      },
      "description": "Item details (POST only). Use copy_from_universe to clone from /universe/"
     }
+   }
+  },
+  "/api/campaigns/{id}/items/{slug}": {
+   "get": {
+    "tags": [
+     "Campaign Items"
+    ],
+    "summary": "Read, change or delete one campaign item",
+    "description": "GET: one custom item of the campaign (anyone). PUT: change its name or merge fields into its data (GM only). DELETE: remove it (GM only).",
+    "responses": {
+     "200": {
+      "description": "The item, the changed item, or the deleted slug",
+      "content": {
+       "application/json": {
+        "schema": {
+         "properties": {
+          "created_at": {
+           "type": "string"
+          },
+          "data": {
+           "type": "object"
+          },
+          "item_type": {
+           "type": "string"
+          },
+          "name": {
+           "type": "string"
+          },
+          "slug": {
+           "type": "string"
+          }
+         },
+         "type": "object"
+        }
+       }
+      }
+     }
+    },
+    "parameters": [
+     {
+      "name": "id",
+      "in": "path",
+      "required": true,
+      "description": "Campaign ID",
+      "schema": {
+       "type": "integer"
+      }
+     },
+     {
+      "name": "slug",
+      "in": "path",
+      "required": true,
+      "description": "The item's slug",
+      "schema": {
+       "type": "string"
+      }
+     }
+    ]
+   },
+   "put": {
+    "tags": [
+     "Campaign Items"
+    ],
+    "summary": "Read, change or delete one campaign item",
+    "description": "GET: one custom item of the campaign (anyone). PUT: change its name or merge fields into its data (GM only). DELETE: remove it (GM only). A tool that can't send PUT can send POST with ?_method=PUT (or the X-HTTP-Method-Override header) and the same body.",
+    "responses": {
+     "400": {
+      "description": "The body was refused (nothing was changed): unknown_field, wrong_type, invalid_json, body_required or id_mismatch, with the fields the request takes",
+      "content": {
+       "application/json": {
+        "schema": {
+         "properties": {
+          "error": {
+           "type": "string"
+          },
+          "fields": {
+           "items": {
+            "type": "string"
+           },
+           "type": "array"
+          },
+          "message": {
+           "type": "string"
+          },
+          "unknown": {
+           "items": {
+            "type": "string"
+           },
+           "type": "array"
+          }
+         },
+         "type": "object"
+        }
+       }
+      }
+     },
+     "200": {
+      "description": "The item, the changed item, or the deleted slug",
+      "content": {
+       "application/json": {
+        "schema": {
+         "properties": {
+          "data": {
+           "properties": {
+            "name": {
+             "type": "string"
+            }
+           },
+           "type": "object"
+          },
+          "name": {
+           "type": "string"
+          },
+          "slug": {
+           "type": "string"
+          },
+          "success": {
+           "type": "boolean"
+          }
+         },
+         "type": "object"
+        }
+       }
+      }
+     }
+    },
+    "parameters": [
+     {
+      "name": "id",
+      "in": "path",
+      "required": true,
+      "description": "Campaign ID",
+      "schema": {
+       "type": "integer"
+      }
+     },
+     {
+      "name": "slug",
+      "in": "path",
+      "required": true,
+      "description": "The item's slug",
+      "schema": {
+       "type": "string"
+      }
+     }
+    ],
+    "requestBody": {
+     "required": false,
+     "content": {
+      "application/json": {
+       "schema": {
+        "type": "object",
+        "properties": {
+         "data": {
+          "type": "object",
+          "description": "fields merged into the item's data"
+         },
+         "name": {
+          "type": "string",
+          "description": "a new name for the item"
+         }
+        }
+       },
+       "example": {
+        "name": "..."
+       }
+      }
+     },
+     "description": "The new name and the data fields to merge (PUT only)"
+    }
+   },
+   "delete": {
+    "tags": [
+     "Campaign Items"
+    ],
+    "summary": "Read, change or delete one campaign item",
+    "description": "GET: one custom item of the campaign (anyone). PUT: change its name or merge fields into its data (GM only). DELETE: remove it (GM only). Takes no request body. A tool that can't send DELETE can send POST with ?_method=DELETE (or the X-HTTP-Method-Override header) and the same body.",
+    "responses": {
+     "200": {
+      "description": "The item, the changed item, or the deleted slug",
+      "content": {
+       "application/json": {
+        "schema": {
+         "properties": {
+          "deleted": {
+           "type": "string"
+          },
+          "success": {
+           "type": "boolean"
+          }
+         },
+         "type": "object"
+        }
+       }
+      }
+     }
+    },
+    "parameters": [
+     {
+      "name": "id",
+      "in": "path",
+      "required": true,
+      "description": "Campaign ID",
+      "schema": {
+       "type": "integer"
+      }
+     },
+     {
+      "name": "slug",
+      "in": "path",
+      "required": true,
+      "description": "The item's slug",
+      "schema": {
+       "type": "string"
+      }
+     }
+    ]
    }
   },
   "/api/campaigns/{id}/leave": {
@@ -20530,12 +20865,82 @@
    }
   },
   "/api/characters/{id}/feat": {
+   "get": {
+    "tags": [
+     "Characters"
+    ],
+    "summary": "Take a feat instead of ASI",
+    "description": "GET lists every feat with its prerequisite and benefits. POST spends 2 ASI points to gain a feat you qualify for (the setup step lists them, each with its how_to_take); a Warlock's Lessons of the First Ones gives an Origin feat without points. A feat that raises a score takes ability_choice. Skilled and Magic Initiate take their choices in choices, as background_feat_choices at character creation: Skilled {\"proficiencies\": [three skills or tools]}, Magic Initiate {\"list\": \"cleric|druid|wizard\", \"cantrips\": [two], \"spell\": \"a level 1 spell\", \"spellcasting_ability\": \"int|wis|cha\"}; they are checked against what the character already has. A Fighting Style feat (with the Fighting Style feature) is one more Fighting Style.",
+    "responses": {
+     "200": {
+      "description": "The feats (GET), or the feat gained (POST)",
+      "content": {
+       "application/json": {
+        "schema": {
+         "properties": {
+          "available_feats": {
+           "items": {
+            "properties": {
+             "benefits": {
+              "items": {
+               "type": "string"
+              },
+              "type": "array"
+             },
+             "category": {
+              "type": "string"
+             },
+             "description": {
+              "type": "string"
+             },
+             "name": {
+              "type": "string"
+             },
+             "prerequisite": {
+              "type": "string"
+             },
+             "repeatable": {
+              "type": "boolean"
+             },
+             "slug": {
+              "type": "string"
+             }
+            },
+            "type": "object"
+           },
+           "type": "array"
+          },
+          "cost": {
+           "type": "string"
+          },
+          "how_to_take": {
+           "type": "string"
+          }
+         },
+         "type": "object"
+        }
+       }
+      }
+     }
+    },
+    "parameters": [
+     {
+      "name": "id",
+      "in": "path",
+      "required": true,
+      "description": "Character ID",
+      "schema": {
+       "type": "integer"
+      }
+     }
+    ]
+   },
    "post": {
     "tags": [
      "Characters"
     ],
     "summary": "Take a feat instead of ASI",
-    "description": "Spend 2 ASI points to gain a feat you qualify for (the setup step lists them, each with its how_to_take); a Warlock's Lessons of the First Ones gives an Origin feat without points. A feat that raises a score takes ability_choice. Skilled and Magic Initiate take their choices in choices, as background_feat_choices at character creation: Skilled {\"proficiencies\": [three skills or tools]}, Magic Initiate {\"list\": \"cleric|druid|wizard\", \"cantrips\": [two], \"spell\": \"a level 1 spell\", \"spellcasting_ability\": \"int|wis|cha\"}; they are checked against what the character already has. A Fighting Style feat (with the Fighting Style feature) is one more Fighting Style.",
+    "description": "GET lists every feat with its prerequisite and benefits. POST spends 2 ASI points to gain a feat you qualify for (the setup step lists them, each with its how_to_take); a Warlock's Lessons of the First Ones gives an Origin feat without points. A feat that raises a score takes ability_choice. Skilled and Magic Initiate take their choices in choices, as background_feat_choices at character creation: Skilled {\"proficiencies\": [three skills or tools]}, Magic Initiate {\"list\": \"cleric|druid|wizard\", \"cantrips\": [two], \"spell\": \"a level 1 spell\", \"spellcasting_ability\": \"int|wis|cha\"}; they are checked against what the character already has. A Fighting Style feat (with the Fighting Style feature) is one more Fighting Style.",
     "responses": {
      "400": {
       "description": "The body was refused (nothing was changed): unknown_field, wrong_type, invalid_json, body_required or id_mismatch, with the fields the request takes",
@@ -20568,7 +20973,7 @@
       }
      },
      "200": {
-      "description": "Feat gained",
+      "description": "The feats (GET), or the feat gained (POST)",
       "content": {
        "application/json": {
         "schema": {
@@ -20711,7 +21116,7 @@
        }
       }
      },
-     "description": "feat (slug or name); ability_choice for a feat that raises a score; choices for Skilled or Magic Initiate"
+     "description": "feat (slug or name); ability_choice for a feat that raises a score; choices for Skilled or Magic Initiate (POST)"
     }
    }
   },
@@ -45772,6 +46177,53 @@
    }
   },
   "/api/gm/object": {
+   "get": {
+    "tags": [
+     "GM"
+    ],
+    "summary": "Objects and doors (breaking objects)",
+    "description": "SRD 5.2.1 Breaking Objects. POST {\"name\": \"oak door\", \"substance\": \"wood\", \"size\": \"large\", \"resilient\": true} creates an object with the Object Armor Class (cloth/paper/rope 11, crystal/glass/ice 13, wood 15, stone 17, iron/steel 19, mithral 21, adamantine 23) and Object Hit Points (fragile or resilient dice by size: tiny 1d4/2d4, small 1d6/3d6, medium 1d8/4d8, large 1d10/5d10); ac, hp, threshold (damage threshold), vulnerable and resistant (damage types) override or add. Players attack it with POST /api/action {\"action\":\"attack\",\"object_id\": N}. POST {\"object_id\": N, \"damage\": 12, \"damage_type\": \"fire\"} damages it (Immunity to Poison and Psychic; damage below the threshold does nothing). POST {\"object_id\": N, \"remove\": true} removes it. GET ?campaign_id lists objects.",
+    "responses": {
+     "200": {
+      "description": "Success",
+      "content": {
+       "application/json": {
+        "schema": {
+         "properties": {
+          "objects": {
+           "items": {
+            "properties": {
+             "ac": {
+              "type": "integer"
+             },
+             "hp": {
+              "type": "integer"
+             },
+             "max_hp": {
+              "type": "integer"
+             },
+             "name": {
+              "type": "string"
+             },
+             "object_id": {
+              "type": "integer"
+             },
+             "threshold": {
+              "type": "integer"
+             }
+            },
+            "type": "object"
+           },
+           "type": "array"
+          }
+         },
+         "type": "object"
+        }
+       }
+      }
+     }
+    }
+   },
    "post": {
     "tags": [
      "GM"
@@ -45916,7 +46368,7 @@
        }
       }
      },
-     "description": "Object"
+     "description": "Object (POST)"
     }
    }
   },

@@ -57,7 +57,7 @@ func TestPostgresImportedAttackRulesThroughTheGMRoute(t *testing.T) {
 			ma["use"] = use
 		}
 		c, j := pgCall(t, "POST", "/api/gm/narrate", gm, map[string]interface{}{"campaign_id": camp, "narration": "The beast attacks.", "monster_action": ma})
-		if c != 200 {
+		if !narrateAnswered(c, j) {
 			t.Fatalf("attack %s: %d %v", action, c, j)
 		}
 		return fmt.Sprint(j["monster_action_result"])

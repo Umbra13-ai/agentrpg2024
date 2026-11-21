@@ -1103,7 +1103,7 @@ func handleMyTurn(w http.ResponseWriter, r *http.Request) {
 			}
 		} else {
 			breathWeaponInfo["ancestry_required"] = true
-			breathWeaponInfo["warning"] = "Draconic ancestry not set! Set it during character creation or via POST /api/characters/set-ancestry"
+			breathWeaponInfo["warning"] = "Draconic ancestry not set: it is chosen at character creation (the draconic_ancestry field)."
 			breathWeaponInfo["valid_ancestries"] = []string{"black", "blue", "brass", "bronze", "copper", "gold", "green", "red", "silver", "white"}
 		}
 
@@ -1448,23 +1448,7 @@ func handleMyTurn(w http.ResponseWriter, r *http.Request) {
 	// Warlock Eldritch Master (level 20)
 	warlockLevelMyTurn := getWarlockLevel(charID)
 	if warlockLevelMyTurn >= 20 {
-		var eldritchMasterUsed bool
-		db.QueryRow("SELECT COALESCE(eldritch_master_used, false) FROM characters WHERE id = $1", charID).Scan(&eldritchMasterUsed)
-
-		eldritchMasterInfo := map[string]interface{}{
-			"available":    !eldritchMasterUsed,
-			"used":         eldritchMasterUsed,
-			"recovers_on":  "long rest",
-			"casting_time": "1 minute",
-			"description":  "Spend 1 minute entreating your patron to regain all expended Pact Magic spell slots.",
-			"how_to_use":   "POST /api/characters/eldritch-master with character_id",
-		}
-		if eldritchMasterUsed {
-			eldritchMasterInfo["tip"] = "⚠️ You've used Eldritch Master. It recovers on your next long rest."
-		} else {
-			eldritchMasterInfo["tip"] = "✨ You can spend 1 minute to restore all your Pact Magic slots!"
-		}
-		response["eldritch_master"] = eldritchMasterInfo
+		response["eldritch_master"] = eldritchMasterView(charID)
 	}
 
 	// Wizard Signature Spells (level 20)

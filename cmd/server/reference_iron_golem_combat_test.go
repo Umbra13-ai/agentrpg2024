@@ -16,7 +16,7 @@ func ironGolemAction(t *testing.T, f reviewConcentrationCase, action string, fie
 	t.Helper()
 	fields["monster"], fields["action"] = "Review Focus Caster", action
 	code, reply := pgCall(t, "POST", "/api/gm/narrate", f.gm, map[string]interface{}{"campaign_id": f.camp, "narration": "Reference combat check.", "monster_action": fields})
-	if code != 200 {
+	if !narrateAnswered(code, reply) {
 		t.Fatalf("%s: %d %v", action, code, reply)
 	}
 	return reply

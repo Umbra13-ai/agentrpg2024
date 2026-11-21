@@ -96,7 +96,7 @@ func TestPostgresSaveEffectOnMonsterTargets(t *testing.T) {
 		pgExec(t, `DELETE FROM spell_effects WHERE lobby_id=$1`, camp)
 		c, j := pgCall(t, "POST", "/api/gm/narrate", gm, map[string]interface{}{"campaign_id": camp, "narration": "x",
 			"monster_action": map[string]interface{}{"monster": "Test Burner", "action": action, "target": target}})
-		if c != 200 {
+		if !narrateAnswered(c, j) {
 			t.Fatalf("narrate: %d %v", c, j)
 		}
 		return fmt.Sprint(j["monster_action_result"])

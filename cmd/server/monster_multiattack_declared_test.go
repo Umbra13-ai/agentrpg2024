@@ -138,7 +138,7 @@ func narrateDeclaredMultiattack(t *testing.T, f reviewConcentrationCase, attacke
 		body["monster_action"].(map[string]interface{})["attacks"] = attacks
 	}
 	code, j := pgCall(t, "POST", "/api/gm/narrate", f.gm, body)
-	if code != 200 {
+	if !narrateAnswered(code, j) {
 		t.Fatalf("declared multiattack: %d %v", code, j)
 	}
 	return j
@@ -259,4 +259,10 @@ func TestPostgresMultiattackDeclaredRefusalRollsNothing(t *testing.T) {
 	if after := targetHP(t, f.char); after != before {
 		t.Fatalf("refused declarations changed Hit Points: %d -> %d", before, after)
 	}
+}
+
+// narrateAnswered: POST /api/gm/narrate answered the monster action, carried out (200) or refused with the refusal in
+// monster_action_result (409 monster_action_refused: nothing recorded, feedback log 69).
+func narrateAnswered(code int, j map[string]interface{}) bool {
+	return code == 200 || (code == 409 && j["error"] == "monster_action_refused" && j["monster_action_result"] != nil)
 }

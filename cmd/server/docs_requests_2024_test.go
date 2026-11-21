@@ -2,10 +2,15 @@ package main
 
 import (
 	"encoding/json"
+	"fmt"
+	"go/ast"
+	"go/parser"
+	"go/token"
 	"os"
 	"path/filepath"
 	"regexp"
 	"sort"
+	"strconv"
 	"strings"
 	"testing"
 
@@ -147,6 +152,33 @@ func topLevelKeys(obj string) []string {
 }
 
 func TestDocsNameRealRequests(t *testing.T) {
+	check := requestChecker(t)
+	docs, _ := filepath.Glob("../../docs/*.md")
+	if len(docs) < 5 {
+		t.Fatalf("found %d guides", len(docs))
+	}
+	n := 0
+	for _, doc := range docs {
+		b, err := os.ReadFile(doc)
+		if err != nil {
+			t.Fatal(err)
+		}
+		name := filepath.Base(doc)
+		for _, rq := range docRequests(name, string(b)) {
+			n++
+			check(fmt.Sprintf("%s:%d", name, rq.line), rq.method, rq.path, rq.body)
+		}
+	}
+	if n < 300 {
+		t.Fatalf("found only %d requests in the guides: the patterns no longer read them", n)
+	}
+}
+
+// requestChecker is the one check of a request a text names (a guide, or the server's own reply words): the route must be in
+// the API reference with that method, and every top-level field of a body shown with it must be a field that request takes
+// (TestAPIShapes' reading of its reader). where says where the text is, for the error.
+func requestChecker(t *testing.T) func(where, method, path, body string) {
+	t.Helper()
 	var spec struct {
 		Paths map[string]map[string]json.RawMessage `json:"paths"`
 	}
@@ -182,52 +214,86 @@ func TestDocsNameRealRequests(t *testing.T) {
 		}
 		fields[strings.ToUpper(sh.Method)+" "+sh.Path] = f
 	}
-	docs, _ := filepath.Glob("../../docs/*.md")
-	if len(docs) < 5 {
-		t.Fatalf("found %d guides", len(docs))
+	placeholder := regexp.MustCompile(`<[^>]+>|%[a-z]`) // a guide's <id>, a reply's %d
+	return func(where, method, path, body string) {
+		t.Helper()
+		path = strings.SplitN(path, "?", 2)[0]
+		path = strings.TrimRight(path, ".:,)`'")
+		path = placeholder.ReplaceAllString(path, "x")
+		var hit *route
+		for i := range routes {
+			if routes[i].method == method && routes[i].rx.MatchString(path) {
+				hit = &routes[i]
+				break
+			}
+		}
+		if hit == nil {
+			t.Errorf("%s names %s %s, which the API reference doesn't have", where, method, path)
+			return
+		}
+		if body == "" || method == "GET" {
+			return
+		}
+		takes, ok := fields[method+" "+hit.path]
+		if !ok {
+			return
+		}
+		for _, k := range topLevelKeys(body) {
+			if strings.Contains(k, "...") || strings.HasPrefix(k, "<") || strings.Contains(k, "%") {
+				continue
+			}
+			if !takes[game.Key(k)] {
+				t.Errorf("%s shows %s %s with field %q, which that request doesn't take", where, method, hit.path, k)
+			}
+		}
 	}
+}
+
+// The server's own replies name requests too ("start one with POST /api/campaigns/%d/combat/start"): every request a string
+// literal of the server names must be a route of the reference with that method, and a body shown with it must use fields the
+// request takes (playtest I-GM-18: GM status told the GM to send POST /api/gm/add-monster, which never existed). A literal that
+// is only the start of a path (joined to an id in code) is checked as far as it goes.
+func TestServerRepliesNameRealRequests(t *testing.T) {
+	check := requestChecker(t)
+	mention := regexp.MustCompile(`\b(GET|POST|PUT|PATCH|DELETE) (/api/(?:[A-Za-z0-9_{}/.:%-]|<[a-z_ ]+>)+)`) // not into HTML tags
+	files, _ := filepath.Glob("*.go")
+	fset := token.NewFileSet()
 	n := 0
-	for _, doc := range docs {
-		b, err := os.ReadFile(doc)
+	for _, f := range files {
+		if strings.HasSuffix(f, "_test.go") {
+			continue
+		}
+		file, err := parser.ParseFile(fset, f, nil, 0)
 		if err != nil {
 			t.Fatal(err)
 		}
-		name := filepath.Base(doc)
-		for _, rq := range docRequests(name, string(b)) {
-			n++
-			path := strings.SplitN(rq.path, "?", 2)[0]
-			path = strings.TrimRight(path, ".:,)`")
-			path = regexp.MustCompile(`<[^>]+>`).ReplaceAllString(path, "x")
-			var hit *route
-			for i := range routes {
-				if routes[i].method == rq.method && routes[i].rx.MatchString(path) {
-					hit = &routes[i]
-					break
-				}
+		ast.Inspect(file, func(nd ast.Node) bool {
+			lit, ok := nd.(*ast.BasicLit)
+			if !ok || lit.Kind != token.STRING {
+				return true
 			}
-			if hit == nil {
-				t.Errorf("%s:%d names %s %s, which the API reference doesn't have", name, rq.line, rq.method, path)
-				continue
+			s, err := strconv.Unquote(lit.Value)
+			if err != nil {
+				return true
 			}
-			if rq.body == "" || rq.method == "GET" {
-				continue
-			}
-			takes, ok := fields[rq.method+" "+hit.path]
-			if !ok {
-				continue
-			}
-			for _, k := range topLevelKeys(rq.body) {
-				if strings.Contains(k, "...") || strings.HasPrefix(k, "<") {
+			for _, m := range mention.FindAllStringSubmatchIndex(s, -1) {
+				method, path := s[m[2]:m[3]], s[m[4]:m[5]]
+				if strings.HasSuffix(path, "/") || strings.HasSuffix(path, "=") { // joined to an id in code: not a whole path
 					continue
 				}
-				if !takes[game.Key(k)] {
-					t.Errorf("%s:%d shows %s %s with field %q, which that request doesn't take", name, rq.line, rq.method, hit.path, k)
+				body := ""
+				rest := s[m[1]:]
+				if trimmed := strings.TrimLeft(rest, " `"); strings.HasPrefix(trimmed, "{") && len(rest)-len(trimmed) <= 2 {
+					body = balancedObject(trimmed)
 				}
+				n++
+				check(fset.Position(lit.Pos()).String(), method, path, body)
 			}
-		}
+			return true
+		})
 	}
-	if n < 300 {
-		t.Fatalf("found only %d requests in the guides: the patterns no longer read them", n)
+	if n < 200 {
+		t.Fatalf("found only %d requests in the server's strings: the pattern no longer reads them", n)
 	}
 }
 

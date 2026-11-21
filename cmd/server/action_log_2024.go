@@ -17,6 +17,8 @@ import (
 	"database/sql"
 	"fmt"
 	"log"
+	"net/http"
+	"strconv"
 	"strings"
 	"time"
 )
@@ -41,6 +43,7 @@ type actionFilter struct {
 	character  int       // only this character's rows (0: every row)
 	inCampaign bool      // only rows written in a campaign (none written outside one)
 	since      time.Time // only rows written after this (zero: no limit)
+	before     time.Time // only rows written before this (zero: no limit)
 	within     time.Duration
 	skipTypes  []string // action types to leave out ("poll", "joined" ...)
 	withPolls  bool     // keep the routine "Checked game status" polls: only "when did the player last look" wants them (a read
@@ -89,6 +92,9 @@ func readActions(f actionFilter) ([]actionRecord, error) {
 	}
 	if !f.since.IsZero() {
 		q += " AND a.created_at > " + arg(f.since.UTC().Format("2006-01-02 15:04:05.999999"))
+	}
+	if !f.before.IsZero() {
+		q += " AND a.created_at < " + arg(f.before.UTC().Format("2006-01-02 15:04:05.999999"))
 	}
 	if f.within > 0 {
 		q += " AND a.created_at > NOW() - " + arg(fmt.Sprintf("%d seconds", int(f.within.Seconds()))) + "::interval"
@@ -173,6 +179,122 @@ func cursorTime(t time.Time) string { return t.UTC().Format(time.RFC3339Nano) }
 
 // isNarration: the row is the GM's narration.
 func (a actionRecord) isNarration() bool { return strings.EqualFold(a.Type, actionNarration) }
+
+// logPage is a page of a campaign's history (the feed's actions and messages, the party chat), the one paging rule of every
+// list a client reads in pages (playtest I-GM-25: the feed always gave the oldest 100 records and ignored every paging word):
+//   - neither since nor before: the newest records;
+//   - since (the created_at of the last record read): the records after it, from the oldest on (reading forward);
+//   - before (the created_at of the first record of a page): the records before it, the newest of them (reading back);
+//   - limit: at most this many (1 to 100, default 100).
+//
+// A page is always oldest first, and more says whether records are left in the direction read (newer after a since page, older
+// otherwise).
+type logPage struct {
+	since, before time.Time
+	limit         int
+}
+
+// logPageParams: the query parameters of a paged list, for the replies that explain them.
+const logPageParams = "since (the created_at of the last record you read: the records after it), before (the created_at of the first record of a page: the records before it), limit (1-100, default 100)"
+
+// readLogPage reads a paged list's query parameters, or answers 400 (invalid_since, invalid_before, invalid_limit) and says no.
+func readLogPage(w http.ResponseWriter, r *http.Request) (p logPage, ok bool) {
+	q := r.URL.Query()
+	refuse := func(code, msg string) (logPage, bool) {
+		writeJSONStatus(w, http.StatusBadRequest, map[string]interface{}{"error": code, "message": msg, "paging": logPageParams})
+		return p, false
+	}
+	if p.since, ok = parseClientTime(q.Get("since")); !ok {
+		return refuse("invalid_since", "since must be a time in RFC3339 form, such as 2026-11-15T16:05:00Z (the created_at of the last record you read).")
+	}
+	if p.before, ok = parseClientTime(q.Get("before")); !ok {
+		return refuse("invalid_before", "before must be a time in RFC3339 form, such as 2026-11-15T16:05:00Z (the created_at of the first record of the page you read).")
+	}
+	p.limit = 100
+	if s := strings.TrimSpace(q.Get("limit")); s != "" {
+		n, err := strconv.Atoi(s)
+		if err != nil || n < 1 || n > 100 {
+			return refuse("invalid_limit", "limit must be a whole number from 1 to 100.")
+		}
+		p.limit = n
+	}
+	return p, true
+}
+
+// newestFirst: the page is read from the newest end (every page but a forward one).
+func (p logPage) newestFirst() bool { return p.since.IsZero() || !p.before.IsZero() }
+
+// pageOf finishes a page from rows read in the page's order with one row more than its limit: the extra row means more are left;
+// the page is turned oldest first.
+func pageOf[T any](rows []T, p logPage) ([]T, bool) {
+	more := len(rows) > p.limit
+	if more {
+		rows = rows[:p.limit]
+	}
+	if p.newestFirst() {
+		for i, j := 0, len(rows)-1; i < j; i, j = i+1, j-1 {
+			rows[i], rows[j] = rows[j], rows[i]
+		}
+	}
+	return rows, more
+}
+
+// readActionPage reads a page of the action log (f says which rows; the page sets the time window, the order and the limit).
+func readActionPage(f actionFilter, p logPage) ([]actionRecord, bool, error) {
+	f.since, f.before, f.limit, f.newestFirst = p.since, p.before, p.limit+1, p.newestFirst()
+	rows, err := readActions(f)
+	if err != nil {
+		return nil, false, err
+	}
+	recs, more := pageOf(rows, p)
+	return recs, more, nil
+}
+
+// readMessagePage reads a page of a campaign's party chat, each message in its one JSON form.
+func readMessagePage(lobby int, p logPage) ([]map[string]interface{}, bool, error) {
+	q := "SELECT id, COALESCE(agent_id, 0), COALESCE(agent_name, ''), COALESCE(message, ''), created_at FROM campaign_messages WHERE lobby_id = $1"
+	args := []interface{}{lobby}
+	if !p.since.IsZero() {
+		args = append(args, p.since.UTC().Format("2006-01-02 15:04:05.999999"))
+		q += fmt.Sprintf(" AND created_at > $%d", len(args))
+	}
+	if !p.before.IsZero() {
+		args = append(args, p.before.UTC().Format("2006-01-02 15:04:05.999999"))
+		q += fmt.Sprintf(" AND created_at < $%d", len(args))
+	}
+	if p.newestFirst() {
+		q += " ORDER BY created_at DESC, id DESC"
+	} else {
+		q += " ORDER BY created_at ASC, id ASC"
+	}
+	args = append(args, p.limit+1)
+	q += fmt.Sprintf(" LIMIT $%d", len(args))
+	rows, err := db.Query(q, args...)
+	if err != nil {
+		return nil, false, err
+	}
+	defer rows.Close()
+	msgs := []map[string]interface{}{}
+	for rows.Next() {
+		var id, agentID int
+		var agentName, message string
+		var createdAt time.Time
+		if err := rows.Scan(&id, &agentID, &agentName, &message, &createdAt); err != nil {
+			log.Printf("party chat: message row unreadable: %v", err)
+			continue
+		}
+		msgs = append(msgs, map[string]interface{}{
+			"id": id, "agent_id": agentID, "agent_name": agentName,
+			"message": message, "type": "message",
+			"created_at": cursorTime(createdAt),
+		})
+	}
+	if err := rows.Err(); err != nil {
+		return nil, false, err
+	}
+	msgs, more := pageOf(msgs, p)
+	return msgs, more, nil
+}
 
 // parseClientTime reads a time a client sends (a feed's ?since=, a repair tool's timestamp): RFC3339, with or without fractions of a
 // second, or a date. ok is false for a value that isn't a time; "" is the zero time.

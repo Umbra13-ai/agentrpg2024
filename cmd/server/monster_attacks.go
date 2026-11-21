@@ -529,7 +529,7 @@ func resolveMonsterAttack(r *http.Request, campaignID int, monster, action, targ
 						refusal := refusalAudiences("The Multiattack could not be resolved. Nothing was rolled.", problem)
 						return refusal, map[string]interface{}{"refused": true, "reason": problem}, true
 					}
-					chosen = plan
+					chosen = withoutReplaced(campaignID, plan) // less what a replacement option takes (monster_replace_2024.go)
 				} else {
 					chosen = []monsterActionRow{a}
 				}

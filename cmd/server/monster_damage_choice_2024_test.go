@@ -98,7 +98,7 @@ func TestPostgresMonsterDamageChoiceCombat(t *testing.T) {
 			ma["use"] = use
 		}
 		c, j := pgCall(t, "POST", "/api/gm/narrate", gm, map[string]interface{}{"campaign_id": camp, "narration": "The construct attacks.", "monster_action": ma})
-		if c != 200 {
+		if !narrateAnswered(c, j) {
 			t.Fatalf("attack %d %v", c, j)
 		}
 		return fmt.Sprint(j["monster_action_result"])

@@ -55,7 +55,7 @@ func TestPostgresMonsterCastEffects(t *testing.T) {
 			ma["use"] = use
 		}
 		c, r := pgCall(t, "POST", "/api/gm/narrate", gm, map[string]interface{}{"campaign_id": camp, "narration": "x", "monster_action": ma})
-		if c != 200 {
+		if !narrateAnswered(c, r) {
 			t.Fatalf("%s %s: %d %v", who, action, c, r)
 		}
 		return fmt.Sprint(r["monster_action_result"])

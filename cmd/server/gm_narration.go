@@ -944,12 +944,11 @@ func handleGMStatus(w http.ResponseWriter, r *http.Request) {
 					"The whisper-scream in the stacks finds them",
 				},
 				"how_to_start_combat": map[string]interface{}{
-					"endpoint": "POST /api/campaigns/{id}/combat/start",
+					"endpoint": fmt.Sprintf("POST /api/campaigns/%d/combat/start", campaignID),
 					"steps": []string{
-						"1. Narrate the threat appearing (POST /api/gm/narrate)",
-						"2. Add monsters (POST /api/gm/add-monster with monster_slug and count)",
-						"3. Start combat (POST /api/campaigns/{id}/combat/start)",
-						"4. The system rolls initiative automatically",
+						fmt.Sprintf(`1. Narrate the threat appearing (POST /api/gm/narrate {"campaign_id": %d, "narration": "..."})`, campaignID),
+						fmt.Sprintf(`2. Start combat (POST /api/campaigns/%d/combat/start, optional {"surprised": [character ids]}): the server rolls every character's Initiative`, campaignID),
+						fmt.Sprintf(`3. Add the monsters (POST /api/campaigns/%d/combat/add {"combatants": [{"name": "Goblin 1", "monster_key": "goblin-warrior"}]}): it refuses until combat has started; identical monsters added together share one Initiative roll`, campaignID),
 					},
 				},
 			}
@@ -1443,7 +1442,7 @@ func recordGMAction(database *sql.DB, campaignID int, actionType, description, r
 
 // handleGMNarrate godoc
 // @Summary Submit GM narration and monster actions
-// @Description GM submits narrative text and optionally runs a monster action. Before the campaign starts (recruiting) a narration sets the opening scene; monster actions and advance_turn wait for the start (campaign_not_active). Attacks resolve mechanically; positioning beats (for example, reposition) are narration-only. monster_action: {"monster", "action" (an action of its stat block, "Multiattack", or a named attack), "target" (a character's name or id, or a companion's name, nickname or combat id), "target_ids" (characters in a saving throw effect), "use" (a choice the entry needs, such as a chosen damage type for an attack that offers one; Command's word: approach, drop, flee, grovel or halt; or a spell the entry offers, such as the Pit Fiend's "Hold Monster" or one of a Lich's spells), "point": [x, y] (aims an area at a grid square; every character in a monster's area on the map is affected, listed or not), "apply_damage" (default true: hits and effects are dealt to the targets; false only rolls and reports), "confirm_targeting" (true confirms required sight or distance the server cannot determine)}. A Multiattack also resolves the actions without an attack roll it names (a Vampire's Bite). advance_turn: true ends the current turn after the narration (as POST /api/campaigns/{id}/combat/next); with it, optional expected_turn {"round": R, "turn_index": I} names the turn to end, as GET /api/campaigns/{id}/combat shows it (round, current_turn_index; GET /api/gm/status: combat.round, combat.current_turn_index). Once that turn has ended (a retry after the first request finished) the reply is 409 turn_already_moved with the turn it is now (round, turn_index, current_turn, current_turn_id), narration_recorded false: nothing is recorded or changed.
+// @Description GM submits narrative text and optionally runs a monster action. Before the campaign starts (recruiting) a narration sets the opening scene; monster actions and advance_turn wait for the start (campaign_not_active). Attacks resolve mechanically; positioning beats (for example, reposition) are narration-only. monster_action: {"monster", "action" (an action of its stat block, "Multiattack", or a named attack), "target" (a character's name or id, or a companion's name, nickname or combat id), "target_ids" (characters in a saving throw effect), "use" (a choice the entry needs, such as Command's word: approach, drop, flee, grovel or halt; or a spell the entry offers, such as one of a Lich's spells; or the option of an entry that can replace part of itself: a Multiattack's "Sleep Breath" or "Scorching Ray" in place of one attack, the Pit Fiend's "Hold Monster" in place of one Fireball, which takes the first target while the other Fireball takes the rest; the GM's stat block lists them under action_choices, and any other word is refused), "point": [x, y] (aims an area at a grid square; every character in a monster's area on the map is affected, listed or not), "apply_damage" (default true: hits and effects are dealt to the targets; false only rolls and reports)}. A Multiattack also resolves the actions without an attack roll it names (a Vampire's Bite). The monster action runs first: one that is refused (not recharged, Incapacitated, a use it doesn't offer: 409 monster_action_refused; at 0 Hit Points: 409 monster_down) or that names nothing in the stat block (400 unknown_monster_action, with monster_actions) records nothing, the narration included (narration_recorded false). advance_turn: true ends the current turn after the narration (as POST /api/campaigns/{id}/combat/next); with it, optional expected_turn {"round": R, "turn_index": I} names the turn to end, as GET /api/campaigns/{id}/combat shows it (round, current_turn_index; GET /api/gm/status: combat.round, combat.current_turn_index). Once that turn has ended (a retry after the first request finished) the reply is 409 turn_already_moved with the turn it is now (round, turn_index, current_turn, current_turn_id), narration_recorded false: nothing is recorded or changed.
 // @Tags GM
 // @Accept json
 // @Produce json
@@ -1509,6 +1508,71 @@ func handleGMNarrate(w http.ResponseWriter, r *http.Request) {
 	}
 	response := map[string]interface{}{"success": true, "campaign_id": campaignID}
 
+	// The monster action runs first (feedback log 69): one that is refused or names nothing in the stat block records nothing, the
+	// narration included, so the log never tells of something that didn't happen and the GM can send the request again.
+	result := ""
+	if req.MonsterAction != nil {
+		var rec *execRecord
+		r, rec = withExecution(r) // what the server carries out is said by the code that does it (monster_day_uses.go)
+		rec.confirmTargeting = req.MonsterAction.ConfirmTargeting
+		r = withMultiattackDeclared(r, req.MonsterAction.Attacks) // a choice Multiattack's declared composition, validated against its text
+		refused := func(status int, code, msg string, extra map[string]interface{}) {
+			reply := map[string]interface{}{"success": false, "error": code, "message": msg + " Nothing was recorded: the narration wasn't posted.",
+				"narration_recorded": false, "monster_action_refused": msg, "monster_action_result": msg}
+			for k, v := range extra {
+				reply[k] = v
+			}
+			writeJSONStatus(w, status, reply)
+		}
+		if isNarrativeOnlyMonsterAction(req.MonsterAction.Action) {
+			// A positioning or other scene-setting beat is not an attack. Record
+			// it faithfully without inventing damage for the target.
+			result = "Narration-only monster action recorded; no attack resolved."
+			response["monster_action_narrative_only"] = true
+		} else if text, handled, refusal := resolveMonsterActionByNameAt(r, campaignID, req.MonsterAction.Point, req.MonsterAction.Monster, req.MonsterAction.Action, req.MonsterAction.Target, req.MonsterAction.TargetIDs, damageApplies(req.MonsterAction.ApplyDamage), req.MonsterAction.Use); refusal != "" {
+			refused(http.StatusConflict, "monster_action_refused", refusal, nil) // a Recharge action not recharged, an Incapacitated monster, a use it doesn't offer
+			return
+		} else if handled {
+			result = text // a saving throw effect, a spell or another action of the stat block (monster_effects_2024.go)
+			response["monster_effect"] = true
+		} else if text, info, ok := resolveMonsterAttack(withMonsterUse(withAllySaid(r, req.MonsterAction.AllyAdjacent), req.MonsterAction.Use), campaignID, req.MonsterAction.Monster, req.MonsterAction.Action, req.MonsterAction.Target, damageApplies(req.MonsterAction.ApplyDamage)); ok {
+			// the stat block's own attack bonus and damage, against the target's Armor Class
+			result = text
+			response["monster_attack"] = info
+		} else {
+			// no action of that name in the monster's stat block: nothing is rolled (the server used to make up an attack)
+			ids := monsterIDsByKeyOrName(campaignID, req.MonsterAction.Monster)
+			alive := 0
+			for _, id := range ids {
+				for _, e := range combatEntries(campaignID) {
+					if asInt(e["id"]) == id && asInt(e["hp"]) > 0 {
+						alive++
+					}
+				}
+			}
+			if len(ids) > 0 && alive == 0 { // the monster is there but at 0 Hit Points: it takes no actions (not "no action of that name")
+				refused(http.StatusConflict, "monster_down", req.MonsterAction.Monster+" is at 0 Hit Points: it takes no actions; nothing was rolled.", nil)
+				return
+			}
+			extra := map[string]interface{}{}
+			if len(ids) > 0 {
+				if _, meta, ok := monsterCombatant(campaignID, ids[0]); ok && meta != nil {
+					var names []string
+					for _, a := range append(append(append([]srdMonsterEntry{}, meta.Actions...), meta.BonusActions...), meta.Reactions...) {
+						names = append(names, a.Name)
+					}
+					extra["monster_actions"] = names
+				}
+			}
+			msg := "No action of that name in the stat block of " + req.MonsterAction.Monster + "; nothing was rolled."
+			if len(ids) == 0 {
+				msg = "No monster called " + req.MonsterAction.Monster + " is in the fight; nothing was rolled."
+			}
+			refused(http.StatusBadRequest, "unknown_monster_action", msg, extra)
+			return
+		}
+	}
+
 	// Record narration as an action from the GM
 	if req.Narration != "" {
 		err = recordGMAction(db, campaignID, "narration", req.Narration, "")
@@ -1523,54 +1587,7 @@ func handleGMNarrate(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 
-	// Handle monster action
 	if req.MonsterAction != nil {
-		var rec *execRecord
-		r, rec = withExecution(r) // what the server carries out is said by the code that does it (monster_day_uses.go)
-		rec.confirmTargeting = req.MonsterAction.ConfirmTargeting
-		r = withMultiattackDeclared(r, req.MonsterAction.Attacks) // a choice Multiattack's declared composition, validated against its text
-		result := ""
-		if isNarrativeOnlyMonsterAction(req.MonsterAction.Action) {
-			// A positioning or other scene-setting beat is not an attack. Record
-			// it faithfully without inventing damage for the target.
-			result = "Narration-only monster action recorded; no attack resolved."
-			response["monster_action_narrative_only"] = true
-		} else if text, handled, refusal := resolveMonsterActionByNameAt(r, campaignID, req.MonsterAction.Point, req.MonsterAction.Monster, req.MonsterAction.Action, req.MonsterAction.Target, req.MonsterAction.TargetIDs, damageApplies(req.MonsterAction.ApplyDamage), req.MonsterAction.Use); refusal != "" {
-			result = refusal // a Recharge action not recharged, an Incapacitated monster
-			response["monster_action_refused"] = refusal
-		} else if handled {
-			result = text // a saving throw effect, a spell or another action of the stat block (monster_effects_2024.go)
-			response["monster_effect"] = true
-		} else if text, info, ok := resolveMonsterAttack(withMonsterUse(withAllySaid(r, req.MonsterAction.AllyAdjacent), req.MonsterAction.Use), campaignID, req.MonsterAction.Monster, req.MonsterAction.Action, req.MonsterAction.Target, damageApplies(req.MonsterAction.ApplyDamage)); ok {
-			// the stat block's own attack bonus and damage, against the target's Armor Class
-			result = text
-			response["monster_attack"] = info
-		} else {
-			// no action of that name in the monster's stat block: nothing is rolled (the server used to make up an attack)
-			result = "No action of that name in the stat block of " + req.MonsterAction.Monster + "; nothing was rolled."
-			ids := monsterIDsByKeyOrName(campaignID, req.MonsterAction.Monster)
-			alive := 0
-			for _, id := range ids {
-				for _, e := range combatEntries(campaignID) {
-					if asInt(e["id"]) == id && asInt(e["hp"]) > 0 {
-						alive++
-					}
-				}
-			}
-			if len(ids) > 0 && alive == 0 { // the monster is there but at 0 Hit Points: it takes no actions (not "no action of that name")
-				result = req.MonsterAction.Monster + " is at 0 Hit Points: it takes no actions; nothing was rolled."
-				response["monster_down"] = true
-			} else if len(ids) > 0 {
-				if _, meta, ok := monsterCombatant(campaignID, ids[0]); ok && meta != nil {
-					var names []string
-					for _, a := range append(append(append([]srdMonsterEntry{}, meta.Actions...), meta.BonusActions...), meta.Reactions...) {
-						names = append(names, a.Name)
-					}
-					response["monster_actions"] = names
-				}
-			}
-		}
-
 		// Record monster action
 		actionType := "monster_" + req.MonsterAction.Action
 		if r := []rune(actionType); len(r) > 50 {

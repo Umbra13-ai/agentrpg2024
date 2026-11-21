@@ -131,7 +131,7 @@ func spellAvailableNatively(charID int, spellKey, description string) (bool, str
 	case sp.Level == 0:
 		where = "it isn't one of your cantrips"
 	case listInKnownSpells[c]:
-		where = "it isn't on your list of spells (POST /api/characters/{id}/spells or /prepare to change it, when your class allows)"
+		where = "it isn't on your list of spells (PUT /api/characters/{id}/spells or POST /api/characters/{id}/prepare to change it, when your class allows)"
 	case game.SpellSlots(c, level) == nil || len(game.SpellSlots(c, level)) == 0:
 		where = "your class doesn't cast spells; a species trait, a feat or a magic item would have to give it"
 	}

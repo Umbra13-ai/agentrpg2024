@@ -1188,6 +1188,34 @@ func resolveMonsterEffectText(r *http.Request, lobbyID, monsterID int, meta *mon
 		}
 		return append([]string{txt}, notes...)
 	}
+	// a spell cast several times, one of them replaced by the option the GM picks with "use" ("casts Fireball twice ... It can
+	// replace one Fireball with Hold Monster or Wall of Fire": monster_replace_2024.go). The option takes the first target when it
+	// is a single-target spell, the remaining copies the others; "use" naming the replaced spell is no replacement.
+	if rule, ok := replaceRuleOf(text); ok && depth == 0 && rule.Replaced != "" {
+		m := mfxSpellRe.FindStringSubmatch(text)
+		if m != nil && strings.EqualFold(strings.TrimSpace(m[1]), rule.Replaced) {
+			if game.Key(use) == game.Key(rule.Replaced) {
+				use = ""
+			}
+			if o, ok := rule.option(use); ok && o.Spell != "" {
+				lvl, _ := strconv.Atoi(m[2])
+				dc, atk := monsterSpellNumbers(text, meta)
+				times := 1
+				if strings.Contains(text, " twice") {
+					times = 2
+				}
+				optTargets, rest := targets, targets
+				if sp, ok := srdSpellsMemory[normalizeSpellSlug(o.Spell)]; ok && sp.AoEShape == "" && len(targets) > 1 {
+					optTargets, rest = targets[:1], targets[1:]
+				}
+				lines = append(lines, resolveMonsterSpell(r, lobbyID, monsterID, name, o.Spell, o.Level, dc, atk, optTargets, false, apply, "")...)
+				for i := 0; i < times-rule.Count; i++ {
+					lines = append(lines, resolveMonsterSpell(r, lobbyID, monsterID, name, m[1], lvl, dc, atk, rest, false, apply, "")...)
+				}
+				return append(lines, notes...)
+			}
+		}
+	}
 	// the spell the GM picks with "use" from the ones the text offers (legendary_more_2024.go)
 	if spName, lvl, ok := monsterSpellFromUse(text, use); ok && depth == 0 {
 		dc, atk := monsterSpellNumbers(text, meta)
