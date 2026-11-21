@@ -166,7 +166,7 @@ func (a actionRecord) eventLine() string {
 		return "[DM]: " + desc
 	case res == "":
 		return fmt.Sprintf("%s: %s", a.Actor, desc)
-	case a.CharacterID > 0 && desc != "" && desc != res && !strings.Contains(res, desc):
+	case desc != "" && desc != res && !strings.Contains(res, desc): // both say something (a GM's record too: "GM gave Robe to Calla → x2", I-CALLA-22)
 		return fmt.Sprintf("%s %s: %s → %s", a.Actor, a.Type, desc, res)
 	}
 	return fmt.Sprintf("%s %s: %s", a.Actor, a.Type, res)

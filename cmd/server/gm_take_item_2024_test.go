@@ -106,7 +106,8 @@ func TestPostgresGMTakeItemLeavesItWhereTheStoryPutIt(t *testing.T) {
 	}
 	_, mt = pgCall(t, "GET", "/api/my-turn", tok, nil)
 	lb, _ = json.Marshal(mt["left_behind"])
-	if !strings.Contains(string(lb), `"gone":"the cultists burned it"`) || strings.Contains(string(lb), "equipment/pick-up") || !strings.Contains(string(lb), "Blanket") {
+	if !strings.Contains(string(lb), `"gone":"the cultists burned it"`) || strings.Contains(string(lb), "equipment/pick-up") || !strings.Contains(string(lb), "Blanket") ||
+		strings.Contains(string(lb), `"where"`) || !strings.Contains(string(lb), `"was_left":"on the ground"`) {
 		t.Errorf("left_behind after the GM's claim: %s", lb)
 	}
 	if ev, _ := json.Marshal(mt["recent_events"]); !strings.Contains(string(ev), "is gone: the cultists burned it") {

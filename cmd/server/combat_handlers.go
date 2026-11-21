@@ -1715,7 +1715,7 @@ func handleShortRest(w http.ResponseWriter, r *http.Request, charID int) {
 		"message":                  "Short rest complete. " + hitDiceMessage(charID, dice),
 		"rest":                     restGuide(charID), // what resting gives and how to ask (rests_2024.go)
 	}
-	writeAction(db, int(lobbyID.Int64), charID, "short_rest", fmt.Sprintf("%s finishes a Short Rest", getCharacterName(charID)), fmt.Sprintf("spent %d Hit Point Dice, regained %d Hit Points", req.HitDice, actualHealing))
+	logRest(charID, "short", fmt.Sprintf("spent %d Hit Point Dice, regained %d Hit Points", req.HitDice, actualHealing))
 
 	if warlockRecovery != "" {
 		response["warlock_recovery"] = warlockRecovery
@@ -1953,6 +1953,7 @@ func handleRest(w http.ResponseWriter, r *http.Request, charID int) {
 		response["indomitable_note"] = fmt.Sprintf("Indomitable uses restored (%d per long rest)", indomitableMaxUses)
 	}
 
+	logRest(charID, "long", fmt.Sprint(response["message"]))
 	json.NewEncoder(w).Encode(response)
 }
 

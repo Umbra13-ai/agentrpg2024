@@ -221,3 +221,11 @@ func hitDiceMessage(charID int, res hitDiceRoll) string {
 	}
 	return msg
 }
+
+// logRest: a rest a character took goes into the campaign's log, so the GM and the party see it (playtest I-CALLA-23: a Long Rest
+// restored everything with no record the GM could read). Both rest routes call it once the rest is done.
+func logRest(charID int, kind, summary string) {
+	lobby := lobbyOfChar(charID) // 0 (in no campaign) is written too: the Hit Point Dice after a Short Rest read the record
+	what := map[string]string{"long": "finishes a Long Rest", "short": "finishes a Short Rest"}[kind]
+	writeAction(db, lobby, charID, kind+"_rest", getCharacterName(charID)+" "+what, summary)
+}

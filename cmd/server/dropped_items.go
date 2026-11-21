@@ -300,7 +300,9 @@ func droppedByCharacter(charID int) []map[string]interface{} {
 		if at.Valid { // a row saved without the time still lists
 			it["dropped_at"] = at.Time.Format(time.RFC3339)
 		}
-		if claimed != "" {
+		if claimed != "" { // no longer where it was left: "where" would say it still lies there
+			delete(it, "where")
+			it["was_left"] = where
 			it["gone"] = claimed
 			it["note"] = "The GM says it is no longer there: it can't be picked up."
 		} else {

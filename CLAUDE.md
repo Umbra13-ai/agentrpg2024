@@ -454,7 +454,7 @@ Add to the owner, never beside it. When you give another rule one owner, add it 
   Go: `TestPostgresPlayersReadTheLogWithoutHiddenNumbers` (I-CALLA-6, 7, 13, 14, 16, 17, 18).
 - **Items a character no longer carries but left somewhere:** `dropToGround` (`cmd/server/dropped_items.go`, through the inventory
   writer) with `place`: the player's drop ("" = on the ground) and the GM's `POST /api/gm/take-item` (narration used the item: it stays
-  `where` the story left it, `dropped_items.left_where`). `droppedByCharacter` is the one reader (an item the GM claimed off the ground stays listed, `gone` with the GM's note and no pick-up; a claim or return is logged by `logGroundChange`: I-CALLA-20); my-turn's `left_behind`
+  `where` the story left it, `dropped_items.left_where`). `droppedByCharacter` is the one reader (an item the GM claimed off the ground stays listed, `gone` with the GM's note, `was_left` instead of `where`, and no pick-up; a claim or return is logged by `logGroundChange`: I-CALLA-20); my-turn's `left_behind`
   (`leftBehindNote`; also the after-battle reminder) reminds the player. **A pick-up is immediate; the GM can veto it** (`.../ground/{id}/veto`: back where it was, through
   `dropToGround`); `recentPickUps` lists the last day's (GM status, the ground list). Go: `TestPostgresGMTakeItemLeavesItWhereTheStoryPutIt` (S-CALLA-9).
 - **How to act (`GET /api/my-turn`'s `how_to_act`):** `actionHowTo` (`cmd/server/actions.go`), made from `actionRequest`'s
@@ -539,7 +539,7 @@ Add to the owner, never beside it. When you give another rule one owner, add it 
   **A list read in pages** (the feed's actions and messages, the party chat) is `logPage` (`readLogPage` reads since / before /
   limit; `readActionPage`, `readMessagePage`, `pageOf`): the newest page by default, before pages back, since reads forward, every
   page oldest first with `more` (playtest I-GM-25: the feed always gave the oldest 100). `TestPostgresFeedPagesFromTheNewest`.
-  **Writing it:** `writeAction(db or tx, campaign, character, type, description, result)`, the only INSERT (0 is NULL);
+  **Writing it:** `writeAction(db or tx, campaign, character, type, description, result)`, the only INSERT (0 is NULL); a rest a character finishes is written by `logRest` (`rests_2024.go`, both rest routes: I-CALLA-23); `eventLine` keeps a record's description beside its result for every record, a GM's too (I-CALLA-22);
   `TestNoOtherActionLogWriter` checks.
 - **A database failure is never reported as something else** (`cmd/server/db_errors_2024.go`, `db_guard_2024.go`): only
   `sql.ErrNoRows` means "not found". A lookup answers its error with `answerDBFailure` (500 `database_error`, before its own
