@@ -597,6 +597,7 @@ const characterProfilePage = `
 .cp .box,.cp .feat,.cp .persona p,.cp .lore p,.cp .spl p{overflow-wrap:anywhere}
 @media (max-width:480px){.cp .statgrid{grid-template-columns:minmax(0,1fr)}.cp .statgrid .cell{white-space:normal}}
 @media (max-width:860px){.cp{padding:1em}.cp .sheet{grid-template-columns:minmax(0,1fr)}.cp .statcol{order:-1}.cp .portrait{max-width:300px}}
+@media (max-width:640px){.cp .portrait{max-width:160px;margin:0 auto 1em}.cp .portrait .ph{font-size:3em}} /* a phone sees the sheet first, the portrait small (Nov 21) */
 </style>
 <div class="cp" id="cp"><p class="muted" id="loading">Loading character…</p><p id="err"></p></div>
 <script>
