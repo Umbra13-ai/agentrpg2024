@@ -149,7 +149,7 @@ func rightAfterShortRest(charID int) (bool, error) {
 	if lobby := lobbyOfChar(charID); lobby != 0 && inActiveCombat(lobby) {
 		return false, nil
 	}
-	recs, err := readActions(actionFilter{character: charID, hidePolls: true, skipTypes: []string{"poll", "following"}, newestFirst: true, limit: 1})
+	recs, err := readActions(actionFilter{character: charID, skipTypes: []string{"poll", "following"}, newestFirst: true, limit: 1})
 	if err != nil || len(recs) == 0 {
 		return false, err
 	}

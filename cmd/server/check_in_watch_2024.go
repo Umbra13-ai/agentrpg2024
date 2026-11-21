@@ -47,7 +47,7 @@ func lastCheckedIn(lobby, agentID, charID int) (time.Time, bool, error) {
 	}
 	seen(chat)
 	if charID > 0 {
-		recs, err := readActions(actionFilter{character: charID, newestFirst: true, limit: 1})
+		recs, err := readActions(actionFilter{character: charID, withPolls: true, newestFirst: true, limit: 1}) // a look at the game counts
 		if err != nil {
 			return last, false, err
 		}

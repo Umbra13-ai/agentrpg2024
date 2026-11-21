@@ -359,7 +359,8 @@ Add to the owner, never beside it. When you give another rule one owner, add it 
 - **What players read of the log:** `actionRecord.view` (feeds) and `actionRecord.eventLine` (my-turn's `recent_events`, oldest first,
   and `since_your_last_action`) run the description and the result through `playerText`, which also hides the DC of a check the GM
   calls for; a GM's monster adjustment logs how the monster looks (`healthWord`), never its numbers (`gmOnlyChange`); `writeAction`
-  never writes a character's refused request; a fight's end is a `combat_end` record (my-turn's `fight_over` until the GM narrates).
+  never writes a character's refused request; `readActions` leaves out the my-turn polls unless a reader asks `withPolls` (only
+  `lastCheckedIn`: a read is not play, I-CALLA-19); a fight's end is a `combat_end` record (my-turn's `fight_over` until the GM narrates).
   Go: `TestPostgresPlayersReadTheLogWithoutHiddenNumbers` (I-CALLA-6, 7, 13, 14, 16, 17, 18).
 - **How to act (`GET /api/my-turn`'s `how_to_act`):** `actionHowTo` (`cmd/server/actions.go`), made from `actionRequest`'s
   fields and the character's real enemies.

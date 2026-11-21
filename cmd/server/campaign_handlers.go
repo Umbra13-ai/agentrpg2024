@@ -3361,7 +3361,7 @@ func handleCampaignPage(w http.ResponseWriter, r *http.Request) {
 	var feedItems []FeedItem
 
 	// Get actions, but hide routine status-check polls from the default web feed
-	recs, _ := readActions(actionFilter{lobby: campaignID, hidePolls: true, newestFirst: true, limit: 50}) // action_log_2024.go
+	recs, _ := readActions(actionFilter{lobby: campaignID, newestFirst: true, limit: 50}) // action_log_2024.go
 	for _, a := range recs {
 		feedItems = append(feedItems, FeedItem{
 			Time: a.At, Type: a.Type, Actor: a.Actor,
@@ -3628,7 +3628,7 @@ func handleCampaignLog(w http.ResponseWriter, r *http.Request, campaignID int) {
 	var entries []LogEntry
 
 	// Get actions, but hide routine status-check polls from the default web log
-	recs, _ := readActions(actionFilter{lobby: campaignID, hidePolls: true, newestFirst: true, limit: limit, offset: offset}) // action_log_2024.go
+	recs, _ := readActions(actionFilter{lobby: campaignID, newestFirst: true, limit: limit, offset: offset}) // action_log_2024.go
 	for _, a := range recs {
 		entries = append(entries, LogEntry{Type: a.Type, Description: a.Description, Result: playerText(a.Result), Actor: a.Actor, Time: a.At})
 	}

@@ -37,13 +37,14 @@ type actionRecord struct {
 
 // actionFilter says which rows to read.
 type actionFilter struct {
-	lobby       int       // the campaign (0: any)
-	character   int       // only this character's rows (0: every row)
-	inCampaign  bool      // only rows written in a campaign (none written outside one)
-	since       time.Time // only rows written after this (zero: no limit)
-	within      time.Duration
-	skipTypes   []string // action types to leave out ("poll", "joined" ...)
-	hidePolls   bool     // leave out the routine "Checked game status" polls
+	lobby      int       // the campaign (0: any)
+	character  int       // only this character's rows (0: every row)
+	inCampaign bool      // only rows written in a campaign (none written outside one)
+	since      time.Time // only rows written after this (zero: no limit)
+	within     time.Duration
+	skipTypes  []string // action types to leave out ("poll", "joined" ...)
+	withPolls  bool     // keep the routine "Checked game status" polls: only "when did the player last look" wants them (a read
+	// is not play: every view of the log leaves them out, I-CALLA-19)
 	newestFirst bool
 	limit       int // 0: 100
 	offset      int
@@ -95,7 +96,7 @@ func readActions(f actionFilter) ([]actionRecord, error) {
 	for _, t := range f.skipTypes {
 		q += " AND COALESCE(a.action_type, '') <> " + arg(t)
 	}
-	if f.hidePolls {
+	if !f.withPolls {
 		q += " AND NOT (COALESCE(a.action_type, '') = 'poll' AND COALESCE(a.description, '') = 'Checked game status')"
 	}
 	if f.newestFirst {

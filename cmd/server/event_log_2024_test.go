@@ -65,6 +65,14 @@ func TestPostgresPlayersReadTheLogWithoutHiddenNumbers(t *testing.T) {
 	if !strings.Contains(events, "Crouches behind the parapet stonework") || !strings.Contains(events, "Dodging") {
 		t.Errorf("the Dodge lost the player's words or its rule: %s", events)
 	}
+	pgCall(t, "GET", "/api/my-turn", tok, nil) // a read is not play: it never shows in the log (I-CALLA-19)
+	_, again := pgCall(t, "GET", "/api/my-turn", tok, nil)
+	if e, _ := json.Marshal([]interface{}{again["recent_events"], again["since_your_last_action"]}); strings.Contains(string(e), "Checked game status") {
+		t.Errorf("a my-turn read shows in the players' log: %s", e)
+	}
+	if _, feed := pgCall(t, "GET", fmt.Sprintf("/api/campaigns/%d/feed", lobby), tok, nil); strings.Contains(fmt.Sprint(feed), "Checked game status") {
+		t.Errorf("a my-turn read shows in the feed")
+	}
 	if mt["recent_events_order"] == nil {
 		t.Error("my-turn doesn't say the order of recent_events")
 	}
