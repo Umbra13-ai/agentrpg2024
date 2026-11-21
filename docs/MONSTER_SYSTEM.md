@@ -551,3 +551,53 @@ Enforced through shared checks: `checkActionEconomy` (POST /api/action), `featur
 Redirect Attack (supplied wording: "The goblin chooses a Small or Medium ally within 5 feet of itself. The goblin and that ally swap places, and the ally becomes the target of the attack instead.") makes the ally the target of the SAME attack roll. So: the roll's total is compared with the ally's AC (a natural 20 hits); the first target keeps nothing of the hit (`undoRecordedHit`); the ally takes the damage as rolled BEFORE the first target's defenses (`charHitOnMonster.Parts`) through the normal damage owner, so the ally's resistance, immunity, vulnerability, absorption and Temporary Hit Points decide the result; the stat block's hit rider is given to the ally by the normal rules (size gate, immunities). Not transferred, flagged to the GM: a character attacker's hit (its damage is built in attack_target.go, no raw parts are recorded) and a critical hit that came from the first target's state (it is not a natural 20). The roll's own Advantage or Disadvantage was decided against the first target and is kept as rolled. Route-tested (`TestPostgresMonsterAttacksMonster`): the first target resists, the ally does not (the ally takes the full damage), the ally gets Prone, and an AC the roll cannot beat is a miss with nothing changed (mutation-checked on the damage and on the rider).
 
 Protection ("An attack roll hits the wearer of the guardian's amulet while the wearer is within 5 feet of the guardian. Response: The wearer gains a +5 bonus to AC ...") is a monster guardian (defender-side Reaction) for a CHARACTER wearer hit by a MONSTER attacker. `TestPostgresProtectionVersusMonsterAttacker` covers it: a hit the +5 turns into a miss is undone (Hit Points and the hit's rider conditions, by id), a hit that still beats AC + 5 is left alone (mutation-checked on the rider removal). The same applies to a cast Shield (`shieldReaction`). Found by this work: a hit's conditions were applied after the hit was recorded, so a Shield or Protection that made it a miss left them on the wearer; and a Shield cast by standing order still got the hit's riders applied. Both are fixed and both are route-tested (the standing-order case with a wizard that has a Shield standing order; mutation-checked on the "hit became a miss" guard). Not covered: a wearer that is a monster hit by a character or monster (the wearer must be a character today: a monster wearer is not supported and not tested).
+
+## A creature's special and forced movement (`cmd/server/creature_movement_2024.go`, 2026-11-21)
+
+One owner of movement that isn't plain walking, every rule read from the entry's wording (no monster names in code):
+
+- **Charges** ("if it moved 20+ feet straight toward the target immediately before the hit"). Each creature's own move of the
+  turn is recorded: the GM's map update without `forced_movement`, a player's path, a companion's path. The attack roll owner
+  (`attackCtx.roll`) spends it in `chargeAtRoll`. The first attack after the move gets its straight approach toward its target:
+  the feet it closed, counted only when every foot it moved closed them. Later attacks get none.
+  `hitChargeDesc` turns the charge sentences into what applies for that one hit, on the character, monster, companion and
+  companion/Wild Shape routes:
+  - the extra damage becomes one more amount of the hit;
+  - the condition becomes a plain rider;
+  - a follow-up ("can make one Bite attack against it") is left as the GM's sentence;
+  - an alternative amount is the damage owner's `condCharged`.
+
+  Without a battle map the GM says it with the monster_action field `"charged": true`; when it didn't, the reply says that's
+  needed. All 18 SRD charge wordings are read.
+- **Pushes and pulls on a hit** (`hitForcedMove`, through `hitAfterDamage`): "pushes the target up to N feet straight away from
+  itself" and "pulls / moves the target ... straight toward itself", with its size gate. `forceToken` is the one forced movement
+  of a token; Weapon Mastery's Push, the monk features and the items use it too. Without a map the GM places the creature.
+- **An entry that moves its creature** (Teleport, Tree Stride, Bubble Dash, Watery Rush, Aquatic Charge, Rampage, Ink Cloud,
+  Leap): `readSpecialMove` reads:
+  - the distance: feet, or a Speed of the stat block, or half of one;
+  - a teleport;
+  - "without provoking Opportunity Attacks";
+  - "straight toward an enemy";
+  - a jump that "spends N feet of movement".
+
+  `grantSpecialMove` grants it for the turn, and the GM's next map update spends it (`takeSpecialMoves`):
+  - a teleport, or a move without Opportunity Attacks, opens none;
+  - the move doesn't count against the Speed, except a jump's stated cost;
+  - a teleport is not a charge;
+  - a move beyond the allowance is noted.
+- **When an entry may be used:** "Immediately after dealing damage to a creature that is already Bloodied" (Rampage) is refused
+  otherwise (`movementEntryRefusal`, from each hit's `recordLastHit` in `hitAfterDamage`).
+- **Sharing space** (`map_spaces_2024.go`, `markMapSpaces`): a Swarm ("can occupy another creature's space and vice versa")
+  shares a space both ways, in the GM's placement and in a player's or companion's path, which may end there. An incorporeal
+  creature ("can move through other creatures and objects as if they were Difficult Terrain") may stand in a wall or a closed
+  door; the turn-end hook `objectEndDamage` deals "takes 5 (1d10) Force damage if it ends its turn inside an object".
+- **Dragging a creature it grapples** (SRD 5.2.1 Grappled): the move costs double unless the creature is Tiny or two sizes
+  smaller (`dragCost`, read by the Speed note). A trait that says it "needn't spend extra movement to move a creature it is
+  grappling" (Abduct) removes the cost.
+- **A fall** ("The X falls."): falling damage is `fallDamageDice` d6 Bludgeoning, the one rule of a fall's dice, also read by the
+  GM's falling damage. It is taken less what the entry reduces ("reduces any damage it takes from the fall by 20"), from the
+  token's altitude, and the token lands. Without a height the GM is told.
+- **Shape-Shift Speeds:** the forms come from the entry. The GM names one in `use` (`shapeShiftRefusal` refuses any other), and
+  its Speeds stand for the monster's (`formSpeedText`, read by `monsterWalkSpeed` and the Speed list) until it shifts again.
+- **Not modelled:** Standing Leap, Running Leap and Jumper. The battle map has no pits or gaps a jump could cross, so a jump is
+  just part of the move's distance; their traits stay in the GM's stat block.

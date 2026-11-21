@@ -1132,6 +1132,9 @@ func resolveMonsterActionByName(r *http.Request, lobbyID int, monster, action, t
 	if why := replaceRefusal(entry, use); why != "" { // a "use" the entry's replacement sentence doesn't offer (monster_replace_2024.go)
 		return "", true, why
 	}
+	if why := shapeShiftRefusal(entry.Text, use); why != "" { // a Shape-Shift form it doesn't offer (creature_movement_2024.go)
+		return "", true, why
+	}
 	s := loadMonsterState(lobbyID, id)
 	base := stripUsage(entry.Name)
 	recharge := rechargeRe.MatchString(entry.Name)

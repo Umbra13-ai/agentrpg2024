@@ -20,9 +20,12 @@ import (
 	"fmt"
 	"net/http"
 	"regexp"
+	"sort"
 	"strconv"
 	"strings"
 	"sync"
+
+	"github.com/agentrpg/agentrpg/game"
 )
 
 // creatureMove: the last move a creature made by itself on the current turn (by the turn marker). In memory: a restart forgets it,
@@ -376,12 +379,13 @@ func hitForcedMove(lobby, attacker, target int, desc string) string {
 // teleport is not a move toward anything (no charge), and a move beyond the allowance is noted.
 
 type specialMove struct {
-	Marker   string
-	Entry    string
-	Feet     int
-	Teleport bool
-	NoOA     bool
-	Straight bool
+	Marker    string
+	Entry     string
+	Feet      int
+	Teleport  bool
+	NoOA      bool
+	Straight  bool
+	SpeedCost int // a jump "by spending 10 feet of movement": what the move costs of its Speed (0: nothing)
 }
 
 var specialMoves sync.Map // creatureMoveKey -> specialMove
@@ -390,6 +394,7 @@ var (
 	teleportUpToRe   = regexp.MustCompile(`(?i)\bteleports?(?:,? along with [^,.]+,)? up to (\d+) (?:feet|ft)`)
 	teleportWithinRe = regexp.MustCompile(`(?i)\bteleports? to an unoccupied space within \d+ feet of [^.]*? within (\d+) feet of`)
 	moveUpToRe       = regexp.MustCompile(`(?i)\b(?:moves?|swims?|flies|fly|climbs?|burrows?) up to (half )?(?:its|their) (Swim |Fly |Climb |Burrow )?Speed(?: or (Swim|Fly|Climb|Burrow) Speed)?`)
+	jumpSpendRe      = regexp.MustCompile(`(?i)\bjumps? up to (\d+) (?:feet|ft\.?) by spending (\d+) (?:feet|ft\.?) of (?:its )?movement`)
 	moveFeetRe       = regexp.MustCompile(`(?i)\b(?:moves?|swims?|flies|fly|climbs?|burrows?) up to (\d+) (?:feet|ft)`)
 	noOARe           = regexp.MustCompile(`(?i)without provoking Opportunity Attacks`)
 	straightEnemyRe  = regexp.MustCompile(`(?i)straight toward an enemy`)
@@ -401,6 +406,10 @@ var (
 func readSpecialMove(text string, speed func(kind string) int) (specialMove, bool) {
 	mv := specialMove{NoOA: noOARe.MatchString(text), Straight: straightEnemyRe.MatchString(text)}
 	switch {
+	case jumpSpendRe.MatchString(text): // Leap: the jump is part of its move and costs what the text says
+		m := jumpSpendRe.FindStringSubmatch(text)
+		mv.Feet, _ = strconv.Atoi(m[1])
+		mv.SpeedCost, _ = strconv.Atoi(m[2])
 	case teleportUpToRe.MatchString(text):
 		mv.Feet, _ = strconv.Atoi(teleportUpToRe.FindStringSubmatch(text)[1])
 		mv.Teleport, mv.NoOA = true, true
@@ -432,8 +441,10 @@ func monsterSpeedOfKind(lobby, id int, kind string) int {
 		s, _ := monsterWalkSpeed(id, lobby)
 		return s
 	}
-	var text string
-	monsterQueryRow(`SELECT COALESCE(speed_text,'') FROM monsters WHERE slug = $1`, monsterKeyOfCombatant(lobby, id)).Scan(&text)
+	text := formSpeedText(lobby, id) // a Shape-Shift form's Speeds
+	if text == "" {
+		monsterQueryRow(`SELECT COALESCE(speed_text,'') FROM monsters WHERE slug = $1`, monsterKeyOfCombatant(lobby, id)).Scan(&text)
+	}
 	for _, m := range speedKindRe.FindAllStringSubmatch(text, -1) {
 		if strings.EqualFold(m[1], kind) {
 			n, _ := strconv.Atoi(m[2])
@@ -464,10 +475,17 @@ func grantSpecialMove(lobby, id int, entry, text string, apply bool) string {
 	if mv.Straight {
 		how += ", straight toward an enemy"
 	}
-	if _, onMap := activeEncounterMap(lobby); !onMap {
-		return fmt.Sprintf("Movement (%s): %s, not counted against its Speed; there is no battle map, so the GM places it.", mv.Entry, how)
+	if mv.SpeedCost > 0 {
+		how = fmt.Sprintf("a jump of up to %d ft costing %d ft of its Speed", mv.Feet, mv.SpeedCost)
 	}
-	return fmt.Sprintf("Movement (%s): %s, not counted against its Speed. Move its token with your next battle map update (PUT /api/campaigns/{id}/battle-map); the server applies this move to it.", mv.Entry, how)
+	if _, onMap := activeEncounterMap(lobby); !onMap {
+		return fmt.Sprintf("Movement (%s): %s; there is no battle map, so the GM places it.", mv.Entry, how)
+	}
+	counted := "not counted against its Speed"
+	if mv.SpeedCost > 0 {
+		counted = "counted as its text says"
+	}
+	return fmt.Sprintf("Movement (%s): %s, "+counted+". Move its token with your next battle map update (PUT /api/campaigns/{id}/battle-map); the server applies this move to it.", mv.Entry, how)
 }
 
 // takeSpecialMoves spends the move allowances of the monsters this GM map update moved. It answers the ids whose move provokes no
@@ -491,6 +509,9 @@ func takeSpecialMoves(lobby int, before, after encounterMap) (noOA, teleported, 
 			continue
 		}
 		notSpeed[old.ID] = true
+		if mv.SpeedCost > 0 && currentTurnID(lobby) == old.ID { // a jump costs what its text says, not its distance
+			addMonsterMoved(lobby, old.ID, mv.SpeedCost)
+		}
 		if mv.NoOA {
 			noOA[old.ID] = true
 		}
@@ -568,4 +589,221 @@ func withoutTeleports(after, before encounterMap, teleported map[int]bool) encou
 		}
 	}
 	return out
+}
+
+// ---- dragging a creature it grapples (SRD 5.2.1, the Grappled condition: "the grappler can drag or carry you when it moves, but
+// every foot of movement costs it 1 extra foot unless you are Tiny or two or more sizes smaller than it"). A trait that says it
+// "needn't spend extra movement to move a creature it is grappling" (Abduct) removes the cost.
+var noDragCostRe = regexp.MustCompile(`(?i)needn['’]t spend extra movement to move a creature it is grappling`)
+
+// dragCost: the creatures the monster dragged in this map update (a creature it grapples whose token moved with it by the same
+// displacement) that make its movement cost double, and why ("" when none).
+func dragCost(lobby, id int, before, after encounterMap) (double bool, why string) {
+	old, ok1 := before.token(id)
+	now, ok2 := after.token(id)
+	if !ok1 || !ok2 || old.Position == now.Position {
+		return false, ""
+	}
+	dx, dy := now.Position.X-old.Position.X, now.Position.Y-old.Position.Y
+	mine := sizeOrder[strings.SplitN(creatureSize(lobby, id), " ", 2)[0]]
+	for _, r := range findConditionRecords(`lobby_id = $1 AND condition = 'grappled'`, lobby) {
+		if !grappledBy(r, id) {
+			continue
+		}
+		tOld, okA := before.token(r.TargetID)
+		tNew, okB := after.token(r.TargetID)
+		if !okA || !okB || tNew.Position.X-tOld.Position.X != dx || tNew.Position.Y-tOld.Position.Y != dy {
+			continue
+		}
+		theirs := sizeOrder[strings.SplitN(creatureSize(lobby, r.TargetID), " ", 2)[0]]
+		if theirs == 0 || mine-theirs >= 2 {
+			continue
+		}
+		if monsterTraitText(lobby, id, noDragCostRe) != "" {
+			return false, ""
+		}
+		return true, fmt.Sprintf("it drags %s, whom it grapples (each foot costs 2)", tNew.Name)
+	}
+	return false, ""
+}
+
+// ---- a creature that falls (an entry that says "The piercer falls.": Drop). Falling damage is fallDamageDice d6 Bludgeoning (the
+// one rule of a fall's dice, also the GM's falling damage), less what the entry says it reduces ("reduces any damage it takes from
+// the fall by 20"), from its height on the battle map (its token's altitude); its token lands. Without a map or a height the GM is
+// told.
+var (
+	fallsRe      = regexp.MustCompile(`(?i)\bThe [\w' -]+ falls\.`)
+	fallReduceRe = regexp.MustCompile(`(?i)reduces any damage it takes from the fall by (\d+)`)
+)
+
+// fallDamageDice: how many d6 a fall of this many feet deals (1d6 per 10 feet, at least 1 for any fall, at most 20).
+func fallDamageDice(feet int) int {
+	return min(max(feet/10, 1), 20)
+}
+
+// monsterFalls: the entry's fall for the monster (apply), and the clause to add ("" when the entry has no fall).
+func monsterFalls(lobby, id int, text string, apply bool) string {
+	if !fallsRe.MatchString(text) {
+		return ""
+	}
+	reduce := 0
+	if m := fallReduceRe.FindStringSubmatch(text); m != nil {
+		reduce, _ = strconv.Atoi(m[1])
+	}
+	name := creatureName(lobby, id)
+	m, onMap := activeEncounterMap(lobby)
+	tk, onToken := m.token(id)
+	if !onMap || !onToken || tk.Altitude <= 0 {
+		less := ""
+		if reduce > 0 {
+			less = fmt.Sprintf(", less %d", reduce)
+		}
+		return fmt.Sprintf("%s falls: falling damage is 1d6 Bludgeoning for every 10 feet%s; its height isn't on the battle map, so the GM deals it (POST /api/gm/adjust-monster).", name, less)
+	}
+	n := fallDamageDice(tk.Altitude)
+	_, rolled := game.RollDice(n, 6)
+	dmg := max(rolled-reduce, 0)
+	if !apply {
+		return fmt.Sprintf("%s would fall %d ft: %dd6 = %d, less %d.", name, tk.Altitude, n, rolled, reduce)
+	}
+	land(lobby, id)
+	if dmg == 0 {
+		return fmt.Sprintf("%s falls %d ft and lands unhurt (%dd6 = %d, less %d).", name, tk.Altitude, n, rolled, reduce)
+	}
+	h, ok := hurtMonster(lobby, id, dmg, "bludgeoning", false)
+	if !ok {
+		return ""
+	}
+	return fmt.Sprintf("%s falls %d ft (%dd6 = %d, less %d): %s", name, tk.Altitude, n, rolled, reduce, h.Text)
+}
+
+// land puts the creature's token on the ground (altitude 0) on the battle map.
+func land(lobby, id int) {
+	m, ok := activeEncounterMap(lobby)
+	if !ok {
+		return
+	}
+	for i := range m.Tokens {
+		if m.Tokens[i].ID == id {
+			m.Tokens[i].Altitude = 0
+		}
+	}
+	m.Revision = mapRevision()
+	out, _ := json.Marshal(m)
+	db.Exec(`UPDATE combat_state SET battle_map = $1 WHERE lobby_id = $2 AND active = true`, string(out), lobby)
+}
+
+// ---- Shape-Shift's Speeds: "shape-shifts to resemble a rat (Speed 20 ft.), a raven (20 ft., Fly 60 ft.), or a spider (20 ft.,
+// Climb 20 ft.), or it returns to its true form. Its game statistics are the same in each form, except for its Speed." The GM names
+// the form in use; its Speeds stand for the monster's until it changes again (a combat effect: the fight's end ends it).
+var (
+	shapeShiftRe = regexp.MustCompile(`(?i)\bshape-shifts (?:to resemble|into) (.+?), or (?:it )?returns to its true form`)
+	shapeFormRe  = regexp.MustCompile(`(?i)^an? (?:(?:Tiny|Small|Medium|Large) )?([\w' -]+?)(?: \((?:Speed )?(.+?)\))?$`)
+)
+
+// shapeForms: the forms the entry offers, name -> its Speed line ("" when the form keeps the Speed).
+func shapeForms(text string) map[string]string {
+	m := shapeShiftRe.FindStringSubmatch(text)
+	if m == nil {
+		return nil
+	}
+	// the list split at its commas and "or"s outside parentheses ("a raven (20 ft., Fly 60 ft.)" is one form)
+	var parts []string
+	depth, cur := 0, ""
+	list := m[1]
+	for i := 0; i < len(list); i++ {
+		switch c := list[i]; {
+		case c == '(':
+			depth++
+		case c == ')':
+			depth--
+		case depth == 0 && c == ',':
+			parts, cur = append(parts, cur), ""
+			continue
+		case depth == 0 && strings.HasPrefix(list[i:], " or "):
+			parts, cur = append(parts, cur), ""
+			i += len(" or ") - 1
+			continue
+		}
+		cur += string(list[i])
+	}
+	parts = append(parts, cur)
+	out := map[string]string{}
+	for _, part := range parts {
+		part = strings.TrimSpace(strings.TrimPrefix(strings.TrimSpace(part), "or "))
+		f := shapeFormRe.FindStringSubmatch(part)
+		if f == nil {
+			continue
+		}
+		out[strings.ToLower(strings.TrimSpace(f[1]))] = strings.TrimSpace(f[2])
+	}
+	return out
+}
+
+// shapeShiftRefusal: the refusal of a Shape-Shift whose use names none of its forms ("" when it names one, or the entry offers none).
+func shapeShiftRefusal(text, use string) string {
+	forms := shapeForms(text)
+	if forms == nil {
+		return ""
+	}
+	if _, _, ok := shapeFormNamed(forms, use); ok {
+		return ""
+	}
+	names := make([]string, 0, len(forms))
+	for k := range forms {
+		names = append(names, k)
+	}
+	sort.Strings(names)
+	return fmt.Sprintf("Name the form in use: %s, or \"true form\". Nothing was changed.", strings.Join(names, ", "))
+}
+
+// shapeFormNamed: the form use names ("raven", "the raven", "true form": true form is "") and its Speed line.
+func shapeFormNamed(forms map[string]string, use string) (form, speed string, ok bool) {
+	pick := strings.ToLower(strings.TrimSpace(use))
+	if pick == "" {
+		return "", "", false
+	}
+	if strings.Contains(pick, "true") {
+		return "", "", true
+	}
+	if sp, found := forms[pick]; found {
+		return pick, sp, true
+	}
+	for k, v := range forms {
+		if strings.Contains(pick, k) {
+			return k, v, true
+		}
+	}
+	return "", "", false
+}
+
+// shapeShift records the form the GM named (use; shapeShiftRefusal already refused any other) and answers the clause.
+func shapeShift(lobby, id int, text, use string, apply bool) string {
+	forms := shapeForms(text)
+	form, speed, ok := shapeFormNamed(forms, use)
+	if forms == nil || !ok || !apply {
+		return ""
+	}
+	db.Exec(`DELETE FROM combat_effects WHERE lobby_id = $1 AND target_id = $2 AND kind = 'shape_form'`, lobby, id)
+	name := creatureName(lobby, id)
+	if form == "" {
+		return fmt.Sprintf("%s returns to its true form (its own Speed).", name)
+	}
+	db.Exec(`INSERT INTO combat_effects (lobby_id, target_id, source_id, kind, text) VALUES ($1,$2,$2,'shape_form',$3)`, lobby, id, form+"|"+speed)
+	if speed == "" {
+		return fmt.Sprintf("%s takes the form of a %s (its Speed doesn't change).", name, form)
+	}
+	return fmt.Sprintf("%s takes the form of a %s: its Speed is now %s.", name, form, speed)
+}
+
+// formSpeedText: the Speed line of the form the monster has taken ("" when it is in its true form or the form keeps its Speed).
+func formSpeedText(lobby, id int) string {
+	var text string
+	if db == nil || db.QueryRow(`SELECT text FROM combat_effects WHERE lobby_id = $1 AND target_id = $2 AND kind = 'shape_form' ORDER BY id DESC LIMIT 1`, lobby, id).Scan(&text) != nil {
+		return ""
+	}
+	if i := strings.Index(text, "|"); i >= 0 {
+		return text[i+1:]
+	}
+	return ""
 }

@@ -1267,6 +1267,12 @@ func resolveMonsterEffectText(r *http.Request, lobbyID, monsterID int, meta *mon
 		if note := grantSpecialMove(lobbyID, monsterID, entryName, text, apply); note != "" { // the entry's own move (creature_movement_2024.go)
 			notes = append(notes, note)
 		}
+		if note := shapeShift(lobbyID, monsterID, text, use, apply); note != "" { // a Shape-Shift form's Speeds (refused before: shapeShiftRefusal)
+			notes = append(notes, note)
+		}
+		if note := monsterFalls(lobbyID, monsterID, text, apply); note != "" { // an entry that makes it fall (Drop)
+			notes = append(notes, note)
+		}
 	}
 	// one action that offers several saving throw effects ("one of the following rays", "at random"): the GM names the one that happened
 	// with use; none is guessed, and nothing is rolled until it is named

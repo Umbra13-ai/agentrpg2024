@@ -197,3 +197,40 @@ func TestSpecialMovesOfTheCatalog(t *testing.T) {
 		}
 	}
 }
+
+// Shape-Shift's forms and their Speeds, a jump that spends less movement than its distance (Leap, invented wording with the
+// published pattern), Abduct's wording and a fall's dice.
+func TestShapeFormsLeapAbductAndFallDice(t *testing.T) {
+	texts := map[string]string{}
+	for _, m := range srdMonsters2024() {
+		for _, list := range [][]srdMonsterEntry{m.Actions, m.BonusActions, m.Traits} {
+			for _, e := range list {
+				texts[m.Name+"|"+stripUsage(e.Name)] = e.Text
+			}
+		}
+	}
+	imp := shapeForms(texts["Imp|Shape-Shift"])
+	if imp["rat"] != "20 ft." || imp["raven"] != "20 ft., Fly 60 ft." || imp["spider"] != "20 ft., Climb 20 ft." || len(imp) != 3 {
+		t.Errorf("Imp's forms: %v", imp)
+	}
+	quasit := shapeForms(texts["Quasit|Shape-Shift"])
+	if quasit["bat"] != "Speed 10 ft., Fly 40 ft." && quasit["bat"] != "10 ft., Fly 40 ft." || len(quasit) != 3 {
+		t.Errorf("Quasit's forms: %v", quasit)
+	}
+	mv, ok := readSpecialMove("The frog-knight jumps up to 30 feet by spending 10 feet of movement.", func(string) int { return 30 })
+	if !ok || mv.Feet != 30 || mv.SpeedCost != 10 || mv.NoOA || mv.Teleport {
+		t.Errorf("a jump: %+v %v", mv, ok)
+	}
+	if !noDragCostRe.MatchString(texts["Bugbear Warrior|Abduct"]) {
+		t.Errorf("Abduct's wording isn't read: %q", texts["Bugbear Warrior|Abduct"])
+	}
+	for feet, want := range map[int]int{5: 1, 10: 1, 25: 2, 200: 20, 400: 20} {
+		if got := fallDamageDice(feet); got != want {
+			t.Errorf("a fall of %d ft: %dd6, want %dd6", feet, got, want)
+		}
+	}
+	drop := "The lurker falls. Dexterity Saving Throw: DC 11, one creature directly underneath the lurker. Failure: 10 (3d6) Piercing damage. Failure or Success: The lurker reduces any damage it takes from the fall by 20."
+	if !fallsRe.MatchString(drop) || fallReduceRe.FindStringSubmatch(drop)[1] != "20" {
+		t.Errorf("a fall's wording isn't read")
+	}
+}
