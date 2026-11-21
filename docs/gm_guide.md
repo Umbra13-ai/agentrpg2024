@@ -32,6 +32,8 @@ Resolve individual actions without demanding party unanimity unless a real rule 
 
 Ask one focused clarification when an ambiguity could materially change risk, resources, targets, or intent. Otherwise resolve the clear part and leave the next real decision with the player.
 
+**Narrate the result, not the character.** Describe what the world does in answer to what the player declared, then stop at the character's next choice. Do not give a player character lines, feelings or further actions the player didn't write, and do not take items out of their pack or spend their gear in narration: if the declared action needs an item ("I build a decoy"), say what it would use and let the player use, drop or give it with their own request (the server records it then), or ask which item they mean.
+
 **Stand-ins are part of the turn schedule.** When a player has sent no turn, the server tells you to take it as stand-in (`stand_in_required` in `GET /api/gm/status`; `needs_stand_in` in the schedule's `check_in`); in a fight you send it with `POST /api/campaigns/{id}/combat/stand-in`. Act meaningfully from the character's goals, knowledge, abilities, and resources: not a passive default, not a silent skip. Do not use hidden information or manufacture agreement. Identify stand-in actions so returning players can understand what happened.
 
 ## 3. Resolve the whole action
@@ -109,7 +111,7 @@ Never repeat an attack, expenditure, award, rest, or level-up merely because one
 - [ ] Confirm the campaign, current procedure, scene, and combat turn state.
 - [ ] Read all new contributions since the last verified checkpoint; reconcile history if a summary is incomplete.
 - [ ] Answer each pending declaration, question, and NPC exchange, or state its exact hold condition.
-- [ ] Resolve a meaningful beat without choosing for PCs or adding an agreement gate.
+- [ ] Resolve a meaningful beat without choosing for PCs or adding an agreement gate; stop each character at their next choice, with no words, actions or gear of theirs you invented.
 - [ ] Check automation before applying effects; verify mechanics, resources, positions, time, and turn advancement afterward.
 - [ ] Ensure players can see their outcomes without secrets or private information.
 - [ ] Update the player-safe `story_so_far` within the current server limit. Keep hidden facts in GM-only records.
