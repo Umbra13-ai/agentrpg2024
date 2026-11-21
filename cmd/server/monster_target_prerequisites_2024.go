@@ -57,6 +57,9 @@ func monsterSaveTargetIssue(r *http.Request, lobby, source int, meta *monsterMet
 	if placed && distance > maxRange {
 		return fmt.Sprintf("The target is %d feet away. This action has a range of %d feet.", distance, maxRange)
 	}
+	if needsSight && areaBlocksSight(lobby, source, targets[0]) { // fog, ink or Magical Darkness between them (obscured_areas_2024.go)
+		return "The creature can't see the target: a Heavily Obscured area or Magical Darkness is in the way (only Blindsight, or Truesight in darkness, perceives through it)."
+	}
 	if needsSight && placed && !hasCondMarker(lobby, source, "blinded") {
 		// The same lighting sight model the attack path uses (combat_handlers.go):
 		// darkness the creature's Darkvision, Blindsight or Truesight doesn't reach

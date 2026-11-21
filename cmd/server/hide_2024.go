@@ -8,6 +8,7 @@ package main
 import (
 	"fmt"
 	"net/http"
+	"regexp"
 	"strings"
 
 	"github.com/agentrpg/agentrpg/game"
@@ -67,6 +68,74 @@ func attemptHide(charID int, label string) string {
 	return fmt.Sprintf("🙈 %s: Dexterity (Stealth)%s %d (d20: %d%s%s). Hidden, if there is somewhere to hide: you must be Heavily Obscured or behind Three-Quarters or Total Cover and out of every enemy's line of sight, and the GM can rule that there isn't. "+
 		"While hidden you have the Invisible condition; a Wisdom (Perception) check of %d finds you. You stop being hidden if you make a sound louder than a whisper, an enemy finds you, you make an attack roll or cast a spell with a Verbal component.",
 		label, profNote, total, roll, rtNote, notes, total)
+}
+
+// hideLightGateRe: a Hide that a stat block allows only in some light ("While in Dim Light or Darkness, the shadow takes the Hide
+// action").
+var hideLightGateRe = regexp.MustCompile(`(?i)\bWhile in (Dim Light or Darkness|Darkness|Dim Light)\b`)
+
+// attemptMonsterHide rolls the Hide action a monster's stat block entry takes: the entry's light condition first (the light at the
+// monster's square: monsterLightingAt), then a DC 15 Dexterity (Stealth) check (its Stealth skill, else its Dexterity modifier;
+// Pass without Trace +10; Disadvantage in sunlight with Sunlight Sensitivity). On a success it is hidden (the hidden condition: the
+// attack roll owner reads it as an unseen attacker until it makes an attack roll). Where there is nowhere to hide is the GM's call,
+// as for a character (POST /api/gm/overrule-hide ends it).
+func attemptMonsterHide(lobbyID, monsterID int, name, entryName, text string, apply bool) string {
+	if m := hideLightGateRe.FindStringSubmatch(text); m != nil {
+		light := monsterLightingAt(lobbyID, monsterID)
+		allowed := map[string]bool{"dim": strings.Contains(strings.ToLower(m[1]), "dim"),
+			"darkness": strings.Contains(strings.ToLower(m[1]), "darkness"), "magical darkness": strings.Contains(strings.ToLower(m[1]), "darkness")}
+		if !allowed[light] {
+			return fmt.Sprintf("%s can't use %s: it can take this Hide only while in %s, and it stands in %s light. Nothing was rolled.", name, entryName, m[1], light)
+		}
+	}
+	if !apply {
+		return fmt.Sprintf("%s would use %s: the Hide action, a DC %d Dexterity (Stealth) check. Nothing was rolled.", name, entryName, hideDC)
+	}
+	key := ""
+	for _, e := range combatEntries(lobbyID) {
+		if asInt(e["id"]) == monsterID {
+			key = sprintAny(e["monster_key"])
+		}
+	}
+	bonus := monsterSkillBonus(key, "stealth")
+	if bonus == -99 {
+		var str, dex, pb int
+		var size, ctype string
+		monsterQueryRow(`SELECT COALESCE(str,10), COALESCE(dex,10), COALESCE(proficiency_bonus,2), COALESCE(size,'Medium'), COALESCE(type,'') FROM monsters WHERE slug = $1`, key).
+			Scan(&str, &dex, &pb, &size, &ctype)
+		bonus = game.Modifier(dex)
+	}
+	notes := ""
+	if passWithoutTraceOn(lobbyID, monsterID) {
+		bonus += 10
+		notes += " [Pass without Trace +10]"
+	}
+	d := game.RollDie(20)
+	if on, _ := sunlightPenalty(lobbyID, monsterID); on {
+		if d2 := game.RollDie(20); d2 < d {
+			d = d2
+		}
+		notes += " [Sunlight Sensitivity: Disadvantage]"
+	}
+	total := d + bonus
+	endCondition(lobbyID, monsterID, "hidden", "")
+	if total < hideDC {
+		return fmt.Sprintf("%s uses %s: the Hide action, Dexterity (Stealth) %d (d20: %d %+d%s). Not hidden: the check needs %d.", name, entryName, total, d, bonus, notes, hideDC)
+	}
+	addCondition(lobbyID, monsterID, condAdd{Condition: "hidden", Source: entryName})
+	return fmt.Sprintf("%s uses %s: the Hide action, Dexterity (Stealth) %d (d20: %d %+d%s). Hidden, if there is somewhere to hide (Heavily Obscured, or Three-Quarters or Total Cover out of every enemy's sight; the GM can rule there isn't): it has the Invisible condition while hidden, and a Wisdom (Perception) check of %d finds it. It stops being hidden when it makes an attack roll.",
+		name, entryName, total, d, bonus, notes, total)
+}
+
+// endHidden: the creature is no longer hidden (it made an attack roll: SRD 5.2.1 Hide).
+func endHidden(lobbyID, id int) {
+	if id > 0 && !isCompanionCombatID(id) {
+		if removeCondition(id, "hidden") {
+			db.Exec(`UPDATE characters SET hide_dc = 0 WHERE id = $1`, id)
+		}
+		return
+	}
+	endCondition(lobbyID, id, "hidden", "")
 }
 
 // @Summary Overrule a hide

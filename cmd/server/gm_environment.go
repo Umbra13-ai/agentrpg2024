@@ -437,12 +437,12 @@ func handleGMUnderwater(w http.ResponseWriter, r *http.Request) {
 
 // handleGMSetLighting godoc
 // @Summary Set area lighting level
-// @Description Set the lighting level for a campaign area. Lighting affects visibility and attack rolls: bright (normal), dim (disadvantage on Perception), darkness (heavily obscured - effectively blinded without darkvision/blindsight/truesight).
+// @Description Set the lighting level for a campaign area. Lighting affects visibility and attack rolls: bright (normal), dim (disadvantage on Perception), darkness (heavily obscured - effectively blinded without darkvision/blindsight/truesight), sunlight (Bright Light that is sunlight: a creature with Sunlight Sensitivity has Disadvantage on attack rolls and ability checks, and on saving throws where its trait says D20 Tests).
 // @Tags GM Tools
 // @Accept json
 // @Produce json
 // @Param Authorization header string true "Bearer <token>"
-// @Body Lighting level: 'bright', 'dim', or 'darkness'. campaign_id: one you run, started or not (optional when you run one).
+// @Body Lighting level: 'bright', 'dim', 'darkness' or 'sunlight'. campaign_id: one you run, started or not (optional when you run one).
 // @Success 200 {object} map[string]interface{} "Lighting updated"
 // @Failure 401 {object} map[string]interface{} "Unauthorized"
 // @Failure 403 {object} map[string]interface{} "Not GM"
@@ -463,7 +463,7 @@ func handleGMSetLighting(w http.ResponseWriter, r *http.Request) {
 
 	var req struct {
 		CampaignID int    `json:"-"`
-		Lighting   string `json:"lighting"` // bright, dim or darkness
+		Lighting   string `json:"lighting"` // bright, dim, darkness or sunlight (Bright Light that is sunlight: Sunlight Sensitivity reads it)
 	}
 	// the campaign: campaign_id, else the GM's only campaign, started or not (gm_campaign_2024.go)
 	campaignID, ok := gmReadAs(w, r, agentID, &req, campaignBeforeStart())
@@ -474,13 +474,13 @@ func handleGMSetLighting(w http.ResponseWriter, r *http.Request) {
 
 	// Validate lighting value
 	req.Lighting = strings.ToLower(req.Lighting)
-	validLighting := map[string]bool{"bright": true, "dim": true, "darkness": true}
+	validLighting := map[string]bool{"bright": true, "dim": true, "darkness": true, "sunlight": true}
 	if !validLighting[req.Lighting] {
 		w.WriteHeader(http.StatusBadRequest)
 		json.NewEncoder(w).Encode(map[string]interface{}{
 			"error":         "invalid_lighting",
-			"message":       "lighting must be 'bright', 'dim', or 'darkness'",
-			"valid_options": []string{"bright", "dim", "darkness"},
+			"message":       "lighting must be 'bright', 'dim', 'darkness' or 'sunlight'",
+			"valid_options": []string{"bright", "dim", "darkness", "sunlight"},
 		})
 		return
 	}
@@ -501,6 +501,8 @@ func handleGMSetLighting(w http.ResponseWriter, r *http.Request) {
 	switch req.Lighting {
 	case "bright":
 		statusText = "The area is brightly lit"
+	case "sunlight":
+		statusText = "Sunlight floods the area"
 	case "dim":
 		statusText = "The area is shrouded in dim light"
 	case "darkness":
@@ -516,6 +518,9 @@ func handleGMSetLighting(w http.ResponseWriter, r *http.Request) {
 	switch req.Lighting {
 	case "bright":
 		effects = append(effects, "Normal visibility for all creatures")
+	case "sunlight":
+		effects = append(effects, "Normal visibility for all creatures (Bright Light)")
+		effects = append(effects, "Sunlight Sensitivity: those creatures have Disadvantage on attack rolls and ability checks (and on saving throws where the trait says D20 Tests)")
 	case "dim":
 		effects = append(effects, "Disadvantage on Wisdom (Perception) checks relying on sight")
 		notes = append(notes, "Creatures with darkvision treat dim light as bright light")

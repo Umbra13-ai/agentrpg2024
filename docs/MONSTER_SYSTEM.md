@@ -551,3 +551,23 @@ Enforced through shared checks: `checkActionEconomy` (POST /api/action), `featur
 Redirect Attack (supplied wording: "The goblin chooses a Small or Medium ally within 5 feet of itself. The goblin and that ally swap places, and the ally becomes the target of the attack instead.") makes the ally the target of the SAME attack roll. So: the roll's total is compared with the ally's AC (a natural 20 hits); the first target keeps nothing of the hit (`undoRecordedHit`); the ally takes the damage as rolled BEFORE the first target's defenses (`charHitOnMonster.Parts`) through the normal damage owner, so the ally's resistance, immunity, vulnerability, absorption and Temporary Hit Points decide the result; the stat block's hit rider is given to the ally by the normal rules (size gate, immunities). Not transferred, flagged to the GM: a character attacker's hit (its damage is built in attack_target.go, no raw parts are recorded) and a critical hit that came from the first target's state (it is not a natural 20). The roll's own Advantage or Disadvantage was decided against the first target and is kept as rolled. Route-tested (`TestPostgresMonsterAttacksMonster`): the first target resists, the ally does not (the ally takes the full damage), the ally gets Prone, and an AC the roll cannot beat is a miss with nothing changed (mutation-checked on the damage and on the rider).
 
 Protection ("An attack roll hits the wearer of the guardian's amulet while the wearer is within 5 feet of the guardian. Response: The wearer gains a +5 bonus to AC ...") is a monster guardian (defender-side Reaction) for a CHARACTER wearer hit by a MONSTER attacker. `TestPostgresProtectionVersusMonsterAttacker` covers it: a hit the +5 turns into a miss is undone (Hit Points and the hit's rider conditions, by id), a hit that still beats AC + 5 is left alone (mutation-checked on the rider removal). The same applies to a cast Shield (`shieldReaction`). Found by this work: a hit's conditions were applied after the hit was recorded, so a Shield or Protection that made it a miss left them on the wearer; and a Shield cast by standing order still got the hit's riders applied. Both are fixed and both are route-tested (the standing-order case with a wizard that has a Shield standing order; mutation-checked on the "hit became a miss" guard). Not covered: a wearer that is a monster hit by a character or monster (the wearer must be a character today: a monster wearer is not supported and not tested).
+
+
+## Obscured areas, senses and light (CR 0-1, 2026-11-21)
+
+- **Heavily Obscured areas** (`obscured_areas_2024.go`): Fog Cloud (Ice Mephit, any caster: `obscuringSpells`) and an entry that "fills a
+  N-foot Cube centered on itself ... is Heavily Obscured for 1 minute" (Octopus and Giant Octopus Ink Cloud: `obscuringTextRe`) make an
+  `obscured_area` row: on the battle map a Sphere around the GM's point (else the first target, else the caster) or a Cube on the
+  creature's space; without a map the creatures named inside (the action's target_ids; the GM's `POST /api/gm/obscured-area`). It ends
+  with its duration, its source's Concentration or the GM (`end`: a strong wind or current). `areaBlocksSight` reads it (and Magical
+  Darkness) for attack rolls (both unseen legs) and for "a creature it can see" targeting; only Blindsight perceives through fog and ink.
+  The Ink Cloud's move ("moves up to its Swim Speed") and its underwater trigger stay the GM's (no underwater or movement state).
+- **Devil's Sight** ("Magical Darkness doesn't impede the X's Darkvision"): the creature's Darkvision sees into Magical Darkness.
+- **Sunlight Sensitivity / Sunlight Weakness**: while the GM's lighting is `sunlight` (POST /api/gm/set-lighting), Disadvantage on the
+  creature's attack rolls and Hide check, and on its saving throws where the trait says D20 Tests (the Shadow).
+- **Shadow Stealth** and every stat block "takes the Hide action": rolled (`attemptMonsterHide`), refused outside the light the entry
+  names; the hidden condition ends when the creature makes an attack roll. Pass without Trace cast by a monster gives any creature in its
+  aura +10 to that check.
+- **GM by design, asserted**: telepathy and mind links (Probing Telepathy, Telepathic Bond, Shark Telepathy, Bound, Vampiric Connection,
+  Shielded Mind; the book's Advanced Telepathy and Telepathic Shroud; any trait worded with telepathy), senses that find things (Iron Scent, Treasure
+  Sense), speaking with creatures: `GM` rows of `monsterTraitRules`, shown to the GM as theirs to apply.
