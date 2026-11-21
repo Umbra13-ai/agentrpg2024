@@ -134,12 +134,12 @@ func gmCombatants(turnOrderJSON []byte, lobbyID int) []map[string]interface{} {
 	return out
 }
 
-var revealsStats = regexp.MustCompile(`(?i)\b(?:AC|armor class)\s*(?:of\s*)?\d+\b|\b\d+\s*(?:hp|hit points)\b|\b(?:hp|hit points)\s*[:=]?\s*\d+\b`)
+var revealsStats = regexp.MustCompile(`(?i)\b(?:AC|armor class)\s*(?:of\s*)?\d+\b|\b\d+\s*(?:hp|hit points)\b|\b(?:hp|hit points)\s*[:=]?\s*\d+\b|\bDC\s*\d+\b|\bthe (?:module|adventure|book) (?:says|gives|lists|calls for)\b`)
 
 // statLeakWarning warns a GM whose narration seems to give away a number players should not see.
 func statLeakWarning(narration string) string {
 	if revealsStats.MatchString(narration) {
-		return "Your narration seems to include an Armor Class or hit point number. Players should learn only whether an attack hit or missed and how a creature looks (wounded, bloodied), never its AC or exact hit points. The narration was posted as written and stays in the log: a narration can't be edited or removed. If the number wasn't meant to be shown, post a corrected narration with POST /api/gm/narrate."
+		return "Your narration seems to include an Armor Class, hit point number, DC or the module's own words. Players should learn only whether an attack hit or missed and how a creature looks (wounded, bloodied), and a task's difficulty in story terms (\"the chain looks old but thick\"), never an AC, exact hit points, a DC or what the module says. The narration was posted as written and stays in the log: a narration can't be edited or removed. If the number wasn't meant to be shown, post a corrected narration with POST /api/gm/narrate."
 	}
 	return ""
 }

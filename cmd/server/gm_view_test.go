@@ -13,6 +13,10 @@ func TestStatLeakWarning(t *testing.T) {
 		"The ogre has 59 HP left.",
 		"The troll has 30 hit points remaining.",
 		"HP: 12",
+		// S-CALLA-10: a DC and the module's own words
+		"OOC: thieves' tools with a DC 10 Dexterity check, or a DC 20 Strength check to break the chain.",
+		"The module gives two direct ways to free this chain.",
+		"The adventure says the guard sleeps until dawn.",
 	}
 	for _, s := range leaks {
 		if statLeakWarning(s) == "" {
@@ -25,6 +29,8 @@ func TestStatLeakWarning(t *testing.T) {
 		"Kestrel rolls a 17 and hits.",
 		"A pack of 7 wolves circles.",
 		"You feel a surge of hope.",
+		"The chain is old but thick; the lock looks crude.",
+		"The DCs of Waterdeep hold their council at noon.",
 	}
 	for _, s := range fine {
 		if w := statLeakWarning(s); w != "" {
