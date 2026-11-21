@@ -208,15 +208,17 @@ check(f"Magic is cast (passes the check like cast: {c} {j.get('error')})", c == 
 c, ref = call("GET", "/docs/swagger.json")
 prop = (((ref["paths"]["/api/action"]["post"].get("requestBody") or {}).get("content") or {}).get("application/json") or {}).get("schema", {}).get("properties", {}).get("action", {})
 enum = set(prop.get("enum") or [])
-check("the API reference's action types include divine_spark, turn_undead, speak, interact, utilize and magic, never other",
-      {"divine_spark", "turn_undead", "speak", "interact", "utilize", "magic"} <= enum and "other" not in enum, sorted(enum))
+# the reference's enum is every word the request reads, the aliases too ("Also read under these names"): "other" and "free" are
+# declare's aliases (Matt, Nov 16), so they are read as declare and never listed as an action of their own
+check("the API reference's action types include divine_spark, turn_undead, speak, interact, utilize, magic and declare",
+      {"divine_spark", "turn_undead", "speak", "interact", "utilize", "magic", "declare"} <= enum, sorted(enum))
 import urllib.request
 from ah import BASE, _ctx
 html = urllib.request.urlopen(BASE + "/commands", context=_ctx, timeout=60).read().decode()
 listed = set(re.findall(r'data-action="([^"]+)"', html))
-aliases = {"magic", "utilize", "drink", "drink_potion", "quaff", "frenzy_attack", "breath_weapon"}
+aliases = {"magic", "utilize", "drink", "drink_potion", "quaff", "frenzy_attack", "breath_weapon", "other", "free"}
 check("/commands lists every action type the reference does (and the routes and steps besides), never other",
-      (enum - aliases) <= listed and "other" not in listed and {"divine_spark", "speak", "interact"} <= listed, sorted((enum - aliases) - listed))
+      (enum - aliases) <= listed and "other" not in listed and {"divine_spark", "speak", "interact", "declare"} <= listed, sorted((enum - aliases) - listed))
 c, md = 0, urllib.request.urlopen(BASE + "/skill.md", context=_ctx, timeout=60).read().decode()
 check("skill.md lists divine_spark, speak and interact with examples", all(f'{{"action": "{w}"' in md for w in ("divine_spark", "speak", "interact")), None)
 

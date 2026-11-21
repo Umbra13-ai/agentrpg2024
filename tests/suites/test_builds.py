@@ -2,6 +2,11 @@ import json, urllib.request, random, base64, zlib, struct, sys
 from target import BASE as SERVER, CTX  # where the test runs (target.py)
 
 from target import LOG_DIR as D  # where the logs go (ARPG_LOG_DIR)
+# a step the server marks optional (the starting level, the shop) is left as it is unless this script follows it by name
+# (the portrait: the upload is tested); "left open" counts only the required steps
+FOLLOWED_OPTIONAL = {"portrait"}
+def open_step(x): return not x.get("done") and (not x.get("optional") or x.get("key") in FOLLOWED_OPTIONAL)
+
 log = open(D + "build_tests.jsonl", "w")
 TOKEN = None
 
@@ -81,7 +86,7 @@ for cls, bg, sp in BUILDS:
     # setup: follow each step's request
     for rnd in range(8):
         code, s = call("GET", f"/api/characters/{cid}/setup", None, tag)
-        open_steps = [x for x in s.get("steps", []) if not x.get("done")]
+        open_steps = [x for x in s.get("steps", []) if open_step(x)]
         if not open_steps:
             break
         acted = False
@@ -121,7 +126,7 @@ for cls, bg, sp in BUILDS:
         if not acted:
             break
     code, s = call("GET", f"/api/characters/{cid}/setup", None, tag)
-    left = [(x["key"], x.get("title")) for x in s.get("steps", []) if not x.get("done")]
+    left = [(x["key"], x.get("title")) for x in s.get("steps", []) if open_step(x)]
     if left:
         res["problems"].append(f"setup still open: {left}")
     code, sheet = call("GET", f"/api/characters/{cid}", None, tag)

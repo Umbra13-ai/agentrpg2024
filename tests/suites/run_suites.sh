@@ -75,12 +75,14 @@ run() {
 
 # the level runs of a group, at once (each makes one account)
 levels() {
-  local spec
+  local spec pids=()
   for spec in "$@"; do
     set -- $spec
     run levelrun "level_$1" "$1" "$2" "$3" &
+    pids+=($!)
   done
-  wait
+  # only the level runs: a bare wait also waits on the server this script started, and never returns (CI hung until cancelled)
+  wait "${pids[@]}"
 }
 
 # The groups as the notes' staging batch runs them, then the suites it doesn't list.

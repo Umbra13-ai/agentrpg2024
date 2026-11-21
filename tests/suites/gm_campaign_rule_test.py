@@ -69,7 +69,7 @@ TARGET_ROUTES = [
     ("/api/gm/turn-undead", "caster_id", False), ("/api/gm/tactical-mind", "character_id", False),
     ("/api/gm/group-check", "character_ids", False), ("/api/gm/overrule-hide", "character_id", False),
     ("/api/gm/deflect-attacks", "character_id", False), ("/api/gm/abjure-foes", "paladin_id", False),
-    ("/api/gm/starting-level", "character_id", False),
+    ("/api/gm/starting-level", "character_id", True),  # a party set up at its level before the start (playtest I-GM-3)
     ("/api/gm/kick-character", "character_id", True),  # its success cases use a2 and run at the end (it removes the character)
 ]
 

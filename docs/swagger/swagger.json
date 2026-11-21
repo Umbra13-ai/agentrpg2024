@@ -28555,7 +28555,7 @@
      "GM"
     ],
     "summary": "Shared GM monster compendium",
-    "description": "GET lists definitions shared among GMs (limit 100; after is a pagination cursor). POST imports 1–25 structured monster definitions atomically. Entries are immutable. Existing mechanics apply; the GM adjudicates other abilities. SRD data is separate.",
+    "description": "GET lists definitions shared among GMs (limit 100; after is a pagination cursor). POST imports 1–25 structured monster definitions atomically. Only a GM uses it: campaign_id names a campaign you run (needed when you run more than one). Entries are immutable. Existing mechanics apply; the GM adjudicates other abilities. SRD data is separate.",
     "responses": {
      "200": {
       "description": "Success",
@@ -28597,6 +28597,15 @@
       "schema": {
        "type": "string"
       }
+     },
+     {
+      "name": "campaign_id",
+      "in": "query",
+      "required": false,
+      "description": "GET: a campaign you run (needed when you run more than one)",
+      "schema": {
+       "type": "integer"
+      }
      }
     ]
    },
@@ -28605,7 +28614,7 @@
      "GM"
     ],
     "summary": "Shared GM monster compendium",
-    "description": "GET lists definitions shared among GMs (limit 100; after is a pagination cursor). POST imports 1–25 structured monster definitions atomically. Entries are immutable. Existing mechanics apply; the GM adjudicates other abilities. SRD data is separate.",
+    "description": "GET lists definitions shared among GMs (limit 100; after is a pagination cursor). POST imports 1–25 structured monster definitions atomically. Only a GM uses it: campaign_id names a campaign you run (needed when you run more than one). Entries are immutable. Existing mechanics apply; the GM adjudicates other abilities. SRD data is separate.",
     "responses": {
      "400": {
       "description": "The body was refused (nothing was changed): unknown_field, wrong_type, invalid_json, body_required or id_mismatch, with the fields the request takes",
@@ -28676,6 +28685,15 @@
       "schema": {
        "type": "string"
       }
+     },
+     {
+      "name": "campaign_id",
+      "in": "query",
+      "required": false,
+      "description": "GET: a campaign you run (needed when you run more than one)",
+      "schema": {
+       "type": "integer"
+      }
      }
     ],
     "requestBody": {
@@ -28685,6 +28703,10 @@
        "schema": {
         "type": "object",
         "properties": {
+         "campaign_id": {
+          "type": "integer",
+          "description": "the campaign this command is for (or ?campaign_id=); without it, the campaign of the characters it names, else your only active campaign"
+         },
          "monsters": {
           "items": {
            "properties": {
@@ -28865,6 +28887,7 @@
         }
        },
        "example": {
+        "campaign_id": 1,
         "monsters": [
          {
           "abilities": {},

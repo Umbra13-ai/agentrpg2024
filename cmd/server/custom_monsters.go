@@ -211,9 +211,10 @@ func customMonsterStats(key string, m srdMonster2024) map[string]interface{} {
 
 // handleGMCompendiumMonsters godoc
 // @Summary Shared GM monster compendium
-// @Description GET lists definitions shared among GMs (limit 100; after is a pagination cursor). POST imports 1–25 structured monster definitions atomically. Entries are immutable. Existing mechanics apply; the GM adjudicates other abilities. SRD data is separate.
+// @Description GET lists definitions shared among GMs (limit 100; after is a pagination cursor). POST imports 1–25 structured monster definitions atomically. Only a GM uses it: campaign_id names a campaign you run (needed when you run more than one). Entries are immutable. Existing mechanics apply; the GM adjudicates other abilities. SRD data is separate.
 // @Tags GM
 // @Param after query string false "GET pagination cursor from next_after"
+// @Param campaign_id query int false "GET: a campaign you run (needed when you run more than one)"
 // @Router /gm/compendium/monsters [get]
 // @Router /gm/compendium/monsters [post]
 func handleGMCompendiumMonsters(w http.ResponseWriter, r *http.Request) {
@@ -227,16 +228,13 @@ func handleGMCompendiumMonsters(w http.ResponseWriter, r *http.Request) {
 		writeAuthError(w, err)
 		return
 	}
-	var isGM bool
-	err = db.QueryRow(`SELECT EXISTS(SELECT 1 FROM lobbies WHERE dm_id=$1)`, agent).Scan(&isGM)
-	if answerDBFailure(w, err, "GM access") {
-		return
-	}
-	if !isGM {
-		writeJSONStatus(w, 403, map[string]interface{}{"error": "not_gm", "message": "Only a GM can use the shared compendium."})
-		return
-	}
+	// who may use the shared compendium is a GM, as every GM command decides it (gm_campaign_2024.go): the campaign named with
+	// campaign_id, else the GM's only campaign, started or not
 	if r.Method == http.MethodGet {
+		if _, code, msg := gmCampaignFor(agent, r, campaignBeforeStart()); code != "" {
+			writeGMCampaignProblem(w, code, msg)
+			return
+		}
 		rows, err := db.Query(`SELECT key,definition,source_note FROM custom_monsters WHERE key>$1 ORDER BY key LIMIT 101`, r.URL.Query().Get("after"))
 		if err != nil {
 			writeDBError(w, err, "the compendium")
@@ -269,7 +267,7 @@ func handleGMCompendiumMonsters(w http.ResponseWriter, r *http.Request) {
 		SourceNote string           `json:"source_note"` // Required provenance for the shared import, up to 500 bytes.
 		Monsters   []srdMonster2024 `json:"monsters"`    // 1–25 structured 2024 stat blocks; name, size, type, ac, hp, abilities, cr and proficiency_bonus are required.
 	}
-	if !readRequest(w, r, &req) {
+	if _, ok := gmReadAs(w, r, agent, &req, campaignBeforeStart()); !ok {
 		return
 	}
 	problem := ""

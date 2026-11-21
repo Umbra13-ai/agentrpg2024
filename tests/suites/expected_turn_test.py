@@ -82,7 +82,7 @@ for state in ("on", "off"):
     ok = [x for x in res if x[0] == 200]
     refused = [x[1].get("error") for x in res if x[0] != 200]
     check(f"[{state}] 5 overlapping nexts naming one turn: one ends it, the others are refused",
-          len(ok) == 1 and all(e in ("turn_change_in_progress", "turn_already_moved") for e in refused), [(x[0], x[1].get("error")) for x in res])
+          len(ok) == 1 and all(e in ("turn_change_in_progress", "turn_already_moved", "combat_operation_in_progress") for e in refused), [(x[0], x[1].get("error")) for x in res])
     check(f"[{state}] ... the turn moved one place", now()[1] == i + 1 and now()[2] == "Gob C", now())
     # narrate with the turn it is now ends it
     r, i, _ = now()

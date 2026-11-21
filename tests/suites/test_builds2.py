@@ -2,6 +2,11 @@
 # through the options (first / last / middle), the other equipment options, then the same setup as test_builds.py.
 import json, urllib.request, random, base64, sys
 import os
+# a step the server marks optional (the starting level, the shop) is left as it is unless this script follows it by name
+# (the portrait: the upload is tested); "left open" counts only the required steps
+FOLLOWED_OPTIONAL = {"portrait"}
+def open_step(x): return not x.get("done") and (not x.get("optional") or x.get("key") in FOLLOWED_OPTIONAL)
+
 exec(open(os.path.join(os.path.dirname(os.path.abspath(__file__)), "test_builds.py")).read().split("# class, background, species")[0].replace('build_tests.jsonl','build_tests2.jsonl'))
 def ov(o,f=None):
     if not isinstance(o,dict): return o
@@ -71,7 +76,7 @@ for cls in classes:
     cid=f["character_id"]; res["hp"],res["ac"]=f.get("hp"),f.get("ac")
     for rnd in range(8):
         s=call("GET",f"/api/characters/{cid}/setup",None,tag)[1]
-        op=[x for x in s.get("steps",[]) if not x.get("done")]
+        op=[x for x in s.get("steps",[]) if open_step(x)]
         if not op: break
         acted=False
         for st in op:
@@ -96,7 +101,7 @@ for cls in classes:
                     if c3>=400 or o3.get("error"): res["problems"].append(f"setup {k} then: {o3.get('error')} {o3.get('message')}")
         if not acted: break
     s=call("GET",f"/api/characters/{cid}/setup",None,tag)[1]
-    left=[x["key"] for x in s.get("steps",[]) if not x.get("done")]
+    left=[x["key"] for x in s.get("steps",[]) if open_step(x)]
     if left: res["problems"].append(f"setup still open: {left}")
     sh=call("GET",f"/api/characters/{cid}",None,tag)[1]
     res["finished"]=sh.get("character_finished"); res["eq"]=sh.get("equipment")

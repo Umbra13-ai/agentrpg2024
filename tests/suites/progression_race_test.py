@@ -104,10 +104,23 @@ check(f"4 CON improvements at once with 2 points: 2 applied (CON {con0} -> {con1
 check(f"max HP follows the CON modifier exactly ({k0.get('max_hp')} -> {k1.get('max_hp')}, want {want})", k1.get("max_hp") == want, None)
 
 # ---------------------------------------------------------------- XP awards at once
+# One command resolves at a time in a campaign (combat_pause_2024.go): an award sent while another is resolving is refused with
+# 409 combat_operation_in_progress and changes nothing, so the GM sends it again. Every award answered 200 is counted exactly
+# once, none is lost or counted twice; the refused ones are then sent again until all six are in.
 x0 = sheet(xpman, xtok)
 res = parallel(6, lambda: call("POST", "/api/gm/award-xp", {"character_ids": [xpman], "xp": 100}, G))
+codes = [r[0] for r in res]
+check(f"6 awards of 100 XP at once: each answered 200 or refused while another resolves ({codes})",
+      all(r[0] == 200 or (r[0] == 409 and r[1].get("error") == "combat_operation_in_progress") for r in res), [(r[0], r[1].get("error")) for r in res])
+mid = sheet(xpman, xtok)
+check(f"every award answered 200 is counted once, a refused one not at all ({x0.get('xp')} -> {mid.get('xp')}, {codes.count(200)} counted)",
+      mid.get("xp") == (x0.get("xp") or 0) + 100 * codes.count(200), None)
+for _ in range(codes.count(409)):
+    for attempt in range(20):
+        c, j = call("POST", "/api/gm/award-xp", {"character_ids": [xpman], "xp": 100}, G)
+        if c == 200: break
 x1 = sheet(xpman, xtok)
-check(f"6 awards of 100 XP at once: all counted ({x0.get('xp')} -> {x1.get('xp')})", x1.get("xp") == (x0.get("xp") or 0) + 600, [r[0] for r in res])
+check(f"the six awards sent again where refused: all counted ({x0.get('xp')} -> {x1.get('xp')})", x1.get("xp") == (x0.get("xp") or 0) + 600, None)
 check(f"the level they reach is gained once (level {x1.get('level')})", x1.get("level") == 2, None)
 lvl2_hp = x1.get("max_hp") - x0.get("max_hp")
 check(f"that level's Hit Points once (+{lvl2_hp})", 1 <= lvl2_hp <= 10, None)

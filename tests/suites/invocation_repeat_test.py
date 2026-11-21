@@ -15,9 +15,12 @@ def at(cls, bg, sp, level):
     cmp = camp["campaign_id"]
     call("POST", f"/api/campaigns/{cmp}/join", {"character_id": cid}, T); call("POST", f"/api/campaigns/{cmp}/start", None, G)
     c, j = call("POST", "/api/gm/starting-level", {"campaign_id": cmp, "character_id": cid, "level": level, "gold": False}, G); assert c == 200, j
-    for st in call("GET", f"/api/characters/{cid}/setup", None, T)[1].get("steps") or []:  # the class's own spells, as suggested
-        if st.get("key") == "spells" and st.get("request"):
-            rq = st["request"]; c, j = call(rq.get("method", "POST"), rq["path"], rq.get("body"), T, "spells")
+    # the class's own spells, as suggested; the spells step waits for the subclass when one gives always-prepared spells
+    # (waits_for, I-CALLA-21), so the subclass is chosen first, as suggested, and then the spells
+    for _ in range(2):
+        for st in call("GET", f"/api/characters/{cid}/setup", None, T)[1].get("steps") or []:
+            if st.get("key") in ("subclass", "spells") and not st.get("done") and st.get("request"):
+                rq = st["request"]; c, j = call(rq.get("method", "POST"), rq["path"], rq.get("body"), T, st["key"])
     return cid
 def opts(cid): return call("GET", f"/api/characters/invocations?character_id={cid}", None, T)[1]
 def learn(cid, body): return call("POST", "/api/characters/invocations", {"character_id": cid, **body}, T, "invocation_repeat")

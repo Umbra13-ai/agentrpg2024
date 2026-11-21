@@ -1,4 +1,4 @@
-import json, urllib.request, random, base64, zlib, struct, os, ssl
+import json, urllib.request, random, base64, zlib, struct, os, ssl, re
 # The request helpers of the suites in this folder: they only send requests (a suite that reads or sets the database stays
 # outside this repository).
 from target import BASE, TARGET, LOCAL, STAGING, LIVE, only, CTX as _ctx, LOG_DIR as D  # where the test runs: target.py (ARPG_TARGET=local|staging|live)
@@ -11,7 +11,31 @@ def _red(o):  # no tokens or passwords in the log
 # schedule from creation (outside a fight a game action is then saved for the GM, not applied), so call() has the GM turn it off
 # right after the campaign is made. A schedule suite sets ah.KEEP_SCHEDULE = True before it makes its campaigns.
 KEEP_SCHEDULE=False
+# Starting a campaign waits on the GM and every player saying ready (POST /api/campaigns/{id}/ready). A suite that tests
+# mechanics, not the start, has its players and GM say ready right before the start: call() remembers who made each campaign
+# and who joined it with which character, and before POST /api/campaigns/{id}/start sends their ready; a player whose character
+# can't be ready yet (an open setup step the suite leaves on purpose) is named in start_without. A suite that tests the start
+# itself sets ah.KEEP_READINESS = True.
+KEEP_READINESS=False
+_campaign_gm={}       # campaign id -> the GM's token
+_campaign_players={}  # campaign id -> {character id: the player's token}
+_start_re=re.compile(r"^/api/campaigns/(\d+)/start(\?.*)?$")
+_join_re=re.compile(r"^/api/campaigns/(\d+)/join(\?.*)?$")
+def _ready_before_start(cid,b):
+    without=[]
+    for char,ptok in _campaign_players.get(cid,{}).items():
+        c,_=call("POST","/api/campaigns/%d/ready"%cid,{"ready":True},ptok,"ready before the start (ah.KEEP_READINESS)")
+        if c!=200: without.append(char)
+    gtok=_campaign_gm.get(cid)
+    if gtok: call("POST","/api/campaigns/%d/ready"%cid,{"ready":True},gtok,"GM ready before the start (ah.KEEP_READINESS)")
+    if not without: return b
+    b=dict(b or {})
+    b["start_without"]=sorted(set((b.get("start_without") or [])+without))
+    return b
 def call(m,p,b=None,tok=None,label="",raw=None,ctype="application/json"):
+    if m=="POST" and raw is None and not KEEP_READINESS:
+        st=_start_re.match(p)
+        if st and int(st.group(1)) in _campaign_gm: b=_ready_before_start(int(st.group(1)),b)
     h={"Content-Type":ctype,"User-Agent":"agentrpg-test"}
     if tok: h["Authorization"]="Bearer "+tok
     data=raw if raw is not None else (json.dumps(b).encode() if b is not None else None)
@@ -25,6 +49,13 @@ def call(m,p,b=None,tok=None,label="",raw=None,ctype="application/json"):
     if isinstance(b,dict) and "image_base64" in b: rb={"image_base64":"(%d chars)"%len(b["image_base64"])}
     log.write(json.dumps({"label":label,"method":m,"path":p,"status":code,"request":rb if raw is None else "(raw %d bytes)"%len(raw),"response":_red(js)})+"\n"); log.flush()
     _remember(m,p,js,tok)
+    if m=="POST" and code==200 and tok and isinstance(js,dict):
+        if p=="/api/campaigns" and js.get("campaign_id"): _campaign_gm[js["campaign_id"]]=tok
+        jn=_join_re.match(p)
+        if jn and isinstance(b,dict) and b.get("character_id"):
+            ps=_campaign_players.setdefault(int(jn.group(1)),{})
+            for k in [k for k,v in ps.items() if v==tok]: del ps[k] # joining with another character takes the old one's seat
+            ps[int(b["character_id"])]=tok
     if m=="POST" and p=="/api/campaigns" and code==200 and isinstance(js,dict) and js.get("campaign_id") and tok and not KEEP_SCHEDULE:
         call("PATCH","/api/campaigns/%d/schedule"%js["campaign_id"],{"state":"off"},tok,"schedule off (ah.KEEP_SCHEDULE)")
     return code,js

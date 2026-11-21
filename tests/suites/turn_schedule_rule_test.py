@@ -201,12 +201,13 @@ check("13:55, the final check-in: only those still without a submission need a s
 # ---------------------------------------------------------------- the fight ends: a noncombat round; off closes it
 c, j = call("POST", f"/api/campaigns/{C}/combat/end", {"award_xp": False}, G)
 r = ((sched().get("check_in") or {}).get("round") or {})
-check("the fight ends: a noncombat round opens", c == 200 and r.get("kind") == "noncombat" and r.get("number") == 1, r)
+# the campaign's start opened campaign round 1 (scheduleCampaignStarts), so the round after the fight is campaign round 2
+check("the fight ends: a noncombat round opens (campaign round 2: the start opened round 1)", c == 200 and r.get("kind") == "noncombat" and r.get("number") == 2 and r.get("name") == "campaign round 2", r)
 c, j = call("PATCH", f"/api/campaigns/{C}/schedule", {"state": "off"}, G)
 check("off: no round, and GET /api/campaigns/{id} says off", c == 200 and (j.get("check_in") or {}).get("round") is None and (call("GET", f"/api/campaigns/{C}", None, G)[1].get("schedule") or {}).get("state") == "off", j.get("check_in"))
 c, j = call("PATCH", f"/api/campaigns/{C}/schedule", {"state": "on"}, G)
 r = ((j.get("check_in") or {}).get("round") or {})
-check("on again outside a fight: noncombat round 2", c == 200 and r.get("kind") == "noncombat" and r.get("number") == 2, r)
+check("on again outside a fight: campaign round 3", c == 200 and r.get("kind") == "noncombat" and r.get("number") == 3, r)
 
 # ---------------------------------------------------------------- the last seat: parallel joins, exactly one wins
 c, j = call("POST", "/api/campaigns", {"name": f"TsRace {random.randint(1000,9999)}", "setting": "t", "max_players": 2}, G)

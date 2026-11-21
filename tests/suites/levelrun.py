@@ -1,6 +1,11 @@
 # One class from creation to level 20. Every exchange is saved with who sent it (player, DM, server) for the readable log.
 import json, sys, random, base64
 from ah import call as _call, register, png, D
+# a step the server marks optional (the starting level, the shop) is left as it is unless this script follows it by name
+# (the portrait: the upload is tested); "left open" counts only the required steps
+FOLLOWED_OPTIONAL = {"portrait"}
+def open_step(x): return not x.get("done") and (not x.get("optional") or x.get("key") in FOLLOWED_OPTIONAL)
+
 cls, bg, sp = sys.argv[1], sys.argv[2], sys.argv[3]
 OUT = open(D + f"levelrun_{cls}.jsonl", "w")
 # 2024 Player's Handbook options that are not in the SRD 5.2.1 (and not on this server)
@@ -58,7 +63,7 @@ if not cid: print("FINISH FAILED", json.dumps(f)[:500]); sys.exit(1)
 def follow_setup(stage):
     for rnd in range(8):
         c, s = call("player", "GET", f"/api/characters/{cid}/setup", None, T)
-        op = [x for x in s.get("steps", []) if not x.get("done")]
+        op = [x for x in s.get("steps", []) if open_step(x)]
         if not op: return []
         acted = False
         for st in op:
