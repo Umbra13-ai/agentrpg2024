@@ -590,53 +590,6 @@ func handleGMTriggerReadied(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// Check for readied action
-	var readiedJSON []byte
-	var charName string
-	err = db.QueryRow("SELECT name, readied_action FROM characters WHERE id = $1", req.CharacterID).Scan(&charName, &readiedJSON)
-	if err != nil || readiedJSON == nil || string(readiedJSON) == "null" {
-		w.WriteHeader(http.StatusBadRequest)
-		json.NewEncoder(w).Encode(map[string]interface{}{
-			"success": false,
-			"error":   "no_readied_action",
-			"message": fmt.Sprintf("%s doesn't have a readied action.", charName),
-		})
-		return
-	}
-
-	var readied map[string]string
-	json.Unmarshal(readiedJSON, &readied)
-
-	// Check if reaction is available
-	var reactionUsed bool
-	db.QueryRow("SELECT COALESCE(reaction_used, false) FROM characters WHERE id = $1", req.CharacterID).Scan(&reactionUsed)
-	if reactionUsed {
-		w.WriteHeader(http.StatusConflict)
-		json.NewEncoder(w).Encode(map[string]interface{}{
-			"success":        false,
-			"error":          "reaction_used",
-			"message":        fmt.Sprintf("%s has already used their reaction this round.", charName),
-			"readied_action": readied,
-		})
-		return
-	}
-
-	// Execute the readied action
-	result := resolveAction(readied["action"], readied["description"], req.CharacterID)
-
-	// Consume reaction and clear readied action
-	db.Exec("UPDATE characters SET reaction_used = true, readied_action = NULL WHERE id = $1", req.CharacterID)
-
-	// Log the action
-	writeAction(db, lobbyID, req.CharacterID, "readied_"+readied["action"], fmt.Sprintf("GM triggered: %s → %s", readied["trigger"], readied["description"]), result)
-
-	json.NewEncoder(w).Encode(map[string]interface{}{
-		"success":           true,
-		"character":         charName,
-		"trigger":           readied["trigger"],
-		"action":            readied["action"],
-		"result":            result,
-		"reaction_consumed": true,
-		"message":           fmt.Sprintf("%s's readied action triggered! '%s' → %s", charName, readied["trigger"], result),
-	})
+	status, out := fireReadied(req.CharacterID, lobbyID, "fired by the GM") // readied_2024.go
+	writeJSONStatus(w, status, out)
 }

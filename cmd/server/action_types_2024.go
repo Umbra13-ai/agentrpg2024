@@ -393,10 +393,11 @@ var actionTypes = []actionType{
 // costVariants: how a variant of an action is costed (an economy word, never sent by a player): a spell whose casting time is a
 // Bonus Action or a Reaction, an item used with a Bonus Action. Their feature-word group is the action's.
 var costVariants = map[string]struct{ cost, group string }{
-	"declare_bonus": {costBonus, "declare"},
-	"bonus_cast":    {costBonus, "cast"},
-	"reaction_cast": {costReaction, "cast"},
-	"item_bonus":    {costBonus, "use_item"},
+	"declare_bonus":    {costBonus, "declare"},
+	"bonus_cast":       {costBonus, "cast"},
+	"reaction_cast":    {costReaction, "cast"},
+	"readied_reaction": {costReaction, "ready"}, // a readied action firing (readied_2024.go)
+	"item_bonus":       {costBonus, "use_item"},
 }
 
 // actionCostForms: a feature whose cost depends on what is done with it (PHB 2024), from the request's description, as the economy

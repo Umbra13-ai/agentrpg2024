@@ -23,11 +23,13 @@ func dodgeActive(charID int) bool {
 // Reckless Attack ("attack rolls against you have Advantage until the start of your next turn"). One list, cleared in one place.
 var untilYourNextTurn = []string{"dodging", "reckless"}
 
-// endUntilNextTurn drops those markers when the character's next turn starts (resetTurnFlags).
+// endUntilNextTurn drops those markers, and a readied action, when the character's next turn starts (resetTurnFlags) and when
+// the fight ends (clearCombatInitiative).
 func endUntilNextTurn(charID int) {
 	if db == nil {
 		return
 	}
+	endReadied(charID) // a readied action lasts until the start of your next turn too (readied_2024.go)
 	for _, m := range untilYourNextTurn {
 		if hasCondition(charID, m) {
 			removeConditionsWhere(0, charID, func(r conditionRecord) bool { return containsStr(untilYourNextTurn, r.entry()) })
@@ -59,4 +61,22 @@ func undeadFortitudeFor(lobbyID, id int, name string, hpBefore, hp, taken int, d
 		return 1, " Undead Fortitude: " + sv.Line(name) + " and drops to 1 Hit Point instead."
 	}
 	return hp, " Undead Fortitude: " + sv.Line(name) + "."
+}
+
+// endUntilNextTurnIn: the fight is over, so is every effect that lasts until a character's next turn (clearCombatInitiative).
+func endUntilNextTurnIn(campaignID int) {
+	rows, err := db.Query(`SELECT id FROM characters WHERE lobby_id = $1`, campaignID)
+	if err != nil {
+		return
+	}
+	var ids []int
+	for rows.Next() {
+		var id int
+		rows.Scan(&id)
+		ids = append(ids, id)
+	}
+	rows.Close()
+	for _, id := range ids {
+		endUntilNextTurn(id)
+	}
 }

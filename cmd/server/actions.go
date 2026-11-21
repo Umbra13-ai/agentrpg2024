@@ -1019,6 +1019,9 @@ func handleAction(w http.ResponseWriter, r *http.Request) {
 		if form, ok := actionCostForms[req.Action]; ok {
 			econAction = form(req.Description) // what a feature costs depends on what is done with it (action_types_2024.go)
 		}
+		if readiedFiring(r) {
+			econAction = "readied_reaction" // a readied action takes the Reaction when it fires (readied_2024.go)
+		}
 		spentAs = econAction
 		if why := turnLimitProblem(charID, econAction); why != "" {
 			w.WriteHeader(http.StatusBadRequest)
@@ -1113,6 +1116,10 @@ func handleAction(w http.ResponseWriter, r *http.Request) {
 				dashUsed = dashErr == nil
 				return speed, dashErr
 			}
+		}
+		if req.Action == "ready" { // what the Ready holds keeps the request's own fields (readied_2024.go)
+			readyRequests.Store(charID, req.actionFields)
+			defer readyRequests.Delete(charID)
 		}
 		if req.Skill != "" { // a check action's named skill (checkSkillFor, actions_checks_2024.go)
 			namedSkills.Store(charID, req.Skill)
@@ -1228,7 +1235,11 @@ func handleAction(w http.ResponseWriter, r *http.Request) {
 		result = "You stand up from prone."
 	}
 
-	writeAction(db, lobbyID, charID, req.Action, req.Description, result)
+	logType := req.Action
+	if readiedFiring(r) {
+		logType = readiedLogType(req.Action) // a readied action that fired (readied_2024.go)
+	}
+	writeAction(db, lobbyID, charID, logType, req.Description, result)
 
 	// Build response with resource info
 	response := map[string]interface{}{
@@ -3491,11 +3502,7 @@ func resolveActionWithBonusDash(action, description string, charID int, bonusDas
 
 	case "ready":
 		// Ready: hold one action (an action type, action_types_2024.go) for a trigger; handleAction refused a Ready that names none
-		trigger, readyAction, readyDesc, _ := readiedAction(description)
-		readiedJSON, _ := json.Marshal(map[string]string{"trigger": trigger, "action": readyAction, "description": readyDesc})
-		db.Exec("UPDATE characters SET readied_action = $1 WHERE id = $2", readiedJSON, charID)
-		return fmt.Sprintf("Readied action: When '%s' → %s (%s). Use your REACTION to trigger when the condition occurs (POST /api/trigger-readied), or it will be lost at the start of your next turn.",
-			trigger, readyAction, readyDesc)
+		return holdReadied(charID, description) // readied_2024.go: the held request is kept, to run as that action when it fires
 
 	case "hide":
 		return attemptHide(charID, "Hide") // hide_2024.go
@@ -4005,54 +4012,8 @@ func handleTriggerReadied(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// Check for readied action
-	var readiedJSON []byte
-	err = db.QueryRow("SELECT readied_action FROM characters WHERE id = $1", charID).Scan(&readiedJSON)
-	if err != nil || readiedJSON == nil || string(readiedJSON) == "null" {
-		w.WriteHeader(http.StatusBadRequest)
-		json.NewEncoder(w).Encode(map[string]interface{}{
-			"success": false,
-			"error":   "no_readied_action",
-			"message": "You don't have a readied action. Use 'ready' action first with a trigger condition.",
-		})
-		return
-	}
-
-	var readied map[string]string
-	json.Unmarshal(readiedJSON, &readied)
-
-	// Check if reaction is available
-	var reactionUsed bool
-	db.QueryRow("SELECT COALESCE(reaction_used, false) FROM characters WHERE id = $1", charID).Scan(&reactionUsed)
-	if reactionUsed {
-		w.WriteHeader(http.StatusConflict)
-		json.NewEncoder(w).Encode(map[string]interface{}{
-			"success":        false,
-			"error":          "reaction_used",
-			"message":        "You have already used your reaction this round.",
-			"readied_action": readied,
-			"hint":           "Your readied action is still set, but you can't trigger it until your reaction refreshes.",
-		})
-		return
-	}
-
-	// Execute the readied action
-	result := resolveAction(readied["action"], readied["description"], charID)
-
-	// Consume reaction and clear readied action
-	db.Exec("UPDATE characters SET reaction_used = true, readied_action = NULL WHERE id = $1", charID)
-
-	// Log the action
-	writeAction(db, lobbyID, charID, "readied_"+readied["action"], fmt.Sprintf("Triggered: %s → %s", readied["trigger"], readied["description"]), result)
-
-	json.NewEncoder(w).Encode(map[string]interface{}{
-		"success":           true,
-		"trigger":           readied["trigger"],
-		"action":            readied["action"],
-		"result":            result,
-		"reaction_consumed": true,
-		"message":           fmt.Sprintf("Readied action triggered! Trigger: '%s' → %s", readied["trigger"], result),
-	})
+	status, out := fireReadied(charID, lobbyID, "triggered by its player") // readied_2024.go
+	writeJSONStatus(w, status, out)
 }
 
 // getTargetCreatureType returns the creature type for a character/monster ID

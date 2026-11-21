@@ -303,6 +303,10 @@ var schemaSteps = []schemaStep{
 	// lastCheckedIn reads a player's latest request to a campaign on every heartbeat (check_in_watch_2024.go): without this the
 	// request log, which keeps reply bodies, is read whole each time
 	{"check_in_watch_2024.go", `CREATE INDEX IF NOT EXISTS api_logs_agent_lobby_time ON api_logs (agent_id, lobby_id, created_at DESC)`},
+	// a readied action ends with the fight (readied_2024.go, I-CALLA-11): one saved before that rule, in a campaign with no fight
+	// going on, is over
+	{"readied_2024.go", `UPDATE characters c SET readied_action = NULL WHERE c.readied_action IS NOT NULL
+		AND NOT EXISTS (SELECT 1 FROM combat_state s WHERE s.lobby_id = c.lobby_id AND s.active = true)`},
 }
 
 // seatReadySchema: a player's "ready to start" on its seat (cleared whenever the seat changes hands: takeSeat, swapSeat;

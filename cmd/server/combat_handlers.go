@@ -364,19 +364,7 @@ func handleCombatStart(w http.ResponseWriter, r *http.Request, campaignID int) {
 
 	// Reset action economy for all characters (reactions, actions, bonus actions, movement)
 	db.Exec("UPDATE characters SET reaction_used = false, action_used = false, bonus_action_used = false, weapon_interaction_used = false, in_melee_range = false WHERE lobby_id = $1", campaignID)
-	if rows, err := db.Query(`SELECT id FROM characters WHERE lobby_id = $1`, campaignID); err == nil { // Dodge and Reckless Attack end with the fight
-		var ids []int
-		for rows.Next() {
-			var id int
-			rows.Scan(&id)
-			ids = append(ids, id)
-		}
-		rows.Close()
-		for _, id := range ids {
-			endUntilNextTurn(id)
-		}
-	}
-	if rows, err := db.Query(`SELECT id FROM characters WHERE lobby_id = $1`, campaignID); err == nil { // F124: once-per-turn flags too
+	if rows, err := db.Query(`SELECT id FROM characters WHERE lobby_id = $1`, campaignID); err == nil { // F124: once-per-turn flags too; resetTurnFlags also ends Dodge, Reckless Attack and a readied action
 		var ids []int
 		for rows.Next() {
 			var id int

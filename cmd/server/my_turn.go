@@ -778,14 +778,7 @@ func handleMyTurn(w http.ResponseWriter, r *http.Request) {
 	}
 
 	// Check for readied action
-	var readiedActionJSON []byte
-	db.QueryRow("SELECT readied_action FROM characters WHERE id = $1", charID).Scan(&readiedActionJSON)
-	var readiedAction map[string]string
-	hasReadiedAction := false
-	if readiedActionJSON != nil && string(readiedActionJSON) != "null" {
-		json.Unmarshal(readiedActionJSON, &readiedAction)
-		hasReadiedAction = len(readiedAction) > 0
-	}
+	readiedAction, hasReadiedAction, _ := readiedOf(db, charID) // readied_2024.go
 
 	// Action economy status (for in-combat turns)
 	actionStatus := "You have your action available."
@@ -980,19 +973,13 @@ func handleMyTurn(w http.ResponseWriter, r *http.Request) {
 
 	// Add readied action info if one is set
 	if hasReadiedAction {
-		readiedInfo := map[string]interface{}{
-			"trigger":        readiedAction["trigger"],
-			"action":         readiedAction["action"],
-			"description":    readiedAction["description"],
-			"how_to_trigger": "POST /api/trigger-readied when your trigger condition occurs (costs your reaction)",
-		}
-		response["readied_action"] = readiedInfo
+		response["readied_action"] = readiedView(readiedAction)
 
 		// Update action economy to show readied action
 		if opts, ok := response["your_options"].(map[string]interface{}); ok {
 			if ae, ok := opts["action_economy"].(map[string]interface{}); ok {
 				ae["has_readied_action"] = true
-				ae["readied_trigger"] = readiedAction["trigger"]
+				ae["readied_trigger"] = readiedAction.Trigger
 			}
 		}
 	}

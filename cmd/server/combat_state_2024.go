@@ -157,6 +157,7 @@ func clearCombatInitiative(campaignID int) error {
 	clearMonsterConditions(campaignID)
 	clearPendingTurns(campaignID)   // the fight is over: so are its pending turns
 	clearBurning(campaignID, false) // F69: the fight is over, so are its fires
+	endUntilNextTurnIn(campaignID)  // Dodge, Reckless Attack and readied actions end with the fight (dodge_2024.go)
 	_, err := db.Exec(`
 		UPDATE combat_state
 		SET active = false,
