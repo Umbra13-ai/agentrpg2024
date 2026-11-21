@@ -951,13 +951,18 @@ func companionAttack(lobbyID int, c companion, a compAttack, targetID int) strin
 	if a.Extra != "" {
 		parts = append(parts, hitDamagePart{Amount: game.RollDamage(a.Extra, out.Critical), Type: a.ExtraType})
 	}
+	// a Wild Shape form's Hex or Hunter's Mark is part of the same hit; a companion has none (hit_riders_2024.go)
+	rs := hitRiders(c.CombatID, targetID, out.Critical)
+	for _, r := range rs {
+		parts = append(parts, hitDamagePart{Amount: r.Damage, Type: r.Type})
+	}
 	hit := monsterHitCursor{Attacker: c.CombatID, AttackerName: c.Name, Target: targetID, Apply: true, Melee: atk.melee, StopDamageWhenDown: true,
 		Action: monsterActionRow{Name: a.Name, DamageType: a.Type, Desc: a.StatBlockText}, Roll: ar, Outcome: out, Parts: parts, Snapshot: snapshotTarget(lobbyID, targetID), HPBefore: monsterHPNow(lobbyID, targetID), Line: ar.LineForAttacker(a.Name, out) + rollNote}
 	text, err := runMonsterHit(lobbyID, &hit)
 	if err != nil {
 		addGMNotice(lobbyID, "A companion hit could not finish; reconcile its saved work before continuing.")
 	}
-	return text
+	return text + riderNote(rs)
 }
 
 func maxHPOf(lobbyID, id int) int {

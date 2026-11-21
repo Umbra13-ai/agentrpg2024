@@ -45,57 +45,6 @@ func parseMarkSpell(concentratingOn string) (spellSlug string, targetID int) {
 	return "", 0
 }
 
-// getMarkBonusDamage calculates bonus damage from Hunter's Mark or Hex spells
-// Returns damage amount and a note string for the attack result
-func getMarkBonusDamage(attackerID, targetID int, isCrit bool) (int, string) {
-	if targetID == 0 {
-		if _, mid, ok := attackedMonster(attackerID); ok {
-			targetID = mid
-		}
-	}
-	if targetID == 0 {
-		return 0, ""
-	}
-
-	var concentratingOn string
-	err := db.QueryRow("SELECT COALESCE(concentrating_on, '') FROM characters WHERE id = $1", attackerID).Scan(&concentratingOn)
-	if err != nil || concentratingOn == "" {
-		return 0, ""
-	}
-
-	spellSlug, markedTarget := parseMarkSpell(concentratingOn)
-	if spellSlug == "" || markedTarget != targetID {
-		return 0, ""
-	}
-
-	// Roll 1d6 (doubled on crit); a Ranger of level 20 (Foe Slayer) rolls a d10 for Hunter's Mark
-	sides := 6
-	if spellSlug == "hunters-mark" {
-		sides = markDieSides(attackerID)
-	}
-	var dmg int
-	if isCrit {
-		dmg = game.RollDie(sides) + game.RollDie(sides)
-	} else {
-		dmg = game.RollDie(sides)
-	}
-
-	// Build note based on spell type
-	diceStr := fmt.Sprintf("1d%d", sides)
-	if isCrit {
-		diceStr = fmt.Sprintf("2d%d", sides)
-	}
-
-	switch spellSlug {
-	case "hunters-mark":
-		return dmg, fmt.Sprintf(" (+%d Hunter's Mark, %s)", dmg, diceStr)
-	case "hex":
-		return dmg, fmt.Sprintf(" (+%d Hex, %s necrotic)", dmg, diceStr)
-	}
-
-	return 0, ""
-}
-
 // isMarkSpell returns true if the spell slug is Hunter's Mark or Hex
 func isMarkSpell(spellSlug string) bool {
 	lower := strings.ToLower(spellSlug)

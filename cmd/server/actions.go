@@ -1273,7 +1273,11 @@ func handleAction(w http.ResponseWriter, r *http.Request) {
 		"result":  playerText(result), // monsters' save totals stay with the GM
 	}
 	if castRefused { // the one refusal shape of every request: 409 with error and message (nothing was spent)
-		response["error"], response["message"] = "action_refused", playerText(result)+" Nothing was spent."
+		msg := playerText(result)
+		if !strings.Contains(msg, "Nothing was spent") { // a refusal that says it already isn't told twice
+			msg += " Nothing was spent."
+		}
+		response["error"], response["message"] = "action_refused", msg
 		w.WriteHeader(http.StatusConflict)
 	}
 
@@ -1412,6 +1416,10 @@ func resolveActionWithBonusDash(action, description string, charID int, bonusDas
 	// F139: Advantage and Disadvantage come from the rules the server tracks (conditions, Help, features) or from the GM's ruling
 	// (POST /api/gm/grant-advantage); a player's description can't claim them. All of it is in attackSources (attack_2024.go).
 
+	// a heal or a restoring spell aimed at a dead character is refused before anything is spent (living_target_2024.go)
+	if why := livingTargetRefusal(action, description, charID, castSpellSlug...); why != "" {
+		return why
+	}
 	if action == "opportunity_attack" { // one melee attack with the Reaction (character_oa_2024.go)
 		action = "attack"
 		takeOAWindow(lobbyOfChar(charID), charID, attackTargetOf(charID))
@@ -1801,10 +1809,14 @@ func resolveActionWithBonusDash(action, description string, charID int, bonusDas
 		ldDmg, lifedrinkerNote := lifedrinker2024(charID, class, level, isRangedAttack, crit, description) // Lifedrinker (2024)
 		dmg += ldDmg
 
-		// Hunter's Mark / Hex bonus damage on normal hit
-		// +1d6 damage to attacks against marked target
-		markDmg, markNote := getMarkBonusDamage(charID, targetID, crit)
-		dmg += markDmg
+		// Hex, Hunter's Mark ... (hit_riders_2024.go): rolled after the outcome, on a hit. Against a monster (target_id) the hit is
+		// resolved by resolveAttackOnMonster, which adds them; at a character the GM applies the damage the reply says.
+		markNote := ""
+		if _, _, onMonster := attackedMonster(charID); !onMonster && atk.target > 0 && out.Hit {
+			rs := hitRiders(charID, atk.target, crit)
+			dmg += riderTotal(rs)
+			markNote = riderNote(rs)
+		}
 
 		// Include power attack note in normal hit result
 		recordAttackOutcome(charID, attackOutcome{Weapon: weaponName, Total: totalAttack, Natural: attackRoll, Crit: crit, Fumble: attackRoll == 1, Roll: rolled, Out: out, Judged: atk.target != 0, Hit: out.Hit, Damage: dmg, DamageType: attackDamageType(hasWeapon, weapon), RollInfo: archeryNote + powerAttackNote + rollExtra, SneakUsed: sneakAttackNote != "", SneakNote: gwfNote + duelingNote + sneakAttackNote + colossusSlayerNote + divineStrikeNote + divineSmiteNote + lifedrinkerNote + markNote, Dice: damageDice, DiceMod: damageMod})
@@ -2349,19 +2361,23 @@ func resolveActionWithBonusDash(action, description string, charID int, bonusDas
 			}
 
 			// Handle concentration
+			markCastText := "" // Hex, Hunter's Mark: the creature marked and what the server adds on each hit
 			if strings.Contains(strings.ToLower(spell.Duration), "concentration") {
 				// For Hunter's Mark and Hex, store target ID with concentration
 				// This enables tracking bonus damage on attacks against marked target
 				concentrationValue := spell.Name
 				if isMarkSpell(spellKey) {
-					// Parse target from description (e.g., "cast hex on goblin" or "hunter's mark the orc")
-					castTargetID := aimedCharacter(description, charID)
-					if _, mid, isMonster := attackedMonster(charID); castTargetID <= 0 && isMonster {
-						castTargetID = mid // a monster picked with target_id
+					// the marked creature: a monster picked with target_id, else a character the request or the description names
+					castTargetID := 0
+					if _, mid, isMonster := attackedMonster(charID); isMonster {
+						castTargetID = mid
+					} else if id := aimedCharacter(description, charID); id > 0 {
+						castTargetID = id
 					}
 					if castTargetID != 0 {
 						concentrationValue = fmt.Sprintf("%s:%d", spell.Name, castTargetID)
 					}
+					markCastText = markCastNote(spellKey, lobbyOfChar(charID), castTargetID, hexAbilityIn(description)) // hit_riders_2024.go
 				}
 				// Drop current concentration
 				db.Exec("UPDATE characters SET concentrating_on = $1 WHERE id = $2", concentrationValue, charID)
@@ -2624,6 +2640,7 @@ func resolveActionWithBonusDash(action, description string, charID int, bonusDas
 			if conditionText == "" {
 				conditionText = resolveConditionSpell(charID, spellKey, saveDC, spell.Name)
 			}
+			conditionText += markCastText
 			dcNote := "" // only a spell with a saving throw has a DC to show (F229: Bless showed "DC 13")
 			if spell.SavingThrow != "" {
 				dcNote = fmt.Sprintf(" (DC %d)", saveDC)

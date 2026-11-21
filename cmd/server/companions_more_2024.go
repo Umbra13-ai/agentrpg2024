@@ -349,6 +349,11 @@ func companionSpecialAction(c companion, charID, lobbyID int, action, descriptio
 		if why := companionRefusal(action, c).text(); why != "" {
 			return "", why
 		}
+		if action == "healing_touch" && targetID > 0 && targetID < companionIDBase { // not on the dead, before the use (living_target_2024.go)
+			if why := deadTargetRefusal("use Healing Touch on", []int{targetID}); why != "" {
+				return "", why
+			}
+		}
 		key := "steed_" + action
 		if err := useOnce(charID, key, "Used already; it comes back when you finish a Long Rest."); err != nil { // resources_2024.go
 			return "", spendText(err, action)

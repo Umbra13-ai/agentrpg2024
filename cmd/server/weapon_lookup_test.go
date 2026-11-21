@@ -108,6 +108,9 @@ func TestWeaponPropertiesOneSpelling(t *testing.T) {
 func TestNoOtherAttackerLine(t *testing.T) {
 	files, _ := filepath.Glob("*.go")
 	own := regexp.MustCompile(`"[^"]*: %d to hit|Attack roll: %d|natural 1: miss|nat %d CRITICAL`)
+	// a roll whose AttackRoll is thrown away can't give the attacker's line (feedback log 65: Eldritch Blast's beams answered "1 of 3
+	// hit" with no d20, total or Disadvantage)
+	dropped := regexp.MustCompile(`_, \w+, _ :?= (\w+\.roll\(\)|spellAttack\(\))`)
 	for _, f := range files {
 		if strings.HasSuffix(f, "_test.go") {
 			continue
@@ -116,6 +119,9 @@ func TestNoOtherAttackerLine(t *testing.T) {
 		for n, line := range strings.Split(string(b), "\n") {
 			if own.MatchString(line) {
 				t.Errorf("%s:%d writes an attack line itself: use attackHead or LineForAttacker", f, n+1)
+			}
+			if dropped.MatchString(line) {
+				t.Errorf("%s:%d throws the attack roll away: its line is the attacker's (LineForAttacker)", f, n+1)
 			}
 		}
 	}

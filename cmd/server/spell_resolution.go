@@ -87,15 +87,28 @@ func resolveSpellOnMonster(charID int, spellKey string, spell SRDSpell, damageDi
 	var lines []string
 
 	if count, beamDice, auto := beamPlan(spellKey, spell.Level, slotLevel, charLevel); count > 0 {
+		// each beam (or dart) is its own attack roll: its line is the attacker's line (HeadForAttacker), and a hit's riders (Hex,
+		// Hunter's Mark: hit_riders_2024.go) are rolled for that beam once it has hit
 		total, hits := 0, 0
+		var beams []string
+		var rs []hitRider
+		anyCrit := false
+		unit := "Beam"
+		if auto {
+			unit = "Dart"
+		}
 		for i := 0; i < count; i++ {
 			crit := false
+			line := fmt.Sprintf("%s %d", unit, i+1)
 			if !auto { // Magic Missile hits without a roll
-				_, out, _ := spellAttack()
+				ar, out, rollNote := spellAttack()
+				line = fmt.Sprintf("%s %d: %s%s", unit, i+1, ar.LineForAttacker(attackName, out), rollNote)
 				if !out.Hit {
+					beams = append(beams, line+".")
 					continue
 				}
 				crit = out.Critical
+				anyCrit = anyCrit || crit
 			}
 			d := game.RollDamage(beamDice, crit)
 			if invocationOn(charID, "agonizing-blast", spellKey) && game.Modifier(spellModScore(charID)) > 0 {
@@ -103,12 +116,20 @@ func resolveSpellOnMonster(charID int, spellKey string, spell SRDSpell, damageDi
 			}
 			total += d
 			hits++
+			beamRs := hitRiders(charID, monster, crit)
+			rs = append(rs, beamRs...)
+			if auto {
+				line += fmt.Sprintf(" hits: %d %s damage%s.", d, dtype, riderNote(beamRs))
+			} else {
+				line += fmt.Sprintf(", %d %s damage%s.", d, dtype, riderNote(beamRs))
+			}
+			beams = append(beams, line)
 		}
 		if total == 0 {
-			return fmt.Sprintf(" Against %s: all %d missed.", name, count)
+			return fmt.Sprintf(" Against %s: %s All %d missed.", name, strings.Join(beams, " "), count)
 		}
-		text, _ := damageMonster(lobbyID, monster, total, dtype)
-		return fmt.Sprintf(" Against %s: %d of %d hit for %d %s damage. %s", name, hits, count, total, dtype, text)
+		text, _ := damageMonster(lobbyID, monster, total, dtype, anyCrit)
+		return fmt.Sprintf(" Against %s: %s %d of %d hit for %d %s damage. %s%s", name, strings.Join(beams, " "), hits, count, total, dtype, text, dealRiders(lobbyID, monster, rs, anyCrit))
 	}
 
 	switch {
@@ -130,6 +151,7 @@ func resolveSpellOnMonster(charID int, spellKey string, spell SRDSpell, damageDi
 			d += game.RollDamage(damageDice, false) // a critical hit rolls the damage dice twice
 		}
 		text, _ := damageMonster(lobbyID, monster, d, dtype)
+		text += hitWithRiders(lobbyID, charID, monster, out.Critical) // Hex, Hunter's Mark (hit_riders_2024.go)
 		if monsterHPNow(lobbyID, monster) <= 0 {
 			text += killEffectNote(charID) // Dark One's Blessing (F134)
 		}

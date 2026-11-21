@@ -88,7 +88,7 @@ type actionType struct {
 	GM      bool     // the server records the description and the GM rules on it (nothing is rolled); a description is required
 	Who     actionWho
 	Group   string   // the feature-word group (feature_words_2024.go): attack, cast or use_item
-	Tags    []string // what kind of thing it is, for the rules that stop some kinds: attack, spell, object, talk
+	Tags    []string // what kind of thing it is, for the rules that stop some kinds: attack, spell, object, talk, heals (aimed at a living creature: living_target_2024.go)
 	Send    string   // where it is sent: sendAction, sendPending, sendRoute or sendFamily
 	Route   string   // sendRoute: the request
 	Family  bool     // a companion can take it too (POST /api/action with companion_id)
@@ -151,7 +151,7 @@ var actionTypes = []actionType{
 	{Name: "shove", Title: "Shove", Section: "SRD actions", Cost: costAction, Tags: []string{"attack"}, Fields: []string{"target_id", "description"},
 		What:    "An Unarmed Strike option, one attack of the Attack action: the target saves (as for a grapple) or is pushed 5 feet or knocked Prone (\"prone\" or \"push\" in the description).",
 		Example: `{"action": "shove", "target_id": -2, "description": "prone"}`},
-	{Name: "stabilize", Title: "Stabilize (first aid)", Section: "SRD actions", Cost: costAction, Fields: []string{"target_character_id", "description"},
+	{Name: "stabilize", Title: "Stabilize (first aid)", Section: "SRD actions", Cost: costAction, Tags: []string{"heals"}, Fields: []string{"target_character_id", "description"},
 		What:    "A DC 10 Wisdom (Medicine) check on a dying ally at 0 Hit Points (target_character_id); on a success it is Stable.",
 		Example: `{"action": "stabilize", "target_character_id": 12}`},
 	{Name: "opportunity_attack", Title: "Opportunity Attack", Section: "SRD actions", Cost: costReaction, Group: "attack", Tags: []string{"attack"}, Fields: []string{"target_id", "spell_slug", "description"},
@@ -218,7 +218,7 @@ var actionTypes = []actionType{
 	{Name: "turn_undead", Title: "Turn Undead (Channel Divinity)", Section: "Class features", Cost: costAction, Who: actionWho{Class: "cleric", Level: 2}, Uses: "channel_divinity", Fields: []string{"target_ids", "target_id", "description"},
 		What:    "A Magic action: each Undead you choose within 30 feet (target_ids) makes a Wisdom save or is Frightened and Incapacitated for 1 minute.",
 		Example: `{"action": "turn_undead", "target_ids": [-1, -2]}`},
-	{Name: "divine_spark", Title: "Divine Spark (Channel Divinity)", Section: "Class features", Cost: costAction, Who: actionWho{Class: "cleric", Level: 2}, Uses: "channel_divinity", Fields: []string{"target_id", "target_character_id", "description"},
+	{Name: "divine_spark", Title: "Divine Spark (Channel Divinity)", Section: "Class features", Cost: costAction, Who: actionWho{Class: "cleric", Level: 2}, Uses: "channel_divinity", Tags: []string{"heals"}, Fields: []string{"target_id", "target_character_id", "description"},
 		What:    "A Magic action: 1d8 + your Wisdom modifier (more d8s at levels 7, 13 and 18) to another creature within 30 feet: healing for an ally (target_character_id, or target_id with the ally's character id), or Radiant or Necrotic damage to an enemy (target_id, a monster; Constitution save for half; say radiant or necrotic). A heal with no ally named, or of an ally at full Hit Points, is refused and spends nothing.",
 		Example: `{"action": "divine_spark", "target_id": -1, "description": "radiant"}`},
 	{Name: "preserve_life", Title: "Preserve Life (Channel Divinity)", Section: "Class features", Cost: costAction, Who: actionWho{Class: "cleric", Subclass: "life", Level: 3}, Uses: "channel_divinity", Fields: []string{"target_ids", "description"},
@@ -281,7 +281,7 @@ var actionTypes = []actionType{
 	{Name: "quivering_palm", Title: "Quivering Palm", Section: "Class features", Cost: costFree, Who: actionWho{Class: "monk", Subclass: "open-hand", Level: 17}, Fields: []string{"target_id", "description"},
 		What:    "\"start\" after an Unarmed Strike hits (4 Focus Points; no action), \"end\" later (an action, or one attack of your Attack action): the target makes a Constitution save, 10d12 Force damage (half on a success). \"end harmlessly\" takes no action.",
 		Example: `{"action": "quivering_palm", "target_id": -1, "description": "start"}`},
-	{Name: "lay_on_hands", Title: "Lay on Hands", Section: "Class features", Cost: costBonus, Who: actionWho{Class: "paladin", Level: 1}, Uses: "lay_on_hands", Fields: []string{"description"},
+	{Name: "lay_on_hands", Title: "Lay on Hands", Section: "Class features", Cost: costBonus, Who: actionWho{Class: "paladin", Level: 1}, Uses: "lay_on_hands", Tags: []string{"heals"}, Fields: []string{"description"},
 		What:    "Restore Hit Points from your pool (five times your Paladin level), or spend 5 to end the Poisoned condition: the amount and the creature in the description.",
 		Example: `{"action": "lay_on_hands", "description": "heal Aldren 5"}`},
 	{Name: "divine_sense", Title: "Divine Sense (Channel Divinity)", Section: "Class features", Cost: costBonus, Who: actionWho{Class: "paladin", Level: 3}, Uses: "channel_divinity",
