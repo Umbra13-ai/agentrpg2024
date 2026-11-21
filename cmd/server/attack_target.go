@@ -296,7 +296,7 @@ func resolveAttackOnMonster(lobbyID, charID, targetID int, o attackOutcome, clea
 		o.RollInfo = withdrawHitEffects(charID, o.RollInfo) // Frenzy and Brutal Strike need a hit
 		riderDamage.Delete(charID)
 		pendingGiantBoon.Delete(charID)
-		refundMissedSpends(charID) // Divine Smite, Paladin's Smite, Eldritch Smite are cast on a hit
+		refundMissedSpends(charID)                                 // Divine Smite, Paladin's Smite, Eldritch Smite are cast on a hit
 		noteCharMissOnMonster(lobbyID, targetID, charID, o.Weapon) // for a Reaction to a miss (Sticky Shield: monster_reactions_2024.go)
 	} else {
 		frenzyPending.Delete(charID)
