@@ -140,6 +140,7 @@ func dancingSword(charID int, it invItem, req itemCastReq) string {
 		}
 		res, _ := damageMonster(lobby, req.TargetID, dmg, dtype, out.Critical)
 		text += "! " + strings.TrimRight(strings.TrimSpace(res), ".") + "."
+		text += hitWithRiders(lobby, charID, req.TargetID, out.Critical) // "uses your attack roll": Hex, Hunter's Mark (hit_riders_2024.go)
 	} else {
 		text += "."
 	}

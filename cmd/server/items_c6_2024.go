@@ -166,10 +166,12 @@ func ringOfTheRam(charID int, it invItem, req itemCastReq, description string) s
 	}
 	dmg := game.RollDamage(fmt.Sprintf("%dd10", 2*n), out.Critical)
 	var res string
+	rs := hitRiders(charID, req.TargetID, out.Critical) // the wearer's attack roll: Hex, Hunter's Mark (hit_riders_2024.go)
 	if req.TargetID < 0 {
 		res, _ = damageMonster(lobby, req.TargetID, dmg, "force", out.Critical)
+		res = strings.TrimRight(strings.TrimSpace(res)+dealRiders(lobby, req.TargetID, rs, out.Critical), ".")
 	} else {
-		res = damageCharacter(req.TargetID, dmg, "force", out.Critical)
+		res = damageCharacterWithRiders(req.TargetID, dmg, "force", out.Critical, rs)
 	}
 	moved, onMap := pushToken(lobby, charID, req.TargetID, 5*n)
 	push := fmt.Sprintf(" It is pushed %d feet away.", 5*n)

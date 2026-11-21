@@ -171,14 +171,7 @@ func monsterName(lobbyID, id int) string {
 
 // applySpellHealing heals the characters a healing spell is aimed at and says who got what.
 func applySpellHealing(charID, heal, healMax int, description string) string {
-	targets := spellCharacterTargets(charID)
-	if len(targets) == 0 {
-		if id := aimedCharacter(description, charID); id > 0 {
-			targets = []int{id}
-		} else {
-			targets = []int{charID}
-		}
-	}
+	targets := spellAllyTargets(charID, description) // living_target_2024.go
 	var parts []string
 	for _, id := range targets {
 		amount, beacon := heal, ""
@@ -260,7 +253,8 @@ func resolveSpellOnCharacters(charID int, spell SRDSpell, damageDice string, rol
 			if out.Critical {
 				d += game.RollDamage(damageDice, false)
 			}
-			lines = append(lines, fmt.Sprintf(" %s%s, %s.", ar.LineForAttacker(sa.name, out), rollNote, damageCharacter(id, d, dtype, out.Critical)))
+			lines = append(lines, fmt.Sprintf(" %s%s, %s.", ar.LineForAttacker(sa.name, out), rollNote,
+				damageCharacterWithRiders(id, d, dtype, out.Critical, hitRiders(charID, id, out.Critical)))) // Hex, Hunter's Mark (hit_riders_2024.go)
 			continue
 		}
 		ability := saveAbilityKey(spell.SavingThrow)

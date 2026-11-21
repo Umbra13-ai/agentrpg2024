@@ -432,12 +432,7 @@ func buffEnds(kind string, targetID int, detail string) {
 
 // lesserRestoration ends one condition: Blinded, Deafened, Paralyzed or Poisoned (the one named, else the first the target has).
 func lesserRestoration(charID, lobby int, description string) string {
-	id := charID
-	if t := spellCharacterTargets(charID); len(t) > 0 {
-		id = t[0]
-	} else if t := aimedCharacter(description, charID); t > 0 {
-		id = t
-	}
+	id := spellAllyTargets(charID, description)[0] // living_target_2024.go
 	dl := strings.ToLower(description)
 	have := strings.ToLower(strings.Join(getCharConditions(id), " "))
 	order := []string{"paralyzed", "poisoned", "blinded", "deafened"}

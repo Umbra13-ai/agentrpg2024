@@ -247,7 +247,8 @@ func handleGMOpportunityAttack(w http.ResponseWriter, r *http.Request) {
 		}
 		// the damage goes through the one damage pipeline for characters (Temporary Hit Points, Resistance, Concentration,
 		// death saves, Relentless Rage and Endurance)
-		text += ", " + targetName + " " + damageCharacter(req.TargetID, damage, damageType, out.Critical) + "."
+		text += ", " + targetName + " " + damageCharacterWithRiders(req.TargetID, damage, damageType, out.Critical,
+			hitRiders(req.AttackerID, req.TargetID, out.Critical)) + "." // a character's Hex or Hunter's Mark (hit_riders_2024.go)
 		response["damage"], response["weapon"] = damage, weaponName
 		if charAtZeroHP(req.TargetID) {
 			if killEffects := applyKillEffects(req.AttackerID); killEffects != nil { // Dark One's Blessing and the like

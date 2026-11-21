@@ -920,6 +920,7 @@ func companionAttack(lobbyID int, c companion, a compAttack, targetID int) strin
 		more, _ := damageMonster(lobbyID, targetID, game.RollDamage(a.Extra, out.Critical), strings.ToLower(a.ExtraType), out.Critical)
 		text += " " + more
 	}
+	text += hitWithRiders(lobbyID, c.CombatID, targetID, out.Critical) // a Wild Shape form's Hex or Hunter's Mark; a companion has none (hit_riders_2024.go)
 	return ar.LineForAttacker(a.Name, out) + rollNote + ". " + text
 }
 

@@ -375,13 +375,7 @@ func resolveEffectSpell(charID int, spell SRDSpell, spellKey string, slotLevel, 
 	case "false-life":
 		return falseLifeCast(charID, slotLevel) // temp_hp_2024.go (F68)
 	case "spare-the-dying": // F242: the spell's text only; the creature never became Stable
-		ids := spellCharacterTargets(charID)
-		if len(ids) == 0 {
-			if id := aimedCharacter(description, charID); id > 0 {
-				ids = []int{id}
-			}
-		}
-		for _, id := range ids {
+		for _, id := range spellAllyTargets(charID, description) { // living_target_2024.go (the caster, when none is named: not at 0)
 			if changed, err := stabilizeCharacter(id); err != nil {
 				return " Spare the Dying: " + dbFailureError(err, "the target's Hit Points").Error()
 			} else if changed {

@@ -1473,6 +1473,9 @@ func useItemAction(charID int, description string) string {
 			if lobbyOfChar(target) != lobby || lobby == 0 {
 				return "Cannot use the " + name + " on that creature: give a potion to a character of your campaign within 5 feet. Nothing was spent."
 			}
+			if why := deadTargetRefusal("give the "+name+" to", []int{target}); why != "" { // a dead body can't drink (living_target_2024.go)
+				return why
+			}
 		}
 		used := false
 		editInventory(charID, func(inv []invItem) []invItem {

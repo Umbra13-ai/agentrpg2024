@@ -285,7 +285,7 @@ func moreItemUse(charID int, it invItem, req itemCastReq, description string) (s
 			return ar.LineForAttacker(atk.name, out) + rollNote + "; the bands contract into a sphere again.", true
 		}
 		applyCondition(lobby, t, "restrained", "Iron Bands", 0, "", 0)
-		return ar.LineForAttacker(atk.name, out) + rollNote + ": the target is Restrained until you release it (a Bonus Action). A creature that can touch the bands can take an action for a DC 20 Strength (Athletics) check to break them (the item is destroyed).", true
+		return ar.LineForAttacker(atk.name, out) + rollNote + ": the target is Restrained until you release it (a Bonus Action). A creature that can touch the bands can take an action for a DC 20 Strength (Athletics) check to break them (the item is destroyed)." + hitWithRiders(lobby, charID, t, out.Critical), true
 	case strings.HasPrefix(n, "rope of entanglement"):
 		if len(targets) == 0 {
 			return "Rope of Entanglement: name the creature within 20 feet (target_id). Nothing was spent.", true

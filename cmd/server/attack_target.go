@@ -358,8 +358,15 @@ func resolveAttackOnMonster(lobbyID, charID, targetID int, o attackOutcome, clea
 	if extraDmg > 0 && monsterPetrified(lobbyID, targetID) {
 		extraDmg /= 2 // F196
 	}
+	// Hex, Hunter's Mark ...: the hit's riders, rolled now that it hit (hit_riders_2024.go), each with its own damage type
+	hitRs := hitRiders(charID, targetID, o.Crit)
+	hitRiderDmg, hitRiderText := ridersOnMonster(lobbyID, targetID, fmt.Sprint(t["monster_key"]), hitRs)
+	extraDmg += hitRiderDmg
 	defer noteRegenerationBlock(lobbyID, targetID, o.DamageType) // Troll: no Regeneration on its next turn after Acid or Fire
 	for rt := range riders {
+		defer noteRegenerationBlock(lobbyID, targetID, rt)
+	}
+	for _, rt := range riderTypes(hitRs) {
 		defer noteRegenerationBlock(lobbyID, targetID, rt)
 	}
 	hp -= dmg + extraDmg
@@ -461,6 +468,7 @@ func resolveAttackOnMonster(lobbyID, charID, targetID int, o attackOutcome, clea
 	case "vulnerable":
 		text += " (it is vulnerable)"
 	}
+	text += hitRiderText
 	text += riderText + vorpalNote + hunterLore(charID, targetID, fmt.Sprint(t["monster_key"])) + wakeNote
 	knockedOut := false
 	if hp == 0 && o.KnockOut {

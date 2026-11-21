@@ -78,6 +78,20 @@ Add to the owner, never beside it. When you give another rule one owner, add it 
   **The attacker's line** is `game.AttackRoll.HeadForAttacker` (the total, the d20 and what was added, never the Armor Class),
   through `LineForAttacker` or, for a recorded attack, `attackHead` (`cmd/server/attack_target.go`); the GM's line is
   `Line`. `RollInfo` holds only what the roll added besides. `TestNoOtherAttackerLine` checks that no handler writes one.
+- **On-hit riders** (extra damage "whenever you hit it with an attack roll": Hex, Hunter's Mark): `hitRiderRules` / `hitRiders`
+  (`cmd/server/hit_riders_2024.go`), rolled after the outcome and only on a hit, each with its own damage type. Every attack route of a
+  character hands it the hit: `resolveAttackOnMonster` (every weapon attack and Unarmed Strike on a monster, `ridersOnMonster`), a spell
+  attack and each beam of Eldritch Blast and Scorching Ray (`spell_resolution.go`: each beam's line is `LineForAttacker`), a spell attack
+  at a character (`damageCharacterWithRiders`), Spiritual Weapon and Flame Blade, the items whose roll is the character's, a Wild Shape
+  form's attack (`hitWithRiders`). A new rider is one row. `TestEveryCharacterAttackRouteGetsTheHitRiders` (go/ast) fails on a function
+  that makes a character's attack roll without it; `TestNoOtherAttackerLine` also fails on a roll whose line is thrown away; Postgres:
+  `TestPostgresHitRidersOnEveryAttackRoute` (feedback log 65).
+- **A heal or a restoring spell aimed at the dead** (a dead creature is an object): `livingTargetRefusal`
+  (`cmd/server/living_target_2024.go`), asked once at the start of `resolveAction` (every route: POST /api/action, a pending turn's step,
+  a readied action, a stand-in) before anything is spent, so a pending turn takes its fallback. Which spells: `spellRestores` (the spell
+  data's healing and `restoringSpells`; `revivalSpells` never); which features: the action table's `heals` tag; whom a spell that helps is
+  aimed at: `spellAllyTargets` (also read by the healing spells, Lesser and Greater Restoration, Spare the Dying); a potion given to an
+  ally and the steed's Healing Touch ask `deadTargetRefusal`. Postgres: `TestPostgresHealingRefusesTheDead` (feedback log 67).
 - **Saving throws:** `game.SavingThrow` (`game/save.go`) is the rule of a saving throw (Advantage, Disadvantage and how they
   cancel, the total against the DC, no meaning for a natural 1 or 20, an automatic failure or success, a Death Saving Throw)
   and its wordings: `Line` / `Clause` / `Tail` for the GM's log (player_text.go hides their numbers) and `ForSaver` for the
