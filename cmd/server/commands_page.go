@@ -5,6 +5,7 @@ package main
 // who uses it, so the page can't fall behind the code.
 
 import (
+	"bytes"
 	"encoding/json"
 	"fmt"
 	"net/http"
@@ -23,18 +24,30 @@ var actionNotes = []struct{ Topic, What string }{
 	{"level up (POST /api/characters/{id}/level-up)", "Between turns: take a level the GM's XP allows (when the GM banked it with auto_level false); the reply lists the choices the new level brings. Each subclass with POST /api/characters/subclass."},
 }
 
+// commandGroups: the groups of the commands page, by reference tag; Filter is the mock-up's filter pill (All / Player / GM / Campaign)
+// a group's commands answer to (the reference and account groups only to All), shown as each card's badge.
 var commandGroups = []struct {
-	Title string
-	Tags  []string
-	Note  string
+	Title  string
+	Tags   []string
+	Note   string
+	Filter string
 }{
-	{"For players: characters", []string{"Characters"}, "Create and manage your character: sheet, equipment, spells, level-up, Ability Score Improvements and feats, class choices."},
-	{"For players: playing", []string{"Actions", "Play", "Gameplay", "Exploration", "Conditions", "Heartbeat"}, "Your turn, actions, what you can do now, and the heartbeat (all your campaigns at once)."},
-	{"Campaigns and combat", []string{"Campaigns", "Combat", "Campaign Items"}, "Join a campaign, the turn order, the battle map, table rules, marching order."},
-	{"For the GM", []string{"GM"}, "Running the game: checks, saves, rewards, levels, monsters' actions, hazards, travel, objects, attitudes, overruling results."},
-	{"Rules and reference", []string{"Universe"}, "The SRD 5.2.1: spells, monsters (players see lore only), items, classes, species, feats, rules glossary."},
-	{"Accounts and the server", []string{"Auth", "Core", "System", "Info", "Feedback", "Other"}, "Registration, tokens, server information."},
-	{"For the operator and moderators", []string{"Admin", "Moderator"}, "The server's operator (the admin key) and moderators: accounts, characters, campaigns, tokens."},
+	{"For players: characters", []string{"Characters"}, "Create and manage your character: sheet, equipment, spells, level-up, Ability Score Improvements and feats, class choices.", "player"},
+	{"For players: playing", []string{"Actions", "Play", "Gameplay", "Exploration", "Conditions", "Heartbeat"}, "Your turn, actions, what you can do now, and the heartbeat (all your campaigns at once).", "player"},
+	{"Campaigns and combat", []string{"Campaigns", "Combat", "Campaign Items"}, "Join a campaign, the turn order, the battle map, table rules, marching order.", "campaign"},
+	{"For the GM", []string{"GM"}, "Running the game: checks, saves, rewards, levels, monsters' actions, hazards, travel, objects, attitudes, overruling results.", "gm"},
+	{"Rules and reference", []string{"Universe"}, "The SRD 5.2.1: spells, monsters (players see lore only), items, classes, species, feats, rules glossary.", "reference"},
+	{"Accounts and the server", []string{"Auth", "Core", "System", "Info", "Feedback", "Other"}, "Registration, tokens, server information.", "account"},
+	{"For the operator and moderators", []string{"Admin", "Moderator"}, "The server's operator (the admin key) and moderators: accounts, characters, campaigns, tokens.", "operator"},
+}
+
+// prettyBody: an example body as the mock-up's code blocks show it (indented JSON); a text that isn't JSON is kept as it is.
+func prettyBody(s string) string {
+	var out bytes.Buffer
+	if json.Indent(&out, []byte(s), "", "  ") == nil {
+		return out.String()
+	}
+	return s
 }
 
 // commandGroupOf: the group of the commands page that lists a reference tag ("" when none does).
@@ -82,23 +95,43 @@ func handleCommandsPage(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 	var b strings.Builder
-	b.WriteString(`<style>.cmd td{vertical-align:top;padding:4px 8px;border-bottom:1px solid rgba(128,128,128,.25)}.cmd code{white-space:nowrap}table.actions{table-layout:fixed;width:100%}table.actions td:first-child code{white-space:normal;overflow-wrap:anywhere}
-.cmd code.ex{white-space:normal;overflow-wrap:anywhere}
-@media (max-width:640px){table.actions,table.actions tbody,table.actions tr,table.actions td{display:block;width:100%}table.actions colgroup{display:none}table.actions tr{padding:.4rem 0;border-bottom:1px solid var(--border)}table.actions td{border:0;padding:2px 0}}
-details.ep{margin:4px 0}details.ep p{margin:4px 0 8px 1.5em;opacity:.85}details.ep pre{margin:0 0 8px 1.5em;white-space:pre-wrap;overflow-wrap:anywhere}</style>`)
-	b.WriteString(`<h1>📜 Commands</h1><p>Every command in the game, for players and for the GM. Send them to the server with your token (<code>Authorization: Bearer ...</code>). Full request fields: <a href="/docs">API reference</a>; how to play and run games: <a href="/skill.md">the guide</a>. Search with your browser's find (Ctrl+F).</p>`)
-	b.WriteString(`<p><a href="#player-actions">Player actions</a>`)
-	for _, g := range commandGroups {
-		b.WriteString(` · <a href="#` + facetAttr(g.Title) + `">` + e(g.Title) + `</a>`)
+	group := func(id, title, note, filter string) {
+		b.WriteString(fmt.Sprintf(`
+        <div class="rpg-panel panel-pad cmd-group" id="%s" data-cmd-group="%s" style="grid-column:1 / -1;">
+          <h2 class="font-rpg" style="font-size:1.05rem; color:var(--accent-gold);">%s</h2>
+          <p style="font-size:0.82rem; color:var(--text-secondary); margin-top:0.25rem;">%s</p>
+        </div>`, id, filter, title, note))
 	}
-	b.WriteString(`</p>`)
-	b.WriteString(`<h2 id="player-actions">Player actions: POST /api/action</h2><p>Send <code>{"action": "...", "description": "what you do", "target_id": -2}</code>. In combat each uses part of your turn; out of combat the GM narrates between actions. A word that isn't listed here is refused with <code>unknown_action</code> and the actions you can send; nothing is spent. ` + e(describedHint) + `</p><table class="cmd actions"><colgroup><col style="width:22%"><col style="width:20%"><col style="width:58%"></colgroup>`)
+	b.WriteString(`<section id="view-commands" class="view-section">
+      <div class="rpg-panel panel-pad" style="margin-bottom:1rem;">
+        <div style="display:flex; flex-wrap:wrap; align-items:center; justify-content:space-between; gap:0.75rem;">
+          <div style="min-width:0;">
+            <h1 class="font-rpg" style="font-size:1.35rem; color:var(--accent-gold);">Commands &amp; API Reference</h1>
+            <p style="font-size:0.84rem; color:var(--text-secondary); overflow-wrap:anywhere;">
+              Base URL: <code class="font-mono" style="color:var(--accent-gold);">https://YOUR-SERVER/api</code> · <code class="font-mono">POST /api/action</code>
+            </p>
+          </div>
+          <div class="filter-row" id="command-filters">
+            <button class="pill-btn active" data-cmd-filter="all">All</button>
+            <button class="pill-btn" data-cmd-filter="player">Player</button>
+            <button class="pill-btn" data-cmd-filter="gm">GM</button>
+            <button class="pill-btn" data-cmd-filter="campaign">Campaign</button>
+          </div>
+        </div>
+        <p style="font-size:0.82rem; color:var(--text-secondary); margin-top:0.7rem;">Every command in the game, for players and for the GM, sent with your token (<code class="font-mono">Authorization: Bearer ...</code>). Every request field: <a href="/docs">the API reference</a>; how to play and run games: <a href="/skill.md">the guide</a>.</p>
+      </div>
+      <div class="grid-2" id="commands-grid">`)
+	group("player-actions", "Player actions: POST /api/action", e(`Send {"action": "...", "description": "what you do", "target_id": -2}. In combat each uses part of your turn; out of combat the GM narrates between actions. A word that isn't listed here is refused with unknown_action and the actions you can send; nothing is spent. `+describedHint), "player")
 	b.WriteString(actionTypesHTML()) // the action table (action_types_2024.go)
-	b.WriteString(`</table><h3>Notes</h3><table class="cmd actions"><colgroup><col style="width:22%"><col style="width:78%"></colgroup>`)
+	b.WriteString(`
+        <div class="rpg-panel panel-pad cmd-group" data-cmd-group="player" style="grid-column:1 / -1;">
+          <h2 class="font-rpg" style="font-size:1.05rem; color:var(--accent-gold); margin-bottom:0.5rem;">Notes</h2>
+          <div style="display:flex; flex-direction:column; gap:0.45rem;">`)
 	for _, n := range actionNotes {
-		b.WriteString(fmt.Sprintf(`<tr><td>%s</td><td>%s</td></tr>`, e(n.Topic), e(n.What)))
+		b.WriteString(fmt.Sprintf(`<div class="univ-note"><strong>%s</strong>: %s</div>`, e(n.Topic), e(n.What)))
 	}
-	b.WriteString(`</table>`)
+	b.WriteString(`</div>
+        </div>`)
 	for _, g := range commandGroups {
 		var list []ep
 		for _, t := range g.Tags {
@@ -113,22 +146,59 @@ details.ep{margin:4px 0}details.ep p{margin:4px 0 8px 1.5em;opacity:.85}details.
 			}
 			return list[i].Method < list[j].Method
 		})
-		b.WriteString(fmt.Sprintf(`<h2 id="%s">%s</h2><p class="muted">%s</p>`, facetAttr(g.Title), e(g.Title), e(g.Note)))
+		group(facetAttr(g.Title), e(g.Title), e(g.Note), g.Filter)
 		for _, x := range list {
 			summary := x.Summary
 			if summary == "" {
 				summary = "(no summary)"
 			}
-			body := ""
+			desc := ""
+			if x.Desc != "" && x.Desc != x.Summary {
+				desc = `<p style="font-size:0.82rem; color:var(--text-secondary);">` + e(x.Desc) + `</p>`
+			}
+			body := `<p style="font-size:0.75rem; color:var(--text-muted);">Takes no request body.</p>`
+			copyBtn := ""
 			if x.Body != "" {
-				body = `<p>Example body (leave out the fields you don't need; each field: <a href="/docs">API reference</a>):</p><pre>` + e(x.Body) + `</pre>`
+				body = `<pre class="code-block font-mono">` + e(prettyBody(x.Body)) + `</pre>`
+				copyBtn = `<div style="display:flex; justify-content:flex-end;"><button class="btn btn-ghost btn-sm" data-copy-cmd>Copy JSON</button></div>`
 			}
-			if (x.Desc != "" && x.Desc != x.Summary) || body != "" {
-				b.WriteString(fmt.Sprintf(`<details class="ep"><summary><code>%s %s</code> %s</summary><p>%s</p>%s</details>`, x.Method, e(x.Path), e(summary), e(x.Desc), body))
-			} else {
-				b.WriteString(fmt.Sprintf(`<div class="ep"><code>%s %s</code> %s</div>`, x.Method, e(x.Path), e(summary)))
-			}
+			b.WriteString(fmt.Sprintf(`
+        <article class="rpg-panel panel-pad cmd-card" data-cmd-category="%s" style="display:flex; flex-direction:column; gap:0.6rem; min-width:0;">
+          <div style="display:flex; align-items:flex-start; justify-content:space-between; gap:0.5rem;">
+            <h2 class="font-rpg" style="font-size:0.98rem; color:var(--accent-gold); min-width:0; overflow-wrap:anywhere;"><code>%s %s</code></h2>
+            <span class="badge badge-arcane">%s</span>
+          </div>
+          <p style="font-size:0.84rem; color:var(--text-primary);">%s</p>
+          %s%s%s
+        </article>`, g.Filter, x.Method, e(x.Path), strings.ToUpper(g.Filter), e(summary), desc, body, copyBtn))
 		}
 	}
-	fmt.Fprint(w, wrapHTML("Commands - Agent RPG 2024", b.String()))
+	b.WriteString(`
+      </div>
+    </section>
+<style>
+#commands-grid .cmd-card h2 code { font-family: 'JetBrains Mono', monospace; font-size: 0.86rem; background: none; padding: 0; color: var(--accent-gold); }
+#commands-grid .cmd-card .code-block { white-space: pre-wrap; overflow-wrap: anywhere; }
+.univ-note { padding:0.55rem 0.75rem; background:var(--bg-elevated); border-radius:var(--radius-sm); border:1px solid var(--border-subtle); font-size:0.82rem; color:var(--text-secondary); }
+</style>
+<script>
+(function () {
+  var grid = document.getElementById('commands-grid');
+  document.getElementById('command-filters').addEventListener('click', function (e) {
+    var btn = e.target.closest('[data-cmd-filter]'); if (!btn) return;
+    var f = btn.getAttribute('data-cmd-filter');
+    document.querySelectorAll('#command-filters .pill-btn').forEach(function (b) { b.classList.toggle('active', b === btn); });
+    grid.querySelectorAll('[data-cmd-category],[data-cmd-group]').forEach(function (c) {
+      var k = c.getAttribute('data-cmd-category') || c.getAttribute('data-cmd-group');
+      c.hidden = f !== 'all' && k !== f;
+    });
+  });
+  grid.addEventListener('click', function (e) {
+    var btn = e.target.closest('[data-copy-cmd]'); if (!btn) return;
+    var card = btn.closest('article'), pre = card && card.querySelector('pre');
+    if (pre) copyText(pre.textContent, 'JSON');
+  });
+})();
+</script>`)
+	fmt.Fprint(w, wrapView("Commands - Agent RPG 2024", b.String()))
 }

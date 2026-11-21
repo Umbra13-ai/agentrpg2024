@@ -86,9 +86,13 @@ const siteFonts = `<link rel="preconnect" href="https://fonts.googleapis.com">
 
 // siteCSS: what the real site adds to the mock-up's stylesheet.
 const siteCSS = `
+/* The ability and save names keep the mock-up's whole words at the 12 px floor on a phone. */
+@media (max-width: 480px) { .ddb-ability { padding-left: 0.12rem; padding-right: 0.12rem; } .ddb-ability-name, .save-name { letter-spacing: 0; font-weight: 600; } .save-pill { gap: 0.3rem; padding-left: 0.4rem; } }
 a { color: var(--accent-gold); }
 img { max-width: 100%; }
 a.brand, a.nav-btn, a.mobile-nav-btn, a.btn, a.pill-btn, a.map-token, a.party-card { text-decoration: none; }
+a.plain-link, a.plain-link:visited { color: inherit; text-decoration: none; }
+a.plain-link:hover { text-decoration: underline; }
 a.nav-btn { display: inline-flex; align-items: center; }
 a.mobile-nav-btn { text-align: center; }
 a.btn-gold, a.btn-gold:visited { color: var(--btn-accent-text); }
@@ -105,6 +109,7 @@ a.party-card { display: block; }
 @media (max-width: 1023px), (pointer: coarse) {
   .btn, .btn-sm, .pill-btn, .theme-select, .nav-btn, .accordion-btn { min-height: 40px; }
   .mobile-nav-btn { min-height: 46px; }
+  a.brand, a.solo-link { display: inline-flex; align-items: center; min-height: 40px; min-width: 1.75rem; }
 }
 @media (max-width: 420px) { .topbar-actions #open-quickstart-btn { padding-left: 0.6rem; padding-right: 0.6rem; } }
 /* the footer's links */
@@ -187,6 +192,13 @@ function copyText(text, label) {
     sel.value = t;
     sel.addEventListener('change', function () { setTheme(sel.value); });
   }
+  // a link that is its block's whole text (a list's entry, a "back" line) is a control, not a word in a sentence: on a touch screen
+  // it gets the 40 px of a control (siteCSS: a.solo-link)
+  document.querySelectorAll('main a[href]').forEach(function (a) {
+    if (a.className || !a.parentElement) return;
+    var own = a.textContent.replace(/\s+/g, ' ').trim(), all = a.parentElement.textContent.replace(/\s+/g, ' ').trim();
+    if (own && (all === own || a.parentElement.classList.contains('list-item'))) a.classList.add('solo-link');
+  });
   var path = location.pathname;
   document.querySelectorAll('[data-match]').forEach(function (a) {
     var hit = a.getAttribute('data-match').split(' ').some(function (m) { return m === '/' ? path === '/' : path === m || path.indexOf(m) === 0; });
@@ -197,6 +209,7 @@ function copyText(text, label) {
   var close = document.getElementById('close-modal-btn');
   if (modal && open) {
     open.addEventListener('click', function () { modal.classList.add('open'); });
+    document.addEventListener('click', function (e) { if (e.target.closest && e.target.closest('[data-open-join]')) { e.preventDefault(); modal.classList.add('open'); } });
     close.addEventListener('click', function () { modal.classList.remove('open'); });
     modal.addEventListener('click', function (e) { if (e.target === modal) modal.classList.remove('open'); });
     document.addEventListener('keydown', function (e) { if (e.key === 'Escape') modal.classList.remove('open'); });

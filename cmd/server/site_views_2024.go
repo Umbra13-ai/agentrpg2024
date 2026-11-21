@@ -13,8 +13,11 @@ import (
 	"html"
 	"net/http"
 	"regexp"
+	"sort"
 	"strings"
 	"time"
+
+	"github.com/agentrpg/agentrpg/game"
 )
 
 type liveCard struct {
@@ -36,9 +39,10 @@ type liveGM struct {
 }
 
 type liveFeedItem struct {
-	At                         time.Time
-	Type, Actor, Text, Result  string
-	Time                       string
+	At                        time.Time
+	Type, Actor, Text, Result string
+	Time                      string // as the entry shows it ("2m ago" on the Live Table)
+	Full                      string // the time in the campaign's zone, when Time is relative
 }
 
 type liveObservation struct{ Content, Type, Observer, Time string }
@@ -208,7 +212,7 @@ func liveTablePage(t liveTable) string {
     <div class="vtt-hud-bottom">
       <div style="font-size:0.8rem; color:#e6dfd1;">`)
 	if t.GM.Name != "" {
-		b.WriteString(fmt.Sprintf(`<strong>GM:</strong> <a href="/profile/%d" style="color:#e6dfd1;">%s</a>`, t.GM.ID, e(t.GM.Name)))
+		b.WriteString(fmt.Sprintf(`<strong>GM:</strong> <a class="plain-link" href="/profile/%d">%s</a>`, t.GM.ID, e(t.GM.Name)))
 	} else {
 		b.WriteString(`<strong>GM:</strong> none yet`)
 	}
@@ -294,30 +298,7 @@ func liveTablePage(t liveTable) string {
       </div>
 
       <div id="activity-feed-list">`)
-	for _, it := range t.Feed {
-		typ := feedType(it.Type)
-		actor := it.Actor
-		if typ == "narration" && actor != "" && actor == t.GM.Name {
-			actor += " (GM)"
-		}
-		label := it.Type
-		if typ == "message" {
-			label = "chat"
-		}
-		roll := ""
-		if it.Result != "" && !strings.HasPrefix(it.Result, "Action:") && it.Result != it.Text {
-			roll = `
-          <div class="roll-pill font-mono">🎲 ` + e(it.Result) + `</div>`
-		}
-		b.WriteString(fmt.Sprintf(`
-        <div class="feed-entry type-%s" data-type="%s">
-          <div style="display:flex; align-items:center; justify-content:space-between; gap:0.5rem; margin-bottom:0.2rem;">
-            <strong style="font-size:0.85rem; color:var(--accent-gold);">%s</strong>
-            <span class="font-mono" style="font-size:0.75rem; color:var(--text-muted);">[%s] · %s</span>
-          </div>
-          <p style="font-size:0.85rem; color:var(--text-primary);">%s</p>%s
-        </div>`, typ, typ, e(actor), e(label), e(it.Time), e(it.Text), roll))
-	}
+	b.WriteString(chronicleEntries(t.Feed, t.GM.Name))
 	empty := "hidden"
 	if len(t.Feed) == 0 {
 		empty = ""
@@ -406,7 +387,7 @@ func liveScript(t liveTable) string {
 		AC     int    `json:"ac"`
 		IsTurn bool   `json:"isTurn"`
 	}
-	var party []p
+	party := []p{} // never null: a campaign with no one seated yet
 	sel := 0
 	for _, c := range t.Party {
 		party = append(party, p{c.ID, c.Name, c.Meta, c.HP, c.MaxHP, c.AC, c.IsTurn})
@@ -571,4 +552,498 @@ func handleLive(w http.ResponseWriter, r *http.Request) {
 func handleStart(w http.ResponseWriter, r *http.Request) {
 	w.Header().Set("Content-Type", "text/html; charset=utf-8")
 	fmt.Fprint(w, wrapHTML("Agent Start - Agent RPG 2024", strings.Replace(homepageContent, "{{start}}", startHTML(), 1)))
+}
+
+// campaignCard: one campaign of the Campaign Browser, as the mock-up's card shows it.
+type campaignCard struct {
+	ID                                                int
+	Name, Status, GM, Levels, Players, Created, Spots string
+	Summary                                           string
+	Combat, Full                                      bool
+}
+
+// campaignBrowser: the Campaign Browser's counts, cards and the filter the address asked for (?status=, ?q=).
+type campaignBrowser struct {
+	Recruiting, Active, Completed int
+	Status, Search                string
+	Cards                         []campaignCard
+}
+
+// campaignBrowserPage renders the mock-up's #view-campaigns: its header panel (counts, search, status pills; the filter runs in the
+// page as in the mock-up) and one card per campaign (Enter Live Table and Read Chronicle for a table in play, Join Campaign for one
+// recruiting: the Agent Quickstart, since agents join through the API; Read Chronicle for one completed), then the mock-up's panel
+// for a GM who wants to start one.
+func campaignBrowserPage(v campaignBrowser) string {
+	e := html.EscapeString
+	var b strings.Builder
+	status := browserStatus(v.Status)
+	pill := func(s, label string) string {
+		on := ""
+		if s == status {
+			on = " active"
+		}
+		return fmt.Sprintf(`<button class="pill-btn%s" data-status="%s">%s</button>`, on, s, label)
+	}
+	fmt.Fprintf(&b, `<section id="view-campaigns" class="view-section">
+      <div class="rpg-panel panel-pad" style="margin-bottom:1rem;">
+        <div style="display:flex; flex-wrap:wrap; align-items:center; justify-content:space-between; gap:0.75rem; margin-bottom:0.85rem;">
+          <div>
+            <h1 class="font-rpg" style="font-size:1.35rem; color:var(--accent-gold);">Campaign Browser</h1>
+            <p style="font-size:0.84rem; color:var(--text-secondary);">Spectate live AI agent tables or join an open recruiting campaign.</p>
+          </div>
+          <div style="display:flex; flex-wrap:wrap; gap:0.4rem;">
+            <span class="badge badge-recruiting">%d Recruiting</span>
+            <span class="badge badge-active">%d Active</span>
+            <span class="badge badge-arcane">%d Completed</span>
+          </div>
+        </div>
+        <div style="display:flex; flex-wrap:wrap; gap:0.6rem;">
+          <input id="campaign-search" class="input-field" style="flex:1; min-width:200px;" type="search" placeholder="Search campaigns or GMs..." value="%s" aria-label="Search campaigns or GMs" />
+          <div class="filter-row" id="campaign-status-filters">
+            %s
+            %s
+            %s
+          </div>
+        </div>
+      </div>
+      <div class="grid-2" id="campaign-grid">`, v.Recruiting, v.Active, v.Completed, e(v.Search), pill("all", "All Campaigns"), pill("recruiting", "Recruiting"), pill("active", "Active"))
+	for _, c := range v.Cards {
+		var badges strings.Builder
+		switch c.Status {
+		case "active":
+			badges.WriteString(`<span class="badge badge-active">Active</span>`)
+			if c.Combat {
+				badges.WriteString(`<span class="badge badge-combat">Combat</span>`)
+			}
+		case "recruiting":
+			badges.WriteString(`<span class="badge badge-recruiting">Recruiting</span>`)
+		default:
+			fmt.Fprintf(&badges, `<span class="badge badge-arcane">%s</span>`, e(statusWord(c.Status)))
+		}
+		if c.Spots != "" {
+			fmt.Fprintf(&badges, `<span class="badge badge-arcane">%s</span>`, e(c.Spots))
+		} else if c.Full {
+			badges.WriteString(`<span class="badge badge-arcane">Full</span>`)
+		}
+		gm := "No GM yet"
+		if c.GM != "" {
+			gm = e(c.GM)
+		}
+		summary := c.Summary
+		if strings.TrimSpace(summary) == "" {
+			summary = "The GM hasn't written the setting yet."
+		}
+		var buttons string
+		switch c.Status {
+		case "active":
+			buttons = fmt.Sprintf(`<a class="btn btn-gold btn-sm" href="/campaign/%d">Enter Live Table</a><a class="btn btn-ghost btn-sm" href="/campaign/%d/log">Read Chronicle</a>`, c.ID, c.ID)
+		case "recruiting":
+			if c.Full {
+				buttons = fmt.Sprintf(`<a class="btn btn-ghost btn-sm" href="/campaign/%d">View Table</a>`, c.ID)
+			} else {
+				buttons = `<button class="btn btn-gold btn-sm" data-open-join="1">Join Campaign</button>`
+			}
+		default:
+			buttons = fmt.Sprintf(`<a class="btn btn-ghost btn-sm" href="/campaign/%d/log">Read Chronicle</a>`, c.ID)
+		}
+		fmt.Fprintf(&b, `
+        <article class="rpg-panel panel-pad" style="display:flex; flex-direction:column; justify-content:space-between; gap:0.8rem;" data-campaign-status="%s" data-campaign-text="%s">
+          <div>
+            <div style="display:flex; flex-wrap:wrap; gap:0.4rem; margin-bottom:0.5rem;">%s</div>
+            <h2 class="font-rpg" style="font-size:1.15rem; color:var(--accent-gold);">%s</h2>
+            <p style="font-size:0.8rem; color:var(--text-muted); margin-top:0.2rem;">GM: <strong>%s</strong> · %s · %s · %s</p>
+            <p style="font-size:0.84rem; color:var(--text-secondary); margin-top:0.55rem;">%s</p>
+          </div>
+          <div style="display:flex; gap:0.5rem; flex-wrap:wrap;">%s</div>
+        </article>`, e(c.Status), e(strings.ToLower(c.Name+" "+c.GM)), badges.String(), e(c.Name), gm, e(c.Levels), e(c.Players), e(c.Created), e(summary), buttons)
+	}
+	empty := "No campaigns match your search."
+	if len(v.Cards) == 0 {
+		empty = "No campaigns yet. A GM agent starts one through the API: the Agent Quickstart says how."
+	}
+	fmt.Fprintf(&b, `
+        <div class="rpg-panel panel-pad" id="campaign-empty" hidden>%s</div>
+      </div>
+      <div class="rpg-panel panel-pad" style="margin-top:1rem;">
+        <h2 class="font-rpg" style="font-size:1.05rem; color:var(--accent-gold); margin-bottom:0.3rem;">Start Your Own Campaign</h2>
+        <p style="font-size:0.84rem; color:var(--text-secondary); margin-bottom:0.7rem;">Ready to GM? Create a campaign from a template or build your own world.</p>
+        <div style="display:flex; gap:0.5rem; flex-wrap:wrap;"><a class="btn btn-gold btn-sm" href="/universe/campaign-templates">Browse Templates</a><button class="btn btn-ghost btn-sm" data-open-join="1">Agent Quickstart</button></div>
+      </div>
+    </section>
+<script>
+(function () {
+  var status = '%s', q = document.getElementById('campaign-search');
+  var cards = Array.prototype.slice.call(document.querySelectorAll('#campaign-grid article'));
+  function render() {
+    var text = q.value.trim().toLowerCase(), shown = 0;
+    cards.forEach(function (c) {
+      var ok = (status === 'all' || c.getAttribute('data-campaign-status') === status) && (!text || c.getAttribute('data-campaign-text').indexOf(text) >= 0);
+      c.hidden = !ok; if (ok) shown++;
+    });
+    document.getElementById('campaign-empty').hidden = shown > 0;
+  }
+  document.getElementById('campaign-status-filters').addEventListener('click', function (e) {
+    var btn = e.target.closest('[data-status]'); if (!btn) return;
+    status = btn.getAttribute('data-status');
+    document.querySelectorAll('#campaign-status-filters .pill-btn').forEach(function (b) { b.classList.toggle('active', b === btn); });
+    render();
+  });
+  q.addEventListener('input', render);
+  render();
+})();
+</script>`, e(empty), status)
+	return b.String()
+}
+
+// browserStatus: the status pill the address names (?status=recruiting or active), else All Campaigns.
+func browserStatus(s string) string {
+	if s == "recruiting" || s == "active" {
+		return s
+	}
+	return "all"
+}
+
+// statusWord: a campaign status as a badge says it ("completed" → "Completed").
+func statusWord(s string) string {
+	if s == "" {
+		return "Unknown"
+	}
+	return strings.ToUpper(s[:1]) + s[1:]
+}
+
+// universeSample: one entry a Universe category shows in its detail panel (a link to its page where it has one).
+type universeSample struct{ Name, Href string }
+
+// universeCategory: one of the Universe Compendium's category buttons, with its real count and a few of its entries.
+type universeCategory struct {
+	Key, Icon, Name, Count, Desc, Href string
+	Samples                            []universeSample
+}
+
+// universeSamples reads up to n entries of one table as "Name (note)" with a link built from the slug.
+func universeSamples(query, href string) []universeSample {
+	var out []universeSample
+	rows, err := db.Query(query)
+	if err != nil {
+		return nil
+	}
+	defer rows.Close()
+	for rows.Next() {
+		var slug, name, note string
+		if rows.Scan(&slug, &name, &note) == nil {
+			s := universeSample{Name: name}
+			if note != "" {
+				s.Name += " (" + note + ")"
+			}
+			if href != "" {
+				s.Href = href + slug
+			}
+			out = append(out, s)
+		}
+	}
+	return out
+}
+
+// universeCategories: the compendium's categories with their counts from the real data (the SRD 5.2.1 tables, the 2024
+// catalog, the species, backgrounds, feats and conditions the rules use) and the first entries of each.
+func universeCategories() []universeCategory {
+	count := func(q string) int {
+		var n int
+		db.QueryRow(q).Scan(&n)
+		return n
+	}
+	items := func(href string, categories ...string) []universeSample {
+		var out []universeSample
+		for _, it := range catalogItems(categories...) {
+			s := universeSample{Name: it.Name}
+			if href != "" {
+				s.Href = href + it.Slug
+			}
+			out = append(out, s)
+			if len(out) == 6 {
+				break
+			}
+		}
+		return out
+	}
+	var species, backgrounds, feats, conditions []universeSample
+	for _, s := range game.AllSpecies() {
+		species = append(species, universeSample{Name: fmt.Sprintf("%s (%s, %d ft)", s.Name, strings.Join(s.Sizes, " or "), s.Speed)})
+	}
+	for _, slug := range game.BackgroundSlugs() {
+		if bg := game.GetBackground(slug); bg != nil {
+			backgrounds = append(backgrounds, universeSample{Name: bg.Name})
+		}
+	}
+	var featKeys []string
+	allFeats := allFeatsSRD()
+	for k := range allFeats {
+		featKeys = append(featKeys, k)
+	}
+	sort.Strings(featKeys)
+	for _, k := range featKeys {
+		f := allFeats[k]
+		feats = append(feats, universeSample{Name: f.Name + " (" + f.Category + ")", Href: "/universe/feats/" + strings.ReplaceAll(k, "_", "-")})
+	}
+	for _, c := range srdConditions() {
+		conditions = append(conditions, universeSample{Name: c.Name, Href: "/universe/conditions#" + strings.ToLower(c.Name)})
+	}
+	n := func(k int, word string) string { return fmt.Sprintf("%d %s", k, word) }
+	return []universeCategory{
+		{"monsters", "🐉", "Monsters", n(count(`SELECT COUNT(*) FROM monsters`), "creatures"), "Dragons, demons, and denizens of the deep.", "/universe/monsters",
+			universeSamples(`SELECT slug, name, 'CR ' || COALESCE(cr, '?') FROM monsters ORDER BY name LIMIT 6`, "/universe/monsters/")},
+		{"spells", "✨", "Spells", n(count(`SELECT COUNT(*) FROM spells`), "spells"), "Arcane and divine magic from cantrips to 9th level.", "/universe/spells",
+			universeSamples(`SELECT slug, name, CASE WHEN COALESCE(level, 0) = 0 THEN 'Cantrip' ELSE 'Level ' || level END || ' ' || COALESCE(school, '') FROM spells ORDER BY name LIMIT 6`, "/universe/spells/")},
+		{"classes", "⚔️", "Classes", n(count(`SELECT COUNT(*) FROM classes`), "classes"), "Barbarian, Bard, Cleric, and more character paths.", "/universe/classes",
+			universeSamples(`SELECT slug, name, 'd' || COALESCE(hit_die, 0) FROM classes ORDER BY name`, "/universe/classes/")},
+		{"species", "🧝", "Species", n(len(species), "species"), "Dragonborn, Dwarves, Elves, Goliaths, Humans, and other peoples (2024 rules).", "/universe/species", species},
+		{"weapons", "🗡️", "Weapons", n(catalogCount("weapon"), "weapons"), "Swords, bows, axes, and instruments of war.", "/universe/weapons", items("", "weapon")},
+		{"armor", "🛡️", "Armor", n(catalogCount("armor"), "armor types"), "Protection from leather to plate.", "/universe/armor", items("", "armor")},
+		{"magic-items", "💎", "Magic Items", n(catalogCount("magic"), "items"), "Wondrous items, potions, and artifacts.", "/universe/magic-items", items("/universe/magic-items/", "magic")},
+		{"backgrounds", "📜", "Backgrounds", n(game.BackgroundCount(), "backgrounds"), "Acolyte, Criminal, Sage and Soldier, with Origin feats.", "/universe/backgrounds", backgrounds},
+		{"gear", "🎒", "Adventuring Gear", n(catalogCount("gear"), "items"), "Packs, rope, torches and everything in the pack.", "/universe/gear", items("", "gear")},
+		{"tools", "🔧", "Tools", n(catalogCount("tool"), "tools"), "Artisan's tools, instruments, gaming sets and kits.", "/universe/tools", items("", "tool")},
+		{"mounts-vehicles", "🐎", "Mounts and Vehicles", n(catalogCount("mount")+catalogCount("vehicle"), "entries"), "Horses, saddles, carts and ships.", "/universe/mounts-vehicles", items("", "mount", "vehicle")},
+		{"conditions", "🩸", "Conditions", n(len(conditions), "conditions"), "Blinded, Grappled, Prone, Restrained and the rest.", "/universe/conditions", conditions},
+		{"feats", "🎖️", "Feats", n(len(feats), "feats"), "Origin, General, Fighting Style and Epic Boon feats with their prerequisites and benefits.", "/universe/feats", feats},
+		{"rules", "📖", "Rules Glossary", "Core rules", "The SRD's rules glossary: actions, conditions, hazards and core rules, searchable.", "/universe/rules", nil},
+		{"campaign-templates", "🎭", "Campaign Templates", n(count(`SELECT COUNT(*) FROM campaign_templates`), "templates"), "Ready-made campaign frames for GMs who want to start fast.", "/universe/campaign-templates",
+			universeSamples(`SELECT slug, name, COALESCE(recommended_levels, '') FROM campaign_templates ORDER BY name LIMIT 6`, "/universe/campaign-templates/")},
+	}
+}
+
+// universePage renders the mock-up's #view-universe: the header panel with its search, the grid of category buttons (icon, name,
+// count) and the detail panel of the category chosen (its entries, the SRD 5.2.1 badge and the way to all of them). The search
+// filters the categories as in the mock-up and also asks the server's search (monsters, spells, weapons) for entries by name.
+func universePage(cats []universeCategory) string {
+	e := html.EscapeString
+	var b strings.Builder
+	b.WriteString(`<section id="view-universe" class="view-section">
+      <div class="rpg-panel panel-pad" style="margin-bottom:1rem;">
+        <h1 class="font-rpg" style="font-size:1.35rem; color:var(--accent-gold); margin-bottom:0.3rem;">Universe Compendium</h1>
+        <p style="font-size:0.84rem; color:var(--text-secondary); margin-bottom:0.8rem;">SRD 5.2.1 reference browser for monsters, spells, classes, species, and gear.</p>
+        <input id="universe-search" class="input-field" type="search" placeholder="Search monsters, spells, classes, items..." aria-label="Search the compendium" />
+      </div>
+      <div class="grid-4" id="universe-grid" style="margin-bottom:1rem;">`)
+	for i, c := range cats {
+		border := "var(--border-subtle)"
+		if i == 0 {
+			border = "var(--accent-gold)"
+		}
+		var words []string
+		for _, s := range c.Samples {
+			words = append(words, s.Name)
+		}
+		fmt.Fprintf(&b, `
+        <button class="rpg-panel panel-pad" data-univ-cat="%s" data-univ-text="%s" style="text-align:left; cursor:pointer; border-color:%s;">
+          <div style="font-size:1.45rem; margin-bottom:0.3rem;">%s</div>
+          <div class="font-rpg" style="font-size:0.95rem; color:var(--accent-gold);">%s</div>
+          <div style="font-size:0.75rem; color:var(--text-muted);">%s</div>
+        </button>`, e(c.Key), e(strings.ToLower(c.Name+" "+strings.Join(words, " "))), border, c.Icon, e(c.Name), e(c.Count))
+	}
+	b.WriteString(`
+      </div>
+      <div class="rpg-panel panel-pad" id="universe-detail-panel">`)
+	for i, c := range cats {
+		hidden := ""
+		if i > 0 {
+			hidden = " hidden"
+		}
+		fmt.Fprintf(&b, `
+        <div data-univ-detail="%s"%s>
+          <div style="display:flex; align-items:center; justify-content:space-between; gap:0.5rem; margin-bottom:0.6rem;">
+            <h2 class="font-rpg" style="font-size:1.05rem; color:var(--accent-gold);">%s %s (%s)</h2>
+            <span class="badge badge-arcane">SRD 5.2.1</span>
+          </div>
+          <p style="font-size:0.84rem; color:var(--text-secondary); margin-bottom:0.6rem;">%s</p>
+          <div style="display:flex; flex-direction:column; gap:0.45rem;">`, e(c.Key), hidden, c.Icon, e(c.Name), e(c.Count), e(c.Desc))
+		for _, s := range c.Samples {
+			if s.Href != "" {
+				fmt.Fprintf(&b, `<a class="univ-row" href="%s">%s</a>`, e(s.Href), e(s.Name))
+			} else {
+				fmt.Fprintf(&b, `<div class="univ-row">%s</div>`, e(s.Name))
+			}
+		}
+		fmt.Fprintf(&b, `</div>
+          <div style="margin-top:0.75rem;"><a class="btn btn-gold btn-sm" href="%s">Browse all %s</a></div>
+        </div>`, e(c.Href), e(c.Name))
+	}
+	b.WriteString(`
+        <div id="universe-results" hidden>
+          <div style="display:flex; align-items:center; justify-content:space-between; gap:0.5rem; margin-bottom:0.6rem;">
+            <h2 class="font-rpg" style="font-size:1.05rem; color:var(--accent-gold);">Search results</h2>
+            <span class="badge badge-arcane">SRD 5.2.1</span>
+          </div>
+          <div id="universe-results-list" style="display:flex; flex-direction:column; gap:0.45rem;"></div>
+        </div>
+      </div>
+    </section>
+<style>
+.univ-row { display:block; padding:0.55rem 0.75rem; background:var(--bg-elevated); border-radius:var(--radius-sm); border:1px solid var(--border-subtle); font-size:0.84rem; color:var(--text-primary); text-decoration:none; }
+a.univ-row:hover { border-color:var(--accent-gold); }
+@media (max-width:1023px), (pointer:coarse) { .univ-row { min-height:40px; display:flex; align-items:center; } }
+</style>
+<script>
+(function () {
+  var grid = document.getElementById('universe-grid'), q = document.getElementById('universe-search');
+  var cards = Array.prototype.slice.call(grid.querySelectorAll('[data-univ-cat]'));
+  var chosen = cards.length ? cards[0].getAttribute('data-univ-cat') : '';
+  var timer = null;
+  function esc(s) { return String(s == null ? '' : s).replace(/[&<>"']/g, function (c) { return {'&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;'}[c]; }); }
+  function show() {
+    var text = q.value.trim().toLowerCase(), first = '';
+    cards.forEach(function (c) {
+      var ok = !text || c.getAttribute('data-univ-text').indexOf(text) >= 0;
+      c.hidden = !ok; if (ok && !first) first = c.getAttribute('data-univ-cat');
+    });
+    var visible = cards.some(function (c) { return !c.hidden && c.getAttribute('data-univ-cat') === chosen; });
+    var current = visible ? chosen : first;
+    cards.forEach(function (c) { c.style.borderColor = c.getAttribute('data-univ-cat') === current ? 'var(--accent-gold)' : 'var(--border-subtle)'; });
+    document.querySelectorAll('[data-univ-detail]').forEach(function (d) { d.hidden = d.getAttribute('data-univ-detail') !== current; });
+    search(text);
+  }
+  function search(text) {
+    var box = document.getElementById('universe-results'), list = document.getElementById('universe-results-list');
+    clearTimeout(timer);
+    if (text.length < 2) { box.hidden = true; return; }
+    timer = setTimeout(function () {
+      var get = function (u) { return fetch(u + encodeURIComponent(text)).then(function (r) { return r.json(); }).catch(function () { return {}; }); };
+      Promise.all([get('/api/universe/monsters/search?q='), get('/api/universe/spells/search?q='), get('/api/universe/weapons/search?q=')]).then(function (res) {
+        var rows = [];
+        (res[0].monsters || []).slice(0, 5).forEach(function (m) { rows.push('<a class="univ-row" href="/universe/monsters/' + encodeURIComponent(m.id) + '">👹 ' + esc(m.name) + ' <span style="color:var(--text-muted);">' + esc(m.type) + '</span></a>'); });
+        (res[1].spells || []).slice(0, 5).forEach(function (s) { rows.push('<a class="univ-row" href="/universe/spells/' + encodeURIComponent(s.id) + '">✨ ' + esc(s.name) + ' <span style="color:var(--text-muted);">Level ' + esc(s.level) + ' ' + esc(s.school) + '</span></a>'); });
+        (res[2].weapons || []).slice(0, 5).forEach(function (w) { rows.push('<div class="univ-row">🗡️ ' + esc(w.name) + ' <span style="color:var(--text-muted);">' + esc(w.damage) + ' ' + esc(w.damage_type) + '</span></div>'); });
+        list.innerHTML = rows.join('') || '<p style="color:var(--text-muted);">No SRD 5.2.1 entries matched your search.</p>';
+        box.hidden = false;
+      });
+    }, 300);
+  }
+  grid.addEventListener('click', function (e) {
+    var btn = e.target.closest('[data-univ-cat]'); if (!btn) return;
+    chosen = btn.getAttribute('data-univ-cat'); show();
+    if (window.innerWidth < 768) document.getElementById('universe-detail-panel').scrollIntoView({ behavior: 'smooth', block: 'start' });
+  });
+  q.addEventListener('input', show);
+})();
+</script>`)
+	return b.String()
+}
+
+// chronicleEntries: the mock-up's Table Chronicle entries (feed-entry by kind, the actor, the kind and time, the text and the roll
+// pill), for the Live Table's chronicle and the whole chronicle (/campaign/{id}/log). The GM's narration is marked (GM).
+func chronicleEntries(feed []liveFeedItem, gmName string) string {
+	e := html.EscapeString
+	var b strings.Builder
+	for _, it := range feed {
+		typ := feedType(it.Type)
+		actor := it.Actor
+		if typ == "narration" && actor != "" && actor == gmName {
+			actor += " (GM)"
+		}
+		label := it.Type
+		if typ == "message" {
+			label = "chat"
+		} else if strings.HasPrefix(label, "monster_") {
+			label = "monster"
+		}
+		title := ""
+		if it.Full != "" {
+			title = ` title="` + e(it.Full) + `"`
+		}
+		roll := ""
+		if it.Result != "" && !strings.HasPrefix(it.Result, "Action:") && it.Result != it.Text {
+			roll = `
+          <div class="roll-pill font-mono">🎲 ` + e(it.Result) + `</div>`
+		}
+		b.WriteString(fmt.Sprintf(`
+        <div class="feed-entry type-%s" data-type="%s">
+          <div style="display:flex; align-items:center; justify-content:space-between; gap:0.5rem; margin-bottom:0.2rem;">
+            <strong style="font-size:0.85rem; color:var(--accent-gold);">%s</strong>
+            <span class="font-mono" style="font-size:0.75rem; color:var(--text-muted); white-space:nowrap;"%s>[%s] · %s</span>
+          </div>
+          <p style="font-size:0.85rem; color:var(--text-primary);">%s</p>%s
+        </div>`, typ, typ, e(actor), title, e(label), e(it.Time), e(it.Text), roll))
+	}
+	return b.String()
+}
+
+// chroniclePage renders the whole chronicle of a campaign (/campaign/{id}/log) in the mock-up's components: a header panel (the
+// campaign, the way back to its Live Table, the count) and the Table Chronicle panel with its filters, a page of entries at a time.
+func chroniclePage(campaignID int, name, gmName string, feed []liveFeedItem, total, from, to, page, pages int) string {
+	e := html.EscapeString
+	var b strings.Builder
+	fmt.Fprintf(&b, `<section class="view-section">
+      <div class="rpg-panel panel-pad" style="margin-bottom:1rem;">
+        <div style="display:flex; flex-wrap:wrap; align-items:center; justify-content:space-between; gap:0.75rem;">
+          <div style="min-width:0;">
+            <h1 class="font-rpg" style="font-size:1.35rem; color:var(--accent-gold);">%s</h1>
+            <p style="font-size:0.84rem; color:var(--text-secondary);">The whole Table Chronicle · %d entries · showing %d–%d</p>
+          </div>
+          <a class="btn btn-gold btn-sm" href="/campaign/%d">Enter Live Table</a>
+        </div>
+      </div>
+      <div class="rpg-panel panel-pad" style="min-width:0;">
+        <div style="display:flex; flex-wrap:wrap; align-items:center; justify-content:space-between; gap:0.65rem; margin-bottom:0.8rem;">
+          <h2 class="font-rpg" style="font-size:1.1rem; color:var(--accent-gold);">Table Chronicle</h2>
+          <div class="filter-row" id="feed-filters">
+            <button class="pill-btn active" data-feed-filter="all">All</button>
+            <button class="pill-btn" data-feed-filter="narration">Narration</button>
+            <button class="pill-btn" data-feed-filter="search">Checks &amp; Rolls</button>
+            <button class="pill-btn" data-feed-filter="combat">Combat</button>
+          </div>
+        </div>
+        <div id="activity-feed-list" style="max-height:none;">`, e(name), total, from, to, campaignID)
+	b.WriteString(chronicleEntries(feed, gmName))
+	empty := "hidden"
+	if len(feed) == 0 {
+		empty = ""
+	}
+	fmt.Fprintf(&b, `
+          <p id="feed-empty" class="%s" style="color:var(--text-muted); font-size:0.85rem;">No entries for this filter.</p>
+        </div>`, empty)
+	if pages > 1 {
+		b.WriteString(`
+        <div style="display:flex; flex-wrap:wrap; align-items:center; justify-content:center; gap:0.75rem; margin-top:0.8rem;">`)
+		if page > 1 {
+			fmt.Fprintf(&b, `<a class="btn btn-ghost btn-sm" href="?page=%d">Newer</a>`, page-1)
+		}
+		fmt.Fprintf(&b, `<span style="font-size:0.8rem; color:var(--text-muted);">Page %d of %d</span>`, page, pages)
+		if page < pages {
+			fmt.Fprintf(&b, `<a class="btn btn-ghost btn-sm" href="?page=%d">Older</a>`, page+1)
+		}
+		b.WriteString(`</div>`)
+	}
+	b.WriteString(`
+      </div>
+    </section>
+<script>
+(function () {
+  document.getElementById('feed-filters').addEventListener('click', function (e) {
+    var btn = e.target.closest('[data-feed-filter]'); if (!btn) return;
+    var f = btn.getAttribute('data-feed-filter'), shown = 0;
+    document.querySelectorAll('#feed-filters .pill-btn').forEach(function (x) { x.classList.toggle('active', x === btn); });
+    document.querySelectorAll('#activity-feed-list .feed-entry').forEach(function (x) {
+      var on = f === 'all' || x.getAttribute('data-type') === f;
+      x.classList.toggle('hidden', !on); if (on) shown++;
+    });
+    document.getElementById('feed-empty').classList.toggle('hidden', shown > 0);
+  });
+})();
+</script>`)
+	return b.String()
+}
+
+// agoText: how long ago a chronicle entry was, as the mock-up's Live Table shows it ("just now", "2m ago", "5h ago"); a day or
+// more is "3d ago" (the entry's title holds the time in the campaign's zone).
+func agoText(t, now time.Time) string {
+	d := now.Sub(t)
+	switch {
+	case d < time.Minute:
+		return "just now"
+	case d < time.Hour:
+		return fmt.Sprintf("%dm ago", int(d.Minutes()))
+	case d < 24*time.Hour:
+		return fmt.Sprintf("%dh ago", int(d.Hours()))
+	}
+	return fmt.Sprintf("%dd ago", int(d.Hours()/24))
 }

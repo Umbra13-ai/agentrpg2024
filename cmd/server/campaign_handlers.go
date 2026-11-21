@@ -5,7 +5,6 @@ import (
 	"encoding/json"
 	"fmt"
 	"github.com/agentrpg/agentrpg/game"
-	"html/template"
 	"net/http"
 	"sort"
 	"strconv"
@@ -2788,236 +2787,72 @@ func handleObserve(w http.ResponseWriter, r *http.Request) {
 
 func handleCampaignsPage(w http.ResponseWriter, r *http.Request) {
 	w.Header().Set("Content-Type", "text/html; charset=utf-8")
-
-	// Parse filter from query params
-	statusFilter := r.URL.Query().Get("status")
-	searchQuery := strings.TrimSpace(r.URL.Query().Get("q"))
-
-	var content strings.Builder
-	content.WriteString(`
-<style>
-.campaigns-grid{display:grid;grid-template-columns:minmax(0,1fr);gap:1rem}
-@media (min-width:768px){.campaigns-grid{grid-template-columns:repeat(2,minmax(0,1fr))}}
-@media (min-width:1280px){.campaigns-grid{grid-template-columns:repeat(3,minmax(0,1fr))}}
-.campaign-card h3{margin:0 0 .5rem;font-family:var(--font-heading,inherit);font-size:1.15rem}
-.campaign-card h3 a{display:inline-flex;align-items:center;min-height:40px;text-decoration:none;color:var(--fg)}
-.campaign-card h3 a:hover{color:var(--accent)}
-.campaign-card .badge{margin:0 .3rem .3rem 0}
-.campaign-card .setting{color:var(--muted);font-style:italic;margin:.5rem 0;max-height:4.8em;overflow:hidden}
-.campaign-card .meta{color:var(--muted);font-size:.875rem;margin-bottom:.5rem}
-.campaign-card .actions{margin-top:1rem;display:flex;gap:.5rem;flex-wrap:wrap}
-.filters{margin:1rem 0;padding:1rem;background:var(--surface);border:1px solid var(--border);border-radius:var(--radius-md);display:flex;gap:.6rem 1rem;flex-wrap:wrap;align-items:center}
-.filters label{font-weight:600}
-.filters input[type=text]{flex:1 1 12rem;min-width:0}
-.stats-bar{display:flex;flex-wrap:wrap;gap:.5rem 1.5rem;margin:1rem 0;color:var(--muted);font-size:.9375rem}
-.stats-bar>span{display:flex;align-items:center;gap:.4rem}
-</style>
-
-<h1>🎲 Campaign Browser</h1>
-<p>Find your next adventure. Join a recruiting campaign or spectate an active game.</p>
-`)
-
+	view := campaignBrowser{Status: r.URL.Query().Get("status"), Search: strings.TrimSpace(r.URL.Query().Get("q"))}
 	if db == nil {
-		content.WriteString("<p>Database not available.</p>")
-		fmt.Fprint(w, wrapHTML("Campaign Browser - Agent RPG 2024", content.String()))
+		fmt.Fprint(w, wrapView("Campaign Browser - Agent RPG 2024", campaignBrowserPage(view)))
 		return
 	}
-
-	// Count campaigns by status for stats
-	var recruitingCount, activeCount, completedCount int
-	db.QueryRow(`SELECT COUNT(*) FROM lobbies WHERE status = 'recruiting'`).Scan(&recruitingCount)
-	db.QueryRow(`SELECT COUNT(*) FROM lobbies WHERE status = 'active'`).Scan(&activeCount)
-	db.QueryRow(`SELECT COUNT(*) FROM lobbies WHERE status = 'completed'`).Scan(&completedCount)
-
-	// Stats bar
-	content.WriteString(fmt.Sprintf(`
-<div class="stats-bar">
-  <span><span class="badge recruiting">%d</span> Recruiting</span>
-  <span><span class="badge active">%d</span> Active</span>
-  <span><span class="badge completed">%d</span> Completed</span>
-</div>
-`, recruitingCount, activeCount, completedCount))
-
-	// Filter form
-	activeAll, activeRecruiting, activeActive, activeCompleted := "", "", "", ""
-	switch statusFilter {
-	case "recruiting":
-		activeRecruiting = " selected"
-	case "active":
-		activeActive = " selected"
-	case "completed":
-		activeCompleted = " selected"
-	default:
-		activeAll = " selected"
-	}
-
-	content.WriteString(fmt.Sprintf(`
-<form class="filters" method="get" action="/campaigns">
-  <label for="status">Status:</label>
-  <select name="status" id="status">
-    <option value=""%s>All Campaigns</option>
-    <option value="recruiting"%s>🟢 Recruiting</option>
-    <option value="active"%s>🟡 Active</option>
-    <option value="completed"%s>🔵 Completed</option>
-  </select>
-  <label for="q">Search:</label>
-  <input type="text" name="q" id="q" placeholder="Campaign name..." value="%s">
-  <button type="submit" class="btn btn-gold">Filter</button>
-</form>
-`, activeAll, activeRecruiting, activeActive, activeCompleted, template.HTMLEscapeString(searchQuery)))
-
-	// Build query with filters
-	query := `
+	db.QueryRow(`SELECT COUNT(*) FROM lobbies WHERE status = 'recruiting'`).Scan(&view.Recruiting)
+	db.QueryRow(`SELECT COUNT(*) FROM lobbies WHERE status = 'active'`).Scan(&view.Active)
+	db.QueryRow(`SELECT COUNT(*) FROM lobbies WHERE status = 'completed'`).Scan(&view.Completed)
+	rows, err := db.Query(`
 		SELECT l.id, l.name, l.status, COALESCE(l.setting, ''), l.max_players,
 			COALESCE(l.min_level, 1), COALESCE(l.max_level, 1),
 			a.id, a.name,
 			(SELECT COUNT(*) FROM characters WHERE lobby_id = l.id) as player_count,
 			l.created_at,
-			COALESCE((SELECT CASE WHEN active THEN '{"active":true}' ELSE '{}' END FROM combat_state WHERE lobby_id = l.id), '{}')
+			COALESCE((SELECT active FROM combat_state WHERE lobby_id = l.id), false)
 		FROM lobbies l
 		LEFT JOIN agents a ON l.dm_id = a.id
 		WHERE COALESCE(l.status,'') <> 'deleted'
-	`
-	args := []interface{}{}
-	argNum := 1
-
-	if statusFilter != "" {
-		query += fmt.Sprintf(" AND l.status = $%d", argNum)
-		args = append(args, statusFilter)
-		argNum++
-	}
-
-	if searchQuery != "" {
-		query += fmt.Sprintf(" AND LOWER(l.name) LIKE LOWER($%d)", argNum)
-		args = append(args, "%"+searchQuery+"%")
-		argNum++
-	}
-
-	query += `
-		ORDER BY 
-			CASE l.status WHEN 'recruiting' THEN 1 WHEN 'active' THEN 2 ELSE 3 END,
-			l.created_at DESC
-	`
-
-	rows, err := db.Query(query, args...)
-
+		ORDER BY
+			CASE l.status WHEN 'active' THEN 1 WHEN 'recruiting' THEN 2 ELSE 3 END,
+			l.created_at DESC`)
 	if err != nil {
-		content.WriteString("<p>Error loading campaigns.</p>")
-	} else {
-		defer rows.Close()
-
-		content.WriteString(`<div class="campaigns-grid">`)
-		count := 0
-		for rows.Next() {
-			count++
-			var id, maxPlayers, minLevel, maxLevel, playerCount int
-			var dmID sql.NullInt64
-			var name, status, setting, combatStateJSON string
-			var dmName sql.NullString
-			var createdAt time.Time
-			rows.Scan(&id, &name, &status, &setting, &maxPlayers, &minLevel, &maxLevel, &dmID, &dmName, &playerCount, &createdAt, &combatStateJSON)
-
-			// Check game mode from combat_state
-			gameMode := "exploration"
-			var combatState map[string]interface{}
-			if err := json.Unmarshal([]byte(combatStateJSON), &combatState); err == nil {
-				if active, ok := combatState["active"].(bool); ok && active {
-					gameMode = "combat"
-				}
-			}
-
-			// Truncate setting
-			settingPreview := setting
-			if len(settingPreview) > 200 {
-				settingPreview = settingPreview[:200] + "..."
-			}
-			if idx := strings.Index(settingPreview, "\n\n"); idx > 0 && idx < 200 {
-				settingPreview = settingPreview[:idx]
-			}
-
-			statusBadge := ""
-			modeBadge := ""
-			switch status {
-			case "recruiting":
-				statusBadge = `<span class="badge recruiting">Recruiting</span>`
-			case "active":
-				statusBadge = `<span class="badge active">Active</span>`
-				if gameMode == "combat" {
-					modeBadge = `<span class="badge combat">⚔️ Combat</span>`
-				} else {
-					modeBadge = `<span class="badge exploration">🗺️ Exploring</span>`
-				}
-			case "completed":
-				statusBadge = `<span class="badge completed">Completed</span>`
-			}
-
-			dmLink := "No GM"
-			if dmName.Valid && dmID.Valid {
-				dmLink = fmt.Sprintf(`<a href="/profile/%d">%s</a>`, dmID.Int64, template.HTMLEscapeString(dmName.String))
-			}
-
-			levelReq := formatLevelRequirement(minLevel, maxLevel)
-
-			// Action buttons based on status
-			actions := ""
-			switch status {
-			case "recruiting":
-				spotsLeft := maxPlayers - playerCount
-				if spotsLeft > 0 {
-					actions = fmt.Sprintf(`
-<div class="actions">
-  <a href="/campaign/%d" class="btn btn-gold">Join Campaign</a>
-  <span class="meta">%d spot%s left</span>
-</div>`, id, spotsLeft, pluralize(spotsLeft, "", "s"))
-				} else {
-					actions = `<div class="actions"><span class="meta">Campaign full</span></div>`
-				}
-			case "active":
-				actions = fmt.Sprintf(`
-<div class="actions">
-  <a href="/campaign/%d" class="btn btn-gold">👁️ Watch Game</a>
-  <a href="/campaign/%d/log" class="btn btn-ghost">📜 Read Log</a>
-</div>`, id, id)
-			case "completed":
-				actions = fmt.Sprintf(`
-<div class="actions">
-  <a href="/campaign/%d/log" class="btn btn-ghost">📜 Read Story</a>
-</div>`, id)
-			}
-
-			content.WriteString(fmt.Sprintf(`
-<div class="campaign-card rpg-panel">
-  <div>%s%s</div>
-  <h3><a href="/campaign/%d">%s</a></h3>
-  <p class="setting">%s</p>
-  <p class="meta">
-    GM: %s · Levels %s · %d/%d players · %s
-  </p>
-  %s
-</div>`, statusBadge, modeBadge, id, template.HTMLEscapeString(name), template.HTMLEscapeString(settingPreview), dmLink, levelReq, playerCount, maxPlayers, createdAt.Format("Jan 2006"), actions))
-		}
-		content.WriteString(`</div>`)
-
-		if count == 0 {
-			if statusFilter != "" || searchQuery != "" {
-				content.WriteString(`<p class="muted">No campaigns match your filters. <a href="/campaigns">Clear filters</a></p>`)
-			} else {
-				content.WriteString(`<p class="muted">No campaigns yet. Be the first to create one!</p>`)
-			}
-		}
+		writeDBErrorPage(w, err, "campaigns")
+		return
 	}
-
-	content.WriteString(`
-<div class="rpg-panel" style="margin-top:2rem">
-  <h2>🎭 Start Your Own Campaign</h2>
-  <p>Ready to GM? Create a campaign from a template or build your own world.</p>
-  <p style="margin-top:1em">
-    <a href="/universe/campaign-templates" class="btn btn-gold">Browse Templates →</a>
-  </p>
-</div>
-`)
-
-	fmt.Fprint(w, wrapHTML("Campaign Browser - Agent RPG 2024", content.String()))
+	defer rows.Close()
+	for rows.Next() {
+		var c campaignCard
+		var maxPlayers, minLevel, maxLevel, playerCount int
+		var dmID sql.NullInt64
+		var dmName sql.NullString
+		var setting string
+		var createdAt time.Time
+		if err := rows.Scan(&c.ID, &c.Name, &c.Status, &setting, &maxPlayers, &minLevel, &maxLevel, &dmID, &dmName, &playerCount, &createdAt, &c.Combat); err != nil {
+			writeDBErrorPage(w, err, "campaigns")
+			return
+		}
+		if dmName.Valid && dmID.Valid {
+			c.GM = dmName.String
+		}
+		c.Levels = formatLevelRequirement(minLevel, maxLevel)
+		c.Players = fmt.Sprintf("%d/%d players", playerCount, maxPlayers)
+		if maxPlayers <= 0 {
+			c.Players = fmt.Sprintf("%d player%s", playerCount, pluralize(playerCount, "", "s"))
+		}
+		c.Created = createdAt.Format("Jan 2, 2006")
+		if left, ok := openSeats(maxPlayers, playerCount).(int); ok && c.Status == "recruiting" {
+			c.Full = left == 0
+			if left > 0 {
+				c.Spots = fmt.Sprintf("%d spot%s left", left, pluralize(left, "", "s"))
+			}
+		}
+		c.Summary = setting
+		if i := strings.Index(c.Summary, "\n\n"); i > 0 {
+			c.Summary = c.Summary[:i]
+		}
+		if r := []rune(c.Summary); len(r) > 220 {
+			c.Summary = string(r[:220]) + "..."
+		}
+		view.Cards = append(view.Cards, c)
+	}
+	if err := rows.Err(); err != nil {
+		writeDBErrorPage(w, err, "campaigns")
+		return
+	}
+	fmt.Fprint(w, wrapView("Campaign Browser - Agent RPG 2024", campaignBrowserPage(view)))
 }
 
 func handleCampaignPage(w http.ResponseWriter, r *http.Request) {
@@ -3223,17 +3058,18 @@ func serveCampaignPage(w http.ResponseWriter, r *http.Request, campaignID int) {
 	}
 	obsRows.Close()
 
-	// The chronicle: the log's records (what players read of it: playerText) and the party chat, newest first, 50 at most
+	// The chronicle: the log's play records (what players read of it: playerText; not the bookkeeping, notPlayTypes) and the party
+	// chat, newest first, 30 at most (the whole chronicle is /campaign/{id}/log)
 	var feed []liveFeedItem
-	recs, _ := readActions(actionFilter{lobby: campaignID, newestFirst: true, limit: 50}) // action_log_2024.go
+	recs, _ := readActions(actionFilter{lobby: campaignID, newestFirst: true, limit: 30, skipTypes: notPlayTypes}) // action_log_2024.go
 	for _, a := range recs {
-		feed = append(feed, liveFeedItem{At: a.At, Type: a.Type, Actor: a.Actor, Text: a.Description, Result: playerText(a.Result)})
+		feed = append(feed, liveFeedItem{At: a.At, Type: a.Type, Actor: a.Actor, Text: playerText(a.Description), Result: playerText(a.Result)})
 	}
 	msgRows, qerr := db.Query(`
 		SELECT COALESCE(agent_name, ''), COALESCE(message, ''), created_at
 		FROM campaign_messages
 		WHERE lobby_id = $1
-		ORDER BY created_at DESC LIMIT 50
+		ORDER BY created_at DESC LIMIT 30
 	`, campaignID)
 	if qerr != nil {
 		writeDBErrorPage(w, qerr, "the campaign's messages")
@@ -3247,11 +3083,12 @@ func serveCampaignPage(w http.ResponseWriter, r *http.Request, campaignID int) {
 	}
 	msgRows.Close()
 	sort.Slice(feed, func(i, j int) bool { return feed[i].At.After(feed[j].At) })
-	if len(feed) > 50 {
-		feed = feed[:50]
+	if len(feed) > 30 {
+		feed = feed[:30]
 	}
+	now := time.Now()
 	for i := range feed {
-		feed[i].Time = feedTime(feed[i].At, campaignID)
+		feed[i].Time, feed[i].Full = agoText(feed[i].At, now), feedTime(feed[i].At, campaignID)
 	}
 
 	var doc map[string]interface{}
@@ -3279,148 +3116,37 @@ func serveCampaignPage(w http.ResponseWriter, r *http.Request, campaignID int) {
 // handleCampaignLog shows the full action log for a campaign with pagination
 func handleCampaignLog(w http.ResponseWriter, r *http.Request, campaignID int) {
 	w.Header().Set("Content-Type", "text/html; charset=utf-8")
-
-	// Get campaign name
-	var campaignName string
-	err := db.QueryRow(`SELECT name FROM lobbies WHERE id = $1`, campaignID).Scan(&campaignName)
-	if err != nil {
+	var campaignName, gmName string
+	err := db.QueryRow(`SELECT l.name, COALESCE(a.name, '') FROM lobbies l LEFT JOIN agents a ON a.id = l.dm_id WHERE l.id = $1`, campaignID).Scan(&campaignName, &gmName)
+	if err == sql.ErrNoRows {
 		http.Error(w, "Campaign not found", http.StatusNotFound)
 		return
 	}
-
-	// Pagination
-	page := 1
-	limit := 100
+	if err != nil {
+		writeDBErrorPage(w, err, "the campaign")
+		return
+	}
+	page, limit := 1, 100
 	if p := r.URL.Query().Get("page"); p != "" {
 		if parsed, err := strconv.Atoi(p); err == nil && parsed > 0 {
 			page = parsed
 		}
 	}
 	offset := (page - 1) * limit
-
-	// Get total count
 	var totalActions int
 	db.QueryRow(`SELECT COUNT(*) FROM actions WHERE lobby_id = $1 AND NOT (action_type = 'poll' AND description = 'Checked game status')`, campaignID).Scan(&totalActions)
-
 	totalPages := (totalActions + limit - 1) / limit
 	if totalPages == 0 {
 		totalPages = 1
 	}
-
-	// Get combined activity (actions + messages)
-	type LogEntry struct {
-		Time        time.Time
-		Type        string
-		Actor       string
-		Description string
-		Result      string
-	}
-	var entries []LogEntry
-
-	// Get actions, but hide routine status-check polls from the default web log
-	recs, _ := readActions(actionFilter{lobby: campaignID, newestFirst: true, limit: limit, offset: offset}) // action_log_2024.go
+	// the actions, newest first, without the routine status polls (action_log_2024.go); players' words only (playerText)
+	recs, _ := readActions(actionFilter{lobby: campaignID, newestFirst: true, limit: limit, offset: offset})
+	var feed []liveFeedItem
 	for _, a := range recs {
-		entries = append(entries, LogEntry{Type: a.Type, Description: a.Description, Result: playerText(a.Result), Actor: a.Actor, Time: a.At})
+		feed = append(feed, liveFeedItem{At: a.At, Type: a.Type, Actor: a.Actor, Text: playerText(a.Description), Result: playerText(a.Result), Time: feedTime(a.At, campaignID)})
 	}
-
-	// Build log HTML
-	var logHTML strings.Builder
-	if len(entries) == 0 {
-		logHTML.WriteString(`<p class="muted">No actions recorded yet.</p>`)
-	} else {
-		for _, entry := range entries {
-			timeStr := feedTime(entry.Time, campaignID)
-			resultHTML := ""
-			if entry.Result != "" && !strings.HasPrefix(entry.Result, "Action:") {
-				resultHTML = fmt.Sprintf(`<div class="result">→ %s</div>`, template.HTMLEscapeString(entry.Result))
-			}
-
-			typeIcon := "⚔️"
-			typeClass := "action"
-			switch entry.Type {
-			case actionNarration:
-				typeIcon = "📖"
-				typeClass = "narrate"
-			case "message":
-				typeIcon = "💬"
-				typeClass = "message"
-			case "poll":
-				typeIcon = "📡"
-				typeClass = "poll"
-			case "attack":
-				typeIcon = "⚔️"
-			case "cast":
-				typeIcon = "✨"
-			case "move":
-				typeIcon = "🏃"
-			case "help":
-				typeIcon = "🤝"
-			case "dodge":
-				typeIcon = "🛡️"
-			}
-
-			logHTML.WriteString(fmt.Sprintf(`
-<div class="feed-entry log-entry %s">
-  <div class="entry-header">
-    <span class="time">%s</span>
-    <strong class="actor">%s</strong>
-    <span class="type">%s %s</span>
-  </div>
-  <div class="entry-body">
-    <p>%s</p>
-    %s
-  </div>
-</div>`, typeClass, timeStr, template.HTMLEscapeString(entry.Actor), typeIcon, template.HTMLEscapeString(entry.Type), template.HTMLEscapeString(entry.Description), resultHTML))
-		}
-	}
-
-	// Pagination controls
-	var paginationHTML strings.Builder
-	if totalPages > 1 {
-		paginationHTML.WriteString(`<div class="pagination">`)
-		if page > 1 {
-			paginationHTML.WriteString(fmt.Sprintf(`<a href="?page=%d" class="btn btn-ghost page-link">← Previous</a>`, page-1))
-		}
-		paginationHTML.WriteString(fmt.Sprintf(`<span class="page-info">Page %d of %d</span>`, page, totalPages))
-		if page < totalPages {
-			paginationHTML.WriteString(fmt.Sprintf(`<a href="?page=%d" class="btn btn-ghost page-link">Next →</a>`, page+1))
-		}
-		paginationHTML.WriteString(`</div>`)
-	}
-
-	content := fmt.Sprintf(`
-<style>
-.log-header{margin-bottom:1em}
-.log-header h1{margin-bottom:0.2em}
-.feed-entry.narrate{border-left-color:#b48cf0}
-.entry-header{display:flex;gap:0.8em;align-items:center;margin-bottom:0.3em;flex-wrap:wrap}
-.entry-header .time{color:var(--muted);font-size:0.8125rem;font-family:var(--font-mono,monospace)}
-.entry-header .actor{color:var(--text)}
-.entry-header .type{color:var(--muted);font-size:0.9em}
-.entry-body p{margin:0.2em 0}
-.entry-body .result{display:inline-block;margin-top:.4rem;background:var(--code-bg);border:1px solid var(--border);border-radius:var(--radius-sm);padding:.25rem .6rem;font-family:var(--font-mono,monospace);font-size:.8125rem;color:var(--accent)}
-.pagination{display:flex;justify-content:center;gap:1.5em;align-items:center;margin:1.5em 0}
-.page-info{color:var(--muted)}
-.stats{color:var(--muted);font-size:0.9em;margin-bottom:1em}
-</style>
-
-<div class="log-header">
-  <h1>📋 Action Log: %s</h1>
-  <p><a class="btn btn-ghost" href="/campaign/%d">← Back to campaign</a></p>
-</div>
-
-<div class="stats">
-  Total actions: %d | Showing: %d-%d
-</div>
-
-%s
-
-%s
-`, template.HTMLEscapeString(campaignName), campaignID, totalActions,
-		min(offset+1, totalActions), min(offset+limit, totalActions),
-		paginationHTML.String(), logHTML.String())
-
-	fmt.Fprint(w, wrapHTML(fmt.Sprintf("Action Log: %s - Agent RPG 2024", campaignName), content))
+	page2 := chroniclePage(campaignID, campaignName, gmName, feed, totalActions, min(offset+1, totalActions), min(offset+limit, totalActions), page, totalPages)
+	fmt.Fprint(w, wrapView(fmt.Sprintf("Chronicle: %s - Agent RPG 2024", campaignName), page2))
 }
 
 // handleCampaignItems godoc
