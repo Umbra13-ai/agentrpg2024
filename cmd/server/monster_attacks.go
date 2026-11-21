@@ -475,6 +475,7 @@ func characterByNameOrID(campaignID int, who string) (id int, name string, ac in
 func damageApplies(p *bool) bool { return p == nil || *p }
 
 func resolveMonsterAttack(r *http.Request, campaignID int, monster, action, target string, apply bool) (string, map[string]interface{}, bool) {
+	chargeSaidNote := ""
 	ids := monsterIDsByKeyOrName(campaignID, monster)
 	if n, err := strconv.Atoi(strings.TrimPrefix(monster, "#")); err == nil && strings.HasPrefix(monster, "#") {
 		ids = []int{n} // one particular monster of the fight (Legendary Actions)
@@ -627,6 +628,7 @@ func resolveMonsterAttack(r *http.Request, campaignID int, monster, action, targ
 	// the reactions after a hit. The roll itself gathers both sides' conditions in attackCtx.
 	var attackerConds []string
 	if attackerID != 0 {
+		chargeSaidNote = recordChargeSaid(r, campaignID, attackerID) // the GM said it charged (no battle map: creature_movement_2024.go)
 		attackerConds = creatureConditions(campaignID, attackerID)
 	}
 	if found && seesUnseen(campaignID, tid) {
@@ -653,7 +655,7 @@ func resolveMonsterAttack(r *http.Request, campaignID int, monster, action, targ
 				return why, map[string]interface{}{"attacks": 0, "refused": true, "reason": why}, true
 			}
 			text, info := monsterAttacksMonster(r, campaignID, attackerID, attackerName, attackerConds, chosen, actions, mid, apply)
-			text += multiattackUses(r, campaignID, attackerID, attackerName, action, actions, target, apply)
+			text += multiattackUses(r, campaignID, attackerID, attackerName, action, actions, target, apply) + chargeSaidNote
 			if made, _ := info["made"].(bool); made && dayReserved {
 				daySettled = true // a limited-use attack stays counted once it was made against a target
 			}
@@ -664,7 +666,7 @@ func resolveMonsterAttack(r *http.Request, campaignID int, monster, action, targ
 				return why, map[string]interface{}{"attacks": 0, "refused": true, "reason": why}, true
 			}
 			text, info := monsterAttacksCompanion(campaignID, attackerID, attackerName, chosen, c, apply)
-			text += multiattackUses(r, campaignID, attackerID, attackerName, action, actions, target, apply)
+			text += multiattackUses(r, campaignID, attackerID, attackerName, action, actions, target, apply) + chargeSaidNote
 			return text, info, true
 		}
 	}
@@ -753,6 +755,8 @@ func resolveMonsterAttack(r *http.Request, campaignID int, monster, action, targ
 		if len(a.Alts) > 0 {
 			a = applyDamageAlternatives(a, monsterHitCondition(campaignID, attackerID, found, tid, rolled.HasAdvantage()))
 		}
+		chargeNote := ""
+		a.Desc, chargeNote = hitChargeDesc(campaignID, attackerID, tid, a.Desc) // a charge's effect for this hit (creature_movement_2024.go)
 		dmg := rollStatBlockDamage(a.DamageDice, a.FlatDamage, crit)
 		sizeNote := ""
 		if dx, dt := enlargeHit(campaignID, attackerID, dmg); dx != 0 { // Enlarge/Reduce on the monster (spells_more_2024.go)
@@ -765,7 +769,7 @@ func resolveMonsterAttack(r *http.Request, campaignID int, monster, action, targ
 		hits++
 		totalDamage += dmg
 		line := hitLine + fmt.Sprintf(", %d %s damage", dmg, a.DamageType) + strings.TrimSuffix(sizeNote, ".")
-		line += gmJudgedAlternatives(a)
+		line += gmJudgedAlternatives(a) + chargeNote
 		rider := unappliedHitRider(a.Desc) // appended after the riders: what they enforce is stripped first
 		parts := []extraDamage{{Type: a.DamageType}}
 		amounts := []int{dmg}
@@ -839,7 +843,7 @@ func resolveMonsterAttack(r *http.Request, campaignID int, monster, action, targ
 						}
 					}
 				}
-				line += hitAfterDamage(campaignID, tid, a.Desc, attackerName+"'s "+stripUsage(a.Name), (hpB+tempB)-(hpA+tempA), dealtByType) // Life Drain, burning (hit_after_damage_2024.go)
+				line += hitAfterDamage(campaignID, attackerID, tid, a.Desc, attackerName+"'s "+stripUsage(a.Name), (hpB+tempB)-(hpA+tempA), dealtByType) // Life Drain, burning (hit_after_damage_2024.go)
 				// the attach the hit starts ("and the stirge attaches to the target"): before the recurring
 				// damage, whose gate reads the attach row (monster_attach_2024.go). Outside the parseHitRider
 				// branch: an attach rider (Stirge Proboscis) carries no condition for it to match.
@@ -885,7 +889,7 @@ func resolveMonsterAttack(r *http.Request, campaignID int, monster, action, targ
 		text += " " + tname
 	}
 	text += redirectNote
-	text += ". " + strings.Join(lines, "; ") + "." + slowNote
+	text += ". " + strings.Join(lines, "; ") + "." + slowNote + chargeSaidNote
 	if strings.EqualFold(stripUsage(action), "Multiattack") {
 		for _, a := range actions {
 			if strings.EqualFold(stripUsage(a.Name), "Multiattack") {

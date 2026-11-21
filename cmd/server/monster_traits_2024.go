@@ -26,6 +26,10 @@ type monsterTraitRule struct {
 }
 
 var monsterTraitRules = []monsterTraitRule{
+	{Match: swarmSpaceRe, Does: "it can occupy another creature's space and vice versa: the battle map lets it and other creatures share its space (a move may end there)",
+		Where: "markMapSpaces, validate, passableTokens, endsInCreature (map_spaces_2024.go, battle_map.go)"},
+	{Match: incorporealRe, Does: "it moves through creatures and objects (its token may stand inside a wall or a closed door); ending its turn inside an object deals the trait's damage",
+		Where: "markMapSpaces (map_spaces_2024.go), objectEndDamage (turn-end hook)"},
 	{Name: "Agile", Does: "Its movement does not provoke Opportunity Attacks when the GM updates the battle map.",
 		Where: "noteMonstersLeavingReach (character_oa_2024.go)"},
 	{Name: "Flyby", Does: "Its flight does not provoke Opportunity Attacks when the GM includes its combat ID in flying on the battle map update.",

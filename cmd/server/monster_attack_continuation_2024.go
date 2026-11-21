@@ -100,6 +100,9 @@ func runMonsterAttackSequence(lobby int, c monsterAttackCursor) (string, map[str
 		if len(a.Alts) > 0 {
 			a = applyDamageAlternatives(a, monsterHitCondition(lobby, c.Attacker, true, c.Target, rolled.HasAdvantage()))
 		}
+		chargeNote := ""
+		a.Desc, chargeNote = hitChargeDesc(lobby, c.Attacker, c.Target, a.Desc) // a charge's effect for this hit (creature_movement_2024.go)
+		note += chargeNote
 		dmg := rollStatBlockDamage(a.DamageDice, a.FlatDamage, out.Critical)
 		if dx, _ := enlargeHit(lobby, c.Attacker, dmg); dx != 0 {
 			dmg += dx
@@ -208,8 +211,8 @@ func runMonsterHit(lobby int, c *monsterHitCursor) (string, error) {
 							}
 						}
 					}
-					line += hitAfterDamage(lobby, c.Target, c.Action.Desc, c.AttackerName+"'s "+stripUsage(c.Action.Name), c.HPBefore-monsterHPNow(lobby, c.Target), c.Dealt) // Life Drain, burning (hit_after_damage_2024.go)
-					coverOK := true                                                                                                                                           // the cover clause the conditions and suffocating hang on fired (its gates held)
+					line += hitAfterDamage(lobby, c.Attacker, c.Target, c.Action.Desc, c.AttackerName+"'s "+stripUsage(c.Action.Name), c.HPBefore-monsterHPNow(lobby, c.Target), c.Dealt) // Life Drain, burning (hit_after_damage_2024.go)
+					coverOK := true                                                                                                                                                       // the cover clause the conditions and suffocating hang on fired (its gates held)
 					if e, ok := parseHitRider(c.Action.Desc); ok {
 						_, gated := e.conditionsFor(lobby, c.Target)
 						coverOK = gated == "" && !(e.CondIfAdvantage && !c.Roll.HasAdvantage())

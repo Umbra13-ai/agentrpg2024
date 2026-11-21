@@ -540,6 +540,7 @@ func (c *attackCtx) attackerName() string {
 
 // roll makes the attack roll. It returns the roll as gathered, its outcome, and a note for anything that changed the die.
 func (c *attackCtx) roll() (game.AttackRoll, game.AttackOutcome, string) {
+	chargeAtRoll(c.lobby, c.attacker, c.target) // the attacker's move right before this attack (a charge; creature_movement_2024.go)
 	a := c.gather()
 	o := a.Roll()
 	note := ""

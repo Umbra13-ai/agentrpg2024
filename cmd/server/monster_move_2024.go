@@ -135,6 +135,9 @@ func addMonsterMoved(lobbyID, id, feet int) int {
 
 // monsterSpeedList: the stat block's whole Speed line when it lists more than the walking Speed ("40 ft., Fly 80 ft., Swim 40 ft."), else "".
 func monsterSpeedList(id, lobbyID int) string {
+	if form := formSpeedText(lobbyID, id); strings.Count(form, "ft") > 1 { // a Shape-Shift form's Speeds
+		return form
+	}
 	for _, e := range combatEntries(lobbyID) {
 		if asInt(e["id"]) != id {
 			continue
@@ -149,6 +152,12 @@ func monsterSpeedList(id, lobbyID int) string {
 }
 
 func monsterWalkSpeed(id int, lobbyID int) (int, bool) {
+	if form := formSpeedText(lobbyID, id); form != "" { // a Shape-Shift form's Speed (creature_movement_2024.go)
+		var n int
+		if _, err := fmt.Sscanf(strings.TrimPrefix(form, "Speed "), "%d", &n); err == nil {
+			return n, true
+		}
+	}
 	for _, e := range combatEntries(lobbyID) {
 		if asInt(e["id"]) != id {
 			continue
@@ -188,13 +197,18 @@ func noteMonsterMoves(lobbyID int, before, after encounterMap) []string {
 			}
 		}
 		feet := 5 * max(dx, dy)
+		dragNote := ""
+		if double, why := dragCost(lobbyID, old.ID, before, after); double { // dragging a creature it grapples (creature_movement_2024.go)
+			feet *= 2
+			dragNote = "; " + why
+		}
 		moved, onTurn := feet, currentTurnID(lobbyID) == old.ID
 		if onTurn { // on its own turn the moves add up: the Speed is a budget for the whole turn
 			moved = addMonsterMoved(lobbyID, old.ID, feet)
 		}
-		tail := ""
+		tail := dragNote
 		if onTurn && moved != feet {
-			tail = fmt.Sprintf(" (%d ft this turn so far)", moved)
+			tail += fmt.Sprintf(" (%d ft this turn so far)", moved)
 		}
 		base, known := monsterWalkSpeed(old.ID, lobbyID)
 		if !known {

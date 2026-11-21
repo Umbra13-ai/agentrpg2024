@@ -29,6 +29,8 @@ type mapToken struct {
 	Altitude       int          `json:"altitude,omitempty"`         // feet above the ground: a flying creature (Fly, Gaseous Form; spells_more_2024.go)
 	ShareSpaceWith int          `json:"share_space_with,omitempty"` // GM places this token wholly inside the named creature's space
 	FreeTerrain    bool         `json:"-"`                          // Freedom of Movement: Difficult Terrain costs nothing extra (the move handler sets it)
+	SharesSpace    bool         `json:"-"`                          // a Swarm: it can occupy another creature's space and vice versa (markMapSpaces, map_spaces_2024.go)
+	Incorporeal    bool         `json:"-"`                          // it can move through creatures and objects and end its turn inside an object (markMapSpaces)
 	Passable       map[int]bool `json:"-"`                          // tokens whose spaces it may move through (map_spaces_2024.go; the move handler sets it)
 }
 
@@ -93,7 +95,10 @@ func (m encounterMap) validate() error {
 			continue
 		}
 		for _, square := range token.footprint(token.Position) {
-			if blockedTile(m.tile(square)) || occupied[square] != 0 {
+			if blockedTile(m.tile(square)) && !token.Incorporeal { // an incorporeal creature can end inside an object (map_spaces_2024.go)
+				return errors.New("token footprints must fit on open, unoccupied squares")
+			}
+			if other := occupied[square]; other != 0 && !token.SharesSpace && !ids[other].SharesSpace { // a Swarm shares a space, both ways
 				return errors.New("token footprints must fit on open, unoccupied squares")
 			}
 			occupied[square] = token.ID
@@ -390,6 +395,7 @@ func handleBattleMap(w http.ResponseWriter, r *http.Request, campaignID int, rou
 		battleMapError(w, 500, "invalid_stored_map")
 		return
 	}
+	markMapSpaces(campaignID, &m) // which creatures share spaces or pass through objects (map_spaces_2024.go)
 	var initiative []struct {
 		ID int `json:"id"`
 	}
@@ -407,6 +413,7 @@ func handleBattleMap(w http.ResponseWriter, r *http.Request, campaignID int, rou
 			}
 			battleMapReply(w, 200, m)
 		case (r.Method == http.MethodPut && operation == "") || (r.Method == http.MethodPost && operation == "preview"):
+			markMapSpaces(campaignID, &req.Map)
 			if err := req.Map.validate(); err != nil {
 				battleMapReply(w, 400, map[string]string{"error": "invalid_map", "message": err.Error()})
 				return
@@ -455,10 +462,28 @@ func handleBattleMap(w http.ResponseWriter, r *http.Request, campaignID int, rou
 				battleMapError(w, 500, "map_write_failed")
 				return
 			}
+			// a stat-block entry's own move (Teleport, Bubble Dash, Aquatic Charge, Rampage ...): spent by this update (creature_movement_2024.go)
+			specialNoOA, teleported, notSpeed, specialNotes := takeSpecialMoves(campaignID, m, req.Map)
+			for _, note := range specialNotes {
+				recordGMAction(db, campaignID, "monster_move", note, note)
+			}
+			ownMoves := req.Map // the moves that are the creatures' own walking (a teleport is not; an entry's move isn't counted against the Speed)
+			ownMoves.Tokens = append([]mapToken(nil), req.Map.Tokens...)
+			for i, tk := range ownMoves.Tokens {
+				if notSpeed[tk.ID] || teleported[tk.ID] {
+					if old, ok := m.token(tk.ID); ok {
+						ownMoves.Tokens[i].Position, ownMoves.Tokens[i].Altitude = old.Position, old.Altitude
+					}
+				}
+			}
+			noOA := append([]int(nil), req.Disengaged...)
+			for id := range specialNoOA {
+				noOA = append(noOA, id)
+			}
 			// a monster that moved out of a character's reach by its own movement lets that character make an Opportunity Attack;
 			// forced movement (pushed, knocked back), teleporting and Disengage don't provoke (character_oa_2024.go)
 			if !req.ForcedMovement {
-				for _, note := range noteMonstersLeavingReach(campaignID, m, req.Map, req.Disengaged, req.Flying) {
+				for _, note := range noteMonstersLeavingReach(campaignID, m, req.Map, noOA, req.Flying) {
 					recordGMAction(db, campaignID, "opportunity_attack_available", note, note)
 				}
 				for _, note := range autoOpportunityAttacks(campaignID) { // standing reaction orders (F220)
@@ -466,7 +491,8 @@ func handleBattleMap(w http.ResponseWriter, r *http.Request, campaignID int, rou
 				}
 			}
 			if !req.ForcedMovement { // a monster's own movement against its Speed (monster_move_2024.go)
-				for _, note := range noteMonsterMoves(campaignID, m, req.Map) {
+				recordMapMoves(campaignID, m, withoutTeleports(req.Map, m, teleported)) // each token's own move of this turn: a charge reads it (creature_movement_2024.go)
+				for _, note := range noteMonsterMoves(campaignID, m, ownMoves) {
 					recordGMAction(db, campaignID, "monster_move", note, note)
 				}
 			}
@@ -677,6 +703,7 @@ func handleBattleMap(w http.ResponseWriter, r *http.Request, campaignID int, rou
 		battleMapError(w, 500, "map_write_failed")
 		return
 	}
+	recordCreatureMove(campaignID, actor.ID, startToken.Position, actor.Position, actor.Size, len(traversed)*battleMapStepFeet) // a charge reads it (creature_movement_2024.go)
 	reply := map[string]any{"position": actor.Position, "traversed": traversed, "interrupted": actor.Paused, "distance_ft": len(traversed) * battleMapStepFeet, "cost_ft": cost, "movement_remaining_ft": movement - cost, "map": m.playerView(actor)}
 	if len(carried) > 0 {
 		reply["carried"] = carried

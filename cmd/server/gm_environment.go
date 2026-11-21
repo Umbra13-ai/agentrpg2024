@@ -143,14 +143,7 @@ func handleGMFallingDamage(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// Calculate damage: 1d6 per 10 feet, max 20d6 (200 feet)
-	diceCount := req.DistanceFeet / 10
-	if diceCount < 1 {
-		diceCount = 1 // Minimum 1d6 if any fall at all
-	}
-	if diceCount > 20 {
-		diceCount = 20 // Maximum 20d6 at 200+ feet
-	}
+	diceCount := fallDamageDice(req.DistanceFeet) // 1d6 per 10 feet, at most 20d6 (creature_movement_2024.go)
 
 	// Roll the dice
 	rolls, totalDamage := game.RollDice(diceCount, 6)

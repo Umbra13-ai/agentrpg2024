@@ -571,3 +571,53 @@ Protection ("An attack roll hits the wearer of the guardian's amulet while the w
 - **GM by design, asserted**: telepathy and mind links (Probing Telepathy, Telepathic Bond, Shark Telepathy, Bound, Vampiric Connection,
   Shielded Mind; the book's Advanced Telepathy and Telepathic Shroud; any trait worded with telepathy), senses that find things (Iron Scent, Treasure
   Sense), speaking with creatures: `GM` rows of `monsterTraitRules`, shown to the GM as theirs to apply.
+
+## A creature's special and forced movement (`cmd/server/creature_movement_2024.go`, 2026-11-21)
+
+One owner of movement that isn't plain walking, every rule read from the entry's wording (no monster names in code):
+
+- **Charges** ("if it moved 20+ feet straight toward the target immediately before the hit"). Each creature's own move of the
+  turn is recorded: the GM's map update without `forced_movement`, a player's path, a companion's path. The attack roll owner
+  (`attackCtx.roll`) spends it in `chargeAtRoll`. The first attack after the move gets its straight approach toward its target:
+  the feet it closed, counted only when every foot it moved closed them. Later attacks get none.
+  `hitChargeDesc` turns the charge sentences into what applies for that one hit, on the character, monster, companion and
+  companion/Wild Shape routes:
+  - the extra damage becomes one more amount of the hit;
+  - the condition becomes a plain rider;
+  - a follow-up ("can make one Bite attack against it") is left as the GM's sentence;
+  - an alternative amount is the damage owner's `condCharged`.
+
+  Without a battle map the GM says it with the monster_action field `"charged": true`; when it didn't, the reply says that's
+  needed. All 18 SRD charge wordings are read.
+- **Pushes and pulls on a hit** (`hitForcedMove`, through `hitAfterDamage`): "pushes the target up to N feet straight away from
+  itself" and "pulls / moves the target ... straight toward itself", with its size gate. `forceToken` is the one forced movement
+  of a token; Weapon Mastery's Push, the monk features and the items use it too. Without a map the GM places the creature.
+- **An entry that moves its creature** (Teleport, Tree Stride, Bubble Dash, Watery Rush, Aquatic Charge, Rampage, Ink Cloud,
+  Leap): `readSpecialMove` reads:
+  - the distance: feet, or a Speed of the stat block, or half of one;
+  - a teleport;
+  - "without provoking Opportunity Attacks";
+  - "straight toward an enemy";
+  - a jump that "spends N feet of movement".
+
+  `grantSpecialMove` grants it for the turn, and the GM's next map update spends it (`takeSpecialMoves`):
+  - a teleport, or a move without Opportunity Attacks, opens none;
+  - the move doesn't count against the Speed, except a jump's stated cost;
+  - a teleport is not a charge;
+  - a move beyond the allowance is noted.
+- **When an entry may be used:** "Immediately after dealing damage to a creature that is already Bloodied" (Rampage) is refused
+  otherwise (`movementEntryRefusal`, from each hit's `recordLastHit` in `hitAfterDamage`).
+- **Sharing space** (`map_spaces_2024.go`, `markMapSpaces`): a Swarm ("can occupy another creature's space and vice versa")
+  shares a space both ways, in the GM's placement and in a player's or companion's path, which may end there. An incorporeal
+  creature ("can move through other creatures and objects as if they were Difficult Terrain") may stand in a wall or a closed
+  door; the turn-end hook `objectEndDamage` deals "takes 5 (1d10) Force damage if it ends its turn inside an object".
+- **Dragging a creature it grapples** (SRD 5.2.1 Grappled): the move costs double unless the creature is Tiny or two sizes
+  smaller (`dragCost`, read by the Speed note). A trait that says it "needn't spend extra movement to move a creature it is
+  grappling" (Abduct) removes the cost.
+- **A fall** ("The X falls."): falling damage is `fallDamageDice` d6 Bludgeoning, the one rule of a fall's dice, also read by the
+  GM's falling damage. It is taken less what the entry reduces ("reduces any damage it takes from the fall by 20"), from the
+  token's altitude, and the token lands. Without a height the GM is told.
+- **Shape-Shift Speeds:** the forms come from the entry. The GM names one in `use` (`shapeShiftRefusal` refuses any other), and
+  its Speeds stand for the monster's (`formSpeedText`, read by `monsterWalkSpeed` and the Speed list) until it shifts again.
+- **Not modelled:** Standing Leap, Running Leap and Jumper. The battle map has no pits or gaps a jump could cross, so a jump is
+  just part of the move's distance; their traits stay in the GM's stat block.

@@ -5139,6 +5139,10 @@
             },
             "type": "array"
            },
+           "charged": {
+            "description": "the monster moved straight toward the target right before this attack, as far as its charge asks (20+ feet): used only without a battle map (with one, the server reads its move)",
+            "type": "boolean"
+           },
            "confirm_targeting": {
             "description": "the GM confirmed required sight or distance that the server cannot determine",
             "type": "boolean"

@@ -107,8 +107,26 @@ Report: "Wizard Scholar accepts any skill for Expertise."
   `monsterTraitRules`. Go: `TestPostgresObscuredAreasAndSenses`, `TestObscuringAndSenseWordings`.
 - **A monster attack's range on the battle map:** `monsterAttackRange` (`cmd/server/map_rules.go`) for every target route (character, monster,
   companion): refusal beyond reach or long range, Disadvantage beyond normal range, within 5 feet. Go: `TestPostgresMonsterAttackRangeOnEveryTarget`.
-- **What a hit does after its damage:** `hitAfterDamage` (`cmd/server/hit_after_damage_2024.go`), called once by every hit route: the drain
-  below and "it starts burning" (the Burning owner, `burning_2024.go`). A new effect of this kind is one call there. Go: `TestPostgresBurningOnHitEveryTarget`.
+- **A creature's special and forced movement:** `cmd/server/creature_movement_2024.go`, read from the entries' wording.
+  - Each own move of the turn is recorded (`recordCreatureMove`: the GM's map update without forced_movement, a player's path, a
+    companion's path).
+  - A charge is spent by the attack roll (`chargeAtRoll`) and applied per hit (`hitChargeDesc`; the alternative amount is
+    `condCharged`; without a map the monster_action's `charged`).
+  - `forceToken` is the one forced movement of a token (`pushToken` is built on it); a hit's push or pull is `hitForcedMove`,
+    through `hitAfterDamage`.
+  - An entry that moves its creature is `readSpecialMove` / `grantSpecialMove`, spent by the GM's map update
+    (`takeSpecialMoves`: Opportunity Attacks, the Speed budget, no charge for a teleport).
+  - "Immediately after dealing damage to a creature that is already Bloodied" is `movementEntryRefusal`.
+  - Dragging a grappled creature is `dragCost` (Abduct).
+  - A fall is `monsterFalls` with `fallDamageDice` (also the GM's falling damage).
+  - Shape-Shift Speeds are `shapeShift` / `shapeShiftRefusal` / `formSpeedText`.
+  - Sharing space (Swarm, Incorporeal Movement) is `markMapSpaces` in `map_spaces_2024.go`, with the turn-end hook
+    `objectEndDamage`.
+  - Go: `TestChargeWordingsOverTheCatalog`, `TestPostgresChargeOnEveryTarget`, `TestPostgresHitPushOnEveryTarget`,
+    `TestPostgresEntryMovesAndRampageGate`, `TestPostgresSwarmAndIncorporealSpaces`, `TestPostgresShapeShiftFallAndDrag`.
+- **What a hit does after its damage:** `hitAfterDamage` (`cmd/server/hit_after_damage_2024.go`), called once by every hit route with the
+  attacker: the drain below, "it starts burning" (the Burning owner, `burning_2024.go`), a push or pull (`hitForcedMove`) and the hit's
+  record for an entry used right after it (`recordLastHit`). A new effect of this kind is one call there. Go: `TestPostgresBurningOnHitEveryTarget`.
 - **A Hit Point maximum drain** (Life Drain, `cmd/server/hp_max_drain_2024.go`): one reader `hpMaxDrainOf` (all the damage taken, or one
   type: "the Necrotic damage taken") and one writer `reduceHPMaximum` (`reduceMaxHP` for a character, restored by `restoreAllHP`;
   `reduceMonsterMaxHP`, `reduceCompanionMaxHP`). A hit: `drainHPMaximum` through `hitAfterDamage`, with what each damage type dealt

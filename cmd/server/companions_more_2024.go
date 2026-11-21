@@ -92,6 +92,12 @@ func monsterAttacksCompanion(lobbyID, attackerID int, attackerName string, chose
 			continue
 		}
 		hits++
+		if len(a.Alts) > 0 { // only a charge's alternative reaches here (prepareUnconditionalAttack)
+			a = applyDamageAlternatives(a, hitCondition{ChargedFeet: chargedFeet(lobbyID, attackerID, cur.CombatID)})
+		}
+		chargeNote := ""
+		a.Desc, chargeNote = hitChargeDesc(lobbyID, attackerID, cur.CombatID, a.Desc) // a charge's effect for this hit (creature_movement_2024.go)
+		rollNote += chargeNote
 		parts := []extraDamage{{Dice: a.DamageDice, Type: a.DamageType}}
 		for _, x := range attackExtraDamage(a.Desc) {
 			if x.IfAdvantage && !rolled.HasAdvantage() {
@@ -272,6 +278,7 @@ func companionMapMove(w http.ResponseWriter, r *http.Request, tx *sql.Tx, campai
 		return
 	}
 	companionMoved.Store(c.ID, fmt.Sprintf("%s|%d", marker, companionMoveUsed(c.ID, marker)+cost))
+	recordCreatureMove(campaignID, actor.ID, startToken.Position, actor.Position, actor.Size, len(traversed)*battleMapStepFeet) // a charge reads it (creature_movement_2024.go)
 	reply := map[string]any{"position": actor.Position, "traversed": traversed, "cost_ft": cost, "movement_remaining_ft": movement - cost, "companion": c.Name, "map": m.playerView(actor)}
 	if len(carried) > 0 {
 		reply["carried"] = carried

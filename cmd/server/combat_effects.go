@@ -174,74 +174,10 @@ func sprintAny(v interface{}) string {
 	return fmt.Sprint(v)
 }
 
-// pushToken moves the target's token up to feet feet straight away from the pusher on the encounter's battle map.
-// It returns how many feet it moved and whether there was a map with both tokens. A wall, a closed door or another
-// creature stops it. The map's revision changes so stale path submissions are refused.
+// pushToken moves the target's token up to feet feet straight away from the pusher on the encounter's battle map (forceToken,
+// creature_movement_2024.go). It returns how many feet it moved and whether there was a map with both tokens.
 func pushToken(lobbyID, pusherID, targetID, feet int) (int, bool) {
-	var raw []byte
-	if db.QueryRow(`SELECT battle_map FROM combat_state WHERE lobby_id = $1 AND active = true`, lobbyID).Scan(&raw) != nil || len(raw) == 0 {
-		return 0, false
-	}
-	var m encounterMap
-	if json.Unmarshal(raw, &m) != nil {
-		return 0, false
-	}
-	var a, b *mapToken
-	for i := range m.Tokens {
-		switch m.Tokens[i].ID {
-		case pusherID:
-			a = &m.Tokens[i]
-		case targetID:
-			b = &m.Tokens[i]
-		}
-	}
-	if a == nil || b == nil {
-		return 0, false
-	}
-	sign := func(n int) int {
-		switch {
-		case n > 0:
-			return 1
-		case n < 0:
-			return -1
-		}
-		return 0
-	}
-	dx, dy := sign(b.Position.X-a.Position.X), sign(b.Position.Y-a.Position.Y)
-	if dx == 0 && dy == 0 {
-		return 0, true
-	}
-	moved := 0
-	for step := 0; step < feet/battleMapStepFeet; step++ {
-		next := mapSquare{b.Position.X + dx, b.Position.Y + dy}
-		free := true
-		for _, sq := range b.footprint(next) {
-			if blockedTile(m.tile(sq)) {
-				free = false
-			}
-			for i := range m.Tokens {
-				if m.Tokens[i].ID == b.ID {
-					continue
-				}
-				for _, o := range m.Tokens[i].footprint(m.Tokens[i].Position) {
-					if o == sq {
-						free = false
-					}
-				}
-			}
-		}
-		if !free {
-			break
-		}
-		b.Position = next
-		moved += battleMapStepFeet
-	}
-	if moved > 0 {
-		m.Revision = mapRevision()
-		out, _ := json.Marshal(m)
-		db.Exec(`UPDATE combat_state SET battle_map = $1 WHERE lobby_id = $2`, string(out), lobbyID)
-	}
-	return moved, true
+	return forceToken(lobbyID, pusherID, targetID, feet, false)
 }
 
 // Damage riders: extra damage of another type that an attack carries (Radiant Strikes and Divine Smite are Radiant,
