@@ -74,6 +74,12 @@ Report: "Wizard Scholar accepts any skill for Expertise."
   An action that offers several named effects (splitSaveOptions) is refused until the GM names one in `use`; a size-gated
   condition (saveEffect.conditionsFor) and a staged "Second Failure" go through the same owner, never a per-monster branch.
   The conditions a stat-block hit gives (parseHitRider, giveConditions) are read and applied by that same owner.
+  A condition's time is read once (`readRider`): "for N minutes/hours" and a rolled "for 1d4 hours" (`conditionDuration`, rolled for each
+  target in `conditionAdd`; never an immunity's "for 24 hours"), "or until it takes damage" (an Unconscious ended by `wakeOnDamageSleep`);
+  "(Constructs and Undead succeed automatically)" is `AutoSucceedTypes`, read by `rollForTarget` for every target kind. **An aura at the end
+  of the monster's turn** (`runMonsterEndAuras`): damage (`endAuraRe`) or a saving throw (`saveEndAuraRe`, `endSaveAura`, a success's
+  immunity honored); "of its choice" is its enemies (`chosenAuraTargets`). Go: `TestPostgresBookTimedAndLinkedConditions`,
+  `TestPostgresBookEndOfTurnAuras`.
 - **A creature's Speed** (`cmd/server/speed_owner_2024.go`): `characterSpeed` asks the one owner for conditions (Speed 0), spells (Slow, Haste),
   weapon-mastery effects and stat-block Speed riders (`speed_halved`, `speed_zero`, `speed_minus` markers); a character's movement budget
   follows a Speed that changes mid-turn (`settleMovement`). Effects whose result depends on an order the rules supplied do not give are never computed: the GM rules
@@ -244,6 +250,8 @@ Add to the owner, never beside it. When you give another rule one owner, add it 
   with the record as combat_effects rows gated on that record (`gate_condition`: a no_healing row and a recurring_damage row the
   recurring owner ticks, `monster_recurring_damage_2024.go`); the record's end ends them; `conditionView`'s `effects` shows them.
   A text's damage dealt now is `immediateDamage`: never a damage "at the start (or end) of each of ... turns" (feedback log 63).
+  "While Frightened, the target has the Paralyzed condition" (`lastingEffects.Also`) is a record noted `notesEndsWith`+"frightened",
+  ended with that record by `conditionChange.remove` (the one place every record ends); Grappled's Restrained stays `linkedCondition`.
   **The conditions a spell ends** (Heal, Mass Heal, Power Word Heal, Protection from Poison, Lesser and Greater Restoration's
   pick): the table `spellEndsConditions` with `endSpellConditions` (`spell_ends_conditions_2024.go`); a healing spell ends them
   before it heals (feedback log 64). A new spell that ends conditions is one row.

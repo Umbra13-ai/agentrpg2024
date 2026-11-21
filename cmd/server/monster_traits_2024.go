@@ -49,7 +49,9 @@ var monsterTraitRules = []monsterTraitRule{
 	{Match: startAuraRe, Does: "an aura: each enemy that starts its turn in it makes the saving throw", Where: "monster_features_2024.go", Aura: true},
 	{Match: rollTraitRe, Does: "Advantage on its attack rolls (melee ones when the trait says so), and on its saving throws when the trait says so, while it is Bloodied or against a target that doesn't have all its Hit Points, as its trait says",
 		Where: "rollTraitAdvantage (monster_traits_2024.go), read by attackSources and saveSources"},
-	{Match: endAuraRe, Does: "an aura: each creature in it takes the damage at the end of the monster's turn", Where: "monster_features_2024.go", Aura: true},
+	{Match: endAuraRe, Does: "an aura: each creature in it (of its choice: its enemies) takes the damage at the end of the monster's turn", Where: "monster_features_2024.go", Aura: true},
+	{Match: saveEndAuraRe, Does: "an aura: each creature in it (of its choice: its enemies) makes the saving throw at the end of the monster's turn; one that is immune to it after a success is left out",
+		Where: "endSaveAura (monster_features_2024.go)", Aura: true},
 }
 
 // traitName: a trait's name without its parenthesis ("Legendary Resistance (3/Day, or 4/Day in Lair)" -> "Legendary Resistance").

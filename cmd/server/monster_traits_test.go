@@ -14,6 +14,8 @@ func TestMonsterTraitsHaveOneOwner(t *testing.T) {
 	importedExamples := []srdMonsterEntry{
 		{Name: "Agile", Text: "Its movement doesn't provoke Opportunity Attacks."},
 		{Name: "Thunder Daze", Text: "If the creature takes Thunder damage, it has Disadvantage on attack rolls and ability checks until the end of its next turn."},
+		// a saving throw aura at the end of the monster's turn (invented with a Monster Manual pattern: Manes Vaporspawn)
+		{Name: "Choking Fumes", Text: "Constitution Saving Throw: DC 12, each creature in a 5-foot Emanation originating from the wretch at the end of the wretch's turn. Failure: The target has the Incapacitated condition until the end of its next turn. Success: The target is immune to this wretch's Choking Fumes for 24 hours."},
 	}
 	all := map[string]int{}
 	applied := map[string]bool{}
