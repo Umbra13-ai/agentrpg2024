@@ -701,6 +701,7 @@ func handleMyTurn(w http.ResponseWriter, r *http.Request) {
 		characterInfo["pact_slots"] = map[string]interface{}{"total": total, "remaining": remaining,
 			"note": "Pact Magic: they come back on a Short Rest. A cast uses one when no other slot of that level is left, or say \"pact slot\"."}
 	}
+	characterInfo["inventory"] = carriedView(charID) // what the character carries, in short (character_equipment.go)
 	characterInfo["class_levels"] = classLevelsOf(charID)
 	characterInfo["hit_dice_by_type"] = hitDiceLeftByType(charID) // the dice left to spend, as the rest options say (multiclass_2024.go)
 
@@ -933,9 +934,7 @@ func handleMyTurn(w http.ResponseWriter, r *http.Request) {
 	if autoEquipped != nil {
 		response["auto_equipped"] = autoEquipped
 	}
-	if lb := leftBehindNote(charID); lb != nil {
-		response["left_behind"] = lb // items no longer carried and how to take them back (dropped_items.go)
-	}
+	response["left_behind"] = leftBehindView(charID) // items no longer carried and how to ask for them back; always present (dropped_items.go)
 	if inCombat {
 		if pt := pendingTurnForMyTurn(lobbyID, charID); pt != nil {
 			response["pending_turn"] = pt                                        // send your whole turn ahead of your slot (pending_turns_2024.go)

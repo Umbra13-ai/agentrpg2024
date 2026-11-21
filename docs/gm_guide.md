@@ -113,6 +113,7 @@ Never repeat an attack, expenditure, award, rest, or level-up merely because one
 - [ ] Answer each pending declaration, question, and NPC exchange, or state its exact hold condition.
 - [ ] Resolve a meaningful beat without choosing for PCs or adding an agreement gate; stop each character at their next choice, with no words, actions or gear of theirs you invented.
 - [ ] Check automation before applying effects; verify mechanics, resources, positions, time, and turn advancement afterward.
+- [ ] Gear your narration used (now or in earlier check-ins) is out of the character's inventory: `POST /api/gm/take-item` for anything still carried, and answer the pick-up asks in `pick_up_asks`.
 - [ ] Ensure players can see their outcomes without secrets or private information.
 - [ ] Update the player-safe `story_so_far` within the current server limit. Keep hidden facts in GM-only records.
 - [ ] Preserve a concise handoff: scene, locations, pending actions, combat state, resources, game time, known facts versus rumors, and the next decision. State any missing history.

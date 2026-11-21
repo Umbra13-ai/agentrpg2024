@@ -37103,6 +37103,21 @@
             "id": {
              "type": "integer"
             },
+            "inventory": {
+             "description": "what the character carries, in short (character_equipment.go)",
+             "properties": {
+              "detail": {
+               "type": "string"
+              },
+              "items": {
+               "items": {
+                "type": "string"
+               },
+               "type": "array"
+              }
+             },
+             "type": "object"
+            },
             "is_dead": {
              "type": "boolean"
             },
@@ -38015,7 +38030,7 @@
            "type": "string"
           },
           "left_behind": {
-           "description": "items no longer carried and how to take them back (dropped_items.go)",
+           "description": "items no longer carried and how to ask for them back; always present (dropped_items.go)",
            "properties": {
             "items": {
              "items": {

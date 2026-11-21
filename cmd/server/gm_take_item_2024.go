@@ -57,7 +57,7 @@ func handleGMTakeItem(w http.ResponseWriter, r *http.Request) {
 		where = "on the ground"
 	}
 	reply := map[string]interface{}{"success": true, "dropped_id": res.DroppedID, "name": res.Name, "quantity": res.Quantity, "items_inside": res.Contents,
-		"where": where, "player_sees": leftBehindNote(req.CharacterID)}
+		"where": where, "player_sees": leftBehindView(req.CharacterID)}
 	if res.Attunement != "" {
 		reply["attunement_ended"] = res.Attunement
 	}

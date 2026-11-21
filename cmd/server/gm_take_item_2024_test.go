@@ -82,7 +82,10 @@ func TestPostgresGMTakeItemLeavesItWhereTheStoryPutIt(t *testing.T) {
 	if c, j := pgCall(t, "POST", ground+"approve", gm, nil); c != 200 || !carries() {
 		t.Fatalf("approve: %d %v", c, j)
 	}
-	if _, mt = pgCall(t, "GET", "/api/my-turn", tok, nil); mt["left_behind"] != nil {
-		t.Errorf("left_behind stays after the pick-up: %v", mt["left_behind"])
+	if _, mt = pgCall(t, "GET", "/api/my-turn", tok, nil); !strings.Contains(fmt.Sprint(mt["left_behind"]), "items:[]") {
+		t.Errorf("left_behind after the pick-up (an empty list): %v", mt["left_behind"])
+	}
+	if inv := fmt.Sprint(mt["character"].(map[string]interface{})["inventory"]); !strings.Contains(inv, "Blanket") || !strings.Contains(inv, "/equipment") {
+		t.Errorf("my-turn's inventory: %s", inv)
 	}
 }

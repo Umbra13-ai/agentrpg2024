@@ -783,3 +783,20 @@ func isWeaponItem(it invItem) bool {
 	}
 	return namedWeaponFor(itemStr(it, "name")) != nil
 }
+
+// carriedView: what the character carries, in short (each item and how many; lost bags left out), for GET /api/my-turn, with the
+// request that shows it in full (where each item is, weights, charges). Playtest: a player couldn't check what it still carried.
+func carriedView(charID int) map[string]interface{} {
+	items := []string{}
+	for _, it := range inventoryOf(charID) {
+		name := strings.TrimSpace(itemStr(it, "name"))
+		if name == "" {
+			continue
+		}
+		if q := itemQty(it); q > 1 {
+			name = fmt.Sprintf("%s x%d", name, q)
+		}
+		items = append(items, name)
+	}
+	return map[string]interface{}{"items": items, "detail": fmt.Sprintf("GET /api/characters/%d/equipment", charID)}
+}

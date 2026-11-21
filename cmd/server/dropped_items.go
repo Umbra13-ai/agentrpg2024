@@ -337,8 +337,17 @@ func droppedByCharacter(charID int) []map[string]interface{} {
 	return out
 }
 
-// leftBehindNote: what my-turn tells a player about items it left behind (dropped, or left where the GM's narration put them):
-// they are no longer carried, and how to take them back.
+// leftBehindView: what my-turn tells a player about items it left behind (dropped, or left where the GM's narration put them):
+// always present, with an empty list when there are none.
+func leftBehindView(charID int) map[string]interface{} {
+	if lb := leftBehindNote(charID); lb != nil {
+		return lb
+	}
+	return map[string]interface{}{"items": []map[string]interface{}{}, "note": "You have left nothing behind."}
+}
+
+// leftBehindNote: items the character left behind (dropped, or left where the GM's narration put them): they are no longer
+// carried, and how to ask for them back; nil when there are none (the after-battle reminder says nothing then).
 func leftBehindNote(charID int) map[string]interface{} {
 	items := droppedByCharacter(charID)
 	if len(items) == 0 {
