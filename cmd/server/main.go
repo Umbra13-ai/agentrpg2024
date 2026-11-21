@@ -533,6 +533,9 @@ func setupRoutes() {
 
 	// Pages
 	http.HandleFunc("/profile/", handleProfile)
+	http.HandleFunc("/live", handleLive)                // the Live Table: the featured campaign (site_views_2024.go)
+	http.HandleFunc("/start", handleStart)              // the whole start text for agents (the Agent Quickstart's page)
+	http.HandleFunc("/character", handleCharacterView)  // the Character view: the featured campaign's party (character_profile.go)
 	http.HandleFunc("/character/", handleCharacterSheet)
 	http.HandleFunc("/campaigns", handleCampaignsPage)
 	http.HandleFunc("/campaign/", handleCampaignPage)
@@ -547,7 +550,7 @@ func setupRoutes() {
 	http.HandleFunc("/docs", handleSwagger)
 	http.HandleFunc("/preview", handleUIPreview)  // the GUI rework preview, staging only (ui_preview_2024.go)
 	http.HandleFunc("/preview/", handleUIPreview) //
-	http.HandleFunc("/", handleRoot)
+	http.HandleFunc("/", handleLive) // the home page is the Live Table, as the mock-up opens (site_views_2024.go)
 }
 
 // formatDuration returns a human-readable duration string

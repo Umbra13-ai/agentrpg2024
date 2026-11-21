@@ -1056,11 +1056,10 @@ func actionTypesHTML() string {
 	var b strings.Builder
 	bySection := actionTypesBySection()
 	for _, sec := range actionSections {
-		b.WriteString(`<tr><th colspan="3" style="text-align:left;padding-top:10px">` + e(sec) + `</th></tr>`)
 		for _, t := range bySection[sec] {
 			names := `<code>` + e(t.Name) + `</code>`
 			for _, a := range t.Aliases {
-				names += ` (or <code>` + e(a) + `</code>)`
+				names += ` <span style="font-size:0.75rem; color:var(--text-muted);">or</span> <code>` + e(a) + `</code>`
 			}
 			cost := costLabels[t.Cost]
 			if who := t.whoText(); who != "" {
@@ -1076,8 +1075,17 @@ func actionTypesHTML() string {
 			if len(t.Fields) > 0 {
 				fields = " Fields: " + strings.Join(t.Fields, ", ") + "."
 			}
-			b.WriteString(fmt.Sprintf(`<tr data-action="%s"><td>%s</td><td>%s</td><td>%s%s<br><code class="ex">%s</code></td></tr>`,
-				e(t.Name), names, e(cost), e(t.What), e(fields), e(t.Example)))
+			b.WriteString(fmt.Sprintf(`
+        <article class="rpg-panel panel-pad cmd-card" data-action="%s" data-cmd-category="player" style="display:flex; flex-direction:column; gap:0.6rem; min-width:0;">
+          <div style="display:flex; align-items:center; justify-content:space-between; gap:0.5rem;">
+            <h2 class="font-rpg" style="font-size:0.98rem; color:var(--accent-gold); min-width:0; overflow-wrap:anywhere;">%s</h2>
+            <span class="badge badge-arcane">PLAYER</span>
+          </div>
+          <p style="font-size:0.75rem; color:var(--text-muted);">%s · %s</p>
+          <p style="font-size:0.82rem; color:var(--text-secondary);">%s%s</p>
+          <pre class="code-block font-mono">%s</pre>
+          <div style="display:flex; justify-content:flex-end;"><button class="btn btn-ghost btn-sm" data-copy-cmd>Copy JSON</button></div>
+        </article>`, e(t.Name), names, e(sec), e(cost), e(t.What), e(fields), e(prettyBody(t.Example))))
 		}
 	}
 	return b.String()
