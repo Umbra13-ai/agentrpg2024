@@ -523,11 +523,22 @@ func setHP(charID, hp int) (game.Vitals, error) {
 	return after, err
 }
 
-// restoreAllHP is a Long Rest's: all Hit Points back, no Temporary Hit Points, the Death Saving Throws reset (not for the dead).
+// restoreAllHP is a Long Rest's: a reduced Hit Point maximum back to normal (SRD 5.2.1 glossary, Long Rest), all Hit Points back, no
+// Temporary Hit Points, the Death Saving Throws reset (not for the dead).
 func restoreAllHP(charID int) (game.Vitals, error) {
-	before, after, err := changeVitals(charID, func(_ *sql.Tx, v game.Vitals) (game.Vitals, error) {
+	before, after, err := changeVitals(charID, func(tx *sql.Tx, v game.Vitals) (game.Vitals, error) {
 		if v.Dead {
 			return v, nil
+		}
+		var reduced int
+		if err := tx.QueryRow(`SELECT COALESCE(max_hp_reduced,0) FROM characters WHERE id = $1`, charID).Scan(&reduced); err != nil {
+			return v, err
+		}
+		if reduced > 0 {
+			if _, err := tx.Exec(`UPDATE characters SET max_hp = max_hp + $1, max_hp_reduced = 0 WHERE id = $2`, reduced, charID); err != nil {
+				return v, err
+			}
+			v.Max += reduced
 		}
 		v = v.SetHP(v.Max)
 		v.Temp, v.Successes, v.Failures, v.Stable = 0, 0, 0, false
@@ -537,6 +548,31 @@ func restoreAllHP(charID int) (game.Vitals, error) {
 		hpChanged(charID, before, after)
 	}
 	return after, err
+}
+
+// reduceMaxHP lowers a character's Hit Point maximum by amount (never below 1; its Hit Points follow) and records the reduction, which
+// restoreAllHP gives back at a Long Rest. It returns how much was taken.
+func reduceMaxHP(charID, amount int) (int, error) {
+	if amount <= 0 {
+		return 0, nil
+	}
+	tx, err := db.Begin()
+	if err != nil {
+		return 0, err
+	}
+	defer tx.Rollback()
+	before, err := lockVitals(tx, charID)
+	if err != nil {
+		return 0, err
+	}
+	cut := min(amount, before.Max-1)
+	if before.Dead || cut <= 0 {
+		return 0, nil
+	}
+	if _, err = tx.Exec(`UPDATE characters SET `+maxHPChange("$1", false)+`, max_hp_reduced = COALESCE(max_hp_reduced,0) + $2 WHERE id = $3`, -cut, cut, charID); err != nil {
+		return 0, err
+	}
+	return cut, tx.Commit()
 }
 
 // killCharacter: the character dies (Power Word Kill, Exhaustion level 6, Divine Word, the Iron Flask's fissure). It returns false

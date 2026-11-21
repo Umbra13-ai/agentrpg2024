@@ -139,7 +139,7 @@ var sizeOrder = map[string]int{"tiny": 0, "small": 1, "medium": 2, "large": 3, "
 // battle map; without a map the player is told the distance and the GM places the creature.
 func pushText(lobbyID, charID, targetID int, name, monsterKey string, feet int) string {
 	var size string
-	db.QueryRow(`SELECT COALESCE(size,'medium') FROM monsters WHERE slug = $1`, monsterKey).Scan(&size)
+	monsterQueryRow(`SELECT COALESCE(size,'medium') FROM monsters WHERE slug = $1`, monsterKey).Scan(&size)
 	if o, ok := sizeOrder[strings.ToLower(strings.SplitN(size, " ", 2)[0])]; ok && o > sizeOrder["large"] {
 		return fmt.Sprintf(" Push: %s is too big to be pushed (Large or smaller only).", name)
 	}
@@ -251,7 +251,7 @@ func resetTurnFlags(charID, speed int) {
 	endUntilNextTurn(charID) // Dodge and Reckless Attack last until the start of your next turn (dodge_2024.go)
 	// the basic resources first, so a database that lacks a newer column still gets its turn back
 	db.Exec(`UPDATE characters SET action_used = false, bonus_action_used = false, weapon_interaction_used = false,
-		movement_remaining = $1, reaction_used = false WHERE id = $2`, speed, charID)
+		movement_remaining = $1, movement_speed_base = $1, reaction_used = false WHERE id = $2`, speed, charID)
 	// Champion level 10, Heroic Warrior: in combat you can give yourself Heroic Inspiration whenever you start your turn without it
 	db.Exec(`UPDATE characters SET inspiration = true WHERE id = $1 AND class = 'fighter' AND subclass = 'champion' AND level >= 10 AND COALESCE(inspiration,false) = false`, charID)
 	clearUses(charID, "peerless_aim", "apotheosis", "eldritch_smite", deathSaveTurnKey) // Boon of Combat Prowess returns at the start of your turn; a new turn's Death Saving Throw

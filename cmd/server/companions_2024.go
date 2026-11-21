@@ -30,7 +30,6 @@ import (
 	"html"
 	"net/http"
 	"os"
-	"regexp"
 	"strings"
 	"sync"
 
@@ -42,13 +41,16 @@ const companionIDBase = 1000000000 // companions' ids in a turn order (character
 func isCompanionCombatID(id int) bool { return id >= companionIDBase }
 
 type compAttack struct {
-	Name      string `json:"name"`
-	Bonus     int    `json:"bonus"`
-	Dice      string `json:"dice"`
-	Type      string `json:"type"`
-	Extra     string `json:"extra,omitempty"`      // extra dice of another type (Giant Insect: 1d4 Poison)
-	ExtraType string `json:"extra_type,omitempty"` // that type
-	Count     int    `json:"count"`                // attacks per turn (Multiattack)
+	DamageChoices []string `json:"damage_choices,omitempty"`
+	StatBlockText string   `json:"stat_block_text,omitempty"`
+	FlatDamage    *int     `json:"flat_damage,omitempty"`
+	Name          string   `json:"name"`
+	Bonus         int      `json:"bonus"`
+	Dice          string   `json:"dice"`
+	Type          string   `json:"type"`
+	Extra         string   `json:"extra,omitempty"`      // extra dice of another type (Giant Insect: 1d4 Poison)
+	ExtraType     string   `json:"extra_type,omitempty"` // that type
+	Count         int      `json:"count"`                // attacks per turn (Multiattack)
 }
 
 type compTrait struct {
@@ -149,6 +151,7 @@ func campaignCompanions(lobbyID int) []companion {
 
 func endCompanion(id int, reason string) {
 	db.Exec(`UPDATE companions SET status = 'gone', end_reason = $1, ended_at = NOW() WHERE id = $2 AND status <> 'gone'`, reason, id)
+	removeConditionsWhere(0, companionIDBase+id, func(conditionRecord) bool { return true }) // a gone companion keeps no conditions (a dismissed one is not gone: its records stay); through the condition owner
 }
 
 // syncCompanionEndings ends summons whose Concentration ended and steeds whose owner died.
@@ -218,42 +221,13 @@ var chainForms = []string{"pseudodragon", "sphinx of wonder", "venomous snake", 
 // formAttacks: the attacks in a monster's stat block (the familiar's own attacks, used through Pact of the Chain).
 func formAttacks(slug string) []compAttack {
 	var raw []byte
-	db.QueryRow(`SELECT COALESCE(actions,'[]') FROM monsters WHERE slug = $1`, slug).Scan(&raw)
-	var acts []map[string]interface{}
-	json.Unmarshal(raw, &acts)
-	var out []compAttack
-	for _, a := range acts {
-		b := asInt(a["attack_bonus"])
-		desc := fmt.Sprint(a["desc"])
-		if b == 0 || !strings.Contains(desc, "Attack Roll") {
-			continue
-		}
-		at := compAttack{Name: fmt.Sprint(a["name"]), Bonus: b, Dice: fmt.Sprint(a["damage_dice"]), Type: fmt.Sprint(a["damage_type"]), Count: 1}
-		if at.Dice == "" || at.Dice == "<nil>" {
-			// flat damage ("Hit: 1 Slashing damage"): 1d1 plus the rest
-			m := flatHitRe.FindStringSubmatch(desc)
-			if m == nil {
-				continue
-			}
-			n := atoiSafe(m[1])
-			at.Dice = fmt.Sprintf("1d1+%d", n-1)
-			if n <= 1 {
-				at.Dice = "1d1"
-			}
-			at.Type = m[2]
-		}
-		if m := plusDamageRe.FindStringSubmatch(desc); m != nil { // "plus 7 (2d6) Poison damage"
-			at.Extra, at.ExtraType = m[1], m[2]
-		}
-		out = append(out, at)
+	monsterQueryRow(`SELECT COALESCE(actions,'[]') FROM monsters WHERE slug = $1`, slug).Scan(&raw)
+	var rows []monsterActionRow
+	if json.Unmarshal(raw, &rows) != nil {
+		return nil
 	}
-	return out
+	return companionRows(rows)
 }
-
-var (
-	flatHitRe    = regexp.MustCompile(`Hit: (\d+) ([A-Za-z]+) damage`)
-	plusDamageRe = regexp.MustCompile(`plus \d+ \((\d+d\d+(?: ?\+ ?\d+)?)\) ([A-Za-z]+) damage`)
-)
 
 func atoiSafe(s string) int {
 	n := 0
@@ -303,7 +277,7 @@ func companionFromSpell(charID int, spellKey string, slot int, description strin
 		ctype := pickWord(description, []string{"celestial", "fey", "fiend"}, "fey")
 		var mname, speed string
 		var hp, ac int
-		if db.QueryRow(`SELECT name, hp, ac, COALESCE(speed_text,'') FROM monsters WHERE slug = $1`, form).Scan(&mname, &hp, &ac, &speed) != nil {
+		if monsterQueryRow(`SELECT name, hp, ac, COALESCE(speed_text,'') FROM monsters WHERE slug = $1`, form).Scan(&mname, &hp, &ac, &speed) != nil {
 			return " (The familiar's form wasn't found.)"
 		}
 		name := fmt.Sprintf("%s's %s", owner, mname)
@@ -327,7 +301,7 @@ func companionFromSpell(charID int, spellKey string, slot int, description strin
 			}
 		}
 		id := insert(companion{Kind: "familiar", Name: name, Form: form, CreatureType: ctype, MaxHP: hp, AC: ac, Speed: speed, Attacks: formAttacks(form), Notes: notes})
-		db.Exec(`UPDATE companions SET traits = (SELECT COALESCE(traits,'[]') FROM monsters WHERE slug = $1) WHERE id = $2`, form, id)
+		monsterExec(`UPDATE companions SET traits = (SELECT COALESCE(traits,'[]') FROM monsters WHERE slug = $1) WHERE id = $2`, form, id)
 		addOwnInitiativeEntry(lobbyID, id)
 		return fmt.Sprintf(" %s appears (%s, HP %d, AC %d)."+how(id, name), name, ctype, hp, ac)
 	case "find-steed":
@@ -395,7 +369,7 @@ func addOwnInitiativeEntry(lobbyID, companionID int) {
 		return
 	}
 	var dex int
-	db.QueryRow(`SELECT COALESCE(dex,10) FROM monsters WHERE slug = $1`, c.Form).Scan(&dex)
+	monsterQueryRow(`SELECT COALESCE(dex,10) FROM monsters WHERE slug = $1`, c.Form).Scan(&dex)
 	init := game.RollInitiative(game.Modifier(dex), 0)
 	entry := map[string]interface{}{"id": c.CombatID, "name": c.Name, "initiative": init, "dex_score": dex, "is_companion": true, "owner_id": c.OwnerID}
 	changeFight(lobbyID, func(f *fight) error { // its place by Initiative; whose turn it is doesn't change (combat_state_2024.go)
@@ -422,7 +396,7 @@ func familiarTurnEntries(lobbyID int) []map[string]interface{} {
 			continue
 		}
 		var dex int
-		db.QueryRow(`SELECT COALESCE(dex,10) FROM monsters WHERE slug = $1`, c.Form).Scan(&dex)
+		monsterQueryRow(`SELECT COALESCE(dex,10) FROM monsters WHERE slug = $1`, c.Form).Scan(&dex)
 		out = append(out, map[string]interface{}{"id": c.CombatID, "name": c.Name, "initiative": game.RollInitiative(game.Modifier(dex), 0),
 			"dex_score": dex, "is_companion": true, "owner_id": c.OwnerID})
 	}
@@ -577,6 +551,14 @@ func handleCompanionAction(w http.ResponseWriter, charID, lobbyID, companionID i
 		reply(400, map[string]interface{}{"success": false, "error": "companion_not_present", "message": c.Name + " isn't here (" + c.Status + ")."})
 		return
 	}
+	if action == "attack" {
+		plan, problem := prepareCompanionPlan(c, description)
+		if problem != "" {
+			reply(400, map[string]interface{}{"success": false, "error": "unsupported_attack_damage", "message": problem})
+			return
+		}
+		c.Attacks = plan
+	}
 	if action == "attack" && c.Kind == "familiar" {
 		familiarAttack(w, c, charID, lobbyID, round, current, inCombat, description, targetID, ownerName)
 		return
@@ -608,11 +590,9 @@ func handleCompanionAction(w http.ResponseWriter, charID, lobbyID, companionID i
 			reply(400, map[string]interface{}{"success": false, "error": "invalid_target", "message": why})
 			return
 		}
-		var lines []string
-		for _, a := range c.Attacks {
-			for i := 0; i < maxInt(1, a.Count); i++ {
-				lines = append(lines, companionAttack(lobbyID, c, a, targetID))
-			}
+		lines, err := companionAttackPlan(lobbyID, c, c.Attacks, targetID)
+		if err != nil {
+			addGMNotice(lobbyID, "A companion attack plan could not finish; reconcile its saved work before continuing.")
 		}
 		text = fmt.Sprintf("%s attacks: %s", c.Name, strings.Join(lines, " "))
 	case "help":
@@ -654,6 +634,16 @@ func familiarAttack(w http.ResponseWriter, c companion, charID, lobbyID, round, 
 		reply(400, map[string]interface{}{"success": false, "error": "not_your_turn", "message": "Your familiar attacks on your turn, when you take the Attack action (Pact of the Chain)."})
 		return
 	}
+	if okT, why := validateAttackTarget(lobbyID, targetID); !okT {
+		reply(400, map[string]interface{}{"success": false, "error": "invalid_target", "message": why})
+		return
+	}
+	plan, problem := prepareCompanionPlan(c, description)
+	if problem != "" {
+		reply(400, map[string]interface{}{"success": false, "error": "unsupported_attack_damage", "message": problem})
+		return
+	}
+	c.Attacks = plan
 	low := strings.ToLower(description)
 	quick := hasInvocation(charID, "investment-of-the-chain-master") && strings.Contains(low, "quick")
 	var how string
@@ -673,6 +663,10 @@ func familiarAttack(w http.ResponseWriter, c companion, charID, lobbyID, round, 
 			reply(400, map[string]interface{}{"success": false, "error": "reaction_used", "message": c.Name + " has already used its Reaction this round."})
 			return
 		}
+		if why := companionCantReact(lobbyID, c); why != "" {
+			reply(400, map[string]interface{}{"success": false, "error": "cant_take_reactions", "message": why})
+			return
+		}
 		var actionUsed bool
 		var remaining sql.NullInt32
 		db.QueryRow(`SELECT COALESCE(action_used,false), attacks_remaining FROM characters WHERE id = $1`, charID).Scan(&actionUsed, &remaining)
@@ -683,10 +677,6 @@ func familiarAttack(w http.ResponseWriter, c companion, charID, lobbyID, round, 
 		consumeAttackAction(charID) // one of the owner's attacks is given up
 		db.Exec(`UPDATE companions SET reaction_round = $1, reaction_lobby = $2 WHERE id = $3`, round, lobbyID, c.ID)
 		how = fmt.Sprintf("%s forgoes one attack; the familiar attacks with its Reaction (Pact of the Chain)", ownerName)
-	}
-	if okT, why := validateAttackTarget(lobbyID, targetID); !okT {
-		reply(400, map[string]interface{}{"success": false, "error": "invalid_target", "message": why})
-		return
 	}
 	a := c.Attacks[0]
 	if hasInvocation(charID, "investment-of-the-chain-master") && (strings.Contains(low, "radiant") || strings.Contains(low, "necrotic")) &&
@@ -700,6 +690,21 @@ func familiarAttack(w http.ResponseWriter, c companion, charID, lobbyID, round, 
 	text := fmt.Sprintf("%s: %s. %s", c.Name, how, companionAttack(lobbyID, c, a, targetID))
 	writeAction(db, lobbyID, charID, "companion", text, "")
 	reply(200, map[string]interface{}{"success": true, "result": text, "companion": companionView(mustCompanion(c.ID))})
+}
+
+// companionCantReact: why a companion cannot take a Reaction right now, or "". It has no characters row, so its conditions are the
+// condition_records of its combat id (the condition owner keeps them like a monster's): the "can't take Reactions" marker, or any
+// condition that makes it Incapacitated (a creature that is Incapacitated can't take Reactions, 2024 Rules Glossary).
+func companionCantReact(lobbyID int, c companion) string {
+	for _, r := range loadConditionRecords(lobbyID, c.CombatID) {
+		if r.Condition == "no_reactions" {
+			return c.Name + " can't take Reactions until the end of its next turn (an effect says so). Nothing was spent."
+		}
+		if game.IsIncapacitatingCondition(r.Condition) {
+			return c.Name + " is " + r.Condition + ", which includes Incapacitated: it can't take Reactions. Nothing was spent."
+		}
+	}
+	return ""
 }
 
 // familiarTouchPending: a touch spell delivered by the familiar, settled after the cast (its Reaction is spent only when the cast works).
@@ -724,6 +729,11 @@ func familiarTouchCheck(charID, lobbyID int, spellSlug, description string) stri
 		db.QueryRow(`SELECT COALESCE(reaction_round,0), COALESCE(reaction_lobby,0) FROM companions WHERE id = $1`, id).Scan(&rr, &rl)
 		if rr == round && rl == lobbyID {
 			return "Your familiar has already used its Reaction this round."
+		}
+		if fam, ok := loadCompanion(id); ok {
+			if why := companionCantReact(lobbyID, fam); why != "" {
+				return why
+			}
 		}
 	}
 	familiarTouchPending.Store(charID, id)
@@ -822,7 +832,7 @@ func companionBoxesHTML(lobbyID int) string {
 		what := c.Kind
 		if c.Kind == "familiar" || c.Kind == "pet" {
 			var mname string
-			db.QueryRow(`SELECT name FROM monsters WHERE slug = $1`, c.Form).Scan(&mname)
+			monsterQueryRow(`SELECT name FROM monsters WHERE slug = $1`, c.Form).Scan(&mname)
 			if mname != "" {
 				what = mname + " " + c.Kind
 			}
@@ -898,6 +908,22 @@ func mustCompanion(id int) companion {
 // (attack_2024.go) and the damage the one damage function's for monsters (damageMonster). c.CombatID is the attacker: a
 // companion's combat id, or the character's own id for a Wild Shape form, which then gets every rule of a character's attack.
 func companionAttack(lobbyID int, c companion, a compAttack, targetID int) string {
+	// The command already parsed stat-block text. Validate the final structured
+	// values here, preserving explicit feature overrides such as Investment.
+	prepared, problem := prepareMonsterAttack(monsterActionRow{Name: a.Name, AttackBonus: a.Bonus, DamageDice: a.Dice, DamageType: a.Type, FlatDamage: a.FlatDamage}, a.Type)
+	if problem != "" {
+		return problem
+	}
+	a.Bonus, a.Dice, a.Type, a.FlatDamage = prepared.AttackBonus, prepared.DamageDice, prepared.DamageType, prepared.FlatDamage
+	if a.Extra != "" && !validStatBlockDamage(a.Extra, a.ExtraType, nil) {
+		return "Unsupported companion extra damage. Nothing was rolled."
+	}
+
+	for _, extra := range attackExtraDamage(a.StatBlockText) {
+		if !extra.valid() {
+			return "Unsupported attack damage. Nothing was rolled."
+		}
+	}
 	alive := false
 	for _, e := range combatEntries(lobbyID) {
 		if asInt(e["id"]) == targetID && asInt(e["hp"]) > 0 {
@@ -907,7 +933,7 @@ func companionAttack(lobbyID int, c companion, a compAttack, targetID int) strin
 	if !alive {
 		return fmt.Sprintf("%s: the target is already down.", a.Name)
 	}
-	atk := attackCtx{lobby: lobbyID, attacker: c.CombatID, target: targetID, name: a.Name, bonus: a.Bonus, melee: true, weapon: true}
+	atk := attackCtx{lobby: lobbyID, attacker: c.CombatID, target: targetID, name: a.Name, bonus: a.Bonus, melee: !rangedOnlyRe.MatchString(a.StatBlockText), weapon: true, statBlockAttack: a.StatBlockText, autoHit: autoHitRe.MatchString(a.StatBlockText)}
 	if lost, note := atk.blocked(); lost {
 		return a.Name + ": " + note
 	}
@@ -915,12 +941,23 @@ func companionAttack(lobbyID int, c companion, a compAttack, targetID int) strin
 	if !out.Hit {
 		return ar.LineForAttacker(a.Name, out) + rollNote + "."
 	}
-	text, _ := damageMonster(lobbyID, targetID, game.RollDamage(a.Dice, out.Critical), strings.ToLower(a.Type), out.Critical)
-	if a.Extra != "" && monsterHPNow(lobbyID, targetID) > 0 {
-		more, _ := damageMonster(lobbyID, targetID, game.RollDamage(a.Extra, out.Critical), strings.ToLower(a.ExtraType), out.Critical)
-		text += " " + more
+	parts := []hitDamagePart{{Amount: rollStatBlockDamage(a.Dice, a.FlatDamage, out.Critical), Type: a.Type}}
+	for _, extra := range attackExtraDamage(a.StatBlockText) {
+		if extra.IfAdvantage && !ar.HasAdvantage() {
+			continue
+		}
+		parts = append(parts, hitDamagePart{Amount: extra.roll(out.Critical), Type: extra.Type})
 	}
-	return ar.LineForAttacker(a.Name, out) + rollNote + ". " + text
+	if a.Extra != "" {
+		parts = append(parts, hitDamagePart{Amount: game.RollDamage(a.Extra, out.Critical), Type: a.ExtraType})
+	}
+	hit := monsterHitCursor{Attacker: c.CombatID, AttackerName: c.Name, Target: targetID, Apply: true, Melee: atk.melee, StopDamageWhenDown: true,
+		Action: monsterActionRow{Name: a.Name, DamageType: a.Type, Desc: a.StatBlockText}, Roll: ar, Outcome: out, Parts: parts, Snapshot: snapshotTarget(lobbyID, targetID), HPBefore: monsterHPNow(lobbyID, targetID), Line: ar.LineForAttacker(a.Name, out) + rollNote}
+	text, err := runMonsterHit(lobbyID, &hit)
+	if err != nil {
+		addGMNotice(lobbyID, "A companion hit could not finish; reconcile its saved work before continuing.")
+	}
+	return text
 }
 
 func maxHPOf(lobbyID, id int) int {
@@ -934,7 +971,7 @@ func maxHPOf(lobbyID, id int) int {
 
 // handleGMCompanion godoc
 // @Summary Companions: pets, damage, healing (GM)
-// @Description Familiars: they deliver their owner's touch spells with their Reaction (cast with "delivered by my familiar"); with Pact of the Chain a familiar attacks when its owner forgoes one attack of the Attack action, or with Quick Attack (Investment of the Chain Master, a Bonus Action). GET ?campaign_id=N lists the campaign's companions (familiars, steeds, summons, pets) with their numbers. POST (GM): give a character a pet from the monster list {"character_id", "monster_key": "mastiff", "name": "Brutus"}; or change a companion {"companion_id", "damage": 7, "damage_type": "slashing"} (at 0 Hit Points it is gone: a familiar comes back when Find Familiar is cast again), {"companion_id", "heal": 5}, {"companion_id", "remove": true}. Players command their companions with POST /api/action {"companion_id": N, "action": "attack", "target_id": -2}; a familiar is dismissed and recalled with the actions dismiss_familiar and recall_familiar. Rule deviation (server setting AGENTRPG_FAMILIAR_INITIATIVE): companions act on their owner's turn; "own" gives a familiar its own Initiative (the SRD rule).
+// @Description Familiars: they deliver their owner's touch spells with their Reaction (cast with "delivered by my familiar"); with Pact of the Chain a familiar attacks when its owner forgoes one attack of the Attack action, or with Quick Attack (Investment of the Chain Master, a Bonus Action). GET ?campaign_id=N lists the campaign's companions (familiars, steeds, summons, pets) with their numbers. POST (GM): give a character a pet from the monster list {"character_id", "monster_key": "mastiff", "name": "Brutus"}; or change a companion {"companion_id", "damage": 7, "damage_type": "slashing"} (at 0 Hit Points it is gone: a familiar comes back when Find Familiar is cast again), {"companion_id", "heal": 5}, {"companion_id", "remove": true}. For attacks offering a damage type choice, description includes damage type: fire (one of the companion damage_choices); invalid choices spend nothing. Players command their companions with POST /api/action {"companion_id": N, "action": "attack", "target_id": -2}; a familiar is dismissed and recalled with the actions dismiss_familiar and recall_familiar. Rule deviation (server setting AGENTRPG_FAMILIAR_INITIATIVE): companions act on their owner's turn; "own" gives a familiar its own Initiative (the SRD rule).
 // @Tags GM
 // @Param campaign_id query int false "Campaign (GET)"
 // @Body Pet or change (POST)
@@ -971,22 +1008,23 @@ func handleGMCompanion(w http.ResponseWriter, r *http.Request) {
 			writeJSONStatus(w, 400, map[string]interface{}{"error": "character_required", "message": "Send the character_id of a character in this campaign, or a companion_id."})
 			return
 		}
-		var mname, speed string
+		var mname, speed, creatureType string
 		var hp, ac int
 		var actions []byte
-		if db.QueryRow(`SELECT name, hp, ac, COALESCE(speed_text,''), COALESCE(actions,'[]') FROM monsters WHERE slug = $1`, req.MonsterKey).Scan(&mname, &hp, &ac, &speed, &actions) != nil {
+		if monsterQueryRow(`SELECT name, hp, ac, COALESCE(speed_text,''), COALESCE(actions,'[]'), COALESCE(type,'') FROM monsters WHERE slug = $1`, req.MonsterKey).Scan(&mname, &hp, &ac, &speed, &actions, &creatureType) != nil {
 			writeJSONStatus(w, 400, map[string]interface{}{"error": "monster_not_found", "message": "monster_key must be a slug from GET /api/universe/monsters."})
 			return
 		}
-		var acts []map[string]interface{}
-		json.Unmarshal(actions, &acts)
-		var attacks []compAttack
-		for _, a := range acts {
-			if b := asInt(a["attack_bonus"]); b > 0 && fmt.Sprint(a["damage_dice"]) != "" {
-				attacks = append(attacks, compAttack{Name: fmt.Sprint(a["name"]), Bonus: b, Dice: fmt.Sprint(a["damage_dice"]), Type: fmt.Sprint(a["damage_type"]), Count: 1})
-				break
-			}
+		var rows []monsterActionRow
+		if err := json.Unmarshal(actions, &rows); err != nil {
+			writeDBError(w, err, "monster attacks")
+			return
 		}
+		attacks := companionRows(rows)
+		if len(attacks) > 1 {
+			attacks = attacks[:1]
+		} // a pet keeps the existing one-attack command
+
 		name := req.Name
 		if name == "" {
 			name = mname
@@ -994,8 +1032,8 @@ func handleGMCompanion(w http.ResponseWriter, r *http.Request) {
 		att, _ := json.Marshal(attacks)
 		var id int
 		db.QueryRow(`INSERT INTO companions (owner_id, lobby_id, kind, name, source, form, creature_type, hp, max_hp, ac, speed, attacks)
-			VALUES ($1,$2,'pet',$3,'gm',$4,'beast',$5,$5,$6,$7,$8) RETURNING id`, req.CharacterID, lobbyID, name, req.MonsterKey, hp, ac, speed, string(att)).Scan(&id)
-		db.Exec(`UPDATE companions SET traits = (SELECT COALESCE(traits,'[]') FROM monsters WHERE slug = $1) WHERE id = $2`, req.MonsterKey, id)
+			VALUES ($1,$2,'pet',$3,'gm',$4,$9,$5,$5,$6,$7,$8) RETURNING id`, req.CharacterID, lobbyID, name, req.MonsterKey, hp, ac, speed, string(att), creatureType).Scan(&id)
+		monsterExec(`UPDATE companions SET traits = (SELECT COALESCE(traits,'[]') FROM monsters WHERE slug = $1) WHERE id = $2`, req.MonsterKey, id)
 		recordGMAction(db, lobbyID, "companion", fmt.Sprintf("The GM gives a pet: %s (%s)", name, mname), "")
 		writeJSONStatus(w, 200, map[string]interface{}{"success": true, "companion": companionView(mustCompanion(id))})
 		return

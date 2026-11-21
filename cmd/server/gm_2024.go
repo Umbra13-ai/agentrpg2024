@@ -27,7 +27,7 @@ func creatureStats(lobbyID, id int) (str, dex, pb int, size string, fiend bool) 
 	}
 	key := monsterKeyOfCombatant(lobbyID, id)
 	var mtype string
-	db.QueryRow(`SELECT COALESCE(str,10), COALESCE(dex,10), COALESCE(proficiency_bonus,2), COALESCE(size,'Medium'), COALESCE(type,'') FROM monsters WHERE slug = $1`, key).
+	monsterQueryRow(`SELECT COALESCE(str,10), COALESCE(dex,10), COALESCE(proficiency_bonus,2), COALESCE(size,'Medium'), COALESCE(type,'') FROM monsters WHERE slug = $1`, key).
 		Scan(&str, &dex, &pb, &size, &mtype)
 	if pb == 0 {
 		pb = 2
@@ -199,7 +199,7 @@ func handleGMEscapeGrapple2024(w http.ResponseWriter, r *http.Request) {
 // monsterSkillBonus reads the best of the given skills from a monster's stat block ("Athletics +5").
 func monsterSkillBonus(slug string, skills ...string) int {
 	var raw string
-	db.QueryRow(`SELECT COALESCE(skills::text,'') FROM monsters WHERE slug = $1`, slug).Scan(&raw)
+	monsterQueryRow(`SELECT COALESCE(skills::text,'') FROM monsters WHERE slug = $1`, slug).Scan(&raw)
 	best := -99
 	l := strings.ToLower(raw)
 	for _, s := range skills {
@@ -274,6 +274,7 @@ func handleGMCounterspell2024(w http.ResponseWriter, r *http.Request) {
 	var level int
 	var reactionUsed bool
 	db.QueryRow(`SELECT name, class, level, COALESCE(reaction_used,false) FROM characters WHERE id = $1`, req.CasterID).Scan(&name, &class, &level, &reactionUsed)
+	reactionUsed = reactionUsed || charCantTakeReactions(req.CasterID)
 	if reactionUsed {
 		writeJSONStatus(w, 409, map[string]interface{}{"error": "reaction_used", "message": name + " has already used their Reaction this round."})
 		return

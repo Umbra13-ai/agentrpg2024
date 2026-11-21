@@ -20,15 +20,16 @@ type mapSquare struct {
 }
 
 type mapToken struct {
-	ID          int          `json:"id"`
-	Name        string       `json:"name"`
-	Position    mapSquare    `json:"position"`
-	Size        int          `json:"size"`
-	Hidden      bool         `json:"hidden,omitempty"`
-	Paused      bool         `json:"paused,omitempty"`
-	Altitude    int          `json:"altitude,omitempty"` // feet above the ground: a flying creature (Fly, Gaseous Form; spells_more_2024.go)
-	FreeTerrain bool         `json:"-"`                  // Freedom of Movement: Difficult Terrain costs nothing extra (the move handler sets it)
-	Passable    map[int]bool `json:"-"`                  // tokens whose spaces it may move through (map_spaces_2024.go; the move handler sets it)
+	ID             int          `json:"id"`
+	Name           string       `json:"name"`
+	Position       mapSquare    `json:"position"`
+	Size           int          `json:"size"`
+	Hidden         bool         `json:"hidden,omitempty"`
+	Paused         bool         `json:"paused,omitempty"`
+	Altitude       int          `json:"altitude,omitempty"`         // feet above the ground: a flying creature (Fly, Gaseous Form; spells_more_2024.go)
+	ShareSpaceWith int          `json:"share_space_with,omitempty"` // GM places this token wholly inside the named creature's space
+	FreeTerrain    bool         `json:"-"`                          // Freedom of Movement: Difficult Terrain costs nothing extra (the move handler sets it)
+	Passable       map[int]bool `json:"-"`                          // tokens whose spaces it may move through (map_spaces_2024.go; the move handler sets it)
 }
 
 type encounterMap struct {
@@ -40,13 +41,14 @@ type encounterMap struct {
 
 type mapRequest struct {
 	CharacterID    int          `json:"character_id"`
-	Map            encounterMap `json:"map"`             // GM (PUT, preview): the battle map object to check or publish
-	Path           []mapSquare  `json:"path"`            // player move: the squares to move through, in order
-	Confirmation   string       `json:"confirmation"`    // the confirmation the preview gave (the map's revision, or the move's): the change is made only when it matches
-	ForcedMovement bool         `json:"forced_movement"` // GM map update: the moves were forced or teleports (no Opportunity Attacks)
-	Disengaged     []int        `json:"disengaged"`      // GM map update: monsters that took the Disengage action this turn
-	CompanionID    int          `json:"companion_id"`    // player move: one of the character's companions instead of the character
-	Altitude       *int         `json:"altitude"`        // player move: the height (feet) to end at; a Fly Speed is needed above 0
+	Map            encounterMap `json:"map"`              // GM (PUT, preview): the battle map object to check or publish
+	Path           []mapSquare  `json:"path"`             // player move: the squares to move through, in order
+	Confirmation   string       `json:"confirmation"`     // the confirmation the preview gave (the map's revision, or the move's): the change is made only when it matches
+	ForcedMovement bool         `json:"forced_movement"`  // GM map update: the moves were forced or teleports (no Opportunity Attacks)
+	Disengaged     []int        `json:"disengaged"`       // GM map update: monsters that took the Disengage action this turn
+	Flying         []int        `json:"flying,omitempty"` // GM map update: monster combat IDs that flew during the submitted move
+	CompanionID    int          `json:"companion_id"`     // player move: one of the character's companions instead of the character
+	Altitude       *int         `json:"altitude"`         // player move: the height (feet) to end at; a Fly Speed is needed above 0
 }
 
 func mapRevision() string {
@@ -80,18 +82,30 @@ func (m encounterMap) validate() error {
 			}
 		}
 	}
-	occupied := map[mapSquare]bool{}
-	ids := map[int]bool{}
+	occupied := map[mapSquare]int{}
+	ids := map[int]mapToken{}
 	for _, token := range m.Tokens {
-		if token.ID == 0 || ids[token.ID] || token.Name == "" || token.Size < 1 || token.Size > 4 {
+		if token.ID == 0 || ids[token.ID].ID != 0 || token.Name == "" || token.Size < 1 || token.Size > 4 {
 			return errors.New("tokens need unique nonzero IDs, names, and footprints of 1–4 squares per side")
 		}
-		ids[token.ID] = true
+		ids[token.ID] = token
+		if token.ShareSpaceWith != 0 {
+			continue
+		}
 		for _, square := range token.footprint(token.Position) {
-			if blockedTile(m.tile(square)) || occupied[square] {
+			if blockedTile(m.tile(square)) || occupied[square] != 0 {
 				return errors.New("token footprints must fit on open, unoccupied squares")
 			}
-			occupied[square] = true
+			occupied[square] = token.ID
+		}
+	}
+	for _, token := range m.Tokens {
+		if token.ShareSpaceWith == 0 {
+			continue
+		}
+		host := ids[token.ShareSpaceWith]
+		if host.ID == 0 || !token.fitsInSpaceOf(host) {
+			return errors.New("a shared space needs a different host token at the same altitude and must contain the whole attached footprint")
 		}
 	}
 	for _, p := range m.Interrupts {
@@ -100,6 +114,12 @@ func (m encounterMap) validate() error {
 		}
 	}
 	return nil
+}
+
+func (t mapToken) fitsInSpaceOf(host mapToken) bool {
+	return t.ID != host.ID && host.ShareSpaceWith == 0 && t.Altitude == host.Altitude &&
+		t.Position.X >= host.Position.X && t.Position.Y >= host.Position.Y &&
+		t.Position.X+t.Size <= host.Position.X+host.Size && t.Position.Y+t.Size <= host.Position.Y+host.Size
 }
 
 func (t mapToken) footprint(p mapSquare) []mapSquare {
@@ -168,6 +188,7 @@ func (m encounterMap) playerView(viewer mapToken) encounterMap {
 		view.Grid[y] = string(visible)
 	}
 	for _, t := range m.Tokens {
+		t.ShareSpaceWith = 0 // the GM's attachment can name a creature outside this player's view
 		if t.ID == viewer.ID {
 			t.Hidden = false
 			view.Tokens = append(view.Tokens, t)
@@ -274,7 +295,7 @@ func battleMapError(w http.ResponseWriter, status int, code string) {
 
 // handleBattleMap godoc
 // @Summary The battle map of a fight
-// @Description During combat. GET shows the map: the GM sees everything, a player adds ?character_id=N for that character's view. GM: POST /battle-map/preview with a map object checks it, PUT /battle-map publishes or updates it (forced_movement: the moves were forced or teleports, so no Opportunity Attacks; disengaged: monster ids that took Disengage; moving a monster into Spirit Guardians triggers its save; a creature a Magic Circle keeps out stays where it was; a token's altitude is its height in feet). Player: POST /battle-map/preview with character_id and the ordered path of adjacent squares returns the cost and a confirmation; POST /battle-map/move with the same path and that confirmation moves the token and spends the movement (Opportunity Attacks happen as the path leaves a monster's reach). altitude: the height in feet to end at, for a creature with a Fly Speed (Fly, Gaseous Form); the climb costs movement and the height counts in distances.
+// @Description During combat. GET shows the map: the GM sees everything, a player adds ?character_id=N for that character's view. GM: POST /battle-map/preview with a map object checks it, PUT /battle-map publishes or updates it (forced_movement: the moves were forced or teleports, so no Opportunity Attacks; disengaged: monster ids that took Disengage; flying: monster combat ids that flew in this update, for Flyby; moving a monster into Spirit Guardians triggers its save; a creature a Magic Circle keeps out stays where it was; a token's altitude is its height in feet). Player: POST /battle-map/preview with character_id and the ordered path of adjacent squares returns the cost and a confirmation; POST /battle-map/move with the same path and that confirmation moves the token and spends the movement (Opportunity Attacks happen as the path leaves a monster's reach). altitude: the height in feet to end at, for a creature with a Fly Speed (Fly, Gaseous Form); the climb costs movement and the height counts in distances. The GM can set share_space_with on a token wholly inside another token's space and at the same altitude. To move that pair, submit both positions together.
 // @Tags Campaigns
 // @Param id path int true "Campaign ID"
 // @Param character_id query int false "A player's character (GET)"
@@ -304,6 +325,9 @@ func handleBattleMap(w http.ResponseWriter, r *http.Request, campaignID int, rou
 		if !readRequest(w, r, &req) {
 			return
 		}
+	}
+	if r.Method == http.MethodPost && req.CharacterID > 0 {
+		settleMovement(req.CharacterID) // a Speed effect that arrived or ended during the turn (speed_owner_2024.go)
 	}
 	tx, err := db.BeginTx(r.Context(), nil)
 	if err != nil {
@@ -377,6 +401,14 @@ func handleBattleMap(w http.ResponseWriter, r *http.Request, campaignID int, rou
 			var circleNotes []string
 			if !req.ForcedMovement {
 				circleNotes = magicCircleHolds(campaignID, m, &req.Map) // the chosen creatures can't cross a Magic Circle by moving (spells_more_2024.go)
+				if len(circleNotes) > 0 && req.Map.validate() != nil {
+					battleMapReply(w, 400, map[string]string{"error": "invalid_map", "message": "A blocked move left a shared space invalid. Adjust the tokens together."})
+					return
+				}
+				if why := attachCarryProblem(tx, campaignID, m, req.Map); why != "" { // an attached monster moves with its target (monster_move_2024.go)
+					battleMapReply(w, 409, map[string]string{"error": "attach_carry_required", "message": why})
+					return
+				}
 			}
 			req.Map.Revision = mapRevision()
 			updated, _ := json.Marshal(req.Map)
@@ -392,12 +424,20 @@ func handleBattleMap(w http.ResponseWriter, r *http.Request, campaignID int, rou
 			// a monster that moved out of a character's reach by its own movement lets that character make an Opportunity Attack;
 			// forced movement (pushed, knocked back), teleporting and Disengage don't provoke (character_oa_2024.go)
 			if !req.ForcedMovement {
-				for _, note := range noteMonstersLeavingReach(campaignID, m, req.Map, req.Disengaged) {
+				for _, note := range noteMonstersLeavingReach(campaignID, m, req.Map, req.Disengaged, req.Flying) {
 					recordGMAction(db, campaignID, "opportunity_attack_available", note, note)
 				}
 				for _, note := range autoOpportunityAttacks(campaignID) { // standing reaction orders (F220)
 					recordGMAction(db, campaignID, "opportunity_attack", note, note)
 				}
+			}
+			if !req.ForcedMovement { // a monster's own movement against its Speed (monster_move_2024.go)
+				for _, note := range noteMonsterMoves(campaignID, m, req.Map) {
+					recordGMAction(db, campaignID, "monster_move", note, note)
+				}
+			}
+			for _, note := range attachSeparationNotes(campaignID, m, req.Map) { // a forced move or ruling can part an attached pair (monster_move_2024.go)
+				recordGMAction(db, campaignID, "monster_move", note, note)
 			}
 			for _, note := range spiritGuardiansEnter(campaignID, m, req.Map) { // entering Spirit Guardians (any movement)
 				recordGMAction(db, campaignID, "condition", note, note)
@@ -463,7 +503,7 @@ func handleBattleMap(w http.ResponseWriter, r *http.Request, campaignID int, rou
 	actor := m.Tokens[actorIndex]
 	view := m.playerView(actor)
 	if r.Method == http.MethodGet && operation == "" {
-		battleMapReply(w, 200, map[string]any{"map": view, "position": actor.Position, "movement_remaining_ft": movement})
+		battleMapReply(w, 200, map[string]any{"map": view, "position": actor.Position, "movement_remaining_ft": max(movement, 0)})
 		return
 	}
 	if r.Method != http.MethodPost || (operation != "preview" && operation != "move") {
@@ -495,6 +535,12 @@ func handleBattleMap(w http.ResponseWriter, r *http.Request, campaignID int, rou
 	if (len(req.Path) == 0 && req.Altitude == nil) || len(req.Path) > 120 {
 		battleMapError(w, 400, "invalid_path_length")
 		return
+	}
+	for _, token := range m.Tokens {
+		if token.ShareSpaceWith == actor.ID {
+			battleMapReply(w, 409, map[string]string{"error": "gm_position_required", "message": "The GM must move both tokens together while this creature shares its space."})
+			return
+		}
 	}
 	actor.FreeTerrain = buffIgnoresDifficult(actor.ID)    // Freedom of Movement (buff_spells_2024.go)
 	actor.Passable = passableTokens(campaignID, m, actor) // F115 (map_spaces_2024.go)
@@ -533,7 +579,7 @@ func handleBattleMap(w http.ResponseWriter, r *http.Request, campaignID int, rou
 		}
 		climb = mapAbs(*req.Altitude - actor.Altitude)
 		if cost+climb > movement {
-			battleMapReply(w, 400, map[string]any{"error": "invalid_path_step", "reason": fmt.Sprintf("not enough movement: the path costs %d ft and the climb %d ft, and you have %d ft", cost, climb, movement), "step": len(req.Path), "movement_remaining_ft": movement - cost})
+			battleMapReply(w, 400, map[string]any{"error": "invalid_path_step", "reason": fmt.Sprintf("not enough movement: the path costs %d ft and the climb %d ft, and you have %d ft", cost, climb, max(movement, 0)), "step": len(req.Path), "movement_remaining_ft": movement - cost})
 			return
 		}
 		cost += climb
@@ -570,8 +616,15 @@ func handleBattleMap(w http.ResponseWriter, r *http.Request, campaignID int, rou
 		cost += climb
 	}
 	startToken := m.Tokens[actorIndex]
+	if actor.ShareSpaceWith != 0 {
+		host, ok := m.token(actor.ShareSpaceWith)
+		if !ok || !actor.fitsInSpaceOf(host) {
+			actor.ShareSpaceWith = 0
+		}
+	}
 	opportunity := opportunityTriggers(campaignID, m, startToken, traversed) // monsters whose reach the character leaves
 	m.Tokens[actorIndex] = actor
+	carried := carryAttachedTokens(tx, campaignID, &m, actor.ID, actor.Name, startToken.Position, actor.Position, actor.Altitude) // an attached monster moves with it
 	m.Revision = mapRevision()
 	updated, _ := json.Marshal(m)
 	if _, err := tx.Exec("UPDATE combat_state SET battle_map=$1 WHERE lobby_id=$2", updated, campaignID); err != nil {
@@ -597,6 +650,9 @@ func handleBattleMap(w http.ResponseWriter, r *http.Request, campaignID int, rou
 		return
 	}
 	reply := map[string]any{"position": actor.Position, "traversed": traversed, "interrupted": actor.Paused, "distance_ft": len(traversed) * battleMapStepFeet, "cost_ft": cost, "movement_remaining_ft": movement - cost, "map": m.playerView(actor)}
+	if len(carried) > 0 {
+		reply["carried"] = carried
+	}
 	if len(opportunity) > 0 {
 		reply["opportunity_attacks"] = resolveOpportunityAttacks(r, campaignID, actor.ID, opportunity)
 	}

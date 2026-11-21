@@ -225,3 +225,18 @@ func TestGreatWeaponFightingTreatsOnesAndTwosAsThrees(t *testing.T) {
 		}
 	}
 }
+
+func TestSignedRulebookDamage(t *testing.T) {
+	for _, expr := range []string{"1d1-1", "1d1 – 1", "1d1 − 1"} {
+		n, s := ParseDice(expr)
+		if n != 1 || s != 1 || FlatBonus(expr) != -1 {
+			t.Fatalf("negative expression %q: %d d%d bonus%d", expr, n, s, FlatBonus(expr))
+		}
+		if RollDamage(expr, false) != 0 || RollDamage(expr, true) != 1 {
+			t.Fatalf("negative damage/critical failed for %q", expr)
+		}
+	}
+	if RollDamage("1d1-20", false) != 0 {
+		t.Fatal("damage must not become negative")
+	}
+}

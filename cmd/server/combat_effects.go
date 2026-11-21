@@ -40,6 +40,7 @@ var effectText = map[string]string{
 	"no_healing":  "Can't regain Hit Points (Chill Touch)",
 	"mind_sliver": "Subtracts 1d4 from its next saving throw (Mind Sliver)",
 	"wisp_lit":    "Can't benefit from the Invisible condition; sheds Dim Light (Starry Wisp)",
+	"disengaged":  "Took the Disengage action: its movement doesn't provoke Opportunity Attacks this turn",
 }
 
 // addCombatEffect puts an effect on a creature; slow and hamstring replace each other (only the newest applies).
@@ -85,13 +86,15 @@ func takeCombatEffect(lobbyID, targetID int, kind string, notFromSource int) boo
 	return n > 0
 }
 
-// expireCombatEffectsOf ends the effects a creature caused, at the start of its turn.
+// expireCombatEffectsOf ends the effects a creature caused, at the start of its turn. The exceptions have
+// their own lifetimes: recurring_damage and attached last while their gate (the grapple or the attach)
+// lasts, and their owner removes them when the gate ends (monster_recurring_damage_2024.go).
 func expireCombatEffectsOf(lobbyID, sourceID int) {
 	if db == nil {
 		return
 	}
-	db.Exec(`DELETE FROM combat_effects WHERE lobby_id = $1 AND source_id = $2`, lobbyID, sourceID)
-	endConditionsFromSource(lobbyID, fmt.Sprintf("Stunning Strike #%d", sourceID)) // Stunned until the start of the Monk's next turn
+	db.Exec(`DELETE FROM combat_effects WHERE lobby_id = $1 AND source_id = $2 AND kind NOT IN ('recurring_damage','attached','suffocating','swallowed')`, lobbyID, sourceID) // the attach kinds, its suffocating and the swallow outlive a turn boundary: their owners end them
+	endConditionsFromSource(lobbyID, fmt.Sprintf("Stunning Strike #%d", sourceID))                                                                                            // Stunned until the start of the Monk's next turn
 }
 
 func clearCombatEffects(lobbyID int) {
@@ -267,14 +270,26 @@ func takeRiders(charID int) map[string]int {
 }
 
 // adjustRiders applies a monster's resistances to each rider and says what they did.
-func adjustRiders(monsterKey string, riders map[string]int) (int, string) {
+func adjustRiders(monsterKey string, riders map[string]int) (int, string, map[string]int) {
 	total := 0
+	amounts := make(map[string]int, len(riders)+2)
 	var parts []string
 	for dtype, amount := range riders {
 		d, how := adjustMonsterDamage(monsterKey, dtype, amount)
+		amounts[dtype] = d
 		total += d
 		switch how {
 		case "immune":
+			absorbs := false
+			if amount > 0 { // an absorption trait turns the rider's damage into Hit Points, unless the form forbids regaining them
+				heals, aerr := absorptionHealsHP(db, monsterKey, dtype)
+				absorbs = aerr == nil && heals // an unreadable catalog answers "not absorbed" (never a silent regain)
+			}
+			if absorbs {
+				total -= amount // negative: the caller's hp -= total heals; the caller caps at the maximum
+				parts = append(parts, fmt.Sprintf("it absorbs the extra %d %s damage and regains that many Hit Points", amount, dtype))
+				break
+			}
 			parts = append(parts, fmt.Sprintf("immune to the extra %s damage", dtype))
 		case "resistant":
 			parts = append(parts, fmt.Sprintf("%d extra %s damage (it resists)", d, dtype))
@@ -283,7 +298,7 @@ func adjustRiders(monsterKey string, riders map[string]int) (int, string) {
 		}
 	}
 	if len(parts) == 0 {
-		return 0, ""
+		return 0, "", amounts
 	}
-	return total, " Plus " + strings.Join(parts, ", ") + "."
+	return total, " Plus " + strings.Join(parts, ", ") + ".", amounts
 }

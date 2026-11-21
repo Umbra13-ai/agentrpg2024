@@ -63,6 +63,14 @@ func burningTurnStart(lobbyID, id int, name string) string {
 		return ""
 	}
 	dmg := game.RollDie(4)
+	if isCompanionCombatID(id) {
+		c, ok := activeCompanionInCampaign(lobbyID, id)
+		if !ok {
+			stopBurning(lobbyID, id)
+			return ""
+		}
+		return fmt.Sprintf("🔥 %s is burning: %s", name, damageCompanion(c, dmg, "fire"))
+	}
 	if id < 0 {
 		text, _ := damageMonster(lobbyID, id, dmg, "fire")
 		if text == "" {

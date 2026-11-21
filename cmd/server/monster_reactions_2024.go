@@ -36,10 +36,25 @@ import (
 type charHitOnMonster struct {
 	Marker             string
 	CharID             int
+	AttackerName       string // a monster attacker (CharID 0): its name
 	Total, AC          int
 	Nat20, Melee       bool
 	DamageType, Weapon string
 	HPBefore, HPAfter  int
+	// what the hit changed on its target, for taking it back (monster_hit_undo_2024.go)
+	EntryBefore, EntryAfter map[string]interface{}
+	NewRecords              []int
+	GoneRecords             []conditionRecord
+	NewEffects              []int
+	RegenSetByHit           bool
+	RecordsAfter            []int
+	// the attack as rolled, for Redirect Attack (the ally becomes the target of the same attack roll): the damage BEFORE the first
+	// target's defenses, and the stat-block text for its riders. Empty for a character's attack (its damage is built in attack_target.go).
+	Parts      []hitDamagePart
+	Crit       bool
+	AttackerID int
+	Desc       string
+	RiderNames []string
 }
 
 var lastHitOnMonster sync.Map // "lobby:monster" -> charHitOnMonster (the latest character hit this turn)
@@ -82,8 +97,6 @@ var (
 	perDayRe      = regexp.MustCompile(`\((\d+)/Day\)`)
 )
 
-var reactionDayUses sync.Map // "lobby:monster:reaction" -> uses this fight
-
 // resolveMonsterReaction resolves a Reaction entry; handled false lets the generic text resolver take it (a saving throw reaction).
 func resolveMonsterReaction(r *http.Request, lobbyID, id int, meta *monsterMeta, entry srdMonsterEntry, target string, targetIDs []int, apply bool) (text string, handled bool, refusal string) {
 	name := creatureName(lobbyID, id)
@@ -93,18 +106,18 @@ func resolveMonsterReaction(r *http.Request, lobbyID, id int, meta *monsterMeta,
 	if v, ok := monsterReactionRound.Load(key); ok && v.(int) == round {
 		return "", true, fmt.Sprintf("%s has already used its Reaction this round (one a round).", name)
 	}
-	dayKey := key + ":" + strings.ToLower(base)
-	if m := perDayRe.FindStringSubmatch(entry.Name); m != nil {
-		n, _ := strconv.Atoi(m[1])
-		if v, ok := reactionDayUses.Load(dayKey); ok && v.(int) >= n {
-			return "", true, fmt.Sprintf("%s has used %s %d times today.", name, base, n)
-		}
+	if cantTakeReactions(lobbyID, id) {
+		return "", true, fmt.Sprintf("%s can't take Reactions until the end of its next turn (a hit or failed save gave it that); nothing was used.", name)
 	}
+	// the per-day count of a "(N/Day)" Reaction is the ledger's (monster_day_uses.go), checked by monsterAction before this runs
 	low := strings.ToLower(entry.Text)
 	hit, haveHit := thisTurnHitOnMonster(lobbyID, id)
 	charName := ""
 	if haveHit {
-		charName = getCharacterName(hit.CharID)
+		charName = hit.AttackerName
+		if charName == "" {
+			charName = getCharacterName(hit.CharID)
+		}
 	}
 	undoIfMiss := func(bonus int, label string) string {
 		desc := fmt.Sprintf("%s's attack (%d against AC %d)", charName, hit.Total, hit.AC+bonus)
@@ -114,9 +127,12 @@ func resolveMonsterReaction(r *http.Request, lobbyID, id int, meta *monsterMeta,
 		if hit.Total >= hit.AC+bonus {
 			return fmt.Sprintf(" %s: +%d AC; %s still hits.", label, bonus, desc)
 		}
-		_, after, _ := healMonster(lobbyID, id, hit.HPBefore-hit.HPAfter) // the hit's damage given back (monster_hp_2024.go)
+		after, said, ok := undoRecordedHit(lobbyID, id, hit) // everything the hit changed (monster_hit_undo_2024.go)
 		lastHitOnMonster.Delete(key)
-		return fmt.Sprintf(" %s: +%d AC; %s is now a miss, its damage undone (%s is back to %d HP).", label, bonus, desc, name, after.HP)
+		if !ok {
+			return fmt.Sprintf(" %s: +%d AC; %s is now a miss.%s", label, bonus, desc, said)
+		}
+		return fmt.Sprintf(" %s: +%d AC; %s is now a miss, its damage undone (%s is back to %d HP).%s", label, bonus, desc, name, after.HP, said)
 	}
 	out := ""
 	switch {
@@ -165,14 +181,17 @@ func resolveMonsterReaction(r *http.Request, lobbyID, id int, meta *monsterMeta,
 			k, _ := strconv.Atoi(m[2])
 			cut += k
 		}
-		taken := hit.HPBefore - hit.HPAfter
-		back := cut
-		if back > taken {
-			back = taken
+		bv, av := monsterVitals(hit.EntryBefore), monsterVitals(hit.EntryAfter)
+		taken := max(bv.HP-av.HP, 0) + max(bv.Temp-av.Temp, 0) // the hit's damage, Temporary Hit Points included
+		if hit.EntryBefore == nil || hit.EntryAfter == nil {
+			taken = hit.HPBefore - hit.HPAfter
 		}
-		_, after, _ := healMonster(lobbyID, id, back) // the part of the hit taken back (monster_hp_2024.go)
-		out = fmt.Sprintf("%s uses %s: the damage is reduced by %d (%d of %d taken back; it has %d HP).", name, base, cut, back, taken, after.HP)
-		if back >= taken {
+		back, after, ok := refundHitDamage(lobbyID, id, key, hit, cut) // monster_hit_undo_2024.go
+		if !ok {
+			return "", true, fmt.Sprintf("%s uses %s: RECONCILIATION NEEDED, the target's Hit Points or state changed after the hit, so the reduction (%d) is not applied by the server; the GM settles it.", name, base, cut)
+		}
+		out = fmt.Sprintf("%s uses %s: the damage is reduced by %d (%d of %d taken back; it has %d HP, %d Temporary).", name, base, cut, back, taken, after.HP, after.Temp)
+		if taken > 0 && back >= taken {
 			out += " The damage is reduced to 0: it can redirect the force (the saving throw in its text; the GM resolves it with monster_action)."
 		}
 	case strings.Contains(low, "splits into two new"):
@@ -193,9 +212,9 @@ func resolveMonsterReaction(r *http.Request, lobbyID, id int, meta *monsterMeta,
 		if ally == 0 {
 			return "", true, fmt.Sprintf("Name the ally that takes the attack (target: its name, or target_ids: [its id]); it must be a Small or Medium ally within 5 feet of %s.", name)
 		}
-		healMonster(lobbyID, id, hit.HPBefore-hit.HPAfter) // the hit goes to the ally instead (monster_hp_2024.go)
+		_, undone, _ := undoRecordedHit(lobbyID, id, hit) // the hit goes to the ally instead: nothing of it stays on this target (monster_hit_undo_2024.go)
 		lastHitOnMonster.Delete(key)
-		dmg := hit.HPBefore - hit.HPAfter
+		defer func() { text += undone }()
 		allyAC := 0
 		for _, e := range combatEntries(lobbyID) {
 			if asInt(e["id"]) == ally {
@@ -203,9 +222,34 @@ func resolveMonsterReaction(r *http.Request, lobbyID, id int, meta *monsterMeta,
 			}
 		}
 		out = fmt.Sprintf("%s uses %s: it and %s swap places (move the tokens on the battle map) and %s becomes the target.", name, base, creatureName(lobbyID, ally), creatureName(lobbyID, ally))
+		// The ally becomes the target of the SAME attack roll: it hits the ally's AC or it misses. The damage is a fresh result against the
+		// ally's defenses (resistance, immunity, vulnerability, absorption, Temporary Hit Points), made from the damage rolled before the first
+		// target's defenses, never the first target's already-reduced damage; the stat block's hit riders are given to the ally by its rules.
 		if hit.Nat20 || hit.Total >= allyAC {
-			t, _ := damageMonster(lobbyID, ally, dmg, strings.ToLower(hit.DamageType))
-			out += fmt.Sprintf(" %s's attack (%d against AC %d) hits it: %s.", charName, hit.Total, allyAC, t)
+			out += fmt.Sprintf(" %s's attack (%d against AC %d) hits it.", charName, hit.Total, allyAC)
+			switch {
+			case len(hit.Parts) == 0 || (hit.Crit && !hit.Nat20):
+				out += fmt.Sprintf(" [GM, not applied automatically: the damage is not carried over (%s); roll or apply it against %s's own defenses, and give %s the hit's riders%s.]",
+					map[bool]string{true: "its critical hit came from the first target's state", false: "a character's attack builds its damage elsewhere"}[len(hit.Parts) > 0],
+					creatureName(lobbyID, ally), creatureName(lobbyID, ally), riderListNote(hit.RiderNames))
+			default:
+				var texts []string
+				for _, p := range hit.Parts {
+					t, _ := damageMonster(lobbyID, ally, p.Amount, strings.ToLower(p.Type), hit.Crit)
+					texts = append(texts, t)
+				}
+				out += " " + strings.Join(texts, " ") + "."
+				if hit.Desc != "" && monsterAlive(lobbyID, ally) {
+					if e, ok := parseHitRider(hit.Desc); ok {
+						e.SourceID = hit.AttackerID
+						if given := e.giveConditions(lobbyID, ally, charName+"'s "+hit.Weapon); len(given) > 0 {
+							out += " [" + strings.Join(given, "; ") + "]"
+						}
+					}
+				} else if len(hit.RiderNames) > 0 {
+					out += fmt.Sprintf(" [GM: the hit's riders%s are not carried over.]", riderListNote(hit.RiderNames))
+				}
+			}
 		} else {
 			out += fmt.Sprintf(" %s's attack (%d against AC %d) misses it.", charName, hit.Total, allyAC)
 		}
@@ -217,6 +261,13 @@ func resolveMonsterReaction(r *http.Request, lobbyID, id int, meta *monsterMeta,
 			wearer = cid
 		}
 		if wearer == 0 {
+			monsterWearer := len(targetIDs) > 0 && targetIDs[0] < 0
+			if !monsterWearer && target != "" {
+				monsterWearer = len(monsterIDsByKeyOrName(lobbyID, target)) > 0
+			}
+			if monsterWearer { // the +5 AC and the hit take-back are built for a character wearer: a monster wearer is the GM's, never guessed
+				return "", true, "The wearer is a monster: the +5 bonus to AC and any hit it would turn into a miss are not automated for a monster. Apply them by hand (the GM adjudicates); nothing was spent."
+			}
 			return "", true, "Name the wearer of the amulet (target or target_ids)."
 		}
 		out = fmt.Sprintf("%s uses %s for %s:%s", name, base, getCharacterName(wearer), strings.Replace(shieldReaction(wearer), " Shield:", "", 1))
@@ -236,13 +287,6 @@ func resolveMonsterReaction(r *http.Request, lobbyID, id int, meta *monsterMeta,
 		return "", false, ""
 	}
 	monsterReactionRound.Store(key, round)
-	if perDayRe.MatchString(entry.Name) {
-		n := 0
-		if v, ok := reactionDayUses.Load(dayKey); ok {
-			n = v.(int)
-		}
-		reactionDayUses.Store(dayKey, n+1)
-	}
 	return strings.TrimSpace(out), true, ""
 }
 
@@ -254,7 +298,7 @@ func splitMonster(lobbyID, id int, name, base string) string {
 		if asInt(e["id"]) == id {
 			size = sprintAny(e["size"])
 			if size == "" || size == "<nil>" {
-				db.QueryRow(`SELECT COALESCE(size,'') FROM monsters WHERE slug = $1`, sprintAny(e["monster_key"])).Scan(&size)
+				monsterQueryRow(`SELECT COALESCE(size,'') FROM monsters WHERE slug = $1`, sprintAny(e["monster_key"])).Scan(&size)
 			}
 		}
 	}
@@ -341,10 +385,10 @@ func takeSaveNotes(lobbyID int) string {
 	return out
 }
 
-// clearMonsterReactionState: monster ids are reused by the next fight, so their Reaction uses and last hits go with the fight.
+// clearMonsterReactionState: monster ids are reused by the next fight, so their last hits go with the fight (a Reaction's per-day count is in the day ledger and stays).
 func clearMonsterReactionState(lobbyID int) {
 	prefix := fmt.Sprintf("%d:", lobbyID)
-	for _, m := range []*sync.Map{&reactionDayUses, &lastHitOnMonster} {
+	for _, m := range []*sync.Map{&lastHitOnMonster} {
 		m.Range(func(k, _ interface{}) bool {
 			if strings.HasPrefix(k.(string), prefix) {
 				m.Delete(k)
@@ -352,4 +396,17 @@ func clearMonsterReactionState(lobbyID int) {
 			return true
 		})
 	}
+}
+
+// hitDamagePart is one damage roll of a hit, before the target's resistances, immunities, vulnerabilities, absorption and Temporary Hit Points.
+type hitDamagePart struct {
+	Amount int
+	Type   string
+}
+
+func riderListNote(names []string) string {
+	if len(names) == 0 {
+		return ""
+	}
+	return " (" + strings.Join(names, ", ") + ")"
 }

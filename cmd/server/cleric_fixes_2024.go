@@ -44,7 +44,10 @@ func divineStrikeHit(lobbyID, charID int, monsterKey string, crit bool, descript
 	if strings.Contains(strings.ToLower(description), "necrotic") {
 		dtype = "necrotic"
 	}
-	d, how := adjustMonsterDamage(monsterKey, dtype, game.RollDamage(dice, crit))
+	d, how := adjustMonsterExtra(monsterKey, dtype, game.RollDamage(dice, crit))
+	if how == "absorbed" {
+		return d, absorbedExtraText("Divine Strike", dtype, d)
+	}
 	note := fmt.Sprintf(" Divine Strike: +%d %s (%s)", d, titleCase(dtype), dice)
 	if how == "immune" {
 		return 0, fmt.Sprintf(" Divine Strike: it is immune to %s damage.", titleCase(dtype))
@@ -66,8 +69,11 @@ func maceOfDisruptionHit(lobbyID, charID, targetID int, monsterKey, name string,
 	if kind != "fiend" && kind != "undead" {
 		return 0, false, ""
 	}
-	d, how := adjustMonsterDamage(monsterKey, "radiant", game.RollDamage("2d6", crit))
+	d, how := adjustMonsterExtra(monsterKey, "radiant", game.RollDamage("2d6", crit))
 	text = fmt.Sprintf(" Mace of Disruption: +%d Radiant (2d6)", d)
+	if how == "absorbed" {
+		text = strings.TrimSuffix(absorbedExtraText("Mace of Disruption", "radiant", d), ".")
+	}
 	if how == "immune" {
 		d, text = 0, " Mace of Disruption: it is immune to Radiant damage"
 	}

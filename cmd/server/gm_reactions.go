@@ -162,6 +162,7 @@ func handleGMOpportunityAttack(w http.ResponseWriter, r *http.Request) {
 			SELECT name, lobby_id, str, dex, level, COALESCE(reaction_used, false), COALESCE(weapon_proficiencies, '')
 			FROM characters WHERE id = $1
 		`, req.AttackerID).Scan(&attackerName, &attackerLobbyID, &str, &dex, &level, &reactionUsed, &weaponProfsStr)
+		reactionUsed = reactionUsed || charCantTakeReactions(req.AttackerID)
 
 		if err != nil {
 			w.WriteHeader(http.StatusBadRequest)
@@ -329,6 +330,7 @@ func handleGMRetaliation(w http.ResponseWriter, r *http.Request) {
 		FROM characters WHERE id = $1
 	`, req.CharacterID).Scan(&charName, &charLobbyID, &class, &str, &dex, &level,
 		&reactionUsed, &weaponProfsStr, &subclass)
+	reactionUsed = reactionUsed || charCantTakeReactions(req.CharacterID)
 
 	if err != nil {
 		if answerDBFailure(w, err, "the character") {
@@ -482,6 +484,7 @@ func handleGMUncannyDodge(w http.ResponseWriter, r *http.Request) {
 		       COALESCE(subclass, '')
 		FROM characters WHERE id = $1
 	`, req.CharacterID).Scan(&charName, &charLobbyID, &class, &level, &reactionUsed, &subclass)
+	reactionUsed = reactionUsed || charCantTakeReactions(req.CharacterID)
 
 	if err != nil {
 		if answerDBFailure(w, err, "the character") {

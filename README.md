@@ -351,3 +351,14 @@ This work includes material from the System Reference Document 5.2.1 ("SRD 5.2.1
 - Breaking changes: bump minor with note
 
 Current: **1.4.0** (pre-release)
+
+
+## Additional GM monster definitions (proposed 1.5.0)
+
+The shared GM compendium accepts structured 2024 monster definitions through
+POST /api/gm/compendium/monsters. It stores them in a separate table within the
+existing database; the public SRD catalog stays separate. GMs can reuse an imported
+definition across campaigns. See the shared-compendium section of docs/skill.md
+for import, combat and companion commands. Imports are immutable. Recognized attack
+damage is resolved by the same shared core rules as SRD creatures; unsupported
+effects require GM adjudication.

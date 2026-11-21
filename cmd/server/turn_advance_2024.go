@@ -27,6 +27,7 @@ import (
 	"crypto/rand"
 	"database/sql"
 	"encoding/hex"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"net/http"
@@ -70,36 +71,42 @@ func namedTurn(w http.ResponseWriter, lobby int, e *expectedTurn) (named *turnRe
 
 // turnHow is how a turn ends.
 type turnHow struct {
-	by      string                                // who or what ends it, for the note of a pending turn it closes ("the GM skipped the turn")
-	expect  *turnRef                              // advance only while this is still the current turn (the timeout worker, the pending-turn walk, gmEndsTurn, expected_turn)
-	allow   func(f *fight) (code, message string) // a check of the turn under the lock (skip: a player's turn that has timed out)
-	between func(t *turnChange)                   // after the ending creature's hooks, before the next one's turn starts (Legendary Actions)
-	remove  int                                   // this creature, whose turn it is, leaves the fight: no end-of-turn hooks; the next one starts
-	result  string                                // how the turn ended, for the turn schedule's record (turn_results; "": read from the turn, endedHow)
+	legendary []legendaryRequest
+	request   *http.Request
+	resume    *turnResume
+	by        string                                // who or what ends it, for the note of a pending turn it closes ("the GM skipped the turn")
+	expect    *turnRef                              // advance only while this is still the current turn (the timeout worker, the pending-turn walk, gmEndsTurn, expected_turn)
+	allow     func(f *fight) (code, message string) // a check of the turn under the lock (skip: a player's turn that has timed out)
+	remove    int                                   // this creature, whose turn it is, leaves the fight: no end-of-turn hooks; the next one starts
+	result    string                                // how the turn ended, for the turn schedule's record (turn_results; "": read from the turn, endedHow)
 }
 
 // turnChange is what a turn change did; the hooks and the callers' replies read it.
 type turnChange struct {
-	Lobby          int
-	how            turnHow
-	EndedID        int
-	EndedName      string
-	EndedRound     int
-	EndedIndex     int
-	EndedStartedAt time.Time
-	EndedSecond    bool                     // the ended turn is a Thief's Reflexes second turn
-	Recorded       string                   // how the turn schedule recorded the ended turn ("" when it didn't: no schedule, or already recorded)
-	RoundOpened    *roundRecord             // the turn schedule's round the change opened (the fight's round went up)
-	Removed        []map[string]interface{} // the entries taken out (remove)
-	Round, Index   int
-	NextID         int
-	NextName       string
-	NewRound       bool
-	Log            []string               // conditions and effects at the end and the start of the turn
-	SpellNotes     []string               // Blink, Regenerate, Aura of Life ... (moreTurnHooks)
-	Survivor       map[string]interface{} // Champion level 18
-	Message        string                 // why a change was refused
-	Now            map[string]interface{} // a refusal because the turn has moved: the turn it is now (round, turn_index, current_turn, current_turn_id)
+	Paused           bool
+	Failure          string
+	LegendaryResults []map[string]interface{}
+	Lobby            int
+	how              turnHow
+	EndedID          int
+	EndedName        string
+	EndedRound       int
+	EndedIndex       int
+	EndedStartedAt   time.Time
+	EndedSecond      bool                     // the ended turn is a Thief's Reflexes second turn
+	Recorded         string                   // how the turn schedule recorded the ended turn ("" when it didn't: no schedule, or already recorded)
+	RoundOpened      *roundRecord             // the turn schedule's round the change opened (the fight's round went up)
+	Removed          []map[string]interface{} // the entries taken out (remove)
+	Round, Index     int
+	NextID           int
+	NextName         string
+	NewRound         bool
+	Log              []string               // conditions and effects at the end and the start of the turn (public: also written to the action log)
+	GMNotes          []string               // the GM's notices of the turn change: never written to the action log (turnEffectLines)
+	SpellNotes       []string               // Blink, Regenerate, Aura of Life ... (moreTurnHooks)
+	Survivor         map[string]interface{} // Champion level 18
+	Message          string                 // why a change was refused
+	Now              map[string]interface{} // a refusal because the turn has moved: the turn it is now (round, turn_index, current_turn, current_turn_id)
 }
 
 // window is the Legendary Action window the ended turn opens ("round:index").
@@ -133,7 +140,12 @@ func init() {
 			}
 		}},
 		{"conditions and effects at the end of the turn", func(t *turnChange) {
-			t.Log = append(t.Log, endTurnEffects(t.Lobby, -1)...) // -1: the current turn, still the ending one
+			l := endTurnEffects(t.Lobby, -1) // -1: the current turn, still the ending one
+			t.Log, t.GMNotes = append(t.Log, l.Public...), append(t.GMNotes, l.GM...)
+			t.Paused = l.Paused
+			if l.Err != nil {
+				t.Failure = l.Err.Error()
+			}
 		}},
 		{"the Legendary Action window after the turn opens", func(t *turnChange) {
 			setLastTurnEnded(t.Lobby, t.window(), t.EndedID)
@@ -141,7 +153,15 @@ func init() {
 	}
 	turnStartHooks = []turnHook{
 		{"conditions and effects at the start of the turn", func(t *turnChange) {
-			t.Log = append(t.Log, startTurnEffects(t.Lobby)...)
+			l := startTurnEffects(t.Lobby)
+			t.Log, t.GMNotes = append(t.Log, l.Public...), append(t.GMNotes, l.GM...)
+			t.Paused = l.Paused
+			if l.Err != nil {
+				t.Failure = l.Err.Error()
+			}
+		}},
+		{"a monster's trait that acts on its death and is still pending (the backstop of monster_death_trigger_2024.go)", func(t *turnChange) {
+			t.Log = append(t.Log, drainDeathTriggers()...)
 		}},
 		{"the turn's action, Bonus Action, Reaction, movement and once-per-turn features return", func(t *turnChange) {
 			if characterTurn(t.NextID) {
@@ -184,25 +204,134 @@ func init() {
 
 // advanceTurn ends the current turn and starts the next one (see the top of this file). It answers the change and "" or a refusal
 // code (turnRefusals; t.Message may say more).
+type savedTurnHow struct {
+	By        string
+	Expect    *turnRef
+	Remove    int
+	Result    string
+	Legendary []legendaryRequest
+}
+type turnResume struct {
+	Change turnChange
+	How    savedTurnHow
+	Phase  string
+	Next   int
+}
+
+func init() {
+	combatResumeHandlers["turn-advance"] = func(lobby int, raw json.RawMessage) (map[string]interface{}, error) {
+		var saved turnResume
+		if err := json.Unmarshal(raw, &saved); err != nil {
+			return nil, err
+		}
+		if saved.Change.Lobby != lobby {
+			return nil, fmt.Errorf("turn continuation campaign mismatch")
+		}
+		t, code := advanceTurn(lobby, turnHow{resume: &saved})
+		if code == "combat_adjudication_pending" {
+			return map[string]interface{}{"combat_paused": true}, nil
+		}
+		if code != "" {
+			return nil, fmt.Errorf("turn continuation stopped: %s", code)
+		}
+		return t.reply(), nil
+	}
+}
+func turnFrame(t *turnChange, phase string, next int) turnResume {
+	return turnResume{Change: *t, How: savedTurnHow{t.how.by, t.how.expect, t.how.remove, t.how.result, t.how.legendary}, Phase: phase, Next: next}
+}
 func advanceTurn(lobby int, how turnHow) (*turnChange, string) {
-	t, token, code := claimTurn(lobby, how)
+	release, ok := acquireCampaignCommand(lobby)
+	if !ok {
+		return &turnChange{Lobby: lobby, how: how, Message: "Another command is resolving in this campaign."}, "combat_operation_in_progress"
+	}
+	defer release()
+	pending, err := pendingConcentrationDecision(lobby)
+	if err != nil {
+		return &turnChange{Lobby: lobby, how: how}, "database_error"
+	}
+	if pending {
+		return &turnChange{Lobby: lobby, how: how, Message: combatPauseMessage}, "combat_adjudication_pending"
+	}
+	var t *turnChange
+	var token, code string
+	phase, next := "end", 0
+	if saved := how.resume; saved != nil {
+		t = &saved.Change
+		phase, next = saved.Phase, saved.Next
+		t.how = turnHow{by: saved.How.By, expect: saved.How.Expect, remove: saved.How.Remove, result: saved.How.Result, legendary: saved.How.Legendary}
+		expected := &turnRef{Round: t.EndedRound, Index: t.EndedIndex, Named: true}
+		if phase == "start" {
+			expected.Round, expected.Index = t.Round, t.Index
+		}
+		_, token, code = claimTurn(lobby, turnHow{expect: expected})
+	} else {
+		if active, e := hasBlockingCombatWork(lobby); e != nil {
+			return &turnChange{Lobby: lobby, how: how}, "database_error"
+		} else if active {
+			return &turnChange{Lobby: lobby, how: how, Message: combatPauseMessage}, "combat_adjudication_pending"
+		}
+		t, token, code = claimTurn(lobby, how)
+	}
 	if code != "" {
 		return t, code
 	}
 	defer releaseTurn(lobby, token)
-	if how.remove == 0 {
-		for _, h := range turnEndHooks {
-			h.run(t)
+	t.Paused = false
+	t.Failure = ""
+	runHooks := func(hooks []turnHook, kind string, from int) string {
+		for i := from; i < len(hooks); i++ {
+			restore, err := armCombatFrame(lobby, "turn-advance", turnFrame(t, kind, i+1))
+			if err != nil {
+				t.Message = err.Error()
+				return "combat_resume_error"
+			}
+			hooks[i].run(t)
+			restore()
+			if t.Failure != "" {
+				t.Message = "Turn effects could not be completed; check the GM notices."
+				return "combat_resume_error"
+			}
+			if t.Paused || combatResolutionPaused(lobby) {
+				t.Message = "The turn paused after completed effects. Resolve the GM decision, then resume saved combat work."
+				return "combat_adjudication_pending"
+			}
 		}
+		return ""
 	}
-	if how.between != nil {
-		how.between(t)
+	if phase == "end" {
+		if t.how.remove == 0 {
+			if code = runHooks(turnEndHooks, "end", next); code != "" {
+				return t, code
+			}
+		}
+		phase, next = "between", 0
 	}
-	if code := moveTurn(t, token); code != "" {
-		return t, code
+	if phase == "between" {
+		for i := next; i < len(t.how.legendary); i++ {
+			restore, err := armCombatFrame(lobby, "turn-advance", turnFrame(t, "between", i+1))
+			if err != nil {
+				return t, "combat_resume_error"
+			}
+			result, refusal, msg := takeLegendaryAction(t.how.request, lobby, t.how.legendary[i], t.window(), t.EndedID)
+			if refusal != "" {
+				result = map[string]interface{}{"combatant_id": t.how.legendary[i].CombatantID, "error": refusal, "message": msg}
+			}
+			t.LegendaryResults = append(t.LegendaryResults, result)
+			restore()
+			if combatResolutionPaused(lobby) {
+				return t, "combat_adjudication_pending"
+			}
+		}
+		if code = moveTurn(t, token); code != "" {
+			return t, code
+		}
+		phase, next = "start", 0
 	}
-	for _, h := range turnStartHooks {
-		h.run(t)
+	if phase == "start" {
+		if code = runHooks(turnStartHooks, "start", next); code != "" {
+			return t, code
+		}
 	}
 	return t, ""
 }
@@ -418,15 +547,18 @@ var turnRefusals = map[string]struct {
 	status  int
 	message string
 }{
-	"no_active_combat":        {http.StatusConflict, "No fight is running in this campaign: POST /api/campaigns/%d/combat/start starts one."},
-	"no_combatants":           {http.StatusConflict, "The turn order is empty: add combatants with POST /api/campaigns/%d/combat/add, or end the fight."},
-	"invalid_combat_turn":     {http.StatusConflict, "The current turn points outside the turn order; nothing was changed. GET /api/campaigns/%d/combat shows the order."},
-	"turn_already_advanced":   {http.StatusConflict, "That turn has already ended; nothing was changed. GET /api/campaigns/%d/combat shows whose turn it is."},
-	"turn_already_moved":      {http.StatusConflict, "The turn named in expected_turn has already ended; nothing was changed. GET /api/campaigns/%d/combat shows whose turn it is."},
-	"turn_change_in_progress": {http.StatusConflict, "Another request is changing this turn right now (it counts once); nothing more was changed. GET /api/campaigns/%d/combat shows whose turn it is."},
-	"not_player_turn":         {http.StatusConflict, "It is a monster's or NPC's turn: only a player's turn is skipped. Resolve it and POST /api/campaigns/%d/combat/next."},
-	"turn_not_timed_out":      {http.StatusConflict, "The turn hasn't timed out yet (table rule combat_turn_timeout); end it with POST /api/campaigns/%d/combat/next if it is done."},
-	"database_error":          {http.StatusInternalServerError, "The database failed; nothing more was changed (campaign %d)."},
+	"no_active_combat":             {http.StatusConflict, "No fight is running in this campaign: POST /api/campaigns/%d/combat/start starts one."},
+	"no_combatants":                {http.StatusConflict, "The turn order is empty: add combatants with POST /api/campaigns/%d/combat/add, or end the fight."},
+	"invalid_combat_turn":          {http.StatusConflict, "The current turn points outside the turn order; nothing was changed. GET /api/campaigns/%d/combat shows the order."},
+	"turn_already_advanced":        {http.StatusConflict, "That turn has already ended; nothing was changed. GET /api/campaigns/%d/combat shows whose turn it is."},
+	"turn_already_moved":           {http.StatusConflict, "The turn named in expected_turn has already ended; nothing was changed. GET /api/campaigns/%d/combat shows whose turn it is."},
+	"combat_adjudication_pending":  {http.StatusConflict, combatPauseMessage},
+	"combat_operation_in_progress": {http.StatusConflict, "Another command is resolving in campaign %d."},
+	"combat_resume_error":          {http.StatusInternalServerError, "Combat work could not be completed in campaign %d."},
+	"turn_change_in_progress":      {http.StatusConflict, "Another request is changing this turn right now (it counts once); nothing more was changed. GET /api/campaigns/%d/combat shows whose turn it is."},
+	"not_player_turn":              {http.StatusConflict, "It is a monster's or NPC's turn: only a player's turn is skipped. Resolve it and POST /api/campaigns/%d/combat/next."},
+	"turn_not_timed_out":           {http.StatusConflict, "The turn hasn't timed out yet (table rule combat_turn_timeout); end it with POST /api/campaigns/%d/combat/next if it is done."},
+	"database_error":               {http.StatusInternalServerError, "The database failed; nothing more was changed (campaign %d)."},
 }
 
 // answerTurnRefusal writes the reply to a refused turn change (extra fields added to it).
@@ -440,6 +572,10 @@ func answerTurnRefusal(w http.ResponseWriter, lobby int, t *turnChange, code str
 		msg = t.Message
 	}
 	out := map[string]interface{}{"error": code, "message": msg}
+	if t != nil && code == "combat_adjudication_pending" {
+		out["turn_resolution_paused"] = true
+		out["completed_turn_effects"] = t.Log
+	}
 	if t != nil {
 		for k, v := range t.Now { // the turn it is now (round, turn_index, current_turn, current_turn_id)
 			out[k] = v
@@ -456,6 +592,9 @@ func answerTurnRefusal(w http.ResponseWriter, lobby int, t *turnChange, code str
 // reply is what every turn change answers: the new turn, the round, and what happened at the change.
 func (t *turnChange) reply() map[string]interface{} {
 	m := map[string]interface{}{"success": true, "round": t.Round, "current_turn": t.NextName, "turn_index": t.Index, "action_economy_reset": true}
+	if len(t.LegendaryResults) > 0 {
+		m["legendary_actions_taken"] = t.LegendaryResults
+	}
 	if t.NewRound {
 		m["new_round"] = true
 	}
@@ -464,6 +603,9 @@ func (t *turnChange) reply() map[string]interface{} {
 	}
 	if len(t.SpellNotes) > 0 {
 		m["spell_turn_effects"] = t.SpellNotes
+	}
+	if len(t.GMNotes) > 0 { // GM only: every route that returns reply() is GM-gated (TestPostgresMonsterEndAnchoredToSource, case D)
+		m["gm_notices"] = t.GMNotes
 	}
 	if t.Survivor != nil {
 		m["survivor_regen"] = t.Survivor

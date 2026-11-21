@@ -83,8 +83,6 @@ func monsterSlug(name string) string {
 }
 
 var (
-	atkBonusRe     = regexp.MustCompile(`Attack Roll: ([+-]\d+)`)
-	hitDmgRe       = regexp.MustCompile(`Hit: \d+ \(([^)]+)\) ([A-Za-z]+) damage`)
 	speedNumRe     = regexp.MustCompile(`\d+`)
 	usesRe         = regexp.MustCompile(`Legendary Action Uses: (\d+)`)
 	legendaryResRe = regexp.MustCompile(`Legendary Resistance \((\d+)/Day`)
@@ -95,15 +93,12 @@ var (
 func oldStyleActions(entries []srdMonsterEntry) []map[string]interface{} {
 	out := []map[string]interface{}{}
 	for _, e := range entries {
-		a := map[string]interface{}{"name": e.Name, "desc": e.Text, "attack_bonus": 0, "damage_dice": "", "damage_type": ""}
-		if m := atkBonusRe.FindStringSubmatch(e.Text); m != nil {
-			n, _ := strconv.Atoi(m[1])
-			a["attack_bonus"] = n
+		parsed := parseMonsterAttack(e.Name, e.Text)
+		a := map[string]interface{}{"name": parsed.Name, "desc": parsed.Desc, "attack_bonus": parsed.AttackBonus, "damage_dice": parsed.DamageDice, "damage_type": parsed.DamageType}
+		if parsed.FlatDamage != nil {
+			a["flat_damage"] = *parsed.FlatDamage
 		}
-		if m := hitDmgRe.FindStringSubmatch(e.Text); m != nil {
-			a["damage_dice"] = strings.ReplaceAll(m[1], " ", "")
-			a["damage_type"] = m[2]
-		}
+
 		out = append(out, a)
 	}
 	return out
@@ -196,7 +191,7 @@ func nullInt(n int) interface{} {
 func monsterSaveBonus(monsterKey, ability string, score int) int {
 	if db != nil && monsterKey != "" {
 		var raw []byte
-		if db.QueryRow(`SELECT saves FROM monsters WHERE slug = $1`, monsterKey).Scan(&raw) == nil && len(raw) > 0 {
+		if monsterQueryRow(`SELECT saves FROM monsters WHERE slug = $1`, monsterKey).Scan(&raw) == nil && len(raw) > 0 {
 			saves := map[string]int{}
 			if json.Unmarshal(raw, &saves) == nil {
 				if v, ok := saves[ability]; ok {

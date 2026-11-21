@@ -14,7 +14,7 @@ import (
 	"time"
 )
 
-const version = "1.4.0"
+const version = "1.5.0"
 
 // Build time set via ldflags: -ldflags "-X main.buildTime=$(date -u +%Y-%m-%dT%H:%M:%SZ)"
 var buildTime = "dev"
@@ -200,7 +200,7 @@ func applyMonsterDamageResistance(monsterKey string, damage int, damageType stri
 
 	// Look up monster damage resistances/immunities/vulnerabilities from SRD data
 	var resistances, immunities, vulnerabilities string
-	err := db.QueryRow(`
+	err := monsterQueryRow(`
 		SELECT COALESCE(damage_resistances, ''), COALESCE(damage_immunities, ''), COALESCE(damage_vulnerabilities, '')
 		FROM monsters WHERE slug = $1
 	`, monsterKey).Scan(&resistances, &immunities, &vulnerabilities)
@@ -302,6 +302,7 @@ func main() {
 }
 
 func setupRoutes() {
+	http.HandleFunc("/api/gm/compendium/monsters", handleGMCompendiumMonsters)
 	// Static
 	http.HandleFunc("/llms.txt", handleLLMsTxt)
 	http.HandleFunc("/skill.md", handleSkillPage)
@@ -349,6 +350,7 @@ func setupRoutes() {
 	http.HandleFunc("/api/my-turn", withAPILogging(handleMyTurn))
 	http.HandleFunc("/api/pending-turn", withAPILogging(handlePendingTurn)) // a whole combat turn held until its slot (pending_turns_2024.go)
 	http.HandleFunc("/api/gm/status", withAPILogging(handleGMStatus))
+	http.HandleFunc("/api/gm/notices", withAPILogging(handleGMNotices))
 	http.HandleFunc("/api/gm/conditions", handleGMConditions)
 	http.HandleFunc("/api/gm/spell-effect", handleGMSpellEffect)      // F231
 	http.HandleFunc("/api/gm/adjust-monster", handleGMAdjustMonster)  // anything about an enemy (Nov 11)
@@ -357,6 +359,7 @@ func setupRoutes() {
 	http.HandleFunc("/api/conditions/active", handleConditionsActive)
 	http.HandleFunc("/api/universe/conditions", handleUniverseConditions)
 	http.HandleFunc("/api/conditions/escape", handleConditionEscape)
+	http.HandleFunc("/api/attach/detach", handleAttachDetach2024)
 	http.HandleFunc("/api/gm/kick-character", handleGMKickCharacter)
 	http.HandleFunc("/api/gm/melee-range", handleGMMeleeRange)
 	http.HandleFunc("/api/tokens", handleTokens)
@@ -391,6 +394,8 @@ func setupRoutes() {
 	http.HandleFunc("/api/gm/grapple", handleGMGrapple2024)
 	http.HandleFunc("/api/gm/escape-grapple", handleGMEscapeGrapple2024)
 	http.HandleFunc("/api/gm/release-grapple", handleGMReleaseGrapple2024)
+	http.HandleFunc("/api/gm/detach", handleGMDetach2024)                    // the GM's judgment; the published detach action is POST /api/attach/detach
+	http.HandleFunc("/api/gm/detach/voluntary", handleGMVoluntaryDetach2024) // the attached monster's own costed detach: its turn, 5 ft of movement
 	http.HandleFunc("/api/gm/forced-movement", handleGMForcedMovement)
 	http.HandleFunc("/api/gm/update-character", handleGMUpdateCharacter)
 	http.HandleFunc("/api/gm/award-xp", handleGMAwardXP)
@@ -410,6 +415,8 @@ func setupRoutes() {
 	http.HandleFunc("/api/gm/aoe-cast", handleGMAoECast)
 	http.HandleFunc("/api/gm/inspiration", handleGMInspiration)
 	http.HandleFunc("/api/gm/legendary-resistance", handleGMLegendaryResistance)
+	http.HandleFunc("/api/gm/monster-concentration", handleGMMonsterConcentration)
+	http.HandleFunc("/api/gm/combat-resume", handleGMCombatResume) // a pending Concentration save (monster_concentration_2024.go)
 	http.HandleFunc("/api/gm/legendary-action", handleGMLegendaryAction)
 	http.HandleFunc("/api/gm/monster-features", handleGMMonsterFeatures) // Legendary Actions and Resistance, lair, auras (monster_features_2024.go)
 	http.HandleFunc("/api/characters/attune", guardCharacterRead(handleCharacterAttune))

@@ -325,6 +325,11 @@ func wildShapeAttack(charID int, description string) string {
 	json.Unmarshal(raw, &acts)
 	low := strings.ToLower(description)
 	plan := beastAttackPlan(attacks, acts, low)
+	checked, problem := prepareCompanionPlan(companion{Attacks: plan}, description)
+	if problem != "" {
+		return problem
+	}
+	plan = checked
 	lobbyID := lobbyOfChar(charID)
 	targetID := attackTargetID(charID)
 	if ok, why := validateAttackTarget(lobbyID, targetID); !ok {
@@ -332,8 +337,7 @@ func wildShapeAttack(charID int, description string) string {
 	}
 	var name string
 	db.QueryRow(`SELECT name FROM characters WHERE id = $1`, charID).Scan(&name)
-	fake := companion{Name: name, CombatID: charID}
-	var lines []string
+	fake := companion{Name: name, CombatID: charID, Form: form}
 	for i, a := range plan {
 		if i == 0 {
 			if extra, typ := primalStrikeDice(charID, low); extra != "" {
@@ -342,7 +346,12 @@ func wildShapeAttack(charID int, description string) string {
 				}
 			}
 		}
-		lines = append(lines, companionAttack(lobbyID, fake, a, targetID))
+		a.Count = 1 // beastAttackPlan already expanded the stat block's counts
+		plan[i] = a
+	}
+	lines, err := companionAttackPlan(lobbyID, fake, plan, targetID)
+	if err != nil {
+		addGMNotice(lobbyID, "A form's attack plan could not finish; reconcile its saved work before continuing.")
 	}
 	return fmt.Sprintf("🐾 In Wild Shape, %s attacks: %s", name, strings.Join(lines, " "))
 }

@@ -145,21 +145,34 @@ func handleGMAdjustMonster(w http.ResponseWriter, r *http.Request) {
 	if req.Damage != nil && *req.Damage > 0 {
 		dtype := strings.ToLower(strings.TrimSpace(req.DamageType))
 		if req.ApplyResistances && dtype != "" {
-			text, _ := damageMonster(campaignID, tid, *req.Damage, dtype)
+			text, ok := damageMonster(campaignID, tid, *req.Damage, dtype)
+			if !ok {
+				writeJSONStatus(w, http.StatusInternalServerError, map[string]interface{}{"error": "monster_damage_failed", "message": "The monster damage could not be applied."})
+				return
+			}
 			did = append(did, strings.TrimSuffix(text, "."))
 		} else {
-			loseMonsterHP(campaignID, tid, *req.Damage) // exact: Temporary Hit Points first, never below 0
+			if _, err := loseMonsterHP(campaignID, tid, *req.Damage, dtype); err != nil { // exact: Temporary Hit Points first
+				writeJSONStatus(w, http.StatusInternalServerError, map[string]interface{}{"error": "monster_damage_failed", "message": "The monster damage could not be applied."})
+				return
+			}
 			text := fmt.Sprintf("%s takes %d%s damage (exact)", name, *req.Damage, strings.TrimRight(" "+dtype, " "))
 			text += wakeOnDamage(campaignID, tid, name)
 			did = append(did, text)
 		}
 	}
 	if req.Heal != nil && *req.Heal > 0 {
-		healMonster(campaignID, tid, *req.Heal)
+		if _, _, err := healMonster(campaignID, tid, *req.Heal); err != nil { // the monster Hit Point owner (monster_hp_2024.go): a failure is answered, never dropped
+			writeJSONStatus(w, http.StatusInternalServerError, map[string]interface{}{"error": "monster_heal_failed", "message": "The monster healing could not be applied."})
+			return
+		}
 		did = append(did, fmt.Sprintf("heals %d", *req.Heal))
 	}
 	if req.TempHP != nil {
-		setMonsterTempHP(campaignID, tid, *req.TempHP)
+		if err := setMonsterTempHP(campaignID, tid, *req.TempHP); err != nil {
+			writeJSONStatus(w, http.StatusInternalServerError, map[string]interface{}{"error": "monster_temp_hp_failed", "message": "The monster's Temporary Hit Points could not be applied."})
+			return
+		}
 		did = append(did, fmt.Sprintf("Temporary Hit Points %d", max(*req.TempHP, 0)))
 	}
 	if req.AC != nil {

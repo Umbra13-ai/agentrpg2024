@@ -150,11 +150,11 @@ func fireReadied(charID, lobbyID int, by string) (int, map[string]interface{}) {
 	return http.StatusOK, out
 }
 
-// reactionUsedNow: the character's Reaction is spent this round.
+// reactionUsedNow: the character has no Reaction to take now (spent this round, or taken away).
 func reactionUsedNow(charID int) bool {
 	var used bool
 	db.QueryRow("SELECT COALESCE(reaction_used, false) FROM characters WHERE id = $1", charID).Scan(&used)
-	return used
+	return used || charCantTakeReactions(charID) // a condition or effect that takes Reactions away (Shocking Grasp ...)
 }
 
 // readiedView: the readied action as my-turn shows it.

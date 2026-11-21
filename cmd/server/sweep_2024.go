@@ -14,6 +14,7 @@ package main
 // a creature hits you, its other attack rolls against you this turn have Disadvantage) are applied to monster attacks.
 
 import (
+	"encoding/json"
 	"fmt"
 	"net/http"
 	"strings"
@@ -261,17 +262,52 @@ func holyNimbusDamage(lobbyID, monsterID int) []string {
 		}
 	}
 	rows.Close()
+	return runHolyNimbus(lobbyID, holyNimbusCursor{Target: monsterID, Paladins: paladins})
+}
+
+type holyNimbusCursor struct {
+	Target   int
+	Paladins []int
+	Next     int
+}
+
+func init() {
+	combatResumeHandlers["holy-nimbus"] = func(lobby int, raw json.RawMessage) (map[string]interface{}, error) {
+		var c holyNimbusCursor
+		if err := json.Unmarshal(raw, &c); err != nil {
+			return nil, err
+		}
+		lines := runHolyNimbus(lobby, c)
+		for _, line := range lines {
+			recordGMAction(db, lobby, "condition", line, line)
+		}
+		return map[string]interface{}{"turn_effects": lines}, nil
+	}
+}
+func runHolyNimbus(lobbyID int, c holyNimbusCursor) []string {
 	var out []string
-	for _, p := range paladins {
+	for i := c.Next; i < len(c.Paladins); i++ {
+		p := c.Paladins[i]
 		var level, cha, hp int
-		db.QueryRow(`SELECT level, cha, hp FROM characters WHERE id = $1`, p).Scan(&level, &cha, &hp)
-		d, known := charDistanceFeet(lobbyID, p, monsterID)
-		if hp <= 0 || !known || d > 30 { // the aura is 30 feet at level 18+; positions need the battle map
+		db.QueryRow(`SELECT level,cha,hp FROM characters WHERE id=$1 AND lobby_id=$2`, p, lobbyID).Scan(&level, &cha, &hp)
+		d, known := charDistanceFeet(lobbyID, p, c.Target)
+		if hp <= 0 || !known || d > 30 {
 			continue
 		}
+		next := c
+		next.Next = i + 1
+		restore, err := armCombatFrame(lobbyID, "holy-nimbus", next)
+		if err != nil {
+			addGMNotice(lobbyID, "An aura could not save its continuation; no further automatic aura damage was run.")
+			return out
+		}
 		dmg := game.Modifier(cha) + game.ProficiencyBonus(level)
-		text, _ := damageMonster(lobbyID, monsterID, dmg, "radiant")
+		text, _ := damageMonster(lobbyID, c.Target, dmg, "radiant")
 		out = append(out, "Holy Nimbus: "+strings.TrimSpace(text))
+		restore()
+		if combatResolutionPaused(lobbyID) {
+			return out
+		}
 	}
 	return out
 }
@@ -340,6 +376,7 @@ func handleGMSuperiorHuntersDefense(w http.ResponseWriter, r *http.Request) {
 	var level int
 	var reaction bool
 	db.QueryRow(`SELECT class, COALESCE(subclass,''), level, COALESCE(reaction_used,false) FROM characters WHERE id = $1`, req.CharacterID).Scan(&class, &subclass, &level, &reaction)
+	reaction = reaction || charCantTakeReactions(req.CharacterID)
 	if !strings.EqualFold(class, "ranger") || !strings.EqualFold(subclass, "hunter") || level < 15 {
 		dmBadRequest(w, "not_available", "Superior Hunter's Defense is a Hunter feature from Ranger level 15.")
 		return

@@ -75,6 +75,7 @@ type conditionRecord struct {
 	EndSave        *conditionSave    `json:"end_save,omitempty"`
 	Notes          string            `json:"notes,omitempty"`
 	Detail         string            `json:"-"` // what follows the condition's name in the list entry ("charmed:12": 12)
+	SourceID       int               `json:"-"` // the creature that caused it (a monster's negative id): ownership by identity, not by the display text of Source
 	CreatedBy      int               `json:"-"` // a Concentration spell's caster (notes "concentration"), or the GM who set it
 }
 
@@ -239,6 +240,8 @@ type gmConditionRequest struct {
 	TargetID         int               `json:"target_id"`
 	Condition        string            `json:"condition"`          // one of the 15 conditions, or exhaustion (DELETE: a condition's name, or all)
 	Source           string            `json:"source"`             // what caused it (GM only)
+	SourceID         int               `json:"source_id"`          // the creature in this campaign that caused it
+	EndsWithGrapple  bool              `json:"ends_with_grapple"`  // a Restrained record that ends with this source's existing Grappled record
 	Escapes          []conditionEscape `json:"escapes"`            // the ways to end it, each {ability, skill, dc, label, uses_action}
 	EscapeDC         int               `json:"escape_dc"`          // Grappled: the escape DC (the Strength (Athletics) or Dexterity (Acrobatics) escapes are made for you)
 	DurationRounds   int               `json:"duration_rounds"`    // it counts down at the end of the affected creature's turns and ends at 0
@@ -246,6 +249,7 @@ type gmConditionRequest struct {
 	RecordID         int               `json:"record_id"`          // DELETE: the record to remove (its id from GET /api/conditions/active)
 	EndSave          *conditionSave    `json:"end_save"`           // a saving throw repeated at the end (or start) of each of its turns: {ability, dc, when}; a success ends it
 	FromMagicalSleep bool              `json:"from_magical_sleep"` // true: magic puts the creature to sleep (Fey Ancestry and the like make it immune)
+	SpeedFt          *int              `json:"speed_ft"`           // condition speed_ruling: the Speed in feet when effects meet that the rules do not combine
 	Level            *int              `json:"level"`              // exhaustion: the level to set (0-6)
 	CasterID         int               `json:"caster_id"`          // a spell's state (blessed): who cast it, when more than one has it in play
 	All              bool              `json:"all"`                // DELETE: every condition of the target
@@ -276,6 +280,11 @@ func handleGMConditions(w http.ResponseWriter, r *http.Request) {
 		handleGMSpellEffect(w, r2)
 		return
 	}
+	if r.Method == http.MethodDelete && req.RecordID == 0 && strings.EqualFold(strings.TrimSpace(req.Condition), "speed_ruling") {
+		gone := removeConditionsWhere(campaignID, req.TargetID, func(r conditionRecord) bool { return r.Condition == "speed_ruling" })
+		writeJSONStatus(w, 200, map[string]interface{}{"success": true, "target_id": req.TargetID, "removed": len(gone)})
+		return
+	}
 	if r.Method == http.MethodDelete && req.RecordID == 0 { // by name: target_id with a condition, or "all"
 		gmDeleteByName(w, campaignID, req.TargetID, req.Condition, req.All)
 		return
@@ -288,6 +297,19 @@ func handleGMConditions(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 		writeJSONStatus(w, 200, map[string]interface{}{"success": true, "removed": gone[0].Condition, "target_id": gone[0].TargetID})
+		return
+	}
+	if strings.EqualFold(strings.TrimSpace(req.Condition), "speed_ruling") { // the GM's Speed when effects meet that the rules do not combine (speed_owner_2024.go)
+		if req.TargetID == 0 || (req.TargetID < 0 && !monsterInCombat(campaignID, req.TargetID)) || req.SpeedFt == nil || *req.SpeedFt < 0 {
+			writeJSONStatus(w, http.StatusBadRequest, map[string]interface{}{"error": "speed_ruling_needs_target_and_speed_ft", "message": "Send target_id and speed_ft (0 or more); duration_rounds counts down at the end of its turns (omit: until you remove it)"})
+			return
+		}
+		res := addCondition(campaignID, req.TargetID, condAdd{Condition: fmt.Sprintf("speed_ruling:%d", *req.SpeedFt), Source: "GM ruling", Rounds: req.DurationRounds, Replace: true, CreatedBy: agentID})
+		if res.Err != nil {
+			writeJSONStatus(w, 500, map[string]interface{}{"error": "could_not_record_condition"})
+			return
+		}
+		writeJSONStatus(w, 200, map[string]interface{}{"success": true, "target_id": req.TargetID, "speed_ft": *req.SpeedFt, "duration_rounds": req.DurationRounds})
 		return
 	}
 	def, valid := srdCondition(req.Condition)
@@ -332,8 +354,33 @@ func handleGMConditions(w http.ResponseWriter, r *http.Request) {
 		writeJSONStatus(w, http.StatusBadRequest, map[string]interface{}{"error": "invalid_end_save", "message": msg})
 		return
 	}
+	if req.SourceID != 0 {
+		if len(targetIDsFrom(campaignID, "", []int{req.SourceID})) != 1 {
+			writeJSONStatus(w, http.StatusBadRequest, map[string]interface{}{"error": "source_not_found", "message": "Give the ID of the source creature in this campaign."})
+			return
+		}
+		if strings.TrimSpace(req.Source) == "" {
+			req.Source = creatureName(campaignID, req.SourceID)
+		}
+	}
+	if req.EndsWithGrapple {
+		linked := false
+		if cond == "restrained" && req.Source != "" && req.SourceID != 0 {
+			for _, record := range loadConditionRecords(campaignID, req.TargetID) {
+				if record.Condition == "grappled" && record.SourceID == req.SourceID && record.Source == req.Source {
+					linked = true
+					break
+				}
+			}
+		}
+		if !linked {
+			writeJSONStatus(w, http.StatusBadRequest, map[string]interface{}{"error": "grapple_source_required", "message": "Link Restrained to an existing Grappled record from the same source and creature."})
+			return
+		}
+		req.Notes = notesEndsWithGrapple
+	}
 	res := addCondition(campaignID, req.TargetID, condAdd{Condition: cond, Source: req.Source, Escapes: escapes, Rounds: req.DurationRounds,
-		EndSave: req.EndSave, Notes: req.Notes, CreatedBy: agentID, MagicalSleep: req.FromMagicalSleep,
+		EndSave: req.EndSave, Notes: req.Notes, CreatedBy: agentID, SourceID: req.SourceID, MagicalSleep: req.FromMagicalSleep,
 		Magical: strings.Contains(strings.ToLower(req.Source), "spell") || strings.Contains(strings.ToLower(req.Source), "magic")}) // the GM names the source
 	if res.Immune != "" {
 		writeJSONStatus(w, 200, map[string]interface{}{"success": true, "immune": true, "immunity_source": res.Immune, "target_id": req.TargetID,
@@ -640,4 +687,8 @@ func clearMonsterConditions(campaignID int) {
 	clearMonsterReactions(campaignID)
 	clearBurning(campaignID, true) // F69: a monster's fire doesn't pass to the monster with its id in the next fight
 	clearMonsterConditionRecords(campaignID)
+	if db != nil {
+		cancelCombatWork(campaignID)
+		db.Exec(`DELETE FROM monster_concentration WHERE lobby_id = $1`, campaignID) // monster ids are not kept between fights (monster_concentration_2024.go)
+	}
 }

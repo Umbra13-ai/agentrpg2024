@@ -470,8 +470,20 @@ func handleGMCuttingWords(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	// Cutting Words is a Reaction: refused when the Reaction is spent or the bard can't take Reactions (the shared check)
+	var cwUsed bool
+	db.QueryRow(`SELECT COALESCE(reaction_used,false) FROM characters WHERE id = $1`, req.BardID).Scan(&cwUsed)
+	if cwUsed || charCantTakeReactions(req.BardID) {
+		w.WriteHeader(http.StatusBadRequest)
+		json.NewEncoder(w).Encode(map[string]interface{}{"error": "no_reaction", "message": fmt.Sprintf("%s can't use Cutting Words: the Reaction is spent or %s can't take Reactions.", charName, charName)})
+		return
+	}
+
 	// Check for Bardic Inspiration uses
 	success, errMsg, remaining := useClassResource(req.BardID, "bardic_inspiration", 1)
+	if success {
+		db.Exec(`UPDATE characters SET reaction_used = true WHERE id = $1`, req.BardID)
+	}
 	if !success {
 		w.WriteHeader(http.StatusBadRequest)
 		json.NewEncoder(w).Encode(map[string]interface{}{

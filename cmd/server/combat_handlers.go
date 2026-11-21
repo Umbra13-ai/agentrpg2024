@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"github.com/agentrpg/agentrpg/game"
 	"net/http"
+	"regexp"
 	"sort"
 	"strconv"
 	"strings"
@@ -57,6 +58,13 @@ func canSeeInLighting(charID int, lighting string) string {
 	darkvision, blindsight, truesight := getCharacterVision(charID)
 
 	switch lighting {
+	case "magical darkness":
+		// Magical Darkness: heavily obscured, and Darkvision can't penetrate it - only Blindsight,
+		// Truesight and Devil's Sight ("darkness, both magical and nonmagical") can.
+		if truesight > 0 || blindsight > 0 || hasInvocation(charID, "devils-sight") {
+			return "normal"
+		}
+		return "blind"
 	case "bright":
 		return "normal"
 	case "dim":
@@ -89,6 +97,69 @@ func canSeeInLighting(charID int, lighting string) string {
 		return "blind"
 	}
 	return "normal"
+}
+
+var monsterVisionRe = regexp.MustCompile(`(?i)(darkvision|blindsight|truesight)\s+(\d+)\s*ft`)
+
+// creatureVision: darkvision, blindsight and truesight ranges in feet for either side of a combat -
+// characters from their sheet and buffs (getCharacterVision), monsters from the compendium's
+// senses. A companion has no modeled senses and reads as an ordinary human: all zero.
+func creatureVision(lobbyID, creatureID int) (darkvision, blindsight, truesight int) {
+	if creatureID > 0 {
+		if isCompanionCombatID(creatureID) {
+			return 0, 0, 0
+		}
+		return getCharacterVision(creatureID)
+	}
+	key := ""
+	for _, entry := range combatEntries(lobbyID) {
+		if asInt(entry["id"]) == creatureID {
+			key = sprintAny(entry["monster_key"])
+			break
+		}
+	}
+	if meta := monsterMetaFor(key); meta != nil {
+		for _, m := range monsterVisionRe.FindAllStringSubmatch(meta.Senses, -1) {
+			n, _ := strconv.Atoi(m[2])
+			switch strings.ToLower(m[1]) {
+			case "darkvision":
+				if n > darkvision {
+					darkvision = n
+				}
+			case "blindsight":
+				if n > blindsight {
+					blindsight = n
+				}
+			case "truesight":
+				if n > truesight {
+					truesight = n
+				}
+			}
+		}
+	}
+	return
+}
+
+// creatureSeesInLighting: the creature can make out something standing on a square with the given
+// lighting at distFeet (0 = no map distance: any positive range counts, the pre-existing
+// convention). The attack-relevant reading of the light rules for BOTH sides: dim light never
+// penalizes attacks; darkness is made out by Darkvision (treated as dim), Blindsight or Truesight
+// within range, and a character's Devil's Sight within 120 feet; magical darkness only by the
+// piercing senses (monster_darkness_2024.go).
+func creatureSeesInLighting(lobbyID, creatureID int, lighting string, distFeet int) bool {
+	if distFeet < 1 {
+		distFeet = 1
+	}
+	switch lighting {
+	case "magical darkness":
+		return piercesMagicalDarknessWithin(lobbyID, creatureID, distFeet)
+	case "darkness":
+		darkvision, blindsight, truesight := creatureVision(lobbyID, creatureID)
+		return darkvision >= distFeet || blindsight >= distFeet || truesight >= distFeet ||
+			(creatureID > 0 && !isCompanionCombatID(creatureID) && hasInvocation(creatureID, "devils-sight") && distFeet <= 120)
+	default: // bright, dim, and anything the model doesn't name
+		return true
+	}
 }
 
 // nullString helper for optional string fields
@@ -387,7 +458,7 @@ func handleCombatStart(w http.ResponseWriter, r *http.Request, campaignID int) {
 		var species string
 		db.QueryRow("SELECT species FROM characters WHERE id = $1", entry.ID).Scan(&species)
 		speed := characterSpeed(entry.ID, species)
-		db.Exec("UPDATE characters SET movement_remaining = $1 WHERE id = $2", speed, entry.ID)
+		setMovementBudget(entry.ID, speed)
 	}
 
 	response := map[string]interface{}{
@@ -526,24 +597,12 @@ func handleCombatNext(w http.ResponseWriter, r *http.Request, campaignID int) {
 		writeJSONStatus(w, http.StatusConflict, end.Reply)
 		return
 	}
-	var legendaryResults []map[string]interface{}
-	t, code := advanceTurn(campaignID, turnHow{by: "the GM advanced the turn order", expect: end.Expect, between: func(t *turnChange) {
-		for _, la := range nextReq.LegendaryActions { // after the turn that ended, before the next creature's turn starts
-			res, code, msg := takeLegendaryAction(r, campaignID, la, t.window(), t.EndedID)
-			if code != "" {
-				res = map[string]interface{}{"combatant_id": la.CombatantID, "error": code, "message": msg}
-			}
-			legendaryResults = append(legendaryResults, res)
-		}
-	}})
+	t, code := advanceTurn(campaignID, turnHow{by: "the GM advanced the turn order", expect: end.Expect, legendary: nextReq.LegendaryActions, request: r})
 	if code != "" {
 		answerTurnRefusal(w, campaignID, t, code)
 		return
 	}
 	response := t.reply()
-	if len(legendaryResults) > 0 {
-		response["legendary_actions_taken"] = legendaryResults
-	}
 	json.NewEncoder(w).Encode(response)
 }
 
@@ -876,15 +935,20 @@ func handleCombatAdd(w http.ResponseWriter, r *http.Request, campaignID int) {
 	var req struct {
 		Combatants []struct { // the combatants to add: name, monster_key, initiative, surprised, hp, ac, in_lair
 			Name       string `json:"name"`
-			MonsterKey string `json:"monster_key"` // SRD monster slug (e.g., "goblin")
+			MonsterKey string `json:"monster_key"` // SRD monster slug or custom: key from the shared GM compendium
 			Initiative int    `json:"initiative"`  // Optional: roll if not provided
 			Surprised  bool   `json:"surprised"`   // Optional: surprised by combat starting (Disadvantage on Initiative)
 			HP         int    `json:"hp"`          // Optional: use monster default
 			AC         int    `json:"ac"`          // Optional: use monster default
 			InLair     bool   `json:"in_lair"`     // Optional: the monster fights in its lair (one more Legendary Action use and Legendary Resistance)
+			CreatureID string `json:"creature_id"` // Optional: a creature the campaign already knows (same stat block): it keeps its per-day uses; without it the monster is a new creature
 		} `json:"combatants"`
 	}
 	if !readRequest(w, r, &req) {
+		return
+	}
+
+	if !checkCustomReferences(w, &req, campaignID) {
 		return
 	}
 
@@ -892,6 +956,29 @@ func handleCombatAdd(w http.ResponseWriter, r *http.Request, campaignID int) {
 		w.WriteHeader(http.StatusBadRequest)
 		json.NewEncoder(w).Encode(map[string]interface{}{"error": "no_combatants_provided"})
 		return
+	}
+
+	// A returning creature is linked on purpose: it must be known to the campaign, have the same stat block and not already be in the fight.
+	linked := map[string]bool{}
+	for _, c := range req.Combatants {
+		if c.CreatureID == "" {
+			continue
+		}
+		if k := creatureStatBlock(campaignID, c.CreatureID); k == "" || k != c.MonsterKey {
+			writeJSONStatus(w, http.StatusBadRequest, map[string]interface{}{"error": "unknown_creature_id", "message": "creature_id " + c.CreatureID + " is not a creature of this campaign with the stat block " + c.MonsterKey + " (GET /api/gm/monster-features lists them)."})
+			return
+		}
+		inFight := linked[c.CreatureID]
+		for _, e := range combatEntries(campaignID) {
+			if sprintAny(e["creature_id"]) == c.CreatureID {
+				inFight = true
+			}
+		}
+		if inFight {
+			writeJSONStatus(w, http.StatusBadRequest, map[string]interface{}{"error": "creature_already_in_fight", "message": "creature_id " + c.CreatureID + " is already in the fight."})
+			return
+		}
+		linked[c.CreatureID] = true
 	}
 
 	// The new entries (their ids are given by the fight, below): stat block, Initiative, Hit Points, AC.
@@ -904,7 +991,8 @@ func handleCombatAdd(w http.ResponseWriter, r *http.Request, campaignID int) {
 		}
 		init, dex, hp, ac := c.Initiative, 0, 10, 10
 		var mdex, mhp, mac int
-		known := c.MonsterKey != "" && db.QueryRow(`SELECT COALESCE(dex, 10), COALESCE(hp, 10), COALESCE(ac, 10) FROM monsters WHERE slug = $1`, c.MonsterKey).Scan(&mdex, &mhp, &mac) == nil
+		var initiativeMod sql.NullInt64
+		known := c.MonsterKey != "" && monsterQueryRow(`SELECT COALESCE(dex, 10), COALESCE(hp, 10), COALESCE(ac, 10), initiative_mod FROM monsters WHERE slug = $1`, c.MonsterKey).Scan(&mdex, &mhp, &mac, &initiativeMod) == nil
 		if known {
 			dex, hp, ac = mdex, mhp, mac
 		}
@@ -921,7 +1009,11 @@ func handleCombatAdd(w http.ResponseWriter, r *http.Request, campaignID int) {
 							d = d2
 						}
 					}
-					init = d + game.Modifier(dex)
+					modifier := game.Modifier(dex)
+					if initiativeMod.Valid {
+						modifier = int(initiativeMod.Int64)
+					}
+					init = d + modifier
 					groupInit[groupKey] = init
 				}
 			} else {
@@ -935,7 +1027,7 @@ func handleCombatAdd(w http.ResponseWriter, r *http.Request, campaignID int) {
 			ac = c.AC
 		}
 		newEntries = append(newEntries, map[string]interface{}{"name": c.Name, "initiative": init, "dex_score": dex, "is_monster": true,
-			"monster_key": c.MonsterKey, "hp": hp, "max_hp": hp, "ac": ac})
+			"monster_key": c.MonsterKey, "hp": hp, "max_hp": hp, "ac": ac, "creature_id": creatureIDFor(c.CreatureID)})
 		inLair = append(inLair, known && c.InLair) // in its lair: the "in Lair" numbers of Legendary Actions and Legendary Resistance
 	}
 
@@ -973,7 +1065,10 @@ func handleCombatAdd(w http.ResponseWriter, r *http.Request, campaignID int) {
 			s.InLair = true
 			saveMonsterState(campaignID, id, s)
 		}
-		a := map[string]interface{}{"id": id, "name": e["name"], "initiative": e["initiative"], "hp": e["hp"], "ac": e["ac"]}
+		if cid := sprintAny(e["creature_id"]); cid != "" && cid != "<nil>" {
+			registerCreature(campaignID, cid, sprintAny(e["name"]), sprintAny(e["monster_key"]))
+		}
+		a := map[string]interface{}{"id": id, "creature_id": e["creature_id"], "name": e["name"], "initiative": e["initiative"], "hp": e["hp"], "ac": e["ac"]}
 		if feats := monsterFeaturesInfo(campaignID, id); feats != nil { // Legendary Actions, Legendary Resistance, auras the server runs for this monster
 			a["features"] = feats
 		}
@@ -1781,7 +1876,7 @@ func handleRest(w http.ResponseWriter, r *http.Request, charID int) {
 			action_used = false,
 			bonus_action_used = false, weapon_interaction_used = false,
 			reaction_used = false,
-			movement_remaining = 30,
+			movement_remaining = 30, movement_speed_base = NULL,
 			ammo_used_since_rest = 0,
 			class_resources_used = '{}',
 			breath_weapon_used = false,

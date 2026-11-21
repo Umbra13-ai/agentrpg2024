@@ -18,9 +18,11 @@ package main
 // Targets are characters (target or target_ids); an Emanation effect with a battle map and no targets reaches the characters in it.
 
 import (
+	"encoding/json"
 	"fmt"
 	"net/http"
 	"regexp"
+	"slices"
 	"strconv"
 	"strings"
 
@@ -28,19 +30,30 @@ import (
 )
 
 var (
-	mfxSaveRe     = regexp.MustCompile(`(Strength|Dexterity|Constitution|Intelligence|Wisdom|Charisma) Saving Throw: DC (\d+)`)
-	mfxDamageRe   = regexp.MustCompile(`(\d+) \((\d+d\d+(?:\s*[+−-]\s*\d+)?)\) ([A-Za-z]+) damage`)
-	mfxCondRe     = regexp.MustCompile(`has the ((?:[A-Z][a-z]+)(?:(?:, | and | or )[A-Z][a-z]+)*) conditions?`)
-	mfxExhaustRe  = regexp.MustCompile(`gains? (\d+) Exhaustion levels?`)
-	mfxAttackRe   = regexp.MustCompile(`makes one ([A-Z][A-Za-z’' -]+?)(?: or ([A-Z][A-Za-z’' -]+?))? attack`)
-	mfxUsesRe     = regexp.MustCompile(`uses (?:its )?([A-Z][A-Za-z’' -]+?)(?:[.,]| and | to |$)`)
-	mfxSpellRe    = regexp.MustCompile(`(?:uses Spellcasting to cast|casts) ([A-Z][A-Za-z’' /-]+?)(?: \(level (\d) version\))?(?: on itself)?(?: twice)?(?:[.,;]| requiring| using| on |$)`)
-	mfxSpellDCRe  = regexp.MustCompile(`spell save DC (\d+)`)
-	mfxSpellAtkRe = regexp.MustCompile(`([+−-]\d+) to hit with spell attacks`)
-	mfxEmanRe     = regexp.MustCompile(`(\d+)\s*-?\s*foot Emanation`)
-	mfxDurationRe = regexp.MustCompile(`(?i)(?:until the (?:start|end) of (?:its|the [^ ]+) next turn|for 1 (?:minute|hour)|for 24 hours)`)
-	mfxPlainDmgRe = regexp.MustCompile(`takes (\d+) \((\d+d\d+(?:\s*[+−-]\s*\d+)?)\) ([A-Za-z]+) damage`)
-	mfxConditions = map[string]bool{"blinded": true, "charmed": true, "deafened": true, "frightened": true, "grappled": true, "incapacitated": true,
+	mfxSaveRe = regexp.MustCompile(`(Strength|Dexterity|Constitution|Intelligence|Wisdom|Charisma) Saving Throw: DC (\d+)`)
+	// SRD 5.2.1 p.185: a nonspell phenomenon is magical when its rule labels it so.
+	mfxMagicalRe                 = regexp.MustCompile(`(?i)(?:^|[.!?]\s+)this (?:action|attack|effect|trait) is magical(?:[.!?]|$)`)
+	mfxConditionDamageImmunityRe = regexp.MustCompile(`(?i)unless the target has immunity to ([a-z]+) damage`)
+	mfxSuccessImmunityTimeRe     = regexp.MustCompile(`(?i)immune to (?:this|the) [^.!?]*? for (?:the next )?(\d+) (rounds?|minutes?|hours?|days?)\b`)
+	mfxAllSourcesImmunityRe      = regexp.MustCompile(`(?i)immune to the [^.!?]*? of all [^.!?]*? for (?:the next )?\d+ (?:rounds?|minutes?|hours?|days?)\b`)
+	mfxDamageRe                  = regexp.MustCompile(`(\d+) \((\d+d\d+(?:\s*[+−-]\s*\d+)?)\) ([A-Za-z]+) damage`)
+	mfxCondRe                    = regexp.MustCompile(`has the ((?:[A-Z][a-z]+)(?:(?:, | and | or )[A-Z][a-z]+)*) conditions?`)
+	mfxEscapeRe                  = regexp.MustCompile(`Grappled condition \(escape DC (\d+)\)`)
+	mfxRestrainRe                = regexp.MustCompile(`(?i)(?:,? and it has the Restrained condition until the grapple ends|while Grappled, the target has the Restrained condition)`)
+	mfxExhaustRe                 = regexp.MustCompile(`gains? (\d+) Exhaustion levels?`)
+	mfxAttackRe                  = regexp.MustCompile(`makes one ([A-Z][A-Za-z’' -]+?)(?: or ([A-Z][A-Za-z’' -]+?))? attack`)
+	mfxUsesRe                    = regexp.MustCompile(`uses (?:its )?([A-Z][A-Za-z’' -]+?)(?:[.,]| and | to |$)`)
+	mfxSpellRe                   = regexp.MustCompile(`(?:uses Spellcasting to cast|casts) ([A-Z][A-Za-z’' /-]+?)(?: \(level (\d) version\))?(?: on itself)?(?: twice)?(?:[.,;]| requiring| using| on |$)`)
+	mfxSpellDCRe                 = regexp.MustCompile(`spell save DC (\d+)`)
+	mfxSpellAtkRe                = regexp.MustCompile(`([+−-]\d+) to hit with spell attacks`)
+	mfxEmanRe                    = regexp.MustCompile(`(\d+)\s*-?\s*foot Emanation`)
+	mfxUntilStartRe              = regexp.MustCompile(`until the start of (?:its|the (?:[^ ]+?)['’]s) next turn`) // the attacker's turn ("the empyrean's"); "the target's" is the target's own
+	mfxUntilEndRe                = regexp.MustCompile(`until the end of the ([^ ]+?)['’]s next turn`)             // an end anchored to a named creature's turn; "the target's" is the target's own
+	mfxEndSaveRe                 = regexp.MustCompile(`(?i)repeats the save at the end of each of its turns|at the end of each of its turns, (?:the target|it) repeats the save`)
+	mfxAutoSucceedRe             = regexp.MustCompile(`(?i)\bAfter (\d+) minutes?, it succeeds automatically`)
+	targetIsCreatureGateRe       = regexp.MustCompile(`(?i)\bIf the target is a creature,?(?:\s+(?:its|it)\b)?`)
+	mfxDurationRe                = regexp.MustCompile(`(?i)(?:until the (?:start|end) of (?:its|the [^ ]+) next turn|for 1 (?:minute|hour)|for 24 hours)`)
+	mfxConditions                = map[string]bool{"blinded": true, "charmed": true, "deafened": true, "frightened": true, "grappled": true, "incapacitated": true,
 		"invisible": true, "paralyzed": true, "petrified": true, "poisoned": true, "prone": true, "restrained": true, "stunned": true, "unconscious": true}
 )
 
@@ -65,36 +78,468 @@ func mfxSection(text, label string, next ...string) string {
 }
 
 type saveEffect struct {
-	Ability       string // dex, con ...
-	AbilityName   string // Dexterity
-	DC            int
-	Damage        []damagePart
-	HalfOnSuccess bool
-	Conditions    []string
-	Rounds        int    // condition duration in rounds (0: until removed)
-	UntilStart    bool   // "until the start of its next turn"
-	EndSave       bool   // repeats the save at the end of each of its turns
-	Exhaustion    int    // Exhaustion levels on a failure
-	Immunity      bool   // Success: immune to this aura for 24 hours
-	Extra         string // Failure text the server doesn't apply (for the GM)
-	Emanation     int    // feet, when the targets are in an Emanation from the monster
-	IsSpell       bool   // a spell: items that guard against spells work (legendary_more_2024.go)
-	SpellLevel    int    // its level (0: a cantrip)
-	School        string // its school (Necromancy: the Scarab of Protection)
-	SingleTarget  bool   // aimed only at one creature, no area (Spell Absorption, Ring of Spell Turning's Reaction)
-	SourceID      int    // the monster it comes from
-	FromUndead    bool   // it comes from an Undead (the Scarab of Protection)
+	Ability            string // dex, con ...
+	AbilityName        string // Dexterity
+	DC                 int
+	Damage             []damagePart
+	HalfOnSuccess      bool
+	SeverePoison       *severePoisonEffect
+	Conditions         []string
+	Rounds             int                 // condition duration in rounds (0: until removed)
+	UntilStart         bool                // "until the start of its next turn"
+	UntilEnd           bool                // "until the end of the <creature>'s next turn": ends at the end of the SOURCE creature's turn (monsterFeaturesTurnEnd)
+	EndSave            bool                // repeats the save at the end of each of its turns
+	Exhaustion         int                 // Exhaustion levels on a failure
+	EscapeDC           int                 // "the Grappled condition (escape DC 16)": the DC of the escape checks
+	RestrainedToo      bool                // "and it has the Restrained condition until the grapple ends": Restrained that ends with the Grappled record
+	SpeedMode          string              // "halved", "zero" or "minus": a Speed rider of the text (speed_owner_2024.go), applied as a marker for SpeedEnd
+	SpeedEnd           riderEnd            // the Speed rider's duration (rider_duration_2024.go)
+	Always             *saveEffect         // the conditions, Speed and Disadvantage of "Failure or Success:": given to every target that rolled the save
+	DisadvMode         []string            // the roll riders of the text: "sap", "exposed", "attacks", "concentration", "save:int", "noreactions" (disadvantage_riders_2024.go)
+	RollRiderEnd       map[string]riderEnd // the duration of each DisadvMode rider
+	SpeedMinus         int                 // the feet of "its Speed decreases by 10 feet"
+	ImmunityName       string              // stat-block entry key for persisted success immunity (set by the effect caller)
+	Immunity           bool                // success grants immunity to this source and entry
+	ImmunityAllSources bool                // "immune to the <entry> of all <kind>s": the immunity covers every source of the entry, not only the grantor
+	ImmunityRounds     int                 // source duration, in combat rounds
+	ImmunityDuration   string              // the parsed numeric duration for the result
+	CondDamageImmunity string              // a damage Immunity excludes its condition rider
+	CondMaxSize        string              // "If the target is a Huge or smaller creature, ... has the Prone condition": the conditions apply only to a target of this size or smaller
+	CondIfAdvantage    bool                // "... and the darkmantle had Advantage on the attack roll": the conditions apply only when the roll had Advantage (enforced by the hit caller, which has the roll)
+	Extra              string              // Failure text the server doesn't apply (for the GM)
+	Emanation          int                 // feet, when the targets are in an Emanation from the monster
+	IsMagical          bool                // a nonspell effect explicitly labeled magical by its stat block
+	IsSpell            bool                // a spell: items that guard against spells work (legendary_more_2024.go)
+	SpellLevel         int                 // its level (0: a cantrip)
+	School             string              // its school (Necromancy: the Scarab of Protection)
+	SingleTarget       bool                // aimed only at one creature, no area (Spell Absorption, Ring of Spell Turning's Reaction)
+	SourceID           int                 // the monster it comes from
+	FromUndead         bool                // it comes from an Undead (the Scarab of Protection)
+}
+
+// conditionAdd is the condition record a failed save leaves (character or monster target): its duration, the repeated save, the note
+// "until the start of its next turn", and for Grappled the escape checks against the stat block's escape DC.
+func (e saveEffect) conditionAdd(cond, source string) condAdd {
+	a := condAdd{Condition: cond, Source: source, Rounds: e.Rounds, SourceID: e.SourceID, Magical: e.IsSpell}
+	if e.EndSave {
+		a.EndSave = &conditionSave{Ability: e.Ability, DC: e.DC}
+	}
+	if e.UntilStart {
+		a.Notes = notesUntilStartOfSourceTurn
+	}
+	if e.UntilEnd {
+		a.Notes = notesUntilEndOfSourceTurn
+	}
+	if cond == "grappled" && e.EscapeDC > 0 {
+		a.Escapes, _ = normalizeEscapes(defaultEscapes("grappled", e.EscapeDC))
+		if a.Notes == "" {
+			a.Notes = fmt.Sprintf("Grappled; escape DC %d", e.EscapeDC)
+		}
+	}
+	return a
+}
+
+// linkedCondition: the second condition of "Grappled (escape DC N), and it has the Restrained condition until the grapple ends": a Restrained
+// record from the same source that the condition owner ends together with the Grappled record (conditionChange.remove).
+func (e saveEffect) linkedCondition(cond, source string) (condAdd, bool) {
+	if cond != "grappled" || !e.RestrainedToo {
+		return condAdd{}, false
+	}
+	return condAdd{Condition: "restrained", Source: source, SourceID: e.SourceID, Magical: e.IsSpell, Notes: notesEndsWithGrapple}, true
+}
+
+// conditionsFor: the conditions of a failed save that this target gets. A condition gated by size ("If the target is a Huge or
+// smaller creature ...") is not given to a bigger target: gated says so for the reply. The one rule for characters and monsters.
+func (e saveEffect) conditionsFor(lobbyID, tid int) (conds []string, gated string) {
+	if dtype := e.CondDamageImmunity; dtype != "" {
+		if !attackDamageTypes[dtype] {
+			return nil, "[GM: resolve the condition's unrecognized damage immunity prerequisite.]"
+		}
+		if creatureIsImmuneToDamage(lobbyID, tid, dtype) {
+			return nil, fmt.Sprintf("not %s (immune to %s damage)", strings.Join(e.Conditions, ", "), dtype)
+		}
+	}
+
+	if _, ok := sizeOrder[e.CondMaxSize]; ok && isCompanionCombatID(tid) { // the server does not know a companion's size: the GM checks
+		return nil, fmt.Sprintf("not applied: %s only to a target of %s size or smaller (the GM checks the companion's size)", strings.Join(e.Conditions, ", "), titleCase(e.CondMaxSize))
+	}
+	if lim, ok := sizeOrder[e.CondMaxSize]; ok && sizeOrder[strings.ToLower(creatureSize(lobbyID, tid))] > lim {
+		return nil, fmt.Sprintf("not %s (larger than %s)", strings.Join(e.Conditions, ", "), titleCase(e.CondMaxSize))
+	}
+	return e.Conditions, ""
+}
+
+// Use the same type mitigation sources that the HP owners use. Resistance
+// (even when rounding leaves no damage) does not meet an Immunity prerequisite.
+func creatureIsImmuneToDamage(lobby, target int, dtype string) bool {
+	switch {
+	case target < 0:
+		_, kind := adjustMonsterDamage(monsterKeyOfCombatant(lobby, target), dtype, 2)
+		return kind == "immune"
+	case isCompanionCombatID(target):
+		c, ok := activeCompanionInCampaign(lobby, target)
+		if !ok {
+			return false
+		}
+		_, kind := adjustMonsterDamage(c.Form, dtype, 2)
+		return kind == "immune"
+	default:
+		return len(applyDamageResistance(target, 2, dtype).Immunities) > 0
+	}
+}
+
+// saveOption is one of the effects an action offers: "Charm Ray. Wisdom Saving Throw: DC 16. Failure: ...".
+type saveOption struct{ Name, Text string }
+
+var mfxOptionRe = regexp.MustCompile(`(?:: |\. )([A-Z][A-Za-z’' -]{2,40})\. (?:Strength|Dexterity|Constitution|Intelligence|Wisdom|Charisma) Saving Throw: DC`)
+
+// splitSaveOptions: the named saving throw effects of an action text, in order; fewer than two when the text is one effect.
+func splitSaveOptions(text string) []saveOption {
+	idx := mfxOptionRe.FindAllStringSubmatchIndex(text, -1)
+	var out []saveOption
+	for i, m := range idx {
+		start := m[2] // the name
+		end := len(text)
+		if i+1 < len(idx) {
+			end = idx[i+1][0] + 1 // up to the ". " or ": " that opens the next one
+		}
+		out = append(out, saveOption{Name: text[m[2]:m[3]], Text: strings.TrimSpace(text[start:end])})
+	}
+	return out
+}
+
+// mfxSizeGateRe: a sentence that gives the condition only to targets of a size or smaller.
+var mfxSizeGateRe = regexp.MustCompile(`(?i)\bIf the target is an? (Tiny|Small|Medium|Large|Huge|Gargantuan) or smaller[^.]*`)
+
+// advantageGateRe: the condition clause gated on the attacker's own roll ("... and the darkmantle had
+// Advantage on the attack roll"): read at parse, enforced by the hit caller, which has the roll.
+var advantageGateRe = regexp.MustCompile(`(?i)\bhad [Aa]dvantage on the attack roll\b`)
+
+// readRider reads what a failed save or a hit gives besides damage out of its text: the conditions, their duration, the escape DC of a
+// grapple, Exhaustion, a size gate. extra is what the server does not apply, for the GM: the sentences that are not only damage or a
+// condition, and every sentence after the first one that names a condition (only the first is read).
+// sentenceSplitRe breaks stat-block prose into sentences across paragraph breaks (". ", ".\n", ".\n\n"),
+// which plain strings.Split(text, ". ") cannot see.
+var sentenceSplitRe = regexp.MustCompile(`\.\s+`)
+
+func (e *saveEffect) readRider(fail string) (extra []string) {
+	if c := mfxCondRe.FindStringSubmatch(fail); c != nil {
+		for _, name := range regexp.MustCompile(`, | and | or `).Split(c[1], -1) {
+			if n := strings.ToLower(strings.TrimSpace(name)); mfxConditions[n] {
+				e.Conditions = append(e.Conditions, n)
+			}
+		}
+	}
+	if len(e.Conditions) > 0 {
+		for _, sentence := range sentenceSplitRe.Split(fail, -1) {
+			if !mfxCondRe.MatchString(sentence) {
+				continue
+			}
+			if gate := mfxConditionDamageImmunityRe.FindStringSubmatch(sentence); gate != nil {
+				e.CondDamageImmunity = strings.ToLower(gate[1])
+			}
+			break
+		}
+	}
+
+	if x := mfxSizeGateRe.FindStringSubmatch(fail); x != nil && len(e.Conditions) > 0 && strings.Contains(strings.ToLower(x[0]), "condition") {
+		e.CondMaxSize = strings.ToLower(x[1])
+	}
+	if len(e.Conditions) > 0 && advantageGateRe.MatchString(fail) {
+		e.CondIfAdvantage = true
+	}
+	lf := strings.ToLower(fail)
+	switch {
+	case mfxUntilStartRe.MatchString(lf) && !strings.Contains(strings.NewReplacer("’", "'").Replace(lf), "start of the target's next turn"):
+		e.UntilStart = true
+	case mfxUntilEndAnchored(lf):
+		e.UntilEnd = true
+	case strings.Contains(lf, "until the end of its next turn"), strings.Contains(lf, "next turn"):
+		e.Rounds = 1
+	case strings.Contains(lf, "for 1 minute"):
+		e.Rounds = 10
+	case strings.Contains(lf, "for 1 hour"):
+		e.Rounds = 600
+	}
+	e.readSpeed(fail)
+	_, gmDisadv := e.readDisadvantage(fail)
+	extra = append(extra, gmDisadv...)
+	e.EndSave = mfxEndSaveRe.MatchString(lf)
+	autoLimit := false // the condition's limit was read from "After N minutes, it succeeds automatically"
+	if m := mfxAutoSucceedRe.FindStringSubmatch(fail); m != nil && e.EndSave && e.Rounds == 0 && len(e.Conditions) > 0 {
+		n, _ := strconv.Atoi(m[1])
+		e.Rounds, autoLimit = n*10, true // the repeated save ends it at the latest then
+	}
+	if x := mfxEscapeRe.FindStringSubmatch(fail); x != nil {
+		e.EscapeDC, _ = strconv.Atoi(x[1])
+	}
+	e.RestrainedToo = e.EscapeDC > 0 && mfxRestrainRe.MatchString(fail)
+	if x := mfxExhaustRe.FindStringSubmatch(fail); x != nil {
+		e.Exhaustion, _ = strconv.Atoi(x[1])
+	}
+	// what the server doesn't apply, for the GM: the Failure sentences that are not only damage or a condition
+	for _, s := range sentenceSplitRe.Split(fail, -1) {
+		ls := strings.ToLower(s)
+		// Recurring damage the turn pipeline ticks (addRecurringDamage recorded it when its gate - the
+		// grapple or the attach - held): the clause, the enforced lockout sharing its sentence and the
+		// gate lead-in are not the GM's.
+		if spec := readRecurringDamage(s); spec != nil {
+			s = recurringDamageRe.ReplaceAllString(s, "")
+			s = recurringLockoutTailRe.ReplaceAllString(s, "")
+			s = grappleGatePrefixRe.ReplaceAllString(s, "")
+			s = attachGatePrefixRe.ReplaceAllString(s, "")
+			s = attachLockoutLeadRe.ReplaceAllString(s, "")
+			if strings.Trim(s, " ,.") == "" {
+				continue
+			}
+			ls = strings.ToLower(s)
+		}
+		// The attach onset ("and the stirge attaches to the target") is enforced by the attach owner on
+		// the hit (monster_attach_2024.go): not the GM's.
+		if attachOnHitRe.MatchString(s) {
+			s = attachOnHitRe.ReplaceAllString(s, "")
+			if strings.Trim(s, " ,.") == "" {
+				continue
+			}
+			ls = strings.ToLower(s)
+		}
+		// The published detach ACTION (the target's or an adjacent creature's, with or without a check)
+		// is enforced by the detach action owner (/api/attach/detach): not the GM's. The VOLUNTARY
+		// detach ("can detach itself by spending 5 feet of its movement") stays: it is the movement
+		// system's.
+		if detachAutoRe.MatchString(s) {
+			s = detachAutoRe.ReplaceAllString(s, "")
+			if strings.Trim(s, " ,.") == "" {
+				continue
+			}
+			ls = strings.ToLower(s)
+		}
+		// The "attack only the target, with Advantage" rider is enforced by the attach owner (attack
+		// entry refusal + the roll's Advantage source): not the GM's. Speed 0 / moves-with-target stays.
+		if whileAttachedOnlyAdvRe.MatchString(s) {
+			s = whileAttachedOnlyAdvRe.ReplaceAllString(s, "")
+			if strings.Trim(s, " ,.") == "" {
+				continue
+			}
+			ls = strings.ToLower(s)
+		}
+		if detachCheckRe.MatchString(s) {
+			s = detachCheckRe.ReplaceAllString(s, "")
+			if strings.Trim(s, " ,.") == "" {
+				continue
+			}
+			ls = strings.ToLower(s)
+		}
+		// The linked condition was already recorded. Preserve a distinct
+		// restriction in the same sentence for the GM.
+		if e.RestrainedToo {
+			if loc := mfxRestrainRe.FindStringIndex(s); loc != nil {
+				if rest := strings.Trim(strings.TrimSpace(s[loc[1]:]), "."); rest != "" {
+					extra = append(extra, strings.TrimSpace(s))
+				}
+				continue
+			}
+		}
+		if first := mfxCondRe.FindString(fail); first != "" && mfxCondRe.MatchString(s) && !strings.Contains(s, first) {
+			extra = append(extra, strings.TrimSuffix(strings.TrimSpace(s), ".")) // a second condition sentence: not read, so not dropped
+			continue
+		}
+		plain := mfxDamageRe.ReplaceAllString(s, "")
+		if e.CondMaxSize != "" {
+			plain = mfxSizeGateRe.ReplaceAllString(plain, "") // the size gate is read (CondMaxSize) and enforced at application: not the GM's
+		}
+		if e.SpeedMode != "" {
+			plain = stripSpeedRider(plain) // applied (giveConditions): not the GM's
+		}
+		if len(e.DisadvMode) > 0 {
+			plain = stripDisadvantage(plain) // applied (giveDisadvantage)
+		}
+		if grappleLockoutTextRe.MatchString(s) {
+			plain = grappleLockoutTextRe.ReplaceAllString(plain, "") // enforced at the attack entry (monsterAttackLockout): not the GM's
+		}
+		if attackDamageTypes[e.CondDamageImmunity] && mfxCondRe.MatchString(s) {
+			plain = mfxConditionDamageImmunityRe.ReplaceAllString(plain, "")
+		}
+		plain = mfxCondRe.ReplaceAllString(plain, "")
+		plain = mfxDurationRe.ReplaceAllString(plain, "")
+		plain = targetIsCreatureGateRe.ReplaceAllString(plain, "") // every target of these routes is a creature: the gate always holds
+		plain = strings.Trim(strings.NewReplacer("The target", "", "and the target", "", "damage", "", ",", "", ".", "").Replace(plain), " ")
+		if strings.Contains(ls, "suffocat") {
+			extra = append(extra, strings.TrimSuffix(strings.TrimSpace(s), ".")) // suffocation is the GM's (gm_2024.go suffocation; its while-attached end with it): never dropped as short
+			continue
+		}
+		if strings.Contains(strings.NewReplacer("’", "'").Replace(ls), "can't take reactions") && !slices.Contains(e.DisadvMode, "noreactions") {
+			extra = append(extra, strings.TrimSuffix(strings.TrimSpace(s), ".")) // "can't take Reactions" with an end the server cannot count: the GM's, never dropped as short
+			continue
+		}
+		if strings.Contains(ls, "speed") && e.SpeedMode == "" && len(plain) < 25 {
+			extra = append(extra, strings.TrimSuffix(strings.TrimSpace(s), ".")) // a Speed effect that is not applied is the GM's, never dropped as short
+			continue
+		}
+		if autoLimit && mfxAutoSucceedRe.MatchString(s) {
+			autoLimit = false // that one sentence is applied as the condition's duration (Rounds); a later one is another effect's
+			continue
+		}
+		if strings.Contains(ls, "repeats the save") || strings.Contains(ls, "exhaustion level") || len(plain) < 25 {
+			continue
+		}
+		extra = append(extra, e.unappliedPart(s)) // the applied riders of the sentence are not repeated to the GM
+	}
+	return extra
+}
+
+// unappliedPart is a residual sentence without the Speed and roll riders the server applies from it ("The target can't take
+// Reactions; its Speed is halved; and it can take either an action or a Bonus Action on its turn, not both" leaves the last clause),
+// so the GM never reads an applied rider as one to apply. A sentence with nothing applied is kept whole.
+func (e *saveEffect) unappliedPart(s string) string {
+	r := strings.TrimSuffix(strings.TrimSpace(s), ".")
+	if e.SpeedMode != "" {
+		for _, re := range []*regexp.Regexp{speedZeroRe, speedHalvedRe, speedMinusRe} {
+			r = re.ReplaceAllString(r, "")
+		}
+	}
+	if len(e.DisadvMode) > 0 {
+		for _, re := range []*regexp.Regexp{disadvSapRe, exposedRe, disadvAttackRe, disadvConcRe, disadvSaveRe, noReactRe} {
+			r = re.ReplaceAllString(r, "")
+		}
+	}
+	if r == strings.TrimSuffix(strings.TrimSpace(s), ".") {
+		return r
+	}
+	var kept []string
+	for _, part := range regexp.MustCompile(`\s*[;,]\s*`).Split(r, -1) {
+		part = strings.TrimSpace(strings.TrimPrefix(strings.TrimSpace(part), "and "))
+		if part == "" || strings.EqualFold(part, "its") || strings.EqualFold(part, "and") || strings.EqualFold(part, "the target’s") || strings.EqualFold(part, "the target's") {
+			continue
+		}
+		kept = append(kept, part)
+	}
+	return strings.Join(kept, ", ")
+}
+
+// giveConditions gives a character target what a failed save or a hit gives besides damage: its conditions (not a size-gated one to a
+// bigger target; not one the target is immune to), the Restrained that ends with a grapple, Exhaustion. One line part for each.
+func (e saveEffect) giveConditions(lobbyID, tid int, source string) []string {
+	var parts []string
+	conds, gated := e.conditionsFor(lobbyID, tid)
+	if gated != "" {
+		parts = append(parts, gated)
+	}
+	for _, c := range conds {
+		a := e.conditionAdd(c, source)
+		if res := addCondition(lobbyID, tid, a); res.Immune != "" { // the condition owner: Immunity (auras, Mind Blank ...)
+			parts = append(parts, fmt.Sprintf("not %s (%s)", c, res.Immune))
+			continue
+		}
+		parts = append(parts, titleCase(c))
+		if l, ok := e.linkedCondition(c, source); ok {
+			if res := addCondition(lobbyID, tid, l); res.Immune != "" {
+				parts = append(parts, fmt.Sprintf("not %s (%s)", l.Condition, res.Immune))
+			} else {
+				parts = append(parts, titleCase(l.Condition)+" until the grapple ends")
+			}
+		}
+	}
+	if e.SpeedMode != "" {
+		parts = append(parts, e.giveSpeed(lobbyID, tid, source))
+	}
+	parts = append(parts, e.giveDisadvantage(lobbyID, tid, source)...)
+	if e.Exhaustion > 0 {
+		switch why := immuneToCondition(lobbyID, tid, e.conditionAdd("exhaustion", source)); {
+		case why != "":
+			parts = append(parts, fmt.Sprintf("no Exhaustion (%s)", why))
+		case tid < 0 || isCompanionCombatID(tid):
+			parts = append(parts, fmt.Sprintf("The GM tracks %d level(s) of Exhaustion for %s", e.Exhaustion, creatureName(lobbyID, tid)))
+		default:
+			parts = append(parts, addExhaustion(tid, e.Exhaustion))
+		}
+	}
+
+	return parts
+}
+
+// giveAlways gives what "Failure or Success:" gives, whatever the save's result (nil Always: nothing).
+func (e saveEffect) giveAlways(lobbyID, tid int, source string) []string {
+	if e.Always == nil {
+		return nil
+	}
+	a := *e.Always
+	a.SourceID, a.IsSpell, a.Ability, a.DC = e.SourceID, e.IsSpell, e.Ability, e.DC
+	return a.giveConditions(lobbyID, tid, source)
+}
+
+// hitRiderChoiceRe: a hit that lets someone choose or roll its effect is not read: all of it goes to the GM.
+// These clauses depend on an adjudicated result after damage, an alternate
+// result, or a specific movement path. Do not grant their effects on an ordinary hit.
+var hitRiderDeferredRe = regexp.MustCompile(`(?i)\b(?:can give it .+ instead of dealing damage|moved \d+\+? feet straight toward(?:s)?|if [^.]*?(?:reduc[[:alpha:]]* [^.]*? to 0 Hit Points|reduced to 0 Hit Points))\b`)
+
+var hitRiderChoiceRe = regexp.MustCompile(`(?i)choice of|determined by rolling|one of the following|\bcursed\b`)
+
+// parseHitRider reads the conditions a stat-block hit gives besides its damage ("..., and the target has the Stunned condition until
+// the start of the empyrean's next turn", "If the target is a Large or smaller creature, it has the Prone condition"): the same rules
+// as a failed save (readRider), with no saving throw of their own. A hit with its own saving throw is the save owner's.
+func parseHitRider(desc string) (saveEffect, bool) {
+	i := strings.Index(desc, "Hit:")
+	if i < 0 || mfxSaveRe.MatchString(desc) {
+		return saveEffect{}, false
+	}
+	hit := desc[i+len("Hit:"):]
+	if j := strings.Index(hit, "Hit or Miss:"); j >= 0 {
+		hit = hit[:j]
+	}
+	if hitRiderChoiceRe.MatchString(hit) || hitRiderDeferredRe.MatchString(hit) {
+		return saveEffect{}, false
+	}
+	var e saveEffect
+	e.Extra = strings.Join(e.readRider(hit), ". ")
+	if hpMaxDrainSentenceRe.MatchString(e.Extra) { // a hit's own: applied by hitAfterDamage on every hit route
+		e.Extra = strings.Trim(hpMaxDrainSentenceRe.ReplaceAllString(e.Extra, ""), " .")
+	}
+	if stripped := stripBurnForCreatures(e.Extra); stripped != e.Extra {
+		e.Extra = strings.Trim(stripped, " .")
+	}
+	return e, len(e.Conditions) > 0 || e.SpeedMode != "" || len(e.DisadvMode) > 0
 }
 
 // parseSaveEffect reads a saving throw effect from a stat block text. ok is false when there is none.
+var saveMarginHeading = regexp.MustCompile(`Failure by (\d+) or More:`)
+var severePoisonText = regexp.MustCompile(`(?i)^The target has the Poisoned condition for (\d+) minutes?\. While Poisoned, the target has the Unconscious condition, which ends early if the target takes any damage\.$`)
+
+type severePoisonEffect struct {
+	Margin int
+	Rounds int
+}
+
+func (e *saveEffect) readSevereFailure(text string) string {
+	m := saveMarginHeading.FindStringSubmatch(text)
+	if m == nil {
+		return ""
+	}
+	branch := mfxSection(text, m[0], "Success:", "Failure or Success:", "Second Failure:")
+	parts := severePoisonText.FindStringSubmatch(branch)
+	if parts != nil {
+		margin, marginErr := strconv.Atoi(m[1])
+		minutes, durationErr := strconv.Atoi(parts[1])
+		if marginErr == nil && durationErr == nil && margin > 0 && minutes > 0 && minutes <= 1440 {
+			e.SeverePoison = &severePoisonEffect{Margin: margin, Rounds: minutes * 10}
+			return ""
+		}
+	}
+	return m[0] + " " + branch
+}
+
 func parseSaveEffect(text string) (saveEffect, bool) {
 	m := mfxSaveRe.FindStringSubmatch(text)
 	if m == nil {
 		return saveEffect{}, false
 	}
-	e := saveEffect{AbilityName: m[1], Ability: strings.ToLower(m[1][:3])}
+	e := saveEffect{AbilityName: m[1], Ability: strings.ToLower(m[1][:3]), IsMagical: mfxMagicalRe.MatchString(strings.TrimSpace(text))}
 	e.DC, _ = strconv.Atoi(m[2])
-	fail := mfxSection(text, "Failure:", "Success:", "Failure or Success:", "Second Failure:")
+	ordinaryText := text
+	if loc := saveMarginHeading.FindStringIndex(ordinaryText); loc != nil {
+		ordinaryText = ordinaryText[:loc[0]]
+	}
+	fail := mfxSection(ordinaryText, "Failure:", "Success:", "Failure or Success:", "Second Failure:")
 	if fail == "" {
 		fail = mfxSection(text, "First Failure:", "Second Failure:", "Success:")
 	}
@@ -108,48 +553,40 @@ func parseSaveEffect(text string) (saveEffect, bool) {
 	low := strings.ToLower(succ)
 	e.HalfOnSuccess = strings.Contains(low, "half damage") || strings.Contains(low, "half as much damage")
 	e.Immunity = strings.Contains(low, "immune to this")
-	if c := mfxCondRe.FindStringSubmatch(fail); c != nil {
-		for _, name := range regexp.MustCompile(`, | and | or `).Split(c[1], -1) {
-			if n := strings.ToLower(strings.TrimSpace(name)); mfxConditions[n] {
-				e.Conditions = append(e.Conditions, n)
-			}
-		}
+	if !e.Immunity && mfxAllSourcesImmunityRe.MatchString(succ) {
+		// "immune to the Stench of all troglodytes for 1 hour": one grant covers
+		// every source of the named entry, not only the creature saved against.
+		e.Immunity, e.ImmunityAllSources = true, true
 	}
-	lf := strings.ToLower(fail)
-	switch {
-	case strings.Contains(lf, "until the start of its next turn"):
-		e.UntilStart = true
-	case strings.Contains(lf, "until the end of its next turn"), strings.Contains(lf, "next turn"):
-		e.Rounds = 1
-	case strings.Contains(lf, "for 1 minute"):
-		e.Rounds = 10
-	case strings.Contains(lf, "for 1 hour"):
-		e.Rounds = 600
-	}
-	e.EndSave = strings.Contains(lf, "repeats the save at the end of each of its turns")
-	if x := mfxExhaustRe.FindStringSubmatch(fail); x != nil {
-		e.Exhaustion, _ = strconv.Atoi(x[1])
+	if e.Immunity {
+		e.ImmunityRounds, e.ImmunityDuration = parseSuccessImmunityDuration(succ)
 	}
 	if x := mfxEmanRe.FindStringSubmatch(text); x != nil {
 		e.Emanation, _ = strconv.Atoi(x[1])
 	}
-	// what the server doesn't apply, for the GM: the Failure sentences that are not only damage or a condition
-	var extra []string
-	for _, s := range strings.Split(fail, ". ") {
-		ls := strings.ToLower(s)
-		plain := mfxDamageRe.ReplaceAllString(s, "")
-		plain = mfxCondRe.ReplaceAllString(plain, "")
-		plain = mfxDurationRe.ReplaceAllString(plain, "")
-		plain = strings.Trim(strings.NewReplacer("The target", "", "and the target", "", "damage", "", ",", "", ".", "").Replace(plain), " ")
-		if strings.Contains(ls, "repeats the save") || strings.Contains(ls, "exhaustion level") || len(plain) < 25 {
-			continue
-		}
-		extra = append(extra, strings.TrimSuffix(strings.TrimSpace(s), "."))
+	extra := e.readRider(fail)
+	if branch := e.readSevereFailure(text); branch != "" {
+		extra = append(extra, branch)
+	}
+	if second := mfxSection(text, "Second Failure:", "Success:", "Failure or Success:"); second != "" { // the stage after the first Failure's repeat save: not rolled here
+		extra = append(extra, "Second Failure (after the repeat save the first Failure gives): "+strings.TrimSuffix(second, "."))
 	}
 	if both := mfxSection(text, "Failure or Success:"); both != "" {
-		extra = append(extra, "Failure or Success: "+strings.TrimSuffix(both, "."))
+		var a saveEffect
+		left := a.readRider(both)
+		if len(a.Conditions) > 0 || a.SpeedMode != "" || len(a.DisadvMode) > 0 {
+			e.Always = &a // applied to every target that rolled the save (giveAlways); only the rest of the text is the GM's
+			if len(left) > 0 {
+				extra = append(extra, "Failure or Success: "+strings.Join(left, ". "))
+			}
+		} else {
+			extra = append(extra, "Failure or Success: "+strings.TrimSuffix(both, "."))
+		}
 	}
 	e.Extra = strings.Join(extra, ". ")
+	if strings.HasSuffix(e.Extra, ":") { // "One of the following effects occurs:" lists its options as the next entries of the stat block
+		e.Extra += " (the options are the entries that follow this action in the stat block)"
+	}
 	return e, true
 }
 
@@ -168,13 +605,153 @@ func characterNameOf(charID int) string {
 
 // applySaveEffect makes each target roll the save and applies the result. source names the effect for condition records.
 // It returns one line per target; immuneAfter lists the targets that succeeded on an effect that gives immunity.
+type saveEffectCursor struct {
+	Source    string
+	Effect    saveEffect
+	Targets   []int
+	Apply     bool
+	Rolled    map[int]int
+	Next      int
+	AnyFailed bool
+}
+
+func init() {
+	combatResumeHandlers["save-effect-targets"] = func(lobby int, raw json.RawMessage) (map[string]interface{}, error) {
+		var c saveEffectCursor
+		if err := json.Unmarshal(raw, &c); err != nil {
+			return nil, err
+		}
+		lines, _ := runSaveEffectTargets(lobby, c)
+		for _, line := range lines {
+			recordGMAction(db, lobby, "monster_effect", line, line)
+		}
+		return map[string]interface{}{"result": lines}, nil
+	}
+}
+
+func parseSuccessImmunityDuration(text string) (int, string) {
+	m := mfxSuccessImmunityTimeRe.FindStringSubmatch(text)
+	if m == nil {
+		return 0, ""
+	}
+	count, err := strconv.Atoi(m[1])
+	per := map[string]int{"round": 1, "minute": 10, "hour": 600, "day": 14400}[strings.TrimSuffix(strings.ToLower(m[2]), "s")]
+	if err != nil || count < 1 || per == 0 || count > (1<<31-1)/per {
+		return 0, ""
+	}
+	return count * per, m[1] + " " + strings.ToLower(m[2])
+}
+
+// rollForTarget uses the shared save rules without consuming any expendable
+// defense during a preview.
+func (e saveEffect) rollForTarget(lobby, target, totalDamage int, apply bool) game.SaveResult {
+	ctx := saveCtx{lobby: lobby, saver: target, ability: e.Ability, dc: e.DC,
+		spell: e.IsSpell, magical: e.IsMagical, against: e.Conditions, source: e.SourceID, fiendOrUndead: e.FromUndead, peek: !apply}
+	return ctx.resist(saveStakes{Condition: len(e.Conditions) > 0, Damage: totalDamage})
+}
+
+// Save riders are game state. All three target kinds use this boundary.
+func saveFailureMargin(sv game.SaveResult) int {
+	if sv.Success || sv.Natural == 0 {
+		return 0
+	}
+	return max(0, sv.Save.DC-sv.Total)
+}
+
+func (e saveEffect) giveSeverePoison(lobby, target int, source string) []string {
+	source += " (severe failed save)"
+	poison := condAdd{Condition: "poisoned", Source: source, SourceID: e.SourceID, Rounds: e.SeverePoison.Rounds, Magical: e.IsSpell}
+	result := addCondition(lobby, target, poison)
+	if result.Immune != "" {
+		return []string{"not Poisoned (" + result.Immune + ")"}
+	}
+	if result.Err != nil || result.ID == 0 {
+		addGMNotice(lobby, "Could not store the severe save's Poisoned condition for "+creatureName(lobby, target)+". The GM should review the failed save.")
+		return nil
+	}
+	sleeper := poison
+	sleeper.Condition = "unconscious"
+	sleeper.Notes = notesEndsWithPoisonOrDamage
+	sleep := addCondition(lobby, target, sleeper)
+	if sleep.Immune != "" {
+		return []string{"Poisoned", "not Unconscious (" + sleep.Immune + ")"}
+	}
+	if sleep.Err != nil || sleep.ID == 0 {
+		addGMNotice(lobby, "Could not store the severe save's Unconscious condition for "+creatureName(lobby, target)+". The GM should review the failed save.")
+		return []string{"Poisoned"}
+	}
+	return []string{fmt.Sprintf("Poisoned for %d minute(s) and Unconscious while Poisoned or until damaged", poison.Rounds/10)}
+}
+
+func (e saveEffect) finishTarget(lobby, target int, source string, apply, saved bool, failedBy int) (parts []string, immune bool) {
+	if !apply {
+		return nil, false
+	}
+	parts = e.giveAlways(lobby, target, source)
+	if !saved {
+		if e.SeverePoison != nil && failedBy >= e.SeverePoison.Margin {
+			return append(parts, e.giveSeverePoison(lobby, target, source)...), false
+		}
+		return append(parts, e.giveConditions(lobby, target, source)...), false
+	}
+	if e.Immunity {
+		if e.ImmunityRounds <= 0 || e.ImmunityName == "" || e.SourceID >= 0 {
+			return append(parts, "[GM: this success grants immunity. Confirm its duration and track it for this source and action.]"), false
+		}
+		if err := storeEffectImmunityKind(lobby, target, e.SourceID, e.ImmunityName, e.ImmunityRounds, e.ImmunityAllSources); err != nil {
+			return append(parts, "[GM: the server couldn't store this success immunity. Track it for "+e.ImmunityDuration+" for this source and action.]"), false
+		}
+		if e.ImmunityAllSources {
+			return append(parts, "immune to it from every source for "+e.ImmunityDuration), true
+		}
+		return append(parts, "immune to it for "+e.ImmunityDuration), true
+	}
+	return parts, false
+}
+
 func applySaveEffect(lobbyID int, source string, e saveEffect, targets []int, apply bool) (lines []string, immuneAfter []int) {
 	rolled := map[int]int{}
 	for i, p := range e.Damage {
 		rolled[i] = game.RollDamage(p.Dice, false)
 	}
-	anyFailed := false
-	for _, tid := range targets {
+	return runSaveEffectTargets(lobbyID, saveEffectCursor{Source: source, Effect: e, Targets: targets, Apply: apply, Rolled: rolled})
+}
+func runSaveEffectTargets(lobbyID int, c saveEffectCursor) (lines []string, immuneAfter []int) {
+	source, e, targets, apply, rolled := c.Source, c.Effect, c.Targets, c.Apply, c.Rolled
+	anyFailed := c.AnyFailed
+	for index := c.Next; index < len(targets); index++ {
+		tid := targets[index]
+		if tid < 0 { // a monster or NPC of the fight (monster_save_targets.go)
+			saved := prepareMonsterSaveEffect(lobbyID, source, e, tid, rolled, apply)
+			anyFailed = anyFailed || !saved.Saved
+			next := c
+			next.Next = index + 1
+			next.AnyFailed = anyFailed
+			restore, err := armCombatFrame(lobbyID, "save-effect-targets", next)
+			if err != nil {
+				addGMNotice(lobbyID, "An effect could not save its remaining targets; no further automatic effects were run.")
+				return lines, immuneAfter
+			}
+			l, immune := runMonsterSaveEffect(lobbyID, saved)
+			restore()
+			if immune {
+				immuneAfter = append(immuneAfter, tid)
+			}
+			lines = append(lines, l)
+			if combatResolutionPaused(lobbyID) {
+				return lines, immuneAfter
+			}
+			continue
+		}
+		if isCompanionCombatID(tid) { // a companion (companion_spell_targets_2024.go): the stat-block save and the companion's own Hit Points
+			l, failed, immune := applySaveEffectOnCompanion(lobbyID, source, e, tid, rolled, apply)
+			anyFailed = anyFailed || failed
+			if immune {
+				immuneAfter = append(immuneAfter, tid)
+			}
+			lines = append(lines, l)
+			continue
+		}
 		if tid <= 0 {
 			continue
 		}
@@ -183,7 +760,7 @@ func applySaveEffect(lobbyID int, source string, e saveEffect, targets []int, ap
 			lines = append(lines, why)
 			continue
 		}
-		if e.IsSpell && e.SingleTarget {
+		if apply && e.IsSpell && e.SingleTarget {
 			if absorbed, note := staffAbsorbs(lobbyID, tid, e.SpellLevel); absorbed { // Staff of the Magi
 				lines = append(lines, name+": "+note)
 				continue
@@ -191,10 +768,10 @@ func applySaveEffect(lobbyID int, source string, e saveEffect, targets []int, ap
 		}
 		// the one saving throw function (save_2024.go): items against spells, Protection from Poison and Dwarven Resilience against
 		// being Poisoned, Fey Ancestry against being Charmed, Foresight, Holy Aura, Danger Sense ...
-		sv := (&saveCtx{lobby: lobbyID, saver: tid, ability: e.Ability, dc: e.DC, spell: e.IsSpell, against: e.Conditions, source: e.SourceID, fiendOrUndead: e.FromUndead}).roll()
+		sv := e.rollForTarget(lobbyID, tid, 0, apply)
 		saved := sv.Success
 		var protect []string
-		if !saved {
+		if apply && !saved {
 			if note := scarabPreserves(tid, e.IsSpell && strings.EqualFold(e.School, "necromancy"), e.FromUndead); note != "" {
 				saved = true
 				protect = append(protect, note)
@@ -205,7 +782,7 @@ func applySaveEffect(lobbyID int, source string, e saveEffect, targets []int, ap
 		line := sv.Line(name)
 		if saved && e.IsSpell && e.SpellLevel <= 7 && ringTurns(tid) { // Ring of Spell Turning: no effect on a success
 			line += ": Ring of Spell Turning: the spell has no effect on you."
-			if e.SingleTarget {
+			if apply && e.SingleTarget {
 				line += turnSpellBack(lobbyID, tid, source, e, rolled)
 			}
 			lines = append(lines, line)
@@ -234,27 +811,10 @@ func applySaveEffect(lobbyID int, source string, e saveEffect, targets []int, ap
 		if evasion {
 			parts = append(parts, "Evasion")
 		}
-		if !saved {
-			for _, c := range e.Conditions {
-				a := condAdd{Condition: c, Source: source, Rounds: e.Rounds, SourceID: e.SourceID, Magical: e.IsSpell}
-				if e.EndSave {
-					a.EndSave = &conditionSave{Ability: e.Ability, DC: e.DC}
-				}
-				if e.UntilStart {
-					a.Notes = "until_start_of_next_turn"
-				}
-				if res := addCondition(lobbyID, tid, a); res.Immune != "" { // the condition owner: Immunity (auras, Mind Blank ...)
-					parts = append(parts, fmt.Sprintf("not %s (%s)", c, res.Immune))
-					continue
-				}
-				parts = append(parts, titleCase(c))
-			}
-			if e.Exhaustion > 0 {
-				parts = append(parts, addExhaustion(tid, e.Exhaustion))
-			}
-		} else if e.Immunity {
+		riders, immune := e.finishTarget(lobbyID, tid, source, apply, saved, saveFailureMargin(sv))
+		parts = append(parts, riders...)
+		if immune {
 			immuneAfter = append(immuneAfter, tid)
-			parts = append(parts, "immune to it for 24 hours")
 		}
 		if len(parts) > 0 {
 			line += ": " + strings.Join(parts, "; ")
@@ -263,7 +823,11 @@ func applySaveEffect(lobbyID int, source string, e saveEffect, targets []int, ap
 	}
 	if e.Extra != "" && (anyFailed || strings.HasPrefix(e.Extra, "Failure or Success")) {
 		if len(e.Damage) > 0 || len(e.Conditions) > 0 { // the text repeats what was just applied; only the rest is the GM's
-			lines = append(lines, "The damage and conditions above are applied; the GM handles the rest of this text (movement, pushes, other effects): "+e.Extra)
+			prefix := "Preview: the GM handles the rest of this text (movement, pushes, other effects): "
+			if apply {
+				prefix = "The damage and conditions above are applied; the GM handles the rest of this text (movement, pushes, other effects): "
+			}
+			lines = append(lines, prefix+e.Extra)
 		} else {
 			lines = append(lines, "For the GM to apply on a failure: "+e.Extra)
 		}
@@ -274,14 +838,19 @@ func applySaveEffect(lobbyID int, source string, e saveEffect, targets []int, ap
 // effectImmune: the creature succeeded on this monster's effect that grants immunity (F70).
 func effectImmune(lobbyID, targetID, monsterID int, entry string) bool {
 	for _, e := range spellEffectsOn(lobbyID, targetID) {
-		if e.Kind == "effect_immune" && e.CasterID == monsterID && strings.EqualFold(e.Detail, entry) {
+		if !strings.EqualFold(e.Detail, entry) {
+			continue
+		}
+		// effect_immune_all: one grant covers every source of the entry ("immune to
+		// the Stench of all troglodytes"); effect_immune: the granting source only.
+		if e.Kind == "effect_immune_all" || (e.Kind == "effect_immune" && e.CasterID == monsterID) {
 			return true
 		}
 	}
 	return false
 }
 
-// charactersInEmanation lists the characters within feet of a monster on the battle map (nil without a map).
+// charactersInEmanation lists the characters and active companions within feet of a monster on the battle map (nil without a map).
 func charactersInEmanation(lobbyID, monsterID, feet int) []int {
 	m, ok := activeEncounterMap(lobbyID)
 	if !ok {
@@ -293,7 +862,10 @@ func charactersInEmanation(lobbyID, monsterID, feet int) []int {
 	}
 	var out []int
 	for _, t := range m.Tokens {
-		if t.ID > 0 && tokenDistanceFeet(src, t) <= feet {
+		if t.ID <= 0 || tokenDistanceFeet(src, t) > feet {
+			continue
+		}
+		if _, ok := activeCompanionInCampaign(lobbyID, t.ID); t.ID < companionIDBase || ok {
 			out = append(out, t.ID)
 		}
 	}
@@ -329,7 +901,7 @@ func monsterSpellNumbers(text string, meta *monsterMeta) (dc, atk int) {
 
 // resolveMonsterSpell casts a spell from the SRD data at characters.
 // use carries the GM's choice where the spell needs one (Command's word: approach, drop, flee, grovel or halt; grovel by default).
-func resolveMonsterSpell(lobbyID, monsterID int, monsterName, spellName string, level, dc, atk int, targets []int, selfCast, apply bool, use string) []string {
+func resolveMonsterSpell(r *http.Request, lobbyID, monsterID int, monsterName, spellName string, level, dc, atk int, targets []int, selfCast, apply bool, use string) []string {
 	if why := monsterCastBlocked(lobbyID, monsterID); why != "" { // Antimagic Field (spells_more_2024.go)
 		return []string{fmt.Sprintf("%s tries to cast %s, but %s.", monsterName, spellName, why)}
 	}
@@ -337,14 +909,22 @@ func resolveMonsterSpell(lobbyID, monsterID int, monsterName, spellName string, 
 	if sp, ok := srdSpellsMemory[normalizeSpellSlug(spellName)]; ok && spellLevel < sp.Level {
 		spellLevel = sp.Level
 	}
+	// Starting another Concentration cast ends the old one BEFORE new effects,
+	// even when the spell name is the same or all targets are shielded.
+	if sp, ok := srdSpellsMemory[normalizeSpellSlug(spellName)]; ok && sp.Concentration && apply {
+		if err := startMonsterConcentration(lobbyID, monsterID, sp.Name); err != nil {
+			return []string{monsterName + " could not start the cast; no new spell effects were applied."}
+		}
+	}
 	kept, notes := magicShieldedTargets(lobbyID, monsterID, spellLevel, targets) // Antimagic Field, Globe of Invulnerability
 	if len(targets) > 0 && len(kept) == 0 && !selfCast {
 		return append([]string{fmt.Sprintf("%s casts %s.", monsterName, spellName)}, notes...)
 	}
-	return append(resolveMonsterSpellRules(lobbyID, monsterID, monsterName, spellName, level, dc, atk, kept, selfCast, apply, use), notes...)
+	out := append(resolveMonsterSpellRules(r, lobbyID, monsterID, monsterName, spellName, level, dc, atk, kept, selfCast, apply, use), notes...)
+	return out
 }
 
-func resolveMonsterSpellRules(lobbyID, monsterID int, monsterName, spellName string, level, dc, atk int, targets []int, selfCast, apply bool, use string) []string {
+func resolveMonsterSpellRules(r *http.Request, lobbyID, monsterID int, monsterName, spellName string, level, dc, atk int, targets []int, selfCast, apply bool, use string) []string {
 	slug := normalizeSpellSlug(spellName)
 	sp, ok := srdSpellsMemory[slug]
 	if !ok {
@@ -381,6 +961,26 @@ func resolveMonsterSpellRules(lobbyID, monsterID int, monsterName, spellName str
 		dice = d
 	}
 	lines := []string{head + "."}
+	if isSpellAttack(sp) || slug == "command" {
+		// a spell attack roll and Command are resolved by code that reads a character's row (name, Armor Class, Hit Points, staff
+		// absorption): given a companion it printed a blank name, AC 0 and 0 damage as a HIT. A companion is not resolved here; the GM is told
+		var rest []int
+		for _, tid := range targets {
+			if tid >= companionIDBase {
+				name := "a companion"
+				if c, ok := activeCompanionInCampaign(lobbyID, tid); ok {
+					name = companionDisplayName(c)
+				}
+				lines = append(lines, fmt.Sprintf("%s: %s is not resolved by the server for a companion - nothing was rolled or applied.", name, sp.Name))
+				addGMNotice(lobbyID, fmt.Sprintf("%s was the target of %s, but a spell attack roll or Command against a companion is not automated: nothing was rolled or applied. Resolve it by hand (POST /api/gm/companion for damage).", name, sp.Name))
+				continue
+			}
+			rest = append(rest, tid)
+		}
+		if targets = rest; len(targets) == 0 {
+			return lines
+		}
+	}
 	if isSpellAttack(sp) {
 		count, beamDice, _ := beamPlan(slug, sp.Level, level, 0)
 		if count == 0 {
@@ -398,6 +998,9 @@ func resolveMonsterSpellRules(lobbyID, monsterID int, monsterName, spellName str
 			// left the Disadvantage note out.
 			sa := attackCtx{lobby: lobbyID, attacker: monsterID, target: tid, name: "Spell attack at " + characterNameOf(tid), bonus: atk,
 				spell: true, melee: spellRangeFeet(sp.Range) >= 0 && spellRangeFeet(sp.Range) <= 5}
+			if apply {
+				markExecuted(r) // the spell attack is made at a target (a miss or a blocked one still uses it)
+			}
 			if lost, note := sa.blocked(); lost {
 				lines = append(lines, note)
 				continue
@@ -437,6 +1040,7 @@ func resolveMonsterSpellRules(lobbyID, monsterID int, monsterName, spellName str
 			}
 			name := characterNameOf(tid)
 			sv := (&saveCtx{lobby: lobbyID, saver: tid, ability: "wis", dc: dc, spell: true, source: monsterID}).roll()
+			markExecuted(r) // the save was rolled
 			if sv.Success {
 				lines = append(lines, sv.Line(name)+".")
 				continue
@@ -487,8 +1091,30 @@ func resolveMonsterSpellRules(lobbyID, monsterID int, monsterName, spellName str
 			}
 			targets = kept
 		}
+		if need := spellCreatureType[slug]; need != "" { // a spell that names a creature type (Hold Person: a Humanoid): published text, SRD 5.2.1
+			var eligible []int
+			for _, tid := range targets {
+				if have := creatureTypeOf(lobbyID, tid); !strings.EqualFold(have, need) {
+					who := creatureName(lobbyID, tid)
+					if have == "" {
+						lines = append(lines, fmt.Sprintf("%s: %s did not roll for it.", who, sp.Name))
+						addGMNotice(lobbyID, fmt.Sprintf("The creature type of %s is unknown, so whether %s (%s only) can affect it is not decided: nothing was rolled for it.", who, sp.Name, titleCase(need)))
+					} else {
+						lines = append(lines, fmt.Sprintf("%s isn't a %s, so %s has no effect on it.", who, titleCase(need), sp.Name))
+					}
+					continue
+				}
+				eligible = append(eligible, tid)
+			}
+			if targets = eligible; len(targets) == 0 {
+				return lines
+			}
+		}
 		e.SingleTarget = sp.AoEShape == "" && len(targets) == 1
 		l, _ := applySaveEffect(lobbyID, monsterName+" ("+sp.Name+")", e, targets, apply)
+		if apply && len(targets) > 0 {
+			markExecuted(r) // the saves were rolled (a success, or an immune target, still uses it)
+		}
 		return append(lines, l...)
 	}
 	return append(lines, "The GM resolves the spell's effect.")
@@ -502,6 +1128,24 @@ func resolveMonsterEffectText(r *http.Request, lobbyID, monsterID int, meta *mon
 	if strings.Contains(text, "moves up to") || strings.Contains(text, "fly up to") || strings.Contains(text, "teleports") {
 		notes = append(notes, "Movement: move its token on the battle map (PUT /api/campaigns/{id}/battle-map) as the text says.")
 	}
+	// one action that offers several saving throw effects ("one of the following rays", "at random"): the GM names the one that happened
+	// with use; none is guessed, and nothing is rolled until it is named
+	if opts := splitSaveOptions(text); len(opts) >= 2 && depth == 0 {
+		chosen := -1
+		for i, o := range opts {
+			if u := strings.TrimSpace(use); u != "" && strings.EqualFold(u, o.Name) {
+				chosen = i
+			}
+		}
+		if chosen < 0 {
+			names := make([]string, len(opts))
+			for i, o := range opts {
+				names[i] = o.Name
+			}
+			return append([]string{fmt.Sprintf("%s offers %d effects (%s). Name the one that happened in use (the GM rolls or picks it as the text says). Nothing was rolled.", entryName, len(opts), strings.Join(names, ", "))}, notes...)
+		}
+		return append(resolveMonsterEffectText(r, lobbyID, monsterID, meta, entryName+": "+opts[chosen].Name, opts[chosen].Text, targets, "", apply, depth+1), notes...)
+	}
 	// an attack of the stat block
 	if m := mfxAttackRe.FindStringSubmatch(text); m != nil {
 		atk := m[1]
@@ -511,7 +1155,7 @@ func resolveMonsterEffectText(r *http.Request, lobbyID, monsterID int, meta *mon
 		if len(targets) == 0 {
 			return append([]string{fmt.Sprintf("%s: name the target of the %s attack (target).", entryName, atk)}, notes...)
 		}
-		txt, _, ok := resolveMonsterAttack(r, lobbyID, fmt.Sprintf("#%d", monsterID), atk, strconv.Itoa(targets[0]), apply)
+		txt, _, ok := resolveMonsterAttack(withMonsterUse(r, use), lobbyID, fmt.Sprintf("#%d", monsterID), atk, strconv.Itoa(targets[0]), apply)
 		if !ok {
 			txt = fmt.Sprintf("%s makes one %s attack (the GM rolls it).", name, atk)
 		}
@@ -520,7 +1164,21 @@ func resolveMonsterEffectText(r *http.Request, lobbyID, monsterID int, meta *mon
 	// the spell the GM picks with "use" from the ones the text offers (legendary_more_2024.go)
 	if spName, lvl, ok := monsterSpellFromUse(text, use); ok && depth == 0 {
 		dc, atk := monsterSpellNumbers(text, meta)
-		lines = append(lines, resolveMonsterSpell(lobbyID, monsterID, name, spName, lvl, dc, atk, targets, false, apply, use)...)
+		// a limited spell called by another entry (a Legendary Action that casts): monsterAction already reserved its own entry's use
+		if rec := execIn(r); apply && rec != nil && !rec.dayHandled {
+			if key, limit := monsterDayUse(srdMonsterEntry{Name: entryName, Text: text}, spName); key != "" {
+				if !reserveDayUse(lobbyID, monsterID, key, limit) {
+					return append([]string{dayUseRefusal(loadMonsterState(lobbyID, monsterID), name, srdMonsterEntry{Name: entryName, Text: text}, spName, key, limit)}, notes...)
+				}
+				before := rec.count()
+				lines = append(lines, resolveMonsterSpell(r, lobbyID, monsterID, name, spName, lvl, dc, atk, targets, false, apply, use)...)
+				if rec.count() == before {
+					releaseDayUse(lobbyID, monsterID, key)
+				}
+				return append(lines, notes...)
+			}
+		}
+		lines = append(lines, resolveMonsterSpell(r, lobbyID, monsterID, name, spName, lvl, dc, atk, targets, false, apply, use)...)
 		return append(lines, notes...)
 	}
 	// a spell
@@ -532,12 +1190,18 @@ func resolveMonsterEffectText(r *http.Request, lobbyID, monsterID int, meta *mon
 			times = 2
 		}
 		for i := 0; i < times; i++ {
-			lines = append(lines, resolveMonsterSpell(lobbyID, monsterID, name, m[1], lvl, dc, atk, targets, strings.Contains(text, "on itself"), apply, use)...)
+			lines = append(lines, resolveMonsterSpell(r, lobbyID, monsterID, name, m[1], lvl, dc, atk, targets, strings.Contains(text, "on itself"), apply, use)...)
 		}
 		return append(lines, notes...)
 	}
 	// a saving throw effect in the text itself
 	if e, ok := parseSaveEffect(text); ok {
+		if issue := monsterSaveTargetIssue(r, lobbyID, monsterID, meta, text, targets); issue != "" {
+			if rec := execIn(r); rec != nil {
+				rec.targetBlocked = true
+			}
+			return append([]string{"Nothing was rolled. [GM: " + issue + "]"}, notes...)
+		}
 		if len(targets) == 0 && e.Emanation > 0 {
 			targets = charactersInEmanation(lobbyID, monsterID, e.Emanation)
 		}
@@ -545,7 +1209,7 @@ func resolveMonsterEffectText(r *http.Request, lobbyID, monsterID int, meta *mon
 			targets, _ = monsterAreaFilter(lobbyID, monsterID, text, nil) // aimed at the GM's point: everyone in the area (O-5)
 		}
 		if len(targets) == 0 {
-			return append([]string{fmt.Sprintf("%s: name the targets (target or target_ids) of the %s saving throw.", entryName, e.AbilityName)}, notes...)
+			return append([]string{fmt.Sprintf("%s: name the targets (target or target_ids) of the %s saving throw (DC %d). Nothing was rolled.", entryName, e.AbilityName, e.DC)}, notes...)
 		}
 		e.SourceID = monsterID
 		e.FromUndead = monsterTypeOf(lobbyID, monsterID) == "undead"           // a harmful effect from an Undead (Scarab of Protection)
@@ -568,18 +1232,26 @@ func resolveMonsterEffectText(r *http.Request, lobbyID, monsterID int, meta *mon
 			fresh = append(fresh, t)
 		}
 		if len(already) > 0 {
-			notes = append(notes, fmt.Sprintf("Immune to %s's %s after a successful save (24 hours): %s.", name, entryName, strings.Join(already, ", ")))
+			notes = append(notes, fmt.Sprintf("Immune to %s's %s after a successful save: %s.", name, entryName, strings.Join(already, ", ")))
 		}
 		if len(fresh) == 0 {
+			if apply {
+				markExecuted(r) // used, and every target is immune: the use is spent
+			}
 			return append([]string{fmt.Sprintf("%s uses %s; every target is immune to it.", name, entryName)}, notes...)
 		}
-		l, immune := applySaveEffect(lobbyID, name+" ("+entryName+")", e, fresh, apply)
+		e.ImmunityName = entryName
+		l, _ := applySaveEffect(lobbyID, name+" ("+entryName+")", e, fresh, apply)
 		if apply {
-			for _, t := range immune {
-				addSpellEffect(lobbyID, t, monsterID, entryName, "effect_immune", entryName, 14400, "", 0) // 24 hours; ends with the fight
-			}
+			markExecuted(r)
 		}
 		lines = append([]string{fmt.Sprintf("%s uses %s.", name, entryName)}, l...)
+		return append(lines, notes...)
+	}
+	if lines, handled := resolveMonsterSwallow(r, lobbyID, monsterID, entryName, text, targets, apply); handled {
+		return append(lines, notes...)
+	}
+	if lines, handled := resolveMonsterDirectDamage(r, lobbyID, name, entryName, text, targets, apply); handled {
 		return append(lines, notes...)
 	}
 	// another action of the stat block ("uses Lightning Strike")
@@ -590,32 +1262,36 @@ func resolveMonsterEffectText(r *http.Request, lobbyID, monsterID int, meta *mon
 					if len(targets) == 0 {
 						return append([]string{fmt.Sprintf("%s: name the target of %s (target).", entryName, a.Name)}, notes...)
 					}
-					txt, _, ok := resolveMonsterAttack(r, lobbyID, fmt.Sprintf("#%d", monsterID), a.Name, strconv.Itoa(targets[0]), apply)
+					txt, _, ok := resolveMonsterAttack(withMonsterUse(r, use), lobbyID, fmt.Sprintf("#%d", monsterID), a.Name, strconv.Itoa(targets[0]), apply)
 					if ok {
 						return append([]string{txt}, notes...)
 					}
+				}
+				// a limited action called by another entry (a Legendary Action's "uses Howl"): checked and reserved here, kept only if the
+				// server executed it
+				if key, limit := monsterDayUse(a, ""); key != "" && apply {
+					if !reserveDayUse(lobbyID, monsterID, key, limit) {
+						return append([]string{dayUseRefusal(loadMonsterState(lobbyID, monsterID), name, a, "", key, limit)}, notes...)
+					}
+					before := execIn(r).count()
+					out := resolveMonsterEffectText(r, lobbyID, monsterID, meta, a.Name, a.Text, targets, use, apply, depth+1)
+					if execIn(r).count() == before {
+						releaseDayUse(lobbyID, monsterID, key)
+					}
+					return append(out, notes...)
 				}
 				return append(resolveMonsterEffectText(r, lobbyID, monsterID, meta, a.Name, a.Text, targets, use, apply, depth+1), notes...)
 			}
 		}
 	}
-	// damage without a saving throw
-	if m := mfxPlainDmgRe.FindStringSubmatch(text); m != nil {
-		if len(targets) == 0 {
-			return append([]string{fmt.Sprintf("%s: name the creatures that take the damage (target_ids).", entryName)}, notes...)
-		}
-		dmg := game.RollDamage(normDice(m[2]), false)
-		lines = append(lines, fmt.Sprintf("%s uses %s.", name, entryName))
-		for _, tid := range targets {
-			if tid > 0 {
-				res := fmt.Sprintf("%d %s damage", dmg, strings.ToLower(m[3]))
-				if apply {
-					res = damageCharacter(tid, dmg, strings.ToLower(m[3]))
-				}
-				lines = append(lines, characterNameOf(tid)+" "+res)
-			}
-		}
-		return append(lines, notes...)
+
+	// a standard action the entry takes: Disengage recorded, a choice named in use (monster_standard_actions_2024.go)
+	if line, ok := resolveMonsterStandardAction(lobbyID, monsterID, name, entryName, text, use, apply); ok {
+		return append([]string{line}, notes...)
+	}
+	// Magical Darkness: a token-anchored emanation the visibility owner reads (monster_darkness_2024.go)
+	if magicalDarknessRe.MatchString(text) {
+		return resolveMagicalDarkness(r, lobbyID, monsterID, entryName, text, apply, notes)
 	}
 	return append([]string{fmt.Sprintf("%s uses %s: %s (the GM resolves it).", name, entryName, text)}, notes...)
 }
@@ -641,9 +1317,27 @@ func targetIDsFrom(lobbyID int, target string, ids []int) []int {
 		if id, _, _, ok := characterByNameOrID(lobbyID, target); ok {
 			out = append(out, id)
 			seen[id] = true
+		} else if id := monsterTargetByName(lobbyID, target); id != 0 { // another monster of the fight
+			out = append(out, id)
+			seen[id] = true
+		} else if c, ok := companionByNameOrID(lobbyID, target); ok { // a companion of the campaign: its stat block makes the save
+			out = append(out, c.CombatID)
+			seen[c.CombatID] = true
 		}
 	}
 	for _, id := range ids {
+		if id >= companionIDBase && !seen[id] {
+			if c, ok := companionByNameOrID(lobbyID, strconv.Itoa(id)); ok && c.CombatID == id {
+				out = append(out, id)
+				seen[id] = true
+			}
+			continue
+		}
+		if id < 0 && !seen[id] && monsterInFight(lobbyID, id) {
+			out = append(out, id)
+			seen[id] = true
+			continue
+		}
 		if id > 0 && !seen[id] {
 			var n int
 			if db.QueryRow(`SELECT count(*) FROM characters WHERE id = $1 AND lobby_id = $2`, id, lobbyID).Scan(&n) == nil && n > 0 {
@@ -653,4 +1347,46 @@ func targetIDsFrom(lobbyID int, target string, ids []int) []int {
 		}
 	}
 	return out
+}
+
+// mfxUntilEndAnchored: the text ends the condition at the end of a named creature's next turn ("until the end of the hag's next turn"), not
+// the target's own ("its", "the target's"). The record keeps the source creature's id and ends at that creature's turn end.
+func mfxUntilEndAnchored(lf string) bool {
+	m := mfxUntilEndRe.FindStringSubmatch(strings.NewReplacer("’", "'").Replace(lf))
+	return m != nil && m[1] != "target"
+}
+
+// creatureTypeOf is the creature type of a monster of the fight or of a companion ("humanoid", "beast" ...), from its stat block; "" when
+// it cannot be read.
+func creatureTypeOf(lobbyID, id int) string {
+	if id >= companionIDBase {
+		c, ok := activeCompanionInCampaign(lobbyID, id)
+		if !ok {
+			return ""
+		}
+		return catalogCreatureType(c.Form)
+	}
+	if id > 0 {
+		return characterCreatureType(lobbyID, id)
+	}
+	return monsterTypeOf(lobbyID, id)
+}
+
+// characterCreatureType reads the campaign member's species. Wild Shape and
+// Polymorph retain creature type under SRD 5.2.1 (pp. 43, 153).
+func characterCreatureType(lobbyID, id int) string {
+	var species string
+	if err := db.QueryRow(`SELECT COALESCE(species,'') FROM characters WHERE id = $1 AND lobby_id = $2`, id, lobbyID).Scan(&species); err != nil {
+		return ""
+	}
+	it, ok := originByName(srdOrigins().Species.Items, strings.TrimSpace(species))
+	if !ok {
+		return ""
+	}
+	for _, f := range it.Fields {
+		if f.Label == "Creature Type" {
+			return strings.ToLower(strings.TrimSpace(f.Text))
+		}
+	}
+	return ""
 }

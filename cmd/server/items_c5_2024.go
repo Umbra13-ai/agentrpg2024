@@ -78,9 +78,13 @@ func thunderLightningHit(lobbyID, charID, targetID int, monsterKey, name string,
 		if dawnUsed(it, key("tl_lightning")) {
 			text += " [the staff's Lightning is used until the next dawn]"
 		} else {
-			x, how := adjustMonsterDamage(monsterKey, "lightning", game.RollDamage("2d6", crit))
+			x, how := adjustMonsterExtra(monsterKey, "lightning", game.RollDamage("2d6", crit))
 			extra += x
-			text += fmt.Sprintf(" Staff of Thunder and Lightning: +%d Lightning%s.", x, map[string]string{"resistant": " (it resists)", "immune": " (it is immune)"}[how])
+			if how == "absorbed" {
+				text += absorbedExtraText("Staff of Thunder and Lightning", "lightning", x)
+			} else {
+				text += fmt.Sprintf(" Staff of Thunder and Lightning: +%d Lightning%s.", x, map[string]string{"resistant": " (it resists)", "immune": " (it is immune)"}[how])
+			}
 		}
 	}
 	if useT && !(dawnUsed(it, key("tl_thunder"))) {
@@ -222,14 +226,20 @@ func venomHit(lobbyID, charID, targetID int, monsterKey, name string, crit bool)
 	if sv.Success {
 		return 0, " Dagger of Venom: " + sv.LineAgainst(name) + "; the poison is spent."
 	}
-	d, how := adjustMonsterDamage(monsterKey, "poison", game.RollDamage("2d10", crit))
+	d, how := adjustMonsterExtra(monsterKey, "poison", game.RollDamage("2d10", crit))
 	applyCondition(lobbyID, targetID, "poisoned", "Dagger of Venom", 10, "", 0)
+	if how == "absorbed" {
+		return d, " Dagger of Venom: " + sv.LineAgainst(name) + absorbedExtraText("; it", "poison", d) + " It has the Poisoned condition for 1 minute."
+	}
 	return d, fmt.Sprintf(" Dagger of Venom: %s: +%d Poison%s and the Poisoned condition for 1 minute.", sv.LineAgainst(name), d, map[string]string{"resistant": " (it resists)", "immune": " (it is immune)"}[how])
 }
 
 func woundingHit(lobbyID, charID, targetID int, monsterKey, name string, crit bool) (int, string) {
-	d, how := adjustMonsterDamage(monsterKey, "necrotic", game.RollDamage("2d6", crit))
+	d, how := adjustMonsterExtra(monsterKey, "necrotic", game.RollDamage("2d6", crit))
 	text := fmt.Sprintf(" Sword of Wounding: +%d Necrotic%s.", d, map[string]string{"resistant": " (it resists)", "immune": " (it is immune)"}[how])
+	if how == "absorbed" {
+		text = absorbedExtraText("Sword of Wounding", "necrotic", d)
+	}
 	sv := creatureSave(lobbyID, targetID, "con", 15)
 	if sv.Success {
 		return d, text + " " + sv.LineAgainst(name) + "."
@@ -239,7 +249,10 @@ func woundingHit(lobbyID, charID, targetID int, monsterKey, name string, crit bo
 }
 
 func frostBrandHit(monsterKey string, crit bool) (int, string) {
-	d, how := adjustMonsterDamage(monsterKey, "cold", game.RollDamage("1d6", crit))
+	d, how := adjustMonsterExtra(monsterKey, "cold", game.RollDamage("1d6", crit))
+	if how == "absorbed" {
+		return d, absorbedExtraText("Frost Brand", "cold", d)
+	}
 	return d, fmt.Sprintf(" Frost Brand: +%d Cold%s.", d, map[string]string{"resistant": " (it resists)", "immune": " (it is immune)", "vulnerable": " (it is vulnerable)"}[how])
 }
 

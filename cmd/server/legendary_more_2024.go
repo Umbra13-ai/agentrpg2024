@@ -101,7 +101,7 @@ func itemActive(charID int, prefix, place string) (invItem, bool) {
 func reactionSpent(charID int) bool {
 	var used bool
 	db.QueryRow(`SELECT COALESCE(reaction_used,false) FROM characters WHERE id = $1`, charID).Scan(&used)
-	return used
+	return used || charCantTakeReactions(charID)
 }
 
 func spendReaction(charID int) {
@@ -629,7 +629,7 @@ func monsterKind(key string) string {
 		return t
 	}
 	var t string
-	db.QueryRow(`SELECT LOWER(COALESCE(type,'')) FROM monsters WHERE slug = $1`, key).Scan(&t)
+	monsterQueryRow(`SELECT LOWER(COALESCE(type,'')) FROM monsters WHERE slug = $1`, key).Scan(&t)
 	monsterTypeMap[key] = t
 	return t
 }
@@ -645,7 +645,7 @@ func weaponHitEffects(lobbyID, charID, targetID int, monsterKey, name, heldItem 
 		d, note := sunBladeHit(monsterKey, crit) // F205 (items_more_2024.go)
 		return d, false, note
 	case strings.HasPrefix(held, "staff of striking"):
-		d, note := staffOfStrikingHit(charID, crit) // F205
+		d, note := staffOfStrikingHit(charID, monsterKey, crit) // F205
 		return d, false, note
 	case strings.HasPrefix(held, "flame tongue"):
 		d, note := flameTongueHit(charID, monsterKey, heldItem, crit) // F103 (barbarian_fixes_2024.go)
@@ -680,8 +680,12 @@ func weaponHitEffects(lobbyID, charID, targetID int, monsterKey, name, heldItem 
 		return maceOfDisruptionHit(lobbyID, charID, targetID, monsterKey, name, crit, hpAfter) // F86 (cleric_fixes_2024.go)
 	case strings.HasPrefix(held, "holy avenger"):
 		if _, ok := attunedTo(charID, "holy avenger"); ok && (mtype == "fiend" || mtype == "undead") {
-			d, how := adjustMonsterDamage(monsterKey, "radiant", game.RollDamage("2d10", crit))
+			d, how := adjustMonsterExtra(monsterKey, "radiant", game.RollDamage("2d10", crit))
 			extra += d
+			if how == "absorbed" {
+				text += absorbedExtraText("Holy Avenger", "radiant", d)
+				break
+			}
 			text += fmt.Sprintf(" Holy Avenger: +%d Radiant against the %s%s.", d, titleCase(mtype), map[string]string{"resistant": " (it resists)", "immune": " (it is immune)", "vulnerable": " (it is vulnerable)"}[how])
 		}
 	case strings.HasPrefix(held, "rod of lordly might"):
@@ -690,9 +694,13 @@ func weaponHitEffects(lobbyID, charID, targetID int, monsterKey, name, heldItem 
 			break
 		}
 		if strings.HasPrefix(rodForm(it), "flame") {
-			d, how := adjustMonsterDamage(monsterKey, "fire", game.RollDamage("2d6", crit))
+			d, how := adjustMonsterExtra(monsterKey, "fire", game.RollDamage("2d6", crit))
 			extra += d
-			text += fmt.Sprintf(" The fiery blade: +%d Fire%s.", d, map[string]string{"resistant": " (it resists)", "immune": " (it is immune)", "vulnerable": " (it is vulnerable)"}[how])
+			if how == "absorbed" {
+				text += absorbedExtraText("The fiery blade", "fire", d)
+			} else {
+				text += fmt.Sprintf(" The fiery blade: +%d Fire%s.", d, map[string]string{"resistant": " (it resists)", "immune": " (it is immune)", "vulnerable": " (it is vulnerable)"}[how])
+			}
 		}
 		if v, ok := rodPowerOnHit.LoadAndDelete(charID); ok && hpAfter-extra > 0 {
 			x, t := rodPower(lobbyID, charID, targetID, name, monsterKey, it, v.(string))
@@ -763,7 +771,10 @@ func rodPower(lobbyID, charID, targetID int, name, monsterKey string, it invItem
 		if sv.Success {
 			return 0, " Drain Life: " + sv.LineAgainst(name) + "."
 		}
-		d, _ := adjustMonsterDamage(monsterKey, "necrotic", dmg)
+		d, how := adjustMonsterExtra(monsterKey, "necrotic", dmg)
+		if how == "absorbed" { // the monster turns the Necrotic damage into Hit Points; nothing is drained for the wielder
+			return d, " Drain Life: " + sv.LineAgainst(name) + "; it absorbs " + fmt.Sprint(-d) + " Necrotic damage and regains that many Hit Points, so you regain none."
+		}
 		healed := d / 2
 		_, before, after := healCharacter(charID, healed)
 		return d, fmt.Sprintf(" Drain Life: %s and takes %d extra Necrotic damage; you regain %d Hit Points (%d → %d).", sv.LineAgainst(name), d, healed, before, after)

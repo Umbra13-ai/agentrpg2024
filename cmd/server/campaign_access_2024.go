@@ -104,7 +104,7 @@ func requireCampaignGM(w http.ResponseWriter, r *http.Request, campaignID int, w
 		writeAccessProblem(w, http.StatusForbidden, "not_gm", fmt.Sprintf("Only the GM of %s can %s.", campaignLabel(campaignID, name), what))
 		return 0, false
 	}
-	return agentID, true
+	return agentID, gateCampaignRequest(w, r, campaignID, nil)
 }
 
 // requireCampaignMember: the signed-in account is the campaign's GM or has a character in it; role is "gm" or "player".
@@ -124,7 +124,7 @@ func requireCampaignMember(w http.ResponseWriter, r *http.Request, campaignID in
 		writeAccessProblem(w, http.StatusForbidden, "not_in_campaign", fmt.Sprintf("Only the GM and the players of %s can %s.", campaignLabel(campaignID, name), what))
 		return 0, "", false
 	}
-	return agentID, role, true
+	return agentID, role, gateCampaignRequest(w, r, campaignID, nil)
 }
 
 // characterLookup: the character's owner, name and campaign (0 when in none); found is false when there is no character; err
@@ -188,7 +188,7 @@ func requireCharacterOwner(w http.ResponseWriter, r *http.Request, charID int, w
 	if agentID, ok = signedIn(w, r); !ok {
 		return 0, false
 	}
-	owner, name, _, found := characterFound(w, charID)
+	owner, name, camp, found := characterFound(w, charID)
 	switch {
 	case !found:
 		return 0, false
@@ -196,7 +196,7 @@ func requireCharacterOwner(w http.ResponseWriter, r *http.Request, charID int, w
 		writeAccessProblem(w, http.StatusForbidden, "not_your_character", fmt.Sprintf("%s isn't yours: only its player can %s.", name, what))
 		return 0, false
 	}
-	return agentID, true
+	return agentID, gateCampaignRequest(w, r, camp, nil)
 }
 
 // requireOwnerOrGM: the signed-in account owns the character or is the GM of the campaign it is in.
@@ -209,7 +209,7 @@ func requireOwnerOrGM(w http.ResponseWriter, r *http.Request, charID int, what s
 		return 0, false
 	}
 	if owner == agentID {
-		return agentID, true
+		return agentID, gateCampaignRequest(w, r, camp, nil)
 	}
 	gm, err := gmOfCampaign(agentID, camp)
 	if err != nil {
@@ -217,7 +217,7 @@ func requireOwnerOrGM(w http.ResponseWriter, r *http.Request, charID int, what s
 		return 0, false
 	}
 	if gm {
-		return agentID, true
+		return agentID, gateCampaignRequest(w, r, camp, nil)
 	}
 	writeAccessProblem(w, http.StatusForbidden, "not_your_character", fmt.Sprintf("%s isn't yours: only its player or its campaign's GM can %s.", name, what))
 	return 0, false
@@ -245,7 +245,7 @@ func requireCharacterGM(w http.ResponseWriter, r *http.Request, charID int, what
 		writeAccessProblem(w, http.StatusForbidden, "not_gm", fmt.Sprintf("Only the GM of %s's campaign can %s; %s isn't run by you, or %s.", name, what, name, where))
 		return 0, false
 	}
-	return agentID, true
+	return agentID, gateCampaignRequest(w, r, camp, nil)
 }
 
 // namedCharactersIn: every character a player's request names in its body (a positive id; a negative id is a monster, which is

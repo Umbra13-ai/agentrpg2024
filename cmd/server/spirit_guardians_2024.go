@@ -118,27 +118,58 @@ func spiritGuardiansSave(lobbyID int, a sgActive, monsterID int, why string) str
 }
 
 // spiritGuardiansTurnEnd: a monster that ends its turn inside an Emanation makes the save.
+type spiritGuardiansCursor struct {
+	Target int
+	Auras  []sgActive
+	Next   int
+}
+
+func init() {
+	combatResumeHandlers["spirit-guardians-turn"] = func(lobby int, raw json.RawMessage) (map[string]interface{}, error) {
+		var c spiritGuardiansCursor
+		if err := json.Unmarshal(raw, &c); err != nil {
+			return nil, err
+		}
+		lines := runSpiritGuardiansTurn(lobby, c)
+		for _, line := range lines {
+			recordGMAction(db, lobby, "condition", line, line)
+		}
+		return map[string]interface{}{"turn_effects": lines}, nil
+	}
+}
 func spiritGuardiansTurnEnd(lobbyID, monsterID int) []string {
 	if monsterID >= 0 {
 		return nil
 	}
-	var log []string
-	act := activeSpiritGuardians(lobbyID)
-	if len(act) == 0 {
-		return nil
-	}
+	return runSpiritGuardiansTurn(lobbyID, spiritGuardiansCursor{Target: monsterID, Auras: activeSpiritGuardians(lobbyID)})
+}
+func runSpiritGuardiansTurn(lobbyID int, c spiritGuardiansCursor) []string {
+	var lines []string
 	var mp *encounterMap
 	if m, ok := activeEncounterMap(lobbyID); ok {
 		mp = &m
 	}
-	for _, a := range act {
-		if inEmanation(lobbyID, a, monsterID, mp) {
-			if line := spiritGuardiansSave(lobbyID, a, monsterID, "it ends its turn in the spirits"); line != "" {
-				log = append(log, line)
-			}
+	for i := c.Next; i < len(c.Auras); i++ {
+		a := c.Auras[i]
+		if !concentrationHolds(a.Caster, "Spirit Guardians") || !inEmanation(lobbyID, a, c.Target, mp) {
+			continue
+		}
+		next := c
+		next.Next = i + 1
+		restore, err := armCombatFrame(lobbyID, "spirit-guardians-turn", next)
+		if err != nil {
+			addGMNotice(lobbyID, "Spirit Guardians could not save its continuation; no further automatic damage was run.")
+			return lines
+		}
+		if line := spiritGuardiansSave(lobbyID, a, c.Target, "it ends its turn in the spirits"); line != "" {
+			lines = append(lines, line)
+		}
+		restore()
+		if combatResolutionPaused(lobbyID) {
+			return lines
 		}
 	}
-	return log
+	return lines
 }
 
 // spiritGuardiansEnter: a monster the GM moved into an Emanation on the map makes the save (once per turn).

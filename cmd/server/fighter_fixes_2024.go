@@ -35,8 +35,11 @@ func swordOfSharpnessHit(lobbyID, charID, targetID int, monsterKey string, natur
 	if _, ok := attunedTo(charID, "sword of sharpness"); !ok {
 		return 0, " (the Sword of Sharpness needs attunement for its sharpness)"
 	}
-	d, how := adjustMonsterDamage(monsterKey, "slashing", 14)
+	d, how := adjustMonsterExtra(monsterKey, "slashing", 14)
 	note := fmt.Sprintf(" Sword of Sharpness: +%d Slashing", d)
+	if how == "absorbed" {
+		note = strings.TrimSuffix(absorbedExtraText("Sword of Sharpness", "slashing", d), ".")
+	}
 	if how == "resistant" {
 		note += " (resisted)"
 	}

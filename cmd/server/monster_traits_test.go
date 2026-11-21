@@ -8,9 +8,13 @@ import (
 	"testing"
 )
 
-// The trait table is the one owner of the traits the server applies: every row names a real SRD trait (or matches one by its
-// wording), the GM's view says for each trait who applies it, and no handler looks a trait up any other way.
+// A registered trait must have evidence in the SRD or a representative
+// invented imported trait. The GM's view and handlers use the same registry.
 func TestMonsterTraitsHaveOneOwner(t *testing.T) {
+	importedExamples := []srdMonsterEntry{
+		{Name: "Agile", Text: "Its movement doesn't provoke Opportunity Attacks."},
+		{Name: "Thunder Daze", Text: "If the creature takes Thunder damage, it has Disadvantage on attack rolls and ability checks until the end of its next turn."},
+	}
 	all := map[string]int{}
 	applied := map[string]bool{}
 	for _, m := range srdMonsters2024() {
@@ -21,19 +25,26 @@ func TestMonsterTraitsHaveOneOwner(t *testing.T) {
 			}
 		}
 	}
+	importedNames := map[string]bool{}
+	for _, trait := range importedExamples {
+		importedNames[trait.Name] = true
+	}
 	for _, r := range monsterTraitRules {
-		if r.Name != "" && all[r.Name] == 0 {
-			t.Errorf("monsterTraitRules names %q, which no SRD monster has", r.Name)
+		if r.Name != "" && all[r.Name] == 0 && !importedNames[r.Name] {
+			t.Errorf("monsterTraitRules names %q without an SRD or imported example", r.Name)
 		}
 		if r.Match != nil {
 			found := false
+			for _, tr := range importedExamples {
+				found = found || r.Match.MatchString(tr.Text)
+			}
 			for _, m := range srdMonsters2024() {
 				for _, tr := range m.Traits {
 					found = found || r.Match.MatchString(tr.Text)
 				}
 			}
 			if !found {
-				t.Errorf("the wording rule %q matches no SRD trait", r.Does)
+				t.Errorf("the wording rule %q matches no SRD or imported fixture trait", r.Does)
 			}
 		}
 	}

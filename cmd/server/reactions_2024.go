@@ -24,6 +24,8 @@ type monsterHit struct {
 	HPAfter, TempAfter    int
 	DeadBefore            bool
 	ConcBefore, ConcAfter string
+	// what the hit's riders created (conditions, combat effects), so a Shield or Protection that turns the hit into a miss takes them back
+	RiderRecords, RiderEffects []int
 }
 
 type turnHits struct {
@@ -113,6 +115,13 @@ func shieldReaction(charID int) string {
 	if len(undone) > 0 {
 		hp, _, _, _ := characterVitals(charID)
 		out += fmt.Sprintf(" Now a miss: %s; its damage is undone (%d Hit Points back; you have %d).", strings.Join(undone, ", "), restore, hp)
+		var gone []monsterHit
+		for _, h := range hits {
+			if !(h.Auto || h.Nat20 || h.Total >= h.AC+5) {
+				gone = append(gone, h)
+			}
+		}
+		out += takeBackRiders(lobby, charID, gone)
 	}
 	if len(stand) > 0 {
 		out += " Still a hit: " + strings.Join(stand, ", ") + "."
@@ -134,4 +143,75 @@ func pruneConcentrationConditions(lobbyID, targetID int) {
 		}
 	}
 	endConditionRecords(drop) // the condition owner
+}
+
+// riderIDsOf lists the condition records and combat effects a creature has now (for finding what a hit's riders created).
+func riderIDsOf(lobbyID, id int) (records, effects []int) {
+	for _, rec := range loadConditionRecords(lobbyID, id) {
+		records = append(records, rec.ID)
+	}
+	for _, e := range combatEffectsOn(lobbyID, id) {
+		effects = append(effects, e.ID)
+	}
+	return
+}
+
+// newIDs: the ids in after that are not in before.
+func newIDs(before, after []int) []int {
+	had := map[int]bool{}
+	for _, b := range before {
+		had[b] = true
+	}
+	var out []int
+	for _, a := range after {
+		if !had[a] {
+			out = append(out, a)
+		}
+	}
+	return out
+}
+
+// addRidersToLastHit records on the character's latest hit this turn what its riders created.
+func addRidersToLastHit(charID int, records, effects []int) {
+	if len(records)+len(effects) == 0 {
+		return
+	}
+	v, ok := monsterHitsOn.Load(charID)
+	if !ok {
+		return
+	}
+	th := v.(turnHits)
+	if len(th.Hits) == 0 {
+		return
+	}
+	last := &th.Hits[len(th.Hits)-1]
+	last.RiderRecords = append(last.RiderRecords, records...)
+	last.RiderEffects = append(last.RiderEffects, effects...)
+	monsterHitsOn.Store(charID, th)
+}
+
+// takeBackRiders removes what the riders of the hits that now miss created: by id, only those records and effects.
+func takeBackRiders(lobbyID, charID int, hits []monsterHit) string {
+	mine := map[int]bool{}
+	var effs []int
+	for _, h := range hits {
+		for _, id := range h.RiderRecords {
+			mine[id] = true
+		}
+		effs = append(effs, h.RiderEffects...)
+	}
+	if len(mine)+len(effs) == 0 {
+		return ""
+	}
+	var names []string
+	for _, rec := range removeConditionsWhere(lobbyID, charID, func(r conditionRecord) bool { return mine[r.ID] }) {
+		names = append(names, rec.Condition)
+	}
+	for _, id := range effs {
+		db.Exec(`DELETE FROM combat_effects WHERE id = $1 AND lobby_id = $2`, id, lobbyID)
+	}
+	if len(names) == 0 && len(effs) == 0 {
+		return ""
+	}
+	return " What the hit gave is removed: " + strings.Join(append(names, map[bool]string{true: "a combat effect", false: ""}[len(effs) > 0]), ", ") + "."
 }

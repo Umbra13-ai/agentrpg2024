@@ -48,45 +48,47 @@ type activeSpellEffect struct {
 
 // spellEffectLabel is what the table sees on an affected creature.
 var spellEffectLabel = map[string]string{
-	"bless":           "blessed",
-	"bane":            "baned",
-	"faerie_fire":     "outlined (Faerie Fire)",
-	"slowed":          "slowed",
-	"shield_of_faith": "shield of faith",
-	"shield_spell":    "Shield (+5 AC)",
-	"mage_armor":      "Mage Armor",
-	"effect_immune":   "immune (saved against a monster's effect)",
-	"commanded":       "commanded",
-	"hasted":          "hasted",
-	"lethargic":       "lethargic (Haste ended)",
-	"heroism":         "heroism",
-	"resistance":      "resistance",
-	"guidance":        "guidance",
-	"large_form":      "Large Form",
-	"draconic_flight": "flying (Draconic Flight)",
-	"stonecunning":    "tremorsense (Stonecunning)",
-	"giant_strength":  "giant strength (potion)",
+	"bless":             "blessed",
+	"bane":              "baned",
+	"faerie_fire":       "outlined (Faerie Fire)",
+	"slowed":            "slowed",
+	"shield_of_faith":   "shield of faith",
+	"shield_spell":      "Shield (+5 AC)",
+	"mage_armor":        "Mage Armor",
+	"effect_immune":     "immune (saved against a monster's effect)",
+	"effect_immune_all": "immune (saved against every source of this effect)",
+	"commanded":         "commanded",
+	"hasted":            "hasted",
+	"lethargic":         "lethargic (Haste ended)",
+	"heroism":           "heroism",
+	"resistance":        "resistance",
+	"guidance":          "guidance",
+	"large_form":        "Large Form",
+	"draconic_flight":   "flying (Draconic Flight)",
+	"stonecunning":      "tremorsense (Stonecunning)",
+	"giant_strength":    "giant strength (potion)",
 }
 
 // spellEffectText is what the effect does, for the GM view.
 var spellEffectText = map[string]string{
-	"bless":           "Adds 1d4 to attack rolls and saving throws",
-	"bane":            "Subtracts 1d4 from attack rolls and saving throws",
-	"faerie_fire":     "Attack rolls against it have Advantage if the attacker can see it; it can't benefit from the Invisible condition",
-	"slowed":          "Speed halved, -2 to AC and Dexterity saves, no Reactions, an action or a Bonus Action (not both), one attack with the Attack action; repeats the Wisdom save at the end of each of its turns",
-	"shield_of_faith": "+2 bonus to AC",
-	"shield_spell":    "+5 bonus to AC until the start of its next turn (the Shield spell)",
-	"mage_armor":      "Base AC 13 + Dexterity modifier while it wears no armor (8 hours; ends if it dons armor)",
-	"effect_immune":   "Succeeded on the save against this monster's effect: immune to it for 24 hours (the effect is named)",
-	"commanded":       "Follows a one-word command on its next turn",
-	"hasted":          "+2 AC, Advantage on Dexterity saves, Speed doubled, one extra action each turn (one attack, Dash, Disengage, Hide or Utilize)",
-	"lethargic":       "Incapacitated with a Speed of 0 until the end of its next turn",
-	"heroism":         "Immune to Frightened; Temporary Hit Points at the start of each of its turns",
-	"resistance":      "Damage of the chosen type is reduced by 1d4, once per turn",
-	"guidance":        "+1d4 to ability checks with the chosen skill",
-	"large_form":      "Large: Advantage on Strength checks, Speed +10 feet (Goliath)",
-	"draconic_flight": "Fly Speed equal to its Speed (Dragonborn)",
-	"stonecunning":    "Tremorsense 60 feet while on or touching stone (Dwarf)",
+	"bless":             "Adds 1d4 to attack rolls and saving throws",
+	"bane":              "Subtracts 1d4 from attack rolls and saving throws",
+	"faerie_fire":       "Attack rolls against it have Advantage if the attacker can see it; it can't benefit from the Invisible condition",
+	"slowed":            "Speed halved, -2 to AC and Dexterity saves, no Reactions, an action or a Bonus Action (not both), one attack with the Attack action; repeats the Wisdom save at the end of each of its turns",
+	"shield_of_faith":   "+2 bonus to AC",
+	"shield_spell":      "+5 bonus to AC until the start of its next turn (the Shield spell)",
+	"mage_armor":        "Base AC 13 + Dexterity modifier while it wears no armor (8 hours; ends if it dons armor)",
+	"effect_immune":     "Immune to the named effect from this monster for the remaining duration",
+	"effect_immune_all": "Immune to the named effect from every source of it for the remaining duration",
+	"commanded":         "Follows a one-word command on its next turn",
+	"hasted":            "+2 AC, Advantage on Dexterity saves, Speed doubled, one extra action each turn (one attack, Dash, Disengage, Hide or Utilize)",
+	"lethargic":         "Incapacitated with a Speed of 0 until the end of its next turn",
+	"heroism":           "Immune to Frightened; Temporary Hit Points at the start of each of its turns",
+	"resistance":        "Damage of the chosen type is reduced by 1d4, once per turn",
+	"guidance":          "+1d4 to ability checks with the chosen skill",
+	"large_form":        "Large: Advantage on Strength checks, Speed +10 feet (Goliath)",
+	"draconic_flight":   "Fly Speed equal to its Speed (Dragonborn)",
+	"stonecunning":      "Tremorsense 60 feet while on or touching stone (Dwarf)",
 
 	// potions
 	"giant_strength":    "Strength score raised by a Potion of Giant Strength",
@@ -123,6 +125,39 @@ func addSpellEffect(lobbyID, targetID, casterID int, spell, kind, detail string,
 	db.Exec(`DELETE FROM spell_effects WHERE lobby_id = $1 AND target_id = $2 AND caster_id = $3 AND kind = $4`, lobbyID, targetID, casterID, kind)
 	db.Exec(`INSERT INTO spell_effects (lobby_id, target_id, caster_id, spell, kind, detail, rounds_left, save_ability, save_dc)
 		VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9)`, lobbyID, targetID, casterID, spell, kind, detail, rounds, saveAbility, saveDC)
+}
+
+// A successful save grants immunity to a particular action from a particular
+// source. Keep distinct actions independent even when they share a source.
+func storeEffectImmunity(lobby, target, source int, entry string, rounds int) error {
+	return storeEffectImmunityKind(lobby, target, source, entry, rounds, false)
+}
+
+// storeEffectImmunityKind: the store behind storeEffectImmunity. allSources marks a grant that
+// covers every source of the entry ("immune to the Stench of all troglodytes"): it keeps the
+// granting monster as caster so the round expiry ticks on the same owner schedule as a
+// single-source grant, and effectImmune matches its kind by entry alone.
+func storeEffectImmunityKind(lobby, target, source int, entry string, rounds int, allSources bool) error {
+	kind := "effect_immune"
+	if allSources {
+		kind = "effect_immune_all"
+	}
+	tx, err := db.Begin()
+	if err != nil {
+		return err
+	}
+	defer tx.Rollback()
+	if _, err = tx.Exec(`DELETE FROM spell_effects
+		WHERE lobby_id=$1 AND target_id=$2 AND caster_id=$3 AND kind=$4 AND lower(detail)=lower($5)`,
+		lobby, target, source, kind, entry); err != nil {
+		return err
+	}
+	if _, err = tx.Exec(`INSERT INTO spell_effects
+		(lobby_id, target_id, caster_id, spell, kind, detail, rounds_left, save_ability, save_dc)
+		VALUES ($1,$2,$3,$4,$5,$4,$6,'',0)`, lobby, target, source, entry, kind, rounds); err != nil {
+		return err
+	}
+	return tx.Commit()
 }
 
 func clearSpellEffects(lobbyID int) {
@@ -338,6 +373,11 @@ func creatureName(lobbyID, id int) string {
 	if id < 0 {
 		return monsterName(lobbyID, id)
 	}
+	if isCompanionCombatID(id) {
+		if c, ok := loadCompanion(id - companionIDBase); ok {
+			return companionDisplayName(c)
+		}
+	}
 	var n string
 	db.QueryRow(`SELECT name FROM characters WHERE id = $1`, id).Scan(&n)
 	if n == "" {
@@ -551,8 +591,40 @@ func spellEffectsTurnStart(lobbyID, id int, name string) []string {
 		if s := monsterStandsUp(lobbyID, id, name); s != "" {
 			log = append(log, s)
 		}
-		log = append(log, holyNimbusDamage(lobbyID, id)...) // Oath of Devotion 20
+		restore, err := armCombatFrame(lobbyID, "spell-turn-start-tail", spellStartTail{ID: id, Name: name})
+		if err != nil {
+			addGMNotice(lobbyID, "Turn effects could not save their continuation; no further automatic effects were run.")
+			return log
+		}
+		log = append(log, holyNimbusDamage(lobbyID, id)...)
+		restore()
+		if combatResolutionPaused(lobbyID) {
+			return log
+		}
 	}
+	return append(log, spellEffectsStartTail(lobbyID, id, name)...)
+}
+
+type spellStartTail struct {
+	ID   int
+	Name string
+}
+
+func init() {
+	combatResumeHandlers["spell-turn-start-tail"] = func(lobby int, raw json.RawMessage) (map[string]interface{}, error) {
+		var c spellStartTail
+		if err := json.Unmarshal(raw, &c); err != nil {
+			return nil, err
+		}
+		lines := spellEffectsStartTail(lobby, c.ID, c.Name)
+		for _, line := range lines {
+			recordGMAction(db, lobby, "condition", line, line)
+		}
+		return map[string]interface{}{"turn_effects": lines}, nil
+	}
+}
+func spellEffectsStartTail(lobbyID, id int, name string) []string {
+	var log []string
 	for _, e := range spellEffectsOn(lobbyID, id) {
 		if e.Kind == "lethargic" && e.RoundsLeft == 1 {
 			db.Exec(`UPDATE spell_effects SET rounds_left = 0 WHERE id = $1`, e.ID)
@@ -682,15 +754,7 @@ func spellTurnStart(charID int) {
 	for _, e := range spellEffectsOn(lobby, charID) {
 		switch e.Kind {
 		case "slowed":
-			if buffIgnoresDifficult(charID) { // Freedom of Movement: magic can't reduce its Speed
-				db.Exec(`UPDATE characters SET reaction_used = true WHERE id = $1`, charID)
-			} else {
-				db.Exec(`UPDATE characters SET movement_remaining = movement_remaining / 2, reaction_used = true WHERE id = $1`, charID)
-			}
-		case "hasted":
-			db.Exec(`UPDATE characters SET movement_remaining = movement_remaining * 2 WHERE id = $1`, charID)
-		case "lethargic":
-			db.Exec(`UPDATE characters SET movement_remaining = 0 WHERE id = $1`, charID)
+			db.Exec(`UPDATE characters SET reaction_used = true WHERE id = $1`, charID) // Slow: no Reactions (its Speed halving is the Speed owner's, speed_owner_2024.go)
 		case "heroism":
 			if n, _ := strconv.Atoi(e.Detail); n > 0 {
 				grantTempHP(charID, n)
@@ -763,6 +827,11 @@ func turnLimitProblem(charID int, action string) string {
 	lobby := lobbyOfChar(charID)
 	rt := getActionResourceType(action)
 	acting := rt == "action" || rt == "bonus_action" || rt == "reaction"
+	if rt == "movement" {
+		if why := speedRulingNeeded(charID); why != "" {
+			return why // effects on the Speed the rules supplied do not combine: the GM rules first (speed_owner_2024.go)
+		}
+	}
 	for _, e := range spellEffectsOn(lobby, charID) {
 		switch e.Kind {
 		case "commanded":
@@ -854,6 +923,11 @@ func passSpellTimeOn(lobbyID, rounds, onlyTarget int) []string {
 	if db == nil || lobbyID == 0 || rounds <= 0 {
 		return nil
 	}
+	release, ok := claimCampaignClock(lobbyID)
+	if !ok {
+		return []string{"Game time did not advance: combat resolution is paused for GM adjudication."}
+	}
+	defer release()
 	recovered := stableRecovery(lobbyID, rounds)
 	recovered = append(recovered, repeatSavesOverTime(lobbyID, rounds, onlyTarget)...) // repeated saves roll each round (F227)
 	wildShapeTickLobby(lobbyID, rounds)                                                // a form that runs out ends (posted to the feed)

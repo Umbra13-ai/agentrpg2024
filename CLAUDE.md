@@ -3,8 +3,10 @@
 **Read `ENGINEERING_STANDARDS.md` first and follow it on every task** (the owner's permanent engineering standards for every
 coding agent). This file adds this project's own rules.
 
-For AI coding sessions working on the Agent RPG 2024 server (Go; code in `cmd/server` and `game/`). The rules are the
-D&D SRD 5.2.1 only. Multiclassing is not supported and must never be offered or documented as an option (`multiclassAllowed`
+For AI coding sessions working on the Agent RPG 2024 server (Go; code in `cmd/server` and `game/`). The built-in rules and public catalog use the D&D SRD 5.2.1. GMs may import additional
+structured 2024 monsters into the separate shared compendium in the existing database.
+Importing text does not implement unfamiliar rules; unsupported effects require GM
+adjudication. Multiclassing is not supported and must never be offered or documented as an option (`multiclassAllowed`
 always answers no). `AGENTS.md` describes the repository and `BUILD.md` how to build, run and test. If the owner's
 notes are attached to your session, read their handoff file first for the standing rules and the current state.
 
@@ -63,6 +65,46 @@ Report: "Wizard Scholar accepts any skill for Expertise."
   message all read that table. Remove the per-class code. Test every class that gets Expertise at each level it gets it.
 
 ### Rules that already have one owner
+- **Legendary Resistance counts:** `monster_resistance_2024.go` owns locked counts for automatic saves, GM commands, item effects and Concentration decisions. General monster-state snapshots never overwrite those counts.
+- **Tracked monster Concentration:** `monster_concentration_2024.go` owns cast identity, damage-time `game.SaveResult` queues, decision identity and transactional decisions/cleanup. `resolveMonsterSpell` starts the cast before effects. Cleanup calls `changeConditionsIn` in the same transaction; never write condition rows directly or reroll stored outcomes. The pending-dependent progression boundary is still incomplete; see `docs/MONSTER_REPAIR_LOG.md`.
+- **A monster's saving-throw effect on its targets:** parseSaveEffect and applySaveEffect in
+  cmd/server/monster_effects_2024.go; a monster as the target goes through
+  applySaveEffectOnMonster (cmd/server/monster_save_targets.go), which uses saveCtx, hurtMonster
+  and addCondition. No other code rolls a stat block's "Saving Throw: DC N" effect.
+  An action that offers several named effects (splitSaveOptions) is refused until the GM names one in `use`; a size-gated
+  condition (saveEffect.conditionsFor) and a staged "Second Failure" go through the same owner, never a per-monster branch.
+  The conditions a stat-block hit gives (parseHitRider, giveConditions) are read and applied by that same owner.
+- **A creature's Speed** (`cmd/server/speed_owner_2024.go`): `characterSpeed` asks the one owner for conditions (Speed 0), spells (Slow, Haste),
+  weapon-mastery effects and stat-block Speed riders (`speed_halved`, `speed_zero`, `speed_minus` markers); a character's movement budget
+  follows a Speed that changes mid-turn (`settleMovement`). Effects whose result depends on an order the rules supplied do not give are never computed: the GM rules
+  (`speed_ruling` on POST /api/gm/conditions). A monster attack on another monster is `monsterAttacksMonster` (same attack, damage and
+  condition owners as for a character target).
+- **A stat-block rider's duration** (`cmd/server/rider_duration_2024.go`): `riderUntil` / `readRiderEnd` / `riderEndFor` read "until the end of its
+  next turn", "until the start (or end) of the <source>'s next turn" once, and `riderEnd.markerAdd` records it, for every Speed rider
+  (`readSpeed` / `giveSpeed`), roll rider (`readDisadvantage` / `giveDisadvantage`: Sap, the "exposed" next-attack Advantage, Disadvantage on
+  attack rolls, Concentration saves or named abilities' saves, read by `attackSources` / `saveSources`) and "can't take Reactions". A new
+  rider kind is one pattern built with `riderPattern` plus the owner that reads its marker; never write the duration into its pattern.
+  Every target kind gets them through `giveConditions` (a companion's hit too). Go: `TestPostgresRiderDurationsOnEveryTarget`.
+- **A trait that acts on a monster's death** (Death Burst, `cmd/server/monster_death_trigger_2024.go`): the writers of a monster's Hit Points
+  call `monsterDiedIn`, which records the trigger in their transaction; `drainDeathTriggers` resolves it after the request (`withProtections`)
+  and at each turn start, through `applySaveEffect`. Never roll a death effect inside a damage transaction. Go: `TestPostgresDeathBurst`.
+- **A standard action a stat-block entry takes** ("takes the Disengage or Hide action", `cmd/server/monster_standard_actions_2024.go`):
+  `resolveMonsterStandardAction` (a choice named in `use`; Disengage recorded as the `disengaged` combat effect that
+  `noteMonstersLeavingReach` reads). Go: `TestPostgresMonsterNimbleEscape`.
+- **A monster attack's range on the battle map:** `monsterAttackRange` (`cmd/server/map_rules.go`) for every target route (character, monster,
+  companion): refusal beyond reach or long range, Disadvantage beyond normal range, within 5 feet. Go: `TestPostgresMonsterAttackRangeOnEveryTarget`.
+- **What a hit does after its damage:** `hitAfterDamage` (`cmd/server/hit_after_damage_2024.go`), called once by every hit route: the drain
+  below and "it starts burning" (the Burning owner, `burning_2024.go`). A new effect of this kind is one call there. Go: `TestPostgresBurningOnHitEveryTarget`.
+- **A hit's Hit Point maximum drain** (Life Drain, `cmd/server/hp_max_drain_2024.go`): `drainHPMaximum` on every hit route; writers
+  `reduceMaxHP` (character, restored by `restoreAllHP`), `reduceMonsterMaxHP`, `reduceCompanionMaxHP`. Go: `TestPostgresLifeDrainOnEveryTarget`.
+- **Monster attack damage definitions:** parseMonsterAttack and prepareMonsterAttack
+  in cmd/server/monster_damage_choice_2024.go: fixed dice, flat damage, type choices,
+  secondary damage, validation and refusal. oldStyleActions is a storage adapter;
+  companionRows and prepareCompanionPlan adapt the same definition for companions,
+  familiars, item companions and Wild Shape. No other consumer parses stat-block
+  hit damage. game.NormalizeDice, game.ParseDice, game.FlatBonus and the existing
+  game damage rollers own signed dice arithmetic. Unsupported/non-damaging hit
+  effects are explicitly GM-adjudicated; no fallback damage is rolled.
 Add to the owner, never beside it. When you give another rule one owner, add it to this list.
 - **Attack rolls:** `game.AttackRoll` (`game/attack.go`) is the rule of an attack roll (Advantage, Disadvantage and how
   they cancel, natural 1 and 20, Critical Hits, the wording of the result line). `attackCtx` and the `attackSources`
@@ -494,6 +536,9 @@ Add to the owner, never beside it. When you give another rule one owner, add it 
 - **The GUI rework preview** (Matt, Nov 17): `handleUIPreview` (`cmd/server/ui_preview_2024.go`) serves the saved ChatGPT design in
   `data/ui_preview/` at `/preview/`, frozen data, only where `AGENTRPG_UI_PREVIEW=1` (staging); 404 elsewhere. Not the real pages.
 - **The guide served to agents:** `docs/skill.md`, built into the program by the `docs` package (`docs.Skill`).
+- **A monster attack's damage and a Multiattack's plan** (`parseMonsterAttack`, `prepareMonsterAttack`, `multiattackPlan`): every damage amount of a
+  Hit is represented or the attack is refused before any roll; a Multiattack is capped at 20 attacks and an either/or choice is never
+  combined. **Absorption** is `monsterAbsorbs`, read from the trait text. See `docs/MONSTER_SYSTEM.md`.
 
 ### Before pushing
 `gofmt -l` on the files you changed, `go vet ./cmd/server ./game`, `go test ./...`, then the owner's test scripts for

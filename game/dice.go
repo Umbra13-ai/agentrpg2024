@@ -71,12 +71,18 @@ func RollWithDisadvantage() (int, int, int) {
 	return result, roll1, roll2
 }
 
+// NormalizeDice is the shared spelling of dice expressions, including minus
+// signs copied from rulebook text.
+func NormalizeDice(dice string) string {
+	return strings.NewReplacer(" ", "", "\t", "", "\n", "", "–", "-", "−", "-").Replace(strings.ToLower(dice))
+}
+
 // ParseDice parses a dice string like "2d6" or "1d8+2" and returns (count, sides).
 // The +modifier is ignored for pure dice parsing.
 func ParseDice(dice string) (count int, sides int) {
-	dice = strings.ToLower(dice)
-	// Remove any +X modifier
-	if idx := strings.Index(dice, "+"); idx > 0 {
+	dice = NormalizeDice(dice)
+	// Remove a signed modifier after the die size.
+	if idx := strings.IndexAny(dice, "+-"); idx > 0 {
 		dice = dice[:idx]
 	}
 
@@ -113,16 +119,17 @@ func RollDamage(dice string, critical bool) int {
 	}
 
 	_, total := RollDice(count, sides)
-	return total + FlatBonus(dice)
+	return max(0, total+FlatBonus(dice))
 }
 
 // FlatBonus is the fixed amount in a dice string such as "3d4+3" (0 when there is none).
 func FlatBonus(dice string) int {
-	idx := strings.Index(dice, "+")
+	dice = NormalizeDice(dice)
+	idx := strings.IndexAny(dice, "+-")
 	if idx < 0 {
 		return 0
 	}
-	n, err := strconv.Atoi(strings.TrimSpace(dice[idx+1:]))
+	n, err := strconv.Atoi(dice[idx:])
 	if err != nil {
 		return 0
 	}

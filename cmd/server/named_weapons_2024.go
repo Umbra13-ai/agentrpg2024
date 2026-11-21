@@ -13,6 +13,7 @@ package main
 import (
 	"encoding/json"
 	"fmt"
+	"log"
 	"regexp"
 	"sort"
 	"strings"
@@ -291,7 +292,7 @@ func vorpalHeld(item string) bool { return strings.EqualFold(strings.TrimSpace(i
 // text for the attacker.
 func vorpalBehead(lobbyID, targetID int, monsterKey, name string) (cut int, killed bool, note string) {
 	var mtype, size, immune, vuln string
-	db.QueryRow(`SELECT COALESCE(type,''), COALESCE(size,''), COALESCE(damage_immunities,''), COALESCE(damage_vulnerabilities,'') FROM monsters WHERE slug = $1`, monsterKey).
+	monsterQueryRow(`SELECT COALESCE(type,''), COALESCE(size,''), COALESCE(damage_immunities,''), COALESCE(damage_vulnerabilities,'') FROM monsters WHERE slug = $1`, monsterKey).
 		Scan(&mtype, &size, &immune, &vuln)
 	extra := func(why string) (int, bool, string) {
 		d := 30
@@ -318,10 +319,17 @@ func vorpalBehead(lobbyID, targetID int, monsterKey, name string) (cut int, kill
 		if meta.LR > 0 {
 			s := loadMonsterState(lobbyID, targetID)
 			if _, total := legendaryUseTotals(meta, s); s.LRUsed < total {
-				s.LRUsed++
-				saveMonsterState(lobbyID, targetID, s)
+				left, spent, err := spendMonsterResistance(lobbyID, targetID, meta)
+				if err != nil {
+					log.Printf("Vorpal Sword resistance decision: %v", err)
+					addGMNotice(lobbyID, "The server could not record "+name+"'s Legendary Resistance use. Resolve the Vorpal Sword effect before continuing.")
+					return 0, false, " Vorpal Sword: the effect needs GM adjudication after a storage failure."
+				}
+				if !spent {
+					return 0, true, fmt.Sprintf(" Vorpal Sword: you cut off %s's head!", name)
+				}
 				recordGMAction(db, lobbyID, "legendary_resistance", fmt.Sprintf("🛡️ %s spends a Legendary Resistance use to keep its head (Vorpal Sword).", name),
-					fmt.Sprintf("%d of %d Legendary Resistance uses left today.", total-s.LRUsed, total))
+					fmt.Sprintf("%d of %d Legendary Resistance uses left today.", left, total))
 				return extra(name + " spends a use of Legendary Resistance to keep its head")
 			}
 		}

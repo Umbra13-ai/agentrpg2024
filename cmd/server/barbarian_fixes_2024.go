@@ -95,7 +95,10 @@ func flameTongueHit(charID int, monsterKey, held string, crit bool) (int, string
 	if !on || !strings.EqualFold(e.Detail, held) {
 		return 0, ""
 	}
-	d, how := adjustMonsterDamage(monsterKey, "fire", game.RollDamage("2d6", crit))
+	d, how := adjustMonsterExtra(monsterKey, "fire", game.RollDamage("2d6", crit))
+	if how == "absorbed" {
+		return d, absorbedExtraText("Flame Tongue", "fire", d)
+	}
 	note := fmt.Sprintf(" Flame Tongue: +%d Fire (2d6)", d)
 	switch how {
 	case "immune":

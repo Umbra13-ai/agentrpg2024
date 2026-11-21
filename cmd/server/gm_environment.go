@@ -164,6 +164,7 @@ func handleGMFallingDamage(w http.ResponseWriter, r *http.Request) {
 		SELECT name, hp, max_hp, class, level, COALESCE(reaction_used, false), COALESCE(class_levels, '{}')
 		FROM characters WHERE id = $1
 	`, req.CharacterID).Scan(&charName, &currentHP, &maxHP, &class, &level, &reactionUsed, &classLevelsJSON)
+	reactionUsed = reactionUsed || charCantTakeReactions(req.CharacterID)
 	if err != nil {
 		if answerDBFailure(w, err, "the character") {
 			return

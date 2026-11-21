@@ -690,7 +690,10 @@ func divineFavorHit(charID int, monsterKey, weapon string, crit bool) (int, stri
 	if _, ok := charBuff(charID, "divine_favor"); !ok {
 		return 0, ""
 	}
-	d, how := adjustMonsterDamage(monsterKey, "radiant", game.RollDamage("1d4", crit))
+	d, how := adjustMonsterExtra(monsterKey, "radiant", game.RollDamage("1d4", crit))
+	if how == "absorbed" {
+		return d, absorbedExtraText("Divine Favor", "radiant", d)
+	}
 	return d, fmt.Sprintf(" Divine Favor: +%d Radiant%s.", d, map[string]string{"resistant": " (it resists)", "immune": " (it is immune)", "vulnerable": " (it is vulnerable)"}[how])
 }
 
@@ -779,7 +782,7 @@ func monsterSeesThrough(lobbyID, monsterID int) bool {
 		return false
 	}
 	var senses string
-	db.QueryRow(`SELECT COALESCE(senses,'') FROM monsters WHERE slug = $1`, fmt.Sprint(e["monster_key"])).Scan(&senses)
+	monsterQueryRow(`SELECT COALESCE(senses,'') FROM monsters WHERE slug = $1`, fmt.Sprint(e["monster_key"])).Scan(&senses)
 	s := strings.ToLower(senses)
 	return strings.Contains(s, "blindsight") || strings.Contains(s, "truesight")
 }

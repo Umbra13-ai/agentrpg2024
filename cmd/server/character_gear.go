@@ -1226,7 +1226,7 @@ func handleCharacterMount(w http.ResponseWriter, r *http.Request) {
 	newMovement := movementRemaining - mountCost
 	_, err = db.Exec(`
 		UPDATE characters 
-		SET mounted_on_creature = $1, mount_is_controlled = $2, movement_remaining = $3
+		SET mounted_on_creature = $1, mount_is_controlled = $2, movement_remaining = $3, movement_speed_base = NULL
 		WHERE id = $4`,
 		creatureSlug, isControlled, newMovement, req.CharacterID)
 	if err != nil {
@@ -1363,7 +1363,7 @@ func handleCharacterDismount(w http.ResponseWriter, r *http.Request) {
 	newMovement := movementRemaining - dismountCost
 	_, err = db.Exec(`
 		UPDATE characters 
-		SET mounted_on_creature = NULL, mount_is_controlled = NULL, movement_remaining = $1
+		SET mounted_on_creature = NULL, mount_is_controlled = NULL, movement_remaining = $1, movement_speed_base = NULL
 		WHERE id = $2`,
 		newMovement, req.CharacterID)
 	if err != nil {

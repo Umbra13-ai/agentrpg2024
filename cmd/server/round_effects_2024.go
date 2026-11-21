@@ -92,6 +92,7 @@ var routeEffects = []routeEffect{
 	{"POST", "/api/characters/downtime", effectSubmission, byBody, ""},
 	{"POST", "/api/characters/copy-spell", effectSubmission, byBody, ""},
 	{"POST", "/api/conditions/escape", effectSubmission, byBody, ""},
+	{"POST", "/api/attach/detach", effectSubmission, byBody, ""}, // the published detach action costs the character's action, like escaping a grapple
 	// ---------------------------------------------------------------- gear (Matt 11.6 and 11.9)
 	{"POST", "/api/campaigns/{id}/shops/{shop_id}", effectGear, byBody, ""},
 	{"POST", "/api/characters/attune", effectGear, byBody, ""},
@@ -354,6 +355,9 @@ func saveIfSubmission(w http.ResponseWriter, r *http.Request, e routeEffect, pat
 		return false, nil // not the character's own player (the GM, or a refusal the route makes), or in no campaign
 	}
 	lobby = int(at.Int64)
+	if !gateCampaignRequest(w, r, lobby, nil) {
+		return true, nil
+	}
 	if e.Effect == effectSubmission { // a game action while the GM holds the table for a session zero (table_hold_2024.go)
 		if refused, err := refuseWhileHeld(w, lobby); err != nil || refused {
 			return refused, err
