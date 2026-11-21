@@ -85,6 +85,11 @@ Report: "Wizard Scholar accepts any skill for Expertise."
   "(Wolf or Hybrid Form Only)" is refused in another form by `formRefusal`, read by `monsterEntryRefusal` and the Multiattack plan.
   **A trait that acts when the creature receives a condition** (Prone Deficiency) is `conditionTraitReaction`
   (`monster_condition_traits_2024.go`), called by `conditionTakesHold`. Go: `TestPostgresBookShapeShiftAndConditionTriggers`.
+  **A creature's trait that gives attacks against it Disadvantage** (Blurred Form) is `attackedWithDisadvantage`, one row of
+  `attackSources`. **A light a monster switches on and off** (Ignited Illumination) is `resolveLightToggle` (combat effect `ablaze`), read
+  by `monsterLightRadii` in the lighting owner. **A Reaction to the creature's own failed save** (Mind Corrosion) is `failedSaveReaction`
+  (`monster_save_reactions_2024.go`), called by `saveCtx.resist` with the save's `source` (a character's spell: `monsterSpellSaveBy`).
+  Go: `TestPostgresBookDefensesLightAndSaveReactions`, `TestPostgresBookEscapeCheck`.
 - **A creature's Speed** (`cmd/server/speed_owner_2024.go`): `characterSpeed` asks the one owner for conditions (Speed 0), spells (Slow, Haste),
   weapon-mastery effects and stat-block Speed riders (`speed_halved`, `speed_zero`, `speed_minus` markers); a character's movement budget
   follows a Speed that changes mid-turn (`settleMovement`). Effects whose result depends on an order the rules supplied do not give are never computed: the GM rules

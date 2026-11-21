@@ -51,6 +51,8 @@ var monsterTraitRules = []monsterTraitRule{
 	{Match: rollTraitRe, Does: "Advantage on its attack rolls (melee ones when the trait says so), and on its saving throws when the trait says so, while it is Bloodied or against a target that doesn't have all its Hit Points, as its trait says",
 		Where: "rollTraitAdvantage (monster_traits_2024.go), read by attackSources and saveSources"},
 	{Match: endAuraRe, Does: "an aura: each creature in it (of its choice: its enemies) takes the damage at the end of the monster's turn", Where: "monster_features_2024.go", Aura: true},
+	{Match: blurredFormRe, Does: "attack rolls against it have Disadvantage (unless it has the Incapacitated condition, when the trait says so)",
+		Where: "attackSources (attack_2024.go), attackedWithDisadvantage (monster_condition_traits_2024.go)"},
 	{Match: conditionTriggerRe, Does: "when it receives the named condition, a die is rolled; on the number the trait names it has the second condition, with the repeated save at the end of each of its turns",
 		Where: "conditionTraitReaction (monster_condition_traits_2024.go), called by conditionTakesHold"},
 	{Match: saveEndAuraRe, Does: "an aura: each creature in it (of its choice: its enemies) makes the saving throw at the end of the monster's turn; one that is immune to it after a success is left out",

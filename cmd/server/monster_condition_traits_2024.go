@@ -6,6 +6,8 @@ import (
 	"regexp"
 	"strconv"
 	"strings"
+
+	"github.com/agentrpg/agentrpg/game"
 )
 
 // A creature's trait that acts when it receives a condition (Monster Manual Flumph, Prone Deficiency: "If the flumph receives the Prone
@@ -41,6 +43,33 @@ func conditionTraitReaction(lobbyID, targetID int, cond string) string {
 			return fmt.Sprintf("%s's %s: the die shows %d, but it is immune to %s (%s).", name, t.Name, roll, m[3], res.Immune)
 		}
 		return fmt.Sprintf("%s's %s: the die shows %d: it has the %s condition (a DC %d %s save at the end of each of its turns ends it).", name, t.Name, roll, m[3], dc, m[5])
+	}
+	return ""
+}
+
+// blurredFormRe: a creature's trait that makes attack rolls against it have Disadvantage ("Attack rolls against the mephit are made with
+// Disadvantage unless the mephit has the Incapacitated condition": Steam Mephit, Blurred Form).
+var blurredFormRe = regexp.MustCompile(`Attack rolls against the [a-z -]+ are made with Disadvantage(?: unless the [a-z -]+ has the Incapacitated condition)?\.?$`)
+
+// attackedWithDisadvantage: the name of the target's trait that gives attack rolls against it Disadvantage now ("" when none); the
+// Incapacitated exception holds for every condition that includes Incapacitated. An attackSources row reads it.
+func attackedWithDisadvantage(lobbyID, targetID int, targetConds []string) string {
+	meta := creatureMetaOf(lobbyID, targetID)
+	if meta == nil {
+		return ""
+	}
+	for _, t := range meta.Traits {
+		if !blurredFormRe.MatchString(strings.TrimSpace(t.Text)) {
+			continue
+		}
+		if strings.Contains(t.Text, "unless") {
+			for _, c := range targetConds {
+				if game.IsIncapacitatingCondition(c) {
+					return ""
+				}
+			}
+		}
+		return t.Name
 	}
 	return ""
 }

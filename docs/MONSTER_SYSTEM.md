@@ -591,3 +591,13 @@ Verified as already handled (probe of the book text through the readers): Mud an
 - **GM by design, asserted**: telepathy and mind links (Probing Telepathy, Telepathic Bond, Shark Telepathy, Bound, Vampiric Connection,
   Shielded Mind; the book's Advanced Telepathy and Telepathic Shroud; any trait worded with telepathy), senses that find things (Iron Scent, Treasure
   Sense), speaking with creatures: `GM` rows of `monsterTraitRules`, shown to the GM as theirs to apply.
+
+## The rest of the CR 0-1 entries (2026-11-21, after the areas work)
+
+- **Blurred Form** (SRD Steam Mephit): "Attack rolls against the mephit are made with Disadvantage unless the mephit has the Incapacitated condition": `attackedWithDisadvantage`, one row of `attackSources`, for every attacker (character, monster, companion); no Disadvantage while the mephit has any condition that includes Incapacitated.
+- **Ignited Illumination** (SRD Magmin): a light the monster switches on and off (`use` "ignite" or "extinguish", else the other state): combat effect `ablaze` (kept across its turns), read by the lighting owner's `monsterLightRadii`.
+- **Mind Corrosion** (Monster Manual Psychic Gray Ooze): its Reaction after it fails a save against a spell or a magical effect: `failedSaveReaction`, called by `saveCtx.resist` when the save's source is known (a character's spell through `monsterSpellSaveBy`; a monster's magical effect through `rollForTarget`), once a round, none while it can't take Reactions; the damage goes through the Hit Point owner of the creature that caused the save.
+- **Eldritch Lantern** (Monster Manual Kenku): "casts Faerie Fire" is the monster cast owner's (already handled).
+- **Rapport Spores** (Monster Manual Myconids): telepathy, no server state: the GM's, and the reply says so.
+- **Sticky Net** (Kuo-toa): the escape check "A creature can take an action to make a DC 10 Strength (Athletics) check to free itself" is the condition record's (`saveEffect.Escapes`, POST /api/conditions/escape); destroying the net (an object) and freeing another creature stay the GM's.
+- **Not built**: Sticky Shield (Kuo-toa: a Reaction to a missed melee weapon attack that sticks the weapon) needs a miss trigger and item state; Myconid Sun Sickness ("dies if it spends more than 1 hour in sunlight") needs a clock of time spent in sunlight (its D20 Tests Disadvantage reads the areas work's Sunlight owner where the wording matches).

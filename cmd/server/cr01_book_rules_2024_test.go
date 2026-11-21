@@ -197,6 +197,105 @@ func TestPostgresBookEndOfTurnAuras(t *testing.T) {
 	}
 }
 
+// The rest of the CR 0-1 entries the areas work left: Blurred Form (SRD Steam Mephit: attack rolls against it have Disadvantage unless it
+// is Incapacitated), Ignited Illumination (SRD Magmin: a light it switches on and off, read by the battle map's lighting), Mind Corrosion
+// (Monster Manual Psychic Gray Ooze: its Reaction to a failed save against a creature's spell or magical effect damages that creature),
+// Eldritch Lantern (Monster Manual Kenku: it casts Faerie Fire). Invented texts with the same wording.
+func TestPostgresBookDefensesLightAndSaveReactions(t *testing.T) {
+	testPostgres(t)
+	gm, _, camp, charID, petID, _ := companionReactionFixture(t)
+	pet := companionIDBase + petID
+	pgExec(t, `UPDATE characters SET hp=1000,max_hp=1000 WHERE id=$1`, charID)
+	plain := []srdMonsterEntry{{Name: "Claw", Text: "Melee Attack Roll: +1, reach 5 ft. Hit: 1 (1d1) Slashing damage."}}
+	blur := bookFixture("Haze Imp", "Elemental", []srdMonsterEntry{{Name: "Shimmer Veil", Text: "Attack rolls against the imp are made with Disadvantage unless the imp has the Incapacitated condition."}}, plain)
+	glow := bookFixture("Cinder Gnome", "Elemental", nil, plain)
+	glow.BonusActions = []srdMonsterEntry{{Name: "Kindle", Text: "The gnome sets itself ablaze or extinguishes its flames. While ablaze, the gnome sheds Bright Light in a 10-foot radius and Dim Light for an additional 10 feet."}}
+	ooze := bookFixture("Thought Ooze", "Ooze", nil, plain)
+	ooze.Reactions = []srdMonsterEntry{{Name: "Mind Burn", Text: "Trigger: The ooze fails a saving throw against a spell or another magical effect created by a creature. Response: The triggering creature takes 3 (1d6) Psychic damage."}}
+	lantern := bookFixture("Lantern Crow", "Monstrosity", nil, plain)
+	lantern.BonusActions = []srdMonsterEntry{{Name: "Ghost Lantern (Recharge 4–6)", Text: "The crow casts Faerie Fire, using Intelligence as the spellcasting ability (spell save DC 40)."}}
+	lantern.Actions = append(lantern.Actions, srdMonsterEntry{Name: "Mind Spores", Text: "The crow expels spores in a 30-foot Emanation originating from itself. Creatures in that area with an Intelligence score of 2 or higher that aren't Constructs, Elementals, or Undead gain telepathy with a range of 30 feet for 1 hour."})
+	ids := importBookFixtures(t, gm, camp, blur, glow, ooze, lantern)
+	// Rapport Spores: telepathy, which the server keeps no state for: the GM's, said so (nothing rolled)
+	if _, j := pgCall(t, "POST", "/api/gm/narrate", gm, map[string]interface{}{"campaign_id": camp, "narration": "x",
+		"monster_action": map[string]interface{}{"monster": "Lantern Crow", "action": "Mind Spores"}}); !strings.Contains(fmt.Sprint(j["monster_action_result"]), "GM") {
+		t.Errorf("Rapport Spores isn't marked as the GM's: %v", j["monster_action_result"])
+	}
+
+	// Blurred Form: Disadvantage on a character's, a monster's and a companion's attack against it, none while it is Incapacitated
+	for _, attacker := range []int{charID, ids["Cinder Gnome"], pet} {
+		atk := attackCtx{lobby: camp, attacker: attacker, target: ids["Haze Imp"], name: "Claw", bonus: 1, melee: true, weapon: true}
+		ar, _, _ := atk.roll()
+		if !strings.Contains(strings.Join(ar.Disadvantage, ","), "Shimmer Veil") {
+			t.Errorf("an attack by %d against the blurred imp: Disadvantage %v", attacker, ar.Disadvantage)
+		}
+	}
+	addCondition(camp, ids["Haze Imp"], condAdd{Condition: "stunned", Source: "test"})
+	atk := attackCtx{lobby: camp, attacker: charID, target: ids["Haze Imp"], name: "Claw", bonus: 1, melee: true, weapon: true}
+	if ar, _, _ := atk.roll(); strings.Contains(strings.Join(ar.Disadvantage, ","), "Shimmer Veil") {
+		t.Errorf("Blurred Form while Stunned (Incapacitated): %v", ar.Disadvantage)
+	}
+
+	// Ignited Illumination: dark scene; the character 10 feet away is in Bright Light only while the gnome is ablaze
+	pgExec(t, `UPDATE combat_state SET lighting='darkness' WHERE lobby_id=$1`, camp)
+	cp := fmt.Sprintf("/api/campaigns/%d", camp)
+	_, state := pgCall(t, "GET", cp+"/battle-map", gm, nil)
+	req := map[string]interface{}{"map": encounterMap{Grid: []string{"........", "........"}, Tokens: []mapToken{
+		{ID: ids["Cinder Gnome"], Name: "gnome", Position: mapSquare{0, 0}, Size: 1},
+		{ID: charID, Name: "hero", Position: mapSquare{2, 0}, Size: 1}}}, "forced_movement": true}
+	if rev, ok := state["revision"].(string); ok {
+		req["confirmation"] = rev
+	}
+	if c, r := pgCall(t, "PUT", cp+"/battle-map", gm, req); c != 200 {
+		t.Fatalf("put map: %d %v", c, r)
+	}
+	before := monsterLightingAt(camp, charID)
+	kindle := func(use string) string {
+		_, j := pgCall(t, "POST", "/api/gm/narrate", gm, map[string]interface{}{"campaign_id": camp, "narration": "x",
+			"monster_action": map[string]interface{}{"monster": "Cinder Gnome", "action": "Kindle", "use": use}})
+		return fmt.Sprint(j["monster_action_result"])
+	}
+	if res := kindle("ignite"); !strings.Contains(res, "ablaze") || monsterLightingAt(camp, charID) != "bright" {
+		t.Errorf("ablaze: lighting %q -> %q (%s)", before, monsterLightingAt(camp, charID), res)
+	}
+	expireCombatEffectsOf(camp, ids["Cinder Gnome"]) // its turn's start keeps it lit
+	if monsterLightingAt(camp, charID) != "bright" {
+		t.Error("the light went out at the gnome's turn start")
+	}
+	if res := kindle("extinguish"); monsterLightingAt(camp, charID) != before {
+		t.Errorf("extinguished: lighting %q (%s)", monsterLightingAt(camp, charID), res)
+	}
+
+	// Mind Corrosion: the ooze fails a save against the character's spell: its Reaction deals the character Psychic damage, once a round
+	hpNow := func() (h int) { db.QueryRow(`SELECT hp FROM characters WHERE id=$1`, charID).Scan(&h); return }
+	h0 := hpNow()
+	sv := monsterSpellSaveBy(camp, ids["Thought Ooze"], "dex", 40, saveStakes{Damage: 1}, nil, charID)
+	note := takeSaveNotes(camp)
+	if sv.Success || hpNow() >= h0 || !strings.Contains(note, "Mind Burn") {
+		t.Fatalf("Mind Corrosion: saved %v, hp %d -> %d, note %q", sv.Success, h0, hpNow(), note)
+	}
+	h1 := hpNow()
+	monsterSpellSaveBy(camp, ids["Thought Ooze"], "dex", 40, saveStakes{Damage: 1}, nil, charID)
+	if hpNow() != h1 {
+		t.Error("the ooze's Reaction answered twice in one round")
+	}
+	// a monster's magical effect, through the save effect owner, with its source
+	monsterReactionRound.Delete(fmt.Sprintf("%d:%d", camp, ids["Thought Ooze"]))
+	g0 := monsterHPNow(camp, ids["Cinder Gnome"])
+	eff := saveEffect{Ability: "dex", DC: 40, IsMagical: true, SourceID: ids["Cinder Gnome"]}
+	eff.rollForTarget(camp, ids["Thought Ooze"], 0, true)
+	if monsterHPNow(camp, ids["Cinder Gnome"]) >= g0 {
+		t.Error("Mind Corrosion didn't answer a monster's magical effect")
+	}
+
+	// Eldritch Lantern: the kenku casts Faerie Fire at the character (a Dexterity save against DC 40)
+	c, j := pgCall(t, "POST", "/api/gm/narrate", gm, map[string]interface{}{"campaign_id": camp, "narration": "x",
+		"monster_action": map[string]interface{}{"monster": "Lantern Crow", "action": "Ghost Lantern", "target_ids": []int{charID}, "confirm_targeting": true}})
+	if res := fmt.Sprint(j["monster_action_result"]); c != 200 || !strings.Contains(res, "Faerie Fire") || strings.Contains(res, "the GM resolves it") {
+		t.Errorf("Eldritch Lantern's Faerie Fire: %d %s", c, res)
+	}
+}
+
 // "A creature can take an action to make a DC 10 Strength (Athletics) check to free itself" (Kuo-toa Sticky Net): the condition's
 // record carries that escape check at every target kind, and a character frees itself with POST /api/conditions/escape.
 func TestPostgresBookEscapeCheck(t *testing.T) {

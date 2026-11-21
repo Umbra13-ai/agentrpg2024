@@ -1540,6 +1540,10 @@ func resolveMonsterEffectText(r *http.Request, lobbyID, monsterID int, meta *mon
 		}
 	}
 
+	// a light the monster switches on and off (Ignited Illumination): the lighting owner reads it (monster_lighting_2024.go)
+	if line, ok := resolveLightToggle(lobbyID, monsterID, name, entryName, text, use, apply); ok {
+		return append([]string{line}, notes...)
+	}
 	// Shape-Shift: the form named in use is recorded; entries limited to a form read it (monster_shape_shift_2024.go)
 	if line, ok := resolveShapeShift(lobbyID, monsterID, name, entryName, text, use, apply); ok {
 		return append([]string{line}, notes...)
