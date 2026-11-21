@@ -95,7 +95,25 @@ var (
 	reactUsesRe   = regexp.MustCompile(`Response: The [\w ]+? uses ([A-Z][\w ]+?)\.`)
 	reactRiposte  = regexp.MustCompile(`makes one ([A-Z][\w ]+?) attack against the triggering creature`)
 	perDayRe      = regexp.MustCompile(`\((\d+)/Day\)`)
+	reactHalveRe  = regexp.MustCompile(`(?i)\bhalves the (?:attack['’]s )?damage\b`)
+	// "Trigger: The noble is hit by a melee attack roll ...", "Trigger: An attack roll hits the rust monster." (not "hits the wearer")
+	reactSelfHitRe = regexp.MustCompile(`(?i)^Trigger: (?:(?:The|An?) [^.]+? is hit by (an?|a melee|a ranged) attack roll|An attack roll hits the ([^.]+?)\.|An attacker [^.]+? hits it with an attack roll)`)
 )
+
+// reactionSelfHitTrigger: the Reaction's trigger is an attack roll hitting the monster itself; kind is "melee", "ranged" or "" (any).
+func reactionSelfHitTrigger(text string) (needs bool, kind string) {
+	m := reactSelfHitRe.FindStringSubmatch(strings.TrimSpace(text))
+	if m == nil || strings.Contains(strings.ToLower(m[2]), "wearer") {
+		return false, ""
+	}
+	switch strings.ToLower(m[1]) {
+	case "a melee":
+		return true, "melee"
+	case "a ranged":
+		return true, "ranged"
+	}
+	return true, ""
+}
 
 // resolveMonsterReaction resolves a Reaction entry; handled false lets the generic text resolver take it (a saving throw reaction).
 func resolveMonsterReaction(r *http.Request, lobbyID, id int, meta *monsterMeta, entry srdMonsterEntry, target string, targetIDs []int, apply bool) (text string, handled bool, refusal string) {
@@ -119,6 +137,17 @@ func resolveMonsterReaction(r *http.Request, lobbyID, id int, meta *monsterMeta,
 			charName = getCharacterName(hit.CharID)
 		}
 	}
+	// a Reaction whose trigger is an attack roll hitting this creature answers only a hit recorded this turn, of the kind the trigger
+	// names: one reader for every such Reaction (Parry, Riposte, Deflect Missile, Whirlwind of Sand, Reflexive Antennae, Uncanny Dodge)
+	// (Protective Magic answers without a hit with where Counterspell is cast instead: its own case below)
+	if needs, kind := reactionSelfHitTrigger(entry.Text); needs && !strings.Contains(low, "casts counterspell or shield") {
+		if !haveHit {
+			return "", true, fmt.Sprintf("%s's %s answers a hit on it, and no attack has hit %s this turn. Nothing was used.", name, base, name)
+		}
+		if kind != "" && (kind == "melee") != hit.Melee {
+			return "", true, fmt.Sprintf("%s's %s answers a %s hit; %s's attack was not. Nothing was used.", name, base, kind, charName)
+		}
+	}
 	undoIfMiss := func(bonus int, label string) string {
 		desc := fmt.Sprintf("%s's attack (%d against AC %d)", charName, hit.Total, hit.AC+bonus)
 		if hit.Nat20 {
@@ -137,11 +166,8 @@ func resolveMonsterReaction(r *http.Request, lobbyID, id int, meta *monsterMeta,
 	out := ""
 	switch {
 	case reactACRe.MatchString(entry.Text):
-		if !haveHit {
-			return "", true, fmt.Sprintf("%s's %s answers a hit, and no character has hit %s this turn.", name, base, name)
-		}
-		if strings.Contains(low, "melee attack roll") && !hit.Melee {
-			return "", true, fmt.Sprintf("%s's %s answers a melee hit; %s's attack was ranged.", name, base, charName)
+		if !haveHit { // a trigger worded otherwise ("any attack roll"): still a hit on it this turn
+			return "", true, fmt.Sprintf("%s's %s answers a hit on it, and no attack has hit %s this turn. Nothing was used.", name, base, name)
 		}
 		n, _ := strconv.Atoi(reactACRe.FindStringSubmatch(entry.Text)[1])
 		out = name + " uses " + base + "." + undoIfMiss(n, base)
@@ -169,7 +195,7 @@ func resolveMonsterReaction(r *http.Request, lobbyID, id int, meta *monsterMeta,
 		out = name + " casts Shield (" + base + ")." + undoIfMiss(5, "Shield") + " +5 AC until the start of its next turn."
 	case reactReduceRe.MatchString(entry.Text):
 		if !haveHit || hit.Melee {
-			return "", true, fmt.Sprintf("%s's %s answers a ranged hit, and none hit it this turn.", name, base)
+			return "", true, fmt.Sprintf("%s's %s answers a ranged hit, and none hit it this turn. Nothing was used.", name, base)
 		}
 		dt := strings.ToLower(hit.DamageType)
 		if dt != "bludgeoning" && dt != "piercing" && dt != "slashing" {
@@ -194,6 +220,17 @@ func resolveMonsterReaction(r *http.Request, lobbyID, id int, meta *monsterMeta,
 		if taken > 0 && back >= taken {
 			out += " The damage is reduced to 0: it can redirect the force (the saving throw in its text; the GM resolves it with monster_action)."
 		}
+	case reactHalveRe.MatchString(entry.Text): // Uncanny Dodge: the hit's damage is halved (rounded down), Temporary Hit Points included
+		bv, av := monsterVitals(hit.EntryBefore), monsterVitals(hit.EntryAfter)
+		if hit.EntryBefore == nil || hit.EntryAfter == nil {
+			return "", true, fmt.Sprintf("%s's %s: the hit's damage wasn't recorded, so the server can't halve it; the GM settles it. Nothing was used.", name, base)
+		}
+		taken := max(bv.HP-av.HP, 0) + max(bv.Temp-av.Temp, 0)
+		back, after, ok := refundHitDamage(lobbyID, id, key, hit, taken-taken/2) // monster_hit_undo_2024.go
+		if !ok {
+			return "", true, fmt.Sprintf("%s uses %s: RECONCILIATION NEEDED, the target's Hit Points or state changed after the hit, so halving its damage is not applied by the server; the GM settles it.", name, base)
+		}
+		out = fmt.Sprintf("%s uses %s: the hit's damage is halved, %d to %d (it has %d HP, %d Temporary).", name, base, taken, taken-back, after.HP, after.Temp)
 	case strings.Contains(low, "splits into two new"):
 		out = splitMonster(lobbyID, id, name, base)
 		if strings.HasPrefix(out, "!") {

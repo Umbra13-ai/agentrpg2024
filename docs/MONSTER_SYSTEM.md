@@ -337,6 +337,17 @@ character branch and dealt nothing; it now takes the damage through `damageCompa
 turn start: the GM's). Tested: `TestPostgresBurningOnHitEveryTarget`, `TestBurnSentenceForCreatures`; mutation-checked (no burning
 rider, the companion branch removed). Catalog parse diff: only Magmin and Fire Elemental changed.
 
+## A creature's own Advantage trait (`rollTraitAdvantage`, `cmd/server/monster_traits_2024.go`)
+
+Blood Frenzy (Advantage on attack rolls against a creature that doesn't have all its Hit Points), Bloodied Fury (while Bloodied; the
+Giant Boar's melee attack rolls only) and Bloodied Frenzy (while Bloodied, attack rolls and saving throws) are read by their wording
+(`rollTraitOf`), one row of `monsterTraitRules`. The attack roll owner and the saving throw owner each ask `rollTraitAdvantage` (one row
+each), for a monster or a companion made from the stat block; the result line names the trait. Bloodied is `game.Vitals.Bloodied` on the
+creature's own Hit Points; "missing Hit Points" is `targetMissingHitPoints` (characters, monsters, companions; Temporary Hit Points
+don't count). Catalog parse: exactly Sahuagin Warrior, Boar, Giant Boar and Berserker match. Tested: `TestRollTraitsOverTheCatalog`,
+`TestPostgresRollTraitsGiveAdvantage` (narrate at a character, a monster and a companion target; a companion's own attack; a ranged
+attack and a melee-only trait; the save); mutation-checked on both rows.
+
 ## Roll riders (`cmd/server/disadvantage_riders_2024.go`)
 
 Read by `readRider` from a hit or a failed save, applied by `giveConditions`, by the one owner for characters, monsters and companions
@@ -395,6 +406,35 @@ Safety rule: the correction is tied to this hit's own snapshot and never guesses
 Not covered, and said in the reply: effects of the hit this code does not track are the GM's to take back. Tracked monster Concentration now has a separate lifecycle owner (`monster_concentration_2024.go`), but undoing a recorded hit does not yet restore its Concentration consequences; that interaction remains an open review/test gap. A creature at 0 Hit Points cannot take a Reaction, so a lethal hit is tested on the undo directly, not through Parry.
 
 Tests: `TestPostgresCharacterHitTakenBack` (character-attacker route: Temp HP restore, stale hit, duplicate Reaction) and `TestPostgresMonsterAttacksMonster` (route: stale and duplicate Reactions, Hit or Miss kept, Slam/Prone/Temp HP, Sting save, Sleep put back, absorption, (1/Day) counted; direct: lethal). Mutation-checked: records removal, Sleep restore, exact entry restore. Hit-or-Miss retention is tested as: the effect reaches the GM on the attack and the Parry reply keeps it with the GM (it is a GM note, never automated). Not yet tested at route level: Shield, Redirect Attack.
+
+## A Reaction triggered by a hit on the monster; Uncanny Dodge
+
+`reactionSelfHitTrigger` (`monster_reactions_2024.go`) reads a Reaction's trigger once for every Reaction: "is hit by a [melee | ranged]
+attack roll", "An attack roll hits the <monster>", "An attacker ... hits it with an attack roll" (not "hits the wearer": Protection). Such a
+Reaction answers only a hit recorded on the monster this turn, of the kind its trigger names; otherwise it is refused and nothing is used.
+Before this, the check was written per Reaction kind (Parry, Deflect Missile) and the "uses <Action>" Reaction (Reflexive Antennae) and
+the halving one had none. Uncanny Dodge ("halves the damage it takes from that attack", MM Performer) halves the recorded hit's damage,
+rounded down, Temporary Hit Points included, through `refundHitDamage` (a stale target: RECONCILIATION NEEDED, nothing applied). Catalog
+parse: the 7 Parry entries, Riposte, Whirlwind of Sand, Reflexive Antennae and Deflect Missile (ranged). Tested:
+`TestReactionSelfHitTriggersOverTheCatalog`, `TestPostgresMonsterReactionTriggersAndUncannyDodge` (no hit: refused and not spent; a
+ranged-only trigger after a melee hit; the halving; one Reaction a round; the "uses" path after a hit); mutation-checked.
+
+## Regeneration from 0 Hit Points (Troll, Troll Limb)
+
+"The troll dies only if it starts its turn with 0 Hit Points and doesn't regenerate" (`regenFromZeroRe`, `regeneratesFromZero`). Before,
+every monster at 0 Hit Points lost its turn (`noTurnFor`) and Regeneration ran only from 1 Hit Point, so a troll at 0 was simply dead.
+Now such a monster keeps its turn at 0, regenerates from 0 at its turn start (the monster Hit Point owner, `healMonster`), and dies at a
+turn start at 0 that brings no regeneration (the Acid or Fire block, a form that can't regain Hit Points): its entry is marked
+`regen_dead` and it has no turn after that. "If it has at least 1 Hit Point" (Oni, Shield Guardian) stays as it was. Catalog: Troll and
+Troll Limb only. Tested: `TestPostgresRegenerationFromZero` (through combat/next: regenerates from 0, the Guardian control, Fire at 0 then
+death, no turn after death), `TestRegenerationFromZeroOverTheCatalog`; mutation-checked.
+
+## Undead Fortitude through the routes
+
+`undeadFortitudeFor` (`dodge_2024.go`, unchanged) was registered but had no test of its own. `TestPostgresUndeadFortitudeRoutes` (SRD
+Zombie): a monster's hit through narrate (hurtMonster, the damage owner spells and companion attacks use too) and a character's weapon
+attack (`attack_target.go`) that drop it to 0 call for the Constitution save; a success leaves 1 Hit Point, a failure 0; Radiant damage,
+a Critical Hit and damage that leaves it standing call for none. Mutation-checked (the Critical Hit exception; the call in hurtMonster).
 
 ## Monster movement against Speed
 

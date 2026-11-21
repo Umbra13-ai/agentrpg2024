@@ -440,6 +440,7 @@ func releaseTurn(lobby int, token string) {
 // transaction; a monster at 0 Hit Points is read from the locked turn order itself.
 func noTurnFor(lobby int) func(order []map[string]interface{}) func(int) bool {
 	down := map[int]bool{}
+	regenFromZero := map[int]bool{} // a monster that keeps its turn at 0 Hit Points to regenerate (Troll: monsterFeaturesTurnStart)
 	if f, err := readFight(db, lobby); err == nil {
 		for _, e := range f.Order {
 			id := asInt(e["id"])
@@ -448,13 +449,15 @@ func noTurnFor(lobby int) func(order []map[string]interface{}) func(int) bool {
 				down[id] = companionGone(id)
 			case id > 0:
 				down[id] = combatCharacterIsDead(id)
+			default:
+				regenFromZero[id] = regeneratesFromZero(monsterMetaFor(sprintAny(e["monster_key"])))
 			}
 		}
 	}
 	return func(order []map[string]interface{}) func(int) bool {
 		monsterDown := map[int]bool{}
 		for _, e := range order {
-			if id := asInt(e["id"]); id < 0 && asInt(e["hp"]) <= 0 {
+			if id := asInt(e["id"]); id < 0 && asInt(e["hp"]) <= 0 && (!regenFromZero[id] || e["regen_dead"] == true) {
 				monsterDown[id] = true
 			}
 		}

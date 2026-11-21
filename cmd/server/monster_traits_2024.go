@@ -11,6 +11,8 @@ package main
 import (
 	"regexp"
 	"strings"
+
+	"github.com/agentrpg/agentrpg/game"
 )
 
 type monsterTraitRule struct {
@@ -42,8 +44,11 @@ var monsterTraitRules = []monsterTraitRule{
 	{Name: "Evasion", Does: "a Dexterity saving throw against an effect that halves damage on a success: a success takes none, a failure half",
 		Where: "applySaveEffectOnMonster (monster_save_targets.go) for a monster that is the target of a monster's save effect"},
 	{Name: "Aura of Authority", Does: "it and its allies within 10 feet have Advantage on attack rolls and saving throws", Where: "attackSources, saveSources", Aura: true},
-	{Match: regenRe, Does: "regains Hit Points at the start of each of its turns (not after the damage the trait names)", Where: "monster_features_2024.go", Aura: true},
+	{Match: regenRe, Does: "regains Hit Points at the start of each of its turns (not after the damage the trait names); one that \"dies only if it starts its turn with 0 Hit Points and doesn't regenerate\" keeps its turn at 0 Hit Points, regenerates from 0, and dies at a turn start at 0 that brings no regeneration",
+		Where: "monsterFeaturesTurnStart (monster_features_2024.go), noTurnFor (turn_advance_2024.go)", Aura: true},
 	{Match: startAuraRe, Does: "an aura: each enemy that starts its turn in it makes the saving throw", Where: "monster_features_2024.go", Aura: true},
+	{Match: rollTraitRe, Does: "Advantage on its attack rolls (melee ones when the trait says so), and on its saving throws when the trait says so, while it is Bloodied or against a target that doesn't have all its Hit Points, as its trait says",
+		Where: "rollTraitAdvantage (monster_traits_2024.go), read by attackSources and saveSources"},
 	{Match: endAuraRe, Does: "an aura: each creature in it takes the damage at the end of the monster's turn", Where: "monster_features_2024.go", Aura: true},
 }
 
@@ -114,4 +119,82 @@ func traitsForGM(key string) []map[string]interface{} {
 		out = append(out, e)
 	}
 	return out
+}
+
+// ---- A creature's own trait that gives its rolls Advantage on a condition (Blood Frenzy, Bloodied Fury, Bloodied Frenzy), found
+// by its wording: "While Bloodied, ... has Advantage on attack rolls [and saving throws]", "has Advantage on melee attack rolls while
+// it is Bloodied", "has Advantage on attack rolls against any creature that doesn't have all its Hit Points". The attack roll owner
+// (attackSources) and the saving throw owner (saveSources) each read it through rollTraitAdvantage; Pack Tactics and the auras have
+// rows of their own.
+
+// rollTraitRe: the wording of such a trait (the Match of its monsterTraitRules row).
+var rollTraitRe = regexp.MustCompile(`(?i)\bhas Advantage on (?:melee )?attack rolls\b[^.]*?(?:\bBloodied\b|\bhave all its Hit Points\b)|\bwhile (?:it is )?Bloodied\b[^.]*?\bhas Advantage on (?:melee )?attack rolls\b`)
+
+var (
+	rollTraitBloodiedRe = regexp.MustCompile(`(?i)\bwhile (?:it is )?Bloodied\b`)
+	rollTraitWoundedRe  = regexp.MustCompile(`(?i)\bagainst any creature that (?:doesn['’]t|does not) have all its Hit Points\b`)
+	rollTraitMeleeRe    = regexp.MustCompile(`(?i)\bAdvantage on melee attack rolls\b`)
+	rollTraitSavesRe    = regexp.MustCompile(`(?i)\battack rolls and saving throws\b`)
+)
+
+// rollTrait: what one such trait says.
+type rollTrait struct {
+	Name      string
+	Bloodied  bool // only while the creature itself is Bloodied
+	Wounded   bool // only against a target that doesn't have all its Hit Points
+	MeleeOnly bool // melee attack rolls only
+	Saves     bool // its saving throws too
+}
+
+// rollTraitOf reads a trait's text; ok is false for any other trait.
+func rollTraitOf(name, text string) (rollTrait, bool) {
+	if !rollTraitRe.MatchString(text) {
+		return rollTrait{}, false
+	}
+	r := rollTrait{Name: traitName(name), Bloodied: rollTraitBloodiedRe.MatchString(text), Wounded: rollTraitWoundedRe.MatchString(text),
+		MeleeOnly: rollTraitMeleeRe.MatchString(text), Saves: rollTraitSavesRe.MatchString(text)}
+	return r, r.Bloodied || r.Wounded
+}
+
+// creatureTraitsAndVitals: a monster's (combat id < 0) or a companion's traits and its Hit Points now.
+func creatureTraitsAndVitals(lobbyID, id int) ([]srdMonsterEntry, game.Vitals) {
+	if isCompanionCombatID(id) {
+		cp, ok := loadCompanion(id - companionIDBase)
+		if !ok {
+			return nil, game.Vitals{}
+		}
+		out := make([]srdMonsterEntry, 0, len(cp.Traits))
+		for _, t := range cp.Traits {
+			out = append(out, srdMonsterEntry{Name: t.Name, Text: t.Text})
+		}
+		return out, game.Vitals{HP: cp.HP, Max: cp.MaxHP}
+	}
+	if id >= 0 {
+		return nil, game.Vitals{}
+	}
+	_, meta, ok := monsterCombatant(lobbyID, id)
+	if !ok || meta == nil {
+		return nil, game.Vitals{}
+	}
+	return meta.Traits, monsterEntryVitals(lobbyID, id)
+}
+
+// rollTraitAdvantage: the name of the creature's trait that gives this roll Advantage, or "". save: a saving throw (else an attack
+// roll, melee or not, against target).
+func rollTraitAdvantage(lobbyID, id int, save, melee bool, target int) string {
+	traits, v := creatureTraitsAndVitals(lobbyID, id)
+	for _, t := range traits {
+		r, ok := rollTraitOf(t.Name, t.Text)
+		if !ok || (save && !r.Saves) || (!save && r.MeleeOnly && !melee) {
+			continue
+		}
+		if r.Bloodied && !v.Bloodied() {
+			continue
+		}
+		if r.Wounded && (save || target == 0 || !targetMissingHitPoints(lobbyID, target)) {
+			continue
+		}
+		return r.Name
+	}
+	return ""
 }
