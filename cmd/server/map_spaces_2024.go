@@ -6,6 +6,8 @@ package main
 // Halfling Nimbleness adds any creature a size larger than the Halfling. (F115: the map refused every occupied square.)
 
 import (
+	"fmt"
+	"regexp"
 	"strings"
 
 	"github.com/agentrpg/agentrpg/game"
@@ -35,8 +37,8 @@ func passableTokens(lobby int, m encounterMap, actor mapToken) map[int]bool {
 		if !ok {
 			continue
 		}
-		if theirs == 0 || theirs-mine >= 2 || mine-theirs >= 2 || (nimble && theirs > mine) {
-			out[t.ID] = true
+		if theirs == 0 || theirs-mine >= 2 || mine-theirs >= 2 || (nimble && theirs > mine) || t.SharesSpace || actor.SharesSpace || actor.Incorporeal {
+			out[t.ID] = true // a Swarm's space (and a Swarm or an incorporeal mover through any space): markMapSpaces
 		}
 	}
 	return out
@@ -48,10 +50,13 @@ func halflingNimble(charID int) bool {
 	return strings.Contains(species, "halfling")
 }
 
-// endsInCreature: the square is in another creature's space (a move can't end there).
+// endsInCreature: the square is in another creature's space (a move can't end there; a Swarm's space is shared both ways).
 func (m encounterMap) endsInCreature(actor mapToken, sq mapSquare) string {
 	for _, p := range actor.footprint(sq) {
 		for _, t := range m.Tokens {
+			if t.SharesSpace || actor.SharesSpace {
+				continue
+			}
 			if t.ID != actor.ID && p.X >= t.Position.X && p.X < t.Position.X+t.Size && p.Y >= t.Position.Y && p.Y < t.Position.Y+t.Size {
 				return t.Name
 			}
@@ -66,4 +71,81 @@ func speciesTraitsOf(species string) []game.Trait {
 		return sp.Traits
 	}
 	return []game.Trait{}
+}
+
+// The stat block traits that change how a creature shares space (read from their wording, monsterTraitRules):
+//   - a Swarm: "can occupy another creature's space and vice versa" (both ways: other creatures can enter and end in its space);
+//   - Incorporeal Movement: "can move through other creatures and objects as if they were Difficult Terrain. It takes 5 (1d10)
+//     Force damage if it ends its turn inside an object." Its token may stand inside a wall or a closed door; the damage is the
+//     turn-end hook objectEndDamage.
+var (
+	swarmSpaceRe   = regexp.MustCompile(`(?i)can occupy another creature['’]s space and vice versa`)
+	incorporealRe  = regexp.MustCompile(`(?i)can move through other creatures and objects as if they were Difficult Terrain`)
+	insideObjectRe = regexp.MustCompile(`(?i)takes (\d+)(?: \(([^)]+)\))? (\w+) damage if it ends its turn inside an object`)
+)
+
+// monsterTraitText: the text of the monster's stat block trait whose wording matches re ("" when none does).
+func monsterTraitText(lobby, id int, re *regexp.Regexp) string {
+	_, meta, ok := monsterCombatant(lobby, id)
+	if !ok || meta == nil {
+		return ""
+	}
+	for _, t := range meta.Traits {
+		if re.MatchString(t.Text) {
+			return t.Text
+		}
+	}
+	return ""
+}
+
+// markMapSpaces marks the map's tokens whose creatures share spaces (a Swarm) or pass through objects (Incorporeal Movement).
+func markMapSpaces(lobby int, m *encounterMap) {
+	for i, t := range m.Tokens {
+		if t.ID >= 0 || db == nil {
+			continue
+		}
+		m.Tokens[i].SharesSpace = monsterTraitText(lobby, t.ID, swarmSpaceRe) != ""
+		m.Tokens[i].Incorporeal = monsterTraitText(lobby, t.ID, incorporealRe) != ""
+	}
+}
+
+// objectEndDamage: the turn-end hook of a creature that ends its turn inside an object (its Incorporeal Movement's damage), dealt
+// through the monster Hit Point owner. "" when it doesn't.
+func objectEndDamage(lobby, id int) string {
+	if id >= 0 || isCompanionCombatID(id) {
+		return ""
+	}
+	text := monsterTraitText(lobby, id, insideObjectRe)
+	if text == "" {
+		return ""
+	}
+	m, ok := activeEncounterMap(lobby)
+	if !ok {
+		return ""
+	}
+	tk, ok := m.token(id)
+	if !ok {
+		return ""
+	}
+	inside := false
+	for _, sq := range tk.footprint(tk.Position) {
+		if blockedTile(m.tile(sq)) {
+			inside = true
+		}
+	}
+	if !inside {
+		return ""
+	}
+	g := insideObjectRe.FindStringSubmatch(text)
+	n := 0
+	fmt.Sscanf(g[1], "%d", &n)
+	dmg := n
+	if g[2] != "" {
+		dmg = rollStatBlockDamage(game.NormalizeDice(g[2]), nil, false)
+	}
+	h, ok := hurtMonster(lobby, id, dmg, strings.ToLower(g[3]), false)
+	if !ok {
+		return ""
+	}
+	return fmt.Sprintf("%s ends its turn inside an object: %s", tk.Name, h.Text)
 }

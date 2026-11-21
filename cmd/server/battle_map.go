@@ -29,6 +29,8 @@ type mapToken struct {
 	Altitude       int          `json:"altitude,omitempty"`         // feet above the ground: a flying creature (Fly, Gaseous Form; spells_more_2024.go)
 	ShareSpaceWith int          `json:"share_space_with,omitempty"` // GM places this token wholly inside the named creature's space
 	FreeTerrain    bool         `json:"-"`                          // Freedom of Movement: Difficult Terrain costs nothing extra (the move handler sets it)
+	SharesSpace    bool         `json:"-"`                          // a Swarm: it can occupy another creature's space and vice versa (markMapSpaces, map_spaces_2024.go)
+	Incorporeal    bool         `json:"-"`                          // it can move through creatures and objects and end its turn inside an object (markMapSpaces)
 	Passable       map[int]bool `json:"-"`                          // tokens whose spaces it may move through (map_spaces_2024.go; the move handler sets it)
 }
 
@@ -93,7 +95,10 @@ func (m encounterMap) validate() error {
 			continue
 		}
 		for _, square := range token.footprint(token.Position) {
-			if blockedTile(m.tile(square)) || occupied[square] != 0 {
+			if blockedTile(m.tile(square)) && !token.Incorporeal { // an incorporeal creature can end inside an object (map_spaces_2024.go)
+				return errors.New("token footprints must fit on open, unoccupied squares")
+			}
+			if other := occupied[square]; other != 0 && !token.SharesSpace && !ids[other].SharesSpace { // a Swarm shares a space, both ways
 				return errors.New("token footprints must fit on open, unoccupied squares")
 			}
 			occupied[square] = token.ID
@@ -390,6 +395,7 @@ func handleBattleMap(w http.ResponseWriter, r *http.Request, campaignID int, rou
 		battleMapError(w, 500, "invalid_stored_map")
 		return
 	}
+	markMapSpaces(campaignID, &m) // which creatures share spaces or pass through objects (map_spaces_2024.go)
 	var initiative []struct {
 		ID int `json:"id"`
 	}
@@ -407,6 +413,7 @@ func handleBattleMap(w http.ResponseWriter, r *http.Request, campaignID int, rou
 			}
 			battleMapReply(w, 200, m)
 		case (r.Method == http.MethodPut && operation == "") || (r.Method == http.MethodPost && operation == "preview"):
+			markMapSpaces(campaignID, &req.Map)
 			if err := req.Map.validate(); err != nil {
 				battleMapReply(w, 400, map[string]string{"error": "invalid_map", "message": err.Error()})
 				return

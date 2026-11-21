@@ -147,6 +147,11 @@ func init() {
 				t.Failure = l.Err.Error()
 			}
 		}},
+		{"a creature that ends its turn inside an object takes its trait's damage (Incorporeal Movement)", func(t *turnChange) {
+			if note := objectEndDamage(t.Lobby, t.EndedID); note != "" { // map_spaces_2024.go
+				t.Log = append(t.Log, note)
+			}
+		}},
 		{"the Legendary Action window after the turn opens", func(t *turnChange) {
 			setLastTurnEnded(t.Lobby, t.window(), t.EndedID)
 		}},

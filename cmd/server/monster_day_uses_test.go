@@ -291,7 +291,7 @@ func TestPostgresMonsterDayUses(t *testing.T) {
 			res := <-results
 			switch {
 			case res.status == 409 && res.body["error"] == "combat_operation_in_progress":
-			case res.status == 200 && refused(fmt.Sprint(res.body["monster_action_result"])):
+			case narrateAnswered(res.status, res.body) && refused(fmt.Sprint(res.body["monster_action_result"])): // a refusal is 409 monster_action_refused (narrate runs the action first)
 			case res.status == 200 && strings.Contains(fmt.Sprint(res.body["monster_action_result"]), "Day use counted"):
 				ran++
 			case res.status == 200 && action == "Spit (1/Day)":

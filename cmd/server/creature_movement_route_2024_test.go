@@ -251,3 +251,76 @@ func TestPostgresEntryMovesAndRampageGate(t *testing.T) {
 		t.Errorf("Rampage after a hit on a Bloodied hero: %d %v", c, r)
 	}
 }
+
+// A Swarm shares spaces both ways and an incorporeal creature stands inside objects: the GM may place a Swarm of Rats in a
+// character's space, a character's path may end in the swarm's space (another monster's still refuses it), a Specter may stand in
+// a wall and takes its trait's Force damage when its turn ends there.
+func TestPostgresSwarmAndIncorporealSpaces(t *testing.T) {
+	testPostgres(t)
+	gm, player, camp, charID, _, _ := companionReactionFixture(t)
+	cp := fmt.Sprintf("/api/campaigns/%d", camp)
+	pgCall(t, "POST", cp+"/combat/add", gm, map[string]interface{}{"combatants": []map[string]interface{}{
+		{"name": "Space Rats", "monster_key": "swarm-of-rats", "hp": 1000, "ac": 1, "initiative": -500},
+		{"name": "Space Goblin", "monster_key": "goblin-warrior", "hp": 1000, "ac": 1, "initiative": -501},
+		{"name": "Space Specter", "monster_key": "specter", "hp": 1000, "ac": 1, "initiative": -502}}})
+	pgExec(t, `UPDATE characters SET movement_remaining=30 WHERE id=$1`, charID)
+	id := func(name string) int { return monsterIDsByKeyOrName(camp, name)[0] }
+	rats, goblin, specter := id("Space Rats"), id("Space Goblin"), id("Space Specter")
+	put := func(tokens []mapToken) (int, map[string]interface{}) {
+		_, state := pgCall(t, "GET", cp+"/battle-map", gm, nil)
+		req := map[string]interface{}{"map": encounterMap{Grid: []string{"....#....."}, Tokens: tokens}, "forced_movement": true}
+		if rev, ok := state["revision"].(string); ok {
+			req["confirmation"] = rev
+		}
+		return pgCall(t, "PUT", cp+"/battle-map", gm, req)
+	}
+	// the GM places the swarm in the character's space; a goblin there is refused
+	if c, r := put([]mapToken{{ID: charID, Name: "hero", Position: mapSquare{1, 0}, Size: 1}, {ID: rats, Name: "rats", Position: mapSquare{1, 0}, Size: 1}}); c != 200 {
+		t.Errorf("a swarm in a character's space: %d %v", c, r)
+	}
+	if c, _ := put([]mapToken{{ID: charID, Name: "hero", Position: mapSquare{1, 0}, Size: 1}, {ID: goblin, Name: "goblin", Position: mapSquare{1, 0}, Size: 1}}); c == 200 {
+		t.Error("a goblin was placed in a character's space")
+	}
+	// the character's path ends in the swarm's space; the goblin's space still refuses it
+	if c, r := put([]mapToken{{ID: charID, Name: "hero", Position: mapSquare{0, 0}, Size: 1}, {ID: rats, Name: "rats", Position: mapSquare{2, 0}, Size: 1},
+		{ID: goblin, Name: "goblin", Position: mapSquare{6, 0}, Size: 1}}); c != 200 {
+		t.Fatalf("put: %d %v", c, r)
+	}
+	f, _ := readFight(db, camp)
+	pgExec(t, `UPDATE combat_state SET current_turn_index=$1 WHERE lobby_id=$2`, idxOfID(f, charID), camp)
+	move := func(path []mapSquare) (int, map[string]interface{}) {
+		body := map[string]interface{}{"character_id": charID, "path": path}
+		_, pv := pgCall(t, "POST", cp+"/battle-map/preview", player, body)
+		if conf, _ := pv["confirmation"].(string); conf != "" {
+			body["confirmation"] = conf
+		} else {
+			return 400, pv
+		}
+		return pgCall(t, "POST", cp+"/battle-map/move", player, body)
+	}
+	if c, r := move([]mapSquare{{1, 0}, {2, 0}}); c != 200 {
+		t.Errorf("a path ending in the swarm's space: %d %v", c, r)
+	}
+	pgExec(t, `UPDATE characters SET movement_remaining=30 WHERE id=$1`, charID)
+	if c, _ := move([]mapSquare{{3, 0}, {4, 0}, {5, 0}, {6, 0}}); c == 200 {
+		t.Error("a path ended in the goblin's space")
+	}
+
+	// the Specter stands in the wall (x=4) and takes its Force damage when its turn ends there
+	if c, r := put([]mapToken{{ID: charID, Name: "hero", Position: mapSquare{0, 0}, Size: 1}, {ID: specter, Name: "specter", Position: mapSquare{4, 0}, Size: 1}}); c != 200 {
+		t.Fatalf("an incorporeal creature in a wall: %d %v", c, r)
+	}
+	if c, _ := put([]mapToken{{ID: charID, Name: "hero", Position: mapSquare{0, 0}, Size: 1}, {ID: goblin, Name: "goblin", Position: mapSquare{4, 0}, Size: 1}}); c == 200 {
+		t.Error("a goblin was placed in a wall")
+	}
+	put([]mapToken{{ID: charID, Name: "hero", Position: mapSquare{0, 0}, Size: 1}, {ID: specter, Name: "specter", Position: mapSquare{4, 0}, Size: 1}})
+	f, _ = readFight(db, camp)
+	pgExec(t, `UPDATE combat_state SET current_turn_index=$1, turn_claim='' WHERE lobby_id=$2`, idxOfID(f, specter), camp)
+	before := monsterHPNow(camp, specter)
+	if c, r := pgCall(t, "POST", cp+"/combat/next", gm, map[string]interface{}{}); c != 200 {
+		t.Fatalf("next: %d %v", c, r)
+	}
+	if after := monsterHPNow(camp, specter); after >= before {
+		t.Errorf("the Specter ended its turn in a wall and took nothing: %d -> %d", before, after)
+	}
+}
