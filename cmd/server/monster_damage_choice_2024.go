@@ -556,6 +556,7 @@ func unappliedHitRider(desc string) string {
 	text = attachOnHitRe.ReplaceAllString(text, "")
 	text = hpMaxDrainSentenceRe.ReplaceAllString(text, "") // applied by every hit route (hitAfterDamage)
 	text = stripBurnForCreatures(text)
+	text = stripAbilityDecrease(text) // applied by every hit route (hitAfterDamage: the ability score owner)
 	kept := []string{}
 	for _, s := range sentenceSplitRe.Split(text, -1) {
 		stripped := s

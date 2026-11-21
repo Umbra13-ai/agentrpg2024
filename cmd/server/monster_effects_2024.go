@@ -533,6 +533,9 @@ func parseHitRider(desc string) (saveEffect, bool) {
 	if stripped := stripBurnForCreatures(e.Extra); stripped != e.Extra {
 		e.Extra = strings.Trim(stripped, " .")
 	}
+	if stripped := stripAbilityDecrease(e.Extra); stripped != e.Extra { // hitAfterDamage applies it
+		e.Extra = strings.Trim(stripped, " .")
+	}
 	return e, len(e.Conditions) > 0 || e.SpeedMode != "" || len(e.DisadvMode) > 0
 }
 

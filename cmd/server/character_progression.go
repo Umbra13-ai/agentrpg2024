@@ -3,6 +3,7 @@ package main
 import (
 	"database/sql"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"github.com/agentrpg/agentrpg/game"
 	"net/http"
@@ -137,30 +138,30 @@ func handleCharacterASI(w http.ResponseWriter, r *http.Request, charID int) {
 		return
 	}
 
-	// Apply the ASI
-	// one guarded statement: two requests at once can't both spend the same points or pass the maximum
-	query := fmt.Sprintf(`UPDATE characters SET %s = %s + $1, pending_asi = pending_asi - $1 WHERE id = $2 AND COALESCE(pending_asi, 0) >= $1 AND %s + $1 <= $3 RETURNING %s, COALESCE(level, 1)`, column, column, column, column)
-	var scoreNow, levelNow int
-	err = db.QueryRow(query, req.Points, charID, abilityMax).Scan(&scoreNow, &levelNow)
-	if dbFailed(err) {
-		w.WriteHeader(http.StatusInternalServerError)
-		json.NewEncoder(w).Encode(map[string]interface{}{"error": "database_error"})
-		return
-	}
-	if err != nil {
+	// Apply the ASI: one step of the ability score owner (ability_owner_2024.go) on the locked row, so two requests at once can't
+	// both spend the same points or pass the maximum; a higher Constitution modifier raises the Hit Point maximum there
+	short := abilityKeyOf(column)
+	_, _, err = changeAbilities(charID, abilityHow{}, func(tx *sql.Tx, a *abilityRow) error {
+		var pending int
+		if err := tx.QueryRow(`SELECT COALESCE(pending_asi, 0) FROM characters WHERE id = $1`, charID).Scan(&pending); err != nil {
+			return err
+		}
+		if pending < req.Points || a.Scores[short]+req.Points > abilityMax {
+			return errNoAbilityChange
+		}
+		a.Scores[short] += req.Points
+		_, err := tx.Exec(`UPDATE characters SET pending_asi = pending_asi - $1 WHERE id = $2`, req.Points, charID)
+		return err
+	})
+	if errors.Is(err, errNoAbilityChange) {
 		w.WriteHeader(http.StatusConflict)
 		json.NewEncoder(w).Encode(map[string]interface{}{"error": "asi_changed", "message": "Your ability scores or points changed meanwhile; check them and try again."})
 		return
 	}
-
-	// Also update max_hp if CON was increased (level * CON modifier change)
-	if column == "con" { // from the score as this statement left it, not as it was read (two requests at once both count)
-		oldMod := game.Modifier(scoreNow - req.Points)
-		newMod := game.Modifier(scoreNow)
-		if newMod > oldMod {
-			hpIncrease := levelNow * (newMod - oldMod)
-			changeMaxHP(charID, hpIncrease, true) // the Hit Point owner (hit_points_2024.go)
-		}
+	if err != nil {
+		w.WriteHeader(http.StatusInternalServerError)
+		json.NewEncoder(w).Encode(map[string]interface{}{"error": "database_error"})
+		return
 	}
 
 	// Recalculate AC if DEX was increased (only if not wearing heavy armor - simplified, assume yes)
@@ -412,8 +413,13 @@ func handleCharacterFeat(w http.ResponseWriter, r *http.Request, charID int) {
 		argIndex++
 	}
 
-	// Apply ability bonuses
+	// Apply ability bonuses (written with the claim by the ability score owner, below)
 	abilityIncreased := ""
+	type featRaise struct {
+		ability string
+		by, cap int
+	}
+	var raises []featRaise
 	if feat.AbilityBonus != nil {
 		for ability, bonus := range feat.AbilityBonus {
 			targetAbility := ability
@@ -421,79 +427,21 @@ func handleCharacterFeat(w http.ResponseWriter, r *http.Request, charID int) {
 				targetAbility = abilityChoice
 			}
 
-			// Map to column name
-			var column string
-			var currentVal int
-			switch targetAbility {
-			case "str":
-				column = "str"
-				currentVal = str
-			case "dex":
-				column = "dex"
-				currentVal = dex
-			case "con":
-				column = "con"
-				currentVal = con
-			case "int":
-				column = "intl"
-				currentVal = intl
-			case "wis":
-				column = "wis"
-				currentVal = wis
-			case "cha":
-				column = "cha"
-				currentVal = cha
-			default:
+			if abilityKeyOf(targetAbility) == "" {
 				continue
 			}
-
 			// "to a maximum of 20": the increase stops at 20, and a score already above 20 (Primal Champion, Body and Mind,
-			// a belt) is never lowered.
-			newVal := currentVal + bonus
-			if newVal > 20 {
-				newVal = 20
-			}
-			if newVal < currentVal {
-				newVal = currentVal
-			}
-			updates = append(updates, fmt.Sprintf("%s = $%d", column, argIndex))
-			args = append(args, newVal)
-			argIndex++
-			abilityIncreased = fmt.Sprintf("%s increased by %d (now %d)", strings.ToUpper(targetAbility), bonus, newVal)
+			// a belt) is never lowered: the ability score owner writes it with the claim (below)
+			raises = append(raises, featRaise{ability: targetAbility, by: bonus, cap: 20})
 		}
 	}
 
 	if len(feat.AbilityChoices) > 0 {
-		column, currentVal := "", 0
-		switch abilityChoice {
-		case "str":
-			column, currentVal = "str", str
-		case "dex":
-			column, currentVal = "dex", dex
-		case "con":
-			column, currentVal = "con", con
-		case "int":
-			column, currentVal = "intl", intl
-		case "wis":
-			column, currentVal = "wis", wis
-		case "cha":
-			column, currentVal = "cha", cha
-		}
 		capScore := feat.MaxScore
 		if capScore == 0 {
 			capScore = 20
 		}
-		newVal := currentVal + feat.AbilityPoints
-		if newVal > capScore {
-			newVal = capScore
-		}
-		if newVal < currentVal { // a score already above the feat's maximum stays as it is
-			newVal = currentVal
-		}
-		updates = append(updates, fmt.Sprintf("%s = $%d", column, argIndex))
-		args = append(args, newVal)
-		argIndex++
-		abilityIncreased = fmt.Sprintf("%s increased by %d (now %d)", strings.ToUpper(abilityChoice), feat.AbilityPoints, newVal)
+		raises = append(raises, featRaise{ability: abilityChoice, by: feat.AbilityPoints, cap: capScore})
 	}
 
 	// Apply Tough feat HP bonus
@@ -511,12 +459,35 @@ func handleCharacterFeat(w http.ResponseWriter, r *http.Request, charID int) {
 	query := fmt.Sprintf("UPDATE characters SET %s WHERE id = $%d AND COALESCE(feats, '[]'::jsonb) = $%d::jsonb AND COALESCE(pending_asi, 0) = $%d",
 		strings.Join(updates, ", "), argIndex, argIndex+1, argIndex+2)
 
-	res, err := db.Exec(query, args...)
-	if err != nil {
+	// the claim and the scores it raises in one step of the ability score owner (ability_owner_2024.go): the guarded statement
+	// decides (another feat or ASI taken meanwhile changes nothing), then the scores rise on the locked row; a higher Constitution
+	// modifier raises the Hit Point maximum there
+	claimed := false
+	_, _, err = changeAbilities(charID, abilityHow{}, func(tx *sql.Tx, a *abilityRow) error {
+		res, err := tx.Exec(query, args...)
+		if err != nil {
+			return err
+		}
+		if n, _ := res.RowsAffected(); n == 0 {
+			return errNoAbilityChange
+		}
+		claimed = true
+		for _, r := range raises {
+			short := abilityKeyOf(r.ability)
+			if short == "" {
+				continue
+			}
+			cur := a.Scores[short]
+			a.Scores[short] = max(cur, min(r.cap, cur+r.by)) // a score already above the maximum stays as it is
+			abilityIncreased = fmt.Sprintf("%s increased by %d (now %d)", strings.ToUpper(short), r.by, a.Scores[short])
+		}
+		return nil
+	})
+	if err != nil && !errors.Is(err, errNoAbilityChange) {
 		writeDBWriteError(w, err, "the feat or Ability Score Improvement")
 		return
 	}
-	if n, _ := res.RowsAffected(); n == 0 { // another feat or ASI was taken meanwhile (audit D-2)
+	if !claimed { // another feat or ASI was taken meanwhile (audit D-2)
 		writeJSONStatus(w, http.StatusConflict, map[string]interface{}{"error": "feats_changed",
 			"message": "The character's feats or Ability Score Improvement points changed meanwhile: check the sheet and try again. Nothing was changed."})
 		return

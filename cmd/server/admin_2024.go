@@ -530,6 +530,7 @@ func adminSet(table, kind string, id int, set map[string]interface{}, note strin
 	}
 	defer tx.Rollback()
 	var changed []string
+	var scoreChanges [][2]abilityRow // a score edited: what follows it once committed (abilitiesChanged: the Hit Points of a new Constitution modifier)
 	oldLobby := ""
 	for _, k := range keys {
 		var old sql.NullString
@@ -557,6 +558,16 @@ func adminSet(table, kind string, id int, set map[string]interface{}, note strin
 				return nil, fmt.Errorf("%s: %v", k, err)
 			}
 			tx.QueryRow(fmt.Sprintf(`SELECT %q::text FROM %s WHERE id = $1`, k, table), id).Scan(&text)
+		} else if short := abilityKeyOf(k); kind == "character" && short != "" && abilityColumn[short] == k { // the ability score owner (ability_owner_2024.go)
+			v, err := strconv.Atoi(text)
+			if err != nil {
+				return nil, fmt.Errorf("%s: %q isn't a whole number", k, text)
+			}
+			before, after, err := changeAbilitiesIn(tx, id, func(_ *sql.Tx, a *abilityRow) error { a.Scores[short] = v; return nil })
+			if err != nil {
+				return nil, fmt.Errorf("%s: %w", k, dbFailureError(err, "the ability score"))
+			}
+			scoreChanges = append(scoreChanges, [2]abilityRow{before, after})
 		} else if _, err := tx.Exec(fmt.Sprintf(`UPDATE %s SET %q = $1 WHERE id = $2`, table, k), val, id); err != nil {
 			return nil, fmt.Errorf("%s: %q doesn't fit this field (its type is %s)", k, text, cols[k])
 		}
@@ -575,6 +586,9 @@ func adminSet(table, kind string, id int, set map[string]interface{}, note strin
 	}
 	if err := tx.Commit(); err != nil {
 		return nil, err
+	}
+	for _, c := range scoreChanges {
+		abilitiesChanged(id, abilityHow{}, c[0], c[1])
 	}
 	// follow-up: a campaign's status depends on its players
 	if kind == "character" {

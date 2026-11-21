@@ -32,6 +32,8 @@ func creatureStats(lobbyID, id int) (str, dex, pb int, size string, fiend bool) 
 	if pb == 0 {
 		pb = 2
 	}
+	// a reduced score reads less (ability_owner_2024.go: its open reductions)
+	str, dex = creatureAbilityScore(lobbyID, id, "str"), creatureAbilityScore(lobbyID, id, "dex")
 	return str, dex, pb, size, strings.Contains(strings.ToLower(mtype), "fiend")
 }
 
@@ -176,8 +178,11 @@ func handleGMEscapeGrapple2024(w http.ResponseWriter, r *http.Request) {
 		bonus = b
 	}
 	if req.TargetID < 0 {
-		if m := monsterSkillBonus(monsterKeyOfCombatant(lobby, req.TargetID), "athletics", "acrobatics"); m > bonus {
-			bonus = m
+		key := monsterKeyOfCombatant(lobby, req.TargetID)
+		for skill, ab := range map[string]string{"athletics": "str", "acrobatics": "dex"} { // a listed skill, less what a reduction took
+			if m := monsterSkillBonus(key, skill); m > -99 && m+monsterAbilityShift(lobby, req.TargetID, ab) > bonus {
+				bonus = m + monsterAbilityShift(lobby, req.TargetID, ab)
+			}
 		}
 	} else {
 		_ = pb

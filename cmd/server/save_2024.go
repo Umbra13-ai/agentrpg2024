@@ -162,8 +162,8 @@ func saveModifier(lobbyID, id int, ability string) (mod int, proficient bool, fe
 	}
 	if isCompanionCombatID(id) { // a companion saves with the stat block it was made from (its form), like a monster: its listed save bonus or its ability modifier
 		if c, ok := loadCompanion(id - companionIDBase); ok {
-			if sb := monsterStatBlock(c.Form); sb != nil {
-				return monsterSaveBonus(c.Form, short, asInt(sb[short])), false, ""
+			if sb := monsterStatBlock(c.Form); sb != nil { // less what a reduction of the score took (ability_owner_2024.go)
+				return monsterSaveBonus(c.Form, short, asInt(sb[short])) + monsterAbilityShift(lobbyID, id, short), false, ""
 			}
 		}
 		return 0, false, ""
@@ -180,7 +180,7 @@ func saveModifier(lobbyID, id int, ability string) (mod int, proficient bool, fe
 	}
 	key := monsterKeyOfCombatant(lobbyID, id)
 	if sb := monsterStatBlock(key); sb != nil {
-		return monsterSaveBonus(key, short, asInt(sb[short])), false, ""
+		return monsterSaveBonus(key, short, asInt(sb[short])) + monsterAbilityShift(lobbyID, id, short), false, ""
 	}
 	return 0, false, ""
 }

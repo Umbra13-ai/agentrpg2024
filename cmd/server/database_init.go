@@ -357,6 +357,14 @@ var schemaSteps = []schemaStep{
 	// a combat effect that lasts while its source's condition lasts on the target ("While Poisoned, ..."): the condition's name
 	// (condition_lasting_effects_2024.go); '' for the rest
 	{"condition_lasting_effects_2024.go", `ALTER TABLE combat_effects ADD COLUMN IF NOT EXISTS gate_condition TEXT NOT NULL DEFAULT ''`},
+	// a reduction of a creature's ability score with its source, open until an effect ends it (ability_owner_2024.go: Shadow
+	// Draining Swipe)
+	{"ability_owner_2024.go", `CREATE TABLE IF NOT EXISTS ability_reductions (id SERIAL PRIMARY KEY, lobby_id INTEGER NOT NULL DEFAULT 0,
+		creature_id INTEGER NOT NULL, ability TEXT NOT NULL, amount INTEGER NOT NULL, source TEXT NOT NULL DEFAULT '',
+		created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(), ended_at TIMESTAMPTZ)`},
+	{"ability_owner_2024.go", `CREATE INDEX IF NOT EXISTS ability_reductions_open ON ability_reductions (creature_id) WHERE ended_at IS NULL`},
+	// the state of one item a character carries (item_state_2024.go: a corroded weapon's or armor's penalty, a weapon stuck fast)
+	// is kept in the item itself in the inventory; nothing here
 }
 
 // seatReadySchema: a player's "ready to start" on its seat (cleared whenever the seat changes hands: takeSeat, swapSeat;

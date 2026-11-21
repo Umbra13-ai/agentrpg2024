@@ -373,6 +373,18 @@ combat_effects, so the effects end with the fight (the poison lasts a minute at 
 with the repeated save. Tested: `TestLastingEffectsAreReadNotDealtNow` (the SRD entries and the whole catalog),
 `TestPostgresPoisonThatStopsHealing` (POST /api/gm/narrate Bite: no poison damage now, no healing, the tick with its dice, the end).
 
+## A hit's ability score decrease (`cmd/server/ability_owner_2024.go`, `hitAfterDamage`)
+
+"Hit: ... and the target's Strength score decreases by 1d4. The target dies if this reduces that score to 0." (SRD 5.2.1 Shadow
+Draining Swipe). `abilityDecreaseRe` reads the ability, the amount and the death clause; `abilityDecreaseOnHit` (in `hitAfterDamage`, so
+every hit route: character, monster, companion) rolls the amount and lowers the score through the ability score owner (`reduceAbility`:
+a character's column, a monster's or companion's open reductions read by its saves and checks). A score of 0 kills when the text says so
+(a character through the Hit Point owner; a monster or companion at 0 Hit Points). The 2024 text gives the decrease no end of its own (the
+2014 "until a Short or Long Rest" is gone): it lasts until an effect removes it, Greater Restoration's "any reduction to one of the
+target's ability scores" (`restoreAbilityScore`). The residual no longer gives the clause to the GM; "a Shadow rises from the corpse 1d4
+hours later" stays the GM's. Catalog parse diff: only the Shadow. Tested: `TestPostgresAbilityDrainOnEveryTarget` (POST /api/gm/narrate at
+a character, a monster and a companion; the sheet and saves; Greater Restoration; Strength 0 kills).
+
 ## A hit's Hit Point maximum drain (`cmd/server/hp_max_drain_2024.go`)
 
 "If the target is a creature, its Hit Point maximum decreases by an amount equal to the damage taken" (SRD 5.2.1 Specter and Wraith Life

@@ -44,6 +44,7 @@ func gmSetCharacterFields(charID int, set map[string]json.RawMessage) ([]string,
 	sort.Strings(keys)
 	var parts []string
 	var args []interface{}
+	scores := map[string]int{}
 	for _, k := range keys {
 		key := strings.ToLower(strings.TrimSpace(k))
 		if key == "int" {
@@ -58,6 +59,14 @@ func gmSetCharacterFields(charID int, set map[string]json.RawMessage) ([]string,
 		}
 		raw := set[k]
 		if conditionColumns[key] { // the condition owner writes them, after the other fields (condition_owner_2024.go)
+			continue
+		}
+		if short := abilityKeyOf(key); short != "" && abilityColumn[short] == key { // the ability score owner writes them (ability_owner_2024.go)
+			var v int
+			if err := json.Unmarshal(raw, &v); err != nil {
+				return nil, fmt.Errorf("%s takes a whole number", k)
+			}
+			scores[short] = v
 			continue
 		}
 		args = append(args, nil)
@@ -95,6 +104,11 @@ func gmSetCharacterFields(charID int, set map[string]json.RawMessage) ([]string,
 		args = append(args, charID)
 		if _, err := db.Exec(fmt.Sprintf("UPDATE characters SET %s WHERE id = $%d", strings.Join(parts, ", "), len(args)), args...); err != nil {
 			return nil, dbFailureError(err, "the character")
+		}
+	}
+	if len(scores) > 0 {
+		if _, err := setAbilityScores(charID, scores); err != nil {
+			return nil, dbFailureError(err, "the character's ability scores")
 		}
 	}
 	for _, k := range keys {
