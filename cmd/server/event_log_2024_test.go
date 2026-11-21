@@ -72,6 +72,31 @@ func TestPostgresPlayersReadTheLogWithoutHiddenNumbers(t *testing.T) {
 	if !strings.Contains(string(since), "Log Drake looks healthy") || strings.Contains(string(since), "Crouches") {
 		t.Errorf("since_your_last_action: %s", since)
 	}
+	if !strings.Contains(events, "Dexterity saving throws") {
+		t.Errorf("the Dodge leaves out its Dexterity saving throw half: %s", events)
+	}
+	// the reaction hint names an order the character can set (a level 1 Rogue: not Shield; I-CALLA-8)
+	if rem, _ := json.Marshal(mt["reminders"]); strings.Contains(string(rem), `\"order\": \"shield\"`) || !strings.Contains(string(rem), "opportunity_attack") {
+		t.Errorf("the reaction hint: %s", rem)
+	}
+	// Hit Point Dice: the sheet shows what is left (I-CALLA-9)
+	pgExec(t, `UPDATE characters SET hit_dice_spent = 1 WHERE id = $1`, char)
+	_, mt = pgCall(t, "GET", "/api/my-turn", tok, nil)
+	if hd, _ := json.Marshal(mt["character"].(map[string]interface{})["hit_dice_by_type"]); string(hd) != `{"d8":0}` {
+		t.Errorf("hit_dice_by_type after spending the only die: %s", hd)
+	}
+	// the fight ends: combat is null and the players are told it is over until the GM narrates (I-CALLA-7, I-CALLA-18)
+	if c, j := pgCall(t, "POST", fmt.Sprintf("/api/campaigns/%d/combat/end", lobby), gm, map[string]interface{}{}); c != 200 {
+		t.Fatalf("combat end: %d %v", c, j)
+	}
+	_, mt = pgCall(t, "GET", "/api/my-turn", tok, nil)
+	if v, ok := mt["combat"]; !ok || v != nil || mt["fight_over"] == nil {
+		t.Errorf("after the fight: combat %v (present %v), fight_over %v", v, ok, mt["fight_over"])
+	}
+	pgCall(t, "POST", "/api/gm/narrate", gm, map[string]interface{}{"campaign_id": lobby, "narration": "The last goblin flees into the dark."})
+	if _, mt = pgCall(t, "GET", "/api/my-turn", tok, nil); mt["fight_over"] != nil {
+		t.Errorf("fight_over stays after the GM narrated: %v", mt["fight_over"])
+	}
 	// the feed shows the same
 	_, feed := pgCall(t, "GET", fmt.Sprintf("/api/campaigns/%d/feed", lobby), tok, nil)
 	if f, _ := json.Marshal(feed); strings.Contains(string(f), "209/212") || strings.Contains(string(f), "AC 22") {

@@ -420,8 +420,19 @@ var actionCostForms = map[string]func(description string) string{
 	},
 }
 
-// castingWords: a description that casts a spell or spends a spell slot.
-var castingWords = regexp.MustCompile(`(?i)\b(cast|casts|casting|spell slot)\b`)
+// castingWords: a description that speaks of casting; slotWords: one that spends a spell slot.
+var castingWords = regexp.MustCompile(`(?i)\b(cast|casts|casting)\b`)
+var slotWords = regexp.MustCompile(`(?i)\bspell slots?\b`)
+
+// declaredSpell: a declaration that casts a spell: it spends a spell slot, or it speaks of casting and names a spell the server
+// knows (the spells it names). "With nothing left in her to cast, she says a prayer" names none: it goes to the GM (I-CALLA-15).
+func declaredSpell(description string) (bool, []string) {
+	if !castingWords.MatchString(description) && !slotWords.MatchString(description) {
+		return false, nil
+	}
+	spells := spellCandidatesFromDescription(description)
+	return slotWords.MatchString(description) || len(spells) > 0, spells
+}
 
 // resourceWords: how a description names a resource a feature spends (the Uses keys of the table), where the key alone is an
 // ordinary word.
@@ -432,7 +443,7 @@ var resourceWords = map[string]string{"focus": "focus point", "rage": "use of ra
 // table's limited ones (Divine Spark, Second Wind ...) or the resource such a feature spends (Channel Divinity, Focus Points ...),
 // is refused with the request to send. Everything it reads is the action table. "" when the declaration may go to the GM.
 func declarationProblem(charID int, description string) string {
-	if castingWords.MatchString(description) {
+	if casts, _ := declaredSpell(description); casts {
 		return declarationCheck(nil, description)
 	}
 	return declarationCheck(actionTypesOpenTo(charID), description)
@@ -441,10 +452,10 @@ func declarationProblem(charID int, description string) string {
 // declarationCheck is declarationProblem's rule, given the action types the character has now.
 func declarationCheck(open []actionType, description string) string {
 	low := strings.ToLower(description)
-	if castingWords.MatchString(description) {
+	if casts, spells := declaredSpell(description); casts {
 		send := `{"action": "cast", "spell_slug": "<slug>"}`
-		if slug, _, _ := resolveCastSpellSlug("", description); slug != "" {
-			send = fmt.Sprintf(`{"action": "cast", "spell_slug": %q}`, slug)
+		if len(spells) > 0 {
+			send = fmt.Sprintf(`{"action": "cast", "spell_slug": %q}`, spells[0])
 		}
 		return "a spell is cast with the Magic action, which spends its slot and rolls what it does: send " + send + " (a declaration is only for what has no action of its own)."
 	}

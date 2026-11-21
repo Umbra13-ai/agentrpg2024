@@ -108,7 +108,7 @@ func restGuide(charID int) map[string]interface{} {
 	suggested, avg := hitDiceSuggestion(r.HP, r.MaxHP, r.Left, r.Die, r.ConMod)
 	dice := map[string]interface{}{"left": r.Left, "die": fmt.Sprintf("d%d", r.Die),
 		"each_heals": fmt.Sprintf("1d%d %+d (about %.1f; at least 1)", r.Die, r.ConMod, avg), "suggested": suggested}
-	if byType := hitDiceLeftByType(charID); byType != nil {
+	if byType := hitDiceLeftByType(charID); len(byType) > 1 {
 		dice["by_type"] = byType
 	}
 	short := map[string]interface{}{

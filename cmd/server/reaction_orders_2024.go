@@ -38,6 +38,17 @@ var reactionOrderKinds = []struct{ Key, What string }{
 	{"opportunity_attack", "make an Opportunity Attack when a monster leaves your reach by its own movement"},
 }
 
+// reactionOrderHowTo: the request that sets a standing order, with an order this character can really take (the first of
+// reactionOrderKinds without a reactionOrderProblem; a Cleric is never told to set Shield: I-CALLA-8), or how to list them.
+func reactionOrderHowTo(charID int) string {
+	for _, k := range reactionOrderKinds {
+		if reactionOrderProblem(charID, k.Key) == "" {
+			return fmt.Sprintf("POST /api/characters/reaction-orders {\"character_id\": %d, \"order\": %q, \"on\": true}", charID, k.Key)
+		}
+	}
+	return fmt.Sprintf("GET /api/characters/reaction-orders?character_id=%d lists the orders and which you can set", charID)
+}
+
 func reactionOrdersOf(charID int) map[string]reactionOrder {
 	var raw []byte
 	db.QueryRow(`SELECT COALESCE(reaction_orders,'{}') FROM characters WHERE id = $1`, charID).Scan(&raw)
@@ -311,7 +322,7 @@ func handleReactionOrders(w http.ResponseWriter, r *http.Request) {
 			list = append(list, e)
 		}
 		return map[string]interface{}{"character_id": req.CharacterID, "orders": list,
-			"how": fmt.Sprintf("POST /api/characters/reaction-orders {\"character_id\": %d, \"order\": \"shield\", \"on\": true}", req.CharacterID)}
+			"how": reactionOrderHowTo(req.CharacterID)}
 	}
 	if r.Method == http.MethodGet {
 		writeJSONStatus(w, http.StatusOK, view())

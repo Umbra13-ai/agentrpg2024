@@ -350,6 +350,17 @@ Add to the owner, never beside it. When you give another rule one owner, add it 
   `TestEveryLimitedActionAsksTheTable` fails on a limited type no resolver asks, `TestWhoRefusalCodes` checks each kind of refusal,
   `TestWhoFeatsAreRealFeats` that every feat the table names is in `availableFeats`, `TestPostgresFeatActionsAskTheTable` a Boon's
   action through the server.
+- **A readied action** (the Ready action): `cmd/server/readied_2024.go`. `holdReadied` keeps what the Ready holds with the held
+  request's own fields (spell_slug, target_id ...); `fireReadied` runs it through POST /api/action itself (attack rolls and saves
+  as on the turn) with the Reaction (`readiedFiring`, cost `readied_reaction`), for the player's `POST /api/trigger-readied` and the
+  GM's `POST /api/gm/trigger-readied`; it ends at the start of the character's next turn (`endUntilNextTurn`) and with the fight
+  (`clearCombatInitiative` → `endUntilNextTurnIn`). `readiedOf` is the one reader (my-turn). Go: `TestPostgresReadiedActionRunsAsTheAction`
+  (playtest I-CALLA-10, 11, 12).
+- **What players read of the log:** `actionRecord.view` (feeds) and `actionRecord.eventLine` (my-turn's `recent_events`, oldest first,
+  and `since_your_last_action`) run the description and the result through `playerText`, which also hides the DC of a check the GM
+  calls for; a GM's monster adjustment logs how the monster looks (`healthWord`), never its numbers (`gmOnlyChange`); `writeAction`
+  never writes a character's refused request; a fight's end is a `combat_end` record (my-turn's `fight_over` until the GM narrates).
+  Go: `TestPostgresPlayersReadTheLogWithoutHiddenNumbers` (I-CALLA-6, 7, 13, 14, 16, 17, 18).
 - **How to act (`GET /api/my-turn`'s `how_to_act`):** `actionHowTo` (`cmd/server/actions.go`), made from `actionRequest`'s
   fields and the character's real enemies.
 - **The equipped hands:** `changeHands` (`cmd/server/equipped_weapons.go`) is the one writer of `equipped_main_hand` /

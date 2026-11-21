@@ -150,6 +150,9 @@ func startFight(lobby int, order interface{}) error {
 	return err
 }
 
+// actionFightOver: the log's record that a fight ended (clearCombatInitiative).
+const actionFightOver = "combat_end"
+
 // clearCombatInitiative deactivates combat and clears all initiative metadata.
 // A finished encounter must not continue to present a stale current turn or
 // turn order to clients; that stale data can otherwise drive timeout loops.
@@ -172,6 +175,8 @@ func clearCombatInitiative(campaignID int) error {
 	`, campaignID)
 	if err == nil {
 		scheduleFightEnds(campaignID) // the turn schedule's next round is a noncombat one (check_in_2024.go)
+		// every reader of the log is told the fight is over, even before the GM narrates it (I-CALLA-18; my-turn's fight_over)
+		writeAction(db, campaignID, 0, actionFightOver, "The fight is over. The GM narrates what follows.", "")
 	}
 	return err
 }

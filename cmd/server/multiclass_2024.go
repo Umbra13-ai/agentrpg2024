@@ -271,11 +271,18 @@ func charHasSubclassFeature(charID int, mechanic string) bool {
 	return false
 }
 
-// hitDiceLeftByType: the Hit Point Dice not spent yet, by type (multiclass); nil for a single class (hit_dice_spent covers it).
+// hitDiceLeftByType: the Hit Point Dice not spent yet, by type: what my-turn, the rest guide and GET short-rest show (a single
+// class: its one pool less hit_dice_spent; before, my-turn showed the pool and never went down: I-CALLA-9).
 func hitDiceLeftByType(charID int) map[string]int {
 	pools := hitDicePools(charID)
 	if len(pools) <= 1 {
-		return nil
+		var spent int
+		db.QueryRow(`SELECT COALESCE(hit_dice_spent, 0) FROM characters WHERE id = $1`, charID).Scan(&spent)
+		out := map[string]int{}
+		for k, n := range pools {
+			out[k] = max(n-spent, 0)
+		}
+		return out
 	}
 	spent := hitDiceSpentByType(charID)
 	out := map[string]int{}
@@ -296,10 +303,10 @@ func hitDiceSpentByType(charID int) map[string]int {
 // spendHitDiceByType records n Hit Point Dice spent from a multiclass character's pools (the type asked for first, then the largest)
 // and returns their sizes; nil for a single class.
 func spendHitDiceByType(charID, n int, first string) []int {
-	left := hitDiceLeftByType(charID)
-	if left == nil || n <= 0 {
+	if len(hitDicePools(charID)) <= 1 || n <= 0 { // a single class spends from hit_dice_spent
 		return nil
 	}
+	left := hitDiceLeftByType(charID)
 	spent := hitDiceSpentByType(charID)
 	var types []string
 	for k := range left {

@@ -292,7 +292,7 @@ func turnLeft(charID int) map[string]interface{} {
 		out["reaction"] = "used"
 	} else {
 		rx := map[string]interface{}{"available": true, "options": reactionOptions(charID, class, level),
-			"note": fmt.Sprintf("A Reaction is taken when its trigger happens, often on another creature's turn. Set standing orders so the server takes it for you: POST /api/characters/reaction-orders {\"character_id\": %d, \"order\": \"shield\", \"on\": true}.", charID)}
+			"note": "A Reaction is taken when its trigger happens, often on another creature's turn. Set standing orders so the server takes it for you: " + reactionOrderHowTo(charID) + "."}
 		if on := activeOrderNames(charID); len(on) > 0 {
 			rx["standing_orders"] = on
 		}

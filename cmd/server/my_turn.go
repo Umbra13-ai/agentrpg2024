@@ -188,8 +188,12 @@ func handleMyTurn(w http.ResponseWriter, r *http.Request) {
 	var latestNarration string
 	var narrationAt time.Time
 	sinceMine, mineSeen := []string{}, false // what happened since the character's own last action (I-CALLA-6, I-CALLA-16)
+	var fightOverAt time.Time                // a fight ended and the GM hasn't narrated since (I-CALLA-18)
 	for i, rec := range recs {
 		line := rec.eventLine()
+		if rec.Type == actionFightOver && latestNarration == "" && fightOverAt.IsZero() {
+			fightOverAt = rec.At
+		}
 		if rec.isNarration() && latestNarration == "" {
 			latestNarration, narrationAt = rec.Description, rec.At // the most recent DM narration
 		}
@@ -698,7 +702,7 @@ func handleMyTurn(w http.ResponseWriter, r *http.Request) {
 			"note": "Pact Magic: they come back on a Short Rest. A cast uses one when no other slot of that level is left, or say \"pact slot\"."}
 	}
 	characterInfo["class_levels"] = classLevelsOf(charID)
-	characterInfo["hit_dice_by_type"] = hitDicePools(charID)
+	characterInfo["hit_dice_by_type"] = hitDiceLeftByType(charID) // the dice left to spend, as the rest options say (multiclass_2024.go)
 
 	// Words of Creation (Bard 20): Power Word Heal and Power Word Kill always prepared
 	if woc := wordsOfCreationSpells(class, level); len(woc) > 0 {
@@ -963,11 +967,18 @@ func handleMyTurn(w http.ResponseWriter, r *http.Request) {
 		response["action_blocked_reason"] = "awaiting_narration"
 	}
 
-	// Add combat info if in combat
+	if !fightOverAt.IsZero() && !inCombat {
+		response["fight_over"] = fmt.Sprintf("The fight ended at %s and the GM hasn't narrated what follows yet: wait for that narration (gm_says) before you act.", fightOverAt.UTC().Format("2006-01-02 15:04 UTC"))
+	}
+	// combat: the fight, or null when there is none (always the key, always one value for "no fight": I-CALLA-7)
+	response["combat"] = nil
 	if inCombat {
 		response["combat"] = combatInfo
 		if !isMyTurn {
 			response["message"] = fmt.Sprintf("It's not your turn. Current turn: %s", combatInfo["current_turn"])
+			if note, ok := response["is_my_turn_note"].(string); ok { // you may still send your turn now (I-CALLA-5)
+				response["message"] = fmt.Sprint(response["message"], ". ", note)
+			}
 		}
 	}
 

@@ -1076,7 +1076,7 @@ func handleAction(w http.ResponseWriter, r *http.Request) {
 			speed = characterSpeed(charID, species)
 		}
 		db.Exec(`UPDATE characters SET movement_remaining = COALESCE(movement_remaining,0) + $1 WHERE id = $2`, speed, charID)
-		result = fmt.Sprintf("Haste action: Dash grants %d additional feet of movement this turn.", speed)
+		result = fmt.Sprintf("Haste action: Dash grants %d additional feet of movement this turn. "+dashMoveNote, speed)
 	} else if inCombat && req.Action == "dash" && resourceUsed == "bonus_action" { // Expeditious Retreat (spells_more_2024.go)
 		speed := 0
 		if canMove(charID) {
@@ -1101,7 +1101,7 @@ func handleAction(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 		removeOneWithShadowsInvisibility(charID)
-		result = fmt.Sprintf("Dash grants %d additional feet of movement this turn.", speed)
+		result = fmt.Sprintf("Dash grants %d additional feet of movement this turn. "+dashMoveNote, speed)
 	} else {
 		var bonusDash func(int) (int, error)
 		var dashUsed bool
@@ -2634,7 +2634,7 @@ func resolveActionWithBonusDash(action, description string, charID int, bonusDas
 		return helpAction(charID, description)
 	case "dodge":
 		addCharacterCondition(charID, "dodging") // the marker until the start of your next turn (dodge_2024.go)
-		return "Dodging. Attacks against you have disadvantage until your next turn."
+		return dodgeResult()                     // dodge_2024.go: the whole rule, as the action table says it (I-CALLA-13)
 
 	case "rage":
 		// Barbarian rage - add raging condition

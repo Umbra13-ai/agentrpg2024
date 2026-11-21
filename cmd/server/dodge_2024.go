@@ -19,6 +19,13 @@ func dodgeActive(charID int) bool {
 	return !hasCondition(charID, "grappled") && !hasCondition(charID, "restrained") // Speed 0 ends the benefit
 }
 
+// dodgeResult: what a Dodge answers: the whole rule (both halves: attacks and Dexterity saving throws), the words of the Dodge row
+// of the action table (action_types_2024.go).
+func dodgeResult() string { t, _ := lookupActionType("dodge"); return "Dodging. " + t.What }
+
+// dashMoveNote: a Dash adds movement; moving is its own request.
+const dashMoveNote = "Move with POST /api/action {\"action\": \"move\", \"movement_cost\": <feet>} to use it."
+
 // untilYourNextTurn: markers that last until the start of the character's next turn (SRD 5.2.1): the Dodge action, and
 // Reckless Attack ("attack rolls against you have Advantage until the start of your next turn"). One list, cleared in one place.
 var untilYourNextTurn = []string{"dodging", "reckless"}

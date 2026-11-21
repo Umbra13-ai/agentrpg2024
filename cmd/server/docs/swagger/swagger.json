@@ -36717,6 +36717,7 @@
              "additionalProperties": {
               "type": "integer"
              },
+             "description": "the dice left to spend, as the rest options say (multiclass_2024.go)",
              "properties": {},
              "type": "object"
             },
@@ -37396,6 +37397,9 @@
             }
            },
            "type": "object"
+          },
+          "fight_over": {
+           "type": "string"
           },
           "frightened_warning": {
            "properties": {

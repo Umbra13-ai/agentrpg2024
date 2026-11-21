@@ -65,7 +65,7 @@ func helpAction(charID int, description string) string {
 			return "Help: name one of your skill or tool proficiencies in the description (Assist an Ability Check needs proficiency in it). Nothing was assisted."
 		}
 		addCombatEffect(lobbyID, req.Ally, charID, "assisted_check:"+key)
-		return fmt.Sprintf("🤝 Help: %s has Advantage on the next ability check it makes with %s, if it makes one before the start of your next turn.", allyName, label)
+		return fmt.Sprintf("🤝 Help: %s has Advantage on the next ability check made with %s, if one is made before the start of your next turn.", allyName, label)
 	}
 	return "Help: send target_id (an enemy within 5 feet of you) to give an ally Advantage on its next attack roll against it, or target_character_id (an ally) with one of your skill or tool proficiencies in the description to give it Advantage on its next check with it."
 }
