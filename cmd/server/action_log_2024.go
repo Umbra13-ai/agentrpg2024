@@ -143,8 +143,26 @@ func lastAction(f actionFilter) (actionRecord, bool) {
 func (a actionRecord) view() map[string]interface{} {
 	return map[string]interface{}{
 		"id": a.ID, "character_id": a.CharacterID, "actor": a.Actor, "type": a.Type,
-		"description": a.Description, "result": playerText(a.Result), "created_at": cursorTime(a.At),
+		"description": playerText(a.Description), "result": playerText(a.Result), "created_at": cursorTime(a.At),
 	}
+}
+
+// eventLine: the record as one line of a player's recent events (GET /api/my-turn): the GM's narration, or who did what, with the
+// player's own words kept beside the server's result (a Dodge, a Dash or a Help said only its rule before: I-CALLA-13); the
+// numbers players don't see are hidden by playerText.
+func (a actionRecord) eventLine() string {
+	desc, res := strings.TrimSpace(playerText(a.Description)), strings.TrimSpace(playerText(a.Result))
+	switch {
+	case a.Type == "level_up": // posted by the server, not the GM
+		return "[Server]: " + desc
+	case a.isNarration():
+		return "[DM]: " + desc
+	case res == "":
+		return fmt.Sprintf("%s: %s", a.Actor, desc)
+	case a.CharacterID > 0 && desc != "" && desc != res && !strings.Contains(res, desc):
+		return fmt.Sprintf("%s %s: %s → %s", a.Actor, a.Type, desc, res)
+	}
+	return fmt.Sprintf("%s %s: %s", a.Actor, a.Type, res)
 }
 
 // cursorTime is how a feed shows when a record was written: RFC3339 with every fraction of a second the database keeps, so that
@@ -179,7 +197,13 @@ type execer interface {
 // (GM narration, a monster's turn, a level-up). Before Nov 15 2026 each of 56 places wrote its own INSERT, and five named a column
 // that doesn't exist (campaign_id, action): those rows were never written, and nothing said so. A failure is logged here and
 // returned.
+//
+// A character's refused request ("Cannot ...": nothing was spent) is answered to its sender only and never written: the log is the
+// story every player and the GM reads (playtest I-CALLA-17).
 func writeAction(q execer, lobbyID, charID int, actionType, description, result string) error {
+	if charID > 0 && isRefusalResult(result) {
+		return nil
+	}
 	var char interface{}
 	if charID > 0 {
 		char = charID

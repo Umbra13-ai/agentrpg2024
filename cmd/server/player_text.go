@@ -9,6 +9,7 @@ package main
 //	"Constitution save 15 vs DC 14, success"            -> "Constitution save, success"
 //	"repeats the Wisdom saving throw ... and fails (2)" -> "... and fails"
 //	"tries to escape: 15 (d20 13 + 2) vs DC 17, ..."    -> "tries to escape: ..."
+//	"Perception check: d20(10)+4 = 14 vs DC 20 → FAILURE" -> "Perception check: d20(10)+4 = 14 → FAILURE" (the GM's DC)
 
 import "regexp"
 
@@ -30,10 +31,15 @@ var playerTextRules = []struct {
 	{regexp.MustCompile(` and (succeeds|fails) \(-?\d+\)`), " and $1"},
 	{regexp.MustCompile(`(succeeds|fails|saves) \(-?\d+\)`), "$1"},
 	{regexp.MustCompile(`: -?\d+ vs DC \d+, `), ": "},
+	// an ability check the GM calls for (gm_checks.go): its DC is the GM's; the player sees the total and the outcome (I-CALLA-14)
+	//	"Perception check: d20(10)+4 = 14 vs DC 20 → FAILURE" -> "Perception check: d20(10)+4 = 14 → FAILURE"
+	{regexp.MustCompile(`( check(?: \([^)]*\))?: [^\n]*?= -?\d+) vs DC \d+ (→|->) `), "$1 $2 "},
+	{regexp.MustCompile(` check \(DC \d+\)`), " check"},
 	{regexp.MustCompile(`: {2,}`), ": "},
 }
 
-// playerText removes monster attack totals, Armor Class numbers and saving throw totals from a result.
+// playerText removes monster attack totals, Armor Class numbers, saving throw totals and the DC of a check the GM calls for from a
+// result or a description.
 func playerText(s string) string {
 	for _, r := range playerTextRules {
 		s = r.re.ReplaceAllString(s, r.repl)

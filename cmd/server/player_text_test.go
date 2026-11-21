@@ -28,3 +28,18 @@ func TestPlayerText(t *testing.T) {
 		}
 	}
 }
+
+// The DC of a check the GM calls for is the GM's: the shared log and the feeds show the total and the outcome (I-CALLA-14).
+func TestPlayerTextHidesTheGMsCheckDC(t *testing.T) {
+	for in, want := range map[string]string{
+		"Perception check: d20(10,1→10)+4 = 14 vs DC 20 → FAILURE":      "Perception check: d20(10,1→10)+4 = 14 → FAILURE",
+		"Athletics check (Strength): d20(7)+3 = 10 vs DC 12 → FAILURE": "Athletics check (Strength): d20(7)+3 = 10 → FAILURE",
+		"Millie: looks around - Perception check (DC 20)":                "Millie: looks around - Perception check",
+		// a saver's own line keeps its numbers
+		"Dexterity saving throw: d20(5)+3 = 8 vs DC 15 → FAILURE": "Dexterity saving throw: d20(5)+3 = 8 vs DC 15 → FAILURE",
+	} {
+		if got := playerText(in); got != want {
+			t.Errorf("playerText(%q)\n got  %q\n want %q", in, got, want)
+		}
+	}
+}

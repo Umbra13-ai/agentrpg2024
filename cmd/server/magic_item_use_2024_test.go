@@ -104,6 +104,13 @@ func TestItemChargeState(t *testing.T) {
 }
 
 func TestSpellScrolls(t *testing.T) {
+	for _, k := range []string{"fireball", "fire-bolt"} { // the real entries come back afterwards: later tests cast these spells
+		if old, ok := srdSpellsMemory[k]; ok {
+			t.Cleanup(func() { srdSpellsMemory[k] = old })
+		} else {
+			t.Cleanup(func() { delete(srdSpellsMemory, k) })
+		}
+	}
 	srdSpellsMemory["fireball"] = SRDSpell{Name: "Fireball", Level: 3}
 	srdSpellsMemory["fire-bolt"] = SRDSpell{Name: "Fire Bolt", Level: 0}
 	loadItemUses()

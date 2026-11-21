@@ -245,7 +245,19 @@ func handleGMAdjustMonster(w http.ResponseWriter, r *http.Request) {
 		state = fmt.Sprintf("%s: %d/%d Hit Points.", name, hp, maxHP)
 	}
 	msg := fmt.Sprintf("%s: %s. %s", name, strings.Join(did, "; "), state)
-	writeAction(db, campaignID, 0, "gm_adjust_monster", "GM: "+msg+gmNote(req.Note), msg)
+	// the log is read by the players: what they could see, never the monster's Hit Points, maximum or Armor Class (I-CALLA-14);
+	// the GM's reply keeps the numbers
+	var seen []string
+	for _, d := range did {
+		if !gmOnlyChange(d) {
+			seen = append(seen, d)
+		}
+	}
+	public := fmt.Sprintf("%s looks %s.", name, healthWord(hp, maxHP))
+	if len(seen) > 0 {
+		public = fmt.Sprintf("%s: %s. %s", name, strings.Join(seen, "; "), public)
+	}
+	writeAction(db, campaignID, 0, "gm_adjust_monster", "GM: "+public+gmNote(req.Note), public)
 	writeJSONStatus(w, 200, map[string]interface{}{"success": true, "target_id": tid, "name": name, "hp": hp, "max_hp": maxHP, "changes": did,
 		"conditions": conditionNames(campaignID, tid), "riders": activeRiders(campaignID, tid), "message": msg})
 }
@@ -307,4 +319,15 @@ func activeRiders(lobbyID, id int) []map[string]interface{} {
 			"ends": fmt.Sprintf("when the spell ends (%d rounds left, or its caster's Concentration)", se.RoundsLeft)})
 	}
 	return out
+}
+
+// gmOnlyChange: a change of the GM's that shows a monster's numbers (its Hit Points, maximum, Temporary Hit Points, Armor Class),
+// kept out of the log players read.
+func gmOnlyChange(d string) bool {
+	for _, p := range []string{"Hit Point maximum ", "Hit Points set to ", "Temporary Hit Points ", "AC ", "heals "} {
+		if strings.HasPrefix(d, p) {
+			return true
+		}
+	}
+	return false
 }

@@ -8105,9 +8105,6 @@
        "application/json": {
         "schema": {
          "properties": {
-          "action": {
-           "type": "string"
-          },
           "before_start": {
            "description": "questions, character changes, the ready flag (campaign_ready_2024.go)",
            "type": "string"
@@ -8140,9 +8137,6 @@
           },
           "message": {
            "type": "string"
-          },
-          "reaction_consumed": {
-           "type": "boolean"
           },
           "readiness": {
            "properties": {
@@ -8192,15 +8186,6 @@
             }
            },
            "type": "object"
-          },
-          "result": {
-           "type": "string"
-          },
-          "success": {
-           "type": "boolean"
-          },
-          "trigger": {
-           "type": "string"
           }
          },
          "type": "object"
@@ -33273,29 +33258,6 @@
       "content": {
        "application/json": {
         "schema": {
-         "properties": {
-          "action": {
-           "type": "string"
-          },
-          "character": {
-           "type": "string"
-          },
-          "message": {
-           "type": "string"
-          },
-          "reaction_consumed": {
-           "type": "boolean"
-          },
-          "result": {
-           "type": "string"
-          },
-          "success": {
-           "type": "boolean"
-          },
-          "trigger": {
-           "type": "string"
-          }
-         },
          "type": "object"
         }
        }
@@ -37887,6 +37849,9 @@
             "how_to_trigger": {
              "type": "string"
             },
+            "request": {
+             "type": "object"
+            },
             "trigger": {
              "type": "string"
             }
@@ -37947,6 +37912,9 @@
             "type": "string"
            },
            "type": "array"
+          },
+          "recent_events_order": {
+           "type": "string"
           },
           "relentless_endurance": {
            "properties": {
@@ -38161,6 +38129,12 @@
             }
            },
            "type": "object"
+          },
+          "since_your_last_action": {
+           "items": {
+            "type": "string"
+           },
+           "type": "array"
           },
           "situation": {
            "properties": {

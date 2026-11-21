@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"github.com/agentrpg/agentrpg/game"
 	"net/http"
+	"slices"
 	"strconv"
 	"strings"
 	"time"
@@ -182,31 +183,28 @@ func handleMyTurn(w http.ResponseWriter, r *http.Request) {
 	}
 
 	// Get recent actions as events (including GM narrations which have no character_id)
-	recs, _ := readActions(actionFilter{lobby: lobbyID, newestFirst: true, limit: 10}) // action_log_2024.go
+	recs, _ := readActions(actionFilter{lobby: lobbyID, newestFirst: true, limit: 40}) // action_log_2024.go
 	recentEvents := []string{}
 	var latestNarration string
 	var narrationAt time.Time
-	for _, rec := range recs {
-		aname, atype, adesc, aresult := rec.Actor, rec.Type, rec.Description, rec.Result
-		if atype == "level_up" { // posted by the server, not the DM
-			recentEvents = append(recentEvents, fmt.Sprintf("[Server]: %s", adesc))
-			continue
+	sinceMine, mineSeen := []string{}, false // what happened since the character's own last action (I-CALLA-6, I-CALLA-16)
+	for i, rec := range recs {
+		line := rec.eventLine()
+		if rec.isNarration() && latestNarration == "" {
+			latestNarration, narrationAt = rec.Description, rec.At // the most recent DM narration
 		}
-		if rec.isNarration() {
-			if latestNarration == "" {
-				latestNarration, narrationAt = adesc, rec.At // Capture the most recent DM narration
-			}
-			recentEvents = append(recentEvents, fmt.Sprintf("[DM]: %s", adesc))
-		} else if aresult != "" {
-			recentEvents = append(recentEvents, fmt.Sprintf("%s %s: %s", aname, atype, playerText(aresult)))
-		} else {
-			recentEvents = append(recentEvents, fmt.Sprintf("%s: %s", aname, adesc))
+		if i < 10 {
+			recentEvents = append(recentEvents, line)
+		}
+		if rec.CharacterID == charID && !containsStr(notPlayTypes, rec.Type) {
+			mineSeen = true
+		}
+		if !mineSeen {
+			sinceMine = append(sinceMine, line)
 		}
 	}
-	// Reverse to show oldest first
-	for i, j := 0, len(recentEvents)-1; i < j; i, j = i+1, j-1 {
-		recentEvents[i], recentEvents[j] = recentEvents[j], recentEvents[i]
-	}
+	slices.Reverse(recentEvents) // oldest first: the newest event is last
+	slices.Reverse(sinceMine)
 
 	// Determine character status
 	charStatus := "healthy"
@@ -910,15 +908,17 @@ func handleMyTurn(w http.ResponseWriter, r *http.Request) {
 				movementRemaining, species, bonusActionSpellCast, cantripsOnlyWarning, conditions,
 				actionStatus, bonusActionStatus, reactionStatus, attacksRemaining),
 		},
-		"tactical_suggestions": suggestions,
-		"rules_reminder":       rulesReminder,
-		"recent_events":        recentEvents,
-		"level_up":             nilIfNoNotices(unseenLevelUpNotices(charID)),
-		"shops_open":           shopsOpenFor(lobbyID), // shops the GM has opened (campaign_shops_2024.go)
-		"gm_says":              latestNarration,
-		"story_so_far":         parseStorySoFar(campaignDocRaw),
-		"party_status":         partyStatus,
-		"how_to_act":           actionHowTo(enemies), // made from the action request (actions.go)
+		"tactical_suggestions":   suggestions,
+		"rules_reminder":         rulesReminder,
+		"recent_events":          recentEvents,
+		"recent_events_order":    "oldest first: the newest event is the last one",
+		"since_your_last_action": sinceMine,
+		"level_up":               nilIfNoNotices(unseenLevelUpNotices(charID)),
+		"shops_open":             shopsOpenFor(lobbyID), // shops the GM has opened (campaign_shops_2024.go)
+		"gm_says":                latestNarration,
+		"story_so_far":           parseStorySoFar(campaignDocRaw),
+		"party_status":           partyStatus,
+		"how_to_act":             actionHowTo(enemies), // made from the action request (actions.go)
 	}
 	if latestNarration != "" { // when the GM said it, and the round it belongs to (feedback log 56: last round's words read as the new round's)
 		response["gm_says_at"] = narrationAt
