@@ -4505,6 +4505,38 @@
            },
            "type": "object"
           },
+          "pick_up_asks": {
+           "items": {
+            "properties": {
+             "approve": {
+              "type": "string"
+             },
+             "asked_at": {
+              "type": "string"
+             },
+             "character": {
+              "type": "string"
+             },
+             "character_id": {
+              "type": "integer"
+             },
+             "dropped_id": {
+              "type": "integer"
+             },
+             "item": {
+              "type": "string"
+             },
+             "refuse": {
+              "type": "string"
+             },
+             "where": {
+              "type": "string"
+             }
+            },
+            "type": "object"
+           },
+           "type": "array"
+          },
           "player_activity": {
            "items": {
             "properties": {
@@ -17734,7 +17766,7 @@
      "Characters"
     ],
     "summary": "Equipment: what is worn, held and in which bag; bags, moving, dropping and picking up items",
-    "description": "GET lists every item with its id and location (worn, held, a bag) and the weight in each bag and in total. POST /equipment/containers adds a bag the character carries ({\"kind\": \"backpack\", \"location\": \"worn\"}, with an optional \"name\" as a label): one of the container kinds, with that kind's capacity; a bag added this way is not one bought, so no shop pays for it. POST /equipment/move moves an item ({\"item\": \"<id or name>\", \"to\": \"<bag id, worn or held>\", \"quantity\": N}; worn: one pair of footwear, gloves or gauntlets, bracers, one item of headwear and one cloak at a time (a second is refused with already_wearing; rings and necklaces have no limit; table rule worn_items); the character sheet's worn_items shows each place; held weapons go through equip-weapon and its hands rule). POST /equipment/drop puts an item on the campaign's ground ({\"item\": ..., \"quantity\": N}); POST /equipment/pick-up takes it back ({\"dropped_id\": N}). POST /equipment/lose and /equipment/recover (GM only) mark a bag lost or found ({\"container\": ..., \"to\": ..., \"reason\": ...}). Owner only, except lose and recover.",
+    "description": "GET lists every item with its id and location (worn, held, a bag) and the weight in each bag and in total. POST /equipment/containers adds a bag the character carries ({\"kind\": \"backpack\", \"location\": \"worn\"}, with an optional \"name\" as a label): one of the container kinds, with that kind's capacity; a bag added this way is not one bought, so no shop pays for it. POST /equipment/move moves an item ({\"item\": \"<id or name>\", \"to\": \"<bag id, worn or held>\", \"quantity\": N}; worn: one pair of footwear, gloves or gauntlets, bracers, one item of headwear and one cloak at a time (a second is refused with already_wearing; rings and necklaces have no limit; table rule worn_items); the character sheet's worn_items shows each place; held weapons go through equip-weapon and its hands rule). POST /equipment/drop puts an item on the campaign's ground ({\"item\": ..., \"quantity\": N}); POST /equipment/pick-up asks to take it back ({\"dropped_id\": N}; 202: the GM approves it when the character is where the item is, POST /api/campaigns/{id}/ground/{dropped_id}/approve). POST /equipment/lose and /equipment/recover (GM only) mark a bag lost or found ({\"container\": ..., \"to\": ..., \"reason\": ...}). Owner only, except lose and recover.",
     "responses": {
      "200": {
       "description": "Success",
@@ -17745,6 +17777,9 @@
           "dropped_by_you": {
            "items": {
             "properties": {
+             "ask_to_pick_up": {
+              "type": "string"
+             },
              "dropped_at": {
               "type": "string"
              },
@@ -17754,7 +17789,7 @@
              "name": {
               "type": "string"
              },
-             "pick_up": {
+             "pick_up_status": {
               "type": "string"
              },
              "quantity": {
@@ -17794,7 +17829,7 @@
      "Characters"
     ],
     "summary": "Equipment: what is worn, held and in which bag; bags, moving, dropping and picking up items",
-    "description": "GET lists every item with its id and location (worn, held, a bag) and the weight in each bag and in total. POST /equipment/containers adds a bag the character carries ({\"kind\": \"backpack\", \"location\": \"worn\"}, with an optional \"name\" as a label): one of the container kinds, with that kind's capacity; a bag added this way is not one bought, so no shop pays for it. POST /equipment/move moves an item ({\"item\": \"<id or name>\", \"to\": \"<bag id, worn or held>\", \"quantity\": N}; worn: one pair of footwear, gloves or gauntlets, bracers, one item of headwear and one cloak at a time (a second is refused with already_wearing; rings and necklaces have no limit; table rule worn_items); the character sheet's worn_items shows each place; held weapons go through equip-weapon and its hands rule). POST /equipment/drop puts an item on the campaign's ground ({\"item\": ..., \"quantity\": N}); POST /equipment/pick-up takes it back ({\"dropped_id\": N}). POST /equipment/lose and /equipment/recover (GM only) mark a bag lost or found ({\"container\": ..., \"to\": ..., \"reason\": ...}). Owner only, except lose and recover.",
+    "description": "GET lists every item with its id and location (worn, held, a bag) and the weight in each bag and in total. POST /equipment/containers adds a bag the character carries ({\"kind\": \"backpack\", \"location\": \"worn\"}, with an optional \"name\" as a label): one of the container kinds, with that kind's capacity; a bag added this way is not one bought, so no shop pays for it. POST /equipment/move moves an item ({\"item\": \"<id or name>\", \"to\": \"<bag id, worn or held>\", \"quantity\": N}; worn: one pair of footwear, gloves or gauntlets, bracers, one item of headwear and one cloak at a time (a second is refused with already_wearing; rings and necklaces have no limit; table rule worn_items); the character sheet's worn_items shows each place; held weapons go through equip-weapon and its hands rule). POST /equipment/drop puts an item on the campaign's ground ({\"item\": ..., \"quantity\": N}); POST /equipment/pick-up asks to take it back ({\"dropped_id\": N}; 202: the GM approves it when the character is where the item is, POST /api/campaigns/{id}/ground/{dropped_id}/approve). POST /equipment/lose and /equipment/recover (GM only) mark a bag lost or found ({\"container\": ..., \"to\": ..., \"reason\": ...}). Owner only, except lose and recover.",
     "responses": {
      "400": {
       "description": "The body was refused (nothing was changed): unknown_field, wrong_type, invalid_json, body_required or id_mismatch, with the fields the request takes",
@@ -17897,7 +17932,7 @@
      "Characters"
     ],
     "summary": "Equipment: what is worn, held and in which bag; bags, moving, dropping and picking up items",
-    "description": "GET lists every item with its id and location (worn, held, a bag) and the weight in each bag and in total. POST /equipment/containers adds a bag the character carries ({\"kind\": \"backpack\", \"location\": \"worn\"}, with an optional \"name\" as a label): one of the container kinds, with that kind's capacity; a bag added this way is not one bought, so no shop pays for it. POST /equipment/move moves an item ({\"item\": \"<id or name>\", \"to\": \"<bag id, worn or held>\", \"quantity\": N}; worn: one pair of footwear, gloves or gauntlets, bracers, one item of headwear and one cloak at a time (a second is refused with already_wearing; rings and necklaces have no limit; table rule worn_items); the character sheet's worn_items shows each place; held weapons go through equip-weapon and its hands rule). POST /equipment/drop puts an item on the campaign's ground ({\"item\": ..., \"quantity\": N}); POST /equipment/pick-up takes it back ({\"dropped_id\": N}). POST /equipment/lose and /equipment/recover (GM only) mark a bag lost or found ({\"container\": ..., \"to\": ..., \"reason\": ...}). Owner only, except lose and recover.",
+    "description": "GET lists every item with its id and location (worn, held, a bag) and the weight in each bag and in total. POST /equipment/containers adds a bag the character carries ({\"kind\": \"backpack\", \"location\": \"worn\"}, with an optional \"name\" as a label): one of the container kinds, with that kind's capacity; a bag added this way is not one bought, so no shop pays for it. POST /equipment/move moves an item ({\"item\": \"<id or name>\", \"to\": \"<bag id, worn or held>\", \"quantity\": N}; worn: one pair of footwear, gloves or gauntlets, bracers, one item of headwear and one cloak at a time (a second is refused with already_wearing; rings and necklaces have no limit; table rule worn_items); the character sheet's worn_items shows each place; held weapons go through equip-weapon and its hands rule). POST /equipment/drop puts an item on the campaign's ground ({\"item\": ..., \"quantity\": N}); POST /equipment/pick-up asks to take it back ({\"dropped_id\": N}; 202: the GM approves it when the character is where the item is, POST /api/campaigns/{id}/ground/{dropped_id}/approve). POST /equipment/lose and /equipment/recover (GM only) mark a bag lost or found ({\"container\": ..., \"to\": ..., \"reason\": ...}). Owner only, except lose and recover.",
     "responses": {
      "400": {
       "description": "The body was refused (nothing was changed): unknown_field, wrong_type, invalid_json, body_required or id_mismatch, with the fields the request takes",
@@ -18000,7 +18035,7 @@
      "Characters"
     ],
     "summary": "Equipment: what is worn, held and in which bag; bags, moving, dropping and picking up items",
-    "description": "GET lists every item with its id and location (worn, held, a bag) and the weight in each bag and in total. POST /equipment/containers adds a bag the character carries ({\"kind\": \"backpack\", \"location\": \"worn\"}, with an optional \"name\" as a label): one of the container kinds, with that kind's capacity; a bag added this way is not one bought, so no shop pays for it. POST /equipment/move moves an item ({\"item\": \"<id or name>\", \"to\": \"<bag id, worn or held>\", \"quantity\": N}; worn: one pair of footwear, gloves or gauntlets, bracers, one item of headwear and one cloak at a time (a second is refused with already_wearing; rings and necklaces have no limit; table rule worn_items); the character sheet's worn_items shows each place; held weapons go through equip-weapon and its hands rule). POST /equipment/drop puts an item on the campaign's ground ({\"item\": ..., \"quantity\": N}); POST /equipment/pick-up takes it back ({\"dropped_id\": N}). POST /equipment/lose and /equipment/recover (GM only) mark a bag lost or found ({\"container\": ..., \"to\": ..., \"reason\": ...}). Owner only, except lose and recover.",
+    "description": "GET lists every item with its id and location (worn, held, a bag) and the weight in each bag and in total. POST /equipment/containers adds a bag the character carries ({\"kind\": \"backpack\", \"location\": \"worn\"}, with an optional \"name\" as a label): one of the container kinds, with that kind's capacity; a bag added this way is not one bought, so no shop pays for it. POST /equipment/move moves an item ({\"item\": \"<id or name>\", \"to\": \"<bag id, worn or held>\", \"quantity\": N}; worn: one pair of footwear, gloves or gauntlets, bracers, one item of headwear and one cloak at a time (a second is refused with already_wearing; rings and necklaces have no limit; table rule worn_items); the character sheet's worn_items shows each place; held weapons go through equip-weapon and its hands rule). POST /equipment/drop puts an item on the campaign's ground ({\"item\": ..., \"quantity\": N}); POST /equipment/pick-up asks to take it back ({\"dropped_id\": N}; 202: the GM approves it when the character is where the item is, POST /api/campaigns/{id}/ground/{dropped_id}/approve). POST /equipment/lose and /equipment/recover (GM only) mark a bag lost or found ({\"container\": ..., \"to\": ..., \"reason\": ...}). Owner only, except lose and recover.",
     "responses": {
      "400": {
       "description": "The body was refused (nothing was changed): unknown_field, wrong_type, invalid_json, body_required or id_mismatch, with the fields the request takes",
@@ -18112,7 +18147,7 @@
      "Characters"
     ],
     "summary": "Equipment: what is worn, held and in which bag; bags, moving, dropping and picking up items",
-    "description": "GET lists every item with its id and location (worn, held, a bag) and the weight in each bag and in total. POST /equipment/containers adds a bag the character carries ({\"kind\": \"backpack\", \"location\": \"worn\"}, with an optional \"name\" as a label): one of the container kinds, with that kind's capacity; a bag added this way is not one bought, so no shop pays for it. POST /equipment/move moves an item ({\"item\": \"<id or name>\", \"to\": \"<bag id, worn or held>\", \"quantity\": N}; worn: one pair of footwear, gloves or gauntlets, bracers, one item of headwear and one cloak at a time (a second is refused with already_wearing; rings and necklaces have no limit; table rule worn_items); the character sheet's worn_items shows each place; held weapons go through equip-weapon and its hands rule). POST /equipment/drop puts an item on the campaign's ground ({\"item\": ..., \"quantity\": N}); POST /equipment/pick-up takes it back ({\"dropped_id\": N}). POST /equipment/lose and /equipment/recover (GM only) mark a bag lost or found ({\"container\": ..., \"to\": ..., \"reason\": ...}). Owner only, except lose and recover.",
+    "description": "GET lists every item with its id and location (worn, held, a bag) and the weight in each bag and in total. POST /equipment/containers adds a bag the character carries ({\"kind\": \"backpack\", \"location\": \"worn\"}, with an optional \"name\" as a label): one of the container kinds, with that kind's capacity; a bag added this way is not one bought, so no shop pays for it. POST /equipment/move moves an item ({\"item\": \"<id or name>\", \"to\": \"<bag id, worn or held>\", \"quantity\": N}; worn: one pair of footwear, gloves or gauntlets, bracers, one item of headwear and one cloak at a time (a second is refused with already_wearing; rings and necklaces have no limit; table rule worn_items); the character sheet's worn_items shows each place; held weapons go through equip-weapon and its hands rule). POST /equipment/drop puts an item on the campaign's ground ({\"item\": ..., \"quantity\": N}); POST /equipment/pick-up asks to take it back ({\"dropped_id\": N}; 202: the GM approves it when the character is where the item is, POST /api/campaigns/{id}/ground/{dropped_id}/approve). POST /equipment/lose and /equipment/recover (GM only) mark a bag lost or found ({\"container\": ..., \"to\": ..., \"reason\": ...}). Owner only, except lose and recover.",
     "responses": {
      "400": {
       "description": "The body was refused (nothing was changed): unknown_field, wrong_type, invalid_json, body_required or id_mismatch, with the fields the request takes",
@@ -18144,16 +18179,19 @@
        }
       }
      },
-     "200": {
+     "202": {
       "description": "Success",
       "content": {
        "application/json": {
         "schema": {
          "properties": {
+          "asked_to_pick_up": {
+           "type": "string"
+          },
           "note": {
            "type": "string"
           },
-          "picked_up": {
+          "status": {
            "type": "string"
           },
           "success": {
@@ -18208,7 +18246,7 @@
      "Characters"
     ],
     "summary": "Equipment: what is worn, held and in which bag; bags, moving, dropping and picking up items",
-    "description": "GET lists every item with its id and location (worn, held, a bag) and the weight in each bag and in total. POST /equipment/containers adds a bag the character carries ({\"kind\": \"backpack\", \"location\": \"worn\"}, with an optional \"name\" as a label): one of the container kinds, with that kind's capacity; a bag added this way is not one bought, so no shop pays for it. POST /equipment/move moves an item ({\"item\": \"<id or name>\", \"to\": \"<bag id, worn or held>\", \"quantity\": N}; worn: one pair of footwear, gloves or gauntlets, bracers, one item of headwear and one cloak at a time (a second is refused with already_wearing; rings and necklaces have no limit; table rule worn_items); the character sheet's worn_items shows each place; held weapons go through equip-weapon and its hands rule). POST /equipment/drop puts an item on the campaign's ground ({\"item\": ..., \"quantity\": N}); POST /equipment/pick-up takes it back ({\"dropped_id\": N}). POST /equipment/lose and /equipment/recover (GM only) mark a bag lost or found ({\"container\": ..., \"to\": ..., \"reason\": ...}). Owner only, except lose and recover.",
+    "description": "GET lists every item with its id and location (worn, held, a bag) and the weight in each bag and in total. POST /equipment/containers adds a bag the character carries ({\"kind\": \"backpack\", \"location\": \"worn\"}, with an optional \"name\" as a label): one of the container kinds, with that kind's capacity; a bag added this way is not one bought, so no shop pays for it. POST /equipment/move moves an item ({\"item\": \"<id or name>\", \"to\": \"<bag id, worn or held>\", \"quantity\": N}; worn: one pair of footwear, gloves or gauntlets, bracers, one item of headwear and one cloak at a time (a second is refused with already_wearing; rings and necklaces have no limit; table rule worn_items); the character sheet's worn_items shows each place; held weapons go through equip-weapon and its hands rule). POST /equipment/drop puts an item on the campaign's ground ({\"item\": ..., \"quantity\": N}); POST /equipment/pick-up asks to take it back ({\"dropped_id\": N}; 202: the GM approves it when the character is where the item is, POST /api/campaigns/{id}/ground/{dropped_id}/approve). POST /equipment/lose and /equipment/recover (GM only) mark a bag lost or found ({\"container\": ..., \"to\": ..., \"reason\": ...}). Owner only, except lose and recover.",
     "responses": {
      "400": {
       "description": "The body was refused (nothing was changed): unknown_field, wrong_type, invalid_json, body_required or id_mismatch, with the fields the request takes",
@@ -18311,7 +18349,7 @@
      "Characters"
     ],
     "summary": "Equipment: what is worn, held and in which bag; bags, moving, dropping and picking up items",
-    "description": "GET lists every item with its id and location (worn, held, a bag) and the weight in each bag and in total. POST /equipment/containers adds a bag the character carries ({\"kind\": \"backpack\", \"location\": \"worn\"}, with an optional \"name\" as a label): one of the container kinds, with that kind's capacity; a bag added this way is not one bought, so no shop pays for it. POST /equipment/move moves an item ({\"item\": \"<id or name>\", \"to\": \"<bag id, worn or held>\", \"quantity\": N}; worn: one pair of footwear, gloves or gauntlets, bracers, one item of headwear and one cloak at a time (a second is refused with already_wearing; rings and necklaces have no limit; table rule worn_items); the character sheet's worn_items shows each place; held weapons go through equip-weapon and its hands rule). POST /equipment/drop puts an item on the campaign's ground ({\"item\": ..., \"quantity\": N}); POST /equipment/pick-up takes it back ({\"dropped_id\": N}). POST /equipment/lose and /equipment/recover (GM only) mark a bag lost or found ({\"container\": ..., \"to\": ..., \"reason\": ...}). Owner only, except lose and recover.",
+    "description": "GET lists every item with its id and location (worn, held, a bag) and the weight in each bag and in total. POST /equipment/containers adds a bag the character carries ({\"kind\": \"backpack\", \"location\": \"worn\"}, with an optional \"name\" as a label): one of the container kinds, with that kind's capacity; a bag added this way is not one bought, so no shop pays for it. POST /equipment/move moves an item ({\"item\": \"<id or name>\", \"to\": \"<bag id, worn or held>\", \"quantity\": N}; worn: one pair of footwear, gloves or gauntlets, bracers, one item of headwear and one cloak at a time (a second is refused with already_wearing; rings and necklaces have no limit; table rule worn_items); the character sheet's worn_items shows each place; held weapons go through equip-weapon and its hands rule). POST /equipment/drop puts an item on the campaign's ground ({\"item\": ..., \"quantity\": N}); POST /equipment/pick-up asks to take it back ({\"dropped_id\": N}; 202: the GM approves it when the character is where the item is, POST /api/campaigns/{id}/ground/{dropped_id}/approve). POST /equipment/lose and /equipment/recover (GM only) mark a bag lost or found ({\"container\": ..., \"to\": ..., \"reason\": ...}). Owner only, except lose and recover.",
     "responses": {
      "400": {
       "description": "The body was refused (nothing was changed): unknown_field, wrong_type, invalid_json, body_required or id_mismatch, with the fields the request takes",
@@ -27580,7 +27618,7 @@
      "Campaigns"
     ],
     "summary": "The items lying on the ground of a campaign",
-    "description": "GET lists what lies on the ground (dropped with /characters/{id}/equipment/drop; the GM adds ?include=claimed to see items taken away too). Players in the campaign pick an item up with /characters/{id}/equipment/pick-up. GM only: POST /ground/{dropped_id}/claim takes an item off the ground with a note ({\"note\": \"the troll took it\"}), POST /ground/{dropped_id}/return puts it back.",
+    "description": "GET lists what lies on the ground (dropped with /characters/{id}/equipment/drop or left by the GM's /gm/take-item; the GM adds ?include=claimed to see items taken away too, and pick_up_asks lists the open asks). A player asks to pick an item up with /characters/{id}/equipment/pick-up; the GM decides, since the character may be nowhere near it now: POST /ground/{dropped_id}/approve gives it to the character that asked, POST /ground/{dropped_id}/refuse {\"note\": \"you are too far away now\"} says no. GM only too: POST /ground/{dropped_id}/claim takes an item off the ground with a note ({\"note\": \"the troll took it\"}), POST /ground/{dropped_id}/return puts it back.",
     "responses": {
      "200": {
       "description": "Success",
@@ -27611,6 +27649,39 @@
              },
              "quantity": {
               "type": "integer"
+             }
+            },
+            "type": "object"
+           },
+           "type": "array"
+          },
+          "pick_up_asks": {
+           "description": "the asks waiting for the GM (S-CALLA-9)",
+           "items": {
+            "properties": {
+             "approve": {
+              "type": "string"
+             },
+             "asked_at": {
+              "type": "string"
+             },
+             "character": {
+              "type": "string"
+             },
+             "character_id": {
+              "type": "integer"
+             },
+             "dropped_id": {
+              "type": "integer"
+             },
+             "item": {
+              "type": "string"
+             },
+             "refuse": {
+              "type": "string"
+             },
+             "where": {
+              "type": "string"
              }
             },
             "type": "object"
@@ -27652,7 +27723,7 @@
      "Campaigns"
     ],
     "summary": "The items lying on the ground of a campaign",
-    "description": "GET lists what lies on the ground (dropped with /characters/{id}/equipment/drop; the GM adds ?include=claimed to see items taken away too). Players in the campaign pick an item up with /characters/{id}/equipment/pick-up. GM only: POST /ground/{dropped_id}/claim takes an item off the ground with a note ({\"note\": \"the troll took it\"}), POST /ground/{dropped_id}/return puts it back.",
+    "description": "GET lists what lies on the ground (dropped with /characters/{id}/equipment/drop or left by the GM's /gm/take-item; the GM adds ?include=claimed to see items taken away too, and pick_up_asks lists the open asks). A player asks to pick an item up with /characters/{id}/equipment/pick-up; the GM decides, since the character may be nowhere near it now: POST /ground/{dropped_id}/approve gives it to the character that asked, POST /ground/{dropped_id}/refuse {\"note\": \"you are too far away now\"} says no. GM only too: POST /ground/{dropped_id}/claim takes an item off the ground with a note ({\"note\": \"the troll took it\"}), POST /ground/{dropped_id}/return puts it back.",
     "responses": {
      "400": {
       "description": "The body was refused (nothing was changed): unknown_field, wrong_type, invalid_json, body_required or id_mismatch, with the fields the request takes",
@@ -27760,7 +27831,7 @@
      "Campaigns"
     ],
     "summary": "The items lying on the ground of a campaign",
-    "description": "GET lists what lies on the ground (dropped with /characters/{id}/equipment/drop; the GM adds ?include=claimed to see items taken away too). Players in the campaign pick an item up with /characters/{id}/equipment/pick-up. GM only: POST /ground/{dropped_id}/claim takes an item off the ground with a note ({\"note\": \"the troll took it\"}), POST /ground/{dropped_id}/return puts it back. Takes no request body.",
+    "description": "GET lists what lies on the ground (dropped with /characters/{id}/equipment/drop or left by the GM's /gm/take-item; the GM adds ?include=claimed to see items taken away too, and pick_up_asks lists the open asks). A player asks to pick an item up with /characters/{id}/equipment/pick-up; the GM decides, since the character may be nowhere near it now: POST /ground/{dropped_id}/approve gives it to the character that asked, POST /ground/{dropped_id}/refuse {\"note\": \"you are too far away now\"} says no. GM only too: POST /ground/{dropped_id}/claim takes an item off the ground with a note ({\"note\": \"the troll took it\"}), POST /ground/{dropped_id}/return puts it back. Takes no request body.",
     "responses": {
      "200": {
       "description": "Success",
@@ -27807,6 +27878,178 @@
       }
      }
     ]
+   }
+  },
+  "/api/campaigns/{id}/ground/{dropped_id}/approve": {
+   "post": {
+    "tags": [
+     "Campaigns"
+    ],
+    "summary": "The items lying on the ground of a campaign",
+    "description": "GET lists what lies on the ground (dropped with /characters/{id}/equipment/drop or left by the GM's /gm/take-item; the GM adds ?include=claimed to see items taken away too, and pick_up_asks lists the open asks). A player asks to pick an item up with /characters/{id}/equipment/pick-up; the GM decides, since the character may be nowhere near it now: POST /ground/{dropped_id}/approve gives it to the character that asked, POST /ground/{dropped_id}/refuse {\"note\": \"you are too far away now\"} says no. GM only too: POST /ground/{dropped_id}/claim takes an item off the ground with a note ({\"note\": \"the troll took it\"}), POST /ground/{dropped_id}/return puts it back. Takes no request body.",
+    "responses": {
+     "200": {
+      "description": "Success",
+      "content": {
+       "application/json": {
+        "schema": {
+         "properties": {
+          "character_id": {
+           "type": "integer"
+          },
+          "note": {
+           "type": "string"
+          },
+          "picked_up": {
+           "type": "string"
+          },
+          "success": {
+           "type": "boolean"
+          }
+         },
+         "type": "object"
+        }
+       }
+      }
+     }
+    },
+    "parameters": [
+     {
+      "name": "dropped_id",
+      "in": "path",
+      "required": true,
+      "schema": {
+       "type": "integer"
+      },
+      "description": "The dropped's id"
+     },
+     {
+      "name": "id",
+      "in": "path",
+      "required": true,
+      "description": "Campaign ID",
+      "schema": {
+       "type": "integer"
+      }
+     },
+     {
+      "name": "include",
+      "in": "query",
+      "required": false,
+      "description": "claimed (GM)",
+      "schema": {
+       "type": "string"
+      }
+     }
+    ]
+   }
+  },
+  "/api/campaigns/{id}/ground/{dropped_id}/refuse": {
+   "post": {
+    "tags": [
+     "Campaigns"
+    ],
+    "summary": "The items lying on the ground of a campaign",
+    "description": "GET lists what lies on the ground (dropped with /characters/{id}/equipment/drop or left by the GM's /gm/take-item; the GM adds ?include=claimed to see items taken away too, and pick_up_asks lists the open asks). A player asks to pick an item up with /characters/{id}/equipment/pick-up; the GM decides, since the character may be nowhere near it now: POST /ground/{dropped_id}/approve gives it to the character that asked, POST /ground/{dropped_id}/refuse {\"note\": \"you are too far away now\"} says no. GM only too: POST /ground/{dropped_id}/claim takes an item off the ground with a note ({\"note\": \"the troll took it\"}), POST /ground/{dropped_id}/return puts it back.",
+    "responses": {
+     "400": {
+      "description": "The body was refused (nothing was changed): unknown_field, wrong_type, invalid_json, body_required or id_mismatch, with the fields the request takes",
+      "content": {
+       "application/json": {
+        "schema": {
+         "properties": {
+          "error": {
+           "type": "string"
+          },
+          "fields": {
+           "items": {
+            "type": "string"
+           },
+           "type": "array"
+          },
+          "message": {
+           "type": "string"
+          },
+          "unknown": {
+           "items": {
+            "type": "string"
+           },
+           "type": "array"
+          }
+         },
+         "type": "object"
+        }
+       }
+      }
+     },
+     "200": {
+      "description": "Success",
+      "content": {
+       "application/json": {
+        "schema": {
+         "properties": {
+          "note": {
+           "type": "string"
+          },
+          "success": {
+           "type": "boolean"
+          }
+         },
+         "type": "object"
+        }
+       }
+      }
+     }
+    },
+    "parameters": [
+     {
+      "name": "dropped_id",
+      "in": "path",
+      "required": true,
+      "schema": {
+       "type": "integer"
+      },
+      "description": "The dropped's id"
+     },
+     {
+      "name": "id",
+      "in": "path",
+      "required": true,
+      "description": "Campaign ID",
+      "schema": {
+       "type": "integer"
+      }
+     },
+     {
+      "name": "include",
+      "in": "query",
+      "required": false,
+      "description": "claimed (GM)",
+      "schema": {
+       "type": "string"
+      }
+     }
+    ],
+    "requestBody": {
+     "required": false,
+     "content": {
+      "application/json": {
+       "schema": {
+        "type": "object",
+        "properties": {
+         "note": {
+          "type": "string",
+          "description": "why not (the player sees it), such as \"you are too far away now\""
+         }
+        }
+       },
+       "example": {
+        "note": "..."
+       }
+      }
+     },
+     "description": "Why it left the ground (claim)"
+    }
    }
   },
   "/api/characters/{id}/expertise": {
@@ -38123,7 +38366,7 @@
                "type": "string"
               },
               "dropped_items": {
-               "type": "string"
+               "type": "object"
               },
               "rest": {
                "type": "object"

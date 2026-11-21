@@ -9,7 +9,7 @@ import (
 )
 
 // S-CALLA-9: the GM's narration uses a character's gear: POST /api/gm/take-item takes it out of the inventory and leaves it where
-// the story put it; the player's my-turn lists it under left_behind with the pick-up request, and picking it up brings it back.
+// the story put it; the player's my-turn lists it under left_behind; a pick-up is an ask the GM approves or refuses.
 func TestPostgresGMTakeItemLeavesItWhereTheStoryPutIt(t *testing.T) {
 	testPostgres(t)
 	_, gm := pgAgent(t, "pg take gm")
@@ -55,8 +55,32 @@ func TestPostgresGMTakeItemLeavesItWhereTheStoryPutIt(t *testing.T) {
 		t.Errorf("the log doesn't say where it was left: %s", ev)
 	}
 	id := int(take["dropped_id"].(float64))
-	if c, j := pgCall(t, "POST", fmt.Sprintf("/api/characters/%d/equipment/pick-up", char), tok, map[string]interface{}{"dropped_id": id}); c != 200 || !carries() {
-		t.Errorf("pick-up: %d %v", c, j)
+	pick := func() (int, map[string]interface{}) {
+		return pgCall(t, "POST", fmt.Sprintf("/api/characters/%d/equipment/pick-up", char), tok, map[string]interface{}{"dropped_id": id})
+	}
+	ground := fmt.Sprintf("/api/campaigns/%d/ground/%d/", lobby, id)
+	// a pick-up is an ask: nothing comes back until the GM approves; a refusal is shown to the player
+	if c, j := pick(); c != 202 || carries() {
+		t.Fatalf("the ask: %d %v (carried %v)", c, j, carries())
+	}
+	if _, st := pgCall(t, "GET", fmt.Sprintf("/api/gm/status?campaign_id=%d", lobby), gm, nil); !strings.Contains(fmt.Sprint(st["pick_up_asks"]), "Blanket") {
+		t.Errorf("GM status doesn't list the ask: %v", st["pick_up_asks"])
+	}
+	if c, _ := pgCall(t, "POST", ground+"approve", tok, nil); c < 400 {
+		t.Errorf("a player approved its own pick-up: %d", c)
+	}
+	if c, j := pgCall(t, "POST", ground+"refuse", gm, map[string]interface{}{"note": "you are a mile away now"}); c != 200 || carries() {
+		t.Fatalf("refuse: %d %v", c, j)
+	}
+	if _, mt = pgCall(t, "GET", "/api/my-turn", tok, nil); !strings.Contains(fmt.Sprint(mt["left_behind"]), "the GM refused: you are a mile away now") {
+		t.Errorf("the refusal isn't shown: %v", mt["left_behind"])
+	}
+	if c, j := pgCall(t, "POST", ground+"approve", gm, nil); c != 409 || carries() {
+		t.Errorf("approve with no ask: %d %v", c, j)
+	}
+	pick()
+	if c, j := pgCall(t, "POST", ground+"approve", gm, nil); c != 200 || !carries() {
+		t.Fatalf("approve: %d %v", c, j)
 	}
 	if _, mt = pgCall(t, "GET", "/api/my-turn", tok, nil); mt["left_behind"] != nil {
 		t.Errorf("left_behind stays after the pick-up: %v", mt["left_behind"])

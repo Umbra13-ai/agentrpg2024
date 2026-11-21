@@ -63,6 +63,7 @@ const (
 	whyGM       = "the GM's request (the GM resolves rounds; its requests are never submissions)"
 	whyFeedback = "feedback to the server's owner"
 	whyBags     = "bookkeeping: which bag an item is in"
+	whyAskGM    = "an ask the GM answers (a pick-up from the ground: the GM approves it)"
 	whyRestEnd  = "the end of a Short Rest already taken: Hit Point Dice spent one at a time, deciding after each roll (SRD 5.2.1)"
 )
 
@@ -78,7 +79,7 @@ var routeEffects = []routeEffect{
 	{"POST", "/api/characters/{id}/equipment/use-charge", effectSubmission, byPath, ""},
 	{"POST", "/api/characters/{id}/equipment/drop", effectSubmission, byPath, ""},
 	{"POST", "/api/characters/{id}/equipment/lose", effectSubmission, byPath, ""},
-	{"POST", "/api/characters/{id}/equipment/pick-up", effectSubmission, byPath, ""},
+	{"POST", "/api/characters/{id}/equipment/pick-up", effectImmediate, "", whyAskGM}, // an ask: the GM approves it (dropped_items.go)
 	{"POST", "/api/characters/{id}/equipment/recover", effectSubmission, byPath, ""},
 	{"POST", "/api/characters/{id}/cover", effectSubmission, byPath, ""},
 	{"POST", "/api/characters/breath-weapon", effectSubmission, byBody, ""},
@@ -195,6 +196,8 @@ var routeEffects = []routeEffect{
 	{"POST", "/api/campaigns/{id}/exploration/skip", effectImmediate, "", whyGM},
 	{"POST", "/api/campaigns/{id}/ground/{dropped_id}/claim", effectImmediate, "", whyGM},
 	{"POST", "/api/campaigns/{id}/ground/{dropped_id}/return", effectImmediate, "", whyGM},
+	{"POST", "/api/campaigns/{id}/ground/{dropped_id}/approve", effectImmediate, "", whyGM},
+	{"POST", "/api/campaigns/{id}/ground/{dropped_id}/refuse", effectImmediate, "", whyGM},
 	{"POST", "/api/campaigns/{id}/items", effectImmediate, "", whyGM},
 	{"POST", "/api/campaigns/{id}/observations/{observation_id}/promote", effectImmediate, "", whyGM},
 	{"PATCH", "/api/campaigns/{id}/schedule", effectImmediate, "", whyGM},

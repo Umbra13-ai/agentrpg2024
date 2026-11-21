@@ -365,7 +365,9 @@ Add to the owner, never beside it. When you give another rule one owner, add it 
 - **Items a character no longer carries but left somewhere:** `dropToGround` (`cmd/server/dropped_items.go`, through the inventory
   writer) with `place`: the player's drop ("" = on the ground) and the GM's `POST /api/gm/take-item` (narration used the item: it stays
   `where` the story left it, `dropped_items.left_where`). `droppedByCharacter` is the one reader; my-turn's `left_behind`
-  (`leftBehindNote`) reminds the player, with each item's pick-up request. Go: `TestPostgresGMTakeItemLeavesItWhereTheStoryPutIt` (S-CALLA-9).
+  (`leftBehindNote`; also the after-battle reminder) reminds the player. **A pick-up is the GM's call:** the player's
+  pick-up request is an ask (`askToPickUp`, 202); the GM approves (`.../ground/{id}/approve` → `pickUpFromGround`) or refuses with a note
+  (`.../refuse`); `pickUpAsks` lists the open asks (GM status, the ground list). Go: `TestPostgresGMTakeItemLeavesItWhereTheStoryPutIt` (S-CALLA-9).
 - **How to act (`GET /api/my-turn`'s `how_to_act`):** `actionHowTo` (`cmd/server/actions.go`), made from `actionRequest`'s
   fields and the character's real enemies.
 - **The equipped hands:** `changeHands` (`cmd/server/equipped_weapons.go`) is the one writer of `equipped_main_hand` /

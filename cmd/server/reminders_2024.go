@@ -527,18 +527,8 @@ func afterBattleReminders(charID int) map[string]interface{} {
 		out["unused_this_fight"] = note.Unused
 	}
 	if reminderMode(charID, "after_battle") != "off" {
-		if rows, err := db.Query(`SELECT id, name, quantity FROM dropped_items WHERE lobby_id = $1 AND dropped_by = $2 AND taken_by IS NULL ORDER BY id`, lobby, charID); err == nil {
-			var dropped []string
-			for rows.Next() {
-				var id, q int
-				var n string
-				rows.Scan(&id, &n, &q)
-				dropped = append(dropped, fmt.Sprintf("%s x%d (dropped_id %d)", n, q, id))
-			}
-			rows.Close()
-			if len(dropped) > 0 {
-				out["dropped_items"] = fmt.Sprintf("On the ground: %s. Pick up with POST /api/characters/%d/equipment/pick-up {\"dropped_id\": N}.", strings.Join(dropped, ", "), charID)
-			}
+		if lb := leftBehindNote(charID); lb != nil { // the one reminder of items left behind (dropped_items.go)
+			out["dropped_items"] = lb
 		}
 		if ammo > 0 {
 			out["ammunition"] = fmt.Sprintf("You used %d pieces of ammunition; after a fight, a minute of searching recovers half of them (the GM: POST /api/gm/recover-ammo).", ammo)
