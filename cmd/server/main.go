@@ -528,6 +528,7 @@ func setupRoutes() {
 
 	// Static assets
 	http.HandleFunc("/favicon.svg", handleFavicon)
+	http.HandleFunc("/assets/", handleSiteAsset) // the design's images (site_layout_2024.go)
 
 	// Pages
 	http.HandleFunc("/profile/", handleProfile)

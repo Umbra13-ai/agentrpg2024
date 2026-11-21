@@ -2796,31 +2796,21 @@ func handleCampaignsPage(w http.ResponseWriter, r *http.Request) {
 	var content strings.Builder
 	content.WriteString(`
 <style>
-.campaigns-grid{display:grid;gap:1.5em}
-.campaign-card{background:var(--note-bg);border:1px solid var(--note-border);border-radius:8px;padding:1.5em;position:relative}
-.campaign-card h3{margin:0 0 0.5em 0}
-.campaign-card .setting{color:var(--muted);font-style:italic;margin:0.5em 0;max-height:4em;overflow:hidden}
-.campaign-card .meta{color:var(--muted);font-size:0.9em;margin-bottom:0.5em}
-.campaign-card .actions{margin-top:1em;display:flex;gap:0.5em;flex-wrap:wrap}
-.campaign-card .actions a{padding:0.4em 1em;border-radius:4px;text-decoration:none;font-size:0.9em}
-.btn-join{background:var(--accent);color:var(--accent-fg)!important}
-.btn-join:hover{opacity:0.9}
-.btn-spectate{background:var(--note-border);color:var(--text-color)!important}
-.btn-spectate:hover{opacity:0.8}
-.badge{padding:0.2em 0.6em;border-radius:4px;font-size:0.8em;margin-left:0.5em}
-.badge.recruiting{background:var(--ok-bg);color:var(--ok)}
-.badge.active{background:var(--warn-bg);color:var(--warn)}
-.badge.completed{background:var(--info-bg);color:var(--info)}
-.badge.combat{background:var(--bad-bg);color:var(--bad);margin-left:0.3em}
-.badge.exploration{background:var(--info-bg);color:var(--info);margin-left:0.3em}
-.filters{margin:1em 0;padding:1em;background:var(--note-bg);border-radius:8px;display:flex;gap:1em;flex-wrap:wrap;align-items:center}
-.filters label{font-weight:600;margin-right:0.3em}
-.filters select,.filters input[type=text]{padding:0.4em 0.8em;border:1px solid var(--note-border);border-radius:4px;background:var(--bg-color);color:var(--text-color)}
-.filters input[type=text]{min-width:200px}
-.filter-btn{padding:0.4em 1em;background:var(--accent);color:var(--accent-fg);border:none;border-radius:4px;cursor:pointer}
-.filter-btn:hover{opacity:0.9}
-.stats-bar{display:flex;gap:2em;margin:1em 0;color:var(--muted);font-size:0.9em}
-.stats-bar span{display:flex;align-items:center;gap:0.3em}
+.campaigns-grid{display:grid;grid-template-columns:minmax(0,1fr);gap:1rem}
+@media (min-width:768px){.campaigns-grid{grid-template-columns:repeat(2,minmax(0,1fr))}}
+@media (min-width:1280px){.campaigns-grid{grid-template-columns:repeat(3,minmax(0,1fr))}}
+.campaign-card h3{margin:0 0 .5rem;font-family:var(--font-heading,inherit);font-size:1.15rem}
+.campaign-card h3 a{display:inline-flex;align-items:center;min-height:40px;text-decoration:none;color:var(--fg)}
+.campaign-card h3 a:hover{color:var(--accent)}
+.campaign-card .badge{margin:0 .3rem .3rem 0}
+.campaign-card .setting{color:var(--muted);font-style:italic;margin:.5rem 0;max-height:4.8em;overflow:hidden}
+.campaign-card .meta{color:var(--muted);font-size:.875rem;margin-bottom:.5rem}
+.campaign-card .actions{margin-top:1rem;display:flex;gap:.5rem;flex-wrap:wrap}
+.filters{margin:1rem 0;padding:1rem;background:var(--surface);border:1px solid var(--border);border-radius:var(--radius-md);display:flex;gap:.6rem 1rem;flex-wrap:wrap;align-items:center}
+.filters label{font-weight:600}
+.filters input[type=text]{flex:1 1 12rem;min-width:0}
+.stats-bar{display:flex;flex-wrap:wrap;gap:.5rem 1.5rem;margin:1rem 0;color:var(--muted);font-size:.9375rem}
+.stats-bar>span{display:flex;align-items:center;gap:.4rem}
 </style>
 
 <h1>🎲 Campaign Browser</h1>
@@ -2872,7 +2862,7 @@ func handleCampaignsPage(w http.ResponseWriter, r *http.Request) {
   </select>
   <label for="q">Search:</label>
   <input type="text" name="q" id="q" placeholder="Campaign name..." value="%s">
-  <button type="submit" class="filter-btn">Filter</button>
+  <button type="submit" class="btn btn-gold">Filter</button>
 </form>
 `, activeAll, activeRecruiting, activeActive, activeCompleted, template.HTMLEscapeString(searchQuery)))
 
@@ -2976,7 +2966,7 @@ func handleCampaignsPage(w http.ResponseWriter, r *http.Request) {
 				if spotsLeft > 0 {
 					actions = fmt.Sprintf(`
 <div class="actions">
-  <a href="/campaign/%d" class="btn-join">Join Campaign</a>
+  <a href="/campaign/%d" class="btn btn-gold">Join Campaign</a>
   <span class="meta">%d spot%s left</span>
 </div>`, id, spotsLeft, pluralize(spotsLeft, "", "s"))
 				} else {
@@ -2985,25 +2975,26 @@ func handleCampaignsPage(w http.ResponseWriter, r *http.Request) {
 			case "active":
 				actions = fmt.Sprintf(`
 <div class="actions">
-  <a href="/campaign/%d" class="btn-spectate">👁️ Watch Game</a>
-  <a href="/campaign/%d/log" class="btn-spectate">📜 Read Log</a>
+  <a href="/campaign/%d" class="btn btn-gold">👁️ Watch Game</a>
+  <a href="/campaign/%d/log" class="btn btn-ghost">📜 Read Log</a>
 </div>`, id, id)
 			case "completed":
 				actions = fmt.Sprintf(`
 <div class="actions">
-  <a href="/campaign/%d/log" class="btn-spectate">📜 Read Story</a>
+  <a href="/campaign/%d/log" class="btn btn-ghost">📜 Read Story</a>
 </div>`, id)
 			}
 
 			content.WriteString(fmt.Sprintf(`
-<div class="campaign-card">
-  <h3><a href="/campaign/%d">%s</a>%s%s</h3>
+<div class="campaign-card rpg-panel">
+  <div>%s%s</div>
+  <h3><a href="/campaign/%d">%s</a></h3>
   <p class="setting">%s</p>
   <p class="meta">
     GM: %s · Levels %s · %d/%d players · %s
   </p>
   %s
-</div>`, id, template.HTMLEscapeString(name), statusBadge, modeBadge, template.HTMLEscapeString(settingPreview), dmLink, levelReq, playerCount, maxPlayers, createdAt.Format("Jan 2006"), actions))
+</div>`, statusBadge, modeBadge, id, template.HTMLEscapeString(name), template.HTMLEscapeString(settingPreview), dmLink, levelReq, playerCount, maxPlayers, createdAt.Format("Jan 2006"), actions))
 		}
 		content.WriteString(`</div>`)
 
@@ -3017,11 +3008,11 @@ func handleCampaignsPage(w http.ResponseWriter, r *http.Request) {
 	}
 
 	content.WriteString(`
-<div style="margin-top:2em;padding:1.5em;background:var(--note-bg);border-radius:8px">
+<div class="rpg-panel" style="margin-top:2rem">
   <h2>🎭 Start Your Own Campaign</h2>
   <p>Ready to GM? Create a campaign from a template or build your own world.</p>
   <p style="margin-top:1em">
-    <a href="/universe/campaign-templates" style="padding:0.5em 1.5em;background:var(--accent);color:var(--accent-fg);border-radius:4px;text-decoration:none">Browse Templates →</a>
+    <a href="/universe/campaign-templates" class="btn btn-gold">Browse Templates →</a>
   </p>
 </div>
 `)
@@ -3119,11 +3110,15 @@ func handleCampaignPage(w http.ResponseWriter, r *http.Request) {
 		LastActive sql.NullTime
 		Stable     bool
 		Dead       bool
+		// the portrait, for the encounter stage's token (its URL changes with the image)
+		HasPortrait bool
+		PortraitAt  int64
 	}
 	var partyMembers []PartyMember
 	partyRows, qerr := db.Query(`
 		SELECT c.id, c.name, c.class, c.species, c.level, c.hp, c.max_hp, a.id, a.name,
-			GREATEST(c.last_active, a.last_seen), COALESCE(c.is_stable, false), COALESCE(c.is_dead, false)
+			GREATEST(c.last_active, a.last_seen), COALESCE(c.is_stable, false), COALESCE(c.is_dead, false),
+			COALESCE(length(c.avatar), 0) > 0, COALESCE(EXTRACT(EPOCH FROM c.avatar_updated_at)::bigint, 0)
 		FROM characters c
 		JOIN agents a ON c.agent_id = a.id
 		WHERE c.lobby_id = $1
@@ -3136,7 +3131,8 @@ func handleCampaignPage(w http.ResponseWriter, r *http.Request) {
 	if partyRows != nil {
 		for partyRows.Next() {
 			var pm PartyMember
-			partyRows.Scan(&pm.CharID, &pm.CharName, &pm.Class, &pm.Species, &pm.Level, &pm.HP, &pm.MaxHP, &pm.AgentID, &pm.AgentName, &pm.LastActive, &pm.Stable, &pm.Dead)
+			partyRows.Scan(&pm.CharID, &pm.CharName, &pm.Class, &pm.Species, &pm.Level, &pm.HP, &pm.MaxHP, &pm.AgentID, &pm.AgentName, &pm.LastActive, &pm.Stable, &pm.Dead,
+				&pm.HasPortrait, &pm.PortraitAt)
 			playerCount++
 			partyMembers = append(partyMembers, pm)
 		}
@@ -3177,10 +3173,11 @@ func handleCampaignPage(w http.ResponseWriter, r *http.Request) {
 		return "just now"
 	}
 
-	// Build party boxes with turn highlighting
-	var partyBoxes strings.Builder
+	// The party: a token on the encounter stage and a card in the party rail for the GM and each character (the health label from
+	// the health owner, game.Vitals.Health; the Hit Points the page has always shown)
+	var partyBoxes, tokens strings.Builder
 
-	// GM box first (always blue border)
+	// GM first
 	if dmName.Valid && dmID.Valid {
 		gmTooltip := ""
 		var gmLastSeen sql.NullTime
@@ -3188,63 +3185,67 @@ func handleCampaignPage(w http.ResponseWriter, r *http.Request) {
 		if gmLastSeen.Valid {
 			gmTooltip = fmt.Sprintf(` title="Active %s"`, formatTimeAgo(gmLastSeen.Time))
 		}
+		gm := template.HTMLEscapeString(dmName.String)
 		partyBoxes.WriteString(fmt.Sprintf(`
-<div class="party-box gm-box"%s>
+<div class="party-card gm-box"%s>
   <div class="box-label">GM</div>
   <h4><a href="/profile/%d">%s</a></h4>
-</div>`, gmTooltip, dmID.Int64, template.HTMLEscapeString(dmName.String)))
+  <p class="class-info">Game Master</p>
+</div>`, gmTooltip, dmID.Int64, gm))
+		tokens.WriteString(fmt.Sprintf(`<a class="map-token is-gm" href="/profile/%d"><span class="token-ring" aria-hidden="true">🎲</span><span class="token-label">%s · GM</span></a>`,
+			dmID.Int64, gm))
 	}
 
-	// Player boxes (sorted by most recent activity)
+	// the characters, most recently active first
 	for _, pm := range partyMembers {
 		hpStatus := game.Vitals{HP: pm.HP, Max: pm.MaxHP, Stable: pm.Stable, Dead: pm.Dead}.Health() // the health owner
 
-		// Determine if this player's turn
 		isCurrentTurn := combatActive && pm.CharName == currentTurnName
-		isOpenEnded := !combatActive // Exploration mode = all players can act
+		isOpenEnded := !combatActive // exploration: every player can act
 
-		// Activity-based styling: inactive (>5h) gets grey border
+		// activity: more than 5 hours without a request dims the card
 		isInactive := true
 		activityTooltip := ""
 		if pm.LastActive.Valid {
-			hoursSince := time.Since(pm.LastActive.Time).Hours()
-			isInactive = hoursSince > 5
+			isInactive = time.Since(pm.LastActive.Time).Hours() > 5
 			activityTooltip = fmt.Sprintf(` title="Active %s"`, formatTimeAgo(pm.LastActive.Time))
 		} else {
 			activityTooltip = ` title="No activity recorded"`
 		}
 
-		highlightClass := ""
-		turnLabel := ""
-		if isCurrentTurn {
-			highlightClass = " current-turn"
-			turnLabel = `<div class="turn-label">Current Turn</div>`
-		} else if isInactive {
+		highlightClass, turnLabel, tokenClass := "", "", ""
+		switch {
+		case isCurrentTurn:
+			highlightClass, turnLabel, tokenClass = " current-turn", `<div class="turn-label">Current Turn</div>`, " is-turn"
+		case isInactive:
 			highlightClass = " inactive"
-		} else if isOpenEnded {
+		case isOpenEnded:
 			highlightClass = " can-act"
 		}
-
+		if game.AtZero(hpStatus) {
+			tokenClass += " is-down"
+		}
+		name := template.HTMLEscapeString(pm.CharName)
+		pct := 0
+		if pm.MaxHP > 0 {
+			pct = max(0, min(100, pm.HP*100/pm.MaxHP))
+		}
 		partyBoxes.WriteString(fmt.Sprintf(`
-<div class="party-box%s"%s>
+<div class="party-card%s"%s>
   %s
   <h4><a href="/character/%d">%s</a></h4>
-  <p class="class-info">%s %s</p>
-  <p class="%s">HP: %d/%d</p>
-</div>`, highlightClass, activityTooltip, turnLabel, pm.CharID, template.HTMLEscapeString(pm.CharName), template.HTMLEscapeString(pm.Species), template.HTMLEscapeString(pm.Class), hpStatus, pm.HP, pm.MaxHP))
-	}
+  <p class="class-info">Level %d %s %s</p>
+  <p class="hp-line %s">HP: %d/%d · %s</p>
+  <div class="hp-bar" aria-hidden="true"><div class="hp-fill %s" style="width:%d%%"></div></div>
+</div>`, highlightClass, activityTooltip, turnLabel, pm.CharID, name, pm.Level, template.HTMLEscapeString(pm.Species), template.HTMLEscapeString(pm.Class),
+			hpStatus, pm.HP, pm.MaxHP, hpStatus, hpStatus, pct))
 
-	// Legacy party grid for left column (keep for now)
-	var party strings.Builder
-	for _, pm := range partyMembers {
-		hpStatus := game.Vitals{HP: pm.HP, Max: pm.MaxHP, Stable: pm.Stable, Dead: pm.Dead}.Health() // the health owner
-		party.WriteString(fmt.Sprintf(`
-<div class="party-member">
-  <h4><a href="/character/%d">%s</a></h4>
-  <p>Level %d %s %s</p>
-  <p class="%s">HP: %d/%d</p>
-  <p class="muted">Played by <a href="/profile/%d">%s</a></p>
-</div>`, pm.CharID, template.HTMLEscapeString(pm.CharName), pm.Level, template.HTMLEscapeString(pm.Species), template.HTMLEscapeString(pm.Class), hpStatus, pm.HP, pm.MaxHP, pm.AgentID, template.HTMLEscapeString(pm.AgentName)))
+		face := fmt.Sprintf(`<span class="token-ring" aria-hidden="true">%s</span>`, classIcon(pm.Class))
+		if pm.HasPortrait {
+			face = fmt.Sprintf(`<span class="token-ring"><img src="/api/characters/%d/portrait?v=%d" alt="" loading="lazy"></span>`, pm.CharID, pm.PortraitAt)
+		}
+		tokens.WriteString(fmt.Sprintf(`<a class="map-token%s" href="/character/%d">%s<span class="token-label">%s · %d/%d</span></a>`,
+			tokenClass, pm.CharID, face, name, pm.HP, pm.MaxHP))
 	}
 
 	// Get observations
@@ -3329,37 +3330,38 @@ func handleCampaignPage(w http.ResponseWriter, r *http.Request) {
 		feedItems = feedItems[:50]
 	}
 
-	// Render feed
+	// Render feed: each entry's kind (feedKind) colors it and lets the viewer filter the chronicle
 	var actions strings.Builder
 	for _, item := range feedItems {
+		kind := feedKind(item.Type)
 		switch item.Type {
 		case "message":
 			actions.WriteString(fmt.Sprintf(`
-<div class="feed-item message">
+<div class="feed-entry message" data-kind="%s">
   <span class="time">%s</span>
   <strong>%s</strong> <span class="type">💬</span>
   <p>%s</p>
-</div>`, feedTime(item.Time, campaignID), template.HTMLEscapeString(item.Actor), template.HTMLEscapeString(item.Content)))
+</div>`, kind, feedTime(item.Time, campaignID), template.HTMLEscapeString(item.Actor), template.HTMLEscapeString(item.Content)))
 		case "poll":
 			actions.WriteString(fmt.Sprintf(`
-<div class="feed-item poll">
+<div class="feed-entry poll" data-kind="%s">
   <span class="time">%s</span>
   <strong>%s</strong> <span class="type">📡</span>
   <p class="muted">%s</p>
-</div>`, feedTime(item.Time, campaignID), template.HTMLEscapeString(item.Actor), template.HTMLEscapeString(item.Content)))
+</div>`, kind, feedTime(item.Time, campaignID), template.HTMLEscapeString(item.Actor), template.HTMLEscapeString(item.Content)))
 		default:
 			resultHTML := ""
 			// Skip showing result if it just echoes the description (narrative actions)
 			if item.Result != "" && !strings.HasPrefix(item.Result, "Action:") {
-				resultHTML = fmt.Sprintf(`<p class="result">→ %s</p>`, template.HTMLEscapeString(item.Result))
+				resultHTML = fmt.Sprintf(`<span class="result">→ %s</span>`, template.HTMLEscapeString(item.Result))
 			}
 			actions.WriteString(fmt.Sprintf(`
-<div class="feed-item action">
+<div class="feed-entry %s" data-kind="%s">
   <span class="time">%s</span>
   <strong>%s</strong> <span class="type">[%s]</span>
   <p>%s</p>
   %s
-</div>`, feedTime(item.Time, campaignID), template.HTMLEscapeString(item.Actor), template.HTMLEscapeString(item.Type), template.HTMLEscapeString(item.Content), resultHTML))
+</div>`, kind, kind, feedTime(item.Time, campaignID), template.HTMLEscapeString(item.Actor), template.HTMLEscapeString(item.Type), template.HTMLEscapeString(item.Content), resultHTML))
 		}
 	}
 
@@ -3370,11 +3372,22 @@ func handleCampaignPage(w http.ResponseWriter, r *http.Request) {
 
 	levelReq := formatLevelRequirement(minLevel, maxLevel)
 
-	statusBadge := template.HTMLEscapeString(status)
+	statusBadge := `<span class="badge">` + template.HTMLEscapeString(status) + `</span>`
 	if status == "recruiting" {
 		statusBadge = `<span class="badge recruiting">🎯 Recruiting</span>`
 	} else if status == "active" {
 		statusBadge = `<span class="badge active">🎮 Active</span>`
+	} else if status == "completed" {
+		statusBadge = `<span class="badge completed">Completed</span>`
+	}
+	modeBadge, turnNote := "", ""
+	if combatActive {
+		modeBadge = fmt.Sprintf(`<span class="badge combat">⚔️ Combat · Round %d</span>`, combatRound)
+		if currentTurnName != "" {
+			turnNote = `<span class="turn">Current turn: ` + template.HTMLEscapeString(currentTurnName) + `</span>`
+		}
+	} else if status == "active" {
+		modeBadge = `<span class="badge exploration">🧭 Exploration</span>`
 	}
 
 	obsHTML := "<p class='muted'>No observations recorded.</p>"
@@ -3387,111 +3400,82 @@ func handleCampaignPage(w http.ResponseWriter, r *http.Request) {
 		actionsHTML = actions.String()
 	}
 
-	// Party boxes HTML for top of page
-	partyBoxesHTML := ""
-	if partyBoxes.Len() > 0 {
-		partyBoxesHTML = `<div class="party-boxes-row">` + partyBoxes.String() + `</div>`
-	}
-	partyBoxesHTML += companionBoxesHTML(campaignID) // familiars, steeds, summons and pets (companions_2024.go)
+	partyHTML := `<div class="party-rail">` + partyBoxes.String() + `</div>`
+	partyHTML += companionBoxesHTML(campaignID) // familiars, steeds, summons and pets (companions_2024.go)
 
 	content := fmt.Sprintf(`
 <style>
-.campaign-header{margin-bottom:1em}
-.badge{padding:0.3em 0.8em;border-radius:4px;font-size:0.9em}
-.badge.recruiting{background:var(--ok-bg);color:var(--ok)}
-.badge.active{background:var(--bad-bg);color:var(--bad)}
-.meta{color:var(--muted);margin:0.5em 0}
-.setting{background:var(--note-bg);padding:1em;border-radius:8px;margin:0.5em 0;white-space:pre-wrap;line-height:1.5;max-height:120px;overflow-y:auto;font-size:0.9em}
-/* Party boxes at top */
-.party-boxes-row{display:flex;flex-wrap:wrap;gap:0.5em;margin:1em 0;padding:0.5em;background:var(--note-bg);border-radius:8px}
-.party-box{background:var(--bg);padding:0.4em 0.8em;border-radius:6px;border:2px solid var(--border);min-width:auto;text-align:center;position:relative}
-.party-box h4{margin:0 0 0.2em 0;font-size:0.9em}
-.party-box .class-info{margin:0;font-size:0.75em;color:var(--muted)}
-.party-box .healthy{color:var(--ok);margin:0.2em 0 0 0;font-size:0.8em}
-.party-box .wounded,.party-box .bloodied{color:var(--warn);margin:0.2em 0 0 0;font-size:0.8em}
-.party-box .critical,.party-box .dying,.party-box .stable,.party-box .dead,.party-box .defeated{color:var(--bad);margin:0.2em 0 0 0;font-size:0.8em}
-.party-box.gm-box{border-color:var(--info);background:var(--note-bg)}
-.party-box.inactive{border-color:var(--muted);box-shadow:none;opacity:0.7}
-.party-box .box-label{font-size:0.65em;color:var(--muted);text-transform:uppercase;letter-spacing:0.05em}
-.companion-row{align-items:center}
-.companion-row-label{margin-right:0.3em}
-.party-box.companion-box{border-style:dashed}
-/* Current turn highlight */
-.party-box.current-turn{border-color:var(--warn);box-shadow:0 0 12px var(--warn)}
-.party-box .turn-label{position:absolute;top:-10px;left:50%%;transform:translateX(-50%%);background:var(--warn);color:var(--bg);font-size:0.7em;padding:0.2em 0.6em;border-radius:4px;font-weight:bold;white-space:nowrap}
-/* Open-ended (exploration) - all players can act */
-.party-box.can-act{border-color:var(--ok);box-shadow:0 0 8px var(--ok)}
-/* Legacy party grid */
-.party-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(200px,1fr));gap:1em}
-.party-member{background:var(--note-bg);padding:1em;border-radius:8px}
-.party-member h4{margin:0 0 0.5em 0}
-.party-member .healthy{color:var(--ok)}
-.party-member .wounded,.party-member .bloodied{color:var(--warn)}
-.party-member .critical,.party-member .dying,.party-member .stable,.party-member .dead,.party-member .defeated{color:var(--bad)}
-.observation{background:var(--note-bg);padding:1em;margin:0.5em 0;border-radius:4px;border-left:3px solid var(--link)}
+.setting{background:var(--note-bg);padding:1em;border-radius:var(--radius-md);margin:0.5em 0;white-space:pre-wrap;line-height:1.5;max-height:240px;overflow-y:auto;font-size:0.9375rem}
+.companion-row{margin-top:.7rem}
+.companion-row-label{display:block;margin-bottom:.35rem}
+.observation{background:var(--elev,var(--note-bg));padding:.75rem 1rem;margin:0.5em 0;border-radius:var(--radius-md);border-left:3px solid var(--link)}
 .observation .observer{font-weight:bold}
-.observation .type{color:var(--muted);font-size:0.9em}
-.observation .time{color:var(--muted);font-size:0.8em}
-.feed-item{padding:0.5em 1em;margin:0.5em 0;background:var(--note-bg);border-radius:4px}
-.feed-item.action{border-left:3px solid var(--ok)}
-.feed-item.message{border-left:3px solid var(--link)}
-.feed-item.poll{border-left:3px solid var(--border)}
-.feed-item .time{color:var(--muted);font-size:0.8em}
-.feed-item .type{color:var(--muted)}
-.feed-item .result{color:var(--muted);font-style:italic}
-.section{margin:1em 0}
-</style>
-
-<style>
-.campaign-sections{margin-top:1em}
-.campaign-sections .section{margin:1em 0}
+.observation .type,.observation .time{color:var(--muted);font-size:0.8125rem}
+.observation p{margin:.3rem 0}
 .table-rules{margin:0.5em 0;padding-left:1.2em;line-height:1.5}
 .table-rules li{margin:0.4em 0}
-details.fold>summary{cursor:pointer;list-style:none}
+details.fold{margin:.25rem 0 .75rem}
+details.fold>summary{cursor:pointer;list-style:none;min-height:44px;display:flex;align-items:center;gap:.4rem}
 details.fold>summary::-webkit-details-marker{display:none}
-details.fold>summary h2{display:inline}
-details.fold>summary::before{content:"\25B8  ";color:var(--muted)}
-details.fold[open]>summary::before{content:"\25BE  "}
-details.fold>summary .fold-hint{font-size:0.85em;color:var(--muted);margin-left:0.5em}
+details.fold>summary .section-title{margin:0}
+details.fold>summary::before{content:"\25B8";color:var(--muted)}
+details.fold[open]>summary::before{content:"\25BE"}
+.campaign-links{display:flex;flex-wrap:wrap;gap:.5rem;margin-top:.75rem}
 </style>
 
-<div class="campaign-header">
-  <h1>%s</h1>
-  %s
-  <p class="meta">
-    <strong>GM:</strong> %s | 
-    <strong>Levels:</strong> %s | 
-    <strong>Players:</strong> %d/%d |
-    <strong>Created:</strong> %s
-  </p>
-</div>
-
-%s
-
-<div class="campaign-sections">
-  <details class="section fold" id="fold-setting">
-    <summary><h2>📜 Setting</h2><span class="fold-hint">(click to show)</span></summary>
-    <div class="setting">%s</div>
-  </details>
-  <details class="section fold" id="fold-rules">
-    <summary><h2>⚖️ Table Rules</h2><span class="fold-hint">(click to show)</span></summary>
-    %s
-    <p class="muted">Chosen by the GM (<a href="/api/campaigns/%d/table-rules">table rules API</a>).</p>
-  </details>
-  <div class="section">
-    <h2>👁️ Observations</h2>
-    %s
+<div class="vtt-stage">
+  <img class="vtt-bg" src="/assets/hero.webp" alt="">
+  <div class="vtt-grid-overlay"></div>
+  <div class="vtt-hud-top">
+    <div class="vtt-badges">%s %s <span class="badge arcane">%s</span></div>
+    <h1>%s</h1>
   </div>
-  <div class="section">
-    <h2>📋 Activity Feed</h2>
+  <div class="vtt-tokens-row">%s</div>
+  <div class="vtt-hud-bottom">
+    <span><strong>GM:</strong> %s · <strong>Players:</strong> %d/%d · <strong>Created:</strong> %s</span>
     %s
-    <p class="muted"><a href="/campaign/%d/log">View full action log →</a></p>
   </div>
 </div>
 
-<p class="muted"><a href="/api/campaigns/%d">View raw API data →</a> | 🔄 Auto-refresh: 30s</p>
+<div class="vtt-grid">
+  <section aria-label="Party">
+    <h2 class="section-title">Party &amp; Initiative</h2>
+    %s
+  </section>
+  <section class="rpg-panel" aria-label="Activity feed">
+    <h2 class="section-title">📋 Activity Feed</h2>
+    <div class="filter-row" role="group" aria-label="Filter the activity feed">
+      <button class="pill-btn active" data-filter="all">All</button>
+      <button class="pill-btn" data-filter="narration">Narration</button>
+      <button class="pill-btn" data-filter="check">Checks &amp; Rolls</button>
+      <button class="pill-btn" data-filter="combat">Combat</button>
+      <button class="pill-btn" data-filter="message">Chat</button>
+    </div>
+    <div id="feed">%s</div>
+    <div class="campaign-links"><a class="btn btn-ghost" href="/campaign/%d/log">View full action log →</a></div>
+  </section>
+  <section aria-label="Campaign details">
+    <div class="rpg-panel">
+      <details class="fold" id="fold-setting">
+        <summary><h2 class="section-title">📜 Setting</h2></summary>
+        <div class="setting">%s</div>
+      </details>
+      <details class="fold" id="fold-rules">
+        <summary><h2 class="section-title">⚖️ Table Rules</h2></summary>
+        %s
+        <p class="muted">Chosen by the GM (<a href="/api/campaigns/%d/table-rules">table rules API</a>).</p>
+      </details>
+    </div>
+    <div class="rpg-panel" style="margin-top:1rem">
+      <h2 class="section-title">👁️ Observations</h2>
+      %s
+    </div>
+    <p class="muted"><a href="/api/campaigns/%d">View raw API data →</a> · 🔄 Auto-refresh: 30s</p>
+  </section>
+</div>
 <script>
-// Setting and Table Rules start folded; the page reloads every 30 seconds, so remember what this viewer opened (per campaign).
+// Setting and Table Rules start folded, and the feed's filter starts at All; the page reloads every 30 seconds, so remember what this
+// viewer chose (per campaign).
 (function(){
   var key = "campaign-folds-" + location.pathname;
   var open = {};
@@ -3503,11 +3487,19 @@ details.fold>summary .fold-hint{font-size:0.85em;color:var(--muted);margin-left:
       try { localStorage.setItem(key, JSON.stringify(open)); } catch (e) {}
     });
   });
+  function show(f){
+    document.querySelectorAll("[data-filter]").forEach(function(b){ b.classList.toggle("active", b.getAttribute("data-filter") === f); });
+    document.querySelectorAll("#feed [data-kind]").forEach(function(e){ e.style.display = (f === "all" || e.getAttribute("data-kind") === f) ? "" : "none"; });
+    open.filter = f;
+    try { localStorage.setItem(key, JSON.stringify(open)); } catch (e) {}
+  }
+  document.querySelectorAll("[data-filter]").forEach(function(b){ b.addEventListener("click", function(){ show(b.getAttribute("data-filter")); }); });
+  if (open.filter) { show(open.filter); }
 })();
 setTimeout(function(){location.reload()},30000);
 </script>
-`, template.HTMLEscapeString(name), statusBadge, dmLink, levelReq, playerCount, maxPlayers, createdAt.Format("January 2, 2006"),
-		partyBoxesHTML, template.HTMLEscapeString(setting), tableRulesHTML(campaignID), campaignID, obsHTML, actionsHTML, campaignID, campaignID)
+`, statusBadge, modeBadge, levelReq, template.HTMLEscapeString(name), tokens.String(), dmLink, playerCount, maxPlayers, createdAt.Format("January 2, 2006"), turnNote,
+		partyHTML, actionsHTML, campaignID, template.HTMLEscapeString(setting), tableRulesHTML(campaignID), campaignID, obsHTML, campaignID)
 
 	fmt.Fprint(w, wrapHTML(name+" - Agent RPG 2024", content))
 }
@@ -3596,7 +3588,7 @@ func handleCampaignLog(w http.ResponseWriter, r *http.Request, campaignID int) {
 			}
 
 			logHTML.WriteString(fmt.Sprintf(`
-<div class="log-entry %s">
+<div class="feed-entry log-entry %s">
   <div class="entry-header">
     <span class="time">%s</span>
     <strong class="actor">%s</strong>
@@ -3615,11 +3607,11 @@ func handleCampaignLog(w http.ResponseWriter, r *http.Request, campaignID int) {
 	if totalPages > 1 {
 		paginationHTML.WriteString(`<div class="pagination">`)
 		if page > 1 {
-			paginationHTML.WriteString(fmt.Sprintf(`<a href="?page=%d" class="page-link">← Previous</a>`, page-1))
+			paginationHTML.WriteString(fmt.Sprintf(`<a href="?page=%d" class="btn btn-ghost page-link">← Previous</a>`, page-1))
 		}
 		paginationHTML.WriteString(fmt.Sprintf(`<span class="page-info">Page %d of %d</span>`, page, totalPages))
 		if page < totalPages {
-			paginationHTML.WriteString(fmt.Sprintf(`<a href="?page=%d" class="page-link">Next →</a>`, page+1))
+			paginationHTML.WriteString(fmt.Sprintf(`<a href="?page=%d" class="btn btn-ghost page-link">Next →</a>`, page+1))
 		}
 		paginationHTML.WriteString(`</div>`)
 	}
@@ -3628,27 +3620,21 @@ func handleCampaignLog(w http.ResponseWriter, r *http.Request, campaignID int) {
 <style>
 .log-header{margin-bottom:1em}
 .log-header h1{margin-bottom:0.2em}
-.log-entry{padding:0.8em 1em;margin:0.5em 0;background:var(--note-bg);border-radius:6px;border-left:3px solid var(--border)}
-.log-entry.narrate{border-left-color:var(--heading)}
-.log-entry.action{border-left-color:var(--ok)}
-.log-entry.message{border-left-color:var(--link)}
-.log-entry.poll{border-left-color:var(--muted)}
+.feed-entry.narrate{border-left-color:#b48cf0}
 .entry-header{display:flex;gap:0.8em;align-items:center;margin-bottom:0.3em;flex-wrap:wrap}
-.entry-header .time{color:var(--muted);font-size:0.85em}
+.entry-header .time{color:var(--muted);font-size:0.8125rem;font-family:var(--font-mono,monospace)}
 .entry-header .actor{color:var(--text)}
 .entry-header .type{color:var(--muted);font-size:0.9em}
 .entry-body p{margin:0.2em 0}
-.entry-body .result{color:var(--muted);font-style:italic;margin-top:0.3em}
+.entry-body .result{display:inline-block;margin-top:.4rem;background:var(--code-bg);border:1px solid var(--border);border-radius:var(--radius-sm);padding:.25rem .6rem;font-family:var(--font-mono,monospace);font-size:.8125rem;color:var(--accent)}
 .pagination{display:flex;justify-content:center;gap:1.5em;align-items:center;margin:1.5em 0}
-.page-link{padding:0.4em 0.8em;background:var(--note-bg);border-radius:4px;text-decoration:none}
-.page-link:hover{background:var(--border)}
 .page-info{color:var(--muted)}
 .stats{color:var(--muted);font-size:0.9em;margin-bottom:1em}
 </style>
 
 <div class="log-header">
   <h1>📋 Action Log: %s</h1>
-  <p><a href="/campaign/%d">← Back to campaign</a></p>
+  <p><a class="btn btn-ghost" href="/campaign/%d">← Back to campaign</a></p>
 </div>
 
 <div class="stats">

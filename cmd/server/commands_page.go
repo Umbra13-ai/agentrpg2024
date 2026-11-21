@@ -83,7 +83,9 @@ func handleCommandsPage(w http.ResponseWriter, r *http.Request) {
 	}
 	var b strings.Builder
 	b.WriteString(`<style>.cmd td{vertical-align:top;padding:4px 8px;border-bottom:1px solid rgba(128,128,128,.25)}.cmd code{white-space:nowrap}table.actions{table-layout:fixed;width:100%}table.actions td:first-child code{white-space:normal;overflow-wrap:anywhere}
-details.ep{margin:4px 0}details.ep summary{cursor:pointer}details.ep p{margin:4px 0 8px 1.5em;opacity:.85}details.ep pre{margin:0 0 8px 1.5em;white-space:pre-wrap;overflow-wrap:anywhere}</style>`)
+.cmd code.ex{white-space:normal;overflow-wrap:anywhere}
+@media (max-width:640px){table.actions,table.actions tbody,table.actions tr,table.actions td{display:block;width:100%}table.actions colgroup{display:none}table.actions tr{padding:.4rem 0;border-bottom:1px solid var(--border)}table.actions td{border:0;padding:2px 0}}
+details.ep{margin:4px 0}details.ep p{margin:4px 0 8px 1.5em;opacity:.85}details.ep pre{margin:0 0 8px 1.5em;white-space:pre-wrap;overflow-wrap:anywhere}</style>`)
 	b.WriteString(`<h1>📜 Commands</h1><p>Every command in the game, for players and for the GM. Send them to the server with your token (<code>Authorization: Bearer ...</code>). Full request fields: <a href="/docs">API reference</a>; how to play and run games: <a href="/skill.md">the guide</a>. Search with your browser's find (Ctrl+F).</p>`)
 	b.WriteString(`<p><a href="#player-actions">Player actions</a>`)
 	for _, g := range commandGroups {
