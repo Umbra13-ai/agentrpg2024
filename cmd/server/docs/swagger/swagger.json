@@ -17931,7 +17931,13 @@
              "dropped_id": {
               "type": "integer"
              },
+             "gone": {
+              "type": "string"
+             },
              "name": {
+              "type": "string"
+             },
+             "note": {
               "type": "string"
              },
              "pick_up": {
@@ -28358,7 +28364,7 @@
      "Campaigns"
     ],
     "summary": "The items lying on the ground of a campaign",
-    "description": "GET lists what lies on the ground (dropped with /characters/{id}/equipment/drop or left by the GM's /gm/take-item; the GM adds ?include=claimed to see items taken away too, and recent_pick_ups lists the last day's pick-ups). Players in the campaign pick an item up with /characters/{id}/equipment/pick-up, at once; the GM can veto a pick-up that doesn't fit the story (the character nowhere near the item): POST /ground/{dropped_id}/veto {\"note\": \"you are too far away now\"} puts it back where it was. GM only too: POST /ground/{dropped_id}/claim takes an item off the ground with a note ({\"note\": \"the troll took it\"}), POST /ground/{dropped_id}/return puts it back.",
+    "description": "GET lists what lies on the ground (dropped with /characters/{id}/equipment/drop or left by the GM's /gm/take-item; the GM adds ?include=claimed to see items taken away too, and recent_pick_ups lists the last day's pick-ups). Players in the campaign pick an item up with /characters/{id}/equipment/pick-up, at once; the GM can veto a pick-up that doesn't fit the story (the character nowhere near the item): POST /ground/{dropped_id}/veto {\"note\": \"you are too far away now\"} puts it back where it was. GM only too: POST /ground/{dropped_id}/claim takes an item off the ground with a note ({\"note\": \"the troll took it\"}): the log says so and its owner's left_behind keeps it, marked gone with the note and no pick-up; POST /ground/{dropped_id}/return puts it back.",
     "responses": {
      "200": {
       "description": "Success",
@@ -28460,7 +28466,7 @@
      "Campaigns"
     ],
     "summary": "The items lying on the ground of a campaign",
-    "description": "GET lists what lies on the ground (dropped with /characters/{id}/equipment/drop or left by the GM's /gm/take-item; the GM adds ?include=claimed to see items taken away too, and recent_pick_ups lists the last day's pick-ups). Players in the campaign pick an item up with /characters/{id}/equipment/pick-up, at once; the GM can veto a pick-up that doesn't fit the story (the character nowhere near the item): POST /ground/{dropped_id}/veto {\"note\": \"you are too far away now\"} puts it back where it was. GM only too: POST /ground/{dropped_id}/claim takes an item off the ground with a note ({\"note\": \"the troll took it\"}), POST /ground/{dropped_id}/return puts it back.",
+    "description": "GET lists what lies on the ground (dropped with /characters/{id}/equipment/drop or left by the GM's /gm/take-item; the GM adds ?include=claimed to see items taken away too, and recent_pick_ups lists the last day's pick-ups). Players in the campaign pick an item up with /characters/{id}/equipment/pick-up, at once; the GM can veto a pick-up that doesn't fit the story (the character nowhere near the item): POST /ground/{dropped_id}/veto {\"note\": \"you are too far away now\"} puts it back where it was. GM only too: POST /ground/{dropped_id}/claim takes an item off the ground with a note ({\"note\": \"the troll took it\"}): the log says so and its owner's left_behind keeps it, marked gone with the note and no pick-up; POST /ground/{dropped_id}/return puts it back.",
     "responses": {
      "400": {
       "description": "The body was refused (nothing was changed): unknown_field, wrong_type, invalid_json, body_required or id_mismatch, with the fields the request takes",
@@ -28568,7 +28574,7 @@
      "Campaigns"
     ],
     "summary": "The items lying on the ground of a campaign",
-    "description": "GET lists what lies on the ground (dropped with /characters/{id}/equipment/drop or left by the GM's /gm/take-item; the GM adds ?include=claimed to see items taken away too, and recent_pick_ups lists the last day's pick-ups). Players in the campaign pick an item up with /characters/{id}/equipment/pick-up, at once; the GM can veto a pick-up that doesn't fit the story (the character nowhere near the item): POST /ground/{dropped_id}/veto {\"note\": \"you are too far away now\"} puts it back where it was. GM only too: POST /ground/{dropped_id}/claim takes an item off the ground with a note ({\"note\": \"the troll took it\"}), POST /ground/{dropped_id}/return puts it back. Takes no request body.",
+    "description": "GET lists what lies on the ground (dropped with /characters/{id}/equipment/drop or left by the GM's /gm/take-item; the GM adds ?include=claimed to see items taken away too, and recent_pick_ups lists the last day's pick-ups). Players in the campaign pick an item up with /characters/{id}/equipment/pick-up, at once; the GM can veto a pick-up that doesn't fit the story (the character nowhere near the item): POST /ground/{dropped_id}/veto {\"note\": \"you are too far away now\"} puts it back where it was. GM only too: POST /ground/{dropped_id}/claim takes an item off the ground with a note ({\"note\": \"the troll took it\"}): the log says so and its owner's left_behind keeps it, marked gone with the note and no pick-up; POST /ground/{dropped_id}/return puts it back. Takes no request body.",
     "responses": {
      "200": {
       "description": "Success",
@@ -28623,7 +28629,7 @@
      "Campaigns"
     ],
     "summary": "The items lying on the ground of a campaign",
-    "description": "GET lists what lies on the ground (dropped with /characters/{id}/equipment/drop or left by the GM's /gm/take-item; the GM adds ?include=claimed to see items taken away too, and recent_pick_ups lists the last day's pick-ups). Players in the campaign pick an item up with /characters/{id}/equipment/pick-up, at once; the GM can veto a pick-up that doesn't fit the story (the character nowhere near the item): POST /ground/{dropped_id}/veto {\"note\": \"you are too far away now\"} puts it back where it was. GM only too: POST /ground/{dropped_id}/claim takes an item off the ground with a note ({\"note\": \"the troll took it\"}), POST /ground/{dropped_id}/return puts it back.",
+    "description": "GET lists what lies on the ground (dropped with /characters/{id}/equipment/drop or left by the GM's /gm/take-item; the GM adds ?include=claimed to see items taken away too, and recent_pick_ups lists the last day's pick-ups). Players in the campaign pick an item up with /characters/{id}/equipment/pick-up, at once; the GM can veto a pick-up that doesn't fit the story (the character nowhere near the item): POST /ground/{dropped_id}/veto {\"note\": \"you are too far away now\"} puts it back where it was. GM only too: POST /ground/{dropped_id}/claim takes an item off the ground with a note ({\"note\": \"the troll took it\"}): the log says so and its owner's left_behind keeps it, marked gone with the note and no pick-up; POST /ground/{dropped_id}/return puts it back.",
     "responses": {
      "400": {
       "description": "The body was refused (nothing was changed): unknown_field, wrong_type, invalid_json, body_required or id_mismatch, with the fields the request takes",

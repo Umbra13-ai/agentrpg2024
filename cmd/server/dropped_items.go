@@ -278,23 +278,35 @@ func recentPickUps(lobbyID int) []map[string]interface{} {
 // droppedByCharacter lists what a character dropped that is still on the ground.
 func droppedByCharacter(charID int) []map[string]interface{} {
 	out := []map[string]interface{}{}
-	rows, err := db.Query(`SELECT id, name, quantity, dropped_at, COALESCE(left_where, '') FROM dropped_items
-		WHERE dropped_by = $1 AND taken_by IS NULL AND taken_note IS NULL ORDER BY id`, charID)
+	// an item the GM claimed off the ground ("the cultists took it") stays on the list with the GM's note and no pick-up: the player
+	// keeps track of where its gear went (playtest I-CALLA-20). A vetoed pick-up's old row has a taker and is left out.
+	rows, err := db.Query(`SELECT id, name, quantity, dropped_at, COALESCE(left_where, ''), COALESCE(taken_note, '') FROM dropped_items
+		WHERE dropped_by = $1 AND taken_by IS NULL ORDER BY id`, charID)
 	if err != nil {
 		return out
 	}
 	defer rows.Close()
 	for rows.Next() {
 		var id, qty int
-		var name, where string
-		var at time.Time
-		if rows.Scan(&id, &name, &qty, &at, &where) == nil {
-			if where == "" {
-				where = "on the ground"
-			}
-			out = append(out, map[string]interface{}{"dropped_id": id, "name": name, "quantity": qty, "dropped_at": at.Format(time.RFC3339),
-				"where": where, "pick_up": fmt.Sprintf(`POST /api/characters/%d/equipment/pick-up {"dropped_id": %d}`, charID, id)})
+		var name, where, claimed string
+		var at sql.NullTime
+		if rows.Scan(&id, &name, &qty, &at, &where, &claimed) != nil {
+			continue
 		}
+		if where == "" {
+			where = "on the ground"
+		}
+		it := map[string]interface{}{"dropped_id": id, "name": name, "quantity": qty, "where": where}
+		if at.Valid { // a row saved without the time still lists
+			it["dropped_at"] = at.Time.Format(time.RFC3339)
+		}
+		if claimed != "" {
+			it["gone"] = claimed
+			it["note"] = "The GM says it is no longer there: it can't be picked up."
+		} else {
+			it["pick_up"] = fmt.Sprintf(`POST /api/characters/%d/equipment/pick-up {"dropped_id": %d}`, charID, id)
+		}
+		out = append(out, it)
 	}
 	return out
 }
@@ -316,7 +328,7 @@ func leftBehindNote(charID int) map[string]interface{} {
 		return nil
 	}
 	return map[string]interface{}{"items": items,
-		"note": "These items are no longer in your inventory. If you want to keep them, pick them up (each item's pick_up request) while your character is still where they were left; the GM can undo a pick-up that doesn't fit the story."}
+		"note": "These items are no longer in your inventory. If you want to keep them, pick them up (each item's pick_up request) while your character is still where they were left; the GM can undo a pick-up that doesn't fit the story. An item marked gone was taken away in the story: the GM's words say where."}
 }
 
 func handleCharacterDrop(w http.ResponseWriter, r *http.Request, charID int) {
@@ -385,7 +397,7 @@ func handleCharacterPickUp(w http.ResponseWriter, r *http.Request, charID int) {
 // handleCampaignGround lists and manages the items lying on the ground of a campaign.
 // handleCampaignGround godoc
 // @Summary The items lying on the ground of a campaign
-// @Description GET lists what lies on the ground (dropped with /characters/{id}/equipment/drop or left by the GM's /gm/take-item; the GM adds ?include=claimed to see items taken away too, and recent_pick_ups lists the last day's pick-ups). Players in the campaign pick an item up with /characters/{id}/equipment/pick-up, at once; the GM can veto a pick-up that doesn't fit the story (the character nowhere near the item): POST /ground/{dropped_id}/veto {"note": "you are too far away now"} puts it back where it was. GM only too: POST /ground/{dropped_id}/claim takes an item off the ground with a note ({"note": "the troll took it"}), POST /ground/{dropped_id}/return puts it back.
+// @Description GET lists what lies on the ground (dropped with /characters/{id}/equipment/drop or left by the GM's /gm/take-item; the GM adds ?include=claimed to see items taken away too, and recent_pick_ups lists the last day's pick-ups). Players in the campaign pick an item up with /characters/{id}/equipment/pick-up, at once; the GM can veto a pick-up that doesn't fit the story (the character nowhere near the item): POST /ground/{dropped_id}/veto {"note": "you are too far away now"} puts it back where it was. GM only too: POST /ground/{dropped_id}/claim takes an item off the ground with a note ({"note": "the troll took it"}): the log says so and its owner's left_behind keeps it, marked gone with the note and no pick-up; POST /ground/{dropped_id}/return puts it back.
 // @Tags Campaigns
 // @Param id path int true "Campaign ID"
 // @Param include query string false "claimed (GM)"
@@ -436,6 +448,7 @@ func handleCampaignGround(w http.ResponseWriter, r *http.Request, campaignID int
 				writeJSONStatus(w, http.StatusConflict, map[string]interface{}{"error": "not_on_the_ground"})
 				return
 			}
+			logGroundChange(campaignID, did, "is gone: "+note)
 			writeJSONStatus(w, http.StatusOK, map[string]interface{}{"success": true, "note": "It is off the ground but kept on record. Use /return to put it back."})
 		case "return":
 			if !noFields(w, r) {
@@ -450,6 +463,7 @@ func handleCampaignGround(w http.ResponseWriter, r *http.Request, campaignID int
 				writeJSONStatus(w, http.StatusConflict, map[string]interface{}{"error": "nothing_to_return"})
 				return
 			}
+			logGroundChange(campaignID, did, "is back where it was left")
 			writeJSONStatus(w, http.StatusOK, map[string]interface{}{"success": true})
 		case "veto": // the GM undoes a pick-up that doesn't fit the story: the item goes back where it was (S-CALLA-9)
 			var req struct {
@@ -532,4 +546,22 @@ func handleCampaignGround(w http.ResponseWriter, r *http.Request, campaignID int
 		reply["recent_pick_ups"] = recentPickUps(campaignID) // what the GM can still veto (S-CALLA-9)
 	}
 	writeJSONStatus(w, http.StatusOK, reply)
+}
+
+// logGroundChange: the GM's claim or return of an item on the ground is written to the log, so its owner and the party read what
+// happened to it (playtest I-CALLA-20: a claimed item vanished from the player's view with no word).
+func logGroundChange(campaignID, droppedID int, what string) {
+	var name, owner, where string
+	if db.QueryRow(`SELECT d.name, COALESCE(c.name, ''), COALESCE(d.left_where, '') FROM dropped_items d LEFT JOIN characters c ON c.id = d.dropped_by
+		WHERE d.id = $1`, droppedID).Scan(&name, &owner, &where) != nil {
+		return
+	}
+	if where == "" {
+		where = "on the ground"
+	}
+	line := fmt.Sprintf("%s (left %s", name, where)
+	if owner != "" {
+		line += " by " + owner
+	}
+	writeAction(db, campaignID, 0, "ground", line+") "+what, "")
 }

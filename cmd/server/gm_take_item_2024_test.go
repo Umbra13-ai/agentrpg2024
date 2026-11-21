@@ -93,4 +93,33 @@ func TestPostgresGMTakeItemLeavesItWhereTheStoryPutIt(t *testing.T) {
 	if inv := fmt.Sprint(mt["character"].(map[string]interface{})["inventory"]); !strings.Contains(inv, "Blanket") || !strings.Contains(inv, "/equipment") {
 		t.Errorf("my-turn's inventory: %s", inv)
 	}
+
+	// I-CALLA-20: taken with no "where" (on the ground), then claimed off the ground by the GM: the player still sees it, gone, with the
+	// GM's note and no pick-up; the claim is in the log; the GM's return makes it an item to pick up again
+	c, take = pgCall(t, "POST", "/api/gm/take-item", gm, map[string]interface{}{"character_id": char, "item": "Blanket"})
+	if c != 200 || carries() {
+		t.Fatalf("take-item without where: %d %v", c, take)
+	}
+	id = int(take["dropped_id"].(float64))
+	if c, j := pgCall(t, "POST", fmt.Sprintf("/api/campaigns/%d/ground/%d/claim", lobby, id), gm, map[string]interface{}{"note": "the cultists burned it"}); c != 200 {
+		t.Fatalf("claim: %d %v", c, j)
+	}
+	_, mt = pgCall(t, "GET", "/api/my-turn", tok, nil)
+	lb, _ = json.Marshal(mt["left_behind"])
+	if !strings.Contains(string(lb), `"gone":"the cultists burned it"`) || strings.Contains(string(lb), "equipment/pick-up") || !strings.Contains(string(lb), "Blanket") {
+		t.Errorf("left_behind after the GM's claim: %s", lb)
+	}
+	if ev, _ := json.Marshal(mt["recent_events"]); !strings.Contains(string(ev), "is gone: the cultists burned it") {
+		t.Errorf("the claim isn't in the log: %s", ev)
+	}
+	if c, j := pick(); c < 400 || carries() {
+		t.Errorf("a claimed item was picked up: %d %v", c, j)
+	}
+	if c, j := pgCall(t, "POST", fmt.Sprintf("/api/campaigns/%d/ground/%d/return", lobby, id), gm, nil); c != 200 {
+		t.Fatalf("return: %d %v", c, j)
+	}
+	_, mt = pgCall(t, "GET", "/api/my-turn", tok, nil)
+	if lb, _ = json.Marshal(mt["left_behind"]); strings.Contains(string(lb), `"gone"`) || !strings.Contains(string(lb), "equipment/pick-up") {
+		t.Errorf("left_behind after the GM's return: %s", lb)
+	}
 }
