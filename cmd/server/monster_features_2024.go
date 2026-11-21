@@ -64,6 +64,9 @@ var (
 	rechargeRe      = regexp.MustCompile(`\(Recharge (\d)(?:[–-]6)?\)`)
 	regenRe         = regexp.MustCompile(`regains (\d+) Hit Points at the start of each of its turns`)
 	regenBlockRe    = regexp.MustCompile(`takes ([A-Z][a-z]+) or ([A-Z][a-z]+) damage, this trait doesn`)
+	// "The troll dies only if it starts its turn with 0 Hit Points and doesn't regenerate": at 0 Hit Points it keeps its turn and
+	// regenerates; it dies at a turn start at 0 that brings no regeneration (the Acid or Fire block, a form that can't regain Hit Points)
+	regenFromZeroRe = regexp.MustCompile(`(?i)dies only if it starts its turn with 0 Hit Points and doesn['’]t regenerate`)
 	startAuraRe     = regexp.MustCompile(`(?:any|each) (enemy|creature|Beast or Humanoid)[^.]*?starts its turn (?:in the aura|in an? (\d+)-foot Emanation|within (\d+) feet)`)
 	endAuraRe       = regexp.MustCompile(`At the end of each of the [^,]+ turns, each creature( of the [^ ]+ choice)? in an? (\d+)-foot Emanation originating from the [^ ]+ takes (\d+) \(([^)]+)\) ([A-Za-z]+) damage`)
 	legendaryOnceRe = regexp.MustCompile(`can’t take this action again until the start of its next turn|can't take this action again until the start of its next turn`)
@@ -452,11 +455,21 @@ func monsterFeaturesTurnStart(lobbyID, id int, name string) []string {
 				continue
 			}
 			hp, maxHP := asInt(e["hp"]), asInt(e["max_hp"])
+			fromZero := regenFromZeroRe.MatchString(t.Text)
+			dies := func(why string) { // it started its turn at 0 and didn't regenerate: it is dead (noTurnFor skips it from now on)
+				editCombatant(lobbyID, id, func(e map[string]interface{}) { e["regen_dead"] = true })
+				log = append(log, fmt.Sprintf("%s doesn't regenerate (%s) and dies: it started its turn with 0 Hit Points.", name, why))
+			}
 			switch {
+			case fromZero && hp <= 0 && e["regen_dead"] == true:
 			case s.RegenBlocked:
-				log = append(log, fmt.Sprintf("%s doesn't regenerate this turn (it took %s).", name, regenBlockTypes(t.Text)))
+				if fromZero && hp <= 0 {
+					dies("it took " + regenBlockTypes(t.Text))
+				} else {
+					log = append(log, fmt.Sprintf("%s doesn't regenerate this turn (it took %s).", name, regenBlockTypes(t.Text)))
+				}
 				s.RegenBlocked, changed = false, true
-			case hp >= 1 && hp < maxHP:
+			case hp < maxHP && (hp >= 1 || fromZero):
 				n, _ := strconv.Atoi(m[1])
 				before, after, err := healMonster(lobbyID, id, n) // the monster Hit Point owner (monster_hp_2024.go)
 				switch {
@@ -464,6 +477,8 @@ func monsterFeaturesTurnStart(lobbyID, id int, name string) []string {
 					log = append(log, fmt.Sprintf("%s's regeneration could not be applied (the server could not read its form's traits).", name))
 				case after.HP > before.HP:
 					log = append(log, fmt.Sprintf("%s regenerates %d Hit Points (%s).", name, after.HP-before.HP, t.Name))
+				case fromZero && hp <= 0:
+					dies("it can't regain Hit Points")
 				default: // the form forbids regaining Hit Points (a Construct's or Undead's trait)
 					log = append(log, fmt.Sprintf("%s doesn't regenerate: it can't regain Hit Points.", name))
 				}
@@ -743,6 +758,19 @@ func auraOfAuthority(lobbyID, monsterID int) bool {
 		a, ok1 := mp.token(cid)
 		b, ok2 := mp.token(monsterID)
 		if ok1 && ok2 && tokenDistanceFeet(a, b) <= 10 {
+			return true
+		}
+	}
+	return false
+}
+
+// regeneratesFromZero: the stat block's Regeneration says it dies only if it starts its turn at 0 Hit Points and doesn't regenerate.
+func regeneratesFromZero(meta *monsterMeta) bool {
+	if meta == nil {
+		return false
+	}
+	for _, t := range meta.Traits {
+		if regenRe.MatchString(t.Text) && regenFromZeroRe.MatchString(t.Text) {
 			return true
 		}
 	}

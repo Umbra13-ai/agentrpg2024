@@ -380,7 +380,7 @@ func TestPostgresMonsterAttacksMonster(t *testing.T) {
 		t.Fatalf("a stale hit was corrected (hp %d, was %d, %q): %s", vit("Mvm Victim").HP, hpHealed, condsOf("Mvm Victim"), pr)
 	}
 	// the same hit cannot be answered twice: no second refund, no second removal
-	if pr := parryNow(); !strings.Contains(pr, "no character has hit") || vit("Mvm Victim").HP != hpHealed {
+	if pr := parryNow(); !strings.Contains(pr, "no attack has hit") || vit("Mvm Victim").HP != hpHealed {
 		t.Fatalf("a hit was answered twice (hp %d): %s", vit("Mvm Victim").HP, pr)
 	}
 	// duplicate Reaction after a clean correction: the first restores, the second finds no hit and changes nothing

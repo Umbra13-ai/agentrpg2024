@@ -381,6 +381,13 @@ var saveSourceRows = []saveSource{
 
 	// ---- Advantage: monsters
 	{saveAdv, "Aura of Authority", func(c *saveCtx) (bool, string) { return yes(c.saver < 0 && auraOfAuthority(c.lobby, c.saver)) }}, // Hobgoblin Captain
+	{saveAdv, "", func(c *saveCtx) (bool, string) { // Bloodied Frenzy: the saver's own trait (rollTraitAdvantage)
+		if c.saver == 0 || (c.saver > 0 && !isCompanionCombatID(c.saver)) {
+			return false, ""
+		}
+		name := rollTraitAdvantage(c.lobby, c.saver, true, false, 0)
+		return name != "", name
+	}},
 	{saveAdv, "Magic Resistance", func(c *saveCtx) (bool, string) { // against spells and other magical effects
 		if !c.spell && !c.magical {
 			return yes(false)

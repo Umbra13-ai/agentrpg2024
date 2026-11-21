@@ -239,6 +239,13 @@ var attackSources = []attackSource{
 				!creatureSeesInLighting(c.lobby, c.target, monsterLightingAt(c.lobby, c.attacker), c.distanceFeet())))
 	}},
 	{true, "Aura of Authority", func(c *attackCtx) (bool, string) { return yes(c.attacker < 0 && auraOfAuthority(c.lobby, c.attacker)) }}, // Hobgoblin Captain
+	{true, "", func(c *attackCtx) (bool, string) { // Blood Frenzy, Bloodied Fury, Bloodied Frenzy: the attacker's own trait (rollTraitAdvantage)
+		if c.attacker == 0 || (c.attacker > 0 && !isCompanionCombatID(c.attacker)) {
+			return false, ""
+		}
+		name := rollTraitAdvantage(c.lobby, c.attacker, false, c.melee, c.target)
+		return name != "", name
+	}},
 	{true, "it is attached to the target", func(c *attackCtx) (bool, string) { // "While attached to a target, it ... has Advantage on its attack rolls" (the attach owner's rider, monster_attach_2024.go)
 		if c.attacker == 0 || c.target == 0 {
 			return false, ""
