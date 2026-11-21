@@ -810,6 +810,18 @@ func resolveMonsterActionByNameAt(r *http.Request, lobbyID int, point []int, mon
 	return resolveMonsterActionByName(r, lobbyID, monster, action, target, targetIDs, apply, use)
 }
 
+// monsterEntryRefusal: why the monster can't use this entry now (a Recharge entry not recharged, the monster Incapacitated), or "".
+func monsterEntryRefusal(lobbyID, id int, entry srdMonsterEntry) string {
+	base := stripUsage(entry.Name)
+	if rechargeRe.MatchString(entry.Name) && containsStr(loadMonsterState(lobbyID, id).RechargeSpent, base) {
+		return fmt.Sprintf("%s's %s hasn't recharged yet (it rolls at the start of each of its turns).", creatureName(lobbyID, id), base)
+	}
+	if monsterIncapacitated(lobbyID, id) {
+		return creatureName(lobbyID, id) + " is Incapacitated and can't act."
+	}
+	return ""
+}
+
 // resolveMonsterActionByName resolves a stat block action that is not a plain attack (a saving throw effect, a spell, a Recharge
 // action) for gm/narrate. handled is false when the action is an attack (the attack code handles it) or unknown.
 // use is the GM's choice where the entry needs one (Command's word; Claw or Tail).
@@ -835,14 +847,23 @@ func resolveMonsterActionByName(r *http.Request, lobbyID int, monster, action, t
 	if !ok {
 		return "", false, ""
 	}
+	if why := monsterEntryRefusal(lobbyID, id, entry); why != "" {
+		return "", true, why
+	}
+	if why := replaceRefusal(entry, use); why != "" { // a "use" the entry's replacement sentence doesn't offer (monster_replace_2024.go)
+		return "", true, why
+	}
 	s := loadMonsterState(lobbyID, id)
 	base := stripUsage(entry.Name)
 	recharge := rechargeRe.MatchString(entry.Name)
-	if recharge && containsStr(s.RechargeSpent, base) {
-		return "", true, fmt.Sprintf("%s's %s hasn't recharged yet (it rolls at the start of each of its turns).", creatureName(lobbyID, id), base)
-	}
-	if monsterIncapacitated(lobbyID, id) {
-		return "", true, creatureName(lobbyID, id) + " is Incapacitated and can't act."
+	if rule, ok := replaceRuleOf(entry.Text); ok && strings.EqualFold(base, "Multiattack") {
+		if o, ok := rule.option(use); ok { // the attacks less the replaced ones, then the option
+			text, why := resolveMultiattackReplacement(r, lobbyID, id, meta, monster, rule, o, target, targetIDs, apply)
+			if why != "" {
+				return "", true, why
+			}
+			return text, true, ""
+		}
 	}
 	if kind == "reaction" { // Parry, Protective Magic, Split ... (monster_reactions_2024.go, F224)
 		text, handled, why := resolveMonsterReaction(r, lobbyID, id, meta, entry, target, targetIDs, apply)

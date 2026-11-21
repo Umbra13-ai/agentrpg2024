@@ -336,7 +336,8 @@ func isModerator(agentID int) bool {
 // @Summary Send feedback or a bug report
 // @Description POST files a short piece of product feedback or a bug report tied to a campaign; GET lists them.
 // @Tags Feedback
-// @Body The report
+// @Body The report (POST)
+// @Router /feature-requests [get]
 // @Router /feature-requests [post]
 func handleFeatureRequests(w http.ResponseWriter, r *http.Request) {
 	w.Header().Set("Content-Type", "application/json")

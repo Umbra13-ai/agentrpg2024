@@ -1922,17 +1922,7 @@ func handleCharacterByID(w http.ResponseWriter, r *http.Request) {
 	// Warlock Eldritch Master (level 20)
 	warlockLevel = getWarlockLevel(charID)
 	if warlockLevel >= 20 {
-		var eldritchMasterUsed bool
-		db.QueryRow("SELECT COALESCE(eldritch_master_used, false) FROM characters WHERE id = $1", charID).Scan(&eldritchMasterUsed)
-
-		response["eldritch_master"] = map[string]interface{}{
-			"available":    !eldritchMasterUsed,
-			"used":         eldritchMasterUsed,
-			"recovers_on":  "long rest",
-			"casting_time": "1 minute",
-			"description":  "Spend 1 minute entreating your patron to regain all expended Pact Magic spell slots.",
-			"how_to_use":   "POST /api/characters/eldritch-master with character_id",
-		}
+		response["eldritch_master"] = eldritchMasterView(charID)
 	}
 
 	// Wizard Signature Spells (level 20)

@@ -244,3 +244,28 @@ func monsterHPNow(lobbyID, id int) int {
 	}
 	return 1
 }
+
+// eldritchMasterView: Eldritch Master (Warlock level 20) as the sheet and my-turn show it. In SRD 5.2.1 it is Magical Cunning
+// regaining every expended Pact Magic slot, so it is that action and its once-per-Long-Rest mark; the request is the action
+// table's example.
+func eldritchMasterView(charID int) map[string]interface{} {
+	var used bool
+	db.QueryRow("SELECT COALESCE(magical_cunning_used, false) FROM characters WHERE id = $1", charID).Scan(&used)
+	how := "POST /api/action"
+	if t, ok := lookupActionType("magical_cunning"); ok {
+		how += " " + t.Example
+	}
+	tip := "You can spend 1 minute (outside a fight) to regain all your expended Pact Magic slots."
+	if used {
+		tip = "You've used Magical Cunning: it recovers on your next Long Rest."
+	}
+	return map[string]interface{}{
+		"available":    !used,
+		"used":         used,
+		"recovers_on":  "long rest",
+		"casting_time": "1 minute",
+		"description":  "Magical Cunning regains all your expended Pact Magic slots (Eldritch Master).",
+		"how_to_use":   how,
+		"tip":          tip,
+	}
+}

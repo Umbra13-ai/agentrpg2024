@@ -157,7 +157,7 @@ func resolveMonsterAttack(r *http.Request, campaignID int, monster, action, targ
 			}
 			if strings.EqualFold(n, action) || (pass == 1 && strings.EqualFold(n, stripUsage(action))) {
 				if strings.EqualFold(stripUsage(a.Name), "Multiattack") {
-					chosen = multiattackPlan(a.Desc, actions)
+					chosen = withoutReplaced(campaignID, multiattackPlan(a.Desc, actions)) // less what a replacement option takes (monster_replace_2024.go)
 				} else {
 					chosen = []monsterActionRow{a}
 				}

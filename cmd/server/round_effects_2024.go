@@ -197,6 +197,8 @@ var routeEffects = []routeEffect{
 	{"POST", "/api/campaigns/{id}/ground/{dropped_id}/return", effectImmediate, "", whyGM},
 	{"POST", "/api/campaigns/{id}/ground/{dropped_id}/veto", effectImmediate, "", whyGM},
 	{"POST", "/api/campaigns/{id}/items", effectImmediate, "", whyGM},
+	{"PUT", "/api/campaigns/{id}/items/{slug}", effectImmediate, "", whyGM},
+	{"DELETE", "/api/campaigns/{id}/items/{slug}", effectImmediate, "", whyGM},
 	{"POST", "/api/campaigns/{id}/observations/{observation_id}/promote", effectImmediate, "", whyGM},
 	{"PATCH", "/api/campaigns/{id}/schedule", effectImmediate, "", whyGM},
 	{"PATCH", "/api/campaigns/{id}/levels", effectImmediate, "", whyGM},

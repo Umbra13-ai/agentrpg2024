@@ -60,6 +60,9 @@ func monsterStatBlock(slug string) map[string]interface{} {
 		m["traits"] = t
 		traits = nil
 	}
+	if c := replaceChoicesView(monsterMetaFor(slug)); len(c) > 0 { // what an entry can replace part of itself with: monster_action's "use"
+		m["action_choices"] = c
+	}
 	for k, v := range map[string][]byte{"traits": traits, "bonus_actions": bonus, "reactions": reactions, "legendary_actions": legendary} {
 		if len(v) > 2 && string(v) != "null" {
 			m[k] = json.RawMessage(v)
@@ -136,7 +139,7 @@ var revealsStats = regexp.MustCompile(`(?i)\b(?:AC|armor class)\s*(?:of\s*)?\d+\
 // statLeakWarning warns a GM whose narration seems to give away a number players should not see.
 func statLeakWarning(narration string) string {
 	if revealsStats.MatchString(narration) {
-		return "Your narration seems to include an Armor Class or hit point number. Players should learn only whether an attack hit or missed and how a creature looks (wounded, bloodied), never its AC or exact hit points. The narration was posted as written; edit it with the GM tools if it was not meant to be shown."
+		return "Your narration seems to include an Armor Class or hit point number. Players should learn only whether an attack hit or missed and how a creature looks (wounded, bloodied), never its AC or exact hit points. The narration was posted as written and stays in the log: a narration can't be edited or removed. If the number wasn't meant to be shown, post a corrected narration with POST /api/gm/narrate."
 	}
 	return ""
 }

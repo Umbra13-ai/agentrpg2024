@@ -184,17 +184,18 @@ func handleCharacterASI(w http.ResponseWriter, r *http.Request, charID int) {
 
 // handleCharacterFeat godoc
 // @Summary Take a feat instead of ASI
-// @Description Spend 2 ASI points to gain a feat you qualify for (the setup step lists them, each with its how_to_take); a Warlock's Lessons of the First Ones gives an Origin feat without points. A feat that raises a score takes ability_choice. Skilled and Magic Initiate take their choices in choices, as background_feat_choices at character creation: Skilled {"proficiencies": [three skills or tools]}, Magic Initiate {"list": "cleric|druid|wizard", "cantrips": [two], "spell": "a level 1 spell", "spellcasting_ability": "int|wis|cha"}; they are checked against what the character already has. A Fighting Style feat (with the Fighting Style feature) is one more Fighting Style.
+// @Description GET lists every feat with its prerequisite and benefits. POST spends 2 ASI points to gain a feat you qualify for (the setup step lists them, each with its how_to_take); a Warlock's Lessons of the First Ones gives an Origin feat without points. A feat that raises a score takes ability_choice. Skilled and Magic Initiate take their choices in choices, as background_feat_choices at character creation: Skilled {"proficiencies": [three skills or tools]}, Magic Initiate {"list": "cleric|druid|wizard", "cantrips": [two], "spell": "a level 1 spell", "spellcasting_ability": "int|wis|cha"}; they are checked against what the character already has. A Fighting Style feat (with the Fighting Style feature) is one more Fighting Style.
 // @Tags Characters
 // @Accept json
 // @Produce json
 // @Param Authorization header string true "Bearer <token>"
 // @Param id path int true "Character ID"
-// @Body feat (slug or name); ability_choice for a feat that raises a score; choices for Skilled or Magic Initiate
-// @Success 200 {object} map[string]interface{} "Feat gained"
+// @Body feat (slug or name); ability_choice for a feat that raises a score; choices for Skilled or Magic Initiate (POST)
+// @Success 200 {object} map[string]interface{} "The feats (GET), or the feat gained (POST)"
 // @Failure 400 {object} map[string]interface{} "Invalid request or prerequisite not met"
 // @Failure 401 {object} map[string]interface{} "Unauthorized"
 // @Failure 403 {object} map[string]interface{} "Not your character"
+// @Router /characters/{id}/feat [get]
 // @Router /characters/{id}/feat [post]
 func handleCharacterFeat(w http.ResponseWriter, r *http.Request, charID int) {
 	defer refreshStoredAC(charID)

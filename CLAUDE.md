@@ -420,10 +420,20 @@ Add to the owner, never beside it. When you give another rule one owner, add it 
   the GM's stat block marks each trait as applied by the server or by the GM (`traitsForGM`). A row marked `Aura` acts on its own timing:
   the GM's `automatic_traits` list (`auraTraits`) and the auras switch read those rows (`TestAuraTraitsComeFromTheTable`). A new trait with mechanics is a
   row here plus its rule in the owner it belongs to (an attack source, a save source, a turn hook).
+  **An entry that can replace part of itself** ("It can replace one attack with a use of Sleep Breath", the Pit Fiend's Hold Monster
+  in place of one Fireball): `replaceRuleOf` (`cmd/server/monster_replace_2024.go`) reads the sentence; monster_action's `use` picks
+  an option, `replaceRefusal` refuses any other word before anything is rolled, `resolveMultiattackReplacement` / `withoutReplaced`
+  make a Multiattack's attacks less the replaced ones and then the option, the spell branch of `resolveMonsterEffectText` casts the
+  option in place of one copy, and the GM's stat block lists them (`action_choices`, `replaceChoicesView`). **Narrate runs the
+  monster action first:** a refused or unknown one records nothing, the narration included (feedback log 69).
+  `TestPostgresReplaceRulesReadEverySRDEntry`, `TestPostgresNarrateRunsTheMonsterActionFirst`.
 - **Reading the action log:** `readActions` (`cmd/server/action_log_2024.go`) with `actionFilter`; `actionRecord.view` is the one JSON
   form of a row and `cursorTime` the one way a feed shows its time (every fraction of a second, so `?since=` the last record's
   `created_at` returns only later ones). The feed, spectate, the web feed and log, GM status, my-turn, the nudge and a character's
   profile read through it; every column may be NULL (narration has no character). `TestNoOtherActionLogReader` checks.
+  **A list read in pages** (the feed's actions and messages, the party chat) is `logPage` (`readLogPage` reads since / before /
+  limit; `readActionPage`, `readMessagePage`, `pageOf`): the newest page by default, before pages back, since reads forward, every
+  page oldest first with `more` (playtest I-GM-25: the feed always gave the oldest 100). `TestPostgresFeedPagesFromTheNewest`.
   **Writing it:** `writeAction(db or tx, campaign, character, type, description, result)`, the only INSERT (0 is NULL);
   `TestNoOtherActionLogWriter` checks.
 - **A database failure is never reported as something else** (`cmd/server/db_errors_2024.go`, `db_guard_2024.go`): only
@@ -480,7 +490,9 @@ Add to the owner, never beside it. When you give another rule one owner, add it 
   script from the request type (`example_body`) unless the hand entry gives one; `/commands` shows it under each command and the GM
   guide points there (feedback log 11; `TestEveryRequestBodyHasAnExample`). `/commands` lists every operation of the reference (a tag no `commandGroups` row names goes under Other;
   `TestCommandsPageListsEveryCommand`). **The guides** (`docs/*.md`): `TestDocsNameRealRequests` fails on a
-  request they name that the reference doesn't have and on a body field they show that the request doesn't take;
+  request they name that the reference doesn't have and on a body field they show that the request doesn't take; **the server's own
+  reply words** are held to the same check by `TestServerRepliesNameRealRequests` (every string literal of `cmd/server` that names
+  a request; both read `requestChecker`, playtest I-GM-18: GM status named `POST /api/gm/add-monster`, which never existed);
   `TestCheckInNoteInGuides` keeps `checkInNote` between the check-in markers of the heartbeat and experience guides
   (`START_UPDATE=1` rewrites them); `TestDocsTableRuleDefaults` checks the table rule defaults they name. Lists the server defines
   (routes, fields, action types) are generated or pointed to (/commands, /docs), not copied.

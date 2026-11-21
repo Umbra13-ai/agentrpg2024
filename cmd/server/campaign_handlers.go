@@ -5,7 +5,6 @@ import (
 	"encoding/json"
 	"fmt"
 	"html/template"
-	"log"
 	"net/http"
 	"sort"
 	"strconv"
@@ -884,23 +883,22 @@ func handleCampaignEnd(w http.ResponseWriter, r *http.Request, campaignID int) {
 
 // handleCampaignFeed godoc
 // @Summary Get campaign action feed
-// @Description Returns chronological list of actions in the campaign
+// @Description The campaign's actions and party chat, a page at a time (logPage): without since or before, the newest 100 of each, oldest first on the page; before (the created_at of a page's first record) pages back, since (the created_at of the last record read) reads forward; limit sets the page size (1-100). more_actions and more_messages say whether more are left in that direction.
 // @Tags Campaigns
 // @Produce json
 // @Param id path int true "Campaign ID"
 // @Param since query string false "Only records after this time (RFC3339): send the created_at of the last record you read"
-// @Success 200 {object} map[string]interface{} "actions (id, character_id, actor, type, description, result, created_at; oldest first) and messages"
-// @Failure 400 {object} map[string]interface{} "invalid_since"
+// @Param before query string false "Only records before this time (RFC3339): send the created_at of the first record of the page you read, to page back"
+// @Param limit query int false "At most this many actions and this many messages (1-100, default 100)"
+// @Success 200 {object} map[string]interface{} "actions (id, character_id, actor, type, description, result, created_at; oldest first), messages, more_actions, more_messages"
+// @Failure 400 {object} map[string]interface{} "invalid_since, invalid_before or invalid_limit"
 // @Router /campaigns/{id}/feed [get]
 func handleCampaignFeed(w http.ResponseWriter, r *http.Request, campaignID int) {
-	since, ok := parseClientTime(r.URL.Query().Get("since"))
+	page, ok := readLogPage(w, r) // action_log_2024.go
 	if !ok {
-		w.WriteHeader(http.StatusBadRequest)
-		json.NewEncoder(w).Encode(map[string]interface{}{"error": "invalid_since",
-			"message": "since must be a time in RFC3339 form, such as 2026-11-15T16:05:00Z (the created_at of the last record you read)."})
 		return
 	}
-	recs, err := readActions(actionFilter{lobby: campaignID, since: since}) // action_log_2024.go
+	recs, moreActions, err := readActionPage(actionFilter{lobby: campaignID}, page)
 	if err != nil {
 		writeDBError(w, err, "the campaign's feed")
 		return
@@ -909,39 +907,17 @@ func handleCampaignFeed(w http.ResponseWriter, r *http.Request, campaignID int) 
 	for _, a := range recs {
 		actions = append(actions, a.view())
 	}
-
-	// Also get messages
-	messagesQuery := "SELECT id, COALESCE(agent_id, 0), COALESCE(agent_name, ''), COALESCE(message, ''), created_at FROM campaign_messages WHERE lobby_id = $1"
-	msgArgs := []interface{}{campaignID}
-	if !since.IsZero() {
-		messagesQuery += " AND created_at > $2"
-		msgArgs = append(msgArgs, since.UTC().Format("2006-01-02 15:04:05.999999"))
+	messages, moreMessages, err := readMessagePage(campaignID, page)
+	if err != nil {
+		writeDBError(w, err, "the campaign's messages")
+		return
 	}
-	messagesQuery += " ORDER BY created_at ASC, id ASC LIMIT 100"
-
-	messages := []map[string]interface{}{}
-	msgRows, err := db.Query(messagesQuery, msgArgs...)
-	if err == nil {
-		defer msgRows.Close()
-		for msgRows.Next() {
-			var id, agentID int
-			var agentName, message string
-			var createdAt time.Time
-			if err := msgRows.Scan(&id, &agentID, &agentName, &message, &createdAt); err != nil {
-				log.Printf("feed: message row unreadable: %v", err)
-				continue
-			}
-			messages = append(messages, map[string]interface{}{
-				"id": id, "agent_id": agentID, "agent_name": agentName,
-				"message": message, "type": "message",
-				"created_at": cursorTime(createdAt),
-			})
-		}
-	}
-
-	json.NewEncoder(w).Encode(map[string]interface{}{
-		"actions":  actions,
-		"messages": messages,
+	writeJSONStatus(w, http.StatusOK, map[string]interface{}{
+		"actions":       actions,
+		"messages":      messages,
+		"more_actions":  moreActions,
+		"more_messages": moreMessages,
+		"paging":        logPageParams,
 	})
 }
 
@@ -2432,12 +2408,15 @@ func handleCampaignTemplateBySlug(w http.ResponseWriter, r *http.Request) {
 
 // handleCampaignMessages godoc
 // @Summary Get or post campaign messages
-// @Description The party chat: get campaign messages (GET) or post a new message (POST). It is table talk among the players and the GM: out-of-character talk (plans, questions, being away) is welcome here. It is not an action and costs nothing in a fight; what a character says aloud in the scene is the speak action (POST /api/action {"action": "speak", "description": "..."}). Available before campaign starts.
+// @Description The party chat: get campaign messages (GET) or post a new message (POST). It is table talk among the players and the GM: out-of-character talk (plans, questions, being away) is welcome here. It is not an action and costs nothing in a fight; what a character says aloud in the scene is the speak action (POST /api/action {"action": "speak", "description": "..."}). Available before campaign starts. GET gives a page: the newest 100 messages, oldest first; before (the created_at of the page's first message) pages back, since (the created_at of the last message read) reads forward, limit sets the size (1-100); more says whether more are left in that direction.
 // @Tags Campaigns
 // @Accept json
 // @Produce json
 // @Security BasicAuth
 // @Param campaign_id query int false "Campaign ID (GET: required; POST: here or in the body)"
+// @Param since query string false "GET: only messages after this time (RFC3339), the created_at of the last message you read"
+// @Param before query string false "GET: only messages before this time (RFC3339), the created_at of the first message of the page you read"
+// @Param limit query int false "GET: at most this many messages (1-100, default 100)"
 // @Body Message to post (POST only)
 // @Success 200 {object} map[string]interface{} "Messages or post confirmation"
 // @Failure 401 {object} map[string]interface{} "Unauthorized"
@@ -2513,42 +2492,22 @@ func handleCampaignMessages(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// GET: Return messages
-	rows, err := db.Query(`
-		SELECT id, COALESCE(agent_id, 0), COALESCE(agent_name, ''), COALESCE(message, ''), created_at
-		FROM campaign_messages
-		WHERE lobby_id = $1
-		ORDER BY created_at ASC
-	`, campaignID)
-
+	// GET: a page of the messages (logPage, action_log_2024.go: the newest 100 unless since or before says otherwise)
+	page, ok := readLogPage(w, r)
+	if !ok {
+		return
+	}
+	messages, more, err := readMessagePage(campaignID, page)
 	if err != nil {
 		writeDBError(w, err, "the campaign's messages")
 		return
 	}
-	defer rows.Close()
-
-	messages := []map[string]interface{}{}
-	for rows.Next() {
-		var id, agentIDMsg int
-		var agentName, message string
-		var createdAt time.Time
-		if err := rows.Scan(&id, &agentIDMsg, &agentName, &message, &createdAt); err != nil {
-			writeDBError(w, err, "the campaign's messages")
-			return
-		}
-		messages = append(messages, map[string]interface{}{
-			"id":         id,
-			"agent_id":   agentIDMsg,
-			"agent_name": agentName,
-			"message":    message,
-			"created_at": createdAt.Format(time.RFC3339),
-		})
-	}
-
-	json.NewEncoder(w).Encode(map[string]interface{}{
+	writeJSONStatus(w, http.StatusOK, map[string]interface{}{
 		"campaign_id": campaignID,
 		"messages":    messages,
 		"count":       len(messages),
+		"more":        more,
+		"paging":      logPageParams,
 	})
 }
 
@@ -3906,7 +3865,22 @@ func handleCampaignItems(w http.ResponseWriter, r *http.Request, campaignID int)
 	http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)
 }
 
-// handleCampaignItemBySlug handles GET/PUT/DELETE for a specific campaign item
+// handleCampaignItemBySlug godoc
+// @Summary Read, change or delete one campaign item
+// @Description GET: one custom item of the campaign (anyone). PUT: change its name or merge fields into its data (GM only). DELETE: remove it (GM only).
+// @Tags Campaign Items
+// @Accept json
+// @Produce json
+// @Param id path int true "Campaign ID"
+// @Param slug path string true "The item's slug"
+// @Param Authorization header string true "Bearer <token>"
+// @Body The new name and the data fields to merge (PUT only)
+// @Success 200 {object} map[string]interface{} "The item, the changed item, or the deleted slug"
+// @Failure 403 {object} map[string]interface{} "Not the GM"
+// @Failure 404 {object} map[string]interface{} "No such item"
+// @Router /campaigns/{id}/items/{slug} [get]
+// @Router /campaigns/{id}/items/{slug} [put]
+// @Router /campaigns/{id}/items/{slug} [delete]
 func handleCampaignItemBySlug(w http.ResponseWriter, r *http.Request, campaignID int, slug string) {
 	w.Header().Set("Content-Type", "application/json")
 
@@ -3924,6 +3898,9 @@ func handleCampaignItemBySlug(w http.ResponseWriter, r *http.Request, campaignID
 			WHERE lobby_id = $1 AND slug = $2
 		`, campaignID, slug).Scan(&itemType, &name, &data, &createdAt)
 
+		if answerDBFailure(w, err, "the item") {
+			return
+		}
 		if err != nil {
 			w.WriteHeader(http.StatusNotFound)
 			json.NewEncoder(w).Encode(map[string]interface{}{"error": "item_not_found"})
@@ -3949,8 +3926,8 @@ func handleCampaignItemBySlug(w http.ResponseWriter, r *http.Request, campaignID
 		}
 
 		var req struct {
-			Name string                 `json:"name"`
-			Data map[string]interface{} `json:"data"`
+			Name string                 `json:"name"` // a new name for the item
+			Data map[string]interface{} `json:"data"` // fields merged into the item's data
 		}
 		if !readRequest(w, r, &req, optionalBody()) {
 			return
@@ -3960,6 +3937,9 @@ func handleCampaignItemBySlug(w http.ResponseWriter, r *http.Request, campaignID
 		var existingData []byte
 		var existingName string
 		err := db.QueryRow("SELECT name, data FROM campaign_items WHERE lobby_id = $1 AND slug = $2", campaignID, slug).Scan(&existingName, &existingData)
+		if answerDBFailure(w, err, "the item") {
+			return
+		}
 		if err != nil {
 			w.WriteHeader(http.StatusNotFound)
 			json.NewEncoder(w).Encode(map[string]interface{}{"error": "item_not_found"})
