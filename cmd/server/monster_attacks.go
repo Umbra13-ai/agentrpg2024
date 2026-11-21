@@ -724,6 +724,9 @@ func resolveMonsterAttack(r *http.Request, campaignID int, monster, action, targ
 		}
 		rolled, out, rollNote := atk.roll()
 		rollNote = blockNote + rollNote
+		if found && apply && attackerID < 0 && !isCompanionCombatID(attackerID) {
+			rollNote += endWardsOnOffenseOf(campaignID, attackerID) // its attack roll ends its Invisibility and Sanctuary (after the roll they helped)
+		}
 		if !found {
 			extra := ""
 			for _, x := range attackExtraDamage(a.Desc) {

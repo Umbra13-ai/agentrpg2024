@@ -2554,17 +2554,9 @@ func resolveActionWithBonusDash(action, description string, charID int, bonusDas
 				}
 				return withSpellResolution(charID, spellKey, spell, damageDice, dmg, slotLevel, level, spellMod, saveDC, fmt.Sprintf("Cast %s%s! %d %s damage%s.%s%s%s%s%s%s%s%s%s%s%s %s", spell.Name, upcastInfo, dmg, spell.DamageType, saveInfo, overchannelNote, overchannelPenaltyNote, elementalAffinityNote, agonizingBlastNote, repellingBlastNote, eldritchSpearNote, metamagicNote, materialConsumedNote, invocationUsedNote, mysticArcanumNote, atWillInvocationNote, spell.Description))
 			} else if spell.Healing != "" && buffSpells[spellKey].Kind == "" { // Aid raises the maximum instead (buff_spells_2024.go)
-				// Check for upcast healing
-				healDice := spell.Healing
-				slotKey := fmt.Sprintf("%d", slotLevel)
-				if len(spell.HealAtSlotLevel) > 0 {
-					if upcastDice, ok := spell.HealAtSlotLevel[slotKey]; ok {
-						// Replace "MOD" with actual modifier
-						healDice = strings.Replace(upcastDice, " + MOD", "", 1)
-						healDice = strings.Replace(healDice, "+ MOD", "", 1)
-						healDice = strings.Replace(healDice, "+MOD", "", 1)
-					}
-				}
+				// the healing at this slot level and whether the modifier is added: the one reading of a healing spell, a monster's cast
+				// reads it too (spellHealDice, monster_cast_effects_2024.go)
+				healDice, addsMod := spellHealDice(spell, slotLevel)
 
 				// Life Domain Cleric healing bonuses
 				bonusInfo := ""
@@ -2576,7 +2568,7 @@ func resolveActionWithBonusDash(action, description string, charID int, bonusDas
 
 				// the spellcasting ability modifier only where the spell says so (Cure Wounds, Healing Word; not Heal or Regenerate)
 				healMod := 0
-				if strings.Contains(strings.ToLower(spell.Description), "spellcasting ability modifier") {
+				if addsMod {
 					healMod = spellMod
 				}
 				if flat, err := strconv.Atoi(strings.TrimSpace(healDice)); err == nil {
