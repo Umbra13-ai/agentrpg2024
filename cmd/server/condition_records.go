@@ -636,6 +636,11 @@ type conditionSave struct {
 	Ability string `json:"ability"`
 	DC      int    `json:"dc"`
 	When    string `json:"when,omitempty"` // "end_of_turn" (default) or "start_of_turn"
+	// Then: the condition a failed repeated save turns the record into (Sleep: Unconscious), for ThenRounds; that one isn't repeated
+	Then             string `json:"then,omitempty"`
+	ThenRounds       int    `json:"then_rounds,omitempty"`
+	ThenEndsOnDamage bool   `json:"then_ends_on_damage,omitempty"`
+	ThenMagicalSleep bool   `json:"then_magical_sleep,omitempty"` // magic puts it to sleep: a creature that can't be is immune
 }
 
 func endSaveJSON(s *conditionSave) interface{} {

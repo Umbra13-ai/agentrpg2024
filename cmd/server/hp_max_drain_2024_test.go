@@ -9,8 +9,9 @@ import (
 // A hit's Hit Point maximum drain (hp_max_drain_2024.go; SRD 5.2.1 Specter and Wraith Life Drain) through every hit route (POST
 // /api/gm/narrate at a character, a monster and a companion): the maximum drops by the damage the hit dealt, Hit Points follow, nothing
 // of it is left for the GM; a character's reduction is recorded and the Long Rest (POST /api/characters/{id}/rest) gives it back. The
-// same clause in a save effect (Wight pattern) is not automated and stays in the GM's text. The texts are invented with the published
-// patterns.
+// same clause in a save effect drains each target by the damage it took (Wight pattern, every target kind); a typed clause counts that
+// type only and the source regains that much (Vampire pattern); under "Failure or Success" a success's half damage drains too (Succubus
+// pattern); a typed hit counts its type only (Clay Golem pattern). The texts are invented with the published patterns.
 func TestPostgresLifeDrainOnEveryTarget(t *testing.T) {
 	testPostgres(t)
 	gm, player, camp, charID, petID, _ := companionReactionFixture(t)
@@ -20,6 +21,9 @@ func TestPostgresLifeDrainOnEveryTarget(t *testing.T) {
 	m.Actions = []srdMonsterEntry{
 		{Name: "Drain Touch", Text: "Melee Attack Roll: +60, reach 5 ft. Hit: 9 (2d8) Necrotic damage. If the target is a creature, its Hit Point maximum decreases by an amount equal to the damage taken."},
 		{Name: "Drain Gaze", Text: "Constitution Saving Throw: DC 40, one creature. Failure: 6 (1d8 + 2) Necrotic damage, and the target’s Hit Point maximum decreases by an amount equal to the damage taken."},
+		{Name: "Drain Nip", Text: "Constitution Saving Throw: DC 40, one creature within 5 feet. Failure: 5 (1d4 + 3) Piercing damage plus 10 (3d6) Necrotic damage. The target’s Hit Point maximum decreases by an amount equal to the Necrotic damage taken, and the shade regains Hit Points equal to that amount."},
+		{Name: "Drain Kiss", Text: "Constitution Saving Throw: DC 12, one creature within 5 feet. Failure: 13 (3d8) Psychic damage. Success: Half damage. Failure or Success: The target’s Hit Point maximum decreases by an amount equal to the damage taken."},
+		{Name: "Drain Slam", Text: "Melee Attack Roll: +60, reach 5 ft. Hit: 10 (1d10 + 5) Bludgeoning damage plus 6 (1d12) Acid damage, and the target’s Hit Point maximum decreases by an amount equal to the Acid damage taken."},
 	}
 	victim := compendiumFixture()
 	victim.Name, victim.Type, victim.Traits, victim.Legendary, victim.LegendaryIn, victim.DmgImmune, victim.Resistances = "Drain Victim", "Beast", nil, nil, "", "", ""
@@ -56,7 +60,7 @@ func TestPostgresLifeDrainOnEveryTarget(t *testing.T) {
 	}
 	act := func(action, target string) string {
 		_, r := pgCall(t, "POST", "/api/gm/narrate", gm, map[string]interface{}{"campaign_id": camp, "narration": "x",
-			"monster_action": map[string]interface{}{"monster": "Drain Shade", "action": action, "target": target}})
+			"monster_action": map[string]interface{}{"monster": "Drain Shade", "action": action, "target": target, "confirm_targeting": true}})
 		return fmt.Sprint(r["monster_action_result"])
 	}
 	for _, tg := range []struct {
@@ -82,13 +86,62 @@ func TestPostgresLifeDrainOnEveryTarget(t *testing.T) {
 	if _, mx := vitals(charID); reduced <= 0 || mx != 200-reduced {
 		t.Fatalf("the character's reduction is not recorded: reduced %d, maximum %d", reduced, mx)
 	}
-	// the save-effect form is not automated: it stays in the GM's text and the maximum holds
-	_, before := vitals(charID)
-	if res := act("Drain Gaze", fmt.Sprint(charID)); !strings.Contains(res, "Hit Point maximum decreases") {
-		t.Errorf("the save effect's drain clause is neither applied nor given to the GM: %s", res)
+	// the save-effect form: each target loses as much maximum as the damage it took (the save fails at DC 40); the GM isn't asked
+	targets := []struct {
+		name, target string
+		id           int
+	}{{"character", fmt.Sprint(charID), charID}, {"monster", "Drain Victim", victimID}, {"companion", "React Pet", pet}}
+	for _, tg := range targets {
+		hp0, max0 := vitals(tg.id)
+		res := act("Drain Gaze", tg.target)
+		hp1, max1 := vitals(tg.id)
+		if taken := hp0 - hp1; taken <= 0 || max1 != max0-taken || strings.Contains(res, "Hit Point maximum decreases") || !strings.Contains(res, fmt.Sprintf("Hit Point maximum -%d", taken)) {
+			t.Errorf("save drain, %s: hp %d -> %d, maximum %d -> %d: %s", tg.name, hp0, hp1, max0, max1, res)
+		}
 	}
-	if _, mx := vitals(charID); mx != before {
-		t.Errorf("the save effect's drain changed the maximum %d -> %d (not automated for saves)", before, mx)
+	// the typed form: only the Necrotic damage drains, and the shade regains that much (the monster Hit Point owner)
+	shade := monsterIDsByKeyOrName(camp, "Drain Shade")[0]
+	f, _ := readFight(db, camp)
+	_, se := f.entry(shade)
+	shadeMax := asInt(se["max_hp"])
+	for _, tg := range targets {
+		if err := setMonsterHP(camp, shade, 1); err != nil {
+			t.Fatal(err)
+		}
+		hp0, max0 := vitals(tg.id)
+		res := act("Drain Nip", tg.target)
+		hp1, max1 := vitals(tg.id)
+		cut := max0 - max1
+		if taken := hp0 - hp1; cut <= 0 || cut >= taken || strings.Contains(res, "Hit Point maximum decreases") {
+			t.Errorf("typed save drain, %s: took %d, maximum cut %d (the Necrotic part only): %s", tg.name, taken, cut, res)
+		}
+		if got := monsterHPNow(camp, shade) - 1; got != min(cut, shadeMax-1) || !strings.Contains(res, "regains") {
+			t.Errorf("typed save drain, %s: the shade regained %d for a drain of %d: %s", tg.name, got, cut, res)
+		}
+	}
+	// "Failure or Success": whatever the save, the maximum drops by the damage taken (half on a success)
+	for _, tg := range targets {
+		hp0, max0 := vitals(tg.id)
+		res := act("Drain Kiss", tg.target)
+		hp1, max1 := vitals(tg.id)
+		if taken := hp0 - hp1; max0-max1 != taken || (taken > 0 && !strings.Contains(res, fmt.Sprintf("Hit Point maximum -%d", taken))) {
+			t.Errorf("failure-or-success drain, %s: took %d, maximum %d -> %d: %s", tg.name, taken, max0, max1, res)
+		}
+	}
+	// the typed hit: only the Acid damage drains
+	for _, tg := range targets {
+		for n := 0; n < 30; n++ {
+			hp0, max0 := vitals(tg.id)
+			res := act("Drain Slam", tg.target)
+			hp1, max1 := vitals(tg.id)
+			if hp1 == hp0 {
+				continue
+			}
+			if cut, taken := max0-max1, hp0-hp1; cut <= 0 || cut >= taken || strings.Contains(res, "Hit Point maximum decreases") {
+				t.Errorf("typed hit drain, %s: took %d, maximum cut %d (the Acid part only): %s", tg.name, taken, cut, res)
+			}
+			break
+		}
 	}
 	// a Long Rest gives the maximum back
 	pgCall(t, "POST", cp+"/combat/end", gm, nil)

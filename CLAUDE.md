@@ -95,8 +95,19 @@ Report: "Wizard Scholar accepts any skill for Expertise."
   companion): refusal beyond reach or long range, Disadvantage beyond normal range, within 5 feet. Go: `TestPostgresMonsterAttackRangeOnEveryTarget`.
 - **What a hit does after its damage:** `hitAfterDamage` (`cmd/server/hit_after_damage_2024.go`), called once by every hit route: the drain
   below and "it starts burning" (the Burning owner, `burning_2024.go`). A new effect of this kind is one call there. Go: `TestPostgresBurningOnHitEveryTarget`.
-- **A hit's Hit Point maximum drain** (Life Drain, `cmd/server/hp_max_drain_2024.go`): `drainHPMaximum` on every hit route; writers
-  `reduceMaxHP` (character, restored by `restoreAllHP`), `reduceMonsterMaxHP`, `reduceCompanionMaxHP`. Go: `TestPostgresLifeDrainOnEveryTarget`.
+- **A Hit Point maximum drain** (Life Drain, `cmd/server/hp_max_drain_2024.go`): one reader `hpMaxDrainOf` (all the damage taken, or one
+  type: "the Necrotic damage taken") and one writer `reduceHPMaximum` (`reduceMaxHP` for a character, restored by `restoreAllHP`;
+  `reduceMonsterMaxHP`, `reduceCompanionMaxHP`). A hit: `drainHPMaximum` through `hitAfterDamage`, with what each damage type dealt
+  (`hpDamage.ByType`, the monster cursor's `Dealt`, the companion route's). A saving throw effect: `saveEffect.Drain`, applied by
+  `drainAfterDamage` after each damage part on the character, monster and companion save routes, with the source's regain
+  (`drainRegain`, the monster HP owner). Go: `TestPostgresLifeDrainOnEveryTarget`.
+- **A condition's second stage** (SRD 5.2.1 Sleep; a monster's "Second Failure:"): `conditionSave.Then` / `ThenRounds` /
+  `ThenEndsOnDamage` / `ThenMagicalSleep` on the record's repeated save; `condition_turns.go` turns the record into the second condition
+  on a failed repeat. A spell's stage is a row of `spellStages` (`endSaveFor`, `spell_effects.go`), read by a character's and a monster's
+  cast; a monster text's is read by `readSecondFailure` (`monster_effects_2024.go`). An Unconscious that "ends if it takes damage" is
+  `notesEndsOnDamage`, ended by `wakeOnDamageSleep` (which also ends a monster's cast of Sleep, `sourceIsSpell`). A monster's cast of
+  a spell that ends conditions reads `spellEndsConditions` (`monsterCastEndsConditions`; a heal ends them first in
+  `monsterCastHealing`). Go: `TestPostgresSleepSecondFailure`, `TestPostgresSecondFailureStages`, `TestPostgresMonsterCastEndsConditions`.
 - **Monster attack damage definitions:** parseMonsterAttack and prepareMonsterAttack
   in cmd/server/monster_damage_choice_2024.go: fixed dice, flat damage, type choices,
   secondary damage, validation and refusal. oldStyleActions is a storage adapter;

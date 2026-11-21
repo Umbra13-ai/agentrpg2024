@@ -207,6 +207,16 @@ func runTurnEffects(campaignID int, c turnEffectsCursor) turnEffectLines {
 						ended = fmt.Sprintf("%s repeats the %s saving throw %s and succeeds%s: the %s condition ends.", name, svSpec.Ability, phase, sv.Tail(), rec.Condition)
 					case id < 0 && legendaryResistance(campaignID, id, saveStakes{Condition: true}):
 						ended = fmt.Sprintf("%s repeats the %s saving throw %s: the %s condition ends (Legendary Resistance).", name, svSpec.Ability, phase, rec.Condition)
+					case svSpec.Then != "": // a second stage (Sleep: the Unconscious condition for the rest of the spell)
+						deleteConditionRecord(campaignID, id, rec.ID)
+						notes := rec.Notes
+						if svSpec.ThenEndsOnDamage && notes == "" {
+							notes = notesEndsOnDamage
+						}
+						addCondition(campaignID, id, condAdd{Condition: svSpec.Then, Source: rec.Source, Rounds: svSpec.ThenRounds, SourceID: rec.SourceID,
+							Notes: notes, CreatedBy: rec.CreatedBy, Magical: true, MagicalSleep: svSpec.ThenMagicalSleep})
+						emit(fmt.Sprintf("%s repeats the %s saving throw %s and fails%s: the %s condition becomes %s.", name, svSpec.Ability, phase, sv.Tail(), rec.Condition, titleCase(svSpec.Then)))
+						continue
 					default:
 						emit(fmt.Sprintf("%s repeats the %s saving throw %s and fails%s: the %s condition continues.", name, svSpec.Ability, phase, sv.Tail(), rec.Condition))
 					}

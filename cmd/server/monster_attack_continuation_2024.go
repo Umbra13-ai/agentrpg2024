@@ -33,6 +33,7 @@ type monsterHitCursor struct {
 	Parts                         []hitDamagePart
 	Snapshot                      hitSnapshot
 	HPBefore                      int
+	Dealt                         map[string]int // what each damage type dealt (a typed Hit Point maximum drain, hitAfterDamage)
 	Line                          string
 }
 
@@ -164,9 +165,13 @@ func runMonsterHit(lobby int, c *monsterHitCursor) (string, error) {
 			if err != nil {
 				return line, err
 			}
-			text, _ := damageMonster(lobby, c.Target, p.Amount, strings.ToLower(p.Type), c.Outcome.Critical)
-			line += ", " + text
+			h, _ := hurtMonster(lobby, c.Target, p.Amount, strings.ToLower(p.Type), c.Outcome.Critical)
+			line += ", " + h.Text
 			restore()
+			if c.Dealt == nil {
+				c.Dealt = map[string]int{}
+			}
+			c.Dealt[strings.ToLower(p.Type)] += h.Dealt
 			c.Next = i + 1
 			if combatResolutionPaused(lobby) {
 				return line, nil
@@ -203,8 +208,8 @@ func runMonsterHit(lobby int, c *monsterHitCursor) (string, error) {
 							}
 						}
 					}
-					line += hitAfterDamage(lobby, c.Target, c.Action.Desc, c.AttackerName+"'s "+stripUsage(c.Action.Name), c.HPBefore-monsterHPNow(lobby, c.Target)) // Life Drain, burning (hit_after_damage_2024.go)
-					coverOK := true                                                                                                                                  // the cover clause the conditions and suffocating hang on fired (its gates held)
+					line += hitAfterDamage(lobby, c.Target, c.Action.Desc, c.AttackerName+"'s "+stripUsage(c.Action.Name), c.HPBefore-monsterHPNow(lobby, c.Target), c.Dealt) // Life Drain, burning (hit_after_damage_2024.go)
+					coverOK := true                                                                                                                                           // the cover clause the conditions and suffocating hang on fired (its gates held)
 					if e, ok := parseHitRider(c.Action.Desc); ok {
 						_, gated := e.conditionsFor(lobby, c.Target)
 						coverOK = gated == "" && !(e.CondIfAdvantage && !c.Roll.HasAdvantage())

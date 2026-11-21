@@ -9,9 +9,10 @@ import (
 // hitAfterDamage is what a stat-block hit does to its target after the damage it dealt, called once by every hit route (a character,
 // monster_attacks.go; a monster, monster_attack_continuation_2024.go; a companion, companionHitRiders): the Hit Point maximum drain
 // (drainHPMaximum) and "it starts burning" (SRD 5.2.1 Magmin Touch: the Burning owner, burning_2024.go). A new effect of this kind is one
-// call here, never one more call in each route. taken is the damage the hit dealt.
-func hitAfterDamage(lobby, target int, desc, source string, taken int) string {
-	return drainHPMaximum(lobby, target, desc, taken) + burnOnHit(lobby, target, desc, source)
+// call here, never one more call in each route. taken is the damage the hit dealt; byType what each damage type of it dealt (a typed
+// drain: "the Acid damage taken").
+func hitAfterDamage(lobby, target int, desc, source string, taken int, byType map[string]int) string {
+	return drainHPMaximum(lobby, target, desc, taken, byType) + burnOnHit(lobby, target, desc, source)
 }
 
 // burnOnHitRe: "If the target is a creature or a flammable object that isn't being worn or carried, it starts burning." A sentence with

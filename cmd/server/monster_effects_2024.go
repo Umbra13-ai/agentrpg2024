@@ -77,8 +77,16 @@ func mfxSection(text, label string, next ...string) string {
 	return strings.TrimSpace(rest[:end])
 }
 
+// hpDrain: the effect's "the target's Hit Point maximum decreases by an amount equal to the [Necrotic] damage taken" (hp_max_drain_2024.go).
+type hpDrain struct {
+	Type      string // the damage type it counts; "" for all the damage taken
+	OnSuccess bool   // under "Failure or Success:": a success's damage drains too (Succubus Draining Kiss)
+	Regain    bool   // "and the vampire regains Hit Points equal to that amount"
+}
+
 type saveEffect struct {
 	Ability            string // dex, con ...
+	Drain              *hpDrain
 	AbilityName        string // Dexterity
 	DC                 int
 	Damage             []damagePart
@@ -116,6 +124,7 @@ type saveEffect struct {
 	School             string              // its school (Necromancy: the Scarab of Protection)
 	SingleTarget       bool                // aimed only at one creature, no area (Spell Absorption, Ring of Spell Turning's Reaction)
 	SourceID           int                 // the monster it comes from
+	Stage              *spellStage         // a condition spell's second stage (Sleep: spellStages)
 	FromUndead         bool                // it comes from an Undead (the Scarab of Protection)
 }
 
@@ -125,6 +134,12 @@ func (e saveEffect) conditionAdd(cond, source string) condAdd {
 	a := condAdd{Condition: cond, Source: source, Rounds: e.Rounds, SourceID: e.SourceID, Magical: e.IsSpell}
 	if e.EndSave {
 		a.EndSave = &conditionSave{Ability: e.Ability, DC: e.DC}
+		if e.Stage != nil {
+			a.EndSave.Then, a.EndSave.ThenRounds, a.EndSave.ThenEndsOnDamage, a.EndSave.ThenMagicalSleep = e.Stage.Then, e.Stage.ThenRounds, e.Stage.EndsOnDamage, e.Stage.MagicalSleep
+		}
+	}
+	if e.Stage != nil {
+		a.MagicalSleep = e.Stage.MagicalSleep
 	}
 	if e.UntilStart {
 		a.Notes = notesUntilStartOfSourceTurn
@@ -379,7 +394,10 @@ func (e *saveEffect) readRider(fail string) (extra []string) {
 		plain = targetIsCreatureGateRe.ReplaceAllString(plain, "") // every target of these routes is a creature: the gate always holds
 		plain = strings.Trim(strings.NewReplacer("The target", "", "and the target", "", "damage", "", ",", "", ".", "").Replace(plain), " ")
 		if strings.Contains(ls, "suffocat") {
-			extra = append(extra, strings.TrimSuffix(strings.TrimSpace(s), ".")) // suffocation is the GM's (gm_2024.go suffocation; its while-attached end with it): never dropped as short
+			if attachTieRe.MatchString(s) {
+				continue // suffocating while attached: the suffocation owner (monster_suffocation_2024.go) starts and ends it with the attach
+			}
+			extra = append(extra, strings.TrimSuffix(strings.TrimSpace(s), ".")) // other suffocation is the GM's (gm_2024.go suffocation): never dropped as short
 			continue
 		}
 		if strings.Contains(strings.NewReplacer("’", "'").Replace(ls), "can't take reactions") && !slices.Contains(e.DisadvMode, "noreactions") {
@@ -522,6 +540,44 @@ func parseHitRider(desc string) (saveEffect, bool) {
 var saveMarginHeading = regexp.MustCompile(`Failure by (\d+) or More:`)
 var severePoisonText = regexp.MustCompile(`(?i)^The target has the Poisoned condition for (\d+) minutes?\. While Poisoned, the target has the Unconscious condition, which ends early if the target takes any damage\.$`)
 
+// severeSleepText: the same severe branch that adds only the Unconscious condition to the Failure's Poisoned (Pseudodragon Sting: "Failure
+// by 5 or More: While Poisoned, the target also has the Unconscious condition, which ends early if the target takes damage or a creature
+// within 5 feet of it takes an action to wake it."). The waking action is the GM's (a creature's action, then POST /api/gm/conditions).
+var severeSleepText = regexp.MustCompile(`(?i)^While Poisoned, the target also has the Unconscious condition, which ends early if the target takes (?:any )?damage(?: or a creature within 5 feet of it takes an action to wake it)?\.$`)
+
+// secondFailureText: a monster effect's second stage after its one repeated save ("The target repeats the save at the end of its next
+// turn ... Second Failure: The target has the Unconscious condition for 1 minute. This effect ends for the target if it takes damage or a
+// creature within 5 feet of it takes an action to wake it.", Brass Dragon Wyrmling Sleep Breath; "... the Petrified condition, instead of
+// the Restrained condition, for 24 hours.", Cockatrice). It is the condition owner's repeated save with a second stage (spellStage,
+// conditionSave.Then), as for the Sleep spell.
+var secondFailureText = regexp.MustCompile(`(?i)^The target has the (\w+) condition(?:, instead of the \w+ condition,)? for (\d+) (minute|hour)s?\.\s*(.*)$`)
+var oneRepeatRe = regexp.MustCompile(`(?i)repeats the save at the end of its next turn|until the end of its next turn, at which point it (?:must )?repeats? the save`)
+var secondFailureWakeText = regexp.MustCompile(`(?i)^This effect ends for the target if it takes damage(?: or a creature within 5 feet of it takes an action to wake it)?\.?$`)
+
+// readSecondFailure: the stage a "Second Failure:" sets on the record of the first, when the first gives one condition and repeats its
+// save once ("repeats the save at the end of its next turn"); ok is false when the text is anything else (it stays the GM's).
+func (e *saveEffect) readSecondFailure(text, second string) bool {
+	if len(e.Conditions) != 1 || !oneRepeatRe.MatchString(text) {
+		return false
+	}
+	m := secondFailureText.FindStringSubmatch(strings.TrimSpace(second))
+	if m == nil || !mfxConditions[strings.ToLower(m[1])] {
+		return false
+	}
+	rest := strings.TrimSpace(m[4])
+	if rest != "" && !secondFailureWakeText.MatchString(rest) {
+		return false
+	}
+	n, _ := strconv.Atoi(m[2])
+	rounds := n * 10
+	if strings.EqualFold(m[3], "hour") {
+		rounds = n * 600
+	}
+	e.Stage = &spellStage{Then: strings.ToLower(m[1]), ThenRounds: rounds, EndsOnDamage: rest != ""}
+	e.EndSave = true // the one repeat: a success ends it, a failure turns it into the second stage (condition_turns.go)
+	return true
+}
+
 type severePoisonEffect struct {
 	Margin int
 	Rounds int
@@ -533,6 +589,12 @@ func (e *saveEffect) readSevereFailure(text string) string {
 		return ""
 	}
 	branch := mfxSection(text, m[0], "Success:", "Failure or Success:", "Second Failure:")
+	if severeSleepText.MatchString(strings.TrimSpace(branch)) && e.Rounds > 0 && len(e.Conditions) == 1 && e.Conditions[0] == "poisoned" {
+		if margin, err := strconv.Atoi(m[1]); err == nil && margin > 0 {
+			e.SeverePoison = &severePoisonEffect{Margin: margin, Rounds: e.Rounds} // the Failure's Poisoned, with the Unconscious while it lasts
+			return ""
+		}
+	}
 	parts := severePoisonText.FindStringSubmatch(branch)
 	if parts != nil {
 		margin, marginErr := strconv.Atoi(m[1])
@@ -581,14 +643,21 @@ func parseSaveEffect(text string) (saveEffect, bool) {
 	if x := mfxEmanRe.FindStringSubmatch(text); x != nil {
 		e.Emanation, _ = strconv.Atoi(x[1])
 	}
+	if dtype, ok := hpMaxDrainOf(fail); ok {
+		e.Drain = &hpDrain{Type: dtype, Regain: drainRegainRe.MatchString(fail)}
+	} else if both := mfxSection(text, "Failure or Success:"); both != "" {
+		if dtype, ok := hpMaxDrainOf(both); ok {
+			e.Drain = &hpDrain{Type: dtype, OnSuccess: true, Regain: drainRegainRe.MatchString(both)}
+		}
+	}
 	extra := e.readRider(fail)
 	if branch := e.readSevereFailure(text); branch != "" {
 		extra = append(extra, branch)
 	}
-	if second := mfxSection(text, "Second Failure:", "Success:", "Failure or Success:"); second != "" { // the stage after the first Failure's repeat save: not rolled here
+	if second := mfxSection(text, "Second Failure:", "Success:", "Failure or Success:"); second != "" && !e.readSecondFailure(text, second) { // the stage after the first Failure's repeat save: the GM's unless readSecondFailure reads it
 		extra = append(extra, "Second Failure (after the repeat save the first Failure gives): "+strings.TrimSuffix(second, "."))
 	}
-	if both := mfxSection(text, "Failure or Success:"); both != "" {
+	if both := mfxSection(text, "Failure or Success:"); both != "" && (e.Drain == nil || strings.Trim(hpMaxDrainSentenceRe.ReplaceAllString(both, ""), " .") != "") {
 		var a saveEffect
 		left := a.readRider(both)
 		if len(a.Conditions) > 0 || a.SpeedMode != "" || len(a.DisadvMode) > 0 {
@@ -599,6 +668,19 @@ func parseSaveEffect(text string) (saveEffect, bool) {
 		} else {
 			extra = append(extra, "Failure or Success: "+strings.TrimSuffix(both, "."))
 		}
+	}
+	if e.Drain != nil { // applied (drainAfterDamage): not the GM's
+		kept := extra[:0]
+		for _, x := range extra {
+			x = strings.Trim(hpMaxDrainSentenceRe.ReplaceAllString(x, ""), " ,.")
+			if strings.Trim(mfxDamageRe.ReplaceAllString(x, ""), " ,.") == "" {
+				continue // only the damage the effect rolls and deals was left of the sentence
+			}
+			if x != "Failure or Success:" {
+				kept = append(kept, x)
+			}
+		}
+		extra = kept
 	}
 	e.Extra = strings.Join(extra, ". ")
 	if strings.HasSuffix(e.Extra, ":") { // "One of the following effects occurs:" lists its options as the next entries of the stat block
@@ -698,6 +780,22 @@ func (e saveEffect) giveSeverePoison(lobby, target int, source string) []string 
 		return []string{"Poisoned"}
 	}
 	return []string{fmt.Sprintf("Poisoned for %d minute(s) and Unconscious while Poisoned or until damaged", poison.Rounds/10)}
+}
+
+// drainAfterDamage: the effect's Hit Point maximum drain for one damage part a target took (dtype, dealt), and the source's regain.
+// Every save route calls it after each part it deals (the character route here, runMonsterSaveEffect, applySaveEffectOnCompanion).
+func (e saveEffect) drainAfterDamage(lobby, target int, saved bool, dtype string, dealt int) string {
+	if e.Drain == nil || dealt <= 0 || (saved && !e.Drain.OnSuccess) {
+		return ""
+	}
+	if e.Drain.Type != "" && !strings.EqualFold(e.Drain.Type, dtype) {
+		return ""
+	}
+	note := reduceHPMaximum(lobby, target, dealt)
+	if e.Drain.Regain {
+		note += drainRegain(lobby, e.SourceID, dealt)
+	}
+	return strings.TrimSpace(note)
 }
 
 func (e saveEffect) finishTarget(lobby, target int, source string, apply, saved bool, failedBy int) (parts []string, immune bool) {
@@ -820,7 +918,11 @@ func runSaveEffectTargets(lobbyID int, c saveEffectCursor) (lines []string, immu
 				continue
 			}
 			if apply {
-				parts = append(parts, damageCharacter(tid, d, p.Type))
+				text, dealt := damageCharacterDealt(tid, d, p.Type)
+				parts = append(parts, text)
+				if drained := e.drainAfterDamage(lobbyID, tid, saved, p.Type, dealt); drained != "" {
+					parts = append(parts, drained)
+				}
 			} else {
 				parts = append(parts, fmt.Sprintf("%d %s damage (not applied)", d, p.Type))
 			}
@@ -968,6 +1070,9 @@ func resolveMonsterSpellRules(r *http.Request, lobbyID, monsterID int, monsterNa
 	if lines, handled := monsterCastHealing(r, lobbyID, monsterID, sp, slug, head, level, targets, selfCast, apply); handled {
 		return lines
 	}
+	if lines, handled := monsterCastEndsConditions(r, lobbyID, monsterID, sp, slug, head, targets, selfCast, apply, use); handled {
+		return lines
+	}
 	if selfCast {
 		return []string{head + " on itself. The GM resolves the spell's effect."}
 	}
@@ -1088,6 +1193,9 @@ func resolveMonsterSpellRules(r *http.Request, lobbyID, monsterID int, monsterNa
 		}
 		if cs, ok := conditionSpells[slug]; ok {
 			e.Conditions, e.Rounds, e.EndSave, e.Escapes = cs.Conditions, cs.Rounds, cs.EndSave, cs.escapes(dc)
+			if st, ok := spellStages[slug]; ok {
+				e.Stage = &st
+			}
 		}
 		if len(e.Damage) == 0 && len(e.Conditions) == 0 {
 			e.Extra = sp.Name + ": apply the spell's effect on a failed save"

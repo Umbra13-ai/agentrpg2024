@@ -381,7 +381,7 @@ func TestPostgresAttachDetachAction(t *testing.T) {
 
 // The cover clause's Advantage gate (Darkmantle Crush): "... and the darkmantle had Advantage on the
 // attack roll" - its conditions apply only when the roll had Advantage. Without it the clause triggers
-// nothing; the suffocating part stays with the GM either way (the suffocation rules are the GM's).
+// nothing; with it the suffocation owner starts the suffocating (monster_suffocation_2024.go), so the GM is never asked to.
 func TestPostgresAttachAdvantageGate(t *testing.T) {
 	testPostgres(t)
 	_, gm := pgAgent(t, "gate gm")
@@ -455,8 +455,15 @@ func TestPostgresAttachAdvantageGate(t *testing.T) {
 		return ""
 	}
 
-	// no Advantage: the attach lands, the cover clause triggers nothing, and the suffocating sentence
-	// still reaches the GM
+	// no Advantage: the attach lands and the cover clause triggers nothing - no Blinded, no suffocating
+	// (the suffocation owner starts it only with the cover), and no GM note asks for it
+	suffocating := func() int {
+		var n int
+		if err := db.QueryRow(`SELECT count(*) FROM combat_effects WHERE lobby_id=$1 AND target_id=$2 AND kind='suffocating'`, camp, hero).Scan(&n); err != nil {
+			t.Fatal(err)
+		}
+		return n
+	}
 	res := hit()
 	if !strings.Contains(res, "attaches to the target") {
 		t.Fatalf("the hit did not attach: %s", res)
@@ -464,8 +471,8 @@ func TestPostgresAttachAdvantageGate(t *testing.T) {
 	if blinded() != 0 || strings.Contains(res, "[Blinded") {
 		t.Fatalf("the cover's Blinded applied without Advantage on the roll: %d %s", blinded(), res)
 	}
-	if !strings.Contains(res, "suffocating") {
-		t.Fatalf("the suffocating sentence did not reach the GM: %s", res)
+	if suffocating() != 0 || strings.Contains(res, "suffocating") {
+		t.Fatalf("suffocating without the cover: %d %s", suffocating(), res)
 	}
 
 	// Advantage (the target is Prone and the attack is in reach): the cover's condition applies
@@ -473,6 +480,9 @@ func TestPostgresAttachAdvantageGate(t *testing.T) {
 	res = hit()
 	if blinded() != 1 || !strings.Contains(res, "Blinded") {
 		t.Fatalf("the cover's Blinded did not apply with Advantage on the roll: %d %s", blinded(), res)
+	}
+	if suffocating() != 1 || strings.Contains(res, "is suffocating while") {
+		t.Fatalf("the cover's suffocating: %d rows; the GM must not be asked to apply it: %s", suffocating(), res)
 	}
 	if grappled() != 0 {
 		t.Fatalf("the attach invented a Grappled condition the text does not own: %d", grappled())
@@ -719,14 +729,14 @@ func TestPostgresAttachSuffocation(t *testing.T) {
 		return fmt.Sprint(r["current_turn"])
 	}
 
-	// no Advantage: the attach lands, the cover does not fire - no suffocation state, and the suffocating
-	// sentence still reaches the GM
+	// no Advantage: the attach lands, the cover does not fire - no suffocation state, and no GM note asks
+	// for one (the gate failed: the rules apply nothing)
 	res := hit()
 	if !strings.Contains(res, "attaches to the target") {
 		t.Fatalf("the hit did not attach: %s", res)
 	}
-	if suffRows() != 0 || !strings.Contains(res, "suffocating") {
-		t.Fatalf("a cover that did not fire started suffocation or hid the sentence: rows=%d %s", suffRows(), res)
+	if suffRows() != 0 || strings.Contains(res, "suffocating") {
+		t.Fatalf("a cover that did not fire started suffocation or asked the GM for it: rows=%d %s", suffRows(), res)
 	}
 	// ending that attach mentions no suffocation (none began)
 	c, j = pgCall(t, "POST", "/api/gm/detach", gm, map[string]interface{}{"campaign_id": camp, "attacher_id": darkID, "target_id": hero})

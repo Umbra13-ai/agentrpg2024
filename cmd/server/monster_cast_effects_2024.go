@@ -233,7 +233,10 @@ func monsterCastHealing(r *http.Request, lobbyID, monsterID int, sp SRDSpell, sl
 			lines = append(lines, fmt.Sprintf("%s would regain %s Hit Points (preview: nothing was applied).", name, roll))
 			continue
 		}
-		markExecuted(r) // the spell is cast: a limited use is spent
+		markExecuted(r)                                                            // the spell is cast: a limited use is spent
+		if ended, _ := endSpellConditions(lobbyID, id, slug, ""); len(ended) > 0 { // Heal: the conditions end first, then it heals (spell_ends_conditions_2024.go)
+			lines = append(lines, fmt.Sprintf("The %s condition on %s ends.", joinNames(ended), name))
+		}
 		switch {
 		case isCompanionCombatID(id):
 			got, err := healCompanion(id-companionIDBase, amount)
@@ -256,6 +259,42 @@ func monsterCastHealing(r *http.Request, lobbyID, monsterID int, sp SRDSpell, sl
 				continue
 			}
 			lines = append(lines, fmt.Sprintf("%s regains %d Hit Points (%s; %d → %d).", h.Name, h.Healed, roll, h.Before.HP, h.After.HP))
+		}
+	}
+	return lines, true
+}
+
+// monsterCastEndsConditions: a monster's cast of a spell that only ends conditions (Lesser Restoration, Protection from Poison's
+// ending; Empyrean Iota): the same table as a character's cast (spellEndsConditions, endSpellConditions). For a spell that ends one
+// condition of a list, the GM's use names it ("poisoned"), else the first the target has. A healing spell's conditions end in
+// monsterCastHealing, before it heals.
+func monsterCastEndsConditions(r *http.Request, lobbyID, monsterID int, sp SRDSpell, slug, head string, targets []int, selfCast, apply bool, use string) ([]string, bool) {
+	if _, ok := spellEndsConditions[slug]; !ok || sp.Healing != "" {
+		return nil, false
+	}
+	ids := targets
+	if selfCast {
+		ids = []int{monsterID}
+	}
+	if len(ids) == 0 {
+		return []string{head + ": name the creature it is cast on (target). Nothing was cast."}, true
+	}
+	lines := []string{head + "."}
+	for _, id := range ids {
+		name := creatureName(lobbyID, id)
+		if !apply {
+			lines = append(lines, fmt.Sprintf("%s: %s would end %s (preview: nothing was applied).", name, sp.Name, spellEndsWords(slug)))
+			continue
+		}
+		markExecuted(r) // the spell is cast: a limited use is spent
+		ended, named := endSpellConditions(lobbyID, id, slug, use)
+		switch {
+		case len(ended) > 0:
+			lines = append(lines, fmt.Sprintf("The %s condition on %s ends.", joinNames(ended), name))
+		case named != "":
+			lines = append(lines, fmt.Sprintf("%s doesn't have the %s condition, so nothing ends.", name, titleCase(named)))
+		default:
+			lines = append(lines, fmt.Sprintf("%s has none of %s, so nothing ends.", name, spellEndsWords(slug)))
 		}
 	}
 	return lines, true

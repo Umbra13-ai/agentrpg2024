@@ -100,6 +100,7 @@ func monsterAttacksCompanion(lobbyID, attackerID int, attackerName string, chose
 			parts = append(parts, x)
 		}
 		var said []string
+		dealtByType := map[string]int{}
 		hpStart := cur.HP
 		if fresh, ok := loadCompanion(c.ID); ok {
 			hpStart = fresh.HP
@@ -118,6 +119,9 @@ func monsterAttacksCompanion(lobbyID, attackerID int, attackerName string, chose
 				cur, _ = loadCompanion(c.ID)
 				if cur.Status == "active" {
 					said = append(said, damageCompanion(cur, d, strings.ToLower(p.Type)))
+					if after, ok := loadCompanion(c.ID); ok && after.HP < cur.HP {
+						dealtByType[strings.ToLower(p.Type)] += cur.HP - after.HP // what this type dealt (a typed Hit Point maximum drain)
+					}
 				}
 			} else {
 				said = append(said, fmt.Sprintf("%d %s damage", d, p.Type))
@@ -129,7 +133,7 @@ func monsterAttacksCompanion(lobbyID, attackerID int, attackerName string, chose
 			if after, ok := loadCompanion(c.ID); ok {
 				taken = hpStart - after.HP
 			}
-			line += companionHitRiders(lobbyID, attackerID, attackerName, a, c.ID, rolled.HasAdvantage(), taken)
+			line += companionHitRiders(lobbyID, attackerID, attackerName, a, c.ID, rolled.HasAdvantage(), taken, dealtByType)
 		} else {
 			line += companionHitRidersNote(a)
 		}
