@@ -838,7 +838,7 @@ func companionBoxesHTML(lobbyID int) string {
 		if c.Nickname != "" {
 			title = c.Nickname
 		}
-		status := fmt.Sprintf(`<p class="%s">HP: %d/%d</p>`, healthClass(c.HP, c.MaxHP), c.HP, c.MaxHP)
+		status := fmt.Sprintf(`<p class="%s">HP: %d/%d</p>`, game.MonsterHealth(c.HP, c.MaxHP), c.HP, c.MaxHP)
 		cls := "party-box companion-box"
 		if c.Status == "dismissed" {
 			status = `<p class="class-info">in its pocket dimension</p>`
@@ -857,16 +857,6 @@ func traitNames(c companion) []string {
 		out = append(out, t.Name+": "+t.Text)
 	}
 	return out
-}
-
-func healthClass(hp, max int) string {
-	switch {
-	case max > 0 && hp < max/4:
-		return "critical"
-	case max > 0 && hp < max/2:
-		return "wounded"
-	}
-	return "healthy"
 }
 
 // companionOpportunityAttack: the GM's opportunity-attack command aimed at a companion (its combat id or its companion id).

@@ -26,6 +26,61 @@ func (v Vitals) Dying() bool { return v.HP <= 0 && !v.Dead }
 // at 0 is dying, not Bloodied, for the features that read it here: Survivor).
 func (v Vitals) Bloodied() bool { return v.HP > 0 && !v.Dead && v.HP <= v.Max/2 }
 
+// How a creature looks: the one health label of the server (every party list, the player's own status, enemies, companions, the
+// spectator page and the GM's party view read it; the tactical hints follow it). A character's life state comes first: dead, dying
+// (at 0 Hit Points, making Death Saving Throws) or stable (at 0, Unconscious, no saves); then the share of Hit Points left.
+const (
+	HealthDead     = "dead"
+	HealthDying    = "dying"
+	HealthStable   = "stable"
+	HealthDefeated = "defeated" // a monster or companion at 0 Hit Points (no Death Saving Throws)
+	HealthCritical = "critical" // a quarter of its Hit Points or fewer
+	HealthBloodied = "bloodied" // half or fewer (SRD 5.2.1 "Bloodied")
+	HealthWounded  = "wounded"  // three quarters or fewer
+	HealthHealthy  = "healthy"
+)
+
+// Health is a character's label.
+func (v Vitals) Health() string {
+	switch {
+	case v.Dead:
+		return HealthDead
+	case v.HP <= 0 && v.Stable:
+		return HealthStable
+	case v.HP <= 0:
+		return HealthDying
+	}
+	return healthShare(v.HP, v.Max)
+}
+
+// MonsterHealth is a monster's or a companion's label: at 0 Hit Points it is defeated.
+func MonsterHealth(hp, max int) string {
+	if hp <= 0 {
+		return HealthDefeated
+	}
+	return healthShare(hp, max)
+}
+
+// AtZero: the label of a creature at 0 Hit Points or dead (it can't act).
+func AtZero(label string) bool {
+	return label == HealthDead || label == HealthDying || label == HealthStable || label == HealthDefeated
+}
+
+func healthShare(hp, max int) string {
+	if max <= 0 {
+		return HealthHealthy
+	}
+	switch {
+	case hp*4 <= max:
+		return HealthCritical
+	case hp*2 <= max:
+		return HealthBloodied
+	case hp*4 <= max*3:
+		return HealthWounded
+	}
+	return HealthHealthy
+}
+
 // DamageOutcome says what a hit did.
 type DamageOutcome string
 

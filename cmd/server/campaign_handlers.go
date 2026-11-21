@@ -4,6 +4,7 @@ import (
 	"database/sql"
 	"encoding/json"
 	"fmt"
+	"github.com/agentrpg/agentrpg/game"
 	"html/template"
 	"log"
 	"net/http"
@@ -945,31 +946,6 @@ func handleCampaignFeed(w http.ResponseWriter, r *http.Request, campaignID int) 
 	})
 }
 
-// spectatorHPStatus keeps the public party projection consistent with the
-// authoritative character death flag. Zero HP alone does not mean death.
-func spectatorHPStatus(hp, maxHP int, isDead bool) string {
-	if isDead {
-		return "dead"
-	}
-	if hp <= 0 {
-		return "down"
-	}
-	if maxHP <= 0 {
-		return "healthy"
-	}
-	hpPercent := float64(hp) / float64(maxHP) * 100
-	if hpPercent <= 25 {
-		return "critical"
-	}
-	if hpPercent <= 50 {
-		return "bloodied"
-	}
-	if hpPercent <= 75 {
-		return "wounded"
-	}
-	return "healthy"
-}
-
 // handleCampaignSpectate godoc
 // @Summary Spectate a campaign (no auth required for public campaigns)
 // @Description Returns spectator-friendly view of campaign state: party status, current game state, and recent activity
@@ -1029,7 +1005,8 @@ func handleCampaignSpectate(w http.ResponseWriter, r *http.Request, campaignID i
 
 	// Get party members (spectator-safe info only)
 	rows, qerr := db.Query(`
-		SELECT c.id, c.name, c.class, c.species, c.level, c.hp, c.max_hp, c.conditions, a.name as agent_name, COALESCE(c.is_dead, false)
+		SELECT c.id, c.name, c.class, c.species, c.level, c.hp, c.max_hp, c.conditions, a.name as agent_name, COALESCE(c.is_dead, false),
+			COALESCE(c.is_stable, false)
 		FROM characters c
 		LEFT JOIN agents a ON c.agent_id = a.id
 		WHERE c.lobby_id = $1
@@ -1043,14 +1020,14 @@ func handleCampaignSpectate(w http.ResponseWriter, r *http.Request, campaignID i
 	party := []map[string]interface{}{}
 	for rows.Next() {
 		var id, level, hp, maxHP int
-		var isDead bool
+		var isDead, isStable bool
 		var charName, class, species string
 		var conditions sql.NullString
 		var agentName sql.NullString
-		rows.Scan(&id, &charName, &class, &species, &level, &hp, &maxHP, &conditions, &agentName, &isDead)
+		rows.Scan(&id, &charName, &class, &species, &level, &hp, &maxHP, &conditions, &agentName, &isDead, &isStable)
 
-		// Calculate HP status text for spectators
-		hpStatus := spectatorHPStatus(hp, maxHP, isDead)
+		// how the character looks (the health owner, game/hit_points.go): never its numbers
+		hpStatus := game.Vitals{HP: hp, Max: maxHP, Stable: isStable, Dead: isDead}.Health()
 
 		// Parse conditions for public display.
 		activeConditions := []string{}
@@ -3181,11 +3158,13 @@ func handleCampaignPage(w http.ResponseWriter, r *http.Request) {
 		AgentID    int
 		AgentName  string
 		LastActive sql.NullTime
+		Stable     bool
+		Dead       bool
 	}
 	var partyMembers []PartyMember
 	partyRows, qerr := db.Query(`
 		SELECT c.id, c.name, c.class, c.species, c.level, c.hp, c.max_hp, a.id, a.name,
-			GREATEST(c.last_active, a.last_seen)
+			GREATEST(c.last_active, a.last_seen), COALESCE(c.is_stable, false), COALESCE(c.is_dead, false)
 		FROM characters c
 		JOIN agents a ON c.agent_id = a.id
 		WHERE c.lobby_id = $1
@@ -3198,7 +3177,7 @@ func handleCampaignPage(w http.ResponseWriter, r *http.Request) {
 	if partyRows != nil {
 		for partyRows.Next() {
 			var pm PartyMember
-			partyRows.Scan(&pm.CharID, &pm.CharName, &pm.Class, &pm.Species, &pm.Level, &pm.HP, &pm.MaxHP, &pm.AgentID, &pm.AgentName, &pm.LastActive)
+			partyRows.Scan(&pm.CharID, &pm.CharName, &pm.Class, &pm.Species, &pm.Level, &pm.HP, &pm.MaxHP, &pm.AgentID, &pm.AgentName, &pm.LastActive, &pm.Stable, &pm.Dead)
 			playerCount++
 			partyMembers = append(partyMembers, pm)
 		}
@@ -3259,13 +3238,7 @@ func handleCampaignPage(w http.ResponseWriter, r *http.Request) {
 
 	// Player boxes (sorted by most recent activity)
 	for _, pm := range partyMembers {
-		hpStatus := "healthy"
-		if pm.HP < pm.MaxHP/2 {
-			hpStatus = "wounded"
-		}
-		if pm.HP < pm.MaxHP/4 {
-			hpStatus = "critical"
-		}
+		hpStatus := game.Vitals{HP: pm.HP, Max: pm.MaxHP, Stable: pm.Stable, Dead: pm.Dead}.Health() // the health owner
 
 		// Determine if this player's turn
 		isCurrentTurn := combatActive && pm.CharName == currentTurnName
@@ -3305,13 +3278,7 @@ func handleCampaignPage(w http.ResponseWriter, r *http.Request) {
 	// Legacy party grid for left column (keep for now)
 	var party strings.Builder
 	for _, pm := range partyMembers {
-		hpStatus := "healthy"
-		if pm.HP < pm.MaxHP/2 {
-			hpStatus = "wounded"
-		}
-		if pm.HP < pm.MaxHP/4 {
-			hpStatus = "critical"
-		}
+		hpStatus := game.Vitals{HP: pm.HP, Max: pm.MaxHP, Stable: pm.Stable, Dead: pm.Dead}.Health() // the health owner
 		party.WriteString(fmt.Sprintf(`
 <div class="party-member">
   <h4><a href="/character/%d">%s</a></h4>
@@ -3482,8 +3449,8 @@ func handleCampaignPage(w http.ResponseWriter, r *http.Request) {
 .party-box h4{margin:0 0 0.2em 0;font-size:0.9em}
 .party-box .class-info{margin:0;font-size:0.75em;color:var(--muted)}
 .party-box .healthy{color:var(--ok);margin:0.2em 0 0 0;font-size:0.8em}
-.party-box .wounded{color:var(--warn);margin:0.2em 0 0 0;font-size:0.8em}
-.party-box .critical{color:var(--bad);margin:0.2em 0 0 0;font-size:0.8em}
+.party-box .wounded,.party-box .bloodied{color:var(--warn);margin:0.2em 0 0 0;font-size:0.8em}
+.party-box .critical,.party-box .dying,.party-box .stable,.party-box .dead,.party-box .defeated{color:var(--bad);margin:0.2em 0 0 0;font-size:0.8em}
 .party-box.gm-box{border-color:var(--info);background:var(--note-bg)}
 .party-box.inactive{border-color:var(--muted);box-shadow:none;opacity:0.7}
 .party-box .box-label{font-size:0.65em;color:var(--muted);text-transform:uppercase;letter-spacing:0.05em}
@@ -3500,8 +3467,8 @@ func handleCampaignPage(w http.ResponseWriter, r *http.Request) {
 .party-member{background:var(--note-bg);padding:1em;border-radius:8px}
 .party-member h4{margin:0 0 0.5em 0}
 .party-member .healthy{color:var(--ok)}
-.party-member .wounded{color:var(--warn)}
-.party-member .critical{color:var(--bad)}
+.party-member .wounded,.party-member .bloodied{color:var(--warn)}
+.party-member .critical,.party-member .dying,.party-member .stable,.party-member .dead,.party-member .defeated{color:var(--bad)}
 .observation{background:var(--note-bg);padding:1em;margin:0.5em 0;border-radius:4px;border-left:3px solid var(--link)}
 .observation .observer{font-weight:bold}
 .observation .type{color:var(--muted);font-size:0.9em}

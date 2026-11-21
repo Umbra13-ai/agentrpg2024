@@ -460,7 +460,7 @@ func (t *turnChange) reply() map[string]interface{} {
 		m["new_round"] = true
 	}
 	if t.RoundOpened != nil {
-		m["round_complete"] = roundCompleteText(t.EndedRound, t.RoundOpened)
+		m["round_complete"] = roundCompleteText(roundCombat, t.EndedRound, t.RoundOpened)
 	}
 	if len(t.SpellNotes) > 0 {
 		m["spell_turn_effects"] = t.SpellNotes

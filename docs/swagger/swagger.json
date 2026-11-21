@@ -1832,6 +1832,10 @@
             "movement_ft": {
              "type": "integer"
             },
+            "nothing_left": {
+             "description": "the Action and Bonus Action are spent: nothing is left to send this turn, and who moves the fight on (I-KESTREL-7)",
+             "type": "string"
+            },
             "reaction": {},
             "resources": {
              "items": {
@@ -3805,6 +3809,25 @@
                 },
                 "type": "object"
                },
+               "window": {
+                "properties": {
+                 "closes_at": {
+                  "format": "date-time",
+                  "type": "string"
+                 },
+                 "open": {
+                  "type": "boolean"
+                 },
+                 "opens_at": {
+                  "format": "date-time",
+                  "type": "string"
+                 },
+                 "send_now": {
+                  "type": "boolean"
+                 }
+                },
+                "type": "object"
+               },
                "window_until": {
                 "format": "date-time",
                 "type": "string"
@@ -3899,6 +3922,10 @@
                "type": "boolean"
               },
               "kind": {
+               "type": "string"
+              },
+              "name": {
+               "description": "roundName: \"campaign round 3\", \"fight round 1\"",
                "type": "string"
               },
               "number": {
@@ -4272,6 +4299,25 @@
                   },
                   "type": "object"
                  },
+                 "window": {
+                  "properties": {
+                   "closes_at": {
+                    "format": "date-time",
+                    "type": "string"
+                   },
+                   "open": {
+                    "type": "boolean"
+                   },
+                   "opens_at": {
+                    "format": "date-time",
+                    "type": "string"
+                   },
+                   "send_now": {
+                    "type": "boolean"
+                   }
+                  },
+                  "type": "object"
+                 },
                  "window_until": {
                   "format": "date-time",
                   "type": "string"
@@ -4366,6 +4412,10 @@
                  "type": "boolean"
                 },
                 "kind": {
+                 "type": "string"
+                },
+                "name": {
+                 "description": "roundName: \"campaign round 3\", \"fight round 1\"",
                  "type": "string"
                 },
                 "number": {
@@ -24427,6 +24477,25 @@
                   },
                   "type": "object"
                  },
+                 "window": {
+                  "properties": {
+                   "closes_at": {
+                    "format": "date-time",
+                    "type": "string"
+                   },
+                   "open": {
+                    "type": "boolean"
+                   },
+                   "opens_at": {
+                    "format": "date-time",
+                    "type": "string"
+                   },
+                   "send_now": {
+                    "type": "boolean"
+                   }
+                  },
+                  "type": "object"
+                 },
                  "window_until": {
                   "format": "date-time",
                   "type": "string"
@@ -24521,6 +24590,10 @@
                  "type": "boolean"
                 },
                 "kind": {
+                 "type": "string"
+                },
+                "name": {
+                 "description": "roundName: \"campaign round 3\", \"fight round 1\"",
                  "type": "string"
                 },
                 "number": {
@@ -24864,6 +24937,25 @@
                   },
                   "type": "object"
                  },
+                 "window": {
+                  "properties": {
+                   "closes_at": {
+                    "format": "date-time",
+                    "type": "string"
+                   },
+                   "open": {
+                    "type": "boolean"
+                   },
+                   "opens_at": {
+                    "format": "date-time",
+                    "type": "string"
+                   },
+                   "send_now": {
+                    "type": "boolean"
+                   }
+                  },
+                  "type": "object"
+                 },
                  "window_until": {
                   "format": "date-time",
                   "type": "string"
@@ -24958,6 +25050,10 @@
                  "type": "boolean"
                 },
                 "kind": {
+                 "type": "string"
+                },
+                "name": {
+                 "description": "roundName: \"campaign round 3\", \"fight round 1\"",
                  "type": "string"
                 },
                 "number": {
@@ -36736,6 +36832,9 @@
           "awaiting_narration": {
            "type": "boolean"
           },
+          "battle_map_unavailable": {
+           "type": "string"
+          },
           "battle_map_url": {
            "type": "string"
           },
@@ -37806,7 +37905,12 @@
            "type": "string"
           },
           "gm_says_round": {
+           "description": "roundName: campaign round or fight round",
            "type": "integer"
+          },
+          "gm_says_round_name": {
+           "description": "roundName: campaign round or fight round",
+           "type": "string"
           },
           "gnome_cunning": {
            "properties": {
@@ -38354,6 +38458,10 @@
               "movement_ft": {
                "type": "integer"
               },
+              "nothing_left": {
+               "description": "the Action and Bonus Action are spent: nothing is left to send this turn, and who moves the fight on (I-KESTREL-7)",
+               "type": "string"
+              },
               "reaction": {},
               "resources": {
                "items": {
@@ -38825,6 +38933,25 @@
                 },
                 "type": "object"
                },
+               "window": {
+                "properties": {
+                 "closes_at": {
+                  "format": "date-time",
+                  "type": "string"
+                 },
+                 "open": {
+                  "type": "boolean"
+                 },
+                 "opens_at": {
+                  "format": "date-time",
+                  "type": "string"
+                 },
+                 "send_now": {
+                  "type": "boolean"
+                 }
+                },
+                "type": "object"
+               },
                "window_until": {
                 "format": "date-time",
                 "type": "string"
@@ -38919,6 +39046,10 @@
                "type": "boolean"
               },
               "kind": {
+               "type": "string"
+              },
+              "name": {
+               "description": "roundName: \"campaign round 3\", \"fight round 1\"",
                "type": "string"
               },
               "number": {
@@ -40160,6 +40291,25 @@
                 },
                 "type": "object"
                },
+               "window": {
+                "properties": {
+                 "closes_at": {
+                  "format": "date-time",
+                  "type": "string"
+                 },
+                 "open": {
+                  "type": "boolean"
+                 },
+                 "opens_at": {
+                  "format": "date-time",
+                  "type": "string"
+                 },
+                 "send_now": {
+                  "type": "boolean"
+                 }
+                },
+                "type": "object"
+               },
                "window_until": {
                 "format": "date-time",
                 "type": "string"
@@ -40254,6 +40404,10 @@
                "type": "boolean"
               },
               "kind": {
+               "type": "string"
+              },
+              "name": {
+               "description": "roundName: \"campaign round 3\", \"fight round 1\"",
                "type": "string"
               },
               "number": {
@@ -40507,6 +40661,25 @@
                   },
                   "type": "object"
                  },
+                 "window": {
+                  "properties": {
+                   "closes_at": {
+                    "format": "date-time",
+                    "type": "string"
+                   },
+                   "open": {
+                    "type": "boolean"
+                   },
+                   "opens_at": {
+                    "format": "date-time",
+                    "type": "string"
+                   },
+                   "send_now": {
+                    "type": "boolean"
+                   }
+                  },
+                  "type": "object"
+                 },
                  "window_until": {
                   "format": "date-time",
                   "type": "string"
@@ -40601,6 +40774,10 @@
                  "type": "boolean"
                 },
                 "kind": {
+                 "type": "string"
+                },
+                "name": {
+                 "description": "roundName: \"campaign round 3\", \"fight round 1\"",
                  "type": "string"
                 },
                 "number": {

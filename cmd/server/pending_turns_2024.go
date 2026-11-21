@@ -437,10 +437,52 @@ func validatePendingSteps(lobbyID, charID int, steps []map[string]interface{}, s
 	if len(uses["bonus_action"]) > 1 {
 		problems = append(problems, fmt.Sprintf("a turn has one Bonus Action; this one has %d steps that take it (%s)", len(uses["bonus_action"]), strings.Join(uses["bonus_action"], ", ")))
 	}
-	if n := len(uses["action"]); n > 1 {
-		warnings = append(warnings, fmt.Sprintf("%d steps take your action (%s): the later ones resolve only if you have an action left then (Extra Attack, Action Surge)", n, strings.Join(uses["action"], ", ")))
+	if w := actionBudgetWarning(charID, uses["action"], surgeQueued(steps)); w != "" {
+		warnings = append(warnings, w)
 	}
 	return problems, warnings
+}
+
+// surgeQueued: the turn's steps include Action Surge.
+func surgeQueued(steps []map[string]interface{}) bool {
+	for _, m := range steps {
+		if a, _ := m["action"].(string); canonicalAction(a) == "action_surge" {
+			return true
+		}
+	}
+	return false
+}
+
+// actionBudgetWarning: a turn's steps that take the action, against what the character really has (S-ALDEN-11): one Attack action
+// holds attacksPerAction attacks, every other step takes a whole action, and a queued Action Surge with a use left adds one action.
+// It warns only when the steps need more actions than that.
+func actionBudgetWarning(charID int, actionSteps []string, surge bool) string {
+	if len(actionSteps) <= 1 {
+		return ""
+	}
+	var class string
+	var level int
+	db.QueryRow(`SELECT COALESCE(class,''), COALESCE(level,1) FROM characters WHERE id = $1`, charID).Scan(&class, &level)
+	per := attacksPerAction(charID, class, level)
+	attacks, others := 0, 0
+	for _, a := range actionSteps {
+		if canonicalAction(a) == "attack" {
+			attacks++
+		} else {
+			others++
+		}
+	}
+	need := others + (attacks+per-1)/per
+	have := 1
+	if surge {
+		if left, _ := resourceLeft(charID, class, level, "action_surge"); left > 0 {
+			have = 2
+		}
+	}
+	if need <= have {
+		return ""
+	}
+	return fmt.Sprintf("these steps need %d actions (%s; an Attack action holds %d attack(s)), and you have %d this turn: the steps past that are refused when they come", need, strings.Join(actionSteps, ", "), per, have)
 }
 
 // withActionOptions adds what the character can send (actions) to a refused turn whose problems include a word that is no action.
@@ -610,7 +652,7 @@ func resolvePendingTurns(lobbyID int) map[string]interface{} {
 			return false
 		}
 		if t.RoundOpened != nil {
-			roundsDone = append(roundsDone, roundCompleteText(t.EndedRound, t.RoundOpened))
+			roundsDone = append(roundsDone, roundCompleteText(roundCombat, t.EndedRound, t.RoundOpened))
 		}
 		return true
 	}
@@ -1257,7 +1299,7 @@ func standInTurn(w http.ResponseWriter, campaignID int, steps []map[string]inter
 	if t, ok, why := ptAdvance(campaignID, c, howStandIn); !ok {
 		out["turn_not_advanced"] = fmt.Sprintf("%s: POST /api/campaigns/%d/combat/next", why, campaignID)
 	} else if t.RoundOpened != nil {
-		out["round_complete"] = roundCompleteText(t.EndedRound, t.RoundOpened)
+		out["round_complete"] = roundCompleteText(roundCombat, t.EndedRound, t.RoundOpened)
 	}
 	return out, true
 }

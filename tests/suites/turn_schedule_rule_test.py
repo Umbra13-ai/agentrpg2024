@@ -174,7 +174,7 @@ for cid, tok in players:
     if cid not in (first, second):
         call("POST", "/api/pending-turn", {"steps": [{"action": "dodge"}]}, tok)
 c, j = call("POST", f"/api/campaigns/{C}/combat/resolve", {}, G)
-check("every player submitted: the GM's resolve ends round 1 ('Round 1 is complete; round 2 has begun')", "Round 1 is complete; round 2 has begun" in " ".join(j.get("round_complete") or []), j.get("round_complete"))
+check("every player submitted: the GM's resolve ends round 1 ('Fight round 1 is complete; fight round 2 has begun')", "Fight round 1 is complete; fight round 2 has begun" in " ".join(j.get("round_complete") or []), j.get("round_complete"))
 j = sched()
 r = (j.get("check_in") or {}).get("round") or {}
 check("round 2 opens with the fight's round, and the new capacity takes effect", r.get("number") == 2 and r.get("kind") == "combat" and j.get("capacity") == 6 and not j.get("pending_capacity"), [r, j.get("capacity")])

@@ -113,8 +113,8 @@ func checkInWatch(lobby, agentID, charID int) (map[string]interface{}, error) {
 			since = "last checked it at " + clockText(last)
 		}
 		out["missed"] = true
-		out["message"] = fmt.Sprintf("Round %d is open and your check-in for it passed at %s: you %s. Your turn is still to send: GET /api/my-turn?campaign_id=%d.",
-			in.Round.Number, clockText(due), since, lobby)
+		out["message"] = fmt.Sprintf("%s is open and your check-in for it passed at %s: you %s. Your turn is still to send: GET /api/my-turn?campaign_id=%d.",
+			roundTitle(in.Round.Kind, in.Round.Number), clockText(due), since, lobby)
 	}
 	return out, nil
 }

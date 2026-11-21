@@ -128,6 +128,15 @@ Add to the owner, never beside it. When you give another rule one owner, add it 
   `handleDamage`, `handleHeal` and `damageCharacter` are thin wrappers. Temporary Hit Points are granted by `grantTempHP`
   (`temp_hp_2024.go`). A new feature that stops a drop to 0 is one row in `dropRescues`. `TestNoOtherHitPointWriter` checks;
   suite: `hp_rule_test.py` (audit AUD-06).
+- **How a creature looks (its health label):** `game.Vitals.Health` (a character: dead, dying or stable at 0 first, then critical,
+  bloodied, wounded, healthy by the share of Hit Points) and `game.MonsterHealth` (a monster or companion: defeated at 0), with
+  `game.AtZero` (`game/hit_points.go`). my-turn's party list, own status and enemies, the GM's party view, the spectator view, the
+  campaign page's boxes, companions, the GM's monster adjustment and every "looks bloodied" line read it; my-turn's hints follow it
+  (`partyHints`, `zeroHPHint`: no help hint for the dead, a Death Saving Throw only for the dying). Feedback log 66 (I-ALDRIC-1, 5);
+  Go: `TestHealthLabel`, `TestPostgresHealthLabelsMapAndActionBudget`.
+- **The attacks an Attack action holds:** `attacksPerAction` (`actions.go`: Extra Attack, or a Pact of the Blade invocation's when
+  higher): the Attack action's spending, the action economy views and a pending turn's action budget (`actionBudgetWarning`, with a
+  queued Action Surge that has a use left; S-ALDEN-11) read it.
 - **A fight's state (combat_state):** `cmd/server/combat_state_2024.go`. `changeFight` is the one writer of the turn order, the
   current turn, the round and the monster id counter: the row locked (`lockFight`), entries changed as maps (unknown fields kept),
   written back in the same transaction. On it: `place` / `insertAt` / `remove` / `setInitiative` (whose turn it is is kept),
@@ -272,7 +281,11 @@ Add to the owner, never beside it. When you give another rule one owner, add it 
   exploration beat (`beatApplies`) and the exploration skip gives way to stand-ins. The gate reads the acting character
   with `actingCharacter` (next rule). **Stage F, what everyone is told:** `roundNoteFor` (`check_in_2024.go`), a view of `checkInAt`, is my-turn's
   `round` and the heartbeat's `turn_status.round_status`; `gmReminder` is the GM's next and final check-in in the resolve replies;
-  `playerNextCheckIn` the player's in the submission replies. Suites: `turn_schedule_rule_test.py`, `initiative_order_test.py`,
+  `playerNextCheckIn` the player's in the submission replies. **A round's name** is `roundName` / `roundTitle` ("campaign round 3",
+  "fight round 1": the chat line, my-turn's `round.name` and `gm_says_round_name`, the heartbeat, the GM's replies; I-KESTREL-7). **A
+  seat's window** is `charStatus.Window` from `checkInAt` (`opens_at`, `closes_at`, `open`, `send_now`: the turn still to send once its
+  check-in has come), in the round note as `window`; a `needs_stand_in` status says the turn can still be sent until the GM's next
+  check-in (I-ALDRIC-3). Suites: `turn_schedule_rule_test.py`, `initiative_order_test.py`,
   `late_gm_test.py`; suites that test mechanics, not the schedule, turn it off at campaign creation ({"state": "off"}); Go:
   `TestPostgresNoncombatRound`.
 - **Before the campaign starts** (Matt, Nov 16): `cmd/server/campaign_ready_2024.go`. While a campaign recruits, players ask questions in
@@ -401,6 +414,9 @@ Add to the owner, never beside it. When you give another rule one owner, add it 
   Powerful Build) with `carryingOf` (`character_gear.go`): GET /characters/encumbrance and the sheet's `carrying`, which the character
   page shows (it computes nothing itself). **A weapon is stored** with
   `setWeapon` (one property spelling); `hasProperty` is the one property check.
+- **Whether a player's battle map view works:** `encounterMap.playerToken` (`battle_map.go`: `no_battle_map`, `no_character_token`):
+  the player's GET, preview and move refuse with it (words from `playerMapReasons`), and my-turn gives `battle_map_url` or
+  `battle_map_unavailable` from it (`playerMapView`; I-ALDRIC-2).
 - **An ally within 5 feet of the target** (Sneak Attack, Pack Tactics): `allyNextToTarget` (`cmd/server/ally_adjacent_2024.go`):
   the battle map, or the attacker's `ally_adjacent` without one; nothing is assumed.
 - **Effects that last until the start of your next turn** (Dodge, Reckless Attack): `untilYourNextTurn` (`dodge_2024.go`),

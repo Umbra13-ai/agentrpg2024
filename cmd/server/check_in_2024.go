@@ -22,6 +22,7 @@ import (
 	"database/sql"
 	"errors"
 	"fmt"
+	"strings"
 	"time"
 
 	"github.com/agentrpg/agentrpg/game"
@@ -80,9 +81,25 @@ func openRoundOf(q rowQuerier, lobby int) (*roundRecord, error) {
 // clockText: a time as messages show it ("10:55 UTC"); the replies' fields carry the full time.
 func clockText(t time.Time) string { return t.UTC().Format("15:04") + " UTC" }
 
+// roundName: how every reply names a round of the schedule. A fight's round is "fight round N" (the fight's own count), a round
+// outside a fight "campaign round N" (the campaign's count of those), so the two numbers never read as one (I-KESTREL-7): the chat
+// line, my-turn, the heartbeat and the GM's replies all name a round with it.
+func roundName(kind string, number int) string {
+	if kind == roundCombat {
+		return fmt.Sprintf("fight round %d", number)
+	}
+	return fmt.Sprintf("campaign round %d", number)
+}
+
+// roundTitle: roundName at the start of a sentence.
+func roundTitle(kind string, number int) string {
+	n := roundName(kind, number)
+	return strings.ToUpper(n[:1]) + n[1:]
+}
+
 // opened: the sentence that says a round opened.
 func (r *roundRecord) opened() string {
-	what := fmt.Sprintf("Round %d (%s) is open", r.Number, r.Kind)
+	what := roundTitle(r.Kind, r.Number) + " is open"
 	if !r.Deadline.Valid {
 		return what + "; the schedule is paused, so it has no deadline until the GM resumes it."
 	}
@@ -143,11 +160,7 @@ func openRound(tx *sql.Tx, lobby int, kind string, number int, now time.Time) (*
 
 // roundOpenedLine: the server's party-chat line when a round opens.
 func roundOpenedLine(r *roundRecord) string {
-	where := "outside a fight"
-	if r.Kind == roundCombat {
-		where = "in the fight"
-	}
-	line := fmt.Sprintf("Round %d (%s) began at %s.", r.Number, where, clockText(r.OpenedAt))
+	line := fmt.Sprintf("%s began at %s.", roundTitle(r.Kind, r.Number), clockText(r.OpenedAt))
 	if r.Number == 1 && r.Kind != roundCombat {
 		line = "Play is open: " + line
 	}
@@ -333,17 +346,28 @@ const (
 )
 
 type charStatus struct {
-	CharacterID int        `json:"character_id"`
-	Name        string     `json:"name"`
-	Seat        int        `json:"seat"`
-	Status      string     `json:"status"`
-	Message     string     `json:"message"`
-	Automatic   string     `json:"automatic,omitempty"` // death_save, stable, unconscious, dead
-	How         string     `json:"how,omitempty"`       // resolved: how the turn ended (turn_results)
-	WaitingOn   *nameRef   `json:"waiting_on,omitempty"`
-	CheckInAt   *time.Time `json:"check_in_at,omitempty"`
-	WindowUntil *time.Time `json:"window_until,omitempty"`
-	ResolvesAt  *time.Time `json:"resolves_at,omitempty"`
+	CharacterID int         `json:"character_id"`
+	Name        string      `json:"name"`
+	Seat        int         `json:"seat"`
+	Status      string      `json:"status"`
+	Message     string      `json:"message"`
+	Automatic   string      `json:"automatic,omitempty"` // death_save, stable, unconscious, dead
+	How         string      `json:"how,omitempty"`       // resolved: how the turn ended (turn_results)
+	WaitingOn   *nameRef    `json:"waiting_on,omitempty"`
+	CheckInAt   *time.Time  `json:"check_in_at,omitempty"`
+	WindowUntil *time.Time  `json:"window_until,omitempty"`
+	Window      *turnWindow `json:"window,omitempty"`
+	ResolvesAt  *time.Time  `json:"resolves_at,omitempty"`
+}
+
+// turnWindow: a seat's submission window this round, from the schedule (scheduleOf): its check-in (opens_at) to the GM's check-in
+// after it (closes_at, never after the round's final check-in). open: now is inside it. send_now: the turn is still to send and its
+// check-in has come (inside the window, or after it until the GM takes a stand-in), so a client can act on one field (I-ALDRIC-3).
+type turnWindow struct {
+	OpensAt  time.Time `json:"opens_at"`
+	ClosesAt time.Time `json:"closes_at"`
+	Open     bool      `json:"open"`
+	SendNow  bool      `json:"send_now"`
 }
 
 type nameRef struct {
@@ -354,6 +378,7 @@ type nameRef struct {
 type roundView struct {
 	Number        int        `json:"number"`
 	Kind          string     `json:"kind"`
+	Name          string     `json:"name"` // roundName: "campaign round 3", "fight round 1"
 	OpenedAt      time.Time  `json:"opened_at"`
 	FinalCheckIn  *time.Time `json:"final_check_in"` // null while paused
 	FinalReached  bool       `json:"final_check_in_reached"`
@@ -448,7 +473,7 @@ func checkInAt(in checkInInputs, now time.Time) checkIn {
 	}
 	r := in.Round
 	paused := in.State == schedulePaused || !r.Deadline.Valid
-	rv := &roundView{Number: r.Number, Kind: r.Kind, OpenedAt: r.OpenedAt, Paused: paused, DeadlineRule: deadlineRuleText}
+	rv := &roundView{Number: r.Number, Kind: r.Kind, Name: roundName(r.Kind, r.Number), OpenedAt: r.OpenedAt, Paused: paused, DeadlineRule: deadlineRuleText}
 	var deadline time.Time
 	if !paused {
 		deadline = r.Deadline.Time
@@ -500,11 +525,43 @@ func checkInAt(in checkInInputs, now time.Time) checkIn {
 		}
 		return "Submitted: the GM resolves it at a check-in."
 	}
+	// a seat's window this round (nil while paused or without seat times)
+	windowOf := func(seat int) *turnWindow {
+		if paused || !in.Timed {
+			return nil
+		}
+		m, ok := in.Sched.seatMinute(seat)
+		if !ok {
+			return nil
+		}
+		at := nextAt(r.ClockFrom, m)
+		until := at.Add(time.Duration(in.Sched.Interval-gmLeadMinutes) * time.Minute)
+		if until.After(deadline) {
+			until = deadline
+		}
+		return &turnWindow{OpensAt: at, ClosesAt: until, Open: !now.Before(at) && now.Before(until)}
+	}
+	// the GM check-in at which a stand-in is taken: the one going on now or next in the round, else the GM's next one after it
+	standInAt := func() *time.Time {
+		if out.NextGMCheckIn != nil {
+			return out.NextGMCheckIn
+		}
+		return lateGM
+	}
 	// a character who still has to submit: its expected check-in, its window, the final check-in
 	notSubmitted := func(st *charStatus) {
+		if w := windowOf(st.Seat); w != nil {
+			w.SendNow = !now.Before(w.OpensAt)
+			st.Window = w
+		}
 		if !paused && rv.FinalReached {
 			st.Status = statusStandIn
-			st.Message = fmt.Sprintf("The round's final check-in (%s) has come with no submission: the GM takes a stand-in turn for %s.", clockText(deadline), st.Name)
+			// the player may still send its turn until the GM takes the stand-in (Matt, Nov 17: a late turn is taken until then)
+			if at := standInAt(); at != nil {
+				st.Message = fmt.Sprintf("The round's final check-in (%s) has passed with no submission: you can still send your turn until the GM takes a stand-in turn for %s at its next check-in (%s).", clockText(deadline), st.Name, clockText(*at))
+			} else {
+				st.Message = fmt.Sprintf("The round's final check-in (%s) has passed with no submission: you can still send your turn until the GM takes a stand-in turn for %s at its next check-in.", clockText(deadline), st.Name)
+			}
 			return
 		}
 		st.Status = statusNotSubmitted
@@ -512,19 +569,11 @@ func checkInAt(in checkInInputs, now time.Time) checkIn {
 			st.Message = "Not submitted yet. The schedule is paused: no check-in or deadline until the GM resumes it; you can submit any time."
 			return
 		}
-		m, ok := 0, false
-		if in.Timed {
-			m, ok = in.Sched.seatMinute(st.Seat)
-		}
-		if !ok {
+		if st.Window == nil {
 			st.Message = fmt.Sprintf("Not submitted yet; you can submit until the round's final check-in at %s.", clockText(deadline))
 			return
 		}
-		at := nextAt(r.ClockFrom, m)
-		until := at.Add(time.Duration(in.Sched.Interval-gmLeadMinutes) * time.Minute)
-		if until.After(deadline) {
-			until = deadline
-		}
+		at, until := st.Window.OpensAt, st.Window.ClosesAt
 		st.CheckInAt, st.WindowUntil = tp(at), tp(until)
 		switch {
 		case now.Before(at):
@@ -552,6 +601,7 @@ func checkInAt(in checkInInputs, now time.Time) checkIn {
 		}
 	}
 	resolved := func(st *charStatus, how string) {
+		st.Window = windowOf(st.Seat) // send_now false: nothing to send
 		st.Status, st.How, st.Message = statusResolved, how, "Done for this round."
 		if w, ok := turnResultHows[how]; ok {
 			st.Message = "Done for this round: " + w + "."
@@ -600,6 +650,7 @@ func checkInAt(in checkInInputs, now time.Time) checkIn {
 				default:
 					st.Status, st.ResolvesAt, st.Message = statusSubmitted, resolvesAt(t.SubmittedAt), submittedText(t.SubmittedAt)
 				}
+				st.Window = windowOf(st.Seat)
 			default:
 				notSubmitted(st)
 			}
@@ -646,6 +697,7 @@ func checkInAt(in checkInInputs, now time.Time) checkIn {
 				automatic(st, t.Needs)
 			case t.Submitted:
 				st.Status, st.ResolvesAt, st.Message = statusSubmitted, resolvesAt(t.SubmittedAt), submittedText(t.SubmittedAt)
+				st.Window = windowOf(st.Seat)
 				if firstSubmitted == nil || t.SubmittedAt.Before(*firstSubmitted) {
 					firstSubmitted, firstName = tp(t.SubmittedAt), s.Name
 				}
@@ -785,17 +837,18 @@ func loadCheckIn(lobby int) (checkInInputs, time.Time, error) {
 // roundNoteFor is the open round as the heartbeat and my-turn show it, a view of checkInAt: for a character (charID > 0) its own
 // status, its next check-in and how to send its turn; for the GM (charID 0) its next check-in, whose action is due and whether it
 // is overdue. nil when the campaign doesn't use the schedule or no round is open.
-// roundAtTime: the number of the schedule's round that was open at a moment of real time (false: none).
-func roundAtTime(lobby int, at time.Time) (int, bool) {
+// roundAtTime: the number and the name (roundName) of the schedule's round that was open at a moment of real time (false: none).
+func roundAtTime(lobby int, at time.Time) (int, string, bool) {
 	clock, err := clockOf(db, lobby)
 	if err != nil {
-		return 0, false
+		return 0, "", false
 	}
 	var n int
-	if db.QueryRow(`SELECT number FROM campaign_rounds WHERE lobby_id = $1 AND opened_at <= $2 ORDER BY opened_at DESC, id DESC LIMIT 1`, lobby, clock.at(at)).Scan(&n) != nil {
-		return 0, false
+	var kind string
+	if db.QueryRow(`SELECT number, kind FROM campaign_rounds WHERE lobby_id = $1 AND opened_at <= $2 ORDER BY opened_at DESC, id DESC LIMIT 1`, lobby, clock.at(at)).Scan(&n, &kind) != nil {
+		return 0, "", false
 	}
-	return n, true
+	return n, roundName(kind, n), true
 }
 
 func roundNoteFor(lobby, charID int) (map[string]interface{}, error) {
@@ -808,7 +861,7 @@ func roundNoteFor(lobby, charID int) (map[string]interface{}, error) {
 		return nil, err
 	}
 	ci := checkInAt(in, now)
-	v := map[string]interface{}{"round": ci.Round.Number, "kind": ci.Round.Kind, "opened_at": ci.Round.OpenedAt, "final_check_in": ci.Round.FinalCheckIn,
+	v := map[string]interface{}{"round": ci.Round.Number, "kind": ci.Round.Kind, "name": ci.Round.Name, "opened_at": ci.Round.OpenedAt, "final_check_in": ci.Round.FinalCheckIn,
 		"paused": ci.Round.Paused, "details": fmt.Sprintf("GET /api/campaigns/%d/round", lobby)}
 	if charID == 0 {
 		v["next_gm_check_in"], v["due"], v["gm_overdue"] = ci.NextGMCheckIn, ci.Due, ci.GMOverdue
@@ -823,6 +876,9 @@ func roundNoteFor(lobby, charID int) (map[string]interface{}, error) {
 		if c.ResolvesAt != nil { // a submitted turn resolves at the GM's check-in, not at the player's own (feedback log entry 36)
 			v["resolves_at"] = c.ResolvesAt
 		}
+		if c.Window != nil { // the seat's window this round and whether to send now (I-ALDRIC-3)
+			v["window"] = c.Window
+		}
 		if ci.Round.Kind != roundCombat { // outside a fight, the round says whether the player can still send its turn (playtest I-ALDEN-5)
 			v["your_turn"] = roundTurnOpen(c.Status)
 		}
@@ -830,11 +886,14 @@ func roundNoteFor(lobby, charID int) (map[string]interface{}, error) {
 			v["waiting_on"] = c.WaitingOn.Name
 		}
 		if ci.Round.FinalReached && c.Status == statusResolved && ci.Round.Kind != roundCombat { // feedback log 56
-			v["next_round"] = fmt.Sprintf("Round %d is over for you. Round %d opens when the GM has resolved the round's last turns; the server says so in the party chat.", ci.Round.Number, ci.Round.Number+1)
+			v["next_round"] = fmt.Sprintf("%s is over for you. The next round opens when the GM has resolved this round's last turns; the server says so in the party chat.", roundTitle(ci.Round.Kind, ci.Round.Number))
 		}
 	}
 	if next, ok := playerNextCheckIn(lobby, charID, in.Round, now); ok {
 		v["next_check_in"] = next
+		if ci.Round.FinalCheckIn != nil && next.After(*ci.Round.FinalCheckIn) { // I-ALDRIC-3: a later round's check-in, not this round's
+			v["next_check_in_note"] = fmt.Sprintf("next_check_in is your seat's next recurring check-in, after this round's final check-in (%s): this round's turn is due before then (window.send_now says when to send it).", clockText(*ci.Round.FinalCheckIn))
+		}
 	}
 	if ci.Round.Kind == roundCombat {
 		v["how_to_send"] = "POST /api/pending-turn {\"steps\": [...]}: your turn is saved for this round and the GM resolves it at a check-in, in Initiative order."

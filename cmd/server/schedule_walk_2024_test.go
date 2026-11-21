@@ -149,7 +149,7 @@ func TestTurnResultsOnceAndTheNextRound(t *testing.T) {
 	if closed != 1 {
 		t.Errorf("%d closed rounds, want 1", closed)
 	}
-	if s := roundCompleteText(1, r2); !strings.HasPrefix(s, "Round 1 is complete; round 2 has begun (its final check-in is ") {
+	if s := roundCompleteText(roundCombat, 1, r2); !strings.HasPrefix(s, "Fight round 1 is complete; fight round 2 has begun (its final check-in is ") {
 		t.Errorf("round complete text: %s", s)
 	}
 	if tc := end(7, howOwn); tc.Recorded != "" {

@@ -433,8 +433,8 @@ func saveSubmission(s *pendingSubmission, r *http.Request, raw []byte, story boo
 	err = tx.QueryRow(`SELECT how FROM turn_results WHERE round_id = $1 AND combatant_id = $2 AND NOT second_turn`, s.Round.ID, s.CharacterID).Scan(&done)
 	if err == nil {
 		return map[string]interface{}{"error": codeTurnAlreadyResolve, "round": s.Round.Number,
-			"message": fmt.Sprintf("%s's turn in round %d has resolved (%s): it is done for this round. Round %d begins when every turn of this round has resolved; send it then. Nothing was saved.",
-				s.Name, s.Round.Number, turnResultHows[done], s.Round.Number+1)}, http.StatusConflict, nil
+			"message": fmt.Sprintf("%s's turn in %s has resolved (%s): it is done for this round. The next round begins when every turn of this round has resolved; send it then. Nothing was saved.",
+				s.Name, roundName(s.Round.Kind, s.Round.Number), turnResultHows[done])}, http.StatusConflict, nil
 	} else if !errors.Is(err, sql.ErrNoRows) {
 		return nil, 0, err
 	}

@@ -156,28 +156,6 @@ func normalizeConditionList(conditions []string) []string {
 	return normalized
 }
 
-// characterHPStatus provides the concise party-status label used by GM and
-// spectator reads. A character at 0 HP who has made three successful death
-// saves is unconscious but stable, not dying.
-func characterHPStatus(hp, maxHP int, isStable, isDead bool) string {
-	if isDead {
-		return "dead"
-	}
-	if hp == 0 {
-		if isStable {
-			return "stable"
-		}
-		return "dying"
-	}
-	if hp <= maxHP/4 {
-		return "critical"
-	}
-	if hp <= maxHP/2 {
-		return "wounded"
-	}
-	return "healthy"
-}
-
 // removeOneWithShadowsInvisibility ends the invisible:one_with_shadows entry (One with Shadows: "invisible until you move or take an
 // action or a reaction"). Called when the character moves, takes an action or uses a reaction.
 func removeOneWithShadowsInvisibility(charID int) bool {

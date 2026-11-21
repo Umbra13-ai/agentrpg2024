@@ -80,8 +80,8 @@ func pendingRoundFor(c ptCombat, slot int, scheduled bool, asked int) (round int
 	} else {
 		round = c.Round
 		if slot < c.Index {
-			return c.Round, codeTurnAlreadyResolve, fmt.Sprintf("%s's turn in round %d has resolved: it is done for this round. Round %d begins when the GM resolves this round's last turn; submit for it then. Nothing was saved.",
-				c.Entries[slot].Name, c.Round, c.Round+1)
+			return c.Round, codeTurnAlreadyResolve, fmt.Sprintf("%s's turn in %s has resolved: it is done for this round. %s begins when the GM resolves this round's last turn; submit for it then. Nothing was saved.",
+				c.Entries[slot].Name, roundName(roundCombat, c.Round), roundTitle(roundCombat, c.Round+1))
 		}
 	}
 	if asked != 0 && asked != round {
@@ -267,8 +267,8 @@ func roundResults(q rowsQuerier, roundID int) (map[int]string, error) {
 }
 
 // roundCompleteText: what a reply says when the last turn of a round ended and the next round opened.
-func roundCompleteText(ended int, next *roundRecord) string {
-	s := fmt.Sprintf("Round %d is complete; round %d has begun", ended, next.Number)
+func roundCompleteText(endedKind string, ended int, next *roundRecord) string {
+	s := fmt.Sprintf("%s is complete; %s has begun", roundTitle(endedKind, ended), roundName(next.Kind, next.Number))
 	if next.Deadline.Valid {
 		return s + fmt.Sprintf(" (its final check-in is %s).", clockText(next.Deadline.Time))
 	}

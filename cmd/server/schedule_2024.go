@@ -738,7 +738,7 @@ func changeSchedule(tx *sql.Tx, lobby int, ch scheduleChange) ([]string, error) 
 			if _, err := tx.Exec(`UPDATE campaign_rounds SET clock_from = $1, deadline = $2 WHERE id = $3`, r.ClockFrom, r.Deadline, r.ID); err != nil {
 				return nil, err
 			}
-			done = append(done, fmt.Sprintf("The turn schedule is on again. Round %d has a fresh deadline: its final check-in is %s, and every player has a check-in before it.", r.Number, clockText(r.Deadline.Time)))
+			done = append(done, fmt.Sprintf("The turn schedule is on again. %s has a fresh deadline: its final check-in is %s, and every player has a check-in before it.", roundTitle(r.Kind, r.Number), clockText(r.Deadline.Time)))
 		} else {
 			done = append(done, "The turn schedule is on again.")
 		}

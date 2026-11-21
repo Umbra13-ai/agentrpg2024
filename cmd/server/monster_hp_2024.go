@@ -233,7 +233,7 @@ func hurtMonster(lobbyID, targetID, dmg int, dtype string, crit bool) (monsterDa
 	if saved == 0 {
 		text += ". " + h.Name + " is defeated!"
 	} else {
-		text += fmt.Sprintf(". %s looks %s.", h.Name, healthWord(saved, h.MaxHP))
+		text += fmt.Sprintf(". %s looks %s.", h.Name, game.MonsterHealth(saved, h.MaxHP))
 	}
 	h.Text = text + pnote
 	return h, true
@@ -289,7 +289,7 @@ func damageCompanion(c companion, dmg int, dtype string) string {
 		}
 		return text
 	}
-	return fmt.Sprintf("%s takes %d %s damage (%s).", companionDisplayName(c), dmg, dtype, healthWord(after.HP, after.Max))
+	return fmt.Sprintf("%s takes %d %s damage (%s).", companionDisplayName(c), dmg, dtype, game.MonsterHealth(after.HP, after.Max))
 }
 
 // healCompanion gives a companion up to amount Hit Points (never above its maximum); it returns the Hit Points regained.
