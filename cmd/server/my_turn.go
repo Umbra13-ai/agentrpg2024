@@ -36,10 +36,7 @@ func buildActionEconomy(charID int, class string, level int, actionUsed, bonusAc
 	}
 
 	// Extra Attack info
-	totalAttacks := characterExtraAttacks(charID, class, level)
-	if pw := pactWeaponAttacks(charID, class); pw > totalAttacks {
-		totalAttacks = pw // Thirsting Blade, Devouring Blade (F201)
-	}
+	totalAttacks := attacksPerAction(charID, class, level)
 	if totalAttacks > 1 {
 		result["extra_attack"] = true
 		result["total_attacks_per_action"] = totalAttacks
@@ -154,7 +151,8 @@ func handleMyTurn(w http.ResponseWriter, r *http.Request) {
 
 	// Get party members
 	rows, qerr := db.Query(`
-		SELECT id, name, class, species, hp, max_hp, ac FROM characters WHERE lobby_id = $1 AND id != $2
+		SELECT id, name, class, species, hp, max_hp, ac, COALESCE(is_stable, false), COALESCE(is_dead, false)
+		FROM characters WHERE lobby_id = $1 AND id != $2
 	`, lobbyID, charID)
 	if qerr != nil {
 		writeDBError(w, qerr, "the party")
@@ -167,14 +165,10 @@ func handleMyTurn(w http.ResponseWriter, r *http.Request) {
 	for rows.Next() {
 		var pid, php, pmaxHP, pac int
 		var pname, pclass, pspecies string
-		rows.Scan(&pid, &pname, &pclass, &pspecies, &php, &pmaxHP, &pac)
+		var pstable, pdead bool
+		rows.Scan(&pid, &pname, &pclass, &pspecies, &php, &pmaxHP, &pac, &pstable, &pdead)
 
-		status := "healthy"
-		if php <= pmaxHP/4 {
-			status = "critical"
-		} else if php <= pmaxHP/2 {
-			status = "wounded"
-		}
+		status := game.Vitals{HP: php, Max: pmaxHP, Stable: pstable, Dead: pdead}.Health() // the health owner (game/hit_points.go)
 
 		allies = append(allies, fmt.Sprintf("%s (%s, %d/%d HP)", pname, pclass, php, pmaxHP))
 		partyStatus = append(partyStatus, map[string]interface{}{
@@ -212,13 +206,8 @@ func handleMyTurn(w http.ResponseWriter, r *http.Request) {
 	slices.Reverse(recentEvents) // oldest first: the newest event is last
 	slices.Reverse(sinceMine)
 
-	// Determine character status
-	charStatus := "healthy"
-	if hp <= maxHP/4 {
-		charStatus = "critical"
-	} else if hp <= maxHP/2 {
-		charStatus = "wounded"
-	}
+	// the character's own status: the health owner (game/hit_points.go), which the hints below follow
+	charStatus := game.Vitals{HP: hp, Max: maxHP, Stable: isStable, Dead: isDead}.Health()
 
 	// Every action type this character has now, by part of the turn, with the request to send and the uses left (action_types_2024.go)
 	actions, featBonus, featFree := turnOptions(charID)
@@ -237,20 +226,7 @@ func handleMyTurn(w http.ResponseWriter, r *http.Request) {
 	}
 
 	// Build tactical suggestions based on situation
-	suggestions := []string{}
-	if hp <= maxHP/4 {
-		suggestions = append(suggestions, "You're critically wounded. Consider retreating, healing, or using Dodge action.")
-	}
-	if len(allies) > 0 {
-		for _, ally := range partyStatus {
-			if ally["status"] == "critical" {
-				suggestions = append(suggestions, fmt.Sprintf("%s is critically wounded and may need help.", ally["name"]))
-			}
-		}
-	}
-	if len(suggestions) == 0 {
-		suggestions = append(suggestions, "The party is in good shape. Press the attack or explore.")
-	}
+	suggestions := partyHints(charStatus, partyStatus)
 
 	// Build contextual rules reminder
 	rulesReminder := map[string]interface{}{}
@@ -620,33 +596,27 @@ func handleMyTurn(w http.ResponseWriter, r *http.Request) {
 		characterInfo["deck_effects"] = dk // lasting Mysterious Deck cards (deck_choices_2024.go)
 	}
 
-	// Add death saves if at 0 HP
-	if hp == 0 && !isDead {
-		characterInfo["death_saves"] = map[string]interface{}{
-			"successes": deathSuccesses,
-			"failures":  deathFailures,
-			"stable":    isStable,
-		}
-		charStatus = "dying"
-		if isStable {
-			charStatus = "stable"
-		}
+	// at 0 Hit Points or dead: the hint and the actions follow the health owner's label (I-ALDRIC-5)
+	if game.AtZero(charStatus) {
 		characterInfo["status"] = charStatus
-
-		// If dying, main action should be death save
-		suggestions = []string{"You are dying! Make a death save with action: death_save"}
-		actions = []map[string]interface{}{
-			{"name": "death_save", "description": "Made once at the start of your turn, no action (in a fight the server rolls it). A d20: 10+ = success, <10 = failure. 3 successes = stable. 3 failures = death. Nat 20 = regain 1 HP. Nat 1 = 2 failures."},
+		suggestions = []string{zeroHPHint(charStatus, inCombat)}
+		if charStatus != game.HealthDead {
+			characterInfo["death_saves"] = map[string]interface{}{
+				"successes": deathSuccesses,
+				"failures":  deathFailures,
+				"stable":    isStable,
+			}
 		}
-	}
-
-	if isDead {
-		characterInfo["is_dead"] = true
-		charStatus = "dead"
-		characterInfo["status"] = charStatus
-		isMyTurn = false
-		suggestions = []string{"Your character has died and cannot take combat actions or death saves."}
 		actions = []map[string]interface{}{}
+		if charStatus == game.HealthDying {
+			actions = []map[string]interface{}{
+				{"name": "death_save", "description": "Made once at the start of your turn, no action (in a fight the server rolls it). A d20: 10+ = success, <10 = failure. 3 successes = stable. 3 failures = death. Nat 20 = regain 1 HP. Nat 1 = 2 failures."},
+			}
+		}
+		if charStatus == game.HealthDead {
+			characterInfo["is_dead"] = true
+			isMyTurn = false
+		}
 	}
 
 	// Add spell slots if caster
@@ -828,18 +798,7 @@ func handleMyTurn(w http.ResponseWriter, r *http.Request) {
 		hiddenOnMap := hiddenMonsterIDs(lobbyID) // creatures the GM hid on the battle map are not listed
 		for _, e := range fullEntries {
 			if e.IsMonster && e.HP > 0 && !hiddenOnMap[e.ID] {
-				// Determine health status (don't reveal exact HP)
-				healthStatus := "healthy"
-				if e.MaxHP > 0 {
-					hpPercent := float64(e.HP) / float64(e.MaxHP)
-					if hpPercent <= 0.25 {
-						healthStatus = "critical"
-					} else if hpPercent <= 0.50 {
-						healthStatus = "bloodied"
-					} else if hpPercent <= 0.75 {
-						healthStatus = "wounded"
-					}
-				}
+				healthStatus := game.MonsterHealth(e.HP, e.MaxHP) // how it looks (the health owner); never its numbers
 
 				enemy := map[string]interface{}{
 					"name":   e.Name,
@@ -865,13 +824,9 @@ func handleMyTurn(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 
-	var mapURL string
+	var mapURL, mapReason string
 	if inCombat {
-		var raw []byte
-		var mapped encounterMap
-		if db.QueryRow("SELECT battle_map FROM combat_state WHERE lobby_id = $1 AND active", lobbyID).Scan(&raw) == nil && len(raw) > 0 && json.Unmarshal(raw, &mapped) == nil {
-			mapURL = fmt.Sprintf("/api/campaigns/%d/battle-map?character_id=%d", lobbyID, charID)
-		}
+		mapURL, mapReason = playerMapView(lobbyID, charID) // battle_map.go: the URL only when the character's view works
 	}
 
 	// Build enemies summary for situation (simple string list for backward compat)
@@ -929,8 +884,8 @@ func handleMyTurn(w http.ResponseWriter, r *http.Request) {
 	}
 	if latestNarration != "" { // when the GM said it, and the round it belongs to (feedback log 56: last round's words read as the new round's)
 		response["gm_says_at"] = narrationAt
-		if n, ok := roundAtTime(lobbyID, narrationAt); ok {
-			response["gm_says_round"] = n
+		if n, name, ok := roundAtTime(lobbyID, narrationAt); ok {
+			response["gm_says_round"], response["gm_says_round_name"] = n, name // roundName: campaign round or fight round
 		}
 	}
 	if autoEquipped != nil {
@@ -1656,6 +1611,8 @@ func handleMyTurn(w http.ResponseWriter, r *http.Request) {
 
 	if mapURL != "" {
 		response["battle_map_url"] = mapURL
+	} else if mapReason != "" {
+		response["battle_map_unavailable"] = mapReason
 	}
 	if comps := companionsOf(charID); len(comps) > 0 {
 		var list []map[string]interface{}
@@ -1709,4 +1666,47 @@ func actionableCombatCharacterID(turnOrderJSON []byte, turnIndex int) int {
 		return 0
 	}
 	return turn.ID
+}
+
+// partyHints: the tactical hints about the party, from the health owner's labels (the character's own and each ally's): a dead ally
+// gets none, a dying or stable one says what helps (I-ALDRIC-1).
+func partyHints(own string, party []map[string]interface{}) []string {
+	hints := []string{}
+	if own == game.HealthCritical {
+		hints = append(hints, "You're critically wounded. Consider retreating, healing, or using Dodge action.")
+	}
+	down := game.AtZero(own)
+	for _, ally := range party {
+		label, _ := ally["status"].(string)
+		switch label {
+		case game.HealthCritical:
+			hints = append(hints, fmt.Sprintf("%s is critically wounded and may need help.", ally["name"]))
+		case game.HealthDying:
+			hints = append(hints, fmt.Sprintf("%s is dying (0 Hit Points): any healing, a DC 10 Wisdom (Medicine) check or Spare the Dying keeps them alive.", ally["name"]))
+		case game.HealthStable:
+			hints = append(hints, fmt.Sprintf("%s is stable at 0 Hit Points: any healing wakes them.", ally["name"]))
+		}
+		down = down || game.AtZero(label)
+	}
+	if len(hints) == 0 && !down {
+		hints = append(hints, "The party is in good shape. Press the attack or explore.")
+	}
+	return hints
+}
+
+// zeroHPHint: the character's own hint at 0 Hit Points or dead (I-ALDRIC-5): only a dying character makes Death Saving Throws (in a
+// fight the server rolls it at the start of the turn); a stable one makes none.
+func zeroHPHint(label string, inFight bool) string {
+	switch label {
+	case game.HealthDead:
+		return "Your character has died and cannot take combat actions or death saves."
+	case game.HealthStable:
+		return "You are stable at 0 Hit Points: you make no Death Saving Throws and have nothing to do. Any healing wakes you, or you regain 1 Hit Point after 1d4 hours."
+	case game.HealthDying:
+		if inFight {
+			return "You are dying: the server rolls your Death Saving Throw at the start of your turn (3 successes: stable; 3 failures: death). Allies can heal or stabilize you."
+		}
+		return `You are dying: make your Death Saving Throw with {"action": "death_save"} (3 successes: stable; 3 failures: death). Allies can heal or stabilize you.`
+	}
+	return ""
 }

@@ -212,7 +212,7 @@ func openNoncombatRound(w http.ResponseWriter, lobby int) (*roundRecord, string,
 		return nil, "", false
 	}
 	if round.Kind != roundNoncombat {
-		writeJSONStatus(w, http.StatusConflict, map[string]interface{}{"error": "combat_round", "message": fmt.Sprintf("Round %d is a fight's round: resolve it with POST /api/campaigns/%d/combat/resolve and combat/stand-in. Nothing was changed.", round.Number, lobby)})
+		writeJSONStatus(w, http.StatusConflict, map[string]interface{}{"error": "combat_round", "message": fmt.Sprintf("%s is a fight's round: resolve it with POST /api/campaigns/%d/combat/resolve and combat/stand-in. Nothing was changed.", roundTitle(round.Kind, round.Number), lobby)})
 		return nil, "", false
 	}
 	return round, state, true
@@ -498,7 +498,7 @@ func afterRoundChange(lobby int, round *roundRecord, reply map[string]interface{
 		return err
 	}
 	if next != nil {
-		reply["round_complete"] = roundCompleteText(round.Number, next)
+		reply["round_complete"] = roundCompleteText(round.Kind, round.Number, next)
 		reply["next_round"] = next.Number
 	}
 	in, now, err := loadCheckIn(lobby)
@@ -516,7 +516,7 @@ func gmReminder(ci checkIn) string {
 	if ci.Round == nil {
 		return ""
 	}
-	parts := []string{fmt.Sprintf("Round %d", ci.Round.Number)}
+	parts := []string{roundTitle(ci.Round.Kind, ci.Round.Number)}
 	if ci.NextGMCheckIn != nil {
 		parts = append(parts, fmt.Sprintf("your next check-in is %s", clockText(*ci.NextGMCheckIn)))
 	}

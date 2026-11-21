@@ -178,3 +178,43 @@ func TestStabilizeAndBloodied(t *testing.T) {
 		}
 	}
 }
+
+// The one health label: life state first (a stale stable flag never hides death), then the share of Hit Points left; a monster at
+// 0 is defeated (I-ALDRIC-1, I-ALDRIC-5).
+func TestHealthLabel(t *testing.T) {
+	for _, c := range []struct {
+		v    Vitals
+		want string
+	}{
+		{Vitals{HP: 0, Max: 10, Dead: true}, HealthDead},
+		{Vitals{HP: 0, Max: 10, Dead: true, Stable: true}, HealthDead},
+		{Vitals{HP: 0, Max: 10, Stable: true}, HealthStable},
+		{Vitals{HP: 0, Max: 10}, HealthDying},
+		{Vitals{HP: 1, Max: 7}, HealthCritical},
+		{Vitals{HP: 3, Max: 7}, HealthBloodied},
+		{Vitals{HP: 5, Max: 10}, HealthBloodied},
+		{Vitals{HP: 5, Max: 7}, HealthWounded},
+		{Vitals{HP: 6, Max: 7}, HealthHealthy},
+		{Vitals{HP: 5, Max: 0}, HealthHealthy},
+	} {
+		if got := c.v.Health(); got != c.want {
+			t.Errorf("%+v: %q, want %q", c.v, got, c.want)
+		}
+	}
+	for _, c := range []struct {
+		hp, max int
+		want    string
+	}{{7, 7, HealthHealthy}, {5, 7, HealthWounded}, {3, 7, HealthBloodied}, {1, 7, HealthCritical}, {0, 7, HealthDefeated}, {-3, 7, HealthDefeated}} {
+		if got := MonsterHealth(c.hp, c.max); got != c.want {
+			t.Errorf("MonsterHealth(%d, %d) = %q, want %q", c.hp, c.max, got, c.want)
+		}
+	}
+	for _, l := range []string{HealthDead, HealthDying, HealthStable, HealthDefeated} {
+		if !AtZero(l) {
+			t.Errorf("%s is at zero", l)
+		}
+	}
+	if AtZero(HealthCritical) {
+		t.Error("critical is above zero")
+	}
+}

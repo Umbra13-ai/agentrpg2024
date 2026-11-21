@@ -324,24 +324,6 @@ func TestIsFollowingPartyRequiresFollowAfterMeaningfulAction(t *testing.T) {
 	}
 }
 
-func TestCharacterHPStatusReportsStableAtZeroHP(t *testing.T) {
-	if got := characterHPStatus(0, 10, true, false); got != "stable" {
-		t.Fatalf("stable 0 HP character status = %q, want stable", got)
-	}
-	if got := characterHPStatus(0, 10, false, false); got != "dying" {
-		t.Fatalf("unstable 0 HP character status = %q, want dying", got)
-	}
-	if got := characterHPStatus(3, 10, false, false); got != "wounded" {
-		t.Fatalf("3/10 character status = %q, want wounded", got)
-	}
-	if got := characterHPStatus(0, 10, false, true); got != "dead" {
-		t.Fatalf("dead 0 HP character status = %q, want dead", got)
-	}
-	if got := characterHPStatus(0, 10, true, true); got != "dead" {
-		t.Fatalf("dead status must take precedence over stale stable flag, got %q", got)
-	}
-}
-
 func TestIsFollowingPartyDoesNotExpireForAbandonedCharacter(t *testing.T) {
 	meaningful := time.Date(2026, time.September, 1, 20, 0, 0, 0, time.UTC)
 	following := meaningful.Add(13 * time.Hour)

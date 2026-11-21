@@ -265,7 +265,7 @@ func handleGMFallingDamage(w http.ResponseWriter, r *http.Request) {
 		if m, ok := view["message"].(string); ok && fall.Before.HP <= 0 {
 			consequence = "💀 " + m
 		}
-	case newHP <= maxHP/4:
+	case fall.After.Health() == game.HealthCritical: // the health owner
 		consequence = "⚠️ Character is badly hurt!"
 	}
 

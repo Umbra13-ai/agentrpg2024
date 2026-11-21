@@ -289,6 +289,9 @@ func turnLeft(charID int) map[string]interface{} {
 		out["bonus_action"] = "available (nothing you have uses it right now)"
 	}
 	out["movement_ft"] = movement
+	if out["action"] == "used" && (bonusUsed || out["bonus_action"] == "available (nothing you have uses it right now)") {
+		out["nothing_left"] = turnSpentNote(lobby, movement) // the Action and Bonus Action are spent: nothing is left to send this turn, and who moves the fight on (I-KESTREL-7)
+	}
 	if reactionUsed {
 		out["reaction"] = "used"
 	} else {
@@ -739,4 +742,18 @@ func handleReminders(w http.ResponseWriter, r *http.Request) {
 	out := view()
 	out["success"] = true
 	writeJSONStatus(w, http.StatusOK, out)
+}
+
+// turnSpentNote: what a fight action's reply says when the character's Action and Bonus Action are spent (I-KESTREL-7): nothing is
+// left to send this turn, and who moves the fight on (the GM, at its check-in with the turn schedule, else with combat/next).
+func turnSpentNote(lobby, movement int) string {
+	moveText := ""
+	if movement > 0 {
+		moveText = fmt.Sprintf(" except moving (%d ft left)", movement)
+	}
+	next := fmt.Sprintf("The GM ends your turn and moves the fight on (POST /api/campaigns/%d/combat/next).", lobby)
+	if st, err := scheduleStateOf(db, lobby); err == nil && usesSchedule(st) {
+		next = "The GM moves the fight on at its next check-in; you don't need to send anything more this turn."
+	}
+	return "Your Action and Bonus Action are spent: there is nothing left to do this turn" + moveText + ". Your Reaction stays for other creatures' turns. " + next
 }

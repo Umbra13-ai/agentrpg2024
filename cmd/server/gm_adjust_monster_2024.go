@@ -19,6 +19,7 @@ package main
 import (
 	"encoding/json"
 	"fmt"
+	"github.com/agentrpg/agentrpg/game"
 	"net/http"
 	"strconv"
 	"strings"
@@ -266,7 +267,7 @@ func handleGMAdjustMonster(w http.ResponseWriter, r *http.Request) {
 			seen = append(seen, d)
 		}
 	}
-	public := fmt.Sprintf("%s looks %s.", name, healthWord(hp, maxHP))
+	public := fmt.Sprintf("%s looks %s.", name, game.MonsterHealth(hp, maxHP))
 	if len(seen) > 0 {
 		public = fmt.Sprintf("%s: %s. %s", name, strings.Join(seen, "; "), public)
 	}

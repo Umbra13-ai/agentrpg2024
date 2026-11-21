@@ -248,7 +248,7 @@ func monsterCastHealing(r *http.Request, lobbyID, monsterID int, sp SRDSpell, sl
 				lines = append(lines, fmt.Sprintf("%s: the healing could not be saved (database error); nothing changed.", name))
 				continue
 			}
-			lines = append(lines, fmt.Sprintf("%s regains %d Hit Points (%s; %s).", name, after.HP-before.HP, roll, healthWord(after.HP, after.Max)))
+			lines = append(lines, fmt.Sprintf("%s regains %d Hit Points (%s; %s).", name, after.HP-before.HP, roll, game.MonsterHealth(after.HP, after.Max)))
 		default:
 			h, err := healHP(id, amount)
 			if err != nil {

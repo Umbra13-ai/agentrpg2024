@@ -445,7 +445,7 @@ func hurtMonster(lobbyID, targetID, dmg int, dtype string, crit bool) (monsterDa
 		text += ". " + h.Name + " is defeated!"
 		gmNoteMonsterConcentrationEnds(lobbyID, targetID, h.Name, "is dead")
 	} else {
-		text += fmt.Sprintf(". %s looks %s.", h.Name, healthWord(saved, h.MaxHP))
+		text += fmt.Sprintf(". %s looks %s.", h.Name, game.MonsterHealth(saved, h.MaxHP))
 	}
 	h.Text = text + pnote
 	gmNoteMonsterConcentration(lobbyID, targetID, h.Name, d, saved)
@@ -618,7 +618,7 @@ func damageCompanion(c companion, dmg int, dtype string) string {
 	if d > 0 {
 		wake = wakeOnDamageSleep(c.LobbyID, c.CombatID, companionDisplayName(c))
 	}
-	return fmt.Sprintf("%s takes %d %s damage%s (%s).", companionDisplayName(c), d, dtype, note, healthWord(after.HP, after.Max)) + wake
+	return fmt.Sprintf("%s takes %d %s damage%s (%s).", companionDisplayName(c), d, dtype, note, game.MonsterHealth(after.HP, after.Max)) + wake
 }
 
 // healCompanion gives a companion up to amount Hit Points (never above its maximum); it returns the Hit Points regained.

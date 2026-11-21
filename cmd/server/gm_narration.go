@@ -4,6 +4,7 @@ import (
 	"database/sql"
 	"encoding/json"
 	"fmt"
+	"github.com/agentrpg/agentrpg/game"
 	"log"
 	"net/http"
 	"sort"
@@ -216,7 +217,7 @@ func handleGMStatus(w http.ResponseWriter, r *http.Request) {
 
 		conditions := responseConditions(conditionsJSON)
 
-		status := characterHPStatus(hp, maxHP, isStable, isDead)
+		status := game.Vitals{HP: hp, Max: maxHP, Stable: isStable, Dead: isDead}.Health() // the health owner
 
 		charInfo := map[string]interface{}{
 			"id":     id,
@@ -516,7 +517,7 @@ func handleGMStatus(w http.ResponseWriter, r *http.Request) {
 						}
 
 						// Tactical suggestions based on HP
-						if e.HP <= e.MaxHP/4 {
+						if game.MonsterHealth(e.HP, e.MaxHP) == game.HealthCritical {
 							guidance["tactical_options"] = []string{
 								"Flee if intelligent",
 								"Fight desperately",

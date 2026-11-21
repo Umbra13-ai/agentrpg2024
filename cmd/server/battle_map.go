@@ -284,6 +284,40 @@ func (m encounterMap) stepProblem(actor mapToken, from, to mapSquare) string {
 	return "that step is not allowed"
 }
 
+// playerToken is the one check of whether a player's map view works: the index of the character's token on the published map, or
+// the refusal code (no_battle_map: the GM hasn't published a map; no_character_token: the GM hasn't placed this character). The
+// player's GET, preview and move refuse with it, and my-turn gives the map's URL or the reason from it (I-ALDRIC-2).
+func (m encounterMap) playerToken(charID int) (int, string) {
+	if len(m.Grid) == 0 {
+		return -1, "no_battle_map"
+	}
+	for i, t := range m.Tokens {
+		if t.ID == charID {
+			return i, ""
+		}
+	}
+	return -1, "no_character_token"
+}
+
+// playerMapReasons: what my-turn says when a player's map view doesn't work, by playerToken's code.
+var playerMapReasons = map[string]string{
+	"no_battle_map":      "The GM hasn't published a battle map for this fight: use the distances the GM narrates.",
+	"no_character_token": "The GM hasn't placed your token on the battle map yet: ask the GM to place it (until then, use the distances the GM narrates).",
+}
+
+// playerMapView: my-turn's battle map, in a fight: the URL when the character's view works, else the reason (the same check as the map).
+func playerMapView(lobbyID, charID int) (url, reason string) {
+	var raw []byte
+	var m encounterMap
+	if db.QueryRow("SELECT battle_map FROM combat_state WHERE lobby_id = $1 AND active", lobbyID).Scan(&raw) == nil && len(raw) > 0 {
+		json.Unmarshal(raw, &m)
+	}
+	if _, problem := m.playerToken(charID); problem != "" {
+		return "", playerMapReasons[problem]
+	}
+	return fmt.Sprintf("/api/campaigns/%d/battle-map?character_id=%d", lobbyID, charID), ""
+}
+
 func battleMapReply(w http.ResponseWriter, status int, body any) {
 	w.WriteHeader(status)
 	_ = json.NewEncoder(w).Encode(body)
@@ -489,15 +523,9 @@ func handleBattleMap(w http.ResponseWriter, r *http.Request, campaignID int, rou
 		companionMapMove(w, r, tx, campaignID, m, order, turn, started, req, operation)
 		return
 	}
-	actorIndex := -1
-	for i, t := range m.Tokens {
-		if t.ID == req.CharacterID {
-			actorIndex = i
-			break
-		}
-	}
-	if actorIndex < 0 {
-		battleMapError(w, 404, "no_character_token")
+	actorIndex, problem := m.playerToken(req.CharacterID)
+	if problem != "" {
+		battleMapReply(w, 404, map[string]string{"error": problem, "message": playerMapReasons[problem]})
 		return
 	}
 	actor := m.Tokens[actorIndex]

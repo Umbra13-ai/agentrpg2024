@@ -313,7 +313,7 @@ func TestMoveIsNotTheBeatAndRoundLines(t *testing.T) {
 		t.Errorf("move %v, dash %v, search %v", actionUsesBeat("move"), actionUsesBeat("dash"), actionUsesBeat("search"))
 	}
 	r := &roundRecord{Number: 2, Kind: roundNoncombat, OpenedAt: at("10:00:00"), Deadline: nullTime(at("10:55:00"))}
-	if l := roundOpenedLine(r); !strings.Contains(l, "Round 2 (outside a fight) began at") || !strings.Contains(l, "final check-in") {
+	if l := roundOpenedLine(r); !strings.Contains(l, "Campaign round 2 began at") || !strings.Contains(l, "final check-in") {
 		t.Errorf("%q", l)
 	}
 	r.Number = 1

@@ -94,25 +94,6 @@ func attackDamageType(hasWeapon bool, w SRDWeapon) string {
 	return "bludgeoning"
 }
 
-func healthWord(hp, maxHP int) string {
-	if hp <= 0 {
-		return "defeated"
-	}
-	if maxHP <= 0 {
-		return "healthy"
-	}
-	p := float64(hp) / float64(maxHP)
-	switch {
-	case p <= 0.25:
-		return "critical"
-	case p <= 0.50:
-		return "bloodied"
-	case p <= 0.75:
-		return "wounded"
-	}
-	return "healthy"
-}
-
 func asInt(v interface{}) int {
 	switch n := v.(type) {
 	case float64:
@@ -363,7 +344,7 @@ func resolveAttackOnMonster(lobbyID, charID, targetID int, o attackOutcome, clea
 			}
 		}
 		text += studiedAttacks(lobbyID, charID, targetID)
-		info["status"] = healthWord(hp, maxHP)
+		info["status"] = game.MonsterHealth(hp, maxHP)
 		return text, info, nil
 	}
 	riders := takeRiders(charID)
@@ -515,7 +496,7 @@ func resolveAttackOnMonster(lobbyID, charID, targetID int, o attackOutcome, clea
 		return "", nil, err
 	}
 	hp = saved
-	status := healthWord(hp, maxHP)
+	status := game.MonsterHealth(hp, maxHP)
 	label := "HIT!"
 	if o.Crit {
 		label = "CRITICAL HIT!"
@@ -543,7 +524,7 @@ func resolveAttackOnMonster(lobbyID, charID, targetID int, o attackOutcome, clea
 		// Knocking Out a Creature: a melee attack that would reduce it to 0 Hit Points can leave it at 1 Hit Point, Unconscious
 		// (it starts a Short Rest; it wakes when it regains Hit Points or someone succeeds on a DC 10 Wisdom (Medicine) check to give first aid).
 		hp, knockedOut = 1, true
-		status = healthWord(hp, maxHP)
+		status = game.MonsterHealth(hp, maxHP)
 		if err := setMonsterHP(lobbyID, targetID, 1); err == nil {
 			applyCondition(lobbyID, targetID, "unconscious", "knocked out", 600, "", 0)
 		}
