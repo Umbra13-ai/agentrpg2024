@@ -197,6 +197,33 @@ func TestPostgresBookEndOfTurnAuras(t *testing.T) {
 	}
 }
 
+// "A creature can take an action to make a DC 10 Strength (Athletics) check to free itself" (Kuo-toa Sticky Net): the condition's
+// record carries that escape check at every target kind, and a character frees itself with POST /api/conditions/escape.
+func TestPostgresBookEscapeCheck(t *testing.T) {
+	testPostgres(t)
+	gm, player, camp, charID, petID, _ := companionReactionFixture(t)
+	pet := companionIDBase + petID
+	pgExec(t, `UPDATE characters SET hp=1000,max_hp=1000,str=30,action_used=false WHERE id=$1`, charID)
+	netter := bookFixture("Reef Netter", "Aberration", nil, []srdMonsterEntry{
+		{Name: "Gummy Net", Text: "Dexterity Saving Throw: DC 40, one Large or smaller creature the netter can see within 15 feet. Failure: The target has the Restrained condition until the net is destroyed (AC 10; HP 5; Immunity to Bludgeoning, Poison, and Psychic damage). A creature can take an action to make a DC 10 Strength (Athletics) check to free itself or another creature in a net within 5 feet, destroying the net on a success."}})
+	ids := importBookFixtures(t, gm, camp, netter, bookFixture("Net Target", "Beast", nil, []srdMonsterEntry{{Name: "Tusk", Text: "Melee Attack Roll: +1, reach 5 ft. Hit: 1 (1d1) Piercing damage."}}))
+	for _, tg := range []struct {
+		name string
+		id   int
+	}{{fmt.Sprint(charID), charID}, {"Net Target", ids["Net Target"]}, {"React Pet", pet}} {
+		c, j := pgCall(t, "POST", "/api/gm/narrate", gm, map[string]interface{}{"campaign_id": camp, "narration": "x",
+			"monster_action": map[string]interface{}{"monster": "Reef Netter", "action": "Gummy Net", "target": tg.name, "confirm_targeting": true}})
+		rs := recordsOf(camp, tg.id, "restrained")
+		if c != 200 || len(rs) != 1 || len(rs[0].Escapes) != 1 || rs[0].Escapes[0].Skill != "Athletics" || rs[0].Escapes[0].DC != 10 || rs[0].Escapes[0].Ability != "Strength" {
+			t.Fatalf("the net at %s: %d %v; records %+v", tg.name, c, j["monster_action_result"], rs)
+		}
+	}
+	rec := recordsOf(camp, charID, "restrained")[0]
+	if c, j := pgCall(t, "POST", "/api/conditions/escape", player, map[string]interface{}{"character_id": charID, "record_id": rec.ID, "escape": 0}); c != 200 || len(recordsOf(camp, charID, "restrained")) != 0 {
+		t.Errorf("the escape check: %d %v", c, j)
+	}
+}
+
 // Shape-Shift (Jackalwere; SRD lycanthropes, Imp, Quasit, Vampire, Mimic): the form named in use is recorded; an entry "(Jackal or
 // Hybrid Form Only)" is refused in another form, alone or in a Multiattack, before anything is rolled; a use the entry doesn't offer
 // is refused. A trait that acts when the creature receives a condition (Flumph, Prone Deficiency): the die decides, and the second

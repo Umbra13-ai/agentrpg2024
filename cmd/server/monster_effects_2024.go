@@ -57,6 +57,9 @@ var (
 	condDurationRe = regexp.MustCompile(`(?i)\bfor (\d+|\d+d\d+) (minutes?|hours?)\b`)
 	// endsOnDamageRe: "... for 10 minutes or until it takes damage": the condition ends when the creature takes damage
 	endsOnDamageRe = regexp.MustCompile(`(?i)\bor until it takes damage\b`)
+	// escapeCheckRe: the check that frees the target ("A creature can take an action to make a DC 10 Strength (Athletics) check to free
+	// itself or another creature in a net within 5 feet")
+	escapeCheckRe = regexp.MustCompile(`(?i)(?:A creature|The target|It) can take an action to make a DC (\d+) (Strength|Dexterity) \(([A-Za-z]+)\) check,? to (?:free itself|escape|end (?:the|this) effect on itself)`)
 	// autoSucceedTypesRe: "(Constructs and Undead succeed automatically)": creatures of those types succeed on the save without a roll
 	autoSucceedTypesRe = regexp.MustCompile(`\(((?:[A-Z][a-z]+)(?:(?:, |,? and |,? or )[A-Z][a-z]+)*) succeed automatically\)`)
 	mfxConditions      = map[string]bool{"blinded": true, "charmed": true, "deafened": true, "frightened": true, "grappled": true, "incapacitated": true,
@@ -314,6 +317,14 @@ func (e *saveEffect) readRider(fail string) (extra []string) {
 	}
 	if x := mfxEscapeRe.FindStringSubmatch(fail); x != nil {
 		e.EscapeDC, _ = strconv.Atoi(x[1])
+	}
+	if x := escapeCheckRe.FindStringSubmatch(fail); x != nil && len(e.Conditions) > 0 && len(e.Escapes) == 0 {
+		// "A creature can take an action to make a DC 10 Strength (Athletics) check to free itself ..." (Kuo-toa Sticky Net): the
+		// record's escape check (POST /api/conditions/escape), against that DC
+		dc, _ := strconv.Atoi(x[1])
+		if esc, problem := normalizeEscapes([]conditionEscape{{Ability: x[2], Skill: x[3], DC: dc}}); problem == "" {
+			e.Escapes = esc
+		}
 	}
 	e.RestrainedToo = e.EscapeDC > 0 && mfxRestrainRe.MatchString(fail)
 	if x := mfxExhaustRe.FindStringSubmatch(fail); x != nil {
