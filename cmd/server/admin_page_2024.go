@@ -65,6 +65,13 @@ details.card>summary::-webkit-details-marker{display:none}details.card[open]>sum
 .adv td:first-child{font:13px ui-monospace,monospace;width:38%;word-break:break-all}.adv textarea{min-height:44px;font:13px ui-monospace,monospace}
 .adv input{font-size:15px;padding:6px 8px}
 .box.plain{padding:10px 12px;border:1px solid var(--line);border-radius:10px}
+/* touch targets at a phone's width: a control is at least 40 px high (tools/page_check_320.js) and a long label wraps instead of widening the page */
+button,input:not([type=checkbox]):not([type=radio]),select,summary,.link{min-height:40px}
+.btn{max-width:100%;white-space:normal}.row>.btn{flex:0 1 auto}
+.btn.small{padding:6px 10px;min-height:40px}.link{padding:6px 0;display:inline-flex;align-items:center}
+.chip button{min-width:40px;min-height:40px;margin:-8px -4px -8px 0}
+details.card>summary{align-items:center;min-height:40px}
+main a[target=_blank]{padding:9px 0;min-height:40px}.toggle{min-height:40px}.toggle input{width:24px;height:24px;transform:none}
 </style></head><body>
 <div id="toast" role="status"></div>
 <header><div class="top"><h1>Admin</h1><button class="link" id="logout" hidden>Sign out</button></div>

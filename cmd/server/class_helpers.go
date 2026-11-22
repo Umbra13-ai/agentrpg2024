@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"github.com/agentrpg/agentrpg/game"
 	"log"
+	"regexp"
 	"strconv"
 	"strings"
 )
@@ -51,11 +52,37 @@ func isMarkSpell(spellSlug string) bool {
 	return lower == "hunters-mark" || lower == "hunter's-mark" || lower == "hex"
 }
 
+// laterHitDamageRe: a spell whose dice are extra damage on the caster's hits, not damage of the cast ("The target takes an extra 2d8 Radiant damage
+// from the attack": Divine Smite, Searing Smite, Shining Smite; "any attack you make deals an extra 2d8 damage when you hit": Conjure Minor
+// Elementals; Hex and Hunter's Mark's "whenever you hit"). Read from the spell's own text, so a new spell of the kind needs no row here.
+var laterHitDamageRe = regexp.MustCompile(`(?i)(extra|additional)[^.]{0,40}damage[^.]{0,80}(whenever you hit|when you hit|from the attack|each time you hit)|any attack you make deals an extra`)
+
+// castDamageOnLaterHits: the spell's dice ride on the caster's later hits (laterHitDamageRe); the cast itself deals none.
+func castDamageOnLaterHits(spellSlug string) bool {
+	sp, ok := srdSpellsMemory[strings.ToLower(spellSlug)]
+	return ok && laterHitDamageRe.MatchString(sp.Description)
+}
+
+// laterHitDamageNote: what a cast of such a spell tells the player when no owner adds the extra damage (Hex and Hunter's Mark have one:
+// hitRiderRules; a buff has its effect row): the server doesn't add it, the GM does from the attack's description.
+func laterHitDamageNote(spellSlug string) string {
+	if !castDamageOnLaterHits(spellSlug) || isMarkSpell(spellSlug) {
+		return ""
+	}
+	if _, buff := buffSpells[strings.ToLower(spellSlug)]; buff {
+		return ""
+	}
+	return " The server doesn't add this extra damage to your hits: say it in the description of the attack so the GM adds it."
+}
+
 // castDealsNoDamage: spells whose damage dice aren't dealt to a target when they're cast. Hunter's Mark and Hex add damage to later
 // hits; the others' damage falls on the caster or comes later: Wish (the stress of a non-duplicating wish), Meld into Stone (the stone
 // is destroyed), Dimension Door and Teleport (a mishap), Contact Other Plane (a failed save), Geas (acting against the command), Dream (the
 // terrifying messenger's damage when the target wakes). A character's cast and a monster's (resolveMonsterSpell) ask it.
 func castDealsNoDamage(spellSlug string) bool {
+	if castDamageOnLaterHits(spellSlug) {
+		return true
+	}
 	switch strings.ToLower(spellSlug) {
 	case "wish", "meld-into-stone", "dimension-door", "teleport", "contact-other-plane", "geas", "dream",
 		"alter-self", "enlarge-reduce", "shillelagh": // their dice are for later attacks or a weapon, not damage on casting

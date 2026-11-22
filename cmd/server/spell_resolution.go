@@ -38,6 +38,16 @@ func beamPlan(spellKey string, spellLevel, slotLevel, charLevel int) (count int,
 	return 0, "", false
 }
 
+// dartShares: how the caster divides a spell's automatic darts over its targets (Magic Missile: round-robin, in the order named). The caster's cast
+// at a character (resolveSpellOnCharacters) and a monster's cast (monsterCastDirect) divide them the same way.
+func dartShares(count int, targets []int) map[int]int {
+	shares := map[int]int{}
+	for i := 0; i < count && len(targets) > 0; i++ {
+		shares[targets[i%len(targets)]]++
+	}
+	return shares
+}
+
 func maxInt(a, b int) int {
 	if a > b {
 		return a
@@ -336,7 +346,7 @@ func castingTimeKind(castingTime string) string {
 // withSpellResolution appends the result against a targeted monster to the cast text.
 func withSpellResolution(charID int, spellKey string, spell SRDSpell, damageDice string, rolled, slotLevel, charLevel, spellMod, saveDC int, castText string) string {
 	res := resolveSpellOnMonster(charID, spellKey, spell, damageDice, rolled, slotLevel, charLevel, spellMod, saveDC) +
-		resolveSpellOnCharacters(charID, spell, damageDice, rolled, charLevel, spellMod, saveDC)
+		resolveSpellOnCharacters(charID, spellKey, spell, slotLevel, damageDice, rolled, charLevel, spellMod, saveDC)
 	if spellKey == "spirit-guardians" { // the Emanation keeps working at the end of enemies' turns (spirit_guardians_2024.go)
 		registerSpiritGuardians(charID, damageDice, spell.DamageType, saveDC, spellMonsterTargets(charID))
 		res += " The spirits stay around you while you concentrate: an enemy that ends its turn within 15 feet of you, or that enters the area, makes the save (once per turn)."

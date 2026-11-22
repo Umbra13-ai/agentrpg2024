@@ -2644,7 +2644,7 @@ func resolveActionWithBonusDash(action, description string, charID int, bonusDas
 			if conditionText == "" && itemRepairSpells[spellKey] {
 				conditionText = mendItem(charID, description) // Mending removes a corrosion penalty (item_state_2024.go)
 			}
-			conditionText += markCastText
+			conditionText += markCastText + laterHitDamageNote(spellKey)
 			dcNote := "" // only a spell with a saving throw has a DC to show (F229: Bless showed "DC 13")
 			if spell.SavingThrow != "" {
 				dcNote = fmt.Sprintf(" (DC %d)", saveDC)
@@ -2699,7 +2699,7 @@ func resolveActionWithBonusDash(action, description string, charID int, bonusDas
 		// a Rage spends one of its uses (2 at level 1, up to 6; one comes back on a Short Rest, all on a Long Rest). Nothing spent
 		// them before, so a Barbarian could rage without limit.
 		if okRage, msg, _ := useClassResource(charID, "rage", 1); !okRage {
-			return "You have no Rage uses left: " + msg
+			return featureRefusal("Rage", "you have no Rage uses left: "+msg)
 		}
 		addCharacterCondition(charID, "raging")
 		startRageClock(charID)

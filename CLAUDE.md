@@ -648,7 +648,22 @@ Add to the owner, never beside it. When you give another rule one owner, add it 
   `TestFeatureRefusalsUseTheRefusalForm` (go/ast: a returned text that reads as a refusal in another form); the sweep
   `TestPostgresEveryFeatureActionResolves` (every class at levels 1, 5, 11, 17 and 20 sends every type the table opens to it, then sends it again in
   the same turn; the refusal list of an unknown word equals `actionTypesOpenTo`; `FEATURE_ACTIONS_OUT=file` writes its table). Not done: a resolver
-  returning a refusal as a value, not as text (the larger fix: every feature resolver returns text today).
+  returning a refusal as a value, not as text (the larger fix: every feature resolver returns text today). `spendText` (`resources_2024.go`) gives every
+  refused spend that form too ("Cannot use Natural Recovery: you have no expended level 3 spell slot.").
+- **The spell sweep** (player-side audit, stage 3): `TestPostgresEveryClassSpellResolves` (`player_spell_sweep_2024_test.go`): a level 20 caster of each of the 8
+  casting classes casts every spell of its class list (`class_spells`) at a monster and at an ally through POST /api/action, costly materials in the
+  inventory, a free hand, the Warlock's Mystic Arcanum by its words; it fails on a 5xx, a spell on the list refused as not the character's, a refusal
+  not in the refusal form, a cast that changed nothing and said nothing, and a damaging cast that tells damage it did not deal to the ally without an
+  attack roll, save or immunity (`SPELL_SWEEP_OUT=file` writes the table). Two rules came of it: **darts** (Magic Missile: no attack roll, no save)
+  go to characters as to monsters, shared round-robin by `dartShares` (`spell_resolution.go`; `dartsOnCharacters` in `spell_effects.go`, the monster
+  cast's `monsterCastDirect` uses the same share), and **a spell whose dice are extra damage on the caster's later hits** (Divine Smite, Searing Smite,
+  Shining Smite, Conjure Minor Elementals; Hex and Hunter's Mark) is read from its own text, `laterHitDamageRe` / `castDamageOnLaterHits`
+  (`class_helpers.go`), so the cast deals none and, where no owner adds the extra damage (`hitRiderRules`, a buff's effect row), says the server
+  doesn't (`laterHitDamageNote`). Not done: an owner that adds the smites' and the Elementals' extra damage to the next hit (a one-hit rider marker
+  in `hitRiderRules`: a new rule, owner's decision). Go: `TestPostgresMagicMissileAtCharacters`, `TestLaterHitDamageSpellsAreReadFromTheirText`.
+- **The pages at a phone's width:** `tools/page_check_320.js` (Playwright with the installed Chromium; `BASE`, `ADMIN_PATH`, `ADMIN_KEY`): the five
+  views, their linked pages and the signed-in admin page at 320 px: no horizontal scroll, no text under 12 px, no control under 40 px high. The admin
+  page's own stylesheet (`admin_page_2024.go`) had 36 px inputs, 20 px chip buttons and a card 415 px wide; fixed there once.
 - **How to act (`GET /api/my-turn`'s `how_to_act`):** `actionHowTo` (`cmd/server/actions.go`), made from `actionRequest`'s
   fields and the character's real enemies.
 - **The equipped hands:** `changeHands` (`cmd/server/equipped_weapons.go`) is the one writer of `equipped_main_hand` /

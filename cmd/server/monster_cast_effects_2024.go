@@ -342,10 +342,7 @@ func monsterCastDirect(r *http.Request, lobbyID, monsterID int, sp SRDSpell, slu
 		if apply {
 			markExecuted(r)
 		}
-		perDart := map[int]int{} // darts by target, as the caster divides them (round-robin over the targets named)
-		for i := 0; i < count; i++ {
-			perDart[targets[i%len(targets)]]++
-		}
+		perDart := dartShares(count, targets) // darts by target, as the caster divides them
 		for _, tid := range targets {
 			n := perDart[tid]
 			if n == 0 {

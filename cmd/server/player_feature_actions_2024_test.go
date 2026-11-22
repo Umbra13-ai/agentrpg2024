@@ -18,11 +18,14 @@ import (
 // answer and is listed, not failed.
 
 // featureSweepState: what a request could have changed, as one comparable text (the character's row and records, the fight; not the log or the turn's spent parts, which every request changes).
-func featureSweepState(camp, id int) string {
+func featureSweepState(camp, id int) string { return featureSweepStateWithout(camp, id, "action_used") }
+
+// featureSweepStateWithout: the same, but for more of the row's columns (the spell sweep leaves out what a slot cost, to see what a spell did besides spend it).
+func featureSweepStateWithout(camp, id int, columns ...string) string {
 	// the whole row, but for the turn's spent parts, which every request changes
 	var row string
-	db.QueryRow(`SELECT (to_jsonb(c) - 'action_used' - 'bonus_action_used' - 'reaction_used' - 'attacks_remaining' - 'movement_remaining' - 'weapon_interaction_used')::text
-		FROM characters c WHERE id=$1`, id).Scan(&row)
+	db.QueryRow(`SELECT (to_jsonb(c) - 'action_used' - 'bonus_action_used' - 'reaction_used' - 'attacks_remaining' - 'movement_remaining' - 'weapon_interaction_used' - $2::text[])::text
+		FROM characters c WHERE id=$1`, id, "{"+strings.Join(columns, ",")+"}").Scan(&row)
 	var recs, effs, spells int
 	db.QueryRow(`SELECT count(*) FROM condition_records WHERE lobby_id=$1`, camp).Scan(&recs)
 	db.QueryRow(`SELECT count(*) FROM combat_effects WHERE lobby_id=$1`, camp).Scan(&effs)
@@ -49,7 +52,7 @@ var featureStateSetups = map[string]map[string]interface{}{
 }
 
 // refusalWording: a result that reads as a refusal (a use already spent, a limit, something missing).
-var refusalWording = regexp.MustCompile(`(?i)^(you('ve| have)? already|you can't|you cannot|you can use .{0,40} only once|[a-z' ]{3,40} is already |no (uses?|charges?|points?) (left|remain))`)
+var refusalWording = regexp.MustCompile(`(?i)^(you('ve| have)? already|you can't|you cannot|you can use .{0,40} only once|you have no |you don't have |you do not have |you must |you need |[a-z' ]{3,40} is already |no (uses?|charges?|points?) (left|remain))`)
 
 func TestPostgresEveryFeatureActionResolves(t *testing.T) {
 	testPostgres(t)

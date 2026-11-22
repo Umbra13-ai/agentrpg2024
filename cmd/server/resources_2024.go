@@ -167,10 +167,17 @@ func refusedSpend(err error) (*notEnough, bool) {
 	return r, ok
 }
 
-// spendText is the reply when a spend failed: the refusal's text, or a database problem.
+// spendText is the reply when a spend failed: the refusal's text in the refusal form (featureRefusal: "Cannot use <what>: you have no expended level 3
+// spell slot."), or a database problem. A refusal made elsewhere in that form is kept as it is.
 func spendText(err error, what string) string {
 	if r, ok := refusedSpend(err); ok {
-		return r.Msg
+		if isRefusalResult(r.Msg) {
+			return r.Msg
+		}
+		if r.Msg == "" {
+			return featureRefusal(what, "there is nothing left to spend.")
+		}
+		return featureRefusal(what, strings.ToLower(r.Msg[:1])+r.Msg[1:])
 	}
 	log.Printf("spending %s: %v", what, err)
 	return notFoundOrDBError(err, "no such character")

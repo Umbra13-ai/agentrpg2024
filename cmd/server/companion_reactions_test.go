@@ -560,7 +560,11 @@ func TestPostgresCompanionConditionsAffectAttacks(t *testing.T) {
 	}
 	addCondition(camp, companionIDBase+petID, condAdd{Condition: "paralyzed", Source: "test", Rounds: 10})
 	for n := 0; n < 4; n++ {
-		if r := attack(); !strings.Contains(r, "with Advantage (the target is Paralyzed)") || !strings.Contains(r, "CRITICAL HIT") {
+		r := attack()
+		for try := 0; try < 20 && strings.Contains(r, "MISS"); try++ { // two natural 1s with Advantage (1 in 400) miss whatever the bonus: roll again
+			r = attack()
+		}
+		if !strings.Contains(r, "with Advantage (the target is Paralyzed)") || !strings.Contains(r, "CRITICAL HIT") {
 			t.Errorf("a Paralyzed companion: want Advantage and a critical hit, got %s", r)
 		}
 	}

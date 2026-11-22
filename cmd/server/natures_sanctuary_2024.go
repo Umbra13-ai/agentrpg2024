@@ -107,7 +107,7 @@ func naturesSanctuary(charID int, description string, move bool) string {
 	if move {
 		z, ok := activeSanctuary(lobby)
 		if !ok || z.Druid != charID {
-			return "You have no Nature's Sanctuary to move."
+			return featureRefusal("Nature's Sanctuary", "you have no Nature's Sanctuary to move.")
 		}
 		if !given {
 			return "Say where to move the Cube: \"move sanctuary to 6,4\" (map squares; up to 60 feet)."

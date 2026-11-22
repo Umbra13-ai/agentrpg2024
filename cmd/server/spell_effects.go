@@ -291,12 +291,40 @@ func damageCharacterDealt(targetID, dmg int, dtype string, critical ...bool) (st
 	return d.Sentence(dtype), d.Dealt
 }
 
+// dartsOnCharacters: a spell's automatic darts (Magic Missile) shared out over the characters it is aimed at (dartShares), each dart a hit that hands
+// its on-hit riders (Hex, Hunter's Mark) over; the Brooch of Shielding is immune. One clause per character, the damage one hit for the Hit Point owner.
+func dartsOnCharacters(charID int, spell SRDSpell, count int, dice string, ids []int) string {
+	shares := dartShares(count, ids)
+	var lines []string
+	for _, id := range ids {
+		n := shares[id]
+		if n == 0 {
+			continue
+		}
+		if magicMissileImmune(id, spell.Name) {
+			lines = append(lines, fmt.Sprintf(" %s is immune to Magic Missile (Brooch of Shielding).", characterNameOf(id)))
+			continue
+		}
+		total := 0
+		var rs []hitRider
+		for d := 0; d < n; d++ {
+			total += game.RollDamage(dice, false)
+			rs = append(rs, hitRiders(charID, id, false)...)
+		}
+		lines = append(lines, fmt.Sprintf(" %s: %d of %d dart(s) hit, %s.", characterNameOf(id), n, count, damageCharacterWithRiders(id, total, "force", false, rs)))
+	}
+	return strings.Join(lines, "")
+}
+
 // resolveSpellOnCharacters applies a damaging spell to the characters in target_ids (or a character target_id): a spell attack against
 // their Armor Class, or their saving throw against the spell save DC.
-func resolveSpellOnCharacters(charID int, spell SRDSpell, damageDice string, rolled, charLevel, spellMod, saveDC int) string {
+func resolveSpellOnCharacters(charID int, spellKey string, spell SRDSpell, slotLevel int, damageDice string, rolled, charLevel, spellMod, saveDC int) string {
 	ids := spellCharacterTargets(charID)
 	if len(ids) == 0 {
 		return ""
+	}
+	if count, dice, auto := beamPlan(spellKey, spell.Level, slotLevel, charLevel); auto && count > 0 { // Magic Missile: no attack roll, no save
+		return dartsOnCharacters(charID, spell, count, dice, ids)
 	}
 	dtype := strings.ToLower(spell.DamageType)
 	var lines []string
