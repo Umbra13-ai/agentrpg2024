@@ -955,7 +955,7 @@ func handleCombatAdd(w http.ResponseWriter, r *http.Request, campaignID int) {
 		return
 	}
 
-	if !checkCustomReferences(w, &req, campaignID) {
+	if !checkCustomReferences(w, r, &req) {
 		return
 	}
 

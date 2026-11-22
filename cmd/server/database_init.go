@@ -406,6 +406,12 @@ var schemaSteps = []schemaStep{
 			character_id INTEGER
 		)`},
 	{"admin_logs_2024.go", `CREATE INDEX IF NOT EXISTS request_errors_agent ON request_errors (agent_id, id DESC)`},
+	// whose a compendium monster is (custom_monsters.go, owner Nov 22): an import is private to its GM until shared; a row made before this
+	// has no owner and stays shared, as it was. replaces names the version an edit superseded; hidden_at takes an entry off the list.
+	{"custom_monsters.go", `ALTER TABLE custom_monsters ADD COLUMN IF NOT EXISTS owner_id INTEGER`},
+	{"custom_monsters.go", `ALTER TABLE custom_monsters ADD COLUMN IF NOT EXISTS shared BOOLEAN NOT NULL DEFAULT true`},
+	{"custom_monsters.go", `ALTER TABLE custom_monsters ADD COLUMN IF NOT EXISTS replaces TEXT`},
+	{"custom_monsters.go", `ALTER TABLE custom_monsters ADD COLUMN IF NOT EXISTS hidden_at TIMESTAMPTZ`},
 }
 
 // seatReadySchema: a player's "ready to start" on its seat (cleared whenever the seat changes hands: takeSeat, swapSeat;

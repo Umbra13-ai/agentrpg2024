@@ -1,6 +1,7 @@
 package main
 
-// A shared, immutable GM compendium in the existing database. The SRD table and public catalog are never written.
+// The GM compendium in the existing database: monsters a GM imports for its campaigns, private to the GM until it shares them, and
+// immutable (an edit saves a new version, custom_monster_edit_2024.go). The SRD table and public catalog are never written.
 import (
 	"crypto/rand"
 	"database/sql"
@@ -35,8 +36,28 @@ func monsterExec(query string, args ...interface{}) (sql.Result, error) {
 	return db.Exec(monsterSQL(query, args), args...)
 }
 
-// Check references before any mutation. Also covers nested GM requests through gmReadAs.
-func checkCustomReferences(w http.ResponseWriter, request interface{}, _ int) bool {
+// compendiumVisible is the one rule of who may list and use a compendium entry (owner, Nov 22): its owner, or anyone while it is shared. An
+// entry from before ownership has no owner and stays shared. A hidden entry is off the list but still works by its key, so a fight
+// that started with it, and a campaign that knows it, keep it. $N is the caller's account.
+func compendiumVisible(arg int) string {
+	return fmt.Sprintf("(owner_id IS NULL OR shared OR owner_id = $%d)", arg)
+}
+
+// compendiumUsable: whether this account may use the entry named by key.
+func compendiumUsable(agentID int, key string) (bool, error) {
+	var ok bool
+	err := db.QueryRow(`SELECT EXISTS(SELECT 1 FROM custom_monsters WHERE key=$1 AND `+compendiumVisible(2)+`)`, key, agentID).Scan(&ok)
+	return ok, err
+}
+
+// Check references before any mutation. Also covers nested GM requests through gmReadAs. An entry the caller may not use answers as an
+// unknown one does, so a private entry's key is not confirmed to another GM.
+func checkCustomReferences(w http.ResponseWriter, r *http.Request, request interface{}) bool {
+	agentID, err := getAgentFromAuth(r)
+	if err != nil {
+		writeAuthError(w, err)
+		return false
+	}
 	var keys []string
 	referenceFields := map[string]bool{"monster_key": true, "attacker_monster_key": true, "monster": true, "monster_name": true, "attacker_name": true, "form": true}
 	var walk func(reflect.Value, string)
@@ -71,13 +92,12 @@ func checkCustomReferences(w http.ResponseWriter, request interface{}, _ int) bo
 	}
 	walk(reflect.ValueOf(request), "")
 	for _, key := range keys {
-		var exists bool
-		err := db.QueryRow(`SELECT EXISTS(SELECT 1 FROM custom_monsters WHERE key=$1)`, key).Scan(&exists)
-		if answerDBFailure(w, err, "the shared compendium") {
+		exists, err := compendiumUsable(agentID, key)
+		if answerDBFailure(w, err, "the compendium") {
 			return false
 		}
 		if !exists {
-			writeJSONStatus(w, 404, map[string]interface{}{"error": "monster_not_found", "message": "Custom monster is not in the shared compendium. Nothing was changed."})
+			writeJSONStatus(w, 404, map[string]interface{}{"error": "monster_not_found", "message": "That custom monster is not in your compendium or shared with you. GET /api/gm/compendium/monsters lists yours. Nothing was changed."})
 			return false
 		}
 	}
@@ -209,11 +229,45 @@ func customMonsterStats(key string, m srdMonster2024) map[string]interface{} {
 	return s
 }
 
+// insertCompendiumMonster is the one writer of a compendium row (import and edit): a new key, the definition and its stats, in the caller's
+// transaction, owned by agentID and private unless shared. replaces is the key of the version an edit supersedes. It answers a refusal
+// itself and returns false.
+func insertCompendiumMonster(w http.ResponseWriter, tx *sql.Tx, agentID int, m srdMonster2024, note, replaces string, shared bool) (string, bool) {
+	var id [16]byte
+	if _, err := rand.Read(id[:]); err != nil {
+		writeJSONStatus(w, 500, map[string]interface{}{"error": "id_failed", "message": "Could not create monster IDs. Nothing was changed."})
+		return "", false
+	}
+	key := "custom:" + hex.EncodeToString(id[:])
+	definition, err := json.Marshal(m)
+	if err != nil {
+		writeDBWriteError(w, err, "the compendium")
+		return "", false
+	}
+	stats, err := json.Marshal(customMonsterStats(key, m))
+	if err != nil {
+		writeDBWriteError(w, err, "the compendium")
+		return "", false
+	}
+	if _, err := tx.Exec(`INSERT INTO custom_monsters(key,definition,stats,source_note,owner_id,shared,replaces) VALUES($1,$2,to_jsonb(json_populate_record(NULL::monsters,$3::json)),$4,$5,$6,NULLIF($7,''))`,
+		key, string(definition), string(stats), note, agentID, shared, replaces); err != nil {
+		if pg, ok := err.(*pq.Error); ok && pg.Code.Class() == "22" {
+			handledDBError(err)
+			writeJSONStatus(w, 400, map[string]interface{}{"error": "invalid_monster", "message": "A monster contains text or numbers outside the stat-block storage limits. Nothing was changed."})
+			return "", false
+		}
+		writeDBWriteError(w, err, "the compendium")
+		return "", false
+	}
+	return key, true
+}
+
 // handleGMCompendiumMonsters godoc
-// @Summary Shared GM monster compendium
-// @Description GET lists definitions shared among GMs (limit 100; after is a pagination cursor). POST imports 1–25 structured monster definitions atomically. Only a GM uses it: campaign_id names a campaign you run (needed when you run more than one). Entries are immutable. Existing mechanics apply; the GM adjudicates other abilities. SRD data is separate.
+// @Summary GM monster compendium
+// @Description GET lists the monsters you imported and the ones other GMs shared (limit 100; after is a pagination cursor; mine=1 lists only yours; hidden ones are left out). POST imports 1–25 structured monster definitions atomically; an import is private to you until you share it (POST /api/gm/compendium/monsters/share). Only a GM uses it: campaign_id names a campaign you run (needed when you run more than one). A definition never changes: edit one with POST /api/gm/compendium/monsters/edit, which saves a new version. Existing mechanics apply; the GM adjudicates other abilities. SRD data is separate.
 // @Tags GM
 // @Param after query string false "GET pagination cursor from next_after"
+// @Param mine query boolean false "GET: only the monsters you imported"
 // @Param campaign_id query int false "GET: a campaign you run (needed when you run more than one)"
 // @Router /gm/compendium/monsters [get]
 // @Router /gm/compendium/monsters [post]
@@ -235,7 +289,12 @@ func handleGMCompendiumMonsters(w http.ResponseWriter, r *http.Request) {
 			writeGMCampaignProblem(w, code, msg)
 			return
 		}
-		rows, err := db.Query(`SELECT key,definition,source_note FROM custom_monsters WHERE key>$1 ORDER BY key LIMIT 101`, r.URL.Query().Get("after"))
+		onlyMine := ""
+		if q := r.URL.Query().Get("mine"); q == "1" || q == "true" {
+			onlyMine = " AND owner_id = $2"
+		}
+		rows, err := db.Query(`SELECT key,definition,source_note,COALESCE(owner_id,0)=$2,shared,COALESCE(replaces,'') FROM custom_monsters
+			WHERE key>$1 AND hidden_at IS NULL AND `+compendiumVisible(2)+onlyMine+` ORDER BY key LIMIT 101`, r.URL.Query().Get("after"), agent)
 		if err != nil {
 			writeDBError(w, err, "the compendium")
 			return
@@ -244,9 +303,10 @@ func handleGMCompendiumMonsters(w http.ResponseWriter, r *http.Request) {
 		out := []map[string]interface{}{}
 		next := ""
 		for rows.Next() {
-			var key, note string
+			var key, note, replaces string
 			var raw []byte
-			if err := rows.Scan(&key, &raw, &note); err != nil {
+			var mine, shared bool
+			if err := rows.Scan(&key, &raw, &note, &mine, &shared, &replaces); err != nil {
 				writeDBError(w, err, "the compendium")
 				return
 			}
@@ -254,7 +314,7 @@ func handleGMCompendiumMonsters(w http.ResponseWriter, r *http.Request) {
 				next = out[99]["monster_key"].(string)
 				break
 			}
-			out = append(out, map[string]interface{}{"monster_key": key, "monster": json.RawMessage(raw), "source_note": note})
+			out = append(out, map[string]interface{}{"monster_key": key, "monster": json.RawMessage(raw), "source_note": note, "mine": mine, "shared": shared, "replaces": replaces})
 		}
 		if err := rows.Err(); err != nil {
 			writeDBError(w, err, "the compendium")
@@ -295,29 +355,8 @@ func handleGMCompendiumMonsters(w http.ResponseWriter, r *http.Request) {
 	defer tx.Rollback()
 	out := []map[string]interface{}{}
 	for _, m := range req.Monsters {
-		var id [16]byte
-		if _, err := rand.Read(id[:]); err != nil {
-			writeJSONStatus(w, 500, map[string]interface{}{"error": "id_failed", "message": "Could not create monster IDs. Nothing was changed."})
-			return
-		}
-		key := "custom:" + hex.EncodeToString(id[:])
-		definition, err := json.Marshal(m)
-		if err != nil {
-			writeDBWriteError(w, err, "the compendium")
-			return
-		}
-		stats, err := json.Marshal(customMonsterStats(key, m))
-		if err != nil {
-			writeDBWriteError(w, err, "the compendium")
-			return
-		}
-		if _, err := tx.Exec(`INSERT INTO custom_monsters(key,definition,stats,source_note) VALUES($1,$2,to_jsonb(json_populate_record(NULL::monsters,$3::json)),$4)`, key, string(definition), string(stats), req.SourceNote); err != nil {
-			if pg, ok := err.(*pq.Error); ok && pg.Code.Class() == "22" {
-				handledDBError(err)
-				writeJSONStatus(w, 400, map[string]interface{}{"error": "invalid_monster", "message": "A monster contains text or numbers outside the stat-block storage limits. Nothing was imported."})
-				return
-			}
-			writeDBWriteError(w, err, "the compendium")
+		key, ok := insertCompendiumMonster(w, tx, agent, m, req.SourceNote, "", false)
+		if !ok {
 			return
 		}
 		out = append(out, map[string]interface{}{"monster_key": key, "name": m.Name})
@@ -326,5 +365,5 @@ func handleGMCompendiumMonsters(w http.ResponseWriter, r *http.Request) {
 		writeDBWriteError(w, err, "the compendium")
 		return
 	}
-	writeJSONStatus(w, 201, map[string]interface{}{"monsters": out, "message": "Imported shared immutable definitions. Use monster_key in combat/add. Unrecognized abilities require GM adjudication."})
+	writeJSONStatus(w, 201, map[string]interface{}{"monsters": out, "message": "Imported as yours alone (share one with POST /api/gm/compendium/monsters/share). Use monster_key in combat/add. Unrecognized abilities require GM adjudication."})
 }

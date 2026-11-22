@@ -303,6 +303,10 @@ func main() {
 
 func setupRoutes() {
 	http.HandleFunc("/api/gm/compendium/monsters", handleGMCompendiumMonsters)
+	http.HandleFunc("/api/gm/compendium/monsters/edit", handleGMCompendiumEdit) // custom_monster_edit_2024.go: what a GM does with a monster it owns
+	http.HandleFunc("/api/gm/compendium/monsters/hide", handleGMCompendiumHide)
+	http.HandleFunc("/api/gm/compendium/monsters/restore", handleGMCompendiumRestore)
+	http.HandleFunc("/api/gm/compendium/monsters/share", handleGMCompendiumShare)
 	// Static
 	http.HandleFunc("/llms.txt", handleLLMsTxt)
 	http.HandleFunc("/skill.md", handleSkillPage)

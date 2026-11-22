@@ -29645,13 +29645,546 @@
     }
    }
   },
+  "/api/gm/compendium/monsters/edit": {
+   "post": {
+    "tags": [
+     "GM"
+    ],
+    "summary": "Edit a compendium monster",
+    "description": "Saves a corrected stat block as a new version of a monster you imported, with the same sharing. The old version is taken off the list but a fight that started with it keeps it; the reply names the new monster_key and the one it replaces. Only the GM who imported it may edit it. campaign_id names a campaign you run (needed when you run more than one).",
+    "responses": {
+     "400": {
+      "description": "The body was refused (nothing was changed): unknown_field, wrong_type, invalid_json, body_required or id_mismatch, with the fields the request takes",
+      "content": {
+       "application/json": {
+        "schema": {
+         "properties": {
+          "error": {
+           "type": "string"
+          },
+          "fields": {
+           "items": {
+            "type": "string"
+           },
+           "type": "array"
+          },
+          "message": {
+           "type": "string"
+          },
+          "unknown": {
+           "items": {
+            "type": "string"
+           },
+           "type": "array"
+          }
+         },
+         "type": "object"
+        }
+       }
+      }
+     },
+     "201": {
+      "description": "Success",
+      "content": {
+       "application/json": {
+        "schema": {
+         "properties": {
+          "message": {
+           "type": "string"
+          },
+          "monster_key": {
+           "type": "string"
+          },
+          "name": {
+           "type": "string"
+          },
+          "replaces": {
+           "type": "string"
+          },
+          "shared": {
+           "type": "boolean"
+          }
+         },
+         "type": "object"
+        }
+       }
+      }
+     }
+    },
+    "requestBody": {
+     "required": true,
+     "content": {
+      "application/json": {
+       "schema": {
+        "type": "object",
+        "properties": {
+         "campaign_id": {
+          "type": "integer",
+          "description": "the campaign this command is for (or ?campaign_id=); without it, the campaign of the characters it names, else your only active campaign"
+         },
+         "monster": {
+          "properties": {
+           "abilities": {
+            "additionalProperties": {
+             "properties": {
+              "Mod": {
+               "type": "integer"
+              },
+              "Save": {
+               "type": "integer"
+              },
+              "Score": {
+               "type": "integer"
+              }
+             },
+             "type": "object"
+            },
+            "type": "object"
+           },
+           "ac": {
+            "type": "integer"
+           },
+           "actions": {
+            "items": {
+             "properties": {
+              "name": {
+               "type": "string"
+              },
+              "text": {
+               "type": "string"
+              }
+             },
+             "type": "object"
+            },
+            "type": "array"
+           },
+           "alignment": {
+            "type": "string"
+           },
+           "bonus_actions": {
+            "items": {
+             "properties": {
+              "name": {
+               "type": "string"
+              },
+              "text": {
+               "type": "string"
+              }
+             },
+             "type": "object"
+            },
+            "type": "array"
+           },
+           "condition_immunities": {
+            "type": "string"
+           },
+           "cr": {
+            "type": "string"
+           },
+           "damage_immunities": {
+            "type": "string"
+           },
+           "damage_resistances": {
+            "type": "string"
+           },
+           "damage_vulnerabilities": {
+            "type": "string"
+           },
+           "gear": {
+            "type": "string"
+           },
+           "group": {
+            "type": "string"
+           },
+           "hit_points_formula": {
+            "type": "string"
+           },
+           "hp": {
+            "type": "integer"
+           },
+           "initiative": {
+            "properties": {
+             "Mod": {
+              "type": "integer"
+             },
+             "Score": {
+              "type": "integer"
+             }
+            },
+            "type": "object"
+           },
+           "languages": {
+            "type": "string"
+           },
+           "legendary_actions": {
+            "items": {
+             "properties": {
+              "name": {
+               "type": "string"
+              },
+              "text": {
+               "type": "string"
+              }
+             },
+             "type": "object"
+            },
+            "type": "array"
+           },
+           "legendary_intro": {
+            "type": "string"
+           },
+           "name": {
+            "type": "string"
+           },
+           "proficiency_bonus": {
+            "type": "integer"
+           },
+           "reactions": {
+            "items": {
+             "properties": {
+              "name": {
+               "type": "string"
+              },
+              "text": {
+               "type": "string"
+              }
+             },
+             "type": "object"
+            },
+            "type": "array"
+           },
+           "senses": {
+            "type": "string"
+           },
+           "size": {
+            "type": "string"
+           },
+           "skills": {
+            "type": "string"
+           },
+           "speed": {
+            "type": "string"
+           },
+           "traits": {
+            "items": {
+             "properties": {
+              "name": {
+               "type": "string"
+              },
+              "text": {
+               "type": "string"
+              }
+             },
+             "type": "object"
+            },
+            "type": "array"
+           },
+           "type": {
+            "type": "string"
+           },
+           "xp": {
+            "type": "integer"
+           },
+           "xp_lair": {
+            "type": "integer"
+           }
+          },
+          "type": "object",
+          "description": "the whole corrected stat block, as in an import"
+         },
+         "monster_key": {
+          "type": "string",
+          "description": "the version to replace (a custom: key you imported)"
+         },
+         "source_note": {
+          "type": "string",
+          "description": "where the corrected stat block comes from, up to 500 bytes; the old note stays when you leave it out"
+         }
+        },
+        "required": [
+         "monster_key"
+        ]
+       },
+       "example": {
+        "monster_key": "..."
+       }
+      }
+     }
+    }
+   }
+  },
+  "/api/gm/compendium/monsters/hide": {
+   "post": {
+    "tags": [
+     "GM"
+    ],
+    "summary": "Hide a compendium monster",
+    "description": "Takes a monster you imported off your compendium list. Nothing is erased: a fight that already has it keeps it, and POST /api/gm/compendium/monsters/restore brings it back. Only the GM who imported it may hide it. campaign_id names a campaign you run (needed when you run more than one).",
+    "responses": {
+     "400": {
+      "description": "The body was refused (nothing was changed): unknown_field, wrong_type, invalid_json, body_required or id_mismatch, with the fields the request takes",
+      "content": {
+       "application/json": {
+        "schema": {
+         "properties": {
+          "error": {
+           "type": "string"
+          },
+          "fields": {
+           "items": {
+            "type": "string"
+           },
+           "type": "array"
+          },
+          "message": {
+           "type": "string"
+          },
+          "unknown": {
+           "items": {
+            "type": "string"
+           },
+           "type": "array"
+          }
+         },
+         "type": "object"
+        }
+       }
+      }
+     },
+     "200": {
+      "description": "Success",
+      "content": {
+       "application/json": {
+        "schema": {
+         "properties": {
+          "hidden": {
+           "type": "boolean"
+          },
+          "message": {
+           "type": "string"
+          },
+          "monster_key": {
+           "type": "string"
+          }
+         },
+         "type": "object"
+        }
+       }
+      }
+     }
+    },
+    "requestBody": {
+     "required": true,
+     "content": {
+      "application/json": {
+       "schema": {
+        "type": "object",
+        "properties": {
+         "campaign_id": {
+          "type": "integer",
+          "description": "the campaign this command is for (or ?campaign_id=); without it, the campaign of the characters it names, else your only active campaign"
+         },
+         "monster_key": {
+          "type": "string",
+          "description": "the compendium monster (a custom: key); it must be one you imported"
+         }
+        },
+        "required": [
+         "monster_key"
+        ]
+       },
+       "example": {
+        "monster_key": "..."
+       }
+      }
+     }
+    }
+   }
+  },
+  "/api/gm/compendium/monsters/restore": {
+   "post": {
+    "tags": [
+     "GM"
+    ],
+    "summary": "Restore a hidden compendium monster",
+    "description": "Puts a monster you hid back on your compendium list. Only the GM who imported it may restore it. campaign_id names a campaign you run (needed when you run more than one).",
+    "responses": {
+     "400": {
+      "description": "The body was refused (nothing was changed): unknown_field, wrong_type, invalid_json, body_required or id_mismatch, with the fields the request takes",
+      "content": {
+       "application/json": {
+        "schema": {
+         "properties": {
+          "error": {
+           "type": "string"
+          },
+          "fields": {
+           "items": {
+            "type": "string"
+           },
+           "type": "array"
+          },
+          "message": {
+           "type": "string"
+          },
+          "unknown": {
+           "items": {
+            "type": "string"
+           },
+           "type": "array"
+          }
+         },
+         "type": "object"
+        }
+       }
+      }
+     },
+     "200": {
+      "description": "Success",
+      "content": {
+       "application/json": {
+        "schema": {
+         "properties": {
+          "hidden": {
+           "type": "boolean"
+          },
+          "message": {
+           "type": "string"
+          },
+          "monster_key": {
+           "type": "string"
+          }
+         },
+         "type": "object"
+        }
+       }
+      }
+     }
+    },
+    "requestBody": {
+     "required": true,
+     "content": {
+      "application/json": {
+       "schema": {
+        "type": "object",
+        "properties": {
+         "campaign_id": {
+          "type": "integer",
+          "description": "the campaign this command is for (or ?campaign_id=); without it, the campaign of the characters it names, else your only active campaign"
+         },
+         "monster_key": {
+          "type": "string",
+          "description": "the compendium monster (a custom: key); it must be one you imported"
+         }
+        },
+        "required": [
+         "monster_key"
+        ]
+       },
+       "example": {
+        "monster_key": "..."
+       }
+      }
+     }
+    }
+   }
+  },
+  "/api/gm/compendium/monsters/share": {
+   "post": {
+    "tags": [
+     "GM"
+    ],
+    "summary": "Share a compendium monster with other GMs, or make it private",
+    "description": "An import is private to you. shared true lets every GM on the server list it and use it in their campaigns (the stat block and its source_note are visible to them); shared false makes it private again, though a fight that already has it keeps it. Only the GM who imported it may change this. campaign_id names a campaign you run (needed when you run more than one).",
+    "responses": {
+     "400": {
+      "description": "The body was refused (nothing was changed): unknown_field, wrong_type, invalid_json, body_required or id_mismatch, with the fields the request takes",
+      "content": {
+       "application/json": {
+        "schema": {
+         "properties": {
+          "error": {
+           "type": "string"
+          },
+          "fields": {
+           "items": {
+            "type": "string"
+           },
+           "type": "array"
+          },
+          "message": {
+           "type": "string"
+          },
+          "unknown": {
+           "items": {
+            "type": "string"
+           },
+           "type": "array"
+          }
+         },
+         "type": "object"
+        }
+       }
+      }
+     },
+     "200": {
+      "description": "Success",
+      "content": {
+       "application/json": {
+        "schema": {
+         "properties": {
+          "monster_key": {
+           "type": "string"
+          },
+          "shared": {}
+         },
+         "type": "object"
+        }
+       }
+      }
+     }
+    },
+    "requestBody": {
+     "required": true,
+     "content": {
+      "application/json": {
+       "schema": {
+        "type": "object",
+        "properties": {
+         "campaign_id": {
+          "type": "integer",
+          "description": "the campaign this command is for (or ?campaign_id=); without it, the campaign of the characters it names, else your only active campaign"
+         },
+         "monster_key": {
+          "type": "string",
+          "description": "the compendium monster (a custom: key); it must be one you imported"
+         },
+         "shared": {
+          "type": "boolean",
+          "description": "true: every GM may use it; false: only you"
+         }
+        },
+        "required": [
+         "monster_key",
+         "shared"
+        ]
+       },
+       "example": {
+        "monster_key": "...",
+        "shared": true
+       }
+      }
+     }
+    }
+   }
+  },
   "/api/gm/compendium/monsters": {
    "get": {
     "tags": [
      "GM"
     ],
-    "summary": "Shared GM monster compendium",
-    "description": "GET lists definitions shared among GMs (limit 100; after is a pagination cursor). POST imports 1–25 structured monster definitions atomically. Only a GM uses it: campaign_id names a campaign you run (needed when you run more than one). Entries are immutable. Existing mechanics apply; the GM adjudicates other abilities. SRD data is separate.",
+    "summary": "GM monster compendium",
+    "description": "GET lists the monsters you imported and the ones other GMs shared (limit 100; after is a pagination cursor; mine=1 lists only yours; hidden ones are left out). POST imports 1–25 structured monster definitions atomically; an import is private to you until you share it (POST /api/gm/compendium/monsters/share). Only a GM uses it: campaign_id names a campaign you run (needed when you run more than one). A definition never changes: edit one with POST /api/gm/compendium/monsters/edit, which saves a new version. Existing mechanics apply; the GM adjudicates other abilities. SRD data is separate.",
     "responses": {
      "200": {
       "description": "Success",
@@ -29662,9 +30195,18 @@
           "monsters": {
            "items": {
             "properties": {
+             "mine": {
+              "type": "boolean"
+             },
              "monster": {},
              "monster_key": {
               "type": "string"
+             },
+             "replaces": {
+              "type": "string"
+             },
+             "shared": {
+              "type": "boolean"
              },
              "source_note": {
               "type": "string"
@@ -29695,6 +30237,15 @@
       }
      },
      {
+      "name": "mine",
+      "in": "query",
+      "required": false,
+      "description": "GET: only the monsters you imported",
+      "schema": {
+       "type": "boolean"
+      }
+     },
+     {
       "name": "campaign_id",
       "in": "query",
       "required": false,
@@ -29709,8 +30260,8 @@
     "tags": [
      "GM"
     ],
-    "summary": "Shared GM monster compendium",
-    "description": "GET lists definitions shared among GMs (limit 100; after is a pagination cursor). POST imports 1–25 structured monster definitions atomically. Only a GM uses it: campaign_id names a campaign you run (needed when you run more than one). Entries are immutable. Existing mechanics apply; the GM adjudicates other abilities. SRD data is separate.",
+    "summary": "GM monster compendium",
+    "description": "GET lists the monsters you imported and the ones other GMs shared (limit 100; after is a pagination cursor; mine=1 lists only yours; hidden ones are left out). POST imports 1–25 structured monster definitions atomically; an import is private to you until you share it (POST /api/gm/compendium/monsters/share). Only a GM uses it: campaign_id names a campaign you run (needed when you run more than one). A definition never changes: edit one with POST /api/gm/compendium/monsters/edit, which saves a new version. Existing mechanics apply; the GM adjudicates other abilities. SRD data is separate.",
     "responses": {
      "400": {
       "description": "The body was refused (nothing was changed): unknown_field, wrong_type, invalid_json, body_required or id_mismatch, with the fields the request takes",
@@ -29780,6 +30331,15 @@
       "description": "GET pagination cursor from next_after",
       "schema": {
        "type": "string"
+      }
+     },
+     {
+      "name": "mine",
+      "in": "query",
+      "required": false,
+      "description": "GET: only the monsters you imported",
+      "schema": {
+       "type": "boolean"
       }
      },
      {

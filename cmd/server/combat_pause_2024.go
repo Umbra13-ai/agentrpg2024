@@ -174,7 +174,7 @@ func gateCampaignRequest(w http.ResponseWriter, r *http.Request, lobby int, body
 }
 
 func completeGMRead(w http.ResponseWriter, r *http.Request, body interface{}, lobby int) bool {
-	return checkCustomReferences(w, body, lobby) && gateCampaignRequest(w, r, lobby, body)
+	return checkCustomReferences(w, r, body) && gateCampaignRequest(w, r, lobby, body)
 }
 
 // Clock changes also have non-request callers. Keep the preflight in the clock

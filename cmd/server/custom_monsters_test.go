@@ -183,6 +183,16 @@ func TestPostgresCustomCompendium(t *testing.T) {
 		pgFight(t, id)
 	}
 	add := map[string]interface{}{"combatants": []map[string]interface{}{{"name": m.Name, "monster_key": key, "initiative": 1}}}
+	// an import is private to its GM until it is shared (owner, Nov 22)
+	if c, j := pgCall(t, "GET", path, other, nil); c != 200 || len(j["monsters"].([]interface{})) != 0 {
+		t.Fatalf("private import listed for another GM %d %v", c, j)
+	}
+	if c, j := pgCall(t, "POST", fmt.Sprintf("/api/campaigns/%d/combat/add", otherCamp), other, add); c != 404 {
+		t.Fatalf("another GM used a private import %d %v", c, j)
+	}
+	if c, j := pgCall(t, "POST", path+"/share", gm, map[string]interface{}{"monster_key": key, "shared": true}); c != 200 {
+		t.Fatalf("share %d %v", c, j)
+	}
 	if c, j := pgCall(t, "GET", path, other, nil); c != 200 || len(j["monsters"].([]interface{})) != 1 {
 		t.Fatalf("shared GM read %d %v", c, j)
 	}
