@@ -320,6 +320,9 @@ var attackSources = []attackSource{
 	{false, "Sap", func(c *attackCtx) (bool, string) {
 		return yes(c.attacker != 0 && takeCombatEffect(c.lobby, c.attacker, "sap", 0))
 	}}, // the Sap mastery: its next attack roll
+	{false, "a Disadvantage rider on its next attack roll", func(c *attackCtx) (bool, string) { // "Disadvantage on the next attack roll it makes before the end of its next turn": used up
+		return yes(c.attacker != 0 && c.lobby > 0 && takeCondMarker(c.lobby, c.attacker, "disadv_next_attack"))
+	}},
 	{false, "a Disadvantage rider on its attack rolls", func(c *attackCtx) (bool, string) { // "Disadvantage on attack rolls until the end of its next turn"
 		return yes(c.attacker != 0 && c.lobby > 0 && hasCondMarker(c.lobby, c.attacker, "disadv_attacks"))
 	}},

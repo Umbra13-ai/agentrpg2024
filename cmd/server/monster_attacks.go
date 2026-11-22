@@ -779,10 +779,13 @@ func resolveMonsterAttack(r *http.Request, campaignID int, monster, action, targ
 		hits++
 		totalDamage += dmg
 		line := hitLine + fmt.Sprintf(", %d %s damage", dmg, a.DamageType) + strings.TrimSuffix(sizeNote, ".")
-		line += gmJudgedAlternatives(a) + chargeNote
-		rider := unappliedHitRider(a.Desc) // appended after the riders: what they enforce is stripped first
 		parts := []extraDamage{{Type: a.DamageType}}
 		amounts := []int{dmg}
+		if hitDamageParts(a.Desc, dmg, a.DamageType) == nil { // a hit that deals no damage, only conditions (noDamageHit)
+			line, parts, amounts = hitLine, nil, nil
+		}
+		line += gmJudgedAlternatives(a) + chargeNote
+		rider := unappliedHitRider(a.Desc)            // appended after the riders: what they enforce is stripped first
 		for _, x := range attackExtraDamage(a.Desc) { // "plus 10 (3d6) Fire damage": rolled (doubled on a critical hit) and dealt as its own type
 			if x.IfAdvantage && !rolled.HasAdvantage() {
 				continue // "plus 2 (1d4) Slashing damage if the attack roll had Advantage" (Goblin Warrior): only then
@@ -819,7 +822,9 @@ func resolveMonsterAttack(r *http.Request, campaignID int, monster, action, targ
 				hit.Parts = append(hit.Parts, hpPart{amounts[i], strings.ToLower(p.Type)})
 			}
 			var dealtByType map[string]int // what each damage type dealt (a typed Hit Point maximum drain, hitAfterDamage)
-			if d, err := damageHP(tid, hit); err == nil {
+			if len(hit.Parts) == 0 {
+				// no damage at all: no Hit Point change, no Concentration save, no Death Saving Throw failure
+			} else if d, err := damageHP(tid, hit); err == nil {
 				dealtByType = d.ByType
 				if c, ok := d.View()["concentration"].(string); ok {
 					line += " [" + c + "]" // the Concentration save the damage called for (F55)

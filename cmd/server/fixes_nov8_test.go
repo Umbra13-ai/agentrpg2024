@@ -29,7 +29,7 @@ func TestAttackExtraDamage(t *testing.T) {
 }
 
 func TestCastDealsNoDamage(t *testing.T) {
-	for _, s := range []string{"wish", "meld-into-stone", "dimension-door", "teleport", "contact-other-plane", "geas", "hunters-mark", "hex"} {
+	for _, s := range []string{"wish", "meld-into-stone", "dimension-door", "teleport", "contact-other-plane", "geas", "dream", "hunters-mark", "hex"} {
 		if !castDealsNoDamage(s) {
 			t.Errorf("%s should deal no damage to a target when cast", s)
 		}

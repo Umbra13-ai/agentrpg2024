@@ -310,7 +310,7 @@ func castChoiceList(text string) []string {
 		return nil
 	}
 	rest := low[i+len("casts "):]
-	for _, stop := range []string{", using", ", requiring", " using", " requiring", "."} {
+	for _, stop := range []string{", using", ", requiring", " using", " requiring", " on ", "."} { // " on it": "casts Cure Wounds or Lesser Restoration on it" (Unicorn's Blessing)
 		if j := strings.Index(rest, stop); j >= 0 {
 			rest = rest[:j]
 		}

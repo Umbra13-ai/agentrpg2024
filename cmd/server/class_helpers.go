@@ -53,10 +53,11 @@ func isMarkSpell(spellSlug string) bool {
 
 // castDealsNoDamage: spells whose damage dice aren't dealt to a target when they're cast. Hunter's Mark and Hex add damage to later
 // hits; the others' damage falls on the caster or comes later: Wish (the stress of a non-duplicating wish), Meld into Stone (the stone
-// is destroyed), Dimension Door and Teleport (a mishap), Contact Other Plane (a failed save), Geas (acting against the command).
+// is destroyed), Dimension Door and Teleport (a mishap), Contact Other Plane (a failed save), Geas (acting against the command), Dream (the
+// terrifying messenger's damage when the target wakes). A character's cast and a monster's (resolveMonsterSpell) ask it.
 func castDealsNoDamage(spellSlug string) bool {
 	switch strings.ToLower(spellSlug) {
-	case "wish", "meld-into-stone", "dimension-door", "teleport", "contact-other-plane", "geas",
+	case "wish", "meld-into-stone", "dimension-door", "teleport", "contact-other-plane", "geas", "dream",
 		"alter-self", "enlarge-reduce", "shillelagh": // their dice are for later attacks or a weapon, not damage on casting
 		return true
 	}

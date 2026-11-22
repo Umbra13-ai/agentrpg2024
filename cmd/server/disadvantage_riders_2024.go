@@ -10,19 +10,22 @@ import (
 //   - "the next attack roll made against the target before the start of the <source>'s next turn has Advantage": the "exposed"
 //     effect (the same one Guiding Bolt gives), used up by the next attack roll against it, removed the same way.
 //   - "Disadvantage on attack rolls until ...": the marker "disadv_attacks", read by attackSources for every attack roll it makes.
+//   - "Disadvantage on the next attack roll it makes before the end of its next turn" (SRD 5.2.1 Ettin Morningstar): the marker
+//     "disadv_next_attack" for that duration, used up by the next attack roll it makes (attackSources, takeCondMarker).
 //   - "Disadvantage on saving throws to maintain Concentration until ...": the marker "disadv_concentration" (saveSources).
 //   - "the target can't take Reactions" with a duration in its sentence (or the effect's text): the marker "no_reactions".
 //
 // A marker lasts for its duration (riderEnd.markerAdd); a rider used up by one roll is applied only when it ends at the start of
 // the source's next turn, the end the combat effects keep.
 //
-// Not applied, always left in Extra for the GM: Disadvantage on ability checks, Disadvantage on the next attack roll before the end
-// of its next turn, no duration given, Disadvantage on Strength-based D20 Tests. Never dropped, never guessed.
+// Not applied, always left in Extra for the GM: Disadvantage on ability checks, no duration given, Disadvantage on Strength-based D20
+// Tests. Never dropped, never guessed.
 
 var (
 	exposedRe      = regexp.MustCompile(`(?i)the next attack roll (?:made )?against (?:the target|it),? ` + riderUntil + `,? has Advantage`)
 	disadvAttackRe = riderPattern(`Disadvantage on attack rolls( and ability checks)?`)
 	disadvConcRe   = riderPattern(`Disadvantage on saving throws to maintain Concentration`)
+	disadvNextRe   = riderPattern(`Disadvantage on the next attack roll it makes`)
 	noReactRe      = regexp.MustCompile(`(?i)(?:the target|it) can['’]t take Reactions;?`)
 )
 
@@ -50,6 +53,9 @@ func (e *saveEffect) readDisadvantage(text string) (handled []string, gm []strin
 	if m := disadvConcRe.FindStringSubmatch(text); m != nil && riderEndIn(m) != riderEndNone {
 		add("concentration", riderEndIn(m), m[0])
 	}
+	if m := disadvNextRe.FindStringSubmatch(text); m != nil && riderEndIn(m) != riderEndNone {
+		add("nextattack", riderEndIn(m), m[0])
+	}
 	if m := noReactRe.FindString(text); m != "" {
 		end := readRiderEnd(text)
 		for _, sentence := range sentenceSplitRe.Split(text, -1) {
@@ -72,6 +78,8 @@ func rollRiderWords(mode string) (cond, what string) {
 		return "disadv_concentration", "Disadvantage on saves to maintain Concentration"
 	case mode == "noreactions":
 		return "no_reactions", "can't take Reactions"
+	case mode == "nextattack":
+		return "disadv_next_attack", "Disadvantage on its next attack roll"
 	}
 	return "disadv_attacks", "Disadvantage on attack rolls"
 }
@@ -104,6 +112,14 @@ func (e saveEffect) giveDisadvantage(lobbyID, tid int, source string) []string {
 	return parts
 }
 
+// takeCondMarker: the creature had the marker, which is used up now (a rider for one roll: "disadv_next_attack").
+func takeCondMarker(lobbyID, id int, cond string) bool {
+	if !hasCondMarker(lobbyID, id, cond) {
+		return false
+	}
+	return len(removeConditionsWhere(lobbyID, id, func(r conditionRecord) bool { return r.Condition == cond })) > 0
+}
+
 // hasCondMarker: the creature has the marker condition now.
 func hasCondMarker(lobbyID, id int, cond string) bool {
 	for _, r := range loadConditionRecords(lobbyID, id) {
@@ -116,7 +132,7 @@ func hasCondMarker(lobbyID, id int, cond string) bool {
 
 // rollRiderPatterns: every roll rider wording readDisadvantage applies (what the GM is no longer told).
 func rollRiderPatterns() []*regexp.Regexp {
-	return []*regexp.Regexp{exposedRe, disadvAttackRe, disadvConcRe, noReactRe}
+	return []*regexp.Regexp{exposedRe, disadvAttackRe, disadvConcRe, disadvNextRe, noReactRe}
 }
 
 // stripDisadvantage removes the handled sentences from a sentence (what is left is for the GM).

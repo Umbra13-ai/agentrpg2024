@@ -64,6 +64,8 @@ var monsterTextPatterns = map[string]*regexp.Regexp{
 	"hideLightGateRe":          hideLightGateRe,          // hide_2024.go
 	"abilityDecreaseRe":        abilityDecreaseRe,        // hit_after_damage_2024.go
 	"dropRiderRe":              dropRiderRe,              // hit_after_damage_2024.go
+	"disadvNextRe":             disadvNextRe,             // disadvantage_riders_2024.go
+	"noDamageHitRe":            noDamageHitRe,            // monster_damage_choice_2024.go
 	"dieOnDropRe":              dieOnDropRe,              // hit_after_damage_2024.go
 	"saveDropRe":               saveDropRe,               // monster_effects_2024.go
 	"saveKillRe":               saveKillRe,               // monster_effects_2024.go

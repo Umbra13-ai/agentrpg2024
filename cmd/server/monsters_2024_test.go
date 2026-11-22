@@ -1,6 +1,13 @@
 package main
 
-import "testing"
+import (
+	"regexp"
+	"strings"
+	"testing"
+)
+
+// splitNameTailRe: a text that begins with the end of its entry's name ("5–6). ...").
+var splitNameTailRe = regexp.MustCompile(`^[^A-Za-z(]*\)`)
 
 func TestMonsters2024Data(t *testing.T) {
 	ms := srdMonsters2024()
@@ -18,6 +25,14 @@ func TestMonsters2024Data(t *testing.T) {
 			t.Errorf("duplicate slug %s", m.Name)
 		}
 		seen[monsterSlug(m.Name)] = true
+		// an entry's name is whole: "Petrifying Gaze (Recharge 5–6)" was once split at a line break, its recharge left in the text
+		for _, g := range [][]srdMonsterEntry{m.Traits, m.Actions, m.BonusActions, m.Reactions, m.Legendary} {
+			for _, e := range g {
+				if strings.Count(e.Name, "(") != strings.Count(e.Name, ")") || splitNameTailRe.MatchString(e.Text) {
+					t.Errorf("%s: entry %q is split (its text begins %.20q)", m.Name, e.Name, e.Text)
+				}
+			}
+		}
 	}
 	var ab *srdMonster2024
 	for i := range ms {

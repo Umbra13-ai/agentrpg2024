@@ -11,7 +11,7 @@ import (
 	"github.com/agentrpg/agentrpg/game"
 )
 
-// The early-game playtest set (owner, Nov 22: CR 0 to 1, widened to CR 3 the same day: 201 SRD 5.2.1 monsters) through the real routes, every entry:
+// The early-game playtest set (owner, Nov 22: CR 0 to 1, widened to CR 3, then CR 6: 253 SRD 5.2.1 monsters) through the real routes, every entry:
 //
 //   - each action, Bonus Action and Reaction is sent as POST /api/gm/narrate's monster_action at a character in a fight, with every
 //     option its entry offers in use (a form, a standard action, a spell: read from the entry by the server's own readers), after the
@@ -225,7 +225,7 @@ func TestPostgresEarlyGameEveryEntry(t *testing.T) {
 		for _, g := range []struct {
 			kind    string
 			entries []srdMonsterEntry
-		}{{"action", m.Actions}, {"bonus", m.BonusActions}, {"reaction", m.Reactions}} {
+		}{{"action", m.Actions}, {"bonus", m.BonusActions}, {"reaction", m.Reactions}, {"legendary", m.Legendary}} {
 			for _, e := range g.entries {
 				// the options the entry offers, read by the server's own readers: every one is run
 				uses := []string{""}
@@ -241,6 +241,22 @@ func TestPostgresEarlyGameEveryEntry(t *testing.T) {
 					}
 					if len(spells) > 0 {
 						uses = spells
+					}
+				}
+				// "damage of the type chosen for the Draconic Origin trait" (in this entry or the attacks its Multiattack makes): the first
+				// damage type the stat block's traits name, sent in use as the GM would
+				if uses[0] == "" {
+					chosen := parseMonsterAttack(e.Name, e.Text).ExtraTypeChosen || chosenTypeExtraRe.MatchString(e.Text)
+					for _, r := range rows {
+						chosen = chosen || (strings.HasPrefix(e.Name, "Multiattack") && strings.Contains(e.Text, stripUsage(r.Name)) && parseMonsterAttack(r.Name, r.Desc).ExtraTypeChosen)
+					}
+					if chosen {
+						for _, tr := range m.Traits {
+							if typ := familyTypes.FindString(tr.Text); typ != "" {
+								uses = []string{strings.ToLower(typ)}
+								break
+							}
+						}
 					}
 				}
 				var attacks []string
@@ -385,8 +401,8 @@ func TestPostgresEarlyGameEveryEntry(t *testing.T) {
 		entries[r.monster+"|"+r.kind+"|"+r.entry] = true
 	}
 	t.Logf("early game routes: %d runs over %d actions, Bonus Actions and Reactions, %d traits: %v", len(runs), len(entries), len(traitRows), verdicts)
-	if len(entries)+len(traitRows) != 540 {
-		t.Errorf("%d entries and %d traits checked; the set has 540", len(entries), len(traitRows))
+	if len(entries)+len(traitRows) != 785 {
+		t.Errorf("%d entries and %d traits checked; the set has 785", len(entries), len(traitRows))
 	}
 	if out := os.Getenv("EARLY_ROUTES_OUT"); out != "" {
 		var lines []string
@@ -418,8 +434,8 @@ func TestPostgresEarlyGameEveryEntry(t *testing.T) {
 			lines = append(lines, fmt.Sprintf("| %s | trait | %s | - | %s |  |  |", p[0], cell(p[2]), cell(p[3])))
 		}
 		sort.Strings(lines)
-		head := "# SRD 5.2.1 early-game monsters (CR 0 to 3): the route test\n\nWritten by `EARLY_ROUTES_OUT=$PWD/docs/SRD_EARLY_GAME_ROUTES.md go test ./cmd/server -run TestPostgresEarlyGameEveryEntry`" +
-			" (srd_early_game_routes_2024_test.go, Postgres): one run's result. Every action, Bonus Action and Reaction of the 201 monsters sent through" +
+		head := "# SRD 5.2.1 early-game monsters (CR 0 to 6): the route test\n\nWritten by `EARLY_ROUTES_OUT=$PWD/docs/SRD_EARLY_GAME_ROUTES.md go test ./cmd/server -run TestPostgresEarlyGameEveryEntry`" +
+			" (srd_early_game_routes_2024_test.go, Postgres): one run's result. Every action, Bonus Action and Reaction (and Legendary Action) of the 253 monsters sent through" +
 			" POST /api/gm/narrate's monster_action at a character, once per option its entry offers (`use`), after the setup its gate needs; an attack" +
 			" repeated until it hits and a save until it fails. \"Stored\" is what the server wrote; \"flagged to the GM\" means the reply hands the GM what" +
 			" the server doesn't do. Movement is run without a battle map here (the GM places the creature). Traits: who applies each, as the GM's view of the fight says.\n\n" +

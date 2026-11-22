@@ -35,20 +35,23 @@ var (
 	mfxDamageRe              = regexp.MustCompile(`(\d+) \((\d+d\d+(?:\s*[+−-]\s*\d+)?)\) ([A-Za-z]+) damage`)
 	mfxCondRe                = regexp.MustCompile(`has the ((?:[A-Z][a-z]+)(?:(?:, | and | or )[A-Z][a-z]+)*) conditions?`)
 	mfxEscapeRe              = regexp.MustCompile(`Grappled condition \(escape DC (\d+)\)`)
-	mfxRestrainRe            = regexp.MustCompile(`(?i)(?:,? and it has the Restrained condition until the grapple ends|while Grappled, the target has the Restrained condition)`)
-	mfxExhaustRe             = regexp.MustCompile(`gains? (\d+) Exhaustion levels?`)
-	mfxAttackRe              = regexp.MustCompile(`makes one ([A-Z][A-Za-z’' -]+?)(?: or ([A-Z][A-Za-z’' -]+?))? attack`)
-	mfxUsesRe                = regexp.MustCompile(`uses (?:its )?([A-Z][A-Za-z’' -]+?)(?:[.,]| and | to |$)`)
-	mfxSpellRe               = regexp.MustCompile(`(?:uses Spellcasting to cast|casts) (?:the )?([A-Z][A-Za-z’' /-]+?)(?: spell)?(?: \(level (\d) version\))?(?: on itself)?(?: twice)?(?:[.,;]| on |$)`)
-	mfxSpellDCRe             = regexp.MustCompile(`spell save DC (\d+)`)
-	mfxSpellAtkRe            = regexp.MustCompile(`([+−-]\d+) to hit with spell attacks`)
-	mfxEmanRe                = regexp.MustCompile(`(\d+)\s*-?\s*foot Emanation`)
-	mfxUntilStartRe          = regexp.MustCompile(`until the start of (?:its|the (?:[^ ]+?)['’]s) next turn`) // the attacker's turn ("the vrock's"); "the target's" is the target's own
-	mfxUntilEndRe            = regexp.MustCompile(`until the end of the ([^ ]+?)['’]s next turn`)             // an end anchored to a named creature's turn; "the target's" is the target's own
-	mfxEndSaveRe             = regexp.MustCompile(`(?i)repeats the save at the end of each of its turns|at the end of each of its turns, (?:the target|it) repeats the save`)
-	mfxAutoSucceedRe         = regexp.MustCompile(`(?i)\bAfter (\d+) minutes?, it succeeds automatically`)
-	targetIsCreatureGateRe   = regexp.MustCompile(`(?i)\bIf the target is a creature,?(?:\s+(?:its|it)\b)?`)
-	mfxDurationRe            = regexp.MustCompile(`(?i)(?:until the (?:start|end) of (?:its|the [^ ]+) next turn|for \d+ (?:minutes?|hours?)|, until it takes damage)`)
+	// mfxRestrainRe: a second condition that lasts as long as the grapple ("and it has the Restrained condition until the grapple ends",
+	// "and the target has the Poisoned condition until the grapple ends": SRD 5.2.1 Roper Tentacle; "While Grappled, the target has the
+	// Restrained condition"). Group 1: the condition ("" for the last form: Restrained).
+	mfxRestrainRe          = regexp.MustCompile(`(?i)(?:,? and (?:it|the target) has the ([A-Za-z]+) condition until the grapple ends|while Grappled, the target has the Restrained condition)`)
+	mfxExhaustRe           = regexp.MustCompile(`gains? (\d+) Exhaustion levels?`)
+	mfxAttackRe            = regexp.MustCompile(`makes one ([A-Z][A-Za-z’' -]+?)(?: or ([A-Z][A-Za-z’' -]+?))? attack`)
+	mfxUsesRe              = regexp.MustCompile(`uses (?:its )?([A-Z][A-Za-z’' -]+?)(?:[.,]| and | to |$)`)
+	mfxSpellRe             = regexp.MustCompile(`(?:uses Spellcasting to cast|casts) (?:the )?([A-Z][A-Za-z’' /-]+?)(?: spell)?(?: \(level (\d) version\))?(?: on itself)?(?: twice)?(?:[.,;]| on |$)`)
+	mfxSpellDCRe           = regexp.MustCompile(`spell save DC (\d+)`)
+	mfxSpellAtkRe          = regexp.MustCompile(`([+−-]\d+) to hit with spell attacks`)
+	mfxEmanRe              = regexp.MustCompile(`(\d+)\s*-?\s*foot Emanation`)
+	mfxUntilStartRe        = regexp.MustCompile(`until the start of (?:its|the (?:[^ ]+?)['’]s) next turn`) // the attacker's turn ("the vrock's"); "the target's" is the target's own
+	mfxUntilEndRe          = regexp.MustCompile(`until the end of the ([^ ]+?)['’]s next turn`)             // an end anchored to a named creature's turn; "the target's" is the target's own
+	mfxEndSaveRe           = regexp.MustCompile(`(?i)repeats the save at the end of each of its turns|at the end of each of its turns, (?:the target|it) repeats the save`)
+	mfxAutoSucceedRe       = regexp.MustCompile(`(?i)\bAfter (\d+) minutes?, it succeeds automatically`)
+	targetIsCreatureGateRe = regexp.MustCompile(`(?i)\bIf the target is a creature,?(?:\s+(?:its|it)\b)?`)
+	mfxDurationRe          = regexp.MustCompile(`(?i)(?:until the (?:start|end) of (?:its|the [^ ]+) next turn|for \d+ (?:minutes?|hours?)|, until it takes damage)`)
 	// condDurationRe: a condition's duration in time ("for 10 minutes", "for 1 hour")
 	condDurationRe = regexp.MustCompile(`(?i)\bfor (\d+) (minutes?|hours?)\b`)
 	// endsOnDamageRe: "... for 1 hour, until it takes damage, or until ..." (SRD Incubus Nightmare, Nalfeshnee Horror Nimbus): the
@@ -104,7 +107,8 @@ type saveEffect struct {
 	Exhaustion       int                 // Exhaustion levels on a failure
 	EscapeDC         int                 // "the Grappled condition (escape DC 16)": the DC of the escape checks
 	Escapes          []conditionEscape   // a spell's escape checks (conditionSpell.escapes: Entangle, Web)
-	RestrainedToo    bool                // "and it has the Restrained condition until the grapple ends": Restrained that ends with the Grappled record
+	RestrainedToo    bool                // "and it has the Restrained condition until the grapple ends": a condition that ends with the Grappled record
+	LinkedCond       string              // that condition (Restrained; Poisoned for the Roper's Tentacle)
 	SpeedMode        string              // "halved", "zero" or "minus": a Speed rider of the text (speed_owner_2024.go), applied as a marker for SpeedEnd
 	SpeedEnd         riderEnd            // the Speed rider's duration (rider_duration_2024.go)
 	Always           *saveEffect         // the conditions, Speed and Disadvantage of "Failure or Success:": given to every target that rolled the save
@@ -172,13 +176,18 @@ func (e saveEffect) conditionAdd(cond, source string) condAdd {
 	return a
 }
 
-// linkedCondition: the second condition of "Grappled (escape DC N), and it has the Restrained condition until the grapple ends": a Restrained
-// record from the same source that the condition owner ends together with the Grappled record (conditionChange.remove).
+// linkedCondition: the second condition of "Grappled (escape DC N), and it has the Restrained condition until the grapple ends": a record
+// of that condition (LinkedCond) from the same source that the condition owner ends together with the Grappled record
+// (conditionChange.remove).
 func (e saveEffect) linkedCondition(cond, source string) (condAdd, bool) {
 	if cond != "grappled" || !e.RestrainedToo {
 		return condAdd{}, false
 	}
-	return condAdd{Condition: "restrained", Source: source, SourceID: e.SourceID, Magical: e.IsSpell, Notes: notesEndsWithGrapple}, true
+	linked := e.LinkedCond
+	if linked == "" {
+		linked = "restrained"
+	}
+	return condAdd{Condition: linked, Source: source, SourceID: e.SourceID, Magical: e.IsSpell, Notes: notesEndsWithGrapple}, true
 }
 
 // conditionsFor: the conditions of a failed save that this target gets. A condition gated by size ("If the target is a Huge or
@@ -271,7 +280,9 @@ func (e *saveEffect) readRider(fail string) (extra []string) {
 	if x := mfxEscapeRe.FindStringSubmatch(fail); x != nil {
 		e.EscapeDC, _ = strconv.Atoi(x[1])
 	}
-	e.RestrainedToo = e.EscapeDC > 0 && mfxRestrainRe.MatchString(fail)
+	if m := mfxRestrainRe.FindStringSubmatch(fail); m != nil && e.EscapeDC > 0 && (m[1] == "" || mfxConditions[strings.ToLower(m[1])]) {
+		e.RestrainedToo, e.LinkedCond = true, strings.ToLower(m[1])
+	}
 	if x := mfxExhaustRe.FindStringSubmatch(fail); x != nil {
 		e.Exhaustion, _ = strconv.Atoi(x[1])
 	}
@@ -1457,6 +1468,9 @@ func resolveMonsterSpellRules(r *http.Request, lobbyID, monsterID int, monsterNa
 	if d, ok := sp.DamageAtSlotLevel[strconv.Itoa(level)]; ok && d != "" {
 		dice = d
 	}
+	if castDealsNoDamage(slug) { // dice dealt later or never by the cast (Geas, Dream: class_helpers.go), as for a character's cast
+		dice = ""
+	}
 	lines := []string{head + "."}
 	if isSpellAttack(sp) || slug == "command" {
 		// a spell attack roll and Command are resolved by code that reads a character's row (name, Armor Class, Hit Points, staff
@@ -1747,7 +1761,15 @@ func resolveMonsterEffectText(r *http.Request, lobbyID, monsterID int, meta *mon
 		}
 		return append(lines, notes...)
 	}
-	// a saving throw effect in the text itself
+	// a saving throw effect in the text itself (its damage type the GM's choice: withChosenDamageType, as for an attack)
+	if chosen, problem := withChosenDamageType(entryName, text, use); problem != "" && mfxSaveRe.MatchString(text) {
+		if rec := execIn(r); rec != nil {
+			rec.targetBlocked = true // nothing rolled or spent
+		}
+		return append([]string{problem}, notes...)
+	} else {
+		text = chosen
+	}
 	if e, ok := parseSaveEffect(text); ok {
 		if issue := monsterSaveTargetIssue(r, lobbyID, monsterID, meta, text, targets); issue != "" {
 			if rec := execIn(r); rec != nil {

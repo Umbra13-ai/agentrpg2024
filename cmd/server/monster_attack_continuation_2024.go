@@ -107,7 +107,7 @@ func runMonsterAttackSequence(lobby int, c monsterAttackCursor) (string, map[str
 		if dx, _ := enlargeHit(lobby, c.Attacker, dmg); dx != 0 {
 			dmg += dx
 		}
-		hit := monsterHitCursor{Attacker: c.Attacker, AttackerName: c.AttackerName, Target: c.Target, Apply: c.Apply, Melee: melee, Action: a, Alternatives: a.Alts, Roll: rolled, Outcome: out, Parts: []hitDamagePart{{Amount: max(dmg, 0), Type: a.DamageType}}, Snapshot: snapshotTarget(lobby, c.Target), HPBefore: monsterHPNow(lobby, c.Target), Line: rolled.Line(a.Name, out) + note}
+		hit := monsterHitCursor{Attacker: c.Attacker, AttackerName: c.AttackerName, Target: c.Target, Apply: c.Apply, Melee: melee, Action: a, Alternatives: a.Alts, Roll: rolled, Outcome: out, Parts: hitDamageParts(a.Desc, dmg, a.DamageType), Snapshot: snapshotTarget(lobby, c.Target), HPBefore: monsterHPNow(lobby, c.Target), Line: rolled.Line(a.Name, out) + note}
 		for _, extra := range attackExtraDamage(a.Desc) {
 			if extra.IfAdvantage && !rolled.HasAdvantage() {
 				continue

@@ -308,6 +308,33 @@ func parseMonsterAttack(name, text string) parsedMonsterAttack {
 	}
 	return p
 }
+
+// noDamageHit: an attack whose Hit deals no damage and gives conditions the rider owner reads ("Hit: The target has the Grappled
+// condition (escape DC 14) from one of six tentacles, and the target has the Poisoned condition until the grapple ends.": SRD 5.2.1
+// Roper Tentacle). It is a valid attack: every hit route skips its damage (hitDamageParts) and applies the conditions as for any hit.
+func noDamageHit(desc string) bool {
+	i := strings.Index(desc, "Hit:")
+	if i < 0 || hitDmgRe.MatchString(desc) || flatHitRe.MatchString(desc) {
+		return false
+	}
+	if !noDamageHitRe.MatchString(desc[i+len("Hit:"):]) {
+		return false
+	}
+	_, ok := parseHitRider(desc)
+	return ok
+}
+
+// noDamageHitRe: a Hit whose first words give a condition instead of an amount of damage.
+var noDamageHitRe = regexp.MustCompile(`^\s*The target has the [A-Z][a-z]+ condition\b`)
+
+// hitDamageParts: a hit's primary damage part, none for a hit that deals no damage (noDamageHit).
+func hitDamageParts(desc string, amount int, typ string) []hitDamagePart {
+	if noDamageHit(desc) {
+		return nil
+	}
+	return []hitDamagePart{{Amount: max(amount, 0), Type: typ}}
+}
+
 func validStatBlockDamage(dice, typ string, flat *int) bool {
 	if !attackDamageTypes[strings.ToLower(typ)] {
 		return false
@@ -336,14 +363,14 @@ func prepareMonsterAttack(a monsterActionRow, use string) (monsterActionRow, str
 		a = parsed.monsterActionRow
 		a.Desc = desc
 		if parsed.ExtraTypeChosen {
-			pick := strings.ToLower(strings.TrimSpace(use))
-			if !attackDamageTypes[pick] {
-				return a, fmt.Sprintf("%s has damage of a type the GM chooses; give a damage type in use (acid, cold, fire, ...). Nothing was rolled.", a.Name)
+			chosen, problem := withChosenDamageType(a.Name, a.Desc, use)
+			if problem != "" {
+				return a, problem
 			}
-			a.Desc = chosenTypeExtraRe.ReplaceAllString(a.Desc, "$1 ($2) "+titleCase(pick)+" damage") // the rest of the engine reads an ordinary typed amount
+			a.Desc = chosen // the rest of the engine reads an ordinary typed amount
 		}
 	}
-	if !validStatBlockDamage(a.DamageDice, a.DamageType, a.FlatDamage) {
+	if !validStatBlockDamage(a.DamageDice, a.DamageType, a.FlatDamage) && !noDamageHit(a.Desc) {
 		return a, fmt.Sprintf("%s has unsupported or missing attack damage; the GM must resolve it. Nothing was rolled.", a.Name)
 	}
 	for _, x := range attackExtraDamage(a.Desc) {
@@ -578,5 +605,19 @@ func gmJudgedAlternatives(a monsterActionRow) string {
 }
 
 const chosenTypeWord = "Chosen"
+
+// withChosenDamageType: a text whose damage is "of the type chosen for the Draconic Origin trait" (SRD 5.2.1 Half-Dragon: Claw's extra
+// amount, Dragon's Breath) with the type the GM names in use written in, so every reader sees an ordinary typed amount; the refusal
+// when use names no damage type. The attack owner (prepareMonsterAttack) and the save owner's entry (resolveMonsterEffectText) read it.
+func withChosenDamageType(entry, text, use string) (string, string) {
+	if !chosenTypeExtraRe.MatchString(text) {
+		return text, ""
+	}
+	pick := strings.ToLower(strings.TrimSpace(use))
+	if !attackDamageTypes[pick] {
+		return text, fmt.Sprintf("%s has damage of a type the GM chooses; give a damage type in use (acid, cold, fire, ...). Nothing was rolled.", entry)
+	}
+	return chosenTypeExtraRe.ReplaceAllString(text, "$1 ($2) "+titleCase(pick)+" damage"), ""
+}
 
 var chosenTypeExtraRe = regexp.MustCompile(`(?i)(\d+) \(([^)]+)\) damage of the type chosen for the [^.,;]+? trait`)

@@ -12058,8 +12058,8 @@
   ],
   "bonus_actions": [
    {
-    "name": "Petrifying Gaze (Recharge",
-    "text": "5–6). Constitution Saving Throw: DC 13, each creature in a 30-foot Cone. If the medusa sees its reflection in the Cone, the medusa must make this save. First Failure: The target has the Restrained condition and repeats the save at the end of its next turn if it is still Restrained, ending the effect on itself on a success. Second Failure: The target has the Petrified condition instead of the Restrained condition."
+    "name": "Petrifying Gaze (Recharge 5–6)",
+    "text": "Constitution Saving Throw: DC 13, each creature in a 30-foot Cone. If the medusa sees its reflection in the Cone, the medusa must make this save. First Failure: The target has the Restrained condition and repeats the save at the end of its next turn if it is still Restrained, ending the effect on itself on a success. Second Failure: The target has the Petrified condition instead of the Restrained condition."
    }
   ],
   "reactions": [],

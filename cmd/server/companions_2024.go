@@ -938,7 +938,7 @@ func companionAttack(lobbyID int, c companion, a compAttack, targetID int) strin
 	chargeNote := ""
 	a.StatBlockText, chargeNote = hitChargeDesc(lobbyID, c.CombatID, targetID, a.StatBlockText)
 	rollNote += chargeNote
-	parts := []hitDamagePart{{Amount: rollStatBlockDamage(a.Dice, a.FlatDamage, out.Critical), Type: a.Type}}
+	parts := hitDamageParts(a.StatBlockText, rollStatBlockDamage(a.Dice, a.FlatDamage, out.Critical), a.Type)
 	for _, extra := range attackExtraDamage(a.StatBlockText) {
 		if extra.IfAdvantage && !ar.HasAdvantage() {
 			continue
