@@ -36,7 +36,6 @@ type saveCtx struct {
 
 	// the cause, where a rule reads it
 	spell         bool     // a spell can also activate effects specifically limited to spells
-	magical       bool     // the nonspell effect is explicitly magical (SRD 5.2.1 p. 185)
 	against       []string // the conditions the effect would impose, or the one the save would end ("poisoned", "charmed")
 	source        int      // the creature that forces the save, when known (Holy Nimbus reads its creature type)
 	fiendOrUndead bool     // the GM says a Fiend or an Undead forces it (Holy Nimbus)
@@ -71,11 +70,6 @@ func (c *saveCtx) resist(st saveStakes) game.SaveResult {
 	if !r.Success && c.saver < 0 && !c.peek && legendaryResistance(c.lobby, c.saver, st) {
 		r.Success = true
 		r.Changed = append(r.Changed, "Legendary Resistance")
-	}
-	if !r.Success && !c.peek && (c.spell || c.magical) && c.source != 0 { // Mind Corrosion: a Reaction to its own failed save (monster_save_reactions_2024.go)
-		if note := failedSaveReaction(c.lobby, c.saver, c.source); note != "" {
-			addSaveNote(c.lobby, note)
-		}
 	}
 	return r
 }
@@ -283,12 +277,6 @@ var saveSourceRows = []saveSource{
 	{saveDis, "a Disadvantage rider on its Concentration saves", func(c *saveCtx) (bool, string) {
 		return yes(c.concentration && c.saver != 0 && c.lobby > 0 && hasCondMarker(c.lobby, c.saver, "disadv_concentration"))
 	}},
-	{saveDis, "", func(c *saveCtx) (bool, string) { // "Disadvantage on Intelligence saving throws until ..." (a hit's or failed save's rider)
-		if saveDisadvantageRider(c.lobby, c.saver, c.ability) {
-			return true, "a Disadvantage rider on its " + game.AbilityName(c.ability) + " saves"
-		}
-		return false, ""
-	}},
 	{saveDis, "armor the saver isn't trained in", func(c *saveCtx) (bool, string) { // any D20 Test that uses Strength or Dexterity
 		return yes(c.saver > 0 && c.is("str", "dex") && isWearingNonProficientArmor(c.saver))
 	}},
@@ -398,7 +386,7 @@ var saveSourceRows = []saveSource{
 		return yes(saves)
 	}},
 	{saveAdv, "Magic Resistance", func(c *saveCtx) (bool, string) { // against spells and other magical effects
-		if !c.spell && !c.magical {
+		if !c.spell {
 			return yes(false)
 		}
 		if isCompanionCombatID(c.saver) { // a companion's traits are kept on it (the stat block it was made from)

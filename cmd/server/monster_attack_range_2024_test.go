@@ -9,8 +9,8 @@ import (
 // The range of a monster's attack (monsterAttackRange, map_rules.go), the one rule of every target route, through POST /api/gm/narrate:
 // at its normal range no Disadvantage; beyond it, up to its long range, Disadvantage ("long range"); beyond its long range (or the single
 // range of an attack that has no long range) no attack: nothing rolled, Hit Points unchanged. The SRD 5.2.1 ranged attacks of the CR 0-1
-// roster (the published ranges are asserted against the catalog's own text), plus an invented single-range attack with the pattern of
-// the 2024 Modron Quadrone's Gears Launcher ("range 320 ft."), against a character; one of them against a monster and a companion. The
+// roster (the published ranges are asserted against the catalog's own text), plus an invented single-range attack ("range 320 ft.", the
+// single-range form of the SRD Solar's Flying Sword "range 120 ft."), against a character; one of them against a monster and a companion. The
 // battle map holds at most 40 squares (200 ft): the distances are reached through the target's altitude, which tokenDistanceFeet counts.
 func TestPostgresMonsterAttackRangeOnEveryTarget(t *testing.T) {
 	testPostgres(t)

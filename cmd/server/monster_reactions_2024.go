@@ -76,32 +76,6 @@ func thisTurnHitOnMonster(lobbyID, monsterID int) (charHitOnMonster, bool) {
 	return h, true
 }
 
-// charMissOnMonster: a character's attack roll that missed a monster this turn, for a Reaction whose trigger is that miss (Sticky
-// Shield: "Trigger: A creature misses the kuo-toa with a melee attack roll using a weapon").
-type charMissOnMonster struct {
-	Marker string
-	CharID int
-	Weapon string // the weapon's key ("" or "unarmed": no weapon)
-}
-
-var lastMissOnMonster sync.Map // "lobby:monster" -> charMissOnMonster (the latest character miss this turn)
-
-func noteCharMissOnMonster(lobbyID, monsterID, charID int, weapon string) {
-	lastMissOnMonster.Store(fmt.Sprintf("%d:%d", lobbyID, monsterID), charMissOnMonster{Marker: combatTurnMarker(lobbyID), CharID: charID, Weapon: weapon})
-}
-
-func thisTurnMissOnMonster(lobbyID, monsterID int) (charMissOnMonster, bool) {
-	v, ok := lastMissOnMonster.Load(fmt.Sprintf("%d:%d", lobbyID, monsterID))
-	if !ok {
-		return charMissOnMonster{}, false
-	}
-	m := v.(charMissOnMonster)
-	return m, m.Marker != "" && m.Marker == combatTurnMarker(lobbyID)
-}
-
-// reactMissWeaponRe: a Reaction that answers a melee weapon attack roll that missed the monster.
-var reactMissWeaponRe = regexp.MustCompile(`(?i)^Trigger: A creature misses the [^.]+? with a melee attack roll using a weapon\.`)
-
 func weaponIsMelee(weapon string) bool {
 	if weapon == "" || strings.EqualFold(weapon, "unarmed") {
 		return true
@@ -121,9 +95,8 @@ var (
 	reactUsesRe   = regexp.MustCompile(`Response: The [\w ]+? uses ([A-Z][\w ]+?)\.`)
 	reactRiposte  = regexp.MustCompile(`makes one ([A-Z][\w ]+?) attack against the triggering creature`)
 	perDayRe      = regexp.MustCompile(`\((\d+)/Day\)`)
-	reactHalveRe  = regexp.MustCompile(`(?i)\bhalves the (?:attack['’]s )?damage\b`)
 	// "Trigger: The noble is hit by a melee attack roll ...", "Trigger: An attack roll hits the rust monster." (not "hits the wearer")
-	reactSelfHitRe = regexp.MustCompile(`(?i)^Trigger: (?:(?:The|An?) [^.]+? is hit by (an?|a melee|a ranged) attack roll|An attack roll hits the ([^.]+?)\.|An attacker [^.]+? hits it with an attack roll)`)
+	reactSelfHitRe = regexp.MustCompile(`(?i)^Trigger: (?:(?:The|An?) [^.]+? is hit by (an?|a melee|a ranged) attack roll|An attack roll hits the ([^.]+?)\.)`)
 )
 
 // reactionSelfHitTrigger: the Reaction's trigger is an attack roll hitting the monster itself; kind is "melee", "ranged" or "" (any).
@@ -164,7 +137,7 @@ func resolveMonsterReaction(r *http.Request, lobbyID, id int, meta *monsterMeta,
 		}
 	}
 	// a Reaction whose trigger is an attack roll hitting this creature answers only a hit recorded this turn, of the kind the trigger
-	// names: one reader for every such Reaction (Parry, Riposte, Deflect Missile, Whirlwind of Sand, Reflexive Antennae, Uncanny Dodge)
+	// names: one reader for every such Reaction (Parry, Riposte, Deflect Missile, Whirlwind of Sand, Reflexive Antennae)
 	// (Protective Magic answers without a hit with where Counterspell is cast instead: its own case below)
 	if needs, kind := reactionSelfHitTrigger(entry.Text); needs && !strings.Contains(low, "casts counterspell or shield") {
 		if !haveHit {
@@ -246,17 +219,6 @@ func resolveMonsterReaction(r *http.Request, lobbyID, id int, meta *monsterMeta,
 		if taken > 0 && back >= taken {
 			out += " The damage is reduced to 0: it can redirect the force (the saving throw in its text; the GM resolves it with monster_action)."
 		}
-	case reactHalveRe.MatchString(entry.Text): // Uncanny Dodge: the hit's damage is halved (rounded down), Temporary Hit Points included
-		bv, av := monsterVitals(hit.EntryBefore), monsterVitals(hit.EntryAfter)
-		if hit.EntryBefore == nil || hit.EntryAfter == nil {
-			return "", true, fmt.Sprintf("%s's %s: the hit's damage wasn't recorded, so the server can't halve it; the GM settles it. Nothing was used.", name, base)
-		}
-		taken := max(bv.HP-av.HP, 0) + max(bv.Temp-av.Temp, 0)
-		back, after, ok := refundHitDamage(lobbyID, id, key, hit, taken-taken/2) // monster_hit_undo_2024.go
-		if !ok {
-			return "", true, fmt.Sprintf("%s uses %s: RECONCILIATION NEEDED, the target's Hit Points or state changed after the hit, so halving its damage is not applied by the server; the GM settles it.", name, base)
-		}
-		out = fmt.Sprintf("%s uses %s: the hit's damage is halved, %d to %d (it has %d HP, %d Temporary).", name, base, taken, taken-back, after.HP, after.Temp)
 	case strings.Contains(low, "splits into two new"):
 		out = splitMonster(lobbyID, id, name, base)
 		if strings.HasPrefix(out, "!") {
@@ -346,24 +308,6 @@ func resolveMonsterReaction(r *http.Request, lobbyID, id int, meta *monsterMeta,
 			}
 		}
 		out = fmt.Sprintf("%s uses %s: %s.", name, base, act) + " " + t
-	case reactMissWeaponRe.MatchString(strings.TrimSpace(entry.Text)):
-		// a melee weapon attack that missed it this turn: the save is the triggering creature's, and a failure sticks that weapon fast
-		// (the item state owner, item_state_2024.go)
-		miss, ok := thisTurnMissOnMonster(lobbyID, id)
-		if !ok || miss.Weapon == "" || strings.EqualFold(miss.Weapon, "unarmed") || !weaponIsMelee(miss.Weapon) {
-			return "", true, fmt.Sprintf("%s's %s answers a melee weapon attack that missed it, and none did this turn. Nothing was used.", name, base)
-		}
-		e, ok := parseSaveEffect(entry.Text)
-		if !ok {
-			return "", false, ""
-		}
-		e.SourceID = id
-		e.StuckWeapon = miss.Weapon
-		lines, _ := applySaveEffect(lobbyID, name, e, []int{miss.CharID}, apply)
-		if apply {
-			lastMissOnMonster.Delete(key)
-		}
-		out = fmt.Sprintf("%s uses %s against %s. %s", name, base, getCharacterName(miss.CharID), strings.Join(lines, " "))
 	default:
 		return "", false, ""
 	}

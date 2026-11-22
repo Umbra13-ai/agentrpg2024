@@ -98,7 +98,7 @@ func readLastingEffects(sentence string, conds []string) (l *lastingEffects, res
 		l.Tick = spec
 		body = lastingTickRe.ReplaceAllString(body, "")
 	}
-	// "While Frightened, the target has the Paralyzed condition" (Scarecrow Terrifying Glare), "While Charmed, the target has the
+	// "While Poisoned, the target has the Paralyzed condition" (Chuul Paralyzing Tentacles), "While Charmed, the target has the
 	// Incapacitated condition" (Harpy): records that last as long as the condition's record (notesEndsWith). Grappled's Restrained is
 	// the grapple's linked record (saveEffect.RestrainedToo), not read here.
 	if a := lastingAlsoRe.FindStringSubmatch(body); a != nil && cond != "grappled" {

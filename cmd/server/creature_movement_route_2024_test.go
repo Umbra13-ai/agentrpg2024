@@ -325,29 +325,18 @@ func TestPostgresSwarmAndIncorporealSpaces(t *testing.T) {
 	}
 }
 
-// Shape-Shift, a fall and a drag through the GM's requests: the Quasit's bat form makes its Speed 10 ft (a 20-foot move is over it);
-// an entry that makes its creature fall deals the falling damage, less what it reduces, from its token's height, and lands it; a
+// Shape-Shift and a drag through the GM's requests: the Quasit's bat form makes its Speed 10 ft (a 20-foot move is over it); a
 // monster dragging a character it grapples pays double, a Bugbear (Abduct) doesn't.
-func TestPostgresShapeShiftFallAndDrag(t *testing.T) {
+func TestPostgresShapeShiftAndDrag(t *testing.T) {
 	testPostgres(t)
 	gm, _, camp, charID, _, _ := companionReactionFixture(t)
 	cp := fmt.Sprintf("/api/campaigns/%d", camp)
-	lurker := compendiumFixture()
-	lurker.Name, lurker.Type, lurker.Traits, lurker.Legendary, lurker.LegendaryIn, lurker.DmgImmune, lurker.Resistances = "Test Lurker", "Monstrosity", nil, nil, "", "", ""
-	lurker.Actions = []srdMonsterEntry{{Name: "Drop", Text: "The lurker falls. Dexterity Saving Throw: DC 11, one creature directly underneath the lurker. Failure: 10 (3d6) Piercing damage. Failure or Success: The lurker reduces any damage it takes from the fall by 20."}}
-	status, imported := pgCall(t, "POST", "/api/gm/compendium/monsters", gm, map[string]interface{}{"source_note": "invented fall fixture", "monsters": []srdMonster2024{lurker}})
-	if status != 201 {
-		t.Fatalf("import: %d %v", status, imported)
-	}
-	key := fmt.Sprint(imported["monsters"].([]interface{})[0].(map[string]interface{})["monster_key"])
-	t.Cleanup(func() { db.Exec(`DELETE FROM custom_monsters WHERE key=$1`, key) })
 	pgCall(t, "POST", cp+"/combat/add", gm, map[string]interface{}{"combatants": []map[string]interface{}{
 		{"name": "Form Quasit", "monster_key": "quasit", "hp": 1000, "ac": 1, "initiative": -500},
-		{"name": "Fall Lurker", "monster_key": key, "hp": 1000, "ac": 1, "initiative": -501},
 		{"name": "Drag Goblin", "monster_key": "goblin-warrior", "hp": 1000, "ac": 1, "initiative": -502},
 		{"name": "Drag Bugbear", "monster_key": "bugbear-warrior", "hp": 1000, "ac": 1, "initiative": -503}}})
 	id := func(name string) int { return monsterIDsByKeyOrName(camp, name)[0] }
-	quasit, fall, goblin, bugbear := id("Form Quasit"), id("Fall Lurker"), id("Drag Goblin"), id("Drag Bugbear")
+	quasit, goblin, bugbear := id("Form Quasit"), id("Drag Goblin"), id("Drag Bugbear")
 	put := func(tokens []mapToken, forced bool) {
 		t.Helper()
 		_, state := pgCall(t, "GET", cp+"/battle-map", gm, nil)
@@ -390,16 +379,6 @@ func TestPostgresShapeShiftFallAndDrag(t *testing.T) {
 	narrate("Form Quasit", "Shape-Shift", "true form")
 	if s, _ := monsterWalkSpeed(quasit, camp); s != 40 {
 		t.Errorf("its true form's Speed: %d", s)
-	}
-
-	// a fall from 30 feet: 3d6 less 20, and it lands
-	put([]mapToken{{ID: fall, Name: "lurker", Position: mapSquare{1, 0}, Size: 1, Altitude: 30}, {ID: charID, Name: "hero", Position: mapSquare{1, 1}, Size: 1}}, true)
-	c, r := narrate("Fall Lurker", "Drop", "")
-	if res := fmt.Sprint(r["monster_action_result"]); c != 200 || !strings.Contains(res, "falls 30 ft") || strings.Contains(res, "reduces any damage it takes from the fall") {
-		t.Errorf("the fall (applied, not left to the GM): %d %v", c, r)
-	}
-	if m, _ := activeEncounterMap(camp); func() int { tk, _ := m.token(fall); return tk.Altitude }() != 0 {
-		t.Error("the lurker didn't land")
 	}
 
 	// the drag: the goblin pays double, the bugbear (Abduct) doesn't

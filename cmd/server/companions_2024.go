@@ -41,16 +41,15 @@ const companionIDBase = 1000000000 // companions' ids in a turn order (character
 func isCompanionCombatID(id int) bool { return id >= companionIDBase }
 
 type compAttack struct {
-	DamageChoices []string `json:"damage_choices,omitempty"`
-	StatBlockText string   `json:"stat_block_text,omitempty"`
-	FlatDamage    *int     `json:"flat_damage,omitempty"`
-	Name          string   `json:"name"`
-	Bonus         int      `json:"bonus"`
-	Dice          string   `json:"dice"`
-	Type          string   `json:"type"`
-	Extra         string   `json:"extra,omitempty"`      // extra dice of another type (Giant Insect: 1d4 Poison)
-	ExtraType     string   `json:"extra_type,omitempty"` // that type
-	Count         int      `json:"count"`                // attacks per turn (Multiattack)
+	StatBlockText string `json:"stat_block_text,omitempty"`
+	FlatDamage    *int   `json:"flat_damage,omitempty"`
+	Name          string `json:"name"`
+	Bonus         int    `json:"bonus"`
+	Dice          string `json:"dice"`
+	Type          string `json:"type"`
+	Extra         string `json:"extra,omitempty"`      // extra dice of another type (Giant Insect: 1d4 Poison)
+	ExtraType     string `json:"extra_type,omitempty"` // that type
+	Count         int    `json:"count"`                // attacks per turn (Multiattack)
 }
 
 type compTrait struct {
@@ -974,7 +973,7 @@ func maxHPOf(lobbyID, id int) int {
 
 // handleGMCompanion godoc
 // @Summary Companions: pets, damage, healing (GM)
-// @Description Familiars: they deliver their owner's touch spells with their Reaction (cast with "delivered by my familiar"); with Pact of the Chain a familiar attacks when its owner forgoes one attack of the Attack action, or with Quick Attack (Investment of the Chain Master, a Bonus Action). GET ?campaign_id=N lists the campaign's companions (familiars, steeds, summons, pets) with their numbers. POST (GM): give a character a pet from the monster list {"character_id", "monster_key": "mastiff", "name": "Brutus"}; or change a companion {"companion_id", "damage": 7, "damage_type": "slashing"} (at 0 Hit Points it is gone: a familiar comes back when Find Familiar is cast again), {"companion_id", "heal": 5}, {"companion_id", "remove": true}. For attacks offering a damage type choice, description includes damage type: fire (one of the companion damage_choices); invalid choices spend nothing. Players command their companions with POST /api/action {"companion_id": N, "action": "attack", "target_id": -2}; a familiar is dismissed and recalled with the actions dismiss_familiar and recall_familiar. Rule deviation (server setting AGENTRPG_FAMILIAR_INITIATIVE): companions act on their owner's turn; "own" gives a familiar its own Initiative (the SRD rule).
+// @Description Familiars: they deliver their owner's touch spells with their Reaction (cast with "delivered by my familiar"); with Pact of the Chain a familiar attacks when its owner forgoes one attack of the Attack action, or with Quick Attack (Investment of the Chain Master, a Bonus Action). GET ?campaign_id=N lists the campaign's companions (familiars, steeds, summons, pets) with their numbers. POST (GM): give a character a pet from the monster list {"character_id", "monster_key": "mastiff", "name": "Brutus"}; or change a companion {"companion_id", "damage": 7, "damage_type": "slashing"} (at 0 Hit Points it is gone: a familiar comes back when Find Familiar is cast again), {"companion_id", "heal": 5}, {"companion_id", "remove": true}. For attacks offering a damage type choice, description includes damage type: fire (an attack whose damage type is chosen, as for a Draconic Origin trait); invalid choices spend nothing. Players command their companions with POST /api/action {"companion_id": N, "action": "attack", "target_id": -2}; a familiar is dismissed and recalled with the actions dismiss_familiar and recall_familiar. Rule deviation (server setting AGENTRPG_FAMILIAR_INITIATIVE): companions act on their owner's turn; "own" gives a familiar its own Initiative (the SRD rule).
 // @Tags GM
 // @Param campaign_id query int false "Campaign (GET)"
 // @Body Pet or change (POST)

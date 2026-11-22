@@ -10,9 +10,9 @@ import (
 // (the direct attack route), a monster (the continuation route) and a companion (companionHitRiders), each rider recorded for the
 // duration its text names, read by the owner it belongs to (Speed, saveSources, attackSources) and nothing of it left for the GM;
 // then the real turn route (combat/next) ends each one on the source's turn: the start of its next turn for a Speed rider and the
-// "exposed" Advantage, the end of its next turn (not the one it is acting in) for the save Disadvantage.
-// The texts are invented; their patterns are those of published hits (SRD 5.2.1 Worg Bite and Merfolk Skirmisher Ocean Spear; the
-// 2024 riders of the CR 0-1 backlog that end on the attacker's turn).
+// "exposed" Advantage, the end of its next turn (not the one it is acting in) for the attack Disadvantage.
+// The texts are invented; their patterns are those of SRD 5.2.1 hits (Worg Bite, Merfolk Skirmisher Ocean Spear, and the
+// "Disadvantage on attack rolls until the end of its next turn" rider, here anchored to the attacker's turn).
 func TestPostgresRiderDurationsOnEveryTarget(t *testing.T) {
 	testPostgres(t)
 	gm, _, camp, charID, petID, opponent := companionReactionFixture(t)
@@ -22,12 +22,10 @@ func TestPostgresRiderDurationsOnEveryTarget(t *testing.T) {
 	raider.Legendary, raider.LegendaryIn = nil, ""
 	raider.Actions = []srdMonsterEntry{
 		{Name: "Chill Bite", Text: "Melee Attack Roll: +60, reach 5 ft. Hit: 4 (1d4 + 2) Cold damage, and the target's Speed decreases by 5 feet until the start of the raider's next turn."},
-		{Name: "Mind Slam", Text: "Melee Attack Roll: +60, reach 5 ft. Hit: 4 (1d4 + 2) Acid damage, and the target has Disadvantage on Intelligence saving throws until the end of the raider's next turn."},
+		{Name: "Dazzle Slam", Text: "Melee Attack Roll: +60, reach 5 ft. Hit: 4 (1d4 + 2) Radiant damage, and the target has Disadvantage on attack rolls until the end of the raider's next turn."},
 		{Name: "Opening Bite", Text: "Melee Attack Roll: +60, reach 5 ft. Hit: 4 (1d4 + 2) Piercing damage, and the next attack roll made against the target before the start of the raider's next turn has Advantage."},
 		{Name: "Slow Strike", Text: "Melee Attack Roll: +60, reach 5 ft. Hit: 4 (1d4 + 2) Cold damage. If the target is a creature, its Speed decreases by 10 feet until the end of its next turn."},
 		{Name: "Jab", Text: "Melee Attack Roll: +60, reach 5 ft. Hit: 3 (1d4 + 1) Bludgeoning damage."},
-		{Name: "Mind Probe", Text: "Intelligence Saving Throw: DC 5, one creature. Failure: 3 (1d6) Psychic damage."},
-		{Name: "Will Probe", Text: "Wisdom Saving Throw: DC 5, one creature. Failure: 3 (1d6) Psychic damage."},
 	}
 	victim := compendiumFixture()
 	victim.Name, victim.Type, victim.Traits = "Rider Victim", "Beast", nil
@@ -124,20 +122,13 @@ func TestPostgresRiderDurationsOnEveryTarget(t *testing.T) {
 				}
 			}
 		}
-		// Disadvantage on one ability's saves, ending at the end of the source's next turn; the save owner reads it for that
-		// ability only
-		r = hit("Mind Slam", tg.target, tg.id)
-		if m := marker(tg.id, "disadv_save"); m == nil || m.Detail != "int" || m.SourceID != raiderID || m.Notes != notesUntilEndOfSourceTurn ||
-			!strings.Contains(r, "Disadvantage on Intelligence saving throws until the end of Rider Raider's next turn") {
-			t.Errorf("%s: Mind Slam recorded %+v; reply %s", tg.name, m, r)
+		// Disadvantage on attack rolls, ending at the end of the source's next turn
+		r = hit("Dazzle Slam", tg.target, tg.id)
+		if m := marker(tg.id, "disadv_attacks"); m == nil || m.SourceID != raiderID || m.Notes != notesUntilEndOfSourceTurn ||
+			!strings.Contains(r, "Disadvantage on attack rolls until the end of Rider Raider's next turn") {
+			t.Errorf("%s: Dazzle Slam recorded %+v; reply %s", tg.name, m, r)
 		}
-		noGMNote(tg.name+" Mind Slam", r)
-		if r := act("Mind Probe", tg.target); !strings.Contains(r, "Disadvantage rider on its Intelligence saves") {
-			t.Errorf("%s: the Intelligence save did not read the rider: %s", tg.name, r)
-		}
-		if r := act("Will Probe", tg.target); strings.Contains(r, "Disadvantage rider") {
-			t.Errorf("%s: a Wisdom save read the Intelligence rider: %s", tg.name, r)
-		}
+		noGMNote(tg.name+" Dazzle Slam", r)
 		// the next attack roll against the target has Advantage; the roll uses it up
 		r = hit("Opening Bite", tg.target, tg.id)
 		if e := effect(tg.id, "exposed"); e == nil || e.SourceID != raiderID ||
@@ -166,12 +157,12 @@ func TestPostgresRiderDurationsOnEveryTarget(t *testing.T) {
 	// timing through the turn route: the riders given on the raider's own turn
 	clean(charID)
 	setTurn(idx["Rider Raider"])
-	hit("Mind Slam", fmt.Sprint(charID), charID)
+	hit("Dazzle Slam", fmt.Sprint(charID), charID)
 	for n := 0; n < 30 && (marker(charID, "speed_minus") == nil || effect(charID, "exposed") == nil); n++ {
 		act("Chill Bite", fmt.Sprint(charID))
 		act("Opening Bite", fmt.Sprint(charID))
 	}
-	if marker(charID, "disadv_save") == nil || marker(charID, "speed_minus") == nil || effect(charID, "exposed") == nil {
+	if marker(charID, "disadv_attacks") == nil || marker(charID, "speed_minus") == nil || effect(charID, "exposed") == nil {
 		t.Fatalf("setup: riders not all given: %+v %+v", loadConditionRecords(camp, charID), combatEffectsOn(camp, charID))
 	}
 	next := func() int {
@@ -185,14 +176,14 @@ func TestPostgresRiderDurationsOnEveryTarget(t *testing.T) {
 		t.Fatal("the turn did not move")
 	}
 	// the end of the turn the riders were given in is not "the end of the raider's next turn"; the start-anchored ones stand
-	if marker(charID, "disadv_save") == nil || marker(charID, "speed_minus") == nil || effect(charID, "exposed") == nil {
+	if marker(charID, "disadv_attacks") == nil || marker(charID, "speed_minus") == nil || effect(charID, "exposed") == nil {
 		t.Fatalf("a rider ended at the end of the turn it was given in: %+v %+v", loadConditionRecords(camp, charID), combatEffectsOn(camp, charID))
 	}
 	for n := 0; n < len(f.Order)+2; n++ {
 		if next() == raiderID {
 			break
 		}
-		if marker(charID, "speed_minus") == nil || effect(charID, "exposed") == nil || marker(charID, "disadv_save") == nil {
+		if marker(charID, "speed_minus") == nil || effect(charID, "exposed") == nil || marker(charID, "disadv_attacks") == nil {
 			t.Fatalf("a rider ended on another creature's turn (turn %d): %+v %+v", n, loadConditionRecords(camp, charID), combatEffectsOn(camp, charID))
 		}
 	}
@@ -200,11 +191,11 @@ func TestPostgresRiderDurationsOnEveryTarget(t *testing.T) {
 	if marker(charID, "speed_minus") != nil || effect(charID, "exposed") != nil {
 		t.Errorf("the Speed rider or the Advantage outlived the start of the raider's next turn: %+v %+v", loadConditionRecords(camp, charID), combatEffectsOn(camp, charID))
 	}
-	if marker(charID, "disadv_save") == nil {
-		t.Fatal("the save Disadvantage ended at the start of the raider's turn, not its end")
+	if marker(charID, "disadv_attacks") == nil {
+		t.Fatal("the attack Disadvantage ended at the start of the raider's turn, not its end")
 	}
 	next() // the end of the raider's next turn
-	if marker(charID, "disadv_save") != nil {
-		t.Errorf("the save Disadvantage outlived the end of the raider's next turn: %+v", loadConditionRecords(camp, charID))
+	if marker(charID, "disadv_attacks") != nil {
+		t.Errorf("the attack Disadvantage outlived the end of the raider's next turn: %+v", loadConditionRecords(camp, charID))
 	}
 }

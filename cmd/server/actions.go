@@ -1503,9 +1503,6 @@ func resolveActionWithBonusDash(action, description string, charID int, bonusDas
 			}
 		}
 		_, weapon, hasWeapon := findWeapon(weaponKey)
-		if why := stuckWeaponRefusal(charID, weaponKey); why != "" { // a weapon stuck fast can't be used (item_state_2024.go)
-			return why
-		}
 		// Improvised weapons (improvised_2024.go): an object, a ranged weapon swung in melee, or a melee weapon without Thrown that is thrown
 		improvised := false
 		if iw, ok := improvisedWeapon(description, weaponKey, weapon, hasWeapon); ok {

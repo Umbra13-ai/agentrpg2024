@@ -8,17 +8,20 @@ import (
 	"testing"
 )
 
+// The SRD 5.2.1 Half-Dragon Claw wording: an extra amount "of the type chosen for the Draconic Origin trait" is dealt in the type the
+// GM names in use; no type, or a word that is no damage type, is refused before anything is rolled.
 func TestMonsterAttackDamageChoice(t *testing.T) {
-	base := monsterActionRow{Name: "Burst", Desc: "Melee or Ranged Attack Roll: +15. Hit: 25 (5d6 + 8) damage of a type chosen by the creature: Acid, Cold, Fire, Lightning, or Thunder."}
+	base := monsterActionRow{Name: "Claw", Desc: "Melee Attack Roll: +7, reach 5 ft. Hit: 6 (1d4 + 4) Slashing damage plus 7 (2d6) damage of the type chosen for the Draconic Origin trait."}
 	for _, tc := range []struct {
 		choice string
 		ok     bool
-	}{{"acid", true}, {" FIRE ", true}, {"thunder", true}, {"", false}, {"poison", false}, {"fire, cold", false}} {
+	}{{"acid", true}, {" FIRE ", true}, {"poison", true}, {"", false}, {"mystery", false}, {"fire, cold", false}} {
 		a, problem := prepareMonsterAttack(base, tc.choice)
 		if (problem == "") != tc.ok {
 			t.Errorf("choice %q: %q", tc.choice, problem)
 		}
-		if tc.ok && (a.DamageDice != "5d6+8" || a.DamageType != strings.ToLower(strings.TrimSpace(tc.choice))) {
+		want := "7 (2d6) " + titleCase(strings.ToLower(strings.TrimSpace(tc.choice))) + " damage"
+		if tc.ok && (a.DamageDice != "1d4+4" || a.DamageType != "Slashing" || !strings.Contains(a.Desc, want)) {
 			t.Errorf("choice %q: %+v", tc.choice, a)
 		}
 	}
@@ -41,11 +44,12 @@ func TestPostgresMonsterDamageChoiceCombat(t *testing.T) {
 	camp := int(j["campaign_id"].(float64))
 	m := compendiumFixture()
 	m.Name = "Choice Construct"
+	m.Traits = append(m.Traits, srdMonsterEntry{Name: "Draconic Origin", Text: "The construct is related to a type of dragon associated with one of the following damage types (GM's choice): Acid, Cold, Fire, Lightning, or Poison."})
 	m.Actions = []srdMonsterEntry{
 		{Name: "Multiattack", Text: "The construct makes two Burst attacks."},
-		{Name: "Burst", Text: "Melee or Ranged Attack Roll: +15, reach 30 ft. or range 150 ft. Hit: 25 (5d6 + 8) damage of a type chosen by the construct: Acid, Cold, Fire, Lightning, or Thunder."},
+		{Name: "Burst", Text: "Melee or Ranged Attack Roll: +15, reach 30 ft. or range 150 ft. Hit: 25 (5d6 + 8) Bludgeoning damage plus 7 (2d6) damage of the type chosen for the Draconic Origin trait."},
 		{Name: "Unknown", Text: "Melee Attack Roll: +15, reach 5 ft. Hit: an unknown amount of damage."},
-		{Name: "Recharging Burst (Recharge 5–6)", Text: "Melee or Ranged Attack Roll: +15, reach 30 ft. or range 150 ft. Hit: 25 (5d6 + 8) damage of a type chosen by the construct: Acid, Cold, Fire, Lightning, or Thunder."},
+		{Name: "Recharging Burst (Recharge 5–6)", Text: "Melee or Ranged Attack Roll: +15, reach 30 ft. or range 150 ft. Hit: 25 (5d6 + 8) Bludgeoning damage plus 7 (2d6) damage of the type chosen for the Draconic Origin trait."},
 	}
 	m.Legendary = []srdMonsterEntry{{Name: "Strike", Text: "The construct makes one Burst attack."}}
 	c, j := pgCall(t, "POST", "/api/gm/compendium/monsters", gm, map[string]interface{}{"source_note": "original test", "monsters": []srdMonster2024{m}})
@@ -126,7 +130,7 @@ func TestPostgresMonsterDamageChoiceCombat(t *testing.T) {
 	if _, used := monsterReactionRound.Load(reactionKey); used {
 		t.Fatal("refused opportunity attack spent reaction")
 	}
-	for _, choice := range []string{"", "poison"} {
+	for _, choice := range []string{"", "mystery"} {
 		before := hp()
 		res := attack("Burst", choice)
 		if hp() != before || !strings.Contains(res, "Nothing was rolled") {
@@ -167,7 +171,7 @@ func TestMonsterDamageParserSharedAdapters(t *testing.T) {
 	entries := []srdMonsterEntry{
 		{Name: "Blade", Text: "Melee Attack Roll: +8. Hit: 12 (2d6 + 5) Slashing damage plus 7 (2d6) Fire damage."},
 		{Name: "Claw", Text: "Melee Attack Roll: +3. Hit: 1 Slashing damage."},
-		{Name: "Burst", Text: "Melee Attack Roll: +8. Hit: 12 (2d6 + 5) damage of a type chosen by the creature: Cold or Fire."},
+		{Name: "Burst", Text: "Melee Attack Roll: +8. Hit: 12 (2d6 + 5) Bludgeoning damage plus 7 (2d6) damage of the type chosen for the Draconic Origin trait."},
 	}
 	var rows []monsterActionRow
 	raw, err := json.Marshal(oldStyleActions(entries))
@@ -180,9 +184,6 @@ func TestMonsterDamageParserSharedAdapters(t *testing.T) {
 	companions := companionRows(rows)
 	if len(companions) != 3 {
 		t.Fatalf("lost attack: %+v", companions)
-	}
-	if len(companions[2].DamageChoices) != 2 {
-		t.Fatal("choices not exposed")
 	}
 	for i, row := range rows {
 		monster, problem := prepareMonsterAttack(row, "fire")
@@ -229,11 +230,4 @@ func TestEverySRDAttackUsesSharedParser(t *testing.T) {
 		t.Fatalf("unexpectedly few attacks: %d", count)
 	}
 	t.Logf("All %d SRD action attacks have a validated damage definition or explicit refusal through the shared owner", count)
-}
-
-func TestParseMonsterAttackInlineTypeChoice(t *testing.T) {
-	p := parseMonsterAttack("Divine Ray", "Ranged Attack Roll: +15, range 600 ft. Hit: 35 (6d8 + 8) Necrotic or Radiant damage (the creature's choice).")
-	if p.Problem != "" || len(p.Choices) != 2 || p.Choices[0] != "necrotic" || p.Choices[1] != "radiant" || p.DamageDice == "" {
-		t.Errorf("inline type choice not read: %+v", p)
-	}
 }

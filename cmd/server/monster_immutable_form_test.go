@@ -1,10 +1,7 @@
 package main
 
 import (
-	"encoding/json"
 	"fmt"
-	"os"
-	"path/filepath"
 	"strings"
 	"testing"
 )
@@ -15,12 +12,12 @@ func TestPostgresImportedImmutableFormBlocksPolymorph(t *testing.T) {
 		immutable bool
 		reference bool
 	}{
-		{name: "mutable control"}, {name: "invented immutable", immutable: true}, {name: "supplied reference", immutable: true, reference: true},
+		{name: "mutable control"}, {name: "invented immutable", immutable: true}, {name: "SRD Iron Golem", immutable: true, reference: true},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			var reference *srdMonster2024
 			if tc.reference {
-				example := suppliedIronGolem(t)
+				example := srdIronGolem(t)
 				reference = &example
 			}
 			f := reviewConcentrationSetup(t, func(m *srdMonster2024) {
@@ -71,29 +68,21 @@ func TestPostgresImportedImmutableFormBlocksPolymorph(t *testing.T) {
 	}
 }
 
-func suppliedIronGolem(t *testing.T) srdMonster2024 {
+func srdIronGolem(t *testing.T) srdMonster2024 {
 	t.Helper()
-	dir := os.Getenv("REFERENCE_FIXTURES_DIR")
-	if dir == "" {
-		t.Skip("private reference fixtures not provided")
+	for _, m := range srdMonsters2024() {
+		if m.Name == "Iron Golem" {
+			return m
+		}
 	}
-	raw, err := os.ReadFile(filepath.Join(dir, "mm10", "iron-golem.json"))
-	if err != nil {
-		t.Fatal(err)
-	}
-	var payload struct {
-		Monsters []srdMonster2024 `json:"monsters"`
-	}
-	if err = json.Unmarshal(raw, &payload); err != nil || len(payload.Monsters) != 1 || payload.Monsters[0].Name != "Iron Golem" {
-		t.Fatalf("private reference: invalid Iron Golem input: %v", err)
-	}
-	return payload.Monsters[0]
+	t.Fatal("the SRD 5.2.1 Iron Golem is missing from the catalog")
+	return srdMonster2024{}
 }
 
-// Exercise the supplied reference through the normal damage endpoint. The
+// Exercise the SRD 5.2.1 Iron Golem through the normal damage endpoint. The
 // target starts wounded so immunity and genuine absorption are distinguishable.
-func TestPostgresReferenceIronGolemFireAbsorption(t *testing.T) {
-	iron := suppliedIronGolem(t)
+func TestPostgresSRDIronGolemFireAbsorption(t *testing.T) {
+	iron := srdIronGolem(t)
 	f := reviewConcentrationSetup(t, func(m *srdMonster2024) { *m = iron; m.Name = "Review Focus Caster" })
 	adjust := func(fields map[string]interface{}) string {
 		t.Helper()

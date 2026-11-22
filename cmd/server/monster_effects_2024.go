@@ -30,38 +30,33 @@ import (
 )
 
 var (
-	mfxSaveRe = regexp.MustCompile(`(Strength|Dexterity|Constitution|Intelligence|Wisdom|Charisma) Saving Throw: DC (\d+)`)
-	// SRD 5.2.1 p.185: a nonspell phenomenon is magical when its rule labels it so.
-	mfxMagicalRe                 = regexp.MustCompile(`(?i)(?:^|[.!?]\s+)this (?:action|attack|effect|trait) is magical(?:[.!?]|$)`)
-	mfxConditionDamageImmunityRe = regexp.MustCompile(`(?i)unless the target has immunity to ([a-z]+) damage`)
-	mfxSuccessImmunityTimeRe     = regexp.MustCompile(`(?i)immune to (?:this|the) [^.!?]*? for (?:the next )?(\d+) (rounds?|minutes?|hours?|days?)\b`)
-	mfxAllSourcesImmunityRe      = regexp.MustCompile(`(?i)immune to the [^.!?]*? of all [^.!?]*? for (?:the next )?\d+ (?:rounds?|minutes?|hours?|days?)\b`)
-	mfxDamageRe                  = regexp.MustCompile(`(\d+) \((\d+d\d+(?:\s*[+−-]\s*\d+)?)\) ([A-Za-z]+) damage`)
-	mfxCondRe                    = regexp.MustCompile(`has the ((?:[A-Z][a-z]+)(?:(?:, | and | or )[A-Z][a-z]+)*) conditions?`)
-	mfxEscapeRe                  = regexp.MustCompile(`Grappled condition \(escape DC (\d+)\)`)
-	mfxRestrainRe                = regexp.MustCompile(`(?i)(?:,? and it has the Restrained condition until the grapple ends|while Grappled, the target has the Restrained condition)`)
-	mfxExhaustRe                 = regexp.MustCompile(`gains? (\d+) Exhaustion levels?`)
-	mfxAttackRe                  = regexp.MustCompile(`makes one ([A-Z][A-Za-z’' -]+?)(?: or ([A-Z][A-Za-z’' -]+?))? attack`)
-	mfxUsesRe                    = regexp.MustCompile(`uses (?:its )?([A-Z][A-Za-z’' -]+?)(?:[.,]| and | to |$)`)
-	mfxSpellRe                   = regexp.MustCompile(`(?:uses Spellcasting to cast|casts) (?:the )?([A-Z][A-Za-z’' /-]+?)(?: spell)?(?: \(level (\d) version\))?(?: on itself)?(?: twice)?(?:[.,;]| requiring| using| on |$)`)
-	mfxSpellDCRe                 = regexp.MustCompile(`spell save DC (\d+)`)
-	mfxSpellAtkRe                = regexp.MustCompile(`([+−-]\d+) to hit with spell attacks`)
-	mfxEmanRe                    = regexp.MustCompile(`(\d+)\s*-?\s*foot Emanation`)
-	mfxUntilStartRe              = regexp.MustCompile(`until the start of (?:its|the (?:[^ ]+?)['’]s) next turn`) // the attacker's turn ("the empyrean's"); "the target's" is the target's own
-	mfxUntilEndRe                = regexp.MustCompile(`until the end of the ([^ ]+?)['’]s next turn`)             // an end anchored to a named creature's turn; "the target's" is the target's own
-	mfxEndSaveRe                 = regexp.MustCompile(`(?i)repeats the save at the end of each of its turns|at the end of each of its turns, (?:the target|it) repeats the save`)
-	mfxAutoSucceedRe             = regexp.MustCompile(`(?i)\bAfter (\d+) minutes?, it succeeds automatically`)
-	targetIsCreatureGateRe       = regexp.MustCompile(`(?i)\bIf the target is a creature,?(?:\s+(?:its|it)\b)?`)
-	mfxDurationRe                = regexp.MustCompile(`(?i)(?:until the (?:start|end) of (?:its|the [^ ]+) next turn|for \d+(?:d\d+)? (?:minutes?|hours?)|or until it takes damage)`)
-	// condDurationRe: a condition's duration in time ("for 10 minutes", "for 1d4 hours", "for 1d12 hours": a die is rolled for each target)
-	condDurationRe = regexp.MustCompile(`(?i)\bfor (\d+|\d+d\d+) (minutes?|hours?)\b`)
-	// endsOnDamageRe: "... for 10 minutes or until it takes damage": the condition ends when the creature takes damage
-	endsOnDamageRe = regexp.MustCompile(`(?i)\bor until it takes damage\b`)
-	// escapeCheckRe: the check that frees the target ("A creature can take an action to make a DC 10 Strength (Athletics) check to free
-	// itself or another creature in a net within 5 feet")
-	escapeCheckRe = regexp.MustCompile(`(?i)(?:A creature|The target|It) can take an action to make a DC (\d+) (Strength|Dexterity) \(([A-Za-z]+)\) check,? to (?:free itself|escape|end (?:the|this) effect on itself)`)
-	// autoSucceedTypesRe: "(Constructs and Undead succeed automatically)": creatures of those types succeed on the save without a roll
-	autoSucceedTypesRe = regexp.MustCompile(`\(((?:[A-Z][a-z]+)(?:(?:, |,? and |,? or )[A-Z][a-z]+)*) succeed automatically\)`)
+	mfxSaveRe                = regexp.MustCompile(`(Strength|Dexterity|Constitution|Intelligence|Wisdom|Charisma) Saving Throw: DC (\d+)`)
+	mfxSuccessImmunityTimeRe = regexp.MustCompile(`(?i)immune to (?:this|the) [^.!?]*? for (?:the next )?(\d+) (rounds?|minutes?|hours?|days?)\b`)
+	mfxDamageRe              = regexp.MustCompile(`(\d+) \((\d+d\d+(?:\s*[+−-]\s*\d+)?)\) ([A-Za-z]+) damage`)
+	mfxCondRe                = regexp.MustCompile(`has the ((?:[A-Z][a-z]+)(?:(?:, | and | or )[A-Z][a-z]+)*) conditions?`)
+	mfxEscapeRe              = regexp.MustCompile(`Grappled condition \(escape DC (\d+)\)`)
+	mfxRestrainRe            = regexp.MustCompile(`(?i)(?:,? and it has the Restrained condition until the grapple ends|while Grappled, the target has the Restrained condition)`)
+	mfxExhaustRe             = regexp.MustCompile(`gains? (\d+) Exhaustion levels?`)
+	mfxAttackRe              = regexp.MustCompile(`makes one ([A-Z][A-Za-z’' -]+?)(?: or ([A-Z][A-Za-z’' -]+?))? attack`)
+	mfxUsesRe                = regexp.MustCompile(`uses (?:its )?([A-Z][A-Za-z’' -]+?)(?:[.,]| and | to |$)`)
+	mfxSpellRe               = regexp.MustCompile(`(?:uses Spellcasting to cast|casts) (?:the )?([A-Z][A-Za-z’' /-]+?)(?: spell)?(?: \(level (\d) version\))?(?: on itself)?(?: twice)?(?:[.,;]| requiring| using| on |$)`)
+	mfxSpellDCRe             = regexp.MustCompile(`spell save DC (\d+)`)
+	mfxSpellAtkRe            = regexp.MustCompile(`([+−-]\d+) to hit with spell attacks`)
+	mfxEmanRe                = regexp.MustCompile(`(\d+)\s*-?\s*foot Emanation`)
+	mfxUntilStartRe          = regexp.MustCompile(`until the start of (?:its|the (?:[^ ]+?)['’]s) next turn`) // the attacker's turn ("the vrock's"); "the target's" is the target's own
+	mfxUntilEndRe            = regexp.MustCompile(`until the end of the ([^ ]+?)['’]s next turn`)             // an end anchored to a named creature's turn; "the target's" is the target's own
+	mfxEndSaveRe             = regexp.MustCompile(`(?i)repeats the save at the end of each of its turns|at the end of each of its turns, (?:the target|it) repeats the save`)
+	mfxAutoSucceedRe         = regexp.MustCompile(`(?i)\bAfter (\d+) minutes?, it succeeds automatically`)
+	targetIsCreatureGateRe   = regexp.MustCompile(`(?i)\bIf the target is a creature,?(?:\s+(?:its|it)\b)?`)
+	mfxDurationRe            = regexp.MustCompile(`(?i)(?:until the (?:start|end) of (?:its|the [^ ]+) next turn|for \d+(?:d\d+)? (?:minutes?|hours?)|or until it takes damage)`)
+	// condDurationRe: a condition's duration in time ("for 10 minutes", "for 1 hour")
+	condDurationRe = regexp.MustCompile(`(?i)\bfor (\d+) (minutes?|hours?)\b`)
+	// endsOnDamageRe: "... for 1 hour, until it takes damage, or until ..." (SRD Incubus Nightmare, Nalfeshnee Horror Nimbus): the
+	// condition ends when the creature takes damage
+	endsOnDamageRe = regexp.MustCompile(`(?i)(?:\bor|,) until it takes damage\b`)
+	// autoSucceedTypesRe: "(demons succeed automatically)" (SRD Vrock Stunning Screech): creatures of those types or tags succeed on the
+	// save without a roll
+	autoSucceedTypesRe = regexp.MustCompile(`(?i)\(([a-z]+(?:(?:, |,? and |,? or )[a-z]+)*) succeed automatically\)`)
 	mfxConditions      = map[string]bool{"blinded": true, "charmed": true, "deafened": true, "frightened": true, "grappled": true, "incapacitated": true,
 		"invisible": true, "paralyzed": true, "petrified": true, "poisoned": true, "prone": true, "restrained": true, "stunned": true, "unconscious": true}
 )
@@ -94,64 +89,54 @@ type hpDrain struct {
 }
 
 type saveEffect struct {
-	Ability            string // dex, con ...
-	Drain              *hpDrain
-	AbilityName        string // Dexterity
-	DC                 int
-	Damage             []damagePart
-	HalfOnSuccess      bool
-	SeverePoison       *severePoisonEffect
-	Conditions         []string
-	Rounds             int                 // condition duration in rounds (0: until removed)
-	UntilStart         bool                // "until the start of its next turn"
-	UntilEnd           bool                // "until the end of the <creature>'s next turn": ends at the end of the SOURCE creature's turn (monsterFeaturesTurnEnd)
-	EndSave            bool                // repeats the save at the end of each of its turns
-	Exhaustion         int                 // Exhaustion levels on a failure
-	EscapeDC           int                 // "the Grappled condition (escape DC 16)": the DC of the escape checks
-	Escapes            []conditionEscape   // a spell's escape checks (conditionSpell.escapes: Entangle, Web)
-	RestrainedToo      bool                // "and it has the Restrained condition until the grapple ends": Restrained that ends with the Grappled record
-	SpeedMode          string              // "halved", "zero" or "minus": a Speed rider of the text (speed_owner_2024.go), applied as a marker for SpeedEnd
-	SpeedEnd           riderEnd            // the Speed rider's duration (rider_duration_2024.go)
-	Always             *saveEffect         // the conditions, Speed and Disadvantage of "Failure or Success:": given to every target that rolled the save
-	DisadvMode         []string            // the roll riders of the text: "sap", "exposed", "attacks", "concentration", "save:int", "noreactions" (disadvantage_riders_2024.go)
-	RollRiderEnd       map[string]riderEnd // the duration of each DisadvMode rider
-	SpeedMinus         int                 // the feet of "its Speed decreases by 10 feet"
-	ImmunityName       string              // stat-block entry key for persisted success immunity (set by the effect caller)
-	Immunity           bool                // success grants immunity to this source and entry
-	ImmunityAllSources bool                // "immune to the <entry> of all <kind>s": the immunity covers every source of the entry, not only the grantor
-	ImmunityRounds     int                 // source duration, in combat rounds
-	ImmunityDuration   string              // the parsed numeric duration for the result
-	CondDamageImmunity string              // a damage Immunity excludes its condition rider
-	CondMaxSize        string              // "If the target is a Huge or smaller creature, ... has the Prone condition": the conditions apply only to a target of this size or smaller
-	CondIfAdvantage    bool                // "... and the darkmantle had Advantage on the attack roll": the conditions apply only when the roll had Advantage (enforced by the hit caller, which has the roll)
-	Lasting            *lastingEffects     // "While Poisoned, the target can't regain Hit Points and takes ... at the start of each of its turns" (condition_lasting_effects_2024.go)
-	ItemPenalty        string              // "The object takes a -1 penalty to the AC it offers (armor) or to its attack rolls (weapon)": "metal" (a metal object only) or "any" (item_state_2024.go)
-	StickEscapeDC      int                 // the escape DC of the grapple while the wielder holds on to the stuck weapon (item_state_2024.go)
-	StickFreeDC        int                 // "The attack's weapon sticks to the kuo-toa's shield ... a DC 11 Strength (Athletics) check, freeing the weapon": the check's DC (item_state_2024.go)
-	StuckWeapon        string              // the weapon that missed (set by the Reaction that answers the miss): what a failure sticks fast
-	Extra              string              // Failure text the server doesn't apply (for the GM)
-	Emanation          int                 // feet, when the targets are in an Emanation from the monster
-	IsMagical          bool                // a nonspell effect explicitly labeled magical by its stat block
-	IsSpell            bool                // a spell: items that guard against spells work (legendary_more_2024.go)
-	SpellLevel         int                 // its level (0: a cantrip)
-	School             string              // its school (Necromancy: the Scarab of Protection)
-	SingleTarget       bool                // aimed only at one creature, no area (Spell Absorption, Ring of Spell Turning's Reaction)
-	SourceID           int                 // the monster it comes from
-	Stage              *spellStage         // a condition spell's second stage (Sleep: spellStages)
-	FromUndead         bool                // it comes from an Undead (the Scarab of Protection)
-	RoundsDice         string              // a duration rolled for each target ("for 1d4 hours": "1d4"), in units of RoundsUnit rounds
-	RoundsUnit         int                 // the rounds of one unit of RoundsDice (10 a minute, 600 an hour)
-	EndsOnDamage       bool                // "or until it takes damage": the condition ends when the creature takes damage (wakeOnDamageSleep)
-	AutoSucceedTypes   []string            // creature types that succeed on the save automatically ("construct", "undead": rollForTarget)
+	Ability          string // dex, con ...
+	Drain            *hpDrain
+	AbilityName      string // Dexterity
+	DC               int
+	Damage           []damagePart
+	HalfOnSuccess    bool
+	SeverePoison     *severePoisonEffect
+	Conditions       []string
+	Rounds           int                 // condition duration in rounds (0: until removed)
+	UntilStart       bool                // "until the start of its next turn"
+	UntilEnd         bool                // "until the end of the <creature>'s next turn": ends at the end of the SOURCE creature's turn (monsterFeaturesTurnEnd)
+	EndSave          bool                // repeats the save at the end of each of its turns
+	Exhaustion       int                 // Exhaustion levels on a failure
+	EscapeDC         int                 // "the Grappled condition (escape DC 16)": the DC of the escape checks
+	Escapes          []conditionEscape   // a spell's escape checks (conditionSpell.escapes: Entangle, Web)
+	RestrainedToo    bool                // "and it has the Restrained condition until the grapple ends": Restrained that ends with the Grappled record
+	SpeedMode        string              // "halved", "zero" or "minus": a Speed rider of the text (speed_owner_2024.go), applied as a marker for SpeedEnd
+	SpeedEnd         riderEnd            // the Speed rider's duration (rider_duration_2024.go)
+	Always           *saveEffect         // the conditions, Speed and Disadvantage of "Failure or Success:": given to every target that rolled the save
+	DisadvMode       []string            // the roll riders of the text: "sap", "exposed", "attacks", "concentration", "save:int", "noreactions" (disadvantage_riders_2024.go)
+	RollRiderEnd     map[string]riderEnd // the duration of each DisadvMode rider
+	SpeedMinus       int                 // the feet of "its Speed decreases by 10 feet"
+	ImmunityName     string              // stat-block entry key for persisted success immunity (set by the effect caller)
+	Immunity         bool                // success grants immunity to this source and entry
+	ImmunityRounds   int                 // source duration, in combat rounds
+	ImmunityDuration string              // the parsed numeric duration for the result
+	CondMaxSize      string              // "If the target is a Huge or smaller creature, ... has the Prone condition": the conditions apply only to a target of this size or smaller
+	CondIfAdvantage  bool                // "... and the darkmantle had Advantage on the attack roll": the conditions apply only when the roll had Advantage (enforced by the hit caller, which has the roll)
+	Lasting          *lastingEffects     // "While Poisoned, the target can't regain Hit Points and takes ... at the start of each of its turns" (condition_lasting_effects_2024.go)
+	ItemPenalty      string              // "The object takes a -1 penalty to the AC it offers (armor) or to its attack rolls (weapon)": "metal" (a metal object only) or "any" (item_state_2024.go)
+	Extra            string              // Failure text the server doesn't apply (for the GM)
+	Emanation        int                 // feet, when the targets are in an Emanation from the monster
+	IsSpell          bool                // a spell: items that guard against spells work (legendary_more_2024.go)
+	SpellLevel       int                 // its level (0: a cantrip)
+	School           string              // its school (Necromancy: the Scarab of Protection)
+	SingleTarget     bool                // aimed only at one creature, no area (Spell Absorption, Ring of Spell Turning's Reaction)
+	SourceID         int                 // the monster it comes from
+	Stage            *spellStage         // a condition spell's second stage (Sleep: spellStages)
+	FromUndead       bool                // it comes from an Undead (the Scarab of Protection)
+	EndsOnDamage     bool                // "or until it takes damage": the condition ends when the creature takes damage (wakeOnDamageSleep)
+	AutoSucceedTypes []string            // creature types that succeed on the save automatically ("construct", "undead": rollForTarget)
+	Setup            string              // the entry\'s sentences outside the save line and its sections ("The djinni conjures a whirlwind at a point ...": saveSetupText), the GM\'s
 }
 
 // conditionAdd is the condition record a failed save leaves (character or monster target): its duration, the repeated save, the note
 // "until the start of its next turn", and for Grappled the escape checks against the stat block's escape DC.
 func (e saveEffect) conditionAdd(cond, source string) condAdd {
 	a := condAdd{Condition: cond, Source: source, Rounds: e.Rounds, SourceID: e.SourceID, Magical: e.IsSpell}
-	if e.RoundsDice != "" && e.RoundsUnit > 0 { // a duration rolled for each target: "for 1d4 hours"
-		a.Rounds = game.RollDamage(e.RoundsDice, false) * e.RoundsUnit
-	}
 	if e.EndsOnDamage && cond == "unconscious" {
 		a.Notes = notesEndsOnDamage // woken by damage (wakeOnDamageSleep)
 	}
@@ -194,15 +179,6 @@ func (e saveEffect) linkedCondition(cond, source string) (condAdd, bool) {
 // conditionsFor: the conditions of a failed save that this target gets. A condition gated by size ("If the target is a Huge or
 // smaller creature ...") is not given to a bigger target: gated says so for the reply. The one rule for characters and monsters.
 func (e saveEffect) conditionsFor(lobbyID, tid int) (conds []string, gated string) {
-	if dtype := e.CondDamageImmunity; dtype != "" {
-		if !attackDamageTypes[dtype] {
-			return nil, "[GM: resolve the condition's unrecognized damage immunity prerequisite.]"
-		}
-		if creatureIsImmuneToDamage(lobbyID, tid, dtype) {
-			return nil, fmt.Sprintf("not %s (immune to %s damage)", strings.Join(e.Conditions, ", "), dtype)
-		}
-	}
-
 	if _, ok := sizeOrder[e.CondMaxSize]; ok && isCompanionCombatID(tid) { // the server does not know a companion's size: the GM checks
 		return nil, fmt.Sprintf("not applied: %s only to a target of %s size or smaller (the GM checks the companion's size)", strings.Join(e.Conditions, ", "), titleCase(e.CondMaxSize))
 	}
@@ -210,25 +186,6 @@ func (e saveEffect) conditionsFor(lobbyID, tid int) (conds []string, gated strin
 		return nil, fmt.Sprintf("not %s (larger than %s)", strings.Join(e.Conditions, ", "), titleCase(e.CondMaxSize))
 	}
 	return e.Conditions, ""
-}
-
-// Use the same type mitigation sources that the HP owners use. Resistance
-// (even when rounding leaves no damage) does not meet an Immunity prerequisite.
-func creatureIsImmuneToDamage(lobby, target int, dtype string) bool {
-	switch {
-	case target < 0:
-		_, kind := adjustMonsterDamage(monsterKeyOfCombatant(lobby, target), dtype, 2)
-		return kind == "immune"
-	case isCompanionCombatID(target):
-		c, ok := activeCompanionInCampaign(lobby, target)
-		if !ok {
-			return false
-		}
-		_, kind := adjustMonsterDamage(c.Form, dtype, 2)
-		return kind == "immune"
-	default:
-		return len(applyDamageResistance(target, 2, dtype).Immunities) > 0
-	}
 }
 
 // saveOption is one of the effects an action offers: "Charm Ray. Wisdom Saving Throw: DC 16. Failure: ...".
@@ -273,17 +230,6 @@ func (e *saveEffect) readRider(fail string) (extra []string) {
 			}
 		}
 	}
-	if len(e.Conditions) > 0 {
-		for _, sentence := range sentenceSplitRe.Split(fail, -1) {
-			if !mfxCondRe.MatchString(sentence) {
-				continue
-			}
-			if gate := mfxConditionDamageImmunityRe.FindStringSubmatch(sentence); gate != nil {
-				e.CondDamageImmunity = strings.ToLower(gate[1])
-			}
-			break
-		}
-	}
 
 	if x := mfxSizeGateRe.FindStringSubmatch(fail); x != nil && len(e.Conditions) > 0 && strings.Contains(strings.ToLower(x[0]), "condition") {
 		e.CondMaxSize = strings.ToLower(x[1])
@@ -304,8 +250,6 @@ func (e *saveEffect) readRider(fail string) (extra []string) {
 			unit := map[string]int{"minute": 10, "hour": 600}[strings.TrimSuffix(d[2], "s")]
 			if n, err := strconv.Atoi(d[1]); err == nil {
 				e.Rounds = n * unit
-			} else {
-				e.RoundsDice, e.RoundsUnit = d[1], unit // rolled for each target (conditionAdd)
 			}
 		}
 	}
@@ -321,14 +265,6 @@ func (e *saveEffect) readRider(fail string) (extra []string) {
 	}
 	if x := mfxEscapeRe.FindStringSubmatch(fail); x != nil {
 		e.EscapeDC, _ = strconv.Atoi(x[1])
-	}
-	if x := escapeCheckRe.FindStringSubmatch(fail); x != nil && len(e.Conditions) > 0 && len(e.Escapes) == 0 {
-		// "A creature can take an action to make a DC 10 Strength (Athletics) check to free itself ..." (Kuo-toa Sticky Net): the
-		// record's escape check (POST /api/conditions/escape), against that DC
-		dc, _ := strconv.Atoi(x[1])
-		if esc, problem := normalizeEscapes([]conditionEscape{{Ability: x[2], Skill: x[3], DC: dc}}); problem == "" {
-			e.Escapes = esc
-		}
 	}
 	e.RestrainedToo = e.EscapeDC > 0 && mfxRestrainRe.MatchString(fail)
 	if x := mfxExhaustRe.FindStringSubmatch(fail); x != nil {
@@ -420,12 +356,6 @@ func (e *saveEffect) readRider(fail string) (extra []string) {
 		if len(e.DisadvMode) > 0 {
 			plain = stripDisadvantage(plain) // applied (giveDisadvantage)
 		}
-		if grappleLockoutTextRe.MatchString(s) {
-			plain = grappleLockoutTextRe.ReplaceAllString(plain, "") // enforced at the attack entry (monsterAttackLockout): not the GM's
-		}
-		if attackDamageTypes[e.CondDamageImmunity] && mfxCondRe.MatchString(s) {
-			plain = mfxConditionDamageImmunityRe.ReplaceAllString(plain, "")
-		}
 		plain = mfxCondRe.ReplaceAllString(plain, "")
 		plain = mfxDurationRe.ReplaceAllString(plain, "")
 		plain = targetIsCreatureGateRe.ReplaceAllString(plain, "") // every target of these routes is a creature: the gate always holds
@@ -455,7 +385,9 @@ func (e *saveEffect) readRider(fail string) (extra []string) {
 		if loc := endsOnDamageRe.FindStringIndex(s); e.EndsOnDamage && loc != nil {
 			// the duration and the end on damage are applied (conditionAdd); another way it ends ("or a creature within 5 feet of it
 			// takes an action to wake it") is the GM's
-			if rest := strings.Trim(strings.TrimPrefix(strings.TrimSpace(s[loc[1]:]), "or "), " ."); rest != "" {
+			rest := strings.TrimLeft(strings.TrimSpace(s[loc[1]:]), ", ")
+			rest = strings.TrimPrefix(strings.TrimPrefix(rest, "or "), "until ")
+			if rest = strings.Trim(rest, " ."); rest != "" {
 				extra = append(extra, "It also ends if "+rest)
 			}
 			continue
@@ -465,7 +397,7 @@ func (e *saveEffect) readRider(fail string) (extra []string) {
 	return extra
 }
 
-// conditionDuration: the first "for N minutes" / "for NdM hours" of a Failure that is the condition's duration, not an immunity's ("the
+// conditionDuration: the first "for N minutes" / "for N hours" of a Failure that is the condition's duration, not an immunity's ("the
 // target is immune to this ghost's Possession for 24 hours" is how long the immunity lasts).
 func conditionDuration(lf string) []string {
 	for _, loc := range condDurationRe.FindAllStringSubmatchIndex(lf, -1) {
@@ -488,7 +420,7 @@ func (e *saveEffect) unappliedPart(s string) string {
 		}
 	}
 	if len(e.DisadvMode) > 0 {
-		for _, re := range []*regexp.Regexp{disadvSapRe, exposedRe, disadvAttackRe, disadvConcRe, disadvSaveRe, noReactRe} {
+		for _, re := range rollRiderPatterns() {
 			r = re.ReplaceAllString(r, "")
 		}
 	}
@@ -573,7 +505,7 @@ var hitRiderDeferredRe = regexp.MustCompile(`(?i)\b(?:can give it .+ instead of 
 var hitRiderChoiceRe = regexp.MustCompile(`(?i)choice of|determined by rolling|one of the following|\bcursed\b`)
 
 // parseHitRider reads the conditions a stat-block hit gives besides its damage ("..., and the target has the Stunned condition until
-// the start of the empyrean's next turn", "If the target is a Large or smaller creature, it has the Prone condition"): the same rules
+// the end of the vrock's next turn", "If the target is a Large or smaller creature, it has the Prone condition"): the same rules
 // as a failed save (readRider), with no saving throw of their own. A hit with its own saving throw is the save owner's.
 func parseHitRider(desc string) (saveEffect, bool) {
 	i := strings.Index(desc, "Hit:")
@@ -678,12 +610,83 @@ func (e *saveEffect) readSevereFailure(text string) string {
 	return m[0] + " " + branch
 }
 
+// saveOptionsIntro: the sentences of a multi-effect entry before its first named effect ("The sphinx emits a magical roar. Whenever it
+// roars, the roar has a different effect ..."): the GM's, beside the effect named in use.
+func saveOptionsIntro(text string, opts []saveOption) string {
+	if len(opts) == 0 {
+		return ""
+	}
+	i := strings.Index(text, opts[0].Name+".")
+	if i <= 0 {
+		return ""
+	}
+	return strings.TrimSpace(strings.TrimSuffix(strings.TrimSpace(text[:i]), ":"))
+}
+
+// castRiders: the sentences of an entry that casts a spell besides the casting sentence ("If the spell kills the target, its soul is
+// trapped in the night hag's soul bag ...", "The spell ends early if the hag starts or ends its turn in Bright Light."): the spell's own
+// effect is the cast owner's; these are the GM's.
+func castRiders(text string) string {
+	var kept []string
+	for _, s := range sentenceSplitRe.Split(text, -1) {
+		s = strings.TrimSpace(strings.TrimSuffix(strings.TrimSpace(s), "."))
+		if s != "" && !mfxSpellRe.MatchString(s) && !strings.Contains(s, "spell save DC") && !strings.HasPrefix(s, "At Will") {
+			kept = append(kept, s)
+		}
+	}
+	return strings.Join(kept, ". ")
+}
+
+// saveSectionHeadRe: where a save entry's sections begin.
+var saveSectionHeadRe = regexp.MustCompile(`(?:First Failure|Second Failure|Failure by \d+ or More|Failure or Success|Failure|Success):`)
+
+// saveSetupText: the sentences of a saving throw entry outside its save line and its Failure / Success sections, which no save rule
+// reads: how the area or the targets come about ("The djinni conjures a whirlwind at a point it can see within 120 feet", "The giant
+// hurls a boulder at a point ...", "If the medusa sees its reflection in the Cone, the medusa must make this save."). They are the GM's,
+// shown with the save's result whatever it is. A move the movement owner reads (readSpecialMove) is left out.
+func saveSetupText(text string) string {
+	loc := mfxSaveRe.FindStringIndex(text)
+	if loc == nil {
+		return ""
+	}
+	end, depth := len(text), 0 // the save line ends at its first period outside parentheses
+	for i := loc[1]; i < len(text); i++ {
+		switch text[i] {
+		case '(':
+			depth++
+		case ')':
+			depth--
+		case '.':
+			if depth <= 0 {
+				end = i + 1
+				i = len(text)
+			}
+		}
+	}
+	mid := text[end:]
+	if h := saveSectionHeadRe.FindStringIndex(mid); h != nil {
+		mid = mid[:h[0]]
+	}
+	var kept []string
+	for _, s := range sentenceSplitRe.Split(strings.TrimSpace(text[:loc[0]])+" "+strings.TrimSpace(mid), -1) {
+		s = strings.TrimSpace(strings.TrimSuffix(strings.TrimSpace(s), "."))
+		if s == "" {
+			continue
+		}
+		if _, ok := readSpecialMove(s, func(string) int { return 1 }); ok {
+			continue
+		}
+		kept = append(kept, s)
+	}
+	return strings.Join(kept, ". ")
+}
+
 func parseSaveEffect(text string) (saveEffect, bool) {
 	m := mfxSaveRe.FindStringSubmatch(text)
 	if m == nil {
 		return saveEffect{}, false
 	}
-	e := saveEffect{AbilityName: m[1], Ability: strings.ToLower(m[1][:3]), IsMagical: mfxMagicalRe.MatchString(strings.TrimSpace(text))}
+	e := saveEffect{AbilityName: m[1], Ability: strings.ToLower(m[1][:3])}
 	e.DC, _ = strconv.Atoi(m[2])
 	head := text
 	if i := strings.Index(head, "Failure"); i >= 0 {
@@ -712,11 +715,6 @@ func parseSaveEffect(text string) (saveEffect, bool) {
 	low := strings.ToLower(succ)
 	e.HalfOnSuccess = strings.Contains(low, "half damage") || strings.Contains(low, "half as much damage")
 	e.Immunity = strings.Contains(low, "immune to this")
-	if !e.Immunity && mfxAllSourcesImmunityRe.MatchString(succ) {
-		// "immune to the Stench of all troglodytes for 1 hour": one grant covers
-		// every source of the named entry, not only the creature saved against.
-		e.Immunity, e.ImmunityAllSources = true, true
-	}
 	if e.Immunity {
 		e.ImmunityRounds, e.ImmunityDuration = parseSuccessImmunityDuration(succ)
 	}
@@ -736,9 +734,6 @@ func parseSaveEffect(text string) (saveEffect, bool) {
 			e.ItemPenalty = "metal"
 		}
 		fail = strings.TrimSpace(objectOnFailureRe.ReplaceAllString(fail, ""))
-	}
-	if dc, escape, rest, ok := readStuckWeapon(fail); ok { // the weapon stuck fast and the grapple of the wielder who holds on: the item state owner (item_state_2024.go)
-		e.StickFreeDC, e.StickEscapeDC, fail = dc, escape, rest
 	}
 	extra := e.readRider(fail)
 	if branch := e.readSevereFailure(text); branch != "" {
@@ -773,6 +768,9 @@ func parseSaveEffect(text string) (saveEffect, bool) {
 		extra = kept
 	}
 	e.Extra = strings.Join(extra, ". ")
+	if !strings.Contains(text, "Attack Roll:") {
+		e.Setup = saveSetupText(text)
+	}
 	if strings.HasSuffix(e.Extra, ":") { // "One of the following effects occurs:" lists its options as the next entries of the stat block
 		e.Extra += " (the options are the entries that follow this action in the stat block)"
 	}
@@ -835,10 +833,13 @@ func parseSuccessImmunityDuration(text string) (int, string) {
 // defense during a preview.
 func (e saveEffect) rollForTarget(lobby, target, totalDamage int, apply bool) game.SaveResult {
 	ctx := saveCtx{lobby: lobby, saver: target, ability: e.Ability, dc: e.DC,
-		spell: e.IsSpell, magical: e.IsMagical, against: e.Conditions, source: e.SourceID, fiendOrUndead: e.FromUndead, peek: !apply}
+		spell: e.IsSpell, against: e.Conditions, source: e.SourceID, fiendOrUndead: e.FromUndead, peek: !apply}
 	if len(e.AutoSucceedTypes) > 0 { // "(Constructs and Undead succeed automatically)"
-		if ct := strings.TrimSuffix(creatureTypeOf(lobby, target), "s"); ct != "" && slices.Contains(e.AutoSucceedTypes, ct) {
-			ctx.autoSucceed = titleCase(ct) + "s succeed automatically on this save"
+		for _, ct := range creatureTypeWords(creatureTypeOf(lobby, target)) {
+			if slices.Contains(e.AutoSucceedTypes, ct) {
+				ctx.autoSucceed = titleCase(ct) + "s succeed automatically on this save"
+				break
+			}
 		}
 	}
 	return ctx.resist(saveStakes{Condition: len(e.Conditions) > 0, Damage: totalDamage})
@@ -898,11 +899,6 @@ func (e saveEffect) finishTarget(lobby, target int, source string, apply, saved 
 		return nil, false
 	}
 	parts = e.giveAlways(lobby, target, source)
-	if !saved && e.StickFreeDC > 0 && e.StuckWeapon != "" { // the weapon that missed sticks fast (item_state_2024.go)
-		if line := strings.TrimSpace(stickWeapon(lobby, target, e.SourceID, e.StuckWeapon, e.StickFreeDC, e.StickEscapeDC)); line != "" {
-			parts = append(parts, line)
-		}
-	}
 	if !saved && e.ItemPenalty != "" { // the creature's armor or weapon corrodes (item_state_2024.go)
 		if line := strings.TrimSpace(corrodeCarriedObject(lobby, target, e.ItemPenalty == "metal")); line != "" {
 			parts = append(parts, line)
@@ -918,11 +914,8 @@ func (e saveEffect) finishTarget(lobby, target int, source string, apply, saved 
 		if e.ImmunityRounds <= 0 || e.ImmunityName == "" || e.SourceID >= 0 {
 			return append(parts, "[GM: this success grants immunity. Confirm its duration and track it for this source and action.]"), false
 		}
-		if err := storeEffectImmunityKind(lobby, target, e.SourceID, e.ImmunityName, e.ImmunityRounds, e.ImmunityAllSources); err != nil {
+		if err := storeEffectImmunity(lobby, target, e.SourceID, e.ImmunityName, e.ImmunityRounds); err != nil {
 			return append(parts, "[GM: the server couldn't store this success immunity. Track it for "+e.ImmunityDuration+" for this source and action.]"), false
-		}
-		if e.ImmunityAllSources {
-			return append(parts, "immune to it from every source for "+e.ImmunityDuration), true
 		}
 		return append(parts, "immune to it for "+e.ImmunityDuration), true
 	}
@@ -1045,6 +1038,9 @@ func runSaveEffectTargets(lobbyID int, c saveEffectCursor) (lines []string, immu
 		}
 		lines = append(lines, line)
 	}
+	if e.Setup != "" {
+		lines = append(lines, "The GM handles how this comes about: "+e.Setup)
+	}
 	if e.Extra != "" && (anyFailed || strings.HasPrefix(e.Extra, "Failure or Success")) {
 		if len(e.Damage) > 0 || len(e.Conditions) > 0 { // the text repeats what was just applied; only the rest is the GM's
 			prefix := "Preview: the GM handles the rest of this text (movement, pushes, other effects): "
@@ -1065,9 +1061,7 @@ func effectImmune(lobbyID, targetID, monsterID int, entry string) bool {
 		if !strings.EqualFold(e.Detail, entry) {
 			continue
 		}
-		// effect_immune_all: one grant covers every source of the entry ("immune to
-		// the Stench of all troglodytes"); effect_immune: the granting source only.
-		if e.Kind == "effect_immune_all" || (e.Kind == "effect_immune" && e.CasterID == monsterID) {
+		if e.Kind == "effect_immune" && e.CasterID == monsterID { // the granting source only
 			return true
 		}
 	}
@@ -1381,9 +1375,6 @@ func resolveMonsterEffectText(r *http.Request, lobbyID, monsterID int, meta *mon
 		if note := grantSpecialMove(lobbyID, monsterID, entryName, text, apply); note != "" { // the entry's own move (creature_movement_2024.go)
 			notes = append(notes, note)
 		}
-		if note := monsterFalls(lobbyID, monsterID, text, apply); note != "" { // an entry that makes it fall (Drop)
-			notes = append(notes, note)
-		}
 	}
 	// one action that offers several saving throw effects ("one of the following rays", "at random"): the GM names the one that happened
 	// with use; none is guessed, and nothing is rolled until it is named
@@ -1401,7 +1392,11 @@ func resolveMonsterEffectText(r *http.Request, lobbyID, monsterID int, meta *mon
 			}
 			return append([]string{fmt.Sprintf("%s offers %d effects (%s). Name the one that happened in use (the GM rolls or picks it as the text says). Nothing was rolled.", entryName, len(opts), strings.Join(names, ", "))}, notes...)
 		}
-		return append(resolveMonsterEffectText(r, lobbyID, monsterID, meta, entryName+": "+opts[chosen].Name, opts[chosen].Text, targets, "", apply, depth+1), notes...)
+		lines := resolveMonsterEffectText(r, lobbyID, monsterID, meta, entryName+": "+opts[chosen].Name, opts[chosen].Text, targets, "", apply, depth+1)
+		if intro := saveOptionsIntro(text, opts); intro != "" {
+			lines = append(lines, "The GM handles the rest of the entry: "+intro)
+		}
+		return append(lines, notes...)
 	}
 	// an attack of the stat block
 	if m := mfxAttackRe.FindStringSubmatch(text); m != nil {
@@ -1484,6 +1479,9 @@ func resolveMonsterEffectText(r *http.Request, lobbyID, monsterID int, meta *mon
 		}
 		for i := 0; i < times; i++ {
 			lines = append(lines, resolveMonsterSpell(r, lobbyID, monsterID, name, m[1], lvl, dc, atk, targets, strings.Contains(text, "on itself"), apply, use)...)
+		}
+		if rest := castRiders(text); rest != "" {
+			lines = append(lines, "The GM handles the rest of the entry: "+rest)
 		}
 		return append(lines, notes...)
 	}
@@ -1663,6 +1661,15 @@ func mfxUntilEndAnchored(lf string) bool {
 
 // creatureTypeOf is the creature type of a monster of the fight or of a companion ("humanoid", "beast" ...), from its stat block; "" when
 // it cannot be read.
+// creatureTypeWords: a creature type and its tags as single lower-case words ("fiend (demon)": fiend, demon).
+func creatureTypeWords(ct string) []string {
+	var out []string
+	for _, w := range strings.FieldsFunc(strings.ToLower(ct), func(r rune) bool { return r == ' ' || r == '(' || r == ')' || r == ',' }) {
+		out = append(out, strings.TrimSuffix(w, "s"))
+	}
+	return out
+}
+
 func creatureTypeOf(lobbyID, id int) string {
 	if id >= companionIDBase {
 		c, ok := activeCompanionInCampaign(lobbyID, id)

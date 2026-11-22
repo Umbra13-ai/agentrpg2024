@@ -1,24 +1,19 @@
 package main
 
 import (
-	"encoding/json"
 	"fmt"
-	"os"
-	"path/filepath"
 	"regexp"
 	"strings"
 	"testing"
 	"time"
 )
 
-// Sixteen different SRD definitions are imported into the custom table. Private
-// reference fixtures add four different non-SRD monsters when explicitly supplied.
-// REQUIRE_TWENTY_MONSTERS=1 makes missing private fixtures a failure, not a skip.
-// This legacy test name covers selected attacks/defenses only. It does NOT
-// establish every-ability acceptance or first-run unique replacement passes.
+// Twenty different SRD 5.2.1 definitions are imported into the custom table (the GM's
+// import route) and played. This covers selected attacks/defenses only; the coverage of
+// every sentence of the SRD catalog is TestSRDMonsterSentenceCoverage.
 func TestPostgresTwentyMonsterAcceptance(t *testing.T) {
 	testPostgres(t)
-	names := []string{"Balor", "Ancient Red Dragon", "Ancient Gold Dragon", "Ancient Blue Dragon", "Ancient Silver Dragon", "Dragon Turtle", "Ice Devil", "Iron Golem", "Kraken", "Lich", "Marilith", "Mummy Lord", "Pit Fiend", "Planetar", "Solar", "Tarrasque"}
+	names := []string{"Balor", "Ancient Red Dragon", "Ancient Gold Dragon", "Ancient Blue Dragon", "Ancient Silver Dragon", "Dragon Turtle", "Ice Devil", "Iron Golem", "Kraken", "Lich", "Marilith", "Mummy Lord", "Pit Fiend", "Planetar", "Solar", "Tarrasque", "Ancient Black Dragon", "Ancient Green Dragon", "Horned Devil", "Nalfeshnee"}
 	fixtures := []srdMonster2024{}
 	for _, name := range names {
 		found := false
@@ -34,23 +29,8 @@ func TestPostgresTwentyMonsterAcceptance(t *testing.T) {
 			t.Fatalf("missing SRD fixture %s", name)
 		}
 	}
-	if dir := os.Getenv("TWENTY_MONSTER_FIXTURES"); dir != "" {
-		for _, file := range []string{"death-knight-import.json", "arch-hag.json", "dracolich.json", "elemental-cataclysm.json"} {
-			raw, err := os.ReadFile(filepath.Join(dir, file))
-			if err != nil {
-				t.Fatal(err)
-			}
-			var batch struct {
-				Monsters []srdMonster2024 `json:"monsters"`
-			}
-			if err = json.Unmarshal(raw, &batch); err != nil || len(batch.Monsters) != 1 {
-				t.Fatalf("fixture %s: %v", file, err)
-			}
-			fixtures = append(fixtures, batch.Monsters[0])
-		}
-	}
-	if os.Getenv("REQUIRE_TWENTY_MONSTERS") != "" && len(fixtures) < 20 {
-		t.Fatal("20-monster gate requires TWENTY_MONSTER_FIXTURES with four reference fixtures")
+	if len(fixtures) != 20 {
+		t.Fatalf("want 20 SRD definitions, have %d", len(fixtures))
 	}
 	seen := map[string]bool{}
 	for _, m := range fixtures {

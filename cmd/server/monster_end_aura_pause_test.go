@@ -11,7 +11,7 @@ func TestPostgresMonsterEndAuraPausesLaterTargetsAndAuras(t *testing.T) {
 	})
 	f.cast(t, f.char)
 	pauseFailingConcentration(t, f)
-	later := referenceSaveTarget(t, f, "Later aura target", -10, "", "")
+	later := reviewSaveTarget(t, f, "Later aura target", -10, "", "")
 	source := compendiumFixture()
 	source.Name = "Invented two-aura source"
 	source.Traits = []srdMonsterEntry{

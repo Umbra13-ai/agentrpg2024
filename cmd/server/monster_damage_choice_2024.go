@@ -49,10 +49,6 @@ func multiattackDeclaredIn(r *http.Request) []string {
 	return s
 }
 
-var chosenAttackDamageRe = regexp.MustCompile(`(?i)Hit: \d+ \((\d+d\d+(?:\s*[+-]\s*\d+)?)\) damage of a type chosen by the [^:.;]+:\s*([^.;]+)`)
-
-// chosenInlineRe: "Hit: 35 (6d8 + 8) Necrotic or Radiant damage (the empyrean's choice)": the creature picks one of the listed types.
-var chosenInlineRe = regexp.MustCompile(`(?i)Hit: \d+ \((\d+d\d+(?:\s*[+-]\s*\d+)?)\) ([a-z]+(?:(?:,| or|, or) [a-z]+)+) damage \([^)]*choice\)`)
 var validAttackDiceRe = regexp.MustCompile(`(?i)^(\d+)d(\d+)([+-]\d+)?$`)
 var attackDamageTypes = map[string]bool{"acid": true, "bludgeoning": true, "cold": true, "fire": true, "force": true, "lightning": true, "necrotic": true, "piercing": true, "poison": true, "psychic": true, "radiant": true, "slashing": true, "thunder": true}
 
@@ -79,7 +75,6 @@ func validMonsterDamageDice(dice string) bool {
 // runtime attacks, companions and Wild Shape. Storage adapters never parse text.
 type parsedMonsterAttack struct {
 	monsterActionRow
-	Choices []string
 	Extras  []extraDamage
 	Problem string
 	// ExtraTypeChosen: an extra amount's damage type is chosen by the GM (use), see chosenTypeExtraRe
@@ -93,7 +88,6 @@ const (
 	condAdvantage            damageCond = iota + 1 // "if the chimera had Advantage on the attack roll"
 	condAttackerBloodied                           // "if the swarm is Bloodied"
 	condTargetBloodied                             // "if the target is Bloodied"
-	condTargetGrappled                             // "if the target is Grappled"
 	condTargetGrappledByUser                       // "if the target is Grappled by the mimic"
 	condCharged                                    // "if the goat moved 20+ feet straight toward the target immediately before the hit" (creature_movement_2024.go)
 	condGMJudged                                   // any other condition: the primary damage is dealt and the GM is told
@@ -112,10 +106,9 @@ var damageConditionTexts = []struct {
 	re   *regexp.Regexp
 	cond damageCond
 }{
-	{regexp.MustCompile(`(?i)^if (?:[\w' -]+ had Advantage on the attack roll|the attack was made with Advantage)$`), condAdvantage},
+	{regexp.MustCompile(`(?i)^if [\w' -]+ had Advantage on the attack roll$`), condAdvantage},
 	{regexp.MustCompile(`(?i)^if the target is Bloodied$`), condTargetBloodied},
 	{regexp.MustCompile(`(?i)^if the target is Grappled by [\w' -]+$`), condTargetGrappledByUser},
-	{regexp.MustCompile(`(?i)^if the target is Grappled$`), condTargetGrappled},
 	{regexp.MustCompile(`(?i)^if the [\w' -]+ is Bloodied$`), condAttackerBloodied}, // after the target rule: the subject is the attacker
 }
 
@@ -135,8 +128,8 @@ func classifyDamageCondition(tail string) (damageCond, bool) {
 
 // hitCondition is what the server knows about one hit when it picks between the primary and an alternative amount.
 type hitCondition struct {
-	Advantage, AttackerBloodied, TargetBloodied, TargetGrappled, TargetGrappledByAttacker bool
-	ChargedFeet                                                                           int // the attack's straight approach toward the target (chargedFeet)
+	Advantage, AttackerBloodied, TargetBloodied, TargetGrappledByAttacker bool
+	ChargedFeet                                                           int // the attack's straight approach toward the target (chargedFeet)
 }
 
 func (h hitCondition) holds(c damageCond) bool {
@@ -147,8 +140,6 @@ func (h hitCondition) holds(c damageCond) bool {
 		return h.AttackerBloodied
 	case condTargetBloodied:
 		return h.TargetBloodied
-	case condTargetGrappled:
-		return h.TargetGrappled
 	case condTargetGrappledByUser:
 		return h.TargetGrappledByAttacker
 	}
@@ -188,7 +179,6 @@ func monsterHitCondition(lobbyID, attackerID int, haveTarget bool, tid int, adva
 			}
 		}
 		for _, r := range findConditionRecords(`target_id = $1 AND lobby_id = $2 AND condition = 'grappled'`, tid, lobbyID) {
-			h.TargetGrappled = true
 			if attackerID != 0 && grappledBy(r, attackerID) {
 				h.TargetGrappledByAttacker = true
 			}
@@ -199,7 +189,6 @@ func monsterHitCondition(lobbyID, attackerID int, haveTarget bool, tid int, adva
 			h.TargetBloodied = v.Bloodied()
 		}
 		for _, r := range findConditionRecords(`target_id = $1 AND lobby_id = $2 AND condition = 'grappled'`, tid, lobbyID) {
-			h.TargetGrappled = true
 			if attackerID != 0 && grappledBy(r, attackerID) {
 				h.TargetGrappledByAttacker = true
 			}
@@ -217,10 +206,8 @@ var (
 	damageWordRe      = regexp.MustCompile(`(?i)\bdamage\b`)
 	hitSentenceEnd    = regexp.MustCompile(`\.(?:\s|$)`)
 	damageJoinRe      = regexp.MustCompile(`(?i)(?:^|[\s,;—–-])(plus|and|an additional)\s*$`)
-	advantageOnlyRe   = regexp.MustCompile(`(?i)^\s*if (?:the attack roll had Advantage|the attack was made with Advantage)\s*[,.;]?\s*$`)
+	advantageOnlyRe   = regexp.MustCompile(`(?i)^\s*if the attack roll had Advantage\s*[,.;]?\s*$`)
 	alternativeHeadRe = regexp.MustCompile(`(?i)(?:^|[\s,;—–-])or\s*$`)
-	// "..., or 8 (1d10 + 3) Slashing damage if used with two hands": the other way to wield the weapon, not extra damage
-	twoHandedAltRe = regexp.MustCompile(`(?i)^\s*if used with two hands\s*[,.;]?\s*$`)
 	// words that make a damage amount conditional; any of them after an amount that is not one of the two recognised conditions
 	// above means the server cannot tell when to deal it
 	damageConditionRe = regexp.MustCompile(`(?i)\b(if|when|while|unless|only|against|provided|whenever|on a)\b`)
@@ -243,15 +230,12 @@ func hitDamageSentence(text string) string {
 // parseExtraDamage reads every damage amount of the Hit sentence after the first one into extras. It returns a problem, not a
 // guess, when the sentence has damage it cannot account for: an amount joined in a way that is not "plus", a condition other than
 // the Advantage one, or the word "damage" without a recognised amount.
-func parseExtraDamage(sentence string, primaryChosen bool) (extras []extraDamage, alts []damageAlt, problem string) {
+func parseExtraDamage(sentence string) (extras []extraDamage, alts []damageAlt, problem string) {
 	clauses := damageClauseRe.FindAllStringSubmatchIndex(sentence, -1)
 	consumed := 0
-	if primaryChosen {
-		consumed = 1 // "damage of a type chosen by ...": read by the chosen-type rule, it is not one of the clauses
-	}
 	for i, loc := range clauses {
 		consumed++
-		if i == 0 && !primaryChosen {
+		if i == 0 {
 			continue // the primary damage
 		}
 		tail := sentence[loc[1]:]
@@ -261,10 +245,7 @@ func parseExtraDamage(sentence string, primaryChosen bool) (extras []extraDamage
 				tail = tail[:j[0]]
 			}
 		}
-		head := sentence[:loc[0]]
-		if i > 0 || primaryChosen {
-			head = strings.TrimRight(head, " ")
-		}
+		head := strings.TrimRight(sentence[:loc[0]], " ")
 		x := extraDamage{Type: sentence[loc[6]:loc[7]]}
 		if loc[4] >= 0 {
 			x.Dice = game.NormalizeDice(sentence[loc[4]:loc[5]])
@@ -277,9 +258,6 @@ func parseExtraDamage(sentence string, primaryChosen bool) (extras []extraDamage
 		}
 		switch {
 		case alternativeHeadRe.MatchString(head):
-			if twoHandedAltRe.MatchString(tail) {
-				continue // the two-handed way to use the weapon: the primary damage stands as the one-handed attack
-			}
 			cond, ok := classifyDamageCondition(tail)
 			if !ok {
 				cond = condGMJudged
@@ -308,29 +286,7 @@ func parseMonsterAttack(name, text string) parsedMonsterAttack {
 	if m := atkBonusRe.FindStringSubmatch(text); m != nil {
 		p.AttackBonus, _ = strconv.Atoi(m[1])
 	}
-	if m := chosenAttackDamageRe.FindStringSubmatch(text); m != nil {
-		p.DamageDice = game.NormalizeDice(m[1])
-		words := strings.ReplaceAll(strings.ToLower(m[2]), ",", " ")
-		words = strings.ReplaceAll(words, " or ", " ")
-		for _, word := range strings.Fields(words) {
-			if !attackDamageTypes[word] {
-				p.Problem = "The attack's damage type choices are not understood; the GM must resolve it."
-				break
-			}
-			p.Choices = append(p.Choices, word)
-		}
-	} else if m := chosenInlineRe.FindStringSubmatch(text); m != nil {
-		p.DamageDice = game.NormalizeDice(m[1])
-		words := strings.ReplaceAll(strings.ToLower(m[2]), ",", " ")
-		words = strings.ReplaceAll(words, " or ", " ")
-		for _, word := range strings.Fields(words) {
-			if !attackDamageTypes[word] {
-				p.Problem = "The attack's damage type choices are not understood; the GM must resolve it."
-				break
-			}
-			p.Choices = append(p.Choices, word)
-		}
-	} else if m := hitDmgRe.FindStringSubmatch(text); m != nil {
+	if m := hitDmgRe.FindStringSubmatch(text); m != nil {
 		p.DamageDice = game.NormalizeDice(m[1])
 		p.DamageType = m[2]
 	} else if m := flatHitRe.FindStringSubmatch(text); m != nil {
@@ -348,7 +304,7 @@ func parseMonsterAttack(name, text string) parsedMonsterAttack {
 			p.ExtraTypeChosen = true
 			sentence = chosenTypeExtraRe.ReplaceAllString(sentence, "$1 ($2) "+chosenTypeWord+" damage")
 		}
-		p.Extras, p.monsterActionRow.Alts, p.Problem = parseExtraDamage(sentence, len(p.Choices) > 0)
+		p.Extras, p.monsterActionRow.Alts, p.Problem = parseExtraDamage(sentence)
 	}
 	return p
 }
@@ -385,13 +341,6 @@ func prepareMonsterAttack(a monsterActionRow, use string) (monsterActionRow, str
 				return a, fmt.Sprintf("%s has damage of a type the GM chooses; give a damage type in use (acid, cold, fire, ...). Nothing was rolled.", a.Name)
 			}
 			a.Desc = chosenTypeExtraRe.ReplaceAllString(a.Desc, "$1 ($2) "+titleCase(pick)+" damage") // the rest of the engine reads an ordinary typed amount
-		}
-		if len(parsed.Choices) > 0 {
-			pick := strings.ToLower(strings.TrimSpace(use))
-			if !containsStr(parsed.Choices, pick) {
-				return a, fmt.Sprintf("%s needs a damage type in use (companions: description damage type: TYPE): choose %s. Nothing was rolled.", a.Name, strings.Join(parsed.Choices, ", "))
-			}
-			a.DamageType = pick
 		}
 	}
 	if !validStatBlockDamage(a.DamageDice, a.DamageType, a.FlatDamage) {
@@ -474,7 +423,7 @@ func companionRows(rows []monsterActionRow) []compAttack {
 			continue
 		}
 		p := parseMonsterAttack(row.Name, row.Desc)
-		out = append(out, compAttack{Name: row.Name, Bonus: p.AttackBonus, Dice: p.DamageDice, Type: p.DamageType, FlatDamage: p.FlatDamage, StatBlockText: row.Desc, DamageChoices: p.Choices, Count: 1})
+		out = append(out, compAttack{Name: row.Name, Bonus: p.AttackBonus, Dice: p.DamageDice, Type: p.DamageType, FlatDamage: p.FlatDamage, StatBlockText: row.Desc, Count: 1})
 	}
 	return out
 }
@@ -493,6 +442,9 @@ func prepareCompanionAttack(a compAttack, choice string) (compAttack, string) {
 		return a, problem
 	}
 	a.Bonus, a.Dice, a.Type, a.FlatDamage = row.AttackBonus, row.DamageDice, row.DamageType, row.FlatDamage
+	if row.Desc != "" {
+		a.StatBlockText = row.Desc // with a chosen extra damage type written in ("7 (2d6) Fire damage"), as the monster route reads it
+	}
 	if a.Extra != "" && !validStatBlockDamage(a.Extra, a.ExtraType, nil) {
 		return a, "Unsupported companion extra damage. Nothing was rolled."
 	}
@@ -600,7 +552,7 @@ func unappliedHitRider(desc string) string {
 			return "" // the condition of an alternative amount: gmJudgedAlternatives reports it
 		}
 	}
-	if _, isCondition := classifyDamageCondition(text); text == "" || isCondition || advantageOnlyRe.MatchString(" "+text) || twoHandedAltRe.MatchString(text) {
+	if _, isCondition := classifyDamageCondition(text); text == "" || isCondition || advantageOnlyRe.MatchString(" "+text) {
 		return "" // nothing beyond the damage, or only the condition of an amount already read
 	}
 	return text

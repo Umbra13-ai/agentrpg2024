@@ -118,8 +118,8 @@ func monsterSpellSaveResult(lobbyID, id int, ability string, dc int, st saveStak
 	return monsterSpellSaveBy(lobbyID, id, ability, dc, st, dis, 0)
 }
 
-// monsterSpellSaveBy: the same, with the caster (its id: a character, a monster or a companion), so a Reaction to the failed save can
-// answer it (Mind Corrosion, monster_save_reactions_2024.go).
+// monsterSpellSaveBy: the same, with the caster (its id: a character, a monster or a companion), the save's source for the rows that
+// read it (saveCtx.source).
 func monsterSpellSaveBy(lobbyID, id int, ability string, dc int, st saveStakes, dis []string, caster int) game.SaveResult {
 	r := (&saveCtx{lobby: lobbyID, saver: id, ability: ability, dc: dc, spell: true, extraDis: dis, source: caster}).resist(st)
 	for _, a := range r.Save.Advantage {

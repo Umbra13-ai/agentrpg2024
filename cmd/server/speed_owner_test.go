@@ -291,15 +291,6 @@ func TestPostgresSpeedOwner(t *testing.T) {
 	if r := (&attackCtx{attacker: char, lobby: camp, target: -1}).gather(); strings.Contains(strings.Join(r.Disadvantage, ","), "Disadvantage rider") {
 		t.Fatal("an attack roll read an ended marker")
 	}
-	// the Sap-like text: the next attack roll only, once
-	reset()
-	saveEffect{DisadvMode: []string{"sap"}, RollRiderEnd: map[string]riderEnd{"sap": riderEndSourceTurnStart}, SourceID: -5}.giveConditions(camp, char, "t")
-	if r := (&attackCtx{attacker: char, lobby: camp, target: -1}).gather(); !strings.Contains(strings.Join(r.Disadvantage, ","), "Sap") {
-		t.Fatalf("Sap-like rider not read: %v", r.Disadvantage)
-	}
-	if r := (&attackCtx{attacker: char, lobby: camp, target: -1}).gather(); strings.Contains(strings.Join(r.Disadvantage, ","), "Sap") {
-		t.Fatal("the Sap-like rider lasted beyond the next attack roll")
-	}
 	// "Failure or Success:": conditions and Speed of that section are given whatever the save's result; the rest stays with the GM
 	reset()
 	fs, _ := parseSaveEffect("Wisdom Saving Throw: DC 19, each creature in a 30-foot Emanation. Failure: 10 (3d6) Psychic damage. Success: Half damage. Failure or Success: The target has the Frightened condition until the start of the lich's next turn. The target's Speed is 0 until the end of its next turn. The lich can't take this action again until the start of its next turn.")
@@ -429,12 +420,11 @@ func TestDisadvantageRiderParsing(t *testing.T) {
 		{"Failure: 22 (4d10) Poison damage, and the target has Disadvantage on saving throws to maintain Concentration until the end of its next turn.", "concentration", false, ""},
 		{"Hit: 17 (2d10) Radiant damage, and the target has Disadvantage on attack rolls until the end of its next turn.", "attacks", false, ""},
 		{"Failure: The target has Disadvantage on attack rolls and ability checks until the end of its next turn.", "attacks", true, "ability checks"},
-		{"Hit: 9 (2d6) Piercing damage. The target has Disadvantage on its next attack roll before the start of the warrior\u2019s next turn.", "sap", false, ""},
-		{"Hit: 17 (2d10) Radiant damage, and the target has Disadvantage on attack rolls until the end of the cyclops\u2019s next turn.", "attacks", false, ""}, // the source's turn: its marker
+		{"Hit: 9 (2d6) Piercing damage. The target has Disadvantage on its next attack roll before the start of the warrior\u2019s next turn.", "", true, "next attack roll"}, // no SRD wording: the GM's
+		{"Hit: 17 (2d10) Radiant damage, and the target has Disadvantage on attack rolls until the end of the cyclops\u2019s next turn.", "attacks", false, ""},               // the source's turn: its marker
 		{"Failure: The target has Disadvantage on Strength-based D20 Tests and loses 1d6 damage.", "", true, "Strength-based"},
-		// Disadvantage on one ability's saving throws, or several
-		{"Hit: 8 (2d6 + 1) Acid damage, and the target has Disadvantage on Intelligence saving throws until the end of the raider's next turn.", "save:int", false, ""},
-		{"Failure: The target has Disadvantage on Wisdom and Charisma saving throws until the end of its next turn.", "save:wis,cha", false, ""},
+		// Disadvantage on one ability's saving throws: no SRD stat block has it, so it is the GM's
+		{"Hit: 8 (2d6 + 1) Acid damage, and the target has Disadvantage on Intelligence saving throws until the end of the raider's next turn.", "", true, "Intelligence saving throws"},
 		{"Failure: The target has Disadvantage on Intelligence saving throws.", "", true, "Intelligence saving throws"}, // no duration: the GM's
 		// the next attack roll against the target (the Worg's Bite; the effect Guiding Bolt gives)
 		{"Hit: 7 (1d8 + 3) Piercing damage, and the next attack roll made against the target before the start of the worg\u2019s next turn has Advantage.", "exposed", false, ""},

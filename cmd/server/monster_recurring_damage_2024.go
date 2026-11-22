@@ -10,8 +10,8 @@ import (
 	"github.com/agentrpg/agentrpg/game"
 )
 
-// Recurring turn-start damage a stat block's hit sets up: "Until the grapple ends, the target takes 4 (1d8)
-// Bludgeoning damage at the start of each of its turns" (Vine Blight Constricting Vine) and "While attached,
+// Recurring turn-start damage a stat block's hit sets up: "Until the grapple ends, the target ... takes 7 (2d6)
+// Thunder damage at the start of each of the stalker's turns" (Invisible Stalker Vortex) and "While attached,
 // ... the target takes 5 (2d4) Necrotic damage at the start of each of the stirge's turns" (Stirge Proboscis).
 // The row lives in combat_effects (kind "recurring_damage", target_id the hurt creature, source_id the
 // attacker) and ticks in the turn pipeline (runTurnEffects stage 7, condition_turns.go), which checkpoints
@@ -301,9 +301,8 @@ func recurringDamageTurnStart(lobbyID, id int, name string) []string {
 	return log
 }
 
-// recurringLockoutTailRe: the lockout clause that shares a recurring-damage sentence (", and the blight
-// can't make Constricting Vine attacks"): enforced at the attack entry, so stripped with the recurring
-// clause. grappleGatePrefixRe: the gate lead-in once both clauses are gone.
+// recurringLockoutTailRe: the lockout clause that shares a sentence (", and the cloaker can't make Attach
+// attacks against other targets"): stripped with the recurring clause. grappleGatePrefixRe: the gate lead-in once both clauses are gone.
 var recurringLockoutTailRe = regexp.MustCompile(`(?i),?\s*and the [\w() '’-]+can(?:'|’)t make [A-Za-z][A-Za-z ]*? attacks?\b`)
 var grappleGatePrefixRe = regexp.MustCompile(`(?i)^\s*Until the grapple ends,\s*`)
 

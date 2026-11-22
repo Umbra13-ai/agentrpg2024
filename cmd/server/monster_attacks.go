@@ -145,7 +145,7 @@ func multiattackCountWord(w string) (int, bool) {
 	return 0, false
 }
 
-// findActionRow resolves an action by its exact name or its usage-stripped name ("Rend (Jackal or Hybrid Form Only)" is "Rend").
+// findActionRow resolves an action by its exact name or its usage-stripped name ("Rend (Bear or Hybrid Form Only)" is "Rend").
 func findActionRow(name string, actions []monsterActionRow) *monsterActionRow {
 	for i, a := range actions {
 		if strings.EqualFold(a.Name, name) || strings.EqualFold(stripUsage(a.Name), name) {
@@ -206,7 +206,7 @@ func parseMultiattackChoice(desc string, actions []monsterActionRow) (multiattac
 		spec.options = attackOptions(m[1])
 	default:
 		if j := strings.Index(body, " attacks or "); j >= 0 {
-			// "four Slam attacks or four Gears Launcher attacks": the whole equal-size group is the choice.
+			// "three Radiant Sword attacks or uses Holy Burst twice" (Planetar): the whole equal-size group is the choice.
 			left := strings.TrimSpace(body[:j])
 			right := strings.TrimSpace(body[j+len(" attacks or "):])
 			rf := strings.Fields(right)
@@ -552,7 +552,7 @@ func resolveMonsterAttack(r *http.Request, campaignID int, monster, action, targ
 			}
 		}
 	}
-	// An attack limited to a form ("Rend (Jackal or Hybrid Form Only)") the monster isn't in refuses the whole request before any
+	// An attack limited to a form ("Rend (Bear or Hybrid Form Only)") the monster isn't in refuses the whole request before any
 	// roll (monster_shape_shift_2024.go)
 	if attackerID != 0 {
 		_, meta, _ := monsterCombatant(campaignID, attackerID)
@@ -570,9 +570,9 @@ func resolveMonsterAttack(r *http.Request, campaignID int, monster, action, targ
 		}
 		chosen[i] = prepared
 	}
-	// An attack the stat block locks while a grapple it created lasts, or while it is attached to a creature
-	// ("Until the grapple ends, the kuo-toa can't make Pincer Staff attacks"): refused here, in the one attack
-	// entry every route uses, before a use is reserved or anything is rolled; the lock reads live condition state.
+	// An attack the stat block locks while it is attached to a creature or swallowing one ("While attached, the
+	// stirge can't make Proboscis attacks"): refused here, in the one attack entry every route uses, before a use
+	// is reserved or anything is rolled; the lock reads live state.
 	if attackerID != 0 {
 		for _, a := range chosen {
 			if why := monsterAttackLockout(campaignID, attackerID, actions, stripUsage(a.Name)); why != "" {
@@ -941,8 +941,8 @@ func allRangedAttacks(chosen []monsterActionRow) bool {
 	return true
 }
 
-// hitOrMissNote tells the GM about a "Hit or Miss:" effect of an attack (Dao's Earth Burst: an explosion around the target whether the
-// attack hits or not). The server rolls the attack and, on a hit, the target's own saving throw; the creatures around the target and the
+// hitOrMissNote tells the GM about a "Hit or Miss:" effect of an attack (Salamander Flame Spear, Solar Flying Sword: the weapon's effect
+// whether the attack hits or not). The server rolls the attack and, on a hit, the target's own saving throw; the creatures around the target and the
 // effect on a miss are the GM's, so the reply says so instead of dropping the text.
 func hitOrMissNote(desc string, hit bool) string {
 	i := strings.Index(desc, "Hit or Miss:")

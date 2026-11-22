@@ -1641,8 +1641,9 @@ only recognizes supported stat-block wording, not every possible description.
 Custom definitions live in a separate table within the existing database. They never appear in `/api/universe/monsters`, public monster pages,
 Wild Shape choices or player-selected forms. SRD seeding cannot overwrite them.
 
-**Companions and damage choices.** Companion attacks expose damage_choices when
-their source attack offers a choice. Send a choice in the existing description,
+**Companions and damage choices.** When a companion's attack deals damage of a
+type that is chosen (a Half-Dragon's "damage of the type chosen for the Draconic
+Origin trait"), send the type in the existing description,
 for example {"action":"attack","companion_id":123,"target_id":-2,
 "description":"damage type: fire"}. Invalid or missing choices are refused before
 the companion's turn, or a familiar's owner action and Reaction, is spent.

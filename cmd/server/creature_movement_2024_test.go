@@ -229,8 +229,4 @@ func TestShapeFormsLeapAbductAndFallDice(t *testing.T) {
 			t.Errorf("a fall of %d ft: %dd6, want %dd6", feet, got, want)
 		}
 	}
-	drop := "The lurker falls. Dexterity Saving Throw: DC 11, one creature directly underneath the lurker. Failure: 10 (3d6) Piercing damage. Failure or Success: The lurker reduces any damage it takes from the fall by 20."
-	if !fallsRe.MatchString(drop) || fallReduceRe.FindStringSubmatch(drop)[1] != "20" {
-		t.Errorf("a fall's wording isn't read")
-	}
 }

@@ -6,7 +6,7 @@ import (
 	"testing"
 )
 
-// SRD 5.2.1 Sleep, cast by a monster ("casts the Sleep spell": Pixie, Dust Mephit) at a character, a monster and a companion: a failed
+// SRD 5.2.1 Sleep, cast by a monster ("casts the Sleep spell") at a character, a monster and a companion: a failed
 // save is Incapacitated until the end of the target's next turn with the second stage on its repeated save (spellStages); at that turn's
 // end a failed repeat turns it into Unconscious for the rest of the spell (the condition owner's repeated save, condition_turns.go), and
 // damage wakes the target (wakeOnDamageSleep: a monster's cast is "<monster> (Sleep)"). The text is invented with the published pattern.
@@ -90,7 +90,7 @@ func TestPostgresSleepSecondFailure(t *testing.T) {
 	}
 }
 
-// A monster's cast of a spell that ends conditions (Empyrean Iota's Lesser Restoration; a Heal) reads the same table as a character's
+// A monster's cast of a spell that ends conditions (Lesser Restoration; a Heal) reads the same table as a character's
 // cast (spellEndsConditions): at a character, a monster and a companion, the condition the GM's use names ends (else the first the
 // target has), a creature without one is told so, and a Heal ends the conditions before it heals. The text is invented.
 func TestPostgresMonsterCastEndsConditions(t *testing.T) {

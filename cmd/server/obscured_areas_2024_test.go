@@ -257,21 +257,11 @@ func TestPostgresObscuredAreasAndSenses(t *testing.T) {
 		t.Error("an ally of the caster doesn't get Pass without Trace")
 	}
 
-	// ---- Devil's Sight in a stat block (invented wording with the Monster Manual's pattern): its Darkvision sees into Magical Darkness
-	imp := compendiumFixture()
-	imp.Name, imp.Size, imp.Type, imp.Senses = "Gloom Imp", "Tiny", "Fiend", "Darkvision 120 ft.; Passive Perception 11"
-	imp.Traits = []srdMonsterEntry{{Name: "Devil's Sight", Text: "Magical Darkness doesn't impede the imp's Darkvision."}}
-	imp.Legendary, imp.LegendaryIn = nil, ""
-	c, ij := pgCall(t, "POST", "/api/gm/compendium/monsters", gm, map[string]interface{}{"source_note": "invented Devil's Sight fixture", "monsters": []srdMonster2024{imp}})
-	if c != 201 {
-		t.Fatalf("import: %d %v", c, ij)
-	}
-	impKey := fmt.Sprint(ij["monsters"].([]interface{})[0].(map[string]interface{})["monster_key"])
-	t.Cleanup(func() { db.Exec(`DELETE FROM custom_monsters WHERE key=$1`, impKey) })
-	pgCall(t, "POST", cp+"/combat/add", gm, map[string]interface{}{"combatants": []map[string]interface{}{{"name": "Gloom Imp", "monster_key": impKey, "hp": 50, "initiative": 0}}})
+	// ---- the SRD Imp's Senses, "Darkvision 120 ft. (unimpeded by magical Darkness)": its Darkvision sees into Magical Darkness
+	pgCall(t, "POST", cp+"/combat/add", gm, map[string]interface{}{"combatants": []map[string]interface{}{{"name": "Gloom Imp", "monster_key": "imp", "hp": 50, "initiative": 0}}})
 	impID := id("Gloom Imp")
 	if !piercesMagicalDarknessWithin(camp, impID, 60) || piercesMagicalDarknessWithin(camp, impID, 130) {
-		t.Error("Devil's Sight: its 120-foot Darkvision sees into Magical Darkness, not beyond it")
+		t.Error("unimpeded Darkvision: its 120-foot Darkvision sees into Magical Darkness, not beyond it")
 	}
 	if piercesMagicalDarknessWithin(camp, kobold, 30) {
 		t.Error("a kobold's Darkvision sees into Magical Darkness")
@@ -279,10 +269,13 @@ func TestPostgresObscuredAreasAndSenses(t *testing.T) {
 }
 
 // The wording readers over the SRD catalog: Ink Cloud (Octopus, Giant Octopus) fills an area; Shadow Stealth is light-gated;
-// Sunlight Sensitivity has its D20 Tests variant; Devil's Sight (invented wording with the published pattern).
+// Sunlight Sensitivity has its D20 Tests variant; seven devils' Darkvision is unimpeded by magical Darkness.
 func TestObscuringAndSenseWordings(t *testing.T) {
-	ink, gate, sun, d20 := 0, 0, 0, 0
+	ink, gate, sun, d20, unimpeded := 0, 0, 0, 0, 0
 	for _, m := range srdMonsters2024() {
+		if unimpededDarkvisionRe.MatchString(m.Senses) {
+			unimpeded++
+		}
 		for _, list := range [][]srdMonsterEntry{m.Traits, m.Actions, m.BonusActions, m.Reactions} {
 			for _, e := range list {
 				if obscuringTextRe.MatchString(e.Text) {
@@ -303,8 +296,8 @@ func TestObscuringAndSenseWordings(t *testing.T) {
 	if ink != 2 || gate != 1 || sun != 6 || d20 != 1 {
 		t.Errorf("catalog: ink %d (want 2), light-gated Hide %d (want 1), Sunlight %d (want 6), of them D20 Tests %d (want 1)", ink, gate, sun, d20)
 	}
-	if !devilsSightRe.MatchString("Magical Darkness doesn't impede the creature's Darkvision.") {
-		t.Error("Devil's Sight wording")
+	if unimpeded != 7 {
+		t.Errorf("catalog: Darkvision unimpeded by magical Darkness %d, want 7 (the devils and the Imp)", unimpeded)
 	}
 	if durationRounds(1, "minute") != 10 || durationRounds(1, "hour") != 600 {
 		t.Error("durations")

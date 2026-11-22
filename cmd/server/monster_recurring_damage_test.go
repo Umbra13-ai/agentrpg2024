@@ -46,14 +46,14 @@ func TestPostgresRecurringDamage(t *testing.T) {
 	con := goblin
 	con.Name = "Test Constrictor"
 	con.Actions = []srdMonsterEntry{
-		{Name: "Constrict", Text: "Melee Attack Roll: +60, reach 10 ft. Hit: 6 (1d8 + 2) Bludgeoning damage. If the target is a Large or smaller creature, it has the Grappled condition (escape DC 12). Until the grapple ends, the target takes 4 (1d8) Bludgeoning damage at the start of each of its turns, and the constrictor can't make Constrict attacks."},
+		{Name: "Constrict", Text: "Melee Attack Roll: +60, reach 10 ft. Hit: 6 (1d8 + 2) Bludgeoning damage. If the target is a Large or smaller creature, it has the Grappled condition (escape DC 12). Until the grapple ends, the target takes 4 (1d8) Bludgeoning damage at the start of each of its turns."},
 		{Name: "ConstrictPlain", Text: "Melee Attack Roll: +60, reach 10 ft. Hit: 6 (1d8 + 2) Bludgeoning damage, and the target has the Grappled condition (escape DC 12). Until the grapple ends, the target takes 4 (1d8) Bludgeoning damage at the start of each of its turns."},
 		{Name: "Punch", Text: "Melee Attack Roll: +60, reach 10 ft. Hit: 3 (1d4 + 1) Bludgeoning damage."},
 	}
 	leech := goblin
 	leech.Name = "Test Leech"
 	leech.Actions = []srdMonsterEntry{
-		{Name: "Siphon", Text: "Melee Attack Roll: +60, reach 5 ft. Hit: 3 (1d4 + 1) Piercing damage. If the target is a Large or smaller creature, it has the Grappled condition (escape DC 12). Until the grapple ends, the target takes 3 (1d4) Necrotic damage at the start of each of the leech's turns, and the leech can't make Siphon attacks."},
+		{Name: "Siphon", Text: "Melee Attack Roll: +60, reach 5 ft. Hit: 3 (1d4 + 1) Piercing damage. If the target is a Large or smaller creature, it has the Grappled condition (escape DC 12). Until the grapple ends, the target takes 3 (1d4) Necrotic damage at the start of each of the leech's turns."},
 	}
 	c, j = pgCall(t, "POST", "/api/gm/compendium/monsters", gm, map[string]interface{}{"source_note": "SRD Goblin Warrior variant for recurring damage tests", "monsters": []srdMonster2024{con, leech}})
 	if c != 201 {
@@ -160,18 +160,6 @@ func TestPostgresRecurringDamage(t *testing.T) {
 	if rows(hero) != 2 || grapples(hero) != 2 {
 		t.Fatalf("the leech's grapple did not add its own row: rows=%d grapples=%d", rows(hero), grapples(hero))
 	}
-	// the entangled tail of A's recurring sentence ("..., and the constrictor can't make Constrict
-	// attacks.") locks A's Constrict while A's grapple holds: refused, nothing rolled, HP unchanged
-	if hpBefore := hp(hero); true {
-		res, atk := narrate(conA, "Constrict", hero)
-		if atk["refused"] != true || !strings.Contains(res, "can't make Constrict attacks") {
-			t.Fatalf("the entangled lockout did not refuse A's Constrict: %v %s", atk, res)
-		}
-		if hp(hero) != hpBefore {
-			t.Fatalf("a refused entangled-locked attack changed HP %d -> %d", hpBefore, hp(hero))
-		}
-	}
-
 	// B grapples the second hero
 	hitUntil(conB, "Constrict", hero2, "Grappled")
 	if rows(hero2) != 1 {

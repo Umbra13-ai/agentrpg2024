@@ -2,8 +2,9 @@ package main
 
 // A creature's own senses and light-bound traits, read from its stat block's wording (monsters and companions:
 // creatureTraitsAndVitals), each read by the owner it belongs to:
-//   - Devil's Sight ("Magical Darkness doesn't impede the imp's Darkvision"): its Darkvision sees into Magical Darkness, read by
-//     piercesMagicalDarknessWithin / piercesMagicalDarkness (monster_darkness_2024.go), the one sight model of that darkness;
+//   - Darkvision unimpeded by magical Darkness (the SRD 5.2.1 devils' Senses line: "Darkvision 120 ft. (unimpeded by magical
+//     Darkness)"): its Darkvision sees into Magical Darkness, read by piercesMagicalDarknessWithin / piercesMagicalDarkness
+//     (monster_darkness_2024.go), the one sight model of that darkness;
 //   - Sunlight Sensitivity ("While in sunlight, the kobold has Disadvantage on ability checks and attack rolls"; the variant "on
 //     D20 Tests" covers saving throws too): read by attackSources, saveSources and the monster Hide action, while the creature
 //     stands in sunlight (inSunlight: the scene's lighting set to sunlight by the GM, POST /api/gm/set-lighting {"lighting":
@@ -16,8 +17,8 @@ import (
 	"strings"
 )
 
-// devilsSightRe: Devil's Sight in a stat block.
-var devilsSightRe = regexp.MustCompile(`(?i)Magical Darkness doesn['’]t impede the [^.]*?\bDarkvision\b`)
+// unimpededDarkvisionRe: a Senses line whose Darkvision magical Darkness doesn't impede.
+var unimpededDarkvisionRe = regexp.MustCompile(`(?i)\bDarkvision\s+\d+\s*ft\.?\s*\(unimpeded by magical Darkness\)`)
 
 // sunlightRe: Sunlight Sensitivity in a stat block; group 1 "D20 Tests" for the variant that covers saving throws.
 var sunlightRe = regexp.MustCompile(`(?i)While in sunlight, the [^,]+? has Disadvantage on (?:ability checks and attack rolls|(D20 Tests))`)
@@ -36,10 +37,11 @@ func creatureHasTraitText(lobbyID, id int, re *regexp.Regexp) (srdMonsterEntry, 
 	return srdMonsterEntry{}, false
 }
 
-// creatureDevilsSight: the creature's Darkvision sees into Magical Darkness (a monster's or companion's Devil's Sight trait).
-func creatureDevilsSight(lobbyID, id int) bool {
-	_, ok := creatureHasTraitText(lobbyID, id, devilsSightRe)
-	return ok
+// creatureUnimpededDarkvision: the creature's Darkvision sees into Magical Darkness (its stat block's Senses say so; a monster or
+// companion of the fight).
+func creatureUnimpededDarkvision(lobbyID, id int) bool {
+	meta := creatureMetaOf(lobbyID, id)
+	return meta != nil && unimpededDarkvisionRe.MatchString(meta.Senses)
 }
 
 // inSunlight: the creature stands in sunlight: the scene is sunlit (the GM's lighting) and it isn't inside Magical Darkness.

@@ -11,18 +11,13 @@ import (
 var (
 	singleSaveTargetRe  = regexp.MustCompile(`(?i)^one (?:creature|target)(?: ((?:it|the [\pL][\pL '’\-]*?) can see))? within ([0-9]+) (?:feet|ft\.?)\.?$`)
 	monsterBlindsightRe = regexp.MustCompile(`(?i)\bblindsight\s+(\d+)\s*(?:feet|ft\b)`)
-	pathSaveTriggerRe   = regexp.MustCompile(`(?i)\b(?:each time|whenever) [^.!?]+\benters (?:a|the|another) creature['’]s space[^.!?]+\b(?:this|that) move\b`)
 )
 
-// A movement-triggered save needs the traversed path and its movement rules.
 // For a single ranged target, validate the supported header and map facts.
 func monsterSaveTargetIssue(r *http.Request, lobby, source int, meta *monsterMeta, text string, targets []int) string {
 	match := mfxSaveRe.FindStringIndex(text)
 	if match == nil {
 		return ""
-	}
-	if pathSaveTriggerRe.MatchString(text[:match[0]]) {
-		return "Resolve the required movement through creature spaces and its effects together as written in the compendium. The server does not verify this action's movement path or resolve the resulting save."
 	}
 	header := strings.TrimSpace(text[match[1]:])
 	if !strings.HasPrefix(header, ",") {

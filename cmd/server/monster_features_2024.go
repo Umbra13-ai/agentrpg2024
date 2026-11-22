@@ -69,8 +69,8 @@ var (
 	regenFromZeroRe = regexp.MustCompile(`(?i)dies only if it starts its turn with 0 Hit Points and doesn['’]t regenerate`)
 	startAuraRe     = regexp.MustCompile(`(?:any|each) (enemy|creature|Beast or Humanoid)[^.]*?starts its turn (?:in the aura|in an? (\d+)-foot Emanation|within (\d+) feet)`)
 	endAuraRe       = regexp.MustCompile(`At the end of each of the [^,]+ turns, each creature( of the [^ ]+ choice)? in an? (\d+)-foot Emanation originating from the [^ ]+ takes (\d+) \(([^)]+)\) ([A-Za-z]+) damage`)
-	// saveEndAuraRe: a saving throw aura at the end of the monster's turn ("Constitution Saving Throw: DC 12, each creature in a 5-foot
-	// Emanation originating from the manes at the end of the manes's turn": Sickening Vapors)
+	// saveEndAuraRe: a saving throw aura at the end of the monster's turn ("Constitution Saving Throw: DC 14, each creature in a 5-foot
+	// Emanation originating from the aboleth at the end of the aboleth's turn": the pattern of the Aboleth's Mucus Cloud)
 	// The save opens the trait: one that begins with a condition of its own ("While underwater, the aboleth is surrounded by mucus.
 	// Constitution Saving Throw ...") is the GM's, who judges the condition.
 	saveEndAuraRe   = regexp.MustCompile(`^[A-Z][a-z]+ Saving Throw: DC \d+, each (?:creature|enemy)( of the [^ ]+ choice)? in an? (\d+)-foot Emanation originating from the [^ ]+ at the end of the [^ ]+ turns?\b`)
@@ -682,7 +682,7 @@ func runMonsterEndAuras(lobbyID int, cursor monsterEndAuraCursor) []string {
 
 // endSaveAura: a saving throw aura at the end of the monster's turn (saveEndAuraRe): every creature in the Emanation on the battle map
 // (of its choice: its enemies, chosenAuraTargets) rolls the save through the save effect owner; a creature immune to it (a success's
-// "immune to this manes's Sickening Vapors for 24 hours") is left out.
+// "immune to this nalfeshnee's Horror Nimbus for 24 hours") is left out.
 func endSaveAura(lobbyID, id int, name string, t srdMonsterEntry, sm []string) []string {
 	if strings.Contains(t.Text, "Incapacitated condition") && strings.Contains(t.Text, "unless") && monsterIncapacitated(lobbyID, id) {
 		return nil

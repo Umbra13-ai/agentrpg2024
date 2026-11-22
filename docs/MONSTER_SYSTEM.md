@@ -1,9 +1,10 @@
 # Monster attacks and the shared compendium
 
 How a stat-block attack becomes game mechanics, and what the server will and will not do for it. Written for developers and GMs.
-Applies to SRD monsters and to monsters imported into the shared compendium (`POST /api/gm/compendium/monsters`), including
-creatures that are not in the SRD (high-CR Monster Manual entries, for example). No monster is named in code: everything below
-reads the stat block.
+Applies to the 330 SRD 5.2.1 monsters (the target of every rule) and to a GM's own monsters imported into the shared compendium
+(`POST /api/gm/compendium/monsters`, a generic feature: wording no rule reads is flagged to the GM). No monster is named in code:
+everything below reads the stat block, and every monster text pattern matches an SRD stat block or an invented test monster
+(`TestMonsterPatternsServeSRDWording`).
 
 ## The rule
 
@@ -40,8 +41,7 @@ A refusal answers two audiences, and the split happens BEFORE anything is persis
   Character HP wording follows the existing public behavior.
 - **Replay refusals stay caller-only** (the 409 turn_already_moved answer is not logged).
 - **Regression tests are part of the rule.** A refusal change ships with assertions on the persisted shared-log
-  row (player-safe text, no private clause), the GM's notice (full reason) and a player read (no leak) -
-  `TestPostgresAttackLockout` is the model.
+  row (player-safe text, no private clause), the GM's notice (full reason) and a player read (no leak).
 
 The refusals under this rule: the attack lockout (a grapple or attachment the stat block creates), per-day use
 limits, Recharge not yet rolled, and Multiattack plan or cap problems (a server limit or an adjudication detail,
@@ -99,8 +99,8 @@ The compendium is shared among all authenticated GMs (not private to a campaign)
 
 `go test ./...` with `TEST_DATABASE_URL` naming a disposable database that contains `test` and `REQUIRE_TEST_DATABASE=1`. Rule tests:
 `monster_attack_rules_test.go` (parser, alternatives, Multiattack bounds), `monster_request_rules_test.go` (through the GM route),
-`monster_absorption_test.go`, `monster_damage_choice_2024_test.go` (all 423 SRD attacks). The three non-SRD reference monsters need
-`REFERENCE_FIXTURES_DIR` (`private_reference_combat_test.go`).
+`monster_absorption_test.go`, `monster_damage_choice_2024_test.go` (all 423 SRD attacks), `twenty_monster_acceptance_test.go` (20 SRD
+stat blocks through the import route).
 
 ## Known limits
 
@@ -108,116 +108,70 @@ Spellcasting, legendary and lair effects, recharge details, auras and most trait
 owner handles them. Passing these tests does not mean every printed monster ability works. Unverified against a live server.
 
 
-## Book-based verification and coverage (2026-11-17)
+## Save actions
 
-Source: the Monster Manual split into Word and HTML chapters that Matt supplied (Drive folder 1OG2yZevRofRaY_7ZDep7Vg1hv5YFnZAn). This is
-the "reconstructed" text, not a scan of the printed book; every statement below is about that text.
+`parseSaveEffect` reads a "Saving Throw:" entry: every damage amount must be in the parsed effect or the rest is flagged to the GM
+(`saveEffect.Extra`); nothing is dropped. The save, half damage, Evasion, conditions and absorption of a character target are the
+`applySaveEffect` rules.
 
-- `tools/verify_fixture_against_book.py fixture.json chapter.txt` checks a fixture's trait/action text and key stats against a chapter.
-  The three fixtures ChatGPT transcribed (Arch-hag, Dracolich, Elemental Cataclysm) all match the chapter text (61 items, 0 missing).
-- `tools/parse_mm_statblocks.py out_dir min_cr chapter.txt...` reads the stat-block layout itself (no monster names) and writes importable
-  JSON. 91 monsters with CR 10 or higher parsed from chapters 2a to 2z; blocks that do not parse are listed and skipped.
-  Its output for the three transcribed monsters agrees with those fixtures (the parser also keeps the full Legendary Actions intro).
-  Word text (chapter 2a) has no page breaks, so text after the final entry of a block is dropped there. Checked for all four CR 10+ blocks in 2a (Aboleth, Animal Lord, Arcanaloth, Arch-hag): the dropped lines are the next monster's heading or lore/quote, and the kept last entries are complete. The Arch-hag page (p. 21 of the supplied Cover - 25.pdf, which is itself a reconstruction) was compared by eye with the parsed block: same stats, same final entry. The supplied chapter PDFs have no text layer, so the other three were compared against the Word text only.
-- `TestMonsterBookCoverage` (cmd/server/monster_book_coverage_test.go, needs MM_FIXTURES_DIR) imports every parsed block through the
-  shared validator and reports attack rolls automated, attack rolls refused, and actions left to the GM. Importing is not coverage.
-  Latest report: COVERAGE_REPORT_CR10plus.md next to this file.
-- The parsed fixtures contain the book's text, so they are kept out of the source tree (private Drive zip), not committed.
-- `TestPostgresBookRouteSweep` (cmd/server/monster_book_route_test.go, needs MM_FIXTURES_DIR and PostgreSQL) plays every parsed monster through
-  the real routes: import, combat/add with stats checked, then every attack-roll action through POST /api/gm/narrate against an AC 1
-  target. Tiers, kept separate: parsed 91, imported 91, attack rolls automated 123, route-exercised 123 attack rolls (not saving-throw
-  actions, spellcasting, traits or legendary actions). Report: ROUTE_SWEEP_REPORT_CR10plus.md.
+An attack with a "Hit or Miss:" effect (Salamander Flame Spear, Solar Flying Sword) rolls the attack and, on a hit, its own rider. The
+effect on a miss is passed to the GM by `hitOrMissNote` (monster_attacks.go); it used to be dropped silently.
 
-## Save actions (parse tier)
-
-`TestMonsterBookSaveActions` (MM_FIXTURES_DIR; MM_SAVES_OUT writes a report) reads every "Saving Throw:" action of the CR 10+ fixtures
-and compares `parseSaveEffect` with the text: every damage amount must be in the parsed effect or the rest must be flagged to the GM
-(`saveEffect.Extra`). Result: 121 save actions, 53 fully represented, 68 with leftover text (pushes, riders, recharge, "Failure or
-Success" effects) shown to the GM, 0 lost. This proves the parsing and the flagging only. It does not play the saves through the
-route; the save, half damage, Evasion, conditions and absorption of a character target are the existing `applySaveEffect` rules.
-Not automated: saves against monsters as targets, area targeting without a battle map. Recharge is already tracked by the shared code (a used Recharge action is refused until the monster's start-of-turn roll).
-
-An attack with a "Hit or Miss:" effect (Dao's Earth Burst) rolls the attack and, on a hit, the target's save. The effect on a miss and
-on the other creatures in the area is passed to the GM by `hitOrMissNote` (monster_attacks.go); it used to be dropped silently.
-
-The book parser removes a page-break heading ("Adult Gold Dragon (continued)") that split a sentence in three stat blocks.
-
-`TestPostgresBookSaveRoute` (MM_FIXTURES_DIR; MM_SAVE_ROUTE_OUT writes a report) plays every save action with damage (67 in the CR 10+
-set) through POST /api/gm/narrate against a character, up to 40 times each: the reply must name the stat block's ability and DC; a failed
-save deals an amount inside the parsed dice range; a success deals nothing or at most half (nothing when the text has no half-damage
-rule); a spent Recharge action must be refused on reuse with no damage. Result: 67 with a failed save seen, 61 with a success seen
-(the others had too low a chance in 40 tries), reuse refused 314 times. Conditions given on a failure are checked by name (245 lines). Not checked: durations, riders, defenses, Evasion, monster targets.
-A "Failure or Success: One of the following effects occurs:" text now tells the GM the options are the entries after the action.
+A "Failure or Success: One of the following effects occurs:" text tells the GM the options are the entries after the action.
 
 Saves with a monster as the target are automated (monster_save_targets.go, `applySaveEffectOnMonster`, called from `applySaveEffect`): the
-target of a monster_action may now be another monster of the fight (name, "#id" or a negative id in target_ids). Its save is `saveCtx.resist`
+target of a monster_action may be another monster of the fight (name, "#id" or a negative id in target_ids). Its save is `saveCtx.resist`
 (Magic Resistance, Legendary Resistance, its stat block's bonus), the damage goes through `hurtMonster` (resistance, immunity, absorption,
 Undead Fortitude), conditions through `addCondition` (duration, repeat save, source), Evasion is honored as a trait row, and Exhaustion is told to
-the GM (a character rule). Plain "takes N damage" effects reach monsters too. NPCs that are characters keep the character path. Tests:
-TestPostgresSaveEffectOnMonsterTargets (DC 30 / DC 1 test monsters: failed save, half damage on success, Evasion, absorber heals, stored
-Frightened and Charmed records with their duration and repeat save, expiry, target_ids with two monsters, no-target refusal); a mutation that
-turned Evasion off failed it. Also tested: resistance halves the failed-save damage of a monster that resists the type, and Legendary Resistance (2/Day) turns a failure that would give a condition into a success twice (half damage, no condition) and the third failure stands. Not tested: Magic Resistance on a spell effect.
-Character-target defenses (resistance, immunity, Evasion of characters) are owned by `damageHP` / `hasEvasion`; the save sweep does not re-verify them (it only checks the damage lies in the dice range with the sweep character, who has none).
+the GM (a character rule). Plain "takes N damage" effects reach monsters too. Test: TestPostgresSaveEffectOnMonsterTargets (failed save, half
+damage on success, Evasion, absorber heals, stored records with their duration and repeat save, expiry, two targets, no-target refusal,
+resistance, Legendary Resistance 2/Day).
 
+A failed save's condition record carries the stat block's duration (1 round "until the end of its next turn", 10 "for 1 minute"), the
+repeated save (ability and DC) iff the text says "repeats the save", the until-start-of-next-turn note iff the text says so, and the
+monster as its source; a timed record is gone after its rounds pass (`passConditionTime`).
 
-Stored condition state (TestPostgresBookSaveRoute, checkConditionState): after each failed save that gave a condition (229 records over the 67
-actions, none of them immune), the character's condition record must exist with the stat block's duration (1 round "until the end of its next
-turn", 10 "for 1 minute"), the repeated save (ability and DC) iff the text says "repeats the save", the until-start-of-next-turn note iff the
-text says so, and the monster as its source; a timed record must be gone after its rounds pass (`passConditionTime`). A mutation (expected
-duration +1) failed 244 checks, so the check bites. The rolling of an end-of-turn repeat save and the removal on success are the condition
-owner's (condition_turns.go, tests in condition_records_test.go); this sweep stores the right save, it does not roll it again.
-Not checked: riders ("pushed", "Speed halved", Disadvantage ...) are GM text; Failure-damage defenses (resistance, immunity, Evasion) of the
-target; Exhaustion levels.
+"Can't take this action again until the start of its next turn" (the metallic dragons' breaths): an action or bonus action with that
+sentence is refused with "Nothing was rolled" on a second use and given back at the start of the monster's next turn, in the same list a
+Legendary Action's use is kept (`LAOnce`, monster_features_2024.go). Test: TestPostgresSaveEffectOnMonsterTargets (Lingering Burst).
 
-"Can't take this action again until the start of its next turn" (14 of the flagged save actions, e.g. the metallic dragons' breaths): an action or
-bonus action with that sentence is refused with "Nothing was rolled" on a second use and given back at the start of the monster's next turn,
-in the same list a Legendary Action's use is kept (`LAOnce`, monster_features_2024.go). Test: TestPostgresSaveEffectOnMonsterTargets
-(Lingering Burst). Flagged save actions still carry GM text for pushes, Speed changes, Disadvantage, Grappled/Restrained riders and "one of the
-following" effects: 28 "Failure or Success" sentences in the CR 10+ set.
+"the Grappled condition (escape DC N)" in a save effect (Behir, Marilith): the stored Grappled record carries the escape checks (Strength
+(Athletics) or Dexterity (Acrobatics) against N), as the unarmed-grapple rule stores them (`saveEffect.conditionAdd`, one function for
+character and monster targets). "...and it has the Restrained condition until the grapple ends" (Behir, Marilith Constrict) is stored as a
+Restrained record with the note `ends_with_grapple` and the same source; `conditionChange.remove` (the one place condition rows are deleted)
+ends it together with the Grappled record of that source, whether by escape, release or the grappler being Incapacitated. Test:
+TestPostgresSaveEffectOnMonsterTargets (Squeeze).
 
-"the Grappled condition (escape DC N)" in a save effect (Behir, Marilith, Gulthias Blight ...): the stored Grappled record now carries the escape
-checks (Strength (Athletics) or Dexterity (Acrobatics) against N), as the unarmed-grapple rule stores them (`saveEffect.conditionAdd`, one
-function for character and monster targets). "…and it has the Restrained condition until the grapple ends" (Behir, Marilith Constrict) is stored as a Restrained record with the note `ends_with_grapple` and the same source; `conditionChange.remove` (the one place condition rows are deleted) ends it together with the Grappled record of that source, whether by escape, release or the grappler being Incapacitated. Save-action parse sweep is now 55 represented / 66 flagged / 0 lost. Tests: the route
-test checks the escape DC of every stored Grappled record; TestPostgresSaveEffectOnMonsterTargets (Squeeze).
-
-## Save-route test: intermittent failure, cause and fix
-`TestPostgresBookSaveRoute` failed rarely (about 1 in 10 runs). Captured output: Guardian Naga / Poisonous Spittle, failed save dealt 5, expected 7-56. Cause: the test's sweep character is a Dwarf (Resistance to Poison damage), so a low poison roll halves below the test's lower bound. The game code was right; the test bound ignored the character's resistance. Fix: the lower bound halves poison dice. Seven poison save actions are affected (Guardian Naga, green dragons, Beholder, Death Tyrant, Iron Golem, Spy Master). The 40-try "no failed save" assertion was checked: at DC 14+ against a +5 save the chance is negligible.
-
-## Leftover rules text reaches the GM (route-tested)
-The save-route sweep now also checks, for every played save action, that any text the shared rules do not automate (pushes, Speed riders, Disadvantage riders, "Failure or Success" riders, area wording) appears whole in the reply with a "the GM" line, on a failed save (or any save for "Failure or Success" text). 156 replies checked in the last run. Mutation: removing the GM line failed 149 checks. This proves the text is surfaced, not that it is automated: pushes, Speed and Disadvantage riders are still GM-applied.
+## Leftover rules text reaches the GM
+Any text the shared rules do not automate appears whole in the reply with a "the GM" line, on a failed save (or any save for "Failure or
+Success" text). The coverage of every SRD sentence (applied by a named rule, or flagged to the GM) is `TestSRDMonsterSentenceCoverage`.
 
 ## Magic Resistance on imported monsters (tested)
-An imported stat block with the Magic Resistance trait gets Advantage on a save against a spell through the one save owner (`saveSources`, save_2024.go); a monster without it, or a save against a monster's own action, gets none. `TestPostgresSaveEffectOnMonsterTargets` checks the Advantage sources through `saveCtx.gather` (nothing rolled). Mutation: switching the row off failed the test. Not covered: a spell cast by a character played end to end against a Magic Resistance monster (the spell paths call the same `monsterSpellSaveResult`).
+A stat block with the Magic Resistance trait gets Advantage on a save against a spell through the one save owner (`saveSources`, save_2024.go); a monster without it, or a save against a monster's own action, gets none. `TestPostgresSaveEffectOnMonsterTargets` checks the Advantage sources through `saveCtx.gather` (nothing rolled).
 
 ## Size-gated conditions
-"If the target is a Huge or smaller creature, it is pushed ... and has the Prone condition" (Marid, Water Jet) is read into `saveEffect.CondMaxSize`. `saveEffect.conditionsFor` is the one rule for characters and monster targets: a bigger target keeps the damage, does not get the condition, and the reply says "not Prone (larger than Huge)". The push itself stays GM text. Test: `TestPostgresSaveEffectOnMonsterTargets` (Medium target stored Prone, Gargantuan target not; mutation removing the gate fails it). Only one book action has this shape (Marid); other "if the target is" clauses are not about conditions. Characters are Small or Medium by species.
+"If the target is a Huge or smaller creature, it has the Prone condition" is read into `saveEffect.CondMaxSize`. `saveEffect.conditionsFor` is the one rule for characters and monster targets: a bigger target keeps the damage, does not get the condition, and the reply says "not Prone (larger than Huge)". Test: `TestPostgresSaveEffectOnMonsterTargets` (Medium target stored Prone, Gargantuan target not). Characters are Small or Medium by species.
 
-## Multi-effect actions and staged effects (found by audit)
-Audit of every CR 10+ save action found two silent over-simplifications in the shared parser, now fixed:
-1. **Actions that offer several effects** (Beholder and Death Tyrant Eye Rays, 10 rays each; Elemental Cataclysm, 4 effects). The parser read the first listed ray and rolled it as if it had been chosen, with the rest not shown. Now `splitSaveOptions` splits the text by named effect, and `resolveMonsterEffectText` refuses the action before rolling ("offers N effects ... name the one that happened in use. Nothing was rolled.") until the GM names one in `monster_action.use`; the named effect is then resolved alone through the same save rules. Tests: `TestSplitSaveOptionsAndStages`, `TestPostgresSaveEffectOnMonsterTargets` (refusal, no HP change, no condition; named effect applied alone; mutation fails), and the route sweep (3 actions refused, each option played).
-2. **Staged effects** ("Failure: Incapacitated ... repeats the save. Second Failure: Unconscious / Paralyzed", Brass and Silver dragon breaths). Only the first stage was applied and the Second Failure text was dropped without a note. Now it goes to the GM in the reply ("Second Failure (after the repeat save the first Failure gives): ..."). The repeat save and second stage are not automated.
-Parse sweep after the change: 141 save entries (multi-effect actions counted per effect): 55 represented, 86 flagged to the GM, 0 lost. Route sweep: 79 played (each ray/effect separately).
-Not done: choosing the random effect (the GM rolls or picks) and area targeting without a battle map. The second stage is now automated
-(2026-11-21, below: "A condition's second stage").
+## Multi-effect actions and staged effects
+1. **Actions that offer several effects** ("one of the following effects", rays chosen at random). `splitSaveOptions` splits the text by named effect, and `resolveMonsterEffectText` refuses the action before rolling ("offers N effects ... name the one that happened in use. Nothing was rolled.") until the GM names one in `monster_action.use`; the named effect is then resolved alone through the same save rules. Tests: `TestSplitSaveOptionsAndStages`, `TestPostgresSaveEffectOnMonsterTargets`.
+2. **Staged effects** ("Failure: Restrained ... repeats the save. Second Failure: Petrified": Basilisk, Cockatrice; the Brass and Silver dragons' breaths) are read by the second-stage owner (below: "A condition's second stage").
 
-## Conditions a hit gives (new: applied, not left to the GM)
-Before this change a stat-block attack applied only its damage; every rider ("If the target is a Large or smaller creature, it has the Prone condition", "Grappled (escape DC 14)", "Stunned until the start of the empyrean's next turn") was shown to the GM as "not applied automatically". Now `parseHitRider` (monster_effects_2024.go) reads the conditions of a hit with the same rule as a failed save (`readRider`), and `saveEffect.giveConditions` gives them to the target (condition records with the monster as the source; immunity honoured; size gate; escape DC; Restrained that ends with the grapple). The monster attack path (monster_attacks.go) calls it after the damage; the shared owners are unchanged (one condition builder, one size rule).
-- Still the GM's, shown in the reply with "[GM, not applied automatically: ...]": a choice or a roll of the condition ("the githzerai's choice of (A) ... or (B)", "determined by rolling 1d4"), curses, a second condition sentence ("Until the grapple ends, the target has the Restrained condition and can't teleport"), "While Poisoned, the target can't regain Hit Points", pushes and pulls, a Speed or roll rider with no duration the server can count, Hit Point maximum changes. Speed and roll riders with a countable duration are applied (rider durations, below). "If the target is a creature" is a gate every target of these routes meets: it is not repeated to the GM once the rest of its sentence is applied.
-- "until the start of the <monster>'s next turn" is now the monster's turn start (same as "its"); before it was a one-round duration. `TestParseSaveEffect` was updated for that.
-- Tests: `TestPostgresMonsterHitRiders` (invented attacks: Prone stored from the monster, size gate with the reason in the reply, Grappled escape DC 17 + linked Restrained, Stunned until start of its next turn, a choice of conditions left to the GM, Poisoned applied while the remaining sentence stays with the GM; mutation switching the apply off fails it) and the route sweep (123 book attack actions hit; 23 hit-rider conditions checked as stored or explained). The sweep clears the character's conditions between attacks (stored riders would otherwise give Advantage and critical hits).
-- Not covered: monsters as the target of a monster attack's riders (this path is for characters); end-of-turn expiry of the hit-given Stunned was not replayed (the condition owner's time passing is tested in condition_records_test.go and in the save sweep).
+## Conditions a hit gives (applied, not left to the GM)
+`parseHitRider` (monster_effects_2024.go) reads the conditions of a hit with the same rule as a failed save (`readRider`), and `saveEffect.giveConditions` gives them to the target (condition records with the monster as the source; immunity honoured; size gate; escape DC; Restrained that ends with the grapple). The monster attack path (monster_attacks.go) calls it after the damage.
+- Still the GM's, shown in the reply with "[GM, not applied automatically: ...]": a choice of conditions, curses, a second condition sentence ("Until the grapple ends, the target has the Restrained condition and can't teleport"), a Speed or roll rider with no duration the server can count. "If the target is a creature" is a gate every target of these routes meets: it is not repeated to the GM once the rest of its sentence is applied.
+- "until the start of the <monster>'s next turn" is the monster's turn start (same as "its").
+- Tests: `TestPostgresMonsterHitRiders` (invented attacks: Prone stored from the monster, size gate with the reason in the reply, Grappled escape DC 17 + linked Restrained, Stunned until start of its next turn, a choice of conditions left to the GM).
 
-## "Until the start of its next turn" ends on the source's turn (bug found by the hit-rider test)
-The condition owner ended a record noted `until_start_of_next_turn` at the start of the holder's own turn. For a monster's effect ("Stunned until the start of the empyrean's next turn") that is the wrong creature: a character who acts before the monster's next turn was freed early. Now `monsterFeaturesTurnStart` ends, at the start of a monster's turn, the records whose source is that monster's ("<name>'s <action>") wherever they are held. Source-turn timing does not depend on the source's HP.
+## "Until the start of its next turn" ends on the source's turn
+At the start of a monster's turn, `monsterFeaturesTurnStart` ends the records whose source is that monster ("<name>'s <action>") wherever they are held. Source-turn timing does not depend on the source's HP.
 
-Open adjudication (not decided by the supplied rules, so nothing is shortened by a guess):
-- **Source down (0 HP) or removed from the fight:** it has no next turn. The record stays stored; at each turn start of the holder the reply carries a "[GM] ... Nothing was changed; the GM decides whether it ends (remove it with the conditions route)" line naming the condition and its source. Tested for a downed and for a removed monster.
+Open adjudication (not decided by the rules, so nothing is shortened by a guess):
+- **Source down (0 HP) or removed from the fight:** it has no next turn. The record stays stored; at each turn start of the holder the reply carries a "[GM] ... Nothing was changed; the GM decides whether it ends (remove it with the conditions route)" line naming the condition and its source.
 - **Explicit end text** ("ends if the dragon is Incapacitated", etc.) is not read by the parser; such sentences are GM text.
-- **Combat teardown (`combat/end`):** monsters' own records are cleared; a character's source-timed record is kept (`TestPostgresMonsterHitRiders` asserts the current behaviour so a change is noticed). The GM removes it.
-- Death versus downed: the fight stores 0 HP for both here; no separate path was tested.
+- **Combat teardown (`combat/end`):** monsters' own records are cleared; a character's source-timed record is kept (`TestPostgresMonsterHitRiders` asserts the current behaviour). The GM removes it.
 
-## Spellcasting entries (route-played)
-`TestPostgresBookSpellcastingRoute` plays every spell listed in the CR 10+ Spellcasting entries (323 spells) through POST /api/gm/narrate with `monster_action.use`: 104 rolled by the shared spell rules (a save or an attack roll), 219 handed to the GM with the spell named and "GM" in the reply, 0 refused, 0 silent. This proves nothing was dropped silently; it does not prove the 219 are automated (utility, buff and out-of-combat spells stay with the GM), nor that the 104 effects are right beyond what the spell tests cover. The rolled/GM split moves by a few spells between runs (the reply text depends on the dice), so only the 0-silent result is a fixed claim. Report: SPELLCASTING_ROUTE_REPORT_CR10plus.md.
+## Spellcasting entries
+A Spellcasting entry's spells are played through POST /api/gm/narrate with `monster_action.use`: a save or an attack roll goes to the shared spell rules; utility, buff and out-of-combat spells the server doesn't resolve are handed to the GM with the spell named.
 
 ## What a monster's cast does (`cmd/server/monster_cast_effects_2024.go`)
 A monster casts through `resolveMonsterSpell` (`monster_effects_2024.go`). A spell attack goes to the attack owner and a saving throw
@@ -293,8 +247,7 @@ place (`riderEnd.markerAdd`):
 A source-anchored rider needs its source creature; without it the reply names it as not applied (`riderNotApplied`). Conditions keep
 their own duration reader (`readRider`'s `UntilStart` / `UntilEnd` / `Rounds`), which ends on the same notes. Before this owner, the Speed,
 Disadvantage and Reaction riders each carried their own copy of "until the end of its next turn" and left every rider that ends on the
-attacker's turn to the GM (Lacedon Ghoul Icy Bite, Psychic Gray Ooze Pseudopod, Steam Mephit Steam Breath's Speed, Balor Lightning
-Blade).
+attacker's turn to the GM (Steam Mephit Steam Breath's Speed, Balor Lightning Blade).
 
 ## A monster attack's range on the battle map (`monsterAttackRange`, `cmd/server/map_rules.go`)
 
@@ -303,8 +256,8 @@ One rule for every target route (a character, `monster_attacks.go`; a monster, `
 an attack with none, "range 320 ft."), no attack: the reply says so and nothing is rolled; beyond its normal range, Disadvantage ("long
 range"); within 5 feet read from the map. The distance is `tokenDistanceFeet`, a flying creature's altitude included, which is how a map
 of at most 40 squares (200 ft) reaches a bow's 600 ft. Tested: `TestPostgresMonsterAttackRangeOnEveryTarget` (POST /api/gm/narrate: the
-eight SRD 5.2.1 ranged attacks of the CR 0-1 roster with their published ranges checked against the catalog text, and a single-range attack
-with the Gears Launcher pattern, at the normal range, just past it, at the long range and just past it, against a character; a bow and the
+eight SRD 5.2.1 ranged attacks of the CR 0-1 roster with their published ranges checked against the catalog text, and an invented
+single-range attack, at the normal range, just past it, at the long range and just past it, against a character; a bow and the
 single-range attack against a monster, the bow against a companion). Mutation-checked: no refusal, no long-range Disadvantage, an
 off-by-one at the long range.
 
@@ -385,7 +338,7 @@ target's ability scores" (`restoreAbilityScore`). The residual no longer gives t
 hours later" stays the GM's. Catalog parse diff: only the Shadow. Tested: `TestPostgresAbilityDrainOnEveryTarget` (POST /api/gm/narrate at
 a character, a monster and a companion; the sheet and saves; Greater Restoration; Strength 0 kills).
 
-## Corroded and stuck items (`cmd/server/item_state_2024.go`)
+## Corroded items (`cmd/server/item_state_2024.go`)
 
 One owner of an item's state, kept on the item in the inventory and written through the inventory writer:
 - Gray Ooze Pseudopod, Black Pudding Dissolving Pseudopod (a hit, `hitAfterDamage`): "Nonmagical armor worn by the target takes a -1
@@ -397,11 +350,7 @@ One owner of an item's state, kept on the item in the inventory and written thro
 - Rust Monster Antennae (a saving throw on "one nonmagical metal object"): on a failure, the worn nonmagical metal armor, else the
   nonmagical metal weapon in hand (`saveEffect.ItemPenalty`). Destroy Metal touches an object nobody wears or carries: the GM's.
 - Mending removes the penalty (`mendItem`: the item named, or the only corroded one).
-- Kuo-toa Sticky Shield (a Reaction to a melee weapon attack that missed, recorded this turn): the Strength save is the attacker's; on a
-  failure the weapon sticks fast (an attack with it is refused), the wielder who holds on is Grappled (escape DC 11), and use_item on the
-  weapon is the action of the DC 11 Strength (Athletics) check that frees it and ends that grapple.
-None of these sentences reaches the GM's residual any more. Catalog parse diff: Gray Ooze, Black Pudding, Rust Monster (the Kuo-toa is
-not SRD; its rule is read from the same wording). Tested: `TestPostgresItemCorrosion` (POST /api/gm/narrate and POST /api/action, invented
+None of these sentences reaches the GM's residual any more. Catalog parse diff: Gray Ooze, Black Pudding, Rust Monster. Tested: `TestPostgresItemCorrosion` (POST /api/gm/narrate and POST /api/action, invented
 creatures with the published sentences).
 
 ## A hit's Hit Point maximum drain (`cmd/server/hp_max_drain_2024.go`)
@@ -433,13 +382,13 @@ The Sleep spell was one minute of Incapacitated with a save at the end of each t
 target's next turn, then one repeated save, and a second failure is Unconscious for the rest of the spell (ends on damage). The record's
 repeated save now carries a second stage (`conditionSave.Then`, `ThenRounds`, `ThenEndsOnDamage`, `ThenMagicalSleep`):
 `condition_turns.go` deletes the record and adds the second condition, with the same source, on a failed repeat; a success ends it. Sleep
-is a row of `spellStages` read by a character's cast and a monster's ("casts the Sleep spell": Pixie, Dust Mephit). A monster text's
+is a row of `spellStages` read by a character's cast and a monster's ("casts the Sleep spell"). A monster text's
 "Second Failure: The target has the X condition [instead of the Y condition] for N minutes/hours [This effect ends ... if it takes damage
 ...]" after a single repeat ("repeats the save at the end of its next turn" / "until the end of its next turn, at which point it repeats
 the save") is read by `readSecondFailure` (the Brass dragons' Sleep Breath, the Cockatrice). An Unconscious that ends on damage is
-`notesEndsOnDamage`; `wakeOnDamageSleep` ends it and a monster's Sleep (`sourceIsSpell`: "Pixie (Sleep)" was never woken before). A
+`notesEndsOnDamage`; `wakeOnDamageSleep` ends it and a monster's Sleep (`sourceIsSpell`: "<monster> (Sleep)" was never woken before). A
 severe branch that only adds Unconscious to the Failure's Poisoned (Pseudodragon Sting) is the severe-poison owner (`severeSleepText`).
-A monster's Lesser Restoration (Empyrean Iota) and a monster's Heal end conditions through `spellEndsConditions`
+A monster's Lesser Restoration and a monster's Heal end conditions through `spellEndsConditions`
 (`monsterCastEndsConditions`; `monsterCastHealing` ends them before healing). Tested: `TestPostgresSleepSecondFailure`,
 `TestPostgresSecondFailureStages`, `TestPostgresMonsterCastEndsConditions` (character, monster and companion targets),
 `TestCR01SaveActionTimingGuards` (the CR 0-1 save actions' timing, Recharge and N/Day tags from the SRD data). Catalog parse diff: the
@@ -481,11 +430,9 @@ Read by `readRider` from a hit or a failed save, applied by `giveConditions`, by
 
 | Text | What the server stores | Read by | Ends |
 |---|---|---|---|
-| "Disadvantage on its next attack roll before the start of the X's next turn" | combat effect `sap` | `attackSources` (the Sap row), consumed by the next attack roll it makes | the source's next turn start (`expireCombatEffectsOf`) |
 | "the next attack roll made against the target before the start of the X's next turn has Advantage" (Worg Bite) | combat effect `exposed` (the effect Guiding Bolt gives) | `attackSources` ("the target is exposed"), consumed by the next attack roll against it | the source's next turn start |
 | "Disadvantage on attack rolls until ..." | marker `disadv_attacks` | `attackSources` | its duration (rider durations) |
 | "Disadvantage on saving throws to maintain Concentration until ..." | marker `disadv_concentration` | `saveSources`, only for Concentration saves | its duration |
-| "Disadvantage on Intelligence saving throws until ..." (one ability or several) | marker `disadv_save:int` | `saveSources`, only for those abilities | its duration |
 
 A rider used up by one roll is applied only with the end the combat effects keep (the start of the source's next turn). Left to the GM,
 listed in the reply's Extra and never dropped: Disadvantage on ability checks (including the second half of "attack rolls and ability
@@ -493,13 +440,13 @@ checks"), "Disadvantage on the next attack roll it makes before the end of its n
 with any other end, a rider with no duration, and Disadvantage on Strength-based D20 Tests (Weakening Breath).
 
 Tested: `TestDisadvantageRiderParsing`, `TestSpeedRiderParsing` (each text, each duration, the GM-left parts), `TestPostgresSpeedOwner`
-(the stored marker, the attack and Concentration saves reading it, ending with the target's next turn, the Sap-like rider consumed once,
+(the stored marker, the attack and Concentration saves reading it, ending with the target's next turn,
 an attacker-anchored Speed rider ended at the attacker's turn end), `TestPostgresCantTakeReactionsRider` (an attacker-anchored "can't
 take Reactions" ended at the attacker's turn start), and `TestPostgresRiderDurationsOnEveryTarget` (POST /api/gm/narrate monster_action
-at a character, a monster and a companion: a source-start Speed rider read by the Speed owner, a source-end Intelligence-save
-Disadvantage read by an Intelligence save and not a Wisdom save, the "exposed" Advantage used by the next attack roll and only that one,
-the creature gate not repeated to the GM; then POST combat/next ends each on the source's turn, the save rider not at the end of the turn
-it was given in). Mutation-checked: the source-anchored ends not read, the saveSources row, the `exposed` reader, the companion route's
+at a character, a monster and a companion: a source-start Speed rider read by the Speed owner, a source-end
+attack-roll Disadvantage, the "exposed" Advantage used by the next attack roll and only that one,
+the creature gate not repeated to the GM; then POST combat/next ends each on the source's turn, the attack rider not at the end of the turn
+it was given in). Mutation-checked: the source-anchored ends not read, the `exposed` reader, the companion route's
 old copy restored, the creature gate kept, a source-end rider stored as source-start.
 
 ## "Failure or Success:" riders
@@ -521,7 +468,7 @@ Owner: `cmd/server/monster_hit_undo_2024.go` (`snapshotTarget`, `recordChanges`,
 
 Given back when a Reaction turns the hit into a miss:
 - The target's whole entry (Hit Points, Temporary Hit Points, Dead, form) when it is unchanged since the hit. Absorbed Hit Points and a hit that took it to 0 are covered this way.
-- Condition records and combat effects the hit created (Prone, the hit's own save condition, linked Grappled+Restrained, Speed and Disadvantage markers, Sap).
+- Condition records and combat effects the hit created (Prone, the hit's own save condition, linked Grappled+Restrained, Speed and Disadvantage markers).
 - Records the damage removed (Sleep, Hypnotic Pattern, Turn Undead, charm on damage).
 - Regeneration's block when this hit set it.
 
@@ -533,17 +480,14 @@ Not covered, and said in the reply: effects of the hit this code does not track 
 
 Tests: `TestPostgresCharacterHitTakenBack` (character-attacker route: Temp HP restore, stale hit, duplicate Reaction) and `TestPostgresMonsterAttacksMonster` (route: stale and duplicate Reactions, Hit or Miss kept, Slam/Prone/Temp HP, Sting save, Sleep put back, absorption, (1/Day) counted; direct: lethal). Mutation-checked: records removal, Sleep restore, exact entry restore. Hit-or-Miss retention is tested as: the effect reaches the GM on the attack and the Parry reply keeps it with the GM (it is a GM note, never automated). Not yet tested at route level: Shield, Redirect Attack.
 
-## A Reaction triggered by a hit on the monster; Uncanny Dodge
+## A Reaction triggered by a hit on the monster
 
 `reactionSelfHitTrigger` (`monster_reactions_2024.go`) reads a Reaction's trigger once for every Reaction: "is hit by a [melee | ranged]
-attack roll", "An attack roll hits the <monster>", "An attacker ... hits it with an attack roll" (not "hits the wearer": Protection). Such a
-Reaction answers only a hit recorded on the monster this turn, of the kind its trigger names; otherwise it is refused and nothing is used.
-Before this, the check was written per Reaction kind (Parry, Deflect Missile) and the "uses <Action>" Reaction (Reflexive Antennae) and
-the halving one had none. Uncanny Dodge ("halves the damage it takes from that attack", MM Performer) halves the recorded hit's damage,
-rounded down, Temporary Hit Points included, through `refundHitDamage` (a stale target: RECONCILIATION NEEDED, nothing applied). Catalog
-parse: the 7 Parry entries, Riposte, Whirlwind of Sand, Reflexive Antennae and Deflect Missile (ranged). Tested:
-`TestReactionSelfHitTriggersOverTheCatalog`, `TestPostgresMonsterReactionTriggersAndUncannyDodge` (no hit: refused and not spent; a
-ranged-only trigger after a melee hit; the halving; one Reaction a round; the "uses" path after a hit); mutation-checked.
+attack roll", "An attack roll hits the <monster>" (not "hits the wearer": Protection). Such a Reaction answers only a hit recorded on the
+monster this turn, of the kind its trigger names; otherwise it is refused and nothing is used. Catalog parse: the 7 Parry entries,
+Riposte, Whirlwind of Sand, Reflexive Antennae and Deflect Missile (ranged). Tested: `TestReactionSelfHitTriggersOverTheCatalog`,
+`TestPostgresMonsterReactionTriggers` (no hit: refused and not spent; a ranged-only trigger after a melee hit; the "uses" path after a
+hit; one Reaction a round).
 
 ## Regeneration from 0 Hit Points (Troll, Troll Limb)
 
@@ -583,26 +527,30 @@ Redirect Attack (supplied wording: "The goblin chooses a Small or Medium ally wi
 
 Protection ("An attack roll hits the wearer of the guardian's amulet while the wearer is within 5 feet of the guardian. Response: The wearer gains a +5 bonus to AC ...") is a monster guardian (defender-side Reaction) for a CHARACTER wearer hit by a MONSTER attacker. `TestPostgresProtectionVersusMonsterAttacker` covers it: a hit the +5 turns into a miss is undone (Hit Points and the hit's rider conditions, by id), a hit that still beats AC + 5 is left alone (mutation-checked on the rider removal). The same applies to a cast Shield (`shieldReaction`). Found by this work: a hit's conditions were applied after the hit was recorded, so a Shield or Protection that made it a miss left them on the wearer; and a Shield cast by standing order still got the hit's riders applied. Both are fixed and both are route-tested (the standing-order case with a wizard that has a Shield standing order; mutation-checked on the "hit became a miss" guard). Not covered: a wearer that is a monster hit by a character or monster (the wearer must be a character today: a monster wearer is not supported and not tested).
 
-## CR 0-1 Monster Manual entries outside the SRD (2026-11-21)
+## Timed and linked conditions, end-of-turn auras (2026-11-21)
 
-Read from the 2024 Monster Manual Word documents (no book text is committed; tests use invented wording with the same pattern; such monsters enter through the GM compendium import). Rules added to the owners, each for every target kind (character, monster, companion):
+Each rule for every target kind (character, monster, companion):
 
-- **A condition's time** (`readRider`): "for 10 minutes", and a rolled "for 1d4 hours" / "for 1d12 hours" (Flumph Stench Spray, Gas Spore Fungus Death Burst: `conditionDuration`, rolled per target in `conditionAdd`). An immunity's "for 24 hours" is never taken as the condition's time (Ghost Possession, found by the catalog diff).
-- **"or until it takes damage"** (Jackalwere Sleep Gaze): the Unconscious record ends on damage (`notesEndsOnDamage`, `wakeOnDamageSleep`); "or a creature within 5 feet of it takes an action to wake it" is the GM's.
-- **"(Constructs and Undead succeed automatically)"**: `AutoSucceedTypes`, an automatic success in `rollForTarget` for a target of that creature type (`creatureTypeOf`).
-- **"While Frightened, the target has the Paralyzed condition"** (Scarecrow Terrifying Glare; SRD Chuul Paralyzing Tentacles and Harpy Luring Song too): `lastingEffects.Also`, a record noted `ends_with:<condition>` that `conditionChange.remove` ends with the first record. The Harpy's "ignores the Luring Song of other harpies" and its movement stay the GM's.
-- **A saving throw aura at the end of the monster's turn** (Manes Vaporspawn Sickening Vapors): `saveEndAuraRe` / `endSaveAura`, the save effect owner for every creature in the Emanation on the battle map, a success's immunity honored. A trait that opens with its own condition ("While underwater, the aboleth ...") stays the GM's.
-- **An aura "of its choice"** (Salamander Fire Snake, SRD Azer and Salamander Fire Aura): its enemies (characters and companions), never the monsters of its side (`chosenAuraTargets`); before, the whole aura went to the GM.
+- **A condition's time** (`readRider`): "for 10 minutes", "for 1 hour" (`conditionDuration`). An immunity's "for 24 hours" is never taken
+  as the condition's time (Ghost Possession, found by the catalog diff).
+- **", until it takes damage,"** (Incubus Nightmare, Nalfeshnee Horror Nimbus): the record ends on damage (`notesEndsOnDamage`,
+  `wakeOnDamageSleep`); "or until a creature within 5 feet of it takes an action to wake it" is the GM's.
+- **"(demons succeed automatically)"** (Vrock Stunning Screech): `AutoSucceedTypes`, an automatic success in `rollForTarget` for a target
+  of that creature type or tag (`creatureTypeOf`, `creatureTypeWords`).
+- **"While Poisoned, the target has the Paralyzed condition"** (Chuul Paralyzing Tentacles; Harpy Luring Song): `lastingEffects.Also`, a
+  record noted `ends_with:<condition>` that `conditionChange.remove` ends with the first record. The Harpy's "ignores the Luring Song of
+  other harpies" and its movement stay the GM's.
+- **A saving throw aura at the end of the monster's turn** (the Aboleth's Mucus Cloud pattern): `saveEndAuraRe` / `endSaveAura`, the save
+  effect owner for every creature in the Emanation on the battle map, a success's immunity honored. A trait that opens with its own
+  condition ("While underwater, the aboleth ...") stays the GM's.
+- **An aura "of its choice"** (Azer Sentinel and Salamander Fire Aura): its enemies (characters and companions), never the monsters of its
+  side (`chosenAuraTargets`); before, the whole aura went to the GM.
 
-Verified as already handled (probe of the book text through the readers): Mud and Smoke Mephit (Death Burst, breath conditions until the end of the mephit's next turn), Myconid Adult Pacifying Spores (Stunned, repeat save, 1-minute limit), Kuo-toa Whip Pincer Staff (size-gated grapple, lockout) and Shield of Faith, Faerie Dragon Youth (Magic Resistance, Euphoria Breath's Incapacitated; its random movement is the GM's), Gas Spore Tendril, Modron Multiattacks, Winged Kobold Chromatic Spittle. Go: `TestPostgresBookTimedAndLinkedConditions`, `TestPostgresBookEndOfTurnAuras`.
+Go: `TestPostgresTimedAndLinkedConditions`, `TestAutoSucceedTypesReadTags`, `TestPostgresEndOfTurnAuras`.
 
 ## A monster's form (Shape-Shift) and form-limited entries
 
-`monster_shape_shift_2024.go`. A Shape-Shift entry ("shape-shifts into ... or it returns to its (true) ... form") is read by `shapeShiftForms`: its forms and its true form (Jackalwere: human, hybrid, true form jackal; Werewolf: hybrid, wolf, true humanoid; Imp: rat, raven, spider; Vampire: bat, mist, true vampire; Mimic: object, true blob). Sent with `use` naming a form, the entry records it (combat effect `shape_form`, kept across the monster's turns, ended with the fight); another word is refused. An entry named "(X or Y Form Only)" is refused in another form, alone or inside a Multiattack, before anything is rolled (`formRefusal`, read by `monsterEntryRefusal` and the Multiattack plan); the monster starts in its true form. What a form changes besides (size, a Speed, "can't speak in bat form") stays the GM's, as the reply says. Effect on the SRD: a lycanthrope's beast or hybrid attacks (and its Longbow or Handaxe in hybrid or humanoid form) now follow its form; the Vampire's Multiattack and Grave Strike need its vampire form.
-
-## A trait that acts when the creature receives a condition
-
-`monster_condition_traits_2024.go`: "If the flumph receives the Prone condition, roll a die. On an odd number, it has the Incapacitated condition. At the end of each of its turns, ... a DC 10 Dexterity saving throw, ending the Incapacitated condition on a success" (Flumph, Prone Deficiency). `conditionTakesHold` calls `conditionTraitReaction` for a monster or a companion once the condition took hold; the die is rolled and the second condition, with its repeated save, goes through `addCondition`. Go: `TestPostgresBookShapeShiftAndConditionTriggers`.
+`monster_shape_shift_2024.go`. A Shape-Shift entry ("shape-shifts into ... or it returns to its (true) ... form") is read by `shapeShiftForms`: its forms and its true form (Werewolf: hybrid, wolf, true humanoid; Imp: rat, raven, spider; Vampire: bat, mist, true vampire; Mimic: object, true blob). Sent with `use` naming a form, the entry records it (combat effect `shape_form`, kept across the monster's turns, ended with the fight); another word is refused. An entry named "(X or Y Form Only)" is refused in another form, alone or inside a Multiattack, before anything is rolled (`formRefusal`, read by `monsterEntryRefusal` and the Multiattack plan); the monster starts in its true form. What a form changes besides (size, a Speed, "can't speak in bat form") stays the GM's, as the reply says. Effect on the SRD: a lycanthrope's beast or hybrid attacks (and its Longbow or Handaxe in hybrid or humanoid form) now follow its form; the Vampire's Multiattack and Grave Strike need its vampire form. Go: `TestPostgresShapeShiftForms`.
 
 ## Obscured areas, senses and light (CR 0-1, 2026-11-21)
 
@@ -613,14 +561,15 @@ Verified as already handled (probe of the book text through the readers): Mud an
   with its duration, its source's Concentration or the GM (`end`: a strong wind or current). `areaBlocksSight` reads it (and Magical
   Darkness) for attack rolls (both unseen legs) and for "a creature it can see" targeting; only Blindsight perceives through fog and ink.
   The Ink Cloud's move ("moves up to its Swim Speed") and its underwater trigger stay the GM's (no underwater or movement state).
-- **Devil's Sight** ("Magical Darkness doesn't impede the X's Darkvision"): the creature's Darkvision sees into Magical Darkness.
+- **Darkvision unimpeded by magical Darkness** (the devils' and the Imp's Senses, "Darkvision 120 ft. (unimpeded by magical Darkness)"):
+  the creature's Darkvision sees into Magical Darkness (`creatureUnimpededDarkvision`).
 - **Sunlight Sensitivity / Sunlight Weakness**: while the GM's lighting is `sunlight` (POST /api/gm/set-lighting), Disadvantage on the
   creature's attack rolls and Hide check, and on its saving throws where the trait says D20 Tests (the Shadow).
 - **Shadow Stealth** and every stat block "takes the Hide action": rolled (`attemptMonsterHide`), refused outside the light the entry
   names; the hidden condition ends when the creature makes an attack roll. Pass without Trace cast by a monster gives any creature in its
   aura +10 to that check.
 - **GM by design, asserted**: telepathy and mind links (Probing Telepathy, Telepathic Bond, Shark Telepathy, Bound, Vampiric Connection,
-  Shielded Mind; the book's Advanced Telepathy and Telepathic Shroud; any trait worded with telepathy), senses that find things (Iron Scent, Treasure
+  Shielded Mind; any trait worded with telepathy), senses that find things (Iron Scent, Treasure
   Sense), speaking with creatures: `GM` rows of `monsterTraitRules`, shown to the GM as theirs to apply.
 
 ## A creature's special and forced movement (`cmd/server/creature_movement_2024.go`, 2026-11-21)
@@ -665,21 +614,16 @@ One owner of movement that isn't plain walking, every rule read from the entry's
 - **Dragging a creature it grapples** (SRD 5.2.1 Grappled): the move costs double unless the creature is Tiny or two sizes
   smaller (`dragCost`, read by the Speed note). A trait that says it "needn't spend extra movement to move a creature it is
   grappling" (Abduct) removes the cost.
-- **A fall** ("The X falls."): falling damage is `fallDamageDice` d6 Bludgeoning, the one rule of a fall's dice, also read by the
-  GM's falling damage. It is taken less what the entry reduces ("reduces any damage it takes from the fall by 20"), from the
-  token's altitude, and the token lands. Without a height the GM is told.
+- **Falling damage** is `fallDamageDice` d6 Bludgeoning, the one rule of a fall's dice (the GM's falling damage).
 - **Shape-Shift Speeds:** part of the one form owner (`monster_shape_shift_2024.go`): the GM names a form in `use`
   (`shapeShiftUseRefusal` refuses any other), and its Speeds (`formSpeeds`) stand for the monster's (`formSpeedText`, read by
   `monsterWalkSpeed` and the Speed list) until it shifts again.
 - **Not modelled:** Standing Leap, Running Leap and Jumper. The battle map has no pits or gaps a jump could cross, so a jump is
   just part of the move's distance; their traits stay in the GM's stat block.
 
-## The rest of the CR 0-1 entries (2026-11-21, after the areas work)
+## Blurred Form and Ignited Illumination (2026-11-21)
 
 - **Blurred Form** (SRD Steam Mephit): "Attack rolls against the mephit are made with Disadvantage unless the mephit has the Incapacitated condition": `attackedWithDisadvantage`, one row of `attackSources`, for every attacker (character, monster, companion); no Disadvantage while the mephit has any condition that includes Incapacitated.
 - **Ignited Illumination** (SRD Magmin): a light the monster switches on and off (`use` "ignite" or "extinguish", else the other state): combat effect `ablaze` (kept across its turns), read by the lighting owner's `monsterLightRadii`.
-- **Mind Corrosion** (Monster Manual Psychic Gray Ooze): its Reaction after it fails a save against a spell or a magical effect: `failedSaveReaction`, called by `saveCtx.resist` when the save's source is known (a character's spell through `monsterSpellSaveBy`; a monster's magical effect through `rollForTarget`), once a round, none while it can't take Reactions; the damage goes through the Hit Point owner of the creature that caused the save.
-- **Eldritch Lantern** (Monster Manual Kenku): "casts Faerie Fire" is the monster cast owner's (already handled).
-- **Rapport Spores** (Monster Manual Myconids): telepathy, no server state: the GM's, and the reply says so.
-- **Sticky Net** (Kuo-toa): the escape check "A creature can take an action to make a DC 10 Strength (Athletics) check to free itself" is the condition record's (`saveEffect.Escapes`, POST /api/conditions/escape); destroying the net (an object) and freeing another creature stay the GM's.
-- **Not built**: Sticky Shield (Kuo-toa: a Reaction to a missed melee weapon attack that sticks the weapon) needs a miss trigger and item state; Myconid Sun Sickness ("dies if it spends more than 1 hour in sunlight") needs a clock of time spent in sunlight (its D20 Tests Disadvantage reads the areas work's Sunlight owner where the wording matches).
+
+Go: `TestPostgresBlurredFormAndIgnitedLight`.

@@ -9,10 +9,10 @@ func TestPostgresMappedMonsterLightTiers(t *testing.T) {
 	f := reviewConcentrationSetup(t, func(m *srdMonster2024) {
 		m.Traits = []srdMonsterEntry{{Name: "Invented Beacon", Text: "The creature sheds Bright Light in a 10-foot radius and Dim Light for an additional 10 feet."}}
 	})
-	bright := referenceSaveTarget(t, f, "Bright target", -10, "", "")
-	dim := referenceSaveTarget(t, f, "Dim target", -10, "", "")
-	outside := referenceSaveTarget(t, f, "Outside light", -10, "", "")
-	behindWall := referenceSaveTarget(t, f, "Light shadow", -10, "", "")
+	bright := reviewSaveTarget(t, f, "Bright target", -10, "", "")
+	dim := reviewSaveTarget(t, f, "Dim target", -10, "", "")
+	outside := reviewSaveTarget(t, f, "Outside light", -10, "", "")
+	behindWall := reviewSaveTarget(t, f, "Light shadow", -10, "", "")
 	body := encounterMap{Grid: []string{"......", "#.....", "......"}, Tokens: []mapToken{
 		{ID: f.caster, Name: "Invented Beacon", Position: mapSquare{0, 0}, Size: 1},
 		{ID: bright, Name: "Bright target", Position: mapSquare{2, 0}, Size: 1},

@@ -1,7 +1,7 @@
 package main
 
 // Stat block data for the public character profile, modelled on the 2024
-// Monster Manual / SRD 5.2.1 stat block: Size, Speed, Alignment, Resistances,
+// SRD 5.2.1 stat block: Size, Speed, Alignment, Resistances,
 // Vulnerabilities, Immunities, then Traits, Actions, Bonus Actions, Reactions.
 // Everything here is derived from data the server already stores. Actions,
 // Bonus Actions and Reactions come from the wording of each feature's own

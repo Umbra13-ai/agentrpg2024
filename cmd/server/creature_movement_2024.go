@@ -1,6 +1,6 @@
 package main
 
-// A creature's special and forced movement (SRD 5.2.1 and the 2024 Monster Manual's movement wordings): one owner.
+// A creature's special and forced movement (the SRD 5.2.1 movement wordings): one owner.
 //
 //   - Every move a creature makes by itself on the battle map is recorded for the current turn (recordCreatureMove): the GM's
 //     map update (a token that moved without forced_movement), a player's path, a companion's path.
@@ -23,8 +23,6 @@ import (
 	"strconv"
 	"strings"
 	"sync"
-
-	"github.com/agentrpg/agentrpg/game"
 )
 
 // creatureMove: the last move a creature made by itself on the current turn (by the turn marker). In memory: a restart forgets it,
@@ -394,7 +392,6 @@ var (
 	teleportWithinRe = regexp.MustCompile(`(?i)\bteleports? to an unoccupied space within \d+ feet of [^.]*? within (\d+) feet of`)
 	moveUpToRe       = regexp.MustCompile(`(?i)\b(?:moves?|swims?|flies|fly|climbs?|burrows?) up to (half )?(?:its|their) (Swim |Fly |Climb |Burrow )?Speed(?: or (Swim|Fly|Climb|Burrow) Speed)?`)
 	jumpSpendRe      = regexp.MustCompile(`(?i)\bjumps? up to (\d+) (?:feet|ft\.?) by spending (\d+) (?:feet|ft\.?) of (?:its )?movement`)
-	moveFeetRe       = regexp.MustCompile(`(?i)\b(?:moves?|swims?|flies|fly|climbs?|burrows?) up to (\d+) (?:feet|ft)`)
 	noOARe           = regexp.MustCompile(`(?i)without provoking Opportunity Attacks`)
 	straightEnemyRe  = regexp.MustCompile(`(?i)straight toward an enemy`)
 	// an entry usable only right after the creature damaged a creature that was already Bloodied (Rampage)
@@ -424,8 +421,6 @@ func readSpecialMove(text string, speed func(kind string) int) (specialMove, boo
 		if m[1] != "" {
 			mv.Feet /= 2
 		}
-	case moveFeetRe.MatchString(text):
-		mv.Feet, _ = strconv.Atoi(moveFeetRe.FindStringSubmatch(text)[1])
 	default:
 		return specialMove{}, false
 	}
@@ -626,68 +621,8 @@ func dragCost(lobby, id int, before, after encounterMap) (double bool, why strin
 	return false, ""
 }
 
-// ---- a creature that falls (an entry that says "The piercer falls.": Drop). Falling damage is fallDamageDice d6 Bludgeoning (the
-// one rule of a fall's dice, also the GM's falling damage), less what the entry says it reduces ("reduces any damage it takes from
-// the fall by 20"), from its height on the battle map (its token's altitude); its token lands. Without a map or a height the GM is
-// told.
-var (
-	fallsRe      = regexp.MustCompile(`(?i)\bThe [\w' -]+ falls\.`)
-	fallReduceRe = regexp.MustCompile(`(?i)reduces any damage it takes from the fall by (\d+)`)
-)
-
+// ---- falling damage: fallDamageDice d6 Bludgeoning, the one rule of a fall's dice (the GM's falling damage, gm_environment.go).
 // fallDamageDice: how many d6 a fall of this many feet deals (1d6 per 10 feet, at least 1 for any fall, at most 20).
 func fallDamageDice(feet int) int {
 	return min(max(feet/10, 1), 20)
-}
-
-// monsterFalls: the entry's fall for the monster (apply), and the clause to add ("" when the entry has no fall).
-func monsterFalls(lobby, id int, text string, apply bool) string {
-	if !fallsRe.MatchString(text) {
-		return ""
-	}
-	reduce := 0
-	if m := fallReduceRe.FindStringSubmatch(text); m != nil {
-		reduce, _ = strconv.Atoi(m[1])
-	}
-	name := creatureName(lobby, id)
-	m, onMap := activeEncounterMap(lobby)
-	tk, onToken := m.token(id)
-	if !onMap || !onToken || tk.Altitude <= 0 {
-		less := ""
-		if reduce > 0 {
-			less = fmt.Sprintf(", less %d", reduce)
-		}
-		return fmt.Sprintf("%s falls: falling damage is 1d6 Bludgeoning for every 10 feet%s; its height isn't on the battle map, so the GM deals it (POST /api/gm/adjust-monster).", name, less)
-	}
-	n := fallDamageDice(tk.Altitude)
-	_, rolled := game.RollDice(n, 6)
-	dmg := max(rolled-reduce, 0)
-	if !apply {
-		return fmt.Sprintf("%s would fall %d ft: %dd6 = %d, less %d.", name, tk.Altitude, n, rolled, reduce)
-	}
-	land(lobby, id)
-	if dmg == 0 {
-		return fmt.Sprintf("%s falls %d ft and lands unhurt (%dd6 = %d, less %d).", name, tk.Altitude, n, rolled, reduce)
-	}
-	h, ok := hurtMonster(lobby, id, dmg, "bludgeoning", false)
-	if !ok {
-		return ""
-	}
-	return fmt.Sprintf("%s falls %d ft (%dd6 = %d, less %d): %s", name, tk.Altitude, n, rolled, reduce, h.Text)
-}
-
-// land puts the creature's token on the ground (altitude 0) on the battle map.
-func land(lobby, id int) {
-	m, ok := activeEncounterMap(lobby)
-	if !ok {
-		return
-	}
-	for i := range m.Tokens {
-		if m.Tokens[i].ID == id {
-			m.Tokens[i].Altitude = 0
-		}
-	}
-	m.Revision = mapRevision()
-	out, _ := json.Marshal(m)
-	db.Exec(`UPDATE combat_state SET battle_map = $1 WHERE lobby_id = $2 AND active = true`, string(out), lobby)
 }

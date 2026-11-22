@@ -2,21 +2,21 @@
 
 ## Combined monster effects checkpoint
 
-Code `bfae58940e238768b65e8fe1c94082f5daeeff98` was tested in tree `f8e91e0bd7af77205ebb599f6f58fb0ae2ff5b24`. The complete `go test -race ./... -count=1 -shuffle=on -json` run passed 1,086 cases, with two external-server skips and no race reports. The server package took 455.270 seconds. All 20 selected-mechanics cases passed with the four private fixtures enabled. Vet, formatting and API generation passed. Nine direct damage, preview and type mutations and the separate Immutable Form mutation triggered test assertions and were restored. See `VALIDATION-bfae589.json` and the named design documents for narrower route and mutation scopes.
+Code `bfae58940e238768b65e8fe1c94082f5daeeff98` was tested in tree `f8e91e0bd7af77205ebb599f6f58fb0ae2ff5b24`. The complete `go test -race ./... -count=1 -shuffle=on -json` run passed 1,086 cases, with two external-server skips and no race reports. The server package took 455.270 seconds. Vet, formatting and API generation passed. Nine direct damage, preview and type mutations and the separate Immutable Form mutation triggered test assertions and were restored. See `VALIDATION-bfae589.json` and the named design documents for narrower route and mutation scopes.
 
-This remains a proposed patch using one application database. The expanded Iron Golem attack, recharge and Magic Resistance probes are in a later worktree. Those results are separate from this full run. The complete ability and unique replacement acceptance requirements remain open.
+This remains a proposed patch using one application database. The expanded Iron Golem attack, recharge and Magic Resistance probes are in a later worktree. Those results are separate from this full run.
 
 
 ## Monster effects and rules checkpoint in validation
 
 The proposal now includes repairs for damage-only deliveries, save previews, Legendary Action previews, retained creature type under SRD 5.2.1, and Immutable Form. The latest code and documentation commits are recorded in the checkpoint manifest. The direct-damage path uses existing HP owners for character, monster and companion targets. A pending Concentration decision keeps later targets in saved work with the original damage roll. Compound clauses needing an unresolved trigger are referred to the GM.
 
-The named before-and-after probes are in `MONSTER_DIRECT_DAMAGE_DESIGN.md`, `MONSTER_RETAINED_TYPE.md`, and `MONSTER_IMMUTABLE_FORM_REVIEW.md`. Nine deliberately reintroduced defects in the direct, preview, and type repairs triggered test assertions and were restored. An additional Immutable Form mutation is recorded separately. The supplied reconstructed Iron Golem has route tests for Fire Absorption and Immutable Form. The 20 selected-mechanics cases passed on the previous full checkpoint. Complete ability testing for all required monsters and fresh replacement rounds remain open. A complete combined suite is being run before this code is promoted to the next validated checkpoint.
+The named before-and-after probes are in `MONSTER_DIRECT_DAMAGE_DESIGN.md`, `MONSTER_RETAINED_TYPE.md`, and `MONSTER_IMMUTABLE_FORM_REVIEW.md`. Nine deliberately reintroduced defects in the direct, preview, and type repairs triggered test assertions and were restored. An additional Immutable Form mutation is recorded separately. The 20 selected-mechanics cases passed on the previous full checkpoint. A complete combined suite is being run before this code is promoted to the next validated checkpoint.
 
 
 ## Source-turn timing checkpoint
 
-Code `0b1fc1e197cbbfd6d79c0529ee32e979cd67fb36` passed 1,075 cases in the complete shuffled race suite, with two external-server skips and no race reports. The server package took 412.243 seconds. The 20 selected-mechanics monster cases passed with all four private fixtures enabled. Four deliberately reintroduced timing defects triggered independent assertions, and the original source was restored each time. See `SOURCE_TURN_TIMING_DESIGN.md` and `VALIDATION-0b1fc1e.json` for route scopes and evidence. The separate compendium still uses the existing database. Complete ability coverage for twenty monsters and the unique replacement rounds remain open.
+Code `0b1fc1e197cbbfd6d79c0529ee32e979cd67fb36` passed 1,075 cases in the complete shuffled race suite, with two external-server skips and no race reports. The server package took 412.243 seconds. Four deliberately reintroduced timing defects triggered independent assertions, and the original source was restored each time. See `SOURCE_TURN_TIMING_DESIGN.md` and `VALIDATION-0b1fc1e.json` for route scopes and evidence. The separate compendium still uses the existing database.
 
 The next worktree reproduced damage-only issues through GM narration. Preview changed monster HP, applied actions skipped companions and did not count the daily use, and later targets took damage during pending Concentration. Those findings and subsequent repair tests are documented independently of this checkpoint.
 
@@ -25,7 +25,7 @@ The next worktree reproduced damage-only issues through GM narration. Preview ch
 
 Code `7c38ef1e88bc8bfbf3ac98b2565e2c2451ae19fb` passed a clean complete `go test -race ./... -count=1 -shuffle=on -json`: **1,066 passes, 2 external-server skips, 0 race reports**. Server elapsed 410.817s; shuffle seed 1795028088336632371. Vet/formatting pass; eight introduced regressions caught and restored; all three patches reproduce all 612 archive files. Exact documentation commit is recorded separately in the export manifest. Evidence: `VALIDATION-7c38ef1.json`, `full-journal-race.jsonl`, `journal-patch-application.json`, and the journal mutation directory.
 
-This closes the specifically reproduced damage/Concentration storage boundary and immediate Incapacitated cleanup defects for the named controls. It does not establish every combat entry path or all-ability monster acceptance. New source-turn probes are being developed in a separate child worktree; their results must not be attributed to this validated code. Continue the documented open paths and the original 20-monster every-ability / fresh-unique-replacement acceptance gate. No release sign-off. The prior in-progress notes below are historical development evidence.
+This closes the specifically reproduced damage/Concentration storage boundary and immediate Incapacitated cleanup defects for the named controls. New source-turn probes are being developed in a separate child worktree; their results must not be attributed to this validated code. No release sign-off. The prior in-progress notes below are historical development evidence.
 
 
 ## Active storage-boundary repair (2026-11-18, not signed off)
@@ -34,30 +34,30 @@ Work continues in the separate `monster-durable-concentration-guard` copy. The f
 
 Current focused result: 53 passes, zero failures (`journal-focused-4.jsonl`). The prior run's single failure was a fixture rejected for importing save +200 (allowed -10..30); +30 is legal and still guarantees the intended DC10 success. Production validation was not weakened. Eight deliberate regressions were caught by assertions (including a paired status+token mutation); restored source hashes match. A clean complete race/shuffle suite is still pending; no current full-suite or monster-acceptance claim. See `CONCENTRATION_STORAGE_BOUNDARY_DESIGN.md`. Exact code/docs hashes will be captured in the next external checkpoint manifest after validation.
 
-All other existing open labels remain unless a named newer test closes them. The original 20-monster every-ability acceptance ledger and fresh unique replacement rounds remain incomplete. Original/upstream/live systems and other AIs' artifacts remain untouched.
+All other existing open labels remain unless a named newer test closes them. Original/upstream/live systems and other AIs' artifacts remain untouched.
 
 
 ## Continuation checkpoint: shared combat pause (2026-11-18, WIP)
 
 Latest fully run code checkpoint: `59f89e816320706f337491fc07c2e28dbf87c09f` (1,053 race/shuffle passes, 2 external-server skips, no race reports; vet passes). The three patches reproduce its 608-file archive exactly. Twenty-five deliberate regressions were caught in two working-tree batches. This documentation commit adds the exact result; its hash is recorded in the external checkpoint manifest.
 
-**A newer storage-failure probe FAILS on that code:** HP commits, Concentration persistence fails and rolls back the continuation, then Command still executes. See `COMBAT_PAUSE_DESIGN.md`'s final section and the separate `journal-work` branch/worktree. This is an explicit release blocker. The preceding full-suite pass does not cover that subsequently written probe. Continue with same-transaction journaling and tested recovery, then the other listed entry paths and all-ability monster/replacement gate. No sign-off.
+**A newer storage-failure probe FAILS on that code:** HP commits, Concentration persistence fails and rolls back the continuation, then Command still executes. See `COMBAT_PAUSE_DESIGN.md`'s final section and the separate `journal-work` branch/worktree. This is an explicit release blocker. The preceding full-suite pass does not cover that subsequently written probe. No sign-off.
 
 
 The earlier completed race/shuffle checkpoint was `3c62f5ce75e9e57906581f8629b30034b11c633c`; the named 59f89e8 run above supersedes it for that code. These following working notes describe development before that run and are not release approval. It adds campaign command/clock guards, typed persisted turn/attack/save/companion continuations, GM resume/reconciliation, and an explicit boundary for failed request costs. All schema additions remain in the existing database. No upstream, original Drive artifact or live server was changed.
 
-Read `COMBAT_PAUSE_DESIGN.md` for exact before/after probes, fixture mistakes and corrections, mutation evidence and remaining paths. Twenty mutations were caught before the later private-notice/companion changes. Focused current tests cover real player attacks, monster multiattacks, saving-throw components/targets, multiple aura sources, turn countdowns, cold-process resume, private GM notices, companion/summon plans and Wild Shape. Do not promote those assertions into all-ability or all-entry-route coverage.
+Read `COMBAT_PAUSE_DESIGN.md` for exact before/after probes, fixture mistakes and corrections, mutation evidence and remaining paths. Twenty mutations were caught before the later private-notice/companion changes. Focused current tests cover real player attacks, monster multiattacks, saving-throw components/targets, multiple aura sources, turn countdowns, cold-process resume, private GM notices, companion/summon plans and Wild Shape.
 
 The first full shuffled run had 1,046 passes and two integration-test failures, corrected in focused runs. The following race/shuffle run stopped after 800 passes / 2 external-server skips at a fixture panic; a diagnostic proved a fixed character name caused a 409, and the fixture now uses a unique campaign name and checks status (repeat run passes). That checkpoint subsequently passed the named full run above; the separate newer journal repair needs its own clean complete suite. Exact code/docs commit, logs, source snapshot and patch belong in a separate checkpoint manifest, not a self-referential hash in this file.
 
 Continue in the separate copy: finish Flurry, spell/item/reflection/map-entry sequences; reproduce/close persistence-failure and source-turn rider gaps; mutation-check the later additions; then re-run the complete suite. The pending lifecycle boundary is not yet closed. Existing concentration/reaction undo, durable notice fallback and other open labels below remain open unless a newer named test proves otherwise.
 
-Private reference preparation downloaded the supplied split Word files read-only, with hashes and Drive ids retained outside the repository. Parsing yielded 387 candidate blocks and 20 rejects; they are reconstructed-text candidates, never printed-book verification. A pool of 127 non-SRD candidates excludes the earlier 91 CR10+ swept names and all SRD names. None is a new behavioral pass. The original 20-monster every-ability ledger and the required fresh unique replacement rounds are NOT completed. Never call import/selected-attack sweeps a full monster pass.
+None is a new behavioral pass. Never call import/selected-attack sweeps a full monster pass.
 
 
 ## Validated repair checkpoint (2026-11-18)
 
-Six reproduced defects are repaired in the separate successor copy: the five concentration failures plus stale snapshots restoring resistance uses. The complete race-enabled suite passed (1,031 cases; 2 external-server skips), vet and formatting passed, and 18 targeted mutations were caught. Code and documentation are committed together; exact commit and patch baselines are in the checkpoint bundle manifest. See MONSTER_REPAIR_LOG.md for scope, failed-run evidence and mutation limitations. **Not release-ready:** pending-dependent progression, complete ability conformance and the unique replacement-monster loop remain open. The earlier work-in-progress notes below are historical; this validation update supersedes their test-status statements.
+Six reproduced defects are repaired in the separate successor copy: the five concentration failures plus stale snapshots restoring resistance uses. The complete race-enabled suite passed (1,031 cases; 2 external-server skips), vet and formatting passed, and 18 targeted mutations were caught. Code and documentation are committed together; exact commit and patch baselines are in the checkpoint bundle manifest. See MONSTER_REPAIR_LOG.md for scope, failed-run evidence and mutation limitations. The earlier work-in-progress notes below are historical; this validation update supersedes their test-status statements.
 
 ## 2026-11-18 repair checkpoint (work in progress)
 
@@ -67,13 +67,15 @@ A separate successor copy repairs five independently reproduced concentration de
 Working copy: branch monster-fix-instinct (separate copy of the code). Nothing was deployed, pushed or changed upstream; the original code,
 other AIs' files and the live server are untouched. Detail and history: docs/MONSTER_REMAINING_WORK.md and docs/MONSTER_SYSTEM.md.
 
-## Objective (Matt)
-Import a high-CR, non-SRD monster's full stats and let the shared combat rules handle attacks, damage, defenses and special abilities,
-with no monster-specific code. Anything unresolvable is flagged to the GM, never ignored or guessed.
+## Objective (owner, Nov 21: scope change)
+Every one of the 330 SRD 5.2.1 stat blocks (`cmd/server/data/srd521_monsters.json`) works through the shared combat rules, with no
+monster-specific code: every sentence is applied by a named rule or flagged to the GM, nothing silent (`TestSRDMonsterSentenceCoverage`).
+The earlier 2024 Monster Manual work is stopped and archived outside the repository; every monster text pattern must match an SRD stat
+block or an invented test monster (`TestMonsterPatternsServeSRDWording`). The GM import route stays, as a generic feature for a GM's own
+monsters.
 
 ## Provenance
-Stat blocks are Matt's supplied reconstructed text, NOT verified against the printed book. Repo tests use invented text. Book-derived
-fixtures stay out of the repo (private Drive zip).
+Rules are read from the SRD 5.2.1 data in the repository. Tests use the SRD stat blocks or invented text with SRD wording.
 
 ## What is automated (route-tested: a test drives the real HTTP route and checks stored state)
 - Attack rolls from stat-block text against characters, companions and monsters: damage, resistance, immunity, vulnerability, absorption,
@@ -97,11 +99,11 @@ unknown-type spell targets, size-gated conditions on companions, Legendary Resis
 ## Unsupported
 - Monster Concentration for anything outside the server's spell path (a trait, GM words, an item): only the conditional GM reminder exists there. Server-resolved Concentration spells ARE tracked (see below).
 - Legendary and lair actions, recharge details, auras and most free-form traits beyond what the shared owners handle.
-- Monster movement enforcement (a note only). Original-book verification.
+- Monster movement enforcement (a note only).
 - Spell restrictions beyond five creature-type spells, forms other than Polymorph and Wild Shape.
 
 ## Coverage levels (never merged)
-- Parsed/imported: 91 of 91 CR 10+ reconstructed stat blocks. Not mechanics coverage.
+Not mechanics coverage.
 - Attack-roll route sweep: 123 attack rolls automated and route-exercised. Spellcasting route sweep: 103 rolled by shared rules, 219 handed to
   the GM with the spell named, 1 refused (ineligible type), 0 silent.
 - Repo test functions: 505 in cmd/server. Last clean full run: see the latest commit in the report (-shuffle=on).
@@ -127,21 +129,21 @@ SAVE_ROUTE, SAVE_ACTIONS, ROUTE_SWEEP, SPELLCASTING, README, MONSTER_SYSTEM.md c
 
 Code `16d3c4c4a3d8a1141ef9eb067e236b0152f64d81` passed 1,099 shuffled race cases with two external-server skips and zero race reports. Three isolated mutations detected the regressions in explicitly magical saves, companion condition immunity and Exhaustion immunity. The originals were restored. See `IRON_GOLEM_ABILITY_PROGRESS.md` for the exact scope of the seven named ability checks, fixture corrections and open interactions.
 
-The twenty selected-mechanics cases passed. The every-ability gate and first-run replacement loop are open. A fresh CR 9 private import reproduced further rule defects after this checkpoint. The sources and evidence for that work are tracked separately until validated.
+The twenty selected-mechanics cases passed. The sources and evidence for that work are tracked separately until validated.
 
 ## Fresh-candidate combat checkpoint f1b3fb2
 
-The full PostgreSQL suite at code `f1b3fb2a0075219a934a62be617c91faabb9f71c` passed 1,108 cases with two external-server skips and no race reports. The server suite took 510.581 seconds. Its shuffle seed was 1795044778117150366. Static vet and whitespace checks passed. The 20 selected-mechanics cases and the named fresh candidate probes ran with the private fixtures enabled.
+The full PostgreSQL suite at code `f1b3fb2a0075219a934a62be617c91faabb9f71c` passed 1,108 cases with two external-server skips and no race reports. The server suite took 510.581 seconds. Its shuffle seed was 1795044778117150366. Static vet and whitespace checks passed.
 
-The shared HP and attack owners now apply the tested damage-triggered Disadvantage rule. Condition riders can honor a damage immunity prerequisite, and success immunities use their stated duration and separate action keys. Unresolved immunity duration and applicable manual ability checks reach the GM privately. See `FRESH_MONSTER_FIRST_RUN.md` and `MONSTER_ACCEPTANCE_LEDGER.md` for the evidence and scopes.
+The shared HP and attack owners now apply the tested damage-triggered Disadvantage rule. Success immunities use their stated duration and separate action keys. Unresolved immunity duration and applicable manual ability checks reach the GM privately.
 
-The first fresh candidate failed its first run. Its targeted rerun covered the repaired damage trigger and save effects. Later independent targeting checks uncovered missing range, target-count and sight requirements. Those targeting changes are being tested in a separate worktree and are outside this complete-run result. The every-ability and fresh replacement acceptance gates remain open.
+The first fresh candidate failed its first run. Its targeted rerun covered the repaired damage trigger and save effects. Later independent targeting checks uncovered missing range, target-count and sight requirements. Those targeting changes are being tested in a separate worktree and are outside this complete-run result.
 
 
 ## Movement, aura and GM charge checkpoint
 
-Code `3f1d93b8497129b0e61305e53d46160da9fb42b3` passed 1,127 cases in a clean PostgreSQL race and shuffle run. The two skips are external-server endpoint checks. No race reports occurred. The 20 selected-mechanics cases and the named reconstructed-monster checks ran with the private fixtures. An earlier full run at `8126c1b` had 1,126 passes, two skips and one failure from the central GM scope registry. The condition source is registered with that guard in the validated code. The failing and corrected runs are retained.
+Code `3f1d93b8497129b0e61305e53d46160da9fb42b3` passed 1,127 cases in a clean PostgreSQL race and shuffle run. The two skips are external-server endpoint checks. No race reports occurred. An earlier full run at `8126c1b` had 1,126 passes, two skips and one failure from the central GM scope registry. The condition source is registered with that guard in the validated code. The failing and corrected runs are retained.
 
 The patch gates saves that require a verified move, delivers supported mapped end-of-turn damage to characters, monsters and companions through the shared damage owner, and resumes later aura effects after a pending Concentration decision. It also applies continuous mapped monster light to attack visibility, records a GM-adjudicated Recharge use and preserves campaign-scoped source and grapple links. The approved manual charge workflow updates affected HP, mapped position, linked conditions and Recharge in the same application database. See `BRAZEN_GORGON_FIRST_RUN.md` for the exact route and fixture scope.
 
-The supported failed-save charge path was tested. Successful saves, additional eligible targets and an occupied grapple slot still require checks. Separate range and real initiative Recharge probes ran on a successor test branch. The first-run attempts for the Yeti, Gorgon and Gray Slaad all failed. The Gray Slaad fixes remain in a separate worktree. Zero complete every-ability passes and zero fully passing first-run replacements have been certified.
+The supported failed-save charge path was tested. Successful saves, additional eligible targets and an occupied grapple slot still require checks. Separate range and real initiative Recharge probes ran on a successor test branch.

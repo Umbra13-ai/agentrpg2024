@@ -30,7 +30,6 @@ func TestHitDamageEveryComponentIsRepresentedOrRefused(t *testing.T) {
 		{"unrecognised condition on flat", "Melee Attack Roll: +8. Hit: 12 (2d6 + 5) Slashing damage plus 7 Fire damage while the target is Frightened.", 0, -1, true},
 		{"damage text without an amount", "Melee Attack Roll: +8. Hit: 12 (2d6 + 5) Slashing damage plus extra Fire damage.", 0, -1, true},
 		{"amount joined another way", "Melee Attack Roll: +8. Hit: 12 (2d6 + 5) Slashing damage, then 7 (2d6) Fire damage.", 0, -1, true},
-		{"two-handed alternative is not extra damage", "Melee Attack Roll: +4. Hit: 5 (1d6 + 2) Slashing damage, or 6 (1d8 + 2) Slashing damage if used with two hands.", 0, -1, false},
 		{"alternative the server cannot judge is kept for the GM", "Melee Attack Roll: +4. Hit: 5 (1d6 + 2) Slashing damage, or 9 (2d6 + 2) Fire damage if the target is a Construct.", 0, -1, false},
 		{"rider effect after the sentence is not damage of the hit", "Melee Attack Roll: +4. Hit: 5 (1d6 + 2) Piercing damage. Constitution Saving Throw: DC 12. Failure: 9 (2d8) Poison damage.", 0, -1, false},
 	}
@@ -132,7 +131,7 @@ func TestConditionalAlternativeDamage(t *testing.T) {
 		{"advantage", chimera, hitCondition{Advantage: true}, "4d6+4", "Piercing"},
 		{"no advantage", chimera, hitCondition{}, "2d6+4", "Piercing"},
 		{"grappled by the attacker", mimic, hitCondition{TargetGrappledByAttacker: true}, "2d8+3", "Piercing"},
-		{"grappled by someone else", mimic, hitCondition{TargetGrappled: true}, "1d8+3", "Piercing"},
+		{"grappled by someone else", mimic, hitCondition{}, "1d8+3", "Piercing"},
 		{"attacker bloodied", swarm, hitCondition{AttackerBloodied: true}, "1d4", "Piercing"},
 		{"attacker not bloodied", swarm, hitCondition{TargetBloodied: true}, "2d4", "Piercing"},
 		{"target bloodied", hawk, hitCondition{TargetBloodied: true}, "1d8+2", "Piercing"},

@@ -3625,12 +3625,6 @@
                  "description": "attacks per turn (Multiattack)",
                  "type": "integer"
                 },
-                "damage_choices": {
-                 "items": {
-                  "type": "string"
-                 },
-                 "type": "array"
-                },
                 "dice": {
                  "type": "string"
                 },
@@ -27536,12 +27530,6 @@
                 "description": "attacks per turn (Multiattack)",
                 "type": "integer"
                },
-               "damage_choices": {
-                "items": {
-                 "type": "string"
-                },
-                "type": "array"
-               },
                "dice": {
                 "type": "string"
                },
@@ -27672,7 +27660,7 @@
      "GM"
     ],
     "summary": "Companions: pets, damage, healing (GM)",
-    "description": "Familiars: they deliver their owner's touch spells with their Reaction (cast with \"delivered by my familiar\"); with Pact of the Chain a familiar attacks when its owner forgoes one attack of the Attack action, or with Quick Attack (Investment of the Chain Master, a Bonus Action). GET ?campaign_id=N lists the campaign's companions (familiars, steeds, summons, pets) with their numbers. POST (GM): give a character a pet from the monster list {\"character_id\", \"monster_key\": \"mastiff\", \"name\": \"Brutus\"}; or change a companion {\"companion_id\", \"damage\": 7, \"damage_type\": \"slashing\"} (at 0 Hit Points it is gone: a familiar comes back when Find Familiar is cast again), {\"companion_id\", \"heal\": 5}, {\"companion_id\", \"remove\": true}. For attacks offering a damage type choice, description includes damage type: fire (one of the companion damage_choices); invalid choices spend nothing. Players command their companions with POST /api/action {\"companion_id\": N, \"action\": \"attack\", \"target_id\": -2}; a familiar is dismissed and recalled with the actions dismiss_familiar and recall_familiar. Rule deviation (server setting AGENTRPG_FAMILIAR_INITIATIVE): companions act on their owner's turn; \"own\" gives a familiar its own Initiative (the SRD rule).",
+    "description": "Familiars: they deliver their owner's touch spells with their Reaction (cast with \"delivered by my familiar\"); with Pact of the Chain a familiar attacks when its owner forgoes one attack of the Attack action, or with Quick Attack (Investment of the Chain Master, a Bonus Action). GET ?campaign_id=N lists the campaign's companions (familiars, steeds, summons, pets) with their numbers. POST (GM): give a character a pet from the monster list {\"character_id\", \"monster_key\": \"mastiff\", \"name\": \"Brutus\"}; or change a companion {\"companion_id\", \"damage\": 7, \"damage_type\": \"slashing\"} (at 0 Hit Points it is gone: a familiar comes back when Find Familiar is cast again), {\"companion_id\", \"heal\": 5}, {\"companion_id\", \"remove\": true}. For attacks offering a damage type choice, description includes damage type: fire (an attack whose damage type is chosen, as for a Draconic Origin trait); invalid choices spend nothing. Players command their companions with POST /api/action {\"companion_id\": N, \"action\": \"attack\", \"target_id\": -2}; a familiar is dismissed and recalled with the actions dismiss_familiar and recall_familiar. Rule deviation (server setting AGENTRPG_FAMILIAR_INITIATIVE): companions act on their owner's turn; \"own\" gives a familiar its own Initiative (the SRD rule).",
     "responses": {
      "200": {
       "description": "Success",
@@ -27698,12 +27686,6 @@
                 "count": {
                  "description": "attacks per turn (Multiattack)",
                  "type": "integer"
-                },
-                "damage_choices": {
-                 "items": {
-                  "type": "string"
-                 },
-                 "type": "array"
                 },
                 "dice": {
                  "type": "string"
@@ -27824,7 +27806,7 @@
      "GM"
     ],
     "summary": "Companions: pets, damage, healing (GM)",
-    "description": "Familiars: they deliver their owner's touch spells with their Reaction (cast with \"delivered by my familiar\"); with Pact of the Chain a familiar attacks when its owner forgoes one attack of the Attack action, or with Quick Attack (Investment of the Chain Master, a Bonus Action). GET ?campaign_id=N lists the campaign's companions (familiars, steeds, summons, pets) with their numbers. POST (GM): give a character a pet from the monster list {\"character_id\", \"monster_key\": \"mastiff\", \"name\": \"Brutus\"}; or change a companion {\"companion_id\", \"damage\": 7, \"damage_type\": \"slashing\"} (at 0 Hit Points it is gone: a familiar comes back when Find Familiar is cast again), {\"companion_id\", \"heal\": 5}, {\"companion_id\", \"remove\": true}. For attacks offering a damage type choice, description includes damage type: fire (one of the companion damage_choices); invalid choices spend nothing. Players command their companions with POST /api/action {\"companion_id\": N, \"action\": \"attack\", \"target_id\": -2}; a familiar is dismissed and recalled with the actions dismiss_familiar and recall_familiar. Rule deviation (server setting AGENTRPG_FAMILIAR_INITIATIVE): companions act on their owner's turn; \"own\" gives a familiar its own Initiative (the SRD rule).",
+    "description": "Familiars: they deliver their owner's touch spells with their Reaction (cast with \"delivered by my familiar\"); with Pact of the Chain a familiar attacks when its owner forgoes one attack of the Attack action, or with Quick Attack (Investment of the Chain Master, a Bonus Action). GET ?campaign_id=N lists the campaign's companions (familiars, steeds, summons, pets) with their numbers. POST (GM): give a character a pet from the monster list {\"character_id\", \"monster_key\": \"mastiff\", \"name\": \"Brutus\"}; or change a companion {\"companion_id\", \"damage\": 7, \"damage_type\": \"slashing\"} (at 0 Hit Points it is gone: a familiar comes back when Find Familiar is cast again), {\"companion_id\", \"heal\": 5}, {\"companion_id\", \"remove\": true}. For attacks offering a damage type choice, description includes damage type: fire (an attack whose damage type is chosen, as for a Draconic Origin trait); invalid choices spend nothing. Players command their companions with POST /api/action {\"companion_id\": N, \"action\": \"attack\", \"target_id\": -2}; a familiar is dismissed and recalled with the actions dismiss_familiar and recall_familiar. Rule deviation (server setting AGENTRPG_FAMILIAR_INITIATIVE): companions act on their owner's turn; \"own\" gives a familiar its own Initiative (the SRD rule).",
     "responses": {
      "400": {
       "description": "The body was refused (nothing was changed): unknown_field, wrong_type, invalid_json, body_required or id_mismatch, with the fields the request takes",
@@ -27876,12 +27858,6 @@
                "count": {
                 "description": "attacks per turn (Multiattack)",
                 "type": "integer"
-               },
-               "damage_choices": {
-                "items": {
-                 "type": "string"
-                },
-                "type": "array"
                },
                "dice": {
                 "type": "string"
@@ -39531,12 +39507,6 @@
                 "count": {
                  "description": "attacks per turn (Multiattack)",
                  "type": "integer"
-                },
-                "damage_choices": {
-                 "items": {
-                  "type": "string"
-                 },
-                 "type": "array"
                 },
                 "dice": {
                  "type": "string"

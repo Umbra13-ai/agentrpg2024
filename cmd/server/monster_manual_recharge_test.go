@@ -9,12 +9,12 @@ import (
 func TestPostgresGMRecordsManuallyResolvedRecharge(t *testing.T) {
 	f := reviewConcentrationSetup(t, func(m *srdMonster2024) {
 		m.Actions = []srdMonsterEntry{
-			{Name: "Rush Pulse (Recharge 6)", Text: "The creature moves up to its Speed. Each time it enters a creature's space during this move, that target is subject to the following effect. Constitution Saving Throw: DC 15. Failure: 7 (2d6) Force damage."},
+			{Name: "Rush Pulse (Recharge 6)", Text: "Constitution Saving Throw: DC 15, each creature in a 15-foot Cone. Failure: 7 (2d6) Force damage. Success: Half damage."},
 			{Name: "Ordinary Pulse", Text: "Constitution Saving Throw: DC 15, one target within 30 feet. Failure: 7 (2d6) Force damage."},
 		}
 	})
-	target := referenceSaveTarget(t, f, "Manual recharge control", -10, "", "")
-	ironGolemMap(t, f, map[int]int{target: 2})
+	target := reviewSaveTarget(t, f, "Manual recharge control", -10, "", "")
+	reviewMap(t, f, map[int]int{target: 2})
 	spend := func(token, action string) (int, map[string]interface{}) {
 		return pgCall(t, "POST", "/api/gm/monster-features", token, map[string]interface{}{
 			"campaign_id": f.camp, "combatant_id": f.caster, "spend_recharge": action,
@@ -41,7 +41,7 @@ func TestPostgresGMRecordsManuallyResolvedRecharge(t *testing.T) {
 	if code, j := spend(f.gm, "rush pulse"); code != 409 || j["error"] != "recharge_spent" {
 		t.Fatalf("duplicate use was not refused: %d %v", code, j)
 	}
-	reply := ironGolemAction(t, f, "Rush Pulse", map[string]interface{}{"target_ids": []int{target}, "confirm_targeting": true})
+	reply := reviewMonsterAction(t, f, "Rush Pulse", map[string]interface{}{"target_ids": []int{target}, "confirm_targeting": true})
 	if result := fmt.Sprint(reply["monster_action_result"]); !strings.Contains(result, "hasn't recharged yet") {
 		t.Fatalf("ordinary action path did not see the recorded use: %s", result)
 	}

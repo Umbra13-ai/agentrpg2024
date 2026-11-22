@@ -102,56 +102,6 @@ func TestPostgresItemCorrosion(t *testing.T) {
 		t.Fatalf("Corrosive Form: corrosion %d: %s", corrosion("Shortsword"), res)
 	}
 
-	// a Reaction to a melee weapon attack that missed: the weapon sticks fast (refused in an attack), the wielder is Grappled, and
-	// use_item on the weapon is the action that frees it
-	g := compendiumFixture()
-	g.Name, g.Type, g.Legendary, g.LegendaryIn, g.Traits, g.AC = "Glue Warden", "Aberration", nil, "", nil, 50
-	g.Actions = []srdMonsterEntry{{Name: "Poke", Text: "Melee Attack Roll: +1, reach 5 ft. Hit: 1 (1d1) Piercing damage."}}
-	g.Reactions = []srdMonsterEntry{{Name: "Gummy Buckler", Text: "Trigger: A creature misses the warden with a melee attack roll using a weapon. Response—Strength Saving Throw: DC 40, the triggering creature. Failure: The attack’s weapon sticks to the warden’s buckler. If the target doesn’t let go of the weapon, the target has the Grappled condition while the weapon is stuck (escape DC 11). While stuck, the weapon can’t be used. The target can take an action to make a DC 1 Strength (Athletics) check, freeing the weapon on a success."}}
-	status, imported = pgCall(t, "POST", "/api/gm/compendium/monsters", gm, map[string]interface{}{"campaign_id": camp, "source_note": "invented sticky fixture", "monsters": []srdMonster2024{g}})
-	if status != 201 {
-		t.Fatalf("import the warden: %d %v", status, imported)
-	}
-	gkey := fmt.Sprint(imported["monsters"].([]interface{})[0].(map[string]interface{})["monster_key"])
-	t.Cleanup(func() { db.Exec(`DELETE FROM custom_monsters WHERE key=$1`, gkey) })
-	pgCall(t, "POST", fmt.Sprintf("/api/campaigns/%d/combat/add", camp), gm, map[string]interface{}{"combatants": []map[string]interface{}{
-		{"name": "Glue Warden", "monster_key": gkey, "hp": 500, "ac": 50, "initiative": -900}}})
-	warden := monsterIDsByKeyOrName(camp, "Glue Warden")[0]
-	// no miss yet: the Reaction refuses
-	if _, r := pgCall(t, "POST", "/api/gm/narrate", gm, map[string]interface{}{"campaign_id": camp, "narration": "x",
-		"monster_action": map[string]interface{}{"monster": "Glue Warden", "action": "Gummy Buckler"}}); !strings.Contains(fmt.Sprint(r["monster_action_result"]), "none did this turn") {
-		t.Errorf("the Reaction without a miss: %v", r["monster_action_result"])
-	}
-	for n := 0; n < 20; n++ { // a natural 20 hits even AC 50: until a miss
-		pgExec(t, `UPDATE characters SET action_used = false, attacks_remaining = NULL WHERE id = $1`, charID)
-		resetTurnFlags(charID, 30)
-		pgCall(t, "POST", "/api/action", player, map[string]interface{}{"character_id": charID, "action": "attack", "target_id": warden, "description": "I stab the warden with my Shortsword"})
-		if _, ok := thisTurnMissOnMonster(camp, warden); ok {
-			break
-		}
-	}
-	_, r := pgCall(t, "POST", "/api/gm/narrate", gm, map[string]interface{}{"campaign_id": camp, "narration": "x",
-		"monster_action": map[string]interface{}{"monster": "Glue Warden", "action": "Gummy Buckler"}})
-	res = fmt.Sprint(r["monster_action_result"])
-	stuck := carriedItem(charID, "Shortsword")
-	if itemNum(stuck, "stuck_dc") != 1 || !strings.Contains(res, "sticks fast") || !strings.Contains(res, "escape DC 11") || strings.Contains(res, "let go of the weapon, the target") || strings.Contains(res, "GM handles") {
-		t.Fatalf("Sticky Shield: stuck %v: %s", stuck, res)
-	}
-	if !hasCondition(charID, "grappled") {
-		t.Errorf("the wielder isn't Grappled: %v", getCharConditions(charID))
-	}
-	pgExec(t, `UPDATE characters SET action_used = false, attacks_remaining = NULL WHERE id = $1`, charID)
-	if _, r := pgCall(t, "POST", "/api/action", player, map[string]interface{}{"character_id": charID, "action": "attack", "target_id": warden, "description": "I stab the warden with my Shortsword"}); !strings.Contains(fmt.Sprint(r), "stuck to") {
-		t.Errorf("an attack with the stuck weapon: %v", r)
-	}
-	pgExec(t, `UPDATE characters SET action_used = false WHERE id = $1`, charID)
-	if _, r := pgCall(t, "POST", "/api/action", player, map[string]interface{}{"character_id": charID, "action": "use_item", "item": "Shortsword", "description": "I pull my Shortsword free"}); !strings.Contains(fmt.Sprint(r), "free") {
-		t.Errorf("freeing it: %v", r)
-	}
-	if itemNum(carriedItem(charID, "Shortsword"), "stuck_dc") != 0 || hasCondition(charID, "grappled") {
-		t.Errorf("after freeing: stuck %v, grappled %v", carriedItem(charID, "Shortsword"), hasCondition(charID, "grappled"))
-	}
-
 	// Mending removes it
 	if line := mendItem(charID, "mend my shortsword"); corrosion("Shortsword") != 0 || !strings.Contains(line, "Shortsword") {
 		t.Errorf("Mending: corrosion %d: %s", corrosion("Shortsword"), line)

@@ -426,7 +426,7 @@ func charmEndsOnDamage(lobbyID, id int, name string) string {
 	return out
 }
 
-// sourceIsSpell: a condition record's source is the spell, cast by a character ("Sleep") or a monster ("Pixie (Sleep)").
+// sourceIsSpell: a condition record's source is the spell, cast by a character ("Sleep") or a monster ("<monster> (Sleep)").
 func sourceIsSpell(source, spell string) bool {
 	return strings.EqualFold(source, spell) || strings.HasSuffix(strings.ToLower(source), " ("+strings.ToLower(spell)+")")
 }

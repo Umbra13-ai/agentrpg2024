@@ -567,11 +567,6 @@ func conditionTakesHold(lobbyID, targetID int, cond, source string) map[string]i
 			}
 		}
 	}
-	if targetID < 0 || isCompanionCombatID(targetID) { // a trait that acts when the creature receives the condition (Prone Deficiency)
-		if n := conditionTraitReaction(lobbyID, targetID, cond); n != "" {
-			notes["trait"] = n
-		}
-	}
 	if len(notes) == 0 {
 		return nil
 	}

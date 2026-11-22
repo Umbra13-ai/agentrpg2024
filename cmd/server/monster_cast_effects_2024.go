@@ -266,7 +266,7 @@ func monsterCastHealing(r *http.Request, lobbyID, monsterID int, sp SRDSpell, sl
 }
 
 // monsterCastEndsConditions: a monster's cast of a spell that only ends conditions (Lesser Restoration, Protection from Poison's
-// ending; Empyrean Iota): the same table as a character's cast (spellEndsConditions, endSpellConditions). For a spell that ends one
+// ending): the same table as a character's cast (spellEndsConditions, endSpellConditions). For a spell that ends one
 // condition of a list, the GM's use names it ("poisoned"), else the first the target has. A healing spell's conditions end in
 // monsterCastHealing, before it heals.
 func monsterCastEndsConditions(r *http.Request, lobbyID, monsterID int, sp SRDSpell, slug, head string, targets []int, selfCast, apply bool, use string) ([]string, bool) {

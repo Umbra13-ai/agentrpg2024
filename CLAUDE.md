@@ -3,10 +3,12 @@
 **Read `ENGINEERING_STANDARDS.md` first and follow it on every task** (the owner's permanent engineering standards for every
 coding agent). This file adds this project's own rules.
 
-For AI coding sessions working on the Agent RPG 2024 server (Go; code in `cmd/server` and `game/`). The built-in rules and public catalog use the D&D SRD 5.2.1. GMs may import additional
-structured 2024 monsters into the separate shared compendium in the existing database.
-Importing text does not implement unfamiliar rules; unsupported effects require GM
-adjudication. Multiclassing is not supported and must never be offered or documented as an option (`multiclassAllowed`
+For AI coding sessions working on the Agent RPG 2024 server (Go; code in `cmd/server` and `game/`). The built-in rules and public catalog use the D&D SRD 5.2.1. **Monster rules target the 330 SRD 5.2.1 stat blocks
+(`cmd/server/data/srd521_monsters.json`) only** (owner, Nov 21): every monster text pattern must match an SRD stat block or an
+invented test monster (`TestMonsterPatternsServeSRDWording`); never add a rule, comment, test or doc built from Monster Manual text
+outside the SRD (the earlier 2024 Monster Manual work is archived outside the repository). GMs may import their own structured
+monsters into the separate shared compendium in the existing database (a generic feature); importing text does not implement
+unfamiliar rules, and wording no rule reads is flagged to the GM. Multiclassing is not supported and must never be offered or documented as an option (`multiclassAllowed`
 always answers no). `AGENTS.md` describes the repository and `BUILD.md` how to build, run and test. If the owner's
 notes are attached to your session, read their handoff file first for the standing rules and the current state.
 
@@ -74,24 +76,22 @@ Report: "Wizard Scholar accepts any skill for Expertise."
   An action that offers several named effects (splitSaveOptions) is refused until the GM names one in `use`; a size-gated
   condition (saveEffect.conditionsFor) and a staged "Second Failure" go through the same owner, never a per-monster branch.
   The conditions a stat-block hit gives (parseHitRider, giveConditions) are read and applied by that same owner.
-  A condition's time is read once (`readRider`): "for N minutes/hours" and a rolled "for 1d4 hours" (`conditionDuration`, rolled for each
-  target in `conditionAdd`; never an immunity's "for 24 hours"), "or until it takes damage" (an Unconscious ended by `wakeOnDamageSleep`);
-  "(Constructs and Undead succeed automatically)" is `AutoSucceedTypes`, read by `rollForTarget` for every target kind. **An aura at the end
-  of the monster's turn** (`runMonsterEndAuras`): damage (`endAuraRe`) or a saving throw (`saveEndAuraRe`, `endSaveAura`, a success's
-  immunity honored); "of its choice" is its enemies (`chosenAuraTargets`). Go: `TestPostgresBookTimedAndLinkedConditions`,
-  `TestPostgresBookEndOfTurnAuras`.
+  A condition's time is read once (`readRider`): "for N minutes/hours" (`conditionDuration`; never an immunity's "for 24 hours"),
+  ", until it takes damage," (Incubus, Nalfeshnee: a condition ended by `wakeOnDamageSleep`); "(demons succeed automatically)" (Vrock) is
+  `AutoSucceedTypes`, read by `rollForTarget` for every target kind against the type and its tags (`creatureTypeWords`). **An aura at the
+  end of the monster's turn** (`runMonsterEndAuras`): damage (`endAuraRe`) or a saving throw (`saveEndAuraRe`, `endSaveAura`, a success's
+  immunity honored); "of its choice" is its enemies (`chosenAuraTargets`). Go: `TestPostgresTimedAndLinkedConditions`,
+  `TestPostgresEndOfTurnAuras`.
 - **A monster's form** (`cmd/server/monster_shape_shift_2024.go`): `shapeShiftForms` reads a Shape-Shift entry (its forms and true form);
   the entry with `use` naming a form records it (`resolveShapeShift`, combat effect `shape_form` = "form|its Speed line", kept across its
   turns; `shapeShiftUseRefusal` refuses another word before anything runs); the form's own Speed (`formSpeeds`, read back by
   `formSpeedText` for `monsterWalkSpeed`, the Speed list and the movement owner) is part of the same record; an entry named
   "(Wolf or Hybrid Form Only)" is refused in another form by `formRefusal`, read by `monsterEntryRefusal` and the Multiattack plan.
-  **A trait that acts when the creature receives a condition** (Prone Deficiency) is `conditionTraitReaction`
-  (`monster_condition_traits_2024.go`), called by `conditionTakesHold`. Go: `TestPostgresBookShapeShiftAndConditionTriggers`.
-  **A creature's trait that gives attacks against it Disadvantage** (Blurred Form) is `attackedWithDisadvantage`, one row of
-  `attackSources`. **A light a monster switches on and off** (Ignited Illumination) is `resolveLightToggle` (combat effect `ablaze`), read
-  by `monsterLightRadii` in the lighting owner. **A Reaction to the creature's own failed save** (Mind Corrosion) is `failedSaveReaction`
-  (`monster_save_reactions_2024.go`), called by `saveCtx.resist` with the save's `source` (a character's spell: `monsterSpellSaveBy`).
-  Go: `TestPostgresBookDefensesLightAndSaveReactions`, `TestPostgresBookEscapeCheck`.
+  Go: `TestPostgresShapeShiftForms`.
+  **A creature's trait that gives attacks against it Disadvantage** (Blurred Form) is `attackedWithDisadvantage`
+  (`monster_condition_traits_2024.go`), one row of `attackSources`. **A light a monster switches on and off** (Ignited Illumination) is
+  `resolveLightToggle` (combat effect `ablaze`), read by `monsterLightRadii` in the lighting owner.
+  Go: `TestPostgresBlurredFormAndIgnitedLight`.
 - **A creature's Speed** (`cmd/server/speed_owner_2024.go`): `characterSpeed` asks the one owner for conditions (Speed 0), spells (Slow, Haste),
   weapon-mastery effects and stat-block Speed riders (`speed_halved`, `speed_zero`, `speed_minus` markers); a character's movement budget
   follows a Speed that changes mid-turn (`settleMovement`). Effects whose result depends on an order the rules supplied do not give are never computed: the GM rules
@@ -99,8 +99,8 @@ Report: "Wizard Scholar accepts any skill for Expertise."
   condition owners as for a character target).
 - **A stat-block rider's duration** (`cmd/server/rider_duration_2024.go`): `riderUntil` / `readRiderEnd` / `riderEndFor` read "until the end of its
   next turn", "until the start (or end) of the <source>'s next turn" once, and `riderEnd.markerAdd` records it, for every Speed rider
-  (`readSpeed` / `giveSpeed`), roll rider (`readDisadvantage` / `giveDisadvantage`: Sap, the "exposed" next-attack Advantage, Disadvantage on
-  attack rolls, Concentration saves or named abilities' saves, read by `attackSources` / `saveSources`) and "can't take Reactions". A new
+  (`readSpeed` / `giveSpeed`), roll rider (`readDisadvantage` / `giveDisadvantage`: the "exposed" next-attack Advantage, Disadvantage on attack
+  rolls or Concentration saves, read by `attackSources` / `saveSources`) and "can't take Reactions". A new
   rider kind is one pattern built with `riderPattern` plus the owner that reads its marker; never write the duration into its pattern.
   Every target kind gets them through `giveConditions` (a companion's hit too). Go: `TestPostgresRiderDurationsOnEveryTarget`.
 - **A trait that acts on a monster's death** (Death Burst, `cmd/server/monster_death_trigger_2024.go`): the writers of a monster's Hit Points
@@ -117,8 +117,8 @@ Report: "Wizard Scholar accepts any skill for Expertise."
   (`endMonsterConcentrationIn` deletes them; a character's `concentrating_on`) or the GM (`end`: a strong wind or current); Blindsight
   perceives through them. A spell that makes one is a row of `obscuringSpells` (a character's and a monster's cast); a stat block entry
   is read by `obscuringTextRe` (Ink Cloud). Magical Darkness keeps its rows (`monster_darkness_2024.go`), read through the same answer.
-  **A creature's own senses and light traits** (`creature_senses_2024.go`): Devil's Sight (`creatureDevilsSight`, read by the Magical
-  Darkness sight model), Sunlight Sensitivity (`sunlightPenalty` while `inSunlight`: the GM's lighting `sunlight`; rows in
+  **A creature's own senses and light traits** (`creature_senses_2024.go`): Darkvision "(unimpeded by magical Darkness)" in its Senses
+  (the devils, `creatureUnimpededDarkvision`, read by the Magical Darkness sight model), Sunlight Sensitivity (`sunlightPenalty` while `inSunlight`: the GM's lighting `sunlight`; rows in
   `attackSources` and `saveSources`, and the monster Hide). **A monster's Hide** is rolled by `attemptMonsterHide` (`hide_2024.go`: a
   light-gated Hide such as Shadow Stealth, its Stealth, Pass without Trace for any creature); a creature stops being hidden when it
   makes an attack roll (`endHidden`, in `attackCtx.roll`). Telepathy and other communication or sense-only traits are `GM` rows of
@@ -136,12 +136,12 @@ Report: "Wizard Scholar accepts any skill for Expertise."
     (`takeSpecialMoves`: Opportunity Attacks, the Speed budget, no charge for a teleport).
   - "Immediately after dealing damage to a creature that is already Bloodied" is `movementEntryRefusal`.
   - Dragging a grappled creature is `dragCost` (Abduct).
-  - A fall is `monsterFalls` with `fallDamageDice` (also the GM's falling damage).
+  - Falling damage is `fallDamageDice` (the GM's falling damage).
   - Shape-Shift Speeds are the form owner's (`formSpeeds` / `formSpeedText`, `monster_shape_shift_2024.go`).
   - Sharing space (Swarm, Incorporeal Movement) is `markMapSpaces` in `map_spaces_2024.go`, with the turn-end hook
     `objectEndDamage`.
   - Go: `TestChargeWordingsOverTheCatalog`, `TestPostgresChargeOnEveryTarget`, `TestPostgresHitPushOnEveryTarget`,
-    `TestPostgresEntryMovesAndRampageGate`, `TestPostgresSwarmAndIncorporealSpaces`, `TestPostgresShapeShiftFallAndDrag`.
+    `TestPostgresEntryMovesAndRampageGate`, `TestPostgresSwarmAndIncorporealSpaces`, `TestPostgresShapeShiftAndDrag`.
 - **What a hit does after its damage:** `hitAfterDamage` (`cmd/server/hit_after_damage_2024.go`), called once by every hit route with the
   attacker: the drain below, "it starts burning" (the Burning owner, `burning_2024.go`), a push or pull (`hitForcedMove`) and the hit's
   record for an entry used right after it (`recordLastHit`). A new effect of this kind is one call there. Go: `TestPostgresBurningOnHitEveryTarget`.
@@ -168,9 +168,7 @@ Report: "Wizard Scholar accepts any skill for Expertise."
   `nonMetalWeapons` for "a nonmagical metal object") from a hit (`corrodeArmorOnHit` in `hitAfterDamage`: Gray Ooze, Black Pudding), a
   trait the attacker touches (`corrodeOnContact`, stage 8 of `runCharacterHitTail`: Corrosive Form, the ammunition destroyed) and a
   failed save (`saveEffect.ItemPenalty`, `corrodeCarriedObject`: Rust Monster Antennae); Mending removes it (`itemRepairSpells`,
-  `mendItem`). **A weapon stuck fast** (Kuo-toa Sticky Shield: `readStuckWeapon`, `stickWeapon` with the wielder Grappled, refused by
-  `stuckWeaponRefusal` in the attack, freed by use_item: `freeStuckWeapon`); the Reaction that answers a miss reads the miss recorded this
-  turn (`noteCharMissOnMonster` / `thisTurnMissOnMonster`, `reactMissWeaponRe`). Go: `TestPostgresItemCorrosion`.
+  `mendItem`). Go: `TestPostgresItemCorrosion`.
 - **A condition's second stage** (SRD 5.2.1 Sleep; a monster's "Second Failure:"): `conditionSave.Then` / `ThenRounds` /
   `ThenEndsOnDamage` / `ThenMagicalSleep` on the record's repeated save; `condition_turns.go` turns the record into the second condition
   on a failed repeat. A spell's stage is a row of `spellStages` (`endSaveFor`, `spell_effects.go`), read by a character's and a monster's
@@ -179,7 +177,7 @@ Report: "Wizard Scholar accepts any skill for Expertise."
   a spell that ends conditions reads `spellEndsConditions` (`monsterCastEndsConditions`; a heal ends them first in
   `monsterCastHealing`). Go: `TestPostgresSleepSecondFailure`, `TestPostgresSecondFailureStages`, `TestPostgresMonsterCastEndsConditions`.
 - **Monster attack damage definitions:** parseMonsterAttack and prepareMonsterAttack
-  in cmd/server/monster_damage_choice_2024.go: fixed dice, flat damage, type choices,
+  in cmd/server/monster_damage_choice_2024.go: fixed dice, flat damage, a type chosen for a trait (Half-Dragon),
   secondary damage, validation and refusal. oldStyleActions is a storage adapter;
   companionRows and prepareCompanionPlan adapt the same definition for companions,
   familiars, item companions and Wild Shape. No other consumer parses stat-block
@@ -187,6 +185,17 @@ Report: "Wizard Scholar accepts any skill for Expertise."
   game damage rollers own signed dice arithmetic. Unsupported/non-damaging hit
   effects are explicitly GM-adjudicated; no fallback damage is rolled.
 Add to the owner, never beside it. When you give another rule one owner, add it to this list.
+- **Monster text patterns serve SRD wording** (owner, Nov 21: SRD 5.2.1 only): `monster_pattern_guard_2024_test.go`. Every package-level
+  pattern of a stat-block reader (`monsterTextFile`) is in `monsterTextPatterns` (matched against every SRD stat block, cut into entries,
+  sentences, sections and clauses by `srdTextPieces`, or a named `patternWitnesses` entry: an SRD entry's own words, or an invented sentence
+  a named test uses) or in `notMonsterText` (stored rows, request text); one built inside a function is in `localMonsterPatterns`.
+  `TestMonsterPatternsServeSRDWording`, `TestEveryMonsterPatternIsListed`. A new rule is written for SRD wording, never for book text.
+- **The coverage of every SRD stat block sentence:** `srd_sentence_coverage_2024_test.go` (`srdSentenceCoverage`, `entryCoverage`): each
+  sentence of the 330 stat blocks follows the server's route (trait table, attack owner, save owner, the resolver's branches) and is
+  applied by a named rule or shown to the GM; `TestSRDMonsterSentenceCoverage` fails on a silent sentence whose family isn't in
+  `srdUnhandledFamilies` (the work list; empty now). The family table is `docs/SRD_MONSTER_COVERAGE.md` (`SRD_COVERAGE_OUT`). What a save
+  entry's rules don't read outside its sections is `saveSetupText` (`saveEffect.Setup`, shown whatever the result), a multi-effect
+  entry's intro `saveOptionsIntro`, a cast's riders `castRiders`: all shown to the GM.
 - **Attack rolls:** `game.AttackRoll` (`game/attack.go`) is the rule of an attack roll (Advantage, Disadvantage and how
   they cancel, natural 1 and 20, Critical Hits, the wording of the result line). `attackCtx` and the `attackSources`
   table (`cmd/server/attack_2024.go`) decide what gives Advantage or Disadvantage, the bonuses, the target's Armor

@@ -8,10 +8,9 @@ import (
 	"github.com/agentrpg/agentrpg/game"
 )
 
-// A monster's form (SRD 5.2.1 and Monster Manual Shape-Shift: lycanthropes, the Vampire, the Mimic, the Imp, the Quasit, the
-// Jackalwere ...). One owner:
+// A monster's form (SRD 5.2.1 Shape-Shift: lycanthropes, the Vampire, the Mimic, the Imp, the Quasit ...). One owner:
 //   - shapeShiftForms reads a Shape-Shift entry: the forms it can take ("into a Large wolf-humanoid hybrid or a Medium wolf": hybrid,
-//     wolf) and its true form ("returns to its true humanoid form": humanoid; "its true form (that of a Small jackal)": jackal);
+//     wolf) and its true form ("returns to its true humanoid form": humanoid; "its true blob form": blob; "its true form": true);
 //   - the Shape-Shift entry, sent with monster_action.use naming a form, records it (combat effect shape_form on the monster, for the
 //     fight); a use it doesn't offer is refused, nothing done;
 //   - an entry named "(Wolf or Hybrid Form Only)" can be used only in one of those forms (formRefusal, read by monsterEntryRefusal
@@ -19,7 +18,7 @@ import (
 // What a form changes besides (its size, a Speed, "can't speak") is the GM's; the reply says so.
 
 var (
-	shapeShiftRe  = regexp.MustCompile(`(?i)shape-shifts (?:into|to resemble) (.+?),? or (?:it )?returns to its ([^.(]*?form)(?: \(that of an? (?:(?:Tiny|Small|Medium|Large|Huge|Gargantuan) )?([a-z-]+)\))?`)
+	shapeShiftRe  = regexp.MustCompile(`(?i)shape-shifts (?:into|to resemble) (.+?),? or (?:it )?returns to its ([^.(]*?form)`)
 	formGateRe    = regexp.MustCompile(`\(((?:[A-Z][a-z]+)(?: or [A-Z][a-z]+)*) Form Only\)`)
 	formSizeWords = map[string]bool{"tiny": true, "small": true, "medium": true, "large": true, "huge": true, "gargantuan": true, "a": true, "an": true, "or": true}
 )
@@ -40,12 +39,9 @@ func shapeShiftForms(text string) (forms []string, trueForm string) {
 			forms = append(forms, name)
 		}
 	}
-	trueForm = strings.ToLower(m[3])
-	if trueForm == "" {
-		for _, w := range strings.Fields(strings.ToLower(m[2])) {
-			if w != "true" && w != "form" && w != "its" {
-				trueForm = w
-			}
+	for _, w := range strings.Fields(strings.ToLower(m[2])) {
+		if w != "true" && w != "form" && w != "its" {
+			trueForm = w
 		}
 	}
 	if trueForm == "" {

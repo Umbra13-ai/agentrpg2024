@@ -26,7 +26,8 @@ func TestPostgresMonsterCoreRoutes(t *testing.T) {
 	m := compendiumFixture()
 	m.Name = "Imported Elemental"
 	m.Type = "Elemental"
-	m.Actions = []srdMonsterEntry{{Name: "Burst", Text: "Melee Attack Roll: +30, reach 10 ft. Hit: 12 (2d6 + 5) damage of a type chosen by the creature: Cold or Fire."}}
+	m.Traits = []srdMonsterEntry{{Name: "Draconic Origin", Text: "The elemental is related to a type of dragon associated with one of the following damage types (GM's choice): Cold or Fire."}}
+	m.Actions = []srdMonsterEntry{{Name: "Burst", Text: "Melee Attack Roll: +30, reach 10 ft. Hit: 12 (2d6 + 5) Bludgeoning damage plus 7 (2d6) damage of the type chosen for the Draconic Origin trait."}}
 	imported := call("POST", "/api/gm/compendium/monsters", gm, map[string]interface{}{"source_note": "Original core route fixture", "monsters": []srdMonster2024{m}})
 	key := imported["monsters"].([]interface{})[0].(map[string]interface{})["monster_key"].(string)
 	defer db.Exec(`DELETE FROM custom_monsters WHERE key=$1`, key)
@@ -55,7 +56,7 @@ func TestPostgresMonsterCoreRoutes(t *testing.T) {
 	j := call("POST", "/api/gm/companion", gm, map[string]interface{}{"campaign_id": camp, "character_id": char, "monster_key": key, "name": "Elemental Ally"})
 	petID := int(j["companion"].(map[string]interface{})["id"].(float64))
 	pet, _ := loadCompanion(petID)
-	if pet.CreatureType != "elemental" || len(pet.Attacks) != 1 || len(pet.Attacks[0].DamageChoices) != 2 {
+	if pet.CreatureType != "elemental" || len(pet.Attacks) != 1 || !strings.Contains(pet.Attacks[0].StatBlockText, "type chosen") {
 		t.Fatalf("creation lost definition: %+v", pet)
 	}
 	action := func(desc string) (int, map[string]interface{}) {
@@ -84,7 +85,7 @@ func TestPostgresMonsterCoreRoutes(t *testing.T) {
 		}
 	}
 	if !hit {
-		t.Fatal("companion never damaged monster")
+		t.Fatalf("companion never damaged monster: %v", j)
 	}
 
 	// A monster targeting a companion uses the same definition and typed damage.
@@ -110,7 +111,7 @@ func TestPostgresMonsterCoreRoutes(t *testing.T) {
 	}
 	item, _ := loadCompanion(itemID)
 	plan, why := prepareCompanionPlan(item, "damage type: cold")
-	if why != "" || len(plan) != 1 || plan[0].Dice != "2d6+5" || plan[0].Type != "cold" {
+	if why != "" || len(plan) != 1 || plan[0].Dice != "2d6+5" || !strings.Contains(plan[0].StatBlockText, "7 (2d6) Cold damage") {
 		t.Fatalf("item adapter: %s %+v", why, plan)
 	}
 

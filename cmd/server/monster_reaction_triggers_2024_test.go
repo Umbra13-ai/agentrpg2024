@@ -26,16 +26,13 @@ func TestReactionSelfHitTriggersOverTheCatalog(t *testing.T) {
 	if strings.Join(got, "\n") != strings.Join(want, "\n") {
 		t.Errorf("self-hit triggers:\n%s\nwant\n%s", strings.Join(got, "\n"), strings.Join(want, "\n"))
 	}
-	if needs, _ := reactionSelfHitTrigger("Trigger: An attacker the fixture can see hits it with an attack roll. Response: The fixture halves the attack's damage against it."); !needs {
-		t.Error("the 'An attacker ... hits it' wording is not read as a hit on it")
-	}
 }
 
 // Through the routes (POST /api/action for the character's hit, POST /api/gm/narrate for the Reaction): a Reaction triggered by a hit on
-// the monster is refused before any hit and spends nothing (Reflexive Antennae's "uses" path, Uncanny Dodge's halving); after a
-// character's melee hit, Uncanny Dodge halves the damage the hit dealt (rounded down) and a ranged-only trigger is refused; and the
-// Antennae path then resolves. Invented wording with the published patterns.
-func TestPostgresMonsterReactionTriggersAndUncannyDodge(t *testing.T) {
+// the monster is refused before any hit and spends nothing (Reflexive Antennae's "uses" path, Parry's AC); after a character's melee
+// hit a ranged-only trigger (Deflect Missile's) is refused, the Antennae path resolves, and a second Reaction the same round is refused.
+// Invented wording with the SRD 5.2.1 patterns.
+func TestPostgresMonsterReactionTriggers(t *testing.T) {
 	testPostgres(t)
 	_, gm := pgAgent(t, "react trigger gm")
 	_, player := pgAgent(t, "react trigger player")
@@ -60,7 +57,7 @@ func TestPostgresMonsterReactionTriggersAndUncannyDodge(t *testing.T) {
 	m.Name, m.AC, m.HP = "Trigger Fixture", 1, 500
 	m.Actions = append(m.Actions, srdMonsterEntry{Name: "Snap", Text: "Melee Attack Roll: +30, reach 5 ft. Hit: 1 Piercing damage."})
 	m.Reactions = []srdMonsterEntry{
-		{Name: "Duck Away", Text: "Trigger: The fixture is hit by an attack roll. Response: The fixture halves the damage it takes from that attack."},
+		{Name: "Duck Away", Text: "Trigger: The fixture is hit by a melee attack roll while holding a weapon. Response: The fixture adds 2 to its AC against that attack, possibly causing it to miss."},
 		{Name: "Feelers", Text: "Trigger: An attack roll hits the fixture. Response: The fixture uses Snap."},
 		{Name: "Arrow Ward", Text: "Trigger: The fixture is hit by a ranged attack roll. Response: The fixture adds 5 to its AC against that attack, possibly causing it to miss."},
 	}
@@ -118,27 +115,17 @@ func TestPostgresMonsterReactionTriggersAndUncannyDodge(t *testing.T) {
 		t.Error("a refused Reaction was spent")
 	}
 
-	// a melee hit: the ranged-only trigger is refused; Uncanny Dodge halves what the hit dealt, rounded down
+	// a melee hit: the ranged-only trigger is refused; the Antennae path resolves; a second Reaction the same round is refused
 	if !hit() {
 		t.Fatal("the character's attack never hit")
 	}
 	if res := react("Arrow Ward"); !strings.Contains(res, "answers a ranged hit") {
 		t.Errorf("a ranged-only trigger after a melee hit: %s", res)
 	}
-	taken := 500 - monsterEntryVitals(camp, id).HP
-	res := react("Duck Away")
-	if want := 500 - taken/2; monsterEntryVitals(camp, id).HP != want || !strings.Contains(res, "halved") {
-		t.Errorf("Uncanny Dodge: %d taken, HP %d, want %d: %s", taken, monsterEntryVitals(camp, id).HP, want, res)
-	}
-	if res := react("Feelers"); !strings.Contains(res, "already used its Reaction") {
-		t.Errorf("a second Reaction the same round: %s", res)
-	}
-
-	// another hit: Reflexive Antennae's "uses Snap" resolves the action
-	if !hit() {
-		t.Fatal("the character's attack never hit (second)")
-	}
 	if res := react("Feelers"); !strings.Contains(res, "uses Feelers: Snap") {
 		t.Errorf("Feelers after a hit: %s", res)
+	}
+	if res := react("Duck Away"); !strings.Contains(res, "already used its Reaction") {
+		t.Errorf("a second Reaction the same round: %s", res)
 	}
 }
