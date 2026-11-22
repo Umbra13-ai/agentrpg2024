@@ -3,20 +3,14 @@ package main
 import (
 	"encoding/json"
 	"fmt"
-	"net/http"
 	"regexp"
 	"strings"
 
 	"github.com/agentrpg/agentrpg/game"
 )
 
-// This pattern recognizes a whole, unconditional delivery to targets selected
-// by the GM. A damage clause in a larger rule does not establish its trigger,
-// eligibility, frequency, movement, or any other effects.
-const directDamageClause = `takes \d+ \((\d+d\d+(?:\s*[+−-]\s*\d+)?)\) ([A-Za-z]+) damage`
-
-var directDamageText = regexp.MustCompile(`(?i)^(the|each) target ` + directDamageClause + `\.?$`)
-var embeddedDamageText = regexp.MustCompile(`(?i)` + directDamageClause)
+// embeddedDamageText: a damage clause inside a larger rule, which doesn't establish its trigger, eligibility, frequency or other effects.
+var embeddedDamageText = regexp.MustCompile(`(?i)takes \d+ \((\d+d\d+(?:\s*[+−-]\s*\d+)?)\) ([A-Za-z]+) damage`)
 
 type monsterDirectDamage struct {
 	Targets      []int
@@ -44,41 +38,22 @@ func init() {
 	}
 }
 
-func resolveMonsterDirectDamage(r *http.Request, lobby int, name, entry, text string, targets []int, apply bool) ([]string, bool) {
-	m := directDamageText.FindStringSubmatch(strings.TrimSpace(text))
-	if m == nil {
-		if !embeddedDamageText.MatchString(text) {
-			return nil, false
-		}
-		message := fmt.Sprintf("%s needs GM adjudication. Check the compendium entry for its trigger, eligible targets, and all effects. Nothing was rolled.", entry)
-		if apply {
-			addGMNotice(lobby, name+": "+message)
-		}
-		return []string{message}, true
+// resolveEmbeddedDamage: an entry whose damage sits inside a larger rule ("..., and each creature within 10 feet of the space it left
+// takes 11 (2d10) Necrotic damage": the Lich's Deathly Teleport) is the GM's: who is hit and when are the rule's, so nothing is rolled.
+func resolveEmbeddedDamage(lobby int, name, entry, text string, apply bool) ([]string, bool) {
+	if !embeddedDamageText.MatchString(text) {
+		return nil, false
 	}
-	dice, dtype := normDice(m[2]), strings.ToLower(m[3])
-	if !validStatBlockDamage(dice, dtype, nil) {
-		return []string{"Unsupported damage expression. Nothing was rolled. [GM: resolve the damage as the stat block specifies.]"}, true
+	message := fmt.Sprintf("%s needs GM adjudication. Check the compendium entry for its trigger, eligible targets, and all effects. Nothing was rolled.", entry)
+	if apply {
+		addGMNotice(lobby, name+": "+message)
 	}
-	if len(targets) == 0 || (strings.EqualFold(m[1], "the") && len(targets) != 1) {
-		return []string{"Name the target or targets as specified in the action. Nothing was rolled."}, true
-	}
-	amount := rollStatBlockDamage(dice, nil, false)
-	lines := []string{fmt.Sprintf("%s uses %s.", name, entry)}
-	if !apply {
-		return append(lines, fmt.Sprintf("%d %s damage per target (not applied).", amount, dtype)), true
-	}
-	results, made, err := runMonsterDirectDamage(lobby, monsterDirectDamage{Targets: targets, Amount: amount, Type: dtype})
-	if made {
-		markExecuted(r)
-	}
-	if err != nil {
-		noteDBError(err, "resolving monster direct damage")
-		results = append(results, "[GM: the damage sequence could not finish. Review its state before continuing.]")
-	}
-	return append(lines, results...), true
+	return []string{message}, true
 }
 
+// runMonsterDirectDamage deals one rolled amount to each target in turn through each kind's Hit Point owner (an aura at the end of the
+// monster's turn: runMonsterEndAuras); it saves the rest of the targets before each one, so a pause (a Concentration decision) resumes
+// with the same roll.
 func runMonsterDirectDamage(lobby int, damage monsterDirectDamage) (lines []string, made bool, err error) {
 	if damage.Next < 0 || damage.Next > len(damage.Targets) || damage.Amount < 0 || damage.Amount > game.MaxDice*game.MaxDieSides+10000 || !attackDamageTypes[damage.Type] {
 		return nil, false, fmt.Errorf("invalid stored direct damage")

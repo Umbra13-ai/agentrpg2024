@@ -57,7 +57,7 @@ func TestPostgresMonsterSavePreviewPreservesState(t *testing.T) {
 }
 
 func TestPostgresLegendaryPreviewKeepsUseAndWindow(t *testing.T) {
-	entry := srdMonsterEntry{Name: "Legendary Force (1/Day)", Text: "The target takes 2 (1d4) Force damage."}
+	entry := srdMonsterEntry{Name: "Legendary Force (1/Day)", Text: "Constitution Saving Throw: DC 99, one creature the caster can see within 120 feet. Failure: 2 (1d4) Force damage."}
 	f := reviewConcentrationSetup(t, func(m *srdMonster2024) { m.Legendary = append(m.Legendary, entry) })
 	setLastTurnEnded(f.camp, "1:1", f.char)
 	target := monsterIDsByKeyOrName(f.camp, "Opponent")[0]
@@ -65,7 +65,7 @@ func TestPostgresLegendaryPreviewKeepsUseAndWindow(t *testing.T) {
 	key, _ := monsterDayUse(entry, "")
 	play := func(apply bool) (int, map[string]interface{}) {
 		t.Helper()
-		return pgCall(t, "POST", "/api/gm/legendary-action", f.gm, map[string]interface{}{"campaign_id": f.camp, "combatant_id": f.caster, "action": entry.Name, "target_ids": []int{target}, "apply_damage": apply})
+		return pgCall(t, "POST", "/api/gm/legendary-action", f.gm, map[string]interface{}{"campaign_id": f.camp, "combatant_id": f.caster, "action": entry.Name, "target_ids": []int{target}, "apply_damage": apply, "confirm_targeting": true})
 	}
 	if code, j := play(false); code != 200 {
 		t.Fatalf("legendary preview: %d %v", code, j)

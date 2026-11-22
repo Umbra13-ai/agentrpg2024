@@ -116,7 +116,6 @@ var monsterTextPatterns = map[string]*regexp.Regexp{
 	"spellListHeadRe":          spellListHeadRe,          // monster_day_uses.go
 	"spellParenRe":             spellParenRe,             // monster_day_uses.go
 	"deathTriggerRe":           deathTriggerRe,           // monster_death_trigger_2024.go
-	"directDamageText":         directDamageText,         // monster_direct_damage_2024.go
 	"embeddedDamageText":       embeddedDamageText,       // monster_direct_damage_2024.go
 	"advantageGateRe":          advantageGateRe,          // monster_effects_2024.go
 	"autoSucceedTypesRe":       autoSucceedTypesRe,       // monster_effects_2024.go
@@ -243,9 +242,7 @@ type patternWitness struct {
 
 var patternWitnesses = map[string]patternWitness{
 	// the damage owner hands these the words after an amount ("... Slashing damage" + tail)
-	"advantageOnlyRe": {Monster: "Goblin Warrior", Entry: "Scimitar", Fragment: "if the attack roll had Advantage."},
-	// an entry that is only "Each target takes N damage": no SRD 5.2.1 entry is (owner to decide whether the whole-entry rule stays)
-	"directDamageText":        {Invented: "Each target takes 2 (1d4) Force damage.", Test: "TestPostgresMonsterDirectDamagePreviewAndCreatureTargets"},
+	"advantageOnlyRe":         {Monster: "Goblin Warrior", Entry: "Scimitar", Fragment: "if the attack roll had Advantage."},
 	"damageJoinRe":            {Monster: "Goblin Warrior", Entry: "Scimitar", Fragment: "5 (1d6 + 2) Slashing damage, plus"},
 	"alternativeHeadRe":       {Monster: "Chimera", Entry: "Bite", Fragment: "11 (2d6 + 4) Piercing damage, or"},
 	"chargeAltRe":             {Monster: "Giant Seahorse", Entry: "Ram", Fragment: "if the seahorse moved 20+ feet straight toward the target immediately before the hit"},

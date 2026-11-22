@@ -11,7 +11,7 @@ This remains a proposed patch using one application database. The expanded Iron 
 
 The proposal now includes repairs for damage-only deliveries, save previews, Legendary Action previews, retained creature type under SRD 5.2.1, and Immutable Form. The latest code and documentation commits are recorded in the checkpoint manifest. The direct-damage path uses existing HP owners for character, monster and companion targets. A pending Concentration decision keeps later targets in saved work with the original damage roll. Compound clauses needing an unresolved trigger are referred to the GM.
 
-The named before-and-after probes are in `MONSTER_DIRECT_DAMAGE_DESIGN.md`, `MONSTER_RETAINED_TYPE.md`, and `MONSTER_IMMUTABLE_FORM_REVIEW.md`. Nine deliberately reintroduced defects in the direct, preview, and type repairs triggered test assertions and were restored. An additional Immutable Form mutation is recorded separately. The 20 selected-mechanics cases passed on the previous full checkpoint. A complete combined suite is being run before this code is promoted to the next validated checkpoint.
+The named before-and-after probes are in `MONSTER_RETAINED_TYPE.md` and `MONSTER_IMMUTABLE_FORM_REVIEW.md` (the direct-damage design was archived: no SRD entry used it). Nine deliberately reintroduced defects in the direct, preview, and type repairs triggered test assertions and were restored. An additional Immutable Form mutation is recorded separately. The 20 selected-mechanics cases passed on the previous full checkpoint. A complete combined suite is being run before this code is promoted to the next validated checkpoint.
 
 
 ## Source-turn timing checkpoint
