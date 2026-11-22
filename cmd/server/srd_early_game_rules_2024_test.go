@@ -148,9 +148,8 @@ func TestPostgresHitThatDropsToZero(t *testing.T) {
 		{Name: "Gnaw", Text: "Melee Attack Roll: +60, reach 5 ft. Hit: 7 (2d6) Piercing damage. The target dies if it is reduced to 0 Hit Points by this attack."},
 	})
 	bite := func() string {
-		_, r := pgCall(t, "POST", "/api/gm/narrate", gm, map[string]interface{}{"campaign_id": camp, "narration": "x",
-			"monster_action": map[string]interface{}{"monster": fmt.Sprintf("#%d", spider), "action": "Bite", "target": fmt.Sprint(hero)}})
-		return fmt.Sprint(r["monster_action_result"])
+		_, line := narrateHit(t, gm, camp, spider, "Bite", fmt.Sprint(hero), "")
+		return line
 	}
 	line := bite() // 1000 Hit Points: standing
 	if !strings.Contains(line, "HIT") || hasCondMarker(camp, hero, "poisoned") || hasCondMarker(camp, hero, "paralyzed") {
@@ -180,9 +179,8 @@ func TestPostgresHitThatDropsToZero(t *testing.T) {
 	}
 	// "The target dies if it is reduced to 0 Hit Points by this attack" (Gibbering Mouther): standing, nothing; dropped, dead
 	gnaw := func() string {
-		_, r := pgCall(t, "POST", "/api/gm/narrate", gm, map[string]interface{}{"campaign_id": camp, "narration": "x",
-			"monster_action": map[string]interface{}{"monster": fmt.Sprintf("#%d", spider), "action": "Gnaw", "target": fmt.Sprint(hero)}})
-		return fmt.Sprint(r["monster_action_result"])
+		_, line := narrateHit(t, gm, camp, spider, "Gnaw", fmt.Sprint(hero), "")
+		return line
 	}
 	dead := func() bool {
 		var d bool
@@ -261,6 +259,20 @@ func narrateAs(t *testing.T, gm string, camp, id int, action, target, use string
 	return c, fmt.Sprint(r["monster_action_result"])
 }
 
+// narrateHit sends the monster action until the attack hits (a natural 1 always misses, whatever the bonus); a miss changes nothing, so
+// the tests that need a hit can simply send it again.
+func narrateHit(t *testing.T, gm string, camp, id int, action, target, use string) (int, string) {
+	t.Helper()
+	var c int
+	var line string
+	for i := 0; i < 40; i++ {
+		if c, line = narrateAs(t, gm, camp, id, action, target, use); strings.Contains(line, "HIT") {
+			return c, line
+		}
+	}
+	return c, line
+}
+
 // A Hit that deals no damage and only gives conditions ("Hit: The target has the Grappled condition (escape DC 14) from one of six
 // tentacles, and the target has the Poisoned condition until the grapple ends.": Roper Tentacle) is a valid attack: no Hit Point change,
 // no Death Saving Throw failure, the grapple and its linked condition recorded from one source, the linked record ending with the grapple.
@@ -273,7 +285,7 @@ func TestPostgresNoDamageHit(t *testing.T) {
 		endConditionRecords(recordsOf(camp, hero, "grappled"))
 		endConditionRecords(recordsOf(camp, hero, "poisoned"))
 		pgExec(t, `UPDATE characters SET hp=$1,death_save_failures=0,is_stable=false WHERE id=$2`, hp, hero)
-		c, line := narrateAs(t, gm, camp, roper, "Tentacle", fmt.Sprint(hero), "")
+		c, line := narrateHit(t, gm, camp, roper, "Tentacle", fmt.Sprint(hero), "")
 		if c != 200 || !strings.Contains(line, "HIT") || strings.Contains(line, "damage") {
 			t.Fatalf("hp %d: the damage-less hit: %d %s", hp, c, line)
 		}
@@ -324,7 +336,7 @@ func TestPostgresNextAttackDisadvantage(t *testing.T) {
 	gm, _, camp, hero, ettin := earlyRulesFixture(t, "Test Dazing Ettin", []srdMonsterEntry{
 		{Name: "Morningstar", Text: "Melee Attack Roll: +60, reach 5 ft. Hit: 13 (2d8 + 4) Piercing damage, and the target has Disadvantage on the next attack roll it makes before the end of its next turn."},
 	})
-	if _, line := narrateAs(t, gm, camp, ettin, "Morningstar", fmt.Sprint(hero), ""); !hasCondMarker(camp, hero, "disadv_next_attack") {
+	if _, line := narrateHit(t, gm, camp, ettin, "Morningstar", fmt.Sprint(hero), ""); !hasCondMarker(camp, hero, "disadv_next_attack") {
 		t.Fatalf("the hit gave no marker: %s", line)
 	}
 	roll := func() []string { return (&attackCtx{lobby: camp, attacker: hero}).gather().Disadvantage }
@@ -378,7 +390,7 @@ func TestPostgresAttackerNextAttackAdvantage(t *testing.T) {
 		}
 		pgCall(t, "POST", cp+"/combat/next", gm, nil)
 	}
-	if _, line := narrateAs(t, gm, camp, pirate, "Rapier", fmt.Sprint(hero), ""); !hasCondMarker(camp, pirate, "adv_next_attack") || hasCondMarker(camp, hero, "adv_next_attack") {
+	if _, line := narrateHit(t, gm, camp, pirate, "Rapier", fmt.Sprint(hero), ""); !hasCondMarker(camp, pirate, "adv_next_attack") || hasCondMarker(camp, hero, "adv_next_attack") {
 		t.Fatalf("the marker belongs on the attacker only: %s", line)
 	}
 	if a := (&attackCtx{lobby: camp, attacker: pirate, target: hero}).gather().Advantage; !strings.Contains(strings.Join(a, ";"), "next attack roll") {
@@ -387,7 +399,7 @@ func TestPostgresAttackerNextAttackAdvantage(t *testing.T) {
 	if hasCondMarker(camp, pirate, "adv_next_attack") {
 		t.Error("the marker was not used up by the roll")
 	}
-	narrateAs(t, gm, camp, pirate, "Rapier", fmt.Sprint(hero), "")
+	narrateHit(t, gm, camp, pirate, "Rapier", fmt.Sprint(hero), "")
 	pgCall(t, "POST", cp+"/combat/next", gm, nil) // the end of this turn
 	if hasCondMarker(camp, pirate, "adv_next_attack") {
 		t.Error("the marker outlived the turn it was given in")
@@ -405,10 +417,10 @@ func TestPostgresGrappledTargetBarsAnAttack(t *testing.T) {
 		{Name: "Multiattack", Text: "The crocodile makes one Bite attack and one Tail attack."},
 	})
 	target := fmt.Sprint(hero)
-	if _, line := narrateAs(t, gm, camp, croc, "Tail", target, ""); !strings.Contains(line, "HIT") {
+	if _, line := narrateHit(t, gm, camp, croc, "Tail", target, ""); !strings.Contains(line, "HIT") {
 		t.Fatalf("the Tail before any grapple: %s", line)
 	}
-	_, line := narrateAs(t, gm, camp, croc, "Bite", target, "")
+	_, line := narrateHit(t, gm, camp, croc, "Bite", target, "")
 	if len(recordsOf(camp, hero, "grappled")) != 1 || strings.Contains(line, "can’t be targeted") || strings.Contains(line, "can't be targeted") {
 		t.Fatalf("the Bite: grappled %d; the GM was told the applied sentence: %s", len(recordsOf(camp, hero, "grappled")), line)
 	}
@@ -417,7 +429,7 @@ func TestPostgresGrappledTargetBarsAnAttack(t *testing.T) {
 	}
 	endConditionRecords(recordsOf(camp, hero, "grappled"))
 	endConditionRecords(recordsOf(camp, hero, "restrained"))
-	if _, line := narrateAs(t, gm, camp, croc, "Tail", target, ""); !strings.Contains(line, "HIT") {
+	if _, line := narrateHit(t, gm, camp, croc, "Tail", target, ""); !strings.Contains(line, "HIT") {
 		t.Fatalf("the Tail after the grapple ended: %s", line)
 	}
 }
@@ -437,7 +449,7 @@ func TestPostgresReelPullsHeldCreatures(t *testing.T) {
 	if _, line := narrateAs(t, gm, camp, roper, "Reel", target, ""); !strings.Contains(line, "holds no creature to pull") {
 		t.Fatalf("Reel with nothing held: %s", line)
 	}
-	narrateAs(t, gm, camp, roper, "Tentacle", target, "")
+	narrateHit(t, gm, camp, roper, "Tentacle", target, "")
 	if len(recordsOf(camp, hero, "grappled")) != 1 {
 		t.Fatal("the Tentacle did not grapple")
 	}
@@ -487,7 +499,7 @@ func TestPostgresRestSaveIsNotRolledWithTheHit(t *testing.T) {
 	gm, _, camp, hero, otyugh := earlyRulesFixture(t, "Test Filth Otyugh", []srdMonsterEntry{
 		{Name: "Bite", Text: "Melee Attack Roll: +60, reach 5 ft. Hit: 12 (2d8 + 3) Piercing damage, and the target has the Poisoned condition. Whenever the Poisoned target finishes a Long Rest, it is subjected to the following effect. Constitution Saving Throw: DC 15. Failure: The target’s Hit Point maximum decreases by 5 (1d10) and doesn’t return to normal until the Poisoned condition ends on the target. Success: The Poisoned condition ends."},
 	})
-	_, line := narrateAs(t, gm, camp, otyugh, "Bite", fmt.Sprint(hero), "")
+	_, line := narrateHit(t, gm, camp, otyugh, "Bite", fmt.Sprint(hero), "")
 	if !strings.Contains(line, "HIT") || len(recordsOf(camp, hero, "poisoned")) != 1 {
 		t.Fatalf("the hit should poison: %s", line)
 	}

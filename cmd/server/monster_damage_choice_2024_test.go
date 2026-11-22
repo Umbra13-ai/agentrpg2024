@@ -220,7 +220,8 @@ func TestEverySRDAttackUsesSharedParser(t *testing.T) {
 			if hasDamage && why != "" {
 				t.Errorf("%s %s: %s", m.Name, e.Name, why)
 			}
-			if !hasDamage && why == "" {
+			// a Hit that deals no damage and only gives conditions (Roper Tentacle) is a valid attack, explicitly (noDamageHit), not invented damage
+			if !hasDamage && why == "" && !noDamageHit(e.Text) {
 				t.Errorf("%s %s silently invented damage", m.Name, e.Name)
 			}
 			count++

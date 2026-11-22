@@ -430,7 +430,10 @@ func TestDisadvantageRiderParsing(t *testing.T) {
 		{"Hit: 7 (1d8 + 3) Piercing damage, and the next attack roll made against the target before the start of the worg\u2019s next turn has Advantage.", "exposed", false, ""},
 		// a rider used up by one roll is kept only until the start of the source's turn: any other end is the GM's
 		{"Hit: 7 (1d8 + 3) Piercing damage, and the next attack roll made against the target before the end of its next turn has Advantage.", "", true, "Advantage"},
-		{"Hit: 9 (2d6) Piercing damage, and the target has Disadvantage on the next attack roll it makes before the end of its next turn.", "", true, "next attack roll"},
+		// the Ettin Morningstar's wording: a marker used up by its next attack roll
+		{"Hit: 9 (2d6) Piercing damage, and the target has Disadvantage on the next attack roll it makes before the end of its next turn.", "nextattack", false, ""},
+		// the Pirate Captain Rapier's: the attacker's own Advantage on its next attack roll this turn
+		{"Hit: 13 (2d8 + 4) Piercing damage, and the pirate has Advantage on the next attack roll it makes before the end of this turn.", "selfnextadv", false, ""},
 	} {
 		var e saveEffect
 		extra := strings.Join(e.readRider(c.text), ". ")

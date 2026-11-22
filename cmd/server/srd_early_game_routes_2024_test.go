@@ -431,7 +431,8 @@ func TestPostgresEarlyGameEveryEntry(t *testing.T) {
 			}
 			reply := strings.TrimSuffix(strings.TrimSpace(r.result), " <nil>")
 			if len(reply) > 260 {
-				reply = reply[:257] + "..."
+				// cut at a word, never inside a request ("POST /api/gm/..."): the guides' request check reads this doc
+				reply = partialRequestRe.ReplaceAllString(reply[:257], "") + "..."
 			}
 			use := r.use
 			if use == "" {
@@ -454,6 +455,8 @@ func TestPostgresEarlyGameEveryEntry(t *testing.T) {
 		os.WriteFile(out, []byte(head+strings.Join(lines, "\n")+"\n"), 0o644)
 	}
 }
+
+var partialRequestRe = regexp.MustCompile(`(?:POST|GET|PATCH|PUT|DELETE) /api\S*$`)
 
 var zeroDamageRe = regexp.MustCompile(`HIT, 0 [A-Z][a-z]+ damage`)
 
