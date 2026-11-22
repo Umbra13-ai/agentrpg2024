@@ -216,3 +216,57 @@ func TestPostgresGMOpenItems(t *testing.T) {
 		t.Errorf("the fight ended and the item stayed: %v", got)
 	}
 }
+
+// The Stage 2 families through narrate's monster_action: a Treant's Animate Trees (a day, or until it dies) and a Wraith's Create Specter (under its
+// control) are the GM's and keep going, so they are listed; the list clears when the creature leaves the fight.
+func TestPostgresGMOpenItemsFromStatBlockEntries(t *testing.T) {
+	testPostgres(t)
+	_, gm := pgAgent(t, "pg open entries gm")
+	_, j := pgCall(t, "POST", "/api/campaigns", gm, map[string]interface{}{"name": "Pg Open Entries", "max_players": 2})
+	lobby := int(j["campaign_id"].(float64))
+	pgCall(t, "PATCH", fmt.Sprintf("/api/campaigns/%d/schedule", lobby), gm, map[string]interface{}{"state": "off"})
+	_, tok := pgAgent(t, "pg open entries player")
+	_, j = pgCall(t, "POST", "/api/characters", tok, pgRogue(fmt.Sprintf("Pg Entries %d", time.Now().UnixNano()%1e9)))
+	char := int(j["character_id"].(float64))
+	pgCall(t, "POST", fmt.Sprintf("/api/campaigns/%d/join", lobby), tok, map[string]interface{}{"character_id": char})
+	pgFinish(t, tok, char)
+	pgCall(t, "POST", fmt.Sprintf("/api/campaigns/%d/ready", lobby), tok, nil)
+	pgCall(t, "POST", fmt.Sprintf("/api/campaigns/%d/ready", lobby), gm, nil)
+	if c, j := pgCall(t, "POST", fmt.Sprintf("/api/campaigns/%d/start", lobby), gm, nil); c != 200 {
+		t.Fatalf("start: %d %v", c, j)
+	}
+	pgCall(t, "POST", fmt.Sprintf("/api/campaigns/%d/combat/start", lobby), gm, map[string]interface{}{})
+	if c, j := pgCall(t, "POST", fmt.Sprintf("/api/campaigns/%d/combat/add", lobby), gm, map[string]interface{}{
+		"combatants": []map[string]interface{}{{"name": "Entry Treant", "monster_key": "treant"}, {"name": "Entry Wraith", "monster_key": "wraith"}}}); c != 200 {
+		t.Fatalf("add: %d %v", c, j)
+	}
+	act := func(monster, action string) {
+		t.Helper()
+		if c, j := pgCall(t, "POST", "/api/gm/narrate", gm, map[string]interface{}{"campaign_id": lobby, "narration": monster + " acts.",
+			"monster_action": map[string]interface{}{"monster": monster, "action": action, "target": fmt.Sprint(char)}}); c != 200 {
+			t.Fatalf("%s %s: %d %v", monster, action, c, j)
+		}
+	}
+	act("Entry Treant", "Animate Trees")
+	act("Entry Wraith", "Create Specter")
+	_, j = pgCall(t, "GET", fmt.Sprintf("/api/gm/open-items?campaign_id=%d", lobby), gm, nil)
+	got := fmt.Sprint(j["open_items"])
+	for _, want := range []string{"Animate Trees", "Create Specter"} {
+		if !strings.Contains(got, want) {
+			t.Errorf("%s is not an open item: %v", want, got)
+		}
+	}
+	var wraith int
+	for _, e := range combatEntries(lobby) {
+		if fmt.Sprint(e["name"]) == "Entry Wraith" {
+			wraith = asInt(e["id"])
+		}
+	}
+	if c, _ := pgCall(t, "POST", fmt.Sprintf("/api/campaigns/%d/combat/remove", lobby), gm, map[string]interface{}{"combatant_id": wraith}); c != 200 {
+		t.Fatalf("remove the wraith: %d", c)
+	}
+	_, j = pgCall(t, "GET", fmt.Sprintf("/api/gm/open-items?campaign_id=%d", lobby), gm, nil)
+	if got := fmt.Sprint(j["open_items"]); strings.Contains(got, "Create Specter") || !strings.Contains(got, "Animate Trees") {
+		t.Errorf("after the wraith left: %v", got)
+	}
+}
