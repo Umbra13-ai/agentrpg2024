@@ -245,8 +245,8 @@ Add to the owner, never beside it. When you give another rule one owner, add it 
   conditions: `dropRiderRe`, Phase Spider, Vampire Familiar; death: `dieOnDropRe`, Gibbering Mouther, Mummy). A "uses <entry>" in a
   clause that says when an effect ends never calls that entry (`usesAnotherEntry`, Will-o'-Wisp Vanish). Go:
   `TestOwnersAppliedNotRepeatedToTheGM`, `TestPostgresHitThatDropsToZero`.
-  **The early-game playtest set** (owner, Nov 22: the monsters of CR 0 to 1, then CR 0 to 3, then CR 0 to 6, then CR 0 to 11: 290 stat blocks, 978 entries
-  with the Legendary Actions of the Unicorn, the Aboleth and the Sphinx of Lore; the only target until the owner says otherwise): `TestSRDEarlyGameCoverage` (its table, `docs/SRD_EARLY_GAME_COVERAGE.md`, `SRD_EARLY_OUT`) and the route test
+  **The early-game playtest set** (owner, Nov 22: the monsters of CR 0 to 1, then CR 0 to 3, then CR 0 to 6, then CR 0 to 11, then CR 0 to 30: all 330 stat blocks, 1318 entries
+  with every Legendary Action; the only target until the owner says otherwise): `TestSRDEarlyGameCoverage` (its table, `docs/SRD_EARLY_GAME_COVERAGE.md`, `SRD_EARLY_OUT`) and the route test
   `TestPostgresEarlyGameEveryEntry`: every action, Bonus Action and Reaction through narrate's monster_action at a character, with every
   option its entry offers in `use` and the setup its gate needs, what is stored read back; every trait in the GM's view of the fight.
 - **Attack rolls:** `game.AttackRoll` (`game/attack.go`) is the rule of an attack roll (Advantage, Disadvantage and how

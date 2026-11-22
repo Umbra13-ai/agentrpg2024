@@ -16,6 +16,11 @@ import (
 const directDamageClause = `takes \d+ \((\d+d\d+(?:\s*[+−-]\s*\d+)?)\) ([A-Za-z]+) damage`
 
 var directDamageText = regexp.MustCompile(`(?i)^(the|each) target ` + directDamageClause + `\.?$`)
+
+// embeddedDamageClauseRe: the damage clause of an entry that does more than deal damage ("each creature within 10 feet of the space it left takes
+// 11 (2d10) Necrotic damage", Lich Deathly Teleport), from the creature it hits.
+var embeddedDamageClauseRe = regexp.MustCompile(`(?i)\beach creature [^.]*?` + directDamageClause + `[^.]*`)
+
 var embeddedDamageText = regexp.MustCompile(`(?i)` + directDamageClause)
 
 type monsterDirectDamage struct {
@@ -51,6 +56,13 @@ func resolveMonsterDirectDamage(r *http.Request, lobby int, name, entry, text st
 			return nil, false
 		}
 		message := fmt.Sprintf("%s needs GM adjudication. Check the compendium entry for its trigger, eligible targets, and all effects. Nothing was rolled.", entry)
+		// a move with damage around where the creature was ("teleports up to 60 feet ..., and each creature within 10 feet of the space it left takes
+		// 11 (2d10) Necrotic damage"): the move is the movement owner's, only the damage around the space it left is the GM's, said once
+		if _, moves := readSpecialMove(text, anySpeed); moves {
+			if cl := embeddedDamageClauseRe.FindString(text); cl != "" {
+				message = fmt.Sprintf("%s uses %s: the move is applied. [GM: apply the rest, the damage around the space it left: %s]", name, entry, strings.TrimSpace(cl)) // gm-one-shot: resolved in the same breath as the move
+			}
+		}
 		if apply {
 			addGMNotice(lobby, name+": "+message)
 		}

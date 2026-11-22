@@ -11,7 +11,7 @@ import (
 	"github.com/agentrpg/agentrpg/game"
 )
 
-// The early-game playtest set (owner, Nov 22: CR 0 to 1, widened to CR 3, then CR 6, then CR 11: 290 SRD 5.2.1 monsters) through the real routes, every entry:
+// The early-game playtest set (owner, Nov 22: CR 0 to 1, widened to CR 3, then CR 6, then CR 11, then CR 30: all 330 SRD 5.2.1 monsters) through the real routes, every entry:
 //
 //   - each action, Bonus Action and Reaction is sent as POST /api/gm/narrate's monster_action at a character in a fight, with every
 //     option its entry offers in use (a form, a standard action, a spell: read from the entry by the server's own readers), after the
@@ -164,6 +164,10 @@ func TestPostgresEarlyGameEveryEntry(t *testing.T) {
 		return false
 	}
 
+	settleCombat := func() {
+		pgExec(t, `DELETE FROM monster_concentration WHERE lobby_id=$1`, camp)
+		pgExec(t, `DELETE FROM combat_paused_work WHERE lobby_id=$1`, camp)
+	}
 	type fightCheck struct{ monster, slug string }
 	var runs []earlyRun
 	var traitRows []string
@@ -173,6 +177,7 @@ func TestPostgresEarlyGameEveryEntry(t *testing.T) {
 	for i, m := range earlyGameMonsters() {
 		name := fmt.Sprintf("%s %d", m.Name, i)
 		slug := game.Slug(m.Name)
+		settleCombat() // the last monster's Concentration decisions don't carry over
 		must("POST", cp+"/combat/add", gm, map[string]interface{}{"combatants": []map[string]interface{}{{"name": name, "monster_key": slug, "hp": 1000, "ac": 1, "initiative": -100 - i}}})
 		id := monsterIDsByKeyOrName(camp, name)[0]
 		rows := make([]monsterActionRow, 0, len(m.Actions))
@@ -278,6 +283,7 @@ func TestPostgresEarlyGameEveryEntry(t *testing.T) {
 					for try := 0; try < 60; try++ {
 						resetHero(fullHP)
 						pgExec(t, `DELETE FROM combat_monster_state WHERE lobby_id=$1 AND monster_id=$2`, camp, id)
+						settleCombat() // a Concentration decision a hit on a concentrating monster left (a Legendary Resistance choice) pauses the fight for later entries
 						pgExec(t, `DELETE FROM monster_day_uses WHERE campaign_id=$1`, camp)
 						clearMonsterReactionState(camp)
 						monsterReactionRound.Delete(fmt.Sprintf("%d:%d", camp, id))
@@ -285,8 +291,8 @@ func TestPostgresEarlyGameEveryEntry(t *testing.T) {
 						pgCall(t, "POST", "/api/gm/set-lighting", gm, map[string]interface{}{"campaign_id": camp, "lighting": "bright"})
 						// the setup the entry's own gate needs
 						needs, hitKind := reactionSelfHitTrigger(e.Text)
-						ranged := hitKind == "ranged" || strings.Contains(e.Text, "is hit by a ranged attack roll") // "The giant is hit by a ranged attack roll and takes ... damage from it"
-						if needs || ranged || strings.Contains(e.Text, "makes an attack roll against it") {
+						ranged := hitKind == "ranged" || strings.Contains(e.Text, "is hit by a ranged attack roll")                                                     // "The giant is hit by a ranged attack roll and takes ... damage from it"
+						if needs || ranged || strings.Contains(e.Text, "makes an attack roll against it") || strings.Contains(e.Text, "casts Counterspell or Shield") { // Protective Magic: Shield answers a hit this turn
 							if !heroHits(id, ranged) {
 								t.Fatalf("%s: the character's attack never hit", name)
 							}
@@ -414,8 +420,8 @@ func TestPostgresEarlyGameEveryEntry(t *testing.T) {
 		entries[r.monster+"|"+r.kind+"|"+r.entry] = true
 	}
 	t.Logf("early game routes: %d runs over %d actions, Bonus Actions and Reactions, %d traits: %v", len(runs), len(entries), len(traitRows), verdicts)
-	if len(entries)+len(traitRows) != 978 {
-		t.Errorf("%d entries and %d traits checked; the set has 978", len(entries), len(traitRows))
+	if len(entries)+len(traitRows) != 1318 {
+		t.Errorf("%d entries and %d traits checked; the set has 1318", len(entries), len(traitRows))
 	}
 	if out := os.Getenv("EARLY_ROUTES_OUT"); out != "" {
 		var lines []string
@@ -448,8 +454,8 @@ func TestPostgresEarlyGameEveryEntry(t *testing.T) {
 			lines = append(lines, fmt.Sprintf("| %s | trait | %s | - | %s |  |  |", p[0], cell(p[2]), cell(p[3])))
 		}
 		sort.Strings(lines)
-		head := "# SRD 5.2.1 early-game monsters (CR 0 to 11): the route test\n\nWritten by `EARLY_ROUTES_OUT=$PWD/docs/SRD_EARLY_GAME_ROUTES.md go test ./cmd/server -run TestPostgresEarlyGameEveryEntry`" +
-			" (srd_early_game_routes_2024_test.go, Postgres): one run's result. Every action, Bonus Action and Reaction (and Legendary Action) of the 290 monsters sent through" +
+		head := "# SRD 5.2.1 early-game monsters (CR 0 to 30, all 330): the route test\n\nWritten by `EARLY_ROUTES_OUT=$PWD/docs/SRD_EARLY_GAME_ROUTES.md go test ./cmd/server -run TestPostgresEarlyGameEveryEntry`" +
+			" (srd_early_game_routes_2024_test.go, Postgres): one run's result. Every action, Bonus Action and Reaction (and Legendary Action) of the 330 monsters sent through" +
 			" POST /api/gm/narrate's monster_action at a character, once per option its entry offers (`use`), after the setup its gate needs; an attack" +
 			" repeated until it hits and a save until it fails. \"Stored\" is what the server wrote; \"flagged to the GM\" means the reply hands the GM what" +
 			" the server doesn't do. Movement is run without a battle map here (the GM places the creature). Traits: who applies each, as the GM's view of the fight says.\n\n" +
