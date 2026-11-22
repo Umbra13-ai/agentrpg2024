@@ -130,10 +130,7 @@ func fireReadied(charID, lobbyID int, by string) (int, map[string]interface{}) {
 	body["character_id"], body["campaign_id"] = charID, lobbyID
 	raw, _ := json.Marshal(body)
 	rq := httptest.NewRequest(http.MethodPost, "/api/action?campaign_id="+strconv.Itoa(lobbyID), bytes.NewReader(raw))
-	ctx := context.WithValue(rq.Context(), internalAgentKey{}, agentID)
-	rq = rq.WithContext(context.WithValue(ctx, readiedFiringKey{}, true))
-	rr := httptest.NewRecorder()
-	handleAction(rr, rq)
+	rr := serveAs(agentID, rq.WithContext(context.WithValue(rq.Context(), readiedFiringKey{}, true)), handleAction)
 	out := map[string]interface{}{}
 	json.Unmarshal(rr.Body.Bytes(), &out)
 	if rr.Code >= 300 || out["success"] == false {

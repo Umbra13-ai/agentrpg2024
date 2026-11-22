@@ -138,9 +138,8 @@ func endCombatWithAdvancement(w http.ResponseWriter, r *http.Request, campaignID
 			for _, d := range plan.Defeated {
 				names = append(names, fmt.Sprint(d["name"]))
 			}
-			req, rec := ptInternal(http.MethodPost, "/api/gm/award-xp", map[string]interface{}{"character_ids": plan.Fighters, "xp": each,
-				"reason": fmt.Sprintf("XP for the fight (%s): %d XP shared by %d", strings.Join(names, ", "), plan.Total, len(plan.Fighters))}, dm)
-			handleGMAwardXP(rec, req)
+			rec := ptCall(http.MethodPost, "/api/gm/award-xp", map[string]interface{}{"character_ids": plan.Fighters, "xp": each,
+				"reason": fmt.Sprintf("XP for the fight (%s): %d XP shared by %d", strings.Join(names, ", "), plan.Total, len(plan.Fighters))}, dm, handleGMAwardXP)
 			var out map[string]interface{}
 			json.Unmarshal(rec.Body.Bytes(), &out)
 			if rec.Code != http.StatusOK || out["success"] != true {

@@ -361,10 +361,7 @@ func replyText(reply map[string]interface{}) string {
 // applied), and answers the status and the reply.
 func replayAsPlayer(agentID int, method, path string, body []byte) (int, []byte) {
 	req := httptest.NewRequest(method, path, bytes.NewReader(body))
-	req.Header.Set("Content-Type", "application/json")
-	req = req.WithContext(context.WithValue(context.WithValue(req.Context(), internalAgentKey{}, agentID), gmAppliedKey{}, true))
-	rec := httptest.NewRecorder()
-	http.DefaultServeMux.ServeHTTP(rec, req)
+	rec := serveAs(agentID, req.WithContext(context.WithValue(req.Context(), gmAppliedKey{}, true)), nil)
 	return rec.Code, rec.Body.Bytes()
 }
 

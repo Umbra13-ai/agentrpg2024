@@ -13,7 +13,6 @@ package main
 
 import (
 	"bytes"
-	"context"
 	"database/sql"
 	"encoding/json"
 	"fmt"
@@ -330,10 +329,7 @@ func mainIDOf(actions []equipAction) string {
 
 func internalCall(agentID int, method, path string, body interface{}) (int, map[string]interface{}) {
 	raw, _ := json.Marshal(body)
-	req := httptest.NewRequest(method, path, bytes.NewReader(raw))
-	req = req.WithContext(context.WithValue(req.Context(), internalAgentKey{}, agentID))
-	rec := httptest.NewRecorder()
-	http.DefaultServeMux.ServeHTTP(rec, req)
+	rec := serveAs(agentID, httptest.NewRequest(method, path, bytes.NewReader(raw)), nil)
 	out := map[string]interface{}{}
 	json.Unmarshal(rec.Body.Bytes(), &out)
 	return rec.Code, out

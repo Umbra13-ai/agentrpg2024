@@ -196,7 +196,7 @@ func handleMyTurn(w http.ResponseWriter, r *http.Request) {
 		if i < 10 {
 			recentEvents = append(recentEvents, line)
 		}
-		if rec.CharacterID == charID && !containsStr(notPlayTypes, rec.Type) {
+		if rec.isOwnActionOf(charID) {
 			mineSeen = true
 		}
 		if !mineSeen {

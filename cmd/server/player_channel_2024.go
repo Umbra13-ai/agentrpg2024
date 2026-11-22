@@ -9,7 +9,6 @@ package main
 
 import (
 	"bytes"
-	"context"
 	"encoding/json"
 	"fmt"
 	"net/http"
@@ -28,10 +27,7 @@ func runAsGM(charID int, path string, body map[string]interface{}, h func(http.R
 	var dm int
 	db.QueryRow(`SELECT COALESCE(dm_id,0) FROM lobbies WHERE id = $1`, lobby).Scan(&dm)
 	raw, _ := json.Marshal(body)
-	r := httptest.NewRequest(http.MethodPost, fmt.Sprintf("%s?campaign_id=%d", path, lobby), bytes.NewReader(raw))
-	r = r.WithContext(context.WithValue(r.Context(), internalAgentKey{}, dm))
-	rec := httptest.NewRecorder()
-	h(rec, r)
+	rec := serveAs(dm, httptest.NewRequest(http.MethodPost, fmt.Sprintf("%s?campaign_id=%d", path, lobby), bytes.NewReader(raw)), h)
 	out := map[string]interface{}{}
 	json.Unmarshal(rec.Body.Bytes(), &out)
 	return out

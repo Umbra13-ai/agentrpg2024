@@ -17,7 +17,6 @@ package main
 
 import (
 	"bytes"
-	"context"
 	"encoding/json"
 	"fmt"
 	"net/http"
@@ -2093,10 +2092,7 @@ func runCreation(body map[string]interface{}, agentID int, dry bool) map[string]
 		b["dry_run"] = true
 	}
 	raw, _ := json.Marshal(b)
-	req := httptest.NewRequest(http.MethodPost, "/api/characters", bytes.NewReader(raw))
-	req = req.WithContext(context.WithValue(req.Context(), internalAgentKey{}, agentID))
-	rec := httptest.NewRecorder()
-	handleCharacters(rec, req)
+	rec := serveAs(agentID, httptest.NewRequest(http.MethodPost, "/api/characters", bytes.NewReader(raw)), handleCharacters)
 	out := map[string]interface{}{}
 	json.Unmarshal(rec.Body.Bytes(), &out)
 	return out
