@@ -100,3 +100,27 @@ func TestPostgresLongRestReadsTheStoryClock(t *testing.T) {
 		t.Errorf("a rest the GM applies: %d %v", c, j)
 	}
 }
+
+// I-CALLA-14 retest: a travel record shows the players the pace and the distance; the terrain's DCs and the rolled encounter distance
+// are the GM's (a note kept out of the shared log, in the GM's notices and reply).
+func TestPostgresTravelKeepsTheGMsNumbersOutOfTheLog(t *testing.T) {
+	testPostgres(t)
+	gm, _, camp, _, _ := pgFightWith(t, "travel dcs", 1)
+	pgCall(t, "POST", fmt.Sprintf("/api/campaigns/%d/combat/end", camp), gm, map[string]interface{}{})
+	c, j := pgCall(t, "POST", "/api/gm/travel", gm, map[string]interface{}{"campaign_id": camp, "hours": 6, "pace": "slow", "terrain": "grassland"})
+	if c != 200 || !strings.Contains(fmt.Sprint(j), "foraging DC") {
+		t.Fatalf("travel (the GM's reply keeps the DCs): %d %v", c, j)
+	}
+	var desc, res string
+	db.QueryRow(`SELECT COALESCE(description,''), COALESCE(result,'') FROM actions WHERE lobby_id = $1 AND action_type = 'travel' ORDER BY id DESC LIMIT 1`, camp).Scan(&desc, &res)
+	for _, text := range []string{desc, res} {
+		if strings.Contains(text, "DC") || strings.Contains(text, "rolled now") || !strings.Contains(text, "miles") {
+			t.Errorf("the shared log's travel record: %q", text)
+		}
+	}
+	var notes int
+	db.QueryRow(`SELECT COUNT(*) FROM gm_notices WHERE lobby_id = $1 AND text LIKE '%foraging DC%'`, camp).Scan(&notes)
+	if notes == 0 {
+		t.Error("the GM's notices don't keep the travel DCs")
+	}
+}

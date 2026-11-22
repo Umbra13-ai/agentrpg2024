@@ -330,6 +330,12 @@ func writeAction(q execer, lobbyID, charID int, actionType, description, result 
 	// the shared log is where every reader looks: a GM's private note (splitGMNotes) is never stored in it, whoever the caller is.
 	// The callers that know their notes (the narrate route) split earlier and name the monster; this is the boundary for the rest.
 	result, held := splitGMNotes(result)
+	description, heldDesc := splitGMNotes(description) // a note in the description too (the GM's travel record repeats its result)
+	for _, n := range heldDesc {
+		if !containsStr(held, n) {
+			held = append(held, n)
+		}
+	}
 	for _, n := range held {
 		addGMNotice(lobbyID, n)
 	}
