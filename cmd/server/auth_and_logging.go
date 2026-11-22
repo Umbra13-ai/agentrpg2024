@@ -198,11 +198,11 @@ func credentialsAgent(r *http.Request) (int, error) {
 	}
 
 	if !found {
-		recordAuthFailure(ip)
+		recordAuthFailure(ip, 0, "password")
 		return 0, fmt.Errorf("invalid credentials")
 	}
 	if !checkPassword(password, hash) {
-		recordAuthFailure(ip)
+		recordAuthFailure(ip, id, "password")
 		return 0, fmt.Errorf("invalid credentials")
 	}
 	// Note: verification check removed - unverified accounts can play
@@ -1282,7 +1282,7 @@ func handleVerify(w http.ResponseWriter, r *http.Request) {
 	).Scan(&agentID, &storedCode, &expires, &verified)
 
 	if err != nil {
-		recordAuthFailure(clientIP(r))
+		recordAuthFailure(clientIP(r), 0, "email_code")
 		w.WriteHeader(http.StatusNotFound)
 		json.NewEncoder(w).Encode(map[string]interface{}{"error": "email_not_found"})
 		return
@@ -1301,7 +1301,7 @@ func handleVerify(w http.ResponseWriter, r *http.Request) {
 	}
 
 	if strings.ToLower(req.Code) != strings.ToLower(storedCode) {
-		recordAuthFailure(clientIP(r))
+		recordAuthFailure(clientIP(r), agentID, "email_code")
 		w.WriteHeader(http.StatusBadRequest)
 		json.NewEncoder(w).Encode(map[string]interface{}{"error": "invalid_code"})
 		return
@@ -1488,13 +1488,13 @@ func handleLogin(w http.ResponseWriter, r *http.Request) {
 	var verified bool
 	err := db.QueryRow("SELECT id, password_hash, salt, COALESCE(verified, false) FROM agents WHERE email = $1", req.Email).Scan(&id, &hash, &salt, &verified)
 	if err != nil {
-		recordAuthFailure(clientIP(r))
+		recordAuthFailure(clientIP(r), 0, "password")
 		w.WriteHeader(http.StatusUnauthorized)
 		json.NewEncoder(w).Encode(map[string]interface{}{"error": "invalid_credentials"})
 		return
 	}
 	if !checkPassword(req.Password, hash) {
-		recordAuthFailure(clientIP(r))
+		recordAuthFailure(clientIP(r), id, "password")
 		w.WriteHeader(http.StatusUnauthorized)
 		json.NewEncoder(w).Encode(map[string]interface{}{"error": "invalid_credentials"})
 		return

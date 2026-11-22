@@ -8192,6 +8192,521 @@
     ]
    }
   },
+  "/api/admin/accounts/{id}/activity": {
+   "get": {
+    "tags": [
+     "Admin"
+    ],
+    "summary": "What an account has been up to",
+    "description": "Needs the X-Admin-Key header (the server's ADMIN_KEY). Every change is written to the admin change log. First and last seen, requests and errors in the last day and week, the routes it uses most, its active tokens and signing keys, and its failed sign-ins (kept 30 days).",
+    "responses": {
+     "200": {
+      "description": "Success",
+      "content": {
+       "application/json": {
+        "schema": {
+         "properties": {
+          "account": {
+           "type": "string"
+          },
+          "failed_requests_24h": {
+           "type": "integer"
+          },
+          "failed_requests_7d": {
+           "type": "integer"
+          },
+          "failed_sign_ins": {
+           "properties": {
+            "last_24h": {
+             "type": "integer"
+            },
+            "last_30d": {
+             "type": "integer"
+            },
+            "recent": {
+             "items": {
+              "properties": {
+               "address": {
+                "type": "string"
+               },
+               "at": {
+                "type": "string"
+               },
+               "how": {
+                "type": "string"
+               }
+              },
+              "type": "object"
+             },
+             "type": "array"
+            }
+           },
+           "type": "object"
+          },
+          "failing_routes": {
+           "items": {
+            "properties": {
+             "error": {
+              "type": "string"
+             },
+             "failed": {
+              "type": "integer"
+             },
+             "route": {
+              "type": "string"
+             }
+            },
+            "type": "object"
+           },
+           "type": "array"
+          },
+          "first_seen": {
+           "type": "string"
+          },
+          "last_active": {
+           "type": "string"
+          },
+          "tokens": {
+           "properties": {
+            "active": {
+             "type": "integer"
+            },
+            "signing_keys": {
+             "type": "integer"
+            }
+           },
+           "type": "object"
+          }
+         },
+         "type": "object"
+        }
+       }
+      }
+     }
+    },
+    "parameters": [
+     {
+      "name": "id",
+      "in": "path",
+      "required": true,
+      "description": "The account's id",
+      "schema": {
+       "type": "integer"
+      }
+     }
+    ]
+   }
+  },
+  "/api/admin/reports": {
+   "get": {
+    "tags": [
+     "Admin"
+    ],
+    "summary": "What players and GMs reported",
+    "description": "Needs the X-Admin-Key header (the server's ADMIN_KEY). Every change is written to the admin change log. The bug reports, errors and requests sent to POST /api/feature-requests; status open (default), resolved, closed or all.",
+    "responses": {
+     "200": {
+      "description": "Success",
+      "content": {
+       "application/json": {
+        "schema": {
+         "properties": {
+          "reports": {
+           "items": {
+            "properties": {
+             "account": {
+              "type": "string"
+             },
+             "account_id": {
+              "type": "integer"
+             },
+             "body": {
+              "type": "string"
+             },
+             "campaign": {
+              "type": "string"
+             },
+             "campaign_id": {
+              "type": "integer"
+             },
+             "character": {
+              "type": "string"
+             },
+             "character_id": {
+              "type": "integer"
+             },
+             "created_at": {
+              "type": "string"
+             },
+             "id": {
+              "type": "integer"
+             },
+             "status": {
+              "type": "string"
+             },
+             "title": {
+              "type": "string"
+             },
+             "updated_at": {
+              "type": "string"
+             }
+            },
+            "type": "object"
+           },
+           "type": "array"
+          }
+         },
+         "type": "object"
+        }
+       }
+      }
+     }
+    },
+    "parameters": [
+     {
+      "name": "status",
+      "in": "query",
+      "required": false,
+      "description": "open, resolved, closed or all",
+      "schema": {
+       "type": "string"
+      }
+     },
+     {
+      "name": "q",
+      "in": "query",
+      "required": false,
+      "description": "search a title, a report, an account or an id",
+      "schema": {
+       "type": "string"
+      }
+     },
+     {
+      "name": "limit",
+      "in": "query",
+      "required": false,
+      "description": "at most 500",
+      "schema": {
+       "type": "string"
+      }
+     }
+    ]
+   }
+  },
+  "/api/admin/reports/{id}": {
+   "post": {
+    "tags": [
+     "Admin"
+    ],
+    "summary": "Change a report's status",
+    "description": "Needs the X-Admin-Key header (the server's ADMIN_KEY). Every change is written to the admin change log. {\"status\": \"open|resolved|closed\", \"note\": \"why\"}.",
+    "responses": {
+     "400": {
+      "description": "The body was refused (nothing was changed): unknown_field, wrong_type, invalid_json, body_required or id_mismatch, with the fields the request takes",
+      "content": {
+       "application/json": {
+        "schema": {
+         "properties": {
+          "error": {
+           "type": "string"
+          },
+          "fields": {
+           "items": {
+            "type": "string"
+           },
+           "type": "array"
+          },
+          "message": {
+           "type": "string"
+          },
+          "unknown": {
+           "items": {
+            "type": "string"
+           },
+           "type": "array"
+          }
+         },
+         "type": "object"
+        }
+       }
+      }
+     },
+     "200": {
+      "description": "Success",
+      "content": {
+       "application/json": {
+        "schema": {
+         "properties": {
+          "id": {
+           "type": "integer"
+          },
+          "status": {
+           "type": "string"
+          },
+          "success": {
+           "type": "boolean"
+          },
+          "was": {
+           "type": "string"
+          }
+         },
+         "type": "object"
+        }
+       }
+      }
+     }
+    },
+    "parameters": [
+     {
+      "name": "id",
+      "in": "path",
+      "required": true,
+      "description": "The report's id",
+      "schema": {
+       "type": "integer"
+      }
+     }
+    ],
+    "requestBody": {
+     "required": true,
+     "content": {
+      "application/json": {
+       "schema": {
+        "type": "object",
+        "properties": {
+         "note": {
+          "type": "string",
+          "description": "why: written to the admin change log"
+         },
+         "status": {
+          "type": "string",
+          "description": "open, resolved or closed"
+         }
+        }
+       },
+       "example": {
+        "note": "...",
+        "status": "..."
+       }
+      }
+     }
+    }
+   }
+  },
+  "/api/admin/errors": {
+   "get": {
+    "tags": [
+     "Admin"
+    ],
+    "summary": "API requests that failed",
+    "description": "Needs the X-Admin-Key header (the server's ADMIN_KEY). Every change is written to the admin change log. Newest first, from the request log: the time, the account, the route and the status.",
+    "responses": {
+     "200": {
+      "description": "Success",
+      "content": {
+       "application/json": {
+        "schema": {
+         "properties": {
+          "errors": {
+           "items": {
+            "properties": {
+             "account": {
+              "type": "string"
+             },
+             "account_id": {
+              "type": "integer"
+             },
+             "at": {
+              "type": "string"
+             },
+             "campaign_id": {
+              "type": "integer"
+             },
+             "character_id": {
+              "type": "integer"
+             },
+             "error": {
+              "type": "string"
+             },
+             "id": {
+              "type": "integer"
+             },
+             "method": {
+              "type": "string"
+             },
+             "route": {
+              "type": "string"
+             },
+             "status": {
+              "type": "integer"
+             }
+            },
+            "type": "object"
+           },
+           "type": "array"
+          }
+         },
+         "type": "object"
+        }
+       }
+      }
+     }
+    },
+    "parameters": [
+     {
+      "name": "account_id",
+      "in": "query",
+      "required": false,
+      "description": "only this account",
+      "schema": {
+       "type": "string"
+      }
+     },
+     {
+      "name": "min_status",
+      "in": "query",
+      "required": false,
+      "description": "400 (default) or 500 for server errors only",
+      "schema": {
+       "type": "string"
+      }
+     },
+     {
+      "name": "q",
+      "in": "query",
+      "required": false,
+      "description": "part of a route",
+      "schema": {
+       "type": "string"
+      }
+     },
+     {
+      "name": "limit",
+      "in": "query",
+      "required": false,
+      "description": "at most 500",
+      "schema": {
+       "type": "string"
+      }
+     }
+    ]
+   }
+  },
+  "/api/admin/settings": {
+   "get": {
+    "tags": [
+     "Admin"
+    ],
+    "summary": "The running server, read only",
+    "description": "Needs the X-Admin-Key header (the server's ADMIN_KEY). Every change is written to the admin change log. The version, the database, whether mail is configured, whether the admin page is on, and counts. No secrets.",
+    "responses": {
+     "200": {
+      "description": "Success",
+      "content": {
+       "application/json": {
+        "schema": {
+         "properties": {
+          "admin": {
+           "properties": {
+            "page_on": {
+             "type": "boolean"
+            }
+           },
+           "type": "object"
+          },
+          "counts": {
+           "properties": {
+            "accounts": {
+             "type": "integer"
+            },
+            "accounts_deleted": {
+             "type": "integer"
+            },
+            "campaigns_by_status": {
+             "additionalProperties": {
+              "type": "integer"
+             },
+             "properties": {},
+             "type": "object"
+            },
+            "characters": {
+             "type": "integer"
+            },
+            "errors_24h": {
+             "type": "integer"
+            },
+            "failed_sign_ins_24h": {
+             "type": "integer"
+            },
+            "open_reports": {
+             "type": "integer"
+            },
+            "requests_24h": {
+             "type": "integer"
+            },
+            "server_errors_24h": {
+             "type": "integer"
+            }
+           },
+           "type": "object"
+          },
+          "database": {
+           "properties": {
+            "ok": {
+             "type": "boolean"
+            },
+            "ping_ms": {
+             "type": "integer"
+            },
+            "spells": {
+             "type": "integer"
+            }
+           },
+           "type": "object"
+          },
+          "mail": {
+           "properties": {
+            "status": {
+             "type": "string"
+            }
+           },
+           "type": "object"
+          },
+          "server": {
+           "properties": {
+            "build_time": {
+             "type": "string"
+            },
+            "go": {
+             "type": "string"
+            },
+            "on_render": {
+             "type": "boolean"
+            },
+            "public_address": {
+             "type": "string"
+            },
+            "started_at": {
+             "type": "string"
+            },
+            "test_clock": {
+             "type": "boolean"
+            },
+            "version": {
+             "type": "string"
+            }
+           },
+           "type": "object"
+          }
+         },
+         "type": "object"
+        }
+       }
+      }
+     }
+    }
+   }
+  },
   "/api/admin/session": {
    "get": {
     "tags": [

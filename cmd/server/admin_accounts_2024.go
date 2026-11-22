@@ -227,6 +227,7 @@ func adminAccountExtras(id int) map[string]interface{} {
 // @Router /admin/accounts/{id} [post]
 // @Router /admin/accounts/{id}/delete [post]
 // @Router /admin/accounts/{id}/restore [post]
+// @Router /admin/accounts/{id}/activity [get]
 func handleAdminAccounts(w http.ResponseWriter, r *http.Request) {
 	if !requireAdmin(w, r) {
 		return
@@ -236,6 +237,10 @@ func handleAdminAccounts(w http.ResponseWriter, r *http.Request) {
 		id, err := strconv.Atoi(parts[0])
 		if err != nil {
 			writeJSONStatus(w, http.StatusBadRequest, map[string]interface{}{"error": "invalid_id"})
+			return
+		}
+		if len(parts) == 2 && parts[1] == "activity" && r.Method == http.MethodGet {
+			accountActivity(w, id)
 			return
 		}
 		adminRowRoutes(w, r, "agents", "account", id, parts[1:])

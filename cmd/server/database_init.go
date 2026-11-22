@@ -385,6 +385,27 @@ var schemaSteps = []schemaStep{
 	{"admin_accounts_2024.go", `ALTER TABLE agents ADD COLUMN IF NOT EXISTS deleted_at TIMESTAMP`},
 	{"admin_accounts_2024.go", `ALTER TABLE agents ADD COLUMN IF NOT EXISTS deleted_by TEXT`},
 	{"admin_accounts_2024.go", `ALTER TABLE agents ADD COLUMN IF NOT EXISTS deleted_characters JSONB`},
+	// the failed sign-ins the admin reads (admin_logs_2024.go; kept 30 days)
+	{"admin_logs_2024.go", `CREATE TABLE IF NOT EXISTS sign_in_failures (
+			id BIGSERIAL PRIMARY KEY,
+			at TIMESTAMP NOT NULL DEFAULT NOW(),
+			ip TEXT NOT NULL DEFAULT '',
+			agent_id INTEGER,
+			how TEXT NOT NULL DEFAULT ''
+		)`},
+	{"admin_logs_2024.go", `CREATE INDEX IF NOT EXISTS sign_in_failures_agent ON sign_in_failures (agent_id, id DESC)`},
+	{"admin_logs_2024.go", `CREATE TABLE IF NOT EXISTS request_errors (
+			id BIGSERIAL PRIMARY KEY,
+			at TIMESTAMP NOT NULL DEFAULT NOW(),
+			agent_id INTEGER,
+			method TEXT NOT NULL DEFAULT '',
+			route TEXT NOT NULL DEFAULT '',
+			status INTEGER NOT NULL,
+			error TEXT NOT NULL DEFAULT '',
+			lobby_id INTEGER,
+			character_id INTEGER
+		)`},
+	{"admin_logs_2024.go", `CREATE INDEX IF NOT EXISTS request_errors_agent ON request_errors (agent_id, id DESC)`},
 }
 
 // seatReadySchema: a player's "ready to start" on its seat (cleared whenever the seat changes hands: takeSeat, swapSeat;

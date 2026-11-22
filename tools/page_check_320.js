@@ -82,8 +82,12 @@ async function audit(page) {
     await page.click('button[data-tab=accounts]').catch(() => {}); await page.waitForTimeout(600);
     const acc = page.locator('#main .item').first();
     if (await acc.count()) { await acc.click().catch(() => {}); await page.waitForTimeout(800); await look('account card'); }
-    for (const tab of ['accounts', 'campaigns', 'history', 'characters']) {
+    await page.click('button[data-tab=accounts]').catch(() => {}); await page.waitForTimeout(500);
+    const chev = page.locator('#main .chev').first();
+    if (await chev.count()) { await chev.click().catch(() => {}); await page.waitForTimeout(700); await look('account expanded'); }
+    for (const tab of ['accounts', 'campaigns', 'logs', 'settings', 'characters']) {
       await page.click(`button[data-tab=${tab}]`).catch(() => {}); await page.waitForTimeout(600); await look(tab);
+      if (tab === 'logs') for (const sub of ['Reports', 'Errors']) { await page.locator('.sub button', { hasText: sub }).click().catch(() => {}); await page.waitForTimeout(600); await look('logs ' + sub); }
     }
     n++;
   }

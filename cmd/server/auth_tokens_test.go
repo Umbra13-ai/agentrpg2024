@@ -43,7 +43,7 @@ func TestAuthThrottle(t *testing.T) {
 		t.Fatal("fresh address should not be throttled")
 	}
 	for i := 0; i < maxFailedPerMinute; i++ {
-		recordAuthFailure(ip)
+		recordAuthFailure(ip, 0, "token")
 	}
 	if !authThrottled(ip) {
 		t.Fatal("address should be throttled after too many failures")

@@ -117,25 +117,31 @@ func authThrottled(ip string) bool {
 
 // authFailure records a failed sign-in from ip and says how to answer it: msg, or too_many_failed_attempts once the address
 // has failed too often in the last minute.
-func authFailure(ip, msg string) error {
+func authFailure(ip string, agentID int, how, msg string) error {
 	throttled := authThrottled(ip)
-	recordAuthFailure(ip)
+	recordAuthFailure(ip, agentID, how)
 	if throttled {
 		return fmt.Errorf("too_many_failed_attempts: wait a minute and try again")
 	}
 	return fmt.Errorf("%s", msg)
 }
 
-func recordAuthFailure(ip string) {
+// recordAuthFailure is the one place a failed sign-in is recorded: for the per-address limit (in memory) and for the admin's view of it
+// (sign_in_failures, admin_logs_2024.go: the account it was aimed at when that is known, and how: token, signature, password, email_code).
+func recordAuthFailure(ip string, agentID int, how string) {
 	authFailures.Lock()
-	defer authFailures.Unlock()
 	authFailures.byIP[ip] = append(authFailures.byIP[ip], time.Now())
+	n := len(authFailures.byIP[ip])
+	authFailures.Unlock()
+	if n <= maxFailedPerMinute+1 { // an address that is already throttled doesn't fill the log
+		logSignInFailure(ip, agentID, how)
+	}
 }
 
 // agentFromBearer authenticates a Bearer token and returns the agent id.
 func agentFromBearer(r *http.Request, token string) (int, error) {
 	ip := clientIP(r)
-	failed := func() (int, error) { return 0, authFailure(ip, "invalid_token") }
+	failed := func() (int, error) { return 0, authFailure(ip, 0, "token", "invalid_token") }
 	token = strings.TrimSpace(token)
 	if !strings.HasPrefix(token, tokenPrefix) {
 		return failed()

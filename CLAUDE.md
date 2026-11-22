@@ -497,6 +497,13 @@ Add to the owner, never beside it. When you give another rule one owner, add it 
   account is the GM of a campaign. `adminAccountValue` checks a name (1 to 64, unused) and an email (valid, unused); `editorColumns` locks the secrets
   (`password_hash`, `salt`, `verification_code`, the delete record, `last_seen`) and `adminRow` never sends them; a character's player or a campaign's GM
   must be a live account (`accountUsable`). Go: `TestPostgresAdminAccounts`; the page: `tools/page_check_320.js`.
+- **The admin's Logs, Settings and an account's activity** (owner, Nov 22; `cmd/server/admin_logs_2024.go`): **Reports** are `feature_requests` (what players and GMs send to
+  POST /api/feature-requests), their status changed by POST `/api/admin/reports/{id}` and logged (kind `report`); **Errors** are `request_errors`, written by
+  `failureRecorder` in `withProtections` (the shared layer: every /api reply of 400 and over but 401 and 429, with the reply's error code and the account
+  signed in; `api_logs` is not a request log and nothing reads it); **sign-in failures** are `sign_in_failures`, written by `recordAuthFailure` (the one
+  place a failed sign-in is recorded: address, how, the account when known); both kept 30 days (`pruneLogs`); `GET /api/admin/settings` is a read-only account of
+  the server, no secret; `GET /api/admin/accounts/{id}/activity` (last seen, failed requests, the routes that fail most, tokens, failed sign-ins). Go:
+  `TestPostgresAdminLogsSettingsActivity`; the page (Logs with Changes, Reports and Errors; Settings; expandable account rows): `tools/page_check_320.js`.
 - **Outgoing mail:** `sendMail` (`cmd/server/mail_2024.go`), through AgentMail or Resend. Never call a mail service anywhere
   else.
 - **A campaign's player seats:** `openSeats` / `campaignFull` (`cmd/server/campaign_flow.go`): the campaign list's

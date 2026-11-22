@@ -14,10 +14,22 @@ const adminPageHTML = `<!DOCTYPE html>
 body{margin:0;background:var(--bg);color:var(--ink);font:17px/1.45 -apple-system,system-ui,sans-serif;padding-bottom:110px}
 header{position:sticky;top:0;z-index:5;background:var(--bg);border-bottom:1px solid var(--line);padding:10px 16px}
 .top{display:flex;align-items:center;gap:10px}.top h1{font-size:19px;margin:0;flex:1}
-.seg{display:flex;background:var(--chip);border-radius:10px;padding:3px;margin-top:10px}
-.seg button{flex:1;min-width:0;border:0;background:transparent;padding:8px 4px;border-radius:8px;font-weight:600;color:var(--muted)}
-@media (max-width:440px){.seg{flex-wrap:wrap}.seg button{flex:1 1 45%}}
-.seg button[aria-pressed=true]{background:var(--card);color:var(--ink);box-shadow:0 1px 3px rgba(0,0,0,.15)}
+.seg{display:flex;flex-wrap:wrap;gap:0 2px;margin-top:10px;padding:0 2px;border-bottom:2px solid var(--line)}
+/* layered tabs: each one sits a little behind the next, the chosen one comes forward and joins the page below it */
+.seg button{flex:1 1 0;min-width:0;border:1px solid var(--line);border-bottom:0;background:linear-gradient(var(--chip),var(--line));padding:9px 4px 8px;margin-top:5px;border-radius:12px 12px 0 0;font-weight:600;font-size:15px;color:var(--muted);box-shadow:inset 0 -6px 8px -6px rgba(0,0,0,.18);position:relative;top:2px}
+.seg button+button{margin-left:-6px;padding-left:10px}
+.seg button[aria-pressed=true]{background:var(--bg);color:var(--ink);margin-top:0;z-index:2;box-shadow:0 -3px 6px -2px rgba(0,0,0,.2);border-color:var(--accent);border-bottom:0;padding-bottom:10px}
+@media (max-width:440px){.seg button{flex:1 1 30%;margin-left:0!important}.seg button+button{padding-left:4px}}
+.sub{display:flex;gap:6px;margin-bottom:12px}.sub button{flex:1;border:1px solid var(--line);background:var(--card);border-radius:10px;padding:8px 4px;font-weight:600;color:var(--muted)}
+.sub button[aria-pressed=true]{background:var(--accent);border-color:var(--accent);color:var(--accent-ink)}
+.chev{display:flex;align-items:center;justify-content:center;width:40px;height:40px;margin:-8px -8px -8px 6px;border-radius:10px;color:var(--muted);font-size:20px;flex:0 0 auto;transition:transform .15s ease}
+.chev[aria-expanded=true]{transform:rotate(180deg);color:var(--accent)}
+.item.rowflex{display:flex;align-items:center;gap:6px}.item.rowflex>.main{flex:1;min-width:0}
+.panel{background:var(--card);border:1px solid var(--line);border-radius:14px;padding:12px 14px;margin:-4px 0 10px}
+.stats{display:grid;grid-template-columns:repeat(2,1fr);gap:8px 12px;margin-bottom:8px}.stats div b{display:block;font-size:17px}.stats div span{color:var(--muted);font-size:14px}
+.kv{display:flex;justify-content:space-between;gap:10px;padding:6px 0;border-top:1px solid var(--line)}.kv:first-child{border-top:0}.kv span:last-child{font-weight:600;text-align:right;word-break:break-word}
+.rep{border-top:1px solid var(--line);padding:10px 0}.rep:first-child{border-top:0}.rep pre{white-space:pre-wrap;word-break:break-word;font:inherit;margin:6px 0;color:var(--muted)}
+.st{display:inline-block;font-size:13px;font-weight:700;padding:2px 8px;border-radius:99px;background:var(--chip);color:var(--muted);margin-left:6px}.st.bad{color:var(--warn)}.st.ok{color:var(--ok)}
 main{padding:14px 16px;max-width:760px;margin:0 auto}
 button,input,select,textarea{font:inherit;color:inherit}
 input,select,textarea{width:100%;background:var(--card);border:1px solid var(--line);border-radius:10px;padding:10px 12px;font-size:17px}
@@ -76,7 +88,7 @@ main a[target=_blank]{padding:9px 0;min-height:40px}.toggle{min-height:40px}.tog
 </style></head><body>
 <div id="toast" role="status"></div>
 <header><div class="top"><h1>Admin</h1><button class="link" id="logout" hidden>Sign out</button></div>
-<div class="seg" id="tabs" hidden><button data-tab="characters" aria-pressed="true">Characters</button><button data-tab="campaigns" aria-pressed="false">Campaigns</button><button data-tab="accounts" aria-pressed="false">Accounts</button><button data-tab="history" aria-pressed="false">History</button></div></header>
+<div class="seg" id="tabs" hidden><button data-tab="characters" aria-pressed="true">Characters</button><button data-tab="campaigns" aria-pressed="false">Campaigns</button><button data-tab="accounts" aria-pressed="false">Accounts</button><button data-tab="logs" aria-pressed="false">Logs</button><button data-tab="settings" aria-pressed="false">Settings</button></div></header>
 <main id="main"></main>
 <div class="savebar" id="savebar"><div class="row"><input id="reason" placeholder="Reason (optional)"><button class="btn" id="discard">Undo</button><button class="btn primary" id="save">Save</button></div></div>
 <script>
@@ -103,23 +115,31 @@ Array.prototype.forEach.call(document.querySelectorAll('#tabs button'),function(
 // ---------- lists
 var q='',which='';
 function showList(){hideSave();pending={};M.textContent='';window.scrollTo(0,0);
-  if(tab==='history')return showHistory();
-  var s=el('div',{'class':'search'});var i=el('input',{type:'search',placeholder:tab==='characters'?'Search name, player or id':(tab==='accounts'?'Search name, email or id':'Search name, GM or id')});i.value=q;
+  if(tab==='logs')return showLogs();
+  if(tab==='settings')return showSettings();
+  var s=el('div',{'class':'search'});var i=el('input',{type:'search',placeholder:tab==='characters'?'Search name, player or id':(tab==='accounts'?'Name, email or id':'Search name, GM or id')});i.value=q;
   var sel=el('select');[['','Active'],['only','Deleted'],['include','All']].forEach(function(o){var op=el('option',{value:o[0]},o[1]);if(o[0]===which)op.selected=true;sel.appendChild(op)});
   add(s,i,sel);M.appendChild(s);var box=el('div');M.appendChild(box);
   var t;i.oninput=function(){clearTimeout(t);t=setTimeout(function(){q=i.value;load()},300)};sel.onchange=function(){which=sel.value;load()};
   function load(){api('GET','/api/admin/'+tab+'?q='+encodeURIComponent(q)+'&deleted='+which).then(function(j){var list=j[tab];box.textContent='';
     if(!list.length){box.appendChild(el('p',{'class':'muted'},'Nothing found.'));return}
     box.appendChild(el('p',{'class':'muted small'},'Swipe a row left (or drag it with the mouse) to '+(which==='only'?'restore it.':'delete it; you can undo.')));
-    list.forEach(function(x){var b=el('button',{'class':'item'});var title=el('b',null,x.name);
+    list.forEach(function(x){var acc=tab==='accounts';var b=acc?el('div',{'class':'item rowflex',role:'button',tabindex:'0'}):el('button',{'class':'item'});var title=el('b',null,x.name);
       if(x.deleted)title.appendChild(el('span',{'class':'badge del'},'Deleted'));
       if(tab==='campaigns'&&!x.deleted)title.appendChild(el('span',{'class':'badge'+(x.status==='active'?' on':'')},x.status));
       var sub=tab==='characters'?('Level '+x.level+' '+cap(x.species)+' '+cap(x.class)+' · '+(x.owner||'no player')+(x.campaign?' · '+x.campaign:'')):
         (tab==='accounts'?((x.email&&x.email!==x.name?x.email:'no email')+' · '+x.characters+' character'+(x.characters===1?'':'s')+(x.campaigns?' · GM of '+x.campaigns:'')+(x.is_moderator?' · moderator':'')+(x.last_seen?' · seen '+x.last_seen:'')):
         ('GM '+(x.gm||'none')+' · '+x.players+' of '+x.max_players+' players'));
       if(tab==='accounts'&&x.is_moderator&&!x.deleted)title.appendChild(el('span',{'class':'badge on'},'Moderator'));
-      add(b,title,el('span',null,sub));
-      box.appendChild(swipeRow(b,x.deleted,function(){tab==='characters'?openCharacter(x.id):(tab==='accounts'?openAccount(x.id):openCampaign(x.id))},function(row){quickAction(x,row,load)}))})}).catch(fail)}
+      if(!acc){add(b,title,el('span',null,sub))}
+      else{var m=el('div',{'class':'main'});add(m,title,el('span',null,sub));var chev=el('span',{'class':'chev',role:'button',tabindex:'0','aria-label':'Show details','aria-expanded':'false'},'▾');add(b,m,chev);
+        b.addEventListener('keydown',function(e){if(e.key==='Enter'&&e.target===b)openAccount(x.id)});
+        var panel=el('div',{'class':'panel'});panel.hidden=true;var loaded=false;
+        function toggle(e){e.stopPropagation();e.preventDefault();var open=panel.hidden;panel.hidden=!open;chev.setAttribute('aria-expanded',String(open));
+          if(open&&!loaded){loaded=true;panel.textContent='Loading…';api('GET','/api/admin/accounts/'+x.id+'/activity').then(function(a){panel.textContent='';renderActivity(panel,a,x.id)}).catch(function(e2){loaded=false;panel.textContent='';fail(e2)})}}
+        chev.addEventListener('click',toggle);chev.addEventListener('keydown',function(e){if(e.key==='Enter'||e.key===' ')toggle(e)});chev.addEventListener('pointerdown',function(e){e.stopPropagation()});
+        box.appendChild(swipeRow(b,x.deleted,function(){openAccount(x.id)},function(row){quickAction(x,row,load)}));box.appendChild(panel);return}
+      box.appendChild(swipeRow(b,x.deleted,function(){tab==='characters'?openCharacter(x.id):openCampaign(x.id)},function(row){quickAction(x,row,load)}))})}).catch(fail)}
   load()}
 
 // ---------- swipe a row left: a red Delete (or, for a deleted row, a green Restore) slides out from under it
@@ -295,11 +315,15 @@ function openAccount(id){curId=id;pending={};hideSave();
       var rb=el('button',{'class':'btn primary'},'Restore account');rb.onclick=function(){if(confirm('Restore this account?'))api('POST','/api/admin/accounts/'+id+'/restore').then(function(r){toast(r.message);campaignsCache=null;openAccount(id)}).catch(fail)};rc.appendChild(rb);M.appendChild(rc);return}
     var s1=section('Details',true);
     add(s1,text('Name','name'),text('Email (an account without one signs in by token only)','email'),toggle('Verified','verified'),toggle('Email verified','email_verified'),toggle('Moderator','is_moderator'));M.appendChild(s1);
+    var act=section('Activity',true);M.appendChild(act);api('GET','/api/admin/accounts/'+id+'/activity').then(function(d){renderActivity(act,d,id,true)}).catch(fail);
     M.appendChild(tokenCard(a.id,a.name));
     var s2=section('Characters',true);
     chars.forEach(function(c){var r=el('div',{'class':'row inv'});var t=el('div');add(t,el('div',null,c.name+(c.deleted?' (deleted)':'')),el('div',{'class':'muted small'},'Level '+c.level+' '+cap(c.class)+(c.campaign?' · '+c.campaign:'')));
       var o=el('button',{'class':'btn small'},'Open');o.onclick=function(){if(dirty()&&!confirm('Discard unsaved changes?'))return;tab='characters';openCharacter(c.id)};add(r,t,o);s2.appendChild(r)});
-    if(!chars.length)s2.appendChild(el('p',{'class':'muted small'},'No characters.'));M.appendChild(s2);
+    if(!chars.length)s2.appendChild(el('p',{'class':'muted small'},'No characters.'));
+    s2.appendChild(finder('Assign a character to this account','Character name','/api/admin/characters?q=','characters',function(x){return x.name+' · '+(x.owner||'no player')+(x.campaign?' · in '+x.campaign:'')},
+      function(x){if(confirm('Give '+x.name+' to '+a.name+'?'+(x.owner?' It leaves '+x.owner+'.':'')))api('POST','/api/admin/characters/'+x.id,{set:{agent_id:id},note:'assigned from the account page'}).then(function(){toast('Assigned');campaignsCache=null;openAccount(id)}).catch(fail)}));
+    M.appendChild(s2);
     var s3=section('Campaigns it runs');
     camps.forEach(function(c){var r=el('div',{'class':'row inv'});var t=el('div');add(t,el('div',null,c.name),el('div',{'class':'muted small'},cap(c.status)));
       var o=el('button',{'class':'btn small'},'Open');o.onclick=function(){if(dirty()&&!confirm('Discard unsaved changes?'))return;tab='campaigns';openCampaign(c.id)};add(r,t,o);s3.appendChild(r)});
@@ -332,10 +356,59 @@ function openCampaign(id){curId=id;pending={};hideSave();
   }).catch(fail)}
 function member(body,id){api('POST','/api/admin/campaigns/'+id,body).then(function(r){toast(r.message);campaignsCache=null;openCampaign(id)}).catch(fail)}
 
-// ---------- history
+// ---------- activity of an account (the list's expanded row and the account's page)
+function stat(label,value){var d=el('div');add(d,el('b',null,value),el('span',null,label));return d}
+function renderActivity(box,d,id,full){var g=el('div',{'class':'stats'});
+  add(g,stat('Last active',d.last_active||'never'),stat('First seen',d.first_seen),stat('Failed requests, 24 hours',d.failed_requests_24h),stat('Failed requests, 7 days',d.failed_requests_7d),
+    stat('Failed sign-ins, 24 h / 30 d',d.failed_sign_ins.last_24h+' / '+d.failed_sign_ins.last_30d),stat('Active tokens / keys',d.tokens.active+' / '+d.tokens.signing_keys));box.appendChild(g);
+  var rt=d.failing_routes||[];box.appendChild(el('h3',null,'Routes that fail most, 7 days'));
+  if(!rt.length)box.appendChild(el('p',{'class':'muted small'},'No failed requests.'));
+  rt.forEach(function(r){var k=el('div',{'class':'kv'});add(k,el('span',null,r.route+(r.error?' · '+r.error:'')),el('span',null,r.failed+'×'));box.appendChild(k)});
+  var f=d.failed_sign_ins.recent||[];box.appendChild(el('h3',null,'Failed sign-ins'));box.lastChild.style.marginTop='12px';
+  if(!f.length)box.appendChild(el('p',{'class':'muted small'},'None in the last 30 days.'));
+  f.forEach(function(r){var k=el('div',{'class':'kv'});add(k,el('span',null,r.at+' · '+r.how),el('span',null,r.address));box.appendChild(k)});
+  if(!full){var o=el('button',{'class':'btn small'},'Open account');o.style.marginTop='10px';o.onclick=function(){openAccount(id)};box.appendChild(o);
+    var e=el('button',{'class':'btn small'},'Its errors');e.style.cssText='margin:10px 0 0 8px';e.onclick=function(){tab='logs';logSub='errors';errAccount=id;document.querySelector('#tabs [data-tab=logs]').click()};box.appendChild(e)}}
+
+// ---------- logs: Changes, Reports, Errors
+var logSub='changes',errAccount=0;
+function showLogs(){M.textContent='';var sub=el('div',{'class':'sub'});[['changes','Changes'],['reports','Reports'],['errors','Errors']].forEach(function(o){var b=el('button',{'aria-pressed':String(o[0]===logSub)},o[1]);b.onclick=function(){logSub=o[0];if(o[0]!=='errors')errAccount=0;showLogs()};sub.appendChild(b)});M.appendChild(sub);
+  var body=el('div');M.appendChild(body);if(logSub==='changes')showHistoryIn(body);else if(logSub==='reports')showReports(body);else showErrors(body)}
+function showReports(box){var st='open';var sel=el('select');[['open','Open'],['resolved','Resolved'],['closed','Closed'],['all','All']].forEach(function(o){sel.appendChild(el('option',{value:o[0]},o[1]))});
+  var s=el('div',{'class':'search'});var i=el('input',{type:'search',placeholder:'Search reports'});add(s,i,sel);box.appendChild(s);var list=el('div',{'class':'card'});box.appendChild(list);
+  function load(){api('GET','/api/admin/reports?status='+sel.value+'&q='+encodeURIComponent(i.value)).then(function(j){list.textContent='';
+    if(!j.reports.length){list.appendChild(el('p',{'class':'muted'},'No reports here.'));return}
+    j.reports.forEach(function(r){var d=el('div',{'class':'rep'});var t=el('b',null,r.title);t.appendChild(el('span',{'class':'st '+(r.status==='open'?'bad':'ok')},r.status));d.appendChild(t);
+      d.appendChild(el('div',{'class':'muted small'},r.created_at+' · '+(r.account||'unknown account')+(r.campaign?' · '+r.campaign:'')+(r.character?' · '+r.character:'')));
+      d.appendChild(el('pre',null,r.body));var row=el('div',{'class':'row'});
+      [['resolved','Resolve'],['closed','Close'],['open','Reopen']].filter(function(o){return o[0]!==r.status}).forEach(function(o){var b=el('button',{'class':'btn small'},o[1]);
+        b.onclick=function(){api('POST','/api/admin/reports/'+r.id,{status:o[0]}).then(function(){toast('Report '+r.id+': '+o[0]);load()}).catch(fail)};row.appendChild(b)});d.appendChild(row);list.appendChild(d)})}).catch(fail)}
+  var t;i.oninput=function(){clearTimeout(t);t=setTimeout(load,300)};sel.onchange=load;load()}
+function showErrors(box){var sel=el('select');[['400','All failed requests'],['500','Server errors only']].forEach(function(o){sel.appendChild(el('option',{value:o[0]},o[1]))});
+  var s=el('div',{'class':'search'});var i=el('input',{type:'search',placeholder:'Part of a route'});add(s,i,sel);box.appendChild(s);
+  if(errAccount){var chip=el('div',{'class':'chips'});var c=el('span',{'class':'chip'},'Account '+errAccount);var x=el('button',{'aria-label':'Show every account'},'×');x.onclick=function(){errAccount=0;showLogs()};c.appendChild(x);chip.appendChild(c);box.appendChild(chip)}
+  var list=el('div',{'class':'card'});box.appendChild(list);
+  function load(){api('GET','/api/admin/errors?min_status='+sel.value+'&q='+encodeURIComponent(i.value)+(errAccount?'&account_id='+errAccount:'')).then(function(j){list.textContent='';
+    if(!j.errors.length){list.appendChild(el('p',{'class':'muted'},'No failed requests.'));return}
+    j.errors.forEach(function(e){var d=el('div',{'class':'hist'});var t=el('div',null,e.method+' '+e.route);t.appendChild(el('span',{'class':'st '+(e.status>=500?'bad':'')},e.status+(e.error?' '+e.error:'')));
+      add(d,t,el('div',{'class':'muted small'},e.at+' · '+(e.account||'no account')+(e.campaign_id?' · campaign '+e.campaign_id:'')+(e.character_id?' · character '+e.character_id:'')));list.appendChild(d)})}).catch(fail)}
+  var t;i.oninput=function(){clearTimeout(t);t=setTimeout(load,300)};sel.onchange=load;load()}
+
+// ---------- settings: the running server, read only
+function showSettings(){M.textContent='';api('GET','/api/admin/settings').then(function(j){
+  function card(title,rows){var c=el('div',{'class':'card'});c.appendChild(el('h3',null,title));rows.forEach(function(r){var k=el('div',{'class':'kv'});add(k,el('span',null,r[0]),el('span',null,r[1]));c.appendChild(k)});M.appendChild(c)}
+  var s=j.server,d=j.database,c=j.counts,cs=c.campaigns_by_status||{};
+  card('Server',[['Version',s.version],['Built',s.build_time],['Started',s.started_at],['Go',s.go],['Address',s.public_address||'not set'],['Hosting',s.on_render?'Render':'other'],['Test clock',s.test_clock?'on':'off']]);
+  card('Database',[['Status',d.ok?'answering':'NOT ANSWERING'],['Round trip',d.ping_ms+' ms'],['Spells loaded',d.spells]]);
+  card('Services',[['Mail',j.mail.status],['Admin page',j.admin.page_on?'on':'off']]);
+  card('Counts',[['Accounts',c.accounts+(c.accounts_deleted?' (+'+c.accounts_deleted+' deleted)':'')],['Characters',c.characters],['Campaigns',Object.keys(cs).map(function(k){return cs[k]+' '+k}).join(', ')||'none'],['Open reports',c.open_reports],
+    ['Failed requests, 24 h',c.errors_24h+(c.server_errors_24h?' ('+c.server_errors_24h+' server errors)':'')],['Failed sign-ins, 24 h',c.failed_sign_ins_24h]]);
+  var r=el('button',{'class':'btn'},'Refresh');r.onclick=showSettings;M.appendChild(r)}).catch(fail)}
+
+// ---------- history (the Changes of Logs)
 var LABEL={hp:'Hit Points',max_hp:'Max Hit Points',temp_hp:'Temporary HP',ac:'Armor Class',xp:'Experience',agent_id:'Player (account)',lobby_id:'Campaign',dm_id:'GM (account)',intl:'Intelligence',str:'Strength',dex:'Dexterity',con:'Constitution',wis:'Wisdom',cha:'Charisma',
   exhaustion_level:'Exhaustion',is_dead:'Dead',spell_slots_used:'Used spell slots',max_players:'Max players',min_level:'Lowest level',max_level:'Highest level'};
-function showHistory(){var box=el('div',{'class':'card'});M.appendChild(box);api('GET','/api/admin/changes?limit=200').then(function(j){
+function showHistoryIn(M){var box=el('div',{'class':'card'});M.appendChild(box);api('GET','/api/admin/changes?limit=200').then(function(j){
   if(!j.changes.length){box.appendChild(el('p',{'class':'muted'},'No admin changes yet.'));return}
   j.changes.forEach(function(x){var d=el('div',{'class':'hist'});var who=x.name||(({character:'Character ',account:'Account '}[x.kind]||'Campaign ')+x.row_id);var what;
     if(x.field==='token')what=cap(x.new);else if(x.field==='deleted')what='Deleted';else if(x.field==='restored')what='Restored';else what=(LABEL[x.field]||nice(x.field))+': '+diff(x.old,x.new);

@@ -107,7 +107,8 @@ func verifySignature(pub ed25519.PublicKey, method, uri, ts, nonce string, body 
 // The body is read and put back so handlers can still read it.
 func agentFromSignature(r *http.Request, header string) (int, error) {
 	ip := clientIP(r)
-	fail := func(msg string) (int, error) { return 0, authFailure(ip, msg) } // a valid signature is never throttled (auth_tokens.go)
+	var agentID int                                                                                // the key's account, once it is known
+	fail := func(msg string) (int, error) { return 0, authFailure(ip, agentID, "signature", msg) } // a valid signature is never throttled (auth_tokens.go)
 	p := parseSignatureHeader(header)
 	keyID, err := strconv.Atoi(p["keyid"])
 	if err != nil || p["ts"] == "" || p["nonce"] == "" || p["sig"] == "" {
@@ -117,7 +118,6 @@ func agentFromSignature(r *http.Request, header string) (int, error) {
 	if tooBig {
 		return fail("could_not_read_body")
 	}
-	var agentID int
 	var pubB64 string
 	err = db.QueryRow(`SELECT agent_id, public_key FROM agent_keys WHERE id = $1 AND revoked_at IS NULL`, keyID).Scan(&agentID, &pubB64)
 	if err != nil {

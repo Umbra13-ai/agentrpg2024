@@ -133,11 +133,11 @@ func TestClientIP(t *testing.T) {
 func TestAuthFailureNeverRefusesBeforeTheLimit(t *testing.T) {
 	ip := "198.51.100.77"
 	for i := 0; i < maxFailedPerMinute; i++ {
-		if err := authFailure(ip, "invalid_token"); err.Error() != "invalid_token" {
+		if err := authFailure(ip, 0, "token", "invalid_token"); err.Error() != "invalid_token" {
 			t.Fatalf("failure %d: %v", i+1, err)
 		}
 	}
-	if err := authFailure(ip, "invalid_token"); !strings.HasPrefix(err.Error(), "too_many_failed_attempts") {
+	if err := authFailure(ip, 0, "token", "invalid_token"); !strings.HasPrefix(err.Error(), "too_many_failed_attempts") {
 		t.Fatalf("after the limit: %v", err)
 	}
 }

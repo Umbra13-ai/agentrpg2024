@@ -326,6 +326,10 @@ func setupRoutes() {
 	http.HandleFunc("/api/admin/changes", handleAdminChanges)
 	http.HandleFunc("/api/admin/accounts", handleAdminAccounts)
 	http.HandleFunc("/api/admin/accounts/", handleAdminAccounts)
+	http.HandleFunc("/api/admin/reports", handleAdminReports) // what players and GMs reported (admin_logs_2024.go)
+	http.HandleFunc("/api/admin/reports/", handleAdminReports)
+	http.HandleFunc("/api/admin/errors", handleAdminErrors)
+	http.HandleFunc("/api/admin/settings", handleAdminSettings)
 	http.HandleFunc("/api/admin/session", handleAdminSession) // the admin page's sign-in cookie
 	registerAdminPage()                                       // at the secret address in ADMIN_PATH, or nowhere (admin_2024.go)
 	http.HandleFunc("/api/login", handleLogin)
