@@ -54,6 +54,17 @@ A sixth defect was reproduced deterministically (`resistance-stale-before.log`):
 
 At this checkpoint, the five original review probes and focused concurrency, storage rollback, token, cold-process, legacy-queue and cast controls pass. Final broad/race validation and exact commit identifiers will be recorded after they finish.
 
+## Status of those blockers (Nov 22, checked against the current code and tests)
+
+The "Still open" lists in this log and in `COMBAT_PAUSE_DESIGN.md` were written mid-repair and are out of date. What exists now, each with its test:
+
+- **A request boundary for dependent work:** `gateCampaignRequest` (`combat_pause_2024.go`) refuses every campaign write while a Concentration decision or saved work is pending, except the settling routes; the clock owner refuses to move time (`claimCampaignClock`). Turn changes, rests, player attacks and monster attacks: `TestPostgresPendingConcentrationBlocksNewWork`, `TestPostgresPendingCombatBlocksClockOwners`.
+- **Inside one command:** continuations save what remains and stop at the next `combatResolutionPaused`: a character's hit tail and a weapon route (`TestPostgresCharacterHitPausesBeforeMastery`, `...ThroughActionRoute`), a Multiattack's parts and next attack (`TestPostgresMonsterMultiattackPausesPartsAndNextAttack`), a save effect's riders and later targets (`TestPostgresSaveEffectPausesRidersAndLaterTargets`), end-of-turn auras (`TestPostgresMonsterEndAuraPausesLaterTargetsAndAuras`, `TestPostgresTurnPausesAgainBetweenAuraSources`), Burning at a turn's start (`TestPostgresTurnPausesAndResumesAfterBurning`), companions and Wild Shape (`companion_continuation_2024.go`).
+- **Fresh process and concurrency:** `TestPostgresCombatContinuationFreshProcess` (a saved continuation resumed by a new server process); `TestPostgresCampaignCommandLeaseIsolation` (one command at a time per campaign: `acquireCampaignCommand`).
+- **The storage boundary:** the Concentration journal (`CONCENTRATION_STORAGE_BOUNDARY_DESIGN.md`).
+
+Still true: a notice whose insert fails is held in memory and lost on a restart (`addGMNotice`, by design, flagged `held_in_memory`); the claim that every route groups damage packets as the rules say is not proven beyond the routes above.
+
 ## Remaining blockers and limits
 
 - Pending Concentration retains its effects while awaiting GM adjudication. There is still no comprehensive enforced boundary across dependent actions, saves, timers, turn changes and time passing. A private instruction to resolve it first is not equivalent to that boundary.
