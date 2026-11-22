@@ -19,13 +19,13 @@ import (
 var srd521MagicItemsJSON []byte
 
 type srdMagicItem struct {
-	Name               string `json:"name"`
-	Type               string `json:"type"`
-	Rarity             string `json:"rarity"`
-	RarityText         string `json:"rarity_text"`
-	RequiresAttunement bool   `json:"requires_attunement"`
-	Attunement         string `json:"attunement"`
-	Description        string `json:"description"`
+	Name               string          `json:"name"`
+	Type               string          `json:"type"`
+	Rarity             string          `json:"rarity"`
+	RarityText         string          `json:"rarity_text"`
+	RequiresAttunement bool            `json:"requires_attunement"`
+	Attunement         string          `json:"attunement"`
+	Description        string          `json:"description"`
 	DescriptionBlocks  []interface{}   `json:"description_blocks"` // paragraphs and tables as printed
 	Statblock          json.RawMessage `json:"statblock"`          // Figurine of Wondrous Power, Mysterious Deck
 }

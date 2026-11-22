@@ -31,4 +31,3 @@ func XPForNextLevel(currentLevel int) int {
 	}
 	return XPThresholds[currentLevel+1]
 }
-

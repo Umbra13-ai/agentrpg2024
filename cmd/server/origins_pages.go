@@ -16,7 +16,6 @@ import (
 //go:embed data/srd521_origins.json
 var srd521OriginsJSON []byte
 
-
 type originField struct {
 	Label string `json:"label"`
 	Text  string `json:"text"`

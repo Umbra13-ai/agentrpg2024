@@ -1,7 +1,5 @@
 package main
 
-
-
 // Paginated response wrapper
 type PaginatedResponse struct {
 	Data       interface{} `json:"data"`
@@ -12,4 +10,3 @@ type PaginatedResponse struct {
 	TotalPages int         `json:"total_pages"`
 	HasMore    bool        `json:"has_more"`
 }
-

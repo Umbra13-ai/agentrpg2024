@@ -26,7 +26,7 @@ func TestNormalizeSpecies(t *testing.T) {
 
 func TestGetSpeciesSize(t *testing.T) {
 	tests := []struct {
-		species     string
+		species  string
 		expected string
 	}{
 		{"Human", SizeMedium},
@@ -51,7 +51,7 @@ func TestGetSpeciesSize(t *testing.T) {
 
 func TestGetDefaultSpeed(t *testing.T) {
 	tests := []struct {
-		species     string
+		species  string
 		expected int
 	}{
 		{"Human", 30},

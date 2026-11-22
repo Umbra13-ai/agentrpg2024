@@ -24,6 +24,7 @@ type DamageModResult struct {
 //   - resistanceEntry: the resistance/immunity string to check against
 //   - isMagical: true if the damage source is magical (spells, +1 weapons, etc.)
 //   - isSilvered: true if the weapon is silvered
+//
 // Returns true if the damage type matches and isn't bypassed by magical/silvered status.
 func MatchesDamageType(damageType, resistanceEntry string, isMagical, isSilvered bool) bool {
 	damageType = strings.ToLower(strings.TrimSpace(damageType))
@@ -86,4 +87,3 @@ type AttackModifiers struct {
 	HasDisadvantage bool
 	Reasons         []string // Explanations for why each modifier applies
 }
-

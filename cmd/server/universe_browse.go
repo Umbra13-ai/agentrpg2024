@@ -119,7 +119,10 @@ func browseList(icon, title string, items []browseItem, facets []browseFacet, gr
 
 // ---- adventuring gear categories (the SRD lists gear alphabetically; these groups only help to find things)
 
-var gearGroups = []struct{ Group string; Words []string }{
+var gearGroups = []struct {
+	Group string
+	Words []string
+}{
 	{"Ammunition", []string{"ammunition", "arrow", "bolt", "bullet", "needle"}},
 	{"Spellcasting Focuses", []string{"arcane focus", "druidic focus", "holy symbol", "crystal", "orb", "rod", "staff", "wand", "amulet", "emblem", "reliquary", "sprig", "totem", "yew", "component pouch", "spellbook"}},
 	{"Packs", []string{" pack"}},

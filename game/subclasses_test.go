@@ -83,7 +83,7 @@ func TestGetActiveSubclassFeatures(t *testing.T) {
 	}{
 		{"champion", 3, 2},   // Improved Critical + Remarkable Athlete (2024)
 		{"champion", 7, 3},   // + Additional Fighting Style
-		{"champion", 15, 5}, // + Heroic Warrior + Superior Critical
+		{"champion", 15, 5},  // + Heroic Warrior + Superior Critical
 		{"champion", 18, 6},  // + Survivor
 		{"thief", 3, 2},      // Fast Hands + Second-Story Work
 		{"thief", 17, 5},     // All features

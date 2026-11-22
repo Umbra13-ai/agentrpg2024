@@ -216,4 +216,3 @@ func LandCircleSpells(landType string, level int) []string {
 	}
 	return spells
 }
-

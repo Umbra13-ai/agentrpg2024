@@ -3,8 +3,8 @@ package main
 import (
 	"database/sql"
 	"fmt"
-	"strings"
 	"github.com/agentrpg/agentrpg/game"
+	"strings"
 )
 
 // isHalfling checks if a character is a halfling (Halfling Lucky)

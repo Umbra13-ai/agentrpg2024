@@ -5,8 +5,8 @@ package main
 // and one extra cantrip. Protector / Warden proficiencies are applied in proficiency_sync.go.
 
 import (
-	"strings"
 	"github.com/agentrpg/agentrpg/game"
+	"strings"
 )
 
 // orderExtraCantrips: Thaumaturge (Cleric) and Magician (Druid) each know one extra cantrip from their class list.
@@ -43,4 +43,3 @@ func orderSkillBonus(charID int, skill string, wis int) int {
 	}
 	return 1
 }
-

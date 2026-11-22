@@ -199,7 +199,6 @@ var AvailableInvocations = map[string]EldritchInvocation{
 	},
 }
 
-
 // GetMaxInvocations returns how many invocations a Warlock can have at their level
 func GetMaxInvocations(warlockLevel int) int {
 	// 2024: the Eldritch Invocations column of the Warlock's Features table
@@ -225,4 +224,3 @@ func GetMaxInvocations(warlockLevel int) int {
 		return 0
 	}
 }
-

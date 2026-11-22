@@ -90,4 +90,3 @@ func ParseProficiencyList(profStr string) []string {
 	}
 	return result
 }
-

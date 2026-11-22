@@ -89,4 +89,3 @@ func TestParseProficiencyList(t *testing.T) {
 		})
 	}
 }
-

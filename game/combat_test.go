@@ -81,4 +81,3 @@ func TestDivineSmiteDice(t *testing.T) {
 		})
 	}
 }
-

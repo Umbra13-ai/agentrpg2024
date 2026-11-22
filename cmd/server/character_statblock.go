@@ -9,9 +9,9 @@ package main
 // feature is only listed under one of those headings when its text says so.
 
 import (
-	"time"
 	"encoding/json"
 	"strings"
+	"time"
 
 	"github.com/agentrpg/agentrpg/game"
 )
