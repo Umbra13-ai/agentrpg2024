@@ -1166,7 +1166,7 @@ func TestPostgresUsesActionAtCompanion(t *testing.T) {
 		ma["monster"], ma["action"] = "Uses Probe", "Frenzy"
 		_, r := pgCall(t, "POST", "/api/gm/narrate", gm, map[string]interface{}{"campaign_id": camp, "narration": "x", "monster_action": ma})
 		db.QueryRow(`SELECT hp FROM companions WHERE id=$1`, petID).Scan(&after)
-		if after >= before {
+		for try := 0; try < 8 && after >= before; try++ { // a natural 1 misses whatever the bonus: send it again
 			if _, r2 := pgCall(t, "POST", "/api/gm/narrate", gm, map[string]interface{}{"campaign_id": camp, "narration": "x", "monster_action": ma}); r2 != nil {
 				db.QueryRow(`SELECT hp FROM companions WHERE id=$1`, petID).Scan(&after)
 			}

@@ -219,7 +219,7 @@ func TestPostgresHitRidersOnEveryAttackRoute(t *testing.T) {
 			}
 			if strings.Contains(res, "HIT") {
 				hit = true
-				if !strings.Contains(res, route.word) {
+				if !strings.Contains(res, route.word) && !strings.Contains(res, strings.Replace(route.word, "1d6", "2d6", 1)) { // a Critical Hit doubles the die
 					t.Errorf("%v hit without %s: %q", route.body["action"], route.spell, res)
 				}
 			}
