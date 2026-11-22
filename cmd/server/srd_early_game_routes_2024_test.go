@@ -11,7 +11,7 @@ import (
 	"github.com/agentrpg/agentrpg/game"
 )
 
-// The early-game playtest set (owner, Nov 22: CR 0 to 1, widened to CR 3, then CR 6: 253 SRD 5.2.1 monsters) through the real routes, every entry:
+// The early-game playtest set (owner, Nov 22: CR 0 to 1, widened to CR 3, then CR 6, then CR 11: 290 SRD 5.2.1 monsters) through the real routes, every entry:
 //
 //   - each action, Bonus Action and Reaction is sent as POST /api/gm/narrate's monster_action at a character in a fight, with every
 //     option its entry offers in use (a form, a standard action, a spell: read from the entry by the server's own readers), after the
@@ -131,14 +131,14 @@ func TestPostgresEarlyGameEveryEntry(t *testing.T) {
 		return narrateAt(monster, action, hero, use, attacks)
 	}
 	// heroHits: the character hits the monster with its weapon (POST /api/action), the trigger of a Reaction to a hit or an attack roll
-	heroHits := func(id int) bool {
+	heroHits := func(id int, ranged bool) bool { // ranged: a thrown weapon, the trigger of a Reaction to a ranged hit
 		for try := 0; try < 40; try++ {
 			clearMonsterReactionState(camp)
 			monsterReactionRound.Delete(fmt.Sprintf("%d:%d", camp, id))
 			setMonsterTempHP(camp, id, 0)
 			setMonsterHP(camp, id, 1000)
 			pgExec(t, `UPDATE characters SET action_used=false,attacks_remaining=NULL,conditions='[]',weapon_interaction_used=false WHERE id=$1`, char)
-			_, r := pgCall(t, "POST", "/api/action", player, map[string]interface{}{"action": "attack", "target_id": id, "description": "I attack with my " + equipped})
+			_, r := pgCall(t, "POST", "/api/action", player, map[string]interface{}{"action": "attack", "target_id": id, "description": map[bool]string{true: "I throw my " + equipped + " at it", false: "I attack with my " + equipped}[ranged]})
 			if am, _ := r["attack"].(map[string]interface{}); am != nil && am["hit"] == true {
 				return true
 			} else if try == 39 {
@@ -284,8 +284,10 @@ func TestPostgresEarlyGameEveryEntry(t *testing.T) {
 						setMonsterHP(camp, id, 1000)
 						pgCall(t, "POST", "/api/gm/set-lighting", gm, map[string]interface{}{"campaign_id": camp, "lighting": "bright"})
 						// the setup the entry's own gate needs
-						if needs, _ := reactionSelfHitTrigger(e.Text); needs || strings.Contains(e.Text, "makes an attack roll against it") {
-							if !heroHits(id) {
+						needs, hitKind := reactionSelfHitTrigger(e.Text)
+						ranged := hitKind == "ranged" || strings.Contains(e.Text, "is hit by a ranged attack roll") // "The giant is hit by a ranged attack roll and takes ... damage from it"
+						if needs || ranged || strings.Contains(e.Text, "makes an attack roll against it") {
+							if !heroHits(id, ranged) {
 								t.Fatalf("%s: the character's attack never hit", name)
 							}
 						}
@@ -344,10 +346,11 @@ func TestPostgresEarlyGameEveryEntry(t *testing.T) {
 							}
 							target = ally
 						}
+						setExhaustionLevel(char, 0) // a level of Exhaustion is a stored change of its own: start each run without one
 						hpBefore, selfBefore, invBefore, deadBefore := heroHP(), selfSnapshot(id), inventory(), heroDead()
 						fxBefore := effectsOn(char)
 						run.code, run.result = narrateAt(name, e.Name, target, use, attacks)
-						run.hpLost, run.conds, run.fx = hpBefore-heroHP(), len(loadConditionRecords(camp, char)), effectsOn(char)-fxBefore
+						run.hpLost, run.conds, run.fx = hpBefore-heroHP(), len(loadConditionRecords(camp, char))+exhaustionLevelOf(char), effectsOn(char)-fxBefore
 						run.selfChanged = selfSnapshot(id) != selfBefore
 						run.itemChanged = inventory() != invBefore // the item state owner keeps corrosion on the item
 						run.died = heroDead() && !deadBefore
@@ -411,8 +414,8 @@ func TestPostgresEarlyGameEveryEntry(t *testing.T) {
 		entries[r.monster+"|"+r.kind+"|"+r.entry] = true
 	}
 	t.Logf("early game routes: %d runs over %d actions, Bonus Actions and Reactions, %d traits: %v", len(runs), len(entries), len(traitRows), verdicts)
-	if len(entries)+len(traitRows) != 785 {
-		t.Errorf("%d entries and %d traits checked; the set has 785", len(entries), len(traitRows))
+	if len(entries)+len(traitRows) != 978 {
+		t.Errorf("%d entries and %d traits checked; the set has 978", len(entries), len(traitRows))
 	}
 	if out := os.Getenv("EARLY_ROUTES_OUT"); out != "" {
 		var lines []string
@@ -445,8 +448,8 @@ func TestPostgresEarlyGameEveryEntry(t *testing.T) {
 			lines = append(lines, fmt.Sprintf("| %s | trait | %s | - | %s |  |  |", p[0], cell(p[2]), cell(p[3])))
 		}
 		sort.Strings(lines)
-		head := "# SRD 5.2.1 early-game monsters (CR 0 to 6): the route test\n\nWritten by `EARLY_ROUTES_OUT=$PWD/docs/SRD_EARLY_GAME_ROUTES.md go test ./cmd/server -run TestPostgresEarlyGameEveryEntry`" +
-			" (srd_early_game_routes_2024_test.go, Postgres): one run's result. Every action, Bonus Action and Reaction (and Legendary Action) of the 253 monsters sent through" +
+		head := "# SRD 5.2.1 early-game monsters (CR 0 to 11): the route test\n\nWritten by `EARLY_ROUTES_OUT=$PWD/docs/SRD_EARLY_GAME_ROUTES.md go test ./cmd/server -run TestPostgresEarlyGameEveryEntry`" +
+			" (srd_early_game_routes_2024_test.go, Postgres): one run's result. Every action, Bonus Action and Reaction (and Legendary Action) of the 290 monsters sent through" +
 			" POST /api/gm/narrate's monster_action at a character, once per option its entry offers (`use`), after the setup its gate needs; an attack" +
 			" repeated until it hits and a save until it fails. \"Stored\" is what the server wrote; \"flagged to the GM\" means the reply hands the GM what" +
 			" the server doesn't do. Movement is run without a battle map here (the GM places the creature). Traits: who applies each, as the GM's view of the fight says.\n\n" +

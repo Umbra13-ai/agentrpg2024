@@ -30,6 +30,7 @@ type attackOutcome struct {
 	Fumble     bool
 	Roll       game.AttackRoll // the roll as the one attack function made it (attack_2024.go)
 	Judged     bool            // the roll was made against the target's Armor Class, so Hit is known
+	Ranged     bool            // made as a ranged attack: a ranged weapon, or a melee weapon thrown (attackCtx.melee false)
 	Hit        bool
 	Damage     int
 	DamageType string
@@ -543,7 +544,7 @@ func resolveAttackOnMonster(lobbyID, charID, targetID int, o attackOutcome, clea
 		info["knocked_out"] = true
 	}
 	tail := characterHitTail{Char: charID, Target: targetID, Name: name, Key: fmt.Sprint(t["monster_key"]), HP: hp, Damage: dmg + extraDmg, BaseDamage: dmg, Outcome: o, HasMastery: hasMastery, Mastery: mu, Snapshot: snap,
-		Record: charHitOnMonster{CharID: charID, Total: o.Total, AC: ac, Nat20: o.Natural == 20 && !peerless, Melee: weaponIsMelee(o.Weapon), DamageType: o.DamageType, Weapon: o.Weapon, HPBefore: hpStart, HPAfter: hp}}
+		Record: charHitOnMonster{CharID: charID, Total: o.Total, AC: ac, Nat20: o.Natural == 20 && !peerless, Melee: weaponIsMelee(o.Weapon) && !o.Ranged, DamageType: o.DamageType, Weapon: o.Weapon, HPBefore: hpStart, HPAfter: hp}}
 	if len(cleaveTarget) > 0 {
 		tail.CleaveTarget = cleaveTarget[0]
 	}

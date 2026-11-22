@@ -1662,7 +1662,7 @@ func resolveActionWithBonusDash(action, description string, charID int, bonusDas
 			if hasWeapon {
 				fumbleDice = monkWeaponDice(charID, class, level, weapon)
 			}
-			recordAttackOutcome(charID, attackOutcome{Weapon: fumbleWeapon, Total: totalAttack, Natural: 1, Fumble: true, Roll: rolled, Out: out, Judged: atk.target != 0, DamageType: attackDamageType(hasWeapon, weapon), RollInfo: archeryNote + rollExtra, Dice: fumbleDice, DiceMod: damageMod})
+			recordAttackOutcome(charID, attackOutcome{Weapon: fumbleWeapon, Total: totalAttack, Natural: 1, Fumble: true, Roll: rolled, Out: out, Judged: atk.target != 0, Ranged: !atk.melee, DamageType: attackDamageType(hasWeapon, weapon), RollInfo: archeryNote + rollExtra, Dice: fumbleDice, DiceMod: damageMod})
 			return rolled.HeadForAttacker("Attack with "+fumbleWeapon, out) + archeryNote + rollExtra + ". MISS (a natural 1)."
 		}
 
@@ -1817,7 +1817,7 @@ func resolveActionWithBonusDash(action, description string, charID int, bonusDas
 		}
 
 		// Include power attack note in normal hit result
-		recordAttackOutcome(charID, attackOutcome{Weapon: weaponName, Total: totalAttack, Natural: attackRoll, Crit: crit, Fumble: attackRoll == 1, Roll: rolled, Out: out, Judged: atk.target != 0, Hit: out.Hit, Damage: dmg, DamageType: attackDamageType(hasWeapon, weapon), RollInfo: archeryNote + powerAttackNote + rollExtra, SneakUsed: sneakAttackNote != "", SneakNote: gwfNote + duelingNote + sneakAttackNote + colossusSlayerNote + divineStrikeNote + divineSmiteNote + lifedrinkerNote + markNote, Dice: damageDice, DiceMod: damageMod})
+		recordAttackOutcome(charID, attackOutcome{Weapon: weaponName, Total: totalAttack, Natural: attackRoll, Crit: crit, Fumble: attackRoll == 1, Roll: rolled, Out: out, Judged: atk.target != 0, Ranged: !atk.melee, Hit: out.Hit, Damage: dmg, DamageType: attackDamageType(hasWeapon, weapon), RollInfo: archeryNote + powerAttackNote + rollExtra, SneakUsed: sneakAttackNote != "", SneakNote: gwfNote + duelingNote + sneakAttackNote + colossusSlayerNote + divineStrikeNote + divineSmiteNote + lifedrinkerNote + markNote, Dice: damageDice, DiceMod: damageMod})
 		extras := gwfNote + duelingNote + colossusSlayerNote + divineStrikeNote + sneakAttackNote + divineSmiteNote + lifedrinkerNote + markNote
 		head := rolled.HeadForAttacker("Attack with "+weaponName, out) + archeryNote + powerAttackNote + rollExtra
 		switch {
@@ -3013,7 +3013,7 @@ func resolveActionWithBonusDash(action, description string, charID int, bonusDas
 		attackRoll, totalAttack := out.Natural, out.Total
 		head := rolled.HeadForAttacker("Offhand attack with "+weapon.Name+profInfo, out) + luckNote
 		if attackRoll == 1 { // a natural 1 misses
-			recordAttackOutcome(charID, attackOutcome{Weapon: weapon.Name, Total: totalAttack, Natural: 1, Fumble: true, Roll: rolled, Out: out, Judged: atk.target != 0, DamageType: attackDamageType(true, weapon), RollInfo: luckNote,
+			recordAttackOutcome(charID, attackOutcome{Weapon: weapon.Name, Total: totalAttack, Natural: 1, Fumble: true, Roll: rolled, Out: out, Judged: atk.target != 0, Ranged: !atk.melee, DamageType: attackDamageType(true, weapon), RollInfo: luckNote,
 				Dice: weapon.Damage, DiceMod: damageMod})
 			return head + ". MISS (a natural 1)."
 		}
@@ -3022,7 +3022,7 @@ func resolveActionWithBonusDash(action, description string, charID int, bonusDas
 			crit = atk.critNoTarget(out)
 		}
 		dmg := game.RollDamage(weapon.Damage, crit) + damageMod // the ability modifier only with the Two-Weapon Fighting style
-		recordAttackOutcome(charID, attackOutcome{Weapon: weapon.Name, Total: totalAttack, Natural: attackRoll, Crit: crit, Roll: rolled, Out: out, Judged: atk.target != 0, Hit: out.Hit, Damage: dmg,
+		recordAttackOutcome(charID, attackOutcome{Weapon: weapon.Name, Total: totalAttack, Natural: attackRoll, Crit: crit, Roll: rolled, Out: out, Judged: atk.target != 0, Ranged: !atk.melee, Hit: out.Hit, Damage: dmg,
 			DamageType: attackDamageType(true, weapon), RollInfo: luckNote + twfNote, Dice: weapon.Damage, DiceMod: damageMod})
 		if crit {
 			return fmt.Sprintf("%s. CRITICAL HIT (a natural %d). Damage: %d%s", head, attackRoll, dmg, twfNote)
