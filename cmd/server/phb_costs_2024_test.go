@@ -66,19 +66,20 @@ func TestDeclarationControls(t *testing.T) {
 	if actionCostForms["declare"]("I hold the line") != "declare" || actionCostForms["declare"]("as a bonus action I shout") != "declare_bonus" {
 		t.Error("a declaration takes the action, or the Bonus Action when it says so")
 	}
-	for slug, name := range map[string]string{"sacred-flame": "Sacred Flame", "healing-word": "Healing Word"} { // without the database
+	for slug, name := range map[string]string{"sacred-flame": "Sacred Flame", "healing-word": "Healing Word", "slow": "Slow", "symbol": "Symbol"} { // without the database
 		if _, ok := srdSpellsMemory[slug]; !ok {
 			srdSpellsMemory[slug] = SRDSpell{Name: name}
 			t.Cleanup(func() { delete(srdSpellsMemory, slug) })
 		}
 	}
 	// speaking of casting without a spell is the character's own words (I-CALLA-15)
-	for _, d := range []string{"With nothing left in her to cast, Calla kneels and says a plain harvest prayer to Chauntea aloud", "the fisherman casts his net"} {
+	for _, d := range []string{"With nothing left in her to cast, Calla kneels and says a plain harvest prayer to Chauntea aloud", "the fisherman casts his net",
+		"Calla casts a long look at the road and the slow passage of the afternoon", "Calla casts a long look and keeps her holy symbol in hand, whispering a prayer"} { // a spell's name among the words (Slow, Symbol) is not a cast
 		if why := declarationCheck(nil, d); why != "" {
 			t.Errorf("a declaration that names no spell goes to the GM: %q refused: %s", d, why)
 		}
 	}
-	for _, d := range []string{"Calla casts Sacred Flame at the rat swarm", "I spend a spell slot to heal Aldren", "casting Healing Word on myself"} {
+	for _, d := range []string{"Calla casts Sacred Flame at the rat swarm", "I spend a spell slot to heal Aldren", "casting Healing Word on myself", "I cast Slow on the ogre", "Calla casts the spell Symbol at the door"} {
 		if declarationProblem(0, d) == "" {
 			t.Errorf("a declaration that casts a spell is refused: %q", d)
 		}

@@ -425,13 +425,35 @@ var castingWords = regexp.MustCompile(`(?i)\b(cast|casts|casting)\b`)
 var slotWords = regexp.MustCompile(`(?i)\bspell slots?\b`)
 
 // declaredSpell: a declaration that casts a spell: it spends a spell slot, or it speaks of casting and names a spell the server
-// knows (the spells it names). "With nothing left in her to cast, she says a prayer" names none: it goes to the GM (I-CALLA-15).
+// knows as the thing cast (the spells it names). "With nothing left in her to cast, she says a prayer" names none: it goes to the GM (I-CALLA-15).
 func declaredSpell(description string) (bool, []string) {
 	if !castingWords.MatchString(description) && !slotWords.MatchString(description) {
 		return false, nil
 	}
-	spells := spellCandidatesFromDescription(description)
+	var spells []string
+	for _, slug := range spellCandidatesFromDescription(description) {
+		if castsSpellNamed(description, slug) {
+			spells = append(spells, slug)
+		}
+	}
 	return slotWords.MatchString(description) || len(spells) > 0, spells
+}
+
+// castsSpellNamed: the description's casting word is followed by the spell as what is cast ("casts Sacred Flame", "casting the spell Healing Word",
+// "cast Slow"), not a spell's name that happens to be among its words ("casts a long look ... the slow passage", "a holy symbol": I-CALLA-15).
+func castsSpellNamed(description, slug string) bool {
+	sp := srdSpellsMemory[slug]
+	text := " " + normalizeSpellText(description) + " "
+	for _, name := range []string{sp.Name, slug} {
+		n := normalizeSpellText(name)
+		if n == "" {
+			continue
+		}
+		if regexp.MustCompile(`\b(?:cast|casts|casting)\s+(?:(?:the|a|an|my|his|her|their|its|your|our)\s+)?(?:spell\s+)?(?:of\s+)?` + regexp.QuoteMeta(n) + `\s`).MatchString(text) {
+			return true
+		}
+	}
+	return false
 }
 
 // resourceWords: how a description names a resource a feature spends (the Uses keys of the table), where the key alone is an

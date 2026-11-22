@@ -293,6 +293,7 @@ func droppedByCharacter(charID int) []map[string]interface{} {
 		if rows.Scan(&id, &name, &qty, &at, &where, &claimed) != nil {
 			continue
 		}
+		left := where // where it was left, as the player or the GM said: empty when nobody said
 		if where == "" {
 			where = "on the ground"
 		}
@@ -302,7 +303,9 @@ func droppedByCharacter(charID int) []map[string]interface{} {
 		}
 		if claimed != "" { // no longer where it was left: "where" would say it still lies there
 			delete(it, "where")
-			it["was_left"] = where
+			if left != "" { // never "on the ground" for an item the GM's words put elsewhere: the gone note says where it is
+				it["was_left"] = left
+			}
 			it["gone"] = claimed
 			it["note"] = "The GM says it is no longer there: it can't be picked up."
 		} else {
