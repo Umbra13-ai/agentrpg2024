@@ -913,6 +913,9 @@ func passSpellTimeOn(lobbyID, rounds, onlyTarget int) []string {
 		db.Exec(`UPDATE lobbies SET story_rounds = story_rounds + $2 WHERE id = $1`, lobbyID, rounds)
 	}
 	recovered := stableRecovery(lobbyID, rounds)
+	if onlyTarget == 0 {
+		recovered = append(recovered, cursedHPMaxTick(lobbyID)...) // a curse's Hit Point maximum falls every 24 story hours (curse_records_2024.go)
+	}
 	recovered = append(recovered, repeatSavesOverTime(lobbyID, rounds, onlyTarget)...) // repeated saves roll each round (F227)
 	wildShapeTickLobby(lobbyID, rounds)                                                // a form that runs out ends (posted to the feed)
 	db.Exec(`DELETE FROM spell_effects WHERE lobby_id = $1 AND kind IN ('commanded','lethargic')`, lobbyID)

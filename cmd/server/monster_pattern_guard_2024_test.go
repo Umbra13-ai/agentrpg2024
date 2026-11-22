@@ -63,6 +63,8 @@ var monsterTextPatterns = map[string]*regexp.Regexp{
 	"weakenedRe":               weakenedRe,               // effect_records_2024.go
 	"notAffectedRe":            notAffectedRe,            // effect_records_2024.go
 	"curseIsRe":                curseIsRe,                // curse_records_2024.go
+	"curseHPMaxRe":             curseHPMaxRe,             // curse_records_2024.go
+	"curseHPMaxStaysRe":        curseHPMaxStaysRe,        // curse_records_2024.go
 	"optionalStandardRe":       optionalStandardRe,       // monster_standard_actions_2024.go
 	"embeddedDamageClauseRe":   embeddedDamageClauseRe,   // monster_direct_damage_2024.go
 	"entryLastingRe":           entryLastingRe,           // gm_handover_2024.go

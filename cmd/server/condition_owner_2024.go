@@ -273,6 +273,13 @@ func (c *conditionChange) remove(match func(conditionRecord) bool) ([]conditionR
 		}
 		kept = still
 	}
+	for _, g := range gone {
+		if g.Condition == condCursed && !noCharacterRow(c.target) && curseTakesHPMax(g.Detail) { // the Hit Point maximum it took returns with the next Long Rest
+			if err := releaseCursedMaxHP(c.tx, c.target); err != nil {
+				return nil, err
+			}
+		}
+	}
 	if len(gone) > 0 {
 		c.recs, c.changed = kept, true
 	}

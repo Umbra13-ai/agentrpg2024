@@ -3,7 +3,10 @@ package main
 import (
 	"fmt"
 	"regexp"
+	"strconv"
 	"strings"
+
+	"github.com/agentrpg/agentrpg/game"
 )
 
 // curse_records_2024.go: a curse a stat block or a GM puts on a creature is a `cursed` record in the one condition store; its Detail is
@@ -24,6 +27,7 @@ const (
 	curseShortRest    = "short_rest"
 	curseLongRest     = "long_rest"
 	curseLycanthropy  = "lycanthropy"
+	curseHPMax        = "hpmax" // hpmax=3d6@<story round of its last tick>: "its Hit Point maximum decreases by 10 (3d6) every 24 hours that elapse"
 	woundedConditions = "wounded"
 )
 
@@ -35,7 +39,12 @@ var (
 	// curseIsRe: "the target is cursed for 24 hours or until the incubus dies" / "it is cursed" / "the target is cursed".
 	curseIsRe = regexp.MustCompile(`(?i)(?:the target|it) is cursed(?: for (\d+) (minutes?|hours?))?(?: or until [^.,;]*? dies)?`)
 	// curseRestRe: "Until the curse ends, the target gains no benefit from finishing Short Rests" / "While cursed, ... a Short or Long Rest".
-	curseRestRe = regexp.MustCompile(`(?i)(?:Until the curse ends|While cursed), the target gains no benefit from finishing (?:a )?(Short or Long Rests?|Short Rests?)`)
+	curseRestRe = regexp.MustCompile(`(?i)(?:(?:Until the curse ends|While cursed), the target|, it) gains no benefit from finishing (?:a )?(Short or Long Rests?|Short Rests?|Long Rests?)`)
+	// curseHPMaxRe: "its Hit Point maximum doesn't return to normal when finishing a Long Rest, and its Hit Point maximum decreases by 10 (3d6) every 24 hours
+	// that elapse" (Mummy) / "it gains no benefit from finishing a Long Rest, and its Hit Point maximum decreases by 10 (3d6) every 24 hours that elapse".
+	curseHPMaxRe = regexp.MustCompile(`(?i)(?:, )?(?:and )?its Hit Point maximum decreases by \d+ \((\d+d\d+)\) every 24 hours that elapse`)
+	// curseHPMaxStaysRe: "its Hit Point maximum doesn't return to normal when finishing a Long Rest".
+	curseHPMaxStaysRe = regexp.MustCompile(`(?i)(?:, )?its Hit Point maximum doesn['’]t return to normal when finishing a Long Rest`)
 	// curseNoRegainRe: "While cursed, the target can't regain Hit Points".
 	curseNoRegainRe = regexp.MustCompile(`(?i)While cursed, the target can['’]t regain Hit Points`)
 	// curseDropRe: "If the cursed target drops to 0 Hit Points, it instead becomes a Werewolf under the GM's control and has 10 Hit Points."
@@ -76,10 +85,15 @@ func (e *saveEffect) readCurse(text string) {
 		c.Flags = append(c.Flags, curseNoRegain)
 	}
 	if r := curseRestRe.FindStringSubmatch(text); r != nil {
-		c.Flags = append(c.Flags, curseShortRest)
+		if strings.Contains(strings.ToLower(r[1]), "short") {
+			c.Flags = append(c.Flags, curseShortRest)
+		}
 		if strings.Contains(strings.ToLower(r[1]), "long") {
 			c.Flags = append(c.Flags, curseLongRest)
 		}
+	}
+	if h := curseHPMaxRe.FindStringSubmatch(text); h != nil {
+		c.Flags = append(c.Flags, curseHPMax+"="+h[1]) // the dice; the day it began is added when it is given (giveCurse)
 	}
 	if curseDropRe.MatchString(text) {
 		c.Flags = append(c.Flags, curseLycanthropy)
@@ -90,7 +104,7 @@ func (e *saveEffect) readCurse(text string) {
 
 // stripCurse removes what readCurse applies from a sentence.
 func stripCurse(s string) string {
-	for _, re := range []*regexp.Regexp{curseNoRegainRe, curseRestRe, curseConditionsRe, humanoidGateRe} {
+	for _, re := range []*regexp.Regexp{curseNoRegainRe, curseRestRe, curseHPMaxRe, curseHPMaxStaysRe, curseConditionsRe, humanoidGateRe} {
 		s = re.ReplaceAllString(s, "")
 	}
 	s = curseIsRe.ReplaceAllStringFunc(s, func(m string) string {
@@ -107,7 +121,13 @@ func (e saveEffect) giveCurse(lobbyID, tid int, source string) []string {
 	if e.Curse == nil {
 		return nil
 	}
-	a := condAdd{Condition: condCursed + ":" + strings.Join(e.Curse.Flags, "+"), Source: source, SourceID: e.SourceID, Magical: e.IsSpell, Rounds: e.Curse.Rounds}
+	flags := append([]string{}, e.Curse.Flags...)
+	for i, f := range flags {
+		if strings.HasPrefix(f, curseHPMax+"=") && !strings.Contains(f, "@") {
+			flags[i] = f + "@" + strconv.FormatInt(storyRoundsOf(lobbyID), 10) // its day count starts now
+		}
+	}
+	a := condAdd{Condition: condCursed + ":" + strings.Join(flags, "+"), Source: source, SourceID: e.SourceID, Magical: e.IsSpell, Rounds: e.Curse.Rounds}
 	if res := addCondition(lobbyID, tid, a); res.Err != nil {
 		return []string{riderNotApplied("cursed")}
 	}
@@ -131,6 +151,10 @@ func curseWords(flags []string) string {
 			out = append(out, "no benefit from Long Rests")
 		case curseLycanthropy:
 			out = append(out, "dropping to 0 Hit Points turns it into the creature, under the GM's control")
+		default:
+			if strings.HasPrefix(f, curseHPMax+"=") {
+				out = append(out, "its Hit Point maximum falls every 24 hours and a Long Rest doesn't return it")
+			}
 		}
 	}
 	return strings.Join(out, ", ")
@@ -168,4 +192,105 @@ func restBenefit(charID int, long bool) (bool, string) {
 		return false, "it is cursed: it gains no benefit from finishing a Long Rest"
 	}
 	return true, ""
+}
+
+// curseTakesHPMax: the record's Detail has the Hit Point maximum flag.
+func curseTakesHPMax(detail string) bool {
+	_, _, ok := curseHPMaxOf(detail)
+	return ok
+}
+
+// curseHPMaxOf reads the flag out of a record's Detail: the dice and the story round of its last tick.
+func curseHPMaxOf(detail string) (dice string, last int64, ok bool) {
+	for _, f := range strings.Split(detail, "+") {
+		if !strings.HasPrefix(f, curseHPMax+"=") {
+			continue
+		}
+		body := strings.TrimPrefix(f, curseHPMax+"=")
+		d, at, found := strings.Cut(body, "@")
+		if !found {
+			return d, 0, d != ""
+		}
+		n, err := strconv.ParseInt(at, 10, 64)
+		return d, n, err == nil && d != ""
+	}
+	return "", 0, false
+}
+
+// storyRoundsOf: the campaign's story clock (lobbies.story_rounds: the GM's pass-time and travel).
+func storyRoundsOf(lobbyID int) int64 {
+	var n int64
+	db.QueryRow(`SELECT COALESCE(story_rounds,0) FROM lobbies WHERE id = $1`, lobbyID).Scan(&n)
+	return n
+}
+
+const storyDayRounds = 14400 // 24 hours of 6-second rounds
+
+// cursedHPMaxTick: for each full 24 story hours since a cursed character's last tick, its Hit Point maximum decreases by the curse's dice (the Mummy's
+// Rotting Fist). The record's day count is advanced first (it is the claim), then the maximum reduced (reduceCursedMaxHP); a maximum that reaches 0 is a
+// death. Called by passSpellTimeOn after the story clock moves. It answers what happened, for the GM.
+func cursedHPMaxTick(lobbyID int) []string {
+	rows, err := db.Query(`SELECT DISTINCT target_id FROM condition_records WHERE lobby_id = $1 AND condition = $2 AND detail LIKE $3 AND target_id > 0`,
+		lobbyID, condCursed, "%"+curseHPMax+"=%")
+	if err != nil {
+		logDBProblem("cursed hit point maximum", err)
+		return nil
+	}
+	var targets []int
+	for rows.Next() {
+		var id int
+		if rows.Scan(&id) == nil && !isCompanionCombatID(id) {
+			targets = append(targets, id)
+		}
+	}
+	rows.Close()
+	now := storyRoundsOf(lobbyID)
+	var out []string
+	for _, id := range targets {
+		var amounts []int
+		err := changeConditions(lobbyID, id, func(c *conditionChange) error {
+			for _, r := range c.recs {
+				dice, last, ok := curseHPMaxOf(r.Detail)
+				if r.Condition != condCursed || !ok {
+					continue
+				}
+				days := int((now - last) / storyDayRounds)
+				if days <= 0 {
+					continue
+				}
+				for i := 0; i < days; i++ {
+					amounts = append(amounts, game.RollDamage(normDice(dice), false))
+				}
+				flags := strings.Split(r.Detail, "+")
+				for i, f := range flags {
+					if strings.HasPrefix(f, curseHPMax+"=") {
+						flags[i] = fmt.Sprintf("%s=%s@%d", curseHPMax, dice, last+int64(days)*storyDayRounds)
+					}
+				}
+				if err := c.set(r.ID, r.DurationRounds, strings.Join(flags, "+")); err != nil {
+					return err
+				}
+			}
+			return nil
+		})
+		if err != nil {
+			logDBProblem("cursed hit point maximum", err)
+			continue
+		}
+		for _, a := range amounts {
+			cut, died, err := reduceCursedMaxHP(id, a)
+			if err != nil {
+				logDBProblem("cursed hit point maximum", err)
+				continue
+			}
+			line := fmt.Sprintf("%s is cursed: its Hit Point maximum decreases by %d (%d taken; a Long Rest doesn't return it).", creatureName(lobbyID, id), a, cut)
+			if died {
+				if ok, _ := killCharacter(id); ok {
+					line += " Its Hit Point maximum is 0: it dies."
+				}
+			}
+			out = append(out, line)
+		}
+	}
+	return out
 }

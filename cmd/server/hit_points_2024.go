@@ -558,26 +558,47 @@ func restoreAllHP(charID int) (game.Vitals, error) {
 // reduceMaxHP lowers a character's Hit Point maximum by amount (never below 1; its Hit Points follow) and records the reduction, which
 // restoreAllHP gives back at a Long Rest. It returns how much was taken.
 func reduceMaxHP(charID, amount int) (int, error) {
-	if amount <= 0 {
-		return 0, nil
+	cut, _, err := reduceMaxHPInto(charID, amount, "max_hp_reduced")
+	return cut, err
+}
+
+// reduceCursedMaxHP is a curse's reduction ("its Hit Point maximum decreases by 10 (3d6) every 24 hours that elapse", the Mummy): kept in
+// max_hp_cursed, which a Long Rest does not give back (releaseCursedMaxHP does when the curse ends). A maximum reduced to 0 is a death
+// (died); it returns how much was taken.
+func reduceCursedMaxHP(charID, amount int) (cut int, died bool, err error) {
+	return reduceMaxHPInto(charID, amount, "max_hp_cursed")
+}
+
+// reduceMaxHPInto: the one writer of a character's reduced Hit Point maximum, into the counter of its source (max_hp_reduced: given back by
+// a Long Rest; max_hp_cursed: kept while the curse lasts). A reduction that would leave 0 or less takes it to 1 and says died.
+func reduceMaxHPInto(charID, amount int, counter string) (int, bool, error) {
+	if amount <= 0 || (counter != "max_hp_reduced" && counter != "max_hp_cursed") {
+		return 0, false, nil
 	}
 	tx, err := db.Begin()
 	if err != nil {
-		return 0, err
+		return 0, false, err
 	}
 	defer tx.Rollback()
 	before, err := lockVitals(tx, charID)
 	if err != nil {
-		return 0, err
+		return 0, false, err
 	}
 	cut := min(amount, before.Max-1)
 	if before.Dead || cut <= 0 {
-		return 0, nil
+		return 0, false, nil
 	}
-	if _, err = tx.Exec(`UPDATE characters SET `+maxHPChange("$1", false)+`, max_hp_reduced = COALESCE(max_hp_reduced,0) + $2 WHERE id = $3`, -cut, cut, charID); err != nil {
-		return 0, err
+	if _, err = tx.Exec(`UPDATE characters SET `+maxHPChange("$1", false)+`, `+counter+` = COALESCE(`+counter+`,0) + $2 WHERE id = $3`, -cut, cut, charID); err != nil {
+		return 0, false, err
 	}
-	return cut, tx.Commit()
+	return cut, amount >= before.Max, tx.Commit()
+}
+
+// releaseCursedMaxHP: the curse that took part of the Hit Point maximum has ended (Remove Curse, Greater Restoration, its time): that part now
+// returns as an ordinary reduction, at the next Long Rest. Run in the condition owner's transaction that removes the record.
+func releaseCursedMaxHP(tx *sql.Tx, charID int) error {
+	_, err := tx.Exec(`UPDATE characters SET max_hp_reduced = COALESCE(max_hp_reduced,0) + COALESCE(max_hp_cursed,0), max_hp_cursed = 0 WHERE id = $1`, charID)
+	return err
 }
 
 // killCharacter: the character dies (Power Word Kill, Exhaustion level 6, Divine Word, the Iron Flask's fissure). It returns false

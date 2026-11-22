@@ -323,8 +323,12 @@ Add to the owner, never beside it. When you give another rule one owner, add it 
   (infernal wound) holds the Hit Points lost at the start of each of its turns (`woundTurnStart`, stage 7 of the turn pipeline: lost, not
   damage), lasts its minute, is closed by a spell that restores Hit Points (`endWoundsBySpell`, in `endSpellConditions`) or by the Wisdom
   (Medicine) check its record carries (POST /api/conditions/escape; `conditionEscape.Adjacent`: `target_id` names a character within 5 feet),
-  and "doesn't already have an infernal wound" is `saveEffect.NotHolding` (no save). Not applied, told to the GM: a curse's "or until the
-  incubus dies", the Mummy's Hit Point maximum, the lycanthrope's transformation at 0 Hit Points, the Aboleth's underwater clause (the server has
+  and "doesn't already have an infernal wound" is `saveEffect.NotHolding` (no save). **A curse's Hit Point maximum** (Mummy: "its Hit Point maximum doesn't return to normal when finishing a Long Rest, and ... decreases by 10 (3d6) every 24 hours that elapse"): the
+  record's flag `hpmax=3d6@<story round>` (`curseHPMaxRe`); `cursedHPMaxTick` (called by `passSpellTimeOn` after the story clock moves) claims each full 24 story hours on the
+  record and reduces the maximum through `reduceCursedMaxHP` into `max_hp_cursed`, which a Long Rest (`restoreAllHP`) does not give back; the record's end
+  (`conditionChange.remove`) moves it into the ordinary reduction (`releaseCursedMaxHP`), returned at the next Long Rest; a maximum reduced to 0 is a death. Go:
+  `TestPostgresMummyCurseHitPointMaximum`. Not applied, told to the GM: a curse's "or until the
+  incubus dies", the lycanthrope's transformation at 0 Hit Points, the Aboleth's underwater clause (the server has
   no underwater state). Go: `TestPostgresStatBlockCursesOnEveryTarget`, `TestPostgresInfernalWoundOnEveryTarget`.
 - **A character's portrait** (the photo on its sheet): `cmd/server/portrait_2024.go` is the one owner of what it may be (`checkPortraitImage`: not empty, up to
   5 MB, a PNG, JPEG or WebP that decodes, each side 32 to 4096 pixels, a note when the sheet's 4:5 frame will crop it), of reading `image_base64`

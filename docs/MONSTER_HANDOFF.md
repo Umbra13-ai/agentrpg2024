@@ -121,11 +121,7 @@ Not mechanics coverage.
 ## Parked by the owner (Nov 22): stat-block effects still with the GM
 Decided to come back to these; each is said to the GM in the reply today, nothing is dropped. The records they would use exist
 (`cursed`, `wounded`, `weakened`: `effect_records_2024.go`, `curse_records_2024.go`, `wound_records_2024.go`).
-- **Mummy / Mummy Lord Rotting Fist: the curse's Hit Point maximum** ("its Hit Point maximum doesn't return to normal when finishing a Long Rest,
-  and its Hit Point maximum decreases by 10 (3d6) every 24 hours that elapse"). Needs (1) a per-source tag on `reduceHPMaximum` so `restoreAllHP`
-  leaves the curse's part of the shared `max_hp_reduced` counter (Life Drain writes it too), and (2) a step in `passSpellTimeOn` that rolls the
-  3d6 for each full 24 story hours (`lobbies.story_rounds`) since the curse began. Retest Life Drain, the rests and the Hit Point owner. Opus
-  high to plan, Sonnet high to code. CLAUDE.md step 6: ask the owner before starting.
+- ~~Mummy / Mummy Lord Rotting Fist: the curse's Hit Point maximum~~ done (Nov 22): `cursedHPMaxTick`, `max_hp_cursed` (`TestPostgresMummyCurseHitPointMaximum`).
 - **Aboleth Mucus Cloud**: "can't regain Hit Points unless it is underwater" and the acid damage every 10 minutes outside water: the server has
   no underwater state for a creature.
 - **Lycanthropes**: "If the cursed target drops to 0 Hit Points, it instead becomes a Werewolf under the GM's control" (the curse flag

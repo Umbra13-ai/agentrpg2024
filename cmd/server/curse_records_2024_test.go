@@ -81,9 +81,9 @@ func TestPostgresStatBlockCursesOnEveryTarget(t *testing.T) {
 	}
 	clear()
 
-	// Mummy: no Hit Points regained; the Hit Point maximum clauses stay the GM's (not applied: said)
+	// Mummy: no Hit Points regained, and the Hit Point maximum that falls 3d6 every 24 hours (TestPostgresMummyCurseHitPointMaximum)
 	line = hit("Rotting Fist")
-	if r := curse(); r.Detail != curseNoRegain {
+	if r := curse(); !strings.HasPrefix(r.Detail, curseNoRegain+"+"+curseHPMax+"=3d6@") {
 		t.Errorf("Mummy curse: %+v", r)
 	}
 	if no, why := cantRegainHP(camp, hero); !no || why == "" {
@@ -123,4 +123,89 @@ func TestPostgresStatBlockCursesOnEveryTarget(t *testing.T) {
 	if len(recordsOf(camp, wolf, condCursed)) != 0 || !strings.Contains(line, "isn't a Humanoid") {
 		t.Errorf("a Beast is not subjected to a Humanoid's curse: %v %s", recordsOf(camp, wolf, condCursed), line)
 	}
+}
+
+// The Mummy's curse takes Hit Point maximum: 3d6 for each full 24 story hours, kept through a Long Rest (which still returns Life Drain's part), and
+// given back as an ordinary reduction when Remove Curse ends the curse; a maximum reduced to 0 is a death.
+func TestPostgresMummyCurseHitPointMaximum(t *testing.T) {
+	testPostgres(t)
+	_, _, camp, char, _, _ := companionReactionFixture(t)
+	text := srdEntryText(t, "Mummy", "Rotting Fist")
+	var e saveEffect
+	e.readCurse(text)
+	if e.Curse == nil || !hasPrefixFlag(e.Curse.Flags, curseHPMax+"=3d6") || !containsStr(e.Curse.Flags, curseNoRegain) {
+		t.Fatalf("the Mummy's curse flags: %+v", e.Curse)
+	}
+	var lord saveEffect
+	lord.readCurse(srdEntryText(t, "Mummy Lord", "Rotting Fist"))
+	if lord.Curse == nil || !containsStr(lord.Curse.Flags, curseLongRest) || containsStr(lord.Curse.Flags, curseShortRest) || !hasPrefixFlag(lord.Curse.Flags, curseHPMax+"=3d6") {
+		t.Fatalf("the Mummy Lord's curse flags: %+v", lord.Curse)
+	}
+	pgExec(t, `UPDATE characters SET hp=1000, max_hp=1000, max_hp_reduced=0, max_hp_cursed=0, conditions='[]', is_dead=false WHERE id=$1`, char)
+	pgExec(t, `UPDATE lobbies SET story_rounds=0 WHERE id=$1`, camp)
+	e.SourceID = -1
+	e.giveCurse(camp, char, "the Mummy's Rotting Fist")
+	maxHP := func() (m, reduced, cursed int) {
+		db.QueryRow(`SELECT max_hp, COALESCE(max_hp_reduced,0), COALESCE(max_hp_cursed,0) FROM characters WHERE id=$1`, char).Scan(&m, &reduced, &cursed)
+		return
+	}
+	passSpellTimeOn(camp, storyDayRounds-1, 0) // a day less a round: nothing yet
+	if m, _, c := maxHP(); m != 1000 || c != 0 {
+		t.Fatalf("before 24 hours: max %d cursed %d", m, c)
+	}
+	passSpellTimeOn(camp, 1, 0) // the day is complete: 3d6
+	m, _, c := maxHP()
+	if c < 3 || c > 18 || m != 1000-c {
+		t.Fatalf("after 24 hours: max %d, cursed part %d (3d6 is 3 to 18)", m, c)
+	}
+	passSpellTimeOn(camp, 1, 0)
+	if _, _, c2 := maxHP(); c2 != c {
+		t.Errorf("the same day was counted twice: %d then %d", c, c2)
+	}
+	// Life Drain's part returns with a Long Rest, the curse's does not
+	if _, err := reduceMaxHP(char, 20); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := restoreAllHP(char); err != nil {
+		t.Fatal(err)
+	}
+	if m, red, cur := maxHP(); red != 0 || cur != c || m != 1000-c {
+		t.Errorf("after a Long Rest: max %d, reduced %d, cursed %d (the curse's %d stays)", m, red, cur, c)
+	}
+	passSpellTimeOn(camp, 2*storyDayRounds, 0) // two more days
+	_, _, c3 := maxHP()
+	if c3 < c+6 || c3 > c+36 {
+		t.Errorf("two more days: cursed %d, was %d", c3, c)
+	}
+	// Remove Curse ends it: the part returns as an ordinary reduction, at the next Long Rest
+	if endCursesBySpell(camp, "remove-curse", []int{char}) == "" {
+		t.Fatal("Remove Curse ended nothing")
+	}
+	if m, red, cur := maxHP(); cur != 0 || red != c3 || m != 1000-c3 {
+		t.Errorf("after Remove Curse: max %d, reduced %d, cursed %d", m, red, cur)
+	}
+	if _, err := restoreAllHP(char); err != nil {
+		t.Fatal(err)
+	}
+	if m, red, cur := maxHP(); m != 1000 || red != 0 || cur != 0 {
+		t.Errorf("after the next Long Rest: max %d reduced %d cursed %d", m, red, cur)
+	}
+	// a maximum reduced to 0 is a death
+	pgExec(t, `UPDATE characters SET hp=2, max_hp=2, max_hp_reduced=0, max_hp_cursed=0, is_dead=false WHERE id=$1`, char)
+	e.giveCurse(camp, char, "the Mummy's Rotting Fist")
+	passSpellTimeOn(camp, storyDayRounds, 0)
+	var dead bool
+	db.QueryRow(`SELECT COALESCE(is_dead,false) FROM characters WHERE id=$1`, char).Scan(&dead)
+	if !dead {
+		t.Errorf("a cursed character whose Hit Point maximum fell to 0 is not dead")
+	}
+}
+
+func hasPrefixFlag(flags []string, prefix string) bool {
+	for _, f := range flags {
+		if strings.HasPrefix(f, prefix) {
+			return true
+		}
+	}
+	return false
 }
