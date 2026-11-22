@@ -705,6 +705,10 @@ Add to the owner, never beside it. When you give another rule one owner, add it 
   - `castChoiceList`: an entry that offers several spells waits for the GM's `use`; so does a Spellcasting entry's lists (`spellTiersOf`,
     which keeps what a list adds to a spell, `spellListNote`: "Charm Monster (lasts 24 hours; ...)", shown to the GM with the cast).
   - `endWardsOnOffenseOf`: Invisibility and Sanctuary end when their creature, a character or a monster, attacks or casts.
+  - `monsterCastDirect` (`monster_cast_effects_2024.go`): a spell with no attack roll and no saving throw that lands at once is resolved by the owners a character's
+    cast uses: Magic Missile's darts (`beamPlan`, round-robin over the targets, the Brooch of Shielding's Immunity), the Power Words (`powerWordOn`) and Remove Curse
+    (`endCursesBySpell`). Go: `TestPostgresMonsterCastDirectSpells`. What stays the GM's: utility and passive spells (Detect Magic, Commune, Teleport ...), summoning and
+    Dispel Magic, whose effect the GM names; the lasting ones among them are open items.
   - A new spell effect for monsters is a row in those tables plus a kind its readers serve for any creature.
   **An entry that can replace part of itself** ("It can replace one attack with a use of Sleep Breath", the Pit Fiend's Hold Monster
   in place of one Fireball): `replaceRuleOf` (`cmd/server/monster_replace_2024.go`) reads the sentence; monster_action's `use` picks

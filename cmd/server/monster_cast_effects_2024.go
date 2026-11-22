@@ -332,3 +332,75 @@ func castChoiceList(text string) []string {
 	}
 	return out
 }
+
+// monsterCastDirect: a spell with no attack roll and no saving throw whose effect lands on its targets at once, resolved by the same owners as a
+// character's cast: Magic Missile's darts (beamPlan: automatic hits, 1d4+1 Force each, the Brooch of Shielding's Immunity) and the Power Words
+// (powerWordOn: Kill, Stun, Heal) and Remove Curse (endCursesBySpell). handled is false for any other spell.
+func monsterCastDirect(r *http.Request, lobbyID, monsterID int, sp SRDSpell, slug, head string, level, dc int, targets []int, apply bool) (lines []string, handled bool) {
+	lines = []string{head + "."}
+	if count, dice, auto := beamPlan(slug, sp.Level, level, 0); auto && count > 0 {
+		if apply {
+			markExecuted(r)
+		}
+		perDart := map[int]int{} // darts by target, as the caster divides them (round-robin over the targets named)
+		for i := 0; i < count; i++ {
+			perDart[targets[i%len(targets)]]++
+		}
+		for _, tid := range targets {
+			n := perDart[tid]
+			if n == 0 {
+				continue
+			}
+			who := creatureName(lobbyID, tid)
+			if tid > 0 && magicMissileImmune(tid, sp.Name) { // Brooch of Shielding
+				lines = append(lines, fmt.Sprintf("%s is immune to Magic Missile (Brooch of Shielding).", who))
+				continue
+			}
+			total := 0
+			for d := 0; d < n; d++ {
+				total += game.RollDamage(normDice(dice), false)
+			}
+			clause := fmt.Sprintf("%d dart(s) deal %d force damage (not applied)", n, total)
+			if apply {
+				switch {
+				case tid < 0 && !isCompanionCombatID(tid):
+					clause, _ = damageMonster(lobbyID, tid, total, "force")
+				case isCompanionCombatID(tid):
+					if c, ok := activeCompanionInCampaign(lobbyID, tid); ok {
+						clause = damageCompanion(c, total, "force")
+					}
+				default:
+					clause = damageCharacter(tid, total, "force")
+				}
+				clause = fmt.Sprintf("%d dart(s): %s", n, clause)
+			}
+			lines = append(lines, who+" "+clause+".")
+		}
+		return lines, true
+	}
+	switch slug {
+	case "remove-curse": // every curse on each target ends (endCursesBySpell: the same owner as a character's cast)
+		if !apply {
+			return append(lines, sp.Name+" would end the curses on its targets (not applied)."), true
+		}
+		markExecuted(r)
+		for _, tid := range targets {
+			text := endCursesBySpell(lobbyID, slug, []int{tid})
+			if text == "" {
+				text = creatureName(lobbyID, tid) + " is under no curse the server tracks, so nothing ends."
+			}
+			lines = append(lines, text)
+		}
+		return lines, true
+	case "power-word-kill", "power-word-stun", "power-word-heal":
+		if len(targets) > 1 {
+			lines = append(lines, fmt.Sprintf("(%s affects one creature; %s isn't affected.)", sp.Name, creatureName(lobbyID, targets[1])))
+		}
+		if !apply {
+			return append(lines, sp.Name+" would affect "+creatureName(lobbyID, targets[0])+" (not applied)."), true
+		}
+		markExecuted(r)
+		return append(lines, powerWordOn(lobbyID, slug, targets[0], dc)), true
+	}
+	return nil, false
+}

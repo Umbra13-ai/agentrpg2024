@@ -22,7 +22,7 @@ var gmLastingSpells = map[string]struct {
 	"scrying": {End: endConcentration}, "faerie-fire": {End: endConcentration}, "slow": {End: endConcentration},
 	"calm-emotions": {End: endConcentration}, "dispel-evil-and-good": {End: endConcentration}, "darkness": {End: endConcentration},
 	"mirror-image": {End: endRounds, Rounds: 10}, "mage-armor": {End: endFight}, "longstrider": {End: endFight},
-	"etherealness": {End: endFight}, "power-word-stun": {End: endFight}, "geas": {End: endNever}, "raise-dead": {End: endNever},
+	"etherealness": {End: endFight}, "geas": {End: endNever}, "raise-dead": {End: endNever},
 }
 
 // monsterHandoverSpell lists a lasting spell the server didn't run; false when it is a one-shot (nothing is listed).

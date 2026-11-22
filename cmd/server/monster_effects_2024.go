@@ -1570,6 +1570,9 @@ func resolveMonsterSpellRules(r *http.Request, lobbyID, monsterID int, monsterNa
 	if len(targets) == 0 {
 		return []string{head + ": name the targets (target or target_ids) to resolve it."}
 	}
+	if lines, handled := monsterCastDirect(r, lobbyID, monsterID, sp, slug, head, level, dc, targets, apply); handled { // Magic Missile, the Power Words
+		return lines
+	}
 	dice := sp.DamageDice
 	if d, ok := sp.DamageAtSlotLevel[strconv.Itoa(level)]; ok && d != "" {
 		dice = d
