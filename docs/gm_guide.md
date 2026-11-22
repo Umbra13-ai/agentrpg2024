@@ -121,6 +121,7 @@ Never repeat an attack, expenditure, award, rest, or level-up merely because one
 - [ ] Check automation before applying effects; verify mechanics, resources, positions, time, and turn advancement afterward.
 - [ ] Gear your narration used (now or in earlier check-ins) is out of the character's inventory: `POST /api/gm/take-item` for anything still carried; glance at `recent_pick_ups` and veto any that doesn't fit the story.
 - [ ] Ensure players can see their outcomes without secrets or private information.
+- [ ] Write the `reason` of a gold or item award (`POST /api/gm/gold`, `give-item`) in plain prose with spaces and full words: players read it verbatim in their event log, as "GM currency_change: <your reason> → 50 gp to: <name>". Keep private bookkeeping out of it (a `[GM: ...]` note is removed from what players read).
 - [ ] Update the player-safe `story_so_far` within the current server limit. Keep hidden facts in GM-only records.
 - [ ] Preserve a concise handoff: scene, locations, pending actions, combat state, resources, game time, known facts versus rumors, and the next decision. State any missing history.
 
