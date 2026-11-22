@@ -22,7 +22,6 @@ package main
 
 import (
 	"bytes"
-	"context"
 	"database/sql"
 	"encoding/json"
 	"fmt"
@@ -498,12 +497,10 @@ func withActionOptions(charID int, problems []string, reply map[string]interface
 
 // ---------------------------------------------------------------- running a turn
 
-func ptInternal(method, path string, body interface{}, agentID int) (*http.Request, *httptest.ResponseRecorder) {
+// ptCall serves a request of a turn as its agent (serveAs) with the route's handler.
+func ptCall(method, path string, body interface{}, agentID int, h http.HandlerFunc) *httptest.ResponseRecorder {
 	raw, _ := json.Marshal(body)
-	req := httptest.NewRequest(method, path, bytes.NewReader(raw))
-	req.Header.Set("Content-Type", "application/json")
-	req = req.WithContext(context.WithValue(req.Context(), internalAgentKey{}, agentID))
-	return req, httptest.NewRecorder()
+	return serveAs(agentID, httptest.NewRequest(method, path, bytes.NewReader(raw)), h)
 }
 
 func ptReply(rec *httptest.ResponseRecorder) (map[string]interface{}, bool, string) {
@@ -547,15 +544,17 @@ func ptRunStep(lobbyID, charID, owner int, m map[string]interface{}) (map[string
 		if s.Altitude != nil {
 			body["altitude"] = *s.Altitude
 		}
-		req, rec := ptInternal(http.MethodPost, fmt.Sprintf("/api/campaigns/%d/battle-map/preview", lobbyID), body, owner)
-		handleBattleMap(rec, req, lobbyID, []string{"preview"})
+		rec := ptCall(http.MethodPost, fmt.Sprintf("/api/campaigns/%d/battle-map/preview", lobbyID), body, owner, func(w http.ResponseWriter, r *http.Request) {
+			handleBattleMap(w, r, lobbyID, []string{"preview"})
+		})
 		out, ok, why := ptReply(rec)
 		if !ok {
 			return out, false, why
 		}
 		body["confirmation"] = out["confirmation"]
-		req, rec = ptInternal(http.MethodPost, fmt.Sprintf("/api/campaigns/%d/battle-map/move", lobbyID), body, owner)
-		handleBattleMap(rec, req, lobbyID, []string{"move"})
+		rec = ptCall(http.MethodPost, fmt.Sprintf("/api/campaigns/%d/battle-map/move", lobbyID), body, owner, func(w http.ResponseWriter, r *http.Request) {
+			handleBattleMap(w, r, lobbyID, []string{"move"})
+		})
 		return ptReply(rec)
 	}
 	body := map[string]interface{}{}
@@ -565,9 +564,7 @@ func ptRunStep(lobbyID, charID, owner int, m map[string]interface{}) (map[string
 		}
 	}
 	body["character_id"], body["campaign_id"] = charID, lobbyID
-	req, rec := ptInternal(http.MethodPost, "/api/action", body, owner)
-	handleAction(rec, req)
-	return ptReply(rec)
+	return ptReply(ptCall(http.MethodPost, "/api/action", body, owner, handleAction))
 }
 
 // ptRunSteps runs the steps in order and stops at the first that is refused. failedAt is -1 when all ran, else the index of the

@@ -10,6 +10,7 @@ import (
 	"github.com/lib/pq"
 	"log"
 	"net/http"
+	"net/http/httptest"
 	"strconv"
 	"strings"
 	"sync"
@@ -57,6 +58,61 @@ func memoAuth(r *http.Request, signIn func(*http.Request) (int, error)) (int, er
 	m.id, m.err = signIn(r)
 	m.done, m.header = true, h
 	return m.id, m.err
+}
+
+// serveAs serves a request the server makes for an agent (a character's own player, or the GM), as that agent: the request is
+// signed in as it, and every record of the action log the request writes is that agent's (requestAuthor). h is the route's
+// handler, or nil for the router. Every request the server makes for an agent goes through here.
+func serveAs(agentID int, req *http.Request, h http.HandlerFunc) *httptest.ResponseRecorder {
+	req = req.WithContext(context.WithValue(req.Context(), internalAgentKey{}, agentID))
+	if req.Header.Get("Content-Type") == "" {
+		req.Header.Set("Content-Type", "application/json")
+	}
+	if wch := watchOf(); wch != nil {
+		wch.mu.Lock()
+		wch.as = append(wch.as, agentID)
+		wch.mu.Unlock()
+		defer func() {
+			wch.mu.Lock()
+			wch.as = wch.as[:len(wch.as)-1]
+			wch.mu.Unlock()
+		}()
+	}
+	rec := httptest.NewRecorder()
+	if h == nil {
+		http.DefaultServeMux.ServeHTTP(rec, req)
+	} else {
+		h(rec, req)
+	}
+	return rec
+}
+
+// requestAuthor: the agent whose request is being served on this goroutine (0: none, such as a background worker, or a request
+// not signed in): the innermost request serveAs makes, else the request itself as its sign-in answered (never a new sign-in).
+func requestAuthor() int {
+	wch := watchOf()
+	if wch == nil {
+		return 0
+	}
+	wch.mu.Lock()
+	defer wch.mu.Unlock()
+	if n := len(wch.as); n > 0 {
+		return wch.as[n-1]
+	}
+	if wch.req == nil {
+		return 0
+	}
+	if id, ok := wch.req.Context().Value(internalAgentKey{}).(int); ok && id > 0 {
+		return id
+	}
+	if m, ok := wch.req.Context().Value(authMemoKey{}).(*authMemo); ok {
+		m.Lock()
+		defer m.Unlock()
+		if m.done && m.err == nil {
+			return m.id
+		}
+	}
+	return 0
 }
 
 // Auth helpers

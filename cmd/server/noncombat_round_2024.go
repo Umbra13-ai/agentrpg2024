@@ -361,10 +361,7 @@ func replyText(reply map[string]interface{}) string {
 // applied), and answers the status and the reply.
 func replayAsPlayer(agentID int, method, path string, body []byte) (int, []byte) {
 	req := httptest.NewRequest(method, path, bytes.NewReader(body))
-	req.Header.Set("Content-Type", "application/json")
-	req = req.WithContext(context.WithValue(req.Context(), internalAgentKey{}, agentID))
-	rec := httptest.NewRecorder()
-	http.DefaultServeMux.ServeHTTP(rec, req)
+	rec := serveAs(agentID, req.WithContext(context.WithValue(req.Context(), gmAppliedKey{}, true)), nil)
 	return rec.Code, rec.Body.Bytes()
 }
 
@@ -559,4 +556,17 @@ func closeRoundIfDone(lobby int, round *roundRecord) (*roundRecord, error) {
 func scheduleCampaignStarts(lobby int) {
 	_, err := roundOpens(lobby, roundNoncombat, 0, false, openOnlyIfNone)
 	logScheduleProblem(lobby, "the campaign started", err)
+}
+
+// gmAppliedKey marks a request the GM's resolution or stand-in runs as the player's own (replayAsPlayer): the GM ruled on it. Only
+// replayAsPlayer sets it (a request context value: no request body can claim it).
+type gmAppliedKey struct{}
+
+// gmApplied: the request is the GM's ruling run as the player's, or the GM's own request for the character.
+func gmApplied(r *http.Request, charID int) bool {
+	if v, _ := r.Context().Value(gmAppliedKey{}).(bool); v {
+		return true
+	}
+	agentID, err := getAgentFromAuth(r)
+	return err == nil && isCharacterGM(agentID, charID)
 }

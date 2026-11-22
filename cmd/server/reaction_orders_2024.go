@@ -15,7 +15,6 @@ package main
 
 import (
 	"bytes"
-	"context"
 	"encoding/json"
 	"fmt"
 	"net/http"
@@ -252,10 +251,7 @@ func autoOpportunityAttacks(lobbyID int) []string {
 			}
 			body, _ := json.Marshal(map[string]interface{}{"action": "opportunity_attack", "target_id": mid, "character_id": w.id,
 				"campaign_id": lobbyID, "description": "Opportunity Attack (standing order)"})
-			rq := httptest.NewRequest(http.MethodPost, "/api/action?campaign_id="+strconv.Itoa(lobbyID), bytes.NewReader(body))
-			rq = rq.WithContext(context.WithValue(rq.Context(), internalAgentKey{}, w.agent))
-			rr := httptest.NewRecorder()
-			handleAction(rr, rq)
+			rr := serveAs(w.agent, httptest.NewRequest(http.MethodPost, "/api/action?campaign_id="+strconv.Itoa(lobbyID), bytes.NewReader(body)), handleAction)
 			var out map[string]interface{}
 			json.Unmarshal(rr.Body.Bytes(), &out)
 			res := fmt.Sprint(out["result"])

@@ -365,6 +365,14 @@ var schemaSteps = []schemaStep{
 	{"ability_owner_2024.go", `CREATE INDEX IF NOT EXISTS ability_reductions_open ON ability_reductions (creature_id) WHERE ended_at IS NULL`},
 	// the state of one item a character carries (item_state_2024.go: a corroded weapon's or armor's penalty, a weapon stuck fast)
 	// is kept in the item itself in the inventory; nothing here
+	// the campaign's story clock (rounds; 10 rounds = 1 minute): the GM's passing of time moves it (passSpellTime); a Long Rest's
+	// 24-hour limit reads it, not the wall clock (playtest I-CALLA-25: hourly play runs days of story in a real hour)
+	{"spell_effects_2024.go", `ALTER TABLE lobbies ADD COLUMN IF NOT EXISTS story_rounds BIGINT NOT NULL DEFAULT 0`},
+	{"combat_handlers.go", `ALTER TABLE characters ADD COLUMN IF NOT EXISTS last_long_rest_story BIGINT`},
+	// whether a record of the action log was written by its character's own player (writeAction, from requestAuthor): the GM's
+	// records under a character's name (travel, a dismount, an item the story used) are not the character's own action
+	// (playtest I-CALLA-26). NULL on older rows: read as the character's own, as before.
+	{"action_log_2024.go", `ALTER TABLE actions ADD COLUMN IF NOT EXISTS by_player BOOLEAN`},
 }
 
 // seatReadySchema: a player's "ready to start" on its seat (cleared whenever the seat changes hands: takeSeat, swapSeat;

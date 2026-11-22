@@ -35,6 +35,7 @@ type actionRecord struct {
 	Description string
 	Result      string // as stored: the GM's log, with every number (playerText hides them from players)
 	At          time.Time
+	ByPlayer    bool // written by the character's own player (a GM's record under the character's name is not: I-CALLA-26)
 }
 
 // actionFilter says which rows to read.
@@ -67,10 +68,16 @@ func notPlaySQL(extra ...string) string {
 	return strings.Join(q, ", ")
 }
 
+// isOwnActionOf: the record is the character's own action: its player wrote it (by_player), and it is play, not bookkeeping. A
+// record the GM writes under the character's name (travel, a dismount, an item the story used) is not (playtest I-CALLA-26).
+func (a actionRecord) isOwnActionOf(charID int) bool {
+	return charID > 0 && a.CharacterID == charID && a.ByPlayer && !containsStr(notPlayTypes, a.Type)
+}
+
 // readActions reads the action log.
 func readActions(f actionFilter) ([]actionRecord, error) {
 	q := `SELECT a.id, COALESCE(a.character_id, 0), COALESCE(c.name, g.name, 'GM'), COALESCE(a.action_type, ''),
-		COALESCE(a.description, ''), COALESCE(a.result, ''), a.created_at
+		COALESCE(a.description, ''), COALESCE(a.result, ''), a.created_at, COALESCE(a.by_player, a.character_id IS NOT NULL)
 		FROM actions a
 		LEFT JOIN characters c ON c.id = a.character_id
 		LEFT JOIN lobbies l ON l.id = a.lobby_id
@@ -126,7 +133,7 @@ func readActions(f actionFilter) ([]actionRecord, error) {
 	for rows.Next() {
 		var a actionRecord
 		var at sql.NullTime
-		if err := rows.Scan(&a.ID, &a.CharacterID, &a.Actor, &a.Type, &a.Description, &a.Result, &at); err != nil {
+		if err := rows.Scan(&a.ID, &a.CharacterID, &a.Actor, &a.Type, &a.Description, &a.Result, &at, &a.ByPlayer); err != nil {
 			log.Printf("action log: row unreadable: %v", err)
 			continue
 		}
@@ -330,6 +337,12 @@ func writeAction(q execer, lobbyID, charID int, actionType, description, result 
 	// the shared log is where every reader looks: a GM's private note (splitGMNotes) is never stored in it, whoever the caller is.
 	// The callers that know their notes (the narrate route) split earlier and name the monster; this is the boundary for the rest.
 	result, held := splitGMNotes(result)
+	description, heldDesc := splitGMNotes(description) // a note in the description too (the GM's travel record repeats its result)
+	for _, n := range heldDesc {
+		if !containsStr(held, n) {
+			held = append(held, n)
+		}
+	}
 	for _, n := range held {
 		addGMNotice(lobbyID, n)
 	}
@@ -341,8 +354,16 @@ func writeAction(q execer, lobbyID, charID int, actionType, description, result 
 	if lobbyID > 0 {
 		lobby = lobbyID
 	}
-	_, err := q.Exec(`INSERT INTO actions (lobby_id, character_id, action_type, description, result) VALUES ($1, $2, $3, $4, $5)`,
-		lobby, char, actionType, description, result)
+	// by_player: the request that writes it is the character's own player's (its own, or one the server makes for it: serveAs)
+	var err error
+	if author := requestAuthor(); charID > 0 && author > 0 {
+		_, err = q.Exec(`INSERT INTO actions (lobby_id, character_id, action_type, description, result, by_player)
+			VALUES ($1, $2, $3, $4, $5, COALESCE((SELECT agent_id = $6 FROM characters WHERE id = $2), FALSE))`,
+			lobby, char, actionType, description, result, author)
+	} else {
+		_, err = q.Exec(`INSERT INTO actions (lobby_id, character_id, action_type, description, result, by_player) VALUES ($1, $2, $3, $4, $5, FALSE)`,
+			lobby, char, actionType, description, result)
+	}
 	if err != nil {
 		log.Printf("action log: couldn't write %q for character %d in campaign %d: %v", actionType, charID, lobbyID, err)
 	}

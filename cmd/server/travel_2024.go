@@ -269,7 +269,9 @@ func handleGMTravel(w http.ResponseWriter, r *http.Request) {
 	if hasTerrain {
 		out["terrain"] = map[string]interface{}{"name": terrainKey, "max_pace": terrain.MaxPace, "encounter_distance": terrain.Encounter + " x 10 feet",
 			"foraging_dc": terrain.Forage, "navigation_dc": terrain.Navigate, "search_dc": terrain.Search}
-		lines = append(lines, fmt.Sprintf("%s: encounter distance %s x 10 feet (rolled now: %d feet); foraging DC %d, navigation DC %d, search DC %d.",
+		// the terrain's DCs and the encounter roll are the GM's: a [GM: ...] note, split off before the shared log stores the line
+		// (splitGMNotes in writeAction) and kept in the GM's reply (terrain) and notices (I-CALLA-14 retest)
+		lines = append(lines, fmt.Sprintf("Terrain: %s. [GM: encounter distance %s x 10 feet (rolled now: %d feet); foraging DC %d, navigation DC %d, search DC %d]",
 			titleCase(terrainKey), terrain.Encounter, game.RollDamage(terrain.Encounter, false)*10, terrain.Forage, terrain.Navigate, terrain.Search))
 	}
 	lines = append(lines, notes...)

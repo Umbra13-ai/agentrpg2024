@@ -49,6 +49,8 @@ type dbWatch struct {
 	errors     []string
 	combatWork map[string]int // work captured by THIS request, not earlier interrupted commands
 	answered   bool           // the handler answered a database failure through the owner (db_errors_2024.go)
+	req        *http.Request  // the request being served (requestAuthor reads who sent it)
+	as         []int          // the agents of the requests the server makes for an agent inside it, innermost last (serveAs)
 }
 
 var (
@@ -147,7 +149,7 @@ func (h *heldReply) Write(b []byte) (int, error) {
 // guardDB serves one request with its database calls watched (see the file comment).
 func guardDB(w http.ResponseWriter, r *http.Request, next http.Handler) {
 	id := goroutineID()
-	wch := &dbWatch{}
+	wch := &dbWatch{req: r}
 	watchMu.Lock()
 	watching[id] = wch
 	watchMu.Unlock()
