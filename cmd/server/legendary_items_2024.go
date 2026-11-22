@@ -158,6 +158,9 @@ func addMonstersToFight(lobbyID int, slug, name string, n, hp int, extra map[str
 	if err != nil {
 		return nil
 	}
+	for _, id := range ids {
+		listRecurringTraits(lobbyID, id, slug) // the traits the GM runs each turn (the GM's open items)
+	}
 	return ids
 }
 

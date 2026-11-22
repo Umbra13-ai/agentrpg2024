@@ -248,10 +248,15 @@ func TestPostgresGMOpenItemsFromStatBlockEntries(t *testing.T) {
 		}
 	}
 	act("Entry Treant", "Animate Trees")
+	// a monster that enters the fight with a trait the GM runs each turn (Barbed Hide) is listed at once, and leaves the list with it
+	if c, j := pgCall(t, "POST", fmt.Sprintf("/api/campaigns/%d/combat/add", lobby), gm, map[string]interface{}{
+		"combatants": []map[string]interface{}{{"name": "Entry Devil", "monster_key": "barbed-devil"}}}); c != 200 {
+		t.Fatalf("add the devil: %d %v", c, j)
+	}
 	act("Entry Wraith", "Create Specter")
 	_, j = pgCall(t, "GET", fmt.Sprintf("/api/gm/open-items?campaign_id=%d", lobby), gm, nil)
 	got := fmt.Sprint(j["open_items"])
-	for _, want := range []string{"Animate Trees", "Create Specter"} {
+	for _, want := range []string{"Animate Trees", "Create Specter", "Barbed Hide"} {
 		if !strings.Contains(got, want) {
 			t.Errorf("%s is not an open item: %v", want, got)
 		}
@@ -268,5 +273,45 @@ func TestPostgresGMOpenItemsFromStatBlockEntries(t *testing.T) {
 	_, j = pgCall(t, "GET", fmt.Sprintf("/api/gm/open-items?campaign_id=%d", lobby), gm, nil)
 	if got := fmt.Sprint(j["open_items"]); strings.Contains(got, "Create Specter") || !strings.Contains(got, "Animate Trees") {
 		t.Errorf("after the wraith left: %v", got)
+	}
+}
+
+// Every function that gives a monster a combat id (newMonsterID) also lists the traits the GM runs each turn (listRecurringTraits), so a monster
+// added by any route (combat/add, an item's summons, a split) can't enter a fight without its open items.
+func TestEveryNewMonsterListsItsTraits(t *testing.T) {
+	files, _ := filepath.Glob("*.go")
+	for _, f := range files {
+		if strings.HasSuffix(f, "_test.go") || f == "combat_state_2024.go" {
+			continue
+		}
+		b, _ := os.ReadFile(f)
+		for _, fn := range strings.Split(string(b), "\nfunc ")[1:] {
+			if strings.Contains(fn, ".newMonsterID()") && !strings.Contains(fn, "listRecurringTraits(") {
+				t.Errorf("%s: func %s gives a monster a combat id without listRecurringTraits", f, strings.SplitN(fn, "(", 2)[0])
+			}
+		}
+	}
+}
+
+// Over the 330 SRD stat blocks: the traits listed as open items are exactly the ones the server leaves to the GM that act every turn or on a
+// trigger; a standing rule (Training, Magic Rope), a return to life after the fight (Celestial Restoration) and a day-long change (Troll Spawn) are not.
+func TestRecurringGMTraitsOverTheCatalog(t *testing.T) {
+	got := map[string]bool{}
+	for _, m := range srdMonsters2024() {
+		for _, tr := range recurringGMTraits(m.Traits) {
+			got[m.Name+": "+stripUsage(tr.Name)] = true
+		}
+	}
+	want := []string{"Barbed Devil: Barbed Hide", "Clay Golem: Berserk", "Flesh Golem: Berserk", "Fire Elemental: Fire Form", "Hydra: Multiple Heads",
+		"Troll: Loathsome Limbs", "Vampire: Vampire Weakness", "Vampire Spawn: Vampire Weakness", "Water Elemental: Freeze", "Aboleth: Mucus Cloud",
+		"Tarrasque: Reflective Carapace", "Marilith: Reactive"}
+	for _, w := range want {
+		if !got[w] {
+			t.Errorf("%s is not listed", w)
+		}
+		delete(got, w)
+	}
+	for k := range got {
+		t.Errorf("listed but not expected (a standing rule or an applied trait?): %s", k)
 	}
 }

@@ -1075,6 +1075,7 @@ func handleCombatAdd(w http.ResponseWriter, r *http.Request, campaignID int) {
 		if cid := sprintAny(e["creature_id"]); cid != "" && cid != "<nil>" {
 			registerCreature(campaignID, cid, sprintAny(e["name"]), sprintAny(e["monster_key"]))
 		}
+		listRecurringTraits(campaignID, id, sprintAny(e["monster_key"])) // the traits the GM runs each turn (the GM's open items)
 		a := map[string]interface{}{"id": id, "creature_id": e["creature_id"], "name": e["name"], "initiative": e["initiative"], "hp": e["hp"], "ac": e["ac"]}
 		if feats := monsterFeaturesInfo(campaignID, id); feats != nil { // Legendary Actions, Legendary Resistance, auras the server runs for this monster
 			a["features"] = feats

@@ -119,3 +119,43 @@ func gmNotApplied(lobby, monsterID int, entryName, text string, targets []int) s
 	monsterHandoverEntry(lobby, monsterID, entryName, text, targets)
 	return " [GM, not applied automatically: " + text + "]"
 }
+
+// recurringTraitRe: a trait's own wording that it acts every turn or on a trigger (SRD 5.2.1): "At the start of each of its turns" (Barbed Hide),
+// "Whenever the golem starts its turn" (Berserk), "If the troll ends any turn" (Loathsome Limbs), "if it ends its turn in running water" (Vampire
+// Weakness), "at the end of the aboleth's turn" (Mucus Cloud), "The first time it enters a creature's space on a turn" (Fire Form), "Whenever the
+// hydra takes 25 damage" (Multiple Heads), "If the elemental takes Cold damage" (Freeze), "If the tarrasque is targeted by" (Reflective Carapace),
+// "on every turn of combat" (Reactive).
+var recurringTraitRe = regexp.MustCompile(`(?i)\bat the (?:start|end) of each of its turns\b|\bstarts its turn\b|\bends (?:any|its) turn\b|\bat the end of the [a-z]+\W?s turn\b|\bthe first time it enters a creature\W?s space on a turn\b|\bwhenever the [a-z]+ takes \d+ damage\b|\bif the [a-z]+ takes [a-z]+ damage\b|\bif the [a-z]+ is targeted by\b|\bon every turn of combat\b`)
+
+// listRecurringTraits: when a monster enters a fight, each trait of its stat block that the server doesn't apply (monsterTraitRules has no row, or
+// a GM row) and that acts every turn or on a trigger (recurringTraitRe) is an open item while the creature is in the fight. Every place that gives
+// a monster its combat id calls it (TestEveryNewMonsterListsItsTraits). It returns how many it listed.
+func listRecurringTraits(lobby, id int, key string) int {
+	meta := monsterMetaFor(key)
+	if meta == nil || lobby == 0 {
+		return 0
+	}
+	n := 0
+	who := creatureName(lobby, id)
+	for _, t := range recurringGMTraits(meta.Traits) {
+		if handOverToGM(gmHandover{Lobby: lobby, Source: id, Kind: "trait", Entry: t.Name, Title: fmt.Sprintf("%s (%s)", t.Name, who),
+			Detail: strings.TrimSpace(t.Text), EndKind: endCreature}) > 0 {
+			n++
+		}
+	}
+	return n
+}
+
+// recurringGMTraits: the traits of a stat block that the server doesn't apply and that act every turn or on a trigger.
+func recurringGMTraits(traits []srdMonsterEntry) []srdMonsterEntry {
+	var out []srdMonsterEntry
+	for _, t := range traits {
+		if r, ok := traitRuleFor(t); ok && !r.GM {
+			continue
+		}
+		if recurringTraitRe.MatchString(t.Text) {
+			out = append(out, t)
+		}
+	}
+	return out
+}

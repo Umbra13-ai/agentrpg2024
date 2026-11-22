@@ -63,6 +63,8 @@ var monsterTextPatterns = map[string]*regexp.Regexp{
 	"weakenedRe":               weakenedRe,               // effect_records_2024.go
 	"notAffectedRe":            notAffectedRe,            // effect_records_2024.go
 	"curseIsRe":                curseIsRe,                // curse_records_2024.go
+	"entryLastingRe":           entryLastingRe,           // gm_handover_2024.go
+	"recurringTraitRe":         recurringTraitRe,         // gm_handover_2024.go
 	"curseRestRe":              curseRestRe,              // curse_records_2024.go
 	"curseNoRegainRe":          curseNoRegainRe,          // curse_records_2024.go
 	"curseDropRe":              curseDropRe,              // curse_records_2024.go
@@ -289,7 +291,7 @@ var patternWitnesses = map[string]patternWitness{
 func monsterTextFile(name string) bool {
 	for _, p := range []string{"monster_", "creature_", "condition_lasting_effects", "disadvantage_riders", "rider_duration", "hit_after_damage",
 		"hp_max_drain", "item_state", "obscured_areas", "hide_2024", "map_spaces", "speed_owner", "area_geometry", "map_rules", "wild_shape",
-		"attack_2024", "attack_target", "monsters_2024", "combat_handlers", "effect_records", "curse_records", "wound_records"} {
+		"attack_2024", "attack_target", "monsters_2024", "combat_handlers", "effect_records", "curse_records", "wound_records", "gm_handover"} {
 		if strings.HasPrefix(name, p) {
 			return true
 		}

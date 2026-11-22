@@ -334,7 +334,7 @@ func splitMonster(lobbyID, id int, name, base string) string {
 	}
 	// both halves in one change of the fight (combat_state_2024.go): the twin right after it, with an id the fight never gave before
 	var half, twinID int
-	var refusal string
+	var refusal, key string
 	_, err := changeFight(lobbyID, func(f *fight) error {
 		idx, e := f.entry(id)
 		if e == nil {
@@ -348,6 +348,7 @@ func splitMonster(lobbyID, id int, name, base string) string {
 		}
 		half = hp / 2
 		twin := copyEntry(e)
+		key = sprintAny(e["monster_key"])
 		e["hp"], e["size"] = half, smaller
 		twinID = f.newMonsterID()
 		twin["id"], twin["hp"], twin["size"], twin["name"] = twinID, half, smaller, name+" (split)"
@@ -365,6 +366,7 @@ func splitMonster(lobbyID, id int, name, base string) string {
 	case err != nil:
 		return "!database error"
 	}
+	listRecurringTraits(lobbyID, twinID, key) // the twin's traits the GM runs each turn (the GM's open items)
 	return fmt.Sprintf("%s uses %s: it splits into two %s creatures of %d Hit Points each, %s and %s (id %d), both acting on its Initiative.",
 		name, base, smaller, half, name, name+" (split)", twinID)
 }
