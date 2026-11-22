@@ -17,6 +17,34 @@ var attackLockoutRe = regexp.MustCompile(`(?i)While attached, the [\w() '’-]+c
 // owner's row (kind 'swallowed'), so it ends exactly with the swallow.
 var swallowLockoutRe = regexp.MustCompile(`(?i)While swallowing the target, the [\w() '’-]+can(?:'|’)t use ([A-Za-z][A-Za-z ]*?)[,.]|\bcan(?:'|’)t use ([A-Za-z]+) while it has a swallowed target`)
 
+// grappledTargetLockRe: an attack the stat block bars against the creature the attacker has Grappled ("While Grappled, the target has the
+// Restrained condition and can't be targeted by the crocodile's Tail.": SRD 5.2.1 Giant Crocodile Bite). Group 1: the barred attack.
+var grappledTargetLockRe = regexp.MustCompile(`(?i)can(?:'|’)t be targeted by the [\w '’-]+?(?:'|’)s ([A-Z][A-Za-z]*(?: [A-Z][A-Za-z]*)*)[.,;]`)
+
+// grappledTargetLock: the refusal when attackName is barred against targetID because the attacker (a monster of the fight) holds it
+// Grappled; "" otherwise. Read live from the condition owner's records, so it ends with the grapple. Asked by monsterAttackRange, the
+// one per-attack gate of every target route (a character, a monster, a companion), so a Multiattack's Tail after its Bite is refused too.
+func grappledTargetLock(lobbyID, attackerID, targetID int, attackName, targetName string) string {
+	if attackerID >= 0 {
+		return ""
+	}
+	_, meta, ok := monsterCombatant(lobbyID, attackerID)
+	if !ok || meta == nil {
+		return ""
+	}
+	base := strings.ToLower(stripUsage(attackName))
+	for _, a := range meta.Actions {
+		for _, m := range grappledTargetLockRe.FindAllStringSubmatch(a.Text, -1) {
+			if strings.ToLower(m[1]) == base && conditionHeldFrom(lobbyID, targetID, "grappled", attackerID) {
+				name := creatureName(lobbyID, attackerID)
+				return refusalAudiences(fmt.Sprintf("%s can't make %s attacks at %s. Nothing was rolled.", name, stripUsage(attackName), targetName),
+					fmt.Sprintf("%s is Grappled by %s, and its stat block bars %s against a creature it has Grappled", targetName, name, stripUsage(attackName)))
+			}
+		}
+	}
+	return ""
+}
+
 type attackLockout struct {
 	action  string // lowercased base name of the locked attack
 	swallow bool   // true: locked while swallowing a creature (the swallow owner owns the row); false: while attached

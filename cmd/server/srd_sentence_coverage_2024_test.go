@@ -260,6 +260,9 @@ func entryCoverage(kind string, e srdMonsterEntry, names []string) []sentenceVer
 	if readSwallow(e.Text) != nil {
 		return bySentence("resolveMonsterSwallow", func(string) bool { return true }, "")
 	}
+	if entryPullRe.MatchString(strings.TrimSpace(e.Text)) {
+		return bySentence("resolveMonsterPull (creature_movement_2024.go)", func(string) bool { return true }, "")
+	}
 	if onlyOwnMove(e.Text) {
 		return bySentence("readSpecialMove / grantSpecialMove", func(string) bool { return true }, "")
 	}

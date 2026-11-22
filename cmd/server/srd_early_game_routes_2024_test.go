@@ -316,6 +316,15 @@ func TestPostgresEarlyGameEveryEntry(t *testing.T) {
 						if hasSave && save.DropAtOrBelow > 0 { // "If the target has 20 Hit Points or fewer, it drops to 0": that branch
 							pgExec(t, `UPDATE characters SET hp=$1 WHERE id=$2`, save.DropAtOrBelow, char)
 						}
+						// an entry that pulls what the monster holds ("each creature Grappled by it", "one creature ... Restrained by its Web
+						// Strand"): the hero is held that way, as the condition owner records it
+						if pm := entryPullRe.FindStringSubmatch(strings.TrimSpace(e.Text)); pm != nil {
+							if pm[4] != "" {
+								addCondition(camp, char, condAdd{Condition: "restrained", Source: name + "'s " + pm[4], SourceID: id})
+							} else {
+								addCondition(camp, char, condAdd{Condition: "grappled", Source: name + "'s hold", SourceID: id})
+							}
+						}
 						// "Bite (Wolf or Hybrid Form Only)": the monster's own Shape-Shift into the first form the entry names
 						if forms := entryForms(e.Name); len(forms) > 0 {
 							shift, ok := shapeShiftEntry(monsterMetaFor(slug))
@@ -342,7 +351,8 @@ func TestPostgresEarlyGameEveryEntry(t *testing.T) {
 						run.selfChanged = selfSnapshot(id) != selfBefore
 						run.itemChanged = inventory() != invBefore // the item state owner keeps corrosion on the item
 						run.died = heroDead() && !deadBefore
-						missed := (isAttackEntry(e.Text) || strings.HasPrefix(e.Name, "Multiattack")) && !strings.Contains(run.result, "HIT")
+						missed := ((isAttackEntry(e.Text) || strings.HasPrefix(e.Name, "Multiattack")) && !strings.Contains(run.result, "HIT")) ||
+							(strings.Contains(run.result, " - MISS") && !strings.Contains(run.result, "HIT")) // a spell attack that missed too
 						saved := strings.Contains(run.result, "succeeds on the") && !strings.Contains(run.result, "fails the")
 						// a roll that did nothing this time: a Hide that failed, a Parry whose +2 AC didn't turn the hit into a miss, a hit that rolled 0 damage
 						notYet := strings.Contains(run.result, "Not hidden") || strings.Contains(run.result, "still hits") || strings.Contains(run.result, "still a hit") || zeroDamageRe.MatchString(run.result)

@@ -211,6 +211,9 @@ var attackSources = []attackSource{
 	{true, "Pack Tactics", func(c *attackCtx) (bool, string) { // an ally of the monster, not Incapacitated, within 5 feet of the target
 		return yes(c.attacker < 0 && monsterHasTrait(c.lobby, c.attacker, "Pack Tactics") && allyNextToTarget(c.lobby, c.attacker, c.target, c.allySaid))
 	}},
+	{true, "its own rider (Advantage on the next attack roll it makes this turn)", func(c *attackCtx) (bool, string) {
+		return yes(c.attacker != 0 && c.lobby > 0 && takeCondMarker(c.lobby, c.attacker, "adv_next_attack"))
+	}},
 	// ---- Advantage: the target's state
 	{true, "", func(c *attackCtx) (bool, string) { // Blinded, Paralyzed, Petrified, Restrained, Stunned, Unconscious; Prone within 5 feet
 		var why []string

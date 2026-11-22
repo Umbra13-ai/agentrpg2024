@@ -365,7 +365,9 @@ func (e *saveEffect) readRider(fail string) (extra []string) {
 		// restriction in the same sentence for the GM.
 		if e.RestrainedToo {
 			if loc := mfxRestrainRe.FindStringIndex(s); loc != nil {
-				if rest := strings.Trim(strings.TrimSpace(s[loc[1]:]), "."); rest != "" {
+				rest := strings.TrimSpace(grappledTargetLockRe.ReplaceAllString(s[loc[1]:], "")) // applied by grappledTargetLock
+				rest = strings.Trim(strings.TrimSpace(strings.TrimPrefix(rest, "and")), " .,")
+				if rest != "" {
 					extra = append(extra, strings.TrimSpace(s))
 				}
 				continue
@@ -587,6 +589,10 @@ func dependsOnDeferred(sentence string, deferred []string) bool {
 }
 
 func parseHitRider(desc string) (saveEffect, bool) {
+	restSave := "" // a save that waits for a rest is the GM's: the hit is read without it
+	if loc := restSaveRe.FindStringIndex(desc); loc != nil {
+		restSave, desc = strings.TrimSpace(desc[loc[0]:]), desc[:loc[0]]
+	}
 	i := strings.Index(desc, "Hit:")
 	if i < 0 || mfxSaveRe.MatchString(desc) {
 		return saveEffect{}, false
@@ -643,6 +649,10 @@ func parseHitRider(desc string) (saveEffect, bool) {
 	}
 	if stripped := stripDropRider(e.Extra + "."); stripped != e.Extra+"." { // reduced to 0 by the hit: applied by hitAfterDamage
 		e.Extra = strings.Trim(stripped, " .")
+	}
+	if restSave != "" {
+		e.Extra = strings.TrimSpace(strings.Trim(e.Extra, " .") + ". " + strings.TrimSuffix(restSave, ".") + ".")
+		e.Extra = strings.TrimPrefix(e.Extra, ". ")
 	}
 	return e, len(e.Conditions) > 0 || e.SpeedMode != "" || len(e.DisadvMode) > 0
 }
@@ -859,7 +869,15 @@ func saveSetupText(text string) string {
 	return strings.Join(kept, ". ")
 }
 
+// restSaveRe: a saving throw that waits for a rest ("Whenever the Poisoned target finishes a Long Rest, it is subjected to the following
+// effect. Constitution Saving Throw: DC 15. ...": SRD 5.2.1 Otyugh Bite). It is not rolled with the hit that sets it up: the text from
+// that sentence on is the GM's (parseHitRider keeps it as the hit's rest), and parseSaveEffect reads no effect from it.
+var restSaveRe = regexp.MustCompile(`(?i)\bWhenever the [\w ’'-]+? finishes a Long Rest, it is subjected to the following effect\.`)
+
 func parseSaveEffect(text string) (saveEffect, bool) {
+	if restSaveRe.MatchString(text) {
+		return saveEffect{}, false
+	}
 	m := mfxSaveRe.FindStringSubmatch(text)
 	if m == nil {
 		return saveEffect{}, false
@@ -1824,6 +1842,9 @@ func resolveMonsterEffectText(r *http.Request, lobbyID, monsterID int, meta *mon
 		return append(lines, notes...)
 	}
 	if lines, handled := resolveMonsterSwallow(r, lobbyID, monsterID, entryName, text, targets, apply); handled {
+		return append(lines, notes...)
+	}
+	if lines, handled := resolveMonsterPull(r, lobbyID, monsterID, entryName, text, targets, apply); handled { // Reel (creature_movement_2024.go)
 		return append(lines, notes...)
 	}
 	if lines, handled := resolveMonsterDirectDamage(r, lobbyID, name, entryName, text, targets, apply); handled {

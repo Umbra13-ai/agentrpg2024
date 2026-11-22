@@ -78,6 +78,11 @@ Report: "Wizard Scholar accepts any skill for Expertise."
   Point threshold ("If the target has 20 Hit Points or fewer, it drops to 0 Hit Points. Otherwise, ...": `dropsToZero`, asked by every
   target route before the damage) and "The target dies, and the wisp regains ..." (`killOnFailure`) are the same owner's.
   Go: `TestPostgresSaveTargetGatesThresholdAndDeath`.
+  A save that waits for a rest ("Whenever the Poisoned target finishes a Long Rest, it is subjected to the following effect": Otyugh
+  Bite, `restSaveRe`) is never rolled with the hit that sets it up: the hit is read without it (`parseHitRider`), the effect is the GM's
+  text. A GM-chosen damage type ("damage of the type chosen for the Draconic Origin trait": Half-Dragon) is `withChosenDamageType`, read
+  for an attack (`prepareMonsterAttack`) and a save entry (`resolveMonsterEffectText`) alike; refused before anything is rolled or spent
+  until `use` names a type. Go: `TestPostgresChosenDamageTypeOnSave`, `TestPostgresRestSaveIsNotRolledWithTheHit`.
   An action that offers several named effects (splitSaveOptions) is refused until the GM names one in `use`; a size-gated
   condition (saveEffect.conditionsFor) and a staged "Second Failure" go through the same owner, never a per-monster branch.
   The conditions a stat-block hit gives (parseHitRider, giveConditions) are read and applied by that same owner.
@@ -105,7 +110,11 @@ Report: "Wizard Scholar accepts any skill for Expertise."
 - **A stat-block rider's duration** (`cmd/server/rider_duration_2024.go`): `riderUntil` / `readRiderEnd` / `riderEndFor` read "until the end of its
   next turn", "until the start (or end) of the <source>'s next turn" once, and `riderEnd.markerAdd` records it, for every Speed rider
   (`readSpeed` / `giveSpeed`), roll rider (`readDisadvantage` / `giveDisadvantage`: the "exposed" next-attack Advantage, Disadvantage on attack
-  rolls or Concentration saves, read by `attackSources` / `saveSources`) and "can't take Reactions". A new
+  rolls or Concentration saves, read by `attackSources` / `saveSources`) and "can't take Reactions". A rider for one roll is a marker used
+  up by `takeCondMarker` in `attackSources`: "Disadvantage on the next attack roll it makes before the end of its next turn" (Ettin,
+  `disadv_next_attack`, on the target) and "the pirate has Advantage on the next attack roll it makes before the end of this turn" (Pirate
+  Captain, `adv_next_attack`, on the hit's own attacker, gone with its turn). Go: `TestPostgresNextAttackDisadvantage`,
+  `TestPostgresAttackerNextAttackAdvantage`. A new
   rider kind is one pattern built with `riderPattern` plus the owner that reads its marker; never write the duration into its pattern.
   Every target kind gets them through `giveConditions` (a companion's hit too). Go: `TestPostgresRiderDurationsOnEveryTarget`.
 - **A trait that acts on a monster's death** (Death Burst, `cmd/server/monster_death_trigger_2024.go`): the writers of a monster's Hit Points
@@ -130,6 +139,9 @@ Report: "Wizard Scholar accepts any skill for Expertise."
   `monsterTraitRules`. Go: `TestPostgresObscuredAreasAndSenses`, `TestObscuringAndSenseWordings`.
 - **A monster attack's range on the battle map:** `monsterAttackRange` (`cmd/server/map_rules.go`) for every target route (character, monster,
   companion): refusal beyond reach or long range, Disadvantage beyond normal range, within 5 feet. Go: `TestPostgresMonsterAttackRangeOnEveryTarget`.
+  The same per-attack gate refuses an attack the stat block bars against a creature the attacker has Grappled (`grappledTargetLock`,
+  `grappledTargetLockRe`: "can't be targeted by the crocodile's Tail"), map or no map, a Multiattack's later attack included. Go:
+  `TestPostgresGrappledTargetBarsAnAttack`.
 - **A creature's special and forced movement:** `cmd/server/creature_movement_2024.go`, read from the entries' wording.
   - A failed save that pushes ("the target is pushed up to 30 feet straight away from the dragon": Repulsion Breath, Cold Gale, the Air
     Elemental's Whirlwind) is `saveEffect.Push` (`savePushRe`), applied by `applySavePush` in `finishTarget` through `forceToken` for
@@ -144,6 +156,9 @@ Report: "Wizard Scholar accepts any skill for Expertise."
     (`takeSpecialMoves`: Opportunity Attacks, the Speed budget, no charge for a teleport).
   - "Immediately after dealing damage to a creature that is already Bloodied" is `movementEntryRefusal`.
   - Dragging a grappled creature is `dragCost` (Abduct).
+  - An entry that pulls the creatures the monster holds ("pulls each creature Grappled by it up to 30 feet straight toward it": Roper Reel;
+    "pulls one creature within 30 feet of itself that is Restrained by its Web Strand ...": Ettercap Reel) is `resolveMonsterPull`
+    (`entryPullRe`), reading the held creatures from the condition records and moving each through `forceToken`. Go: `TestPostgresReelPullsHeldCreatures`.
   - A swallow is `readSwallow` / `resolveMonsterSwallow` (`monster_swallow_2024.go`): the damage once at the end of its next turn, then
     disgorged (Giant Frog), or at the end of each of its turns (`swallowEachRe`, Giant Toad); the locked attack is `swallowLockoutRe`.
     Go: `TestPostgresSwallowLifecycle`, `TestPostgresSwallowAtEachTurnEnd`.
@@ -220,8 +235,8 @@ Add to the owner, never beside it. When you give another rule one owner, add it 
   conditions: `dropRiderRe`, Phase Spider, Vampire Familiar; death: `dieOnDropRe`, Gibbering Mouther, Mummy). A "uses <entry>" in a
   clause that says when an effect ends never calls that entry (`usesAnotherEntry`, Will-o'-Wisp Vanish). Go:
   `TestOwnersAppliedNotRepeatedToTheGM`, `TestPostgresHitThatDropsToZero`.
-  **The early-game playtest set** (owner, Nov 22: the monsters of CR 0 to 1, then CR 0 to 3: 201 stat blocks, 540 entries; the only
-  target until the owner says otherwise): `TestSRDEarlyGameCoverage` (its table, `docs/SRD_EARLY_GAME_COVERAGE.md`, `SRD_EARLY_OUT`) and the route test
+  **The early-game playtest set** (owner, Nov 22: the monsters of CR 0 to 1, then CR 0 to 3, then CR 0 to 6: 253 stat blocks, 785 entries
+  with the Unicorn's two Legendary Actions; the only target until the owner says otherwise): `TestSRDEarlyGameCoverage` (its table, `docs/SRD_EARLY_GAME_COVERAGE.md`, `SRD_EARLY_OUT`) and the route test
   `TestPostgresEarlyGameEveryEntry`: every action, Bonus Action and Reaction through narrate's monster_action at a character, with every
   option its entry offers in `use` and the setup its gate needs, what is stored read back; every trait in the GM's view of the fight.
 - **Attack rolls:** `game.AttackRoll` (`game/attack.go`) is the rule of an attack roll (Advantage, Disadvantage and how
@@ -353,7 +368,7 @@ Add to the owner, never beside it. When you give another rule one owner, add it 
   A text's damage dealt now is `immediateDamage`: never a damage "at the start (or end) of each of ... turns" (feedback log 63).
   "While Frightened, the target has the Paralyzed condition" (`lastingEffects.Also`) and "While Deafened, the target also has Disadvantage
   on ... attack rolls" (`DisadvAttacks`: the roll rider's `disadv_attacks` marker; ability checks have no owner yet and stay the GM's)
-  are records noted `notesEndsWith` + the condition ("frightened", "deafened"), ended with that record by `conditionChange.remove` (the one place every record ends); Grappled's Restrained stays `linkedCondition`.
+  are records noted `notesEndsWith` + the condition ("frightened", "deafened"), ended with that record by `conditionChange.remove` (the one place every record ends); the condition that lasts "until the grapple ends" (Restrained, or Poisoned for the Roper's Tentacle: `saveEffect.LinkedCond`) stays `linkedCondition`.
   **The conditions a spell ends** (Heal, Mass Heal, Power Word Heal, Protection from Poison, Lesser and Greater Restoration's
   pick): the table `spellEndsConditions` with `endSpellConditions` (`spell_ends_conditions_2024.go`); a healing spell ends them
   before it heals (feedback log 64). A new spell that ends conditions is one row.
@@ -627,6 +642,8 @@ Add to the owner, never beside it. When you give another rule one owner, add it 
   melee only or saves too as worded) is `rollTraitOf` / `rollTraitAdvantage`, one row each in `attackSources` and `saveSources`, for
   monsters and companions (`TestRollTraitsOverTheCatalog`, `TestPostgresRollTraitsGiveAdvantage`).
 - **What a monster's cast of a spell does** when it is neither a spell attack nor a saving throw: `monster_cast_effects_2024.go`.
+  - `castDealsNoDamage` (`class_helpers.go`, read by a character's cast and a monster's: Geas, Dream) says a spell's dice are dealt later or
+    never by the cast. Go: `TestPostgresDreamDealsNoDamageOnCast`.
   - `lastingSpellEffect` (`buffSpells` and `gmSpellKinds`) gives the effect's kind, duration and number of targets. A character's
     Bless and Shield of Faith read it too.
   - `castEffectAnyCreature` lists the kinds a monster's cast applies.
@@ -745,7 +762,9 @@ Add to the owner, never beside it. When you give another rule one owner, add it 
   (staging); 404 elsewhere. The real pages are built from the layout above.
 - **The guide served to agents:** `docs/skill.md`, built into the program by the `docs` package (`docs.Skill`).
 - **A monster attack's damage and a Multiattack's plan** (`parseMonsterAttack`, `prepareMonsterAttack`, `multiattackPlan`): every damage amount of a
-  Hit is represented or the attack is refused before any roll; a Multiattack is capped at 20 attacks and an either/or choice is never
+  Hit is represented or the attack is refused before any roll; a Hit that deals no damage and only gives conditions (`noDamageHit`: Roper
+  Tentacle) is a valid attack, its damage step skipped by `hitDamageParts` on every hit route (no Hit Point change, no Concentration save, no
+  Death Saving Throw failure; `TestPostgresNoDamageHit`); a Multiattack is capped at 20 attacks and an either/or choice is never
   combined. **Absorption** is `monsterAbsorbs`, read from the trait text. See `docs/MONSTER_SYSTEM.md`.
 
 ### Before pushing

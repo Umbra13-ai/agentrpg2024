@@ -366,6 +366,73 @@ func hitForcedMove(lobby, attacker, target int, desc string) string {
 	return " [" + strings.Join(out, "; ") + "]"
 }
 
+// ---- an entry that pulls the creatures the monster holds (SRD 5.2.1 Roper Reel: "The roper pulls each creature Grappled by it up to 30
+// feet straight toward it."; Ettercap Reel: "The ettercap pulls one creature within 30 feet of itself that is Restrained by its Web Strand
+// up to 25 feet straight toward itself."). The held creatures are read from the condition owner's records (a Grappled or Restrained
+// record this monster caused, by identity: SourceID, and for a named effect that record's source text); each is moved through the one
+// forced movement owner (forceToken), a pull stops next to the monster; without a map the GM places it.
+var entryPullRe = regexp.MustCompile(`(?i)^The [\w '’-]+? pulls (each|one) creature (?:within (\d+) feet of itself )?(?:that is )?(Grappled by it|Restrained by its ([A-Z][\w ’'-]*?)) up to (\d+) feet straight toward (?:it|itself)\.?$`)
+
+// resolveMonsterPull answers a pulling entry (handled false: the text is another kind of entry).
+func resolveMonsterPull(r *http.Request, lobby, monsterID int, entryName, text string, targets []int, apply bool) ([]string, bool) {
+	m := entryPullRe.FindStringSubmatch(strings.TrimSpace(text))
+	if m == nil {
+		return nil, false
+	}
+	cond, via := "grappled", ""
+	if m[4] != "" {
+		cond, via = "restrained", strings.ToLower(m[4])
+	}
+	feet, _ := strconv.Atoi(m[5])
+	name := creatureName(lobby, monsterID)
+	var held []int
+	seen := map[int]bool{}
+	for _, rec := range findConditionRecords(`lobby_id = $1 AND source_id = $2 AND condition = $3`, lobby, monsterID, cond) {
+		if (via == "" || strings.Contains(strings.ToLower(rec.Source), via)) && !seen[rec.TargetID] {
+			seen[rec.TargetID] = true
+			held = append(held, rec.TargetID)
+		}
+	}
+	if strings.EqualFold(m[1], "one") { // "one creature within N feet": the GM names it, and it must be held that way
+		if len(targets) != 1 {
+			return []string{fmt.Sprintf("%s: name the one creature it pulls (target). Nothing was moved.", entryName)}, true
+		}
+		if !seen[targets[0]] {
+			return []string{fmt.Sprintf("%s isn't %s by %s's %s, so %s can't pull it. Nothing was moved.", creatureName(lobby, targets[0]), map[string]string{"grappled": "Grappled", "restrained": "Restrained"}[cond], name, via, entryName)}, true
+		}
+		if n, _ := strconv.Atoi(m[2]); n > 0 {
+			if dist, onMap := monsterDistance(lobby, monsterID, targets[0]); onMap && dist > n {
+				return []string{fmt.Sprintf("%s is %d feet away: %s reaches only %d feet. Nothing was moved.", creatureName(lobby, targets[0]), dist, entryName, n)}, true
+			}
+		}
+		held = targets
+	}
+	if len(held) == 0 {
+		return []string{fmt.Sprintf("%s uses %s: it holds no creature to pull.", name, entryName)}, true
+	}
+	var out []string
+	for _, tid := range held {
+		who := creatureName(lobby, tid)
+		if !apply {
+			out = append(out, fmt.Sprintf("%s would be pulled up to %d feet straight toward %s (not applied)", who, feet, name))
+			continue
+		}
+		moved, onMap := forceToken(lobby, monsterID, tid, feet, true)
+		switch {
+		case !onMap:
+			out = append(out, fmt.Sprintf("%s is pulled up to %d feet straight toward %s (no battle map: the GM places it)", who, feet, name))
+		case moved == 0:
+			out = append(out, fmt.Sprintf("%s can't be pulled further: it is already next to %s or something is in the way", who, name))
+		default:
+			out = append(out, fmt.Sprintf("%s is pulled %d feet straight toward %s", who, moved, name))
+		}
+	}
+	if apply {
+		markExecuted(r)
+	}
+	return []string{fmt.Sprintf("%s uses %s: %s.", name, entryName, strings.Join(out, "; "))}, true
+}
+
 // ---- a stat-block entry's own movement (Teleport, Tree Stride, Bubble Dash, Aquatic Charge, Rampage's move, Ink Cloud's move ...)
 //
 // When the GM uses such an entry (narrate's monster_action), the monster gets a move allowance for the turn, read from the entry's

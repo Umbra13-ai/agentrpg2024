@@ -177,9 +177,13 @@ func monsterNormalRange(desc string) int {
 // a monster, monster_attack_continuation_2024.go; a companion, companions_more_2024.go): beyond its reach or long range there is no
 // attack (refusal is the line that says so, and nothing is rolled); beyond its normal range it has Disadvantage (longRange); within 5 feet
 // is read from the map. Distance is tokenDistanceFeet, a flying creature's altitude included. Without a map, or without a token for either,
-// nothing is refused and a melee attack is within 5 feet.
+// nothing is refused and a melee attack is within 5 feet. The same per-attack gate refuses an attack the stat block bars against a
+// creature the attacker has Grappled (grappledTargetLock), map or no map.
 func monsterAttackRange(lobbyID, attackerID, targetID int, desc, attackName, targetName string, melee bool) (withinFive, longRange bool, refusal string) {
 	withinFive = melee
+	if why := grappledTargetLock(lobbyID, attackerID, targetID, attackName, targetName); why != "" {
+		return withinFive, false, why
+	}
 	dist, onMap := monsterDistance(lobbyID, attackerID, targetID)
 	if !onMap {
 		return
