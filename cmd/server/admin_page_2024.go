@@ -19,7 +19,9 @@ header{position:sticky;top:0;z-index:5;background:var(--bg);border-bottom:1px so
 .seg button{flex:1 1 0;min-width:0;border:1px solid var(--line);border-bottom:0;background:linear-gradient(var(--chip),var(--line));padding:9px 4px 8px;margin-top:5px;border-radius:12px 12px 0 0;font-weight:600;font-size:15px;color:var(--muted);box-shadow:inset 0 -6px 8px -6px rgba(0,0,0,.18);position:relative;top:2px}
 .seg button+button{margin-left:-6px;padding-left:10px}
 .seg button[aria-pressed=true]{background:var(--bg);color:var(--ink);margin-top:0;z-index:2;box-shadow:0 -3px 6px -2px rgba(0,0,0,.2);border-color:var(--accent);border-bottom:0;padding-bottom:10px}
-@media (max-width:440px){.seg button{flex:1 1 30%;margin-left:0!important}.seg button+button{padding-left:4px}}
+.seg button:nth-child(-n+2){flex-grow:1.4}
+/* on a phone Characters and Campaigns (the longest words) share the first row, the other three the second */
+@media (max-width:440px){.seg button{flex:1 1 30%;margin-left:0!important}.seg button:nth-child(-n+2){flex:1 1 45%}.seg button+button{padding-left:4px}}
 .sub{display:flex;gap:6px;margin-bottom:12px}.sub button{flex:1;border:1px solid var(--line);background:var(--card);border-radius:10px;padding:8px 4px;font-weight:600;color:var(--muted)}
 .sub button[aria-pressed=true]{background:var(--accent);border-color:var(--accent);color:var(--accent-ink)}
 .chev{display:flex;align-items:center;justify-content:center;width:40px;height:40px;margin:-8px -8px -8px 6px;border-radius:10px;color:var(--muted);font-size:20px;flex:0 0 auto;transition:transform .15s ease}
