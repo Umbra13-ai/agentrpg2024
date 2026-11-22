@@ -173,6 +173,8 @@ func entryCoverage(kind string, e srdMonsterEntry, names []string) []sentenceVer
 				v.Status, v.Rule = "gm", route+" residual"
 			case strings.HasPrefix(s, "Hit or Miss:"):
 				v.Status, v.Rule = "gm", "hitOrMissNote"
+			case chargeSentenceRe.MatchString(body):
+				v.Status, v.Rule = "applied", "chargeRewrite (creature_movement_2024.go)"
 			case strings.HasPrefix(s, "Trigger:"):
 				v.Status, v.Rule = "gm", "a Reaction's trigger: the GM sends the Reaction when it happens"
 			case specialMoveSentence(body):
@@ -227,7 +229,8 @@ func entryCoverage(kind string, e srdMonsterEntry, names []string) []sentenceVer
 		if _, problem := prepareMonsterAttack(a.monsterActionRow, "fire"); problem != "" {
 			return all("gm", "attack refused: "+problem)
 		}
-		residual := unappliedHitRider(e.Text) + " " + gmJudgedAlternatives(a.monsterActionRow)
+		uncharged, _ := chargeRewrite(e.Text, 0, true, func(string) bool { return true }) // the routes rewrite a charge before the residual
+		residual := unappliedHitRider(uncharged) + " " + gmJudgedAlternatives(a.monsterActionRow)
 		if sv, ok := parseSaveEffect(e.Text); ok {
 			residual += " " + sv.Extra
 		}
@@ -254,6 +257,12 @@ func entryCoverage(kind string, e srdMonsterEntry, names []string) []sentenceVer
 	if _, ok := parseSaveEffect(e.Text); ok {
 		return bySentence("save owner (parseSaveEffect)", saveOwnSentence, saveResidual(e.Text))
 	}
+	if swallowActionRe.MatchString(e.Text) {
+		return bySentence("resolveMonsterSwallow", func(string) bool { return true }, "")
+	}
+	if onlyOwnMove(e.Text) {
+		return bySentence("readSpecialMove / grantSpecialMove", func(string) bool { return true }, "")
+	}
 	if monsterLightToggleRe.MatchString(e.Text) {
 		return bySentence("resolveLightToggle", func(string) bool { return true }, "")
 	}
@@ -270,7 +279,13 @@ func entryCoverage(kind string, e srdMonsterEntry, names []string) []sentenceVer
 			}
 		}
 	}
-	return all("gm", "resolveMonsterEffectText: the GM resolves it")
+	out := all("gm", "resolveMonsterEffectText: the GM resolves it")
+	for i := range out {
+		if legendaryOnceRe.MatchString(out[i].Sentence) {
+			out[i].Status, out[i].Rule = "applied", "legendaryOnceRe (LAOnce)"
+		}
+	}
+	return out
 }
 
 // specialMoveSentence: a sentence the movement owner reads as the entry's own move (grantSpecialMove runs on every entry).
@@ -349,7 +364,7 @@ func TestSRDMonsterSentenceCoverage(t *testing.T) {
 		" numbers, dice, damage types, conditions, abilities, sizes, its creature's name and other entries' names replaced by placeholders." +
 		" \"GM-flagged\" means the reply or the GM's stat block view shows it to the GM; the work to automate is the GM-flagged families, highest count first.\n\n")
 	fmt.Fprintf(&report, "Sentences: %d; applied %d, flagged to the GM %d, unhandled %d. Families: %d.\n\n", len(vs), totals["applied"], totals["gm"], totals["unhandled"], len(fams))
-	report.WriteString("| family | stat blocks | sentences | status | owner |\n|---|---|---|---|---|\n")
+	report.WriteString("| family | stat blocks | sentences | status | owner | example |\n|---|---|---|---|---|---|\n")
 	for _, k := range keys {
 		f := fams[k]
 		status := "applied"
@@ -366,7 +381,7 @@ func TestSRDMonsterSentenceCoverage(t *testing.T) {
 			rules = append(rules, r)
 		}
 		sort.Strings(rules)
-		fmt.Fprintf(&report, "| %s | %d | %d | %s | %s |\n", strings.ReplaceAll(k, "|", "/"), len(f.monsters), f.count, status, strings.ReplaceAll(strings.Join(rules, "; "), "|", "/"))
+		fmt.Fprintf(&report, "| %s | %d | %d | %s | %s | %s |\n", strings.ReplaceAll(k, "|", "/"), len(f.monsters), f.count, status, strings.ReplaceAll(strings.Join(rules, "; "), "|", "/"), strings.ReplaceAll(f.example, "|", "/"))
 		_, listed := srdUnhandledFamilies[k]
 		if f.status["unhandled"] > 0 && !listed {
 			t.Errorf("silent: %d sentence(s) of %q are read by no rule and not shown to the GM (e.g. %s)", f.status["unhandled"], k, f.example)

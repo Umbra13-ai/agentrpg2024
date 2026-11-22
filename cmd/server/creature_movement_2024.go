@@ -390,7 +390,7 @@ var specialMoves sync.Map // creatureMoveKey -> specialMove
 var (
 	teleportUpToRe   = regexp.MustCompile(`(?i)\bteleports?(?:,? along with [^,.]+,)? up to (\d+) (?:feet|ft)`)
 	teleportWithinRe = regexp.MustCompile(`(?i)\bteleports? to an unoccupied space within \d+ feet of [^.]*? within (\d+) feet of`)
-	moveUpToRe       = regexp.MustCompile(`(?i)\b(?:moves?|swims?|flies|fly|climbs?|burrows?) up to (half )?(?:its|their) (Swim |Fly |Climb |Burrow )?Speed(?: or (Swim|Fly|Climb|Burrow) Speed)?`)
+	moveUpToRe       = regexp.MustCompile(`(?i)\b(?:moves?|swims?|flies|fly) up to (half )?(?:its|their) (Swim |Fly |Climb |Burrow )?Speed(?: or (Swim|Fly|Climb|Burrow) Speed)?`)
 	jumpSpendRe      = regexp.MustCompile(`(?i)\bjumps? up to (\d+) (?:feet|ft\.?) by spending (\d+) (?:feet|ft\.?) of (?:its )?movement`)
 	noOARe           = regexp.MustCompile(`(?i)without provoking Opportunity Attacks`)
 	straightEnemyRe  = regexp.MustCompile(`(?i)straight toward an enemy`)

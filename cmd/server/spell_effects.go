@@ -108,6 +108,7 @@ type spellStage struct {
 	ThenRounds   int    // how long that lasts (the rest of the spell's duration)
 	MagicalSleep bool
 	EndsOnDamage bool // the second stage ends if the creature takes damage (a monster's "Second Failure": Sleep Breath)
+	Repeats      bool // the second stage keeps the repeated save, same ability and DC (the silver dragons' Paralyzing Breath)
 }
 
 var spellStages = map[string]spellStage{

@@ -182,7 +182,7 @@ func yes(b bool) (bool, string) { return b, "" }
 // attackSources: every source of Advantage and Disadvantage on an attack roll (SRD 5.2.1). Each row decides from the attacker,
 // the target and the kind of attack whether it applies; a row that is used up by the attack (Help, a GM's grant, Sap) is used
 // up here and nowhere else.
-var woundedTargetAdvantage = regexp.MustCompile(`(?i)\bwith Advantage if the target (?:doesn['’]t|does not) have all its Hit Points\b`)
+var woundedTargetAdvantage = regexp.MustCompile(`(?i)\bwith Advantage if the target doesn['’]t have all its Hit Points\b`)
 
 // targetMissingHitPoints reads current and maximum Hit Points from the target's
 // owner. Temporary Hit Points do not count toward either amount.

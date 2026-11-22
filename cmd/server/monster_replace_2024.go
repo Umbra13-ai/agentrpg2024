@@ -37,7 +37,7 @@ type replaceOption struct {
 }
 
 var (
-	replaceSentenceRe = regexp.MustCompile(`(?i)\bcan replace (one|two|three|any|the) (.+?) with (.+?)(?: if available)?\.`)
+	replaceSentenceRe = regexp.MustCompile(`(?i)\bcan replace (one|two|any|the) (.+?) with (.+?)(?: if available)?\.`)
 	replaceMarkerRe   = regexp.MustCompile(`\([A-Z]\)\s*`)
 	replaceLevelRe    = regexp.MustCompile(`\s*\(level (\d) version\)`)
 )

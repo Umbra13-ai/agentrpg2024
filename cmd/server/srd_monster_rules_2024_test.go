@@ -386,3 +386,112 @@ func TestSaveSetupOptionsIntroAndCastRiders(t *testing.T) {
 		t.Errorf("invented cast riders: %q", r)
 	}
 }
+
+// What an owner applies is not repeated to the GM, and a hit's later-result sentence doesn't cost its other riders (SRD 5.2.1 texts):
+// the Gibbering Mouther's Bite gives Prone though "The target dies if it is reduced to 0 Hit Points" stays the GM's; the Swarm of
+// Crawling Claws' Bloodied alternative is the damage owner's; the Blink Dog's Teleport is the movement owner's whole; a Legendary
+// Action's once-a-turn sentence is LAOnce's (Frightful Presence's cast, Disrupt Life's save).
+func TestOwnersAppliedNotRepeatedToTheGM(t *testing.T) {
+	text := func(monster, prefix string) string {
+		for _, m := range srdMonsters2024() {
+			if m.Name != monster {
+				continue
+			}
+			for _, g := range [][]srdMonsterEntry{m.Actions, m.BonusActions, m.Legendary} {
+				for _, e := range g {
+					if strings.HasPrefix(e.Name, prefix) {
+						return e.Text
+					}
+				}
+			}
+		}
+		t.Fatalf("%s|%s is not in the catalog", monster, prefix)
+		return ""
+	}
+	mouther := text("Gibbering Mouther", "Bite")
+	if e, ok := parseHitRider(mouther); !ok || strings.Join(e.Conditions, ",") != "prone" || !strings.Contains(e.Extra, "dies if it is reduced to 0") || strings.Contains(e.Extra, "Prone") {
+		t.Errorf("Gibbering Mouther Bite: ok %v %+v", ok, e)
+	}
+	if r := unappliedHitRider(text("Swarm of Crawling Claws", "Swarm of Grasping Hands")); r != "" {
+		t.Errorf("the swarm's Bloodied alternative reached the GM: %q", r)
+	}
+	if !onlyOwnMove(text("Blink Dog", "Teleport")) {
+		t.Error("the Blink Dog's Teleport is not read whole by the movement owner")
+	}
+	for _, m := range srdMonsters2024() {
+		for _, e := range m.Legendary {
+			sv, _ := parseSaveEffect(e.Text)
+			for what, s := range map[string]string{"cast riders": castRiders(e.Text), "save residual": sv.Extra, "save setup": sv.Setup} {
+				if legendaryOnceRe.MatchString(s) {
+					t.Errorf("%s / %s: the once-a-turn sentence is in the %s: %q", m.Name, e.Name, what, s)
+				}
+			}
+		}
+	}
+}
+
+// A failed save that pushes its target ("the target is pushed up to 30 feet straight away from the dragon": the SRD bronze dragons'
+// Repulsion Breath, the silver dragons' Cold Gale, the Air Elemental's Whirlwind): the save owner moves a character, a monster and a
+// companion on the battle map through forceToken, gives the rest of the sentence (Prone, the damage), and leaves the GM nothing; a
+// success doesn't move it. Invented wording with other numbers.
+func TestPostgresSavePushOnEveryTarget(t *testing.T) {
+	testPostgres(t)
+	gm, _, camp, charID, petID, _ := companionReactionFixture(t)
+	pet := companionIDBase + petID
+	pgExec(t, `UPDATE characters SET hp=1000,max_hp=1000 WHERE id=$1`, charID)
+	pgExec(t, `UPDATE companions SET hp=1000,max_hp=1000 WHERE id=$1`, petID)
+	gust := inventedMonster("Gust Drake", "Dragon", nil, []srdMonsterEntry{
+		{Name: "Shove Breath", Text: "Strength Saving Throw: DC 40, each creature in a 30-foot Cone. Failure: The target is pushed up to 15 feet straight away from the drake and has the Prone condition."},
+		{Name: "Weak Gust", Text: "Strength Saving Throw: DC 1, one creature within 30 feet. Failure: 3 (1d6) Cold damage, and the target is pushed up to 15 feet straight away from the drake."}})
+	pushed := inventedMonster("Pushed Boar", "Beast", nil, []srdMonsterEntry{{Name: "Tusk", Text: "Melee Attack Roll: +1, reach 5 ft. Hit: 1 (1d1) Piercing damage."}})
+	ids := importInventedMonsters(t, gm, camp, gust, pushed)
+	if e, _ := parseSaveEffect(gust.Actions[0].Text); e.Push == nil || e.Push.Feet != 15 || e.Extra != "" || len(e.Conditions) != 1 {
+		t.Fatalf("Shove Breath read: %+v", e)
+	}
+	cp := fmt.Sprintf("/api/campaigns/%d", camp)
+	place := func() { // each creature in line with the drake, one row each: a push is straight away from it along its row
+		t.Helper()
+		_, state := pgCall(t, "GET", cp+"/battle-map", gm, nil)
+		req := map[string]interface{}{"map": encounterMap{Grid: []string{"............", "............", "............"}, Tokens: []mapToken{
+			{ID: ids["Gust Drake"], Name: "drake", Position: mapSquare{0, 1}, Size: 1},
+			{ID: charID, Name: "hero", Position: mapSquare{1, 1}, Size: 1}}}, "forced_movement": true}
+		if rev, ok := state["revision"].(string); ok {
+			req["confirmation"] = rev
+		}
+		if c, r := pgCall(t, "PUT", cp+"/battle-map", gm, req); c != 200 {
+			t.Fatalf("put map: %d %v", c, r)
+		}
+	}
+	xOf := func(id int) int {
+		m, _ := activeEncounterMap(camp)
+		tk, _ := m.token(id)
+		return tk.Position.X
+	}
+	names := map[int]string{charID: fmt.Sprint(charID), ids["Pushed Boar"]: "Pushed Boar", pet: "React Pet"}
+	for _, id := range []int{charID, ids["Pushed Boar"], pet} {
+		place()
+		m, _ := activeEncounterMap(camp)
+		m.Tokens = []mapToken{{ID: ids["Gust Drake"], Name: "drake", Position: mapSquare{0, 1}, Size: 1}, {ID: id, Name: names[id], Position: mapSquare{1, 1}, Size: 1}}
+		_, state := pgCall(t, "GET", cp+"/battle-map", gm, nil)
+		if c, r := pgCall(t, "PUT", cp+"/battle-map", gm, map[string]interface{}{"map": m, "forced_movement": true, "confirmation": state["revision"]}); c != 200 {
+			t.Fatalf("put map: %d %v", c, r)
+		}
+		_, j := pgCall(t, "POST", "/api/gm/narrate", gm, map[string]interface{}{"campaign_id": camp, "narration": "x",
+			"monster_action": map[string]interface{}{"monster": "Gust Drake", "action": "Shove Breath", "target": names[id], "confirm_targeting": true}})
+		res := fmt.Sprint(j["monster_action_result"])
+		if xOf(id) != 4 || len(recordsOf(camp, id, "prone")) != 1 || strings.Contains(res, "pushed up to") || strings.Contains(res, "the GM handles") {
+			t.Errorf("Shove Breath at %s: x %d, prone %v: %s", names[id], xOf(id), recordsOf(camp, id, "prone"), res)
+		}
+		removeConditionsWhere(camp, id, func(conditionRecord) bool { return true })
+	}
+	// a success (DC 1) doesn't move it
+	m, _ := activeEncounterMap(camp)
+	m.Tokens = []mapToken{{ID: ids["Gust Drake"], Name: "drake", Position: mapSquare{0, 1}, Size: 1}, {ID: ids["Pushed Boar"], Name: "boar", Position: mapSquare{1, 1}, Size: 1}}
+	_, state := pgCall(t, "GET", cp+"/battle-map", gm, nil)
+	pgCall(t, "PUT", cp+"/battle-map", gm, map[string]interface{}{"map": m, "forced_movement": true, "confirmation": state["revision"]})
+	pgCall(t, "POST", "/api/gm/narrate", gm, map[string]interface{}{"campaign_id": camp, "narration": "x",
+		"monster_action": map[string]interface{}{"monster": "Gust Drake", "action": "Weak Gust", "target": "Pushed Boar", "confirm_targeting": true}})
+	if xOf(ids["Pushed Boar"]) != 1 {
+		t.Errorf("a successful save moved the boar to x %d", xOf(ids["Pushed Boar"]))
+	}
+}

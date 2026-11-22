@@ -25,7 +25,8 @@ func TestParseSaveEffect(t *testing.T) {
 	}
 	lich := "Constitution Saving Throw: DC 20, each creature that isn’t an Undead in a 20-foot Emanation originating from the lich. Failure: 31 (9d6) Necrotic damage. Success: Half damage. Failure or Success: The lich can’t take this action again until the start of its next turn."
 	e, _ = parseSaveEffect(lich)
-	if e.Emanation != 20 || !e.HalfOnSuccess || len(e.Damage) != 1 || !strings.Contains(e.Extra, "Failure or Success") {
+	// the once-a-turn limit is the Legendary Action owner's (LAOnce): not repeated to the GM
+	if e.Emanation != 20 || !e.HalfOnSuccess || len(e.Damage) != 1 || strings.Contains(e.Extra, "can’t take this action") || e.Setup != "" {
 		t.Errorf("Disrupt Life: %+v", e)
 	}
 	mace := "Melee Attack Roll: +14, reach 10 ft. Hit: 22 (4d6 + 8) Force damage plus 21 (6d6) Fire damage."

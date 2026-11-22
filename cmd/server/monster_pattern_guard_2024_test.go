@@ -20,6 +20,12 @@ import (
 // TestEveryMonsterPatternIsListed (go/ast) fails on one that is in neither this list nor notMonsterText, so a new pattern is
 // classified when it is written.
 var monsterTextPatterns = map[string]*regexp.Regexp{
+	"secondFailureLimitText":   secondFailureLimitText,   // monster_effects_2024.go
+	"savePushAndRe":            savePushAndRe,            // monster_effects_2024.go
+	"savePushTailRe":           savePushTailRe,           // monster_effects_2024.go
+	"savePushRe":               savePushRe,               // monster_effects_2024.go
+	"judgedAlternativeRe":      judgedAlternativeRe,      // monster_effects_2024.go
+	"legendaryOnceSentenceRe":  legendaryOnceSentenceRe,  // monster_effects_2024.go
 	"saveSectionHeadRe":        saveSectionHeadRe,        // monster_effects_2024.go
 	"lineWidthRe":              lineWidthRe,              // area_geometry_2024.go
 	"monsterConeRe":            monsterConeRe,            // area_geometry_2024.go
@@ -237,7 +243,10 @@ type patternWitness struct {
 
 var patternWitnesses = map[string]patternWitness{
 	// the damage owner hands these the words after an amount ("... Slashing damage" + tail)
-	"advantageOnlyRe":         {Monster: "Goblin Warrior", Entry: "Scimitar", Fragment: "if the attack roll had Advantage."},
+	"advantageOnlyRe": {Monster: "Goblin Warrior", Entry: "Scimitar", Fragment: "if the attack roll had Advantage."},
+	// an entry that is only "Each target takes N damage": no SRD 5.2.1 entry is (owner to decide whether the whole-entry rule stays)
+	"directDamageText":        {Invented: "Each target takes 2 (1d4) Force damage.", Test: "TestPostgresMonsterDirectDamagePreviewAndCreatureTargets"},
+	"damageJoinRe":            {Monster: "Goblin Warrior", Entry: "Scimitar", Fragment: "5 (1d6 + 2) Slashing damage, plus"},
 	"alternativeHeadRe":       {Monster: "Chimera", Entry: "Bite", Fragment: "11 (2d6 + 4) Piercing damage, or"},
 	"chargeAltRe":             {Monster: "Giant Seahorse", Entry: "Ram", Fragment: "if the seahorse moved 20+ feet straight toward the target immediately before the hit"},
 	"recurringTailRe":         {Monster: "Remorhaz", Entry: "Swallow", Fragment: " plus 10 (3d6) Fire damage at the start of each of "},
@@ -335,7 +344,7 @@ func TestMonsterPatternsServeSRDWording(t *testing.T) {
 						text != "" && strings.Contains(text, w.Fragment), rx.MatchString(w.Fragment))
 				}
 			default:
-				if !rx.MatchString(w.Invented) || !strings.Contains(tests[w.Test], w.Invented) {
+				if _, named := tests[w.Test]; !named || !rx.MatchString(w.Invented) || !strings.Contains(testFilesText(t), w.Invented) {
 					t.Errorf("%s: its invented witness isn't read by the pattern or isn't in %s", name, w.Test)
 				}
 			}
@@ -385,6 +394,16 @@ func srdWitnessText(monster, entry string) string {
 		}
 	}
 	return ""
+}
+
+// testFilesText: every _test.go file's text (an invented witness may sit in a fixture variable beside its test).
+func testFilesText(t *testing.T) string {
+	files, _ := filepath.Glob("*_test.go")
+	var b strings.Builder
+	for _, f := range files {
+		b.WriteString(readFileOrFail(t, f))
+	}
+	return b.String()
 }
 
 // testSources: the text of every test function, by name.

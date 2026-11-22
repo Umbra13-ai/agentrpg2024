@@ -187,3 +187,10 @@ func TestPostgresMonsterHitRiders(t *testing.T) {
 		t.Fatal("Rot: the target can still regain Hit Points while Poisoned")
 	}
 }
+
+// A hit whose condition is rolled for ("determined by rolling") is never applied by guess: the whole rider stays the GM's.
+func TestHitRiderRolledConditionIsTheGMs(t *testing.T) {
+	if _, ok := parseHitRider("Melee Attack Roll: +5, reach 5 ft. Hit: 7 (1d8 + 3) Psychic damage, and the target has a condition determined by rolling 1d4: 1, Blinded; 2, Deafened; 3, Frightened; 4, Prone."); ok {
+		t.Error("a rolled condition was read as a rider to apply")
+	}
+}

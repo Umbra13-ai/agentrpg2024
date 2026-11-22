@@ -22,7 +22,7 @@ func hitAfterDamage(lobby, attacker, target int, desc, source string, taken int,
 
 // abilityDecreaseRe: "and the target's Strength score decreases by 1d4. The target dies if this reduces that score to 0." (SRD 5.2.1
 // Shadow Draining Swipe): the ability, the amount, and whether a score of 0 kills.
-var abilityDecreaseRe = regexp.MustCompile(`(?i),?\s*(?:and\s+)?(?:the target['’]s|its) (Strength|Dexterity|Constitution|Intelligence|Wisdom|Charisma) score (?:decreases|is reduced) by (\d+d\d+(?:\s*[+-]\s*\d+)?|\d+)\.?(\s*The target dies if this reduces that score to 0\.?)?`)
+var abilityDecreaseRe = regexp.MustCompile(`(?i),?\s*(?:and\s+)?(?:the target['’]s|its) (Strength|Dexterity|Constitution|Intelligence|Wisdom|Charisma) score decreases by (\d+d\d+(?:\s*[+-]\s*\d+)?|\d+)\.?(\s*The target dies if this reduces that score to 0\.?)?`)
 
 // stripAbilityDecrease removes that sentence from a residual (applied by abilityDecreaseOnHit on every hit route).
 func stripAbilityDecrease(text string) string { return abilityDecreaseRe.ReplaceAllString(text, "") }

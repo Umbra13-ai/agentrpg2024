@@ -126,6 +126,9 @@ Report: "Wizard Scholar accepts any skill for Expertise."
 - **A monster attack's range on the battle map:** `monsterAttackRange` (`cmd/server/map_rules.go`) for every target route (character, monster,
   companion): refusal beyond reach or long range, Disadvantage beyond normal range, within 5 feet. Go: `TestPostgresMonsterAttackRangeOnEveryTarget`.
 - **A creature's special and forced movement:** `cmd/server/creature_movement_2024.go`, read from the entries' wording.
+  - A failed save that pushes ("the target is pushed up to 30 feet straight away from the dragon": Repulsion Breath, Cold Gale, the Air
+    Elemental's Whirlwind) is `saveEffect.Push` (`savePushRe`), applied by `applySavePush` in `finishTarget` through `forceToken` for
+    every target kind. Go: `TestPostgresSavePushOnEveryTarget`.
   - Each own move of the turn is recorded (`recordCreatureMove`: the GM's map update without forced_movement, a player's path, a
     companion's path).
   - A charge is spent by the attack roll (`chargeAtRoll`) and applied per hit (`hitChargeDesc`; the alternative amount is
@@ -170,8 +173,9 @@ Report: "Wizard Scholar accepts any skill for Expertise."
   failed save (`saveEffect.ItemPenalty`, `corrodeCarriedObject`: Rust Monster Antennae); Mending removes it (`itemRepairSpells`,
   `mendItem`). Go: `TestPostgresItemCorrosion`.
 - **A condition's second stage** (SRD 5.2.1 Sleep; a monster's "Second Failure:"): `conditionSave.Then` / `ThenRounds` /
-  `ThenEndsOnDamage` / `ThenMagicalSleep` on the record's repeated save; `condition_turns.go` turns the record into the second condition
-  on a failed repeat. A spell's stage is a row of `spellStages` (`endSaveFor`, `spell_effects.go`), read by a character's and a monster's
+  `ThenEndsOnDamage` / `ThenMagicalSleep` / `ThenRepeats` on the record's repeated save; `condition_turns.go` turns the record into the
+  second condition on a failed repeat (with no end for "Petrified instead of the Restrained condition": Basilisk, Gorgon, Medusa; keeping
+  the repeated save for "After 1 minute, it succeeds automatically": the silver dragons). A spell's stage is a row of `spellStages` (`endSaveFor`, `spell_effects.go`), read by a character's and a monster's
   cast; a monster text's is read by `readSecondFailure` (`monster_effects_2024.go`). An Unconscious that "ends if it takes damage" is
   `notesEndsOnDamage`, ended by `wakeOnDamageSleep` (which also ends a monster's cast of Sleep, `sourceIsSpell`). A monster's cast of
   a spell that ends conditions reads `spellEndsConditions` (`monsterCastEndsConditions`; a heal ends them first in
@@ -190,12 +194,18 @@ Add to the owner, never beside it. When you give another rule one owner, add it 
   sentences, sections and clauses by `srdTextPieces`, or a named `patternWitnesses` entry: an SRD entry's own words, or an invented sentence
   a named test uses) or in `notMonsterText` (stored rows, request text); one built inside a function is in `localMonsterPatterns`.
   `TestMonsterPatternsServeSRDWording`, `TestEveryMonsterPatternIsListed`. A new rule is written for SRD wording, never for book text.
+  Every branch of every alternation is held to the same check (`TestMonsterPatternBranchesServeSRDWording`, split on the source text:
+  `alternationVariants`); lists of game vocabulary are exempt (`patternVocabulary`), and only a refusal may keep a branch with no SRD
+  wording, with an invented witness (`branchWitnesses`).
 - **The coverage of every SRD stat block sentence:** `srd_sentence_coverage_2024_test.go` (`srdSentenceCoverage`, `entryCoverage`): each
   sentence of the 330 stat blocks follows the server's route (trait table, attack owner, save owner, the resolver's branches) and is
   applied by a named rule or shown to the GM; `TestSRDMonsterSentenceCoverage` fails on a silent sentence whose family isn't in
   `srdUnhandledFamilies` (the work list; empty now). The family table is `docs/SRD_MONSTER_COVERAGE.md` (`SRD_COVERAGE_OUT`). What a save
   entry's rules don't read outside its sections is `saveSetupText` (`saveEffect.Setup`, shown whatever the result), a multi-effect
-  entry's intro `saveOptionsIntro`, a cast's riders `castRiders`: all shown to the GM.
+  entry's intro `saveOptionsIntro`, a cast's riders `castRiders`: all shown to the GM. What an owner applies is never repeated to the GM:
+  a Legendary Action's once-a-turn sentence (`legendaryOnceSentenceRe`, LAOnce's), a judged damage alternative (`judgedAlternativeRe`),
+  an entry that is only its creature's move (`onlyOwnMove`); a hit sentence that waits on a later result ("dies if it is reduced to 0
+  Hit Points") goes to the GM alone, the hit's other riders still apply (`parseHitRider`). Go: `TestOwnersAppliedNotRepeatedToTheGM`.
 - **Attack rolls:** `game.AttackRoll` (`game/attack.go`) is the rule of an attack roll (Advantage, Disadvantage and how
   they cancel, natural 1 and 20, Critical Hits, the wording of the result line). `attackCtx` and the `attackSources`
   table (`cmd/server/attack_2024.go`) decide what gives Advantage or Disadvantage, the bonuses, the target's Armor

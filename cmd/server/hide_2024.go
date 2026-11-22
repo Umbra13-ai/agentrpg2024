@@ -72,7 +72,7 @@ func attemptHide(charID int, label string) string {
 
 // hideLightGateRe: a Hide that a stat block allows only in some light ("While in Dim Light or Darkness, the shadow takes the Hide
 // action").
-var hideLightGateRe = regexp.MustCompile(`(?i)\bWhile in (Dim Light or Darkness|Darkness|Dim Light)\b`)
+var hideLightGateRe = regexp.MustCompile(`(?i)\bWhile in (Dim Light or Darkness|Dim Light)\b`)
 
 // attemptMonsterHide rolls the Hide action a monster's stat block entry takes: the entry's light condition first (the light at the
 // monster's square: monsterLightingAt), then a DC 15 Dexterity (Stealth) check (its Stealth skill, else its Dexterity modifier;

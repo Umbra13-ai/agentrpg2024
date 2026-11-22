@@ -20,6 +20,8 @@ func TestPostgresSecondFailureStages(t *testing.T) {
 	m.Actions = []srdMonsterEntry{
 		{Name: "Drowse Breath", Text: "Constitution Saving Throw: DC 40, each creature in a 15-foot Cone. Failure: The target has the Incapacitated condition until the end of its next turn, at which point it repeats the save. Second Failure: The target has the Unconscious condition for 1 minute. This effect ends for the target if it takes damage or a creature within 5 feet of it takes an action to wake it."},
 		{Name: "Stone Nip", Text: "Constitution Saving Throw: DC 40, one creature within 5 feet. First Failure: The target has the Restrained condition. The target repeats the save at the end of its next turn if it is still Restrained, ending the effect on itself on a success. Second Failure: The target has the Petrified condition, instead of the Restrained condition, for 24 hours."},
+		{Name: "Stone Stare", Text: "Constitution Saving Throw: DC 40, one creature within 30 feet. Failure: The target has the Restrained condition and repeats the save at the end of its next turn if it is still Restrained, ending the effect on itself on a success. Second Failure: The target has the Petrified condition instead of the Restrained condition."},
+		{Name: "Numbing Breath", Text: "Constitution Saving Throw: DC 40, each creature in a 15-foot Cone. Failure: The target has the Incapacitated condition until the end of its next turn, when it repeats the save. Second Failure: The target has the Paralyzed condition, and it repeats the save at the end of each of its turns, ending the effect on itself on a success. After 2 minutes, it succeeds automatically."},
 		{Name: "Dozing Sting", Text: "Constitution Saving Throw: DC 40, one creature within 5 feet. Failure: The target has the Poisoned condition for 1 hour. Failure by 5 or More: While Poisoned, the target also has the Unconscious condition, which ends early if the target takes damage or a creature within 5 feet of it takes an action to wake it."},
 	}
 	victim := compendiumFixture()
@@ -106,6 +108,23 @@ func TestPostgresSecondFailureStages(t *testing.T) {
 		endTurnEffects(camp, index(tg.id))
 		if rec = recOf(tg.id, "petrified"); rec == nil || rec.DurationRounds != 14400 || recOf(tg.id, "restrained") != nil {
 			t.Errorf("%s: Stone Nip's second failure: %+v", tg.name, rec)
+		}
+		clear(tg.id)
+		// Stone Stare (the Basilisk's pattern): Restrained, then Petrified with no end
+		act("Stone Stare", tg.target)
+		endTurnEffects(camp, index(tg.id))
+		if rec = recOf(tg.id, "petrified"); rec == nil || rec.DurationRounds != 0 || rec.EndSave != nil || recOf(tg.id, "restrained") != nil {
+			t.Errorf("%s: Stone Stare's second failure: %+v", tg.name, rec)
+		}
+		clear(tg.id)
+		// Numbing Breath (the silver dragons' pattern, other numbers): Incapacitated, then Paralyzed that keeps the repeated save, 2 minutes
+		act("Numbing Breath", tg.target)
+		if rec = recOf(tg.id, "incapacitated"); rec == nil || rec.EndSave == nil || rec.EndSave.Then != "paralyzed" || !rec.EndSave.ThenRepeats || rec.EndSave.ThenRounds != 20 {
+			t.Fatalf("%s: Numbing Breath's first failure: %+v", tg.name, rec)
+		}
+		endTurnEffects(camp, index(tg.id))
+		if rec = recOf(tg.id, "paralyzed"); rec == nil || rec.DurationRounds != 20 || rec.EndSave == nil || rec.EndSave.DC != 40 || rec.EndSave.Then != "" {
+			t.Errorf("%s: Numbing Breath's second failure: %+v", tg.name, rec)
 		}
 		clear(tg.id)
 		// Dozing Sting: a failure by 5 or more is Poisoned and Unconscious, waking on damage

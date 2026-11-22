@@ -67,14 +67,14 @@ var (
 	// "The troll dies only if it starts its turn with 0 Hit Points and doesn't regenerate": at 0 Hit Points it keeps its turn and
 	// regenerates; it dies at a turn start at 0 that brings no regeneration (the Acid or Fire block, a form that can't regain Hit Points)
 	regenFromZeroRe = regexp.MustCompile(`(?i)dies only if it starts its turn with 0 Hit Points and doesn['’]t regenerate`)
-	startAuraRe     = regexp.MustCompile(`(?:any|each) (enemy|creature|Beast or Humanoid)[^.]*?starts its turn (?:in the aura|in an? (\d+)-foot Emanation|within (\d+) feet)`)
+	startAuraRe     = regexp.MustCompile(`(?:any) (enemy|creature|Beast or Humanoid)[^.]*?starts its turn (?:in the aura|in an? (\d+)-foot Emanation|within (\d+) feet)`)
 	endAuraRe       = regexp.MustCompile(`At the end of each of the [^,]+ turns, each creature( of the [^ ]+ choice)? in an? (\d+)-foot Emanation originating from the [^ ]+ takes (\d+) \(([^)]+)\) ([A-Za-z]+) damage`)
 	// saveEndAuraRe: a saving throw aura at the end of the monster's turn ("Constitution Saving Throw: DC 14, each creature in a 5-foot
 	// Emanation originating from the aboleth at the end of the aboleth's turn": the pattern of the Aboleth's Mucus Cloud)
 	// The save opens the trait: one that begins with a condition of its own ("While underwater, the aboleth is surrounded by mucus.
 	// Constitution Saving Throw ...") is the GM's, who judges the condition.
 	saveEndAuraRe   = regexp.MustCompile(`^[A-Z][a-z]+ Saving Throw: DC \d+, each (?:creature|enemy)( of the [^ ]+ choice)? in an? (\d+)-foot Emanation originating from the [^ ]+ at the end of the [^ ]+ turns?\b`)
-	legendaryOnceRe = regexp.MustCompile(`can’t take this action again until the start of its next turn|can't take this action again until the start of its next turn`)
+	legendaryOnceRe = regexp.MustCompile(`can['’]t take this action again until the start of its next turn`)
 )
 
 func monsterMetaFor(key string) *monsterMeta {

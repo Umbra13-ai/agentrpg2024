@@ -288,7 +288,7 @@ Action "takes the Dash, Disengage, or Hide action"). One reader (`monsterStandar
 resolver: an entry that offers several actions is refused until the GM names one in `monster_action.use` ("Nothing was done");
 Disengage is recorded as the combat effect `disengaged` on the monster, read by `noteMonstersLeavingReach` beside the GM's own
 `disengaged` list (no Opportunity Attack chance from its movement on a GM map update), ended at the start of its next turn by
-`expireCombatEffectsOf`; Hide, Dash and Dodge are the GM's and the reply says so (Hide with its DC 15 Stealth check and its
+`expireCombatEffectsOf`; Hide and Dash are the GM's and the reply says so (Hide with its DC 15 Stealth check and its
 requirements). Tested: `TestPostgresMonsterNimbleEscape` (narrate without use refused, nothing recorded; hide is the GM's; disengage
 recorded; PUT battle-map moving it out of a character's reach opens no chance, while the same move without it does; POST combat/next
 to its turn ends it). Mutation-checked on the Opportunity Attack owner's read.
@@ -383,9 +383,11 @@ target's next turn, then one repeated save, and a second failure is Unconscious 
 repeated save now carries a second stage (`conditionSave.Then`, `ThenRounds`, `ThenEndsOnDamage`, `ThenMagicalSleep`):
 `condition_turns.go` deletes the record and adds the second condition, with the same source, on a failed repeat; a success ends it. Sleep
 is a row of `spellStages` read by a character's cast and a monster's ("casts the Sleep spell"). A monster text's
-"Second Failure: The target has the X condition [instead of the Y condition] for N minutes/hours [This effect ends ... if it takes damage
-...]" after a single repeat ("repeats the save at the end of its next turn" / "until the end of its next turn, at which point it repeats
-the save") is read by `readSecondFailure` (the Brass dragons' Sleep Breath, the Cockatrice). An Unconscious that ends on damage is
+"Second Failure: The target has the X condition [instead of the Y condition] [for N minutes/hours] [, and it repeats the save at the end
+of each of its turns ...] [This effect ends ... if it takes damage ... | After N minutes, it succeeds automatically.]" after a single repeat
+("repeats the save at the end of its next turn" / "until the end of its next turn, at which point (or when) it repeats the save") is read
+by `readSecondFailure`: the Brass dragons' Sleep Breath, the Cockatrice, the Basilisk, Gorgon and Medusa (Petrified with no end) and the
+silver dragons' Paralyzing Breath (the second condition keeps the repeated save, `ThenRepeats`, for 1 minute at most). An Unconscious that ends on damage is
 `notesEndsOnDamage`; `wakeOnDamageSleep` ends it and a monster's Sleep (`sourceIsSpell`: "<monster> (Sleep)" was never woken before). A
 severe branch that only adds Unconscious to the Failure's Poisoned (Pseudodragon Sting) is the severe-poison owner (`severeSleepText`).
 A monster's Lesser Restoration and a monster's Heal end conditions through `spellEndsConditions`
@@ -620,6 +622,20 @@ One owner of movement that isn't plain walking, every rule read from the entry's
   `monsterWalkSpeed` and the Speed list) until it shifts again.
 - **Not modelled:** Standing Leap, Running Leap and Jumper. The battle map has no pits or gaps a jump could cross, so a jump is
   just part of the move's distance; their traits stay in the GM's stat block.
+
+## A failed save that pushes (2026-11-22)
+
+"the target is pushed up to 30 feet straight away from the dragon" (the bronze dragons' Repulsion Breath, the silver dragons' Cold Gale,
+the Air Elemental's Whirlwind) is `saveEffect.Push` (`savePushRe`; the rest of its sentence, Prone or the damage, is read as usual),
+applied by `applySavePush` in `finishTarget` through `forceToken` for a character, a monster and a companion; without a battle map the
+GM places the creature. Go: `TestPostgresSavePushOnEveryTarget`.
+
+## Still the GM's, and why (2026-11-22)
+
+The gold dragons' Weakening Breath ("Disadvantage on Strength-based D20 Tests and subtracts 2 (1d4) from its damage rolls") and the
+copper dragons' Giggling Magic (a die subtracted from ability checks and attack rolls) need a damage-roll and check modifier every
+attack route reads (the character's main, off-hand and Opportunity Attacks, the GM's reactions, the monster damage path): a new shared
+hook, not built (owner to decide).
 
 ## Blurred Form and Ignited Illumination (2026-11-21)
 

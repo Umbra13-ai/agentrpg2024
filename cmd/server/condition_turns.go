@@ -213,8 +213,12 @@ func runTurnEffects(campaignID int, c turnEffectsCursor) turnEffectLines {
 						if svSpec.ThenEndsOnDamage && notes == "" {
 							notes = notesEndsOnDamage
 						}
+						var again *conditionSave
+						if svSpec.ThenRepeats { // the second condition keeps the repeated save (Paralyzing Breath), with no further stage
+							again = &conditionSave{Ability: svSpec.Ability, DC: svSpec.DC, When: svSpec.When}
+						}
 						addCondition(campaignID, id, condAdd{Condition: svSpec.Then, Source: rec.Source, Rounds: svSpec.ThenRounds, SourceID: rec.SourceID,
-							Notes: notes, CreatedBy: rec.CreatedBy, Magical: true, MagicalSleep: svSpec.ThenMagicalSleep})
+							Notes: notes, CreatedBy: rec.CreatedBy, Magical: true, MagicalSleep: svSpec.ThenMagicalSleep, EndSave: again})
 						emit(fmt.Sprintf("%s repeats the %s saving throw %s and fails%s: the %s condition becomes %s.", name, svSpec.Ability, phase, sv.Tail(), rec.Condition, titleCase(svSpec.Then)))
 						continue
 					default:

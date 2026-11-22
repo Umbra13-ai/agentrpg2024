@@ -262,7 +262,7 @@ func monsterSpeedNote(lobbyID, id int) string {
 var (
 	speedHalvedRe = regexp.MustCompile(`(?i)\bSpeed (?:is|becomes) halved`)
 	speedZeroRe   = regexp.MustCompile(`(?i)\bSpeed (?:is|becomes) (?:reduced to )?0\b`)
-	speedMinusRe  = regexp.MustCompile(`(?i)\bSpeed (?:decreases|is reduced|is decreased) by (\d+) f(?:ee|oo)t`)
+	speedMinusRe  = regexp.MustCompile(`(?i)\bSpeed decreases by (\d+) f(?:ee|oo)t`)
 )
 
 // readSpeed reads a Speed rider out of a failure or hit text with its duration (riderEndFor, rider_duration_2024.go): the one in the

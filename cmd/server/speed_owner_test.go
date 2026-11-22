@@ -297,7 +297,7 @@ func TestPostgresSpeedOwner(t *testing.T) {
 	if fs.Always == nil || len(fs.Always.Conditions) != 1 || fs.Always.SpeedMode != "zero" || len(fs.Conditions) != 0 {
 		t.Fatalf("Failure or Success not read as an always-effect: %+v", fs)
 	}
-	if !strings.Contains(fs.Extra, "can't take this action again") || strings.Contains(fs.Extra, "Frightened") {
+	if strings.Contains(fs.Extra, "can't take this action again") || strings.Contains(fs.Extra, "Frightened") { // LAOnce's, not the GM's
 		t.Fatalf("what is left for the GM: %q", fs.Extra)
 	}
 	fs.SourceID = -7

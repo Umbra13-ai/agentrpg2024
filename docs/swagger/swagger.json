@@ -2758,6 +2758,10 @@
             "description": "magic puts it to sleep: a creature that can't be is immune",
             "type": "boolean"
            },
+           "then_repeats": {
+            "description": "the second condition keeps this repeated save (no further stage)",
+            "type": "boolean"
+           },
            "then_rounds": {
             "type": "integer"
            },
@@ -2990,6 +2994,10 @@
            },
            "then_magical_sleep": {
             "description": "magic puts it to sleep: a creature that can't be is immune",
+            "type": "boolean"
+           },
+           "then_repeats": {
+            "description": "the second condition keeps this repeated save (no further stage)",
             "type": "boolean"
            },
            "then_rounds": {
@@ -28173,6 +28181,10 @@
             "description": "magic puts it to sleep: a creature that can't be is immune",
             "type": "boolean"
            },
+           "then_repeats": {
+            "description": "the second condition keeps this repeated save (no further stage)",
+            "type": "boolean"
+           },
            "then_rounds": {
             "type": "integer"
            },
@@ -28420,6 +28432,10 @@
            },
            "then_magical_sleep": {
             "description": "magic puts it to sleep: a creature that can't be is immune",
+            "type": "boolean"
+           },
+           "then_repeats": {
+            "description": "the second condition keeps this repeated save (no further stage)",
             "type": "boolean"
            },
            "then_rounds": {
@@ -30749,6 +30765,10 @@
            },
            "then_magical_sleep": {
             "description": "magic puts it to sleep: a creature that can't be is immune",
+            "type": "boolean"
+           },
+           "then_repeats": {
+            "description": "the second condition keeps this repeated save (no further stage)",
             "type": "boolean"
            },
            "then_rounds": {

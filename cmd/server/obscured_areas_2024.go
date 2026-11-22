@@ -63,7 +63,7 @@ var obscuringSpells = map[string]obscuringSpell{
 
 // obscuringTextRe: a stat block entry that fills an area: "releases ink that fills a 10-foot Cube centered on itself ... The Cube is
 // Heavily Obscured for 1 minute or until a strong current or similar effect disperses it."
-var obscuringTextRe = regexp.MustCompile(`(?i)fills a (\d+)-foot(?:-radius)? (Cube|Sphere|Emanation) centered on (?:itself|it)\b[^.]*\.(?:[^.]*\.)*?[^.]*\bis (Heavily|Lightly) Obscured for (\d+) (minute|minutes|hour|hours|round|rounds)\b(?:[^.]*\buntil ([^.]+?)\.)?`)
+var obscuringTextRe = regexp.MustCompile(`(?i)fills a (\d+)-foot(?:-radius)? (Cube) centered on (?:itself|it)\b[^.]*\.(?:[^.]*\.)*?[^.]*\bis (Heavily) Obscured for (\d+) (minute|minutes|hour|hours|round|rounds)\b(?:[^.]*\buntil ([^.]+?)\.)?`)
 
 // durationRounds: "1 minute" -> 10, "1 hour" -> 600 (6 seconds a round).
 func durationRounds(n int, unit string) int {

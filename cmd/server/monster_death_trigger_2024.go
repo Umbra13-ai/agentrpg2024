@@ -23,7 +23,7 @@ import (
 // on the battle map: characters, companions and the other monsters (a burst can kill another monster and set off its own). Without
 // a battle map or without the monster's token, nothing is rolled and the GM is told to resolve it. The result goes to the
 // campaign's log (its GM-only parts to the GM's notices, as every log line) and, whole, to the GM's notices.
-var deathTriggerRe = regexp.MustCompile(`(?i)\b(?:explodes|bursts) when it dies\b`)
+var deathTriggerRe = regexp.MustCompile(`(?i)\bexplodes when it dies\b`)
 
 // deathTriggerOf: the trait of a stat block that acts on its death, if any.
 func deathTriggerOf(traits []srdMonsterEntry) (srdMonsterEntry, bool) {

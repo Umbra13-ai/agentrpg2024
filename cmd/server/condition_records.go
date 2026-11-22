@@ -641,6 +641,7 @@ type conditionSave struct {
 	ThenRounds       int    `json:"then_rounds,omitempty"`
 	ThenEndsOnDamage bool   `json:"then_ends_on_damage,omitempty"`
 	ThenMagicalSleep bool   `json:"then_magical_sleep,omitempty"` // magic puts it to sleep: a creature that can't be is immune
+	ThenRepeats      bool   `json:"then_repeats,omitempty"`       // the second condition keeps this repeated save (no further stage)
 }
 
 func endSaveJSON(s *conditionSave) interface{} {

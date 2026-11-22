@@ -39,7 +39,7 @@ var (
 	mfxExhaustRe             = regexp.MustCompile(`gains? (\d+) Exhaustion levels?`)
 	mfxAttackRe              = regexp.MustCompile(`makes one ([A-Z][A-Za-z’' -]+?)(?: or ([A-Z][A-Za-z’' -]+?))? attack`)
 	mfxUsesRe                = regexp.MustCompile(`uses (?:its )?([A-Z][A-Za-z’' -]+?)(?:[.,]| and | to |$)`)
-	mfxSpellRe               = regexp.MustCompile(`(?:uses Spellcasting to cast|casts) (?:the )?([A-Z][A-Za-z’' /-]+?)(?: spell)?(?: \(level (\d) version\))?(?: on itself)?(?: twice)?(?:[.,;]| requiring| using| on |$)`)
+	mfxSpellRe               = regexp.MustCompile(`(?:uses Spellcasting to cast|casts) (?:the )?([A-Z][A-Za-z’' /-]+?)(?: spell)?(?: \(level (\d) version\))?(?: on itself)?(?: twice)?(?:[.,;]| on |$)`)
 	mfxSpellDCRe             = regexp.MustCompile(`spell save DC (\d+)`)
 	mfxSpellAtkRe            = regexp.MustCompile(`([+−-]\d+) to hit with spell attacks`)
 	mfxEmanRe                = regexp.MustCompile(`(\d+)\s*-?\s*foot Emanation`)
@@ -48,7 +48,7 @@ var (
 	mfxEndSaveRe             = regexp.MustCompile(`(?i)repeats the save at the end of each of its turns|at the end of each of its turns, (?:the target|it) repeats the save`)
 	mfxAutoSucceedRe         = regexp.MustCompile(`(?i)\bAfter (\d+) minutes?, it succeeds automatically`)
 	targetIsCreatureGateRe   = regexp.MustCompile(`(?i)\bIf the target is a creature,?(?:\s+(?:its|it)\b)?`)
-	mfxDurationRe            = regexp.MustCompile(`(?i)(?:until the (?:start|end) of (?:its|the [^ ]+) next turn|for \d+(?:d\d+)? (?:minutes?|hours?)|or until it takes damage)`)
+	mfxDurationRe            = regexp.MustCompile(`(?i)(?:until the (?:start|end) of (?:its|the [^ ]+) next turn|for \d+ (?:minutes?|hours?)|, until it takes damage)`)
 	// condDurationRe: a condition's duration in time ("for 10 minutes", "for 1 hour")
 	condDurationRe = regexp.MustCompile(`(?i)\bfor (\d+) (minutes?|hours?)\b`)
 	// endsOnDamageRe: "... for 1 hour, until it takes damage, or until ..." (SRD Incubus Nightmare, Nalfeshnee Horror Nimbus): the
@@ -131,6 +131,7 @@ type saveEffect struct {
 	EndsOnDamage     bool                // "or until it takes damage": the condition ends when the creature takes damage (wakeOnDamageSleep)
 	AutoSucceedTypes []string            // creature types that succeed on the save automatically ("construct", "undead": rollForTarget)
 	Setup            string              // the entry\'s sentences outside the save line and its sections ("The djinni conjures a whirlwind at a point ...": saveSetupText), the GM\'s
+	Push             *savePush           // "the target is pushed up to 30 feet straight away from the dragon" on a failed save (applySavePush)
 }
 
 // conditionAdd is the condition record a failed save leaves (character or monster target): its duration, the repeated save, the note
@@ -144,6 +145,7 @@ func (e saveEffect) conditionAdd(cond, source string) condAdd {
 		a.EndSave = &conditionSave{Ability: e.Ability, DC: e.DC}
 		if e.Stage != nil {
 			a.EndSave.Then, a.EndSave.ThenRounds, a.EndSave.ThenEndsOnDamage, a.EndSave.ThenMagicalSleep = e.Stage.Then, e.Stage.ThenRounds, e.Stage.EndsOnDamage, e.Stage.MagicalSleep
+			a.EndSave.ThenRepeats = e.Stage.Repeats
 		}
 	}
 	if e.Stage != nil {
@@ -502,6 +504,10 @@ func (e saveEffect) giveAlways(lobbyID, tid int, source string) []string {
 // result, or a specific movement path. Do not grant their effects on an ordinary hit.
 var hitRiderDeferredRe = regexp.MustCompile(`(?i)\b(?:can give it .+ instead of dealing damage|moved \d+\+? feet straight toward(?:s)?|if [^.]*?(?:reduc[[:alpha:]]* [^.]*? to 0 Hit Points|reduced to 0 Hit Points))\b`)
 
+// judgedAlternativeRe: an alternative damage amount of a hit and its condition (", or 11 (2d8 + 2) Necrotic damage if the swarm is
+// Bloodied"): group 1 is the condition, judged by classifyDamageCondition.
+var judgedAlternativeRe = regexp.MustCompile(`,? or \d+(?: \([^)]*\))? [A-Za-z]+ damage (if [^.,;]+)`)
+
 var hitRiderChoiceRe = regexp.MustCompile(`(?i)choice of|determined by rolling|one of the following|\bcursed\b`)
 
 // parseHitRider reads the conditions a stat-block hit gives besides its damage ("..., and the target has the Stunned condition until
@@ -516,11 +522,33 @@ func parseHitRider(desc string) (saveEffect, bool) {
 	if j := strings.Index(hit, "Hit or Miss:"); j >= 0 {
 		hit = hit[:j]
 	}
-	if hitRiderChoiceRe.MatchString(hit) || hitRiderDeferredRe.MatchString(hit) {
+	if hitRiderChoiceRe.MatchString(hit) {
 		return saveEffect{}, false
 	}
+	// a judged damage alternative (", or 11 (2d8 + 2) Necrotic damage if the swarm is Bloodied") is the damage owner's
+	hit = judgedAlternativeRe.ReplaceAllStringFunc(hit, func(s string) string {
+		if _, ok := classifyDamageCondition(strings.TrimSpace(judgedAlternativeRe.FindStringSubmatch(s)[1])); ok {
+			return ""
+		}
+		return s
+	})
+	// a sentence that waits on a later result (reduced to 0 Hit Points, an alternate result, a movement path) is the GM's; the rest of
+	// the hit is read as usual
+	var deferred []string
+	var kept []string
+	for _, s := range sentenceSplitRe.Split(strings.TrimSpace(hit), -1) {
+		if hitRiderDeferredRe.MatchString(s) {
+			deferred = append(deferred, strings.TrimSuffix(strings.TrimSpace(s), "."))
+		} else {
+			kept = append(kept, s)
+		}
+	}
+	if len(deferred) > 0 && len(kept) <= 1 {
+		return saveEffect{}, false // nothing but the damage besides: the whole rider stays the GM's
+	}
+	hit = strings.Join(kept, ". ")
 	var e saveEffect
-	e.Extra = strings.Join(e.readRider(hit), ". ")
+	e.Extra = strings.Join(append(e.readRider(hit), deferred...), ". ")
 	if hpMaxDrainSentenceRe.MatchString(e.Extra) { // a hit's own: applied by hitAfterDamage on every hit route
 		e.Extra = strings.Trim(hpMaxDrainSentenceRe.ReplaceAllString(e.Extra, ""), " .")
 	}
@@ -551,10 +579,13 @@ var severeSleepText = regexp.MustCompile(`(?i)^While Poisoned, the target also h
 // secondFailureText: a monster effect's second stage after its one repeated save ("The target repeats the save at the end of its next
 // turn ... Second Failure: The target has the Unconscious condition for 1 minute. This effect ends for the target if it takes damage or a
 // creature within 5 feet of it takes an action to wake it.", Brass Dragon Wyrmling Sleep Breath; "... the Petrified condition, instead of
-// the Restrained condition, for 24 hours.", Cockatrice). It is the condition owner's repeated save with a second stage (spellStage,
-// conditionSave.Then), as for the Sleep spell.
-var secondFailureText = regexp.MustCompile(`(?i)^The target has the (\w+) condition(?:, instead of the \w+ condition,)? for (\d+) (minute|hour)s?\.\s*(.*)$`)
-var oneRepeatRe = regexp.MustCompile(`(?i)repeats the save at the end of its next turn|until the end of its next turn, at which point it (?:must )?repeats? the save`)
+// the Restrained condition, for 24 hours.", Cockatrice; "... the Petrified condition instead of the Restrained condition.", Basilisk,
+// with no end; "The target has the Paralyzed condition, and it repeats the save at the end of each of its turns, ending the effect on
+// itself on a success. After 1 minute, it succeeds automatically.", the silver dragons: the second condition keeps the repeated save
+// for 1 minute at most). It is the condition owner's repeated save with a second stage (spellStage, conditionSave.Then), as for Sleep.
+var secondFailureText = regexp.MustCompile(`(?i)^The target has the (\w+) condition(?:,? instead of the \w+ condition,?)?(?: for (\d+) (minute|hour)s?)?(, and it repeats the save at the end of each of its turns, ending the effect on itself on a success)?\.\s*(.*)$`)
+var oneRepeatRe = regexp.MustCompile(`(?i)repeats the save at the end of its next turn|until the end of its next turn, (?:at which point|when) it (?:must )?repeats? the save`)
+var secondFailureLimitText = regexp.MustCompile(`(?i)^After (\d+) (minute|hour)s?, it succeeds automatically\.?$`)
 var secondFailureWakeText = regexp.MustCompile(`(?i)^This effect ends for the target if it takes damage(?: or a creature within 5 feet of it takes an action to wake it)?\.?$`)
 
 // readSecondFailure: the stage a "Second Failure:" sets on the record of the first, when the first gives one condition and repeats its
@@ -567,16 +598,28 @@ func (e *saveEffect) readSecondFailure(text, second string) bool {
 	if m == nil || !mfxConditions[strings.ToLower(m[1])] {
 		return false
 	}
-	rest := strings.TrimSpace(m[4])
-	if rest != "" && !secondFailureWakeText.MatchString(rest) {
+	rounds := func(n, unit string) int {
+		v, _ := strconv.Atoi(n)
+		if strings.EqualFold(unit, "hour") {
+			return v * 600
+		}
+		return v * 10
+	}
+	stage := spellStage{Then: strings.ToLower(m[1]), Repeats: m[4] != ""}
+	if m[2] != "" {
+		stage.ThenRounds = rounds(m[2], m[3])
+	}
+	switch rest := strings.TrimSpace(m[5]); {
+	case rest == "":
+	case secondFailureWakeText.MatchString(rest):
+		stage.EndsOnDamage = true
+	case stage.Repeats && secondFailureLimitText.MatchString(rest): // the repeated save ends it at the latest then
+		l := secondFailureLimitText.FindStringSubmatch(rest)
+		stage.ThenRounds = rounds(l[1], l[2])
+	default:
 		return false
 	}
-	n, _ := strconv.Atoi(m[2])
-	rounds := n * 10
-	if strings.EqualFold(m[3], "hour") {
-		rounds = n * 600
-	}
-	e.Stage = &spellStage{Then: strings.ToLower(m[1]), ThenRounds: rounds, EndsOnDamage: rest != ""}
+	e.Stage = &stage
 	e.EndSave = true // the one repeat: a success ends it, a failure turns it into the second stage (condition_turns.go)
 	return true
 }
@@ -610,6 +653,43 @@ func (e *saveEffect) readSevereFailure(text string) string {
 	return m[0] + " " + branch
 }
 
+// savePushRe: a failed save that moves the target ("the target is pushed up to 30 feet straight away from the dragon": the SRD
+// bronze dragons' Repulsion Breath, the silver dragons' Cold Gale, the Air Elemental's Whirlwind).
+var savePushRe = regexp.MustCompile(`(?i)\bthe target is (pushed) up to (\d+) (?:feet|ft\.?) straight (away from) (?:the [\w' -]+?|it|itself)\b`)
+
+// savePushAndRe / savePushTailRe: the push taken out of its sentence ("..., and the target is pushed up to 20 feet straight away from the
+// elemental and has the Prone condition." reads "..., and the target has the Prone condition."; "14 (4d6) Cold damage, and the target
+// is pushed up to 30 feet straight away from the dragon." reads "14 (4d6) Cold damage.").
+var (
+	savePushAndRe  = regexp.MustCompile(`(?i)\bthe target is pushed up to \d+ (?:feet|ft\.?) straight away from (?:the [\w' -]+?|it|itself) and\b`)
+	savePushTailRe = regexp.MustCompile(`(?i),? and the target is pushed up to \d+ (?:feet|ft\.?) straight away from (?:the [\w' -]+|it|itself)\.`)
+)
+
+// savePush: how far a failed save moves its target, and which way.
+type savePush struct {
+	Feet   int
+	Toward bool
+}
+
+// applySavePush moves the target on the battle map through the one forced movement owner (forceToken), from the effect's source; with
+// no map or no source the GM places it.
+func (e saveEffect) applySavePush(lobby, target int) string {
+	verb := map[bool]string{false: "pushed", true: "pulled"}[e.Push.Toward]
+	way := map[bool]string{false: "away from", true: "toward"}[e.Push.Toward]
+	name, from := creatureName(lobby, target), "its source"
+	if e.SourceID != 0 {
+		from = creatureName(lobby, e.SourceID)
+		moved, onMap := forceToken(lobby, e.SourceID, target, e.Push.Feet, e.Push.Toward)
+		switch {
+		case onMap && moved == 0:
+			return fmt.Sprintf("%s can't be %s: something is in the way", name, verb)
+		case onMap:
+			return fmt.Sprintf("%s is %s %d feet straight %s %s", name, verb, moved, way, from)
+		}
+	}
+	return fmt.Sprintf("%s is %s up to %d feet straight %s %s (no battle map: the GM places it)", name, verb, e.Push.Feet, way, from)
+}
+
 // saveOptionsIntro: the sentences of a multi-effect entry before its first named effect ("The sphinx emits a magical roar. Whenever it
 // roars, the roar has a different effect ..."): the GM's, beside the effect named in use.
 func saveOptionsIntro(text string, opts []saveOption) string {
@@ -630,12 +710,30 @@ func castRiders(text string) string {
 	var kept []string
 	for _, s := range sentenceSplitRe.Split(text, -1) {
 		s = strings.TrimSpace(strings.TrimSuffix(strings.TrimSpace(s), "."))
-		if s != "" && !mfxSpellRe.MatchString(s) && !strings.Contains(s, "spell save DC") && !strings.HasPrefix(s, "At Will") {
+		if s != "" && !mfxSpellRe.MatchString(s) && !strings.Contains(s, "spell save DC") && !strings.HasPrefix(s, "At Will") && !legendaryOnceRe.MatchString(s) {
 			kept = append(kept, s)
 		}
 	}
 	return strings.Join(kept, ". ")
 }
+
+// onlyOwnMove: every sentence of the entry is its creature's own move (readSpecialMove) or the Legendary once-a-turn limit.
+func onlyOwnMove(text string) bool {
+	for _, s := range sentenceSplitRe.Split(strings.TrimSpace(text), -1) {
+		s = strings.TrimSpace(strings.TrimSuffix(strings.TrimSpace(s), "."))
+		if s == "" || legendaryOnceRe.MatchString(s) {
+			continue
+		}
+		if _, ok := readSpecialMove(s, func(string) int { return 1 }); !ok {
+			return false
+		}
+	}
+	return true
+}
+
+// legendaryOnceSentenceRe: the sentence of a Legendary Action that limits it to once between the monster's turns ("The dragon can't
+// take this action again until the start of its next turn."), applied by the Legendary Action owner (LAOnce): never the GM's.
+var legendaryOnceSentenceRe = regexp.MustCompile(`(?i)\s*The [\w' -]+? can(?:'|’)t take this action again until the start of its next turn\.?`)
 
 // saveSectionHeadRe: where a save entry's sections begin.
 var saveSectionHeadRe = regexp.MustCompile(`(?:First Failure|Second Failure|Failure by \d+ or More|Failure or Success|Failure|Success):`)
@@ -673,7 +771,7 @@ func saveSetupText(text string) string {
 		if s == "" {
 			continue
 		}
-		if _, ok := readSpecialMove(s, func(string) int { return 1 }); ok {
+		if _, ok := readSpecialMove(s, func(string) int { return 1 }); ok || legendaryOnceRe.MatchString(s) {
 			continue
 		}
 		kept = append(kept, s)
@@ -735,6 +833,12 @@ func parseSaveEffect(text string) (saveEffect, bool) {
 		}
 		fail = strings.TrimSpace(objectOnFailureRe.ReplaceAllString(fail, ""))
 	}
+	if m := savePushRe.FindStringSubmatch(fail); m != nil { // applied (applySavePush): the rest of the sentence is read as usual
+		feet, _ := strconv.Atoi(m[2])
+		e.Push = &savePush{Feet: feet, Toward: strings.EqualFold(m[3], "toward")}
+		fail = savePushAndRe.ReplaceAllString(fail, "the target")
+		fail = savePushTailRe.ReplaceAllString(fail, ".")
+	}
 	extra := e.readRider(fail)
 	if branch := e.readSevereFailure(text); branch != "" {
 		extra = append(extra, branch)
@@ -742,7 +846,8 @@ func parseSaveEffect(text string) (saveEffect, bool) {
 	if second := mfxSection(text, "Second Failure:", "Success:", "Failure or Success:"); second != "" && !e.readSecondFailure(text, second) { // the stage after the first Failure's repeat save: the GM's unless readSecondFailure reads it
 		extra = append(extra, "Second Failure (after the repeat save the first Failure gives): "+strings.TrimSuffix(second, "."))
 	}
-	if both := mfxSection(text, "Failure or Success:"); both != "" && (e.Drain == nil || strings.Trim(hpMaxDrainSentenceRe.ReplaceAllString(both, ""), " .") != "") {
+	both := strings.TrimSpace(legendaryOnceSentenceRe.ReplaceAllString(mfxSection(text, "Failure or Success:"), "")) // the once-a-turn rule is LAOnce's
+	if both != "" && (e.Drain == nil || strings.Trim(hpMaxDrainSentenceRe.ReplaceAllString(both, ""), " .") != "") {
 		var a saveEffect
 		left := a.readRider(both)
 		if len(a.Conditions) > 0 || a.SpeedMode != "" || len(a.DisadvMode) > 0 {
@@ -903,6 +1008,9 @@ func (e saveEffect) finishTarget(lobby, target int, source string, apply, saved 
 		if line := strings.TrimSpace(corrodeCarriedObject(lobby, target, e.ItemPenalty == "metal")); line != "" {
 			parts = append(parts, line)
 		}
+	}
+	if !saved && e.Push != nil {
+		parts = append(parts, e.applySavePush(lobby, target))
 	}
 	if !saved {
 		if e.SeverePoison != nil && failedBy >= e.SeverePoison.Margin {
@@ -1596,7 +1704,11 @@ func resolveMonsterEffectText(r *http.Request, lobbyID, monsterID int, meta *mon
 	if obscuringTextRe.MatchString(text) {
 		return append(resolveObscuringText(r, lobbyID, monsterID, entryName, text, targets, apply), notes...)
 	}
-	return append([]string{fmt.Sprintf("%s uses %s: %s (the GM resolves it).", name, entryName, text)}, notes...)
+	if len(notes) > 0 && onlyOwnMove(text) { // "The dog teleports up to 40 feet ...": the movement owner granted it; nothing is left
+		return append([]string{fmt.Sprintf("%s uses %s.", name, entryName)}, notes...)
+	}
+	rest := strings.TrimSpace(legendaryOnceSentenceRe.ReplaceAllString(text, "")) // the once-a-turn limit is LAOnce's
+	return append([]string{fmt.Sprintf("%s uses %s: %s (the GM resolves it).", name, entryName, rest)}, notes...)
 }
 
 // isAttackEntry: the stat block entry is an attack roll.

@@ -15,9 +15,9 @@ import (
 //     Opportunity Attack chance for the rest of the turn (noteMonstersLeavingReach reads it with the GM's own disengaged list),
 //     and expireCombatEffectsOf ends it at the start of its next turn;
 //   - Hide (a Stealth check that needs Heavy Obscurement or cover out of sight), Dash (movement) and Dodge stay with the GM, said so.
-var monsterStandardActionRe = regexp.MustCompile(`(?i)\btakes the ((?:Dash|Disengage|Hide|Dodge)(?:(?:,|,? or|,? and) (?:Dash|Disengage|Hide|Dodge))*) action\b`)
+var monsterStandardActionRe = regexp.MustCompile(`(?i)\btakes the ((?:Dash|Disengage|Hide)(?:(?:,|,? or|,? and) (?:Dash|Disengage|Hide))*) action\b`)
 
-var standardActionNameRe = regexp.MustCompile(`(?i)Dash|Disengage|Hide|Dodge`)
+var standardActionNameRe = regexp.MustCompile(`(?i)Dash|Disengage|Hide`)
 
 // monsterStandardActions: the actions an entry's text takes, in its order ("" when it takes none).
 func monsterStandardActions(text string) []string {
