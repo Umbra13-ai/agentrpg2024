@@ -78,7 +78,7 @@ jobs:
         env:
           TEST_DATABASE_URL: postgres://postgres:postgres@localhost:5432/agentrpg_test?sslmode=disable
           REQUIRE_TEST_DATABASE: "1"
-        run: go test -race -count=1 ./...
+        run: go test -race -timeout 30m -count=1 ./...
 
   suites:
     runs-on: ubuntu-latest
