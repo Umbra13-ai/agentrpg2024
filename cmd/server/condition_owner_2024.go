@@ -834,14 +834,14 @@ func passConditionTime(lobbyID, rounds, onlyTarget int) {
 // dropMarkersKeepConditions removes the markers (dodging, reckless, hidden, raging ...) from a character's conditions and keeps the
 // rules' conditions and diseases: starting a fight, or a Long Rest, must not cure Poisoned or stand a Prone character up.
 func dropMarkersKeepConditions(charID int) {
-	removeConditionsWhere(0, charID, func(r conditionRecord) bool { return !ruleConditions[r.Condition] && r.Condition != "disease" })
+	removeConditionsWhere(0, charID, func(r conditionRecord) bool { return !ruleConditions[r.Condition] && !keptRecordKinds[r.Condition] })
 }
 
 // longRestConditions: a Long Rest ends the markers and removes one level of Exhaustion (SRD 5.2.1 Long Rest); the rules'
 // conditions keep their own durations, which the rest's 8 hours have already passed.
 func longRestConditions(charID int) error {
 	err := changeConditions(0, charID, func(c *conditionChange) error {
-		if _, err := c.remove(func(r conditionRecord) bool { return !ruleConditions[r.Condition] && r.Condition != "disease" }); err != nil {
+		if _, err := c.remove(func(r conditionRecord) bool { return !ruleConditions[r.Condition] && !keptRecordKinds[r.Condition] }); err != nil {
 			return err
 		}
 		if c.exhaustion > 0 {

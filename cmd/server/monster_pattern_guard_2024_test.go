@@ -62,6 +62,16 @@ var monsterTextPatterns = map[string]*regexp.Regexp{
 	"d20MinusRe":               d20MinusRe,               // effect_records_2024.go
 	"weakenedRe":               weakenedRe,               // effect_records_2024.go
 	"notAffectedRe":            notAffectedRe,            // effect_records_2024.go
+	"curseIsRe":                curseIsRe,                // curse_records_2024.go
+	"curseRestRe":              curseRestRe,              // curse_records_2024.go
+	"curseNoRegainRe":          curseNoRegainRe,          // curse_records_2024.go
+	"curseDropRe":              curseDropRe,              // curse_records_2024.go
+	"curseConditionsRe":        curseConditionsRe,        // curse_records_2024.go
+	"humanoidGateRe":           humanoidGateRe,           // curse_records_2024.go
+	"woundGiveRe":              woundGiveRe,              // wound_records_2024.go
+	"woundLossRe":              woundLossRe,              // wound_records_2024.go
+	"woundCloseRe":             woundCloseRe,             // wound_records_2024.go
+	"woundGateRe":              woundGateRe,              // wound_records_2024.go
 	"exposedRe":                exposedRe,                // disadvantage_riders_2024.go
 	"noReactRe":                noReactRe,                // disadvantage_riders_2024.go
 	"hideLightGateRe":          hideLightGateRe,          // hide_2024.go
@@ -279,7 +289,7 @@ var patternWitnesses = map[string]patternWitness{
 func monsterTextFile(name string) bool {
 	for _, p := range []string{"monster_", "creature_", "condition_lasting_effects", "disadvantage_riders", "rider_duration", "hit_after_damage",
 		"hp_max_drain", "item_state", "obscured_areas", "hide_2024", "map_spaces", "speed_owner", "area_geometry", "map_rules", "wild_shape",
-		"attack_2024", "attack_target", "monsters_2024", "combat_handlers", "effect_records"} {
+		"attack_2024", "attack_target", "monsters_2024", "combat_handlers", "effect_records", "curse_records", "wound_records"} {
 		if strings.HasPrefix(name, p) {
 			return true
 		}

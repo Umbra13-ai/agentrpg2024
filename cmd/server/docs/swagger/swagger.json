@@ -2610,13 +2610,18 @@
          "record_id": {
           "type": "integer",
           "description": "the condition's record (its record_id from GET /api/conditions/active)"
+         },
+         "target_id": {
+          "type": "integer",
+          "description": "the character that holds the condition, when it is another one within 5 feet of character_id (a way to end it that says an adjacent creature may try)"
          }
         }
        },
        "example": {
         "character_id": 1,
         "escape": 1,
-        "record_id": 1
+        "record_id": 1,
+        "target_id": 1
        }
       }
      }
@@ -2787,6 +2792,10 @@
             "ability": {
              "type": "string"
             },
+            "adjacent": {
+             "description": "a creature within 5 feet of the holder may make the attempt too (an infernal wound's stanching)",
+             "type": "boolean"
+            },
             "dc": {
              "type": "integer"
             },
@@ -2851,6 +2860,7 @@
         "escapes": [
          {
           "ability": "...",
+          "adjacent": true,
           "dc": 1,
           "label": "...",
           "skill": "...",
@@ -3025,6 +3035,10 @@
             "ability": {
              "type": "string"
             },
+            "adjacent": {
+             "description": "a creature within 5 feet of the holder may make the attempt too (an infernal wound's stanching)",
+             "type": "boolean"
+            },
             "dc": {
              "type": "integer"
             },
@@ -3089,6 +3103,7 @@
         "escapes": [
          {
           "ability": "...",
+          "adjacent": true,
           "dc": 1,
           "label": "...",
           "skill": "...",
@@ -28210,6 +28225,10 @@
             "ability": {
              "type": "string"
             },
+            "adjacent": {
+             "description": "a creature within 5 feet of the holder may make the attempt too (an infernal wound's stanching)",
+             "type": "boolean"
+            },
             "dc": {
              "type": "integer"
             },
@@ -28274,6 +28293,7 @@
         "escapes": [
          {
           "ability": "...",
+          "adjacent": true,
           "dc": 1,
           "label": "...",
           "skill": "...",
@@ -28463,6 +28483,10 @@
             "ability": {
              "type": "string"
             },
+            "adjacent": {
+             "description": "a creature within 5 feet of the holder may make the attempt too (an infernal wound's stanching)",
+             "type": "boolean"
+            },
             "dc": {
              "type": "integer"
             },
@@ -28527,6 +28551,7 @@
         "escapes": [
          {
           "ability": "...",
+          "adjacent": true,
           "dc": 1,
           "label": "...",
           "skill": "...",

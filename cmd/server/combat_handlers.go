@@ -1450,6 +1450,11 @@ func handleShortRest(w http.ResponseWriter, r *http.Request, charID int) {
 		passSpellTimeOn(int(lobbyID.Int64), 600, charID) // a Short Rest is 1 hour: this character's shorter spell effects end (F72)
 	}
 	stopCharacterBurning(charID) // F69
+	// a curse ("the target gains no benefit from finishing Short Rests", curse_records_2024.go): the hour passed, nothing is restored
+	if ok, why := restBenefit(charID, false); !ok {
+		writeJSONStatus(w, http.StatusOK, map[string]interface{}{"success": true, "message": "The Short Rest's hour passes, but " + why + ". Nothing was restored."})
+		return
+	}
 
 	// the Hit Point Dice spent as the rest finishes (rests_2024.go: one guarded claim, rolled, healed by the Hit Point owner)
 	dice, err := rollHitDice(charID, req.HitDice, req.Die)
@@ -1847,6 +1852,11 @@ func handleRest(w http.ResponseWriter, r *http.Request, charID int) {
 	}
 	passSpellTimeOn(lobbyOfChar(charID), restRounds, charID) // the effects on this character (F72)
 	stopCharacterBurning(charID)                             // F69
+	// a curse ("the target gains no benefit from finishing a Short or Long Rest", curse_records_2024.go): the 8 hours pass, nothing is restored
+	if ok, why := restBenefit(charID, true); !ok {
+		writeJSONStatus(w, http.StatusOK, map[string]interface{}{"success": true, "message": "The Long Rest's 8 hours pass, but " + why + ". Nothing was restored."})
+		return
+	}
 
 	// SRD 5.2.1 Long Rest: "You regain all lost Hit Points and all spent Hit Point Dice."
 	newHitDiceSpent := 0

@@ -32,9 +32,12 @@ var spellEndsConditions = map[string]conditionEnding{
 // endSpellConditions ends on creature id the conditions spellKey ends. ended are the conditions that ended (title case); named is the
 // condition the description chose for a Pick spell ("" when it named none).
 func endSpellConditions(lobbyID, id int, spellKey, description string) (ended []string, named string) {
+	if id != 0 {
+		ended = append(ended, endWoundsBySpell(lobbyID, id, spellKey)...) // "after a spell restores Hit Points to the target" (wound_records_2024.go)
+	}
 	row, ok := spellEndsConditions[spellKey]
 	if !ok || id == 0 {
-		return nil, ""
+		return ended, ""
 	}
 	end := func(c string) bool {
 		if len(endCondition(lobbyID, id, c, "")) > 0 {

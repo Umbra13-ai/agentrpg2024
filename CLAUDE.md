@@ -304,6 +304,18 @@ Add to the owner, never beside it. When you give another rule one owner, add it 
   holds Enlarge and Reduce: nothing calls `enlargeHit` but it; `TestDamageRollsAskTheAdjust` lists the routes). "each creature that isn't
   currently affected by this breath" is `affectedBySource`, a gate on the targets. A new kind is one row (a pattern in
   `monsterTextPatterns`, a record name, the owner's reader). Go: `TestPostgresD20RidersOnEveryRoute`, `TestDamageRollsAskTheAdjust`.
+- **A curse or a wound a stat block gives** (`cmd/server/curse_records_2024.go`, `wound_records_2024.go`; the same records as the effects above, read by
+  `readRider` for a hit and a failed save alike): a `cursed` record whose Detail is its flags (`no_regain`: `cantRegainHP`; `short_rest` and
+  `long_rest`: `restBenefit`, which the Short and Long Rest handlers ask after the time has passed; `lycanthropy`: what the GM is told), ended by
+  its time or by Remove Curse and Greater Restoration (`endCursesBySpell`), and kept through a fight and a Long Rest (`keptRecordKinds`); the
+  conditions of "Until the curse ends, the target has the Charmed and Poisoned conditions" end with it (`saveEffect.CurseLinked`). "If the
+  target is a Humanoid" is `saveEffect.OnlyType`, a gate on the targets in `applySaveEffect` (no save for another type). A `wounded` record
+  (infernal wound) holds the Hit Points lost at the start of each of its turns (`woundTurnStart`, stage 7 of the turn pipeline: lost, not
+  damage), lasts its minute, is closed by a spell that restores Hit Points (`endWoundsBySpell`, in `endSpellConditions`) or by the Wisdom
+  (Medicine) check its record carries (POST /api/conditions/escape; `conditionEscape.Adjacent`: `target_id` names a character within 5 feet),
+  and "doesn't already have an infernal wound" is `saveEffect.NotHolding` (no save). Not applied, told to the GM: a curse's "or until the
+  incubus dies", the Mummy's Hit Point maximum, the lycanthrope's transformation at 0 Hit Points, the Aboleth's underwater clause (the server has
+  no underwater state). Go: `TestPostgresStatBlockCursesOnEveryTarget`, `TestPostgresInfernalWoundOnEveryTarget`.
 - **The 18 skills:** `game/skills.go`.
 - **Expertise:** `game/expertise.go`, with its database side in `cmd/server/expertise_2024.go`.
 - **Which feats a character can take:** `cmd/server/feats_2024.go` (`featRefusal`, `featsOpenTo`, `featTakerOf`, `featHowTo`).

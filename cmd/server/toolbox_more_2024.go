@@ -364,11 +364,15 @@ func endCursesBySpell(lobbyID int, spellSlug string, targets []int) string {
 	}
 	var out []string
 	for _, t := range targets {
-		res, err := db.Exec(`DELETE FROM curses WHERE lobby_id = $1 AND target_id = $2`, lobbyID, t)
-		if err == nil {
-			if n, _ := res.RowsAffected(); n > 0 {
-				out = append(out, fmt.Sprintf("The curse(s) on %s end.", creatureName(lobbyID, t)))
+		n := 0
+		if res, err := db.Exec(`DELETE FROM curses WHERE lobby_id = $1 AND target_id = $2`, lobbyID, t); err == nil {
+			if k, _ := res.RowsAffected(); k > 0 {
+				n += int(k)
 			}
+		}
+		n += len(removeConditionsWhere(lobbyID, t, func(r conditionRecord) bool { return r.Condition == condCursed })) // a stat block's curse (curse_records_2024.go)
+		if n > 0 {
+			out = append(out, fmt.Sprintf("The curse(s) on %s end.", creatureName(lobbyID, t)))
 		}
 	}
 	return strings.Join(out, " ")

@@ -243,6 +243,7 @@ func runTurnEffects(campaignID int, c turnEffectsCursor) turnEffectLines {
 		case 7:
 			if when == "start_of_turn" {
 				emit(recurringDamageTurnStart(campaignID, id, name)...)
+				emit(woundTurnStart(campaignID, id, name)...) // a wound's Hit Points lost (wound_records_2024.go)
 			}
 		}
 		restore()

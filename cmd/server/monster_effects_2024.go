@@ -115,6 +115,11 @@ type saveEffect struct {
 	DisadvMode       []string            // the roll riders of the text: "sap", "exposed", "attacks", "concentration", "save:int", "noreactions" (disadvantage_riders_2024.go)
 	RollRiderEnd     map[string]riderEnd // the duration of each DisadvMode rider
 	Effects          []effectRead        // the effect records of the text: a die subtracted from D20 Tests, Strength-based Disadvantage (effect_records_2024.go)
+	Curse            *curseRead          // "the target is cursed" and what the curse does (curse_records_2024.go)
+	CurseLinked      bool                // "Until the curse ends, the target has the Charmed and Poisoned conditions": its conditions end with the curse record
+	Wound            *woundRead          // "The target receives an infernal wound ..." (wound_records_2024.go)
+	NotHolding       bool                // "doesn't already have an infernal wound" / "if it doesn't have one": a creature that holds the wound is not a target
+	OnlyType         string              // "If the target is a Humanoid": only a creature of this type is a target (applySaveEffect)
 	SpeedMinus       int                 // the feet of "its Speed decreases by 10 feet"
 	ImmunityName     string              // stat-block entry key for persisted success immunity (set by the effect caller)
 	Immunity         bool                // success grants immunity to this source and entry
@@ -148,6 +153,9 @@ func (e saveEffect) conditionAdd(cond, source string) condAdd {
 	a := condAdd{Condition: cond, Source: source, Rounds: e.Rounds, SourceID: e.SourceID, Magical: e.IsSpell}
 	if e.EndsOnDamage && cond == "unconscious" {
 		a.Notes = notesEndsOnDamage // woken by damage (wakeOnDamageSleep)
+	}
+	if e.CurseLinked {
+		a.Notes = notesEndsWith + condCursed // "Until the curse ends, the target has the Charmed and Poisoned conditions"
 	}
 	if e.EndSave {
 		a.EndSave = &conditionSave{Ability: e.Ability, DC: e.DC}
@@ -272,6 +280,8 @@ func (e *saveEffect) readRider(fail string) (extra []string) {
 	e.readSpeed(fail)
 	_, gmDisadv := e.readDisadvantage(fail)
 	e.readEffects(fail) // effect records (effect_records_2024.go)
+	e.readCurse(fail)   // a curse (curse_records_2024.go)
+	e.readWound(fail)   // a wound (wound_records_2024.go)
 	extra = append(extra, gmDisadv...)
 	e.EndSave = mfxEndSaveRe.MatchString(lf)
 	autoLimit := false // the condition's limit was read from "After N minutes, it succeeds automatically"
@@ -392,6 +402,12 @@ func (e *saveEffect) readRider(fail string) (extra []string) {
 		if len(e.Effects) > 0 {
 			plain = stripEffects(plain) // applied (giveEffects)
 		}
+		if e.Curse != nil {
+			plain = stripCurse(plain) // applied (giveCurse)
+		}
+		if e.Wound != nil {
+			plain = stripWound(plain) // applied (giveWound)
+		}
 		plain = mfxCondRe.ReplaceAllString(plain, "")
 		plain = mfxDurationRe.ReplaceAllString(plain, "")
 		plain = targetIsCreatureGateRe.ReplaceAllString(plain, "") // every target of these routes is a creature: the gate always holds
@@ -463,6 +479,12 @@ func (e *saveEffect) unappliedPart(s string) string {
 	if len(e.Effects) > 0 {
 		r = stripEffects(r)
 	}
+	if e.Curse != nil {
+		r = stripCurse(r)
+	}
+	if e.Wound != nil {
+		r = stripWound(r)
+	}
 	if r == strings.TrimSuffix(strings.TrimSpace(s), ".") {
 		return r
 	}
@@ -520,6 +542,8 @@ func (e saveEffect) giveConditions(lobbyID, tid int, source string) []string {
 	}
 	parts = append(parts, e.giveDisadvantage(lobbyID, tid, source)...)
 	parts = append(parts, e.giveEffects(lobbyID, tid, source)...)
+	parts = append(parts, e.giveCurse(lobbyID, tid, source)...)
+	parts = append(parts, e.giveWound(lobbyID, tid, source)...)
 	if e.Exhaustion > 0 {
 		switch why := immuneToCondition(lobbyID, tid, e.conditionAdd("exhaustion", source)); {
 		case why != "":
@@ -553,7 +577,7 @@ var hitRiderDeferredRe = regexp.MustCompile(`(?i)\b(?:can give it .+ instead of 
 // Bloodied"): group 1 is the condition, judged by classifyDamageCondition.
 var judgedAlternativeRe = regexp.MustCompile(`,? or \d+(?: \([^)]*\))? [A-Za-z]+ damage (if [^.,;]+)`)
 
-var hitRiderChoiceRe = regexp.MustCompile(`(?i)choice of|determined by rolling|one of the following|\bcursed\b`)
+var hitRiderChoiceRe = regexp.MustCompile(`(?i)choice of|determined by rolling|one of the following`)
 
 // parseHitRider reads the conditions a stat-block hit gives besides its damage ("..., and the target has the Stunned condition until
 // the end of the vrock's next turn", "If the target is a Large or smaller creature, it has the Prone condition"): the same rules
@@ -666,7 +690,7 @@ func parseHitRider(desc string) (saveEffect, bool) {
 		e.Extra = strings.TrimSpace(strings.Trim(e.Extra, " .") + ". " + strings.TrimSuffix(restSave, ".") + ".")
 		e.Extra = strings.TrimPrefix(e.Extra, ". ")
 	}
-	return e, len(e.Conditions) > 0 || e.SpeedMode != "" || len(e.DisadvMode) > 0 || len(e.Effects) > 0
+	return e, len(e.Conditions) > 0 || e.SpeedMode != "" || len(e.DisadvMode) > 0 || len(e.Effects) > 0 || e.Curse != nil || e.Wound != nil
 }
 
 // parseSaveEffect reads a saving throw effect from a stat block text. ok is false when there is none.
@@ -896,6 +920,10 @@ func parseSaveEffect(text string) (saveEffect, bool) {
 	}
 	e := saveEffect{AbilityName: m[1], Ability: strings.ToLower(m[1][:3])}
 	e.DC, _ = strconv.Atoi(m[2])
+	e.NotHolding = woundGateRe.MatchString(text) // "doesn't already have an infernal wound"
+	if humanoidGateRe.MatchString(text) {        // "If the target is a Humanoid, it is subjected to the following effect": no save for another type
+		e.OnlyType = "humanoid"
+	}
 	head := text
 	if i := strings.Index(head, "Failure"); i >= 0 {
 		head = head[:i]
@@ -960,7 +988,7 @@ func parseSaveEffect(text string) (saveEffect, bool) {
 	if both != "" && (e.Drain == nil || strings.Trim(hpMaxDrainSentenceRe.ReplaceAllString(both, ""), " .") != "") {
 		var a saveEffect
 		left := a.readRider(both)
-		if len(a.Conditions) > 0 || a.SpeedMode != "" || len(a.DisadvMode) > 0 || len(a.Effects) > 0 {
+		if len(a.Conditions) > 0 || a.SpeedMode != "" || len(a.DisadvMode) > 0 || len(a.Effects) > 0 || a.Curse != nil || a.Wound != nil {
 			e.Always = &a // applied to every target that rolled the save (giveAlways); only the rest of the text is the GM's
 			if len(left) > 0 {
 				extra = append(extra, "Failure or Success: "+strings.Join(left, ". "))
@@ -1211,6 +1239,32 @@ func (e saveEffect) dropToZero(lobby, tid int, apply bool) string {
 }
 
 func applySaveEffect(lobbyID int, source string, e saveEffect, targets []int, apply bool) (lines []string, immuneAfter []int) {
+	if e.Wound != nil && e.NotHolding { // a creature that already has the wound is not subjected to it: no save
+		var kept []int
+		for _, t := range targets {
+			if holdsWound(lobbyID, t) {
+				lines = append(lines, fmt.Sprintf("%s already has a wound: not subjected to %s's effect, no saving throw.", creatureName(lobbyID, t), source))
+			} else {
+				kept = append(kept, t)
+			}
+		}
+		if targets = kept; len(targets) == 0 {
+			return lines, nil
+		}
+	}
+	if e.OnlyType != "" { // a gate on the target's creature type: another type is not subjected to the effect and rolls nothing
+		var kept []int
+		for _, t := range targets {
+			if ct := creatureTypeOf(lobbyID, t); ct == "" || slices.Contains(creatureTypeWords(ct), e.OnlyType) {
+				kept = append(kept, t)
+			} else {
+				lines = append(lines, fmt.Sprintf("%s isn't a %s: not subjected to %s's effect, no saving throw.", creatureName(lobbyID, t), titleCase(e.OnlyType), source))
+			}
+		}
+		if targets = kept; len(targets) == 0 {
+			return lines, nil
+		}
+	}
 	rolled := map[int]int{}
 	for i, p := range e.Damage {
 		rolled[i] = game.RollDamage(p.Dice, false)

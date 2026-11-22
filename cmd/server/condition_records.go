@@ -62,6 +62,7 @@ type conditionEscape struct {
 	Skill      string `json:"skill,omitempty"`
 	DC         int    `json:"dc,omitempty"`
 	UsesAction *bool  `json:"uses_action,omitempty"` // default true: the attempt takes the creature's action
+	Adjacent   bool   `json:"adjacent,omitempty"`    // a creature within 5 feet of the holder may make the attempt too (an infernal wound's stanching)
 }
 
 type conditionRecord struct {
@@ -516,6 +517,7 @@ func handleConditionEscape(w http.ResponseWriter, r *http.Request) {
 		CharacterID int `json:"character_id"`
 		RecordID    int `json:"record_id"` // the condition's record (its record_id from GET /api/conditions/active)
 		Escape      int `json:"escape"`    // which way to end it: its index in ways_to_end
+		TargetID    int `json:"target_id"` // the character that holds the condition, when it is another one within 5 feet of character_id (a way to end it that says an adjacent creature may try)
 	}
 	if !readRequest(w, r, &req) {
 		return
@@ -530,8 +532,16 @@ func handleConditionEscape(w http.ResponseWriter, r *http.Request) {
 		writeJSONStatus(w, http.StatusNotFound, map[string]interface{}{"error": "character_not_found"})
 		return
 	}
+	holder := req.CharacterID // whose condition it is: the character's own, or another one within 5 feet when the way to end it allows
+	if req.TargetID != 0 && req.TargetID != req.CharacterID {
+		holder = req.TargetID
+		if lobbyOfChar(holder) != lobby || lobby == 0 {
+			writeJSONStatus(w, http.StatusNotFound, map[string]interface{}{"error": "character_not_found", "message": "target_id is not in your campaign."})
+			return
+		}
+	}
 	var recs []conditionRecord
-	for _, rec := range loadConditionRecords(lobby, req.CharacterID) {
+	for _, rec := range loadConditionRecords(lobby, holder) {
 		if rec.ID == req.RecordID {
 			recs = append(recs, rec)
 		}
@@ -541,6 +551,16 @@ func handleConditionEscape(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	rec, esc := recs[0], recs[0].Escapes[req.Escape]
+	if holder != req.CharacterID {
+		if !esc.Adjacent {
+			writeJSONStatus(w, http.StatusConflict, map[string]interface{}{"error": "not_adjacent_way", "message": "Only the creature that holds this condition can try that way to end it."})
+			return
+		}
+		if feet, known := charDistanceFeet(lobby, req.CharacterID, holder); !known || feet > 5 {
+			writeJSONStatus(w, http.StatusConflict, map[string]interface{}{"error": "not_within_5_feet", "message": "A creature within 5 feet of the holder may try this; the battle map must show you there (or the GM rules). Nothing was rolled."})
+			return
+		}
+	}
 	if esc.usesAction() {
 		var used bool
 		db.QueryRow(`SELECT COALESCE(action_used,false) FROM characters WHERE id = $1`, req.CharacterID).Scan(&used)
@@ -562,7 +582,7 @@ func handleConditionEscape(w http.ResponseWriter, r *http.Request) {
 	}
 	// What gives the check Advantage or Disadvantage has one owner (check_2024.go): Poisoned, Frightened, riders, Sunlight Sensitivity, the
 	// holder's own words, Large Form, Powerful Build, Help
-	why := checkCtx{lobby: lobby, who: req.CharacterID, ability: esc.Ability, skill: esc.Skill, escape: true, holder: rec.SourceID}.sources()
+	why := checkCtx{lobby: lobby, who: req.CharacterID, ability: esc.Ability, skill: esc.Skill, escape: rec.Condition == "grappled", holder: rec.SourceID}.sources()
 	mod -= why.Penalty // Exhaustion and a die subtracted from the check (check_2024.go)
 	disadv, adv := why.Disadvantage(), why.Advantage()
 	roll, r1, r2, _ := rollCheckD20(adv, disadv)
@@ -577,7 +597,7 @@ func handleConditionEscape(w http.ResponseWriter, r *http.Request) {
 		resp["advantage"] = strings.Join(why.Adv, ", ")
 	}
 	if success {
-		deleteConditionRecord(lobby, req.CharacterID, rec.ID)
+		deleteConditionRecord(lobby, holder, rec.ID)
 		resp["message"] = fmt.Sprintf("%s total %d: success. The %s condition ends.", name, total, rec.Condition)
 	} else {
 		resp["message"] = fmt.Sprintf("%s total %d: failure. The %s condition continues.", name, total, rec.Condition)

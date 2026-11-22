@@ -257,6 +257,9 @@ func cantRegainHP(lobbyID, id int) (bool, string) {
 	if db == nil || lobbyID == 0 {
 		return false, ""
 	}
+	if curseHas(lobbyID, id, curseNoRegain) { // "While cursed, the target can't regain Hit Points" (curse_records_2024.go)
+		return true, "it is cursed"
+	}
 	effects, err := gatedEffectsOn(lobbyID, id, "no_healing")
 	if err != nil {
 		log.Printf("cantRegainHP: couldn't read the effects on %d in campaign %d: %v", id, lobbyID, err)
