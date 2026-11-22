@@ -34,15 +34,21 @@ func newServer(addr string) *http.Server {
 	}
 }
 
+// bodyLimitFor is the one answer to how large a request to this path may be: a portrait upload may be larger (an image in base64), the
+// rest of the server's requests are small. The cap in withProtections and the reader's (readRequest) both ask it.
+func bodyLimitFor(path string) int64 {
+	if strings.HasSuffix(path, "/portrait") {
+		return maxUploadBody
+	}
+	return maxRequestBody
+}
+
 // withProtections caps the request body and sets the security headers.
 func withProtections(next http.Handler) http.Handler {
 	next = roundGate(next) // a game action in a round outside a fight is saved as a submission (round_effects_2024.go)
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		r = overrideMethod(r) // a POST that stands for DELETE, PATCH or PUT (method_override_2024.go)
-		limit := int64(maxRequestBody)
-		if strings.HasSuffix(r.URL.Path, "/portrait") {
-			limit = maxUploadBody
-		}
+		limit := bodyLimitFor(r.URL.Path)
 		h := w.Header()
 		h.Set("X-Content-Type-Options", "nosniff")
 		h.Set("X-Frame-Options", "DENY")

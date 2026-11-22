@@ -59,6 +59,26 @@ func TestPostgresAdminPortrait(t *testing.T) {
 	}
 	good := testPNG(t, 64, 80)
 
+	// a large photo sent as base64 JSON (the admin page's way): the PNG is under 5 MB but its base64 is over the 2 MB of an ordinary request
+	var big bytes.Buffer
+	noise := image.NewRGBA(image.Rect(0, 0, 900, 900))
+	seed := uint32(12345)
+	for i := range noise.Pix {
+		seed = seed*1664525 + 1013904223
+		noise.Pix[i] = uint8(seed >> 24)
+	}
+	for i := 3; i < len(noise.Pix); i += 4 {
+		noise.Pix[i] = 255
+	}
+	png.Encode(&big, noise)
+	if big.Len() < 1700<<10 || big.Len() > 4<<20 {
+		t.Fatalf("test image is %d bytes", big.Len())
+	}
+	if c, j := upload(big.Bytes(), "large photo"); c != 200 {
+		t.Fatalf("a %d byte photo as base64 JSON: %d %v", big.Len(), c, j)
+	}
+	admin("DELETE", path, "", nil, key)
+
 	// no key, no change
 	if c, _ := admin("POST", path, "image/png", good, ""); c == 200 || hasPortrait(hero) {
 		t.Fatalf("without the key: %d, portrait %v", c, hasPortrait(hero))
@@ -117,11 +137,11 @@ func TestPostgresAdminPortrait(t *testing.T) {
 	}
 	var n int
 	db.QueryRow(`SELECT COUNT(*) FROM admin_changes WHERE kind='character' AND row_id=$1 AND field='portrait'`, hero).Scan(&n)
-	if n != 4 { // add, replace, add again, remove (the owner's own removal is not the administrator's)
-		t.Errorf("the admin change log holds %d portrait changes, want 4", n)
+	if n != 6 { // the large photo's add and remove, then add, replace, add again, remove (the owner's own removal is not the administrator's)
+		t.Errorf("the admin change log holds %d portrait changes, want 6", n)
 	}
 	var note string
-	db.QueryRow(`SELECT COALESCE(note,'') FROM admin_changes WHERE kind='character' AND row_id=$1 AND field='portrait' ORDER BY id LIMIT 1`, hero).Scan(&note)
+	db.QueryRow(`SELECT COALESCE(note,'') FROM admin_changes WHERE kind='character' AND row_id=$1 AND field='portrait' AND note = 'added for the sheet' LIMIT 1`, hero).Scan(&note)
 	if note != "added for the sheet" {
 		t.Errorf("the note is in the log: %q", note)
 	}

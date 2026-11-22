@@ -133,7 +133,11 @@ func readRequest(w http.ResponseWriter, r *http.Request, v interface{}, opts ...
 	if r != nil && r.URL != nil {
 		spec.path = r.URL.Path
 	}
-	raw, tooBig := bodyBytes(r, spec.limit)
+	limit := spec.limit
+	if spec.path != "" {
+		limit = max(limit, bodyLimitFor(spec.path))
+	}
+	raw, tooBig := bodyBytes(r, limit)
 	if tooBig {
 		writeBodyProblem(w, &bodyProblem{Status: http.StatusRequestEntityTooLarge, Code: "request_too_large",
 			Message: "The request body is too large. Nothing was changed."})
