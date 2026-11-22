@@ -15,7 +15,8 @@ body{margin:0;background:var(--bg);color:var(--ink);font:17px/1.45 -apple-system
 header{position:sticky;top:0;z-index:5;background:var(--bg);border-bottom:1px solid var(--line);padding:10px 16px}
 .top{display:flex;align-items:center;gap:10px}.top h1{font-size:19px;margin:0;flex:1}
 .seg{display:flex;background:var(--chip);border-radius:10px;padding:3px;margin-top:10px}
-.seg button{flex:1;border:0;background:transparent;padding:8px 4px;border-radius:8px;font-weight:600;color:var(--muted)}
+.seg button{flex:1;min-width:0;border:0;background:transparent;padding:8px 4px;border-radius:8px;font-weight:600;color:var(--muted)}
+@media (max-width:440px){.seg{flex-wrap:wrap}.seg button{flex:1 1 45%}}
 .seg button[aria-pressed=true]{background:var(--card);color:var(--ink);box-shadow:0 1px 3px rgba(0,0,0,.15)}
 main{padding:14px 16px;max-width:760px;margin:0 auto}
 button,input,select,textarea{font:inherit;color:inherit}
@@ -75,7 +76,7 @@ main a[target=_blank]{padding:9px 0;min-height:40px}.toggle{min-height:40px}.tog
 </style></head><body>
 <div id="toast" role="status"></div>
 <header><div class="top"><h1>Admin</h1><button class="link" id="logout" hidden>Sign out</button></div>
-<div class="seg" id="tabs" hidden><button data-tab="characters" aria-pressed="true">Characters</button><button data-tab="campaigns" aria-pressed="false">Campaigns</button><button data-tab="history" aria-pressed="false">History</button></div></header>
+<div class="seg" id="tabs" hidden><button data-tab="characters" aria-pressed="true">Characters</button><button data-tab="campaigns" aria-pressed="false">Campaigns</button><button data-tab="accounts" aria-pressed="false">Accounts</button><button data-tab="history" aria-pressed="false">History</button></div></header>
 <main id="main"></main>
 <div class="savebar" id="savebar"><div class="row"><input id="reason" placeholder="Reason (optional)"><button class="btn" id="discard">Undo</button><button class="btn primary" id="save">Save</button></div></div>
 <script>
@@ -103,7 +104,7 @@ Array.prototype.forEach.call(document.querySelectorAll('#tabs button'),function(
 var q='',which='';
 function showList(){hideSave();pending={};M.textContent='';window.scrollTo(0,0);
   if(tab==='history')return showHistory();
-  var s=el('div',{'class':'search'});var i=el('input',{type:'search',placeholder:tab==='characters'?'Search name, player or id':'Search name, GM or id'});i.value=q;
+  var s=el('div',{'class':'search'});var i=el('input',{type:'search',placeholder:tab==='characters'?'Search name, player or id':(tab==='accounts'?'Search name, email or id':'Search name, GM or id')});i.value=q;
   var sel=el('select');[['','Active'],['only','Deleted'],['include','All']].forEach(function(o){var op=el('option',{value:o[0]},o[1]);if(o[0]===which)op.selected=true;sel.appendChild(op)});
   add(s,i,sel);M.appendChild(s);var box=el('div');M.appendChild(box);
   var t;i.oninput=function(){clearTimeout(t);t=setTimeout(function(){q=i.value;load()},300)};sel.onchange=function(){which=sel.value;load()};
@@ -113,9 +114,12 @@ function showList(){hideSave();pending={};M.textContent='';window.scrollTo(0,0);
     list.forEach(function(x){var b=el('button',{'class':'item'});var title=el('b',null,x.name);
       if(x.deleted)title.appendChild(el('span',{'class':'badge del'},'Deleted'));
       if(tab==='campaigns'&&!x.deleted)title.appendChild(el('span',{'class':'badge'+(x.status==='active'?' on':'')},x.status));
-      var sub=tab==='characters'?('Level '+x.level+' '+cap(x.species)+' '+cap(x.class)+' · '+(x.owner||'no player')+(x.campaign?' · '+x.campaign:'')):('GM '+(x.gm||'none')+' · '+x.players+' of '+x.max_players+' players');
+      var sub=tab==='characters'?('Level '+x.level+' '+cap(x.species)+' '+cap(x.class)+' · '+(x.owner||'no player')+(x.campaign?' · '+x.campaign:'')):
+        (tab==='accounts'?((x.email&&x.email!==x.name?x.email:'no email')+' · '+x.characters+' character'+(x.characters===1?'':'s')+(x.campaigns?' · GM of '+x.campaigns:'')+(x.is_moderator?' · moderator':'')+(x.last_seen?' · seen '+x.last_seen:'')):
+        ('GM '+(x.gm||'none')+' · '+x.players+' of '+x.max_players+' players'));
+      if(tab==='accounts'&&x.is_moderator&&!x.deleted)title.appendChild(el('span',{'class':'badge on'},'Moderator'));
       add(b,title,el('span',null,sub));
-      box.appendChild(swipeRow(b,x.deleted,function(){tab==='characters'?openCharacter(x.id):openCampaign(x.id)},function(row){quickAction(x,row,load)}))})}).catch(fail)}
+      box.appendChild(swipeRow(b,x.deleted,function(){tab==='characters'?openCharacter(x.id):(tab==='accounts'?openAccount(x.id):openCampaign(x.id))},function(row){quickAction(x,row,load)}))})}).catch(fail)}
   load()}
 
 // ---------- swipe a row left: a red Delete (or, for a deleted row, a green Restore) slides out from under it
@@ -142,7 +146,7 @@ function swipeRow(item,deleted,onOpen,onAct){var W=96;var w=el('div',{'class':'s
   item.addEventListener('keydown',function(e){if(e.key==='Delete'||e.key==='Backspace'){e.preventDefault();open();a.focus()}});
   a.onclick=act;add(w,a,item);return w}
 // Delete (or restore) from the list, with Undo; the row folds away and the list reloads.
-function quickAction(x,row,reload){var t=tab,kind=t==='characters'?'character':'campaign',verb=x.deleted?'restore':'delete';
+function quickAction(x,row,reload){var t=tab,kind=t==='characters'?'character':(t==='accounts'?'account':'campaign'),verb=x.deleted?'restore':'delete';
   api('POST','/api/admin/'+t+'/'+x.id+'/'+verb).then(function(r){campaignsCache=null;fold(row,reload);
     if(verb==='delete')undoToast(cap(kind)+' '+x.name+' deleted.',function(){api('POST','/api/admin/'+t+'/'+x.id+'/restore').then(function(r2){toast(r2.message||'Restored.');campaignsCache=null;reload()}).catch(fail)});
     else toast(r.message||'Restored.')}).catch(function(e){row.querySelector('.act').disabled=false;row.close();fail(e)})}
@@ -159,9 +163,9 @@ function setField(f,v){if(same(v,orig[f]))delete pending[f];else pending[f]=v;va
   Array.prototype.forEach.call(document.querySelectorAll('[data-f]'),function(w){w.classList.toggle('changed',w.getAttribute('data-f') in pending)})}
 function hideSave(){document.getElementById('savebar').classList.remove('show');document.getElementById('reason').value=''}
 document.getElementById('discard').onclick=function(){pending={};hideSave();reopen()};
-document.getElementById('save').onclick=function(){if(!dirty())return;var path=tab==='characters'?'/api/admin/characters/':'/api/admin/campaigns/';
+document.getElementById('save').onclick=function(){if(!dirty())return;var path='/api/admin/'+tab+'/';
   api('POST',path+curId,{set:pending,note:document.getElementById('reason').value}).then(function(r){toast(r.changed.length?'Saved':'Nothing changed');pending={};hideSave();campaignsCache=null;reopen()}).catch(fail)};
-function reopen(){tab==='characters'?openCharacter(curId):openCampaign(curId)}
+function reopen(){tab==='characters'?openCharacter(curId):(tab==='accounts'?openAccount(curId):openCampaign(curId))}
 function fieldWrap(label,f){var w=el('div',{'class':'f'});if(f)w.setAttribute('data-f',f);if(label)w.appendChild(el('label',null,label));return w}
 function text(label,f,opt){opt=opt||{};var w=fieldWrap(label,f);var i=opt.area?el('textarea'):el('input',{type:opt.num?'number':'text',inputmode:opt.num?'numeric':'text'});
   var v=orig[f];i.value=v===null||v===undefined?'':v;if(opt.area)i.rows=opt.rows||5;
@@ -279,6 +283,31 @@ function inventory(c){var s=section('Inventory');var w=el('div',{'data-f':'inven
     var ab=el('button',{'class':'btn small'},'Add');ab.onclick=function(){var nm=an.value.trim();if(!nm)return;var it={id:'a'+Date.now().toString(36),name:nm,location:'worn',source:'admin'};var qv=Number(aq.value)||1;if(qv>1)it.quantity=qv;inv.push(it);setField('inventory',inv);draw()};
     add(ar,an,aq,ab);w.appendChild(ar);w.appendChild(el('p',{'class':'muted small'},'Use SRD item names: the rules look items up by name. Removing an item doesn’t unequip it (see the equipped_ fields under Advanced).'))}
   draw();return s}
+
+// ---------- account
+function openAccount(id){curId=id;pending={};hideSave();
+  api('GET','/api/admin/accounts/'+id).then(function(j){var a=j.account;orig=JSON.parse(JSON.stringify(a));if(!/@/.test(orig.email||''))orig.email='';M.textContent='';window.scrollTo(0,0);M.appendChild(back());var del=!!a.deleted_at;
+    var chars=j.characters||[],camps=j.campaigns||[];
+    var head=headCard(a.name,del,a.is_moderator?el('span',{'class':'badge on'},'Moderator'):null,['Account '+a.id+' · '+(a.email&&a.email!==a.name?a.email:'no email')+(a.email_verified?' (verified)':''),
+      'Joined '+String(a.created_at||'').slice(0,10)+(a.last_seen?' · last seen '+String(a.last_seen).slice(0,16).replace('T',' '):''),chars.filter(function(c){return!c.deleted}).length+' character(s) · GM of '+camps.length+' campaign(s)']);
+    M.appendChild(head);
+    if(del){var rc=el('div',{'class':'card'});add(rc,el('p',null,'This account is deleted: it cannot sign in and its tokens are on hold, with nothing erased.'+(a.deleted_by?' Deleted by '+a.deleted_by+'.':'')+' Restoring brings back its sign-in and the characters that were hidden with it.'));
+      var rb=el('button',{'class':'btn primary'},'Restore account');rb.onclick=function(){if(confirm('Restore this account?'))api('POST','/api/admin/accounts/'+id+'/restore').then(function(r){toast(r.message);campaignsCache=null;openAccount(id)}).catch(fail)};rc.appendChild(rb);M.appendChild(rc);return}
+    var s1=section('Details',true);
+    add(s1,text('Name','name'),text('Email (an account without one signs in by token only)','email'),toggle('Verified','verified'),toggle('Email verified','email_verified'),toggle('Moderator','is_moderator'));M.appendChild(s1);
+    M.appendChild(tokenCard(a.id,a.name));
+    var s2=section('Characters',true);
+    chars.forEach(function(c){var r=el('div',{'class':'row inv'});var t=el('div');add(t,el('div',null,c.name+(c.deleted?' (deleted)':'')),el('div',{'class':'muted small'},'Level '+c.level+' '+cap(c.class)+(c.campaign?' · '+c.campaign:'')));
+      var o=el('button',{'class':'btn small'},'Open');o.onclick=function(){if(dirty()&&!confirm('Discard unsaved changes?'))return;tab='characters';openCharacter(c.id)};add(r,t,o);s2.appendChild(r)});
+    if(!chars.length)s2.appendChild(el('p',{'class':'muted small'},'No characters.'));M.appendChild(s2);
+    var s3=section('Campaigns it runs');
+    camps.forEach(function(c){var r=el('div',{'class':'row inv'});var t=el('div');add(t,el('div',null,c.name),el('div',{'class':'muted small'},cap(c.status)));
+      var o=el('button',{'class':'btn small'},'Open');o.onclick=function(){if(dirty()&&!confirm('Discard unsaved changes?'))return;tab='campaigns';openCampaign(c.id)};add(r,t,o);s3.appendChild(r)});
+    if(!camps.length)s3.appendChild(el('p',{'class':'muted small'},'It runs no campaign.'));M.appendChild(s3);
+    M.appendChild(advanced(a,j.field_types,j.locked_fields));
+    var dz=el('div',{'class':'card'});dz.appendChild(el('h3',null,'Delete'));dz.appendChild(el('p',{'class':'muted small'},'Hides the account: it can no longer sign in, and its characters are hidden with it. Nothing is erased; you can restore it here. An account that is the GM of a campaign can’t be deleted until that campaign is deleted or has another GM.'));
+    var db=el('button',{'class':'btn danger'},'Delete account');db.onclick=function(){if(confirm('Delete '+a.name+' and hide its '+chars.filter(function(c){return!c.deleted}).length+' character(s)? You can restore it later.'))api('POST','/api/admin/accounts/'+id+'/delete').then(function(r){toast(r.message);campaignsCache=null;openAccount(id)}).catch(fail)};dz.appendChild(db);M.appendChild(dz)
+  }).catch(fail)}
 
 // ---------- campaign
 function openCampaign(id){curId=id;pending={};hideSave();

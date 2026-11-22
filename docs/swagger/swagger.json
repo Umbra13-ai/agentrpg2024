@@ -7826,8 +7826,8 @@
     "tags": [
      "Admin"
     ],
-    "summary": "Find accounts",
-    "description": "Needs the X-Admin-Key header (the server's ADMIN_KEY). By name or id, to choose a character's player or a campaign's GM.",
+    "summary": "List accounts",
+    "description": "Needs the X-Admin-Key header (the server's ADMIN_KEY). Every change is written to the admin change log. By name, email or id (also how the admin page chooses a character's player or a campaign's GM); deleted accounts only with deleted.",
     "responses": {
      "200": {
       "description": "Success",
@@ -7838,14 +7838,38 @@
           "accounts": {
            "items": {
             "properties": {
+             "campaigns": {
+              "type": "integer"
+             },
              "characters": {
               "type": "integer"
+             },
+             "created_at": {
+              "type": "string"
+             },
+             "deleted": {
+              "type": "boolean"
+             },
+             "email": {
+              "type": "string"
+             },
+             "email_verified": {
+              "type": "boolean"
              },
              "id": {
               "type": "integer"
              },
+             "is_moderator": {
+              "type": "boolean"
+             },
+             "last_seen": {
+              "type": "string"
+             },
              "name": {
               "type": "string"
+             },
+             "verified": {
+              "type": "boolean"
              }
             },
             "type": "object"
@@ -7864,9 +7888,305 @@
       "name": "q",
       "in": "query",
       "required": false,
-      "description": "a name or an id",
+      "description": "search a name, an email or an id",
       "schema": {
        "type": "string"
+      }
+     },
+     {
+      "name": "deleted",
+      "in": "query",
+      "required": false,
+      "description": "include or only",
+      "schema": {
+       "type": "string"
+      }
+     }
+    ]
+   }
+  },
+  "/api/admin/accounts/{id}": {
+   "get": {
+    "tags": [
+     "Admin"
+    ],
+    "summary": "One account, every field but its secrets",
+    "description": "Needs the X-Admin-Key header (the server's ADMIN_KEY). Every change is written to the admin change log. Also its characters (the ones hidden with it too) and the campaigns it runs. The password hash, salt and verification code are never sent.",
+    "responses": {
+     "200": {
+      "description": "Success",
+      "content": {
+       "application/json": {
+        "schema": {
+         "properties": {
+          "campaign_name": {
+           "type": "string"
+          },
+          "characters": {
+           "items": {
+            "properties": {
+             "class": {
+              "type": "string"
+             },
+             "id": {
+              "type": "integer"
+             },
+             "level": {
+              "type": "integer"
+             },
+             "name": {
+              "type": "string"
+             },
+             "owner": {
+              "type": "string"
+             }
+            },
+            "type": "object"
+           },
+           "type": "array"
+          },
+          "field_types": {
+           "additionalProperties": {
+            "type": "string"
+           },
+           "properties": {},
+           "type": "object"
+          },
+          "gm_name": {
+           "type": "string"
+          },
+          "locked_fields": {
+           "additionalProperties": {
+            "type": "boolean"
+           },
+           "properties": {},
+           "type": "object"
+          },
+          "owner_name": {
+           "type": "string"
+          }
+         },
+         "type": "object"
+        }
+       }
+      }
+     }
+    },
+    "parameters": [
+     {
+      "name": "id",
+      "in": "path",
+      "required": true,
+      "description": "The account's id",
+      "schema": {
+       "type": "integer"
+      }
+     }
+    ]
+   },
+   "post": {
+    "tags": [
+     "Admin"
+    ],
+    "summary": "Edit an account",
+    "description": "Needs the X-Admin-Key header (the server's ADMIN_KEY). Every change is written to the admin change log. {\"set\": {\"field\": value}, \"note\": \"why\"}: a name (1 to 64 characters, unused), an email (valid, unused), verified, email_verified, is_moderator ... The reply of GET lists field_types and locked_fields.",
+    "responses": {
+     "400": {
+      "description": "The body was refused (nothing was changed): unknown_field, wrong_type, invalid_json, body_required or id_mismatch, with the fields the request takes",
+      "content": {
+       "application/json": {
+        "schema": {
+         "properties": {
+          "error": {
+           "type": "string"
+          },
+          "fields": {
+           "items": {
+            "type": "string"
+           },
+           "type": "array"
+          },
+          "message": {
+           "type": "string"
+          },
+          "unknown": {
+           "items": {
+            "type": "string"
+           },
+           "type": "array"
+          }
+         },
+         "type": "object"
+        }
+       }
+      }
+     },
+     "200": {
+      "description": "Success",
+      "content": {
+       "application/json": {
+        "schema": {
+         "properties": {
+          "changed": {
+           "items": {
+            "type": "string"
+           },
+           "type": "array"
+          },
+          "characters": {
+           "items": {
+            "properties": {
+             "class": {
+              "type": "string"
+             },
+             "id": {
+              "type": "integer"
+             },
+             "level": {
+              "type": "integer"
+             },
+             "name": {
+              "type": "string"
+             },
+             "owner": {
+              "type": "string"
+             }
+            },
+            "type": "object"
+           },
+           "type": "array"
+          },
+          "message": {
+           "type": "string"
+          },
+          "success": {
+           "type": "boolean"
+          }
+         },
+         "type": "object"
+        }
+       }
+      }
+     }
+    },
+    "parameters": [
+     {
+      "name": "id",
+      "in": "path",
+      "required": true,
+      "description": "The account's id",
+      "schema": {
+       "type": "integer"
+      }
+     }
+    ],
+    "requestBody": {
+     "required": true,
+     "content": {
+      "application/json": {
+       "schema": {
+        "type": "object",
+        "properties": {
+         "add_character": {
+          "description": "a campaign: the id of a character to put in it"
+         },
+         "note": {
+          "description": "why: written to the admin change log"
+         },
+         "remove_character": {
+          "description": "a campaign: the id of a character to take out of it"
+         },
+         "set": {
+          "description": "{\"field\": value}: the columns to change (the GET of the row lists field_types and locked_fields)"
+         }
+        }
+       },
+       "example": {
+        "add_character": "...",
+        "note": "...",
+        "remove_character": "...",
+        "set": "..."
+       }
+      }
+     }
+    }
+   }
+  },
+  "/api/admin/accounts/{id}/delete": {
+   "post": {
+    "tags": [
+     "Admin"
+    ],
+    "summary": "Delete an account (hide; restorable)",
+    "description": "Needs the X-Admin-Key header (the server's ADMIN_KEY). Every change is written to the admin change log. The account can no longer sign in (its tokens and keys are on hold) and its characters are deleted with it. Refused while it is the GM of a campaign. Takes no request body.",
+    "responses": {
+     "200": {
+      "description": "Success",
+      "content": {
+       "application/json": {
+        "schema": {
+         "properties": {
+          "message": {
+           "type": "string"
+          },
+          "success": {
+           "type": "boolean"
+          }
+         },
+         "type": "object"
+        }
+       }
+      }
+     }
+    },
+    "parameters": [
+     {
+      "name": "id",
+      "in": "path",
+      "required": true,
+      "description": "The account's id",
+      "schema": {
+       "type": "integer"
+      }
+     }
+    ]
+   }
+  },
+  "/api/admin/accounts/{id}/restore": {
+   "post": {
+    "tags": [
+     "Admin"
+    ],
+    "summary": "Restore a deleted account",
+    "description": "Needs the X-Admin-Key header (the server's ADMIN_KEY). Every change is written to the admin change log. Its sign-in comes back with its tokens, and the characters hidden with it are restored. Takes no request body.",
+    "responses": {
+     "200": {
+      "description": "Success",
+      "content": {
+       "application/json": {
+        "schema": {
+         "properties": {
+          "message": {
+           "type": "string"
+          },
+          "success": {
+           "type": "boolean"
+          }
+         },
+         "type": "object"
+        }
+       }
+      }
+     }
+    },
+    "parameters": [
+     {
+      "name": "id",
+      "in": "path",
+      "required": true,
+      "description": "The account's id",
+      "schema": {
+       "type": "integer"
       }
      }
     ]

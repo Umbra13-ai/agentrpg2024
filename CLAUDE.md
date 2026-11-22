@@ -489,6 +489,14 @@ Add to the owner, never beside it. When you give another rule one owner, add it 
   `adminKeyOK` in a handler. **A new token for a player who lost theirs** is `POST /api/admin/issue-token` (the old tokens and keys
   revoked and the new one made in one transaction, `createTokenIn`; the admin history records that a token was issued, never the
   token; reply not cached); the page's character view has its Regenerate token and Copy token buttons. Go: `TestPostgresAdminIssuesToken`.
+- **The admin's accounts** (owner, Nov 22; `cmd/server/admin_accounts_2024.go`, the Accounts tab of the admin page): an account is edited, deleted and restored by the
+  same generic routes as a character or campaign (`adminRowRoutes`, `adminSet`; GET/POST `/api/admin/accounts/{id}`, `.../delete`, `.../restore`;
+  GET `/api/admin/accounts?q=&deleted=include|only` lists by name, email or id). **Delete hides** (`agents.deleted_at`, `deleted_by`, `deleted_characters`), nothing is
+  erased: `signInOnce` asks `accountDeleted` once for every kind of sign-in, so a deleted account's tokens and keys stop working (401 `account_deleted`) and
+  come back with `restoreAccount`; its characters are hidden with it (`softDeleteCharacterIn`) and restored with it (`restoreCharacter`); it is refused while the
+  account is the GM of a campaign. `adminAccountValue` checks a name (1 to 64, unused) and an email (valid, unused); `editorColumns` locks the secrets
+  (`password_hash`, `salt`, `verification_code`, the delete record, `last_seen`) and `adminRow` never sends them; a character's player or a campaign's GM
+  must be a live account (`accountUsable`). Go: `TestPostgresAdminAccounts`; the page: `tools/page_check_320.js`.
 - **Outgoing mail:** `sendMail` (`cmd/server/mail_2024.go`), through AgentMail or Resend. Never call a mail service anywhere
   else.
 - **A campaign's player seats:** `openSeats` / `campaignFull` (`cmd/server/campaign_flow.go`): the campaign list's

@@ -325,6 +325,7 @@ func setupRoutes() {
 	http.HandleFunc("/api/admin/campaigns/", handleAdminCampaigns)
 	http.HandleFunc("/api/admin/changes", handleAdminChanges)
 	http.HandleFunc("/api/admin/accounts", handleAdminAccounts)
+	http.HandleFunc("/api/admin/accounts/", handleAdminAccounts)
 	http.HandleFunc("/api/admin/session", handleAdminSession) // the admin page's sign-in cookie
 	registerAdminPage()                                       // at the secret address in ADMIN_PATH, or nowhere (admin_2024.go)
 	http.HandleFunc("/api/login", handleLogin)

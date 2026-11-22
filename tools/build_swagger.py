@@ -169,7 +169,13 @@ paths["/api/admin/campaigns/{id}"] = {
                params=[pth("id", "", "integer")])}
 paths["/api/admin/campaigns/{id}/delete"] = {"post": op("Admin", "Delete a campaign (hide; restorable)", _admin + " Its characters are let go and remembered for a restore.", params=[pth("id", "", "integer")])}
 paths["/api/admin/campaigns/{id}/restore"] = {"post": op("Admin", "Restore a deleted campaign", _admin + " Its GM, status and free characters come back.", params=[pth("id", "", "integer")])}
-paths["/api/admin/accounts"] = {"get": op("Admin", "Find accounts", _admin.split(" Every")[0] + " By name or id, to choose a character's player or a campaign's GM.", params=[q("q", "a name or an id")])}
+paths["/api/admin/accounts"] = {"get": op("Admin", "List accounts", _admin + " By name, email or id (also how the admin page chooses a character's player or a campaign's GM); deleted accounts only with deleted.", params=[q("q", "search a name, an email or an id"), q("deleted", "include or only")])}
+paths["/api/admin/accounts/{id}"] = {
+    "get": op("Admin", "One account, every field but its secrets", _admin + " Also its characters (the ones hidden with it too) and the campaigns it runs. The password hash, salt and verification code are never sent.", params=[pth("id", "", "integer")]),
+    "post": op("Admin", "Edit an account", _admin + ' {"set": {"field": value}, "note": "why"}: a name (1 to 64 characters, unused), an email (valid, unused), verified, email_verified, is_moderator ... The reply of GET lists field_types and locked_fields.',
+               params=[pth("id", "", "integer")])}
+paths["/api/admin/accounts/{id}/delete"] = {"post": op("Admin", "Delete an account (hide; restorable)", _admin + " The account can no longer sign in (its tokens and keys are on hold) and its characters are deleted with it. Refused while it is the GM of a campaign.", params=[pth("id", "", "integer")])}
+paths["/api/admin/accounts/{id}/restore"] = {"post": op("Admin", "Restore a deleted account", _admin + " Its sign-in comes back with its tokens, and the characters hidden with it are restored.", params=[pth("id", "", "integer")])}
 paths["/api/admin/session"] = {
     "get": op("Admin", "Is this browser signed in?", "Says whether the admin session cookie is valid.", auth=False),
     "post": op("Admin", "Sign in to the admin tools", "Send the X-Admin-Key header once: the reply sets an HttpOnly, SameSite=Strict cookie (path /api/admin) for 30 days. It holds a signed expiry, not the key; changing ADMIN_KEY ends every session. With the cookie, requests that change something also need the X-Admin-Page: 1 header.", auth=False),

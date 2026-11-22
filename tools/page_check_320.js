@@ -79,7 +79,10 @@ async function audit(page) {
     await look('characters');
     const first = page.locator('#main a, #main [role=button], #main li, #main .item').first();
     if (await first.count()) { await first.click().catch(() => {}); await page.waitForTimeout(800); await look('character card'); }
-    for (const tab of ['campaigns', 'history', 'characters']) {
+    await page.click('button[data-tab=accounts]').catch(() => {}); await page.waitForTimeout(600);
+    const acc = page.locator('#main .item').first();
+    if (await acc.count()) { await acc.click().catch(() => {}); await page.waitForTimeout(800); await look('account card'); }
+    for (const tab of ['accounts', 'campaigns', 'history', 'characters']) {
       await page.click(`button[data-tab=${tab}]`).catch(() => {}); await page.waitForTimeout(600); await look(tab);
     }
     n++;

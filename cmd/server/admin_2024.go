@@ -449,7 +449,8 @@ func tableColumns(table string) map[string]string {
 var editorColumns = map[string]string{
 	"id": "never", "created_at": "never", "avatar": "never", "password_hash": "never", "watch_password_hash": "never",
 	"deleted_at": "never", "deleted_owner": "never", "deleted_name": "never", "deleted_lobby": "never", "deleted_by": "never",
-	"deleted_dm": "never", "deleted_status": "never", "deleted_members": "never",
+	"deleted_dm": "never", "deleted_status": "never", "deleted_members": "never", "deleted_characters": "never",
+	"salt": "never", "verification_code": "never", "verification_expires": "never", "last_seen": "never", // an account's secrets and the server's own record
 	"class_levels": "never", "subclasses": "never", "hit_dice_spent_by_type": "never",
 	"agent_id": "admin", "lobby_id": "admin", "class": "admin", "subclass": "admin",
 	"schedule_state": "never", "pending_capacity": "never", // the GM's PATCH /api/campaigns/{id}/schedule (schedule_2024.go)
@@ -522,6 +523,20 @@ func adminSet(table, kind string, id int, set map[string]interface{}, note strin
 		}
 		if kind == "campaign" && k == "status" && set[k] == "deleted" {
 			return nil, fmt.Errorf("use the delete button to delete a campaign")
+		}
+		if kind == "account" { // a name or an email: checked, and stored as the owner of the account would
+			v, err := adminAccountValue(id, k, set[k])
+			if err != nil {
+				return nil, err
+			}
+			set[k] = v
+		}
+		if (kind == "character" && k == "agent_id") || (kind == "campaign" && k == "dm_id") {
+			if text, isNum := set[k].(float64); isNum {
+				if err := accountUsable(int(text)); err != nil {
+					return nil, fmt.Errorf("%s: %w", k, err)
+				}
+			}
 		}
 	}
 	tx, err := db.Begin()
@@ -614,7 +629,7 @@ func adminSet(table, kind string, id int, set map[string]interface{}, note strin
 // adminRow: one row as JSON (bytea columns left out).
 func adminRow(table string, id int) map[string]interface{} {
 	var raw []byte
-	if db.QueryRow(fmt.Sprintf(`SELECT to_jsonb(t) - 'avatar' - 'watch_password_hash' FROM %s t WHERE id = $1`, table), id).Scan(&raw) != nil {
+	if db.QueryRow(fmt.Sprintf(`SELECT to_jsonb(t) - 'avatar' - 'watch_password_hash' - 'password_hash' - 'salt' - 'verification_code' FROM %s t WHERE id = $1`, table), id).Scan(&raw) != nil {
 		return nil
 	}
 	out := map[string]interface{}{}
@@ -747,9 +762,12 @@ func adminRowRoutes(w http.ResponseWriter, r *http.Request, table, kind string, 
 			return
 		}
 		var err error
-		if kind == "character" {
+		switch kind {
+		case "character":
 			err = softDeleteCharacter(id, "admin")
-		} else {
+		case "account":
+			err = softDeleteAccount(id, "admin")
+		default:
 			err = softDeleteCampaign(id, "admin")
 		}
 		if answerHelperDBFailure(w, err) {
@@ -766,9 +784,12 @@ func adminRowRoutes(w http.ResponseWriter, r *http.Request, table, kind string, 
 		}
 		var msg string
 		var err error
-		if kind == "character" {
+		switch kind {
+		case "character":
 			msg, err = restoreCharacter(id, "admin")
-		} else {
+		case "account":
+			msg, err = restoreAccount(id, "admin")
+		default:
 			msg, err = restoreCampaign(id, "admin")
 		}
 		if answerHelperDBFailure(w, err) {
@@ -787,7 +808,11 @@ func adminRowRoutes(w http.ResponseWriter, r *http.Request, table, kind string, 
 		}
 		out := map[string]interface{}{kind: row, "field_types": tableColumns(table), "locked_fields": adminLocked()}
 		var n1, n2 string
-		if kind == "campaign" {
+		if kind == "account" {
+			for k, v := range adminAccountExtras(id) {
+				out[k] = v
+			}
+		} else if kind == "campaign" {
 			out["characters"] = adminCampaignMembers(id)
 			db.QueryRow(`SELECT COALESCE(a.name,'') FROM lobbies l LEFT JOIN agents a ON a.id = COALESCE(l.dm_id, l.deleted_dm) WHERE l.id = $1`, id).Scan(&n1)
 			out["gm_name"] = n1
@@ -982,30 +1007,4 @@ func handleAdminPage(w http.ResponseWriter, r *http.Request) {
 	w.Header().Set("Cache-Control", "no-store")
 	w.Header().Set("X-Robots-Tag", "noindex")
 	fmt.Fprint(w, adminPageHTML)
-}
-
-// handleAdminAccounts godoc
-// handleAdminAccounts: GET /api/admin/accounts?q= finds accounts by name or id (to choose a character's player or a campaign's GM).
-// The words of these routes are written in tools/build_swagger.py; the request and the reply come from the code.
-// @Router /admin/accounts [get]
-func handleAdminAccounts(w http.ResponseWriter, r *http.Request) {
-	if !requireAdmin(w, r) {
-		return
-	}
-	q := strings.TrimSpace(r.URL.Query().Get("q"))
-	rows, err := db.Query(`SELECT id, name, (SELECT COUNT(*) FROM characters WHERE agent_id = agents.id) FROM agents
-		WHERE LOWER(name) LIKE '%' || LOWER($1) || '%' OR id::text = $1 ORDER BY (LOWER(name) = LOWER($1)) DESC, id DESC LIMIT 20`, q)
-	if err != nil {
-		writeDBError(w, err, "the accounts")
-		return
-	}
-	defer rows.Close()
-	list := []map[string]interface{}{}
-	for rows.Next() {
-		var id, n int
-		var name string
-		rows.Scan(&id, &name, &n)
-		list = append(list, map[string]interface{}{"id": id, "name": name, "characters": n})
-	}
-	writeJSONStatus(w, http.StatusOK, map[string]interface{}{"accounts": list})
 }

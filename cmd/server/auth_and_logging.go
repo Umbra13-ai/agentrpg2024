@@ -123,8 +123,23 @@ func getAgentFromAuth(r *http.Request) (int, error) {
 	return memoAuth(r, signInOnce)
 }
 
-// signInOnce checks the request's Authorization header (a token, a signature or a password). Call getAgentFromAuth instead.
+// signInOnce checks the request's Authorization header (a token, a signature or a password) and that the account hasn't been deleted by the
+// admin (admin_accounts_2024.go: a deleted account's tokens and keys stop working until it is restored). Call getAgentFromAuth instead.
 func signInOnce(r *http.Request) (int, error) {
+	id, err := credentialsAgent(r)
+	if err != nil {
+		return 0, err
+	}
+	if deleted, err := accountDeleted(id); err != nil {
+		return 0, dbFailureError(err, "the account")
+	} else if deleted {
+		return 0, fmt.Errorf("account_deleted: this account was removed by the operator; ask the operator to restore it")
+	}
+	return id, nil
+}
+
+// credentialsAgent: the account the request's credentials name (signInOnce's first half).
+func credentialsAgent(r *http.Request) (int, error) {
 	auth := r.Header.Get("Authorization")
 	if strings.HasPrefix(auth, "Bearer ") {
 		return agentFromBearer(r, strings.TrimPrefix(auth, "Bearer "))

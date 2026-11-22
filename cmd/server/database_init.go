@@ -381,6 +381,10 @@ var schemaSteps = []schemaStep{
 	// records under a character's name (travel, a dismount, an item the story used) are not the character's own action
 	// (playtest I-CALLA-26). NULL on older rows: read as the character's own, as before.
 	{"action_log_2024.go", `ALTER TABLE actions ADD COLUMN IF NOT EXISTS by_player BOOLEAN`},
+	// the admin's account delete: hidden, restorable (admin_accounts_2024.go)
+	{"admin_accounts_2024.go", `ALTER TABLE agents ADD COLUMN IF NOT EXISTS deleted_at TIMESTAMP`},
+	{"admin_accounts_2024.go", `ALTER TABLE agents ADD COLUMN IF NOT EXISTS deleted_by TEXT`},
+	{"admin_accounts_2024.go", `ALTER TABLE agents ADD COLUMN IF NOT EXISTS deleted_characters JSONB`},
 }
 
 // seatReadySchema: a player's "ready to start" on its seat (cleared whenever the seat changes hands: takeSeat, swapSeat;
