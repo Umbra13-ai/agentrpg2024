@@ -65,3 +65,50 @@ func TestPostgresMonsterCastDirectSpells(t *testing.T) {
 		t.Errorf("Remove Curse left the curse: %s", res)
 	}
 }
+
+// The Darkness spell a monster casts at the point the GM aims on the battle map fills a 15-foot-radius Sphere of Magical Darkness there (the same rows and
+// readers as a stat block's Magical Darkness), and it ends with the caster's Concentration.
+func TestPostgresMonsterDarknessSpellAtAPoint(t *testing.T) {
+	testPostgres(t)
+	gm, _, camp, charID, _, _ := companionReactionFixture(t)
+	cp := fmt.Sprintf("/api/campaigns/%d", camp)
+	pgCall(t, "POST", cp+"/combat/add", gm, map[string]interface{}{"combatants": []map[string]interface{}{{"name": "Dark Glabrezu", "monster_key": "glabrezu", "hp": 1000, "ac": 1, "initiative": -500}}})
+	glab := monsterIDsByKeyOrName(camp, "Dark Glabrezu")[0]
+	_, state := pgCall(t, "GET", cp+"/battle-map", gm, nil)
+	req := map[string]interface{}{"map": encounterMap{Grid: []string{"................"}, Tokens: []mapToken{
+		{ID: charID, Name: "hero", Position: mapSquare{0, 0}, Size: 1}, {ID: glab, Name: "Dark Glabrezu", Position: mapSquare{12, 0}, Size: 1}}}}
+	if rev, ok := state["revision"].(string); ok {
+		req["confirmation"] = rev
+	}
+	if c, r := pgCall(t, "PUT", cp+"/battle-map", gm, req); c != 200 {
+		t.Fatalf("put map: %d %v", c, r)
+	}
+	narrate := func(extra map[string]interface{}) string {
+		ma := map[string]interface{}{"monster": "Dark Glabrezu", "action": "Spellcasting", "use": "Darkness", "target": fmt.Sprint(charID)}
+		for k, v := range extra {
+			ma[k] = v
+		}
+		_, r := pgCall(t, "POST", "/api/gm/narrate", gm, map[string]interface{}{"campaign_id": camp, "narration": "x", "monster_action": ma})
+		return fmt.Sprint(r["monster_action_result"])
+	}
+	// without a point the area can't be placed: the GM's (an open item), nothing is recorded
+	if res := narrate(nil); len(magicalDarknessRows(camp)) != 0 {
+		t.Fatalf("a Sphere was recorded with no point: %s", res)
+	}
+	pgExec(t, `DELETE FROM monster_day_uses WHERE campaign_id=$1`, camp)
+	res := narrate(map[string]interface{}{"point": []int{3, 0}})
+	rows := magicalDarknessRows(camp)
+	if len(rows) != 1 || rows[0].at == nil || *rows[0].at != (mapSquare{3, 0}) || rows[0].radius != 15 {
+		t.Fatalf("the Sphere at the point: %v / %s", rows, res)
+	}
+	if !magicalDarknessAt(camp, charID) { // the hero stands 15 feet from the point
+		t.Errorf("the hero, 15 feet from the point, is not in the Darkness")
+	}
+	if !magicalDarknessBlocksSight(camp, glab, charID) && !piercesMagicalDarkness(camp, glab) {
+		t.Errorf("a creature in the Darkness can still be seen from outside it")
+	}
+	endMonsterConcentration(camp, glab, "Dark Glabrezu", "test")
+	if len(magicalDarknessRows(camp)) != 0 {
+		t.Errorf("the Darkness outlived the caster's Concentration")
+	}
+}

@@ -1542,6 +1542,12 @@ func resolveMonsterSpellRules(r *http.Request, lobbyID, monsterID int, monsterNa
 		}
 		return []string{head + ". " + line}
 	}
+	if line, handled := castMagicalDarknessSpell(lobbyID, monsterID, slug, point, apply); handled { // the Darkness spell's Sphere (monster_darkness_2024.go)
+		if apply && !strings.Contains(line, "could not be recorded") {
+			markExecuted(r)
+		}
+		return []string{head + ". " + line}
+	}
 	// a lasting effect or a heal: the effect a character's cast of the spell has (monster_cast_effects_2024.go)
 	if lines, handled := monsterCastLasting(r, lobbyID, monsterID, sp, slug, head, level, dc, targets, selfCast, apply); handled {
 		return lines

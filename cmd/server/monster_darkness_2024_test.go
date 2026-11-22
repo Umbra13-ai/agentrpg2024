@@ -281,7 +281,7 @@ func TestPostgresDarknessAura(t *testing.T) {
 	}
 
 	// Death: the emanation ends when its anchor dies (the lazy sweep is the backstop for it).
-	if err := startMagicalDarkness(camp, id, 15); err != nil {
+	if err := startMagicalDarkness(camp, id, 15, nil); err != nil {
 		t.Fatal(err)
 	}
 	var raw []byte

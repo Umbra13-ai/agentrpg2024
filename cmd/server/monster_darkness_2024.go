@@ -25,15 +25,29 @@ const magicalDarknessRounds = 100 // 10 minutes at 6 seconds a round
 
 type magicalDarknessRow struct {
 	id, source, radius, round int
+	at                        *mapSquare // a Sphere the Darkness spell fills at a point (nil: an Emanation originating from the source's own token)
 }
 
-// startMagicalDarkness records the emanation. One row per source: a second use replaces the first.
-func startMagicalDarkness(lobbyID, sourceID, radius int) error {
+// originToken: where the darkness spreads from on the battle map: its point, else the source creature's token.
+func (r magicalDarknessRow) originToken(battle encounterMap) (mapToken, bool) {
+	if r.at != nil {
+		return pointToken(*r.at), true
+	}
+	return battle.token(r.source)
+}
+
+// startMagicalDarkness records the darkness: an Emanation originating from the source (at nil) or the Darkness spell's Sphere at a point. One row
+// per source: a second use replaces the first.
+func startMagicalDarkness(lobbyID, sourceID, radius int, at *mapSquare) error {
 	if _, err := db.Exec(`DELETE FROM combat_effects WHERE lobby_id=$1 AND kind='magical_darkness' AND source_id=$2`, lobbyID, sourceID); err != nil {
 		return err
 	}
+	text := fmt.Sprintf("radius: %d | round: %d", radius, currentRound(lobbyID))
+	if at != nil {
+		text += fmt.Sprintf(" | at: %d,%d", at.X, at.Y)
+	}
 	_, err := db.Exec(`INSERT INTO combat_effects (lobby_id, target_id, source_id, kind, text) VALUES ($1,0,$2,'magical_darkness',$3)`,
-		lobbyID, sourceID, fmt.Sprintf("radius: %d | round: %d", radius, currentRound(lobbyID)))
+		lobbyID, sourceID, text)
 	return err
 }
 
@@ -58,7 +72,10 @@ func magicalDarknessRows(lobbyID int) []magicalDarknessRow {
 		if rows.Scan(&r.id, &r.source, &text) != nil {
 			continue
 		}
-		if _, err := fmt.Sscanf(text, "radius: %d | round: %d", &r.radius, &r.round); err != nil {
+		var x, y int
+		if n, _ := fmt.Sscanf(text, "radius: %d | round: %d | at: %d,%d", &r.radius, &r.round, &x, &y); n == 4 {
+			r.at = &mapSquare{X: x, Y: y}
+		} else if _, err := fmt.Sscanf(text, "radius: %d | round: %d", &r.radius, &r.round); err != nil {
 			continue
 		}
 		if hp[r.source] <= 0 || round >= r.round+magicalDarknessRounds {
@@ -89,7 +106,7 @@ func magicalDarknessAt(lobbyID, creatureID int) bool {
 		if creatureID == r.source {
 			continue // the origin's own square is not in its Emanation (SRD 5.2.1 "Emanation")
 		}
-		origin, ok := battle.token(r.source)
+		origin, ok := r.originToken(battle)
 		if !ok {
 			continue
 		}
@@ -182,7 +199,7 @@ func magicalDarknessBlocksSight(lobbyID, viewerID, targetID int) bool {
 		return false
 	}
 	for _, r := range rows {
-		origin, ok := battle.token(r.source)
+		origin, ok := r.originToken(battle)
 		if !ok {
 			continue
 		}
@@ -236,7 +253,7 @@ func resolveMagicalDarkness(r *http.Request, lobbyID, monsterID int, entryName, 
 	if !apply {
 		return append([]string{fmt.Sprintf("%s: Magical Darkness would fill a %d-foot Emanation around %s. Nothing is established.", entryName, radius, name)}, notes...)
 	}
-	if err := startMagicalDarkness(lobbyID, monsterID, radius); err != nil {
+	if err := startMagicalDarkness(lobbyID, monsterID, radius, nil); err != nil {
 		log.Printf("magical darkness: couldn't record the emanation for %d in campaign %d: %v", monsterID, lobbyID, err)
 		return append([]string{fmt.Sprintf("%s: the Magical Darkness could not be recorded; nothing is established. Try again.", entryName)}, notes...)
 	}
@@ -247,4 +264,29 @@ func resolveMagicalDarkness(r *http.Request, lobbyID, monsterID int, entryName, 
 	}
 	markExecuted(r) // the server established it: the (1/Day) use is counted (monster_day_uses.go)
 	return append([]string{fmt.Sprintf("%s: Magical Darkness fills a %d-foot Emanation around %s. Darkvision can't penetrate it and no light illuminates it; it lasts while %s maintains Concentration, up to 10 minutes.", entryName, radius, name, name)}, notes...)
+}
+
+// castMagicalDarknessSpell: the Darkness spell (SRD 5.2.1: "magical Darkness spreads from a point within range and fills a 15-foot-radius Sphere") cast by a
+// monster at the point the GM aims (monster_action "point") on the battle map: the same rows and readers as a stat block's Magical Darkness. Without a
+// battle map or a point the area can't be placed and the cast stays the GM's (handled false).
+func castMagicalDarknessSpell(lobbyID, casterID int, slug string, point *mapSquare, apply bool) (line string, handled bool) {
+	if slug != "darkness" || point == nil {
+		return "", false
+	}
+	if _, ok := activeEncounterMap(lobbyID); !ok {
+		return "", false
+	}
+	sp := srdSpellsMemory[slug]
+	radius := sp.AoESize
+	if radius == 0 {
+		radius = 15
+	}
+	if !apply {
+		return fmt.Sprintf("Magical Darkness would fill a %d-foot-radius Sphere at the square (%d, %d). Nothing is established.", radius, point.X, point.Y), true
+	}
+	if err := startMagicalDarkness(lobbyID, casterID, radius, point); err != nil {
+		log.Printf("magical darkness: couldn't record the sphere for %d in campaign %d: %v", casterID, lobbyID, err)
+		return "The Magical Darkness could not be recorded; nothing is established. Try again.", true
+	}
+	return fmt.Sprintf("Magical Darkness fills a %d-foot-radius Sphere at the square (%d, %d). Darkvision can't penetrate it and nonmagical light can't illuminate it; it lasts while the caster maintains Concentration, up to 10 minutes.", radius, point.X, point.Y), true
 }

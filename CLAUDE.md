@@ -140,7 +140,7 @@ Report: "Wizard Scholar accepts any skill for Expertise."
   inside (the cast's targets, `POST /api/gm/obscured-area` `inside`); they end with their time, their source's Concentration
   (`endMonsterConcentrationIn` deletes them; a character's `concentrating_on`) or the GM (`end`: a strong wind or current); Blindsight
   perceives through them. A spell that makes one is a row of `obscuringSpells` (a character's and a monster's cast); a stat block entry
-  is read by `obscuringTextRe` (Ink Cloud). Magical Darkness keeps its rows (`monster_darkness_2024.go`), read through the same answer.
+  is read by `obscuringTextRe` (Ink Cloud). Magical Darkness keeps its rows (`monster_darkness_2024.go`), read through the same answer: an Emanation from its source's token, or the Darkness spell's 15-foot-radius Sphere at the point the GM aims (`castMagicalDarknessSpell`, row `at`, `originToken`; without a battle map or a point the cast stays the GM's open item). Go: `TestPostgresMonsterDarknessSpellAtAPoint`.
   **A creature's own senses and light traits** (`creature_senses_2024.go`): Darkvision "(unimpeded by magical Darkness)" in its Senses
   (the devils, `creatureUnimpededDarkvision`, read by the Magical Darkness sight model), Sunlight Sensitivity (`sunlightPenalty` while `inSunlight`: the GM's lighting `sunlight`; rows in
   `attackSources` and `saveSources`, and the monster Hide). **A monster's Hide** is rolled by `attemptMonsterHide` (`hide_2024.go`: a
