@@ -419,7 +419,7 @@ func TestDisadvantageRiderParsing(t *testing.T) {
 	}{
 		{"Failure: 22 (4d10) Poison damage, and the target has Disadvantage on saving throws to maintain Concentration until the end of its next turn.", "concentration", false, ""},
 		{"Hit: 17 (2d10) Radiant damage, and the target has Disadvantage on attack rolls until the end of its next turn.", "attacks", false, ""},
-		{"Failure: The target has Disadvantage on attack rolls and ability checks until the end of its next turn.", "attacks,checks", false, ""}, // the check owner reads the marker (check_2024.go)
+		{"Failure: The target has Disadvantage on attack rolls and ability checks until the end of its next turn.", "attacks,checks", false, ""},                              // the check owner reads the marker (check_2024.go)
 		{"Hit: 9 (2d6) Piercing damage. The target has Disadvantage on its next attack roll before the start of the warrior\u2019s next turn.", "", true, "next attack roll"}, // no SRD wording: the GM's
 		{"Hit: 17 (2d10) Radiant damage, and the target has Disadvantage on attack rolls until the end of the cyclops\u2019s next turn.", "attacks", false, ""},               // the source's turn: its marker
 		{"Failure: The target has Disadvantage on Strength-based D20 Tests and loses 1d6 damage.", "", true, "Strength-based"},
