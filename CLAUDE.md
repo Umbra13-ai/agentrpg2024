@@ -139,6 +139,9 @@ Report: "Wizard Scholar accepts any skill for Expertise."
     (`takeSpecialMoves`: Opportunity Attacks, the Speed budget, no charge for a teleport).
   - "Immediately after dealing damage to a creature that is already Bloodied" is `movementEntryRefusal`.
   - Dragging a grappled creature is `dragCost` (Abduct).
+  - A swallow is `readSwallow` / `resolveMonsterSwallow` (`monster_swallow_2024.go`): the damage once at the end of its next turn, then
+    disgorged (Giant Frog), or at the end of each of its turns (`swallowEachRe`, Giant Toad); the locked attack is `swallowLockoutRe`.
+    Go: `TestPostgresSwallowLifecycle`, `TestPostgresSwallowAtEachTurnEnd`.
   - Falling damage is `fallDamageDice` (the GM's falling damage).
   - Shape-Shift Speeds are the form owner's (`formSpeeds` / `formSpeedText`, `monster_shape_shift_2024.go`).
   - Sharing space (Swarm, Incorporeal Movement) is `markMapSpaces` in `map_spaces_2024.go`, with the turn-end hook
@@ -206,6 +209,10 @@ Add to the owner, never beside it. When you give another rule one owner, add it 
   a Legendary Action's once-a-turn sentence (`legendaryOnceSentenceRe`, LAOnce's), a judged damage alternative (`judgedAlternativeRe`),
   an entry that is only its creature's move (`onlyOwnMove`); a hit sentence that waits on a later result ("dies if it is reduced to 0
   Hit Points") goes to the GM alone, the hit's other riders still apply (`parseHitRider`). Go: `TestOwnersAppliedNotRepeatedToTheGM`.
+  **The early-game playtest set** (owner, Nov 22: the 134 monsters of CR 0 to 1, 312 entries; the only target until the owner says
+  otherwise): `TestSRDEarlyGameCoverage` (its table, `docs/SRD_EARLY_GAME_COVERAGE.md`, `SRD_EARLY_OUT`) and the route test
+  `TestPostgresEarlyGameEveryEntry`: every action, Bonus Action and Reaction through narrate's monster_action at a character, with every
+  option its entry offers in `use` and the setup its gate needs, what is stored read back; every trait in the GM's view of the fight.
 - **Attack rolls:** `game.AttackRoll` (`game/attack.go`) is the rule of an attack roll (Advantage, Disadvantage and how
   they cancel, natural 1 and 20, Critical Hits, the wording of the result line). `attackCtx` and the `attackSources`
   table (`cmd/server/attack_2024.go`) decide what gives Advantage or Disadvantage, the bonuses, the target's Armor
@@ -333,8 +340,9 @@ Add to the owner, never beside it. When you give another rule one owner, add it 
   with the record as combat_effects rows gated on that record (`gate_condition`: a no_healing row and a recurring_damage row the
   recurring owner ticks, `monster_recurring_damage_2024.go`); the record's end ends them; `conditionView`'s `effects` shows them.
   A text's damage dealt now is `immediateDamage`: never a damage "at the start (or end) of each of ... turns" (feedback log 63).
-  "While Frightened, the target has the Paralyzed condition" (`lastingEffects.Also`) is a record noted `notesEndsWith`+"frightened",
-  ended with that record by `conditionChange.remove` (the one place every record ends); Grappled's Restrained stays `linkedCondition`.
+  "While Frightened, the target has the Paralyzed condition" (`lastingEffects.Also`) and "While Deafened, the target also has Disadvantage
+  on ... attack rolls" (`DisadvAttacks`: the roll rider's `disadv_attacks` marker; ability checks have no owner yet and stay the GM's)
+  are records noted `notesEndsWith` + the condition ("frightened", "deafened"), ended with that record by `conditionChange.remove` (the one place every record ends); Grappled's Restrained stays `linkedCondition`.
   **The conditions a spell ends** (Heal, Mass Heal, Power Word Heal, Protection from Poison, Lesser and Greater Restoration's
   pick): the table `spellEndsConditions` with `endSpellConditions` (`spell_ends_conditions_2024.go`); a healing spell ends them
   before it heals (feedback log 64). A new spell that ends conditions is one row.

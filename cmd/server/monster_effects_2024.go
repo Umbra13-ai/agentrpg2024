@@ -457,7 +457,11 @@ func (e saveEffect) giveConditions(lobbyID, tid int, source string) []string {
 		parts = append(parts, titleCase(c))
 		if e.Lasting != nil && e.Lasting.Condition == c { // what it suffers while it has it, ended with the record
 			parts = append(parts, addLastingEffects(lobbyID, tid, e.SourceID, *e.Lasting, source))
-			for _, also := range e.Lasting.Also { // "While Frightened, the target has the Paralyzed condition": ends with the record
+			also := e.Lasting.Also
+			if e.Lasting.DisadvAttacks { // "While Deafened, the target also has Disadvantage on attack rolls": the roll rider's marker
+				also = append(append([]string{}, also...), "disadv_attacks")
+			}
+			for _, also := range also { // "While Frightened, the target has the Paralyzed condition": ends with the record
 				if res := addCondition(lobbyID, tid, condAdd{Condition: also, Source: source, SourceID: e.SourceID, Magical: e.IsSpell, Notes: e.Lasting.AlsoNotes}); res.Immune != "" {
 					parts = append(parts, fmt.Sprintf("not %s (%s)", also, res.Immune))
 				}
@@ -1569,8 +1573,13 @@ func resolveMonsterEffectText(r *http.Request, lobbyID, monsterID int, meta *mon
 		lines = append(lines, resolveMonsterSpell(r, lobbyID, monsterID, name, spName, lvl, dc, atk, targets, false, apply, use)...)
 		return append(lines, notes...)
 	}
-	// an entry that offers several spells ("casts Bless, Healing Word, or Sanctuary"): the GM names the one cast with use; none is guessed
-	if choices := castChoiceList(text); len(choices) >= 2 && depth == 0 {
+	// an entry that offers several spells ("casts Bless, Healing Word, or Sanctuary", a Spellcasting entry's lists): the GM names the one
+	// cast with use; none is guessed
+	choices := castChoiceList(text)
+	for _, t := range spellTiersOf(text) {
+		choices = append(choices, t.Spells...)
+	}
+	if len(choices) >= 2 && depth == 0 {
 		why := ""
 		if u := strings.TrimSpace(use); u != "" {
 			why = fmt.Sprintf(" %q isn't one of them.", u)

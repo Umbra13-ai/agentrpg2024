@@ -25,7 +25,11 @@ import (
 // targeting time: recorded open scope, GM adjudicated until the targeting gate lands.
 
 var swallowActionRe = regexp.MustCompile(`(?i)swallows an? (\w+) or smaller target it is grappling`)
+
+// swallowAcidRe: the damage of the swallowed target, once "at the end of the frog's next turn" (then disgorged: Giant Frog) or "at the
+// end of each of the toad's turns" (each: Giant Toad).
 var swallowAcidRe = regexp.MustCompile(`(?i)at the end of the [\w() '’-]+ next turn, the swallowed target takes (\d+) \(([^)]+)\) (\w+) damage`)
+var swallowEachRe = regexp.MustCompile(`(?i)the target takes (\d+) \(([^)]+)\) (\w+) damage at the end of each of the [\w() '’-]+ turns`)
 var swallowCondsRe = regexp.MustCompile(`(?i)has the ([A-Za-z]+) and ([A-Za-z]+) conditions`)
 var swallowArmedRe = regexp.MustCompile(`\| armed`)
 
@@ -35,6 +39,7 @@ type swallowSpec struct {
 	acidDice string
 	acidType string
 	conds    []string
+	each     bool // the damage at the end of each of the monster's turns while swallowed, no disgorging (Giant Toad)
 }
 
 // readSwallow parses the published swallow grammar; nil when the text is not a swallow action. Every
@@ -51,7 +56,10 @@ func readSwallow(text string) *swallowSpec {
 	}
 	a := swallowAcidRe.FindStringSubmatch(text)
 	if a == nil || !strings.Contains(text, "disgorges") {
-		return nil
+		if a = swallowEachRe.FindStringSubmatch(text); a == nil {
+			return nil
+		}
+		spec.each = true
 	}
 	spec.acidAvg, spec.acidDice, spec.acidType = a[1], strings.ReplaceAll(a[2], " ", ""), strings.ToLower(a[3])
 	cm := swallowCondsRe.FindStringSubmatch(text)
@@ -114,6 +122,9 @@ func resolveMonsterSwallow(r *http.Request, lobbyID, monsterID int, entryName, t
 	endConditionRecords(grapples)
 	rowText := "swallow | owns: " + strings.Join(spec.conds, ", ") + " @ " + source +
 		fmt.Sprintf(" | acid: %s (%s) %s", spec.acidAvg, spec.acidDice, spec.acidType)
+	if spec.each { // the end of this turn is one "of each of its turns": armed now, kept after the damage
+		rowText += " | each | armed"
+	}
 	if _, err := db.Exec(`INSERT INTO combat_effects (lobby_id, target_id, source_id, kind, text) VALUES ($1,$2,$3,'swallowed',$4)`, lobbyID, tid, monsterID, rowText); err != nil {
 		log.Printf("swallow: couldn't record the row for source %d in campaign %d: %v", monsterID, lobbyID, err)
 		return []string{"The swallow could not be recorded. Nothing was rolled."}, true
@@ -122,6 +133,10 @@ func resolveMonsterSwallow(r *http.Request, lobbyID, monsterID int, entryName, t
 		addCondition(lobbyID, tid, condAdd{Condition: cond, Source: source, SourceID: monsterID})
 	}
 	markExecuted(r)
+	if spec.each {
+		return []string{fmt.Sprintf("%s swallows %s. %s has the %s and %s conditions. At the end of each of %s's turns, %s takes %s (%s) %s damage.",
+			name, tname, tname, titleCase(spec.conds[0]), titleCase(spec.conds[1]), name, tname, spec.acidAvg, spec.acidDice, titleCase(spec.acidType))}, true
+	}
 	return []string{fmt.Sprintf("%s swallows %s. %s has the %s and %s conditions. At the end of %s's next turn, %s takes %s (%s) %s damage; if it survives, %s disgorges it and it exits Prone.",
 		name, tname, tname, titleCase(spec.conds[0]), titleCase(spec.conds[1]), name, tname, spec.acidAvg, spec.acidDice, titleCase(spec.acidType), name)}, true
 }
@@ -148,6 +163,9 @@ func swallowTurnEnd(lobbyID, monsterID int, name string) []string {
 		if applied := recurringApplyOne(lobbyID, tid, *spec); applied != "" {
 			log2 = append(log2, fmt.Sprintf("%s %s (swallowed by %s).", tname, applied, name))
 		}
+	}
+	if strings.Contains(text, "| each") { // swallowed until the monster dies or the GM ends it: no disgorging
+		return log2
 	}
 	if attachSideAlive(lobbyID, tid) {
 		db.Exec(`DELETE FROM combat_effects WHERE id=$1 AND lobby_id=$2`, rowID, lobbyID)

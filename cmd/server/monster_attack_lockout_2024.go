@@ -13,9 +13,9 @@ import (
 var attackLockoutRe = regexp.MustCompile(`(?i)While attached, the [\w() '’-]+can(?:'|’)t make ([A-Za-z][A-Za-z ]*?) attacks?\b`)
 
 // swallowLockoutRe: the swallow action's own grammar locks the named action while the swallow lasts
-// (Giant Frog: "While swallowing the target, the frog can't use Bite."). The lock reads the swallow
+// (Giant Frog: "While swallowing the target, the frog can't use Bite."; Giant Toad: "it can't use Bite while it has a swallowed target"). The lock reads the swallow
 // owner's row (kind 'swallowed'), so it ends exactly with the swallow.
-var swallowLockoutRe = regexp.MustCompile(`(?i)While swallowing the target, the [\w() '’-]+can(?:'|’)t use ([A-Za-z][A-Za-z ]*?)[,.]`)
+var swallowLockoutRe = regexp.MustCompile(`(?i)While swallowing the target, the [\w() '’-]+can(?:'|’)t use ([A-Za-z][A-Za-z ]*?)[,.]|\bcan(?:'|’)t use ([A-Za-z]+) while it has a swallowed target`)
 
 type attackLockout struct {
 	action  string // lowercased base name of the locked attack
@@ -30,7 +30,7 @@ func attackLockouts(actions []monsterActionRow) []attackLockout {
 			out = append(out, attackLockout{action: strings.ToLower(strings.TrimSpace(m[1]))})
 		}
 		for _, m := range swallowLockoutRe.FindAllStringSubmatch(a.Desc, -1) {
-			out = append(out, attackLockout{action: strings.ToLower(strings.TrimSpace(m[1])), swallow: true})
+			out = append(out, attackLockout{action: strings.ToLower(strings.TrimSpace(m[1] + m[2])), swallow: true}) // the frog's wording or the toad's
 		}
 	}
 	return out

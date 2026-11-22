@@ -54,6 +54,10 @@ type lastingEffects struct {
 	Tick      *recurringDamageSpec
 	Also      []string // conditions the target also has while it has Condition ("While Frightened, the target has the Paralyzed condition")
 	AlsoNotes string   // the note of those records (notesEndsWith + Condition; Unconscious that also ends on damage: notesEndsWithPoisonOrDamage)
+	// DisadvAttacks: "While Deafened, the target also has Disadvantage on ... attack rolls" (Swarm of Ravens Cacophony): the roll rider
+	// marker "disadv_attacks" (read by attackSources), a record noted AlsoNotes that ends with the condition's. Disadvantage on ability
+	// checks has no owner yet: that part of the sentence stays the GM's.
+	DisadvAttacks bool
 }
 
 var (
@@ -66,6 +70,8 @@ var (
 	lastingAlsoRe = regexp.MustCompile(`(?:also )?has the ([A-Z][a-z]+(?:(?:, | and )[A-Z][a-z]+)*) conditions?`)
 	// lastingWakeRe: ", which ends early if the target takes (any) damage": an Unconscious that also ends on damage
 	lastingWakeRe = regexp.MustCompile(`(?i),?\s*which ends early if the target takes (?:any )?damage`)
+	// lastingDisadvAttacksRe: "(also) has Disadvantage on ability checks and attack rolls" in a "While <Condition>, the target ..." sentence
+	lastingDisadvAttacksRe = regexp.MustCompile(`(?i)(?:also )?has Disadvantage on (?:ability checks and )?attack rolls`)
 )
 
 // readLastingEffects reads sentence as the lasting effects of one of conds (the conditions the same text gives). rest is the part of
@@ -116,7 +122,18 @@ func readLastingEffects(sentence string, conds []string) (l *lastingEffects, res
 			}
 		}
 	}
-	if !l.NoRegain && l.Tick == nil && len(l.Also) == 0 {
+	if lastingDisadvAttacksRe.MatchString(body) {
+		l.DisadvAttacks = true
+		if l.AlsoNotes == "" {
+			l.AlsoNotes = notesEndsWith + cond
+		}
+		if strings.Contains(strings.ToLower(lastingDisadvAttacksRe.FindString(body)), "ability checks") {
+			// the ability checks are the GM's (the reply's words say the attack rolls are applied)
+			return l, strings.TrimSpace(regexp.MustCompile(`(?i)ability checks and attack rolls`).ReplaceAllString(sentence, "ability checks"))
+		}
+		body = lastingDisadvAttacksRe.ReplaceAllString(body, "")
+	}
+	if !l.NoRegain && l.Tick == nil && len(l.Also) == 0 && !l.DisadvAttacks {
 		return nil, sentence
 	}
 	body = lastingRepeatRe.ReplaceAllString(body, "") // the repeated save is the condition record's (EndSave)
@@ -138,6 +155,9 @@ func (l lastingEffects) words() string {
 	}
 	if len(l.Also) > 0 {
 		parts = append(parts, "has the "+joinNames(titleWordsAll(l.Also))+" condition")
+	}
+	if l.DisadvAttacks {
+		parts = append(parts, "has Disadvantage on attack rolls")
 	}
 	return strings.Join(parts, " and ") + " while " + titleCase(l.Condition)
 }

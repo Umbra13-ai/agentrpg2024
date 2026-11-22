@@ -257,7 +257,7 @@ func entryCoverage(kind string, e srdMonsterEntry, names []string) []sentenceVer
 	if _, ok := parseSaveEffect(e.Text); ok {
 		return bySentence("save owner (parseSaveEffect)", saveOwnSentence, saveResidual(e.Text))
 	}
-	if swallowActionRe.MatchString(e.Text) {
+	if readSwallow(e.Text) != nil {
 		return bySentence("resolveMonsterSwallow", func(string) bool { return true }, "")
 	}
 	if onlyOwnMove(e.Text) {

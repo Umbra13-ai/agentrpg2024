@@ -40,6 +40,7 @@ var monsterTextPatterns = map[string]*regexp.Regexp{
 	"lastingRepeatRe":          lastingRepeatRe,          // condition_lasting_effects_2024.go
 	"lastingTickRe":            lastingTickRe,            // condition_lasting_effects_2024.go
 	"lastingWakeRe":            lastingWakeRe,            // condition_lasting_effects_2024.go
+	"lastingDisadvAttacksRe":   lastingDisadvAttacksRe,   // condition_lasting_effects_2024.go
 	"recurringTailRe":          recurringTailRe,          // condition_lasting_effects_2024.go
 	"afterBloodiedHitRe":       afterBloodiedHitRe,       // creature_movement_2024.go
 	"chargeAltRe":              chargeAltRe,              // creature_movement_2024.go
@@ -183,6 +184,7 @@ var monsterTextPatterns = map[string]*regexp.Regexp{
 	"monsterStandardActionRe":  monsterStandardActionRe,  // monster_standard_actions_2024.go
 	"standardActionNameRe":     standardActionNameRe,     // monster_standard_actions_2024.go
 	"swallowAcidRe":            swallowAcidRe,            // monster_swallow_2024.go
+	"swallowEachRe":            swallowEachRe,            // monster_swallow_2024.go
 	"swallowActionRe":          swallowActionRe,          // monster_swallow_2024.go
 	"swallowCondsRe":           swallowCondsRe,           // monster_swallow_2024.go
 	"monsterBlindsightRe":      monsterBlindsightRe,      // monster_target_prerequisites_2024.go
