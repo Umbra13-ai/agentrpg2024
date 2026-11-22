@@ -494,15 +494,13 @@ func sphereOfAnnihilation(charID int, it invItem, req itemCastReq, description s
 		return fmt.Sprintf("Cannot use the %s without saying how: \"control\" (a Magic action within 60 feet: DC 25 Intelligence (Arcana)), then \"move\" with \"target_ids\" (a Bonus Action, or \"move talisman\"). Anything that touches it takes 8d10 Force damage. Nothing was spent.", name)
 	}
 	mod, prof, _, _ := checkBonus(charID, class, level, "arcana", intl)
-	r1, r2 := game.RollDie(20), game.RollDie(20)
-	roll, how := r1, ""
+	adv := ""
 	if talisman {
-		if r2 > r1 {
-			roll = r2
-		}
-		how = fmt.Sprintf(" with Advantage (Talisman of the Sphere: %d, %d)", r1, r2)
+		adv = "Talisman of the Sphere"
 	}
-	total := roll + mod + prof - game.ExhaustionD20Penalty(exhaustionLevelOf(charID))
+	cr := checkCtx{who: charID, ability: "int", skill: "arcana", advFrom: adv}.roll() // check_2024.go
+	how := cr.Why.note()
+	total := cr.Final + mod + prof - cr.Penalty
 	if total < 25 {
 		return fmt.Sprintf("Intelligence (Arcana) check%s: %d against DC 25, a failure. The %s moves 10 feet toward you in a straight line.", how, total, name)
 	}

@@ -286,9 +286,12 @@ Add to the owner, never beside it. When you give another rule one owner, add it 
   Build, Help, travel pace, items, Foresight, Enhance Ability, Reduce); `rollCheckD20` is the one check d20 and cancels them;
   `checkExhaustion` is the -2 per level for any creature; the bonus stays `checkBonus`. "Disadvantage on attack rolls and ability checks
   until ..." and "While Deafened, the target also has Disadvantage on ability checks and attack rolls" give the marker `disadv_checks`
-  (`readDisadvantage`, `lastingEffects.DisadvChecks`). Routes on it: the GM's skill and tool checks, the condition escape, the detach
-  action, the GM's grapple escape and both Hide actions (stage 1 of `docs`' plan); the other check routes (contested, group, Search/Study/
-  Influence, Stabilize, Fast Hands, jump, Sphere, Use Magic Device, Dispel Magic) are listed in `TestNoOtherCheckRoll` until they move.
+  (`readDisadvantage`, `lastingEffects.DisadvChecks`). `checkCtx.roll()` asks the sources and rolls (`checkRoll`: the d20s, how it was
+  rolled, why, and Exhaustion's `Penalty`); `checkWhy.note()` is the bracket every reply carries; `spellcastingCheck` is a caster's
+  ability check (Dispel Magic). Every check route is on it: the GM's skill, tool, contested and group checks, the condition escape, the
+  detach action, the GM's grapple escape, both Hide actions, Search / Study / Influence (a recorded attitude is `checkCtx.attitude`;
+  an unknown one is rolled once per attitude), Stabilize, Fast Hands, the jump landing, the Sphere of Annihilation, a Spell Scroll's
+  checks and Dispel Magic (the GM route and the spells it ends); a source a route alone knows is `checkCtx.advFrom`.
   Never roll a check's d20 anywhere else. Go: `TestPostgresCheckSourcesOnEveryRoute`, `TestNoOtherCheckRoll`.
 - **The 18 skills:** `game/skills.go`.
 - **Expertise:** `game/expertise.go`, with its database side in `cmd/server/expertise_2024.go`.

@@ -231,12 +231,13 @@ func jumpAction(charID int, description string) string {
 	}
 	if !high && strings.Contains(d, "difficult") {
 		mod, prof, _, _ := checkBonus(charID, class, level, "acrobatics", dex)
-		roll := game.RollDie(20)
-		if roll+mod+prof >= 10 {
-			out += fmt.Sprintf(" Landing in Difficult Terrain: Dexterity (Acrobatics) %d vs DC 10, you keep your feet.", roll+mod+prof)
+		cr := checkCtx{who: charID, ability: "dex", skill: "acrobatics"}.roll() // check_2024.go
+		total := cr.Final + mod + prof - cr.Penalty
+		if total >= 10 {
+			out += fmt.Sprintf(" Landing in Difficult Terrain: Dexterity (Acrobatics) %d vs DC 10%s, you keep your feet.", total, cr.Why.note())
 		} else {
 			addCharacterCondition(charID, "prone")
-			out += fmt.Sprintf(" Landing in Difficult Terrain: Dexterity (Acrobatics) %d vs DC 10, you fall Prone.", roll+mod+prof)
+			out += fmt.Sprintf(" Landing in Difficult Terrain: Dexterity (Acrobatics) %d vs DC 10%s, you fall Prone.", total, cr.Why.note())
 		}
 	}
 	return out

@@ -104,16 +104,14 @@ func handleGMGroupCheck(w http.ResponseWriter, r *http.Request) {
 		if skill != "" {
 			guide, _ = guidanceBonus(lobby, id, strings.ReplaceAll(skill, "_", " "))
 		}
-		d1, d2 := game.RollDie(20), game.RollDie(20)
-		roll := d1
-		bAdv, _ := buffCheckAdvantage(id, ability)                      // Foresight, Enhance Ability
-		adv := req.Advantage || largeFormAdvantage(id, ability) || bAdv // Goliath Large Form: Advantage on Strength checks
-		if adv && !req.Disadvantage && d2 > roll {
-			roll = d2
-		} else if req.Disadvantage && !adv && d2 < roll {
-			roll = d2
-		}
+		// each character's d20 is the check owner's (check_2024.go): the GM's Advantage or Disadvantage for the group, Large Form,
+		// Foresight, Enhance Ability, Poisoned, Frightened, armor, Help ...
+		cr := checkCtx{lobby: lobby, who: id, ability: ability, skill: strings.ReplaceAll(skill, "_", " "),
+			gmAdvantage: req.Advantage, gmDisadvantage: req.Disadvantage}.roll()
+		guide -= cr.Penalty
+		roll := cr.Final
 		roll, rt := reliableRoll(roll, reliable)
+		rt += cr.Why.note()
 		total := roll + mod + prof + guide
 		ok := total >= req.DC
 		if !ok && luckReroll(id, false) { // the Luck Blade's Luck

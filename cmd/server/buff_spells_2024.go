@@ -601,27 +601,6 @@ func skillAbility(skill string) string {
 	return shortAbility(skill)
 }
 
-// buffCheckRoll rolls a d20 for an ability check, with Advantage from Foresight or Enhance Ability; note says why.
-func buffCheckRoll(charID int, ability string, roll int) (int, string) {
-	adv, why := buffCheckAdvantage(charID, ability)
-	dis, dwhy := moreCheckDisadvantage(charID, ability) // Reduce (spells_more_2024.go)
-	switch {
-	case adv && dis:
-		return roll, " [Advantage (" + why + ") and Disadvantage (" + dwhy + ") cancel]"
-	case adv:
-		if b := game.RollDie(20); b > roll {
-			roll = b
-		}
-		return roll, " [Advantage: " + why + "]"
-	case dis:
-		if b := game.RollDie(20); b < roll {
-			roll = b
-		}
-		return roll, " [Disadvantage: " + dwhy + "]"
-	}
-	return roll, ""
-}
-
 // buffSpeedBonus: Longstrider +10 feet.
 func buffSpeedBonus(charID int) int {
 	if _, ok := charBuff(charID, "longstrider"); ok {
@@ -985,7 +964,7 @@ func pruneConcentrationByCaster(casterID int) {
 // dispelSpellEffects: Dispel Magic ends each spell on the creature of the slot's level or lower; a higher one needs the caster's
 // ability check (d20 + spellcasting modifier against DC 10 + its level). effect, when given, picks one spell by name. Spell effects
 // keep the spell's own level, not the slot it was cast with. F76: Dispel Magic only ended the target's own Concentration.
-func dispelSpellEffects(lobbyID, targetID, slot, mod int, effect string) (lines []string, anyEnded bool) {
+func dispelSpellEffects(lobbyID, targetID, casterID, slot, mod int, ability, effect string) (lines []string, anyEnded bool) {
 	seen := map[string]bool{}
 	for _, e := range spellEffectsOn(lobbyID, targetID) {
 		if effect != "" && !strings.EqualFold(e.Spell, effect) {
@@ -1002,9 +981,9 @@ func dispelSpellEffects(lobbyID, targetID, slot, mod int, effect string) (lines 
 		}
 		ends, note := sp.Level <= slot, ""
 		if !ends {
-			r := game.RollDie(20)
-			ends = r+mod >= 10+sp.Level
-			note = fmt.Sprintf(" (ability check %d vs DC %d)", r+mod, 10+sp.Level)
+			total, _, why := spellcastingCheck(lobbyID, casterID, ability, mod) // the check owner (check_2024.go)
+			ends = total >= 10+sp.Level
+			note = fmt.Sprintf(" (ability check %d%s vs DC %d)", total, why, 10+sp.Level)
 		}
 		if !ends {
 			lines = append(lines, fmt.Sprintf("%s (level %d) holds%s", e.Spell, sp.Level, note))

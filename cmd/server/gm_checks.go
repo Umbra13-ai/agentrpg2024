@@ -1314,63 +1314,23 @@ func handleGMContestedCheck(w http.ResponseWriter, r *http.Request) {
 	initMod, initSkillName := calcMod(req.InitiatorID, req.InitiatorSkill, initStr, initDex, initCon, initInt, initWis, initCha, initLevel)
 	defMod, defSkillName := calcMod(req.DefenderID, defSkill, defStr, defDex, defCon, defInt, defWis, defCha, defLevel)
 
-	// Goliath Large Form: Advantage on Strength checks (Athletics included)
-	strOf := func(skill string) string {
-		if sk, ok := game.LookupSkill(skill); ok {
-			return sk.Ability
-		}
-		return skill
+	// Each side's d20 is the check owner's (check_2024.go): the GM's own Advantage or Disadvantage on a side, Large Form, Foresight,
+	// Enhance Ability, Reduce, Poisoned, Frightened, riders, armor, Help ... for a character, a monster or a companion alike.
+	side := func(id int, skill string, adv, dis bool) checkRoll {
+		return checkCtx{lobby: campaignID, who: id, ability: skillAbility(skill), skill: strings.ReplaceAll(skill, "_", " "),
+			gmAdvantage: adv, gmDisadvantage: dis}.roll()
 	}
-	if largeFormAdvantage(req.InitiatorID, strOf(req.InitiatorSkill)) {
-		req.InitiatorAdvantage = true
-	}
-	if largeFormAdvantage(req.DefenderID, strOf(defSkill)) {
-		req.DefenderAdvantage = true
-	}
-
-	// Roll for initiator
-	var initRoll1, initRoll2, initFinalRoll int
-	initRollType := "normal"
-	if req.InitiatorAdvantage && !req.InitiatorDisadvantage {
-		initFinalRoll, initRoll1, initRoll2 = game.RollWithAdvantage()
-		initRollType = "advantage"
-	} else if req.InitiatorDisadvantage && !req.InitiatorAdvantage {
-		initFinalRoll, initRoll1, initRoll2 = game.RollWithDisadvantage()
-		initRollType = "disadvantage"
-	} else {
-		initFinalRoll = game.RollDie(20)
-		initRoll1 = initFinalRoll
-	}
-	if req.InitiatorID > 0 {
-		if r, n := buffCheckRoll(req.InitiatorID, skillAbility(req.InitiatorSkill), initFinalRoll); n != "" { // Foresight, Enhance Ability
-			initFinalRoll, initRollType = r, "advantage"+n
-		}
-	}
-	initTotal := initFinalRoll + initMod
+	init := side(req.InitiatorID, req.InitiatorSkill, req.InitiatorAdvantage, req.InitiatorDisadvantage)
+	initRoll1, initRoll2, initFinalRoll, initRollType := init.R1, init.R2, init.Final, init.Kind
+	initTotal := initFinalRoll + initMod - init.Penalty
 	if req.InitiatorID > 0 { // Guidance
 		g, _ := guidanceBonus(campaignID, req.InitiatorID, req.InitiatorSkill)
 		initTotal += g
 	}
 
-	// Roll for defender
-	var defRoll1, defRoll2, defFinalRoll int
-	defRollType := "normal"
-	if req.DefenderAdvantage && !req.DefenderDisadvantage {
-		defFinalRoll, defRoll1, defRoll2 = game.RollWithAdvantage()
-		defRollType = "advantage"
-	} else if req.DefenderDisadvantage && !req.DefenderAdvantage {
-		defFinalRoll, defRoll1, defRoll2 = game.RollWithDisadvantage()
-		defRollType = "disadvantage"
-	} else {
-		defFinalRoll = game.RollDie(20)
-		defRoll1 = defFinalRoll
-	}
-	if req.DefenderID > 0 {
-		if r, n := buffCheckRoll(req.DefenderID, skillAbility(defSkill), defFinalRoll); n != "" { // Foresight, Enhance Ability
-			defFinalRoll, defRollType = r, "advantage"+n
-		}
-	}
-	defTotal := defFinalRoll + defMod
+	def := side(req.DefenderID, defSkill, req.DefenderAdvantage, req.DefenderDisadvantage)
+	defRoll1, defRoll2, defFinalRoll, defRollType := def.R1, def.R2, def.Final, def.Kind
+	defTotal := defFinalRoll + defMod - def.Penalty
 	if req.DefenderID > 0 { // Guidance
 		g, _ := guidanceBonus(campaignID, req.DefenderID, defSkill)
 		defTotal += g

@@ -74,7 +74,6 @@ func TestNoOtherSaveRoll(t *testing.T) {
 		"actions.go:resolveStabilizeAction":             "Wisdom (Medicine) check",
 		"actions_checks_2024.go:resolveCheckAction":     "ability checks",
 		"attack_target.go:resolveAttackOnMonster":       "the Luck Blade's reroll of an attack roll, judged by game.AttackRoll",
-		"buff_spells_2024.go:buffCheckRoll":             "ability checks",
 		"buff_spells_2024.go:dispelSpellEffects":        "Dispel Magic's ability check",
 		"combat_handlers.go:handleCombatAdd":            "Initiative",
 		"combat_handlers.go:handleCombatStart":          "Initiative",

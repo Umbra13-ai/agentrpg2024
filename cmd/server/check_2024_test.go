@@ -157,8 +157,7 @@ func TestPostgresMonsterHideReadsTheCheckOwner(t *testing.T) {
 }
 
 // The one ability check d20 (check_2024.go rollCheckD20): no route rolls a check's d20 itself. Every d20 rolled in the server outside
-// game.AttackRoll, game.SavingThrow and rollCheckD20 must be in a function listed here with what it is for: a check not yet moved onto
-// checkCtx (the plan's stage 2 and 3), a reroll of a check the owner rolled (Heroic Inspiration, the Luck Blade), or not a check at all
+// game.AttackRoll, game.SavingThrow and rollCheckD20 must be in a function listed here with what it is for: a reroll of a check the owner rolled (Heroic Inspiration, the Luck Blade), or not a check at all
 // (initiative, an item's last charge, the dice roller). A listed function that no longer rolls fails too: a moved route leaves the list.
 func TestNoOtherCheckRoll(t *testing.T) {
 	notACheck := map[string]string{
@@ -166,18 +165,8 @@ func TestNoOtherCheckRoll(t *testing.T) {
 		"gm_checks.go:handleGMSkillCheck": "Heroic Inspiration's reroll of a check rolled by the owner",
 		"gm_checks.go:handleGMToolCheck":  "Heroic Inspiration's reroll of a check rolled by the owner",
 		"hide_2024.go:attemptHide":        "the Luck Blade's reroll of a check rolled by the owner",
-		// checks not yet on the owner (stage 2: other routes, stage 3: Dispel Magic)
-		"actions.go:resolveActionWithBonusDash":        "stage 2: Dexterity (Sleight of Hand) check to pick a lock",
-		"actions.go:resolveStabilizeAction":            "stage 2: Wisdom (Medicine) check",
-		"actions_checks_2024.go:resolveCheckAction":    "stage 2: Search, Study and Influence checks",
-		"buff_spells_2024.go:buffCheckRoll":            "stage 2: Hide and Search read it until they move",
-		"buff_spells_2024.go:dispelSpellEffects":       "stage 3: Dispel Magic's ability check",
-		"gm_checks.go:handleGMContestedCheck":          "stage 2: contested checks",
-		"gm_group_check_2024.go:handleGMGroupCheck":    "stage 2: group checks",
-		"gm_spells.go:handleGMDispelMagic":             "stage 3: Dispel Magic's ability check",
-		"legendary_items_2024.go:sphereOfAnnihilation": "stage 2: an Intelligence (Arcana) check",
-		"magic_item_use_2024.go:planItemCast":          "stage 2: a Spell Scroll's ability check",
-		"toolbox_more_2024.go:jumpAction":              "stage 2: a Strength (Athletics) check",
+		// rerolls of a check rolled by the owner (the group check's Luck Blade)
+		"gm_group_check_2024.go:handleGMGroupCheck": "the Luck Blade's reroll of a check rolled by the owner",
 		// not checks
 		"attack_target.go:resolveAttackOnMonster":    "the Luck Blade's reroll of an attack roll, judged by game.AttackRoll",
 		"combat_handlers.go:handleCombatAdd":         "Initiative",
@@ -215,5 +204,70 @@ func TestNoOtherCheckRoll(t *testing.T) {
 		if !rolls[k] {
 			t.Errorf("%s is listed as rolling a d20 and no longer does: remove it from the list", k)
 		}
+	}
+}
+
+// Stage 2: the other check routes read the same owner. A Poisoned character's contested, group, Search, Study, Influence, Stabilize and
+// Dispel Magic checks all have Disadvantage; Influence's unknown attitude is rolled for each attitude.
+func TestPostgresCheckSourcesOnTheOtherRoutes(t *testing.T) {
+	testPostgres(t)
+	gm, _, camp, hero, _ := earlyRulesFixture(t, "Test Other Checks", []srdMonsterEntry{{Name: "Claw", Text: "Melee Attack Roll: +5, reach 5 ft. Hit: 5 (1d6 + 2) Slashing damage."}})
+	pgExec(t, `UPDATE characters SET species='Human' WHERE id=$1`, hero)
+	var class string
+	var level, intl, wis, cha int
+	if err := db.QueryRow(`SELECT class, level, intl, wis, cha FROM characters WHERE id=$1`, hero).Scan(&class, &level, &intl, &wis, &cha); err != nil {
+		t.Fatal(err)
+	}
+	contested := func() string {
+		c, j := pgCall(t, "POST", "/api/gm/contested-check", gm, map[string]interface{}{"campaign_id": camp, "initiator_id": hero, "defender_id": hero,
+			"initiator_skill": "athletics", "defender_skill": "athletics"})
+		if c != 200 {
+			t.Fatalf("contested: %d %v", c, j)
+		}
+		return fmt.Sprint(j["initiator"].(map[string]interface{})["roll_type"])
+	}
+	group := func() string {
+		c, j := pgCall(t, "POST", "/api/gm/group-check", gm, map[string]interface{}{"campaign_id": camp, "skill": "athletics", "dc": 10, "character_ids": []int{hero}})
+		if c != 200 {
+			t.Fatalf("group: %d %v", c, j)
+		}
+		return fmt.Sprint(j["result"])
+	}
+	search := func() string { return resolveCheckAction("search", "look around", hero, class, level, intl, wis, cha) }
+	influence := func() string {
+		return resolveCheckAction("influence", "talk to the guard", hero, class, level, intl, wis, cha)
+	}
+	stabilize := func() string {
+		s, err := resolveStabilizeAction(hero, hero, "Hero")
+		if err != nil {
+			t.Fatal(err)
+		}
+		return s
+	}
+	dispel := func() string { _, _, note := spellcastingCheck(camp, hero, "wis", 0); return note }
+
+	if got := contested(); got != "normal" {
+		t.Errorf("contested with no source rolled %q", got)
+	}
+	if strings.Contains(group(), "Disadvantage") || strings.Contains(search(), "Disadvantage") || strings.Contains(stabilize(), "Disadvantage") || dispel() != "" {
+		t.Error("a check with no source mentions Disadvantage")
+	}
+	addCondition(camp, hero, condAdd{Condition: "poisoned", Source: "test"})
+	if got := contested(); got != "disadvantage" {
+		t.Errorf("a Poisoned initiator's contested check rolled %q", got)
+	}
+	for name, got := range map[string]string{"group": group(), "Search": search(), "Influence": influence(), "Stabilize": stabilize(), "Dispel Magic": dispel()} {
+		if !strings.Contains(got, "Disadvantage") {
+			t.Errorf("%s with Poisoned should say Disadvantage: %s", name, got)
+		}
+	}
+	if got := influence(); !strings.Contains(got, "if the creature is Indifferent") || !strings.Contains(got, "Friendly") {
+		t.Errorf("Influence with an unknown attitude gives its three totals: %s", got)
+	}
+	endConditionRecords(recordsOf(camp, hero, "poisoned"))
+	// Exhaustion's -2 per level reaches these routes too
+	setExhaustionLevel(hero, 2)
+	if cr := (checkCtx{who: hero, ability: "wis", skill: "perception"}).roll(); cr.Penalty != 4 {
+		t.Errorf("Exhaustion 2 should be -4 on the owner's roll, got -%d", cr.Penalty)
 	}
 }

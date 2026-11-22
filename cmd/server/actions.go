@@ -1367,38 +1367,27 @@ func handleAction(w http.ResponseWriter, r *http.Request) {
 // update prevents a late check from changing someone already healed or stable.
 func resolveStabilizeAction(actorID, targetID int, targetName string) (string, error) {
 	var wisdom, level int
-	var skills, expertise string
-	if err := db.QueryRow(`SELECT wis, level, COALESCE(skill_proficiencies, ''), COALESCE(expertise, '')
-		FROM characters WHERE id = $1`, actorID).Scan(&wisdom, &level, &skills, &expertise); err != nil {
+	var class string
+	if err := db.QueryRow(`SELECT wis, level, class FROM characters WHERE id = $1`, actorID).Scan(&wisdom, &level, &class); err != nil {
 		return "", err
 	}
-	mod := game.Modifier(wisdom)
-	proficient := false
-	for _, skill := range strings.Split(skills, ",") {
-		proficient = proficient || strings.EqualFold(strings.TrimSpace(skill), "medicine")
-	}
-	if proficient {
-		mod += game.ProficiencyBonus(level)
-	}
-	for _, skill := range strings.Split(expertise, ",") {
-		if strings.EqualFold(strings.TrimSpace(skill), "medicine") {
-			mod += game.ProficiencyBonus(level)
-			break
-		}
-	}
-	roll := game.RollDie(20)
+	// the bonus is checkBonus's (proficiency, Expertise, Jack of All Trades ...), the d20 the check owner's (check_2024.go)
+	m, prof, _, _ := checkBonus(actorID, class, level, "medicine", wisdom)
+	cr := checkCtx{who: actorID, ability: "wis", skill: "medicine"}.roll()
+	mod := m + prof - cr.Penalty
+	roll := cr.Final
 	total := roll + mod
 	if total < 10 {
-		return fmt.Sprintf("Medicine check for %s: %d %+d = %d vs DC 10; failed. They remain dying.", targetName, roll, mod, total), nil
+		return fmt.Sprintf("Medicine check for %s: %d %+d = %d vs DC 10%s; failed. They remain dying.", targetName, roll, mod, total, cr.Why.note()), nil
 	}
 	changed, err := stabilizeCharacter(targetID) // the Hit Point owner (hit_points_2024.go)
 	if err != nil {
 		return "", err
 	}
 	if !changed {
-		return fmt.Sprintf("Medicine check for %s: %d %+d = %d vs DC 10; target already recovered or stabilized. No state changed.", targetName, roll, mod, total), nil
+		return fmt.Sprintf("Medicine check for %s: %d %+d = %d vs DC 10%s; target already recovered or stabilized. No state changed.", targetName, roll, mod, total, cr.Why.note()), nil
 	}
-	return fmt.Sprintf("Medicine check for %s: %d %+d = %d vs DC 10; success. They are stable at 0 HP and no longer make death saves.", targetName, roll, mod, total), nil
+	return fmt.Sprintf("Medicine check for %s: %d %+d = %d vs DC 10%s; success. They are stable at 0 HP and no longer make death saves.", targetName, roll, mod, total, cr.Why.note()), nil
 }
 
 // What gives an attack roll Advantage or Disadvantage is in attackSources (attack_2024.go), the one table every attack reads.
@@ -3173,19 +3162,17 @@ func resolveActionWithBonusDash(action, description string, charID int, bonusDas
 				advantage := false
 				if withTools && game.HasToolProficiency(game.ParseProficiencyList(tools), "thieves' tools") {
 					if strings.Contains(profNote, "proficient") || strings.Contains(profNote, "expertise") {
-						advantage, profNote = true, profNote+" (and Thieves' Tools: Advantage)"
+						advantage, profNote = true, profNote+" (and Thieves' Tools)"
 					} else {
 						prof, profNote = game.ProficiencyBonus(level), " (Thieves' Tools)"
 					}
 				}
-				d1 := game.RollDie(20)
-				d, dice := d1, fmt.Sprintf("d20: %d", d1)
-				if advantage {
-					d2 := game.RollDie(20)
-					if d2 > d {
-						d = d2
-					}
-					dice = fmt.Sprintf("d20s: %d and %d, Advantage", d1, d2)
+				cr := checkCtx{who: charID, ability: "dex", skill: "sleight of hand", toolAndSkill: advantage}.roll() // check_2024.go
+				d, dice := cr.Final, fmt.Sprintf("d20: %d", cr.Final)
+				if cr.Kind != "normal" {
+					dice = fmt.Sprintf("d20s: %d and %d%s", cr.R1, cr.R2, cr.Why.note())
+				} else if n := cr.Why.note(); n != "" {
+					dice += n
 				}
 				roll, rtNote := reliableRoll(d, reliable)
 				what := "pick a pocket"
@@ -3195,7 +3182,10 @@ func resolveActionWithBonusDash(action, description string, charID int, bonusDas
 				case withTools:
 					what = "pick a lock with Thieves' Tools"
 				}
-				return fmt.Sprintf("🤏 Fast Hands (Sleight of Hand/DEX)%s to %s: %d (%s%s + %d DEX + %d prof). The GM compares it with the DC.", profNote, what, roll+mod+prof, dice, rtNote, mod, prof)
+				if cr.Penalty > 0 {
+					rtNote += fmt.Sprintf(" - %d Exhaustion", cr.Penalty)
+				}
+				return fmt.Sprintf("🤏 Fast Hands (Sleight of Hand/DEX)%s to %s: %d (%s%s + %d DEX + %d prof). The GM compares it with the DC.", profNote, what, roll+mod+prof-cr.Penalty, dice, rtNote, mod, prof)
 			}
 
 			if strings.Contains(descLower, "use") && (strings.Contains(descLower, "object") || strings.Contains(descLower, "item") || strings.Contains(descLower, "potion")) {

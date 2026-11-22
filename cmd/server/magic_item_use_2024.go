@@ -673,15 +673,15 @@ func planItemCast(charID int, spellKey string, spell SRDSpell, req itemCastReq, 
 		case thief && s.Level >= 2:
 			// Use Magic Device: an Intelligence (Arcana) check, DC 10 + the spell's level
 			mod, prof, _, _ := checkBonus(charID, class, levelOf(charID), "arcana", intl)
-			d := game.RollDie(20)
-			total := d + mod + prof
-			plan.CheckNote = fmt.Sprintf(" [Use Magic Device: Intelligence (Arcana) %d (d20 %d) vs DC %d]", total, d, 10+s.Level)
+			cr := checkCtx{who: charID, ability: "int", skill: "arcana"}.roll() // check_2024.go
+			total := cr.Final + mod + prof - cr.Penalty
+			plan.CheckNote = fmt.Sprintf(" [Use Magic Device: Intelligence (Arcana) %d (d20 %d)%s vs DC %d]", total, cr.Final, cr.Why.note(), 10+s.Level)
 			plan.Failed = total < 10+s.Level
 		case !thief && s.Level > highestSlotLevel(charID):
 			ab := map[string]int{"INT": intl, "WIS": wis, "CHA": cha}[strings.ToUpper(srdClasses[strings.ToLower(class)].Spellcasting)]
-			d := game.RollDie(20)
-			total := d + game.Modifier(ab) - game.ExhaustionD20Penalty(exhaustionLevelOf(charID))
-			plan.CheckNote = fmt.Sprintf(" [a level %d spell is above what you can cast: spellcasting ability check %d (d20 %d) vs DC %d]", s.Level, total, d, 10+s.Level)
+			cr := checkCtx{who: charID, ability: strings.ToLower(srdClasses[strings.ToLower(class)].Spellcasting)}.roll() // check_2024.go
+			total := cr.Final + game.Modifier(ab) - cr.Penalty
+			plan.CheckNote = fmt.Sprintf(" [a level %d spell is above what you can cast: spellcasting ability check %d (d20 %d)%s vs DC %d]", s.Level, total, cr.Final, cr.Why.note(), 10+s.Level)
 			plan.Failed = total < 10+s.Level
 		}
 		return plan, ""

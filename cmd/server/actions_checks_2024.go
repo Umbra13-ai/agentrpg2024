@@ -206,15 +206,10 @@ func resolveCheckAction(action, description string, charID int, class string, le
 	guide, guideNote := guidanceBonus(lobbyOfChar(charID), charID, c.skill)
 	bonus := mod + prof + guide
 	if action != "influence" {
-		d, bAdv := buffCheckRoll(charID, c.ability, game.RollDie(20)) // Foresight, Enhance Ability
-		guideNote += bAdv
-		if pAdv, pDis, pNote := travelPaceEffect(lobbyOfChar(charID), c.skill); pAdv || pDis { // travel pace on Perception and Survival
-			d2 := game.RollDie(20)
-			if (pAdv && d2 > d) || (pDis && d2 < d) {
-				d = d2
-			}
-			guideNote += pNote
-		}
+		cr := checkCtx{who: charID, ability: c.ability, skill: c.skill}.roll() // what gives it Advantage or Disadvantage: check_2024.go
+		bonus -= cr.Penalty
+		guideNote += cr.Why.note()
+		d := cr.Final
 		roll, rtNote := reliableRoll(d, reliable)
 		icon := map[string]string{"search": "🔍 Search", "study": "📚 Study"}[action]
 		return fmt.Sprintf("%s (%s/%s)%s: %d (d20: %d%s + %d %s + %d prof%s). %s",
@@ -227,32 +222,33 @@ func resolveCheckAction(action, description string, charID int, class string, le
 		tid = mid
 	}
 	if att, who, ok := attitudeFor(lobby, tid, description); ok {
-		d1, d2 := game.RollDie(20), game.RollDie(20)
-		d, how := d1, "no Advantage or Disadvantage"
-		switch att {
-		case "friendly":
-			if d2 > d {
-				d = d2
-			}
-			how = fmt.Sprintf("Advantage, d20s %d and %d", d1, d2)
-		case "hostile":
-			if d2 < d {
-				d = d2
-			}
-			how = fmt.Sprintf("Disadvantage, d20s %d and %d", d1, d2)
+		cr := checkCtx{who: charID, ability: c.ability, skill: c.skill, attitude: att}.roll()
+		bonus -= cr.Penalty
+		d, how := cr.Final, "no Advantage or Disadvantage"
+		switch cr.Kind {
+		case "advantage":
+			how = fmt.Sprintf("Advantage (%s), d20s %d and %d", strings.Join(cr.Why.Adv, ", "), cr.R1, cr.R2)
+		case "disadvantage":
+			how = fmt.Sprintf("Disadvantage (%s), d20s %d and %d", strings.Join(cr.Why.Dis, ", "), cr.R1, cr.R2)
 		}
 		roll, rt := reliableRoll(d, reliable)
 		return fmt.Sprintf("🗣️ Influence (%s/%s)%s on %s, who is %s (%s): %d (d20: %d%s + %d %s + %d prof%s). If %s is hesitant, the GM compares the total with DC 15 or its Intelligence score, whichever is higher; a willing creature needs no check and an unwilling one won't comply. %s",
 			titleSkill(c.skill), ab, profNote, who, titleCase(att), how, roll+bonus, roll, rt+guideNote, mod, ab, prof, map[bool]string{true: fmt.Sprintf(" + %d Guidance", guide)}[guide != 0], who, description)
 	}
-	// Attitude unknown to the server: both d20s are rolled and all three totals are reported; the GM uses the one that fits.
-	r1, n1 := reliableRoll(game.RollDie(20), reliable)
-	r2, n2 := reliableRoll(game.RollDie(20), reliable)
-	hi, lo := r1, r2
-	if r2 > r1 {
-		hi, lo = r2, r1
+	// Attitude unknown to the server: the check is rolled for each attitude by the owner (check_2024.go) and the three totals reported;
+	// the GM uses the one that fits.
+	var totals [3]int
+	var dice [3]string
+	for i, att := range []string{"", "friendly", "hostile"} {
+		cr := checkCtx{who: charID, ability: c.ability, skill: c.skill, attitude: att}.roll()
+		r, n := reliableRoll(cr.Final, reliable)
+		totals[i] = r + bonus - cr.Penalty
+		dice[i] = fmt.Sprintf("%d%s", r, n)
+		if cr.Kind != "normal" {
+			dice[i] = fmt.Sprintf("%d and %d, taking %d%s", cr.R1, cr.R2, r, n)
+		}
 	}
-	return fmt.Sprintf("🗣️ Influence (%s/%s)%s: %d if the creature is Indifferent, %d if Friendly (Advantage), %d if Hostile (Disadvantage) (d20s: %d%s and %d%s, + %d %s + %d prof%s). "+
+	return fmt.Sprintf("🗣️ Influence (%s/%s)%s: %d if the creature is Indifferent, %d if Friendly (Advantage), %d if Hostile (Disadvantage) (d20s: %s; %s; %s%s, + %d %s + %d prof%s). "+
 		"If the creature is hesitant, the GM compares the total with DC 15 or the creature's Intelligence score, whichever is higher; a willing creature needs no check and an unwilling one won't comply. %s",
-		titleSkill(c.skill), ab, profNote, r1+bonus, hi+bonus, lo+bonus, r1, n1, r2, n2+guideNote, mod, ab, prof, map[bool]string{true: fmt.Sprintf(" + %d Guidance", guide)}[guide != 0], description)
+		titleSkill(c.skill), ab, profNote, totals[0], totals[1], totals[2], dice[0], dice[1], dice[2], guideNote, mod, ab, prof, map[bool]string{true: fmt.Sprintf(" + %d Guidance", guide)}[guide != 0], description)
 }

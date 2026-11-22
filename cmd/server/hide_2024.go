@@ -32,14 +32,7 @@ func attemptHide(charID int, label string) string {
 	// pace, Foresight, Enhance Ability, Reduce ...; they cancel to one d20
 	why := checkCtx{lobby: lobby, who: charID, ability: "dex", skill: "stealth"}.sources()
 	d, _, _, _ := rollCheckD20(why.Advantage(), why.Disadvantage())
-	switch {
-	case why.Advantage() && why.Disadvantage():
-		notes += " [Advantage (" + strings.Join(why.Adv, ", ") + ") and Disadvantage (" + strings.Join(why.Dis, ", ") + ") cancel]"
-	case why.Advantage():
-		notes += " [Advantage: " + strings.Join(why.Adv, ", ") + "]"
-	case why.Disadvantage():
-		notes += " [Disadvantage: " + strings.Join(why.Dis, ", ") + "]"
-	}
+	notes += why.note()
 	roll, rtNote := reliableRoll(d, reliable)
 	total := roll + mod + prof + guide
 	if total < hideDC && luckReroll(charID, false) { // the Luck Blade's Luck

@@ -656,7 +656,9 @@ func handleGMDispelMagic(w http.ResponseWriter, r *http.Request) {
 	// Get spellcasting ability modifier
 	classKey := strings.ToLower(class)
 	spellMod := 0
+	spellAbility := ""
 	if c, ok := srdClasses[classKey]; ok {
+		spellAbility = strings.ToLower(c.Spellcasting)
 		switch c.Spellcasting {
 		case "INT":
 			spellMod = game.Modifier(intl)
@@ -683,6 +685,7 @@ func handleGMDispelMagic(w http.ResponseWriter, r *http.Request) {
 	success := false
 	roll := 0
 	totalCheck := 0
+	checkNote := "" // why the check had Advantage or Disadvantage
 	dc := 10 + req.TargetSpellLevel
 	autoSuccess := req.SlotLevel >= req.TargetSpellLevel
 
@@ -690,8 +693,9 @@ func handleGMDispelMagic(w http.ResponseWriter, r *http.Request) {
 		success = true
 	} else {
 		// Roll d20 + spellcasting modifier vs DC
-		roll = game.RollDie(20)
-		totalCheck = roll + spellMod
+		var why string
+		totalCheck, roll, why = spellcastingCheck(lobbyID, req.CasterID, spellAbility, spellMod) // check_2024.go
+		checkNote = why
 		success = totalCheck >= dc
 	}
 
@@ -756,11 +760,13 @@ func handleGMDispelMagic(w http.ResponseWriter, r *http.Request) {
 				req.SlotLevel, effectDispelled, req.TargetSpellLevel, roll, spellMod, totalCheck, dc)
 			response["effect_ended"] = false
 		}
+		response["message"] = fmt.Sprint(response["message"]) + checkNote
+		actionResult += checkNote
 	}
 
 	// the spells others cast on the target (Mage Armor, Barkskin, Bless, Haste ...): each ends at the slot's level or lower, else
 	// with the ability check (F76)
-	if effLines, effAny := dispelSpellEffects(lobbyID, req.TargetID, req.SlotLevel, spellMod, req.EffectName); len(effLines) > 0 || effectsOnly {
+	if effLines, effAny := dispelSpellEffects(lobbyID, req.TargetID, req.CasterID, req.SlotLevel, spellMod, spellAbility, req.EffectName); len(effLines) > 0 || effectsOnly {
 		response["spells_on_target"] = effLines
 		if effectsOnly {
 			delete(response, "auto_success")
