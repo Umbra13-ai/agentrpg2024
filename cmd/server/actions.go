@@ -2359,6 +2359,7 @@ func resolveActionWithBonusDash(action, description string, charID int, bonusDas
 
 			// Handle concentration
 			markCastText := "" // Hex, Hunter's Mark: the creature marked and what the server adds on each hit
+			hexTarget := 0
 			if strings.Contains(strings.ToLower(spell.Duration), "concentration") {
 				// For Hunter's Mark and Hex, store target ID with concentration
 				// This enables tracking bonus damage on attacks against marked target
@@ -2375,10 +2376,14 @@ func resolveActionWithBonusDash(action, description string, charID int, bonusDas
 						concentrationValue = fmt.Sprintf("%s:%d", spell.Name, castTargetID)
 					}
 					markCastText = markCastNote(spellKey, lobbyOfChar(charID), castTargetID, hexAbilityIn(description)) // hit_riders_2024.go
+					hexTarget = castTargetID
 				}
 				// Drop current concentration
 				db.Exec("UPDATE characters SET concentrating_on = $1 WHERE id = $2", concentrationValue, charID)
 				pruneConcentrationByCaster(charID) // the old spell's conditions end now (Invisibility on an ally ...)
+				if spellKey == "hex" {
+					castHexChecks(lobbyOfChar(charID), charID, hexTarget, hexAbilityKey(description)) // Disadvantage on the chosen ability's checks
+				}
 			}
 
 			// Consume material component if spell requires it

@@ -271,3 +271,39 @@ func TestPostgresCheckSourcesOnTheOtherRoutes(t *testing.T) {
 		t.Errorf("Exhaustion 2 should be -4 on the owner's roll, got -%d", cr.Penalty)
 	}
 }
+
+// Hex: "The target has Disadvantage on ability checks made with the chosen ability" is a record that lasts while the caster
+// concentrates, read by the check owner for a creature of the fight and a character alike.
+func TestPostgresHexChecksDisadvantage(t *testing.T) {
+	testPostgres(t)
+	gm, _, camp, hero, _ := earlyRulesFixture(t, "Test Hex Drake", []srdMonsterEntry{{Name: "Claw", Text: "Melee Attack Roll: +5, reach 5 ft. Hit: 5 (1d6 + 2) Slashing damage."}})
+	pgCall(t, "POST", fmt.Sprintf("/api/campaigns/%d/combat/add", camp), gm, map[string]interface{}{"combatants": []map[string]interface{}{
+		{"name": "Hex Kobold", "monster_key": "kobold-warrior", "hp": 1000, "ac": 1, "initiative": -720}}})
+	kobold := monsterIDsByKeyOrName(camp, "Hex Kobold")[0]
+	if hexAbilityKey("Hex on the kobold: Dexterity") != "dex" || hexAbilityKey("no ability here") != "" {
+		t.Fatal("hexAbilityKey")
+	}
+	dis := func(who int, ability string) bool {
+		return (checkCtx{lobby: camp, who: who, ability: ability, skill: "stealth"}).sources().hasDis("Hex")
+	}
+	if dis(kobold, "dex") {
+		t.Fatal("Disadvantage with no Hex")
+	}
+	pgExec(t, `UPDATE characters SET concentrating_on = $1 WHERE id = $2`, fmt.Sprintf("Hex:%d", kobold), hero)
+	castHexChecks(camp, hero, kobold, "dex")
+	if !dis(kobold, "dex") || !dis(kobold, "dexterity") {
+		t.Error("the Hexed kobold's Dexterity checks should have Disadvantage")
+	}
+	if dis(kobold, "str") {
+		t.Error("only the chosen ability's checks")
+	}
+	castHexChecks(camp, hero, hero, "str") // a Hex on a character reads the same way
+	if !(checkCtx{lobby: camp, who: hero, ability: "str", skill: "athletics"}).sources().hasDis("Hex") {
+		t.Error("the Hexed character's Strength checks")
+	}
+	pgExec(t, `UPDATE characters SET concentrating_on = NULL WHERE id = $1`, hero)
+	pruneConcentrationByCaster(hero) // the spell ends with the caster's Concentration
+	if dis(kobold, "dex") || (checkCtx{lobby: camp, who: hero, ability: "str"}).sources().hasDis("Hex") {
+		t.Error("the Hex ended with its caster's Concentration")
+	}
+}

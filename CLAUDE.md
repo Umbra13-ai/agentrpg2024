@@ -283,7 +283,7 @@ Add to the owner, never beside it. When you give another rule one owner, add it 
   Disadvantage, for a character, a monster or a companion (every creature: Poisoned, Frightened while its source is in sight on the battle
   map, a `disadv_checks` rider, Sunlight Sensitivity, a damage-triggered rider such as Aversion to Fire, the holder's own words when escaping
   its grapple (Mimic); a character's own: Charmed target, Remarkable Athlete, Supreme Sneak, Boots of Elvenkind, armor, Large Form, Powerful
-  Build, Help, travel pace, items, Foresight, Enhance Ability, Reduce); `rollCheckD20` is the one check d20 and cancels them;
+  Build, Help, travel pace, items, Foresight, Enhance Ability, Reduce; Hex's chosen ability is the target's `hex_checks` record, `castHexChecks`, ended with the caster's Concentration); `rollCheckD20` is the one check d20 and cancels them;
   `checkExhaustion` is the -2 per level for any creature; the bonus stays `checkBonus`. "Disadvantage on attack rolls and ability checks
   until ..." and "While Deafened, the target also has Disadvantage on ability checks and attack rolls" give the marker `disadv_checks`
   (`readDisadvantage`, `lastingEffects.DisadvChecks`). `checkCtx.roll()` asks the sources and rolls (`checkRoll`: the d20s, how it was

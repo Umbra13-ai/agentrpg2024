@@ -244,9 +244,9 @@ func hitWithRiders(lobbyID, attackerID, targetID int, crit bool) string {
 	return dealRiders(lobbyID, targetID, hitRiders(attackerID, targetID, crit), crit)
 }
 
-// hexAbilityIn: the ability a Hex names in the caster's words ("Hex on the goblin: Dexterity"), "" when none is named. The target has
-// Disadvantage on ability checks made with it; the GM applies that.
-func hexAbilityIn(description string) string {
+// hexAbilityKey: the ability a Hex names in the caster's words ("Hex on the goblin: Dexterity"), as its key ("dex"), "" when none is
+// named. The target has Disadvantage on ability checks made with it: castHexChecks records it, the check owner (check_2024.go) reads it.
+func hexAbilityKey(description string) string {
 	for _, w := range strings.FieldsFunc(description, func(r rune) bool {
 		return !(r >= 'a' && r <= 'z' || r >= 'A' && r <= 'Z')
 	}) {
@@ -254,10 +254,44 @@ func hexAbilityIn(description string) string {
 			continue
 		}
 		if k, ok := game.AbilityKey(w); ok {
-			return game.AbilityName(k)
+			return k
 		}
 	}
 	return ""
+}
+
+// hexAbilityIn: the ability a Hex names, spelled out ("Dexterity"), "" when none is named.
+func hexAbilityIn(description string) string {
+	if k := hexAbilityKey(description); k != "" {
+		return game.AbilityName(k)
+	}
+	return ""
+}
+
+// hexChecksCondition: the record a Hex puts on its target (its Detail is the chosen ability's key); it lasts while the caster
+// concentrates (Notes "concentration": pruneConcentrationByCaster ends it with the spell).
+const hexChecksCondition = "hex_checks"
+
+// castHexChecks records the Hex's ability on its target: "The target has Disadvantage on ability checks made with the chosen ability."
+func castHexChecks(lobbyID, casterID, targetID int, ability string) {
+	if targetID == 0 || ability == "" {
+		return
+	}
+	addCondition(lobbyID, targetID, condAdd{Condition: hexChecksCondition + ":" + ability, Source: "Hex", Rounds: 600, Notes: "concentration", CreatedBy: casterID, SourceID: casterID})
+}
+
+// hexOnChecks: a Hex on the creature names this ability (the check owner's row).
+func hexOnChecks(lobbyID, who int, ability string) bool {
+	k, ok := game.AbilityKey(ability)
+	if !ok {
+		return false
+	}
+	for _, r := range loadConditionRecords(lobbyID, who) {
+		if r.Condition == hexChecksCondition && r.Detail == k {
+			return true
+		}
+	}
+	return false
 }
 
 // markCastNote: what a cast of Hex or Hunter's Mark tells the caster: the creature marked, the server's part (the extra damage on
@@ -274,9 +308,9 @@ func markCastNote(spellKey string, lobbyID, targetID int, ability string) string
 	note := fmt.Sprintf(" %s is on %s: each of your hits on it with an attack roll (a weapon, a spell attack, each beam) deals %s, rolled by the server.", spell, creatureName(lobbyID, targetID), extra)
 	if spellKey == "hex" {
 		if ability != "" {
-			note += fmt.Sprintf(" It has Disadvantage on %s checks (the GM applies it).", ability)
+			note += fmt.Sprintf(" It has Disadvantage on %s checks (the server applies it).", ability)
 		} else {
-			note += " Name the ability whose checks it makes with Disadvantage in the description (Strength, Dexterity, Constitution, Intelligence, Wisdom or Charisma); the GM applies it."
+			note += " Name the ability whose checks it makes with Disadvantage in the description (Strength, Dexterity, Constitution, Intelligence, Wisdom or Charisma); without it nothing is applied."
 		}
 	}
 	return note

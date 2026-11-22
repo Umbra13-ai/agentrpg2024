@@ -108,6 +108,9 @@ func (c checkCtx) sources() checkWhy {
 			w.dis("Sunlight Sensitivity")
 		}
 	}
+	if lobby > 0 && c.ability != "" && hexOnChecks(lobby, c.who, c.ability) { // Hex: Disadvantage on the chosen ability's checks
+		w.dis("Hex")
+	}
 	if c.escape && lobby > 0 && c.holder != 0 && holderMakesEscapeHarder(lobby, c.holder) {
 		w.dis("its holder's own words (escaping this grapple has Disadvantage)")
 	}
