@@ -206,9 +206,15 @@ func applySaveEffectOnCompanion(lobbyID int, source string, e saveEffect, tid in
 		addGMNotice(lobbyID, fmt.Sprintf("%s failed a saving throw (%s), and its stat block has Legendary Resistance, which the server does not track for a companion: it may choose to succeed instead.", name, source))
 	}
 	var parts []string
+	dropped := e.dropsToZero(lobbyID, tid, saved)
+	if dropped {
+		parts = append(parts, e.dropToZero(lobbyID, tid, apply))
+	}
 	for i, p := range e.Damage {
 		d := rolled[i]
 		switch {
+		case dropped:
+			d = 0
 		case saved && (evasion || !e.HalfOnSuccess):
 			d = 0
 		case saved, evasion:

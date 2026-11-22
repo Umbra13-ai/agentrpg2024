@@ -21,8 +21,9 @@ import (
 // know when a day ends: the GM calls new_day. Documented in docs/MONSTER_SYSTEM.md.
 
 var (
-	spellListHeadRe = regexp.MustCompile(`(At Will|(\d+)/Day( Each)?):`)
-	spellParenRe    = regexp.MustCompile(`\s*\([^)]*\)`)
+	spellListHeadRe  = regexp.MustCompile(`(At Will|(\d+)/Day( Each)?):`)
+	spellParenRe     = regexp.MustCompile(`\s*\([^)]*\)`)
+	spellLevelNoteRe = regexp.MustCompile(`^level \d version$`)
 )
 
 // spellTier is one list of a Spellcasting entry: "At Will" (Limit 0), "2/Day Each" (Limit 2, Each) or "1/Day" (Limit 1, shared).
@@ -31,6 +32,7 @@ type spellTier struct {
 	Limit  int
 	Each   bool
 	Spells []string
+	Notes  map[string]string // what the stat block adds to a spell in its list ("Charm Monster (lasts 24 hours; ...)"): the GM's
 }
 
 // spellTiersOf reads the lists of a Spellcasting entry in order.
@@ -47,15 +49,47 @@ func spellTiersOf(text string) []spellTier {
 			t.Limit, _ = strconv.Atoi(text[l[4]:l[5]])
 		}
 		t.Each = l[6] >= 0
-		for _, n := range strings.Split(text[l[1]:end], ",") {
-			n = strings.TrimSpace(strings.TrimSuffix(strings.TrimSpace(spellParenRe.ReplaceAllString(n, "")), "."))
+		// a note may hold commas ("Invisibility (self only, and the hag leaves no tracks while Invisible)"): the notes come out first
+		list := text[l[1]:end]
+		notes := map[int]string{}
+		list = spellParenRe.ReplaceAllStringFunc(list, func(p string) string {
+			notes[len(notes)] = strings.TrimSuffix(strings.TrimPrefix(strings.TrimSpace(p), "("), ")")
+			return fmt.Sprintf("\x00%d", len(notes)-1)
+		})
+		for _, n := range strings.Split(list, ",") {
+			note := ""
+			if i := strings.Index(n, "\x00"); i >= 0 {
+				k, _ := strconv.Atoi(strings.TrimSpace(strings.TrimSuffix(strings.TrimSpace(n[i+1:]), ".")))
+				note, n = notes[k], n[:i]
+			}
+			n = strings.TrimSpace(strings.TrimSuffix(strings.TrimSpace(n), "."))
 			if n != "" && len(n) < 40 {
 				t.Spells = append(t.Spells, n)
+				if note != "" && !spellLevelNoteRe.MatchString(note) { // "(level 3 version)" is the cast's own (monsterSpellFromUse)
+					if t.Notes == nil {
+						t.Notes = map[string]string{}
+					}
+					t.Notes[n] = note
+				}
 			}
 		}
 		out = append(out, t)
 	}
 	return out
+}
+
+// spellListNote: what a Spellcasting entry's list adds to one of its spells ("lasts 24 hours; ends early if the dryad casts the spell
+// again", "24-hour duration", "self only, and the hag leaves no tracks while Invisible"), "" when nothing: the server casts the spell
+// as the SRD gives it, so this is shown to the GM with the cast.
+func spellListNote(text, spell string) string {
+	for _, t := range spellTiersOf(text) {
+		for n, note := range t.Notes {
+			if strings.EqualFold(n, spell) {
+				return note
+			}
+		}
+	}
+	return ""
 }
 
 // spellNamesOf: every spell name a Spellcasting entry lists.

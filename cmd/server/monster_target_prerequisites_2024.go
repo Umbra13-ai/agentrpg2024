@@ -9,35 +9,71 @@ import (
 )
 
 var (
-	singleSaveTargetRe  = regexp.MustCompile(`(?i)^one (?:creature|target)(?: ((?:it|the [\pL][\pL '’\-]*?) can see))? within ([0-9]+) (?:feet|ft\.?)\.?$`)
+	// singleSaveTargetRe: "one creature [it can see] within N feet", with what the creature must be: a condition it has ("one Frightened
+	// creature the hag can see within 30 feet": SRD 5.2.1 Sea Hag Death Glare), or living at 0 Hit Points ("one living creature the wisp
+	// can see within 5 feet that has 0 Hit Points": Will-o'-Wisp Consume Life). Groups: 1 living, 2 the condition, 3 the sight clause,
+	// 4 the range, 5 "that has 0 Hit Points".
+	singleSaveTargetRe  = regexp.MustCompile(`(?i)^one (living )?(?:([a-z]+) )?(?:creature|target)(?: ((?:it|the [\pL][\pL '’\-]*?) can see))? within ([0-9]+) (?:feet|ft\.?)( that has 0 Hit Points)?\.?$`)
 	monsterBlindsightRe = regexp.MustCompile(`(?i)\bblindsight\s+(\d+)\s*(?:feet|ft\b)`)
 )
 
-// For a single ranged target, validate the supported header and map facts.
-func monsterSaveTargetIssue(r *http.Request, lobby, source int, meta *monsterMeta, text string, targets []int) string {
+// singleSaveTarget: the single target a save entry's header names (singleSaveTargetRe's groups), nil when it names another kind.
+func singleSaveTarget(text string) []string {
 	match := mfxSaveRe.FindStringIndex(text)
 	if match == nil {
-		return ""
+		return nil
 	}
 	header := strings.TrimSpace(text[match[1]:])
 	if !strings.HasPrefix(header, ",") {
-		return ""
+		return nil
 	}
 	spec, _, _ := strings.Cut(strings.TrimSpace(header[1:]), " Failure:")
 	parts := singleSaveTargetRe.FindStringSubmatch(strings.TrimSpace(spec))
+	if parts == nil || (parts[2] != "" && !mfxConditions[strings.ToLower(parts[2])]) {
+		return nil
+	}
+	return parts
+}
+
+// livingAtZero: a creature at 0 Hit Points that is still alive: a character that isn't dead (dying or Stable). A monster or a companion
+// at 0 Hit Points is dead or destroyed (it has no Death Saving Throws).
+func livingAtZero(lobby, id int) bool {
+	if id <= 0 || isCompanionCombatID(id) {
+		return false
+	}
+	var dead bool
+	db.QueryRow(`SELECT COALESCE(is_dead,false) FROM characters WHERE id=$1`, id).Scan(&dead)
+	return !dead
+}
+
+// For a single ranged target, validate the supported header and map facts.
+func monsterSaveTargetIssue(r *http.Request, lobby, source int, meta *monsterMeta, text string, targets []int) string {
+	parts := singleSaveTarget(text)
 	if parts == nil {
 		return ""
 	}
 	if len(targets) != 1 {
 		return "Select exactly one creature for this action."
 	}
-	maxRange, err := strconv.Atoi(parts[2])
+	// what the target must be, read from the same header: a condition it has, or living at 0 Hit Points
+	if cond := strings.ToLower(parts[2]); cond != "" && !hasCondMarker(lobby, targets[0], cond) {
+		return fmt.Sprintf("%s doesn't have the %s condition: this action targets only a %s creature.", creatureName(lobby, targets[0]), titleCase(cond), titleCase(cond))
+	}
+	if parts[5] != "" {
+		if hp, _ := creatureHP(lobby, targets[0]); hp != 0 {
+			return fmt.Sprintf("%s has %d Hit Points: this action targets only a living creature that has 0 Hit Points.", creatureName(lobby, targets[0]), hp)
+		}
+		if !livingAtZero(lobby, targets[0]) {
+			return fmt.Sprintf("%s isn't living: this action targets only a living creature that has 0 Hit Points.", creatureName(lobby, targets[0]))
+		}
+	}
+	maxRange, err := strconv.Atoi(parts[4])
 	if err != nil || maxRange < 1 {
 		return "The server could not read this action's range. Adjudicate the targeting before applying the effect."
 	}
 	var distance int
 	var placed bool
-	needsSight := parts[1] != ""
+	needsSight := parts[3] != ""
 	if battle, ok := activeEncounterMap(lobby); ok {
 		a, hasSource := battle.token(source)
 		b, hasTarget := battle.token(targets[0])

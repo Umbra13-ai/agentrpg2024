@@ -409,7 +409,8 @@ func TestOwnersAppliedNotRepeatedToTheGM(t *testing.T) {
 		return ""
 	}
 	mouther := text("Gibbering Mouther", "Bite")
-	if e, ok := parseHitRider(mouther); !ok || strings.Join(e.Conditions, ",") != "prone" || !strings.Contains(e.Extra, "dies if it is reduced to 0") || strings.Contains(e.Extra, "Prone") {
+	// its death on a drop is applied by hitAfterDamage (dieOnDropRe); only what becomes of the body is the GM's
+	if e, ok := parseHitRider(mouther); !ok || strings.Join(e.Conditions, ",") != "prone" || strings.Contains(e.Extra, "dies if") || !strings.Contains(e.Extra, "absorbed") || strings.Contains(e.Extra, "Prone") {
 		t.Errorf("Gibbering Mouther Bite: ok %v %+v", ok, e)
 	}
 	if r := unappliedHitRider(text("Swarm of Crawling Claws", "Swarm of Grasping Hands")); r != "" {

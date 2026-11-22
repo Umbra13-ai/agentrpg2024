@@ -330,7 +330,7 @@ func takeLegendaryAction(r *http.Request, lobbyID int, req legendaryRequest, win
 			return nil, "invalid_attack_damage", problem
 		}
 	}
-	if match := mfxUsesRe.FindStringSubmatch(act.Text); match != nil {
+	if match := usesAnotherEntry(act.Text); match != nil {
 		if problem := preflightMonsterAction(meta, strings.TrimSpace(match[1]), req.Use, nil); problem != "" {
 			return nil, "invalid_attack_damage", problem
 		}

@@ -52,6 +52,7 @@ type monsterSaveCursor struct {
 	Effect                saveEffect
 	Target, FailedBy      int
 	Apply, Saved, Evasion bool
+	Dropped               bool // dropsToZero: no damage, the target drops to 0 Hit Points
 	Damage                []int
 	Next                  int
 	Line                  string
@@ -65,9 +66,12 @@ func prepareMonsterSaveEffect(lobby int, source string, e saveEffect, tid int, r
 	sv := e.rollForTarget(lobby, tid, total, apply)
 	c := monsterSaveCursor{Source: source, Effect: e, Target: tid, Apply: apply, Saved: sv.Success, FailedBy: saveFailureMargin(sv), Line: sv.Line(creatureName(lobby, tid))}
 	c.Evasion = e.Ability == "dex" && e.HalfOnSuccess && monsterHasTrait(lobby, tid, "Evasion")
+	c.Dropped = e.dropsToZero(lobby, tid, c.Saved)
 	for i := range e.Damage {
 		d := rolled[i]
 		switch {
+		case c.Dropped:
+			d = 0
 		case c.Saved && (c.Evasion || !e.HalfOnSuccess):
 			d = 0
 		case c.Saved, c.Evasion:
@@ -99,6 +103,9 @@ func applySaveEffectOnMonster(lobbyID int, source string, e saveEffect, tid int,
 func runMonsterSaveEffect(lobby int, c monsterSaveCursor) (line string, immune bool) {
 	var parts []string
 	e := c.Effect
+	if c.Dropped && c.Next == 0 {
+		parts = append(parts, e.dropToZero(lobby, c.Target, c.Apply))
+	}
 	for i := c.Next; i < len(e.Damage); i++ {
 		d := c.Damage[i]
 		if d <= 0 {

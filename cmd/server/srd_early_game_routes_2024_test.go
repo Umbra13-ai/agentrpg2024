@@ -11,7 +11,7 @@ import (
 	"github.com/agentrpg/agentrpg/game"
 )
 
-// The early-game playtest set (owner, Nov 22: the 134 SRD 5.2.1 monsters of CR 0 to 1) through the real routes, every entry:
+// The early-game playtest set (owner, Nov 22: CR 0 to 1, widened to CR 3 the same day: 201 SRD 5.2.1 monsters) through the real routes, every entry:
 //
 //   - each action, Bonus Action and Reaction is sent as POST /api/gm/narrate's monster_action at a character in a fight, with every
 //     option its entry offers in use (a form, a standard action, a spell: read from the entry by the server's own readers), after the
@@ -32,6 +32,7 @@ type earlyRun struct {
 	result                    string
 	hpLost, conds, fx         int
 	selfChanged, itemChanged  bool
+	died                      bool
 	verdict                   string
 }
 
@@ -93,6 +94,11 @@ func TestPostgresEarlyGameEveryEntry(t *testing.T) {
 				t.Fatalf("equip again: %d %v", c, j)
 			}
 		}
+	}
+	heroDead := func() bool {
+		var dead bool
+		db.QueryRow(`SELECT COALESCE(is_dead,false) FROM characters WHERE id=$1`, char).Scan(&dead)
+		return dead
 	}
 	heroHP := func() int {
 		var hp int
@@ -281,6 +287,30 @@ func TestPostgresEarlyGameEveryEntry(t *testing.T) {
 						if hideLightGateRe.MatchString(e.Text) {
 							pgCall(t, "POST", "/api/gm/set-lighting", gm, map[string]interface{}{"campaign_id": camp, "lighting": "dim"})
 						}
+						// what a single save target must be ("one Frightened creature", "one living creature ... that has 0 Hit Points"):
+						// the hero is made so, read from the same header as the server's check (singleSaveTarget)
+						if parts := singleSaveTarget(e.Text); parts != nil {
+							if parts[2] != "" {
+								addCondition(camp, char, condAdd{Condition: strings.ToLower(parts[2]), Source: "the route test's setup"})
+							}
+							if parts[5] != "" {
+								resetHero(0)
+							}
+						}
+						if hasSave && save.DropAtOrBelow > 0 { // "If the target has 20 Hit Points or fewer, it drops to 0": that branch
+							pgExec(t, `UPDATE characters SET hp=$1 WHERE id=$2`, save.DropAtOrBelow, char)
+						}
+						// "Bite (Wolf or Hybrid Form Only)": the monster's own Shape-Shift into the first form the entry names
+						if forms := entryForms(e.Name); len(forms) > 0 {
+							shift, ok := shapeShiftEntry(monsterMetaFor(slug))
+							if !ok {
+								t.Fatalf("%s / %s: a form-gated entry without a Shape-Shift entry", name, e.Name)
+							}
+							_, trueForm := shapeShiftForms(shift.Text)
+							if c, res := narrate(name, shift.Name, forms[0], nil); c != 200 || (formOf(camp, id) == "") != strings.EqualFold(forms[0], trueForm) {
+								t.Fatalf("%s: Shape-Shift into %s: %d %s", name, forms[0], c, res)
+							}
+						}
 						target := hero
 						if g.kind == "reaction" && strings.Contains(e.Text, " ally ") { // "The goblin chooses a Small or Medium ally within 5 feet of itself"
 							ally := name + " ally"
@@ -289,12 +319,13 @@ func TestPostgresEarlyGameEveryEntry(t *testing.T) {
 							}
 							target = ally
 						}
-						hpBefore, selfBefore, invBefore := heroHP(), selfSnapshot(id), inventory()
+						hpBefore, selfBefore, invBefore, deadBefore := heroHP(), selfSnapshot(id), inventory(), heroDead()
 						fxBefore := effectsOn(char)
 						run.code, run.result = narrateAt(name, e.Name, target, use, attacks)
 						run.hpLost, run.conds, run.fx = hpBefore-heroHP(), len(loadConditionRecords(camp, char)), effectsOn(char)-fxBefore
 						run.selfChanged = selfSnapshot(id) != selfBefore
 						run.itemChanged = inventory() != invBefore // the item state owner keeps corrosion on the item
+						run.died = heroDead() && !deadBefore
 						missed := (isAttackEntry(e.Text) || strings.HasPrefix(e.Name, "Multiattack")) && !strings.Contains(run.result, "HIT")
 						saved := strings.Contains(run.result, "succeeds on the") && !strings.Contains(run.result, "fails the")
 						// a roll that did nothing this time: a Hide that failed, a Parry whose +2 AC didn't turn the hit into a miss, a hit that rolled 0 damage
@@ -304,7 +335,7 @@ func TestPostgresEarlyGameEveryEntry(t *testing.T) {
 						}
 					}
 					// stored, or the rule's own answer that it does nothing to this target ("isn't a Beast, so Animal Friendship has no effect")
-					stored := run.hpLost > 0 || run.conds > 0 || run.fx > 0 || run.selfChanged || run.itemChanged || strings.Contains(run.result, "has no effect")
+					stored := run.hpLost > 0 || run.conds > 0 || run.fx > 0 || run.selfChanged || run.itemChanged || run.died || strings.Contains(run.result, "has no effect")
 					flagged := strings.Contains(run.result, "GM")
 					switch {
 					case run.code != 200 && !(swallow != nil && sizeOrder[strings.ToLower(heroSize)] > sizeOrder[swallow.maxSize] && strings.Contains(run.result, "swallows only a target of")):
@@ -354,8 +385,8 @@ func TestPostgresEarlyGameEveryEntry(t *testing.T) {
 		entries[r.monster+"|"+r.kind+"|"+r.entry] = true
 	}
 	t.Logf("early game routes: %d runs over %d actions, Bonus Actions and Reactions, %d traits: %v", len(runs), len(entries), len(traitRows), verdicts)
-	if len(entries)+len(traitRows) != 312 {
-		t.Errorf("%d entries and %d traits checked; the set has 312", len(entries), len(traitRows))
+	if len(entries)+len(traitRows) != 540 {
+		t.Errorf("%d entries and %d traits checked; the set has 540", len(entries), len(traitRows))
 	}
 	if out := os.Getenv("EARLY_ROUTES_OUT"); out != "" {
 		var lines []string
@@ -367,7 +398,7 @@ func TestPostgresEarlyGameEveryEntry(t *testing.T) {
 			for _, x := range []struct {
 				on   bool
 				what string
-			}{{r.hpLost > 0, "Hit Points"}, {r.conds > 0, "condition records"}, {r.fx > 0, "effects on the character"}, {r.selfChanged, "the monster's own state"}, {r.itemChanged, "an item"}} {
+			}{{r.hpLost > 0, "Hit Points"}, {r.conds > 0, "condition records"}, {r.fx > 0, "effects on the character"}, {r.selfChanged, "the monster's own state"}, {r.itemChanged, "an item"}, {r.died, "the character's death"}} {
 				if x.on {
 					stored = append(stored, x.what)
 				}
@@ -387,8 +418,8 @@ func TestPostgresEarlyGameEveryEntry(t *testing.T) {
 			lines = append(lines, fmt.Sprintf("| %s | trait | %s | - | %s |  |  |", p[0], cell(p[2]), cell(p[3])))
 		}
 		sort.Strings(lines)
-		head := "# SRD 5.2.1 early-game monsters (CR 0 to 1): the route test\n\nWritten by `EARLY_ROUTES_OUT=$PWD/docs/SRD_EARLY_GAME_ROUTES.md go test ./cmd/server -run TestPostgresEarlyGameEveryEntry`" +
-			" (srd_early_game_routes_2024_test.go, Postgres): one run's result. Every action, Bonus Action and Reaction of the 134 monsters sent through" +
+		head := "# SRD 5.2.1 early-game monsters (CR 0 to 3): the route test\n\nWritten by `EARLY_ROUTES_OUT=$PWD/docs/SRD_EARLY_GAME_ROUTES.md go test ./cmd/server -run TestPostgresEarlyGameEveryEntry`" +
+			" (srd_early_game_routes_2024_test.go, Postgres): one run's result. Every action, Bonus Action and Reaction of the 201 monsters sent through" +
 			" POST /api/gm/narrate's monster_action at a character, once per option its entry offers (`use`), after the setup its gate needs; an attack" +
 			" repeated until it hits and a save until it fails. \"Stored\" is what the server wrote; \"flagged to the GM\" means the reply hands the GM what" +
 			" the server doesn't do. Movement is run without a battle map here (the GM places the creature). Traits: who applies each, as the GM's view of the fight says.\n\n" +

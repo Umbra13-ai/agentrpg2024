@@ -3,6 +3,7 @@ package main
 import (
 	"fmt"
 	"regexp"
+	"strconv"
 	"strings"
 
 	"github.com/agentrpg/agentrpg/game"
@@ -17,7 +18,93 @@ func hitAfterDamage(lobby, attacker, target int, desc, source string, taken int,
 	recordLastHit(lobby, attacker, target, taken) // what it hit, for an entry used right after (Rampage; creature_movement_2024.go)
 	return drainHPMaximum(lobby, target, desc, taken, byType) + burnOnHit(lobby, target, desc, source) + abilityDecreaseOnHit(lobby, target, desc, source) +
 		corrodeArmorOnHit(lobby, target, desc) + // item_state_2024.go
-		hitForcedMove(lobby, attacker, target, desc) // a push or pull (creature_movement_2024.go)
+		hitForcedMove(lobby, attacker, target, desc) + // a push or pull (creature_movement_2024.go)
+		droppedToZeroOnHit(lobby, attacker, target, desc, source, taken)
+}
+
+// dropRiderRe: what a hit does when it reduces its target to 0 Hit Points ("If this damage reduces the target to 0 Hit Points, the
+// target becomes Stable, and it has the Poisoned condition for 1 hour. While Poisoned, the target also has the Paralyzed condition.":
+// SRD 5.2.1 Phase Spider Bite; "If the target is reduced to 0 Hit Points by this attack, the target becomes Stable but has the Poisoned
+// condition for 1 hour. While it has the Poisoned condition, the target has the Paralyzed condition.": Vampire Familiar Umbral Dagger).
+// parseHitRider never applies these on a hit (hitRiderDeferredRe, dependsOnDeferred); this applies them when the hit did it.
+var dropRiderRe = regexp.MustCompile(`(?i)If (?:this damage reduces the target to 0 Hit Points|the target is reduced to 0 Hit Points by this attack), the target becomes Stable,? (?:and it|but) has the ([A-Za-z]+) condition for (\d+) (minute|hour)s?\.\s*While (?:it has the )?([A-Za-z]+)(?: condition)?, the target (?:also )?has the ([A-Za-z]+) condition\.?`)
+
+// dieOnDropRe: "The target dies if it is reduced to 0 Hit Points by this attack." (SRD 5.2.1 Gibbering Mouther Bite), "A creature dies
+// and turns to dust if reduced to 0 Hit Points by this attack." (Mummy Rotting Fist): droppedToZeroOnHit kills it (what becomes of the
+// body stays in the GM's text).
+var dieOnDropRe = regexp.MustCompile(`(?i)(?:The target|A creature) dies(?: and turns to dust)? if (?:it is )?reduced to 0 Hit Points by this attack\.?`)
+
+// stripDropRider removes those texts from a residual (applied by droppedToZeroOnHit on every hit route).
+func stripDropRider(text string) string {
+	return dieOnDropRe.ReplaceAllString(dropRiderRe.ReplaceAllString(text, ""), "")
+}
+
+// hitDroppedToZero: this hit, which dealt taken damage, reduced the target to 0 Hit Points. A character that was already at 0 took a
+// Death Saving Throw failure from it (or is dead), so a character at 0 with no failures was dropped by this hit; a monster or companion
+// at 0 after damage was.
+func hitDroppedToZero(lobby, target, taken int) bool {
+	if taken <= 0 {
+		return false
+	}
+	if hp, _ := creatureHP(lobby, target); hp != 0 {
+		return false
+	}
+	if target > 0 && !isCompanionCombatID(target) {
+		var failures int
+		var dead bool
+		db.QueryRow(`SELECT COALESCE(death_save_failures,0), COALESCE(is_dead,false) FROM characters WHERE id=$1`, target).Scan(&failures, &dead)
+		return failures == 0 && !dead
+	}
+	return true
+}
+
+// dieOnDrop: the target the hit dropped dies (a character through the Hit Point owner; a monster or companion at 0 is already dead).
+func dieOnDrop(lobby, target int) string {
+	name := creatureName(lobby, target)
+	if target > 0 && !isCompanionCombatID(target) {
+		if _, err := killCharacter(target); err != nil {
+			return fmt.Sprintf(" [%s dies by this attack's rule: not recorded (%s); the GM applies it]", name, notFoundOrDBError(err, "no such character"))
+		}
+	}
+	return fmt.Sprintf(" [%s is reduced to 0 Hit Points by this attack and dies]", name)
+}
+
+// droppedToZeroOnHit: the hit reduced its target to 0 Hit Points (it dealt damage and the target is at 0 now; a character that was already
+// at 0 took a Death Saving Throw failure from it, so 0 failures means this hit dropped it): the target becomes Stable (a character through
+// the Hit Point owner; a monster or companion has no Death Saving Throws: the GM keeps it alive at 0) and has the first condition for its
+// time, and the second while it has the first (the condition owner, notesEndsWith).
+func droppedToZeroOnHit(lobby, attacker, target int, desc, source string, taken int) string {
+	hitText := hitDamageText(desc)
+	if dieOnDropRe.MatchString(hitText) && hitDroppedToZero(lobby, target, taken) {
+		return dieOnDrop(lobby, target)
+	}
+	m := dropRiderRe.FindStringSubmatch(hitText)
+	if m == nil || !strings.EqualFold(m[1], m[4]) || !hitDroppedToZero(lobby, target, taken) {
+		return ""
+	}
+	name := creatureName(lobby, target)
+	text := ""
+	if target > 0 && !isCompanionCombatID(target) {
+		if _, err := stabilizeCharacter(target); err != nil {
+			return fmt.Sprintf(" [%s drops to 0 Hit Points and becomes Stable, Poisoned and Paralyzed by its rule: not recorded (%s); the GM applies it]", name, notFoundOrDBError(err, "no such character"))
+		}
+		text = fmt.Sprintf(" [%s drops to 0 Hit Points and becomes Stable", name)
+	} else {
+		text = fmt.Sprintf(" [%s drops to 0 Hit Points; by this attack's rule it becomes Stable (the GM keeps it alive at 0)", name)
+	}
+	first, second := strings.ToLower(m[1]), strings.ToLower(m[5])
+	n, _ := strconv.Atoi(m[2])
+	rounds := n * map[string]int{"minute": 10, "hour": 600}[strings.ToLower(m[3])]
+	if res := addCondition(lobby, target, condAdd{Condition: first, Source: source, Rounds: rounds, SourceID: attacker}); res.Immune != "" {
+		return text + fmt.Sprintf("; not %s (%s)]", titleCase(first), res.Immune)
+	}
+	text += fmt.Sprintf("; %s for %s %s", titleCase(first), m[2], strings.ToLower(m[3])+map[bool]string{true: "s", false: ""}[n != 1])
+	if res := addCondition(lobby, target, condAdd{Condition: second, Source: source, SourceID: attacker, Notes: notesEndsWith + first}); res.Immune != "" {
+		text += fmt.Sprintf("; not %s (%s)", titleCase(second), res.Immune)
+	} else {
+		text += fmt.Sprintf(", and %s while %s", titleCase(second), titleCase(first))
+	}
+	return text + "]"
 }
 
 // abilityDecreaseRe: "and the target's Strength score decreases by 1d4. The target dies if this reduces that score to 0." (SRD 5.2.1

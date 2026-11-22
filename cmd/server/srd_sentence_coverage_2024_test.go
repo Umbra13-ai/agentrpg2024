@@ -269,8 +269,8 @@ func entryCoverage(kind string, e srdMonsterEntry, names []string) []sentenceVer
 	if obscuringTextRe.MatchString(e.Text) {
 		return bySentence("resolveObscuringText", func(string) bool { return true }, "")
 	}
-	if mfxUsesRe.MatchString(e.Text) {
-		return bySentence("mfxUsesRe (uses another entry)", func(s string) bool { return mfxUsesRe.MatchString(s) }, "")
+	if usesAnotherEntry(e.Text) != nil {
+		return bySentence("usesAnotherEntry (uses another entry)", func(s string) bool { return usesAnotherEntry(s) != nil }, "")
 	}
 	for _, n := range names {
 		if monsterTextPatterns[n].MatchString(e.Text) && strings.Contains(n, "") {

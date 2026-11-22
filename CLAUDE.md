@@ -73,6 +73,11 @@ Report: "Wizard Scholar accepts any skill for Expertise."
   cmd/server/monster_effects_2024.go; a monster as the target goes through
   applySaveEffectOnMonster (cmd/server/monster_save_targets.go), which uses saveCtx, hurtMonster
   and addCondition. No other code rolls a stat block's "Saving Throw: DC N" effect.
+  What a single target must be is read from the entry's header by `monsterSaveTargetIssue` (`singleSaveTarget`: range, sight, "one
+  Frightened creature", "one living creature ... that has 0 Hit Points"), refused before anything is rolled or spent. A failure's Hit
+  Point threshold ("If the target has 20 Hit Points or fewer, it drops to 0 Hit Points. Otherwise, ...": `dropsToZero`, asked by every
+  target route before the damage) and "The target dies, and the wisp regains ..." (`killOnFailure`) are the same owner's.
+  Go: `TestPostgresSaveTargetGatesThresholdAndDeath`.
   An action that offers several named effects (splitSaveOptions) is refused until the GM names one in `use`; a size-gated
   condition (saveEffect.conditionsFor) and a staged "Second Failure" go through the same owner, never a per-monster branch.
   The conditions a stat-block hit gives (parseHitRider, giveConditions) are read and applied by that same owner.
@@ -207,10 +212,16 @@ Add to the owner, never beside it. When you give another rule one owner, add it 
   entry's rules don't read outside its sections is `saveSetupText` (`saveEffect.Setup`, shown whatever the result), a multi-effect
   entry's intro `saveOptionsIntro`, a cast's riders `castRiders`: all shown to the GM. What an owner applies is never repeated to the GM:
   a Legendary Action's once-a-turn sentence (`legendaryOnceSentenceRe`, LAOnce's), a judged damage alternative (`judgedAlternativeRe`),
-  an entry that is only its creature's move (`onlyOwnMove`); a hit sentence that waits on a later result ("dies if it is reduced to 0
-  Hit Points") goes to the GM alone, the hit's other riders still apply (`parseHitRider`). Go: `TestOwnersAppliedNotRepeatedToTheGM`.
-  **The early-game playtest set** (owner, Nov 22: the 134 monsters of CR 0 to 1, 312 entries; the only target until the owner says
-  otherwise): `TestSRDEarlyGameCoverage` (its table, `docs/SRD_EARLY_GAME_COVERAGE.md`, `SRD_EARLY_OUT`) and the route test
+  an entry that is only its creature's move (`onlyOwnMove`); a hit sentence that waits on a later result goes to the GM alone, the hit's
+  other riders still apply (`parseHitRider`), and so does a sentence that lasts only while a condition the waiting one gives
+  (`dependsOnDeferred`: "While Poisoned, the target also has the Paralyzed condition" after "If this damage reduces the target to 0 Hit
+  Points, ..."; "Until the grapple ends, ..." after "can give it the Grappled condition ... instead of dealing damage"). What a hit does
+  when it reduced its target to 0 Hit Points is `droppedToZeroOnHit` in `hitAfterDamage` (`hitDroppedToZero`; Stable with the
+  conditions: `dropRiderRe`, Phase Spider, Vampire Familiar; death: `dieOnDropRe`, Gibbering Mouther, Mummy). A "uses <entry>" in a
+  clause that says when an effect ends never calls that entry (`usesAnotherEntry`, Will-o'-Wisp Vanish). Go:
+  `TestOwnersAppliedNotRepeatedToTheGM`, `TestPostgresHitThatDropsToZero`.
+  **The early-game playtest set** (owner, Nov 22: the monsters of CR 0 to 1, then CR 0 to 3: 201 stat blocks, 540 entries; the only
+  target until the owner says otherwise): `TestSRDEarlyGameCoverage` (its table, `docs/SRD_EARLY_GAME_COVERAGE.md`, `SRD_EARLY_OUT`) and the route test
   `TestPostgresEarlyGameEveryEntry`: every action, Bonus Action and Reaction through narrate's monster_action at a character, with every
   option its entry offers in `use` and the setup its gate needs, what is stored read back; every trait in the GM's view of the fight.
 - **Attack rolls:** `game.AttackRoll` (`game/attack.go`) is the rule of an attack roll (Advantage, Disadvantage and how
@@ -621,7 +632,8 @@ Add to the owner, never beside it. When you give another rule one owner, add it 
   - `castEffectAnyCreature` lists the kinds a monster's cast applies.
   - `spellHealDice` is a healing spell's dice and modifier, for characters and monsters.
   - `monsterSpellcastingMod` / `monsterSpellDC` read a monster's casting ability and DC.
-  - `castChoiceList`: an entry that offers several spells waits for the GM's `use`.
+  - `castChoiceList`: an entry that offers several spells waits for the GM's `use`; so does a Spellcasting entry's lists (`spellTiersOf`,
+    which keeps what a list adds to a spell, `spellListNote`: "Charm Monster (lasts 24 hours; ...)", shown to the GM with the cast).
   - `endWardsOnOffenseOf`: Invisibility and Sanctuary end when their creature, a character or a monster, attacks or casts.
   - A new spell effect for monsters is a row in those tables plus a kind its readers serve for any creature.
   **An entry that can replace part of itself** ("It can replace one attack with a use of Sleep Breath", the Pit Fiend's Hold Monster

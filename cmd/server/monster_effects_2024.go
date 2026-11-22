@@ -132,6 +132,9 @@ type saveEffect struct {
 	AutoSucceedTypes []string            // creature types that succeed on the save automatically ("construct", "undead": rollForTarget)
 	Setup            string              // the entry\'s sentences outside the save line and its sections ("The djinni conjures a whirlwind at a point ...": saveSetupText), the GM\'s
 	Push             *savePush           // "the target is pushed up to 30 feet straight away from the dragon" on a failed save (applySavePush)
+	DropAtOrBelow    int                 // "If the target has 20 Hit Points or fewer, it drops to 0 Hit Points. Otherwise, the target takes ...": dropsToZero
+	Kills            bool                // "Failure: The target dies" (SRD 5.2.1 Will-o'-Wisp Consume Life): killOnFailure
+	KillRegain       string              // ", and the wisp regains 10 (3d6) Hit Points": the source's regain, the monster Hit Point owner
 }
 
 // conditionAdd is the condition record a failed save leaves (character or monster target): its duration, the repeated save, the note
@@ -297,6 +300,19 @@ func (e *saveEffect) readRider(fail string) (extra []string) {
 				continue
 			}
 			ls = strings.ToLower(s)
+		}
+		// "If the target has 20 Hit Points or fewer, it drops to 0 Hit Points." (SRD 5.2.1 Sea Hag Death Glare): dropsToZero decides it per
+		// target before the damage, which then only "Otherwise" applies
+		if m := saveDropRe.FindStringSubmatch(s); m != nil {
+			e.DropAtOrBelow, _ = strconv.Atoi(m[1])
+			continue
+		}
+		if m := saveKillRe.FindStringSubmatch(s); m != nil {
+			e.Kills, e.KillRegain = true, normDice(m[1])
+			continue
+		}
+		if e.DropAtOrBelow > 0 && saveOtherwiseDamageRe.MatchString(s) {
+			continue // the damage above, dealt only to a target with more Hit Points
 		}
 		// The attach onset ("and the stirge attaches to the target") is enforced by the attach owner on
 		// the hit (monster_attach_2024.go): not the GM's.
@@ -517,6 +533,48 @@ var hitRiderChoiceRe = regexp.MustCompile(`(?i)choice of|determined by rolling|o
 // parseHitRider reads the conditions a stat-block hit gives besides its damage ("..., and the target has the Stunned condition until
 // the end of the vrock's next turn", "If the target is a Large or smaller creature, it has the Prone condition"): the same rules
 // as a failed save (readRider), with no saving throw of their own. A hit with its own saving throw is the save owner's.
+// usesAnotherEntry: the "uses <entry>" of a text that calls another entry of the stat block ("uses Lightning Strike"), nil when none.
+// A "uses <entry>" in a clause that says when the effect ends ("which ends early immediately after the wisp makes an attack roll or uses
+// Consume Life": SRD 5.2.1 Will-o'-Wisp Vanish) is a condition of the effect, never a call to that entry.
+func usesAnotherEntry(text string) []string {
+	for _, loc := range mfxUsesRe.FindAllStringSubmatchIndex(text, -1) {
+		before := text[:loc[0]]
+		if i := strings.LastIndexAny(before, ".\n"); i >= 0 {
+			before = before[i+1:]
+		}
+		if usesEndClauseRe.MatchString(before) {
+			continue
+		}
+		m := make([]string, len(loc)/2)
+		for k := range m {
+			if loc[2*k] >= 0 {
+				m[k] = text[loc[2*k]:loc[2*k+1]]
+			}
+		}
+		return m
+	}
+	return nil
+}
+
+// usesEndClauseRe: the lead of a clause that says when an effect ends.
+var usesEndClauseRe = regexp.MustCompile(`(?i)\bends?\b[^.]*\bafter\b`)
+
+// hitRiderWhileRe: a sentence that lasts while a condition lasts ("While Poisoned, ...", "Until the grapple ends, ...").
+var hitRiderWhileRe = regexp.MustCompile(`(?i)^\s*(?:While (?:it has the )?([A-Za-z]+)(?: condition)?|Until the (grapple) ends),`)
+
+// dependsOnDeferred: the sentence lasts while a condition that only a deferred sentence gives.
+func dependsOnDeferred(sentence string, deferred []string) bool {
+	m := hitRiderWhileRe.FindStringSubmatch(sentence)
+	if m == nil || len(deferred) == 0 {
+		return false
+	}
+	cond := strings.ToLower(m[1])
+	if m[2] != "" {
+		cond = "grappled"
+	}
+	return strings.Contains(strings.ToLower(strings.Join(deferred, " ")), "the "+cond+" condition")
+}
+
 func parseHitRider(desc string) (saveEffect, bool) {
 	i := strings.Index(desc, "Hit:")
 	if i < 0 || mfxSaveRe.MatchString(desc) {
@@ -538,17 +596,21 @@ func parseHitRider(desc string) (saveEffect, bool) {
 	})
 	// a sentence that waits on a later result (reduced to 0 Hit Points, an alternate result, a movement path) is the GM's; the rest of
 	// the hit is read as usual
+	// A sentence that lasts only while a condition a deferred sentence gives lasts ("While Poisoned, the target also has the Paralyzed
+	// condition" after "If this damage reduces the target to 0 Hit Points, ... it has the Poisoned condition for 1 hour": Phase Spider,
+	// Vampire Familiar; "Until the grapple ends, ..." after "the rug can give it the Grappled condition ... instead of dealing damage")
+	// waits with it: it is never applied on a hit that didn't give that condition.
 	var deferred []string
 	var kept []string
 	for _, s := range sentenceSplitRe.Split(strings.TrimSpace(hit), -1) {
-		if hitRiderDeferredRe.MatchString(s) {
+		if hitRiderDeferredRe.MatchString(s) || dependsOnDeferred(s, deferred) {
 			deferred = append(deferred, strings.TrimSuffix(strings.TrimSpace(s), "."))
 		} else {
 			kept = append(kept, s)
 		}
 	}
 	if len(deferred) > 0 && len(kept) <= 1 {
-		return saveEffect{}, false // nothing but the damage besides: the whole rider stays the GM's
+		return saveEffect{}, false // nothing but the damage besides: the whole rider stays the GM's (less what hitAfterDamage applies)
 	}
 	hit = strings.Join(kept, ". ")
 	var e saveEffect
@@ -566,6 +628,9 @@ func parseHitRider(desc string) (saveEffect, bool) {
 		e.Extra = strings.Trim(stripped, " .")
 	}
 	if stripped := stripForcedMoves(e.Extra); stripped != e.Extra { // a push or pull: applied by hitAfterDamage
+		e.Extra = strings.Trim(stripped, " .")
+	}
+	if stripped := stripDropRider(e.Extra + "."); stripped != e.Extra+"." { // reduced to 0 by the hit: applied by hitAfterDamage
 		e.Extra = strings.Trim(stripped, " .")
 	}
 	return e, len(e.Conditions) > 0 || e.SpeedMode != "" || len(e.DisadvMode) > 0
@@ -1016,6 +1081,9 @@ func (e saveEffect) finishTarget(lobby, target int, source string, apply, saved 
 	if !saved && e.Push != nil {
 		parts = append(parts, e.applySavePush(lobby, target))
 	}
+	if !saved && e.Kills {
+		parts = append(parts, e.killOnFailure(lobby, target))
+	}
 	if !saved {
 		if e.SeverePoison != nil && failedBy >= e.SeverePoison.Margin {
 			return append(parts, e.giveSeverePoison(lobby, target, source)...), false
@@ -1032,6 +1100,73 @@ func (e saveEffect) finishTarget(lobby, target int, source string, apply, saved 
 		return append(parts, "immune to it for "+e.ImmunityDuration), true
 	}
 	return parts, false
+}
+
+// saveDropRe / saveOtherwiseDamageRe: a failure that drops a target with few enough Hit Points to 0 and otherwise deals its damage.
+var (
+	saveDropRe            = regexp.MustCompile(`(?i)^\s*If the target has (\d+) Hit Points or fewer, it drops to 0 Hit Points\.?\s*$`)
+	saveOtherwiseDamageRe = regexp.MustCompile(`(?i)^\s*Otherwise, the target takes \d+ \(\d+d\d+(?:\s*[+−-]\s*\d+)?\) [A-Za-z]+ damage\.?\s*$`)
+	// saveKillRe: "The target dies, and the wisp regains 10 (3d6) Hit Points." (the regain is optional)
+	saveKillRe = regexp.MustCompile(`(?i)^\s*The target dies(?:, and the [\pL '’-]+ regains \d+ \((\d+d\d+(?:\s*[+−-]\s*\d+)?)\) Hit Points)?\.?\s*$`)
+)
+
+// killOnFailure: a failed save's "The target dies": a character through the Hit Point owner (killCharacter), a monster at 0 Hit Points,
+// a companion at 0; then the source regains what the text says (drainRegain: the monster Hit Point owner).
+func (e saveEffect) killOnFailure(lobby, tid int) string {
+	name := creatureName(lobby, tid)
+	var err error
+	switch {
+	case isCompanionCombatID(tid):
+		if c, ok := loadCompanion(tid - companionIDBase); ok {
+			_, _, err = changeCompanionHP(c.ID, func(v game.Vitals) game.Vitals { return v.SetHP(0) }, nil)
+		}
+	case tid > 0:
+		_, err = killCharacter(tid)
+	default:
+		err = setMonsterHP(lobby, tid, 0)
+	}
+	if err != nil {
+		return fmt.Sprintf("[%s dies by this effect: not recorded (%s); the GM applies it]", name, notFoundOrDBError(err, "no such creature"))
+	}
+	text := name + " dies"
+	if e.KillRegain != "" {
+		text += drainRegain(lobby, e.SourceID, game.RollDamage(e.KillRegain, false))
+	}
+	return text
+}
+
+// dropsToZero: on a failed save, a target with DropAtOrBelow Hit Points or fewer drops to 0 Hit Points (each target kind through its own
+// Hit Point owner: setHP, setMonsterHP, changeCompanionHP), and the effect's damage is not dealt to it. Every target route asks it before
+// the damage (the character's, runMonsterSaveEffect, applySaveEffectOnCompanion). It is not damage: no Concentration save, no resistance.
+func (e saveEffect) dropsToZero(lobby, tid int, saved bool) bool {
+	if saved || e.DropAtOrBelow <= 0 {
+		return false
+	}
+	hp, _ := creatureHP(lobby, tid)
+	return hp > 0 && hp <= e.DropAtOrBelow
+}
+
+// dropToZero applies it (apply) and says so.
+func (e saveEffect) dropToZero(lobby, tid int, apply bool) string {
+	name := creatureName(lobby, tid)
+	if !apply {
+		return fmt.Sprintf("%s has %d Hit Points or fewer: it would drop to 0 Hit Points (not applied)", name, e.DropAtOrBelow)
+	}
+	var err error
+	switch {
+	case isCompanionCombatID(tid):
+		if c, ok := loadCompanion(tid - companionIDBase); ok {
+			_, _, err = changeCompanionHP(c.ID, func(v game.Vitals) game.Vitals { return v.SetHP(0) }, nil)
+		}
+	case tid > 0:
+		_, err = setHP(tid, 0)
+	default:
+		err = setMonsterHP(lobby, tid, 0)
+	}
+	if err != nil {
+		return fmt.Sprintf("[%s should drop to 0 Hit Points (it has %d or fewer): not recorded (%s); the GM applies it]", name, e.DropAtOrBelow, notFoundOrDBError(err, "no such creature"))
+	}
+	return fmt.Sprintf("%s has %d Hit Points or fewer and drops to 0 Hit Points", name, e.DropAtOrBelow)
 }
 
 func applySaveEffect(lobbyID int, source string, e saveEffect, targets []int, apply bool) (lines []string, immuneAfter []int) {
@@ -1116,8 +1251,15 @@ func runSaveEffectTargets(lobbyID int, c saveEffectCursor) (lines []string, immu
 		var parts []string
 		parts = append(parts, protect...)
 		evasion := e.Ability == "dex" && e.HalfOnSuccess && hasEvasion(tid)
+		dropped := e.dropsToZero(lobbyID, tid, saved)
+		if dropped {
+			parts = append(parts, e.dropToZero(lobbyID, tid, apply))
+		}
 		for i, p := range e.Damage {
 			d := rolled[i]
+			if dropped {
+				break
+			}
 			switch {
 			case saved && (evasion || !e.HalfOnSuccess):
 				d = 0
@@ -1556,6 +1698,9 @@ func resolveMonsterEffectText(r *http.Request, lobbyID, monsterID int, meta *mon
 	// the spell the GM picks with "use" from the ones the text offers (legendary_more_2024.go)
 	if spName, lvl, ok := monsterSpellFromUse(text, use); ok && depth == 0 {
 		dc, atk := monsterSpellNumbers(text, meta)
+		if note := spellListNote(text, spName); note != "" { // what the stat block changes in the spell is the GM's
+			notes = append(notes, fmt.Sprintf("The GM applies what the stat block adds to %s: %s.", spName, note))
+		}
 		// a limited spell called by another entry (a Legendary Action that casts): monsterAction already reserved its own entry's use
 		if rec := execIn(r); apply && rec != nil && !rec.dayHandled {
 			if key, limit := monsterDayUse(srdMonsterEntry{Name: entryName, Text: text}, spName); key != "" {
@@ -1663,7 +1808,7 @@ func resolveMonsterEffectText(r *http.Request, lobbyID, monsterID int, meta *mon
 		return append(lines, notes...)
 	}
 	// another action of the stat block ("uses Lightning Strike")
-	if m := mfxUsesRe.FindStringSubmatch(text); m != nil && meta != nil && depth < 2 {
+	if m := usesAnotherEntry(text); m != nil && meta != nil && depth < 2 {
 		for _, a := range append(append([]srdMonsterEntry{}, meta.Actions...), meta.BonusActions...) {
 			if strings.EqualFold(stripUsage(a.Name), strings.TrimSpace(m[1])) {
 				if isAttackEntry(a.Text) {

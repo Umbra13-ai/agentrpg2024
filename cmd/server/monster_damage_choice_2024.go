@@ -522,6 +522,7 @@ func unappliedHitRider(desc string) string {
 	text = stripForcedMoves(text)     // applied by every hit route (hitAfterDamage)
 	text = stripAbilityDecrease(text) // applied by every hit route (hitAfterDamage: the ability score owner)
 	text = stripItemPenalties(text)   // hitAfterDamage corrodes the worn armor (item_state_2024.go)
+	text = stripDropRider(text)       // reduced to 0 by the hit: hitAfterDamage
 	kept := []string{}
 	for _, s := range sentenceSplitRe.Split(text, -1) {
 		stripped := s

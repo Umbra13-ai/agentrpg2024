@@ -63,6 +63,13 @@ var monsterTextPatterns = map[string]*regexp.Regexp{
 	"noReactRe":                noReactRe,                // disadvantage_riders_2024.go
 	"hideLightGateRe":          hideLightGateRe,          // hide_2024.go
 	"abilityDecreaseRe":        abilityDecreaseRe,        // hit_after_damage_2024.go
+	"dropRiderRe":              dropRiderRe,              // hit_after_damage_2024.go
+	"dieOnDropRe":              dieOnDropRe,              // hit_after_damage_2024.go
+	"saveDropRe":               saveDropRe,               // monster_effects_2024.go
+	"saveKillRe":               saveKillRe,               // monster_effects_2024.go
+	"saveOtherwiseDamageRe":    saveOtherwiseDamageRe,    // monster_effects_2024.go
+	"hitRiderWhileRe":          hitRiderWhileRe,          // monster_effects_2024.go
+	"usesEndClauseRe":          usesEndClauseRe,          // monster_effects_2024.go
 	"burnOnHitRe":              burnOnHitRe,              // hit_after_damage_2024.go
 	"drainRegainRe":            drainRegainRe,            // hp_max_drain_2024.go
 	"hpMaxDrainRe":             hpMaxDrainRe,             // hp_max_drain_2024.go
@@ -116,6 +123,7 @@ var monsterTextPatterns = map[string]*regexp.Regexp{
 	"magicalDarknessSenseRe":   magicalDarknessSenseRe,   // monster_darkness_2024.go
 	"spellListHeadRe":          spellListHeadRe,          // monster_day_uses.go
 	"spellParenRe":             spellParenRe,             // monster_day_uses.go
+	"spellLevelNoteRe":         spellLevelNoteRe,         // monster_day_uses.go
 	"deathTriggerRe":           deathTriggerRe,           // monster_death_trigger_2024.go
 	"directDamageText":         directDamageText,         // monster_direct_damage_2024.go
 	"embeddedDamageText":       embeddedDamageText,       // monster_direct_damage_2024.go
