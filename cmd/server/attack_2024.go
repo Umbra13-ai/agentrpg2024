@@ -36,6 +36,7 @@ type attackCtx struct {
 	melee           bool // made within reach; false: a ranged attack
 	spell           bool // a spell attack
 	weapon          bool // made with a weapon or an Unarmed Strike (it uses Strength or Dexterity)
+	strength        bool // a Strength-based attack roll: the attack uses Strength (a weakened creature has Disadvantage on it, effect_records_2024.go)
 	opportunity     bool // an Opportunity Attack
 	longRange       bool // beyond the attack's normal range (the caller knows the attack's ranges)
 	within5         *bool
@@ -489,6 +490,9 @@ func (c *attackCtx) gather() game.AttackRoll {
 	}
 	a.Advantage = append(a.Advantage, c.extraAdv...)
 	a.Disadvantage = append(a.Disadvantage, c.extraDis...)
+	if c.attacker != 0 && c.strength && weakenedOn(c.lobby, c.attacker) { // Weakening Breath: Disadvantage on Strength-based D20 Tests
+		a.Disadvantage = append(a.Disadvantage, "weakened (a Strength-based D20 Test)")
+	}
 	// Elusive (Rogue 18): no attack roll has Advantage against the Rogue unless the Rogue is Incapacitated
 	if c.target > 0 && len(a.Advantage) > 0 && hasElusive(c.target) && !isIncapacitated(c.target) {
 		a.Advantage = nil
@@ -500,6 +504,11 @@ func (c *attackCtx) gather() game.AttackRoll {
 	if c.attacker != 0 {
 		if adj, note := spellRollAdjust(c.lobby, c.attacker, "attack"); note != "" {
 			a.Adjust = append(a.Adjust, game.RollAdjust{Amount: adj, Why: strings.Trim(note, " []")})
+		}
+	}
+	if c.attacker != 0 {
+		if n, why := d20MinusRoll(c.lobby, c.attacker); n > 0 { // Giggling Magic: a die subtracted from each attack roll
+			a.Adjust = append(a.Adjust, game.RollAdjust{Amount: -n, Why: why})
 		}
 	}
 	if c.attacker != 0 { // every D20 Test: 2 per Exhaustion level, whatever the attacker's kind (exhaustion_any_2024.go)

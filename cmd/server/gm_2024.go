@@ -187,10 +187,10 @@ func handleGMEscapeGrapple2024(w http.ResponseWriter, r *http.Request) {
 	} else {
 		_ = pb
 	}
-	bonus -= checkExhaustion(lobby, req.TargetID) // SRD 5.2.1: -2 per Exhaustion level on a D20 Test, any kind of creature
 	// What gives the check Advantage or Disadvantage has one owner (check_2024.go): Poisoned, Frightened, riders, Sunlight Sensitivity, the
 	// holder's own words (the Mimic), Large Form, Powerful Build. This route had none.
 	why := checkCtx{lobby: lobby, who: req.TargetID, ability: "str", skill: "athletics", escape: true, holder: rec.SourceID}.sources()
+	bonus -= why.Penalty // Exhaustion (-2 per level, any kind of creature) and a die subtracted from the check
 	roll, r1, r2, _ := rollCheckD20(why.Advantage(), why.Disadvantage())
 	total := roll + bonus
 	name := creatureName(lobby, req.TargetID)

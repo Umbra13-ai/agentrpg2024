@@ -551,7 +551,7 @@ func handleConditionEscape(w http.ResponseWriter, r *http.Request) {
 		db.Exec(`UPDATE characters SET action_used = true WHERE id = $1`, req.CharacterID)
 	}
 	scores := map[string]int{"Strength": str, "Dexterity": dex, "Constitution": con, "Intelligence": intl, "Wisdom": wis, "Charisma": cha}
-	mod := game.Modifier(scores[esc.Ability]) - game.ExhaustionD20Penalty(exhaustionLevelOf(req.CharacterID))
+	mod := game.Modifier(scores[esc.Ability])
 	if esc.Skill != "" {
 		if proficient, expert := characterSkillProficiency(req.CharacterID, esc.Skill); proficient { // the one proficiency reader
 			mod += game.ProficiencyBonus(level)
@@ -563,6 +563,7 @@ func handleConditionEscape(w http.ResponseWriter, r *http.Request) {
 	// What gives the check Advantage or Disadvantage has one owner (check_2024.go): Poisoned, Frightened, riders, Sunlight Sensitivity, the
 	// holder's own words, Large Form, Powerful Build, Help
 	why := checkCtx{lobby: lobby, who: req.CharacterID, ability: esc.Ability, skill: esc.Skill, escape: true, holder: rec.SourceID}.sources()
+	mod -= why.Penalty // Exhaustion and a die subtracted from the check (check_2024.go)
 	disadv, adv := why.Disadvantage(), why.Advantage()
 	roll, r1, r2, _ := rollCheckD20(adv, disadv)
 	total := roll + mod

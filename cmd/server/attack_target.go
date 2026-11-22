@@ -442,7 +442,7 @@ func resolveAttackOnMonster(lobbyID, charID, targetID int, o attackOutcome, clea
 			extraDmg += dx
 			vorpalNote += dt
 		}
-		if dx, dt := enlargeHit(lobbyID, charID, dmg+extraDmg); dx != 0 { // Enlarge/Reduce (spells_more_2024.go)
+		if dx, dt := damageRollAdjust(lobbyID, charID, dmg+extraDmg, true); dx != 0 { // Enlarge/Reduce and a weakened die (effect_records_2024.go)
 			hp -= dx
 			extraDmg += dx
 			vorpalNote += dt

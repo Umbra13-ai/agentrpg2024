@@ -32,6 +32,7 @@ func attemptHide(charID int, label string) string {
 	// pace, Foresight, Enhance Ability, Reduce ...; they cancel to one d20
 	why := checkCtx{lobby: lobby, who: charID, ability: "dex", skill: "stealth"}.sources()
 	d, _, _, _ := rollCheckD20(why.Advantage(), why.Disadvantage())
+	guide -= why.Penalty // Exhaustion and a die subtracted from the check
 	notes += why.note()
 	roll, rtNote := reliableRoll(d, reliable)
 	total := roll + mod + prof + guide
@@ -92,7 +93,6 @@ func attemptMonsterHide(lobbyID, monsterID int, name, entryName, text string, ap
 		bonus += 10
 		notes += " [Pass without Trace +10]"
 	}
-	bonus -= checkExhaustion(lobbyID, monsterID) // SRD 5.2.1: -2 per Exhaustion level on a D20 Test
 	// What gives the check Advantage or Disadvantage has one owner (check_2024.go): Poisoned, Frightened, riders, Sunlight Sensitivity ...
 	why := checkCtx{lobby: lobbyID, who: monsterID, ability: "dex", skill: "stealth"}.sources()
 	d, _, _, _ := rollCheckD20(why.Advantage(), why.Disadvantage())
@@ -104,6 +104,7 @@ func attemptMonsterHide(lobbyID, monsterID int, name, entryName, text string, ap
 	case why.Advantage():
 		notes += " [" + strings.Join(why.Adv, ", ") + ": Advantage]"
 	}
+	bonus -= why.Penalty // Exhaustion (-2 per level on a D20 Test) and a die subtracted from the check
 	total := d + bonus
 	endCondition(lobbyID, monsterID, "hidden", "")
 	if total < hideDC {

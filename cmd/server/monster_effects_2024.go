@@ -114,6 +114,7 @@ type saveEffect struct {
 	Always           *saveEffect         // the conditions, Speed and Disadvantage of "Failure or Success:": given to every target that rolled the save
 	DisadvMode       []string            // the roll riders of the text: "sap", "exposed", "attacks", "concentration", "save:int", "noreactions" (disadvantage_riders_2024.go)
 	RollRiderEnd     map[string]riderEnd // the duration of each DisadvMode rider
+	Effects          []effectRead        // the effect records of the text: a die subtracted from D20 Tests, Strength-based Disadvantage (effect_records_2024.go)
 	SpeedMinus       int                 // the feet of "its Speed decreases by 10 feet"
 	ImmunityName     string              // stat-block entry key for persisted success immunity (set by the effect caller)
 	Immunity         bool                // success grants immunity to this source and entry
@@ -270,10 +271,11 @@ func (e *saveEffect) readRider(fail string) (extra []string) {
 	e.EndsOnDamage = len(e.Conditions) > 0 && endsOnDamageRe.MatchString(fail)
 	e.readSpeed(fail)
 	_, gmDisadv := e.readDisadvantage(fail)
+	e.readEffects(fail) // effect records (effect_records_2024.go)
 	extra = append(extra, gmDisadv...)
 	e.EndSave = mfxEndSaveRe.MatchString(lf)
 	autoLimit := false // the condition's limit was read from "After N minutes, it succeeds automatically"
-	if m := mfxAutoSucceedRe.FindStringSubmatch(fail); m != nil && e.EndSave && e.Rounds == 0 && len(e.Conditions) > 0 {
+	if m := mfxAutoSucceedRe.FindStringSubmatch(fail); m != nil && e.EndSave && e.Rounds == 0 && (len(e.Conditions) > 0 || len(e.Effects) > 0) {
 		n, _ := strconv.Atoi(m[1])
 		e.Rounds, autoLimit = n*10, true // the repeated save ends it at the latest then
 	}
@@ -387,6 +389,9 @@ func (e *saveEffect) readRider(fail string) (extra []string) {
 		if len(e.DisadvMode) > 0 {
 			plain = stripDisadvantage(plain) // applied (giveDisadvantage)
 		}
+		if len(e.Effects) > 0 {
+			plain = stripEffects(plain) // applied (giveEffects)
+		}
 		plain = mfxCondRe.ReplaceAllString(plain, "")
 		plain = mfxDurationRe.ReplaceAllString(plain, "")
 		plain = targetIsCreatureGateRe.ReplaceAllString(plain, "") // every target of these routes is a creature: the gate always holds
@@ -455,6 +460,9 @@ func (e *saveEffect) unappliedPart(s string) string {
 			r = re.ReplaceAllString(r, "")
 		}
 	}
+	if len(e.Effects) > 0 {
+		r = stripEffects(r)
+	}
 	if r == strings.TrimSuffix(strings.TrimSpace(s), ".") {
 		return r
 	}
@@ -511,6 +519,7 @@ func (e saveEffect) giveConditions(lobbyID, tid int, source string) []string {
 		parts = append(parts, e.giveSpeed(lobbyID, tid, source))
 	}
 	parts = append(parts, e.giveDisadvantage(lobbyID, tid, source)...)
+	parts = append(parts, e.giveEffects(lobbyID, tid, source)...)
 	if e.Exhaustion > 0 {
 		switch why := immuneToCondition(lobbyID, tid, e.conditionAdd("exhaustion", source)); {
 		case why != "":
@@ -657,7 +666,7 @@ func parseHitRider(desc string) (saveEffect, bool) {
 		e.Extra = strings.TrimSpace(strings.Trim(e.Extra, " .") + ". " + strings.TrimSuffix(restSave, ".") + ".")
 		e.Extra = strings.TrimPrefix(e.Extra, ". ")
 	}
-	return e, len(e.Conditions) > 0 || e.SpeedMode != "" || len(e.DisadvMode) > 0
+	return e, len(e.Conditions) > 0 || e.SpeedMode != "" || len(e.DisadvMode) > 0 || len(e.Effects) > 0
 }
 
 // parseSaveEffect reads a saving throw effect from a stat block text. ok is false when there is none.
@@ -951,7 +960,7 @@ func parseSaveEffect(text string) (saveEffect, bool) {
 	if both != "" && (e.Drain == nil || strings.Trim(hpMaxDrainSentenceRe.ReplaceAllString(both, ""), " .") != "") {
 		var a saveEffect
 		left := a.readRider(both)
-		if len(a.Conditions) > 0 || a.SpeedMode != "" || len(a.DisadvMode) > 0 {
+		if len(a.Conditions) > 0 || a.SpeedMode != "" || len(a.DisadvMode) > 0 || len(a.Effects) > 0 {
 			e.Always = &a // applied to every target that rolled the save (giveAlways); only the rest of the text is the GM's
 			if len(left) > 0 {
 				extra = append(extra, "Failure or Success: "+strings.Join(left, ". "))
@@ -1205,6 +1214,11 @@ func applySaveEffect(lobbyID int, source string, e saveEffect, targets []int, ap
 	rolled := map[int]int{}
 	for i, p := range e.Damage {
 		rolled[i] = game.RollDamage(p.Dice, false)
+		if i == 0 && e.SourceID != 0 { // a weakened source's die comes off its damage roll (effect_records_2024.go)
+			if dx, _ := damageRollAdjust(lobbyID, e.SourceID, rolled[i], false); dx != 0 {
+				rolled[i] += dx
+			}
+		}
 	}
 	return runSaveEffectTargets(lobbyID, saveEffectCursor{Source: source, Effect: e, Targets: targets, Apply: apply, Rolled: rolled})
 }
@@ -1821,6 +1835,10 @@ func resolveMonsterEffectText(r *http.Request, lobbyID, monsterID int, meta *mon
 		var fresh []int
 		var already []string
 		for _, t := range kept {
+			if notAffectedRe.MatchString(text) && affectedBySource(lobbyID, t, monsterID, effectKindsIn(e)) { // "each creature that isn't currently affected by this breath"
+				notes = append(notes, fmt.Sprintf("%s is already affected by %s's %s: not a target.", creatureName(lobbyID, t), name, entryName))
+				continue
+			}
 			if effectImmune(lobbyID, t, monsterID, entryName) {
 				already = append(already, creatureName(lobbyID, t))
 				continue

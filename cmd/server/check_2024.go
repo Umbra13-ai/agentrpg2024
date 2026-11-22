@@ -41,6 +41,8 @@ type checkCtx struct {
 type checkWhy struct {
 	Adv, Dis []string
 	Notes    string // the bracketed notes of the buff and item sources ("[Advantage: Foresight]")
+	Minus    string // a die subtracted from the check (Giggling Magic): note() says it
+	Penalty  int    // what comes off the total: Exhaustion's -2 per level and that die (rolled here: reading the sources of a check uses it up)
 }
 
 func (w *checkWhy) adv(why string) { w.Adv = append(w.Adv, why) }
@@ -85,6 +87,11 @@ func (c checkCtx) sources() checkWhy {
 	if lobby == 0 && c.who > 0 && !isCompanionCombatID(c.who) {
 		lobby = lobbyOfChar(c.who)
 	}
+	w.Penalty = checkExhaustion(lobby, c.who)
+	if n, what := d20MinusRoll(lobby, c.who); n > 0 { // Giggling Magic: a die subtracted from each ability check
+		w.Penalty += n
+		w.Minus = " [" + what + "]"
+	}
 	// ---- every creature
 	conds := creatureConditions(lobby, c.who)
 	if game.HasCondition(conds, game.ConditionPoisoned) {
@@ -107,6 +114,9 @@ func (c checkCtx) sources() checkWhy {
 		if on, _ := sunlightPenalty(lobby, c.who); on { // Sunlight Sensitivity, Vampire Weakness: every one of its wordings has ability checks
 			w.dis("Sunlight Sensitivity")
 		}
+	}
+	if lobby > 0 && c.ability != "" && shortAbility(c.ability) == "str" && weakenedOn(lobby, c.who) { // Weakening Breath: Strength-based D20 Tests
+		w.dis("weakened (a Strength-based D20 Test)")
 	}
 	if lobby > 0 && c.ability != "" && hexOnChecks(lobby, c.who, c.ability) { // Hex: Disadvantage on the chosen ability's checks
 		w.dis("Hex")
@@ -204,6 +214,11 @@ func rollCheckD20(adv, dis bool) (final, r1, r2 int, kind string) {
 
 // note says in words why the roll had Advantage or Disadvantage (or why they cancelled): the bracket every route's reply carries.
 func (w checkWhy) note() string {
+	return w.advNote() + w.Minus
+}
+
+// advNote is note() without the subtracted die.
+func (w checkWhy) advNote() string {
 	switch {
 	case w.Advantage() && w.Disadvantage():
 		return " [Advantage (" + strings.Join(w.Adv, ", ") + ") and Disadvantage (" + strings.Join(w.Dis, ", ") + ") cancel]"
@@ -227,11 +242,7 @@ type checkRoll struct {
 func (c checkCtx) roll() checkRoll {
 	why := c.sources()
 	f, r1, r2, kind := rollCheckD20(why.Advantage(), why.Disadvantage())
-	lobby := c.lobby
-	if lobby == 0 && c.who > 0 && !isCompanionCombatID(c.who) {
-		lobby = lobbyOfChar(c.who)
-	}
-	return checkRoll{Final: f, R1: r1, R2: r2, Kind: kind, Why: why, Penalty: checkExhaustion(lobby, c.who)}
+	return checkRoll{Final: f, R1: r1, R2: r2, Kind: kind, Why: why, Penalty: why.Penalty}
 }
 
 // spellcastingCheck is a caster's spellcasting ability check (Dispel Magic against a higher-level spell): the d20 the owner's, the

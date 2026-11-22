@@ -923,6 +923,7 @@ func companionAttack(lobbyID int, c companion, a compAttack, targetID int) strin
 		return fmt.Sprintf("%s: the target is already down.", a.Name)
 	}
 	atk := attackCtx{lobby: lobbyID, attacker: c.CombatID, target: targetID, name: a.Name, bonus: a.Bonus, melee: !rangedOnlyRe.MatchString(a.StatBlockText), weapon: true, statBlockAttack: a.StatBlockText, autoHit: autoHitRe.MatchString(a.StatBlockText)}
+	atk.strength = monsterAttackIsStrength(lobbyID, c.CombatID, a.Bonus, atk.melee)
 	if lost, note := atk.blocked(); lost {
 		return a.Name + ": " + note
 	}
@@ -938,7 +939,12 @@ func companionAttack(lobbyID int, c companion, a compAttack, targetID int) strin
 	chargeNote := ""
 	a.StatBlockText, chargeNote = hitChargeDesc(lobbyID, c.CombatID, targetID, a.StatBlockText)
 	rollNote += chargeNote
-	parts := hitDamageParts(a.StatBlockText, rollStatBlockDamage(a.Dice, a.FlatDamage, out.Critical), a.Type)
+	dmg := rollStatBlockDamage(a.Dice, a.FlatDamage, out.Critical)
+	if dx, dt := damageRollAdjust(lobbyID, c.CombatID, dmg, false); dx != 0 { // a weakened die (effect_records_2024.go)
+		dmg += dx
+		rollNote += dt
+	}
+	parts := hitDamageParts(a.StatBlockText, dmg, a.Type)
 	for _, extra := range attackExtraDamage(a.StatBlockText) {
 		if extra.IfAdvantage && !ar.HasAdvantage() {
 			continue

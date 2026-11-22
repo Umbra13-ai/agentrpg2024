@@ -293,6 +293,17 @@ Add to the owner, never beside it. When you give another rule one owner, add it 
   an unknown one is rolled once per attitude), Stabilize, Fast Hands, the jump landing, the Sphere of Annihilation, a Spell Scroll's
   checks and Dispel Magic (the GM route and the spells it ends); a source a route alone knows is `checkCtx.advFrom`.
   Never roll a check's d20 anywhere else. Go: `TestPostgresCheckSourcesOnEveryRoute`, `TestNoOtherCheckRoll`.
+- **An effect a stat block puts on a creature that is not a rules condition** (`cmd/server/effect_records_2024.go`): a record of a kind in the one
+  condition store, read once by `saveEffect.readEffects` (called by `readRider`, so a failed save and a hit alike), written by
+  `giveEffects` (in `giveConditions`) and read by every owner it changes: `d20_minus:1d6` (Giggling Magic: "the target rolls 1d6 whenever it
+  makes an ability check or attack roll and subtracts the number rolled from the D20 Test", until the end of its next turn) is rolled by the
+  check owner (`checkWhy.Penalty`, which every check route subtracts: Exhaustion's -2 per level is there too) and an `attackCtx.gather`
+  adjustment; `weakened:1d6` (Weakening Breath: Disadvantage on Strength-based D20 Tests, the die off its damage rolls, a repeated save and
+  1 minute) is a Disadvantage row in `attackSources` (the attack's `strength` flag: a character's `weaponAttackMods.UsesStrength`, a stat
+  block's `monsterAttackIsStrength`), `saveSources` and `checkCtx.sources`, and `damageRollAdjust` after every attack damage roll (it also
+  holds Enlarge and Reduce: nothing calls `enlargeHit` but it; `TestDamageRollsAskTheAdjust` lists the routes). "each creature that isn't
+  currently affected by this breath" is `affectedBySource`, a gate on the targets. A new kind is one row (a pattern in
+  `monsterTextPatterns`, a record name, the owner's reader). Go: `TestPostgresD20RidersOnEveryRoute`, `TestDamageRollsAskTheAdjust`.
 - **The 18 skills:** `game/skills.go`.
 - **Expertise:** `game/expertise.go`, with its database side in `cmd/server/expertise_2024.go`.
 - **Which feats a character can take:** `cmd/server/feats_2024.go` (`featRefusal`, `featsOpenTo`, `featTakerOf`, `featHowTo`).

@@ -281,6 +281,9 @@ var saveSourceRows = []saveSource{
 		return yes(c.saver > 0 && c.is("str", "dex") && isWearingNonProficientArmor(c.saver))
 	}},
 	{saveDis, "Reduce", func(c *saveCtx) (bool, string) { return yes(c.is("str") && enlargeMode(c.lobby, c.saver) == "reduce") }},
+	{saveDis, "weakened (a Strength-based D20 Test)", func(c *saveCtx) (bool, string) { // Weakening Breath (effect_records_2024.go)
+		return yes(c.is("str") && c.saver != 0 && weakenedOn(c.lobby, c.saver))
+	}},
 	{saveDis, "the Fool card", func(c *saveCtx) (bool, string) { // the Mysterious Deck: Disadvantage on D20 Tests
 		_, d := deckD20(c.saver)
 		return yes(d)

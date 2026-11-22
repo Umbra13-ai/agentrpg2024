@@ -1559,7 +1559,8 @@ func resolveActionWithBonusDash(action, description string, charID int, bonusDas
 		var lobbyID int
 		db.QueryRow("SELECT lobby_id FROM characters WHERE id = $1", charID).Scan(&lobbyID)
 		atk := characterWeaponAttack(charID, attackMod, weapon, hasWeapon, weaponKey, description)
-		underwaterMiss.Delete(charID) // a flag left by an attack that stopped early must not touch this one
+		atk.strength = mods.UsesStrength // weapon_attack_2024.go: a Strength-based attack roll
+		underwaterMiss.Delete(charID)    // a flag left by an attack that stopped early must not touch this one
 		if atk.longRange && isUnderwaterCombat(lobbyID) {
 			underwaterMiss.Store(charID, true) // underwater, a ranged weapon attack beyond its normal range automatically misses
 		}
@@ -3004,6 +3005,7 @@ func resolveActionWithBonusDash(action, description string, charID int, bonusDas
 		}
 		// the roll: the one attack function (attack_2024.go), as for the main attack
 		atk := characterWeaponAttack(charID, attackMod, weapon, true, weaponKey, description)
+		atk.strength = mods.UsesStrength
 		if lost, why := atk.blocked(); lost {
 			return why
 		}

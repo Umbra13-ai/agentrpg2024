@@ -91,7 +91,8 @@ func runMonsterAttackSequence(lobby int, c monsterAttackCursor) (string, map[str
 			lines = append(lines, refusal)
 			continue
 		}
-		atk := attackCtx{lobby: lobby, attacker: c.Attacker, target: c.Target, name: a.Name, bonus: a.AttackBonus, melee: melee, weapon: true, longRange: longRange, within5: &withinFive, statBlockAttack: a.Desc, autoHit: autoHitRe.MatchString(a.Desc)}
+		atk := attackCtx{lobby: lobby, attacker: c.Attacker, target: c.Target, name: a.Name, bonus: a.AttackBonus, melee: melee, weapon: true, longRange: longRange, within5: &withinFive, statBlockAttack: a.Desc, autoHit: autoHitRe.MatchString(a.Desc),
+			strength: monsterAttackIsStrength(lobby, c.Attacker, a.AttackBonus, melee)}
 		rolled, out, note := atk.roll()
 		if !out.Hit {
 			lines = append(lines, rolled.Line(a.Name, out)+note+hitOrMissNote(a.Desc, false))
@@ -104,7 +105,7 @@ func runMonsterAttackSequence(lobby int, c monsterAttackCursor) (string, map[str
 		a.Desc, chargeNote = hitChargeDesc(lobby, c.Attacker, c.Target, a.Desc) // a charge's effect for this hit (creature_movement_2024.go)
 		note += chargeNote
 		dmg := rollStatBlockDamage(a.DamageDice, a.FlatDamage, out.Critical)
-		if dx, _ := enlargeHit(lobby, c.Attacker, dmg); dx != 0 {
+		if dx, _ := damageRollAdjust(lobby, c.Attacker, dmg, true); dx != 0 {
 			dmg += dx
 		}
 		hit := monsterHitCursor{Attacker: c.Attacker, AttackerName: c.AttackerName, Target: c.Target, Apply: c.Apply, Melee: melee, Action: a, Alternatives: a.Alts, Roll: rolled, Outcome: out, Parts: hitDamageParts(a.Desc, dmg, a.DamageType), Snapshot: snapshotTarget(lobby, c.Target), HPBefore: monsterHPNow(lobby, c.Target), Line: rolled.Line(a.Name, out) + note}

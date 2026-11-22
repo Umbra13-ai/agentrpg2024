@@ -652,7 +652,7 @@ func handleAttachDetach2024(w http.ResponseWriter, r *http.Request) {
 		finish(true, fmt.Sprintf("%s detaches %s.", name, attacherName))
 		return
 	}
-	mod := game.Modifier(str) - game.ExhaustionD20Penalty(exhaustionLevelOf(req.CharacterID))
+	mod := game.Modifier(str)
 	if rule.Skill != "" {
 		if proficient, expert := characterSkillProficiency(req.CharacterID, rule.Skill); proficient { // the one proficiency reader
 			mod += game.ProficiencyBonus(level)
@@ -663,6 +663,7 @@ func handleAttachDetach2024(w http.ResponseWriter, r *http.Request) {
 	}
 	// What gives the check Advantage or Disadvantage has one owner (check_2024.go), as for the condition escape
 	why := checkCtx{lobby: lobby, who: req.CharacterID, ability: rule.Ability, skill: rule.Skill}.sources()
+	mod -= why.Penalty // Exhaustion and a die subtracted from the check (check_2024.go)
 	disadv, adv := why.Disadvantage(), why.Advantage()
 	roll, r1, r2, _ := rollCheckD20(adv, disadv)
 	switch {

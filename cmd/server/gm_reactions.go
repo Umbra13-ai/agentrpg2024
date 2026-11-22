@@ -246,6 +246,10 @@ func handleGMOpportunityAttack(w http.ResponseWriter, r *http.Request) {
 		if damage < 1 {
 			damage = 1
 		}
+		if dx, dt := damageRollAdjust(campaignID, req.AttackerID, damage, true); dx != 0 { // Enlarge/Reduce and a weakened die (effect_records_2024.go)
+			damage = maxInt(0, damage+dx)
+			text += dt
+		}
 		// the damage goes through the one damage pipeline for characters (Temporary Hit Points, Resistance, Concentration,
 		// death saves, Relentless Rage and Endurance)
 		text += ", " + targetName + " " + damageCharacterWithRiders(req.TargetID, damage, damageType, out.Critical,

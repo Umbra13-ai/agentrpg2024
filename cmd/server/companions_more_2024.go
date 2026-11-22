@@ -85,7 +85,8 @@ func monsterAttacksCompanion(lobbyID, attackerID int, attackerName string, chose
 			}
 		}
 		atk := attackCtx{lobby: lobbyID, attacker: attackerID, target: cur.CombatID, name: a.Name, bonus: a.AttackBonus, melee: isMelee, weapon: true,
-			ac: &cur.AC, statBlockAttack: a.Desc, autoHit: autoHitRe.MatchString(a.Desc), within5: &withinFive, longRange: longRange}
+			ac: &cur.AC, statBlockAttack: a.Desc, autoHit: autoHitRe.MatchString(a.Desc), within5: &withinFive, longRange: longRange,
+			strength: monsterAttackIsStrength(lobbyID, attackerID, a.AttackBonus, isMelee)}
 		rolled, out, rollNote := atk.roll()
 		if !out.Hit {
 			lines = append(lines, rolled.Line(a.Name, out)+rollNote)

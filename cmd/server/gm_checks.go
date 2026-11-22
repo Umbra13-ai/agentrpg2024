@@ -194,7 +194,6 @@ func handleGMSkillCheck(w http.ResponseWriter, r *http.Request) {
 	// The skill's bonus has one owner, checkBonus (actions_checks_2024.go): proficiency or Expertise, Jack of All Trades, the
 	// Thaumaturge or Magician bonus, items and Wild Shape. A check without a skill: Jack of All Trades and items.
 	totalMod := abilityMod
-	totalMod -= game.ExhaustionD20Penalty(exhaustionLevelOf(req.CharacterID)) // SRD 5.2.1: -2 per Exhaustion level
 	isProficient, hasExpertise := false, false
 	remarkableAthleteBonus, jackOfAllTradesBonus := 0, 0 // 2024 Remarkable Athlete is Advantage (below), not a bonus
 	if skillUsed != "" {
@@ -235,6 +234,7 @@ func handleGMSkillCheck(w http.ResponseWriter, r *http.Request) {
 	why := checkCtx{lobby: campaignID, who: req.CharacterID, ability: abilityUsed, skill: skillUsed, targetID: req.TargetID,
 		gmAdvantage: req.Advantage, gmDisadvantage: req.Disadvantage, halfSpeedMovement: req.HalfSpeedMovement}.sources()
 	req.Advantage, req.Disadvantage = why.Advantage(), why.Disadvantage()
+	totalMod -= why.Penalty // Exhaustion (-2 per level) and a die subtracted from the check (check_2024.go)
 	advWhy, disWhy := why.Adv, why.Dis
 	charmedAdvantage := why.hasAdv("Charmed target")
 	supremeSneakAdvantage := why.hasAdv("Supreme Sneak")
@@ -699,7 +699,6 @@ func handleGMToolCheck(w http.ResponseWriter, r *http.Request) {
 
 	// Check for proficiency and expertise
 	totalMod := abilityMod
-	totalMod -= game.ExhaustionD20Penalty(exhaustionLevelOf(req.CharacterID)) // SRD 5.2.1: -2 per Exhaustion level
 	isProficient := game.HasToolProficiency(ownedTools, req.Tool)
 	// SRD 5.2.1: a skill that's also used with the check. Proficiency in it adds the Proficiency Bonus (Expertise doubles it), and
 	// proficiency in both the tool and the skill gives Advantage.
@@ -758,6 +757,7 @@ func handleGMToolCheck(w http.ResponseWriter, r *http.Request) {
 	why := checkCtx{lobby: campaignID, who: req.CharacterID, ability: abilityUsed, skill: req.Skill, help: req.Tool,
 		gmAdvantage: req.Advantage, gmDisadvantage: req.Disadvantage, toolAndSkill: toolAndSkill}.sources()
 	req.Advantage, req.Disadvantage = why.Advantage(), why.Disadvantage()
+	totalMod -= why.Penalty // Exhaustion (-2 per level) and a die subtracted from the check (check_2024.go)
 	poisonedDisadvantage := why.hasDis("Poisoned")
 	exhaustionDisadvantage := false // 2024: Exhaustion is a -2 per level penalty on the D20 Test (above), not Disadvantage
 	var charExhaustion int

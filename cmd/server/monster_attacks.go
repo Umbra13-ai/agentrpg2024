@@ -717,7 +717,8 @@ func resolveMonsterAttack(r *http.Request, campaignID int, monster, action, targ
 		// judging of the roll are the one attack function's (attack_2024.go). Only what this monster's stat block and the
 		// battle map say about this attack is decided here.
 		atk := attackCtx{lobby: campaignID, attacker: attackerID, name: a.Name, bonus: a.AttackBonus, melee: isMelee, weapon: true, allySaid: allySaidIn(r),
-			opportunity: inReach, longRange: longRange, within5: &withinFive, statBlockAttack: a.Desc, autoHit: autoHitRe.MatchString(a.Desc)}
+			opportunity: inReach, longRange: longRange, within5: &withinFive, statBlockAttack: a.Desc, autoHit: autoHitRe.MatchString(a.Desc),
+			strength: monsterAttackIsStrength(campaignID, attackerID, a.AttackBonus, isMelee)}
 		blockNote := ""
 		if found {
 			if apply {
@@ -769,7 +770,7 @@ func resolveMonsterAttack(r *http.Request, campaignID int, monster, action, targ
 		a.Desc, chargeNote = hitChargeDesc(campaignID, attackerID, tid, a.Desc) // a charge's effect for this hit (creature_movement_2024.go)
 		dmg := rollStatBlockDamage(a.DamageDice, a.FlatDamage, crit)
 		sizeNote := ""
-		if dx, dt := enlargeHit(campaignID, attackerID, dmg); dx != 0 { // Enlarge/Reduce on the monster (spells_more_2024.go)
+		if dx, dt := damageRollAdjust(campaignID, attackerID, dmg, true); dx != 0 { // Enlarge/Reduce and a weakened die (effect_records_2024.go)
 			dmg += dx
 			sizeNote = dt
 		}

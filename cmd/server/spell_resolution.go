@@ -150,6 +150,10 @@ func resolveSpellOnMonster(charID int, spellKey string, spell SRDSpell, damageDi
 		if out.Critical {
 			d += game.RollDamage(damageDice, false) // a critical hit rolls the damage dice twice
 		}
+		if dx, dt := damageRollAdjust(lobbyID, charID, d, false); dx != 0 { // a weakened die (effect_records_2024.go)
+			d += dx
+			rollNote += dt
+		}
 		text, _ := damageMonster(lobbyID, monster, d, dtype)
 		text += hitWithRiders(lobbyID, charID, monster, out.Critical) // Hex, Hunter's Mark (hit_riders_2024.go)
 		if monsterHPNow(lobbyID, monster) <= 0 {
