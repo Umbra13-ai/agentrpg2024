@@ -56,6 +56,7 @@ func resolveMonsterStandardAction(lobbyID, monsterID int, name, entryName, text,
 	case "Hide":
 		return attemptMonsterHide(lobbyID, monsterID, name, entryName, text, apply), true
 	}
+	// gm-one-shot: the Dash, Disengage or Hide the GM resolves in the same breath
 	return fmt.Sprintf("%s uses %s: it takes the %s action (the GM resolves it).", name, entryName, chosen), true
 }
 

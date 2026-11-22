@@ -217,7 +217,7 @@ func resolveMonsterReaction(r *http.Request, lobbyID, id int, meta *monsterMeta,
 		}
 		out = fmt.Sprintf("%s uses %s: the damage is reduced by %d (%d of %d taken back; it has %d HP, %d Temporary).", name, base, cut, back, taken, after.HP, after.Temp)
 		if taken > 0 && back >= taken {
-			out += " The damage is reduced to 0: it can redirect the force (the saving throw in its text; the GM resolves it with monster_action)."
+			out += " The damage is reduced to 0: it can redirect the force (the saving throw in its text; the GM resolves it with monster_action)." // gm-one-shot: the redirect is resolved in the same breath
 		}
 	case strings.Contains(low, "splits into two new"):
 		out = splitMonster(lobbyID, id, name, base)

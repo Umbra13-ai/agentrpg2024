@@ -102,6 +102,16 @@ Report: "Wizard Scholar accepts any skill for Expertise."
   (`monster_condition_traits_2024.go`), one row of `attackSources`. **A light a monster switches on and off** (Ignited Illumination) is
   `resolveLightToggle` (combat effect `ablaze`), read by `monsterLightRadii` in the lighting owner.
   Go: `TestPostgresBlurredFormAndIgnitedLight`.
+- **The GM's open items** (`cmd/server/gm_open_items_2024.go`, `gm_handover_2024.go`; owner, Nov 22): a lasting mechanic the server hands to the GM is listed in
+  every status the GM reads until the GM resolves it or the server sees it end; a one-shot (resolved in the same breath) is never listed.
+  `handOverToGM` is the one writer of a new item (idempotent on creature, entry and targets), `resolveGMItems`, `resolveGMItemsEnding` (the end
+  hooks: `endMonsterConcentration`, `removeFromFight`, `clearCombatInitiative`) and `snoozeGMItem` the others; `gmOpenItems` is the one reader, a pure
+  read that asks the owners the game asks (`gmItemLive`: Concentration, the creature in the fight, the round), so GET /api/gm/status changes no
+  row. A lasting spell is a row of `gmLastingSpells` (`monsterHandoverSpell`), a stat-block remainder is read by `entryLastingRe`
+  (`monsterHandoverEntry`, `saveEffect.handOverOnFailure`); a site that says "the GM resolves it" either calls them or carries `// gm-one-shot: why`
+  (`TestEveryGMHandoverIsKindedOrOneShot`). Snooze hides an item until the next round or N check-ins; routes GET, POST and DELETE
+  `/api/gm/open-items`; status `open_items` + one task line, the heartbeat's GM block the count. Stage 2 (riders, containment, reactions, resume
+  notes) and Stage 3 (recurring traits) are not moved yet. Go: `TestPostgresGMOpenItems`.
 - **A creature's Speed** (`cmd/server/speed_owner_2024.go`): `characterSpeed` asks the one owner for conditions (Speed 0), spells (Slow, Haste),
   weapon-mastery effects and stat-block Speed riders (`speed_halved`, `speed_zero`, `speed_minus` markers); a character's movement budget
   follows a Speed that changes mid-turn (`settleMovement`). Effects whose result depends on an order the rules supplied do not give are never computed: the GM rules

@@ -117,6 +117,7 @@ type saveEffect struct {
 	Effects          []effectRead        // the effect records of the text: a die subtracted from D20 Tests, Strength-based Disadvantage (effect_records_2024.go)
 	Curse            *curseRead          // "the target is cursed" and what the curse does (curse_records_2024.go)
 	CurseLinked      bool                // "Until the curse ends, the target has the Charmed and Poisoned conditions": its conditions end with the curse record
+	SpellSlug        string              // the spell this effect is a cast of (its lasting remainder is the GM's open item: gm_handover_2024.go)
 	Wound            *woundRead          // "The target receives an infernal wound ..." (wound_records_2024.go)
 	NotHolding       bool                // "doesn't already have an infernal wound" / "if it doesn't have one": a creature that holds the wound is not a target
 	OnlyType         string              // "If the target is a Humanoid": only a creature of this type is a target (applySaveEffect)
@@ -1284,6 +1285,9 @@ func runSaveEffectTargets(lobbyID int, c saveEffectCursor) (lines []string, immu
 		if tid < 0 { // a monster or NPC of the fight (monster_save_targets.go)
 			saved := prepareMonsterSaveEffect(lobbyID, source, e, tid, rolled, apply)
 			anyFailed = anyFailed || !saved.Saved
+			if apply && !saved.Saved {
+				e.handOverOnFailure(lobbyID, tid) // a lasting remainder is the GM's open item (gm_handover_2024.go)
+			}
 			next := c
 			next.Next = index + 1
 			next.AnyFailed = anyFailed
@@ -1306,6 +1310,9 @@ func runSaveEffectTargets(lobbyID int, c saveEffectCursor) (lines []string, immu
 		if isCompanionCombatID(tid) { // a companion (companion_spell_targets_2024.go): the stat-block save and the companion's own Hit Points
 			l, failed, immune := applySaveEffectOnCompanion(lobbyID, source, e, tid, rolled, apply)
 			anyFailed = anyFailed || failed
+			if apply && failed {
+				e.handOverOnFailure(lobbyID, tid)
+			}
 			if immune {
 				immuneAfter = append(immuneAfter, tid)
 			}
@@ -1338,6 +1345,9 @@ func runSaveEffectTargets(lobbyID int, c saveEffectCursor) (lines []string, immu
 			}
 		}
 		anyFailed = anyFailed || !saved
+		if apply && !saved {
+			e.handOverOnFailure(lobbyID, tid)
+		}
 		// a failure the Scarab of Protection turned reads "fails" here and says so in the parts after it
 		line := sv.Line(name)
 		if saved && e.IsSpell && e.SpellLevel <= 7 && ringTurns(tid) { // Ring of Spell Turning: no effect on a success
@@ -1393,7 +1403,7 @@ func runSaveEffectTargets(lobbyID int, c saveEffectCursor) (lines []string, immu
 		lines = append(lines, line)
 	}
 	if e.Setup != "" {
-		lines = append(lines, "The GM handles how this comes about: "+e.Setup)
+		lines = append(lines, "The GM handles how this comes about: "+e.Setup) // gm-one-shot: setup text of how a stat block effect comes about, not a lasting effect
 	}
 	if e.Extra != "" && (anyFailed || strings.HasPrefix(e.Extra, "Failure or Success")) {
 		if len(e.Damage) > 0 || len(e.Conditions) > 0 { // the text repeats what was just applied; only the rest is the GM's
@@ -1507,6 +1517,7 @@ func resolveMonsterSpellRules(r *http.Request, lobbyID, monsterID int, monsterNa
 	slug := normalizeSpellSlug(spellName)
 	sp, ok := srdSpellsMemory[slug]
 	if !ok {
+		// gm-one-shot: a spell the server has no data for; nothing is known of how long it lasts
 		return []string{fmt.Sprintf("%s casts %s (the GM resolves it).", monsterName, spellName)}
 	}
 	if level < sp.Level {
@@ -1539,6 +1550,9 @@ func resolveMonsterSpellRules(r *http.Request, lobbyID, monsterID int, monsterNa
 		return lines
 	}
 	if selfCast {
+		if apply {
+			monsterHandoverSpell(lobbyID, monsterID, slug, nil) // a lasting spell is the GM's open item (gm_handover_2024.go)
+		}
 		return []string{head + " on itself. The GM resolves the spell's effect."}
 	}
 	areaAimed := false
@@ -1669,6 +1683,7 @@ func resolveMonsterSpellRules(r *http.Request, lobbyID, monsterID int, monsterNa
 			e.Extra = sp.Name + ": apply the spell's effect on a failed save"
 		}
 		e.IsSpell, e.SpellLevel, e.School, e.SourceID = true, level, sp.School, monsterID
+		e.SpellSlug = slug
 		e.FromUndead = monsterTypeOf(lobbyID, monsterID) == "undead"
 		if sp.AoEShape != "" && !areaAimed { // the spell's area on the battle map (F61)
 			kept, note := areaFilter(lobbyID, monsterID, sp, targets)
@@ -1720,6 +1735,9 @@ func resolveMonsterSpellRules(r *http.Request, lobbyID, monsterID int, monsterNa
 		}
 		return append(lines, l...)
 	}
+	if apply {
+		monsterHandoverSpell(lobbyID, monsterID, slug, targets) // a lasting spell is the GM's open item (gm_handover_2024.go)
+	}
 	return append(lines, "The GM resolves the spell's effect.")
 }
 
@@ -1751,6 +1769,9 @@ func resolveMonsterEffectText(r *http.Request, lobbyID, monsterID int, meta *mon
 		}
 		lines := resolveMonsterEffectText(r, lobbyID, monsterID, meta, entryName+": "+opts[chosen].Name, opts[chosen].Text, targets, "", apply, depth+1)
 		if intro := saveOptionsIntro(text, opts); intro != "" {
+			if apply {
+				monsterHandoverEntry(lobbyID, monsterID, entryName, intro, targets) // a lasting remainder is the GM's open item (gm_handover_2024.go)
+			}
 			lines = append(lines, "The GM handles the rest of the entry: "+intro)
 		}
 		return append(lines, notes...)
@@ -1802,7 +1823,7 @@ func resolveMonsterEffectText(r *http.Request, lobbyID, monsterID int, meta *mon
 	if spName, lvl, ok := monsterSpellFromUse(text, use); ok && depth == 0 {
 		dc, atk := monsterSpellNumbers(text, meta)
 		if note := spellListNote(text, spName); note != "" { // what the stat block changes in the spell is the GM's
-			notes = append(notes, fmt.Sprintf("The GM applies what the stat block adds to %s: %s.", spName, note))
+			notes = append(notes, fmt.Sprintf("The GM applies what the stat block adds to %s: %s.", spName, note)) // gm-one-shot: a spell list's note, applied when cast
 		}
 		// a limited spell called by another entry (a Legendary Action that casts): monsterAction already reserved its own entry's use
 		if rec := execIn(r); apply && rec != nil && !rec.dayHandled {
@@ -1846,6 +1867,9 @@ func resolveMonsterEffectText(r *http.Request, lobbyID, monsterID int, meta *mon
 			lines = append(lines, resolveMonsterSpell(r, lobbyID, monsterID, name, m[1], lvl, dc, atk, targets, strings.Contains(text, "on itself"), apply, use)...)
 		}
 		if rest := castRiders(text); rest != "" {
+			if apply {
+				monsterHandoverEntry(lobbyID, monsterID, entryName, rest, targets)
+			}
 			lines = append(lines, "The GM handles the rest of the entry: "+rest)
 		}
 		return append(lines, notes...)
@@ -1980,6 +2004,9 @@ func resolveMonsterEffectText(r *http.Request, lobbyID, monsterID int, meta *mon
 		return append([]string{fmt.Sprintf("%s uses %s.", name, entryName)}, notes...)
 	}
 	rest := strings.TrimSpace(legendaryOnceSentenceRe.ReplaceAllString(text, "")) // the once-a-turn limit is LAOnce's
+	if apply {
+		monsterHandoverEntry(lobbyID, monsterID, entryName, rest, targets) // a lasting part is the GM's open item (gm_handover_2024.go)
+	}
 	return append([]string{fmt.Sprintf("%s uses %s: %s (the GM resolves it).", name, entryName, rest)}, notes...)
 }
 

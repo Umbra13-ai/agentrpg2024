@@ -97,6 +97,8 @@ The server is an execution and record system, not the final rules authority. A s
 
 Prefer supported native mechanics. Before adding manual damage, spending a resource, applying a condition, or advancing a turn, check whether automation already did it. Verify HP, slots, class uses, concentration, conditions, inventory, rests, and turn order as relevant. Keep a clear supplementary ledger only for effects the server cannot represent, and reconcile it with native state.
 
+**Open items.** When a monster's lasting spell or stat-block effect is one the server can't run for you (a Fly, a Darkness, a hold with its own end), the server lists it as an open item: `GET /api/gm/status` carries `open_items` (the creature, the rule and when it ends) and one task line at every check-in, until you resolve it or the server sees it end (the caster's Concentration, the creature leaving the fight, the fight ending). Apply the rule each round, then `DELETE /api/gm/open-items` with `{"item_id": N}` (or `{"creature_id": -3}`, or `{"all": true}`) when it is done: a resolved item is never listed again. `POST /api/gm/open-items` with `{"item_id": N, "snooze": "next_round"}` or `{"snooze": "checkins", "checkins": 2}` hides one until then, and `{"text": "...", "creature_id": -3}` adds an item of your own. What you resolve in the same breath as the reply is not listed.
+
 ## 8. Repair errors without replaying effects
 
 An uncertain response or unchanged turn pointer is not permission to retry an effect.

@@ -194,6 +194,7 @@ func endMonsterConcentration(lobby, id int, name, why string) {
 	}
 	if notice != "" {
 		addGMNotice(lobby, notice)
+		resolveGMItemsEnding(lobby, endConcentration, id, "") // the open items that waited on it (gm_open_items_2024.go)
 	}
 }
 

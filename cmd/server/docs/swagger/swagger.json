@@ -4308,6 +4308,50 @@
           "needs_attention": {
            "type": "boolean"
           },
+          "open_items": {
+           "items": {
+            "properties": {
+             "creature": {
+              "type": "string"
+             },
+             "ends_when": {
+              "type": "string"
+             },
+             "entry": {
+              "type": "string"
+             },
+             "id": {
+              "type": "integer"
+             },
+             "rule": {
+              "type": "string"
+             },
+             "since_round": {
+              "type": "integer"
+             },
+             "snoozed": {
+              "type": "boolean"
+             },
+             "targets": {
+              "items": {
+               "type": "string"
+              },
+              "type": "array"
+             },
+             "title": {
+              "type": "string"
+             }
+            },
+            "type": "object"
+           },
+           "type": "array"
+          },
+          "open_items_error": {
+           "type": "string"
+          },
+          "open_items_snoozed": {
+           "type": "integer"
+          },
           "overdue_deadlines": {
            "items": {
             "properties": {
@@ -15034,6 +15078,9 @@
               "type": "object"
              },
              "name": {
+              "type": "string"
+             },
+             "open_items": {
               "type": "string"
              },
              "players": {
@@ -34787,6 +34834,442 @@
        }
       }
      }
+    }
+   }
+  },
+  "/api/gm/open-items": {
+   "get": {
+    "tags": [
+     "GM"
+    ],
+    "summary": "The GM's open items: lasting mechanics the server can't run",
+    "description": "GET lists the open items of the campaign (?all=true also the snoozed ones): each is a mechanic the server handed to the GM that keeps going (a monster's lasting spell the server doesn't run, a stat-block effect with its own end), with the creature, the rule and when it ends. They are also in GET /api/gm/status as open_items, with one task line, at every check-in, until you resolve them or the server sees them end. DELETE resolves one ({\"item_id\": N}), a creature's ({\"creature_id\": -3}) or all ({\"all\": true}); a resolved item is never listed again. POST {\"item_id\": N, \"snooze\": \"next_round\"} (or {\"snooze\": \"checkins\", \"checkins\": 2}) hides an item until then; POST {\"text\": \"...\", \"creature_id\": -3} adds an item of your own.",
+    "responses": {
+     "200": {
+      "description": "open_items",
+      "content": {
+       "application/json": {
+        "schema": {
+         "properties": {
+          "campaign_id": {
+           "type": "integer"
+          },
+          "open_items": {
+           "items": {
+            "properties": {
+             "creature": {
+              "type": "string"
+             },
+             "ends_when": {
+              "type": "string"
+             },
+             "entry": {
+              "type": "string"
+             },
+             "id": {
+              "type": "integer"
+             },
+             "rule": {
+              "type": "string"
+             },
+             "since_round": {
+              "type": "integer"
+             },
+             "snoozed": {
+              "type": "boolean"
+             },
+             "targets": {
+              "items": {
+               "type": "string"
+              },
+              "type": "array"
+             },
+             "title": {
+              "type": "string"
+             }
+            },
+            "type": "object"
+           },
+           "type": "array"
+          },
+          "open_items_error": {
+           "type": "string"
+          },
+          "snoozed": {
+           "type": "integer"
+          }
+         },
+         "type": "object"
+        }
+       }
+      }
+     }
+    },
+    "parameters": [
+     {
+      "name": "campaign_id",
+      "in": "query",
+      "required": false,
+      "description": "The campaign (default: the GM's only active campaign)",
+      "schema": {
+       "type": "integer"
+      }
+     },
+     {
+      "name": "all",
+      "in": "query",
+      "required": false,
+      "description": "GET: include the snoozed items",
+      "schema": {
+       "type": "boolean"
+      }
+     }
+    ]
+   },
+   "post": {
+    "tags": [
+     "GM"
+    ],
+    "summary": "The GM's open items: lasting mechanics the server can't run",
+    "description": "GET lists the open items of the campaign (?all=true also the snoozed ones): each is a mechanic the server handed to the GM that keeps going (a monster's lasting spell the server doesn't run, a stat-block effect with its own end), with the creature, the rule and when it ends. They are also in GET /api/gm/status as open_items, with one task line, at every check-in, until you resolve them or the server sees them end. DELETE resolves one ({\"item_id\": N}), a creature's ({\"creature_id\": -3}) or all ({\"all\": true}); a resolved item is never listed again. POST {\"item_id\": N, \"snooze\": \"next_round\"} (or {\"snooze\": \"checkins\", \"checkins\": 2}) hides an item until then; POST {\"text\": \"...\", \"creature_id\": -3} adds an item of your own.",
+    "responses": {
+     "400": {
+      "description": "The body was refused (nothing was changed): unknown_field, wrong_type, invalid_json, body_required or id_mismatch, with the fields the request takes",
+      "content": {
+       "application/json": {
+        "schema": {
+         "properties": {
+          "error": {
+           "type": "string"
+          },
+          "fields": {
+           "items": {
+            "type": "string"
+           },
+           "type": "array"
+          },
+          "message": {
+           "type": "string"
+          },
+          "unknown": {
+           "items": {
+            "type": "string"
+           },
+           "type": "array"
+          }
+         },
+         "type": "object"
+        }
+       }
+      }
+     },
+     "200": {
+      "description": "open_items",
+      "content": {
+       "application/json": {
+        "schema": {
+         "properties": {
+          "campaign_id": {
+           "type": "integer"
+          },
+          "open_items": {
+           "items": {
+            "properties": {
+             "creature": {
+              "type": "string"
+             },
+             "ends_when": {
+              "type": "string"
+             },
+             "entry": {
+              "type": "string"
+             },
+             "id": {
+              "type": "integer"
+             },
+             "rule": {
+              "type": "string"
+             },
+             "since_round": {
+              "type": "integer"
+             },
+             "snoozed": {
+              "type": "boolean"
+             },
+             "targets": {
+              "items": {
+               "type": "string"
+              },
+              "type": "array"
+             },
+             "title": {
+              "type": "string"
+             }
+            },
+            "type": "object"
+           },
+           "type": "array"
+          },
+          "open_items_error": {
+           "type": "string"
+          },
+          "snoozed": {
+           "type": "integer"
+          }
+         },
+         "type": "object"
+        }
+       }
+      }
+     }
+    },
+    "parameters": [
+     {
+      "name": "campaign_id",
+      "in": "query",
+      "required": false,
+      "description": "The campaign (default: the GM's only active campaign)",
+      "schema": {
+       "type": "integer"
+      }
+     },
+     {
+      "name": "all",
+      "in": "query",
+      "required": false,
+      "description": "GET: include the snoozed items",
+      "schema": {
+       "type": "boolean"
+      }
+     }
+    ],
+    "requestBody": {
+     "required": false,
+     "content": {
+      "application/json": {
+       "schema": {
+        "type": "object",
+        "properties": {
+         "all": {
+          "type": "boolean",
+          "description": "DELETE: resolve every open item of the campaign"
+         },
+         "campaign_id": {
+          "type": "integer",
+          "description": "the campaign this command is for (or ?campaign_id=); without it, the campaign of the characters it names, else your only active campaign"
+         },
+         "checkins": {
+          "type": "integer",
+          "description": "with snooze \"checkins\": how many GM check-ins to skip, 1 to 48"
+         },
+         "creature_id": {
+          "type": "integer",
+          "description": "DELETE: resolve every item of this creature; POST with text: the creature your own item is about"
+         },
+         "item_id": {
+          "type": "integer",
+          "description": "the item (DELETE: resolve it; POST with snooze: hide it)"
+         },
+         "snooze": {
+          "type": "string",
+          "description": "POST with item_id: \"next_round\" (back at the next round) or \"checkins\" (back after checkins GM check-ins)"
+         },
+         "text": {
+          "type": "string",
+          "description": "POST: your own item, the rule or fact to keep in mind"
+         },
+         "title": {
+          "type": "string",
+          "description": "POST with text: its one-line title (default: the start of the text)"
+         }
+        }
+       },
+       "example": {
+        "all": true,
+        "campaign_id": 1,
+        "checkins": 1,
+        "creature_id": 1,
+        "item_id": 1,
+        "snooze": "...",
+        "text": "...",
+        "title": "..."
+       }
+      }
+     },
+     "description": "Open items (POST and DELETE)"
+    }
+   },
+   "delete": {
+    "tags": [
+     "GM"
+    ],
+    "summary": "The GM's open items: lasting mechanics the server can't run",
+    "description": "GET lists the open items of the campaign (?all=true also the snoozed ones): each is a mechanic the server handed to the GM that keeps going (a monster's lasting spell the server doesn't run, a stat-block effect with its own end), with the creature, the rule and when it ends. They are also in GET /api/gm/status as open_items, with one task line, at every check-in, until you resolve them or the server sees them end. DELETE resolves one ({\"item_id\": N}), a creature's ({\"creature_id\": -3}) or all ({\"all\": true}); a resolved item is never listed again. POST {\"item_id\": N, \"snooze\": \"next_round\"} (or {\"snooze\": \"checkins\", \"checkins\": 2}) hides an item until then; POST {\"text\": \"...\", \"creature_id\": -3} adds an item of your own. A tool that can't send DELETE can send POST with ?_method=DELETE (or the X-HTTP-Method-Override header) and the same body.",
+    "responses": {
+     "400": {
+      "description": "The body was refused (nothing was changed): unknown_field, wrong_type, invalid_json, body_required or id_mismatch, with the fields the request takes",
+      "content": {
+       "application/json": {
+        "schema": {
+         "properties": {
+          "error": {
+           "type": "string"
+          },
+          "fields": {
+           "items": {
+            "type": "string"
+           },
+           "type": "array"
+          },
+          "message": {
+           "type": "string"
+          },
+          "unknown": {
+           "items": {
+            "type": "string"
+           },
+           "type": "array"
+          }
+         },
+         "type": "object"
+        }
+       }
+      }
+     },
+     "200": {
+      "description": "open_items",
+      "content": {
+       "application/json": {
+        "schema": {
+         "properties": {
+          "campaign_id": {
+           "type": "integer"
+          },
+          "open_items": {
+           "items": {
+            "properties": {
+             "creature": {
+              "type": "string"
+             },
+             "ends_when": {
+              "type": "string"
+             },
+             "entry": {
+              "type": "string"
+             },
+             "id": {
+              "type": "integer"
+             },
+             "rule": {
+              "type": "string"
+             },
+             "since_round": {
+              "type": "integer"
+             },
+             "snoozed": {
+              "type": "boolean"
+             },
+             "targets": {
+              "items": {
+               "type": "string"
+              },
+              "type": "array"
+             },
+             "title": {
+              "type": "string"
+             }
+            },
+            "type": "object"
+           },
+           "type": "array"
+          },
+          "open_items_error": {
+           "type": "string"
+          },
+          "snoozed": {
+           "type": "integer"
+          }
+         },
+         "type": "object"
+        }
+       }
+      }
+     }
+    },
+    "parameters": [
+     {
+      "name": "campaign_id",
+      "in": "query",
+      "required": false,
+      "description": "The campaign (default: the GM's only active campaign)",
+      "schema": {
+       "type": "integer"
+      }
+     },
+     {
+      "name": "all",
+      "in": "query",
+      "required": false,
+      "description": "GET: include the snoozed items",
+      "schema": {
+       "type": "boolean"
+      }
+     }
+    ],
+    "requestBody": {
+     "required": false,
+     "content": {
+      "application/json": {
+       "schema": {
+        "type": "object",
+        "properties": {
+         "all": {
+          "type": "boolean",
+          "description": "DELETE: resolve every open item of the campaign"
+         },
+         "campaign_id": {
+          "type": "integer",
+          "description": "the campaign this command is for (or ?campaign_id=); without it, the campaign of the characters it names, else your only active campaign"
+         },
+         "checkins": {
+          "type": "integer",
+          "description": "with snooze \"checkins\": how many GM check-ins to skip, 1 to 48"
+         },
+         "creature_id": {
+          "type": "integer",
+          "description": "DELETE: resolve every item of this creature; POST with text: the creature your own item is about"
+         },
+         "item_id": {
+          "type": "integer",
+          "description": "the item (DELETE: resolve it; POST with snooze: hide it)"
+         },
+         "snooze": {
+          "type": "string",
+          "description": "POST with item_id: \"next_round\" (back at the next round) or \"checkins\" (back after checkins GM check-ins)"
+         },
+         "text": {
+          "type": "string",
+          "description": "POST: your own item, the rule or fact to keep in mind"
+         },
+         "title": {
+          "type": "string",
+          "description": "POST with text: its one-line title (default: the start of the text)"
+         }
+        }
+       },
+       "example": {
+        "all": true,
+        "campaign_id": 1,
+        "checkins": 1,
+        "creature_id": 1,
+        "item_id": 1,
+        "snooze": "...",
+        "text": "...",
+        "title": "..."
+       }
+      }
+     },
+     "description": "Open items (POST and DELETE)"
     }
    }
   },

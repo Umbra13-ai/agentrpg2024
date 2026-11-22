@@ -335,6 +335,8 @@ var schemaSteps = []schemaStep{
 	{"campaign_ready_2024.go", `ALTER TABLE lobbies ADD COLUMN IF NOT EXISTS gm_ready_at TIMESTAMP`}, // the GM's own ready before the start
 	// what the GM is waiting on a player for, one open ask per character (gm_asks_2024.go)
 	{"gm_asks_2024.go", gmAsksSchema},
+	// the GM's open items: lasting mechanics the server can't run for the GM, listed until they end (gm_open_items_2024.go)
+	{"gm_open_items_2024.go", gmOpenItemsSchema},
 	// lastCheckedIn reads a player's latest request to a campaign on every heartbeat (check_in_watch_2024.go): without this the
 	// request log, which keeps reply bodies, is read whole each time
 	{"check_in_watch_2024.go", `CREATE INDEX IF NOT EXISTS api_logs_agent_lobby_time ON api_logs (agent_id, lobby_id, created_at DESC)`},
@@ -377,6 +379,29 @@ var schemaSteps = []schemaStep{
 
 // seatReadySchema: a player's "ready to start" on its seat (cleared whenever the seat changes hands: takeSeat, swapSeat;
 // campaign_ready_2024.go).
+// gmOpenItemsSchema: the mechanics the server hands to the GM that keep going (gm_open_items_2024.go).
+const gmOpenItemsSchema = `
+	CREATE TABLE IF NOT EXISTS gm_open_items (
+		id SERIAL PRIMARY KEY,
+		lobby_id INTEGER NOT NULL,
+		kind TEXT NOT NULL,
+		source_id INTEGER NOT NULL DEFAULT 0,
+		target_ids TEXT NOT NULL DEFAULT '',
+		entry TEXT NOT NULL DEFAULT '',
+		title TEXT NOT NULL,
+		detail TEXT NOT NULL DEFAULT '',
+		end_kind TEXT NOT NULL DEFAULT 'never',
+		end_key TEXT NOT NULL DEFAULT '',
+		ends_round INTEGER NOT NULL DEFAULT 0,
+		created_round INTEGER NOT NULL DEFAULT 0,
+		created_at TIMESTAMP NOT NULL DEFAULT NOW(),
+		snoozed_until TIMESTAMP,
+		snooze_round INTEGER NOT NULL DEFAULT 0,
+		resolved_at TIMESTAMP,
+		resolved_by TEXT NOT NULL DEFAULT ''
+	);
+	CREATE INDEX IF NOT EXISTS gm_open_items_open ON gm_open_items (lobby_id) WHERE resolved_at IS NULL;`
+
 // gmAsksSchema: what the GM is waiting on a player for, one open ask per character (gm_asks_2024.go).
 const gmAsksSchema = `
 	CREATE TABLE IF NOT EXISTS gm_asks (

@@ -2558,6 +2558,11 @@ func handleHeartbeat(w http.ResponseWriter, r *http.Request) {
 				combatStatus = getTurnStatus(id, 0) // 0 = GM doesn't have a character
 			}
 
+			openItems, _, openErr := gmOpenItems(id, false) // lasting mechanics the server can't run: the GM's status lists them (gm_open_items_2024.go)
+			openItemsNote := fmt.Sprintf("%d open item(s) to keep applying: read open_items in GET /api/gm/status", len(openItems))
+			if openErr != nil {
+				openItemsNote = "The open items could not be read just now: GET /api/gm/status shows them once it works"
+			}
 			gmCampaigns = append(gmCampaigns, map[string]interface{}{
 				"id":                id,
 				"name":              name,
@@ -2574,6 +2579,7 @@ func handleHeartbeat(w http.ResponseWriter, r *http.Request) {
 				"more_messages":     moreMessages,
 				"more_actions":      moreActions,
 				"created_at":        createdAt.Format(time.RFC3339),
+				"open_items":        openItemsNote,
 				"your_role":         "gm",
 			})
 		}

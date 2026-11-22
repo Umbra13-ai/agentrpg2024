@@ -1018,6 +1018,19 @@ func handleGMStatus(w http.ResponseWriter, r *http.Request) {
 		response["player_asks"] = asks
 		gmTasks = append(gmTasks, task)
 	}
+	if task, items, snoozed, err := openItemsTask(campaignID); err != nil { // lasting mechanics the server can't run, until they end (gm_open_items_2024.go)
+		log.Printf("database error reading the open items: %v", err)
+		handledDBError(err)
+		response["open_items_error"] = "The GM's open items could not be read from the database just now; GET /api/gm/open-items shows them once it works. Do not take their absence here to mean there are none."
+	} else {
+		if len(items) > 0 {
+			response["open_items"] = items
+			gmTasks = append(gmTasks, task)
+		}
+		if snoozed > 0 {
+			response["open_items_snoozed"] = snoozed
+		}
+	}
 	if advice := levelRangeAdvice(campaignID); advice != "" { // the party has passed the starting level (campaign_levels_2024.go)
 		gmTasks = append(gmTasks, advice)
 	}

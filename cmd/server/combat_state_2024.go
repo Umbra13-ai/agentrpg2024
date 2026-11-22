@@ -164,9 +164,10 @@ const actionFightOver = "combat_end"
 // turn order to clients; that stale data can otherwise drive timeout loops.
 func clearCombatInitiative(campaignID int) error {
 	clearMonsterConditions(campaignID)
-	clearPendingTurns(campaignID)   // the fight is over: so are its pending turns
-	clearBurning(campaignID, false) // F69: the fight is over, so are its fires
-	endUntilNextTurnIn(campaignID)  // Dodge, Reckless Attack and readied actions end with the fight (dodge_2024.go)
+	clearPendingTurns(campaignID)               // the fight is over: so are its pending turns
+	clearBurning(campaignID, false)             // F69: the fight is over, so are its fires
+	endUntilNextTurnIn(campaignID)              // Dodge, Reckless Attack and readied actions end with the fight (dodge_2024.go)
+	resolveGMItemsEnding(campaignID, "", 0, "") // the GM's open items that last only through the fight
 	_, err := db.Exec(`
 		UPDATE combat_state
 		SET active = false,
@@ -357,7 +358,11 @@ type removal struct {
 // turn it is, the turn passes to the next one, which starts its turn (advanceTurn with remove); when nobody is left, the fight
 // ends. It answers what it did and "" or a refusal code (combatant_not_found, no_active_combat, a turn refusal).
 func removeFromFight(lobby, id int, by string) (removal, string) {
-	return removeFromFightTry(lobby, id, by, 3)
+	out, code := removeFromFightTry(lobby, id, by, 3)
+	if code == "" && !out.Ended {
+		resolveGMItemsEnding(lobby, "", id, "") // what the creature held ends with it (the GM's open items)
+	}
+	return out, code
 }
 
 func removeFromFightTry(lobby, id int, by string, tries int) (removal, string) {

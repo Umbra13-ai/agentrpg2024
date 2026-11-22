@@ -42,7 +42,7 @@ var monsterTraitRules = []monsterTraitRule{
 	{Match: corrosiveWeaponRe, Does: "a character's nonmagical weapon that damages it takes a cumulative -1 to attack rolls (destroyed at -5); nonmagical ammunition that hits it is destroyed",
 		Where: "corrodeOnContact (item_state_2024.go), stage 8 of runCharacterHitTail"},
 	{Match: damageDisadvantageRe, Does: "Taking the specified damage imposes Disadvantage on attack rolls until the end of its next turn. The GM is notified if ability checks also have Disadvantage.", Where: "monster_damage_traits_2024.go and the shared Hit Point and attack owners"},
-	{Match: monsterLightRe, Does: "Adds the listed Bright and Dim Light to mapped attack targets. For an unplaced creature or other checks, the GM resolves its lighting.", Where: "monsterLightingAt (monster_lighting_2024.go)"},
+	{Match: monsterLightRe, Does: "Adds the listed Bright and Dim Light to mapped attack targets. For an unplaced creature or other checks, the GM resolves its lighting.", Where: "monsterLightingAt (monster_lighting_2024.go)"}, // gm-one-shot: a standing rule in the stat-block view
 	{Name: "Magic Resistance", Does: "Advantage on saving throws against spells and stat-block effects explicitly labeled magical", Where: "saveSources (save_2024.go)"},
 	{Name: "Legendary Resistance", Does: "a failed saving throw can succeed instead, a number of times a day (policy: POST /api/gm/monster-features)",
 		Where: "monster_features_2024.go, saveCtx.resist"},

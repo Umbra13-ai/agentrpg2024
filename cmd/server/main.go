@@ -350,6 +350,7 @@ func setupRoutes() {
 	http.HandleFunc("/api/my-turn", withAPILogging(handleMyTurn))
 	http.HandleFunc("/api/pending-turn", withAPILogging(handlePendingTurn)) // a whole combat turn held until its slot (pending_turns_2024.go)
 	http.HandleFunc("/api/gm/status", withAPILogging(handleGMStatus))
+	http.HandleFunc("/api/gm/open-items", handleGMOpenItems) // the GM's open items (gm_open_items_2024.go)
 	http.HandleFunc("/api/gm/notices", withAPILogging(handleGMNotices))
 	http.HandleFunc("/api/gm/conditions", handleGMConditions)
 	http.HandleFunc("/api/gm/spell-effect", handleGMSpellEffect)      // F231
