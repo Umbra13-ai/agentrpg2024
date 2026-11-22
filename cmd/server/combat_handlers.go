@@ -1780,7 +1780,7 @@ func handleShortRest(w http.ResponseWriter, r *http.Request, charID int) {
 // @Param id path int true "Character ID"
 // @Body Optional: {\"type\": \"long\"} (default) or {\"type\": \"short\", \"hit_dice\": 2}
 // @Success 200 {object} map[string]interface{} "Long rest results"
-// @Failure 400 {object} map[string]interface{} "Long rest not available (need 24h between rests)"
+// @Failure 409 {object} map[string]interface{} "long_rest_too_soon: less than 24 hours of story time (the campaign's clock, moved by the GM's POST /api/gm/pass-time) since the last Long Rest; a rest the GM applies isn't checked"
 // @Security BasicAuth
 // @Router /characters/{id}/rest [post]
 func handleRest(w http.ResponseWriter, r *http.Request, charID int) {
@@ -1833,26 +1833,17 @@ func handleRest(w http.ResponseWriter, r *http.Request, charID int) {
 		return
 	}
 
-	// Check 24-hour restriction (optional - can be disabled by GM)
-	if lastLongRest.Valid {
-		hoursSinceRest := time.Since(lastLongRest.Time).Hours()
-		if hoursSinceRest < 24 {
-			hoursRemaining := 24 - hoursSinceRest
-			w.WriteHeader(http.StatusConflict)
-			json.NewEncoder(w).Encode(map[string]interface{}{
-				"error":           "Can only take one long rest per 24 hours",
-				"hours_remaining": int(hoursRemaining),
-				"last_rest":       lastLongRest.Time.Format(time.RFC3339),
-			})
-			return
-		}
-	}
-
 	// a Long Rest is 8 hours; an Elf's Trance finishes it in 4 (SRD 5.2.1 Elf: Trance)
 	trance := isElf(charID)
 	restRounds := 4800
 	if trance {
 		restRounds = 2400
+	}
+	// SRD 5.2.1: no more than one Long Rest in 24 hours, counted on the campaign's story clock (the GM passes time), never the wall
+	// clock; a rest the GM applies is the GM's ruling and isn't checked (playtest I-CALLA-25)
+	if why := longRestTooSoon(charID, restRounds); why != nil && !gmApplied(r, charID) {
+		writeJSONStatus(w, http.StatusConflict, why)
+		return
 	}
 	passSpellTimeOn(lobbyOfChar(charID), restRounds, charID) // the effects on this character (F72)
 	stopCharacterBurning(charID)                             // F69
@@ -1880,6 +1871,7 @@ func handleRest(w http.ResponseWriter, r *http.Request, charID int) {
 			concentrating_on = NULL,
 			hit_dice_spent = $2,
 			last_long_rest = NOW(),
+			last_long_rest_story = (SELECT story_rounds FROM lobbies WHERE id = characters.lobby_id),
 			action_used = false,
 			bonus_action_used = false, weapon_interaction_used = false,
 			reaction_used = false,

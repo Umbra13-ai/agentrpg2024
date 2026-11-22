@@ -229,3 +229,25 @@ func logRest(charID int, kind, summary string) {
 	what := map[string]string{"long": "finishes a Long Rest", "short": "finishes a Short Rest"}[kind]
 	writeAction(db, lobby, charID, kind+"_rest", getCharacterName(charID)+" "+what, summary)
 }
+
+// longRestTooSoon: the refusal of a Long Rest started less than 24 hours of story time after the character's last one began (SRD
+// 5.2.1), nil when it may rest. The story clock is the campaign's (lobbies.story_rounds: the GM's POST /api/gm/pass-time and travel
+// move it); a character's own rest isn't on it, so the gap needed is 24 hours less the rest's own length. A character in no
+// campaign, or with no Long Rest on the story clock yet, may rest.
+func longRestTooSoon(charID, restRounds int) map[string]interface{} {
+	var last sql.NullInt64
+	var now int64
+	var lobby sql.NullInt64
+	if db.QueryRow(`SELECT c.last_long_rest_story, c.lobby_id, COALESCE(l.story_rounds, 0) FROM characters c LEFT JOIN lobbies l ON l.id = c.lobby_id
+		WHERE c.id = $1`, charID).Scan(&last, &lobby, &now) != nil || !lobby.Valid || !last.Valid {
+		return nil
+	}
+	need := int64(14400 - restRounds) // 24 hours of 10-round minutes, less the rest's own 8 (or a Trance's 4)
+	if gone := now - last.Int64; gone < need {
+		left := (need - gone + 599) / 600
+		return map[string]interface{}{"success": false, "error": "long_rest_too_soon", "story_hours_left": left,
+			"message": fmt.Sprintf("A creature can't benefit from more than one Long Rest in 24 hours, and the story clock shows %d more hours to go since this character's last one. "+
+				"If the story has moved on, the GM passes the time (POST /api/gm/pass-time {\"minutes\": %d}) or applies the rest. Nothing was changed.", left, left*60)}
+	}
+	return nil
+}

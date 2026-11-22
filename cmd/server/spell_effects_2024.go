@@ -922,6 +922,9 @@ func passSpellTimeOn(lobbyID, rounds, onlyTarget int) []string {
 		return []string{"Game time did not advance: combat resolution is paused for GM adjudication."}
 	}
 	defer release()
+	if onlyTarget == 0 { // the campaign's story clock (a character's own rest moves only its effects, F72)
+		db.Exec(`UPDATE lobbies SET story_rounds = story_rounds + $2 WHERE id = $1`, lobbyID, rounds)
+	}
 	recovered := stableRecovery(lobbyID, rounds)
 	recovered = append(recovered, repeatSavesOverTime(lobbyID, rounds, onlyTarget)...) // repeated saves roll each round (F227)
 	wildShapeTickLobby(lobbyID, rounds)                                                // a form that runs out ends (posted to the feed)
