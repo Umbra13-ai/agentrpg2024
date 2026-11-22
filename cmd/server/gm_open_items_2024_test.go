@@ -13,7 +13,7 @@ import (
 // (monsterHandoverSpell, monsterHandoverEntry, handOverOnFailure: gm_handover_2024.go) or says it is a one-shot (`// gm-one-shot: why`) within a few
 // lines of the text. A new such text with neither fails.
 func TestEveryGMHandoverIsKindedOrOneShot(t *testing.T) {
-	phrases := []string{"the GM resolves it", "The GM resolves the spell", "For the GM to apply", "The GM handles the rest", "The GM handles how this comes", "The GM applies what the stat block adds"}
+	phrases := []string{"GM, not applied automatically", "the GM resolves it", "The GM resolves the spell", "For the GM to apply", "The GM handles the rest", "The GM handles how this comes", "The GM applies what the stat block adds"}
 	files, _ := filepath.Glob("monster_*.go") // a hand-over of a monster's mechanic; the schedule texts that say "the GM resolves it" are not
 	for _, f := range files {
 		if strings.HasSuffix(f, "_test.go") || f == "gm_handover_2024.go" {
@@ -105,6 +105,15 @@ func TestPostgresGMOpenItems(t *testing.T) {
 	if len(items) != 1 || !strings.Contains(fmt.Sprint(items[0]), "Open Fiend") || !strings.Contains(strings.ToLower(fmt.Sprint(items[0])), "fly") {
 		t.Fatalf("Fly item: %v", items)
 	}
+	// a hit's remainder the server doesn't apply: listed when its wording gives a duration, told in the reply alone when it doesn't
+	if got := gmNotApplied(lobby, b, "Test Grasp", "The target is held by the web until the end of its next turn.", []int{a}); !strings.Contains(got, "[GM, not applied automatically:") {
+		t.Errorf("the bracket: %q", got)
+	}
+	gmNotApplied(lobby, b, "Test Nip", "The target feels a faint chill.", []int{a})
+	if got := fmt.Sprint(list("")); !strings.Contains(got, "Test Grasp") || strings.Contains(got, "Test Nip") {
+		t.Errorf("a lasting rider is listed and a one-shot is not: %v", got)
+	}
+	resolveGMItems(lobby, 0, b, false, "gm")
 	// the GM's status carries it and one task line
 	_, st := pgCall(t, "GET", fmt.Sprintf("/api/gm/status?campaign_id=%d", lobby), gm, nil)
 	if len(asList(st["open_items"])) != 1 || !strings.Contains(fmt.Sprint(st["gm_tasks"]), "open item") {

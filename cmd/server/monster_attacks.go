@@ -878,7 +878,7 @@ func resolveMonsterAttack(r *http.Request, campaignID int, monster, action, targ
 				if rec, gmNote := addRecurringDamage(campaignID, attackerID, tid, a.Desc, attackerName); rec != "" {
 					line += " [" + rec + "]"
 				} else if gmNote != "" {
-					line += " [GM, not applied automatically: " + gmNote + "]"
+					line += gmNotApplied(campaignID, attackerID, a.Name, gmNote, []int{tid})
 				}
 				if e, ok := parseSaveEffect(a.Desc); ok {
 					e.SourceID = attackerID
@@ -894,7 +894,7 @@ func resolveMonsterAttack(r *http.Request, campaignID int, monster, action, targ
 					rider = dropSuffocatingSentences(rider)
 				}
 				if rider != "" {
-					line += " [GM, not applied automatically: " + rider + "]"
+					line += gmNotApplied(campaignID, attackerID, a.Name, rider, []int{tid})
 				}
 			}
 		}

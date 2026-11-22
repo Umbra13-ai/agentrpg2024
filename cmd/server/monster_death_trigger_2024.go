@@ -107,7 +107,7 @@ func resolveDeathTrigger(lobby, id int, name, traitName, text string) string {
 			rolled, _ := applySaveEffect(lobby, source, e, targets, true)
 			line = fmt.Sprintf("%s dies: its %s acts. %s", name, traitName, strings.Join(rolled, " "))
 			if e.Extra != "" {
-				line += " [GM, not applied automatically: " + e.Extra + "]"
+				line += " [GM, not applied automatically: " + e.Extra + "]" // gm-one-shot: its creature has died; nothing of it lasts in the fight
 			}
 		}
 	}

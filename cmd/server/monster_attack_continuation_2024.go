@@ -183,7 +183,7 @@ func runMonsterHit(lobby int, c *monsterHitCursor) (string, error) {
 		}
 		line += gmJudgedAlternatives(c.Action)
 		if rider := unappliedHitRider(c.Action.Desc); rider != "" {
-			line += " [GM, not applied automatically: " + rider + "]"
+			line += gmNotApplied(lobby, c.Attacker, c.Action.Name, rider, []int{c.Target})
 		}
 		line += hitOrMissNote(c.Action.Desc, true)
 		c.Stage = 1
@@ -224,7 +224,7 @@ func runMonsterHit(lobby int, c *monsterHitCursor) (string, error) {
 					if rec, gmNote := addRecurringDamage(lobby, c.Attacker, c.Target, c.Action.Desc, c.AttackerName); rec != "" {
 						line += " [" + rec + "]"
 					} else if gmNote != "" {
-						line += " [GM, not applied automatically: " + gmNote + "]"
+						line += gmNotApplied(lobby, c.Attacker, c.Action.Name, gmNote, []int{c.Target})
 					}
 				}
 			case 2:

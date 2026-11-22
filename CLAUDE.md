@@ -110,8 +110,9 @@ Report: "Wizard Scholar accepts any skill for Expertise."
   row. A lasting spell is a row of `gmLastingSpells` (`monsterHandoverSpell`), a stat-block remainder is read by `entryLastingRe`
   (`monsterHandoverEntry`, `saveEffect.handOverOnFailure`); a site that says "the GM resolves it" either calls them or carries `// gm-one-shot: why`
   (`TestEveryGMHandoverIsKindedOrOneShot`). Snooze hides an item until the next round or N check-ins; routes GET, POST and DELETE
-  `/api/gm/open-items`; status `open_items` + one task line, the heartbeat's GM block the count. Stage 2 (riders, containment, reactions, resume
-  notes) and Stage 3 (recurring traits) are not moved yet. Go: `TestPostgresGMOpenItems`.
+  `/api/gm/open-items`; status `open_items` + one task line, the heartbeat's GM block the count. A hit's unapplied remainder is `gmNotApplied` (the bracket and, when its wording names a duration, the item: monster_attacks.go and the
+  Multiattack resume handlers); the resume handlers' bracketed notes reach the GM as notices at `writeAction`'s boundary. Not yet moved: containment
+  and attach/hold effects, Treant, Specter, Ink Cloud, a curse's "until it dies" (stage 2 rest) and recurring traits (stage 3). Go: `TestPostgresGMOpenItems`.
 - **A creature's Speed** (`cmd/server/speed_owner_2024.go`): `characterSpeed` asks the one owner for conditions (Speed 0), spells (Slow, Haste),
   weapon-mastery effects and stat-block Speed riders (`speed_halved`, `speed_zero`, `speed_minus` markers); a character's movement budget
   follows a Speed that changes mid-turn (`settleMovement`). Effects whose result depends on an order the rules supplied do not give are never computed: the GM rules

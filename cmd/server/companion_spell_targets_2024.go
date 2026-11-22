@@ -177,7 +177,7 @@ func companionHitRiders(lobbyID, attackerID int, attackerName string, a monsterA
 		out += " [" + strings.Join(applied, "; ") + "]"
 	}
 	if len(gm) > 0 {
-		out += " [GM, not applied automatically: " + strings.Join(gm, "; ") + "]"
+		out += " [GM, not applied automatically: " + strings.Join(gm, "; ") + "]" // gm-one-shot: a companion's hit rider, told with the hit
 	}
 	return out + hitOrMissNote(a.Desc, true)
 }

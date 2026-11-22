@@ -254,6 +254,7 @@ func resolveMonsterReaction(r *http.Request, lobbyID, id int, meta *monsterMeta,
 			out += fmt.Sprintf(" %s's attack (%d against AC %d) hits it.", charName, hit.Total, allyAC)
 			switch {
 			case len(hit.Parts) == 0 || (hit.Crit && !hit.Nat20):
+				// gm-one-shot: the reaction's redirected damage is applied by the GM in the same breath as the reply
 				out += fmt.Sprintf(" [GM, not applied automatically: the damage is not carried over (%s); roll or apply it against %s's own defenses, and give %s the hit's riders%s.]",
 					map[bool]string{true: "its critical hit came from the first target's state", false: "a character's attack builds its damage elsewhere"}[len(hit.Parts) > 0],
 					creatureName(lobbyID, ally), creatureName(lobbyID, ally), riderListNote(hit.RiderNames))

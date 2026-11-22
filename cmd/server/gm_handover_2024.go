@@ -112,3 +112,10 @@ func (e saveEffect) handOverOnFailure(lobbyID, tid int) {
 		monsterHandoverEntry(lobbyID, e.SourceID, e.ImmunityName, e.Extra, []int{tid})
 	}
 }
+
+// gmNotApplied is the bracket a hit's or a trigger's remainder the server doesn't apply carries for the GM ("[GM, not applied automatically: ...]"),
+// and lists it as an open item when its own wording says it lasts (monsterHandoverEntry); a remainder with no duration stays in the reply alone.
+func gmNotApplied(lobby, monsterID int, entryName, text string, targets []int) string {
+	monsterHandoverEntry(lobby, monsterID, entryName, text, targets)
+	return " [GM, not applied automatically: " + text + "]"
+}
