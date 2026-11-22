@@ -2693,7 +2693,7 @@ func resolveActionWithBonusDash(action, description string, charID int, bonusDas
 
 		// 2024: you cannot enter a Rage while wearing Heavy armor
 		if wearingHeavyArmor(charID) {
-			return "You can't enter a Rage while wearing Heavy armor."
+			return featureRefusal("Rage", "you can't enter a Rage while wearing Heavy armor.")
 		}
 
 		// a Rage spends one of its uses (2 at level 1, up to 6; one comes back on a Short Rest, all on a Long Rest). Nothing spent
@@ -3321,13 +3321,13 @@ func resolveActionWithBonusDash(action, description string, charID int, bonusDas
 		currentUsed := resourcesUsed["second_wind"]
 
 		if currentUsed >= maxUses {
-			return "You've already used Second Wind! Take a short or long rest to regain this ability."
+			return featureRefusal("Second Wind", "you've already used it. Take a short or long rest to regain it.")
 		}
 
 		// Consume the resource first: the guarded spend (resources_2024.go)
 		if _, err := spendUse(charID, "second_wind", 1, maxUses); err != nil {
 			if _, refused := refusedSpend(err); refused {
-				return "You've already used Second Wind! Take a short or long rest to regain this ability."
+				return featureRefusal("Second Wind", "you've already used it. Take a short or long rest to regain it.")
 			}
 			return spendText(err, "Second Wind")
 		}
@@ -3375,19 +3375,19 @@ func resolveActionWithBonusDash(action, description string, charID int, bonusDas
 			if maxUses > 1 {
 				usesWord = "uses"
 			}
-			return fmt.Sprintf("You've already used Action Surge %d time(s)! Take a short or long rest to regain this ability (%d %s per rest).", currentUsed, maxUses, usesWord)
+			return featureRefusal("Action Surge", fmt.Sprintf("you've already used it %d time(s). Take a short or long rest to regain it (%d %s per rest).", currentUsed, maxUses, usesWord))
 		}
 
 		// 2024: Action Surge can be used only once on a turn
 		var surgedThisTurn bool
 		db.QueryRow("SELECT COALESCE(action_surge_this_turn, false) FROM characters WHERE id = $1", charID).Scan(&surgedThisTurn)
 		if surgedThisTurn {
-			return "You can use Action Surge only once on a turn."
+			return featureRefusal("Action Surge", "you can use it only once on a turn.")
 		}
 		// Consume the resource: the guarded spend (resources_2024.go)
 		if _, err := spendUse(charID, "action_surge", 1, maxUses); err != nil {
 			if _, refused := refusedSpend(err); refused {
-				return "You've already used Action Surge! Take a short or long rest to regain this ability."
+				return featureRefusal("Action Surge", "you've already used it. Take a short or long rest to regain it.")
 			}
 			return spendText(err, "Action Surge")
 		}

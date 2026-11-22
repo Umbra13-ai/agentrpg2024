@@ -654,7 +654,7 @@ func (t actionType) refusal(f *actorFacts) *whoRefusal {
 	// every refusal reads "Cannot use <feature>: <why>.", the form the server treats as a refusal (it spends nothing and uses
 	// no exploration beat: hasCharacterActedSinceLastNarration)
 	no := func(code, format string, args ...interface{}) *whoRefusal {
-		return &whoRefusal{Code: code, Message: "Cannot use " + title + ": " + fmt.Sprintf(format, args...)}
+		return &whoRefusal{Code: code, Message: featureRefusal(title, fmt.Sprintf(format, args...))}
 	}
 	if w.Class != "" {
 		feature := fmt.Sprintf("a %s feature from level %d", titleCase(w.Class), maxInt(w.Level, 1))
@@ -704,6 +704,12 @@ func (t actionType) refusal(f *actorFacts) *whoRefusal {
 	}
 	return nil
 }
+
+// featureRefusal: a feature's refusal in the one form the server reads as a refusal (isRefusalResult): "Cannot use <feature>: <why>". Only that form
+// spends nothing in a fight, uses no exploration beat and is answered 409 action_refused; a resolver that refuses in any other words is played as an
+// action (the feature action sweep found Action Surge, Second Wind, Steady Aim, Superior Defense, Magical Cunning, Improve Fate and Rage doing it).
+// A resolver's refusal is always made here; TestFeatureRefusalsUseTheRefusalForm fails on a returned text that reads as a refusal in another form.
+func featureRefusal(feature, why string) string { return "Cannot use " + feature + ": " + why }
 
 // whileProblem: the state a type is used in (While), and what is wrong when the character isn't in it ("" when it is).
 func whileProblem(while string, f *actorFacts) string {

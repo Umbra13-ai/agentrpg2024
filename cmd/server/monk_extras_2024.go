@@ -176,7 +176,7 @@ func superiorDefense(charID int) string {
 		return why
 	}
 	if hasCondition(charID, "superior_defense") {
-		return "Superior Defense is already active."
+		return featureRefusal("Superior Defense", "it is already active.")
 	}
 	okFP, msg, left := useClassResource(charID, "focus", 3)
 	if !okFP {

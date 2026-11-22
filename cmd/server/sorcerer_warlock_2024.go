@@ -101,7 +101,7 @@ func magicalCunning(charID int) string {
 		return dbReadMessage("the character")
 	}
 	if n, _ := res.RowsAffected(); n == 0 {
-		return "You already used Magical Cunning; finish a Long Rest."
+		return featureRefusal("Magical Cunning", "you already used it; finish a Long Rest.")
 	}
 	if _, _, err := changeSpentTx(tx, charID, func(sp *spent) error {
 		spent := sp.Pact

@@ -163,7 +163,7 @@ func steadyAim(charID int) string {
 	}
 	speed = characterSpeed(charID, species)
 	if moveLeft < speed {
-		return "You can't use Steady Aim if you have moved during this turn."
+		return featureRefusal("Steady Aim", "you can't use it if you have moved during this turn.")
 	}
 	db.Exec(`UPDATE characters SET steady_aim = true, movement_remaining = 0 WHERE id = $1`, charID)
 	return "🎯 Steady Aim: you have Advantage on your next attack roll this turn, and your Speed is 0 until the end of the turn."

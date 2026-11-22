@@ -441,7 +441,7 @@ func improveFate(charID int) string {
 	if why := actionRefusal("improve_fate", charID).text(); why != "" { // the action table's Who (action_types_2024.go)
 		return why
 	}
-	if err := useOnce(charID, "improve_fate", "You already used Improve Fate; it returns when you roll Initiative or finish a Short or Long Rest."); err != nil {
+	if err := useOnce(charID, "improve_fate", featureRefusal("Improve Fate", "you already used it; it returns when you roll Initiative or finish a Short or Long Rest.")); err != nil {
 		return spendText(err, "Improve Fate")
 	}
 	a, b := game.RollDie(4), game.RollDie(4)

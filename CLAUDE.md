@@ -641,6 +641,14 @@ Add to the owner, never beside it. When you give another rule one owner, add it 
   `where` the story left it, `dropped_items.left_where`). `droppedByCharacter` is the one reader (an item the GM claimed off the ground stays listed, `gone` with the GM's note, `was_left` instead of `where`, and no pick-up; a claim or return is logged by `logGroundChange`: I-CALLA-20); my-turn's `left_behind`
   (`leftBehindNote`; also the after-battle reminder) reminds the player. **A pick-up is immediate; the GM can veto it** (`.../ground/{id}/veto`: back where it was, through
   `dropToGround`); `recentPickUps` lists the last day's (GM status, the ground list). Go: `TestPostgresGMTakeItemLeavesItWhereTheStoryPutIt` (S-CALLA-9).
+- **How a feature says it refuses** (feature action sweep, Nov 22): `featureRefusal` (`cmd/server/action_types_2024.go`) makes "Cannot use <feature>: <why>",
+  the one form `isRefusalResult` reads: only it spends nothing in a fight, uses no exploration beat and is answered 409 `action_refused`; the table's
+  own refusals (`whoRefusal`) are made by it too. A resolver never words a refusal itself (Action Surge, Second Wind, Steady Aim, Superior Defense,
+  Magical Cunning, Improve Fate and Rage's Heavy armor were played as actions: 200 success, the cost spent).
+  `TestFeatureRefusalsUseTheRefusalForm` (go/ast: a returned text that reads as a refusal in another form); the sweep
+  `TestPostgresEveryFeatureActionResolves` (every class at levels 1, 5, 11, 17 and 20 sends every type the table opens to it, then sends it again in
+  the same turn; the refusal list of an unknown word equals `actionTypesOpenTo`; `FEATURE_ACTIONS_OUT=file` writes its table). Not done: a resolver
+  returning a refusal as a value, not as text (the larger fix: every feature resolver returns text today).
 - **How to act (`GET /api/my-turn`'s `how_to_act`):** `actionHowTo` (`cmd/server/actions.go`), made from `actionRequest`'s
   fields and the character's real enemies.
 - **The equipped hands:** `changeHands` (`cmd/server/equipped_weapons.go`) is the one writer of `equipped_main_hand` /
