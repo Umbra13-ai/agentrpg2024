@@ -109,8 +109,9 @@ func TestPostgresGMOpenItems(t *testing.T) {
 	if got := gmNotApplied(lobby, b, "Test Grasp", "The target is held by the web until the end of its next turn.", []int{a}); !strings.Contains(got, "[GM, not applied automatically:") {
 		t.Errorf("the bracket: %q", got)
 	}
+	gmNotApplied(lobby, b, "Test Cry", "The giant has Advantage on attack rolls until the start of the giant's next turn.", nil) // War Cry's wording
 	gmNotApplied(lobby, b, "Test Nip", "The target feels a faint chill.", []int{a})
-	if got := fmt.Sprint(list("")); !strings.Contains(got, "Test Grasp") || strings.Contains(got, "Test Nip") {
+	if got := fmt.Sprint(list("")); !strings.Contains(got, "Test Grasp") || !strings.Contains(got, "Test Cry") || strings.Contains(got, "Test Nip") {
 		t.Errorf("a lasting rider is listed and a one-shot is not: %v", got)
 	}
 	resolveGMItems(lobby, 0, b, false, "gm")

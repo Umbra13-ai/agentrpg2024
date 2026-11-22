@@ -15,7 +15,10 @@ import (
 //     Opportunity Attack chance for the rest of the turn (noteMonstersLeavingReach reads it with the GM's own disengaged list),
 //     and expireCombatEffectsOf ends it at the start of its next turn;
 //   - Hide (a Stealth check that needs Heavy Obscurement or cover out of sight), Dash (movement) and Dodge stay with the GM, said so.
-var monsterStandardActionRe = regexp.MustCompile(`(?i)\btakes the ((?:Dash|Disengage|Hide)(?:(?:,|,? or|,? and) (?:Dash|Disengage|Hide))*) action\b`)
+var monsterStandardActionRe = regexp.MustCompile(`(?i)\b(?:takes|can take) the ((?:Dash|Disengage|Hide)(?:(?:,|,? or|,? and) (?:Dash|Disengage|Hide))*) action\b`)
+
+// optionalStandardRe: the entry's standard action is the creature's to take or not ("can take the Hide action").
+var optionalStandardRe = regexp.MustCompile(`(?i)\bcan take the Hide action`)
 
 var standardActionNameRe = regexp.MustCompile(`(?i)Dash|Disengage|Hide`)
 
@@ -39,7 +42,13 @@ func resolveMonsterStandardAction(lobbyID, monsterID int, name, entryName, text,
 		return "", false
 	}
 	chosen := ""
-	if len(options) == 1 {
+	if optionalStandardRe.MatchString(text) { // "At the end of this movement, the weretiger can take the Hide action" (Prowl): only when use names it
+		m, ok := game.MatchString(use, options)
+		if !ok {
+			return fmt.Sprintf("%s uses %s. At the end of its movement it can take the %s action: send use \"%s\" to have it do so.", name, entryName, strings.Join(options, " or "), options[0]), true
+		}
+		chosen = m
+	} else if len(options) == 1 {
 		chosen = options[0]
 	} else if m, ok := game.MatchString(use, options); ok {
 		chosen = m

@@ -86,3 +86,37 @@ func TestPostgresMonsterNimbleEscape(t *testing.T) {
 		t.Errorf("the Disengage outlived the start of the monster's next turn")
 	}
 }
+
+// An entry whose creature "can take the Hide action" at the end of its movement (the Weretiger's Prowl): the move is applied as for any entry,
+// and the Hide is rolled only when the GM names it in use.
+func TestPostgresOptionalHideAfterMove(t *testing.T) {
+	testPostgres(t)
+	gm, _, camp, _, _, _ := companionReactionFixture(t)
+	m := compendiumFixture()
+	m.Name, m.Type, m.Traits, m.Legendary, m.LegendaryIn = "Prowling Raider", "Humanoid", nil, nil, ""
+	m.BonusActions = []srdMonsterEntry{{Name: "Prowl", Text: "The raider moves up to its Speed without provoking Opportunity Attacks. At the end of this movement, the raider can take the Hide action."}}
+	status, imported := pgCall(t, "POST", "/api/gm/compendium/monsters", gm, map[string]interface{}{"source_note": "invented optional-hide fixture", "monsters": []srdMonster2024{m}})
+	if status != 201 {
+		t.Fatalf("import: %d %v", status, imported)
+	}
+	key := imported["monsters"].([]interface{})[0].(map[string]interface{})["monster_key"].(string)
+	t.Cleanup(func() { db.Exec(`DELETE FROM custom_monsters WHERE key=$1`, key) })
+	pgCall(t, "POST", fmt.Sprintf("/api/campaigns/%d/combat/add", camp), gm, map[string]interface{}{"combatants": []map[string]interface{}{{"name": "Prowling Raider", "monster_key": key, "hp": 100, "ac": 1, "initiative": -400}}})
+	fr, _ := readFight(db, camp)
+	raider := monsterIDsByKeyOrName(camp, "Prowling Raider")[0]
+	pgExec(t, `UPDATE combat_state SET current_turn_index=$1, turn_started_at=NOW() WHERE lobby_id=$2`, idxOfID(fr, raider), camp)
+	use := func(choice string) string {
+		body := map[string]interface{}{"monster": "Prowling Raider", "action": "Prowl"}
+		if choice != "" {
+			body["use"] = choice
+		}
+		_, r := pgCall(t, "POST", "/api/gm/narrate", gm, map[string]interface{}{"campaign_id": camp, "narration": "x", "monster_action": body})
+		return fmt.Sprint(r["monster_action_result"])
+	}
+	if r := use(""); !strings.Contains(r, "can take the Hide action: send use") || strings.Contains(r, "Dexterity (Stealth)") {
+		t.Errorf("without use the Hide must not be rolled: %s", r)
+	}
+	if r := use("hide"); !strings.Contains(r, "the Hide action, Dexterity (Stealth)") {
+		t.Errorf("named Hide: %s", r)
+	}
+}

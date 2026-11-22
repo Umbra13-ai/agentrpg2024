@@ -58,7 +58,7 @@ func monsterHandoverSpell(lobby, monsterID int, spellSlug string, targets []int)
 
 // entryLastingRe: a stat-block effect's own wording that it lasts (SRD 5.2.1): "until the end of its next turn", "for 1 minute", "for 24 hours",
 // "until the grapple ends", "... dies", "Concentration", "under the wraith\u2019s control" (a creature it commands).
-var entryLastingRe = regexp.MustCompile(`(?i)\buntil the end of (?:its|the [^.,;]+?) next turn\b|\bfor (\d+) (minutes?|hours?|days?)\b|\buntil [^.;]*?\b(?:ends|dies)\b|\bConcentration\b|\bunder the [a-z ]+?\W?s control\b`)
+var entryLastingRe = regexp.MustCompile(`(?i)\buntil the (?:end|start) of (?:its|the [^.,;]+?) next turn\b|\bfor (\d+) (minutes?|hours?|days?)\b|\buntil [^.;]*?\b(?:ends|dies)\b|\bConcentration\b|\bunder the [a-z ]+?\W?s control\b`)
 
 // monsterHandoverEntry lists the lasting part of a stat-block entry the server doesn't run, from its own wording; false when the text names no
 // duration (a one-shot).

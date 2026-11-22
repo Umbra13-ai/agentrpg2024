@@ -844,6 +844,9 @@ func castRiders(text string) string {
 	return strings.Join(kept, ". ")
 }
 
+// anySpeed stands for a Speed when only the wording of a move is asked: large enough that "half its Speed" doesn't round to 0.
+func anySpeed(string) int { return 60 }
+
 // onlyOwnMove: every sentence of the entry is its creature's own move (readSpecialMove) or the Legendary once-a-turn limit.
 func onlyOwnMove(text string) bool {
 	for _, s := range sentenceSplitRe.Split(strings.TrimSpace(text), -1) {
@@ -851,7 +854,7 @@ func onlyOwnMove(text string) bool {
 		if s == "" || legendaryOnceRe.MatchString(s) {
 			continue
 		}
-		if _, ok := readSpecialMove(s, func(string) int { return 1 }); !ok {
+		if _, ok := readSpecialMove(s, anySpeed); !ok {
 			return false
 		}
 	}
@@ -898,7 +901,7 @@ func saveSetupText(text string) string {
 		if s == "" {
 			continue
 		}
-		if _, ok := readSpecialMove(s, func(string) int { return 1 }); ok || legendaryOnceRe.MatchString(s) {
+		if _, ok := readSpecialMove(s, anySpeed); ok || legendaryOnceRe.MatchString(s) {
 			continue
 		}
 		kept = append(kept, s)

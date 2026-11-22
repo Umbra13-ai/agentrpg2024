@@ -132,7 +132,7 @@ Report: "Wizard Scholar accepts any skill for Expertise."
   and at each turn start, through `applySaveEffect`. Never roll a death effect inside a damage transaction. Go: `TestPostgresDeathBurst`.
 - **A standard action a stat-block entry takes** ("takes the Disengage or Hide action", `cmd/server/monster_standard_actions_2024.go`):
   `resolveMonsterStandardAction` (a choice named in `use`; Disengage recorded as the `disengaged` combat effect that
-  `noteMonstersLeavingReach` reads). Go: `TestPostgresMonsterNimbleEscape`.
+  `noteMonstersLeavingReach` reads). An entry whose creature "can take the Hide action" at the end of its movement (Weretiger Prowl) rolls the Hide only when `use` names it (`optionalStandardRe`); an entry that is only its creature's own move is `onlyOwnMove` (probed with `anySpeed`, so "half its Speed" is read). Go: `TestPostgresMonsterNimbleEscape`, `TestPostgresOptionalHideAfterMove`.
 - **An area that blocks sight** (SRD 5.2.1 Heavily Obscured; Magical Darkness): `areaBlocksSight` (`cmd/server/obscured_areas_2024.go`)
   is the one answer to "an area keeps the viewer from seeing the target", read by the attack roll's unseen-attacker and unseen-target
   rows and by a monster action that needs a creature it can see. Fog, ink and smoke are `obscured_area` rows (`obscuredAreas` reads and
