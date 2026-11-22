@@ -868,6 +868,13 @@ Add to the owner, never beside it. When you give another rule one owner, add it 
   Death Saving Throw failure; `TestPostgresNoDamageHit`); a Multiattack is capped at 20 attacks and an either/or choice is never
   combined. **Absorption** is `monsterAbsorbs`, read from the trait text. See `docs/MONSTER_SYSTEM.md`.
 
+### Commits (standing rule, owner, Nov 22)
+One commit holds one kind of change; never mix kinds in a commit. The kinds: **mechanics** (rules, the game's behaviour), **admin** (the admin app: its routes,
+page and logs), **GUI** (the public pages and their layout), **docs**, **tests and tools** that belong to no other change, and **deploy/config**. A change that
+needs two kinds is two commits, each on its own passing the gates, in the order they depend on each other (the owner first, then what reads it). A fix to a
+test or a tool goes with the change it checks, not with an unrelated one. Say the kind in the commit's first line. Check `git diff --cached --stat` before every
+commit: a file of another kind means unstage it.
+
 ### Before pushing
 `gofmt -l` on the files you changed, `go vet ./cmd/server ./game`, `go test ./...`, then the owner's test scripts for
 character creation, leveling and combat if you have them. Do not deploy unless the owner says "deploy".
