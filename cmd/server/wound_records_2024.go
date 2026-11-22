@@ -20,7 +20,10 @@ var (
 	woundGiveRe  = regexp.MustCompile(`(?i)the target receives an? [a-z]+ wound(?: if it doesn['’]t have one)?`)
 	woundLossRe  = regexp.MustCompile(`(?i)While wounded, the target loses \d+ \((\d+d\d+)\) Hit Points at the start of each of its turns`)
 	woundCloseRe = regexp.MustCompile(`(?i)The wound closes after (\d+) minutes?, after a spell restores Hit Points to the target, or after the target or a creature within 5 feet of it takes an action to stanch the wound, doing so by succeeding on a DC (\d+) Wisdom \(Medicine\) check`)
-	woundGateRe  = regexp.MustCompile(`(?i)(?:doesn['’]t already have an? [a-z]+ wound|if it doesn['’]t have one)`)
+	// woundGateRe: the whole effect is only for a creature without the wound ("If the target is a creature and doesn't already have an infernal wound, it is subjected to the following effect": Bearded Devil).
+	woundGateRe = regexp.MustCompile(`(?i)doesn['’]t already have an? [a-z]+ wound, it is subjected to the following effect`)
+	// woundIfNoneRe: only the wound is conditional; the rest of the effect applies ("Necrotic damage, and the target receives an infernal wound if it doesn't have one": Horned Devil).
+	woundIfNoneRe = regexp.MustCompile(`(?i)receives an? [a-z]+ wound if it doesn['’]t have one`)
 )
 
 // woundRead is a text's wound.
@@ -28,6 +31,7 @@ type woundRead struct {
 	Dice   string // the Hit Points lost each turn
 	Rounds int    // 1 minute is 10 rounds (0: until a spell or the check ends it)
 	DC     int    // the Wisdom (Medicine) check that stanches it (0: none)
+	IfNone bool   // given only to a creature that has no wound (the rest of the effect applies to every target)
 }
 
 // readWound reads the wound of a Failure's text (the give, the loss each turn and, when it is there, how it closes).
@@ -39,7 +43,7 @@ func (e *saveEffect) readWound(text string) {
 	if l == nil {
 		return
 	}
-	w := &woundRead{Dice: game.NormalizeDice(l[1])}
+	w := &woundRead{Dice: game.NormalizeDice(l[1]), IfNone: woundIfNoneRe.MatchString(text)}
 	if c := woundCloseRe.FindStringSubmatch(text); c != nil {
 		n, _ := strconv.Atoi(c[1])
 		w.Rounds = n * 10
@@ -50,7 +54,7 @@ func (e *saveEffect) readWound(text string) {
 
 // stripWound removes what readWound applies from a sentence.
 func stripWound(s string) string {
-	for _, re := range []*regexp.Regexp{woundGiveRe, woundLossRe, woundCloseRe} {
+	for _, re := range []*regexp.Regexp{woundGiveRe, woundLossRe, woundCloseRe, woundIfNoneRe} {
 		s = re.ReplaceAllString(s, "")
 	}
 	return s
@@ -60,6 +64,9 @@ func stripWound(s string) string {
 func (e saveEffect) giveWound(lobbyID, tid int, source string) []string {
 	if e.Wound == nil {
 		return nil
+	}
+	if e.Wound.IfNone && holdsWound(lobbyID, tid) { // "if it doesn't have one": the damage was dealt; no second wound
+		return []string{"already wounded: no second wound"}
 	}
 	a := condAdd{Condition: woundedConditions + ":" + e.Wound.Dice, Source: source, SourceID: e.SourceID, Magical: e.IsSpell, Rounds: e.Wound.Rounds}
 	if e.Wound.DC > 0 {

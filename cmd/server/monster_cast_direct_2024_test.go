@@ -104,8 +104,21 @@ func TestPostgresMonsterDarknessSpellAtAPoint(t *testing.T) {
 	if !magicalDarknessAt(camp, charID) { // the hero stands 15 feet from the point
 		t.Errorf("the hero, 15 feet from the point, is not in the Darkness")
 	}
-	if !magicalDarknessBlocksSight(camp, glab, charID) && !piercesMagicalDarkness(camp, glab) {
-		t.Errorf("a creature in the Darkness can still be seen from outside it")
+	if !magicalDarknessBlocksSight(camp, charID, glab) { // the hero stands in the Darkness: it can't see the Glabrezu outside it (the hero has no sense that pierces it)
+		t.Errorf("a creature in the Darkness sees out of it")
+	}
+	// the caster, standing 5 feet from the point, is in its own Sphere (a Sphere at a point has no creature origin to exclude)
+	_, state = pgCall(t, "GET", cp+"/battle-map", gm, nil)
+	req = map[string]interface{}{"map": encounterMap{Grid: []string{"................"}, Tokens: []mapToken{
+		{ID: charID, Name: "hero", Position: mapSquare{0, 0}, Size: 1}, {ID: glab, Name: "Dark Glabrezu", Position: mapSquare{4, 0}, Size: 1}}}}
+	if rev, ok := state["revision"].(string); ok {
+		req["confirmation"] = rev
+	}
+	if c, r := pgCall(t, "PUT", cp+"/battle-map", gm, req); c != 200 {
+		t.Fatalf("move the caster: %d %v", c, r)
+	}
+	if !magicalDarknessAt(camp, glab) {
+		t.Errorf("the caster, 5 feet from the point, is not in its own Darkness")
 	}
 	endMonsterConcentration(camp, glab, "Dark Glabrezu", "test")
 	if len(magicalDarknessRows(camp)) != 0 {

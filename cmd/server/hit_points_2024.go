@@ -531,6 +531,7 @@ func setHP(charID, hp int) (game.Vitals, error) {
 // restoreAllHP is a Long Rest's: a reduced Hit Point maximum back to normal (SRD 5.2.1 glossary, Long Rest), all Hit Points back, no
 // Temporary Hit Points, the Death Saving Throws reset (not for the dead).
 func restoreAllHP(charID int) (game.Vitals, error) {
+	noRegain, _ := cantRegainHP(lobbyOfChar(charID), charID) // a curse's "can't regain Hit Points": the rest still returns a reduced maximum, not the Hit Points
 	before, after, err := changeVitals(charID, func(tx *sql.Tx, v game.Vitals) (game.Vitals, error) {
 		if v.Dead {
 			return v, nil
@@ -545,7 +546,11 @@ func restoreAllHP(charID int) (game.Vitals, error) {
 			}
 			v.Max += reduced
 		}
-		v = v.SetHP(v.Max)
+		if noRegain {
+			v = v.SetHP(min(v.HP, v.Max))
+		} else {
+			v = v.SetHP(v.Max)
+		}
 		v.Temp, v.Successes, v.Failures, v.Stable = 0, 0, 0, false
 		return v, nil
 	})
@@ -585,13 +590,14 @@ func reduceMaxHPInto(charID, amount int, counter string) (int, bool, error) {
 		return 0, false, err
 	}
 	cut := min(amount, before.Max-1)
+	died := !before.Dead && amount >= before.Max
 	if before.Dead || cut <= 0 {
-		return 0, false, nil
+		return 0, died, nil
 	}
 	if _, err = tx.Exec(`UPDATE characters SET `+maxHPChange("$1", false)+`, `+counter+` = COALESCE(`+counter+`,0) + $2 WHERE id = $3`, -cut, cut, charID); err != nil {
 		return 0, false, err
 	}
-	return cut, amount >= before.Max, tx.Commit()
+	return cut, died, tx.Commit()
 }
 
 // releaseCursedMaxHP: the curse that took part of the Hit Point maximum has ended (Remove Curse, Greater Restoration, its time): that part now

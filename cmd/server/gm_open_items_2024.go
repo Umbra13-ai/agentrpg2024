@@ -80,15 +80,13 @@ func handOverToGM(h gmHandover) int {
 	}
 	key := targetKey(h.Targets)
 	var id int
-	err := inTx(func(tx *sql.Tx) error {
-		err := tx.QueryRow(`UPDATE gm_open_items SET title=$1, detail=$2, end_kind=$3, end_key=$4, ends_round=$5, created_round=$6, created_at=NOW(), snoozed_until=NULL, snooze_round=0
-			WHERE lobby_id=$7 AND source_id=$8 AND entry=$9 AND target_ids=$10 AND resolved_at IS NULL RETURNING id`,
-			h.Title, h.Detail, h.EndKind, h.EndKey, endsRound, round, h.Lobby, h.Source, h.Entry, key).Scan(&id)
-		if err == nil {
-			return nil
-		}
+	err := inTx(func(tx *sql.Tx) error { // one open item per creature, entry and targets (gm_open_items_open_once): a repeat, even at once, refreshes it
 		return tx.QueryRow(`INSERT INTO gm_open_items (lobby_id, kind, source_id, target_ids, entry, title, detail, end_kind, end_key, ends_round, created_round)
-			VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11) RETURNING id`,
+			VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11)
+			ON CONFLICT (lobby_id, source_id, entry, target_ids) WHERE resolved_at IS NULL
+			DO UPDATE SET title = EXCLUDED.title, detail = EXCLUDED.detail, end_kind = EXCLUDED.end_kind, end_key = EXCLUDED.end_key, ends_round = EXCLUDED.ends_round,
+				created_round = EXCLUDED.created_round, created_at = NOW(), snoozed_until = NULL, snooze_round = 0
+			RETURNING id`,
 			h.Lobby, h.Kind, h.Source, key, h.Entry, h.Title, h.Detail, h.EndKind, h.EndKey, endsRound, round).Scan(&id)
 	})
 	if err != nil {
@@ -151,14 +149,14 @@ func loadOpenItems(lobby int) ([]gmItem, error) {
 
 // gmItemLive: the server has not seen the item end. It asks the owners the game asks.
 func gmItemLive(lobby int, it gmItem, round int) bool {
-	if it.Source < 0 && it.Kind != "gm" && it.EndKind != endNever && !monsterInFight(lobby, it.Source) { // what it holds ends with it (it left the fight or died); a lasting effect on others (Geas) stays
+	if it.Source < 0 && it.Kind != "gm" && it.EndKind != endNever && !monsterAlive(lobby, it.Source) { // what it holds ends with it (it left the fight or was struck down); a lasting effect on others (Geas) stays
 		return false
 	}
 	switch it.EndKind {
 	case endConcentration:
 		return it.Source != 0 && normalizeSpellSlug(monsterConcentrationOn(lobby, it.Source)) == normalizeSpellSlug(it.EndKey)
 	case endCreature:
-		return monsterInFight(lobby, it.Source)
+		return monsterAlive(lobby, it.Source)
 	case endFight:
 		return round > 0
 	case endRounds:
@@ -279,11 +277,17 @@ func resolveGMItemsEnding(lobby int, endKind string, source int, key string) int
 		return 0
 	}
 	n, _ := res.RowsAffected()
+	if endKind == "" && source == 0 { // the fight is over: a monster's id belongs to that fight only (the next fight numbers its own), and its round counts end
+		db.Exec(`UPDATE gm_open_items SET source_id = 0, snooze_round = 0 WHERE lobby_id = $1 AND resolved_at IS NULL AND (source_id < 0 OR snooze_round > 0)`, lobby)
+	}
 	return int(n)
 }
 
 // snoozeGMItem hides an item until the next round, or for n GM check-ins; it comes back by itself. A time is stored, so a read stays a read.
 func snoozeGMItem(lobby, item int, nextRound bool, checkins int) (bool, error) {
+	if nextRound && currentRound(lobby) == 0 { // no fight, no round to count: the next GM check-in is the same wait
+		nextRound, checkins = false, 0
+	}
 	if nextRound {
 		res, err := db.Exec(`UPDATE gm_open_items SET snooze_round = $3, snoozed_until = NULL WHERE lobby_id = $1 AND id = $2 AND resolved_at IS NULL`, lobby, item, currentRound(lobby)+1)
 		if err != nil {
@@ -408,11 +412,15 @@ func handleGMOpenItems(w http.ResponseWriter, r *http.Request) {
 			}
 			reply(map[string]interface{}{"snoozed_item": req.ItemID})
 		case strings.TrimSpace(req.Text) != "":
+			if req.CreatureID > 0 && lobbyOfChar(req.CreatureID) != lobby { // a character of another campaign is not this campaign's to name
+				writeJSONStatus(w, http.StatusNotFound, map[string]interface{}{"error": "character_not_in_campaign", "message": "That character is not in this campaign."})
+				return
+			}
 			title := strings.TrimSpace(req.Title)
 			if title == "" {
 				title = strings.TrimSpace(req.Text)
-				if len(title) > 80 {
-					title = title[:80] + "..."
+				if r := []rune(title); len(r) > 80 {
+					title = string(r[:80]) + "..."
 				}
 			}
 			id := handOverToGM(gmHandover{Lobby: lobby, Source: req.CreatureID, Kind: "gm", Entry: "GM's own: " + title, Title: title, Detail: strings.TrimSpace(req.Text), EndKind: endNever})

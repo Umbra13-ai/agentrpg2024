@@ -80,3 +80,22 @@ func TestPostgresInfernalWoundOnEveryTarget(t *testing.T) {
 		}
 	}
 }
+
+// Infernal Tail (Horned Devil) conditions only the wound on there being none: a creature already wounded still takes the save and the damage.
+func TestPostgresInfernalTailHurtsTheWounded(t *testing.T) {
+	testPostgres(t)
+	gm, _, camp, hero, devil := earlyRulesFixture(t, "Test Horned Tail Devil", []srdMonsterEntry{
+		{Name: "Infernal Tail", Text: "Dexterity Saving Throw: DC 30, one creature the devil can see within 10 feet. Failure: 10 (1d8 + 6) Necrotic damage, and the target receives an infernal wound if it doesn’t have one. While wounded, the target loses 10 (3d6) Hit Points at the start of each of its turns. The wound closes after 1 minute, after a spell restores Hit Points to the target, or after the target or a creature within 5 feet of it takes an action to stanch the wound, doing so by succeeding on a DC 17 Wisdom (Medicine) check."},
+	})
+	pgExec(t, `UPDATE characters SET hp=1000, max_hp=1000, dex=1 WHERE id=$1`, hero)
+	addCondition(camp, hero, condAdd{Condition: woundedConditions + ":1d10", Source: "an earlier devil"})
+	hp := func() (h int) { db.QueryRow(`SELECT hp FROM characters WHERE id=$1`, hero).Scan(&h); return }
+	before := hp()
+	_, line := narrateAs(t, gm, camp, devil, "Infernal Tail", fmt.Sprint(hero), "")
+	if lost := before - hp(); lost < 7 || strings.Contains(fmt.Sprint(line), "no saving throw") {
+		t.Errorf("a wounded target took %d from Infernal Tail (1d8 + 6 is 7 to 14): %v", lost, line)
+	}
+	if n := len(recordsOf(camp, hero, woundedConditions)); n != 1 {
+		t.Errorf("a wounded target holds %d wounds after Infernal Tail, want the one it had", n)
+	}
+}

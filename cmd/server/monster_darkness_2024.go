@@ -103,8 +103,8 @@ func magicalDarknessAt(lobbyID, creatureID int) bool {
 		return false
 	}
 	for _, r := range rows {
-		if creatureID == r.source {
-			continue // the origin's own square is not in its Emanation (SRD 5.2.1 "Emanation")
+		if creatureID == r.source && r.at == nil {
+			continue // the origin's own square is not in its Emanation (SRD 5.2.1 "Emanation"); a Sphere at a point has no creature origin
 		}
 		origin, ok := r.originToken(battle)
 		if !ok {
@@ -203,8 +203,8 @@ func magicalDarknessBlocksSight(lobbyID, viewerID, targetID int) bool {
 		if !ok {
 			continue
 		}
-		insideV := viewerID != r.source && tokenDistanceFeet(origin, v) <= r.radius
-		insideT := targetID != r.source && tokenDistanceFeet(origin, t) <= r.radius
+		insideV := (viewerID != r.source || r.at != nil) && tokenDistanceFeet(origin, v) <= r.radius
+		insideT := (targetID != r.source || r.at != nil) && tokenDistanceFeet(origin, t) <= r.radius
 		if !insideV && !insideT && !segmentCrossesEmanation(v.Position, t.Position, origin.Position, r.radius) {
 			continue
 		}

@@ -124,7 +124,10 @@ func (e saveEffect) giveCurse(lobbyID, tid int, source string) []string {
 	flags := append([]string{}, e.Curse.Flags...)
 	for i, f := range flags {
 		if strings.HasPrefix(f, curseHPMax+"=") && !strings.Contains(f, "@") {
-			flags[i] = f + "@" + strconv.FormatInt(storyRoundsOf(lobbyID), 10) // its day count starts now
+			if holdsHPMaxCurse(lobbyID, tid) { // a second hit doesn't start a second count: the creature is cursed once
+				return []string{"already cursed (its days keep counting)"}
+			}
+			flags[i] = fmt.Sprintf("%s@%d@%d", f, storyRoundsOf(lobbyID), lobbyID) // its day count starts now, on this campaign's clock
 		}
 	}
 	a := condAdd{Condition: condCursed + ":" + strings.Join(flags, "+"), Source: source, SourceID: e.SourceID, Magical: e.IsSpell, Rounds: e.Curse.Rounds}
@@ -196,25 +199,42 @@ func restBenefit(charID int, long bool) (bool, string) {
 
 // curseTakesHPMax: the record's Detail has the Hit Point maximum flag.
 func curseTakesHPMax(detail string) bool {
-	_, _, ok := curseHPMaxOf(detail)
+	_, _, _, ok := curseHPMaxOf(detail)
 	return ok
 }
 
-// curseHPMaxOf reads the flag out of a record's Detail: the dice and the story round of its last tick.
-func curseHPMaxOf(detail string) (dice string, last int64, ok bool) {
+// curseHPMaxOf reads the flag out of a record's Detail: the dice, the story round of its last tick and the campaign whose clock that round is on
+// (0: not recorded).
+func curseHPMaxOf(detail string) (dice string, last int64, lobby int, ok bool) {
 	for _, f := range strings.Split(detail, "+") {
 		if !strings.HasPrefix(f, curseHPMax+"=") {
 			continue
 		}
-		body := strings.TrimPrefix(f, curseHPMax+"=")
-		d, at, found := strings.Cut(body, "@")
-		if !found {
-			return d, 0, d != ""
+		parts := strings.Split(strings.TrimPrefix(f, curseHPMax+"="), "@")
+		dice = parts[0]
+		if len(parts) > 1 {
+			n, err := strconv.ParseInt(parts[1], 10, 64)
+			if err != nil {
+				return dice, 0, 0, false
+			}
+			last = n
 		}
-		n, err := strconv.ParseInt(at, 10, 64)
-		return d, n, err == nil && d != ""
+		if len(parts) > 2 {
+			lobby, _ = strconv.Atoi(parts[2])
+		}
+		return dice, last, lobby, dice != ""
 	}
-	return "", 0, false
+	return "", 0, 0, false
+}
+
+// holdsHPMaxCurse: the creature already has a curse that takes Hit Point maximum.
+func holdsHPMaxCurse(lobbyID, who int) bool {
+	for _, r := range loadConditionRecords(lobbyID, who) {
+		if r.Condition == condCursed && curseTakesHPMax(r.Detail) {
+			return true
+		}
+	}
+	return false
 }
 
 // storyRoundsOf: the campaign's story clock (lobbies.story_rounds: the GM's pass-time and travel).
@@ -226,11 +246,15 @@ func storyRoundsOf(lobbyID int) int64 {
 
 const storyDayRounds = 14400 // 24 hours of 6-second rounds
 
+// maxCurseDaysPerPass: the days one pass of time counts for a curse (a pass of years is not thousands of rolls and transactions).
+const maxCurseDaysPerPass = 100
+
 // cursedHPMaxTick: for each full 24 story hours since a cursed character's last tick, its Hit Point maximum decreases by the curse's dice (the Mummy's
 // Rotting Fist). The record's day count is advanced first (it is the claim), then the maximum reduced (reduceCursedMaxHP); a maximum that reaches 0 is a
 // death. Called by passSpellTimeOn after the story clock moves. It answers what happened, for the GM.
 func cursedHPMaxTick(lobbyID int) []string {
-	rows, err := db.Query(`SELECT DISTINCT target_id FROM condition_records WHERE lobby_id = $1 AND condition = $2 AND detail LIKE $3 AND target_id > 0`,
+	rows, err := db.Query(`SELECT DISTINCT r.target_id FROM condition_records r JOIN characters c ON c.id = r.target_id
+		WHERE c.lobby_id = $1 AND r.condition = $2 AND r.detail LIKE $3 AND r.target_id > 0`, // the creature's campaign now: not the one it was cursed in
 		lobbyID, condCursed, "%"+curseHPMax+"=%")
 	if err != nil {
 		logDBProblem("cursed hit point maximum", err)
@@ -250,21 +274,24 @@ func cursedHPMaxTick(lobbyID int) []string {
 		var amounts []int
 		err := changeConditions(lobbyID, id, func(c *conditionChange) error {
 			for _, r := range c.recs {
-				dice, last, ok := curseHPMaxOf(r.Detail)
+				dice, last, stampedIn, ok := curseHPMaxOf(r.Detail)
 				if r.Condition != condCursed || !ok {
 					continue
 				}
 				days := int((now - last) / storyDayRounds)
-				if days <= 0 {
+				if stampedIn != 0 && stampedIn != lobbyID { // the creature is in another campaign now: its days count again from this clock
+					days, last = 0, now
+				} else if days <= 0 {
 					continue
 				}
+				days = min(days, maxCurseDaysPerPass)
 				for i := 0; i < days; i++ {
 					amounts = append(amounts, game.RollDamage(normDice(dice), false))
 				}
 				flags := strings.Split(r.Detail, "+")
 				for i, f := range flags {
 					if strings.HasPrefix(f, curseHPMax+"=") {
-						flags[i] = fmt.Sprintf("%s=%s@%d", curseHPMax, dice, last+int64(days)*storyDayRounds)
+						flags[i] = fmt.Sprintf("%s=%s@%d@%d", curseHPMax, dice, last+int64(days)*storyDayRounds, lobbyID)
 					}
 				}
 				if err := c.set(r.ID, r.DurationRounds, strings.Join(flags, "+")); err != nil {
@@ -279,6 +306,9 @@ func cursedHPMaxTick(lobbyID int) []string {
 		}
 		for _, a := range amounts {
 			cut, died, err := reduceCursedMaxHP(id, a)
+			if err == nil && cut == 0 && !died {
+				break // dead already, or nothing left to take
+			}
 			if err != nil {
 				logDBProblem("cursed hit point maximum", err)
 				continue
@@ -288,6 +318,8 @@ func cursedHPMaxTick(lobbyID int) []string {
 				if ok, _ := killCharacter(id); ok {
 					line += " Its Hit Point maximum is 0: it dies."
 				}
+				out = append(out, line)
+				break // the rest of the days are for the dead
 			}
 			out = append(out, line)
 		}

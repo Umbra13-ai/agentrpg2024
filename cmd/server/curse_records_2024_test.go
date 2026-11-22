@@ -209,3 +209,93 @@ func hasPrefixFlag(flags []string, prefix string) bool {
 	}
 	return false
 }
+
+// Edges of the Mummy curse's Hit Point maximum (Fable review of Nov 22): a second hit while cursed doesn't double the days, a cursed creature regains no
+// Hit Points at a Long Rest, a maximum already at 1 still dies, and another campaign's pass-time or a campaign the creature has left never ticks it.
+func TestPostgresMummyCurseEdges(t *testing.T) {
+	testPostgres(t)
+	gm, _, camp, char, _, _ := companionReactionFixture(t)
+	text := srdEntryText(t, "Mummy", "Rotting Fist")
+	var e saveEffect
+	e.readCurse(text)
+	e.SourceID = -1
+	reset := func() {
+		pgExec(t, `UPDATE characters SET hp=500, max_hp=1000, max_hp_reduced=0, max_hp_cursed=0, conditions='[]', is_dead=false WHERE id=$1`, char)
+		pgExec(t, `DELETE FROM condition_records WHERE target_id=$1`, char)
+		pgExec(t, `UPDATE lobbies SET story_rounds=0 WHERE id=$1`, camp)
+	}
+	cursedRecords := func() (n int) {
+		for _, r := range loadConditionRecords(camp, char) {
+			if r.Condition == condCursed {
+				n++
+			}
+		}
+		return
+	}
+	cursedPart := func() (c int) {
+		db.QueryRow(`SELECT COALESCE(max_hp_cursed,0) FROM characters WHERE id=$1`, char).Scan(&c)
+		return
+	}
+
+	// 1. a second Rotting Fist while cursed: one curse, one 3d6 a day
+	reset()
+	e.giveCurse(camp, char, "Mummy 1's Rotting Fist")
+	passSpellTimeOn(camp, 100, 0)
+	e.giveCurse(camp, char, "Mummy 2's Rotting Fist")
+	if n := cursedRecords(); n != 1 {
+		t.Errorf("two hits left %d curse records, want 1", n)
+	}
+	passSpellTimeOn(camp, storyDayRounds, 0)
+	if c := cursedPart(); c < 3 || c > 18 {
+		t.Errorf("one day after two hits: the cursed part is %d (one 3d6 is 3 to 18)", c)
+	}
+
+	// 3. a cursed creature regains no Hit Points at a Long Rest, but Life Drain's part of the maximum returns
+	reset()
+	e.giveCurse(camp, char, "Mummy 1's Rotting Fist")
+	if _, err := reduceMaxHP(char, 30); err != nil {
+		t.Fatal(err)
+	}
+	pgExec(t, `UPDATE characters SET hp=100 WHERE id=$1`, char)
+	if _, err := restoreAllHP(char); err != nil {
+		t.Fatal(err)
+	}
+	var hp, maxHP int
+	db.QueryRow(`SELECT hp, max_hp FROM characters WHERE id=$1`, char).Scan(&hp, &maxHP)
+	if hp != 100 || maxHP != 1000 {
+		t.Errorf("a cursed creature's Long Rest: hp %d (it can't regain Hit Points: want 100), max %d (Life Drain's part returns: want 1000)", hp, maxHP)
+	}
+
+	// 9. a maximum already at 1 dies when the curse takes more
+	reset()
+	pgExec(t, `UPDATE characters SET hp=1, max_hp=1 WHERE id=$1`, char)
+	e.giveCurse(camp, char, "Mummy 1's Rotting Fist")
+	passSpellTimeOn(camp, storyDayRounds, 0)
+	var dead bool
+	db.QueryRow(`SELECT COALESCE(is_dead,false) FROM characters WHERE id=$1`, char).Scan(&dead)
+	if !dead {
+		t.Errorf("a cursed character at Hit Point maximum 1 did not die when the curse took more")
+	}
+
+	// 4. a character that left the campaign is not ticked by its pass-time; joining another campaign starts the count again there
+	reset()
+	e.giveCurse(camp, char, "Mummy 1's Rotting Fist")
+	pgExec(t, `UPDATE characters SET lobby_id=NULL WHERE id=$1`, char)
+	passSpellTimeOn(camp, 3*storyDayRounds, 0)
+	if c := cursedPart(); c != 0 {
+		t.Errorf("a character that left the campaign lost %d Hit Point maximum to its pass-time", c)
+	}
+	_, j := pgCall(t, "POST", "/api/campaigns", gm, map[string]interface{}{"name": "Curse edges B", "max_players": 2})
+	campB := int(j["campaign_id"].(float64))
+	pgExec(t, `UPDATE lobbies SET story_rounds=$2 WHERE id=$1`, campB, 50*storyDayRounds) // another campaign, its clock far ahead
+	pgExec(t, `UPDATE characters SET lobby_id=$1 WHERE id=$2`, campB, char)
+	passSpellTimeOn(campB, 1, 0)
+	if c := cursedPart(); c != 0 {
+		t.Errorf("joining a campaign whose clock is far ahead counted %d Hit Point maximum at once; the count starts again there", c)
+	}
+	passSpellTimeOn(campB, storyDayRounds, 0)
+	if c := cursedPart(); c < 3 || c > 18 {
+		t.Errorf("one day on the new campaign's clock: the cursed part is %d (3d6 is 3 to 18)", c)
+	}
+	pgExec(t, `UPDATE characters SET lobby_id=$1 WHERE id=$2`, camp, char)
+}

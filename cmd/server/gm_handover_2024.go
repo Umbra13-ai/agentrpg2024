@@ -49,8 +49,8 @@ func monsterHandoverSpell(lobby, monsterID int, spellSlug string, targets []int)
 		title += " on " + strings.Join(names, ", ")
 	}
 	detail := strings.TrimSpace(sp.Description)
-	if len(detail) > 700 {
-		detail = detail[:700] + "..."
+	if r := []rune(detail); len(r) > 700 {
+		detail = string(r[:700]) + "..."
 	}
 	return handOverToGM(gmHandover{Lobby: lobby, Source: monsterID, Targets: targets, Kind: "spell", Entry: spellSlug, Title: title,
 		Detail: sp.Name + ": " + detail, EndKind: end, EndKey: spellSlug, Rounds: row.Rounds}) > 0

@@ -326,8 +326,10 @@ Add to the owner, never beside it. When you give another rule one owner, add it 
   and "doesn't already have an infernal wound" is `saveEffect.NotHolding` (no save). **A curse's Hit Point maximum** (Mummy: "its Hit Point maximum doesn't return to normal when finishing a Long Rest, and ... decreases by 10 (3d6) every 24 hours that elapse"): the
   record's flag `hpmax=3d6@<story round>` (`curseHPMaxRe`); `cursedHPMaxTick` (called by `passSpellTimeOn` after the story clock moves) claims each full 24 story hours on the
   record and reduces the maximum through `reduceCursedMaxHP` into `max_hp_cursed`, which a Long Rest (`restoreAllHP`) does not give back; the record's end
-  (`conditionChange.remove`) moves it into the ordinary reduction (`releaseCursedMaxHP`), returned at the next Long Rest; a maximum reduced to 0 is a death. Go:
-  `TestPostgresMummyCurseHitPointMaximum`. Not applied, told to the GM: a curse's "or until the
+  (`conditionChange.remove`) moves it into the ordinary reduction (`releaseCursedMaxHP`), returned at the next Long Rest; a maximum reduced to 0 is a death. A creature is cursed once (a second hit starts no second count: `holdsHPMaxCurse`); the days count on the campaign's story clock, which only the GM's
+  pass-time and travel move (a rest does not), on the campaign the creature is in (the stamp carries its campaign: a creature that moves to another campaign starts counting again
+  there); a cursed creature's Long Rest returns Life Drain's part of the maximum but no Hit Points (`restoreAllHP` asks `cantRegainHP`). Go:
+  `TestPostgresMummyCurseHitPointMaximum`, `TestPostgresMummyCurseEdges`. Not applied, told to the GM: a curse's "or until the
   incubus dies", the lycanthrope's transformation at 0 Hit Points, the Aboleth's underwater clause (the server has
   no underwater state). Go: `TestPostgresStatBlockCursesOnEveryTarget`, `TestPostgresInfernalWoundOnEveryTarget`.
 - **A character's portrait** (the photo on its sheet): `cmd/server/portrait_2024.go` is the one owner of what it may be (`checkPortraitImage`: not empty, up to

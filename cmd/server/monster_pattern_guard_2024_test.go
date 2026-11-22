@@ -78,6 +78,7 @@ var monsterTextPatterns = map[string]*regexp.Regexp{
 	"woundLossRe":              woundLossRe,              // wound_records_2024.go
 	"woundCloseRe":             woundCloseRe,             // wound_records_2024.go
 	"woundGateRe":              woundGateRe,              // wound_records_2024.go
+	"woundIfNoneRe":            woundIfNoneRe,            // wound_records_2024.go
 	"exposedRe":                exposedRe,                // disadvantage_riders_2024.go
 	"noReactRe":                noReactRe,                // disadvantage_riders_2024.go
 	"hideLightGateRe":          hideLightGateRe,          // hide_2024.go

@@ -1,10 +1,12 @@
 package main
 
 import (
+	"database/sql"
 	"fmt"
 	"os"
 	"path/filepath"
 	"strings"
+	"sync"
 	"testing"
 	"time"
 )
@@ -81,10 +83,15 @@ func TestPostgresGMOpenItems(t *testing.T) {
 		}
 		return asList(j["open_items"])
 	}
-	count := func() int {
-		var n int
-		db.QueryRow(`SELECT COUNT(*) FROM gm_open_items WHERE lobby_id = $1`, lobby).Scan(&n)
-		return n
+	count := func() string { // every mutable column of every row, not only how many rows there are
+		var sum string
+		db.QueryRow(`SELECT COALESCE(md5(string_agg(id::text || ':' || COALESCE(resolved_at::text,'') || ':' || COALESCE(snoozed_until::text,'') || ':' || snooze_round::text || ':' || source_id::text, ',' ORDER BY id)), '')
+			FROM gm_open_items WHERE lobby_id = $1`, lobby).Scan(&sum)
+		return sum
+	}
+	closedByServer := func() (n int) {
+		db.QueryRow(`SELECT COUNT(*) FROM gm_open_items WHERE lobby_id = $1 AND resolved_by LIKE 'server:%'`, lobby).Scan(&n)
+		return
 	}
 
 	// a one-shot or unknown spell is never listed; a lasting one is, with its creature and rule
@@ -127,7 +134,7 @@ func TestPostgresGMOpenItems(t *testing.T) {
 		pgCall(t, "GET", fmt.Sprintf("/api/gm/status?campaign_id=%d", lobby), gm, nil)
 	}
 	if count() != before {
-		t.Errorf("a read changed the table: %d -> %d", before, count())
+		t.Errorf("a read changed the table: %s -> %s", before, count())
 	}
 
 	// ends the server sees: Concentration, the creature leaving, the fight ending
@@ -135,6 +142,9 @@ func TestPostgresGMOpenItems(t *testing.T) {
 	endMonsterConcentration(lobby, a, "Open Fiend", "test")
 	if got := list(""); len(got) != 0 {
 		t.Fatalf("Concentration ended and the item stayed: %v", got)
+	}
+	if closedByServer() != 1 {
+		t.Errorf("the Concentration's end was not written as the item's resolution (%d closed by the server)", closedByServer())
 	}
 	startMonsterConcentration(lobby, a, "fly")
 	monsterHandoverSpell(lobby, a, "fly", nil) // listed again with a new cast
@@ -146,10 +156,13 @@ func TestPostgresGMOpenItems(t *testing.T) {
 		t.Fatalf("two items expected: %v", list(""))
 	}
 	if c, j := pgCall(t, "POST", fmt.Sprintf("/api/campaigns/%d/combat/remove", lobby), gm, map[string]interface{}{"combatant_id": b}); c != 200 {
-		t.Logf("remove: %d %v", c, j)
+		t.Fatalf("remove: %d %v", c, j)
 	}
 	if got := list(""); len(got) != 1 {
 		t.Errorf("removing the creature left %d items: %v", len(got), got)
+	}
+	if closedByServer() != 2 {
+		t.Errorf("removing the creature was not written as its items' resolution (%d closed by the server)", closedByServer())
 	}
 
 	// snooze: hidden, and back after the next round
@@ -202,19 +215,73 @@ func TestPostgresGMOpenItems(t *testing.T) {
 		t.Errorf("an unknown field: %d", c)
 	}
 
-	// the fight ending clears what is tied to it; a player may not read or write the list
+	// a creature struck down no longer holds what it cast (it is in the fight at 0 Hit Points: the reader asks its Hit Points)
 	monsterHandoverSpell(lobby, a, "mage-armor", nil)
 	if len(list("")) != 1 {
 		t.Fatalf("Mage Armor was not listed")
 	}
+	setMonsterHP(lobby, a, 0)
+	if got := list(""); len(got) != 0 {
+		t.Errorf("a monster at 0 Hit Points still holds its Mage Armor item: %v", got)
+	}
+	setMonsterHP(lobby, a, 1000)
+
+	// a text of multibyte characters is cut on characters, not bytes (a title of 100 accented letters), and a character of another campaign can't be named
+	if c, j := pgCall(t, "POST", path, gm, map[string]interface{}{"campaign_id": lobby, "text": strings.Repeat("é", 100)}); c != 200 {
+		t.Errorf("a long text of accented letters: %d %v", c, j)
+	}
+	if c, _ := pgCall(t, "POST", path, gm, map[string]interface{}{"campaign_id": lobby, "creature_id": 999999999, "text": "Not in this campaign."}); c != 404 {
+		t.Errorf("a character of no campaign named in an item: %d", c)
+	}
+	pgCall(t, "DELETE", path, gm, map[string]interface{}{"campaign_id": lobby, "all": true})
+	monsterHandoverSpell(lobby, a, "mage-armor", nil)
+
+	// the same hand-over made at once is one open item (the unique index and the upsert)
+	var wg sync.WaitGroup
+	for i := 0; i < 8; i++ {
+		wg.Add(1)
+		go func() {
+			defer wg.Done()
+			handOverToGM(gmHandover{Lobby: lobby, Source: a, Kind: "gm", Entry: "race", Title: "At once", Detail: "x", EndKind: endNever})
+		}()
+	}
+	wg.Wait()
+	var racing int
+	db.QueryRow(`SELECT COUNT(*) FROM gm_open_items WHERE lobby_id = $1 AND entry = 'race' AND resolved_at IS NULL`, lobby).Scan(&racing)
+	if racing != 1 {
+		t.Errorf("8 hand-overs at once made %d open items", racing)
+	}
+	pgExec(t, `UPDATE gm_open_items SET resolved_at = NOW(), resolved_by = 'test' WHERE lobby_id = $1 AND entry = 'race'`, lobby)
+	monsterHandoverSpell(lobby, a, "geas", nil) // lasts past the fight: it lets go of the fight's monster id when the fight ends
+
 	if c, _ := pgCall(t, "GET", fmt.Sprintf("%s?campaign_id=%d", path, lobby), tok, nil); c != 403 {
 		t.Errorf("a player read the GM's list: %d", c)
 	}
 	if c, _ := pgCall(t, "POST", fmt.Sprintf("/api/campaigns/%d/combat/end", lobby), gm, map[string]interface{}{}); c != 200 {
-		t.Logf("combat end: %d", c)
+		t.Fatalf("combat end: %d", c)
 	}
-	if got := list(""); len(got) != 0 {
-		t.Errorf("the fight ended and the item stayed: %v", got)
+	got := list("")
+	if _, named := got[0].(map[string]interface{})["creature"]; len(got) != 1 || !strings.Contains(fmt.Sprint(got[0]), "geas") || named { // the title keeps the caster's name; the item no longer names a creature of the fight
+		t.Errorf("after the fight only the Geas stays, with no creature of the fight: %v", got)
+	}
+	if closedByServer() < 3 {
+		t.Errorf("the fight's end was not written as the item's resolution (%d closed by the server)", closedByServer())
+	}
+	var source int
+	db.QueryRow(`SELECT source_id FROM gm_open_items WHERE lobby_id = $1 AND entry = 'geas' AND resolved_at IS NULL`, lobby).Scan(&source)
+	if source != 0 {
+		t.Errorf("the Geas still points at monster id %d of a fight that is over", source)
+	}
+	// outside a fight there is no round to wait for: "next_round" waits for the next GM check-in
+	geas := asInt(got[0].(map[string]interface{})["id"])
+	if c, j := pgCall(t, "POST", path, gm, map[string]interface{}{"campaign_id": lobby, "item_id": geas, "snooze": "next_round"}); c != 200 {
+		t.Fatalf("snooze outside a fight: %d %v", c, j)
+	}
+	var round int
+	var until sql.NullTime
+	db.QueryRow(`SELECT snooze_round, snoozed_until FROM gm_open_items WHERE id = $1`, geas).Scan(&round, &until)
+	if round != 0 || !until.Valid || !until.Time.After(time.Now().Add(-time.Minute)) {
+		t.Errorf("a next-round snooze outside a fight: round %d, until %v (a time is wanted, no round)", round, until)
 	}
 }
 
