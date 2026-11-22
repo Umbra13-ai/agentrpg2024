@@ -55,9 +55,10 @@ type lastingEffects struct {
 	Also      []string // conditions the target also has while it has Condition ("While Frightened, the target has the Paralyzed condition")
 	AlsoNotes string   // the note of those records (notesEndsWith + Condition; Unconscious that also ends on damage: notesEndsWithPoisonOrDamage)
 	// DisadvAttacks: "While Deafened, the target also has Disadvantage on ... attack rolls" (Swarm of Ravens Cacophony): the roll rider
-	// marker "disadv_attacks" (read by attackSources), a record noted AlsoNotes that ends with the condition's. Disadvantage on ability
-	// checks has no owner yet: that part of the sentence stays the GM's.
+	// marker "disadv_attacks" (read by attackSources), a record noted AlsoNotes that ends with the condition's. "... on ability checks and
+	// attack rolls" is also the marker "disadv_checks" (DisadvChecks), read by the check owner (check_2024.go).
 	DisadvAttacks bool
+	DisadvChecks  bool
 }
 
 var (
@@ -128,8 +129,7 @@ func readLastingEffects(sentence string, conds []string) (l *lastingEffects, res
 			l.AlsoNotes = notesEndsWith + cond
 		}
 		if strings.Contains(strings.ToLower(lastingDisadvAttacksRe.FindString(body)), "ability checks") {
-			// the ability checks are the GM's (the reply's words say the attack rolls are applied)
-			return l, strings.TrimSpace(regexp.MustCompile(`(?i)ability checks and attack rolls`).ReplaceAllString(sentence, "ability checks"))
+			l.DisadvChecks = true // the ability checks too: the check owner reads the marker
 		}
 		body = lastingDisadvAttacksRe.ReplaceAllString(body, "")
 	}
@@ -156,7 +156,9 @@ func (l lastingEffects) words() string {
 	if len(l.Also) > 0 {
 		parts = append(parts, "has the "+joinNames(titleWordsAll(l.Also))+" condition")
 	}
-	if l.DisadvAttacks {
+	if l.DisadvChecks {
+		parts = append(parts, "has Disadvantage on ability checks and attack rolls")
+	} else if l.DisadvAttacks {
 		parts = append(parts, "has Disadvantage on attack rolls")
 	}
 	return strings.Join(parts, " and ") + " while " + titleCase(l.Condition)

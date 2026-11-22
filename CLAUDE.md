@@ -279,6 +279,17 @@ Add to the owner, never beside it. When you give another rule one owner, add it 
   `creatureSave`, `monsterSaveFor`, `monsterSaveRoll` and `monsterSpellSave(For)` return the `game.SaveResult`: a message about a
   save uses its wordings (`LineAgainst` keeps the DC visible when the reader's own feature forces the save), never a line of its own
   from the total and the DC, so it always says why a save had Advantage or Disadvantage; `TestNoSaveLineByHand` checks (HANDOFF item 24).
+- **Ability checks:** `checkCtx` and `checkCtx.sources` (`cmd/server/check_2024.go`) decide what gives an ability check Advantage or
+  Disadvantage, for a character, a monster or a companion (every creature: Poisoned, Frightened while its source is in sight on the battle
+  map, a `disadv_checks` rider, Sunlight Sensitivity, a damage-triggered rider such as Aversion to Fire, the holder's own words when escaping
+  its grapple (Mimic); a character's own: Charmed target, Remarkable Athlete, Supreme Sneak, Boots of Elvenkind, armor, Large Form, Powerful
+  Build, Help, travel pace, items, Foresight, Enhance Ability, Reduce); `rollCheckD20` is the one check d20 and cancels them;
+  `checkExhaustion` is the -2 per level for any creature; the bonus stays `checkBonus`. "Disadvantage on attack rolls and ability checks
+  until ..." and "While Deafened, the target also has Disadvantage on ability checks and attack rolls" give the marker `disadv_checks`
+  (`readDisadvantage`, `lastingEffects.DisadvChecks`). Routes on it: the GM's skill and tool checks, the condition escape, the detach
+  action, the GM's grapple escape and both Hide actions (stage 1 of `docs`' plan); the other check routes (contested, group, Search/Study/
+  Influence, Stabilize, Fast Hands, jump, Sphere, Use Magic Device, Dispel Magic) are listed in `TestNoOtherCheckRoll` until they move.
+  Never roll a check's d20 anywhere else. Go: `TestPostgresCheckSourcesOnEveryRoute`, `TestNoOtherCheckRoll`.
 - **The 18 skills:** `game/skills.go`.
 - **Expertise:** `game/expertise.go`, with its database side in `cmd/server/expertise_2024.go`.
 - **Which feats a character can take:** `cmd/server/feats_2024.go` (`featRefusal`, `featsOpenTo`, `featTakerOf`, `featHowTo`).
@@ -367,7 +378,7 @@ Add to the owner, never beside it. When you give another rule one owner, add it 
   recurring owner ticks, `monster_recurring_damage_2024.go`); the record's end ends them; `conditionView`'s `effects` shows them.
   A text's damage dealt now is `immediateDamage`: never a damage "at the start (or end) of each of ... turns" (feedback log 63).
   "While Frightened, the target has the Paralyzed condition" (`lastingEffects.Also`) and "While Deafened, the target also has Disadvantage
-  on ... attack rolls" (`DisadvAttacks`: the roll rider's `disadv_attacks` marker; ability checks have no owner yet and stay the GM's)
+  on ... attack rolls" (`DisadvAttacks`: the roll rider's `disadv_attacks` marker, and `DisadvChecks`: the check owner's `disadv_checks`)
   are records noted `notesEndsWith` + the condition ("frightened", "deafened"), ended with that record by `conditionChange.remove` (the one place every record ends); the condition that lasts "until the grapple ends" (Restrained, or Poisoned for the Roper's Tentacle: `saveEffect.LinkedCond`) stays `linkedCondition`.
   **The conditions a spell ends** (Heal, Mass Heal, Power Word Heal, Protection from Poison, Lesser and Greater Restoration's
   pick): the table `spellEndsConditions` with `endSpellConditions` (`spell_ends_conditions_2024.go`); a healing spell ends them

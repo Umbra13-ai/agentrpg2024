@@ -524,9 +524,9 @@ func handleConditionEscape(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	var lobby, level, str, dex, con, intl, wis, cha int
-	var name, skillRaw, expRaw string
-	if db.QueryRow(`SELECT lobby_id, level, str, dex, con, intl, wis, cha, name, COALESCE(skill_proficiencies,''), COALESCE(expertise,'') FROM characters WHERE id = $1`,
-		req.CharacterID).Scan(&lobby, &level, &str, &dex, &con, &intl, &wis, &cha, &name, &skillRaw, &expRaw) != nil {
+	var name string
+	if db.QueryRow(`SELECT lobby_id, level, str, dex, con, intl, wis, cha, name FROM characters WHERE id = $1`,
+		req.CharacterID).Scan(&lobby, &level, &str, &dex, &con, &intl, &wis, &cha, &name) != nil {
 		writeJSONStatus(w, http.StatusNotFound, map[string]interface{}{"error": "character_not_found"})
 		return
 	}
@@ -552,34 +552,19 @@ func handleConditionEscape(w http.ResponseWriter, r *http.Request) {
 	}
 	scores := map[string]int{"Strength": str, "Dexterity": dex, "Constitution": con, "Intelligence": intl, "Wisdom": wis, "Charisma": cha}
 	mod := game.Modifier(scores[esc.Ability]) - game.ExhaustionD20Penalty(exhaustionLevelOf(req.CharacterID))
-	skillKey := strings.ToLower(strings.ReplaceAll(esc.Skill, " ", "_"))
-	has := func(list string) bool {
-		for _, f := range strings.FieldsFunc(strings.ToLower(list), func(r rune) bool { return r == ',' || r == ' ' || r == ';' || r == '"' || r == '[' || r == ']' }) {
-			if strings.ReplaceAll(f, "-", "_") == skillKey {
-				return true
+	if esc.Skill != "" {
+		if proficient, expert := characterSkillProficiency(req.CharacterID, esc.Skill); proficient { // the one proficiency reader
+			mod += game.ProficiencyBonus(level)
+			if expert {
+				mod += game.ProficiencyBonus(level)
 			}
 		}
-		return false
 	}
-	if skillKey != "" && has(skillRaw) {
-		mod += game.ProficiencyBonus(level)
-		if has(expRaw) {
-			mod += game.ProficiencyBonus(level)
-		}
-	}
-	conditions := getCharConditions(req.CharacterID)
-	disadv := game.GetAbilityCheckDisadvantage(conditions, 0, false)
-	adv := largeFormAdvantage(req.CharacterID, esc.Ability) // Goliath Large Form: Advantage on Strength checks
-	roll, r1, r2 := 0, 0, 0
-	switch {
-	case disadv && !adv:
-		roll, r1, r2 = game.RollWithDisadvantage()
-	case adv && !disadv:
-		roll, r1, r2 = game.RollWithAdvantage()
-	default:
-		roll = game.RollDie(20)
-		r1 = roll
-	}
+	// What gives the check Advantage or Disadvantage has one owner (check_2024.go): Poisoned, Frightened, riders, Sunlight Sensitivity, the
+	// holder's own words, Large Form, Powerful Build, Help
+	why := checkCtx{lobby: lobby, who: req.CharacterID, ability: esc.Ability, skill: esc.Skill, escape: true, holder: rec.SourceID}.sources()
+	disadv, adv := why.Disadvantage(), why.Advantage()
+	roll, r1, r2, _ := rollCheckD20(adv, disadv)
 	total := roll + mod
 	success := total >= esc.DC
 	resp := map[string]interface{}{"character": name, "condition": rec.Condition, "attempt": escapeLabel(esc), "roll": roll, "modifier": mod, "total": total, "success": success}
@@ -588,7 +573,7 @@ func handleConditionEscape(w http.ResponseWriter, r *http.Request) {
 		resp["disadvantage"] = true
 	} else if adv && !disadv {
 		resp["rolls"] = []int{r1, r2}
-		resp["advantage"] = "Large Form"
+		resp["advantage"] = strings.Join(why.Adv, ", ")
 	}
 	if success {
 		deleteConditionRecord(lobby, req.CharacterID, rec.ID)

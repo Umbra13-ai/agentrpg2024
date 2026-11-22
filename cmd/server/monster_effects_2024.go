@@ -490,6 +490,9 @@ func (e saveEffect) giveConditions(lobbyID, tid int, source string) []string {
 			if e.Lasting.DisadvAttacks { // "While Deafened, the target also has Disadvantage on attack rolls": the roll rider's marker
 				also = append(append([]string{}, also...), "disadv_attacks")
 			}
+			if e.Lasting.DisadvChecks { // "... on ability checks and attack rolls": the check owner's marker
+				also = append(append([]string{}, also...), "disadv_checks")
+			}
 			for _, also := range also { // "While Frightened, the target has the Paralyzed condition": ends with the record
 				if res := addCondition(lobbyID, tid, condAdd{Condition: also, Source: source, SourceID: e.SourceID, Magical: e.IsSpell, Notes: e.Lasting.AlsoNotes}); res.Immune != "" {
 					parts = append(parts, fmt.Sprintf("not %s (%s)", also, res.Immune))

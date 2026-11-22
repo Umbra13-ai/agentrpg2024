@@ -25,31 +25,20 @@ func attemptHide(charID int, label string) string {
 	mod, prof, profNote, reliable := checkBonus(charID, class, level, "stealth", dex)
 	lobby := lobbyOfChar(charID)
 	guide, guideNote := guidanceBonus(lobby, charID, "stealth")
-	d, advNote := buffCheckRoll(charID, "dex", game.RollDie(20)) // Foresight, Enhance Ability (Dexterity)
-	pwt, pwtNote := buffStealthBonus(charID)                     // Pass without Trace +10
+	pwt, pwtNote := buffStealthBonus(charID) // Pass without Trace +10
 	guide += pwt
-	notes := guideNote + advNote + pwtNote
-	dis := false
-	if armorStealthDisadvantage(charID) {
-		dis, notes = true, notes+" [armor: Disadvantage on Stealth]"
-	}
-	if _, pDis, pNote := travelPaceEffect(lobby, "stealth"); pDis {
-		dis, notes = true, notes+pNote
-	}
-	if bootsOfElvenkind(charID, "stealth") { // F112: Advantage on Stealth (cancels with Disadvantage)
-		if dis {
-			dis, notes = false, notes+" [Boots of Elvenkind: Advantage and Disadvantage cancel]"
-		} else {
-			if d2 := game.RollDie(20); d2 > d {
-				d = d2
-			}
-			notes += " [Boots of Elvenkind: Advantage]"
-		}
-	}
-	if dis {
-		if d2 := game.RollDie(20); d2 < d {
-			d = d2
-		}
+	notes := guideNote + pwtNote
+	// What gives the check Advantage or Disadvantage has one owner (check_2024.go): conditions, riders, armor, Boots of Elvenkind, travel
+	// pace, Foresight, Enhance Ability, Reduce ...; they cancel to one d20
+	why := checkCtx{lobby: lobby, who: charID, ability: "dex", skill: "stealth"}.sources()
+	d, _, _, _ := rollCheckD20(why.Advantage(), why.Disadvantage())
+	switch {
+	case why.Advantage() && why.Disadvantage():
+		notes += " [Advantage (" + strings.Join(why.Adv, ", ") + ") and Disadvantage (" + strings.Join(why.Dis, ", ") + ") cancel]"
+	case why.Advantage():
+		notes += " [Advantage: " + strings.Join(why.Adv, ", ") + "]"
+	case why.Disadvantage():
+		notes += " [Disadvantage: " + strings.Join(why.Dis, ", ") + "]"
 	}
 	roll, rtNote := reliableRoll(d, reliable)
 	total := roll + mod + prof + guide
@@ -110,12 +99,17 @@ func attemptMonsterHide(lobbyID, monsterID int, name, entryName, text string, ap
 		bonus += 10
 		notes += " [Pass without Trace +10]"
 	}
-	d := game.RollDie(20)
-	if on, _ := sunlightPenalty(lobbyID, monsterID); on {
-		if d2 := game.RollDie(20); d2 < d {
-			d = d2
-		}
-		notes += " [Sunlight Sensitivity: Disadvantage]"
+	bonus -= checkExhaustion(lobbyID, monsterID) // SRD 5.2.1: -2 per Exhaustion level on a D20 Test
+	// What gives the check Advantage or Disadvantage has one owner (check_2024.go): Poisoned, Frightened, riders, Sunlight Sensitivity ...
+	why := checkCtx{lobby: lobbyID, who: monsterID, ability: "dex", skill: "stealth"}.sources()
+	d, _, _, _ := rollCheckD20(why.Advantage(), why.Disadvantage())
+	switch {
+	case why.Advantage() && why.Disadvantage():
+		notes += " [Advantage (" + strings.Join(why.Adv, ", ") + ") and Disadvantage (" + strings.Join(why.Dis, ", ") + ") cancel]"
+	case why.Disadvantage():
+		notes += " [" + strings.Join(why.Dis, ", ") + ": Disadvantage]"
+	case why.Advantage():
+		notes += " [" + strings.Join(why.Adv, ", ") + ": Advantage]"
 	}
 	total := d + bonus
 	endCondition(lobbyID, monsterID, "hidden", "")

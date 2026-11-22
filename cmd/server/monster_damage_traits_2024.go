@@ -1,7 +1,6 @@
 package main
 
 import (
-	"fmt"
 	"regexp"
 	"strings"
 )
@@ -38,10 +37,8 @@ func damageDisadvantages(key string, amounts map[string]int) []damageDisadvantag
 }
 
 func damageTraitGMNotices(lobby, id int, name string, penalties []damageDisadvantage) {
-	for _, penalty := range penalties {
-		if penalty.abilityChecks {
-			addGMNotice(lobby, fmt.Sprintf("%s's %s gives Disadvantage on ability checks until the end of its next turn. For an applicable NPC check, roll with disadvantage via POST /api/gm/roll using its check modifier.", name, penalty.name))
-		}
+	for range penalties {
+		// "... and ability checks": the check owner reads the marker (check_2024.go checkCtx.sources); nothing is left for the GM
 		noticeIfCompanionSourceHasNoTurn(lobby, id, id, damageDisadvantageMarker, notesUntilEndOfSourceTurn)
 	}
 }

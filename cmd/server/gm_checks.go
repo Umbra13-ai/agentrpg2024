@@ -230,116 +230,25 @@ func handleGMSkillCheck(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 
-	// O-11: why the roll has Advantage or Disadvantage, so the reply can say when they cancel
-	var advWhy, disWhy []string
-	if req.Advantage {
-		advWhy = append(advWhy, "the GM's ruling")
-	}
-	if req.Disadvantage {
-		disWhy = append(disWhy, "the GM's ruling")
-	}
-
-	// Charmed: Charmer has advantage on CHA-based checks against charmed target
-	charmedAdvantage := false
-	if req.TargetID > 0 && (abilityUsed == "cha" || abilityUsed == "charisma") {
-		if isCharmedBy(req.TargetID, req.CharacterID) {
-			req.Advantage = true
-			charmedAdvantage = true
-			advWhy = append(advWhy, "Charmed target")
-		}
-	}
-
-	// 2024 Remarkable Athlete (Champion): Advantage on Strength (Athletics) checks
-	if skillUsed == "athletics" && subclassRaw.Valid && hasSubclassFeature(subclassRaw.String, level, "remarkable_athlete") {
-		req.Advantage = true
-		advWhy = append(advWhy, "Remarkable Athlete")
-	}
-
-	// Supreme Sneak (Thief Rogue level 9+) - advantage on Stealth if moved no more than half speed
-	supremeSneakAdvantage := false
-	if skillUsed == "stealth" && req.HalfSpeedMovement {
-		if subclassRaw.Valid && hasSubclassFeature(subclassRaw.String, level, "supreme_sneak") {
-			req.Advantage = true
-			supremeSneakAdvantage = true
-			advWhy = append(advWhy, "Supreme Sneak")
-		}
-	}
-
-	if bootsOfElvenkind(req.CharacterID, skillUsed) { // F112 (rogue_fixes_2024.go)
-		req.Advantage = true
-		advWhy = append(advWhy, "Boots of Elvenkind / Cloak of the Bat")
-	}
-
-	// Poisoned condition gives disadvantage on ability checks
-	poisonedDisadvantage := false
-	if hasCondition(req.CharacterID, "poisoned") {
-		req.Disadvantage = true
-		poisonedDisadvantage = true
-		disWhy = append(disWhy, "Poisoned")
-	}
-
-	// Exhaustion level 1+ gives disadvantage on ability checks
-	exhaustionDisadvantage := false
+	// What gives the check Advantage or Disadvantage has one owner (check_2024.go): conditions, riders, Sunlight Sensitivity, the character's
+	// class, subclass, species, items, spells, armor, Help and travel pace; O-11: the reasons let the reply say when they cancel
+	why := checkCtx{lobby: campaignID, who: req.CharacterID, ability: abilityUsed, skill: skillUsed, targetID: req.TargetID,
+		gmAdvantage: req.Advantage, gmDisadvantage: req.Disadvantage, halfSpeedMovement: req.HalfSpeedMovement}.sources()
+	req.Advantage, req.Disadvantage = why.Advantage(), why.Disadvantage()
+	advWhy, disWhy := why.Adv, why.Dis
+	charmedAdvantage := why.hasAdv("Charmed target")
+	supremeSneakAdvantage := why.hasAdv("Supreme Sneak")
+	largeForm := why.hasAdv("Large Form")
+	poisonedDisadvantage := why.hasDis("Poisoned")
+	exhaustionDisadvantage := false // 2024: Exhaustion is a -2 per level penalty on the D20 Test (above), not Disadvantage
 	var charExhaustion int
-	db.QueryRow("SELECT COALESCE(exhaustion_level, 0) FROM characters WHERE id = $1", req.CharacterID).Scan(&charExhaustion)
-	if charExhaustion >= 1 {
-		exhaustionDisadvantage = false // 2024: Exhaustion is a -2 per level penalty on the D20 Test, not Disadvantage
-	}
+	buffCheckWhy := why.Notes
 
-	// Non-proficient armor gives disadvantage on STR/DEX ability checks
-	armorDisadvantage := false
-	isStrOrDexCheck := abilityUsed == "str" || abilityUsed == "strength" || abilityUsed == "dex" || abilityUsed == "dexterity"
-	if isStrOrDexCheck && isWearingNonProficientArmor(req.CharacterID) {
-		req.Disadvantage = true
-		armorDisadvantage = true
-		disWhy = append(disWhy, "armor without proficiency")
-	}
-	// SRD 5.2.1 Armor, Stealth: armor marked Disadvantage in the Stealth column gives Disadvantage on Dexterity (Stealth) checks
-	if skillUsed == "stealth" && armorStealthDisadvantage(req.CharacterID) {
-		req.Disadvantage = true
-		disWhy = append(disWhy, "armor (Stealth Disadvantage)")
-	}
-	largeForm := largeFormAdvantage(req.CharacterID, abilityUsed) // Goliath Large Form: Advantage on Strength checks
-	if largeForm {
-		req.Advantage = true
-		advWhy = append(advWhy, "Large Form")
-	}
-	if takeHelpedCheck(req.CharacterID, skillUsed) {
-		req.Advantage = true // an ally's Help (Assist an Ability Check)
-		advWhy = append(advWhy, "Help")
-	}
-	// Travel pace (Fast: Disadvantage on Perception, Survival, Stealth; Normal: on Stealth; Slow: Advantage on Perception, Survival)
-	if pAdv, pDis, _ := travelPaceEffect(lobbyOfChar(req.CharacterID), skillUsed); pAdv {
-		req.Advantage = true
-		advWhy = append(advWhy, "travel pace")
-	} else if pDis {
-		req.Disadvantage = true
-		disWhy = append(disWhy, "travel pace")
-	}
-	buffCheckWhy := ""
-	if ok, why := itemSkillAdvantage(req.CharacterID, skillUsed); ok { // Cloak of Elvenkind, Eyes of the Eagle, Robe of Eyes ... (F204)
-		req.Advantage = true
-		buffCheckWhy += " [Advantage: " + why + "]"
-		advWhy = append(advWhy, why)
-	}
-	if ok, why := buffCheckAdvantage(req.CharacterID, abilityUsed); ok { // Foresight, Enhance Ability (buff_spells_2024.go)
-		req.Advantage = true
-		buffCheckWhy = " [Advantage: " + why + "]"
-		advWhy = append(advWhy, why)
-	}
-	if dis, why := moreCheckDisadvantage(req.CharacterID, abilityUsed); dis { // Reduce (spells_more_2024.go)
-		req.Disadvantage = true
-		buffCheckWhy += " [Disadvantage: " + why + "]"
-		disWhy = append(disWhy, why)
-	}
-
-	// Roll the die
-	var roll1, roll2, finalRoll int
-	rollType := "normal"
-
-	if req.Advantage && !req.Disadvantage {
-		finalRoll, roll1, roll2 = game.RollWithAdvantage()
-		rollType = "advantage"
+	// Roll the die (the one check d20, check_2024.go)
+	finalRoll, roll1, roll2, rollKind := rollCheckD20(req.Advantage, req.Disadvantage)
+	rollType := rollKind
+	switch {
+	case rollKind == "advantage":
 		if usedInspiration {
 			rollType = "advantage (inspiration)"
 		}
@@ -352,30 +261,24 @@ func handleGMSkillCheck(w http.ResponseWriter, r *http.Request) {
 		if largeForm {
 			rollType = "advantage (Large Form)"
 		}
-	} else if req.Disadvantage && !req.Advantage {
-		finalRoll, roll1, roll2 = game.RollWithDisadvantage()
-		rollType = "disadvantage"
-		// Build descriptive reason for disadvantage
+	case rollKind == "disadvantage":
+		// the reasons, in words: Poisoned and armor as before, every other source the owner named
 		reasons := []string{}
-		if poisonedDisadvantage {
-			reasons = append(reasons, "poisoned")
-		}
-		if exhaustionDisadvantage {
-			reasons = append(reasons, "exhaustion")
-		}
-		if armorDisadvantage {
-			reasons = append(reasons, "non-proficient armor")
+		for _, d := range disWhy {
+			switch d {
+			case "Poisoned":
+				reasons = append(reasons, "poisoned")
+			case "armor without proficiency":
+				reasons = append(reasons, "non-proficient armor")
+			default:
+				reasons = append(reasons, strings.ToLower(d))
+			}
 		}
 		if len(reasons) > 0 {
 			rollType = "disadvantage (" + strings.Join(reasons, ", ") + ")"
 		}
-	} else {
-		finalRoll = game.RollDie(20)
-		roll1 = finalRoll
-		if req.Advantage && req.Disadvantage { // O-11: say why there is one d20
-			rollType = "normal (Advantage from " + strings.Join(advWhy, ", ") + " and Disadvantage from " + strings.Join(disWhy, ", ") + " cancel)"
-		}
-		roll2 = 0
+	case req.Advantage && req.Disadvantage: // O-11: say why there is one d20
+		rollType = "normal (Advantage from " + strings.Join(advWhy, ", ") + " and Disadvantage from " + strings.Join(disWhy, ", ") + " cancel)"
 	}
 
 	// Halfling Lucky
@@ -804,10 +707,7 @@ func handleGMToolCheck(w http.ResponseWriter, r *http.Request) {
 	if req.Skill != "" {
 		skillProficient, hasExpertise = characterSkillProficiency(req.CharacterID, req.Skill)
 	}
-	toolAndSkill := isProficient && skillProficient
-	if toolAndSkill {
-		req.Advantage = true
-	}
+	toolAndSkill := isProficient && skillProficient // the owner gives the Advantage (check_2024.go)
 	isProficient = isProficient || skillProficient
 	if isProficient {
 		if hasExpertise {
@@ -854,66 +754,35 @@ func handleGMToolCheck(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 
-	// Poisoned condition gives disadvantage on ability checks (tool checks are ability checks)
-	poisonedDisadvantage := false
-	if hasCondition(req.CharacterID, "poisoned") {
-		req.Disadvantage = true
-		poisonedDisadvantage = true
-	}
-
-	// Exhaustion level 1+ gives disadvantage on ability checks
-	exhaustionDisadvantage := false
+	// What gives the check Advantage or Disadvantage has one owner (check_2024.go), the same list a skill check has; Help names the tool
+	why := checkCtx{lobby: campaignID, who: req.CharacterID, ability: abilityUsed, skill: req.Skill, help: req.Tool,
+		gmAdvantage: req.Advantage, gmDisadvantage: req.Disadvantage, toolAndSkill: toolAndSkill}.sources()
+	req.Advantage, req.Disadvantage = why.Advantage(), why.Disadvantage()
+	poisonedDisadvantage := why.hasDis("Poisoned")
+	exhaustionDisadvantage := false // 2024: Exhaustion is a -2 per level penalty on the D20 Test (above), not Disadvantage
 	var charExhaustion int
-	db.QueryRow("SELECT COALESCE(exhaustion_level, 0) FROM characters WHERE id = $1", req.CharacterID).Scan(&charExhaustion)
-	if charExhaustion >= 1 {
-		exhaustionDisadvantage = false // 2024: Exhaustion is a -2 per level penalty on the D20 Test, not Disadvantage
-	}
 
-	// Non-proficient armor gives disadvantage on STR/DEX ability checks
-	armorDisadvantage := false
-	isStrOrDexTool := abilityUsed == "str" || abilityUsed == "strength" || abilityUsed == "dex" || abilityUsed == "dexterity"
-	if isStrOrDexTool && isWearingNonProficientArmor(req.CharacterID) {
-		req.Disadvantage = true
-		armorDisadvantage = true
+	// Roll the die (the one check d20, check_2024.go)
+	finalRoll, roll1, roll2, rollKind := rollCheckD20(req.Advantage, req.Disadvantage)
+	rollType := rollKind
+	if rollKind == "advantage" && usedInspiration {
+		rollType = "advantage (inspiration)"
 	}
-	if largeFormAdvantage(req.CharacterID, abilityUsed) { // Goliath Large Form
-		req.Advantage = true
-	}
-
-	// Roll the die
-	var roll1, roll2, finalRoll int
-	rollType := "normal"
-
-	if takeHelpedCheck(req.CharacterID, req.Tool) {
-		req.Advantage = true // an ally's Help (Assist an Ability Check)
-	}
-	if req.Advantage && !req.Disadvantage {
-		finalRoll, roll1, roll2 = game.RollWithAdvantage()
-		rollType = "advantage"
-		if usedInspiration {
-			rollType = "advantage (inspiration)"
-		}
-	} else if req.Disadvantage && !req.Advantage {
-		finalRoll, roll1, roll2 = game.RollWithDisadvantage()
-		rollType = "disadvantage"
-		// Build descriptive reason for disadvantage
+	if rollKind == "disadvantage" {
 		toolReasons := []string{}
-		if poisonedDisadvantage {
-			toolReasons = append(toolReasons, "poisoned")
-		}
-		if exhaustionDisadvantage {
-			toolReasons = append(toolReasons, "exhaustion")
-		}
-		if armorDisadvantage {
-			toolReasons = append(toolReasons, "non-proficient armor")
+		for _, d := range why.Dis {
+			switch d {
+			case "Poisoned":
+				toolReasons = append(toolReasons, "poisoned")
+			case "armor without proficiency":
+				toolReasons = append(toolReasons, "non-proficient armor")
+			default:
+				toolReasons = append(toolReasons, strings.ToLower(d))
+			}
 		}
 		if len(toolReasons) > 0 {
 			rollType = "disadvantage (" + strings.Join(toolReasons, ", ") + ")"
 		}
-	} else {
-		finalRoll = game.RollDie(20)
-		roll1 = finalRoll
-		roll2 = 0
 	}
 
 	// Halfling Lucky

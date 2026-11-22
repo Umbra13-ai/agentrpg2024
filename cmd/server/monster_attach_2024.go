@@ -575,9 +575,9 @@ func handleAttachDetach2024(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	var lobby, level, str int
-	var name, skillRaw, expRaw string
-	if db.QueryRow(`SELECT lobby_id, level, str, name, COALESCE(skill_proficiencies,''), COALESCE(expertise,'') FROM characters WHERE id = $1`,
-		req.CharacterID).Scan(&lobby, &level, &str, &name, &skillRaw, &expRaw) != nil {
+	var name string
+	if db.QueryRow(`SELECT lobby_id, level, str, name FROM characters WHERE id = $1`,
+		req.CharacterID).Scan(&lobby, &level, &str, &name) != nil {
 		writeJSONStatus(w, http.StatusNotFound, map[string]interface{}{"error": "character_not_found"})
 		return
 	}
@@ -653,35 +653,25 @@ func handleAttachDetach2024(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	mod := game.Modifier(str) - game.ExhaustionD20Penalty(exhaustionLevelOf(req.CharacterID))
-	skillKey := strings.ToLower(rule.Skill)
-	has := func(list string) bool {
-		for _, f := range strings.FieldsFunc(strings.ToLower(list), func(r rune) bool { return r == ',' || r == ' ' || r == ';' || r == '"' || r == '[' || r == ']' }) {
-			if strings.ReplaceAll(f, "-", "_") == skillKey {
-				return true
+	if rule.Skill != "" {
+		if proficient, expert := characterSkillProficiency(req.CharacterID, rule.Skill); proficient { // the one proficiency reader
+			mod += game.ProficiencyBonus(level)
+			if expert {
+				mod += game.ProficiencyBonus(level)
 			}
 		}
-		return false
 	}
-	if has(skillRaw) {
-		mod += game.ProficiencyBonus(level)
-		if has(expRaw) {
-			mod += game.ProficiencyBonus(level)
-		}
-	}
-	disadv := game.GetAbilityCheckDisadvantage(getCharConditions(req.CharacterID), 0, false)
-	adv := largeFormAdvantage(req.CharacterID, rule.Ability) // Goliath Large Form: Advantage on Strength checks
-	roll, r1, r2 := 0, 0, 0
+	// What gives the check Advantage or Disadvantage has one owner (check_2024.go), as for the condition escape
+	why := checkCtx{lobby: lobby, who: req.CharacterID, ability: rule.Ability, skill: rule.Skill}.sources()
+	disadv, adv := why.Disadvantage(), why.Advantage()
+	roll, r1, r2, _ := rollCheckD20(adv, disadv)
 	switch {
 	case disadv && !adv:
-		roll, r1, r2 = game.RollWithDisadvantage()
 		resp["rolls"] = []int{r1, r2}
 		resp["disadvantage"] = true
 	case adv && !disadv:
-		roll, r1, r2 = game.RollWithAdvantage()
 		resp["rolls"] = []int{r1, r2}
-		resp["advantage"] = "Large Form"
-	default:
-		roll = game.RollDie(20)
+		resp["advantage"] = strings.Join(why.Adv, ", ")
 	}
 	total := roll + mod
 	resp["roll"], resp["modifier"], resp["total"], resp["dc"] = roll, mod, total, rule.DC

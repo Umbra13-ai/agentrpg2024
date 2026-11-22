@@ -21,8 +21,9 @@ import (
 // A marker lasts for its duration (riderEnd.markerAdd); a rider used up by one roll is applied only when it ends at the start of
 // the source's next turn, the end the combat effects keep.
 //
-// Not applied, always left in Extra for the GM: Disadvantage on ability checks, no duration given, Disadvantage on Strength-based D20
-// Tests. Never dropped, never guessed.
+//   - "... and ability checks": the marker "disadv_checks" for the same duration, read by the check owner (check_2024.go checkCtx.sources).
+//
+// Not applied, always left in Extra for the GM: no duration given, Disadvantage on Strength-based D20 Tests. Never dropped, never guessed.
 
 var (
 	exposedRe      = regexp.MustCompile(`(?i)the next attack roll (?:made )?against (?:the target|it),? ` + riderUntil + `,? has Advantage`)
@@ -50,8 +51,9 @@ func (e *saveEffect) readDisadvantage(text string) (handled []string, gm []strin
 	}
 	if m := disadvAttackRe.FindStringSubmatch(text); m != nil && riderEndIn(m) != riderEndNone {
 		add("attacks", riderEndIn(m), m[0])
-		if m[1] != "" {
-			gm = append(gm, "Disadvantage on ability checks "+riderEndIn(m).describe(0, 0)+" (ability checks are the GM's)")
+		if m[1] != "" { // "... and ability checks": the same duration, read by the check owner (check_2024.go)
+			e.DisadvMode = append(e.DisadvMode, "checks")
+			e.RollRiderEnd["checks"] = riderEndIn(m)
 		}
 	}
 	if m := disadvConcRe.FindStringSubmatch(text); m != nil && riderEndIn(m) != riderEndNone {
@@ -86,6 +88,8 @@ func rollRiderWords(mode string) (cond, what string) {
 		return "disadv_concentration", "Disadvantage on saves to maintain Concentration"
 	case mode == "noreactions":
 		return "no_reactions", "can't take Reactions"
+	case mode == "checks":
+		return "disadv_checks", "Disadvantage on ability checks"
 	case mode == "nextattack":
 		return "disadv_next_attack", "Disadvantage on its next attack roll"
 	case mode == "selfnextadv":

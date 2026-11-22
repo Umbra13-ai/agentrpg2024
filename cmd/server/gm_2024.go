@@ -187,10 +187,21 @@ func handleGMEscapeGrapple2024(w http.ResponseWriter, r *http.Request) {
 	} else {
 		_ = pb
 	}
-	roll := game.RollDie(20)
+	bonus -= checkExhaustion(lobby, req.TargetID) // SRD 5.2.1: -2 per Exhaustion level on a D20 Test, any kind of creature
+	// What gives the check Advantage or Disadvantage has one owner (check_2024.go): Poisoned, Frightened, riders, Sunlight Sensitivity, the
+	// holder's own words (the Mimic), Large Form, Powerful Build. This route had none.
+	why := checkCtx{lobby: lobby, who: req.TargetID, ability: "str", skill: "athletics", escape: true, holder: rec.SourceID}.sources()
+	roll, r1, r2, _ := rollCheckD20(why.Advantage(), why.Disadvantage())
 	total := roll + bonus
 	name := creatureName(lobby, req.TargetID)
-	result := fmt.Sprintf("%s tries to escape: %d (d20 %d + %d) vs DC %d, ", name, total, roll, bonus, dc)
+	dice := fmt.Sprintf("d20 %d", roll)
+	switch {
+	case why.Disadvantage() && !why.Advantage():
+		dice = fmt.Sprintf("d20s %d and %d with Disadvantage (%s): %d", r1, r2, strings.Join(why.Dis, ", "), roll)
+	case why.Advantage() && !why.Disadvantage():
+		dice = fmt.Sprintf("d20s %d and %d with Advantage (%s): %d", r1, r2, strings.Join(why.Adv, ", "), roll)
+	}
+	result := fmt.Sprintf("%s tries to escape: %d (%s + %d) vs DC %d, ", name, total, dice, bonus, dc)
 	if total >= dc {
 		deleteConditionRecord(lobby, req.TargetID, rec.ID)
 		result += "success. The Grappled condition ends."

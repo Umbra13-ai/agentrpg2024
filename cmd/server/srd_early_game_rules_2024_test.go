@@ -122,19 +122,20 @@ func TestPostgresDeafenedAttackDisadvantage(t *testing.T) {
 	if !hasCondMarker(camp, hero, "deafened") {
 		t.Fatalf("the save never failed: %s", line)
 	}
-	if !hasCondMarker(camp, hero, "disadv_attacks") || !strings.Contains(line, "Disadvantage on attack rolls while Deafened") {
-		t.Fatalf("Deafened without the attack rolls' Disadvantage: %s", line)
+	// both halves are applied (the attack rolls' marker and the check owner's), and nothing of the sentence is left for the GM
+	if !hasCondMarker(camp, hero, "disadv_attacks") || !hasCondMarker(camp, hero, "disadv_checks") || !strings.Contains(line, "Disadvantage on ability checks and attack rolls while Deafened") {
+		t.Fatalf("Deafened without the Disadvantage on ability checks and attack rolls: %s", line)
 	}
-	if !strings.Contains(line, "Disadvantage on ability checks") || strings.Contains(line, "ability checks and attack rolls") {
-		t.Errorf("the GM should be told the ability checks only (the attack rolls are applied): %s", line)
+	if strings.Contains(line, "The GM handles") || strings.Contains(line, "GM to apply") {
+		t.Errorf("nothing of the sentence is left for the GM: %s", line)
 	}
 	ctx := attackCtx{lobby: camp, attacker: hero, target: swarm}
 	if a := ctx.gather(); !strings.Contains(strings.Join(a.Disadvantage, "; "), "Disadvantage rider") {
 		t.Errorf("the Deafened character's attack roll lacks the rider's Disadvantage: %v", a.Disadvantage)
 	}
 	endConditionRecords(recordsOf(camp, hero, "deafened")) // the condition owner's end: the marker ends with it
-	if hasCondMarker(camp, hero, "disadv_attacks") {
-		t.Error("the attack rolls' Disadvantage outlived the Deafened record")
+	if hasCondMarker(camp, hero, "disadv_attacks") || hasCondMarker(camp, hero, "disadv_checks") {
+		t.Error("the Disadvantage outlived the Deafened record")
 	}
 }
 
