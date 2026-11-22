@@ -13,12 +13,8 @@ package main
 import (
 	"bytes"
 	"database/sql"
-	"encoding/base64"
 	"encoding/json"
 	"fmt"
-	"image"
-	_ "image/jpeg"
-	_ "image/png"
 	"net/http"
 	"strconv"
 	"strings"
@@ -196,62 +192,21 @@ func handleCharacterPortrait(w http.ResponseWriter, r *http.Request, charID int)
 				})
 				return
 			}
-			b64 := req.ImageBase64
-			if i := strings.Index(b64, "base64,"); i >= 0 { // tolerate data: URLs
-				b64 = b64[i+len("base64,"):]
-			}
-			var decErr error
-			imageBytes, decErr = base64.StdEncoding.DecodeString(b64)
-			if decErr != nil {
-				writeJSONStatus(w, http.StatusBadRequest, map[string]interface{}{"error": "invalid_base64", "message": "image_base64 is not valid base64. Encode the image file's bytes as standard base64 (a data: URL is also accepted)."})
+			var ref *portraitRefusal
+			if imageBytes, ref = decodePortraitBase64(req.ImageBase64); ref != nil { // portrait_2024.go
+				writeJSONStatus(w, ref.Status, ref.Body)
 				return
 			}
 		} else {
 			imageBytes = raw
 		}
 
-		if len(imageBytes) == 0 {
-			writeJSONStatus(w, http.StatusBadRequest, map[string]interface{}{"error": "empty_image", "message": "No image was sent."})
+		mime, shapeNote, ref := checkPortraitImage(imageBytes) // the one rule of what a portrait may be (portrait_2024.go)
+		if ref != nil {
+			writeJSONStatus(w, ref.Status, ref.Body)
 			return
 		}
-		if len(imageBytes) > maxPortraitBytes {
-			writeJSONStatus(w, http.StatusRequestEntityTooLarge, map[string]interface{}{
-				"error": "image_too_large", "max_bytes": maxPortraitBytes, "message": "The image is over 5 MB. Make it smaller (1024 by 1280 pixels is the best size for the sheet) and send it again."})
-			return
-		}
-		mime := detectPortraitType(imageBytes)
-		if mime == "" {
-			writeJSONStatus(w, http.StatusUnsupportedMediaType, map[string]interface{}{
-				"error": "unsupported_image_type", "allowed": []string{"image/png", "image/jpeg", "image/webp"}, "message": "This is not a PNG, JPEG or WebP image. Send one of those."})
-			return
-		}
-		shapeNote := ""
-		if mime != "image/webp" { // webp has no decoder here; PNG/JPEG get a real decode check
-			cfg, _, err := image.DecodeConfig(bytes.NewReader(imageBytes))
-			if err != nil {
-				writeJSONStatus(w, http.StatusBadRequest, map[string]interface{}{"error": "corrupt_image", "message": "The image could not be read: the file looks damaged. Save it again and resend it."})
-				return
-			}
-			if cfg.Width > maxPortraitPixels || cfg.Height > maxPortraitPixels ||
-				cfg.Width < minPortraitPixels || cfg.Height < minPortraitPixels {
-				writeJSONStatus(w, http.StatusBadRequest, map[string]interface{}{
-					"error":      "bad_dimensions",
-					"min_pixels": minPortraitPixels, "max_pixels": maxPortraitPixels,
-					"got":     fmt.Sprintf("%dx%d", cfg.Width, cfg.Height),
-					"message": fmt.Sprintf("The image is %d by %d pixels. Each side must be %d to %d pixels; 1024 by 1280 is the best size for the sheet.", cfg.Width, cfg.Height, minPortraitPixels, maxPortraitPixels)})
-				return
-			}
-			if _, _, derr := image.Decode(bytes.NewReader(imageBytes)); derr != nil { // the pixels too, not only the header (Nov 14 review: a truncated PNG was saved)
-				writeJSONStatus(w, http.StatusBadRequest, map[string]interface{}{"error": "corrupt_image", "message": "The image could not be read: the file looks damaged or cut short. Save it again and resend it. Nothing was changed."})
-				return
-			}
-			if r := float64(cfg.Width) / float64(cfg.Height); r < 0.75 || r > 0.85 { // the sheet's frame is 4:5 (0.8)
-				shapeNote = fmt.Sprintf("Saved. The image is %d by %d pixels; the sheet shows a 4:5 frame and crops the rest, so the edges may be cut. 1024 by 1280 fits exactly.", cfg.Width, cfg.Height)
-			}
-		}
-
-		if _, err := db.Exec(`UPDATE characters SET avatar = $1, avatar_type = $2, avatar_updated_at = NOW() WHERE id = $3`,
-			imageBytes, mime, charID); err != nil {
+		if err := savePortrait(charID, imageBytes, mime); err != nil {
 			writeJSONStatus(w, http.StatusInternalServerError, map[string]interface{}{"error": "save_failed"})
 			return
 		}
@@ -269,7 +224,7 @@ func handleCharacterPortrait(w http.ResponseWriter, r *http.Request, charID int)
 		if _, ok := requireCharacterOwner(w, r, charID, "remove its portrait"); !ok {
 			return
 		}
-		db.Exec(`UPDATE characters SET avatar = NULL, avatar_type = NULL, avatar_updated_at = NULL WHERE id = $1`, charID)
+		clearPortrait(charID) // portrait_2024.go
 		writeJSONStatus(w, http.StatusOK, map[string]interface{}{"success": true})
 
 	default:

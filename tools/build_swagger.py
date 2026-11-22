@@ -158,6 +158,10 @@ paths["/api/admin/characters/{id}"] = {
                params=[pth("id", "", "integer")], example={"set": {"hp": 12, "gold": 50}, "note": "refund"})}
 paths["/api/admin/characters/{id}/delete"] = {"post": op("Admin", "Delete a character (hide; restorable)", _admin, params=[pth("id", "", "integer")])}
 paths["/api/admin/characters/{id}/restore"] = {"post": op("Admin", "Restore a deleted character", _admin + " Its owner, name and campaign come back when they still can.", params=[pth("id", "", "integer")])}
+paths["/api/admin/characters/{id}/portrait"] = {
+    "post": op("Admin", "Add or replace a character's portrait", _admin + ' Send {"image_base64": "...", "note": "why"} (a PNG, JPEG or WebP, each side 32 to 4096 pixels, up to 5 MB; 1024 by 1280 fits the sheet exactly), or the raw image bytes with their Content-Type. The same rules as the owner\'s upload.',
+               params=[pth("id", "", "integer")], example={"image_base64": "<the image file as base64>", "note": "replaced an unsuitable image"}),
+    "delete": op("Admin", "Remove a character's portrait", _admin + ' Optional {"note": "why"}; the sheet goes back to the class icon.', params=[pth("id", "", "integer")], example={"note": "removed an unsuitable image"})}
 paths["/api/admin/campaigns"] = {"get": op("Admin", "List campaigns", _admin, params=[q("q", "search a name, a GM or an id"), q("deleted", "include or only")])}
 paths["/api/admin/campaigns/{id}"] = {
     "get": op("Admin", "One campaign, every field and its characters", _admin, params=[pth("id", "", "integer")]),

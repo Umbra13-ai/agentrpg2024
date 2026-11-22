@@ -316,6 +316,12 @@ Add to the owner, never beside it. When you give another rule one owner, add it 
   and "doesn't already have an infernal wound" is `saveEffect.NotHolding` (no save). Not applied, told to the GM: a curse's "or until the
   incubus dies", the Mummy's Hit Point maximum, the lycanthrope's transformation at 0 Hit Points, the Aboleth's underwater clause (the server has
   no underwater state). Go: `TestPostgresStatBlockCursesOnEveryTarget`, `TestPostgresInfernalWoundOnEveryTarget`.
+- **A character's portrait** (the photo on its sheet): `cmd/server/portrait_2024.go` is the one owner of what it may be (`checkPortraitImage`: not empty, up to
+  5 MB, a PNG, JPEG or WebP that decodes, each side 32 to 4096 pixels, a note when the sheet's 4:5 frame will crop it), of reading `image_base64`
+  (`decodePortraitBase64`) and of the writes (`savePortrait`, `clearPortrait`). The owner's route (POST, PUT and DELETE `/api/characters/{id}/portrait`,
+  `character_profile.go`) and the administrator's (POST, PUT and DELETE `/api/admin/characters/{id}/portrait`, `admin_portrait_2024.go`, written to
+  the admin change log with its note; the admin page's Portrait card adds, replaces and removes) both go through them; `TestNoOtherPortraitWriter`
+  fails on any other write of the avatar columns. Go: `TestPostgresAdminPortrait`.
 - **The 18 skills:** `game/skills.go`.
 - **Expertise:** `game/expertise.go`, with its database side in `cmd/server/expertise_2024.go`.
 - **Which feats a character can take:** `cmd/server/feats_2024.go` (`featRefusal`, `featsOpenTo`, `featTakerOf`, `featHowTo`).

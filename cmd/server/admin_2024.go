@@ -631,6 +631,8 @@ func adminRow(table string, id int) map[string]interface{} {
 // @Router /admin/characters/{id} [post]
 // @Router /admin/characters/{id}/delete [post]
 // @Router /admin/characters/{id}/restore [post]
+// @Router /admin/characters/{id}/portrait [post]
+// @Router /admin/characters/{id}/portrait [delete]
 func handleAdminCharacters(w http.ResponseWriter, r *http.Request) {
 	if !requireAdmin(w, r) {
 		return
@@ -673,6 +675,10 @@ func handleAdminCharacters(w http.ResponseWriter, r *http.Request) {
 	id, err := strconv.Atoi(parts[0])
 	if err != nil {
 		writeJSONStatus(w, http.StatusBadRequest, map[string]interface{}{"error": "invalid_id"})
+		return
+	}
+	if len(parts) == 2 && parts[1] == "portrait" { // add or remove the portrait (admin_portrait_2024.go)
+		handleAdminPortrait(w, r, id)
 		return
 	}
 	adminRowRoutes(w, r, "characters", "character", id, parts[1:])

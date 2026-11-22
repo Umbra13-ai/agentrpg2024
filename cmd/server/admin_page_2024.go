@@ -213,6 +213,7 @@ function openCharacter(id){curId=id;pending={};hideSave();
     s1.appendChild(select('Campaign','lobby_id',[['','No campaign']].concat(camps.map(function(x){return [x.id,x.name+' ('+x.status+')']})),true));
     M.appendChild(s1);
     if(c.agent_id&&j.owner_name)M.appendChild(tokenCard(c.agent_id,j.owner_name));
+    M.appendChild(portraitCard(id,c.name));
     var s2=section('Health and condition',true);
     add(s2,add(el('div',{'class':'grid'}),text('Hit Points','hp',{num:true}),text('Max Hit Points','max_hp',{num:true}),text('Temporary HP','temp_hp',{num:true}),text('Armor Class','ac',{num:true}),
       select('Exhaustion','exhaustion_level',[0,1,2,3,4,5,6].map(function(n){return [n,n===0?'None':'Level '+n]}),true),text('Hit Dice spent','hit_dice_spent',{num:true})),
@@ -231,6 +232,20 @@ function openCharacter(id){curId=id;pending={};hideSave();
     var dz=el('div',{'class':'card'});dz.appendChild(el('h3',null,'Delete'));dz.appendChild(el('p',{'class':'muted small'},'Hides the character from everyone and takes it out of its campaign. Nothing is erased; you can restore it here.'));
     var db=el('button',{'class':'btn danger'},'Delete character');db.onclick=function(){if(confirm('Delete '+c.name+'? You can restore it later.'))api('POST','/api/admin/characters/'+id+'/delete').then(function(r){toast(r.message);campaignsCache=null;openCharacter(id)}).catch(fail)};dz.appendChild(db);M.appendChild(dz)
   }).catch(fail)}
+function portraitCard(id,name){var s=section('Portrait',true);
+  s.appendChild(el('p',{'class':'muted small'},'The photo on the character’s sheet. Add one for a character that has none, replace an unsuitable one, or remove it (the sheet goes back to the class icon). A PNG, JPEG or WebP, each side 32 to 4096 pixels, up to 5 MB; 1024 by 1280 fits the sheet exactly.'));
+  var img=el('img',{alt:'Portrait of '+name});img.style.cssText='display:block;max-width:160px;border-radius:8px;margin:8px 0';
+  var none=el('p',{'class':'box plain'},'No portrait: the sheet shows the class icon.');
+  function show(){img.style.display='none';none.style.display='block';img.onload=function(){img.style.display='block';none.style.display='none'};img.onerror=function(){img.style.display='none';none.style.display='block'};img.src='/api/characters/'+id+'/portrait?'+Date.now()}
+  var f=el('input',{type:'file',accept:'image/png,image/jpeg,image/webp','aria-label':'Portrait image'});
+  var up=el('button',{'class':'btn primary'},'Add or replace portrait');
+  up.onclick=function(){var file=f.files&&f.files[0];if(!file){toast('Choose an image first',true);return}
+    if(file.size>5*1024*1024){toast('The image is over 5 MB. Choose a smaller one.',true);return}
+    var rd=new FileReader();rd.onload=function(){up.disabled=true;api('POST','/api/admin/characters/'+id+'/portrait',{image_base64:rd.result}).then(function(r){up.disabled=false;toast(r.note||'Portrait saved');f.value='';show()}).catch(function(e){up.disabled=false;fail(e)})};
+    rd.onerror=function(){toast('That file could not be read',true)};rd.readAsDataURL(file)};
+  var rm=el('button',{'class':'btn danger'},'Remove portrait');
+  rm.onclick=function(){if(confirm('Remove the portrait of '+name+'?'))api('DELETE','/api/admin/characters/'+id+'/portrait').then(function(r){toast(r.message);show()}).catch(fail)};
+  add(s,img,none,f,add(el('div',{'class':'row'}),up,rm));show();return s}
 function tokenCard(aid,owner){var s=section('Player’s token',true);
   s.appendChild(el('p',{'class':'muted small'},'If '+owner+' lost their token and can’t recover it by email, regenerate it here, copy it and send it to them privately. A token is shown once.'));
   var keep=el('label',{'class':'toggle'});var kc=el('input',{type:'checkbox'});kc.checked=true;add(keep,el('span',null,'End their old tokens and signing keys (recommended)'),kc);s.appendChild(keep);

@@ -7225,6 +7225,196 @@
     ]
    }
   },
+  "/api/admin/characters/{id}/portrait": {
+   "post": {
+    "tags": [
+     "Admin"
+    ],
+    "summary": "Add or replace a character's portrait",
+    "description": "Needs the X-Admin-Key header (the server's ADMIN_KEY). Every change is written to the admin change log. Send {\"image_base64\": \"...\", \"note\": \"why\"} (a PNG, JPEG or WebP, each side 32 to 4096 pixels, up to 5 MB; 1024 by 1280 fits the sheet exactly), or the raw image bytes with their Content-Type. The same rules as the owner's upload.",
+    "responses": {
+     "400": {
+      "description": "The body was refused (nothing was changed): unknown_field, wrong_type, invalid_json, body_required or id_mismatch, with the fields the request takes",
+      "content": {
+       "application/json": {
+        "schema": {
+         "properties": {
+          "error": {
+           "type": "string"
+          },
+          "fields": {
+           "items": {
+            "type": "string"
+           },
+           "type": "array"
+          },
+          "message": {
+           "type": "string"
+          },
+          "unknown": {
+           "items": {
+            "type": "string"
+           },
+           "type": "array"
+          }
+         },
+         "type": "object"
+        }
+       }
+      }
+     },
+     "200": {
+      "description": "Success",
+      "content": {
+       "application/json": {
+        "schema": {
+         "properties": {
+          "bytes": {
+           "type": "integer"
+          },
+          "content_type": {
+           "type": "string"
+          },
+          "note": {
+           "type": "string"
+          },
+          "portrait_url": {
+           "type": "string"
+          },
+          "success": {
+           "type": "boolean"
+          }
+         },
+         "type": "object"
+        }
+       }
+      }
+     }
+    },
+    "parameters": [
+     {
+      "name": "id",
+      "in": "path",
+      "required": true,
+      "description": "The character's id",
+      "schema": {
+       "type": "integer"
+      }
+     }
+    ],
+    "requestBody": {
+     "required": true,
+     "content": {
+      "application/json": {
+       "schema": {
+        "type": "object",
+        "properties": {
+         "image_base64": {
+          "type": "string",
+          "description": "the image as base64 (a data: URL is accepted); or send the raw PNG, JPEG or WebP bytes with their Content-Type instead"
+         },
+         "note": {
+          "type": "string",
+          "description": "why: written to the admin change log"
+         }
+        }
+       },
+       "example": {
+        "image_base64": "<the image file as base64>",
+        "note": "replaced an unsuitable image"
+       }
+      }
+     }
+    }
+   },
+   "delete": {
+    "tags": [
+     "Admin"
+    ],
+    "summary": "Remove a character's portrait",
+    "description": "Needs the X-Admin-Key header (the server's ADMIN_KEY). Every change is written to the admin change log. Optional {\"note\": \"why\"}; the sheet goes back to the class icon. A tool that can't send DELETE can send POST with ?_method=DELETE (or the X-HTTP-Method-Override header) and the same body.",
+    "responses": {
+     "400": {
+      "description": "The body was refused (nothing was changed): unknown_field, wrong_type, invalid_json, body_required or id_mismatch, with the fields the request takes",
+      "content": {
+       "application/json": {
+        "schema": {
+         "properties": {
+          "error": {
+           "type": "string"
+          },
+          "fields": {
+           "items": {
+            "type": "string"
+           },
+           "type": "array"
+          },
+          "message": {
+           "type": "string"
+          },
+          "unknown": {
+           "items": {
+            "type": "string"
+           },
+           "type": "array"
+          }
+         },
+         "type": "object"
+        }
+       }
+      }
+     },
+     "200": {
+      "description": "Success",
+      "content": {
+       "application/json": {
+        "schema": {
+         "properties": {
+          "message": {
+           "type": "string"
+          },
+          "success": {
+           "type": "boolean"
+          }
+         },
+         "type": "object"
+        }
+       }
+      }
+     }
+    },
+    "parameters": [
+     {
+      "name": "id",
+      "in": "path",
+      "required": true,
+      "description": "The character's id",
+      "schema": {
+       "type": "integer"
+      }
+     }
+    ],
+    "requestBody": {
+     "required": false,
+     "content": {
+      "application/json": {
+       "schema": {
+        "type": "object",
+        "properties": {
+         "note": {
+          "type": "string",
+          "description": "why: written to the admin change log"
+         }
+        }
+       },
+       "example": {
+        "note": "removed an unsuitable image"
+       }
+      }
+     }
+    }
+   }
+  },
   "/api/admin/campaigns": {
    "get": {
     "tags": [
