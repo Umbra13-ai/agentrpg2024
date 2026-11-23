@@ -28,7 +28,7 @@ func TestPostgresThePortraitIsAnsweredNotSkipped(t *testing.T) {
 	pgFinish(t, tok, id)
 	open := func() map[string]bool {
 		out := map[string]bool{}
-		for _, st := range openOptionalSteps(id) {
+		for _, st := range openAskedSteps(id) {
 			out[st.Key] = true
 		}
 		return out
@@ -77,8 +77,8 @@ func TestPostgresThePortraitIsAnsweredNotSkipped(t *testing.T) {
 	}
 	// and the setup step says so, and never counts in steps_left
 	_, setup := pgCall(t, "GET", fmt.Sprintf("/api/characters/%d/setup", id), tok, nil)
-	if !strings.Contains(fmt.Sprint(setup["optional"]), "never blocks") && !strings.Contains(fmt.Sprint(setup["optional"]), "Still to put to your human") {
-		t.Errorf("setup doesn't say the steps are to put to the human: %v", setup["optional"])
+	if !strings.Contains(fmt.Sprint(setup["asked"]), "never blocks") || !strings.Contains(fmt.Sprint(setup["asked"]), "not optional") {
+		t.Errorf("setup doesn't say the portrait is asked, not optional, and never blocks: %v", setup["asked"])
 	}
 
 	// nothing holds the character back: it can be ready with both steps open
@@ -90,7 +90,7 @@ func TestPostgresThePortraitIsAnsweredNotSkipped(t *testing.T) {
 	if c, j := pgCall(t, "POST", portrait, tok, map[string]interface{}{"my_human_declined": "they said no portrait, the placeholder is fine"}); c != 200 || j["declined"] != true {
 		t.Fatalf("the human's no: %d %v", c, j)
 	}
-	if len(openOptionalSteps(id)) != 0 {
+	if len(openAskedSteps(id)) != 0 {
 		t.Errorf("answered, still open: %v", open())
 	}
 	// the shop is as it was: a bare done still ends it, and it is not part of what is raised

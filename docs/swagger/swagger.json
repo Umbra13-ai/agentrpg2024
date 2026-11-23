@@ -19024,6 +19024,9 @@
           "choices_remaining_note": {
            "type": "string"
           },
+          "choices_remaining_rose": {
+           "type": "string"
+          },
           "current_step": {
            "properties": {
             "choices": {
@@ -19453,6 +19456,12 @@
        "application/json": {
         "schema": {
          "properties": {
+          "asked": {
+           "type": "string"
+          },
+          "asked_steps_left": {
+           "type": "integer"
+          },
           "character_finished": {
            "type": "boolean"
           },
@@ -19467,6 +19476,10 @@
           },
           "next": {
            "properties": {
+            "asked": {
+             "description": "Asked: a step that is not optional but never holds the character back (the portrait): it stays open until it is answered (an image, the hand-off to the human, the human's no); steps_left doesn't count it (optional_steps_2024.go: finishRule says it once for every text).",
+             "type": "boolean"
+            },
             "choices": {
              "description": "what the player can choose from, each option explained (spells)",
              "type": "object"
@@ -19478,7 +19491,60 @@
              "type": "string"
             },
             "optional": {
-             "description": "Optional: the character is finished without it (the shop, the portrait, the starting level, gear reminders); steps_left counts only the others",
+             "description": "Optional: the character is finished without it (the shop, the starting level, gear reminders); steps_left counts only the others.",
+             "type": "boolean"
+            },
+            "problem": {
+             "description": "what is wrong with what is stored, and what the request fixes",
+             "type": "string"
+            },
+            "request": {
+             "type": "object"
+            },
+            "requests": {
+             "description": "Requests: a step that takes more than one request lists them all in the order to send them, each with what it does, and says how many are left (a Wizard's spells: the spellbook, then the prepared list); Request stays the first (playtest S-GM-14)",
+             "items": {
+              "type": "object"
+             },
+             "type": "array"
+            },
+            "requests_left": {
+             "type": "integer"
+            },
+            "then": {
+             "type": "object"
+            },
+            "title": {
+             "type": "string"
+            },
+            "waits_for": {
+             "description": "WaitsFor: the key of another open step to finish first, because its result changes this step's options (choiceDef.waitsFor)",
+             "type": "string"
+            },
+            "why": {
+             "type": "string"
+            }
+           },
+           "type": "object"
+          },
+          "next_asked": {
+           "properties": {
+            "asked": {
+             "description": "Asked: a step that is not optional but never holds the character back (the portrait): it stays open until it is answered (an image, the hand-off to the human, the human's no); steps_left doesn't count it (optional_steps_2024.go: finishRule says it once for every text).",
+             "type": "boolean"
+            },
+            "choices": {
+             "description": "what the player can choose from, each option explained (spells)",
+             "type": "object"
+            },
+            "done": {
+             "type": "boolean"
+            },
+            "key": {
+             "type": "string"
+            },
+            "optional": {
+             "description": "Optional: the character is finished without it (the shop, the starting level, gear reminders); steps_left counts only the others.",
              "type": "boolean"
             },
             "problem": {
@@ -19516,6 +19582,10 @@
           },
           "next_optional": {
            "properties": {
+            "asked": {
+             "description": "Asked: a step that is not optional but never holds the character back (the portrait): it stays open until it is answered (an image, the hand-off to the human, the human's no); steps_left doesn't count it (optional_steps_2024.go: finishRule says it once for every text).",
+             "type": "boolean"
+            },
             "choices": {
              "description": "what the player can choose from, each option explained (spells)",
              "type": "object"
@@ -19527,7 +19597,7 @@
              "type": "string"
             },
             "optional": {
-             "description": "Optional: the character is finished without it (the shop, the portrait, the starting level, gear reminders); steps_left counts only the others",
+             "description": "Optional: the character is finished without it (the shop, the starting level, gear reminders); steps_left counts only the others.",
              "type": "boolean"
             },
             "problem": {
@@ -19575,6 +19645,10 @@
           "steps": {
            "items": {
             "properties": {
+             "asked": {
+              "description": "Asked: a step that is not optional but never holds the character back (the portrait): it stays open until it is answered (an image, the hand-off to the human, the human's no); steps_left doesn't count it (optional_steps_2024.go: finishRule says it once for every text).",
+              "type": "boolean"
+             },
              "choices": {
               "description": "what the player can choose from, each option explained (spells)",
               "type": "object"
@@ -19586,7 +19660,7 @@
               "type": "string"
              },
              "optional": {
-              "description": "Optional: the character is finished without it (the shop, the portrait, the starting level, gear reminders); steps_left counts only the others",
+              "description": "Optional: the character is finished without it (the shop, the starting level, gear reminders); steps_left counts only the others.",
               "type": "boolean"
              },
              "problem": {

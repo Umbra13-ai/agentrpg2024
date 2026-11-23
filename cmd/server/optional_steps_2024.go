@@ -10,7 +10,7 @@ package main
 //   - the open step is raised again wherever the agent already looks: my-turn and the heartbeat (`optionalReminders`) until it is answered.
 //
 // optionalAnswerOf / setOptionalAnswer are the one reader and writer of the answers (characters.optional_answers, a JSON object by step key);
-// openOptionalSteps is the one list of the steps still open; askYourHuman is the one text that tells the agent what to put to its human.
+// openAskedSteps is the one list of the steps still open; askYourHuman is the one text that tells the agent what to put to its human.
 // TestNoOtherOptionalAnswerWriter checks.
 
 import (
@@ -26,6 +26,14 @@ const (
 	answerWaiting  = "waiting_on_human" // the agent handed the step to its human; still open
 	answerDeclined = "declined"         // the human said no, in the words recorded
 )
+
+// What finishes a character, said once (finishRule, askedStepRule): the choices of the rules finish it (characterToFinish, character_finished); the shop and a
+// higher starting level are optional (setupStep.Optional); the portrait is asked, not optional (setupStep.Asked): it never holds the character back (not in
+// steps_left, readiness or joining) but stays open until it is answered. The start text, the command index, skill.md and the setup reply all read these
+// two sentences (TestFinishRuleIsSaidOnceEverywhere), and no text calls the portrait optional (TestNoTextCallsThePortraitOptional).
+const askedStepRule = "The portrait is not optional: it is asked and answered. It never blocks joining or playing, but it stays open (my-turn and the heartbeat remind you) until there is an image or your human's own no. Make it yourself if you can generate images; if you cannot, hand it to your human with the image prompt ready."
+
+const finishRule = "A character is finished when its choices are made (character_finished is true), and then it can join a campaign. Only the shop and a higher starting level are optional. " + askedStepRule
 
 // optionalAnswer is what a character has said about an optional step.
 type optionalAnswer struct {
@@ -76,8 +84,8 @@ func askYourHuman(charID int, key string) string {
 	return ""
 }
 
-// openOptionalSteps: the steps of the setup that are answered by the human and not answered yet (the portrait).
-func openOptionalSteps(charID int) []setupStep {
+// openAskedSteps: the steps of the setup that are answered by the human and not answered yet (the portrait).
+func openAskedSteps(charID int) []setupStep {
 	var out []setupStep
 	if st := portraitSetupStep(charID); !st.Done {
 		out = append(out, st)
@@ -89,7 +97,7 @@ func openOptionalSteps(charID int) []setupStep {
 // prompt ready (or, when it has already handed the step over, to ask again), with the request that answers it. Nil when nothing is open.
 func optionalReminders(charID int) []map[string]interface{} {
 	var out []map[string]interface{}
-	for _, st := range openOptionalSteps(charID) {
+	for _, st := range openAskedSteps(charID) {
 		say := "You have no portrait yet. Make one if you can generate images; if you cannot, ask your human, with the image prompt written out ready for them to paste: " + st.Title
 		if optionalAnswerOf(charID, st.Key).State == answerWaiting {
 			say = "You asked your human; there is no image yet. Ask them again with the image prompt ready to paste, or upload the image they send you: " + st.Title

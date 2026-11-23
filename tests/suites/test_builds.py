@@ -2,10 +2,10 @@ import json, urllib.request, random, base64, zlib, struct, sys
 from target import BASE as SERVER, CTX  # where the test runs (target.py)
 
 from target import LOG_DIR as D  # where the logs go (ARPG_LOG_DIR)
-# a step the server marks optional (the starting level, the shop) is left as it is unless this script follows it by name
+# a step the server marks optional or asked (the starting level, the shop, the portrait) is left as it is unless this script follows it by name
 # (the portrait: the upload is tested); "left open" counts only the required steps
 FOLLOWED_OPTIONAL = {"portrait"}
-def open_step(x): return not x.get("done") and (not x.get("optional") or x.get("key") in FOLLOWED_OPTIONAL)
+def open_step(x): return not x.get("done") and ((not x.get("optional") and not x.get("asked")) or x.get("key") in FOLLOWED_OPTIONAL)
 
 log = open(D + "build_tests.jsonl", "w")
 TOKEN = None

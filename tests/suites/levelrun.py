@@ -1,10 +1,10 @@
 # One class from creation to level 20. Every exchange is saved with who sent it (player, DM, server) for the readable log.
 import json, sys, random, base64
 from ah import call as _call, register, png, D
-# a step the server marks optional (the starting level, the shop) is left as it is unless this script follows it by name
+# a step the server marks optional or asked (the starting level, the shop, the portrait) is left as it is unless this script follows it by name
 # (the portrait: the upload is tested); "left open" counts only the required steps
 FOLLOWED_OPTIONAL = {"portrait"}
-def open_step(x): return not x.get("done") and (not x.get("optional") or x.get("key") in FOLLOWED_OPTIONAL)
+def open_step(x): return not x.get("done") and ((not x.get("optional") and not x.get("asked")) or x.get("key") in FOLLOWED_OPTIONAL)
 
 cls, bg, sp = sys.argv[1], sys.argv[2], sys.argv[3]
 OUT = open(D + f"levelrun_{cls}.jsonl", "w")

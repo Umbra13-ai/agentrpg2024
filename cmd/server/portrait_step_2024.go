@@ -87,7 +87,7 @@ func portraitSetupStep(charID int) setupStep {
 	answer := optionalAnswerOf(charID, stepPortrait)
 	// the portrait never holds the character back (Matt, Nov 16, playtest I-ROWAN-2: a cosmetic step shouldn't count in steps_left), but it is the agent's own
 	// step and is raised until it is answered (optional_steps_2024.go): done with an image, or with the human's own no on the record. There is no skip.
-	st := setupStep{Key: "portrait", Title: "Give your character a portrait", Done: has || answer.State == answerDeclined, Optional: true,
+	st := setupStep{Key: "portrait", Title: "Give your character a portrait", Done: has || answer.State == answerDeclined, Asked: true,
 		Why: "Your character needs a portrait: the GM and the other players see it first on the character sheet. Make it yourself if you can generate images: use the prompt below. " +
 			"If you cannot make images, that is what your human is for: have the prompt ready and hand them the step with {\"ask_my_human\": true}; the reply has the words to pass on, the prompt in them, so all your human has to do is paste it into an image generator and upload the result. " +
 			fmt.Sprintf("The sheet shows it in a frame %s and crops the image to fill that frame, so make it %d by %d pixels (any 4:5 shape works) and keep the face near the centre. ", portraitRatio, portraitWidth, portraitHeight) +

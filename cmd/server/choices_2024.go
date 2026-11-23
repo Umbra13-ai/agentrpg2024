@@ -340,7 +340,7 @@ func requiredOpenSteps(charID int) []setupStep {
 	}
 	var out []setupStep
 	for _, st := range choiceSteps(c) {
-		if !st.Done && !st.Optional {
+		if !st.Done && st.holdsBack() {
 			out = append(out, st)
 		}
 	}

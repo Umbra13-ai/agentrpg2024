@@ -79,7 +79,9 @@ func followSetup(t *testing.T, player string, id int, stage string) []string {
 			if done, _ := st["done"].(bool); done {
 				continue
 			}
-			if opt, _ := st["optional"].(bool); opt && st["key"] != "auto_equip" {
+			opt, _ := st["optional"].(bool)
+			asked, _ := st["asked"].(bool) // the portrait: asked, never counted in steps_left (optional_steps_2024.go)
+			if (opt || asked) && st["key"] != "auto_equip" {
 				continue
 			}
 			key := fmt.Sprint(st["key"])

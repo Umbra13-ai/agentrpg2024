@@ -641,6 +641,19 @@ func builderSteps(body map[string]interface{}, agentID int, withCheck bool) []bu
 		if len(fromBg) > 0 {
 			skillChoice["left_out_your_background_gives_them"] = fromBg
 		}
+		if bg == nil { // no background yet: mark the offered skills a background gives, so a pick here can be made knowing which backgrounds would reopen it
+			given := map[string][]string{}
+			src := skillSources()
+			for _, o := range offered {
+				if bgs := src[o]; len(bgs) > 0 {
+					given[o] = bgs
+				}
+			}
+			if len(given) > 0 {
+				skillChoice["given_by_backgrounds"] = given
+				skillChoice["overlap_note"] = "A background also gives two skills. If you pick one of these and later choose a background that gives it, this step reopens: choose that background's other skills, or send the background first."
+			}
+		}
 		if len(fromSpecies) > 0 {
 			skillChoice["left_out_your_species_gives_them"] = fromSpecies
 		}
@@ -939,6 +952,14 @@ func builderSteps(body map[string]interface{}, agentID int, withCheck bool) []bu
 		bo["ability_bonuses_do"] = backgroundAbilityInfo(b.AbilityScores, class) // what its three abilities are for, and how they fit the class
 		bo["equipment_a"] = backgroundKit(b)                                     // what the package holds
 		bo["equipment_b"] = fmt.Sprintf("%d GP and no equipment", game.BackgroundAltGold)
+		if fu := followUpOfBackground(b); fu != nil { // said before the pick (builder_followups_2024.go)
+			bo["follow_up"] = fu
+		}
+		if classOK { // the class skills this background gives: picks in Step 2 that it would reopen
+			if used := classSkillsUsedBy(class, b); len(used) > 0 {
+				bo["uses_up_class_skills"] = used
+			}
+		}
 		bgOpts = append(bgOpts, bo)
 	}
 	s3.Choices = append(s3.Choices, choice("background", "your background", 1, bgOpts, nilIfEmpty(bgKey), bg != nil, ifStr(bgKey != "" && bg == nil, notOneOf("background", bgKey, bgOpts))))
@@ -1076,7 +1097,7 @@ func builderSteps(body map[string]interface{}, agentID int, withCheck bool) []bu
 			}
 			traits = append(traits, map[string]string{"name": t.Name, "description": d})
 		}
-		spOpts = append(spOpts, map[string]interface{}{"species": s.Key, "sizes": s.Sizes, "speed": s.Speed, "darkvision": s.Darkvision, "asks_for": s.Needs, "traits": traits}) // traits: each special trait with its description, so the player can choose knowing what the species does
+		spOpts = append(spOpts, map[string]interface{}{"species": s.Key, "sizes": s.Sizes, "speed": s.Speed, "darkvision": s.Darkvision, "asks_for": s.Needs, "follow_up": followUpOfSpecies(s), "traits": traits}) // traits: each special trait with its description, so the player can choose knowing what the species does
 	}
 	s4.Choices = append(s4.Choices, choice("species", "your species", 1, spOpts, nilIfEmpty(spKey), sp != nil, ifStr(spKey != "" && sp == nil, notOneOf("species", spKey, spOpts))))
 	sug4 := map[string]interface{}{}
@@ -1714,7 +1735,7 @@ func builderSteps(body map[string]interface{}, agentID int, withCheck bool) []bu
 	// 7. Backstory (Nov 12): the player is encouraged to write one
 	sb := builderStep{Key: "backstory", Title: "Step 7: Write your character’s backstory",
 		Explain: "Tell the story of who your character was before this adventure and what brought them here. A good length is 3 to 6 paragraphs, but it is your character, so write what suits them: shorter or longer, serious or funny. Separate paragraphs with a blank line. Up to 4000 characters. " +
-			"A backstory gives the GM and the other players something to play with, so please write one. You can also describe how your character looks (optional): it helps when you make a portrait."}
+			"A backstory gives the GM and the other players something to play with, so please write one. You can also describe how your character looks, which is a free choice. It helps when you make the portrait."}
 	story := strings.TrimSpace(bstr(body, "backstory"))
 	skip, _ := body["backstory_skip"].(bool)
 	skipProblem := ""
@@ -2175,7 +2196,7 @@ func builderViewOf(id int, body map[string]interface{}, steps []builderStep) map
 		}
 	}
 	out := map[string]interface{}{"draft_id": id, "steps": list, "choices_remaining": total, "draft": body,
-		"choices_remaining_note": "This count can go up: a class, background or species brings its own follow-up choices (skills, a tool, a lineage ...), and an answer that conflicts with a later one (a skill your background also gives) opens again."}
+		"choices_remaining_note": "This count can go up: a class, background or species brings its own follow-up choices (skills, a tool, a lineage ...), and an answer that conflicts with a later one (a skill your background also gives) opens again. The reply that raised it says why (choices_remaining_rose); the options name their follow-up before you pick (follow_up)."}
 	var leftover []string // fields an older draft holds that the builder doesn't read
 	for _, k := range []string{"known_spells", "divine_order", "primal_order", "draconic_ancestry"} {
 		if _, has := body[k]; has {
@@ -2308,6 +2329,7 @@ type builderOutcome struct {
 	unknown         []string                 // fields or parts the builder doesn't know: nothing is saved
 	errCode, errMsg string                   // the request refused as a whole (use_suggestion alone, with nothing it can fill)
 	refused         []map[string]interface{} // answers not saved, each with the reason
+	rose            string                   // why the count of choices left went up with this request (countRoseText)
 	notes           []string                 // answers read under another name
 	filled          []string                 // parts the suggestion filled
 	replaced        []map[string]interface{} // earlier answers the suggestion changed (they had a problem)
@@ -2688,6 +2710,9 @@ func (o *builderOutcome) decorate(view map[string]interface{}, steps []builderSt
 	if o.sugNote != "" {
 		msgs = append(msgs, o.sugNote)
 	}
+	if o.rose != "" {
+		msgs = append(msgs, o.rose)
+	}
 	status := http.StatusOK
 	if len(o.refused) > 0 {
 		sugKeys := map[string]string{} // fields use_suggestion would fill (open choices the suggestion answers), with their step
@@ -2833,6 +2858,11 @@ func handleCharacterBuilder(w http.ResponseWriter, r *http.Request) {
 	if !readRequest(w, r, &upd, optionalBody(), keysCheckedByHandler(builderFieldNames()...)) {
 		return
 	}
+	stepsBefore := builderSteps(body, agentID, true) // what was left before this request: a count that rises says why (builder_followups_2024.go)
+	leftBefore := 0
+	for _, st := range stepsBefore {
+		leftBefore += st.Remaining
+	}
 	o := applyBuilderUpdate(body, upd, agentID)
 	if len(o.unknown) > 0 { // a typo must not look like a saved choice (Nov 13 tester)
 		writeJSONStatus(w, http.StatusBadRequest, map[string]interface{}{"error": "unknown_field", "message": strings.Join(o.unknown, "; ") + ". Nothing was saved: send the request again with the right field names.",
@@ -2849,6 +2879,10 @@ func handleCharacterBuilder(w http.ResponseWriter, r *http.Request) {
 	}
 	steps := builderSteps(body, agentID, true)
 	view := builderViewOf(id, body, steps)
+	if rose := countRoseText(leftBefore, steps, stepsBefore); rose != "" {
+		o.rose = rose
+		view["choices_remaining_rose"] = rose
+	}
 	writeJSONStatus(w, o.decorate(view, steps), view)
 }
 
@@ -3007,6 +3041,9 @@ func suggestInvocation(charID int) string {
 
 // ---------------------------------------------------------------- after creation: GET /api/characters/{id}/setup
 
+// holdsBack: the step counts for steps_left (neither optional nor merely asked).
+func (st setupStep) holdsBack() bool { return !st.Optional && !st.Asked }
+
 type setupStep struct {
 	Key     string                 `json:"key"`
 	Title   string                 `json:"title"`
@@ -3015,8 +3052,11 @@ type setupStep struct {
 	Request map[string]interface{} `json:"request,omitempty"`
 	Then    *setupStep             `json:"then,omitempty"`
 	Choices map[string]interface{} `json:"choices,omitempty"` // what the player can choose from, each option explained (spells)
-	// Optional: the character is finished without it (the shop, the portrait, the starting level, gear reminders); steps_left counts only the others
+	// Optional: the character is finished without it (the shop, the starting level, gear reminders); steps_left counts only the others.
 	Optional bool `json:"optional,omitempty"`
+	// Asked: a step that is not optional but never holds the character back (the portrait): it stays open until it is answered (an image, the hand-off to the
+	// human, the human's no); steps_left doesn't count it (optional_steps_2024.go: finishRule says it once for every text).
+	Asked bool `json:"asked,omitempty"`
 
 	Problem string `json:"problem,omitempty"` // what is wrong with what is stored, and what the request fixes
 	// Requests: a step that takes more than one request lists them all in the order to send them, each with what it does, and says
@@ -3180,11 +3220,18 @@ func handleCharacterSetup(w http.ResponseWriter, r *http.Request, charID int) {
 	if w := primaryAbilityWarning(cl, map[string]int{"str": str, "dex": dex, "con": con, "int": intl, "wis": wis, "cha": cha}); w != "" {
 		warnings = append(warnings, w+" The GM can correct scores with POST /api/gm/update-character.")
 	}
-	left, optLeft := 0, 0
-	var next, nextOpt *setupStep
+	left, optLeft, askedLeft := 0, 0, 0
+	var next, nextOpt, nextAsked *setupStep
 	var optNames []string
 	for i := range steps {
 		if steps[i].Done {
+			continue
+		}
+		if steps[i].Asked { // the portrait: answered, never blocking (optional_steps_2024.go)
+			askedLeft++
+			if nextAsked == nil {
+				nextAsked = &steps[i]
+			}
 			continue
 		}
 		if steps[i].Optional {
@@ -3201,32 +3248,23 @@ func handleCharacterSetup(w http.ResponseWriter, r *http.Request, charID int) {
 		}
 	}
 	// character_finished is the sheet's (characterToFinish: the choices of the rules); steps_left also counts the guided steps
-	// after them (a weapon in hand), which the player may finish before or after joining; the shop and the portrait are optional
+	// after them (a weapon in hand), which the player may finish before or after joining; the shop is optional and the portrait is asked, not optional (finishRule)
 	out := map[string]interface{}{"character_id": charID, "character_finished": choicesLeft == 0, "steps": steps, "steps_left": left,
-		"choices_left": choicesLeft, "optional_steps_left": optLeft}
+		"choices_left": choicesLeft, "optional_steps_left": optLeft, "asked_steps_left": askedLeft}
 	if choicesLeft == 0 && left > 0 {
 		var guided []string
 		for _, st := range steps {
-			if !st.Done && !st.Optional {
+			if !st.Done && st.holdsBack() {
 				guided = append(guided, st.Key)
 			}
 		}
 		out["ready_to_play"] = fmt.Sprintf("Your character is finished and can join a campaign. The guided steps left (%s) are best done now, but they can wait.", strings.Join(guided, ", "))
 	}
+	if next == nil && nextAsked != nil { // finished, with a step asked and not yet answered (the portrait)
+		out["asked"] = "Your character is finished and can join a campaign. " + askedStepRule
+	}
 	if next == nil && nextOpt != nil {
-		msg := "Your character is finished and can join a campaign."
-		var rest []string
-		for _, n := range optNames {
-			if n == stepPortrait {
-				msg += " The portrait is yours to make; if you cannot make images, hand it to your human with the image prompt ready for them (it never blocks joining or playing, and my-turn and the heartbeat remind you until it is answered)."
-			} else {
-				rest = append(rest, n)
-			}
-		}
-		if len(rest) > 0 {
-			msg += fmt.Sprintf(" Optional, when you like: %s.", strings.Join(rest, ", "))
-		}
-		out["optional"] = msg
+		out["optional"] = fmt.Sprintf("Optional, when you like: %s.", strings.Join(optNames, ", "))
 	}
 	if len(warnings) > 0 {
 		out["warnings"] = warnings
@@ -3236,6 +3274,9 @@ func handleCharacterSetup(w http.ResponseWriter, r *http.Request, charID int) {
 		out["how"] = "Send each step's request (the suggested choices are filled in; change them as you like), then GET this page again until steps_left is 0."
 	} else {
 		out["how"] = "Your character is ready to play."
+		if nextAsked != nil {
+			out["next_asked"] = nextAsked
+		}
 		if nextOpt != nil {
 			out["next_optional"] = nextOpt
 		}

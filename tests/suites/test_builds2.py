@@ -2,10 +2,10 @@
 # through the options (first / last / middle), the other equipment options, then the same setup as test_builds.py.
 import json, urllib.request, random, base64, sys
 import os
-# a step the server marks optional (the starting level, the shop) is left as it is unless this script follows it by name
+# a step the server marks optional or asked (the starting level, the shop, the portrait) is left as it is unless this script follows it by name
 # (the portrait: the upload is tested); "left open" counts only the required steps
 FOLLOWED_OPTIONAL = {"portrait"}
-def open_step(x): return not x.get("done") and (not x.get("optional") or x.get("key") in FOLLOWED_OPTIONAL)
+def open_step(x): return not x.get("done") and ((not x.get("optional") and not x.get("asked")) or x.get("key") in FOLLOWED_OPTIONAL)
 
 exec(open(os.path.join(os.path.dirname(os.path.abspath(__file__)), "test_builds.py")).read().split("# class, background, species")[0].replace('build_tests.jsonl','build_tests2.jsonl'))
 def ov(o,f=None):
