@@ -28156,6 +28156,10 @@
           "message": {
            "type": "string"
           },
+          "outcome": {
+           "description": "a rest the server ran (a refusal is not a 200: long_rest_too_soon changes nothing)",
+           "type": "string"
+          },
           "periapt_of_wound_closure": {
            "type": "string"
           },
@@ -28434,6 +28438,10 @@
            "type": "integer"
           },
           "message": {
+           "type": "string"
+          },
+          "outcome": {
+           "description": "a rest the server ran (a refusal is not a 200: long_rest_too_soon changes nothing)",
            "type": "string"
           },
           "reminders": {
@@ -46981,6 +46989,10 @@
            "type": "string"
           },
           "not_saved": {},
+          "outcome": {
+           "description": "the purchase was made: your_money is the balance after it",
+           "type": "string"
+          },
           "success": {
            "type": "boolean"
           },

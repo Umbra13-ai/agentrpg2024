@@ -307,6 +307,7 @@ func handleCharacterShop(w http.ResponseWriter, r *http.Request, charID int) {
 				reply["message"] = fmt.Sprintf("Done: %s. Done shopping; you keep the money you didn't spend.", strings.Join(doneParts, "; "))
 			}
 		}
+		reply["outcome"] = outcomeApplied // the purchase was made: your_money is the balance after it
 		writeJSONStatus(w, http.StatusOK, reply)
 		return
 	}
@@ -359,6 +360,7 @@ func handleCharacterShop(w http.ResponseWriter, r *http.Request, charID int) {
 		reply["next"] = fmt.Sprintf("Done shopping; you keep the money you didn't spend. Put on armor and take up weapons: POST /api/characters/auto-equip {\"character_id\": %d, \"answer\": \"yes\"}.", charID)
 		reply["done_shopping"] = true
 	}
+	reply["outcome"] = outcomeApplied
 	writeJSONStatus(w, http.StatusOK, reply)
 }
 

@@ -622,6 +622,9 @@ func withRestReminders(h func(http.ResponseWriter, *http.Request, int), forceSho
 			if rr := restReminders(charID, long); rr != nil {
 				m["reminders"] = rr
 			}
+			if m["outcome"] == nil {
+				m["outcome"] = outcomeApplied // a rest the server ran (a refusal is not a 200: long_rest_too_soon changes nothing)
+			}
 		})
 	}
 }
