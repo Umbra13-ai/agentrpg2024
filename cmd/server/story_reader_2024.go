@@ -235,8 +235,35 @@ func roman(n int) string {
 
 // storyPage renders the reader: the mock-up's markup with the story in window.__STORY__.
 func storyPage(campaignID int, name, gmName string, chapters []storyChapter, total int) string {
+	data, _ := json.Marshal(storyData(campaignID, name, gmName, chapters, false))
+	return `<style>` + storyReaderCSS + `</style>` + storyReaderMarkup(campaignID, name, gmName, total, true) +
+		`<script>window.__STORY__ = ` + string(data) + `;</script>
+<script>` + storyReaderJS + `</script>`
+}
+
+// storyData is the story the reader runs on (window.__STORY__, and GET /campaign/{id}/story.json for the Live Table). inline: it is read inside the Live Table.
+func storyData(campaignID int, name, gmName string, chapters []storyChapter, inline bool) map[string]interface{} {
+	return map[string]interface{}{"campaign_id": campaignID, "name": name, "gm": gmName, "chapters": chapters, "inline": inline}
+}
+
+// storyPanel is the reader inside the Live Table, in the place of the old Table Chronicle feed: the same markup and script as the page, with the story
+// fetched once the page is up (a long story is never read for a Live Table view that doesn't need it yet).
+func storyPanel(campaignID int, name, gmName string) string {
+	return `<div class="reader-inline"><style>` + storyReaderCSS + `</style>` + storyReaderMarkup(campaignID, name, gmName, 0, false) +
+		fmt.Sprintf(`<script>window.__startReader = function () {`+"\n"+`%s`+"\n"+`};
+fetch('/campaign/%d/story.json', { credentials: 'same-origin' }).then(function (r) { return r.ok ? r.json() : Promise.reject(); })
+  .then(function (j) { window.__STORY__ = j; window.__startReader(); })
+  .catch(function () { var r = document.getElementById('story-reader'); if (r) r.textContent = 'The story could not be loaded. Reload the page to try again.'; });</script></div>`, storyReaderJS, campaignID)
+}
+
+// storyReaderMarkup is the reader's markup (the mock-up's): its bar, controls, book, scroll box, empty state and Chapters drawer. withBack: the empty state links back to the Live Table.
+func storyReaderMarkup(campaignID int, name, gmName string, total int, withBack bool) string {
 	e := html.EscapeString
-	data, _ := json.Marshal(map[string]interface{}{"campaign_id": campaignID, "name": name, "gm": gmName, "chapters": chapters})
+	back := ""
+	if withBack {
+		back = `
+  <p style="margin-top:0.7rem;"><a class="btn btn-ghost btn-sm" href="/campaign/` + fmt.Sprint(campaignID) + `">Back to the Live Table</a></p>`
+	}
 	gmLine := ""
 	if gmName != "" {
 		gmLine = `<span class="font-mono" style="font-size:0.75rem; color:var(--text-muted);">GM: ` + e(gmName) + `</span>`
@@ -245,8 +272,7 @@ func storyPage(campaignID int, name, gmName string, chapters []storyChapter, tot
 	if total >= storyMaxRecords {
 		note = fmt.Sprintf(`<p style="font-size:0.78rem; color:var(--text-muted); margin-bottom:0.6rem;">This is the first part of a very long story. <a href="/campaign/%d/log">The whole chronicle</a> has the rest, newest first.</p>`, campaignID)
 	}
-	return `<style>` + storyReaderCSS + `</style>
-<div class="reader-shell" id="story-reader">
+	return `<div class="reader-shell" id="story-reader">
   <header class="reader-topbar">
     <div class="reader-topbar-row">
       <div style="min-width:0;">
@@ -297,7 +323,7 @@ func storyPage(campaignID int, name, gmName string, chapters []storyChapter, tot
 <div class="rpg-panel panel-pad hidden" id="story-empty" style="max-width:900px; margin:1rem auto;">
   <h1 class="font-rpg" style="font-size:1.2rem; color:var(--accent-gold);">` + e(name) + `</h1>
   <p style="color:var(--text-secondary); margin-top:0.4rem;">The story has not begun yet. When the GM narrates and the players act, it is written here as a book.</p>
-  <p style="margin-top:0.7rem;"><a class="btn btn-ghost btn-sm" href="/campaign/` + fmt.Sprint(campaignID) + `">Back to the Live Table</a></p>
+` + back + `
 </div>
 <div class="toc-backdrop hidden" id="toc-backdrop" role="dialog" aria-modal="true" aria-label="Chapters and Bookmarks">
   <div class="toc-drawer">
@@ -314,15 +340,32 @@ func storyPage(campaignID int, name, gmName string, chapters []storyChapter, tot
       <button class="pill-btn" id="btn-reset-progress" type="button">Restart Book</button>
     </div>
   </div>
-</div>
-<script>window.__STORY__ = ` + string(data) + `;</script>
-<script>` + storyReaderJS + `</script>`
+</div>`
 }
 
 // serveStoryReader serves GET /campaign/{id}/story (the caller checked the campaign may be watched).
 func serveStoryReader(w http.ResponseWriter, r *http.Request, campaignID int) {
 	w.Header().Set("Content-Type", "text/html; charset=utf-8")
-	var name, gmName string
+	name, gmName, chapters, total, ok := loadStory(w, campaignID)
+	if !ok {
+		return
+	}
+	fmt.Fprint(w, wrapView("Story: "+name+" - Agent RPG 2024", storyPage(campaignID, name, gmName, chapters, total)))
+}
+
+// serveStoryJSON serves GET /campaign/{id}/story.json: the story the Live Table's reader runs on (the caller checked the campaign may be watched).
+func serveStoryJSON(w http.ResponseWriter, r *http.Request, campaignID int) {
+	name, gmName, chapters, _, ok := loadStory(w, campaignID)
+	if !ok {
+		return
+	}
+	w.Header().Set("Content-Type", "application/json; charset=utf-8")
+	w.Header().Set("Cache-Control", "no-store")
+	json.NewEncoder(w).Encode(storyData(campaignID, name, gmName, chapters, true))
+}
+
+// loadStory reads the campaign's story, the log made into chapters (the one reader of it); it has answered the request itself when ok is false.
+func loadStory(w http.ResponseWriter, campaignID int) (name, gmName string, chapters []storyChapter, total int, ok bool) {
 	err := db.QueryRow(`SELECT l.name, COALESCE(a.name, '') FROM lobbies l LEFT JOIN agents a ON a.id = l.dm_id WHERE l.id = $1`, campaignID).Scan(&name, &gmName)
 	if err == sql.ErrNoRows {
 		http.Error(w, "Campaign not found", http.StatusNotFound)
@@ -345,6 +388,5 @@ func serveStoryReader(w http.ResponseWriter, r *http.Request, campaignID int) {
 			icons[a.CharacterID] = classIcon(class)
 		}
 	}
-	chapters := storyChapters(storyPassages(recs, icons), campaignLocation(campaignID))
-	fmt.Fprint(w, wrapView("Story: "+name+" - Agent RPG 2024", storyPage(campaignID, name, gmName, chapters, len(recs))))
+	return name, gmName, storyChapters(storyPassages(recs, icons), campaignLocation(campaignID)), len(recs), true
 }

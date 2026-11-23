@@ -72,7 +72,6 @@ type liveTable struct {
 	TurnName                   string
 	Enemies                    []liveEnemy
 	Party                      []liveCard
-	Feed                       []liveFeedItem
 	Observations               []liveObservation
 	TableRules                 string // HTML from its owner (table_rules.go)
 	Background                 string // the picture behind the header (campaign_background_2024.go); empty is the default
@@ -185,7 +184,6 @@ func liveTablePage(t liveTable) string {
         <h1 class="font-rpg" style="font-size: clamp(1.25rem, 2.8vw, 1.85rem); color:#fff6e0; text-shadow:0 2px 10px #000;">` + e(t.Name) + `</h1>
       </div>
       <div style="display:flex; gap:0.45rem; flex-wrap:wrap;">
-        <a class="btn btn-gold btn-sm" href="/campaign/` + fmt.Sprint(t.ID) + `/story">📖 Read the Story</a>
         <a class="btn btn-ghost btn-sm" href="/campaigns">Switch Campaign</a>
       </div>
     </div>
@@ -284,31 +282,14 @@ func liveTablePage(t liveTable) string {
       </div>
     </aside>
 
-    <!-- Center: Chronicle Feed -->
-    <div class="rpg-panel panel-pad" style="min-width:0;">
-      <div style="display:flex; flex-wrap:wrap; align-items:center; justify-content:space-between; gap:0.65rem; margin-bottom:0.8rem;">
-        <h2 class="font-rpg" style="font-size:1.1rem; color:var(--accent-gold);">Table Chronicle</h2>
-        <div class="filter-row" id="feed-filters">
-          <button class="pill-btn active" data-feed-filter="all">All</button>
-          <button class="pill-btn" data-feed-filter="narration">Narration</button>
-          <button class="pill-btn" data-feed-filter="search">Checks &amp; Rolls</button>
-          <button class="pill-btn" data-feed-filter="combat">Combat</button>
-        </div>
-      </div>
-
-      <div id="activity-feed-list">`)
-	b.WriteString(chronicleEntries(t.Feed, t.GM.Name))
-	empty := "hidden"
-	if len(t.Feed) == 0 {
-		empty = ""
-	}
+    <!-- Center: the story reader, in the place of the old Table Chronicle feed (story_reader_2024.go) -->
+    <div class="rpg-panel panel-pad" style="min-width:0;">`)
+	b.WriteString(storyPanel(t.ID, t.Name, t.GM.Name))
 	b.WriteString(fmt.Sprintf(`
-        <p id="feed-empty" class="%s" style="color:var(--text-muted); font-size:0.85rem;">No entries for this filter.</p>
-      </div>
-      <div style="display:flex; justify-content:flex-end; margin-top:0.4rem;">
-        <a class="btn btn-gold btn-sm" href="/campaign/%d/story">📖 Read the story</a>
+      <div style="display:flex; justify-content:flex-end; margin-top:0.6rem;">
         <a class="btn btn-ghost btn-sm" href="/campaign/%d/log">Read the whole chronicle</a>
       </div>
+    </div>
     </div>
 
     <!-- Right Rail: Quick Character + Setting/Rules -->
@@ -336,7 +317,7 @@ func liveTablePage(t liveTable) string {
           <span class="font-rpg" style="color:var(--accent-gold);">Observations</span>
           <span class="acc-icon">+</span>
         </button>
-        <div class="accordion-body hidden" id="acc-observations">`, empty, t.ID, t.ID, settingText(t.Setting), t.TableRules, t.ID))
+        <div class="accordion-body hidden" id="acc-observations">`, t.ID, settingText(t.Setting), t.TableRules, t.ID))
 	if len(t.Observations) == 0 {
 		b.WriteString(`No observations recorded.`)
 	}
@@ -409,23 +390,6 @@ func liveScript(t liveTable) string {
   function keep() { try { sessionStorage.setItem(key, JSON.stringify(kept)); } catch (e) {} }
   function el(tag, cls, text) { var x = document.createElement(tag); if (cls) x.className = cls; if (text !== undefined && text !== null) x.textContent = String(text); return x; }
   function sgn(n) { return (n >= 0 ? '+' : '−') + Math.abs(n); }
-
-  // the chronicle's filters
-  function filter(f) {
-    var shown = 0;
-    document.querySelectorAll('#feed-filters .pill-btn').forEach(function (b) { b.classList.toggle('active', b.getAttribute('data-feed-filter') === f); });
-    document.querySelectorAll('#activity-feed-list .feed-entry').forEach(function (x) {
-      var on = f === 'all' || x.getAttribute('data-type') === f;
-      x.classList.toggle('hidden', !on);
-      if (on) shown++;
-    });
-    document.getElementById('feed-empty').classList.toggle('hidden', shown > 0);
-    kept.filter = f; keep();
-  }
-  document.getElementById('feed-filters').addEventListener('click', function (e) {
-    var b = e.target.closest('[data-feed-filter]'); if (b) filter(b.getAttribute('data-feed-filter'));
-  });
-  if (kept.filter) filter(kept.filter);
 
   // the accordions
   kept.open = kept.open || {};

@@ -10,6 +10,12 @@
 
   function esc(s) { return String(s == null ? '' : s).replace(/[&<>"']/g, function (c) { return { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]; }); }
   function $(id) { return document.getElementById(id); }
+  // in the Live Table (STORY.inline) the scroll mode scrolls its own box, not the whole page
+  var INLINE = Boolean(STORY.inline);
+  function scrollBox() { return INLINE ? $('scroll-container') : null; }
+  function scrollMax() { var b = scrollBox(); return b ? b.scrollHeight - b.clientHeight : document.documentElement.scrollHeight - window.innerHeight; }
+  function scrollPos() { var b = scrollBox(); return b ? b.scrollTop : window.scrollY; }
+  function scrollGo(top) { var b = scrollBox(); if (b) b.scrollTo({ top: top, behavior: 'smooth' }); else window.scrollTo({ top: top, behavior: 'smooth' }); }
   function loadSavedState() {
     try { var raw = localStorage.getItem(STORAGE_KEY); return raw ? JSON.parse(raw) : null; } catch (e) { return null; }
   }
@@ -165,18 +171,18 @@
   $('btn-mode-scroll').addEventListener('click', function () {
     READER.mode = 'scroll'; applyPreferences(); renderScrollMode(); saveState();
     setTimeout(function () {
-      var docH = document.documentElement.scrollHeight - window.innerHeight;
-      if (docH > 0 && READER.scrollRatio > 0) window.scrollTo({ top: Math.round(docH * READER.scrollRatio), behavior: 'smooth' });
+      var docH = scrollMax();
+      if (docH > 0 && READER.scrollRatio > 0) scrollGo(Math.round(docH * READER.scrollRatio));
     }, 40);
   });
   var scrollTick = null;
-  window.addEventListener('scroll', function () {
+  (INLINE ? $('scroll-container') : window).addEventListener('scroll', function () {
     if (READER.mode !== 'scroll') return;
     clearTimeout(scrollTick);
     scrollTick = setTimeout(function () {
-      var docH = document.documentElement.scrollHeight - window.innerHeight;
+      var docH = scrollMax();
       if (docH > 0) {
-        var ratio = Math.max(0, Math.min(1, window.scrollY / docH));
+        var ratio = Math.max(0, Math.min(1, scrollPos() / docH));
         READER.scrollRatio = ratio;
         noteRead(Math.min(ALL.length - 1, Math.round(ratio * (ALL.length - 1))));
         $('reader-progress-fill').style.width = Math.round(ratio * 100) + '%';
@@ -213,17 +219,17 @@
   });
   $('btn-reset-progress').addEventListener('click', function () {
     READER.pageIndex = 0; READER.scrollRatio = 0; READER.readUpTo = -1; saveState(); toc.classList.add('hidden');
-    if (READER.mode === 'flip') goToPage(0, 'prev'); else window.scrollTo({ top: 0, behavior: 'smooth' });
+    if (READER.mode === 'flip') goToPage(0, 'prev'); else scrollGo(0);
   });
   $('btn-dismiss-resume').addEventListener('click', function () { $('resume-banner').classList.add('hidden'); });
   $('btn-new').addEventListener('click', function () { var a = ALL[Math.min(ALL.length - 1, READER.readUpTo + 1)]; if (a) jumpToPassage(a.id); });
   $('btn-latest').addEventListener('click', function () {
-    if (READER.mode === 'flip') goToPage(READER.pages.length - 1, 'next'); else window.scrollTo({ top: document.documentElement.scrollHeight, behavior: 'smooth' });
+    if (READER.mode === 'flip') goToPage(READER.pages.length - 1, 'next'); else scrollGo(scrollMax());
   });
   $('btn-refresh').addEventListener('click', function () { saveState(); location.reload(); });
 
   // the reader's bar sits under the site's own bar
-  function placeBar() { var bar = document.querySelector('.topbar'); document.documentElement.style.setProperty('--story-top', (bar ? bar.offsetHeight : 0) + 'px'); }
+  function placeBar() { var bar = document.querySelector('.topbar'); document.documentElement.style.setProperty('--story-top', (bar && !INLINE ? bar.offsetHeight : 0) + 'px'); }
   placeBar(); window.addEventListener('resize', placeBar);
 
   // Init

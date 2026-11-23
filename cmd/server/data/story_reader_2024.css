@@ -304,3 +304,7 @@
   .toc-item { min-height: 40px; }
   .page-scrubber { min-height: 40px; }
 }
+
+/* the reader inside the Live Table's chronicle panel (STORY.inline): no page padding, scroll mode in its own box */
+.reader-inline .reader-shell { max-width: none; padding: 0; }
+.reader-inline #scroll-container { max-height: 70vh; overflow-y: auto; }

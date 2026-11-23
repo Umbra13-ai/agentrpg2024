@@ -2902,6 +2902,9 @@ func handleCampaignPage(w http.ResponseWriter, r *http.Request) {
 		case "story": // the log read as a book (story_reader_2024.go)
 			serveStoryReader(w, r, campaignID)
 			return
+		case "story.json": // the story the Live Table's reader runs on
+			serveStoryJSON(w, r, campaignID)
+			return
 		}
 	}
 	serveCampaignPage(w, r, campaignID)
@@ -3079,39 +3082,6 @@ func serveCampaignPage(w http.ResponseWriter, r *http.Request, campaignID int) {
 	}
 	obsRows.Close()
 
-	// The chronicle: the log's play records (what players read of it: playerText; not the bookkeeping, notPlayTypes) and the party
-	// chat, newest first, 30 at most (the whole chronicle is /campaign/{id}/log)
-	var feed []liveFeedItem
-	recs, _ := readActions(actionFilter{lobby: campaignID, newestFirst: true, limit: 30, skipTypes: notPlayTypes}) // action_log_2024.go
-	for _, a := range recs {
-		feed = append(feed, liveFeedItem{At: a.At, Type: a.Type, Actor: a.Actor, Text: playerText(a.Description), Result: playerText(a.Result)})
-	}
-	msgRows, qerr := db.Query(`
-		SELECT COALESCE(agent_name, ''), COALESCE(message, ''), created_at
-		FROM campaign_messages
-		WHERE lobby_id = $1
-		ORDER BY created_at DESC LIMIT 30
-	`, campaignID)
-	if qerr != nil {
-		writeDBErrorPage(w, qerr, "the campaign's messages")
-		return
-	}
-	for msgRows.Next() {
-		var it liveFeedItem
-		msgRows.Scan(&it.Actor, &it.Text, &it.At)
-		it.Type = "message"
-		feed = append(feed, it)
-	}
-	msgRows.Close()
-	sort.Slice(feed, func(i, j int) bool { return feed[i].At.After(feed[j].At) })
-	if len(feed) > 30 {
-		feed = feed[:30]
-	}
-	now := time.Now()
-	for i := range feed {
-		feed[i].Time, feed[i].Full = agoText(feed[i].At, now), feedTime(feed[i].At, campaignID)
-	}
-
 	var doc map[string]interface{}
 	var docRaw []byte
 	db.QueryRow(`SELECT COALESCE(campaign_document, '{}') FROM lobbies WHERE id = $1`, campaignID).Scan(&docRaw)
@@ -3128,7 +3098,7 @@ func serveCampaignPage(w http.ResponseWriter, r *http.Request, campaignID int) {
 		ID: campaignID, Name: name, Status: status, Levels: formatLevelRequirement(minLevel, maxLevel), Setting: setting,
 		GM: gm, Players: playerCount, MaxPlayers: maxPlayers, Created: createdAt.Format("January 2, 2006"), Location: location,
 		Combat: combatActive, Round: combatRound, TurnName: currentTurnName, Enemies: liveEnemies(turnOrderJSON, combatActive),
-		Party: cards, Feed: feed, Observations: observations, TableRules: tableRulesHTML(campaignID), Background: backgroundURL(campaignID),
+		Party: cards, Observations: observations, TableRules: tableRulesHTML(campaignID), Background: backgroundURL(campaignID),
 	})
 	fmt.Fprint(w, wrapView(name+" - Agent RPG 2024", page))
 }

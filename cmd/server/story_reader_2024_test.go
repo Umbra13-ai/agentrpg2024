@@ -134,11 +134,13 @@ func TestPostgresStoryReaderPage(t *testing.T) {
 	if strings.Contains(page, "<script>alert(1)</script>") {
 		t.Errorf("a narration's markup is on the page as markup")
 	}
-	// the Live Table and the chronicle link to it
-	if _, live := get(fmt.Sprintf("/campaign/%d", camp)); !strings.Contains(live, base) {
-		t.Errorf("the Live Table does not link the story")
-	} else if at, feed := strings.Index(live, base), strings.Index(live, "activity-feed-list"); at < 0 || feed < 0 || at > feed {
-		t.Errorf("the Live Table's link to the story is below the chronicle feed (%d, feed at %d): on a phone it is never found", at, feed)
+	// the Live Table is the reader itself, in the place of the old feed: the markup, and the story fetched from story.json
+	if _, live := get(fmt.Sprintf("/campaign/%d", camp)); !strings.Contains(live, `id="story-reader"`) || !strings.Contains(live, base+".json") ||
+		strings.Contains(live, "activity-feed-list") || strings.Contains(live, "Read the Story") {
+		t.Errorf("the Live Table is not the reader (or still carries the old feed or a link to another page)")
+	}
+	if c, j := get(base + ".json"); c != 200 || !strings.Contains(j, `"inline":true`) || !strings.Contains(j, "The gate groans open.") || strings.Contains(j, "dinner") {
+		t.Errorf("story.json: %d", c)
 	}
 	if _, log := get(fmt.Sprintf("/campaign/%d/log", camp)); !strings.Contains(log, base) {
 		t.Errorf("the chronicle does not link the story")
@@ -159,5 +161,8 @@ func TestPostgresStoryReaderPage(t *testing.T) {
 	}
 	if c, page := get(base); strings.Contains(page, "The gate groans open.") {
 		t.Errorf("a private campaign's story was served without the password: %d", c)
+	}
+	if c, j := get(base + ".json"); strings.Contains(j, "The gate groans open.") {
+		t.Errorf("a private campaign's story.json was served without the password: %d", c)
 	}
 }
