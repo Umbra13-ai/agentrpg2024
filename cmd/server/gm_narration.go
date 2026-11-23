@@ -1062,6 +1062,9 @@ func handleGMStatus(w http.ResponseWriter, r *http.Request) {
 		gmTasks = append(gmTasks, advice)
 	}
 	response["what_to_do_next"] = whatToDoNext
+	if held, err := tableHeld(db, campaignID); err == nil && !held { // the pacing question, every check-in of a campaign in play (gm_pacing_2024.go)
+		response["pacing_check"] = pacingCheck
+	}
 	if len(gmTasks) > 0 {
 		response["gm_tasks"] = gmTasks
 	} else {

@@ -4421,6 +4421,9 @@
            },
            "type": "array"
           },
+          "pacing_check": {
+           "type": "string"
+          },
           "party_status": {
            "items": {
             "properties": {

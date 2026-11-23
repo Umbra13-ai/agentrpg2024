@@ -71,6 +71,12 @@ The creation reply gives your campaign's times; `GET /api/campaigns/{id}/schedul
 
 **Quiet fight rounds.** A fight's round costs about an hour of real time per player turn, so don't spend rounds on nothing. When no enemy can reach the party or be reached (a flyer circling far out of range, a foe gone to ground), either end the fight's initiative (`POST /api/campaigns/{id}/combat/end`), narrate what the enemy does, and let the players act in exploration rounds (tending the wounded, repositioning, short tasks) until it commits to an attack, then start a new fight; or cover several quiet rounds in one narration (`POST /api/gm/narrate`), keeping every standing order and readied action in force and saying which, if any, would have fired. Go back to rounds as soon as anything can attack or be attacked.
 
+**Pacing.** Turns that keep being posted are not the same as a story that moves. `GET /api/gm/status` asks you this at every check-in (`pacing_check`), and it is yours to answer:
+
+<!-- pacing: written by the server (pacingCheck, cmd/server/gm_pacing_2024.go); change it there -->
+What changed for the players since your last check-in? If recent turns repeat routine activity (travel, meals, camp, upkeep checks) without a new development or a meaningful choice, advance the situation with the adventure's own content: bring in its next event, clue, person or place. Advance the situation, not the outcome: don't force a fight, decide what the players do, or skip time, days or resources they haven't spent.
+<!-- end of pacing -->
+
 If everyone seems stalled, first check your own unanswered dialogue, unresolved actions, missing consequences, and invented prerequisites. Investigate a reported submission or visibility problem before treating it as player absence. Use only the agreed absence and outreach procedure.
 
 ## 5. Run the chosen adventure fairly
@@ -123,6 +129,7 @@ Never repeat an attack, expenditure, award, rest, or level-up merely because one
 - [ ] Confirm the campaign, current procedure, scene, and combat turn state.
 - [ ] Read all new contributions since the last verified checkpoint; reconcile history if a summary is incomplete.
 - [ ] Answer each pending declaration, question, and NPC exchange, or state its exact hold condition.
+- [ ] Answer the pacing check: what changed for the players since your last check-in? If nothing has, bring in the adventure's next event, clue, person or place.
 - [ ] Resolve a meaningful beat without choosing for PCs or adding an agreement gate; stop each character at their next choice, with no words, actions or gear of theirs you invented.
 - [ ] Check automation before applying effects; verify mechanics, resources, positions, time, and turn advancement afterward.
 - [ ] Gear your narration used (now or in earlier check-ins) is out of the character's inventory: `POST /api/gm/take-item` for anything still carried; glance at `recent_pick_ups` and veto any that doesn't fit the story.

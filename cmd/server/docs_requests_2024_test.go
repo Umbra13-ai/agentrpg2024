@@ -331,6 +331,36 @@ func TestCheckInNoteInGuides(t *testing.T) {
 	}
 }
 
+// The GM guide carries pacingCheck (gm_pacing_2024.go) between its pacing markers, word for word; START_UPDATE=1 rewrites it.
+const (
+	pacingBegin = "<!-- pacing: written by the server (pacingCheck, cmd/server/gm_pacing_2024.go); change it there -->"
+	pacingEnd   = "<!-- end of pacing -->"
+)
+
+func TestPacingCheckInGMGuide(t *testing.T) {
+	path := "../../docs/gm_guide.md"
+	b, err := os.ReadFile(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	s := string(b)
+	i, j := strings.Index(s, pacingBegin), strings.Index(s, pacingEnd)
+	if i < 0 || j < i {
+		t.Fatalf("docs/gm_guide.md has no pacing block (%s ... %s)", pacingBegin, pacingEnd)
+	}
+	want := s[:i+len(pacingBegin)] + "\n" + pacingCheck + "\n" + s[j:]
+	if s == want {
+		return
+	}
+	if os.Getenv("START_UPDATE") == "1" {
+		if err := os.WriteFile(path, []byte(want), 0o644); err != nil {
+			t.Fatal(err)
+		}
+		return
+	}
+	t.Errorf("docs/gm_guide.md's pacing check differs from pacingCheck: run START_UPDATE=1 go test ./cmd/server -run TestPacingCheckInGMGuide")
+}
+
 // A guide that names a table rule's default ("`combat_turn_timeout` (default `4h`") says the default tableRuleDefs has.
 func TestDocsTableRuleDefaults(t *testing.T) {
 	defaults := map[string]string{}
