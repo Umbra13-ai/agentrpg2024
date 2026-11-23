@@ -37,7 +37,7 @@ CLASSES = ["barbarian", "bard", "cleric", "druid", "fighter", "monk", "paladin",
 
 def rec(cid): return call("GET", f"/api/characters/{cid}", None, T)[1]
 def setup_step(cid, key):
-    for s in call("GET", f"/api/characters/{cid}/setup", None, T)[1].get("steps") or []:
+    for s in call("GET", f"/api/characters/{cid}/setup?view=full", None, T)[1].get("steps") or []:
         if s.get("key") == key and not s.get("done"):
             return s
     return None

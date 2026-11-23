@@ -20,7 +20,7 @@ def at(cls, bg, sp, level):
     c, j = call("POST", "/api/gm/starting-level", {"campaign_id": cmp, "character_id": cid, "level": level, "gold": False}, G); assert c == 200, j
     return cid
 def step_feats(cid):
-    for s in call("GET", f"/api/characters/{cid}/setup", None, T)[1].get("steps") or []:
+    for s in call("GET", f"/api/characters/{cid}/setup?view=full", None, T)[1].get("steps") or []:
         if s.get("key") == "asi_or_feat":
             return [o["feat"] for o in s["choices"]["option_2_a_feat_you_qualify_for"]], s
     return None, None

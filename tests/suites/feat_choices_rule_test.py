@@ -25,7 +25,7 @@ def at(cls, bg, sp, level):
 def feat(cid, body): return call("POST", f"/api/characters/{cid}/feat", body, T, "feat_choices")
 def sheet(cid): return call("GET", f"/api/characters/{cid}", None, T)[1]
 def setup_step(cid, key):
-    for s in call("GET", f"/api/characters/{cid}/setup", None, T)[1].get("steps") or []:
+    for s in call("GET", f"/api/characters/{cid}/setup?view=full", None, T)[1].get("steps") or []:
         if s.get("key") == key: return s
 c, allf = call("GET", "/api/universe/feats", None, T)
 FS = sorted(f["slug"] for f in allf.get("feats") or [] if f.get("category") == "Fighting Style")

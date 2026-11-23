@@ -44,7 +44,7 @@ def rec(cid):
     return call("GET", f"/api/characters/{cid}", None, T)[1]
 
 def setup(cid):
-    return call("GET", f"/api/characters/{cid}/setup", None, T)[1]
+    return call("GET", f"/api/characters/{cid}/setup?view=full", None, T)[1]
 
 def step(cid, key):
     for s in setup(cid).get("steps") or []:

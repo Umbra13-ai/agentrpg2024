@@ -1107,6 +1107,11 @@ func builderSteps(body map[string]interface{}, agentID int, withCheck bool) []bu
 		if !speciesCantripFree(s, miCantrips) {
 			s = "human" // the class's usual species would give a cantrip the player's Magic Initiate already picks (a Tiefling's Thaumaturgy)
 		}
+		if sp := game.GetSpecies(s); sp != nil && containsStr(sp.Needs, "skill") {
+			if _, skill := speciesChoiceOptions(s, "skill", class, draftHeldSkills(body, bg)); skill == "" {
+				s = "human" // its skill (an Elf's Keen Senses) would have none left: the class and background give them all (Ranger + Acolyte)
+			}
+		}
 		sug4["species"] = s
 	}
 	if sp == nil {
@@ -1155,15 +1160,7 @@ func builderSteps(body map[string]interface{}, agentID int, withCheck bool) []bu
 				delete(sc, alias)
 			}
 		}
-		held := map[string]bool{} // the skills the class and the background give
-		for _, s := range blist(body, "skill_proficiencies") {
-			held[game.SkillName(s)] = true
-		}
-		if bg != nil {
-			for _, s := range bg.Skills {
-				held[game.SkillName(s)] = true
-			}
-		}
+		held := draftHeldSkills(body, bg) // the skills the class and the background give
 		sfcRaw, hasSfc := body["species_feat_choices"]
 		if hasSfc && sfcRaw == nil {
 			delete(body, "species_feat_choices")
@@ -1933,6 +1930,20 @@ func magicInitiateSuggestion(list, class string, avoid ...string) map[string]int
 }
 
 // speciesChoiceOptions: the options for one species choice and the builder's suggestion.
+// draftHeldSkills: the skills a draft's class choices and background give (what a species' skill choice can't take again).
+func draftHeldSkills(body map[string]interface{}, bg *game.Background) map[string]bool {
+	held := map[string]bool{}
+	for _, s := range blist(body, "skill_proficiencies") {
+		held[game.SkillName(s)] = true
+	}
+	if bg != nil {
+		for _, s := range bg.Skills {
+			held[game.SkillName(s)] = true
+		}
+	}
+	return held
+}
+
 func speciesChoiceOptions(species, need, class string, held map[string]bool) ([]string, string) {
 	mental := mentalAbility(class)
 	switch need {
@@ -2780,11 +2791,12 @@ func (o *builderOutcome) decorate(view map[string]interface{}, steps []builderSt
 
 // handleCharacterBuilder godoc
 // @Summary Character builder: create a character step by step
-// @Description Guides character creation in the order of the 2024 Player's Handbook (and the D&D Beyond builder): 1 class, 2 the class's choices (skills, Weapon Mastery, tools, Expertise, Divine/Primal Order, starting equipment), 3 background, 4 species, 5 ability scores (the Standard Array only; the PHB's Standard Array by Class is suggested), 6 name, alignment and languages, 7 backstory (3 to 6 paragraphs suggested) and appearance, 8 review (a summary before you create). POST starts a draft (with any fields, checked as an update is); GET lists your drafts (newest first; ?limit= up to 100 and ?offset=, with the total); GET /api/character-builder/{id} shows every step with the choices left, the current step's options and a suggestion; POST /api/character-builder/{id} with fields (any builder field; null removes one) or {"use_suggestion": true} (fills the open choices and fixes the ones with a problem; valid answers stay; the class, the alignment and the backstory have no suggestion: send them yourself). Each answer is saved as sent or refused with the reason (not_saved; 422 when other answers were saved, 400 when none was). POST /api/character-builder/{id}/finish (no body) creates the character; DELETE /api/character-builder/{id} removes a draft (a character it made is kept). Then GET /api/characters/{id}/setup guides spells, gear, the shop and a portrait.
+// @Description Guides character creation in the order of the 2024 Player's Handbook (and the D&D Beyond builder): 1 class, 2 the class's choices (skills, Weapon Mastery, tools, Expertise, Divine/Primal Order, starting equipment), 3 background, 4 species, 5 ability scores (the Standard Array only; the PHB's Standard Array by Class is suggested), 6 name, alignment and languages, 7 backstory (3 to 6 paragraphs suggested) and appearance, 8 review (a summary before you create). POST starts a draft (with any fields, checked as an update is); GET lists your drafts (newest first; ?limit= up to 100 and ?offset=, with the total); GET /api/character-builder/{id} shows every step with the choices left, the current step's options and a suggestion; POST /api/character-builder/{id} with fields (any builder field; null removes one) or {"use_suggestion": true} (fills the open choices and fixes the ones with a problem; valid answers stay; the class, the alignment and the backstory have no suggestion: send them yourself). Each answer is saved as sent or refused with the reason (not_saved; 422 when other answers were saved, 400 when none was). POST /api/character-builder/{id}/finish creates the character; it takes the draft's fields too (the backstory, or every answer at once), saved as an update saves them, and creates nothing while an answer is refused or a step is open. The first reply of a draft is full; later replies are short (the long descriptions left out) unless the request adds ?view=full (?view=short any time); DELETE /api/character-builder/{id} removes a draft (a character it made is kept). Then GET /api/characters/{id}/setup guides spells, gear, the shop and a portrait.
 // @Tags Characters
 // @Accept json
 // @Produce json
-// @Body Start a draft, or fields to set
+// @Body Start a draft, or fields to set (also what /finish takes: the draft's fields, saved before it creates the character)
+// @Param view query string false "full: every option described; short: the long descriptions left out (the default after a draft's first reply)"
 // @Success 200 {object} map[string]interface{}
 // @Router /character-builder [post]
 // @Router /character-builder [get]
@@ -2829,7 +2841,9 @@ func handleCharacterBuilder(w http.ResponseWriter, r *http.Request) {
 	}
 	switch r.Method {
 	case http.MethodGet:
-		writeJSONStatus(w, 200, builderView(id, body, charID, agentID))
+		view := builderView(id, body, charID, agentID)
+		answerGuideView(r, view, false) // a draft's first reply is its start (startBuilderDraft); later ones short (guide_short_view_2024.go)
+		writeJSONStatus(w, 200, view)
 		return
 	case http.MethodDelete:
 		if !noFields(w, r) {
@@ -2858,6 +2872,16 @@ func handleCharacterBuilder(w http.ResponseWriter, r *http.Request) {
 	if !readRequest(w, r, &upd, optionalBody(), keysCheckedByHandler(builderFieldNames()...)) {
 		return
 	}
+	if view, status, ok := updateDraft(w, r, id, body, upd, agentID); ok {
+		answerGuideView(r, view, false)
+		writeJSONStatus(w, status, view)
+	}
+}
+
+// updateDraft applies a request's builder fields to a draft and saves it: the one update of a draft, for POST /api/character-builder/{id}
+// and for the fields /finish takes. The reply view and its status (200; 422 when some answers were refused; 400 when none was saved);
+// false when it already answered (an unknown field, a whole-request error, the store failing: nothing saved).
+func updateDraft(w http.ResponseWriter, r *http.Request, id int, body, upd map[string]interface{}, agentID int) (map[string]interface{}, int, bool) {
 	stepsBefore := builderSteps(body, agentID, true) // what was left before this request: a count that rises says why (builder_followups_2024.go)
 	leftBefore := 0
 	for _, st := range stepsBefore {
@@ -2867,15 +2891,15 @@ func handleCharacterBuilder(w http.ResponseWriter, r *http.Request) {
 	if len(o.unknown) > 0 { // a typo must not look like a saved choice (Nov 13 tester)
 		writeJSONStatus(w, http.StatusBadRequest, map[string]interface{}{"error": "unknown_field", "message": strings.Join(o.unknown, "; ") + ". Nothing was saved: send the request again with the right field names.",
 			"nothing_saved": true, "draft": builderView(id, body, nil, agentID), "fields": builderFieldNames(), "unknown": keysNotIn(upd, builderFieldNames())})
-		return
+		return nil, 0, false
 	}
 	if o.errCode != "" {
 		writeJSONStatus(w, http.StatusBadRequest, map[string]interface{}{"error": o.errCode, "message": o.errMsg, "nothing_saved": true, "draft": builderView(id, body, nil, agentID)})
-		return
+		return nil, 0, false
 	}
 	if err := saveDraft(id, body); err != nil {
 		writeJSONStatus(w, http.StatusInternalServerError, map[string]interface{}{"error": "could_not_save", "message": "Nothing was saved: the server could not store the draft. Send the request again."})
-		return
+		return nil, 0, false
 	}
 	steps := builderSteps(body, agentID, true)
 	view := builderViewOf(id, body, steps)
@@ -2883,7 +2907,7 @@ func handleCharacterBuilder(w http.ResponseWriter, r *http.Request) {
 		o.rose = rose
 		view["choices_remaining_rose"] = rose
 	}
-	writeJSONStatus(w, o.decorate(view, steps), view)
+	return view, o.decorate(view, steps), true
 }
 
 // listBuilderDrafts: the player's drafts, newest first, with the total and paging (Nov 14 audit: only the latest 20, silently).
@@ -2966,19 +2990,39 @@ func startBuilderDraft(w http.ResponseWriter, r *http.Request, agentID int) {
 	if note := campaignsNote(agentID); note != "" { // told before the work, not after (Nov 13 tester); what joining does depends on the campaign's start (playtest I-ALDEN-6)
 		view["campaigns_note"] = note
 	}
+	answerGuideView(r, view, true) // a draft's first reply is full (guide_short_view_2024.go)
 	writeJSONStatus(w, status, view)
 }
 
-// finishBuilderDraft creates the character (POST only; Nov 14 audit: a GET created it). It takes no fields.
+// finishBuilderDraft creates the character (POST only; Nov 14 audit: a GET created it). It takes the draft's own fields too (owner, Nov
+// 23: a backstory cost a request of its own): they are saved as an update saves them (updateDraft), and the character is created in the
+// same request when the draft is then complete. A refused answer or a step still open creates nothing and says what is left.
 func finishBuilderDraft(w http.ResponseWriter, r *http.Request, id int, body map[string]interface{}, charID *int, agentID int) {
 	if r.Method != http.MethodPost {
 		writeJSONStatus(w, http.StatusMethodNotAllowed, map[string]interface{}{"error": "method_not_allowed",
 			"message": fmt.Sprintf("Nothing was created: POST /api/character-builder/%d/finish creates the character. GET /api/character-builder/%d shows the draft.", id, id)})
 		return
 	}
-	var none struct{} // /finish takes no fields (read first: a reply sent before the body is read can be reset on some systems)
-	if !readRequest(w, r, &none, optionalBody(), bodyHint(fmt.Sprintf("Send changes to POST /api/character-builder/%d first, then POST /api/character-builder/%d/finish with no body.", id, id))) {
+	upd := map[string]interface{}{} // the draft's fields, as an update takes them (read first: a reply sent before the body is read can be reset on some systems)
+	if !readRequest(w, r, &upd, optionalBody(), keysCheckedByHandler(builderFieldNames()...)) {
 		return
+	}
+	if charID != nil && len(upd) > 0 {
+		writeJSONStatus(w, http.StatusBadRequest, map[string]interface{}{"error": "already_created", "message": fmt.Sprintf("Nothing was changed: this draft made character %d. Use GET /api/characters/%d/setup.", *charID, *charID)})
+		return
+	}
+	if len(upd) > 0 {
+		view, status, ok := updateDraft(w, r, id, body, upd, agentID)
+		if !ok {
+			return
+		}
+		if status != http.StatusOK { // a refused answer: what was valid is saved, nothing is created
+			view["message"] = "Nothing was created. " + fmt.Sprint(view["message"])
+			view["created"] = false
+			answerGuideView(r, view, false)
+			writeJSONStatus(w, status, view)
+			return
+		}
 	}
 	if charID != nil { // finished before (a retried request): the same answer
 		writeJSONStatus(w, 200, map[string]interface{}{"success": true, "already_created": true, "character_id": *charID,
@@ -2987,7 +3031,9 @@ func finishBuilderDraft(w http.ResponseWriter, r *http.Request, id int, body map
 	}
 	for _, s := range builderSteps(body, agentID, true) {
 		if !s.Done {
-			writeJSONStatus(w, http.StatusBadRequest, map[string]interface{}{"error": "draft_not_finished", "message": s.Title + " still has choices to make.", "draft": builderView(id, body, nil, agentID)})
+			out := map[string]interface{}{"error": "draft_not_finished", "message": s.Title + " still has choices to make." + savedNote(len(upd) > 0), "draft": builderView(id, body, nil, agentID)}
+			answerGuideView(r, out, false)
+			writeJSONStatus(w, http.StatusBadRequest, out)
 			return
 		}
 	}
@@ -3003,6 +3049,14 @@ func finishBuilderDraft(w http.ResponseWriter, r *http.Request, id int, body map
 		res["campaigns_note"] = note
 	}
 	writeJSONStatus(w, 200, res)
+}
+
+// savedNote: what a /finish that saved fields but created nothing says about them.
+func savedNote(saved bool) string {
+	if saved {
+		return " The answers you sent are saved; send what is left (here or to /finish again)."
+	}
+	return ""
 }
 
 // suggestInvocation: an invocation the Warlock qualifies for and doesn't know (the setup guide's suggestion).
@@ -3125,7 +3179,8 @@ func req(method, path string, body interface{}) map[string]interface{} {
 
 // handleCharacterSetup godoc
 // @Summary Finish a new character: spells, gear in hand, class choices left
-// @Description After creation, the steps that remain, each with the request to send (suggested choices filled in; change them as you like): class choices (Divine/Primal Order, Fighting Style, Eldritch Invocations, Expertise ...), cantrips and spells, a weapon in hand, armor to put on; and warnings (your class's main ability isn't your highest score). character_finished is true when nothing is left.
+// @Description After creation, the steps that remain, each with the request to send (suggested choices filled in; change them as you like): class choices (Divine/Primal Order, Fighting Style, Eldritch Invocations, Expertise ...), cantrips and spells, a weapon in hand, armor to put on; and warnings (your class's main ability isn't your highest score). character_finished is true when nothing is left. The first read is full; later reads are short (the steps that aren't next by name, the long descriptions left out) unless ?view=full.
+// @Param view query string false "full: every step and option described; short: the short view (the default after the first read)"
 // @Tags Characters
 // @Produce json
 // @Param id path int true "Character ID"
@@ -3281,6 +3336,8 @@ func handleCharacterSetup(w http.ResponseWriter, r *http.Request, charID int) {
 			out["next_optional"] = nextOpt
 		}
 	}
+	first := r.URL.Query().Get("view") == "" && setupFirstRead(charID) // the first read is full; later ones short (guide_short_view_2024.go)
+	answerGuideView(r, out, first)
 	writeJSONStatus(w, 200, out)
 }
 

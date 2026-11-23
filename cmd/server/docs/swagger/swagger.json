@@ -18450,7 +18450,7 @@
      "Characters"
     ],
     "summary": "Character builder: create a character step by step",
-    "description": "Guides character creation in the order of the 2024 Player's Handbook (and the D&D Beyond builder): 1 class, 2 the class's choices (skills, Weapon Mastery, tools, Expertise, Divine/Primal Order, starting equipment), 3 background, 4 species, 5 ability scores (the Standard Array only; the PHB's Standard Array by Class is suggested), 6 name, alignment and languages, 7 backstory (3 to 6 paragraphs suggested) and appearance, 8 review (a summary before you create). POST starts a draft (with any fields, checked as an update is); GET lists your drafts (newest first; ?limit= up to 100 and ?offset=, with the total); GET /api/character-builder/{id} shows every step with the choices left, the current step's options and a suggestion; POST /api/character-builder/{id} with fields (any builder field; null removes one) or {\"use_suggestion\": true} (fills the open choices and fixes the ones with a problem; valid answers stay; the class, the alignment and the backstory have no suggestion: send them yourself). Each answer is saved as sent or refused with the reason (not_saved; 422 when other answers were saved, 400 when none was). POST /api/character-builder/{id}/finish (no body) creates the character; DELETE /api/character-builder/{id} removes a draft (a character it made is kept). Then GET /api/characters/{id}/setup guides spells, gear, the shop and a portrait.",
+    "description": "Guides character creation in the order of the 2024 Player's Handbook (and the D&D Beyond builder): 1 class, 2 the class's choices (skills, Weapon Mastery, tools, Expertise, Divine/Primal Order, starting equipment), 3 background, 4 species, 5 ability scores (the Standard Array only; the PHB's Standard Array by Class is suggested), 6 name, alignment and languages, 7 backstory (3 to 6 paragraphs suggested) and appearance, 8 review (a summary before you create). POST starts a draft (with any fields, checked as an update is); GET lists your drafts (newest first; ?limit= up to 100 and ?offset=, with the total); GET /api/character-builder/{id} shows every step with the choices left, the current step's options and a suggestion; POST /api/character-builder/{id} with fields (any builder field; null removes one) or {\"use_suggestion\": true} (fills the open choices and fixes the ones with a problem; valid answers stay; the class, the alignment and the backstory have no suggestion: send them yourself). Each answer is saved as sent or refused with the reason (not_saved; 422 when other answers were saved, 400 when none was). POST /api/character-builder/{id}/finish creates the character; it takes the draft's fields too (the backstory, or every answer at once), saved as an update saves them, and creates nothing while an answer is refused or a step is open. The first reply of a draft is full; later replies are short (the long descriptions left out) unless the request adds ?view=full (?view=short any time); DELETE /api/character-builder/{id} removes a draft (a character it made is kept). Then GET /api/characters/{id}/setup guides spells, gear, the shop and a portrait.",
     "responses": {
      "400": {
       "description": "The body was refused (nothing was changed): unknown_field, wrong_type, invalid_json, body_required or id_mismatch, with the fields the request takes",
@@ -18619,6 +18619,17 @@
       }
      }
     },
+    "parameters": [
+     {
+      "name": "view",
+      "in": "query",
+      "required": false,
+      "description": "full: every option described; short: the long descriptions left out (the default after a draft's first reply)",
+      "schema": {
+       "type": "string"
+      }
+     }
+    ],
     "requestBody": {
      "required": false,
      "content": {
@@ -18764,7 +18775,7 @@
        }
       }
      },
-     "description": "Start a draft, or fields to set The handler checks each field itself and explains a misplaced one."
+     "description": "Start a draft, or fields to set (also what /finish takes: the draft's fields, saved before it creates the character) The handler checks each field itself and explains a misplaced one."
     }
    },
    "get": {
@@ -18772,7 +18783,7 @@
      "Characters"
     ],
     "summary": "Character builder: create a character step by step",
-    "description": "Guides character creation in the order of the 2024 Player's Handbook (and the D&D Beyond builder): 1 class, 2 the class's choices (skills, Weapon Mastery, tools, Expertise, Divine/Primal Order, starting equipment), 3 background, 4 species, 5 ability scores (the Standard Array only; the PHB's Standard Array by Class is suggested), 6 name, alignment and languages, 7 backstory (3 to 6 paragraphs suggested) and appearance, 8 review (a summary before you create). POST starts a draft (with any fields, checked as an update is); GET lists your drafts (newest first; ?limit= up to 100 and ?offset=, with the total); GET /api/character-builder/{id} shows every step with the choices left, the current step's options and a suggestion; POST /api/character-builder/{id} with fields (any builder field; null removes one) or {\"use_suggestion\": true} (fills the open choices and fixes the ones with a problem; valid answers stay; the class, the alignment and the backstory have no suggestion: send them yourself). Each answer is saved as sent or refused with the reason (not_saved; 422 when other answers were saved, 400 when none was). POST /api/character-builder/{id}/finish (no body) creates the character; DELETE /api/character-builder/{id} removes a draft (a character it made is kept). Then GET /api/characters/{id}/setup guides spells, gear, the shop and a portrait.",
+    "description": "Guides character creation in the order of the 2024 Player's Handbook (and the D&D Beyond builder): 1 class, 2 the class's choices (skills, Weapon Mastery, tools, Expertise, Divine/Primal Order, starting equipment), 3 background, 4 species, 5 ability scores (the Standard Array only; the PHB's Standard Array by Class is suggested), 6 name, alignment and languages, 7 backstory (3 to 6 paragraphs suggested) and appearance, 8 review (a summary before you create). POST starts a draft (with any fields, checked as an update is); GET lists your drafts (newest first; ?limit= up to 100 and ?offset=, with the total); GET /api/character-builder/{id} shows every step with the choices left, the current step's options and a suggestion; POST /api/character-builder/{id} with fields (any builder field; null removes one) or {\"use_suggestion\": true} (fills the open choices and fixes the ones with a problem; valid answers stay; the class, the alignment and the backstory have no suggestion: send them yourself). Each answer is saved as sent or refused with the reason (not_saved; 422 when other answers were saved, 400 when none was). POST /api/character-builder/{id}/finish creates the character; it takes the draft's fields too (the backstory, or every answer at once), saved as an update saves them, and creates nothing while an answer is refused or a step is open. The first reply of a draft is full; later replies are short (the long descriptions left out) unless the request adds ?view=full (?view=short any time); DELETE /api/character-builder/{id} removes a draft (a character it made is kept). Then GET /api/characters/{id}/setup guides spells, gear, the shop and a portrait.",
     "responses": {
      "200": {
       "description": "Success",
@@ -18820,7 +18831,18 @@
        }
       }
      }
-    }
+    },
+    "parameters": [
+     {
+      "name": "view",
+      "in": "query",
+      "required": false,
+      "description": "full: every option described; short: the long descriptions left out (the default after a draft's first reply)",
+      "schema": {
+       "type": "string"
+      }
+     }
+    ]
    }
   },
   "/api/character-builder/{id}": {
@@ -18829,7 +18851,7 @@
      "Characters"
     ],
     "summary": "Character builder: create a character step by step",
-    "description": "Guides character creation in the order of the 2024 Player's Handbook (and the D&D Beyond builder): 1 class, 2 the class's choices (skills, Weapon Mastery, tools, Expertise, Divine/Primal Order, starting equipment), 3 background, 4 species, 5 ability scores (the Standard Array only; the PHB's Standard Array by Class is suggested), 6 name, alignment and languages, 7 backstory (3 to 6 paragraphs suggested) and appearance, 8 review (a summary before you create). POST starts a draft (with any fields, checked as an update is); GET lists your drafts (newest first; ?limit= up to 100 and ?offset=, with the total); GET /api/character-builder/{id} shows every step with the choices left, the current step's options and a suggestion; POST /api/character-builder/{id} with fields (any builder field; null removes one) or {\"use_suggestion\": true} (fills the open choices and fixes the ones with a problem; valid answers stay; the class, the alignment and the backstory have no suggestion: send them yourself). Each answer is saved as sent or refused with the reason (not_saved; 422 when other answers were saved, 400 when none was). POST /api/character-builder/{id}/finish (no body) creates the character; DELETE /api/character-builder/{id} removes a draft (a character it made is kept). Then GET /api/characters/{id}/setup guides spells, gear, the shop and a portrait.",
+    "description": "Guides character creation in the order of the 2024 Player's Handbook (and the D&D Beyond builder): 1 class, 2 the class's choices (skills, Weapon Mastery, tools, Expertise, Divine/Primal Order, starting equipment), 3 background, 4 species, 5 ability scores (the Standard Array only; the PHB's Standard Array by Class is suggested), 6 name, alignment and languages, 7 backstory (3 to 6 paragraphs suggested) and appearance, 8 review (a summary before you create). POST starts a draft (with any fields, checked as an update is); GET lists your drafts (newest first; ?limit= up to 100 and ?offset=, with the total); GET /api/character-builder/{id} shows every step with the choices left, the current step's options and a suggestion; POST /api/character-builder/{id} with fields (any builder field; null removes one) or {\"use_suggestion\": true} (fills the open choices and fixes the ones with a problem; valid answers stay; the class, the alignment and the backstory have no suggestion: send them yourself). Each answer is saved as sent or refused with the reason (not_saved; 422 when other answers were saved, 400 when none was). POST /api/character-builder/{id}/finish creates the character; it takes the draft's fields too (the backstory, or every answer at once), saved as an update saves them, and creates nothing while an answer is refused or a step is open. The first reply of a draft is full; later replies are short (the long descriptions left out) unless the request adds ?view=full (?view=short any time); DELETE /api/character-builder/{id} removes a draft (a character it made is kept). Then GET /api/characters/{id}/setup guides spells, gear, the shop and a portrait.",
     "responses": {
      "200": {
       "description": "Success",
@@ -18923,26 +18945,11 @@
           "steps": {
            "items": {
             "properties": {
-             "choices_remaining": {
-              "type": "integer"
-             },
-             "done": {
-              "type": "boolean"
-             },
-             "key": {
-              "type": "string"
-             },
              "problems": {
               "items": {
                "type": "string"
               },
               "type": "array"
-             },
-             "step": {
-              "type": "integer"
-             },
-             "title": {
-              "type": "string"
              },
              "warnings": {
               "items": {
@@ -18975,6 +18982,15 @@
        "type": "integer"
       },
       "description": "The character builder's id"
+     },
+     {
+      "name": "view",
+      "in": "query",
+      "required": false,
+      "description": "full: every option described; short: the long descriptions left out (the default after a draft's first reply)",
+      "schema": {
+       "type": "string"
+      }
      }
     ]
    },
@@ -18983,7 +18999,7 @@
      "Characters"
     ],
     "summary": "Character builder: create a character step by step",
-    "description": "Guides character creation in the order of the 2024 Player's Handbook (and the D&D Beyond builder): 1 class, 2 the class's choices (skills, Weapon Mastery, tools, Expertise, Divine/Primal Order, starting equipment), 3 background, 4 species, 5 ability scores (the Standard Array only; the PHB's Standard Array by Class is suggested), 6 name, alignment and languages, 7 backstory (3 to 6 paragraphs suggested) and appearance, 8 review (a summary before you create). POST starts a draft (with any fields, checked as an update is); GET lists your drafts (newest first; ?limit= up to 100 and ?offset=, with the total); GET /api/character-builder/{id} shows every step with the choices left, the current step's options and a suggestion; POST /api/character-builder/{id} with fields (any builder field; null removes one) or {\"use_suggestion\": true} (fills the open choices and fixes the ones with a problem; valid answers stay; the class, the alignment and the backstory have no suggestion: send them yourself). Each answer is saved as sent or refused with the reason (not_saved; 422 when other answers were saved, 400 when none was). POST /api/character-builder/{id}/finish (no body) creates the character; DELETE /api/character-builder/{id} removes a draft (a character it made is kept). Then GET /api/characters/{id}/setup guides spells, gear, the shop and a portrait.",
+    "description": "Guides character creation in the order of the 2024 Player's Handbook (and the D&D Beyond builder): 1 class, 2 the class's choices (skills, Weapon Mastery, tools, Expertise, Divine/Primal Order, starting equipment), 3 background, 4 species, 5 ability scores (the Standard Array only; the PHB's Standard Array by Class is suggested), 6 name, alignment and languages, 7 backstory (3 to 6 paragraphs suggested) and appearance, 8 review (a summary before you create). POST starts a draft (with any fields, checked as an update is); GET lists your drafts (newest first; ?limit= up to 100 and ?offset=, with the total); GET /api/character-builder/{id} shows every step with the choices left, the current step's options and a suggestion; POST /api/character-builder/{id} with fields (any builder field; null removes one) or {\"use_suggestion\": true} (fills the open choices and fixes the ones with a problem; valid answers stay; the class, the alignment and the backstory have no suggestion: send them yourself). Each answer is saved as sent or refused with the reason (not_saved; 422 when other answers were saved, 400 when none was). POST /api/character-builder/{id}/finish creates the character; it takes the draft's fields too (the backstory, or every answer at once), saved as an update saves them, and creates nothing while an answer is refused or a step is open. The first reply of a draft is full; later replies are short (the long descriptions left out) unless the request adds ?view=full (?view=short any time); DELETE /api/character-builder/{id} removes a draft (a character it made is kept). Then GET /api/characters/{id}/setup guides spells, gear, the shop and a portrait.",
     "responses": {
      "400": {
       "description": "The body was refused (nothing was changed): unknown_field, wrong_type, invalid_json, body_required or id_mismatch, with the fields the request takes",
@@ -19020,138 +19036,32 @@
       "content": {
        "application/json": {
         "schema": {
-         "properties": {
-          "choices_remaining": {
-           "type": "integer"
-          },
-          "choices_remaining_note": {
-           "type": "string"
-          },
-          "choices_remaining_rose": {
-           "type": "string"
-          },
-          "current_step": {
-           "properties": {
-            "choices": {
-             "items": {
-              "type": "object"
-             },
-             "type": "array"
-            },
-            "choices_remaining": {
-             "type": "integer"
-            },
-            "done": {
-             "type": "boolean"
-            },
-            "explain": {
-             "type": "string"
-            },
-            "key": {
-             "type": "string"
-            },
-            "problems": {
-             "items": {
-              "type": "string"
-             },
-             "type": "array"
-            },
-            "suggestion": {
-             "type": "object"
-            },
-            "title": {
-             "type": "string"
-            },
-            "warnings": {
-             "items": {
-              "type": "string"
-             },
-             "type": "array"
-            }
-           },
-           "type": "object"
-          },
-          "draft": {
-           "type": "object"
-          },
-          "draft_id": {
-           "type": "integer"
-          },
-          "fields_not_used": {
-           "type": "string"
-          },
-          "next": {
-           "type": "string"
-          },
-          "send": {
-           "properties": {
-            "body": {
-             "properties": {},
-             "type": "object"
-            },
-            "method": {
-             "type": "string"
-            },
-            "or": {
-             "properties": {
-              "use_suggestion": {
-               "type": "boolean"
-              }
-             },
-             "type": "object"
-            },
-            "path": {
-             "type": "string"
-            }
-           },
-           "type": "object"
-          },
-          "steps": {
-           "items": {
-            "properties": {
-             "choices_remaining": {
-              "type": "integer"
-             },
-             "done": {
-              "type": "boolean"
-             },
-             "key": {
-              "type": "string"
-             },
-             "problems": {
-              "items": {
-               "type": "string"
-              },
-              "type": "array"
-             },
-             "step": {
-              "type": "integer"
-             },
-             "title": {
-              "type": "string"
-             },
-             "warnings": {
-              "items": {
-               "type": "string"
-              },
-              "type": "array"
-             }
-            },
-            "type": "object"
-           },
-           "type": "array"
-          },
-          "summary_before_you_finish": {},
-          "to_change_something": {
-           "type": "string"
-          }
-         },
          "type": "object"
         }
        }
       }
      }
     },
+    "parameters": [
+     {
+      "name": "id",
+      "in": "path",
+      "required": true,
+      "schema": {
+       "type": "integer"
+      },
+      "description": "The character builder's id"
+     },
+     {
+      "name": "view",
+      "in": "query",
+      "required": false,
+      "description": "full: every option described; short: the long descriptions left out (the default after a draft's first reply)",
+      "schema": {
+       "type": "string"
+      }
+     }
+    ],
     "requestBody": {
      "required": false,
      "content": {
@@ -19297,26 +19207,15 @@
        }
       }
      },
-     "description": "Start a draft, or fields to set The handler checks each field itself and explains a misplaced one."
-    },
-    "parameters": [
-     {
-      "name": "id",
-      "in": "path",
-      "required": true,
-      "schema": {
-       "type": "integer"
-      },
-      "description": "The character builder's id"
-     }
-    ]
+     "description": "Start a draft, or fields to set (also what /finish takes: the draft's fields, saved before it creates the character) The handler checks each field itself and explains a misplaced one."
+    }
    },
    "delete": {
     "tags": [
      "Characters"
     ],
     "summary": "Character builder: create a character step by step",
-    "description": "Guides character creation in the order of the 2024 Player's Handbook (and the D&D Beyond builder): 1 class, 2 the class's choices (skills, Weapon Mastery, tools, Expertise, Divine/Primal Order, starting equipment), 3 background, 4 species, 5 ability scores (the Standard Array only; the PHB's Standard Array by Class is suggested), 6 name, alignment and languages, 7 backstory (3 to 6 paragraphs suggested) and appearance, 8 review (a summary before you create). POST starts a draft (with any fields, checked as an update is); GET lists your drafts (newest first; ?limit= up to 100 and ?offset=, with the total); GET /api/character-builder/{id} shows every step with the choices left, the current step's options and a suggestion; POST /api/character-builder/{id} with fields (any builder field; null removes one) or {\"use_suggestion\": true} (fills the open choices and fixes the ones with a problem; valid answers stay; the class, the alignment and the backstory have no suggestion: send them yourself). Each answer is saved as sent or refused with the reason (not_saved; 422 when other answers were saved, 400 when none was). POST /api/character-builder/{id}/finish (no body) creates the character; DELETE /api/character-builder/{id} removes a draft (a character it made is kept). Then GET /api/characters/{id}/setup guides spells, gear, the shop and a portrait. Takes no request body. A tool that can't send DELETE can send POST with ?_method=DELETE (or the X-HTTP-Method-Override header) and the same body.",
+    "description": "Guides character creation in the order of the 2024 Player's Handbook (and the D&D Beyond builder): 1 class, 2 the class's choices (skills, Weapon Mastery, tools, Expertise, Divine/Primal Order, starting equipment), 3 background, 4 species, 5 ability scores (the Standard Array only; the PHB's Standard Array by Class is suggested), 6 name, alignment and languages, 7 backstory (3 to 6 paragraphs suggested) and appearance, 8 review (a summary before you create). POST starts a draft (with any fields, checked as an update is); GET lists your drafts (newest first; ?limit= up to 100 and ?offset=, with the total); GET /api/character-builder/{id} shows every step with the choices left, the current step's options and a suggestion; POST /api/character-builder/{id} with fields (any builder field; null removes one) or {\"use_suggestion\": true} (fills the open choices and fixes the ones with a problem; valid answers stay; the class, the alignment and the backstory have no suggestion: send them yourself). Each answer is saved as sent or refused with the reason (not_saved; 422 when other answers were saved, 400 when none was). POST /api/character-builder/{id}/finish creates the character; it takes the draft's fields too (the backstory, or every answer at once), saved as an update saves them, and creates nothing while an answer is refused or a step is open. The first reply of a draft is full; later replies are short (the long descriptions left out) unless the request adds ?view=full (?view=short any time); DELETE /api/character-builder/{id} removes a draft (a character it made is kept). Then GET /api/characters/{id}/setup guides spells, gear, the shop and a portrait. Takes no request body. A tool that can't send DELETE can send POST with ?_method=DELETE (or the X-HTTP-Method-Override header) and the same body.",
     "responses": {
      "200": {
       "description": "Success",
@@ -19352,6 +19251,15 @@
        "type": "integer"
       },
       "description": "The character builder's id"
+     },
+     {
+      "name": "view",
+      "in": "query",
+      "required": false,
+      "description": "full: every option described; short: the long descriptions left out (the default after a draft's first reply)",
+      "schema": {
+       "type": "string"
+      }
      }
     ]
    }
@@ -19362,7 +19270,7 @@
      "Characters"
     ],
     "summary": "Character builder: create a character step by step",
-    "description": "Guides character creation in the order of the 2024 Player's Handbook (and the D&D Beyond builder): 1 class, 2 the class's choices (skills, Weapon Mastery, tools, Expertise, Divine/Primal Order, starting equipment), 3 background, 4 species, 5 ability scores (the Standard Array only; the PHB's Standard Array by Class is suggested), 6 name, alignment and languages, 7 backstory (3 to 6 paragraphs suggested) and appearance, 8 review (a summary before you create). POST starts a draft (with any fields, checked as an update is); GET lists your drafts (newest first; ?limit= up to 100 and ?offset=, with the total); GET /api/character-builder/{id} shows every step with the choices left, the current step's options and a suggestion; POST /api/character-builder/{id} with fields (any builder field; null removes one) or {\"use_suggestion\": true} (fills the open choices and fixes the ones with a problem; valid answers stay; the class, the alignment and the backstory have no suggestion: send them yourself). Each answer is saved as sent or refused with the reason (not_saved; 422 when other answers were saved, 400 when none was). POST /api/character-builder/{id}/finish (no body) creates the character; DELETE /api/character-builder/{id} removes a draft (a character it made is kept). Then GET /api/characters/{id}/setup guides spells, gear, the shop and a portrait.",
+    "description": "Guides character creation in the order of the 2024 Player's Handbook (and the D&D Beyond builder): 1 class, 2 the class's choices (skills, Weapon Mastery, tools, Expertise, Divine/Primal Order, starting equipment), 3 background, 4 species, 5 ability scores (the Standard Array only; the PHB's Standard Array by Class is suggested), 6 name, alignment and languages, 7 backstory (3 to 6 paragraphs suggested) and appearance, 8 review (a summary before you create). POST starts a draft (with any fields, checked as an update is); GET lists your drafts (newest first; ?limit= up to 100 and ?offset=, with the total); GET /api/character-builder/{id} shows every step with the choices left, the current step's options and a suggestion; POST /api/character-builder/{id} with fields (any builder field; null removes one) or {\"use_suggestion\": true} (fills the open choices and fixes the ones with a problem; valid answers stay; the class, the alignment and the backstory have no suggestion: send them yourself). Each answer is saved as sent or refused with the reason (not_saved; 422 when other answers were saved, 400 when none was). POST /api/character-builder/{id}/finish creates the character; it takes the draft's fields too (the backstory, or every answer at once), saved as an update saves them, and creates nothing while an answer is refused or a step is open. The first reply of a draft is full; later replies are short (the long descriptions left out) unless the request adds ?view=full (?view=short any time); DELETE /api/character-builder/{id} removes a draft (a character it made is kept). Then GET /api/characters/{id}/setup guides spells, gear, the shop and a portrait.",
     "responses": {
      "400": {
       "description": "The body was refused (nothing was changed): unknown_field, wrong_type, invalid_json, body_required or id_mismatch, with the fields the request takes",
@@ -19407,6 +19315,12 @@
            "type": "string"
           },
           "character_id": {},
+          "created": {
+           "type": "boolean"
+          },
+          "message": {
+           "type": "string"
+          },
           "setup": {
            "type": "string"
           },
@@ -19420,18 +19334,6 @@
       }
      }
     },
-    "requestBody": {
-     "required": false,
-     "content": {
-      "application/json": {
-       "schema": {
-        "type": "object",
-        "properties": {}
-       }
-      }
-     },
-     "description": "Start a draft, or fields to set"
-    },
     "parameters": [
      {
       "name": "id",
@@ -19441,8 +19343,164 @@
        "type": "integer"
       },
       "description": "The character builder's id"
+     },
+     {
+      "name": "view",
+      "in": "query",
+      "required": false,
+      "description": "full: every option described; short: the long descriptions left out (the default after a draft's first reply)",
+      "schema": {
+       "type": "string"
+      }
      }
-    ]
+    ],
+    "requestBody": {
+     "required": false,
+     "content": {
+      "application/json": {
+       "schema": {
+        "type": "object",
+        "properties": {
+         "ability_increases": {
+          "description": "from the background: {\"int\": 2, \"wis\": 1} or all three at 1"
+         },
+         "ability_method": {
+          "description": "\"standard_array\", the only method this server uses; scores before the background increases"
+         },
+         "alignment": {
+          "description": "one of the nine alignments (Lawful Good ... Chaotic Evil); a roleplaying guide"
+         },
+         "appearance": {
+          "description": "optional: how the character looks"
+         },
+         "background": {
+          "description": "Acolyte, Criminal, Sage or Soldier"
+         },
+         "background_equipment": {
+          "description": "\"a\" (the package, default) or \"b\" (50 GP)"
+         },
+         "background_feat_choices": {
+          "description": "Magic Initiate or Skilled picks"
+         },
+         "background_tool": {
+          "description": "Soldier: which Gaming Set"
+         },
+         "backstory": {
+          "description": "the character’s story (the builder asks for 3 to 6 paragraphs)"
+         },
+         "backstory_skip": {
+          "description": "Send true or false"
+         },
+         "cha": {
+          "description": "the ability score from the standard array, before the background's increase"
+         },
+         "class": {
+          "description": "barbarian, bard, cleric, druid, fighter, monk, paladin, ranger, rogue, sorcerer, warlock or wizard"
+         },
+         "class_options": {
+          "description": "the class's level 1 choices: a Cleric's divine_order, a Druid's primal_order"
+         },
+         "con": {
+          "description": "the ability score from the standard array, before the background's increase"
+         },
+         "dex": {
+          "description": "the ability score from the standard array, before the background's increase"
+         },
+         "divine_order": {
+          "description": "an older draft's field, read only to be removed (null): a Cleric's order goes in class_options"
+         },
+         "draconic_ancestry": {
+          "description": "e.g., \"red\", \"blue\" - for Dragonborn breath weapon"
+         },
+         "expertise": {
+          "description": "a class with Expertise at level 1 (the Rogue): its skills, e.g. [\"stealth\", \"sleight of hand\"] (double Proficiency Bonus)"
+         },
+         "extra_languages": {
+          "description": "exactly two Standard Languages besides Common (2024 rules)"
+         },
+         "int": {
+          "description": "the ability score from the standard array, before the background's increase"
+         },
+         "known_spells": {
+          "description": "refused when sent: spells are chosen in the setup after creation; the origin spells are added here"
+         },
+         "name": {
+          "description": "a name no other character has"
+         },
+         "primal_order": {
+          "description": "an older draft's field, read only to be removed (null): a Druid's order goes in class_options"
+         },
+         "skill_proficiencies": {
+          "description": "e.g., [\"perception\", \"stealth\"]"
+         },
+         "species": {
+          "description": "Dragonborn, Dwarf, Elf, Gnome, Goliath, Halfling, Human, Orc or Tiefling"
+         },
+         "species_choices": {
+          "description": "lineage, ancestry, spellcasting_ability, skill, size, feat ..."
+         },
+         "species_feat_choices": {
+          "description": "the Human's extra Origin feat picks"
+         },
+         "starting_equipment": {
+          "description": "class kit option: \"a\" (default), \"b\" or \"c\" where offered; gold-only options give gold"
+         },
+         "str": {
+          "description": "the ability score from the standard array, before the background's increase"
+         },
+         "tool_proficiencies": {
+          "description": "e.g., [\"thieves' tools\", \"herbalism kit\"]"
+         },
+         "use_suggestion": {
+          "description": "true: take the current step's suggestion; or a step's key: take that step's suggestion"
+         },
+         "weapon_masteries": {
+          "description": "Barbarian 2, Fighter 3, Paladin/Ranger/Rogue 2 kinds of weapon"
+         },
+         "wis": {
+          "description": "the ability score from the standard array, before the background's increase"
+         }
+        }
+       },
+       "example": {
+        "ability_increases": "...",
+        "ability_method": "...",
+        "alignment": "...",
+        "appearance": "...",
+        "background": "...",
+        "background_equipment": "...",
+        "background_feat_choices": "...",
+        "background_tool": "...",
+        "backstory": "...",
+        "backstory_skip": "...",
+        "cha": "...",
+        "class": "...",
+        "class_options": "...",
+        "con": "...",
+        "dex": "...",
+        "divine_order": "...",
+        "draconic_ancestry": "...",
+        "expertise": "...",
+        "extra_languages": "...",
+        "int": "...",
+        "known_spells": "...",
+        "name": "...",
+        "primal_order": "...",
+        "skill_proficiencies": "...",
+        "species": "...",
+        "species_choices": "...",
+        "species_feat_choices": "...",
+        "starting_equipment": "...",
+        "str": "...",
+        "tool_proficiencies": "...",
+        "use_suggestion": "...",
+        "weapon_masteries": "...",
+        "wis": "..."
+       }
+      }
+     },
+     "description": "Start a draft, or fields to set (also what /finish takes: the draft's fields, saved before it creates the character) The handler checks each field itself and explains a misplaced one."
+    }
    }
   },
   "/api/characters/{id}/setup": {
@@ -19451,7 +19509,7 @@
      "Characters"
     ],
     "summary": "Finish a new character: spells, gear in hand, class choices left",
-    "description": "After creation, the steps that remain, each with the request to send (suggested choices filled in; change them as you like): class choices (Divine/Primal Order, Fighting Style, Eldritch Invocations, Expertise ...), cantrips and spells, a weapon in hand, armor to put on; and warnings (your class's main ability isn't your highest score). character_finished is true when nothing is left.",
+    "description": "After creation, the steps that remain, each with the request to send (suggested choices filled in; change them as you like): class choices (Divine/Primal Order, Fighting Style, Eldritch Invocations, Expertise ...), cantrips and spells, a weapon in hand, armor to put on; and warnings (your class's main ability isn't your highest score). character_finished is true when nothing is left. The first read is full; later reads are short (the steps that aren't next by name, the long descriptions left out) unless ?view=full.",
     "responses": {
      "200": {
       "description": "Success",
@@ -19718,6 +19776,15 @@
      }
     },
     "parameters": [
+     {
+      "name": "view",
+      "in": "query",
+      "required": false,
+      "description": "full: every step and option described; short: the short view (the default after the first read)",
+      "schema": {
+       "type": "string"
+      }
+     },
      {
       "name": "id",
       "in": "path",
