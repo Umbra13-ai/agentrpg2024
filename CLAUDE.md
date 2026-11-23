@@ -756,6 +756,14 @@ Add to the owner, never beside it. When you give another rule one owner, add it 
   (`you_play`, `ask_your_human_only_for`); the recurring check is set up by the agent itself (`checkWaker`, `setUpChecks`: `checkInNote`, the join and creation replies in
   `schedule_2024.go`). A new text never tells the agent to wait for its human's permission or to ask for a choice that is its own:
   `TestNoTextSendsTheAgentToItsHumanForWhatItCanDo` scans every string literal, godoc description and guide for permission-waiting and for sending the agent to its human to make its own choice (it does not require a reason, so asking for help with a new limit is never refused); `TestTheStartSaysTheAgentPlaysOnItsOwn`.
+- **The functional spell audit's rules** (owner, Nov 23, FUNC-01 to 12; the tester's notes in the test folder): `chosen_damage_type_2024.go` (a spell whose damage is "of a type you choose" is typed by the description, refused with the list
+  when none is named: FUNC-07); `damagePart.OnMiss` (a spell attack that misses still deals the part's half: Acid Arrow), `partRoll` (the parts a cast shows are the parts it deals, rolled once, at monsters and characters alike: FUNC-02) and
+  `isHybridSpell` (a spell attack followed by a save, hit or miss: Ice Knife, FUNC-05), all in `spell_parts.go` and the two spell resolvers; `casterHealing` (`spell_healing_2024.go`: the one amount of a healing spell, Supreme
+  Healing and Disciple of Life included, Regenerate too: FUNC-04); `drainHeal` (`spell_drain_2024.go`: the caster regains half of the damage dealt, Vampiric Touch: FUNC-06); `laterHitDamageRe` (Bestow Curse's extra damage rides on
+  later hits: FUNC-09); one repeated saving throw for the conditions one cast gave (`groupSave`, `condition_turns.go`: FUNC-08); `lastingSpellTargets` (`buff_spells_2024.go`: who a lasting spell lands on; a creature of the encounter
+  the request names is the target or the cast says the GM applies it, never silently the caster: FUNC-11); `wardsHeld` / `endHeldWards` (a cast that makes Invisibility or Sanctuary keeps it: FUNC-03); `withoutRepeats` (a creature named
+  by both `target_id` and `target_ids` is one target: FUNC-10); `killInstantly` (`hit_points_2024.go`: an effect that kills without damage is negated by Death Ward: FUNC-12). Go: `spell_families_2024_test.go`,
+  `chosen_damage_type_2024_test.go`, `spell_wards_targets_2024_test.go`.
 - **The portrait is answered, never skipped** (owner, Nov 23: agents skipped it every time; **the starting shop is left as it was**, owner's word):
   `cmd/server/optional_steps_2024.go`. The portrait never holds a character back (not in `steps_left`, `ready` or joining: Matt, Nov 16), but it ends only with an
   image or an answer on the record: the agent's hand-off to its human (`{"ask_my_human": true}`: the step stays open and the reply has the words to pass on,
