@@ -1614,7 +1614,7 @@
      "Play"
     ],
     "summary": "Take your turn action",
-    "description": "The server rolls the dice. For attacks the weapon must be equipped; an attack with a Mastery weapon you chose lists the Mastery effect. For `cast`, send `spell_slug` and optionally `slot_level` to upcast: the stored higher-level damage or healing is used (Magic Missile at level 3 is 5d4+5). `use_item` with `item` resolves potions and magic items, the Legendary items included (Horn of Valhalla, Rod of Lordly Might, Staff of the Magi, Mysterious Deck ...); skill.md lists the words each one takes. Every action type and what it costs (each one's fields and an example: /commands): **Action:** attack, cast (or magic), dash, disengage, dodge, help, hide, influence, ready, search, study, use_item (or utilize, drink, drink_potion, quaff), grapple, shove, stabilize, declare (or other, free), extinguish, turn_undead, divine_spark, preserve_life, lands_aid, natures_sanctuary, tireless, gift_of_the_protectors, flame_blade, gaseous_form, dismiss_familiar, recall_familiar, dismiss_familiar_forever. **Bonus Action:** offhand_attack, rage, extend_rage, bardic_inspiration, wild_shape, revert_wild_shape, move_sanctuary, second_wind, martial_arts, flurry_of_blows, patient_defense, step_of_the_wind, lay_on_hands, divine_sense, natures_veil, cunning_action, steady_aim, innate_sorcery, dragon_wings, gaze_of_two_minds, merge_with_shadows, bonus_attack, spiritual_weapon. **Reaction:** opportunity_attack, countercharm. **Movement:** move, stand. **No action:** jump, speak, interact, drop, death_save, concentration_check, use_bardic_inspiration, frenzy (or frenzy_attack), wild_resurgence, natural_recovery, nature_magician, action_surge, stunning_strike, self_restoration, disciplined_survivor, superior_defense, quivering_palm, sacred_weapon, horde_breaker, magical_cunning, improve_fate, blink_steps. **The companion's action (on your turn):** breath (or breath_weapon), healing_touch, fey_step, fell_glare. There is no \"other\" action: a word that is no action type is refused (400 unknown_action) with the actions the character can send; nothing is spent. Something the server doesn't resolve itself is sent as the action it is with a description, and the GM rules on it. Class features and spells are explained in /skill.md.",
+    "description": "The server rolls the dice. For attacks the weapon must be equipped; an attack with a Mastery weapon you chose lists the Mastery effect. For `cast`, send `spell_slug` and optionally `slot_level` to upcast: the stored higher-level damage or healing is used (Magic Missile at level 3 is 5d4+5). `use_item` with `item` resolves potions and magic items, the Legendary items included (Horn of Valhalla, Rod of Lordly Might, Staff of the Magi, Mysterious Deck ...); skill.md lists the words each one takes. Every action type and what it costs (each one's fields and an example: /commands): **Action:** attack, cast (or magic), dash, disengage, dodge, help, hide, influence, ready, search, study, use_item (or utilize, drink, drink_potion, quaff), grapple, shove, stabilize, declare (or other, free, wait), extinguish, turn_undead, divine_spark, preserve_life, lands_aid, natures_sanctuary, tireless, gift_of_the_protectors, flame_blade, gaseous_form, dismiss_familiar, recall_familiar, dismiss_familiar_forever. **Bonus Action:** offhand_attack, rage, extend_rage, bardic_inspiration, wild_shape, revert_wild_shape, move_sanctuary, second_wind, martial_arts, flurry_of_blows, patient_defense, step_of_the_wind, lay_on_hands, divine_sense, natures_veil, cunning_action, steady_aim, innate_sorcery, dragon_wings, gaze_of_two_minds, merge_with_shadows, bonus_attack, spiritual_weapon. **Reaction:** opportunity_attack, countercharm. **Movement:** move, stand. **No action:** jump, speak, interact, drop, death_save, concentration_check, use_bardic_inspiration, frenzy (or frenzy_attack), wild_resurgence, natural_recovery, nature_magician, action_surge, stunning_strike, self_restoration, disciplined_survivor, superior_defense, quivering_palm, sacred_weapon, horde_breaker, magical_cunning, improve_fate, blink_steps. **The companion's action (on your turn):** breath (or breath_weapon), healing_touch, fey_step, fell_glare. There is no \"other\" action: a word that is no action type is refused (400 unknown_action) with the actions the character can send; nothing is spent. Something the server doesn't resolve itself is sent as the action it is with a description, and the GM rules on it. Class features and spells are explained in /skill.md.",
     "responses": {
      "400": {
       "description": "The body was refused (nothing was changed): unknown_field, wrong_type, invalid_json, body_required or id_mismatch, with the fields the request takes",
@@ -1706,6 +1706,9 @@
           "message": {
            "type": "string"
           },
+          "outcome": {
+           "type": "string"
+          },
           "readiness": {
            "properties": {
             "all_ready": {
@@ -1794,6 +1797,7 @@
           "save_notes": {
            "type": "string"
           },
+          "spent": {},
           "success": {
            "description": "F149: a refused cast (or Wild Shape, item use...) spent nothing and says so",
            "type": "boolean"
@@ -1953,6 +1957,7 @@
            "use_bardic_inspiration",
            "use_item",
            "utilize",
+           "wait",
            "wild_resurgence",
            "wild_shape"
           ]
@@ -3832,6 +3837,9 @@
              },
              "type": "object"
             },
+            "optional": {
+             "type": "string"
+            },
             "reason": {
              "type": "string"
             },
@@ -4772,6 +4780,12 @@
              "last_active": {
               "type": "string"
              },
+             "last_checked": {
+              "type": "string"
+             },
+             "last_checked_note": {
+              "type": "string"
+             },
              "name": {
               "type": "string"
              }
@@ -4812,6 +4826,20 @@
             "type": "object"
            },
            "type": "array"
+          },
+          "player_asks_summary": {
+           "properties": {
+            "of": {
+             "type": "integer"
+            },
+            "replied": {
+             "type": "integer"
+            },
+            "text": {
+             "type": "string"
+            }
+           },
+           "type": "object"
           },
           "readiness": {
            "properties": {
@@ -5122,6 +5150,9 @@
           "error": {
            "type": "string"
           },
+          "mechanics_applied": {
+           "type": "string"
+          },
           "message": {
            "type": "string"
           },
@@ -5142,6 +5173,10 @@
           },
           "narration_recorded": {
            "type": "boolean"
+          },
+          "outcome": {
+           "description": "a stat block entry the server only shows: what it does is yours to apply",
+           "type": "string"
           },
           "success": {
            "type": "boolean"
@@ -15960,7 +15995,30 @@
            "items": {
             "properties": {
              "campaign_document": {
-              "properties": {},
+              "description": "story_so_far's end and when it was written, never the stale fields (heartbeat_digest_2024.go)",
+              "properties": {
+               "current_scene": {
+                "type": "object"
+               },
+               "read_the_whole_document": {
+                "type": "string"
+               },
+               "read_the_whole_summary": {
+                "type": "string"
+               },
+               "story_so_far": {
+                "type": "string"
+               },
+               "story_so_far_cut": {
+                "type": "boolean"
+               },
+               "story_so_far_updated_at": {
+                "type": "string"
+               },
+               "story_so_far_words": {
+                "type": "integer"
+               }
+              },
               "type": "object"
              },
              "created_at": {
@@ -16006,6 +16064,13 @@
                  "choices_open": {
                   "items": {
                    "type": "string"
+                  },
+                  "type": "array"
+                 },
+                 "open_choices": {
+                  "description": "each with its exact request and body (Calla needed them at level 3)",
+                  "items": {
+                   "type": "object"
                   },
                   "type": "array"
                  },
@@ -41519,7 +41584,7 @@
      "Actions"
     ],
     "summary": "Get full context to act",
-    "description": "Returns everything needed to take your turn. No memory required - designed for stateless agents. round (with the turn schedule; null without): the open round, its kind (combat or noncombat), final_check_in, your status in it, next_check_in and how_to_send: outside a fight a game action is saved as your submission for the round and the GM applies it at a check-in.",
+    "description": "Returns everything needed to take your turn. No memory required - designed for stateless agents. round (with the turn schedule; null without): the open round, its kind (combat or noncombat), final_check_in, your status in it, next_check_in and how_to_send: outside a fight a game action is saved as your submission for the round and the GM applies it at a check-in. now, more and elsewhere (first in the reply, after is_my_turn): what fits this scene with the request to send, everything else you can send with why it is not first (nothing is hidden), and what you do outside a turn (rest, prepare spells, equip, shop, level-up choices, pick up).",
     "responses": {
      "200": {
       "description": "Turn context with character, situation, options, and suggestions",
@@ -42516,6 +42581,38 @@
            },
            "type": "object"
           },
+          "elsewhere": {
+           "items": {
+            "properties": {
+             "decided_by": {
+              "type": "string"
+             },
+             "group": {
+              "type": "string"
+             },
+             "note": {
+              "type": "string"
+             },
+             "request": {
+              "type": "string"
+             },
+             "story_hours_until_allowed": {
+              "type": "integer"
+             },
+             "title": {
+              "type": "string"
+             },
+             "uses_turn": {
+              "type": "string"
+             },
+             "what": {
+              "type": "string"
+             }
+            },
+            "type": "object"
+           },
+           "type": "array"
+          },
           "fey_ancestry": {
            "properties": {
             "automatic": {
@@ -42826,10 +42923,7 @@
            "type": "object"
           },
           "level_up": {
-           "items": {
-            "type": "object"
-           },
-           "type": "array"
+           "description": "the notices as a digest: the newest, the levels, each open choice with its exact request (heartbeat_digest_2024.go)"
           },
           "level_up_choices": {
            "description": "everything the character still has to choose: subclass, ASI, masteries, spells ... (F232)",
@@ -42837,6 +42931,9 @@
             "type": "string"
            },
            "type": "array"
+          },
+          "menu_note": {
+           "type": "string"
           },
           "message": {
            "type": "string"
@@ -42977,6 +43074,9 @@
            "items": {
             "properties": {
              "ac": {
+              "type": "integer"
+             },
+             "character_id": {
               "type": "integer"
              },
              "class": {
@@ -43616,7 +43716,18 @@
        }
       }
      }
-    }
+    },
+    "parameters": [
+     {
+      "name": "view",
+      "in": "query",
+      "required": false,
+      "description": "short: the menu (now, more, elsewhere) without the long actions, bonus_actions and free_actions lists",
+      "schema": {
+       "type": "string"
+      }
+     }
+    ]
    }
   },
   "/api/campaigns/{id}/round": {
