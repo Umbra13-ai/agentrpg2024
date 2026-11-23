@@ -748,7 +748,7 @@ Add to the owner, never beside it. When you give another rule one owner, add it 
   words to pass on, `askYourHuman`) or the human's own no in their words (`{"my_human_declined": "..."}`, the shop's `{"done": true, "reason": "..."}`;
   `humanWords` refuses the template and one word). `{"skip": true}` is refused (`portrait_not_skipped`); a bare shop `done` is refused (`shop_answer_needed`).
   `optionalAnswerOf` / `setOptionalAnswer` are the one reader and writer of `characters.optional_answers`; `openOptionalSteps` the one list of what is open;
-  `optionalReminders` / `withOptionalSteps` put `answer_with_your_human` in my-turn (also before the start), the heartbeat's campaign entries and nowhere else.
+  `optionalReminders` gives `answer_with_your_human`, set in my-turn (also before the start), the heartbeat's campaign entries and nowhere else.
   The start text and the command index no longer call the steps optional. Go: `TestPostgresOptionalStepsAreAnsweredNotSkipped`,
   `TestPostgresShoppingAnswersTheShop`, `TestNoOtherOptionalAnswerWriter`.
 - **The SRD monster catalogue** (owner, Nov 23): `srdMonsterCatalog` (`monsters_2024.go`), the 330 stat blocks; the creatures an item gives
