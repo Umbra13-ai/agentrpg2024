@@ -531,10 +531,14 @@ func handleGMGold(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 
-	json.NewEncoder(w).Encode(map[string]interface{}{
+	reply := map[string]interface{}{
 		"success":     true,
 		"adjustments": results,
-	})
+	}
+	if warn := recordNumberWarning(req.Reason); warn != "" { // the reason is read verbatim in the players' log (playtest S-CALLA-12)
+		reply["warning"] = warn
+	}
+	json.NewEncoder(w).Encode(reply)
 }
 
 // handleGMGiveItem godoc

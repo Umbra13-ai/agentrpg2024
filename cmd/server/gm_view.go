@@ -11,6 +11,7 @@ import (
 	"encoding/json"
 	"net/http"
 	"regexp"
+	"strings"
 )
 
 // requestIsGM reports whether the caller is signed in and runs at least one campaign (or is a moderator).
@@ -139,10 +140,30 @@ func gmCombatants(turnOrderJSON []byte, lobbyID int) []map[string]interface{} {
 
 var revealsStats = regexp.MustCompile(`(?i)\b(?:AC|armor class)\s*(?:of\s*)?\d+\b|\b\d+\s*(?:hp|hit points)\b|\b(?:hp|hit points)\s*[:=]?\s*\d+\b|\bDC\s*\d+\b|\bthe (?:module|adventure|book) (?:says|gives|lists|calls for)\b`)
 
-// statLeakWarning warns a GM whose narration seems to give away a number players should not see.
-func statLeakWarning(narration string) string {
-	if revealsStats.MatchString(narration) {
-		return "Your narration seems to include an Armor Class, hit point number, DC or the module's own words. Players should learn only whether an attack hit or missed and how a creature looks (wounded, bloodied), and a task's difficulty in story terms (\"the chain looks old but thick\"), never an AC, exact hit points, a DC or what the module says. The narration was posted as written and stays in the log: a narration can't be edited or removed. If the number wasn't meant to be shown, post a corrected narration with POST /api/gm/narrate."
+// revealsRecordNumbers: the server's own record numbers in words a player reads ("narration 4709", "Millie's actual Search 5223",
+// "actual5160"): players cannot look them up and they read as leaked internal ids (playtest S-CALLA-12).
+var revealsRecordNumbers = regexp.MustCompile(`(?i)\b(?:narration|record|entry|action|actual\w*(?:\s+\w+)?|log)\s*#?\d{3,}\b`)
+
+// recordNumberWarning: "" or what to say to a GM whose text (a narration, the reason of a gold award) names a record by its number.
+// The one check, read by narrate and by the gold award's reply.
+func recordNumberWarning(text string) string {
+	if revealsRecordNumbers.MatchString(text) {
+		return "Your text names a record by its number (\"narration 4709\", \"actual 5223\"). Players cannot look those up and they read as leaked internal ids: say what the player did in words (\"Millie's Search\") and keep record numbers out of narration and gold reasons."
 	}
 	return ""
+}
+
+const statLeakStatsWarning = "Your narration seems to include an Armor Class, hit point number, DC or the module's own words. Players should learn only whether an attack hit or missed and how a creature looks (wounded, bloodied), and a task's difficulty in story terms (\"the chain looks old but thick\"), never an AC, exact hit points, a DC or what the module says. The narration was posted as written and stays in the log: a narration can't be edited or removed. If the number wasn't meant to be shown, post a corrected narration with POST /api/gm/narrate."
+
+// statLeakWarning warns a GM whose narration seems to give away a number players should not see: an Armor Class, Hit Points, a DC,
+// the module's own words, or a record number.
+func statLeakWarning(narration string) string {
+	warn := ""
+	if revealsStats.MatchString(narration) {
+		warn = statLeakStatsWarning
+	}
+	if w := recordNumberWarning(narration); w != "" {
+		warn = strings.TrimSpace(warn + " " + w)
+	}
+	return warn
 }

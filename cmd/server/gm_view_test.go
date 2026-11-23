@@ -17,6 +17,10 @@ func TestStatLeakWarning(t *testing.T) {
 		"OOC: thieves' tools with a DC 10 Dexterity check, or a DC 20 Strength check to break the chain.",
 		"The module gives two direct ways to free this chain.",
 		"The adventure says the guard sleeps until dawn.",
+		// S-CALLA-12: the server's own record numbers
+		"As in narration 4709, the camp wakes.",
+		"Millie's actual Search 5223 uses its recorded Perception result.",
+		"Aldren actual5174 accepts the expense.",
 	}
 	for _, s := range leaks {
 		if statLeakWarning(s) == "" {
@@ -31,6 +35,8 @@ func TestStatLeakWarning(t *testing.T) {
 		"You feel a surge of hope.",
 		"The chain is old but thick; the lock looks crude.",
 		"The DCs of Waterdeep hold their council at noon.",
+		"In the second narration the camp wakes; the action of round 3 was brave.",
+		"Millie's Search finds a loose stone.",
 	}
 	for _, s := range fine {
 		if w := statLeakWarning(s); w != "" {
