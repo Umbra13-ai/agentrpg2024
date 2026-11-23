@@ -189,6 +189,16 @@ func handleGMStatus(w http.ResponseWriter, r *http.Request) {
 	}
 	defer rows.Close()
 
+	agentOfCharacter := map[int]int{} // each character's player, for last_checked
+	if arows, aerr := db.Query(`SELECT id, COALESCE(agent_id, 0) FROM characters WHERE lobby_id = $1`, campaignID); aerr == nil {
+		for arows.Next() {
+			var cid, aid int
+			if arows.Scan(&cid, &aid) == nil {
+				agentOfCharacter[cid] = aid
+			}
+		}
+		arows.Close()
+	}
 	partyStatus := []map[string]interface{}{}
 	playerActivity := []map[string]interface{}{}
 	gmTasks := []string{}
@@ -246,6 +256,15 @@ func handleGMStatus(w http.ResponseWriter, r *http.Request) {
 		}
 		if active.Valid {
 			activityInfo["last_active"] = active.Time.UTC().Format(time.RFC3339)
+		}
+		// the last time this player looked at the campaign (a request, a chat line, a look at the game): "has not looked" is not "a request failed"
+		if t, ok, err := lastCheckedIn(campaignID, agentOfCharacter[id], id); err == nil {
+			if ok {
+				activityInfo["last_checked"] = t.UTC().Format(time.RFC3339)
+			} else {
+				activityInfo["last_checked"] = nil
+				activityInfo["last_checked_note"] = "has not looked at this campaign yet"
+			}
 		}
 		if isFollowingParty(lastActionAt, lastFollowingAt) {
 			if lastActionAt.Valid {
@@ -935,7 +954,8 @@ func handleGMStatus(w http.ResponseWriter, r *http.Request) {
 		if activePlayerCount >= 3 && actionsSinceCombat >= 5 {
 			response["battle_recommended"] = true
 			response["battle_guidance"] = map[string]interface{}{
-				"reason": fmt.Sprintf("%d players active in last 4 hours, %d actions since last combat — time to raise the stakes!", activePlayerCount, actionsSinceCombat),
+				"optional": "a suggestion: nothing is waiting on you for it, and it is yours to ignore (plan v2.1, S7)",
+				"reason":   fmt.Sprintf("%d players active in last 4 hours, %d actions since last combat — time to raise the stakes!", activePlayerCount, actionsSinceCombat),
 				"suggestions": []string{
 					"Introduce a threat that blocks their path forward",
 					"Have something attack while they're exploring/talking",
@@ -952,7 +972,7 @@ func handleGMStatus(w http.ResponseWriter, r *http.Request) {
 					},
 				},
 			}
-			gmTasks = append(gmTasks, "⚔️ Battle recommended! 3+ players active, consider introducing combat.")
+			gmTasks = append(gmTasks, "(Optional, nothing waits on it) Battle suggested: 3+ players active, consider introducing combat.")
 		} else if recentPlayerCount < 3 && recentPlayerCount > 0 {
 			// Dormancy mode: fewer than 3 players active in 12 hours
 			response["campaign_dormant"] = true
@@ -1016,7 +1036,14 @@ func handleGMStatus(w http.ResponseWriter, r *http.Request) {
 	}
 	if task, asks := gmAsksTask(campaignID); task != "" { // what the GM is waiting on players for (gm_asks_2024.go)
 		response["player_asks"] = asks
-		gmTasks = append(gmTasks, task)
+		replied := 0
+		for _, a := range asks {
+			if a.Answered {
+				replied++
+			}
+		}
+		response["player_asks_summary"] = map[string]interface{}{"replied": replied, "of": len(asks), "text": fmt.Sprintf("%d of %d replied", replied, len(asks))}
+		gmTasks = append(gmTasks, task+fmt.Sprintf(" (%d of %d replied.)", replied, len(asks)))
 	}
 	if task, items, snoozed, err := openItemsTask(campaignID); err != nil { // lasting mechanics the server can't run, until they end (gm_open_items_2024.go)
 		log.Printf("database error reading the open items: %v", err)
@@ -1623,6 +1650,13 @@ func handleGMNarrate(w http.ResponseWriter, r *http.Request) {
 			addGMNotice(campaignID, req.MonsterAction.Monster+": "+note)
 		}
 		response["monster_action_result"] = result
+		response["outcome"] = outcomeApplied
+		if _, ruled := response["monster_attack"]; !ruled && response["monster_effect"] == nil {
+			response["outcome"] = outcomeNeedsGM // a stat block entry the server only shows: what it does is yours to apply
+		}
+	} else if response["narration_recorded"] == true {
+		response["outcome"] = outcomeTextOnly
+		response["mechanics_applied"] = "none: a narration is text and changes no Hit Points, resources or conditions; apply what it did with the GM requests"
 	}
 
 	// Advance turn if requested: the one turn change (turn_advance_2024.go), with every hook of the turn that ends and the one that
