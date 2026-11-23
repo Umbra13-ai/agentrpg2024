@@ -196,8 +196,12 @@ func textVerdicts(kind string, e srdMonsterEntry) []sentenceVerdict {
 	case strings.HasPrefix(e.Name, "Spellcasting"):
 		return bySentence("monster spellcasting (resolveMonsterSpell)", func(s string) bool { return true }, "")
 	case isAttackEntry(e.Text):
+		row, use := entryActionRow(e), "fire"
+		if len(row.ChosenTypes) > 0 {
+			use = row.ChosenTypes[0]
+		}
 		a := parseMonsterAttack(e.Name, e.Text)
-		if _, problem := prepareMonsterAttack(a.monsterActionRow, "fire"); problem != "" {
+		if _, problem := prepareMonsterAttack(row, use); problem != "" {
 			return all("gm", "attack refused: "+problem)
 		}
 		uncharged, _ := chargeRewrite(e.Text, 0, true, func(string) bool { return true }) // the routes rewrite a charge before the residual

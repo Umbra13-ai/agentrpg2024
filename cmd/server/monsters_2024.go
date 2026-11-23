@@ -94,10 +94,13 @@ var (
 func oldStyleActions(entries []srdMonsterEntry) []map[string]interface{} {
 	out := []map[string]interface{}{}
 	for _, e := range entries {
-		parsed := parseMonsterAttack(e.Name, rulesText(e)) // the words an attached mechanic covers are its own (monster_mechanics_2024.go)
+		parsed := entryActionRow(e) // the entry's row with its attached mechanics (monster_mechanics_2024.go)
 		a := map[string]interface{}{"name": parsed.Name, "desc": parsed.Desc, "attack_bonus": parsed.AttackBonus, "damage_dice": parsed.DamageDice, "damage_type": parsed.DamageType}
 		if parsed.FlatDamage != nil {
 			a["flat_damage"] = *parsed.FlatDamage
+		}
+		if len(parsed.ChosenTypes) > 0 {
+			a["chosen_types"] = parsed.ChosenTypes
 		}
 
 		out = append(out, a)

@@ -123,6 +123,7 @@ var monsterTextPatterns = map[string]*regexp.Regexp{
 	"alternativeHeadRe":        alternativeHeadRe,        // monster_damage_choice_2024.go
 	"atkBonusRe":               atkBonusRe,               // monster_damage_choice_2024.go
 	"chosenTypeExtraRe":        chosenTypeExtraRe,        // monster_damage_choice_2024.go
+	"untypedAmountRe":          untypedAmountRe,          // monster_mechanics_2024.go
 	"damageBackRefRe":          damageBackRefRe,          // monster_damage_choice_2024.go
 	"damageClauseRe":           damageClauseRe,           // monster_damage_choice_2024.go
 	"damageConditionRe":        damageConditionRe,        // monster_damage_choice_2024.go

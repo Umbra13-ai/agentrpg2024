@@ -354,6 +354,13 @@ func rollStatBlockDamage(dice string, flat *int, crit bool) int {
 // prepareMonsterAttack refuses missing, malformed or unsupported damage before
 // any roll, HP change or effects. The use choice must be one of the stat block's types.
 func prepareMonsterAttack(a monsterActionRow, use string) (monsterActionRow, string) {
+	if len(a.ChosenTypes) > 0 { // the GM picks the type from the entry's list (a chosen_damage_type mechanic, monster_mechanics_2024.go)
+		desc, problem := withListedDamageType(a.Name, a.Desc, a.ChosenTypes, use)
+		if problem != "" {
+			return a, problem
+		}
+		a.Desc = desc
+	}
 	if strings.Contains(a.Desc, "Hit:") {
 		parsed := parseMonsterAttack(a.Name, a.Desc)
 		if parsed.Problem != "" {
@@ -403,7 +410,7 @@ func preflightMonsterAction(meta *monsterMeta, name, use string, declared []stri
 	}
 	rows := make([]monsterActionRow, 0, len(meta.Actions))
 	for _, entry := range meta.Actions {
-		rows = append(rows, parseMonsterAttack(entry.Name, rulesText(entry)).monsterActionRow)
+		rows = append(rows, entryActionRow(entry))
 	}
 
 	for _, a := range rows {

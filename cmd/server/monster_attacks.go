@@ -28,6 +28,9 @@ type monsterActionRow struct {
 	DamageDice  string `json:"damage_dice"`
 	DamageType  string `json:"damage_type"`
 	Desc        string `json:"desc"`
+	// ChosenTypes: the damage types the GM picks from in use for the untyped amounts of the Hit (a chosen_damage_type mechanic,
+	// monster_mechanics_2024.go); prepareMonsterAttack writes the pick in.
+	ChosenTypes []string `json:"chosen_types,omitempty"`
 	// Alts: "..., or 18 (4d6 + 4) Piercing damage if the chimera had Advantage on the attack roll": the damage that replaces the
 	// primary one when its condition holds (parsed from Desc by parseMonsterAttack, never stored).
 	Alts []damageAlt `json:"-"`

@@ -161,7 +161,7 @@ func validateCustomMonster(m srdMonster2024) string {
 	// text the engine cannot resolve is not an import error: the attack is refused when it is made and the GM resolves it.
 	rows := make([]monsterActionRow, 0, len(m.Actions))
 	for _, e := range m.Actions {
-		rows = append(rows, parseMonsterAttack(e.Name, rulesText(e)).monsterActionRow)
+		rows = append(rows, entryActionRow(e))
 	}
 	for _, e := range m.Actions {
 		if strings.EqualFold(stripUsage(e.Name), "Multiattack") {

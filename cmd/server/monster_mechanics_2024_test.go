@@ -68,11 +68,11 @@ func TestMechanicProblems(t *testing.T) {
 	}
 	for _, k := range mechanicCatalog {
 		b, _ := json.Marshal(k.Example)
-		e := srdMonsterEntry{Name: "Example", Text: ashClawText, Mechanics: mechanicsFromJSON(t, "["+string(b)+"]")}
+		e := srdMonsterEntry{Name: "Example", Text: k.ExampleOn, Mechanics: mechanicsFromJSON(t, "["+string(b)+"]")}
 		if p := mechanicProblem("action", e); p != "" {
 			t.Errorf("the catalogue's own example of %s is refused: %s", k.Kind, p)
 		}
-		if k.describe == nil || k.Does == "" || k.AppliedBy == "" {
+		if k.describe == nil || k.Does == "" || k.AppliedBy == "" || mechanicFits[k.On].Check == nil {
 			t.Errorf("%s: every row says what it does, who applies it and how it reads attached", k.Kind)
 		}
 	}
@@ -255,5 +255,111 @@ func TestPostgresMechanicsInPreviewAndCatalogue(t *testing.T) {
 	}
 	if c, _ = pgCall(t, "GET", "/api/gm/compendium/mechanics?srd=Not%20A%20Monster", gm, nil); c != 404 {
 		t.Errorf("an unknown SRD name: %d", c)
+	}
+}
+
+const (
+	spitText   = "Ranged Attack Roll: +60, range 60 ft. Hit: 9 (2d8) damage of a type it chooses: Acid, Cold, or Fire."
+	spitCovers = "of a type it chooses: Acid, Cold, or Fire"
+	glareText  = "The watcher glances at one creature it can see within 60 feet (roll a die; reroll an effect already used this turn): Frost Glance. " +
+		"Constitution Saving Throw: DC 30. Failure: 9 (2d8) Cold damage. Ember Glance. Dexterity Saving Throw: DC 30. Failure: 9 (2d8) Fire damage."
+	glareCovers = "(roll a die; reroll an effect already used this turn)"
+)
+
+func spit() srdMonsterEntry {
+	return srdMonsterEntry{Name: "Prism Spit", Text: spitText, Mechanics: []entryMechanic{{"kind": "chosen_damage_type", "types": []interface{}{"Acid", "cold", "FIRE"}, "covers": spitCovers}}}
+}
+
+func glare() srdMonsterEntry {
+	return srdMonsterEntry{Name: "Twin Glance", Text: glareText, Mechanics: []entryMechanic{{"kind": "random_choice", "note": "reroll an effect already used this turn", "covers": glareCovers}}}
+}
+
+// TestChosenTypeAndRandomChoiceProblems: the entry checks and list parameters of the two kinds; the rows they make.
+func TestChosenTypeAndRandomChoiceProblems(t *testing.T) {
+	cases := []struct{ text, mechanics, want string }{
+		{spitText, `[{"kind":"chosen_damage_type","types":["acid","cold"],"covers":"of a type it chooses: Acid, Cold, or Fire"}]`, ""},
+		{spitText, `[{"kind":"chosen_damage_type","types":["acid"],"covers":"of a type it chooses: Acid, Cold, or Fire"}]`, "types must be a list of 2 or more"},
+		{spitText, `[{"kind":"chosen_damage_type","types":["acid","sonic"],"covers":"of a type it chooses: Acid, Cold, or Fire"}]`, "types[1] must be one of"},
+		{spitText, `[{"kind":"chosen_damage_type","types":["acid","Acid"],"covers":"of a type it chooses: Acid, Cold, or Fire"}]`, "each once"},
+		{ashClawText, `[{"kind":"chosen_damage_type","types":["acid","cold"]}]`, "the Hit has no damage amount without a type"},
+		{glareText, `[{"kind":"random_choice"}]`, ""},
+		{glareText, `[{"kind":"random_choice","order":["Ember Glance","frost glance"]}]`, ""},
+		{glareText, `[{"kind":"random_choice","order":["Ember Glance"]}]`, "order must be a list of every one once of: Frost Glance, Ember Glance"},
+		{glareText, `[{"kind":"random_choice","order":["Ember Glance","Ember Glance"]}]`, "each once"},
+		{ashClawText, `[{"kind":"random_choice"}]`, "attaches to an entry that offers two or more named effects"},
+		{glareText, `[{"kind":"chosen_damage_type","types":["acid","cold"]}]`, "attaches to an entry with an attack roll"},
+	}
+	for _, c := range cases {
+		got := mechanicProblem("action", srdMonsterEntry{Name: "x", Text: c.text, Mechanics: mechanicsFromJSON(t, c.mechanics)})
+		if (c.want == "") != (got == "") || !strings.Contains(got, c.want) {
+			t.Errorf("%s: got %q, want %q", c.mechanics, got, c.want)
+		}
+	}
+	if mechanicProblem("reaction", glare()) == "" {
+		t.Error("random_choice on a Reaction")
+	}
+	e := spit()
+	if p := mechanicProblem("action", e); p != "" {
+		t.Fatal(p)
+	}
+	row := entryActionRow(e)
+	if strings.Join(row.ChosenTypes, ",") != "acid,cold,fire" || !strings.HasSuffix(row.Desc, "9 (2d8) damage.") {
+		t.Fatalf("row: %+v", row)
+	}
+	if _, problem := prepareMonsterAttack(row, ""); !strings.Contains(problem, "name one in use (acid, cold, fire). Nothing was rolled") {
+		t.Errorf("no type named: %q", problem)
+	}
+	if _, problem := prepareMonsterAttack(row, "force"); problem == "" {
+		t.Error("a type not on the list was taken")
+	}
+	if got, problem := prepareMonsterAttack(row, "Cold"); problem != "" || !strings.EqualFold(got.DamageType, "cold") || got.DamageDice != "2d8" {
+		t.Errorf("cold: %+v %q", got, problem)
+	}
+	for _, v := range entryVerdicts("action", e) {
+		if v.Status != "applied" {
+			t.Errorf("Prism Spit sentence not applied: %+v", v)
+		}
+	}
+}
+
+// TestPostgresChosenTypeAndRandomChoiceInPlay: the GM's type through narrate (refused until named, then dealt as that type), and the
+// rolled effect when use names none (named, it is the one named).
+func TestPostgresChosenTypeAndRandomChoiceInPlay(t *testing.T) {
+	testPostgres(t)
+	gm, _, camp, hero, watcher := earlyRulesFixture(t, "Test Prism Watcher", []srdMonsterEntry{spit(), glare()})
+	hp := func() int {
+		var n int
+		db.QueryRow(`SELECT hp FROM characters WHERE id=$1`, hero).Scan(&n)
+		return n
+	}
+	if c, line := narrateAs(t, gm, camp, watcher, "Prism Spit", fmt.Sprint(hero), ""); c < 400 || hp() != 1000 || strings.Contains(line, "HIT") {
+		t.Fatalf("no type named: %d %s (hp %d)", c, line, hp())
+	}
+	if c, _ := narrateAs(t, gm, camp, watcher, "Prism Spit", fmt.Sprint(hero), "force"); c < 400 || hp() != 1000 {
+		t.Fatalf("a type off the list: %d", c)
+	}
+	if _, line := narrateHit(t, gm, camp, watcher, "Prism Spit", fmt.Sprint(hero), "cold"); !strings.Contains(strings.ToLower(line), "cold damage") || hp() >= 1000 {
+		t.Fatalf("cold: %s", line)
+	}
+	seen := map[string]bool{}
+	for i := 0; i < 30 && len(seen) < 2; i++ {
+		c, line := narrateAs(t, gm, camp, watcher, "Twin Glance", fmt.Sprint(hero), "")
+		if c != 200 || !strings.Contains(line, "Twin Glance: rolled 1d2 = ") || !strings.Contains(line, "reroll an effect already used this turn") || strings.Contains(line, "Name the one") {
+			t.Fatalf("rolled glance: %d %s", c, line)
+		}
+		for _, n := range []string{"Frost Glance", "Ember Glance"} {
+			if strings.Contains(line, "rolled 1d2 = 1: "+n) || strings.Contains(line, "rolled 1d2 = 2: "+n) {
+				seen[n] = true
+			}
+		}
+	}
+	if len(seen) != 2 {
+		t.Errorf("both effects should come up in 30 rolls: %v", seen)
+	}
+	if _, line := narrateAs(t, gm, camp, watcher, "Twin Glance", fmt.Sprint(hero), "Ember Glance"); strings.Contains(line, "rolled 1d2") || !strings.Contains(line, "Ember Glance") {
+		t.Errorf("named in use: %s", line)
+	}
+	if c, _ := narrateAs(t, gm, camp, watcher, "Twin Glance", fmt.Sprint(hero), "Sun Glance"); c < 400 {
+		t.Errorf("a use that names no effect: %d", c)
 	}
 }

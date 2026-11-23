@@ -42295,6 +42295,9 @@
              "example": {
               "type": "object"
              },
+             "example_entry_text": {
+              "type": "string"
+             },
              "kind": {
               "type": "string"
              },
@@ -42313,6 +42316,9 @@
                 "min": {
                  "type": "integer"
                 },
+                "min_items": {
+                 "type": "integer"
+                },
                 "name": {
                  "type": "string"
                 },
@@ -42322,12 +42328,7 @@
                 "only_with": {
                  "type": "string"
                 },
-                "options": {
-                 "items": {
-                  "type": "string"
-                 },
-                 "type": "array"
-                },
+                "options": {},
                 "required": {
                  "type": "boolean"
                 },

@@ -1779,6 +1779,10 @@ func resolveMonsterEffectText(r *http.Request, lobbyID, monsterID int, meta *mon
 				chosen = i
 			}
 		}
+		rolled := ""
+		if chosen < 0 && strings.TrimSpace(use) == "" { // an attached random_choice rolls for it (monster_mechanics_2024.go)
+			chosen, rolled = rollForOption(meta, entryName, opts)
+		}
 		if chosen < 0 {
 			names := make([]string, len(opts))
 			for i, o := range opts {
@@ -1787,6 +1791,9 @@ func resolveMonsterEffectText(r *http.Request, lobbyID, monsterID int, meta *mon
 			return append(blockedBeforeRoll(r, fmt.Sprintf("%s offers %d effects (%s). Name the one that happened in use (the GM rolls or picks it as the text says). Nothing was rolled.", entryName, len(opts), strings.Join(names, ", "))), notes...)
 		}
 		lines := resolveMonsterEffectText(r, lobbyID, monsterID, meta, entryName+": "+opts[chosen].Name, opts[chosen].Text, targets, "", apply, depth+1)
+		if rolled != "" { // the roll first, then what it did
+			lines = append([]string{rolled}, lines...)
+		}
 		if intro := saveOptionsIntro(text, opts); intro != "" {
 			if apply {
 				monsterHandoverEntry(lobbyID, monsterID, entryName, intro, targets) // a lasting remainder is the GM's open item (gm_handover_2024.go)
