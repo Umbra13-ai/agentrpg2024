@@ -43,7 +43,8 @@ func handleSiteAsset(w http.ResponseWriter, r *http.Request) {
 //     view being read is marked active by its Match paths. footerLinks: the site's other pages, in the footer.
 //   - designCSS (site_design_css_2024.go): the mock-up's stylesheet as it is; siteCSS: what the real site adds (links, the touch
 //     targets, the text pages' typography in .prose, the footer's links).
-//   - the mock-up's top bar (brand, navigation, theme select, Agent Quickstart), its Agent Quickstart modal (quickstartModal: the
+//   - the mock-up's top bar (brand, navigation, Agent Quickstart on its right; no theme select until a settings area holds it: every
+//     page shows the default theme), its Agent Quickstart modal (quickstartModal: the
 //     server's real start, start_2024.go), its toast and its footer line.
 // framePage puts a page into it: wrapView for a view of the design (Live Table, Campaigns, Character, Universe, Commands & API), whose
 // markup is the mock-up's own; wrapHTML for a text page (about, how it works, the guide, the universe's lists), its content in
@@ -107,11 +108,14 @@ a.party-card { display: block; }
 .hidden-by-filter { display: none !important; }
 /* a touch screen: every control at least 40 px */
 @media (max-width: 1023px), (pointer: coarse) {
-  .btn, .btn-sm, .pill-btn, .theme-select, .nav-btn, .accordion-btn { min-height: 40px; }
+  .btn, .btn-sm, .pill-btn, .nav-btn, .accordion-btn { min-height: 40px; }
   .mobile-nav-btn { min-height: 46px; }
   a.brand, a.solo-link { display: inline-flex; align-items: center; min-height: 40px; min-width: 1.75rem; }
 }
 @media (max-width: 420px) { .topbar-actions #open-quickstart-btn { padding-left: 0.6rem; padding-right: 0.6rem; } }
+/* Agent Quickstart stays at the top bar's right, on the brand's line down to 320 px (the title a little smaller under 360 px) */
+.topbar-actions { margin-left: auto; }
+@media (max-width: 359px) { .brand-title { font-size: 1.1rem; } }
 /* the footer's links */
 .site-footer-links { display: flex; flex-wrap: wrap; justify-content: center; gap: 0 0.9rem; margin-bottom: 0.35rem; }
 .site-footer-links a { display: inline-flex; align-items: center; min-height: 40px; padding: 0 0.25rem; }
@@ -147,7 +151,7 @@ a.party-card { display: block; }
 .skill-code { max-height: 400px; overflow-y: auto; }
 `
 
-// siteScript: the theme (kept in this browser; a theme saved before the rework still applies), the active view, the Agent Quickstart
+// siteScript: the active view, the Agent Quickstart
 // modal and its Copy cURL, the toast. Every storage call is in a try.
 var siteScript = `<script>
 function showToast(msg) {
@@ -166,10 +170,6 @@ function attackLine(name, d) {
   d = d.replace(/,? one target\. Hit:\s*/, ', ').replace(/ damage\.$/, '').replace(/\.$/, '');
   return name + ': ' + d;
 }
-function setTheme(t) {
-  document.documentElement.setAttribute('data-theme', t);
-  try { localStorage.setItem('theme', t); } catch (e) {}
-}
 function copyText(text, label) {
   function done() { showToast(label + ' copied'); }
   function fallback() {
@@ -180,18 +180,6 @@ function copyText(text, label) {
   if (navigator.clipboard && navigator.clipboard.writeText) { navigator.clipboard.writeText(text).then(done, fallback); } else { fallback(); }
 }
 (function () {
-  var saved = null;
-  try { saved = localStorage.getItem('theme') || localStorage.getItem('agent_rpg_theme'); } catch (e) {}
-  if (saved) document.documentElement.setAttribute('data-theme', saved);
-  var sel = document.getElementById('theme-select');
-  if (sel) {
-    var t = saved || '` + defaultTheme + `';
-    if (!Array.prototype.some.call(sel.options, function (o) { return o.value === t; })) {
-      var o = document.createElement('option'); o.value = t; o.textContent = t; sel.appendChild(o);
-    }
-    sel.value = t;
-    sel.addEventListener('change', function () { setTheme(sel.value); });
-  }
   // a link that is its block's whole text (a list's entry, a "back" line) is a control, not a word in a sentence: on a touch screen
   // it gets the 40 px of a control (siteCSS: a.solo-link)
   document.querySelectorAll('main a[href]').forEach(function (a) {
@@ -279,7 +267,6 @@ func init() {
       </a>
       <nav class="desktop-nav" aria-label="Main navigation">` + desktop + `</nav>
       <div class="topbar-actions">
-        ` + themeMenu() + `
         <button class="btn btn-gold btn-sm" id="open-quickstart-btn">Agent Quickstart</button>
       </div>
     </div>

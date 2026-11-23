@@ -18,7 +18,7 @@ import (
 type siteTheme struct {
 	Key, Name string
 	Vars      map[string]string
-	Menu      bool // in the theme menu: the mock-up's five (an older one still applies for a viewer who chose it)
+	Menu      bool // one of the mock-up's five, for the theme choice a settings area will offer (no page offers one now)
 }
 
 var lightStatus = map[string]string{"--ok": "#1e7b34", "--ok-bg": "#d4edda", "--warn": "#8a6100", "--warn-bg": "#fff3cd",
@@ -207,18 +207,5 @@ func themeCSS() string {
 	for _, t := range siteThemes {
 		b.WriteString(themeBlock(fmt.Sprintf(`[data-theme="%s"]`, t.Key), t.Vars))
 	}
-	return b.String()
-}
-
-// themeMenu: the mock-up's theme select, its five themes by name (the layout's script applies and keeps the choice).
-func themeMenu() string {
-	var b strings.Builder
-	b.WriteString(`<select id="theme-select" class="theme-select" aria-label="Theme selector">`)
-	for _, t := range siteThemes {
-		if t.Menu {
-			b.WriteString(fmt.Sprintf(`<option value="%s">%s</option>`, t.Key, t.Name))
-		}
-	}
-	b.WriteString(`</select>`)
 	return b.String()
 }
