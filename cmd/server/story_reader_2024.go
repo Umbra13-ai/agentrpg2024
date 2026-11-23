@@ -2,7 +2,7 @@ package main
 
 // The Campaign Story Reader (owner, Nov 23; mock-up data/ui_preview/story-reader-2026-11-23/index.html): GET /campaign/{id}/story, the
 // campaign's log read as a book so a human can follow the story their AI is playing. The reader is the mock-up's: a sticky bar with the
-// progress, Page Flip and Scroll modes, a chapters-and-bookmarks drawer, text size, a rolls toggle (Show rolls / Hide rolls) and one Aa button with a text-size slider; its place, bookmarks and
+// progress, Page Flip and Scroll modes, a chapters-and-bookmarks drawer, text size, a rolls toggle that says its state (Rolls shown / Rolls hidden), one Aa button with a text-size slider and one Flip|Scroll switch (Flip by default); its place, bookmarks and
 // settings are kept in the browser (per campaign). The site's theme menu replaces the mock-up's own four theme buttons.
 //
 // The story is made from the action log (readActions, the one reader of it), never from a copy: `storyPassages` says which records are the
@@ -269,23 +269,22 @@ func storyReaderMarkup(campaignID int, name, gmName string, total int, withBack 
         <div id="topbar-subtitle" style="font-size:0.78rem; color:var(--text-secondary); margin-top:0.1rem;"></div>
       </div>
       <div style="display:flex; align-items:center; gap:0.4rem; flex-wrap:wrap;">
-        <button class="pill-btn" id="btn-toc" type="button">📑 Parts</button>
-        <button class="pill-btn" id="btn-mode-flip" type="button">📖 Flip</button>
-        <button class="pill-btn" id="btn-mode-scroll" type="button">📜 Scroll</button>
+        <button class="pill-btn" id="btn-toc" type="button">Contents</button>
+        <span class="mode-seg" role="group" aria-label="Reading mode"><button class="pill-btn" id="btn-mode-flip" type="button">Flip</button><button class="pill-btn" id="btn-mode-scroll" type="button">Scroll</button></span>
+        <span class="size-wrap">
+          <button class="pill-btn" id="btn-size" type="button" aria-haspopup="true" aria-expanded="false" aria-label="Text size">Aa</button>
+          <span class="size-pop hidden" id="size-pop"><span class="size-small" aria-hidden="true">A</span><input class="size-range" id="size-range" type="range" min="0" max="2" step="1" value="1" aria-label="Text size: small, medium or large" /><span class="size-big" aria-hidden="true">A</span></span>
+        </span>
+        <button class="pill-btn active" id="btn-dice-toggle" type="button" aria-pressed="true">🎲 Rolls shown</button>
       </div>
     </div>
     <div class="reader-progress-track" title="Campaign Reading Progress"><div class="reader-progress-fill" id="reader-progress-fill" style="width: 0%;"></div></div>
   </header>
   ` + note + `
   <div class="reader-controls">
-    <button class="pill-btn active" id="btn-dice-toggle" type="button">🎲 Hide rolls</button>
-    <span class="size-wrap">
-      <button class="pill-btn" id="btn-size" type="button" aria-haspopup="true" aria-expanded="false" aria-label="Text size">Aa</button>
-      <span class="size-pop hidden" id="size-pop"><span class="size-small" aria-hidden="true">A</span><input class="size-range" id="size-range" type="range" min="0" max="2" step="1" value="1" aria-label="Text size: small, medium or large" /><span class="size-big" aria-hidden="true">A</span></span>
-    </span>
-    <button class="pill-btn hidden" id="btn-new" type="button"></button>
-    <button class="pill-btn" id="btn-latest" type="button">📍 Latest</button>
-    <button class="pill-btn" id="btn-refresh" type="button" title="Reload to see what has been played since">↻ Refresh</button>
+    <button class="pill-btn hidden" id="btn-new" type="button">View unread</button>
+    <button class="pill-btn" id="btn-latest" type="button">See latest</button>
+    <button class="pill-btn" id="btn-refresh" type="button" title="Reload to see what has been played since">Refresh</button>
   </div>
   <section id="flip-container">
     <div class="book-stage" id="book-stage"><article class="book-page" id="book-page"></article></div>
@@ -304,13 +303,13 @@ func storyReaderMarkup(campaignID int, name, gmName string, total int, withBack 
   <p style="color:var(--text-secondary); margin-top:0.4rem;">The story has not begun yet. When the GM narrates and the players act, it is written here as a book.</p>
 ` + back + `
 </div>
-<div class="toc-backdrop hidden" id="toc-backdrop" role="dialog" aria-modal="true" aria-label="Parts and Bookmarks">
+<div class="toc-backdrop hidden" id="toc-backdrop" role="dialog" aria-modal="true" aria-label="Contents and Bookmarks">
   <div class="toc-drawer">
     <div style="display:flex; align-items:center; justify-content:space-between; border-bottom:1px solid var(--border-subtle); padding-bottom:0.65rem;">
       <h2 class="font-rpg" style="font-size:1.05rem; color:var(--accent-gold);">Campaign Chronicle</h2>
       <button class="btn btn-ghost" id="btn-close-toc" type="button">Close</button>
     </div>
-    <div><div style="font-size:0.75rem; font-weight:700; color:var(--text-muted); text-transform:uppercase; letter-spacing:0.06em; margin-bottom:0.45rem;">Parts</div>
+    <div><div style="font-size:0.75rem; font-weight:700; color:var(--text-muted); text-transform:uppercase; letter-spacing:0.06em; margin-bottom:0.45rem;">Contents</div>
       <div id="toc-chapters" style="display:flex; flex-direction:column; gap:0.45rem;"></div></div>
     <div><div style="font-size:0.75rem; font-weight:700; color:var(--text-muted); text-transform:uppercase; letter-spacing:0.06em; margin-bottom:0.45rem;">Starred Bookmarks</div>
       <div id="toc-bookmarks" style="display:flex; flex-direction:column; gap:0.45rem;"></div></div>

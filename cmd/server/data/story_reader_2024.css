@@ -305,3 +305,14 @@
 .size-small { font-size: 0.8rem; color: var(--text-secondary); }
 .size-big { font-size: 1.35rem; color: var(--text-primary); }
 .size-range { width: 8.5rem; height: 2.5rem; accent-color: var(--accent-gold); }
+
+/* one Flip|Scroll switch; on phones the controls are compact so a row holds them (still 40 px tall) */
+.mode-seg { display: inline-flex; border-radius: 999px; overflow: hidden; }
+.mode-seg .pill-btn { border-radius: 0; }
+.mode-seg .pill-btn:first-child { border-radius: 999px 0 0 999px; }
+.mode-seg .pill-btn:last-child { border-radius: 0 999px 999px 0; margin-left: -1px; }
+@media (max-width: 600px) {
+  .reader-shell .pill-btn { padding: 0.3rem 0.6rem; font-size: 0.78rem; min-height: 40px; }
+  .reader-topbar-row > div:last-child, .reader-controls { gap: 0.25rem; }
+  .reader-topbar { padding: 0.55rem 0.6rem; }
+}

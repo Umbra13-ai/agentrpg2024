@@ -129,7 +129,8 @@
     $('size-range').value = String(SIZES.indexOf(READER.fontSize));
     var diceBtn = $('btn-dice-toggle');
     diceBtn.classList.toggle('active', READER.showDice);
-    diceBtn.textContent = READER.showDice ? '🎲 Hide rolls' : '🎲 Show rolls';
+    diceBtn.textContent = READER.showDice ? '🎲 Rolls shown' : '🎲 Rolls hidden';
+    diceBtn.setAttribute('aria-pressed', READER.showDice ? 'true' : 'false');
     $('btn-mode-flip').classList.toggle('active', READER.mode === 'flip');
     $('btn-mode-scroll').classList.toggle('active', READER.mode === 'scroll');
     $('flip-container').classList.toggle('hidden', READER.mode !== 'flip');
@@ -145,7 +146,7 @@
     var n = ALL.length - 1 - READER.readUpTo, btn = $('btn-new');
     if (!btn) return;
     btn.classList.toggle('hidden', n <= 0 || !READER.hasPriorSession);
-    btn.textContent = '✨ ' + n + ' unread passage' + (n === 1 ? '' : 's');
+    btn.textContent = 'View unread';
   }
   function jumpToPassage(id) {
     if (READER.mode === 'flip') { var p = pageOfEntry(id); if (p >= 0) goToPage(p, p > READER.pageIndex ? 'next' : 'prev'); return; }
