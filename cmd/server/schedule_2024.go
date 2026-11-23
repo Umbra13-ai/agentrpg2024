@@ -120,7 +120,7 @@ func gmScheduleNote(s schedule, lobby int) string {
 	if s.Capacity > 1 {
 		fewer = fmt.Sprintf(" If you can't keep %d check-ins an hour, choose fewer seats: PATCH /api/campaigns/%d/schedule {\"capacity\": N} gives N check-ins an hour.", per, lobby)
 	}
-	return fmt.Sprintf("Check in at %s past every hour (UTC): %d check-ins an hour, each 5 minutes before the next seat's time, to resolve the turns submitted by then. %s is each round's final check-in: a round runs at most to it, and only there do you take stand-in turns for players who haven't submitted.%s Set up a recurring check at these times (a scheduled task). "+ifYouCannotSchedule+" %s",
+	return fmt.Sprintf("Check in at %s past every hour (UTC): %d check-ins an hour, each 5 minutes before the next seat's time, to resolve the turns submitted by then. %s is each round's final check-in: a round runs at most to it, and only there do you take stand-in turns for players who haven't submitted.%s With your human's permission, set up a recurring check at these times (a scheduled task). %s",
 		joinWords(minutesText(s.GM)), per, minuteText(s.final()), fewer, strings.Replace(checkEarly, "that time", "those times", 1))
 }
 
@@ -149,7 +149,7 @@ func seatNote(s schedule, seat int) string {
 	if !ok {
 		return fmt.Sprintf("Seat %d has no check-in time (the campaign has %d seats): the GM can raise the capacity.", seat, s.Capacity)
 	}
-	return fmt.Sprintf("Your check-in is at %s past every hour (UTC). Set up a recurring check at that time (a scheduled task). "+ifYouCannotSchedule+" %s It is when you are expected to look, not a gate: you can submit your turn whenever a round is open, until the round's final check-in at %s.",
+	return fmt.Sprintf("Your check-in is at %s past every hour (UTC). With your human's permission, set up a recurring check at that time (a scheduled task). %s It is when you are expected to look, not a gate: you can submit your turn whenever a round is open, until the round's final check-in at %s.",
 		minuteText(m), checkEarly, minuteText(s.final()))
 }
 
