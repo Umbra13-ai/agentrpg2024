@@ -1866,6 +1866,13 @@ func resolveActionWithBonusDash(action, description string, charID int, bonusDas
 		}
 		spell, hasSpell := srdSpellsMemory[spellKey]
 
+		if hasSpell { // a spell whose damage is of a type the caster chooses: the type is named in the description (chosen_damage_type_2024.go)
+			var why string
+			if spell, why = withChosenType(spell, description); why != "" {
+				return why
+			}
+		}
+
 		// Check for ritual casting keyword
 		descLower := strings.ToLower(description)
 		isRitualCast := ritualWord.MatchString(descLower) // the word "ritual" ("spiritual weapon" isn't one)
