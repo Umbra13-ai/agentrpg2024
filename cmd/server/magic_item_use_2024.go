@@ -852,6 +852,9 @@ func isPotion(it invItem) bool {
 	if strings.HasPrefix(n, "potion") || strings.HasPrefix(n, "elixir") || strings.HasPrefix(n, "philter") || strings.HasPrefix(n, "oil of") {
 		return true
 	}
+	if _, made := spellItemOf(it); made { // a spell's consumable (Goodberry: spell_created_items_2024.go) is used as a potion is
+		return true
+	}
 	u := itemUseFor(it)
 	return u != nil && u.Potion
 }
@@ -1481,6 +1484,10 @@ func useItemAction(charID int, description string) string {
 	if isPotion(it) {
 		lobby := lobbyOfChar(charID)
 		target := req.Target
+		if _, made := spellItemOf(it); made && !spellItemLive(it) { // the spell has ended: its items are gone
+			sweepSpellItems(charID)
+			return featureRefusal("the "+name, "the spell that made it has ended, and it disappeared with it")
+		}
 		if target != 0 && target != charID {
 			if lobbyOfChar(target) != lobby || lobby == 0 {
 				return "Cannot use the " + name + " on that creature: give a potion to a character of your campaign within 5 feet. Nothing was spent."
@@ -1501,6 +1508,9 @@ func useItemAction(charID int, description string) string {
 		})
 		if !used {
 			return "Cannot use the " + name + ": it is no longer in your inventory. Nothing was spent."
+		}
+		if _, made := spellItemOf(it); made {
+			return useSpellItem(lobby, charID, target, it) // spell_created_items_2024.go
 		}
 		return usePotion(lobby, charID, target, it)
 	}

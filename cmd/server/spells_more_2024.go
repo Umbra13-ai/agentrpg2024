@@ -51,6 +51,7 @@ var moreSpells = map[string]buffSpell{
 	"divine-word":              {"divine_word", 0, false, nil},
 	"blink":                    {"blink", 10, true, nil},
 	"darkvision":               {"darkvision", 4800, false, nil},
+	"goodberry":                {"goodberry", 14400, false, nil},
 	"enlarge-reduce":           {"enlarge_reduce", 10, false, nil},
 	"expeditious-retreat":      {"expeditious_retreat", 100, true, nil},
 	"feather-fall":             {"feather_fall", 10, false, func(int) int { return 5 }},
@@ -325,6 +326,10 @@ func resolveMoreSpell(charID, lobby int, spell SRDSpell, key string, slot, saveD
 			heal = fmt.Sprintf("%s regains %d Hit Points (the GM updates the monster)", creatureName(lobby, target), n)
 		}
 		out = heal + hl.Info + ". For 1 hour it regains 1 Hit Point at the start of each of its turns, and severed body parts regrow after 2 minutes." + hl.Blessed
+	case "goodberry": // the berries are items of the caster's inventory, gone when the spell ends (spell_created_items_2024.go)
+		token := newItemID("gb")
+		add(charID, token)
+		out = createSpellItems(charID, key, token)
 	case "darkvision":
 		add(ids[0], "")
 		out = fmt.Sprintf("For 8 hours %s has Darkvision with a range of 150 feet.", who)
