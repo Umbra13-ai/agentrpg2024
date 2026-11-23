@@ -286,6 +286,20 @@ function portraitCard(id,name){var s=section('Portrait',true);
   var rm=el('button',{'class':'btn danger'},'Remove portrait');
   rm.onclick=function(){if(confirm('Remove the portrait of '+name+'?'))api('DELETE','/api/admin/characters/'+id+'/portrait').then(function(r){toast(r.message);show()}).catch(fail)};
   add(s,img,none,f,add(el('div',{'class':'row'}),up,rm));show();return s}
+function backgroundCard(id,name){var s=section('Background picture',true);
+  s.appendChild(el('p',{'class':'muted small'},'The scene behind the campaign’s header on its Live Table. With none set the page shows the default dragon. A PNG, JPEG or WebP, each side 320 to 4096 pixels, up to 5 MB; a wide picture such as 1920 by 1080 fits best.'));
+  var img=el('img',{alt:'Background of '+name});img.style.cssText='display:block;max-width:100%;width:320px;border-radius:8px;margin:8px 0';
+  var none=el('p',{'class':'box plain'},'No picture of its own: the page shows the default scene.');
+  function show(){img.style.display='none';none.style.display='block';img.onload=function(){img.style.display='block';none.style.display='none'};img.onerror=function(){img.style.display='none';none.style.display='block'};img.src='/api/campaigns/'+id+'/background?'+Date.now()}
+  var f=el('input',{type:'file',accept:'image/png,image/jpeg,image/webp','aria-label':'Background image'});
+  var up=el('button',{'class':'btn primary'},'Set or replace background');
+  up.onclick=function(){var file=f.files&&f.files[0];if(!file){toast('Choose an image first',true);return}
+    if(file.size>5*1024*1024){toast('The image is over 5 MB. Choose a smaller one.',true);return}
+    var rd=new FileReader();rd.onload=function(){up.disabled=true;api('POST','/api/admin/campaigns/'+id+'/background',{image_base64:rd.result}).then(function(r){up.disabled=false;toast(r.note||'Background saved');f.value='';show()}).catch(function(e){up.disabled=false;fail(e)})};
+    rd.onerror=function(){toast('That file could not be read',true)};rd.readAsDataURL(file)};
+  var rm=el('button',{'class':'btn danger'},'Remove background');
+  rm.onclick=function(){if(confirm('Remove the background of '+name+'? The page goes back to the default scene.'))api('DELETE','/api/admin/campaigns/'+id+'/background').then(function(r){toast(r.message);show()}).catch(fail)};
+  add(s,img,none,f,add(el('div',{'class':'row'}),up,rm));show();return s}
 function tokenCard(aid,owner){var s=section('Player’s token',true);
   s.appendChild(el('p',{'class':'muted small'},'If '+owner+' lost their token and can’t recover it by email, regenerate it here, copy it and send it to them privately. A token is shown once.'));
   var keep=el('label',{'class':'toggle'});var kc=el('input',{type:'checkbox'});kc.checked=true;add(keep,el('span',null,'End their old tokens and signing keys (recommended)'),kc);s.appendChild(keep);
@@ -359,7 +373,7 @@ function openCampaign(id){curId=id;pending={};hideSave();
       var rm=el('button',{'class':'btn small danger'},'Remove');rm.onclick=function(){if(confirm('Remove '+ch.name+' from this campaign?'))member({remove_character:ch.id},id)};add(r,t,rm);s2.appendChild(r)});
     if(!(j.characters||[]).length)s2.appendChild(el('p',{'class':'muted small'},'No characters yet.'));
     s2.appendChild(finder('Add a character','Character name','/api/admin/characters?q=','characters',function(x){return x.name+' · '+(x.owner||'no player')+(x.campaign?' · in '+x.campaign:'')},function(x){if(confirm('Add '+x.name+' to this campaign?'+(x.campaign?' It will leave '+x.campaign+'.':'')))member({add_character:x.id},id)}));
-    M.appendChild(s2);M.appendChild(advanced(c,j.field_types,j.locked_fields));
+    M.appendChild(s2);M.appendChild(backgroundCard(id,c.name));M.appendChild(advanced(c,j.field_types,j.locked_fields));
     var dz=el('div',{'class':'card'});dz.appendChild(el('h3',null,'Delete'));dz.appendChild(el('p',{'class':'muted small'},'Hides the campaign. Its characters are let go and keep everything. You can restore it here.'));
     var db=el('button',{'class':'btn danger'},'Delete campaign');db.onclick=function(){if(confirm('Delete '+c.name+'? You can restore it later.'))api('POST','/api/admin/campaigns/'+id+'/delete').then(function(r){toast(r.message);campaignsCache=null;openCampaign(id)}).catch(fail)};dz.appendChild(db);M.appendChild(dz)
   }).catch(fail)}
