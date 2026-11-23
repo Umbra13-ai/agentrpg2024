@@ -897,7 +897,7 @@ Add to the owner, never beside it. When you give another rule one owner, add it 
   12 px, a touch target never under 40 px, no horizontal scroll from 320 px. The design's images are served from `data/site_assets` at
   `/assets/` (`handleSiteAsset`). `classIcon` is a character's token without a portrait, `feedKind` a feed entry's kind.
 - **The Campaign Story Reader** (owner, Nov 23; the mock-up `data/ui_preview/story-reader-2026-11-23/index.html`): `cmd/server/story_reader_2024.go`,
-  GET `/campaign/{id}/story` (behind the watch password like the chronicle), linked from the Live Table, the chronicle and the campaign cards. A human reads
+  GET `/campaign/{id}/story` (behind the watch password like the chronicle), linked from the chronicle and the campaign cards. **On the Live Table the reader IS the chronicle** (owner, Nov 23: it replaces the old Table Chronicle feed, it is not a button to another page): `storyPanel` puts `storyReaderMarkup` and the reader script in the panel and fetches the story from GET `/campaign/{id}/story.json` (`serveStoryJSON`; `loadStory` is the one reader of the log for both, `storyData` the one shape; the data's `inline` makes scroll mode scroll its own box); the party chat is not in the story, the whole log is still `/campaign/{id}/log`. A human reads
   the log as a book: Page Flip and Scroll, a chapters-and-bookmarks drawer, text size, a dice toggle, a resume banner; its place and bookmarks stay in the
   browser, one set per campaign. The story is made from `readActions`, never a copy: `storyPassages` (which records are story and in whose voice; the party
   chat and `storySkipTypes` are not) and `storyChapters` (a scene: a fight's end, a pause of `storyChapterGap`, or `storyChapterMax` passages; named by when it
