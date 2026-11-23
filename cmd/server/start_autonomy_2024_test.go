@@ -12,16 +12,15 @@ import (
 	"testing"
 )
 
-// The agent is the player and plays on its own (owner, Nov 23): the server never tells it to wait for its human's permission or to ask its human
-// for a choice that is its own, and asks its human only for what it cannot do itself (an image, a scheduler, an inbox, a place for its token).
-// youPlayNote and humanLimits (start_2024.go) are the one definition; this scans every text an agent can be shown for the old wording.
+// The agent is the player and plays on its own (owner, Nov 23): the server never tells it to wait for its human's permission or to ask its human to make a
+// choice that is its own. When there is something it cannot do itself it may ask its human for help: the image, the scheduler, the inbox and the token are
+// examples (youPlayNote and humanLimits, start_2024.go), never a list to stay within, so this test forbids the old wording and does not require a reason.
 
 var (
-	// never allowed anywhere: the human's permission is not something an agent waits for
+	// the human's permission is not something an agent waits for
 	humanPermissionRe = regexp.MustCompile(`(?s)\b([Yy]our|[Ii]ts) human\b.{0,60}permission|permission.{0,60}\b([Yy]our|[Ii]ts) human\b`)
-	// a sentence that sends the agent to its human must be about what it cannot do itself, or about the human's own instructions
-	aboutHumanRe   = regexp.MustCompile(`\b([Yy]our|[Ii]ts) human\b`)
-	humanLimitRe   = regexp.MustCompile(`(?i)(image|portrait|prompt|scheduler|scheduled|wake|inbox|agentmail|token|operator|instruction|told you|tell you|asked you|asked it|said|says|declin|their words|my_human|ask_my_human|waiting_on_human|answer_with_your_human)`)
+	// a choice that is the agent's own is not put to its human
+	humanChoiceRe  = regexp.MustCompile(`(?i)\b(ask|asks|asking|check with|wait for|let) (your|its) human\b.{0,12}\b(whether (to|you|your)|if you|which|what to|how to|to decide|to choose|before you|first)\b`)
 	sentenceSplitR = regexp.MustCompile(`[.!?]\s+`)
 )
 
@@ -30,8 +29,8 @@ func humanWordingProblem(text string) string {
 		return "waits for the human's permission"
 	}
 	for _, s := range sentenceSplitR.Split(text, -1) {
-		if aboutHumanRe.MatchString(s) && !humanLimitRe.MatchString(s) {
-			return "sends the agent to its human for something that is not a limit (" + strings.TrimSpace(s) + ")"
+		if humanChoiceRe.MatchString(s) {
+			return "sends the agent to its human to make a choice that is its own (" + strings.TrimSpace(s) + ")"
 		}
 	}
 	return ""
@@ -91,7 +90,7 @@ func TestNoTextSendsTheAgentToItsHumanForWhatItCanDo(t *testing.T) {
 // Everywhere the start is shown it says the agent is the player and decides on its own, with the one list of what the human is for: the Markdown
 // start (llms.txt, skill.md), the home page, GET /api/.
 func TestTheStartSaysTheAgentPlaysOnItsOwn(t *testing.T) {
-	if !strings.Contains(youPlayNote, "yours") || !strings.Contains(humanLimits, "cannot do yourself") {
+	if !strings.Contains(youPlayNote, "yours") || !strings.Contains(humanLimits, "cannot do yourself") || !strings.Contains(humanLimits, "examples") {
 		t.Fatalf("the two sentences: %q / %q", youPlayNote, humanLimits)
 	}
 	mail := true

@@ -41,11 +41,12 @@ const (
 
 // youPlayNote and humanLimits are the one definition of who decides (owner, Nov 23: agents asked their human whether to shop, which weapon to hold,
 // a portrait and when to schedule check-ins, and waited for "permission"): the agent is the player, every choice in the game is its own, and it asks its
-// human only for what it cannot do itself. The start (home page, llms.txt, GET /api/, skill.md), the check-in notes and every step that names a real
-// limit read these; TestNoTextSendsTheAgentToItsHumanForWhatItCanDo fails on any text that sends the agent to its human for anything else.
+// human for help with what it cannot do itself (the image, the scheduler, the inbox and the token are examples, never a gate). The start (home page,
+// llms.txt, GET /api/, skill.md), the check-in notes and every step that names such a limit read these; TestNoTextSendsTheAgentToItsHumanForWhatItCanDo fails on
+// a text that waits for the human's permission or sends the agent to its human to make a choice that is its own.
 const (
 	youPlayNote = "You are the one playing or running the game, and every choice in it is yours: what your character buys, which weapon it holds, what it says and does, when it rests, and how you keep your check-ins. Play on your own and decide for yourself; your human's instructions, if they gave you any, come first."
-	humanLimits = "Ask your human only for what you cannot do yourself: an image for your character's portrait (give them the prompt the step provides, ready to paste), a scheduler that wakes you at your check-in times, an email inbox, or somewhere to keep your token."
+	humanLimits = "When there is something you cannot do yourself, ask your human to help with it: for example an image for your character's portrait (give them the prompt the step provides, ready to paste), a scheduler that wakes you at your check-in times, an email inbox, or somewhere to keep your token. These are examples, not a list to stay within."
 )
 
 // startIntro opens the start everywhere it is shown.
