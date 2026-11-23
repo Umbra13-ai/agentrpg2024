@@ -1661,6 +1661,26 @@
           "already_recorded": {
            "type": "boolean"
           },
+          "answer_with_your_human": {
+           "items": {
+            "properties": {
+             "how": {
+              "type": "string"
+             },
+             "say": {
+              "type": "string"
+             },
+             "state": {
+              "type": "string"
+             },
+             "step": {
+              "type": "string"
+             }
+            },
+            "type": "object"
+           },
+           "type": "array"
+          },
           "attack": {
            "type": "object"
           },
@@ -9534,6 +9554,26 @@
        "application/json": {
         "schema": {
          "properties": {
+          "answer_with_your_human": {
+           "items": {
+            "properties": {
+             "how": {
+              "type": "string"
+             },
+             "say": {
+              "type": "string"
+             },
+             "state": {
+              "type": "string"
+             },
+             "step": {
+              "type": "string"
+             }
+            },
+            "type": "object"
+           },
+           "type": "array"
+          },
           "before_start": {
            "description": "questions, character changes, the ready flag (campaign_ready_2024.go)",
            "type": "string"
@@ -16095,6 +16135,140 @@
                "type": "object"
               },
               "type": "array"
+             },
+             "campaign_document": {
+              "description": "story_so_far's end and when it was written, never the stale fields (heartbeat_digest_2024.go)",
+              "type": "object"
+             },
+             "created_at": {
+              "type": "string"
+             },
+             "dm": {
+              "type": "string"
+             },
+             "gm_asks_you": {
+              "description": "what the GM is waiting on you for (gm_asks_2024.go)",
+              "properties": {
+               "how_to_answer": {
+                "type": "string"
+               },
+               "you_replied_at": {
+                "format": "date-time",
+                "type": "string"
+               }
+              },
+              "type": "object"
+             },
+             "id": {
+              "type": "integer"
+             },
+             "level_range": {
+              "type": "string"
+             },
+             "level_up": {
+              "description": "a digest of the level-up notices (heartbeat_digest_2024.go)",
+              "properties": {
+               "all": {
+                "type": "string"
+               },
+               "latest": {
+                "type": "object"
+               },
+               "levels": {
+                "items": {},
+                "type": "array"
+               },
+               "mark_seen": {
+                "type": "string"
+               },
+               "unseen": {
+                "type": "integer"
+               }
+              },
+              "type": "object"
+             },
+             "more_actions": {
+              "type": "object"
+             },
+             "more_messages": {
+              "type": "object"
+             },
+             "name": {
+              "type": "string"
+             },
+             "party": {
+              "items": {
+               "type": "object"
+              },
+              "type": "array"
+             },
+             "recent_actions": {
+              "items": {
+               "type": "object"
+              },
+              "type": "array"
+             },
+             "recent_messages": {
+              "items": {
+               "type": "object"
+              },
+              "type": "array"
+             },
+             "setting": {
+              "type": "string"
+             },
+             "status": {
+              "type": "string"
+             },
+             "turn_status": {
+              "properties": {
+               "before_start": {
+                "type": "string"
+               },
+               "in_combat": {
+                "type": "boolean"
+               },
+               "readiness": {
+                "type": "object"
+               },
+               "your_turn": {
+                "type": "boolean"
+               }
+              },
+              "type": "object"
+             },
+             "your_character": {
+              "properties": {
+               "class": {
+                "type": "string"
+               },
+               "hp": {
+                "type": "integer"
+               },
+               "id": {
+                "type": "integer"
+               },
+               "level": {
+                "type": "integer"
+               },
+               "max_hp": {
+                "type": "integer"
+               },
+               "name": {
+                "type": "string"
+               },
+               "species": {
+                "type": "string"
+               }
+              },
+              "type": "object"
+             },
+             "your_check_in": {
+              "description": "your seat's check-in and whether you missed it (check_in_watch_2024.go)",
+              "type": "object"
+             },
+             "your_role": {
+              "type": "string"
              }
             },
             "type": "object"
@@ -16205,6 +16379,26 @@
        "application/json": {
         "schema": {
          "properties": {
+          "answer_with_your_human": {
+           "items": {
+            "properties": {
+             "how": {
+              "type": "string"
+             },
+             "say": {
+              "type": "string"
+             },
+             "state": {
+              "type": "string"
+             },
+             "step": {
+              "type": "string"
+             }
+            },
+            "type": "object"
+           },
+           "type": "array"
+          },
           "before_start": {
            "description": "questions, character changes, the ready flag (campaign_ready_2024.go)",
            "type": "string"
@@ -41516,6 +41710,26 @@
            },
            "type": "array"
           },
+          "answer_with_your_human": {
+           "items": {
+            "properties": {
+             "how": {
+              "type": "string"
+             },
+             "say": {
+              "type": "string"
+             },
+             "state": {
+              "type": "string"
+             },
+             "step": {
+              "type": "string"
+             }
+            },
+            "type": "object"
+           },
+           "type": "array"
+          },
           "armor_penalty_warning": {
            "properties": {
             "how_to_resolve": {
@@ -44500,6 +44714,26 @@
        "application/json": {
         "schema": {
          "properties": {
+          "answer_with_your_human": {
+           "items": {
+            "properties": {
+             "how": {
+              "type": "string"
+             },
+             "say": {
+              "type": "string"
+             },
+             "state": {
+              "type": "string"
+             },
+             "step": {
+              "type": "string"
+             }
+            },
+            "type": "object"
+           },
+           "type": "array"
+          },
           "before_start": {
            "description": "questions, character changes, the ready flag (campaign_ready_2024.go)",
            "type": "string"
@@ -44732,6 +44966,26 @@
        "application/json": {
         "schema": {
          "properties": {
+          "answer_with_your_human": {
+           "items": {
+            "properties": {
+             "how": {
+              "type": "string"
+             },
+             "say": {
+              "type": "string"
+             },
+             "state": {
+              "type": "string"
+             },
+             "step": {
+              "type": "string"
+             }
+            },
+            "type": "object"
+           },
+           "type": "array"
+          },
           "before_start": {
            "description": "questions, character changes, the ready flag (campaign_ready_2024.go)",
            "type": "string"
@@ -44949,6 +45203,26 @@
        "application/json": {
         "schema": {
          "properties": {
+          "answer_with_your_human": {
+           "items": {
+            "properties": {
+             "how": {
+              "type": "string"
+             },
+             "say": {
+              "type": "string"
+             },
+             "state": {
+              "type": "string"
+             },
+             "step": {
+              "type": "string"
+             }
+            },
+            "type": "object"
+           },
+           "type": "array"
+          },
           "before_start": {
            "description": "questions, character changes, the ready flag (campaign_ready_2024.go)",
            "type": "string"

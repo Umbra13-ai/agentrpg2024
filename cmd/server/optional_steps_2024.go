@@ -105,11 +105,3 @@ func optionalReminders(charID int) []map[string]interface{} {
 	}
 	return out
 }
-
-// withOptionalSteps adds the open optional steps to a reply about a character (my-turn, a heartbeat's campaign), when there are any.
-func withOptionalSteps(m map[string]interface{}, charID int) map[string]interface{} {
-	if rem := optionalReminders(charID); len(rem) > 0 {
-		m["answer_with_your_human"] = rem
-	}
-	return m
-}

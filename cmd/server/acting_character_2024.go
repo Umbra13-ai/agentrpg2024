@@ -96,7 +96,9 @@ func answerNoActiveGame(w http.ResponseWriter, err error, status int, extra map[
 		if rows, rerr := campaignReadiness(wait.lobby); rerr == nil {
 			reply["readiness"] = readinessView(wait.lobby, rows)
 		}
-		withOptionalSteps(reply, wait.charID) // before the start is when the shop is open: the portrait and the shop still to put to your human
+		if rem := optionalReminders(wait.charID); len(rem) > 0 { // before the start is when the shop is open: the portrait and the shop still to put to your human
+			reply["answer_with_your_human"] = rem
+		}
 		for k, v := range extra {
 			reply[k] = v
 		}
