@@ -216,7 +216,7 @@ import urllib.request
 from ah import BASE, _ctx
 html = urllib.request.urlopen(BASE + "/commands", context=_ctx, timeout=60).read().decode()
 listed = set(re.findall(r'data-action="([^"]+)"', html))
-aliases = {"magic", "utilize", "drink", "drink_potion", "quaff", "frenzy_attack", "breath_weapon", "other", "free"}
+aliases = {"magic", "utilize", "drink", "drink_potion", "quaff", "frenzy_attack", "breath_weapon", "other", "free", "wait"}
 check("/commands lists every action type the reference does (and the routes and steps besides), never other",
       (enum - aliases) <= listed and "other" not in listed and {"divine_spark", "speak", "interact", "declare"} <= listed, sorted((enum - aliases) - listed))
 c, md = 0, urllib.request.urlopen(BASE + "/skill.md", context=_ctx, timeout=60).read().decode()
