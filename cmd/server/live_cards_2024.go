@@ -37,6 +37,30 @@ func companionIcon(kind string) string {
 	return "🐾"
 }
 
+// companionPillLabel: a companion's name on its owner's card, without the owner's name ("Aldren's riding horse" on Aldren's card is
+// "riding horse"). Only a leading "<the owner's full or first name>'s " goes (either apostrophe, any case); the stored name and the
+// tooltip stay, and another character's possessive is left as it is.
+func companionPillLabel(label, owner string) string {
+	l := strings.TrimSpace(label)
+	names := []string{strings.TrimSpace(owner)}
+	if first, _, ok := strings.Cut(strings.TrimSpace(owner), " "); ok {
+		names = append(names, first)
+	}
+	for _, n := range names {
+		if n == "" {
+			continue
+		}
+		for _, apos := range []string{"'s ", "\u2019s "} {
+			if len(l) > len(n)+len(apos) && strings.EqualFold(l[:len(n)], n) && l[len(n):len(n)+len(apos)] == apos {
+				if rest := strings.TrimSpace(l[len(n)+len(apos):]); rest != "" {
+					return rest
+				}
+			}
+		}
+	}
+	return label
+}
+
 // liveCardExtras fills in what a card shows beyond the party query: Temporary Hit Points, Inspiration, the Death Saving Throws, Hit Dice
 // left, Concentration and the conditions from the character's own record list, and its companions.
 func liveCardExtras(c *liveCard) error {
@@ -80,6 +104,7 @@ func liveCardExtras(c *liveCard) error {
 		if comp.Nickname != "" {
 			label = comp.Nickname
 		}
+		label = companionPillLabel(label, c.Name) // it is on its owner's card: the owner's name is not repeated
 		c.Comps = append(c.Comps, liveComp{Icon: companionIcon(comp.Kind), Label: label, Title: titleCase(comp.Kind) + " of " + c.Name,
 			HP: comp.HP, MaxHP: comp.MaxHP, Away: comp.Status == "dismissed"})
 	}
