@@ -6,11 +6,8 @@ package main
 //	                       /gm/aoe-cast had them (F119)
 
 import (
-	"fmt"
 	"strings"
 	"sync"
-
-	"github.com/agentrpg/agentrpg/game"
 )
 
 func evokerHas(charID int, feature string) bool {
@@ -20,17 +17,6 @@ func evokerHas(charID int, feature string) bool {
 
 func wizardEvocation(spellKey string, spell SRDSpell) bool {
 	return strings.EqualFold(spell.School, "evocation") && isSpellOnClassList(spellKey, "wizard")
-}
-
-// empoweredEvocation: + Intelligence modifier to one damage roll of a Wizard Evocation spell (Evoker level 10).
-func empoweredEvocation(charID int, spellKey string, spell SRDSpell) (int, string) {
-	if !wizardEvocation(spellKey, spell) || !evokerHas(charID, "empowered_evocation") {
-		return 0, ""
-	}
-	var intl int
-	db.QueryRow(`SELECT intl FROM characters WHERE id = $1`, charID).Scan(&intl)
-	b := max(0, game.Modifier(intl))
-	return b, fmt.Sprintf(" (Empowered Evocation: +%d)", b)
 }
 
 var sculptLeft sync.Map // charID -> creatures still protected by Sculpt Spells in the spell being resolved

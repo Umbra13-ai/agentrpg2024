@@ -103,6 +103,7 @@ func resolveSpellOnMonster(charID int, spellKey string, spell SRDSpell, damageDi
 		var beams []string
 		var rs []hitRider
 		anyCrit := false
+		bonus := &firstHit{left: spellOneRollBonus(charID, spellKey, spell)} // Empowered Evocation, Elemental Affinity: one roll of the spell
 		unit := "Beam"
 		if auto {
 			unit = "Dart"
@@ -124,14 +125,15 @@ func resolveSpellOnMonster(charID int, spellKey string, spell SRDSpell, damageDi
 			if invocationOn(charID, "agonizing-blast", spellKey) && game.Modifier(spellModScore(charID)) > 0 {
 				d += game.Modifier(spellModScore(charID))
 			}
+			d, bonusNote := bonus.add(d)
 			total += d
 			hits++
 			beamRs := hitRiders(charID, monster, crit)
 			rs = append(rs, beamRs...)
 			if auto {
-				line += fmt.Sprintf(" hits: %d %s damage%s.", d, dtype, riderNote(beamRs))
+				line += fmt.Sprintf(" hits: %d %s damage%s%s.", d, dtype, bonusNote, riderNote(beamRs))
 			} else {
-				line += fmt.Sprintf(", %d %s damage%s.", d, dtype, riderNote(beamRs))
+				line += fmt.Sprintf(", %d %s damage%s%s.", d, dtype, bonusNote, riderNote(beamRs))
 			}
 			beams = append(beams, line)
 		}

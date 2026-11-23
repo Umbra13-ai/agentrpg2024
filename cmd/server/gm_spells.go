@@ -183,25 +183,24 @@ func handleGMAoECast(w http.ResponseWriter, r *http.Request) {
 	}
 
 	// Evocation Wizard features
-	// Check if caster has Empowered Evocation and spell is evocation school
-	empoweredEvocationBonus := 0
+	// Empowered Evocation and Elemental Affinity: one damage roll of the spell (spell_one_roll_2024.go)
 	hasSculptSpells := false
 	maxSculptTargets := 0
 	isEvocationSpell := strings.ToLower(spellSchool) == "evocation"
+	oneRoll := oneRollBonus{}
+	if req.CasterID > 0 {
+		oneRoll = spellOneRollBonus(req.CasterID, req.SpellSlug, srdSpellsMemory[req.SpellSlug])
+		baseDamage += oneRoll.Total()
+	}
+	empoweredEvocationBonus := oneRoll.Empowered
 
 	if req.CasterID > 0 && isEvocationSpell {
 		// Get caster's subclass and level
 		var subclass sql.NullString
-		var casterLevel, casterInt int
-		db.QueryRow(`SELECT COALESCE(subclass, ''), level, intl FROM characters WHERE id = $1`, req.CasterID).Scan(&subclass, &casterLevel, &casterInt)
+		var casterLevel int
+		db.QueryRow(`SELECT COALESCE(subclass, ''), level FROM characters WHERE id = $1`, req.CasterID).Scan(&subclass, &casterLevel)
 
 		if subclass.Valid && subclass.String != "" {
-			// Check for Empowered Evocation (level 10 Evocation Wizard feature)
-			if hasSubclassFeature(subclass.String, casterLevel, "empowered_evocation") {
-				empoweredEvocationBonus = game.Modifier(casterInt)
-				baseDamage += empoweredEvocationBonus
-			}
-
 			// Check for Sculpt Spells (level 2 Evocation Wizard feature)
 			if hasSubclassFeature(subclass.String, casterLevel, "sculpt_spells") {
 				hasSculptSpells = true
@@ -210,26 +209,7 @@ func handleGMAoECast(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 
-	// Check for Elemental Affinity (Draconic Sorcerer level 6+)
-	// When casting a spell that deals damage matching dragon ancestry, add CHA mod to damage
-	elementalAffinityBonus := 0
-	elementalAffinityAncestry := ""
-	if req.CasterID > 0 && damageType != "" {
-		var subclass sql.NullString
-		var casterLevel, casterCha int
-		db.QueryRow(`SELECT COALESCE(subclass, ''), level, cha FROM characters WHERE id = $1`, req.CasterID).Scan(&subclass, &casterLevel, &casterCha)
-
-		if subclass.Valid && subclass.String == "draconic" {
-			if hasSubclassFeature(subclass.String, casterLevel, "elemental_affinity") {
-				ancestryDamageType := getDragonAncestryDamageType(req.CasterID)
-				if ancestryDamageType != "" && strings.ToLower(damageType) == ancestryDamageType {
-					elementalAffinityBonus = game.Modifier(casterCha)
-					elementalAffinityAncestry = ancestryDamageType
-					baseDamage += elementalAffinityBonus
-				}
-			}
-		}
-	}
+	elementalAffinityBonus, elementalAffinityAncestry := oneRoll.Affinity, oneRoll.AncestryDmg
 
 	// Check for Potent Cantrip (Evocation Wizard level 6+)
 	// Potent Cantrip: when a creature succeeds on save against your cantrip, they take half damage

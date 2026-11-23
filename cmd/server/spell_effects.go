@@ -293,8 +293,9 @@ func damageCharacterDealt(targetID, dmg int, dtype string, critical ...bool) (st
 
 // dartsOnCharacters: a spell's automatic darts (Magic Missile) shared out over the characters it is aimed at (dartShares), each dart a hit that hands
 // its on-hit riders (Hex, Hunter's Mark) over; the Brooch of Shielding is immune. One clause per character, the damage one hit for the Hit Point owner.
-func dartsOnCharacters(charID int, spell SRDSpell, count int, dice string, ids []int) string {
+func dartsOnCharacters(charID int, spellKey string, spell SRDSpell, count int, dice string, ids []int) string {
 	shares := dartShares(count, ids)
+	bonus := &firstHit{left: spellOneRollBonus(charID, spellKey, spell)} // Empowered Evocation, Elemental Affinity: one roll of the spell
 	var lines []string
 	for _, id := range ids {
 		n := shares[id]
@@ -307,11 +308,14 @@ func dartsOnCharacters(charID int, spell SRDSpell, count int, dice string, ids [
 		}
 		total := 0
 		var rs []hitRider
+		bonusNote := ""
 		for d := 0; d < n; d++ {
-			total += game.RollDamage(dice, false)
+			roll, note := bonus.add(game.RollDamage(dice, false))
+			total += roll
+			bonusNote += note
 			rs = append(rs, hitRiders(charID, id, false)...)
 		}
-		lines = append(lines, fmt.Sprintf(" %s: %d of %d dart(s) hit, %s.", characterNameOf(id), n, count, damageCharacterWithRiders(id, total, "force", false, rs)))
+		lines = append(lines, fmt.Sprintf(" %s: %d of %d dart(s) hit%s, %s.", characterNameOf(id), n, count, bonusNote, damageCharacterWithRiders(id, total, "force", false, rs)))
 	}
 	return strings.Join(lines, "")
 }
@@ -324,7 +328,7 @@ func resolveSpellOnCharacters(charID int, spellKey string, spell SRDSpell, slotL
 		return ""
 	}
 	if count, dice, auto := beamPlan(spellKey, spell.Level, slotLevel, charLevel); auto && count > 0 { // Magic Missile: no attack roll, no save
-		return dartsOnCharacters(charID, spell, count, dice, ids)
+		return dartsOnCharacters(charID, spellKey, spell, count, dice, ids)
 	}
 	dtype := strings.ToLower(spell.DamageType)
 	var lines []string

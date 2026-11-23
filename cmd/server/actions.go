@@ -2500,24 +2500,13 @@ func resolveActionWithBonusDash(action, description string, charID int, bonusDas
 				}
 				dmg += potentSpellcastingBonus(charID, class, level, spell.Level) // Potent Spellcasting (Cleric, Druid level 7)
 
-				// Elemental Affinity (Draconic Sorcerer level 6+)
-				// Add CHA mod to damage when spell damage type matches dragon ancestry
-				elementalAffinityNote := ""
-				if subclass.Valid && subclass.String == "draconic" {
-					if hasSubclassFeature(subclass.String, level, "elemental_affinity") {
-						ancestryDamageType := getDragonAncestryDamageType(charID)
-						if ancestryDamageType != "" && strings.ToLower(spell.DamageType) == ancestryDamageType {
-							chaBonus := game.Modifier(cha)
-							dmg += chaBonus
-							elementalAffinityNote = fmt.Sprintf(" (Elemental Affinity: +%d)", chaBonus)
-						}
-					}
+				// Elemental Affinity and Empowered Evocation: one damage roll of the spell (spell_one_roll_2024.go)
+				oneRoll := spellOneRollBonus(charID, spellKey, spell)
+				if beams, _, _ := beamPlan(spellKey, spell.Level, slotLevel, level); beams > 0 {
+					oneRoll = oneRollBonus{} // a spell of separate beams or darts adds it to the first that hits, on that line (resolveSpellOnMonster)
 				}
-
-				if b, note := empoweredEvocation(charID, spellKey, spell); b > 0 { // F119 (wizard_fixes_2024.go)
-					dmg += b
-					elementalAffinityNote += note
-				}
+				dmg += oneRoll.Total()
+				elementalAffinityNote := oneRoll.Note()
 				sculptSpells(charID, spellKey, spell, slotLevel, description) // F119
 
 				// Agonizing Blast (Warlock Invocation)
