@@ -458,11 +458,12 @@ func ensureGiantFly() {
 		if db == nil {
 			return
 		}
+		// the stat block of the SRD 5.2.1 (Magic Items, Figurine of Wondrous Power): Proficiency Bonus +2; a stored row is corrected, not kept
 		db.Exec(`INSERT INTO monsters (slug, name, size, type, ac, hp, hit_dice, speed, str, dex, con, intl, wis, cha, cr, xp, actions, source, ruleset, alignment,
-			speed_text, initiative_mod, saves, senses, languages, traits, description)
-			VALUES ('giant-fly', 'Giant Fly', 'large', 'beast', 11, 19, '3d10+3', 30, 14, 13, 13, 2, 10, 3, '0', 0, '[]'::jsonb, 'srd521-item', '2024', 'Unaligned',
+			speed_text, initiative_mod, saves, senses, languages, traits, description, proficiency_bonus)
+			VALUES ('giant-fly', 'Giant Fly', 'large', 'beast', 11, 19, '3d10+3', 30, 14, 13, 13, 2, 10, 3, '0', 0, '[]'::jsonb, $1, '2024', 'Unaligned',
 			'30 ft., Fly 60 ft.', 1, '{"str": 2, "dex": 1, "con": 1, "int": -4, "wis": 0, "cha": -4}'::jsonb, 'Darkvision 60 ft.; Passive Perception 10', 'None', '[]'::jsonb,
-			'The Ebony Fly of a Figurine of Wondrous Power (SRD 5.2.1): a Giant Fly that can be ridden as a mount (it can be used three times; then it rests 2 days).')
-			ON CONFLICT (slug) DO NOTHING`)
+			'The Ebony Fly of a Figurine of Wondrous Power (SRD 5.2.1): a Giant Fly that can be ridden as a mount. The figurine can become it for up to 12 hours; once it has been used, it can''t be used again until 2 days have passed.', 2)
+			ON CONFLICT (slug) DO UPDATE SET description = EXCLUDED.description, proficiency_bonus = EXCLUDED.proficiency_bonus, source = EXCLUDED.source`, itemCreatureSource)
 	})
 }

@@ -57,6 +57,13 @@ func TestPostgresMonsterCatalogIsTheSRDStatBlocks(t *testing.T) {
 	if flyBeast != 0 {
 		t.Errorf("the Giant Fly is in the beast lists (Wild Shape, pets, beast spells)")
 	}
+	// the Figurine's Giant Fly has the SRD stat block's Proficiency Bonus (+2) and the figurine's 12 hours (it read 0 and an invented three uses)
+	var pb int
+	var desc string
+	db.QueryRow(`SELECT COALESCE(proficiency_bonus,0), COALESCE(description,'') FROM monsters WHERE slug = 'giant-fly'`).Scan(&pb, &desc)
+	if pb != 2 || !strings.Contains(desc, "12 hours") || strings.Contains(desc, "three times") {
+		t.Errorf("the Giant Fly: Proficiency Bonus %d, description %q", pb, desc)
+	}
 	// the item's own creature is still there for its item
 	var name string
 	if db.QueryRow(`SELECT name FROM monsters WHERE slug = 'giant-fly'`).Scan(&name); name != "Giant Fly" {
