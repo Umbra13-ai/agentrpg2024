@@ -291,6 +291,9 @@ Add to the owner, never beside it. When you give another rule one owner, add it 
   `creatureSave`, `monsterSaveFor`, `monsterSaveRoll` and `monsterSpellSave(For)` return the `game.SaveResult`: a message about a
   save uses its wordings (`LineAgainst` keeps the DC visible when the reader's own feature forces the save), never a line of its own
   from the total and the DC, so it always says why a save had Advantage or Disadvantage; `TestNoSaveLineByHand` checks (HANDOFF item 24).
+  **A saving throw's damage** is `game.SaveDamage` (half or none on a success; Evasion: none on a success, half on a failure, only for an effect
+  that allows half) with `creatureEvasion` (`evasion_2024.go`: a character's class feature, a stat block's trait): a character's spell at a monster
+  or a character, a stat block's save effect at a character, a monster or a companion, the GM's area cast. Go: `TestPostgresEvasionOnEverySaveRoute` (I-WL-6).
 - **Ability checks:** `checkCtx` and `checkCtx.sources` (`cmd/server/check_2024.go`) decide what gives an ability check Advantage or
   Disadvantage, for a character, a monster or a companion (every creature: Poisoned, Frightened while its source is in sight on the battle
   map, a `disadv_checks` rider, Sunlight Sensitivity, a damage-triggered rider such as Aversion to Fire, the holder's own words when escaping
