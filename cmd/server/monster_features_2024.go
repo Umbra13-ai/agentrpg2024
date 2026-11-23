@@ -1301,8 +1301,8 @@ func resolveMonsterActionByName(r *http.Request, lobbyID int, monster, action, t
 	}
 	targets := targetIDsFrom(lobbyID, target, targetIDs)
 	lines := resolveMonsterEffectText(r, lobbyID, id, meta, entry.Name, entry.Text, targets, use, apply, 0)
-	if rec.targetBlocked {
-		return strings.Join(lines, " "), true, ""
+	if rec.targetBlocked { // nothing was rolled or spent: a refusal (gm/narrate posts nothing), never a result
+		return "", true, strings.Join(lines, " ")
 	}
 	if kind == "reaction" && apply {
 		monsterReactionRound.Store(fmt.Sprintf("%d:%d", lobbyID, id), currentRound(lobbyID))

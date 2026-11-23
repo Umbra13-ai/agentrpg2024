@@ -1777,7 +1777,7 @@ func resolveMonsterEffectText(r *http.Request, lobbyID, monsterID int, meta *mon
 			for i, o := range opts {
 				names[i] = o.Name
 			}
-			return append([]string{fmt.Sprintf("%s offers %d effects (%s). Name the one that happened in use (the GM rolls or picks it as the text says). Nothing was rolled.", entryName, len(opts), strings.Join(names, ", "))}, notes...)
+			return append(blockedBeforeRoll(r, fmt.Sprintf("%s offers %d effects (%s). Name the one that happened in use (the GM rolls or picks it as the text says). Nothing was rolled.", entryName, len(opts), strings.Join(names, ", "))), notes...)
 		}
 		lines := resolveMonsterEffectText(r, lobbyID, monsterID, meta, entryName+": "+opts[chosen].Name, opts[chosen].Text, targets, "", apply, depth+1)
 		if intro := saveOptionsIntro(text, opts); intro != "" {
@@ -1865,7 +1865,7 @@ func resolveMonsterEffectText(r *http.Request, lobbyID, monsterID int, meta *mon
 		if u := strings.TrimSpace(use); u != "" {
 			why = fmt.Sprintf(" %q isn't one of them.", u)
 		}
-		return append([]string{fmt.Sprintf("%s casts one of %s.%s Name the spell cast in use. Nothing was cast.", entryName, strings.Join(choices, ", "), why)}, notes...)
+		return append(blockedBeforeRoll(r, fmt.Sprintf("%s casts one of %s.%s Name the spell cast in use. Nothing was cast.", entryName, strings.Join(choices, ", "), why)), notes...)
 	}
 	// a spell
 	if m := mfxSpellRe.FindStringSubmatch(text); m != nil && !strings.Contains(m[1], "Spellcasting") {
@@ -1888,19 +1888,13 @@ func resolveMonsterEffectText(r *http.Request, lobbyID, monsterID int, meta *mon
 	}
 	// a saving throw effect in the text itself (its damage type the GM's choice: withChosenDamageType, as for an attack)
 	if chosen, problem := withChosenDamageType(entryName, text, use); problem != "" && mfxSaveRe.MatchString(text) {
-		if rec := execIn(r); rec != nil {
-			rec.targetBlocked = true // nothing rolled or spent
-		}
-		return append([]string{problem}, notes...)
+		return append(blockedBeforeRoll(r, problem), notes...)
 	} else {
 		text = chosen
 	}
 	if e, ok := parseSaveEffect(text); ok {
 		if issue := monsterSaveTargetIssue(r, lobbyID, monsterID, meta, text, targets); issue != "" {
-			if rec := execIn(r); rec != nil {
-				rec.targetBlocked = true
-			}
-			return append([]string{"Nothing was rolled. [GM: " + issue + "]"}, notes...)
+			return append(blockedBeforeRoll(r, "Nothing was rolled. [GM: "+issue+"]"), notes...)
 		}
 		if len(targets) == 0 && e.Emanation > 0 {
 			targets = charactersInEmanation(lobbyID, monsterID, e.Emanation)
@@ -1909,7 +1903,7 @@ func resolveMonsterEffectText(r *http.Request, lobbyID, monsterID int, meta *mon
 			targets, _ = monsterAreaFilter(lobbyID, monsterID, text, nil) // aimed at the GM's point: everyone in the area (O-5)
 		}
 		if len(targets) == 0 {
-			return append([]string{fmt.Sprintf("%s: name the targets (target or target_ids) of the %s saving throw (DC %d). Nothing was rolled.", entryName, e.AbilityName, e.DC)}, notes...)
+			return append(blockedBeforeRoll(r, fmt.Sprintf("%s: name the targets (target or target_ids) of the %s saving throw (DC %d). Nothing was rolled.", entryName, e.AbilityName, e.DC)), notes...)
 		}
 		e.SourceID = monsterID
 		e.FromUndead = monsterTypeOf(lobbyID, monsterID) == "undead"           // a harmful effect from an Undead (Scarab of Protection)

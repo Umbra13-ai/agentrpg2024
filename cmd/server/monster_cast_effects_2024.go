@@ -211,7 +211,7 @@ func monsterCastHealing(r *http.Request, lobbyID, monsterID int, sp SRDSpell, sl
 		ids = []int{monsterID}
 	}
 	if len(ids) == 0 {
-		return []string{head + ": name the creature it heals (target or target_ids). Nothing was rolled."}, true
+		return blockedBeforeRoll(r, head+": name the creature it heals (target or target_ids). Nothing was rolled."), true
 	}
 	lines := []string{head + "."}
 	if limit := healTargetLimit(sp); len(ids) > limit {
@@ -278,7 +278,7 @@ func monsterCastEndsConditions(r *http.Request, lobbyID, monsterID int, sp SRDSp
 		ids = []int{monsterID}
 	}
 	if len(ids) == 0 {
-		return []string{head + ": name the creature it is cast on (target). Nothing was cast."}, true
+		return blockedBeforeRoll(r, head+": name the creature it is cast on (target). Nothing was cast."), true
 	}
 	lines := []string{head + "."}
 	for _, id := range ids {

@@ -253,7 +253,7 @@ type execKey struct{}
 type execRecord struct {
 	executed         int32
 	confirmTargeting bool   // the GM confirmed any range or sight the server cannot determine
-	targetBlocked    bool   // an explicit prerequisite blocked the action before it rolled
+	targetBlocked    bool   // an explicit prerequisite blocked the action before it rolled (set only by blockedBeforeRoll)
 	dayHandled       bool   // monsterAction reserves its own entry's use; inner entries do not take it twice
 	fromCaller       bool   // the record came with the request (the narrate route), so it will settle a pending attack
 	pending          func() // the day use an attack settles after it was rolled (set by monsterAction, run by the narrate route)
@@ -280,6 +280,16 @@ func markExecuted(r *http.Request) {
 	if rec := execIn(r); rec != nil {
 		atomic.AddInt32(&rec.executed, 1)
 	}
+}
+
+// blockedBeforeRoll: the action can't run until the GM names something it needs (a target, a spell or effect it offers, a damage type)
+// or an explicit prerequisite fails; nothing was rolled or spent. The callers answer it as a refusal (gm/narrate: 409, nothing posted;
+// a Legendary Action: target_ineligible), never as a result. Every effect resolver that stops this way says so here.
+func blockedBeforeRoll(r *http.Request, lines ...string) []string {
+	if rec := execIn(r); rec != nil {
+		rec.targetBlocked = true
+	}
+	return lines
 }
 
 func (e *execRecord) wasExecuted() bool { return e != nil && atomic.LoadInt32(&e.executed) > 0 }

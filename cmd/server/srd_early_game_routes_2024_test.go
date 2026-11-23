@@ -238,6 +238,11 @@ func TestPostgresEarlyGameEveryEntry(t *testing.T) {
 					uses = append(append([]string{}, forms...), trueForm)
 				} else if acts := monsterStandardActions(e.Text); len(acts) > 1 {
 					uses = acts
+				} else if opts := splitSaveOptions(e.Text); len(opts) > 1 {
+					uses = nil // an entry that offers several named effects (Roar's First, Second and Third Roar): each one, as the GM names it
+					for _, o := range opts {
+						uses = append(uses, o.Name)
+					}
 				} else {
 					var spells []string
 					spells = append(spells, castChoiceList(e.Text)...)

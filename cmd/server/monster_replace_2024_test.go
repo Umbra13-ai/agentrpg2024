@@ -98,7 +98,7 @@ func TestPostgresNarrateRunsTheMonsterActionFirst(t *testing.T) {
 		t.Fatalf("combat start: %d %v", c, j)
 	}
 	if c, j := pgCall(t, "POST", fmt.Sprintf("/api/campaigns/%d/combat/add", lobby), gm, map[string]interface{}{
-		"combatants": []map[string]interface{}{{"name": "Test Fiend", "monster_key": "pit-fiend"}, {"name": "Test Wyrmling", "monster_key": "young-brass-dragon"}}}); c != 200 {
+		"combatants": []map[string]interface{}{{"name": "Test Fiend", "monster_key": "pit-fiend"}, {"name": "Test Wyrmling", "monster_key": "young-brass-dragon"}, {"name": "Test Mage", "monster_key": "mage"}}}); c != 200 {
 		t.Fatalf("add: %d %v", c, j)
 	}
 	pgExec(t, `UPDATE characters SET max_hp = 900, hp = 900 WHERE id = $1`, char)
@@ -119,6 +119,14 @@ func TestPostgresNarrateRunsTheMonsterActionFirst(t *testing.T) {
 	}
 	if narrations("Hellfire, take one.") != 0 {
 		t.Error("the refused action's narration was posted")
+	}
+	// a spell the Spellcasting entry doesn't list (staged test 2.10): refused, nothing posted; the same for the targets a cast needs
+	if c, j := narrate("The fiend casts nonsense.", map[string]interface{}{"monster": "Test Mage", "action": "Spellcasting", "use": "DefinitelyNotASpell"}); c != 409 ||
+		j["error"] != "monster_action_refused" || j["narration_recorded"] != false || !strings.Contains(fmt.Sprint(j["message"]), "DefinitelyNotASpell") {
+		t.Errorf("a spell Spellcasting doesn't list: %d %v", c, j)
+	}
+	if narrations("The fiend casts nonsense.") != 0 {
+		t.Error("the narration of a spell the entry doesn't list was posted")
 	}
 	// Hold Monster in place of one Fireball
 	c, j := narrate("Hellfire, take two.", map[string]interface{}{"monster": "Test Fiend", "action": "Hellfire Spellcasting", "use": "hold monster"})

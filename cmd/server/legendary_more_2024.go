@@ -1231,7 +1231,7 @@ func monsterSpellFromUse(text, use string) (string, int, bool) {
 	if !ok {
 		return "", 0, false
 	}
-	low, name := strings.ToLower(normQuotes(text)), strings.ToLower(sp.Name)
+	low, name := strings.ToLower(normQuotes(text)), strings.ToLower(normQuotes(sp.Name)) // both folded: the SRD spells a name with a curly apostrophe (Heroes’ Feast)
 	i := strings.Index(low, name)
 	if i < 0 {
 		return "", 0, false
