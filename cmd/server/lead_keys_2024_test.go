@@ -13,7 +13,7 @@ func TestMarshalLeadingPutsTheNamedKeysFirst(t *testing.T) {
 		t.Fatal(err)
 	}
 	got := string(b)
-	if !strings.HasPrefix(got, `{"is_my_turn":true,"now":["a<b"],"alpha":[1,2],"nested":{"a":2,"b":1},"zeta":1}`) {
+	if !strings.HasPrefix(got, `{"is_my_turn":true,"now":["a\u003cb"],"alpha":[1,2],"nested":{"a":2,"b":1},"zeta":1}`) {
 		t.Errorf("order or content: %s", got)
 	}
 	// the same content as json.Marshal
