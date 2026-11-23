@@ -271,11 +271,7 @@ func storyReaderMarkup(campaignID int, name, gmName string, total int, withBack 
       <div style="display:flex; align-items:center; gap:0.4rem; flex-wrap:wrap;">
         <button class="pill-btn" id="btn-toc" type="button">Contents</button>
         <span class="mode-seg" role="group" aria-label="Reading mode"><button class="pill-btn" id="btn-mode-flip" type="button">Flip</button><button class="pill-btn" id="btn-mode-scroll" type="button">Scroll</button></span>
-        <span class="size-wrap">
-          <button class="pill-btn" id="btn-size" type="button" aria-haspopup="true" aria-expanded="false" aria-label="Text size">Aa</button>
-          <span class="size-pop hidden" id="size-pop"><span class="size-small" aria-hidden="true">A</span><input class="size-range" id="size-range" type="range" min="0" max="2" step="1" value="1" aria-label="Text size: small, medium or large" /><span class="size-big" aria-hidden="true">A</span></span>
-        </span>
-        <button class="pill-btn active" id="btn-dice-toggle" type="button" aria-pressed="true">🎲 Rolls shown</button>
+        <button class="pill-btn active" id="btn-dice-toggle" type="button" aria-pressed="true">Rolls shown</button>
       </div>
     </div>
     <div class="reader-progress-track" title="Campaign Reading Progress"><div class="reader-progress-fill" id="reader-progress-fill" style="width: 0%;"></div></div>
@@ -285,6 +281,10 @@ func storyReaderMarkup(campaignID int, name, gmName string, total int, withBack 
     <button class="pill-btn hidden" id="btn-new" type="button">View unread</button>
     <button class="pill-btn" id="btn-latest" type="button">See latest</button>
     <button class="pill-btn" id="btn-refresh" type="button" title="Reload to see what has been played since">Refresh</button>
+    <span class="size-wrap">
+      <button class="pill-btn" id="btn-size" type="button" aria-haspopup="true" aria-expanded="false" aria-label="Text size">Aa</button>
+      <span class="size-pop hidden" id="size-pop"><span class="size-small" aria-hidden="true">A</span><input class="size-range" id="size-range" type="range" min="0" max="2" step="1" value="1" aria-label="Text size: small, medium or large" /><span class="size-big" aria-hidden="true">A</span></span>
+    </span>
   </div>
   <section id="flip-container">
     <div class="book-stage" id="book-stage"><article class="book-page" id="book-page"></article></div>

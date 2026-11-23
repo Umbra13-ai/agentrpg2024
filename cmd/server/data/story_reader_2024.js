@@ -129,7 +129,7 @@
     $('size-range').value = String(SIZES.indexOf(READER.fontSize));
     var diceBtn = $('btn-dice-toggle');
     diceBtn.classList.toggle('active', READER.showDice);
-    diceBtn.textContent = READER.showDice ? '🎲 Rolls shown' : '🎲 Rolls hidden';
+    diceBtn.textContent = READER.showDice ? 'Rolls shown' : 'Rolls hidden';
     diceBtn.setAttribute('aria-pressed', READER.showDice ? 'true' : 'false');
     $('btn-mode-flip').classList.toggle('active', READER.mode === 'flip');
     $('btn-mode-scroll').classList.toggle('active', READER.mode === 'scroll');

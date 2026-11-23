@@ -298,8 +298,10 @@
 
 /* the controls in one compact row; the text size is one button with a slider */
 .reader-controls { display: flex; flex-wrap: wrap; gap: 0.4rem; align-items: center; justify-content: flex-start; margin-bottom: 0.6rem; }
-.size-wrap { position: relative; display: inline-block; }
-.size-pop { position: absolute; z-index: 40; top: calc(100% + 0.35rem); left: 0; display: flex; align-items: center; gap: 0.6rem; padding: 0.55rem 0.8rem;
+/* Aa ends the controls row: its slider opens under the row, at the row's right edge, so it never runs off the screen */
+.reader-controls { position: relative; }
+.size-wrap { display: inline-block; }
+.size-pop { position: absolute; z-index: 40; top: calc(100% + 0.35rem); right: 0; display: flex; align-items: center; gap: 0.6rem; padding: 0.55rem 0.8rem;
   background: var(--bg-elevated); border: 1px solid var(--border-subtle); border-radius: var(--radius-md); box-shadow: 0 8px 24px rgba(0,0,0,0.45); }
 .size-pop.hidden { display: none; }
 .size-small { font-size: 0.8rem; color: var(--text-secondary); }
