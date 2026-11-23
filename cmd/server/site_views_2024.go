@@ -301,6 +301,7 @@ func liveTablePage(t liveTable) string {
         <p id="feed-empty" class="%s" style="color:var(--text-muted); font-size:0.85rem;">No entries for this filter.</p>
       </div>
       <div style="display:flex; justify-content:flex-end; margin-top:0.4rem;">
+        <a class="btn btn-gold btn-sm" href="/campaign/%d/story">📖 Read the story</a>
         <a class="btn btn-ghost btn-sm" href="/campaign/%d/log">Read the whole chronicle</a>
       </div>
     </div>
@@ -330,7 +331,7 @@ func liveTablePage(t liveTable) string {
           <span class="font-rpg" style="color:var(--accent-gold);">Observations</span>
           <span class="acc-icon">+</span>
         </button>
-        <div class="accordion-body hidden" id="acc-observations">`, empty, t.ID, settingText(t.Setting), t.TableRules, t.ID))
+        <div class="accordion-body hidden" id="acc-observations">`, empty, t.ID, t.ID, settingText(t.Setting), t.TableRules, t.ID))
 	if len(t.Observations) == 0 {
 		b.WriteString(`No observations recorded.`)
 	}
@@ -631,7 +632,7 @@ func campaignBrowserPage(v campaignBrowser) string {
 		var buttons string
 		switch c.Status {
 		case "active":
-			buttons = fmt.Sprintf(`<a class="btn btn-gold btn-sm" href="/campaign/%d">Enter Live Table</a><a class="btn btn-ghost btn-sm" href="/campaign/%d/log">Read Chronicle</a>`, c.ID, c.ID)
+			buttons = fmt.Sprintf(`<a class="btn btn-gold btn-sm" href="/campaign/%d">Enter Live Table</a><a class="btn btn-ghost btn-sm" href="/campaign/%d/story">📖 Read the Story</a>`, c.ID, c.ID)
 		case "recruiting":
 			if c.Full {
 				buttons = fmt.Sprintf(`<a class="btn btn-ghost btn-sm" href="/campaign/%d">View Table</a>`, c.ID)
@@ -639,7 +640,7 @@ func campaignBrowserPage(v campaignBrowser) string {
 				buttons = `<button class="btn btn-gold btn-sm" data-open-join="1">Join Campaign</button>`
 			}
 		default:
-			buttons = fmt.Sprintf(`<a class="btn btn-ghost btn-sm" href="/campaign/%d/log">Read Chronicle</a>`, c.ID)
+			buttons = fmt.Sprintf(`<a class="btn btn-ghost btn-sm" href="/campaign/%d/story">📖 Read the Story</a>`, c.ID)
 		}
 		fmt.Fprintf(&b, `
         <article class="rpg-panel panel-pad" style="display:flex; flex-direction:column; justify-content:space-between; gap:0.8rem;" data-campaign-status="%s" data-campaign-text="%s">
@@ -998,7 +999,7 @@ func chroniclePage(campaignID int, name, gmName string, feed []liveFeedItem, tot
             <h1 class="font-rpg" style="font-size:1.35rem; color:var(--accent-gold);">%s</h1>
             <p style="font-size:0.84rem; color:var(--text-secondary);">The whole Table Chronicle · %d entries · showing %d–%d</p>
           </div>
-          <a class="btn btn-gold btn-sm" href="/campaign/%d">Enter Live Table</a>
+          <div style="display:flex; flex-wrap:wrap; gap:0.4rem;"><a class="btn btn-gold btn-sm" href="/campaign/%d/story">📖 Read the story</a><a class="btn btn-ghost btn-sm" href="/campaign/%d">Enter Live Table</a></div>
         </div>
       </div>
       <div class="rpg-panel panel-pad" style="min-width:0;">
@@ -1011,7 +1012,7 @@ func chroniclePage(campaignID int, name, gmName string, feed []liveFeedItem, tot
             <button class="pill-btn" data-feed-filter="combat">Combat</button>
           </div>
         </div>
-        <div id="activity-feed-list" style="max-height:none;">`, e(name), total, from, to, campaignID)
+        <div id="activity-feed-list" style="max-height:none;">`, e(name), total, from, to, campaignID, campaignID)
 	b.WriteString(chronicleEntries(feed, gmName))
 	empty := "hidden"
 	if len(feed) == 0 {

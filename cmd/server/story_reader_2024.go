@@ -1,0 +1,331 @@
+package main
+
+// The Campaign Story Reader (owner, Nov 23; mock-up data/ui_preview/story-reader-2026-11-23/index.html): GET /campaign/{id}/story, the
+// campaign's log read as a book so a human can follow the story their AI is playing. The reader is the mock-up's: a sticky bar with the
+// progress, Page Flip and Scroll modes, a chapters-and-bookmarks drawer, text size, a dice toggle, and a resume banner; its place, bookmarks and
+// settings are kept in the browser (per campaign). The site's theme menu replaces the mock-up's own four theme buttons.
+//
+// The story is made from the action log (readActions, the one reader of it), never from a copy: `storyPassages` says which records are the
+// story and in whose voice, `storyChapters` where a new chapter begins. The server stores no chapters, so a chapter is a scene: it ends when a
+// fight ends, after a gap of more than `storyChapterGap` between passages, or at `storyChapterMax` passages. Players' words only (playerText,
+// as everywhere the log is shown), a private campaign behind its watch password (canWatch), the party chat and the log's bookkeeping left out.
+
+import (
+	"database/sql"
+	_ "embed"
+	"encoding/json"
+	"fmt"
+	"html"
+	"net/http"
+	"strings"
+	"time"
+	"unicode/utf8"
+)
+
+//go:embed data/story_reader_2024.css
+var storyReaderCSS string
+
+//go:embed data/story_reader_2024.js
+var storyReaderJS string
+
+const (
+	storyMaxRecords  = 4000             // the newest records the reader reads; older ones stay in the whole chronicle
+	storyChapterGap  = 6 * time.Hour    // a pause this long between passages starts a new chapter
+	storyChapterMax  = 60               // a chapter this long is cut, so no chapter is a wall
+	storyChapterMin  = 3                // a fight's end starts a new chapter only when the chapter before it has this many passages
+	storyTextMax     = 4000             // the longest passage text sent
+	storyWordsPerMin = 200              // reading speed for "N min read"
+	storyOpenerGap   = 90 * time.Second // no drop cap on a narration that follows another within this time
+)
+
+// storyPassage is one passage of the book. Type "gm" is the narrator's voice (a narration, a monster's turn), "pc" a character's.
+type storyPassage struct {
+	ID      string `json:"id"`
+	Type    string `json:"type"`
+	Speaker string `json:"speaker,omitempty"`
+	Icon    string `json:"icon,omitempty"`
+	Text    string `json:"text"`
+	Dice    string `json:"dice,omitempty"` // the roll or result that came with it
+	Tone    string `json:"tone,omitempty"` // "hit", "fail" or ""
+	Opener  bool   `json:"opener,omitempty"`
+	at      time.Time
+	endsFor bool // the fight ended here: the next passage begins a chapter
+}
+
+type storyChapter struct {
+	ID       string         `json:"id"`
+	Num      string         `json:"num"`
+	Title    string         `json:"title"`
+	Location string         `json:"location"` // the day it began, in the campaign's zone
+	ReadTime string         `json:"read_time"`
+	Entries  []storyPassage `json:"entries"`
+}
+
+// storySkipTypes: the log's records that are not story: bookkeeping (notPlayTypes), the GM's tools and the party chat.
+func storySkipTypes() []string {
+	return append(append([]string{}, notPlayTypes...), "message", "environment", "gm_adjust_monster", "map_update", "schedule", "companion",
+		"drop", "table_hold", "table_release", "started_without")
+}
+
+// storyPassages makes the passages of the story from log records, oldest first. icons says each character's token (by character id).
+func storyPassages(recs []actionRecord, icons map[int]string) []storyPassage {
+	var out []storyPassage
+	skip := storySkipTypes()
+	for _, a := range recs {
+		if containsStr(skip, a.Type) { // not the story, whatever a caller read (the read leaves them out too, for the size)
+			continue
+		}
+		desc, res := strings.TrimSpace(playerText(a.Description)), strings.TrimSpace(playerText(a.Result))
+		p := storyPassage{ID: fmt.Sprintf("e%d", a.ID), at: a.At}
+		switch {
+		case a.Type == actionFightOver:
+			if n := len(out); n > 0 {
+				out[n-1].endsFor = true
+			}
+			continue
+		case a.Type == actionNarration || strings.Contains(strings.ToLower(a.Type), "narrat"):
+			if desc == "" {
+				continue
+			}
+			p.Type, p.Text = "gm", desc
+		case strings.HasPrefix(a.Type, "monster_"): // a monster's turn: the GM's, in the monster's name
+			who, said := strings.TrimSpace(strings.TrimSuffix(desc, ":")), ""
+			if i := strings.Index(desc, ":"); i >= 0 {
+				who, said = strings.TrimSpace(desc[:i]), strings.TrimSpace(desc[i+1:])
+			}
+			p.Type, p.Speaker = "gm", who
+			if said != "" {
+				p.Text, p.Dice = said, res
+			} else {
+				p.Text = res
+			}
+		case a.CharacterID > 0 && a.ByPlayer: // a character in its player's words
+			p.Type, p.Speaker, p.Icon = "pc", a.Actor, icons[a.CharacterID]
+			if desc != "" && !strings.HasPrefix(desc, "Action:") {
+				p.Text, p.Dice = desc, res
+			} else {
+				p.Text = res
+			}
+		default:
+			continue
+		}
+		if strings.TrimSpace(p.Text) == "" {
+			continue
+		}
+		if p.Dice == p.Text || strings.HasPrefix(p.Dice, "Action:") {
+			p.Dice = ""
+		}
+		p.Text, p.Dice = clipText(p.Text, storyTextMax), clipText(p.Dice, 400)
+		p.Tone = storyTone(p.Dice)
+		out = append(out, p)
+	}
+	return out
+}
+
+// storyTone colours a roll's chip: a hit or a success green, a miss or a failure red.
+func storyTone(dice string) string {
+	d := strings.ToLower(dice)
+	switch {
+	case d == "":
+		return ""
+	case strings.Contains(d, "miss") || strings.Contains(d, "fail") || strings.Contains(d, "fumble"):
+		return "fail"
+	case strings.Contains(d, " hit") || strings.Contains(d, "hits") || strings.Contains(d, "success") || strings.Contains(d, "critical"):
+		return "hit"
+	}
+	return ""
+}
+
+func clipText(s string, max int) string {
+	if utf8.RuneCountInString(s) <= max {
+		return s
+	}
+	r := []rune(s)
+	return strings.TrimSpace(string(r[:max])) + "…"
+}
+
+// storyChapters cuts the passages into chapters (see the file's note) and gives each its number, a title from the words that open it, the
+// day it began and a reading time. zone is the campaign's.
+func storyChapters(ps []storyPassage, zone *time.Location) []storyChapter {
+	var cuts [][]storyPassage
+	var cur []storyPassage
+	for i, p := range ps {
+		if len(cur) > 0 {
+			prev := ps[i-1]
+			gap := p.at.Sub(prev.at) > storyChapterGap
+			afterFight := prev.endsFor && len(cur) >= storyChapterMin
+			if gap || afterFight || len(cur) >= storyChapterMax {
+				cuts, cur = append(cuts, cur), nil
+			}
+		}
+		if p.Type == "gm" && p.Speaker == "" && (len(cur) == 0 || p.at.Sub(cur[len(cur)-1].at) > storyOpenerGap) {
+			p.Opener = true // a narration that opens a chapter or a new beat gets the drop cap
+		}
+		cur = append(cur, p)
+	}
+	if len(cur) > 0 {
+		cuts = append(cuts, cur)
+	}
+	out := make([]storyChapter, 0, len(cuts))
+	for i, c := range cuts {
+		words := 0
+		for _, p := range c {
+			words += len(strings.Fields(p.Text))
+		}
+		mins := max(1, (words+storyWordsPerMin-1)/storyWordsPerMin)
+		begun := c[0].at.In(zone)
+		out = append(out, storyChapter{
+			ID: fmt.Sprintf("ch%d", i+1), Num: fmt.Sprintf("Chapter %s", roman(i+1)), Title: storyTitle(begun),
+			Location: begun.Format("Jan 2, 15:04 MST"), ReadTime: fmt.Sprintf("%d %s · %d min read", len(c), map[bool]string{true: "passage", false: "passages"}[len(c) == 1], mins), Entries: c,
+		})
+	}
+	return out
+}
+
+// storyTitle names a chapter by when it began, in the campaign's zone: "Sunday evening". The server stores no chapter names, and the words that
+// open a chapter are already on its first page.
+func storyTitle(begun time.Time) string {
+	part := "night"
+	switch h := begun.Hour(); {
+	case h >= 5 && h < 12:
+		part = "morning"
+	case h >= 12 && h < 17:
+		part = "afternoon"
+	case h >= 17 && h < 21:
+		part = "evening"
+	}
+	return begun.Weekday().String() + " " + part
+}
+
+func roman(n int) string {
+	var b strings.Builder
+	for _, r := range []struct {
+		v int
+		s string
+	}{{1000, "M"}, {900, "CM"}, {500, "D"}, {400, "CD"}, {100, "C"}, {90, "XC"}, {50, "L"}, {40, "XL"}, {10, "X"}, {9, "IX"}, {5, "V"}, {4, "IV"}, {1, "I"}} {
+		for n >= r.v {
+			b.WriteString(r.s)
+			n -= r.v
+		}
+	}
+	return b.String()
+}
+
+// storyPage renders the reader: the mock-up's markup with the story in window.__STORY__.
+func storyPage(campaignID int, name, gmName string, chapters []storyChapter, total int) string {
+	e := html.EscapeString
+	data, _ := json.Marshal(map[string]interface{}{"campaign_id": campaignID, "name": name, "gm": gmName, "chapters": chapters})
+	gmLine := ""
+	if gmName != "" {
+		gmLine = `<span class="font-mono" style="font-size:0.75rem; color:var(--text-muted);">GM: ` + e(gmName) + `</span>`
+	}
+	note := ""
+	if total >= storyMaxRecords {
+		note = fmt.Sprintf(`<p style="font-size:0.78rem; color:var(--text-muted); margin-bottom:0.6rem;">Showing the newest part of the story. <a href="/campaign/%d/log">The whole chronicle</a> has everything.</p>`, campaignID)
+	}
+	return `<style>` + storyReaderCSS + `</style>
+<div class="reader-shell" id="story-reader">
+  <header class="reader-topbar">
+    <div class="reader-topbar-row">
+      <div style="min-width:0;">
+        <div style="display:flex; align-items:center; gap:0.45rem; flex-wrap:wrap;">
+          <span class="font-rpg" style="font-size:1.05rem; font-weight:800; color:var(--accent-gold);">` + e(name) + `</span>
+          ` + gmLine + `
+        </div>
+        <div id="topbar-subtitle" style="font-size:0.78rem; color:var(--text-secondary); margin-top:0.1rem;"></div>
+      </div>
+      <div style="display:flex; align-items:center; gap:0.4rem; flex-wrap:wrap;">
+        <button class="pill-btn" id="btn-toc" type="button">📑 Chapters &amp; Bookmarks</button>
+        <button class="pill-btn" id="btn-mode-flip" type="button">📖 Page Flip</button>
+        <button class="pill-btn" id="btn-mode-scroll" type="button">📜 Scroll</button>
+      </div>
+    </div>
+    <div class="reader-progress-track" title="Campaign Reading Progress"><div class="reader-progress-fill" id="reader-progress-fill" style="width: 0%;"></div></div>
+  </header>
+  ` + note + `
+  <div class="resume-banner hidden" id="resume-banner">
+    <span id="resume-text"></span>
+    <div style="display:flex; gap:0.35rem;"><button class="pill-btn" id="btn-dismiss-resume" type="button">Got it</button></div>
+  </div>
+  <div class="reader-controls">
+    <div class="control-group">
+      <button class="pill-btn active" id="btn-dice-toggle" type="button">🎲 Dice &amp; Rolls: On</button>
+      <button class="pill-btn" data-size="sm" type="button" aria-label="Smaller text">A-</button>
+      <button class="pill-btn active" data-size="md" type="button" aria-label="Normal text">A</button>
+      <button class="pill-btn" data-size="lg" type="button" aria-label="Larger text">A+</button>
+    </div>
+    <div class="control-group">
+      <button class="pill-btn hidden" id="btn-new" type="button"></button>
+      <button class="pill-btn" id="btn-latest" type="button">📍 Latest</button>
+      <button class="pill-btn" id="btn-refresh" type="button" title="Reload to see what has been played since">↻ Check for new</button>
+    </div>
+  </div>
+  <section id="flip-container">
+    <div class="book-stage" id="book-stage"><article class="book-page" id="book-page"></article></div>
+    <div class="flip-nav-bar">
+      <button class="btn btn-ghost" id="btn-prev-page" type="button">← Prev</button>
+      <input class="page-scrubber" id="page-scrubber" type="range" min="0" max="1" value="0" aria-label="Jump to page" />
+      <span class="font-mono" id="page-counter" style="font-size:0.78rem; color:var(--text-secondary); min-width:74px; text-align:center;">Page 1 / 1</span>
+      <button class="btn btn-gold" id="btn-next-page" type="button">Next →</button>
+    </div>
+    <div class="swipe-hint">Tip: swipe left/right on the page, tap the arrows, or use ← / → keys. Your spot is saved in this browser.</div>
+  </section>
+  <section id="scroll-container" class="hidden"></section>
+</div>
+<div class="rpg-panel panel-pad hidden" id="story-empty" style="max-width:900px; margin:1rem auto;">
+  <h1 class="font-rpg" style="font-size:1.2rem; color:var(--accent-gold);">` + e(name) + `</h1>
+  <p style="color:var(--text-secondary); margin-top:0.4rem;">The story has not begun yet. When the GM narrates and the players act, it is written here as a book.</p>
+  <p style="margin-top:0.7rem;"><a class="btn btn-ghost btn-sm" href="/campaign/` + fmt.Sprint(campaignID) + `">Back to the Live Table</a></p>
+</div>
+<div class="toc-backdrop hidden" id="toc-backdrop" role="dialog" aria-modal="true" aria-label="Chapters and Bookmarks">
+  <div class="toc-drawer">
+    <div style="display:flex; align-items:center; justify-content:space-between; border-bottom:1px solid var(--border-subtle); padding-bottom:0.65rem;">
+      <h2 class="font-rpg" style="font-size:1.05rem; color:var(--accent-gold);">Campaign Chronicle</h2>
+      <button class="btn btn-ghost" id="btn-close-toc" type="button">Close</button>
+    </div>
+    <div><div style="font-size:0.75rem; font-weight:700; color:var(--text-muted); text-transform:uppercase; letter-spacing:0.06em; margin-bottom:0.45rem;">Chapters</div>
+      <div id="toc-chapters" style="display:flex; flex-direction:column; gap:0.45rem;"></div></div>
+    <div><div style="font-size:0.75rem; font-weight:700; color:var(--text-muted); text-transform:uppercase; letter-spacing:0.06em; margin-bottom:0.45rem;">Starred Bookmarks</div>
+      <div id="toc-bookmarks" style="display:flex; flex-direction:column; gap:0.45rem;"></div></div>
+    <div style="margin-top:auto; border-top:1px solid var(--border-subtle); padding-top:0.75rem; display:flex; justify-content:space-between; align-items:center; gap:0.5rem; flex-wrap:wrap;">
+      <span style="font-size:0.75rem; color:var(--text-muted);">Saved in this browser · <a href="/campaign/` + fmt.Sprint(campaignID) + `/log">whole chronicle</a></span>
+      <button class="pill-btn" id="btn-reset-progress" type="button">Restart Book</button>
+    </div>
+  </div>
+</div>
+<script>window.__STORY__ = ` + string(data) + `;</script>
+<script>` + storyReaderJS + `</script>`
+}
+
+// serveStoryReader serves GET /campaign/{id}/story (the caller checked the campaign may be watched).
+func serveStoryReader(w http.ResponseWriter, r *http.Request, campaignID int) {
+	w.Header().Set("Content-Type", "text/html; charset=utf-8")
+	var name, gmName string
+	err := db.QueryRow(`SELECT l.name, COALESCE(a.name, '') FROM lobbies l LEFT JOIN agents a ON a.id = l.dm_id WHERE l.id = $1`, campaignID).Scan(&name, &gmName)
+	if err == sql.ErrNoRows {
+		http.Error(w, "Campaign not found", http.StatusNotFound)
+		return
+	}
+	if err != nil {
+		writeDBErrorPage(w, err, "the campaign")
+		return
+	}
+	recs, err := readActions(actionFilter{lobby: campaignID, newestFirst: true, limit: storyMaxRecords, skipTypes: storySkipTypes()})
+	if err != nil {
+		writeDBErrorPage(w, err, "the campaign's story")
+		return
+	}
+	for i, j := 0, len(recs)-1; i < j; i, j = i+1, j-1 { // oldest first
+		recs[i], recs[j] = recs[j], recs[i]
+	}
+	icons := map[int]string{}
+	for _, a := range recs {
+		if _, seen := icons[a.CharacterID]; a.CharacterID > 0 && !seen {
+			var class string
+			db.QueryRow(`SELECT COALESCE(class, '') FROM characters WHERE id = $1`, a.CharacterID).Scan(&class)
+			icons[a.CharacterID] = classIcon(class)
+		}
+	}
+	chapters := storyChapters(storyPassages(recs, icons), campaignLocation(campaignID))
+	fmt.Fprint(w, wrapView("Story: "+name+" - Agent RPG 2024", storyPage(campaignID, name, gmName, chapters, len(recs))))
+}

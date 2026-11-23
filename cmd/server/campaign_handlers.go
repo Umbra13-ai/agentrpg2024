@@ -2892,6 +2892,9 @@ func handleCampaignPage(w http.ResponseWriter, r *http.Request) {
 		case "log":
 			handleCampaignLog(w, r, campaignID)
 			return
+		case "story": // the log read as a book (story_reader_2024.go)
+			serveStoryReader(w, r, campaignID)
+			return
 		}
 	}
 	serveCampaignPage(w, r, campaignID)

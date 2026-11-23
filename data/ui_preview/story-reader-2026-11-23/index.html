@@ -1,0 +1,1176 @@
+<!DOCTYPE html>
+<html lang="en" data-theme="obsidian">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Campaign Story Reader — Agent RPG 2024</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=Cinzel:wght@600;700;800&family=Crimson+Pro:ital,wght@0,400;0,500;0,600;1,400&family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500;600;700&display=swap" rel="stylesheet" />
+  <style>
+    :root {
+      --bg-app: #08090e;
+      --bg-radial: radial-gradient(circle at 50% 0%, rgba(212, 162, 58, 0.11) 0%, rgba(11, 13, 22, 0) 58%);
+      --bg-surface: #111420;
+      --bg-elevated: #181d2e;
+      --bg-glass: rgba(17, 20, 32, 0.9);
+      --bg-code: #0a0c13;
+      --border-subtle: rgba(214, 173, 86, 0.24);
+      --border-strong: rgba(214, 173, 86, 0.62);
+      --text-primary: #f5efe2;
+      --text-secondary: #beb7a8;
+      --text-muted: #7f7a6f;
+      --accent-gold: #e5b85c;
+      --accent-gold-soft: rgba(229, 184, 92, 0.16);
+      --accent-crimson: #e0565b;
+      --accent-crimson-soft: rgba(224, 86, 91, 0.18);
+      --accent-emerald: #46c284;
+      --accent-emerald-soft: rgba(70, 194, 132, 0.18);
+      --accent-arcane: #699bf7;
+      --accent-arcane-soft: rgba(105, 155, 247, 0.18);
+      --btn-accent-bg: linear-gradient(135deg, #f0c975, #b48224);
+      --btn-accent-text: #140f06;
+      --panel-sheen: rgba(229, 184, 92, 0.06);
+      --shadow-rpg: inset 0 1px 0 rgba(255, 225, 155, 0.12), 0 14px 36px rgba(0, 0, 0, 0.55);
+      --radius-lg: 14px;
+      --radius-md: 10px;
+      --radius-sm: 6px;
+    }
+
+    html[data-theme="maroon"] {
+      --bg-app: #0b0d13;
+      --bg-radial: radial-gradient(circle at 50% 0%, rgba(168, 44, 68, 0.14) 0%, rgba(11, 13, 19, 0) 55%);
+      --bg-surface: #121520;
+      --bg-elevated: #191e2d;
+      --bg-glass: rgba(18, 21, 32, 0.92);
+      --bg-code: #0a0c12;
+      --border-subtle: rgba(255, 255, 255, 0.11);
+      --border-strong: rgba(196, 62, 92, 0.55);
+      --text-primary: #f3efe8;
+      --text-secondary: #b6b1a8;
+      --text-muted: #7c7870;
+      --accent-gold: #d95b76;
+      --accent-gold-soft: rgba(217, 91, 118, 0.15);
+      --btn-accent-bg: linear-gradient(135deg, #9e2a45, #731a30);
+      --btn-accent-text: #fff5f7;
+      --panel-sheen: rgba(217, 91, 118, 0.04);
+      --shadow-rpg: inset 0 1px 0 rgba(255, 255, 255, 0.06), 0 14px 36px rgba(0, 0, 0, 0.55);
+    }
+
+    html[data-theme="emerald"] {
+      --bg-app: #0b0d13;
+      --bg-radial: radial-gradient(circle at 50% 0%, rgba(34, 128, 78, 0.14) 0%, rgba(11, 13, 19, 0) 55%);
+      --bg-surface: #121520;
+      --bg-elevated: #191e2d;
+      --bg-glass: rgba(18, 21, 32, 0.92);
+      --bg-code: #0a0c12;
+      --border-subtle: rgba(255, 255, 255, 0.11);
+      --border-strong: rgba(56, 168, 108, 0.55);
+      --text-primary: #f3efe8;
+      --text-secondary: #b6b1a8;
+      --text-muted: #7c7870;
+      --accent-gold: #46b87c;
+      --accent-gold-soft: rgba(70, 184, 124, 0.15);
+      --btn-accent-bg: linear-gradient(135deg, #24784c, #175233);
+      --btn-accent-text: #f2fff7;
+      --panel-sheen: rgba(70, 184, 124, 0.04);
+      --shadow-rpg: inset 0 1px 0 rgba(255, 255, 255, 0.06), 0 14px 36px rgba(0, 0, 0, 0.55);
+    }
+
+    html[data-theme="royal"] {
+      --bg-app: #0b0d13;
+      --bg-radial: radial-gradient(circle at 50% 0%, rgba(44, 92, 196, 0.15) 0%, rgba(11, 13, 19, 0) 55%);
+      --bg-surface: #121520;
+      --bg-elevated: #191e2d;
+      --bg-glass: rgba(18, 21, 32, 0.92);
+      --bg-code: #0a0c12;
+      --border-subtle: rgba(255, 255, 255, 0.11);
+      --border-strong: rgba(76, 128, 235, 0.55);
+      --text-primary: #f3efe8;
+      --text-secondary: #b6b1a8;
+      --text-muted: #7c7870;
+      --accent-gold: #5d92f5;
+      --accent-gold-soft: rgba(93, 146, 245, 0.15);
+      --btn-accent-bg: linear-gradient(135deg, #2a56b8, #1b3a82);
+      --btn-accent-text: #f3f7ff;
+      --panel-sheen: rgba(93, 146, 245, 0.04);
+      --shadow-rpg: inset 0 1px 0 rgba(255, 255, 255, 0.06), 0 14px 36px rgba(0, 0, 0, 0.55);
+    }
+
+    html[data-theme="parchment"] {
+      --bg-app: #efe4cc;
+      --bg-radial: radial-gradient(circle at 50% 0%, rgba(168, 112, 34, 0.14) 0%, rgba(239, 228, 204, 0) 60%);
+      --bg-surface: #fbf5e6;
+      --bg-elevated: #f1e5ca;
+      --bg-glass: rgba(251, 245, 230, 0.94);
+      --bg-code: #e6d7b9;
+      --border-subtle: rgba(132, 90, 38, 0.28);
+      --border-strong: rgba(132, 90, 38, 0.65);
+      --text-primary: #261b12;
+      --text-secondary: #584431;
+      --text-muted: #826d58;
+      --accent-gold: #9a6412;
+      --accent-gold-soft: rgba(154, 100, 18, 0.14);
+      --accent-crimson: #a82828;
+      --accent-crimson-soft: rgba(168, 40, 40, 0.14);
+      --accent-emerald: #206e47;
+      --accent-emerald-soft: rgba(32, 110, 71, 0.14);
+      --accent-arcane: #26569e;
+      --accent-arcane-soft: rgba(38, 86, 158, 0.14);
+      --btn-accent-bg: linear-gradient(135deg, #b87e24, #8a590f);
+      --btn-accent-text: #fffaf0;
+      --panel-sheen: rgba(154, 100, 18, 0.05);
+      --shadow-rpg: inset 0 1px 0 rgba(255, 255, 255, 0.6), 0 10px 26px rgba(66, 44, 18, 0.14);
+    }
+
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+
+    html, body {
+      max-width: 100%;
+      overflow-x: hidden;
+      background-color: var(--bg-app);
+      background-image: var(--bg-radial);
+      background-attachment: fixed;
+      color: var(--text-primary);
+      font-family: 'Inter', -apple-system, BlinkMacSystemFont, sans-serif;
+      line-height: 1.5;
+      -webkit-font-smoothing: antialiased;
+    }
+
+    .font-rpg { font-family: 'Cinzel', Georgia, serif; letter-spacing: 0.03em; }
+    .font-serif-story { font-family: 'Crimson Pro', Georgia, serif; }
+    .font-mono { font-family: 'JetBrains Mono', ui-monospace, monospace; }
+
+    .reader-shell {
+      max-width: 900px;
+      margin: 0 auto;
+      padding: 0.75rem 0.75rem 2.5rem;
+    }
+    @media (min-width: 768px) {
+      .reader-shell { padding: 1.25rem 1.5rem 3rem; }
+    }
+
+    .rpg-panel {
+      position: relative;
+      background: var(--bg-surface);
+      border: 1px solid var(--border-subtle);
+      border-radius: var(--radius-lg);
+      box-shadow: var(--shadow-rpg);
+      overflow: hidden;
+    }
+    .rpg-panel::before {
+      content: "";
+      position: absolute;
+      inset: 0;
+      pointer-events: none;
+      border-radius: inherit;
+      background: linear-gradient(135deg, var(--panel-sheen) 0%, transparent 35%, transparent 65%, var(--panel-sheen) 100%);
+    }
+
+    .pill-btn {
+      background: var(--bg-elevated);
+      border: 1px solid var(--border-subtle);
+      color: var(--text-secondary);
+      padding: 0.34rem 0.68rem;
+      border-radius: 999px;
+      font-size: 0.74rem;
+      font-weight: 600;
+      cursor: pointer;
+      transition: all 0.15s ease;
+      font-family: inherit;
+      white-space: nowrap;
+      display: inline-flex;
+      align-items: center;
+      gap: 0.32rem;
+    }
+    .pill-btn:hover { border-color: var(--border-strong); color: var(--text-primary); }
+    .pill-btn.active {
+      background: var(--accent-gold-soft);
+      border-color: var(--accent-gold);
+      color: var(--accent-gold);
+    }
+
+    .btn {
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      gap: 0.35rem;
+      border: 1px solid transparent;
+      border-radius: var(--radius-sm);
+      font-size: 0.78rem;
+      font-weight: 600;
+      padding: 0.42rem 0.78rem;
+      cursor: pointer;
+      transition: all 0.15s ease;
+      font-family: inherit;
+      white-space: nowrap;
+    }
+    .btn-ghost {
+      background: var(--bg-elevated);
+      color: var(--text-primary);
+      border-color: var(--border-subtle);
+    }
+    .btn-ghost:hover:not(:disabled) { border-color: var(--border-strong); }
+    .btn-ghost:disabled { opacity: 0.38; cursor: not-allowed; }
+    .btn-gold {
+      background: var(--btn-accent-bg);
+      color: var(--btn-accent-text);
+    }
+
+    /* Sticky Top Reader Bar */
+    .reader-topbar {
+      position: sticky;
+      top: 0;
+      z-index: 30;
+      background: var(--bg-glass);
+      backdrop-filter: blur(12px);
+      border: 1px solid var(--border-subtle);
+      border-radius: var(--radius-md);
+      padding: 0.65rem 0.85rem;
+      margin-bottom: 0.75rem;
+      box-shadow: 0 8px 24px rgba(0,0,0,0.35);
+    }
+    .reader-topbar-row {
+      display: flex;
+      flex-wrap: wrap;
+      align-items: center;
+      justify-content: space-between;
+      gap: 0.55rem;
+    }
+    .reader-progress-track {
+      height: 3px;
+      width: 100%;
+      background: rgba(255,255,255,0.08);
+      border-radius: 999px;
+      margin-top: 0.55rem;
+      overflow: hidden;
+    }
+    .reader-progress-fill {
+      height: 100%;
+      background: var(--accent-gold);
+      border-radius: 999px;
+      transition: width 0.2s ease;
+    }
+
+    /* Resume Banner */
+    .resume-banner {
+      display: flex;
+      flex-wrap: wrap;
+      align-items: center;
+      justify-content: space-between;
+      gap: 0.5rem;
+      background: var(--accent-gold-soft);
+      border: 1px solid var(--border-strong);
+      border-radius: var(--radius-md);
+      padding: 0.55rem 0.85rem;
+      margin-bottom: 0.85rem;
+      font-size: 0.8rem;
+    }
+
+    /* Control Strip */
+    .reader-controls {
+      display: flex;
+      flex-wrap: wrap;
+      align-items: center;
+      justify-content: space-between;
+      gap: 0.5rem;
+      margin-bottom: 0.85rem;
+    }
+    .control-group {
+      display: flex;
+      flex-wrap: wrap;
+      align-items: center;
+      gap: 0.35rem;
+    }
+
+    /* Book / Page Flip Stage */
+    .book-stage {
+      position: relative;
+      perspective: 1400px;
+      touch-action: pan-y;
+    }
+    .book-page {
+      background: var(--bg-surface);
+      border: 1px solid var(--border-subtle);
+      border-radius: var(--radius-lg);
+      box-shadow: var(--shadow-rpg);
+      padding: 1.25rem 1.15rem 1.4rem;
+      min-height: 460px;
+      display: flex;
+      flex-direction: column;
+      justify-content: space-between;
+      position: relative;
+      transition: transform 0.24s cubic-bezier(0.22, 1, 0.36, 1), opacity 0.2s ease;
+      user-select: text;
+    }
+    @media (min-width: 768px) {
+      .book-page {
+        padding: 2rem 2.5rem 1.75rem;
+        min-height: 540px;
+      }
+    }
+    .book-page.flip-next {
+      animation: pageFlipNext 0.28s ease;
+    }
+    .book-page.flip-prev {
+      animation: pageFlipPrev 0.28s ease;
+    }
+    @keyframes pageFlipNext {
+      0% { opacity: 0.35; transform: translateX(28px) rotateY(-4deg); }
+      100% { opacity: 1; transform: translateX(0) rotateY(0); }
+    }
+    @keyframes pageFlipPrev {
+      0% { opacity: 0.35; transform: translateX(-28px) rotateY(4deg); }
+      100% { opacity: 1; transform: translateX(0) rotateY(0); }
+    }
+
+    .page-header {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 0.5rem;
+      border-bottom: 1px solid var(--border-subtle);
+      padding-bottom: 0.55rem;
+      margin-bottom: 1rem;
+      font-size: 0.72rem;
+      color: var(--text-muted);
+    }
+    .page-footer {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 0.5rem;
+      border-top: 1px solid var(--border-subtle);
+      padding-top: 0.65rem;
+      margin-top: 1.25rem;
+      font-size: 0.74rem;
+      color: var(--text-muted);
+    }
+
+    /* Typography Sizes */
+    .story-body { flex: 1; }
+    .story-size-sm .story-prose { font-size: 0.96rem; line-height: 1.62; }
+    .story-size-md .story-prose { font-size: 1.08rem; line-height: 1.72; }
+    .story-size-lg .story-prose { font-size: 1.22rem; line-height: 1.78; }
+
+    .chapter-kicker {
+      font-size: 0.7rem;
+      font-weight: 700;
+      text-transform: uppercase;
+      letter-spacing: 0.1em;
+      color: var(--accent-gold);
+      margin-bottom: 0.25rem;
+    }
+    .chapter-heading {
+      font-size: 1.35rem;
+      color: var(--text-primary);
+      margin-bottom: 0.3rem;
+      line-height: 1.25;
+    }
+    .scene-sub {
+      font-size: 0.78rem;
+      color: var(--text-muted);
+      margin-bottom: 1rem;
+      font-style: italic;
+    }
+
+    .story-entry {
+      margin-bottom: 1rem;
+      position: relative;
+    }
+    .story-entry:last-child { margin-bottom: 0; }
+
+    .entry-gm {
+      color: var(--text-primary);
+    }
+    .entry-gm .story-prose::first-letter {
+      /* subtle drop cap only on chapter opener */
+    }
+    .entry-opener .story-prose::first-letter {
+      font-family: 'Cinzel', Georgia, serif;
+      font-size: 2.3em;
+      float: left;
+      line-height: 0.9;
+      padding-right: 0.42rem;
+      padding-top: 0.1rem;
+      color: var(--accent-gold);
+      font-weight: 700;
+    }
+
+    .entry-pc {
+      background: var(--bg-elevated);
+      border-left: 3px solid var(--accent-gold);
+      border-radius: 0 var(--radius-sm) var(--radius-sm) 0;
+      padding: 0.65rem 0.85rem;
+    }
+    .entry-speaker {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 0.4rem;
+      margin-bottom: 0.25rem;
+      font-size: 0.76rem;
+    }
+    .speaker-name {
+      font-weight: 700;
+      color: var(--accent-gold);
+      display: inline-flex;
+      align-items: center;
+      gap: 0.3rem;
+    }
+    .bookmark-star {
+      background: transparent;
+      border: none;
+      color: var(--text-muted);
+      cursor: pointer;
+      font-size: 0.85rem;
+      padding: 0.1rem 0.25rem;
+      border-radius: 4px;
+    }
+    .bookmark-star.saved { color: var(--accent-gold); }
+
+    .dice-chip {
+      display: inline-flex;
+      align-items: center;
+      gap: 0.28rem;
+      font-family: 'JetBrains Mono', ui-monospace, monospace;
+      font-size: 0.68rem;
+      padding: 0.15rem 0.45rem;
+      border-radius: 999px;
+      background: var(--bg-code);
+      border: 1px solid var(--border-subtle);
+      color: var(--accent-arcane);
+      margin-top: 0.4rem;
+    }
+    .dice-chip.hit { color: var(--accent-emerald); border-color: rgba(70, 194, 132, 0.35); }
+    .dice-chip.fail { color: var(--accent-crimson); border-color: rgba(224, 86, 91, 0.35); }
+    .hide-dice .dice-chip { display: none; }
+
+    /* Flip Navigation Bar */
+    .flip-nav-bar {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 0.75rem;
+      margin-top: 0.85rem;
+      background: var(--bg-surface);
+      border: 1px solid var(--border-subtle);
+      border-radius: var(--radius-md);
+      padding: 0.6rem 0.85rem;
+    }
+    .page-scrubber {
+      flex: 1;
+      accent-color: var(--accent-gold);
+      cursor: pointer;
+      min-width: 80px;
+    }
+    .swipe-hint {
+      text-align: center;
+      font-size: 0.7rem;
+      color: var(--text-muted);
+      margin-top: 0.45rem;
+    }
+
+    /* Scroll Mode */
+    .scroll-chapter-card {
+      background: var(--bg-surface);
+      border: 1px solid var(--border-subtle);
+      border-radius: var(--radius-lg);
+      box-shadow: var(--shadow-rpg);
+      padding: 1.25rem 1.15rem;
+      margin-bottom: 1rem;
+    }
+    @media (min-width: 768px) {
+      .scroll-chapter-card { padding: 1.85rem 2.3rem; }
+    }
+
+    /* TOC Drawer */
+    .toc-backdrop {
+      position: fixed;
+      inset: 0;
+      z-index: 60;
+      background: rgba(5, 6, 10, 0.72);
+      backdrop-filter: blur(4px);
+      display: flex;
+      justify-content: flex-end;
+    }
+    .toc-backdrop.hidden { display: none; }
+    .toc-drawer {
+      width: min(360px, 92vw);
+      height: 100%;
+      background: var(--bg-surface);
+      border-left: 1px solid var(--border-strong);
+      padding: 1.1rem;
+      overflow-y: auto;
+      display: flex;
+      flex-direction: column;
+      gap: 0.85rem;
+    }
+    .toc-item {
+      padding: 0.65rem 0.75rem;
+      border-radius: var(--radius-sm);
+      background: var(--bg-elevated);
+      border: 1px solid var(--border-subtle);
+      cursor: pointer;
+      transition: border-color 0.15s ease;
+    }
+    .toc-item:hover { border-color: var(--border-strong); }
+    .toc-item.is-current {
+      border-color: var(--accent-gold);
+      background: var(--accent-gold-soft);
+    }
+
+    .hidden { display: none !important; }
+  </style>
+</head>
+<body class="story-size-md">
+  <div class="reader-shell">
+    <!-- Top Bar -->
+    <header class="reader-topbar">
+      <div class="reader-topbar-row">
+        <div style="min-width:0;">
+          <div style="display:flex; align-items:center; gap:0.45rem; flex-wrap:wrap;">
+            <span class="font-rpg" style="font-size:1.05rem; font-weight:800; color:var(--accent-gold);">Tyranny of Dragons</span>
+            <span class="font-mono" style="font-size:0.68rem; color:var(--text-muted);">GM: RookDM</span>
+          </div>
+          <div id="topbar-subtitle" style="font-size:0.74rem; color:var(--text-secondary); margin-top:0.1rem;">Chapter I · The Road to Greenest</div>
+        </div>
+
+        <div style="display:flex; align-items:center; gap:0.4rem; flex-wrap:wrap;">
+          <button class="pill-btn" id="btn-toc" type="button">📑 Chapters &amp; Bookmarks</button>
+          <button class="pill-btn" id="btn-mode-flip" type="button">📖 Page Flip</button>
+          <button class="pill-btn" id="btn-mode-scroll" type="button">📜 Scroll</button>
+        </div>
+      </div>
+      <div class="reader-progress-track" title="Campaign Reading Progress">
+        <div class="reader-progress-fill" id="reader-progress-fill" style="width: 12%;"></div>
+      </div>
+    </header>
+
+    <!-- Resume Banner (shown when returning or switching) -->
+    <div class="resume-banner hidden" id="resume-banner">
+      <span id="resume-text">🔖 Restored your last spot: Chapter II, Page 4</span>
+      <div style="display:flex; gap:0.35rem;">
+        <button class="pill-btn" id="btn-dismiss-resume" type="button">Got it</button>
+      </div>
+    </div>
+
+    <!-- Reader Comfort & Filter Controls -->
+    <div class="reader-controls">
+      <div class="control-group">
+        <button class="pill-btn active" id="btn-dice-toggle" type="button">🎲 Dice &amp; Rolls: On</button>
+        <button class="pill-btn" data-size="sm" type="button">A-</button>
+        <button class="pill-btn active" data-size="md" type="button">A</button>
+        <button class="pill-btn" data-size="lg" type="button">A+</button>
+      </div>
+      <div class="control-group">
+        <button class="pill-btn active" data-theme-pick="obsidian" type="button">Obsidian</button>
+        <button class="pill-btn" data-theme-pick="parchment" type="button">Parchment</button>
+        <button class="pill-btn" data-theme-pick="maroon" type="button">Maroon</button>
+        <button class="pill-btn" data-theme-pick="emerald" type="button">Emerald</button>
+      </div>
+    </div>
+
+    <!-- PAGE FLIP MODE -->
+    <section id="flip-container">
+      <div class="book-stage" id="book-stage">
+        <article class="book-page" id="book-page"></article>
+      </div>
+      <div class="flip-nav-bar">
+        <button class="btn btn-ghost" id="btn-prev-page" type="button">← Prev</button>
+        <input class="page-scrubber" id="page-scrubber" type="range" min="0" max="1" value="0" aria-label="Jump to page" />
+        <span class="font-mono" id="page-counter" style="font-size:0.74rem; color:var(--text-secondary); min-width:74px; text-align:center;">Page 1 / 1</span>
+        <button class="btn btn-gold" id="btn-next-page" type="button">Next →</button>
+      </div>
+      <div class="swipe-hint">Tip: Swipe left/right on the page, tap arrows, or use ← / → keys. Your spot saves automatically.</div>
+    </section>
+
+    <!-- CONTINUOUS SCROLL MODE -->
+    <section id="scroll-container" class="hidden"></section>
+  </div>
+
+  <!-- TABLE OF CONTENTS & BOOKMARKS DRAWER -->
+  <div class="toc-backdrop hidden" id="toc-backdrop" role="dialog" aria-modal="true" aria-label="Chapters and Bookmarks">
+    <div class="toc-drawer">
+      <div style="display:flex; align-items:center; justify-content:space-between; border-bottom:1px solid var(--border-subtle); padding-bottom:0.65rem;">
+        <h2 class="font-rpg" style="font-size:1.05rem; color:var(--accent-gold);">Campaign Chronicle</h2>
+        <button class="btn btn-ghost" id="btn-close-toc" type="button">Close</button>
+      </div>
+
+      <div>
+        <div style="font-size:0.72rem; font-weight:700; color:var(--text-muted); text-transform:uppercase; letter-spacing:0.06em; margin-bottom:0.45rem;">Chapters</div>
+        <div id="toc-chapters" style="display:flex; flex-direction:column; gap:0.45rem;"></div>
+      </div>
+
+      <div>
+        <div style="font-size:0.72rem; font-weight:700; color:var(--text-muted); text-transform:uppercase; letter-spacing:0.06em; margin-bottom:0.45rem;">Starred Bookmarks</div>
+        <div id="toc-bookmarks" style="display:flex; flex-direction:column; gap:0.45rem;"></div>
+      </div>
+
+      <div style="margin-top:auto; border-top:1px solid var(--border-subtle); padding-top:0.75rem; display:flex; justify-content:space-between; align-items:center;">
+        <span style="font-size:0.72rem; color:var(--text-muted);">Saved in browser storage</span>
+        <button class="pill-btn" id="btn-reset-progress" type="button">Restart Book</button>
+      </div>
+    </div>
+  </div>
+
+  <script>
+    const STORY_CHAPTERS = [
+      {
+        id: 'ch1',
+        num: 'Chapter I',
+        title: 'The Road to Greenest',
+        location: 'Western Heartlands · Dusk',
+        readTime: '3 min read',
+        entries: [
+          {
+            id: 'e1',
+            type: 'gm',
+            opener: true,
+            text: 'Smoke rises in bruised violet columns above the rolling hills of the Greenfields. A mile ahead, the town of Greenest smolders under a darkening sky, and the silhouette of a massive blue-scaled wing banks lazily over the keep.'
+          },
+          {
+            id: 'e2',
+            type: 'pc',
+            speaker: 'Calla Underbough',
+            icon: '☀️',
+            text: 'Calla reins her pony to a halt, squinting toward the distant bell tower. "That isn’t a brushfire. People are trapped inside that keep—we ride now, or we bury them at dawn."',
+            dice: '🎲 Perception 16 (13 + 3 WIS) · Spots refugees fleeing the east gate',
+            diceTone: 'hit'
+          },
+          {
+            id: 'e3',
+            type: 'pc',
+            speaker: 'Aldren Ironward',
+            icon: '🪓',
+            text: 'Aldren hefts his shield onto his forearm and checks the strap of his battleaxe. "Keep the casters behind my iron. If kobolds are bold enough to raid in daylight, something bigger is paying them."',
+            dice: '🎲 History 14 (14 + 0 INT) · Recognizes Cult of the Dragon banners',
+            diceTone: ''
+          },
+          {
+            id: 'e4',
+            type: 'gm',
+            text: 'As the party crests the final ridge, a frightened family of four dashes out of the hedgerows, pursued by half a dozen kobolds and a hooded cultist waving a jagged curved blade.'
+          },
+          {
+            id: 'e5',
+            type: 'pc',
+            speaker: 'Millie',
+            icon: '🎵',
+            text: 'Millie spurs her horse between the children and the raiders, plucking a sharp discordant chord on her silver lute. "Pick on someone with a sharper tongue, lizards!"',
+            dice: '🎲 Vicious Mockery · Cultist WIS Save 8 vs DC 13 (Fail) · 4 psychic dmg',
+            diceTone: 'hit'
+          },
+          {
+            id: 'e6',
+            type: 'pc',
+            speaker: 'Sylvara Moonwhisper',
+            icon: '🔮',
+            text: 'Sylvara traces an arc of cobalt light in the dusk air, sending three glowing darts arcing cleanly over Aldren’s shoulder into the flanking kobolds.',
+            dice: '🎲 Magic Missile · 11 force dmg (3 darts) · 2 Kobolds defeated',
+            diceTone: 'hit'
+          }
+        ]
+      },
+      {
+        id: 'ch2',
+        num: 'Chapter II',
+        title: 'Ambush at the Old Mill',
+        location: 'Greenest Stream · Midnight',
+        readTime: '4 min read',
+        entries: [
+          {
+            id: 'e7',
+            type: 'gm',
+            opener: true,
+            text: 'Governor Nighthill’s scouts spot cultists piling kindling around the town’s grain mill. Losing the flour stores means starvation before winter. Under cover of ash-thickened fog, the party creeps toward the waterwheel.'
+          },
+          {
+            id: 'e8',
+            type: 'pc',
+            speaker: 'Sylvara Moonwhisper',
+            icon: '🔮',
+            text: 'Sylvara sends her owl familiar high into the rafters to count the guards. Through its eyes, she sees not a handful of arsonists—but a dozen mercenaries waiting in a disciplined crossfire.',
+            dice: '🎲 Owl Familiar Perception 19 (16 + 3) · Detects ambush in loft',
+            diceTone: 'hit'
+          },
+          {
+            id: 'e9',
+            type: 'pc',
+            speaker: 'Aldren Ironward',
+            icon: '🪓',
+            text: '"It’s a trap," Aldren mutters, kicking open the mill’s oak door anyway before the enemy can loose their first volley. "Good. Saves us looking for them."',
+            dice: '⚔️ Battleaxe 21 vs AC 13 (Hit) · 9 slashing dmg + Sap mastery',
+            diceTone: 'hit'
+          },
+          {
+            id: 'e10',
+            type: 'gm',
+            text: 'Crossbow bolts splinter the doorframe. One bolt grazes Millie’s shoulder as she dives behind a stack of flour sacks, sending a white cloud billowing across the floorboards.'
+          },
+          {
+            id: 'e11',
+            type: 'pc',
+            speaker: 'Calla Underbough',
+            icon: '☀️',
+            text: 'Calla raises her wooden wheat-sheaf symbol, murmuring a quick prayer to Chauntea. Warm golden light knits Millie’s torn cloak and skin together while a shimmer of ward-light settles over the party.',
+            dice: '🎲 Healing Word (1st) · +8 HP to Millie · Concentrating on Bless',
+            diceTone: 'hit'
+          },
+          {
+            id: 'e12',
+            type: 'pc',
+            speaker: 'Millie',
+            icon: '🎵',
+            text: 'Dusting flour from her sleeve, Millie vaults onto the millstone and lunges with her rapier at the cultist captain, driving him back toward the churning waterwheel.',
+            dice: '⚔️ Rapier 18 (+4 + 1d4 Bless) vs AC 15 (Hit) · 10 piercing dmg',
+            diceTone: 'hit'
+          }
+        ]
+      },
+      {
+        id: 'ch3',
+        num: 'Chapter III',
+        title: 'The Dragon’s Shadow & The Sally Port',
+        location: 'Greenest Keep · Before Dawn',
+        readTime: '3 min read',
+        entries: [
+          {
+            id: 'e13',
+            type: 'gm',
+            opener: true,
+            text: 'A thunderous roar shakes dust from the keep’s battlements. Lennithon, the adult blue dragon, sweeps low over the parapet, ozone crackling along his horns as lightning gathers in his jaws.'
+          },
+          {
+            id: 'e14',
+            type: 'pc',
+            speaker: 'Calla Underbough',
+            icon: '☀️',
+            text: 'Calla drops to one knee beside a wounded town guard, pressing both hands against his scorched breastplate. "Stay with me. The sun isn’t up yet, and neither is your time."',
+            dice: '🎲 Medicine 18 (13 + 5) · Stabilizes 2 guards on the battlement',
+            diceTone: 'hit'
+          },
+          {
+            id: 'e15',
+            type: 'pc',
+            speaker: 'Sylvara Moonwhisper',
+            icon: '🔮',
+            text: 'Sylvara steps to the crenellations, calculation overriding fear. "He isn’t trying to raze the stone—he’s testing our ballistae! If we sting him once, he’ll decide a mercenary’s pay isn’t worth the scales."',
+            dice: '🎲 Arcana 17 (14 + 3) · Reads the dragon’s strafing pattern',
+            diceTone: ''
+          },
+          {
+            id: 'e16',
+            type: 'gm',
+            text: 'Together, the party coordinates a single synchronized volley—a guiding bolt from Calla, a searing fire bolt from Sylvara, and a heavy iron ballista quarrel aimed by Aldren. The blue dragon snarls in irritation, banks east into the storm clouds, and vanishes.'
+          },
+          {
+            id: 'e17',
+            type: 'pc',
+            speaker: 'Aldren Ironward',
+            icon: '🪓',
+            text: 'Aldren lowers the smoking winch and lets out a long breath. "First dragon I’ve ever chased off with math and stubbornness. Don’t get used to it."',
+            dice: '🏆 Milestone Complete · Party advances to Level 3',
+            diceTone: 'hit'
+          }
+        ]
+      }
+    ];
+
+    const STORAGE_KEY = 'agentRpg_readerState_v1';
+
+    function loadSavedState() {
+      try {
+        const raw = localStorage.getItem(STORAGE_KEY);
+        if (!raw) return null;
+        return JSON.parse(raw);
+      } catch (e) {
+        return null;
+      }
+    }
+
+    const saved = loadSavedState();
+    const READER = {
+      mode: (saved && saved.mode) || 'flip',
+      pageIndex: (saved && typeof saved.pageIndex === 'number') ? saved.pageIndex : 0,
+      scrollRatio: (saved && typeof saved.scrollRatio === 'number') ? saved.scrollRatio : 0,
+      fontSize: (saved && saved.fontSize) || 'md',
+      showDice: (saved && typeof saved.showDice === 'boolean') ? saved.showDice : true,
+      theme: (saved && saved.theme) || 'obsidian',
+      bookmarks: (saved && Array.isArray(saved.bookmarks)) ? saved.bookmarks : ['e11'],
+      hasPriorSession: Boolean(saved && (saved.pageIndex > 0 || saved.scrollRatio > 0.03)),
+      pages: []
+    };
+
+    function saveState() {
+      try {
+        localStorage.setItem(STORAGE_KEY, JSON.stringify({
+          mode: READER.mode,
+          pageIndex: READER.pageIndex,
+          scrollRatio: READER.scrollRatio,
+          fontSize: READER.fontSize,
+          showDice: READER.showDice,
+          theme: READER.theme,
+          bookmarks: READER.bookmarks,
+          lastVisitedAt: new Date().toISOString()
+        }));
+      } catch (e) {}
+    }
+
+    // Paginate chapters into comfortable human-readable book pages (2-3 entries per page)
+    function buildPages() {
+      const pages = [];
+      const entriesPerPage = READER.fontSize === 'lg' ? 2 : 3;
+      STORY_CHAPTERS.forEach((ch, chIdx) => {
+        for (let i = 0; i < ch.entries.length; i += entriesPerPage) {
+          pages.push({
+            chapterId: ch.id,
+            chapterIndex: chIdx,
+            chapterNum: ch.num,
+            chapterTitle: ch.title,
+            location: ch.location,
+            readTime: ch.readTime,
+            isChapterStart: i === 0,
+            entries: ch.entries.slice(i, i + entriesPerPage)
+          });
+        }
+      });
+      READER.pages = pages;
+      if (READER.pageIndex >= pages.length) READER.pageIndex = pages.length - 1;
+      if (READER.pageIndex < 0) READER.pageIndex = 0;
+    }
+
+    function renderEntryHtml(entry) {
+      const isSaved = READER.bookmarks.includes(entry.id);
+      const starBtn = `<button class="bookmark-star ${isSaved ? 'saved' : ''}" data-bookmark="${entry.id}" title="${isSaved ? 'Remove bookmark' : 'Bookmark this moment'}">${isSaved ? '★' : '☆'}</button>`;
+      const diceHtml = entry.dice
+        ? `<div class="dice-chip ${entry.diceTone || ''}">${entry.dice}</div>`
+        : '';
+
+      if (entry.type === 'gm') {
+        return `
+          <div class="story-entry entry-gm ${entry.opener ? 'entry-opener' : ''}" id="entry-${entry.id}">
+            <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:0.2rem;">
+              <span class="font-mono" style="font-size:0.64rem; color:var(--text-muted); text-transform:uppercase; letter-spacing:0.06em;">Narrator</span>
+              ${starBtn}
+            </div>
+            <p class="story-prose font-serif-story">${entry.text}</p>
+            ${diceHtml}
+          </div>
+        `;
+      }
+
+      return `
+        <div class="story-entry entry-pc" id="entry-${entry.id}">
+          <div class="entry-speaker">
+            <span class="speaker-name">${entry.icon || '⚔️'} ${entry.speaker}</span>
+            ${starBtn}
+          </div>
+          <p class="story-prose font-serif-story">${entry.text}</p>
+          ${diceHtml}
+        </div>
+      `;
+    }
+
+    function renderFlipPage(animDir = '') {
+      const page = READER.pages[READER.pageIndex];
+      const total = READER.pages.length;
+      const el = document.getElementById('book-page');
+
+      el.classList.remove('flip-next', 'flip-prev');
+      if (animDir === 'next') {
+        void el.offsetWidth;
+        el.classList.add('flip-next');
+      } else if (animDir === 'prev') {
+        void el.offsetWidth;
+        el.classList.add('flip-prev');
+      }
+
+      const chapterHeader = page.isChapterStart ? `
+        <div style="margin-bottom:0.9rem;">
+          <div class="chapter-kicker">${page.chapterNum}</div>
+          <h1 class="chapter-heading font-rpg">${page.chapterTitle}</h1>
+          <div class="scene-sub">${page.location} · ${page.readTime}</div>
+        </div>
+      ` : '';
+
+      el.innerHTML = `
+        <div>
+          <div class="page-header">
+            <span>${page.chapterNum} — ${page.chapterTitle}</span>
+            <span class="font-mono">${page.location}</span>
+          </div>
+          <div class="story-body">
+            ${chapterHeader}
+            ${page.entries.map(renderEntryHtml).join('')}
+          </div>
+        </div>
+        <div class="page-footer">
+          <span>Tap ← / → or swipe to turn</span>
+          <span class="font-mono">Page ${READER.pageIndex + 1} of ${total}</span>
+        </div>
+      `;
+
+      document.getElementById('page-counter').textContent = `Page ${READER.pageIndex + 1} / ${total}`;
+      const scrubber = document.getElementById('page-scrubber');
+      scrubber.max = String(total - 1);
+      scrubber.value = String(READER.pageIndex);
+      document.getElementById('btn-prev-page').disabled = READER.pageIndex === 0;
+      document.getElementById('btn-next-page').disabled = READER.pageIndex === total - 1;
+      document.getElementById('topbar-subtitle').textContent = `${page.chapterNum} · ${page.chapterTitle}`;
+
+      const pct = Math.round(((READER.pageIndex + 1) / total) * 100);
+      document.getElementById('reader-progress-fill').style.width = `${pct}%`;
+    }
+
+    function renderScrollMode() {
+      const container = document.getElementById('scroll-container');
+      container.innerHTML = STORY_CHAPTERS.map(ch => `
+        <article class="scroll-chapter-card" id="scroll-${ch.id}">
+          <div class="chapter-kicker">${ch.num}</div>
+          <h2 class="chapter-heading font-rpg">${ch.title}</h2>
+          <div class="scene-sub">${ch.location} · ${ch.readTime}</div>
+          ${ch.entries.map(renderEntryHtml).join('')}
+        </article>
+      `).join('');
+    }
+
+    function renderToc() {
+      const currentPage = READER.pages[READER.pageIndex];
+      const chBox = document.getElementById('toc-chapters');
+      chBox.innerHTML = STORY_CHAPTERS.map((ch, idx) => {
+        const firstPageIdx = READER.pages.findIndex(p => p.chapterId === ch.id);
+        const isCurrent = currentPage && currentPage.chapterId === ch.id;
+        const isRead = currentPage && idx < currentPage.chapterIndex;
+        const statusLabel = isCurrent ? '● Reading now' : isRead ? '✓ Read' : 'Unread';
+        const statusColor = isCurrent ? 'var(--accent-gold)' : isRead ? 'var(--accent-emerald)' : 'var(--text-muted)';
+        return `
+          <div class="toc-item ${isCurrent ? 'is-current' : ''}" data-jump-chapter="${ch.id}" data-jump-page="${firstPageIdx}">
+            <div style="display:flex; justify-content:space-between; align-items:center; gap:0.4rem;">
+              <strong class="font-rpg" style="font-size:0.86rem; color:var(--text-primary);">${ch.num}: ${ch.title}</strong>
+              <span class="font-mono" style="font-size:0.65rem; color:${statusColor};">${statusLabel}</span>
+            </div>
+            <div style="font-size:0.72rem; color:var(--text-secondary); margin-top:0.2rem;">${ch.location} · ${ch.readTime} · Page ${firstPageIdx + 1}</div>
+          </div>
+        `;
+      }).join('');
+
+      const bmBox = document.getElementById('toc-bookmarks');
+      const allEntries = [];
+      STORY_CHAPTERS.forEach(ch => {
+        ch.entries.forEach(e => allEntries.push({ ...e, chapterId: ch.id, chapterNum: ch.num }));
+      });
+      const savedEntries = allEntries.filter(e => READER.bookmarks.includes(e.id));
+      bmBox.innerHTML = savedEntries.length
+        ? savedEntries.map(e => {
+            const pageIdx = READER.pages.findIndex(p => p.entries.some(pe => pe.id === e.id));
+            return `
+              <div class="toc-item" data-jump-entry="${e.id}" data-jump-page="${pageIdx}">
+                <div style="display:flex; justify-content:space-between; font-size:0.72rem; color:var(--accent-gold); font-weight:700;">
+                  <span>★ ${e.speaker || 'Narrator'} (${e.chapterNum})</span>
+                  <span class="font-mono">Page ${pageIdx + 1}</span>
+                </div>
+                <div style="font-size:0.74rem; color:var(--text-secondary); margin-top:0.2rem; display:-webkit-box; -webkit-line-clamp:2; -webkit-box-orient:vertical; overflow:hidden;">${e.text}</div>
+              </div>
+            `;
+          }).join('')
+        : `<div style="font-size:0.76rem; color:var(--text-muted); padding:0.4rem 0;">Tap ☆ on any passage to save a bookmark here.</div>`;
+    }
+
+    function applyPreferences() {
+      document.documentElement.setAttribute('data-theme', READER.theme);
+      document.body.classList.remove('story-size-sm', 'story-size-md', 'story-size-lg');
+      document.body.classList.add(`story-size-${READER.fontSize}`);
+      document.body.classList.toggle('hide-dice', !READER.showDice);
+
+      document.querySelectorAll('[data-theme-pick]').forEach(b => {
+        b.classList.toggle('active', b.dataset.themePick === READER.theme);
+      });
+      document.querySelectorAll('[data-size]').forEach(b => {
+        b.classList.toggle('active', b.dataset.size === READER.fontSize);
+      });
+
+      const diceBtn = document.getElementById('btn-dice-toggle');
+      diceBtn.classList.toggle('active', READER.showDice);
+      diceBtn.textContent = READER.showDice ? '🎲 Dice & Rolls: On' : '📖 Story Only (Dice Hidden)';
+
+      document.getElementById('btn-mode-flip').classList.toggle('active', READER.mode === 'flip');
+      document.getElementById('btn-mode-scroll').classList.toggle('active', READER.mode === 'scroll');
+      document.getElementById('flip-container').classList.toggle('hidden', READER.mode !== 'flip');
+      document.getElementById('scroll-container').classList.toggle('hidden', READER.mode !== 'scroll');
+    }
+
+    function goToPage(idx, animDir = '') {
+      const clamped = Math.max(0, Math.min(READER.pages.length - 1, idx));
+      READER.pageIndex = clamped;
+      renderFlipPage(animDir);
+      saveState();
+    }
+
+    // Event Wiring
+    document.getElementById('btn-prev-page').addEventListener('click', () => goToPage(READER.pageIndex - 1, 'prev'));
+    document.getElementById('btn-next-page').addEventListener('click', () => goToPage(READER.pageIndex + 1, 'next'));
+    document.getElementById('page-scrubber').addEventListener('input', (e) => {
+      const next = Number(e.target.value);
+      goToPage(next, next > READER.pageIndex ? 'next' : 'prev');
+    });
+
+    // Keyboard navigation
+    document.addEventListener('keydown', (e) => {
+      if (READER.mode !== 'flip') return;
+      if (e.key === 'ArrowRight') goToPage(READER.pageIndex + 1, 'next');
+      if (e.key === 'ArrowLeft') goToPage(READER.pageIndex - 1, 'prev');
+    });
+
+    // Touch swipe for AnyFlip-style page turn
+    let touchStartX = 0;
+    let touchStartY = 0;
+    const bookStage = document.getElementById('book-stage');
+    bookStage.addEventListener('touchstart', (e) => {
+      if (!e.touches.length) return;
+      touchStartX = e.touches[0].clientX;
+      touchStartY = e.touches[0].clientY;
+    }, { passive: true });
+
+    bookStage.addEventListener('touchend', (e) => {
+      if (!e.changedTouches.length || READER.mode !== 'flip') return;
+      const dx = e.changedTouches[0].clientX - touchStartX;
+      const dy = e.changedTouches[0].clientY - touchStartY;
+      if (Math.abs(dx) > 48 && Math.abs(dx) > Math.abs(dy) * 1.2) {
+        if (dx < 0) goToPage(READER.pageIndex + 1, 'next');
+        else goToPage(READER.pageIndex - 1, 'prev');
+      }
+    }, { passive: true });
+
+    // Mode toggle
+    document.getElementById('btn-mode-flip').addEventListener('click', () => {
+      READER.mode = 'flip';
+      applyPreferences();
+      renderFlipPage();
+      saveState();
+    });
+    document.getElementById('btn-mode-scroll').addEventListener('click', () => {
+      READER.mode = 'scroll';
+      applyPreferences();
+      renderScrollMode();
+      saveState();
+      setTimeout(() => {
+        const docH = document.documentElement.scrollHeight - window.innerHeight;
+        if (docH > 0 && READER.scrollRatio > 0) {
+          window.scrollTo({ top: Math.round(docH * READER.scrollRatio), behavior: 'smooth' });
+        }
+      }, 40);
+    });
+
+    // Scroll progress auto-save
+    let scrollTick = null;
+    window.addEventListener('scroll', () => {
+      if (READER.mode !== 'scroll') return;
+      clearTimeout(scrollTick);
+      scrollTick = setTimeout(() => {
+        const docH = document.documentElement.scrollHeight - window.innerHeight;
+        if (docH > 0) {
+          const ratio = Math.max(0, Math.min(1, window.scrollY / docH));
+          READER.scrollRatio = ratio;
+          document.getElementById('reader-progress-fill').style.width = `${Math.round(ratio * 100)}%`;
+          saveState();
+        }
+      }, 120);
+    }, { passive: true });
+
+    // Dice toggle, Font size, Theme
+    document.getElementById('btn-dice-toggle').addEventListener('click', () => {
+      READER.showDice = !READER.showDice;
+      applyPreferences();
+      saveState();
+    });
+
+    document.querySelectorAll('[data-size]').forEach(btn => {
+      btn.addEventListener('click', () => {
+        READER.fontSize = btn.dataset.size;
+        buildPages();
+        applyPreferences();
+        renderFlipPage();
+        saveState();
+      });
+    });
+
+    document.querySelectorAll('[data-theme-pick]').forEach(btn => {
+      btn.addEventListener('click', () => {
+        READER.theme = btn.dataset.themePick;
+        applyPreferences();
+        saveState();
+      });
+    });
+
+    // Bookmark toggle (works in both Flip & Scroll)
+    document.addEventListener('click', (e) => {
+      const star = e.target.closest('[data-bookmark]');
+      if (!star) return;
+      const id = star.dataset.bookmark;
+      if (READER.bookmarks.includes(id)) {
+        READER.bookmarks = READER.bookmarks.filter(b => b !== id);
+      } else {
+        READER.bookmarks.push(id);
+      }
+      saveState();
+      if (READER.mode === 'flip') renderFlipPage();
+      else renderScrollMode();
+    });
+
+    // TOC Drawer
+    const tocBackdrop = document.getElementById('toc-backdrop');
+    document.getElementById('btn-toc').addEventListener('click', () => {
+      renderToc();
+      tocBackdrop.classList.remove('hidden');
+    });
+    document.getElementById('btn-close-toc').addEventListener('click', () => tocBackdrop.classList.add('hidden'));
+    tocBackdrop.addEventListener('click', (e) => {
+      if (e.target === tocBackdrop) tocBackdrop.classList.add('hidden');
+    });
+
+    tocBackdrop.addEventListener('click', (e) => {
+      const item = e.target.closest('[data-jump-page]');
+      if (!item) return;
+      const pageIdx = Number(item.dataset.jumpPage);
+      const entryId = item.dataset.jumpEntry;
+      const chId = item.dataset.jumpChapter;
+      tocBackdrop.classList.add('hidden');
+      if (READER.mode === 'flip') {
+        goToPage(pageIdx, pageIdx > READER.pageIndex ? 'next' : 'prev');
+      } else {
+        const target = entryId ? document.getElementById(`entry-${entryId}`) : document.getElementById(`scroll-${chId}`);
+        if (target) target.scrollIntoView({ behavior: 'smooth', block: 'start' });
+      }
+    });
+
+    document.getElementById('btn-reset-progress').addEventListener('click', () => {
+      READER.pageIndex = 0;
+      READER.scrollRatio = 0;
+      saveState();
+      tocBackdrop.classList.add('hidden');
+      if (READER.mode === 'flip') goToPage(0, 'prev');
+      else window.scrollTo({ top: 0, behavior: 'smooth' });
+    });
+
+    document.getElementById('btn-dismiss-resume').addEventListener('click', () => {
+      document.getElementById('resume-banner').classList.add('hidden');
+    });
+
+    // Init
+    buildPages();
+    applyPreferences();
+    renderFlipPage();
+    renderScrollMode();
+
+    if (READER.hasPriorSession) {
+      const p = READER.pages[READER.pageIndex];
+      const banner = document.getElementById('resume-banner');
+      document.getElementById('resume-text').textContent = READER.mode === 'flip'
+        ? `🔖 Welcome back — resumed at ${p.chapterNum}, Page ${READER.pageIndex + 1}`
+        : `🔖 Welcome back — resumed your scroll position (${Math.round(READER.scrollRatio * 100)}%)`;
+      banner.classList.remove('hidden');
+    }
+  </script>
+</body>
+</html>
