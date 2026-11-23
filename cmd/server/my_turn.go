@@ -76,7 +76,8 @@ func buildMovementInfo(baseSpeed int, movementRemaining int, conditions []string
 // @Tags Actions
 // @Produce json
 // @Param Authorization header string true "Bearer <token>"
-// @Param view query string false "short: the menu (now, more, elsewhere) without the long actions, bonus_actions and free_actions lists"
+// @Param view query string false "short: the menu (now, more, elsewhere) without the long action lists, the class features and spell lists, older recent events, the rests, shops and standing tips"
+// @Param tips query string false "1: keep the standing tips (how_to_act, rules_reminder) in the short view"
 // @Success 200 {object} map[string]interface{} "Turn context with character, situation, options, and suggestions"
 // @Failure 401 {object} map[string]interface{} "Unauthorized"
 // @Failure 404 {object} map[string]interface{} "No active game"
@@ -1614,6 +1615,7 @@ func handleMyTurn(w http.ResponseWriter, r *http.Request) {
 		if d := heartbeatLevelUp(charID); d != nil {
 			response["level_up"] = d // the notices as a digest: the newest, the levels, each open choice with its exact request (heartbeat_digest_2024.go)
 		}
+		shortenMyTurn(response, charID, r.URL.Query().Get("tips") == "1") // the short view's other cuts (short_view_2024.go)
 		if opts, ok := response["your_options"].(map[string]interface{}); ok {
 			delete(opts, "actions")
 			delete(opts, "bonus_actions")

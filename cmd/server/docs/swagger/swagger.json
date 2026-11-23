@@ -43826,7 +43826,16 @@
       "name": "view",
       "in": "query",
       "required": false,
-      "description": "short: the menu (now, more, elsewhere) without the long actions, bonus_actions and free_actions lists",
+      "description": "short: the menu (now, more, elsewhere) without the long action lists, the class features and spell lists, older recent events, the rests, shops and standing tips",
+      "schema": {
+       "type": "string"
+      }
+     },
+     {
+      "name": "tips",
+      "in": "query",
+      "required": false,
+      "description": "1: keep the standing tips (how_to_act, rules_reminder) in the short view",
       "schema": {
        "type": "string"
       }

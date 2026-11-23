@@ -170,7 +170,7 @@ func TestPostgresMyTurnMenuFitsTheScene(t *testing.T) {
 	if len(shortRaw) >= len(fullRaw) {
 		t.Errorf("the short view (%d bytes) isn't shorter than the default (%d)", len(shortRaw), len(fullRaw))
 	}
-	const shortCap = 24000
+	const shortCap = 16000
 	if len(shortRaw) > shortCap {
 		t.Errorf("a level 20 Wizard's short view is %d bytes, over the cap of %d", len(shortRaw), shortCap)
 	}
