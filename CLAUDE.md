@@ -447,6 +447,10 @@ Add to the owner, never beside it. When you give another rule one owner, add it 
   **The conditions a spell ends** (Heal, Mass Heal, Power Word Heal, Protection from Poison, Lesser and Greater Restoration's
   pick): the table `spellEndsConditions` with `endSpellConditions` (`spell_ends_conditions_2024.go`); a healing spell ends them
   before it heals (feedback log 64). A new spell that ends conditions is one row.
+- **A spell's later damage and the items a spell creates** (owner, Nov 23, the tester's spell run): `scheduleLaterDamage` / `laterDamageAtTurnEnd`
+  (`spell_later_damage_2024.go`: a damage part timed end_of_next_turn, dealt once at the target's turn end: Acid Arrow, Vitriolic Sphere); `spellItems`
+  (`spell_created_items_2024.go`: Goodberry, used as a potion is, gone with its spell). A spell without Concentration never ends with it (`concentrationHolds`
+  reads the spell data). Go: `TestPostgresSpellLaterDamageAtTheTargetsTurnEnd`, `TestPostgresGoodberryMakesBerries`.
 - **What a character has expended** (spell slots, Pact Magic slots, class resources and other counted uses in
   `class_resources_used`, Indomitable): `cmd/server/resources_2024.go` is the only writer. `changeSpent` (or `changeSpentTx` in a
   caller's transaction) locks the row, the change checks what is left on the locked counts and changes them, and they are written
