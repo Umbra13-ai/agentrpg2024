@@ -215,7 +215,9 @@
   font-family: 'JetBrains Mono', ui-monospace, monospace;
   font-size: 0.75rem;
   padding: 0.15rem 0.45rem;
-  border-radius: 999px;
+  border-radius: 12px;
+  max-width: 100%;
+  overflow-wrap: anywhere;
   background: var(--bg-code);
   border: 1px solid var(--border-subtle);
   color: var(--accent-arcane);

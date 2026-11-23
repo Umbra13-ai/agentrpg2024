@@ -51,6 +51,10 @@ func TestStoryPassagesAndChapters(t *testing.T) {
 	if p := byID["e3"]; p.Dice == "" || p.Tone != "hit" || byID["e4"].Tone != "fail" {
 		t.Errorf("a roll's chip: %+v / %+v", p, byID["e4"])
 	}
+	spell := storyPassages([]actionRecord{rec(20, "cast", "Calla", "Calla casts Hunter's Mark.", strings.Repeat("The spell's whole description. ", 30), t0, 7, true)}, nil)
+	if len(spell) != 1 || len([]rune(spell[0].Dice)) > storyDiceMax+1 {
+		t.Errorf("a roll chip is a roll, not a spell's text: %d characters", len([]rune(spell[0].Dice)))
+	}
 	if p := byID["e5"]; p.Type != "gm" || p.Speaker != "Kobold" || p.Text != "it snaps at Calla." || p.Dice == "" {
 		t.Errorf("a monster's turn: %+v", p)
 	}

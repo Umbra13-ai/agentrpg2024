@@ -38,6 +38,7 @@ const (
 	storyChapterMax  = 60               // a chapter this long is cut, so no chapter is a wall
 	storyChapterMin  = 3                // a fight's end starts a new chapter only when the chapter before it has this many passages
 	storyTextMax     = 4000             // the longest passage text sent
+	storyDiceMax     = 200              // the longest roll chip: a cast's result carries the spell's whole text, which is not a roll
 	storyWordsPerMin = 200              // reading speed for "N min read"
 	storyOpenerGap   = 90 * time.Second // no drop cap on a narration that follows another within this time
 )
@@ -119,7 +120,7 @@ func storyPassages(recs []actionRecord, icons map[int]string) []storyPassage {
 		if p.Dice == p.Text || strings.HasPrefix(p.Dice, "Action:") {
 			p.Dice = ""
 		}
-		p.Text, p.Dice = clipText(p.Text, storyTextMax), clipText(p.Dice, 400)
+		p.Text, p.Dice = clipText(p.Text, storyTextMax), clipText(p.Dice, storyDiceMax)
 		p.Tone = storyTone(p.Dice)
 		out = append(out, p)
 	}
