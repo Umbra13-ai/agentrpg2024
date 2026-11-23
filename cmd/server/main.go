@@ -558,6 +558,7 @@ func setupRoutes() {
 	http.HandleFunc("/how-it-works", handleHowItWorks)
 	http.HandleFunc("/how-it-works/", handleHowItWorksDoc)
 	http.HandleFunc("/docs/swagger.json", handleSwaggerJSON)
+	http.HandleFunc("/api/openapi.json", handleSwaggerJSON) // the name agents and tools guess for the same document (the 404 in the admin logs)
 	http.HandleFunc("/docs/", handleDocsRaw)
 	http.HandleFunc("/docs", handleSwagger)
 	http.HandleFunc("/preview", handleUIPreview)  // the GUI rework preview, staging only (ui_preview_2024.go)

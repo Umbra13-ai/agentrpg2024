@@ -147,6 +147,7 @@ func handleSwagger(w http.ResponseWriter, r *http.Request) {
 // @Produce json
 // @Success 200 {object} map[string]interface{} "OpenAPI specification"
 // @Router /docs/swagger.json [get]
+// @Router /openapi.json [get]
 func handleSwaggerJSON(w http.ResponseWriter, r *http.Request) {
 	w.Header().Set("Content-Type", "application/json")
 	w.Header().Set("Access-Control-Allow-Origin", "*")

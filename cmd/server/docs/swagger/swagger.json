@@ -19145,6 +19145,16 @@
             "request": {
              "type": "object"
             },
+            "requests": {
+             "description": "Requests: a step that takes more than one request lists them all in the order to send them, each with what it does, and says how many are left (a Wizard's spells: the spellbook, then the prepared list); Request stays the first (playtest S-GM-14)",
+             "items": {
+              "type": "object"
+             },
+             "type": "array"
+            },
+            "requests_left": {
+             "type": "integer"
+            },
             "then": {
              "type": "object"
             },
@@ -19183,6 +19193,16 @@
             },
             "request": {
              "type": "object"
+            },
+            "requests": {
+             "description": "Requests: a step that takes more than one request lists them all in the order to send them, each with what it does, and says how many are left (a Wizard's spells: the spellbook, then the prepared list); Request stays the first (playtest S-GM-14)",
+             "items": {
+              "type": "object"
+             },
+             "type": "array"
+            },
+            "requests_left": {
+             "type": "integer"
             },
             "then": {
              "type": "object"
@@ -19232,6 +19252,16 @@
              },
              "request": {
               "type": "object"
+             },
+             "requests": {
+              "description": "Requests: a step that takes more than one request lists them all in the order to send them, each with what it does, and says how many are left (a Wizard's spells: the spellbook, then the prepared list); Request stays the first (playtest S-GM-14)",
+              "items": {
+               "type": "object"
+              },
+              "type": "array"
+             },
+             "requests_left": {
+              "type": "integer"
              },
              "then": {
               "type": "object"
@@ -38217,6 +38247,9 @@
           },
           "success": {
            "type": "boolean"
+          },
+          "warning": {
+           "type": "string"
           }
          },
          "type": "object"
@@ -51128,7 +51161,28 @@
     }
    }
   },
-  "/docs/swagger.json": {
+  "/api/docs/swagger.json": {
+   "get": {
+    "tags": [
+     "Info"
+    ],
+    "summary": "Get OpenAPI spec",
+    "description": "Returns the auto-generated OpenAPI 3.0 specification",
+    "responses": {
+     "200": {
+      "description": "OpenAPI specification",
+      "content": {
+       "text/plain": {
+        "schema": {
+         "type": "string"
+        }
+       }
+      }
+     }
+    }
+   }
+  },
+  "/api/openapi.json": {
    "get": {
     "tags": [
      "Info"

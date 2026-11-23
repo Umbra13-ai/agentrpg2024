@@ -1109,14 +1109,6 @@ func handleMyTurn(w http.ResponseWriter, r *http.Request) {
 
 		response["breath_weapon"] = breathWeaponInfo
 
-		// Add breath weapon to bonus actions if available and unused
-		if !breathWeaponUsed && ancestry != "" && !bonusActionUsed {
-			if opts, ok := response["your_options"].(map[string]interface{}); ok {
-				if bonusActions, ok := opts["bonus_actions"].([]string); ok {
-					opts["bonus_actions"] = append(bonusActions, "breath_weapon (Dragonborn: Proficiency Bonus uses per Long Rest)")
-				}
-			}
-		}
 	}
 
 	// Orc Relentless Endurance status
@@ -1267,13 +1259,6 @@ func handleMyTurn(w http.ResponseWriter, r *http.Request) {
 			info["unavailable_reason"] = "Used since your last Long Rest."
 		}
 		response["divine_intervention"] = info
-		if available && !actionUsed {
-			if opts, ok := response["your_options"].(map[string]interface{}); ok {
-				if actions, ok := opts["actions"].([]string); ok {
-					opts["actions"] = append(actions, "cast with \"divine intervention\" (a Cleric spell of level 5 or lower, no slot; once per Long Rest)")
-				}
-			}
-		}
 	}
 
 	// Hunter Ranger Stand Against the Tide (level 15+)
