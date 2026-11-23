@@ -1605,7 +1605,7 @@ func handleMyTurn(w http.ResponseWriter, r *http.Request) {
 		hours, _ = soon["story_hours_left"].(int64)
 	}
 	cl := strings.ToLower(class)
-	response["elsewhere"] = elsewhere(elsewhereScene{CharID: charID, Lobby: lobbyID, Class: cl, Level: level,
+	response["elsewhere"] = elsewhere(elsewhereScene{CharID: charID, Lobby: lobbyID, Class: cl, Level: level, InFight: inCombat,
 		Caster:   game.ClassTableInt(cl, level, "Prepared Spells") > 0 || game.ClassTableInt(cl, level, "Cantrips") > 0,
 		Schedule: usesScheduleFor(charID), ShopOpen: shopsOpenFor(lobbyID) != nil, ChoicesOpen: len(characterToFinish(charID)) > 0,
 		LeftBehind: leftBehindNote(charID) != nil, LongRestHours: hours})

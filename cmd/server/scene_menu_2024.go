@@ -200,6 +200,7 @@ type elsewhereScene struct {
 	Class         string
 	Level         int
 	Caster        bool
+	InFight       bool // a rest cannot be taken in a fight
 	Schedule      bool
 	ShopOpen      bool
 	ChoicesOpen   bool
@@ -209,9 +210,11 @@ type elsewhereScene struct {
 
 var elsewhereTasks = []elsewhereTask{
 	{Group: "resting", Title: "Long Rest", Method: "POST", Path: "/api/characters/{id}/rest", Body: `{}`,
-		What: "8 hours: all Hit Points, spell slots and class resources, and half your Hit Point Dice"},
+		What: "8 hours: all Hit Points, spell slots and class resources, and half your Hit Point Dice",
+		When: func(c elsewhereScene) bool { return !c.InFight }},
 	{Group: "resting", Title: "Short Rest", Method: "POST", Path: "/api/characters/{id}/short-rest", Body: `{"hit_dice": 1}`,
-		What: "1 hour: spend Hit Point Dice to heal; some features come back"},
+		What: "1 hour: spend Hit Point Dice to heal; some features come back",
+		When: func(c elsewhereScene) bool { return !c.InFight }},
 	{Group: "spells", Title: "Prepare spells", Method: "POST", Path: "/api/characters/{id}/prepare", Body: `{"spells": ["..."]}`,
 		What: "change your prepared spells and cantrips (the rules say when: after a Long Rest, or on a level); GET the same path lists what you have and your limit",
 		When: func(c elsewhereScene) bool { return c.Caster }},

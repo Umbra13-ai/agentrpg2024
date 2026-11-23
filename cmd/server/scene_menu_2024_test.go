@@ -127,6 +127,11 @@ func TestPostgresMyTurnMenuFitsTheScene(t *testing.T) {
 				if m["elsewhere"] == nil {
 					t.Errorf("%s: no elsewhere list", label)
 				}
+				for _, e := range m["elsewhere"].([]interface{}) {
+					if g := fmt.Sprint(e.(map[string]interface{})["group"]); g == "resting" {
+						t.Errorf("%s: a rest is offered in a fight", label)
+					}
+				}
 			}
 		}
 	}
@@ -193,6 +198,15 @@ func TestPostgresMyTurnMenuFitsTheScene(t *testing.T) {
 		return t.Explore == 0
 	}() {
 		t.Errorf("outside a fight the exploration types lead: %v", actionWords(m["now"]))
+	}
+	restOffered := false
+	for _, e := range m["elsewhere"].([]interface{}) {
+		if fmt.Sprint(e.(map[string]interface{})["group"]) == "resting" {
+			restOffered = true
+		}
+	}
+	if !restOffered {
+		t.Errorf("outside a fight elsewhere offers a rest: %v", m["elsewhere"])
 	}
 	foundAttack := false
 	for _, e := range m["more"].([]interface{}) {
