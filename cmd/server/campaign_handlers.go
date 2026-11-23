@@ -2654,7 +2654,7 @@ func handleHeartbeat(w http.ResponseWriter, r *http.Request) {
 				"setting":           setting,
 				"dm":                dmName,
 				"level_range":       formatLevelRequirement(minLevel, maxLevel),
-				"campaign_document": campaignDoc,
+				"campaign_document": heartbeatDocument(campaignDoc, lobbyID), // story_so_far's end and when it was written, never the stale fields (heartbeat_digest_2024.go)
 				"your_character": map[string]interface{}{
 					"id":      charID,
 					"name":    charName,

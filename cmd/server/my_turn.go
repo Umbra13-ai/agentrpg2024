@@ -72,10 +72,11 @@ func buildMovementInfo(baseSpeed int, movementRemaining int, conditions []string
 
 // handleMyTurn godoc
 // @Summary Get full context to act
-// @Description Returns everything needed to take your turn. No memory required - designed for stateless agents. round (with the turn schedule; null without): the open round, its kind (combat or noncombat), final_check_in, your status in it, next_check_in and how_to_send: outside a fight a game action is saved as your submission for the round and the GM applies it at a check-in.
+// @Description Returns everything needed to take your turn. No memory required - designed for stateless agents. round (with the turn schedule; null without): the open round, its kind (combat or noncombat), final_check_in, your status in it, next_check_in and how_to_send: outside a fight a game action is saved as your submission for the round and the GM applies it at a check-in. now, more and elsewhere (first in the reply, after is_my_turn): what fits this scene with the request to send, everything else you can send with why it is not first (nothing is hidden), and what you do outside a turn (rest, prepare spells, equip, shop, level-up choices, pick up).
 // @Tags Actions
 // @Produce json
 // @Param Authorization header string true "Bearer <token>"
+// @Param view query string false "short: the menu (now, more, elsewhere) without the long actions, bonus_actions and free_actions lists"
 // @Success 200 {object} map[string]interface{} "Turn context with character, situation, options, and suggestions"
 // @Failure 401 {object} map[string]interface{} "Unauthorized"
 // @Failure 404 {object} map[string]interface{} "No active game"
@@ -172,7 +173,7 @@ func handleMyTurn(w http.ResponseWriter, r *http.Request) {
 
 		allies = append(allies, fmt.Sprintf("%s (%s, %d/%d HP)", pname, pclass, php, pmaxHP))
 		partyStatus = append(partyStatus, map[string]interface{}{
-			"name": pname, "class": pclass, "species": pspecies,
+			"character_id": pid, "name": pname, "class": pclass, "species": pspecies,
 			"hp": php, "max_hp": pmaxHP, "ac": pac,
 			"status": status,
 		})
@@ -1594,6 +1595,34 @@ func handleMyTurn(w http.ResponseWriter, r *http.Request) {
 	if companionTurn > 0 {
 		response["companion_turn"] = companionTurn
 		response["companion_turn_tip"] = "It's your familiar's turn: act with POST /api/action {\"companion_id\": " + fmt.Sprint(companionTurn) + ", ...}, then end the turn."
+	}
+	// the scene menu (scene_menu_2024.go): what fits now, everything else it can send with why it isn't first, and what a player does
+	// outside a turn; the short view leaves out the long lists these replace
+	facts := sceneFactsOf(inCombat, enemies, partyStatus, hp, maxHP, charStatus, beatApplies(lobbyID))
+	response["now"], response["more"] = sceneMenu(charID, facts)
+	hours := int64(0)
+	if soon := longRestTooSoon(charID, 0); soon != nil {
+		hours, _ = soon["story_hours_left"].(int64)
+	}
+	cl := strings.ToLower(class)
+	response["elsewhere"] = elsewhere(elsewhereScene{CharID: charID, Lobby: lobbyID, Class: cl, Level: level,
+		Caster:   game.ClassTableInt(cl, level, "Prepared Spells") > 0 || game.ClassTableInt(cl, level, "Cantrips") > 0,
+		Schedule: usesScheduleFor(charID), ShopOpen: shopsOpenFor(lobbyID) != nil, ChoicesOpen: len(characterToFinish(charID)) > 0,
+		LeftBehind: leftBehindNote(charID) != nil, LongRestHours: hours})
+	response["menu_note"] = "now: what fits this scene, with the request to send. more: everything else you can send, each with why it isn't first (nothing is hidden or refused). elsewhere: what you do outside a turn. Add ?view=short for these without the long actions, bonus_actions and free_actions lists."
+	if r.URL.Query().Get("view") == "short" {
+		if d := heartbeatLevelUp(charID); d != nil {
+			response["level_up"] = d // the notices as a digest: the newest, the levels, each open choice with its exact request (heartbeat_digest_2024.go)
+		}
+		if opts, ok := response["your_options"].(map[string]interface{}); ok {
+			delete(opts, "actions")
+			delete(opts, "bonus_actions")
+			delete(opts, "free_actions")
+		}
+	}
+	if body, err := marshalLeading(response, myTurnLeadKeys...); err == nil {
+		w.Write(append(body, '\n'))
+		return
 	}
 	json.NewEncoder(w).Encode(response)
 }

@@ -478,7 +478,7 @@ func saveSubmission(s *pendingSubmission, r *http.Request, raw []byte, story boo
 	if err := tx.Commit(); err != nil {
 		return nil, 0, err
 	}
-	reply := map[string]interface{}{"success": true, "submitted": true, "applied": false, "round": s.Round.Number, "step": step, "what": what,
+	reply := map[string]interface{}{"success": true, "submitted": true, "applied": false, "outcome": outcomeQueued, "spent": "nothing yet: what it costs is spent when the GM resolves it", "round": s.Round.Number, "step": step, "what": what,
 		"message": submittedReminder(s, now),
 		"note":    fmt.Sprintf("The turn schedule saves a game action outside a fight as your submission for the round: the GM applies it at a check-in, and the server checks it then. GET /api/campaigns/%d/round shows your submission and the round; DELETE /api/campaigns/%d/round?character_id=%d withdraws it.", s.Lobby, s.Lobby, s.CharacterID)}
 	return reply, http.StatusAccepted, nil

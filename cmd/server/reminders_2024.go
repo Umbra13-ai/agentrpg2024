@@ -391,6 +391,7 @@ func withTurnReminders(h http.HandlerFunc) http.HandlerFunc {
 			if t := turnLeft(charID); t != nil {
 				m["turn_left"] = t
 			}
+			setOutcome(m)
 		})
 	}
 }

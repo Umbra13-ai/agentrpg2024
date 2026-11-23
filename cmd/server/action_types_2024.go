@@ -95,6 +95,8 @@ type actionType struct {
 	Beat    bool     // outside a fight it doesn't use up the exploration beat (the GM narrates between actions)
 	SRD     bool     // one of the SRD's twelve actions (Attack, Dash ... Utilize), named by the turn reminder
 	Uses    string   // the class resource it spends, shown as uses left (my-turn)
+	Needs   string   // what the scene must have for it to lead my-turn's menu (scene_menu_2024.go): fight, enemy, hurt, dying; "" fits every scene
+	Explore int      // outside a fight the types with a rank lead my-turn's menu, in this order (1 first)
 	While   string   // shown only while: raging, not_raging, wild_shaped, prone, dying, burning, inspired (holds a Bardic Inspiration die)
 }
 
@@ -106,21 +108,21 @@ func (t actionType) sentToAction() bool { return t.Send == sendAction || t.Send 
 
 var actionTypes = []actionType{
 	// ---------------------------------------------------------------- the SRD's actions
-	{Name: "attack", SRD: true, Title: "Attack", Section: "SRD actions", Cost: costAction, Group: "attack", Tags: []string{"attack"}, Family: true,
+	{Name: "attack", Needs: needEnemy, SRD: true, Title: "Attack", Section: "SRD actions", Cost: costAction, Group: "attack", Tags: []string{"attack"}, Family: true,
 		Fields:  []string{"target_id", "target", "object_id", "cleave_target_id", "description", "close_range", "ally_adjacent", "features"},
 		What:    "Attack with your equipped weapon or an Unarmed Strike: target_id is an enemy (situation.enemies in GET /api/my-turn), object_id an object such as a door. The server rolls and answers hit or miss. With Extra Attack each request is one attack of the Attack action. Improvised weapons, Alchemist's Fire and Acid flasks; \"knock out\" for a nonlethal blow. Words of magic weapons go in the description (\"luck\", \"hurl\", \"2 to AC\").",
 		Example: `{"action": "attack", "target_id": -1, "description": "I swing my longsword at the goblin"}`},
-	{Name: "cast", SRD: true, Aliases: []string{"magic"}, Title: "Magic (cast a spell)", Section: "SRD actions", Cost: costAction, Group: "cast", Tags: []string{"spell"},
+	{Name: "cast", Explore: 9, SRD: true, Aliases: []string{"magic"}, Title: "Magic (cast a spell)", Section: "SRD actions", Cost: costAction, Group: "cast", Tags: []string{"spell"},
 		Fields:  []string{"spell_slug", "slot_level", "target_id", "target_ids", "target", "item", "charges", "description", "features"},
 		What:    "The Magic action: cast a spell you have (prepared, a cantrip, or given by a feature, your origin or an item). It takes what its casting time says: a Bonus Action spell the Bonus Action, a Reaction spell (Shield, Counterspell) the Reaction. spell_slug is the exact slug (GET /api/universe/spells), slot_level upcasts, target_id or target_ids aim it; item casts from a wand, staff or Spell Scroll.",
 		Example: `{"action": "cast", "spell_slug": "sacred-flame", "target_id": -1}`},
-	{Name: "dash", SRD: true, Title: "Dash", Section: "SRD actions", Cost: costAction, Family: true, Fields: []string{"description"},
+	{Name: "dash", Needs: needFight, SRD: true, Title: "Dash", Section: "SRD actions", Cost: costAction, Family: true, Fields: []string{"description"},
 		What:    "Extra movement equal to your Speed this turn. With Expeditious Retreat it is a Bonus Action (\"bonus\" in the description).",
 		Example: `{"action": "dash"}`},
-	{Name: "disengage", SRD: true, Title: "Disengage", Section: "SRD actions", Cost: costAction, Family: true, Fields: []string{"description"},
+	{Name: "disengage", Needs: needFight, SRD: true, Title: "Disengage", Section: "SRD actions", Cost: costAction, Family: true, Fields: []string{"description"},
 		What:    "Your movement doesn't provoke Opportunity Attacks for the rest of the turn.",
 		Example: `{"action": "disengage"}`},
-	{Name: "dodge", SRD: true, Title: "Dodge", Section: "SRD actions", Cost: costAction, Family: true, Fields: []string{"description"},
+	{Name: "dodge", Needs: needFight, SRD: true, Title: "Dodge", Section: "SRD actions", Cost: costAction, Family: true, Fields: []string{"description"},
 		What:    "Until the start of your next turn, attack rolls against you have Disadvantage and you have Advantage on Dexterity saving throws.",
 		Example: `{"action": "dodge"}`},
 	{Name: "help", SRD: true, Title: "Help", Section: "SRD actions", Cost: costAction, Family: true, Fields: []string{"target_id", "target_character_id", "description"},
@@ -129,40 +131,40 @@ var actionTypes = []actionType{
 	{Name: "hide", SRD: true, Title: "Hide", Section: "SRD actions", Cost: costAction, Family: true, Fields: []string{"description"},
 		What:    "A DC 15 Dexterity (Stealth) check while Heavily Obscured or behind Three-Quarters or Total Cover; on a success you have the Invisible condition until you're found (the GM can overrule where there is nowhere to hide).",
 		Example: `{"action": "hide", "description": "I slip behind the wagon"}`},
-	{Name: "influence", SRD: true, Title: "Influence", Section: "SRD actions", Cost: costAction, Fields: []string{"target_id", "skill", "description"},
+	{Name: "influence", Explore: 3, SRD: true, Title: "Influence", Section: "SRD actions", Cost: costAction, Fields: []string{"target_id", "skill", "description"},
 		What:    "Urge a creature to do something: Charisma (Deception, Intimidation, Performance or Persuasion, the default) or Wisdom (Animal Handling). The server rolls; the creature's attitude gives Advantage or Disadvantage; the GM says how it answers. Name the creature in the description or with target_id, and the skill with skill (else the description decides); the GM may rule another skill fits.",
 		Example: `{"action": "influence", "description": "I persuade the guard to let us pass"}`},
-	{Name: "ready", SRD: true, Title: "Ready", Section: "SRD actions", Cost: costAction, Fields: []string{"description"},
+	{Name: "ready", Needs: needFight, SRD: true, Title: "Ready", Section: "SRD actions", Cost: costAction, Fields: []string{"description"},
 		What:    "Hold an action for a trigger: \"trigger: ...; action: ...\", where the action is one of these action types (attack, cast, dash, dodge, help, hide, use_item ...) or move. When the trigger happens, POST /api/trigger-readied takes it with your Reaction.",
 		Example: `{"action": "ready", "description": "trigger: the first goblin comes through the door; action: attack it with my spear"}`},
-	{Name: "search", SRD: true, Title: "Search", Section: "SRD actions", Cost: costAction, Family: true, Fields: []string{"skill", "description"},
+	{Name: "search", Explore: 1, SRD: true, Title: "Search", Section: "SRD actions", Cost: costAction, Family: true, Fields: []string{"skill", "description"},
 		What:    "A Wisdom check to discern something: Insight (a creature's state of mind), Medicine (an ailment or cause of death), Perception (a concealed creature or object, the default) or Survival (tracks or food); name it with skill (else the description decides). The server rolls; the GM says what you find and may rule another skill fits.",
 		Example: `{"action": "search", "description": "I search the room for hidden doors"}`},
-	{Name: "study", SRD: true, Title: "Study", Section: "SRD actions", Cost: costAction, Fields: []string{"skill", "description"},
+	{Name: "study", Explore: 2, SRD: true, Title: "Study", Section: "SRD actions", Cost: costAction, Fields: []string{"skill", "description"},
 		What:    "An Intelligence check to recall or work something out: Arcana, History, Investigation (the default), Nature or Religion; name it with skill (else the description decides). The server rolls; the GM says what you learn and may rule another skill fits.",
 		Example: `{"action": "study", "skill": "arcana", "description": "I study the runes on the door"}`},
-	{Name: "use_item", SRD: true, Aliases: []string{"utilize", "drink", "drink_potion", "quaff"}, Title: "Utilize (use an object)", Section: "SRD actions", Cost: costAction, Group: "use_item", Tags: []string{"object"},
+	{Name: "use_item", Explore: 8, SRD: true, Aliases: []string{"utilize", "drink", "drink_potion", "quaff"}, Title: "Utilize (use an object)", Section: "SRD actions", Cost: costAction, Group: "use_item", Tags: []string{"object"},
 		Fields:  []string{"item", "target_character_id", "target_id", "target_ids", "charges", "description"},
 		What:    "The Utilize action: use an object that needs an action. With item, the server resolves potions (drinking one, or giving it to target_character_id within 5 feet, is a Bonus Action) and magic items (the Legendary items' words are in skill.md). Anything else (pull a lever, force a stuck door, light a fuse) is described and the GM rules on it. A Spell Scroll or a wand is read with cast and item.",
 		Example: `{"action": "use_item", "item": "Potion of Healing"}`},
-	{Name: "grapple", Title: "Grapple", Section: "SRD actions", Cost: costAction, Tags: []string{"attack"}, Fields: []string{"target_id", "description"},
+	{Name: "grapple", Needs: needEnemy, Title: "Grapple", Section: "SRD actions", Cost: costAction, Tags: []string{"attack"}, Fields: []string{"target_id", "description"},
 		What:    "An Unarmed Strike option, one attack of the Attack action: the target (no more than one size larger, within 5 feet) makes a Strength or Dexterity save against 8 + your Strength modifier + Proficiency Bonus or has the Grappled condition.",
 		Example: `{"action": "grapple", "target_id": -2}`},
-	{Name: "shove", Title: "Shove", Section: "SRD actions", Cost: costAction, Tags: []string{"attack"}, Fields: []string{"target_id", "description"},
+	{Name: "shove", Needs: needEnemy, Title: "Shove", Section: "SRD actions", Cost: costAction, Tags: []string{"attack"}, Fields: []string{"target_id", "description"},
 		What:    "An Unarmed Strike option, one attack of the Attack action: the target saves (as for a grapple) or is pushed 5 feet or knocked Prone (\"prone\" or \"push\" in the description).",
 		Example: `{"action": "shove", "target_id": -2, "description": "prone"}`},
-	{Name: "stabilize", Title: "Stabilize (first aid)", Section: "SRD actions", Cost: costAction, Tags: []string{"heals"}, Fields: []string{"target_character_id", "description"},
+	{Name: "stabilize", Needs: needDying, Title: "Stabilize (first aid)", Section: "SRD actions", Cost: costAction, Tags: []string{"heals"}, Fields: []string{"target_character_id", "description"},
 		What:    "A DC 10 Wisdom (Medicine) check on a dying ally at 0 Hit Points (target_character_id); on a success it is Stable.",
 		Example: `{"action": "stabilize", "target_character_id": 12}`},
-	{Name: "opportunity_attack", Title: "Opportunity Attack", Section: "SRD actions", Cost: costReaction, Group: "attack", Tags: []string{"attack"}, Fields: []string{"target_id", "spell_slug", "description"},
+	{Name: "opportunity_attack", Needs: needEnemy, Title: "Opportunity Attack", Section: "SRD actions", Cost: costReaction, Group: "attack", Tags: []string{"attack"}, Fields: []string{"target_id", "spell_slug", "description"},
 		What:    "One melee attack with your Reaction when an enemy leaves your reach (GET /api/my-turn says when you can). With the War Caster feat, spell_slug casts a spell at it instead (Reactive Spell).",
 		Example: `{"action": "opportunity_attack", "target_id": -1}`},
 
 	// ---------------------------------------------------------------- moving, talking and the free parts of a turn
-	{Name: "declare", Aliases: []string{"other", "free"}, Title: "Declare (your own words, the GM rules)", Section: "In your own words", Cost: costAction, GM: true, Fields: []string{"description"},
+	{Name: "declare", Explore: 4, Aliases: []string{"other", "free", "wait"}, Title: "Declare (your own words, the GM rules)", Section: "In your own words", Cost: costAction, GM: true, Fields: []string{"description"},
 		What:    "What your character does, in your own words, when no other action type fits: leading the group along a wall, a whispered plan, waiting at a corner, scouting a route. The GM rules on it and narrates; nothing is rolled. Outside a fight it is your turn's story action (with the turn schedule, saved for the GM). In a fight it takes your action (say \"bonus action\" in the description for your Bonus Action) and the GM decides what it achieves. A spell is cast with cast and a feature with its own action: a declaration that casts a spell or uses a feature or its resource (a spell slot, Channel Divinity, Focus Points ...) is refused with the request to send.",
 		Example: `{"action": "declare", "description": "I take point along the wall at the children's pace and stop at the last cover before the crossing"}`},
-	{Name: "move", Title: "Move", Section: "Moving and the free parts of a turn", Cost: costMovement, Family: true, Beat: true, Fields: []string{"movement_cost", "toward_frightened_source", "description"},
+	{Name: "move", Explore: 7, Title: "Move", Section: "Moving and the free parts of a turn", Cost: costMovement, Family: true, Beat: true, Fields: []string{"movement_cost", "toward_frightened_source", "description"},
 		What:    "Move without a battle map: movement_cost is the feet you use (crawling while Prone costs double). On a battle map use POST /api/campaigns/{id}/battle-map/move instead.",
 		Example: `{"action": "move", "movement_cost": 30, "description": "I run to the pillar"}`},
 	{Name: "map_move", Title: "Move on the battle map (a pending turn's step)", Section: "Moving and the free parts of a turn", Cost: costMovement, Send: sendPending, Fields: []string{"path", "altitude"},
@@ -174,10 +176,10 @@ var actionTypes = []actionType{
 	{Name: "jump", Title: "Jump", Section: "Moving and the free parts of a turn", Cost: costFree, Fields: []string{"description"},
 		What:    "A Long Jump (up to your Strength score in feet) or a High Jump (3 + your Strength modifier), paid from your movement; \"standing\" halves it. The Jump spell: 30 feet for 10 feet of movement.",
 		Example: `{"action": "jump", "description": "long jump over the chasm"}`},
-	{Name: "speak", Title: "Speak (in character)", Section: "Moving and the free parts of a turn", Cost: costFree, GM: true, Beat: true, Tags: []string{"talk"}, Fields: []string{"description"},
+	{Name: "speak", Explore: 5, Title: "Speak (in character)", Section: "Moving and the free parts of a turn", Cost: costFree, GM: true, Beat: true, Tags: []string{"talk"}, Fields: []string{"description"},
 		What:    "Your character's own words, said aloud in the scene: a warning, a taunt, an answer to an NPC. Free (brief speech takes no action) and logged as your character's words for the GM and the party. Persuading someone is Influence; talking out of character is the party chat (POST /api/campaigns/messages).",
 		Example: `{"action": "speak", "description": "\"Stay behind me, Millie!\" I shout over the din."}`},
-	{Name: "interact", Title: "Interact with one object", Section: "Moving and the free parts of a turn", Cost: costFree, GM: true, Beat: true, Tags: []string{"object"}, Fields: []string{"description"},
+	{Name: "interact", Explore: 6, Title: "Interact with one object", Section: "Moving and the free parts of a turn", Cost: costFree, GM: true, Beat: true, Tags: []string{"object"}, Fields: []string{"description"},
 		What:    "The one object interaction a turn includes, as part of your movement or action: open a door, pick up a dropped weapon, hand an item to an ally, draw something from a pack. Free; the GM rules on it. A second object, or one that needs an action, is Utilize (use_item).",
 		Example: `{"action": "interact", "description": "I open the door to the vestry"}`},
 	{Name: "drop", Title: "Drop something", Section: "Moving and the free parts of a turn", Cost: costFree, GM: true, Beat: true, Tags: []string{"object"}, Fields: []string{"description"},
@@ -192,7 +194,7 @@ var actionTypes = []actionType{
 	{Name: "concentration_check", Title: "Concentration check", Section: "Moving and the free parts of a turn", Cost: costFree, Fields: []string{"description"},
 		What:    "Roll a Constitution save to keep Concentration after damage the server didn't apply itself (the damage taken first in the description). Damage the server applies rolls it for you.",
 		Example: `{"action": "concentration_check", "description": "14 damage from the falling rocks"}`},
-	{Name: "offhand_attack", Title: "Light weapon's extra attack", Section: "Moving and the free parts of a turn", Cost: costBonus, Group: "attack", Tags: []string{"attack"}, Fields: []string{"target_id", "description"},
+	{Name: "offhand_attack", Needs: needEnemy, Title: "Light weapon's extra attack", Section: "Moving and the free parts of a turn", Cost: costBonus, Group: "attack", Tags: []string{"attack"}, Fields: []string{"target_id", "description"},
 		What:    "After you take the Attack action with a Light weapon, one attack with a different Light weapon in your other hand (no ability modifier to its damage unless negative). With the Nick mastery it is part of the Attack action instead.",
 		Example: `{"action": "offhand_attack", "target_id": -1, "description": "dagger"}`},
 	{Name: "use_bardic_inspiration", Title: "Use a Bardic Inspiration die", Section: "Moving and the free parts of a turn", Cost: costFree, While: "inspired", Fields: []string{"description"},
@@ -200,28 +202,28 @@ var actionTypes = []actionType{
 		Example: `{"action": "use_bardic_inspiration", "description": "total 11 dc 14"}`},
 
 	// ---------------------------------------------------------------- class features
-	{Name: "rage", Title: "Rage", Section: "Class features", Cost: costBonus, Who: actionWho{Class: "barbarian", Level: 1}, Uses: "rage", While: "not_raging",
+	{Name: "rage", Needs: needFight, Title: "Rage", Section: "Class features", Cost: costBonus, Who: actionWho{Class: "barbarian", Level: 1}, Uses: "rage", While: "not_raging",
 		What:    "Enter your Rage (not in Heavy armor): Resistance to Bludgeoning, Piercing and Slashing damage, Advantage on Strength checks and saves, the Rage Damage bonus on Strength attacks.",
 		Example: `{"action": "rage"}`},
-	{Name: "extend_rage", Title: "Extend your Rage", Section: "Class features", Cost: costBonus, Who: actionWho{Class: "barbarian", Level: 1}, While: "raging",
+	{Name: "extend_rage", Needs: needFight, Title: "Extend your Rage", Section: "Class features", Cost: costBonus, Who: actionWho{Class: "barbarian", Level: 1}, While: "raging",
 		What:    "Keep your Rage going until the end of your next turn (attacking an enemy or forcing a save extends it too).",
 		Example: `{"action": "extend_rage"}`},
-	{Name: "frenzy", Aliases: []string{"frenzy_attack"}, Title: "Frenzy (how it works)", Section: "Class features", Cost: costFree, Who: actionWho{Class: "barbarian", Subclass: "berserker", Level: 3},
+	{Name: "frenzy", Needs: needFight, Aliases: []string{"frenzy_attack"}, Title: "Frenzy (how it works)", Section: "Class features", Cost: costFree, Who: actionWho{Class: "barbarian", Subclass: "berserker", Level: 3},
 		What:    "Explains the 2024 Frenzy: while raging, a Reckless Attack's first Strength hit on your turn deals extra d6s equal to your Rage Damage (write \"reckless\" in the attack). There is no extra attack.",
 		Example: `{"action": "frenzy"}`},
 	{Name: "bardic_inspiration", Title: "Bardic Inspiration", Section: "Class features", Cost: costBonus, Who: actionWho{Class: "bard", Level: 1}, Uses: "bardic_inspiration", Fields: []string{"target_id", "target_ids", "description"},
 		What:    "Give an ally within 60 feet a Bardic Inspiration die to add to a D20 Test it fails (name the ally in the description).",
 		Example: `{"action": "bardic_inspiration", "description": "on Aldren"}`},
-	{Name: "countercharm", Title: "Countercharm", Section: "Class features", Cost: costReaction, Who: actionWho{Class: "bard", Level: 7}, Fields: []string{"description"},
+	{Name: "countercharm", Needs: needFight, Title: "Countercharm", Section: "Class features", Cost: costReaction, Who: actionWho{Class: "bard", Level: 7}, Fields: []string{"description"},
 		What:    "When you or a creature within 30 feet fails a save against being Charmed or Frightened, it rerolls with Advantage: the save's bonus and DC in the description.",
 		Example: `{"action": "countercharm", "description": "bonus 2 dc 14"}`},
-	{Name: "turn_undead", Title: "Turn Undead (Channel Divinity)", Section: "Class features", Cost: costAction, Who: actionWho{Class: "cleric", Level: 2}, Uses: "channel_divinity", Fields: []string{"target_ids", "target_id", "description"},
+	{Name: "turn_undead", Needs: needFight, Title: "Turn Undead (Channel Divinity)", Section: "Class features", Cost: costAction, Who: actionWho{Class: "cleric", Level: 2}, Uses: "channel_divinity", Fields: []string{"target_ids", "target_id", "description"},
 		What:    "A Magic action: each Undead you choose within 30 feet (target_ids) makes a Wisdom save or is Frightened and Incapacitated for 1 minute.",
 		Example: `{"action": "turn_undead", "target_ids": [-1, -2]}`},
 	{Name: "divine_spark", Title: "Divine Spark (Channel Divinity)", Section: "Class features", Cost: costAction, Who: actionWho{Class: "cleric", Level: 2}, Uses: "channel_divinity", Tags: []string{"heals"}, Fields: []string{"target_id", "target_character_id", "description"},
 		What:    "A Magic action: 1d8 + your Wisdom modifier (more d8s at levels 7, 13 and 18) to another creature within 30 feet: healing for an ally (target_character_id, or target_id with the ally's character id), or Radiant or Necrotic damage to an enemy (target_id, a monster; Constitution save for half; say radiant or necrotic). A heal with no ally named, or of an ally at full Hit Points, is refused and spends nothing.",
 		Example: `{"action": "divine_spark", "target_id": -1, "description": "radiant"}`},
-	{Name: "preserve_life", Title: "Preserve Life (Channel Divinity)", Section: "Class features", Cost: costAction, Who: actionWho{Class: "cleric", Subclass: "life", Level: 3}, Uses: "channel_divinity", Fields: []string{"target_ids", "description"},
+	{Name: "preserve_life", Needs: needHurt, Title: "Preserve Life (Channel Divinity)", Section: "Class features", Cost: costAction, Who: actionWho{Class: "cleric", Subclass: "life", Level: 3}, Uses: "channel_divinity", Fields: []string{"target_ids", "description"},
 		What:    "A Magic action: share five times your Cleric level in Hit Points among Bloodied creatures within 30 feet (up to half each one's maximum).",
 		Example: `{"action": "preserve_life", "description": "Aldren 8, Millie 7"}`},
 	{Name: "wild_shape", Title: "Wild Shape", Section: "Class features", Cost: costBonus, Who: actionWho{Class: "druid", Level: 2}, Uses: "wild_shape", Fields: []string{"description"},
@@ -233,7 +235,7 @@ var actionTypes = []actionType{
 	{Name: "wild_resurgence", Title: "Wild Resurgence", Section: "Class features", Cost: costFree, Who: actionWho{Class: "druid", Level: 5}, Fields: []string{"description"},
 		What:    "Once a turn: spend a spell slot for a use of Wild Shape (\"shape\"), or a use of Wild Shape for a level 1 spell slot (\"slot\", once per Long Rest).",
 		Example: `{"action": "wild_resurgence", "description": "shape"}`},
-	{Name: "lands_aid", Title: "Land's Aid", Section: "Class features", Cost: costAction, Who: actionWho{Class: "druid", Subclass: "land", Level: 3}, Uses: "wild_shape", Fields: []string{"target_id", "description"},
+	{Name: "lands_aid", Needs: needHurt, Title: "Land's Aid", Section: "Class features", Cost: costAction, Who: actionWho{Class: "druid", Subclass: "land", Level: 3}, Uses: "wild_shape", Fields: []string{"target_id", "description"},
 		What:    "A Magic action and a use of Wild Shape: 2d6 Necrotic damage (Constitution save for half) to creatures of your choice in a 10-foot Sphere (target_id), and one creature there regains 2d6 Hit Points (\"heal <name>\").",
 		Example: `{"action": "lands_aid", "target_id": -1, "description": "heal Aldren"}`},
 	{Name: "natural_recovery", Title: "Natural Recovery", Section: "Class features", Cost: costFree, Who: actionWho{Class: "druid", Subclass: "land", Level: 6}, Fields: []string{"description"},
@@ -251,22 +253,22 @@ var actionTypes = []actionType{
 	{Name: "second_wind", Title: "Second Wind", Section: "Class features", Cost: costBonus, Who: actionWho{Class: "fighter", Level: 1}, Uses: "second_wind",
 		What:    "Regain 1d10 + your Fighter level Hit Points; one use comes back on a Short Rest, all on a Long Rest.",
 		Example: `{"action": "second_wind"}`},
-	{Name: "action_surge", Title: "Action Surge", Section: "Class features", Cost: costFree, Who: actionWho{Class: "fighter", Level: 2}, Uses: "action_surge",
+	{Name: "action_surge", Needs: needFight, Title: "Action Surge", Section: "Class features", Cost: costFree, Who: actionWho{Class: "fighter", Level: 2}, Uses: "action_surge",
 		What:    "Take one more action this turn (not the Magic action).",
 		Example: `{"action": "action_surge"}`},
-	{Name: "martial_arts", Title: "Martial Arts strike", Section: "Class features", Cost: costBonus, Group: "attack", Tags: []string{"attack"}, Who: actionWho{Class: "monk", Level: 1}, Fields: []string{"target_id", "description"},
+	{Name: "martial_arts", Needs: needEnemy, Title: "Martial Arts strike", Section: "Class features", Cost: costBonus, Group: "attack", Tags: []string{"attack"}, Who: actionWho{Class: "monk", Level: 1}, Fields: []string{"target_id", "description"},
 		What:    "After you take the Attack action, one Unarmed Strike with your Martial Arts die.",
 		Example: `{"action": "martial_arts", "target_id": -1}`},
-	{Name: "flurry_of_blows", Title: "Flurry of Blows", Section: "Class features", Cost: costBonus, Group: "attack", Tags: []string{"attack"}, Who: actionWho{Class: "monk", Level: 2}, Uses: "focus", Fields: []string{"target_id", "description"},
+	{Name: "flurry_of_blows", Needs: needEnemy, Title: "Flurry of Blows", Section: "Class features", Cost: costBonus, Group: "attack", Tags: []string{"attack"}, Who: actionWho{Class: "monk", Level: 2}, Uses: "focus", Fields: []string{"target_id", "description"},
 		What:    "1 Focus Point: two Unarmed Strikes (three from level 10). A Warrior of the Open Hand adds \"addle\", \"push\" or \"topple\".",
 		Example: `{"action": "flurry_of_blows", "target_id": -1, "description": "topple"}`},
-	{Name: "patient_defense", Title: "Patient Defense", Section: "Class features", Cost: costBonus, Who: actionWho{Class: "monk", Level: 2}, Fields: []string{"description"},
+	{Name: "patient_defense", Needs: needFight, Title: "Patient Defense", Section: "Class features", Cost: costBonus, Who: actionWho{Class: "monk", Level: 2}, Fields: []string{"description"},
 		What:    "Take the Disengage action; with \"focus\" (1 Focus Point) Disengage and Dodge.",
 		Example: `{"action": "patient_defense", "description": "focus"}`},
-	{Name: "step_of_the_wind", Title: "Step of the Wind", Section: "Class features", Cost: costBonus, Who: actionWho{Class: "monk", Level: 2}, Fields: []string{"description"},
+	{Name: "step_of_the_wind", Needs: needFight, Title: "Step of the Wind", Section: "Class features", Cost: costBonus, Who: actionWho{Class: "monk", Level: 2}, Fields: []string{"description"},
 		What:    "Take the Dash action; with \"focus\" (1 Focus Point) Disengage and Dash, and your jump distance doubles. Fleet Step (Open Hand 11): right after another Bonus Action, without one of its own.",
 		Example: `{"action": "step_of_the_wind", "description": "focus"}`},
-	{Name: "stunning_strike", Title: "Stunning Strike", Section: "Class features", Cost: costFree, Who: actionWho{Class: "monk", Level: 5}, Fields: []string{"target_id", "description"},
+	{Name: "stunning_strike", Needs: needEnemy, Title: "Stunning Strike", Section: "Class features", Cost: costFree, Who: actionWho{Class: "monk", Level: 5}, Fields: []string{"target_id", "description"},
 		What:    "Once a turn when you hit with a Monk weapon or an Unarmed Strike, 1 Focus Point: the target makes a Constitution save or is Stunned. Easiest as the feature word in the attack (\"stunning strike\").",
 		Example: `{"action": "stunning_strike", "target_id": -1}`},
 	{Name: "self_restoration", Title: "Self-Restoration", Section: "Class features", Cost: costFree, Who: actionWho{Class: "monk", Level: 10}, Fields: []string{"description"},
@@ -278,19 +280,19 @@ var actionTypes = []actionType{
 	{Name: "superior_defense", Title: "Superior Defense", Section: "Class features", Cost: costFree, Who: actionWho{Class: "monk", Level: 18},
 		What:    "At the start of your turn, 3 Focus Points: Resistance to every damage type but Force for 1 minute.",
 		Example: `{"action": "superior_defense"}`},
-	{Name: "quivering_palm", Title: "Quivering Palm", Section: "Class features", Cost: costFree, Who: actionWho{Class: "monk", Subclass: "open-hand", Level: 17}, Fields: []string{"target_id", "description"},
+	{Name: "quivering_palm", Needs: needEnemy, Title: "Quivering Palm", Section: "Class features", Cost: costFree, Who: actionWho{Class: "monk", Subclass: "open-hand", Level: 17}, Fields: []string{"target_id", "description"},
 		What:    "\"start\" after an Unarmed Strike hits (4 Focus Points; no action), \"end\" later (an action, or one attack of your Attack action): the target makes a Constitution save, 10d12 Force damage (half on a success). \"end harmlessly\" takes no action.",
 		Example: `{"action": "quivering_palm", "target_id": -1, "description": "start"}`},
-	{Name: "lay_on_hands", Title: "Lay on Hands", Section: "Class features", Cost: costBonus, Who: actionWho{Class: "paladin", Level: 1}, Uses: "lay_on_hands", Tags: []string{"heals"}, Fields: []string{"description"},
+	{Name: "lay_on_hands", Needs: needHurt, Title: "Lay on Hands", Section: "Class features", Cost: costBonus, Who: actionWho{Class: "paladin", Level: 1}, Uses: "lay_on_hands", Tags: []string{"heals"}, Fields: []string{"description"},
 		What:    "Restore Hit Points from your pool (five times your Paladin level), or spend 5 to end the Poisoned condition: the amount and the creature in the description.",
 		Example: `{"action": "lay_on_hands", "description": "heal Aldren 5"}`},
 	{Name: "divine_sense", Title: "Divine Sense (Channel Divinity)", Section: "Class features", Cost: costBonus, Who: actionWho{Class: "paladin", Level: 3}, Uses: "channel_divinity",
 		What:    "For 10 minutes you sense Celestials, Fiends and Undead within 60 feet.",
 		Example: `{"action": "divine_sense"}`},
-	{Name: "sacred_weapon", Title: "Sacred Weapon (Channel Divinity)", Section: "Class features", Cost: costFree, Who: actionWho{Class: "paladin", Subclass: "devotion", Level: 3}, Uses: "channel_divinity", Fields: []string{"target_id", "target_ids", "description"},
+	{Name: "sacred_weapon", Needs: needFight, Title: "Sacred Weapon (Channel Divinity)", Section: "Class features", Cost: costFree, Who: actionWho{Class: "paladin", Subclass: "devotion", Level: 3}, Uses: "channel_divinity", Fields: []string{"target_id", "target_ids", "description"},
 		What:    "When you take the Attack action: add your Charisma modifier to attack rolls with the weapon for 10 minutes; it sheds light and can deal Radiant damage.",
 		Example: `{"action": "sacred_weapon"}`},
-	{Name: "horde_breaker", Title: "Horde Breaker", Section: "Class features", Cost: costFree, Tags: []string{"attack"}, Who: actionWho{Class: "ranger", Subclass: "hunter", Level: 3, Choice: "hunters_prey=horde_breaker"}, Fields: []string{"target_id", "description"},
+	{Name: "horde_breaker", Needs: needEnemy, Title: "Horde Breaker", Section: "Class features", Cost: costFree, Tags: []string{"attack"}, Who: actionWho{Class: "ranger", Subclass: "hunter", Level: 3, Choice: "hunters_prey=horde_breaker"}, Fields: []string{"target_id", "description"},
 		What:    "Once on each of your turns after a weapon attack: another attack with the same weapon at a different creature within 5 feet of the first (if Horde Breaker is your Hunter's Prey).",
 		Example: `{"action": "horde_breaker", "target_id": -2, "description": "longbow"}`},
 	{Name: "tireless", Title: "Tireless", Section: "Class features", Cost: costAction, Who: actionWho{Class: "ranger", Level: 10}, Uses: "tireless",
@@ -299,10 +301,10 @@ var actionTypes = []actionType{
 	{Name: "natures_veil", Title: "Nature's Veil", Section: "Class features", Cost: costBonus, Who: actionWho{Class: "ranger", Level: 14}, Uses: "natures_veil",
 		What:    "You have the Invisible condition until the end of your next turn.",
 		Example: `{"action": "natures_veil"}`},
-	{Name: "cunning_action", Title: "Cunning Action", Section: "Class features", Cost: costBonus, Who: actionWho{Class: "rogue", Level: 2}, Fields: []string{"description"},
+	{Name: "cunning_action", Needs: needFight, Title: "Cunning Action", Section: "Class features", Cost: costBonus, Who: actionWho{Class: "rogue", Level: 2}, Fields: []string{"description"},
 		What:    "Dash, Disengage or Hide as a Bonus Action (say which). A Thief (Fast Hands) can also make a Sleight of Hand check, use Thieves' Tools or Utilize.",
 		Example: `{"action": "cunning_action", "description": "disengage"}`},
-	{Name: "steady_aim", Title: "Steady Aim", Section: "Class features", Cost: costBonus, Who: actionWho{Class: "rogue", Level: 3},
+	{Name: "steady_aim", Needs: needFight, Title: "Steady Aim", Section: "Class features", Cost: costBonus, Who: actionWho{Class: "rogue", Level: 3},
 		What:    "If you haven't moved this turn: Advantage on your next attack roll this turn; your Speed is 0 until the turn ends.",
 		Example: `{"action": "steady_aim"}`},
 	{Name: "innate_sorcery", Title: "Innate Sorcery", Section: "Class features", Cost: costBonus, Who: actionWho{Class: "sorcerer", Level: 1}, Uses: "innate_sorcery",
@@ -333,15 +335,15 @@ var actionTypes = []actionType{
 		Example: `{"action": "blink_steps", "description": "to the top of the stairs"}`},
 
 	// ---------------------------------------------------------------- magic items
-	{Name: "bonus_attack", Title: "Scimitar of Speed's attack", Section: "Magic items", Cost: costBonus, Group: "attack", Tags: []string{"attack"}, Who: actionWho{Item: "Scimitar of Speed"}, Fields: []string{"target_id", "description"},
+	{Name: "bonus_attack", Needs: needEnemy, Title: "Scimitar of Speed's attack", Section: "Magic items", Cost: costBonus, Group: "attack", Tags: []string{"attack"}, Who: actionWho{Item: "Scimitar of Speed"}, Fields: []string{"target_id", "description"},
 		What:    "One attack with the Scimitar of Speed (held and attuned) as a Bonus Action.",
 		Example: `{"action": "bonus_attack", "target_id": -1}`},
 
 	// ---------------------------------------------------------------- spells' own actions
-	{Name: "spiritual_weapon", Title: "Spiritual Weapon's attack", Section: "Spells' own actions", Cost: costBonus, Tags: []string{"attack", "spell"}, Who: actionWho{Effect: "spiritual_weapon"}, Fields: []string{"target_id", "description"},
+	{Name: "spiritual_weapon", Needs: needEnemy, Title: "Spiritual Weapon's attack", Section: "Spells' own actions", Cost: costBonus, Tags: []string{"attack", "spell"}, Who: actionWho{Effect: "spiritual_weapon"}, Fields: []string{"target_id", "description"},
 		What:    "The spectral weapon moves up to 20 feet and makes a melee spell attack against a creature within 5 feet of it (target_id): 1d8 + your spellcasting modifier Force, +1d8 a slot level above 2.",
 		Example: `{"action": "spiritual_weapon", "target_id": -1}`},
-	{Name: "flame_blade", Title: "Flame Blade", Section: "Spells' own actions", Cost: costAction, Tags: []string{"attack", "spell"}, Who: actionWho{Effect: "flame_blade"}, Fields: []string{"target_id", "description"},
+	{Name: "flame_blade", Needs: needEnemy, Title: "Flame Blade", Section: "Spells' own actions", Cost: costAction, Tags: []string{"attack", "spell"}, Who: actionWho{Effect: "flame_blade"}, Fields: []string{"target_id", "description"},
 		What:    "A melee spell attack with the blade (a Magic action, target_id): 3d6 + your spellcasting modifier Fire, +1d6 a slot level above 2. \"evoke\" brings it back (a Bonus Action); \"let go\" is free.",
 		Example: `{"action": "flame_blade", "target_id": -1}`},
 	{Name: "gaseous_form", Title: "End Gaseous Form", Section: "Spells' own actions", Cost: costAction, Who: actionWho{Effect: "gaseous_form"}, Fields: []string{"description"},
@@ -951,32 +953,50 @@ func readiedActionRefusal(charID int) map[string]interface{} {
 
 // ---------------------------------------------------------------- my-turn's options and reminders
 
-// turnOptions: the types the character has now, as my-turn lists them by part of the turn: actions, Bonus Actions and the things
-// that take none, each with the request to send and the uses left. A companion's own actions are listed with the companion.
-func turnOptions(charID int) (actions, bonus, free []map[string]interface{}) {
+// openType: one action type the character has now, with the request to send and the uses left.
+type openType struct {
+	t         actionType
+	what, use string
+	left, max int // uses left of a limited feature (max 0: not limited)
+}
+
+// openTypes: every action type this character has now, in the table's order: the one filter that my-turn's lists (turnOptions) and its
+// scene menu (sceneMenu: now, more) both read, so they cannot disagree about what a character has. A companion's own actions are
+// listed with the companion.
+func openTypes(charID int) []openType {
 	f := actorFactsOf(charID)
+	var out []openType
 	for _, t := range actionTypes {
 		if t.Send == sendFamily || t.Send == sendPending || !t.openTo(&f) {
 			continue
 		}
-		what := t.What
+		o := openType{t: t, what: t.What, use: t.Example}
 		if t.Uses != "" {
 			if l, m := resourceLeft(charID, f.class, f.level, t.Uses); m > 0 {
-				what += fmt.Sprintf(" (%d of %d left)", l, m)
+				o.left, o.max = l, m
+				o.what += fmt.Sprintf(" (%d of %d left)", l, m)
 			}
 		}
-		use := t.Example
 		if t.Send == sendRoute {
-			use = strings.Replace(use, `"character_id": 7`, fmt.Sprintf(`"character_id": %d`, charID), 1)
+			o.use = strings.Replace(o.use, `"character_id": 7`, fmt.Sprintf(`"character_id": %d`, charID), 1)
 		}
-		o := map[string]interface{}{"name": t.Title, "action": t.Name, "use": use, "description": what}
-		switch t.Cost {
+		out = append(out, o)
+	}
+	return out
+}
+
+// turnOptions: the types the character has now, as my-turn lists them by part of the turn: actions, Bonus Actions and the things
+// that take none, each with the request to send and the uses left.
+func turnOptions(charID int) (actions, bonus, free []map[string]interface{}) {
+	for _, o := range openTypes(charID) {
+		m := map[string]interface{}{"name": o.t.Title, "action": o.t.Name, "use": o.use, "description": o.what}
+		switch o.t.Cost {
 		case costAction:
-			actions = append(actions, o)
+			actions = append(actions, m)
 		case costBonus:
-			bonus = append(bonus, o)
+			bonus = append(bonus, m)
 		case costFree, costMovement:
-			free = append(free, o)
+			free = append(free, m)
 		}
 	}
 	return
