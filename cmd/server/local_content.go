@@ -11,7 +11,6 @@ package main
 //	                      "damage_at_slot_level": {"4": "2d8"}}, ...}   changes to spells, applied when they are loaded
 
 import (
-	_ "embed"
 	"encoding/json"
 	"log"
 	"os"
@@ -68,18 +67,9 @@ type localSpellChange struct {
 	DamageAtSlotLevel map[string]string `json:"damage_at_slot_level"`
 }
 
-// spellCorrections2024: the Player's Handbook's corrections to four SRD spells (Telekinesis, Animal Shapes, Flaming Sphere's school,
-// Conjure Minor Elementals' damage at higher levels), applied on every server (the project owner, Nov 10: wording changes to SRD spells are fine).
-//
-//go:embed data/spell_corrections_2024.json
-var spellCorrections2024 []byte
-
-// applyLocalSpellChanges changes the SRD spells, before they are stored: the corrections above, then the local content's changes.
+// applyLocalSpellChanges changes the SRD spells before they are stored, only by a private server's local content. The built-in spells are the
+// SRD 5.2.1 as it is (owner, Nov 23: the Player's Handbook corrections to four spells that were applied on every server are gone).
 func applyLocalSpellChanges(spells []srdSpell2024) {
-	var fixes map[string]localSpellChange
-	if json.Unmarshal(spellCorrections2024, &fixes) == nil {
-		applySpellChanges(spells, fixes, "Spell corrections")
-	}
 	var changes map[string]localSpellChange
 	if !loadLocalJSON("spells.json", &changes) {
 		return

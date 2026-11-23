@@ -1,6 +1,8 @@
 package main
 
 import (
+	"encoding/json"
+	"fmt"
 	"os"
 	"path/filepath"
 	"strings"
@@ -252,13 +254,30 @@ func TestLocalContent(t *testing.T) {
 	}
 }
 
-// The Handbook's corrections to four SRD spells are applied on every server (spell_corrections_2024.json).
-func TestSpellCorrections(t *testing.T) {
+// The built-in spells are the SRD 5.2.1 as it is (owner, Nov 23): with no local content folder nothing changes a spell, so Flaming Sphere is
+// Conjuration, Conjure Minor Elementals adds 1d8 a slot level, and Animal Shapes and Telekinesis keep the SRD's words.
+func TestSpellsAreTheSRDAsItIs(t *testing.T) {
 	t.Setenv("AGENTRPG_LOCAL_CONTENT", "")
-	spells := []srdSpell2024{{Slug: "flaming-sphere", School: "Conjuration"}}
+	var spells, before []srdSpell2024
+	if err := json.Unmarshal(srd521SpellsJSON, &spells); err != nil {
+		t.Fatal(err)
+	}
+	json.Unmarshal(srd521SpellsJSON, &before)
 	applyLocalSpellChanges(spells)
-	if spells[0].School != "Evocation" {
-		t.Errorf("Flaming Sphere's school: %q", spells[0].School)
+	for i := range spells {
+		if spells[i].Description != before[i].Description || spells[i].School != before[i].School || spells[i].HigherLevel != before[i].HigherLevel ||
+			fmt.Sprint(spells[i].DamageAtSlotLevel) != fmt.Sprint(before[i].DamageAtSlotLevel) {
+			t.Errorf("%s was changed with no local content", spells[i].Slug)
+		}
+	}
+	by := map[string]srdSpell2024{}
+	for _, s := range spells {
+		by[s.Slug] = s
+	}
+	if by["flaming-sphere"].School != "Conjuration" || by["conjure-minor-elementals"].DamageAtSlotLevel["5"] != "3d8" ||
+		!strings.Contains(by["animal-shapes"].Description, "equal to the Hit Points of the first form into which it shape-shifts") ||
+		!strings.Contains(by["telekinesis"].Description, "such as manipulating a simple tool.") {
+		t.Errorf("the four spells are not the SRD's: %q %v", by["flaming-sphere"].School, by["conjure-minor-elementals"].DamageAtSlotLevel)
 	}
 }
 
