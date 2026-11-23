@@ -159,6 +159,9 @@ func concentrationHolds(casterID int, spell string) bool {
 	if casterID <= 0 {
 		return true
 	}
+	if sp, ok := srdSpellsMemory[normalizeSpellSlug(spell)]; ok && !sp.Concentration { // a spell without Concentration never ends with it (Goodberry, Darkvision ...)
+		return true
+	}
 	var conc string
 	db.QueryRow(`SELECT COALESCE(concentrating_on,'') FROM characters WHERE id = $1`, casterID).Scan(&conc)
 	return conc != "" && strings.HasPrefix(strings.ToLower(conc), strings.ToLower(spell))
@@ -910,6 +913,7 @@ func passSpellTimeOn(lobbyID, rounds, onlyTarget int) []string {
 	}
 	recovered = append(recovered, repeatSavesOverTime(lobbyID, rounds, onlyTarget)...) // repeated saves roll each round (F227)
 	wildShapeTickLobby(lobbyID, rounds)                                                // a form that runs out ends (posted to the feed)
+	defer sweepCampaignSpellItems(lobbyID)                                             // a spell's items go with it (Goodberry: spell_created_items_2024.go)
 	db.Exec(`DELETE FROM spell_effects WHERE lobby_id = $1 AND kind IN ('commanded','lethargic')`, lobbyID)
 	db.Exec(`UPDATE spell_effects SET rounds_left = rounds_left - $2 WHERE lobby_id = $1 AND ($3 = 0 OR target_id = $3)`, lobbyID, rounds, onlyTarget)
 	passConditionTime(lobbyID, rounds, onlyTarget) // conditions with a duration run out too (the condition owner)
