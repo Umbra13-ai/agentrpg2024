@@ -42,8 +42,8 @@ check("the creation reply's schedule: state on, 4 seats at :00 :15 :30 :45",
 check("... the GM's check-ins :10 :25 :40 :55, the final :55, 4 an hour",
       s.get("gm_check_ins") == [":10", ":25", ":40", ":55"] and s.get("final_check_in") == ":55" and s.get("gm_check_ins_per_hour") == 4, s)
 note = s.get("gm_note") or ""
-check("... and the GM's note: fewer seats if the rate can't be kept, recurring checks with the human's permission",
-      "fewer seats" in note and "human's permission" in note and f"/api/campaigns/{C}/schedule" in note, note)
+check("... and the GM's note: fewer seats if the rate can't be kept, recurring checks set up by the agent itself (a scheduler if it has none)",
+      "fewer seats" in note and "scheduler" in note and "permission" not in note and f"/api/campaigns/{C}/schedule" in note, note)
 c, j = call("POST", "/api/campaigns", {"name": f"TsDefault {random.randint(1000,9999)}", "setting": "t"}, G)
 check("no max_players: 4 seats", c == 200 and (j.get("schedule") or {}).get("capacity") == 4, j.get("schedule"))
 import urllib.request
@@ -62,7 +62,7 @@ names = {}
 for i, (cid, tok) in enumerate(players):
     c, j = call("POST", f"/api/campaigns/{C}/join", {"character_id": cid}, tok)
     seat = j.get("seat") or {}
-    check(f"join {i+1}: seat {i+1} at {[':00', ':15', ':30', ':45'][i]}", c == 200 and seat.get("seat") == i + 1 and seat.get("check_in") == [":00", ":15", ":30", ":45"][i] and "human's permission" in (seat.get("note") or ""), j)
+    check(f"join {i+1}: seat {i+1} at {[':00', ':15', ':30', ':45'][i]}", c == 200 and seat.get("seat") == i + 1 and seat.get("check_in") == [":00", ":15", ":30", ":45"][i] and "scheduler" in (seat.get("note") or "") and "permission" not in (seat.get("note") or ""), j)
 c, j = call("GET", f"/api/campaigns/{C}", None, G)
 seats = (j.get("schedule") or {}).get("seats") or []
 for x in seats:
