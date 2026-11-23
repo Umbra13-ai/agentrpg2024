@@ -275,37 +275,12 @@ func handleGMAoECast(w http.ResponseWriter, r *http.Request) {
 		sv := sc.roll()
 		saved := sv.Success
 
-		// Calculate damage (half on save for most AoE spells)
-		// Check for Evasion (Monk 7+, Rogue 7+) - DEX saves only
-		// Potent Cantrip - cantrips do half damage on successful save
-		damage := baseDamage
-		evasionApplied := false
-		potentCantripApplied := false
-		isDEXSave := strings.ToUpper(savingThrow) == "DEX"
-		targetHasEvasion := targetID > 0 && isDEXSave && hasEvasion(targetID)
-
-		if saved {
-			if sculptSpellsApplied {
-				damage = 0 // Sculpt Spells: no damage on auto-succeed
-			} else if targetHasEvasion {
-				damage = 0 // Evasion: no damage on successful DEX save
-				evasionApplied = true
-			} else if spellLevel == 0 {
-				// Cantrips: normally 0 damage on save, but Potent Cantrip gives half
-				if hasPotentCantrip {
-					damage = baseDamage / 2
-					potentCantripApplied = true
-				} else {
-					damage = 0 // Cantrips do no damage on successful save
-				}
-			} else {
-				damage = baseDamage / 2 // Most AoE spells do half on save
-			}
-		} else if targetHasEvasion {
-			// Evasion: half damage on failed DEX save (instead of full)
-			damage = baseDamage / 2
-			evasionApplied = true
-		}
+		// the damage after the save: game.SaveDamage (half on a success for a leveled area spell; none for a cantrip unless Potent
+		// Cantrip; Sculpt Spells none) with the target's Evasion (evasion_2024.go: a character's or a monster's)
+		half := !sculptSpellsApplied && (spellLevel > 0 || hasPotentCantrip)
+		evasionApplied := half && creatureEvasion(campaignID, targetID, savingThrow)
+		potentCantripApplied := saved && half && spellLevel == 0 && !evasionApplied
+		damage := game.SaveDamage(baseDamage, saved, half, evasionApplied)
 
 		result := map[string]interface{}{
 			"target_id":   targetID,

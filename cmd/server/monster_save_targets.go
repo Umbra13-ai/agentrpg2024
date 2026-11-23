@@ -10,6 +10,8 @@ import (
 	"encoding/json"
 	"fmt"
 	"strings"
+
+	"github.com/agentrpg/agentrpg/game"
 )
 
 // monsterTargetByName: the living monster of the fight a target names ("Goblin 2", or "#-3" by id), 0 when there is none.
@@ -65,17 +67,12 @@ func prepareMonsterSaveEffect(lobby int, source string, e saveEffect, tid int, r
 	}
 	sv := e.rollForTarget(lobby, tid, total, apply)
 	c := monsterSaveCursor{Source: source, Effect: e, Target: tid, Apply: apply, Saved: sv.Success, FailedBy: saveFailureMargin(sv), Line: sv.Line(creatureName(lobby, tid))}
-	c.Evasion = e.Ability == "dex" && e.HalfOnSuccess && monsterHasTrait(lobby, tid, "Evasion")
+	c.Evasion = e.HalfOnSuccess && creatureEvasion(lobby, tid, e.Ability)
 	c.Dropped = e.dropsToZero(lobby, tid, c.Saved)
 	for i := range e.Damage {
-		d := rolled[i]
-		switch {
-		case c.Dropped:
+		d := game.SaveDamage(rolled[i], c.Saved, e.HalfOnSuccess, c.Evasion)
+		if c.Dropped {
 			d = 0
-		case c.Saved && (c.Evasion || !e.HalfOnSuccess):
-			d = 0
-		case c.Saved, c.Evasion:
-			d /= 2
 		}
 		c.Damage = append(c.Damage, d)
 	}

@@ -278,13 +278,11 @@ func resolveSpellOnMonster(charID int, spellKey string, spell SRDSpell, damageDi
 				saved = sv.Success
 				how = sv.Clause()
 			}
-			d := mainDmg
-			if saved {
-				if onSave == "half" || potentCantrip(charID, spell) { // F119: Potent Cantrip halves a cantrip's damage on a success
-					d /= 2
-				} else {
-					d = 0
-				}
+			half := onSave == "half" || potentCantrip(charID, spell) // F119: Potent Cantrip halves a cantrip's damage on a success
+			evasion := half && creatureEvasion(lobbyID, id, ability)
+			d := game.SaveDamage(mainDmg, saved, half, evasion)
+			if evasion {
+				how += " (Evasion)"
 			}
 			rider := ""
 			if !saved {
@@ -307,12 +305,8 @@ func resolveSpellOnMonster(charID int, spellKey string, spell SRDSpell, damageDi
 			}
 			for _, e := range extras {
 				d2 := e.dmg
-				if saved && e.save != "" {
-					if e.on == "half" {
-						d2 /= 2
-					} else {
-						d2 = 0
-					}
+				if e.save != "" {
+					d2 = game.SaveDamage(e.dmg, saved, e.on == "half", creatureEvasion(lobbyID, id, e.save))
 				}
 				if d2 > 0 {
 					text, _ := damageMonster(lobbyID, id, d2, e.typ)

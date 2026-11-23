@@ -346,3 +346,18 @@ func titleWord(s string) string {
 	}
 	return strings.ToUpper(s[:1]) + s[1:]
 }
+
+// SaveDamage is the damage a creature takes from an effect after its saving throw (SRD 5.2.1): halfOnSuccess is an effect that deals
+// half as much damage on a success (otherwise a success takes none). evasion is a creature with Evasion making a Dexterity saving
+// throw; it changes only an effect that allows half damage: a success takes none and a failure half. Every save that deals damage, to
+// any creature from any source, works its damage out here.
+func SaveDamage(full int, saved, halfOnSuccess, evasion bool) int {
+	evasion = evasion && halfOnSuccess
+	switch {
+	case saved && (evasion || !halfOnSuccess):
+		return 0
+	case saved, evasion:
+		return full / 2
+	}
+	return full
+}

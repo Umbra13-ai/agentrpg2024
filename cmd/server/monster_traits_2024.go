@@ -51,7 +51,7 @@ var monsterTraitRules = []monsterTraitRule{
 	{Match: deathTriggerRe, Does: "when it dies, its saving throw effect is rolled for every creature in its Emanation on the battle map (monsters too), after the request that killed it or at the next turn start; without a map the GM is told",
 		Where: "recordDeathTriggerIn, drainDeathTriggers (monster_death_trigger_2024.go)"},
 	{Name: "Evasion", Does: "a Dexterity saving throw against an effect that halves damage on a success: a success takes none, a failure half",
-		Where: "applySaveEffectOnMonster (monster_save_targets.go) for a monster that is the target of a monster's save effect"},
+		Where: "creatureEvasion with game.SaveDamage (evasion_2024.go): every saving throw's damage to it, a character's spell, the GM's area cast or a stat block's effect"},
 	{Name: "Aura of Authority", Does: "it and its allies within 10 feet have Advantage on attack rolls and saving throws", Where: "attackSources, saveSources", Aura: true},
 	{Match: regenRe, Does: "regains Hit Points at the start of each of its turns (not after the damage the trait names); one that \"dies only if it starts its turn with 0 Hit Points and doesn't regenerate\" keeps its turn at 0 Hit Points, regenerates from 0, and dies at a turn start at 0 that brings no regeneration",
 		Where: "monsterFeaturesTurnStart (monster_features_2024.go), noTurnFor (turn_advance_2024.go)", Aura: true},

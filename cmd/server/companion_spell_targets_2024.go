@@ -21,6 +21,8 @@ import (
 	"fmt"
 	"net/http"
 	"strings"
+
+	"github.com/agentrpg/agentrpg/game"
 )
 
 func hasCompanionID(ids []int) bool {
@@ -200,8 +202,8 @@ func applySaveEffectOnCompanion(lobbyID int, source string, e saveEffect, tid in
 	sv := e.rollForTarget(lobbyID, tid, total, apply)
 	saved := sv.Success
 	line = sv.Line(name)
-	evasion := e.Ability == "dex" && e.HalfOnSuccess && companionHasTrait(c, "Evasion")
-	if meta := monsterMetaFor(c.Form); apply && !saved && meta != nil && meta.LR > 0 { // the use count lives in a fight monster's state: not kept for a companion
+	evasion := e.HalfOnSuccess && saveAbilityKey(e.Ability) == "dex" && companionHasTrait(c, "Evasion") // a companion's stat block (evasion_2024.go)
+	if meta := monsterMetaFor(c.Form); apply && !saved && meta != nil && meta.LR > 0 {                  // the use count lives in a fight monster's state: not kept for a companion
 		// private: a stat block's Legendary Resistance is not for the shared action log; the GM's notices carry it
 		addGMNotice(lobbyID, fmt.Sprintf("%s failed a saving throw (%s), and its stat block has Legendary Resistance, which the server does not track for a companion: it may choose to succeed instead.", name, source))
 	}
@@ -211,16 +213,8 @@ func applySaveEffectOnCompanion(lobbyID int, source string, e saveEffect, tid in
 		parts = append(parts, e.dropToZero(lobbyID, tid, apply))
 	}
 	for i, p := range e.Damage {
-		d := rolled[i]
-		switch {
-		case dropped:
-			d = 0
-		case saved && (evasion || !e.HalfOnSuccess):
-			d = 0
-		case saved, evasion:
-			d /= 2
-		}
-		if d <= 0 {
+		d := game.SaveDamage(rolled[i], saved, e.HalfOnSuccess, evasion)
+		if dropped || d <= 0 {
 			continue
 		}
 		if !apply {

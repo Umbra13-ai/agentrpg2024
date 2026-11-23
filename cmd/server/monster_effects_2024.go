@@ -1366,22 +1366,16 @@ func runSaveEffectTargets(lobbyID int, c saveEffectCursor) (lines []string, immu
 		}
 		var parts []string
 		parts = append(parts, protect...)
-		evasion := e.Ability == "dex" && e.HalfOnSuccess && hasEvasion(tid)
+		evasion := e.HalfOnSuccess && creatureEvasion(lobbyID, tid, e.Ability)
 		dropped := e.dropsToZero(lobbyID, tid, saved)
 		if dropped {
 			parts = append(parts, e.dropToZero(lobbyID, tid, apply))
 		}
 		for i, p := range e.Damage {
-			d := rolled[i]
 			if dropped {
 				break
 			}
-			switch {
-			case saved && (evasion || !e.HalfOnSuccess):
-				d = 0
-			case saved, evasion: // a success halves; Evasion halves a failure
-				d /= 2
-			}
+			d := game.SaveDamage(rolled[i], saved, e.HalfOnSuccess, evasion)
 			if d <= 0 {
 				continue
 			}

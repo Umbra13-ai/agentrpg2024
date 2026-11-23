@@ -407,14 +407,11 @@ func resolveSpellOnCharacters(charID int, spellKey string, spell SRDSpell, slotL
 		}
 		r := sc.roll()
 		saved := r.Success
-		d := mainDmg
 		how := r.Clause()
-		if saved {
-			if onSave == "half" {
-				d /= 2
-			} else {
-				d = 0
-			}
+		evasion := onSave == "half" && creatureEvasion(lobbyOfChar(charID), id, ability)
+		d := game.SaveDamage(mainDmg, saved, onSave == "half", evasion)
+		if evasion {
+			how += " (Evasion)"
 		}
 		if d == 0 {
 			lines = append(lines, fmt.Sprintf(" %s %s and takes no damage.", name, how))
@@ -434,12 +431,8 @@ func resolveSpellOnCharacters(charID int, spellKey string, spell SRDSpell, slotL
 				continue
 			}
 			d2 := partRoll(charID, i, p.diceAt(slotLevel))
-			if saved && p.Save != "" {
-				if p.OnSave == "half" {
-					d2 /= 2
-				} else {
-					d2 = 0
-				}
+			if p.Save != "" {
+				d2 = game.SaveDamage(d2, saved, p.OnSave == "half", creatureEvasion(lobbyOfChar(charID), id, p.Save))
 			}
 			if d2 > 0 {
 				lines = append(lines, " "+damageCharacter(id, d2, strings.ToLower(p.Type))+".")
