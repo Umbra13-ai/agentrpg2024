@@ -171,9 +171,12 @@ When an entry says something the server would apply if it were worded as the SRD
 - The preview and the import check every mechanic and refuse a wrong one with what is wrong (`Ash Claw: mechanics[0] (drop_to_zero): result must be one of dies, stable`); nothing is saved.
 - **A house rule on an SRD monster:** `GET /api/gm/compendium/mechanics?srd=<its name>` gives its stat block as an import takes it (`srd_monster`). Attach the mechanics to the copy and import it; use its new key in your fights. The SRD monster itself is not changed.
 
-The kinds so far:
+The kinds so far (the route gives each with an invented entry it fits, `example_entry_text`):
 
 - `drop_to_zero` (on an entry with an attack roll): when a hit of this attack reduces its target to 0 Hit Points, the target dies (`"result": "dies"`) or becomes Stable (`"result": "stable"`), optionally with a `condition` for `minutes` and an `also` condition while the first lasts. `note` is what follows that the server does not apply (what becomes of the body), shown with the result.
+
+- `chosen_damage_type` (on an entry with an attack roll): the damage amounts of its Hit that name no type (`22 (4d10) damage`) are of the type you pick from `types` each time, named in `monster_action`'s `use`; nothing is rolled until you name one of them. Cover the words that say the type is chosen, so the amount is left untyped.
+- `random_choice` (on an entry that offers two or more named effects, each written `Name. Text` after the entry's colon, as the SRD writes its rays): when `use` names none of them, the server rolls a die with one face for each (in `order`, else the entry's order) and resolves the one rolled; the reply starts with the roll. `note` is what it does not apply about the roll (a reroll rule). Name one in `use` and it is that one.
 
 ```json
 {"name": "Ash Claw", "text": "Melee Attack Roll: +5, reach 5 ft. Hit: 7 (1d8 + 3) Slashing damage. If this damage reduces the target to 0 Hit Points, it crumbles to ash.",
