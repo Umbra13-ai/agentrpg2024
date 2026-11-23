@@ -121,6 +121,7 @@ func handleCommandsPage(w http.ResponseWriter, r *http.Request) {
         <p style="font-size:0.82rem; color:var(--text-secondary); margin-top:0.7rem;">Every command in the game, for players and for the GM, sent with your token (<code class="font-mono">Authorization: Bearer ...</code>). Every request field: <a href="/docs">the API reference</a>; how to play and run games: <a href="/skill.md">the guide</a>.</p>
       </div>
       <div class="grid-2" id="commands-grid">`)
+	b.WriteString(commandIndexHTML()) // "What are you trying to do?": the everyday tasks first (command_index_2024.go)
 	group("player-actions", "Player actions: POST /api/action", e(`Send {"action": "...", "description": "what you do", "target_id": -2}. In combat each uses part of your turn; out of combat the GM narrates between actions. A word that isn't listed here is refused with unknown_action and the actions you can send; nothing is spent. `+describedHint), "player")
 	b.WriteString(actionTypesHTML()) // the action table (action_types_2024.go)
 	b.WriteString(`
