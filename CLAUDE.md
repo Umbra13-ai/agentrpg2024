@@ -104,6 +104,10 @@ Report: "Wizard Scholar accepts any skill for Expertise."
   (`monster_condition_traits_2024.go`), one row of `attackSources`. **A light a monster switches on and off** (Ignited Illumination) is
   `resolveLightToggle` (combat effect `ablaze`), read by `monsterLightRadii` in the lighting owner.
   Go: `TestPostgresBlurredFormAndIgnitedLight`.
+- **A monster's per-day uses** (`monster_day_uses.go`): reserved in one locked step (`reserveDayUse`), kept when the request ran the entry, the server's effect or a hand-off to the GM
+  (`execRecord.usedSince`; owner, Nov 23, I-WL-2), given back only for a refusal, a `blockedBeforeRoll` stop or a reaction with no trigger. Go: `TestPostgresMonsterDayUses`.
+- **The GM's pacing check** (`gm_pacing_2024.go`, owner, Nov 23): `pacingCheck`, GET /api/gm/status `pacing_check` for a campaign in play and the GM guide's pacing block
+  (`TestPacingCheckInGMGuide`, `START_UPDATE=1`). A question, never a gate: it does not force a fight, a player's choice or progress.
 - **The GM's open items** (`cmd/server/gm_open_items_2024.go`, `gm_handover_2024.go`; owner, Nov 22): a lasting mechanic the server hands to the GM is listed in
   every status the GM reads until the GM resolves it or the server sees it end; a one-shot (resolved in the same breath) is never listed.
   `handOverToGM` is the one writer of a new item (idempotent on creature, entry and targets), `resolveGMItems`, `resolveGMItemsEnding` (the end
