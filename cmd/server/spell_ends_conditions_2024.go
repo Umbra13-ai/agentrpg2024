@@ -33,7 +33,8 @@ var spellEndsConditions = map[string]conditionEnding{
 // condition the description chose for a Pick spell ("" when it named none).
 func endSpellConditions(lobbyID, id int, spellKey, description string) (ended []string, named string) {
 	if id != 0 {
-		ended = append(ended, endWoundsBySpell(lobbyID, id, spellKey)...) // "after a spell restores Hit Points to the target" (wound_records_2024.go)
+		ended = append(ended, endWoundsBySpell(lobbyID, id, spellKey)...)       // "after a spell restores Hit Points to the target" (wound_records_2024.go)
+		ended = append(ended, endBefuddlementBySpell(lobbyID, id, spellKey)...) // "can also be ended by the Greater Restoration, Heal, or Wish spell" (spell_cast_conditions_2024.go)
 	}
 	row, ok := spellEndsConditions[spellKey]
 	if !ok || id == 0 {

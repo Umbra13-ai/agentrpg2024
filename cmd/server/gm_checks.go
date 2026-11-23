@@ -246,6 +246,8 @@ func handleGMSkillCheck(w http.ResponseWriter, r *http.Request) {
 
 	// Roll the die (the one check d20, check_2024.go)
 	finalRoll, roll1, roll2, rollKind := rollCheckD20(req.Advantage, req.Disadvantage)
+	finalRoll, floorNote := why.floored(finalRoll) // Glibness (check_2024.go)
+	buffCheckWhy += floorNote
 	rollType := rollKind
 	switch {
 	case rollKind == "advantage":
@@ -764,6 +766,7 @@ func handleGMToolCheck(w http.ResponseWriter, r *http.Request) {
 
 	// Roll the die (the one check d20, check_2024.go)
 	finalRoll, roll1, roll2, rollKind := rollCheckD20(req.Advantage, req.Disadvantage)
+	finalRoll, toolFloorNote := why.floored(finalRoll) // Glibness (check_2024.go)
 	rollType := rollKind
 	if rollKind == "advantage" && usedInspiration {
 		rollType = "advantage (inspiration)"
@@ -891,6 +894,8 @@ func handleGMToolCheck(w http.ResponseWriter, r *http.Request) {
 			resultStr = fmt.Sprintf("d20(%d,%d→%d)", roll1, roll2, finalRoll)
 		}
 	}
+
+	resultStr += toolFloorNote
 
 	// Build Peerless Skill string if used
 	toolPeerlessStr := ""

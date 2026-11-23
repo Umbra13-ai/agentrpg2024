@@ -199,7 +199,8 @@ func resolveSpellOnMonster(charID int, spellKey string, spell SRDSpell, damageDi
 		if monsterHPNow(lobbyID, monster) <= 0 {
 			text += killEffectNote(charID) // Dark One's Blessing (F134)
 		}
-		text += spellRider(lobbyID, charID, monster, spellKey) // Guiding Bolt, Ray of Frost, Chill Touch ... (F250)
+		text += spellRider(lobbyID, charID, monster, spellKey)                    // Guiding Bolt, Ray of Frost, Chill Touch ... (F250)
+		text += applyCastCondition(lobbyID, charID, monster, spell, saveDC, true) // Ray of Sickness's Poisoned (spell_cast_conditions_2024.go)
 		lines = append(lines, fmt.Sprintf(" %s%s, %d %s damage. %s", ar.LineForAttacker(attackName, out), rollNote, d, dtype, text))
 	case spell.SavingThrow != "" || len(spell.DamageParts) > 0:
 		ability := saveAbilityKey(spell.SavingThrow)
@@ -249,7 +250,8 @@ func resolveSpellOnMonster(charID int, spellKey string, spell SRDSpell, damageDi
 		// every creature the spell is aimed at (target_id and target_ids) makes its own saving throw; the damage is rolled once
 		for _, id := range spellMonsterTargets(charID) {
 			tname := monsterName(lobbyID, id)
-			stakes := saveStakes{Damage: mainDmg, Condition: isDamageConditionSpell(spellKey)}
+			_, withCondition := castConditionOf(spell)
+			stakes := saveStakes{Damage: mainDmg, Condition: withCondition}
 			rule, typed := spellTypeSaveRules[spellKey]
 			typed = typed && monsterTypeOf(lobbyID, id) == rule.Type
 			heightened := heightenedDisadvantage(charID, id) // Heightened Spell (F194)
@@ -317,11 +319,10 @@ func resolveSpellOnMonster(charID int, spellKey string, spell SRDSpell, damageDi
 					lines = append(lines, " "+text)
 				}
 			}
-			if cs, ok := conditionSpells[spellKey]; ok && isDamageConditionSpell(spellKey) && !saved {
-				for _, c := range cs.Conditions {
-					applyCondition(lobbyID, id, c, spell.Name, extendRounds(charID, cs.Rounds), "", saveDC)
+			if !saved { // the condition its damage comes with (Sunburst, Contagion, Black Tentacles, Weird ...: spell_cast_conditions_2024.go)
+				if line := applyCastCondition(lobbyID, charID, id, spell, saveDC, false) + applyCastMarker(lobbyID, charID, id, spell); line != "" {
+					lines = append(lines, line)
 				}
-				lines = append(lines, fmt.Sprintf(" %s is %s.", tname, strings.Join(cs.Conditions, " and ")))
 			}
 		}
 	}

@@ -83,11 +83,8 @@ var conditionSpells = map[string]conditionSpell{
 	"suggestion":              {"wis", []string{"charmed"}, 4800, false, ""},
 	"mass-suggestion":         {"wis", []string{"charmed"}, 14400, false, ""},
 	"modify-memory":           {"wis", []string{"charmed", "incapacitated"}, 10, false, ""},
-	"grease":                  {"dex", []string{"prone"}, 0, false, ""},      // the creatures in the square when the grease appears
-	"weird":                   {"wis", []string{"frightened"}, 10, true, ""}, // after its damage
+	"grease":                  {"dex", []string{"prone"}, 0, false, ""}, // the creatures in the square when the grease appears
 	"color-spray":             {"con", []string{"blinded"}, 1, false, ""},
-	"ray-of-sickness":         {"con", []string{"poisoned"}, 2, false, ""}, // after its damage
-	"stinking-cloud":          {"con", []string{"poisoned"}, 2, false, ""}, // after its damage
 }
 
 // escapes: the check that frees a creature from the spell's condition, against the spell save DC (none: nil).
@@ -125,14 +122,11 @@ func endSaveFor(spellKey, ability string, dc int) *conditionSave {
 }
 
 // damageSpellConditions are the spells that deal damage and also apply a condition on a failed save.
-func isDamageConditionSpell(key string) bool {
-	return key == "ray-of-sickness" || key == "stinking-cloud" || key == "weird"
-}
 
 // resolveConditionSpell handles a cast with no damage dice that puts a condition on monsters. It returns "" when the spell is not one.
 func resolveConditionSpell(charID int, spellKey string, saveDC int, spellName string) string {
 	cs, ok := conditionSpells[spellKey]
-	if !ok || isDamageConditionSpell(spellKey) {
+	if !ok {
 		return ""
 	}
 	targets := spellMonsterTargets(charID)
@@ -369,6 +363,7 @@ func resolveSpellOnCharacters(charID int, spellKey string, spell SRDSpell, slotL
 				hpBefore := characterHP(id)
 				dmgText := damageCharacterWithRiders(id, d, dtype, out.Critical, hitRiders(charID, id, out.Critical)) // Hex, Hunter's Mark (hit_riders_2024.go)
 				dmgText += drainHeal(charID, spell, dtype, hpBefore-characterHP(id))                                  // Vampiric Touch (spell_drain_2024.go)
+				dmgText += applyCastCondition(lobbyOfChar(charID), charID, id, spell, saveDC, true)                   // Ray of Sickness (spell_cast_conditions_2024.go)
 				lines = append(lines, fmt.Sprintf(" %s%s, %s.", ar.LineForAttacker(sa.name, out), rollNote, dmgText))
 				if !hybrid {
 					continue
@@ -425,6 +420,11 @@ func resolveSpellOnCharacters(charID int, spellKey string, spell SRDSpell, slotL
 			lines = append(lines, fmt.Sprintf(" %s %s and takes no damage.", name, how))
 		} else {
 			lines = append(lines, fmt.Sprintf(" %s %s and %s.", name, how, damageCharacter(id, d, mainType)))
+		}
+		if !saved { // the condition its damage comes with (spell_cast_conditions_2024.go)
+			if line := applyCastCondition(lobbyOfChar(charID), charID, id, spell, saveDC, false) + applyCastMarker(lobbyOfChar(charID), charID, id, spell); line != "" {
+				lines = append(lines, line)
+			}
 		}
 		for i, p := range spell.DamageParts { // the other parts that happen now (Meteor Swarm's Bludgeoning, Ice Storm's Cold, Ice Knife's Cold)
 			if i == mainPart || (i == 0 && !hybrid) {

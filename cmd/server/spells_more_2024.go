@@ -1029,6 +1029,9 @@ func monsterCastBlocked(lobby, monsterID int) string {
 	if antimagicCovers(lobby, monsterID) {
 		return "it is inside an Antimagic Field, where no one can cast spells: nothing happens"
 	}
+	if cannotCastSpells(lobby, monsterID) { // Befuddlement (spell_cast_conditions_2024.go)
+		return "it can't cast spells (Befuddlement): nothing happens"
+	}
 	return ""
 }
 

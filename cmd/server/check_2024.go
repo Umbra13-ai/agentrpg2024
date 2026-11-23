@@ -1,6 +1,7 @@
 package main
 
 import (
+	"fmt"
 	"regexp"
 	"strings"
 
@@ -43,6 +44,17 @@ type checkWhy struct {
 	Notes    string // the bracketed notes of the buff and item sources ("[Advantage: Foresight]")
 	Minus    string // a die subtracted from the check (Giggling Magic): note() says it
 	Penalty  int    // what comes off the total: Exhaustion's -2 per level and that die (rolled here: reading the sources of a check uses it up)
+	Floor    int    // the d20 counts as at least this (Glibness: a Charisma check's roll can be replaced with a 15); 0 for none
+	FloorWhy string
+}
+
+// floored is the d20 of the check after its floor (Glibness), and the note that says so when it raised it ("" when it didn't). Every route that rolls a
+// check with its sources takes the d20 through it.
+func (w checkWhy) floored(d20 int) (int, string) {
+	if w.Floor > 0 && d20 < w.Floor {
+		return w.Floor, fmt.Sprintf(" [%s: the d20's %d counts as %d]", w.FloorWhy, d20, w.Floor)
+	}
+	return d20, ""
 }
 
 func (w *checkWhy) adv(why string) { w.Adv = append(w.Adv, why) }
@@ -88,6 +100,9 @@ func (c checkCtx) sources() checkWhy {
 		lobby = lobbyOfChar(c.who)
 	}
 	w.Penalty = checkExhaustion(lobby, c.who)
+	if c.who > 0 && !isCompanionCombatID(c.who) && checkIsCharisma(c.ability) && hasSpellEffect(lobby, c.who, "glibness") {
+		w.Floor, w.FloorWhy = 15, "Glibness" // "when you make a Charisma check, you can replace the number you roll with a 15"
+	}
 	if n, what := d20MinusRoll(lobby, c.who); n > 0 { // Giggling Magic: a die subtracted from each ability check
 		w.Penalty += n
 		w.Minus = " [" + what + "]"
@@ -242,6 +257,8 @@ type checkRoll struct {
 func (c checkCtx) roll() checkRoll {
 	why := c.sources()
 	f, r1, r2, kind := rollCheckD20(why.Advantage(), why.Disadvantage())
+	f, floorNote := why.floored(f) // Glibness
+	why.Minus += floorNote
 	return checkRoll{Final: f, R1: r1, R2: r2, Kind: kind, Why: why, Penalty: why.Penalty}
 }
 
@@ -307,4 +324,10 @@ func powerfulBuild(charID int) bool {
 	}
 	rec, ok := loadOriginRecord(raw)
 	return ok && rec.Species.Key == "goliath"
+}
+
+// checkIsCharisma: the check's ability is Charisma ("cha", "charisma", any spelling game.AbilityKey reads).
+func checkIsCharisma(ability string) bool {
+	k, ok := game.AbilityKey(ability)
+	return ok && k == "cha"
 }

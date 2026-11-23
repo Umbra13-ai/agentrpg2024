@@ -1871,6 +1871,12 @@ func resolveActionWithBonusDash(action, description string, charID int, bonusDas
 			if spell, why = withChosenType(spell, description); why != "" {
 				return why
 			}
+			if why := lastingTargetRefusal(charID, spell, spellKey); why != "" { // before the slot or a material is spent (buff_spells_2024.go)
+				return why
+			}
+			if cannotCastSpells(lobbyOfChar(charID), charID) { // Befuddlement (spell_cast_conditions_2024.go)
+				return "Cannot cast " + spell.Name + ": you can't cast spells or take the Magic action (Befuddlement). Greater Restoration, Heal or Wish ends it. Nothing was spent."
+			}
 		}
 
 		// Check for ritual casting keyword

@@ -419,6 +419,7 @@ var schemaSteps = []schemaStep{
 	// portrait skipped before is open again
 	{"optional_steps_2024.go", `ALTER TABLE characters ADD COLUMN IF NOT EXISTS optional_answers JSONB DEFAULT '{}'::jsonb`},
 	{"campaign_background_2024.go", `ALTER TABLE lobbies ADD COLUMN IF NOT EXISTS background_image BYTEA; ALTER TABLE lobbies ADD COLUMN IF NOT EXISTS background_type VARCHAR(32); ALTER TABLE lobbies ADD COLUMN IF NOT EXISTS background_updated_at TIMESTAMP`},
+	{"combat_effects.go", `ALTER TABLE combat_effects ADD COLUMN IF NOT EXISTS ends TEXT NOT NULL DEFAULT ''`},
 }
 
 // seatReadySchema: a player's "ready to start" on its seat (cleared whenever the seat changes hands: takeSeat, swapSeat;

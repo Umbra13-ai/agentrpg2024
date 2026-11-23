@@ -193,13 +193,14 @@ func TestPostgresOneRepeatedSaveForOneCast(t *testing.T) {
 		}
 		return n
 	}
-	// a save that cannot fail: one save, both conditions end
-	give(1)
+	// a save that cannot fail (DC -20): one save, both conditions end
+	give(-20)
 	out := joinLines(endTurnEffects(camp, index))
 	if held() != 0 || strings.Count(out, "repeats the") != 1 {
 		t.Errorf("a successful repeated save: %d conditions left, %d saves rolled: %q", held(), strings.Count(out, "repeats the"), out)
 	}
 	// a save that cannot succeed: one save, both continue
+	removeConditionsWhere(camp, target, func(r conditionRecord) bool { return r.Condition == "prone" || r.Condition == "incapacitated" })
 	give(100)
 	out = joinLines(endTurnEffects(camp, index))
 	if held() != 2 || strings.Count(out, "repeats the") != 1 {
@@ -211,13 +212,17 @@ func TestPostgresOneRepeatedSaveForOneCast(t *testing.T) {
 // FUNC-12: Death Ward negates an instant death that deals no damage, and ends.
 func TestPostgresTouchBuffsAndDeathWard(t *testing.T) {
 	testPostgres(t)
-	_, char, camp, target, cast := spellFightFixture(t, "touchward")
+	tok, char, camp, target, cast := spellFightFixture(t, "touchward")
 	pgExec(t, `UPDATE characters SET class = 'druid', subclass = NULL, level = 9, wis = 20, hp = max_hp, known_spells = '["barkskin","longstrider","shield-of-faith","darkvision"]'::jsonb,
 		prepared_spells = '["barkskin","longstrider","shield-of-faith","darkvision"]'::jsonb, inventory = $2::jsonb WHERE id = $1`, char, focusInventory)
 	for _, slug := range []string{"barkskin", "longstrider", "darkvision"} {
 		for _, body := range []map[string]interface{}{{"target_id": target}, {"target_ids": []int{target}}} {
 			body["slot_level"] = 3
-			cast(slug, body)
+			body["action"], body["spell_slug"] = "cast", slug
+			pgExec(t, `UPDATE characters SET action_used = false, slot_spent_turn = '', spell_slots_used = '{}'::jsonb WHERE id = $1`, char)
+			if c, j := pgCall(t, "POST", "/api/action", tok, body); c == 200 || !strings.Contains(fmt.Sprint(j["message"]), "creature of the encounter") {
+				t.Errorf("%s at an encounter creature: %d %v (refused before anything is spent)", slug, c, j["message"])
+			}
 			var n int
 			db.QueryRow(`SELECT COUNT(*) FROM spell_effects WHERE target_id = $1`, char).Scan(&n)
 			if n != 0 {

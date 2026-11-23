@@ -45,12 +45,25 @@ var effectText = map[string]string{
 
 // addCombatEffect puts an effect on a creature; slow and hamstring replace each other (only the newest applies).
 func addCombatEffect(lobbyID, targetID, sourceID int, kind string) {
+	addCombatEffectUntil(lobbyID, targetID, sourceID, kind, "")
+}
+
+// addCombatEffectUntil adds an effect that ends at a turn boundary its text names (ends): "" the start of the source's next turn (the default),
+// "source_end" the end of the source's next turn, "target_start" / "target_end" the start or end of the target's next turn. A turn end named while
+// that creature's own turn is running is its next one, not this one (the "_next" form, moved on at this turn's end by expireCombatEffectsAtTurnEnd).
+func addCombatEffectUntil(lobbyID, targetID, sourceID int, kind, ends string) {
+	switch {
+	case ends == "source_end" && currentTurnID(lobbyID) == sourceID:
+		ends = "source_end_next"
+	case ends == "target_end" && currentTurnID(lobbyID) == targetID:
+		ends = "target_end_next"
+	}
 	if kind == "slow" || kind == "hamstring" {
 		db.Exec(`DELETE FROM combat_effects WHERE lobby_id = $1 AND target_id = $2 AND kind IN ('slow','hamstring')`, lobbyID, targetID)
 	} else {
 		db.Exec(`DELETE FROM combat_effects WHERE lobby_id = $1 AND target_id = $2 AND kind = $3`, lobbyID, targetID, kind)
 	}
-	db.Exec(`INSERT INTO combat_effects (lobby_id, target_id, source_id, kind, text) VALUES ($1,$2,$3,$4,$5)`, lobbyID, targetID, sourceID, kind, effectText[kind])
+	db.Exec(`INSERT INTO combat_effects (lobby_id, target_id, source_id, kind, text, ends) VALUES ($1,$2,$3,$4,$5,$6)`, lobbyID, targetID, sourceID, kind, effectText[kind], ends)
 }
 
 func combatEffectsOn(lobbyID, targetID int) []combatEffect {
@@ -95,8 +108,20 @@ func expireCombatEffectsOf(lobbyID, sourceID int) {
 	}
 	// the attach kinds, its suffocating, the swallow and a condition's lasting effects (gate_condition) outlive a turn boundary: their
 	// owners end them
-	db.Exec(`DELETE FROM combat_effects WHERE lobby_id = $1 AND source_id = $2 AND kind NOT IN ('recurring_damage','attached','suffocating','swallowed','shape_form','ablaze') AND gate_condition = ''`, lobbyID, sourceID)
-	endConditionsFromSource(lobbyID, fmt.Sprintf("Stunning Strike #%d", sourceID)) // Stunned until the start of the Monk's next turn
+	db.Exec(`DELETE FROM combat_effects WHERE lobby_id = $1 AND source_id = $2 AND kind NOT IN ('recurring_damage','attached','suffocating','swallowed','shape_form','ablaze') AND gate_condition = '' AND ends = ''`, lobbyID, sourceID)
+	db.Exec(`DELETE FROM combat_effects WHERE lobby_id = $1 AND target_id = $2 AND ends = 'target_start'`, lobbyID, sourceID) // "until the start of its next turn" (Shocking Grasp)
+	endConditionsFromSource(lobbyID, fmt.Sprintf("Stunning Strike #%d", sourceID))                                            // Stunned until the start of the Monk's next turn
+}
+
+// expireCombatEffectsAtTurnEnd ends the effects that last to the end of this creature's next turn (as source or as target), and makes the ones named
+// during this turn ("_next") last to the end of its next one (a turn-end hook, turn_advance_2024.go).
+func expireCombatEffectsAtTurnEnd(lobbyID, id int) {
+	if db == nil || id == 0 {
+		return
+	}
+	db.Exec(`DELETE FROM combat_effects WHERE lobby_id = $1 AND ((source_id = $2 AND ends = 'source_end') OR (target_id = $2 AND ends = 'target_end'))`, lobbyID, id)
+	db.Exec(`UPDATE combat_effects SET ends = 'source_end' WHERE lobby_id = $1 AND source_id = $2 AND ends = 'source_end_next'`, lobbyID, id)
+	db.Exec(`UPDATE combat_effects SET ends = 'target_end' WHERE lobby_id = $1 AND target_id = $2 AND ends = 'target_end_next'`, lobbyID, id)
 }
 
 func clearCombatEffects(lobbyID int) {

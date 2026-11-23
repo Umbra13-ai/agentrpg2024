@@ -147,6 +147,9 @@ func init() {
 				t.Failure = l.Err.Error()
 			}
 		}},
+		{"effects that last to the end of this creature's next turn end (Chill Touch, Starry Wisp, Guiding Bolt ...)", func(t *turnChange) {
+			expireCombatEffectsAtTurnEnd(t.Lobby, t.EndedID) // combat_effects.go
+		}},
 		{"a creature that ends its turn inside an object takes its trait's damage (Incorporeal Movement)", func(t *turnChange) {
 			if note := objectEndDamage(t.Lobby, t.EndedID); note != "" { // map_spaces_2024.go
 				t.Log = append(t.Log, note)

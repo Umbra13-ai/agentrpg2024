@@ -414,18 +414,11 @@ func resolveEffectSpell(charID int, spell SRDSpell, spellKey string, slotLevel, 
 		}
 		return " Spare the Dying: no creature at 0 Hit Points was named (target_id), so nothing happens."
 	case "bless", "shield-of-faith":
-		ids := spellCharacterTargets(charID)
-		for _, id := range spellMonsterTargets(charID) {
-			ids = append(ids, id)
+		kind, rounds, limit, _, _ := lastingSpellEffect(spellKey, slotLevel)                                                                             // gmSpellKinds (monster_cast_effects_2024.go)
+		ids, refusal := lastingSpellTargets(charID, lobby, spell, kind, false, func() []int { return parseTargetsFromDescription(description, charID) }) // F229
+		if refusal != "" {
+			return refusal
 		}
-		if len(ids) == 0 {
-			if named := parseTargetsFromDescription(description, charID); len(named) > 0 {
-				ids = named // every character the description names (F229)
-			} else {
-				ids = []int{charID}
-			}
-		}
-		kind, rounds, limit, _, _ := lastingSpellEffect(spellKey, slotLevel) // gmSpellKinds (monster_cast_effects_2024.go)
 		note := ""
 		if len(ids) > limit {
 			note = fmt.Sprintf(" (only the first %d targets: the spell affects %d at this level)", limit, limit)
@@ -447,16 +440,15 @@ func resolveEffectSpell(charID int, spell SRDSpell, spellKey string, slotLevel, 
 		return fmt.Sprintf(" Shield of Faith: %s gains a +2 bonus to AC while you keep Concentration (up to 10 minutes).", joinNames(names))
 
 	case "haste", "heroism", "resistance", "guidance":
-		ids := spellCharacterTargets(charID)
-		if spellKey == "haste" {
-			ids = append(ids, spellMonsterTargets(charID)...)
-		}
-		if len(ids) == 0 {
+		kind, _, _, _, _ := lastingSpellEffect(spellKey, slotLevel)
+		ids, refusal := lastingSpellTargets(charID, lobby, spell, kind, false, func() []int { // the one reading of who a lasting spell lands on (buff_spells_2024.go)
 			if id := aimedCharacter(description, charID); id > 0 {
-				ids = []int{id}
-			} else {
-				ids = []int{charID}
+				return []int{id}
 			}
+			return nil
+		})
+		if refusal != "" {
+			return refusal
 		}
 		id := ids[0] // each of these spells affects one creature
 		name := creatureName(lobby, id)

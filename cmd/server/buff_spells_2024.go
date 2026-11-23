@@ -77,6 +77,7 @@ var buffSpells = map[string]buffSpell{
 	"see-invisibility":              {"see_invisibility", 600, true, nil},
 	"spider-climb":                  {"spider_climb", 600, false, onePlusAbove(2)},
 	"stoneskin":                     {"stoneskin", 600, false, nil},
+	"glibness":                      {"glibness", 600, true, nil}, // Self: a Charisma check's d20 counts as 15 (the check owner's floor, check_2024.go)
 	"true-seeing":                   {"true_seeing", 600, false, nil},
 	"warding-bond":                  {"warding_bond", 600, false, nil},
 }
@@ -109,13 +110,14 @@ var buffLabels = map[string][2]string{
 	"spider_climb":                  {"Spider Climb", "Climb Speed equal to its Speed; walks on walls and ceilings"},
 	"stoneskin":                     {"Stoneskin", "Resistance to Bludgeoning, Piercing and Slashing damage"},
 	"true_seeing":                   {"True Seeing", "Truesight 120 feet (1 hour)"},
+	"glibness":                      {"Glibness", "A Charisma check's d20 counts as 15 when it rolls less (1 hour)"},
 	"warding_bond":                  {"Warding Bond", "+1 AC and saves, Resistance to all damage; its caster takes the same damage"},
 }
 
 // the effects that last their full duration without the caster's Concentration
 var buffNoConcentration = []string{"aid", "barkskin", "death_ward", "divine_favor", "fire_shield", "foresight", "freedom_of_movement",
 	"heroes_feast", "longstrider", "magic_weapon", "mind_blank", "mirror_image", "protection_from_poison", "sanctuary",
-	"see_invisibility", "true_seeing", "warding_bond"}
+	"see_invisibility", "true_seeing", "warding_bond", "glibness"}
 
 func init() {
 	for _, k := range buffNoConcentration {
@@ -201,6 +203,37 @@ func lastingSpellTargets(charID, lobby int, spell SRDSpell, kind string, self bo
 		return t, ""
 	}
 	return ids, ""
+}
+
+// lastingKindOf: the effect kind a lasting spell puts on its target and whether it is the caster's own (ok false for a spell that is not one, or one
+// that reads the creature it is aimed at itself: moreActsOnAimedCreature).
+func lastingKindOf(key string) (kind string, self, ok bool) {
+	if key == "mage-armor" {
+		return "mage_armor", false, true
+	}
+	if b, found := moreSpells[key]; found {
+		if moreActsOnAimedCreature[key] {
+			return "", false, false
+		}
+		return b.Kind, b.Self, true
+	}
+	kind, _, _, self, ok = lastingSpellEffect(key, 1)
+	return kind, self, ok
+}
+
+// lastingTargetRefusal is asked before the cast spends anything (its slot, its material: Stoneskin's diamond dust): a lasting spell aimed at a creature of
+// the encounter whose effect the server applies to characters only is refused, in the refusal form, so nothing is spent (lastingSpellTargets says the same
+// later for a cast that reaches it another way).
+func lastingTargetRefusal(charID int, spell SRDSpell, key string) string {
+	kind, self, ok := lastingKindOf(key)
+	if !ok || self || castEffectAnyCreature[kind] {
+		return ""
+	}
+	mons := spellMonsterTargets(charID)
+	if len(mons) == 0 {
+		return ""
+	}
+	return fmt.Sprintf("Cannot cast %s: the server applies this spell to characters, and %s is a creature of the encounter (the GM applies it there). Name a character with target_id, or none for yourself. Nothing was spent.", spell.Name, creatureName(lobbyOfChar(charID), mons[0]))
 }
 
 func resolveBuffSpell(charID, lobby int, spell SRDSpell, spellKey string, slotLevel, saveDC int, description string) string {
@@ -321,6 +354,9 @@ func resolveBuffSpell(charID, lobby int, spell SRDSpell, spellKey string, slotLe
 			ended = " The Poisoned condition ends."
 		}
 		out = fmt.Sprintf("For 1 hour %s has Resistance to Poison damage and Advantage on saves against being Poisoned.%s", who, ended)
+	case "glibness":
+		add(charID, "")
+		out = "For 1 hour, when you make a Charisma check, a d20 that rolls under 15 counts as 15 (the server applies it to the check), and magic that would determine whether you are telling the truth says you are."
 	case "warding-bond":
 		id := ids[0]
 		if id == charID {

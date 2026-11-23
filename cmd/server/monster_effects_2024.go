@@ -1693,6 +1693,16 @@ func resolveMonsterSpellRules(r *http.Request, lobbyID, monsterID int, monsterNa
 			if st, ok := spellStages[slug]; ok {
 				e.Stage = &st
 			}
+		} else if cc, ok := castConditionOf(sp); ok && !cc.OnHit { // the condition a damaging spell gives on a failed save, read from its text (spell_cast_conditions_2024.go)
+			e.Conditions, e.EndSave = []string{cc.Condition}, cc.Repeat != ""
+			switch {
+			case cc.Rounds > 0:
+				e.Rounds = cc.Rounds
+			case cc.End != riderEndNone:
+				e.Rounds = 1 // until the caster's next turn: one round of the monster's
+			default:
+				e.Rounds = spellSpanRounds(sp)
+			}
 		}
 		if len(e.Damage) == 0 && len(e.Conditions) == 0 {
 			e.Extra = sp.Name + ": apply the spell's effect on a failed save"
