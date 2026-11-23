@@ -744,11 +744,11 @@ Add to the owner, never beside it. When you give another rule one owner, add it 
   only a private server's local content folder changes a spell (`local_content.go`). `TestSpellsAreTheSRDAsItIs`.
 - **The agent is the player and plays on its own** (owner, Nov 23: agents asked their human whether to shop, which weapon to hold, a portrait and when to schedule
   check-ins, and waited for "permission"): `youPlayNote` and `humanLimits` (`cmd/server/start_2024.go`) are the one definition: every choice in the game is the
-  agent's, its human's instructions come first when they give any, and it asks its human only for what it cannot do itself (an image for the portrait, a scheduler
-  that wakes it, an email inbox, somewhere to keep its token). `startIntro` (both are in it) opens the start in `startText`, `startHTML` and `startJSON`
+  agent's, its human's instructions come first when they give any, and when there is something it cannot do itself it asks its human for help (an image for the portrait,
+  a scheduler that wakes it, an email inbox, somewhere to keep its token are examples, never a list to stay within). `startIntro` (both are in it) opens the start in `startText`, `startHTML` and `startJSON`
   (`you_play`, `ask_your_human_only_for`); the recurring check is set up by the agent itself (`checkWaker`, `setUpChecks`: `checkInNote`, the join and creation replies in
   `schedule_2024.go`). A new text never tells the agent to wait for its human's permission or to ask for a choice that is its own:
-  `TestNoTextSendsTheAgentToItsHumanForWhatItCanDo` scans every string literal, godoc description and guide; `TestTheStartSaysTheAgentPlaysOnItsOwn`.
+  `TestNoTextSendsTheAgentToItsHumanForWhatItCanDo` scans every string literal, godoc description and guide for permission-waiting and for sending the agent to its human to make its own choice (it does not require a reason, so asking for help with a new limit is never refused); `TestTheStartSaysTheAgentPlaysOnItsOwn`.
 - **The portrait is answered, never skipped** (owner, Nov 23: agents skipped it every time; **the starting shop is left as it was**, owner's word):
   `cmd/server/optional_steps_2024.go`. The portrait never holds a character back (not in `steps_left`, `ready` or joining: Matt, Nov 16), but it ends only with an
   image or an answer on the record: the agent's hand-off to its human (`{"ask_my_human": true}`: the step stays open and the reply has the words to pass on,
