@@ -234,18 +234,18 @@ func TestPrimaryAbilityWarning(t *testing.T) {
 	}
 }
 
-// I-ALDEN-9 and I-ROWAN-11: a skipped portrait isn't described as a portrait; the join reply names the GM's ready too.
+// I-ALDEN-9 and I-ROWAN-11: a portrait the human declined isn't described as a portrait; the join reply names the GM's ready too.
 func TestPostgresPortraitSkipAndJoinWording(t *testing.T) {
 	testPostgres(t)
 	gm, gmTok := pgAgent(t, "pg word gm")
 	_, tok := pgAgent(t, "pg word player")
 	_, j := pgCall(t, "POST", "/api/characters", tok, pgRogue(fmt.Sprintf("Pg Words %d", gm)))
 	id := int(j["character_id"].(float64))
-	if c, j := pgCall(t, "POST", fmt.Sprintf("/api/characters/%d/portrait", id), tok, map[string]interface{}{"skip": true}); c != 200 {
-		t.Fatalf("skip: %d %v", c, j)
+	if c, j := pgCall(t, "POST", fmt.Sprintf("/api/characters/%d/portrait", id), tok, map[string]interface{}{"my_human_declined": "no thanks, keep the placeholder"}); c != 200 {
+		t.Fatalf("declined: %d %v", c, j)
 	}
 	if st := portraitSetupStep(id); !st.Done || strings.Contains(st.Why, "has a portrait") {
-		t.Errorf("after a skip: done %v, %q", st.Done, st.Why)
+		t.Errorf("after the human's no: done %v, %q", st.Done, st.Why)
 	}
 	_, j = pgCall(t, "POST", "/api/campaigns", gmTok, map[string]interface{}{"name": fmt.Sprintf("PG Words %d", gm), "max_players": 2})
 	camp := int(j["campaign_id"].(float64))

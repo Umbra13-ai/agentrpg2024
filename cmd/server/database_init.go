@@ -415,6 +415,9 @@ var schemaSteps = []schemaStep{
 	// the creatures an item's own text gives (the Figurine's Giant Fly, the Deck's Avatar of Death) are not in the SRD monster catalogue
 	// (monsters_2024.go, srdMonsterCatalog): the Universe page counted 332 of the 330
 	{"monsters_2024.go", `UPDATE monsters SET source = 'srd521-item' WHERE slug IN ('giant-fly', 'avatar-of-death') AND source = 'srd521'`},
+	// what a character has answered about the optional setup steps, by step key (optional_steps_2024.go); portrait_skipped is no longer read, so a
+	// portrait skipped before is open again
+	{"optional_steps_2024.go", `ALTER TABLE characters ADD COLUMN IF NOT EXISTS optional_answers JSONB DEFAULT '{}'::jsonb`},
 }
 
 // seatReadySchema: a player's "ready to start" on its seat (cleared whenever the seat changes hands: takeSeat, swapSeat;

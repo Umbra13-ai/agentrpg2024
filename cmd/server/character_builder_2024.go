@@ -3214,7 +3214,7 @@ func handleCharacterSetup(w http.ResponseWriter, r *http.Request, charID int) {
 		out["ready_to_play"] = fmt.Sprintf("Your character is finished and can join a campaign. The guided steps left (%s) are best done now, but they can wait.", strings.Join(guided, ", "))
 	}
 	if next == nil && nextOpt != nil {
-		out["optional"] = fmt.Sprintf("Your character is finished. Optional, when you like: %s.", strings.Join(optNames, ", "))
+		out["optional"] = fmt.Sprintf("Your character is finished and can join a campaign. Still to put to your human (it never blocks joining or playing, and my-turn and the heartbeat remind you until it is answered): %s.", strings.Join(optNames, ", "))
 	}
 	if len(warnings) > 0 {
 		out["warnings"] = warnings

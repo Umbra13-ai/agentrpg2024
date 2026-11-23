@@ -906,6 +906,7 @@ func handleMyTurn(w http.ResponseWriter, r *http.Request) {
 		response["reminders"] = rem // turn_left, after_battle, prep (F216, reminders_2024.go)
 	}
 	if !inCombat {
+		withOptionalSteps(response, charID) // the portrait and the shop still to put to your human (optional_steps_2024.go)
 		if g := gearReminders(charID); len(g) > 0 {
 			response["gear_reminders"] = g // gear that could be worn and isn't; mute with POST /api/characters/gear-reminders (F214)
 		}

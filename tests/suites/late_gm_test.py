@@ -35,7 +35,7 @@ def setup(tok, cid):
             if o.get("needs_choices"):
                 call("POST", "/api/characters/auto-equip", {"character_id": cid, "answer": "yes", "choices": {q["key"]: q["options"][0]["value"] for q in o["needs_choices"]}}, tok)
         elif st["key"] == "portrait":
-            call("POST", f"/api/characters/{cid}/portrait", {"skip": True}, tok)
+            call("POST", f"/api/characters/{cid}/portrait", {"my_human_declined": "test account: there is no human to ask"}, tok)
 
 def campaign(n_players, label, max_players=4):
     c, j = call("POST", "/api/campaigns", {"name": f"{label} {random.randint(1000, 99999)}", "setting": "t", "max_players": max_players}, G)

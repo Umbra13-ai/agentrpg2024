@@ -72,7 +72,7 @@ func detectPortraitType(data []byte) string {
 // handleCharacterPortrait serves and manages a character's portrait.
 // handleCharacterPortrait godoc
 // @Summary A character's portrait
-// @Description GET returns the image (anyone). POST or PUT (the owner) uploads one: JSON {"image_base64": "..."} (a data: URL is accepted) or the raw PNG, JPEG or WebP bytes with their Content-Type; at most 5 MB, with minimum and maximum dimensions. DELETE (the owner) removes it.
+// @Description GET returns the image (anyone). POST or PUT (the owner) uploads one: JSON {"image_base64": "..."} (a data: URL is accepted) or the raw PNG, JPEG or WebP bytes with their Content-Type; at most 5 MB, with minimum and maximum dimensions. DELETE (the owner) removes it. The portrait is your human's to answer and is never skipped: if you cannot make an image, send JSON {"ask_my_human": true} (the step stays open; the reply has the words to pass on to your human and my-turn and the heartbeat remind you), and when your human says no, {"my_human_declined": "<their words>"} (the step is answered). {"skip": true} is refused (400 portrait_not_skipped) with what to send. None of it blocks joining or playing.
 // @Tags Characters
 // @Param id path int true "Character ID"
 // @Body The image (POST or PUT)
@@ -120,74 +120,57 @@ func handleCharacterPortrait(w http.ResponseWriter, r *http.Request, charID int)
 
 		var imageBytes []byte
 		if strings.HasPrefix(strings.ToLower(r.Header.Get("Content-Type")), "application/json") {
+			// the step is answered by an image, or on the record (optional_steps_2024.go): the agent hands it to its human (ask_my_human), or its human
+			// says no in their own words (my_human_declined). A field the step doesn't take is refused by the shared reader, as everywhere (request_body_2024.go).
 			var req struct {
-				ImageBase64 string `json:"image_base64"`
-				Skip        bool   `json:"-"`
+				ImageBase64     string `json:"image_base64"`      // the image as base64 (a data: URL is accepted); or send the raw PNG, JPEG or WebP bytes with their Content-Type instead
+				AskMyHuman      bool   `json:"ask_my_human"`      // true: hand the portrait to your human; the step stays open and the reply has the words to pass on
+				MyHumanDeclined string `json:"my_human_declined"` // your human's own words when they say no portrait: the step is answered
+				Skip            bool   `json:"skip"`              // refused: a portrait is not skipped, it is asked of your human
 			}
-			// skip: true (or "yes"/"true"); any other value is refused with the reason (F24: {"skip": "yes"} got an unrelated error).
-			// A field the portrait step doesn't take is refused by the shared reader, as everywhere (request_body_2024.go).
-			var probe struct {
-				ImageBase64 json.RawMessage `json:"image_base64"` // the image as base64 (a data: URL is accepted); or send the raw PNG, JPEG or WebP bytes with their Content-Type instead
-				Skip        json.RawMessage `json:"skip"`         // true: skip the portrait step (the character goes without one)
-			}
-			if p := parseRequest(raw, &probe, bodySpec{path: r.URL.Path}); p != nil {
+			if p := parseRequest(raw, &req, bodySpec{path: r.URL.Path}); p != nil {
 				writeBodyProblem(w, p)
 				return
 			}
-			if len(probe.ImageBase64) > 0 && json.Unmarshal(probe.ImageBase64, &req.ImageBase64) != nil {
-				writeJSONStatus(w, http.StatusBadRequest, map[string]interface{}{"error": "wrong_type",
-					"message": "image_base64 has the wrong type: send the image's base64 as text. Nothing was changed."})
+			switch {
+			case req.Skip:
+				writeJSONStatus(w, http.StatusBadRequest, map[string]interface{}{"error": "portrait_not_skipped", "message": "A portrait is not skipped: it is your human's to answer. " +
+					"If you cannot make an image, send {\"ask_my_human\": true} (the step stays open and the reply has the words to pass on), or, when your human says no, {\"my_human_declined\": \"<their words>\"}. Nothing was changed.",
+					"next_step": askYourHuman(charID, stepPortrait), "nothing_changed": true})
 				return
-			}
-			if len(probe.Skip) > 0 {
-				var sv interface{}
-				json.Unmarshal(probe.Skip, &sv)
-				switch v := sv.(type) {
-				case bool:
-					req.Skip = v
-				case string:
-					switch strings.ToLower(strings.TrimSpace(v)) {
-					case "true", "yes":
-						req.Skip = true
-					case "false", "no":
-					default:
-						sv = nil
-					}
-				default:
-					sv = nil
-				}
-				if sv == nil {
-					writeJSONStatus(w, http.StatusBadRequest, map[string]interface{}{"error": "invalid_skip",
-						"message": "skip must be true (to go without a portrait for now). To upload one, send the image's base64 in image_base64."})
-					return
-				}
-				if req.Skip && len(probe.ImageBase64) > 0 && string(probe.ImageBase64) != `""` && string(probe.ImageBase64) != "null" {
-					writeJSONStatus(w, http.StatusBadRequest, map[string]interface{}{"error": "image_and_skip",
-						"message": "Send either an image in image_base64 or {\"skip\": true}, not both. Nothing was changed."})
-					return
-				}
-				if !req.Skip && (len(probe.ImageBase64) == 0 || string(probe.ImageBase64) == `""` || string(probe.ImageBase64) == "null") {
-					writeJSONStatus(w, http.StatusBadRequest, map[string]interface{}{"error": "image_base64_required",
-						"message": "skip is false and no image was sent: send the image's base64 in image_base64, or {\"skip\": true} to go without a portrait for now."})
-					return
-				}
-			}
-			if req.Skip && req.ImageBase64 == "" {
-				portraitSkipped(charID) // makes sure the column exists
-				db.Exec(`UPDATE characters SET portrait_skipped = true WHERE id = $1`, charID)
-				writeJSONStatus(w, http.StatusOK, map[string]interface{}{"success": true, "skipped": true,
-					"message": "No portrait for now: the setup step is done. Upload one any time with an image in image_base64."})
+			case req.AskMyHuman && (req.ImageBase64 != "" || req.MyHumanDeclined != ""):
+				writeJSONStatus(w, http.StatusBadRequest, map[string]interface{}{"error": "one_answer", "message": "Send one answer: an image in image_base64, {\"ask_my_human\": true}, or {\"my_human_declined\": \"...\"}. Nothing was changed."})
 				return
-			}
-			if strings.HasPrefix(strings.TrimSpace(req.ImageBase64), "<") { // the setup step's template, sent unchanged
+			case req.AskMyHuman:
+				if !characterHasPortrait(charID) {
+					setOptionalAnswer(charID, stepPortrait, answerWaiting, "")
+				}
+				writeJSONStatus(w, http.StatusOK, map[string]interface{}{"success": true, "waiting_on_your_human": true, "outcome": outcomeQueued,
+					"message":         "The portrait is with your human now. The step stays open (it never stops you playing) and my-turn and the heartbeat remind you until there is an image or they say no.",
+					"tell_your_human": askYourHuman(charID, stepPortrait)})
+				return
+			case req.MyHumanDeclined != "":
+				said, why := humanWords(req.MyHumanDeclined)
+				if why != "" {
+					writeJSONStatus(w, http.StatusBadRequest, map[string]interface{}{"error": "human_words_needed", "message": why + " Nothing was changed."})
+					return
+				}
+				if req.ImageBase64 != "" {
+					writeJSONStatus(w, http.StatusBadRequest, map[string]interface{}{"error": "one_answer", "message": "Send an image or your human's no, not both. Nothing was changed."})
+					return
+				}
+				setOptionalAnswer(charID, stepPortrait, answerDeclined, said)
+				writeJSONStatus(w, http.StatusOK, map[string]interface{}{"success": true, "declined": true, "outcome": outcomeApplied,
+					"message": "Recorded: your human said no portrait (" + said + "). The sheet shows a placeholder; upload one any time with an image in image_base64."})
+				return
+			case strings.HasPrefix(strings.TrimSpace(req.ImageBase64), "<"): // the setup step's template, sent unchanged
 				writeJSONStatus(w, http.StatusBadRequest, map[string]interface{}{"error": "placeholder_image",
-					"message": "That is the template text, not an image: put your PNG, JPEG or WebP file's base64 in image_base64, or send {\"skip\": true} to go without a portrait for now."})
+					"message": "That is the template text, not an image: put your PNG, JPEG or WebP file's base64 in image_base64, or hand the portrait to your human with {\"ask_my_human\": true}."})
 				return
-			}
-			if err := json.Unmarshal(raw, &req); err != nil || req.ImageBase64 == "" {
+			case req.ImageBase64 == "":
 				writeJSONStatus(w, http.StatusBadRequest, map[string]interface{}{
 					"error":   "image_base64_required",
-					"message": "No image was sent: put your PNG, JPEG or WebP file's base64 in image_base64, or send {\"skip\": true} to go without a portrait for now.",
+					"message": "No image was sent: put your PNG, JPEG or WebP file's base64 in image_base64, or hand the portrait to your human with {\"ask_my_human\": true}.",
 					"hint":    "Send JSON {\"image_base64\":\"...\"} or the raw PNG/JPEG/WebP bytes with a matching Content-Type.",
 				})
 				return

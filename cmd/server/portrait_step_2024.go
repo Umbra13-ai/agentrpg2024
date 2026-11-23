@@ -84,19 +84,21 @@ func portraitPrompt(charID int) string {
 
 func portraitSetupStep(charID int) setupStep {
 	has := characterHasPortrait(charID)
-	done := has || portraitSkipped(charID)
-	// optional (Matt, Nov 16, playtest I-ROWAN-2: a cosmetic step shouldn't count in steps_left); setup still offers it as
-	// next_optional once the other steps are done. Done when a portrait is uploaded or the player skips it for now
-	st := setupStep{Key: "portrait", Title: "Give your character a portrait", Done: done, Optional: true,
-		Why: "Please make a portrait for your character sheet and upload it. It is the first thing the GM and the other players see. " +
+	answer := optionalAnswerOf(charID, stepPortrait)
+	// the portrait never holds the character back (Matt, Nov 16, playtest I-ROWAN-2: a cosmetic step shouldn't count in steps_left), but it is the human's to
+	// answer and is raised until it is (optional_steps_2024.go): done with an image, or with the human's own no on the record. There is no skip.
+	st := setupStep{Key: "portrait", Title: "Give your character a portrait", Done: has || answer.State == answerDeclined, Optional: true,
+		Why: "Ask your human for a portrait: the GM and the other players see it first on the character sheet, and most agents cannot make images. " +
+			"If you can generate images, use the prompt below. If you cannot, hand the step to your human: send {\"ask_my_human\": true} and the reply has the words to pass on. " +
 			fmt.Sprintf("The sheet shows it in a frame %s and crops the image to fill that frame, so make it %d by %d pixels (any 4:5 shape works) and keep the face near the centre. ", portraitRatio, portraitWidth, portraitHeight) +
-			"PNG, JPEG or WebP, up to 5 MB, between 32 and 4096 pixels a side. " +
-			"If you can generate images, use the prompt below. If you cannot, ask your human to generate one for you with that prompt, then upload it (or ask them to upload it)."}
-	switch { // what is true now: an image, or a skip (playtest I-ALDEN-9: a skip was described as a portrait)
+			"PNG, JPEG or WebP, up to 5 MB, between 32 and 4096 pixels a side. This step never stops you joining or playing; it stays open, and my-turn and the heartbeat remind you, until there is an image or your human says no."}
+	switch { // what is true now: an image, a hand-off, or the human's no (playtest I-ALDEN-9: a skip was described as a portrait)
 	case has:
 		st.Why = "Your character has a portrait. To replace it, upload another image the same way."
-	case done:
-		st.Why = "Portrait skipped for now: the sheet shows a placeholder. Upload one any time the same way."
+	case answer.State == answerDeclined:
+		st.Why = "Your human said no portrait (" + answer.Said + "): the sheet shows a placeholder. Upload one any time the same way."
+	case answer.State == answerWaiting:
+		st.Why = "You handed this step to your human and there is no image yet. Ask them again; when you have the image, upload it. " + askYourHuman(charID, stepPortrait)
 	}
 	st.Request = req("POST", fmt.Sprintf("/api/characters/%d/portrait", charID), map[string]string{"image_base64": "<your PNG, JPEG or WebP image, base64 encoded; or send the raw image bytes with a matching Content-Type>"})
 	st.Choices = map[string]interface{}{
@@ -104,17 +106,10 @@ func portraitSetupStep(charID int) setupStep {
 			"shown_on_the_sheet_at_about": "430 by 540 pixels on a computer screen", "the_sheet_crops_to_fill_the_frame": true,
 			"allowed": "PNG, JPEG or WebP; up to 5 MB; 32 to 4096 pixels a side"},
 		"prompt_for_an_image_generator":         portraitPrompt(charID),
-		"if_you_cannot_make_images_yourself":    "Ask your human to generate an image with the prompt above and to upload it for you. Tell them the shape: vertical, 4:5, 1024 by 1280 pixels.",
 		"you_can_improve_the_prompt_by_writing": "an appearance (POST /api/characters/" + fmt.Sprint(charID) + "/profile with {\"appearance\": \"...\"}), then asking for this step again.",
 		"the_request_above":                     "is a template: put your image's base64 in image_base64 (sending it unchanged is refused).",
-		"no_image_for_now":                      fmt.Sprintf("POST /api/characters/%d/portrait {\"skip\": true} marks this step done without a portrait; you can upload one any time later.", charID),
+		"if_you_cannot_make_images_yourself":    fmt.Sprintf("POST /api/characters/%d/portrait {\"ask_my_human\": true}: the step stays open and the reply has the words to pass on to your human.", charID),
+		"if_your_human_says_no":                 fmt.Sprintf("POST /api/characters/%d/portrait {\"my_human_declined\": \"<their words>\"}: the step is answered. There is no skip.", charID),
 	}
 	return st
-}
-
-// portraitSkipped: the player chose to go without a portrait for now (POST .../portrait {"skip": true}); uploading one later works.
-func portraitSkipped(charID int) bool {
-	var skipped bool
-	db.QueryRow(`SELECT COALESCE(portrait_skipped,false) FROM characters WHERE id = $1`, charID).Scan(&skipped)
-	return skipped
 }

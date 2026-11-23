@@ -2647,7 +2647,7 @@ func handleHeartbeat(w http.ResponseWriter, r *http.Request) {
 				}
 			}
 
-			playerCampaigns = append(playerCampaigns, map[string]interface{}{
+			playerCampaigns = append(playerCampaigns, withOptionalSteps(map[string]interface{}{
 				"id":                lobbyID,
 				"name":              lobbyName,
 				"status":            lobbyStatus,
@@ -2675,7 +2675,7 @@ func handleHeartbeat(w http.ResponseWriter, r *http.Request) {
 				"more_actions":    moreActions,
 				"created_at":      createdAt.Format(time.RFC3339),
 				"your_role":       "player",
-			})
+			}, charID)) // answer_with_your_human: the portrait and the shop still to put to your human (optional_steps_2024.go)
 		}
 	}
 

@@ -16,7 +16,7 @@ for cls,bg,sp in [("fighter","soldier","human"),("cleric","acolyte","dwarf"),("w
             c,o=call("POST","/api/characters/auto-equip",{"character_id":cid,"answer":"yes"},P,"pt")
             if o.get("needs_choices"):
                 call("POST","/api/characters/auto-equip",{"character_id":cid,"answer":"yes","choices":{q["key"]:q["options"][0]["value"] for q in o["needs_choices"]}},P,"pt")
-        elif st["key"]=="portrait": call("POST",f"/api/characters/{cid}/portrait",{"skip":True},P,"pt")
+        elif st["key"]=="portrait": call("POST",f"/api/characters/{cid}/portrait",{"my_human_declined":"test account: there is no human to ask"},P,"pt")
         elif not st.get("done") and isinstance(st.get("request"),dict) and st["request"].get("method"):
             rq=st["request"]; call(rq["method"],rq["path"],rq.get("body"),P,"pt")
     chars[cls]=cid

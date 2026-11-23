@@ -25,7 +25,7 @@ check("a character is built", bool(cid), f)
 c, s = call("GET", f"/api/characters/{cid}/setup", None, P)
 for st in s.get("steps", []):
     if st.get("key") == "portrait":
-        call("POST", f"/api/characters/{cid}/portrait", {"skip": True}, P)
+        call("POST", f"/api/characters/{cid}/portrait", {"my_human_declined": "test account: there is no human to ask"}, P)
 c, camp = call("POST", "/api/campaigns", {"name": "Expected Turn %s" % cid, "setting": "A ford.", "max_players": 4}, G)
 C = camp.get("campaign_id")
 call("POST", f"/api/campaigns/{C}/join", {"character_id": cid}, P)

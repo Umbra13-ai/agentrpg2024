@@ -255,8 +255,10 @@ func handleCharacterShop(w http.ResponseWriter, r *http.Request, charID int) {
 			Item     string `json:"item"`
 			Quantity *int   `json:"quantity"` // missing: 1
 		} `json:"buy"`
-		Done bool      `json:"done"` // true: finish shopping
-		Sell []sellReq `json:"sell"` // what to sell: each item_id (or item) and its quantity (left out: the whole stack)
+		Done bool `json:"done"` // true: finish shopping
+		// Reason: your human's words (or yours) when you finish without buying or selling anything: it is recorded as the answer
+		Reason string    `json:"reason"`
+		Sell   []sellReq `json:"sell"` // what to sell: each item_id (or item) and its quantity (left out: the whole stack)
 	}
 	// a misspelled field (qty) is refused, not read as 1 (F17)
 	if !readRequest(w, r, &req) {
@@ -286,6 +288,7 @@ func handleCharacterShop(w http.ResponseWriter, r *http.Request, charID int) {
 		}
 		doneParts = append(doneParts, "sold "+strings.Join(anyStrings(resp["sold"]), ", "))
 		money = walletCP(charID)
+		setOptionalAnswer(charID, stepShop, answerShopped, "") // a sale is the shop's answer (optional_steps_2024.go)
 	}
 	refuse := func(status int, body map[string]interface{}) {
 		if len(doneParts) > 0 {
@@ -300,6 +303,12 @@ func handleCharacterShop(w http.ResponseWriter, r *http.Request, charID int) {
 	}
 	if len(req.Buy) == 0 {
 		if req.Done {
+			if len(doneParts) == 0 { // nothing bought or sold in this request: leaving needs the answer on the record, unless the character shopped before
+				if ref := shopLeaveRefusal(charID, req.Reason); ref != nil {
+					writeJSONStatus(w, http.StatusBadRequest, ref)
+					return
+				}
+			}
 			db.Exec(`UPDATE characters SET shop_done = true WHERE id = $1`, charID)
 			reply["your_money"] = moneyText(money)
 			reply["message"] = "Done shopping. You keep the money you didn't spend."
@@ -354,6 +363,7 @@ func handleCharacterShop(w http.ResponseWriter, r *http.Request, charID int) {
 	for k, v := range resp {
 		reply[k] = v
 	}
+	setOptionalAnswer(charID, stepShop, answerShopped, "") // a purchase is the shop's answer
 	reply["next"] = fmt.Sprintf("Put on armor and take up weapons: POST /api/characters/auto-equip {\"character_id\": %d, \"answer\": \"yes\"}. Buy more, or POST /api/characters/%d/shop {\"done\": true} when you have finished.", charID, charID)
 	if req.Done {
 		db.Exec(`UPDATE characters SET shop_done = true WHERE id = $1`, charID)
@@ -452,6 +462,22 @@ func craftMagicItem(name string) bool {
 	return craftMagic[itemKey(name)]
 }
 
+// shopLeaveRefusal: finishing the shop without buying or selling anything is an answer, and goes on the record with its reason (a character that
+// bought or sold something already answered). A refusal says what to send; nil lets the request through and records a no.
+func shopLeaveRefusal(charID int, reason string) map[string]interface{} {
+	if optionalAnswerOf(charID, stepShop).State == answerShopped {
+		return nil
+	}
+	said, why := humanWords(reason)
+	if why != "" {
+		return map[string]interface{}{"error": "shop_answer_needed", "nothing_changed": true,
+			"message":   "You have bought and sold nothing. Leaving the shop is an answer: ask your human what the character should buy, or send {\"done\": true, \"reason\": \"<what they said>\"} when they want nothing. " + why + " Nothing was changed.",
+			"next_step": askYourHuman(charID, stepShop)}
+	}
+	setOptionalAnswer(charID, stepShop, answerDeclined, said)
+	return nil
+}
+
 // shopSetupStep: an optional step (Matt, Nov 16, playtest I-ROWAN-2): while the shop is open and the player hasn't answered, setup
 // asks whether it wants to shop for more equipment. "Yes": the shop's requests; "no": POST .../shop {"done": true}, which completes
 // the step. It never counts in steps_left, whatever the character took at creation; only the question's wording depends on that
@@ -466,7 +492,7 @@ func shopSetupStep(charID int) *setupStep {
 	var bothPackages bool // decided once, at creation: did the character take both equipment packages (class kit and background package)?
 	db.QueryRow(`SELECT COALESCE(took_both_packages, false) FROM characters WHERE id = $1`, charID).Scan(&bothPackages)
 	shop := fmt.Sprintf("GET /api/characters/%d/shop", charID)
-	no := map[string]interface{}{"done": true}
+	no := map[string]interface{}{"done": true, "reason": "<what your human said when you asked>"}
 	title := "Do you want to shop for additional equipment?"
 	why := fmt.Sprintf("You took your equipment packages and have %s. Do you want to visit the shop to buy more equipment or sell items from your pack? ", moneyText(money))
 	if !bothPackages {
@@ -474,8 +500,8 @@ func shopSetupStep(charID int) *setupStep {
 	}
 	why += fmt.Sprintf("Yes: %s lists everything (add ?category=weapons, armor, gear, ammunition or tools) with what each item does, whether you are proficient and whether you can afford it; "+
 		"buy with POST /api/characters/%d/shop {\"buy\": [{\"item\": \"Longsword\", \"quantity\": 1}]}, sell with {\"sell\": [{\"item_id\": \"<id from your inventory>\"}]} (a shop pays half the price), "+
-		"and send {\"done\": true} when you have finished. No: send the request below and this step is complete. "+
-		"Shopping is optional: your character can join a campaign either way. The shop closes when your campaign starts; after that, buying and selling are up to your GM.", shop, charID)
+		"and send {\"done\": true} when you have finished. No: ask your human first (what the character buys is theirs to choose), then send the request below with their words in reason and the step is answered. "+
+		"The shop never stops you joining a campaign, but it does not go away by itself: it stays open, and my-turn and the heartbeat remind you, until you shop or your human says no. It closes when your campaign starts; after that, buying and selling are up to your GM.", shop, charID)
 	st := setupStep{Key: "shop", Title: title, Why: why, Optional: true,
 		Request: req("POST", fmt.Sprintf("/api/characters/%d/shop", charID), no),
 		Choices: map[string]interface{}{"your_money": moneyText(money),
@@ -483,7 +509,7 @@ func shopSetupStep(charID int) *setupStep {
 				"buy":             fmt.Sprintf("POST /api/characters/%d/shop {\"buy\": [{\"item\": \"...\", \"quantity\": 1}]}", charID),
 				"sell":            fmt.Sprintf("POST /api/characters/%d/shop {\"sell\": [{\"item_id\": \"...\"}]}", charID),
 				"finish_shopping": fmt.Sprintf("POST /api/characters/%d/shop {\"done\": true}", charID)},
-			"no":        fmt.Sprintf("POST /api/characters/%d/shop {\"done\": true}: the step is complete", charID),
+			"no":        fmt.Sprintf("POST /api/characters/%d/shop {\"done\": true, \"reason\": \"<what your human said>\"}: the step is answered", charID),
 			"you_chose": map[bool]string{false: "gold instead of an equipment package", true: "both equipment packages"}[bothPackages]}}
 	return &st
 }
