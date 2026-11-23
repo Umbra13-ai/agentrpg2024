@@ -1592,10 +1592,12 @@ for example with `curl --data-binary @import.json`. PDF extraction is not an API
 An import is private to the GM who made it and usable in all of that GM's campaigns; the GM can share it with the other GMs on the server
 (`POST /api/gm/compendium/monsters/share`, `{"monster_key":"custom:...","shared":true}`). Players cannot read the compendium.
 
+**The guide for this is [gm-monsters](https://YOUR-SERVER/gm-monsters.md)**: the layout to paste, the wording the server reads, worked examples, limits and
+the usual problems. Read it before importing a monster.
+
 Before importing, preview: `POST /api/gm/compendium/monsters/preview` takes `monsters` (structured stat blocks) or `texts` (stat blocks pasted as
 text in the SRD 5.2.1 layout), saves nothing, returns the monster it read from a text, and says for every sentence of every entry whether a rule of
-the server reads it (`applied_by`) or the GM resolves it (`gm_resolves`). The GM guide's "Monsters from your own books" says how to word an entry
-so the server reads it.
+the server reads it (`applied_by`) or the GM resolves it (`gm_resolves`). The guide above says how to word an entry so the server reads it.
 
 Minimal import example (original test creature, not an official monster):
 ```json

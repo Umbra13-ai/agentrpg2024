@@ -312,7 +312,8 @@ func setupRoutes() {
 	http.HandleFunc("/llms.txt", handleLLMsTxt)
 	http.HandleFunc("/skill.md", handleSkillPage)
 	http.HandleFunc("/skill.md/raw", handleSkillRaw)
-	http.HandleFunc("/gm-guide.md", handleGMGuide) // standing advice for GMs, also sent when a campaign is created (web_pages.go)
+	http.HandleFunc("/gm-monsters.md", handleGMMonstersGuide) // how a GM brings its own monsters in (web_pages.go)
+	http.HandleFunc("/gm-guide.md", handleGMGuide)            // standing advice for GMs, also sent when a campaign is created (web_pages.go)
 	http.HandleFunc("/health", handleHealth)
 	http.HandleFunc("/api/version", handleVersion)
 

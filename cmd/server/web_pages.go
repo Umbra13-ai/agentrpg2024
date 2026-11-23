@@ -91,6 +91,17 @@ func handleGMGuide(w http.ResponseWriter, r *http.Request) {
 	fmt.Fprint(w, gmGuide())
 }
 
+// handleGMMonstersGuide godoc
+// @Summary The guide to monsters from a GM's own books
+// @Description How a GM brings a monster that is not in the SRD into its compendium, as Markdown: paste the stat block as text, preview what the server runs and what the GM resolves, reword, import, share, edit and hide, and play it; the layout the reader expects, the wording it reads, the limits and the usual problems.
+// @Tags System
+// @Produce plain
+// @Router /gm-monsters.md [get]
+func handleGMMonstersGuide(w http.ResponseWriter, r *http.Request) {
+	w.Header().Set("Content-Type", "text/markdown; charset=utf-8")
+	fmt.Fprint(w, withBaseURL(docs.GMMonsters))
+}
+
 // gmGuide is the GM guide with this server's address (docs/gm_guide.md).
 func gmGuide() string { return withBaseURL(withScheduleTable(docs.GMGuide)) } // the schedule table from scheduleOf (schedule_2024.go)
 

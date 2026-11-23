@@ -30227,7 +30227,7 @@
      "GM"
     ],
     "summary": "Preview what the server does with a monster before importing it",
-    "description": "Saves nothing. Send monsters (1–25 stat blocks, as an import takes them) or texts (1–25 stat blocks pasted as text in the SRD 5.2.1 layout: the name, the size, type and alignment line, AC, Initiative, HP, Speed, the ability grid, the labelled lines, then Traits, Actions, Bonus Actions, Reactions and Legendary Actions with each entry as \"Name. Text\"); not both. A text comes back as the monster it was read as (monster, with read_notes for what could not be read or was changed): check it, correct it, and import that. For each monster it says whether it would import (valid, problem), what the server fills in that you left out (notes), what it will count as 0 or apply by name unless the wording changes (warnings), and, for each entry, which sentences a rule of the server reads (applied_by) and which you resolve in play (gm_resolves; silent true: the server does not mention it either, so remember it). The server reads the SRD 5.2.1 wording: reword an entry as docs/gm_guide.md's \"Writing a monster the server runs\" says and preview again. campaign_id names a campaign you run (needed when you run more than one).",
+    "description": "Saves nothing. Send monsters (1–25 stat blocks, as an import takes them) or texts (1–25 stat blocks pasted as text in the SRD 5.2.1 layout: the name, the size, type and alignment line, AC, Initiative, HP, Speed, the ability grid, the labelled lines, then Traits, Actions, Bonus Actions, Reactions and Legendary Actions with each entry as \"Name. Text\"); not both. A text comes back as the monster it was read as (monster, with read_notes for what could not be read or was changed): check it, correct it, and import that. For each monster it says whether it would import (valid, problem), what the server fills in that you left out (notes), what it will count as 0 or apply by name unless the wording changes (warnings), and, for each entry, which sentences a rule of the server reads (applied_by) and which you resolve in play (gm_resolves; silent true: the server does not mention it either, so remember it). The server reads the SRD 5.2.1 wording: reword an entry as the guide at /gm-monsters.md says and preview again. campaign_id names a campaign you run (needed when you run more than one).",
     "responses": {
      "400": {
       "description": "The body was refused (nothing was changed): unknown_field, wrong_type, invalid_json, body_required or id_mismatch, with the fields the request takes",
@@ -30738,7 +30738,7 @@
      "GM"
     ],
     "summary": "GM monster compendium",
-    "description": "GET lists the monsters you imported and the ones other GMs shared (limit 100; after is a pagination cursor; mine=1 lists only yours; hidden ones are left out). POST imports 1–25 structured monster definitions atomically; an import is private to you until you share it (POST /api/gm/compendium/monsters/share). Only a GM uses it: campaign_id names a campaign you run (needed when you run more than one). A definition never changes: edit one with POST /api/gm/compendium/monsters/edit, which saves a new version. Existing mechanics apply; the GM adjudicates other abilities. SRD data is separate.",
+    "description": "How to write a monster the server runs: the guide at /gm-monsters.md. GET lists the monsters you imported and the ones other GMs shared (limit 100; after is a pagination cursor; mine=1 lists only yours; hidden ones are left out). POST imports 1–25 structured monster definitions atomically; an import is private to you until you share it (POST /api/gm/compendium/monsters/share). Only a GM uses it: campaign_id names a campaign you run (needed when you run more than one). A definition never changes: edit one with POST /api/gm/compendium/monsters/edit, which saves a new version. Existing mechanics apply; the GM adjudicates other abilities. SRD data is separate.",
     "responses": {
      "200": {
       "description": "Success",
@@ -30815,7 +30815,7 @@
      "GM"
     ],
     "summary": "GM monster compendium",
-    "description": "GET lists the monsters you imported and the ones other GMs shared (limit 100; after is a pagination cursor; mine=1 lists only yours; hidden ones are left out). POST imports 1–25 structured monster definitions atomically; an import is private to you until you share it (POST /api/gm/compendium/monsters/share). Only a GM uses it: campaign_id names a campaign you run (needed when you run more than one). A definition never changes: edit one with POST /api/gm/compendium/monsters/edit, which saves a new version. Existing mechanics apply; the GM adjudicates other abilities. SRD data is separate.",
+    "description": "How to write a monster the server runs: the guide at /gm-monsters.md. GET lists the monsters you imported and the ones other GMs shared (limit 100; after is a pagination cursor; mine=1 lists only yours; hidden ones are left out). POST imports 1–25 structured monster definitions atomically; an import is private to you until you share it (POST /api/gm/compendium/monsters/share). Only a GM uses it: campaign_id names a campaign you run (needed when you run more than one). A definition never changes: edit one with POST /api/gm/compendium/monsters/edit, which saves a new version. Existing mechanics apply; the GM adjudicates other abilities. SRD data is separate.",
     "responses": {
      "400": {
       "description": "The body was refused (nothing was changed): unknown_field, wrong_type, invalid_json, body_required or id_mismatch, with the fields the request takes",
@@ -51093,6 +51093,27 @@
     ],
     "summary": "The GM guide",
     "description": "Standing advice for a GM (agency, resolving whole actions, asynchronous play, knowledge and visibility, native state, repairing errors, a per-check-in checklist), as Markdown, with the turn schedule's check-in times for every number of seats. The same text is sent as gm_guide when a campaign is created.",
+    "responses": {
+     "200": {
+      "description": "Success",
+      "content": {
+       "text/markdown": {
+        "schema": {
+         "type": "string"
+        }
+       }
+      }
+     }
+    }
+   }
+  },
+  "/gm-monsters.md": {
+   "get": {
+    "tags": [
+     "System"
+    ],
+    "summary": "The guide to monsters from a GM's own books",
+    "description": "How a GM brings a monster that is not in the SRD into its compendium, as Markdown: paste the stat block as text, preview what the server runs and what the GM resolves, reword, import, share, edit and hide, and play it; the layout the reader expects, the wording it reads, the limits and the usual problems.",
     "responses": {
      "200": {
       "description": "Success",

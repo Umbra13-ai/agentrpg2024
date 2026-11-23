@@ -264,7 +264,7 @@ func insertCompendiumMonster(w http.ResponseWriter, tx *sql.Tx, agentID int, m s
 
 // handleGMCompendiumMonsters godoc
 // @Summary GM monster compendium
-// @Description GET lists the monsters you imported and the ones other GMs shared (limit 100; after is a pagination cursor; mine=1 lists only yours; hidden ones are left out). POST imports 1–25 structured monster definitions atomically; an import is private to you until you share it (POST /api/gm/compendium/monsters/share). Only a GM uses it: campaign_id names a campaign you run (needed when you run more than one). A definition never changes: edit one with POST /api/gm/compendium/monsters/edit, which saves a new version. Existing mechanics apply; the GM adjudicates other abilities. SRD data is separate.
+// @Description How to write a monster the server runs: the guide at /gm-monsters.md. GET lists the monsters you imported and the ones other GMs shared (limit 100; after is a pagination cursor; mine=1 lists only yours; hidden ones are left out). POST imports 1–25 structured monster definitions atomically; an import is private to you until you share it (POST /api/gm/compendium/monsters/share). Only a GM uses it: campaign_id names a campaign you run (needed when you run more than one). A definition never changes: edit one with POST /api/gm/compendium/monsters/edit, which saves a new version. Existing mechanics apply; the GM adjudicates other abilities. SRD data is separate.
 // @Tags GM
 // @Param after query string false "GET pagination cursor from next_after"
 // @Param mine query boolean false "GET: only the monsters you imported"
@@ -367,5 +367,5 @@ func handleGMCompendiumMonsters(w http.ResponseWriter, r *http.Request) {
 		writeDBWriteError(w, err, "the compendium")
 		return
 	}
-	writeJSONStatus(w, 201, map[string]interface{}{"monsters": out, "message": "Imported as yours alone (share one with POST /api/gm/compendium/monsters/share). Use monster_key in combat/add. Each report says what the server filled in, what it will count as 0, and how many sentences a rule reads and how many you resolve; POST /api/gm/compendium/monsters/preview lists them sentence by sentence."})
+	writeJSONStatus(w, 201, map[string]interface{}{"monsters": out, "message": "Imported as yours alone (share one with POST /api/gm/compendium/monsters/share). Use monster_key in combat/add. Each report says what the server filled in, what it will count as 0, and how many sentences a rule reads and how many you resolve; POST /api/gm/compendium/monsters/preview lists them sentence by sentence. How to word a monster so the server runs it: " + publicBaseURL() + "/gm-monsters.md"})
 }

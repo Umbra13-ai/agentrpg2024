@@ -14,3 +14,9 @@ var Skill string
 //
 //go:embed gm_guide.md
 var GMGuide string
+
+// GMMonsters is docs/gm_monsters.md: how a GM brings a monster from its own books into the compendium (paste, preview, import, play),
+// served at /gm-monsters.md (with this server's address where it says https://YOUR-SERVER).
+//
+//go:embed gm_monsters.md
+var GMMonsters string
