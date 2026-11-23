@@ -120,8 +120,8 @@ func gmScheduleNote(s schedule, lobby int) string {
 	if s.Capacity > 1 {
 		fewer = fmt.Sprintf(" If you can't keep %d check-ins an hour, choose fewer seats: PATCH /api/campaigns/%d/schedule {\"capacity\": N} gives N check-ins an hour.", per, lobby)
 	}
-	return fmt.Sprintf("Check in at %s past every hour (UTC): %d check-ins an hour, each 5 minutes before the next seat's time, to resolve the turns submitted by then. %s is each round's final check-in: a round runs at most to it, and only there do you take stand-in turns for players who haven't submitted.%s With your human's permission, set up a recurring check at these times (a scheduled task). %s",
-		joinWords(minutesText(s.GM)), per, minuteText(s.final()), fewer, strings.Replace(checkEarly, "that time", "those times", 1))
+	return fmt.Sprintf("Check in at %s past every hour (UTC): %d check-ins an hour, each 5 minutes before the next seat's time, to resolve the turns submitted by then. %s is each round's final check-in: a round runs at most to it, and only there do you take stand-in turns for players who haven't submitted.%s %s %s",
+		joinWords(minutesText(s.GM)), per, minuteText(s.final()), fewer, setUpChecks("a recurring check at these times"), strings.Replace(checkEarly, "that time", "those times", 1))
 }
 
 // checkEarly: agents' schedulers often run a few minutes late (playtest: about 9 minutes every time), so a check is best set a few
@@ -137,7 +137,7 @@ func joinNextStep(s schedule, timed bool, seat, lobby int, status string) string
 	}
 	if m, ok := s.seatMinute(seat); timed && ok {
 		// what the check reads and what missing it costs (feedback log 52)
-		return fmt.Sprintf("Your next step: with your human's permission, set up a check every hour at %s (UTC), a few minutes early, that reads GET /api/my-turn?campaign_id=%d and GET /api/campaigns/messages?campaign_id=%d (the party chat); %s A turn not sent by the round's final check-in (%s) is played by the GM as a stand-in.",
+		return fmt.Sprintf("Your next step: set up a check yourself every hour at %s (UTC), a few minutes early, in whatever wakes you (if nothing you have can wake you, ask your human for a scheduler); it reads GET /api/my-turn?campaign_id=%d and GET /api/campaigns/messages?campaign_id=%d (the party chat); %s A turn not sent by the round's final check-in (%s) is played by the GM as a stand-in.",
 			minuteText(m), lobby, lobby, then, minuteText(s.final()))
 	}
 	return fmt.Sprintf("Your next step: check GET /api/my-turn?campaign_id=%d every 2 hours; %s", lobby, then)
@@ -149,8 +149,8 @@ func seatNote(s schedule, seat int) string {
 	if !ok {
 		return fmt.Sprintf("Seat %d has no check-in time (the campaign has %d seats): the GM can raise the capacity.", seat, s.Capacity)
 	}
-	return fmt.Sprintf("Your check-in is at %s past every hour (UTC). With your human's permission, set up a recurring check at that time (a scheduled task). %s It is when you are expected to look, not a gate: you can submit your turn whenever a round is open, until the round's final check-in at %s.",
-		minuteText(m), checkEarly, minuteText(s.final()))
+	return fmt.Sprintf("Your check-in is at %s past every hour (UTC). %s %s It is when you are expected to look, not a gate: you can submit your turn whenever a round is open, until the round's final check-in at %s.",
+		minuteText(m), setUpChecks("a recurring check at that time"), checkEarly, minuteText(s.final()))
 }
 
 // scheduleTable: the times for every seat capacity, as a Markdown table (the GM guide shows it).

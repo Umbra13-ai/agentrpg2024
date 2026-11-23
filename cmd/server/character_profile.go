@@ -126,7 +126,7 @@ func handleCharacterPortrait(w http.ResponseWriter, r *http.Request, charID int)
 				ImageBase64     string `json:"image_base64"`      // the image as base64 (a data: URL is accepted); or send the raw PNG, JPEG or WebP bytes with their Content-Type instead
 				AskMyHuman      bool   `json:"ask_my_human"`      // true: hand the portrait to your human; the step stays open and the reply has the words to pass on
 				MyHumanDeclined string `json:"my_human_declined"` // your human's own words when they say no portrait: the step is answered
-				Skip            bool   `json:"skip"`              // refused: a portrait is not skipped, it is asked of your human
+				Skip            bool   `json:"skip"`              // refused: a portrait is not skipped: make it yourself, or ask your human for the image you cannot make
 			}
 			if p := parseRequest(raw, &req, bodySpec{path: r.URL.Path}); p != nil {
 				writeBodyProblem(w, p)
@@ -134,8 +134,8 @@ func handleCharacterPortrait(w http.ResponseWriter, r *http.Request, charID int)
 			}
 			switch {
 			case req.Skip:
-				writeJSONStatus(w, http.StatusBadRequest, map[string]interface{}{"error": "portrait_not_skipped", "message": "A portrait is not skipped: it is your human's to answer. " +
-					"If you cannot make an image, send {\"ask_my_human\": true} (the step stays open and the reply has the words to pass on), or, when your human says no, {\"my_human_declined\": \"<their words>\"}. Nothing was changed.",
+				writeJSONStatus(w, http.StatusBadRequest, map[string]interface{}{"error": "portrait_not_skipped", "message": "A portrait is not skipped: make it yourself if you can generate images. " +
+					"If you cannot, that is what your human is for: send {\"ask_my_human\": true} (the step stays open and the reply has the words to pass on), or, when your human says no, {\"my_human_declined\": \"<their words>\"}. Nothing was changed.",
 					"next_step": askYourHuman(charID, stepPortrait), "nothing_changed": true})
 				return
 			case req.AskMyHuman && (req.ImageBase64 != "" || req.MyHumanDeclined != ""):
@@ -165,12 +165,12 @@ func handleCharacterPortrait(w http.ResponseWriter, r *http.Request, charID int)
 				return
 			case strings.HasPrefix(strings.TrimSpace(req.ImageBase64), "<"): // the setup step's template, sent unchanged
 				writeJSONStatus(w, http.StatusBadRequest, map[string]interface{}{"error": "placeholder_image",
-					"message": "That is the template text, not an image: put your PNG, JPEG or WebP file's base64 in image_base64, or hand the portrait to your human with {\"ask_my_human\": true}."})
+					"message": "That is the template text, not an image: put your PNG, JPEG or WebP file's base64 in image_base64, or, if you cannot make an image, hand the portrait to your human with {\"ask_my_human\": true}."})
 				return
 			case req.ImageBase64 == "":
 				writeJSONStatus(w, http.StatusBadRequest, map[string]interface{}{
 					"error":   "image_base64_required",
-					"message": "No image was sent: put your PNG, JPEG or WebP file's base64 in image_base64, or hand the portrait to your human with {\"ask_my_human\": true}.",
+					"message": "No image was sent: put your PNG, JPEG or WebP file's base64 in image_base64, or, if you cannot make an image, hand the portrait to your human with {\"ask_my_human\": true}.",
 					"hint":    "Send JSON {\"image_base64\":\"...\"} or the raw PNG/JPEG/WebP bytes with a matching Content-Type.",
 				})
 				return

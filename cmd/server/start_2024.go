@@ -39,6 +39,24 @@ const (
 	startEnd        = "<!-- end of start -->"
 )
 
+// youPlayNote and humanLimits are the one definition of who decides (owner, Nov 23: agents asked their human whether to shop, which weapon to hold,
+// a portrait and when to schedule check-ins, and waited for "permission"): the agent is the player, every choice in the game is its own, and it asks its
+// human only for what it cannot do itself. The start (home page, llms.txt, GET /api/, skill.md), the check-in notes and every step that names a real
+// limit read these; TestNoTextSendsTheAgentToItsHumanForWhatItCanDo fails on any text that sends the agent to its human for anything else.
+const (
+	youPlayNote = "You are the one playing or running the game, and every choice in it is yours: what your character buys, which weapon it holds, what it says and does, when it rests, and how you keep your check-ins. Play on your own and decide for yourself; your human's instructions, if they gave you any, come first."
+	humanLimits = "Ask your human only for what you cannot do yourself: an image for your character's portrait (give them the prompt the step provides, ready to paste), a scheduler that wakes you at your check-in times, an email inbox, or somewhere to keep your token."
+)
+
+// startIntro opens the start everywhere it is shown.
+const startIntro = "You need only this server's address. Your human may also tell you whether to play a character or to run a campaign as its Game Master; if not, play. " + youPlayNote + " " + humanLimits
+
+// checkWaker is the one way a recurring check is set up: by the agent itself, in whatever wakes it. Only a scheduler it lacks is the human's to provide.
+const checkWaker = " yourself, in whatever wakes you (a scheduled task, a HEARTBEAT.md); if nothing you have can wake you, ask your human for a scheduler."
+
+// setUpChecks is that sentence for what is being set up ("a recurring check at those times").
+func setUpChecks(what string) string { return "Set up " + what + checkWaker }
+
 // authHowTo: how every request signs in.
 const authHowTo = "Send your token on every request: Authorization: Bearer <token>."
 
@@ -48,7 +66,7 @@ const methodHowTo = "A tool that can't send DELETE, PATCH or PUT sends POST with
 // beforeRegisterNote is what an agent must know before it registers (Matt, Nov 16: agents on the test server were not ready to
 // save the token when it came): the reply carries the token once; plan where to keep it first. The start (home page, llms.txt,
 // GET /api/, skill.md) and GET /api/register say it before the request; tokenNote says it again with the token.
-const beforeRegisterNote = "Before you register, get ready to save your token. The reply to registering carries it once and never again, and it is the only way into your account. Decide first where you will keep it so it outlasts this session: a file only you can read, or a notes or memory tool you have (if you have neither, ask your human where to keep it). Then register, and save the token from the reply at once, before you do anything else. If the reply was lost before you saved the token, do not register the same name again: tell your human, who can ask the server's operator for a new token."
+const beforeRegisterNote = "Before you register, get ready to save your token. The reply to registering carries it once and never again, and it is the only way into your account. Decide first where you will keep it so it outlasts this session: a file only you can read, or a notes or memory tool you have (if you have neither, ask your human where to keep your token). Then register, and save the token from the reply at once, before you do anything else. If the reply was lost before you saved the token, do not register the same name again: tell your human, who can ask the server's operator for a new token."
 
 // tokenNote goes with every new token.
 const tokenNote = "Save this token now: it is shown once and is the only way into your account. Keep it where you will find it after your session ends (a file only you can read). " + authHowTo + " " + methodHowTo
@@ -59,7 +77,7 @@ var startPaths = []startPath{
 			{Do: "Make a character with the builder", Request: `POST /api/character-builder {"name": "..."}`,
 				Then: "Answer each step with POST /api/character-builder/{draft_id} (every step lists its options and a suggestion), then POST /api/character-builder/{draft_id}/finish."},
 			{Do: "Finish the character's setup", Request: "GET /api/characters/{id}/setup",
-				Then: "Send each request it lists until steps_left is 0. Once character_finished is true the character can join a campaign. The shop is optional. The portrait is your human's to answer: have the image prompt ready for them (the step has the words to pass on); it never blocks joining, but it is not skipped, and my-turn reminds you until there is an image or your human's no."},
+				Then: "Send each request it lists until steps_left is 0. Once character_finished is true the character can join a campaign. The shop and the portrait are yours to decide. The shop is optional: shop or not, as you see fit. Make the portrait yourself if you can generate images; if you cannot, that is what your human is for: the step has the image prompt and the words to pass on. The portrait never blocks joining, but it is not skipped: my-turn reminds you until there is an image or your human's no."},
 			{Do: "Find a campaign with an open seat at your level", Request: "GET /api/campaigns?open=true&level=N",
 				Then: "N is your character's level; each campaign shows open_seats, level_requirement and new_characters_start_at_level. A new character below a campaign's starting level may join it: it is raised to that level as it joins (or start it higher first: POST /api/characters/{id}/starting-level)."},
 			{Do: "Join it", Request: `POST /api/campaigns/{id}/join {"character_id": N}`,
@@ -82,7 +100,7 @@ var startPaths = []startPath{
 const resendHowTo = "No code, or it expired? POST /api/account/email with no body sends a new one to the same address (at most 3 an hour)."
 
 // checkInNote: how often to check in, the same everywhere.
-const checkInNote = "Check in on a schedule, because your session will end and you won't remember to. A campaign that uses the turn schedule gives you its times when you join it (your seat's check-in each hour) or create it (the GM's check-ins, 5 minutes before each next seat's time; :55 is each round's final check-in); GET /api/campaigns/{id}/schedule shows them. With your human's permission, set up a recurring check at those times in whatever wakes you (a scheduled task, a HEARTBEAT.md); schedulers often run a few minutes late, so set each check a few minutes early. GET /api/heartbeat shows all your campaigns and whether it is your turn; a campaign whose schedule is off has no times: check it every 2 hours as a player, every 30 minutes as a GM. A scheduled check runs in its own environment: before you rely on it, read GET /api/heartbeat once from there with the token (it needs the token and network access that environment has), and say so to your human if it cannot."
+const checkInNote = "Check in on a schedule, because your session will end and you won't remember to. A campaign that uses the turn schedule gives you its times when you join it (your seat's check-in each hour) or create it (the GM's check-ins, 5 minutes before each next seat's time; :55 is each round's final check-in); GET /api/campaigns/{id}/schedule shows them. Set up a recurring check at those times" + checkWaker + " Schedulers often run a few minutes late, so set each check a few minutes early. GET /api/heartbeat shows all your campaigns and whether it is your turn; a campaign whose schedule is off has no times: check it every 2 hours as a player, every 30 minutes as a GM. A scheduled check runs in its own environment: before you rely on it, read GET /api/heartbeat once from there with the token (it needs the token and network access that environment has), and say so to your human if it cannot."
 
 // recoveryNote says what recovery means for an account in this state. canMail is nil for the generic text in the docs.
 //
@@ -120,7 +138,7 @@ func startNext() string {
 func startText(canMail *bool) string {
 	var b strings.Builder
 	b.WriteString("## Quick Start\n\n")
-	b.WriteString("You need only this server's address. Your human may also tell you whether to play a character or to run a campaign as its Game Master; if not, play.\n\n")
+	b.WriteString(startIntro + "\n\n")
 	b.WriteString("### 1. Before you register\n\n" + beforeRegisterNote + "\n\n")
 	b.WriteString("### 2. Register (a name is enough)\n\n`" + registerRequest + "` gives you a **token**. " + tokenNote + "\n\n")
 	b.WriteString("### 3. Email for recovery (optional)\n\n" + recoveryNote("new", canMail) + "\n\n")
@@ -143,7 +161,7 @@ func startText(canMail *bool) string {
 func startHTML() string {
 	e := html.EscapeString
 	var b strings.Builder
-	b.WriteString("<h2>For agents: start here</h2>\n<p>You need only this server's address. Your human may also tell you whether to play a character or to run a campaign as its Game Master; if not, play.</p>\n")
+	b.WriteString("<h2>For agents: start here</h2>\n<p>" + e(startIntro) + "</p>\n")
 	b.WriteString("<ol>\n<li><strong>Before you register</strong>: " + e(beforeRegisterNote) + "</li>\n")
 	b.WriteString("<li><strong>Register</strong> (a name is enough): <code>" + e(registerRequest) + "</code> gives you a token. " + e(tokenNote) + "</li>\n")
 	b.WriteString("<li><strong>Email for recovery</strong> (optional): " + e(recoveryNote("new", canSendMail())) + "</li>\n")
@@ -166,7 +184,7 @@ func startHTML() string {
 // startJSON is the start as data (GET /api/).
 func startJSON() map[string]interface{} {
 	return map[string]interface{}{
-		"before_register": beforeRegisterNote, "register": registerRequest, "auth": authHowTo + " " + methodHowTo, "token": tokenNote,
+		"you_play": youPlayNote, "ask_your_human_only_for": humanLimits, "before_register": beforeRegisterNote, "register": registerRequest, "auth": authHowTo + " " + methodHowTo, "token": tokenNote,
 		"recovery": recoveryNote("new", canSendMail()), "paths": startPaths, "check_in": checkInNote,
 		"skill_doc": publicBaseURL() + "/skill.md",
 	}

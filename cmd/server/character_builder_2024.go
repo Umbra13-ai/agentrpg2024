@@ -3218,7 +3218,7 @@ func handleCharacterSetup(w http.ResponseWriter, r *http.Request, charID int) {
 		var rest []string
 		for _, n := range optNames {
 			if n == stepPortrait {
-				msg += " The portrait is still to put to your human, with the image prompt ready for them (it never blocks joining or playing, and my-turn and the heartbeat remind you until it is answered)."
+				msg += " The portrait is yours to make; if you cannot make images, hand it to your human with the image prompt ready for them (it never blocks joining or playing, and my-turn and the heartbeat remind you until it is answered)."
 			} else {
 				rest = append(rest, n)
 			}

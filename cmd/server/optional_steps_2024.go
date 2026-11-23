@@ -2,7 +2,7 @@ package main
 
 // The portrait is answered, never skipped (owner, Nov 23, from a tester agent's report on why agents skipped it every time; the starting shop is left as it
 // was: the owner said not to change it). The portrait never holds a character back (steps_left, ready and joining don't count it: Matt, Nov 16,
-// I-ROWAN-2), but it is the human's to answer, and a free "skip" made not answering the easiest move: the start text called it optional, the character was
+// I-ROWAN-2), but it is the agent's own step, and a free "skip" made not answering the easiest move: the start text called it optional, the character was
 // finished without it, and one request ended the step for good. Now:
 //   - the step ends with its result (an image uploaded) or with an answer on the record: the agent's hand-off to its human (`ask_my_human`: the step
 //     stays open, "waiting on your human", and the agent has the image prompt ready for the human to paste) or the human's own no, in their words
@@ -90,7 +90,7 @@ func openOptionalSteps(charID int) []setupStep {
 func optionalReminders(charID int) []map[string]interface{} {
 	var out []map[string]interface{}
 	for _, st := range openOptionalSteps(charID) {
-		say := "Not answered yet. Put it to your human, with the image prompt written out ready for them to paste: " + st.Title
+		say := "You have no portrait yet. Make one if you can generate images; if you cannot, ask your human, with the image prompt written out ready for them to paste: " + st.Title
 		if optionalAnswerOf(charID, st.Key).State == answerWaiting {
 			say = "You asked your human; there is no image yet. Ask them again with the image prompt ready to paste, or upload the image they send you: " + st.Title
 		}
