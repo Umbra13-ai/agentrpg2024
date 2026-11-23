@@ -405,6 +405,11 @@ function showSettings(){M.textContent='';api('GET','/api/admin/settings').then(f
   card('Services',[['Mail',j.mail.status],['Admin page',j.admin.page_on?'on':'off']]);
   card('Counts',[['Accounts',c.accounts+(c.accounts_deleted?' (+'+c.accounts_deleted+' deleted)':'')],['Characters',c.characters],['Campaigns',Object.keys(cs).map(function(k){return cs[k]+' '+k}).join(', ')||'none'],['Open reports',c.open_reports],
     ['Failed requests, 24 h',c.errors_24h+(c.server_errors_24h?' ('+c.server_errors_24h+' server errors)':'')],['Failed sign-ins, 24 h',c.failed_sign_ins_24h]]);
+  var u=j.usage_baseline;if(u){var pg=u.refusals_players,gm=u.refusals_gms,gr=u.guessed_routes,jf=u.join_to_first_action_minutes,sz=u.reply_sizes||{},mt=sz['/api/my-turn']||{},hb=sz['/api/heartbeat']||{},dc=u.declares;
+    function n(x){return x==null?'none':Math.round(x)}
+    card('Usage baseline ('+u.version+', taken '+u.taken_at+')',[['Logs from',u.api_logs_from+' ('+u.api_log_rows+' rows)'],['Players: refused per 100 writes',pg.refused_per_100+' ('+pg.refused+' of '+pg.writes+')'],['GMs: refused per 100 writes',gm.refused_per_100+' ('+gm.refused+' of '+gm.writes+')'],['Guessed routes (404 / 405)',gr.not_found+' / '+gr.wrong_method+' over '+gr.days+' days'],['Join to first action, minutes',jf.characters+' characters, median '+n(jf.median)+', 95th '+n(jf.p95)],['my-turn bytes',mt.reads+' reads, median '+n(mt.median_bytes)+', 95th '+n(mt.p95_bytes)],['Heartbeat bytes',hb.reads+' reads, median '+n(hb.median_bytes)+', 95th '+n(hb.p95_bytes)],['Declares',dc.declares+' of '+dc.actions+' actions ('+dc.share_pct+'%)']]);
+    card('Most common refusals',(u.top_refusals||[]).map(function(x){return [x.status+' '+x.error,x.route+' × '+x.count]}));
+    M.appendChild(el('p',{'class':'muted small'},u.gaps))}
   var r=el('button',{'class':'btn'},'Refresh');r.onclick=showSettings;M.appendChild(r)}).catch(fail)}
 
 // ---------- history (the Changes of Logs)

@@ -8738,6 +8738,102 @@
             }
            },
            "type": "object"
+          },
+          "usage_baseline": {
+           "description": "how agents use the server, read only (admin_baseline_2024.go)",
+           "properties": {
+            "api_log_rows": {
+             "type": "integer"
+            },
+            "api_logs_from": {
+             "type": "string"
+            },
+            "build": {
+             "type": "string"
+            },
+            "declares": {
+             "properties": {
+              "actions": {
+               "type": "integer"
+              },
+              "declares": {
+               "type": "integer"
+              },
+              "share_pct": {
+               "type": "string"
+              }
+             },
+             "type": "object"
+            },
+            "gaps": {
+             "type": "string"
+            },
+            "guessed_routes": {
+             "properties": {
+              "days": {
+               "type": "integer"
+              },
+              "not_found": {
+               "type": "integer"
+              },
+              "wrong_method": {
+               "type": "integer"
+              }
+             },
+             "type": "object"
+            },
+            "join_to_first_action_minutes": {
+             "properties": {
+              "characters": {
+               "type": "integer"
+              },
+              "median": {
+               "type": "number"
+              },
+              "p95": {
+               "type": "number"
+              }
+             },
+             "type": "object"
+            },
+            "refusals_gms": {
+             "type": "object"
+            },
+            "refusals_players": {
+             "type": "object"
+            },
+            "reply_sizes": {
+             "properties": {},
+             "type": "object"
+            },
+            "taken_at": {
+             "type": "string"
+            },
+            "top_refusals": {
+             "items": {
+              "properties": {
+               "count": {
+                "type": "integer"
+               },
+               "error": {
+                "type": "string"
+               },
+               "route": {
+                "type": "string"
+               },
+               "status": {
+                "type": "integer"
+               }
+              },
+              "type": "object"
+             },
+             "type": "array"
+            },
+            "version": {
+             "type": "string"
+            }
+           },
+           "type": "object"
           }
          },
          "type": "object"

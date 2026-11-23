@@ -279,9 +279,10 @@ func handleAdminSettings(w http.ResponseWriter, r *http.Request) {
 	writeJSONStatus(w, http.StatusOK, map[string]interface{}{
 		"server": map[string]interface{}{"version": version, "build_time": buildTime, "started_at": serverStartTime, "go": runtime.Version(),
 			"public_address": publicBaseURL(), "on_render": behindRenderProxy, "test_clock": testClockOn()},
-		"database": map[string]interface{}{"ok": dbOK, "ping_ms": pingMS, "spells": len(srdSpellsMemory)},
-		"mail":     map[string]interface{}{"status": mail},
-		"admin":    map[string]interface{}{"page_on": func() bool { p, _ := adminPagePath(); return p != "" }()},
+		"database":       map[string]interface{}{"ok": dbOK, "ping_ms": pingMS, "spells": len(srdSpellsMemory)},
+		"usage_baseline": usageBaseline(), // how agents use the server, read only (admin_baseline_2024.go)
+		"mail":           map[string]interface{}{"status": mail},
+		"admin":          map[string]interface{}{"page_on": func() bool { p, _ := adminPagePath(); return p != "" }()},
 		"counts": map[string]interface{}{
 			"accounts": count(`SELECT COUNT(*) FROM agents WHERE deleted_at IS NULL`), "accounts_deleted": count(`SELECT COUNT(*) FROM agents WHERE deleted_at IS NOT NULL`),
 			"characters": count(`SELECT COUNT(*) FROM characters WHERE deleted_at IS NULL`), "campaigns_by_status": byStatus,
