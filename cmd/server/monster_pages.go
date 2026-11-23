@@ -10,6 +10,30 @@ import (
 	"strings"
 )
 
+// crBands are the Challenge Rating groups the Universe page and the monster list share (crBand: a stat block's group).
+var crBands = []struct {
+	Label    string
+	From, To float64
+}{{"CR 0 to 1", 0, 1}, {"CR 2 to 4", 2, 4}, {"CR 5 to 10", 5, 10}, {"CR 11 to 16", 11, 16}, {"CR 17 to 30", 17, 30}}
+
+func crBand(cr string) string {
+	v := crValue(cr)
+	for _, b := range crBands {
+		if v <= b.To {
+			return b.Label
+		}
+	}
+	return crBands[len(crBands)-1].Label
+}
+
+func crBandOrder() []string {
+	var out []string
+	for _, b := range crBands {
+		out = append(out, b.Label)
+	}
+	return out
+}
+
 func rulesetFilter(r *http.Request) string {
 	switch r.URL.Query().Get("ruleset") {
 	case "all":
@@ -119,23 +143,24 @@ func monstersPage(rest string) string {
 		b.WriteString(`<p><a href="/universe/monsters">← All monsters</a></p>`)
 		return b.String()
 	}
-	rows, err := db.Query(`SELECT slug, name, COALESCE(type,''), COALESCE(size,'') FROM monsters WHERE ruleset = '2024' ORDER BY name`)
+	rows, err := db.Query(`SELECT slug, name, COALESCE(type,''), COALESCE(size,''), COALESCE(cr,'0') FROM monsters WHERE ruleset = '2024' AND ` + srdMonsterCatalog + ` ORDER BY name`)
 	var items []browseItem
 	if err == nil {
 		defer rows.Close()
 		for rows.Next() {
-			var slug, name, typ, size string
-			if rows.Scan(&slug, &name, &typ, &size) != nil {
+			var slug, name, typ, size, cr string
+			if rows.Scan(&slug, &name, &typ, &size, &cr) != nil {
 				continue
 			}
 			baseType := titleWords(strings.TrimSpace(strings.SplitN(typ, "(", 2)[0])) // "Humanoid (Goblinoid)" -> "Humanoid"
 			group := strings.ToUpper(name[:1])
-			items = append(items, browseItem{Href: "/universe/monsters/" + slug, Name: name, Meta: strings.TrimSpace(titleWords(size) + " " + titleWords(typ)), Group: group,
-				Facets: map[string][]string{"type": {baseType}, "size": {titleWords(size)}}})
+			items = append(items, browseItem{Href: "/universe/monsters/" + slug, Name: name, Meta: strings.TrimSpace(titleWords(size) + " " + titleWords(typ) + ", CR " + cr), Group: group,
+				Facets: map[string][]string{"type": {baseType}, "size": {titleWords(size)}, "cr": {crBand(cr)}}})
 		}
 	}
 	return browseList("👹", "Monsters", items, []browseFacet{
 		{Key: "type", Label: "Type"},
 		{Key: "size", Label: "Size", Order: []string{"Tiny", "Small", "Medium", "Large", "Huge", "Gargantuan"}},
+		{Key: "cr", Label: "Challenge", Order: crBandOrder()},
 	}, nil)
 }

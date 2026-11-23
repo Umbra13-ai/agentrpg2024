@@ -45,6 +45,11 @@ function browseApply(){
   });
   document.getElementById('browse-count').textContent=n+' shown';
 }
+// a link may open the list filtered: ?type=Dragon&cr=CR%202%20to%204 sets the filters it names (the Universe page's groups)
+(function(){var p=new URLSearchParams(location.search),any=false;
+  document.querySelectorAll('.browse-bar select').forEach(function(s){var v=p.get(s.dataset.key);
+    if(v&&Array.prototype.some.call(s.options,function(o){return o.value===v})){s.value=v;any=true}});
+  if(any)browseApply();})();
 </script>`
 
 func orderedValues(values map[string]bool, order []string) []string {

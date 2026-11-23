@@ -12,6 +12,7 @@ import (
 	"fmt"
 	"html"
 	"net/http"
+	"net/url"
 	"regexp"
 	"sort"
 	"strings"
@@ -714,6 +715,30 @@ type universeCategory struct {
 	Samples                            []universeSample
 }
 
+// universeMonsterBands: the monster panel's rows, one per Challenge Rating group of the catalogue (crBands) with its count, each opening
+// the monster list with that filter (not the first six by name, which read as arbitrary: owner, Nov 23).
+func universeMonsterBands() []universeSample {
+	counts := map[string]int{}
+	rows, err := db.Query(`SELECT COALESCE(cr,'0') FROM monsters WHERE ` + srdMonsterCatalog)
+	if err != nil {
+		return nil
+	}
+	defer rows.Close()
+	for rows.Next() {
+		var cr string
+		if rows.Scan(&cr) == nil {
+			counts[crBand(cr)]++
+		}
+	}
+	var out []universeSample
+	for _, b := range crBands {
+		if counts[b.Label] > 0 {
+			out = append(out, universeSample{Name: fmt.Sprintf("%s (%d monsters)", b.Label, counts[b.Label]), Href: "/universe/monsters?cr=" + url.QueryEscape(b.Label)})
+		}
+	}
+	return out
+}
+
 // universeSamples reads up to n entries of one table as "Name (note)" with a link built from the slug.
 func universeSamples(query, href string) []universeSample {
 	var out []universeSample
@@ -784,8 +809,8 @@ func universeCategories() []universeCategory {
 	}
 	n := func(k int, word string) string { return fmt.Sprintf("%d %s", k, word) }
 	return []universeCategory{
-		{"monsters", "🐉", "Monsters", n(count(`SELECT COUNT(*) FROM monsters`), "creatures"), "Dragons, demons, and denizens of the deep.", "/universe/monsters",
-			universeSamples(`SELECT slug, name, 'CR ' || COALESCE(cr, '?') FROM monsters ORDER BY name LIMIT 6`, "/universe/monsters/")},
+		{"monsters", "🐉", "Monsters", n(count(`SELECT COUNT(*) FROM monsters WHERE `+srdMonsterCatalog), "creatures"), "The SRD 5.2.1 stat blocks, by Challenge Rating: each group opens the list filtered.", "/universe/monsters",
+			universeMonsterBands()},
 		{"spells", "✨", "Spells", n(count(`SELECT COUNT(*) FROM spells`), "spells"), "Arcane and divine magic from cantrips to 9th level.", "/universe/spells",
 			universeSamples(`SELECT slug, name, CASE WHEN COALESCE(level, 0) = 0 THEN 'Cantrip' ELSE 'Level ' || level END || ' ' || COALESCE(school, '') FROM spells ORDER BY name LIMIT 6`, "/universe/spells/")},
 		{"classes", "⚔️", "Classes", n(count(`SELECT COUNT(*) FROM classes`), "classes"), "Barbarian, Bard, Cleric, and more character paths.", "/universe/classes",
