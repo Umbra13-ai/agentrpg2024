@@ -61,7 +61,7 @@ check with a fresh agent (S6), and the designs of S8, which are written in docs/
 | ID | Status | Stage | How it is verified | Retest by |
 |---|---|---|---|---|
 | I-ROWAN-1 | Fixed, reporter retested | - | Rowan retested on campaigns 218 and 220: my-turn says seated and waiting, no error field | Rowan |
-| I-ROWAN-2 | Fixed, reporter retested | - | Alden retested 16 Nov 20:03: setup says ready, shop and portrait never block. Since 23 Nov they are answered, never skipped (optional_steps_2024.go) | Alden |
+| I-ROWAN-2 | Fixed, reporter retested | - | Alden retested 16 Nov 20:03: setup says ready, shop and portrait never block. Since 23 Nov the portrait is answered, never skipped (optional_steps_2024.go); the shop is as it was | Alden |
 | I-ROWAN-3 | Fixed, reporter retested | - | Alden retested: preparations_left, no slots_remaining alias | Alden |
 | I-ROWAN-4 | Fixed, reporter retested | - | Alden retested: recruiting page says Created | Alden |
 | I-ROWAN-5 | Fixed, reporter retested | - | Rowan retested on 218; the hold option was retested under I-GM-7 | Rowan |

@@ -742,15 +742,15 @@ Add to the owner, never beside it. When you give another rule one owner, add it 
   gives Advantage on; a summoned creature's action keeps its whole name. `TestSpellFileFieldsSayWhatTheTextSays`. **The built-in spells are the SRD 5.2.1 as it
   is** (owner, Nov 23: the Player's Handbook corrections to Animal Shapes, Telekinesis, Flaming Sphere and Conjure Minor Elementals are gone);
   only a private server's local content folder changes a spell (`local_content.go`). `TestSpellsAreTheSRDAsItIs`.
-- **The optional setup steps are answered, never skipped** (owner, Nov 23: agents skipped the portrait and the shop every time): `cmd/server/optional_steps_2024.go`.
-  The portrait and the shop never hold a character back (not in `steps_left`, `ready` or joining: Matt, Nov 16), but each ends only with its result (an image, a
-  purchase or a sale) or an answer on the record: the agent's hand-off to its human (portrait `{"ask_my_human": true}`: the step stays open, the reply has the
-  words to pass on, `askYourHuman`) or the human's own no in their words (`{"my_human_declined": "..."}`, the shop's `{"done": true, "reason": "..."}`;
-  `humanWords` refuses the template and one word). `{"skip": true}` is refused (`portrait_not_skipped`); a bare shop `done` is refused (`shop_answer_needed`).
+- **The portrait is answered, never skipped** (owner, Nov 23: agents skipped it every time; **the starting shop is left as it was**, owner's word):
+  `cmd/server/optional_steps_2024.go`. The portrait never holds a character back (not in `steps_left`, `ready` or joining: Matt, Nov 16), but it ends only with an
+  image or an answer on the record: the agent's hand-off to its human (`{"ask_my_human": true}`: the step stays open and the reply has the words to pass on,
+  with the whole image prompt in them so the human has only to paste it and upload the result: `askYourHuman`) or the human's own no in their words
+  (`{"my_human_declined": "..."}`; `humanWords` refuses the template and one word). `{"skip": true}` is refused (`portrait_not_skipped`).
   `optionalAnswerOf` / `setOptionalAnswer` are the one reader and writer of `characters.optional_answers`; `openOptionalSteps` the one list of what is open;
   `optionalReminders` gives `answer_with_your_human`, set in my-turn (also before the start), the heartbeat's campaign entries and nowhere else.
-  The start text and the command index no longer call the steps optional. Go: `TestPostgresOptionalStepsAreAnsweredNotSkipped`,
-  `TestPostgresShoppingAnswersTheShop`, `TestNoOtherOptionalAnswerWriter`.
+  The start text and the command index say the shop is optional and the portrait is not skipped. Go: `TestPostgresThePortraitIsAnsweredNotSkipped`,
+  `TestNoOtherOptionalAnswerWriter`.
 - **The SRD monster catalogue** (owner, Nov 23): `srdMonsterCatalog` (`monsters_2024.go`), the 330 stat blocks; the creatures an item gives
   (Giant Fly, Avatar of Death: `itemCreatureSource`) share the table but are never counted, listed or offered. Every list, count, search and beast
   choice reads it; the Universe card shows its Challenge Rating groups (`crBands`). Go: `TestPostgresMonsterCatalogIsTheSRDStatBlocks`.
