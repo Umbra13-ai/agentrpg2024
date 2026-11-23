@@ -88,7 +88,7 @@ func customMonsterReport(m srdMonster2024, notes []string, entries bool) map[str
 
 // handleGMCompendiumPreview godoc
 // @Summary Preview what the server does with a monster before importing it
-// @Description Saves nothing. For each monster you send (1–25, the same stat block an import takes) it says whether it would import (valid, problem), what the server fills in that you left out (notes), what it will count as 0 or apply by name unless the wording changes (warnings), and, for each entry, which sentences a rule of the server reads (applied_by) and which you resolve in play (gm_resolves; silent true: the server does not mention it either, so remember it). The server reads the SRD 5.2.1 wording: reword an entry with docs/gm_guide.md's "Writing a monster the server runs" and preview again. campaign_id names a campaign you run (needed when you run more than one).
+// @Description Saves nothing. Send monsters (1–25 stat blocks, as an import takes them) or texts (1–25 stat blocks pasted as text in the SRD 5.2.1 layout: the name, the size, type and alignment line, AC, Initiative, HP, Speed, the ability grid, the labelled lines, then Traits, Actions, Bonus Actions, Reactions and Legendary Actions with each entry as "Name. Text"); not both. A text comes back as the monster it was read as (monster, with read_notes for what could not be read or was changed): check it, correct it, and import that. For each monster it says whether it would import (valid, problem), what the server fills in that you left out (notes), what it will count as 0 or apply by name unless the wording changes (warnings), and, for each entry, which sentences a rule of the server reads (applied_by) and which you resolve in play (gm_resolves; silent true: the server does not mention it either, so remember it). The server reads the SRD 5.2.1 wording: reword an entry as docs/gm_guide.md's "Writing a monster the server runs" says and preview again. campaign_id names a campaign you run (needed when you run more than one).
 // @Tags GM
 // @Router /gm/compendium/monsters/preview [post]
 func handleGMCompendiumPreview(w http.ResponseWriter, r *http.Request) {
@@ -98,20 +98,40 @@ func handleGMCompendiumPreview(w http.ResponseWriter, r *http.Request) {
 	}
 	var req struct {
 		Monsters []srdMonster2024 `json:"monsters"` // 1–25 stat blocks, as in an import
+		Texts    []string         `json:"texts"`    // or 1–25 stat blocks pasted as text, up to 100000 bytes each
 	}
 	if _, ok := gmReadAs(w, r, agent, &req, campaignBeforeStart()); !ok {
 		return
 	}
-	if len(req.Monsters) < 1 || len(req.Monsters) > 25 {
-		writeJSONStatus(w, http.StatusBadRequest, map[string]interface{}{"error": "invalid_monster", "message": "Preview 1–25 monsters at a time."})
+	n := len(req.Monsters) + len(req.Texts)
+	if (len(req.Monsters) > 0 && len(req.Texts) > 0) || n < 1 || n > 25 {
+		writeJSONStatus(w, http.StatusBadRequest, map[string]interface{}{"error": "invalid_monster", "message": "Preview 1–25 stat blocks at a time: send monsters or texts, not both."})
 		return
+	}
+	var readNotes [][]string
+	fromText := len(req.Texts) > 0
+	if fromText {
+		readNotes = make([][]string, len(req.Texts))
+		for i, t := range req.Texts {
+			if len(t) > 100000 {
+				writeJSONStatus(w, http.StatusBadRequest, map[string]interface{}{"error": "invalid_monster", "message": fmt.Sprintf("texts[%d] is over 100000 bytes.", i)})
+				return
+			}
+			m, notes := readStatBlockText(t)
+			req.Monsters = append(req.Monsters, m)
+			readNotes[i] = notes
+		}
 	}
 	out := []map[string]interface{}{}
 	for i := range req.Monsters {
+		asRead := req.Monsters[i]
 		notes := normalizeCustomMonster(&req.Monsters[i])
 		m := req.Monsters[i]
 		problem := validateCustomMonster(m)
 		e := map[string]interface{}{"name": m.Name, "valid": problem == "", "problem": problem}
+		if fromText {
+			e["monster"], e["read_notes"] = asRead, nonNil(readNotes[i])
+		}
 		if problem == "" {
 			for k, v := range customMonsterReport(m, notes, true) {
 				e[k] = v
