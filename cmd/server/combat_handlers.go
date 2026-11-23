@@ -1847,7 +1847,7 @@ func handleRest(w http.ResponseWriter, r *http.Request, charID int) {
 	}
 	// SRD 5.2.1: no more than one Long Rest in 24 hours, counted on the campaign's story clock (the GM passes time), never the wall
 	// clock; a rest the GM applies is the GM's ruling and isn't checked (playtest I-CALLA-25)
-	if why := longRestTooSoon(charID, restRounds); why != nil && !gmApplied(r, charID) {
+	if why := longRestTooSoon(charID, restRounds); why != nil && !gmOwnRequest(r, charID) {
 		writeJSONStatus(w, http.StatusConflict, why)
 		return
 	}

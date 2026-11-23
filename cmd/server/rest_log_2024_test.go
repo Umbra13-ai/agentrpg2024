@@ -124,3 +124,41 @@ func TestPostgresTravelKeepsTheGMsNumbersOutOfTheLog(t *testing.T) {
 		t.Error("the GM's notices don't keep the travel DCs")
 	}
 }
+
+// Staged test ON3.1: with the turn schedule on, a player's Long Rest is a submission the GM resolves, and resolving it is held to the 24
+// story hours like the player's own request (it used to skip the check every time); the GM's own request stays its ruling.
+func TestPostgresResolvedRestKeepsTheStoryClock(t *testing.T) {
+	testPostgres(t)
+	_, gm := pgAgent(t, "pg sched rest gm")
+	_, j := pgCall(t, "POST", "/api/campaigns", gm, map[string]interface{}{"name": "Pg Sched Rest", "max_players": 2})
+	lobby := int(j["campaign_id"].(float64))
+	_, tok := pgAgent(t, "pg sched rest player")
+	_, j = pgCall(t, "POST", "/api/characters", tok, pgRogue(fmt.Sprintf("Pg Sched %d", time.Now().UnixNano()%1e9)))
+	char := int(j["character_id"].(float64))
+	pgCall(t, "POST", fmt.Sprintf("/api/campaigns/%d/join", lobby), tok, map[string]interface{}{"character_id": char})
+	pgFinish(t, tok, char)
+	pgCall(t, "POST", fmt.Sprintf("/api/campaigns/%d/ready", lobby), tok, nil)
+	pgCall(t, "POST", fmt.Sprintf("/api/campaigns/%d/ready", lobby), gm, nil)
+	if c, j := pgCall(t, "POST", fmt.Sprintf("/api/campaigns/%d/start", lobby), gm, nil); c != 200 {
+		t.Fatalf("start: %d %v", c, j)
+	}
+	// the character finished a Long Rest just now on the story clock
+	pgExec(t, `UPDATE characters c SET last_long_rest_story = COALESCE(l.story_rounds, 0) FROM lobbies l WHERE l.id = c.lobby_id AND c.id = $1`, char)
+	if c, j := pgCall(t, "POST", fmt.Sprintf("/api/characters/%d/rest", char), tok, nil); c != 202 || j["submitted"] != true {
+		t.Fatalf("a Long Rest with the schedule on is a submission: %d %v", c, j)
+	}
+	c, j := pgCall(t, "POST", fmt.Sprintf("/api/campaigns/%d/round/resolve", lobby), gm, map[string]interface{}{"character_id": char})
+	res, _ := j["resolved"].([]interface{})
+	if len(res) != 1 || res[0].(map[string]interface{})["resolved"] == true || !strings.Contains(fmt.Sprint(j), "long_rest_too_soon") {
+		t.Errorf("resolving a second rest with no story time passed: %d %v", c, j)
+	}
+	var rests int
+	db.QueryRow(`SELECT COUNT(*) FROM actions WHERE character_id = $1 AND action_type = 'long_rest'`, char).Scan(&rests)
+	if rests != 0 {
+		t.Errorf("the refused rest was logged %d times", rests)
+	}
+	// the GM's own request is its ruling
+	if c, j := pgCall(t, "POST", fmt.Sprintf("/api/characters/%d/rest", char), gm, nil); c != 200 {
+		t.Errorf("a rest the GM sends itself: %d %v", c, j)
+	}
+}

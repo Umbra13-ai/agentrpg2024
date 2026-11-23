@@ -247,7 +247,7 @@ func longRestTooSoon(charID, restRounds int) map[string]interface{} {
 		left := (need - gone + 599) / 600
 		return map[string]interface{}{"success": false, "error": "long_rest_too_soon", "story_hours_left": left,
 			"message": fmt.Sprintf("A creature can't benefit from more than one Long Rest in 24 hours, and the story clock shows %d more hours to go since this character's last one. "+
-				"If the story has moved on, the GM passes the time (POST /api/gm/pass-time {\"minutes\": %d}) or applies the rest. Nothing was changed.", left, left*60)}
+				"If the story has moved on, the GM passes the time (POST /api/gm/pass-time {\"minutes\": %d}) or sends the rest itself (the GM's own request is its ruling; a submission it resolves is checked like the player's). Nothing was changed.", left, left*60)}
 	}
 	return nil
 }
