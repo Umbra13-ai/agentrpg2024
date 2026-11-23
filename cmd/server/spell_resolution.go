@@ -194,8 +194,9 @@ func resolveSpellOnMonster(charID int, spellKey string, spell SRDSpell, damageDi
 			rollNote += dt
 		}
 		hurt, _ := hurtMonster(lobbyID, monster, d, dtype, false)
-		text := hurt.Text + drainHeal(charID, spell, dtype, hurt.Dealt) // Vampiric Touch: the caster regains half (spell_drain_2024.go)
-		text += hitWithRiders(lobbyID, charID, monster, out.Critical)   // Hex, Hunter's Mark (hit_riders_2024.go)
+		text := hurt.Text + drainHeal(charID, spell, dtype, hurt.Dealt)               // Vampiric Touch: the caster regains half (spell_drain_2024.go)
+		text += hitWithRiders(lobbyID, charID, monster, out.Critical)                 // Hex, Hunter's Mark (hit_riders_2024.go)
+		text += scheduleLaterDamage(lobbyID, charID, monster, spell, slotLevel, true) // Acid Arrow's 2d4 at the end of its next turn (spell_later_damage_2024.go)
 		if monsterHPNow(lobbyID, monster) <= 0 {
 			text += killEffectNote(charID) // Dark One's Blessing (F134)
 		}
@@ -314,6 +315,9 @@ func resolveSpellOnMonster(charID int, spellKey string, spell SRDSpell, damageDi
 				}
 			}
 			if !saved { // the condition its damage comes with (Sunburst, Contagion, Black Tentacles, Weird ...: spell_cast_conditions_2024.go)
+				if line := scheduleLaterDamage(lobbyID, charID, id, spell, slotLevel, true); line != "" { // Vitriolic Sphere (spell_later_damage_2024.go)
+					lines = append(lines, line)
+				}
 				if line := applyCastCondition(lobbyID, charID, id, spell, saveDC, false) + applyCastMarker(lobbyID, charID, id, spell); line != "" {
 					lines = append(lines, line)
 				}

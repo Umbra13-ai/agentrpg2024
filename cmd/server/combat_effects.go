@@ -108,7 +108,7 @@ func expireCombatEffectsOf(lobbyID, sourceID int) {
 	}
 	// the attach kinds, its suffocating, the swallow and a condition's lasting effects (gate_condition) outlive a turn boundary: their
 	// owners end them
-	db.Exec(`DELETE FROM combat_effects WHERE lobby_id = $1 AND source_id = $2 AND kind NOT IN ('recurring_damage','attached','suffocating','swallowed','shape_form','ablaze') AND gate_condition = '' AND ends = ''`, lobbyID, sourceID)
+	db.Exec(`DELETE FROM combat_effects WHERE lobby_id = $1 AND source_id = $2 AND kind NOT IN ('recurring_damage','attached','suffocating','swallowed','shape_form','ablaze','later_damage') AND gate_condition = '' AND ends = ''`, lobbyID, sourceID)
 	db.Exec(`DELETE FROM combat_effects WHERE lobby_id = $1 AND target_id = $2 AND ends = 'target_start'`, lobbyID, sourceID) // "until the start of its next turn" (Shocking Grasp)
 	endConditionsFromSource(lobbyID, fmt.Sprintf("Stunning Strike #%d", sourceID))                                            // Stunned until the start of the Monk's next turn
 }

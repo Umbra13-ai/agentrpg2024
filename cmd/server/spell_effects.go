@@ -364,6 +364,7 @@ func resolveSpellOnCharacters(charID int, spellKey string, spell SRDSpell, slotL
 				dmgText := damageCharacterWithRiders(id, d, dtype, out.Critical, hitRiders(charID, id, out.Critical)) // Hex, Hunter's Mark (hit_riders_2024.go)
 				dmgText += drainHeal(charID, spell, dtype, hpBefore-characterHP(id))                                  // Vampiric Touch (spell_drain_2024.go)
 				dmgText += applyCastCondition(lobbyOfChar(charID), charID, id, spell, saveDC, true)                   // Ray of Sickness (spell_cast_conditions_2024.go)
+				dmgText += scheduleLaterDamage(lobbyOfChar(charID), charID, id, spell, slotLevel, true)               // Acid Arrow (spell_later_damage_2024.go)
 				lines = append(lines, fmt.Sprintf(" %s%s, %s.", ar.LineForAttacker(sa.name, out), rollNote, dmgText))
 				if !hybrid {
 					continue
@@ -418,7 +419,8 @@ func resolveSpellOnCharacters(charID int, spellKey string, spell SRDSpell, slotL
 		} else {
 			lines = append(lines, fmt.Sprintf(" %s %s and %s.", name, how, damageCharacter(id, d, mainType)))
 		}
-		if !saved { // the condition its damage comes with (spell_cast_conditions_2024.go)
+		if !saved { // the condition its damage comes with (spell_cast_conditions_2024.go); Vitriolic Sphere's later damage (spell_later_damage_2024.go)
+			lines = append(lines, scheduleLaterDamage(lobbyOfChar(charID), charID, id, spell, slotLevel, true))
 			if line := applyCastCondition(lobbyOfChar(charID), charID, id, spell, saveDC, false) + applyCastMarker(lobbyOfChar(charID), charID, id, spell); line != "" {
 				lines = append(lines, line)
 			}

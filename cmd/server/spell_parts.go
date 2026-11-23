@@ -129,7 +129,7 @@ func extraPartsText(charID int, parts []damagePart, slotLevel, dc int) string {
 		out += " Also: " + strings.Join(now, "; ") + "."
 	}
 	if len(later) > 0 {
-		out += " Later: " + strings.Join(later, "; ") + " (roll it then)."
+		out += " Later: " + strings.Join(later, "; ") + "."
 	}
 	return out
 }

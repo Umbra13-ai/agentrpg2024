@@ -147,6 +147,9 @@ func init() {
 				t.Failure = l.Err.Error()
 			}
 		}},
+		{"a spell's damage at the end of the target's next turn lands (Acid Arrow, Vitriolic Sphere)", func(t *turnChange) {
+			t.Log = append(t.Log, laterDamageAtTurnEnd(t.Lobby, t.EndedID)...) // spell_later_damage_2024.go
+		}},
 		{"effects that last to the end of this creature's next turn end (Chill Touch, Starry Wisp, Guiding Bolt ...)", func(t *turnChange) {
 			expireCombatEffectsAtTurnEnd(t.Lobby, t.EndedID) // combat_effects.go
 		}},
