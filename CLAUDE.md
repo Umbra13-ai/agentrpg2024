@@ -732,6 +732,16 @@ Add to the owner, never beside it. When you give another rule one owner, add it 
 - **Whether a monster action the GM sends deals its damage:** `damageApplies` (`monster_attacks.go`): yes unless the request says
   `"apply_damage": false` (narrate's `monster_action`, a Legendary Action); a hit's own saving throw is rolled by `parseSaveEffect` /
   `applySaveEffect` (feedback log 62, I-GM-19; `TestPostgresMonsterHitAppliesByDefault`).
+- **A bonus a spell's damage gets once** (Empowered Evocation, Elemental Affinity: "one damage roll of that spell"): `spellOneRollBonus`
+  (`cmd/server/spell_one_roll_2024.go`) is the one reader. The cast text adds it to the damage it shows; a spell of separate beams or darts
+  (Magic Missile, Scorching Ray, Eldritch Blast) gives it to the first that hits (`firstHit`) and says so on that line, at a monster and at
+  characters; the GM's area cast reads it too. Go: `TestPostgresEmpoweredEvocationOnEveryRoute`.
+- **A fight started before anyone is in it** (the GM mounts monsters first): an active fight with an empty turn order is valid; combat/start
+  answers 200 with no current turn, combat/add fills it and the highest Initiative takes the first turn. Go: `TestPostgresFightStartedWithNoCharacters`.
+- **The spell file's derived fields** (`srd521_spells.json`): a `saving_throw` is a save the target makes against the spell, never a save the spell
+  gives Advantage on; a summoned creature's action keeps its whole name. `TestSpellFileFieldsSayWhatTheTextSays`. The four Player's Handbook
+  corrections (`spell_corrections_2024.json`, owner Nov 10) change the SRD text of Animal Shapes, Telekinesis, Flaming Sphere and Conjure
+  Minor Elementals on every server.
 - **The SRD monster catalogue** (owner, Nov 23): `srdMonsterCatalog` (`monsters_2024.go`), the 330 stat blocks; the creatures an item gives
   (Giant Fly, Avatar of Death: `itemCreatureSource`) share the table but are never counted, listed or offered. Every list, count, search and beast
   choice reads it; the Universe card shows its Challenge Rating groups (`crBands`). Go: `TestPostgresMonsterCatalogIsTheSRDStatBlocks`.
