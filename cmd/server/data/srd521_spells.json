@@ -1199,7 +1199,7 @@
   "material": "",
   "material_cost": 0,
   "material_consumed": false,
-  "saving_throw": "WIS",
+  "saving_throw": "",
   "aoe_shape": "",
   "aoe_size": 0,
   "damage_dice": "",
@@ -2436,7 +2436,7 @@
   "material": "",
   "material_cost": 0,
   "material_consumed": false,
-  "saving_throw": "STR",
+  "saving_throw": "DEX",
   "aoe_shape": "",
   "aoe_size": 0,
   "damage_dice": "3d10",
@@ -5252,11 +5252,7 @@
        "text": "The steed teleports, along with its rider, to an unoccupied space of your choice up to 60 feet away from itself."
       },
       {
-       "name": "Healing Touch (Celestial Only; Recharges after a Long",
-       "text": ""
-      },
-      {
-       "name": "Rest)",
+       "name": "Healing Touch (Celestial Only; Recharges after a Long Rest)",
        "text": "One creature within 5 feet of the steed regains a number of Hit Points equal to 2d8 plus the spell’s level."
       }
      ]
@@ -6123,7 +6119,7 @@
   "material": "a bit of gauze",
   "material_cost": 0,
   "material_consumed": false,
-  "saving_throw": "CON",
+  "saving_throw": "",
   "aoe_shape": "",
   "aoe_size": 0,
   "damage_dice": "",
@@ -7027,7 +7023,7 @@
   "material": "a shaving of licorice root",
   "material_cost": 0,
   "material_consumed": false,
-  "saving_throw": "DEX",
+  "saving_throw": "",
   "aoe_shape": "",
   "aoe_size": 0,
   "damage_dice": "",
