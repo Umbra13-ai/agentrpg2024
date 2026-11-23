@@ -7,7 +7,8 @@ package main
 //
 // The story is made from the action log (readActions, the one reader of it), never from a copy: `storyPassages` says which records are the
 // story and in whose voice, `storyChapters` where a new chapter begins. The server stores no chapters, so a chapter is a scene: it ends when a
-// fight ends, after a gap of more than `storyChapterGap` between passages, or at `storyChapterMax` passages. Players' words only (playerText,
+// fight ends, after a gap of more than `storyChapterGap` between passages, or at `storyChapterMax` passages. It is read from the beginning: a first visit opens
+// Chapter I, page 1, a returning reader is put back where they stopped, and "Latest" goes to the end. Players' words only (playerText,
 // as everywhere the log is shown), a private campaign behind its watch password (canWatch), the party chat and the log's bookkeeping left out.
 
 import (
@@ -28,8 +29,11 @@ var storyReaderCSS string
 //go:embed data/story_reader_2024.js
 var storyReaderJS string
 
+// storyMaxRecords: the records the reader reads, from the beginning (a story is read in order, so a very long one is cut at its end, never its start;
+// the whole chronicle has the rest). A variable for the test.
+var storyMaxRecords = 20000
+
 const (
-	storyMaxRecords  = 4000             // the newest records the reader reads; older ones stay in the whole chronicle
 	storyChapterGap  = 6 * time.Hour    // a pause this long between passages starts a new chapter
 	storyChapterMax  = 60               // a chapter this long is cut, so no chapter is a wall
 	storyChapterMin  = 3                // a fight's end starts a new chapter only when the chapter before it has this many passages
@@ -221,7 +225,7 @@ func storyPage(campaignID int, name, gmName string, chapters []storyChapter, tot
 	}
 	note := ""
 	if total >= storyMaxRecords {
-		note = fmt.Sprintf(`<p style="font-size:0.78rem; color:var(--text-muted); margin-bottom:0.6rem;">Showing the newest part of the story. <a href="/campaign/%d/log">The whole chronicle</a> has everything.</p>`, campaignID)
+		note = fmt.Sprintf(`<p style="font-size:0.78rem; color:var(--text-muted); margin-bottom:0.6rem;">This is the first part of a very long story. <a href="/campaign/%d/log">The whole chronicle</a> has the rest, newest first.</p>`, campaignID)
 	}
 	return `<style>` + storyReaderCSS + `</style>
 <div class="reader-shell" id="story-reader">
@@ -310,13 +314,10 @@ func serveStoryReader(w http.ResponseWriter, r *http.Request, campaignID int) {
 		writeDBErrorPage(w, err, "the campaign")
 		return
 	}
-	recs, err := readActions(actionFilter{lobby: campaignID, newestFirst: true, limit: storyMaxRecords, skipTypes: storySkipTypes()})
+	recs, err := readActions(actionFilter{lobby: campaignID, limit: storyMaxRecords, skipTypes: storySkipTypes()}) // oldest first: the story starts at its beginning
 	if err != nil {
 		writeDBErrorPage(w, err, "the campaign's story")
 		return
-	}
-	for i, j := 0, len(recs)-1; i < j; i, j = i+1, j-1 { // oldest first
-		recs[i], recs[j] = recs[j], recs[i]
 	}
 	icons := map[int]string{}
 	for _, a := range recs {

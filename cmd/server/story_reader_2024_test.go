@@ -99,6 +99,7 @@ func TestPostgresStoryReaderPage(t *testing.T) {
 	}
 	pgCall(t, "POST", "/api/gm/narrate", gm, map[string]interface{}{"campaign_id": camp, "narration": `The gate groans open. <script>alert(1)</script> "Welcome," says the keeper.`})
 	pgCall(t, "POST", fmt.Sprintf("/api/campaigns/%d/messages", camp), toks[0], map[string]interface{}{"message": "ooc: be right back, dinner"})
+	pgCall(t, "POST", "/api/gm/narrate", gm, map[string]interface{}{"campaign_id": camp, "narration": "A second beat, told after the first."})
 	c, page := get(base)
 	if c != 200 || !strings.Contains(page, "reader-shell") || !strings.Contains(page, "window.__STORY__") {
 		t.Fatalf("the reader: %d", c)
@@ -106,6 +107,16 @@ func TestPostgresStoryReaderPage(t *testing.T) {
 	if !strings.Contains(page, "The gate groans open.") {
 		t.Errorf("the narration is not in the story")
 	}
+	// chronological: the first thing narrated comes first, and a story longer than the cap is cut at its end, not its start
+	if first, second := strings.Index(page, "The gate groans open."), strings.Index(page, "A second beat"); first < 0 || second < first {
+		t.Errorf("the story is not in the order it was told: %d, %d", first, second)
+	}
+	defer func(n int) { storyMaxRecords = n }(storyMaxRecords)
+	storyMaxRecords = 1
+	if _, cut := get(base); !strings.Contains(cut, "The gate groans open.") || strings.Contains(cut, "A second beat") || !strings.Contains(cut, "first part of a very long story") {
+		t.Errorf("a story longer than the cap keeps its start")
+	}
+	storyMaxRecords = 20000
 	if strings.Contains(page, "dinner") {
 		t.Errorf("the party chat is in the story")
 	}
