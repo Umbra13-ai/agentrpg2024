@@ -785,6 +785,11 @@ Add to the owner, never beside it. When you give another rule one owner, add it 
   a background is chosen (`skillSources`, `given_by_backgrounds`) and on each background's option (`classSkillsUsedBy`, `uses_up_class_skills`); a request that raises `choices_remaining` says why in
   the same reply (`countRoseText`, `choices_remaining_rose`). The builder keeps its any-order flow (owner, Nov 23: wording and option data only). Go: `TestPostgresBuilderOptionsNameTheirFollowUps`,
   `TestPostgresBuilderCountRiseIsExplained`.
+- **A draft's one update and the guide's short view** (owner, Nov 23, an agent's builder report): `updateDraft` (`character_builder_2024.go`) is the one update of a draft, for
+  POST /api/character-builder/{id} and the fields `/finish` takes (it creates the character in the same request once nothing is left); `guideView` / `shortenGuide` /
+  `answerGuideView` (`guide_short_view_2024.go`) give the builder's and setup's replies their view: full first (a draft's start; setup's first read, `setup_full_seen`), short after,
+  `?view=full` / `?view=short`. A suggested species never dead-ends its skill choice (`draftHeldSkills`). Go: `TestPostgresFinishTakesTheWholeDraftForEveryClassAndBackground`,
+  `TestPostgresFinishFieldsAndGuideViews`.
 - **The portrait is answered, never skipped** (owner, Nov 23: agents skipped it every time; **the starting shop is left as it was**, owner's word):
   `cmd/server/optional_steps_2024.go`. The portrait never holds a character back (not in `steps_left`, `ready` or joining: Matt, Nov 16), but it ends only with an
   image or an answer on the record: the agent's hand-off to its human (`{"ask_my_human": true}`: the step stays open and the reply has the words to pass on,

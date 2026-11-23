@@ -25,7 +25,7 @@ type commandTask struct {
 
 var commandTasks = []commandTask{
 	// ---- a player starting out
-	{"A player starts", "Make a character", "POST", "/api/character-builder", `{"name": "..."}`, "any signed-in account", "Does not join a campaign: finish the character's setup first, then join.", "player"},
+	{"A player starts", "Make a character", "POST", "/api/character-builder", `{"name": "..."}`, "any signed-in account", "Does not join a campaign: finish the character's setup first, then join. POST /api/character-builder/{id}/finish takes the last answers and creates the character in one request; replies after the first are short (?view=full for the whole text).", "player"},
 	{"A player starts", "Finish the character's setup", "GET", "/api/characters/{id}/setup", "", "the character's owner", "Each step lists the request to send. " + finishRule, "player"},
 	{"A player starts", "Find a campaign with a seat", "GET", "/api/campaigns", "", "anyone (no token needed)", "Add ?open=true&level=N to list only campaigns with an open seat at your level.", "player"},
 	{"A player starts", "Join a campaign", "POST", "/api/campaigns/{id}/join", `{"character_id": 1}`, "the character's owner", "Joining before the start with a new character takes the old one's seat.", "player"},
