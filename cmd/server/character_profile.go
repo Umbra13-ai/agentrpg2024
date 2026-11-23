@@ -718,9 +718,9 @@ function render(d, p) {
         a.appendChild(r);
       });
       g.appendChild(a);
-      var s = panel('Spellcasting');
       var caster = d.spell_slots || d.pact_magic || (d.spell_groups && d.spell_groups.length) || d.spellcasting_ability;
-      if (caster) {
+      if (caster) { // a martial character with no spellcasting has no Spellcasting section at all
+        var s = panel('Spellcasting');
         var ab = {INT: 'INT', WIS: 'WIS', CHA: 'CHA'}[String(d.spellcasting_ability || '').toUpperCase()] || String(d.spellcasting_ability || '—').toUpperCase();
         var bd = css(el('div'), 'display:grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap:0.4rem;');
         [['Ability: ' + ab, 'badge-arcane'], ['Save DC: ' + (d.spell_save_dc || '—'), 'badge-recruiting'], ['Spell Atk: ' + (d.spell_attack_bonus !== undefined ? sgn(d.spell_attack_bonus) : '—'), 'badge-active']].forEach(function (x) {
@@ -744,10 +744,8 @@ function render(d, p) {
             s.appendChild(item(by[lv].join(', '), (lv === 0 ? 'Cantrips (At Will)' : ordinal(lv) + '-Level ' + (grp.label === 'Spellbook' ? 'Spellbook' : 'Prepared')) + ':'));
           });
         });
-      } else {
-        s.appendChild(item('Martial / non-caster combatant.'));
+        g.appendChild(s);
       }
-      g.appendChild(s);
     } else if (tab === 'skills') {
       var k = panel('Skills & Senses');
       var sp = (d.skill_proficiencies || []).map(norm), ex = (d.expertise || []).map(norm);
