@@ -30360,10 +30360,19 @@
            "actions": {
             "items": {
              "properties": {
+              "mechanics": {
+               "description": "structured mechanics the GM attaches (GET /api/gm/compendium/mechanics; monster_mechanics_2024.go)",
+               "items": {
+                "type": "object"
+               },
+               "type": "array"
+              },
               "name": {
+               "description": "the entry's name, with its usage (\"Bite\", \"Fire Breath (Recharge 5–6)\")",
                "type": "string"
               },
               "text": {
+               "description": "the entry's words, as the stat block prints them",
                "type": "string"
               }
              },
@@ -30377,10 +30386,19 @@
            "bonus_actions": {
             "items": {
              "properties": {
+              "mechanics": {
+               "description": "structured mechanics the GM attaches (GET /api/gm/compendium/mechanics; monster_mechanics_2024.go)",
+               "items": {
+                "type": "object"
+               },
+               "type": "array"
+              },
               "name": {
+               "description": "the entry's name, with its usage (\"Bite\", \"Fire Breath (Recharge 5–6)\")",
                "type": "string"
               },
               "text": {
+               "description": "the entry's words, as the stat block prints them",
                "type": "string"
               }
              },
@@ -30432,10 +30450,19 @@
            "legendary_actions": {
             "items": {
              "properties": {
+              "mechanics": {
+               "description": "structured mechanics the GM attaches (GET /api/gm/compendium/mechanics; monster_mechanics_2024.go)",
+               "items": {
+                "type": "object"
+               },
+               "type": "array"
+              },
               "name": {
+               "description": "the entry's name, with its usage (\"Bite\", \"Fire Breath (Recharge 5–6)\")",
                "type": "string"
               },
               "text": {
+               "description": "the entry's words, as the stat block prints them",
                "type": "string"
               }
              },
@@ -30455,10 +30482,19 @@
            "reactions": {
             "items": {
              "properties": {
+              "mechanics": {
+               "description": "structured mechanics the GM attaches (GET /api/gm/compendium/mechanics; monster_mechanics_2024.go)",
+               "items": {
+                "type": "object"
+               },
+               "type": "array"
+              },
               "name": {
+               "description": "the entry's name, with its usage (\"Bite\", \"Fire Breath (Recharge 5–6)\")",
                "type": "string"
               },
               "text": {
+               "description": "the entry's words, as the stat block prints them",
                "type": "string"
               }
              },
@@ -30481,10 +30517,19 @@
            "traits": {
             "items": {
              "properties": {
+              "mechanics": {
+               "description": "structured mechanics the GM attaches (GET /api/gm/compendium/mechanics; monster_mechanics_2024.go)",
+               "items": {
+                "type": "object"
+               },
+               "type": "array"
+              },
               "name": {
+               "description": "the entry's name, with its usage (\"Bite\", \"Fire Breath (Recharge 5–6)\")",
                "type": "string"
               },
               "text": {
+               "description": "the entry's words, as the stat block prints them",
                "type": "string"
               }
              },
@@ -30863,10 +30908,19 @@
                "actions": {
                 "items": {
                  "properties": {
+                  "mechanics": {
+                   "description": "structured mechanics the GM attaches (GET /api/gm/compendium/mechanics; monster_mechanics_2024.go)",
+                   "items": {
+                    "type": "object"
+                   },
+                   "type": "array"
+                  },
                   "name": {
+                   "description": "the entry's name, with its usage (\"Bite\", \"Fire Breath (Recharge 5–6)\")",
                    "type": "string"
                   },
                   "text": {
+                   "description": "the entry's words, as the stat block prints them",
                    "type": "string"
                   }
                  },
@@ -30880,10 +30934,19 @@
                "bonus_actions": {
                 "items": {
                  "properties": {
+                  "mechanics": {
+                   "description": "structured mechanics the GM attaches (GET /api/gm/compendium/mechanics; monster_mechanics_2024.go)",
+                   "items": {
+                    "type": "object"
+                   },
+                   "type": "array"
+                  },
                   "name": {
+                   "description": "the entry's name, with its usage (\"Bite\", \"Fire Breath (Recharge 5–6)\")",
                    "type": "string"
                   },
                   "text": {
+                   "description": "the entry's words, as the stat block prints them",
                    "type": "string"
                   }
                  },
@@ -30935,10 +30998,19 @@
                "legendary_actions": {
                 "items": {
                  "properties": {
+                  "mechanics": {
+                   "description": "structured mechanics the GM attaches (GET /api/gm/compendium/mechanics; monster_mechanics_2024.go)",
+                   "items": {
+                    "type": "object"
+                   },
+                   "type": "array"
+                  },
                   "name": {
+                   "description": "the entry's name, with its usage (\"Bite\", \"Fire Breath (Recharge 5–6)\")",
                    "type": "string"
                   },
                   "text": {
+                   "description": "the entry's words, as the stat block prints them",
                    "type": "string"
                   }
                  },
@@ -30958,10 +31030,19 @@
                "reactions": {
                 "items": {
                  "properties": {
+                  "mechanics": {
+                   "description": "structured mechanics the GM attaches (GET /api/gm/compendium/mechanics; monster_mechanics_2024.go)",
+                   "items": {
+                    "type": "object"
+                   },
+                   "type": "array"
+                  },
                   "name": {
+                   "description": "the entry's name, with its usage (\"Bite\", \"Fire Breath (Recharge 5–6)\")",
                    "type": "string"
                   },
                   "text": {
+                   "description": "the entry's words, as the stat block prints them",
                    "type": "string"
                   }
                  },
@@ -30984,10 +31065,19 @@
                "traits": {
                 "items": {
                  "properties": {
+                  "mechanics": {
+                   "description": "structured mechanics the GM attaches (GET /api/gm/compendium/mechanics; monster_mechanics_2024.go)",
+                   "items": {
+                    "type": "object"
+                   },
+                   "type": "array"
+                  },
                   "name": {
+                   "description": "the entry's name, with its usage (\"Bite\", \"Fire Breath (Recharge 5–6)\")",
                    "type": "string"
                   },
                   "text": {
+                   "description": "the entry's words, as the stat block prints them",
                    "type": "string"
                   }
                  },
@@ -31074,10 +31164,19 @@
             "actions": {
              "items": {
               "properties": {
+               "mechanics": {
+                "description": "structured mechanics the GM attaches (GET /api/gm/compendium/mechanics; monster_mechanics_2024.go)",
+                "items": {
+                 "type": "object"
+                },
+                "type": "array"
+               },
                "name": {
+                "description": "the entry's name, with its usage (\"Bite\", \"Fire Breath (Recharge 5–6)\")",
                 "type": "string"
                },
                "text": {
+                "description": "the entry's words, as the stat block prints them",
                 "type": "string"
                }
               },
@@ -31091,10 +31190,19 @@
             "bonus_actions": {
              "items": {
               "properties": {
+               "mechanics": {
+                "description": "structured mechanics the GM attaches (GET /api/gm/compendium/mechanics; monster_mechanics_2024.go)",
+                "items": {
+                 "type": "object"
+                },
+                "type": "array"
+               },
                "name": {
+                "description": "the entry's name, with its usage (\"Bite\", \"Fire Breath (Recharge 5–6)\")",
                 "type": "string"
                },
                "text": {
+                "description": "the entry's words, as the stat block prints them",
                 "type": "string"
                }
               },
@@ -31146,10 +31254,19 @@
             "legendary_actions": {
              "items": {
               "properties": {
+               "mechanics": {
+                "description": "structured mechanics the GM attaches (GET /api/gm/compendium/mechanics; monster_mechanics_2024.go)",
+                "items": {
+                 "type": "object"
+                },
+                "type": "array"
+               },
                "name": {
+                "description": "the entry's name, with its usage (\"Bite\", \"Fire Breath (Recharge 5–6)\")",
                 "type": "string"
                },
                "text": {
+                "description": "the entry's words, as the stat block prints them",
                 "type": "string"
                }
               },
@@ -31169,10 +31286,19 @@
             "reactions": {
              "items": {
               "properties": {
+               "mechanics": {
+                "description": "structured mechanics the GM attaches (GET /api/gm/compendium/mechanics; monster_mechanics_2024.go)",
+                "items": {
+                 "type": "object"
+                },
+                "type": "array"
+               },
                "name": {
+                "description": "the entry's name, with its usage (\"Bite\", \"Fire Breath (Recharge 5–6)\")",
                 "type": "string"
                },
                "text": {
+                "description": "the entry's words, as the stat block prints them",
                 "type": "string"
                }
               },
@@ -31195,10 +31321,19 @@
             "traits": {
              "items": {
               "properties": {
+               "mechanics": {
+                "description": "structured mechanics the GM attaches (GET /api/gm/compendium/mechanics; monster_mechanics_2024.go)",
+                "items": {
+                 "type": "object"
+                },
+                "type": "array"
+               },
                "name": {
+                "description": "the entry's name, with its usage (\"Bite\", \"Fire Breath (Recharge 5–6)\")",
                 "type": "string"
                },
                "text": {
+                "description": "the entry's words, as the stat block prints them",
                 "type": "string"
                }
               },
@@ -31238,6 +31373,9 @@
           "ac": 1,
           "actions": [
            {
+            "mechanics": [
+             {}
+            ],
             "name": "...",
             "text": "..."
            }
@@ -31245,6 +31383,9 @@
           "alignment": "...",
           "bonus_actions": [
            {
+            "mechanics": [
+             {}
+            ],
             "name": "...",
             "text": "..."
            }
@@ -31265,6 +31406,9 @@
           "languages": "...",
           "legendary_actions": [
            {
+            "mechanics": [
+             {}
+            ],
             "name": "...",
             "text": "..."
            }
@@ -31274,6 +31418,9 @@
           "proficiency_bonus": 1,
           "reactions": [
            {
+            "mechanics": [
+             {}
+            ],
             "name": "...",
             "text": "..."
            }
@@ -31284,6 +31431,9 @@
           "speed": "...",
           "traits": [
            {
+            "mechanics": [
+             {}
+            ],
             "name": "...",
             "text": "..."
            }
@@ -31550,10 +31700,19 @@
             "actions": {
              "items": {
               "properties": {
+               "mechanics": {
+                "description": "structured mechanics the GM attaches (GET /api/gm/compendium/mechanics; monster_mechanics_2024.go)",
+                "items": {
+                 "type": "object"
+                },
+                "type": "array"
+               },
                "name": {
+                "description": "the entry's name, with its usage (\"Bite\", \"Fire Breath (Recharge 5–6)\")",
                 "type": "string"
                },
                "text": {
+                "description": "the entry's words, as the stat block prints them",
                 "type": "string"
                }
               },
@@ -31567,10 +31726,19 @@
             "bonus_actions": {
              "items": {
               "properties": {
+               "mechanics": {
+                "description": "structured mechanics the GM attaches (GET /api/gm/compendium/mechanics; monster_mechanics_2024.go)",
+                "items": {
+                 "type": "object"
+                },
+                "type": "array"
+               },
                "name": {
+                "description": "the entry's name, with its usage (\"Bite\", \"Fire Breath (Recharge 5–6)\")",
                 "type": "string"
                },
                "text": {
+                "description": "the entry's words, as the stat block prints them",
                 "type": "string"
                }
               },
@@ -31622,10 +31790,19 @@
             "legendary_actions": {
              "items": {
               "properties": {
+               "mechanics": {
+                "description": "structured mechanics the GM attaches (GET /api/gm/compendium/mechanics; monster_mechanics_2024.go)",
+                "items": {
+                 "type": "object"
+                },
+                "type": "array"
+               },
                "name": {
+                "description": "the entry's name, with its usage (\"Bite\", \"Fire Breath (Recharge 5–6)\")",
                 "type": "string"
                },
                "text": {
+                "description": "the entry's words, as the stat block prints them",
                 "type": "string"
                }
               },
@@ -31645,10 +31822,19 @@
             "reactions": {
              "items": {
               "properties": {
+               "mechanics": {
+                "description": "structured mechanics the GM attaches (GET /api/gm/compendium/mechanics; monster_mechanics_2024.go)",
+                "items": {
+                 "type": "object"
+                },
+                "type": "array"
+               },
                "name": {
+                "description": "the entry's name, with its usage (\"Bite\", \"Fire Breath (Recharge 5–6)\")",
                 "type": "string"
                },
                "text": {
+                "description": "the entry's words, as the stat block prints them",
                 "type": "string"
                }
               },
@@ -31671,10 +31857,19 @@
             "traits": {
              "items": {
               "properties": {
+               "mechanics": {
+                "description": "structured mechanics the GM attaches (GET /api/gm/compendium/mechanics; monster_mechanics_2024.go)",
+                "items": {
+                 "type": "object"
+                },
+                "type": "array"
+               },
                "name": {
+                "description": "the entry's name, with its usage (\"Bite\", \"Fire Breath (Recharge 5–6)\")",
                 "type": "string"
                },
                "text": {
+                "description": "the entry's words, as the stat block prints them",
                 "type": "string"
                }
               },
@@ -31711,6 +31906,9 @@
           "ac": 1,
           "actions": [
            {
+            "mechanics": [
+             {}
+            ],
             "name": "...",
             "text": "..."
            }
@@ -31718,6 +31916,9 @@
           "alignment": "...",
           "bonus_actions": [
            {
+            "mechanics": [
+             {}
+            ],
             "name": "...",
             "text": "..."
            }
@@ -31738,6 +31939,9 @@
           "languages": "...",
           "legendary_actions": [
            {
+            "mechanics": [
+             {}
+            ],
             "name": "...",
             "text": "..."
            }
@@ -31747,6 +31951,9 @@
           "proficiency_bonus": 1,
           "reactions": [
            {
+            "mechanics": [
+             {}
+            ],
             "name": "...",
             "text": "..."
            }
@@ -31757,6 +31964,9 @@
           "speed": "...",
           "traits": [
            {
+            "mechanics": [
+             {}
+            ],
             "name": "...",
             "text": "..."
            }
@@ -42051,6 +42261,330 @@
      },
      "description": "Monster id"
     }
+   }
+  },
+  "/api/gm/compendium/mechanics": {
+   "get": {
+    "tags": [
+     "GM"
+    ],
+    "summary": "The mechanics a GM can attach to a monster's entries",
+    "description": "Lists every mechanic kind a GM can attach to an entry of a monster it imports (the entry's mechanics list): what it does, which entries it attaches to, its parameters with their options and limits, and an example. Attached mechanics are how an imported monster's wording that the server doesn't read, or a house rule on an SRD monster (import a copy of it), is applied by the server's own rules; covers names the entry's words the mechanic replaces. The import, edit and preview check them and say which sentences they cover. campaign_id names a campaign you run (needed when you run more than one).",
+    "responses": {
+     "200": {
+      "description": "Success",
+      "content": {
+       "application/json": {
+        "schema": {
+         "properties": {
+          "how": {
+           "type": "string"
+          },
+          "mechanics": {
+           "items": {
+            "properties": {
+             "applied_by": {
+              "type": "string"
+             },
+             "attaches_to": {
+              "type": "string"
+             },
+             "does": {
+              "type": "string"
+             },
+             "example": {
+              "type": "object"
+             },
+             "kind": {
+              "type": "string"
+             },
+             "params": {
+              "items": {
+               "properties": {
+                "does": {
+                 "type": "string"
+                },
+                "max": {
+                 "type": "integer"
+                },
+                "max_length": {
+                 "type": "integer"
+                },
+                "min": {
+                 "type": "integer"
+                },
+                "name": {
+                 "type": "string"
+                },
+                "needs": {
+                 "type": "string"
+                },
+                "only_with": {
+                 "type": "string"
+                },
+                "options": {
+                 "items": {
+                  "type": "string"
+                 },
+                 "type": "array"
+                },
+                "required": {
+                 "type": "boolean"
+                },
+                "type": {
+                 "type": "string"
+                }
+               },
+               "type": "object"
+              },
+              "type": "array"
+             }
+            },
+            "type": "object"
+           },
+           "type": "array"
+          },
+          "srd_monster": {
+           "properties": {
+            "abilities": {
+             "additionalProperties": {
+              "properties": {
+               "Mod": {
+                "type": "integer"
+               },
+               "Save": {
+                "type": "integer"
+               },
+               "Score": {
+                "type": "integer"
+               }
+              },
+              "type": "object"
+             },
+             "type": "object"
+            },
+            "ac": {
+             "type": "integer"
+            },
+            "actions": {
+             "items": {
+              "properties": {
+               "mechanics": {
+                "description": "structured mechanics the GM attaches (GET /api/gm/compendium/mechanics; monster_mechanics_2024.go)",
+                "items": {
+                 "type": "object"
+                },
+                "type": "array"
+               },
+               "name": {
+                "description": "the entry's name, with its usage (\"Bite\", \"Fire Breath (Recharge 5–6)\")",
+                "type": "string"
+               },
+               "text": {
+                "description": "the entry's words, as the stat block prints them",
+                "type": "string"
+               }
+              },
+              "type": "object"
+             },
+             "type": "array"
+            },
+            "alignment": {
+             "type": "string"
+            },
+            "bonus_actions": {
+             "items": {
+              "properties": {
+               "mechanics": {
+                "description": "structured mechanics the GM attaches (GET /api/gm/compendium/mechanics; monster_mechanics_2024.go)",
+                "items": {
+                 "type": "object"
+                },
+                "type": "array"
+               },
+               "name": {
+                "description": "the entry's name, with its usage (\"Bite\", \"Fire Breath (Recharge 5–6)\")",
+                "type": "string"
+               },
+               "text": {
+                "description": "the entry's words, as the stat block prints them",
+                "type": "string"
+               }
+              },
+              "type": "object"
+             },
+             "type": "array"
+            },
+            "condition_immunities": {
+             "type": "string"
+            },
+            "cr": {
+             "type": "string"
+            },
+            "damage_immunities": {
+             "type": "string"
+            },
+            "damage_resistances": {
+             "type": "string"
+            },
+            "damage_vulnerabilities": {
+             "type": "string"
+            },
+            "gear": {
+             "type": "string"
+            },
+            "group": {
+             "type": "string"
+            },
+            "hit_points_formula": {
+             "type": "string"
+            },
+            "hp": {
+             "type": "integer"
+            },
+            "initiative": {
+             "properties": {
+              "Mod": {
+               "type": "integer"
+              },
+              "Score": {
+               "type": "integer"
+              }
+             },
+             "type": "object"
+            },
+            "languages": {
+             "type": "string"
+            },
+            "legendary_actions": {
+             "items": {
+              "properties": {
+               "mechanics": {
+                "description": "structured mechanics the GM attaches (GET /api/gm/compendium/mechanics; monster_mechanics_2024.go)",
+                "items": {
+                 "type": "object"
+                },
+                "type": "array"
+               },
+               "name": {
+                "description": "the entry's name, with its usage (\"Bite\", \"Fire Breath (Recharge 5–6)\")",
+                "type": "string"
+               },
+               "text": {
+                "description": "the entry's words, as the stat block prints them",
+                "type": "string"
+               }
+              },
+              "type": "object"
+             },
+             "type": "array"
+            },
+            "legendary_intro": {
+             "type": "string"
+            },
+            "name": {
+             "type": "string"
+            },
+            "proficiency_bonus": {
+             "type": "integer"
+            },
+            "reactions": {
+             "items": {
+              "properties": {
+               "mechanics": {
+                "description": "structured mechanics the GM attaches (GET /api/gm/compendium/mechanics; monster_mechanics_2024.go)",
+                "items": {
+                 "type": "object"
+                },
+                "type": "array"
+               },
+               "name": {
+                "description": "the entry's name, with its usage (\"Bite\", \"Fire Breath (Recharge 5–6)\")",
+                "type": "string"
+               },
+               "text": {
+                "description": "the entry's words, as the stat block prints them",
+                "type": "string"
+               }
+              },
+              "type": "object"
+             },
+             "type": "array"
+            },
+            "senses": {
+             "type": "string"
+            },
+            "size": {
+             "type": "string"
+            },
+            "skills": {
+             "type": "string"
+            },
+            "speed": {
+             "type": "string"
+            },
+            "traits": {
+             "items": {
+              "properties": {
+               "mechanics": {
+                "description": "structured mechanics the GM attaches (GET /api/gm/compendium/mechanics; monster_mechanics_2024.go)",
+                "items": {
+                 "type": "object"
+                },
+                "type": "array"
+               },
+               "name": {
+                "description": "the entry's name, with its usage (\"Bite\", \"Fire Breath (Recharge 5–6)\")",
+                "type": "string"
+               },
+               "text": {
+                "description": "the entry's words, as the stat block prints them",
+                "type": "string"
+               }
+              },
+              "type": "object"
+             },
+             "type": "array"
+            },
+            "type": {
+             "type": "string"
+            },
+            "xp": {
+             "type": "integer"
+            },
+            "xp_lair": {
+             "type": "integer"
+            }
+           },
+           "type": "object"
+          }
+         },
+         "type": "object"
+        }
+       }
+      }
+     }
+    },
+    "parameters": [
+     {
+      "name": "srd",
+      "in": "query",
+      "required": false,
+      "description": "an SRD 5.2.1 monster's name: the reply adds its stat block as an import takes it (srd_monster), to copy with mechanics attached",
+      "schema": {
+       "type": "string"
+      }
+     },
+     {
+      "name": "campaign_id",
+      "in": "query",
+      "required": false,
+      "description": "a campaign you run (needed when you run more than one)",
+      "schema": {
+       "type": "integer"
+      }
+     }
+    ]
    }
   },
   "/api/my-turn": {

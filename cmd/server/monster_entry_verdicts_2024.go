@@ -110,8 +110,20 @@ func coveringPattern(sentence string) string {
 }
 
 // entryVerdicts: the verdicts of one entry's sentences along the route the server takes for it. kind is trait, action, bonus,
-// reaction or legendary.
+// reaction or legendary. A sentence a mechanic the GM attached covers is applied by that mechanic's owner (monster_mechanics_2024.go).
 func entryVerdicts(kind string, e srdMonsterEntry) []sentenceVerdict {
+	out := textVerdicts(kind, e)
+	for i := range out {
+		if k := mechanicCovers(e, out[i].Sentence); k != "" {
+			r, _ := mechanicKindOf(k)
+			out[i].Status, out[i].Rule = "applied", "attached mechanic "+k+": "+r.AppliedBy
+		}
+	}
+	return out
+}
+
+// textVerdicts: the verdicts the entry's words get from the server's text rules.
+func textVerdicts(kind string, e srdMonsterEntry) []sentenceVerdict {
 	sentences := entrySentences(e.Text)
 	all := func(status, rule string) []sentenceVerdict {
 		out := make([]sentenceVerdict, 0, len(sentences))
@@ -285,15 +297,15 @@ func saveResidual(text string) string {
 
 // ---- The report a GM reads (the import preview and the GM's stat block): the verdicts of an entry in the GM's words.
 
-type entryKey struct{ kind, name, text string }
+type entryKey struct{ kind, name, text, mechanics string }
 
-var entryReportMemo sync.Map // entryKey -> map[string]interface{}: a verdict depends on the entry's words only
+var entryReportMemo sync.Map // entryKey -> map[string]interface{}: a verdict depends on the entry's words and attached mechanics only
 
 // entryReport: one entry's verdicts as the GM reads them. applied lists what a rule of the server reads (and which); gm_resolves what the
 // GM resolves in play; a sentence in gm_resolves with silent true is one the server neither reads nor mentions in the reply, so the GM must
 // remember it.
 func entryReport(kind string, e srdMonsterEntry) map[string]interface{} {
-	k := entryKey{kind, e.Name, e.Text}
+	k := entryKey{kind, e.Name, e.Text, mechanicsKey(e)}
 	if v, ok := entryReportMemo.Load(k); ok {
 		return v.(map[string]interface{})
 	}
@@ -310,6 +322,9 @@ func entryReport(kind string, e srdMonsterEntry) map[string]interface{} {
 		}
 	}
 	r := map[string]interface{}{"name": e.Name, "kind": kind, "applied": applied, "gm_resolves": gm}
+	if mv := mechanicsView(e); len(mv) > 0 {
+		r["mechanics"] = mv
+	}
 	entryReportMemo.Store(k, r)
 	return r
 }

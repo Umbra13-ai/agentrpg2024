@@ -403,7 +403,7 @@ func preflightMonsterAction(meta *monsterMeta, name, use string, declared []stri
 	}
 	rows := make([]monsterActionRow, 0, len(meta.Actions))
 	for _, entry := range meta.Actions {
-		rows = append(rows, parseMonsterAttack(entry.Name, entry.Text).monsterActionRow)
+		rows = append(rows, parseMonsterAttack(entry.Name, rulesText(entry)).monsterActionRow)
 	}
 
 	for _, a := range rows {

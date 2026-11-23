@@ -69,42 +69,82 @@ func dieOnDrop(lobby, target int) string {
 	return fmt.Sprintf(" [%s is reduced to 0 Hit Points by this attack and dies]", name)
 }
 
-// droppedToZeroOnHit: the hit reduced its target to 0 Hit Points (it dealt damage and the target is at 0 now; a character that was already
-// at 0 took a Death Saving Throw failure from it, so 0 failures means this hit dropped it): the target becomes Stable (a character through
-// the Hit Point owner; a monster or companion has no Death Saving Throws: the GM keeps it alive at 0) and has the first condition for its
-// time, and the second while it has the first (the condition owner, notesEndsWith).
-func droppedToZeroOnHit(lobby, attacker, target int, desc, source string, taken int) string {
-	hitText := hitDamageText(desc)
-	if dieOnDropRe.MatchString(hitText) && hitDroppedToZero(lobby, target, taken) {
-		return dieOnDrop(lobby, target)
+// dropRule: what a hit does to a target it reduces to 0 Hit Points: it dies, or it becomes Stable with First for Rounds and Second
+// while First lasts (either may be empty). Read from the SRD wording (textDropRule) or from a drop_to_zero mechanic the GM attached
+// (mechanicDropRule); applied by droppedToZeroOnHit only.
+type dropRule struct {
+	Dies          bool
+	First, Second string
+	Rounds        int
+	Note          string // what follows that the server does not apply (an attached mechanic's note)
+}
+
+// textDropRule: the SRD wordings (dieOnDropRe, dropRiderRe) of the hit's text.
+func textDropRule(hitText string) (dropRule, bool) {
+	if dieOnDropRe.MatchString(hitText) {
+		return dropRule{Dies: true}, true
 	}
 	m := dropRiderRe.FindStringSubmatch(hitText)
-	if m == nil || !strings.EqualFold(m[1], m[4]) || !hitDroppedToZero(lobby, target, taken) {
+	if m == nil || !strings.EqualFold(m[1], m[4]) {
+		return dropRule{}, false
+	}
+	n, _ := strconv.Atoi(m[2])
+	return dropRule{First: strings.ToLower(m[1]), Second: strings.ToLower(m[5]), Rounds: n * map[string]int{"minute": 10, "hour": 600}[strings.ToLower(m[3])]}, true
+}
+
+// mechanicDropRule: the drop_to_zero mechanic attached to the attacking monster's entry (monster_mechanics_2024.go).
+func mechanicDropRule(lobby, attacker int, desc string) (dropRule, bool) {
+	m, ok := attachedMechanic(lobby, attacker, desc, "drop_to_zero")
+	if !ok {
+		return dropRule{}, false
+	}
+	return dropRule{Dies: m.str("result") == "dies", First: m.str("condition"), Second: m.str("also"), Rounds: m.num("minutes") * 10, Note: m.str("note")}, true
+}
+
+// droppedToZeroOnHit: the hit reduced its target to 0 Hit Points (it dealt damage and the target is at 0 now; a character that was already
+// at 0 took a Death Saving Throw failure from it, so 0 failures means this hit dropped it): the target dies, or becomes Stable (a character
+// through the Hit Point owner; a monster or companion has no Death Saving Throws: the GM keeps it alive at 0) and has the first condition
+// for its time, and the second while it has the first (the condition owner, notesEndsWith). An attached mechanic replaces the text's rule.
+func droppedToZeroOnHit(lobby, attacker, target int, desc, source string, taken int) string {
+	rule, ok := mechanicDropRule(lobby, attacker, desc)
+	if !ok {
+		rule, ok = textDropRule(hitDamageText(desc))
+	}
+	if !ok || !hitDroppedToZero(lobby, target, taken) {
 		return ""
+	}
+	note := ""
+	if rule.Note != "" {
+		note = "; the stat block adds: " + rule.Note
+	}
+	if rule.Dies {
+		return strings.TrimSuffix(dieOnDrop(lobby, target), "]") + note + "]"
 	}
 	name := creatureName(lobby, target)
 	text := ""
 	if target > 0 && !isCompanionCombatID(target) {
 		if _, err := stabilizeCharacter(target); err != nil {
-			return fmt.Sprintf(" [%s drops to 0 Hit Points and becomes Stable, Poisoned and Paralyzed by its rule: not recorded (%s); the GM applies it]", name, notFoundOrDBError(err, "no such character"))
+			return fmt.Sprintf(" [%s drops to 0 Hit Points and becomes Stable by this attack's rule: not recorded (%s); the GM applies it]", name, notFoundOrDBError(err, "no such character"))
 		}
 		text = fmt.Sprintf(" [%s drops to 0 Hit Points and becomes Stable", name)
 	} else {
 		text = fmt.Sprintf(" [%s drops to 0 Hit Points; by this attack's rule it becomes Stable (the GM keeps it alive at 0)", name)
 	}
-	first, second := strings.ToLower(m[1]), strings.ToLower(m[5])
-	n, _ := strconv.Atoi(m[2])
-	rounds := n * map[string]int{"minute": 10, "hour": 600}[strings.ToLower(m[3])]
-	if res := addCondition(lobby, target, condAdd{Condition: first, Source: source, Rounds: rounds, SourceID: attacker}); res.Immune != "" {
-		return text + fmt.Sprintf("; not %s (%s)]", titleCase(first), res.Immune)
+	if rule.First == "" {
+		return text + note + "]"
 	}
-	text += fmt.Sprintf("; %s for %s %s", titleCase(first), m[2], strings.ToLower(m[3])+map[bool]string{true: "s", false: ""}[n != 1])
-	if res := addCondition(lobby, target, condAdd{Condition: second, Source: source, SourceID: attacker, Notes: notesEndsWith + first}); res.Immune != "" {
-		text += fmt.Sprintf("; not %s (%s)", titleCase(second), res.Immune)
-	} else {
-		text += fmt.Sprintf(", and %s while %s", titleCase(second), titleCase(first))
+	if res := addCondition(lobby, target, condAdd{Condition: rule.First, Source: source, Rounds: rule.Rounds, SourceID: attacker}); res.Immune != "" {
+		return text + fmt.Sprintf("; not %s (%s)", titleCase(rule.First), res.Immune) + note + "]"
 	}
-	return text + "]"
+	text += fmt.Sprintf("; %s for %s", titleCase(rule.First), minutesWords(rule.Rounds/10))
+	if rule.Second != "" {
+		if res := addCondition(lobby, target, condAdd{Condition: rule.Second, Source: source, SourceID: attacker, Notes: notesEndsWith + rule.First}); res.Immune != "" {
+			text += fmt.Sprintf("; not %s (%s)", titleCase(rule.Second), res.Immune)
+		} else {
+			text += fmt.Sprintf(", and %s while %s", titleCase(rule.Second), titleCase(rule.First))
+		}
+	}
+	return text + note + "]"
 }
 
 // abilityDecreaseRe: "and the target's Strength score decreases by 1d4. The target dies if this reduces that score to 0." (SRD 5.2.1

@@ -31,8 +31,9 @@ func monsterLore() map[string]struct{ Description, Lore string } {
 }
 
 type srdMonsterEntry struct {
-	Name string `json:"name"`
-	Text string `json:"text"`
+	Name      string          `json:"name"`                // the entry's name, with its usage ("Bite", "Fire Breath (Recharge 5–6)")
+	Text      string          `json:"text"`                // the entry's words, as the stat block prints them
+	Mechanics []entryMechanic `json:"mechanics,omitempty"` // structured mechanics the GM attaches (GET /api/gm/compendium/mechanics; monster_mechanics_2024.go)
 }
 
 type srdMonster2024 struct {
@@ -93,7 +94,7 @@ var (
 func oldStyleActions(entries []srdMonsterEntry) []map[string]interface{} {
 	out := []map[string]interface{}{}
 	for _, e := range entries {
-		parsed := parseMonsterAttack(e.Name, e.Text)
+		parsed := parseMonsterAttack(e.Name, rulesText(e)) // the words an attached mechanic covers are its own (monster_mechanics_2024.go)
 		a := map[string]interface{}{"name": parsed.Name, "desc": parsed.Desc, "attack_bonus": parsed.AttackBonus, "damage_dice": parsed.DamageDice, "damage_type": parsed.DamageType}
 		if parsed.FlatDamage != nil {
 			a["flat_damage"] = *parsed.FlatDamage

@@ -308,6 +308,7 @@ func setupRoutes() {
 	http.HandleFunc("/api/gm/compendium/monsters/restore", handleGMCompendiumRestore)
 	http.HandleFunc("/api/gm/compendium/monsters/share", handleGMCompendiumShare)
 	http.HandleFunc("/api/gm/compendium/monsters/preview", handleGMCompendiumPreview) // custom_monster_preview_2024.go
+	http.HandleFunc("/api/gm/compendium/mechanics", handleGMCompendiumMechanics)      // monster_mechanics_2024.go: the mechanics a GM attaches to an entry
 	// Static
 	http.HandleFunc("/llms.txt", handleLLMsTxt)
 	http.HandleFunc("/skill.md", handleSkillPage)

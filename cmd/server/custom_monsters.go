@@ -147,11 +147,21 @@ func validateCustomMonster(m srdMonster2024) string {
 			}
 		}
 	}
+	for _, g := range []struct {
+		kind    string
+		entries []srdMonsterEntry
+	}{{"trait", m.Traits}, {"action", m.Actions}, {"bonus", m.BonusActions}, {"reaction", m.Reactions}, {"legendary", m.Legendary}} {
+		for _, e := range g.entries {
+			if p := mechanicProblem(g.kind, e); p != "" { // the attached mechanics (monster_mechanics_2024.go)
+				return p
+			}
+		}
+	}
 	// An imported Multiattack is checked as it will be played, so a definition cannot ask for an unbounded number of attacks. Other
 	// text the engine cannot resolve is not an import error: the attack is refused when it is made and the GM resolves it.
 	rows := make([]monsterActionRow, 0, len(m.Actions))
 	for _, e := range m.Actions {
-		rows = append(rows, parseMonsterAttack(e.Name, e.Text).monsterActionRow)
+		rows = append(rows, parseMonsterAttack(e.Name, rulesText(e)).monsterActionRow)
 	}
 	for _, e := range m.Actions {
 		if strings.EqualFold(stripUsage(e.Name), "Multiattack") {
