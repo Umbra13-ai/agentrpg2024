@@ -55,6 +55,13 @@ func TestStoryPassagesAndChapters(t *testing.T) {
 	if len(spell) != 1 || len([]rune(spell[0].Dice)) > storyDiceMax+1 {
 		t.Errorf("a roll chip is a roll, not a spell's text: %d characters", len([]rune(spell[0].Dice)))
 	}
+	said := "Kneeling beside the first unconscious kobold, I search it thoroughly for anything I missed: pouches, coins and insignia."
+	if got := rollOnly("🔍 Search (Perception/WIS) (expertise): 11 (d20: 7 + 0 WIS + 4 prof). "+said[:70]+" and I whisper to Calla...", said); got != "🔍 Search (Perception/WIS) (expertise): 11 (d20: 7 + 0 WIS + 4 prof)" {
+		t.Errorf("a roll chip holds the roll, not the sentence again: %q", got)
+	}
+	if got := rollOnly("Axe 21 vs AC 13 - HIT, 9 slashing damage", "Aldren swings at the kobold."); got != "Axe 21 vs AC 13 - HIT, 9 slashing damage" {
+		t.Errorf("a result that does not repeat the passage is kept: %q", got)
+	}
 	if p := byID["e5"]; p.Type != "gm" || p.Speaker != "Kobold" || p.Text != "it snaps at Calla." || p.Dice == "" {
 		t.Errorf("a monster's turn: %+v", p)
 	}

@@ -117,6 +117,7 @@ func storyPassages(recs []actionRecord, icons map[int]string) []storyPassage {
 		if strings.TrimSpace(p.Text) == "" {
 			continue
 		}
+		p.Dice = rollOnly(p.Dice, p.Text)
 		if p.Dice == p.Text || strings.HasPrefix(p.Dice, "Action:") {
 			p.Dice = ""
 		}
@@ -125,6 +126,22 @@ func storyPassages(recs []actionRecord, icons map[int]string) []storyPassage {
 		out = append(out, p)
 	}
 	return out
+}
+
+// rollOnly is the roll in a record's result without the player's own sentence: a check's result is written as the roll and then the words the player
+// sent, which the passage already shows. It cuts the result where the passage's opening words begin (the result may hold them shortened).
+func rollOnly(result, said string) string {
+	probe := strings.Join(strings.Fields(said), " ")
+	if r := []rune(probe); len(r) > 30 {
+		probe = string(r[:30])
+	}
+	if len([]rune(probe)) < 12 {
+		return result
+	}
+	if i := strings.Index(strings.Join(strings.Fields(result), " "), probe); i > 0 {
+		result = strings.Join(strings.Fields(result), " ")[:i]
+	}
+	return strings.TrimRight(strings.TrimSpace(result), ".:;,— -")
 }
 
 // storyTone colours a roll's chip: a hit or a success green, a miss or a failure red.

@@ -209,19 +209,20 @@
 }
 .bookmark-star.saved { color: var(--accent-gold); }
 .dice-chip {
-  display: inline-flex;
-  align-items: center;
-  gap: 0.28rem;
+  display: block;
+  width: fit-content;
+  max-width: 100%;
+  box-sizing: border-box;
   font-family: 'JetBrains Mono', ui-monospace, monospace;
   font-size: 0.75rem;
-  padding: 0.15rem 0.45rem;
-  border-radius: 12px;
-  max-width: 100%;
+  line-height: 1.5;
+  padding: 0.4rem 0.6rem;
+  border-radius: 6px;
   overflow-wrap: anywhere;
   background: var(--bg-code);
   border: 1px solid var(--border-subtle);
   color: var(--accent-arcane);
-  margin-top: 0.4rem;
+  margin-top: 0.5rem;
 }
 .dice-chip.hit { color: var(--accent-emerald); border-color: rgba(70, 194, 132, 0.35); }
 .dice-chip.fail { color: var(--accent-crimson); border-color: rgba(224, 86, 91, 0.35); }
