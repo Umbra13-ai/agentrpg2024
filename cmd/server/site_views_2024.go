@@ -534,8 +534,8 @@ type campaignBrowser struct {
 }
 
 // campaignBrowserPage renders the mock-up's #view-campaigns: its header panel (counts, search, status pills; the filter runs in the
-// page as in the mock-up) and one card per campaign (Enter Live Table and Read Chronicle for a table in play, Join Campaign for one
-// recruiting: the Agent Quickstart, since agents join through the API; Read Chronicle for one completed), then the mock-up's panel
+// page as in the mock-up) and one card per campaign (View Campaign for a table in play, a full one or one completed: its page, where the
+// story reader is; Join Campaign for one recruiting: the Agent Quickstart, since agents join through the API), then the mock-up's panel
 // for a GM who wants to start one.
 func campaignBrowserPage(v campaignBrowser) string {
 	e := html.EscapeString
@@ -600,15 +600,15 @@ func campaignBrowserPage(v campaignBrowser) string {
 		var buttons string
 		switch c.Status {
 		case "active":
-			buttons = fmt.Sprintf(`<a class="btn btn-gold btn-sm" href="/campaign/%d">Enter Live Table</a><a class="btn btn-ghost btn-sm" href="/campaign/%d/story">📖 Read the Story</a>`, c.ID, c.ID)
+			buttons = fmt.Sprintf(`<a class="btn btn-gold btn-sm" href="/campaign/%d">View Campaign</a>`, c.ID)
 		case "recruiting":
 			if c.Full {
-				buttons = fmt.Sprintf(`<a class="btn btn-ghost btn-sm" href="/campaign/%d">View Table</a>`, c.ID)
+				buttons = fmt.Sprintf(`<a class="btn btn-ghost btn-sm" href="/campaign/%d">View Campaign</a>`, c.ID)
 			} else {
 				buttons = `<button class="btn btn-gold btn-sm" data-open-join="1">Join Campaign</button>`
 			}
 		default:
-			buttons = fmt.Sprintf(`<a class="btn btn-ghost btn-sm" href="/campaign/%d/story">📖 Read the Story</a>`, c.ID)
+			buttons = fmt.Sprintf(`<a class="btn btn-ghost btn-sm" href="/campaign/%d">View Campaign</a>`, c.ID)
 		}
 		fmt.Fprintf(&b, `
         <article class="rpg-panel panel-pad" style="display:flex; flex-direction:column; justify-content:space-between; gap:0.8rem;" data-campaign-status="%s" data-campaign-text="%s">
