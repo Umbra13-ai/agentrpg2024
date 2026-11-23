@@ -654,7 +654,7 @@ func handlePrepareSpells(w http.ResponseWriter, r *http.Request, charID int) {
 	if r.Method == "GET" {
 		// Return current prepared spells with enriched info
 		preparedInfo := []map[string]interface{}{}
-		for _, slug := range preparedSpells {
+		for _, slug := range preparedChosen(charID, preparedSpells) {
 			if spell, ok := srdSpellsMemory[slug]; ok {
 				preparedInfo = append(preparedInfo, map[string]interface{}{
 					"slug":         slug,
@@ -683,9 +683,9 @@ func handlePrepareSpells(w http.ResponseWriter, r *http.Request, charID int) {
 			"caster_type":          "prepared",
 			"spellcasting_ability": spellAbility,
 			"prepared_spells":      preparedInfo,
-			"prepared_count":       countLeveled(withoutAlwaysPrepared(preparedSpells, alwaysPrepared)),
+			"prepared_count":       preparedCount(charID, preparedSpells),
 			"max_prepared":         maxPrepared,
-			"preparations_left":    maxPrepared - countLeveled(withoutAlwaysPrepared(preparedSpells, alwaysPrepared)), // spells you can still prepare (not spell slots: playtest I-ROWAN-3)
+			"preparations_left":    maxPrepared - preparedCount(charID, preparedSpells), // spells you can still prepare (not spell slots: playtest I-ROWAN-3)
 		}
 		if info := originSpellsInfo(charID); len(info) > 0 {
 			response["origin_spells"] = info

@@ -246,6 +246,16 @@ func countLeveled(list []string) int {
 	return len(leveled)
 }
 
+// preparedChosen: the spells the character chose to prepare, out of a stored list: everything it has prepared without choosing it
+// (allAlwaysPrepared: subclass, origin, class features, Book of Shadows ...) is left out. preparedCount: how many of them count
+// against the limit (level 1 and up). The sheet, the prepare request's reply, the setup step and to_finish all read these two, so a
+// Magic Initiate spell is listed under origin_spells and never in prepared_spells, and every count agrees (playtest S-GM-15).
+func preparedChosen(charID int, list []string) []string {
+	return withoutAlwaysPrepared(list, allAlwaysPrepared(charID))
+}
+
+func preparedCount(charID int, list []string) int { return countLeveled(preparedChosen(charID, list)) }
+
 // withoutAlwaysPrepared drops the always-prepared spells (subclass spells) from a list: they don't count against the limit.
 func withoutAlwaysPrepared(list, always []string) []string {
 	skip := map[string]bool{}
@@ -374,7 +384,7 @@ func preparedListProblems(charID int) []string {
 	if game.ClassTableInt(c, level, "Prepared Spells") == 0 && game.ClassTableInt(c, level, "Cantrips") == 0 {
 		return nil
 	}
-	list := withoutAlwaysPrepared(currentPreparedList(charID, c), allAlwaysPrepared(charID))
+	list := preparedChosen(charID, currentPreparedList(charID, c))
 	secrets := jsonListOf(charID, "magical_secrets")
 	classList := getClassSpellList(c)
 	if c == "bard" && level >= 10 {

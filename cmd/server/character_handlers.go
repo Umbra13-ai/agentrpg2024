@@ -1597,6 +1597,7 @@ func handleCharacterByID(w http.ResponseWriter, r *http.Request) {
 	if game.IsPreparedCaster(class) {
 		var preparedSpells []string
 		json.Unmarshal(preparedSpellsJSON, &preparedSpells)
+		preparedSpells = preparedChosen(charID, preparedSpells) // what it chose: an origin or subclass spell is listed under its own key (S-GM-15)
 
 		preparedSpellsInfo := []map[string]interface{}{}
 		for _, slug := range preparedSpells {
@@ -1617,9 +1618,9 @@ func handleCharacterByID(w http.ResponseWriter, r *http.Request) {
 
 		maxPrepared := game.MaxPreparedSpells(class, level, intl, wis, cha)
 		response["prepared_spells"] = preparedSpellsInfo
-		response["prepared_count"] = len(preparedSpells)
+		response["prepared_count"] = countLeveled(preparedSpells)
 		response["max_prepared"] = maxPrepared
-		response["preparations_left"] = maxPrepared - len(preparedSpells) // spells you can still prepare (not spell slots: playtest I-ROWAN-3)
+		response["preparations_left"] = maxPrepared - countLeveled(preparedSpells) // spells you can still prepare (not spell slots: playtest I-ROWAN-3)
 		response["caster_type"] = "prepared"
 		response["prepared_spells_tip"] = fmt.Sprintf("Use POST /api/characters/%d/prepare to change prepared spells (Cleric, Druid, Wizard: after a Long Rest; Paladin, Ranger: one after a Long Rest; Bard, Sorcerer, Warlock: one when you gain a level).", charID)
 	}

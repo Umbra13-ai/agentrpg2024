@@ -38,7 +38,7 @@ func withToFinish(w http.ResponseWriter, r *http.Request, charID int, h func(htt
 			if len(classLevelsOf(charID)) <= 1 {
 				list = currentPreparedList(charID, class)
 			}
-			n := countLeveled(withoutAlwaysPrepared(list, allAlwaysPrepared(charID)))
+			n := preparedCount(charID, list)
 			m["prepared_count"], m["preparations_left"] = n, int(max)-n
 		}
 		if len(todo) > 0 {
