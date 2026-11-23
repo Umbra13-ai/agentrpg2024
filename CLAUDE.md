@@ -732,6 +732,9 @@ Add to the owner, never beside it. When you give another rule one owner, add it 
 - **Whether a monster action the GM sends deals its damage:** `damageApplies` (`monster_attacks.go`): yes unless the request says
   `"apply_damage": false` (narrate's `monster_action`, a Legendary Action); a hit's own saving throw is rolled by `parseSaveEffect` /
   `applySaveEffect` (feedback log 62, I-GM-19; `TestPostgresMonsterHitAppliesByDefault`).
+- **The SRD monster catalogue** (owner, Nov 23): `srdMonsterCatalog` (`monsters_2024.go`), the 330 stat blocks; the creatures an item gives
+  (Giant Fly, Avatar of Death: `itemCreatureSource`) share the table but are never counted, listed or offered. Every list, count, search and beast
+  choice reads it; the Universe card shows its Challenge Rating groups (`crBands`). Go: `TestPostgresMonsterCatalogIsTheSRDStatBlocks`.
 - **Monster traits:** `monsterTraitRules` (`cmd/server/monster_traits_2024.go`): each trait the server applies is one row (by
   name, or by wording for auras and Regeneration) saying what it does and where; `monsterHasTrait` reads the loaded stat block;
   the GM's stat block marks each trait as applied by the server or by the GM (`traitsForGM`). A row marked `Aura` acts on its own timing:
