@@ -29,6 +29,8 @@ import (
 	"strings"
 	"sync"
 	"time"
+
+	"github.com/agentrpg/agentrpg/game"
 )
 
 func logAdminChange(kind string, id int, field, oldV, newV, by, note string) {
@@ -547,13 +549,49 @@ func adminSet(table, kind string, id int, set map[string]interface{}, note strin
 	var changed []string
 	var scoreChanges [][2]abilityRow // a score edited: what follows it once committed (abilitiesChanged: the Hit Points of a new Constitution modifier)
 	oldLobby := ""
+	// a character's Hit Points are one edit of the Hit Point owner (editVitalsIn, hit_points_2024.go), never plain columns: the values
+	// before it are kept for the change log
+	vitalsOld := map[string]sql.NullString{}
+	var vitalsBefore, vitalsAfter game.Vitals
+	vitalsDone := false
+	if kind == "character" {
+		vitals := map[string]interface{}{}
+		for _, k := range keys {
+			if vitalsFields[k] {
+				vitals[k] = set[k]
+				var old sql.NullString
+				if err := tx.QueryRow(fmt.Sprintf(`SELECT %q::text FROM characters WHERE id = $1`, k), id).Scan(&old); err != nil {
+					return nil, fmt.Errorf("%s %d not found", kind, id)
+				}
+				vitalsOld[k] = old
+			}
+		}
+		if len(vitals) > 0 {
+			e, err := vitalsEditFrom(vitals)
+			if err != nil {
+				return nil, err
+			}
+			if vitalsBefore, vitalsAfter, err = editVitalsIn(tx, id, e); err != nil {
+				var refused vitalsRefused
+				if errors.As(err, &refused) {
+					return nil, err // its words say why; nothing was changed
+				}
+				return nil, dbFailureError(err, "the character's Hit Points")
+			}
+			vitalsDone = true
+		}
+	}
 	for _, k := range keys {
 		var old sql.NullString
-		if err := tx.QueryRow(fmt.Sprintf(`SELECT %q::text FROM %s WHERE id = $1`, k, table), id).Scan(&old); err != nil {
+		if pre, ok := vitalsOld[k]; ok {
+			old = pre
+		} else if err := tx.QueryRow(fmt.Sprintf(`SELECT %q::text FROM %s WHERE id = $1`, k, table), id).Scan(&old); err != nil {
 			return nil, fmt.Errorf("%s %d not found", kind, id)
 		}
 		val, text := adminValueText(set[k])
-		if kind == "character" && k == "lobby_id" && val != nil { // into a campaign: its one way in (schedule_2024.go)
+		if _, ok := vitalsOld[k]; ok { // written above by the Hit Point owner: the value it now has
+			tx.QueryRow(fmt.Sprintf(`SELECT %q::text FROM characters WHERE id = $1`, k), id).Scan(&text)
+		} else if kind == "character" && k == "lobby_id" && val != nil { // into a campaign: its one way in (schedule_2024.go)
 			lobby, err := strconv.Atoi(text)
 			if err != nil {
 				return nil, fmt.Errorf("lobby_id: %q isn't a campaign id", text)
@@ -604,6 +642,9 @@ func adminSet(table, kind string, id int, set map[string]interface{}, note strin
 	}
 	for _, c := range scoreChanges {
 		abilitiesChanged(id, abilityHow{}, c[0], c[1])
+	}
+	if vitalsDone {
+		hpChanged(id, vitalsBefore, vitalsAfter)
 	}
 	// follow-up: a campaign's status depends on its players
 	if kind == "character" {

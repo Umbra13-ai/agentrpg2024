@@ -3,8 +3,10 @@ package main
 import (
 	"database/sql"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"net/http"
+	"sort"
 	"strconv"
 	"strings"
 
@@ -13,7 +15,7 @@ import (
 
 // handleGMUpdateCharacter godoc
 // @Summary Change any of a character's data (GM)
-// @Description The GM of the character's campaign can change any of its data. GET ?character_id=N returns every field and its value. POST {"character_id": N, "set": {"field": value, ...}} writes any field of the character (hp, temp_hp, gold, conditions, inventory, spell_slots_used, known_spells, feats, exhaustion_level, subclass, ...; JSON fields take arrays or objects; null clears a field); only id, agent_id, lobby_id and created_at are fixed. The older shortcuts still work: class, species, background, name, str, dex, con, intl, wis, cha, hp, max_hp, level, and items (names added to the inventory).
+// @Description The GM of the character's campaign can change any of its data. GET ?character_id=N returns every field and its value. POST {"character_id": N, "set": {"field": value, ...}} writes any field of the character (hp, temp_hp, gold, conditions, inventory, spell_slots_used, known_spells, feats, exhaustion_level, subclass, ...; JSON fields take arrays or objects; null clears a field); only id, agent_id, lobby_id and created_at are fixed. The older shortcuts still work: class, species, background, name, str, dex, con, intl, wis, cha, hp, max_hp, level, and items (names added to the inventory). Hit Points (hp, max_hp, temp_hp, is_dead, is_stable, death_save_successes, death_save_failures) are one change the rules allow, made after the other fields: the maximum at least 1 and hp 0 to it; is_dead true puts the character at 0; a dead character is given Hit Points only with is_dead false (hp, or 1); Death Saving Throws and is_stable only at 0 Hit Points. Anything else is refused (400 invalid_field) and nothing is changed.
 // @Tags GM
 // @Accept json
 // @Produce json
@@ -113,23 +115,38 @@ func handleGMUpdateCharacter(w http.ResponseWriter, r *http.Request) {
 			scores[short] = *v
 		}
 	}
-	// Hit Points are set by the Hit Point owner (hit_points_2024.go), after the other fields (a new max_hp first): 0 to the maximum,
-	// from 0 the Death Saving Throws reset, to 0 the character is dying. The shortcut and set's "hp" both go there.
-	hpTo := req.HP
-	if raw, ok := req.Set["hp"]; ok {
-		var n int
-		if json.Unmarshal(raw, &n) != nil {
-			w.WriteHeader(http.StatusBadRequest)
-			json.NewEncoder(w).Encode(map[string]interface{}{"error": "invalid_field", "message": "hp is a whole number"})
-			return
-		}
-		hpTo = &n
-		delete(req.Set, "hp")
+	// Hit Points (hp, max_hp, temp_hp, is_dead, is_stable, the Death Saving Throws: the shortcuts or set) are one edit of the Hit Point
+	// owner (editVitals, hit_points_2024.go), after the other fields and a new level: one state the rules allow, or a refusal before
+	// anything is written.
+	vitals := map[string]interface{}{}
+	if req.HP != nil {
+		vitals["hp"] = float64(*req.HP)
 	}
 	if req.MaxHP != nil {
-		updates = append(updates, fmt.Sprintf("max_hp = $%d", argNum))
-		args = append(args, *req.MaxHP)
-		argNum++
+		vitals["max_hp"] = float64(*req.MaxHP)
+	}
+	for k, raw := range req.Set {
+		if key := strings.ToLower(strings.TrimSpace(k)); vitalsFields[key] {
+			var v interface{}
+			if json.Unmarshal(raw, &v) != nil {
+				v = string(raw)
+			}
+			vitals[key] = v
+			delete(req.Set, k)
+		}
+	}
+	vitalsEdit, vitalsErr := vitalsEditFrom(vitals)
+	if vitalsErr == nil {
+		var before game.Vitals
+		if before, vitalsErr = readVitals(db, req.CharacterID); vitalsErr != nil {
+			writeDBError(w, vitalsErr, "the character")
+			return
+		}
+		_, vitalsErr = before.Edit(vitalsEdit) // checked before anything is written; applied after the other fields
+	}
+	if vitalsErr != nil {
+		writeJSONStatus(w, http.StatusBadRequest, map[string]interface{}{"error": "invalid_field", "message": vitalsErr.Error() + " Nothing was changed."})
+		return
 	}
 	// A new level goes through the level-up path (Hit Points, ASI points, the public note), after the other updates.
 	var oldLevel int
@@ -171,7 +188,7 @@ func handleGMUpdateCharacter(w http.ResponseWriter, r *http.Request) {
 		changed = append(changed, "level")
 	}
 
-	if len(updates) == 0 && len(req.Items) == 0 && len(changed) == 0 && hpTo == nil && len(scores) == 0 {
+	if len(updates) == 0 && len(req.Items) == 0 && len(changed) == 0 && vitalsEdit.Empty() && len(scores) == 0 {
 		w.WriteHeader(http.StatusBadRequest)
 		json.NewEncoder(w).Encode(map[string]interface{}{"error": "no_updates", "message": "No fields to update"})
 		return
@@ -194,11 +211,20 @@ func handleGMUpdateCharacter(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 
-	if hpTo != nil {
-		if _, err := setHP(req.CharacterID, *hpTo); answerDBFailure(w, err, "the character") {
+	if !vitalsEdit.Empty() {
+		if _, err := editVitals(req.CharacterID, vitalsEdit); err != nil {
+			var refused vitalsRefused
+			if errors.As(err, &refused) { // a new level changed the maximum since the check
+				writeJSONStatus(w, http.StatusBadRequest, map[string]interface{}{"error": "invalid_field", "message": err.Error() + " The other fields were changed."})
+				return
+			}
+			writeDBWriteError(w, err, "the character's Hit Points")
 			return
 		}
-		changed = append(changed, "hp")
+		for k := range vitals {
+			changed = append(changed, k)
+		}
+		sort.Strings(changed)
 	}
 
 	// Items go into the inventory (the old character_items table no longer exists)

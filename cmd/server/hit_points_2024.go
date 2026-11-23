@@ -17,6 +17,7 @@ package main
 import (
 	"database/sql"
 	"fmt"
+	"strconv"
 	"strings"
 
 	"github.com/agentrpg/agentrpg/game"
@@ -680,6 +681,109 @@ func changeMaxHP(charID, delta int, current bool) (game.Vitals, error) {
 		return before, err
 	}
 	after, err := readVitals(tx, charID)
+	if err != nil {
+		return before, err
+	}
+	if err = tx.Commit(); err != nil {
+		return before, err
+	}
+	hpChanged(charID, before, after)
+	return after, nil
+}
+
+// ---------------------------------------------------------------- an editor's Hit Points
+
+// vitalsFields are the columns an editor names to change a character's Hit Points (the GM's update-character, the admin page): they
+// go through editVitals / editVitalsIn, never written as a plain column (a dead character at 68 Hit Points with a maximum of 0 was).
+var vitalsFields = map[string]bool{"hp": true, "max_hp": true, "temp_hp": true, "is_dead": true, "is_stable": true,
+	"death_save_successes": true, "death_save_failures": true}
+
+// vitalsEditFrom reads an editor's values by column name (a JSON number or bool, or its text from a form); other keys are ignored.
+func vitalsEditFrom(values map[string]interface{}) (game.VitalsEdit, error) {
+	var e game.VitalsEdit
+	num := func(k string, v interface{}) (*int, error) {
+		switch x := v.(type) {
+		case float64:
+			if x == float64(int(x)) {
+				n := int(x)
+				return &n, nil
+			}
+		case int:
+			return &x, nil
+		case string:
+			if n, err := strconv.Atoi(strings.TrimSpace(x)); err == nil {
+				return &n, nil
+			}
+		}
+		return nil, fmt.Errorf("%s takes a whole number", k)
+	}
+	flag := func(k string, v interface{}) (*bool, error) {
+		switch x := v.(type) {
+		case bool:
+			return &x, nil
+		case string:
+			if b, err := strconv.ParseBool(strings.TrimSpace(x)); err == nil {
+				return &b, nil
+			}
+		}
+		return nil, fmt.Errorf("%s takes true or false", k)
+	}
+	var err error
+	for k, v := range values {
+		switch k {
+		case "hp":
+			e.HP, err = num(k, v)
+		case "max_hp":
+			e.Max, err = num(k, v)
+		case "temp_hp":
+			e.Temp, err = num(k, v)
+		case "death_save_successes":
+			e.Successes, err = num(k, v)
+		case "death_save_failures":
+			e.Failures, err = num(k, v)
+		case "is_stable":
+			e.Stable, err = flag(k, v)
+		case "is_dead":
+			e.Dead, err = flag(k, v)
+		}
+		if err != nil {
+			return e, err
+		}
+	}
+	return e, nil
+}
+
+// editVitalsIn puts an editor's values on the character in the caller's transaction (the row locked; game.Vitals.Edit says what they
+// become or why they can't); the caller runs hpChanged after it commits. A refusal is a plain error and changes nothing.
+func editVitalsIn(tx *sql.Tx, charID int, e game.VitalsEdit) (before, after game.Vitals, err error) {
+	if before, err = lockVitals(tx, charID); err != nil {
+		return before, before, err
+	}
+	if after, err = before.Edit(e); err != nil {
+		return before, before, vitalsRefused{err}
+	}
+	if after.Max != before.Max {
+		if _, err = tx.Exec(`UPDATE characters SET max_hp = $1 WHERE id = $2`, after.Max, charID); err != nil {
+			return before, before, err
+		}
+	}
+	if after != before {
+		err = writeVitals(tx, charID, after)
+	}
+	return before, after, err
+}
+
+// vitalsRefused: the edit isn't a state the rules allow (its words say why); every other error of editVitals is the database's.
+type vitalsRefused struct{ error }
+
+// editVitals is editVitalsIn in its own transaction (the GM's update-character).
+func editVitals(charID int, e game.VitalsEdit) (game.Vitals, error) {
+	tx, err := db.Begin()
+	if err != nil {
+		return game.Vitals{}, err
+	}
+	defer tx.Rollback()
+	before, after, err := editVitalsIn(tx, charID, e)
 	if err != nil {
 		return before, err
 	}

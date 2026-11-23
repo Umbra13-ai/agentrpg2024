@@ -1,5 +1,7 @@
 package game
 
+import "fmt"
+
 // Hit Points (SRD 5.2.1, Rules Glossary and "Damage and Healing"): the pure rule of every change to a creature's Hit Points. The
 // server reads a character's values under a row lock, asks this file what they become, and writes the answer in the same
 // transaction (cmd/server/hit_points_2024.go); nothing else in the server decides what damage or healing does.
@@ -279,4 +281,87 @@ func (v Vitals) DeathSave(natural int, success bool) (Vitals, DeathSaveOutcome) 
 // to 30. damageTaken is the damage after resistance, vulnerability and immunity.
 func ConcentrationDC(damageTaken int) int {
 	return min(max(10, damageTaken/2), 30)
+}
+
+// VitalsEdit is what an editor (the GM's update-character, the operator's admin page) sets on a character's Hit Points; nil leaves a
+// value as it is.
+type VitalsEdit struct {
+	HP, Max, Temp, Successes, Failures *int
+	Stable, Dead                       *bool
+}
+
+// Empty: the edit sets nothing.
+func (e VitalsEdit) Empty() bool {
+	return e.HP == nil && e.Max == nil && e.Temp == nil && e.Successes == nil && e.Failures == nil && e.Stable == nil && e.Dead == nil
+}
+
+// Edit puts an editor's values on v as one state the rules allow, or says why it can't, changing nothing: the maximum at least 1 and
+// the Hit Points 0 to it; dead is at 0 Hit Points (Kill), and brought back with is_dead false (Revive, with the hp sent or 1); a dead
+// creature is never given Hit Points without that; Death Saving Throws and Stable only for a creature dying at 0; Temporary Hit Points
+// 0 or more. A dead creature's Hit Points are 0 after any edit (a row written before this rule had a dead character at 68).
+func (v Vitals) Edit(e VitalsEdit) (Vitals, error) {
+	if e.Max != nil {
+		if *e.Max < 1 {
+			return v, fmt.Errorf("max_hp is at least 1 (sent %d)", *e.Max)
+		}
+		v.Max = *e.Max
+		v.HP = min(v.HP, v.Max)
+	}
+	if e.HP != nil && (*e.HP < 0 || *e.HP > v.Max) {
+		return v, fmt.Errorf("hp is 0 to the Hit Point maximum %d (sent %d)", v.Max, *e.HP)
+	}
+	if e.Dead != nil {
+		switch {
+		case *e.Dead:
+			v = v.Kill()
+		case v.Dead:
+			hp := 1
+			if e.HP != nil {
+				hp = *e.HP
+			}
+			v = v.Revive(hp)
+		}
+	}
+	if v.Dead {
+		v.HP, v.Temp, v.Successes, v.Failures, v.Stable = 0, 0, 0, 0, false
+		if e.HP != nil && *e.HP > 0 {
+			return v, fmt.Errorf("the character is dead: send is_dead false with hp to bring it back (or cast a spell that does)")
+		}
+	} else if e.HP != nil {
+		v = v.SetHP(*e.HP)
+	}
+	if e.Temp != nil {
+		if *e.Temp < 0 {
+			return v, fmt.Errorf("temp_hp is 0 or more (sent %d)", *e.Temp)
+		}
+		if !v.Dead {
+			v.Temp = *e.Temp
+		}
+	}
+	for _, s := range []struct {
+		name string
+		n    *int
+		to   *int
+	}{{"death_save_successes", e.Successes, &v.Successes}, {"death_save_failures", e.Failures, &v.Failures}} {
+		if s.n == nil {
+			continue
+		}
+		if *s.n < 0 || *s.n > 3 {
+			return v, fmt.Errorf("%s is 0 to 3 (sent %d)", s.name, *s.n)
+		}
+		if *s.n > 0 && !v.Dying() {
+			return v, fmt.Errorf("%s: only a character dying at 0 Hit Points makes Death Saving Throws", s.name)
+		}
+		*s.to = *s.n
+	}
+	if e.Stable != nil {
+		if *e.Stable && !v.Dying() {
+			return v, fmt.Errorf("is_stable: only a character at 0 Hit Points can be Stable")
+		}
+		v.Stable = *e.Stable && v.Dying()
+		if v.Stable {
+			v.Successes, v.Failures = 0, 0
+		}
+	}
+	return v, nil
 }

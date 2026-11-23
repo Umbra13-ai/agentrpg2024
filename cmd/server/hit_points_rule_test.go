@@ -15,8 +15,8 @@ import (
 // (also Stable, dead and the Death Saving Throw counts: HANDOFF item 28, stabilizing wrote them itself)
 func TestNoOtherHitPointWriter(t *testing.T) {
 	update := regexp.MustCompile(`(?is)UPDATE\s+characters\b(.*?)\bWHERE\b`)
-	assign := regexp.MustCompile(`(?i)(\bSET\s+|,\s*)((temp_)?hp|is_stable|is_dead|death_save_successes|death_save_failures)\s*=`)
-	built := regexp.MustCompile(`"(temp_)?hp = `) // a SET clause put together in Go ("hp = $%d")
+	assign := regexp.MustCompile(`(?i)(\bSET\s+|,\s*)((temp_|max_)?hp|is_stable|is_dead|death_save_successes|death_save_failures)\s*=`)
+	built := regexp.MustCompile(`"(temp_|max_)?hp = `) // a SET clause put together in Go ("hp = $%d")
 	owners := map[string]bool{"hit_points_2024.go": true, "temp_hp_2024.go": true}
 	files, _ := filepath.Glob("*.go")
 	for _, f := range files {

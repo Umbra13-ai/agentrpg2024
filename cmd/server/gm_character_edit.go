@@ -57,6 +57,9 @@ func gmSetCharacterFields(charID int, set map[string]json.RawMessage) ([]string,
 		if !ok || !gmMayEdit(key) { // editorColumns (admin_2024.go)
 			return nil, fmt.Errorf("%q is not a character field the GM can change (GET this endpoint with character_id to see the fields)", k)
 		}
+		if vitalsFields[key] { // the caller sends them to the Hit Point owner (editVitals, hit_points_2024.go)
+			return nil, fmt.Errorf("%s is changed by the Hit Point owner, not as a plain field", k)
+		}
 		raw := set[k]
 		if conditionColumns[key] { // the condition owner writes them, after the other fields (condition_owner_2024.go)
 			continue
