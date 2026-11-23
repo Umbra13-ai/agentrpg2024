@@ -181,6 +181,7 @@ func liveTablePage(t liveTable) string {
         <h1 class="font-rpg" style="font-size: clamp(1.25rem, 2.8vw, 1.85rem); color:#fff6e0; text-shadow:0 2px 10px #000;">` + e(t.Name) + `</h1>
       </div>
       <div style="display:flex; gap:0.45rem; flex-wrap:wrap;">
+        <a class="btn btn-gold btn-sm" href="/campaign/` + fmt.Sprint(t.ID) + `/story">📖 Read the Story</a>
         <a class="btn btn-ghost btn-sm" href="/campaigns">Switch Campaign</a>
       </div>
     </div>

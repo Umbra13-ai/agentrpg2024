@@ -130,6 +130,8 @@ func TestPostgresStoryReaderPage(t *testing.T) {
 	// the Live Table and the chronicle link to it
 	if _, live := get(fmt.Sprintf("/campaign/%d", camp)); !strings.Contains(live, base) {
 		t.Errorf("the Live Table does not link the story")
+	} else if at, feed := strings.Index(live, base), strings.Index(live, "activity-feed-list"); at < 0 || feed < 0 || at > feed {
+		t.Errorf("the Live Table's link to the story is below the chronicle feed (%d, feed at %d): on a phone it is never found", at, feed)
 	}
 	if _, log := get(fmt.Sprintf("/campaign/%d/log", camp)); !strings.Contains(log, base) {
 		t.Errorf("the chronicle does not link the story")
