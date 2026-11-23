@@ -460,7 +460,7 @@ func ensureGiantFly() {
 		}
 		db.Exec(`INSERT INTO monsters (slug, name, size, type, ac, hp, hit_dice, speed, str, dex, con, intl, wis, cha, cr, xp, actions, source, ruleset, alignment,
 			speed_text, initiative_mod, saves, senses, languages, traits, description)
-			VALUES ('giant-fly', 'Giant Fly', 'large', 'beast', 11, 19, '3d10+3', 30, 14, 13, 13, 2, 10, 3, '0', 0, '[]'::jsonb, 'srd521', '2024', 'Unaligned',
+			VALUES ('giant-fly', 'Giant Fly', 'large', 'beast', 11, 19, '3d10+3', 30, 14, 13, 13, 2, 10, 3, '0', 0, '[]'::jsonb, 'srd521-item', '2024', 'Unaligned',
 			'30 ft., Fly 60 ft.', 1, '{"str": 2, "dex": 1, "con": 1, "int": -4, "wis": 0, "cha": -4}'::jsonb, 'Darkvision 60 ft.; Passive Perception 10', 'None', '[]'::jsonb,
 			'The Ebony Fly of a Figurine of Wondrous Power (SRD 5.2.1): a Giant Fly that can be ridden as a mount (it can be used three times; then it rests 2 days).')
 			ON CONFLICT (slug) DO NOTHING`)

@@ -776,7 +776,7 @@ func ensureAvatarOfDeath() {
 		traits := `[{"name": "Incorporeal Movement", "text": "The avatar can move through other creatures and objects as if they were Difficult Terrain. It takes 5 (1d10) Force damage if it ends its turn inside an object."}]`
 		db.Exec(`INSERT INTO monsters (slug, name, size, type, ac, hp, hit_dice, speed, str, dex, con, intl, wis, cha, cr, xp, actions, source, damage_immunities,
 			condition_immunities, ruleset, alignment, speed_text, initiative_mod, saves, senses, languages, traits, description)
-			VALUES ('avatar-of-death', 'Avatar of Death', 'medium', 'undead', 20, 1, '', 60, 16, 16, 16, 16, 16, 16, '0', 0, $1::jsonb, 'srd521', 'necrotic, poison',
+			VALUES ('avatar-of-death', 'Avatar of Death', 'medium', 'undead', 20, 1, '', 60, 16, 16, 16, 16, 16, 16, '0', 0, $1::jsonb, 'srd521-item', 'necrotic, poison',
 			'charmed, exhaustion, frightened, paralyzed, petrified, poisoned, unconscious', '2024', 'Neutral Evil', '60 ft., Fly 60 ft. (hover)', 3,
 			'{"str": 3, "dex": 3, "con": 3, "int": 3, "wis": 3, "cha": 3}'::jsonb, 'Truesight 60 ft.; Passive Perception 13', 'All languages known to its summoner', $2::jsonb,
 			'Summoned by the Skull card of a Mysterious Deck (SRD 5.2.1). HP: half the Hit Point maximum of its summoner. CR None (XP 0; PB equals its summoner’s). It targets only its summoner with its attacks and disappears when it drops to 0 Hit Points or its summoner dies.')

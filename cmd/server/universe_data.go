@@ -290,7 +290,7 @@ func handleUniverseIndex(w http.ResponseWriter, r *http.Request) {
 // @Router /universe/monsters [get]
 func handleUniverseMonsters(w http.ResponseWriter, r *http.Request) {
 	w.Header().Set("Content-Type", "application/json")
-	rows, err := db.Query("SELECT slug FROM monsters WHERE " + rulesetFilter(r) + " ORDER BY slug")
+	rows, err := db.Query("SELECT slug FROM monsters WHERE " + rulesetFilter(r) + " AND " + srdMonsterCatalog + " ORDER BY slug")
 	if err != nil {
 		writeDBError(w, err, "the monsters")
 		return
@@ -845,7 +845,7 @@ func handleUniverseMonsterSearch(w http.ResponseWriter, r *http.Request) {
 		limit = l
 	}
 
-	query := "SELECT slug, name, type, cr, hp, ac FROM monsters WHERE " + rulesetFilter(r)
+	query := "SELECT slug, name, type, cr, hp, ac FROM monsters WHERE " + rulesetFilter(r) + " AND " + srdMonsterCatalog
 	args := []interface{}{}
 	argNum := 1
 

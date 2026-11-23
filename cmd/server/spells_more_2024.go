@@ -807,7 +807,7 @@ func polymorphCast(charID, lobby, target int, spell SRDSpell, saveDC int, dl str
 		limit = float64(lvl)
 	}
 	slug, beast, bcr, bhp, bac := "", "", "", 0, 10
-	rows, err := db.Query(`SELECT slug, name, COALESCE(cr,'0'), hp, ac FROM monsters WHERE lower(type) LIKE 'beast%' ORDER BY length(name) DESC`)
+	rows, err := db.Query(`SELECT slug, name, COALESCE(cr,'0'), hp, ac FROM monsters WHERE lower(type) LIKE 'beast%' AND ` + srdMonsterCatalog + ` ORDER BY length(name) DESC`)
 	if err == nil {
 		for rows.Next() {
 			var s, n, c string

@@ -237,7 +237,7 @@ func skillChoices(list []string, held map[string]bool) []map[string]string {
 // wildShapeOptions: the Beasts a Druid of this level can know, with what matters for choosing one.
 func wildShapeOptions(level int) []map[string]interface{} {
 	_, maxCR, fly := wildShapeLimits(level)
-	rows, err := db.Query(`SELECT slug, name, COALESCE(size,''), cr, ac, hp, COALESCE(speed_text,'') FROM monsters WHERE LOWER(type) = 'beast' ORDER BY name`)
+	rows, err := db.Query(`SELECT slug, name, COALESCE(size,''), cr, ac, hp, COALESCE(speed_text,'') FROM monsters WHERE LOWER(type) = 'beast' AND ` + srdMonsterCatalog + ` ORDER BY name`)
 	if err != nil {
 		return nil
 	}

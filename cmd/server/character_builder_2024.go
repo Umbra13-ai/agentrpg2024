@@ -114,7 +114,7 @@ func classLevelsOrSingle(charID int) map[string]int {
 func suggestWildShapeForms(charID int) []string {
 	_, _, level := subclassOf(charID)
 	known, maxCR, fly := wildShapeLimits(level)
-	rows, err := db.Query(`SELECT slug, cr, COALESCE(speed_text,'') FROM monsters WHERE LOWER(type) = 'beast' ORDER BY slug`)
+	rows, err := db.Query(`SELECT slug, cr, COALESCE(speed_text,'') FROM monsters WHERE LOWER(type) = 'beast' AND ` + srdMonsterCatalog + ` ORDER BY slug`)
 	if err != nil {
 		return nil
 	}

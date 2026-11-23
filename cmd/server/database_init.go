@@ -412,6 +412,9 @@ var schemaSteps = []schemaStep{
 	{"custom_monsters.go", `ALTER TABLE custom_monsters ADD COLUMN IF NOT EXISTS shared BOOLEAN NOT NULL DEFAULT true`},
 	{"custom_monsters.go", `ALTER TABLE custom_monsters ADD COLUMN IF NOT EXISTS replaces TEXT`},
 	{"custom_monsters.go", `ALTER TABLE custom_monsters ADD COLUMN IF NOT EXISTS hidden_at TIMESTAMPTZ`},
+	// the creatures an item's own text gives (the Figurine's Giant Fly, the Deck's Avatar of Death) are not in the SRD monster catalogue
+	// (monsters_2024.go, srdMonsterCatalog): the Universe page counted 332 of the 330
+	{"monsters_2024.go", `UPDATE monsters SET source = 'srd521-item' WHERE slug IN ('giant-fly', 'avatar-of-death') AND source = 'srd521'`},
 }
 
 // seatReadySchema: a player's "ready to start" on its seat (cleared whenever the seat changes hands: takeSeat, swapSeat;

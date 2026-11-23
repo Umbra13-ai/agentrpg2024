@@ -104,6 +104,15 @@ func oldStyleActions(entries []srdMonsterEntry) []map[string]interface{} {
 	return out
 }
 
+// srdMonsterCatalog is the SQL condition of the SRD 5.2.1 monster catalogue: the 330 stat blocks seeded from srd521_monsters.json.
+// The monsters table also holds creatures an item's own text gives (the Figurine of Wondrous Power's Giant Fly, the Mysterious Deck's
+// Avatar of Death: source itemCreatureSource), reached only by their slug from that item; every list, count, search and choice of
+// the catalogue (the Universe page, GET /api/universe/monsters, the beast lists of Wild Shape, pets and spells) reads this condition.
+const (
+	srdMonsterCatalog  = "source = 'srd521'"
+	itemCreatureSource = "srd521-item"
+)
+
 func seedMonsters2024() {
 	if db == nil {
 		return
