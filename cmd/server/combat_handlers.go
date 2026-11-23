@@ -472,8 +472,14 @@ func handleCombatStart(w http.ResponseWriter, r *http.Request, campaignID int) {
 		"success":             true,
 		"round":               1,
 		"turn_order":          entries,
-		"current_turn":        entries[0].Name,
+		"current_turn":        "",
 		"action_economy_note": "All characters have their action, bonus action, reaction, and full movement available.",
+	}
+	if len(entries) > 0 {
+		response["current_turn"] = entries[0].Name
+	} else { // a fight started before any character is in the campaign (monsters are mounted first): an empty order is a started fight
+		response["turn_order"] = []InitEntry{}
+		response["next_step"] = fmt.Sprintf("The fight has started with no one in the turn order. Add the monsters with POST /api/campaigns/%d/combat/add; the highest Initiative takes the first turn.", campaignID)
 	}
 
 	// Add capstone feature notes if any triggered
@@ -1041,22 +1047,20 @@ func handleCombatAdd(w http.ResponseWriter, r *http.Request, campaignID int) {
 	// Each new monster gets an id the fight has never given (audit AUD-39) and its place in the Initiative order; whose turn it
 	// is doesn't change; every other entry is kept as it is (the combat-state owner, combat_state_2024.go).
 	f, err := changeFight(campaignID, func(f *fight) error {
-		if len(f.Order) == 0 {
-			return errNotInFight
-		}
-		if f.current() == nil {
+		if len(f.Order) > 0 && f.current() == nil { // an empty order is a started fight with no one in it yet: the first added takes the turn
 			return errTurnMoved
 		}
+		empty := len(f.Order) == 0
 		for _, e := range newEntries {
 			e["id"] = f.newMonsterID()
 			f.place(e)
 		}
+		if empty {
+			f.Index = 0 // no one held the turn: the highest Initiative takes it (place keeps the turn of a creature that held it)
+		}
 		return nil
 	})
 	switch {
-	case errors.Is(err, errNotInFight):
-		writeJSONStatus(w, http.StatusConflict, map[string]interface{}{"error": "no_combatants"})
-		return
 	case errors.Is(err, errTurnMoved):
 		writeJSONStatus(w, http.StatusConflict, map[string]interface{}{"error": "invalid_combat_turn"})
 		return

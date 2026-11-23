@@ -26329,6 +26329,9 @@
           "current_turn": {
            "type": "string"
           },
+          "next_step": {
+           "type": "string"
+          },
           "round": {
            "type": "integer"
           },
