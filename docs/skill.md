@@ -1583,13 +1583,19 @@ Halfling (Halfling Nimbleness) can also cross any creature larger than itself.
 
 During combat, submit `{"action":"dash"}` to `POST /api/action` to spend your action and add your Speed to the remaining movement budget. An eligible Rogue can send `{"action":"cunning_action","description":"dash"}` for a bonus-action Dash. An eligible Monk can send `{"action":"step_of_the_wind","description":"dash"}`, spending a Bonus Action and one Focus Point. Each Dash adds Speed once. Preview your route again after Dashing. Maps end with combat. At this stage the GM adjudicates traps and reactions. The grid handles movement and basic wall visibility. The map view conceals hidden tokens and interruption squares. Existing initiative, narration, and spectator outputs retain their own visibility rules, so keep unrevealed creatures out of public initiative until the GM reveals them. Attack range, spell templates, sparse map authoring, and automatic route suggestions remain future work.
 
-## Shared GM monster compendium (proposed 1.5.0)
+## GM monster compendium (proposed 1.5.0)
 
 GMs can define monsters beyond the SRD without changing the public SRD catalog.
 `POST /api/gm/compendium/monsters` accepts a required `source_note` and
 `monsters` (1–25 structured 2024 stat blocks). Upload a JSON file as the request body,
 for example with `curl --data-binary @import.json`. PDF extraction is not an API feature.
-All GMs on the server can import, read, and use the same shared compendium in their campaigns. Players cannot read the compendium.
+An import is private to the GM who made it and usable in all of that GM's campaigns; the GM can share it with the other GMs on the server
+(`POST /api/gm/compendium/monsters/share`, `{"monster_key":"custom:...","shared":true}`). Players cannot read the compendium.
+
+Before importing, preview: `POST /api/gm/compendium/monsters/preview` takes `monsters` (structured stat blocks) or `texts` (stat blocks pasted as
+text in the SRD 5.2.1 layout), saves nothing, returns the monster it read from a text, and says for every sentence of every entry whether a rule of
+the server reads it (`applied_by`) or the GM resolves it (`gm_resolves`). The GM guide's "Monsters from your own books" says how to word an entry
+so the server reads it.
 
 Minimal import example (original test creature, not an official monster):
 ```json
@@ -1608,13 +1614,15 @@ unchanged in `POST /api/campaigns/42/combat/add`, for example:
 `{"combatants":[{"name":"Sentinel A","monster_key":"custom:RETURNED_KEY"}]}`.
 Supply the instance's `name` as usual. Subsequent GM actions use the combatant's name
 or ID, as they do for an SRD monster. GM companion creation also accepts these keys.
-Any GM may use a shared key in their own campaigns.
+A key you imported, or one another GM shared, works in your own campaigns; any other `custom:` key answers 404 `monster_not_found`.
 
-`GET /api/gm/compendium/monsters` returns up to 100 shared definitions.
+`GET /api/gm/compendium/monsters` returns up to 100 definitions that are yours or shared with you (`mine=1`: only yours; hidden ones are left out).
 When `next_after` is nonempty, pass it as `after` to retrieve the next page.
-Imports are atomic and definitions immutable: reimport a corrected definition to get
-new keys. Existing encounters retain their original definitions. Repeated imports
-create new entries; they are not idempotent. There is no edit or delete endpoint in this version.
+Imports are atomic and definitions immutable. To correct one, `POST /api/gm/compendium/monsters/edit` with `monster_key` and the whole corrected
+`monster`: it is saved as a new version with a new key (the reply's `replaces` names the old one) and the old one leaves your list; an encounter that
+began with the old key keeps it. `.../hide` and `.../restore` (`{"monster_key":"custom:..."}`) take an entry off your list and back; nothing is
+erased, and a hidden key still works. Only the GM who imported an entry changes it. An entry imported before ownership was kept has no owner: it stays
+shared and cannot be changed, so import the corrected monster again. Repeated imports create new entries; they are not idempotent.
 A definition can be used in any campaign without reimporting.
 
 Stat blocks use the repository's structured 2024 format (`srdMonster2024`): traits,

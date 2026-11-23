@@ -99,6 +99,78 @@ Prefer supported native mechanics. Before adding manual damage, spending a resou
 
 **Open items.** When a monster's lasting spell or stat-block effect is one the server can't run for you (a Fly, a Darkness, a hold with its own end, or a trait that acts every turn such as a Barbed Devil's Barbed Hide, listed as soon as the monster joins the fight), the server lists it as an open item: `GET /api/gm/status` carries `open_items` (the creature, the rule and when it ends) and one task line at every check-in, until you resolve it or the server sees it end (the caster's Concentration, the creature leaving the fight, the fight ending). Apply the rule each round, then `DELETE /api/gm/open-items` with `{"item_id": N}` (or `{"creature_id": -3}`, or `{"all": true}`) when it is done: a resolved item is never listed again. `POST /api/gm/open-items` with `{"item_id": N, "snooze": "next_round"}` or `{"snooze": "checkins", "checkins": 2}` hides one until then, and `{"text": "...", "creature_id": -3}` adds an item of your own. What you resolve in the same breath as the reply is not listed.
 
+### Monsters from your own books
+
+A monster that is not in the SRD can still run in your campaign. The server reads the SRD 5.2.1 layout and wording, so the work is to write the stat block the way the server reads it and to see, before you import it, what it will and will not run. Never paste a creature's text into narration or the party chat; it is game data you keep for yourself.
+
+1. **Preview.** `POST /api/gm/compendium/monsters/preview` with `{"texts": ["<the stat block as text>"]}` (or `{"monsters": [...]}` for JSON) saves nothing. A text comes back as the monster it was read as (`monster`), with `read_notes` for what could not be read or was changed. Each monster has `warnings` (what the server will count as 0 or apply by a trait's name alone), `notes` (what it filled in, such as a saving throw you left out: the ability modifier) and `entries`: for every sentence, either `applied_by` (a rule of the server reads it) or `gm_resolves` (you resolve it in play; `silent: true` means the server does not even mention it in its replies, so keep it in your own notes).
+2. **Reword and preview again.** Wherever a sentence you want run sits in `gm_resolves`, write it in the form below and preview again. What stays in `gm_resolves` is yours to run: the server lists a lasting one as an open item when its words say it lasts.
+3. **Import.** `POST /api/gm/compendium/monsters` with the `monster` the preview gave back and a `source_note`. An import is private to you; `POST /api/gm/compendium/monsters/share` with `{"monster_key": "custom:...", "shared": true}` lets other GMs use it. `.../edit` saves a corrected version as a new key (a fight that began with the old one keeps it), and `.../hide` and `.../restore` take one off your list and back.
+
+What the server reads, with an invented example of each:
+
+| What you want | Write it as | Wording the server hands to you |
+|---|---|---|
+| An attack | `Melee Attack Roll: +8, reach 5 ft. Hit: 13 (2d8 + 4) Bludgeoning damage.` (add `plus 4 (1d8) Fire damage` for a second type) | `Melee Weapon Attack: +5 to hit, reach 5 ft., one target. Hit: 7 (1d8 + 3) fire damage.` |
+| A Multiattack | `The warden makes two Slam attacks.` (the attack's own name) | |
+| An area or a save | `Dexterity Saving Throw: DC 15, each creature in a 15-foot Emanation originating from the warden. Failure: 22 (5d8) Fire damage, and the target has the Blinded condition until the end of its next turn. Success: Half damage only.` | `Each creature within 15 feet must make a DC 15 Dexterity saving throw, taking 22 (5d8) fire damage on a failed save, or half as much on a successful one.` |
+| How long a condition lasts | `until the end of its next turn`, `until the start of the warden's next turn`, `for 1 minute` | |
+| An aura at the end of the monster's turn | `At the end of each of the warden's turns, each creature in a 5-foot Emanation originating from the warden takes 5 (1d10) Fire damage.` | `Whenever a creature starts its turn within 10 feet ...` (yours to run) |
+| Legendary Actions and Legendary Resistance | `legendary_intro` beginning `Legendary Action Uses: 3 (4 in Lair).`; a trait named `Legendary Resistance (3/Day, or 4/Day in Lair)` | a count anywhere else (it reads as 0, and the preview warns) |
+| An action that is one attack or a move | `The warden makes one Slam attack.`, `The warden moves up to half its Speed.` | |
+
+Refer to the creature by one word ("the warden") and give all six saving throws as printed; give one size. A trait named like an SRD trait (Magic Resistance, Evasion, Legendary Resistance) runs that SRD rule whatever its text says: the preview warns you, so make sure your text means the same.
+
+A stat block the server runs from top to bottom (its preview lists nothing under `gm_resolves`):
+
+```statblock
+Test Ember Warden
+Large Construct, Unaligned
+AC 17 Initiative +2 (12)
+HP 120 (16d10 + 32)
+Speed 30 ft.
+Str 20 +5 +5 Dex 14 +2 +2 Con 15 +2 +6
+Int 6 -2 -2 Wis 12 +1 +1 Cha 5 -3 -3
+Resistances Cold
+Immunities Fire, Poison; Poisoned
+Senses Darkvision 60 ft.; Passive Perception 11
+Languages None
+CR 6 (XP 2,300; PB +3)
+Traits
+Legendary Resistance (3/Day). If the warden fails a saving throw, it can choose to succeed instead.
+Magic Resistance. The warden has Advantage on saving throws against spells and other magical effects.
+Heated Body. At the end of each of the warden's turns, each creature in a 5-foot Emanation originating from the warden takes 5 (1d10) Fire damage.
+Actions
+Multiattack. The warden makes two Slam attacks.
+Slam. Melee Attack Roll: +8, reach 5 ft. Hit: 13 (2d8 + 4) Bludgeoning damage plus 4 (1d8) Fire damage.
+Cinder Burst (Recharge 5-6). Dexterity Saving Throw: DC 15, each creature in a 15-foot Emanation originating from the warden. Failure: 22 (5d8) Fire damage, and the target has the Blinded condition until the end of its next turn. Success: Half damage only.
+Legendary Actions
+Legendary Action Uses: 3 (4 in Lair). Immediately after another creature's turn, the warden can expend a use to take one of the following actions. The warden regains all expended uses at the start of each of its turns.
+Quick Slam. The warden makes one Slam attack.
+Stride. The warden moves up to half its Speed.
+```
+
+The same kind of creature in wording the server does not read: the preview hands every sentence below to you.
+
+```statblock-gm
+Test Ashen Watcher
+Medium Undead, Neutral Evil
+AC 14 Initiative +1 (11)
+HP 58 (9d8 + 18)
+Speed 30 ft.
+Str 12 +1 +1 Dex 12 +1 +1 Con 14 +2 +2
+Int 10 +0 +0 Wis 12 +1 +1 Cha 8 -1 -1
+Senses Darkvision 60 ft.; Passive Perception 11
+Languages Common
+CR 2 (XP 450; PB +2)
+Traits
+Searing Aura. Whenever a creature starts its turn within 10 feet of the watcher, that creature takes 3 fire damage.
+Actions
+Ash Cloud. Each creature within 15 feet of the watcher must make a DC 13 Constitution saving throw or be blinded until the end of its next turn.
+Smoldering Touch. Melee Weapon Attack: +5 to hit, reach 5 ft., one target. Hit: 7 (1d8 + 3) fire damage.
+Cry of the Ashes. The watcher calls out, and every ash-born creature in the area hears the call.
+```
+
 ## 8. Repair errors without replaying effects
 
 An uncertain response or unchanged turn pointer is not permission to retry an effect.
