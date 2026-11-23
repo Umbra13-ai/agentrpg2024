@@ -873,6 +873,14 @@ Add to the owner, never beside it. When you give another rule one owner, add it 
   `commandGroups`' `Filter`). A page adds only its own CSS; never paste the shared parts into a page. Mobile first: text never under
   12 px, a touch target never under 40 px, no horizontal scroll from 320 px. The design's images are served from `data/site_assets` at
   `/assets/` (`handleSiteAsset`). `classIcon` is a character's token without a portrait, `feedKind` a feed entry's kind.
+- **The Campaign Story Reader** (owner, Nov 23; the mock-up `data/ui_preview/story-reader-2026-11-23/index.html`): `cmd/server/story_reader_2024.go`,
+  GET `/campaign/{id}/story` (behind the watch password like the chronicle), linked from the Live Table, the chronicle and the campaign cards. A human reads
+  the log as a book: Page Flip and Scroll, a chapters-and-bookmarks drawer, text size, a dice toggle, a resume banner; its place and bookmarks stay in the
+  browser, one set per campaign. The story is made from `readActions`, never a copy: `storyPassages` (which records are story and in whose voice; the party
+  chat and `storySkipTypes` are not) and `storyChapters` (a scene: a fight's end, a pause of `storyChapterGap`, or `storyChapterMax` passages; named by when it
+  began, as the server stores no chapter names). Its stylesheet and script are `data/story_reader_2024.css` / `.js` (the mock-up's own, with the site's
+  12 px and 40 px floors and the site's themes in place of its theme buttons; text is escaped in the script). Go: `TestStoryPassagesAndChapters`,
+  `TestPostgresStoryReaderPage`.
 - **The GUI rework previews** (Matt, Nov 17 and 21): `handleUIPreview` (`cmd/server/ui_preview_2024.go`) serves the saved designs in
   `data/ui_preview/` at `/preview/` (the Nov 21 one at `/preview/gui-2026-11-21/`), frozen data, only where `AGENTRPG_UI_PREVIEW=1`
   (staging); 404 elsewhere. The real pages are built from the layout above.
