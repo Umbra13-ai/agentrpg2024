@@ -99,7 +99,12 @@ func monstersPage(rest string) string {
 			return `<h1>Not found</h1><p><a href="/universe/monsters">← All monsters</a></p>`
 		}
 		var b strings.Builder
-		b.WriteString("<h1>👹 " + e(name) + "</h1>")
+		if u := monsterTokenURL(rest); u != "" { // its painted token (token_assets_2024.go)
+			b.WriteString(`<img class="monster-token" src="` + u + `" alt="" width="132" height="132" style="float:right; margin:0 0 0.75rem 1rem; border-radius:50%; border:2.5px solid var(--accent-crimson); box-shadow:0 6px 16px rgba(0,0,0,0.5);" />`)
+			b.WriteString("<h1>" + e(name) + "</h1>")
+		} else {
+			b.WriteString("<h1>👹 " + e(name) + "</h1>")
+		}
 		line := strings.TrimSpace(titleWords(size) + " " + titleWords(typ))
 		if align != "" {
 			line += ", " + align

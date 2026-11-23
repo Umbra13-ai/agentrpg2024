@@ -56,6 +56,7 @@ type liveObservation struct{ Content, Type, Observer, Time string }
 
 type liveEnemy struct {
 	Name  string
+	Key   string // the stat block's key, for its token (token_assets_2024.go); the first of the kind
 	Count int
 }
 
@@ -102,7 +103,7 @@ func liveEnemies(turnOrder []byte, active bool) []liveEnemy {
 			continue
 		}
 		idx[name] = len(out)
-		out = append(out, liveEnemy{Name: name, Count: 1})
+		out = append(out, liveEnemy{Name: name, Key: sprintAny(e["monster_key"]), Count: 1})
 	}
 	return out
 }
@@ -207,9 +208,13 @@ func liveTablePage(t liveTable) string {
 		if en.Count > 1 {
 			label = fmt.Sprintf("%s (x%d)", en.Name, en.Count)
 		}
+		face := "👹"
+		if u := monsterTokenURL(en.Key); u != "" { // the monster's painted token (token_assets_2024.go)
+			face = `<img src="` + u + `" alt="` + e(en.Name) + `" loading="lazy" />`
+		}
 		b.WriteString(`
       <div class="map-token is-enemy" title="` + e(label) + `">
-        <div class="token-ring">👹</div>
+        <div class="token-ring">` + face + `</div>
         <span class="token-label">` + e(label) + `</span>
       </div>`)
 	}
