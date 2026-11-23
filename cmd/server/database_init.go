@@ -418,6 +418,7 @@ var schemaSteps = []schemaStep{
 	// what a character has answered about the optional setup steps, by step key (optional_steps_2024.go); portrait_skipped is no longer read, so a
 	// portrait skipped before is open again
 	{"optional_steps_2024.go", `ALTER TABLE characters ADD COLUMN IF NOT EXISTS optional_answers JSONB DEFAULT '{}'::jsonb`},
+	{"campaign_background_2024.go", `ALTER TABLE lobbies ADD COLUMN IF NOT EXISTS background_image BYTEA; ALTER TABLE lobbies ADD COLUMN IF NOT EXISTS background_type VARCHAR(32); ALTER TABLE lobbies ADD COLUMN IF NOT EXISTS background_updated_at TIMESTAMP`},
 }
 
 // seatReadySchema: a player's "ready to start" on its seat (cleared whenever the seat changes hands: takeSeat, swapSeat;

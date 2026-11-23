@@ -75,6 +75,7 @@ type liveTable struct {
 	Feed                       []liveFeedItem
 	Observations               []liveObservation
 	TableRules                 string // HTML from its owner (table_rules.go)
+	Background                 string // the picture behind the header (campaign_background_2024.go); empty is the default
 }
 
 var trailingNumber = regexp.MustCompile(`\s+\d+$`)
@@ -153,10 +154,13 @@ func feedType(actionType string) string {
 // liveTablePage: the mock-up's Live Table view (#view-live) with the campaign's real data.
 func liveTablePage(t liveTable) string {
 	e := html.EscapeString
+	if t.Background == "" {
+		t.Background = defaultBackground
+	}
 	var b strings.Builder
 	b.WriteString(`<section id="view-live" class="view-section">
   <div class="vtt-stage">
-    <img class="vtt-bg" src="/assets/hero.webp" alt="` + e(t.Name) + ` encounter scene" />
+    <img class="vtt-bg" src="` + e(t.Background) + `" alt="` + e(t.Name) + ` encounter scene" />
     <div class="vtt-grid-overlay"></div>
     <div class="vtt-hud-top">
       <div>

@@ -167,6 +167,10 @@ paths["/api/admin/campaigns/{id}"] = {
     "get": op("Admin", "One campaign, every field and its characters", _admin, params=[pth("id", "", "integer")]),
     "post": op("Admin", "Edit a campaign", _admin + ' {"set": {...}} as for characters, or {"add_character": id} / {"remove_character": id}.',
                params=[pth("id", "", "integer")])}
+paths["/api/admin/campaigns/{id}/background"] = {
+    "post": op("Admin", "Set or replace a campaign's background picture", _admin + ' Send {"image_base64": "...", "note": "why"} (a PNG, JPEG or WebP, each side 320 to 4096 pixels, up to 5 MB; 1920 by 1080 fits best), or the raw image bytes with their Content-Type. It is the scene behind the campaign header on its Live Table, read at GET /api/campaigns/{id}/background.',
+               params=[pth("id", "", "integer")], example={"image_base64": "<the image file as base64>", "note": "the campaign's cover scene"}),
+    "delete": op("Admin", "Remove a campaign's background picture", _admin + ' Optional {"note": "why"}; the page goes back to the default scene.', params=[pth("id", "", "integer")], example={"note": "removed an unsuitable image"})}
 paths["/api/admin/campaigns/{id}/delete"] = {"post": op("Admin", "Delete a campaign (hide; restorable)", _admin + " Its characters are let go and remembered for a restore.", params=[pth("id", "", "integer")])}
 paths["/api/admin/campaigns/{id}/restore"] = {"post": op("Admin", "Restore a deleted campaign", _admin + " Its GM, status and free characters come back.", params=[pth("id", "", "integer")])}
 paths["/api/admin/accounts"] = {"get": op("Admin", "List accounts", _admin + " By name, email or id (also how the admin page chooses a character's player or a campaign's GM); deleted accounts only with deleted.", params=[q("q", "search a name, an email or an id"), q("deleted", "include or only")])}

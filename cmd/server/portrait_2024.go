@@ -22,18 +22,41 @@ type portraitRefusal struct {
 	Body   map[string]interface{}
 }
 
-// checkPortraitImage judges the bytes of an image: not empty, within maxPortraitBytes, a PNG, JPEG or WebP, readable (the header and
-// the pixels), each side minPortraitPixels to maxPortraitPixels. mime is its type; shapeNote says when the sheet's 4:5 frame will crop it.
+// imageRule is what one kind of uploaded picture may be: its size in bytes and pixels, the size that fits best, and the note given when its shape will be
+// cropped. A character's portrait and a campaign's background (campaign_background_2024.go) each have one; checkImage is the one check.
+type imageRule struct {
+	MaxBytes, MinPx, MaxPx int
+	Best                   string                // "1024 by 1280 pixels is the best size for the sheet"
+	Shape                  func(w, h int) string // the note when the picture will be cropped, "" when it fits
+}
+
+// portraitRule: the sheet's frame is 4:5 (0.8).
+var portraitRule = imageRule{MaxBytes: maxPortraitBytes, MinPx: minPortraitPixels, MaxPx: maxPortraitPixels,
+	Best: "1024 by 1280 pixels is the best size for the sheet",
+	Shape: func(w, h int) string {
+		if r := float64(w) / float64(h); r < 0.75 || r > 0.85 {
+			return fmt.Sprintf("Saved. The image is %d by %d pixels; the sheet shows a 4:5 frame and crops the rest, so the edges may be cut. 1024 by 1280 fits exactly.", w, h)
+		}
+		return ""
+	}}
+
+// checkPortraitImage judges a portrait.
 func checkPortraitImage(imageBytes []byte) (mime, shapeNote string, ref *portraitRefusal) {
+	return checkImage(imageBytes, portraitRule)
+}
+
+// checkImage judges the bytes of an image: not empty, within the rule's size, a PNG, JPEG or WebP, readable (the header and the pixels), each side
+// within the rule's pixels. mime is its type; shapeNote says when the frame will crop it.
+func checkImage(imageBytes []byte, rule imageRule) (mime, shapeNote string, ref *portraitRefusal) {
 	refuse := func(status int, body map[string]interface{}) (string, string, *portraitRefusal) {
 		return "", "", &portraitRefusal{Status: status, Body: body}
 	}
 	if len(imageBytes) == 0 {
 		return refuse(http.StatusBadRequest, map[string]interface{}{"error": "empty_image", "message": "No image was sent."})
 	}
-	if len(imageBytes) > maxPortraitBytes {
+	if len(imageBytes) > rule.MaxBytes {
 		return refuse(http.StatusRequestEntityTooLarge, map[string]interface{}{
-			"error": "image_too_large", "max_bytes": maxPortraitBytes, "message": "The image is over 5 MB. Make it smaller (1024 by 1280 pixels is the best size for the sheet) and send it again."})
+			"error": "image_too_large", "max_bytes": rule.MaxBytes, "message": fmt.Sprintf("The image is over %d MB. Make it smaller (%s) and send it again.", rule.MaxBytes/(1024*1024), rule.Best)})
 	}
 	mime = detectPortraitType(imageBytes)
 	if mime == "" {
@@ -45,19 +68,18 @@ func checkPortraitImage(imageBytes []byte) (mime, shapeNote string, ref *portrai
 		if err != nil {
 			return refuse(http.StatusBadRequest, map[string]interface{}{"error": "corrupt_image", "message": "The image could not be read: the file looks damaged. Save it again and resend it."})
 		}
-		if cfg.Width > maxPortraitPixels || cfg.Height > maxPortraitPixels ||
-			cfg.Width < minPortraitPixels || cfg.Height < minPortraitPixels {
+		if cfg.Width > rule.MaxPx || cfg.Height > rule.MaxPx || cfg.Width < rule.MinPx || cfg.Height < rule.MinPx {
 			return refuse(http.StatusBadRequest, map[string]interface{}{
 				"error":      "bad_dimensions",
-				"min_pixels": minPortraitPixels, "max_pixels": maxPortraitPixels,
+				"min_pixels": rule.MinPx, "max_pixels": rule.MaxPx,
 				"got":     fmt.Sprintf("%dx%d", cfg.Width, cfg.Height),
-				"message": fmt.Sprintf("The image is %d by %d pixels. Each side must be %d to %d pixels; 1024 by 1280 is the best size for the sheet.", cfg.Width, cfg.Height, minPortraitPixels, maxPortraitPixels)})
+				"message": fmt.Sprintf("The image is %d by %d pixels. Each side must be %d to %d pixels; %s.", cfg.Width, cfg.Height, rule.MinPx, rule.MaxPx, rule.Best)})
 		}
 		if _, _, derr := image.Decode(bytes.NewReader(imageBytes)); derr != nil { // the pixels too, not only the header (Nov 14 review: a truncated PNG was saved)
 			return refuse(http.StatusBadRequest, map[string]interface{}{"error": "corrupt_image", "message": "The image could not be read: the file looks damaged or cut short. Save it again and resend it. Nothing was changed."})
 		}
-		if r := float64(cfg.Width) / float64(cfg.Height); r < 0.75 || r > 0.85 { // the sheet's frame is 4:5 (0.8)
-			shapeNote = fmt.Sprintf("Saved. The image is %d by %d pixels; the sheet shows a 4:5 frame and crops the rest, so the edges may be cut. 1024 by 1280 fits exactly.", cfg.Width, cfg.Height)
+		if rule.Shape != nil {
+			shapeNote = rule.Shape(cfg.Width, cfg.Height)
 		}
 	}
 	return mime, shapeNote, nil

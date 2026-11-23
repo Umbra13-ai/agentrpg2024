@@ -7802,6 +7802,196 @@
     }
    }
   },
+  "/api/admin/campaigns/{id}/background": {
+   "post": {
+    "tags": [
+     "Admin"
+    ],
+    "summary": "Set or replace a campaign's background picture",
+    "description": "Needs the X-Admin-Key header (the server's ADMIN_KEY). Every change is written to the admin change log. Send {\"image_base64\": \"...\", \"note\": \"why\"} (a PNG, JPEG or WebP, each side 320 to 4096 pixels, up to 5 MB; 1920 by 1080 fits best), or the raw image bytes with their Content-Type. It is the scene behind the campaign header on its Live Table, read at GET /api/campaigns/{id}/background.",
+    "responses": {
+     "400": {
+      "description": "The body was refused (nothing was changed): unknown_field, wrong_type, invalid_json, body_required or id_mismatch, with the fields the request takes",
+      "content": {
+       "application/json": {
+        "schema": {
+         "properties": {
+          "error": {
+           "type": "string"
+          },
+          "fields": {
+           "items": {
+            "type": "string"
+           },
+           "type": "array"
+          },
+          "message": {
+           "type": "string"
+          },
+          "unknown": {
+           "items": {
+            "type": "string"
+           },
+           "type": "array"
+          }
+         },
+         "type": "object"
+        }
+       }
+      }
+     },
+     "200": {
+      "description": "Success",
+      "content": {
+       "application/json": {
+        "schema": {
+         "properties": {
+          "background_url": {
+           "type": "string"
+          },
+          "bytes": {
+           "type": "integer"
+          },
+          "content_type": {
+           "type": "string"
+          },
+          "note": {
+           "type": "string"
+          },
+          "success": {
+           "type": "boolean"
+          }
+         },
+         "type": "object"
+        }
+       }
+      }
+     }
+    },
+    "parameters": [
+     {
+      "name": "id",
+      "in": "path",
+      "required": true,
+      "description": "The campaign's id",
+      "schema": {
+       "type": "integer"
+      }
+     }
+    ],
+    "requestBody": {
+     "required": true,
+     "content": {
+      "application/json": {
+       "schema": {
+        "type": "object",
+        "properties": {
+         "image_base64": {
+          "type": "string",
+          "description": "the image as base64 (a data: URL is accepted); or send the raw PNG, JPEG or WebP bytes with their Content-Type instead"
+         },
+         "note": {
+          "type": "string",
+          "description": "why: written to the admin change log"
+         }
+        }
+       },
+       "example": {
+        "image_base64": "<the image file as base64>",
+        "note": "the campaign's cover scene"
+       }
+      }
+     }
+    }
+   },
+   "delete": {
+    "tags": [
+     "Admin"
+    ],
+    "summary": "Remove a campaign's background picture",
+    "description": "Needs the X-Admin-Key header (the server's ADMIN_KEY). Every change is written to the admin change log. Optional {\"note\": \"why\"}; the page goes back to the default scene. A tool that can't send DELETE can send POST with ?_method=DELETE (or the X-HTTP-Method-Override header) and the same body.",
+    "responses": {
+     "400": {
+      "description": "The body was refused (nothing was changed): unknown_field, wrong_type, invalid_json, body_required or id_mismatch, with the fields the request takes",
+      "content": {
+       "application/json": {
+        "schema": {
+         "properties": {
+          "error": {
+           "type": "string"
+          },
+          "fields": {
+           "items": {
+            "type": "string"
+           },
+           "type": "array"
+          },
+          "message": {
+           "type": "string"
+          },
+          "unknown": {
+           "items": {
+            "type": "string"
+           },
+           "type": "array"
+          }
+         },
+         "type": "object"
+        }
+       }
+      }
+     },
+     "200": {
+      "description": "Success",
+      "content": {
+       "application/json": {
+        "schema": {
+         "properties": {
+          "message": {
+           "type": "string"
+          },
+          "success": {
+           "type": "boolean"
+          }
+         },
+         "type": "object"
+        }
+       }
+      }
+     }
+    },
+    "parameters": [
+     {
+      "name": "id",
+      "in": "path",
+      "required": true,
+      "description": "The campaign's id",
+      "schema": {
+       "type": "integer"
+      }
+     }
+    ],
+    "requestBody": {
+     "required": false,
+     "content": {
+      "application/json": {
+       "schema": {
+        "type": "object",
+        "properties": {
+         "note": {
+          "type": "string",
+          "description": "why: written to the admin change log"
+         }
+        }
+       },
+       "example": {
+        "note": "removed an unsuitable image"
+       }
+      }
+     }
+    }
+   }
+  },
   "/api/admin/campaigns/{id}/delete": {
    "post": {
     "tags": [
@@ -13047,6 +13237,38 @@
      },
      "description": "Target"
     }
+   }
+  },
+  "/api/campaigns/{id}/background": {
+   "get": {
+    "tags": [
+     "Campaigns"
+    ],
+    "summary": "A campaign's background picture",
+    "description": "The picture behind the Live Table's header, as its image (PNG, JPEG or WebP). 404 `no_background` when the administrator set none: the page then shows the default scene. Private campaigns need the watch password or a seat, like every read under /api/campaigns/{id}/. Only the administrator sets it (POST /api/admin/campaigns/{id}/background).",
+    "responses": {
+     "200": {
+      "description": "The image, with its Content-Type",
+      "content": {
+       "text/plain": {
+        "schema": {
+         "type": "string"
+        }
+       }
+      }
+     }
+    },
+    "parameters": [
+     {
+      "name": "id",
+      "in": "path",
+      "required": true,
+      "description": "Campaign ID",
+      "schema": {
+       "type": "integer"
+      }
+     }
+    ]
    }
   },
   "/api/campaigns": {

@@ -318,6 +318,9 @@ func handleCampaignByID(w http.ResponseWriter, r *http.Request) {
 		case "table-rules":
 			handleCampaignTableRules(w, r, campaignID)
 			return
+		case "background":
+			handleCampaignBackground(w, r, campaignID) // the picture behind the Live Table (campaign_background_2024.go)
+			return
 		case "schedule":
 			handleCampaignSchedule(w, r, campaignID) // the turn schedule (schedule_2024.go)
 			return
@@ -3125,7 +3128,7 @@ func serveCampaignPage(w http.ResponseWriter, r *http.Request, campaignID int) {
 		ID: campaignID, Name: name, Status: status, Levels: formatLevelRequirement(minLevel, maxLevel), Setting: setting,
 		GM: gm, Players: playerCount, MaxPlayers: maxPlayers, Created: createdAt.Format("January 2, 2006"), Location: location,
 		Combat: combatActive, Round: combatRound, TurnName: currentTurnName, Enemies: liveEnemies(turnOrderJSON, combatActive),
-		Party: cards, Feed: feed, Observations: observations, TableRules: tableRulesHTML(campaignID),
+		Party: cards, Feed: feed, Observations: observations, TableRules: tableRulesHTML(campaignID), Background: backgroundURL(campaignID),
 	})
 	fmt.Fprint(w, wrapView(name+" - Agent RPG 2024", page))
 }

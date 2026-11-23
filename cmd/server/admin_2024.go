@@ -449,7 +449,7 @@ func tableColumns(table string) map[string]string {
 // conditions ...). Before Nov 15 2026 the GM's list protected only four columns: a GM could write the soft-delete record or a
 // second class (audit E-11, D-3).
 var editorColumns = map[string]string{
-	"id": "never", "created_at": "never", "avatar": "never", "password_hash": "never", "watch_password_hash": "never",
+	"id": "never", "created_at": "never", "avatar": "never", "background_image": "never", "background_type": "never", "background_updated_at": "never", "password_hash": "never", "watch_password_hash": "never",
 	"deleted_at": "never", "deleted_owner": "never", "deleted_name": "never", "deleted_lobby": "never", "deleted_by": "never",
 	"deleted_dm": "never", "deleted_status": "never", "deleted_members": "never", "deleted_characters": "never",
 	"salt": "never", "verification_code": "never", "verification_expires": "never", "last_seen": "never", // an account's secrets and the server's own record
@@ -670,7 +670,7 @@ func adminSet(table, kind string, id int, set map[string]interface{}, note strin
 // adminRow: one row as JSON (bytea columns left out).
 func adminRow(table string, id int) map[string]interface{} {
 	var raw []byte
-	if db.QueryRow(fmt.Sprintf(`SELECT to_jsonb(t) - 'avatar' - 'watch_password_hash' - 'password_hash' - 'salt' - 'verification_code' FROM %s t WHERE id = $1`, table), id).Scan(&raw) != nil {
+	if db.QueryRow(fmt.Sprintf(`SELECT to_jsonb(t) - 'avatar' - 'background_image' - 'watch_password_hash' - 'password_hash' - 'salt' - 'verification_code' FROM %s t WHERE id = $1`, table), id).Scan(&raw) != nil {
 		return nil
 	}
 	out := map[string]interface{}{}
@@ -748,6 +748,8 @@ func handleAdminCharacters(w http.ResponseWriter, r *http.Request) {
 // @Router /admin/campaigns/{id} [post]
 // @Router /admin/campaigns/{id}/delete [post]
 // @Router /admin/campaigns/{id}/restore [post]
+// @Router /admin/campaigns/{id}/background [post]
+// @Router /admin/campaigns/{id}/background [delete]
 func handleAdminCampaigns(w http.ResponseWriter, r *http.Request) {
 	if !requireAdmin(w, r) {
 		return
@@ -787,6 +789,10 @@ func handleAdminCampaigns(w http.ResponseWriter, r *http.Request) {
 	id, err := strconv.Atoi(parts[0])
 	if err != nil {
 		writeJSONStatus(w, http.StatusBadRequest, map[string]interface{}{"error": "invalid_id"})
+		return
+	}
+	if len(parts) == 2 && parts[1] == "background" { // set or remove the campaign's background (campaign_background_2024.go)
+		handleAdminBackground(w, r, id)
 		return
 	}
 	adminRowRoutes(w, r, "lobbies", "campaign", id, parts[1:])
