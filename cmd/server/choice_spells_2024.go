@@ -328,6 +328,9 @@ func spellsStep(ch *choiceChar) *setupStep {
 					}
 				}
 				st.Then = &setupStep{Key: "prepare", Title: "Prepare spells from your spellbook", Request: req("POST", fmt.Sprintf("/api/characters/%d/prepare", ch.id), map[string]interface{}{"spells": prep})}
+				st.listRequests(
+					requestOf{"write the spells in your spellbook", st.Request},
+					requestOf{"then prepare spells from the book", st.Then.Request})
 			} else {
 				st.Request = req("POST", fmt.Sprintf("/api/characters/%d/prepare", ch.id), map[string]interface{}{"spells": all})
 			}

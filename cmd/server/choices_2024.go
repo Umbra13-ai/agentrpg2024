@@ -305,7 +305,7 @@ func choiceSteps(c *choiceChar) []setupStep {
 		if open && d.waitsFor != nil {
 			if key, why := d.waitsFor(c); key != "" {
 				st.WaitsFor, st.Why = key, strings.TrimSpace(why+" "+st.Why+" The options are listed; a suggested request comes once that choice is made.")
-				st.Request, st.Then = nil, nil // no suggestion yet: it would be computed without the other choice
+				st.Request, st.Then, st.Requests, st.RequestsLeft = nil, nil, nil, 0 // no suggestion yet: it would be computed without the other choice
 				unsuggest(st.Choices)
 			}
 		}

@@ -3019,6 +3019,10 @@ type setupStep struct {
 	Optional bool `json:"optional,omitempty"`
 
 	Problem string `json:"problem,omitempty"` // what is wrong with what is stored, and what the request fixes
+	// Requests: a step that takes more than one request lists them all in the order to send them, each with what it does, and says
+	// how many are left (a Wizard's spells: the spellbook, then the prepared list); Request stays the first (playtest S-GM-14)
+	Requests     []map[string]interface{} `json:"requests,omitempty"`
+	RequestsLeft int                      `json:"requests_left,omitempty"`
 	// WaitsFor: the key of another open step to finish first, because its result changes this step's options (choiceDef.waitsFor)
 	WaitsFor string `json:"waits_for,omitempty"`
 }
@@ -3135,6 +3139,11 @@ func handleCharacterSetup(w http.ResponseWriter, r *http.Request, charID int) {
 				// a spellcaster with a Shield: a weapon in the other hand would leave no free hand for spells
 				extra(setupStep{Key: "weapon_in_hand", Title: "Hold a weapon", Done: true,
 					Why: "You hold a Shield and cast spells, so your other hand is left free for spells with gestures (S). To fight with a weapon, draw it: POST /api/characters/equip-weapon {\"character_id\": " + fmt.Sprint(charID) + ", \"weapon\": \"" + strings.ToLower(weapon) + "\", \"slot\": \"main_hand\"} (one weapon change a turn)."})
+			} else if autoEquipOpen(charID) {
+				// auto-equip is still to be answered and may put a weapon in a hand itself: this step waits for it, with no request to send, so
+				// a player never sends a draw that can only answer "already equipped" (playtest S-GM-16)
+				extra(setupStep{Key: "weapon_in_hand", Title: "Hold a weapon", WaitsFor: "auto_equip",
+					Why: "Answer the auto-equip question first: it may put a weapon in your hand. If your hands are still empty after it, this step gives the request to draw one."})
 			} else {
 				extra(setupStep{Key: "weapon_in_hand", Title: "Hold a weapon", Why: why,
 					Request: req("POST", "/api/characters/equip-weapon", map[string]interface{}{"character_id": charID, "weapon": strings.ToLower(weapon), "slot": "main_hand"})})
@@ -3299,4 +3308,20 @@ func humanMagicInitiateOptions(bgList string, bgSpells []string) map[string]inte
 		}
 	}
 	return map[string]interface{}{"list": out, "how_to_answer": "choose one list, then from it 2 cantrips, 1 spell and the ability: {\"list\": \"" + example + "\", \"cantrips\": [...], \"spell\": \"...\", \"spellcasting_ability\": \"wis\"}"}
+}
+
+// requestOf: one request of a step that takes several, with what it does.
+type requestOf struct {
+	What    string
+	Request map[string]interface{}
+}
+
+// listRequests puts all of a step's requests in order on the step (Requests, RequestsLeft): one pass through the setup page then
+// finishes the step. If a request leaves more to do (a spellbook that still has room), the next read of setup shows the new one.
+func (st *setupStep) listRequests(list ...requestOf) {
+	st.Requests = nil
+	for i, r := range list {
+		st.Requests = append(st.Requests, map[string]interface{}{"order": i + 1, "what": r.What, "request": r.Request})
+	}
+	st.RequestsLeft = len(list)
 }
