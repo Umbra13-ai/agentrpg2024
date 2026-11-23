@@ -8,7 +8,9 @@ For AI coding sessions working on the Agent RPG 2024 server (Go; code in `cmd/se
 invented test monster (`TestMonsterPatternsServeSRDWording`); never add a rule, comment, test or doc built from Monster Manual text
 outside the SRD (the earlier 2024 Monster Manual work is archived outside the repository). GMs may import their own structured
 monsters into the separate shared compendium in the existing database (a generic feature); importing text does not implement
-unfamiliar rules, and wording no rule reads is flagged to the GM. Multiclassing is not supported and must never be offered or documented as an option (`multiclassAllowed`
+unfamiliar rules, and wording no rule reads is flagged to the GM. **Structured mechanics a GM attaches to an entry are generic and allowed** (owner, Nov 23:
+`mechanicCatalog`, `monster_mechanics_2024.go`), on an imported monster or on a copy of an SRD monster as a house rule; SRD-only stays
+the rule for text patterns. Multiclassing is not supported and must never be offered or documented as an option (`multiclassAllowed`
 always answers no). `AGENTS.md` describes the repository and `BUILD.md` how to build, run and test. If the owner's
 notes are attached to your session, read their handoff file first for the standing rules and the current state.
 
@@ -184,6 +186,15 @@ Report: "Wizard Scholar accepts any skill for Expertise."
     `objectEndDamage`.
   - Go: `TestChargeWordingsOverTheCatalog`, `TestPostgresChargeOnEveryTarget`, `TestPostgresHitPushOnEveryTarget`,
     `TestPostgresEntryMovesAndRampageGate`, `TestPostgresSwarmAndIncorporealSpaces`, `TestPostgresShapeShiftAndDrag`.
+- **A mechanic a GM attaches to a stat-block entry** (owner, Nov 23; `cmd/server/monster_mechanics_2024.go`): `mechanicCatalog` is the one table of
+  the kinds (what each does, the entries it attaches to, its parameters and limits, an example, the owner that applies it); `mechanicProblem`
+  (through `validateCustomMonster`: import, edit, preview) refuses a wrong one from the row's own words; `mechanicsView` and `entryVerdicts` (a
+  sentence its `covers` holds is applied by the mechanic) give the report and the stat block; `rulesText` is what the text rules read (the
+  covered words left out: the play rows, `oldStyleActions`, the preflight and the Multiattack check); `attachedMechanic` is how an owner finds
+  one; GET `/api/gm/compendium/mechanics` serves the table (`?srd=` a stat block to copy for a house rule). Kinds: `drop_to_zero`, read with the
+  SRD wording as one `dropRule` by `droppedToZeroOnHit` (a monster target the hit defeats included). A new kind is one row plus its rule in
+  the owner it belongs to. Go: `TestMechanicProblems`, `TestCoveredSentencesAreApplied`, `TestPostgresAttachedDropToZeroOnEveryTarget`,
+  `TestPostgresMechanicsInPreviewAndCatalogue`.
 - **What a hit does after its damage:** `hitAfterDamage` (`cmd/server/hit_after_damage_2024.go`), called once by every hit route with the
   attacker: the drain below, "it starts burning" (the Burning owner, `burning_2024.go`), a push or pull (`hitForcedMove`) and the hit's
   record for an entry used right after it (`recordLastHit`). A new effect of this kind is one call there. Go: `TestPostgresBurningOnHitEveryTarget`.
