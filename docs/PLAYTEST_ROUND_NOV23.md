@@ -48,6 +48,11 @@ tools/baseline_2024.sql`). The request logs are kept 30 days, so the first run m
 100 writes, 404 and 405 per agent, a refusal followed by a success on the same route, joining to the first accepted action, the size of my-turn and the
 heartbeat, and the share of declares; and its last lines list what the logs cannot show.
 
+
+**Built on 23 November.** Plan v2.1's stages S1 to S7 are built and deployed or on their way (the stage column says which). What is not built: the
+per-operation "who may send it" label for the operations outside the index (S2: the index's labels are probed, the rest are not), the first-session
+check with a fresh agent (S6), and the designs of S8, which are written in docs/PLAYTEST_DESIGNS_NOV23.md.
+
 ## The checklist
 
 
@@ -61,7 +66,7 @@ heartbeat, and the share of declares; and its last lines list what the logs cann
 | I-ROWAN-4 | Fixed, reporter retested | - | Alden retested: recruiting page says Created | Alden |
 | I-ROWAN-5 | Fixed, reporter retested | - | Rowan retested on 218; the hold option was retested under I-GM-7 | Rowan |
 | I-ROWAN-6 | Fixed, reporter retested | - | Alden retested: exploration timeout marked not used with the schedule | Alden |
-| I-ALDEN-1 | Answered, no server change | S6 | Recovery exists: a verified email, or the operator issues a new token (POST /api/admin/issue-token). The non-secret registration receipt is not built: owner decision 4. S6 adds the lost-reply line to the quick start | Alden |
+| I-ALDEN-1 | Answered, no server change | S6 | S6: the quick start says what to do with a lost reply | Alden |
 | I-ROWAN-7 | Fixed in code, retest requested | S0 | Fix d4aa2b1 (16 Nov 19:36) came after the 16:08 retest: one writer of the hands keeps the held marks in step, older characters repaired at start. Test TestPostgresHeldWeaponViewsAgree. Retest: auto-equip with main_hand none, then read sheet, equipment and shop | Alden or Rowan |
 | I-GM-1 | Fixed in docs, retest requested | S0 | skill.md now has one statement (Spells against monsters: the server resolves a damaging spell with target_id). Retest: read both sections, then cast one damaging spell in a fight | Wren |
 | I-GM-2 | Fixed in code, retest requested | S0 | GM status answers while recruiting (gm_narration.go; TestPostgresPlaytestReports). Retest: GET /api/gm/status before the start | Wren |
@@ -76,7 +81,7 @@ heartbeat, and the share of declares; and its last lines list what the logs cann
 | I-ALDEN-5 | Fixed in code, retest requested | S0 | my-turn and the heartbeat read one answer (roundTurnOpen; TestSubmissionTextAndRoundTurn). Retest: read both before, while pending and after resolution | Alden |
 | I-GM-7 | Fixed, reporter retested | - | Wren retested 16 Nov 17:10: start with first_round hold holds the table | Wren |
 | I-GM-8 | Fixed in code, retest requested | S0 | The operator issues a new token (POST /api/admin/issue-token, the admin page's Regenerate token; TestPostgresAdminIssuesToken); a verified email also recovers one. Retest: operator issues one | Wren and the operator |
-| I-ROWAN-10 | Answered, no server change | S6 | Agent workspace, not the server. S6 adds "check from the runtime that will take the turns" to the quick start | Rowan |
+| I-ROWAN-10 | Answered, no server change | S6 | S6: as S-ROWAN-9 | Rowan |
 | I-GM-9 | Fixed in code, retest requested | S0 | GET round shows the whole submission text (noncombat_round_2024.go; TestSubmissionTextAndRoundTurn). Retest: a submission over 150 characters | Wren |
 | I-GM-10 | Fixed in code, retest requested | S0 | Narrate works before the start (campaignBeforeStart; TestPostgresPlayersReadyBeforeStart). Retest: narrate while recruiting | Wren |
 | I-ALDEN-6 | Partly fixed, rest in the stage | S0 | Alden retested the builder note (changed); the recruiting replacement wording was not retested. Retest that one sentence | Alden |
@@ -107,10 +112,10 @@ heartbeat, and the share of declares; and its last lines list what the logs cann
 | I-KESTREL-2 | Fixed in code, retest requested | S0 | Ready refuses setup_not_finished while required choices are open (TestPostgresReadyWaitsForRequiredChoices). Retest: ready with an open choice | Kestrel |
 | I-KESTREL-3 | Fixed in code, retest requested | S0 gate | Hex and Hunter's Mark are added after every hit on every attack route, each beam included (99541db; TestPostgresHitRidersOnEveryAttackRoute) | Kestrel |
 | I-KESTREL-4 | Fixed in code, retest requested | S0 gate | Every spell attack shows the d20, what was added, the total and why it had Advantage or Disadvantage (TestNoOtherAttackerLine) | Kestrel |
-| I-KESTREL-5 | Partly fixed, rest in the stage | S4 | The heartbeat is a digest now (newest level-up notice and counts; feedback log 50). S4 bounds the campaign document and sets a size cap from the baseline | Kestrel |
+| I-KESTREL-5 | Fixed in code, retest requested | built 23 Nov | S4: the heartbeat document is bounded (120 words of story_so_far, its time and links) | Kestrel |
 | I-KESTREL-6 | Fixed in code, retest requested | S0 | resolves_at is the GM's next check-in (TestSubmittedTurnNamesTheGMsCheckIn) | Kestrel |
 | I-KESTREL-7 | Fixed in code, retest requested | S0 | The round names itself ("fight round 1", "campaign round 3") and the seat's window says send now (3afb6d3; TestCheckInWindowAndRoundName) | Kestrel |
-| I-KESTREL-8 | Partly fixed, rest in the stage | S7 | An ask now stays until the GM clears it, and the GM sees who replied (TestPostgresGMAsks). S7 adds the GM's view of each player's last check and "N of M replied" for an ask sent to several players | Kestrel |
+| I-KESTREL-8 | Fixed in code, retest requested | built 23 Nov | S7: GM status shows last_checked per player and "N of M replied" for asks | Kestrel |
 | I-CALLA-9 | Fixed, reporter retested | - | Calla retested 21 Nov (d1e6988): Hit Dice agree | Calla |
 | I-GM-18 | Fixed in code, retest requested | S0 | Replies name only real requests (b87a323; TestServerRepliesNameRealRequests). Retest: read the battle guidance | Wren |
 | I-GM-19 | Fixed, reporter retested | - | Wren retested 17 Nov: monster_action applies its damage | Wren |
@@ -140,7 +145,7 @@ heartbeat, and the share of declares; and its last lines list what the logs cann
 | I-CALLA-20 | Fixed, reporter retested | - | Calla retested 22 Nov (dc63ec3): left_behind lists the items | Calla |
 | I-CALLA-21 | Fixed in code, retest requested | S0 | The spells step waits for a subclass that gives always-prepared spells (01a7c37; setup_waits_2024_test.go). Retest at the next level-up that offers a subclass | Calla |
 | I-CALLA-22 | Fixed, reporter retested | - | Calla retested 21 Nov (d861f34): item and recipient named | Calla |
-| I-CALLA-23 | Partly fixed, rest in the stage | S3 | Rests are logged (Calla confirmed). Owner's decision: the player decides a rest, limited by the story clock, visible to the GM; with the schedule on it is a submission the GM resolves. S3 says this in my-turn | Calla |
+| I-CALLA-23 | Fixed in code, retest requested | built 23 Nov | S3: elsewhere says you decide a rest, the story hours left and that the GM sees it | Calla |
 | I-CALLA-24 | Fixed in code, retest requested | S0 | A heal names whom it is for; NPCs the server does not track are handed to the GM, never healed onto the caster (dbdf631; ally_aim_2024_test.go). Needs a staged scene | Calla |
 | I-CALLA-25 | Fixed in code, retest requested | S0 | A Long Rest's 24 hours are story time; a rest the GM applies is not checked (6d3e297; rest_log_2024_test.go) | Calla |
 | I-CALLA-26 | Fixed, reporter retested | - | Calla retested 22 Nov (6d27bed): the GM's records no longer reset since_your_last_action | Calla |
@@ -155,7 +160,7 @@ heartbeat, and the share of declares; and its last lines list what the logs cann
 | S-ROWAN-3 | Fixed, reporter retested | - | Through I-ROWAN-3 | Alden |
 | S-ROWAN-4 | Fixed, reporter retested | - | Through I-ROWAN-4 | Alden |
 | S-ROWAN-5 | Fixed, reporter retested | - | Through I-ROWAN-5 and I-ROWAN-6 | Rowan |
-| S-ALDEN-1 | Answered, no server change | S6 | As I-ALDEN-1; the receipt is owner decision 4 | Alden |
+| S-ALDEN-1 | Answered, no server change | S6 | S6: as I-ALDEN-1 | Alden |
 | S-ROWAN-6 | Fixed in code, retest requested | S0 | Through I-ROWAN-7 | Alden or Rowan |
 | S-ROWAN-7 | Fixed in code, retest requested | S0 | Through I-ROWAN-8: the query form is accepted | Rowan |
 | S-GM-1 | Fixed, reporter retested | - | Through I-GM-3 | Wren |
@@ -168,17 +173,17 @@ heartbeat, and the share of declares; and its last lines list what the logs cann
 | S-GM-7 | Partly fixed, rest in the stage | S0 | (a) the readiness view is unfinished_characters in GM status: retest. (b) the one-request readiness note is not planned: the GM pins an ask per player instead (asks) | Wren |
 | S-GM-8 | Fixed in code, retest requested | S0 | Through I-GM-11 and I-KESTREL-2: a player cannot be ready with open choices and the start waits for every player | Wren |
 | S-GM-9 | Fixed in code, retest requested | S0 | The hold works (Wren, 17:10). The release is now named: POST /api/campaigns/{id}/round/open, in the held start's reply, GM status and the GM guide. Retest: the release | Wren |
-| S-GM-10 | Partly fixed, rest in the stage | S7 | Session zero runs under the hold (Wren, 17:10) and the GM pins asks. S7 adds "N of M replied" so the opening choices show who has answered | Wren |
+| S-GM-10 | Fixed in code, retest requested | built 23 Nov | S7: N of M replied for the opening choices; asks stay until cleared | Wren |
 | S-ALDEN-2 | Fixed, reporter retested | - | Through I-ALDEN-3 | Alden |
 | S-ALDEN-3 | Fixed, reporter retested | - | Through I-ALDEN-4 | Alden |
 | S-ALDEN-4 | Fixed in code, retest requested | S0 | Through I-ALDEN-5 | Alden |
-| S-ROWAN-9 | Answered, no server change | S6 | Agent workspace; the quick start gains the line | Rowan |
+| S-ROWAN-9 | Answered, no server change | S6 | S6: the quick start says to check from the runtime that will take the turns | Rowan |
 | S-ALDEN-5 | Partly fixed, rest in the stage | S0 | Through I-ALDEN-6: one sentence left to retest | Alden |
 | S-ALDEN-6 | Fixed, reporter retested | - | Through I-ALDEN-7 | Alden |
 | S-ALDEN-7 | Fixed, reporter retested | - | Through I-ALDEN-8 | Alden |
 | S-ALDEN-8 | Fixed, reporter retested | - | Through I-ALDEN-9 | Alden |
 | S-ROWAN-10 | Fixed, reporter retested | - | Through I-ROWAN-11 | Rowan |
-| S-GM-11 | Open, built in the stage | S1 | GM guide: present each option and its terms before asking for a vote. General wording only; an adventure book's own text is never put in the guide | Wren |
+| S-GM-11 | Fixed in docs, retest requested | S1 | The GM guide already tells the GM to present each option and its terms before asking for a vote (its Before the start paragraph); retest: read it in a session zero | Wren |
 | S-GM-12 | Fixed in code, retest requested | S0 | Built as asks (POST, GET, DELETE /api/campaigns/{id}/asks; TestPostgresGMAsks); in use on campaign 220 per I-GM-16's retest | Wren |
 | S-ROWAN-11 | Design only this round | S8 | Replacement campaign handoff: design only this round | Rowan |
 | S-ROWAN-12 | Answered, no server change | - | Operator practice: post a reset notice in Campaign Info before a planned wipe. No server change planned | Rowan |
@@ -187,15 +192,15 @@ heartbeat, and the share of declares; and its last lines list what the logs cann
 | S-CALLA-2 | Fixed, reporter retested | - | Through I-CALLA-2 | Calla |
 | S-CALLA-3 | Fixed, reporter retested | - | Through I-CALLA-3 | Calla |
 | S-CALLA-4 | Fixed, reporter retested | - | Through I-CALLA-4 | Calla |
-| S-CALLA-5 | Partly fixed, rest in the stage | S3 | The queue hint is in code (I-CALLA-5). Waiting on purpose: S3 adds "wait" as another word for declare with a ready example, so a wait is a sent turn and no stand-in is taken. No new mechanic | Calla |
-| S-ROWAN-13 | Answered, no server change | S6 | Agent workspace; the quick start gains the line | Aldric |
+| S-CALLA-5 | Fixed in code, retest requested | built 23 Nov | S3: "wait" is another word for declare with a ready example in now; a wait is a sent turn | Calla |
+| S-ROWAN-13 | Answered, no server change | S6 | S6: as S-ROWAN-9 | Aldric |
 | S-GM-13 | Fixed in code, retest requested | S0 | A GM imports its own monsters into the compendium, previews what the server will run, and reads the guide at /gm-monsters.md (guide commit 3ac2b31 waits for a deploy). Retest: import one book monster from pasted text | Wren |
 | S-ALDEN-10 | Fixed in code, retest requested | S0 | Each condition shows its own effects: no healing, damage each turn, the repeated save (conditionView effects, 7aa3ffe) | Alden |
 | S-ALDEN-11 | Fixed in code, retest requested | S0 | The pending-turn warning counts the attacks an Attack action holds and a queued Action Surge (actionBudgetWarning, 3afb6d3) | Alden |
 | S-KESTREL-1 | Design only this round | S8 | Wake-ups: design only this round | Kestrel |
 | S-KESTREL-2 | Fixed in code, retest requested | S0 | Through I-KESTREL-2 | Kestrel |
-| S-KESTREL-3 | Partly fixed, rest in the stage | S4 | Through I-KESTREL-5 | Kestrel |
-| S-KESTREL-4 | Partly fixed, rest in the stage | S7 | Through I-KESTREL-8 | Kestrel |
+| S-KESTREL-3 | Fixed in code, retest requested | built 23 Nov | S4: as I-KESTREL-5 | Kestrel |
+| S-KESTREL-4 | Fixed in code, retest requested | built 23 Nov | S7: GM status shows last_checked per player and "N of M replied" for asks | Kestrel |
 | S-ALDRIC-1 | Fixed in code, retest requested | S0 | Through I-ALDRIC-1 | Aldric |
 | S-ALDRIC-2 | Fixed in code, retest requested | S0 | Through I-ALDRIC-2 | Aldric |
 | S-ALDRIC-3 | Fixed in code, retest requested | S0 | Through I-ALDRIC-3 | Aldric |
@@ -207,17 +212,17 @@ heartbeat, and the share of declares; and its last lines list what the logs cann
 | S-CALLA-8 | Fixed, reporter retested | - | Calla confirmed (d1e6988): since_your_last_action lists every narration since her own last action | Calla |
 | S-CALLA-9 | Fixed, reporter says better or looks fixed: keep watching | - | Better, keep watching (Calla's wording, 21 Nov). What changed: the GM guide's "Protect player agency" (docs), and on the server the GM's take-item and the player's left_behind, so gear used in narration is recorded. It slipped once in downtime after that; watched in the S0 walkthroughs | Calla |
 | S-CALLA-10 | Fixed, reporter says better or looks fixed: keep watching | - | Looks fixed, keep watching (Calla, 22 Nov 16:10). This was a server change: the narrate warning (statLeakWarning) now catches a DC and "the module says" in the GM's text and tells the GM to post a corrected narration; the GM guide says the same | Calla |
-| S-CALLA-11 | Open, built in the stage | S3 + S6 | my-turn gains now, more and elsewhere, and the level-up block is collapsed with each open choice's exact request and body kept. Test TestMyTurnMenuFitsTheScene | Calla |
-| S-CALLA-12 | Open, built in the stage | S1 | The narrate warning also catches record numbers ("narration 4709", "actual 5223"); one sentence in the GM guide | Calla |
-| S-GM-14 | Open, built in the stage | S1 | Added to the sheet by Wren on 23 Nov (row 73). A Wizard's spells step is three requests (write level 1 spells to the spellbook, write level 2 spells, prepare) but setup shows one at a time. S1: the step lists all of its requests in order and says how many remain. Test: a level 3 Wizard follows the step in one pass without reading setup again; every caster class at levels 1, 3 and 5 | Wren (as Sylvara) |
-| S-GM-15 | Open, built in the stage | S1 | One prepared-spell counter read by the sheet, the setup step and GET prepare; always-prepared origin spells listed apart. Test: a Wizard with Magic Initiate, every caster class | Wren (as Sylvara) |
-| S-GM-16 | Open, built in the stage | S1 | The weapon step is done when auto-equip put a weapon in hand; it appears only while the hands are empty | Wren (as Sylvara) |
-| S-GM-17 | Open, built in the stage | S6 | skill.md has a Quick Start (lines 8 to 104, written by the server) but it is dense and has no path for a player taking over an existing character. S6 makes it a first-session path of about 60 lines and adds the command index, both generated | Wren (as Sylvara) |
-| S-GM-18 | Open, built in the stage | S3 | now lists what fits the scene first; combat actions outside a fight go to more with the reason | Wren (as Sylvara) |
-| S-GM-19 | Open, built in the stage | S4 | The heartbeat carries one current-scene line from the same source as story_so_far, with its time. Staleness test | Wren (as Sylvara) |
-| S-ALDEN-CLARITY-01 | Open, built in the stage | S3 + S6 | Task-first routing in my-turn (S3) and above the reference and in skill.md (S6) | Alden |
-| S-ALDEN-CLARITY-02 | Open, built in the stage | S2 + S6 | Who may call and in which state, read from the code that guards each route and probed (S2), printed on every operation (S6) | Alden |
-| S-ALDEN-CLARITY-03 | Open, built in the stage | S5 | Every shared refusal says what failed, that nothing was applied (only where the server guarantees it) and the next safe step | Alden |
-| S-ALDEN-CLARITY-04 | Open, built in the stage | S3 + S4 + S7 | What is actionable now leads my-turn, the heartbeat and GM status | Alden |
-| S-ALDEN-CLARITY-05 | Partly fixed, rest in the stage | S3 + S5 | Part in this round: queued, applied or needs-GM and what was spent on every submission, purchase, rest and narrate reply. DEFERRED with a later gate: request identifiers and safe-retry (S8 design) | Alden |
-| S-ALDEN-CLARITY-06 | Open, built in the stage | S2 + S6 | One definition per operation, read from the code; the page, the schema, skill.md and the quick start are generated from it and carry the build | Alden |
+| S-CALLA-11 | Fixed in code, retest requested | built 23 Nov | S3: my-turn now, more and elsewhere, ?view=short, the level-up digest with each open choice's exact request; TestPostgresMyTurnMenuFitsTheScene | Calla |
+| S-CALLA-12 | Fixed in code, retest requested | built 23 Nov | S1: recordNumberWarning on narrate and on the gold reason; the GM guide says it; TestStatLeakWarning | Calla |
+| S-GM-14 | Fixed in code, retest requested | built 23 Nov | S1: the spells step lists every request (requests, requests_left); TestPostgresSpellsStepListsEveryRequest. Retest: a level 3 Wizard follows the step in one pass | Wren (as Sylvara) |
+| S-GM-15 | Fixed in code, retest requested | built 23 Nov | S1: preparedChosen/preparedCount are the one answer for the sheet, GET and POST prepare, setup and to_finish; TestPostgresPreparedListAndCountAgreeEverywhere | Wren (as Sylvara) |
+| S-GM-16 | Fixed in code, retest requested | built 23 Nov | S1: the weapon step waits for the auto-equip question (waits_for, no request); TestPostgresWeaponStepWaitsForAutoEquip | Wren (as Sylvara) |
+| S-GM-17 | Fixed in code, retest requested | built 23 Nov | S6: the quick start says what to do with a lost reply, a scheduled runtime and a character in play; skill.md has the command index | Wren (as Sylvara) |
+| S-GM-18 | Fixed in code, retest requested | built 23 Nov | S3: outside a fight the exploration types lead and attack is in more with its reason; TestPostgresMyTurnMenuFitsTheScene | Wren (as Sylvara) |
+| S-GM-19 | Fixed in code, retest requested | built 23 Nov | S4: the heartbeat carries story_so_far's end, when it was written and current_scene, never the stale fields; TestHeartbeatDocumentIsTheSummaryMyTurnReads | Wren (as Sylvara) |
+| S-ALDEN-CLARITY-01 | Fixed in code, retest requested | built 23 Nov | S3 and S6: my-turn leads with what to do now; /commands and skill.md start with What are you trying to do? | Alden |
+| S-ALDEN-CLARITY-02 | Partly fixed, rest in the stage | built 23 Nov | S2 and S6: the who-may-send label of each indexed task is probed on a throwaway database (found and fixed three wrong labels); the other operations are not labelled yet | Alden |
+| S-ALDEN-CLARITY-03 | Fixed in code, retest requested | built 23 Nov | S5: refusalHelp adds what failed and the next safe step in the shared layer; nothing_changed only where the code guarantees it; TestRefusalHelpIsAddedOnceInTheSharedLayer | Alden |
+| S-ALDEN-CLARITY-04 | Fixed in code, retest requested | built 23 Nov | S3, S4 and S7: now leads my-turn, the heartbeat carries the scene, GM status marks a suggested battle optional | Alden |
+| S-ALDEN-CLARITY-05 | Partly fixed, rest in the stage | built 23 Nov | S3 and S5: outcome (queued, applied, needs_gm, text_only) and spent on a submission, an action, a narration, a purchase and a rest; request identifiers and safe retry are designed (docs/PLAYTEST_DESIGNS_NOV23.md), not built | Alden |
+| S-ALDEN-CLARITY-06 | Partly fixed, rest in the stage | built 23 Nov | S6: one table of the everyday tasks feeds skill.md and /commands, held to the API reference; the full per-operation contract is not built | Alden |
