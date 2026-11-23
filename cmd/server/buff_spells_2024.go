@@ -892,6 +892,28 @@ func beaconMaxHealing(charID int) bool {
 	return ok
 }
 
+// wardSet is which of the two wards a creature holds: the ones that end when it attacks, casts a spell or deals damage.
+type wardSet struct{ Sanctuary, Invisible bool }
+
+// wardsHeld reads the wards a creature (a character, or a monster of the campaign) holds now. A turn's offense ends only the wards it held when it
+// began: a cast that makes the ward (Invisibility or Sanctuary on oneself) is not the offense that ends it (SRD 5.2.1: "ends early immediately after
+// the target makes an attack roll, deals damage, or casts a spell").
+func wardsHeld(lobby, id int) wardSet {
+	if id == 0 || (id < 0 && lobby == 0) {
+		return wardSet{}
+	}
+	_, sanct := buffEffect(lobby, id, "sanctuary")
+	invis := false
+	if recs, err := readConditionRecords(db, lobby, id); err == nil {
+		for _, r := range recs {
+			if r.Condition == "invisible" {
+				invis = true
+			}
+		}
+	}
+	return wardSet{Sanctuary: sanct, Invisible: invis}
+}
+
 // endWardsOnOffense: Invisibility and Sanctuary end when their creature attacks, casts a spell or deals damage.
 func endWardsOnOffense(charID int) string {
 	if charID <= 0 {
@@ -902,15 +924,22 @@ func endWardsOnOffense(charID int) string {
 
 // endWardsOnOffenseOf is endWardsOnOffense for any creature: a character, or a monster of the campaign (its attack roll, its cast).
 func endWardsOnOffenseOf(lobby, id int) string {
+	return endHeldWards(lobby, id, wardsHeld(lobby, id))
+}
+
+// endHeldWards ends the wards of held (what the creature held before the offense) and says so.
+func endHeldWards(lobby, id int, held wardSet) string {
 	if id == 0 || (id < 0 && lobby == 0) {
 		return ""
 	}
 	var notes []string
-	if _, ok := buffEffect(lobby, id, "sanctuary"); ok {
-		db.Exec(`DELETE FROM spell_effects WHERE lobby_id = $1 AND target_id = $2 AND kind = 'sanctuary'`, lobby, id)
-		notes = append(notes, "Sanctuary")
+	if held.Sanctuary {
+		if _, ok := buffEffect(lobby, id, "sanctuary"); ok {
+			db.Exec(`DELETE FROM spell_effects WHERE lobby_id = $1 AND target_id = $2 AND kind = 'sanctuary'`, lobby, id)
+			notes = append(notes, "Sanctuary")
+		}
 	}
-	if len(endCondition(lobby, id, "invisible", "Invisibility")) > 0 {
+	if held.Invisible && len(endCondition(lobby, id, "invisible", "Invisibility")) > 0 {
 		if id < 0 {
 			db.Exec(`DELETE FROM spell_effects WHERE lobby_id = $1 AND target_id = $2 AND kind = 'invisibility'`, lobby, id)
 		} else {

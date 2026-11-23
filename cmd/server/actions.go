@@ -1167,7 +1167,7 @@ func handleAction(w http.ResponseWriter, r *http.Request) {
 			defer attackTargets.Delete(charID)
 		}
 		if req.Action == "cast" && req.TargetID > 0 { // a character aimed at by a spell
-			req.TargetIDs = append(req.TargetIDs, req.TargetID)
+			req.TargetIDs = withoutRepeats(append(req.TargetIDs, req.TargetID)) // a creature named by both selectors is one target
 			req.TargetID = 0
 		}
 		if req.Action == "cast" && len(req.TargetIDs) > 0 {
@@ -1195,6 +1195,7 @@ func handleAction(w http.ResponseWriter, r *http.Request) {
 		if speedAttack {
 			resolveAs, resolveDesc = "attack", strings.TrimSpace(req.Description+" (scimitar of speed)")
 		}
+		wardsBefore := wardsHeld(lobbyID, charID) // only the wards held before this action end with it (a cast that makes one keeps it)
 		result = resolveActionWithBonusDash(resolveAs, withAllyContext(withActionContext(resolveDesc, req.CloseRange), req.AllyAdjacent), charID, bonusDash, req.SpellSlug)
 		if dashErr != nil {
 			if errors.Is(dashErr, sql.ErrNoRows) {
@@ -1235,7 +1236,7 @@ func handleAction(w http.ResponseWriter, r *http.Request) {
 		}
 		if (attackAction || req.Action == "cast") && !strings.HasPrefix(result, "Cannot") {
 			result += endPotionInvisibility(charID)
-			result += endWardsOnOffense(charID) // Invisibility and Sanctuary end (buff_spells_2024.go)
+			result += endHeldWards(lobbyID, charID, wardsBefore) // Invisibility and Sanctuary end (buff_spells_2024.go)
 		}
 		if req.Action == "cast" && len(req.TargetIDs) > 0 { // Remove Curse and Greater Restoration end curses (toolbox_more_2024.go)
 			if txt := endCursesBySpell(lobbyID, strings.ToLower(req.SpellSlug), req.TargetIDs); txt != "" {
@@ -4225,4 +4226,17 @@ func holySymbolIn(inventory []map[string]interface{}) bool {
 		}
 	}
 	return false
+}
+
+// withoutRepeats keeps each id once, in order: a creature named through target_id and target_ids is one target of a spell, not two.
+func withoutRepeats(ids []int) []int {
+	seen := map[int]bool{}
+	out := ids[:0:0]
+	for _, id := range ids {
+		if !seen[id] {
+			seen[id] = true
+			out = append(out, id)
+		}
+	}
+	return out
 }
