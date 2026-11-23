@@ -2,7 +2,7 @@ package main
 
 // The Campaign Story Reader (owner, Nov 23; mock-up data/ui_preview/story-reader-2026-11-23/index.html): GET /campaign/{id}/story, the
 // campaign's log read as a book so a human can follow the story their AI is playing. The reader is the mock-up's: a sticky bar with the
-// progress, Page Flip and Scroll modes, a chapters-and-bookmarks drawer, text size, a dice toggle, and a resume banner; its place, bookmarks and
+// progress, Page Flip and Scroll modes, a chapters-and-bookmarks drawer, text size, a rolls toggle (Show rolls / Hide rolls) and one Aa button with a text-size slider; its place, bookmarks and
 // settings are kept in the browser (per campaign). The site's theme menu replaces the mock-up's own four theme buttons.
 //
 // The story is made from the action log (readActions, the one reader of it), never from a copy: `storyPassages` says which records are the
@@ -198,7 +198,7 @@ func storyChapters(ps []storyPassage, zone *time.Location) []storyChapter {
 		begun := c[0].at.In(zone)
 		out = append(out, storyChapter{
 			ID: fmt.Sprintf("ch%d", i+1), Num: fmt.Sprintf("Chapter %s", roman(i+1)), Title: storyTitle(begun),
-			Location: begun.Format("Jan 2, 15:04 MST"), ReadTime: fmt.Sprintf("%d %s · %d min read", len(c), map[bool]string{true: "passage", false: "passages"}[len(c) == 1], mins), Entries: c,
+			Location: begun.Format("Jan 2, 3:04 PM MST"), ReadTime: fmt.Sprintf("%d %s · %d min read", len(c), map[bool]string{true: "passage", false: "passages"}[len(c) == 1], mins), Entries: c,
 		})
 	}
 	return out
@@ -283,30 +283,23 @@ func storyReaderMarkup(campaignID int, name, gmName string, total int, withBack 
         <div id="topbar-subtitle" style="font-size:0.78rem; color:var(--text-secondary); margin-top:0.1rem;"></div>
       </div>
       <div style="display:flex; align-items:center; gap:0.4rem; flex-wrap:wrap;">
-        <button class="pill-btn" id="btn-toc" type="button">📑 Chapters &amp; Bookmarks</button>
-        <button class="pill-btn" id="btn-mode-flip" type="button">📖 Page Flip</button>
+        <button class="pill-btn" id="btn-toc" type="button">📑 Chapters</button>
+        <button class="pill-btn" id="btn-mode-flip" type="button">📖 Flip</button>
         <button class="pill-btn" id="btn-mode-scroll" type="button">📜 Scroll</button>
       </div>
     </div>
     <div class="reader-progress-track" title="Campaign Reading Progress"><div class="reader-progress-fill" id="reader-progress-fill" style="width: 0%;"></div></div>
   </header>
   ` + note + `
-  <div class="resume-banner hidden" id="resume-banner">
-    <span id="resume-text"></span>
-    <div style="display:flex; gap:0.35rem;"><button class="pill-btn" id="btn-dismiss-resume" type="button">Got it</button></div>
-  </div>
   <div class="reader-controls">
-    <div class="control-group">
-      <button class="pill-btn active" id="btn-dice-toggle" type="button">🎲 Dice &amp; Rolls: On</button>
-      <button class="pill-btn" data-size="sm" type="button" aria-label="Smaller text">A-</button>
-      <button class="pill-btn active" data-size="md" type="button" aria-label="Normal text">A</button>
-      <button class="pill-btn" data-size="lg" type="button" aria-label="Larger text">A+</button>
-    </div>
-    <div class="control-group">
-      <button class="pill-btn hidden" id="btn-new" type="button"></button>
-      <button class="pill-btn" id="btn-latest" type="button">📍 Latest</button>
-      <button class="pill-btn" id="btn-refresh" type="button" title="Reload to see what has been played since">↻ Check for new</button>
-    </div>
+    <button class="pill-btn active" id="btn-dice-toggle" type="button">🎲 Hide rolls</button>
+    <span class="size-wrap">
+      <button class="pill-btn" id="btn-size" type="button" aria-haspopup="true" aria-expanded="false" aria-label="Text size">Aa</button>
+      <span class="size-pop hidden" id="size-pop"><span class="size-small" aria-hidden="true">A</span><input class="size-range" id="size-range" type="range" min="0" max="2" step="1" value="1" aria-label="Text size: small, medium or large" /><span class="size-big" aria-hidden="true">A</span></span>
+    </span>
+    <button class="pill-btn hidden" id="btn-new" type="button"></button>
+    <button class="pill-btn" id="btn-latest" type="button">📍 Latest</button>
+    <button class="pill-btn" id="btn-refresh" type="button" title="Reload to see what has been played since">↻ Refresh</button>
   </div>
   <section id="flip-container">
     <div class="book-stage" id="book-stage"><article class="book-page" id="book-page"></article></div>

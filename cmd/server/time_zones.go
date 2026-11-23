@@ -55,9 +55,9 @@ func campaignLocation(lobbyID int) *time.Location {
 	return serverLocation()
 }
 
-// feedTime formats a stored (UTC) time for a campaign's pages: "Jan 2, 15:04 EST".
+// feedTime formats a stored (UTC) time for a campaign's pages: "Jan 2, 3:04 PM EST".
 func feedTime(t time.Time, lobbyID int) string {
-	return t.In(campaignLocation(lobbyID)).Format("Jan 2, 15:04 MST")
+	return t.In(campaignLocation(lobbyID)).Format("Jan 2, 3:04 PM MST")
 }
 
 // timeZoneTableRule is the time_zone table rule: the server's zone, or one of timeZoneChoices.

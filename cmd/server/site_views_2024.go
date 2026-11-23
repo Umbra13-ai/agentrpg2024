@@ -327,7 +327,7 @@ func liveTablePage(t liveTable) string {
 	}
 	b.WriteString(fmt.Sprintf(`</div>
       </div>
-      <p style="font-size:0.75rem; color:var(--text-muted);"><a href="/api/campaigns/%d">Raw API data</a> · the page refreshes every 30 seconds</p>
+      <p style="font-size:0.75rem; color:var(--text-muted);"><a href="/api/campaigns/%d">Raw API data</a></p>
     </aside>
   </div>
 </section>
@@ -357,7 +357,7 @@ func shortName(name string) string {
 
 // liveScript: the Live Table's behavior as in the mock-up: the chronicle's filters, the accordions, the quick sheet of the party member
 // tapped (its numbers from the character's own sheet and profile, GET /api/characters/{id} and .../profile: the page works nothing
-// out), what the viewer chose kept for the 30-second refresh.
+// out), what the viewer chose kept.
 func liveScript(t liveTable) string {
 	type p struct {
 		ID     int    `json:"id"`
@@ -457,7 +457,6 @@ func liveScript(t liveTable) string {
   document.getElementById('vtt-tokens-row').addEventListener('click', function (e) { pick(e, 'data-token-char'); });
   document.getElementById('party-rail').addEventListener('click', function (e) { pick(e, 'data-inspect-char'); });
   inspect(kept.selected || LIVE.selected);
-  setTimeout(function () { location.reload(); }, 30000);
 })();
 </script>`
 }

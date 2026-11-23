@@ -10,6 +10,7 @@
 
   function esc(s) { return String(s == null ? '' : s).replace(/[&<>"']/g, function (c) { return { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]; }); }
   function $(id) { return document.getElementById(id); }
+  var SIZES = ['sm', 'md', 'lg'];
   // in the Live Table (STORY.inline) the scroll mode scrolls its own box, not the whole page
   var INLINE = Boolean(STORY.inline);
   function scrollBox() { return INLINE ? $('scroll-container') : null; }
@@ -125,10 +126,10 @@
     document.body.classList.remove('story-size-sm', 'story-size-md', 'story-size-lg');
     document.body.classList.add('story-size-' + READER.fontSize);
     document.body.classList.toggle('hide-dice', !READER.showDice);
-    document.querySelectorAll('[data-size]').forEach(function (b) { b.classList.toggle('active', b.dataset.size === READER.fontSize); });
+    $('size-range').value = String(SIZES.indexOf(READER.fontSize));
     var diceBtn = $('btn-dice-toggle');
     diceBtn.classList.toggle('active', READER.showDice);
-    diceBtn.textContent = READER.showDice ? '🎲 Dice & Rolls: On' : '📖 Story Only (Dice Hidden)';
+    diceBtn.textContent = READER.showDice ? '🎲 Hide rolls' : '🎲 Show rolls';
     $('btn-mode-flip').classList.toggle('active', READER.mode === 'flip');
     $('btn-mode-scroll').classList.toggle('active', READER.mode === 'scroll');
     $('flip-container').classList.toggle('hidden', READER.mode !== 'flip');
@@ -191,13 +192,21 @@
     }, 120);
   }, { passive: true });
   $('btn-dice-toggle').addEventListener('click', function () { READER.showDice = !READER.showDice; applyPreferences(); saveState(); });
-  document.querySelectorAll('[data-size]').forEach(function (btn) {
-    btn.addEventListener('click', function () {
-      var p = READER.pages[READER.pageIndex], keep = p && p.entries.length ? p.entries[0].id : '';
-      READER.fontSize = btn.dataset.size; buildPages();
-      var at = keep ? pageOfEntry(keep) : -1; if (at >= 0) READER.pageIndex = at; // the same passage stays in view
-      applyPreferences(); renderFlipPage(); saveState();
-    });
+  // one Aa button opens a slider for the three text sizes
+  var sizeBtn = $('btn-size'), sizePop = $('size-pop');
+  sizeBtn.addEventListener('click', function (e) {
+    e.stopPropagation();
+    var open = sizePop.classList.toggle('hidden') === false;
+    sizeBtn.setAttribute('aria-expanded', open ? 'true' : 'false'); sizeBtn.classList.toggle('active', open);
+  });
+  document.addEventListener('click', function (e) {
+    if (!sizePop.contains(e.target) && e.target !== sizeBtn) { sizePop.classList.add('hidden'); sizeBtn.setAttribute('aria-expanded', 'false'); sizeBtn.classList.remove('active'); }
+  });
+  $('size-range').addEventListener('input', function () {
+    var p = READER.pages[READER.pageIndex], keep = p && p.entries.length ? p.entries[0].id : '';
+    READER.fontSize = SIZES[Number(this.value)] || 'md'; buildPages();
+    var at = keep ? pageOfEntry(keep) : -1; if (at >= 0) READER.pageIndex = at; // the same passage stays in view
+    applyPreferences(); renderFlipPage(); saveState();
   });
   document.addEventListener('click', function (e) {
     var star = e.target.closest('[data-bookmark]'); if (!star) return;
@@ -221,7 +230,6 @@
     READER.pageIndex = 0; READER.scrollRatio = 0; READER.readUpTo = -1; saveState(); toc.classList.add('hidden');
     if (READER.mode === 'flip') goToPage(0, 'prev'); else scrollGo(0);
   });
-  $('btn-dismiss-resume').addEventListener('click', function () { $('resume-banner').classList.add('hidden'); });
   $('btn-new').addEventListener('click', function () { var a = ALL[Math.min(ALL.length - 1, READER.readUpTo + 1)]; if (a) jumpToPassage(a.id); });
   $('btn-latest').addEventListener('click', function () {
     if (READER.mode === 'flip') goToPage(READER.pages.length - 1, 'next'); else scrollGo(scrollMax());
@@ -237,12 +245,4 @@
   buildPages();
   if (READER.firstPassage) { var at = pageOfEntry(READER.firstPassage); if (at >= 0) READER.pageIndex = at; }
   applyPreferences(); renderFlipPage(); renderScrollMode();
-  if (READER.hasPriorSession) {
-    var p = READER.pages[READER.pageIndex], left = ALL.length - 1 - READER.readUpTo, note = READER.mode === 'flip'
-      ? '🔖 Welcome back — resumed at ' + p.chapterNum + ', Page ' + (READER.pageIndex + 1)
-      : '🔖 Welcome back — resumed your scroll position (' + Math.round(READER.scrollRatio * 100) + '%)';
-    if (left > 0) note += ' · ' + left + ' passage' + (left === 1 ? '' : 's') + ' you have not read yet';
-    $('resume-text').textContent = note;
-    $('resume-banner').classList.remove('hidden');
-  }
 })();
