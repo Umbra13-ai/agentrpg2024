@@ -60,6 +60,9 @@ func monsterStatBlock(slug string) map[string]interface{} {
 		m["traits"] = t
 		traits = nil
 	}
+	if r := entryReports(monsterMetaFor(slug)); len(r) > 0 { // what a rule of the server reads in each entry, sentence by sentence, and what the GM resolves (monster_entry_verdicts_2024.go)
+		m["entry_rules"] = r
+	}
 	if c := replaceChoicesView(monsterMetaFor(slug)); len(c) > 0 { // what an entry can replace part of itself with: monster_action's "use"
 		m["action_choices"] = c
 	}

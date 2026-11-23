@@ -23,10 +23,6 @@ import (
 // Sentences are grouped into wording families: the sentence with its numbers, dice, DCs, damage types, conditions, abilities, sizes,
 // the creature's own name and other entries' names replaced by placeholders (sentenceFamily).
 
-type sentenceVerdict struct {
-	Monster, Kind, Entry, Sentence, Family, Status, Rule string
-}
-
 var (
 	familyDamage  = regexp.MustCompile(`\d+ \(\d+d\d+(?: ?[+−-] ?\d+)?\)`)
 	familyDice    = regexp.MustCompile(`\(?\b\d+d\d+(?: ?[+−-] ?\d+)?\)?`)
@@ -36,8 +32,6 @@ var (
 	familySize    = regexp.MustCompile(`\b(Tiny|Small|Medium|Large|Huge|Gargantuan)\b`)
 	familyCount   = regexp.MustCompile(`\b(one|two|three|four|five|six|twice|thrice)\b`)
 	familyNumber  = regexp.MustCompile(`[+-]?\d+`)
-	familyHeading = regexp.MustCompile(`(Hit or Miss:|Hit:|First Failure:|Second Failure:|Failure by \d+ or More:|Failure or Success:|Failure:|Success:|Trigger:|Response(?:—| -|:))`)
-	familySplit   = regexp.MustCompile(`(?:[.!?])\s+(?:[A-Z])|\n`)
 )
 
 // sentenceFamily: a sentence with its specifics replaced by placeholders (see above). entries are the stat block's entry names.
@@ -63,73 +57,8 @@ func sentenceFamily(sentence string, m srdMonster2024, entries []string) string 
 	return strings.Join(strings.Fields(s), " ")
 }
 
-// entrySentences: an entry's text cut at its headings ("Hit:", "Failure:" ...) and its sentences; each keeps its heading.
-func entrySentences(text string) []string {
-	var out []string
-	locs := familyHeading.FindAllStringIndex(text, -1)
-	starts := []int{0}
-	for _, l := range locs {
-		starts = append(starts, l[0])
-	}
-	starts = append(starts, len(text))
-	for i := 0; i+1 < len(starts); i++ {
-		sec := text[starts[i]:starts[i+1]]
-		head := ""
-		if h := familyHeading.FindStringIndex(sec); h != nil && h[0] == 0 {
-			head, sec = sec[:h[1]], sec[h[1]:]
-		}
-		prev := 0
-		for _, l := range familySplit.FindAllStringIndex(sec, -1) {
-			out = appendSentence(out, head, sec[prev:l[0]+1])
-			prev = l[1] - 1
-			if sec[l[1]-1] == '\n' {
-				prev = l[1]
-			}
-		}
-		out = appendSentence(out, head, sec[prev:])
-	}
-	return out
-}
-
-func appendSentence(out []string, head, s string) []string {
-	s = strings.TrimSpace(s)
-	if s == "" {
-		return out
-	}
-	if head != "" {
-		s = strings.TrimSpace(head + " " + s)
-	}
-	return append(out, s)
-}
-
-// coveringPattern: the first listed monster text pattern (by name) whose match covers at least half of the sentence, or a whole
-// clause the owners cut out of it; "" when none.
-func coveringPattern(sentence string, names []string) string {
-	body := strings.TrimSpace(familyHeading.ReplaceAllString(sentence, ""))
-	if body == "" {
-		return "heading"
-	}
-	for _, n := range names {
-		rx := monsterTextPatterns[n]
-		for _, loc := range rx.FindAllStringIndex(body, -1) {
-			if (loc[1]-loc[0])*2 >= len(body) {
-				return n
-			}
-		}
-		if rx.MatchString(strings.TrimSuffix(body, ".")) && len(body) < 60 {
-			return n
-		}
-	}
-	return ""
-}
-
 // srdSentenceCoverage: the verdict of every sentence of the SRD catalog.
 func srdSentenceCoverage() []sentenceVerdict {
-	names := make([]string, 0, len(monsterTextPatterns))
-	for n := range monsterTextPatterns {
-		names = append(names, n)
-	}
-	sort.Strings(names)
 	var out []sentenceVerdict
 	for _, m := range srdMonsters2024() {
 		var entryNames []string
@@ -140,7 +69,7 @@ func srdSentenceCoverage() []sentenceVerdict {
 		}
 		for kind, group := range map[string][]srdMonsterEntry{"trait": m.Traits, "action": m.Actions, "bonus": m.BonusActions, "reaction": m.Reactions, "legendary": m.Legendary} {
 			for _, e := range group {
-				for _, v := range entryCoverage(kind, e, names) {
+				for _, v := range entryVerdicts(kind, e) {
 					v.Monster, v.Kind, v.Entry = m.Name, kind, e.Name
 					v.Family = kind + "| " + sentenceFamily(v.Sentence, m, entryNames)
 					out = append(out, v)
@@ -149,179 +78,6 @@ func srdSentenceCoverage() []sentenceVerdict {
 		}
 	}
 	return out
-}
-
-// entryCoverage: the verdicts of one entry's sentences along the route the server takes for it.
-func entryCoverage(kind string, e srdMonsterEntry, names []string) []sentenceVerdict {
-	sentences := entrySentences(e.Text)
-	all := func(status, rule string) []sentenceVerdict {
-		out := make([]sentenceVerdict, 0, len(sentences))
-		for _, s := range sentences {
-			out = append(out, sentenceVerdict{Sentence: s, Status: status, Rule: rule})
-		}
-		return out
-	}
-	// each sentence: read by the route's owner (own), in the residual shown to the GM, or read by a listed pattern
-	bySentence := func(route string, own func(string) bool, residual string) []sentenceVerdict {
-		out := make([]sentenceVerdict, 0, len(sentences))
-		res := strings.ToLower(residual)
-		for _, s := range sentences {
-			body := strings.TrimSpace(familyHeading.ReplaceAllString(s, ""))
-			v := sentenceVerdict{Sentence: s}
-			switch {
-			case body != "" && res != "" && strings.Contains(res, strings.ToLower(strings.TrimSuffix(body, "."))):
-				v.Status, v.Rule = "gm", route+" residual"
-			case strings.HasPrefix(s, "Hit or Miss:"):
-				v.Status, v.Rule = "gm", "hitOrMissNote"
-			case chargeSentenceRe.MatchString(body):
-				v.Status, v.Rule = "applied", "chargeRewrite (creature_movement_2024.go)"
-			case strings.HasPrefix(s, "Trigger:"):
-				v.Status, v.Rule = "gm", "a Reaction's trigger: the GM sends the Reaction when it happens"
-			case specialMoveSentence(body):
-				v.Status, v.Rule = "applied", "readSpecialMove / grantSpecialMove"
-			case own(s):
-				v.Status, v.Rule = "applied", route
-			default:
-				if p := coveringPattern(s, names); p != "" {
-					v.Status, v.Rule = "applied", p
-				} else {
-					v.Status, v.Rule = "unhandled", route
-				}
-			}
-			out = append(out, v)
-		}
-		return out
-	}
-	if kind == "trait" {
-		if r, ok := traitRuleFor(e); ok {
-			if r.GM {
-				return all("gm", "monsterTraitRules GM row")
-			}
-			return all("applied", "monsterTraitRules: "+r.Where)
-		}
-		if strings.HasPrefix(e.Name, "Spellcasting") {
-			return all("applied", "monster spellcasting (resolveMonsterSpell)")
-		}
-		if _, ok := parseSaveEffect(e.Text); ok {
-			return bySentence("save owner (trait)", saveOwnSentence, saveResidual(e.Text))
-		}
-		return all("gm", "trait the GM applies (traitsForGM)")
-	}
-	if kind == "reaction" {
-		low := strings.ToLower(e.Text)
-		if needs, _ := reactionSelfHitTrigger(e.Text); needs || reactACRe.MatchString(e.Text) || reactReduceRe.MatchString(e.Text) || reactUsesRe.MatchString(e.Text) ||
-			strings.Contains(low, "casts counterspell or shield") || strings.Contains(low, "splits into two new") ||
-			(strings.Contains(low, "swap places") && strings.Contains(low, "becomes the target")) || strings.Contains(low, "the wearer gains a +5 bonus to ac") {
-			return bySentence("resolveMonsterReaction", func(s string) bool { return strings.HasPrefix(s, "Trigger:") || strings.HasPrefix(s, "Response") }, "")
-		}
-	}
-	if forms, _ := shapeShiftForms(e.Text); len(forms) > 0 {
-		// the reply says what a form changes besides its Speed (size, equipment, game statistics) is the GM's
-		return bySentence("resolveShapeShift", func(s string) bool { return true }, "")
-	}
-	switch {
-	case strings.HasPrefix(e.Name, "Multiattack"):
-		return bySentence("multiattackPlan", func(s string) bool { return true }, "")
-	case strings.HasPrefix(e.Name, "Spellcasting"):
-		return bySentence("monster spellcasting (resolveMonsterSpell)", func(s string) bool { return true }, "")
-	case isAttackEntry(e.Text):
-		a := parseMonsterAttack(e.Name, e.Text)
-		if _, problem := prepareMonsterAttack(a.monsterActionRow, "fire"); problem != "" {
-			return all("gm", "attack refused: "+problem)
-		}
-		uncharged, _ := chargeRewrite(e.Text, 0, true, func(string) bool { return true }) // the routes rewrite a charge before the residual
-		residual := unappliedHitRider(uncharged) + " " + gmJudgedAlternatives(a.monsterActionRow)
-		if sv, ok := parseSaveEffect(e.Text); ok {
-			residual += " " + sv.Extra
-		}
-		return bySentence("attack owner (parseMonsterAttack)", attackOwnSentence, residual)
-	case len(splitSaveOptions(e.Text)) >= 2:
-		opts := splitSaveOptions(e.Text)
-		residual := saveOptionsIntro(e.Text, opts)
-		for _, o := range opts {
-			residual += " " + saveResidual(o.Text)
-		}
-		return bySentence("splitSaveOptions (the GM names the effect)", func(s string) bool {
-			for _, o := range opts {
-				if strings.Contains(s, o.Name) {
-					return true
-				}
-			}
-			return saveOwnSentence(s)
-		}, residual)
-	case mfxAttackRe.MatchString(e.Text):
-		return bySentence("mfxAttackRe (one attack of another entry)", func(s string) bool { return mfxAttackRe.MatchString(s) }, "")
-	case len(castChoiceList(e.Text)) >= 2 || mfxSpellRe.MatchString(e.Text):
-		return bySentence("monster cast (resolveMonsterSpell)", func(s string) bool { return mfxSpellRe.MatchString(s) || strings.Contains(s, "casts") }, castRiders(e.Text))
-	}
-	if _, ok := parseSaveEffect(e.Text); ok {
-		return bySentence("save owner (parseSaveEffect)", saveOwnSentence, saveResidual(e.Text))
-	}
-	if readSwallow(e.Text) != nil {
-		return bySentence("resolveMonsterSwallow", func(string) bool { return true }, "")
-	}
-	if entryPullRe.MatchString(strings.TrimSpace(e.Text)) {
-		return bySentence("resolveMonsterPull (creature_movement_2024.go)", func(string) bool { return true }, "")
-	}
-	if onlyOwnMove(e.Text) {
-		return bySentence("readSpecialMove / grantSpecialMove", func(string) bool { return true }, "")
-	}
-	if monsterLightToggleRe.MatchString(e.Text) {
-		return bySentence("resolveLightToggle", func(string) bool { return true }, "")
-	}
-	if obscuringTextRe.MatchString(e.Text) {
-		return bySentence("resolveObscuringText", func(string) bool { return true }, "")
-	}
-	if usesAnotherEntry(e.Text) != nil {
-		return bySentence("usesAnotherEntry (uses another entry)", func(s string) bool { return usesAnotherEntry(s) != nil }, "")
-	}
-	for _, n := range names {
-		if monsterTextPatterns[n].MatchString(e.Text) && strings.Contains(n, "") {
-			if p := coveringPattern(e.Text, names); p != "" {
-				return bySentence(p, func(string) bool { return false }, "")
-			}
-		}
-	}
-	out := all("gm", "resolveMonsterEffectText: the GM resolves it")
-	for i := range out {
-		if legendaryOnceRe.MatchString(out[i].Sentence) {
-			out[i].Status, out[i].Rule = "applied", "legendaryOnceRe (LAOnce)"
-		}
-	}
-	return out
-}
-
-// specialMoveSentence: a sentence the movement owner reads as the entry's own move (grantSpecialMove runs on every entry).
-func specialMoveSentence(s string) bool {
-	_, ok := readSpecialMove(s, func(string) int { return 30 })
-	return ok
-}
-
-// attackOwnSentence: the attack line and the Hit's damage sentence, read by parseMonsterAttack.
-// Any other sentence of the Hit is read by the hit's owners (parseHitRider, hitAfterDamage, the save owner for "subjected to the
-// following effect"): what they don't apply is the residual unappliedHitRider reports, checked before this.
-func attackOwnSentence(s string) bool {
-	return strings.Contains(s, "Attack Roll:") || strings.HasPrefix(s, "Hit:") || saveOwnSentence(s)
-}
-
-// saveOwnSentence: the save line, its damage and half damage, read by parseSaveEffect.
-// A sentence of a Failure, Success or staged section is read by parseSaveEffect: what it doesn't apply is its Extra (the residual,
-// checked before this). The save line itself is read too. Sentences before the save line (an area's description, a trigger) are not.
-func saveOwnSentence(s string) bool {
-	if mfxSaveRe.MatchString(s) {
-		return true
-	}
-	for _, h := range []string{"Failure", "Success:", "First Failure:", "Second Failure:"} {
-		if strings.HasPrefix(s, h) {
-			return true
-		}
-	}
-	return false
-}
-
-func saveResidual(text string) string {
-	e, _ := parseSaveEffect(text)
-	return e.Extra + " " + e.Setup
 }
 
 // TestSRDMonsterSentenceCoverage: every sentence is applied or flagged to the GM; a sentence nothing reads and nothing shows (unhandled)

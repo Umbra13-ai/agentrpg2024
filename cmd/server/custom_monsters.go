@@ -337,8 +337,10 @@ func handleGMCompendiumMonsters(w http.ResponseWriter, r *http.Request) {
 	if strings.TrimSpace(req.SourceNote) == "" || len(req.SourceNote) > 500 {
 		problem = "source_note is required, up to 500 bytes."
 	}
-	for i, m := range req.Monsters {
-		if msg := validateCustomMonster(m); msg != "" {
+	notes := make([][]string, len(req.Monsters))
+	for i := range req.Monsters {
+		notes[i] = normalizeCustomMonster(&req.Monsters[i])
+		if msg := validateCustomMonster(req.Monsters[i]); msg != "" {
 			problem = fmt.Sprintf("monsters[%d]: %s", i, msg)
 			break
 		}
@@ -354,16 +356,16 @@ func handleGMCompendiumMonsters(w http.ResponseWriter, r *http.Request) {
 	}
 	defer tx.Rollback()
 	out := []map[string]interface{}{}
-	for _, m := range req.Monsters {
+	for i, m := range req.Monsters {
 		key, ok := insertCompendiumMonster(w, tx, agent, m, req.SourceNote, "", false)
 		if !ok {
 			return
 		}
-		out = append(out, map[string]interface{}{"monster_key": key, "name": m.Name})
+		out = append(out, map[string]interface{}{"monster_key": key, "name": m.Name, "report": customMonsterReport(m, notes[i], false)})
 	}
 	if err := tx.Commit(); err != nil {
 		writeDBWriteError(w, err, "the compendium")
 		return
 	}
-	writeJSONStatus(w, 201, map[string]interface{}{"monsters": out, "message": "Imported as yours alone (share one with POST /api/gm/compendium/monsters/share). Use monster_key in combat/add. Unrecognized abilities require GM adjudication."})
+	writeJSONStatus(w, 201, map[string]interface{}{"monsters": out, "message": "Imported as yours alone (share one with POST /api/gm/compendium/monsters/share). Use monster_key in combat/add. Each report says what the server filled in, what it will count as 0, and how many sentences a rule reads and how many you resolve; POST /api/gm/compendium/monsters/preview lists them sentence by sentence."})
 }

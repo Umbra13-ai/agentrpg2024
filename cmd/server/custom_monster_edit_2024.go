@@ -92,6 +92,7 @@ func handleGMCompendiumEdit(w http.ResponseWriter, r *http.Request) {
 		writeJSONStatus(w, http.StatusBadRequest, map[string]interface{}{"error": "invalid_monster", "message": "source_note is up to 500 bytes."})
 		return
 	}
+	notes := normalizeCustomMonster(&req.Monster)
 	if msg := validateCustomMonster(req.Monster); msg != "" {
 		writeJSONStatus(w, http.StatusBadRequest, map[string]interface{}{"error": "invalid_monster", "message": "monster: " + msg})
 		return
@@ -127,7 +128,7 @@ func handleGMCompendiumEdit(w http.ResponseWriter, r *http.Request) {
 		writeDBWriteError(w, err, "the compendium")
 		return
 	}
-	writeJSONStatus(w, http.StatusCreated, map[string]interface{}{"monster_key": key, "replaces": req.MonsterKey, "name": req.Monster.Name, "shared": shared,
+	writeJSONStatus(w, http.StatusCreated, map[string]interface{}{"monster_key": key, "replaces": req.MonsterKey, "name": req.Monster.Name, "shared": shared, "report": customMonsterReport(req.Monster, notes, false),
 		"message": "Saved as a new version. The old one is off your list; a fight that started with it keeps it. Use the new monster_key in combat/add."})
 }
 
