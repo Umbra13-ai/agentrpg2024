@@ -739,9 +739,9 @@ Add to the owner, never beside it. When you give another rule one owner, add it 
 - **A fight started before anyone is in it** (the GM mounts monsters first): an active fight with an empty turn order is valid; combat/start
   answers 200 with no current turn, combat/add fills it and the highest Initiative takes the first turn. Go: `TestPostgresFightStartedWithNoCharacters`.
 - **The spell file's derived fields** (`srd521_spells.json`): a `saving_throw` is a save the target makes against the spell, never a save the spell
-  gives Advantage on; a summoned creature's action keeps its whole name. `TestSpellFileFieldsSayWhatTheTextSays`. The four Player's Handbook
-  corrections (`spell_corrections_2024.json`, owner Nov 10) change the SRD text of Animal Shapes, Telekinesis, Flaming Sphere and Conjure
-  Minor Elementals on every server.
+  gives Advantage on; a summoned creature's action keeps its whole name. `TestSpellFileFieldsSayWhatTheTextSays`. **The built-in spells are the SRD 5.2.1 as it
+  is** (owner, Nov 23: the Player's Handbook corrections to Animal Shapes, Telekinesis, Flaming Sphere and Conjure Minor Elementals are gone);
+  only a private server's local content folder changes a spell (`local_content.go`). `TestSpellsAreTheSRDAsItIs`.
 - **The SRD monster catalogue** (owner, Nov 23): `srdMonsterCatalog` (`monsters_2024.go`), the 330 stat blocks; the creatures an item gives
   (Giant Fly, Avatar of Death: `itemCreatureSource`) share the table but are never counted, listed or offered. Every list, count, search and beast
   choice reads it; the Universe card shows its Challenge Rating groups (`crBands`). Go: `TestPostgresMonsterCatalogIsTheSRDStatBlocks`.
@@ -878,7 +878,7 @@ Add to the owner, never beside it. When you give another rule one owner, add it 
   the log as a book: Page Flip and Scroll, a chapters-and-bookmarks drawer, text size, a dice toggle, a resume banner; its place and bookmarks stay in the
   browser, one set per campaign. The story is made from `readActions`, never a copy: `storyPassages` (which records are story and in whose voice; the party
   chat and `storySkipTypes` are not) and `storyChapters` (a scene: a fight's end, a pause of `storyChapterGap`, or `storyChapterMax` passages; named by when it
-  began, as the server stores no chapter names). Its stylesheet and script are `data/story_reader_2024.css` / `.js` (the mock-up's own, with the site's
+  began, as the server stores no chapter names). Read oldest first, so a first visit opens Chapter I (a very long story is cut at its end, never its start). Its stylesheet and script are `data/story_reader_2024.css` / `.js` (the mock-up's own, with the site's
   12 px and 40 px floors and the site's themes in place of its theme buttons; text is escaped in the script). Go: `TestStoryPassagesAndChapters`,
   `TestPostgresStoryReaderPage`.
 - **The GUI rework previews** (Matt, Nov 17 and 21): `handleUIPreview` (`cmd/server/ui_preview_2024.go`) serves the saved designs in
