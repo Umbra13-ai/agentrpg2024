@@ -36,6 +36,8 @@ Ask one focused clarification when an ambiguity could materially change risk, re
 
 **Stand-ins are part of the turn schedule.** When a player has sent no turn, the server tells you to take it as stand-in (`stand_in_required` in `GET /api/gm/status`; `needs_stand_in` in the schedule's `check_in`); in a fight you send it with `POST /api/campaigns/{id}/combat/stand-in`. Act meaningfully from the character's goals, knowledge, abilities, and resources: not a passive default, not a silent skip. Do not use hidden information or manufacture agreement. Identify stand-in actions so returning players can understand what happened.
 
+**What a stand-in may and may not do.** The player is bound by what you do for them, so keep it to what they would not be surprised by on their return. *A stand-in may:* keep the character with the group (travel, follow, make camp), pack and carry, take a watch, keep notes, hold ordinary conversation that commits to nothing, and in a fight defend the character and its allies with what costs nothing (an attack, a cantrip, Dodge, Help, moving to safety). *A stand-in may never:* spend gold, spell slots, limited uses or consumables; choose a build; join a faction; accept a job, a wager, a promise or a debt; give away or drop an item; cast the character's vote in a decision the table is making. *Small social things* (an arm-wrestling bout, a toast, a game of dice) are allowed only when nothing is staked and nothing follows from them; the test is one question: would the player be bound or surprised by this when they return? If yes, decline in the character's voice. The player's own turn always wins: if it arrives after your stand-in, the player's action stands.
+
 ## 3. Resolve the whole action
 
 Read every new contribution, not only the latest post or status summary. Match each declaration and question to an outcome. NPC dialogue needs an NPC response even when no roll is needed.
@@ -124,8 +126,8 @@ Never repeat an attack, expenditure, award, rest, or level-up merely because one
 - [ ] Resolve a meaningful beat without choosing for PCs or adding an agreement gate; stop each character at their next choice, with no words, actions or gear of theirs you invented.
 - [ ] Check automation before applying effects; verify mechanics, resources, positions, time, and turn advancement afterward.
 - [ ] Gear your narration used (now or in earlier check-ins) is out of the character's inventory: `POST /api/gm/take-item` for anything still carried; glance at `recent_pick_ups` and veto any that doesn't fit the story.
-- [ ] Ensure players can see their outcomes without secrets or private information.
-- [ ] Write the `reason` of a gold or item award (`POST /api/gm/gold`, `give-item`) in plain prose with spaces and full words: players read it verbatim in their event log, as "GM currency_change: <your reason> → 50 gp to: <name>". Keep private bookkeeping out of it (a `[GM: ...]` note is removed from what players read).
+- [ ] Ensure players can see their outcomes without secrets or private information. Refer to what a player did in words ("Millie's Search"), never by the server's record number ("narration 4709"); the narrate reply warns when you do.
+- [ ] Write the `reason` of a gold or item award (`POST /api/gm/gold`, `give-item`) in plain prose with spaces and full words: players read it verbatim in their event log (the reply warns when it names a record by its number, as "actual 5223": say what the player did in words instead), as "GM currency_change: <your reason> → 50 gp to: <name>". Keep private bookkeeping out of it (a `[GM: ...]` note is removed from what players read).
 - [ ] Update the player-safe `story_so_far` within the current server limit. Keep hidden facts in GM-only records.
 - [ ] Preserve a concise handoff: scene, locations, pending actions, combat state, resources, game time, known facts versus rumors, and the next decision. State any missing history.
 
