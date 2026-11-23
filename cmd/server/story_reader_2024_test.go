@@ -69,7 +69,7 @@ func TestStoryPassagesAndChapters(t *testing.T) {
 	if len(chs) != 3 {
 		t.Fatalf("chapters: %d (a fight's end and a nine-hour pause each begin one)", len(chs))
 	}
-	if len(chs[0].Entries) != 5 || len(chs[1].Entries) != 1 || chs[0].Num != "Chapter I" || chs[2].Num != "Chapter III" {
+	if len(chs[0].Entries) != 5 || len(chs[1].Entries) != 1 || chs[0].Num != "Part 1" || chs[2].Num != "Part 3" {
 		t.Errorf("the chapters: %d / %d passages, %q ... %q", len(chs[0].Entries), len(chs[1].Entries), chs[0].Num, chs[2].Num)
 	}
 	if chs[0].Title != "Monday morning" || chs[2].Title != "Monday evening" || !strings.Contains(chs[0].ReadTime, "5 passages") {
@@ -85,9 +85,6 @@ func TestStoryPassagesAndChapters(t *testing.T) {
 	}
 	if c := storyChapters(long, time.UTC); len(c) != 2 || len(c[0].Entries) != storyChapterMax {
 		t.Errorf("a long scene: %d chapters", len(c))
-	}
-	if roman(4) != "IV" || roman(14) != "XIV" || roman(1994) != "MCMXCIV" {
-		t.Errorf("numerals: %s %s %s", roman(4), roman(14), roman(1994))
 	}
 }
 

@@ -6,9 +6,9 @@ package main
 // settings are kept in the browser (per campaign). The site's theme menu replaces the mock-up's own four theme buttons.
 //
 // The story is made from the action log (readActions, the one reader of it), never from a copy: `storyPassages` says which records are the
-// story and in whose voice, `storyChapters` where a new chapter begins. The server stores no chapters, so a chapter is a scene: it ends when a
+// story and in whose voice, `storyChapters` where a new chapter begins. The server stores no chapters, so what the reader shows is a numbered Part ("Part 3 · Tuesday evening", never called a chapter: it is a scene cut by the clock): it ends when a
 // fight ends, after a gap of more than `storyChapterGap` between passages, or at `storyChapterMax` passages. It is read from the beginning: a first visit opens
-// Chapter I, page 1, a returning reader is put back where they stopped, and "Latest" goes to the end. Players' words only (playerText,
+// Part 1, page 1, a returning reader is put back where they stopped, and "Latest" goes to the end. Players' words only (playerText,
 // as everywhere the log is shown), a private campaign behind its watch password (canWatch), the party chat and the log's bookkeeping left out.
 
 import (
@@ -197,7 +197,7 @@ func storyChapters(ps []storyPassage, zone *time.Location) []storyChapter {
 		mins := max(1, (words+storyWordsPerMin-1)/storyWordsPerMin)
 		begun := c[0].at.In(zone)
 		out = append(out, storyChapter{
-			ID: fmt.Sprintf("ch%d", i+1), Num: fmt.Sprintf("Chapter %s", roman(i+1)), Title: storyTitle(begun),
+			ID: fmt.Sprintf("ch%d", i+1), Num: fmt.Sprintf("Part %d", i+1), Title: storyTitle(begun),
 			Location: begun.Format("Jan 2, 3:04 PM MST"), ReadTime: fmt.Sprintf("%d %s · %d min read", len(c), map[bool]string{true: "passage", false: "passages"}[len(c) == 1], mins), Entries: c,
 		})
 	}
@@ -217,20 +217,6 @@ func storyTitle(begun time.Time) string {
 		part = "evening"
 	}
 	return begun.Weekday().String() + " " + part
-}
-
-func roman(n int) string {
-	var b strings.Builder
-	for _, r := range []struct {
-		v int
-		s string
-	}{{1000, "M"}, {900, "CM"}, {500, "D"}, {400, "CD"}, {100, "C"}, {90, "XC"}, {50, "L"}, {40, "XL"}, {10, "X"}, {9, "IX"}, {5, "V"}, {4, "IV"}, {1, "I"}} {
-		for n >= r.v {
-			b.WriteString(r.s)
-			n -= r.v
-		}
-	}
-	return b.String()
 }
 
 // storyPage renders the reader: the mock-up's markup with the story in window.__STORY__.
@@ -283,7 +269,7 @@ func storyReaderMarkup(campaignID int, name, gmName string, total int, withBack 
         <div id="topbar-subtitle" style="font-size:0.78rem; color:var(--text-secondary); margin-top:0.1rem;"></div>
       </div>
       <div style="display:flex; align-items:center; gap:0.4rem; flex-wrap:wrap;">
-        <button class="pill-btn" id="btn-toc" type="button">📑 Chapters</button>
+        <button class="pill-btn" id="btn-toc" type="button">📑 Parts</button>
         <button class="pill-btn" id="btn-mode-flip" type="button">📖 Flip</button>
         <button class="pill-btn" id="btn-mode-scroll" type="button">📜 Scroll</button>
       </div>
@@ -318,13 +304,13 @@ func storyReaderMarkup(campaignID int, name, gmName string, total int, withBack 
   <p style="color:var(--text-secondary); margin-top:0.4rem;">The story has not begun yet. When the GM narrates and the players act, it is written here as a book.</p>
 ` + back + `
 </div>
-<div class="toc-backdrop hidden" id="toc-backdrop" role="dialog" aria-modal="true" aria-label="Chapters and Bookmarks">
+<div class="toc-backdrop hidden" id="toc-backdrop" role="dialog" aria-modal="true" aria-label="Parts and Bookmarks">
   <div class="toc-drawer">
     <div style="display:flex; align-items:center; justify-content:space-between; border-bottom:1px solid var(--border-subtle); padding-bottom:0.65rem;">
       <h2 class="font-rpg" style="font-size:1.05rem; color:var(--accent-gold);">Campaign Chronicle</h2>
       <button class="btn btn-ghost" id="btn-close-toc" type="button">Close</button>
     </div>
-    <div><div style="font-size:0.75rem; font-weight:700; color:var(--text-muted); text-transform:uppercase; letter-spacing:0.06em; margin-bottom:0.45rem;">Chapters</div>
+    <div><div style="font-size:0.75rem; font-weight:700; color:var(--text-muted); text-transform:uppercase; letter-spacing:0.06em; margin-bottom:0.45rem;">Parts</div>
       <div id="toc-chapters" style="display:flex; flex-direction:column; gap:0.45rem;"></div></div>
     <div><div style="font-size:0.75rem; font-weight:700; color:var(--text-muted); text-transform:uppercase; letter-spacing:0.06em; margin-bottom:0.45rem;">Starred Bookmarks</div>
       <div id="toc-bookmarks" style="display:flex; flex-direction:column; gap:0.45rem;"></div></div>
