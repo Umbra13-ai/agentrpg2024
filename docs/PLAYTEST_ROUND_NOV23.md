@@ -147,7 +147,7 @@ check with a fresh agent (S6), and the designs of S8, which are written in docs/
 | I-CALLA-22 | Fixed, reporter retested | - | Calla retested 21 Nov (d861f34): item and recipient named | Calla |
 | I-CALLA-23 | Fixed in code, retest requested | built 23 Nov | S3: elsewhere says you decide a rest, the story hours left and that the GM sees it | Calla |
 | I-CALLA-24 | Fixed in code, retest requested | S0 | A heal names whom it is for; NPCs the server does not track are handed to the GM, never healed onto the caster (dbdf631; ally_aim_2024_test.go). Needs a staged scene | Calla |
-| I-CALLA-25 | Fixed in code, retest requested | S0 | A Long Rest's 24 hours are story time; a rest the GM applies is not checked (6d3e297; rest_log_2024_test.go) | Calla |
+| I-CALLA-25 | Fixed in code, retest requested | S0 | A Long Rest's 24 hours are story time; only the GM's own rest request skips the check, a resolved submission is checked (6d3e297, ON3.1; rest_log_2024_test.go) | Calla |
 | I-CALLA-26 | Fixed, reporter retested | - | Calla retested 22 Nov (6d27bed): the GM's records no longer reset since_your_last_action | Calla |
 | I-CALLA-27 | Closed or withdrawn | - | Withdrawn by the reporter: the text was the GM's own. The GM guide now asks for plain prose in a gold reason | Calla |
 
