@@ -27,7 +27,6 @@ import (
 	"database/sql"
 	"encoding/json"
 	"fmt"
-	"html"
 	"net/http"
 	"os"
 	"strings"
@@ -815,49 +814,6 @@ func handleCompanionName(w http.ResponseWriter, r *http.Request) {
 		writeAction(db, c.LobbyID, c.OwnerID, "companion", fmt.Sprintf("%s is now called %s.", c.Name, name), "")
 	}
 	writeJSONStatus(w, http.StatusOK, map[string]interface{}{"success": true, "companion": companionView(c)})
-}
-
-// companionBoxesHTML: the campaign page's row of companion boxes (name, what it is, owner, HP or where it is).
-func companionBoxesHTML(lobbyID int) string {
-	comps := campaignCompanions(lobbyID)
-	if len(comps) == 0 {
-		return ""
-	}
-	var b strings.Builder
-	b.WriteString(`<div class="companion-row"><span class="box-label companion-row-label">Companions</span><div class="party-rail">`)
-	for _, c := range comps {
-		var owner string
-		db.QueryRow(`SELECT name FROM characters WHERE id = $1`, c.OwnerID).Scan(&owner)
-		what := c.Kind
-		if c.Kind == "familiar" || c.Kind == "pet" {
-			var mname string
-			monsterQueryRow(`SELECT name FROM monsters WHERE slug = $1`, c.Form).Scan(&mname)
-			if mname != "" {
-				what = mname + " " + c.Kind
-			}
-		} else if c.Kind == "steed" {
-			what = "Otherworldly Steed"
-		} else if c.Kind == "summon" {
-			what = titleCase(strings.ReplaceAll(c.Form, "-", " ")) + " (summon)"
-		}
-		if c.CreatureType != "" && c.Kind != "summon" {
-			what += ", " + titleCase(c.CreatureType)
-		}
-		title := c.Name
-		if c.Nickname != "" {
-			title = c.Nickname
-		}
-		status := fmt.Sprintf(`<p class="hp-line %s">HP: %d/%d</p>`, game.MonsterHealth(c.HP, c.MaxHP), c.HP, c.MaxHP)
-		cls := "party-card companion-box"
-		if c.Status == "dismissed" {
-			status = `<p class="class-info">in its pocket dimension</p>`
-			cls += " inactive"
-		}
-		b.WriteString(fmt.Sprintf(`<div class="%s" title="%s"><h4>%s</h4><p class="class-info">%s</p><p class="class-info">of %s</p>%s</div>`,
-			cls, html.EscapeString(strings.Join(traitNames(c), ", ")), html.EscapeString(title), html.EscapeString(what), html.EscapeString(owner), status))
-	}
-	b.WriteString(`</div></div>`)
-	return b.String()
 }
 
 func traitNames(c companion) []string {

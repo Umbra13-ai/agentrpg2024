@@ -342,55 +342,134 @@ html, body {
     align-items: start;
   }
 }
-/* Party Rail */
+/* Party & Initiative cards (owner, Nov 23: the cards proposal; its sizes under 12 px raised to the floor). live_cards_2024.go renders them. */
 .party-rail {
   display: flex;
-  gap: 0.7rem;
+  flex-direction: column;
+  gap: 0.5rem;
   width: 100%;
   max-width: 100%;
-  overflow-x: auto;
-  -webkit-overflow-scrolling: touch;
-  padding-bottom: 0.35rem;
-  scroll-snap-type: x mandatory;
-}
-@media (min-width: 1024px) {
-  .party-rail {
-    flex-direction: column;
-    overflow-x: visible;
-    padding-bottom: 0;
-  }
 }
 .party-card {
-  min-width: 230px;
-  scroll-snap-align: start;
+  width: 100%;
+  min-width: 0;
   background: var(--bg-surface);
   border: 1px solid var(--border-subtle);
   border-radius: var(--radius-md);
-  padding: 0.8rem;
+  padding: 0.55rem 0.6rem;
   cursor: pointer;
   transition: all 0.16s ease;
 }
-@media (min-width: 1024px) { .party-card { min-width: 0; width: 100%; } }
 .party-card:hover { border-color: var(--border-strong); transform: translateY(-1px); }
 .party-card.is-turn {
   border-color: var(--accent-gold);
   background: linear-gradient(135deg, var(--accent-gold-soft), var(--bg-surface));
-  box-shadow: 0 0 18px var(--accent-gold-soft);
+  box-shadow: 0 0 16px var(--accent-gold-soft);
 }
 .party-card.is-gm {
   border-color: var(--accent-arcane);
   background: linear-gradient(135deg, var(--accent-arcane-soft), var(--bg-surface));
 }
-.hp-bar {
-  width: 100%;
-  height: 7px;
-  background: var(--bg-code);
-  border-radius: 999px;
+.party-card.is-inspected { box-shadow: 0 0 0 1px var(--accent-arcane), 0 8px 20px rgba(0, 0, 0, 0.35); }
+.party-card.is-dead { opacity: 0.72; }
+.party-card-row { display: flex; align-items: flex-start; gap: 0.65rem; min-width: 0; }
+.party-avatar-col { display: flex; flex-direction: column; align-items: center; gap: 0.22rem; flex-shrink: 0; }
+.party-avatar-wrap { position: relative; display: inline-flex; }
+.party-avatar {
+  width: 38px;
+  height: 38px;
+  border-radius: 50%;
+  border: 1.5px solid var(--border-strong);
+  background: var(--bg-elevated);
+  display: grid;
+  place-items: center;
+  font-size: 1.15rem;
   overflow: hidden;
-  margin-top: 0.45rem;
-  border: 1px solid rgba(255, 255, 255, 0.06);
+  flex-shrink: 0;
 }
-.hp-fill { height: 100%; border-radius: 999px; transition: width 0.25s ease; }
+.party-avatar img { width: 100%; height: 100%; object-fit: cover; }
+.party-card.is-dead .party-avatar img { filter: grayscale(1); }
+.insp-pip {
+  position: absolute;
+  top: -5px;
+  right: -6px;
+  width: 18px;
+  height: 18px;
+  border-radius: 50%;
+  background: var(--accent-gold);
+  color: #140f06;
+  font-size: 0.75rem;
+  font-weight: 800;
+  line-height: 1;
+  display: grid;
+  place-items: center;
+  border: 1.5px solid var(--bg-surface);
+  box-shadow: 0 0 8px var(--accent-gold-soft);
+}
+.party-turn { font-size: 0.75rem; padding: 0.04rem 0.4rem; line-height: 1.25; }
+.party-meta-col { flex: 1; min-width: 0; }
+.party-name { display: block; font-size: 0.9rem; line-height: 1.25; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.party-meta { font-size: 0.75rem; color: var(--text-secondary); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; margin-top: 0.08rem; }
+.party-stats-line {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.35rem;
+  font-size: 0.78rem;
+  margin-top: 0.28rem;
+}
+.party-temp { color: var(--accent-arcane); font-weight: 600; margin-left: 0.2rem; }
+.party-hd { color: var(--text-secondary); font-size: 0.75rem; }
+.party-ac { color: var(--accent-gold); font-weight: 600; }
+.hp-bar-wrap {
+  display: flex;
+  align-items: center;
+  gap: 2px;
+  height: 5px;
+  border-radius: 999px;
+  background: rgba(255, 255, 255, 0.08);
+  overflow: hidden;
+  margin-top: 0.38rem;
+}
+.hp-fill-seg { height: 100%; border-radius: 999px; transition: width 0.2s ease; }
+.thp-fill-seg { height: 100%; background: var(--accent-arcane); border-radius: 999px; }
+.party-bottom-row { display: flex; align-items: center; justify-content: space-between; gap: 0.4rem; margin-top: 0.42rem; min-height: 22px; }
+.cond-list { display: flex; flex-wrap: wrap; align-items: center; gap: 0.28rem; min-width: 0; flex: 1; }
+.comp-group { display: flex; flex-wrap: wrap; justify-content: flex-end; gap: 0.28rem; flex-shrink: 0; margin-left: auto; }
+.companion-pill {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.35rem;
+  font-size: 0.75rem;
+  padding: 0.12rem 0.45rem;
+  border-radius: 999px;
+  background: var(--bg-elevated);
+  border: 1px solid var(--border-subtle);
+  color: var(--text-secondary);
+  white-space: nowrap;
+}
+.party-comp-hp { color: var(--accent-emerald); font-weight: 600; }
+.cond-pill {
+  display: inline-flex;
+  align-items: center;
+  font-size: 0.75rem;
+  font-weight: 700;
+  padding: 0.08rem 0.42rem;
+  border-radius: 999px;
+  white-space: nowrap;
+  border: 1px solid transparent;
+}
+.cond-arcane { background: var(--accent-arcane-soft); color: var(--accent-arcane); border-color: rgba(105, 155, 247, 0.35); }
+.cond-gold { background: var(--accent-gold-soft); color: var(--accent-gold); border-color: rgba(229, 184, 92, 0.35); }
+.cond-crimson { background: var(--accent-crimson-soft); color: var(--accent-crimson); border-color: rgba(224, 86, 91, 0.38); }
+.cond-dead { background: rgba(127, 122, 111, 0.2); color: var(--text-muted); border-color: rgba(127, 122, 111, 0.4); text-decoration: line-through; }
+.cond-dying { background: var(--accent-crimson-soft); color: var(--accent-crimson); border-color: rgba(224, 86, 91, 0.45); gap: 0.32rem; }
+.ds-track { display: inline-flex; align-items: center; gap: 2px; }
+.ds-dot { width: 7px; height: 7px; border-radius: 50%; border: 1px solid rgba(255, 255, 255, 0.35); background: transparent; display: inline-block; }
+.ds-dot.is-succ { background: var(--accent-emerald); border-color: var(--accent-emerald); }
+.ds-dot.is-fail { background: var(--accent-crimson); border-color: var(--accent-crimson); }
+.ds-sep { font-size: 0.75rem; opacity: 0.55; margin: 0 1px; }
 /* Interactive Dice Tray */
 .dice-tray {
   display: flex;

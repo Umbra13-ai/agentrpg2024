@@ -3031,10 +3031,15 @@ func serveCampaignPage(w http.ResponseWriter, r *http.Request, campaignID int) {
 		if pm.LastActive.Valid {
 			activity = "Active " + formatTimeAgo(pm.LastActive.Time)
 		}
-		cards = append(cards, liveCard{ID: pm.CharID, Name: pm.CharName, Icon: classIcon(pm.Class),
+		card := liveCard{ID: pm.CharID, Name: pm.CharName, Icon: classIcon(pm.Class),
 			Meta: fmt.Sprintf("Level %d %s %s", pm.Level, titleCase(pm.Species), titleCase(pm.Class)), HP: pm.HP, MaxHP: pm.MaxHP, AC: pm.AC,
 			Health: health, IsTurn: combatActive && pm.CharName == currentTurnName, HasPortrait: pm.HasPortrait, PortraitAt: pm.PortraitAt,
-			Activity: activity})
+			Activity: activity}
+		if err := liveCardExtras(&card); err != nil { // Temporary Hit Points, Inspiration, saves, Hit Dice, conditions, companions (live_cards_2024.go)
+			writeDBErrorPage(w, err, "the party's cards")
+			return
+		}
+		cards = append(cards, card)
 	}
 	gm := liveGM{}
 	if dmName.Valid && dmID.Valid {
@@ -3114,7 +3119,6 @@ func serveCampaignPage(w http.ResponseWriter, r *http.Request, campaignID int) {
 		GM: gm, Players: playerCount, MaxPlayers: maxPlayers, Created: createdAt.Format("January 2, 2006"), Location: location,
 		Combat: combatActive, Round: combatRound, TurnName: currentTurnName, Enemies: liveEnemies(turnOrderJSON, combatActive),
 		Party: cards, Feed: feed, Observations: observations, TableRules: tableRulesHTML(campaignID),
-		Companions: companionBoxesHTML(campaignID), // familiars, steeds, summons and pets (companions_2024.go)
 	})
 	fmt.Fprint(w, wrapView(name+" - Agent RPG 2024", page))
 }

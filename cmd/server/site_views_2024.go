@@ -31,6 +31,13 @@ type liveCard struct {
 	HasPortrait bool
 	PortraitAt  int64
 	Activity    string
+	// the rest of the card (live_cards_2024.go: liveCardExtras)
+	TempHP               int
+	Inspired             bool
+	HitDice              string // the Hit Dice left, "2d8"
+	DeathSucc, DeathFail int
+	Conds                []liveCond
+	Comps                []liveComp
 }
 
 type liveGM struct {
@@ -65,7 +72,7 @@ type liveTable struct {
 	Party                      []liveCard
 	Feed                       []liveFeedItem
 	Observations               []liveObservation
-	TableRules, Companions     string // HTML from their owners (table_rules.go, companions_2024.go)
+	TableRules                 string // HTML from its owner (table_rules.go)
 }
 
 var trailingNumber = regexp.MustCompile(`\s+\d+$`)
@@ -257,27 +264,8 @@ func liveTablePage(t liveTable) string {
         </a>`, t.GM.ID, e(t.GM.Name)))
 	}
 	for _, c := range t.Party {
-		cls := "party-card"
-		turn := ""
-		if c.IsTurn {
-			cls += " is-turn"
-			turn = `<span class="badge badge-recruiting">Turn</span>`
-		}
-		b.WriteString(fmt.Sprintf(`
-        <a class="%s" href="/character/%d" data-inspect-char="%d" title="%s">
-          <div style="display:flex; align-items:center; justify-content:space-between; gap:0.35rem;">
-            <strong class="font-rpg" style="font-size:0.88rem;">%s %s</strong>
-            %s
-          </div>
-          <div style="font-size:0.75rem; color:var(--text-secondary); margin-top:0.15rem;">%s</div>
-          <div style="display:flex; justify-content:space-between; font-size:0.75rem; margin-top:0.35rem;">
-            <span class="font-mono">HP %d/%d · <span class="%s">%s</span></span>
-            <span class="font-mono" style="color:var(--text-muted);">AC %d</span>
-          </div>
-          <div class="hp-bar"><div class="hp-fill" style="width:%d%%; background:%s;"></div></div>
-        </a>`, cls, c.ID, c.ID, e(c.Activity), c.Icon, e(c.Name), turn, e(c.Meta), c.HP, c.MaxHP, c.Health, c.Health, c.AC, pct(c.HP, c.MaxHP), hpFillColor(c.Health)))
+		b.WriteString(liveCardHTML(c))
 	}
-	b.WriteString(t.Companions)
 	if t.GM.Name == "" && len(t.Party) == 0 {
 		b.WriteString(`<div class="party-card"><div style="font-size:0.8rem; color:var(--text-secondary);">No one has joined yet.</div></div>`)
 	}
@@ -455,6 +443,7 @@ func liveScript(t liveTable) string {
     box.textContent = '';
     if (!c) { box.appendChild(el('div', null, 'No character has joined yet.')); box.firstChild.style.cssText = 'font-size:0.82rem; color:var(--text-secondary);'; return; }
     kept.selected = c.id; keep();
+    document.querySelectorAll('[data-inspect-char]').forEach(function (x) { x.classList.toggle('is-inspected', Number(x.getAttribute('data-inspect-char')) === c.id); });
     var head = el('div'); head.style.cssText = 'display:flex; align-items:center; justify-content:space-between; gap:0.5rem; margin-bottom:0.6rem;';
     var who = el('div');
     var nm = el('div', 'font-rpg', c.name); nm.style.cssText = 'font-size:1rem; color:var(--accent-gold);';
