@@ -189,3 +189,24 @@ func TestPostgresBefuddlementAndGlibness(t *testing.T) {
 		}
 	}
 }
+
+// Reincarnate brings back a dead creature in a new body (a row of revivalSpells, the one revival owner), its species rolled on the spell's table.
+func TestPostgresReincarnateRevives(t *testing.T) {
+	testPostgres(t)
+	_, toks, _, chars, _ := pgFightWith(t, "reincarnate", 2)
+	tok, druid, ally := toks[0], chars[0], chars[1]
+	pgExec(t, `UPDATE characters SET class = 'druid', subclass = NULL, level = 9, wis = 20, hp = max_hp, action_used = false, spell_slots_used = '{}'::jsonb,
+		known_spells = '["reincarnate"]'::jsonb, prepared_spells = '["reincarnate"]'::jsonb,
+		inventory = '[{"id":"i1","name":"Druidic Focus","type":"focus","spellcasting_focus":true},{"id":"i2","name":"Rare Oils","quantity":1,"value_gp":1000}]'::jsonb WHERE id = $1`, druid)
+	if _, err := killCharacter(ally); err != nil {
+		t.Fatal(err)
+	}
+	c, j := pgCall(t, "POST", "/api/action", tok, map[string]interface{}{"action": "cast", "spell_slug": "reincarnate", "target_id": ally, "slot_level": 5})
+	res := fmt.Sprint(j["result"]) + fmt.Sprint(j["message"])
+	var dead bool
+	var hp int
+	db.QueryRow(`SELECT COALESCE(is_dead,false), hp FROM characters WHERE id = $1`, ally).Scan(&dead, &hp)
+	if c != 200 || dead || hp < 1 || !strings.Contains(res, "the new body is") {
+		t.Errorf("Reincarnate on a dead ally: %d, dead %v, hp %d: %q", c, dead, hp, res)
+	}
+}

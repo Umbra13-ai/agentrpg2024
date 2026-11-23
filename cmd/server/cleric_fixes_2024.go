@@ -227,17 +227,29 @@ func divineWord(charID, lobby int, saveDC int, targets []int) string {
 	return " Divine Word: " + strings.Join(lines, "; ") + "."
 }
 
-// ---------------------------------------------------------------- Revivify, Raise Dead, Resurrection, True Resurrection
+// ---------------------------------------------------------------- Revivify, Raise Dead, Reincarnate, Resurrection, True Resurrection
 
 var revivalSpells = map[string]struct {
 	Full    bool   // all Hit Points, else 1
 	Penalty bool   // the -4 penalty to D20 Tests, down by 1 each Long Rest
 	Limit   string // how long dead
+	NewBody bool   // a new body of a species rolled on the spell's table (Reincarnate): the server rolls it, the GM applies the species' traits
 }{
-	"revivify":          {false, false, "within the last minute"},
-	"raise-dead":        {false, true, "no longer than 10 days"},
-	"resurrection":      {true, true, "no more than a century"},
-	"true-resurrection": {true, false, "no longer than 200 years"},
+	"revivify":          {false, false, "within the last minute", false},
+	"raise-dead":        {false, true, "no longer than 10 days", false},
+	"resurrection":      {true, true, "no more than a century", false},
+	"true-resurrection": {true, false, "no longer than 200 years", false},
+	"reincarnate":       {false, false, "no longer than 10 days", true}, // the text names no Hit Points: 1, as Raise Dead; the GM may set more
+}
+
+// reincarnateSpecies rolls the new body's species on the spell's 1d10 table (1: roll again).
+func reincarnateSpecies() string {
+	table := map[int]string{2: "Dragonborn", 3: "Dwarf", 4: "Elf", 5: "Gnome", 6: "Goliath", 7: "Halfling", 8: "Human", 9: "Orc", 10: "Tiefling"}
+	for {
+		if s, ok := table[game.RollDie(10)]; ok {
+			return s
+		}
+	}
 }
 
 // reviveSpell brings a dead character back ("" for other spells or no dead target).
@@ -279,6 +291,9 @@ func reviveSpell(charID, lobby int, key string, spell SRDSpell, targets []int) s
 		}
 		removeConditionsWhere(0, id, func(r conditionRecord) bool { return r.Condition == "unconscious" || r.Condition == "poisoned" })
 		line := fmt.Sprintf("%s returns to life with %d Hit Point%s (dead %s: the GM confirms)", name, hp, map[bool]string{true: "", false: "s"}[hp == 1], r.Limit)
+		if r.NewBody {
+			line += fmt.Sprintf("; the new body is %s (rolled on the spell's table, or the GM chooses another playable species): the GM applies its traits in place of the old species'", reincarnateSpecies())
+		}
 		if r.Penalty {
 			addSpellEffect(lobby, id, charID, spell.Name, "revival_penalty", "4", 999999, "", 0)
 			line += "; coming back is an ordeal: -4 to D20 Tests, 1 less after each Long Rest (the GM applies it)"
