@@ -766,6 +766,13 @@ Add to the owner, never beside it. When you give another rule one owner, add it 
   the request names is the target or the cast says the GM applies it, never silently the caster: FUNC-11); `wardsHeld` / `endHeldWards` (a cast that makes Invisibility or Sanctuary keeps it: FUNC-03); `withoutRepeats` (a creature named
   by both `target_id` and `target_ids` is one target: FUNC-10); `killInstantly` (`hit_points_2024.go`: an effect that kills without damage is negated by Death Ward: FUNC-12). Go: `spell_families_2024_test.go`,
   `chosen_damage_type_2024_test.go`, `spell_wards_targets_2024_test.go`.
+  The second notes (Nov 23): **a damaging spell's own condition** is read from its text, `castConditionOf` / `applyCastCondition` (`spell_cast_conditions_2024.go`: on a hit or a failed save,
+  its duration from the text through the rider duration owner, its repeated save; a character's cast at a monster or a character, and a monster's cast through `saveEffect`; Sunburst, Sunbeam,
+  Contagion, Black Tentacles, Weird, Storm of Vengeance, Ray of Sickness on a hit); **a spell rider lasts as its text says** (`spellRiderEnds`, `addCombatEffectUntil` with `combat_effects.ends`,
+  ended by `expireCombatEffectsOf` at a turn start and `expireCombatEffectsAtTurnEnd`, a turn-end hook); **a lasting spell aimed at a creature only characters' effects reach** is refused before
+  anything is spent (`lastingKindOf`, `lastingTargetRefusal`; Bless, Shield of Faith, Haste, Heroism, Resistance and Guidance take `lastingSpellTargets` too); **Befuddlement** is the `befuddled`
+  record (`applyCastMarker`, `cannotCastSpells` for a character's cast and `monsterCastBlocked`, `endBefuddlementBySpell`); **Glibness** is the check owner's floor (`checkWhy.Floor`, `floored`).
+  Go: `spell_batch2_2024_test.go`.
 - **What a pick in the character builder brings with it** (agent report, Nov 23; `cmd/server/builder_followups_2024.go`): a background's or a species' follow-up question is named on its option before it is picked
   (`followUpOfBackground`, `followUpOfSpecies`, from `featFollowUps` and the species' Needs, with the fields to send in one request); the class skills a background gives are marked in the class step before
   a background is chosen (`skillSources`, `given_by_backgrounds`) and on each background's option (`classSkillsUsedBy`, `uses_up_class_skills`); a request that raises `choices_remaining` says why in
