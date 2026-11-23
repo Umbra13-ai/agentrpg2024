@@ -55,6 +55,18 @@ func maxInt(a, b int) int {
 	return b
 }
 
+// halfOnMiss: why a spell attack that misses still deals half its damage ("" when it deals none): Potent Cantrip (a cantrip), or the spell's own
+// first damage part ("On a miss, the arrow splashes the target with acid for half as much of the initial damage only": Acid Arrow's on_miss).
+func halfOnMiss(charID int, spell SRDSpell) string {
+	if len(spell.DamageParts) > 0 && spell.DamageParts[0].OnMiss == "half" {
+		return "the spell's splash"
+	}
+	if potentCantrip(charID, spell) {
+		return "Potent Cantrip"
+	}
+	return ""
+}
+
 func isSpellAttack(spell SRDSpell) bool {
 	return spell.SavingThrow == "" && strings.Contains(strings.ToLower(spell.Description), "spell attack")
 }
@@ -144,17 +156,32 @@ func resolveSpellOnMonster(charID int, spellKey string, spell SRDSpell, damageDi
 		return fmt.Sprintf(" Against %s: %s %d of %d hit for %d %s damage. %s%s", name, strings.Join(beams, " "), hits, count, total, dtype, text, dealRiders(lobbyID, monster, rs, anyCrit))
 	}
 
+	hybrid := isHybridSpell(spell) // Ice Knife: the shard's attack, then the explosion's save, hit or miss
+	if hybrid {
+		ar, out, rollNote := spellAttack()
+		if !out.Hit {
+			lines = append(lines, fmt.Sprintf(" %s%s.", ar.LineForAttacker(attackName, out), rollNote))
+		} else {
+			d := rolled
+			if out.Critical {
+				d += game.RollDamage(damageDice, false)
+			}
+			text, _ := damageMonster(lobbyID, monster, d, dtype)
+			text += hitWithRiders(lobbyID, charID, monster, out.Critical)
+			lines = append(lines, fmt.Sprintf(" %s%s, %d %s damage. %s", ar.LineForAttacker(attackName, out), rollNote, d, dtype, text))
+		}
+	}
 	switch {
-	case isSpellAttack(spell):
+	case !hybrid && isSpellAttack(spell):
 		ar, out, rollNote := spellAttack()
 		if _, seeking := seekingSpell.LoadAndDelete(charID); seeking && !out.Hit {
 			out = ar.Judge(game.RollDie(20)) // Seeking Spell: reroll a missed attack and use the new roll
 			rollNote += " (Seeking Spell: the miss is rerolled)"
 		}
 		if !out.Hit {
-			if potentCantrip(charID, spell) && rolled/2 > 0 { // F119: Potent Cantrip
+			if why := halfOnMiss(charID, spell); why != "" && rolled/2 > 0 { // F119: Potent Cantrip; Acid Arrow's splash
 				text, _ := damageMonster(lobbyID, monster, rolled/2, dtype)
-				return fmt.Sprintf(" %s%s (Potent Cantrip: half damage, %d %s). %s", ar.LineForAttacker(attackName, out), rollNote, rolled/2, dtype, text)
+				return fmt.Sprintf(" %s%s (%s: half damage, %d %s). %s", ar.LineForAttacker(attackName, out), rollNote, why, rolled/2, dtype, text)
 			}
 			return fmt.Sprintf(" %s%s.", ar.LineForAttacker(attackName, out), rollNote)
 		}
@@ -166,8 +193,9 @@ func resolveSpellOnMonster(charID int, spellKey string, spell SRDSpell, damageDi
 			d += dx
 			rollNote += dt
 		}
-		text, _ := damageMonster(lobbyID, monster, d, dtype)
-		text += hitWithRiders(lobbyID, charID, monster, out.Critical) // Hex, Hunter's Mark (hit_riders_2024.go)
+		hurt, _ := hurtMonster(lobbyID, monster, d, dtype, false)
+		text := hurt.Text + drainHeal(charID, spell, dtype, hurt.Dealt) // Vampiric Touch: the caster regains half (spell_drain_2024.go)
+		text += hitWithRiders(lobbyID, charID, monster, out.Critical)   // Hex, Hunter's Mark (hit_riders_2024.go)
 		if monsterHPNow(lobbyID, monster) <= 0 {
 			text += killEffectNote(charID) // Dark One's Blessing (F134)
 		}
@@ -175,6 +203,16 @@ func resolveSpellOnMonster(charID int, spellKey string, spell SRDSpell, damageDi
 		lines = append(lines, fmt.Sprintf(" %s%s, %d %s damage. %s", ar.LineForAttacker(attackName, out), rollNote, d, dtype, text))
 	case spell.SavingThrow != "" || len(spell.DamageParts) > 0:
 		ability := saveAbilityKey(spell.SavingThrow)
+		mainDmg, mainType, mainPart := rolled, dtype, 0
+		if hybrid { // the explosion is the first part with a save; the attack's own damage is dealt above
+			for i, p := range spell.DamageParts {
+				if _, later := laterTimings[p.Timing]; !later && p.Timing != "on_hit" && p.Save != "" {
+					mainPart, mainType = i, strings.ToLower(p.Type)
+					mainDmg = partRoll(charID, i, p.diceAt(slotLevel))
+					break
+				}
+			}
+		}
 		// F247: without damage parts the spell's text decides: "half as much damage" on a success, otherwise none (Sacred Flame, Acid
 		// Splash, Vicious Mockery ... took half damage on a successful save)
 		onSave := "none"
@@ -183,15 +221,15 @@ func resolveSpellOnMonster(charID int, spellKey string, spell SRDSpell, damageDi
 		}
 		if len(spell.DamageParts) > 0 {
 			onSave = "half"
-			if spell.DamageParts[0].Save != "" {
-				ability = saveAbilityKey(spell.DamageParts[0].Save)
+			if spell.DamageParts[mainPart].Save != "" {
+				ability = saveAbilityKey(spell.DamageParts[mainPart].Save)
 			}
-			if spell.DamageParts[0].OnSave == "none" {
+			if spell.DamageParts[mainPart].OnSave == "none" {
 				onSave = "none"
 			}
 		}
 		if ability == "" {
-			return ""
+			return strings.Join(lines, "")
 		}
 		// the spell's other damage parts that happen now (Meteor Swarm: Fire and Bludgeoning; Flame Strike: Fire and Radiant), rolled once
 		type extraPart struct {
@@ -199,18 +237,19 @@ func resolveSpellOnMonster(charID int, spellKey string, spell SRDSpell, damageDi
 			typ, save, on string
 		}
 		var extras []extraPart
-		if len(spell.DamageParts) > 1 {
-			for _, p := range spell.DamageParts[1:] {
-				if _, later := laterTimings[p.Timing]; later || p.Timing == "on_hit" {
-					continue
-				}
-				extras = append(extras, extraPart{game.RollDamage(p.diceAt(slotLevel), false), strings.ToLower(p.Type), p.Save, p.OnSave})
+		for i, p := range spell.DamageParts {
+			if i == 0 && !hybrid || hybrid && i == mainPart {
+				continue
 			}
+			if _, later := laterTimings[p.Timing]; later || p.Timing == "on_hit" {
+				continue
+			}
+			extras = append(extras, extraPart{partRoll(charID, i, p.diceAt(slotLevel)), strings.ToLower(p.Type), p.Save, p.OnSave})
 		}
 		// every creature the spell is aimed at (target_id and target_ids) makes its own saving throw; the damage is rolled once
 		for _, id := range spellMonsterTargets(charID) {
 			tname := monsterName(lobbyID, id)
-			stakes := saveStakes{Damage: rolled, Condition: isDamageConditionSpell(spellKey)}
+			stakes := saveStakes{Damage: mainDmg, Condition: isDamageConditionSpell(spellKey)}
 			rule, typed := spellTypeSaveRules[spellKey]
 			typed = typed && monsterTypeOf(lobbyID, id) == rule.Type
 			heightened := heightenedDisadvantage(charID, id) // Heightened Spell (F194)
@@ -237,7 +276,7 @@ func resolveSpellOnMonster(charID int, spellKey string, spell SRDSpell, damageDi
 				saved = sv.Success
 				how = sv.Clause()
 			}
-			d := rolled
+			d := mainDmg
 			if saved {
 				if onSave == "half" || potentCantrip(charID, spell) { // F119: Potent Cantrip halves a cantrip's damage on a success
 					d /= 2
@@ -252,13 +291,13 @@ func resolveSpellOnMonster(charID int, spellKey string, spell SRDSpell, damageDi
 			if d == 0 {
 				lines = append(lines, fmt.Sprintf(" %s %s and takes no damage.%s", tname, how, rider))
 			} else if rider != "" {
-				text, _ := damageMonster(lobbyID, id, d, dtype)
+				text, _ := damageMonster(lobbyID, id, d, mainType)
 				if monsterHPNow(lobbyID, id) <= 0 {
 					text += killEffectNote(charID)
 				}
 				lines = append(lines, fmt.Sprintf(" %s %s. %s%s", tname, how, text, rider))
 			} else {
-				text, _ := damageMonster(lobbyID, id, d, dtype)
+				text, _ := damageMonster(lobbyID, id, d, mainType)
 				if monsterHPNow(lobbyID, id) <= 0 {
 					text += killEffectNote(charID) // Dark One's Blessing (F134)
 				}

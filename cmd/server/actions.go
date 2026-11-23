@@ -2544,7 +2544,7 @@ func resolveActionWithBonusDash(action, description string, charID int, bonusDas
 
 				saveInfo := ""
 				if len(spell.DamageParts) > 0 {
-					saveInfo = primarySaveInfo(spell.DamageParts, saveDC) + extraPartsText(spell.DamageParts, slotLevel, saveDC)
+					saveInfo = primarySaveInfo(spell.DamageParts, saveDC) + extraPartsText(charID, spell.DamageParts, slotLevel, saveDC)
 				} else if spell.SavingThrow != "" {
 					if dl := strings.ToLower(spell.Description); strings.Contains(dl, "half as much damage") || strings.Contains(dl, "half damage") {
 						saveInfo = fmt.Sprintf(" (DC %d %s save for half)", saveDC, spell.SavingThrow)
@@ -2554,71 +2554,9 @@ func resolveActionWithBonusDash(action, description string, charID int, bonusDas
 				}
 				return withSpellResolution(charID, spellKey, spell, damageDice, dmg, slotLevel, level, spellMod, saveDC, fmt.Sprintf("Cast %s%s! %d %s damage%s.%s%s%s%s%s%s%s%s%s%s%s %s", spell.Name, upcastInfo, dmg, spell.DamageType, saveInfo, overchannelNote, overchannelPenaltyNote, elementalAffinityNote, agonizingBlastNote, repellingBlastNote, eldritchSpearNote, metamagicNote, materialConsumedNote, invocationUsedNote, mysticArcanumNote, atWillInvocationNote, spell.Description))
 			} else if spell.Healing != "" && buffSpells[spellKey].Kind == "" { // Aid raises the maximum instead (buff_spells_2024.go)
-				// the healing at this slot level and whether the modifier is added: the one reading of a healing spell, a monster's cast
-				// reads it too (spellHealDice, monster_cast_effects_2024.go)
-				healDice, addsMod := spellHealDice(spell, slotLevel)
-
-				// Life Domain Cleric healing bonuses
-				bonusInfo := ""
-				heal := 0
-				subclassSlug := ""
-				if subclass.Valid {
-					subclassSlug = subclass.String
-				}
-
-				// the spellcasting ability modifier only where the spell says so (Cure Wounds, Healing Word; not Heal or Regenerate)
-				healMod := 0
-				if addsMod {
-					healMod = spellMod
-				}
-				if flat, err := strconv.Atoi(strings.TrimSpace(healDice)); err == nil {
-					// a fixed amount: Heal restores 70 Hit Points (80, 90, 100 with higher slots: heal_at_slot_level); no dice to roll or maximize
-					heal = flat
-				} else if hasSubclassFeature(subclassSlug, level, "supreme_healing") {
-					// Supreme Healing (Life Domain level 17): the highest number on each die instead of rolling
-					heal = game.RollDamageMax(healDice) + healMod
-					bonusInfo = " (Supreme Healing: max dice)"
-				} else {
-					heal = game.RollDamage(healDice, false) + healMod
-				}
-				healMax := heal // Beacon of Hope: healing at its maximum (applySpellHealing)
-				if _, err := strconv.Atoi(strings.TrimSpace(healDice)); err != nil {
-					healMax = game.RollDamageMax(healDice) + healMod
-				}
-
-				// Check for Disciple of Life (Life Domain level 1) - add 2 + spell level bonus
-				// Only applies to spells of 1st level or higher
-				if slotLevel >= 1 && hasSubclassFeature(subclassSlug, level, "bonus_healing") {
-					bonusHealing := 2 + slotLevel
-					heal += bonusHealing
-					healMax += bonusHealing
-					if bonusInfo != "" {
-						bonusInfo = fmt.Sprintf(" (Supreme Healing + Disciple of Life: +%d)", bonusHealing)
-					} else {
-						bonusInfo = fmt.Sprintf(" (Disciple of Life: +%d)", bonusHealing)
-					}
-				}
-
-				// Blessed Healer (Life Domain level 6) - heal self when healing others
-				// When you cast a healing spell on a creature other than yourself, you regain 2 + spell level HP
-				blessedHealerInfo := ""
-				if slotLevel >= 1 && hasSubclassFeature(subclassSlug, level, "blessed_healer") {
-					// another creature healed: the same aim the healing reads (spellAllyAim, living_target_2024.go: F83, I-CALLA-24)
-					aim := spellAllyAim(charID, description)
-					healingSelf := !aim.Others && len(aim.Combatants) == 0
-					for _, t := range aim.IDs {
-						if t != charID {
-							healingSelf = false
-						}
-					}
-
-					if !healingSelf {
-						// Healing another creature - heal self too
-						if h, err := healHP(charID, 2+slotLevel); err == nil && h.Healed > 0 {
-							blessedHealerInfo = fmt.Sprintf(" Blessed Healer: you also heal %d HP!", h.Healed)
-						}
-					}
-				}
+				// the one reading of a healing spell's amount (casterHealing, spell_healing_2024.go); a monster's cast reads spellHealDice too
+				hl := casterHealing(charID, spell, slotLevel, level, spellMod, subclass.String, description)
+				heal, healMax, bonusInfo, blessedHealerInfo := hl.Heal, hl.Max, hl.Info, hl.Blessed
 
 				healText := applySpellHealing(charID, spellKey, heal, healMax, description)
 				return fmt.Sprintf("Cast %s%s! Heals %d HP%s.%s%s%s%s%s%s %s", spell.Name, upcastInfo, heal, bonusInfo, healText, metamagicNote, materialConsumedNote, invocationUsedNote, atWillInvocationNote, blessedHealerInfo, spell.Description)

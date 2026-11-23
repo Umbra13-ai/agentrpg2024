@@ -179,6 +179,30 @@ func shortAbility(a string) string {
 }
 
 // resolveBuffSpell applies a lasting buff spell (buffSpells) or Lesser Restoration; "" for other spells.
+// lastingSpellTargets is who a lasting spell (a buff, Darkvision, Longstrider ...) lands on: the caster for a spell of Range Self; else the characters the
+// request names (castTargets), else those named by named(), else the caster; and a creature of the encounter the request names (a negative id) is the target,
+// never silently the caster (FUNC-11). The effect kinds a creature that is not a character holds are castEffectAnyCreature's; for another kind the cast says
+// the GM applies it (refusal) and nothing is put on anyone. Both buff tables (buffSpells, moreSpells) ask it.
+func lastingSpellTargets(charID, lobby int, spell SRDSpell, kind string, self bool, named func() []int) (ids []int, refusal string) {
+	ids = []int{charID}
+	if self {
+		return ids, ""
+	}
+	if mons := spellMonsterTargets(charID); len(mons) > 0 {
+		if !castEffectAnyCreature[kind] {
+			return nil, fmt.Sprintf(" %s: the server applies this spell to characters. %s is a creature of the encounter, so the GM applies it; it was not applied to you or anyone else.", spell.Name, creatureName(lobby, mons[0]))
+		}
+		return append(append([]int{}, spellCharacterTargets(charID)...), mons...), ""
+	}
+	if t := spellCharacterTargets(charID); len(t) > 0 {
+		return t, ""
+	}
+	if t := named(); len(t) > 0 {
+		return t, ""
+	}
+	return ids, ""
+}
+
 func resolveBuffSpell(charID, lobby int, spell SRDSpell, spellKey string, slotLevel, saveDC int, description string) string {
 	if t := resolveMoreSpell(charID, lobby, spell, spellKey, slotLevel, saveDC, description); t != "" {
 		return t // Blink, Fly, Polymorph, Antimagic Field ... (spells_more_2024.go)
@@ -190,13 +214,9 @@ func resolveBuffSpell(charID, lobby int, spell SRDSpell, spellKey string, slotLe
 	if !ok {
 		return ""
 	}
-	ids := []int{charID}
-	if !b.Self {
-		if t := spellCharacterTargets(charID); len(t) > 0 {
-			ids = t
-		} else if t := parseTargetsFromDescription(description, charID); len(t) > 0 {
-			ids = t // every character named (F229)
-		}
+	ids, refusal := lastingSpellTargets(charID, lobby, spell, b.Kind, b.Self, func() []int { return parseTargetsFromDescription(description, charID) }) // F229
+	if refusal != "" {
+		return refusal
 	}
 	most := 1
 	if b.Most != nil {

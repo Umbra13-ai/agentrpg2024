@@ -197,7 +197,9 @@ func divineWord(charID, lobby int, saveDC int, targets []int) string {
 		case hp <= 20:
 			effect = "dies"
 			if id > 0 {
-				killCharacter(id) // the Hit Point owner (hit_points_2024.go)
+				if _, warded, _ := killInstantly(id); warded { // the Hit Point owner (hit_points_2024.go); Death Ward negates it
+					effect = "is protected by Death Ward: the instant death is negated, and the spell ends"
+				}
 			} else {
 				setMonsterHP(lobby, id, 0) // the monster Hit Point owner (monster_hp_2024.go)
 			}

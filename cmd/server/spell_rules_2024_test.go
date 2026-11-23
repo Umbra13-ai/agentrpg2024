@@ -36,7 +36,7 @@ func TestLaterHitDamageSpellsAreReadFromTheirText(t *testing.T) {
 		}
 	}
 	sort.Strings(got)
-	want := []string{"conjure-minor-elementals", "divine-smite", "hex", "hunters-mark", "searing-smite", "shining-smite"}
+	want := []string{"bestow-curse", "conjure-minor-elementals", "divine-smite", "hex", "hunters-mark", "searing-smite", "shining-smite"}
 	if fmt.Sprint(got) != fmt.Sprint(want) {
 		t.Errorf("the spells that deal extra damage on later hits (SRD 5.2.1) are %v; the test knows %v: check each has an owner or a note", got, want)
 	}

@@ -54,8 +54,8 @@ func isMarkSpell(spellSlug string) bool {
 
 // laterHitDamageRe: a spell whose dice are extra damage on the caster's hits, not damage of the cast ("The target takes an extra 2d8 Radiant damage
 // from the attack": Divine Smite, Searing Smite, Shining Smite; "any attack you make deals an extra 2d8 damage when you hit": Conjure Minor
-// Elementals; Hex and Hunter's Mark's "whenever you hit"). Read from the spell's own text, so a new spell of the kind needs no row here.
-var laterHitDamageRe = regexp.MustCompile(`(?i)(extra|additional)[^.]{0,40}damage[^.]{0,80}(whenever you hit|when you hit|from the attack|each time you hit)|any attack you make deals an extra`)
+// Elementals; Hex and Hunter's Mark's "whenever you hit"; Bestow Curse's "if you deal damage to the target with an attack roll or a spell, the target takes an extra 1d8 Necrotic damage"). Read from the spell's own text, so a new spell of the kind needs no row here.
+var laterHitDamageRe = regexp.MustCompile(`(?i)(extra|additional)[^.]{0,40}damage[^.]{0,80}(whenever you hit|when you hit|from the attack|each time you hit)|any attack you make deals an extra|(if|when|whenever) you deal damage to the target[^.]{0,80}(extra|additional)[^.]{0,40}damage`)
 
 // castDamageOnLaterHits: the spell's dice ride on the caster's later hits (laterHitDamageRe); the cast itself deals none.
 func castDamageOnLaterHits(spellSlug string) bool {

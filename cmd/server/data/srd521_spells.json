@@ -58,7 +58,8 @@
      "8": "10d4",
      "9": "11d4"
     },
-    "note": "half as much on a miss"
+    "note": "half as much on a miss",
+    "on_miss": "half"
    },
    {
     "name": "Later damage",

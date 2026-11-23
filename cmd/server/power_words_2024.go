@@ -132,8 +132,8 @@ func powerWordOn(lobby int, spellKey string, id, saveDC int) string {
 		if hp <= 100 {
 			if id < 0 {
 				setMonsterHP(lobby, id, 0)
-			} else {
-				killCharacter(id) // the Hit Point owner: dead at 0 Hit Points, and what that ends (Wild Shape, Concentration)
+			} else if _, warded, _ := killInstantly(id); warded { // the Hit Point owner: dead at 0 Hit Points, and what that ends; Death Ward negates it
+				return name + " is protected by Death Ward: the instant death is negated, and the spell ends."
 			}
 			return name + " dies (it had 100 Hit Points or fewer)."
 		}

@@ -619,6 +619,23 @@ func killCharacter(charID int) (bool, error) {
 	return true, nil
 }
 
+// killInstantly ends a character with an effect that kills it instantly without dealing damage (Power Word Kill, Divine Word, a stat block's "The
+// target dies"). SRD 5.2.1 Death Ward: such an effect "is negated against the target, and the spell ends": warded is true, the ward is spent in one
+// guarded step (two effects at once can't both use it), and nothing else changes (FUNC-12). Damage that takes a character to 0 is damageHP's.
+func killInstantly(charID int) (killed, warded bool, err error) {
+	if ward, ok := charBuff(charID, "death_ward"); ok && ward.ID > 0 {
+		res, derr := db.Exec(`DELETE FROM spell_effects WHERE id = $1`, ward.ID)
+		if derr != nil {
+			return false, false, derr
+		}
+		if n, _ := res.RowsAffected(); n == 1 {
+			return false, true, nil
+		}
+	}
+	killed, err = killCharacter(charID)
+	return killed, false, err
+}
+
 // reviveCharacter returns a dead character to life with hp Hit Points (Revivify, Raise Dead, Resurrection, True Resurrection).
 // It returns false when the character isn't dead.
 func reviveCharacter(charID, hp int) (bool, error) {

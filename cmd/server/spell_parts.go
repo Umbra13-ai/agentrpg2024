@@ -8,6 +8,7 @@ import (
 	"fmt"
 	"regexp"
 	"strings"
+	"sync"
 
 	"github.com/agentrpg/agentrpg/game"
 )
@@ -21,6 +22,7 @@ type damagePart struct {
 	OnSave      string            `json:"on_save,omitempty"` // "half" or "none"
 	AtSlotLevel map[string]string `json:"at_slot_level,omitempty"`
 	Note        string            `json:"note,omitempty"`
+	OnMiss      string            `json:"on_miss,omitempty"` // "half": a spell attack that misses still deals half of this part (Acid Arrow's initial damage)
 }
 
 var abilityWord = map[string]string{"STR": "Strength", "DEX": "Dexterity", "CON": "Constitution", "INT": "Intelligence", "WIS": "Wisdom", "CHA": "Charisma"}
@@ -66,13 +68,46 @@ var laterTimings = map[string]string{
 	"turn_2": "on your turn 2", "turn_3": "on your turn 3", "turn_4": "on your turn 4", "turns_5_to_10": "on your turns 5 to 10",
 }
 
+// castPartRolls: for each caster, what the cast text rolled for each damage part after the first (part index to damage).
+var castPartRolls sync.Map
+
+// partRoll is the damage rolled for part idx of the caster's current cast: the number the cast text showed (rolled once), or a fresh roll when
+// the cast text rolled none for it.
+func partRoll(charID, idx int, dice string) int {
+	if v, ok := castPartRolls.Load(charID); ok {
+		if n, ok := v.(map[int]int)[idx]; ok {
+			return n
+		}
+	}
+	return game.RollDamage(dice, false)
+}
+
+// isHybridSpell: a spell with a spell attack for its first damage and a saving throw for the rest, hit or miss (Ice Knife: the shard's
+// Piercing on a hit, then the explosion's Cold on a Dexterity save whether it hit or not).
+func isHybridSpell(spell SRDSpell) bool {
+	if len(spell.DamageParts) < 2 || spell.DamageParts[0].Timing != "on_hit" || !strings.Contains(strings.ToLower(spell.Description), "spell attack") {
+		return false
+	}
+	for _, p := range spell.DamageParts[1:] {
+		if p.Save != "" {
+			return true
+		}
+	}
+	return false
+}
+
 // extraPartsText rolls the other parts that happen now and lists the ones that come later.
-func extraPartsText(parts []damagePart, slotLevel, dc int) string {
+func extraPartsText(charID int, parts []damagePart, slotLevel, dc int) string {
+	rolls := map[int]int{}
+	castPartRolls.Store(charID, rolls) // what is rolled here is what the resolvers apply (partRoll): one roll, shown and dealt
 	if len(parts) < 2 {
 		return ""
 	}
 	var now, later []string
-	for _, p := range parts[1:] {
+	for i, p := range parts {
+		if i == 0 {
+			continue
+		}
 		dice := p.diceAt(slotLevel)
 		if when, isLater := laterTimings[p.Timing]; isLater {
 			s := fmt.Sprintf("%s %s damage %s", dice, p.Type, when)
@@ -82,7 +117,8 @@ func extraPartsText(parts []damagePart, slotLevel, dc int) string {
 			later = append(later, s)
 			continue
 		}
-		s := fmt.Sprintf("%d %s damage (%s, %s)", game.RollDamage(dice, false), p.Type, dice, strings.TrimSpace(p.Name))
+		rolls[i] = game.RollDamage(dice, false)
+		s := fmt.Sprintf("%d %s damage (%s, %s)", rolls[i], p.Type, dice, strings.TrimSpace(p.Name))
 		if sw := p.saveWords(dc); sw != "" {
 			s += " (" + sw + ")"
 		}

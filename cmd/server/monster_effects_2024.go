@@ -1194,7 +1194,10 @@ func (e saveEffect) killOnFailure(lobby, tid int) string {
 			_, _, err = changeCompanionHP(c.ID, func(v game.Vitals) game.Vitals { return v.SetHP(0) }, nil)
 		}
 	case tid > 0:
-		_, err = killCharacter(tid)
+		var warded bool
+		if _, warded, err = killInstantly(tid); warded { // Death Ward negates an effect that kills instantly without damage (hit_points_2024.go)
+			return fmt.Sprintf("%s is protected by Death Ward: the death is negated, and the spell ends.", name)
+		}
 	default:
 		err = setMonsterHP(lobby, tid, 0)
 	}

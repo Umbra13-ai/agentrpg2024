@@ -17,15 +17,16 @@ const mageArmorRounds = 4800 // 8 hours
 
 // mageArmorCast resolves a cast of Mage Armor on the target named in the request or the description (the caster by default).
 func mageArmorCast(charID, lobby int, spell SRDSpell, description string) string {
-	id := charID
-	if ids := spellCharacterTargets(charID); len(ids) > 0 {
-		id = ids[0]
-	} else if t := aimedCharacter(description, charID); t > 0 {
-		id = t
+	ids, refusal := lastingSpellTargets(charID, lobby, spell, "mage_armor", false, func() []int { // the one reading of who a lasting spell lands on (buff_spells_2024.go)
+		if t := aimedCharacter(description, charID); t > 0 {
+			return []int{t}
+		}
+		return nil
+	})
+	if refusal != "" {
+		return refusal + " (Mage Armor: 13 + its Dexterity modifier while it wears no armor.)"
 	}
-	if id < 0 {
-		return " Mage Armor: the GM applies it to the creature's Armor Class (13 + its Dexterity modifier while it wears no armor)."
-	}
+	id := ids[0]
 	name := creatureName(lobby, id)
 	var armor string
 	db.QueryRow(`SELECT COALESCE(equipped_armor,'') FROM characters WHERE id = $1`, id).Scan(&armor)

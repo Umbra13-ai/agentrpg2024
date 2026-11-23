@@ -34,6 +34,7 @@ package main
 //	Jump                  once on each of its turns the creature jumps up to 30 feet for 10 feet of movement (action "jump")
 
 import (
+	"database/sql"
 	"encoding/json"
 	"fmt"
 	"regexp"
@@ -103,6 +104,11 @@ func init() {
 }
 
 // resolveMoreSpell applies one of these spells ("" for other spells).
+// moreActsOnAimedCreature: the spells of this table that read the creature of the encounter the request aims at themselves (a Polymorph or an
+// Enlarge/Reduce on a monster, the attack of a Spiritual Weapon or a Flame Blade, a Divine Word): they keep their own target choice, and the other
+// lasting spells take lastingSpellTargets' (a creature of the encounter gets the effect, or the cast says the GM applies it).
+var moreActsOnAimedCreature = map[string]bool{"polymorph": true, "enlarge-reduce": true, "spiritual-weapon": true, "flame-blade": true, "divine-word": true}
+
 func resolveMoreSpell(charID, lobby int, spell SRDSpell, key string, slot, saveDC int, description string) string {
 	if key == "greater-restoration" {
 		if aim := spellAllyAim(charID, description); aim.Others {
@@ -119,13 +125,14 @@ func resolveMoreSpell(charID, lobby int, spell SRDSpell, key string, slot, saveD
 		return ""
 	}
 	dl := strings.ToLower(description)
-	ids := []int{charID}
-	if !b.Self {
-		if t := spellCharacterTargets(charID); len(t) > 0 {
-			ids = t
-		} else if t := aimedCharacter(description, charID); t > 0 {
-			ids = []int{t}
+	ids, refusal := lastingSpellTargets(charID, lobby, spell, b.Kind, b.Self || moreActsOnAimedCreature[key], func() []int { // the one reading of who a lasting spell lands on (buff_spells_2024.go)
+		if t := aimedCharacter(description, charID); t > 0 {
+			return []int{t}
 		}
+		return nil
+	})
+	if refusal != "" {
+		return refusal
 	}
 	most := 1
 	if b.Most != nil {
@@ -305,7 +312,11 @@ func resolveMoreSpell(charID, lobby int, spell SRDSpell, key string, slot, saveD
 	case "regenerate":
 		target := ids[0]
 		add(target, "")
-		n := game.RollDamage("4d8", false) + 15
+		var casterLevel int
+		var casterSub sql.NullString
+		db.QueryRow(`SELECT level, subclass FROM characters WHERE id = $1`, charID).Scan(&casterLevel, &casterSub)
+		hl := casterHealing(charID, spell, slot, casterLevel, game.Modifier(spellModScore(charID)), casterSub.String, description) // Supreme Healing, Disciple of Life (spell_healing_2024.go)
+		n := hl.Heal
 		heal := ""
 		if target > 0 {
 			nm, before, after := healCharacter(target, n)
@@ -313,7 +324,7 @@ func resolveMoreSpell(charID, lobby int, spell SRDSpell, key string, slot, saveD
 		} else {
 			heal = fmt.Sprintf("%s regains %d Hit Points (the GM updates the monster)", creatureName(lobby, target), n)
 		}
-		out = heal + ". For 1 hour it regains 1 Hit Point at the start of each of its turns, and severed body parts regrow after 2 minutes."
+		out = heal + hl.Info + ". For 1 hour it regains 1 Hit Point at the start of each of its turns, and severed body parts regrow after 2 minutes." + hl.Blessed
 	case "darkvision":
 		add(ids[0], "")
 		out = fmt.Sprintf("For 8 hours %s has Darkvision with a range of 150 feet.", who)

@@ -341,7 +341,8 @@ func resolveSpellOnCharacters(charID int, spellKey string, spell SRDSpell, slotL
 		if db.QueryRow(`SELECT name FROM characters WHERE id = $1`, id).Scan(&name) != nil {
 			continue
 		}
-		if isSpellAttack(spell) {
+		hybrid := isHybridSpell(spell) // Ice Knife: the attack for the shard, then the explosion's save, hit or miss
+		if isSpellAttack(spell) || hybrid {
 			// the one attack function (attack_2024.go). Nov 14: this path ignored the target's Dodge, Blur and cover, the
 			// caster's conditions and magic item bonus, and Sanctuary.
 			sa := attackCtx{lobby: lobbyOfChar(charID), attacker: charID, target: id, name: "Spell attack against " + name,
@@ -352,24 +353,47 @@ func resolveSpellOnCharacters(charID int, spellKey string, spell SRDSpell, slotL
 			}
 			ar, out, rollNote := sa.roll()
 			if !out.Hit {
-				lines = append(lines, " "+ar.LineForAttacker(sa.name, out)+rollNote+".")
-				continue
+				if why := halfOnMiss(charID, spell); why != "" && rolled/2 > 0 && !hybrid { // Acid Arrow's splash; Potent Cantrip
+					lines = append(lines, fmt.Sprintf(" %s%s (%s: half damage). %s.", ar.LineForAttacker(sa.name, out), rollNote, why, damageCharacter(id, rolled/2, dtype)))
+				} else {
+					lines = append(lines, " "+ar.LineForAttacker(sa.name, out)+rollNote+".")
+				}
+				if !hybrid {
+					continue
+				}
+			} else {
+				d := rolled
+				if out.Critical {
+					d += game.RollDamage(damageDice, false)
+				}
+				hpBefore := characterHP(id)
+				dmgText := damageCharacterWithRiders(id, d, dtype, out.Critical, hitRiders(charID, id, out.Critical)) // Hex, Hunter's Mark (hit_riders_2024.go)
+				dmgText += drainHeal(charID, spell, dtype, hpBefore-characterHP(id))                                  // Vampiric Touch (spell_drain_2024.go)
+				lines = append(lines, fmt.Sprintf(" %s%s, %s.", ar.LineForAttacker(sa.name, out), rollNote, dmgText))
+				if !hybrid {
+					continue
+				}
 			}
-			d := rolled
-			if out.Critical {
-				d += game.RollDamage(damageDice, false)
+		}
+		// the save parts: the first part with a save is the main one (for a hybrid the attack's part is dealt above), the others that happen now
+		// follow with their own types, each rolled once (partRoll): what the cast text showed is what is dealt
+		mainDmg, mainType, mainPart := rolled, dtype, 0
+		if hybrid {
+			for i, p := range spell.DamageParts {
+				if _, later := laterTimings[p.Timing]; !later && p.Timing != "on_hit" && p.Save != "" {
+					mainPart, mainType = i, strings.ToLower(p.Type)
+					mainDmg = partRoll(charID, i, p.diceAt(slotLevel))
+					break
+				}
 			}
-			lines = append(lines, fmt.Sprintf(" %s%s, %s.", ar.LineForAttacker(sa.name, out), rollNote,
-				damageCharacterWithRiders(id, d, dtype, out.Critical, hitRiders(charID, id, out.Critical)))) // Hex, Hunter's Mark (hit_riders_2024.go)
-			continue
 		}
 		ability := saveAbilityKey(spell.SavingThrow)
 		onSave := "half"
 		if len(spell.DamageParts) > 0 {
-			if spell.DamageParts[0].Save != "" {
-				ability = saveAbilityKey(spell.DamageParts[0].Save)
+			if spell.DamageParts[mainPart].Save != "" {
+				ability = saveAbilityKey(spell.DamageParts[mainPart].Save)
 			}
-			if spell.DamageParts[0].OnSave == "none" {
+			if spell.DamageParts[mainPart].OnSave == "none" {
 				onSave = "none"
 			}
 		}
@@ -388,7 +412,7 @@ func resolveSpellOnCharacters(charID int, spellKey string, spell SRDSpell, slotL
 		}
 		r := sc.roll()
 		saved := r.Success
-		d := rolled
+		d := mainDmg
 		how := r.Clause()
 		if saved {
 			if onSave == "half" {
@@ -400,7 +424,26 @@ func resolveSpellOnCharacters(charID int, spellKey string, spell SRDSpell, slotL
 		if d == 0 {
 			lines = append(lines, fmt.Sprintf(" %s %s and takes no damage.", name, how))
 		} else {
-			lines = append(lines, fmt.Sprintf(" %s %s and %s.", name, how, damageCharacter(id, d, dtype)))
+			lines = append(lines, fmt.Sprintf(" %s %s and %s.", name, how, damageCharacter(id, d, mainType)))
+		}
+		for i, p := range spell.DamageParts { // the other parts that happen now (Meteor Swarm's Bludgeoning, Ice Storm's Cold, Ice Knife's Cold)
+			if i == mainPart || (i == 0 && !hybrid) {
+				continue
+			}
+			if _, later := laterTimings[p.Timing]; later || p.Timing == "on_hit" {
+				continue
+			}
+			d2 := partRoll(charID, i, p.diceAt(slotLevel))
+			if saved && p.Save != "" {
+				if p.OnSave == "half" {
+					d2 /= 2
+				} else {
+					d2 = 0
+				}
+			}
+			if d2 > 0 {
+				lines = append(lines, " "+damageCharacter(id, d2, strings.ToLower(p.Type))+".")
+			}
 		}
 	}
 	return strings.Join(lines, "")

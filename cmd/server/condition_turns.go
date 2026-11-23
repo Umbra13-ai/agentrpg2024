@@ -9,7 +9,15 @@ import (
 	"errors"
 	"fmt"
 	"strings"
+
+	"github.com/agentrpg/agentrpg/game"
 )
+
+// groupSave is the repeated saving throw of one cast, shared by every condition that cast gave (see the turn pipeline's stage 5).
+type groupSave struct {
+	sv game.SaveResult
+	lr bool // a monster's Legendary Resistance turned the failed save
+}
 
 // validateEndSave checks the end_save the GM sent and fills in the ability name.
 func validateEndSave(s *conditionSave) string {
@@ -177,6 +185,7 @@ func runTurnEffects(campaignID int, c turnEffectsCursor) turnEffectLines {
 				emit(spiritGuardiansTurnEnd(campaignID, id)...)
 			}
 		case 5:
+			groupSaves := map[string]*groupSave{}
 			if c.Conditions == nil {
 				for _, r := range loadConditionRecords(campaignID, id) {
 					c.Conditions = append(c.Conditions, r.ID)
@@ -201,11 +210,25 @@ func runTurnEffects(campaignID int, c turnEffectsCursor) turnEffectLines {
 					if when == "start_of_turn" {
 						phase = "at the start of its turn"
 					}
-					sv := (&saveCtx{lobby: campaignID, saver: id, ability: svSpec.Ability, dc: svSpec.DC, against: []string{rec.Condition}}).roll()
+					// one repeated save for the conditions one cast gave (Hideous Laughter's Prone and Incapacitated: "makes another Wisdom saving throw ... On a
+					// successful save, the spell ends"): the first record rolls it, the others of the same source and save take its result (FUNC-08)
+					key := fmt.Sprintf("%s|%d|%s|%d|%s", rec.Source, rec.SourceID, svSpec.Ability, svSpec.DC, svSpec.When)
+					grp, shared := groupSaves[key]
+					if !shared {
+						g := &groupSave{sv: (&saveCtx{lobby: campaignID, saver: id, ability: svSpec.Ability, dc: svSpec.DC, against: []string{rec.Condition}}).roll()}
+						g.lr = !g.sv.Success && id < 0 && legendaryResistance(campaignID, id, saveStakes{Condition: true})
+						grp = g
+						groupSaves[key] = grp
+					}
+					sv := grp.sv
 					switch {
+					case sv.Success && shared:
+						ended = fmt.Sprintf("The %s condition ends with the same saving throw.", rec.Condition)
 					case sv.Success:
 						ended = fmt.Sprintf("%s repeats the %s saving throw %s and succeeds%s: the %s condition ends.", name, svSpec.Ability, phase, sv.Tail(), rec.Condition)
-					case id < 0 && legendaryResistance(campaignID, id, saveStakes{Condition: true}):
+					case grp.lr && shared:
+						ended = fmt.Sprintf("The %s condition ends (Legendary Resistance on the same saving throw).", rec.Condition)
+					case grp.lr:
 						ended = fmt.Sprintf("%s repeats the %s saving throw %s: the %s condition ends (Legendary Resistance).", name, svSpec.Ability, phase, rec.Condition)
 					case svSpec.Then != "": // a second stage (Sleep: the Unconscious condition for the rest of the spell)
 						deleteConditionRecord(campaignID, id, rec.ID)
@@ -221,6 +244,8 @@ func runTurnEffects(campaignID int, c turnEffectsCursor) turnEffectLines {
 							Notes: notes, CreatedBy: rec.CreatedBy, Magical: true, MagicalSleep: svSpec.ThenMagicalSleep, EndSave: again})
 						emit(fmt.Sprintf("%s repeats the %s saving throw %s and fails%s: the %s condition becomes %s.", name, svSpec.Ability, phase, sv.Tail(), rec.Condition, titleCase(svSpec.Then)))
 						continue
+					case shared:
+						emit(fmt.Sprintf("The %s condition continues.", rec.Condition))
 					default:
 						emit(fmt.Sprintf("%s repeats the %s saving throw %s and fails%s: the %s condition continues.", name, svSpec.Ability, phase, sv.Tail(), rec.Condition))
 					}

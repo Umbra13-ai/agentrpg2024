@@ -83,7 +83,7 @@ func TestDamagePartsOfSpells(t *testing.T) {
 	if len(ik) != 2 || ik[1].Save != "DEX" || ik[1].OnSave != "none" || ik[1].diceAt(3) != "4d6" {
 		t.Errorf("Ice Knife: %+v", ik)
 	}
-	text := extraPartsText(with["acid-arrow"], 3, 15)
+	text := extraPartsText(0, with["acid-arrow"], 3, 15)
 	if !strings.Contains(text, "3d4 acid") || !strings.Contains(text, "end of the target's next turn") {
 		t.Errorf("Acid Arrow later damage: %q", text)
 	}
