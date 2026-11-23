@@ -149,7 +149,7 @@ func TestPostgresMonsterDayUses(t *testing.T) {
 			id = asInt(e["id"])
 		}
 	}
-	if d := loadMonsterState(camp, id).DayUses; d["action:smoke bomb"] != 1 || d["spell:fireball"] != 2 || d["tier:1/day"] != 1 || d["spell:light"] != 0 || d["spell:fly"] != 0 {
+	if d := loadMonsterState(camp, id).DayUses; d["action:smoke bomb"] != 1 || d["spell:fireball"] != 2 || d["tier:1/day"] != 1 || d["spell:light"] != 0 || d["spell:fly"] != 1 { // Fly is the GM's to resolve: its use counted all the same (I-WL-2)
 		t.Fatalf("stored day uses: %v", d)
 	}
 	// the counts last from one fight to the next: the same creature, linked on purpose (also under another name), keeps them
@@ -210,7 +210,7 @@ func TestPostgresMonsterDayUses(t *testing.T) {
 	if len(ids) != 2 || dayCreatureID(camp, ids[0]) == dayCreatureID(camp, ids[1]) {
 		t.Fatalf("two creatures with one name share an identity: %v", ids)
 	}
-	// a preview (apply_damage false) and a hand-off to the GM are not confirmed uses: nothing is counted, and the reply says so
+	// a preview (apply_damage false) counts nothing; a hand-off to the GM is the GM using it: counted, the second refused (I-WL-2)
 	pgCall(t, "POST", cp+"/combat/end", gm, nil)
 	startFight(map[string]interface{}{"name": "Fresh Caster", "monster_key": key, "initiative": 20})
 	who = "Fresh Caster"
@@ -221,11 +221,11 @@ func TestPostgresMonsterDayUses(t *testing.T) {
 		}
 	}
 	preview = false
-	for i := 0; i < 2; i++ {
-		res := use("Spellcasting", "Teleport", hero)
-		if refused(res) || !strings.Contains(res, "Not counted as a day use") || strings.Contains(res, "Day use counted") {
-			t.Fatalf("a hand-off to the GM should not be counted (try %d): %s", i+1, res)
-		}
+	if res := use("Spellcasting", "Teleport", hero); refused(res) || !strings.Contains(res, "Day use counted for Fresh Caster: 1 of 1/Day") {
+		t.Fatalf("a hand-off to the GM should be counted: %s", res)
+	}
+	if res := use("Spellcasting", "Teleport", hero); !refused(res) {
+		t.Fatalf("a second 1/Day hand-off was not refused: %s", res)
 	}
 	f, _ = readFight(db, camp)
 	for _, e := range f.Order {
@@ -233,14 +233,7 @@ func TestPostgresMonsterDayUses(t *testing.T) {
 			id = asInt(e["id"])
 		}
 	}
-	if d := loadDayUses(camp, id); len(d) != 0 {
-		t.Fatalf("a preview or hand-off spent a use: %v", d)
-	}
-	// the GM counts the hand-off once it happened, then it is refused; the GM can also give it back
-	pgCall(t, "POST", "/api/gm/monster-features", gm, map[string]interface{}{"campaign_id": camp, "combatant_id": id, "day_uses": map[string]int{"tier:1/day": 1}})
-	if res := use("Spellcasting", "Teleport", hero); !refused(res) {
-		t.Fatalf("the use the GM counted was not refused: %s", res)
-	}
+	// the GM gives a use back, then it is allowed again
 	pgCall(t, "POST", "/api/gm/monster-features", gm, map[string]interface{}{"campaign_id": camp, "combatant_id": id, "day_uses": map[string]int{"tier:1/day": 0}})
 	if res := use("Spellcasting", "Teleport", hero); refused(res) {
 		t.Fatalf("the use the GM gave back was refused: %s", res)

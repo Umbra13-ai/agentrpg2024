@@ -1852,7 +1852,7 @@ func resolveMonsterEffectText(r *http.Request, lobbyID, monsterID int, meta *mon
 				}
 				before := rec.count()
 				lines = append(lines, resolveMonsterSpell(r, lobbyID, monsterID, name, spName, lvl, dc, atk, targets, false, apply, use)...)
-				if rec.count() == before {
+				if !rec.usedSince(before) {
 					releaseDayUse(lobbyID, monsterID, key)
 				}
 				return append(lines, notes...)
@@ -1983,7 +1983,7 @@ func resolveMonsterEffectText(r *http.Request, lobbyID, monsterID int, meta *mon
 					}
 					before := execIn(r).count()
 					out := resolveMonsterEffectText(r, lobbyID, monsterID, meta, a.Name, a.Text, targets, use, apply, depth+1)
-					if execIn(r).count() == before {
+					if !execIn(r).usedSince(before) {
 						releaseDayUse(lobbyID, monsterID, key)
 					}
 					return append(out, notes...)

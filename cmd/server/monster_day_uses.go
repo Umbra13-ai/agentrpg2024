@@ -248,6 +248,7 @@ func creatureIDFor(linked string) string {
 // Execution record: what the server actually carried out for one monster action, said by the code that did it (an attack rolled against
 // a target, a saving throw effect applied to its targets, a reaction that took effect), never read back from the reply text. A miss, a
 // save that succeeds, immunity and a condition-only effect are all executed; a hand-off to the GM, a preview and a refusal are not.
+// Executed or not, a day use is spent when the request ran the entry (usedSince): a hand-off is the GM using it (owner, Nov 23, I-WL-2).
 type execKey struct{}
 
 type execRecord struct {
@@ -369,6 +370,13 @@ func newDay(campaignID int) {
 // dayUseCounted is the line that says a use was counted (a confirmed use, never a refusal).
 func dayUseCounted(name, key string, used, limit int) string {
 	return fmt.Sprintf("Day use counted for %s: %d of %d/Day (%s).", name, used, limit, strings.TrimPrefix(strings.TrimPrefix(key, "action:"), "spell:"))
+}
+
+// usedSince: a reserved day use stays spent when the request ran the entry since the count was before: the server carried something out
+// or handed the entry to the GM, who uses it (owner, Nov 23: a 1/Day the GM resolves was never counted, I-WL-2). Only a request that ran
+// nothing gives the use back: one blocked before anything was rolled (blockedBeforeRoll), a refusal, a preview (which reserves nothing).
+func (e *execRecord) usedSince(before int32) bool {
+	return e != nil && (e.count() > before || !e.targetBlocked)
 }
 
 func (e *execRecord) count() int32 {

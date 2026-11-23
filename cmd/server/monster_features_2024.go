@@ -349,7 +349,7 @@ func takeLegendaryAction(r *http.Request, lobbyID int, req legendaryRequest, win
 				return nil, "day_limit", dayUseRefusal(loadMonsterState(lobbyID, req.CombatantID), name, act, "", key, limit)
 			}
 			defer func() {
-				if !rec.wasExecuted() {
+				if !rec.usedSince(0) {
 					releaseDayUse(lobbyID, req.CombatantID, key)
 				}
 			}()
@@ -1233,7 +1233,7 @@ func resolveMonsterActionByName(r *http.Request, lobbyID int, monster, action, t
 	reserved, settled := false, false
 	if dayKey, dayLimit = monsterDayUse(entry, use); dayKey != "" && !attackEntry {
 		// the limit is checked and the use reserved in one step in the database (two requests cannot both take the last use); a use that
-		// is not executed (hand-off, refusal, rejected target) gives the reservation back below. A preview only reads the count.
+		// ran nothing (refusal, rejected target) gives the reservation back below; a hand-off to the GM is spent. A preview only reads the count.
 		if apply {
 			if !reserveDayUse(lobbyID, id, dayKey, dayLimit) {
 				return "", true, dayUseRefusal(loadMonsterState(lobbyID, id), creatureName(lobbyID, id), entry, use, dayKey, dayLimit)
@@ -1248,9 +1248,9 @@ func resolveMonsterActionByName(r *http.Request, lobbyID int, monster, action, t
 			}
 		}()
 	}
-	// spendDay settles a use the server executed (the reservation stays). apply_damage false is a preview: nothing is counted. An actual
-	// miss, a save that succeeds, immunity or no damage still counts: they are executed. A hand-off to the GM (the reply only tells the GM
-	// what to do) is not a confirmed use: it says so and gives the reservation back.
+	// spendDay settles a use the request ran (the reservation stays). apply_damage false is a preview: nothing is counted. An actual
+	// miss, a save that succeeds, immunity or no damage still counts, and so does a hand-off to the GM (usedSince). Only a reaction that
+	// found no trigger passes false: it took no effect and gives the reservation back.
 	r, rec := ensureExecution(r)
 	rec.dayHandled = true
 	spendDay := func(executed bool) string {
@@ -1261,7 +1261,7 @@ func resolveMonsterActionByName(r *http.Request, lobbyID int, monster, action, t
 			return "Not counted as a day use: apply_damage is false (a preview)."
 		}
 		if !executed {
-			return fmt.Sprintf("Not counted as a day use: the server executed nothing (it is the GM's to resolve). When it happens, count it with POST /api/gm/monster-features day_uses {\"%s\": n}.", dayKey)
+			return "Not counted as a day use: it took no effect."
 		}
 		settled = true
 		return dayUseCounted(creatureName(lobbyID, id), dayKey, loadDayUses(lobbyID, id)[dayKey], dayLimit)
@@ -1308,7 +1308,7 @@ func resolveMonsterActionByName(r *http.Request, lobbyID int, monster, action, t
 		monsterReactionRound.Store(fmt.Sprintf("%d:%d", lobbyID, id), currentRound(lobbyID))
 	}
 	if joined := strings.Join(lines, " "); !strings.Contains(joined, "Nothing was rolled") { // a refusal does not use it up
-		if note := spendDay(rec.wasExecuted()); note != "" {
+		if note := spendDay(rec.usedSince(0)); note != "" {
 			lines = append(lines, note)
 		}
 	}
