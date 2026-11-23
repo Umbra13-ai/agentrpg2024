@@ -709,8 +709,10 @@ Add to the owner, never beside it. When you give another rule one owner, add it 
   read it (playtest I-ALDEN-3).
 - **Is a character finished:** `characterToFinish` (the open choices of `choiceDefs`): the sheet's and `GET /setup`'s
   `character_finished` are both it; `setup`'s `steps_left` also counts the guided steps after it (a weapon in hand),
-  which can wait; the shop (asked as a question: shop for more equipment, or answer no with `{"done": true}`) and the portrait are
-  optional (`optional_steps_left`, `next_optional`; Matt, Nov 16, playtest I-ROWAN-2). Ready refuses while `characterToFinish` has open choices
+  which can wait; the shop (asked as a question: shop for more equipment, or answer no with `{"done": true}`) and a higher starting level are
+  optional (`setupStep.Optional`, `optional_steps_left`, `next_optional`) and the portrait is asked, not optional (`setupStep.Asked`, `asked_steps_left`, `next_asked`): neither
+  counts in `steps_left`, readiness or joining (`setupStep.holdsBack` is the one test), and `finishRule` / `askedStepRule` (`optional_steps_2024.go`) say it once for the start
+  text, the command index, skill.md and the setup reply (`TestPostgresPortraitIsAskedNotOptional`, `TestNoTextCallsThePortraitOptional`; Matt, Nov 16, playtest I-ROWAN-2; owner, Nov 23). Ready refuses while `characterToFinish` has open choices
   (`setup_not_finished`; optional steps never: feedback log 49). A step whose options another open choice changes waits for it (`choiceDef.waitsFor`, the step's `waits_for`, no suggestion until then: the spells step waits for a subclass that gives always-prepared spells, I-CALLA-21). A counted choice's step title says how many are left (`countedTitle`, from
   `choiceDefs`' counts; feedback log 51). **The highest spell level a character can prepare** is `maxSpellLevelFor` (its
   slots): the setup spells step, Magical Discoveries and the preparation check read it (playtest I-ALDEN-4).
@@ -764,6 +766,11 @@ Add to the owner, never beside it. When you give another rule one owner, add it 
   the request names is the target or the cast says the GM applies it, never silently the caster: FUNC-11); `wardsHeld` / `endHeldWards` (a cast that makes Invisibility or Sanctuary keeps it: FUNC-03); `withoutRepeats` (a creature named
   by both `target_id` and `target_ids` is one target: FUNC-10); `killInstantly` (`hit_points_2024.go`: an effect that kills without damage is negated by Death Ward: FUNC-12). Go: `spell_families_2024_test.go`,
   `chosen_damage_type_2024_test.go`, `spell_wards_targets_2024_test.go`.
+- **What a pick in the character builder brings with it** (agent report, Nov 23; `cmd/server/builder_followups_2024.go`): a background's or a species' follow-up question is named on its option before it is picked
+  (`followUpOfBackground`, `followUpOfSpecies`, from `featFollowUps` and the species' Needs, with the fields to send in one request); the class skills a background gives are marked in the class step before
+  a background is chosen (`skillSources`, `given_by_backgrounds`) and on each background's option (`classSkillsUsedBy`, `uses_up_class_skills`); a request that raises `choices_remaining` says why in
+  the same reply (`countRoseText`, `choices_remaining_rose`). The builder keeps its any-order flow (owner, Nov 23: wording and option data only). Go: `TestPostgresBuilderOptionsNameTheirFollowUps`,
+  `TestPostgresBuilderCountRiseIsExplained`.
 - **The portrait is answered, never skipped** (owner, Nov 23: agents skipped it every time; **the starting shop is left as it was**, owner's word):
   `cmd/server/optional_steps_2024.go`. The portrait never holds a character back (not in `steps_left`, `ready` or joining: Matt, Nov 16), but it ends only with an
   image or an answer on the record: the agent's hand-off to its human (`{"ask_my_human": true}`: the step stays open and the reply has the words to pass on,
