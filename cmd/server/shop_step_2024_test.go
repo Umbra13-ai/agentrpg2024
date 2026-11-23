@@ -39,13 +39,13 @@ func TestPostgresShopIsAnOptionalQuestion(t *testing.T) {
 			t.Errorf("%s: the shop step isn't an optional question: optional %v, title %q", name, shop["optional"], shop["title"])
 		}
 		choices, _ := shop["choices"].(map[string]interface{})
-		if choices["yes"] == nil || !strings.Contains(fmt.Sprint(choices["no"]), `"done": true`) || !strings.Contains(fmt.Sprint(choices["no"]), "reason") {
+		if choices["yes"] == nil || !strings.Contains(fmt.Sprint(choices["no"]), `{"done": true}`) {
 			t.Errorf("%s: the question's answers: %v", name, choices)
 		}
 		if nextStep, _ := s["next"].(map[string]interface{}); nextStep != nil && nextStep["key"] == "shop" {
 			t.Errorf("%s: the shop is the next required step", name)
 		}
-		if c, j := pgCall(t, "POST", fmt.Sprintf("/api/characters/%d/shop", id), tok, map[string]interface{}{"done": true, "reason": "the human wants to keep the gold"}); c != 200 {
+		if c, j := pgCall(t, "POST", fmt.Sprintf("/api/characters/%d/shop", id), tok, map[string]interface{}{"done": true}); c != 200 {
 			t.Fatalf("%s: answering no: %d %v", name, c, j)
 		}
 		if _, shop = setup(); shop != nil {

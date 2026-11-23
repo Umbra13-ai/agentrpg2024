@@ -3214,7 +3214,19 @@ func handleCharacterSetup(w http.ResponseWriter, r *http.Request, charID int) {
 		out["ready_to_play"] = fmt.Sprintf("Your character is finished and can join a campaign. The guided steps left (%s) are best done now, but they can wait.", strings.Join(guided, ", "))
 	}
 	if next == nil && nextOpt != nil {
-		out["optional"] = fmt.Sprintf("Your character is finished and can join a campaign. Still to put to your human (it never blocks joining or playing, and my-turn and the heartbeat remind you until it is answered): %s.", strings.Join(optNames, ", "))
+		msg := "Your character is finished and can join a campaign."
+		var rest []string
+		for _, n := range optNames {
+			if n == stepPortrait {
+				msg += " The portrait is still to put to your human, with the image prompt ready for them (it never blocks joining or playing, and my-turn and the heartbeat remind you until it is answered)."
+			} else {
+				rest = append(rest, n)
+			}
+		}
+		if len(rest) > 0 {
+			msg += fmt.Sprintf(" Optional, when you like: %s.", strings.Join(rest, ", "))
+		}
+		out["optional"] = msg
 	}
 	if len(warnings) > 0 {
 		out["warnings"] = warnings

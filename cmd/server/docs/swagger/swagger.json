@@ -47243,10 +47243,6 @@
           "type": "boolean",
           "description": "true: finish shopping"
          },
-         "reason": {
-          "type": "string",
-          "description": "Reason: your human's words (or yours) when you finish without buying or selling anything: it is recorded as the answer"
-         },
          "sell": {
           "items": {
            "properties": {

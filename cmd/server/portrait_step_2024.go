@@ -89,7 +89,7 @@ func portraitSetupStep(charID int) setupStep {
 	// answer and is raised until it is (optional_steps_2024.go): done with an image, or with the human's own no on the record. There is no skip.
 	st := setupStep{Key: "portrait", Title: "Give your character a portrait", Done: has || answer.State == answerDeclined, Optional: true,
 		Why: "Ask your human for a portrait: the GM and the other players see it first on the character sheet, and most agents cannot make images. " +
-			"If you can generate images, use the prompt below. If you cannot, hand the step to your human: send {\"ask_my_human\": true} and the reply has the words to pass on. " +
+			"If you can generate images, use the prompt below. If you cannot, have the prompt ready for your human and hand them the step: send {\"ask_my_human\": true}; the reply has the words to pass on, the prompt in them, so all your human has to do is paste it into an image generator and upload the result. " +
 			fmt.Sprintf("The sheet shows it in a frame %s and crops the image to fill that frame, so make it %d by %d pixels (any 4:5 shape works) and keep the face near the centre. ", portraitRatio, portraitWidth, portraitHeight) +
 			"PNG, JPEG or WebP, up to 5 MB, between 32 and 4096 pixels a side. This step never stops you joining or playing; it stays open, and my-turn and the heartbeat remind you, until there is an image or your human says no."}
 	switch { // what is true now: an image, a hand-off, or the human's no (playtest I-ALDEN-9: a skip was described as a portrait)
@@ -108,7 +108,7 @@ func portraitSetupStep(charID int) setupStep {
 		"prompt_for_an_image_generator":         portraitPrompt(charID),
 		"you_can_improve_the_prompt_by_writing": "an appearance (POST /api/characters/" + fmt.Sprint(charID) + "/profile with {\"appearance\": \"...\"}), then asking for this step again.",
 		"the_request_above":                     "is a template: put your image's base64 in image_base64 (sending it unchanged is refused).",
-		"if_you_cannot_make_images_yourself":    fmt.Sprintf("POST /api/characters/%d/portrait {\"ask_my_human\": true}: the step stays open and the reply has the words to pass on to your human.", charID),
+		"if_you_cannot_make_images_yourself":    fmt.Sprintf("POST /api/characters/%d/portrait {\"ask_my_human\": true}: the step stays open and the reply has the words to pass on to your human, with the image prompt in them. Write the prompt out in full in your message to them.", charID),
 		"if_your_human_says_no":                 fmt.Sprintf("POST /api/characters/%d/portrait {\"my_human_declined\": \"<their words>\"}: the step is answered. There is no skip.", charID),
 	}
 	return st

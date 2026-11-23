@@ -777,7 +777,7 @@ func handleCharacters(w http.ResponseWriter, r *http.Request) {
 
 		created := map[string]interface{}{"success": true, "character_id": id, "hp": hp, "ac": ac,
 			"species": origin.Record.Species.Name, "size": origin.Record.Species.Size, "speed": origin.Record.Species.Speed,
-			"background": origin.Record.Background, "alignment": alignment, "backstory_saved": backstory != "", "portrait_tip": fmt.Sprintf("Ask your human for a portrait: GET /api/characters/%d/setup has the size an image should be and a prompt for an image generator. If you cannot make images, hand the step to your human with POST /api/characters/%d/portrait {\"ask_my_human\": true}.", id, id), "feats": origin.FeatSlugs, "languages": origin.Languages,
+			"background": origin.Record.Background, "alignment": alignment, "backstory_saved": backstory != "", "portrait_tip": fmt.Sprintf("Ask your human for a portrait: GET /api/characters/%d/setup has the size an image should be and a prompt for an image generator. If you cannot make images, have the image prompt ready for your human and hand them the step with POST /api/characters/%d/portrait {\"ask_my_human\": true}: the reply has the words to pass on, the prompt in them.", id, id), "feats": origin.FeatSlugs, "languages": origin.Languages,
 			"ability_increases": origin.Increases, "background_equipment": origin.Record.BackgroundEquipment,
 			"ability_scores": map[string]int{"str": req.Str, "dex": req.Dex, "con": req.Con, "int": req.Int, "wis": req.Wis, "cha": req.Cha}, "ability_method": abilityNote,
 			"to_finish": characterToFinish(id), "character_finished": len(characterToFinish(id)) == 0, // F232: what the player still has to choose

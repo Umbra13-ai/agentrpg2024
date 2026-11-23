@@ -1,13 +1,13 @@
 package main
 
-// The optional setup steps are answered, never skipped (owner, Nov 23, from a tester agent's report on why agents skipped the shop and the
-// portrait every time). The portrait and the shop never hold a character back (steps_left, ready and joining don't count them: Matt, Nov 16,
-// I-ROWAN-2), but they are the human's to answer, and a free "skip" made not answering the easiest move: the start text called them optional,
-// the character was finished without them, and one request ended the step for good. Now:
-//   - a step ends with its result (a portrait uploaded, something bought or sold), or with an answer on the record: the agent's hand-off to its
-//     human (`ask_my_human`: the step stays open, "waiting on your human") or the human's own no, in their words (`my_human_declined`,
-//     `reason` for the shop). A bare skip is refused with what to send instead.
-//   - an open step is raised again wherever the agent already looks: my-turn and the heartbeat (`optionalReminders`) until it is answered.
+// The portrait is answered, never skipped (owner, Nov 23, from a tester agent's report on why agents skipped it every time; the starting shop is left as it
+// was: the owner said not to change it). The portrait never holds a character back (steps_left, ready and joining don't count it: Matt, Nov 16,
+// I-ROWAN-2), but it is the human's to answer, and a free "skip" made not answering the easiest move: the start text called it optional, the character was
+// finished without it, and one request ended the step for good. Now:
+//   - the step ends with its result (an image uploaded) or with an answer on the record: the agent's hand-off to its human (`ask_my_human`: the step
+//     stays open, "waiting on your human", and the agent has the image prompt ready for the human to paste) or the human's own no, in their words
+//     (`my_human_declined`). A bare skip is refused with what to send instead.
+//   - the open step is raised again wherever the agent already looks: my-turn and the heartbeat (`optionalReminders`) until it is answered.
 //
 // optionalAnswerOf / setOptionalAnswer are the one reader and writer of the answers (characters.optional_answers, a JSON object by step key);
 // openOptionalSteps is the one list of the steps still open; askYourHuman is the one text that tells the agent what to put to its human.
@@ -22,11 +22,9 @@ import (
 
 const (
 	stepPortrait = "portrait"
-	stepShop     = "shop"
 
 	answerWaiting  = "waiting_on_human" // the agent handed the step to its human; still open
 	answerDeclined = "declined"         // the human said no, in the words recorded
-	answerShopped  = "shopped"          // the character bought or sold something: the shop's answer is its result
 )
 
 // optionalAnswer is what a character has said about an optional step.
@@ -64,41 +62,37 @@ func humanWords(s string) (string, string) {
 	return s, ""
 }
 
-// askYourHuman is what the agent puts to its human for a step: the words to pass on, and what to send once they answer.
+// askYourHuman is what the agent puts to its human for a step: the words to pass on, with the image prompt in them so the human has only to make the
+// image, and what to send once they answer.
 func askYourHuman(charID int, key string) string {
 	switch key {
 	case stepPortrait:
-		return fmt.Sprintf("Tell your human: \"%s needs a portrait for the character sheet; the GM and the other players see it first. Please make one with this prompt and either upload it for me or send it to me: %s Vertical, %s, %d by %d pixels, PNG, JPEG or WebP up to 5 MB.\" "+
+		return fmt.Sprintf("Have the image prompt ready, and put it to your human in one message they can use as it is: \"%s needs a portrait for the character sheet; the GM and the other players see it first. "+
+			"Please paste this prompt into an image generator and upload the result for me (or send me the image): %s\" Vertical, %s, %d by %d pixels, PNG, JPEG or WebP up to 5 MB. "+
+			"Write the prompt out in full in that message (do not just point at the step), so all your human has to do is paste it and make the image. "+
 			"When you have the image: POST /api/characters/%d/portrait {\"image_base64\": \"...\"}. If they say no: POST /api/characters/%d/portrait {\"my_human_declined\": \"<what they said>\"}.",
 			characterNameOf(charID), portraitPrompt(charID), portraitRatio, portraitWidth, portraitHeight, charID, charID)
-	case stepShop:
-		return fmt.Sprintf("Ask your human what %s should buy before the campaign starts (the shop closes then): GET /api/characters/%d/shop lists everything with what it does and what you can afford. "+
-			"When they have chosen: POST /api/characters/%d/shop {\"buy\": [...]}, then {\"done\": true}. If they want nothing: POST /api/characters/%d/shop {\"done\": true, \"reason\": \"<what they said>\"}.",
-			characterNameOf(charID), charID, charID, charID)
 	}
 	return ""
 }
 
-// openOptionalSteps: the optional steps of the setup that are not answered yet, in order (the portrait, then the shop while it is open).
+// openOptionalSteps: the steps of the setup that are answered by the human and not answered yet (the portrait).
 func openOptionalSteps(charID int) []setupStep {
 	var out []setupStep
 	if st := portraitSetupStep(charID); !st.Done {
 		out = append(out, st)
 	}
-	if st := shopSetupStep(charID); st != nil && !st.Done {
-		out = append(out, *st)
-	}
 	return out
 }
 
-// optionalReminders: one line for each open optional step, for my-turn and the heartbeat. The agent is told to put the question to its human
-// (or, when it has already handed the step over, to ask again), with the request that answers it. Nil when nothing is open.
+// optionalReminders: one line for each open step, for my-turn and the heartbeat. The agent is told to put the question to its human with the image
+// prompt ready (or, when it has already handed the step over, to ask again), with the request that answers it. Nil when nothing is open.
 func optionalReminders(charID int) []map[string]interface{} {
 	var out []map[string]interface{}
 	for _, st := range openOptionalSteps(charID) {
-		say := "Not answered yet. Put it to your human: " + st.Title
+		say := "Not answered yet. Put it to your human, with the image prompt written out ready for them to paste: " + st.Title
 		if optionalAnswerOf(charID, st.Key).State == answerWaiting {
-			say = "You asked your human; there is no answer yet. Ask them again, or upload the image they send you: " + st.Title
+			say = "You asked your human; there is no image yet. Ask them again with the image prompt ready to paste, or upload the image they send you: " + st.Title
 		}
 		out = append(out, map[string]interface{}{"step": st.Key, "say": say, "how": fmt.Sprintf("GET /api/characters/%d/setup shows the step with what to send. It never stops you playing.", charID),
 			"state": map[bool]string{true: answerWaiting, false: "open"}[optionalAnswerOf(charID, st.Key).State == answerWaiting]})

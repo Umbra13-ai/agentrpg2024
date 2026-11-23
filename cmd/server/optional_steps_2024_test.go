@@ -9,17 +9,16 @@ import (
 	"testing"
 )
 
-// The portrait and the shop are answered, never skipped (optional_steps_2024.go; owner, Nov 23): a bare skip is refused with what to send, the
-// agent hands the step to its human (it stays open and is raised in my-turn and the heartbeat), and only a result or the human's own words end it;
-// none of it ever holds the character back from being ready or joining.
-func TestPostgresOptionalStepsAreAnsweredNotSkipped(t *testing.T) {
+// The portrait is answered, never skipped (optional_steps_2024.go; owner, Nov 23): a bare skip is refused with what to send, the agent hands the step to
+// its human with the image prompt ready for them (it stays open and is raised in my-turn and the heartbeat), and only an image or the human's own words end
+// it; none of it ever holds the character back from being ready or joining. The shop is not part of this: it is as it was.
+func TestPostgresThePortraitIsAnsweredNotSkipped(t *testing.T) {
 	testPostgres(t)
 	gm, gmTok := pgAgent(t, "optional gm")
 	_, tok := pgAgent(t, "optional player")
 	_, j := pgCall(t, "POST", "/api/characters", tok, pgRogue(fmt.Sprintf("Pg Optional %d", gm)))
 	id := int(j["character_id"].(float64))
 	portrait := fmt.Sprintf("/api/characters/%d/portrait", id)
-	shop := fmt.Sprintf("/api/characters/%d/shop", id)
 	_, j = pgCall(t, "POST", "/api/campaigns", gmTok, map[string]interface{}{"name": fmt.Sprintf("PG Optional %d", gm), "max_players": 2})
 	camp := int(j["campaign_id"].(float64))
 	pgCall(t, "PATCH", fmt.Sprintf("/api/campaigns/%d/schedule", camp), gmTok, map[string]interface{}{"state": "off"})
@@ -34,8 +33,8 @@ func TestPostgresOptionalStepsAreAnsweredNotSkipped(t *testing.T) {
 		}
 		return out
 	}
-	if o := open(); !o["portrait"] || !o["shop"] {
-		t.Fatalf("a new character has the portrait and the shop open: %v", o)
+	if o := open(); !o["portrait"] || len(o) != 1 {
+		t.Fatalf("a new character has the portrait open, and only the portrait: %v", o)
 	}
 
 	// no free skip: refused, with what to send, and nothing changed
@@ -56,8 +55,13 @@ func TestPostgresOptionalStepsAreAnsweredNotSkipped(t *testing.T) {
 
 	// the hand-off: the step stays open and the reply has the words to pass on
 	c, j = pgCall(t, "POST", portrait, tok, map[string]interface{}{"ask_my_human": true})
-	if c != 200 || j["waiting_on_your_human"] != true || !strings.Contains(fmt.Sprint(j["tell_your_human"]), "Tell your human") || !strings.Contains(fmt.Sprint(j["tell_your_human"]), "my_human_declined") {
+	say := fmt.Sprint(j["tell_your_human"])
+	if c != 200 || j["waiting_on_your_human"] != true || !strings.Contains(say, "Have the image prompt ready") || !strings.Contains(say, "my_human_declined") {
 		t.Fatalf("the hand-off: %d %v", c, j)
+	}
+	// the human has only to paste: the whole prompt is in the words to pass on, and the agent is told to write it out
+	if prompt := portraitPrompt(id); !strings.Contains(say, prompt) || !strings.Contains(say, "Write the prompt out in full") {
+		t.Errorf("the hand-off doesn't carry the whole image prompt for the human to paste: %q", say)
 	}
 	if !open()["portrait"] || optionalAnswerOf(id, stepPortrait).State != answerWaiting {
 		t.Errorf("a hand-off leaves the step open and waiting: %v %q", open(), optionalAnswerOf(id, stepPortrait).State)
@@ -82,56 +86,22 @@ func TestPostgresOptionalStepsAreAnsweredNotSkipped(t *testing.T) {
 		t.Errorf("ready with the portrait and the shop open: %d %v", c, j)
 	}
 
-	// the shop: leaving without buying or selling needs the answer on the record
-	c, j = pgCall(t, "POST", shop, tok, map[string]interface{}{"done": true})
-	if c != 400 || j["error"] != "shop_answer_needed" || !open()["shop"] {
-		t.Errorf("a bare done: %d %v", c, j)
-	}
-	if c, j := pgCall(t, "POST", shop, tok, map[string]interface{}{"done": true, "reason": "<what your human said when you asked>"}); c != 400 {
-		t.Errorf("the template as a reason: %d %v", c, j)
-	}
-	if c, j := pgCall(t, "POST", shop, tok, map[string]interface{}{"done": true, "reason": "the human wants to keep the gold"}); c != 200 || open()["shop"] {
-		t.Errorf("done with the human's words: %d %v, open %v", c, j, open())
-	}
-	if a := optionalAnswerOf(id, stepShop); a.State != answerDeclined || !strings.Contains(a.Said, "keep the gold") {
-		t.Errorf("the shop's answer on the record: %+v", a)
-	}
-
 	// the human's no for the portrait, in their words
 	if c, j := pgCall(t, "POST", portrait, tok, map[string]interface{}{"my_human_declined": "they said no portrait, the placeholder is fine"}); c != 200 || j["declined"] != true {
 		t.Fatalf("the human's no: %d %v", c, j)
 	}
 	if len(openOptionalSteps(id)) != 0 {
-		t.Errorf("both answered, still open: %v", open())
+		t.Errorf("answered, still open: %v", open())
+	}
+	// the shop is as it was: a bare done still ends it, and it is not part of what is raised
+	if c, j := pgCall(t, "POST", fmt.Sprintf("/api/characters/%d/shop", id), tok, map[string]interface{}{"done": true}); c != 200 {
+		t.Errorf("the shop's done is as it was: %d %v", c, j)
 	}
 	_, mt = pgCall(t, "GET", fmt.Sprintf("/api/my-turn?character_id=%d", id), tok, nil)
 	if mt["answer_with_your_human"] != nil {
 		t.Errorf("my-turn still reminds an answered character: %v", mt["answer_with_your_human"])
 	}
 	_ = gm
-}
-
-// A character that shopped has answered the shop: leaving needs no reason (a purchase is the result).
-func TestPostgresShoppingAnswersTheShop(t *testing.T) {
-	testPostgres(t)
-	gm, gmTok := pgAgent(t, "shopped gm")
-	_, tok := pgAgent(t, "shopped player")
-	_, j := pgCall(t, "POST", "/api/characters", tok, pgRogue(fmt.Sprintf("Pg Shopped %d", gm)))
-	id := int(j["character_id"].(float64))
-	_, j = pgCall(t, "POST", "/api/campaigns", gmTok, map[string]interface{}{"name": fmt.Sprintf("PG Shopped %d", gm), "max_players": 2})
-	camp := int(j["campaign_id"].(float64))
-	pgCall(t, "POST", fmt.Sprintf("/api/campaigns/%d/join", camp), tok, map[string]interface{}{"character_id": id})
-	shop := fmt.Sprintf("/api/characters/%d/shop", id)
-	pgExec(t, `UPDATE characters SET gold = 100 WHERE id = $1`, id)
-	if c, j := pgCall(t, "POST", shop, tok, map[string]interface{}{"buy": []map[string]interface{}{{"item": "Torch", "quantity": 1}}}); c != 200 {
-		t.Fatalf("buy: %d %v", c, j)
-	}
-	if optionalAnswerOf(id, stepShop).State != answerShopped {
-		t.Errorf("a purchase is the shop's answer: %+v", optionalAnswerOf(id, stepShop))
-	}
-	if c, j := pgCall(t, "POST", shop, tok, map[string]interface{}{"done": true}); c != 200 {
-		t.Errorf("done after shopping needs no reason: %d %v", c, j)
-	}
 }
 
 // Only optional_steps_2024.go writes a character's answers.
