@@ -340,6 +340,13 @@ Add to the owner, never beside it. When you give another rule one owner, add it 
   `character_profile.go`) and the administrator's (POST, PUT and DELETE `/api/admin/characters/{id}/portrait`, `admin_portrait_2024.go`, written to
   the admin change log with its note; the admin page's Portrait card adds, replaces and removes) both go through them; `TestNoOtherPortraitWriter`
   fails on any other write of the avatar columns. Go: `TestPostgresAdminPortrait`.
+- **A campaign's background picture** (the scene behind the Live Table's header; owner, Nov 23): `cmd/server/campaign_background_2024.go` is the one owner. What a
+  picture may be is `checkImage` with an `imageRule` (`portrait_2024.go`: the portrait's `portraitRule` and the background's `backgroundRule`, 320 to 4096 pixels, up to 5 MB,
+  a note when a tall picture will be cropped); the writes are `saveBackground` / `clearBackground` (`lobbies.background_*`), and `backgroundURL` is what the page shows (the
+  campaign's own with its change time, else the default dragon `defaultBackground`). The administrator's route (POST, PUT and DELETE `/api/admin/campaigns/{id}/background`,
+  `handleAdminBackground`, written to the admin change log; the campaign page's Background card in the admin page) sets it; the public image is GET `/api/campaigns/{id}/background`
+  (gated like every read under `/api/campaigns/{id}/`: a private campaign's picture is private). The admin editor never sends the bytes (`editorColumns`). Go:
+  `TestPostgresAdminCampaignBackground`, `TestNoOtherBackgroundWriter`.
 - **The 18 skills:** `game/skills.go`.
 - **Expertise:** `game/expertise.go`, with its database side in `cmd/server/expertise_2024.go`.
 - **Which feats a character can take:** `cmd/server/feats_2024.go` (`featRefusal`, `featsOpenTo`, `featTakerOf`, `featHowTo`).
