@@ -88,6 +88,12 @@ var mechanicFits = map[string]struct {
 		}
 		return ""
 	}},
+	"reaction": {"a Reaction", func(group string, e srdMonsterEntry) string {
+		if group != "reaction" {
+			return "attaches to a Reaction"
+		}
+		return ""
+	}},
 	"trait": {"a trait", func(group string, e srdMonsterEntry) string {
 		if group != "trait" {
 			return "attaches to a trait"
@@ -730,6 +736,42 @@ var mechanicCatalog = []mechanicKind{
 			}
 			return s
 		},
+	},
+	{
+		Kind: "reaction",
+		Does: "What the Reaction does, when the GM uses it right after its trigger (monster_action naming the Reaction): ac_bonus adds bonus to its AC " +
+			"against the attack that hit it this turn (a miss now undoes the hit); halve_damage halves that hit's damage (round down); resist_damage " +
+			"gives it Resistance to that hit when its damage is of one of damage_types, and temp_hp Temporary Hit Points; disadvantage_on_attack " +
+			"rolls a second d20 for that attack roll and keeps the lower (a miss now undoes the hit); attacker_save_or_miss has the attacker make the " +
+			"save against dc: on a failure the attack misses and the attacker has the conditions until the end of the monster's next turn; " +
+			"damage_back deals damage of damage_type to the triggering creature (the creature the GM names, else the one that hit it this turn).",
+		On:        "reaction",
+		AppliedBy: "attachedReaction (monster_reaction_mechanics_2024.go), at the start of resolveMonsterReaction: the hit undo and refund owners (monster_hit_undo_2024.go), the save owner, the condition and Hit Point owners",
+		Params: []mechanicParam{
+			{Name: "response", Type: "choice", Options: reactionResponses, Required: true, Does: "what the Reaction does"},
+			{Name: "against", Type: "choice", Options: []string{"any", "melee", "ranged"}, Does: "the attacks it answers (any by default)"},
+			{Name: "bonus", Type: "number", Min: 1, Max: 10, Only: "response=ac_bonus", Does: "the AC it adds (required for ac_bonus)"},
+			{Name: "damage_types", Type: "damage_types", Min: 1, Only: "response=resist_damage", Does: "the damage types it resists (required for resist_damage)"},
+			{Name: "temp_hp", Type: "number", Min: 1, Max: 500, Only: "response=resist_damage", Does: "Temporary Hit Points it gains"},
+			{Name: "save", Type: "choice", Options: []string{"str", "dex", "con", "int", "wis", "cha"}, Only: "response=attacker_save_or_miss", Does: "the attacker's saving throw (required)"},
+			{Name: "dc", Type: "number", Min: 1, Max: 40, Only: "response=attacker_save_or_miss", Does: "its DC (required)"},
+			{Name: "conditions", Type: "conditions", Min: 1, Only: "response=attacker_save_or_miss", Does: "conditions a failed save gives the attacker until the end of the monster's next turn"},
+			{Name: "damage", Type: "dice", Only: "response=damage_back", Does: "the damage dealt back (required for damage_back)"},
+			{Name: "damage_type", Type: "choice", Options: sortedDamageTypes(), Only: "response=damage_back", Does: "its type (required for damage_back)"},
+			{Name: "note", Type: "text", MaxLen: 300, Does: "what the server doesn't apply, shown with the result"},
+		},
+		Example:   entryMechanic{"kind": "reaction", "response": "halve_damage", "covers": "Response: The duelist twists aside, and the blow lands only glancingly."},
+		ExampleOn: "Trigger: The duelist is hit by an attack roll. Response: The duelist twists aside, and the blow lands only glancingly.",
+		check: func(e srdMonsterEntry, m entryMechanic) string {
+			need := map[string][]string{"ac_bonus": {"bonus"}, "resist_damage": {"damage_types"}, "attacker_save_or_miss": {"save", "dc"}, "damage_back": {"damage", "damage_type"}}
+			for _, p := range need[m.str("response")] {
+				if _, ok := m[p]; !ok {
+					return m.str("response") + " needs " + p
+				}
+			}
+			return ""
+		},
+		describe: func(m entryMechanic) string { return reactionWords(m) + noteWords(m) },
 	},
 	{
 		Kind: "teleport",

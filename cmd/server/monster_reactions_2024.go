@@ -39,6 +39,8 @@ type charHitOnMonster struct {
 	AttackerName       string // a monster attacker (CharID 0): its name
 	Total, AC          int
 	Nat20, Melee       bool
+	Natural            int    // the d20 that counted (a reaction that imposes Disadvantage after the roll reads it)
+	Mode               string // how the d20 was rolled: "advantage", "disadvantage", "cancelled" or "" (game.AttackRoll.Mode)
 	DamageType, Weapon string
 	HPBefore, HPAfter  int
 	// what the hit changed on its target, for taking it back (monster_hit_undo_2024.go)
@@ -161,6 +163,14 @@ func resolveMonsterReaction(r *http.Request, lobbyID, id int, meta *monsterMeta,
 			return fmt.Sprintf(" %s: +%d AC; %s is now a miss.%s", label, bonus, desc, said)
 		}
 		return fmt.Sprintf(" %s: +%d AC; %s is now a miss, its damage undone (%s is back to %d HP).%s", label, bonus, desc, name, after.HP, said)
+	}
+	if m, ok := entry.mechanic("reaction"); ok { // a GM's attached reaction (monster_reaction_mechanics_2024.go)
+		out, refusal := attachedReaction(r, lobbyID, id, name, base, key, m, hit, haveHit, charName, target, targetIDs, apply, undoIfMiss)
+		if refusal != "" {
+			return "", true, refusal
+		}
+		monsterReactionRound.Store(key, round)
+		return strings.TrimSpace(out), true, ""
 	}
 	out := ""
 	switch {

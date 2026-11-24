@@ -240,7 +240,7 @@ func runMonsterHit(lobby int, c *monsterHitCursor) (string, error) {
 					}
 				}
 			case 3:
-				h := charHitOnMonster{AttackerName: c.AttackerName, Total: c.Outcome.Total, AC: c.Roll.AC, Nat20: c.Outcome.Natural == 20, Melee: c.Melee, DamageType: c.Action.DamageType, Weapon: c.Action.Name, HPBefore: c.HPBefore, HPAfter: monsterHPNow(lobby, c.Target), Parts: c.Parts, Crit: c.Outcome.Critical, AttackerID: c.Attacker, Desc: c.Action.Desc}
+				h := charHitOnMonster{AttackerName: c.AttackerName, Total: c.Outcome.Total, AC: c.Roll.AC, Nat20: c.Outcome.Natural == 20, Natural: c.Outcome.Natural, Mode: c.Outcome.Mode, Melee: c.Melee, DamageType: c.Action.DamageType, Weapon: c.Action.Name, HPBefore: c.HPBefore, HPAfter: monsterHPNow(lobby, c.Target), Parts: c.Parts, Crit: c.Outcome.Critical, AttackerID: c.Attacker, Desc: c.Action.Desc}
 				h.recordChanges(lobby, c.Target, c.Snapshot)
 				noteCharHitOnMonster(lobby, c.Target, h)
 			}

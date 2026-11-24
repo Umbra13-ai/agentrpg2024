@@ -109,6 +109,26 @@ func (a AttackRoll) judge(o AttackOutcome) AttackOutcome {
 	return o
 }
 
+// LaterDisadvantage gives an attack roll already made Disadvantage after the roll (a Reaction that imposes it once the attack hit): a
+// second d20 is rolled and the lower of the two counts, the total moved by the difference and judged again against ac (a Critical Hit only on
+// a natural 20: the attack's own crit range isn't kept). A roll that already had Disadvantage (or Advantage and Disadvantage, cancelled) is
+// as it was. ok is false for a roll made with Advantage: the two cancel to one d20, and which of the two rolled the rules don't say.
+func LaterDisadvantage(natural, total, ac int, mode string) (o AttackOutcome, ok bool) {
+	switch mode {
+	case "advantage":
+		return AttackOutcome{}, false
+	case "disadvantage", "cancelled":
+		o = AttackOutcome{Natural: natural, Dice: [2]int{natural, 0}, Total: total, Mode: mode}
+	default:
+		second := RollDie(20)
+		low := min(natural, second)
+		o = AttackOutcome{Natural: low, Dice: [2]int{natural, second}, Total: total - natural + low, Mode: "disadvantage"}
+	}
+	o.Hit = o.Natural != 1 && (o.Natural == 20 || o.Total >= ac)
+	o.Critical = o.Hit && o.Natural == 20
+	return o, true
+}
+
 // Describe gives the roll in words, the same in every result line, to follow the total:
 //
 //	" with Advantage (Faerie Fire)"

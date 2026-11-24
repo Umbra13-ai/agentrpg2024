@@ -545,7 +545,7 @@ func resolveAttackOnMonster(lobbyID, charID, targetID int, o attackOutcome, clea
 		info["knocked_out"] = true
 	}
 	tail := characterHitTail{Char: charID, Target: targetID, Name: name, Key: fmt.Sprint(t["monster_key"]), HP: hp, Damage: dmg + extraDmg, BaseDamage: dmg, Outcome: o, HasMastery: hasMastery, Mastery: mu, Snapshot: snap,
-		Record: charHitOnMonster{CharID: charID, Total: o.Total, AC: ac, Nat20: o.Natural == 20 && !peerless, Melee: weaponIsMelee(o.Weapon) && !o.Ranged, DamageType: o.DamageType, Weapon: o.Weapon, HPBefore: hpStart, HPAfter: hp}}
+		Record: charHitOnMonster{CharID: charID, Total: o.Total, AC: ac, Nat20: o.Natural == 20 && !peerless, Natural: o.Natural, Mode: o.Out.Mode, Melee: weaponIsMelee(o.Weapon) && !o.Ranged, DamageType: o.DamageType, Weapon: o.Weapon, HPBefore: hpStart, HPAfter: hp}}
 	if len(cleaveTarget) > 0 {
 		tail.CleaveTarget = cleaveTarget[0]
 	}

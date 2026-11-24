@@ -69,7 +69,10 @@ func TestMechanicProblems(t *testing.T) {
 	for _, k := range mechanicCatalog {
 		b, _ := json.Marshal(k.Example)
 		e := srdMonsterEntry{Name: "Example", Text: k.ExampleOn, Mechanics: mechanicsFromJSON(t, "["+string(b)+"]")}
-		group := map[bool]string{true: "trait", false: "action"}[k.On == "trait"]
+		group := "action"
+		if k.On == "trait" || k.On == "reaction" {
+			group = k.On
+		}
 		if p := mechanicProblem(group, e); p != "" {
 			t.Errorf("the catalogue's own example of %s is refused: %s", k.Kind, p)
 		}
