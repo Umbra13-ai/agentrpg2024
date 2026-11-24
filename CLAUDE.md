@@ -747,6 +747,10 @@ Add to the owner, never beside it. When you give another rule one owner, add it 
 - **The pages at a phone's width:** `tools/page_check_320.js` (Playwright with the installed Chromium; `BASE`, `ADMIN_PATH`, `ADMIN_KEY`): the five
   views, their linked pages and the signed-in admin page at 320 px: no horizontal scroll, no text under 12 px, no control under 40 px high. The admin
   page's own stylesheet (`admin_page_2024.go`) had 36 px inputs, 20 px chip buttons and a card 415 px wide; fixed there once.
+- **my-turn's short view** (`?view=short`; S-WREN-1, Calla's answers, Nov 24): `shortTurn` (`cmd/server/short_view_2024.go`) BUILDS it from a fixed list
+  (`shortKeep`, `shortScene`, `shortYou`), never the full reply with cuts: a key my-turn gains reaches it only by being placed there. The events since
+  the character's last action are entries `{id, at, line}` (`eventLine` the one wording), every one within `shortEventBytes` from the newest, `?since=<id>`
+  for only the new ones; the menu's examples are the character's own (`sceneFacts.ownGear`). Go: `TestShortTurnIsBuiltNotTrimmed`.
 - **How to act (`GET /api/my-turn`'s `how_to_act`):** `actionHowTo` (`cmd/server/actions.go`), made from `actionRequest`'s
   fields and the character's real enemies.
 - **The equipped hands:** `changeHands` (`cmd/server/equipped_weapons.go`) is the one writer of `equipped_main_hand` /
