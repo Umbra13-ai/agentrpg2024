@@ -670,3 +670,72 @@ func TestPostgresZoneMechanicsInPlay(t *testing.T) {
 		t.Errorf("a heal beyond the aura: %+v", h)
 	}
 }
+
+const witherText = "Melee Attack Roll: +60, reach 5 ft. Hit: 1 (1d1) Necrotic damage. The target is cursed: its wounds won't close, it withers by 2d6 Hit Points a day, and it is sickened."
+
+func witherTouch() srdMonsterEntry {
+	return srdMonsterEntry{Name: "Withering Touch", Text: witherText, Mechanics: []entryMechanic{{"kind": "curse", "no_regain": true, "max_hp_loss": "2D6",
+		"conditions": []interface{}{"poisoned"}, "note": "the wound smells of grave soil",
+		"covers": "The target is cursed: its wounds won't close, it withers by 2d6 Hit Points a day, and it is sickened."}}}
+}
+
+// TestCurseMechanicProblems: the curse kind's refusals, and its sentences read back by the curse owner as the flags they stand for.
+func TestCurseMechanicProblems(t *testing.T) {
+	cases := []struct{ mechanics, want string }{
+		{`[{"kind":"curse"}]`, ""},
+		{`[{"kind":"curse","hours":24,"no_regain":true,"no_rest_benefit":"short_and_long","max_hp_loss":"3d6","conditions":["charmed","poisoned"]}]`, ""},
+		{`[{"kind":"curse","no_regain":"yes"}]`, "no_regain must be true or false"},
+		{`[{"kind":"curse","max_hp_loss":"3d6+2"}]`, "max_hp_loss must be dice such as 3d6"},
+		{`[{"kind":"curse","max_hp_loss":"lots"}]`, "max_hp_loss must be dice"},
+		{`[{"kind":"curse","no_rest_benefit":"all"}]`, "no_rest_benefit must be one of short, long, short_and_long"},
+		{`[{"kind":"curse","conditions":[]}]`, "conditions must be a list of 1 or more"},
+	}
+	for _, c := range cases {
+		got := mechanicProblem("action", srdMonsterEntry{Name: "x", Text: ashClawText, Mechanics: mechanicsFromJSON(t, c.mechanics)})
+		if (c.want == "") != (got == "") || !strings.Contains(got, c.want) {
+			t.Errorf("%s: got %q, want %q", c.mechanics, got, c.want)
+		}
+	}
+	m := mechanicsFromJSON(t, `[{"kind":"curse","hours":24,"no_regain":true,"no_rest_benefit":"short_and_long","max_hp_loss":"3d6","conditions":["charmed","poisoned"]}]`)[0]
+	e, ok := parseHitRider(curseSentences(m))
+	if !ok || e.Curse == nil || e.Curse.Rounds != 24*600 || !e.CurseLinked || strings.Join(e.Conditions, ",") != "charmed,poisoned" ||
+		strings.Join(e.Curse.Flags, ",") != "no_regain,short_rest,long_rest,hpmax=3d6" || strings.TrimSpace(e.Extra) != "" {
+		t.Errorf("the curse owner reads %q as %+v %+v", curseSentences(m), e.Curse, e)
+	}
+	w := witherTouch()
+	if p := mechanicProblem("action", w); p != "" || w.Mechanics[0].str("max_hp_loss") != "2d6" {
+		t.Fatalf("%q %v", p, w.Mechanics[0])
+	}
+}
+
+// TestPostgresCurseMechanicOnEveryTarget: the attached curse on a character and a monster: the cursed record, its linked condition, no
+// healing; a second hit starts no second count; Remove Curse ends the curse and the condition with it.
+func TestPostgresCurseMechanicOnEveryTarget(t *testing.T) {
+	testPostgres(t)
+	gm, _, camp, hero, wight := earlyRulesFixture(t, "Test Wither Wight", []srdMonsterEntry{witherTouch()})
+	cp := fmt.Sprintf("/api/campaigns/%d", camp)
+	pgCall(t, "POST", cp+"/combat/add", gm, map[string]interface{}{"combatants": []map[string]interface{}{{"name": "Wither Victim", "monster_key": "goblin-warrior", "hp": 1000, "ac": 1, "initiative": -600}}})
+	victim := monsterIDsByKeyOrName(camp, "Wither Victim")[0]
+	for _, tg := range []struct {
+		id   int
+		name string
+	}{{hero, fmt.Sprint(hero)}, {victim, "Wither Victim"}} {
+		_, line := narrateHit(t, gm, camp, wight, "Withering Touch", tg.name, "")
+		if !hasCondMarker(camp, tg.id, "cursed") || !hasCondMarker(camp, tg.id, "poisoned") || !strings.Contains(line, "grave soil") || strings.Contains(line, "withers by") {
+			t.Errorf("%s: cursed %v poisoned %v: %s", tg.name, hasCondMarker(camp, tg.id, "cursed"), hasCondMarker(camp, tg.id, "poisoned"), line)
+		}
+		if cant, _ := cantRegainHP(camp, tg.id); !cant {
+			t.Errorf("%s regains Hit Points while cursed", tg.name)
+		}
+		if !holdsHPMaxCurse(camp, tg.id) {
+			t.Errorf("%s: the Hit Point maximum count did not start", tg.name)
+		}
+		if _, line = narrateHit(t, gm, camp, wight, "Withering Touch", tg.name, ""); !strings.Contains(line, "already cursed") || len(recordsOf(camp, tg.id, "cursed")) != 1 {
+			t.Errorf("%s: a second hit: %s", tg.name, line)
+		}
+		endCursesBySpell(camp, "remove-curse", []int{tg.id})
+		if hasCondMarker(camp, tg.id, "cursed") || hasCondMarker(camp, tg.id, "poisoned") {
+			t.Errorf("%s: Remove Curse left the curse or its condition", tg.name)
+		}
+	}
+}

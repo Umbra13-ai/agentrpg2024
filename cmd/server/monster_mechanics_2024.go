@@ -32,7 +32,7 @@ type entryMechanic map[string]interface{}
 type mechanicParam struct {
 	Name string // the field name
 	Type string // "choice" (one of Options), "condition" (a rules condition), "number" (Min to Max), "text" (up to MaxLen bytes),
-	// "damage_types" (a list of Min or more damage types), "conditions" (a list of Min or more rules conditions), "entry_options" (a list
+	// "flag" (true or false), "dice" (NdM), "damage_types" (a list of Min or more damage types), "conditions" (a list of Min or more rules conditions), "entry_options" (a list
 	// naming each effect the entry offers once)
 	Options  []string // a choice's values
 	Min, Max int      // a number's range
@@ -338,6 +338,97 @@ var mechanicCatalog = []mechanicKind{
 			return fmt.Sprintf("creatures within %d feet of it can't regain Hit Points", m.num("feet"))
 		},
 	},
+	{
+		Kind: "curse",
+		Does: "A hit of this attack curses its target, as the SRD's curses are kept: a cursed record that a Remove Curse or Greater Restoration ends, " +
+			"and that lasts hours (or, without them, until a spell ends it). While cursed the target can't regain Hit Points (no_regain), gains no " +
+			"benefit from Short or Long Rests (no_rest_benefit), loses max_hp_loss (dice) from its Hit Point maximum every 24 hours of the story " +
+			"(it doesn't return with a Long Rest; a creature is cursed once), and has conditions until the curse ends.",
+		On:        "attack",
+		AppliedBy: "curseOnHit through hitAfterDamage and the curse owner (readCurse, giveCurse: curse_records_2024.go), on every hit route",
+		Params: []mechanicParam{
+			{Name: "hours", Type: "number", Min: 1, Max: 8760, Does: "how long the curse lasts (without it: until a spell ends it)"},
+			{Name: "no_regain", Type: "flag", Does: "true: the cursed target can't regain Hit Points"},
+			{Name: "no_rest_benefit", Type: "choice", Options: []string{"short", "long", "short_and_long"}, Does: "the rests that give the cursed target no benefit"},
+			{Name: "max_hp_loss", Type: "dice", Does: "dice its Hit Point maximum loses every 24 hours (\"3d6\")"},
+			{Name: "conditions", Type: "conditions", Min: 1, Does: "conditions the target has until the curse ends"},
+			{Name: "note", Type: "text", MaxLen: 300, Does: "what the curse does that the server does not apply, shown with the result"},
+		},
+		Example: entryMechanic{"kind": "curse", "no_regain": true, "max_hp_loss": "2d6", "note": "the wound smells of grave soil",
+			"covers": "The target is cursed: its wounds won't close, and it withers by 2d6 Hit Points a day."},
+		ExampleOn: "Melee Attack Roll: +5, reach 5 ft. Hit: 7 (1d8 + 3) Necrotic damage. The target is cursed: its wounds won't close, and it withers by 2d6 Hit Points a day.",
+		describe: func(m entryMechanic) string {
+			var parts []string
+			if h := m.num("hours"); h > 0 {
+				parts = append(parts, fmt.Sprintf("for %d hour%s", h, map[bool]string{true: "s", false: ""}[h != 1]))
+			} else {
+				parts = append(parts, "until a spell ends it")
+			}
+			if b, _ := m["no_regain"].(bool); b {
+				parts = append(parts, "can't regain Hit Points")
+			}
+			if r := m.str("no_rest_benefit"); r != "" {
+				parts = append(parts, "no benefit from "+strings.ReplaceAll(strings.ReplaceAll(r, "short_and_long", "Short or Long"), "_", " ")+" Rests")
+			}
+			if d := m.str("max_hp_loss"); d != "" {
+				parts = append(parts, "its Hit Point maximum loses "+d+" every 24 hours")
+			}
+			if c := m.list("conditions"); len(c) > 0 {
+				parts = append(parts, "has the "+strings.Join(c, " and ")+" condition while cursed")
+			}
+			return "a hit curses its target (" + strings.Join(parts, "; ") + ")" + noteWords(m)
+		},
+	},
+}
+
+// curseSentences: the SRD's own words for a curse mechanic, which the curse owner reads (readCurse): one owner of what a curse does.
+func curseSentences(m entryMechanic) string {
+	s := "Hit: The target is cursed"
+	if h := m.num("hours"); h > 0 {
+		s += fmt.Sprintf(" for %d hours", h)
+	}
+	s += "."
+	if b, _ := m["no_regain"].(bool); b {
+		s += " While cursed, the target can't regain Hit Points."
+	}
+	if r := m.str("no_rest_benefit"); r != "" {
+		s += " Until the curse ends, the target gains no benefit from finishing " +
+			map[string]string{"short": "Short Rests", "long": "Long Rests", "short_and_long": "Short or Long Rests"}[r] + "."
+	}
+	if d := m.str("max_hp_loss"); d != "" {
+		n, sides := game.ParseDice(d)
+		s += fmt.Sprintf(" Its Hit Point maximum decreases by %d (%s) every 24 hours that elapse.", n*(sides+1)/2, d)
+	}
+	if c := m.list("conditions"); len(c) > 0 {
+		names := make([]string, len(c))
+		for i, x := range c {
+			names[i] = titleCase(x)
+		}
+		s += " Until the curse ends, the target has the " + strings.Join(names, " and ") + " condition"
+		if len(c) > 1 {
+			s += "s"
+		}
+		s += "."
+	}
+	return s
+}
+
+// curseOnHit: the attached curse of the attacking monster's entry, given by the curse owner from its SRD sentences.
+func curseOnHit(lobby, attacker, target int, desc, source string) string {
+	m, ok := attachedMechanic(lobby, attacker, desc, "curse")
+	if !ok {
+		return ""
+	}
+	e, ok := parseHitRider(curseSentences(m))
+	if !ok || e.Curse == nil {
+		return " [the curse attached to this attack could not be read; the GM applies it]"
+	}
+	e.SourceID = attacker
+	note := ""
+	if n := m.str("note"); n != "" {
+		note = "; the stat block adds: " + n
+	}
+	return " [" + creatureName(lobby, target) + ": " + strings.Join(e.giveConditions(lobby, target, source), "; ") + note + "]"
 }
 
 // conditionTimeWords: a random_condition's time in the words of the SRD's riders (riderUntil, conditionDuration read them).
@@ -744,6 +835,17 @@ func (k mechanicKind) paramProblem(m entryMechanic, e srdMonsterEntry) string {
 			if !ok || strings.TrimSpace(s) == "" || len(s) > p.MaxLen {
 				return fmt.Sprintf("%s must be text of 1 to %d bytes", p.Name, p.MaxLen)
 			}
+		case "flag":
+			if _, ok := v.(bool); !ok {
+				return p.Name + " must be true or false"
+			}
+		case "dice":
+			sv, _ := v.(string)
+			n, sides := game.ParseDice(strings.TrimSpace(sv))
+			if n < 1 || n > 100 || sides < 2 || sides > 100 || fmt.Sprintf("%dd%d", n, sides) != strings.ToLower(strings.TrimSpace(sv)) {
+				return p.Name + " must be dice such as 3d6 (1 to 100 dice of 2 to 100 sides)"
+			}
+			m[p.Name] = fmt.Sprintf("%dd%d", n, sides)
 		case "damage_types", "entry_options", "conditions":
 			var opts []string
 			if p.Type == "conditions" {
@@ -879,6 +981,8 @@ func mechanicCatalogView() []map[string]interface{} {
 				v["options"] = "the names of the effects the entry offers"
 			case "conditions":
 				v["options"], v["min_items"] = rulesConditions(), p.Min
+			case "dice":
+				v["format"] = "NdM, such as 3d6"
 			}
 			if p.Only != "" {
 				v["only_with"] = strings.ReplaceAll(p.Only, "=", " ")

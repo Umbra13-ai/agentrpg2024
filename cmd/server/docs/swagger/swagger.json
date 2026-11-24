@@ -42315,6 +42315,9 @@
                 "does": {
                  "type": "string"
                 },
+                "format": {
+                 "type": "string"
+                },
                 "max": {
                  "type": "integer"
                 },
