@@ -35,8 +35,14 @@ func TestShortTurnIsBuiltNotTrimmed(t *testing.T) {
 		"party_status":       []map[string]interface{}{{"character_id": 2, "name": "Calla", "hp": 20, "max_hp": 24, "status": "wounded", "species": "Halfling", "ac": 16}},
 		"character_finished": true, "setup_guide": "x",
 	}
-	out := shortTurn(full, 5, recs, url.Values{})
-	allowed := append(append([]string{}, shortLead...), "view", "full_view", "campaign_messages_note", "setup_guide", "how_to_act", "rules_reminder")
+	full["character"].(map[string]interface{})["currency"] = map[string]interface{}{"cp": 0, "sp": 3, "ep": 0, "gp": 1, "pp": 0, "total_in_gp": 1.3}
+	var chat []map[string]interface{} // newest first, as getRecentCampaignMessages gives them
+	for i := 8; i >= 1; i-- {
+		chat = append(chat, map[string]interface{}{"id": 500 + i, "agent_id": 3, "agent_name": "Calla", "message": fmt.Sprintf("line %d", i), "created_at": "t"})
+	}
+	full["campaign_messages"] = chat
+	out := shortTurn(full, 5, 9, recs, url.Values{})
+	allowed := append(append([]string{}, shortLead...), "view", "full_view", "setup_guide", "how_to_act", "rules_reminder")
 	for k := range out {
 		if !slices.Contains(allowed, k) {
 			t.Errorf("the short view carries %q, which nothing placed there", k)
@@ -56,7 +62,7 @@ func TestShortTurnIsBuiltNotTrimmed(t *testing.T) {
 		t.Error("gm_says repeats the newest narration the list holds")
 	}
 	// a short history: every event since the last action, no note
-	few := shortTurn(full, 5, recs[36:], url.Values{})["scene"].(map[string]interface{})
+	few := shortTurn(full, 5, 9, recs[36:], url.Values{})["scene"].(map[string]interface{})
 	if l := few["since_your_last_action"].([]map[string]interface{}); len(l) != 4 || few["since_your_last_action_note"] != nil {
 		t.Errorf("four events since the last action: %v", few)
 	}
@@ -72,13 +78,30 @@ func TestShortTurnIsBuiltNotTrimmed(t *testing.T) {
 		t.Errorf("the short view is %d bytes with 2 KB events", len(b))
 	}
 	// ?since: only the newer events
-	after := shortTurn(full, 5, recs, url.Values{"since": {"135"}})
+	after := shortTurn(full, 5, 9, recs, url.Values{"since": {"135"}})
 	ev = after["scene"].(map[string]interface{})["since_your_last_action"].([]map[string]interface{})
 	if len(ev) != 5 || ev[0]["id"] != 136 {
 		t.Errorf("since 135: %v", ev)
 	}
+	// money with its units and who changes it
+	if m, _ := you["money"].(map[string]interface{}); m["sp"] != 3 || m["gp"] != 1 || !strings.Contains(fmt.Sprint(m["note"]), "GM adjusts money and items") || you["gold"] != nil {
+		t.Errorf("money: %v", you["money"])
+	}
+	// the party chat: labelled, the newest lines oldest first, a cursor for only the new ones
+	pc := out["party_chat"].(map[string]interface{})
+	lines := pc["lines"].([]map[string]interface{})
+	if !strings.Contains(fmt.Sprint(pc["what"]), "party chat") || len(lines) != shortChatEntries || lines[len(lines)-1]["id"] != 508 || lines[0]["id"] != 504 || pc["more"] == nil {
+		t.Errorf("party chat: %v", pc)
+	}
+	pc = shortTurn(full, 5, 9, recs, url.Values{"chat_since": {"506"}})["party_chat"].(map[string]interface{})
+	if pc["new"] != 2 || len(pc["lines"].([]map[string]interface{})) != 2 || pc["more"] != nil {
+		t.Errorf("chat_since 506: %v", pc)
+	}
+	if pc = shortTurn(full, 5, 9, recs, url.Values{"chat_since": {"508"}})["party_chat"].(map[string]interface{}); pc["new"] != 0 || pc["lines"] != nil {
+		t.Errorf("nothing new: %v", pc)
+	}
 	// tips=1 brings the standing tips back
-	if tips := shortTurn(full, 5, recs, url.Values{"tips": {"1"}}); tips["how_to_act"] == nil {
+	if tips := shortTurn(full, 5, 9, recs, url.Values{"tips": {"1"}}); tips["how_to_act"] == nil {
 		t.Error("tips=1")
 	}
 }

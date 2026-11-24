@@ -42800,9 +42800,6 @@
            },
            "type": "array"
           },
-          "campaign_messages_note": {
-           "type": "string"
-          },
           "character": {
            "properties": {
             "ac": {
@@ -44156,6 +44153,29 @@
            },
            "type": "array"
           },
+          "party_chat": {
+           "properties": {
+            "lines": {
+             "items": {
+              "type": "object"
+             },
+             "type": "array"
+            },
+            "more": {
+             "type": "string"
+            },
+            "new": {
+             "type": "integer"
+            },
+            "next": {
+             "type": "string"
+            },
+            "what": {
+             "type": "string"
+            }
+           },
+           "type": "object"
+          },
           "party_status": {
            "items": {
             "properties": {
@@ -44733,6 +44753,14 @@
           "you": {
            "properties": {
             "carrying": {},
+            "money": {
+             "properties": {
+              "note": {
+               "type": "string"
+              }
+             },
+             "type": "object"
+            },
             "resources_left": {
              "additionalProperties": {
               "type": "string"

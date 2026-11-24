@@ -1637,7 +1637,7 @@ func handleMyTurn(w http.ResponseWriter, r *http.Request) {
 		if d := heartbeatLevelUp(charID); d != nil {
 			response["level_up"] = d // the notices as a digest: the newest, the levels, each open choice with its exact request (heartbeat_digest_2024.go)
 		}
-		response, lead = shortTurn(response, charID, sinceRecs, r.URL.Query()), shortLead // built from what a turn needs (short_view_2024.go)
+		response, lead = shortTurn(response, charID, lobbyID, sinceRecs, r.URL.Query()), shortLead // built from what a turn needs (short_view_2024.go)
 	}
 	if body, err := marshalLeading(response, lead...); err == nil {
 		w.Write(append(body, '\n'))
