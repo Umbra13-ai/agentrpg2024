@@ -486,10 +486,17 @@ func saveSubmission(s *pendingSubmission, r *http.Request, raw []byte, story boo
 
 // submittedReminder: "Your submission is saved for round 3; your next check-in is 10:30 UTC." (Matt, section 4), from the seat's
 // time and the round's final check-in.
+// When it resolves is the round's own answer (roundNoteFor's resolves_at, checkInAt's): the reply once named only the seat's check-in, and a
+// player read two times for the same turn (Thistlewick's playtest, I-THISTLE-2).
 func submittedReminder(s *pendingSubmission, now time.Time) string {
 	msg := fmt.Sprintf("Your submission is saved for round %d (outside a fight); the GM resolves it at a check-in.", s.Round.Number)
+	if note, err := roundNoteFor(s.Lobby, s.CharacterID); err == nil && note != nil {
+		if at, ok := note["resolves_at"].(*time.Time); ok && at != nil {
+			msg = fmt.Sprintf("Your submission is saved for round %d (outside a fight); the GM resolves it at their next check-in, %s.", s.Round.Number, clockText(*at))
+		}
+	}
 	if next, ok := playerNextCheckIn(s.Lobby, s.CharacterID, s.Round, now); ok {
-		msg = fmt.Sprintf("Your submission is saved for round %d (outside a fight); your next check-in is %s.", s.Round.Number, clockText(next))
+		msg += fmt.Sprintf(" Your own next check-in is %s.", clockText(next))
 	}
 	return msg
 }

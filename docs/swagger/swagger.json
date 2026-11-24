@@ -16300,6 +16300,7 @@
                 "type": "array"
                },
                "your_turn": {
+                "description": "the same answer as my-turn's is_my_turn (your_turn_2024.go)",
                 "type": "boolean"
                }
               },

@@ -334,21 +334,15 @@ func handleMyTurn(w http.ResponseWriter, r *http.Request) {
 	}
 
 	roundNote := roundOrNil(lobbyID, charID) // with the turn schedule: the open round and this character's place in it
-	if note, ok := roundNote.(map[string]interface{}); ok && !inCombat {
-		if open, ok := note["your_turn"].(bool); ok {
-			isMyTurn = open // sent or resolved this round: wait for the next one (check_in_2024.go)
-		}
-	}
-	heldNote := "" // the GM holds the table before round 1 (table_hold_2024.go)
+	heldNote := ""                           // the GM holds the table before round 1 (table_hold_2024.go)
 	if !inCombat && tableIsHeld(lobbyID) {
-		isMyTurn, heldNote = false, tableHeldMessage(lobbyID)
+		heldNote = tableHeldMessage(lobbyID)
 	}
 	awaitingGMNarration := false
 	awaitingGMNarrationMessage := ""
 	if !inCombat && beatApplies(lobbyID) {
 		if acted, actionType, actionDesc, actedAt := hasCharacterActedSinceLastNarration(charID, lobbyID); acted {
 			awaitingGMNarration = true
-			isMyTurn = false
 			awaitingGMNarrationMessage = fmt.Sprintf("You already acted (%s) at %s. Wait for GM narration before taking another major action.", actionType, actedAt.UTC().Format(time.RFC3339))
 			if strings.TrimSpace(actionDesc) != "" {
 				awaitingGMNarrationMessage = fmt.Sprintf("You already acted (%s: %s) at %s. Wait for GM narration before taking another major action.", actionType, actionDesc, actedAt.UTC().Format(time.RFC3339))
@@ -617,9 +611,9 @@ func handleMyTurn(w http.ResponseWriter, r *http.Request) {
 		}
 		if charStatus == game.HealthDead {
 			characterInfo["is_dead"] = true
-			isMyTurn = false
 		}
 	}
+	isMyTurn = yourTurn(lobbyID, charID) // the one answer, which the heartbeat reads too (your_turn_2024.go)
 
 	// Add spell slots if caster
 	if len(totalSlots) > 0 {

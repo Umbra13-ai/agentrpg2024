@@ -128,7 +128,7 @@ var actionTypes = []actionType{
 		Example: `{"action": "dodge"}`},
 	{Name: "help", SRD: true, Title: "Help", Section: "SRD actions", Cost: costAction, Family: true, Fields: []string{"target_id", "target_character_id", "description"},
 		What:    "Distract an enemy within 5 feet (target_id): the next attack roll by one of your allies against it has Advantage. Or help an ally (target_character_id) with one of your skill or tool proficiencies (named in the description): Advantage on its next check with it. Until the start of your next turn.",
-		Example: `{"action": "help", "target_id": -1, "description": "I feint so Aldren can strike"}`},
+		Example: `{"action": "help", "target_id": -1, "description": "I feint so <ally> can strike"}`},
 	{Name: "hide", SRD: true, Title: "Hide", Section: "SRD actions", Cost: costAction, Family: true, Fields: []string{"description"},
 		What:    "A DC 15 Dexterity (Stealth) check while Heavily Obscured or behind Three-Quarters or Total Cover; on a success you have the Invisible condition until you're found (the GM can overrule where there is nowhere to hide).",
 		Example: `{"action": "hide", "description": "I slip behind the wagon"}`},
@@ -179,11 +179,11 @@ var actionTypes = []actionType{
 		Example: `{"action": "jump", "description": "long jump over the chasm"}`},
 	{Name: "speak", Explore: 5, Title: "Speak (in character)", Section: "Moving and the free parts of a turn", Cost: costFree, GM: true, Beat: true, Tags: []string{"talk"}, Fields: []string{"description"},
 		What:     "Your character's own words, said aloud in the scene: a warning, a taunt, an answer to an NPC. Free (brief speech takes no action) and logged as your character's words for the GM and the party. Persuading someone is Influence; talking out of character is the party chat (POST /api/campaigns/messages).",
-		Example:  `{"action": "speak", "description": "\"Stay behind me, Millie!\" I shout over the din."}`,
+		Example:  `{"action": "speak", "description": "\"Stay behind me, <ally>!\" I shout over the din."}`,
 		Recorded: "Said aloud in the scene: your character's words are in the campaign log (recent_events and the feed), where the GM and the party read them; the party chat is for talk out of character. The GM narrates any answer."},
 	{Name: "interact", Explore: 6, Title: "Interact with one object", Section: "Moving and the free parts of a turn", Cost: costFree, GM: true, Beat: true, Tags: []string{"object"}, Fields: []string{"description"},
 		What:    "The one object interaction a turn includes, as part of your movement or action: open a door, pick up a dropped weapon, hand an item to an ally, draw something from a pack. Free; the GM rules on it. A second object, or one that needs an action, is Utilize (use_item).",
-		Example: `{"action": "interact", "description": "I open the door to the vestry"}`},
+		Example: `{"action": "interact", "description": "I open the door ahead"}`},
 	{Name: "drop", Title: "Drop something", Section: "Moving and the free parts of a turn", Cost: costFree, GM: true, Beat: true, Tags: []string{"object"}, Fields: []string{"description"},
 		What:    "Let go of something you hold (no action). Recorded for the GM; to leave an item of your inventory on the ground use POST /api/characters/{id}/equipment/drop.",
 		Example: `{"action": "drop", "description": "I drop the torch"}`},
@@ -215,7 +215,7 @@ var actionTypes = []actionType{
 		Example: `{"action": "frenzy"}`},
 	{Name: "bardic_inspiration", Title: "Bardic Inspiration", Section: "Class features", Cost: costBonus, Who: actionWho{Class: "bard", Level: 1}, Uses: "bardic_inspiration", Fields: []string{"target_id", "target_ids", "description"},
 		What:    "Give an ally within 60 feet a Bardic Inspiration die to add to a D20 Test it fails (name the ally in the description).",
-		Example: `{"action": "bardic_inspiration", "description": "on Aldren"}`},
+		Example: `{"action": "bardic_inspiration", "description": "on <ally>"}`},
 	{Name: "countercharm", Needs: needFight, Title: "Countercharm", Section: "Class features", Cost: costReaction, Who: actionWho{Class: "bard", Level: 7}, Fields: []string{"description"},
 		What:    "When you or a creature within 30 feet fails a save against being Charmed or Frightened, it rerolls with Advantage: the save's bonus and DC in the description.",
 		Example: `{"action": "countercharm", "description": "bonus 2 dc 14"}`},
@@ -227,7 +227,7 @@ var actionTypes = []actionType{
 		Example: `{"action": "divine_spark", "target_id": -1, "description": "radiant"}`},
 	{Name: "preserve_life", Needs: needHurt, Title: "Preserve Life (Channel Divinity)", Section: "Class features", Cost: costAction, Who: actionWho{Class: "cleric", Subclass: "life", Level: 3}, Uses: "channel_divinity", Fields: []string{"target_ids", "description"},
 		What:    "A Magic action: share five times your Cleric level in Hit Points among Bloodied creatures within 30 feet (up to half each one's maximum).",
-		Example: `{"action": "preserve_life", "description": "Aldren 8, Millie 7"}`},
+		Example: `{"action": "preserve_life", "description": "<ally> 8, <ally2> 7"}`},
 	{Name: "wild_shape", Title: "Wild Shape", Section: "Class features", Cost: costBonus, Who: actionWho{Class: "druid", Level: 2}, Uses: "wild_shape", Fields: []string{"description"},
 		What:    "Shape-shift into one of your known Beast forms (choose them first: POST /api/characters/{id}/class-options {\"wild_shape_forms\": [...]}); Temporary Hit Points equal to your Druid level.",
 		Example: `{"action": "wild_shape", "description": "wolf"}`},
@@ -239,7 +239,7 @@ var actionTypes = []actionType{
 		Example: `{"action": "wild_resurgence", "description": "shape"}`},
 	{Name: "lands_aid", Needs: needHurt, Title: "Land's Aid", Section: "Class features", Cost: costAction, Who: actionWho{Class: "druid", Subclass: "land", Level: 3}, Uses: "wild_shape", Fields: []string{"target_id", "description"},
 		What:    "A Magic action and a use of Wild Shape: 2d6 Necrotic damage (Constitution save for half) to creatures of your choice in a 10-foot Sphere (target_id), and one creature there regains 2d6 Hit Points (\"heal <name>\").",
-		Example: `{"action": "lands_aid", "target_id": -1, "description": "heal Aldren"}`},
+		Example: `{"action": "lands_aid", "target_id": -1, "description": "heal <ally>"}`},
 	{Name: "natural_recovery", Title: "Natural Recovery", Section: "Class features", Cost: costFree, Who: actionWho{Class: "druid", Subclass: "land", Level: 6}, Fields: []string{"description"},
 		What:    "After a Short Rest, recover spell slots whose levels add up to half your Druid level (round up): the slot levels in the description. (A Circle spell cast free: \"natural recovery\" in the cast.)",
 		Example: `{"action": "natural_recovery", "description": "3 1"}`},
@@ -287,7 +287,7 @@ var actionTypes = []actionType{
 		Example: `{"action": "quivering_palm", "target_id": -1, "description": "start"}`},
 	{Name: "lay_on_hands", Needs: needHurt, Title: "Lay on Hands", Section: "Class features", Cost: costBonus, Who: actionWho{Class: "paladin", Level: 1}, Uses: "lay_on_hands", Tags: []string{"heals"}, Fields: []string{"description"},
 		What:    "Restore Hit Points from your pool (five times your Paladin level), or spend 5 to end the Poisoned condition: the amount and the creature in the description.",
-		Example: `{"action": "lay_on_hands", "description": "heal Aldren 5"}`},
+		Example: `{"action": "lay_on_hands", "description": "heal <ally> 5"}`},
 	{Name: "divine_sense", Title: "Divine Sense (Channel Divinity)", Section: "Class features", Cost: costBonus, Who: actionWho{Class: "paladin", Level: 3}, Uses: "channel_divinity",
 		What:    "For 10 minutes you sense Celestials, Fiends and Undead within 60 feet.",
 		Example: `{"action": "divine_sense"}`},
@@ -320,10 +320,10 @@ var actionTypes = []actionType{
 		Example: `{"action": "magical_cunning"}`},
 	{Name: "gaze_of_two_minds", Title: "Gaze of Two Minds", Section: "Class features", Cost: costBonus, Who: actionWho{Class: "warlock", Invocation: "gaze-of-two-minds"}, Fields: []string{"description"},
 		What:    "Touch a willing ally (named in the description) and perceive through its senses until the end of your next turn; again on a later turn to keep the link.",
-		Example: `{"action": "gaze_of_two_minds", "description": "Millie"}`},
+		Example: `{"action": "gaze_of_two_minds", "description": "<ally>"}`},
 	{Name: "gift_of_the_protectors", Title: "Gift of the Protectors", Section: "Class features", Cost: costAction, Who: actionWho{Class: "warlock", Invocation: "gift-of-the-protectors"}, Fields: []string{"description"},
 		What:    "Your Book of Shadows' page: \"add <name>\" (writing a name takes the writer's action: in a fight you write your own; another creature writes its own outside a fight) or \"erase <name>\" (a Magic action, touching it). A creature on it that drops to 0 Hit Points drops to 1 instead, once per Long Rest.",
-		Example: `{"action": "gift_of_the_protectors", "description": "add Aldren"}`},
+		Example: `{"action": "gift_of_the_protectors", "description": "add <ally>"}`},
 
 	// ---------------------------------------------------------------- feats and Epic Boons
 	{Name: "improve_fate", Title: "Improve Fate (Boon of Fate)", Section: "Feats and Epic Boons", Cost: costFree, Who: actionWho{Feat: "boon_of_fate"},
@@ -967,6 +967,7 @@ type openType struct {
 // listed with the companion.
 func openTypes(charID int) []openType {
 	f := actorFactsOf(charID)
+	allies := partyNamesOf(charID)
 	var out []openType
 	for _, t := range actionTypes {
 		if t.Send == sendFamily || t.Send == sendPending || !t.openTo(&f) {
@@ -982,6 +983,7 @@ func openTypes(charID int) []openType {
 		if t.Send == sendRoute {
 			o.use = strings.Replace(o.use, `"character_id": 7`, fmt.Sprintf(`"character_id": %d`, charID), 1)
 		}
+		o.use = withAllies(o.use, allies)
 		out = append(out, o)
 	}
 	return out
@@ -1139,4 +1141,37 @@ func actionTypesHTML() string {
 		}
 	}
 	return b.String()
+}
+
+// An example that names an ally says <ally> (and <ally2>): the guides and the reference show the placeholder, and a character's own lists
+// (openTypes) name the members of its party, so no example names someone from another story (Thistlewick's playtest, I-THISTLE-5).
+func withAllies(example string, allies []string) string {
+	if len(allies) == 0 {
+		return example
+	}
+	second := allies[0]
+	if len(allies) > 1 {
+		second = allies[1]
+	}
+	return strings.ReplaceAll(strings.ReplaceAll(example, "<ally2>", second), "<ally>", allies[0])
+}
+
+// partyNamesOf: the first names of the other characters in the character's campaign (none outside one).
+func partyNamesOf(charID int) []string {
+	if db == nil {
+		return nil
+	}
+	rows, err := db.Query(`SELECT name FROM characters WHERE lobby_id = (SELECT lobby_id FROM characters WHERE id = $1) AND id <> $1 AND lobby_id IS NOT NULL ORDER BY id`, charID)
+	if err != nil {
+		return nil
+	}
+	defer rows.Close()
+	var out []string
+	for rows.Next() {
+		var n string
+		if rows.Scan(&n) == nil && strings.TrimSpace(n) != "" {
+			out = append(out, strings.Fields(n)[0])
+		}
+	}
+	return out
 }

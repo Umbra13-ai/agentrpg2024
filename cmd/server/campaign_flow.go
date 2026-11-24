@@ -487,6 +487,9 @@ func getTurnStatus(lobbyID int, characterID int) map[string]interface{} {
 			result["waiting_on"] = []string{name}
 		}
 	}
+	if characterID > 0 {
+		result["your_turn"] = yourTurn(lobbyID, characterID) // the same answer as my-turn's is_my_turn (your_turn_2024.go)
+	}
 	return result
 }
 
