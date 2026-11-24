@@ -28,6 +28,7 @@ type imageRule struct {
 	MaxBytes, MinPx, MaxPx int
 	Best                   string                // "1024 by 1280 pixels is the best size for the sheet"
 	Shape                  func(w, h int) string // the note when the picture will be cropped, "" when it fits
+	Square                 bool                  // the picture must be square (a monster's token): another shape is refused
 }
 
 // portraitRule: the sheet's frame is 4:5 (0.8).
@@ -63,26 +64,64 @@ func checkImage(imageBytes []byte, rule imageRule) (mime, shapeNote string, ref 
 		return refuse(http.StatusUnsupportedMediaType, map[string]interface{}{
 			"error": "unsupported_image_type", "allowed": []string{"image/png", "image/jpeg", "image/webp"}, "message": "This is not a PNG, JPEG or WebP image. Send one of those."})
 	}
-	if mime != "image/webp" { // webp has no decoder here; PNG/JPEG get a real decode check
+	// the size in pixels: PNG and JPEG from their header, WebP from its own (webpSize: there is no WebP decoder here, so its pixels aren't read)
+	var w, h int
+	if mime == "image/webp" {
+		var ok bool
+		if w, h, ok = webpSize(imageBytes); !ok {
+			return refuse(http.StatusBadRequest, map[string]interface{}{"error": "corrupt_image", "message": "The image could not be read: the file looks damaged. Save it again and resend it."})
+		}
+	} else {
 		cfg, _, err := image.DecodeConfig(bytes.NewReader(imageBytes))
 		if err != nil {
 			return refuse(http.StatusBadRequest, map[string]interface{}{"error": "corrupt_image", "message": "The image could not be read: the file looks damaged. Save it again and resend it."})
 		}
-		if cfg.Width > rule.MaxPx || cfg.Height > rule.MaxPx || cfg.Width < rule.MinPx || cfg.Height < rule.MinPx {
-			return refuse(http.StatusBadRequest, map[string]interface{}{
-				"error":      "bad_dimensions",
-				"min_pixels": rule.MinPx, "max_pixels": rule.MaxPx,
-				"got":     fmt.Sprintf("%dx%d", cfg.Width, cfg.Height),
-				"message": fmt.Sprintf("The image is %d by %d pixels. Each side must be %d to %d pixels; %s.", cfg.Width, cfg.Height, rule.MinPx, rule.MaxPx, rule.Best)})
-		}
+		w, h = cfg.Width, cfg.Height
+	}
+	if w > rule.MaxPx || h > rule.MaxPx || w < rule.MinPx || h < rule.MinPx {
+		return refuse(http.StatusBadRequest, map[string]interface{}{
+			"error":      "bad_dimensions",
+			"min_pixels": rule.MinPx, "max_pixels": rule.MaxPx,
+			"got":     fmt.Sprintf("%dx%d", w, h),
+			"message": fmt.Sprintf("The image is %d by %d pixels. Each side must be %d to %d pixels; %s.", w, h, rule.MinPx, rule.MaxPx, rule.Best)})
+	}
+	if rule.Square && w != h {
+		return refuse(http.StatusBadRequest, map[string]interface{}{
+			"error": "not_square", "got": fmt.Sprintf("%dx%d", w, h),
+			"message": fmt.Sprintf("The image is %d by %d pixels: it must be square (the same width and height); %s. Crop it and send it again. Nothing was changed.", w, h, rule.Best)})
+	}
+	if mime != "image/webp" {
 		if _, _, derr := image.Decode(bytes.NewReader(imageBytes)); derr != nil { // the pixels too, not only the header (Nov 14 review: a truncated PNG was saved)
 			return refuse(http.StatusBadRequest, map[string]interface{}{"error": "corrupt_image", "message": "The image could not be read: the file looks damaged or cut short. Save it again and resend it. Nothing was changed."})
 		}
-		if rule.Shape != nil {
-			shapeNote = rule.Shape(cfg.Width, cfg.Height)
-		}
+	}
+	if rule.Shape != nil {
+		shapeNote = rule.Shape(w, h)
 	}
 	return mime, shapeNote, nil
+}
+
+// webpSize reads a WebP's width and height from its header: a lossy (VP8), lossless (VP8L) or extended (VP8X) file.
+func webpSize(b []byte) (w, h int, ok bool) {
+	if len(b) < 30 || string(b[:4]) != "RIFF" || string(b[8:12]) != "WEBP" {
+		return 0, 0, false
+	}
+	switch string(b[12:16]) {
+	case "VP8 ":
+		if b[23] != 0x9d || b[24] != 0x01 || b[25] != 0x2a {
+			return 0, 0, false
+		}
+		return int(b[26]) | int(b[27]&0x3f)<<8, int(b[28]) | int(b[29]&0x3f)<<8, true
+	case "VP8L":
+		if b[20] != 0x2f {
+			return 0, 0, false
+		}
+		bits := uint32(b[21]) | uint32(b[22])<<8 | uint32(b[23])<<16 | uint32(b[24])<<24
+		return int(bits&0x3fff) + 1, int(bits>>14&0x3fff) + 1, true
+	case "VP8X":
+		return 1 + (int(b[24]) | int(b[25])<<8 | int(b[26])<<16), 1 + (int(b[27]) | int(b[28])<<8 | int(b[29])<<16), true
+	}
+	return 0, 0, false
 }
 
 // savePortrait writes a checked image as the character's portrait.

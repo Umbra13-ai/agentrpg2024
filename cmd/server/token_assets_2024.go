@@ -8,13 +8,17 @@ package main
 import (
 	"io/fs"
 	"regexp"
+	"strings"
 )
 
 var monsterTokenSlugRe = regexp.MustCompile(`^[a-z0-9]+(?:-[a-z0-9]+)*$`)
 
-// monsterTokenURL: the URL of the token of the monster with this slug (a stat block's key), or "" when there is none (a GM's own monster, a
-// slug nobody knows): the page then keeps its emoji.
+// monsterTokenURL: the URL of the token of the monster with this key, or "" when there is none (the page then keeps its emoji): an SRD
+// stat block's painted token, or the token a GM uploaded for a compendium monster (a custom: key, monster_token_2024.go).
 func monsterTokenURL(slug string) string {
+	if strings.HasPrefix(slug, "custom:") {
+		return customTokenURL(slug)
+	}
 	if !monsterTokenSlugRe.MatchString(slug) {
 		return ""
 	}

@@ -120,6 +120,10 @@ func handleGMCompendiumEdit(w http.ResponseWriter, r *http.Request) {
 	if !ok {
 		return
 	}
+	if err := copyMonsterTokenIn(tx, req.MonsterKey, key); err != nil { // the new version keeps the token (monster_token_2024.go)
+		writeDBWriteError(w, err, "the compendium")
+		return
+	}
 	if _, err := tx.Exec(`UPDATE custom_monsters SET hidden_at = COALESCE(hidden_at, NOW()) WHERE key=$1`, req.MonsterKey); err != nil {
 		writeDBWriteError(w, err, "the compendium")
 		return
@@ -128,8 +132,8 @@ func handleGMCompendiumEdit(w http.ResponseWriter, r *http.Request) {
 		writeDBWriteError(w, err, "the compendium")
 		return
 	}
-	writeJSONStatus(w, http.StatusCreated, map[string]interface{}{"monster_key": key, "replaces": req.MonsterKey, "name": req.Monster.Name, "shared": shared, "report": customMonsterReport(req.Monster, notes, false),
-		"message": "Saved as a new version. The old one is off your list; a fight that started with it keeps it. Use the new monster_key in combat/add."})
+	writeJSONStatus(w, http.StatusCreated, map[string]interface{}{"monster_key": key, "replaces": req.MonsterKey, "name": req.Monster.Name, "shared": shared, "report": customMonsterReport(req.Monster, notes, false), "token": monsterTokenView(key),
+		"message": "Saved as a new version (its token kept). The old one is off your list; a fight that started with it keeps it. Use the new monster_key in combat/add."})
 }
 
 // setCompendiumHidden is hide and restore: only the owner's row, one statement.

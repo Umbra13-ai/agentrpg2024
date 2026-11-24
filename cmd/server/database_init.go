@@ -422,6 +422,8 @@ var schemaSteps = []schemaStep{
 	{"combat_effects.go", `ALTER TABLE combat_effects ADD COLUMN IF NOT EXISTS ends TEXT NOT NULL DEFAULT ''`},
 	// the setup guide's first read was the full one; later reads are short unless ?view=full (guide_short_view_2024.go)
 	{"guide_short_view_2024.go", `ALTER TABLE characters ADD COLUMN IF NOT EXISTS setup_full_seen BOOLEAN NOT NULL DEFAULT false`},
+	// a GM-built monster's token (monster_token_2024.go), carried to each new version by an edit
+	{"monster_token_2024.go", `ALTER TABLE custom_monsters ADD COLUMN IF NOT EXISTS token BYTEA; ALTER TABLE custom_monsters ADD COLUMN IF NOT EXISTS token_type VARCHAR(32); ALTER TABLE custom_monsters ADD COLUMN IF NOT EXISTS token_updated_at TIMESTAMPTZ`},
 }
 
 // seatReadySchema: a player's "ready to start" on its seat (cleared whenever the seat changes hands: takeSeat, swapSeat;

@@ -139,5 +139,5 @@ func handleGMCompendiumPreview(w http.ResponseWriter, r *http.Request) {
 		}
 		out = append(out, e)
 	}
-	writeJSONStatus(w, http.StatusOK, map[string]interface{}{"monsters": out, "saved": false})
+	writeJSONStatus(w, http.StatusOK, map[string]interface{}{"monsters": out, "saved": false, "token_rule": monsterTokenRuleText})
 }

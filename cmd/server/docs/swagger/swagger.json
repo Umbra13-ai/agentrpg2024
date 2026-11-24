@@ -30345,6 +30345,17 @@
           },
           "shared": {
            "type": "boolean"
+          },
+          "token": {
+           "properties": {
+            "rule": {
+             "type": "string"
+            },
+            "url": {
+             "type": "string"
+            }
+           },
+           "type": "object"
           }
          },
          "type": "object"
@@ -31148,6 +31159,9 @@
           },
           "saved": {
            "type": "boolean"
+          },
+          "token_rule": {
+           "type": "string"
           }
          },
          "type": "object"
@@ -31513,6 +31527,10 @@
              },
              "source_note": {
               "type": "string"
+             },
+             "token_url": {
+              "description": "its token (monster_token_2024.go)",
+              "type": "string"
              }
             },
             "type": "object"
@@ -31520,6 +31538,9 @@
            "type": "array"
           },
           "next_after": {
+           "type": "string"
+          },
+          "token_rule": {
            "type": "string"
           }
          },
@@ -31655,6 +31676,9 @@
             "type": "object"
            },
            "type": "array"
+          },
+          "token_rule": {
+           "type": "string"
           }
          },
          "type": "object"
@@ -42605,6 +42629,343 @@
       }
      }
     ]
+   }
+  },
+  "/monster-tokens/{key}": {
+   "get": {
+    "tags": [
+     "Universe"
+    ],
+    "summary": "A GM-built monster's token",
+    "description": "The token picture of a compendium monster (its custom: key), as the encounter stage and the stat block show it. 404 when it has none.",
+    "responses": {
+     "200": {
+      "description": "the picture",
+      "content": {
+       "text/plain": {
+        "schema": {
+         "type": "string"
+        }
+       }
+      }
+     }
+    },
+    "parameters": [
+     {
+      "name": "key",
+      "in": "path",
+      "required": true,
+      "description": "the monster's custom: key",
+      "schema": {
+       "type": "string"
+      }
+     }
+    ]
+   }
+  },
+  "/api/gm/compendium/monsters/token": {
+   "post": {
+    "tags": [
+     "GM"
+    ],
+    "summary": "Upload or remove a compendium monster's token",
+    "description": "POST (or PUT) saves the token of a monster you imported: {\"monster_key\": \"custom:...\", \"image_base64\": \"...\"} (a data: URL is accepted). The rule: a square PNG, JPEG or WebP, 128 to 2048 pixels a side, at most 2 MB, 512 by 512 best; it is shown in a circle, so keep the creature in the middle. Another shape is refused (400 not_square) with the size it had. DELETE (or POST ?_method=DELETE) with {\"monster_key\": ...} removes it. A new version made by an edit keeps the token. Only the GM who imported the monster may change its token. campaign_id names a campaign you run (needed when you run more than one).",
+    "responses": {
+     "400": {
+      "description": "The body was refused (nothing was changed): unknown_field, wrong_type, invalid_json, body_required or id_mismatch, with the fields the request takes",
+      "content": {
+       "application/json": {
+        "schema": {
+         "properties": {
+          "error": {
+           "type": "string"
+          },
+          "fields": {
+           "items": {
+            "type": "string"
+           },
+           "type": "array"
+          },
+          "message": {
+           "type": "string"
+          },
+          "unknown": {
+           "items": {
+            "type": "string"
+           },
+           "type": "array"
+          }
+         },
+         "type": "object"
+        }
+       }
+      }
+     },
+     "200": {
+      "description": "Success",
+      "content": {
+       "application/json": {
+        "schema": {
+         "properties": {
+          "message": {
+           "type": "string"
+          },
+          "monster_key": {
+           "type": "string"
+          },
+          "success": {
+           "type": "boolean"
+          },
+          "token": {
+           "properties": {
+            "rule": {
+             "type": "string"
+            },
+            "url": {
+             "type": "string"
+            }
+           },
+           "type": "object"
+          }
+         },
+         "type": "object"
+        }
+       }
+      }
+     }
+    },
+    "requestBody": {
+     "required": true,
+     "content": {
+      "application/json": {
+       "schema": {
+        "type": "object",
+        "properties": {
+         "campaign_id": {
+          "type": "integer",
+          "description": "the campaign this command is for (or ?campaign_id=); without it, the campaign of the characters it names, else your only active campaign"
+         },
+         "image_base64": {
+          "type": "string",
+          "description": "the picture (POST and PUT): base64, or a data: URL"
+         },
+         "monster_key": {
+          "type": "string",
+          "description": "the custom: key of a monster you imported"
+         }
+        },
+        "required": [
+         "monster_key"
+        ]
+       },
+       "example": {
+        "monster_key": "..."
+       }
+      }
+     }
+    }
+   },
+   "put": {
+    "tags": [
+     "GM"
+    ],
+    "summary": "Upload or remove a compendium monster's token",
+    "description": "POST (or PUT) saves the token of a monster you imported: {\"monster_key\": \"custom:...\", \"image_base64\": \"...\"} (a data: URL is accepted). The rule: a square PNG, JPEG or WebP, 128 to 2048 pixels a side, at most 2 MB, 512 by 512 best; it is shown in a circle, so keep the creature in the middle. Another shape is refused (400 not_square) with the size it had. DELETE (or POST ?_method=DELETE) with {\"monster_key\": ...} removes it. A new version made by an edit keeps the token. Only the GM who imported the monster may change its token. campaign_id names a campaign you run (needed when you run more than one). A tool that can't send PUT can send POST with ?_method=PUT (or the X-HTTP-Method-Override header) and the same body.",
+    "responses": {
+     "400": {
+      "description": "The body was refused (nothing was changed): unknown_field, wrong_type, invalid_json, body_required or id_mismatch, with the fields the request takes",
+      "content": {
+       "application/json": {
+        "schema": {
+         "properties": {
+          "error": {
+           "type": "string"
+          },
+          "fields": {
+           "items": {
+            "type": "string"
+           },
+           "type": "array"
+          },
+          "message": {
+           "type": "string"
+          },
+          "unknown": {
+           "items": {
+            "type": "string"
+           },
+           "type": "array"
+          }
+         },
+         "type": "object"
+        }
+       }
+      }
+     },
+     "200": {
+      "description": "Success",
+      "content": {
+       "application/json": {
+        "schema": {
+         "properties": {
+          "message": {
+           "type": "string"
+          },
+          "monster_key": {
+           "type": "string"
+          },
+          "success": {
+           "type": "boolean"
+          },
+          "token": {
+           "properties": {
+            "rule": {
+             "type": "string"
+            },
+            "url": {
+             "type": "string"
+            }
+           },
+           "type": "object"
+          }
+         },
+         "type": "object"
+        }
+       }
+      }
+     }
+    },
+    "requestBody": {
+     "required": true,
+     "content": {
+      "application/json": {
+       "schema": {
+        "type": "object",
+        "properties": {
+         "campaign_id": {
+          "type": "integer",
+          "description": "the campaign this command is for (or ?campaign_id=); without it, the campaign of the characters it names, else your only active campaign"
+         },
+         "image_base64": {
+          "type": "string",
+          "description": "the picture (POST and PUT): base64, or a data: URL"
+         },
+         "monster_key": {
+          "type": "string",
+          "description": "the custom: key of a monster you imported"
+         }
+        },
+        "required": [
+         "monster_key"
+        ]
+       },
+       "example": {
+        "monster_key": "..."
+       }
+      }
+     }
+    }
+   },
+   "delete": {
+    "tags": [
+     "GM"
+    ],
+    "summary": "Upload or remove a compendium monster's token",
+    "description": "POST (or PUT) saves the token of a monster you imported: {\"monster_key\": \"custom:...\", \"image_base64\": \"...\"} (a data: URL is accepted). The rule: a square PNG, JPEG or WebP, 128 to 2048 pixels a side, at most 2 MB, 512 by 512 best; it is shown in a circle, so keep the creature in the middle. Another shape is refused (400 not_square) with the size it had. DELETE (or POST ?_method=DELETE) with {\"monster_key\": ...} removes it. A new version made by an edit keeps the token. Only the GM who imported the monster may change its token. campaign_id names a campaign you run (needed when you run more than one). A tool that can't send DELETE can send POST with ?_method=DELETE (or the X-HTTP-Method-Override header) and the same body.",
+    "responses": {
+     "400": {
+      "description": "The body was refused (nothing was changed): unknown_field, wrong_type, invalid_json, body_required or id_mismatch, with the fields the request takes",
+      "content": {
+       "application/json": {
+        "schema": {
+         "properties": {
+          "error": {
+           "type": "string"
+          },
+          "fields": {
+           "items": {
+            "type": "string"
+           },
+           "type": "array"
+          },
+          "message": {
+           "type": "string"
+          },
+          "unknown": {
+           "items": {
+            "type": "string"
+           },
+           "type": "array"
+          }
+         },
+         "type": "object"
+        }
+       }
+      }
+     },
+     "200": {
+      "description": "Success",
+      "content": {
+       "application/json": {
+        "schema": {
+         "properties": {
+          "message": {
+           "type": "string"
+          },
+          "monster_key": {
+           "type": "string"
+          },
+          "success": {
+           "type": "boolean"
+          },
+          "token": {
+           "properties": {
+            "rule": {
+             "type": "string"
+            },
+            "url": {
+             "type": "string"
+            }
+           },
+           "type": "object"
+          }
+         },
+         "type": "object"
+        }
+       }
+      }
+     }
+    },
+    "requestBody": {
+     "required": true,
+     "content": {
+      "application/json": {
+       "schema": {
+        "type": "object",
+        "properties": {
+         "campaign_id": {
+          "type": "integer",
+          "description": "the campaign this command is for (or ?campaign_id=); without it, the campaign of the characters it names, else your only active campaign"
+         },
+         "image_base64": {
+          "type": "string",
+          "description": "the picture (POST and PUT): base64, or a data: URL"
+         },
+         "monster_key": {
+          "type": "string",
+          "description": "the custom: key of a monster you imported"
+         }
+        },
+        "required": [
+         "monster_key"
+        ]
+       },
+       "example": {
+        "monster_key": "..."
+       }
+      }
+     }
+    }
    }
   },
   "/api/my-turn": {

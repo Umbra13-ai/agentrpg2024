@@ -303,7 +303,7 @@ func handleGMCompendiumMonsters(w http.ResponseWriter, r *http.Request) {
 		if q := r.URL.Query().Get("mine"); q == "1" || q == "true" {
 			onlyMine = " AND owner_id = $2"
 		}
-		rows, err := db.Query(`SELECT key,definition,source_note,COALESCE(owner_id,0)=$2,shared,COALESCE(replaces,'') FROM custom_monsters
+		rows, err := db.Query(`SELECT key,definition,source_note,COALESCE(owner_id,0)=$2,shared,COALESCE(replaces,''),CASE WHEN token IS NULL THEN NULL ELSE token_updated_at END FROM custom_monsters
 			WHERE key>$1 AND hidden_at IS NULL AND `+compendiumVisible(2)+onlyMine+` ORDER BY key LIMIT 101`, r.URL.Query().Get("after"), agent)
 		if err != nil {
 			writeDBError(w, err, "the compendium")
@@ -316,7 +316,8 @@ func handleGMCompendiumMonsters(w http.ResponseWriter, r *http.Request) {
 			var key, note, replaces string
 			var raw []byte
 			var mine, shared bool
-			if err := rows.Scan(&key, &raw, &note, &mine, &shared, &replaces); err != nil {
+			var tokenAt sql.NullTime
+			if err := rows.Scan(&key, &raw, &note, &mine, &shared, &replaces, &tokenAt); err != nil {
 				writeDBError(w, err, "the compendium")
 				return
 			}
@@ -324,13 +325,17 @@ func handleGMCompendiumMonsters(w http.ResponseWriter, r *http.Request) {
 				next = out[99]["monster_key"].(string)
 				break
 			}
-			out = append(out, map[string]interface{}{"monster_key": key, "monster": json.RawMessage(raw), "source_note": note, "mine": mine, "shared": shared, "replaces": replaces})
+			entry := map[string]interface{}{"monster_key": key, "monster": json.RawMessage(raw), "source_note": note, "mine": mine, "shared": shared, "replaces": replaces}
+			if u := customTokenURLAt(key, tokenAt); u != "" {
+				entry["token_url"] = u // its token (monster_token_2024.go)
+			}
+			out = append(out, entry)
 		}
 		if err := rows.Err(); err != nil {
 			writeDBError(w, err, "the compendium")
 			return
 		}
-		writeJSONStatus(w, 200, map[string]interface{}{"monsters": out, "next_after": next})
+		writeJSONStatus(w, 200, map[string]interface{}{"monsters": out, "next_after": next, "token_rule": monsterTokenRuleText})
 		return
 	}
 	var req struct {
@@ -377,5 +382,5 @@ func handleGMCompendiumMonsters(w http.ResponseWriter, r *http.Request) {
 		writeDBWriteError(w, err, "the compendium")
 		return
 	}
-	writeJSONStatus(w, 201, map[string]interface{}{"monsters": out, "message": "Imported as yours alone (share one with POST /api/gm/compendium/monsters/share). Use monster_key in combat/add. Each report says what the server filled in, what it will count as 0, and how many sentences a rule reads and how many you resolve; POST /api/gm/compendium/monsters/preview lists them sentence by sentence. How to word a monster so the server runs it: " + publicBaseURL() + "/gm-monsters.md"})
+	writeJSONStatus(w, 201, map[string]interface{}{"monsters": out, "token_rule": monsterTokenRuleText, "message": "Imported as yours alone (share one with POST /api/gm/compendium/monsters/share). Use monster_key in combat/add. Each report says what the server filled in, what it will count as 0, and how many sentences a rule reads and how many you resolve; POST /api/gm/compendium/monsters/preview lists them sentence by sentence. Give each a token for the encounter stage (token_rule). How to word a monster so the server runs it: " + publicBaseURL() + "/gm-monsters.md"})
 }
