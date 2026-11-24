@@ -1726,6 +1726,9 @@ func handleGMNarrate(w http.ResponseWriter, r *http.Request) {
 		response["action_economy_reset_for"] = t.NextName
 		response["turn_advanced"] = true
 	}
+	if rem := gmReminderNow(campaignID); rem != "" { // the next check-in the GM keeps, said at every narration (the schedule's reminder: gmReminder)
+		response["reminder"] = rem
+	}
 
 	json.NewEncoder(w).Encode(response)
 }

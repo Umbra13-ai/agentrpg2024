@@ -60,6 +60,29 @@ type roundRecord struct {
 	Deadline   sql.NullTime // the final check-in; not set while paused
 }
 
+// gmReminderNow: the GM's next and final check-in in words for a campaign that uses the turn schedule, "" for any other: the GM is told at every
+// narration, not only when it resolves a round.
+func gmReminderNow(lobby int) string {
+	if state, err := scheduleStateOf(db, lobby); err != nil || !usesSchedule(state) {
+		return ""
+	}
+	in, now, err := loadCheckIn(lobby)
+	if err != nil {
+		return ""
+	}
+	return gmReminder(checkInAt(in, now))
+}
+
+// finalCheckInClause: ", and no later than the round's final check-in (11:55 UTC)": the GM reads a turn at a check-in, and says when it will at the
+// latest, so a player who looks at the first one and finds nothing knows how long to wait (I-THISTLE-8). "" when the final check-in is not after
+// the time named or the schedule is paused.
+func finalCheckInClause(final time.Time, valid bool, at time.Time) string {
+	if !valid || !final.After(at) {
+		return ""
+	}
+	return fmt.Sprintf(", and no later than the round's final check-in (%s)", clockText(final))
+}
+
 // openRoundOf reads a campaign's open round (nil when none).
 func openRoundOf(q rowQuerier, lobby int) (*roundRecord, error) {
 	r := &roundRecord{}
@@ -524,7 +547,7 @@ func checkInAt(in checkInInputs, now time.Time) checkIn {
 	submittedText := func(sent time.Time) string {
 		switch at := resolvesAt(sent); {
 		case out.NextGMCheckIn != nil && at != nil:
-			return fmt.Sprintf("Submitted: it resolves at the GM's next check-in (%s).", clockText(*at))
+			return fmt.Sprintf("Submitted: it resolves at the GM's next check-in (%s)%s.", clockText(*at), finalCheckInClause(deadline, !paused, *at))
 		case lateGM != nil:
 			return fmt.Sprintf("Submitted: the round's final check-in has passed, so the GM resolves it at their next check-in (%s). There is nothing more for you to do this round.", clockText(*lateGM))
 		}

@@ -59,6 +59,19 @@ func TestPostgresThistlewickPlaytest(t *testing.T) {
 	if at, _ := round["resolves_at"].(string); at == "" || !strings.Contains(fmt.Sprint(sub["message"]), "resolves it at their next check-in") {
 		t.Errorf("the submission's reply and the round: %v / %v", sub["message"], round)
 	}
+	// the GM is told its next and final check-in at every narration, not only when it resolves a round (I-THISTLE-8)
+	_, nar := pgCall(t, "POST", "/api/gm/narrate", gm, map[string]interface{}{"campaign_id": camp, "narration": "The ferry pushes off."})
+	if rem := fmt.Sprint(nar["reminder"]); !strings.Contains(rem, "your next check-in is") || !strings.Contains(rem, "final check-in is") {
+		t.Errorf("narrate's reply names no check-in: %v", nar["reminder"])
+	}
+	// and a turn that waits says the latest the GM reads it
+	final := time.Date(2026, 11, 24, 11, 55, 0, 0, time.UTC)
+	if got := finalCheckInClause(final, true, time.Date(2026, 11, 24, 11, 10, 0, 0, time.UTC)); !strings.Contains(got, "no later than the round's final check-in (11:55 UTC)") {
+		t.Errorf("the latest time: %q", got)
+	}
+	if finalCheckInClause(final, true, final) != "" || finalCheckInClause(final, false, time.Time{}) != "" {
+		t.Error("a final check-in that is not later is named")
+	}
 	// examples name the party, never another story's people (I-THISTLE-5)
 	for _, at := range actionTypes {
 		for _, name := range []string{"Aldren", "Millie", "vestry", "children"} {
