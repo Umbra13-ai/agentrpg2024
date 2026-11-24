@@ -107,6 +107,7 @@ type saveEffect struct {
 	Exhaustion       int                 // Exhaustion levels on a failure
 	EscapeDC         int                 // "the Grappled condition (escape DC 16)": the DC of the escape checks
 	Escapes          []conditionEscape   // a spell's escape checks (conditionSpell.escapes: Entangle, Web)
+	Engulf           entryMechanic       // an engulf mechanic the GM attached to the entry (monster_mechanics_2024.go): given on a failed save
 	RestrainedToo    bool                // "and it has the Restrained condition until the grapple ends": a condition that ends with the Grappled record
 	LinkedCond       string              // that condition (Restrained; Poisoned for the Roper's Tentacle)
 	SpeedMode        string              // "halved", "zero" or "minus": a Speed rider of the text (speed_owner_2024.go), applied as a marker for SpeedEnd
@@ -1157,6 +1158,9 @@ func (e saveEffect) finishTarget(lobby, target int, source string, apply, saved 
 	if !saved && e.Kills {
 		parts = append(parts, e.killOnFailure(lobby, target))
 	}
+	if !saved && e.Engulf != nil {
+		parts = append(parts, e.giveEngulf(lobby, target, source)...) // an attached engulf (monster_mechanics_2024.go)
+	}
 	if !saved {
 		if e.SeverePoison != nil && failedBy >= e.SeverePoison.Margin {
 			return append(parts, e.giveSeverePoison(lobby, target, source)...), false
@@ -1962,6 +1966,9 @@ func resolveMonsterEffectText(r *http.Request, lobbyID, monsterID int, meta *mon
 			return append([]string{fmt.Sprintf("%s uses %s; every target is immune to it.", name, entryName)}, notes...)
 		}
 		e.ImmunityName = entryName
+		if m, ok := entryMechanicIn(meta, entryName, "engulf"); ok {
+			e.Engulf = m // an attached engulf, given with the failure (finishTarget)
+		}
 		l, _ := applySaveEffect(lobbyID, name+" ("+entryName+")", e, fresh, apply)
 		if apply {
 			markExecuted(r)

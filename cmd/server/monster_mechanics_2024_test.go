@@ -739,3 +739,69 @@ func TestPostgresCurseMechanicOnEveryTarget(t *testing.T) {
 		}
 	}
 }
+
+const gulpText = "Dexterity Saving Throw: DC 30, one creature within 5 feet. Failure: The target is drawn inside the blob, blinded and dissolving."
+
+func gulp() srdMonsterEntry {
+	return srdMonsterEntry{Name: "Gulp", Text: gulpText, Mechanics: []entryMechanic{{"kind": "engulf", "escape_dc": float64(5), "also": []interface{}{"blinded"},
+		"damage": "2d6", "damage_type": "acid", "note": "Total Cover from outside", "covers": "The target is drawn inside the blob, blinded and dissolving."}}}
+}
+
+// TestEngulfMechanicProblems: the save fit and the engulf's parameters; its sentences read back as the condition, what lasts with it.
+func TestEngulfMechanicProblems(t *testing.T) {
+	cases := []struct{ group, text, mechanics, want string }{
+		{"action", gulpText, `[{"kind":"engulf","escape_dc":12}]`, ""},
+		{"action", ashClawText, `[{"kind":"engulf","escape_dc":12}]`, "attaches to an entry with a saving throw"},
+		{"trait", gulpText, `[{"kind":"engulf","escape_dc":12}]`, "attaches to an action, Bonus Action or Legendary Action with a saving throw"},
+		{"action", gulpText, `[{"kind":"engulf"}]`, "escape_dc is required"},
+		{"action", gulpText, `[{"kind":"engulf","escape_dc":12,"damage":"2d6"}]`, "damage needs damage_type"},
+		{"action", gulpText, `[{"kind":"engulf","escape_dc":12,"damage_type":"acid"}]`, "damage_type is only taken with damage"},
+		{"action", gulpText, `[{"kind":"engulf","escape_dc":12,"escape_skill":"stealth"}]`, "escape_skill must be one of athletics, acrobatics"},
+	}
+	for _, c := range cases {
+		got := mechanicProblem(c.group, srdMonsterEntry{Name: "x", Text: c.text, Mechanics: mechanicsFromJSON(t, c.mechanics)})
+		if (c.want == "") != (got == "") || !strings.Contains(got, c.want) {
+			t.Errorf("%s %s: got %q, want %q", c.group, c.mechanics, got, c.want)
+		}
+	}
+	e, ok := parseHitRider(engulfSentences(gulp().Mechanics[0]))
+	if !ok || strings.Join(e.Conditions, ",") != "restrained" || e.Lasting == nil || strings.Join(e.Lasting.Also, ",") != "blinded" || e.Lasting.Tick == nil || strings.TrimSpace(e.Extra) != "" {
+		t.Errorf("engulf sentences %q read as %+v", engulfSentences(gulp().Mechanics[0]), e)
+	}
+}
+
+// TestPostgresEngulfMechanicInPlay: a failed save engulfs the character (Restrained, Blinded while Restrained, the escape on the
+// Restrained record) and a monster; the character's escape check ends both conditions.
+func TestPostgresEngulfMechanicInPlay(t *testing.T) {
+	testPostgres(t)
+	gm, player, camp, hero, blob := earlyRulesFixture(t, "Test Gulp Blob", []srdMonsterEntry{gulp()})
+	cp := fmt.Sprintf("/api/campaigns/%d", camp)
+	pgCall(t, "POST", cp+"/combat/add", gm, map[string]interface{}{"combatants": []map[string]interface{}{{"name": "Gulp Victim", "monster_key": "goblin-warrior", "hp": 1000, "ac": 1, "initiative": -600}}})
+	victim := monsterIDsByKeyOrName(camp, "Gulp Victim")[0]
+	for _, tg := range []struct {
+		id   int
+		name string
+	}{{hero, fmt.Sprint(hero)}, {victim, "Gulp Victim"}} {
+		c, line := narrateAs(t, gm, camp, blob, "Gulp", tg.name, "")
+		if c != 200 || !hasCondMarker(camp, tg.id, "restrained") || !hasCondMarker(camp, tg.id, "blinded") || !strings.Contains(line, "DC 5 Athletics") ||
+			!strings.Contains(line, "Total Cover") || strings.Contains(line, "dissolving") {
+			t.Errorf("Gulp at %s: %d restrained %v blinded %v: %s", tg.name, c, hasCondMarker(camp, tg.id, "restrained"), hasCondMarker(camp, tg.id, "blinded"), line)
+		}
+	}
+	if g, _ := gatedEffectsOn(camp, hero, "recurring_damage"); len(g) != 1 || g[0].Gate != "restrained" || !strings.Contains(g[0].Text, "2d6") {
+		t.Errorf("the acid at the start of each of its turns, while Restrained: %+v", g)
+	}
+	rs := recordsOf(camp, hero, "restrained")
+	if len(rs) != 1 || len(rs[0].Escapes) != 1 || rs[0].Escapes[0].DC != 5 || rs[0].Escapes[0].Skill != "athletics" || !rs[0].Escapes[0].Adjacent {
+		t.Fatalf("the Restrained record: %+v", rs)
+	}
+	var c int
+	var j map[string]interface{}
+	for i := 0; i < 40 && hasCondMarker(camp, hero, "restrained"); i++ { // a failed check leaves it: try again on a new turn, as a player would
+		pgExec(t, `UPDATE characters SET action_used=false WHERE id=$1`, hero)
+		c, j = pgCall(t, "POST", "/api/conditions/escape", player, map[string]interface{}{"character_id": hero, "record_id": rs[0].ID, "escape": 0})
+	}
+	if c != 200 || hasCondMarker(camp, hero, "restrained") || hasCondMarker(camp, hero, "blinded") {
+		t.Errorf("the escape: %d %v; restrained %v blinded %v", c, j, hasCondMarker(camp, hero, "restrained"), hasCondMarker(camp, hero, "blinded"))
+	}
+}

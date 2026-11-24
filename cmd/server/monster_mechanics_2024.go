@@ -96,6 +96,15 @@ var mechanicFits = map[string]struct {
 		}
 		return ""
 	}},
+	"save": {"an action, Bonus Action or Legendary Action with a saving throw (\"Strength Saving Throw: DC 15, ...\")", func(group string, e srdMonsterEntry) string {
+		if group == "trait" || group == "reaction" {
+			return "attaches to an action, Bonus Action or Legendary Action with a saving throw"
+		}
+		if _, ok := parseSaveEffect(rulesText(e)); !ok {
+			return "attaches to an entry with a saving throw (\"Strength Saving Throw: DC 15, one creature ...\"): preview it to see whether the server reads one"
+		}
+		return ""
+	}},
 	"options": {"an action, Bonus Action or Legendary Action that offers several named effects (\"Name. Text\" after a colon, as the SRD's rays are written)", func(group string, e srdMonsterEntry) string {
 		if group == "trait" || group == "reaction" || len(splitSaveOptions(rulesText(e))) < 2 {
 			return "attaches to an entry that offers two or more named effects, each written \"Name. Text\" after the entry's colon (preview it: the report names the effects it reads)"
@@ -379,6 +388,90 @@ var mechanicCatalog = []mechanicKind{
 			return "a hit curses its target (" + strings.Join(parts, "; ") + ")" + noteWords(m)
 		},
 	},
+	{
+		Kind: "engulf",
+		Does: "A creature that fails this entry's saving throw is engulfed, held or buried: it has the Restrained condition, the also conditions while " +
+			"Restrained, and damage (dice of damage_type) at the start of each of its turns while Restrained. It, or a creature within 5 feet of it, " +
+			"can take an action to make the escape_skill check against escape_dc (POST /api/conditions/escape), ending all of it on a success.",
+		On:        "save",
+		AppliedBy: "giveEngulf in the save owner's finishTarget (monster_effects_2024.go), on every target route, through the hit and condition owners",
+		Params: []mechanicParam{
+			{Name: "escape_dc", Type: "number", Min: 1, Max: 40, Required: true, Does: "the DC of the check that ends it"},
+			{Name: "escape_skill", Type: "choice", Options: []string{"athletics", "acrobatics"}, Does: "the skill of that check (Athletics by default)"},
+			{Name: "also", Type: "conditions", Min: 1, Does: "conditions the creature has while Restrained (Blinded inside a creature)"},
+			{Name: "damage", Type: "dice", Needs: "damage_type", Does: "the damage it takes at the start of each of its turns while Restrained"},
+			{Name: "damage_type", Type: "choice", Options: sortedDamageTypes(), Only: "damage", Does: "that damage's type"},
+			{Name: "note", Type: "text", MaxLen: 300, Does: "what the server doesn't apply (Total Cover, suffocating, moving with it), shown with the result"},
+		},
+		Example: entryMechanic{"kind": "engulf", "escape_dc": float64(13), "also": []interface{}{"blinded"}, "damage": "2d6", "damage_type": "acid",
+			"note": "Total Cover from outside; it moves with the blob", "covers": "The target is drawn inside the blob, blinded and dissolving."},
+		ExampleOn: "Dexterity Saving Throw: DC 13, one creature within 5 feet. Failure: The target is drawn inside the blob, blinded and dissolving.",
+		describe: func(m entryMechanic) string {
+			s := "a failed save leaves the creature Restrained"
+			if a := m.list("also"); len(a) > 0 {
+				s += " (and " + strings.Join(a, " and ") + " while Restrained)"
+			}
+			if d := m.str("damage"); d != "" {
+				s += fmt.Sprintf(", taking %s %s damage at the start of each of its turns", d, titleCase(m.str("damage_type")))
+			}
+			skill := m.str("escape_skill")
+			if skill == "" {
+				skill = "athletics"
+			}
+			return s + fmt.Sprintf("; escape: an action and a DC %d %s check", m.num("escape_dc"), titleCase(skill)) + noteWords(m)
+		},
+	},
+}
+
+// engulfSentences: the SRD's own words for an engulf, which the hit and condition owners read (parseHitRider: the condition, what lasts
+// while it does).
+func engulfSentences(m entryMechanic) string {
+	s := "Hit: The target has the Restrained condition."
+	var while []string
+	if a := m.list("also"); len(a) > 0 {
+		names := make([]string, len(a))
+		for i, x := range a {
+			names[i] = titleCase(x)
+		}
+		cond := " condition"
+		if len(a) > 1 {
+			cond = " conditions"
+		}
+		while = append(while, "also has the "+strings.Join(names, " and ")+cond)
+	}
+	if d := m.str("damage"); d != "" {
+		n, sides := game.ParseDice(d)
+		while = append(while, fmt.Sprintf("takes %d (%s) %s damage at the start of each of its turns", n*(sides+1)/2, d, titleCase(m.str("damage_type"))))
+	}
+	if len(while) > 0 {
+		s += " While Restrained, the target " + strings.Join(while, " and ") + "."
+	}
+	return s
+}
+
+// giveEngulf: the engulf a failed save gives (the save owner's finishTarget, for every target kind): the conditions and what lasts with
+// them, and the escape on the Restrained record.
+func (e saveEffect) giveEngulf(lobby, target int, source string) []string {
+	if e.Engulf == nil {
+		return nil
+	}
+	m := e.Engulf
+	g, ok := parseHitRider(engulfSentences(m))
+	if !ok {
+		return []string{"[the engulf attached to this entry could not be read; the GM applies it]"}
+	}
+	skill := m.str("escape_skill")
+	if skill == "" {
+		skill = "athletics"
+	}
+	g.SourceID = e.SourceID
+	g.Escapes = []conditionEscape{{Label: stripUsage(source), Ability: map[string]string{"athletics": "str", "acrobatics": "dex"}[skill], Skill: skill, DC: m.num("escape_dc"), Adjacent: true}} // it, or a creature within 5 feet of it
+	out := g.giveConditions(lobby, target, source)
+	out = append(out, fmt.Sprintf("escape: an action and a DC %d %s check (POST /api/conditions/escape)", m.num("escape_dc"), titleCase(skill)))
+	if n := m.str("note"); n != "" {
+		out = append(out, "the stat block adds: "+n)
+	}
+	return out
 }
 
 // curseSentences: the SRD's own words for a curse mechanic, which the curse owner reads (readCurse): one owner of what a curse does.
