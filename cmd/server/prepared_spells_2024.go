@@ -355,6 +355,38 @@ func spellsHeld(charID int, except ...string) map[string]bool {
 	return have
 }
 
+// spellsReady: the spells the character can cast now, by name, as a turn needs them (my-turn's short view): its cantrips, its prepared
+// spells and every spell it has prepared without choosing it (allAlwaysPrepared: subclass, origin, class features ...), the last marked
+// "(always prepared)" (I-CALLA-33: the short view left out a Life Cleric's domain spells). A Wizard's other spellbook spells are not ready.
+func spellsReady(charID int) []string {
+	if db == nil {
+		return nil
+	}
+	var out []string
+	seen := map[string]bool{}
+	add := func(slug, mark string) {
+		slug = normalizeSpellSlug(slug)
+		sp, ok := srdSpellsMemory[slug]
+		if !ok || seen[slug] {
+			return
+		}
+		seen[slug] = true
+		out = append(out, sp.Name+mark)
+	}
+	for _, s := range jsonListOf(charID, "known_spells") {
+		if sp, ok := srdSpellsMemory[normalizeSpellSlug(s)]; ok && sp.Level == 0 {
+			add(s, "")
+		}
+	}
+	for _, s := range jsonListOf(charID, "prepared_spells") {
+		add(s, "")
+	}
+	for _, s := range allAlwaysPrepared(charID) {
+		add(s, " (always prepared)")
+	}
+	return out
+}
+
 // maxSpellLevelFor: the highest spell level the character has slots for (Pact Magic included); 0 without slots.
 func maxSpellLevelFor(charID int, class string, level int) int {
 	m := 0

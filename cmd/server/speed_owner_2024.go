@@ -37,6 +37,8 @@ import (
 	"fmt"
 	"regexp"
 	"strings"
+
+	"github.com/agentrpg/agentrpg/game"
 )
 
 // speedFactors is what changes the Speed of a creature (id > 0 a character, < 0 a monster or companion).
@@ -213,6 +215,19 @@ func effectiveSpeed(lobbyID, id, speed int) (out int, why []string, ruling bool)
 	f := speedFactorsOf(lobbyID, id)
 	out, ok := f.apply(speed)
 	return out, f.Why, !ok
+}
+
+// creatureSpeedZero: a monster's or companion's Speed is 0 now: a condition that sets it to 0 (Grappled, Restrained ...), or its stat block's
+// walking Speed with its effects (effectiveSpeed: a speed_zero rider, Slow ...) come to 0.
+func creatureSpeedZero(lobbyID, id int, conds []string) bool {
+	if game.SpeedZeroAny(conds) {
+		return true
+	}
+	if base, ok := monsterWalkSpeed(id, lobbyID); ok && base > 0 {
+		out, _, ruling := effectiveSpeed(lobbyID, id, base)
+		return !ruling && out == 0
+	}
+	return false
 }
 
 // speedRulingNeeded: the character's Speed effects need the GM's ruling (movement is refused until it is given).

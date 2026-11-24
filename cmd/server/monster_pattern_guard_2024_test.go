@@ -21,6 +21,7 @@ import (
 var notMonsterText = map[string]string{
 	"attachOwnedFromRowRe":    "reads the attach owner's own stored row (\"owns: ... @ ...\")",
 	"spellAreaWordRe":         "reads a spell's description (an area its effect fills), never a stat block",
+	"speedZeroWordsRe":        "reads a mechanic's covers in the GM's request (a Speed of 0 the flag must apply), never a stat block",
 	"suffocationRowRe":        "reads the suffocation owner's stored row (\"| gained: N\")",
 	"swallowArmedRe":          "reads the swallow owner's stored row (\"| armed\")",
 	"recurringFromTextRe":     "reads the recurring-damage owner's stored description of a tick",

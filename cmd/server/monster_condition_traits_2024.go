@@ -23,10 +23,11 @@ func attackedWithDisadvantage(lobbyID, targetID int, targetConds []string) strin
 		return ""
 	}
 	for _, t := range meta.Traits {
-		unless := strings.Contains(t.Text, "unless")
+		unless, atSpeedZero := strings.Contains(t.Text, "unless"), false
 		if m, ok := t.mechanic("attacked_with_disadvantage"); ok { // a GM's attached mechanic (monster_mechanics_2024.go; GM doc B3)
 			b, set := m["unless_incapacitated"].(bool)
 			unless = !set || b
+			atSpeedZero, _ = m["unless_speed_zero"].(bool)
 		} else if !blurredFormRe.MatchString(strings.TrimSpace(t.Text)) {
 			continue
 		}
@@ -36,6 +37,9 @@ func attackedWithDisadvantage(lobbyID, targetID int, targetConds []string) strin
 					return ""
 				}
 			}
+		}
+		if atSpeedZero && creatureSpeedZero(lobbyID, targetID, targetConds) { // the speed owner's answer (speed_owner_2024.go)
+			return ""
 		}
 		return t.Name
 	}

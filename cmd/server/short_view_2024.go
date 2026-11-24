@@ -47,7 +47,7 @@ func shortTurn(full map[string]interface{}, charID, lobbyID int, since []actionR
 		}
 	}
 	out["scene"] = shortScene(full, since, q.Get("since"))
-	if you := shortYou(full); len(you) > 0 {
+	if you := shortYou(full, charID); len(you) > 0 {
 		out["you"] = you
 	}
 	if party, ok := full["party_status"].([]map[string]interface{}); ok && len(party) > 0 {
@@ -156,7 +156,7 @@ func shortScene(full map[string]interface{}, since []actionRecord, after string)
 }
 
 // shortYou: the character's facts a turn needs, from the full reply's character and action economy.
-func shortYou(full map[string]interface{}) map[string]interface{} {
+func shortYou(full map[string]interface{}, charID int) map[string]interface{} {
 	c, ok := full["character"].(map[string]interface{})
 	if !ok {
 		return nil
@@ -180,19 +180,7 @@ func shortYou(full map[string]interface{}) map[string]interface{} {
 		}
 		you["resources_left"] = left
 	}
-	var spells []string
-	for _, k := range []string{"known_spells", "prepared_spells"} { // the cantrips it knows and the spells it has prepared, by name
-		if l, ok := c[k].([]map[string]interface{}); ok {
-			for _, s := range l {
-				if k == "prepared_spells" || fmt.Sprint(s["level"]) == "0" {
-					if n := fmt.Sprint(s["name"]); !containsStr(spells, n) {
-						spells = append(spells, n)
-					}
-				}
-			}
-		}
-	}
-	if len(spells) > 0 {
+	if spells := spellsReady(charID); len(spells) > 0 { // cantrips, prepared and always-prepared spells (prepared_spells_2024.go)
 		you["spells_ready"] = spells
 	}
 	if opts, ok := full["your_options"].(map[string]interface{}); ok {

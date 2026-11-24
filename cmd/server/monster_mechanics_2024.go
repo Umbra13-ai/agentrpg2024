@@ -467,19 +467,36 @@ var mechanicCatalog = []mechanicKind{
 	{
 		Kind: "attacked_with_disadvantage",
 		Does: "Attack rolls against the creature have Disadvantage, as the SRD's Blurred Form gives (a blur, a displacement, a shimmer of speed): " +
-			"while it has the Incapacitated condition (or a condition that includes it) they don't, unless unless_incapacitated is false.",
+			"while it has the Incapacitated condition (or a condition that includes it) they don't, unless unless_incapacitated is false; with " +
+			"unless_speed_zero true they don't while its Speed is 0 either (Grappled, Restrained, a Speed rider: the speed owner's answer).",
 		On:        "trait",
 		AppliedBy: "attackedWithDisadvantage (monster_condition_traits_2024.go), one row of attackSources: every attack roll against it",
 		Params: []mechanicParam{
 			{Name: "unless_incapacitated", Type: "flag", Does: "false: the Disadvantage holds even while the creature is Incapacitated (true by default)"},
+			{Name: "unless_speed_zero", Type: "flag", Does: "true: no Disadvantage while the creature's Speed is 0 (false by default)"},
+		},
+		// covers may claim only what the mechanic applies: a "Speed is 0" exception in the words is the flag's (I-ALDENQA-5)
+		check: func(e srdMonsterEntry, m entryMechanic) string {
+			if b, _ := m["unless_speed_zero"].(bool); !b && speedZeroWordsRe.MatchString(m.str("covers")) {
+				return "covers names a Speed of 0 as an exception: set unless_speed_zero to true so the server applies it, or leave those words out of covers"
+			}
+			return ""
 		},
 		Example:   entryMechanic{"kind": "attacked_with_disadvantage", "covers": "The sprite moves in a blur too quick to follow."},
 		ExampleOn: "The sprite moves in a blur too quick to follow.",
 		describe: func(m entryMechanic) string {
-			if b, set := m["unless_incapacitated"].(bool); set && !b {
-				return "attack rolls against it have Disadvantage"
+			s := "attack rolls against it have Disadvantage"
+			var unless []string
+			if b, set := m["unless_incapacitated"].(bool); !set || b {
+				unless = append(unless, "it is Incapacitated")
 			}
-			return "attack rolls against it have Disadvantage unless it is Incapacitated"
+			if b, _ := m["unless_speed_zero"].(bool); b {
+				unless = append(unless, "its Speed is 0")
+			}
+			if len(unless) > 0 {
+				s += " unless " + strings.Join(unless, " or ")
+			}
+			return s
 		},
 	},
 	{
@@ -1888,6 +1905,9 @@ func srdMonsterNamed(name string) (srdMonster2024, bool) {
 	}
 	return srdMonster2024{}, false
 }
+
+// speedZeroWordsRe: a covers text (the GM's request) that names a Speed of 0 as an exception.
+var speedZeroWordsRe = regexp.MustCompile(`(?i)\bspeed (?:is|of) 0\b`)
 
 // mechanicsKey: an entry's mechanics as text, for the report memo.
 func mechanicsKey(e srdMonsterEntry) string {

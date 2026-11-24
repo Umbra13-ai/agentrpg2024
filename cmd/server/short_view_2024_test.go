@@ -67,7 +67,7 @@ func TestShortTurnIsBuiltNotTrimmed(t *testing.T) {
 		t.Errorf("four events since the last action: %v", few)
 	}
 	you := out["you"].(map[string]interface{})
-	if you["hp"] != 23 || you["carrying"] != nil || you["class_features"] != nil || fmt.Sprint(you["spells_ready"]) != "[Fire Bolt Shield]" || you["this_turn"] == nil {
+	if you["hp"] != 23 || you["carrying"] != nil || you["class_features"] != nil || you["this_turn"] == nil { // spells_ready is the spell owner's (spellsReady): TestPostgresShortViewSpellsReady
 		t.Errorf("you: %v", you)
 	}
 	if p := out["party"].([]map[string]interface{}); p[0]["species"] != nil || p[0]["hp"] != 20 {
