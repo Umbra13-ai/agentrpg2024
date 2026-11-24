@@ -150,8 +150,8 @@ Report: "Wizard Scholar accepts any skill for Expertise."
   perceives through them. A spell that makes one is a row of `obscuringSpells` (a character's and a monster's cast); a stat block entry
   is read by `obscuringTextRe` (Ink Cloud). Magical Darkness keeps its rows (`monster_darkness_2024.go`), read through the same answer: an Emanation from its source's token, or the Darkness spell's 15-foot-radius Sphere at the point the GM aims (`castMagicalDarknessSpell`, row `at`, `originToken`; without a battle map or a point the cast stays the GM's open item). Go: `TestPostgresMonsterDarknessSpellAtAPoint`.
   **A creature's own senses and light traits** (`creature_senses_2024.go`): Darkvision "(unimpeded by magical Darkness)" in its Senses
-  (the devils, `creatureUnimpededDarkvision`, read by the Magical Darkness sight model), Sunlight Sensitivity (`sunlightPenalty` while `inSunlight`: the GM's lighting `sunlight`; rows in
-  `attackSources` and `saveSources`, and the monster Hide). **A monster's Hide** is rolled by `attemptMonsterHide` (`hide_2024.go`: a
+  (the devils, `creatureUnimpededDarkvision`, read by the Magical Darkness sight model), Sunlight Sensitivity (`lightPenaltyNow` while `inSunlight`: the GM's lighting `sunlight`; rows in
+  `attackSources`, `checkCtx.sources` and `saveSources`, and the monster Hide). **A monster's Hide** is rolled by `attemptMonsterHide` (`hide_2024.go`: a
   light-gated Hide such as Shadow Stealth, its Stealth, Pass without Trace for any creature); a creature stops being hidden when it
   makes an attack roll (`endHidden`, in `attackCtx.roll`). Telepathy and other communication or sense-only traits are `GM` rows of
   `monsterTraitRules`. Go: `TestPostgresObscuredAreasAndSenses`, `TestObscuringAndSenseWordings`.
@@ -199,9 +199,14 @@ Report: "Wizard Scholar accepts any skill for Expertise."
   (`rollForOption`, in `resolveMonsterEffectText`'s pick of one of an entry's effects when `use` names none); `random_condition`
   (`randomConditionOnHit` in `hitAfterDamage`: the rolled condition given by the hit condition owner from the SRD rider sentence it stands
   for, `conditionTimeWords`); `forced_move` (`mechanicHitMove`: the movement owner's `hitMove`, which `textHitMoves` reads from the SRD
-  wording, applied by `hitForcedMove`). A new kind is one row plus
+  wording, applied by `hitForcedMove`); `light_penalty` (`mechanicLightPenalty`: the light owner's `lightPenalty`, which
+  `textLightPenalty` reads from Sunlight Sensitivity, combined by `lightPenaltyNow` for `attackSources`, `checkCtx.sources` and
+  `saveSources`, the reason the trait's own name); `light_turn_damage` (`lightTurnDamage` in `monsterFeaturesTurnStart`, through
+  `damageMonster`). A trait an attached mechanic covers is applied in the GM's trait view (`traitsForGM`) and never an open item
+  (`recurringGMTraits` reads `rulesText`). Not done: Resistance in a light (the damage owners read Resistances by the monster's key alone). A new kind is one row plus
   its rule in the owner it belongs to. Go: `TestMechanicProblems`, `TestCoveredSentencesAreApplied`, `TestChosenTypeAndRandomChoiceProblems`,
-  `TestRandomConditionAndForcedMoveProblems`, `TestPostgresRandomConditionAndForcedMoveOnEveryTarget`, `TestPostgresAttachedDropToZeroOnEveryTarget`, `TestPostgresMechanicsInPreviewAndCatalogue`, `TestPostgresChosenTypeAndRandomChoiceInPlay`.
+  `TestRandomConditionAndForcedMoveProblems`, `TestPostgresRandomConditionAndForcedMoveOnEveryTarget`, `TestLightMechanicProblems`,
+  `TestPostgresLightMechanicsInPlay`, `TestPostgresAttachedDropToZeroOnEveryTarget`, `TestPostgresMechanicsInPreviewAndCatalogue`, `TestPostgresChosenTypeAndRandomChoiceInPlay`.
 - **What a hit does after its damage:** `hitAfterDamage` (`cmd/server/hit_after_damage_2024.go`), called once by every hit route with the
   attacker: the drain below, "it starts burning" (the Burning owner, `burning_2024.go`), a push or pull (`hitForcedMove`) and the hit's
   record for an entry used right after it (`recordLastHit`). A new effect of this kind is one call there. Go: `TestPostgresBurningOnHitEveryTarget`.
