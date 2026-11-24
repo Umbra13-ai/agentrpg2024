@@ -150,7 +150,7 @@ func resolveMonsterReaction(r *http.Request, lobbyID, id int, meta *monsterMeta,
 		}
 	}
 	undoIfMiss := func(bonus int, label string) string {
-		desc := fmt.Sprintf("%s's attack (%d against AC %d)", charName, hit.Total, hit.AC+bonus)
+		desc := fmt.Sprintf("%s's attack (%d against AC %d + %d = %d)", charName, hit.Total, hit.AC, bonus, hit.AC+bonus) // the arithmetic: the AC it was rolled against, the bonus, the AC now
 		if hit.Nat20 {
 			return fmt.Sprintf(" %s: +%d AC, but %s was a natural 20: still a hit.", label, bonus, charName)
 		}

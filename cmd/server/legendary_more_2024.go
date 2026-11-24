@@ -1236,7 +1236,7 @@ func listedSpellNamed(text, use string) (string, bool) {
 }
 
 func monsterSpellFromUse(text, use string) (string, int, bool) {
-	u := strings.TrimSpace(use)
+	u := spellUseName(use)
 	if u == "" {
 		return "", 0, false
 	}

@@ -59,6 +59,7 @@ func spellTiersOf(text string) []spellTier {
 			notes[len(notes)] = strings.TrimSuffix(strings.TrimPrefix(strings.TrimSpace(p), "("), ")")
 			return fmt.Sprintf("\x00%d", len(notes)-1)
 		})
+		list = list[:spellListEnd(list)] // the list ends where its sentence or line does: what follows is not a spell
 		for _, n := range strings.Split(list, ",") {
 			note := ""
 			if i := strings.Index(n, "\x00"); i >= 0 {
@@ -79,6 +80,24 @@ func spellTiersOf(text string) []spellTier {
 		out = append(out, t)
 	}
 	return out
+}
+
+// spellListEnd: where a spell list ends in the text after its heading: the first line break, semicolon or sentence end ("polymorph. The witch
+// can also ..." keeps "polymorph"), else the end of the text. Notes in parentheses are already out of it.
+func spellListEnd(list string) int {
+	end := len(list)
+	if i := strings.IndexAny(list, "\n;"); i >= 0 && i < end {
+		end = i
+	}
+	if i := strings.Index(list, ". "); i >= 0 && i < end {
+		end = i
+	}
+	return end
+}
+
+// spellUseName: the spell the GM named in use, without the qualifier an entry prints after it ("Summon Fiend (demon only)" is Summon Fiend).
+func spellUseName(use string) string {
+	return strings.TrimSpace(spellParenRe.ReplaceAllString(use, ""))
 }
 
 // spellListNote: what a Spellcasting entry's list adds to one of its spells ("lasts 24 hours; ends early if the dryad casts the spell
@@ -114,7 +133,7 @@ func monsterDayUse(entry srdMonsterEntry, use string) (key string, limit int) {
 		n, _ := strconv.Atoi(m[1])
 		return "action:" + strings.ToLower(stripUsage(entry.Name)), n
 	}
-	u := strings.ToLower(strings.TrimSpace(use))
+	u := strings.ToLower(spellUseName(use))
 	if u == "" {
 		return "", 0
 	}

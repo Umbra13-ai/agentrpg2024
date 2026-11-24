@@ -23,6 +23,32 @@ func TestImportedSpellcastingWordings(t *testing.T) {
 	}
 }
 
+// A list ends where its sentence or line does, so the last spell of the last list is still a spell (and counted) when more text follows, a list
+// ends at a semicolon without leaving it on the name, and a use that carries the entry's own qualifier is the same spell.
+func TestSpellListEndsWithItsSentence(t *testing.T) {
+	for _, c := range []struct {
+		text, spell string
+		want        string
+	}{
+		{"The witch casts: At will: light 3/Day Each: dispel magic, fly, polymorph. The witch can also use a power twice.", "Polymorph", "spell:polymorph"},
+		{"The witch casts: 3/day each: charm person, detect magic, sleep\nShe wakes at dawn and regains her spells.", "Sleep", "spell:sleep"},
+		{"The witch casts: 1/Day Each: web, fly; and she is wise and quite learned in all matters of the arcane arts.", "Fly", "spell:fly"},
+		{"At Will: dancing lights, minor illusion; 1/day each: summon fiend (demon only)", "Summon Fiend (demon only)", "spell:summon fiend"},
+		{"At Will: dancing lights, minor illusion; 1/day each: summon fiend (demon only)", "summon fiend", "spell:summon fiend"},
+	} {
+		if k, l := monsterDayUse(srdMonsterEntry{Name: "Spellcasting", Text: c.text}, c.spell); k != c.want || l == 0 {
+			t.Errorf("%q in %q: key %q limit %d, want %q", c.spell, c.text, k, l, c.want)
+		}
+	}
+	for _, tr := range spellTiersOf("At Will: dancing lights, mage hand, minor illusion; 1/day each: summon fiend (demon only)") {
+		for _, sp := range tr.Spells {
+			if strings.ContainsAny(sp, ";.") {
+				t.Errorf("a spell name with punctuation left on it: %q", sp)
+			}
+		}
+	}
+}
+
 func TestPostgresImportedSpellcastingOnTheRoute(t *testing.T) {
 	testPostgres(t)
 	for in, want := range map[string]string{"Tasha's hideous laughter": "hideous-laughter", "Otto’s irresistible dance": "irresistible-dance", "Hideous Laughter": "hideous-laughter", "Fireball": "fireball"} {
