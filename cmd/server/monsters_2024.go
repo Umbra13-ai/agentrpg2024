@@ -36,36 +36,61 @@ type srdMonsterEntry struct {
 	Mechanics []entryMechanic `json:"mechanics,omitempty"` // structured mechanics the GM attaches (GET /api/gm/compendium/mechanics; monster_mechanics_2024.go)
 }
 
+// abilityLine: one ability of a stat block (score, modifier, saving throw). saveGiven says the saving throw was written (a JSON "Save" key, or
+// the text's third number): a written +0 is a proficient save of a creature whose modifier is -2, never "left out" (normalizeCustomMonster).
+type abilityLine struct {
+	Score, Mod, Save int
+	saveGiven        bool
+}
+
+// UnmarshalJSON reads the line as encoding/json would and notes whether the saving throw was in it.
+func (a *abilityLine) UnmarshalJSON(b []byte) error {
+	type plain abilityLine
+	var p plain
+	if err := json.Unmarshal(b, &p); err != nil {
+		return err
+	}
+	var keys map[string]json.RawMessage
+	json.Unmarshal(b, &keys)
+	*a = abilityLine(p)
+	for k, v := range keys {
+		if strings.EqualFold(k, "save") && string(v) != "null" {
+			a.saveGiven = true
+		}
+	}
+	return nil
+}
+
 type srdMonster2024 struct {
-	Name         string                                    `json:"name"`
-	Group        string                                    `json:"group"`
-	Size         string                                    `json:"size"`
-	Type         string                                    `json:"type"`
-	Alignment    string                                    `json:"alignment"`
-	AC           int                                       `json:"ac"`
-	Initiative   struct{ Mod, Score int }                  `json:"initiative"`
-	HP           int                                       `json:"hp"`
-	HPFormula    string                                    `json:"hit_points_formula"`
-	Speed        string                                    `json:"speed"`
-	Abilities    map[string]struct{ Score, Mod, Save int } `json:"abilities"`
-	Skills       string                                    `json:"skills"`
-	Vulnerable   string                                    `json:"damage_vulnerabilities"`
-	Resistances  string                                    `json:"damage_resistances"`
-	DmgImmune    string                                    `json:"damage_immunities"`
-	CondImmune   string                                    `json:"condition_immunities"`
-	Gear         string                                    `json:"gear"`
-	Senses       string                                    `json:"senses"`
-	Languages    string                                    `json:"languages"`
-	CR           string                                    `json:"cr"`
-	XP           int                                       `json:"xp"`
-	XPLair       int                                       `json:"xp_lair"`
-	PB           int                                       `json:"proficiency_bonus"`
-	Traits       []srdMonsterEntry                         `json:"traits"`
-	Actions      []srdMonsterEntry                         `json:"actions"`
-	BonusActions []srdMonsterEntry                         `json:"bonus_actions"`
-	Reactions    []srdMonsterEntry                         `json:"reactions"`
-	Legendary    []srdMonsterEntry                         `json:"legendary_actions"`
-	LegendaryIn  string                                    `json:"legendary_intro"`
+	Name         string                   `json:"name"`
+	Group        string                   `json:"group"`
+	Size         string                   `json:"size"`
+	Type         string                   `json:"type"`
+	Alignment    string                   `json:"alignment"`
+	AC           int                      `json:"ac"`
+	Initiative   struct{ Mod, Score int } `json:"initiative"`
+	HP           int                      `json:"hp"`
+	HPFormula    string                   `json:"hit_points_formula"`
+	Speed        string                   `json:"speed"`
+	Abilities    map[string]abilityLine   `json:"abilities"`
+	Skills       string                   `json:"skills"`
+	Vulnerable   string                   `json:"damage_vulnerabilities"`
+	Resistances  string                   `json:"damage_resistances"`
+	DmgImmune    string                   `json:"damage_immunities"`
+	CondImmune   string                   `json:"condition_immunities"`
+	Gear         string                   `json:"gear"`
+	Senses       string                   `json:"senses"`
+	Languages    string                   `json:"languages"`
+	CR           string                   `json:"cr"`
+	XP           int                      `json:"xp"`
+	XPLair       int                      `json:"xp_lair"`
+	PB           int                      `json:"proficiency_bonus"`
+	Traits       []srdMonsterEntry        `json:"traits"`
+	Actions      []srdMonsterEntry        `json:"actions"`
+	BonusActions []srdMonsterEntry        `json:"bonus_actions"`
+	Reactions    []srdMonsterEntry        `json:"reactions"`
+	Legendary    []srdMonsterEntry        `json:"legendary_actions"`
+	LegendaryIn  string                   `json:"legendary_intro"`
 }
 
 func srdMonsters2024() []srdMonster2024 {

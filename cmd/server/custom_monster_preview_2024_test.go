@@ -1,6 +1,7 @@
 package main
 
 import (
+	"encoding/json"
 	"fmt"
 	"strings"
 	"testing"
@@ -17,8 +18,8 @@ func previewFixture() srdMonster2024 {
 
 func TestNormalizeAndWarnCustomMonster(t *testing.T) {
 	m := compendiumFixture()
-	m.Abilities["wis"] = struct{ Score, Mod, Save int }{Score: 18} // a save left out where the modifier is +4
-	m.Abilities["int"] = struct{ Score, Mod, Save int }{Score: 10} // a save of 0 where the modifier is 0: nothing to fill in
+	m.Abilities["wis"] = abilityLine{Score: 18} // a save left out where the modifier is +4
+	m.Abilities["int"] = abilityLine{Score: 10} // a save of 0 where the modifier is 0: nothing to fill in
 	notes := normalizeCustomMonster(&m)
 	if m.Abilities["wis"].Save != 4 || m.Abilities["int"].Save != 0 || m.Abilities["str"].Save != 8 {
 		t.Fatalf("saves after normalizing: %+v", m.Abilities)
@@ -36,7 +37,7 @@ func TestNormalizeAndWarnCustomMonster(t *testing.T) {
 	bad.LegendaryIn = ""
 	bad.Traits = []srdMonsterEntry{{Name: "Legendary Resistance", Text: "The warden can choose to succeed on a failed saving throw."}}
 	bad.Speed = ""
-	bad.Abilities["dex"] = struct{ Score, Mod, Save int }{Score: 20, Save: 1}
+	bad.Abilities["dex"] = abilityLine{Score: 20, Save: 1}
 	joined := strings.Join(customMonsterWarnings(bad), "\n")
 	for _, want := range []string{"Legendary Action Uses", "Legendary Resistance (3/Day", "speed is empty", "DEX saving throw +1"} {
 		if !strings.Contains(joined, want) {
@@ -57,7 +58,7 @@ func TestPostgresCompendiumPreview(t *testing.T) {
 	}
 	path := "/api/gm/compendium/monsters"
 	m := previewFixture()
-	m.Abilities["wis"] = struct{ Score, Mod, Save int }{Score: 18} // save left out
+	m.Abilities["wis"] = abilityLine{Score: 18} // save left out
 	count := func() int {
 		var n int
 		db.QueryRow(`SELECT COUNT(*) FROM custom_monsters`).Scan(&n)
@@ -80,7 +81,11 @@ func TestPostgresCompendiumPreview(t *testing.T) {
 
 	// the preview itself
 	before := count()
-	c, j := pgCall(t, "POST", path+"/preview", gm, map[string]interface{}{"monsters": []srdMonster2024{m}})
+	sent := map[string]interface{}{} // the WIS line as a client leaves its save out: no "Save" key (a written 0 is a +0 save)
+	b, _ := json.Marshal(m)
+	json.Unmarshal(b, &sent)
+	sent["abilities"].(map[string]interface{})["wis"] = map[string]interface{}{"Score": 18}
+	c, j := pgCall(t, "POST", path+"/preview", gm, map[string]interface{}{"monsters": []interface{}{sent}})
 	if c != 200 || j["saved"] != false || count() != before {
 		t.Fatalf("preview %d %v (rows %d -> %d)", c, j, before, count())
 	}
@@ -123,7 +128,7 @@ func TestPostgresCompendiumPreview(t *testing.T) {
 	}
 
 	// import: the same notes and counts, and the save is stored as the modifier
-	c, j = pgCall(t, "POST", path, gm, map[string]interface{}{"source_note": "preview test", "monsters": []srdMonster2024{m}})
+	c, j = pgCall(t, "POST", path, gm, map[string]interface{}{"source_note": "preview test", "monsters": []interface{}{sent}})
 	if c != 201 {
 		t.Fatalf("import %d %v", c, j)
 	}
@@ -179,5 +184,54 @@ func TestEntryReportsAreTheSRDCoverage(t *testing.T) {
 	}
 	if applied != wantApplied || gm != wantGM {
 		t.Fatalf("reports: applied %d, GM %d; coverage: applied %d, GM %d", applied, gm, wantApplied, wantGM)
+	}
+}
+
+// A written saving throw of +0 (a proficient save of a creature whose modifier is -2) is kept, from the JSON definition and from the text;
+// only a save that isn't written is the ability modifier.
+func TestWrittenZeroSaveIsKept(t *testing.T) {
+	var m srdMonster2024
+	if err := json.Unmarshal([]byte(`{"abilities": {"cha": {"Score": 7, "Mod": -2, "Save": 0}, "wis": {"Score": 7, "Mod": -2}, "int": {"score": 7, "mod": -2, "save": 0}}}`), &m); err != nil {
+		t.Fatal(err)
+	}
+	normalizeCustomMonster(&m)
+	if m.Abilities["cha"].Save != 0 || m.Abilities["int"].Save != 0 {
+		t.Errorf("a written +0 save was replaced: cha %+d, int %+d", m.Abilities["cha"].Save, m.Abilities["int"].Save)
+	}
+	if m.Abilities["wis"].Save != -2 {
+		t.Errorf("a save left out is the modifier: wis %+d", m.Abilities["wis"].Save)
+	}
+	// stored and read back, the written 0 is still written
+	b, _ := json.Marshal(m)
+	var again srdMonster2024
+	json.Unmarshal(b, &again)
+	normalizeCustomMonster(&again)
+	if again.Abilities["cha"].Save != 0 {
+		t.Errorf("read back: cha %+d", again.Abilities["cha"].Save)
+	}
+}
+
+// An attack that play refuses whole (a conditional extra damage inside its Hit sentence) is a warning at import, from the same check play
+// runs; written as its own sentence, the attack rolls and nothing is warned.
+func TestImportWarnsOfAnAttackPlayRefuses(t *testing.T) {
+	m := compendiumFixture()
+	m.Actions = append(m.Actions, srdMonsterEntry{Name: "Knave Dagger", Text: "Melee Attack Roll: +5, reach 5 ft. Hit: 5 (1d4 + 3) Piercing damage plus an extra 5 (2d4) Piercing damage if the knave has at least 18 Hit Points."})
+	found := false
+	for _, w := range customMonsterWarnings(m) {
+		if strings.Contains(w, `"Knave Dagger" will be refused in play`) {
+			found = true
+		}
+	}
+	if !found || attackEntryRefusal(m.Actions[len(m.Actions)-1]) == "" {
+		t.Errorf("no warning for an attack play refuses: %v", customMonsterWarnings(m))
+	}
+	m.Actions[len(m.Actions)-1].Text = "Melee Attack Roll: +5, reach 5 ft. Hit: 5 (1d4 + 3) Piercing damage. If the knave has at least 18 Hit Points, the target takes an extra 5 (2d4) Piercing damage."
+	if p := attackEntryRefusal(m.Actions[len(m.Actions)-1]); p != "" {
+		t.Errorf("the reworded attack is refused: %s", p)
+	}
+	for _, w := range customMonsterWarnings(m) {
+		if strings.Contains(w, "Knave Dagger") {
+			t.Errorf("a warning for the reworded attack: %s", w)
+		}
 	}
 }

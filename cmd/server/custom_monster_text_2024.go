@@ -167,7 +167,7 @@ func readStatBlockText(text string) (srdMonster2024, []string) {
 	}
 
 	// the six abilities, until the first labelled line or section
-	m.Abilities = map[string]struct{ Score, Mod, Save int }{}
+	m.Abilities = map[string]abilityLine{}
 	for i < len(lines) {
 		l := lines[i]
 		if textLabelRe.MatchString(l) || textSectionRe.MatchString(l) {
@@ -178,10 +178,10 @@ func readStatBlockText(text string) (srdMonster2024, []string) {
 			continue
 		}
 		for _, x := range textAbilityRe.FindAllStringSubmatch(strings.ReplaceAll(l, "\u2212", "-"), -1) {
-			a := struct{ Score, Mod, Save int }{Score: textInt(x[2])}
+			a := abilityLine{Score: textInt(x[2])}
 			a.Mod = game.Modifier(a.Score)
 			if x[3] != "" {
-				a.Mod, a.Save = textInt(x[3]), textInt(x[4])
+				a.Mod, a.Save, a.saveGiven = textInt(x[3]), textInt(x[4]), true
 			}
 			m.Abilities[strings.ToLower(x[1])] = a
 		}

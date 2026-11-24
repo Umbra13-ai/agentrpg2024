@@ -123,6 +123,17 @@ func entryVerdicts(kind string, e srdMonsterEntry) []sentenceVerdict {
 	return out
 }
 
+// attackEntryRefusal: why play refuses this attack entry before any roll (prepareMonsterAttack, as the play rows read it, with a damage type
+// chosen when the entry offers one); "" when it rolls. The verdict and the import's warnings read it.
+func attackEntryRefusal(e srdMonsterEntry) string {
+	row, use := entryActionRow(e), "fire"
+	if len(row.ChosenTypes) > 0 {
+		use = row.ChosenTypes[0]
+	}
+	_, problem := prepareMonsterAttack(row, use)
+	return problem
+}
+
 // textVerdicts: the verdicts the entry's words get from the server's text rules.
 func textVerdicts(kind string, e srdMonsterEntry) []sentenceVerdict {
 	sentences := entrySentences(e.Text)
@@ -201,12 +212,8 @@ func textVerdicts(kind string, e srdMonsterEntry) []sentenceVerdict {
 	case strings.HasPrefix(e.Name, "Spellcasting"):
 		return bySentence("monster spellcasting (resolveMonsterSpell)", func(s string) bool { return true }, "")
 	case isAttackEntry(e.Text):
-		row, use := entryActionRow(e), "fire"
-		if len(row.ChosenTypes) > 0 {
-			use = row.ChosenTypes[0]
-		}
 		a := parseMonsterAttack(e.Name, e.Text)
-		if _, problem := prepareMonsterAttack(row, use); problem != "" {
+		if problem := attackEntryRefusal(e); problem != "" {
 			return all("gm", "attack refused: "+problem)
 		}
 		uncharged, _ := chargeRewrite(e.Text, 0, true, func(string) bool { return true }) // the routes rewrite a charge before the residual

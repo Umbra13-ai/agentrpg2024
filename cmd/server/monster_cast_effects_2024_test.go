@@ -19,7 +19,7 @@ func TestPostgresMonsterCastEffects(t *testing.T) {
 	pet := companionIDBase + petID
 	m := compendiumFixture()
 	m.Name, m.Type, m.CR, m.XP, m.PB, m.Traits, m.Legendary, m.LegendaryIn, m.DmgImmune, m.Resistances = "Glimmer Sprite", "Fey", "1", 200, 2, nil, nil, "", "", ""
-	m.Abilities["cha"] = struct{ Score, Mod, Save int }{16, 3, 3}
+	m.Abilities["cha"] = abilityLine{Score: 16, Mod: 3, Save: 3}
 	m.Actions = []srdMonsterEntry{
 		{Name: "Claw", Text: "Melee Attack Roll: +60, reach 5 ft. Hit: 1 (1d1) Slashing damage."},
 		{Name: "Fade", Text: "The sprite casts Invisibility on itself, requiring no spell components and using Charisma as the spellcasting ability."},

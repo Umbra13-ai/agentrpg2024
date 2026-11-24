@@ -16,8 +16,8 @@ import (
 )
 
 // normalizeCustomMonster fills in what the definition left out, in one place (import, edit and preview all call it before they validate):
-// a saving throw bonus left out (0 where the ability modifier is not 0) is the ability modifier, which is what a stat block prints for an
-// ability the creature is not proficient in. It returns what it changed, for the GM to read.
+// a saving throw bonus left out (not written, where the ability modifier is not 0) is the ability modifier, which is what a stat block prints for
+// an ability the creature is not proficient in; a written 0 stays (a proficient save of a creature whose modifier is -2). It returns what it changed, for the GM to read.
 func normalizeCustomMonster(m *srdMonster2024) []string {
 	var notes []string
 	for _, k := range abilityOrder {
@@ -25,7 +25,7 @@ func normalizeCustomMonster(m *srdMonster2024) []string {
 		if !ok {
 			continue
 		}
-		if mod := game.Modifier(a.Score); a.Save == 0 && mod != 0 {
+		if mod := game.Modifier(a.Score); !a.saveGiven && a.Save == 0 && mod != 0 {
 			a.Save = mod
 			m.Abilities[k] = a
 			notes = append(notes, fmt.Sprintf("%s saving throw left out: used the ability modifier (%+d).", strings.ToUpper(k), mod))
@@ -50,6 +50,15 @@ func customMonsterWarnings(m srdMonster2024) []string {
 		}
 		if r, ok := traitRuleFor(t); ok && r.Name != "" && !r.GM {
 			warnings = append(warnings, fmt.Sprintf("The trait %q is applied by the server's rule of that name (%s). Its text is not read: make sure it means the same.", t.Name, r.Does))
+		}
+	}
+	for _, g := range [][]srdMonsterEntry{m.Actions, m.BonusActions, m.Reactions, m.Legendary} { // an attack play refuses whole, said before play
+		for _, e := range g {
+			if isAttackEntry(e.Text) {
+				if problem := attackEntryRefusal(e); problem != "" {
+					warnings = append(warnings, fmt.Sprintf("The attack %q will be refused in play, nothing rolled: %s Write each damage the server reads as \"plus N (dice) Type damage\"; put a conditional or charge-spending extra damage in its own sentence (\"If ..., the target takes an extra 5 (2d4) Piercing damage.\"): the attack then rolls and the GM resolves that sentence.", e.Name, problem))
+				}
+			}
 		}
 	}
 	if strings.TrimSpace(m.Speed) == "" {
