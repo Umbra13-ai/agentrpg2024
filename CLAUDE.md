@@ -76,7 +76,9 @@ Report: "Wizard Scholar accepts any skill for Expertise."
   applySaveEffectOnMonster (cmd/server/monster_save_targets.go), which uses saveCtx, hurtMonster
   and addCondition. No other code rolls a stat block's "Saving Throw: DC N" effect.
   What a single target must be is read from the entry's header by `monsterSaveTargetIssue` (`singleSaveTarget`: range, sight, "one
-  Frightened creature", "one living creature ... that has 0 Hit Points"), refused before anything is rolled or spent. A failure's Hit
+  Frightened creature", "one living creature ... that has 0 Hit Points"), refused before anything is rolled or spent; a header that names only the creatures the source
+  holds ("one creature Grappled by the glabrezu", "each creature Grappled by the otyugh": `heldSaveTargetRe`, `heldTargetIssue`) is checked in the same place against the grapple records
+  (`TestPostgresHeldTargetSaveEntries`). A failure's Hit
   Point threshold ("If the target has 20 Hit Points or fewer, it drops to 0 Hit Points. Otherwise, ...": `dropsToZero`, asked by every
   target route before the damage) and "The target dies, and the wisp regains ..." (`killOnFailure`) are the same owner's.
   Go: `TestPostgresSaveTargetGatesThresholdAndDeath`.
