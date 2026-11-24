@@ -7,11 +7,19 @@ package main
 // reading of those names (refused before anything is recorded when one is unknown); the record keeps each {name, key}
 // (writeActionShowing, actions.creatures); storyCreaturesOf turns them into what a page shows: the name and its token (monsterTokenURL),
 // only for a creature that has one. The story reader and the chronicle show them beside the line; my-turn names them.
+//
+// A narration sent without appearing (owner, Nov 24) shows the creatures its words name (creaturesNamedIn): a creature of the campaign's
+// fight (by its name, that name without its number, or its stat block's name) and a monster of the GM's own compendium, each as a whole word,
+// singular or plural. Not the SRD catalogue at large: its names are everyday words ("Shadow", "Guard", "Cat"). The reply says which were read;
+// appearing names them instead, and an empty appearing shows none.
 
 import (
 	"database/sql"
 	"fmt"
+	"regexp"
 	"strings"
+
+	"github.com/agentrpg/agentrpg/game"
 )
 
 // shownCreature: a creature a log record shows: the name the story uses and the key of its stat block (an SRD slug or a custom: key).
@@ -116,4 +124,69 @@ func quoteEach(list []string) []string {
 		out[i] = fmt.Sprintf("%q", s)
 	}
 	return out
+}
+
+// trailingNumberRe: a fight creature's number after its name ("Bandit 2").
+var trailingNumberRe = regexp.MustCompile(`\s+\d+$`)
+
+// creaturesNamedIn: the creatures a narration's words name (see the file comment), in the order of the candidates, each once.
+func creaturesNamedIn(lobby, agent int, text string) []shownCreature {
+	type candidate struct {
+		words []string
+		c     shownCreature
+	}
+	var cands []candidate
+	for _, e := range combatEntries(lobby) {
+		if asInt(e["id"]) >= 0 {
+			continue
+		}
+		name := strings.TrimSpace(sprintAny(e["name"]))
+		key := strings.TrimSpace(sprintAny(e["monster_key"]))
+		base := trailingNumberRe.ReplaceAllString(name, "")
+		words := []string{name, base}
+		if m, ok := srdMonsterNamed(key); ok {
+			words = append(words, m.Name)
+		}
+		cands = append(cands, candidate{words, shownCreature{Name: base, Key: key}})
+	}
+	if agent > 0 && db != nil {
+		rows, err := db.Query(`SELECT key, definition->>'name' FROM custom_monsters WHERE owner_id = $1 AND hidden_at IS NULL ORDER BY created_at DESC`, agent)
+		if err == nil {
+			for rows.Next() {
+				var key, name string
+				if rows.Scan(&key, &name) == nil && name != "" {
+					cands = append(cands, candidate{[]string{name}, shownCreature{Name: name, Key: key}})
+				}
+			}
+			rows.Close()
+		} else {
+			handledDBError(err)
+		}
+	}
+	var out []shownCreature
+	seen := map[string]bool{}
+	for _, cd := range cands {
+		if seen[game.Key(cd.c.Name)+"|"+cd.c.Key] {
+			continue
+		}
+		for _, w := range cd.words {
+			if namesWord(text, w) {
+				seen[game.Key(cd.c.Name)+"|"+cd.c.Key] = true
+				out = append(out, cd.c)
+				break
+			}
+		}
+	}
+	return out
+}
+
+// namesWord: the text holds the name as whole words, any case, singular or plural ("goblin warrior", "Goblin Warriors"); a name under three
+// letters is never read.
+func namesWord(text, name string) bool {
+	name = strings.TrimSpace(name)
+	if len(name) < 3 {
+		return false
+	}
+	re, err := regexp.Compile(`(?i)\b` + regexp.QuoteMeta(name) + `(?:s|es)?\b`)
+	return err == nil && re.MatchString(text)
 }

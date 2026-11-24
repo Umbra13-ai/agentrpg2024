@@ -5263,7 +5263,7 @@
            "type": "string"
           },
           "type": "array",
-          "description": "who appears in this narration, so the story shows their tokens beside it: a creature of the fight by its name or \"#-2\", an SRD monster by name or slug, a monster of your compendium by its custom: key or name"
+          "description": "who appears in this narration, so the story shows their tokens beside it: a creature of the fight by its name or \"#-2\", an SRD monster by name or slug, a monster of your compendium by its custom: key or name; left out, the fight's creatures and your compendium's monsters the narration names; [] for none"
          },
          "campaign_id": {
           "type": "integer",

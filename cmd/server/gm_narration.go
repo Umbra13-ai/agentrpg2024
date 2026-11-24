@@ -1450,7 +1450,7 @@ type gmNarrateRequest struct {
 		ConfirmTargeting bool     `json:"confirm_targeting"` // the GM confirmed required sight or distance that the server cannot determine
 		Attacks          []string `json:"attacks"`           // a choice Multiattack's declared composition: the named attacks in order, as many as the text makes ("Scimitar", "Shortbow"); validated against the text before anything is rolled
 	} `json:"monster_action"`
-	Appearing    []string      `json:"appearing"`     // who appears in this narration, so the story shows their tokens beside it: a creature of the fight by its name or "#-2", an SRD monster by name or slug, a monster of your compendium by its custom: key or name
+	Appearing    []string      `json:"appearing"`     // who appears in this narration, so the story shows their tokens beside it: a creature of the fight by its name or "#-2", an SRD monster by name or slug, a monster of your compendium by its custom: key or name; left out, the fight's creatures and your compendium's monsters the narration names; [] for none
 	AdvanceTurn  bool          `json:"advance_turn"`  // true: end the current turn after the narration (as POST .../combat/next)
 	ExpectedTurn *expectedTurn `json:"expected_turn"` // with advance_turn: the turn to end ({round, turn_index}); a retry after it ended is turn_already_moved
 }
@@ -1538,6 +1538,10 @@ func handleGMNarrate(w http.ResponseWriter, r *http.Request) {
 
 	// who appears (story_creatures_2024.go): every name known before anything is recorded
 	appearing, unknown := resolveShownCreatures(campaignID, agentID, req.Appearing)
+	fromText := req.Appearing == nil // no appearing sent: the creatures the narration's words name (creaturesNamedIn)
+	if fromText {
+		appearing = creaturesNamedIn(campaignID, agentID, req.Narration)
+	}
 	if len(unknown) > 0 {
 		writeJSONStatus(w, http.StatusBadRequest, map[string]interface{}{"success": false, "error": "appearing_unknown", "unknown": unknown, "narration_recorded": false,
 			"message": appearingRefusal(unknown) + " Nothing was recorded."})
@@ -1640,8 +1644,12 @@ func handleGMNarrate(w http.ResponseWriter, r *http.Request) {
 		}
 		if len(appearing) > 0 {
 			response["appearing"] = appearing // the story shows their tokens beside the narration
-		} else if len(req.Appearing) == 0 {
-			response["appearing_tip"] = "When someone new appears in the scene, name them in appearing (a monster of the fight, an SRD monster, a monster of your compendium) and the story shows their token beside the narration."
+		}
+		switch {
+		case fromText && len(appearing) > 0:
+			response["appearing_tip"] = "These were read from your narration's words (the fight's creatures and your compendium's monsters it names), and the story shows their tokens beside it. Send appearing to name them yourself (an SRD monster too), or \"appearing\": [] for none."
+		case len(req.Appearing) == 0:
+			response["appearing_tip"] = "When someone new appears in the scene, name them in appearing (a monster of the fight, an SRD monster, a monster of your compendium) and the story shows their token beside the narration; without appearing, the fight's creatures and your compendium's monsters your narration names are shown."
 		}
 	}
 

@@ -6,6 +6,7 @@ package main
 
 import (
 	"encoding/base64"
+	"encoding/json"
 	"fmt"
 	"strings"
 	"testing"
@@ -69,5 +70,33 @@ func TestPostgresNarrateRecordsWhoAppears(t *testing.T) {
 	_, m := pgCall(t, "GET", fmt.Sprintf("/api/my-turn?character_id=%d", hero), player, nil)
 	if fmt.Sprint(m["gm_says_appearing"]) != "[Test Bell Keeper]" {
 		t.Errorf("my-turn gm_says_appearing: %v (gm_says %v)", m["gm_says_appearing"], m["gm_says"])
+	}
+}
+
+// A narration without appearing shows the creatures its words name: the fight's (by name, plural too) and the GM's compendium monsters, never
+// an SRD monster named only as an everyday word; an empty appearing shows none; the reply says what was read.
+func TestPostgresNarrationNamesItsCreatures(t *testing.T) {
+	testPostgres(t)
+	gm, _, camp, _ := storyCreatureFixture(t)
+	last := func() []shownCreature { // the newest narration's record
+		var raw []byte
+		db.QueryRow(`SELECT COALESCE(creatures::text,'[]') FROM actions WHERE lobby_id=$1 AND action_type='narration' ORDER BY id DESC LIMIT 1`, camp).Scan(&raw)
+		var out []shownCreature
+		json.Unmarshal(raw, &out)
+		return out
+	}
+	c, r := pgCall(t, "POST", "/api/gm/narrate", gm, map[string]interface{}{"campaign_id": camp, "narration": "Two test story raiders slip out of the shadow while the Test Bell Keeper watches."})
+	got := fmt.Sprint(last())
+	if c != 200 || !strings.Contains(got, "Test Story Raider") || !strings.Contains(got, "Test Bell Keeper") || strings.Contains(strings.ToLower(got), "shadow") ||
+		!strings.Contains(fmt.Sprint(r["appearing_tip"]), "read from your narration") {
+		t.Errorf("read from the words: %d %s (tip %v)", c, got, r["appearing_tip"])
+	}
+	pgCall(t, "POST", "/api/gm/narrate", gm, map[string]interface{}{"campaign_id": camp, "narration": "The Test Bell Keeper is only remembered.", "appearing": []string{}})
+	if got := last(); len(got) != 0 {
+		t.Errorf("appearing [] shows none: %+v", got)
+	}
+	pgCall(t, "POST", "/api/gm/narrate", gm, map[string]interface{}{"campaign_id": camp, "narration": "The raider's keeper of bells is absent."})
+	if got := last(); len(got) != 0 {
+		t.Errorf("no whole name: %+v", got)
 	}
 }
