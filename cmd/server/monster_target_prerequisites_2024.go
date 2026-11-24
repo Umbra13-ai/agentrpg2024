@@ -13,22 +13,67 @@ var (
 	// creature the hag can see within 30 feet": SRD 5.2.1 Sea Hag Death Glare), or living at 0 Hit Points ("one living creature the wisp
 	// can see within 5 feet that has 0 Hit Points": Will-o'-Wisp Consume Life). Groups: 1 living, 2 the condition, 3 the sight clause,
 	// 4 the range, 5 "that has 0 Hit Points".
-	singleSaveTargetRe  = regexp.MustCompile(`(?i)^one (living )?(?:([a-z]+) )?(?:creature|target)(?: ((?:it|the [\pL][\pL '’\-]*?) can see))? within ([0-9]+) (?:feet|ft\.?)( that has 0 Hit Points)?\.?$`)
+	singleSaveTargetRe = regexp.MustCompile(`(?i)^one (living )?(?:([a-z]+) )?(?:creature|target)(?: ((?:it|the [\pL][\pL '’\-]*?) can see))? within ([0-9]+) (?:feet|ft\.?)( that has 0 Hit Points)?\.?$`)
+	// heldSaveTargetRe: "one creature Grappled by the glabrezu", "one Large or smaller creature Grappled by the remorhaz", "each creature Grappled by the
+	// otyugh": only the creatures this creature holds. Group 1: one or each.
+	heldSaveTargetRe    = regexp.MustCompile(`(?i)^(one|each) (?:[\pL]+ or smaller )?creature Grappled by the [\pL][\pL '’\-]*?(?: \(|\.|$)`)
 	monsterBlindsightRe = regexp.MustCompile(`(?i)\bblindsight\s+(\d+)\s*(?:feet|ft\b)`)
 )
 
-// singleSaveTarget: the single target a save entry's header names (singleSaveTargetRe's groups), nil when it names another kind.
-func singleSaveTarget(text string) []string {
+// saveHeaderTargets: the words a save entry's header gives for its targets ("one creature the hag can see within 30 feet"), "" when it has none.
+func saveHeaderTargets(text string) string {
 	match := mfxSaveRe.FindStringIndex(text)
 	if match == nil {
-		return nil
+		return ""
 	}
 	header := strings.TrimSpace(text[match[1]:])
 	if !strings.HasPrefix(header, ",") {
-		return nil
+		return ""
 	}
 	spec, _, _ := strings.Cut(strings.TrimSpace(header[1:]), " Failure:")
-	parts := singleSaveTargetRe.FindStringSubmatch(strings.TrimSpace(spec))
+	return strings.TrimSpace(spec)
+}
+
+// heldOnlyTargets: the header limits the targets to the creatures the source holds Grappled ("one creature Grappled by the blight"), and
+// whether it names one creature or each.
+func heldOnlyTargets(text string) (one, held bool) {
+	m := heldSaveTargetRe.FindStringSubmatch(saveHeaderTargets(text))
+	if m == nil {
+		return false, false
+	}
+	return strings.EqualFold(m[1], "one"), true
+}
+
+// heldTargetIssue: a target the source does not hold Grappled, for a header that names only those, or "".
+func heldTargetIssue(lobby, source int, text string, targets []int) string {
+	one, held := heldOnlyTargets(text)
+	if !held {
+		return ""
+	}
+	if one && len(targets) != 1 {
+		return "Select exactly one creature for this action."
+	}
+	for _, t := range targets {
+		holds := false
+		for _, rec := range loadConditionRecords(lobby, t) {
+			if grappledBy(rec, source) {
+				holds = true
+			}
+		}
+		if !holds {
+			return fmt.Sprintf("%s isn't Grappled by %s: this action targets only a creature it holds Grappled.", creatureName(lobby, t), creatureName(lobby, source))
+		}
+	}
+	return ""
+}
+
+// singleSaveTarget: the single target a save entry's header names (singleSaveTargetRe's groups), nil when it names another kind.
+func singleSaveTarget(text string) []string {
+	spec := saveHeaderTargets(text)
+	if spec == "" {
+		return nil
+	}
+	parts := singleSaveTargetRe.FindStringSubmatch(spec)
 	if parts == nil || (parts[2] != "" && !mfxConditions[strings.ToLower(parts[2])]) {
 		return nil
 	}
@@ -48,6 +93,9 @@ func livingAtZero(lobby, id int) bool {
 
 // For a single ranged target, validate the supported header and map facts.
 func monsterSaveTargetIssue(r *http.Request, lobby, source int, meta *monsterMeta, text string, targets []int) string {
+	if issue := heldTargetIssue(lobby, source, text, targets); issue != "" {
+		return issue
+	}
 	parts := singleSaveTarget(text)
 	if parts == nil {
 		return ""

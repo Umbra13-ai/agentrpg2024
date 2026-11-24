@@ -329,6 +329,10 @@ func TestPostgresEarlyGameEveryEntry(t *testing.T) {
 						if hasSave && save.DropAtOrBelow > 0 { // "If the target has 20 Hit Points or fewer, it drops to 0": that branch
 							pgExec(t, `UPDATE characters SET hp=$1 WHERE id=$2`, save.DropAtOrBelow, char)
 						}
+						// a header that names only the creatures the source holds ("one creature Grappled by the glabrezu"): the hero is held by it
+						if _, held := heldOnlyTargets(e.Text); held {
+							addCondition(camp, char, condAdd{Condition: "grappled", Source: grappleSource(id), SourceID: id})
+						}
 						// an entry that pulls what the monster holds ("each creature Grappled by it", "one creature ... Restrained by its Web
 						// Strand"): the hero is held that way, as the condition owner records it
 						if pm := entryPullRe.FindStringSubmatch(strings.TrimSpace(e.Text)); pm != nil {

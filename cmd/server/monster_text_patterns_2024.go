@@ -215,6 +215,7 @@ var monsterTextPatterns = map[string]*regexp.Regexp{
 	"swallowCondsRe":           swallowCondsRe,           // monster_swallow_2024.go
 	"monsterBlindsightRe":      monsterBlindsightRe,      // monster_target_prerequisites_2024.go
 	"singleSaveTargetRe":       singleSaveTargetRe,       // monster_target_prerequisites_2024.go
+	"heldSaveTargetRe":         heldSaveTargetRe,         // monster_target_prerequisites_2024.go
 	"rollTraitBloodiedRe":      rollTraitBloodiedRe,      // monster_traits_2024.go
 	"rollTraitMeleeRe":         rollTraitMeleeRe,         // monster_traits_2024.go
 	"rollTraitRe":              rollTraitRe,              // monster_traits_2024.go

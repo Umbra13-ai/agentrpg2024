@@ -218,6 +218,51 @@ func TestPostgresScoreToZeroConditionIsNotGivenOnEveryHit(t *testing.T) {
 	}
 }
 
+// A save entry whose header names only the creatures its source holds ("one creature Grappled by the glabrezu", "one Large or smaller creature
+// Grappled by the remorhaz", "each creature Grappled by the otyugh"): refused before anything is rolled for a creature it doesn't hold, and run
+// for one it does.
+func TestPostgresHeldTargetSaveEntries(t *testing.T) {
+	testPostgres(t)
+	for header, want := range map[string][2]bool{
+		"one creature Grappled by the glabrezu":                  {true, true},
+		"one Large or smaller creature Grappled by the remorhaz": {true, true},
+		"each creature Grappled by the otyugh":                   {false, true},
+		"one creature within 30 feet":                            {false, false},
+	} {
+		if one, held := heldOnlyTargets("Dexterity Saving Throw: DC 17, " + header + ". Failure: 3 (1d6) Piercing damage."); one != want[0] || held != want[1] {
+			t.Errorf("heldOnlyTargets(%q) = %v, %v; want %v", header, one, held, want)
+		}
+	}
+	gm, _, camp, hero, id := earlyRulesFixture(t, "Test Held Blight", []srdMonsterEntry{
+		{Name: "Gnash", Text: "Dexterity Saving Throw: DC 40, one creature Grappled by the blight. Failure: 5 (1d6 + 2) Piercing damage. Success: Half damage."},
+		{Name: "Squeeze", Text: "Dexterity Saving Throw: DC 40, each creature Grappled by the blight. Failure: 5 (1d6 + 2) Bludgeoning damage. Success: Half damage."},
+	})
+	hp := func() int {
+		var n int
+		db.QueryRow(`SELECT hp FROM characters WHERE id=$1`, hero).Scan(&n)
+		return n
+	}
+	act := func(action string) string {
+		_, line := narrateAs(t, gm, camp, id, action, fmt.Sprint(hero), "")
+		return line
+	}
+	before := hp()
+	for _, a := range []string{"Gnash", "Squeeze"} {
+		if line := act(a); !strings.Contains(line, "isn't Grappled by") || hp() != before {
+			t.Errorf("%s on a creature the blight doesn't hold: %s (hp %d -> %d)", a, line, before, hp())
+		}
+	}
+	addCondition(camp, hero, condAdd{Condition: "grappled", Source: grappleSource(id), SourceID: id})
+	for _, a := range []string{"Gnash", "Squeeze"} {
+		if line := act(a); strings.Contains(line, "isn't Grappled by") || !strings.Contains(line, "saving throw") {
+			t.Errorf("%s on a creature it holds: %s", a, line)
+		}
+	}
+	if hp() >= before {
+		t.Errorf("the entries on a held creature dealt nothing: hp %d -> %d", before, hp())
+	}
+}
+
 // What a single save target must be, read from the entry's header (monsterSaveTargetIssue): "one Frightened creature" (Sea Hag Death
 // Glare) and "one living creature ... that has 0 Hit Points" (Will-o'-Wisp Consume Life); a target that isn't is refused before
 // anything is rolled or spent. Death Glare's Hit Point threshold (dropsToZero) and Consume Life's death and regain (killOnFailure).
