@@ -231,6 +231,16 @@ func handleGMPreserveLife(w http.ResponseWriter, r *http.Request) {
 
 	writeAction(db, lobbyID, req.CasterID, "preserve_life", fmt.Sprintf("%s uses Channel Divinity: Preserve Life!", casterName), fmt.Sprintf("Healed %d HP total: %s", totalHealed, strings.Join(targetNames, ", ")))
 
+	// the one line of what it did, for this reply and the player's action reply (player_channel_2024.go): each target with its amount, before
+	// and after, and any amount the half-maximum limit cut
+	var lines []string
+	for _, r := range results {
+		if m, ok := r["message"].(string); ok {
+			lines = append(lines, strings.TrimSpace(strings.TrimPrefix(m, "✨")))
+		}
+	}
+	summary := fmt.Sprintf("%d of %d Hit Points restored (5 x Cleric level %d). %s.", totalHealed, healingPool, casterLevel, strings.Join(lines, "; "))
+
 	json.NewEncoder(w).Encode(map[string]interface{}{
 		"success":                    true,
 		"caster":                     casterName,
@@ -240,6 +250,7 @@ func handleGMPreserveLife(w http.ResponseWriter, r *http.Request) {
 		"healing_remaining":          healingPool - totalRequested,
 		"channel_divinity_remaining": remaining,
 		"results":                    results,
+		"result":                     summary,
 		"rules_note":                 "Preserve Life cannot restore a creature to more than half its hit point maximum",
 	})
 }
