@@ -1621,7 +1621,8 @@ func handleMyTurn(w http.ResponseWriter, r *http.Request) {
 	// outside a turn; the short view leaves out the long lists these replace
 	facts := sceneFactsOf(inCombat, enemies, partyStatus, hp, maxHP, charStatus, beatApplies(lobbyID))
 	facts.ownGear(charID) // the examples name the character's own weapon and spell (scene_menu_2024.go)
-	if facts.CantAct = cantActBecause(charID); facts.CantAct != "" && hp > 0 { // nothing to send: the turn passes on its own (I-ALDENQA-2)
+	// a character that can't act has nothing to send: its turn passes on its own (I-ALDENQA-2)
+	if facts.CantAct = cantActBecause(charID); facts.CantAct != "" && hp > 0 {
 		response["cant_act"] = cantActNote(facts.CantAct)
 	}
 	response["now"], response["more"] = sceneMenu(charID, facts)
