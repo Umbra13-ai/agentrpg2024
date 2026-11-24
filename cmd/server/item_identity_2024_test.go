@@ -214,3 +214,80 @@ func TestPostgresUnidentifiedItemByItsLookInEveryCommand(t *testing.T) {
 		t.Errorf("drop by its look: %s", refusal)
 	}
 }
+
+// Stage 3: an unidentified item becomes known by a cast of Identify (named by its look, the caster's or a party member's), a Short Rest
+// focused on it, a taste of a potion (not drunk) and the GM's identify-item; what was learned is its name and what it does.
+func TestPostgresIdentifyingAnItemOnEveryRoute(t *testing.T) {
+	testPostgres(t)
+	gm, player, camp, hero, _ := earlyRulesFixture(t, "Test Identify Raider", nil)
+	pgCall(t, "POST", fmt.Sprintf("/api/campaigns/%d/combat/end", camp), gm, map[string]interface{}{})
+	give := func(name, look string) {
+		if c, r := pgCall(t, "POST", "/api/gm/give-item", gm, map[string]interface{}{"character_id": hero, "campaign_id": camp, "item_name": name, "unidentified": true, "appears_as": look}); c != 200 {
+			t.Fatalf("give %s: %d %v", name, c, r)
+		}
+	}
+	give("Ring of Protection", "a plain silver ring")
+	give("Cloak of Protection", "a moth-grey cloak")
+	give("Potion of Healing", "a vial of cloudy red liquid")
+	give("Wand of Magic Missiles", "a crooked ash wand")
+	known := func(look string) (invItem, bool) {
+		for _, it := range inventoryOf(hero) {
+			if strings.EqualFold(itemStr(it, appearsAsKey), look) {
+				return it, false
+			}
+		}
+		for _, it := range inventoryOf(hero) {
+			if !itemUnidentified(it) && strings.Contains(look, "ring") && itemStr(it, "name") == "Ring of Protection" {
+				return it, true
+			}
+		}
+		return nil, true
+	}
+	// Identify
+	pgExec(t, `UPDATE characters SET class = 'wizard', subclass = NULL, level = 3, intl = 16, known_spells = '["identify"]', prepared_spells = '["identify"]', spell_slots_used = '{}'::jsonb,
+		inventory = inventory || '[{"name":"Component Pouch","quantity":1},{"name":"Pearl (100 GP)","quantity":1}]'::jsonb, action_used = false WHERE id = $1`, hero)
+	c, r := pgCall(t, "POST", "/api/action", player, map[string]interface{}{"action": "cast", "spell_slug": "identify", "description": "I touch the plain silver ring and study its weave"})
+	res := fmt.Sprint(r["result"])
+	if _, isKnown := known("a plain silver ring"); c != 200 || !isKnown || !strings.Contains(res, "is Ring of Protection") {
+		t.Errorf("Identify: %d %q", c, res)
+	}
+	// a Short Rest focused on the cloak
+	if c, r := pgCall(t, "POST", fmt.Sprintf("/api/characters/%d/short-rest", hero), player, map[string]interface{}{"hit_dice": 0, "study_item": "the rope"}); c != 400 || r["error"] != "nothing_to_study" {
+		t.Errorf("studying what isn't an unknown item: %d %v", c, r)
+	}
+	c, r = pgCall(t, "POST", fmt.Sprintf("/api/characters/%d/short-rest", hero), player, map[string]interface{}{"hit_dice": 0, "study_item": "a moth-grey cloak"})
+	if c != 200 || !strings.Contains(fmt.Sprint(r["identified"]), "Cloak of Protection") {
+		t.Errorf("a Short Rest's study: %d %v", c, r["identified"])
+	}
+	// a taste of the vial: known, not drunk
+	pgExec(t, `UPDATE characters SET action_used = false WHERE id = $1`, hero)
+	pgCall(t, "POST", "/api/gm/narrate", gm, map[string]interface{}{"campaign_id": camp, "narration": "The hour passes quietly."}) // the next exploration beat
+	_, r = pgCall(t, "POST", "/api/action", player, map[string]interface{}{"action": "use_item", "description": "I take a small sip from the vial of cloudy red liquid"})
+	vials := 0
+	for _, it := range inventoryOf(hero) {
+		if itemStr(it, "name") == "Potion of Healing" && !itemUnidentified(it) {
+			vials++
+		}
+	}
+	if !strings.Contains(fmt.Sprint(r["result"]), "Potion of Healing") || vials != 1 {
+		t.Errorf("a taste: %v (known potions carried: %d)", r, vials)
+	}
+	// the GM's word
+	c, r = pgCall(t, "POST", "/api/gm/identify-item", gm, map[string]interface{}{"character_id": hero, "campaign_id": camp, "item": "a crooked ash wand"})
+	if c != 200 || !strings.Contains(fmt.Sprint(r["result"]), "Wand of Magic Missiles") || !strings.Contains(fmt.Sprint(r["result"]), "charges") {
+		t.Errorf("the GM's identify-item: %d %v", c, r)
+	}
+	for _, it := range inventoryOf(hero) {
+		if itemUnidentified(it) {
+			t.Errorf("still unidentified: %v", it)
+		}
+	}
+	// a known item now reads as itself
+	_, sheet := pgCall(t, "GET", fmt.Sprintf("/api/characters/%d", hero), player, nil)
+	if inv := fmt.Sprint(sheet["inventory"]); !strings.Contains(inv, "Wand of Magic Missiles") || !strings.Contains(inv, "Ring of Protection") {
+		t.Errorf("the sheet after identifying: %s", inv)
+	}
+	if c, r := pgCall(t, "POST", "/api/gm/identify-item", gm, map[string]interface{}{"character_id": hero, "campaign_id": camp, "item": "Ring of Protection"}); c != 400 {
+		t.Errorf("identifying a known item: %d %v", c, r)
+	}
+}

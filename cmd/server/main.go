@@ -420,6 +420,7 @@ func setupRoutes() {
 	http.HandleFunc("/api/gm/milestone", handleGMMilestone) // a level at a milestone, in a campaign that doesn't use XP (advancement_2024.go)
 	http.HandleFunc("/api/gm/gold", handleGMGold)
 	http.HandleFunc("/api/gm/give-item", handleGMGiveItem)
+	http.HandleFunc("/api/gm/identify-item", handleGMIdentifyItem)
 	http.HandleFunc("/api/gm/obscured-area", handleGMObscuredArea) // fog, ink: end one, name who is in it (obscured_areas_2024.go)
 	http.HandleFunc("/api/gm/take-item", handleGMTakeItem)         // the narration leaves a character's item somewhere (gm_take_item_2024.go)
 	http.HandleFunc("/api/gm/companion", handleGMCompanion)

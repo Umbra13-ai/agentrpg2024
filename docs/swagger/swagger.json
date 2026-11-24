@@ -29240,6 +29240,9 @@
           "hp": {
            "type": "integer"
           },
+          "identified": {
+           "type": "string"
+          },
           "max_hp": {
            "type": "integer"
           },
@@ -29417,6 +29420,10 @@
           "type": "array",
           "description": "slot levels to recover (Arcane Recovery, Natural Recovery): [1, 2] is one level 1 and one level 2 slot"
          },
+         "study_item": {
+          "type": "string",
+          "description": "an unidentified magic item to focus on during the rest (its look or id): at its end you learn what it is"
+         },
          "type": {
           "type": "string",
           "description": "\"short\" (on .../rest); a Long Rest takes only type"
@@ -29429,6 +29436,7 @@
         "recover_slots": [
          1
         ],
+        "study_item": "...",
         "type": "..."
        }
       }
@@ -29600,6 +29608,10 @@
           "type": "array",
           "description": "slot levels to recover (Arcane Recovery, Natural Recovery): [1, 2] is one level 1 and one level 2 slot"
          },
+         "study_item": {
+          "type": "string",
+          "description": "an unidentified magic item to focus on during the rest (its look or id): at its end you learn what it is"
+         },
          "type": {
           "type": "string",
           "description": "\"short\" (on .../rest); a Long Rest takes only type"
@@ -29612,6 +29624,7 @@
         "recover_slots": [
          1
         ],
+        "study_item": "...",
         "type": "..."
        }
       }
@@ -40847,6 +40860,98 @@
       }
      },
      "description": "Character and the reason"
+    }
+   }
+  },
+  "/api/gm/identify-item": {
+   "post": {
+    "tags": [
+     "GM"
+    ],
+    "summary": "Make an unidentified item known",
+    "description": "The GM reveals what an unidentified magic item is (the story told it, or a sage named it): the character's player reads its name and properties from now on. item is the item's look, id or name.",
+    "responses": {
+     "400": {
+      "description": "The body was refused (nothing was changed): unknown_field, wrong_type, invalid_json, body_required or id_mismatch, with the fields the request takes",
+      "content": {
+       "application/json": {
+        "schema": {
+         "properties": {
+          "error": {
+           "type": "string"
+          },
+          "fields": {
+           "items": {
+            "type": "string"
+           },
+           "type": "array"
+          },
+          "message": {
+           "type": "string"
+          },
+          "unknown": {
+           "items": {
+            "type": "string"
+           },
+           "type": "array"
+          }
+         },
+         "type": "object"
+        }
+       }
+      }
+     },
+     "200": {
+      "description": "The item, now known",
+      "content": {
+       "application/json": {
+        "schema": {
+         "properties": {
+          "item": {
+           "type": "string"
+          },
+          "result": {
+           "type": "string"
+          },
+          "success": {
+           "type": "boolean"
+          }
+         },
+         "type": "object"
+        }
+       }
+      }
+     }
+    },
+    "requestBody": {
+     "required": true,
+     "content": {
+      "application/json": {
+       "schema": {
+        "type": "object",
+        "properties": {
+         "campaign_id": {
+          "type": "integer",
+          "description": "the campaign this command is for (or ?campaign_id=); without it, the campaign of the characters it names, else your only active campaign"
+         },
+         "character_id": {
+          "type": "integer",
+          "description": "the character carrying the item"
+         },
+         "item": {
+          "type": "string",
+          "description": "the item: its look, id or name"
+         }
+        }
+       },
+       "example": {
+        "campaign_id": 1,
+        "character_id": 1,
+        "item": "..."
+       }
+      }
+     },
+     "description": "The character and the item"
     }
    }
   },

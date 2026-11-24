@@ -2582,6 +2582,9 @@ func resolveActionWithBonusDash(action, description string, charID int, bonusDas
 			if conditionText == "" && itemRepairSpells[spellKey] {
 				conditionText = mendItem(charID, description) // Mending removes a corrosion penalty (item_state_2024.go)
 			}
+			if conditionText == "" && itemLearningSpells[spellKey] {
+				conditionText = identifyBySpell(charID, description) // Identify learns an unidentified item (item_identify_2024.go)
+			}
 			conditionText += markCastText + laterHitDamageNote(spellKey)
 			dcNote := "" // only a spell with a saving throw has a DC to show (F229: Bless showed "DC 13")
 			if spell.SavingThrow != "" {

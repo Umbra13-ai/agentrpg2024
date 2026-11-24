@@ -1374,6 +1374,7 @@ type shortRestRequest struct {
 	HitDice      int    `json:"hit_dice"`      // Hit Point Dice to spend
 	Die          string `json:"die"`           // multiclass: which Hit Point Die to spend first ("d10"); the largest first otherwise
 	RecoverSlots []int  `json:"recover_slots"` // slot levels to recover (Arcane Recovery, Natural Recovery): [1, 2] is one level 1 and one level 2 slot
+	StudyItem    string `json:"study_item"`    // an unidentified magic item to focus on during the rest (its look or id): at its end you learn what it is
 }
 
 // restKind reads a rest's type: "long" (also when none is sent), "short", or "" for anything else.
@@ -1407,6 +1408,16 @@ func handleShortRest(w http.ResponseWriter, r *http.Request, charID int) {
 		writeJSONStatus(w, http.StatusBadRequest, map[string]interface{}{"error": "invalid_rest_type",
 			"message": fmt.Sprintf("This route takes a Short Rest; type %q isn't one. Leave type out (or send \"short\"); a Long Rest is POST /api/characters/{id}/rest. Nothing was changed.", req.Type)})
 		return
+	}
+	studyLook := "" // the item focused on during the rest (item_identify_2024.go): checked before the rest is taken
+	if strings.TrimSpace(req.StudyItem) != "" {
+		it, ferr := findInventoryItem(inventoryOf(charID), req.StudyItem)
+		if ferr != nil || it == nil || !itemUnidentified(it) {
+			writeJSONStatus(w, http.StatusBadRequest, map[string]interface{}{"error": "nothing_to_study",
+				"message": fmt.Sprintf("study_item names no unidentified magic item you carry (%q): name it by its look or id. Nothing was changed.", req.StudyItem)})
+			return
+		}
+		studyLook, req.StudyItem = playerItemName(it), itemStr(it, "id")
 	}
 
 	// Get character info including subclass for Natural Recovery, class_levels for multiclass, and lobby_id for the spell clock
@@ -1748,6 +1759,13 @@ func handleShortRest(w http.ResponseWriter, r *http.Request, charID int) {
 		"rest":                     restGuide(charID), // what resting gives and how to ask (rests_2024.go)
 	}
 	logRest(charID, "short", fmt.Sprintf("spent %d Hit Point Dice, regained %d Hit Points", req.HitDice, actualHealing))
+	if req.StudyItem != "" { // focused on one magic item the whole rest: at its end its properties are known (SRD 5.2.1)
+		if known, refusal := identifyItem(charID, req.StudyItem); refusal == "" {
+			response["identified"] = identifiedLine(studyLook, known)
+		} else {
+			response["identified"] = "The study taught nothing: " + refusal + "."
+		}
+	}
 
 	if warlockRecovery != "" {
 		response["warlock_recovery"] = warlockRecovery

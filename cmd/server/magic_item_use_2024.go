@@ -1478,6 +1478,9 @@ func useItemAction(charID int, description string) string {
 	if itemBool(it, "destroyed") {
 		return "Cannot use the " + playerItemName(it) + ": it is destroyed. Nothing was spent."
 	}
+	if out, tasted := tastePotion(charID, it, description); tasted { // a taste tells what a potion does (item_identify_2024.go)
+		return out
+	}
 	if itemUnidentified(it) && !isPotion(it) { // working it means knowing it; a potion is drunk all the same (item_identity_2024.go)
 		return featureRefusal(playerItemName(it), "it is unidentified, so you don't know how to use it yet: the Identify spell, or a Short Rest focused on it, tells you")
 	}
