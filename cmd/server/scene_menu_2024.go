@@ -42,6 +42,29 @@ type sceneFacts struct {
 	SelfHurt   bool
 	Label      string // the character's own health label (game.Vitals.Health)
 	BeatRound  bool   // outside a fight the story action is the beat (schedule off) rather than the round
+	Weapon     string // the weapon in the character's main hand, for the attack example ("" : none)
+	Spell      string // a damaging spell the character has (a cantrip first), for the cast example ("": none)
+}
+
+// ownGear: the character's weapon in hand and a damaging spell it has, so the menu's examples are its own (S-WREN-1, I-THISTLE-5: a
+// Wizard was shown sacred-flame and a longsword it didn't hold).
+func (f *sceneFacts) ownGear(charID int) {
+	var main string
+	db.QueryRow(`SELECT COALESCE(equipped_main_hand,'') FROM characters WHERE id = $1`, charID).Scan(&main)
+	if _, w, ok := findWeapon(main); ok {
+		f.Weapon = strings.ToLower(w.Name)
+	}
+	best := ""
+	for slug := range spellsHeld(charID) {
+		sp, ok := srdSpellsMemory[slug]
+		if !ok || (sp.DamageDice == "" && len(sp.DamageAtSlotLevel) == 0 && len(sp.DamageAtCharLevel) == 0) {
+			continue
+		}
+		if best == "" || sp.Level < srdSpellsMemory[best].Level || (sp.Level == srdSpellsMemory[best].Level && slug < best) {
+			best = slug
+		}
+	}
+	f.Spell = best
 }
 
 // sceneFactsOf reads my-turn's own lists: enemies (each with "id"), party (each with "character_id", "hp", "max_hp", "status").
@@ -95,6 +118,12 @@ var targetIDRe = regexp.MustCompile(`"target_id": -(\d+)`)
 
 // realTarget: an example's placeholder target ("target_id": -1) made one this scene has: the first enemy, or the second (-2) when there is one.
 func (f sceneFacts) realTarget(use string) string {
+	if f.Spell != "" {
+		use = strings.Replace(use, `"spell_slug": "sacred-flame"`, fmt.Sprintf(`"spell_slug": %q`, f.Spell), 1)
+	}
+	if f.Weapon != "" {
+		use = strings.Replace(use, "my longsword", "my "+f.Weapon, 1)
+	}
 	if len(f.EnemyIDs) == 0 {
 		return use
 	}

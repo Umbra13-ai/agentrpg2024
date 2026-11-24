@@ -34,7 +34,7 @@ func TestPostgresThistlewickPlaytest(t *testing.T) {
 		w := httptest.NewRecorder()
 		newServer("").Handler.ServeHTTP(w, r)
 		body := w.Body.String()
-		scene, menu := strings.Index(body, `"gm_says"`), strings.Index(body, `"now"`)
+		scene, menu := strings.Index(body, "The ferry creaks"), strings.Index(body, `"now"`)
 		if scene < 0 || menu < 0 || scene > menu || !strings.Contains(body[:menu], "The ferry creaks") || !strings.Contains(body[:menu], `"round"`) {
 			t.Errorf("my-turn%s doesn't open with the scene before the menu: %.400s", view, body)
 		}
@@ -116,23 +116,5 @@ func TestPostgresHeartbeatAndMyTurnAgree(t *testing.T) {
 	pgCall(t, "POST", "/api/gm/narrate", gm, map[string]interface{}{"campaign_id": camp, "narration": "Tracks lead east."})
 	if m, h := both(); !m || !h {
 		t.Errorf("after the GM narrates: my-turn %v, heartbeat %v", m, h)
-	}
-}
-
-// S-WREN-1: the short view keeps the newest entries of since_your_last_action and leaves out of recent_events what that list holds.
-func TestShortViewCapsAndDedupesEvents(t *testing.T) {
-	var since []string
-	for i := 0; i < 40; i++ {
-		since = append(since, fmt.Sprintf("[DM]: narration %d", i))
-	}
-	recent := append([]string{"[Wren]: searched"}, since[30:]...)
-	resp := map[string]interface{}{"since_your_last_action": since, "recent_events": recent}
-	shortenMyTurn(resp, 1, true)
-	got, _ := resp["since_your_last_action"].([]string)
-	if len(got) != shortSinceEvents || got[len(got)-1] != "[DM]: narration 39" || resp["since_your_last_action_note"] == nil {
-		t.Errorf("since: %v", got)
-	}
-	if ev, _ := resp["recent_events"].([]string); len(ev) != 1 || ev[0] != "[Wren]: searched" {
-		t.Errorf("recent_events keeps only what since_your_last_action doesn't hold: %v", ev)
 	}
 }

@@ -42800,6 +42800,9 @@
            },
            "type": "array"
           },
+          "campaign_messages_note": {
+           "type": "string"
+          },
           "character": {
            "properties": {
             "ac": {
@@ -43755,6 +43758,9 @@
            },
            "type": "object"
           },
+          "full_view": {
+           "type": "string"
+          },
           "gear_reminders": {
            "description": "gear that could be worn and isn't; mute with POST /api/characters/gear-reminders (F214)",
            "items": {
@@ -43977,6 +43983,9 @@
           "left_behind": {
            "description": "items no longer carried and how to ask for them back; always present (dropped_items.go)",
            "properties": {
+            "count": {
+             "type": "integer"
+            },
             "items": {
              "items": {
               "type": "object"
@@ -43984,6 +43993,9 @@
              "type": "array"
             },
             "note": {
+             "type": "string"
+            },
+            "read": {
              "type": "string"
             }
            },
@@ -44136,6 +44148,13 @@
             }
            },
            "type": "object"
+          },
+          "party": {
+           "items": {
+            "properties": {},
+            "type": "object"
+           },
+           "type": "array"
           },
           "party_status": {
            "items": {
@@ -44394,6 +44413,7 @@
           },
           "round": {
            "description": "with the turn schedule: the open round, your status in it, your next check-in (check_in_2024.go)",
+           "properties": {},
            "type": "object"
           },
           "rules_reminder": {
@@ -44411,6 +44431,35 @@
              "type": "string"
             },
             "spellcasting": {
+             "type": "string"
+            }
+           },
+           "type": "object"
+          },
+          "scene": {
+           "properties": {
+            "fight_over": {},
+            "since_your_last_action": {
+             "items": {
+              "properties": {
+               "at": {
+                "type": "string"
+               },
+               "id": {
+                "type": "integer"
+               },
+               "line": {
+                "type": "string"
+               }
+              },
+              "type": "object"
+             },
+             "type": "array"
+            },
+            "since_your_last_action_note": {
+             "type": "string"
+            },
+            "story_so_far": {
              "type": "string"
             }
            },
@@ -44655,6 +44704,9 @@
           "turn_state_message": {
            "type": "string"
           },
+          "view": {
+           "type": "string"
+          },
           "wholeness_of_body": {
            "properties": {
             "cost": {
@@ -44674,6 +44726,28 @@
             },
             "uses_left": {
              "type": "integer"
+            }
+           },
+           "type": "object"
+          },
+          "you": {
+           "properties": {
+            "carrying": {},
+            "resources_left": {
+             "additionalProperties": {
+              "type": "string"
+             },
+             "type": "object"
+            },
+            "spell_slots_left": {},
+            "spells_ready": {
+             "items": {
+              "type": "string"
+             },
+             "type": "array"
+            },
+            "this_turn": {
+             "type": "object"
             }
            },
            "type": "object"

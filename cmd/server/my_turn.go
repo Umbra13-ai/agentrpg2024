@@ -186,6 +186,7 @@ func handleMyTurn(w http.ResponseWriter, r *http.Request) {
 	var latestNarration string
 	var narrationAt time.Time
 	sinceMine, mineSeen := []string{}, false // what happened since the character's own last action (I-CALLA-6, I-CALLA-16)
+	var sinceRecs []actionRecord             // the same events as records, for the short view's entries (short_view_2024.go)
 	var fightOverAt time.Time                // a fight ended and the GM hasn't narrated since (I-CALLA-18)
 	for i, rec := range recs {
 		line := rec.eventLine()
@@ -203,10 +204,12 @@ func handleMyTurn(w http.ResponseWriter, r *http.Request) {
 		}
 		if !mineSeen && isPlayRecord(rec.Type) { // bookkeeping (an automatic "following", joining, ready) is not play (I-CALLA-28)
 			sinceMine = append(sinceMine, line)
+			sinceRecs = append(sinceRecs, rec)
 		}
 	}
 	slices.Reverse(recentEvents) // oldest first: the newest event is last
 	slices.Reverse(sinceMine)
+	slices.Reverse(sinceRecs)
 
 	// the character's own status: the health owner (game/hit_points.go), which the hints below follow
 	charStatus := game.Vitals{HP: hp, Max: maxHP, Stable: isStable, Dead: isDead}.Health()
@@ -1617,6 +1620,7 @@ func handleMyTurn(w http.ResponseWriter, r *http.Request) {
 	// the scene menu (scene_menu_2024.go): what fits now, everything else it can send with why it isn't first, and what a player does
 	// outside a turn; the short view leaves out the long lists these replace
 	facts := sceneFactsOf(inCombat, enemies, partyStatus, hp, maxHP, charStatus, beatApplies(lobbyID))
+	facts.ownGear(charID) // the examples name the character's own weapon and spell (scene_menu_2024.go)
 	response["now"], response["more"] = sceneMenu(charID, facts)
 	hours := int64(0)
 	if soon := longRestTooSoon(charID, 0); soon != nil {
@@ -1628,18 +1632,14 @@ func handleMyTurn(w http.ResponseWriter, r *http.Request) {
 		Schedule: usesScheduleFor(charID), ShopOpen: shopsOpenFor(lobbyID) != nil, ChoicesOpen: len(characterToFinish(charID)) > 0,
 		LeftBehind: leftBehindNote(charID) != nil, LongRestHours: hours})
 	response["menu_note"] = "now: what fits this scene, with the request to send. more: everything else you can send, each with why it isn't first (nothing is hidden or refused). elsewhere: what you do outside a turn. Add ?view=short for these without the long actions, bonus_actions and free_actions lists."
+	lead := myTurnLeadKeys
 	if r.URL.Query().Get("view") == "short" {
 		if d := heartbeatLevelUp(charID); d != nil {
 			response["level_up"] = d // the notices as a digest: the newest, the levels, each open choice with its exact request (heartbeat_digest_2024.go)
 		}
-		shortenMyTurn(response, charID, r.URL.Query().Get("tips") == "1") // the short view's other cuts (short_view_2024.go)
-		if opts, ok := response["your_options"].(map[string]interface{}); ok {
-			delete(opts, "actions")
-			delete(opts, "bonus_actions")
-			delete(opts, "free_actions")
-		}
+		response, lead = shortTurn(response, charID, sinceRecs, r.URL.Query()), shortLead // built from what a turn needs (short_view_2024.go)
 	}
-	if body, err := marshalLeading(response, myTurnLeadKeys...); err == nil {
+	if body, err := marshalLeading(response, lead...); err == nil {
 		w.Write(append(body, '\n'))
 		return
 	}

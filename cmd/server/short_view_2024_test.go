@@ -1,45 +1,84 @@
 package main
 
 import (
+	"encoding/json"
+	"fmt"
+	"net/url"
+	"slices"
 	"strings"
 	"testing"
+	"time"
 )
 
-func TestShortenMyTurn(t *testing.T) {
-	long := strings.Repeat("x", 900)
-	ev := []string{"one", "two", "three", "four " + long, "five " + long}
-	resp := map[string]interface{}{
-		"character":     map[string]interface{}{"name": "Calla", "hp": 20, "class_features": []map[string]interface{}{{"name": "Channel Divinity", "description": long}}, "prepared_spells": []string{"bless"}},
-		"recent_events": ev, "how_to_act": "tip", "rules_reminder": map[string]interface{}{}, "shops_open": []string{"s"},
-		"your_options": map[string]interface{}{"rests": map[string]interface{}{"x": long}, "movement": "30"},
-		"left_behind":  map[string]interface{}{"items": []map[string]interface{}{{"item": "Robe"}}},
-		"story_so_far": strings.Repeat("word ", 400) + "the end",
+// The short view is built from a fixed list (shortTurn): a key my-turn gains never reaches it by itself; the events since the character's
+// last action are entries {id, at, line}, the newest few or those after ?since, never repeating the newest narration (gm_says); the sheet's
+// reference text, the long menus and the feature notes stay in the full view (S-WREN-1).
+func TestShortTurnIsBuiltNotTrimmed(t *testing.T) {
+	long := strings.Repeat("x", 2000)
+	var recs []actionRecord
+	at := time.Date(2026, 11, 24, 9, 0, 0, 0, time.UTC)
+	for i := 1; i <= 40; i++ {
+		typ := "search"
+		if i%2 == 0 {
+			typ = actionNarration
+		}
+		recs = append(recs, actionRecord{ID: 100 + i, Actor: "Wren", Type: typ, Description: fmt.Sprintf("event %d %s", i, long), At: at.Add(time.Duration(i) * time.Minute)})
 	}
-	shortenMyTurn(resp, 7, false)
-	ch := resp["character"].(map[string]interface{})
-	if ch["class_features"] != nil || ch["prepared_spells"] != nil || ch["hp"] != 20 || ch["class_feature_names"].([]string)[0] != "Channel Divinity" || ch["left_out_of_the_short_view"] == nil {
-		t.Errorf("character: %v", ch)
+	full := map[string]interface{}{
+		"is_my_turn": true, "message": "Your turn.", "gm_says": recs[39].Description, "gm_says_at": "now", "story_so_far": strings.Repeat("word ", 400) + "the end",
+		"now": []map[string]interface{}{{"action": "search"}},
+		"character": map[string]interface{}{"name": "Sylvara", "hp": 23, "max_hp": 23, "ac": 12, "class_features": []map[string]interface{}{{"description": long}}, "spell_slots": map[string]interface{}{"remaining": map[string]int{"1": 4}},
+			"known_spells": []map[string]interface{}{{"name": "Fire Bolt", "level": 0}, {"name": "Shield", "level": 1}}, "prepared_spells": []map[string]interface{}{{"name": "Shield", "level": 1}}},
+		"your_options":  map[string]interface{}{"action_economy": map[string]interface{}{"action": true, "bonus_action": false, "reaction": true, "movement_remaining_ft": 30}, "actions": long},
+		"recent_events": []string{long}, "since_your_last_action": []string{long}, "dwarven_resilience": map[string]interface{}{"tip": long},
+		"elsewhere": []string{long}, "more": []string{long}, "how_to_act": long, "a_key_added_tomorrow": long, "table_held": false,
+		"party_status":       []map[string]interface{}{{"character_id": 2, "name": "Calla", "hp": 20, "max_hp": 24, "status": "wounded", "species": "Halfling", "ac": 16}},
+		"character_finished": true, "setup_guide": "x",
 	}
-	if got := resp["recent_events"].([]string); len(got) != 3 || len([]rune(got[1])) > shortEventChars+100 {
-		t.Errorf("recent_events: %d entries", len(got))
-	}
-	for _, k := range []string{"how_to_act", "rules_reminder", "shops_open"} {
-		if resp[k] != nil {
-			t.Errorf("%s stays", k)
+	out := shortTurn(full, 5, recs, url.Values{})
+	allowed := append(append([]string{}, shortLead...), "view", "full_view", "campaign_messages_note", "setup_guide", "how_to_act", "rules_reminder")
+	for k := range out {
+		if !slices.Contains(allowed, k) {
+			t.Errorf("the short view carries %q, which nothing placed there", k)
 		}
 	}
-	if resp["your_options"].(map[string]interface{})["rests"] != nil || resp["your_options"].(map[string]interface{})["movement"] != "30" {
-		t.Errorf("your_options: %v", resp["your_options"])
+	for _, k := range []string{"a_key_added_tomorrow", "dwarven_resilience", "elsewhere", "more", "your_options", "recent_events", "since_your_last_action", "table_held", "setup_guide", "how_to_act"} {
+		if _, has := out[k]; has {
+			t.Errorf("%s reached the short view", k)
+		}
 	}
-	if lb := resp["left_behind"].(map[string]interface{}); lb["count"] != 1 {
-		t.Errorf("left_behind: %v", lb)
+	scene := out["scene"].(map[string]interface{})
+	ev := scene["since_your_last_action"].([]map[string]interface{})
+	if len(ev) < 5 || ev[len(ev)-1]["id"] != 140 || scene["since_your_last_action_note"] == nil || !strings.HasSuffix(fmt.Sprint(scene["story_so_far"]), "the end") {
+		t.Errorf("the scene: %d events, the last %v", len(ev), ev[len(ev)-1]["id"])
 	}
-	if s := resp["story_so_far"].(string); !strings.HasSuffix(s, "the end") || len(strings.Fields(s)) > shortStoryWords+2 {
-		t.Errorf("story: %d words", len(strings.Fields(s)))
+	if scene["gm_says"] != nil {
+		t.Error("gm_says repeats the newest narration the list holds")
 	}
-	resp2 := map[string]interface{}{"how_to_act": "tip"}
-	shortenMyTurn(resp2, 7, true)
-	if resp2["how_to_act"] != "tip" {
-		t.Error("tips=1 should keep the tips")
+	// a short history: every event since the last action, no note
+	few := shortTurn(full, 5, recs[36:], url.Values{})["scene"].(map[string]interface{})
+	if l := few["since_your_last_action"].([]map[string]interface{}); len(l) != 4 || few["since_your_last_action_note"] != nil {
+		t.Errorf("four events since the last action: %v", few)
+	}
+	you := out["you"].(map[string]interface{})
+	if you["hp"] != 23 || you["carrying"] != nil || you["class_features"] != nil || fmt.Sprint(you["spells_ready"]) != "[Fire Bolt Shield]" || you["this_turn"] == nil {
+		t.Errorf("you: %v", you)
+	}
+	if p := out["party"].([]map[string]interface{}); p[0]["species"] != nil || p[0]["hp"] != 20 {
+		t.Errorf("party: %v", p)
+	}
+	b, _ := json.Marshal(out)
+	if len(b) > shortEventBytes+6000 {
+		t.Errorf("the short view is %d bytes with 2 KB events", len(b))
+	}
+	// ?since: only the newer events
+	after := shortTurn(full, 5, recs, url.Values{"since": {"135"}})
+	ev = after["scene"].(map[string]interface{})["since_your_last_action"].([]map[string]interface{})
+	if len(ev) != 5 || ev[0]["id"] != 136 {
+		t.Errorf("since 135: %v", ev)
+	}
+	// tips=1 brings the standing tips back
+	if tips := shortTurn(full, 5, recs, url.Values{"tips": {"1"}}); tips["how_to_act"] == nil {
+		t.Error("tips=1")
 	}
 }

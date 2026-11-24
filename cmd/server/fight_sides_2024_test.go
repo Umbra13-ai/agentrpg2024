@@ -50,7 +50,7 @@ func TestPostgresFightSidesInMyTurn(t *testing.T) {
 	setMonsterHP(camp, guard, 2) // a bolt through his arm: a quarter of 11 or fewer
 	situation := func() (map[string]interface{}, string) {
 		t.Helper()
-		_, j := pgCall(t, "GET", fmt.Sprintf("/api/my-turn?view=short&character_id=%d", hero), player, nil)
+		_, j := pgCall(t, "GET", fmt.Sprintf("/api/my-turn?character_id=%d", hero), player, nil) // the hints are in the full view
 		b, _ := json.Marshal(j["tactical_suggestions"])
 		s, _ := j["situation"].(map[string]interface{})
 		return s, string(b)
