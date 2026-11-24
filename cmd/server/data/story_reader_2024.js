@@ -93,12 +93,10 @@
     el.innerHTML = '<div><div class="page-header"><span>' + esc(page.chapterNum) + ' — ' + esc(page.chapterTitle) + '</span><span class="font-mono">' + esc(page.location) + '</span></div>' +
       '<div class="story-body">' + head + page.entries.map(renderEntryHtml).join('') + '</div></div>' +
       '<div class="page-footer"><span>Tap ← / → or swipe to turn</span><span class="font-mono">Page ' + (READER.pageIndex + 1) + ' of ' + total + '</span></div>';
-    ['', '-top'].forEach(function (s) { // the bar under the page and the same bar above it
-      $('page-counter' + s).textContent = 'Page ' + (READER.pageIndex + 1) + ' / ' + total;
-      var scrubber = $('page-scrubber' + s); scrubber.max = String(total - 1); scrubber.value = String(READER.pageIndex);
-      $('btn-prev-page' + s).disabled = READER.pageIndex === 0;
-      $('btn-next-page' + s).disabled = READER.pageIndex === total - 1;
-    });
+    $('page-counter').textContent = 'Page ' + (READER.pageIndex + 1) + ' / ' + total;
+    var scrubber = $('page-scrubber'); scrubber.max = String(total - 1); scrubber.value = String(READER.pageIndex);
+    $('btn-prev-page').disabled = READER.pageIndex === 0;
+    $('btn-next-page').disabled = READER.pageIndex === total - 1;
     $('topbar-subtitle').textContent = page.chapterNum + ' · ' + page.chapterTitle;
     if (page.entries.length) noteRead(POS[page.entries[page.entries.length - 1].id]);
     $('reader-progress-fill').style.width = Math.round(((READER.pageIndex + 1) / total) * 100) + '%';
@@ -166,11 +164,9 @@
   }
 
   // Event wiring
-  ['', '-top'].forEach(function (s) {
-    $('btn-prev-page' + s).addEventListener('click', function () { goToPage(READER.pageIndex - 1, 'prev'); });
-    $('btn-next-page' + s).addEventListener('click', function () { goToPage(READER.pageIndex + 1, 'next'); });
-    $('page-scrubber' + s).addEventListener('input', function (e) { var n = Number(e.target.value); goToPage(n, n > READER.pageIndex ? 'next' : 'prev'); });
-  });
+  $('btn-prev-page').addEventListener('click', function () { goToPage(READER.pageIndex - 1, 'prev'); });
+  $('btn-next-page').addEventListener('click', function () { goToPage(READER.pageIndex + 1, 'next'); });
+  $('page-scrubber').addEventListener('input', function (e) { var n = Number(e.target.value); goToPage(n, n > READER.pageIndex ? 'next' : 'prev'); });
   document.addEventListener('keydown', function (e) {
     if (READER.mode !== 'flip' || /^(INPUT|TEXTAREA|SELECT)$/.test((e.target || {}).tagName || '')) return;
     if (e.key === 'ArrowRight') goToPage(READER.pageIndex + 1, 'next');

@@ -331,8 +331,7 @@
 .cast-token.open img { width: 192px; height: 192px; }
 .cast-name { font-size: 12px; line-height: 1.2; text-align: center; overflow-wrap: anywhere; }
 
-/* the page bar above the page as well as under it; on a narrow screen the counter takes its own line, so Next never runs off the edge */
-.flip-nav-top { margin-top: 0; margin-bottom: 0.85rem; }
+/* the page bar under the page; on a narrow screen the counter takes its own line, so Next never runs off the edge */
 .flip-nav-bar { flex-wrap: wrap; min-width: 0; }
 .flip-nav-bar .btn { flex: 0 0 auto; }
 .page-count { font-size: 0.78rem; color: var(--text-secondary); min-width: 74px; text-align: center; }
