@@ -298,11 +298,17 @@ func storyReaderMarkup(campaignID int, name, gmName string, total int, withBack 
     </span>
   </div>
   <section id="flip-container">
+    <div class="flip-nav-bar flip-nav-top" aria-label="Turn the page">
+      <button class="btn btn-ghost" id="btn-prev-page-top" type="button">← Prev</button>
+      <input class="page-scrubber" id="page-scrubber-top" type="range" min="0" max="1" value="0" aria-label="Jump to page" />
+      <span class="font-mono page-count" id="page-counter-top">Page 1 / 1</span>
+      <button class="btn btn-gold" id="btn-next-page-top" type="button">Next →</button>
+    </div>
     <div class="book-stage" id="book-stage"><article class="book-page" id="book-page"></article></div>
     <div class="flip-nav-bar">
       <button class="btn btn-ghost" id="btn-prev-page" type="button">← Prev</button>
       <input class="page-scrubber" id="page-scrubber" type="range" min="0" max="1" value="0" aria-label="Jump to page" />
-      <span class="font-mono" id="page-counter" style="font-size:0.78rem; color:var(--text-secondary); min-width:74px; text-align:center;">Page 1 / 1</span>
+      <span class="font-mono page-count" id="page-counter">Page 1 / 1</span>
       <button class="btn btn-gold" id="btn-next-page" type="button">Next →</button>
     </div>
     <div class="swipe-hint">Tip: swipe left/right on the page, tap the arrows, or use ← / → keys. Your spot is saved in this browser.</div>
