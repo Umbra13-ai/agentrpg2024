@@ -32,7 +32,8 @@ type entryMechanic map[string]interface{}
 type mechanicParam struct {
 	Name string // the field name
 	Type string // "choice" (one of Options), "condition" (a rules condition), "number" (Min to Max), "text" (up to MaxLen bytes),
-	// "damage_types" (a list of Min or more damage types), "entry_options" (a list naming each effect the entry offers once)
+	// "damage_types" (a list of Min or more damage types), "conditions" (a list of Min or more rules conditions), "entry_options" (a list
+	// naming each effect the entry offers once)
 	Options  []string // a choice's values
 	Min, Max int      // a number's range
 	MaxLen   int      // a text's length
@@ -171,6 +172,114 @@ var mechanicCatalog = []mechanicKind{
 			return s + noteWords(m)
 		},
 	},
+	{
+		Kind: "random_condition",
+		Does: "A hit of this attack gives its target one condition the server rolls from conditions (a die with one face for each, in the list's order), " +
+			"for the time until says: until the end of the target's next turn, until the start or the end of the attacker's next turn, or for minutes. " +
+			"It is given as the SRD's own condition riders are, so the target's Immunity and the condition's end are honored.",
+		On:        "attack",
+		AppliedBy: "randomConditionOnHit through hitAfterDamage (hit_after_damage_2024.go) and the hit condition owner (parseHitRider, giveConditions), on every hit route",
+		Params: []mechanicParam{
+			{Name: "conditions", Type: "conditions", Min: 2, Required: true, Does: "the conditions in the die's order (1 first)"},
+			{Name: "until", Type: "choice", Options: []string{"end_of_its_next_turn", "start_of_attackers_next_turn", "end_of_attackers_next_turn", "minutes"}, Required: true,
+				Does: "how long the rolled condition lasts"},
+			{Name: "minutes", Type: "number", Min: 1, Max: 14400, Only: "until=minutes", Does: "how long, in minutes, with until minutes"},
+		},
+		Example: entryMechanic{"kind": "random_condition", "conditions": []interface{}{"charmed", "frightened", "poisoned"}, "until": "start_of_attackers_next_turn",
+			"covers": "Until the start of the dancer's next turn, the target has a condition the dancer rolls for: Charmed, Frightened or Poisoned."},
+		ExampleOn: "Melee Attack Roll: +5, reach 5 ft. Hit: 7 (1d8 + 3) Psychic damage. Until the start of the dancer's next turn, the target has a condition the dancer rolls for: Charmed, Frightened or Poisoned.",
+		check: func(e srdMonsterEntry, m entryMechanic) string {
+			if m.str("until") == "minutes" && m.num("minutes") == 0 {
+				return "until minutes needs minutes"
+			}
+			return ""
+		},
+		describe: func(m entryMechanic) string {
+			return "a hit gives its target a condition rolled from " + strings.Join(m.list("conditions"), ", ") + ", " + conditionTimeWords(m)
+		},
+	},
+	{
+		Kind: "forced_move",
+		Does: "A hit of this attack moves its target up to feet: pushed straight away from the attacker (push), pulled straight toward it (pull), or " +
+			"moved some other way the GM places (gm_places), only for a target of max_size or smaller when it is set. On the battle map the server moves " +
+			"the token as the SRD's own pushes are moved; without a map the GM places it.",
+		On:        "attack",
+		AppliedBy: "hitForcedMove (creature_movement_2024.go: forceToken) through hitAfterDamage, on every hit route",
+		Params: []mechanicParam{
+			{Name: "direction", Type: "choice", Options: []string{"push", "pull", "gm_places"}, Required: true, Does: "which way the target moves"},
+			{Name: "feet", Type: "number", Min: 5, Max: 300, Required: true, Does: "how far, in feet (a multiple of 5)"},
+			{Name: "max_size", Type: "choice", Options: []string{"tiny", "small", "medium", "large", "huge", "gargantuan"}, Does: "the largest size of target it moves"},
+		},
+		Example: entryMechanic{"kind": "forced_move", "direction": "push", "feet": float64(10), "max_size": "large",
+			"covers": "A Large or smaller target is flung 10 feet back."},
+		ExampleOn: "Melee Attack Roll: +5, reach 5 ft. Hit: 7 (1d8 + 3) Bludgeoning damage. A Large or smaller target is flung 10 feet back.",
+		check: func(e srdMonsterEntry, m entryMechanic) string {
+			if m.num("feet")%5 != 0 {
+				return "feet must be a multiple of 5"
+			}
+			return ""
+		},
+		describe: func(m entryMechanic) string {
+			s := map[string]string{"push": "a hit pushes its target up to %d feet straight away from it", "pull": "a hit pulls its target up to %d feet straight toward it",
+				"gm_places": "a hit moves its target up to %d feet, placed by the GM"}[m.str("direction")]
+			s = fmt.Sprintf(s, m.num("feet"))
+			if z := m.str("max_size"); z != "" {
+				s += " (a " + titleCase(z) + " or smaller target)"
+			}
+			return s
+		},
+	},
+}
+
+// conditionTimeWords: a random_condition's time in the words of the SRD's riders (riderUntil, conditionDuration read them).
+func conditionTimeWords(m entryMechanic) string {
+	switch m.str("until") {
+	case "start_of_attackers_next_turn":
+		return "until the start of the attacker's next turn"
+	case "end_of_attackers_next_turn":
+		return "until the end of the attacker's next turn"
+	case "minutes":
+		return "for " + minutesWords(m.num("minutes"))
+	}
+	return "until the end of its next turn"
+}
+
+// randomConditionOnHit: the attached random_condition of the attacking monster's entry: the condition rolled, given by the hit condition
+// owner from the SRD sentence it stands for (parseHitRider reads its time; giveConditions honors Immunity and records its end).
+func randomConditionOnHit(lobby, attacker, target int, desc, source string) string {
+	m, ok := attachedMechanic(lobby, attacker, desc, "random_condition")
+	if !ok {
+		return ""
+	}
+	conds := m.list("conditions")
+	if len(conds) == 0 {
+		return ""
+	}
+	roll := game.RollDamage(fmt.Sprintf("1d%d", len(conds)), false)
+	if roll < 1 || roll > len(conds) {
+		return ""
+	}
+	c := conds[roll-1]
+	head := fmt.Sprintf(" [%s: rolled 1d%d = %d: %s", stripUsage(source), len(conds), roll, titleCase(c))
+	e, ok := parseHitRider(fmt.Sprintf("Hit: The target has the %s condition %s.", titleCase(c), conditionTimeWords(m)))
+	if !ok {
+		return head + " (the GM applies it)]"
+	}
+	e.SourceID = attacker
+	if given := e.giveConditions(lobby, target, source); len(given) > 0 {
+		return head + "; " + strings.Join(given, "; ") + "]"
+	}
+	return head + "]"
+}
+
+// mechanicHitMove: the attached forced_move of the attacking monster's entry, as the movement owner's hitMove.
+func mechanicHitMove(lobby, attacker int, desc string) (hitMove, bool) {
+	m, ok := attachedMechanic(lobby, attacker, desc, "forced_move")
+	if !ok {
+		return hitMove{}, false
+	}
+	d := m.str("direction")
+	return hitMove{MaxSize: m.str("max_size"), Feet: m.num("feet"), Toward: d == "pull", GMPlaces: d == "gm_places"}, true
 }
 
 // untypedAmountRe: a damage amount with no type ("22 (4d10) damage"), the part a chosen_damage_type types; SRD 5.2.1 writes it before
@@ -414,9 +523,11 @@ func (k mechanicKind) paramProblem(m entryMechanic, e srdMonsterEntry) string {
 			if !ok || strings.TrimSpace(s) == "" || len(s) > p.MaxLen {
 				return fmt.Sprintf("%s must be text of 1 to %d bytes", p.Name, p.MaxLen)
 			}
-		case "damage_types", "entry_options":
+		case "damage_types", "entry_options", "conditions":
 			var opts []string
-			if p.Type == "damage_types" {
+			if p.Type == "conditions" {
+				opts = rulesConditions()
+			} else if p.Type == "damage_types" {
 				for t := range attackDamageTypes {
 					opts = append(opts, t)
 				}
@@ -553,6 +664,8 @@ func mechanicCatalogView() []map[string]interface{} {
 				v["options"], v["min_items"] = opts, p.Min
 			case "entry_options":
 				v["options"] = "the names of the effects the entry offers"
+			case "conditions":
+				v["options"], v["min_items"] = rulesConditions(), p.Min
 			}
 			if p.Only != "" {
 				v["only_with"] = strings.ReplaceAll(p.Only, "=", " ")

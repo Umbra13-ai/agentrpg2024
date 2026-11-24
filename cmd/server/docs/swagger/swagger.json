@@ -42328,7 +42328,12 @@
                 "only_with": {
                  "type": "string"
                 },
-                "options": {},
+                "options": {
+                 "items": {
+                  "type": "string"
+                 },
+                 "type": "array"
+                },
                 "required": {
                  "type": "boolean"
                 },

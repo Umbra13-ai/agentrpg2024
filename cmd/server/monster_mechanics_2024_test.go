@@ -363,3 +363,120 @@ func TestPostgresChosenTypeAndRandomChoiceInPlay(t *testing.T) {
 		t.Errorf("a use that names no effect: %d", c)
 	}
 }
+
+const (
+	dazeText    = "Melee Attack Roll: +60, reach 5 ft. Hit: 1 (1d1) Psychic damage. Until the end of its next turn, the target has a condition the dancer rolls for: Charmed or Frightened."
+	dazeCovers  = "Until the end of its next turn, the target has a condition the dancer rolls for: Charmed or Frightened."
+	flingText   = "Melee Attack Roll: +60, reach 5 ft. Hit: 1 (1d1) Bludgeoning damage. A Medium or smaller target is flung 10 feet back."
+	flingCovers = "A Medium or smaller target is flung 10 feet back."
+)
+
+func daze() srdMonsterEntry {
+	return srdMonsterEntry{Name: "Dazing Touch", Text: dazeText, Mechanics: []entryMechanic{{"kind": "random_condition", "conditions": []interface{}{"Charmed", "frightened"}, "until": "end_of_its_next_turn", "covers": dazeCovers}}}
+}
+
+func fling() srdMonsterEntry {
+	return srdMonsterEntry{Name: "Fling", Text: flingText, Mechanics: []entryMechanic{{"kind": "forced_move", "direction": "push", "feet": float64(10), "max_size": "medium", "covers": flingCovers}}}
+}
+
+// TestRandomConditionAndForcedMoveProblems: the two kinds' refusals, and the movement rule the mechanic gives.
+func TestRandomConditionAndForcedMoveProblems(t *testing.T) {
+	cases := []struct{ mechanics, want string }{
+		{`[{"kind":"random_condition","conditions":["charmed","stunned"],"until":"start_of_attackers_next_turn"}]`, ""},
+		{`[{"kind":"random_condition","conditions":["charmed","stunned"],"until":"minutes","minutes":10}]`, ""},
+		{`[{"kind":"random_condition","conditions":["charmed"],"until":"end_of_its_next_turn"}]`, "conditions must be a list of 2 or more"},
+		{`[{"kind":"random_condition","conditions":["charmed","bored"],"until":"end_of_its_next_turn"}]`, "conditions[1] must be one of"},
+		{`[{"kind":"random_condition","conditions":["charmed","stunned"]}]`, "until is required"},
+		{`[{"kind":"random_condition","conditions":["charmed","stunned"],"until":"minutes"}]`, "until minutes needs minutes"},
+		{`[{"kind":"random_condition","conditions":["charmed","stunned"],"until":"end_of_its_next_turn","minutes":5}]`, "minutes is only taken with until minutes"},
+		{`[{"kind":"forced_move","direction":"pull","feet":15}]`, ""},
+		{`[{"kind":"forced_move","direction":"gm_places","feet":20,"max_size":"Huge"}]`, ""},
+		{`[{"kind":"forced_move","direction":"sideways","feet":15}]`, "direction must be one of push, pull, gm_places"},
+		{`[{"kind":"forced_move","direction":"push","feet":12}]`, "feet must be a multiple of 5"},
+		{`[{"kind":"forced_move","direction":"push"}]`, "feet is required"},
+		{`[{"kind":"forced_move","direction":"push","feet":10,"max_size":"colossal"}]`, "max_size must be one of"},
+	}
+	for _, c := range cases {
+		got := mechanicProblem("action", srdMonsterEntry{Name: "x", Text: ashClawText, Mechanics: mechanicsFromJSON(t, c.mechanics)})
+		if (c.want == "") != (got == "") || !strings.Contains(got, c.want) {
+			t.Errorf("%s: got %q, want %q", c.mechanics, got, c.want)
+		}
+	}
+	for _, e := range []srdMonsterEntry{daze(), fling()} {
+		if p := mechanicProblem("action", e); p != "" {
+			t.Fatal(p)
+		}
+		for _, v := range entryVerdicts("action", e) {
+			if v.Status != "applied" {
+				t.Errorf("%s: sentence not applied: %+v", e.Name, v)
+			}
+		}
+	}
+	if d := mechanicsView(fling())[0]["does"]; d != "a hit pushes its target up to 10 feet straight away from it (a Medium or smaller target)" {
+		t.Errorf("forced_move describe: %v", d)
+	}
+}
+
+// TestPostgresRandomConditionAndForcedMoveOnEveryTarget: the rolled condition and the push on a character, a monster and a companion.
+func TestPostgresRandomConditionAndForcedMoveOnEveryTarget(t *testing.T) {
+	testPostgres(t)
+	gm, _, camp, hero, petID, _ := companionReactionFixture(t)
+	pet := companionIDBase + petID
+	cp := fmt.Sprintf("/api/campaigns/%d", camp)
+	m := inventedMonster("Test Dancer", "Fey", nil, []srdMonsterEntry{daze(), fling()})
+	c, j := pgCall(t, "POST", "/api/gm/compendium/monsters", gm, map[string]interface{}{"source_note": "invented mechanics fixture", "monsters": []srdMonster2024{m}})
+	if c != 201 {
+		t.Fatalf("import: %d %v", c, j)
+	}
+	key := fmt.Sprint(j["monsters"].([]interface{})[0].(map[string]interface{})["monster_key"])
+	t.Cleanup(func() { db.Exec(`DELETE FROM custom_monsters WHERE key=$1`, key) })
+	pgCall(t, "POST", cp+"/combat/add", gm, map[string]interface{}{"combatants": []map[string]interface{}{
+		{"name": "Test Dancer", "monster_key": key, "hp": 500, "ac": 1, "initiative": -500},
+		{"name": "Dance Victim", "monster_key": "goblin-warrior", "hp": 100000, "ac": 1, "initiative": -501},
+		{"name": "Dance Ogre", "monster_key": "ogre", "hp": 100000, "ac": 1, "initiative": -502}}})
+	pgExec(t, `UPDATE characters SET hp=100000, max_hp=100000, ac=1 WHERE id=$1`, hero)
+	pgExec(t, `UPDATE companions SET hp=100000, max_hp=100000, ac=1 WHERE id=$1`, petID)
+	dancer := monsterIDsByKeyOrName(camp, "Test Dancer")[0]
+	victim := monsterIDsByKeyOrName(camp, "Dance Victim")[0]
+	ogre := monsterIDsByKeyOrName(camp, "Dance Ogre")[0]
+	putMap := func(target, size int) {
+		t.Helper()
+		_, state := pgCall(t, "GET", cp+"/battle-map", gm, nil)
+		req := map[string]interface{}{"map": encounterMap{Grid: []string{"..........", "..........", ".........."}, Tokens: []mapToken{
+			{ID: dancer, Name: "dancer", Position: mapSquare{0, 0}, Size: 1}, {ID: target, Name: "target", Position: mapSquare{1, 0}, Size: size}}},
+			"forced_movement": true}
+		if rev, ok := state["revision"].(string); ok {
+			req["confirmation"] = rev
+		}
+		if c, r := pgCall(t, "PUT", cp+"/battle-map", gm, req); c != 200 {
+			t.Fatalf("put map: %d %v", c, r)
+		}
+	}
+	at := func(target int) mapSquare {
+		mp, _ := activeEncounterMap(camp)
+		tk, _ := mp.token(target)
+		return tk.Position
+	}
+	for _, tg := range []struct {
+		id   int
+		name string
+	}{{hero, fmt.Sprint(hero)}, {victim, "Dance Victim"}, {pet, "React Pet"}} {
+		putMap(tg.id, 1)
+		_, line := narrateHit(t, gm, camp, dancer, "Fling", tg.name, "")
+		if p := at(tg.id); p != (mapSquare{3, 0}) || !strings.Contains(line, "pushed 10 feet") || strings.Contains(line, "flung") {
+			t.Errorf("Fling %s: at %v: %s", tg.name, p, line)
+		}
+		putMap(tg.id, 1) // back within reach
+		_, line = narrateHit(t, gm, camp, dancer, "Dazing Touch", tg.name, "")
+		if !strings.Contains(line, "Dazing Touch: rolled 1d2 = ") || strings.Contains(line, "rolls for") {
+			t.Errorf("Dazing Touch %s: %s", tg.name, line)
+		}
+		if !hasCondMarker(camp, tg.id, "charmed") && !hasCondMarker(camp, tg.id, "frightened") {
+			t.Errorf("Dazing Touch gave %s no condition: %s", tg.name, line)
+		}
+	}
+	putMap(ogre, 2) // Large: Fling moves a Medium or smaller target
+	if _, line := narrateHit(t, gm, camp, dancer, "Fling", "Dance Ogre", ""); at(ogre) != (mapSquare{1, 0}) || strings.Contains(line, "pushed") {
+		t.Errorf("a Large target was moved: %s", line)
+	}
+}

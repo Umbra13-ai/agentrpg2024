@@ -327,37 +327,64 @@ var hitForcedMoveRe = regexp.MustCompile(`(?i)(?:If (?:the )?target is (?:an? )?
 // stripForcedMoves: the text without the movement sentences hitForcedMove applies.
 func stripForcedMoves(text string) string { return hitForcedMoveRe.ReplaceAllString(text, "") }
 
-// hitForcedMove moves the target of a hit as the hit's text says, on the battle map, and answers the clause; without a map the GM
-// is told the distance and places the creature.
-func hitForcedMove(lobby, attacker, target int, desc string) string {
-	if attacker == 0 {
-		return ""
-	}
+// hitMove is one movement a hit gives its target: up to Feet straight away (Toward false) or toward the attacker, only for a target of
+// MaxSize or smaller when set; GMPlaces: the text moves it some other way, so the GM places it within Feet. Read from the SRD wording
+// (textHitMoves) or from a forced_move mechanic the GM attached (monster_mechanics_2024.go); applied by hitForcedMove only.
+type hitMove struct {
+	MaxSize  string
+	Feet     int
+	Toward   bool
+	GMPlaces bool
+}
+
+// textHitMoves: the movement sentences of a hit's text.
+func textHitMoves(desc string) []hitMove {
 	i := strings.Index(desc, "Hit:")
 	if i < 0 {
-		return ""
+		return nil
 	}
 	hit := desc[i:]
 	if j := strings.Index(hit, "Hit or Miss:"); j >= 0 {
 		hit = hit[:j]
 	}
-	var out []string
+	var out []hitMove
 	for _, m := range hitForcedMoveRe.FindAllStringSubmatch(hit, -1) {
-		if m[1] != "" && !targetAtMostSize(lobby, target, strings.ToLower(m[1])) {
+		feet, _ := strconv.Atoi(m[3])
+		out = append(out, hitMove{MaxSize: strings.ToLower(m[1]), Feet: feet, Toward: strings.EqualFold(m[4], "toward")})
+	}
+	return out
+}
+
+// hitForcedMove moves the target of a hit as the hit's text (or its attached forced_move) says, on the battle map, and answers the
+// clause; without a map the GM is told the distance and places the creature.
+func hitForcedMove(lobby, attacker, target int, desc string) string {
+	if attacker == 0 {
+		return ""
+	}
+	moves := textHitMoves(desc)
+	if m, ok := mechanicHitMove(lobby, attacker, desc); ok {
+		moves = append(moves, m)
+	}
+	var out []string
+	for _, mv := range moves {
+		if mv.MaxSize != "" && !targetAtMostSize(lobby, target, mv.MaxSize) {
 			continue
 		}
-		feet, _ := strconv.Atoi(m[3])
-		toward := strings.EqualFold(m[4], "toward")
-		verb := map[bool]string{false: "pushed", true: "pulled"}[toward]
 		name := creatureName(lobby, target)
-		moved, onMap := forceToken(lobby, attacker, target, feet, toward)
+		if mv.GMPlaces {
+			out = append(out, fmt.Sprintf("%s is moved up to %d feet as the attack says (the GM places it)", name, mv.Feet))
+			continue
+		}
+		way := map[bool]string{false: "away from", true: "toward"}[mv.Toward]
+		verb := map[bool]string{false: "pushed", true: "pulled"}[mv.Toward]
+		moved, onMap := forceToken(lobby, attacker, target, mv.Feet, mv.Toward)
 		switch {
 		case !onMap:
-			out = append(out, fmt.Sprintf("%s is %s up to %d feet straight %s %s (no battle map: the GM places it)", name, verb, feet, strings.ToLower(m[4]), creatureName(lobby, attacker)))
+			out = append(out, fmt.Sprintf("%s is %s up to %d feet straight %s %s (no battle map: the GM places it)", name, verb, mv.Feet, way, creatureName(lobby, attacker)))
 		case moved == 0:
 			out = append(out, fmt.Sprintf("%s can't be %s: something is in the way", name, verb))
 		default:
-			out = append(out, fmt.Sprintf("%s is %s %d feet straight %s %s", name, verb, moved, strings.ToLower(m[4]), creatureName(lobby, attacker)))
+			out = append(out, fmt.Sprintf("%s is %s %d feet straight %s %s", name, verb, moved, way, creatureName(lobby, attacker)))
 		}
 	}
 	if len(out) == 0 {

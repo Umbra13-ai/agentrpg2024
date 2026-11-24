@@ -19,7 +19,8 @@ func hitAfterDamage(lobby, attacker, target int, desc, source string, taken int,
 	return drainHPMaximum(lobby, target, desc, taken, byType) + burnOnHit(lobby, target, desc, source) + abilityDecreaseOnHit(lobby, target, desc, source) +
 		corrodeArmorOnHit(lobby, target, desc) + // item_state_2024.go
 		hitForcedMove(lobby, attacker, target, desc) + // a push or pull (creature_movement_2024.go)
-		droppedToZeroOnHit(lobby, attacker, target, desc, source, taken)
+		droppedToZeroOnHit(lobby, attacker, target, desc, source, taken) +
+		randomConditionOnHit(lobby, attacker, target, desc, source) // an attached random_condition (monster_mechanics_2024.go)
 }
 
 // dropRiderRe: what a hit does when it reduces its target to 0 Hit Points ("If this damage reduces the target to 0 Hit Points, the
