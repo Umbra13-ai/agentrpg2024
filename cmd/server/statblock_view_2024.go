@@ -159,7 +159,11 @@ func statBlockHTML(c compendiumEntry) string {
 				if v.Status == "applied" {
 					mark, title = `<span class="badge badge-arcane">Server</span>`, "applied by the server: "+v.Rule
 				}
-				b.WriteString(`<p style="margin:0.3rem 0;" title="` + e(title) + `">` + mark + ` ` + e(v.Sentence) + `</p>`)
+				does := ""
+				if v.Does != "" { // what the server does with it, shown under the sentence, not only in a hover a phone never shows
+					does = `<br><span style="color:var(--text-secondary);">` + e(map[bool]string{true: "The server: ", false: "The GM: "}[v.Status == "applied"]+v.Does) + `</span>`
+				}
+				b.WriteString(`<p style="margin:0.3rem 0;" title="` + e(title) + `">` + mark + ` ` + e(v.Sentence) + does + `</p>`)
 			}
 			for _, mv := range mechanicsView(en) {
 				b.WriteString(`<p style="margin:0.3rem 0;color:var(--text-secondary);"><span class="badge badge-recruiting">Mechanic</span> ` +
