@@ -120,7 +120,7 @@ func masteryOnHit(lobbyID, charID, targetID int, name, monsterKey string, mu mas
 			return " Vex: you have Advantage on your next attack roll against it before the end of your next turn."
 		}
 	case "Sap": // SRD 5.2.1: any hit (Vex and Slow need damage too)
-		addCombatEffect(lobbyID, targetID, charID, "sap")
+		addCombatEffectFrom(lobbyID, targetID, charID, "sap", "", "Sap")
 		return fmt.Sprintf(" Sap: %s has Disadvantage on its next attack roll before the start of your next turn.", name)
 	case "Slow":
 		if damage > 0 {

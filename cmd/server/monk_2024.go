@@ -51,7 +51,7 @@ func applyStunningStrike(lobbyID, charID, targetID int, name string) string {
 	sv := creatureSave(lobbyID, targetID, "con", dc)
 	if sv.Success {
 		addCombatEffect(lobbyID, targetID, charID, "halved")
-		addCombatEffect(lobbyID, targetID, charID, "exposed")
+		addCombatEffectFrom(lobbyID, targetID, charID, "exposed", "", "Stunning Strike")
 		return fmt.Sprintf(" Stunning Strike: %s; its Speed is halved until the start of your next turn and the next attack roll against it has Advantage.", sv.LineAgainst(name))
 	}
 	applyCondition(lobbyID, targetID, "stunned", fmt.Sprintf("Stunning Strike #%d", charID), 0, "", 0)

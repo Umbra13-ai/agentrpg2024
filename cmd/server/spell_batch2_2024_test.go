@@ -5,6 +5,8 @@ import (
 	"sort"
 	"strings"
 	"testing"
+
+	"github.com/agentrpg/agentrpg/game"
 )
 
 // The tester's second spell notes (Nov 23): a damaging spell's own condition, a rider's time, the wrong recipient refused before anything is spent,
@@ -208,5 +210,35 @@ func TestPostgresReincarnateRevives(t *testing.T) {
 	db.QueryRow(`SELECT COALESCE(is_dead,false), hp FROM characters WHERE id = $1`, ally).Scan(&dead, &hp)
 	if c != 200 || dead || hp < 1 || !strings.Contains(res, "the new body is") {
 		t.Errorf("Reincarnate on a dead ally: %d, dead %v, hp %d: %q", c, dead, hp, res)
+	}
+}
+
+// A roll that uses up an effect names what gave it: Vicious Mockery's Disadvantage, the Sap mastery's, the GM's rider, Guiding Bolt's Advantage.
+func TestPostgresEffectRollsNameTheirOrigin(t *testing.T) {
+	testPostgres(t)
+	_, char, camp, target, _ := spellFightFixture(t, "effectorigin")
+	roll := func(attacker, at int) game.AttackRoll {
+		ar, _, _ := (&attackCtx{lobby: camp, attacker: attacker, target: at, name: "Probe", bonus: 1, melee: true, weapon: true}).roll()
+		return ar
+	}
+	for _, c := range []struct {
+		write func()
+		want  string
+	}{
+		{func() { spellRider(camp, char, target, "vicious-mockery") }, "Vicious Mockery"},
+		{func() { addCombatEffectFrom(camp, target, char, "sap", "", "Sap") }, "Sap"},
+		{func() { addCombatEffectFrom(camp, target, gmRiderSource, "sap", "", "the GM's rider") }, "the GM's rider"},
+		{func() { addCombatEffect(camp, target, char, "sap") }, "Disadvantage on its next attack roll"},
+	} {
+		c.write()
+		if got := strings.Join(roll(target, char).Disadvantage, "; "); got != c.want {
+			t.Errorf("the monster's next attack: Disadvantage from %q, want %q", got, c.want)
+		}
+	}
+	if _, ok := srdSpellsMemory["guiding-bolt"]; ok {
+		spellRider(camp, char, target, "guiding-bolt")
+		if got := strings.Join(roll(char, target).Advantage, "; "); !strings.Contains(got, "Guiding Bolt") {
+			t.Errorf("the next attack against it: Advantage from %q, want Guiding Bolt", got)
+		}
 	}
 }

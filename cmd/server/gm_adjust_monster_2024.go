@@ -220,7 +220,7 @@ func handleGMAdjustMonster(w http.ResponseWriter, r *http.Request) {
 	for _, rd := range req.Riders {
 		switch strings.ToLower(strings.TrimSpace(rd)) {
 		case "disadvantage_next_attack", "disadvantage", "vicious_mockery":
-			addCombatEffect(campaignID, tid, gmRiderSource, "sap") // its next attack roll before the end of its next turn has Disadvantage
+			addCombatEffectFrom(campaignID, tid, gmRiderSource, "sap", "", "the GM's rider") // its next attack roll before the end of its next turn has Disadvantage
 			did = append(did, "Disadvantage on its next attack roll")
 		default:
 			did = append(did, fmt.Sprintf("note: %s (the server doesn't apply this rider; the GM narrates it)", rd))

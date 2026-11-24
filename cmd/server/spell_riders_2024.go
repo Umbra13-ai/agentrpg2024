@@ -55,6 +55,6 @@ func spellRider(lobbyID, casterID, monsterID int, spellKey string) string {
 		return ""
 	}
 	ends, words := spellRiderEnds(spellKey)
-	addCombatEffectUntil(lobbyID, monsterID, casterID, r.kind, ends)
+	addCombatEffectFrom(lobbyID, monsterID, casterID, r.kind, ends, spellName(spellKey))
 	return fmt.Sprintf(" %s, %s.", strings.ToUpper(words[:1])+words[1:], r.text)
 }

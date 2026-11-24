@@ -234,7 +234,11 @@ var attackSources = []attackSource{
 		return yes(c.target != 0 && takeCombatEffect(c.lobby, c.target, "assisted", c.attacker))
 	}},
 	{true, "the target is exposed", func(c *attackCtx) (bool, string) { // a saved Stunning Strike, Guiding Bolt: the next attack roll against it
-		return yes(c.target != 0 && takeCombatEffect(c.lobby, c.target, "exposed", 0))
+		if c.target == 0 {
+			return false, ""
+		}
+		took, origin := takeCombatEffectFrom(c.lobby, c.target, "exposed", 0)
+		return took, effectReason(origin, "the target is exposed")
 	}},
 	// ---- Advantage: the attacker's state
 	{true, "the target can't see the attacker", func(c *attackCtx) (bool, string) { // an Invisible or hidden attacker, or one the dark hides
@@ -328,9 +332,13 @@ var attackSources = []attackSource{
 	{false, "the attacker is Grappled by another creature", func(c *attackCtx) (bool, string) {
 		return yes(c.attacker != 0 && c.target != 0 && grappledAttackPenalty(c.lobby, c.attacker, c.target))
 	}},
-	{false, "Sap", func(c *attackCtx) (bool, string) {
-		return yes(c.attacker != 0 && takeCombatEffect(c.lobby, c.attacker, "sap", 0))
-	}}, // the Sap mastery: its next attack roll
+	{false, "Disadvantage on its next attack roll", func(c *attackCtx) (bool, string) { // the Sap mastery, Vicious Mockery, the GM's rider: named by what gave it
+		if c.attacker == 0 {
+			return false, ""
+		}
+		took, origin := takeCombatEffectFrom(c.lobby, c.attacker, "sap", 0)
+		return took, effectReason(origin, "Disadvantage on its next attack roll")
+	}},
 	{false, "a Disadvantage rider on its next attack roll", func(c *attackCtx) (bool, string) { // "Disadvantage on the next attack roll it makes before the end of its next turn": used up
 		return yes(c.attacker != 0 && c.lobby > 0 && takeCondMarker(c.lobby, c.attacker, "disadv_next_attack"))
 	}},

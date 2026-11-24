@@ -53,6 +53,12 @@ func addCombatEffect(lobbyID, targetID, sourceID int, kind string) {
 // "source_end" the end of the source's next turn, "target_start" / "target_end" the start or end of the target's next turn. A turn end named while
 // that creature's own turn is running is its next one, not this one (the "_next" form, moved on at this turn's end by expireCombatEffectsAtTurnEnd).
 func addCombatEffectUntil(lobbyID, targetID, sourceID int, kind, ends string) {
+	addCombatEffectFrom(lobbyID, targetID, sourceID, kind, ends, "")
+}
+
+// addCombatEffectFrom is addCombatEffectUntil with what gave the effect (origin: "Vicious Mockery", "Sap", "the GM's rider"), which the
+// roll that uses it names (takeCombatEffectFrom); "" names the effect itself.
+func addCombatEffectFrom(lobbyID, targetID, sourceID int, kind, ends, origin string) {
 	switch {
 	case ends == "source_end" && currentTurnID(lobbyID) == sourceID:
 		ends = "source_end_next"
@@ -64,7 +70,7 @@ func addCombatEffectUntil(lobbyID, targetID, sourceID int, kind, ends string) {
 	} else {
 		db.Exec(`DELETE FROM combat_effects WHERE lobby_id = $1 AND target_id = $2 AND kind = $3`, lobbyID, targetID, kind)
 	}
-	db.Exec(`INSERT INTO combat_effects (lobby_id, target_id, source_id, kind, text, ends) VALUES ($1,$2,$3,$4,$5,$6)`, lobbyID, targetID, sourceID, kind, effectText[kind], ends)
+	db.Exec(`INSERT INTO combat_effects (lobby_id, target_id, source_id, kind, text, ends, origin) VALUES ($1,$2,$3,$4,$5,$6,$7)`, lobbyID, targetID, sourceID, kind, effectText[kind], ends, origin)
 }
 
 func combatEffectsOn(lobbyID, targetID int) []combatEffect {
@@ -88,16 +94,27 @@ func combatEffectsOn(lobbyID, targetID int) []combatEffect {
 
 // takeCombatEffect uses up an effect on a creature. fromOther, when set, only takes an effect caused by someone else.
 func takeCombatEffect(lobbyID, targetID int, kind string, notFromSource int) bool {
+	took, _ := takeCombatEffectFrom(lobbyID, targetID, kind, notFromSource)
+	return took
+}
+
+// takeCombatEffectFrom uses up an effect as takeCombatEffect does and says what gave it (its origin; "" when its writer named none).
+func takeCombatEffectFrom(lobbyID, targetID int, kind string, notFromSource int) (bool, string) {
 	if db == nil {
-		return false
+		return false, ""
 	}
-	res, err := db.Exec(`DELETE FROM combat_effects WHERE id = (SELECT id FROM combat_effects WHERE lobby_id = $1 AND target_id = $2 AND kind = $3 AND source_id <> $4 ORDER BY id LIMIT 1)`,
-		lobbyID, targetID, kind, notFromSource)
-	if err != nil {
-		return false
+	var origin string
+	err := db.QueryRow(`DELETE FROM combat_effects WHERE id = (SELECT id FROM combat_effects WHERE lobby_id = $1 AND target_id = $2 AND kind = $3 AND source_id <> $4 ORDER BY id LIMIT 1) RETURNING origin`,
+		lobbyID, targetID, kind, notFromSource).Scan(&origin)
+	return err == nil, origin
+}
+
+// effectReason: the reason a roll gives for an effect it used up: what gave it, else the effect's own words.
+func effectReason(origin, otherwise string) string {
+	if origin != "" {
+		return origin
 	}
-	n, _ := res.RowsAffected()
-	return n > 0
+	return otherwise
 }
 
 // expireCombatEffectsOf ends the effects a creature caused, at the start of its turn. The exceptions have
