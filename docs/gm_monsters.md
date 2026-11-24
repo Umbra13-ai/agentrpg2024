@@ -111,7 +111,7 @@ Legendary Actions
 | Legendary Actions and Legendary Resistance | the intro `Legendary Action Uses: 3 (4 in Lair).`; a trait named `Legendary Resistance (3/Day, or 4/Day in Lair)` | a count anywhere else (it reads as 0, and the preview warns) |
 | An action that is one attack or a move | `The warden makes one Slam attack.`, `The warden moves up to half its Speed.` | |
 
-Refer to the creature by one word ("the warden"). Give one size. A trait named like an SRD trait (Magic Resistance, Evasion, Legendary Resistance, Pack Tactics) runs that SRD rule whatever its text says: the preview warns you, so make sure your text means the same.
+Refer to the creature by one word ("the warden") and as "it" and "its", never "he" or "she": the SRD calls every creature "it" ("until the start of its next turn"), and a sentence written with "his" is not read (the preview warns you). Give one size. A trait named like an SRD trait (Magic Resistance, Evasion, Legendary Resistance, Pack Tactics) runs that SRD rule whatever its text says: the preview warns you, so make sure your text means the same.
 
 A stat block the server runs from top to bottom (its preview lists nothing under `gm_resolves`):
 
