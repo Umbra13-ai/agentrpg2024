@@ -186,6 +186,13 @@ Report: "Wizard Scholar accepts any skill for Expertise."
     `objectEndDamage`.
   - Go: `TestChargeWordingsOverTheCatalog`, `TestPostgresChargeOnEveryTarget`, `TestPostgresHitPushOnEveryTarget`,
     `TestPostgresEntryMovesAndRampageGate`, `TestPostgresSwarmAndIncorporealSpaces`, `TestPostgresShapeShiftAndDrag`.
+- **Who in a fight is the party's enemy** (I-CALLA-29, Nov 24; `cmd/server/attitudes_2024.go`): a creature of the fight is hostile unless the GM
+  recorded it Friendly or Indifferent (`hostileInFight`, read from `fightAttitudes`); `setAttitude` is the one writer (POST /api/gm/attitude and
+  combat/add's `attitude`), and a combatant's attitude ends with its fight (`clearFightAttitudes` in `startFight` and `clearCombatInitiative`: a new
+  fight gives its ids again from -1). my-turn lists the hostile creatures in `situation.enemies` and the others in `situation.others` (with their
+  attitude), and `partyHints` follows them (`fightSides`: "press the attack" only with an enemy; a badly hurt Friendly or Indifferent creature is
+  named). A Friendly creature stays a target (`enemyTargets`): attacking it is the player's choice. Not moved: a monster's own rules that pick
+  "its enemies" (`chosenAuraTargets` takes the characters). Go: `TestPartyHintsFollowTheFightsSides`, `TestPostgresFightSidesInMyTurn`.
 - **A mechanic a GM attaches to a stat-block entry** (owner, Nov 23; `cmd/server/monster_mechanics_2024.go`): `mechanicCatalog` is the one table of
   the kinds (what each does, the entries it attaches to, its parameters and limits, an example, the owner that applies it); `mechanicProblem`
   (through `validateCustomMonster`: import, edit, preview) refuses a wrong one from the row's own words; `mechanicsView` and `entryVerdicts` (a
@@ -639,7 +646,8 @@ Add to the owner, never beside it. When you give another rule one owner, add it 
   character's scores against it (the builder's review and the setup warnings), `primaryByScore` orders the suggestion of an Ability
   Score Improvement (playtest I-ALDEN-8).
 - **The action log's bookkeeping records** (not play: polls, joining, leaving, following, ready, the GM opening play, level-ups): `notPlayTypes` /
-  `notPlaySQL` (`cmd/server/action_log_2024.go`); every "when did this character last play" query and `characterHasPlayed` use it.
+  `notPlaySQL` / `isPlayRecord` (`cmd/server/action_log_2024.go`); every "when did this character last play" query, `characterHasPlayed` and
+  my-turn's `since_your_last_action` (I-CALLA-28) use it.
 - **The table held before round 1** (a session zero, playtest I-GM-7): `cmd/server/table_hold_2024.go`. `POST /api/campaigns/{id}/start
   {"first_round": "hold"}` starts the campaign with no round open; `tableHeld` is the one answer, `holdTable` / `releaseTable` the only
   writers of `lobbies.table_held`. While held the round gate refuses a player's game action (`refuseWhileHeld`: 409 `table_held`,
