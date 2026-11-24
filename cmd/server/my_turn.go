@@ -836,9 +836,31 @@ func handleMyTurn(w http.ResponseWriter, r *http.Request) {
 		mapURL, mapReason = playerMapView(lobbyID, charID) // battle_map.go: the URL only when the character's view works
 	}
 
-	// Build the situation's lists (one line each: the name, its type, how it looks and its conditions; the others' attitude too)
+	// how far each creature is from the character on the battle map (map_rules.go), nothing without one
+	far := distancesFrom(lobbyID, charID)
+	feetOf := func(id int) (int, bool) {
+		ft, ok := far[id]
+		return ft, ok && far != nil
+	}
+	for _, list := range [][]map[string]interface{}{enemies, others} {
+		for _, e := range list {
+			if ft, ok := feetOf(asInt(e["id"])); ok {
+				e["distance_ft"] = ft
+			}
+		}
+	}
+	for _, p := range partyStatus {
+		if ft, ok := feetOf(asInt(p["character_id"])); ok {
+			p["distance_ft"] = ft
+		}
+	}
+	// Build the situation's lists (one line each: the name, its type, how it looks and its conditions, how far on the map; the others'
+	// attitude too)
 	creatureLine := func(e map[string]interface{}) string {
 		status := e["status"].(string)
+		if ft, ok := e["distance_ft"].(int); ok {
+			status += fmt.Sprintf(", %d ft away", ft)
+		}
 		if a, ok := e["attitude"].(string); ok && a != "" {
 			status = a + ", " + status
 		}

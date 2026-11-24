@@ -36,6 +36,27 @@ func (m encounterMap) token(id int) (mapToken, bool) {
 	return mapToken{}, false
 }
 
+// distancesFrom: how far each other creature on the published battle map is from this one, in feet (tokenDistanceFeet: the nearest squares,
+// a diagonal counted as one square of 5 feet); nil without a map or without this creature's token. my-turn gives it with each enemy, other
+// creature and party member (Calla, Wren: whether a spell reaches, whether to move), and gives nothing without a map.
+func distancesFrom(lobbyID, id int) map[int]int {
+	m, ok := activeEncounterMap(lobbyID)
+	if !ok {
+		return nil
+	}
+	me, ok := m.token(id)
+	if !ok {
+		return nil
+	}
+	out := map[int]int{}
+	for _, t := range m.Tokens {
+		if t.ID != id {
+			out[t.ID] = tokenDistanceFeet(me, t)
+		}
+	}
+	return out
+}
+
 // distanceFeet is the distance between two tokens in feet: squares counted with diagonals as one, between the nearest squares.
 func tokenDistanceFeet(a, b mapToken) int {
 	best := -1

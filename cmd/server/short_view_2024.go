@@ -53,7 +53,7 @@ func shortTurn(full map[string]interface{}, charID, lobbyID int, since []actionR
 	if party, ok := full["party_status"].([]map[string]interface{}); ok && len(party) > 0 {
 		list := make([]map[string]interface{}, 0, len(party))
 		for _, p := range party {
-			list = append(list, pick(p, "character_id", "name", "class", "hp", "max_hp", "status", "conditions"))
+			list = append(list, pick(p, "character_id", "name", "class", "hp", "max_hp", "status", "conditions", "distance_ft"))
 		}
 		out["party"] = list
 	}
