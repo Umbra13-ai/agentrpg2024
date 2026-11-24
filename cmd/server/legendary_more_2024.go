@@ -1221,6 +1221,20 @@ func legendaryMoreEconomy(charID int, ref, description string) string {
 
 // monsterSpellFromUse: the GM's "use" names a spell the monster's text offers ("replace one Fireball with Hold Monster (level 7 version)",
 // a Lich's Spellcasting list): that spell and its level (0: the spell's own). F61: the GM couldn't pick one before.
+// listedSpellNamed: the entry's own spelling of the spell the GM named, when the entry offers it ("Friends" in a list of spells).
+func listedSpellNamed(text, use string) (string, bool) {
+	names := castChoiceList(text)
+	for _, t := range spellTiersOf(text) {
+		names = append(names, t.Spells...)
+	}
+	for _, n := range names {
+		if game.Key(n) == game.Key(use) {
+			return n, true
+		}
+	}
+	return "", false
+}
+
 func monsterSpellFromUse(text, use string) (string, int, bool) {
 	u := strings.TrimSpace(use)
 	if u == "" {
@@ -1229,6 +1243,11 @@ func monsterSpellFromUse(text, use string) (string, int, bool) {
 	slug, found := lookupSpell(u) // the SRD's name for the spell, whoever's name a stat block puts in front of it
 	sp, ok := srdSpellsMemory[slug]
 	if !found || !ok {
+		// a spell the entry lists that the server has no data for (one outside the SRD): cast by its listed name; the cast is the GM's
+		// (resolveMonsterSpell hands a spell without data over) and its per-day use is counted like any other
+		if listed, isListed := listedSpellNamed(text, u); isListed {
+			return listed, 0, true
+		}
 		return "", 0, false
 	}
 	low, name := strings.ToLower(normQuotes(text)), strings.ToLower(normQuotes(sp.Name)) // both folded: the SRD spells a name with a curly apostrophe (Heroes’ Feast)

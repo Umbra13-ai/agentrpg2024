@@ -59,7 +59,9 @@ func checkCustomReferences(w http.ResponseWriter, r *http.Request, request inter
 		return false
 	}
 	var keys []string
+	var slugs []string // a key field that names no compendium entry: it must be an SRD monster slug
 	referenceFields := map[string]bool{"monster_key": true, "attacker_monster_key": true, "monster": true, "monster_name": true, "attacker_name": true, "form": true}
+	keyFields := map[string]bool{"monster_key": true, "attacker_monster_key": true}
 	var walk func(reflect.Value, string)
 	walk = func(v reflect.Value, field string) {
 		if !v.IsValid() {
@@ -87,6 +89,8 @@ func checkCustomReferences(w http.ResponseWriter, r *http.Request, request inter
 		case reflect.String:
 			if referenceFields[field] && strings.HasPrefix(strings.ToLower(strings.TrimSpace(v.String())), "custom:") {
 				keys = append(keys, v.String())
+			} else if s := strings.TrimSpace(v.String()); keyFields[field] && s != "" {
+				slugs = append(slugs, s)
 			}
 		}
 	}
@@ -98,6 +102,15 @@ func checkCustomReferences(w http.ResponseWriter, r *http.Request, request inter
 		}
 		if !exists {
 			writeJSONStatus(w, 404, map[string]interface{}{"error": "monster_not_found", "message": "That custom monster is not in your compendium or shared with you. GET /api/gm/compendium/monsters lists yours. Nothing was changed."})
+			return false
+		}
+	}
+	for _, key := range slugs {
+		if strings.HasPrefix(r.URL.Path, "/api/gm/compendium/") { // those routes name compendium keys, which their own handlers check
+			break
+		}
+		if monsterMetaFor(key) == nil { // never a made-up creature with stand-in stats (10 Hit Points, Armor Class 10, no actions)
+			writeJSONStatus(w, 404, map[string]interface{}{"error": "monster_not_found", "message": fmt.Sprintf("%q is not an SRD monster slug or a custom: key. GET /api/universe/monsters lists the SRD slugs and GET /api/gm/compendium/monsters your own. Nothing was changed.", key)})
 			return false
 		}
 	}
