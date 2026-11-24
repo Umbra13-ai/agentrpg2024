@@ -213,7 +213,9 @@ Report: "Wizard Scholar accepts any skill for Expertise."
   `startObscuredArea`; the GM's `point` from `monsterAreaPoint`); `no_healing_aura` (`noHealingAuraOver` in `cantRegainHP`, on the battle
   map); `curse` (`curseOnHit` in `hitAfterDamage`: `curseSentences` writes the SRD's curse sentences, which the curse owner reads, `readCurse` /
   `giveCurse`); `engulf` (a save entry: `saveEffect.Engulf`, set in `resolveMonsterEffectText` and given by `giveEngulf` in `finishTarget` for
-  every target kind; `engulfSentences` writes Restrained with what lasts while it does, and the record carries the escape, `Adjacent`). `resolveMonsterEffectText` reads an entry with mechanics as its `rulesText` (`metaEntry`), and an entry they cover whole is only used. A trait an attached mechanic covers is applied in the GM's trait view (`traitsForGM`) and never an open item
+  every target kind; `engulfSentences` writes Restrained with what lasts while it does, and the record carries the escape, `Adjacent`);
+  `max_hp_drain` (`mechanicHPMaxDrain`, read by `drainHPMaximum` beside the SRD wording); `attacked_with_disadvantage` (read by
+  `attackedWithDisadvantage` beside Blurred Form). `resolveMonsterEffectText` reads an entry with mechanics as its `rulesText` (`metaEntry`), and an entry they cover whole is only used. A trait an attached mechanic covers is applied in the GM's trait view (`traitsForGM`) and never an open item
   (`recurringGMTraits` reads `rulesText`). Not done: Resistance in a light (the damage owners read Resistances by the monster's key alone). A new kind is one row plus
   its rule in the owner it belongs to. Go: `TestMechanicProblems`, `TestCoveredSentencesAreApplied`, `TestChosenTypeAndRandomChoiceProblems`,
   `TestRandomConditionAndForcedMoveProblems`, `TestPostgresRandomConditionAndForcedMoveOnEveryTarget`, `TestLightMechanicProblems`,
@@ -866,6 +868,12 @@ Add to the owner, never beside it. When you give another rule one owner, add it 
     (`endCursesBySpell`). Go: `TestPostgresMonsterCastDirectSpells`. What stays the GM's: utility and passive spells (Detect Magic, Commune, Teleport ...), summoning and
     Dispel Magic, whose effect the GM names; the lasting ones among them are open items.
   - A new spell effect for monsters is a row in those tables plus a kind its readers serve for any creature.
+  **A Multiattack's attacks** are read outside its replacement sentence (`withoutReplaceSentence`: an option is never one more attack),
+  each name whole and longest first (`wholeNameIndex`: "Claw" is not read inside "Sickening Claw"); "one of the attacks" is any attack and
+  an option's name leaves out "if available" however it is written (`withoutIfAvailable`, also for `use`). Go:
+  `TestMultiattackPlanReadsTheReplacementApart`, `TestPostgresMultiattackReplacementNeverAddsAnAttack` (GM doc A2, I-ALDEN-PARTY-01).
+  **A monster named in a GM request** ("Bandit", "Bandit 2", its key, or "#-3" by its combat id) is `monsterIDsByKeyOrName`, for every
+  caller. The adjudication fallback of `resolveMonsterDirectDamage` lists a lasting effect as an open item (`monsterHandoverEntry`; GM doc B2).
   **An entry that can replace part of itself** ("It can replace one attack with a use of Sleep Breath", the Pit Fiend's Hold Monster
   in place of one Fireball): `replaceRuleOf` (`cmd/server/monster_replace_2024.go`) reads the sentence; monster_action's `use` picks
   an option, `replaceRefusal` refuses any other word before anything is rolled, `resolveMultiattackReplacement` / `withoutReplaced`
