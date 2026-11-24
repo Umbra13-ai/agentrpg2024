@@ -107,7 +107,7 @@ Report: "Wizard Scholar accepts any skill for Expertise."
   `resolveLightToggle` (combat effect `ablaze`), read by `monsterLightRadii` in the lighting owner.
   Go: `TestPostgresBlurredFormAndIgnitedLight`.
 - **A monster's per-day uses** (`monster_day_uses.go`): reserved in one locked step (`reserveDayUse`), kept when the request ran the entry, the server's effect or a hand-off to the GM
-  (`execRecord.usedSince`; owner, Nov 23, I-WL-2), given back only for a refusal, a `blockedBeforeRoll` stop or a reaction with no trigger. Go: `TestPostgresMonsterDayUses`.
+  (`execRecord.usedSince`; owner, Nov 23, I-WL-2), given back only for a refusal, a `blockedBeforeRoll` stop or a reaction with no trigger; the wording is read in any letter case (`spellListHeadRe`, `perDayRe`), and a per-day list heading it can't read ("3e/day each:") is the import's warning (`unreadDayLists`). Go: `TestPostgresMonsterDayUses`, `TestPostgresImportedSpellcastingOnTheRoute`.
 - **The GM's pacing check** (`gm_pacing_2024.go`, owner, Nov 23): `pacingCheck`, GET /api/gm/status `pacing_check` for a campaign in play and the GM guide's pacing block
   (`TestPacingCheckInGMGuide`, `START_UPDATE=1`). A question, never a gate: it does not force a fight, a player's choice or progress.
 - **The GM's open items** (`cmd/server/gm_open_items_2024.go`, `gm_handover_2024.go`; owner, Nov 22): a lasting mechanic the server hands to the GM is listed in
@@ -446,7 +446,7 @@ Add to the owner, never beside it. When you give another rule one owner, add it 
   row in `featurePicks` (`cmd/server/feature_picks_2024.go`); both pick requests and character creation read it.
 - **Reading a player's answer (a name or a slug):** `game.Key` (`game/match.go`) is the one fold: case, spaces, hyphens,
   underscores, "/" and apostrophes. `game.Match` matches an answer to a list of options; `game.Slug` gives the hyphen
-  form spells and monsters are stored in; `lookupSpell` and `game.LookupSubclass`, `game.AbilityKey` and
+  form spells and monsters are stored in; `lookupSpell` (a wizard's name in front of a spell, as a stat block writes it, reads as the SRD's: "Tasha's hideous laughter" is Hideous Laughter) and `game.LookupSubclass`, `game.AbilityKey` and
   `game.FindTool` are built on it. Don't write another fold.
 - **The spells a character already has:** `spellsHeld` (`cmd/server/prepared_spells_2024.go`).
 - **When a class changes its prepared spells and cantrips:** `spellChanges` (`cmd/server/prepared_spells_2024.go`, SRD 5.2.1: a Wizard
@@ -912,8 +912,8 @@ Add to the owner, never beside it. When you give another rule one owner, add it 
   melee only or saves too as worded) is `rollTraitOf` / `rollTraitAdvantage`, one row each in `attackSources` and `saveSources`, for
   monsters and companions (`TestRollTraitsOverTheCatalog`, `TestPostgresRollTraitsGiveAdvantage`).
 - **What a monster's cast of a spell does** when it is neither a spell attack nor a saving throw: `monster_cast_effects_2024.go`.
-  - `castDealsNoDamage` (`class_helpers.go`, read by a character's cast and a monster's: Geas, Dream) says a spell's dice are dealt later or
-    never by the cast. Go: `TestPostgresDreamDealsNoDamageOnCast`.
+  - `castDealsNoDamage` (`class_helpers.go`, read by a character's cast and a monster's: Geas, Dream, and Web, whose fire damage is a hazard's, `hazardDamageRe`) says a spell's dice are dealt later or
+    never by the cast. A monster's cast aimed at itself alone is a willing target: `resolveMonsterSpell` rolls no save against its own spell. Go: `TestPostgresDreamDealsNoDamageOnCast`.
   - `lastingSpellEffect` (`buffSpells` and `gmSpellKinds`) gives the effect's kind, duration and number of targets. A character's
     Bless and Shield of Faith read it too.
   - `castEffectAnyCreature` lists the kinds a monster's cast applies.
