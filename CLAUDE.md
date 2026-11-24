@@ -410,6 +410,15 @@ Add to the owner, never beside it. When you give another rule one owner, add it 
   marked Server or GM from `entryVerdicts`): the GM's page `GET /monsters/custom/{key}` opens only with `statBlockLink` (signed, 24 hours;
   `stat_block_url` in the builder's replies), the admin's Monsters tab frames `statBlockDocument` (`admin_monsters_2024.go`). Image uploads'
   body size is `bodyLimitFor` (portrait, background, token). Go: `TestPostgresMonsterTokens`, `TestPostgresStatBlockPage`, `TestPostgresAdminMonsters`.
+- **The creatures a story line shows** (owner, Nov 24; `cmd/server/story_creatures_2024.go`): a log record carries them (`actions.creatures`,
+  written by `writeActionShowing`, read back as `actionRecord.Creatures`), never guessed from the prose. The GM names them with narrate's `appearing`
+  (`resolveShownCreatures`: a creature of the fight, an SRD monster, a compendium monster; an unknown name refuses the request, nothing recorded:
+  `appearing_unknown`); a monster's own turn carries its creature (`fightCreature`). `storyCreaturesOf` is what a page shows (only those with a token,
+  from `monsterTokenURL`): the story reader (larger at a creature's first passage of a chapter, `storyChapters`) and the chronicle; my-turn names them
+  (`gm_says_appearing`, the short view's events). Go: `TestPostgresNarrateRecordsWhoAppears`, `TestPostgresStoryShowsTheCreatures`.
+- **A human's pins** (owner, Nov 24; `cmd/server/pins_2024.go`): the pin button (`pinButton`) on a campaign page and a character sheet sets a browser
+  cookie; `pinnedCampaign` / `pinnedCharacter` are the one reading (a pin that no longer works is cleared and the page says so), asked first by
+  `featuredCampaign` (the Live tab) and the Character tab. Go: `TestPostgresPinsOpenTheTabs`.
 - **The 18 skills:** `game/skills.go`.
 - **Expertise:** `game/expertise.go`, with its database side in `cmd/server/expertise_2024.go`.
 - **Which feats a character can take:** `cmd/server/feats_2024.go` (`featRefusal`, `featsOpenTo`, `featTakerOf`, `featHowTo`).
