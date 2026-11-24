@@ -595,7 +595,7 @@ type itemCastPlan struct {
 // itemCastSpells lists the inventory items that can cast a spell: (item, entry) pairs, and the scrolls of it.
 func itemCastOptions(inv []invItem, slug string) (charged []invItem, scrolls []invItem) {
 	for _, it := range usableInventory(inv) {
-		if itemBool(it, "destroyed") {
+		if itemBool(it, "destroyed") || itemUnidentified(it) { // an unidentified item casts nothing its holder knows of (item_identity_2024.go)
 			continue
 		}
 		if s, ok := scrollOf(it); ok {
@@ -630,6 +630,9 @@ func planItemCast(charID int, spellKey string, spell SRDSpell, req itemCastReq, 
 		found, err := findInventoryItem(inv, req.Item)
 		if err != nil {
 			return nil, fmt.Sprintf("Cannot cast %s from %q: %v. Nothing was spent.", spell.Name, req.Item, err)
+		}
+		if itemUnidentified(found) { // its spells are learned with it (item_identity_2024.go)
+			return nil, fmt.Sprintf("Cannot cast %s from %s: it is unidentified, so you don't know what it casts: the Identify spell, or a Short Rest focused on it, tells you. Nothing was spent.", spell.Name, playerItemName(found))
 		}
 		it = found
 	default:
@@ -1388,9 +1391,12 @@ func itemInUse(charID int, ref, description string) (invItem, []invItem) {
 			best = it
 		}
 	}
+	if best == nil { // an unidentified item by its look ("I drink the cloudy red vial"; item_identity_2024.go)
+		best = lookInText(usableInventory(inv), description)
+	}
 	if best == nil && (strings.Contains(low, "potion") || strings.Contains(low, "drink")) {
 		for _, it := range usableInventory(inv) {
-			if isPotion(it) && strings.Contains(low, strings.ToLower(strings.TrimPrefix(strings.ToLower(itemStr(it, "name")), "potion of "))) {
+			if isPotion(it) && !itemUnidentified(it) && strings.Contains(low, strings.ToLower(strings.TrimPrefix(strings.ToLower(itemStr(it, "name")), "potion of "))) {
 				best = it
 				break
 			}
@@ -1470,7 +1476,10 @@ func useItemAction(charID int, description string) string {
 	}
 	name := itemStr(it, "name")
 	if itemBool(it, "destroyed") {
-		return "Cannot use the " + name + ": it is destroyed. Nothing was spent."
+		return "Cannot use the " + playerItemName(it) + ": it is destroyed. Nothing was spent."
+	}
+	if itemUnidentified(it) && !isPotion(it) { // working it means knowing it; a potion is drunk all the same (item_identity_2024.go)
+		return featureRefusal(playerItemName(it), "it is unidentified, so you don't know how to use it yet: the Identify spell, or a Short Rest focused on it, tells you")
 	}
 	if out, ok := legendaryItemUse(charID, it, req, description); ok { // Horn of Valhalla, Ring of Djinni Summoning, Iron Flask, Sphere, Deck
 		return out

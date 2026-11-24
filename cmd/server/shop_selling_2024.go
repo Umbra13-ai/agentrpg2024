@@ -196,7 +196,7 @@ func sellItems(charID int, def *shopTypeDef, shopName string, priceCP func(float
 		for _, s := range req {
 			idx := -1
 			for i, it := range inv {
-				if (s.ItemID != "" && itemStr(it, "id") == s.ItemID) || (s.ItemID == "" && s.Item != "" && strings.EqualFold(itemStr(it, "name"), s.Item)) {
+				if (s.ItemID != "" && itemStr(it, "id") == s.ItemID) || (s.ItemID == "" && s.Item != "" && (strings.EqualFold(itemStr(it, "name"), s.Item) || appearsAs(it, s.Item))) { // an unknown item by its look: sellBlocked refuses it
 					idx = i
 					break
 				}
@@ -206,8 +206,8 @@ func sellItems(charID int, def *shopTypeDef, shopName string, priceCP func(float
 			}
 			it := inv[idx]
 			name := itemStr(it, "name")
-			if s.ItemID != "" && s.Item != "" && normalizeRef(s.Item) != normalizeRef(name) { // the two name different items (Nov 14 review)
-				return nil, refuseInv(http.StatusBadRequest, map[string]interface{}{"error": "item_mismatch", "message": fmt.Sprintf("item_id %s is %s, but item says %q: send one of them, or both for the same item. Nothing was sold.", s.ItemID, name, s.Item)})
+			if s.ItemID != "" && s.Item != "" && normalizeRef(s.Item) != normalizeRef(name) && !appearsAs(it, s.Item) { // the two name different items (Nov 14 review)
+				return nil, refuseInv(http.StatusBadRequest, map[string]interface{}{"error": "item_mismatch", "message": fmt.Sprintf("item_id %s is %s, but item says %q: send one of them, or both for the same item. Nothing was sold.", s.ItemID, playerItemName(it), s.Item)})
 			}
 			have := 1
 			if v, ok := it["quantity"].(float64); ok && v > 1 {

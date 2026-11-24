@@ -263,7 +263,7 @@ func findItem(inv []invItem, ref string) (invItem, error) {
 	}
 	var matches []invItem
 	for _, it := range inv {
-		if normalizeRef(itemStr(it, "name")) == normalizeRef(ref) {
+		if normalizeRef(itemStr(it, "name")) == normalizeRef(ref) || appearsAs(it, ref) { // an unidentified item by its look too (item_identity_2024.go)
 			matches = append(matches, it)
 		}
 	}

@@ -21471,6 +21471,7 @@
            "type": "integer"
           },
           "equipped_armor": {
+           "description": "as its player knows it (item_identity_2024.go)",
            "type": "string"
           },
           "equipped_shield": {
@@ -21608,6 +21609,7 @@
            "type": "integer"
           },
           "equipped_armor": {
+           "description": "as its player knows it (item_identity_2024.go)",
            "type": "string"
           },
           "equipped_shield": {
@@ -21766,6 +21768,12 @@
            "properties": {
             "base_weapon": {
              "type": "string"
+            },
+            "name": {
+             "type": "string"
+            },
+            "unidentified": {
+             "type": "boolean"
             }
            },
            "type": "object"

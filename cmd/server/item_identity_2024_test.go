@@ -133,3 +133,84 @@ func TestPostgresUnidentifiedItemEverywhereAPlayerReads(t *testing.T) {
 		t.Errorf("the ground: %q, bundle %s", groundName, bundle)
 	}
 }
+
+// Stage 2: every command a player sends names an unidentified item by its look and acts on the item itself; what needs knowing the item
+// (attuning, working it, casting from it) waits for it to be identified; a potion is drunk all the same.
+func TestPostgresUnidentifiedItemByItsLookInEveryCommand(t *testing.T) {
+	testPostgres(t)
+	gm, player, camp, hero, _ := earlyRulesFixture(t, "Test Look Raider", nil)
+	give := func(name, look string) {
+		if c, r := pgCall(t, "POST", "/api/gm/give-item", gm, map[string]interface{}{"character_id": hero, "campaign_id": camp, "item_name": name, "unidentified": true, "appears_as": look}); c != 200 {
+			t.Fatalf("give %s: %d %v", name, c, r)
+		}
+	}
+	give("Longsword +1", "a longsword with a sea-green hilt")
+	give("Leather Armor +1", "a supple dark leather jerkin")
+	give("Ring of Protection", "a plain silver ring")
+	give("Wand of Magic Missiles", "a crooked ash wand")
+	give("Potion of Healing", "a vial of cloudy red liquid")
+	pgExec(t, `UPDATE characters SET equipped_main_hand = NULL, equipped_off_hand = NULL, equipped_armor = NULL, hp = 1 WHERE id = $1`, hero)
+	pgCall(t, "POST", fmt.Sprintf("/api/campaigns/%d/combat/end", camp), gm, map[string]interface{}{}) // armor changes outside a fight
+	quiet := func(where string, r map[string]interface{}) {
+		t.Helper()
+		b, _ := json.Marshal(r)
+		for _, s := range []string{"Longsword +1", "Leather Armor +1", "Ring of Protection", "Wand of Magic Missiles", "Magic Missile"} {
+			if strings.Contains(string(b), s) {
+				t.Errorf("%s names %q: %s", where, s, b)
+			}
+		}
+	}
+	// equip a weapon by its look: the hand holds the item itself
+	c, r := pgCall(t, "POST", "/api/characters/equip-weapon", player, map[string]interface{}{"character_id": hero, "weapon": "a longsword with a sea-green hilt", "slot": "main_hand"})
+	var mainHand, armor string
+	db.QueryRow(`SELECT COALESCE(equipped_main_hand,''), COALESCE(equipped_armor,'') FROM characters WHERE id = $1`, hero).Scan(&mainHand, &armor)
+	if c != 200 || mainHand != "Longsword +1" || r["weapon"] != "a longsword with a sea-green hilt" {
+		t.Errorf("equip by its look: %d %v (hand %q)", c, r, mainHand)
+	}
+	quiet("the equip reply", r)
+	// wear armor by its look
+	c, r = pgCall(t, "POST", "/api/characters/equip-armor", player, map[string]interface{}{"character_id": hero, "armor": "supple dark leather jerkin"})
+	db.QueryRow(`SELECT COALESCE(equipped_armor,'') FROM characters WHERE id = $1`, hero).Scan(&armor)
+	if c != 200 || armor != "Leather Armor +1" || r["equipped_armor"] != "a supple dark leather jerkin" {
+		t.Errorf("wear by its look: %d %v (armor %q)", c, r, armor)
+	}
+	quiet("the armor reply", r)
+	// move the ring by its look; attuning waits for it to be identified
+	if c, r := pgCall(t, "POST", fmt.Sprintf("/api/characters/%d/equipment/move", hero), player, map[string]interface{}{"item": "a plain silver ring", "to": "worn"}); c != 200 {
+		t.Errorf("move by its look: %d %v", c, r)
+	} else {
+		quiet("the move reply", r)
+	}
+	if c, r := pgCall(t, "POST", "/api/characters/attune", player, map[string]interface{}{"character_id": hero, "action": "attune", "item_name": "a plain silver ring"}); c != 409 || r["error"] != "item_unidentified" {
+		t.Errorf("attuning an unknown ring: %d %v", c, r)
+	} else {
+		quiet("the attune refusal", r)
+	}
+	// the wand can't be worked, nor cast from; the vial is drunk
+	act := func(body map[string]interface{}) (int, map[string]interface{}) {
+		pgExec(t, `UPDATE characters SET action_used = false, bonus_action_used = false WHERE id = $1`, hero)
+		return pgCall(t, "POST", "/api/action", player, body)
+	}
+	c, r = act(map[string]interface{}{"action": "use_item", "item": "a crooked ash wand", "description": "I wave the crooked ash wand"})
+	if res := fmt.Sprint(r["result"], r["message"]); !strings.Contains(res, "unidentified") {
+		t.Errorf("working an unknown wand: %d %v", c, r)
+	}
+	quiet("the wand refusal", r)
+	c, r = act(map[string]interface{}{"action": "cast", "spell_slug": "magic-missile", "item": "a crooked ash wand", "description": "missiles from the wand"})
+	if res := fmt.Sprint(r["result"], r["message"]); !strings.Contains(res, "unidentified") && r["error"] != "spell_not_available" {
+		t.Errorf("casting from an unknown wand: %d %v", c, r)
+	}
+	if res := fmt.Sprint(r["result"]); strings.Contains(res, "darts") || strings.Contains(res, "Force damage") {
+		t.Errorf("the unknown wand cast: %v", r)
+	}
+	c, r = act(map[string]interface{}{"action": "use_item", "description": "I drink the vial of cloudy red liquid"})
+	var hp int
+	db.QueryRow(`SELECT hp FROM characters WHERE id = $1`, hero).Scan(&hp)
+	if hp <= 1 {
+		t.Errorf("drinking the unknown vial: %d %v (hp %d)", c, r, hp)
+	}
+	// drop by its look
+	if _, refusal := dropToGround(hero, "a crooked ash wand", 1, ""); refusal != "" {
+		t.Errorf("drop by its look: %s", refusal)
+	}
+}

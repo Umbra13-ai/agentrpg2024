@@ -34,9 +34,15 @@ func handsAllow(charID int, mainHand, offHand string, shield bool) (bool, string
 	}
 	var held []string
 	hands := 0
+	shown := func(name string) string { // what fills a hand, as its player knows it (item_identity_2024.go)
+		if charID > 0 {
+			return shownItemName(charID, name)
+		}
+		return name
+	}
 	if mainHand != "" {
 		hands++
-		held = append(held, mainHand)
+		held = append(held, shown(mainHand))
 		if isTwoHandedWeapon(mainHand) {
 			hands++
 			held[len(held)-1] += " (two-handed)"
@@ -44,7 +50,7 @@ func handsAllow(charID int, mainHand, offHand string, shield bool) (bool, string
 	}
 	if offHand != "" {
 		hands++
-		held = append(held, offHand)
+		held = append(held, shown(offHand))
 	}
 	if shield {
 		hands++
@@ -68,13 +74,13 @@ func freeHandRequests(charID int, mainHand, offHand string, shield bool) string 
 	}
 	var ways []string
 	if offHand != "" {
-		ways = append(ways, fmt.Sprintf("put away the %s: POST /api/characters/unequip-weapon {\"character_id\": %d, \"slot\": \"off_hand\"}", offHand, charID))
+		ways = append(ways, fmt.Sprintf("put away the %s: POST /api/characters/unequip-weapon {\"character_id\": %d, \"slot\": \"off_hand\"}", shownItemName(charID, offHand), charID))
 	}
 	if shield {
 		ways = append(ways, fmt.Sprintf("take off the shield: POST /api/characters/equip-armor {\"character_id\": %d, \"shield\": false}", charID))
 	}
 	if mainHand != "" && offHand == "" && !shield {
-		ways = append(ways, fmt.Sprintf("put away the %s: POST /api/characters/unequip-weapon {\"character_id\": %d, \"slot\": \"main_hand\"}", mainHand, charID))
+		ways = append(ways, fmt.Sprintf("put away the %s: POST /api/characters/unequip-weapon {\"character_id\": %d, \"slot\": \"main_hand\"}", shownItemName(charID, mainHand), charID))
 	}
 	if len(ways) == 0 {
 		return ""

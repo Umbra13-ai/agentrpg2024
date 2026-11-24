@@ -72,7 +72,7 @@ func playerInventory(inv []invItem) []invItem {
 // shownItemName: a name one of the character's item columns holds (a hand, the armor, an attunement), as its player knows it: the
 // appearance of the carried item of that name while it is unidentified, else the name as held.
 func shownItemName(charID int, name string) string {
-	if name == "" {
+	if name == "" || db == nil {
 		return name
 	}
 	return shownNameIn(inventoryOf(charID), name)
@@ -114,4 +114,39 @@ func inventoryAsRead(knows bool, list []interface{}) []interface{} {
 		out = append(out, x)
 	}
 	return out
+}
+
+// appearsAs: the player's words name this unidentified item by its look ("a plain silver ring", or "plain silver ring" without its article).
+// Every reader of a player's item reference asks it beside the item's name (findItem and the readers that match a description).
+func appearsAs(it invItem, ref string) bool {
+	if !itemUnidentified(it) {
+		return false
+	}
+	look := normalizeRef(itemStr(it, appearsAsKey))
+	r := normalizeRef(ref)
+	return look != "" && (r == look || r == withoutArticle(look) || withoutArticle(r) == withoutArticle(look))
+}
+
+// withoutArticle: a look's words without a leading "a", "an" or "the".
+func withoutArticle(s string) string {
+	for _, a := range []string{"a ", "an ", "the "} {
+		if strings.HasPrefix(s, a) {
+			return strings.TrimPrefix(s, a)
+		}
+	}
+	return s
+}
+
+// lookInText: an unidentified item of the inventory whose look the text names (a description that says "I drink the cloudy red vial"), or nil.
+func lookInText(inv []invItem, text string) invItem {
+	low := normalizeRef(text)
+	for _, it := range inv {
+		if !itemUnidentified(it) {
+			continue
+		}
+		if look := withoutArticle(normalizeRef(itemStr(it, appearsAsKey))); look != "" && strings.Contains(low, look) {
+			return it
+		}
+	}
+	return nil
 }

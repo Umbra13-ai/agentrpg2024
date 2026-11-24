@@ -78,6 +78,11 @@ func handleCharacterAttune(w http.ResponseWriter, r *http.Request) {
 			notCarried()
 			return
 		}
+		if itemUnidentified(it) { // SRD 5.2.1: attuning takes a Short Rest focused on the item, not the one used to learn its properties (item_identity_2024.go)
+			writeJSONStatus(w, http.StatusConflict, map[string]interface{}{"error": "item_unidentified",
+				"message": fmt.Sprintf("%s is unidentified: learn its properties first (the Identify spell, or a Short Rest focused on it); attuning is another Short Rest. Nothing was changed.", playerItemName(it))})
+			return
+		}
 		if n := itemStr(it, "name"); n != "" {
 			req.ItemName = n // the item's own name, as the inventory has it
 		}
@@ -361,6 +366,13 @@ func handleCharacterEquipArmor(w http.ResponseWriter, r *http.Request) {
 		newArmor = ""
 	}
 
+	// armor named by its look: the character wears the carried item itself, by its name (item_identity_2024.go)
+	if req.Armor != "" {
+		if it, err := findInventoryItem(inventoryOf(req.CharacterID), req.Armor); err == nil && itemUnidentified(it) {
+			req.Armor = itemStr(it, "name")
+		}
+	}
+
 	// Handle armor change
 	if req.Armor != "" {
 		// Validate armor exists (magic armor names resolve to their base armor: getArmorInfo)
@@ -485,7 +497,7 @@ func handleCharacterEquipArmor(w http.ResponseWriter, r *http.Request) {
 	response := map[string]interface{}{
 		"success":         true,
 		"character":       charName,
-		"equipped_armor":  newArmor,
+		"equipped_armor":  shownItemName(req.CharacterID, newArmor), // as its player knows it (item_identity_2024.go)
 		"equipped_shield": newShield,
 		"new_ac":          newAC,
 	}
@@ -660,7 +672,7 @@ func handleCharacterUnequipArmor(w http.ResponseWriter, r *http.Request) {
 	response := map[string]interface{}{
 		"success":         true,
 		"character":       charName,
-		"equipped_armor":  newArmor,
+		"equipped_armor":  shownItemName(req.CharacterID, newArmor), // as its player knows it (item_identity_2024.go)
 		"equipped_shield": newShield,
 		"new_ac":          newAC,
 	}
@@ -763,9 +775,13 @@ func handleCharacterEquipWeapon(w http.ResponseWriter, r *http.Request) {
 		}
 		itemName, _ := item["name"].(string)
 		itemSlug := strings.ToLower(strings.ReplaceAll(itemName, " ", "-"))
-		if itemSlug == weaponSlug || strings.ToLower(itemName) == strings.ToLower(req.Weapon) {
+		if itemSlug == weaponSlug || strings.ToLower(itemName) == strings.ToLower(req.Weapon) || appearsAs(item, req.Weapon) {
 			foundWeapon = true
 			weaponInfo = item
+			if itemUnidentified(item) { // named by its look: the hand holds the item itself, by its name (item_identity_2024.go)
+				req.Weapon = itemName
+				weaponSlug = strings.ToLower(strings.ReplaceAll(itemName, " ", "-"))
+			}
 			break
 		}
 	}
@@ -860,7 +876,7 @@ func handleCharacterEquipWeapon(w http.ResponseWriter, r *http.Request) {
 			return k(a) == k(b)
 		}
 		if slotPrev.Valid && slotPrev.String != "" && sameItem(slotPrev.String, req.Weapon) {
-			reply := map[string]interface{}{"success": true, "message": "That weapon is already equipped in that hand.", "weapon": req.Weapon}
+			reply := map[string]interface{}{"success": true, "message": "That weapon is already equipped in that hand.", "weapon": shownItemName(req.CharacterID, req.Weapon)}
 			if baseChanged { // a named weapon already in hand gets its base weapon now (named_weapons_2024.go)
 				weaponInfo["base_weapon"] = baseKey
 				updateInventoryItem(req.CharacterID, weaponInfo, func(x invItem) { x["base_weapon"] = baseKey }) // inventory_2024.go
@@ -930,6 +946,15 @@ func handleCharacterEquipWeapon(w http.ResponseWriter, r *http.Request) {
 	}
 	if weaponInfo != nil {
 		response["weapon_info"] = weaponInfo
+	}
+	if weaponInfo != nil && itemUnidentified(weaponInfo) { // the reply names it as its player knows it (item_identity_2024.go)
+		shown := playerItemName(weaponInfo)
+		response["weapon"], response["weapon_info"] = shown, playerItemView(weaponInfo)
+		for _, k := range []string{"equipped_main_hand", "equipped_off_hand"} {
+			if v, ok := response[k].(string); ok && strings.EqualFold(v, req.Weapon) {
+				response[k] = shown
+			}
+		}
 	}
 	if isTwoHanded {
 		response["two_handed"] = true
