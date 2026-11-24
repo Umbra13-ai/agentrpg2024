@@ -212,12 +212,16 @@ Report: "Wizard Scholar accepts any skill for Expertise."
   `damageMonster`); `obscuring_zone` (`obscuringZone` at the start of `resolveMonsterEffectText`, through `placeArea` /
   `startObscuredArea`; the GM's `point` from `monsterAreaPoint`); `no_healing_aura` (`noHealingAuraOver` in `cantRegainHP`, on the battle
   map); `curse` (`curseOnHit` in `hitAfterDamage`: `curseSentences` writes the SRD's curse sentences, which the curse owner reads, `readCurse` /
-  `giveCurse`); `engulf` (a save entry: `saveEffect.Engulf`, set in `resolveMonsterEffectText` and given by `giveEngulf` in `finishTarget` for
+  `giveCurse`); `engulf` (a save entry: a row of `failureKinds`, set in `resolveMonsterEffectText` and given by `giveEngulf` in `finishTarget` for
   every target kind; `engulfSentences` writes Restrained with what lasts while it does, and the record carries the escape, `Adjacent`);
   `max_hp_drain` (`mechanicHPMaxDrain`, read by `drainHPMaximum` beside the SRD wording); `attacked_with_disadvantage` (read by
   `attackedWithDisadvantage` beside Blurred Form); `condition_on_hit` (`conditionOnHit` in `hitAfterDamage`; `conditionHitSentence`, shared
   with `random_condition`, writes the SRD's rider sentence: the time, "until it takes damage", the size gate). `roll_rider` (`rollRiderOnHit`;
-  `rollRiderSentence` writes the SRD's roll rider sentence the roll rider owner reads, `exposed` with its one end). A hit finds its entry's
+  `rollRiderSentence` writes the SRD's roll rider sentence the roll rider owner reads, `exposed` with its one end). `evasion` (`traitMechanicOf` in
+  `creatureEvasion`); `regain_from_damage` (`regainOnHit` through `drainRegain`); `burning` (`burningOnHit`, or a failed save:
+  `failureKinds`, the one list of what a failed save's attached mechanics give, `saveEffect.OnFailure` given in `finishTarget`; engulf is the
+  other row); `grapple` (`grappleOnHit`; `grappleSentence` writes the SRD grapple sentence, its escape DC, size gate and Restrained until the
+  grapple ends). A hit finds its entry's
   mechanics by the entry's name (`attachedMechanic`, `hitAfterDamage`'s `entry`), never by its text, which two entries can share. `resolveMonsterEffectText` reads an entry with mechanics as its `rulesText` (`metaEntry`), and an entry they cover whole is only used. A trait an attached mechanic covers is applied in the GM's trait view (`traitsForGM`) and never an open item
   (`recurringGMTraits` reads `rulesText`). Not done: Resistance in a light (the damage owners read Resistances by the monster's key alone). A new kind is one row plus
   its rule in the owner it belongs to. Go: `TestMechanicProblems`, `TestCoveredSentencesAreApplied`, `TestChosenTypeAndRandomChoiceProblems`,
@@ -225,7 +229,7 @@ Report: "Wizard Scholar accepts any skill for Expertise."
   `TestPostgresLightMechanicsInPlay`, `TestZoneMechanicProblems`, `TestPostgresZoneMechanicsInPlay`, `TestCurseMechanicProblems`,
   `TestPostgresCurseMechanicOnEveryTarget`, `TestEngulfMechanicProblems`, `TestPostgresEngulfMechanicInPlay`,
   `TestConditionOnHitProblems`, `TestPostgresConditionOnHitEndsOnDamage`,
-  `TestRollRiderSentencesReadBack`, `TestPostgresRollRiderOnHit`, `TestPostgresAttachedDropToZeroOnEveryTarget`, `TestPostgresMechanicsInPreviewAndCatalogue`, `TestPostgresChosenTypeAndRandomChoiceInPlay`.
+  `TestRollRiderSentencesReadBack`, `TestPostgresRollRiderOnHit`, `TestPostgresEvasionAndRegainMechanics`, `TestPostgresBurningMechanic`, `TestPostgresGrappleMechanic`, `TestPostgresAttachedDropToZeroOnEveryTarget`, `TestPostgresMechanicsInPreviewAndCatalogue`, `TestPostgresChosenTypeAndRandomChoiceInPlay`.
 - **What a hit does after its damage:** `hitAfterDamage` (`cmd/server/hit_after_damage_2024.go`), called once by every hit route with the
   attacker: the drain below, "it starts burning" (the Burning owner, `burning_2024.go`), a push or pull (`hitForcedMove`) and the hit's
   record for an entry used right after it (`recordLastHit`). A new effect of this kind is one call there. Go: `TestPostgresBurningOnHitEveryTarget`.
