@@ -24,7 +24,8 @@ var monsterTokenRule = imageRule{MaxBytes: 2 * 1024 * 1024, MinPx: 128, MaxPx: 2
 // monsterTokenRuleText: the rule in words.
 var monsterTokenRuleText = fmt.Sprintf("A token is a square picture (the same width and height) in PNG, JPEG or WebP, %d to %d pixels a side and at most %d MB; "+
 	"%s. It is shown in a circle (192 pixels across on a stat block, 54 on the encounter stage), so keep the creature in the middle and fill the "+
-	"square; a plain or transparent background works best. Send it as {\"monster_key\": \"custom:...\", \"image_base64\": \"...\"} (a data: URL "+
+	"square; a plain or transparent background works best. A PNG or JPEG is stored as a PNG of at most 512 pixels a side (scaled down when larger, with "+
+	"the file's camera and place tags dropped); a WebP is stored as it is. Send it as {\"monster_key\": \"custom:...\", \"image_base64\": \"...\"} (a data: URL "+
 	"is accepted) to POST /api/gm/compendium/monsters/token.",
 	monsterTokenRule.MinPx, monsterTokenRule.MaxPx, monsterTokenRule.MaxBytes/(1024*1024), monsterTokenRule.Best)
 
@@ -128,18 +129,28 @@ func putMonsterToken(w http.ResponseWriter, r *http.Request, key, b64 string) (c
 		writeJSONStatus(w, refused.Status, refused.Body)
 		return "", false
 	}
-	if err := saveMonsterToken(key, imageBytes, mime); err != nil {
+	stored, storedMime, note, err := normalizeToken(imageBytes, mime) // a PNG of at most 512 pixels a side (token_normalize_2024.go)
+	if err != nil {
+		writeJSONStatus(w, http.StatusBadRequest, map[string]interface{}{"error": "corrupt_image", "rule": monsterTokenRuleText,
+			"message": "The image could not be read: the file looks damaged. Save it again and resend it. Nothing was changed."})
+		return "", false
+	}
+	if err := saveMonsterToken(key, stored, storedMime); err != nil {
 		writeDBWriteError(w, err, "the token")
 		return "", false
 	}
+	message := "Saved. The encounter stage and the stat block show it now."
+	if note != "" {
+		message += " " + note
+	}
 	writeJSONStatus(w, 200, map[string]interface{}{"success": true, "monster_key": key, "token": monsterTokenView(key), "stat_block_url": statBlockLink(key),
-		"message": "Saved. The encounter stage and the stat block show it now."})
+		"message": message})
 	return "saved", true
 }
 
 // handleGMCompendiumToken godoc
 // @Summary Upload or remove a compendium monster's token
-// @Description POST (or PUT) saves the token of a monster you imported: {"monster_key": "custom:...", "image_base64": "..."} (a data: URL is accepted). The rule: a square PNG, JPEG or WebP, 128 to 2048 pixels a side, at most 2 MB, 512 by 512 best; it is shown in a circle, so keep the creature in the middle. Another shape is refused (400 not_square) with the size it had. DELETE (or POST ?_method=DELETE) with {"monster_key": ...} removes it. A new version made by an edit keeps the token. Only the GM who imported the monster may change its token. campaign_id names a campaign you run (needed when you run more than one).
+// @Description POST (or PUT) saves the token of a monster you imported: {"monster_key": "custom:...", "image_base64": "..."} (a data: URL is accepted). The rule: a square PNG, JPEG or WebP, 128 to 2048 pixels a side, at most 2 MB, 512 by 512 best; a PNG or JPEG is stored as a PNG of at most 512 pixels a side (scaled down when larger), a WebP as it is; it is shown in a circle, so keep the creature in the middle. Another shape is refused (400 not_square) with the size it had. DELETE (or POST ?_method=DELETE) with {"monster_key": ...} removes it. A new version made by an edit keeps the token. Only the GM who imported the monster may change its token. campaign_id names a campaign you run (needed when you run more than one).
 // @Tags GM
 // @Router /gm/compendium/monsters/token [post]
 // @Router /gm/compendium/monsters/token [put]
