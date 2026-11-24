@@ -856,3 +856,47 @@ func TestPostgresConditionOnHitEndsOnDamage(t *testing.T) {
 		}
 	}
 }
+
+func TestRollRiderSentencesReadBack(t *testing.T) {
+	want := map[string]string{"exposed": "exposed", "disadvantage_attacks": "attacks", "disadvantage_attacks_and_checks": "attacks,checks",
+		"disadvantage_next_attack": "nextattack", "no_reactions": "noreactions", "self_advantage_next_attack": "selfnextadv"}
+	for rider, modes := range want {
+		for _, until := range []string{"", "start_of_attackers_next_turn", "end_of_attackers_next_turn"} {
+			if (rider == "exposed" && until == "end_of_attackers_next_turn") || (rider == "self_advantage_next_attack" && until != "") {
+				continue // refused by the row's check (below)
+			}
+			m := entryMechanic{"kind": "roll_rider", "rider": rider}
+			if until != "" {
+				m["until"] = until
+			}
+			e, ok := parseHitRider(rollRiderSentence(m))
+			if !ok || strings.Join(e.DisadvMode, ",") != modes || strings.TrimSpace(e.Extra) != "" {
+				t.Errorf("%s %s: %q read as %v (extra %q)", rider, until, rollRiderSentence(m), e.DisadvMode, e.Extra)
+			}
+		}
+	}
+	for js, want := range map[string]string{
+		`[{"kind":"roll_rider","rider":"confused"}]`:                                                  "rider must be one of",
+		`[{"kind":"roll_rider","rider":"exposed","until":"end_of_its_next_turn"}]`:                    "exposed lasts until the start of the attacker's next turn",
+		`[{"kind":"roll_rider","rider":"self_advantage_next_attack","until":"end_of_its_next_turn"}]`: "leave until out",
+	} {
+		if p := mechanicProblem("action", srdMonsterEntry{Name: "x", Text: ashClawText, Mechanics: mechanicsFromJSON(t, js)}); !strings.Contains(p, want) {
+			t.Errorf("%s: %q", js, p)
+		}
+	}
+}
+
+func TestPostgresRollRiderOnHit(t *testing.T) {
+	testPostgres(t)
+	glare := srdMonsterEntry{Name: "Glare Strike", Text: "Melee Attack Roll: +60, reach 5 ft. Hit: 1 (1d1) Radiant damage. The target is dazzled by the glare.",
+		Mechanics: []entryMechanic{{"kind": "roll_rider", "rider": "disadvantage_attacks", "covers": "The target is dazzled by the glare."}}}
+	mark := srdMonsterEntry{Name: "Marking Strike", Text: "Melee Attack Roll: +60, reach 5 ft. Hit: 1 (1d1) Radiant damage. The target glows, easy to strike.",
+		Mechanics: []entryMechanic{{"kind": "roll_rider", "rider": "exposed", "until": "start_of_attackers_next_turn", "covers": "The target glows, easy to strike."}}}
+	gm, _, camp, hero, lamp := earlyRulesFixture(t, "Test Glare Lamp", []srdMonsterEntry{glare, mark})
+	if _, line := narrateHit(t, gm, camp, lamp, "Glare Strike", fmt.Sprint(hero), ""); !hasCondMarker(camp, hero, "disadv_attacks") || strings.Contains(line, "dazzled") {
+		t.Errorf("Glare Strike: %s", line)
+	}
+	if _, line := narrateHit(t, gm, camp, lamp, "Marking Strike", fmt.Sprint(hero), ""); !anyContains(combatEffectNames(camp, hero), "xposed") || strings.Contains(line, "glows") {
+		t.Errorf("Marking Strike: %s", line)
+	}
+}

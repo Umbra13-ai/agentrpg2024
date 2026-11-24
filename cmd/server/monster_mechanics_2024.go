@@ -492,6 +492,43 @@ var mechanicCatalog = []mechanicKind{
 			return s
 		},
 	},
+	{
+		Kind: "roll_rider",
+		Does: "A hit of this attack changes rolls for a time, as the SRD's riders do: the next attack roll against the target has Advantage (exposed), the " +
+			"target has Disadvantage on attack rolls (or attack rolls and ability checks, or its next attack roll), the target can't take Reactions, or the " +
+			"attacker has Advantage on its next attack roll this turn (self_advantage_next_attack); until says how long.",
+		On:        "attack",
+		AppliedBy: "rollRiderOnHit through hitAfterDamage and the roll rider owner (readDisadvantage, giveDisadvantage; attackSources, checkCtx.sources)",
+		Params: []mechanicParam{
+			{Name: "rider", Type: "choice", Options: []string{"exposed", "disadvantage_attacks", "disadvantage_attacks_and_checks", "disadvantage_next_attack", "no_reactions",
+				"self_advantage_next_attack"}, Required: true, Does: "what the hit changes"},
+			{Name: "until", Type: "choice", Options: []string{"end_of_its_next_turn", "start_of_attackers_next_turn", "end_of_attackers_next_turn"},
+				Does: "how long (the end of the target's next turn by default; the attacker's own Advantage lasts the rest of its turn)"},
+		},
+		Example: entryMechanic{"kind": "roll_rider", "rider": "disadvantage_attacks", "covers": "The target is dazzled by the glare."},
+		check: func(e srdMonsterEntry, m entryMechanic) string {
+			switch u := m.str("until"); {
+			case m.str("rider") == "exposed" && u != "" && u != "start_of_attackers_next_turn":
+				return "exposed lasts until the start of the attacker's next turn (leave until out, or send start_of_attackers_next_turn)"
+			case m.str("rider") == "self_advantage_next_attack" && u != "":
+				return "self_advantage_next_attack lasts the rest of the attacker's turn: leave until out"
+			}
+			return ""
+		},
+		ExampleOn: "Melee Attack Roll: +5, reach 5 ft. Hit: 6 (1d8 + 2) Radiant damage. The target is dazzled by the glare.",
+		describe: func(m entryMechanic) string {
+			what := map[string]string{"exposed": "the next attack roll against the target has Advantage", "disadvantage_attacks": "the target has Disadvantage on attack rolls",
+				"disadvantage_attacks_and_checks": "the target has Disadvantage on attack rolls and ability checks", "disadvantage_next_attack": "the target has Disadvantage on its next attack roll",
+				"no_reactions": "the target can't take Reactions", "self_advantage_next_attack": "the attacker has Advantage on its next attack roll this turn"}[m.str("rider")]
+			switch m.str("rider") {
+			case "self_advantage_next_attack":
+				return "a hit: " + what
+			case "exposed":
+				return "a hit: " + what + ", before the start of the attacker's next turn"
+			}
+			return "a hit: " + what + ", " + rollRiderTime(m, "until")
+		},
+	},
 }
 
 // engulfSentences: the SRD's own words for an engulf, which the hit and condition owners read (parseHitRider: the condition, what lasts
@@ -552,6 +589,46 @@ func mechanicHPMaxDrain(lobby, attacker int, entry string) (string, bool) {
 		return "", false
 	}
 	return m.str("damage_type"), true
+}
+
+// rollRiderTime: a roll_rider's time in the SRD's words ("until the end of its next turn"), with the word before it.
+func rollRiderTime(m entryMechanic, word string) string {
+	return word + " " + map[string]string{"": "the end of its next turn", "end_of_its_next_turn": "the end of its next turn",
+		"start_of_attackers_next_turn": "the start of the attacker's next turn", "end_of_attackers_next_turn": "the end of the attacker's next turn"}[m.str("until")]
+}
+
+// rollRiderSentence: the SRD's own sentence for a roll_rider, which the roll rider owner reads (readDisadvantage, exposedRe).
+func rollRiderSentence(m entryMechanic) string {
+	switch m.str("rider") {
+	case "exposed": // it ends at the start of the attacker's next turn (the exposed effect's one end)
+		return "Hit: The next attack roll made against the target before the start of the attacker's next turn has Advantage."
+	case "disadvantage_attacks_and_checks":
+		return "Hit: The target has Disadvantage on attack rolls and ability checks " + rollRiderTime(m, "until") + "."
+	case "disadvantage_next_attack":
+		return "Hit: The target has Disadvantage on the next attack roll it makes " + rollRiderTime(m, "before") + "."
+	case "no_reactions":
+		return "Hit: The target can't take Reactions " + rollRiderTime(m, "until") + "."
+	case "self_advantage_next_attack":
+		return "Hit: The attacker has Advantage on the next attack roll it makes before the end of this turn."
+	}
+	return "Hit: The target has Disadvantage on attack rolls " + rollRiderTime(m, "until") + "."
+}
+
+// rollRiderOnHit: the attached roll_rider of the attacking monster's entry, given by the roll rider owner.
+func rollRiderOnHit(lobby, attacker, target int, entry, source string) string {
+	m, ok := attachedMechanic(lobby, attacker, entry, "roll_rider")
+	if !ok {
+		return ""
+	}
+	e, ok := parseHitRider(rollRiderSentence(m))
+	if !ok || len(e.DisadvMode) == 0 {
+		return " [the roll rider attached to this attack could not be read; the GM applies it]"
+	}
+	e.SourceID = attacker
+	if given := e.giveConditions(lobby, target, source); len(given) > 0 {
+		return " [" + strings.Join(given, "; ") + "]"
+	}
+	return ""
 }
 
 // curseSentences: the SRD's own words for a curse mechanic, which the curse owner reads (readCurse): one owner of what a curse does.
