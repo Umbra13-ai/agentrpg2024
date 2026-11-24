@@ -132,7 +132,7 @@ func handleGMCompendiumEdit(w http.ResponseWriter, r *http.Request) {
 		writeDBWriteError(w, err, "the compendium")
 		return
 	}
-	writeJSONStatus(w, http.StatusCreated, map[string]interface{}{"monster_key": key, "replaces": req.MonsterKey, "name": req.Monster.Name, "shared": shared, "report": customMonsterReport(req.Monster, notes, false), "token": monsterTokenView(key),
+	writeJSONStatus(w, http.StatusCreated, map[string]interface{}{"monster_key": key, "replaces": req.MonsterKey, "name": req.Monster.Name, "shared": shared, "report": customMonsterReport(req.Monster, notes, false), "token": monsterTokenView(key), "stat_block_url": statBlockLink(key),
 		"message": "Saved as a new version (its token kept). The old one is off your list; a fight that started with it keeps it. Use the new monster_key in combat/add."})
 }
 

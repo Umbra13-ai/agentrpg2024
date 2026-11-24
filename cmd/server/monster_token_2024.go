@@ -132,7 +132,7 @@ func putMonsterToken(w http.ResponseWriter, r *http.Request, key, b64 string) (c
 		writeDBWriteError(w, err, "the token")
 		return "", false
 	}
-	writeJSONStatus(w, 200, map[string]interface{}{"success": true, "monster_key": key, "token": monsterTokenView(key),
+	writeJSONStatus(w, 200, map[string]interface{}{"success": true, "monster_key": key, "token": monsterTokenView(key), "stat_block_url": statBlockLink(key),
 		"message": "Saved. The encounter stage and the stat block show it now."})
 	return "saved", true
 }

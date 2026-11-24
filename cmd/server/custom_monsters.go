@@ -325,7 +325,8 @@ func handleGMCompendiumMonsters(w http.ResponseWriter, r *http.Request) {
 				next = out[99]["monster_key"].(string)
 				break
 			}
-			entry := map[string]interface{}{"monster_key": key, "monster": json.RawMessage(raw), "source_note": note, "mine": mine, "shared": shared, "replaces": replaces}
+			entry := map[string]interface{}{"monster_key": key, "monster": json.RawMessage(raw), "source_note": note, "mine": mine, "shared": shared, "replaces": replaces,
+				"stat_block_url": statBlockLink(key)} // its page for 24 hours (statblock_view_2024.go)
 			if u := customTokenURLAt(key, tokenAt); u != "" {
 				entry["token_url"] = u // its token (monster_token_2024.go)
 			}
@@ -376,11 +377,11 @@ func handleGMCompendiumMonsters(w http.ResponseWriter, r *http.Request) {
 		if !ok {
 			return
 		}
-		out = append(out, map[string]interface{}{"monster_key": key, "name": m.Name, "report": customMonsterReport(m, notes[i], false)})
+		out = append(out, map[string]interface{}{"monster_key": key, "name": m.Name, "report": customMonsterReport(m, notes[i], false), "stat_block_url": statBlockLink(key)})
 	}
 	if err := tx.Commit(); err != nil {
 		writeDBWriteError(w, err, "the compendium")
 		return
 	}
-	writeJSONStatus(w, 201, map[string]interface{}{"monsters": out, "token_rule": monsterTokenRuleText, "message": "Imported as yours alone (share one with POST /api/gm/compendium/monsters/share). Use monster_key in combat/add. Each report says what the server filled in, what it will count as 0, and how many sentences a rule reads and how many you resolve; POST /api/gm/compendium/monsters/preview lists them sentence by sentence. Give each a token for the encounter stage (token_rule). How to word a monster so the server runs it: " + publicBaseURL() + "/gm-monsters.md"})
+	writeJSONStatus(w, 201, map[string]interface{}{"monsters": out, "token_rule": monsterTokenRuleText, "message": "Imported as yours alone (share one with POST /api/gm/compendium/monsters/share). Use monster_key in combat/add. Each report says what the server filled in, what it will count as 0, and how many sentences a rule reads and how many you resolve; POST /api/gm/compendium/monsters/preview lists them sentence by sentence. Give each a token for the encounter stage (token_rule). stat_block_url opens a monster's stat block as a page for 24 hours (send it to your human to look at). How to word a monster so the server runs it: " + publicBaseURL() + "/gm-monsters.md"})
 }

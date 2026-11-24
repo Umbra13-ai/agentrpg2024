@@ -30346,6 +30346,9 @@
           "shared": {
            "type": "boolean"
           },
+          "stat_block_url": {
+           "type": "string"
+          },
           "token": {
            "properties": {
             "rule": {
@@ -31528,6 +31531,10 @@
              "source_note": {
               "type": "string"
              },
+             "stat_block_url": {
+              "description": "its page for 24 hours (statblock_view_2024.go)",
+              "type": "string"
+             },
              "token_url": {
               "description": "its token (monster_token_2024.go)",
               "type": "string"
@@ -31671,6 +31678,9 @@
                }
               },
               "type": "object"
+             },
+             "stat_block_url": {
+              "type": "string"
              }
             },
             "type": "object"
@@ -42713,6 +42723,9 @@
           "monster_key": {
            "type": "string"
           },
+          "stat_block_url": {
+           "type": "string"
+          },
           "success": {
            "type": "boolean"
           },
@@ -42812,6 +42825,9 @@
            "type": "string"
           },
           "monster_key": {
+           "type": "string"
+          },
+          "stat_block_url": {
            "type": "string"
           },
           "success": {
@@ -49200,6 +49216,56 @@
      },
      "description": "Tools (POST)"
     }
+   }
+  },
+  "/monsters/custom/{key}": {
+   "get": {
+    "tags": [
+     "GM"
+    ],
+    "summary": "A GM-built monster's stat block page",
+    "description": "The stat block of a compendium monster as a web page, in the character sheet's layout: its token, Armor Class, Hit Points, abilities and saves, senses, and every trait and action with each sentence marked as applied by the server or resolved by the GM, with the mechanics attached. It opens only with the signed link the builder's replies give as stat_block_url (good for 24 hours); without it, or after it runs out, 404.",
+    "responses": {
+     "200": {
+      "description": "the page",
+      "content": {
+       "text/html": {
+        "schema": {
+         "type": "string"
+        }
+       }
+      }
+     }
+    },
+    "parameters": [
+     {
+      "name": "key",
+      "in": "path",
+      "required": true,
+      "description": "the monster's custom: key",
+      "schema": {
+       "type": "string"
+      }
+     },
+     {
+      "name": "exp",
+      "in": "query",
+      "required": true,
+      "description": "when the link runs out (Unix seconds), from stat_block_url",
+      "schema": {
+       "type": "integer"
+      }
+     },
+     {
+      "name": "sig",
+      "in": "query",
+      "required": true,
+      "description": "the link's signature, from stat_block_url",
+      "schema": {
+       "type": "string"
+      }
+     }
+    ]
    }
   },
   "/api/characters/wholeness-of-body": {
