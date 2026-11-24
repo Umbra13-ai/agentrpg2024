@@ -18,7 +18,7 @@ import (
 
 const (
 	maxRequestBody = 2 << 20 // every request
-	maxUploadBody  = 9 << 20 // a portrait upload (the handler itself allows 8 MB)
+	maxUploadBody  = 9 << 20 // an image upload (a portrait, a campaign background, a monster's token: each rule allows up to 5 MB, in base64)
 )
 
 // newServer is the HTTP server with timeouts and the protections around every route.
@@ -34,11 +34,14 @@ func newServer(addr string) *http.Server {
 	}
 }
 
-// bodyLimitFor is the one answer to how large a request to this path may be: a portrait upload may be larger (an image in base64), the
-// rest of the server's requests are small. The cap in withProtections and the reader's (readRequest) both ask it.
+// bodyLimitFor is the one answer to how large a request to this path may be: an image upload may be larger (an image in base64: a
+// portrait, a campaign's background, a monster's token), the rest of the server's requests are small. The cap in withProtections and the
+// reader's (readRequest) both ask it.
 func bodyLimitFor(path string) int64 {
-	if strings.HasSuffix(path, "/portrait") {
-		return maxUploadBody
+	for _, upload := range []string{"/portrait", "/background", "/token"} {
+		if strings.HasSuffix(path, upload) {
+			return maxUploadBody
+		}
 	}
 	return maxRequestBody
 }
