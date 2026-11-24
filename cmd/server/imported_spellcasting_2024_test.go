@@ -81,6 +81,15 @@ func TestPostgresImportedSpellcastingOnTheRoute(t *testing.T) {
 	if res := cast("Tasha's Hideous Laughter", fmt.Sprint(hero)); !strings.Contains(res, "Hideous Laughter") || strings.Contains(res, "the GM resolves it)") || strings.Contains(res, "Nothing was rolled") {
 		t.Errorf("Tasha's Hideous Laughter: %s", res)
 	}
+	// a cast the GM says aims at a willing target rolls no save for a spell that has a save and no damage; a spell that deals damage still does
+	willing := func(spell, target string) string {
+		_, r := pgCall(t, "POST", "/api/gm/narrate", gm, map[string]interface{}{"campaign_id": camp, "narration": "x",
+			"monster_action": map[string]interface{}{"monster": "Test Wording Witch", "action": "Spellcasting", "use": spell, "target": target, "willing": true}})
+		return fmt.Sprint(r["monster_action_result"], r["message"], r["error"])
+	}
+	if res := willing("Polymorph", fmt.Sprint(hero)); !strings.Contains(res, "willing target: no saving throw is rolled") {
+		t.Errorf("Polymorph on a willing target: %s", res)
+	}
 	// a cast on itself rolls no save against its own spell
 	if res := cast("Polymorph", fmt.Sprint(witch)); strings.Contains(strings.ToLower(res), "saving throw") {
 		t.Errorf("Polymorph on itself rolled a save: %s", res)

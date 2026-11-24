@@ -249,6 +249,7 @@ type legendaryRequest struct {
 	Use              string `json:"use"`               // the chosen attack, spell, or attack damage type
 	ApplyDamage      *bool  `json:"apply_damage"`      // defaults to true; false previews without spending this use or closing the window
 	ConfirmTargeting bool   `json:"confirm_targeting"` // the GM confirmed required sight or distance the server cannot determine
+	Willing          bool   `json:"willing"`           // the target of the cast is willing: a spell that has a saving throw but deals no damage (Polymorph) rolls no save, and the GM applies its effect
 }
 
 // lastTurnEnded is the turn after which Legendary Actions may be taken now ("round:index") and whose turn it was.
@@ -345,6 +346,7 @@ func takeLegendaryAction(r *http.Request, lobbyID int, req legendaryRequest, win
 	}
 	r, rec := withExecution(r)
 	rec.confirmTargeting = req.ConfirmTargeting
+	rec.willing = req.Willing
 	if key, limit := monsterDayUse(act, ""); key != "" {
 		if apply {
 			if !reserveDayUse(lobbyID, req.CombatantID, key, limit) {
@@ -452,6 +454,7 @@ func monsterFeaturesTurnStart(lobbyID, id int, name string) []string {
 		if !ok || meta == nil {
 			return log
 		}
+		resetBonusActions(lobbyID, id) // a new turn: its Bonus Action is back (monster_bonus_action_2024.go)
 		s := loadMonsterState(lobbyID, id)
 		changed := s.LAUsed > 0 || len(s.LAOnce) > 0
 		s.LAUsed, s.LAOnce = 0, nil
@@ -989,12 +992,15 @@ func monsterFeaturesInfo(lobbyID, id int) map[string]interface{} {
 		}
 		out["xp"] = xp
 	}
+	if len(meta.BonusActions) > 0 {
+		out["bonus_actions"] = map[string]interface{}{"allowed_per_turn": bonusActionsAllowed(lobbyID, id), "taken_this_turn": bonusActionsTaken(lobbyID, id)}
+	}
 	return out
 }
 
 // handleGMMonsterFeatures godoc
 // @Summary A monster's Legendary Actions, Legendary Resistance, lair and auras in the fight
-// @Description GET ?combatant_id=N shows them (uses left, policy, automatic traits, recharging actions). POST sets them: in_lair (one more Legendary Action use and Legendary Resistance; the 2024 rules have no Lair Actions), legendary_resistance ("auto": used against effects that give a condition or damage that would drop the monster to 0 HP; "always"; "manual"), auras (false switches the monster's auras, Regeneration aside, off), new_day (true: every creature's per-day uses in the campaign come back; the server does not track days by itself), rest ("short" or "long": the creatures rested, so an action that recharges after a Short or Long Rest, a Long Rest or the next dawn can be used again), day_uses (sets this creature's counts by key, 0 gives one back). Per-day uses (\"(1/Day)\", Spellcasting \"2/Day Each\") are kept per creature (creature_id) across fights; GET without combatant_id lists the known creatures. Send spend_recharge with the name of a Recharge action the GM has already resolved to record that use.
+// @Description GET ?combatant_id=N shows them (uses left, policy, automatic traits, recharging actions). POST sets them: in_lair (one more Legendary Action use and Legendary Resistance; the 2024 rules have no Lair Actions), legendary_resistance ("auto": used against effects that give a condition or damage that would drop the monster to 0 HP; "always"; "manual"), auras (false switches the monster's auras, Regeneration aside, off), new_day (true: every creature's per-day uses in the campaign come back; the server does not track days by itself), bonus_actions (how many Bonus Actions this monster takes in a turn: 1 unless its stat block gives it more; narrate refuses a second Bonus Action of the turn before anything is rolled), rest ("short" or "long": the creatures rested, so an action that recharges after a Short or Long Rest, a Long Rest or the next dawn can be used again), day_uses (sets this creature's counts by key, 0 gives one back). Per-day uses (\"(1/Day)\", Spellcasting \"2/Day Each\") are kept per creature (creature_id) across fights; GET without combatant_id lists the known creatures. Send spend_recharge with the name of a Recharge action the GM has already resolved to record that use.
 // @Tags GM
 // @Param combatant_id query int false "Monster id (GET)"
 // @Body Settings (POST)
@@ -1007,6 +1013,7 @@ func handleGMMonsterFeatures(w http.ResponseWriter, r *http.Request) {
 		LegendaryResistance string         `json:"legendary_resistance"` // auto (used against a condition, or damage that would drop it to 0), always or manual
 		Auras               *bool          `json:"auras"`                // false switches the monster's auras off (Regeneration aside)
 		NewDay              bool           `json:"new_day"`              // a new day begins: every creature's per-day uses in the campaign come back
+		BonusActions        int            `json:"bonus_actions"`        // how many Bonus Actions this monster takes in a turn (default 1; set more only when its stat block gives it more)
 		Rest                string         `json:"rest"`                 // short or long: the creatures rested, so an action that "recharges after a Short or Long Rest" (a Long Rest, or the next dawn) is available again
 		DayUses             map[string]int `json:"day_uses"`             // sets this monster's per-day counts by key (action:<name>, spell:<name>, tier:<head>); 0 gives a use back
 		SpendRecharge       string         `json:"spend_recharge"`       // records the use of a named Recharge action the GM has already resolved
@@ -1091,6 +1098,16 @@ func handleGMMonsterFeatures(w http.ResponseWriter, r *http.Request) {
 		if err := saveMonsterState(lobbyID, req.CombatantID, s); err != nil {
 			writeDBWriteError(w, err, "the monster's features")
 			return
+		}
+		if req.BonusActions != 0 {
+			if req.BonusActions < 1 || req.BonusActions > 5 {
+				writeJSONStatus(w, http.StatusBadRequest, map[string]interface{}{"error": "invalid_bonus_actions", "message": "bonus_actions is 1 to 5: how many Bonus Actions the monster's stat block lets it take in a turn."})
+				return
+			}
+			if err := setBonusActionsAllowed(lobbyID, req.CombatantID, req.BonusActions); err != nil {
+				writeDBWriteError(w, err, "the monster's Bonus Actions")
+				return
+			}
 		}
 		if req.NewDay {
 			newDay(lobbyID)
@@ -1228,16 +1245,7 @@ func monsterEntryRefusal(lobbyID, id int, entry srdMonsterEntry) string {
 // action) for gm/narrate. handled is false when the action is an attack (the attack code handles it) or unknown.
 // use is the GM's choice where the entry needs one (Command's word; Claw or Tail).
 func resolveMonsterActionByName(r *http.Request, lobbyID int, monster, action, target string, targetIDs []int, apply bool, use string) (string, bool, string) {
-	ids := monsterIDsByKeyOrName(lobbyID, monster) // "#-3" names one monster by its combat id (monsterIDsByKeyOrName)
-	id := 0
-	entries := combatEntries(lobbyID)
-	for _, x := range ids { // the best match first (F208)
-		for _, c := range entries {
-			if asInt(c["id"]) == x && asInt(c["hp"]) > 0 && id == 0 {
-				id = x
-			}
-		}
-	}
+	id := aliveMonsterID(lobbyID, monster) // "#-3" names one monster by its combat id; the best match first (F208)
 	if id == 0 {
 		return "", false, ""
 	}

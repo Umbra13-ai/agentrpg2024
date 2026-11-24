@@ -1448,6 +1448,7 @@ type gmNarrateRequest struct {
 		AllyAdjacent     bool     `json:"ally_adjacent"`     // an ally of the monster (not Incapacitated) is within 5 feet of the target: Pack Tactics without a battle map
 		Charged          bool     `json:"charged"`           // the monster moved straight toward the target right before this attack, as far as its charge asks (20+ feet): used only without a battle map (with one, the server reads its move)
 		ConfirmTargeting bool     `json:"confirm_targeting"` // the GM confirmed required sight or distance that the server cannot determine
+		Willing          bool     `json:"willing"`           // the target of the cast is willing: a spell that has a saving throw but deals no damage (Polymorph) rolls no save, and the GM applies its effect
 		Attacks          []string `json:"attacks"`           // a choice Multiattack's declared composition: the named attacks in order, as many as the text makes ("Scimitar", "Shortbow"); validated against the text before anything is rolled
 	} `json:"monster_action"`
 	Appearing    []string      `json:"appearing"`     // who appears in this narration, so the story shows their tokens beside it: a creature of the fight by its name or "#-2", an SRD monster by name or slug, a monster of your compendium by its custom: key or name; left out, the fight's creatures and your compendium's monsters the narration names; [] for none
@@ -1571,15 +1572,28 @@ func handleGMNarrate(w http.ResponseWriter, r *http.Request) {
 		var rec *execRecord
 		r, rec = withExecution(r) // what the server carries out is said by the code that does it (monster_day_uses.go)
 		rec.confirmTargeting = req.MonsterAction.ConfirmTargeting
+		rec.willing = req.MonsterAction.Willing
 		r = withMultiattackDeclared(r, req.MonsterAction.Attacks) // a choice Multiattack's declared composition, validated against its text
 		r = withChargeSaid(r, req.MonsterAction.Charged)          // a charge said by the GM (no battle map: creature_movement_2024.go)
+		bonusHeld := 0                                            // the monster whose Bonus Action of the turn this request took (monster_bonus_action_2024.go)
 		refused := func(status int, code, msg string, extra map[string]interface{}) {
+			if bonusHeld != 0 { // it ran nothing: the Bonus Action is back
+				releaseBonusAction(campaignID, bonusHeld)
+			}
 			reply := map[string]interface{}{"success": false, "error": code, "message": msg + " Nothing was recorded: the narration wasn't posted.",
 				"narration_recorded": false, "monster_action_refused": msg, "monster_action_result": msg}
 			for k, v := range extra {
 				reply[k] = v
 			}
 			writeJSONStatus(w, status, reply)
+		}
+		if !isNarrativeOnlyMonsterAction(req.MonsterAction.Action) {
+			held, why := takeMonsterBonusAction(campaignID, req.MonsterAction.Monster, req.MonsterAction.Action, damageApplies(req.MonsterAction.ApplyDamage))
+			if why != "" {
+				refused(http.StatusConflict, "monster_action_refused", why, nil)
+				return
+			}
+			bonusHeld = held
 		}
 		if isNarrativeOnlyMonsterAction(req.MonsterAction.Action) {
 			// A positioning or other scene-setting beat is not an attack. Record

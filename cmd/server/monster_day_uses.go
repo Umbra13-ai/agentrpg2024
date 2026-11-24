@@ -327,6 +327,7 @@ type execKey struct{}
 type execRecord struct {
 	executed         int32
 	confirmTargeting bool   // the GM confirmed any range or sight the server cannot determine
+	willing          bool   // the GM said the cast's target is willing: a spell with a save and no damage rolls none
 	targetBlocked    bool   // an explicit prerequisite blocked the action before it rolled (set only by blockedBeforeRoll)
 	dayHandled       bool   // monsterAction reserves its own entry's use; inner entries do not take it twice
 	fromCaller       bool   // the record came with the request (the narrate route), so it will settle a pending attack

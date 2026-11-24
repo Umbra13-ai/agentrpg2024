@@ -426,7 +426,8 @@ var schemaSteps = []schemaStep{
 	// the creatures a log record shows (story_creatures_2024.go): [{name, key}]
 	{"story_creatures_2024.go", `ALTER TABLE actions ADD COLUMN IF NOT EXISTS creatures JSONB`},
 	{"monster_token_2024.go", `ALTER TABLE custom_monsters ADD COLUMN IF NOT EXISTS token BYTEA; ALTER TABLE custom_monsters ADD COLUMN IF NOT EXISTS token_type VARCHAR(32); ALTER TABLE custom_monsters ADD COLUMN IF NOT EXISTS token_updated_at TIMESTAMPTZ`},
-	{"combat_effects.go", `ALTER TABLE combat_effects ADD COLUMN IF NOT EXISTS origin TEXT NOT NULL DEFAULT ''`}, // what gave the effect (a spell, a mastery, the GM): its roll line names it
+	{"monster_bonus_action_2024.go", `ALTER TABLE combat_monster_state ADD COLUMN IF NOT EXISTS bonus_used INTEGER NOT NULL DEFAULT 0; ALTER TABLE combat_monster_state ADD COLUMN IF NOT EXISTS bonus_allowed INTEGER NOT NULL DEFAULT 0`}, // the Bonus Actions a monster has taken this turn, and how many its stat block gives it
+	{"combat_effects.go", `ALTER TABLE combat_effects ADD COLUMN IF NOT EXISTS origin TEXT NOT NULL DEFAULT ''`},                                                                                                                            // what gave the effect (a spell, a mastery, the GM): its roll line names it
 }
 
 // seatReadySchema: a player's "ready to start" on its seat (cleared whenever the seat changes hands: takeSeat, swapSeat;

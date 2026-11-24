@@ -5335,6 +5335,10 @@
            "use": {
             "description": "a choice the entry needs: Command's word, or the damage type for an attack that offers one (its own choice, or an extra amount \"of the type chosen for the ... trait\")",
             "type": "string"
+           },
+           "willing": {
+            "description": "the target of the cast is willing: a spell that has a saving throw but deals no damage (Polymorph) rolls no save, and the GM applies its effect",
+            "type": "boolean"
            }
           },
           "type": "object",
@@ -27817,6 +27821,10 @@
             "use": {
              "description": "the chosen attack, spell, or attack damage type",
              "type": "string"
+            },
+            "willing": {
+             "description": "the target of the cast is willing: a spell that has a saving throw but deals no damage (Polymorph) rolls no save, and the GM applies its effect",
+             "type": "boolean"
             }
            },
            "type": "object"
@@ -27838,7 +27846,8 @@
           "target_ids": [
            1
           ],
-          "use": "..."
+          "use": "...",
+          "willing": true
          }
         ]
        }
@@ -28523,6 +28532,17 @@
                  "type": "string"
                 },
                 "type": "array"
+               },
+               "bonus_actions": {
+                "properties": {
+                 "allowed_per_turn": {
+                  "type": "integer"
+                 },
+                 "taken_this_turn": {
+                  "type": "integer"
+                 }
+                },
+                "type": "object"
                },
                "creature_id": {
                 "type": "string"
@@ -42250,7 +42270,7 @@
      "GM"
     ],
     "summary": "A monster's Legendary Actions, Legendary Resistance, lair and auras in the fight",
-    "description": "GET ?combatant_id=N shows them (uses left, policy, automatic traits, recharging actions). POST sets them: in_lair (one more Legendary Action use and Legendary Resistance; the 2024 rules have no Lair Actions), legendary_resistance (\"auto\": used against effects that give a condition or damage that would drop the monster to 0 HP; \"always\"; \"manual\"), auras (false switches the monster's auras, Regeneration aside, off), new_day (true: every creature's per-day uses in the campaign come back; the server does not track days by itself), rest (\"short\" or \"long\": the creatures rested, so an action that recharges after a Short or Long Rest, a Long Rest or the next dawn can be used again), day_uses (sets this creature's counts by key, 0 gives one back). Per-day uses (\\\"(1/Day)\\\", Spellcasting \\\"2/Day Each\\\") are kept per creature (creature_id) across fights; GET without combatant_id lists the known creatures. Send spend_recharge with the name of a Recharge action the GM has already resolved to record that use.",
+    "description": "GET ?combatant_id=N shows them (uses left, policy, automatic traits, recharging actions). POST sets them: in_lair (one more Legendary Action use and Legendary Resistance; the 2024 rules have no Lair Actions), legendary_resistance (\"auto\": used against effects that give a condition or damage that would drop the monster to 0 HP; \"always\"; \"manual\"), auras (false switches the monster's auras, Regeneration aside, off), new_day (true: every creature's per-day uses in the campaign come back; the server does not track days by itself), bonus_actions (how many Bonus Actions this monster takes in a turn: 1 unless its stat block gives it more; narrate refuses a second Bonus Action of the turn before anything is rolled), rest (\"short\" or \"long\": the creatures rested, so an action that recharges after a Short or Long Rest, a Long Rest or the next dawn can be used again), day_uses (sets this creature's counts by key, 0 gives one back). Per-day uses (\\\"(1/Day)\\\", Spellcasting \\\"2/Day Each\\\") are kept per creature (creature_id) across fights; GET without combatant_id lists the known creatures. Send spend_recharge with the name of a Recharge action the GM has already resolved to record that use.",
     "responses": {
      "200": {
       "description": "Success",
@@ -42295,6 +42315,17 @@
               "type": "string"
              },
              "type": "array"
+            },
+            "bonus_actions": {
+             "properties": {
+              "allowed_per_turn": {
+               "type": "integer"
+              },
+              "taken_this_turn": {
+               "type": "integer"
+              }
+             },
+             "type": "object"
             },
             "creature_id": {
              "type": "string"
@@ -42383,6 +42414,17 @@
                  "type": "string"
                 },
                 "type": "array"
+               },
+               "bonus_actions": {
+                "properties": {
+                 "allowed_per_turn": {
+                  "type": "integer"
+                 },
+                 "taken_this_turn": {
+                  "type": "integer"
+                 }
+                },
+                "type": "object"
                },
                "creature_id": {
                 "type": "string"
@@ -42486,7 +42528,7 @@
      "GM"
     ],
     "summary": "A monster's Legendary Actions, Legendary Resistance, lair and auras in the fight",
-    "description": "GET ?combatant_id=N shows them (uses left, policy, automatic traits, recharging actions). POST sets them: in_lair (one more Legendary Action use and Legendary Resistance; the 2024 rules have no Lair Actions), legendary_resistance (\"auto\": used against effects that give a condition or damage that would drop the monster to 0 HP; \"always\"; \"manual\"), auras (false switches the monster's auras, Regeneration aside, off), new_day (true: every creature's per-day uses in the campaign come back; the server does not track days by itself), rest (\"short\" or \"long\": the creatures rested, so an action that recharges after a Short or Long Rest, a Long Rest or the next dawn can be used again), day_uses (sets this creature's counts by key, 0 gives one back). Per-day uses (\\\"(1/Day)\\\", Spellcasting \\\"2/Day Each\\\") are kept per creature (creature_id) across fights; GET without combatant_id lists the known creatures. Send spend_recharge with the name of a Recharge action the GM has already resolved to record that use.",
+    "description": "GET ?combatant_id=N shows them (uses left, policy, automatic traits, recharging actions). POST sets them: in_lair (one more Legendary Action use and Legendary Resistance; the 2024 rules have no Lair Actions), legendary_resistance (\"auto\": used against effects that give a condition or damage that would drop the monster to 0 HP; \"always\"; \"manual\"), auras (false switches the monster's auras, Regeneration aside, off), new_day (true: every creature's per-day uses in the campaign come back; the server does not track days by itself), bonus_actions (how many Bonus Actions this monster takes in a turn: 1 unless its stat block gives it more; narrate refuses a second Bonus Action of the turn before anything is rolled), rest (\"short\" or \"long\": the creatures rested, so an action that recharges after a Short or Long Rest, a Long Rest or the next dawn can be used again), day_uses (sets this creature's counts by key, 0 gives one back). Per-day uses (\\\"(1/Day)\\\", Spellcasting \\\"2/Day Each\\\") are kept per creature (creature_id) across fights; GET without combatant_id lists the known creatures. Send spend_recharge with the name of a Recharge action the GM has already resolved to record that use.",
     "responses": {
      "400": {
       "description": "The body was refused (nothing was changed): unknown_field, wrong_type, invalid_json, body_required or id_mismatch, with the fields the request takes",
@@ -42561,6 +42603,17 @@
               "type": "string"
              },
              "type": "array"
+            },
+            "bonus_actions": {
+             "properties": {
+              "allowed_per_turn": {
+               "type": "integer"
+              },
+              "taken_this_turn": {
+               "type": "integer"
+              }
+             },
+             "type": "object"
             },
             "creature_id": {
              "type": "string"
@@ -42649,6 +42702,17 @@
                  "type": "string"
                 },
                 "type": "array"
+               },
+               "bonus_actions": {
+                "properties": {
+                 "allowed_per_turn": {
+                  "type": "integer"
+                 },
+                 "taken_this_turn": {
+                  "type": "integer"
+                 }
+                },
+                "type": "object"
                },
                "creature_id": {
                 "type": "string"
@@ -42757,6 +42821,10 @@
           "type": "boolean",
           "description": "false switches the monster's auras off (Regeneration aside)"
          },
+         "bonus_actions": {
+          "type": "integer",
+          "description": "how many Bonus Actions this monster takes in a turn (default 1; set more only when its stat block gives it more)"
+         },
          "campaign_id": {
           "type": "integer",
           "description": "the campaign this command is for (or ?campaign_id=); without it, the campaign of the characters it names, else your only active campaign"
@@ -42796,6 +42864,7 @@
        },
        "example": {
         "auras": true,
+        "bonus_actions": 1,
         "campaign_id": 1,
         "combatant_id": 1,
         "in_lair": true,
@@ -42909,6 +42978,10 @@
          "use": {
           "type": "string",
           "description": "the chosen attack, spell, or attack damage type"
+         },
+         "willing": {
+          "type": "boolean",
+          "description": "the target of the cast is willing: a spell that has a saving throw but deals no damage (Polymorph) rolls no save, and the GM applies its effect"
          }
         }
        },
@@ -42923,7 +42996,8 @@
         "target_ids": [
          1
         ],
-        "use": "..."
+        "use": "...",
+        "willing": true
        }
       }
      },

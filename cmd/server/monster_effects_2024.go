@@ -1524,6 +1524,12 @@ func resolveMonsterSpell(r *http.Request, lobbyID, monsterID int, monsterName, s
 	return out
 }
 
+// spellSaveWithoutDamage: a spell whose only mechanic here is a saving throw (Polymorph, Hold Person): a target that accepts it has nothing to save
+// against. A spell that deals damage is never skipped this way.
+func spellSaveWithoutDamage(sp SRDSpell) bool {
+	return sp.SavingThrow != "" && sp.DamageDice == "" && len(sp.DamageParts) == 0
+}
+
 func resolveMonsterSpellRules(r *http.Request, lobbyID, monsterID int, monsterName, spellName string, level, dc, atk int, targets []int, selfCast, apply bool, use string) []string {
 	slug := normalizeSpellSlug(spellName)
 	sp, ok := srdSpellsMemory[slug]
@@ -1571,6 +1577,13 @@ func resolveMonsterSpellRules(r *http.Request, lobbyID, monsterID int, monsterNa
 			monsterHandoverSpell(lobbyID, monsterID, slug, nil) // a lasting spell is the GM's open item (gm_handover_2024.go)
 		}
 		return []string{head + " on itself. The GM resolves the spell's effect."}
+	}
+	if rec := execIn(r); rec != nil && rec.willing && spellSaveWithoutDamage(sp) && len(targets) > 0 { // the GM says the target accepts the spell: it gives up its save
+		if apply {
+			markExecuted(r)
+			monsterHandoverSpell(lobbyID, monsterID, slug, nil)
+		}
+		return []string{head + " on a willing target: no saving throw is rolled. The GM resolves the spell's effect."}
 	}
 	areaAimed := false
 	if v, pt := monsterAreaPoint.Load(lobbyID); pt && sp.AoEShape != "" && !isSpellAttack(sp) { // aimed at a point (O-5)
