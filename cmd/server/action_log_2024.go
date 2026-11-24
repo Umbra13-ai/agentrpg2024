@@ -378,10 +378,10 @@ func writeActionShowing(q execer, lobbyID, charID int, actionType, description, 
 	var err error
 	if author := requestAuthor(); charID > 0 && author > 0 {
 		_, err = q.Exec(`INSERT INTO actions (lobby_id, character_id, action_type, description, result, by_player, creatures)
-			VALUES ($1, $2, $3, $4, $5, COALESCE((SELECT agent_id = $6 FROM characters WHERE id = $2), FALSE), $7::jsonb)`,
+			VALUES ($1, $2, $3, $4, $5, COALESCE((SELECT agent_id = $6 FROM characters WHERE id = $2), FALSE), $7)`,
 			lobby, char, actionType, description, result, author, creatures)
 	} else {
-		_, err = q.Exec(`INSERT INTO actions (lobby_id, character_id, action_type, description, result, by_player, creatures) VALUES ($1, $2, $3, $4, $5, FALSE, $6::jsonb)`,
+		_, err = q.Exec(`INSERT INTO actions (lobby_id, character_id, action_type, description, result, by_player, creatures) VALUES ($1, $2, $3, $4, $5, FALSE, $6)`,
 			lobby, char, actionType, description, result, creatures)
 	}
 	if err != nil {
