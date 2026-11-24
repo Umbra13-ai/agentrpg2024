@@ -254,7 +254,7 @@ func scheduleFightEnds(lobby int) {
 const (
 	needChoose    = "choose"     // a chosen action: a submission (or a stand-in at the final check-in)
 	needDeathSave = "death_save" // dying: the Death Saving Throw, rolled automatically at the character's turn
-	needNothing   = "none"       // stable, unconscious or dead: the turn passes with no action
+	needNothing   = "none"       // stable, dead or unable to act (an Incapacitating condition): the turn passes with no action
 )
 
 // turnNeed: what a character's turn needs, and why ("dying", "stable", "unconscious", "dead"; "" for a chosen action).
@@ -265,9 +265,9 @@ type turnNeed struct {
 
 // turnNeedOf is the rule (Matt, 11.3): 0 Hit Points alone is not the exemption. A dying character (at 0, not stable) gets the
 // automatic Death Saving Throw, never a submission or a stand-in; a stable one rolls none and needs no action; a dead character
-// is never a missing submission; an unconscious character (asleep, at any Hit Points) has no action to choose. Anyone else
-// chooses an action.
-func turnNeedOf(v game.Vitals, unconscious bool) turnNeed {
+// is never a missing submission; a character an Incapacitating condition holds (cantActBecause: asleep, Paralyzed, Stunned ...) has
+// no action to choose, its Why the condition. Anyone else chooses an action.
+func turnNeedOf(v game.Vitals, cantAct string) turnNeed {
 	switch {
 	case v.Dead:
 		return turnNeed{needNothing, "dead"}
@@ -275,8 +275,8 @@ func turnNeedOf(v game.Vitals, unconscious bool) turnNeed {
 		return turnNeed{needDeathSave, "dying"}
 	case v.Dying():
 		return turnNeed{needNothing, "stable"}
-	case unconscious:
-		return turnNeed{needNothing, "unconscious"}
+	case cantAct != "":
+		return turnNeed{needNothing, cantAct}
 	}
 	return turnNeed{Kind: needChoose}
 }
@@ -287,7 +287,7 @@ func turnNeeds(charID int) (turnNeed, error) {
 	if err != nil {
 		return turnNeed{}, err
 	}
-	return turnNeedOf(v, hasCondition(charID, "unconscious")), nil
+	return turnNeedOf(v, cantActBecause(charID)), nil
 }
 
 // needsDeathSave: the character's turn is its automatic Death Saving Throw (the pending-turn walk, my-turn).

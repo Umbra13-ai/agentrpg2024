@@ -243,7 +243,7 @@ func sellItems(charID int, def *shopTypeDef, shopName string, priceCP func(float
 			}
 		}
 		money = walletCPIn(tx, charID) + total // read in the transaction, with the character locked
-		if _, err := tx.Exec(`UPDATE characters SET gold = $1, silver = $2, copper = $3, electrum = 0, platinum = 0 WHERE id = $4`, money/100, (money%100)/10, money%10, charID); err != nil {
+		if err := writePurseIn(tx, charID, purseOfCP(money)); err != nil {
 			return nil, err
 		}
 		return inv, nil

@@ -44,6 +44,7 @@ type sceneFacts struct {
 	BeatRound  bool   // outside a fight the story action is the beat (schedule off) rather than the round
 	Weapon     string // the weapon in the character's main hand, for the attack example ("" : none)
 	Spell      string // a damaging spell the character has (a cantrip first), for the cast example ("": none)
+	CantAct    string // the Incapacitating condition that keeps the character from acting (cantActBecause), "" when none
 }
 
 // ownGear: the character's weapon in hand and a damaging spell it has, so the menu's examples are its own (S-WREN-1, I-THISTLE-5: a
@@ -165,6 +166,8 @@ func sceneMenu(charID int, f sceneFacts) (now, more []map[string]interface{}) {
 			why = "your character has died"
 		case game.AtZero(f.Label) && o.t.While != "dying" && o.t.Name != "death_save":
 			why = "you are at 0 Hit Points"
+		case f.CantAct != "" && o.t.Name != "death_save":
+			why = "you are " + f.CantAct + ": you can't act"
 		case o.t.Cost == costReaction && why == "":
 			why = "a Reaction: when its trigger happens, not on your turn"
 		case o.t.Cost == costCompanion && why == "":

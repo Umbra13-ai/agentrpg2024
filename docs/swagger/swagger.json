@@ -38928,7 +38928,7 @@
      "GM"
     ],
     "summary": "Award or deduct currency from characters",
-    "description": "GM adjusts currency for one or more characters. Use positive amount to award, negative to deduct. Supports all the coins of the SRD 5.2.1: cp (copper), sp (silver), ep (electrum), gp (gold, default), pp (platinum).",
+    "description": "GM adjusts currency for one or more characters. Use positive amount to award, negative to deduct. A deduction is a payment from the whole purse: the coin named pays it when it holds enough, otherwise the purse makes change (what is left is written as GP, SP and CP); a character who can't pay refuses the whole request (409 not_enough_money, nothing changed). Supports all the coins of the SRD 5.2.1: cp (copper), sp (silver), ep (electrum), gp (gold, default), pp (platinum).",
     "responses": {
      "400": {
       "description": "The body was refused (nothing was changed): unknown_field, wrong_type, invalid_json, body_required or id_mismatch, with the fields the request takes",
@@ -38981,43 +38981,25 @@
              "currency": {
               "type": "string"
              },
-             "current": {
-              "type": "integer"
-             },
+             "current": {},
              "current_gold": {
               "type": "integer"
              },
              "full_currency": {
-              "properties": {
-               "cp": {
-                "type": "integer"
-               },
-               "ep": {
-                "type": "integer"
-               },
-               "gp": {
-                "type": "integer"
-               },
-               "pp": {
-                "type": "integer"
-               },
-               "sp": {
-                "type": "integer"
-               },
-               "total_in_gp": {
-                "type": "number"
-               }
-              },
               "type": "object"
              },
              "gold_change": {
               "type": "integer"
              },
-             "previous": {
-              "type": "integer"
-             },
+             "previous": {},
              "previous_gold": {
               "type": "integer"
+             },
+             "purse_after": {
+              "type": "string"
+             },
+             "purse_before": {
+              "type": "string"
              }
             },
             "type": "object"
@@ -42799,6 +42781,9 @@
             "type": "object"
            },
            "type": "array"
+          },
+          "cant_act": {
+           "type": "string"
           },
           "character": {
            "properties": {

@@ -438,12 +438,17 @@ func handleCharacterDowntime(w http.ResponseWriter, r *http.Request) {
 	// Gold, progress and the inventory change together, so two requests at once can't pay twice or finish twice: one locked
 	// inventory change (inventory_2024.go) that also writes the gold and the progress.
 	var gold int
+	var money purse
 	var cp craftProgress
 	started, done := false, false
 	_, err := changeInventory(req.CharacterID, func(tx *sql.Tx, inv []invItem) ([]invItem, error) {
 		var progressRaw []byte
-		if err := tx.QueryRow(`SELECT COALESCE(gold, 0), COALESCE(training_progress, '{}') FROM characters WHERE id = $1`, req.CharacterID).
-			Scan(&gold, &progressRaw); err != nil {
+		if err := tx.QueryRow(`SELECT COALESCE(training_progress, '{}') FROM characters WHERE id = $1`, req.CharacterID).
+			Scan(&progressRaw); err != nil {
+			return nil, err
+		}
+		var err error
+		if money, err = readPurseIn(tx, req.CharacterID); err != nil {
 			return nil, err
 		}
 		progress := map[string]json.RawMessage{}
@@ -456,12 +461,13 @@ func handleCharacterDowntime(w http.ResponseWriter, r *http.Request) {
 			started = true
 		}
 		if !started {
-			if gold < plan.Materials {
+			paid, ok := money.pay(plan.Materials, "gp") // the purse owner: paid from the whole purse (money_2024.go)
+			if !ok {
 				return nil, refuseInv(http.StatusBadRequest, map[string]interface{}{"error": "insufficient_gold",
-					"message":   fmt.Sprintf("Crafting %s takes %d GP of raw materials (half its %s GP cost); you have %d GP.", plan.Item, plan.Materials, trimFloat(plan.CostGP), gold),
-					"gold_have": gold, "gold_need": plan.Materials})
+					"message":   fmt.Sprintf("Crafting %s takes %d GP of raw materials (half its %s GP cost); you have %s.", plan.Item, plan.Materials, trimFloat(plan.CostGP), money.text()),
+					"gold_have": money.total() / 100, "gold_need": plan.Materials})
 			}
-			gold -= plan.Materials
+			money = paid
 			cp = craftProgress{Item: plan.Item, Qty: plan.Qty, Tool: tool, DaysNeeded: plan.Days, Materials: plan.Materials}
 		}
 		cp.Days += req.Days * (1 + helpers)
@@ -478,9 +484,13 @@ func handleCharacterDowntime(w http.ResponseWriter, r *http.Request) {
 			progress[key] = v
 		}
 		progressOut, _ := json.Marshal(progress)
-		if _, err := tx.Exec(`UPDATE characters SET gold = $1, training_progress = $2 WHERE id = $3`, gold, progressOut, req.CharacterID); err != nil {
+		if _, err := tx.Exec(`UPDATE characters SET training_progress = $1 WHERE id = $2`, progressOut, req.CharacterID); err != nil {
 			return nil, err
 		}
+		if err := writePurseIn(tx, req.CharacterID, money); err != nil {
+			return nil, err
+		}
+		gold = money.GP
 		result := fmt.Sprintf("%d of %d days of work", min(cp.Days, cp.DaysNeeded), cp.DaysNeeded)
 		if done {
 			result = fmt.Sprintf("finished after %d days of work; the item is in the inventory (unsorted)", cp.DaysNeeded)
@@ -599,11 +609,16 @@ func scribeScroll(w http.ResponseWriter, charID int, spellRef string, days int) 
 
 	// gold, progress and the scroll in one locked inventory change (inventory_2024.go)
 	var gold int
+	var money purse
 	var cp craftProgress
 	started, done := false, false
 	_, err := changeInventory(charID, func(tx *sql.Tx, items []invItem) ([]invItem, error) {
 		var progressRaw []byte
-		if err := tx.QueryRow(`SELECT COALESCE(gold,0), COALESCE(training_progress,'{}') FROM characters WHERE id = $1`, charID).Scan(&gold, &progressRaw); err != nil {
+		if err := tx.QueryRow(`SELECT COALESCE(training_progress,'{}') FROM characters WHERE id = $1`, charID).Scan(&progressRaw); err != nil {
+			return nil, err
+		}
+		var err error
+		if money, err = readPurseIn(tx, charID); err != nil {
 			return nil, err
 		}
 		progress := map[string]json.RawMessage{}
@@ -616,11 +631,12 @@ func scribeScroll(w http.ResponseWriter, charID int, spellRef string, days int) 
 			started = true
 		}
 		if !started {
-			if gold < cost[1] {
+			paid, ok := money.pay(cost[1], "gp") // the purse owner (money_2024.go)
+			if !ok {
 				return nil, refuseInv(http.StatusBadRequest, map[string]interface{}{"error": "insufficient_gold",
-					"message": fmt.Sprintf("A Spell Scroll of a level %d spell costs %d GP to scribe; you have %d GP.", sp.Level, cost[1], gold)})
+					"message": fmt.Sprintf("A Spell Scroll of a level %d spell costs %d GP to scribe; you have %s.", sp.Level, cost[1], money.text())})
 			}
-			gold -= cost[1]
+			money = paid
 			cp = craftProgress{Item: "Spell Scroll (" + sp.Name + ")", Tool: "scribing", DaysNeeded: cost[0], Materials: cost[1]}
 		}
 		cp.Days += days
@@ -638,9 +654,13 @@ func scribeScroll(w http.ResponseWriter, charID int, spellRef string, days int) 
 			progress[key] = v
 		}
 		pOut, _ := json.Marshal(progress)
-		if _, err := tx.Exec(`UPDATE characters SET gold = $1, training_progress = $2 WHERE id = $3`, gold, pOut, charID); err != nil {
+		if _, err := tx.Exec(`UPDATE characters SET training_progress = $1 WHERE id = $2`, pOut, charID); err != nil {
 			return nil, err
 		}
+		if err := writePurseIn(tx, charID, money); err != nil {
+			return nil, err
+		}
+		gold = money.GP
 		return items, nil
 	})
 	if answerInvRefusal(w, err) {

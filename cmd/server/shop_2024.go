@@ -123,9 +123,8 @@ func walletCP(charID int) int { return walletCPIn(db, charID) }
 
 // walletCPIn: walletCP read through q; inside a transaction that has locked the character, the money it is about to change.
 func walletCPIn(q rowQuerier, charID int) int {
-	var gp, sp, cp, ep, pp int
-	q.QueryRow(`SELECT COALESCE(gold,0), COALESCE(silver,0), COALESCE(copper,0), COALESCE(electrum,0), COALESCE(platinum,0) FROM characters WHERE id = $1`, charID).Scan(&gp, &sp, &cp, &ep, &pp)
-	return pp*1000 + gp*100 + ep*50 + sp*10 + cp
+	p, _ := readPurseIn(q, charID) // the purse owner (money_2024.go)
+	return p.total()
 }
 
 func moneyText(cp int) string {
@@ -427,7 +426,7 @@ func completePurchase(charID, money, total int, kit []startItem, lines []string)
 		}
 		fillItemWeights(inv)
 		left = money - total
-		if _, err := tx.Exec(`UPDATE characters SET gold = $1, silver = $2, copper = $3, electrum = 0, platinum = 0 WHERE id = $4`, left/100, (left%100)/10, left%10, charID); err != nil {
+		if err := writePurseIn(tx, charID, purseOfCP(left)); err != nil {
 			return nil, err
 		}
 		return inv, nil

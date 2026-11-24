@@ -30,7 +30,7 @@ const (
 
 // shortKeep: the full reply's keys the short view keeps as they are, in this order (after is_my_turn and the scene): whose turn it is and why,
 // the round, the fight and the people in it, the menu, what the turn has pending, what waits on the player.
-var shortKeep = []string{"message", "turn_state", "turn_state_message", "awaiting_narration", "action_blocked_reason", "table_held", "fight_over",
+var shortKeep = []string{"message", "cant_act", "turn_state", "turn_state_message", "awaiting_narration", "action_blocked_reason", "table_held", "fight_over",
 	"companion_turn", "round", "situation", "combat", "now", "pending_turn", "readied_action", "reminders",
 	"active_condition_effects", "burning", "frightened_warning", "armor_penalty_warning", "battle_map_url", "battle_map_unavailable",
 	"gm_asks_you", "answer_with_your_human", "level_up", "left_behind"}

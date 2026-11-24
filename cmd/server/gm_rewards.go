@@ -420,7 +420,7 @@ func handleGMAwardXP(w http.ResponseWriter, r *http.Request) {
 
 // handleGMGold godoc
 // @Summary Award or deduct currency from characters
-// @Description GM adjusts currency for one or more characters. Use positive amount to award, negative to deduct. Supports all the coins of the SRD 5.2.1: cp (copper), sp (silver), ep (electrum), gp (gold, default), pp (platinum).
+// @Description GM adjusts currency for one or more characters. Use positive amount to award, negative to deduct. A deduction is a payment from the whole purse: the coin named pays it when it holds enough, otherwise the purse makes change (what is left is written as GP, SP and CP); a character who can't pay refuses the whole request (409 not_enough_money, nothing changed). Supports all the coins of the SRD 5.2.1: cp (copper), sp (silver), ep (electrum), gp (gold, default), pp (platinum).
 // @Tags GM
 // @Accept json
 // @Produce json
@@ -470,7 +470,7 @@ func handleGMGold(w http.ResponseWriter, r *http.Request) {
 	}
 
 	// Get currency column (defaults to gold)
-	column, abbrev, valid := getCurrencyColumn(req.Currency)
+	_, abbrev, valid := getCurrencyColumn(req.Currency)
 	if !valid {
 		w.WriteHeader(http.StatusBadRequest)
 		json.NewEncoder(w).Encode(map[string]interface{}{
@@ -480,55 +480,68 @@ func handleGMGold(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// Adjust currency for each character
+	// Adjust currency for each character: an award adds the coin; a deduction is a payment from the whole purse, which makes change when the
+	// coin named is short (the purse owner, money_2024.go: I-ALDEN-1). The whole request is one locked step: a character who can't pay
+	// refuses it and nothing changes for anyone.
 	results := []map[string]interface{}{}
-
-	for _, charID := range req.CharacterIDs {
-		var name string
-		var currentAmount int
-		err = db.QueryRow(fmt.Sprintf(`
-			SELECT name, COALESCE(%s, 0) FROM characters WHERE id = $1
-		`, column), charID).Scan(&name, &currentAmount)
-
-		if err != nil {
-			continue
+	var short []string
+	err = inTx(func(tx *sql.Tx) error {
+		results, short = results[:0], short[:0]
+		for _, charID := range req.CharacterIDs {
+			var name string
+			if err := tx.QueryRow(`SELECT name FROM characters WHERE id = $1`, charID).Scan(&name); err != nil {
+				if err == sql.ErrNoRows {
+					continue
+				}
+				return err
+			}
+			before, err := lockPurse(tx, charID)
+			if err != nil {
+				return err
+			}
+			after := before
+			if req.Amount > 0 {
+				*after.coin(abbrev) += req.Amount
+			} else if paid, ok := before.pay(-req.Amount, abbrev); ok {
+				after = paid
+			} else {
+				short = append(short, fmt.Sprintf("%s has %s", name, before.text()))
+				continue
+			}
+			if err := writePurseIn(tx, charID, after); err != nil {
+				return err
+			}
+			result := map[string]interface{}{
+				"character_id":   charID,
+				"character_name": name,
+				"currency":       abbrev,
+				"change":         req.Amount,
+				"previous":       *before.coin(abbrev),
+				"current":        *after.coin(abbrev),
+				"purse_before":   before.text(),
+				"purse_after":    after.text(),
+				"full_currency":  after.view(),
+			}
+			if abbrev == "gp" { // Backwards compatibility for gold
+				result["gold_change"] = req.Amount
+				result["previous_gold"] = before.GP
+				result["current_gold"] = after.GP
+			}
+			results = append(results, result)
 		}
-
-		newAmount := currentAmount + req.Amount
-		if newAmount < 0 {
-			newAmount = 0 // Don't allow negative currency
+		if len(short) > 0 {
+			return errPurseShort
 		}
-
-		_, err = db.Exec(fmt.Sprintf(`UPDATE characters SET %s = $1 WHERE id = $2`, column), newAmount, charID)
-		if err != nil {
-			continue
-		}
-
-		// Get full currency breakdown for result
-		var cp, sp, ep, gp, pp int
-		db.QueryRow(`SELECT COALESCE(copper,0), COALESCE(silver,0), COALESCE(electrum,0), COALESCE(gold,0), COALESCE(platinum,0) FROM characters WHERE id = $1`, charID).Scan(&cp, &sp, &ep, &gp, &pp)
-
-		result := map[string]interface{}{
-			"character_id":   charID,
-			"character_name": name,
-			"currency":       abbrev,
-			"change":         req.Amount,
-			"previous":       currentAmount,
-			"current":        newAmount,
-			"full_currency": map[string]interface{}{
-				"cp": cp, "sp": sp, "ep": ep, "gp": gp, "pp": pp,
-				"total_in_gp": float64(cp)/100 + float64(sp)/10 + float64(ep)/2 + float64(gp) + float64(pp)*10,
-			},
-		}
-
-		// Backwards compatibility for gold
-		if abbrev == "gp" {
-			result["gold_change"] = req.Amount
-			result["previous_gold"] = currentAmount
-			result["current_gold"] = newAmount
-		}
-
-		results = append(results, result)
+		return nil
+	})
+	if err == errPurseShort {
+		writeJSONStatus(w, http.StatusConflict, map[string]interface{}{"error": "not_enough_money",
+			"message": fmt.Sprintf("Can't take %d %s: %s. Nothing was changed for anyone.", -req.Amount, strings.ToUpper(abbrev), strings.Join(short, "; "))})
+		return
+	}
+	if err != nil {
+		writeDBWriteError(w, err, "the characters' money")
+		return
 	}
 
 	// Log currency change as an action

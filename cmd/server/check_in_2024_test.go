@@ -93,20 +93,21 @@ func TestRoundDeadline(t *testing.T) {
 func TestTurnNeedOf(t *testing.T) {
 	cases := []struct {
 		v      game.Vitals
-		uncon  bool
+		uncon  string
 		kind   string
 		reason string
 	}{
-		{game.Vitals{HP: 10, Max: 10}, false, needChoose, ""},
-		{game.Vitals{HP: 0, Max: 10}, true, needDeathSave, "dying"},
-		{game.Vitals{HP: 0, Max: 10, Failures: 2}, true, needDeathSave, "dying"},
-		{game.Vitals{HP: 0, Max: 10, Stable: true}, true, needNothing, "stable"},
-		{game.Vitals{HP: 0, Max: 10, Dead: true}, true, needNothing, "dead"},
-		{game.Vitals{HP: 7, Max: 10}, true, needNothing, "unconscious"},
+		{game.Vitals{HP: 10, Max: 10}, "", needChoose, ""},
+		{game.Vitals{HP: 0, Max: 10}, "unconscious", needDeathSave, "dying"},
+		{game.Vitals{HP: 0, Max: 10, Failures: 2}, "unconscious", needDeathSave, "dying"},
+		{game.Vitals{HP: 0, Max: 10, Stable: true}, "unconscious", needNothing, "stable"},
+		{game.Vitals{HP: 0, Max: 10, Dead: true}, "unconscious", needNothing, "dead"},
+		{game.Vitals{HP: 7, Max: 10}, "unconscious", needNothing, "unconscious"},
+		{game.Vitals{HP: 7, Max: 10}, "paralyzed", needNothing, "paralyzed"},
 	}
 	for _, c := range cases {
 		if got := turnNeedOf(c.v, c.uncon); got.Kind != c.kind || got.Why != c.reason {
-			t.Errorf("%+v unconscious=%v: %+v, want %s/%s", c.v, c.uncon, got, c.kind, c.reason)
+			t.Errorf("%+v can't act=%q: %+v, want %s/%s", c.v, c.uncon, got, c.kind, c.reason)
 		}
 	}
 }

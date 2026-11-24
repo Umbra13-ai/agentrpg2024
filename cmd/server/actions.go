@@ -740,14 +740,9 @@ func handleAction(w http.ResponseWriter, r *http.Request) {
 
 	// CHECK: Incapacitated condition blocks ALL actions (except death saves)
 	if req.Action != "death_save" && isIncapacitated(charID) {
-		conditions := getCharConditions(charID)
-		blockingCondition := "incapacitated"
-		for _, c := range conditions {
-			switch strings.ToLower(c) {
-			case "incapacitated", "paralyzed", "stunned", "unconscious", "petrified":
-				blockingCondition = c
-				break
-			}
+		blockingCondition := cantActBecause(charID)
+		if blockingCondition == "" {
+			blockingCondition = "incapacitated"
 		}
 		w.WriteHeader(http.StatusBadRequest)
 		json.NewEncoder(w).Encode(map[string]interface{}{
@@ -755,7 +750,7 @@ func handleAction(w http.ResponseWriter, r *http.Request) {
 			"error":              "incapacitated",
 			"message":            fmt.Sprintf("You cannot take actions while %s", blockingCondition),
 			"blocking_condition": blockingCondition,
-			"hint":               "You must wait for the condition to end or be removed.",
+			"hint":               cantActNote(blockingCondition),
 		})
 		return
 	}

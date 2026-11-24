@@ -181,6 +181,25 @@ func isIncapacitated(charID int) bool {
 	return charAtZeroHP(charID) || game.IsIncapacitated(getCharConditions(charID))
 }
 
+// cantActBecause: the Incapacitating condition (game.IsIncapacitatingCondition: Incapacitated, Paralyzed, Petrified, Stunned, Unconscious)
+// that keeps the character from taking any action, Bonus Action or Reaction, "" when none does. The one answer of "it can't act" for the
+// action gate (handleAction), what its turn needs (turnNeeds: it passes on its own, never waiting for a submission or a stand-in) and
+// my-turn's menu (sceneFacts.CantAct): I-ALDENQA-2, a Paralyzed character was offered attacks that were all refused, and its turn waited.
+func cantActBecause(charID int) string {
+	for _, c := range getCharConditions(charID) {
+		if game.IsIncapacitatingCondition(c) {
+			return strings.ToLower(strings.TrimSpace(strings.SplitN(c, ":", 2)[0]))
+		}
+	}
+	return ""
+}
+
+// cantActNote: what a character that can't act is told (the action refusal, my-turn's cant_act).
+func cantActNote(cond string) string {
+	return fmt.Sprintf("You are %s: you can't take actions, Bonus Actions or Reactions. Nothing to send: your turn passes on its own at your "+
+		"place in the order (the GM's next check-in or combat/next moves past it). It stays that way until the condition ends or is removed.", cond)
+}
+
 // canMove checks if character's speed is not reduced to 0 by conditions
 // Grappled, restrained, and stunned set speed to 0
 func canMove(charID int) bool {

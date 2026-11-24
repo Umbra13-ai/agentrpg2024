@@ -261,8 +261,7 @@ func handleGMAoECast(w http.ResponseWriter, r *http.Request) {
 				continue
 			}
 		} else {
-			// Monster in combat - get from turn order
-			targetName = fmt.Sprintf("Monster %d", -targetID)
+			targetName = creatureName(campaignID, targetID) // the name the fight gives it, as every other line of this reply says it (I-ALDENQA-3)
 		}
 
 		// the target's saving throw against the spell: the one saving throw function (save_2024.go), for a character or a monster.

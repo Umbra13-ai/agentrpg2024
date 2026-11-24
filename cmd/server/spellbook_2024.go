@@ -7,6 +7,7 @@ package main
 // After a Long Rest the Wizard can prepare it (POST /api/characters/{id}/prepare).
 
 import (
+	"database/sql"
 	"encoding/json"
 	"fmt"
 	"net/http"
@@ -40,9 +41,9 @@ func handleCopySpell2024(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	var class string
-	var level, gold int
+	var level int
 	var raw []byte
-	db.QueryRow(`SELECT COALESCE(class,''), level, COALESCE(gold,0), COALESCE(known_spells,'[]') FROM characters WHERE id = $1`, req.CharacterID).Scan(&class, &level, &gold, &raw)
+	db.QueryRow(`SELECT COALESCE(class,''), level, COALESCE(known_spells,'[]') FROM characters WHERE id = $1`, req.CharacterID).Scan(&class, &level, &raw)
 	wiz := classLevelsOf(req.CharacterID)["wizard"]
 	if wiz == 0 && strings.EqualFold(class, "wizard") {
 		wiz = level
@@ -90,17 +91,39 @@ func handleCopySpell2024(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	cost := 50 * sp.Level
-	if gold < cost {
-		writeJSONStatus(w, 409, map[string]interface{}{"error": "not_enough_gold", "message": fmt.Sprintf("Copying %s costs %d GP (50 per spell level); you have %d.", sp.Name, cost, gold)})
-		return
-	}
 	book = append(book, slug)
 	b, _ := json.Marshal(book)
-	db.Exec(`UPDATE characters SET known_spells = $1, gold = gold - $2 WHERE id = $3`, b, cost, req.CharacterID)
+	var left purse
+	short := ""
+	err := inTx(func(tx *sql.Tx) error { // paid from the whole purse, in one locked step with the book (money_2024.go)
+		p, err := lockPurse(tx, req.CharacterID)
+		if err != nil {
+			return err
+		}
+		paid, ok := p.pay(cost, "gp")
+		if !ok {
+			short = p.text()
+			return nil
+		}
+		left = paid
+		if err := writePurseIn(tx, req.CharacterID, paid); err != nil {
+			return err
+		}
+		_, err = tx.Exec(`UPDATE characters SET known_spells = $1 WHERE id = $2`, b, req.CharacterID)
+		return err
+	})
+	if err != nil {
+		writeDBWriteError(w, err, "the spellbook")
+		return
+	}
+	if short != "" {
+		writeJSONStatus(w, 409, map[string]interface{}{"error": "not_enough_gold", "message": fmt.Sprintf("Copying %s costs %d GP (50 per spell level); you have %s.", sp.Name, cost, short)})
+		return
+	}
 	copied, _ := json.Marshal(append(spellbookCopied(req.CharacterID), slug)) // paid for: not one of the free spellbook spells
 	db.Exec(`UPDATE characters SET spellbook_copied = $1 WHERE id = $2`, copied, req.CharacterID)
 	writeJSONStatus(w, 200, map[string]interface{}{
-		"success": true, "spell": sp.Name, "hours": 2 * sp.Level, "gold_spent": cost, "gold": gold - cost, "spellbook_size": len(book),
+		"success": true, "spell": sp.Name, "hours": 2 * sp.Level, "gold_spent": cost, "gold": left.GP, "spellbook_size": len(book),
 		"message": fmt.Sprintf("You spend %d hours and %d GP copying %s into your spellbook. You can prepare it after a Long Rest (POST /api/characters/%d/prepare).", 2*sp.Level, cost, sp.Name, req.CharacterID),
 	})
 }
