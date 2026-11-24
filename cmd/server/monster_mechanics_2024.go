@@ -90,6 +90,12 @@ var mechanicFits = map[string]struct {
 		}
 		return ""
 	}},
+	"effect": {"an action, Bonus Action or Legendary Action (not a trait or a Reaction)", func(group string, e srdMonsterEntry) string {
+		if group == "trait" || group == "reaction" {
+			return "attaches to an action, Bonus Action or Legendary Action"
+		}
+		return ""
+	}},
 	"options": {"an action, Bonus Action or Legendary Action that offers several named effects (\"Name. Text\" after a colon, as the SRD's rays are written)", func(group string, e srdMonsterEntry) string {
 		if group == "trait" || group == "reaction" || len(splitSaveOptions(rulesText(e))) < 2 {
 			return "attaches to an entry that offers two or more named effects, each written \"Name. Text\" after the entry's colon (preview it: the report names the effects it reads)"
@@ -274,6 +280,64 @@ var mechanicCatalog = []mechanicKind{
 			return fmt.Sprintf("takes %d %s damage when it starts its turn in %s", m.num("amount"), titleCase(m.str("damage_type")), light)
 		},
 	},
+	{
+		Kind: "obscuring_zone",
+		Does: "Using the entry fills an area with fog, smoke or a cloud that is Heavily (or Lightly) Obscured: a Sphere of radius size or a Cube of side size, " +
+			"centered on the monster (at self) or on the square the GM aims at (at point: monster_action's point). It lasts minutes, or until the GM ends it " +
+			"(POST /api/gm/obscured-area). Without a battle map, the creatures the action names are inside it. Anything else the entry does still runs.",
+		On:        "effect",
+		AppliedBy: "obscuringZone in resolveMonsterEffectText, through the obscured-area owner (startObscuredArea, obscured_areas_2024.go)",
+		Params: []mechanicParam{
+			{Name: "area", Type: "choice", Options: []string{"heavily_obscured", "lightly_obscured"}, Required: true, Does: "how much it blocks sight"},
+			{Name: "shape", Type: "choice", Options: []string{"sphere", "cube"}, Required: true, Does: "its shape"},
+			{Name: "size", Type: "number", Min: 5, Max: 300, Required: true, Does: "a Sphere's radius or a Cube's side, in feet (a multiple of 5)"},
+			{Name: "at", Type: "choice", Options: []string{"self", "point"}, Required: true, Does: "centered on the monster, or on the square the GM aims at"},
+			{Name: "minutes", Type: "number", Min: 1, Max: 1440, Does: "how long it lasts (without it: until the GM ends it)"},
+		},
+		Example: entryMechanic{"kind": "obscuring_zone", "area": "heavily_obscured", "shape": "sphere", "size": float64(15), "at": "point", "minutes": float64(1),
+			"covers": "Choking smoke fills a 15-foot-radius Sphere it can see for 1 minute; the area is Heavily Obscured."},
+		ExampleOn: "The smoker hurls a pot. Choking smoke fills a 15-foot-radius Sphere it can see for 1 minute; the area is Heavily Obscured.",
+		check: func(e srdMonsterEntry, m entryMechanic) string {
+			if m.num("size")%5 != 0 {
+				return "size must be a multiple of 5"
+			}
+			return ""
+		},
+		describe: func(m entryMechanic) string {
+			s := fmt.Sprintf("using it fills a %d-foot %s %s that is %s", m.num("size"), map[string]string{"sphere": "radius", "cube": "side"}[m.str("shape")],
+				titleCase(m.str("shape")), titleCase(strings.ReplaceAll(m.str("area"), "_", " ")))
+			if m.str("at") == "point" {
+				s += ", centered where the GM aims (point)"
+			} else {
+				s += ", centered on itself"
+			}
+			if n := m.num("minutes"); n > 0 {
+				return s + ", for " + minutesWords(n)
+			}
+			return s + ", until the GM ends it"
+		},
+	},
+	{
+		Kind: "no_healing_aura",
+		Does: "Creatures within feet of the monster (on the battle map) can't regain Hit Points while it is alive and in the fight. Without a battle map " +
+			"the server can't tell who is within reach, and the GM applies it.",
+		On:        "trait",
+		AppliedBy: "noHealingAuraOver in cantRegainHP (condition_lasting_effects_2024.go), asked by every heal of a character, monster or companion",
+		Params: []mechanicParam{
+			{Name: "feet", Type: "number", Min: 5, Max: 300, Required: true, Does: "how far it reaches, in feet (a multiple of 5)"},
+		},
+		Example:   entryMechanic{"kind": "no_healing_aura", "feet": float64(30), "covers": "No wound closes within 30 feet of the blightwood."},
+		ExampleOn: "No wound closes within 30 feet of the blightwood.",
+		check: func(e srdMonsterEntry, m entryMechanic) string {
+			if m.num("feet")%5 != 0 {
+				return "feet must be a multiple of 5"
+			}
+			return ""
+		},
+		describe: func(m entryMechanic) string {
+			return fmt.Sprintf("creatures within %d feet of it can't regain Hit Points", m.num("feet"))
+		},
+	},
 }
 
 // conditionTimeWords: a random_condition's time in the words of the SRD's riders (riderUntil, conditionDuration read them).
@@ -325,6 +389,71 @@ func mechanicHitMove(lobby, attacker int, desc string) (hitMove, bool) {
 	}
 	d := m.str("direction")
 	return hitMove{MaxSize: m.str("max_size"), Feet: m.num("feet"), Toward: d == "pull", GMPlaces: d == "gm_places"}, true
+}
+
+// obscuringZone: the obscuring_zone of the entry being used (as the monster takes the action): the area recorded by the obscured-area owner.
+// handled false when the entry has none.
+func obscuringZone(r *http.Request, lobbyID, monsterID int, meta *monsterMeta, entryName string, targets []int, apply bool) (string, bool) {
+	m, ok := entryMechanicIn(meta, entryName, "obscuring_zone")
+	if !ok {
+		return "", false
+	}
+	a := obscuredArea{Label: stripUsage(entryName), Heavy: m.str("area") == "heavily_obscured", Shape: m.str("shape"), Rounds: m.num("minutes") * 10}
+	a.Radius = m.num("size")
+	if a.Shape == "cube" {
+		a.Radius = m.num("size") / 2
+	}
+	var point *mapSquare
+	if v, ok := monsterAreaPoint.Load(lobbyID); ok && m.str("at") == "point" {
+		sq := v.(mapSquare)
+		point = &sq
+	}
+	centerOn := monsterID
+	if m.str("at") == "point" && point == nil && len(targets) > 0 {
+		centerOn = targets[0]
+	}
+	placeArea(lobbyID, monsterID, &a, point, centerOn, append([]int{monsterID}, targets...))
+	what := mechanicsView(srdMonsterEntry{Mechanics: []entryMechanic{m}})[0]["does"]
+	if !apply {
+		return fmt.Sprintf("%s: it would make an area (%s, %s). Nothing is established.", stripUsage(entryName), what, areaWhere(lobbyID, a)), true
+	}
+	if _, err := startObscuredArea(lobbyID, monsterID, a); err != nil {
+		return fmt.Sprintf("%s: the area could not be recorded; nothing is established. Try again.", stripUsage(entryName)), true
+	}
+	markExecuted(r) // the server established it: a limited use is counted (monster_day_uses.go)
+	return fmt.Sprintf("%s: the area is established (%s), %s; the GM ends it early with POST /api/gm/obscured-area {\"end\": true}.", stripUsage(entryName), what, areaWhere(lobbyID, a)), true
+}
+
+// noHealingAuraOver: the living monster of the fight whose no_healing_aura reaches the creature on the battle map ("" when none).
+func noHealingAuraOver(lobbyID, id int) string {
+	battle, ok := activeEncounterMap(lobbyID)
+	if !ok {
+		return ""
+	}
+	at, ok := battle.token(id)
+	if !ok {
+		return ""
+	}
+	for _, e := range combatEntries(lobbyID) {
+		mid := asInt(e["id"])
+		if mid >= 0 || mid == id || asInt(e["hp"]) <= 0 {
+			continue
+		}
+		meta := monsterMetaFor(sprintAny(e["monster_key"]))
+		if meta == nil {
+			continue
+		}
+		for _, t := range meta.Traits {
+			m, ok := t.mechanic("no_healing_aura")
+			if !ok {
+				continue
+			}
+			if origin, ok := battle.token(mid); ok && tokenDistanceFeet(origin, at) <= m.num("feet") {
+				return fmt.Sprintf("it is within %d feet of %s (%s)", m.num("feet"), creatureName(lobbyID, mid), t.Name)
+			}
+		}
+	}
+	return ""
 }
 
 // sortedDamageTypes: the damage types, in order (a choice's options).
@@ -404,17 +533,25 @@ func (e srdMonsterEntry) mechanic(kind string) (entryMechanic, bool) {
 	return nil, false
 }
 
-// entryMechanicIn: the mechanic of this kind attached to the stat block's entry of that name (its usage left aside).
-func entryMechanicIn(meta *monsterMeta, entryName, kind string) (entryMechanic, bool) {
+// metaEntry: the stat block's action, Bonus Action, Reaction or Legendary Action of that name (its usage left aside).
+func metaEntry(meta *monsterMeta, entryName string) (srdMonsterEntry, bool) {
 	if meta == nil {
-		return nil, false
+		return srdMonsterEntry{}, false
 	}
 	for _, g := range [][]srdMonsterEntry{meta.Actions, meta.BonusActions, meta.Reactions, meta.Legendary} {
 		for _, e := range g {
 			if game.Key(stripUsage(e.Name)) == game.Key(stripUsage(entryName)) {
-				return e.mechanic(kind)
+				return e, true
 			}
 		}
+	}
+	return srdMonsterEntry{}, false
+}
+
+// entryMechanicIn: the mechanic of this kind attached to the stat block's entry of that name.
+func entryMechanicIn(meta *monsterMeta, entryName, kind string) (entryMechanic, bool) {
+	if e, ok := metaEntry(meta, entryName); ok {
+		return e.mechanic(kind)
 	}
 	return nil, false
 }

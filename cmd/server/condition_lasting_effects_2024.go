@@ -273,6 +273,9 @@ func cantRegainHP(lobbyID, id int) (bool, string) {
 			return true, spellEffectText["no_regain"]
 		}
 	}
+	if why := noHealingAuraOver(lobbyID, id); why != "" { // a monster's no_healing_aura (monster_mechanics_2024.go)
+		return true, why
+	}
 	return false, ""
 }
 

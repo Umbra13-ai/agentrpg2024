@@ -1766,8 +1766,17 @@ func resolveMonsterEffectText(r *http.Request, lobbyID, monsterID int, meta *mon
 	var lines []string
 	var notes []string
 	if depth == 0 {
+		if e, ok := metaEntry(meta, entryName); ok && len(e.Mechanics) > 0 {
+			text = rulesText(e) // the words its attached mechanics cover are theirs (monster_mechanics_2024.go)
+		}
 		if note := grantSpecialMove(lobbyID, monsterID, entryName, text, apply); note != "" { // the entry's own move (creature_movement_2024.go)
 			notes = append(notes, note)
+		}
+		if line, ok := obscuringZone(r, lobbyID, monsterID, meta, entryName, targets, apply); ok { // an attached obscuring_zone
+			notes = append(notes, line)
+		}
+		if strings.TrimSpace(text) == "" { // every word is an attached mechanic's: nothing is left for the text rules
+			return append([]string{fmt.Sprintf("%s uses %s.", name, entryName)}, notes...)
 		}
 	}
 	// one action that offers several saving throw effects ("one of the following rays", "at random"): the GM names the one that happened

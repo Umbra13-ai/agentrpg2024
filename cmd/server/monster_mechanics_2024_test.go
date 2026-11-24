@@ -598,3 +598,75 @@ func TestPostgresLightMechanicsInPlay(t *testing.T) {
 		t.Errorf("the GM's trait view: %s", b)
 	}
 }
+
+const (
+	smokeText  = "The smoker hurls a pot. Choking smoke fills a 15-foot-radius Sphere it can see for 1 minute; the area is Heavily Obscured."
+	blightText = "No wound closes within 30 feet of the blightwood."
+)
+
+// TestZoneMechanicProblems: the effect and trait fits of the two zone kinds and their checks.
+func TestZoneMechanicProblems(t *testing.T) {
+	cases := []struct{ group, mechanics, want string }{
+		{"action", `[{"kind":"obscuring_zone","area":"heavily_obscured","shape":"cube","size":20,"at":"self"}]`, ""},
+		{"bonus", `[{"kind":"obscuring_zone","area":"lightly_obscured","shape":"sphere","size":10,"at":"point","minutes":10}]`, ""},
+		{"trait", `[{"kind":"obscuring_zone","area":"heavily_obscured","shape":"cube","size":20,"at":"self"}]`, "attaches to an action, Bonus Action or Legendary Action"},
+		{"reaction", `[{"kind":"obscuring_zone","area":"heavily_obscured","shape":"cube","size":20,"at":"self"}]`, "attaches to an action, Bonus Action or Legendary Action"},
+		{"action", `[{"kind":"obscuring_zone","area":"heavily_obscured","shape":"cone","size":20,"at":"self"}]`, "shape must be one of sphere, cube"},
+		{"action", `[{"kind":"obscuring_zone","area":"heavily_obscured","shape":"cube","size":22,"at":"self"}]`, "size must be a multiple of 5"},
+		{"trait", `[{"kind":"no_healing_aura","feet":30}]`, ""},
+		{"action", `[{"kind":"no_healing_aura","feet":30}]`, "attaches to a trait"},
+		{"trait", `[{"kind":"no_healing_aura","feet":33}]`, "feet must be a multiple of 5"},
+	}
+	for _, c := range cases {
+		got := mechanicProblem(c.group, srdMonsterEntry{Name: "x", Text: smokeText, Mechanics: mechanicsFromJSON(t, c.mechanics)})
+		if (c.want == "") != (got == "") || !strings.Contains(got, c.want) {
+			t.Errorf("%s %s: got %q, want %q", c.group, c.mechanics, got, c.want)
+		}
+	}
+}
+
+// TestPostgresZoneMechanicsInPlay: the smoke at the square the GM aims at, as the obscured-area owner records it; no healing within
+// 30 feet of the blightwood on the battle map (the heal owner refuses it), and healing again once the creature is beyond it.
+func TestPostgresZoneMechanicsInPlay(t *testing.T) {
+	testPostgres(t)
+	smoke := srdMonsterEntry{Name: "Smoke Pot (1/Day)", Text: smokeText, Mechanics: []entryMechanic{{"kind": "obscuring_zone", "area": "heavily_obscured", "shape": "sphere",
+		"size": float64(15), "at": "point", "minutes": float64(1), "covers": smokeText}}}
+	gm, _, camp, hero, blight := earlyRulesFixture(t, "Test Blightwood", []srdMonsterEntry{smoke})
+	entry, _, _ := monsterCombatant(camp, blight)
+	key := fmt.Sprint(entry["monster_key"])
+	pgExec(t, `UPDATE custom_monsters SET definition = jsonb_set(definition, '{traits}', $2::jsonb) WHERE key=$1`, key,
+		`[{"name": "Blight", "text": "`+blightText+`", "mechanics": [{"kind": "no_healing_aura", "feet": 30, "covers": "`+blightText+`"}]}]`)
+	cp := fmt.Sprintf("/api/campaigns/%d", camp)
+	putMap := func(heroAt int) {
+		t.Helper()
+		_, state := pgCall(t, "GET", cp+"/battle-map", gm, nil)
+		req := map[string]interface{}{"map": encounterMap{Grid: []string{"..........", "..........", ".........."}, Tokens: []mapToken{
+			{ID: blight, Name: "blight", Position: mapSquare{0, 0}, Size: 1}, {ID: hero, Name: "hero", Position: mapSquare{heroAt, 0}, Size: 1}}}, "forced_movement": true}
+		if rev, ok := state["revision"].(string); ok {
+			req["confirmation"] = rev
+		}
+		if c, r := pgCall(t, "PUT", cp+"/battle-map", gm, req); c != 200 {
+			t.Fatalf("put map: %d %v", c, r)
+		}
+	}
+	putMap(2) // 10 feet away
+	c, r := pgCall(t, "POST", "/api/gm/narrate", gm, map[string]interface{}{"campaign_id": camp, "narration": "x",
+		"monster_action": map[string]interface{}{"monster": fmt.Sprintf("#%d", blight), "action": "Smoke Pot", "point": []int{5, 1}}})
+	line := fmt.Sprint(r["monster_action_result"])
+	areas := obscuredAreas(camp)
+	if c != 200 || len(areas) != 1 || !areas[0].Heavy || areas[0].Radius != 15 || areas[0].Center != (mapSquare{5, 1}) || areas[0].Rounds != 10 ||
+		!strings.Contains(line, "the area is established") || strings.Contains(line, "GM resolves") {
+		t.Fatalf("Smoke Pot: %d %+v %s", c, areas, line)
+	}
+	pgExec(t, `UPDATE characters SET hp=10, max_hp=100 WHERE id=$1`, hero)
+	if cant, why := cantRegainHP(camp, hero); !cant || !strings.Contains(why, "within 30 feet") {
+		t.Fatalf("within 30 feet: %v %q", cant, why)
+	}
+	if h, _ := healHP(hero, 20); h.After.HP != 10 {
+		t.Errorf("a heal within the aura: %+v", h)
+	}
+	putMap(8) // 40 feet away
+	if h, _ := healHP(hero, 20); h.After.HP != 30 {
+		t.Errorf("a heal beyond the aura: %+v", h)
+	}
+}
