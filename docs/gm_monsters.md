@@ -95,8 +95,8 @@ Legendary Actions
 | `read_notes` | What the reader could not read or changed (a missing AC or HP, a size of two, text outside any section). |
 | `notes` | What the server filled in (a saving throw you left out; an initiative left out is the Dexterity modifier). |
 | `warnings` | What it will count as 0 or apply by a trait's name alone: Legendary Action uses it cannot read, Legendary Resistance uses, an SRD trait name (Magic Resistance, Evasion) whose text it does not read, a save below the modifier, an empty Speed. |
-| `entries[].applied` | Sentences a rule of the server reads, with the rule's name. |
-| `entries[].gm_resolves` | Sentences you resolve in play. `silent: true` means the server will not even mention it in its replies, so write it down. |
+| `entries[].applied` | Sentences a rule of the server reads, with the rule's name; for a trait the server applies, `server_does` says what it does in play. |
+| `entries[].gm_resolves` | Sentences you resolve in play. `silent: true` means the server will not even mention it in its replies, so write it down. `suggest_mechanics` lists the attached mechanics whose wording the sentence resembles (each `kind` with what it does): a suggestion only, read the kind in `GET /api/gm/compendium/mechanics` and attach it if it fits. |
 | `summary` | The counts of all three. |
 
 ## Wording the server reads
@@ -219,6 +219,7 @@ Every mechanic that does something to a hit's or a failed save's target (`drop_t
 
 - **Its turn.** `POST /api/gm/narrate` with `monster_action`, as for any monster: `{"campaign_id": 42, "narration": "...", "monster_action": {"monster": "Warden A", "action": "Slam", "target": "12"}}`. The server rolls what it reads and tells you what it did not. A choice the entry offers (a damage type, one of several effects) goes in `use`; `"apply_damage": false` only rolls and reports.
 - **What is yours.** A sentence in `gm_resolves` comes back in the reply as `[GM, not applied automatically: ...]`. When its words say it lasts ("until the end of its next turn", "for 1 minute", "until it dies"), the server also lists it as an open item (`GET /api/gm/open-items`) until you resolve it (`DELETE /api/gm/open-items`). A trait that acts every turn or on a trigger is listed as soon as the monster joins the fight.
+- **A trait that acts on its death** (a monster that explodes when it dies) is resolved as soon as the request that killed the monster has finished, before its reply is sent: the reply carries what it did in `after_this_request` (your whole line; a player who dealt the blow reads the player's line). Without a battle map holding the monster's token, nothing is rolled and the line says so.
 - **What you see.** The GM's view of the fight (`GET /api/campaigns/{id}/combat`) carries each monster's `stat_block`: its numbers, traits, and `entry_rules`, the same verdict as the preview for every entry (traits, actions, Bonus Actions, Reactions, Legendary Actions).
 - **Legendary Actions, Recharge, uses per day.** They follow the SRD rules whenever the entry is worded as in the table: take a Legendary Action with `POST /api/gm/legendary-action`, and an action named `(Recharge 5-6)` or `(2/Day)` is counted by the server when the server carries it out (an attack rolled, a saving throw applied). An entry the server only hands to you to resolve is not counted: its reply says "Not counted as a day use" and gives the request that counts it (`POST /api/gm/monster-features` with `day_uses`), so count it when it happens and refuse the second use yourself until then.
 - **Players** see the monster by its name only, as for an SRD monster, with its token on the campaign's encounter stage (a placeholder icon until you give it one: below).
