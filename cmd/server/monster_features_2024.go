@@ -24,7 +24,8 @@ package main
 //     condition "until the start of its next turn" ends then; a success that gives immunity lasts for the rest of the fight.
 //   - at the end of the monster's own turn: "each creature in a N-foot Emanation ... takes D damage" (Balor, Fire Elemental with
 //     Burning, Remorhaz, Azer Sentinel, Salamander).
-//   - Aura of Authority (Hobgoblin Captain): it and its allies within 10 feet have Advantage on attack rolls and saving throws.
+//   - Aura of Authority (Hobgoblin Captain): it and its allies within 10 feet have Advantage on attack rolls and saving throws (allyAuraFor,
+//     which also reads a GM's attached ally_aura).
 //   Who is in an aura: with a battle map, the distance; without one, an aura of 10 feet or less reaches characters in melee range
 //   and a larger one every character in the fight. Auras affect characters (the party), not the monster's allies. The GM can switch
 //   a monster's auras off (gm/monster-features {"auras": false}).
@@ -38,6 +39,7 @@ import (
 	"log"
 	"net/http"
 	"regexp"
+	"slices"
 	"strconv"
 	"strings"
 	"sync"
@@ -802,31 +804,74 @@ func inMonsterAura(lobbyID, monsterID, charID, feet int) bool {
 	return true
 }
 
-// auraOfAuthority: a Hobgoblin Captain's Aura of Authority gives the monster Advantage on attack rolls and saving throws.
-func auraOfAuthority(lobbyID, monsterID int) bool {
+// allyAuraFor: the name of the aura that gives this monster of the fight what gives says now ("" when none): "advantage" (Advantage on attack
+// rolls and saving throws) or "immunity" to cond. The auras are the SRD's Aura of Authority (Hobgoblin Captain: it and its allies within 10
+// feet) and a GM's attached ally_aura (monster_mechanics_2024.go: its radius, the allies' creature types, itself left out or not). An aura's
+// monster is in the fight, above 0 Hit Points, its auras on and not Incapacitated; without a battle map every ally is in reach. Its allies
+// are the other monsters of the fight; an aura "of its choice" reaches every one, and the GM leaves one out by ending the effect.
+func allyAuraFor(lobbyID, monsterID int, gives, cond string) string {
 	if monsterID >= 0 {
-		return false
+		return ""
 	}
 	mp, hasMap := activeEncounterMap(lobbyID)
+	var targetType []string
 	for _, e := range combatEntries(lobbyID) {
 		cid := asInt(e["id"])
 		meta := monsterMetaFor(sprintAny(e["monster_key"]))
 		if cid >= 0 || meta == nil || asInt(e["hp"]) <= 0 || loadMonsterState(lobbyID, cid).AurasOff {
 			continue
 		}
-		if !metaHasTrait(meta, "Aura of Authority") || monsterIncapacitated(lobbyID, cid) {
-			continue
-		}
-		if cid == monsterID || !hasMap {
-			return true
-		}
-		a, ok1 := mp.token(cid)
-		b, ok2 := mp.token(monsterID)
-		if ok1 && ok2 && tokenDistanceFeet(a, b) <= 10 {
-			return true
+		for _, a := range allyAurasOf(meta) {
+			if a.gives != gives || (gives == "immunity" && !slices.Contains(a.conditions, cond)) || (a.excludesSelf && cid == monsterID) {
+				continue
+			}
+			if monsterIncapacitated(lobbyID, cid) {
+				continue
+			}
+			if len(a.types) > 0 {
+				if targetType == nil {
+					targetType = append(creatureTypeWords(creatureTypeOf(lobbyID, monsterID)), "")
+				}
+				if !slices.ContainsFunc(a.types, func(t string) bool { return slices.Contains(targetType, t) }) {
+					continue
+				}
+			}
+			if cid == monsterID || !hasMap {
+				return a.name
+			}
+			x, ok1 := mp.token(cid)
+			y, ok2 := mp.token(monsterID)
+			if ok1 && ok2 && tokenDistanceFeet(x, y) <= a.radius {
+				return a.name
+			}
 		}
 	}
-	return false
+	return ""
+}
+
+// allyAura is one aura a stat block gives its allies (allyAuraFor).
+type allyAura struct {
+	name         string
+	gives        string   // "advantage" or "immunity"
+	conditions   []string // the conditions of an immunity
+	radius       int
+	types        []string // only allies of these creature types (empty: every ally)
+	excludesSelf bool
+}
+
+// allyAurasOf: the stat block's ally auras: the SRD's Aura of Authority and its traits' attached ally_aura mechanics.
+func allyAurasOf(meta *monsterMeta) []allyAura {
+	var out []allyAura
+	if metaHasTrait(meta, "Aura of Authority") {
+		out = append(out, allyAura{name: "Aura of Authority", gives: "advantage", radius: 10})
+	}
+	for _, t := range meta.Traits {
+		if m, ok := t.mechanic("ally_aura"); ok {
+			out = append(out, allyAura{name: t.Name, gives: m.str("gives"), conditions: m.list("conditions"), radius: m.num("radius"),
+				types: m.list("ally_types"), excludesSelf: m["excludes_self"] == true})
+		}
+	}
+	return out
 }
 
 // regeneratesFromZero: the stat block's Regeneration says it dies only if it starts its turn at 0 Hit Points and doesn't regenerate.

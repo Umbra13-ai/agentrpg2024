@@ -1773,6 +1773,15 @@ func resolveMonsterEffectText(r *http.Request, lobbyID, monsterID int, meta *mon
 		if e, ok := metaEntry(meta, entryName); ok && len(e.Mechanics) > 0 {
 			text = rulesText(e) // the words its attached mechanics cover are theirs (monster_mechanics_2024.go)
 		}
+		if line, blocked, ok := allyGrant(lobbyID, monsterID, meta, entryName, targets, apply); ok { // an attached ally_grant: before anything else, so a refusal changes nothing
+			if blocked {
+				return blockedBeforeRoll(r, line)
+			}
+			notes = append(notes, line)
+			if apply {
+				markExecuted(r)
+			}
+		}
 		if note := grantSpecialMove(lobbyID, monsterID, entryName, text, apply); note != "" { // the entry's own move (creature_movement_2024.go)
 			notes = append(notes, note)
 		}

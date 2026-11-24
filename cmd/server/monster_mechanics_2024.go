@@ -19,6 +19,7 @@ import (
 	"fmt"
 	"net/http"
 	"regexp"
+	"slices"
 	"sort"
 	"strings"
 
@@ -32,7 +33,8 @@ type entryMechanic map[string]interface{}
 type mechanicParam struct {
 	Name string // the field name
 	Type string // "choice" (one of Options), "condition" (a rules condition), "number" (Min to Max), "text" (up to MaxLen bytes),
-	// "flag" (true or false), "dice" (NdM), "damage_types" (a list of Min or more damage types), "conditions" (a list of Min or more rules conditions), "entry_options" (a list
+	// "flag" (true or false), "dice" (NdM), "damage_types" (a list of Min or more damage types), "conditions" (a list of Min or more rules conditions),
+	// "creature_types" (a list of Min or more creature types), "entry_options" (a list
 	// naming each effect the entry offers once)
 	Options  []string // a choice's values
 	Min, Max int      // a number's range
@@ -49,11 +51,13 @@ type mechanicKind struct {
 	Does      string
 	On        string // the entries it attaches to: a key of mechanicFits
 	AppliedBy string // the owner that applies it
-	Params    []mechanicParam
-	Example   entryMechanic
-	ExampleOn string                                          // an invented entry's text the example attaches to
-	describe  func(m entryMechanic) string                    // what this attached mechanic does, in the GM's words
-	check     func(e srdMonsterEntry, m entryMechanic) string // a check of the entry this mechanic needs besides its parameters
+	// TargetGate: a rider kind (what a hit or a failed save does to its target): it takes targetGateParams, which mechanicTargetGate reads
+	TargetGate bool
+	Params     []mechanicParam
+	Example    entryMechanic
+	ExampleOn  string                                          // an invented entry's text the example attaches to
+	describe   func(m entryMechanic) string                    // what this attached mechanic does, in the GM's words
+	check      func(e srdMonsterEntry, m entryMechanic) string // a check of the entry this mechanic needs besides its parameters
 }
 
 // mechanicCoversLen bounds covers; maxEntryMechanics the mechanics of one entry.
@@ -124,7 +128,8 @@ var mechanicFits = map[string]struct {
 
 var mechanicCatalog = []mechanicKind{
 	{
-		Kind: "drop_to_zero",
+		Kind:       "drop_to_zero",
+		TargetGate: true,
 		Does: "When a hit of this attack reduces its target to 0 Hit Points, the target dies (result dies) or becomes Stable (result stable), " +
 			"optionally with a condition for a time and a second condition while the first lasts. A monster or companion at 0 Hit Points is " +
 			"already out of the fight; Stable keeps it alive at 0 for the GM.",
@@ -203,7 +208,8 @@ var mechanicCatalog = []mechanicKind{
 		},
 	},
 	{
-		Kind: "random_condition",
+		Kind:       "random_condition",
+		TargetGate: true,
 		Does: "A hit of this attack gives its target one condition the server rolls from conditions (a die with one face for each, in the list's order), " +
 			"for the time until says: until the end of the target's next turn, until the start or the end of the attacker's next turn, or for minutes. " +
 			"It is given as the SRD's own condition riders are, so the target's Immunity and the condition's end are honored.",
@@ -229,7 +235,8 @@ var mechanicCatalog = []mechanicKind{
 		},
 	},
 	{
-		Kind: "forced_move",
+		Kind:       "forced_move",
+		TargetGate: true,
 		Does: "A hit of this attack moves its target up to feet: pushed straight away from the attacker (push), pulled straight toward it (pull), or " +
 			"moved some other way the GM places (gm_places), only for a target of max_size or smaller when it is set. On the battle map the server moves " +
 			"the token as the SRD's own pushes are moved; without a map the GM places it.",
@@ -357,7 +364,8 @@ var mechanicCatalog = []mechanicKind{
 		},
 	},
 	{
-		Kind: "curse",
+		Kind:       "curse",
+		TargetGate: true,
 		Does: "A hit of this attack curses its target, as the SRD's curses are kept: a cursed record that a Remove Curse or Greater Restoration ends, " +
 			"and that lasts hours (or, without them, until a spell ends it). While cursed the target can't regain Hit Points (no_regain), gains no " +
 			"benefit from Short or Long Rests (no_rest_benefit), loses max_hp_loss (dice) from its Hit Point maximum every 24 hours of the story " +
@@ -398,7 +406,8 @@ var mechanicCatalog = []mechanicKind{
 		},
 	},
 	{
-		Kind: "engulf",
+		Kind:       "engulf",
+		TargetGate: true,
 		Does: "A creature that fails this entry's saving throw is engulfed, held or buried: it has the Restrained condition, the also conditions while " +
 			"Restrained, and damage (dice of damage_type) at the start of each of its turns while Restrained. It, or a creature within 5 feet of it, " +
 			"can take an action to make the escape_skill check against escape_dc (POST /api/conditions/escape), ending all of it on a success.",
@@ -431,7 +440,8 @@ var mechanicCatalog = []mechanicKind{
 		},
 	},
 	{
-		Kind: "max_hp_drain",
+		Kind:       "max_hp_drain",
+		TargetGate: true,
 		Does: "A hit of this attack lowers its target's Hit Point maximum by the damage it took (or only the damage of damage_type), as the SRD's Life Drain " +
 			"does: the maximum returns with a Long Rest, and a creature whose maximum falls to 0 dies.",
 		On:        "attack",
@@ -467,7 +477,8 @@ var mechanicCatalog = []mechanicKind{
 		},
 	},
 	{
-		Kind: "condition_on_hit",
+		Kind:       "condition_on_hit",
+		TargetGate: true,
 		Does: "A hit of this attack gives its target the conditions, for the time until says (until the end of the target's next turn, until the start or the " +
 			"end of the attacker's next turn, or minutes); ends_on_damage true ends them when the target takes damage; max_size gives them only to a target " +
 			"of that size or smaller. They are given as the SRD's own riders are (Immunity, the condition's end).",
@@ -502,7 +513,8 @@ var mechanicCatalog = []mechanicKind{
 		},
 	},
 	{
-		Kind: "roll_rider",
+		Kind:       "roll_rider",
+		TargetGate: true,
 		Does: "A hit of this attack changes rolls for a time, as the SRD's riders do: the next attack roll against the target has Advantage (exposed), the " +
 			"target has Disadvantage on attack rolls (or attack rolls and ability checks, or its next attack roll), the target can't take Reactions, or the " +
 			"attacker has Advantage on its next attack roll this turn (self_advantage_next_attack); until says how long.",
@@ -568,7 +580,8 @@ var mechanicCatalog = []mechanicKind{
 		},
 	},
 	{
-		Kind: "burning",
+		Kind:       "burning",
+		TargetGate: true,
 		Does: "The target starts burning on a hit of this attack, or on a failed saving throw of this entry: the SRD's Burning hazard (1d4 Fire damage at " +
 			"the start of each of its turns, until it takes an action and the Prone condition to put the fire out, or the GM ends it).",
 		On:        "hit_or_save",
@@ -578,7 +591,8 @@ var mechanicCatalog = []mechanicKind{
 		describe:  func(m entryMechanic) string { return "the target starts burning (a hit, or a failed save)" },
 	},
 	{
-		Kind: "grapple",
+		Kind:       "grapple",
+		TargetGate: true,
 		Does: "A hit of this attack gives its target the Grappled condition with an escape DC, as the SRD's grapples are kept (only a target of max_size or " +
 			"smaller, when set); restrained true also gives it the Restrained condition until the grapple ends. The escape, the holder's grapples and " +
 			"their end are the condition owner's.",
@@ -601,6 +615,120 @@ var mechanicCatalog = []mechanicKind{
 				s += ", Restrained until the grapple ends"
 			}
 			return s + noteWords(m)
+		},
+	},
+	{
+		Kind: "extra_damage",
+		Does: "A hit of this attack deals more damage (damage dice of damage_type, doubled on a Critical Hit as the hit's other dice) when a condition " +
+			"the server judges holds: when advantage, only if the attack roll had Advantage (the SRD's \"plus ... if the attack roll had Advantage\"); " +
+			"when charge, only if the monster moved at least feet straight toward the target immediately before the hit (the SRD's charge: read " +
+			"from the battle map, or the monster_action's charged without one).",
+		On:        "attack",
+		AppliedBy: "the attack damage owner on every hit route and in a Multiattack: entryActionRow writes the SRD's sentence into the play row (extraDamageWords), read by parseMonsterAttack's extras or the charge owner (hitChargeDesc)",
+		Params: []mechanicParam{
+			{Name: "when", Type: "choice", Options: []string{"advantage", "charge"}, Required: true, Does: "what the extra damage needs: Advantage on the attack roll, or a charge"},
+			{Name: "damage", Type: "dice", Required: true, Does: "the extra damage's dice"},
+			{Name: "damage_type", Type: "choice", Options: sortedDamageTypes(), Required: true, Does: "its damage type"},
+			{Name: "feet", Type: "number", Min: 5, Max: 120, Only: "when=charge", Does: "how far the monster moves straight toward the target first (required for a charge)"},
+		},
+		Example:   entryMechanic{"kind": "extra_damage", "when": "advantage", "damage": "3d6", "damage_type": "piercing", "covers": "The blade finds the gaps an unwary foe leaves."},
+		ExampleOn: "Melee Attack Roll: +5, reach 5 ft. Hit: 6 (1d6 + 3) Piercing damage. The blade finds the gaps an unwary foe leaves.",
+		check: func(e srdMonsterEntry, m entryMechanic) string {
+			if m.str("when") == "charge" && m.num("feet") == 0 {
+				return "a charge needs feet: how far the monster moves straight toward the target first"
+			}
+			if hitDamageText(rulesText(e)) == "" {
+				return "the Hit deals no damage amount to add to"
+			}
+			return ""
+		},
+		describe: func(m entryMechanic) string {
+			s := fmt.Sprintf("a hit deals %s more %s damage", m.str("damage"), titleCase(m.str("damage_type")))
+			if m.str("when") == "charge" {
+				return s + fmt.Sprintf(" if the monster moved %d+ feet straight toward the target right before it", m.num("feet"))
+			}
+			return s + " if the attack roll had Advantage"
+		},
+	},
+	{
+		Kind: "ally_aura",
+		Does: "The creature's allies (the other monsters of the fight; itself too unless excludes_self) within radius feet have Advantage on attack rolls " +
+			"and saving throws (gives advantage, as the SRD's Aura of Authority), or Immunity to the conditions (gives immunity), while it isn't " +
+			"Incapacitated and has Hit Points; ally_types limits it to allies of those creature types. Without a battle map every ally is in reach.",
+		On:        "trait",
+		AppliedBy: "allyAuraFor (monster_features_2024.go): a row of attackSources and saveSources, and of conditionImmunities (addCondition)",
+		Params: []mechanicParam{
+			{Name: "gives", Type: "choice", Options: []string{"advantage", "immunity"}, Required: true, Does: "Advantage on attack rolls and saving throws, or Immunity to conditions"},
+			{Name: "radius", Type: "number", Min: 5, Max: 300, Required: true, Does: "how far it reaches, in feet"},
+			{Name: "conditions", Type: "conditions", Min: 1, Only: "gives=immunity", Does: "the conditions its allies are immune to (required for immunity)"},
+			{Name: "ally_types", Type: "creature_types", Min: 1, Does: "only allies of these creature types (Undead)"},
+			{Name: "excludes_self", Type: "flag", Does: "true: the creature itself doesn't have it"},
+		},
+		Example: entryMechanic{"kind": "ally_aura", "gives": "advantage", "radius": float64(30), "ally_types": []interface{}{"undead"}, "excludes_self": true,
+			"covers": "The lich-lord's dead servants fight with unnatural purpose near it."},
+		ExampleOn: "The lich-lord's dead servants fight with unnatural purpose near it.",
+		check: func(e srdMonsterEntry, m entryMechanic) string {
+			if m.str("gives") == "immunity" && len(m.list("conditions")) == 0 {
+				return "gives immunity needs conditions"
+			}
+			return ""
+		},
+		describe: func(m entryMechanic) string {
+			who := "it and its allies"
+			if m["excludes_self"] == true {
+				who = "its allies"
+			}
+			if t := m.list("ally_types"); len(t) > 0 {
+				names := make([]string, len(t))
+				for i, x := range t {
+					names[i] = titleCase(x)
+				}
+				who = strings.Replace(who, "allies", strings.Join(names, " or ")+" allies", 1)
+			}
+			s := fmt.Sprintf("%s within %d feet have ", who, m.num("radius"))
+			if m.str("gives") == "immunity" {
+				return s + "Immunity to " + strings.Join(m.list("conditions"), " and ") + " (not while it is Incapacitated)"
+			}
+			return s + "Advantage on attack rolls and saving throws (not while it is Incapacitated)"
+		},
+	},
+	{
+		Kind: "ally_grant",
+		Does: "Using the entry gives its allies Advantage until the start (or end) of the monster's next turn: on attack rolls and saving throws (gives " +
+			"attacks_and_saves) or on every D20 Test (d20_tests). The allies are the ones the GM names in target_ids (the monster's allies within radius), " +
+			"else every ally within radius (every ally without a battle map); with count, the GM names them when more are in reach. includes_self adds " +
+			"the monster; temp_hp gives it Temporary Hit Points.",
+		On:        "effect",
+		AppliedBy: "allyGrant at the start of resolveMonsterEffectText: the markers adv_attacks, adv_saves and adv_checks (rows of attackSources, saveSources and checkCtx.sources), timed by the rider duration owner",
+		Params: []mechanicParam{
+			{Name: "gives", Type: "choice", Options: []string{"attacks_and_saves", "d20_tests"}, Required: true, Does: "what has Advantage"},
+			{Name: "until", Type: "choice", Options: []string{"start_of_its_next_turn", "end_of_its_next_turn"}, Required: true, Does: "when it ends: the monster's next turn"},
+			{Name: "radius", Type: "number", Min: 5, Max: 300, Required: true, Does: "how far its allies may be, in feet"},
+			{Name: "count", Type: "number", Min: 1, Max: 20, Does: "at most this many allies (the GM names them when more are in reach)"},
+			{Name: "ally_types", Type: "creature_types", Min: 1, Does: "only allies of these creature types"},
+			{Name: "includes_self", Type: "flag", Does: "true: the monster has it too"},
+			{Name: "temp_hp", Type: "number", Min: 1, Max: 500, Does: "Temporary Hit Points the monster gains"},
+		},
+		Example: entryMechanic{"kind": "ally_grant", "gives": "attacks_and_saves", "until": "start_of_its_next_turn", "radius": float64(30), "count": float64(3),
+			"covers": "The captain bellows a war cry, and up to three allies it can see within 30 feet fight with fresh fury until its next turn."},
+		ExampleOn: "The captain bellows a war cry, and up to three allies it can see within 30 feet fight with fresh fury until its next turn.",
+		describe: func(m entryMechanic) string {
+			s := fmt.Sprintf("its allies within %d feet", m.num("radius"))
+			if n := m.num("count"); n > 0 {
+				s = fmt.Sprintf("up to %d allies within %d feet", n, m.num("radius"))
+			}
+			if m["includes_self"] == true {
+				s = "it and " + s
+			}
+			what := "Advantage on attack rolls and saving throws"
+			if m.str("gives") == "d20_tests" {
+				what = "Advantage on D20 Tests"
+			}
+			s += " have " + what + " until the " + strings.ReplaceAll(strings.TrimSuffix(m.str("until"), "_its_next_turn"), "_", " ") + " of its next turn"
+			if hp := m.num("temp_hp"); hp > 0 {
+				s += fmt.Sprintf("; it gains %d Temporary Hit Points", hp)
+			}
+			return s
 		},
 	},
 	{
@@ -704,6 +832,9 @@ func failureMechanicsOf(meta *monsterMeta, entryName string) []entryMechanic {
 func (e saveEffect) giveFailureMechanics(lobby, target int, source string) []string {
 	var out []string
 	for _, m := range e.OnFailure {
+		if !mechanicTargetGate(lobby, target, m) {
+			continue
+		}
 		out = append(out, failureKinds[m.kind()](e, m, lobby, target, source)...)
 	}
 	return out
@@ -718,7 +849,7 @@ func setBurning(lobby, target int, source string) string {
 
 // burningOnHit: the attached burning of the attacking monster's entry, on a hit.
 func burningOnHit(lobby, attacker, target int, entry, source string) string {
-	if _, ok := attachedMechanic(lobby, attacker, entry, "burning"); !ok {
+	if _, ok := attachedMechanic(lobby, attacker, target, entry, "burning"); !ok {
 		return ""
 	}
 	return " [" + setBurning(lobby, target, source) + "]"
@@ -746,8 +877,8 @@ func (e saveEffect) giveEngulf(m entryMechanic, lobby, target int, source string
 }
 
 // mechanicHPMaxDrain: the attached max_hp_drain of the attacking monster's entry, as the drain owner reads one (its damage type, "" for all).
-func mechanicHPMaxDrain(lobby, attacker int, entry string) (string, bool) {
-	m, ok := attachedMechanic(lobby, attacker, entry, "max_hp_drain")
+func mechanicHPMaxDrain(lobby, attacker, target int, entry string) (string, bool) {
+	m, ok := attachedMechanic(lobby, attacker, target, entry, "max_hp_drain")
 	if !ok {
 		return "", false
 	}
@@ -779,7 +910,7 @@ func rollRiderSentence(m entryMechanic) string {
 
 // rollRiderOnHit: the attached roll_rider of the attacking monster's entry, given by the roll rider owner.
 func rollRiderOnHit(lobby, attacker, target int, entry, source string) string {
-	m, ok := attachedMechanic(lobby, attacker, entry, "roll_rider")
+	m, ok := attachedMechanic(lobby, attacker, target, entry, "roll_rider")
 	if !ok {
 		return ""
 	}
@@ -809,8 +940,8 @@ func traitMechanicOf(lobby, id int, kind string) bool {
 }
 
 // regainOnHit: the attached regain_from_damage of the attacking monster's entry: it regains what the hit dealt (or half), through drainRegain.
-func regainOnHit(lobby, attacker int, entry string, taken int) string {
-	m, ok := attachedMechanic(lobby, attacker, entry, "regain_from_damage")
+func regainOnHit(lobby, attacker, target int, entry string, taken int) string {
+	m, ok := attachedMechanic(lobby, attacker, target, entry, "regain_from_damage")
 	if !ok || taken <= 0 {
 		return ""
 	}
@@ -835,7 +966,7 @@ func grappleSentence(m entryMechanic) string {
 
 // grappleOnHit: the attached grapple of the attacking monster's entry, given by the hit condition owner.
 func grappleOnHit(lobby, attacker, target int, entry, source string) string {
-	m, ok := attachedMechanic(lobby, attacker, entry, "grapple")
+	m, ok := attachedMechanic(lobby, attacker, target, entry, "grapple")
 	if !ok {
 		return ""
 	}
@@ -933,7 +1064,7 @@ func curseSentences(m entryMechanic) string {
 
 // curseOnHit: the attached curse of the attacking monster's entry, given by the curse owner from its SRD sentences.
 func curseOnHit(lobby, attacker, target int, entry, source string) string {
-	m, ok := attachedMechanic(lobby, attacker, entry, "curse")
+	m, ok := attachedMechanic(lobby, attacker, target, entry, "curse")
 	if !ok {
 		return ""
 	}
@@ -987,7 +1118,7 @@ func conditionHitSentence(conds []string, m entryMechanic) string {
 
 // conditionOnHit: the attached condition_on_hit of the attacking monster's entry, given by the hit condition owner.
 func conditionOnHit(lobby, attacker, target int, entry, source string) string {
-	m, ok := attachedMechanic(lobby, attacker, entry, "condition_on_hit")
+	m, ok := attachedMechanic(lobby, attacker, target, entry, "condition_on_hit")
 	if !ok {
 		return ""
 	}
@@ -1005,7 +1136,7 @@ func conditionOnHit(lobby, attacker, target int, entry, source string) string {
 // randomConditionOnHit: the attached random_condition of the attacking monster's entry: the condition rolled, given by the hit condition
 // owner from the SRD sentence it stands for (parseHitRider reads its time; giveConditions honors Immunity and records its end).
 func randomConditionOnHit(lobby, attacker, target int, entry, source string) string {
-	m, ok := attachedMechanic(lobby, attacker, entry, "random_condition")
+	m, ok := attachedMechanic(lobby, attacker, target, entry, "random_condition")
 	if !ok {
 		return ""
 	}
@@ -1031,8 +1162,8 @@ func randomConditionOnHit(lobby, attacker, target int, entry, source string) str
 }
 
 // mechanicHitMove: the attached forced_move of the attacking monster's entry, as the movement owner's hitMove.
-func mechanicHitMove(lobby, attacker int, entry string) (hitMove, bool) {
-	m, ok := attachedMechanic(lobby, attacker, entry, "forced_move")
+func mechanicHitMove(lobby, attacker, target int, entry string) (hitMove, bool) {
+	m, ok := attachedMechanic(lobby, attacker, target, entry, "forced_move")
 	if !ok {
 		return hitMove{}, false
 	}
@@ -1169,7 +1300,32 @@ func entryActionRow(e srdMonsterEntry) monsterActionRow {
 	if m, ok := e.mechanic("chosen_damage_type"); ok {
 		row.ChosenTypes = m.list("types")
 	}
+	if m, ok := e.mechanic("extra_damage"); ok {
+		row.Desc = extraDamageWords(row.Desc, m)
+	}
 	return row
+}
+
+// extraDamageWords: the attack's text with an extra_damage mechanic written as the SRD writes it, so the damage owners deal it on every
+// hit route: "plus 10 (3d6) Piercing damage if the attack roll had Advantage" at the end of the Hit sentence (parseExtraDamage's
+// IfAdvantage), or a charge sentence of its own with the size gate that leaves no creature out (chargeSentenceRe, read by hitChargeDesc).
+func extraDamageWords(desc string, m entryMechanic) string {
+	n, sides := game.ParseDice(m.str("damage"))
+	amount := fmt.Sprintf("%d (%s) %s damage", n*(sides+1)/2, m.str("damage"), titleCase(m.str("damage_type")))
+	if m.str("when") == "charge" {
+		return strings.TrimSpace(desc) + fmt.Sprintf(" If the target is a Gargantuan or smaller creature and the monster moved %d+ feet straight toward it "+
+			"immediately before the hit, the target takes an extra %s.", m.num("feet"), amount)
+	}
+	i := strings.Index(desc, "Hit:")
+	if i < 0 {
+		return desc
+	}
+	loc := hitSentenceEnd.FindStringIndex(desc[i:])
+	if loc == nil {
+		return strings.TrimRight(desc, " ") + ", plus " + amount + " if the attack roll had Advantage."
+	}
+	at := i + loc[0]
+	return desc[:at] + ", plus " + amount + " if the attack roll had Advantage" + desc[at:]
 }
 
 // mechanic: the entry's attached mechanic of this kind.
@@ -1404,10 +1560,12 @@ func (k mechanicKind) paramProblem(m entryMechanic, e srdMonsterEntry) string {
 				return p.Name + " must be dice such as 3d6 (1 to 100 dice of 2 to 100 sides)"
 			}
 			m[p.Name] = fmt.Sprintf("%dd%d", n, sides)
-		case "damage_types", "entry_options", "conditions":
+		case "damage_types", "entry_options", "conditions", "creature_types":
 			var opts []string
 			if p.Type == "conditions" {
 				opts = rulesConditions()
+			} else if p.Type == "creature_types" {
+				opts = creatureTypes
 			} else if p.Type == "damage_types" {
 				opts = sortedDamageTypes()
 			} else {
@@ -1469,12 +1627,103 @@ func rulesText(e srdMonsterEntry) string {
 
 // attachedMechanic: the mechanic of this kind attached to the attacking monster's entry of that name (the hit route's action: its own name,
 // never its text, which two entries can share once covered words are left out). Only a compendium monster has attached mechanics.
-func attachedMechanic(lobby, attacker int, entry, kind string) (entryMechanic, bool) {
+func attachedMechanic(lobby, attacker, target int, entry, kind string) (entryMechanic, bool) {
 	_, meta, ok := monsterCombatant(lobby, attacker)
 	if !ok || meta == nil {
 		return nil, false
 	}
-	return entryMechanicIn(meta, entry, kind)
+	m, ok := entryMechanicIn(meta, entry, kind)
+	if !ok || !mechanicTargetGate(lobby, target, m) {
+		return nil, false
+	}
+	return m, true
+}
+
+// creatureTypes: the SRD 5.2.1 creature types, the options of a creature_types parameter.
+var creatureTypes = []string{"aberration", "beast", "celestial", "construct", "dragon", "elemental", "fey", "fiend", "giant", "humanoid", "monstrosity", "ooze", "plant", "undead"}
+
+// targetGateParams: the parameters every rider kind takes (TargetGate) to leave targets out, as the SRD's "If the target is a Humanoid"
+// does (saveEffect.OnlyType) and a stat block's "if the target isn't an Undead" or "unless the target has Immunity to Cold damage".
+var targetGateParams = []mechanicParam{
+	{Name: "only_types", Type: "creature_types", Min: 1, Does: "only a target of one of these creature types has it (a Humanoid)"},
+	{Name: "not_types", Type: "creature_types", Min: 1, Does: "a target of these creature types never has it (an Undead)"},
+	{Name: "unless_immune_to", Type: "choice", Options: sortedDamageTypes(), Does: "a target with Immunity to this damage type never has it"},
+}
+
+func init() {
+	for i := range mechanicCatalog {
+		if mechanicCatalog[i].TargetGate {
+			mechanicCatalog[i].Params = append(mechanicCatalog[i].Params, targetGateParams...)
+		}
+	}
+}
+
+// mechanicTargetGate: whether the target is one the attached rider reaches (targetGateParams): its creature type (creatureTypeOf, read as
+// AutoSucceedTypes reads it, a tag such as "(Elf)" included) and its damage Immunity (damageImmune). Every attached rider asks it: the hit
+// readers through attachedMechanic, a failed save's through giveFailureMechanics.
+func mechanicTargetGate(lobby, target int, m entryMechanic) bool {
+	only, not := m.list("only_types"), m.list("not_types")
+	if len(only) > 0 || len(not) > 0 {
+		words := creatureTypeWords(creatureTypeOf(lobby, target))
+		is := func(types []string) bool {
+			for _, t := range types {
+				if slices.Contains(words, strings.ToLower(t)) {
+					return true
+				}
+			}
+			return false
+		}
+		if (len(only) > 0 && !is(only)) || is(not) {
+			return false
+		}
+	}
+	if t := m.str("unless_immune_to"); t != "" && damageImmune(lobby, target, t) {
+		return false
+	}
+	return true
+}
+
+// targetGateWords: the targets the rider leaves out, as the GM reads the mechanic.
+func targetGateWords(m entryMechanic) string {
+	var w []string
+	names := func(l []string) string {
+		out := make([]string, len(l))
+		for i, x := range l {
+			out[i] = titleCase(x)
+		}
+		return strings.Join(out, " or ")
+	}
+	if o := m.list("only_types"); len(o) > 0 {
+		w = append(w, "only "+names(o)+" targets")
+	}
+	if n := m.list("not_types"); len(n) > 0 {
+		w = append(w, "not "+names(n)+" targets")
+	}
+	if t := m.str("unless_immune_to"); t != "" {
+		w = append(w, "not a target with Immunity to "+titleCase(t)+" damage")
+	}
+	if len(w) == 0 {
+		return ""
+	}
+	return " (" + strings.Join(w, "; ") + ")"
+}
+
+// damageImmune: the target has Immunity to the damage type, as the damage owners read it (a character's applyDamageResistance, a
+// monster's or companion's adjustMonsterDamage).
+func damageImmune(lobby, target int, dtype string) bool {
+	switch {
+	case isCompanionCombatID(target):
+		c, ok := activeCompanionInCampaign(lobby, target)
+		if !ok {
+			return false
+		}
+		_, how := adjustMonsterDamage(c.Form, dtype, 10)
+		return how == "immune"
+	case target > 0:
+		return applyDamageResistance(target, 10, dtype).WasNegated
+	}
+	_, how := adjustMonsterDamage(monsterKeyOfCombatant(lobby, target), dtype, 10)
+	return how == "immune"
 }
 
 // mechanicsView: an entry's attached mechanics as the GM reads them (the report and the stat block).
@@ -1485,7 +1734,7 @@ func mechanicsView(e srdMonsterEntry) []map[string]interface{} {
 		if !ok {
 			continue
 		}
-		v := map[string]interface{}{"kind": k.Kind, "does": k.describe(m), "applied_by": k.AppliedBy}
+		v := map[string]interface{}{"kind": k.Kind, "does": k.describe(m) + targetGateWords(m), "applied_by": k.AppliedBy}
 		if c := m.str("covers"); c != "" {
 			v["covers"] = c
 		}
@@ -1530,6 +1779,8 @@ func mechanicCatalogView() []map[string]interface{} {
 				v["options"] = "the names of the effects the entry offers"
 			case "conditions":
 				v["options"], v["min_items"] = rulesConditions(), p.Min
+			case "creature_types":
+				v["options"], v["min_items"] = creatureTypes, p.Min
 			case "dice":
 				v["format"] = "NdM, such as 3d6"
 			}
@@ -1603,4 +1854,130 @@ func mechanicsKey(e srdMonsterEntry) string {
 	}
 	b, _ := json.Marshal(e.Mechanics)
 	return string(b)
+}
+
+// The markers an ally_grant gives, each read by one row of its roll's owner (attackSources, saveSources, checkCtx.sources): Advantage until
+// the record ends (its time is the rider duration owner's: riderEnd.markerAdd).
+const (
+	advAttacksMarker = "adv_attacks"
+	advSavesMarker   = "adv_saves"
+	advChecksMarker  = "adv_checks"
+)
+
+// grantedAdvantage: the source of a granted Advantage marker the creature has ("" when none), the words a roll shows for it.
+func grantedAdvantage(lobby, id int, marker string) string {
+	if lobby <= 0 || id == 0 {
+		return ""
+	}
+	for _, r := range findConditionRecords(`target_id = $1 AND lobby_id = $2 AND condition = $3`, id, lobby, marker) {
+		if r.Source != "" {
+			return r.Source
+		}
+		return "a granted Advantage"
+	}
+	return ""
+}
+
+// alliesInReach: the other monsters of the fight with Hit Points within feet of the monster (every one without a battle map), of the
+// creature types when types names some.
+func alliesInReach(lobby, monsterID, feet int, types []string) []int {
+	mp, hasMap := activeEncounterMap(lobby)
+	var out []int
+	for _, e := range combatEntries(lobby) {
+		id := asInt(e["id"])
+		if id >= 0 || id == monsterID || asInt(e["hp"]) <= 0 {
+			continue
+		}
+		if len(types) > 0 {
+			words := creatureTypeWords(creatureTypeOf(lobby, id))
+			if !slices.ContainsFunc(types, func(t string) bool { return slices.Contains(words, t) }) {
+				continue
+			}
+		}
+		if hasMap {
+			a, ok1 := mp.token(monsterID)
+			b, ok2 := mp.token(id)
+			if !ok1 || !ok2 || tokenDistanceFeet(a, b) > feet {
+				continue
+			}
+		}
+		out = append(out, id)
+	}
+	return out
+}
+
+// allyGrant: an attached ally_grant of the entry, used: the allies the GM names in target_ids (its other monsters within radius), else every
+// ally in reach, have Advantage until the start or the end of the monster's next turn (the markers above), and the monster gains its
+// Temporary Hit Points. blocked: the GM must name the allies first (more in reach than count, or one named out of reach): nothing applied.
+// ok false: the entry has no ally_grant.
+func allyGrant(lobby, monsterID int, meta *monsterMeta, entryName string, targets []int, apply bool) (line string, blocked, ok bool) {
+	m, ok := entryMechanicIn(meta, entryName, "ally_grant")
+	if !ok {
+		return "", false, false
+	}
+	name := creatureName(lobby, monsterID)
+	reach := alliesInReach(lobby, monsterID, m.num("radius"), m.list("ally_types"))
+	var chosen []int
+	for _, t := range targets {
+		if t >= 0 || t == monsterID {
+			continue
+		}
+		if !slices.Contains(reach, t) {
+			return fmt.Sprintf("%s's %s: %s isn't an ally within %d feet of it. Nothing was applied.", name, stripUsage(entryName), creatureName(lobby, t), m.num("radius")), true, true
+		}
+		chosen = append(chosen, t)
+	}
+	if len(chosen) == 0 {
+		chosen = reach
+	}
+	if n := m.num("count"); n > 0 && len(chosen) > n {
+		return fmt.Sprintf("%s's %s reaches up to %d allies and %d are within %d feet: name the ones it chooses in target_ids (their combat ids). Nothing was applied.",
+			name, stripUsage(entryName), n, len(chosen), m.num("radius")), true, true
+	}
+	if m["includes_self"] == true {
+		chosen = append([]int{monsterID}, chosen...)
+	}
+	markers := []string{advAttacksMarker, advSavesMarker}
+	what := "Advantage on attack rolls and saving throws"
+	if m.str("gives") == "d20_tests" {
+		markers, what = append(markers, advChecksMarker), "Advantage on D20 Tests"
+	}
+	end := riderEndSourceTurnStart
+	if m.str("until") == "end_of_its_next_turn" {
+		end = riderEndSourceTurnEnd
+	}
+	names := make([]string, 0, len(chosen))
+	for _, id := range chosen {
+		names = append(names, creatureName(lobby, id))
+	}
+	if len(names) == 0 {
+		names = append(names, "no ally in reach")
+	}
+	line = fmt.Sprintf("%s: %s %s", stripUsage(entryName), strings.Join(names, ", "), what+" "+end.describe(lobby, monsterID))
+	if hp := m.num("temp_hp"); hp > 0 {
+		line += fmt.Sprintf("; %s gains %d Temporary Hit Points", name, hp)
+	}
+	if !apply {
+		return line + " (not applied)", false, true
+	}
+	source := name + "'s " + stripUsage(entryName)
+	for _, id := range chosen {
+		for _, mk := range markers {
+			if a, ok := end.markerAdd(lobby, id, monsterID, mk, source, false); ok {
+				addCondition(lobby, id, a)
+			}
+		}
+	}
+	if hp := m.num("temp_hp"); hp > 0 {
+		cur := 0
+		for _, e := range combatEntries(lobby) {
+			if asInt(e["id"]) == monsterID {
+				cur = monsterVitals(e).Temp
+			}
+		}
+		if hp > cur { // Temporary Hit Points don't add up: the higher stays
+			setMonsterTempHP(lobby, monsterID, hp)
+		}
+	}
+	return line, false, true
 }

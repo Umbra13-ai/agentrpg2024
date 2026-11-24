@@ -242,7 +242,14 @@ var attackSources = []attackSource{
 			c.target != 0 && c.lobby > 0 && (areaBlocksSight(c.lobby, c.target, c.attacker) ||
 				!creatureSeesInLighting(c.lobby, c.target, monsterLightingAt(c.lobby, c.attacker), c.distanceFeet())))
 	}},
-	{true, "Aura of Authority", func(c *attackCtx) (bool, string) { return yes(c.attacker < 0 && auraOfAuthority(c.lobby, c.attacker)) }}, // Hobgoblin Captain
+	{true, "a granted Advantage", func(c *attackCtx) (bool, string) { // an ally's attached ally_grant (monster_mechanics_2024.go: allyGrant)
+		w := grantedAdvantage(c.lobby, c.attacker, advAttacksMarker)
+		return w != "", w
+	}},
+	{true, "Aura of Authority", func(c *attackCtx) (bool, string) { // Hobgoblin Captain, or an attached ally_aura (allyAuraFor)
+		name := allyAuraFor(c.lobby, c.attacker, "advantage", "")
+		return name != "", name
+	}},
 	{true, "", func(c *attackCtx) (bool, string) { // Blood Frenzy, Bloodied Fury, Bloodied Frenzy: the attacker's own trait (rollTraitAdvantage)
 		if c.attacker == 0 || (c.attacker > 0 && !isCompanionCombatID(c.attacker)) {
 			return false, ""

@@ -408,6 +408,9 @@ func conditionImmunityRows() []conditionImmunity {
 			_, why := auraImmune(lobbyID, targetID, cond)
 			return why
 		},
+		func(lobbyID, targetID int, cond string, _ condAdd) string { // a monster ally's aura (an attached ally_aura: allyAuraFor)
+			return allyAuraFor(lobbyID, targetID, "immunity", cond)
+		},
 		func(_, targetID int, cond string, a condAdd) string { // Fey Ancestry: magic can't put you to sleep
 			if targetID > 0 && a.MagicalSleep && (cond == "unconscious" || cond == "incapacitated") && isImmuneToMagicalSleep(targetID) {
 				return "Fey Ancestry"

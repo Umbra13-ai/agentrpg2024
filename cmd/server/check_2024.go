@@ -115,6 +115,9 @@ func (c checkCtx) sources() checkWhy {
 	if game.HasCondition(conds, game.ConditionFrightened) && frightenSourceInSight(lobby, c.who) {
 		w.dis("Frightened (its source is in sight)")
 	}
+	if w2 := grantedAdvantage(lobby, c.who, advChecksMarker); w2 != "" { // an ally's attached ally_grant (monster_mechanics_2024.go: allyGrant)
+		w.adv(w2)
+	}
 	if lobby > 0 && hasCondMarker(lobby, c.who, "disadv_checks") { // "Disadvantage on ... ability checks until ..." (disadvantage_riders_2024.go)
 		w.dis("a Disadvantage rider on its ability checks")
 	}

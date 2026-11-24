@@ -362,7 +362,7 @@ func hitForcedMove(lobby, attacker, target int, entry, desc string) string {
 		return ""
 	}
 	moves := textHitMoves(desc)
-	if m, ok := mechanicHitMove(lobby, attacker, entry); ok {
+	if m, ok := mechanicHitMove(lobby, attacker, target, entry); ok {
 		moves = append(moves, m)
 	}
 	var out []string

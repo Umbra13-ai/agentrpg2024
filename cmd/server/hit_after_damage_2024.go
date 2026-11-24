@@ -24,7 +24,7 @@ func hitAfterDamage(lobby, attacker, target int, entry, desc, source string, tak
 		curseOnHit(lobby, attacker, target, entry, source) + // an attached curse (monster_mechanics_2024.go)
 		conditionOnHit(lobby, attacker, target, entry, source) + // an attached condition_on_hit (monster_mechanics_2024.go)
 		rollRiderOnHit(lobby, attacker, target, entry, source) + // an attached roll_rider (monster_mechanics_2024.go)
-		regainOnHit(lobby, attacker, entry, taken) + // an attached regain_from_damage (monster_mechanics_2024.go)
+		regainOnHit(lobby, attacker, target, entry, taken) + // an attached regain_from_damage (monster_mechanics_2024.go)
 		burningOnHit(lobby, attacker, target, entry, source) + // an attached burning (monster_mechanics_2024.go)
 		grappleOnHit(lobby, attacker, target, entry, source) // an attached grapple (monster_mechanics_2024.go)
 }
@@ -100,8 +100,8 @@ func textDropRule(hitText string) (dropRule, bool) {
 }
 
 // mechanicDropRule: the drop_to_zero mechanic attached to the attacking monster's entry (monster_mechanics_2024.go).
-func mechanicDropRule(lobby, attacker int, entry string) (dropRule, bool) {
-	m, ok := attachedMechanic(lobby, attacker, entry, "drop_to_zero")
+func mechanicDropRule(lobby, attacker, target int, entry string) (dropRule, bool) {
+	m, ok := attachedMechanic(lobby, attacker, target, entry, "drop_to_zero")
 	if !ok {
 		return dropRule{}, false
 	}
@@ -113,7 +113,7 @@ func mechanicDropRule(lobby, attacker int, entry string) (dropRule, bool) {
 // through the Hit Point owner; a monster or companion has no Death Saving Throws: the GM keeps it alive at 0) and has the first condition
 // for its time, and the second while it has the first (the condition owner, notesEndsWith). An attached mechanic replaces the text's rule.
 func droppedToZeroOnHit(lobby, attacker, target int, entry, desc, source string, taken int) string {
-	rule, ok := mechanicDropRule(lobby, attacker, entry)
+	rule, ok := mechanicDropRule(lobby, attacker, target, entry)
 	if !ok {
 		rule, ok = textDropRule(hitDamageText(desc))
 	}

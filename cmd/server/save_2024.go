@@ -376,7 +376,14 @@ var saveSourceRows = []saveSource{
 	}},
 
 	// ---- Advantage: monsters
-	{saveAdv, "Aura of Authority", func(c *saveCtx) (bool, string) { return yes(c.saver < 0 && auraOfAuthority(c.lobby, c.saver)) }}, // Hobgoblin Captain
+	{saveAdv, "a granted Advantage", func(c *saveCtx) (bool, string) { // an ally's attached ally_grant (monster_mechanics_2024.go: allyGrant)
+		w := grantedAdvantage(c.lobby, c.saver, advSavesMarker)
+		return w != "", w
+	}},
+	{saveAdv, "Aura of Authority", func(c *saveCtx) (bool, string) { // Hobgoblin Captain, or an attached ally_aura (allyAuraFor)
+		name := allyAuraFor(c.lobby, c.saver, "advantage", "")
+		return name != "", name
+	}},
 	{saveAdv, "", func(c *saveCtx) (bool, string) { // Bloodied Frenzy: the saver's own trait (rollTraitAdvantage)
 		if c.saver == 0 || (c.saver > 0 && !isCompanionCombatID(c.saver)) {
 			return false, ""

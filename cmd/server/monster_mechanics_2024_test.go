@@ -991,3 +991,231 @@ func TestPostgresTeleportAndSelfConditionMechanics(t *testing.T) {
 		t.Errorf("Invisible until the start of its next turn: %+v", rs)
 	}
 }
+
+// An extra_damage mechanic is written as the SRD writes the extra amount, so the damage owners deal it on every hit route: at the end of
+// the Hit sentence for Advantage (an alternative amount before it keeps its own condition), and as a charge sentence with the size gate
+// that leaves no creature out for a charge.
+func TestExtraDamageWordsReadBack(t *testing.T) {
+	adv := entryMechanic{"kind": "extra_damage", "when": "advantage", "damage": "3d6", "damage_type": "piercing"}
+	for _, text := range []string{
+		"Melee Attack Roll: +5, reach 5 ft. Hit: 6 (1d6 + 3) Piercing damage. The blade finds the gaps.",
+		"Melee Attack Roll: +5, reach 5 ft. Hit: 6 (1d6 + 3) Piercing damage, or 7 (1d8 + 3) Piercing damage if used with two hands.",
+	} {
+		p := parseMonsterAttack("Blade", extraDamageWords(text, adv))
+		if p.Problem != "" || len(p.Extras) != 1 || !p.Extras[0].IfAdvantage || p.Extras[0].Dice != "3d6" || p.Extras[0].Type != "Piercing" || p.DamageDice != "1d6+3" {
+			t.Errorf("%q: %+v", text, p)
+		}
+		if strings.Contains(text, "two hands") && (len(p.Alts) != 1 || p.Alts[0].Cond != condGMJudged) {
+			t.Errorf("the alternative amount kept: %+v", p.Alts)
+		}
+	}
+	charge := entryMechanic{"kind": "extra_damage", "when": "charge", "feet": float64(30), "damage": "2d8", "damage_type": "piercing"}
+	desc := extraDamageWords("Melee Attack Roll: +5, reach 5 ft. Hit: 7 (1d8 + 3) Piercing damage.", charge)
+	all := func(string) bool { return true }
+	if d, _ := chargeRewrite(desc, 30, true, all); !strings.Contains(d, "plus 9 (2d8) Piercing damage") {
+		t.Errorf("a 30-foot charge: %s", d)
+	}
+	if d, _ := chargeRewrite(desc, 25, true, all); strings.Contains(d, "plus") || strings.Contains(d, "moved") {
+		t.Errorf("a 25-foot move is no 30-foot charge: %s", d)
+	}
+	fits := func(size string) bool { return size == "gargantuan" }
+	if d, _ := chargeRewrite(desc, 30, true, fits); !strings.Contains(d, "plus 9 (2d8)") {
+		t.Errorf("no size is left out: %s", d)
+	}
+	for _, c := range []struct{ js, want string }{
+		{`[{"kind":"extra_damage","when":"charge","damage":"2d8","damage_type":"piercing"}]`, "needs feet"},
+		{`[{"kind":"extra_damage","when":"advantage","feet":30,"damage":"2d8","damage_type":"piercing"}]`, "feet"},
+		{`[{"kind":"extra_damage","when":"advantage","damage":"2d8+1","damage_type":"piercing"}]`, "damage must be dice"},
+		{`[{"kind":"extra_damage","when":"advantage","damage":"2d8"}]`, "damage_type is required"},
+	} {
+		if p := mechanicProblem("action", srdMonsterEntry{Name: "x", Text: ashClawText, Mechanics: mechanicsFromJSON(t, c.js)}); !strings.Contains(p, c.want) {
+			t.Errorf("%s: %q", c.js, p)
+		}
+	}
+	if p := mechanicProblem("action", srdMonsterEntry{Name: "x", Text: ashClawText, Mechanics: mechanicsFromJSON(t, `[{"kind":"extra_damage","when":"advantage","damage":"2d8","damage_type":"piercing"}]`)}); p != "" {
+		t.Errorf("a good row refused: %q", p)
+	}
+}
+
+// The extra damage is dealt through narrate's monster_action: only with Advantage (the target Restrained), only after the charge the GM
+// says without a battle map.
+func TestPostgresExtraDamageMechanic(t *testing.T) {
+	testPostgres(t)
+	stab := srdMonsterEntry{Name: "Gap Stab", Text: "Melee Attack Roll: +60, reach 5 ft. Hit: 1 (1d1) Piercing damage. The blade finds the gaps.",
+		Mechanics: []entryMechanic{{"kind": "extra_damage", "when": "advantage", "damage": "10d2", "damage_type": "piercing", "covers": "The blade finds the gaps."}}}
+	gore := srdMonsterEntry{Name: "Swoop Gore", Text: "Melee Attack Roll: +60, reach 5 ft. Hit: 1 (1d1) Piercing damage. It swoops in horns first.",
+		Mechanics: []entryMechanic{{"kind": "extra_damage", "when": "charge", "feet": float64(30), "damage": "10d2", "damage_type": "piercing", "covers": "It swoops in horns first."}}}
+	gm, _, camp, hero, beast := earlyRulesFixture(t, "Test Swoop Beast", []srdMonsterEntry{stab, gore})
+	hp := func() int {
+		var n int
+		db.QueryRow(`SELECT hp FROM characters WHERE id=$1`, hero).Scan(&n)
+		return n
+	}
+	took := func(action string, extra map[string]interface{}) (int, string) {
+		for i := 0; i < 40; i++ {
+			pgExec(t, `UPDATE characters SET hp=1000 WHERE id=$1`, hero)
+			ma := map[string]interface{}{"monster": fmt.Sprintf("#%d", beast), "action": action, "target": fmt.Sprint(hero), "confirm_targeting": true}
+			for k, v := range extra {
+				ma[k] = v
+			}
+			_, r := pgCall(t, "POST", "/api/gm/narrate", gm, map[string]interface{}{"campaign_id": camp, "narration": "x", "monster_action": ma})
+			if line := fmt.Sprint(r["monster_action_result"]); strings.Contains(line, "HIT") {
+				return 1000 - hp(), line
+			}
+		}
+		t.Fatalf("%s never hit", action)
+		return 0, ""
+	}
+	if n, line := took("Gap Stab", nil); n > 2 || strings.Contains(line, "gaps") {
+		t.Errorf("no Advantage, no extra: %d %s", n, line)
+	}
+	addCharacterCondition(hero, "restrained")
+	if n, line := took("Gap Stab", nil); n < 11 {
+		t.Errorf("with Advantage the extra 10d2: %d %s", n, line)
+	}
+	endCondition(camp, hero, "restrained", "")
+	if n, line := took("Swoop Gore", nil); n > 2 || !strings.Contains(line, `"charged": true`) {
+		t.Errorf("no charge said: %d %s", n, line)
+	}
+	if n, line := took("Swoop Gore", map[string]interface{}{"charged": true}); n < 11 {
+		t.Errorf("charged: %d %s", n, line)
+	}
+}
+
+// Every rider kind takes the shared target gate (only_types, not_types, unless_immune_to): mechanicTargetGate leaves those targets out, on a
+// hit (attachedMechanic) and on a failed save (giveFailureMechanics), and the GM reads it with the mechanic.
+func TestPostgresMechanicTargetGate(t *testing.T) {
+	testPostgres(t)
+	claw := srdMonsterEntry{Name: "Numbing Claw", Text: "Melee Attack Roll: +60, reach 5 ft. Hit: 1 (1d1) Slashing damage. The living go stiff at its touch.",
+		Mechanics: []entryMechanic{{"kind": "condition_on_hit", "conditions": []interface{}{"paralyzed"}, "until": "end_of_its_next_turn", "not_types": []interface{}{"undead"},
+			"covers": "The living go stiff at its touch."}}}
+	frost := srdMonsterEntry{Name: "Frost Touch", Text: "Melee Attack Roll: +60, reach 5 ft. Hit: 1 (1d1) Cold damage. Rime locks the target in place.",
+		Mechanics: []entryMechanic{{"kind": "condition_on_hit", "conditions": []interface{}{"restrained"}, "until": "end_of_its_next_turn", "unless_immune_to": "cold",
+			"covers": "Rime locks the target in place."}}}
+	spit := srdMonsterEntry{Name: "Pitch Spit", Text: "Dexterity Saving Throw: DC 30, one creature within 30 feet. Failure: 1 (1d1) Fire damage, and a Fey's wings catch alight.",
+		Mechanics: []entryMechanic{{"kind": "burning", "only_types": []interface{}{"fey"}, "covers": "and a Fey's wings catch alight."}}}
+	gm, _, camp, _, beast := earlyRulesFixture(t, "Test Gate Wight", []srdMonsterEntry{claw, frost, spit})
+	cp := fmt.Sprintf("/api/campaigns/%d", camp)
+	pgCall(t, "POST", cp+"/combat/add", gm, map[string]interface{}{"combatants": []map[string]interface{}{
+		{"name": "Gate Goblin", "monster_key": "goblin-warrior", "hp": 1000, "ac": 1, "initiative": -600},
+		{"name": "Gate Zombie", "monster_key": "zombie", "hp": 1000, "ac": 1, "initiative": -601},
+		{"name": "Gate Wyrmling", "monster_key": "white-dragon-wyrmling", "hp": 1000, "ac": 1, "initiative": -602}}})
+	goblin, zombie, wyrm := monsterIDsByKeyOrName(camp, "Gate Goblin")[0], monsterIDsByKeyOrName(camp, "Gate Zombie")[0], monsterIDsByKeyOrName(camp, "Gate Wyrmling")[0]
+	for _, c := range []struct {
+		action, target, cond string
+		id                   int
+		want                 bool
+	}{
+		{"Numbing Claw", "Gate Goblin", "paralyzed", goblin, true},
+		{"Numbing Claw", "Gate Zombie", "paralyzed", zombie, false},
+		{"Frost Touch", "Gate Goblin", "restrained", goblin, true},
+		{"Frost Touch", "Gate Wyrmling", "restrained", wyrm, false},
+	} {
+		narrateHit(t, gm, camp, beast, c.action, c.target, "")
+		if got := hasCondMarker(camp, c.id, c.cond); got != c.want {
+			t.Errorf("%s at %s: %s %v, want %v", c.action, c.target, c.cond, got, c.want)
+		}
+	}
+	for _, c := range []struct {
+		target string
+		id     int
+		want   bool
+	}{{"Gate Goblin", goblin, true}, {"Gate Zombie", zombie, false}} {
+		if code, line := narrateAs(t, gm, camp, beast, "Pitch Spit", c.target, ""); code != 200 || isBurning(camp, c.id) != c.want {
+			t.Errorf("Pitch Spit at %s: burning %v, want %v: %s", c.target, isBurning(camp, c.id), c.want, line)
+		}
+	}
+	if p := mechanicProblem("action", srdMonsterEntry{Name: "x", Text: ashClawText, Mechanics: mechanicsFromJSON(t, `[{"kind":"drop_to_zero","result":"dies","only_types":["elves"]}]`)}); !strings.Contains(p, "only_types[0] must be one of") {
+		t.Errorf("a creature type that isn't one: %q", p)
+	}
+	if p := mechanicProblem("action", srdMonsterEntry{Name: "x", Text: ashClawText, Mechanics: mechanicsFromJSON(t, `[{"kind":"extra_damage","when":"advantage","damage":"2d6","damage_type":"fire","not_types":["undead"]}]`)}); !strings.Contains(p, "not_types") {
+		t.Errorf("the gate on a kind that isn't a rider: %q", p)
+	}
+	if v := mechanicsView(claw); len(v) != 1 || !strings.Contains(fmt.Sprint(v[0]["does"]), "(not Undead targets)") {
+		t.Errorf("the GM's view: %v", v)
+	}
+}
+
+// An attached ally_aura is read with the SRD's Aura of Authority by allyAuraFor: Advantage on attack rolls and saves for allies of the named
+// types (not the creature itself with excludes_self), Immunity to conditions through the condition owner, and neither while it is
+// Incapacitated.
+func TestPostgresAllyAuraMechanic(t *testing.T) {
+	testPostgres(t)
+	gm, _, camp, hero, lord := earlyRulesFixture(t, "Test Marshal Lord", []srdMonsterEntry{{Name: "Rod", Text: "Melee Attack Roll: +60, reach 5 ft. Hit: 1 (1d1) Bludgeoning damage."}})
+	entry, _, _ := monsterCombatant(camp, lord)
+	pgExec(t, `UPDATE custom_monsters SET definition = jsonb_set(definition, '{traits}', $2::jsonb) WHERE key=$1`, fmt.Sprint(entry["monster_key"]),
+		`[{"name": "Dread Marshal", "text": "Its dead servants fight with purpose near it.", "mechanics": [{"kind": "ally_aura", "gives": "advantage", "radius": 30, "ally_types": ["undead"], "excludes_self": true, "covers": "Its dead servants fight with purpose near it."}]},
+		  {"name": "Steadying Presence", "text": "Its allies stand firm.", "mechanics": [{"kind": "ally_aura", "gives": "immunity", "radius": 30, "conditions": ["frightened"], "covers": "Its allies stand firm."}]}]`)
+	cp := fmt.Sprintf("/api/campaigns/%d", camp)
+	pgCall(t, "POST", cp+"/combat/add", gm, map[string]interface{}{"combatants": []map[string]interface{}{
+		{"name": "Aura Zombie", "monster_key": "zombie", "hp": 1000, "ac": 1, "initiative": -600},
+		{"name": "Aura Goblin", "monster_key": "goblin-warrior", "hp": 1000, "ac": 1, "initiative": -601}}})
+	zombie, goblin := monsterIDsByKeyOrName(camp, "Aura Zombie")[0], monsterIDsByKeyOrName(camp, "Aura Goblin")[0]
+	if allyAuraFor(camp, zombie, "advantage", "") != "Dread Marshal" || allyAuraFor(camp, goblin, "advantage", "") != "" || allyAuraFor(camp, lord, "advantage", "") != "" {
+		t.Errorf("Advantage: zombie %q goblin %q itself %q", allyAuraFor(camp, zombie, "advantage", ""), allyAuraFor(camp, goblin, "advantage", ""), allyAuraFor(camp, lord, "advantage", ""))
+	}
+	if _, line := narrateHit(t, gm, camp, zombie, "Slam", fmt.Sprint(hero), ""); !strings.Contains(line, "Dread Marshal") {
+		t.Errorf("the zombie's attack names the aura: %s", line)
+	}
+	if r := applyCondition(camp, goblin, "frightened", "test", 0, "", 0); r.Immune != "Steadying Presence" {
+		t.Errorf("Immunity to Frightened: %+v", r)
+	}
+	applyCondition(camp, lord, "incapacitated", "test", 0, "", 0)
+	if allyAuraFor(camp, zombie, "advantage", "") != "" || applyCondition(camp, goblin, "frightened", "test", 0, "", 0).Immune != "" {
+		t.Errorf("an Incapacitated lord's auras still hold")
+	}
+	if p := mechanicProblem("trait", srdMonsterEntry{Name: "x", Text: "It stands firm.", Mechanics: mechanicsFromJSON(t, `[{"kind":"ally_aura","gives":"immunity","radius":10}]`)}); !strings.Contains(p, "needs conditions") {
+		t.Errorf("immunity without conditions: %q", p)
+	}
+}
+
+// An attached ally_grant: refused before anything is applied while more allies are in reach than its count; the allies named in
+// target_ids then have Advantage on attack rolls, saves and (d20_tests) ability checks, read by the three roll owners, the monster its
+// Temporary Hit Points; the Advantage ends at the start of the monster's next turn.
+func TestPostgresAllyGrantMechanic(t *testing.T) {
+	testPostgres(t)
+	rally := srdMonsterEntry{Name: "War Cry", Text: "The captain bellows, and up to two allies fight with fury.",
+		Mechanics: []entryMechanic{{"kind": "ally_grant", "gives": "d20_tests", "until": "start_of_its_next_turn", "radius": float64(30), "count": float64(2), "temp_hp": float64(10),
+			"covers": "The captain bellows, and up to two allies fight with fury."}}}
+	gm, _, camp, _, captain := earlyRulesFixture(t, "Test Cry Captain", []srdMonsterEntry{rally})
+	cp := fmt.Sprintf("/api/campaigns/%d", camp)
+	pgCall(t, "POST", cp+"/combat/add", gm, map[string]interface{}{"combatants": []map[string]interface{}{
+		{"name": "Cry Goblin A", "monster_key": "goblin-warrior", "hp": 100, "ac": 1, "initiative": -600},
+		{"name": "Cry Goblin B", "monster_key": "goblin-warrior", "hp": 100, "ac": 1, "initiative": -601},
+		{"name": "Cry Goblin C", "monster_key": "goblin-warrior", "hp": 100, "ac": 1, "initiative": -602}}})
+	a, b, c := monsterIDsByKeyOrName(camp, "Cry Goblin A")[0], monsterIDsByKeyOrName(camp, "Cry Goblin B")[0], monsterIDsByKeyOrName(camp, "Cry Goblin C")[0]
+	cry := func(ids []int) (int, string) {
+		ma := map[string]interface{}{"monster": fmt.Sprintf("#%d", captain), "action": "War Cry", "confirm_targeting": true}
+		if ids != nil {
+			ma["target_ids"] = ids
+		}
+		code, r := pgCall(t, "POST", "/api/gm/narrate", gm, map[string]interface{}{"campaign_id": camp, "narration": "x", "monster_action": ma})
+		return code, fmt.Sprint(r)
+	}
+	if code, line := cry(nil); code != 409 || !strings.Contains(line, "name the ones it chooses") || grantedAdvantage(camp, a, advAttacksMarker) != "" {
+		t.Fatalf("three in reach, none named: %d %s", code, line)
+	}
+	if code, line := cry([]int{a, b}); code != 200 {
+		t.Fatalf("two named: %d %s", code, line)
+	}
+	for _, id := range []int{a, b} {
+		for _, mk := range []string{advAttacksMarker, advSavesMarker, advChecksMarker} {
+			if grantedAdvantage(camp, id, mk) == "" {
+				t.Errorf("%d lacks %s", id, mk)
+			}
+		}
+	}
+	if grantedAdvantage(camp, c, advAttacksMarker) != "" {
+		t.Errorf("the goblin not named has it")
+	}
+	if v := monsterEntryVitals(camp, captain); v.Temp != 10 {
+		t.Errorf("Temporary Hit Points: %+v", v)
+	}
+	if _, line := narrateHit(t, gm, camp, a, "Scimitar", "Cry Goblin C", ""); !strings.Contains(line, "War Cry") {
+		t.Errorf("the attack owner doesn't read it: %s", line)
+	}
+	expireSourceTurnConditions(camp, captain, creatureName(camp, captain), "start")
+	if grantedAdvantage(camp, a, advAttacksMarker) != "" {
+		t.Errorf("it outlasts the start of the captain's next turn")
+	}
+}

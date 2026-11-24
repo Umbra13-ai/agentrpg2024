@@ -47,7 +47,7 @@ func drainedAmount(dtype string, total int, byType map[string]int) int {
 func drainHPMaximum(lobby, attacker, target int, entry, desc string, taken int, byType map[string]int) string {
 	dtype, ok := hpMaxDrainOf(hitDamageText(desc))
 	if !ok {
-		dtype, ok = mechanicHPMaxDrain(lobby, attacker, entry) // an attached max_hp_drain (monster_mechanics_2024.go)
+		dtype, ok = mechanicHPMaxDrain(lobby, attacker, target, entry) // an attached max_hp_drain (monster_mechanics_2024.go)
 	}
 	if !ok {
 		return ""
