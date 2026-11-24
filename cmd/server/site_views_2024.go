@@ -451,11 +451,15 @@ func liveScript(t liveTable) string {
     }).catch(function () { list.textContent = ''; line('Could not load the sheet.'); });
   }
   function pick(e, attr) {
+    if (e.target.closest('.party-sheet-link')) return; // the sheet icon is a link: it opens the full sheet
     var x = e.target.closest('[' + attr + ']'); if (!x) return;
     e.preventDefault(); inspect(Number(x.getAttribute(attr)));
   }
   document.getElementById('vtt-tokens-row').addEventListener('click', function (e) { pick(e, 'data-token-char'); });
   document.getElementById('party-rail').addEventListener('click', function (e) { pick(e, 'data-inspect-char'); });
+  document.getElementById('party-rail').addEventListener('keydown', function (e) { // a card is a button: Enter or Space opens the quick sheet
+    if ((e.key === 'Enter' || e.key === ' ') && !e.target.closest('.party-sheet-link')) pick(e, 'data-inspect-char');
+  });
   inspect(kept.selected || LIVE.selected);
 })();
 </script>`

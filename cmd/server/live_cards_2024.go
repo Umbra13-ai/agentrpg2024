@@ -111,7 +111,11 @@ func liveCardExtras(c *liveCard) error {
 	return nil
 }
 
-// liveCardHTML renders one party card: a link to the character's sheet that the page's script turns into the quick sheet on a tap.
+// sheetIcon: the small paper sheet in a card's top right corner (owner, Nov 24), drawn in the theme's accent with currentColor.
+const sheetIcon = `<svg viewBox="0 0 24 24" width="18" height="18" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M14 3H6.5A1.5 1.5 0 0 0 5 4.5v15A1.5 1.5 0 0 0 6.5 21h11a1.5 1.5 0 0 0 1.5-1.5V8z"/><path d="M14 3v5h5"/><path d="M8.5 12.5h7M8.5 16h7"/></svg>`
+
+// liveCardHTML renders one party card: a tap (or Enter or Space) opens the quick sheet in the page's script; the sheet icon in its top
+// right corner is the link to the character's full sheet (a link can't hold another link, so the card itself is not one).
 func liveCardHTML(c liveCard) string {
 	e := html.EscapeString
 	dead, dying := c.Health == "dead", c.Health == "dying"
@@ -205,7 +209,8 @@ func liveCardHTML(c liveCard) string {
 		footer += `</div>`
 	}
 	return fmt.Sprintf(`
-        <a class="%s" href="/character/%d" data-inspect-char="%d" title="%s">
+        <div class="%s" role="button" tabindex="0" data-inspect-char="%d" title="%s">
+          <a class="party-sheet-link" href="/character/%d" title="%s's character sheet" aria-label="Open %s's character sheet">%s</a>
           <div>
             <div class="party-card-row">
               <div class="party-avatar-col">
@@ -224,5 +229,5 @@ func liveCardHTML(c liveCard) string {
             </div>
             <div class="hp-bar-wrap" title="%s"><div class="hp-fill-seg" style="width:%d%%; background:%s;"></div>%s</div>
           </div>%s
-        </a>`, cls, c.ID, c.ID, e(c.Activity), face, pip, badge, e(c.Name), e(c.Meta), color, hp, c.MaxHP, temp, hd, c.AC, e(barTitle), hpPct, color, thp, footer)
+        </div>`, cls, c.ID, e(c.Activity), c.ID, e(c.Name), e(c.Name), sheetIcon, face, pip, badge, e(c.Name), e(c.Meta), color, hp, c.MaxHP, temp, hd, c.AC, e(barTitle), hpPct, color, thp, footer)
 }

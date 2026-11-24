@@ -361,6 +361,23 @@ html, body {
   transition: all 0.16s ease;
 }
 .party-card:hover { border-color: var(--border-strong); transform: translateY(-1px); }
+.party-card { position: relative; }
+.party-card:focus-visible { outline: 2px solid var(--accent-gold); outline-offset: 2px; }
+.party-card .party-name { padding-right: 1.9rem; }
+/* the character sheet link in a card's top right corner: an 18 px sheet in the theme's accent, a 40 px target */
+.party-sheet-link {
+  position: absolute;
+  top: 0;
+  right: 0;
+  width: 40px;
+  height: 40px;
+  display: grid;
+  place-items: center;
+  color: var(--accent-gold);
+  border-radius: var(--radius-md);
+  opacity: 0.85;
+}
+.party-sheet-link:hover, .party-sheet-link:focus-visible { opacity: 1; background: var(--accent-gold-soft); }
 .party-card.is-turn {
   border-color: var(--accent-gold);
   background: linear-gradient(135deg, var(--accent-gold-soft), var(--bg-surface));
