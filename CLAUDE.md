@@ -266,7 +266,11 @@ Report: "Wizard Scholar accepts any skill for Expertise."
   replies), `carriedView` (my-turn, the short view), my-turn's held weapons, `inventoryWeight`, the ground (`dropToGround` writes the look, the bundle
   keeps the item), the give-item log line, the portrait prompt, setup's held weapon. Readers that would tell what it is leave it out: the item reminders
   (healing potions, scrolls), `gearReminders`, `autoEquipArmor`, `equipPlan` and setup's draw suggestion, feature words, the shop (`sellOffers`, refused
-  by `sellBlocked`). Not done: the attack line of a held unidentified magic weapon shows its bonus. Go: `TestPostgresUnidentifiedItemEverywhereAPlayerReads`.
+  by `sellBlocked`). **By its look** (stage 2): `findItem` matches `appearsAs`, a description `lookInText`; equipping or wearing it stores the item's own name; attuning, working it and
+  casting from it (`itemCastOptions`) wait until it is known; a potion is drunk. **Identifying** (`item_identify_2024.go`): `identifyItem` is the one writer that makes it
+  known, `identifiedLine` the one wording; routes: Identify (`itemLearningSpells`, `identifyBySpell`), a Short Rest's `study_item`, a taste (`tastePotion`), the GM's
+  `POST /api/gm/identify-item`. Not done: the attack line of a held unidentified magic weapon shows its bonus. Go: `TestPostgresUnidentifiedItemEverywhereAPlayerReads`,
+  `TestPostgresUnidentifiedItemByItsLookInEveryCommand`, `TestPostgresIdentifyingAnItemOnEveryRoute`.
 - **A condition's second stage** (SRD 5.2.1 Sleep; a monster's "Second Failure:"): `conditionSave.Then` / `ThenRounds` /
   `ThenEndsOnDamage` / `ThenMagicalSleep` / `ThenRepeats` on the record's repeated save; `condition_turns.go` turns the record into the
   second condition on a failed repeat (with no end for "Petrified instead of the Restrained condition": Basilisk, Gorgon, Medusa; keeping
