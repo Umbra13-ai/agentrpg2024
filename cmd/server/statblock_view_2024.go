@@ -92,7 +92,7 @@ func statBlockHTML(c compendiumEntry) string {
 		line += ", " + m.Alignment
 	}
 	// the stat block's own rule: a long value (a key, a list of senses) wraps in its pill instead of running out of it at a phone's width
-	b.WriteString(`<style>.statblock .sense-pill{min-width:0;max-width:100%;}.statblock .sense-pill span:last-child{overflow-wrap:anywhere;min-width:0;}</style>
+	b.WriteString(`<style>.statblock .char-hero{flex-wrap:wrap;}.statblock .badge{white-space:normal;max-width:100%;}.statblock .sense-pill{min-width:0;max-width:100%;}.statblock .sense-pill span:last-child{overflow-wrap:anywhere;min-width:0;}</style>
 <div class="rpg-panel panel-pad statblock" data-monster-key="` + e(c.Key) + `">
   <div class="char-hero">
     <div class="char-portrait-col"><div class="char-portrait-frame" style="border-radius:50%;overflow:hidden;display:flex;align-items:center;justify-content:center;">` + face + `</div></div>
