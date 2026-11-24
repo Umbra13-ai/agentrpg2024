@@ -909,7 +909,7 @@ func resolveMonsterAttack(r *http.Request, campaignID int, monster, action, targ
 						}
 					}
 				}
-				line += hitAfterDamage(campaignID, attackerID, tid, a.Desc, attackerName+"'s "+stripUsage(a.Name), (hpB+tempB)-(hpA+tempA), dealtByType) // Life Drain, burning (hit_after_damage_2024.go)
+				line += hitAfterDamage(campaignID, attackerID, tid, a.Name, a.Desc, attackerName+"'s "+stripUsage(a.Name), (hpB+tempB)-(hpA+tempA), dealtByType) // Life Drain, burning (hit_after_damage_2024.go)
 				// the attach the hit starts ("and the stirge attaches to the target"): before the recurring
 				// damage, whose gate reads the attach row (monster_attach_2024.go). Outside the parseHitRider
 				// branch: an attach rider (Stirge Proboscis) carries no condition for it to match.

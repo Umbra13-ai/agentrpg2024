@@ -14,14 +14,15 @@ import (
 // (drainHPMaximum) and "it starts burning" (SRD 5.2.1 Magmin Touch: the Burning owner, burning_2024.go). A new effect of this kind is one
 // call here, never one more call in each route. taken is the damage the hit dealt; byType what each damage type of it dealt (a typed
 // drain: "the Acid damage taken").
-func hitAfterDamage(lobby, attacker, target int, desc, source string, taken int, byType map[string]int) string {
+func hitAfterDamage(lobby, attacker, target int, entry, desc, source string, taken int, byType map[string]int) string {
 	recordLastHit(lobby, attacker, target, taken) // what it hit, for an entry used right after (Rampage; creature_movement_2024.go)
-	return drainHPMaximum(lobby, attacker, target, desc, taken, byType) + burnOnHit(lobby, target, desc, source) + abilityDecreaseOnHit(lobby, target, desc, source) +
+	return drainHPMaximum(lobby, attacker, target, entry, desc, taken, byType) + burnOnHit(lobby, target, desc, source) + abilityDecreaseOnHit(lobby, target, desc, source) +
 		corrodeArmorOnHit(lobby, target, desc) + // item_state_2024.go
-		hitForcedMove(lobby, attacker, target, desc) + // a push or pull (creature_movement_2024.go)
-		droppedToZeroOnHit(lobby, attacker, target, desc, source, taken) +
-		randomConditionOnHit(lobby, attacker, target, desc, source) + // an attached random_condition (monster_mechanics_2024.go)
-		curseOnHit(lobby, attacker, target, desc, source) // an attached curse (monster_mechanics_2024.go)
+		hitForcedMove(lobby, attacker, target, entry, desc) + // a push or pull (creature_movement_2024.go)
+		droppedToZeroOnHit(lobby, attacker, target, entry, desc, source, taken) +
+		randomConditionOnHit(lobby, attacker, target, entry, source) + // an attached random_condition (monster_mechanics_2024.go)
+		curseOnHit(lobby, attacker, target, entry, source) + // an attached curse (monster_mechanics_2024.go)
+		conditionOnHit(lobby, attacker, target, entry, source) // an attached condition_on_hit (monster_mechanics_2024.go)
 }
 
 // dropRiderRe: what a hit does when it reduces its target to 0 Hit Points ("If this damage reduces the target to 0 Hit Points, the
@@ -95,8 +96,8 @@ func textDropRule(hitText string) (dropRule, bool) {
 }
 
 // mechanicDropRule: the drop_to_zero mechanic attached to the attacking monster's entry (monster_mechanics_2024.go).
-func mechanicDropRule(lobby, attacker int, desc string) (dropRule, bool) {
-	m, ok := attachedMechanic(lobby, attacker, desc, "drop_to_zero")
+func mechanicDropRule(lobby, attacker int, entry string) (dropRule, bool) {
+	m, ok := attachedMechanic(lobby, attacker, entry, "drop_to_zero")
 	if !ok {
 		return dropRule{}, false
 	}
@@ -107,8 +108,8 @@ func mechanicDropRule(lobby, attacker int, desc string) (dropRule, bool) {
 // at 0 took a Death Saving Throw failure from it, so 0 failures means this hit dropped it): the target dies, or becomes Stable (a character
 // through the Hit Point owner; a monster or companion has no Death Saving Throws: the GM keeps it alive at 0) and has the first condition
 // for its time, and the second while it has the first (the condition owner, notesEndsWith). An attached mechanic replaces the text's rule.
-func droppedToZeroOnHit(lobby, attacker, target int, desc, source string, taken int) string {
-	rule, ok := mechanicDropRule(lobby, attacker, desc)
+func droppedToZeroOnHit(lobby, attacker, target int, entry, desc, source string, taken int) string {
+	rule, ok := mechanicDropRule(lobby, attacker, entry)
 	if !ok {
 		rule, ok = textDropRule(hitDamageText(desc))
 	}

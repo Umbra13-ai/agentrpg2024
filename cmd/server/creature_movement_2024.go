@@ -357,12 +357,12 @@ func textHitMoves(desc string) []hitMove {
 
 // hitForcedMove moves the target of a hit as the hit's text (or its attached forced_move) says, on the battle map, and answers the
 // clause; without a map the GM is told the distance and places the creature.
-func hitForcedMove(lobby, attacker, target int, desc string) string {
+func hitForcedMove(lobby, attacker, target int, entry, desc string) string {
 	if attacker == 0 {
 		return ""
 	}
 	moves := textHitMoves(desc)
-	if m, ok := mechanicHitMove(lobby, attacker, desc); ok {
+	if m, ok := mechanicHitMove(lobby, attacker, entry); ok {
 		moves = append(moves, m)
 	}
 	var out []string

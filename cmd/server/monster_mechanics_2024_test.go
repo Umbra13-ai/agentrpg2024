@@ -805,3 +805,54 @@ func TestPostgresEngulfMechanicInPlay(t *testing.T) {
 		t.Errorf("the escape: %d %v; restrained %v blinded %v", c, j, hasCondMarker(camp, hero, "restrained"), hasCondMarker(camp, hero, "blinded"))
 	}
 }
+
+const slumberText = "Melee Attack Roll: +60, reach 5 ft. Hit: 1 (1d1) Piercing damage. The target falls into a deep slumber for 1 minute unless something wakes it."
+
+func slumberBite() srdMonsterEntry {
+	return srdMonsterEntry{Name: "Slumber Bite", Text: slumberText, Mechanics: []entryMechanic{{"kind": "condition_on_hit", "conditions": []interface{}{"unconscious"},
+		"until": "minutes", "minutes": float64(1), "ends_on_damage": true, "covers": "The target falls into a deep slumber for 1 minute unless something wakes it."}}}
+}
+
+func TestConditionOnHitProblems(t *testing.T) {
+	cases := []struct{ mechanics, want string }{
+		{`[{"kind":"condition_on_hit","conditions":["prone"],"until":"end_of_its_next_turn","max_size":"medium"}]`, ""},
+		{`[{"kind":"condition_on_hit","conditions":["prone"]}]`, "until is required"},
+		{`[{"kind":"condition_on_hit","conditions":[],"until":"end_of_its_next_turn"}]`, "conditions must be a list of 1 or more"},
+		{`[{"kind":"condition_on_hit","conditions":["prone"],"until":"end_of_its_next_turn","ends_on_damage":true}]`, "ends_on_damage is only taken with until minutes"},
+	}
+	for _, c := range cases {
+		got := mechanicProblem("action", srdMonsterEntry{Name: "x", Text: ashClawText, Mechanics: mechanicsFromJSON(t, c.mechanics)})
+		if (c.want == "") != (got == "") || !strings.Contains(got, c.want) {
+			t.Errorf("%s: got %q, want %q", c.mechanics, got, c.want)
+		}
+	}
+	m := mechanicsFromJSON(t, `[{"kind":"condition_on_hit","conditions":["prone","grappled"],"until":"end_of_attackers_next_turn","max_size":"large"}]`)[0]
+	if e, ok := parseHitRider(conditionHitSentence(m.list("conditions"), m)); !ok || strings.Join(e.Conditions, ",") != "prone,grappled" || !e.UntilEnd || e.CondMaxSize != "large" {
+		t.Errorf("%q read as %+v", conditionHitSentence(m.list("conditions"), m), e)
+	}
+}
+
+func TestPostgresConditionOnHitEndsOnDamage(t *testing.T) {
+	testPostgres(t)
+	gm, _, camp, hero, viper := earlyRulesFixture(t, "Test Slumber Viper", []srdMonsterEntry{slumberBite(), {Name: "Nip", Text: "Melee Attack Roll: +60, reach 5 ft. Hit: 1 (1d1) Piercing damage."}})
+	cp := fmt.Sprintf("/api/campaigns/%d", camp)
+	pgCall(t, "POST", cp+"/combat/add", gm, map[string]interface{}{"combatants": []map[string]interface{}{{"name": "Slumber Victim", "monster_key": "goblin-warrior", "hp": 1000, "ac": 1, "initiative": -600}}})
+	victim := monsterIDsByKeyOrName(camp, "Slumber Victim")[0]
+	for _, tg := range []struct {
+		id   int
+		name string
+	}{{hero, fmt.Sprint(hero)}, {victim, "Slumber Victim"}} {
+		_, line := narrateHit(t, gm, camp, viper, "Slumber Bite", tg.name, "")
+		if !hasCondMarker(camp, tg.id, "unconscious") || strings.Contains(line, "deep slumber") {
+			t.Errorf("%s: Slumber Bite: %s", tg.name, line)
+			continue
+		}
+		if rs := recordsOf(camp, tg.id, "unconscious"); len(rs) != 1 || rs[0].DurationRounds != 10 {
+			t.Errorf("%s: Unconscious for 1 minute: %+v", tg.name, rs)
+		}
+		narrateHit(t, gm, camp, viper, "Nip", tg.name, "")
+		if hasCondMarker(camp, tg.id, "unconscious") {
+			t.Errorf("%s: damage did not wake it", tg.name)
+		}
+	}
+}

@@ -44,10 +44,10 @@ func drainedAmount(dtype string, total int, byType map[string]int) int {
 }
 
 // drainHPMaximum applies the clause of a hit's text to its target for the damage it took; "" when the text has none or nothing was taken.
-func drainHPMaximum(lobby, attacker, target int, desc string, taken int, byType map[string]int) string {
+func drainHPMaximum(lobby, attacker, target int, entry, desc string, taken int, byType map[string]int) string {
 	dtype, ok := hpMaxDrainOf(hitDamageText(desc))
 	if !ok {
-		dtype, ok = mechanicHPMaxDrain(lobby, attacker, desc) // an attached max_hp_drain (monster_mechanics_2024.go)
+		dtype, ok = mechanicHPMaxDrain(lobby, attacker, entry) // an attached max_hp_drain (monster_mechanics_2024.go)
 	}
 	if !ok {
 		return ""

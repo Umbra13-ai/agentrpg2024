@@ -457,6 +457,41 @@ var mechanicCatalog = []mechanicKind{
 			return "attack rolls against it have Disadvantage unless it is Incapacitated"
 		},
 	},
+	{
+		Kind: "condition_on_hit",
+		Does: "A hit of this attack gives its target the conditions, for the time until says (until the end of the target's next turn, until the start or the " +
+			"end of the attacker's next turn, or minutes); ends_on_damage true ends them when the target takes damage; max_size gives them only to a target " +
+			"of that size or smaller. They are given as the SRD's own riders are (Immunity, the condition's end).",
+		On:        "attack",
+		AppliedBy: "conditionOnHit through hitAfterDamage and the hit condition owner (parseHitRider, giveConditions), on every hit route",
+		Params: []mechanicParam{
+			{Name: "conditions", Type: "conditions", Min: 1, Required: true, Does: "the conditions the hit gives"},
+			{Name: "until", Type: "choice", Options: []string{"end_of_its_next_turn", "start_of_attackers_next_turn", "end_of_attackers_next_turn", "minutes"}, Required: true,
+				Does: "how long they last"},
+			{Name: "minutes", Type: "number", Min: 1, Max: 14400, Only: "until=minutes", Does: "how long, in minutes, with until minutes"},
+			{Name: "ends_on_damage", Type: "flag", Only: "until=minutes", Does: "true: they also end when the target takes damage (a magical sleep)"},
+			{Name: "max_size", Type: "choice", Options: []string{"tiny", "small", "medium", "large", "huge", "gargantuan"}, Does: "only a target of this size or smaller"},
+		},
+		Example: entryMechanic{"kind": "condition_on_hit", "conditions": []interface{}{"unconscious"}, "until": "minutes", "minutes": float64(1), "ends_on_damage": true,
+			"covers": "The target falls into a deep slumber for 1 minute unless something wakes it."},
+		ExampleOn: "Melee Attack Roll: +5, reach 5 ft. Hit: 4 (1d6 + 1) Piercing damage. The target falls into a deep slumber for 1 minute unless something wakes it.",
+		check: func(e srdMonsterEntry, m entryMechanic) string {
+			if m.str("until") == "minutes" && m.num("minutes") == 0 {
+				return "until minutes needs minutes"
+			}
+			return ""
+		},
+		describe: func(m entryMechanic) string {
+			s := "a hit gives its target " + strings.Join(m.list("conditions"), " and ") + ", " + conditionTimeWords(m)
+			if b, _ := m["ends_on_damage"].(bool); b {
+				s += ", until it takes damage"
+			}
+			if z := m.str("max_size"); z != "" {
+				s += " (a " + titleCase(z) + " or smaller target)"
+			}
+			return s
+		},
+	},
 }
 
 // engulfSentences: the SRD's own words for an engulf, which the hit and condition owners read (parseHitRider: the condition, what lasts
@@ -511,8 +546,8 @@ func (e saveEffect) giveEngulf(lobby, target int, source string) []string {
 }
 
 // mechanicHPMaxDrain: the attached max_hp_drain of the attacking monster's entry, as the drain owner reads one (its damage type, "" for all).
-func mechanicHPMaxDrain(lobby, attacker int, desc string) (string, bool) {
-	m, ok := attachedMechanic(lobby, attacker, desc, "max_hp_drain")
+func mechanicHPMaxDrain(lobby, attacker int, entry string) (string, bool) {
+	m, ok := attachedMechanic(lobby, attacker, entry, "max_hp_drain")
 	if !ok {
 		return "", false
 	}
@@ -552,8 +587,8 @@ func curseSentences(m entryMechanic) string {
 }
 
 // curseOnHit: the attached curse of the attacking monster's entry, given by the curse owner from its SRD sentences.
-func curseOnHit(lobby, attacker, target int, desc, source string) string {
-	m, ok := attachedMechanic(lobby, attacker, desc, "curse")
+func curseOnHit(lobby, attacker, target int, entry, source string) string {
+	m, ok := attachedMechanic(lobby, attacker, entry, "curse")
 	if !ok {
 		return ""
 	}
@@ -582,10 +617,50 @@ func conditionTimeWords(m entryMechanic) string {
 	return "until the end of its next turn"
 }
 
+// conditionHitSentence: the SRD's own sentence for conditions a hit gives, with the mechanic's time, its "until it takes damage" and its size
+// limit, which the hit condition owner reads (parseHitRider: the conditions, readRider's time, the size gate). random_condition and
+// condition_on_hit both write it.
+func conditionHitSentence(conds []string, m entryMechanic) string {
+	names := make([]string, len(conds))
+	for i, c := range conds {
+		names[i] = titleCase(c)
+	}
+	word := " condition"
+	if len(conds) > 1 {
+		word = " conditions"
+	}
+	who := "The target has"
+	if z := m.str("max_size"); z != "" {
+		who = "If the target is a " + titleCase(z) + " or smaller creature, it has"
+	}
+	s := "Hit: " + who + " the " + strings.Join(names, " and ") + word + " " + conditionTimeWords(m)
+	if b, _ := m["ends_on_damage"].(bool); b {
+		s += ", until it takes damage"
+	}
+	return s + "."
+}
+
+// conditionOnHit: the attached condition_on_hit of the attacking monster's entry, given by the hit condition owner.
+func conditionOnHit(lobby, attacker, target int, entry, source string) string {
+	m, ok := attachedMechanic(lobby, attacker, entry, "condition_on_hit")
+	if !ok {
+		return ""
+	}
+	e, ok := parseHitRider(conditionHitSentence(m.list("conditions"), m))
+	if !ok {
+		return " [the condition attached to this attack could not be read; the GM applies it]"
+	}
+	e.SourceID = attacker
+	if given := e.giveConditions(lobby, target, source); len(given) > 0 {
+		return " [" + strings.Join(given, "; ") + "]"
+	}
+	return ""
+}
+
 // randomConditionOnHit: the attached random_condition of the attacking monster's entry: the condition rolled, given by the hit condition
 // owner from the SRD sentence it stands for (parseHitRider reads its time; giveConditions honors Immunity and records its end).
-func randomConditionOnHit(lobby, attacker, target int, desc, source string) string {
-	m, ok := attachedMechanic(lobby, attacker, desc, "random_condition")
+func randomConditionOnHit(lobby, attacker, target int, entry, source string) string {
+	m, ok := attachedMechanic(lobby, attacker, entry, "random_condition")
 	if !ok {
 		return ""
 	}
@@ -599,7 +674,7 @@ func randomConditionOnHit(lobby, attacker, target int, desc, source string) stri
 	}
 	c := conds[roll-1]
 	head := fmt.Sprintf(" [%s: rolled 1d%d = %d: %s", stripUsage(source), len(conds), roll, titleCase(c))
-	e, ok := parseHitRider(fmt.Sprintf("Hit: The target has the %s condition %s.", titleCase(c), conditionTimeWords(m)))
+	e, ok := parseHitRider(conditionHitSentence([]string{c}, m))
 	if !ok {
 		return head + " (the GM applies it)]"
 	}
@@ -611,8 +686,8 @@ func randomConditionOnHit(lobby, attacker, target int, desc, source string) stri
 }
 
 // mechanicHitMove: the attached forced_move of the attacking monster's entry, as the movement owner's hitMove.
-func mechanicHitMove(lobby, attacker int, desc string) (hitMove, bool) {
-	m, ok := attachedMechanic(lobby, attacker, desc, "forced_move")
+func mechanicHitMove(lobby, attacker int, entry string) (hitMove, bool) {
+	m, ok := attachedMechanic(lobby, attacker, entry, "forced_move")
 	if !ok {
 		return hitMove{}, false
 	}
@@ -1047,23 +1122,14 @@ func rulesText(e srdMonsterEntry) string {
 	return strings.TrimSpace(text)
 }
 
-// attachedMechanic: the mechanic of this kind attached to the entry of the attacking monster whose text the route is reading (desc: the
-// row's text, which is the entry's rulesText). Only a compendium monster has attached mechanics.
-func attachedMechanic(lobby, attacker int, desc, kind string) (entryMechanic, bool) {
+// attachedMechanic: the mechanic of this kind attached to the attacking monster's entry of that name (the hit route's action: its own name,
+// never its text, which two entries can share once covered words are left out). Only a compendium monster has attached mechanics.
+func attachedMechanic(lobby, attacker int, entry, kind string) (entryMechanic, bool) {
 	_, meta, ok := monsterCombatant(lobby, attacker)
 	if !ok || meta == nil {
 		return nil, false
 	}
-	want := strings.TrimSpace(desc)
-	for _, g := range [][]srdMonsterEntry{meta.Actions, meta.BonusActions, meta.Reactions, meta.Legendary} {
-		for _, e := range g {
-			if len(e.Mechanics) == 0 || (rulesText(e) != want && strings.TrimSpace(e.Text) != want) {
-				continue
-			}
-			return e.mechanic(kind)
-		}
-	}
-	return nil, false
+	return entryMechanicIn(meta, entry, kind)
 }
 
 // mechanicsView: an entry's attached mechanics as the GM reads them (the report and the stat block).
