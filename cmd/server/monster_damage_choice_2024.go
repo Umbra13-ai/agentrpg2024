@@ -100,6 +100,10 @@ type damageAlt struct {
 	Type string
 	Cond damageCond
 	Text string // the condition as printed, for condGMJudged
+	// Extra: the amount is dealt IN ADDITION to the primary damage when its words hold ("plus an extra 5 (2d4) Piercing damage if it has at
+	// least 18 Hit Points", "can expend up to 3 charges, dealing an extra 3 (1d6) Force damage for each"), not instead of it. Only ever with
+	// condGMJudged: the server deals the primary damage and tells the GM the extra, never rolls it by guesswork.
+	Extra bool
 }
 
 var damageConditionTexts = []struct {
@@ -227,9 +231,9 @@ func hitDamageSentence(text string) string {
 	return text
 }
 
-// parseExtraDamage reads every damage amount of the Hit sentence after the first one into extras. It returns a problem, not a
-// guess, when the sentence has damage it cannot account for: an amount joined in a way that is not "plus", a condition other than
-// the Advantage one, or the word "damage" without a recognised amount.
+// parseExtraDamage reads every damage amount of the Hit sentence after the first one into extras. An amount joined in a way that is not
+// "plus", or under a condition other than Advantage, is a GM-judged extra (damageAlt.Extra): the primary damage is dealt and the GM is told
+// the rest. It returns a problem, not a guess, only for the word "damage" without a recognised amount.
 func parseExtraDamage(sentence string) (extras []extraDamage, alts []damageAlt, problem string) {
 	clauses := damageClauseRe.FindAllStringSubmatchIndex(sentence, -1)
 	consumed := 0
@@ -265,12 +269,18 @@ func parseExtraDamage(sentence string) (extras []extraDamage, alts []damageAlt, 
 			alts = append(alts, damageAlt{Dice: x.Dice, Flat: x.Flat, Type: x.Type, Cond: cond, Text: strings.TrimSpace(strings.Trim(strings.TrimSpace(tail), ".,;—–-"))})
 			continue
 		case !damageJoinRe.MatchString(head):
-			return nil, nil, "The attack's damage text is not understood (an amount that is not 'plus'); the GM must resolve it."
+			// an amount worded in a way the server does not read ("and the mage can expend up to 3 charges, dealing an extra 3 (1d6) Force damage
+			// for each"): the primary damage is dealt and the GM is told the extra (gmJudgedAlternatives), never a guess
+			alts = append(alts, damageAlt{Dice: x.Dice, Flat: x.Flat, Type: x.Type, Cond: condGMJudged, Extra: true,
+				Text: strings.TrimSpace(strings.Trim(sentence[clauses[i-1][1]:loc[1]]+tail, " .,;—–-"))})
+			continue
 		}
 		if advantageOnlyRe.MatchString(tail) {
 			x.IfAdvantage = true
 		} else if strings.TrimSpace(strings.Trim(tail, ".,;")) != "" && damageConditionRe.MatchString(tail) {
-			return nil, nil, "The attack has damage that depends on a condition the server cannot judge (" + strings.TrimSpace(tail) + "); the GM must resolve it. Nothing was rolled."
+			// "plus 5 (2d4) Piercing damage if it has at least 18 Hit Points": a condition the server has no reader for
+			alts = append(alts, damageAlt{Dice: x.Dice, Flat: x.Flat, Type: x.Type, Cond: condGMJudged, Extra: true, Text: strings.TrimSpace(strings.Trim(tail, " .,;—–-"))})
+			continue
 		}
 		extras = append(extras, x)
 	}
@@ -604,6 +614,10 @@ func gmJudgedAlternatives(a monsterActionRow) string {
 			amount := alt.Dice
 			if alt.Flat != nil {
 				amount = strconv.Itoa(*alt.Flat)
+			}
+			if alt.Extra {
+				note += fmt.Sprintf(" [GM: dealt its normal damage; %s %s damage applies as well when this holds: %s]", amount, alt.Type, alt.Text)
+				continue
 			}
 			note += fmt.Sprintf(" [GM: dealt its normal damage; %s %s damage applies instead %s]", amount, alt.Type, alt.Text)
 		}

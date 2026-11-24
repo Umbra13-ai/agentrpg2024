@@ -6,8 +6,9 @@ import (
 	"testing"
 )
 
-// The shared attack-data rules (monster_attacks.go, monster_damage_choice_2024.go): every damage amount of a Hit is represented or
-// the whole attack is refused before anything is rolled; a Multiattack is bounded and never turns a choice into both attacks.
+// The shared attack-data rules (monster_attacks.go, monster_damage_choice_2024.go): every damage amount of a Hit is rolled, or kept for the GM
+// when its condition or wording is one the server has no reader for (the primary damage is dealt and the GM is told the rest), and the whole
+// attack is refused before anything is rolled only for damage text with no amount; a Multiattack is bounded and never turns a choice into both attacks.
 // Originated as the independent review's counterexamples (Instinct, 2026-11-17), now regression tests of the rules.
 
 func attackRow(desc string) monsterActionRow {
@@ -21,17 +22,20 @@ func TestHitDamageEveryComponentIsRepresentedOrRefused(t *testing.T) {
 		extras  int
 		flat    int // value of the first extra when it is flat
 		refused bool
+		forGM   int // extra amounts kept for the GM (damageAlt.Extra): dealt by nobody, told to the GM
 	}{
-		{"dice plus dice", "Melee Attack Roll: +8. Hit: 12 (2d6 + 5) Slashing damage plus 10 (3d6) Fire damage.", 1, -1, false},
-		{"flat secondary", "Melee Attack Roll: +8. Hit: 12 (2d6 + 5) Slashing damage plus 7 Fire damage.", 1, 7, false},
-		{"flat primary and flat secondary", "Melee Attack Roll: +8. Hit: 9 Slashing damage plus 7 Cold damage.", 1, 7, false},
-		{"advantage rider", "Melee Attack Roll: +4. Hit: 5 (1d6 + 2) Piercing damage plus 2 (1d4) Slashing damage if the attack roll had Advantage.", 1, -1, false},
-		{"unrecognised condition on dice", "Melee Attack Roll: +8. Hit: 12 (2d6 + 5) Slashing damage plus 7 (2d6) Fire damage if the target is Prone.", 0, -1, true},
-		{"unrecognised condition on flat", "Melee Attack Roll: +8. Hit: 12 (2d6 + 5) Slashing damage plus 7 Fire damage while the target is Frightened.", 0, -1, true},
-		{"damage text without an amount", "Melee Attack Roll: +8. Hit: 12 (2d6 + 5) Slashing damage plus extra Fire damage.", 0, -1, true},
-		{"amount joined another way", "Melee Attack Roll: +8. Hit: 12 (2d6 + 5) Slashing damage, then 7 (2d6) Fire damage.", 0, -1, true},
-		{"alternative the server cannot judge is kept for the GM", "Melee Attack Roll: +4. Hit: 5 (1d6 + 2) Slashing damage, or 9 (2d6 + 2) Fire damage if the target is a Construct.", 0, -1, false},
-		{"rider effect after the sentence is not damage of the hit", "Melee Attack Roll: +4. Hit: 5 (1d6 + 2) Piercing damage. Constitution Saving Throw: DC 12. Failure: 9 (2d8) Poison damage.", 0, -1, false},
+		{"dice plus dice", "Melee Attack Roll: +8. Hit: 12 (2d6 + 5) Slashing damage plus 10 (3d6) Fire damage.", 1, -1, false, 0},
+		{"flat secondary", "Melee Attack Roll: +8. Hit: 12 (2d6 + 5) Slashing damage plus 7 Fire damage.", 1, 7, false, 0},
+		{"flat primary and flat secondary", "Melee Attack Roll: +8. Hit: 9 Slashing damage plus 7 Cold damage.", 1, 7, false, 0},
+		{"advantage rider", "Melee Attack Roll: +4. Hit: 5 (1d6 + 2) Piercing damage plus 2 (1d4) Slashing damage if the attack roll had Advantage.", 1, -1, false, 0},
+		{"unrecognised condition on dice is kept for the GM", "Melee Attack Roll: +8. Hit: 12 (2d6 + 5) Slashing damage plus 7 (2d6) Fire damage if the target is Prone.", 0, -1, false, 1},
+		{"unrecognised condition on flat is kept for the GM", "Melee Attack Roll: +8. Hit: 12 (2d6 + 5) Slashing damage plus 7 Fire damage while the target is Frightened.", 0, -1, false, 1},
+		{"a hit-point condition is kept for the GM", "Melee Attack Roll: +5, reach 5 ft. Hit: 5 (1d4 + 3) Piercing damage plus an extra 5 (2d4) Piercing damage if the knave has at least 18 Hit Points.", 0, -1, false, 1},
+		{"charges spent are kept for the GM", "Melee Attack Roll: +5, reach 5 ft. Hit: 6 (1d6 + 3) Bludgeoning damage, and the mage can expend up to 3 of the staff's charges, dealing an extra 3 (1d6) Force damage for each expended charge.", 0, -1, false, 1},
+		{"damage text without an amount", "Melee Attack Roll: +8. Hit: 12 (2d6 + 5) Slashing damage plus extra Fire damage.", 0, -1, true, 0},
+		{"amount joined another way is kept for the GM", "Melee Attack Roll: +8. Hit: 12 (2d6 + 5) Slashing damage, then 7 (2d6) Fire damage.", 0, -1, false, 1},
+		{"alternative the server cannot judge is kept for the GM", "Melee Attack Roll: +4. Hit: 5 (1d6 + 2) Slashing damage, or 9 (2d6 + 2) Fire damage if the target is a Construct.", 0, -1, false, 0},
+		{"rider effect after the sentence is not damage of the hit", "Melee Attack Roll: +4. Hit: 5 (1d6 + 2) Piercing damage. Constitution Saving Throw: DC 12. Failure: 9 (2d8) Poison damage.", 0, -1, false, 0},
 	}
 	for _, c := range cases {
 		p, problem := prepareMonsterAttack(attackRow(c.desc), "")
@@ -44,6 +48,18 @@ func TestHitDamageEveryComponentIsRepresentedOrRefused(t *testing.T) {
 		if problem != "" {
 			t.Errorf("%s: refused: %s", c.name, problem)
 			continue
+		}
+		kept := 0
+		for _, alt := range parseMonsterAttack("", c.desc).Alts {
+			if alt.Extra && alt.Cond == condGMJudged {
+				kept++
+			}
+		}
+		if kept != c.forGM {
+			t.Errorf("%s: %d extra amounts kept for the GM, want %d", c.name, kept, c.forGM)
+		}
+		if c.forGM > 0 && !strings.Contains(gmJudgedAlternatives(parseMonsterAttack("", c.desc).monsterActionRow), "applies as well when this holds") {
+			t.Errorf("%s: the GM is not told the extra: %q", c.name, gmJudgedAlternatives(parseMonsterAttack("", c.desc).monsterActionRow))
 		}
 		extras := attackExtraDamage(p.Desc)
 		if len(extras) != c.extras {

@@ -66,7 +66,7 @@ func customMonsterWarnings(m srdMonster2024) []string {
 		for _, e := range g {
 			if isAttackEntry(e.Text) {
 				if problem := attackEntryRefusal(e); problem != "" {
-					warnings = append(warnings, fmt.Sprintf("The attack %q will be refused in play, nothing rolled: %s Write each damage the server reads as \"plus N (dice) Type damage\"; put a conditional or charge-spending extra damage in its own sentence (\"If ..., the target takes an extra 5 (2d4) Piercing damage.\"): the attack then rolls and the GM resolves that sentence.", e.Name, problem))
+					warnings = append(warnings, fmt.Sprintf("The attack %q will be refused in play, nothing rolled: %s Write each damage amount with its number and type (\"plus 5 (2d4) Piercing damage\").", e.Name, problem))
 				}
 			}
 		}

@@ -82,7 +82,19 @@ func TestPostgresImportedAttackRulesThroughTheGMRoute(t *testing.T) {
 	if text := attackBy("Choice Beast", "Multiattack", ""); hp() != 1000 || !strings.Contains(text, "choice between attacks") || !strings.Contains(text, "Nothing was rolled") {
 		t.Errorf("an either/or Multiattack was not refused (HP %d): %s", hp(), text)
 	}
-	refused("Prone Rider", "", "Nothing was rolled")
+	// an extra amount under a condition the server has no reader for ("if the target is Prone") is the GM's: the primary damage is dealt and
+	// the reply tells the GM the extra (a miss, at +30 against AC 1, only on a natural 1: try until a hit)
+	for try := 0; try < 20; try++ {
+		pgExec(t, `UPDATE characters SET hp=1000 WHERE id=$1`, char)
+		text := attack("Prone Rider", "")
+		if !strings.Contains(text, "- HIT") && !strings.Contains(text, "CRITICAL HIT") {
+			continue
+		}
+		if hp() == 1000 || !strings.Contains(text, "applies as well when this holds: if the target is Prone") {
+			t.Errorf("Prone Rider: the primary damage was not dealt or the GM was not told the extra (HP %d): %s", hp(), text)
+		}
+		break
+	}
 	refused("Chosen Rider", "", "Nothing was rolled")
 	// a natural 1 misses whatever the bonus: try until a hit
 	for try := 0; try < 20; try++ {

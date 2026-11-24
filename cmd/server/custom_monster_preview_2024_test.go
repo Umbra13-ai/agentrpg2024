@@ -211,11 +211,11 @@ func TestWrittenZeroSaveIsKept(t *testing.T) {
 	}
 }
 
-// An attack that play refuses whole (a conditional extra damage inside its Hit sentence) is a warning at import, from the same check play
-// runs; written as its own sentence, the attack rolls and nothing is warned.
+// An attack that play refuses whole (damage text with no amount) is a warning at import, from the same check play runs; a conditional extra
+// amount is not refused (the primary damage is dealt and the GM is told the extra), so nothing is warned and its sentence is the GM's.
 func TestImportWarnsOfAnAttackPlayRefuses(t *testing.T) {
 	m := compendiumFixture()
-	m.Actions = append(m.Actions, srdMonsterEntry{Name: "Knave Dagger", Text: "Melee Attack Roll: +5, reach 5 ft. Hit: 5 (1d4 + 3) Piercing damage plus an extra 5 (2d4) Piercing damage if the knave has at least 18 Hit Points."})
+	m.Actions = append(m.Actions, srdMonsterEntry{Name: "Knave Dagger", Text: "Melee Attack Roll: +5, reach 5 ft. Hit: 5 (1d4 + 3) Piercing damage plus extra Piercing damage."})
 	found := false
 	for _, w := range customMonsterWarnings(m) {
 		if strings.Contains(w, `"Knave Dagger" will be refused in play`) {
@@ -225,13 +225,13 @@ func TestImportWarnsOfAnAttackPlayRefuses(t *testing.T) {
 	if !found || attackEntryRefusal(m.Actions[len(m.Actions)-1]) == "" {
 		t.Errorf("no warning for an attack play refuses: %v", customMonsterWarnings(m))
 	}
-	m.Actions[len(m.Actions)-1].Text = "Melee Attack Roll: +5, reach 5 ft. Hit: 5 (1d4 + 3) Piercing damage. If the knave has at least 18 Hit Points, the target takes an extra 5 (2d4) Piercing damage."
+	m.Actions[len(m.Actions)-1].Text = "Melee Attack Roll: +5, reach 5 ft. Hit: 5 (1d4 + 3) Piercing damage plus an extra 5 (2d4) Piercing damage if the knave has at least 18 Hit Points."
 	if p := attackEntryRefusal(m.Actions[len(m.Actions)-1]); p != "" {
-		t.Errorf("the reworded attack is refused: %s", p)
+		t.Errorf("a conditional extra is refused: %s", p)
 	}
 	for _, w := range customMonsterWarnings(m) {
 		if strings.Contains(w, "Knave Dagger") {
-			t.Errorf("a warning for the reworded attack: %s", w)
+			t.Errorf("a warning for an attack that rolls: %s", w)
 		}
 	}
 }
