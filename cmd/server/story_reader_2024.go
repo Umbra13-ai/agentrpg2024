@@ -51,10 +51,10 @@ type storyPassage struct {
 	Icon    string `json:"icon,omitempty"`
 	// Portrait: the speaking character's portrait, shown as its token left of its name (the Icon, its class's, when it has none)
 	Portrait string `json:"portrait,omitempty"`
-	Text    string `json:"text"`
-	Dice    string `json:"dice,omitempty"` // the roll or result that came with it
-	Tone    string `json:"tone,omitempty"` // "hit", "fail" or ""
-	Opener  bool   `json:"opener,omitempty"`
+	Text     string `json:"text"`
+	Dice     string `json:"dice,omitempty"` // the roll or result that came with it
+	Tone     string `json:"tone,omitempty"` // "hit", "fail" or ""
+	Opener   bool   `json:"opener,omitempty"`
 	// the creatures it shows, with their tokens (story_creatures_2024.go)
 	Creatures []storyCreature `json:"creatures,omitempty"`
 	at        time.Time
