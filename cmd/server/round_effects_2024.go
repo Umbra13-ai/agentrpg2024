@@ -101,6 +101,7 @@ var routeEffects = []routeEffect{
 	{"POST", "/api/characters/equip-weapon", effectGear, byBody, ""},
 	{"POST", "/api/characters/unequip-armor", effectGear, byBody, ""},
 	{"POST", "/api/characters/unequip-weapon", effectGear, byBody, ""},
+	{"POST", "/api/characters/{id}/setup", effectGear, byPath, ""}, // setup's answers: gear among them, so the request is what gear is
 	// ---------------------------------------------------------------- immediate
 	{"POST", "/api/account/email", effectImmediate, "", whyAccount},
 	{"POST", "/api/register", effectImmediate, "", whyAccount},

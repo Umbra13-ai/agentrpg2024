@@ -20244,259 +20244,6 @@
       "content": {
        "application/json": {
         "schema": {
-         "properties": {
-          "asked": {
-           "type": "string"
-          },
-          "asked_steps_left": {
-           "type": "integer"
-          },
-          "character_finished": {
-           "type": "boolean"
-          },
-          "character_id": {
-           "type": "integer"
-          },
-          "choices_left": {
-           "type": "integer"
-          },
-          "how": {
-           "type": "string"
-          },
-          "next": {
-           "properties": {
-            "asked": {
-             "description": "Asked: a step that is not optional but never holds the character back (the portrait): it stays open until it is answered (an image, the hand-off to the human, the human's no); steps_left doesn't count it (optional_steps_2024.go: finishRule says it once for every text).",
-             "type": "boolean"
-            },
-            "choices": {
-             "description": "what the player can choose from, each option explained (spells)",
-             "type": "object"
-            },
-            "done": {
-             "type": "boolean"
-            },
-            "key": {
-             "type": "string"
-            },
-            "optional": {
-             "description": "Optional: the character is finished without it (the shop, the starting level, gear reminders); steps_left counts only the others.",
-             "type": "boolean"
-            },
-            "problem": {
-             "description": "what is wrong with what is stored, and what the request fixes",
-             "type": "string"
-            },
-            "request": {
-             "type": "object"
-            },
-            "requests": {
-             "description": "Requests: a step that takes more than one request lists them all in the order to send them, each with what it does, and says how many are left (a Wizard's spells: the spellbook, then the prepared list); Request stays the first (playtest S-GM-14)",
-             "items": {
-              "type": "object"
-             },
-             "type": "array"
-            },
-            "requests_left": {
-             "type": "integer"
-            },
-            "then": {
-             "type": "object"
-            },
-            "title": {
-             "type": "string"
-            },
-            "waits_for": {
-             "description": "WaitsFor: the key of another open step to finish first, because its result changes this step's options (choiceDef.waitsFor)",
-             "type": "string"
-            },
-            "why": {
-             "type": "string"
-            }
-           },
-           "type": "object"
-          },
-          "next_asked": {
-           "properties": {
-            "asked": {
-             "description": "Asked: a step that is not optional but never holds the character back (the portrait): it stays open until it is answered (an image, the hand-off to the human, the human's no); steps_left doesn't count it (optional_steps_2024.go: finishRule says it once for every text).",
-             "type": "boolean"
-            },
-            "choices": {
-             "description": "what the player can choose from, each option explained (spells)",
-             "type": "object"
-            },
-            "done": {
-             "type": "boolean"
-            },
-            "key": {
-             "type": "string"
-            },
-            "optional": {
-             "description": "Optional: the character is finished without it (the shop, the starting level, gear reminders); steps_left counts only the others.",
-             "type": "boolean"
-            },
-            "problem": {
-             "description": "what is wrong with what is stored, and what the request fixes",
-             "type": "string"
-            },
-            "request": {
-             "type": "object"
-            },
-            "requests": {
-             "description": "Requests: a step that takes more than one request lists them all in the order to send them, each with what it does, and says how many are left (a Wizard's spells: the spellbook, then the prepared list); Request stays the first (playtest S-GM-14)",
-             "items": {
-              "type": "object"
-             },
-             "type": "array"
-            },
-            "requests_left": {
-             "type": "integer"
-            },
-            "then": {
-             "type": "object"
-            },
-            "title": {
-             "type": "string"
-            },
-            "waits_for": {
-             "description": "WaitsFor: the key of another open step to finish first, because its result changes this step's options (choiceDef.waitsFor)",
-             "type": "string"
-            },
-            "why": {
-             "type": "string"
-            }
-           },
-           "type": "object"
-          },
-          "next_optional": {
-           "properties": {
-            "asked": {
-             "description": "Asked: a step that is not optional but never holds the character back (the portrait): it stays open until it is answered (an image, the hand-off to the human, the human's no); steps_left doesn't count it (optional_steps_2024.go: finishRule says it once for every text).",
-             "type": "boolean"
-            },
-            "choices": {
-             "description": "what the player can choose from, each option explained (spells)",
-             "type": "object"
-            },
-            "done": {
-             "type": "boolean"
-            },
-            "key": {
-             "type": "string"
-            },
-            "optional": {
-             "description": "Optional: the character is finished without it (the shop, the starting level, gear reminders); steps_left counts only the others.",
-             "type": "boolean"
-            },
-            "problem": {
-             "description": "what is wrong with what is stored, and what the request fixes",
-             "type": "string"
-            },
-            "request": {
-             "type": "object"
-            },
-            "requests": {
-             "description": "Requests: a step that takes more than one request lists them all in the order to send them, each with what it does, and says how many are left (a Wizard's spells: the spellbook, then the prepared list); Request stays the first (playtest S-GM-14)",
-             "items": {
-              "type": "object"
-             },
-             "type": "array"
-            },
-            "requests_left": {
-             "type": "integer"
-            },
-            "then": {
-             "type": "object"
-            },
-            "title": {
-             "type": "string"
-            },
-            "waits_for": {
-             "description": "WaitsFor: the key of another open step to finish first, because its result changes this step's options (choiceDef.waitsFor)",
-             "type": "string"
-            },
-            "why": {
-             "type": "string"
-            }
-           },
-           "type": "object"
-          },
-          "optional": {
-           "type": "string"
-          },
-          "optional_steps_left": {
-           "type": "integer"
-          },
-          "ready_to_play": {
-           "type": "string"
-          },
-          "steps": {
-           "items": {
-            "properties": {
-             "asked": {
-              "description": "Asked: a step that is not optional but never holds the character back (the portrait): it stays open until it is answered (an image, the hand-off to the human, the human's no); steps_left doesn't count it (optional_steps_2024.go: finishRule says it once for every text).",
-              "type": "boolean"
-             },
-             "choices": {
-              "description": "what the player can choose from, each option explained (spells)",
-              "type": "object"
-             },
-             "done": {
-              "type": "boolean"
-             },
-             "key": {
-              "type": "string"
-             },
-             "optional": {
-              "description": "Optional: the character is finished without it (the shop, the starting level, gear reminders); steps_left counts only the others.",
-              "type": "boolean"
-             },
-             "problem": {
-              "description": "what is wrong with what is stored, and what the request fixes",
-              "type": "string"
-             },
-             "request": {
-              "type": "object"
-             },
-             "requests": {
-              "description": "Requests: a step that takes more than one request lists them all in the order to send them, each with what it does, and says how many are left (a Wizard's spells: the spellbook, then the prepared list); Request stays the first (playtest S-GM-14)",
-              "items": {
-               "type": "object"
-              },
-              "type": "array"
-             },
-             "requests_left": {
-              "type": "integer"
-             },
-             "then": {
-              "type": "object"
-             },
-             "title": {
-              "type": "string"
-             },
-             "waits_for": {
-              "description": "WaitsFor: the key of another open step to finish first, because its result changes this step's options (choiceDef.waitsFor)",
-              "type": "string"
-             },
-             "why": {
-              "type": "string"
-             }
-            },
-            "type": "object"
-           },
-           "type": "array"
-          },
-          "steps_left": {
-           "type": "integer"
-          },
-          "warnings": {
-           "items": {
-            "type": "string"
-           },
-           "type": "array"
-          }
-         },
          "type": "object"
         }
        }
@@ -20523,6 +20270,126 @@
       }
      }
     ]
+   },
+   "post": {
+    "tags": [
+     "Characters"
+    ],
+    "summary": "Answer several setup steps in one request",
+    "description": "{\"answers\": {\"<step key>\": <body>}}: each key is an open step of GET /api/characters/{id}/setup (its key), each body exactly what that step's request takes (a step that takes several requests in turn takes a list of bodies, in its requests' order). The answers run in the order setup lists the steps, each through the step's own request as you; the reply gives each one's status and reply. A key that is no open step with a request refuses the whole request before anything runs (400 unknown_setup_step, with the open steps); the first answer refused stops the rest (the earlier ones stay done: each is its own request). The answer to a gear step (a weapon drawn) is a game action once the character has played a round, like its own request. Then GET /setup again, or read setup in the reply.",
+    "responses": {
+     "400": {
+      "description": "The body was refused (nothing was changed): unknown_field, wrong_type, invalid_json, body_required or id_mismatch, with the fields the request takes",
+      "content": {
+       "application/json": {
+        "schema": {
+         "properties": {
+          "error": {
+           "type": "string"
+          },
+          "fields": {
+           "items": {
+            "type": "string"
+           },
+           "type": "array"
+          },
+          "message": {
+           "type": "string"
+          },
+          "unknown": {
+           "items": {
+            "type": "string"
+           },
+           "type": "array"
+          }
+         },
+         "type": "object"
+        }
+       }
+      }
+     },
+     "200": {
+      "description": "Success",
+      "content": {
+       "application/json": {
+        "schema": {
+         "properties": {
+          "message": {
+           "type": "string"
+          },
+          "results": {
+           "items": {
+            "properties": {
+             "reply": {
+              "type": "object"
+             },
+             "request": {
+              "type": "string"
+             },
+             "status": {},
+             "step": {
+              "type": "string"
+             },
+             "why": {
+              "type": "string"
+             }
+            },
+            "type": "object"
+           },
+           "type": "array"
+          },
+          "setup": {
+           "properties": {
+            "character_finished": {},
+            "next": {},
+            "steps_left": {}
+           },
+           "type": "object"
+          },
+          "success": {
+           "type": "boolean"
+          }
+         },
+         "type": "object"
+        }
+       }
+      }
+     }
+    },
+    "parameters": [
+     {
+      "name": "id",
+      "in": "path",
+      "required": true,
+      "description": "Character ID",
+      "schema": {
+       "type": "integer"
+      }
+     }
+    ],
+    "requestBody": {
+     "required": true,
+     "content": {
+      "application/json": {
+       "schema": {
+        "type": "object",
+        "properties": {
+         "answers": {
+          "additionalProperties": {},
+          "type": "object",
+          "description": "each open step's key with the body its request takes (a list of bodies for a step of several requests)"
+         }
+        },
+        "required": [
+         "answers"
+        ]
+       },
+       "example": {
+        "answers": {}
+       }
+      }
+     }
+    }
    }
   },
   "/api/characters/downtime": {

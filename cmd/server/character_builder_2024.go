@@ -3187,10 +3187,26 @@ func req(method, path string, body interface{}) map[string]interface{} {
 // @Success 200 {object} map[string]interface{}
 // @Router /characters/{id}/setup [get]
 func handleCharacterSetup(w http.ResponseWriter, r *http.Request, charID int) {
-	c, ok := loadChoiceChar(charID)
+	if r.Method == http.MethodPost { // every step's answer in one request (setup_answers_2024.go)
+		handleSetupAnswers(w, r, charID)
+		return
+	}
+	out, ok := setupView(charID)
 	if !ok {
 		writeJSONStatus(w, http.StatusNotFound, map[string]interface{}{"error": "character_not_found"})
 		return
+	}
+	first := r.URL.Query().Get("view") == "" && setupFirstRead(charID) // the first read is full; later ones short (guide_short_view_2024.go)
+	answerGuideView(r, out, first)
+	writeJSONStatus(w, 200, out)
+}
+
+// setupView: a character's setup as GET /setup gives it (its steps, what is left, what to send next); the one source of the steps the page shows and
+// the combined answer runs (setup_answers_2024.go). false: no such character.
+func setupView(charID int) (map[string]interface{}, bool) {
+	c, ok := loadChoiceChar(charID)
+	if !ok {
+		return nil, false
 	}
 	var level, str, dex, con, intl, wis, cha int
 	var mainHand string
@@ -3326,7 +3342,8 @@ func handleCharacterSetup(w http.ResponseWriter, r *http.Request, charID int) {
 	}
 	if next != nil {
 		out["next"] = next
-		out["how"] = "Send each step's request (the suggested choices are filled in; change them as you like), then GET this page again until steps_left is 0."
+		out["how"] = "Send each step's request (the suggested choices are filled in; change them as you like), then GET this page again until steps_left is 0. " +
+			"To answer several at once: POST /api/characters/" + fmt.Sprint(charID) + "/setup {\"answers\": {\"<step key>\": <the body its request takes>, ...}}."
 	} else {
 		out["how"] = "Your character is ready to play."
 		if nextAsked != nil {
@@ -3336,9 +3353,7 @@ func handleCharacterSetup(w http.ResponseWriter, r *http.Request, charID int) {
 			out["next_optional"] = nextOpt
 		}
 	}
-	first := r.URL.Query().Get("view") == "" && setupFirstRead(charID) // the first read is full; later ones short (guide_short_view_2024.go)
-	answerGuideView(r, out, first)
-	writeJSONStatus(w, 200, out)
+	return out, true
 }
 
 // draftSpeciesCantrips: the cantrips the draft's species lineage or legacy gives (High Elf: Prestidigitation ...).

@@ -38,7 +38,7 @@ func newServer(addr string) *http.Server {
 // portrait, a campaign's background, a monster's token), the rest of the server's requests are small. The cap in withProtections and the
 // reader's (readRequest) both ask it.
 func bodyLimitFor(path string) int64 {
-	for _, upload := range []string{"/portrait", "/background", "/token"} {
+	for _, upload := range []string{"/portrait", "/background", "/token", "/setup"} { // setup's answers may carry the portrait
 		if strings.HasSuffix(path, upload) {
 			return maxUploadBody
 		}
