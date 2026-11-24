@@ -521,3 +521,70 @@ func TestPostgresLegendaryDayUses(t *testing.T) {
 		t.Fatalf("a refused Legendary Action used up a Legendary Action use")
 	}
 }
+
+// A rest-based recharge ("Recharges after a Short or Long Rest", "Recharges after a Long Rest", "Recharges at the Next Dawn", and the SRD's
+// "(Recharge after a Short or Long Rest)"): one use until the GM says the creatures rested (monster-features rest short or long, or new_day), on
+// every route that runs an entry, with the retry refused before anything is rolled.
+func TestPostgresRestRechargeActions(t *testing.T) {
+	testPostgres(t)
+	for name, want := range map[string]string{
+		"Second Wind (Recharges after a Short or Long Rest)": "short", "Phantasms (Recharge after a Short or Long Rest)": "short",
+		"Magic Boon (Recharges after a Long Rest)": "long", "Revivify (Recharges at the Next Dawn)": "long", "Croak (Recharge 5-6)": "", "Roar (1/Day)": "",
+	} {
+		if got := restRechargePeriod(name); got != want {
+			t.Errorf("restRechargePeriod(%q) = %q, want %q", name, got, want)
+		}
+	}
+	gm, _, camp, hero, id := earlyRulesFixture(t, "Test Rest Knight", []srdMonsterEntry{
+		{Name: "Second Wind (Recharges after a Short or Long Rest)", Text: "The knight regains 10 (3d6) Hit Points."},
+		{Name: "Phantasms (Recharge after a Short or Long Rest)", Text: "The knight casts the Mirror Image spell, requiring no spell components and using Wisdom as the spellcasting ability."},
+		{Name: "Magic Boon (Recharges after a Long Rest)", Text: "The knight gives one ally a boon."},
+		{Name: "Revivify (Recharges at the Next Dawn)", Text: "The knight casts Revivify."},
+	})
+	use := func(action string) string {
+		t.Helper()
+		_, r := pgCall(t, "POST", "/api/gm/narrate", gm, map[string]interface{}{"campaign_id": camp, "narration": "x",
+			"monster_action": map[string]interface{}{"monster": fmt.Sprintf("#%d", id), "action": action, "target": fmt.Sprint(hero)}})
+		return fmt.Sprint(r["monster_action_result"], r["message"], r["error"])
+	}
+	spent := func(res string) bool { return strings.Contains(res, "already used") }
+	actions := []string{"Second Wind", "Phantasms", "Magic Boon", "Revivify"}
+	for _, a := range actions {
+		if res := use(a); spent(res) {
+			t.Fatalf("the first use of %s was refused: %s", a, res)
+		}
+		if res := use(a); !spent(res) || !strings.Contains(res, "Nothing was rolled") {
+			t.Errorf("the second use of %s: %s", a, res)
+		}
+	}
+	rest := func(kind string) {
+		t.Helper()
+		if c, j := pgCall(t, "POST", "/api/gm/monster-features", gm, map[string]interface{}{"campaign_id": camp, "rest": kind}); c != 200 {
+			t.Fatalf("rest %s: %d %v", kind, c, j)
+		}
+	}
+	rest("short") // the short-rest entries only
+	for a, back := range map[string]bool{"Second Wind": true, "Phantasms": true, "Magic Boon": false, "Revivify": false} {
+		if res := use(a); spent(res) == back {
+			t.Errorf("after a Short Rest %s (available %v): %s", a, back, res)
+		}
+	}
+	rest("long")
+	for _, a := range []string{"Magic Boon", "Revivify"} {
+		if res := use(a); spent(res) {
+			t.Errorf("after a Long Rest %s was refused: %s", a, res)
+		}
+	}
+	for _, a := range actions { // all spent again: a new day gives them back too
+		use(a)
+	}
+	pgCall(t, "POST", "/api/gm/monster-features", gm, map[string]interface{}{"campaign_id": camp, "new_day": true})
+	for _, a := range actions {
+		if res := use(a); spent(res) {
+			t.Errorf("after a new day %s was refused: %s", a, res)
+		}
+	}
+	if c, _ := pgCall(t, "POST", "/api/gm/monster-features", gm, map[string]interface{}{"campaign_id": camp, "rest": "nap"}); c != 400 {
+		t.Errorf("an unknown rest: %d", c)
+	}
+}

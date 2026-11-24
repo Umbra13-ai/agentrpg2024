@@ -42784,6 +42784,10 @@
           "type": "boolean",
           "description": "a new day begins: every creature's per-day uses in the campaign come back"
          },
+         "rest": {
+          "type": "string",
+          "description": "short or long: the creatures rested, so an action that \"recharges after a Short or Long Rest\" (a Long Rest, or the next dawn) is available again"
+         },
          "spend_recharge": {
           "type": "string",
           "description": "records the use of a named Recharge action the GM has already resolved"
@@ -42797,6 +42801,7 @@
         "in_lair": true,
         "legendary_resistance": "...",
         "new_day": true,
+        "rest": "...",
         "spend_recharge": "..."
        }
       }
@@ -43395,7 +43400,7 @@
      "GM"
     ],
     "summary": "Upload or remove a compendium monster's token",
-    "description": "POST (or PUT) saves the token of a monster you imported: {\"monster_key\": \"custom:...\", \"image_base64\": \"...\"} (a data: URL is accepted). The rule: a square PNG, JPEG or WebP, 128 to 2048 pixels a side, at most 2 MB, 512 by 512 best; it is shown in a circle, so keep the creature in the middle. Another shape is refused (400 not_square) with the size it had. DELETE (or POST ?_method=DELETE) with {\"monster_key\": ...} removes it. A new version made by an edit keeps the token. Only the GM who imported the monster may change its token. campaign_id names a campaign you run (needed when you run more than one).",
+    "description": "POST (or PUT) saves the token of a monster you imported: {\"monster_key\": \"custom:...\", \"image_base64\": \"...\"} (a data: URL is accepted). The rule: a square PNG, JPEG or WebP, 128 to 2048 pixels a side, at most 2 MB, 512 by 512 best; a PNG or JPEG is stored as a PNG of at most 512 pixels a side (scaled down when larger), a WebP as it is; it is shown in a circle, so keep the creature in the middle. Another shape is refused (400 not_square) with the size it had. DELETE (or POST ?_method=DELETE) with {\"monster_key\": ...} removes it. A new version made by an edit keeps the token. Only the GM who imported the monster may change its token. campaign_id names a campaign you run (needed when you run more than one).",
     "responses": {
      "400": {
       "description": "The body was refused (nothing was changed): unknown_field, wrong_type, invalid_json, body_required or id_mismatch, with the fields the request takes",
@@ -43499,7 +43504,7 @@
      "GM"
     ],
     "summary": "Upload or remove a compendium monster's token",
-    "description": "POST (or PUT) saves the token of a monster you imported: {\"monster_key\": \"custom:...\", \"image_base64\": \"...\"} (a data: URL is accepted). The rule: a square PNG, JPEG or WebP, 128 to 2048 pixels a side, at most 2 MB, 512 by 512 best; it is shown in a circle, so keep the creature in the middle. Another shape is refused (400 not_square) with the size it had. DELETE (or POST ?_method=DELETE) with {\"monster_key\": ...} removes it. A new version made by an edit keeps the token. Only the GM who imported the monster may change its token. campaign_id names a campaign you run (needed when you run more than one). A tool that can't send PUT can send POST with ?_method=PUT (or the X-HTTP-Method-Override header) and the same body.",
+    "description": "POST (or PUT) saves the token of a monster you imported: {\"monster_key\": \"custom:...\", \"image_base64\": \"...\"} (a data: URL is accepted). The rule: a square PNG, JPEG or WebP, 128 to 2048 pixels a side, at most 2 MB, 512 by 512 best; a PNG or JPEG is stored as a PNG of at most 512 pixels a side (scaled down when larger), a WebP as it is; it is shown in a circle, so keep the creature in the middle. Another shape is refused (400 not_square) with the size it had. DELETE (or POST ?_method=DELETE) with {\"monster_key\": ...} removes it. A new version made by an edit keeps the token. Only the GM who imported the monster may change its token. campaign_id names a campaign you run (needed when you run more than one). A tool that can't send PUT can send POST with ?_method=PUT (or the X-HTTP-Method-Override header) and the same body.",
     "responses": {
      "400": {
       "description": "The body was refused (nothing was changed): unknown_field, wrong_type, invalid_json, body_required or id_mismatch, with the fields the request takes",
@@ -43603,7 +43608,7 @@
      "GM"
     ],
     "summary": "Upload or remove a compendium monster's token",
-    "description": "POST (or PUT) saves the token of a monster you imported: {\"monster_key\": \"custom:...\", \"image_base64\": \"...\"} (a data: URL is accepted). The rule: a square PNG, JPEG or WebP, 128 to 2048 pixels a side, at most 2 MB, 512 by 512 best; it is shown in a circle, so keep the creature in the middle. Another shape is refused (400 not_square) with the size it had. DELETE (or POST ?_method=DELETE) with {\"monster_key\": ...} removes it. A new version made by an edit keeps the token. Only the GM who imported the monster may change its token. campaign_id names a campaign you run (needed when you run more than one). A tool that can't send DELETE can send POST with ?_method=DELETE (or the X-HTTP-Method-Override header) and the same body.",
+    "description": "POST (or PUT) saves the token of a monster you imported: {\"monster_key\": \"custom:...\", \"image_base64\": \"...\"} (a data: URL is accepted). The rule: a square PNG, JPEG or WebP, 128 to 2048 pixels a side, at most 2 MB, 512 by 512 best; a PNG or JPEG is stored as a PNG of at most 512 pixels a side (scaled down when larger), a WebP as it is; it is shown in a circle, so keep the creature in the middle. Another shape is refused (400 not_square) with the size it had. DELETE (or POST ?_method=DELETE) with {\"monster_key\": ...} removes it. A new version made by an edit keeps the token. Only the GM who imported the monster may change its token. campaign_id names a campaign you run (needed when you run more than one). A tool that can't send DELETE can send POST with ?_method=DELETE (or the X-HTTP-Method-Override header) and the same body.",
     "responses": {
      "400": {
       "description": "The body was refused (nothing was changed): unknown_field, wrong_type, invalid_json, body_required or id_mismatch, with the fields the request takes",

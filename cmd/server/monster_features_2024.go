@@ -994,7 +994,7 @@ func monsterFeaturesInfo(lobbyID, id int) map[string]interface{} {
 
 // handleGMMonsterFeatures godoc
 // @Summary A monster's Legendary Actions, Legendary Resistance, lair and auras in the fight
-// @Description GET ?combatant_id=N shows them (uses left, policy, automatic traits, recharging actions). POST sets them: in_lair (one more Legendary Action use and Legendary Resistance; the 2024 rules have no Lair Actions), legendary_resistance ("auto": used against effects that give a condition or damage that would drop the monster to 0 HP; "always"; "manual"), auras (false switches the monster's auras, Regeneration aside, off), new_day (true: every creature's per-day uses in the campaign come back; the server does not track days by itself), day_uses (sets this creature's counts by key, 0 gives one back). Per-day uses (\"(1/Day)\", Spellcasting \"2/Day Each\") are kept per creature (creature_id) across fights; GET without combatant_id lists the known creatures. Send spend_recharge with the name of a Recharge action the GM has already resolved to record that use.
+// @Description GET ?combatant_id=N shows them (uses left, policy, automatic traits, recharging actions). POST sets them: in_lair (one more Legendary Action use and Legendary Resistance; the 2024 rules have no Lair Actions), legendary_resistance ("auto": used against effects that give a condition or damage that would drop the monster to 0 HP; "always"; "manual"), auras (false switches the monster's auras, Regeneration aside, off), new_day (true: every creature's per-day uses in the campaign come back; the server does not track days by itself), rest ("short" or "long": the creatures rested, so an action that recharges after a Short or Long Rest, a Long Rest or the next dawn can be used again), day_uses (sets this creature's counts by key, 0 gives one back). Per-day uses (\"(1/Day)\", Spellcasting \"2/Day Each\") are kept per creature (creature_id) across fights; GET without combatant_id lists the known creatures. Send spend_recharge with the name of a Recharge action the GM has already resolved to record that use.
 // @Tags GM
 // @Param combatant_id query int false "Monster id (GET)"
 // @Body Settings (POST)
@@ -1007,6 +1007,7 @@ func handleGMMonsterFeatures(w http.ResponseWriter, r *http.Request) {
 		LegendaryResistance string         `json:"legendary_resistance"` // auto (used against a condition, or damage that would drop it to 0), always or manual
 		Auras               *bool          `json:"auras"`                // false switches the monster's auras off (Regeneration aside)
 		NewDay              bool           `json:"new_day"`              // a new day begins: every creature's per-day uses in the campaign come back
+		Rest                string         `json:"rest"`                 // short or long: the creatures rested, so an action that "recharges after a Short or Long Rest" (a Long Rest, or the next dawn) is available again
 		DayUses             map[string]int `json:"day_uses"`             // sets this monster's per-day counts by key (action:<name>, spell:<name>, tier:<head>); 0 gives a use back
 		SpendRecharge       string         `json:"spend_recharge"`       // records the use of a named Recharge action the GM has already resolved
 	}
@@ -1016,6 +1017,11 @@ func handleGMMonsterFeatures(w http.ResponseWriter, r *http.Request) {
 	}
 	if r.Method != http.MethodPost {
 		req.CombatantID, _ = strconv.Atoi(r.URL.Query().Get("combatant_id"))
+	}
+	rested := strings.ToLower(strings.TrimSpace(req.Rest))
+	if rested != "" && rested != "short" && rested != "long" {
+		writeJSONStatus(w, http.StatusBadRequest, map[string]interface{}{"error": "invalid_rest", "message": "rest is short or long."})
+		return
 	}
 	e, meta, found := monsterCombatant(lobbyID, req.CombatantID)
 	entryName := ""
@@ -1034,6 +1040,9 @@ func handleGMMonsterFeatures(w http.ResponseWriter, r *http.Request) {
 	if !found {
 		if r.Method == http.MethodPost && req.NewDay {
 			newDay(lobbyID)
+		}
+		if r.Method == http.MethodPost && rested != "" {
+			endRest(lobbyID, rested == "long")
 		}
 		var list []map[string]interface{}
 		for _, c := range combatEntries(lobbyID) {
@@ -1085,6 +1094,9 @@ func handleGMMonsterFeatures(w http.ResponseWriter, r *http.Request) {
 		}
 		if req.NewDay {
 			newDay(lobbyID)
+		}
+		if rested != "" {
+			endRest(lobbyID, rested == "long")
 		}
 		if len(req.DayUses) > 0 {
 			saveDayUses(lobbyID, req.CombatantID, s.DayUses)

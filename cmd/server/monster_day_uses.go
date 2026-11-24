@@ -21,7 +21,10 @@ import (
 // know when a day ends: the GM calls new_day. Documented in docs/MONSTER_SYSTEM.md.
 
 var (
-	spellListHeadRe  = regexp.MustCompile(`(?i)(At Will|(\d+)/Day( Each)?):`) // any case: an imported entry writes "1/day each"
+	spellListHeadRe = regexp.MustCompile(`(?i)(At Will|(\d+)/Day( Each)?):`) // any case: an imported entry writes "1/day each"
+	// restRechargeRe: "(Recharge after a Short or Long Rest)" (Cloaker Phantasms; an import writes "Recharges after a Long Rest", "Recharges at the Next
+	// Dawn"): one use until the rest it names. Group 1 is what it waits for.
+	restRechargeRe   = regexp.MustCompile(`(?i)\(Recharges? [a-z]+ (?:the |a )?([^)]+)\)`)
 	spellParenRe     = regexp.MustCompile(`\s*\([^)]*\)`)
 	spellLevelNoteRe = regexp.MustCompile(`^level \d version$`)
 )
@@ -104,6 +107,9 @@ func spellNamesOf(text string) []string {
 // monsterDayUse names the per-day counter the use of an entry spends and its limit; key is "" when the use is unlimited (At Will, no
 // "/Day"). use is the spell the GM named for a Spellcasting entry.
 func monsterDayUse(entry srdMonsterEntry, use string) (key string, limit int) {
+	if period := restRechargePeriod(entry.Name); period != "" { // one use until the rest (a Recharge that rolls is rechargeRe's)
+		return "rest:" + period + ":" + strings.ToLower(stripUsage(entry.Name)), 1
+	}
 	if m := perDayRe.FindStringSubmatch(entry.Name); m != nil {
 		n, _ := strconv.Atoi(m[1])
 		return "action:" + strings.ToLower(stripUsage(entry.Name)), n
@@ -125,6 +131,70 @@ func monsterDayUse(entry srdMonsterEntry, use string) (key string, limit int) {
 	return "", 0
 }
 
+// restRechargePeriod: "short" for an entry that recharges after a Short Rest (alone or "Short or Long Rest"), "long" for one that waits for a
+// Long Rest or the next dawn, "" for an entry with no rest recharge.
+func restRechargePeriod(entryName string) string {
+	m := restRechargeRe.FindStringSubmatch(entryName)
+	if m == nil {
+		return ""
+	}
+	if strings.Contains(strings.ToLower(m[1]), "short") {
+		return "short"
+	}
+	return "long"
+}
+
+// restWords: what the entry waits for, as its name says it ("a Short or Long Rest", "the Next Dawn").
+func restWords(entryName string) string {
+	m := restRechargeRe.FindStringSubmatch(entryName)
+	if m == nil {
+		return "a rest"
+	}
+	if strings.HasPrefix(strings.ToLower(m[1]), "next dawn") {
+		return "the " + m[1]
+	}
+	return "a " + m[1]
+}
+
+// endRest gives back the rest-recharged uses of every creature in the campaign: a Short Rest those that recharge after one, a Long Rest all of them
+// (the GM says the creatures rested, as it says a new day began).
+func endRest(campaignID int, long bool) {
+	if db == nil {
+		return
+	}
+	rows, err := db.Query(`SELECT creature_id, uses FROM monster_day_uses WHERE campaign_id = $1`, campaignID)
+	if err != nil {
+		return
+	}
+	type held struct {
+		id   string
+		uses map[string]int
+	}
+	var all []held
+	for rows.Next() {
+		var id string
+		var raw []byte
+		uses := map[string]int{}
+		if rows.Scan(&id, &raw) == nil && json.Unmarshal(raw, &uses) == nil {
+			all = append(all, held{id, uses})
+		}
+	}
+	rows.Close()
+	for _, h := range all {
+		changed := false
+		for k := range h.uses {
+			if strings.HasPrefix(k, "rest:short:") || (long && strings.HasPrefix(k, "rest:long:")) {
+				delete(h.uses, k)
+				changed = true
+			}
+		}
+		if changed {
+			out, _ := json.Marshal(h.uses)
+			db.Exec(`UPDATE monster_day_uses SET uses = $3 WHERE campaign_id = $1 AND creature_id = $2`, campaignID, h.id, string(out))
+		}
+	}
+}
+
 // dayUseRefusal is the refusal of a use past its limit, or "".
 func dayUseRefusal(s monsterState, name string, entry srdMonsterEntry, use, key string, limit int) string {
 	if key == "" || s.DayUses[key] < limit {
@@ -135,6 +205,9 @@ func dayUseRefusal(s monsterState, name string, entry srdMonsterEntry, use, key 
 		what = strings.TrimSpace(use) + " (Spellcasting)"
 	}
 	safe := fmt.Sprintf("%s has already used %s. Nothing was rolled.", name, what)
+	if strings.HasPrefix(key, "rest:") {
+		return refusalAudiences(safe, fmt.Sprintf("%s has already used %s: it recharges after %s (counted per creature across fights; the GM says the creatures rested with monster-features rest, or ends the day with new_day)", name, what, restWords(entry.Name)))
+	}
 	return refusalAudiences(safe, fmt.Sprintf("%s has used %s %d time(s) already: the stat block allows %d/Day (counted per creature across fights; the GM ends the day with monster-features new_day, or corrects the count with day_uses)", name, what, s.DayUses[key], limit))
 }
 
