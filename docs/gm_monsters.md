@@ -80,7 +80,7 @@ Legendary Actions
 ```
 
 - **First line** is the name; **second line** is `Size Type, Alignment` (a size of two, "Medium or Small", is read as the first and the reader tells you).
-- **AC, Initiative, HP and Speed** may share lines or have their own. **The ability grid** is `Str 18 +4 +4`: score, modifier, saving throw bonus. Give all six, with the saving throw bonus as printed (a save you leave out is taken as the ability modifier, and the preview says so).
+- **AC, Initiative, HP and Speed** may share lines or have their own. **The ability grid** is `Str 18 +4 +4`: score, modifier, saving throw bonus. Give all six, with the saving throw bonus as printed: a printed +0 is written `+0` (or `"Save": 0` in JSON) and kept; a save you leave out (no third number, no `Save` key) is taken as the ability modifier, and the preview says so.
 - **Labelled lines** (leave out the ones the creature lacks): `Skills`, `Vulnerabilities`, `Resistances`, `Immunities` (damage, then `;` and conditions), `Gear`, `Senses`, `Languages`, `CR` (`CR 3 (XP 700; PB +2)`, or with a lair XP: `CR 10 (XP 5,900, or 7,200 in lair; PB +4)`).
 - **Sections** each on a line of their own: `Traits`, `Actions`, `Bonus Actions`, `Reactions`, `Legendary Actions`. Each **entry** is `Name. Text` on one line (or more: a following line that does not start another entry's `Name.` continues the text). The name is in Title Case; a parenthesis stays with it (`Fire Breath (Recharge 5-6)`, `Legendary Resistance (3/Day, or 4/Day in Lair)`).
 - Under `Legendary Actions`, the paragraph before the first entry is the intro: begin it `Legendary Action Uses: 3 (4 in Lair).`
@@ -94,7 +94,7 @@ Legendary Actions
 | `monster` | The stat block as the reader understood it, as JSON. Check it, correct it, import it. |
 | `read_notes` | What the reader could not read or changed (a missing AC or HP, a size of two, text outside any section). |
 | `notes` | What the server filled in (a saving throw you left out; an initiative left out is the Dexterity modifier). |
-| `warnings` | What it will count as 0 or apply by a trait's name alone: Legendary Action uses it cannot read, Legendary Resistance uses, an SRD trait name (Magic Resistance, Evasion) whose text it does not read, a save below the modifier, an empty Speed. |
+| `warnings` | What it will count as 0 or apply by a trait's name alone: Legendary Action uses it cannot read, Legendary Resistance uses, an SRD trait name (Magic Resistance, Evasion) whose text it does not read, a save below the modifier, an empty Speed, and an attack the server will refuse whole in play (a conditional or charge-spending extra damage inside its Hit sentence: move it to its own sentence and the attack rolls). |
 | `entries[].applied` | Sentences a rule of the server reads, with the rule's name; for a trait the server applies, `server_does` says what it does in play. |
 | `entries[].gm_resolves` | Sentences you resolve in play. `silent: true` means the server will not even mention it in its replies, so write it down. `suggest_mechanics` lists the attached mechanics whose wording the sentence resembles (each `kind` with what it does): a suggestion only, read the kind in `GET /api/gm/compendium/mechanics` and attach it if it fits. |
 | `summary` | The counts of all three. |
