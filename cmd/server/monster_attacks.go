@@ -118,6 +118,16 @@ func multiattackPlan(desc string, actions []monsterActionRow) ([]monsterActionRo
 	if named > 1 && attackChoiceRe.MatchString(low) {
 		return nil, "The Multiattack offers a choice between attacks (" + strings.TrimSpace(desc) + "); the GM must make the attacks one by one by name. Nothing was rolled."
 	}
+	// a total the text states ("makes two attacks ...") is the number rolled, never fewer (I-ALDENQA-7: "makes two attacks with its beak" rolled
+	// one): one attack named makes all of them; several named that add up to less is the GM's, refused before anything is rolled
+	if stated := statedAttackTotal(low); stated > 0 && len(plan) > 0 && len(plan) < stated {
+		if named != 1 {
+			return nil, fmt.Sprintf("The Multiattack says %d attacks but names fewer (%d); the GM must make the attacks one by one by name. Nothing was rolled.", stated, len(plan))
+		}
+		for len(plan) < stated {
+			plan = append(plan, plan[0])
+		}
+	}
 	if len(plan) == 0 { // "makes two attacks": use the first attack in the list
 		for _, a := range actions {
 			if (a.DamageDice != "" || isAttackEntry(a.Desc)) && !strings.EqualFold(stripUsage(a.Name), "Multiattack") {
@@ -135,6 +145,16 @@ func multiattackPlan(desc string, actions []monsterActionRow) ([]monsterActionRo
 		}
 	}
 	return plan, ""
+}
+
+// statedAttackTotal: the total a Multiattack's text states ("makes two attacks", "makes three attacks"), 0 when it states none.
+func statedAttackTotal(low string) int {
+	for w, c := range countWords {
+		if strings.Contains(low, "makes "+w+" attacks") {
+			return c
+		}
+	}
+	return 0
 }
 
 // wholeNameIndex: where name stands in text as a whole name (not inside a longer word) outside the claimed spans; -1 when nowhere.

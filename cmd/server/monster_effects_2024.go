@@ -248,8 +248,10 @@ var advantageGateRe = regexp.MustCompile(`(?i)\bhad [Aa]dvantage on the attack r
 var sentenceSplitRe = regexp.MustCompile(`\.\s+`)
 
 func (e *saveEffect) readRider(fail string) (extra []string) {
-	if c := mfxCondRe.FindStringSubmatch(fail); c != nil {
-		for _, name := range regexp.MustCompile(`, | and | or `).Split(c[1], -1) {
+	// conditions joined by "or" are a choice ("the Charmed or Poisoned condition (its choice)"): the rules never give both, and the server
+	// doesn't pick, so none is applied and the sentence stays the GM's (I-ALDENQA-8: both were given). No SRD stat block words one so.
+	if c := mfxCondRe.FindStringSubmatch(fail); c != nil && !strings.Contains(c[1], " or ") {
+		for _, name := range regexp.MustCompile(`, | and `).Split(c[1], -1) {
 			if n := strings.ToLower(strings.TrimSpace(name)); mfxConditions[n] {
 				e.Conditions = append(e.Conditions, n)
 			}
