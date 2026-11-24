@@ -15,6 +15,7 @@ import (
 	"fmt"
 	"net/http"
 	"regexp"
+	"sort"
 	"strconv"
 	"strings"
 
@@ -57,19 +58,30 @@ var (
 // the text cannot be read with certainty it returns a problem instead of a guess, and nothing may be rolled: a count above
 // maxMultiattackAttacks, an either/or choice between attacks, a count the text does not give.
 func multiattackPlan(desc string, actions []monsterActionRow) ([]monsterActionRow, string) {
-	low := strings.ToLower(desc)
-	var plan []monsterActionRow
-	named := 0
-	for _, a := range actions {
+	// the attacks it makes are named outside its replacement sentence (an option is never one more attack: GM doc A2); each name is
+	// found as a whole name, longest first, where no longer name already stands ("Claw" is not read inside "Sickening Claw")
+	low := strings.ToLower(withoutReplaceSentence(desc))
+	type found struct{ idx, count int }
+	at := map[int]found{} // actions index -> where its name stands and how many
+	claimed := [][2]int{}
+	order := make([]int, 0, len(actions))
+	for i := range actions {
+		order = append(order, i)
+	}
+	sort.SliceStable(order, func(a, b int) bool {
+		return len(stripUsage(actions[order[a]].Name)) > len(stripUsage(actions[order[b]].Name))
+	})
+	for _, i := range order {
+		a := actions[i]
 		if strings.EqualFold(stripUsage(a.Name), "Multiattack") || (a.DamageDice == "" && !isAttackEntry(a.Desc)) {
 			continue
 		}
 		n := strings.ToLower(stripUsage(a.Name)) // "Grave Strike (Vampire Form Only)" is "Grave Strike" in the Multiattack text
-		idx := strings.Index(low, n)
+		idx := wholeNameIndex(low, n, claimed)
 		if idx < 0 {
 			continue
 		}
-		named++
+		claimed = append(claimed, [2]int{idx, idx + len(n)})
 		count := 1
 		pre := strings.Fields(low[:idx])
 		if len(pre) > 0 {
@@ -84,10 +96,20 @@ func multiattackPlan(desc string, actions []monsterActionRow) ([]monsterActionRo
 				count = c
 			}
 		}
-		if len(plan)+count > maxMultiattackAttacks {
+		at[i] = found{idx, count}
+	}
+	var plan []monsterActionRow
+	named := 0
+	for i, a := range actions { // the plan keeps the stat block's order
+		f, ok := at[i]
+		if !ok {
+			continue
+		}
+		named++
+		if len(plan)+f.count > maxMultiattackAttacks {
 			return nil, multiattackOverCapProblem + "the plan is refused. The GM must resolve it."
 		}
-		for i := 0; i < count; i++ {
+		for k := 0; k < f.count; k++ {
 			plan = append(plan, a)
 		}
 	}
@@ -113,6 +135,34 @@ func multiattackPlan(desc string, actions []monsterActionRow) ([]monsterActionRo
 		}
 	}
 	return plan, ""
+}
+
+// wholeNameIndex: where name stands in text as a whole name (not inside a longer word) outside the claimed spans; -1 when nowhere.
+func wholeNameIndex(text, name string, claimed [][2]int) int {
+	for from := 0; from <= len(text); {
+		i := strings.Index(text[from:], name)
+		if i < 0 {
+			return -1
+		}
+		i += from
+		end := i + len(name)
+		whole := (i == 0 || !isNameByte(text[i-1])) && (end == len(text) || !isNameByte(text[end]))
+		inside := false
+		for _, c := range claimed {
+			if i < c[1] && end > c[0] {
+				inside = true
+			}
+		}
+		if whole && !inside {
+			return i
+		}
+		from = i + 1
+	}
+	return -1
+}
+
+func isNameByte(b byte) bool {
+	return b >= 'a' && b <= 'z' || b >= 'A' && b <= 'Z' || b >= '0' && b <= '9' || b == '\''
 }
 
 // multiattackChoiceSpec is the declared-composition contract of a Multiattack text: how many attacks it makes, which
@@ -479,10 +529,7 @@ func damageApplies(p *bool) bool { return p == nil || *p }
 
 func resolveMonsterAttack(r *http.Request, campaignID int, monster, action, target string, apply bool) (string, map[string]interface{}, bool) {
 	chargeSaidNote := ""
-	ids := monsterIDsByKeyOrName(campaignID, monster)
-	if n, err := strconv.Atoi(strings.TrimPrefix(monster, "#")); err == nil && strings.HasPrefix(monster, "#") {
-		ids = []int{n} // one particular monster of the fight (Legendary Actions)
-	}
+	ids := monsterIDsByKeyOrName(campaignID, monster) // "#-3" names one monster by its combat id (monsterIDsByKeyOrName)
 	attackerID, key, attackerName := 0, strings.ToLower(strings.ReplaceAll(monster, " ", "-")), monster
 	entries := combatEntries(campaignID)
 	for _, id := range ids { // the best match first (F208), not the first in the turn order

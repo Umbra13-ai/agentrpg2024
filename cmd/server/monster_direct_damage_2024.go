@@ -49,7 +49,7 @@ func init() {
 	}
 }
 
-func resolveMonsterDirectDamage(r *http.Request, lobby int, name, entry, text string, targets []int, apply bool) ([]string, bool) {
+func resolveMonsterDirectDamage(r *http.Request, lobby, monsterID int, name, entry, text string, targets []int, apply bool) ([]string, bool) {
 	m := directDamageText.FindStringSubmatch(strings.TrimSpace(text))
 	if m == nil {
 		if !embeddedDamageText.MatchString(text) {
@@ -65,6 +65,7 @@ func resolveMonsterDirectDamage(r *http.Request, lobby int, name, entry, text st
 		}
 		if apply {
 			addGMNotice(lobby, name+": "+message)
+			monsterHandoverEntry(lobby, monsterID, entry, text, targets) // a lasting effect handed over is the GM's open item (gm_handover_2024.go; GM doc B2)
 		}
 		return []string{message}, true
 	}

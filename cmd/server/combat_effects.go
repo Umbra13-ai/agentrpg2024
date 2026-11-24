@@ -13,6 +13,7 @@ package main
 import (
 	"encoding/json"
 	"fmt"
+	"strconv"
 	"strings"
 	"sync"
 )
@@ -150,6 +151,14 @@ func combatEffectViews(lobbyID, targetID int) []map[string]interface{} {
 
 // monsterIDsByKeyOrName finds the combat ids of monsters that match a name or key given by the GM.
 func monsterIDsByKeyOrName(lobbyID int, monster string) []int {
+	if n, err := strconv.Atoi(strings.TrimPrefix(strings.TrimSpace(monster), "#")); err == nil && strings.HasPrefix(strings.TrimSpace(monster), "#") {
+		for _, c := range combatEntries(lobbyID) { // "#-3": one particular monster of the fight, by its combat id (every caller reads it)
+			if m, _ := c["is_monster"].(bool); m && asInt(c["id"]) == n {
+				return []int{n}
+			}
+		}
+		return nil
+	}
 	// F208: the best match first: the exact name, then the monster kind, then numbered copies ("Bandit 2"), then other names that begin
 	// with it ("Bandit Captain"); before, the turn order decided and "Bandit" could be the Bandit Captain
 	var ranked [4][]int

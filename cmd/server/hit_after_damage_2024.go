@@ -16,7 +16,7 @@ import (
 // drain: "the Acid damage taken").
 func hitAfterDamage(lobby, attacker, target int, desc, source string, taken int, byType map[string]int) string {
 	recordLastHit(lobby, attacker, target, taken) // what it hit, for an entry used right after (Rampage; creature_movement_2024.go)
-	return drainHPMaximum(lobby, target, desc, taken, byType) + burnOnHit(lobby, target, desc, source) + abilityDecreaseOnHit(lobby, target, desc, source) +
+	return drainHPMaximum(lobby, attacker, target, desc, taken, byType) + burnOnHit(lobby, target, desc, source) + abilityDecreaseOnHit(lobby, target, desc, source) +
 		corrodeArmorOnHit(lobby, target, desc) + // item_state_2024.go
 		hitForcedMove(lobby, attacker, target, desc) + // a push or pull (creature_movement_2024.go)
 		droppedToZeroOnHit(lobby, attacker, target, desc, source, taken) +

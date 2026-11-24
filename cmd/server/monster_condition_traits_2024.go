@@ -14,18 +14,23 @@ import (
 // Disadvantage unless the mephit has the Incapacitated condition": Steam Mephit, Blurred Form).
 var blurredFormRe = regexp.MustCompile(`Attack rolls against the [a-z -]+ are made with Disadvantage(?: unless the [a-z -]+ has the Incapacitated condition)?\.?$`)
 
-// attackedWithDisadvantage: the name of the target's trait that gives attack rolls against it Disadvantage now ("" when none); the
-// Incapacitated exception holds for every condition that includes Incapacitated. An attackSources row reads it.
+// attackedWithDisadvantage: the name of the target's trait that gives attack rolls against it Disadvantage now ("" when none): the SRD
+// wording (blurredFormRe) or an attached attacked_with_disadvantage mechanic; the Incapacitated exception holds for every condition that
+// includes Incapacitated. An attackSources row reads it.
 func attackedWithDisadvantage(lobbyID, targetID int, targetConds []string) string {
 	meta := creatureMetaOf(lobbyID, targetID)
 	if meta == nil {
 		return ""
 	}
 	for _, t := range meta.Traits {
-		if !blurredFormRe.MatchString(strings.TrimSpace(t.Text)) {
+		unless := strings.Contains(t.Text, "unless")
+		if m, ok := t.mechanic("attacked_with_disadvantage"); ok { // a GM's attached mechanic (monster_mechanics_2024.go; GM doc B3)
+			b, set := m["unless_incapacitated"].(bool)
+			unless = !set || b
+		} else if !blurredFormRe.MatchString(strings.TrimSpace(t.Text)) {
 			continue
 		}
-		if strings.Contains(t.Text, "unless") {
+		if unless {
 			for _, c := range targetConds {
 				if game.IsIncapacitatingCondition(c) {
 					return ""

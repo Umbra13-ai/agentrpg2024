@@ -1171,10 +1171,7 @@ func monsterEntryRefusal(lobbyID, id int, entry srdMonsterEntry) string {
 // action) for gm/narrate. handled is false when the action is an attack (the attack code handles it) or unknown.
 // use is the GM's choice where the entry needs one (Command's word; Claw or Tail).
 func resolveMonsterActionByName(r *http.Request, lobbyID int, monster, action, target string, targetIDs []int, apply bool, use string) (string, bool, string) {
-	ids := monsterIDsByKeyOrName(lobbyID, monster)
-	if n, err := strconv.Atoi(strings.TrimPrefix(monster, "#")); err == nil && strings.HasPrefix(monster, "#") {
-		ids = []int{n} // one particular monster of the fight, resolveMonsterAttack's convention: the same action, addressed by combat id, must resolve the same way
-	}
+	ids := monsterIDsByKeyOrName(lobbyID, monster) // "#-3" names one monster by its combat id (monsterIDsByKeyOrName)
 	id := 0
 	entries := combatEntries(lobbyID)
 	for _, x := range ids { // the best match first (F208)

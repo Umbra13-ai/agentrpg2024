@@ -53,13 +53,18 @@ func replaceRuleOf(text string) (replaceRule, bool) {
 		rule.Count = n
 	}
 	replaced := strings.TrimSpace(m[2])
+	for _, prefix := range []string{"of the ", "of its "} { // "one of the attacks", "one of its attacks": any attack
+		if strings.HasPrefix(strings.ToLower(replaced), prefix) {
+			replaced = replaced[len(prefix):]
+		}
+	}
 	for _, suffix := range []string{" attacks", " attack"} {
 		replaced = strings.TrimSuffix(replaced, suffix)
 	}
 	if !strings.EqualFold(replaced, "attack") && !strings.EqualFold(replaced, "attacks") {
 		rule.Replaced = replaced
 	}
-	for _, part := range strings.Split(replaceMarkerRe.ReplaceAllString(m[3], ""), " or ") {
+	for _, part := range strings.Split(replaceMarkerRe.ReplaceAllString(withoutIfAvailable(m[3]), ""), " or ") {
 		o := strings.TrimSpace(part)
 		for _, prefix := range []string{"a use of ", "a ", "an "} {
 			if strings.HasPrefix(strings.ToLower(o), prefix) {
@@ -92,9 +97,39 @@ func replaceRuleOf(text string) (replaceRule, bool) {
 	return rule, len(rule.Options) > 0
 }
 
+// withoutIfAvailable: an option list without the "if available" that ends it, however it is written (", if available", "(if available)")
+// and its trailing punctuation, so an option's name is only its name.
+func withoutIfAvailable(s string) string {
+	s = strings.TrimSpace(s)
+	for {
+		t := strings.TrimRight(s, " ,;")
+		low := strings.ToLower(t)
+		for _, suf := range []string{"(if available)", "if available"} {
+			if strings.HasSuffix(low, suf) {
+				t = t[:len(t)-len(suf)]
+			}
+		}
+		t = strings.TrimRight(t, " ,;")
+		if t == s {
+			return t
+		}
+		s = t
+	}
+}
+
+// withoutReplaceSentence: a text without its replacement sentence ("It can replace one of the attacks with a Sting attack."): the
+// attacks it names are options, never more attacks (multiattackPlan).
+func withoutReplaceSentence(text string) string {
+	t := normQuotes(text)
+	if loc := replaceSentenceRe.FindStringIndex(t); loc != nil {
+		return t[:loc[0]] + t[loc[1]:]
+	}
+	return t
+}
+
 // option: the option "use" names (by its name, its entry or its spell, in any spelling).
 func (rule replaceRule) option(use string) (replaceOption, bool) {
-	k := game.Key(use)
+	k := game.Key(withoutIfAvailable(use)) // "Insect Gorge (if available)" names the option "Insect Gorge"
 	for _, o := range rule.Options {
 		if k == game.Key(o.Name) || (o.Spell != "" && k == game.Key(o.Spell)) || (o.Entry != "" && k == game.Key(o.Entry)) {
 			return o, true

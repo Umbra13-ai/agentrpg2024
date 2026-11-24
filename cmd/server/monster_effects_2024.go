@@ -1982,7 +1982,7 @@ func resolveMonsterEffectText(r *http.Request, lobbyID, monsterID int, meta *mon
 	if lines, handled := resolveMonsterPull(r, lobbyID, monsterID, entryName, text, targets, apply); handled { // Reel (creature_movement_2024.go)
 		return append(lines, notes...)
 	}
-	if lines, handled := resolveMonsterDirectDamage(r, lobbyID, name, entryName, text, targets, apply); handled {
+	if lines, handled := resolveMonsterDirectDamage(r, lobbyID, monsterID, name, entryName, text, targets, apply); handled {
 		return append(lines, notes...)
 	}
 	// another action of the stat block ("uses Lightning Strike")

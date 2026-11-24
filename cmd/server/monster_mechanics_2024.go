@@ -421,6 +421,42 @@ var mechanicCatalog = []mechanicKind{
 			return s + fmt.Sprintf("; escape: an action and a DC %d %s check", m.num("escape_dc"), titleCase(skill)) + noteWords(m)
 		},
 	},
+	{
+		Kind: "max_hp_drain",
+		Does: "A hit of this attack lowers its target's Hit Point maximum by the damage it took (or only the damage of damage_type), as the SRD's Life Drain " +
+			"does: the maximum returns with a Long Rest, and a creature whose maximum falls to 0 dies.",
+		On:        "attack",
+		AppliedBy: "drainHPMaximum through hitAfterDamage and the Hit Point maximum owner (reduceHPMaximum, hp_max_drain_2024.go), on every hit route",
+		Params: []mechanicParam{
+			{Name: "damage_type", Type: "choice", Options: sortedDamageTypes(), Does: "only the damage of this type lowers the maximum (without it: all the damage)"},
+		},
+		Example:   entryMechanic{"kind": "max_hp_drain", "damage_type": "necrotic", "covers": "The wound saps the target's vitality until it rests."},
+		ExampleOn: "Melee Attack Roll: +5, reach 5 ft. Hit: 7 (1d8 + 3) Necrotic damage. The wound saps the target's vitality until it rests.",
+		describe: func(m entryMechanic) string {
+			if t := m.str("damage_type"); t != "" {
+				return "a hit lowers the target's Hit Point maximum by the " + titleCase(t) + " damage it took (back with a Long Rest)"
+			}
+			return "a hit lowers the target's Hit Point maximum by the damage it took (back with a Long Rest)"
+		},
+	},
+	{
+		Kind: "attacked_with_disadvantage",
+		Does: "Attack rolls against the creature have Disadvantage, as the SRD's Blurred Form gives (a blur, a displacement, a shimmer of speed): " +
+			"while it has the Incapacitated condition (or a condition that includes it) they don't, unless unless_incapacitated is false.",
+		On:        "trait",
+		AppliedBy: "attackedWithDisadvantage (monster_condition_traits_2024.go), one row of attackSources: every attack roll against it",
+		Params: []mechanicParam{
+			{Name: "unless_incapacitated", Type: "flag", Does: "false: the Disadvantage holds even while the creature is Incapacitated (true by default)"},
+		},
+		Example:   entryMechanic{"kind": "attacked_with_disadvantage", "covers": "The sprite moves in a blur too quick to follow."},
+		ExampleOn: "The sprite moves in a blur too quick to follow.",
+		describe: func(m entryMechanic) string {
+			if b, set := m["unless_incapacitated"].(bool); set && !b {
+				return "attack rolls against it have Disadvantage"
+			}
+			return "attack rolls against it have Disadvantage unless it is Incapacitated"
+		},
+	},
 }
 
 // engulfSentences: the SRD's own words for an engulf, which the hit and condition owners read (parseHitRider: the condition, what lasts
@@ -472,6 +508,15 @@ func (e saveEffect) giveEngulf(lobby, target int, source string) []string {
 		out = append(out, "the stat block adds: "+n)
 	}
 	return out
+}
+
+// mechanicHPMaxDrain: the attached max_hp_drain of the attacking monster's entry, as the drain owner reads one (its damage type, "" for all).
+func mechanicHPMaxDrain(lobby, attacker int, desc string) (string, bool) {
+	m, ok := attachedMechanic(lobby, attacker, desc, "max_hp_drain")
+	if !ok {
+		return "", false
+	}
+	return m.str("damage_type"), true
 }
 
 // curseSentences: the SRD's own words for a curse mechanic, which the curse owner reads (readCurse): one owner of what a curse does.
