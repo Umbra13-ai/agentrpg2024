@@ -15,7 +15,7 @@ func creatureEvasion(lobbyID, id int, ability string) bool {
 	case id > 0:
 		return hasEvasion(id)
 	case id < 0:
-		return monsterHasTrait(lobbyID, id, "Evasion")
+		return monsterHasTrait(lobbyID, id, "Evasion") || traitMechanicOf(lobbyID, id, "evasion") // the SRD trait, or an attached evasion
 	}
 	return false
 }

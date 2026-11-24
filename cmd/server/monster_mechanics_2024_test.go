@@ -900,3 +900,74 @@ func TestPostgresRollRiderOnHit(t *testing.T) {
 		t.Errorf("Marking Strike: %s", line)
 	}
 }
+
+func TestPostgresEvasionAndRegainMechanics(t *testing.T) {
+	testPostgres(t)
+	leech := srdMonsterEntry{Name: "Leeching Bite", Text: "Melee Attack Roll: +60, reach 5 ft. Hit: 10 (1d1 + 9) Piercing damage. The leech grows fat on the blood it drinks.",
+		Mechanics: []entryMechanic{{"kind": "regain_from_damage", "share": "half", "covers": "The leech grows fat on the blood it drinks."}}}
+	gm, _, camp, hero, ghoul := earlyRulesFixture(t, "Test Leech Sprite", []srdMonsterEntry{leech})
+	entry, _, _ := monsterCombatant(camp, ghoul)
+	pgExec(t, `UPDATE custom_monsters SET definition = jsonb_set(definition, '{traits}', $2::jsonb) WHERE key=$1`, fmt.Sprint(entry["monster_key"]),
+		`[{"name": "Slippery", "text": "The sprite twists out of the way of blasts.", "mechanics": [{"kind": "evasion", "covers": "The sprite twists out of the way of blasts."}]}]`)
+	if !creatureEvasion(camp, ghoul, "dex") || creatureEvasion(camp, ghoul, "con") {
+		t.Errorf("the attached evasion: dex %v con %v", creatureEvasion(camp, ghoul, "dex"), creatureEvasion(camp, ghoul, "con"))
+	}
+	setMonsterHP(camp, ghoul, 100) // of 500
+	_, line := narrateHit(t, gm, camp, ghoul, "Leeching Bite", fmt.Sprint(hero), "")
+	if hp := monsterEntryVitals(camp, ghoul).HP; hp < 105 || hp > 110 || !strings.Contains(line, "regains") {
+		t.Errorf("regain half of 10 (20 on a critical): HP %d: %s", hp, line)
+	}
+	if p := mechanicProblem("action", srdMonsterEntry{Name: "x", Text: ashClawText, Mechanics: mechanicsFromJSON(t, `[{"kind":"regain_from_damage"}]`)}); !strings.Contains(p, "share is required") {
+		t.Errorf("share left out: %q", p)
+	}
+}
+
+func TestPostgresBurningMechanic(t *testing.T) {
+	testPostgres(t)
+	torch := srdMonsterEntry{Name: "Torch Swipe", Text: "Melee Attack Roll: +60, reach 5 ft. Hit: 1 (1d1) Fire damage. Flames catch on the target's clothes.",
+		Mechanics: []entryMechanic{{"kind": "burning", "covers": "Flames catch on the target's clothes."}}}
+	spit := srdMonsterEntry{Name: "Oil Spit", Text: "Dexterity Saving Throw: DC 30, one creature within 30 feet. Failure: 1 (1d1) Fire damage, and the oil on the target ignites.",
+		Mechanics: []entryMechanic{{"kind": "burning", "covers": "and the oil on the target ignites."}}}
+	gm, _, camp, hero, imp := earlyRulesFixture(t, "Test Torch Imp", []srdMonsterEntry{torch, spit})
+	cp := fmt.Sprintf("/api/campaigns/%d", camp)
+	pgCall(t, "POST", cp+"/combat/add", gm, map[string]interface{}{"combatants": []map[string]interface{}{{"name": "Oil Victim", "monster_key": "goblin-warrior", "hp": 1000, "ac": 1, "initiative": -600}}})
+	victim := monsterIDsByKeyOrName(camp, "Oil Victim")[0]
+	if _, line := narrateHit(t, gm, camp, imp, "Torch Swipe", fmt.Sprint(hero), ""); !isBurning(camp, hero) || strings.Contains(line, "catch on") {
+		t.Errorf("Torch Swipe: %s", line)
+	}
+	if c, line := narrateAs(t, gm, camp, imp, "Oil Spit", "Oil Victim", ""); c != 200 || !isBurning(camp, victim) || strings.Contains(line, "ignites") {
+		t.Errorf("Oil Spit at a monster: %d %s", c, line)
+	}
+	if p := mechanicProblem("trait", srdMonsterEntry{Name: "x", Text: "It glows.", Mechanics: mechanicsFromJSON(t, `[{"kind":"burning"}]`)}); !strings.Contains(p, "attack roll or a saving throw") {
+		t.Errorf("burning on a trait: %q", p)
+	}
+}
+
+func TestPostgresGrappleMechanic(t *testing.T) {
+	testPostgres(t)
+	vine := srdMonsterEntry{Name: "Coiling Vine", Text: "Melee Attack Roll: +60, reach 10 ft. Hit: 1 (1d1) Bludgeoning damage. The vine coils around a Large or smaller target (escape DC 13) and binds it.",
+		Mechanics: []entryMechanic{{"kind": "grapple", "escape_dc": float64(13), "max_size": "large", "restrained": true, "note": "one target at a time",
+			"covers": "The vine coils around a Large or smaller target (escape DC 13) and binds it."}}}
+	gm, _, camp, hero, shrub := earlyRulesFixture(t, "Test Coil Shrub", []srdMonsterEntry{vine})
+	cp := fmt.Sprintf("/api/campaigns/%d", camp)
+	pgCall(t, "POST", cp+"/combat/add", gm, map[string]interface{}{"combatants": []map[string]interface{}{
+		{"name": "Coil Victim", "monster_key": "goblin-warrior", "hp": 1000, "ac": 1, "initiative": -600},
+		{"name": "Coil Giant", "monster_key": "hill-giant", "hp": 1000, "ac": 1, "initiative": -601}}})
+	victim := monsterIDsByKeyOrName(camp, "Coil Victim")[0]
+	giant := monsterIDsByKeyOrName(camp, "Coil Giant")[0]
+	for _, tg := range []struct {
+		id   int
+		name string
+	}{{hero, fmt.Sprint(hero)}, {victim, "Coil Victim"}} {
+		_, line := narrateHit(t, gm, camp, shrub, "Coiling Vine", tg.name, "")
+		if !hasCondMarker(camp, tg.id, "grappled") || !hasCondMarker(camp, tg.id, "restrained") || !strings.Contains(line, "one target at a time") || strings.Contains(line, "coils around") {
+			t.Errorf("%s: %s", tg.name, line)
+		}
+		if rs := recordsOf(camp, tg.id, "grappled"); len(rs) != 1 || len(rs[0].Escapes) == 0 || rs[0].Escapes[0].DC != 13 {
+			t.Errorf("%s: the grapple's escape: %+v", tg.name, rs)
+		}
+	}
+	if _, line := narrateHit(t, gm, camp, shrub, "Coiling Vine", "Coil Giant", ""); hasCondMarker(camp, giant, "grappled") {
+		t.Errorf("a Huge target was grappled: %s", line)
+	}
+}

@@ -23,7 +23,10 @@ func hitAfterDamage(lobby, attacker, target int, entry, desc, source string, tak
 		randomConditionOnHit(lobby, attacker, target, entry, source) + // an attached random_condition (monster_mechanics_2024.go)
 		curseOnHit(lobby, attacker, target, entry, source) + // an attached curse (monster_mechanics_2024.go)
 		conditionOnHit(lobby, attacker, target, entry, source) + // an attached condition_on_hit (monster_mechanics_2024.go)
-		rollRiderOnHit(lobby, attacker, target, entry, source) // an attached roll_rider (monster_mechanics_2024.go)
+		rollRiderOnHit(lobby, attacker, target, entry, source) + // an attached roll_rider (monster_mechanics_2024.go)
+		regainOnHit(lobby, attacker, entry, taken) + // an attached regain_from_damage (monster_mechanics_2024.go)
+		burningOnHit(lobby, attacker, target, entry, source) + // an attached burning (monster_mechanics_2024.go)
+		grappleOnHit(lobby, attacker, target, entry, source) // an attached grapple (monster_mechanics_2024.go)
 }
 
 // dropRiderRe: what a hit does when it reduces its target to 0 Hit Points ("If this damage reduces the target to 0 Hit Points, the

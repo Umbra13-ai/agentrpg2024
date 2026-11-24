@@ -105,6 +105,15 @@ var mechanicFits = map[string]struct {
 		}
 		return ""
 	}},
+	"hit_or_save": {"an action, Bonus Action or Legendary Action with an attack roll or a saving throw", func(group string, e srdMonsterEntry) string {
+		if group == "trait" || group == "reaction" {
+			return "attaches to an action, Bonus Action or Legendary Action with an attack roll or a saving throw"
+		}
+		if _, save := parseSaveEffect(rulesText(e)); !isAttackEntry(e.Text) && !save {
+			return "attaches to an entry with an attack roll or a saving throw"
+		}
+		return ""
+	}},
 	"options": {"an action, Bonus Action or Legendary Action that offers several named effects (\"Name. Text\" after a colon, as the SRD's rays are written)", func(group string, e srdMonsterEntry) string {
 		if group == "trait" || group == "reaction" || len(splitSaveOptions(rulesText(e))) < 2 {
 			return "attaches to an entry that offers two or more named effects, each written \"Name. Text\" after the entry's colon (preview it: the report names the effects it reads)"
@@ -529,6 +538,71 @@ var mechanicCatalog = []mechanicKind{
 			return "a hit: " + what + ", " + rollRiderTime(m, "until")
 		},
 	},
+	{
+		Kind:      "evasion",
+		Does:      "The creature has the SRD's Evasion under whatever name its stat block gives it: on a Dexterity saving throw against an effect that allows half damage, no damage on a success and half on a failure.",
+		On:        "trait",
+		AppliedBy: "creatureEvasion with game.SaveDamage (evasion_2024.go): every saving throw's damage to it",
+		Example:   entryMechanic{"kind": "evasion", "covers": "The sprite twists out of the way of blasts."},
+		ExampleOn: "The sprite twists out of the way of blasts.",
+		describe: func(m entryMechanic) string {
+			return "Evasion: no damage on a successful Dexterity save against half damage, half on a failure"
+		},
+	},
+	{
+		Kind: "regain_from_damage",
+		Does: "When a hit of this attack deals damage, the monster regains Hit Points equal to the damage dealt (share all) or half of it (share half), " +
+			"through its Hit Point owner (never past its maximum, none while it can't regain Hit Points).",
+		On:        "attack",
+		AppliedBy: "regainOnHit through hitAfterDamage and the monster Hit Point owner (drainRegain, healMonster)",
+		Params: []mechanicParam{
+			{Name: "share", Type: "choice", Options: []string{"all", "half"}, Required: true, Does: "how much of the damage dealt it regains"},
+		},
+		Example:   entryMechanic{"kind": "regain_from_damage", "share": "half", "covers": "The leech grows fat on the blood it drinks."},
+		ExampleOn: "Melee Attack Roll: +5, reach 5 ft. Hit: 6 (1d8 + 2) Piercing damage. The leech grows fat on the blood it drinks.",
+		describe: func(m entryMechanic) string {
+			if m.str("share") == "half" {
+				return "a hit's damage: the monster regains half of it in Hit Points"
+			}
+			return "a hit's damage: the monster regains that many Hit Points"
+		},
+	},
+	{
+		Kind: "burning",
+		Does: "The target starts burning on a hit of this attack, or on a failed saving throw of this entry: the SRD's Burning hazard (1d4 Fire damage at " +
+			"the start of each of its turns, until it takes an action and the Prone condition to put the fire out, or the GM ends it).",
+		On:        "hit_or_save",
+		AppliedBy: "burningOnHit through hitAfterDamage, or the save owner's finishTarget (failureKinds), and the Burning owner (burning_2024.go), on every route",
+		Example:   entryMechanic{"kind": "burning", "covers": "Flames catch on the target's clothes."},
+		ExampleOn: "Melee Attack Roll: +5, reach 5 ft. Hit: 6 (1d8 + 2) Fire damage. Flames catch on the target's clothes.",
+		describe:  func(m entryMechanic) string { return "the target starts burning (a hit, or a failed save)" },
+	},
+	{
+		Kind: "grapple",
+		Does: "A hit of this attack gives its target the Grappled condition with an escape DC, as the SRD's grapples are kept (only a target of max_size or " +
+			"smaller, when set); restrained true also gives it the Restrained condition until the grapple ends. The escape, the holder's grapples and " +
+			"their end are the condition owner's.",
+		On:        "attack",
+		AppliedBy: "grappleOnHit through hitAfterDamage and the hit condition owner (parseHitRider, giveConditions, linkedCondition), on every hit route",
+		Params: []mechanicParam{
+			{Name: "escape_dc", Type: "number", Min: 1, Max: 40, Required: true, Does: "the DC to escape the grapple"},
+			{Name: "max_size", Type: "choice", Options: []string{"tiny", "small", "medium", "large", "huge", "gargantuan"}, Does: "the largest size it grapples"},
+			{Name: "restrained", Type: "flag", Does: "true: the target also has the Restrained condition until the grapple ends"},
+			{Name: "note", Type: "text", MaxLen: 300, Does: "what the server doesn't apply about the grapple (one target at a time, moving it), shown with the result"},
+		},
+		Example:   entryMechanic{"kind": "grapple", "escape_dc": float64(13), "max_size": "medium", "covers": "The vine coils around a Medium or smaller target (escape DC 13)."},
+		ExampleOn: "Melee Attack Roll: +5, reach 10 ft. Hit: 6 (1d8 + 2) Bludgeoning damage. The vine coils around a Medium or smaller target (escape DC 13).",
+		describe: func(m entryMechanic) string {
+			s := fmt.Sprintf("a hit grapples its target (escape DC %d)", m.num("escape_dc"))
+			if z := m.str("max_size"); z != "" {
+				s += " if it is " + titleCase(z) + " or smaller"
+			}
+			if b, _ := m["restrained"].(bool); b {
+				s += ", Restrained until the grapple ends"
+			}
+			return s + noteWords(m)
+		},
+	},
 }
 
 // engulfSentences: the SRD's own words for an engulf, which the hit and condition owners read (parseHitRider: the condition, what lasts
@@ -557,13 +631,58 @@ func engulfSentences(m entryMechanic) string {
 	return s
 }
 
-// giveEngulf: the engulf a failed save gives (the save owner's finishTarget, for every target kind): the conditions and what lasts with
-// them, and the escape on the Restrained record.
-func (e saveEffect) giveEngulf(lobby, target int, source string) []string {
-	if e.Engulf == nil {
+// failureKinds: the attached kinds a failed save gives, each by its giver (the save owner's finishTarget, for every target kind).
+var failureKinds = map[string]func(e saveEffect, m entryMechanic, lobby, target int, source string) []string{
+	"engulf": func(e saveEffect, m entryMechanic, lobby, target int, source string) []string {
+		return e.giveEngulf(m, lobby, target, source)
+	},
+	"burning": func(e saveEffect, m entryMechanic, lobby, target int, source string) []string {
+		return []string{setBurning(lobby, target, source)}
+	},
+}
+
+// failureMechanicsOf: the mechanics of the entry that a failed save gives.
+func failureMechanicsOf(meta *monsterMeta, entryName string) []entryMechanic {
+	e, ok := metaEntry(meta, entryName)
+	if !ok {
 		return nil
 	}
-	m := e.Engulf
+	var out []entryMechanic
+	for _, m := range e.Mechanics {
+		if _, gives := failureKinds[m.kind()]; gives {
+			out = append(out, m)
+		}
+	}
+	return out
+}
+
+// giveFailureMechanics gives the failed save's attached mechanics.
+func (e saveEffect) giveFailureMechanics(lobby, target int, source string) []string {
+	var out []string
+	for _, m := range e.OnFailure {
+		out = append(out, failureKinds[m.kind()](e, m, lobby, target, source)...)
+	}
+	return out
+}
+
+// setBurning: the target starts burning (the Burning owner, burning_2024.go: 1d4 Fire damage at the start of each of its turns until an
+// action puts it out).
+func setBurning(lobby, target int, source string) string {
+	startBurning(lobby, target, source)
+	return creatureName(lobby, target) + " starts burning (1d4 Fire damage at the start of each of its turns; an action and the Prone condition put it out)"
+}
+
+// burningOnHit: the attached burning of the attacking monster's entry, on a hit.
+func burningOnHit(lobby, attacker, target int, entry, source string) string {
+	if _, ok := attachedMechanic(lobby, attacker, entry, "burning"); !ok {
+		return ""
+	}
+	return " [" + setBurning(lobby, target, source) + "]"
+}
+
+// giveEngulf: the engulf a failed save gives (the save owner's finishTarget, for every target kind): the conditions and what lasts with
+// them, and the escape on the Restrained record.
+func (e saveEffect) giveEngulf(m entryMechanic, lobby, target int, source string) []string {
 	g, ok := parseHitRider(engulfSentences(m))
 	if !ok {
 		return []string{"[the engulf attached to this entry could not be read; the GM applies it]"}
@@ -629,6 +748,66 @@ func rollRiderOnHit(lobby, attacker, target int, entry, source string) string {
 		return " [" + strings.Join(given, "; ") + "]"
 	}
 	return ""
+}
+
+// traitMechanicOf: the monster of the fight has a trait with an attached mechanic of this kind.
+func traitMechanicOf(lobby, id int, kind string) bool {
+	meta := creatureMetaOf(lobby, id)
+	if meta == nil {
+		return false
+	}
+	for _, t := range meta.Traits {
+		if _, ok := t.mechanic(kind); ok {
+			return true
+		}
+	}
+	return false
+}
+
+// regainOnHit: the attached regain_from_damage of the attacking monster's entry: it regains what the hit dealt (or half), through drainRegain.
+func regainOnHit(lobby, attacker int, entry string, taken int) string {
+	m, ok := attachedMechanic(lobby, attacker, entry, "regain_from_damage")
+	if !ok || taken <= 0 {
+		return ""
+	}
+	if m.str("share") == "half" {
+		taken /= 2
+	}
+	return drainRegain(lobby, attacker, taken)
+}
+
+// grappleSentence: the SRD's own grapple sentence for a grapple mechanic, which the hit condition owner reads.
+func grappleSentence(m entryMechanic) string {
+	who := "The target has"
+	if z := m.str("max_size"); z != "" {
+		who = "If the target is a " + titleCase(z) + " or smaller creature, it has"
+	}
+	s := fmt.Sprintf("Hit: %s the Grappled condition (escape DC %d)", who, m.num("escape_dc"))
+	if b, _ := m["restrained"].(bool); b {
+		s += ", and it has the Restrained condition until the grapple ends"
+	}
+	return s + "."
+}
+
+// grappleOnHit: the attached grapple of the attacking monster's entry, given by the hit condition owner.
+func grappleOnHit(lobby, attacker, target int, entry, source string) string {
+	m, ok := attachedMechanic(lobby, attacker, entry, "grapple")
+	if !ok {
+		return ""
+	}
+	e, ok := parseHitRider(grappleSentence(m))
+	if !ok {
+		return " [the grapple attached to this attack could not be read; the GM applies it]"
+	}
+	e.SourceID = attacker
+	given := e.giveConditions(lobby, target, source)
+	if n := m.str("note"); n != "" {
+		given = append(given, "the stat block adds: "+n)
+	}
+	if len(given) == 0 {
+		return ""
+	}
+	return " [" + strings.Join(given, "; ") + "]"
 }
 
 // curseSentences: the SRD's own words for a curse mechanic, which the curse owner reads (readCurse): one owner of what a curse does.
