@@ -1026,7 +1026,7 @@ func adminPagePath() (string, string) {
 			return "", "ADMIN_PATH may use only letters, digits, - and _"
 		}
 	}
-	for _, taken := range []string{"/api", "/docs", "/character", "/campaign", "/profile", "/universe", "/how-it-works", "/about", "/commands", "/skill", "/gm-guide", "/gm-monsters", "/admin"} {
+	for _, taken := range []string{"/api", "/docs", "/character", "/campaign", "/profile", "/universe", "/how-it-works", "/about", "/commands", "/skill", "/gm-guide", "/gm-monsters", "/admin", "/monsters", "/monster-tokens"} {
 		if strings.HasPrefix(strings.ToLower(p), taken) {
 			return "", "ADMIN_PATH can't start with " + taken
 		}

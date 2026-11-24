@@ -49,6 +49,7 @@ textarea{min-height:110px;resize:vertical}
 a{color:var(--accent);font-weight:600}.link{border:0;background:none;color:var(--accent);font-weight:600;padding:6px 0}
 .card{background:var(--card);border:1px solid var(--line);border-radius:14px;padding:14px;margin-bottom:12px}
 .item{display:block;width:100%;text-align:left;background:var(--card);border:1px solid var(--line);border-radius:14px;padding:12px 14px;margin-bottom:10px}
+.card .muted{overflow-wrap:anywhere}.mthumb{flex:0 0 44px;width:44px;height:44px;border-radius:50%;overflow:hidden;display:flex;align-items:center;justify-content:center;font-size:24px;background:var(--line)}.mthumb img{width:100%;height:100%;object-fit:cover}
 .item b{display:block;font-size:17px}.item span{color:var(--muted);font-size:15px}
 .swipe{position:relative;margin-bottom:10px;border-radius:14px;overflow:hidden}
 .swipe .item{position:relative;z-index:1;margin:0;touch-action:pan-y;transition:transform .2s ease}
@@ -97,7 +98,7 @@ main a[target=_blank]{padding:9px 0;min-height:40px}.toggle{min-height:40px}.tog
 </style></head><body>
 <div id="toast" role="status"></div>
 <header><div class="top"><h1>Admin</h1><button class="link" id="logout" hidden>Sign out</button></div>
-<div class="seg" id="tabs" hidden><button data-tab="characters" aria-pressed="true">Characters</button><button data-tab="campaigns" aria-pressed="false">Campaigns</button><button data-tab="accounts" aria-pressed="false">Accounts</button><button data-tab="logs" aria-pressed="false">Logs</button><button data-tab="settings" aria-pressed="false">Settings</button></div></header>
+<div class="seg" id="tabs" hidden><button data-tab="characters" aria-pressed="true">Characters</button><button data-tab="campaigns" aria-pressed="false">Campaigns</button><button data-tab="accounts" aria-pressed="false">Accounts</button><button data-tab="monsters" aria-pressed="false">Monsters</button><button data-tab="logs" aria-pressed="false">Logs</button><button data-tab="settings" aria-pressed="false">Settings</button></div></header>
 <main id="main"></main>
 <div class="savebar" id="savebar"><div class="row"><input id="reason" placeholder="Reason (optional)"><button class="btn" id="discard">Undo</button><button class="btn primary" id="save">Save</button></div></div>
 <script>
@@ -125,6 +126,7 @@ Array.prototype.forEach.call(document.querySelectorAll('#tabs button'),function(
 var q='',which='';
 function showList(){hideSave();pending={};M.textContent='';window.scrollTo(0,0);
   if(tab==='logs')return showLogs();
+  if(tab==='monsters')return showMonsters();
   if(tab==='settings')return showSettings();
   var s=el('div',{'class':'search'});var i=el('input',{type:'search',placeholder:tab==='characters'?'Search name, player or id':(tab==='accounts'?'Name, email or id':'Search name, GM or id')});i.value=q;
   var sel=el('select');[['','Active'],['only','Deleted'],['include','All']].forEach(function(o){var op=el('option',{value:o[0]},o[1]);if(o[0]===which)op.selected=true;sel.appendChild(op)});
@@ -232,6 +234,44 @@ function getCampaigns(){if(campaignsCache)return Promise.resolve(campaignsCache)
 function getSpells(){if(spellsCache)return Promise.resolve(spellsCache);return fetch('/api/universe/spells').then(function(r){return r.json()}).then(function(j){spellsCache=j.spells||[];return spellsCache}).catch(function(){return []})}
 function headCard(title,deleted,badge,lines){var h=el('div',{'class':'card'});var t=el('h2',null,title);if(deleted)t.appendChild(el('span',{'class':'badge del'},'Deleted'));else if(badge)t.appendChild(badge);h.appendChild(t);
   lines.forEach(function(l){h.appendChild(el('div',{'class':'muted small'},l))});return h}
+
+// ---------- monsters: every monster GMs built (admin_monsters_2024.go), its stat block and its token
+var mq='',mwhich='';
+function thumb(u,name){var t=el('span',{'class':'mthumb'});if(u){var i=el('img',{alt:'',src:u,loading:'lazy'});t.appendChild(i)}else t.textContent='👹';t.setAttribute('aria-label',name+(u?' token':' has no token'));return t}
+function showMonsters(){var s=el('div',{'class':'search'});var i=el('input',{type:'search',placeholder:'Name, key or GM'});i.value=mq;
+  var sel=el('select');[['','Current'],['only','Hidden'],['include','All']].forEach(function(o){var op=el('option',{value:o[0]},o[1]);if(o[0]===mwhich)op.selected=true;sel.appendChild(op)});
+  add(s,i,sel);M.appendChild(s);M.appendChild(el('p',{'class':'muted small'},'Every monster GMs built with the monster builder, from every GM, shared or private (Hidden: hidden by its GM, or an old version an edit replaced). Open one for its stat block and its token.'));var box=el('div');M.appendChild(box);
+  var t;i.oninput=function(){clearTimeout(t);t=setTimeout(function(){mq=i.value;load()},300)};sel.onchange=function(){mwhich=sel.value;load()};
+  function load(){api('GET','/api/admin/monsters?q='+encodeURIComponent(mq)+'&deleted='+mwhich).then(function(j){box.textContent='';var list=j.monsters||[];
+    if(!list.length){box.appendChild(el('p',{'class':'muted'},'Nothing found.'));return}
+    list.forEach(function(x){var b=el('button',{'class':'item rowflex'});var m=el('div',{'class':'main'});var title=el('b',null,x.name);
+      if(x.deleted)title.appendChild(el('span',{'class':'badge del'},'Hidden'));title.appendChild(el('span',{'class':'badge'+(x.shared?' on':'')},x.shared?'Shared':'Private'));
+      add(m,title,el('span',null,'CR '+(x.cr||'?')+' · '+[x.size,x.type].filter(Boolean).join(' ')+' · GM '+(x.owner||'unknown')+' · '+x.created+(x.replaces?' · a new version':'')));
+      add(b,thumb(x.token_url,x.name),m);b.onclick=function(){openMonster(x.key)};box.appendChild(b)})}).catch(fail)}
+  load()}
+function openMonster(key){M.textContent='';window.scrollTo(0,0);
+  api('GET','/api/admin/monsters/'+encodeURIComponent(key)).then(function(j){var m=j.monster;M.appendChild(back());
+    var badge=el('span',{'class':'badge'+(m.shared?' on':'')},m.shared?'Shared':'Private');
+    M.appendChild(headCard(m.name,m.deleted,badge,['CR '+(m.cr||'?')+' · built by '+(m.owner||'unknown')+' · saved '+m.created,'Key '+m.key,m.source_note?'Source: '+m.source_note:''].filter(Boolean)));
+    M.appendChild(monsterTokenCard(m,j.token_rule));
+    if(j.versions&&j.versions.length){var v=section('Versions ('+(j.versions.length+1)+')');v.appendChild(el('p',{'class':'muted small'},'An edit saves a new version and hides the old one; a fight that started with an old one keeps it.'));
+      j.versions.forEach(function(x){var b=el('button',{'class':'btn small'},x.saved+' · '+x.key);b.onclick=function(){openMonster(x.key)};v.appendChild(b)});M.appendChild(v)}
+    var sb=section('Stat block',true);var f=el('iframe',{src:j.page,title:'Stat block of '+m.name,loading:'lazy'});f.style.cssText='width:100%;border:0;border-radius:10px;min-height:600px;background:transparent';
+    f.onload=function(){try{f.style.height=(f.contentWindow.document.documentElement.scrollHeight+8)+'px'}catch(_){}};
+    var open=el('a',{href:j.page,target:'_blank',rel:'noopener'},'Open the stat block on its own');add(sb,f,open);M.appendChild(sb)}).catch(fail)}
+function monsterTokenCard(m,rule){var s=section('Token',true);s.appendChild(el('p',{'class':'muted small'},rule||''));
+  var img=el('img',{alt:'Token of '+m.name});img.style.cssText='display:block;width:128px;height:128px;border-radius:50%;object-fit:cover;margin:8px 0';
+  var none=el('p',{'class':'box plain'},'No token: the encounter stage shows 👹.');
+  function show(u){if(u){img.src=u;img.style.display='block';none.style.display='none'}else{img.style.display='none';none.style.display='block'}}
+  var f=el('input',{type:'file',accept:'image/png,image/jpeg,image/webp','aria-label':'Token image'});
+  var up=el('button',{'class':'btn primary'},'Add or replace token');var path='/api/admin/monsters/'+encodeURIComponent(m.key)+'/token';
+  up.onclick=function(){var file=f.files&&f.files[0];if(!file){toast('Choose an image first',true);return}
+    if(file.size>2*1024*1024){toast('The image is over 2 MB. Choose a smaller one.',true);return}
+    var rd=new FileReader();rd.onload=function(){up.disabled=true;api('POST',path,{image_base64:rd.result}).then(function(r){up.disabled=false;toast(r.message||'Token saved');f.value='';show(r.token&&r.token.url)}).catch(function(e){up.disabled=false;fail(e)})};
+    rd.onerror=function(){toast('That file could not be read',true)};rd.readAsDataURL(file)};
+  var rm=el('button',{'class':'btn danger'},'Remove token');
+  rm.onclick=function(){if(confirm('Remove the token of '+m.name+'?'))api('DELETE',path).then(function(r){toast(r.message);show('')}).catch(fail)};
+  add(s,img,none,f,add(el('div',{'class':'row'}),up,rm));show(m.token_url);return s}
 
 // ---------- character
 var CONDITIONS=['blinded','charmed','deafened','frightened','grappled','incapacitated','invisible','paralyzed','petrified','poisoned','prone','restrained','stunned','unconscious'];

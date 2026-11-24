@@ -340,6 +340,8 @@ func setupRoutes() {
 	http.HandleFunc("/api/admin/reports/", handleAdminReports)
 	http.HandleFunc("/api/admin/errors", handleAdminErrors)
 	http.HandleFunc("/api/admin/settings", handleAdminSettings)
+	http.HandleFunc("/api/admin/monsters", handleAdminMonsters) // the GM-built monsters (admin_monsters_2024.go)
+	http.HandleFunc("/api/admin/monsters/", handleAdminMonsters)
 	http.HandleFunc("/api/admin/session", handleAdminSession) // the admin page's sign-in cookie
 	registerAdminPage()                                       // at the secret address in ADMIN_PATH, or nowhere (admin_2024.go)
 	http.HandleFunc("/api/login", handleLogin)

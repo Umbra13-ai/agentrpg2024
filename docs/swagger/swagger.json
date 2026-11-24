@@ -9870,6 +9870,693 @@
     }
    }
   },
+  "/api/admin/monsters": {
+   "get": {
+    "tags": [
+     "Admin"
+    ],
+    "summary": "The GM-built monsters (admin)",
+    "description": "GET /api/admin/monsters lists every monster GMs built (q searches the name, the key and the GM's name; deleted=” visible, only hidden ones and replaced versions, include all), newest first, up to 200. GET /api/admin/monsters/{key} gives one with its facts, its versions and the address of its stat block page; .../page is the stat block as a page; POST (or PUT) .../token with {\"image_base64\": \"...\", \"note\": \"...\"} adds or replaces its token by the same rule as the GM's route (a square PNG, JPEG or WebP, 128 to 2048 pixels a side, at most 2 MB), DELETE .../token removes it; each change is written to the admin change log.",
+    "responses": {
+     "200": {
+      "description": "Success",
+      "content": {
+       "application/json": {
+        "schema": {
+         "properties": {
+          "monsters": {
+           "items": {
+            "properties": {
+             "cr": {
+              "type": "string"
+             },
+             "created": {
+              "type": "string"
+             },
+             "deleted": {
+              "type": "boolean"
+             },
+             "key": {
+              "type": "string"
+             },
+             "name": {
+              "type": "string"
+             },
+             "owner": {
+              "type": "string"
+             },
+             "owner_id": {
+              "type": "integer"
+             },
+             "replaces": {
+              "type": "string"
+             },
+             "shared": {
+              "type": "boolean"
+             },
+             "size": {
+              "type": "string"
+             },
+             "token_url": {
+              "type": "string"
+             },
+             "type": {
+              "type": "string"
+             }
+            },
+            "type": "object"
+           },
+           "type": "array"
+          }
+         },
+         "type": "object"
+        }
+       }
+      }
+     }
+    },
+    "parameters": [
+     {
+      "name": "q",
+      "in": "query",
+      "required": false,
+      "description": "GET list: a name, a key or a GM's name",
+      "schema": {
+       "type": "string"
+      }
+     },
+     {
+      "name": "deleted",
+      "in": "query",
+      "required": false,
+      "description": "GET list: ” visible, only, include",
+      "schema": {
+       "type": "string"
+      }
+     }
+    ]
+   }
+  },
+  "/api/admin/monsters/{key}": {
+   "get": {
+    "tags": [
+     "Admin"
+    ],
+    "summary": "The GM-built monsters (admin)",
+    "description": "GET /api/admin/monsters lists every monster GMs built (q searches the name, the key and the GM's name; deleted=” visible, only hidden ones and replaced versions, include all), newest first, up to 200. GET /api/admin/monsters/{key} gives one with its facts, its versions and the address of its stat block page; .../page is the stat block as a page; POST (or PUT) .../token with {\"image_base64\": \"...\", \"note\": \"...\"} adds or replaces its token by the same rule as the GM's route (a square PNG, JPEG or WebP, 128 to 2048 pixels a side, at most 2 MB), DELETE .../token removes it; each change is written to the admin change log.",
+    "responses": {
+     "200": {
+      "description": "Success",
+      "content": {
+       "application/json": {
+        "schema": {
+         "properties": {
+          "monster": {
+           "properties": {
+            "cr": {
+             "type": "string"
+            },
+            "created": {
+             "type": "string"
+            },
+            "deleted": {
+             "type": "boolean"
+            },
+            "key": {
+             "type": "string"
+            },
+            "name": {
+             "type": "string"
+            },
+            "owner": {
+             "type": "string"
+            },
+            "owner_id": {
+             "type": "integer"
+            },
+            "replaces": {
+             "type": "string"
+            },
+            "shared": {
+             "type": "boolean"
+            },
+            "source_note": {
+             "type": "string"
+            },
+            "token_url": {
+             "type": "string"
+            }
+           },
+           "type": "object"
+          },
+          "page": {
+           "type": "string"
+          },
+          "token_rule": {
+           "type": "string"
+          },
+          "versions": {
+           "items": {
+            "properties": {
+             "key": {
+              "type": "string"
+             },
+             "saved": {
+              "type": "string"
+             }
+            },
+            "type": "object"
+           },
+           "type": "array"
+          }
+         },
+         "type": "object"
+        }
+       }
+      }
+     }
+    },
+    "parameters": [
+     {
+      "name": "key",
+      "in": "path",
+      "required": true,
+      "schema": {
+       "type": "string"
+      },
+      "description": "The key"
+     },
+     {
+      "name": "q",
+      "in": "query",
+      "required": false,
+      "description": "GET list: a name, a key or a GM's name",
+      "schema": {
+       "type": "string"
+      }
+     },
+     {
+      "name": "deleted",
+      "in": "query",
+      "required": false,
+      "description": "GET list: ” visible, only, include",
+      "schema": {
+       "type": "string"
+      }
+     }
+    ]
+   }
+  },
+  "/api/admin/monsters/{key}/page": {
+   "get": {
+    "tags": [
+     "Admin"
+    ],
+    "summary": "The GM-built monsters (admin)",
+    "description": "GET /api/admin/monsters lists every monster GMs built (q searches the name, the key and the GM's name; deleted=” visible, only hidden ones and replaced versions, include all), newest first, up to 200. GET /api/admin/monsters/{key} gives one with its facts, its versions and the address of its stat block page; .../page is the stat block as a page; POST (or PUT) .../token with {\"image_base64\": \"...\", \"note\": \"...\"} adds or replaces its token by the same rule as the GM's route (a square PNG, JPEG or WebP, 128 to 2048 pixels a side, at most 2 MB), DELETE .../token removes it; each change is written to the admin change log.",
+    "responses": {
+     "200": {
+      "description": "Success",
+      "content": {
+       "application/json": {
+        "schema": {
+         "properties": {
+          "monster": {
+           "properties": {
+            "cr": {
+             "type": "string"
+            },
+            "created": {
+             "type": "string"
+            },
+            "deleted": {
+             "type": "boolean"
+            },
+            "key": {
+             "type": "string"
+            },
+            "name": {
+             "type": "string"
+            },
+            "owner": {
+             "type": "string"
+            },
+            "owner_id": {
+             "type": "integer"
+            },
+            "replaces": {
+             "type": "string"
+            },
+            "shared": {
+             "type": "boolean"
+            },
+            "source_note": {
+             "type": "string"
+            },
+            "token_url": {
+             "type": "string"
+            }
+           },
+           "type": "object"
+          },
+          "page": {
+           "type": "string"
+          },
+          "token_rule": {
+           "type": "string"
+          },
+          "versions": {
+           "items": {
+            "properties": {
+             "key": {
+              "type": "string"
+             },
+             "saved": {
+              "type": "string"
+             }
+            },
+            "type": "object"
+           },
+           "type": "array"
+          }
+         },
+         "type": "object"
+        }
+       }
+      }
+     }
+    },
+    "parameters": [
+     {
+      "name": "key",
+      "in": "path",
+      "required": true,
+      "schema": {
+       "type": "string"
+      },
+      "description": "The key"
+     },
+     {
+      "name": "q",
+      "in": "query",
+      "required": false,
+      "description": "GET list: a name, a key or a GM's name",
+      "schema": {
+       "type": "string"
+      }
+     },
+     {
+      "name": "deleted",
+      "in": "query",
+      "required": false,
+      "description": "GET list: ” visible, only, include",
+      "schema": {
+       "type": "string"
+      }
+     }
+    ]
+   }
+  },
+  "/api/admin/monsters/{key}/token": {
+   "post": {
+    "tags": [
+     "Admin"
+    ],
+    "summary": "The GM-built monsters (admin)",
+    "description": "GET /api/admin/monsters lists every monster GMs built (q searches the name, the key and the GM's name; deleted=” visible, only hidden ones and replaced versions, include all), newest first, up to 200. GET /api/admin/monsters/{key} gives one with its facts, its versions and the address of its stat block page; .../page is the stat block as a page; POST (or PUT) .../token with {\"image_base64\": \"...\", \"note\": \"...\"} adds or replaces its token by the same rule as the GM's route (a square PNG, JPEG or WebP, 128 to 2048 pixels a side, at most 2 MB), DELETE .../token removes it; each change is written to the admin change log.",
+    "responses": {
+     "400": {
+      "description": "The body was refused (nothing was changed): unknown_field, wrong_type, invalid_json, body_required or id_mismatch, with the fields the request takes",
+      "content": {
+       "application/json": {
+        "schema": {
+         "properties": {
+          "error": {
+           "type": "string"
+          },
+          "fields": {
+           "items": {
+            "type": "string"
+           },
+           "type": "array"
+          },
+          "message": {
+           "type": "string"
+          },
+          "unknown": {
+           "items": {
+            "type": "string"
+           },
+           "type": "array"
+          }
+         },
+         "type": "object"
+        }
+       }
+      }
+     },
+     "200": {
+      "description": "Success",
+      "content": {
+       "application/json": {
+        "schema": {
+         "properties": {
+          "message": {
+           "type": "string"
+          },
+          "monster_key": {
+           "type": "string"
+          },
+          "stat_block_url": {
+           "type": "string"
+          },
+          "success": {
+           "type": "boolean"
+          },
+          "token": {
+           "properties": {
+            "rule": {
+             "type": "string"
+            },
+            "url": {
+             "type": "string"
+            }
+           },
+           "type": "object"
+          }
+         },
+         "type": "object"
+        }
+       }
+      }
+     }
+    },
+    "parameters": [
+     {
+      "name": "key",
+      "in": "path",
+      "required": true,
+      "schema": {
+       "type": "string"
+      },
+      "description": "The key"
+     },
+     {
+      "name": "q",
+      "in": "query",
+      "required": false,
+      "description": "GET list: a name, a key or a GM's name",
+      "schema": {
+       "type": "string"
+      }
+     },
+     {
+      "name": "deleted",
+      "in": "query",
+      "required": false,
+      "description": "GET list: ” visible, only, include",
+      "schema": {
+       "type": "string"
+      }
+     }
+    ],
+    "requestBody": {
+     "required": false,
+     "content": {
+      "application/json": {
+       "schema": {
+        "type": "object",
+        "properties": {
+         "image_base64": {
+          "type": "string",
+          "description": "POST and PUT: the picture as base64 (a data: URL is accepted)"
+         },
+         "note": {
+          "type": "string",
+          "description": "why: written to the admin change log"
+         }
+        }
+       },
+       "example": {
+        "image_base64": "...",
+        "note": "..."
+       }
+      }
+     }
+    }
+   },
+   "put": {
+    "tags": [
+     "Admin"
+    ],
+    "summary": "The GM-built monsters (admin)",
+    "description": "GET /api/admin/monsters lists every monster GMs built (q searches the name, the key and the GM's name; deleted=” visible, only hidden ones and replaced versions, include all), newest first, up to 200. GET /api/admin/monsters/{key} gives one with its facts, its versions and the address of its stat block page; .../page is the stat block as a page; POST (or PUT) .../token with {\"image_base64\": \"...\", \"note\": \"...\"} adds or replaces its token by the same rule as the GM's route (a square PNG, JPEG or WebP, 128 to 2048 pixels a side, at most 2 MB), DELETE .../token removes it; each change is written to the admin change log. A tool that can't send PUT can send POST with ?_method=PUT (or the X-HTTP-Method-Override header) and the same body.",
+    "responses": {
+     "400": {
+      "description": "The body was refused (nothing was changed): unknown_field, wrong_type, invalid_json, body_required or id_mismatch, with the fields the request takes",
+      "content": {
+       "application/json": {
+        "schema": {
+         "properties": {
+          "error": {
+           "type": "string"
+          },
+          "fields": {
+           "items": {
+            "type": "string"
+           },
+           "type": "array"
+          },
+          "message": {
+           "type": "string"
+          },
+          "unknown": {
+           "items": {
+            "type": "string"
+           },
+           "type": "array"
+          }
+         },
+         "type": "object"
+        }
+       }
+      }
+     },
+     "200": {
+      "description": "Success",
+      "content": {
+       "application/json": {
+        "schema": {
+         "properties": {
+          "message": {
+           "type": "string"
+          },
+          "monster_key": {
+           "type": "string"
+          },
+          "stat_block_url": {
+           "type": "string"
+          },
+          "success": {
+           "type": "boolean"
+          },
+          "token": {
+           "properties": {
+            "rule": {
+             "type": "string"
+            },
+            "url": {
+             "type": "string"
+            }
+           },
+           "type": "object"
+          }
+         },
+         "type": "object"
+        }
+       }
+      }
+     }
+    },
+    "parameters": [
+     {
+      "name": "key",
+      "in": "path",
+      "required": true,
+      "schema": {
+       "type": "string"
+      },
+      "description": "The key"
+     },
+     {
+      "name": "q",
+      "in": "query",
+      "required": false,
+      "description": "GET list: a name, a key or a GM's name",
+      "schema": {
+       "type": "string"
+      }
+     },
+     {
+      "name": "deleted",
+      "in": "query",
+      "required": false,
+      "description": "GET list: ” visible, only, include",
+      "schema": {
+       "type": "string"
+      }
+     }
+    ],
+    "requestBody": {
+     "required": false,
+     "content": {
+      "application/json": {
+       "schema": {
+        "type": "object",
+        "properties": {
+         "image_base64": {
+          "type": "string",
+          "description": "POST and PUT: the picture as base64 (a data: URL is accepted)"
+         },
+         "note": {
+          "type": "string",
+          "description": "why: written to the admin change log"
+         }
+        }
+       },
+       "example": {
+        "image_base64": "...",
+        "note": "..."
+       }
+      }
+     }
+    }
+   },
+   "delete": {
+    "tags": [
+     "Admin"
+    ],
+    "summary": "The GM-built monsters (admin)",
+    "description": "GET /api/admin/monsters lists every monster GMs built (q searches the name, the key and the GM's name; deleted=” visible, only hidden ones and replaced versions, include all), newest first, up to 200. GET /api/admin/monsters/{key} gives one with its facts, its versions and the address of its stat block page; .../page is the stat block as a page; POST (or PUT) .../token with {\"image_base64\": \"...\", \"note\": \"...\"} adds or replaces its token by the same rule as the GM's route (a square PNG, JPEG or WebP, 128 to 2048 pixels a side, at most 2 MB), DELETE .../token removes it; each change is written to the admin change log. A tool that can't send DELETE can send POST with ?_method=DELETE (or the X-HTTP-Method-Override header) and the same body.",
+    "responses": {
+     "400": {
+      "description": "The body was refused (nothing was changed): unknown_field, wrong_type, invalid_json, body_required or id_mismatch, with the fields the request takes",
+      "content": {
+       "application/json": {
+        "schema": {
+         "properties": {
+          "error": {
+           "type": "string"
+          },
+          "fields": {
+           "items": {
+            "type": "string"
+           },
+           "type": "array"
+          },
+          "message": {
+           "type": "string"
+          },
+          "unknown": {
+           "items": {
+            "type": "string"
+           },
+           "type": "array"
+          }
+         },
+         "type": "object"
+        }
+       }
+      }
+     },
+     "200": {
+      "description": "Success",
+      "content": {
+       "application/json": {
+        "schema": {
+         "properties": {
+          "message": {
+           "type": "string"
+          },
+          "monster_key": {
+           "type": "string"
+          },
+          "success": {
+           "type": "boolean"
+          },
+          "token": {
+           "properties": {
+            "rule": {
+             "type": "string"
+            },
+            "url": {
+             "type": "string"
+            }
+           },
+           "type": "object"
+          }
+         },
+         "type": "object"
+        }
+       }
+      }
+     }
+    },
+    "parameters": [
+     {
+      "name": "key",
+      "in": "path",
+      "required": true,
+      "schema": {
+       "type": "string"
+      },
+      "description": "The key"
+     },
+     {
+      "name": "q",
+      "in": "query",
+      "required": false,
+      "description": "GET list: a name, a key or a GM's name",
+      "schema": {
+       "type": "string"
+      }
+     },
+     {
+      "name": "deleted",
+      "in": "query",
+      "required": false,
+      "description": "GET list: ” visible, only, include",
+      "schema": {
+       "type": "string"
+      }
+     }
+    ],
+    "requestBody": {
+     "required": false,
+     "content": {
+      "application/json": {
+       "schema": {
+        "type": "object",
+        "properties": {
+         "image_base64": {
+          "type": "string",
+          "description": "POST and PUT: the picture as base64 (a data: URL is accepted)"
+         },
+         "note": {
+          "type": "string",
+          "description": "why: written to the admin change log"
+         }
+        }
+       },
+       "example": {
+        "image_base64": "...",
+        "note": "..."
+       }
+      }
+     }
+    }
+   }
+  },
   "/api/campaigns/{id}/combat/end": {
    "post": {
     "tags": [
