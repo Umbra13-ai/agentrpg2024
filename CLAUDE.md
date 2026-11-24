@@ -258,6 +258,15 @@ Report: "Wizard Scholar accepts any skill for Expertise."
   trait the attacker touches (`corrodeOnContact`, stage 8 of `runCharacterHitTail`: Corrosive Form, the ammunition destroyed) and a
   failed save (`saveEffect.ItemPenalty`, `corrodeCarriedObject`: Rust Monster Antennae); Mending removes it (`itemRepairSpells`,
   `mendItem`). Go: `TestPostgresItemCorrosion`.
+- **An unidentified magic item** (owner, Nov 24; `cmd/server/item_identity_2024.go`): the item keeps its real name and fields (every rule reads it as
+  any item) with `unidentified` and `appears_as`, given by the GM (`POST /api/gm/give-item`'s `unidentified` and `appears_as`; it stacks only with the same
+  unknown item). What a player reads of an item is `playerItemName` / `playerItemView` (its look, where it is, how many, its weight; no magic field) and
+  `shownItemName` / `shownNameIn` for a name in the hand, armor or attunement columns; `inventoryAsRead` / `readerKnowsItems` give the sheet's
+  inventory as it is to the character's GM only. On it: the sheet (inventory, hands, armor, `wornItemsView`), `describeItem` (the equipment page and its
+  replies), `carriedView` (my-turn, the short view), my-turn's held weapons, `inventoryWeight`, the ground (`dropToGround` writes the look, the bundle
+  keeps the item), the give-item log line, the portrait prompt, setup's held weapon. Readers that would tell what it is leave it out: the item reminders
+  (healing potions, scrolls), `gearReminders`, `autoEquipArmor`, `equipPlan` and setup's draw suggestion, feature words, the shop (`sellOffers`, refused
+  by `sellBlocked`). Not done: the attack line of a held unidentified magic weapon shows its bonus. Go: `TestPostgresUnidentifiedItemEverywhereAPlayerReads`.
 - **A condition's second stage** (SRD 5.2.1 Sleep; a monster's "Second Failure:"): `conditionSave.Then` / `ThenRounds` /
   `ThenEndsOnDamage` / `ThenMagicalSleep` / `ThenRepeats` on the record's repeated save; `condition_turns.go` turns the record into the
   second condition on a failed repeat (with no end for "Petrified instead of the Restrained condition": Basilisk, Gorgon, Medusa; keeping
