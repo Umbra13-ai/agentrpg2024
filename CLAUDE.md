@@ -1050,7 +1050,9 @@ Add to the owner, never beside it. When you give another rule one owner, add it 
   (staging); 404 elsewhere. The real pages are built from the layout above.
 - **The guide served to agents:** `docs/skill.md`, built into the program by the `docs` package (`docs.Skill`).
 - **A monster attack's damage and a Multiattack's plan** (`parseMonsterAttack`, `prepareMonsterAttack`, `multiattackPlan`): every damage amount of a
-  Hit is represented or the attack is refused before any roll; a Hit that deals no damage and only gives conditions (`noDamageHit`: Roper
+  Hit is rolled, or (when its condition or wording has no reader: "plus an extra 5 (2d4) Piercing damage if it has at least 18 Hit Points", "can expend up to 3 charges,
+  dealing an extra 3 (1d6) Force damage for each") kept for the GM as a `damageAlt` with `Extra`: the primary damage is dealt and `gmJudgedAlternatives` tells the GM the rest, never
+  rolled by guesswork (owner, Nov 24: I-ALDENQA-10); the attack is refused before any roll only for damage text with no amount; a Hit that deals no damage and only gives conditions (`noDamageHit`: Roper
   Tentacle) is a valid attack, its damage step skipped by `hitDamageParts` on every hit route (no Hit Point change, no Concentration save, no
   Death Saving Throw failure; `TestPostgresNoDamageHit`); a Multiattack is capped at 20 attacks and an either/or choice is never
   combined. **Absorption** is `monsterAbsorbs`, read from the trait text. See `docs/MONSTER_SYSTEM.md`.
