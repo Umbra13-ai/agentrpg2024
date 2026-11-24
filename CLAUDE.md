@@ -196,9 +196,12 @@ Report: "Wizard Scholar accepts any skill for Expertise."
   reader (the play rows, the preflight, the import's Multiattack check, the report). Kinds: `drop_to_zero`, read with the SRD wording as one
   `dropRule` by `droppedToZeroOnHit` (a monster target the hit defeats included); `chosen_damage_type` (the row's `ChosenTypes`, written
   in by `prepareMonsterAttack` through `withListedDamageType` from the GM's `use`, refused before any roll otherwise); `random_choice`
-  (`rollForOption`, in `resolveMonsterEffectText`'s pick of one of an entry's effects when `use` names none). A new kind is one row plus
+  (`rollForOption`, in `resolveMonsterEffectText`'s pick of one of an entry's effects when `use` names none); `random_condition`
+  (`randomConditionOnHit` in `hitAfterDamage`: the rolled condition given by the hit condition owner from the SRD rider sentence it stands
+  for, `conditionTimeWords`); `forced_move` (`mechanicHitMove`: the movement owner's `hitMove`, which `textHitMoves` reads from the SRD
+  wording, applied by `hitForcedMove`). A new kind is one row plus
   its rule in the owner it belongs to. Go: `TestMechanicProblems`, `TestCoveredSentencesAreApplied`, `TestChosenTypeAndRandomChoiceProblems`,
-  `TestPostgresAttachedDropToZeroOnEveryTarget`, `TestPostgresMechanicsInPreviewAndCatalogue`, `TestPostgresChosenTypeAndRandomChoiceInPlay`.
+  `TestRandomConditionAndForcedMoveProblems`, `TestPostgresRandomConditionAndForcedMoveOnEveryTarget`, `TestPostgresAttachedDropToZeroOnEveryTarget`, `TestPostgresMechanicsInPreviewAndCatalogue`, `TestPostgresChosenTypeAndRandomChoiceInPlay`.
 - **What a hit does after its damage:** `hitAfterDamage` (`cmd/server/hit_after_damage_2024.go`), called once by every hit route with the
   attacker: the drain below, "it starts burning" (the Burning owner, `burning_2024.go`), a push or pull (`hitForcedMove`) and the hit's
   record for an entry used right after it (`recordLastHit`). A new effect of this kind is one call there. Go: `TestPostgresBurningOnHitEveryTarget`.
