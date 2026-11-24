@@ -100,7 +100,14 @@ func TestPostgresDeathBurst(t *testing.T) {
 	pgCall(t, "POST", "/api/gm/adjust-monster", gm, map[string]interface{}{"campaign_id": camp, "target": "Far Bystander", "hp": 1000})
 
 	c0, p0, b0 := charHP(), petHP(), monHP("Burst Bystander")
-	kill("Burst Imp")
+	// the killing request's own reply says what its death set off: both bursts of the chain, the GM's whole lines
+	c, r := pgCall(t, "POST", "/api/gm/adjust-monster", gm, map[string]interface{}{"campaign_id": camp, "target": "Burst Imp", "hp": 0})
+	if c != 200 {
+		t.Fatalf("adjust-monster Burst Imp: %d %v", c, r)
+	}
+	if after := fmt.Sprint(r["after_this_request"]); !strings.Contains(after, "Burst Imp dies: its Death Burst acts") || !strings.Contains(after, "Chain Imp dies: its Death Burst acts") {
+		t.Errorf("the killing reply does not say what the bursts did: after_this_request = %v", r["after_this_request"])
+	}
 	if pending() != 0 {
 		t.Fatalf("triggers left pending after the request: %d", pending())
 	}
@@ -139,5 +146,23 @@ func TestPostgresDeathBurst(t *testing.T) {
 	}
 	if pending() != 0 || charHP() >= c2 {
 		t.Errorf("the pending trigger was not resolved at the turn start: pending %d, hero %d->%d", pending(), c2, charHP())
+	}
+}
+
+// The import report and the stat block say what the server does with a trait it applies, in the GM's words, not only the code's names.
+func TestTraitReportSaysWhatTheServerDoes(t *testing.T) {
+	trait := srdMonsterEntry{Name: "Death Burst", Text: "The imp explodes when it dies. Dexterity Saving Throw: DC 11, each creature in a 10-foot Emanation originating from the imp. Failure: 7 (2d6) Fire damage. Success: Half damage."}
+	rule, ok := traitRuleFor(trait)
+	if !ok {
+		t.Fatal("no trait rule reads a death burst")
+	}
+	applied, _ := entryReport("trait", trait)["applied"].([]map[string]interface{})
+	if len(applied) == 0 {
+		t.Fatal("nothing applied")
+	}
+	for _, a := range applied {
+		if a["server_does"] != rule.Does {
+			t.Errorf("%q: server_does %v, want the rule's %q", a["sentence"], a["server_does"], rule.Does)
+		}
 	}
 }

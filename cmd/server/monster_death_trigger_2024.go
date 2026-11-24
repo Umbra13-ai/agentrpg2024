@@ -1,8 +1,11 @@
 package main
 
 import (
+	"bytes"
 	"database/sql"
+	"encoding/json"
 	"fmt"
+	"net/http"
 	"regexp"
 	"strings"
 	"sync/atomic"
@@ -11,6 +14,9 @@ import (
 // A stat-block trait that acts when the monster dies ("The magmin explodes when it dies. Dexterity Saving Throw: DC 11, each
 // creature in a 10-foot Emanation originating from the magmin. Failure: 7 (2d6) Fire damage. Success: Half damage."; SRD 5.2.1
 // Death Burst of the Magmin and the Dust, Ice, Magma and Steam Mephits; the Balor's Death Throes).
+//
+// What the trigger did is added to the reply of the request that killed the monster (addDeathTriggersToReply, called by guardDB
+// before it sends the reply it holds): the GM's whole line, or a player's playerText, as after_this_request.
 //
 // The death is decided by the monster Hit Point owner (changeMonsterVitalsE): in the same transaction it records the pending
 // trigger (recordDeathTriggerIn, table pending_death_triggers), so a death that happened is never lost. The trigger is resolved
@@ -62,14 +68,65 @@ func recordDeathTriggerIn(tx *sql.Tx, lobby, id int, name, key string) error {
 	return nil
 }
 
-// drainDeathTriggers resolves every pending trigger (of every campaign, oldest first), including those its own bursts set off.
-// It returns the lines it wrote, for a caller that shows them (the turn change's log).
+// deathTriggerResult: one resolved trigger, with the campaign it happened in (the line is the GM's: playerText for a player).
+type deathTriggerResult struct {
+	Lobby int
+	Line  string
+}
+
+// drainDeathTriggers resolves every pending trigger and returns the lines it wrote, for a caller that shows them (the turn change's log).
 func drainDeathTriggers() []string {
+	var lines []string
+	for _, d := range resolvePendingDeathTriggers() {
+		lines = append(lines, d.Line)
+	}
+	return lines
+}
+
+// addDeathTriggersToReply: before the reply of the request that killed the monster is sent (guardDB holds it), its pending triggers
+// are resolved and what they did is added to the reply as after_this_request: whole for the campaign's GM, as playerText for one of
+// its players, nothing for anyone else. A reply that failed or isn't a JSON object leaves them to the drain after the request.
+func addDeathTriggersToReply(h http.Header, status int, body *bytes.Buffer) {
+	if status >= 400 || !deathTriggersPending.Load() || !strings.Contains(h.Get("Content-Type"), "json") {
+		return
+	}
+	var m map[string]interface{}
+	if json.Unmarshal(body.Bytes(), &m) != nil || m == nil {
+		return
+	}
+	agent := requestAuthor()
+	var lines []string
+	for _, d := range resolvePendingDeathTriggers() {
+		if agent == 0 {
+			continue
+		}
+		switch role, _, _ := campaignRole(agent, d.Lobby); role {
+		case "gm":
+			lines = append(lines, d.Line)
+		case "player":
+			lines = append(lines, playerText(d.Line))
+		}
+	}
+	if len(lines) == 0 {
+		return
+	}
+	m["after_this_request"] = lines
+	out, err := json.Marshal(m)
+	if err != nil {
+		return
+	}
+	h.Del("Content-Length")
+	body.Reset()
+	body.Write(out)
+}
+
+// resolvePendingDeathTriggers resolves every pending trigger (of every campaign, oldest first), including those its own bursts set off.
+func resolvePendingDeathTriggers() []deathTriggerResult {
 	if db == nil {
 		return nil
 	}
 	deathTriggersPending.Store(false)
-	var lines []string
+	var lines []deathTriggerResult
 	for n := 0; n < 200; n++ { // each row is one monster's death; a chain ends when no living monster is left in reach
 		var lobby, id int
 		var name, traitName, text string
@@ -81,8 +138,7 @@ func drainDeathTriggers() []string {
 			}
 			return lines
 		}
-		line := resolveDeathTrigger(lobby, id, name, traitName, text)
-		lines = append(lines, line)
+		lines = append(lines, deathTriggerResult{lobby, resolveDeathTrigger(lobby, id, name, traitName, text)})
 	}
 	return lines
 }

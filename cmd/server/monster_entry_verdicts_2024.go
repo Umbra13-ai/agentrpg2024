@@ -31,6 +31,7 @@ var (
 // sentenceVerdict is what the server does with one sentence of an entry (Monster, Kind, Entry and Family are filled by the SRD test).
 type sentenceVerdict struct {
 	Monster, Kind, Entry, Sentence, Family, Status, Rule string
+	Does                                                 string // what the server does with it, in the GM's words (a monsterTraitRules row's Does); "" when only Rule says it
 }
 
 // entrySentences: an entry's text cut at its headings ("Hit:", "Failure:" ...) and its sentences; each keeps its heading.
@@ -165,10 +166,14 @@ func textVerdicts(kind string, e srdMonsterEntry) []sentenceVerdict {
 	}
 	if kind == "trait" {
 		if r, ok := traitRuleFor(e); ok {
+			out := all("applied", "monsterTraitRules: "+r.Where)
 			if r.GM {
-				return all("gm", "monsterTraitRules GM row")
+				out = all("gm", "monsterTraitRules GM row")
 			}
-			return all("applied", "monsterTraitRules: "+r.Where)
+			for i := range out {
+				out[i].Does = r.Does
+			}
+			return out
 		}
 		if strings.HasPrefix(e.Name, "Spellcasting") {
 			return all("applied", "monster spellcasting (resolveMonsterSpell)")
@@ -318,11 +323,24 @@ func entryReport(kind string, e srdMonsterEntry) map[string]interface{} {
 	for _, v := range entryVerdicts(kind, e) {
 		switch v.Status {
 		case "applied":
-			applied = append(applied, map[string]interface{}{"sentence": v.Sentence, "applied_by": v.Rule})
+			a := map[string]interface{}{"sentence": v.Sentence, "applied_by": v.Rule}
+			if v.Does != "" {
+				a["server_does"] = v.Does
+			}
+			applied = append(applied, a)
 		case "gm":
-			gm = append(gm, map[string]interface{}{"sentence": v.Sentence, "why": v.Rule, "silent": false})
+			why := v.Rule
+			if v.Does != "" {
+				why = v.Does
+			}
+			gm = append(gm, map[string]interface{}{"sentence": v.Sentence, "why": why, "silent": false})
 		default:
 			gm = append(gm, map[string]interface{}{"sentence": v.Sentence, "why": "no rule of the server reads this sentence (" + v.Rule + ")", "silent": true})
+		}
+		if v.Status != "applied" && v.Does == "" { // a mechanic the GM could attach so the server applies it (monster_mechanic_suggestions_2024.go)
+			if s := mechanicSuggestions(kind, e, v.Sentence); len(s) > 0 {
+				gm[len(gm)-1]["suggest_mechanics"] = s
+			}
 		}
 	}
 	r := map[string]interface{}{"name": e.Name, "kind": kind, "applied": applied, "gm_resolves": gm}

@@ -55,9 +55,12 @@ type mechanicKind struct {
 	TargetGate bool
 	Params     []mechanicParam
 	Example    entryMechanic
-	ExampleOn  string                                          // an invented entry's text the example attaches to
-	describe   func(m entryMechanic) string                    // what this attached mechanic does, in the GM's words
-	check      func(e srdMonsterEntry, m entryMechanic) string // a check of the entry this mechanic needs besides its parameters
+	ExampleOn  string
+	// Hints: words (lowercase; any one) of an entry's sentence that no rule reads which suggest this kind to the GM in the import report
+	// (mechanicSuggestions). A suggestion only: the GM decides and attaches it.
+	Hints    []string                                        // an invented entry's text the example attaches to
+	describe func(m entryMechanic) string                    // what this attached mechanic does, in the GM's words
+	check    func(e srdMonsterEntry, m entryMechanic) string // a check of the entry this mechanic needs besides its parameters
 }
 
 // mechanicCoversLen bounds covers; maxEntryMechanics the mechanics of one entry.
@@ -135,6 +138,7 @@ var mechanicFits = map[string]struct {
 var mechanicCatalog = []mechanicKind{
 	{
 		Kind:       "drop_to_zero",
+		Hints:      []string{"drops to 0 hit points", "reduced to 0 hit points", "reduces the target to 0 hit points"},
 		TargetGate: true,
 		Does: "When a hit of this attack reduces its target to 0 Hit Points, the target dies (result dies) or becomes Stable (result stable), " +
 			"optionally with a condition for a time and a second condition while the first lasts. A monster or companion at 0 Hit Points is " +
@@ -171,7 +175,8 @@ var mechanicCatalog = []mechanicKind{
 		},
 	},
 	{
-		Kind: "chosen_damage_type",
+		Kind:  "chosen_damage_type",
+		Hints: []string{"type of its choice", "type chosen", "damage type chosen"},
 		Does: "The damage amounts of this attack's Hit that name no damage type (\"22 (4d10) damage\") are of a type the GM picks from types each time: " +
 			"the GM names it in monster_action's use, and nothing is rolled until it names one of them.",
 		On:        "attack",
@@ -192,7 +197,8 @@ var mechanicCatalog = []mechanicKind{
 		},
 	},
 	{
-		Kind: "random_choice",
+		Kind:  "random_choice",
+		Hints: []string{"at random", "randomly", "roll a d", "roll 1d"},
 		Does: "When the GM names none of the effects this entry offers in use, the server rolls a die with one face for each effect and resolves the one it rolls " +
 			"(order: the effects in the die's order, else the entry's). The GM may still name one in use (a reroll the text asks for, a choice).",
 		On:        "options",
@@ -215,6 +221,7 @@ var mechanicCatalog = []mechanicKind{
 	},
 	{
 		Kind:       "random_condition",
+		Hints:      []string{"at random", "randomly", "roll a d", "roll 1d"},
 		TargetGate: true,
 		Does: "A hit of this attack gives its target one condition the server rolls from conditions (a die with one face for each, in the list's order), " +
 			"for the time until says: until the end of the target's next turn, until the start or the end of the attacker's next turn, or for minutes. " +
@@ -242,6 +249,7 @@ var mechanicCatalog = []mechanicKind{
 	},
 	{
 		Kind:       "forced_move",
+		Hints:      []string{"pushed", "pulled", "push ", "pull ", "knocked back", "knocks"},
 		TargetGate: true,
 		Does: "A hit of this attack moves its target up to feet: pushed straight away from the attacker (push), pulled straight toward it (pull), or " +
 			"moved some other way the GM places (gm_places), only for a target of max_size or smaller when it is set. On the battle map the server moves " +
@@ -273,7 +281,8 @@ var mechanicCatalog = []mechanicKind{
 		},
 	},
 	{
-		Kind: "light_penalty",
+		Kind:  "light_penalty",
+		Hints: []string{"sunlight", "bright light"},
 		Does: "While the creature is in light (sunlight; or bright_light: Bright Light at it, sunlight included), its own trait gives it Disadvantage on " +
 			"what on says: attack rolls, attack rolls and ability checks, or every D20 Test (saving throws too). It is the SRD's Sunlight Sensitivity rule; " +
 			"the GM's lighting (POST /api/gm/set-lighting) and the battle map's lights decide the light.",
@@ -293,7 +302,8 @@ var mechanicCatalog = []mechanicKind{
 		},
 	},
 	{
-		Kind: "light_turn_damage",
+		Kind:  "light_turn_damage",
+		Hints: []string{"starts its turn in sunlight", "starts its turn in bright light"},
 		Does: "The creature takes damage (a fixed amount of a type) when it starts its turn in light (sunlight; or bright_light, sunlight included), through " +
 			"its Hit Point owner (its Resistances and Immunities apply).",
 		On:        "trait",
@@ -312,7 +322,8 @@ var mechanicCatalog = []mechanicKind{
 		},
 	},
 	{
-		Kind: "obscuring_zone",
+		Kind:  "obscuring_zone",
+		Hints: []string{"heavily obscured", "lightly obscured", "cloud", "fog", "smoke", "darkness"},
 		Does: "Using the entry fills an area with fog, smoke or a cloud that is Heavily (or Lightly) Obscured: a Sphere of radius size or a Cube of side size, " +
 			"centered on the monster (at self) or on the square the GM aims at (at point: monster_action's point). It lasts minutes, or until the GM ends it " +
 			"(POST /api/gm/obscured-area). Without a battle map, the creatures the action names are inside it. Anything else the entry does still runs.",
@@ -349,7 +360,8 @@ var mechanicCatalog = []mechanicKind{
 		},
 	},
 	{
-		Kind: "no_healing_aura",
+		Kind:  "no_healing_aura",
+		Hints: []string{"can't regain hit points", "cannot regain hit points"},
 		Does: "Creatures within feet of the monster (on the battle map) can't regain Hit Points while it is alive and in the fight. Without a battle map " +
 			"the server can't tell who is within reach, and the GM applies it.",
 		On:        "trait",
@@ -371,6 +383,7 @@ var mechanicCatalog = []mechanicKind{
 	},
 	{
 		Kind:       "curse",
+		Hints:      []string{"curse"},
 		TargetGate: true,
 		Does: "A hit of this attack curses its target, as the SRD's curses are kept: a cursed record that a Remove Curse or Greater Restoration ends, " +
 			"and that lasts hours (or, without them, until a spell ends it). While cursed the target can't regain Hit Points (no_regain), gains no " +
@@ -413,6 +426,7 @@ var mechanicCatalog = []mechanicKind{
 	},
 	{
 		Kind:       "engulf",
+		Hints:      []string{"engulf"},
 		TargetGate: true,
 		Does: "A creature that fails this entry's saving throw is engulfed, held or buried: it has the Restrained condition, the also conditions while " +
 			"Restrained, and damage (dice of damage_type) at the start of each of its turns while Restrained. It, or a creature within 5 feet of it, " +
@@ -447,6 +461,7 @@ var mechanicCatalog = []mechanicKind{
 	},
 	{
 		Kind:       "max_hp_drain",
+		Hints:      []string{"hit point maximum"},
 		TargetGate: true,
 		Does: "A hit of this attack lowers its target's Hit Point maximum by the damage it took (or only the damage of damage_type), as the SRD's Life Drain " +
 			"does: the maximum returns with a Long Rest, and a creature whose maximum falls to 0 dies.",
@@ -465,7 +480,8 @@ var mechanicCatalog = []mechanicKind{
 		},
 	},
 	{
-		Kind: "attacked_with_disadvantage",
+		Kind:  "attacked_with_disadvantage",
+		Hints: []string{"attack rolls against it have disadvantage", "against it have disadvantage", "attack rolls against the"},
 		Does: "Attack rolls against the creature have Disadvantage, as the SRD's Blurred Form gives (a blur, a displacement, a shimmer of speed): " +
 			"while it has the Incapacitated condition (or a condition that includes it) they don't, unless unless_incapacitated is false; with " +
 			"unless_speed_zero true they don't while its Speed is 0 either (Grappled, Restrained, a Speed rider: the speed owner's answer).",
@@ -501,6 +517,7 @@ var mechanicCatalog = []mechanicKind{
 	},
 	{
 		Kind:       "condition_on_hit",
+		Hints:      []string{"the target has the", "target has the", "condition"},
 		TargetGate: true,
 		Does: "A hit of this attack gives its target the conditions, for the time until says (until the end of the target's next turn, until the start or the " +
 			"end of the attacker's next turn, or minutes); ends_on_damage true ends them when the target takes damage; max_size gives them only to a target " +
@@ -537,6 +554,7 @@ var mechanicCatalog = []mechanicKind{
 	},
 	{
 		Kind:       "roll_rider",
+		Hints:      []string{"disadvantage on", "advantage on"},
 		TargetGate: true,
 		Does: "A hit of this attack changes rolls for a time, as the SRD's riders do: the next attack roll against the target has Advantage (exposed), the " +
 			"target has Disadvantage on attack rolls (or attack rolls and ability checks, or its next attack roll), the target can't take Reactions, or the " +
@@ -575,6 +593,7 @@ var mechanicCatalog = []mechanicKind{
 	},
 	{
 		Kind:      "evasion",
+		Hints:     []string{"evasion", "takes no damage if it succeeds", "only half damage if it fails"},
 		Does:      "The creature has the SRD's Evasion under whatever name its stat block gives it: on a Dexterity saving throw against an effect that allows half damage, no damage on a success and half on a failure.",
 		On:        "trait",
 		AppliedBy: "creatureEvasion with game.SaveDamage (evasion_2024.go): every saving throw's damage to it",
@@ -585,7 +604,8 @@ var mechanicCatalog = []mechanicKind{
 		},
 	},
 	{
-		Kind: "regain_from_damage",
+		Kind:  "regain_from_damage",
+		Hints: []string{"regains hit points equal", "regains a number of hit points", "regains hit points"},
 		Does: "When a hit of this attack deals damage, the monster regains Hit Points equal to the damage dealt (share all) or half of it (share half), " +
 			"through its Hit Point owner (never past its maximum, none while it can't regain Hit Points).",
 		On:        "attack",
@@ -604,6 +624,7 @@ var mechanicCatalog = []mechanicKind{
 	},
 	{
 		Kind:       "burning",
+		Hints:      []string{"catch fire", "catches fire", "starts burning", "on fire", "ignite", "burning"},
 		TargetGate: true,
 		Does: "The target starts burning on a hit of this attack, or on a failed saving throw of this entry: the SRD's Burning hazard (1d4 Fire damage at " +
 			"the start of each of its turns, until it takes an action and the Prone condition to put the fire out, or the GM ends it).",
@@ -615,6 +636,7 @@ var mechanicCatalog = []mechanicKind{
 	},
 	{
 		Kind:       "grapple",
+		Hints:      []string{"grapple", "escape dc"},
 		TargetGate: true,
 		Does: "A hit of this attack gives its target the Grappled condition with an escape DC, as the SRD's grapples are kept (only a target of max_size or " +
 			"smaller, when set); restrained true also gives it the Restrained condition until the grapple ends. The escape, the holder's grapples and " +
@@ -641,7 +663,8 @@ var mechanicCatalog = []mechanicKind{
 		},
 	},
 	{
-		Kind: "extra_damage",
+		Kind:  "extra_damage",
+		Hints: []string{"extra", "additional damage", "if the attack roll had advantage", "if it moved"},
 		Does: "A hit of this attack deals more damage (damage dice of damage_type, doubled on a Critical Hit as the hit's other dice) when a condition " +
 			"the server judges holds: when advantage, only if the attack roll had Advantage (the SRD's \"plus ... if the attack roll had Advantage\"); " +
 			"when charge, only if the monster moved at least feet straight toward the target immediately before the hit (the SRD's charge: read " +
@@ -674,7 +697,8 @@ var mechanicCatalog = []mechanicKind{
 		},
 	},
 	{
-		Kind: "ally_aura",
+		Kind:  "ally_aura",
+		Hints: []string{"allies within", "ally within"},
 		Does: "The creature's allies (the other monsters of the fight; itself too unless excludes_self) within radius feet have Advantage on attack rolls " +
 			"and saving throws (gives advantage, as the SRD's Aura of Authority), or Immunity to the conditions (gives immunity), while it isn't " +
 			"Incapacitated and has Hit Points; ally_types limits it to allies of those creature types. Without a battle map every ally is in reach.",
@@ -716,7 +740,8 @@ var mechanicCatalog = []mechanicKind{
 		},
 	},
 	{
-		Kind: "ally_grant",
+		Kind:  "ally_grant",
+		Hints: []string{"its allies", "each ally", "one ally", "an ally"},
 		Does: "Using the entry gives its allies Advantage until the start (or end) of the monster's next turn: on attack rolls and saving throws (gives " +
 			"attacks_and_saves) or on every D20 Test (d20_tests). The allies are the ones the GM names in target_ids (the monster's allies within radius), " +
 			"else every ally within radius (every ally without a battle map); with count, the GM names them when more are in reach. includes_self adds " +
@@ -755,7 +780,8 @@ var mechanicCatalog = []mechanicKind{
 		},
 	},
 	{
-		Kind: "reaction",
+		Kind:  "reaction",
+		Hints: []string{"reduce the damage", "halves the damage", "bonus to its ac", "adds", "to its ac"},
 		Does: "What the Reaction does, when the GM uses it right after its trigger (monster_action naming the Reaction): ac_bonus adds bonus to its AC " +
 			"against the attack that hit it this turn (a miss now undoes the hit); halve_damage halves that hit's damage (round down); resist_damage " +
 			"gives it Resistance to that hit when its damage is of one of damage_types, and temp_hp Temporary Hit Points; disadvantage_on_attack " +
@@ -791,7 +817,8 @@ var mechanicCatalog = []mechanicKind{
 		describe: func(m entryMechanic) string { return reactionWords(m) + noteWords(m) },
 	},
 	{
-		Kind: "teleport",
+		Kind:  "teleport",
+		Hints: []string{"teleport"},
 		Does: "Using the entry lets the monster teleport up to feet to an unoccupied space it can see, as the SRD's teleports: the GM moves its token on the " +
 			"battle map (no path, no Opportunity Attacks, no Speed spent). Anything else the entry does still runs.",
 		On:        "effect",
@@ -812,7 +839,8 @@ var mechanicCatalog = []mechanicKind{
 		},
 	},
 	{
-		Kind: "self_condition",
+		Kind:  "self_condition",
+		Hints: []string{"becomes invisible", "turns invisible", "it has the", "the monster has the"},
 		Does: "Using the entry gives the monster itself the conditions (Invisible, a defensive stance) for the time until says: until the start or the end " +
 			"of its next turn, or minutes. They are kept as every condition is (the condition owner), so its Immunities and the conditions' end apply.",
 		On:        "effect",

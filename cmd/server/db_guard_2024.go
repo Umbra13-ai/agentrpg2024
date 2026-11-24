@@ -187,6 +187,7 @@ func guardDB(w http.ResponseWriter, r *http.Request, next http.Handler) {
 		w.Write([]byte(`{"error":"database_error","message":"The server had a database problem while answering (a problem on the server, not with your request). Part of what you asked may have been saved: check before trying again."}`))
 		return
 	}
+	addDeathTriggersToReply(w.Header(), held.status, &held.body) // a death the request caused acts before its reply (monster_death_trigger_2024.go)
 	w.WriteHeader(held.status)
 	w.Write(held.body.Bytes())
 }
