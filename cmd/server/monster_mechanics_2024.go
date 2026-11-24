@@ -603,6 +603,50 @@ var mechanicCatalog = []mechanicKind{
 			return s + noteWords(m)
 		},
 	},
+	{
+		Kind: "teleport",
+		Does: "Using the entry lets the monster teleport up to feet to an unoccupied space it can see, as the SRD's teleports: the GM moves its token on the " +
+			"battle map (no path, no Opportunity Attacks, no Speed spent). Anything else the entry does still runs.",
+		On:        "effect",
+		AppliedBy: "monsterOwnUse in resolveMonsterEffectText, through the movement owner (readSpecialMove, grantSpecialMove; the GM's map update spends it)",
+		Params: []mechanicParam{
+			{Name: "feet", Type: "number", Min: 5, Max: 1000, Required: true, Does: "how far it teleports (a multiple of 5)"},
+		},
+		Example:   entryMechanic{"kind": "teleport", "feet": float64(30), "covers": "The sprite blinks away in a shower of sparks."},
+		ExampleOn: "The sprite blinks away in a shower of sparks.",
+		check: func(e srdMonsterEntry, m entryMechanic) string {
+			if m.num("feet")%5 != 0 {
+				return "feet must be a multiple of 5"
+			}
+			return ""
+		},
+		describe: func(m entryMechanic) string {
+			return fmt.Sprintf("using it, the monster teleports up to %d feet", m.num("feet"))
+		},
+	},
+	{
+		Kind: "self_condition",
+		Does: "Using the entry gives the monster itself the conditions (Invisible, a defensive stance) for the time until says: until the start or the end " +
+			"of its next turn, or minutes. They are kept as every condition is (the condition owner), so its Immunities and the conditions' end apply.",
+		On:        "effect",
+		AppliedBy: "monsterOwnUse in resolveMonsterEffectText, through the hit condition owner's sentence (parseHitRider, giveConditions)",
+		Params: []mechanicParam{
+			{Name: "conditions", Type: "conditions", Min: 1, Required: true, Does: "the conditions it gives itself"},
+			{Name: "until", Type: "choice", Options: []string{"start_of_its_next_turn", "end_of_its_next_turn", "minutes"}, Required: true, Does: "how long they last"},
+			{Name: "minutes", Type: "number", Min: 1, Max: 14400, Only: "until=minutes", Does: "how long, in minutes, with until minutes"},
+		},
+		Example:   entryMechanic{"kind": "self_condition", "conditions": []interface{}{"invisible"}, "until": "start_of_its_next_turn", "covers": "The sprite fades from sight."},
+		ExampleOn: "The sprite fades from sight.",
+		check: func(e srdMonsterEntry, m entryMechanic) string {
+			if m.str("until") == "minutes" && m.num("minutes") == 0 {
+				return "until minutes needs minutes"
+			}
+			return ""
+		},
+		describe: func(m entryMechanic) string {
+			return "using it, the monster has " + strings.Join(m.list("conditions"), " and ") + ", " + selfConditionTime(m)
+		},
+	},
 }
 
 // engulfSentences: the SRD's own words for an engulf, which the hit and condition owners read (parseHitRider: the condition, what lasts
@@ -808,6 +852,51 @@ func grappleOnHit(lobby, attacker, target int, entry, source string) string {
 		return ""
 	}
 	return " [" + strings.Join(given, "; ") + "]"
+}
+
+// selfConditionTime: a self_condition's time in the SRD's words (its next turn is its own, the source's: riderUntil reads it so).
+func selfConditionTime(m entryMechanic) string {
+	switch m.str("until") {
+	case "start_of_its_next_turn":
+		return "until the start of the attacker's next turn"
+	case "minutes":
+		return "for " + minutesWords(m.num("minutes"))
+	}
+	return "until the end of its next turn"
+}
+
+// monsterOwnUse: what an entry's attached teleport and self_condition do as the monster uses it (resolveMonsterEffectText, before the
+// entry's own words): the move granted by the movement owner, the conditions given to itself by the condition owner. The notes say so.
+func monsterOwnUse(lobby, monsterID int, meta *monsterMeta, entryName string, apply bool) []string {
+	var notes []string
+	if m, ok := entryMechanicIn(meta, entryName, "teleport"); ok {
+		if note := grantSpecialMove(lobby, monsterID, entryName, fmt.Sprintf("The creature teleports up to %d feet to an unoccupied space it can see.", m.num("feet")), apply); note != "" {
+			notes = append(notes, note)
+		}
+	}
+	if m, ok := entryMechanicIn(meta, entryName, "self_condition"); ok {
+		names := make([]string, 0)
+		for _, c := range m.list("conditions") {
+			names = append(names, titleCase(c))
+		}
+		word := " condition "
+		if len(names) > 1 {
+			word = " conditions "
+		}
+		e, ok := parseHitRider("Hit: The target has the " + strings.Join(names, " and ") + word + selfConditionTime(m) + ".")
+		switch {
+		case !ok:
+			notes = append(notes, "[the condition attached to this entry could not be read; the GM applies it]")
+		case !apply:
+			notes = append(notes, creatureName(lobby, monsterID)+" would have "+strings.Join(names, " and ")+" (not applied)")
+		default:
+			e.SourceID = monsterID
+			if given := e.giveConditions(lobby, monsterID, creatureName(lobby, monsterID)+"'s "+stripUsage(entryName)); len(given) > 0 {
+				notes = append(notes, creatureName(lobby, monsterID)+": "+strings.Join(given, "; "))
+			}
+		}
+	}
+	return notes
 }
 
 // curseSentences: the SRD's own words for a curse mechanic, which the curse owner reads (readCurse): one owner of what a curse does.

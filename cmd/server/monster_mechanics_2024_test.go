@@ -971,3 +971,23 @@ func TestPostgresGrappleMechanic(t *testing.T) {
 		t.Errorf("a Huge target was grappled: %s", line)
 	}
 }
+
+func TestPostgresTeleportAndSelfConditionMechanics(t *testing.T) {
+	testPostgres(t)
+	blink := srdMonsterEntry{Name: "Blink Away", Text: "The sprite blinks away in a shower of sparks and fades from sight.",
+		Mechanics: []entryMechanic{{"kind": "teleport", "feet": float64(30), "covers": "The sprite blinks away in a shower of sparks"},
+			{"kind": "self_condition", "conditions": []interface{}{"invisible"}, "until": "start_of_its_next_turn", "covers": "and fades from sight."}}}
+	gm, _, camp, _, sprite := earlyRulesFixture(t, "Test Blink Sprite", []srdMonsterEntry{blink})
+	c, j := pgCall(t, "POST", "/api/gm/narrate", gm, map[string]interface{}{"campaign_id": camp, "narration": "x",
+		"monster_action": map[string]interface{}{"monster": fmt.Sprintf("#%d", sprite), "action": "Blink Away"}})
+	line := fmt.Sprint(j["monster_action_result"])
+	if c != 200 || !strings.Contains(line, "up to 30 ft") || !hasCondMarker(camp, sprite, "invisible") || strings.Contains(line, "GM resolves") || strings.Contains(line, "sparks") {
+		t.Fatalf("Blink Away: %d invisible %v: %s", c, hasCondMarker(camp, sprite, "invisible"), line)
+	}
+	if v, ok := specialMoves.Load(creatureMoveKey{camp, sprite}); !ok || v.(specialMove).Feet != 30 || !v.(specialMove).Teleport {
+		t.Errorf("the teleport granted: %v %v", v, ok)
+	}
+	if rs := recordsOf(camp, sprite, "invisible"); len(rs) != 1 || rs[0].Notes != notesUntilStartOfSourceTurn {
+		t.Errorf("Invisible until the start of its next turn: %+v", rs)
+	}
+}

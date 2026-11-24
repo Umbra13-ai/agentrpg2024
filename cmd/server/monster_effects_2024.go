@@ -1779,6 +1779,12 @@ func resolveMonsterEffectText(r *http.Request, lobbyID, monsterID int, meta *mon
 		if line, ok := obscuringZone(r, lobbyID, monsterID, meta, entryName, targets, apply); ok { // an attached obscuring_zone
 			notes = append(notes, line)
 		}
+		if own := monsterOwnUse(lobbyID, monsterID, meta, entryName, apply); len(own) > 0 { // an attached teleport or self_condition
+			notes = append(notes, own...)
+			if apply {
+				markExecuted(r) // the server applied it: a limited use is counted (monster_day_uses.go)
+			}
+		}
 		if strings.TrimSpace(text) == "" { // every word is an attached mechanic's: nothing is left for the text rules
 			return append([]string{fmt.Sprintf("%s uses %s.", name, entryName)}, notes...)
 		}
