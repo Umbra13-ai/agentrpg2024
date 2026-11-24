@@ -77,27 +77,28 @@ type actionWho struct {
 
 // actionType: one type of action.
 type actionType struct {
-	Name    string   // the word sent as "action"
-	Aliases []string // other words for it: the SRD 2024 names (Magic is cast, Utilize is use_item) and older spellings
-	Title   string   // the name a player reads (my-turn, the commands page)
-	Section string   // one of actionSections
-	Cost    string   // one of the cost constants; a cast takes what the spell's casting time says
-	Fields  []string // the request fields it reads besides "action" (actionFields' JSON names; a route: that request's own)
-	What    string   // one line: what it does
-	Example string   // a request body (a route: "METHOD /path {body}")
-	GM      bool     // the server records the description and the GM rules on it (nothing is rolled); a description is required
-	Who     actionWho
-	Group   string   // the feature-word group (feature_words_2024.go): attack, cast or use_item
-	Tags    []string // what kind of thing it is, for the rules that stop some kinds: attack, spell, object, talk, heals (aimed at a living creature: living_target_2024.go)
-	Send    string   // where it is sent: sendAction, sendPending, sendRoute or sendFamily
-	Route   string   // sendRoute: the request
-	Family  bool     // a companion can take it too (POST /api/action with companion_id)
-	Beat    bool     // outside a fight it doesn't use up the exploration beat (the GM narrates between actions)
-	SRD     bool     // one of the SRD's twelve actions (Attack, Dash ... Utilize), named by the turn reminder
-	Uses    string   // the class resource it spends, shown as uses left (my-turn)
-	Needs   string   // what the scene must have for it to lead my-turn's menu (scene_menu_2024.go): fight, enemy, hurt, dying; "" fits every scene
-	Explore int      // outside a fight the types with a rank lead my-turn's menu, in this order (1 first)
-	While   string   // shown only while: raging, not_raging, wild_shaped, prone, dying, burning, inspired (holds a Bardic Inspiration die)
+	Name     string   // the word sent as "action"
+	Aliases  []string // other words for it: the SRD 2024 names (Magic is cast, Utilize is use_item) and older spellings
+	Title    string   // the name a player reads (my-turn, the commands page)
+	Section  string   // one of actionSections
+	Cost     string   // one of the cost constants; a cast takes what the spell's casting time says
+	Fields   []string // the request fields it reads besides "action" (actionFields' JSON names; a route: that request's own)
+	What     string   // one line: what it does
+	Example  string   // a request body (a route: "METHOD /path {body}")
+	GM       bool     // the server records the description and the GM rules on it (nothing is rolled); a description is required
+	Recorded string   // for a GM row the reply's words about where the description went, in place of "the GM rules on what this does" (speech is said, not ruled on)
+	Who      actionWho
+	Group    string   // the feature-word group (feature_words_2024.go): attack, cast or use_item
+	Tags     []string // what kind of thing it is, for the rules that stop some kinds: attack, spell, object, talk, heals (aimed at a living creature: living_target_2024.go)
+	Send     string   // where it is sent: sendAction, sendPending, sendRoute or sendFamily
+	Route    string   // sendRoute: the request
+	Family   bool     // a companion can take it too (POST /api/action with companion_id)
+	Beat     bool     // outside a fight it doesn't use up the exploration beat (the GM narrates between actions)
+	SRD      bool     // one of the SRD's twelve actions (Attack, Dash ... Utilize), named by the turn reminder
+	Uses     string   // the class resource it spends, shown as uses left (my-turn)
+	Needs    string   // what the scene must have for it to lead my-turn's menu (scene_menu_2024.go): fight, enemy, hurt, dying; "" fits every scene
+	Explore  int      // outside a fight the types with a rank lead my-turn's menu, in this order (1 first)
+	While    string   // shown only while: raging, not_raging, wild_shaped, prone, dying, burning, inspired (holds a Bardic Inspiration die)
 }
 
 func (t actionType) takes(field string) bool { return containsStr(t.Fields, field) }
@@ -163,7 +164,7 @@ var actionTypes = []actionType{
 	// ---------------------------------------------------------------- moving, talking and the free parts of a turn
 	{Name: "declare", Explore: 4, Aliases: []string{"other", "free", "wait"}, Title: "Declare (your own words, the GM rules)", Section: "In your own words", Cost: costAction, GM: true, Fields: []string{"description"},
 		What:    "What your character does, in your own words, when no other action type fits: leading the group along a wall, a whispered plan, waiting at a corner, scouting a route. The GM rules on it and narrates; nothing is rolled. Outside a fight it is your turn's story action (with the turn schedule, saved for the GM). In a fight it takes your action (say \"bonus action\" in the description for your Bonus Action) and the GM decides what it achieves. A spell is cast with cast and a feature with its own action: a declaration that casts a spell or uses a feature or its resource (a spell slot, Channel Divinity, Focus Points ...) is refused with the request to send.",
-		Example: `{"action": "declare", "description": "I take point along the wall at the children's pace and stop at the last cover before the crossing"}`},
+		Example: `{"action": "declare", "description": "I scout ahead along the road and signal the others if it is clear"}`},
 	{Name: "move", Explore: 7, Title: "Move", Section: "Moving and the free parts of a turn", Cost: costMovement, Family: true, Beat: true, Fields: []string{"movement_cost", "toward_frightened_source", "description"},
 		What:    "Move without a battle map: movement_cost is the feet you use (crawling while Prone costs double). On a battle map use POST /api/campaigns/{id}/battle-map/move instead.",
 		Example: `{"action": "move", "movement_cost": 30, "description": "I run to the pillar"}`},
@@ -177,8 +178,9 @@ var actionTypes = []actionType{
 		What:    "A Long Jump (up to your Strength score in feet) or a High Jump (3 + your Strength modifier), paid from your movement; \"standing\" halves it. The Jump spell: 30 feet for 10 feet of movement.",
 		Example: `{"action": "jump", "description": "long jump over the chasm"}`},
 	{Name: "speak", Explore: 5, Title: "Speak (in character)", Section: "Moving and the free parts of a turn", Cost: costFree, GM: true, Beat: true, Tags: []string{"talk"}, Fields: []string{"description"},
-		What:    "Your character's own words, said aloud in the scene: a warning, a taunt, an answer to an NPC. Free (brief speech takes no action) and logged as your character's words for the GM and the party. Persuading someone is Influence; talking out of character is the party chat (POST /api/campaigns/messages).",
-		Example: `{"action": "speak", "description": "\"Stay behind me, Millie!\" I shout over the din."}`},
+		What:     "Your character's own words, said aloud in the scene: a warning, a taunt, an answer to an NPC. Free (brief speech takes no action) and logged as your character's words for the GM and the party. Persuading someone is Influence; talking out of character is the party chat (POST /api/campaigns/messages).",
+		Example:  `{"action": "speak", "description": "\"Stay behind me, Millie!\" I shout over the din."}`,
+		Recorded: "Said aloud in the scene: your character's words are in the campaign log (recent_events and the feed), where the GM and the party read them; the party chat is for talk out of character. The GM narrates any answer."},
 	{Name: "interact", Explore: 6, Title: "Interact with one object", Section: "Moving and the free parts of a turn", Cost: costFree, GM: true, Beat: true, Tags: []string{"object"}, Fields: []string{"description"},
 		What:    "The one object interaction a turn includes, as part of your movement or action: open a door, pick up a dropped weapon, hand an item to an ally, draw something from a pack. Free; the GM rules on it. A second object, or one that needs an action, is Utilize (use_item).",
 		Example: `{"action": "interact", "description": "I open the door to the vestry"}`},

@@ -56,5 +56,7 @@ func marshalLeading(m map[string]interface{}, lead ...string) ([]byte, error) {
 	return b.Bytes(), nil
 }
 
-// myTurnLeadKeys: what my-turn's reply starts with: whether it is the player's turn and what to do now (scene_menu_2024.go).
-var myTurnLeadKeys = []string{"is_my_turn", "now", "more", "elsewhere"}
+// myTurnLeadKeys: what my-turn's reply starts with: whether it is the player's turn, the scene (the GM's newest narration, the story so far,
+// the newest events, the round) and then what to do now (scene_menu_2024.go). Thistlewick's playtest: the scene sat among 29 keys, after a
+// long menu, and read as missing from the short view.
+var myTurnLeadKeys = []string{"is_my_turn", "gm_says", "gm_says_round_name", "gm_says_at", "story_so_far", "recent_events", "round", "now", "more", "elsewhere"}

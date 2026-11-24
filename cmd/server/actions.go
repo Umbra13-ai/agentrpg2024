@@ -1303,7 +1303,9 @@ func handleAction(w http.ResponseWriter, r *http.Request) {
 		if !actionUsesBeat(req.Action) {
 			response["resource_consumed"] = "nothing: outside a fight this doesn't use your story action"
 		}
-		if t, ok := lookupActionType(req.Action); ok && t.GM {
+		if t, ok := lookupActionType(req.Action); ok && t.Recorded != "" {
+			response["recorded"] = t.Recorded // what the reply says the action did, from the action table (speech is said, not ruled on)
+		} else if ok && t.GM {
 			response["gm_rules"] = "The GM rules on what this does and narrates it."
 		}
 	}

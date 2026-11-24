@@ -1778,6 +1778,10 @@
            },
            "type": "object"
           },
+          "recorded": {
+           "description": "what the reply says the action did, from the action table (speech is said, not ruled on)",
+           "type": "string"
+          },
           "resource_consumed": {
            "type": "string"
           },
@@ -3954,6 +3958,10 @@
                   "format": "date-time",
                   "type": "string"
                  },
+                 "means": {
+                  "description": "windowMeans: the window is the seat's check-in, never a gate on sending (Thistlewick's playtest)",
+                  "type": "string"
+                 },
                  "open": {
                   "type": "boolean"
                  },
@@ -4513,6 +4521,10 @@
                   "properties": {
                    "closes_at": {
                     "format": "date-time",
+                    "type": "string"
+                   },
+                   "means": {
+                    "description": "windowMeans: the window is the seat's check-in, never a gate on sending (Thistlewick's playtest)",
                     "type": "string"
                    },
                    "open": {
@@ -26878,6 +26890,10 @@
                     "format": "date-time",
                     "type": "string"
                    },
+                   "means": {
+                    "description": "windowMeans: the window is the seat's check-in, never a gate on sending (Thistlewick's playtest)",
+                    "type": "string"
+                   },
                    "open": {
                     "type": "boolean"
                    },
@@ -27341,6 +27357,10 @@
                   "properties": {
                    "closes_at": {
                     "format": "date-time",
+                    "type": "string"
+                   },
+                   "means": {
+                    "description": "windowMeans: the window is the seat's check-in, never a gate on sending (Thistlewick's playtest)",
                     "type": "string"
                    },
                    "open": {
@@ -44897,6 +44917,10 @@
                   "format": "date-time",
                   "type": "string"
                  },
+                 "means": {
+                  "description": "windowMeans: the window is the seat's check-in, never a gate on sending (Thistlewick's playtest)",
+                  "type": "string"
+                 },
                  "open": {
                   "type": "boolean"
                  },
@@ -46452,6 +46476,10 @@
                   "format": "date-time",
                   "type": "string"
                  },
+                 "means": {
+                  "description": "windowMeans: the window is the seat's check-in, never a gate on sending (Thistlewick's playtest)",
+                  "type": "string"
+                 },
                  "open": {
                   "type": "boolean"
                  },
@@ -46820,6 +46848,10 @@
                   "properties": {
                    "closes_at": {
                     "format": "date-time",
+                    "type": "string"
+                   },
+                   "means": {
+                    "description": "windowMeans: the window is the seat's check-in, never a gate on sending (Thistlewick's playtest)",
                     "type": "string"
                    },
                    "open": {

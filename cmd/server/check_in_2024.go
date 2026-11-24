@@ -368,7 +368,12 @@ type turnWindow struct {
 	ClosesAt time.Time `json:"closes_at"`
 	Open     bool      `json:"open"`
 	SendNow  bool      `json:"send_now"`
+	Means    string    `json:"means"` // windowMeans: the window is the seat's check-in, never a gate on sending (Thistlewick's playtest)
 }
+
+// windowMeans: what a seat's window is, said with every window: a player read "open": false as "can't send yet" while its turn was accepted.
+const windowMeans = "Your seat's check-in time: open says whether it has come, send_now that it has and your turn is still to send. " +
+	"You may send your turn before it; it is saved for the GM."
 
 type nameRef struct {
 	CharacterID int    `json:"character_id,omitempty"`
@@ -539,7 +544,7 @@ func checkInAt(in checkInInputs, now time.Time) checkIn {
 		if until.After(deadline) {
 			until = deadline
 		}
-		return &turnWindow{OpensAt: at, ClosesAt: until, Open: !now.Before(at) && now.Before(until)}
+		return &turnWindow{OpensAt: at, ClosesAt: until, Open: !now.Before(at) && now.Before(until), Means: windowMeans}
 	}
 	// the GM check-in at which a stand-in is taken: the one going on now or next in the round, else the GM's next one after it
 	standInAt := func() *time.Time {
@@ -577,9 +582,9 @@ func checkInAt(in checkInInputs, now time.Time) checkIn {
 		st.CheckInAt, st.WindowUntil = tp(at), tp(until)
 		switch {
 		case now.Before(at):
-			st.Message = fmt.Sprintf("Not submitted yet; your check-in is at %s.", clockText(at))
+			st.Message = fmt.Sprintf("Not submitted yet. You can send your turn now: it is saved for the GM, and your check-in is at %s.", clockText(at))
 		case now.Before(until):
-			st.Message = fmt.Sprintf("Not submitted yet; your window is open until %s.", clockText(until))
+			st.Message = fmt.Sprintf("Not submitted yet. Send your turn now: your check-in window is open until %s.", clockText(until))
 		default:
 			st.Message = fmt.Sprintf("Your check-in has passed; you can still submit until the round's final check-in at %s.", clockText(deadline))
 		}
