@@ -35,6 +35,10 @@ func TestPostgresConditionalExtraDamageIsTheGMs(t *testing.T) {
 		before := hp()
 		code, r := run(map[string]interface{}{"action": c.action})
 		res := fmt.Sprint(r["monster_action_result"])
+		for try := 0; try < 40 && !strings.Contains(res, "HIT"); try++ { // a natural 1 always misses: send it again
+			code, r = run(map[string]interface{}{"action": c.action})
+			res = fmt.Sprint(r["monster_action_result"])
+		}
 		if code != 200 || hp() >= before || !strings.Contains(res, "applies as well when this holds") || !strings.Contains(res, "dealt its normal damage") {
 			t.Errorf("%s: %d %q (hp %d -> %d)", c.action, code, res, before, hp())
 		}
@@ -42,6 +46,9 @@ func TestPostgresConditionalExtraDamageIsTheGMs(t *testing.T) {
 	// inside a Multiattack the same attacks roll
 	before := hp()
 	code, r := run(map[string]interface{}{"action": "Multiattack", "attacks": []string{"Dagger", "Staff"}})
+	for try := 0; try < 40 && hp() >= before; try++ { // both attacks missed (a natural 1 always does): send it again
+		code, r = run(map[string]interface{}{"action": "Multiattack", "attacks": []string{"Dagger", "Staff"}})
+	}
 	if code != 200 || hp() >= before || strings.Contains(fmt.Sprint(r), "not understood") {
 		t.Errorf("Multiattack: %d %v (hp %d -> %d)", code, r, before, hp())
 	}
