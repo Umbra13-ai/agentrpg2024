@@ -216,14 +216,16 @@ Report: "Wizard Scholar accepts any skill for Expertise."
   every target kind; `engulfSentences` writes Restrained with what lasts while it does, and the record carries the escape, `Adjacent`);
   `max_hp_drain` (`mechanicHPMaxDrain`, read by `drainHPMaximum` beside the SRD wording); `attacked_with_disadvantage` (read by
   `attackedWithDisadvantage` beside Blurred Form); `condition_on_hit` (`conditionOnHit` in `hitAfterDamage`; `conditionHitSentence`, shared
-  with `random_condition`, writes the SRD's rider sentence: the time, "until it takes damage", the size gate). A hit finds its entry's
+  with `random_condition`, writes the SRD's rider sentence: the time, "until it takes damage", the size gate). `roll_rider` (`rollRiderOnHit`;
+  `rollRiderSentence` writes the SRD's roll rider sentence the roll rider owner reads, `exposed` with its one end). A hit finds its entry's
   mechanics by the entry's name (`attachedMechanic`, `hitAfterDamage`'s `entry`), never by its text, which two entries can share. `resolveMonsterEffectText` reads an entry with mechanics as its `rulesText` (`metaEntry`), and an entry they cover whole is only used. A trait an attached mechanic covers is applied in the GM's trait view (`traitsForGM`) and never an open item
   (`recurringGMTraits` reads `rulesText`). Not done: Resistance in a light (the damage owners read Resistances by the monster's key alone). A new kind is one row plus
   its rule in the owner it belongs to. Go: `TestMechanicProblems`, `TestCoveredSentencesAreApplied`, `TestChosenTypeAndRandomChoiceProblems`,
   `TestRandomConditionAndForcedMoveProblems`, `TestPostgresRandomConditionAndForcedMoveOnEveryTarget`, `TestLightMechanicProblems`,
   `TestPostgresLightMechanicsInPlay`, `TestZoneMechanicProblems`, `TestPostgresZoneMechanicsInPlay`, `TestCurseMechanicProblems`,
   `TestPostgresCurseMechanicOnEveryTarget`, `TestEngulfMechanicProblems`, `TestPostgresEngulfMechanicInPlay`,
-  `TestConditionOnHitProblems`, `TestPostgresConditionOnHitEndsOnDamage`, `TestPostgresAttachedDropToZeroOnEveryTarget`, `TestPostgresMechanicsInPreviewAndCatalogue`, `TestPostgresChosenTypeAndRandomChoiceInPlay`.
+  `TestConditionOnHitProblems`, `TestPostgresConditionOnHitEndsOnDamage`,
+  `TestRollRiderSentencesReadBack`, `TestPostgresRollRiderOnHit`, `TestPostgresAttachedDropToZeroOnEveryTarget`, `TestPostgresMechanicsInPreviewAndCatalogue`, `TestPostgresChosenTypeAndRandomChoiceInPlay`.
 - **What a hit does after its damage:** `hitAfterDamage` (`cmd/server/hit_after_damage_2024.go`), called once by every hit route with the
   attacker: the drain below, "it starts burning" (the Burning owner, `burning_2024.go`), a push or pull (`hitForcedMove`) and the hit's
   record for an entry used right after it (`recordLastHit`). A new effect of this kind is one call there. Go: `TestPostgresBurningOnHitEveryTarget`.
