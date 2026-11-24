@@ -384,9 +384,9 @@ var saveSourceRows = []saveSource{
 		name := rollTraitAdvantage(c.lobby, c.saver, true, false, 0)
 		return name != "", name
 	}},
-	{saveDis, "Sunlight Sensitivity", func(c *saveCtx) (bool, string) { // the variant "Disadvantage on D20 Tests", in sunlight (creature_senses_2024.go)
-		_, saves := sunlightPenalty(c.lobby, c.saver)
-		return yes(saves)
+	{saveDis, "Sunlight Sensitivity", func(c *saveCtx) (bool, string) { // the variant "Disadvantage on D20 Tests", in its light (creature_senses_2024.go)
+		p := lightPenaltyNow(c.lobby, c.saver)
+		return p.Saves, p.Trait
 	}},
 	{saveAdv, "Magic Resistance", func(c *saveCtx) (bool, string) { // against spells and other magical effects
 		if !c.spell {

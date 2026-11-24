@@ -153,7 +153,7 @@ func recurringGMTraits(traits []srdMonsterEntry) []srdMonsterEntry {
 		if r, ok := traitRuleFor(t); ok && !r.GM {
 			continue
 		}
-		if recurringTraitRe.MatchString(t.Text) {
+		if recurringTraitRe.MatchString(rulesText(t)) { // the words an attached mechanic covers are its own (monster_mechanics_2024.go)
 			out = append(out, t)
 		}
 	}

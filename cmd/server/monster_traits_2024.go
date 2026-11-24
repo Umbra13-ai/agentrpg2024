@@ -64,7 +64,7 @@ var monsterTraitRules = []monsterTraitRule{
 	{Match: saveEndAuraRe, Does: "an aura: each creature in it (of its choice: its enemies) makes the saving throw at the end of the monster's turn; one that is immune to it after a success is left out",
 		Where: "endSaveAura (monster_features_2024.go)", Aura: true},
 	{Match: sunlightRe, Does: "while it stands in sunlight (the GM's lighting set to sunlight): Disadvantage on its attack rolls and its Hide check, and on its saving throws where the trait says D20 Tests",
-		Where: "attackSources, saveSources, attemptMonsterHide; sunlightPenalty (creature_senses_2024.go)"},
+		Where: "attackSources, saveSources, attemptMonsterHide; lightPenaltyNow (creature_senses_2024.go)"},
 	// the GM's by design: no server state to apply them to (asserted, so the GM's stat block says so plainly)
 	{Match: regexp.MustCompile(`(?i)\btelepath`), Does: "telepathic communication or a mind link: the GM plays it (the server keeps no messages between creatures)", Where: "the GM", GM: true},
 	{Match: regexp.MustCompile(`(?i)\bcan pinpoint the location of\b`), Does: "a sense that finds things (ferrous metal, a scent): the GM tells what it finds", Where: "the GM", GM: true},
@@ -136,6 +136,12 @@ func traitsForGM(key string) []map[string]interface{} {
 			e["server_applies"], e["server_does"] = false, "the GM applies this trait: "+r.Does
 		} else {
 			e["server_applies"], e["server_does"] = false, "the server doesn't apply this trait: the GM does"
+		}
+		if mv := mechanicsView(t); len(mv) > 0 { // what the GM attached (monster_mechanics_2024.go): applied, when it covers every word
+			e["mechanics"] = mv
+			if strings.TrimSpace(rulesText(t)) == "" {
+				e["server_applies"], e["server_does"] = true, "the mechanics attached to it"
+			}
 		}
 		out = append(out, e)
 	}

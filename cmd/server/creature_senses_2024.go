@@ -52,12 +52,59 @@ func inSunlight(lobbyID, id int) bool {
 	return !magicalDarknessAt(lobbyID, id)
 }
 
-// sunlightPenalty: the creature has Sunlight Sensitivity and stands in sunlight; saves is the variant that covers every D20 Test.
-func sunlightPenalty(lobbyID, id int) (applies, saves bool) {
-	t, ok := creatureHasTraitText(lobbyID, id, sunlightRe)
-	if !ok || !inSunlight(lobbyID, id) {
-		return false, false
+// lightPenalty: the Disadvantage a creature's own trait gives it while it is in some light: Trait (its name, the reason a roll shows),
+// Light ("sunlight": inSunlight; "bright": Bright Light at the creature, sunlight included), and the rolls it covers. Read from the SRD
+// wording (textLightPenalty: Sunlight Sensitivity, "on D20 Tests" covering saving throws too) or from a light_penalty mechanic the GM
+// attached to a trait (monster_mechanics_2024.go); asked by attackSources, checkCtx.sources, saveSources and the monster Hide through
+// lightPenaltyNow only.
+type lightPenalty struct {
+	Trait, Light           string
+	Attacks, Checks, Saves bool
+}
+
+// textLightPenalty: the SRD wording of a trait's words as the text rules read them.
+func textLightPenalty(t srdMonsterEntry) (lightPenalty, bool) {
+	m := sunlightRe.FindStringSubmatch(rulesText(t))
+	if m == nil {
+		return lightPenalty{}, false
 	}
-	m := sunlightRe.FindStringSubmatch(t.Text)
-	return true, m != nil && strings.TrimSpace(m[1]) != ""
+	return lightPenalty{Trait: t.Name, Light: "sunlight", Attacks: true, Checks: true, Saves: strings.TrimSpace(m[1]) != ""}, true
+}
+
+// lightHolds: the creature is in that light now.
+func lightHolds(lobbyID, id int, light string) bool {
+	if light == "sunlight" {
+		return inSunlight(lobbyID, id)
+	}
+	return lobbyID > 0 && monsterLightingAt(lobbyID, id) == "bright"
+}
+
+// lightPenaltyNow: what the creature's light traits give it now (the rolls of every one whose light holds, their names joined).
+func lightPenaltyNow(lobbyID, id int) lightPenalty {
+	var out lightPenalty
+	if id == 0 || (id > 0 && !isCompanionCombatID(id)) {
+		return out
+	}
+	traits, _ := creatureTraitsAndVitals(lobbyID, id)
+	for _, t := range traits {
+		ps := []lightPenalty{}
+		if p, ok := textLightPenalty(t); ok {
+			ps = append(ps, p)
+		}
+		if p, ok := mechanicLightPenalty(t); ok {
+			ps = append(ps, p)
+		}
+		for _, p := range ps {
+			if !lightHolds(lobbyID, id, p.Light) {
+				continue
+			}
+			if out.Trait == "" {
+				out.Trait = p.Trait
+			} else if !strings.Contains(out.Trait, p.Trait) {
+				out.Trait += ", " + p.Trait
+			}
+			out.Attacks, out.Checks, out.Saves = out.Attacks || p.Attacks, out.Checks || p.Checks, out.Saves || p.Saves
+		}
+	}
+	return out
 }

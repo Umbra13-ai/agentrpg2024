@@ -453,6 +453,7 @@ func monsterFeaturesTurnStart(lobbyID, id int, name string) []string {
 		s := loadMonsterState(lobbyID, id)
 		changed := s.LAUsed > 0 || len(s.LAOnce) > 0
 		s.LAUsed, s.LAOnce = 0, nil
+		log = append(log, lightTurnDamage(lobbyID, id, name, meta)...) // a light_turn_damage trait (monster_mechanics_2024.go)
 		// Regeneration
 		for _, t := range meta.Traits {
 			m := regenRe.FindStringSubmatch(t.Text)

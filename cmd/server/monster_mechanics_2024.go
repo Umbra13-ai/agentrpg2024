@@ -84,6 +84,12 @@ var mechanicFits = map[string]struct {
 		}
 		return ""
 	}},
+	"trait": {"a trait", func(group string, e srdMonsterEntry) string {
+		if group != "trait" {
+			return "attaches to a trait"
+		}
+		return ""
+	}},
 	"options": {"an action, Bonus Action or Legendary Action that offers several named effects (\"Name. Text\" after a colon, as the SRD's rays are written)", func(group string, e srdMonsterEntry) string {
 		if group == "trait" || group == "reaction" || len(splitSaveOptions(rulesText(e))) < 2 {
 			return "attaches to an entry that offers two or more named effects, each written \"Name. Text\" after the entry's colon (preview it: the report names the effects it reads)"
@@ -229,6 +235,45 @@ var mechanicCatalog = []mechanicKind{
 			return s
 		},
 	},
+	{
+		Kind: "light_penalty",
+		Does: "While the creature is in light (sunlight; or bright_light: Bright Light at it, sunlight included), its own trait gives it Disadvantage on " +
+			"what on says: attack rolls, attack rolls and ability checks, or every D20 Test (saving throws too). It is the SRD's Sunlight Sensitivity rule; " +
+			"the GM's lighting (POST /api/gm/set-lighting) and the battle map's lights decide the light.",
+		On:        "trait",
+		AppliedBy: "lightPenaltyNow (creature_senses_2024.go), asked by attackSources, checkCtx.sources (the monster Hide too) and saveSources",
+		Params: []mechanicParam{
+			{Name: "light", Type: "choice", Options: []string{"sunlight", "bright_light"}, Required: true, Does: "the light it suffers in"},
+			{Name: "on", Type: "choice", Options: []string{"attack_rolls", "attack_rolls_and_checks", "d20_tests"}, Required: true, Does: "which rolls have Disadvantage"},
+		},
+		Example: entryMechanic{"kind": "light_penalty", "light": "bright_light", "on": "attack_rolls",
+			"covers": "In bright light the gloomling's eyes water, and its attack rolls have Disadvantage."},
+		ExampleOn: "In bright light the gloomling's eyes water, and its attack rolls have Disadvantage.",
+		describe: func(m entryMechanic) string {
+			light := map[string]string{"sunlight": "sunlight", "bright_light": "Bright Light"}[m.str("light")]
+			on := map[string]string{"attack_rolls": "attack rolls", "attack_rolls_and_checks": "attack rolls and ability checks", "d20_tests": "D20 Tests"}[m.str("on")]
+			return "Disadvantage on " + on + " while in " + light
+		},
+	},
+	{
+		Kind: "light_turn_damage",
+		Does: "The creature takes damage (a fixed amount of a type) when it starts its turn in light (sunlight; or bright_light, sunlight included), through " +
+			"its Hit Point owner (its Resistances and Immunities apply).",
+		On:        "trait",
+		AppliedBy: "lightTurnDamage at the monster's turn start (monsterFeaturesTurnStart, monster_features_2024.go), through damageMonster",
+		Params: []mechanicParam{
+			{Name: "light", Type: "choice", Options: []string{"sunlight", "bright_light"}, Required: true, Does: "the light that harms it"},
+			{Name: "amount", Type: "number", Min: 1, Max: 1000, Required: true, Does: "the damage it takes"},
+			{Name: "damage_type", Type: "choice", Options: sortedDamageTypes(), Required: true, Does: "the damage's type"},
+		},
+		Example: entryMechanic{"kind": "light_turn_damage", "light": "sunlight", "amount": float64(10), "damage_type": "radiant",
+			"covers": "The gloomling takes 10 Radiant damage when it starts its turn in sunlight."},
+		ExampleOn: "The gloomling takes 10 Radiant damage when it starts its turn in sunlight.",
+		describe: func(m entryMechanic) string {
+			light := map[string]string{"sunlight": "sunlight", "bright_light": "Bright Light"}[m.str("light")]
+			return fmt.Sprintf("takes %d %s damage when it starts its turn in %s", m.num("amount"), titleCase(m.str("damage_type")), light)
+		},
+	},
 }
 
 // conditionTimeWords: a random_condition's time in the words of the SRD's riders (riderUntil, conditionDuration read them).
@@ -280,6 +325,45 @@ func mechanicHitMove(lobby, attacker int, desc string) (hitMove, bool) {
 	}
 	d := m.str("direction")
 	return hitMove{MaxSize: m.str("max_size"), Feet: m.num("feet"), Toward: d == "pull", GMPlaces: d == "gm_places"}, true
+}
+
+// sortedDamageTypes: the damage types, in order (a choice's options).
+func sortedDamageTypes() []string {
+	var out []string
+	for t := range attackDamageTypes {
+		out = append(out, t)
+	}
+	sort.Strings(out)
+	return out
+}
+
+// mechanicLightPenalty: a trait's attached light_penalty, as the light owner's lightPenalty.
+func mechanicLightPenalty(t srdMonsterEntry) (lightPenalty, bool) {
+	m, ok := t.mechanic("light_penalty")
+	if !ok {
+		return lightPenalty{}, false
+	}
+	on := m.str("on")
+	return lightPenalty{Trait: t.Name, Light: map[string]string{"sunlight": "sunlight", "bright_light": "bright"}[m.str("light")],
+		Attacks: true, Checks: on != "attack_rolls", Saves: on == "d20_tests"}, true
+}
+
+// lightTurnDamage: the monster's light_turn_damage traits at the start of its turn, each dealt by the monster Hit Point owner while the
+// monster stands in its light.
+func lightTurnDamage(lobbyID, id int, name string, meta *monsterMeta) []string {
+	var out []string
+	if meta == nil || monsterHPNow(lobbyID, id) <= 0 {
+		return nil
+	}
+	for _, t := range meta.Traits {
+		m, ok := t.mechanic("light_turn_damage")
+		if !ok || !lightHolds(lobbyID, id, map[string]string{"sunlight": "sunlight", "bright_light": "bright"}[m.str("light")]) {
+			continue
+		}
+		text, _ := damageMonster(lobbyID, id, m.num("amount"), m.str("damage_type"))
+		out = append(out, fmt.Sprintf("%s starts its turn in %s (%s): %s", name, strings.ReplaceAll(m.str("light"), "_", " "), t.Name, strings.TrimSpace(text)))
+	}
+	return out
 }
 
 // untypedAmountRe: a damage amount with no type ("22 (4d10) damage"), the part a chosen_damage_type types; SRD 5.2.1 writes it before
@@ -528,10 +612,7 @@ func (k mechanicKind) paramProblem(m entryMechanic, e srdMonsterEntry) string {
 			if p.Type == "conditions" {
 				opts = rulesConditions()
 			} else if p.Type == "damage_types" {
-				for t := range attackDamageTypes {
-					opts = append(opts, t)
-				}
-				sort.Strings(opts)
+				opts = sortedDamageTypes()
 			} else {
 				for _, o := range splitSaveOptions(rulesText(e)) {
 					opts = append(opts, o.Name)
@@ -656,12 +737,7 @@ func mechanicCatalogView() []map[string]interface{} {
 			case "text":
 				v["max_length"] = p.MaxLen
 			case "damage_types":
-				var opts []string
-				for t := range attackDamageTypes {
-					opts = append(opts, t)
-				}
-				sort.Strings(opts)
-				v["options"], v["min_items"] = opts, p.Min
+				v["options"], v["min_items"] = sortedDamageTypes(), p.Min
 			case "entry_options":
 				v["options"] = "the names of the effects the entry offers"
 			case "conditions":

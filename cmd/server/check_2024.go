@@ -126,8 +126,8 @@ func (c checkCtx) sources() checkWhy {
 		}
 	}
 	if lobby > 0 {
-		if on, _ := sunlightPenalty(lobby, c.who); on { // Sunlight Sensitivity, Vampire Weakness: every one of its wordings has ability checks
-			w.dis("Sunlight Sensitivity")
+		if p := lightPenaltyNow(lobby, c.who); p.Checks { // Sunlight Sensitivity and the light traits a GM attached (creature_senses_2024.go)
+			w.dis(p.Trait)
 		}
 	}
 	if lobby > 0 && c.ability != "" && shortAbility(c.ability) == "str" && weakenedOn(lobby, c.who) { // Weakening Breath: Strength-based D20 Tests

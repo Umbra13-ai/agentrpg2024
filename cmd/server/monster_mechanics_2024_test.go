@@ -69,7 +69,8 @@ func TestMechanicProblems(t *testing.T) {
 	for _, k := range mechanicCatalog {
 		b, _ := json.Marshal(k.Example)
 		e := srdMonsterEntry{Name: "Example", Text: k.ExampleOn, Mechanics: mechanicsFromJSON(t, "["+string(b)+"]")}
-		if p := mechanicProblem("action", e); p != "" {
+		group := map[bool]string{true: "trait", false: "action"}[k.On == "trait"]
+		if p := mechanicProblem(group, e); p != "" {
 			t.Errorf("the catalogue's own example of %s is refused: %s", k.Kind, p)
 		}
 		if k.describe == nil || k.Does == "" || k.AppliedBy == "" || mechanicFits[k.On].Check == nil {
@@ -478,5 +479,122 @@ func TestPostgresRandomConditionAndForcedMoveOnEveryTarget(t *testing.T) {
 	putMap(ogre, 2) // Large: Fling moves a Medium or smaller target
 	if _, line := narrateHit(t, gm, camp, dancer, "Fling", "Dance Ogre", ""); at(ogre) != (mapSquare{1, 0}) || strings.Contains(line, "pushed") {
 		t.Errorf("a Large target was moved: %s", line)
+	}
+}
+
+const (
+	glareTraitText   = "In bright light the gloomling's eyes water, and its attack rolls and ability checks have Disadvantage."
+	sunBurnTraitText = "The gloomling takes 10 Radiant damage when it starts its turn in sunlight."
+)
+
+func gloomTraits() []srdMonsterEntry {
+	return []srdMonsterEntry{
+		{Name: "Watering Eyes", Text: glareTraitText, Mechanics: []entryMechanic{{"kind": "light_penalty", "light": "bright_light", "on": "attack_rolls_and_checks", "covers": glareTraitText}}},
+		{Name: "Sun Scorch", Text: sunBurnTraitText, Mechanics: []entryMechanic{{"kind": "light_turn_damage", "light": "sunlight", "amount": float64(10), "damage_type": "Radiant", "covers": sunBurnTraitText}}},
+	}
+}
+
+// TestLightMechanicProblems: the trait fit and the two light kinds' refusals; the GM's trait view and open items read the mechanics.
+func TestLightMechanicProblems(t *testing.T) {
+	cases := []struct{ group, mechanics, want string }{
+		{"trait", `[{"kind":"light_penalty","light":"sunlight","on":"d20_tests"}]`, ""},
+		{"action", `[{"kind":"light_penalty","light":"sunlight","on":"d20_tests"}]`, "attaches to a trait"},
+		{"trait", `[{"kind":"light_penalty","light":"moonlight","on":"d20_tests"}]`, "light must be one of sunlight, bright_light"},
+		{"trait", `[{"kind":"light_penalty","light":"sunlight"}]`, "on is required"},
+		{"trait", `[{"kind":"light_turn_damage","light":"sunlight","amount":5,"damage_type":"radiant"}]`, ""},
+		{"trait", `[{"kind":"light_turn_damage","light":"sunlight","amount":0,"damage_type":"radiant"}]`, "amount must be a whole number from 1 to 1000"},
+		{"trait", `[{"kind":"light_turn_damage","light":"sunlight","amount":5,"damage_type":"holy"}]`, "damage_type must be one of"},
+	}
+	for _, c := range cases {
+		got := mechanicProblem(c.group, srdMonsterEntry{Name: "x", Text: ashClawText, Mechanics: mechanicsFromJSON(t, c.mechanics)})
+		if (c.want == "") != (got == "") || !strings.Contains(got, c.want) {
+			t.Errorf("%s %s: got %q, want %q", c.group, c.mechanics, got, c.want)
+		}
+	}
+	for _, tr := range gloomTraits() {
+		b, _ := json.Marshal(tr.Mechanics)
+		tr.Mechanics = mechanicsFromJSON(t, string(b))
+		if p := mechanicProblem("trait", tr); p != "" {
+			t.Fatal(p)
+		}
+		for _, v := range entryVerdicts("trait", tr) {
+			if v.Status != "applied" {
+				t.Errorf("%s: %+v", tr.Name, v)
+			}
+		}
+	}
+	if got := recurringGMTraits(gloomTraits()); len(got) != 0 {
+		t.Errorf("a trait an attached mechanic applies is listed as the GM's: %v", got)
+	}
+	bare := gloomTraits()[1]
+	bare.Mechanics = nil
+	if len(recurringGMTraits([]srdMonsterEntry{bare})) != 1 {
+		t.Error("the same words without the mechanic should be the GM's open item")
+	}
+	if p, ok := mechanicLightPenalty(gloomTraits()[0]); !ok || p.Light != "bright" || !p.Attacks || !p.Checks || p.Saves {
+		t.Errorf("light penalty: %+v", p)
+	}
+}
+
+// TestPostgresLightMechanicsInPlay: Disadvantage on the monster's attack and its check in Bright Light, none in Dim Light; Radiant damage
+// at the start of its turn in sunlight, none in Bright Light; the GM's stat block marks both traits applied.
+func TestPostgresLightMechanicsInPlay(t *testing.T) {
+	testPostgres(t)
+	gm, _, camp, hero, _, _ := companionReactionFixture(t)
+	cp := fmt.Sprintf("/api/campaigns/%d", camp)
+	m := inventedMonster("Test Gloomling", "Monstrosity", gloomTraits(), []srdMonsterEntry{{Name: "Claw", Text: "Melee Attack Roll: +60, reach 5 ft. Hit: 1 (1d1) Slashing damage."}})
+	c, j := pgCall(t, "POST", "/api/gm/compendium/monsters", gm, map[string]interface{}{"source_note": "invented mechanics fixture", "monsters": []srdMonster2024{m}})
+	if c != 201 {
+		t.Fatalf("import: %d %v", c, j)
+	}
+	key := fmt.Sprint(j["monsters"].([]interface{})[0].(map[string]interface{})["monster_key"])
+	t.Cleanup(func() { db.Exec(`DELETE FROM custom_monsters WHERE key=$1`, key) })
+	pgCall(t, "POST", cp+"/combat/add", gm, map[string]interface{}{"combatants": []map[string]interface{}{{"name": "Test Gloomling", "monster_key": key, "hp": 500, "ac": 1, "initiative": -500}}})
+	pgExec(t, `UPDATE characters SET hp=100000, max_hp=100000, ac=1 WHERE id=$1`, hero)
+	gloom := monsterIDsByKeyOrName(camp, "Test Gloomling")[0]
+	light := func(l string) {
+		if c, r := pgCall(t, "POST", "/api/gm/set-lighting", gm, map[string]interface{}{"campaign_id": camp, "lighting": l}); c != 200 {
+			t.Fatalf("set lighting %s: %d %v", l, c, r)
+		}
+	}
+	light("bright")
+	if _, line := narrateAs(t, gm, camp, gloom, "Claw", fmt.Sprint(hero), ""); !strings.Contains(line, "Watering Eyes") {
+		t.Errorf("Bright Light: no Disadvantage from Watering Eyes: %s", line)
+	}
+	if w := (checkCtx{lobby: camp, who: gloom}).sources(); !w.hasDis("Watering Eyes") {
+		t.Errorf("Bright Light: its check has no Disadvantage: %+v", w)
+	}
+	light("dim")
+	if _, line := narrateAs(t, gm, camp, gloom, "Claw", fmt.Sprint(hero), ""); strings.Contains(line, "Watering Eyes") {
+		t.Errorf("Dim Light gave Disadvantage: %s", line)
+	}
+	turnStart := func() string {
+		t.Helper()
+		for n := 0; n < 12; n++ {
+			_, j := pgCall(t, "POST", cp+"/combat/next", gm, map[string]interface{}{})
+			f, err := readFight(db, camp)
+			if err != nil {
+				t.Fatal(err)
+			}
+			if asInt(f.current()["id"]) == gloom {
+				return fmt.Sprint(j)
+			}
+		}
+		t.Fatal("the gloomling's turn never came")
+		return ""
+	}
+	light("sunlight")
+	before := monsterEntryVitals(camp, gloom).HP
+	if res := turnStart(); monsterEntryVitals(camp, gloom).HP != before-10 {
+		t.Errorf("sunlight at its turn start: HP %d -> %d: %s", before, monsterEntryVitals(camp, gloom).HP, res)
+	}
+	light("bright")
+	before = monsterEntryVitals(camp, gloom).HP
+	if turnStart(); monsterEntryVitals(camp, gloom).HP != before {
+		t.Errorf("Bright Light (not sunlight) burned it: %d -> %d", before, monsterEntryVitals(camp, gloom).HP)
+	}
+	b, _ := json.Marshal(monsterStatBlock(key)["traits"])
+	if strings.Count(string(b), `"server_applies":true`) != 2 {
+		t.Errorf("the GM's trait view: %s", b)
 	}
 }

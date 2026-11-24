@@ -229,7 +229,7 @@ func TestPostgresObscuredAreasAndSenses(t *testing.T) {
 		t.Errorf("an octopus has no Sunlight Sensitivity: %v", dis)
 	}
 	s := saveCtx{lobby: camp, saver: shadow, ability: "dex", dc: 10}
-	if st := s.gather(); !anyContains(st.Disadvantage, "Sunlight Sensitivity") {
+	if st := s.gather(); !anyContains(st.Disadvantage, "Sunlight Weakness") { // the reason is the creature's own trait (lightPenaltyNow)
 		t.Errorf("the shadow's save in sunlight (D20 Tests): %v", st.Disadvantage)
 	}
 	k := saveCtx{lobby: camp, saver: kobold, ability: "dex", dc: 10}

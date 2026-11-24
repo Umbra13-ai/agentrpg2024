@@ -314,9 +314,9 @@ var attackSources = []attackSource{
 		}
 		return yes(!creatureSeesInLighting(c.lobby, c.attacker, monsterLightingAt(c.lobby, c.target), c.distanceFeet()))
 	}},
-	{false, "Sunlight Sensitivity", func(c *attackCtx) (bool, string) { // the attacker's own trait, in sunlight (creature_senses_2024.go)
-		on, _ := sunlightPenalty(c.lobby, c.attacker)
-		return yes(on)
+	{false, "Sunlight Sensitivity", func(c *attackCtx) (bool, string) { // the attacker's own light trait, in its light (creature_senses_2024.go)
+		p := lightPenaltyNow(c.lobby, c.attacker)
+		return p.Attacks, p.Trait
 	}},
 	{false, "the attacker is Grappled by another creature", func(c *attackCtx) (bool, string) {
 		return yes(c.attacker != 0 && c.target != 0 && grappledAttackPenalty(c.lobby, c.attacker, c.target))
