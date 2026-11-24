@@ -137,7 +137,7 @@ Report: "Wizard Scholar accepts any skill for Expertise."
   Every target kind gets them through `giveConditions` (a companion's hit too). Go: `TestPostgresRiderDurationsOnEveryTarget`.
 - **A trait that acts on a monster's death** (Death Burst, `cmd/server/monster_death_trigger_2024.go`): the writers of a monster's Hit Points
   call `monsterDiedIn`, which records the trigger in their transaction; `drainDeathTriggers` resolves it after the request (`withProtections`)
-  and at each turn start, through `applySaveEffect`. Never roll a death effect inside a damage transaction. Go: `TestPostgresDeathBurst`.
+  and at each turn start, through `applySaveEffect`; the request's own reply carries what it did (`addDeathTriggersToReply`, called by `guardDB` before the held reply is sent: `after_this_request`, the GM's line or a player's `playerText`). Never roll a death effect inside a damage transaction. Go: `TestPostgresDeathBurst`.
 - **A standard action a stat-block entry takes** ("takes the Disengage or Hide action", `cmd/server/monster_standard_actions_2024.go`):
   `resolveMonsterStandardAction` (a choice named in `use`; Disengage recorded as the `disengaged` combat effect that
   `noteMonstersLeavingReach` reads). An entry whose creature "can take the Hide action" at the end of its movement (Weretiger Prowl) rolls the Hide only when `use` names it (`optionalStandardRe`); an entry that is only its creature's own move is `onlyOwnMove` (probed with `anySpeed`, so "half its Speed" is read). Go: `TestPostgresMonsterNimbleEscape`, `TestPostgresOptionalHideAfterMove`.
@@ -198,7 +198,7 @@ Report: "Wizard Scholar accepts any skill for Expertise."
   (through `validateCustomMonster`: import, edit, preview) refuses a wrong one from the row's own words; `mechanicsView` and `entryVerdicts` (a
   sentence its `covers` holds is applied by the mechanic) give the report and the stat block; `rulesText` is what the text rules read (the
   covered words left out: the play rows, `oldStyleActions`, the preflight and the Multiattack check); `attachedMechanic` is how an owner finds
-  one; GET `/api/gm/compendium/mechanics` serves the table (`?srd=` a stat block to copy for a house rule). Which entries a kind fits is `mechanicFits` (with its
+  one; GET `/api/gm/compendium/mechanics` serves the table (`?srd=` a stat block to copy for a house rule); the import report's `suggest_mechanics` for a sentence no rule reads is a kind's `Hints` with `mechanicFits` (`mechanicSuggestions`, a suggestion only), and a trait rule's `Does` is the verdict's `server_does`. Which entries a kind fits is `mechanicFits` (with its
   check); a check of the entry a kind needs besides its parameters is the row's `check`. An entry's attack row is `entryActionRow` for every
   reader (the play rows, the preflight, the import's Multiattack check, the report). Kinds: `drop_to_zero`, read with the SRD wording as one
   `dropRule` by `droppedToZeroOnHit` (a monster target the hit defeats included); `chosen_damage_type` (the row's `ChosenTypes`, written
