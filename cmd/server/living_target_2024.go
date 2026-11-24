@@ -39,6 +39,7 @@ type allyAim struct {
 	IDs        []int // characters and companions: target_id / target_ids, else every character the description names
 	Combatants []int // creatures of the fight a negative target_id names (an NPC ally the GM added): their own Hit Point owner
 	Others     bool  // the description names creatures that are none of these (NPCs the server doesn't track): the GM applies it to them
+	Described  bool  // IDs are the characters the description names (the request named none)
 }
 
 // spellAllyAim: whom a spell that helps is aimed at, the one answer for every such spell (healing, Lesser and Greater Restoration,
@@ -65,11 +66,11 @@ func spellAllyAim(charID int, description string) allyAim {
 		return a
 	}
 	if named := parseTargetsFromDescription(description, charID); len(named) > 0 {
-		a.IDs = named
+		a.IDs, a.Described = named, true
 		return a
 	}
 	if id := aimedCharacter(description, charID); id > 0 {
-		a.IDs = []int{id}
+		a.IDs, a.Described = []int{id}, true
 		return a
 	}
 	if describesOthers(description) {
@@ -152,6 +153,9 @@ func livingTargetRefusal(action, description string, charID int, castSpellSlug .
 		if !ok || !spellRestores(key, sp) {
 			return ""
 		}
+		if r := allyAimRefusal(charID, sp, description); r != "" {
+			return r
+		}
 		return deadTargetRefusal("cast "+sp.Name, spellAllyTargets(charID, description))
 	}
 	t, ok := lookupActionType(action)
@@ -184,4 +188,35 @@ func deadTargetRefusal(what string, ids []int) string {
 			"Resurrection and True Resurrection bring back the dead). Nothing was spent.", subject, name)
 	}
 	return ""
+}
+
+// allyAimRefusal: the refusal of a cast that heals or restores aimed at more creatures than the spell reaches (healTargetLimit: Cure
+// Wounds one, Mass Healing Word six), made before anything is spent: the creatures the request names, or the characters the description
+// names when it names none (I-CALLA-31: a Cure Wounds whose description named the caster, an ally and an NPC guard healed both
+// characters). "" when the aim fits.
+func allyAimRefusal(charID int, sp SRDSpell, description string) string {
+	limit := healTargetLimit(sp)
+	aim := spellAllyAim(charID, description)
+	if limit == 0 || len(aim.IDs)+len(aim.Combatants) <= limit {
+		return ""
+	}
+	lobby := lobbyOfChar(charID)
+	var names []string
+	for _, id := range aim.IDs {
+		names = append(names, creatureName(lobby, id))
+	}
+	for _, id := range aim.Combatants {
+		names = append(names, creatureName(lobby, id))
+	}
+	reach := "one creature"
+	if limit > 1 {
+		reach = fmt.Sprintf("up to %d creatures", limit)
+	}
+	how := "it is aimed at " + joinNames(names)
+	if aim.Described {
+		how = "the description names " + joinNames(names) + " and no target was sent"
+	}
+	return fmt.Sprintf("Cannot cast %s: it reaches %s, and %s. Name the creature in target_character_id or target_ids (a creature of the fight: "+
+		"its target_id); to aim it at a creature the server doesn't track, leave the characters' names out of the description and the GM applies "+
+		"it. Nothing was spent.", sp.Name, reach, how)
 }

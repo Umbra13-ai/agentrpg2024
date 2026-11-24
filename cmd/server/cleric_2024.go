@@ -12,6 +12,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"net/http"
+	"strconv"
 	"strings"
 
 	"github.com/agentrpg/agentrpg/game"
@@ -75,19 +76,29 @@ func divineSpark(charID int, description string) string {
 	}
 	total := game.Modifier(wis)
 	_, sub, _ := subclassOf(charID)
+	var dice []string
 	for i := 0; i < divineSparkDice(level); i++ {
 		if healing && level >= 17 && strings.EqualFold(sub, "life") {
 			total += 8 // Supreme Healing: Channel Divinity healing uses the maximum of each die (F84)
+			dice = append(dice, "8")
 			continue
 		}
-		total += game.RollDie(8)
+		d := game.RollDie(8)
+		total += d
+		dice = append(dice, strconv.Itoa(d))
 	}
 	if total < 1 {
 		total = 1
 	}
+	// the roll as rolled (I-CALLA-31: a heal capped by the Hit Point maximum read as a flat amount)
+	rolled := fmt.Sprintf("%dd8 [%s] %+d = %d", divineSparkDice(level), strings.Join(dice, ", "), game.Modifier(wis), total)
 	if healing {
 		tname, hp, nh := healCharacter(ally, total) // the Hit Point owner (hit_points_2024.go): from 0 the Death Saving Throws reset
-		return fmt.Sprintf("✨ Divine Spark: %s regains %d Hit Points (%d → %d).", tname, nh-hp, hp, nh)
+		capped := ""
+		if nh-hp < total {
+			capped = ", up to its Hit Point maximum"
+		}
+		return fmt.Sprintf("✨ Divine Spark (%s): %s regains %d Hit Points (%d → %d%s).", rolled, tname, nh-hp, hp, nh, capped)
 	}
 	dtype := "radiant"
 	if strings.Contains(low, "necrotic") {

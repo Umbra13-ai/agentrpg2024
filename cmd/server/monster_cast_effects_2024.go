@@ -83,13 +83,21 @@ var (
 	healCountWords = map[string]int{"two": 2, "three": 3, "four": 4, "five": 5, "six": 6, "seven": 7, "eight": 8, "nine": 9, "ten": 10}
 )
 
-// healTargetLimit: how many creatures a healing spell reaches ("up to six creatures": Mass Healing Word), else one.
+// healTargetLimit: how many creatures a spell that heals or restores reaches: "up to six creatures" (Mass Healing Word), none for a spell
+// that reaches the creatures in an area (0: Conjure Celestial's Cylinder), else one ("A creature you touch"). A monster's cast and a
+// character's (allyAimRefusal, living_target_2024.go) read it.
 func healTargetLimit(sp SRDSpell) int {
 	if m := healUpToRe.FindStringSubmatch(sp.Description); m != nil {
 		return healCountWords[strings.ToLower(m[1])]
 	}
+	if sp.AoEShape != "" || spellAreaWordRe.MatchString(sp.Description) {
+		return 0
+	}
 	return 1
 }
+
+// spellAreaWordRe: a spell text that names an area its effect fills.
+var spellAreaWordRe = regexp.MustCompile(`\b(?:Cylinder|Sphere|Emanation|Cone|Cube|Line)\b`)
 
 // monsterSpellcastingAbility: the ability a monster casts with, from its stat block ("using Wisdom as the spellcasting ability"; an
 // entry that says "the same spellcasting ability as Spellcasting" reads the Spellcasting entry, which the search finds). "" when the
@@ -215,7 +223,7 @@ func monsterCastHealing(r *http.Request, lobbyID, monsterID int, sp SRDSpell, sl
 		return blockedBeforeRoll(r, head+": name the creature it heals (target or target_ids). Nothing was rolled."), true
 	}
 	lines := []string{head + "."}
-	if limit := healTargetLimit(sp); len(ids) > limit {
+	if limit := healTargetLimit(sp); limit > 0 && len(ids) > limit {
 		lines[0] = fmt.Sprintf("%s (it reaches %d creature(s); the others named aren't healed).", head, limit)
 		ids = ids[:limit]
 	}
