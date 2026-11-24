@@ -309,8 +309,11 @@ Add to the owner, never beside it. When you give another rule one owner, add it 
   Points, ..."; "Until the grapple ends, ..." after "can give it the Grappled condition ... instead of dealing damage"). What a hit does
   when it reduced its target to 0 Hit Points is `droppedToZeroOnHit` in `hitAfterDamage` (`hitDroppedToZero`; Stable with the
   conditions: `dropRiderRe`, Phase Spider, Vampire Familiar; death: `dieOnDropRe`, Gibbering Mouther, Mummy). A "uses <entry>" in a
-  clause that says when an effect ends never calls that entry (`usesAnotherEntry`, Will-o'-Wisp Vanish). Go:
-  `TestOwnersAppliedNotRepeatedToTheGM`, `TestPostgresHitThatDropsToZero`.
+  clause that says when an effect ends never calls that entry (`usesAnotherEntry`, Will-o'-Wisp Vanish). A condition that waits on an ability
+  score reaching 0 ("If this reduces the target's Strength to 0, the target has the Unconscious condition") is deferred the same way
+  (`hitRiderDeferredRe`, read after `stripAbilityDecrease`), never given with every hit; a Spellcasting cast that names no target gives its
+  day use back (`blockedBeforeRoll`). Go: `TestOwnersAppliedNotRepeatedToTheGM`, `TestPostgresHitThatDropsToZero`,
+  `TestPostgresScoreToZeroConditionIsNotGivenOnEveryHit`.
   **The early-game playtest set** (owner, Nov 22: the monsters of CR 0 to 1, then CR 0 to 3, then CR 0 to 6, then CR 0 to 11, then CR 0 to 30: all 330 stat blocks, 1318 entries
   with every Legendary Action; the only target until the owner says otherwise): `TestSRDEarlyGameCoverage` (its table, `docs/SRD_EARLY_GAME_COVERAGE.md`, `SRD_EARLY_OUT`) and the route test
   `TestPostgresEarlyGameEveryEntry`: every action, Bonus Action and Reaction through narrate's monster_action at a character, with every
