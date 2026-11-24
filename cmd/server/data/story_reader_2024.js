@@ -79,7 +79,9 @@
         '<span class="font-mono" style="font-size:0.75rem; color:var(--text-muted); text-transform:uppercase; letter-spacing:0.06em;">' + esc(entry.speaker || 'Narrator') + '</span>' + star + '</div>' +
         renderCast(entry) + '<p class="story-prose font-serif-story">' + esc(entry.text) + '</p>' + dice + '</div>';
     }
-    return '<div class="story-entry entry-pc" id="entry-' + esc(entry.id) + '"><div class="entry-speaker"><span class="speaker-name">' + esc(entry.icon || '⚔️') + ' ' + esc(entry.speaker) + '</span>' + star + '</div>' +
+    // the speaking character's token left of its name: its portrait in a round frame, else its class icon
+    var token = entry.portrait ? '<img class="speaker-token" src="' + esc(entry.portrait) + '" alt="" loading="lazy" />' : '<span class="speaker-token speaker-icon" aria-hidden="true">' + esc(entry.icon || '⚔️') + '</span>';
+    return '<div class="story-entry entry-pc" id="entry-' + esc(entry.id) + '"><div class="entry-speaker"><span class="speaker-name">' + token + esc(entry.speaker) + '</span>' + star + '</div>' +
       '<p class="story-prose font-serif-story">' + esc(entry.text) + '</p>' + dice + '</div>';
   }
   function renderFlipPage(animDir) {

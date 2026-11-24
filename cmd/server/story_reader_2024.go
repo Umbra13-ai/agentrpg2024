@@ -49,6 +49,8 @@ type storyPassage struct {
 	Type    string `json:"type"`
 	Speaker string `json:"speaker,omitempty"`
 	Icon    string `json:"icon,omitempty"`
+	// Portrait: the speaking character's portrait, shown as its token left of its name (the Icon, its class's, when it has none)
+	Portrait string `json:"portrait,omitempty"`
 	Text    string `json:"text"`
 	Dice    string `json:"dice,omitempty"` // the roll or result that came with it
 	Tone    string `json:"tone,omitempty"` // "hit", "fail" or ""
@@ -75,7 +77,10 @@ func storySkipTypes() []string {
 }
 
 // storyPassages makes the passages of the story from log records, oldest first. icons says each character's token (by character id).
-func storyPassages(recs []actionRecord, icons map[int]string) []storyPassage {
+// storySpeaker: how a character shows in the story: its class icon and its portrait's address ("" without one).
+type storySpeaker struct{ Icon, Portrait string }
+
+func storyPassages(recs []actionRecord, speakers map[int]storySpeaker) []storyPassage {
 	var out []storyPassage
 	skip := storySkipTypes()
 	for _, a := range recs {
@@ -107,7 +112,8 @@ func storyPassages(recs []actionRecord, icons map[int]string) []storyPassage {
 				p.Text = res
 			}
 		case a.CharacterID > 0 && a.ByPlayer: // a character in its player's words
-			p.Type, p.Speaker, p.Icon = "pc", a.Actor, icons[a.CharacterID]
+			sp := speakers[a.CharacterID]
+			p.Type, p.Speaker, p.Icon, p.Portrait = "pc", a.Actor, sp.Icon, sp.Portrait
 			if desc != "" && !strings.HasPrefix(desc, "Action:") {
 				p.Text, p.Dice = desc, res
 			} else {
@@ -375,13 +381,18 @@ func loadStory(w http.ResponseWriter, campaignID int) (name, gmName string, chap
 		writeDBErrorPage(w, err, "the campaign's story")
 		return
 	}
-	icons := map[int]string{}
+	speakers := map[int]storySpeaker{} // each character's token beside its words: its portrait, else its class icon
 	for _, a := range recs {
-		if _, seen := icons[a.CharacterID]; a.CharacterID > 0 && !seen {
+		if _, seen := speakers[a.CharacterID]; a.CharacterID > 0 && !seen {
 			var class string
-			db.QueryRow(`SELECT COALESCE(class, '') FROM characters WHERE id = $1`, a.CharacterID).Scan(&class)
-			icons[a.CharacterID] = classIcon(class)
+			var at sql.NullTime
+			db.QueryRow(`SELECT COALESCE(class, ''), CASE WHEN octet_length(avatar) > 0 THEN avatar_updated_at END FROM characters WHERE id = $1`, a.CharacterID).Scan(&class, &at)
+			sp := storySpeaker{Icon: classIcon(class)}
+			if at.Valid {
+				sp.Portrait = fmt.Sprintf("/api/characters/%d/portrait?v=%d", a.CharacterID, at.Time.Unix())
+			}
+			speakers[a.CharacterID] = sp
 		}
 	}
-	return name, gmName, storyChapters(storyPassages(recs, icons), campaignLocation(campaignID)), len(recs), true
+	return name, gmName, storyChapters(storyPassages(recs, speakers), campaignLocation(campaignID)), len(recs), true
 }

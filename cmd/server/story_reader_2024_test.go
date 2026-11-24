@@ -29,7 +29,7 @@ func TestStoryPassagesAndChapters(t *testing.T) {
 		rec(10, "environment", "GM", "The area is brightly lit", "Lighting set", min(8), 0, false),
 		rec(11, "narration", "GM", "The next morning the party wakes in the keep's cellar.", "", min(60*9), 0, false), // 9 hours later: a new chapter
 	}
-	ps := storyPassages(recs, map[int]string{7: "☀️", 8: "🪓"})
+	ps := storyPassages(recs, map[int]storySpeaker{7: {Icon: "☀️"}, 8: {Icon: "🪓", Portrait: "/api/characters/8/portrait?v=1"}})
 	// the party chat, the poll and the lighting are not in the story, and the fight's end is a mark, not a passage: 11 records, 7 passages
 	if len(ps) != 7 {
 		t.Fatalf("passages: %d", len(ps))
@@ -40,6 +40,15 @@ func TestStoryPassagesAndChapters(t *testing.T) {
 	}
 	if strings.Join(ids, ",") != "e1,e2,e3,e4,e5,e7,e11" {
 		t.Fatalf("the story is %v", ids)
+	}
+	// each character's token beside its words: a portrait when it has one, its class icon otherwise
+	for _, p := range ps {
+		if p.Type == "pc" && p.Icon == "🪓" && p.Portrait != "/api/characters/8/portrait?v=1" {
+			t.Errorf("character 8's portrait is not its token: %+v", p)
+		}
+		if p.Type == "pc" && p.Icon == "☀️" && p.Portrait != "" {
+			t.Errorf("character 7 has no portrait: %+v", p)
+		}
 	}
 	byID := map[string]storyPassage{}
 	for _, p := range ps {
