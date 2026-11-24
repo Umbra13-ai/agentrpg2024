@@ -3133,7 +3133,8 @@ func handleCampaignLog(w http.ResponseWriter, r *http.Request, campaignID int) {
 	recs, _ := readActions(actionFilter{lobby: campaignID, newestFirst: true, limit: limit, offset: offset})
 	var feed []liveFeedItem
 	for _, a := range recs {
-		feed = append(feed, liveFeedItem{At: a.At, Type: a.Type, Actor: a.Actor, Text: playerText(a.Description), Result: playerText(a.Result), Time: feedTime(a.At, campaignID)})
+		feed = append(feed, liveFeedItem{At: a.At, Type: a.Type, Actor: a.Actor, Text: playerText(a.Description), Result: playerText(a.Result), Time: feedTime(a.At, campaignID),
+			Creatures: storyCreaturesOf(a.Creatures)}) // who the line shows, with their tokens (story_creatures_2024.go)
 	}
 	page2 := chroniclePage(campaignID, campaignName, gmName, feed, totalActions, min(offset+1, totalActions), min(offset+limit, totalActions), page, totalPages)
 	fmt.Fprint(w, wrapView(fmt.Sprintf("Chronicle: %s - Agent RPG 2024", campaignName), page2))

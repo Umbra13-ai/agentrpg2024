@@ -53,8 +53,10 @@ type storyPassage struct {
 	Dice    string `json:"dice,omitempty"` // the roll or result that came with it
 	Tone    string `json:"tone,omitempty"` // "hit", "fail" or ""
 	Opener  bool   `json:"opener,omitempty"`
-	at      time.Time
-	endsFor bool // the fight ended here: the next passage begins a chapter
+	// the creatures it shows, with their tokens (story_creatures_2024.go)
+	Creatures []storyCreature `json:"creatures,omitempty"`
+	at        time.Time
+	endsFor   bool // the fight ended here: the next passage begins a chapter
 }
 
 type storyChapter struct {
@@ -123,6 +125,7 @@ func storyPassages(recs []actionRecord, icons map[int]string) []storyPassage {
 		}
 		p.Text, p.Dice = clipText(p.Text, storyTextMax), clipText(p.Dice, storyDiceMax)
 		p.Tone = storyTone(p.Dice)
+		p.Creatures = storyCreaturesOf(a.Creatures)
 		out = append(out, p)
 	}
 	return out
@@ -195,6 +198,14 @@ func storyChapters(ps []storyPassage, zone *time.Location) []storyChapter {
 			words += len(strings.Fields(p.Text))
 		}
 		mins := max(1, (words+storyWordsPerMin-1)/storyWordsPerMin)
+		met := map[string]bool{} // a creature's first passage of the chapter shows its token larger
+		for j := range c {
+			for k := range c[j].Creatures {
+				if id := c[j].Creatures[k].Name + "|" + c[j].Creatures[k].Token; !met[id] {
+					met[id], c[j].Creatures[k].First = true, true
+				}
+			}
+		}
 		begun := c[0].at.In(zone)
 		out = append(out, storyChapter{
 			ID: fmt.Sprintf("ch%d", i+1), Num: fmt.Sprintf("Part %d", i+1), Title: storyTitle(begun),

@@ -61,6 +61,14 @@
     for (var i = 0; i < READER.pages.length; i++) { if (READER.pages[i].entries.some(function (e) { return e.id === id; })) return i; }
     return -1;
   }
+  // the creatures a passage shows (story_creatures_2024.go): their tokens, larger at their first passage of a chapter; a tap enlarges one
+  function renderCast(entry) {
+    if (!entry.creatures || !entry.creatures.length) return '';
+    return '<div class="story-cast">' + entry.creatures.map(function (c) {
+      return '<button type="button" class="cast-token' + (c.first ? ' first' : '') + '" aria-label="' + esc(c.name) + ': show the token larger"><img src="' + esc(c.token) +
+        '" alt="' + esc(c.name) + '" loading="lazy" /><span class="cast-name">' + esc(c.name) + '</span></button>';
+    }).join('') + '</div>';
+  }
   function renderEntryHtml(entry) {
     var isSaved = READER.bookmarks.indexOf(entry.id) >= 0;
     var star = '<button class="bookmark-star ' + (isSaved ? 'saved' : '') + '" data-bookmark="' + esc(entry.id) + '" aria-label="' + (isSaved ? 'Remove bookmark' : 'Bookmark this moment') + '" title="' + (isSaved ? 'Remove bookmark' : 'Bookmark this moment') + '">' + (isSaved ? '★' : '☆') + '</button>';
@@ -69,7 +77,7 @@
       return '<div class="story-entry entry-gm ' + (entry.opener ? 'entry-opener' : '') + '" id="entry-' + esc(entry.id) + '">' +
         '<div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:0.2rem;">' +
         '<span class="font-mono" style="font-size:0.75rem; color:var(--text-muted); text-transform:uppercase; letter-spacing:0.06em;">' + esc(entry.speaker || 'Narrator') + '</span>' + star + '</div>' +
-        '<p class="story-prose font-serif-story">' + esc(entry.text) + '</p>' + dice + '</div>';
+        renderCast(entry) + '<p class="story-prose font-serif-story">' + esc(entry.text) + '</p>' + dice + '</div>';
     }
     return '<div class="story-entry entry-pc" id="entry-' + esc(entry.id) + '"><div class="entry-speaker"><span class="speaker-name">' + esc(entry.icon || '⚔️') + ' ' + esc(entry.speaker) + '</span>' + star + '</div>' +
       '<p class="story-prose font-serif-story">' + esc(entry.text) + '</p>' + dice + '</div>';
@@ -210,6 +218,7 @@
     applyPreferences(); renderFlipPage(); saveState();
   });
   document.addEventListener('click', function (e) {
+    var cast = e.target.closest('.cast-token'); if (cast) { cast.classList.toggle('open'); return; }
     var star = e.target.closest('[data-bookmark]'); if (!star) return;
     var id = star.dataset.bookmark;
     if (READER.bookmarks.indexOf(id) >= 0) READER.bookmarks = READER.bookmarks.filter(function (b) { return b !== id; }); else READER.bookmarks.push(id);

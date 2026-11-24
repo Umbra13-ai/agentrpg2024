@@ -49,8 +49,9 @@ type liveGM struct {
 type liveFeedItem struct {
 	At                        time.Time
 	Type, Actor, Text, Result string
-	Time                      string // as the entry shows it ("2m ago" on the Live Table)
-	Full                      string // the time in the campaign's zone, when Time is relative
+	Time                      string          // as the entry shows it ("2m ago" on the Live Table)
+	Full                      string          // the time in the campaign's zone, when Time is relative
+	Creatures                 []storyCreature // the creatures the line shows, with their tokens (story_creatures_2024.go)
 }
 
 type liveObservation struct{ Content, Type, Observer, Time string }
@@ -946,6 +947,15 @@ func chronicleEntries(feed []liveFeedItem, gmName string) string {
 		if it.Full != "" {
 			title = ` title="` + e(it.Full) + `"`
 		}
+		cast := ""
+		if len(it.Creatures) > 0 { // their tokens beside the line, small, with the name on hover
+			cast = `
+          <div style="display:flex; flex-wrap:wrap; gap:0.35rem; margin:0.25rem 0;">`
+			for _, c := range it.Creatures {
+				cast += `<img src="` + e(c.Token) + `" alt="` + e(c.Name) + `" title="` + e(c.Name) + `" loading="lazy" style="width:32px; height:32px; border-radius:50%; object-fit:cover; border:2px solid var(--accent-gold);" />`
+			}
+			cast += `</div>`
+		}
 		roll := ""
 		if it.Result != "" && !strings.HasPrefix(it.Result, "Action:") && it.Result != it.Text {
 			roll = `
@@ -956,9 +966,9 @@ func chronicleEntries(feed []liveFeedItem, gmName string) string {
           <div style="display:flex; align-items:center; justify-content:space-between; gap:0.5rem; margin-bottom:0.2rem;">
             <strong style="font-size:0.85rem; color:var(--accent-gold);">%s</strong>
             <span class="font-mono" style="font-size:0.75rem; color:var(--text-muted); white-space:nowrap;"%s>[%s] · %s</span>
-          </div>
+          </div>%s
           <p style="font-size:0.85rem; color:var(--text-primary);">%s</p>%s
-        </div>`, typ, typ, e(actor), title, e(label), e(it.Time), e(it.Text), roll))
+        </div>`, typ, typ, e(actor), title, e(label), e(it.Time), cast, e(it.Text), roll))
 	}
 	return b.String()
 }
