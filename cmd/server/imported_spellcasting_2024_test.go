@@ -70,11 +70,15 @@ func TestPostgresImportedSpellcastingOnTheRoute(t *testing.T) {
 	if again := cast("Web", fmt.Sprint(hero)); !strings.Contains(again, "Nothing was rolled") {
 		t.Errorf("a second Web under 1/day each: %s", again)
 	}
+	// a cast that names no target is asked for them and spends nothing: the same use is cast once the target is named
+	if res := cast("Tasha's Hideous Laughter", ""); !strings.Contains(res, "name the targets") {
+		t.Errorf("a cast with no target: %s", res)
+	}
 	// a spell under its wizard's name resolves as the SRD's spell
 	if res := cast("Otto's irresistible dance", fmt.Sprint(hero)); !strings.Contains(res, "Irresistible Dance") || strings.Contains(res, "the GM resolves it)") {
 		t.Errorf("Otto's irresistible dance: %s", res)
 	}
-	if res := cast("Tasha's Hideous Laughter", fmt.Sprint(hero)); !strings.Contains(res, "Hideous Laughter") || strings.Contains(res, "the GM resolves it)") {
+	if res := cast("Tasha's Hideous Laughter", fmt.Sprint(hero)); !strings.Contains(res, "Hideous Laughter") || strings.Contains(res, "the GM resolves it)") || strings.Contains(res, "Nothing was rolled") {
 		t.Errorf("Tasha's Hideous Laughter: %s", res)
 	}
 	// a cast on itself rolls no save against its own spell

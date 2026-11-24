@@ -575,7 +575,7 @@ func (e saveEffect) giveAlways(lobbyID, tid int, source string) []string {
 // hitRiderChoiceRe: a hit that lets someone choose or roll its effect is not read: all of it goes to the GM.
 // These clauses depend on an adjudicated result after damage, an alternate
 // result, or a specific movement path. Do not grant their effects on an ordinary hit.
-var hitRiderDeferredRe = regexp.MustCompile(`(?i)\b(?:can give it .+ instead of dealing damage|moved \d+\+? feet straight toward(?:s)?|if [^.]*?(?:reduc[[:alpha:]]* [^.]*? to 0 Hit Points|reduced to 0 Hit Points))\b`)
+var hitRiderDeferredRe = regexp.MustCompile(`(?i)\b(?:can give it .+ instead of dealing damage|moved \d+\+? feet straight toward(?:s)?|if [^.]*?(?:reduc[[:alpha:]]* [^.]*? to 0 Hit Points|reduced to 0 Hit Points)|if [^.]*?reduc[[:alpha:]]* [^.]*? to 0)\b`)
 
 // judgedAlternativeRe: an alternative damage amount of a hit and its condition (", or 11 (2d8 + 2) Necrotic damage if the swarm is
 // Bloodied"): group 1 is the condition, judged by classifyDamageCondition.
@@ -659,7 +659,9 @@ func parseHitRider(desc string) (saveEffect, bool) {
 	// waits with it: it is never applied on a hit that didn't give that condition.
 	var deferred []string
 	var kept []string
-	for _, s := range sentenceSplitRe.Split(strings.TrimSpace(hit), -1) {
+	// the drop of an ability score the hit's own owner applies (abilityDecreaseOnHit) is not a rider here; what waits on a score reaching 0
+	// ("If this reduces the target's Strength to 0, the target has the Unconscious condition") is a deferred result like a Hit Point drop to 0
+	for _, s := range sentenceSplitRe.Split(strings.TrimSpace(stripAbilityDecrease(hit)), -1) {
 		if hitRiderDeferredRe.MatchString(s) || dependsOnDeferred(s, deferred) {
 			deferred = append(deferred, strings.TrimSuffix(strings.TrimSpace(s), "."))
 		} else {
@@ -1579,8 +1581,8 @@ func resolveMonsterSpellRules(r *http.Request, lobbyID, monsterID int, monsterNa
 		}
 		areaAimed = true
 	}
-	if len(targets) == 0 {
-		return []string{head + ": name the targets (target or target_ids) to resolve it."}
+	if len(targets) == 0 { // nothing is cast: a limited use is not spent (blockedBeforeRoll gives it back)
+		return blockedBeforeRoll(r, head+": name the targets (target or target_ids) to resolve it. Nothing was rolled.")
 	}
 	if lines, handled := monsterCastDirect(r, lobbyID, monsterID, sp, slug, head, level, dc, targets, apply); handled { // Magic Missile, the Power Words
 		return lines

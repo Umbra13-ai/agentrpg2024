@@ -198,6 +198,26 @@ func TestPostgresHitThatDropsToZero(t *testing.T) {
 	}
 }
 
+// A condition that waits on an ability score reaching 0 ("If this reduces the target's Strength to 0, the target has the Unconscious
+// condition": an invented wording for a score reduced rather than decreased) is the GM's result, never given with every hit; the hit's
+// damage is dealt and the sentence is shown to the GM.
+func TestPostgresScoreToZeroConditionIsNotGivenOnEveryHit(t *testing.T) {
+	testPostgres(t)
+	gm, _, camp, hero, shade := earlyRulesFixture(t, "Test Score Shade", []srdMonsterEntry{
+		{Name: "Draining Touch", Text: "Melee Attack Roll: +60, reach 5 ft. Hit: 5 (1d6 + 2) Necrotic damage. The target's Strength score is reduced by 1d4. If this reduces the target's Strength to 0, the target has the Unconscious condition."},
+	})
+	_, line := narrateHit(t, gm, camp, shade, "Draining Touch", fmt.Sprint(hero), "")
+	if !strings.Contains(line, "HIT") {
+		t.Fatalf("no hit: %s", line)
+	}
+	if hasCondMarker(camp, hero, "unconscious") || hasCondMarker(camp, hero, "prone") {
+		t.Errorf("a hit that left the Strength score above 0 gave Unconscious or Prone: %s", line)
+	}
+	if !strings.Contains(line, "reduces the target's Strength to 0") {
+		t.Errorf("the conditional sentence is not shown to the GM: %s", line)
+	}
+}
+
 // What a single save target must be, read from the entry's header (monsterSaveTargetIssue): "one Frightened creature" (Sea Hag Death
 // Glare) and "one living creature ... that has 0 Hit Points" (Will-o'-Wisp Consume Life); a target that isn't is refused before
 // anything is rolled or spent. Death Glare's Hit Point threshold (dropsToZero) and Consume Life's death and regain (killOnFailure).
