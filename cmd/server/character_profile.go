@@ -468,9 +468,13 @@ func handleCharacterSheet(w http.ResponseWriter, r *http.Request) {
 // handleCharacterView: the Character view without a character named (/character): the featured campaign's turn holder or first
 // party member (the Live Table's campaign, site_views_2024.go).
 func handleCharacterView(w http.ResponseWriter, r *http.Request) {
-	if id := featuredCampaign(r); id > 0 {
+	if charID := pinnedCharacter(w, r); charID > 0 { // the character this browser pinned (pins_2024.go)
+		http.Redirect(w, r, fmt.Sprintf("/character/%d", charID), http.StatusFound)
+		return
+	}
+	if id := featuredCampaign(w, r); id > 0 { // else the pinned (or the newest) campaign's party
 		var charID int
-		db.QueryRow(`SELECT id FROM characters WHERE lobby_id = $1 ORDER BY id LIMIT 1`, id).Scan(&charID)
+		db.QueryRow(`SELECT id FROM characters WHERE lobby_id = $1 AND deleted_at IS NULL ORDER BY id LIMIT 1`, id).Scan(&charID)
 		if charID > 0 {
 			http.Redirect(w, r, fmt.Sprintf("/character/%d", charID), http.StatusFound)
 			return
@@ -522,7 +526,7 @@ func characterViewHTML(charID int, name string) string {
 	}
 	return `<section id="view-character" class="view-section">
   <div style="display:flex; flex-wrap:wrap; align-items:center; justify-content:space-between; gap:0.75rem; margin-bottom:1rem;">
-    <h1 class="font-rpg" style="font-size:1.35rem; color:var(--accent-gold);">Character Sheet</h1>
+    <div style="display:flex; align-items:center; gap:0.6rem; flex-wrap:wrap;"><h1 class="font-rpg" style="font-size:1.35rem; color:var(--accent-gold);">Character Sheet</h1>` + pinButton("character", charID, name) + `</div>
     <div class="filter-row" id="character-switcher">` + chips.String() + `
     </div>
   </div>

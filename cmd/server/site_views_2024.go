@@ -184,6 +184,7 @@ func liveTablePage(t liveTable) string {
         <h1 class="font-rpg" style="font-size: clamp(1.25rem, 2.8vw, 1.85rem); color:#fff6e0; text-shadow:0 2px 10px #000;">` + e(t.Name) + `</h1>
       </div>
       <div style="display:flex; gap:0.45rem; flex-wrap:wrap;">
+        ` + pinButton("campaign", t.ID, t.Name) + `
         <a class="btn btn-ghost btn-sm" href="/campaigns">Switch Campaign</a>
       </div>
     </div>
@@ -467,7 +468,10 @@ func liveScript(t liveTable) string {
 
 // featuredCampaign: the campaign the Live Table opens on (/live and /): the active campaign this request may watch with the newest
 // record in its log, else the newest active one, else the newest recruiting one (0: none).
-func featuredCampaign(r *http.Request) int {
+func featuredCampaign(w http.ResponseWriter, r *http.Request) int {
+	if id := pinnedCampaign(w, r); id > 0 { // the campaign this browser pinned comes first (pins_2024.go)
+		return id
+	}
 	rows, err := db.Query(`SELECT l.id FROM lobbies l
 		WHERE COALESCE(l.status, '') IN ('active', 'recruiting')
 		ORDER BY CASE WHEN l.status = 'active' THEN 0 ELSE 1 END,
@@ -499,7 +503,7 @@ func handleLive(w http.ResponseWriter, r *http.Request) {
 		http.NotFound(w, r)
 		return
 	}
-	if id := featuredCampaign(r); id > 0 {
+	if id := featuredCampaign(w, r); id > 0 {
 		serveCampaignPage(w, r, id)
 		return
 	}

@@ -91,6 +91,12 @@ const siteCSS = `
 @media (max-width: 480px) { .ddb-ability { padding-left: 0.12rem; padding-right: 0.12rem; } .ddb-ability-name, .save-name { letter-spacing: 0; font-weight: 600; } .save-pill { gap: 0.3rem; padding-left: 0.4rem; } }
 a { color: var(--accent-gold); }
 img { max-width: 100%; }
+/* the pin button (pins_2024.go) and the tab that opens what is pinned */
+.pin-btn .pin-icon { filter: grayscale(1); opacity: 0.65; }
+.pin-btn[aria-pressed="true"] { border-color: var(--accent-gold); color: var(--accent-gold); }
+.pin-btn[aria-pressed="true"] .pin-icon { filter: none; opacity: 1; }
+a.nav-btn.is-pinned, a.mobile-nav-btn.is-pinned { position: relative; }
+a.nav-btn.is-pinned::after, a.mobile-nav-btn.is-pinned::after { content: "📌"; font-size: 12px; position: absolute; top: 0; right: 2px; }
 a.brand, a.nav-btn, a.mobile-nav-btn, a.btn, a.pill-btn, a.map-token, a.party-card { text-decoration: none; }
 a.plain-link, a.plain-link:visited { color: inherit; text-decoration: none; }
 a.plain-link:hover { text-decoration: underline; }
@@ -153,7 +159,7 @@ a.party-card { display: block; }
 
 // siteScript: the active view, the Agent Quickstart
 // modal and its Copy cURL, the toast. Every storage call is in a try.
-var siteScript = `<script>
+var siteScript = `<script>` + pinScript + `
 function showToast(msg) {
   var el = document.getElementById('toast');
   if (!el) return;
