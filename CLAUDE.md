@@ -212,12 +212,13 @@ Report: "Wizard Scholar accepts any skill for Expertise."
   `damageMonster`); `obscuring_zone` (`obscuringZone` at the start of `resolveMonsterEffectText`, through `placeArea` /
   `startObscuredArea`; the GM's `point` from `monsterAreaPoint`); `no_healing_aura` (`noHealingAuraOver` in `cantRegainHP`, on the battle
   map); `curse` (`curseOnHit` in `hitAfterDamage`: `curseSentences` writes the SRD's curse sentences, which the curse owner reads, `readCurse` /
-  `giveCurse`). `resolveMonsterEffectText` reads an entry with mechanics as its `rulesText` (`metaEntry`), and an entry they cover whole is only used. A trait an attached mechanic covers is applied in the GM's trait view (`traitsForGM`) and never an open item
+  `giveCurse`); `engulf` (a save entry: `saveEffect.Engulf`, set in `resolveMonsterEffectText` and given by `giveEngulf` in `finishTarget` for
+  every target kind; `engulfSentences` writes Restrained with what lasts while it does, and the record carries the escape, `Adjacent`). `resolveMonsterEffectText` reads an entry with mechanics as its `rulesText` (`metaEntry`), and an entry they cover whole is only used. A trait an attached mechanic covers is applied in the GM's trait view (`traitsForGM`) and never an open item
   (`recurringGMTraits` reads `rulesText`). Not done: Resistance in a light (the damage owners read Resistances by the monster's key alone). A new kind is one row plus
   its rule in the owner it belongs to. Go: `TestMechanicProblems`, `TestCoveredSentencesAreApplied`, `TestChosenTypeAndRandomChoiceProblems`,
   `TestRandomConditionAndForcedMoveProblems`, `TestPostgresRandomConditionAndForcedMoveOnEveryTarget`, `TestLightMechanicProblems`,
   `TestPostgresLightMechanicsInPlay`, `TestZoneMechanicProblems`, `TestPostgresZoneMechanicsInPlay`, `TestCurseMechanicProblems`,
-  `TestPostgresCurseMechanicOnEveryTarget`, `TestPostgresAttachedDropToZeroOnEveryTarget`, `TestPostgresMechanicsInPreviewAndCatalogue`, `TestPostgresChosenTypeAndRandomChoiceInPlay`.
+  `TestPostgresCurseMechanicOnEveryTarget`, `TestEngulfMechanicProblems`, `TestPostgresEngulfMechanicInPlay`, `TestPostgresAttachedDropToZeroOnEveryTarget`, `TestPostgresMechanicsInPreviewAndCatalogue`, `TestPostgresChosenTypeAndRandomChoiceInPlay`.
 - **What a hit does after its damage:** `hitAfterDamage` (`cmd/server/hit_after_damage_2024.go`), called once by every hit route with the
   attacker: the drain below, "it starts burning" (the Burning owner, `burning_2024.go`), a push or pull (`hitForcedMove`) and the hit's
   record for an entry used right after it (`recordLastHit`). A new effect of this kind is one call there. Go: `TestPostgresBurningOnHitEveryTarget`.
