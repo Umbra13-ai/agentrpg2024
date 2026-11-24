@@ -110,6 +110,10 @@ Report: "Wizard Scholar accepts any skill for Expertise."
   Go: `TestPostgresBlurredFormAndIgnitedLight`.
 - **A monster's per-day uses** (`monster_day_uses.go`): reserved in one locked step (`reserveDayUse`), kept when the request ran the entry, the server's effect or a hand-off to the GM
   (`execRecord.usedSince`; owner, Nov 23, I-WL-2), given back only for a refusal, a `blockedBeforeRoll` stop or a reaction with no trigger; **a rest-based recharge** ("Recharges after a Short or Long Rest", "Recharges at the Next Dawn", the SRD's "(Recharge after a Short or Long Rest)": `restRechargeRe`, `restRechargePeriod`) is one use of the same ledger, given back by the GM's `monster-features` `rest` short or long (`endRest`) or `new_day`, `TestPostgresRestRechargeActions`; the wording is read in any letter case (`spellListHeadRe`, `perDayRe`), and a per-day list heading it can't read ("3e/day each:") is the import's warning (`unreadDayLists`). Go: `TestPostgresMonsterDayUses`, `TestPostgresImportedSpellcastingOnTheRoute`.
+- **A monster's Bonus Action in a turn** (owner, Nov 24; `cmd/server/monster_bonus_action_2024.go`): one a turn. narrate's `monster_action` asks `takeMonsterBonusAction` before it runs an entry of the stat block's Bonus Actions: the
+  turn's Bonus Action is reserved in one statement (`reserveBonusAction`, `combat_monster_state.bonus_used`), the second refused 409 before anything is rolled, given back for a refusal or a stop before anything was rolled, only read
+  by a preview (apply_damage false), cleared at the start of the monster's turn (`resetBonusActions`, in `monsterFeaturesTurnStart`). A monster whose stat block gives it more has the GM's `bonus_actions` (1 to 5, POST /api/gm/monster-features: `setBonusActionsAllowed`).
+  Not done: a Legendary Action or the battle map's attack route does not ask it (neither runs a Bonus Action), and a monster's Action is not limited. Go: `TestPostgresMonsterBonusActionOnceATurn`.
 - **The GM's pacing check** (`gm_pacing_2024.go`, owner, Nov 23): `pacingCheck`, GET /api/gm/status `pacing_check` for a campaign in play and the GM guide's pacing block
   (`TestPacingCheckInGMGuide`, `START_UPDATE=1`). A question, never a gate: it does not force a fight, a player's choice or progress.
 - **The GM's open items** (`cmd/server/gm_open_items_2024.go`, `gm_handover_2024.go`; owner, Nov 22): a lasting mechanic the server hands to the GM is listed in
@@ -918,7 +922,7 @@ Add to the owner, never beside it. When you give another rule one owner, add it 
   monsters and companions (`TestRollTraitsOverTheCatalog`, `TestPostgresRollTraitsGiveAdvantage`).
 - **What a monster's cast of a spell does** when it is neither a spell attack nor a saving throw: `monster_cast_effects_2024.go`.
   - `castDealsNoDamage` (`class_helpers.go`, read by a character's cast and a monster's: Geas, Dream, and Web, whose fire damage is a hazard's, `hazardDamageRe`) says a spell's dice are dealt later or
-    never by the cast. A monster's cast aimed at itself alone is a willing target: `resolveMonsterSpell` rolls no save against its own spell. Go: `TestPostgresDreamDealsNoDamageOnCast`.
+    never by the cast. A monster's cast aimed at itself alone is a willing target: `resolveMonsterSpell` rolls no save against its own spell; a cast the GM says aims at a willing target (monster_action's `willing`: `execRecord.willing`) rolls none for a spell that has a saving throw and deals no damage (`spellSaveWithoutDamage`: Polymorph, Hold Person), and the GM applies the effect. Go: `TestPostgresDreamDealsNoDamageOnCast`.
   - `lastingSpellEffect` (`buffSpells` and `gmSpellKinds`) gives the effect's kind, duration and number of targets. A character's
     Bless and Shield of Faith read it too.
   - `castEffectAnyCreature` lists the kinds a monster's cast applies.
