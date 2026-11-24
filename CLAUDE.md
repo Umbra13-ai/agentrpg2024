@@ -782,6 +782,16 @@ Add to the owner, never beside it. When you give another rule one owner, add it 
 - **Is it the character's turn** (I-WREN-1, Nov 24): `yourTurn` (`cmd/server/your_turn_2024.go`) is the one answer, read by my-turn's `is_my_turn` and the
   heartbeat's `turn_status.your_turn`: a fight's slot (or a familiar's), else the round's `your_turn` with the schedule, else the exploration beat; never
   while the table is held or for the dead. Go: `TestPostgresHeartbeatAndMyTurnAgree`.
+- **A character that can't act** (I-ALDENQA-2, Nov 24): `cantActBecause` (`conditions_legacy.go`: the Incapacitating condition holding it, from
+  `game.IsIncapacitatingCondition`) is the one answer, read by the action gate (`handleAction`, its hint `cantActNote`), `turnNeeds` (`turnNeedOf`: the turn
+  needs nothing and passes on its own, `howAutomatic`, as an unconscious one does: the walk, `gmEndsTurn`, `endedHow`) and my-turn (`cant_act`; the menu's
+  `sceneFacts.CantAct` moves every entry to `more`). Go: `TestPostgresIncapacitatedTurnPasses`.
+- **A character's purse** (I-ALDEN-1, Nov 24): `cmd/server/money_2024.go`. A payment comes from the whole purse (`purse.pay`: the coin named alone when it
+  holds the price, else change, what is left written as GP, SP and CP; a purse that can't pay changes nothing); `readPurseIn` / `writePurseIn` /
+  `lockPurse` are the reads and writes, inside the caller's locked transaction. On it: the shop's purchases and sales, the GM's `POST /api/gm/gold`
+  (an award adds the coin; a deduction is a payment, the whole request refused 409 `not_enough_money` when one character can't pay), the spellbook
+  copy and downtime's crafting and scribing. `TestNoOtherPurseWriter` lists the other coin writers (an award, a card); Go: `TestPurseRule`,
+  `TestPostgresPaymentsFromTheWholePurse`.
 - **Can a player send its turn now, outside a fight, with the schedule:** `roundTurnOpen` through `roundNoteFor`'s `your_turn`:
   my-turn's `is_my_turn` and the heartbeat's `your_turn` read it (playtest I-ALDEN-5). **A character seated in a campaign that
   hasn't started** is `actingCharacter`'s `waitingToStart` (a no-row error), answered `campaign_not_started` by
