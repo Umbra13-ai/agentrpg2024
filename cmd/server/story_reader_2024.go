@@ -120,7 +120,7 @@ func storyPassages(recs []actionRecord, icons map[int]string) []storyPassage {
 			continue
 		}
 		p.Dice = rollOnly(p.Dice, p.Text)
-		if p.Dice == p.Text || strings.HasPrefix(p.Dice, "Action:") {
+		if p.Dice == p.Text || p.Dice == "Action" || strings.HasPrefix(p.Dice, "Action:") { // the record's "Action: <the player's words>" is no roll
 			p.Dice = ""
 		}
 		p.Text, p.Dice = clipText(p.Text, storyTextMax), clipText(p.Dice, storyDiceMax)
