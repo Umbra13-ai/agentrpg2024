@@ -113,7 +113,7 @@ func shortScene(full map[string]interface{}, since []actionRecord, after string)
 		}
 	}
 	if !inList { // the newest narration came before the character's last action: say it, it is still the scene
-		for _, k := range []string{"gm_says", "gm_says_at", "gm_says_round_name"} {
+		for _, k := range []string{"gm_says", "gm_says_at", "gm_says_round_name", "gm_says_appearing"} {
 			if v, ok := full[k]; ok && !nothingToSay(v) {
 				scene[k] = v
 			}
@@ -140,7 +140,11 @@ func shortScene(full map[string]interface{}, since []actionRecord, after string)
 	}
 	list := make([]map[string]interface{}, 0, len(events)-first)
 	for _, e := range events[first:] {
-		list = append(list, map[string]interface{}{"id": e.ID, "at": cursorTime(e.At), "line": e.eventLine()})
+		entry := map[string]interface{}{"id": e.ID, "at": cursorTime(e.At), "line": e.eventLine()}
+		if len(e.Creatures) > 0 {
+			entry["appearing"] = shownNames(e.Creatures) // who the GM named as appearing (story_creatures_2024.go)
+		}
+		list = append(list, entry)
 	}
 	scene["since_your_last_action"] = list
 	if first > 0 {

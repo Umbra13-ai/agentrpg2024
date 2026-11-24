@@ -185,6 +185,7 @@ func handleMyTurn(w http.ResponseWriter, r *http.Request) {
 	recentEvents := []string{}
 	var latestNarration string
 	var narrationAt time.Time
+	var narrationShows []shownCreature       // who appears in it (story_creatures_2024.go)
 	sinceMine, mineSeen := []string{}, false // what happened since the character's own last action (I-CALLA-6, I-CALLA-16)
 	var sinceRecs []actionRecord             // the same events as records, for the short view's entries (short_view_2024.go)
 	var fightOverAt time.Time                // a fight ended and the GM hasn't narrated since (I-CALLA-18)
@@ -194,7 +195,7 @@ func handleMyTurn(w http.ResponseWriter, r *http.Request) {
 			fightOverAt = rec.At
 		}
 		if rec.isNarration() && latestNarration == "" {
-			latestNarration, narrationAt = rec.Description, rec.At // the most recent DM narration
+			latestNarration, narrationAt, narrationShows = rec.Description, rec.At, rec.Creatures // the most recent DM narration
 		}
 		if i < 10 {
 			recentEvents = append(recentEvents, line)
@@ -903,6 +904,9 @@ func handleMyTurn(w http.ResponseWriter, r *http.Request) {
 	}
 	if latestNarration != "" { // when the GM said it, and the round it belongs to (feedback log 56: last round's words read as the new round's)
 		response["gm_says_at"] = narrationAt
+		if len(narrationShows) > 0 {
+			response["gm_says_appearing"] = shownNames(narrationShows) // who the GM named as appearing in it
+		}
 		if n, name, ok := roundAtTime(lobbyID, narrationAt); ok {
 			response["gm_says_round"], response["gm_says_round_name"] = n, name // roundName: campaign round or fight round
 		}

@@ -5179,6 +5179,24 @@
           "action_economy_reset_for": {
            "type": "string"
           },
+          "appearing": {
+           "description": "the story shows their tokens beside the narration",
+           "items": {
+            "properties": {
+             "key": {
+              "type": "string"
+             },
+             "name": {
+              "type": "string"
+             }
+            },
+            "type": "object"
+           },
+           "type": "array"
+          },
+          "appearing_tip": {
+           "type": "string"
+          },
           "campaign_id": {
            "type": "integer"
           },
@@ -5239,6 +5257,13 @@
          "advance_turn": {
           "type": "boolean",
           "description": "true: end the current turn after the narration (as POST .../combat/next)"
+         },
+         "appearing": {
+          "items": {
+           "type": "string"
+          },
+          "type": "array",
+          "description": "who appears in this narration, so the story shows their tokens beside it: a creature of the fight by its name or \"#-2\", an SRD monster by name or slug, a monster of your compendium by its custom: key or name"
          },
          "campaign_id": {
           "type": "integer",
@@ -5323,6 +5348,9 @@
        },
        "example": {
         "advance_turn": true,
+        "appearing": [
+         "..."
+        ],
         "campaign_id": 1,
         "narration": "..."
        }
@@ -44866,6 +44894,13 @@
           "gm_says": {
            "type": "string"
           },
+          "gm_says_appearing": {
+           "description": "who the GM named as appearing in it",
+           "items": {
+            "type": "string"
+           },
+           "type": "array"
+          },
           "gm_says_at": {
            "format": "date-time",
            "type": "string"
@@ -45511,14 +45546,12 @@
             "since_your_last_action": {
              "items": {
               "properties": {
-               "at": {
-                "type": "string"
-               },
-               "id": {
-                "type": "integer"
-               },
-               "line": {
-                "type": "string"
+               "appearing": {
+                "description": "who the GM named as appearing (story_creatures_2024.go)",
+                "items": {
+                 "type": "string"
+                },
+                "type": "array"
                }
               },
               "type": "object"

@@ -15,6 +15,7 @@ package main
 
 import (
 	"database/sql"
+	"encoding/json"
 	"fmt"
 	"log"
 	"net/http"
@@ -36,7 +37,8 @@ type actionRecord struct {
 	Description string
 	Result      string // as stored: the GM's log, with every number (playerText hides them from players)
 	At          time.Time
-	ByPlayer    bool // written by the character's own player (a GM's record under the character's name is not: I-CALLA-26)
+	ByPlayer    bool            // written by the character's own player (a GM's record under the character's name is not: I-CALLA-26)
+	Creatures   []shownCreature // the creatures the record shows (story_creatures_2024.go)
 }
 
 // actionFilter says which rows to read.
@@ -82,7 +84,7 @@ func (a actionRecord) isOwnActionOf(charID int) bool {
 // readActions reads the action log.
 func readActions(f actionFilter) ([]actionRecord, error) {
 	q := `SELECT a.id, COALESCE(a.character_id, 0), COALESCE(c.name, g.name, 'GM'), COALESCE(a.action_type, ''),
-		COALESCE(a.description, ''), COALESCE(a.result, ''), a.created_at, COALESCE(a.by_player, a.character_id IS NOT NULL)
+		COALESCE(a.description, ''), COALESCE(a.result, ''), a.created_at, COALESCE(a.by_player, a.character_id IS NOT NULL), COALESCE(a.creatures, '[]'::jsonb)
 		FROM actions a
 		LEFT JOIN characters c ON c.id = a.character_id
 		LEFT JOIN lobbies l ON l.id = a.lobby_id
@@ -138,11 +140,13 @@ func readActions(f actionFilter) ([]actionRecord, error) {
 	for rows.Next() {
 		var a actionRecord
 		var at sql.NullTime
-		if err := rows.Scan(&a.ID, &a.CharacterID, &a.Actor, &a.Type, &a.Description, &a.Result, &at, &a.ByPlayer); err != nil {
+		var shown []byte
+		if err := rows.Scan(&a.ID, &a.CharacterID, &a.Actor, &a.Type, &a.Description, &a.Result, &at, &a.ByPlayer, &shown); err != nil {
 			log.Printf("action log: row unreadable: %v", err)
 			continue
 		}
 		a.At = at.Time
+		json.Unmarshal(shown, &a.Creatures)
 		out = append(out, a)
 	}
 	return out, rows.Err()
@@ -336,6 +340,12 @@ type execer interface {
 // A character's refused request ("Cannot ...": nothing was spent) is answered to its sender only and never written: the log is the
 // story every player and the GM reads (playtest I-CALLA-17).
 func writeAction(q execer, lobbyID, charID int, actionType, description, result string) error {
+	return writeActionShowing(q, lobbyID, charID, actionType, description, result, nil)
+}
+
+// writeActionShowing is writeAction with the creatures the record shows (story_creatures_2024.go: a narration's appearing list, a monster's
+// own turn).
+func writeActionShowing(q execer, lobbyID, charID int, actionType, description, result string, shown []shownCreature) error {
 	if charID > 0 && isRefusalResult(result) {
 		return nil
 	}
@@ -360,14 +370,19 @@ func writeAction(q execer, lobbyID, charID int, actionType, description, result 
 		lobby = lobbyID
 	}
 	// by_player: the request that writes it is the character's own player's (its own, or one the server makes for it: serveAs)
+	var creatures interface{}
+	if len(shown) > 0 {
+		b, _ := json.Marshal(shown)
+		creatures = string(b)
+	}
 	var err error
 	if author := requestAuthor(); charID > 0 && author > 0 {
-		_, err = q.Exec(`INSERT INTO actions (lobby_id, character_id, action_type, description, result, by_player)
-			VALUES ($1, $2, $3, $4, $5, COALESCE((SELECT agent_id = $6 FROM characters WHERE id = $2), FALSE))`,
-			lobby, char, actionType, description, result, author)
+		_, err = q.Exec(`INSERT INTO actions (lobby_id, character_id, action_type, description, result, by_player, creatures)
+			VALUES ($1, $2, $3, $4, $5, COALESCE((SELECT agent_id = $6 FROM characters WHERE id = $2), FALSE), $7::jsonb)`,
+			lobby, char, actionType, description, result, author, creatures)
 	} else {
-		_, err = q.Exec(`INSERT INTO actions (lobby_id, character_id, action_type, description, result, by_player) VALUES ($1, $2, $3, $4, $5, FALSE)`,
-			lobby, char, actionType, description, result)
+		_, err = q.Exec(`INSERT INTO actions (lobby_id, character_id, action_type, description, result, by_player, creatures) VALUES ($1, $2, $3, $4, $5, FALSE, $6::jsonb)`,
+			lobby, char, actionType, description, result, creatures)
 	}
 	if err != nil {
 		log.Printf("action log: couldn't write %q for character %d in campaign %d: %v", actionType, charID, lobbyID, err)
