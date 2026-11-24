@@ -401,6 +401,15 @@ Add to the owner, never beside it. When you give another rule one owner, add it 
   `handleAdminBackground`, written to the admin change log; the campaign page's Background card in the admin page) sets it; the public image is GET `/api/campaigns/{id}/background`
   (gated like every read under `/api/campaigns/{id}/`: a private campaign's picture is private). The admin editor never sends the bytes (`editorColumns`). Go:
   `TestPostgresAdminCampaignBackground`, `TestNoOtherBackgroundWriter`.
+- **A GM-built monster's token and stat block** (owner, Nov 24): `cmd/server/monster_token_2024.go` owns the token of a compendium monster
+  (`custom_monsters.token*`): `monsterTokenRule` (an `imageRule` with `Square`: a square PNG, JPEG or WebP, 128 to 2048 px, 2 MB; `checkImage` reads a WebP's
+  size with `webpSize`) and `monsterTokenRuleText`, the words every builder reply gives as `token_rule`; `saveMonsterToken` / `clearMonsterToken`
+  (`TestNoOtherMonsterTokenWriter`), from the GM's `POST|DELETE /api/gm/compendium/monsters/token` and the admin's `/api/admin/monsters/{key}/token`
+  (`putMonsterToken`, both); an edit's new version keeps it (`copyMonsterTokenIn`). `monsterTokenURL` answers for an SRD slug and a `custom:` key
+  alike (the encounter stage). **The stat block** is `statBlockHTML` (`statblock_view_2024.go`, the character sheet's components, each sentence
+  marked Server or GM from `entryVerdicts`): the GM's page `GET /monsters/custom/{key}` opens only with `statBlockLink` (signed, 24 hours;
+  `stat_block_url` in the builder's replies), the admin's Monsters tab frames `statBlockDocument` (`admin_monsters_2024.go`). Image uploads'
+  body size is `bodyLimitFor` (portrait, background, token). Go: `TestPostgresMonsterTokens`, `TestPostgresStatBlockPage`, `TestPostgresAdminMonsters`.
 - **The 18 skills:** `game/skills.go`.
 - **Expertise:** `game/expertise.go`, with its database side in `cmd/server/expertise_2024.go`.
 - **Which feats a character can take:** `cmd/server/feats_2024.go` (`featRefusal`, `featsOpenTo`, `featTakerOf`, `featHowTo`).

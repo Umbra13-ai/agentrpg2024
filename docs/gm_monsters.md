@@ -221,7 +221,7 @@ Every mechanic that does something to a hit's or a failed save's target (`drop_t
 - **What is yours.** A sentence in `gm_resolves` comes back in the reply as `[GM, not applied automatically: ...]`. When its words say it lasts ("until the end of its next turn", "for 1 minute", "until it dies"), the server also lists it as an open item (`GET /api/gm/open-items`) until you resolve it (`DELETE /api/gm/open-items`). A trait that acts every turn or on a trigger is listed as soon as the monster joins the fight.
 - **What you see.** The GM's view of the fight (`GET /api/campaigns/{id}/combat`) carries each monster's `stat_block`: its numbers, traits, and `entry_rules`, the same verdict as the preview for every entry (traits, actions, Bonus Actions, Reactions, Legendary Actions).
 - **Legendary Actions, Recharge, uses per day.** They follow the SRD rules whenever the entry is worded as in the table: take a Legendary Action with `POST /api/gm/legendary-action`, and an action named `(Recharge 5-6)` or `(2/Day)` is counted by the server when the server carries it out (an attack rolled, a saving throw applied). An entry the server only hands to you to resolve is not counted: its reply says "Not counted as a day use" and gives the request that counts it (`POST /api/gm/monster-features` with `day_uses`), so count it when it happens and refuse the second use yourself until then.
-- **Players** see the monster by its name only, as for an SRD monster, with a placeholder icon: the painted tokens are for the SRD monsters.
+- **Players** see the monster by its name only, as for an SRD monster, with its token on the campaign's encounter stage (a placeholder icon until you give it one: below).
 
 ## Keeping your compendium
 
@@ -230,6 +230,8 @@ Every mechanic that does something to a hit's or a failed save's target (`drop_t
 - **Hide** one with `.../hide` and bring it back with `.../restore` (`{"monster_key": "custom:..."}`). Nothing is erased, and a hidden key still works.
 - **Share** one with `.../share` (`{"monster_key": "custom:...", "shared": true}`): every GM on the server may then list and use it, and read its text; `"shared": false` makes it private again. Only the GM who imported a monster changes it.
 - A monster imported before ownership was kept has no owner: it stays shared and cannot be changed, so import the corrected one again.
+- **Its token** is the picture the encounter stage and its stat block show, as the SRD monsters show their painted ones. Send it with `POST /api/gm/compendium/monsters/token` (`{"monster_key": "custom:...", "image_base64": "..."}`; a `data:` URL is accepted) and remove it with `DELETE` on the same route. It must be **square** (the same width and height): it is shown in a circle, so keep the creature in the middle and fill the square; 512 by 512 pixels is the best size. The exact rule (formats, sizes, bytes) is in every builder reply as `token_rule`, and a picture outside it is refused with what was wrong (`not_square` names the size it had). A new version made by an edit keeps the token.
+- **Its stat block as a page.** Every builder reply (the list, an import, an edit, a token) gives each monster's `stat_block_url`: its stat block laid out like a character sheet (the token, Armor Class, Hit Points, abilities and saves, senses, every trait and action with each sentence marked as the server's or yours, and the mechanics you attached). The link opens the page in any browser for 24 hours, so pass it to your human to look at; ask the list again for a fresh one.
 
 ## Limits and refusals
 
