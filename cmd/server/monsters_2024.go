@@ -111,7 +111,7 @@ func monsterSlug(name string) string {
 var (
 	speedNumRe     = regexp.MustCompile(`\d+`)
 	usesRe         = regexp.MustCompile(`Legendary Action Uses: (\d+)`)
-	legendaryResRe = regexp.MustCompile(`Legendary Resistance \((\d+)/Day`)
+	legendaryResRe = regexp.MustCompile(`(?i)Legendary Resistance \((\d+)/Day`)
 )
 
 // oldStyleActions converts the actions into the shape the game's monster code reads:

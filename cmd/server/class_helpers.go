@@ -57,6 +57,10 @@ func isMarkSpell(spellSlug string) bool {
 // Elementals; Hex and Hunter's Mark's "whenever you hit"; Bestow Curse's "if you deal damage to the target with an attack roll or a spell, the target takes an extra 1d8 Necrotic damage"). Read from the spell's own text, so a new spell of the kind needs no row here.
 var laterHitDamageRe = regexp.MustCompile(`(?i)(extra|additional)[^.]{0,40}damage[^.]{0,80}(whenever you hit|when you hit|from the attack|each time you hit)|any attack you make deals an extra|(if|when|whenever) you deal damage to the target[^.]{0,80}(extra|additional)[^.]{0,40}damage`)
 
+// hazardDamageRe: a spell whose dice are dealt by a hazard the spell made once something sets it off ("The webs are flammable. Any 5-foot Cube of webs
+// exposed to fire burns away in 1 round, dealing 2d4 Fire damage to any creature that starts its turn in the fire": Web), not by the cast.
+var hazardDamageRe = regexp.MustCompile(`(?i)exposed to (?:fire|flame)[^.]{0,80}dealing[^.]{0,40}damage`)
+
 // castDamageOnLaterHits: the spell's dice ride on the caster's later hits (laterHitDamageRe); the cast itself deals none.
 func castDamageOnLaterHits(spellSlug string) bool {
 	sp, ok := srdSpellsMemory[strings.ToLower(spellSlug)]
@@ -82,6 +86,9 @@ func laterHitDamageNote(spellSlug string) string {
 func castDealsNoDamage(spellSlug string) bool {
 	if castDamageOnLaterHits(spellSlug) {
 		return true
+	}
+	if sp, ok := srdSpellsMemory[strings.ToLower(spellSlug)]; ok && hazardDamageRe.MatchString(sp.Description) {
+		return true // Web: the fire damage is dealt when its webs burn, not by a failed save
 	}
 	switch strings.ToLower(spellSlug) {
 	case "wish", "meld-into-stone", "dimension-door", "teleport", "contact-other-plane", "geas", "dream",

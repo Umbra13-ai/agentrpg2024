@@ -1490,6 +1490,9 @@ func monsterSpellNumbers(text string, meta *monsterMeta) (dc, atk int) {
 // resolveMonsterSpell casts a spell from the SRD data at characters.
 // use carries the GM's choice where the spell needs one (Command's word: approach, drop, flee, grovel or halt; grovel by default).
 func resolveMonsterSpell(r *http.Request, lobbyID, monsterID int, monsterName, spellName string, level, dc, atk int, targets []int, selfCast, apply bool, use string) []string {
+	if len(targets) == 1 && targets[0] == monsterID { // aimed at itself alone: a willing target, no save is rolled against its own spell
+		selfCast = true
+	}
 	if why := monsterCastBlocked(lobbyID, monsterID); why != "" { // Antimagic Field (spells_more_2024.go)
 		return []string{fmt.Sprintf("%s tries to cast %s, but %s.", monsterName, spellName, why)}
 	}

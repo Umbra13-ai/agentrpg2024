@@ -52,6 +52,16 @@ func customMonsterWarnings(m srdMonster2024) []string {
 			warnings = append(warnings, fmt.Sprintf("The trait %q is applied by the server's rule of that name (%s). Its text is not read: make sure it means the same.", t.Name, r.Does))
 		}
 	}
+	for _, g := range [][]srdMonsterEntry{m.Traits, m.Actions, m.BonusActions, m.Reactions, m.Legendary} { // a per-day list the server can't count
+		for _, e := range g {
+			if !strings.HasPrefix(e.Name, "Spellcasting") {
+				continue
+			}
+			if heads := unreadDayLists(e.Text); len(heads) > 0 {
+				warnings = append(warnings, fmt.Sprintf("The entry %q has per-day lists the server can't read (%s), so their spells are not counted and may be cast without limit. Write them as the SRD does: \"2/Day Each:\" or \"1/Day:\" (any letter case).", e.Name, strings.Join(heads, ", ")))
+			}
+		}
+	}
 	for _, g := range [][]srdMonsterEntry{m.Actions, m.BonusActions, m.Reactions, m.Legendary} { // an attack play refuses whole, said before play
 		for _, e := range g {
 			if isAttackEntry(e.Text) {

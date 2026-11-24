@@ -138,6 +138,7 @@ var monsterTextPatterns = map[string]*regexp.Regexp{
 	"magicalDarknessRe":        magicalDarknessRe,        // monster_darkness_2024.go
 	"magicalDarknessSenseRe":   magicalDarknessSenseRe,   // monster_darkness_2024.go
 	"spellListHeadRe":          spellListHeadRe,          // monster_day_uses.go
+	"dayListHeadLooseRe":       dayListHeadLooseRe,       // monster_day_uses.go
 	"spellParenRe":             spellParenRe,             // monster_day_uses.go
 	"spellLevelNoteRe":         spellLevelNoteRe,         // monster_day_uses.go
 	"deathTriggerRe":           deathTriggerRe,           // monster_death_trigger_2024.go

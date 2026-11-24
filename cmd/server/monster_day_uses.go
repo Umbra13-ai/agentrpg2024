@@ -21,7 +21,7 @@ import (
 // know when a day ends: the GM calls new_day. Documented in docs/MONSTER_SYSTEM.md.
 
 var (
-	spellListHeadRe  = regexp.MustCompile(`(At Will|(\d+)/Day( Each)?):`)
+	spellListHeadRe  = regexp.MustCompile(`(?i)(At Will|(\d+)/Day( Each)?):`) // any case: an imported entry writes "1/day each"
 	spellParenRe     = regexp.MustCompile(`\s*\([^)]*\)`)
 	spellLevelNoteRe = regexp.MustCompile(`^level \d version$`)
 )
@@ -384,4 +384,19 @@ func (e *execRecord) count() int32 {
 		return 0
 	}
 	return atomic.LoadInt32(&e.executed)
+}
+
+// dayListHeadLooseRe: anything that reads like a per-day list heading of a Spellcasting entry, in any wording ("3e/day each:").
+var dayListHeadLooseRe = regexp.MustCompile(`(?i)\b\d+\w*\s*/\s*day\b[^:.;]{0,12}:`)
+
+// unreadDayLists: the per-day list headings of a Spellcasting entry the server does not read (spellListHeadRe), so a spell under one is
+// not counted: the import's warning names them.
+func unreadDayLists(text string) []string {
+	var out []string
+	for _, h := range dayListHeadLooseRe.FindAllString(text, -1) {
+		if !spellListHeadRe.MatchString(h) {
+			out = append(out, strings.TrimSpace(h))
+		}
+	}
+	return out
 }

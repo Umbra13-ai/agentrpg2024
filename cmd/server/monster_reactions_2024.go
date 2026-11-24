@@ -96,7 +96,7 @@ var (
 	reactReduceRe = regexp.MustCompile(`reduces the damage it takes from the attack by \d+ \((\d+d\d+)(?:\s*\+\s*(\d+))?\)`)
 	reactUsesRe   = regexp.MustCompile(`Response: The [\w ]+? uses ([A-Z][\w ]+?)\.`)
 	reactRiposte  = regexp.MustCompile(`makes one ([A-Z][\w ]+?) attack against the triggering creature`)
-	perDayRe      = regexp.MustCompile(`\((\d+)/Day\)`)
+	perDayRe      = regexp.MustCompile(`(?i)\((\d+)/Day\)`)
 	// "Trigger: The noble is hit by a melee attack roll ...", "Trigger: An attack roll hits the rust monster." (not "hits the wearer")
 	reactSelfHitRe = regexp.MustCompile(`(?i)^Trigger: (?:(?:The|An?) [^.]+? is hit by (an?|a melee|a ranged) attack roll|An attack roll hits the ([^.]+?)\.)`)
 )

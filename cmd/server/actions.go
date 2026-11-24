@@ -3570,11 +3570,23 @@ func resolveCastSpellSlug(requestedSlug, description string) (string, []string, 
 // It doesn't check that the spell exists: lookupSpell does.
 func normalizeSpellSlug(slug string) string { return game.Slug(slug) }
 
-// lookupSpell: the slug of the SRD spell a name means, in any spelling; false when it isn't one.
+// possessiveNameRe: a spell's wizard in front of its name ("Tasha's hideous laughter", "Otto's irresistible dance", "Bigby's hand"): the SRD 5.2.1
+// names those spells without the wizard (Hideous Laughter, Irresistible Dance, Arcane Hand), so the name a stat block or a player gives
+// reads as the SRD's when it isn't one itself.
+var possessiveNameRe = regexp.MustCompile(`^\s*[A-Za-z]+['’]s\s+`)
+
+// lookupSpell: the slug of the SRD spell a name means, in any spelling (a wizard's name in front of it too); false when it isn't one.
 func lookupSpell(name string) (string, bool) {
 	slug := game.Slug(name)
-	_, ok := srdSpellsMemory[slug]
-	return slug, ok
+	if _, ok := srdSpellsMemory[slug]; ok {
+		return slug, true
+	}
+	if rest := possessiveNameRe.ReplaceAllString(name, ""); rest != name {
+		if s := game.Slug(rest); srdSpellsMemory[s].Name != "" {
+			return s, true
+		}
+	}
+	return slug, false
 }
 
 // spellCandidatesFromDescription returns every whole spell title mentioned in

@@ -1226,9 +1226,9 @@ func monsterSpellFromUse(text, use string) (string, int, bool) {
 	if u == "" {
 		return "", 0, false
 	}
-	slug := normalizeSpellSlug(u)
+	slug, found := lookupSpell(u) // the SRD's name for the spell, whoever's name a stat block puts in front of it
 	sp, ok := srdSpellsMemory[slug]
-	if !ok {
+	if !found || !ok {
 		return "", 0, false
 	}
 	low, name := strings.ToLower(normQuotes(text)), strings.ToLower(normQuotes(sp.Name)) // both folded: the SRD spells a name with a curly apostrophe (Heroes’ Feast)

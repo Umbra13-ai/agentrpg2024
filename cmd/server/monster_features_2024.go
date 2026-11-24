@@ -62,7 +62,7 @@ var (
 	monsterMetaOnce sync.Once
 	monsterMetaMap  map[string]*monsterMeta
 	laUsesRe        = regexp.MustCompile(`Legendary Action Uses: (\d+)(?: \((\d+) in Lair\))?`)
-	lrRe            = regexp.MustCompile(`Legendary Resistance \((\d+)/Day(?:, or (\d+)/Day in Lair)?\)`)
+	lrRe            = regexp.MustCompile(`(?i)Legendary Resistance \((\d+)/Day(?:, or (\d+)/Day in Lair)?\)`)
 	rechargeRe      = regexp.MustCompile(`\(Recharge (\d)(?:[–-]6)?\)`)
 	regenRe         = regexp.MustCompile(`regains (\d+) Hit Points at the start of each of its turns`)
 	regenBlockRe    = regexp.MustCompile(`takes ([A-Z][a-z]+) or ([A-Z][a-z]+) damage, this trait doesn`)
