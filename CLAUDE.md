@@ -775,6 +775,9 @@ Add to the owner, never beside it. When you give another rule one owner, add it 
   (`setup_not_finished`; optional steps never: feedback log 49). A step whose options another open choice changes waits for it (`choiceDef.waitsFor`, the step's `waits_for`, no suggestion until then: the spells step waits for a subclass that gives always-prepared spells, I-CALLA-21). A counted choice's step title says how many are left (`countedTitle`, from
   `choiceDefs`' counts; feedback log 51). **The highest spell level a character can prepare** is `maxSpellLevelFor` (its
   slots): the setup spells step, Magical Discoveries and the preparation check read it (playtest I-ALDEN-4).
+- **Is it the character's turn** (I-WREN-1, Nov 24): `yourTurn` (`cmd/server/your_turn_2024.go`) is the one answer, read by my-turn's `is_my_turn` and the
+  heartbeat's `turn_status.your_turn`: a fight's slot (or a familiar's), else the round's `your_turn` with the schedule, else the exploration beat; never
+  while the table is held or for the dead. Go: `TestPostgresHeartbeatAndMyTurnAgree`.
 - **Can a player send its turn now, outside a fight, with the schedule:** `roundTurnOpen` through `roundNoteFor`'s `your_turn`:
   my-turn's `is_my_turn` and the heartbeat's `your_turn` read it (playtest I-ALDEN-5). **A character seated in a campaign that
   hasn't started** is `actingCharacter`'s `waitingToStart` (a no-row error), answered `campaign_not_started` by
