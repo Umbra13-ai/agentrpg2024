@@ -8,6 +8,7 @@ import (
 	"github.com/agentrpg/agentrpg/game"
 	"net/http"
 	"regexp"
+	"slices"
 	"sort"
 	"strconv"
 	"strings"
@@ -921,7 +922,7 @@ func handleExplorationSkip(w http.ResponseWriter, r *http.Request, campaignID in
 // @Produce json
 // @Param id path int true "Campaign ID"
 // @Param Authorization header string true "Bearer <token>"
-// @Body Combatants to add (name, monster_key, initiative, surprised, hp, ac, in_lair). Identical monsters added together share one Initiative roll; surprised gives Disadvantage on it; in_lair gives a legendary monster the in-Lair uses of Legendary Actions and Legendary Resistance.
+// @Body Combatants to add (name, monster_key, initiative, surprised, hp, ac, in_lair, attitude). attitude friendly or indifferent keeps a creature the party fights beside (a guard, a bystander) out of the players' enemy list. Identical monsters added together share one Initiative roll; surprised gives Disadvantage on it; in_lair gives a legendary monster the in-Lair uses of Legendary Actions and Legendary Resistance.
 // @Success 200 {object} map[string]interface{} "Combatants added"
 // @Failure 401 {object} map[string]interface{} "Unauthorized"
 // @Failure 403 {object} map[string]interface{} "Only GM can add combatants"
@@ -955,6 +956,7 @@ func handleCombatAdd(w http.ResponseWriter, r *http.Request, campaignID int) {
 			AC         int    `json:"ac"`          // Optional: use monster default
 			InLair     bool   `json:"in_lair"`     // Optional: the monster fights in its lair (one more Legendary Action use and Legendary Resistance)
 			CreatureID string `json:"creature_id"` // Optional: a creature the campaign already knows (same stat block): it keeps its per-day uses; without it the monster is a new creature
+			Attitude   string `json:"attitude"`    // Optional: friendly, indifferent or hostile toward the party; none (or hostile) makes it one of the party's enemies in what players read
 		} `json:"combatants"`
 	}
 	if !readRequest(w, r, &req) {
@@ -969,6 +971,13 @@ func handleCombatAdd(w http.ResponseWriter, r *http.Request, campaignID int) {
 		w.WriteHeader(http.StatusBadRequest)
 		json.NewEncoder(w).Encode(map[string]interface{}{"error": "no_combatants_provided"})
 		return
+	}
+
+	for _, c := range req.Combatants {
+		if a := strings.ToLower(strings.TrimSpace(c.Attitude)); a != "" && !slices.Contains(attitudeWords, a) {
+			writeJSONStatus(w, http.StatusBadRequest, map[string]interface{}{"error": "invalid_attitude", "message": "attitude is friendly, indifferent or hostile (" + c.Name + "). Nothing was added."})
+			return
+		}
 	}
 
 	// A returning creature is linked on purpose: it must be known to the campaign, have the same stat block and not already be in the fight.
@@ -997,6 +1006,7 @@ func handleCombatAdd(w http.ResponseWriter, r *http.Request, campaignID int) {
 	// The new entries (their ids are given by the fight, below): stat block, Initiative, Hit Points, AC.
 	var newEntries []map[string]interface{}
 	var inLair []bool
+	var attitudes []string // each new entry's attitude toward the party, written by the attitude owner once it has its id
 	groupInit := map[string]int{}
 	for _, c := range req.Combatants {
 		if c.Name == "" {
@@ -1041,6 +1051,7 @@ func handleCombatAdd(w http.ResponseWriter, r *http.Request, campaignID int) {
 		}
 		newEntries = append(newEntries, map[string]interface{}{"name": c.Name, "initiative": init, "dex_score": dex, "is_monster": true,
 			"monster_key": c.MonsterKey, "hp": hp, "max_hp": hp, "ac": ac, "creature_id": creatureIDFor(c.CreatureID)})
+		attitudes = append(attitudes, strings.ToLower(strings.TrimSpace(c.Attitude)))
 		inLair = append(inLair, known && c.InLair) // in its lair: the "in Lair" numbers of Legendary Actions and Legendary Resistance
 	}
 
@@ -1081,6 +1092,10 @@ func handleCombatAdd(w http.ResponseWriter, r *http.Request, campaignID int) {
 		}
 		listRecurringTraits(campaignID, id, sprintAny(e["monster_key"])) // the traits the GM runs each turn (the GM's open items)
 		a := map[string]interface{}{"id": id, "creature_id": e["creature_id"], "name": e["name"], "initiative": e["initiative"], "hp": e["hp"], "ac": e["ac"]}
+		if att := attitudes[i]; att != "" {
+			setAttitude(db, campaignID, id, "", sprintAny(e["name"]), att) // attitudes_2024.go: not an enemy unless hostile
+			a["attitude"] = att
+		}
 		if feats := monsterFeaturesInfo(campaignID, id); feats != nil { // Legendary Actions, Legendary Resistance, auras the server runs for this monster
 			a["features"] = feats
 		}

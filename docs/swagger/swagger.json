@@ -10115,7 +10115,7 @@
      "GM"
     ],
     "summary": "NPC and monster attitudes",
-    "description": "A creature's attitude toward the characters: friendly, indifferent (the default) or hostile. Friendly gives Advantage on Influence checks against it, Hostile Disadvantage. POST {\"target_id\": -2, \"attitude\": \"friendly\"} for a combatant, or {\"npc\": \"Ismark\", \"attitude\": \"hostile\"} for any named NPC (the Influence action finds the name in the player's description); attitude \"clear\" forgets it. GET ?campaign_id lists them. Players see the effect in their Influence result, not this list.",
+    "description": "A creature's attitude toward the characters: friendly, indifferent (the default) or hostile. Friendly gives Advantage on Influence checks against it, Hostile Disadvantage. In a fight, a creature with no attitude recorded, or a Hostile one, is the party's enemy in what players read (my-turn's enemies); mark the creatures the party fights beside Friendly or Indifferent (here, or with attitude in combat/add). A combatant's attitude ends with the fight. POST {\"target_id\": -2, \"attitude\": \"friendly\"} for a combatant, or {\"npc\": \"Ismark\", \"attitude\": \"hostile\"} for any named NPC (the Influence action finds the name in the player's description); attitude \"clear\" forgets it. GET ?campaign_id lists them. Players see the effect in their Influence result, not this list.",
     "responses": {
      "400": {
       "description": "The body was refused (nothing was changed): unknown_field, wrong_type, invalid_json, body_required or id_mismatch, with the fields the request takes",
@@ -27894,6 +27894,9 @@
            "items": {
             "properties": {
              "ac": {},
+             "attitude": {
+              "type": "string"
+             },
              "creature_id": {},
              "features": {
               "properties": {
@@ -28027,6 +28030,10 @@
              "description": "Optional: use monster default",
              "type": "integer"
             },
+            "attitude": {
+             "description": "Optional: friendly, indifferent or hostile toward the party; none (or hostile) makes it one of the party's enemies in what players read",
+             "type": "string"
+            },
             "creature_id": {
              "description": "Optional: a creature the campaign already knows (same stat block): it keeps its per-day uses; without it the monster is a new creature",
              "type": "string"
@@ -28069,6 +28076,7 @@
         "combatants": [
          {
           "ac": 1,
+          "attitude": "...",
           "creature_id": "...",
           "hp": 1,
           "in_lair": true,
@@ -28081,7 +28089,7 @@
        }
       }
      },
-     "description": "Combatants to add (name, monster_key, initiative, surprised, hp, ac, in_lair). Identical monsters added together share one Initiative roll; surprised gives Disadvantage on it; in_lair gives a legendary monster the in-Lair uses of Legendary Actions and Legendary Resistance."
+     "description": "Combatants to add (name, monster_key, initiative, surprised, hp, ac, in_lair, attitude). attitude friendly or indifferent keeps a creature the party fights beside (a guard, a bystander) out of the players' enemy list. Identical monsters added together share one Initiative roll; surprised gives Disadvantage on it; in_lair gives a legendary monster the in-Lair uses of Legendary Actions and Legendary Resistance."
     }
    }
   },
@@ -44484,6 +44492,9 @@
              "description": "Full enemy data for targeting",
              "items": {
               "properties": {
+               "attitude": {
+                "type": "string"
+               },
                "conditions": {
                 "description": "visible to everyone; the source and the DCs stay with the GM",
                 "items": {
@@ -44512,6 +44523,45 @@
             },
             "in_combat": {
              "type": "boolean"
+            },
+            "other_details": {
+             "items": {
+              "properties": {
+               "attitude": {
+                "type": "string"
+               },
+               "conditions": {
+                "description": "visible to everyone; the source and the DCs stay with the GM",
+                "items": {
+                 "type": "string"
+                },
+                "type": "array"
+               },
+               "id": {
+                "description": "Negative ID for targeting",
+                "type": "integer"
+               },
+               "name": {
+                "type": "string"
+               },
+               "status": {
+                "description": "a monster's AC and exact HP are never shown to players",
+                "type": "string"
+               },
+               "type": {
+                "type": "string"
+               }
+              },
+              "type": "object"
+             },
+             "type": "array"
+            },
+            "others": {
+             "description": "creatures in the fight the GM marked Friendly or Indifferent: not enemies",
+             "items": {
+              "type": "string"
+             },
+             "type": "array"
             },
             "summary": {
              "type": "string"

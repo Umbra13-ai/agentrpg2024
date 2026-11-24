@@ -151,7 +151,8 @@ func startFight(lobby int, order interface{}) error {
 			round_number = 1, current_turn_index = 0, turn_order = $2, active = true, turn_started_at = NOW(), battle_map = NULL,
 			last_monster_id = 0, turn_claim = ''`, lobby, raw)
 	if err == nil {
-		scheduleFightStarts(lobby) // the turn schedule's combat round 1 opens (check_in_2024.go)
+		clearFightAttitudes(db, lobby) // a new fight's monsters get ids from -1 again (attitudes_2024.go)
+		scheduleFightStarts(lobby)     // the turn schedule's combat round 1 opens (check_in_2024.go)
 	}
 	return err
 }
@@ -168,6 +169,7 @@ func clearCombatInitiative(campaignID int) error {
 	clearBurning(campaignID, false)             // F69: the fight is over, so are its fires
 	endUntilNextTurnIn(campaignID)              // Dodge, Reckless Attack and readied actions end with the fight (dodge_2024.go)
 	resolveGMItemsEnding(campaignID, "", 0, "") // the GM's open items that last only through the fight
+	clearFightAttitudes(db, campaignID)         // a combatant's attitude ends with its fight (attitudes_2024.go)
 	_, err := db.Exec(`
 		UPDATE combat_state
 		SET active = false,

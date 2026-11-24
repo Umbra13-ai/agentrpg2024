@@ -105,7 +105,8 @@ func asInt(v interface{}) int {
 	return 0
 }
 
-// enemyTargets lists the living monsters in the campaign's combat: id and name only.
+// enemyTargets lists the living monsters in the campaign's combat a character may aim at: id and name only. A Friendly or Indifferent
+// creature (attitudes_2024.go) stays a target: my-turn lists it under others, not enemies, but attacking it is the player's choice.
 func enemyTargets(lobbyID int) []map[string]interface{} {
 	var raw []byte
 	var active bool
@@ -145,7 +146,7 @@ func validateAttackTarget(lobbyID, targetID int) (bool, string) {
 		ids = append(ids, fmt.Sprintf("%v (%v)", t["id"], t["name"]))
 	}
 	sort.Strings(ids)
-	return false, "target_id must be the id of a living enemy: " + strings.Join(ids, ", ") + ". See situation.enemies in GET /api/my-turn."
+	return false, "target_id must be the id of a living creature in the fight: " + strings.Join(ids, ", ") + ". See situation.enemies (and situation.others, the creatures that aren't hostile) in GET /api/my-turn."
 }
 
 // adjustMonsterDamage applies a monster's resistances, immunities and vulnerabilities.

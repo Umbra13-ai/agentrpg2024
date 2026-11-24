@@ -18,6 +18,7 @@ import (
 	"fmt"
 	"log"
 	"net/http"
+	"slices"
 	"strconv"
 	"strings"
 	"time"
@@ -58,6 +59,10 @@ type actionFilter struct {
 // is ready before the start, the GM opening play. Every reader that asks "when did this character last play" leaves them out
 // (notPlaySQL), so a new bookkeeping record is one entry here.
 var notPlayTypes = []string{"poll", "joined", "left", "following", "ready", "round_open", "started_without", "level_up", "level_range"}
+
+// isPlayRecord: a record of play, not one of notPlayTypes' bookkeeping (my-turn's since_your_last_action reads it in Go, as notPlaySQL
+// does in SQL).
+func isPlayRecord(actionType string) bool { return !slices.Contains(notPlayTypes, actionType) }
 
 // notPlaySQL: notPlayTypes and any extra types as a quoted SQL list, for "action_type NOT IN (...)".
 func notPlaySQL(extra ...string) string {

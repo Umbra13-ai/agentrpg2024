@@ -201,7 +201,7 @@ func handleMyTurn(w http.ResponseWriter, r *http.Request) {
 		if rec.isOwnActionOf(charID) {
 			mineSeen = true
 		}
-		if !mineSeen {
+		if !mineSeen && isPlayRecord(rec.Type) { // bookkeeping (an automatic "following", joining, ready) is not play (I-CALLA-28)
 			sinceMine = append(sinceMine, line)
 		}
 	}
@@ -227,8 +227,8 @@ func handleMyTurn(w http.ResponseWriter, r *http.Request) {
 		featBonus = nil
 	}
 
-	// Build tactical suggestions based on situation
-	suggestions := partyHints(charStatus, partyStatus)
+	// tactical suggestions: the zero-HP hint below, else partyHints once the fight's sides are known
+	var suggestions []string
 
 	// Build contextual rules reminder
 	rulesReminder := map[string]interface{}{}
@@ -781,8 +781,9 @@ func handleMyTurn(w http.ResponseWriter, r *http.Request) {
 	// Get recent campaign messages (last 6 hours)
 	recentMessages := getRecentCampaignMessages(lobbyID, 6)
 
-	// Extract enemy information from combat turn_order
+	// Extract enemy information from combat turn_order: the hostile creatures, and the others (Friendly or Indifferent) apart
 	enemies := []map[string]interface{}{}
+	others := []map[string]interface{}{}
 	if inCombat && len(turnOrderJSON) > 0 {
 		type FullTurnEntry struct {
 			ID         int    `json:"id"`
@@ -798,6 +799,7 @@ func handleMyTurn(w http.ResponseWriter, r *http.Request) {
 		json.Unmarshal(turnOrderJSON, &fullEntries)
 
 		hiddenOnMap := hiddenMonsterIDs(lobbyID) // creatures the GM hid on the battle map are not listed
+		attitudes := fightAttitudes(lobbyID)     // who is hostile (attitudes_2024.go): the rest are listed apart, never as enemies
 		for _, e := range fullEntries {
 			if e.IsMonster && e.HP > 0 && !hiddenOnMap[e.ID] {
 				healthStatus := game.MonsterHealth(e.HP, e.MaxHP) // how it looks (the health owner); never its numbers
@@ -821,6 +823,11 @@ func handleMyTurn(w http.ResponseWriter, r *http.Request) {
 					}
 				}
 
+				if att := attitudes[e.ID]; !hostileInFight(att) {
+					enemy["attitude"] = att
+					others = append(others, enemy)
+					continue
+				}
 				enemies = append(enemies, enemy)
 			}
 		}
@@ -831,18 +838,29 @@ func handleMyTurn(w http.ResponseWriter, r *http.Request) {
 		mapURL, mapReason = playerMapView(lobbyID, charID) // battle_map.go: the URL only when the character's view works
 	}
 
-	// Build enemies summary for situation (simple string list for backward compat)
-	enemySummary := []string{}
-	for _, e := range enemies {
+	// Build the situation's lists (one line each: the name, its type, how it looks and its conditions; the others' attitude too)
+	creatureLine := func(e map[string]interface{}) string {
 		status := e["status"].(string)
+		if a, ok := e["attitude"].(string); ok && a != "" {
+			status = a + ", " + status
+		}
 		if cs, ok := e["conditions"].([]string); ok && len(cs) > 0 {
 			status += ", " + strings.Join(cs, ", ")
 		}
-		summary := fmt.Sprintf("%s (%s)", e["name"], status)
 		if mtype, ok := e["type"].(string); ok && mtype != "" {
-			summary = fmt.Sprintf("%s [%s] (%s)", e["name"], mtype, status)
+			return fmt.Sprintf("%s [%s] (%s)", e["name"], mtype, status)
 		}
-		enemySummary = append(enemySummary, summary)
+		return fmt.Sprintf("%s (%s)", e["name"], status)
+	}
+	enemySummary, othersSummary := []string{}, []string{}
+	for _, e := range enemies {
+		enemySummary = append(enemySummary, creatureLine(e))
+	}
+	for _, e := range others {
+		othersSummary = append(othersSummary, creatureLine(e))
+	}
+	if !game.AtZero(charStatus) {
+		suggestions = partyHints(charStatus, partyStatus, fightSides{InFight: inCombat, Hostile: len(enemies), Others: others})
 	}
 
 	// Build response
@@ -856,6 +874,8 @@ func handleMyTurn(w http.ResponseWriter, r *http.Request) {
 			"summary":       fmt.Sprintf("You are in %s. %s", lobbyName, setting),
 			"allies":        allies,
 			"enemies":       enemySummary,
+			"others":        othersSummary, // creatures in the fight the GM marked Friendly or Indifferent: not enemies
+			"other_details": others,
 			"enemy_details": enemies, // Full enemy data for targeting
 			"terrain":       "",      // TODO: track terrain when position system is built
 			"in_combat":     inCombat,
@@ -1673,7 +1693,15 @@ func actionableCombatCharacterID(turnOrderJSON []byte, turnIndex int) int {
 
 // partyHints: the tactical hints about the party, from the health owner's labels (the character's own and each ally's): a dead ally
 // gets none, a dying or stable one says what helps (I-ALDRIC-1).
-func partyHints(own string, party []map[string]interface{}) []string {
+// fightSides: what the hints know of the fight: whether there is one, how many creatures in it are hostile, and the others (Friendly or
+// Indifferent: attitudes_2024.go).
+type fightSides struct {
+	InFight bool
+	Hostile int
+	Others  []map[string]interface{}
+}
+
+func partyHints(own string, party []map[string]interface{}, sides fightSides) []string {
 	hints := []string{}
 	if own == game.HealthCritical {
 		hints = append(hints, "You're critically wounded. Consider retreating, healing, or using Dodge action.")
@@ -1691,8 +1719,20 @@ func partyHints(own string, party []map[string]interface{}) []string {
 		}
 		down = down || game.AtZero(label)
 	}
+	for _, o := range sides.Others {
+		if label, _ := o["status"].(string); label == game.HealthBloodied || label == game.HealthCritical {
+			hints = append(hints, fmt.Sprintf("%s (%s) is %s. It is not one of your enemies.", o["name"], o["attitude"], label))
+		}
+	}
 	if len(hints) == 0 && !down {
-		hints = append(hints, "The party is in good shape. Press the attack or explore.")
+		switch {
+		case sides.InFight && sides.Hostile > 0:
+			hints = append(hints, "The party is in good shape. Press the attack.")
+		case sides.InFight:
+			hints = append(hints, "The party is in good shape, and no creature in the fight is hostile to you.")
+		default:
+			hints = append(hints, "The party is in good shape.")
+		}
 	}
 	return hints
 }

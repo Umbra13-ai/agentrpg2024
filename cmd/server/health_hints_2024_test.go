@@ -16,7 +16,7 @@ func TestHintsFollowTheHealthLabel(t *testing.T) {
 		{"name": "Vesper", "status": game.HealthStable},
 		{"name": "Ash", "status": game.HealthCritical},
 	}
-	all := strings.Join(partyHints(game.HealthHealthy, party), " | ")
+	all := strings.Join(partyHints(game.HealthHealthy, party, fightSides{}), " | ")
 	if strings.Contains(all, "Doran") {
 		t.Errorf("a dead ally has a hint: %s", all)
 	}
@@ -25,10 +25,10 @@ func TestHintsFollowTheHealthLabel(t *testing.T) {
 			t.Errorf("missing %q in %s", want, all)
 		}
 	}
-	if h := partyHints(game.HealthHealthy, party[:1]); len(h) != 0 {
+	if h := partyHints(game.HealthHealthy, party[:1], fightSides{}); len(h) != 0 {
 		t.Errorf("a party with a dead ally is not 'in good shape': %v", h)
 	}
-	if h := partyHints(game.HealthHealthy, nil); len(h) != 1 || !strings.Contains(h[0], "good shape") {
+	if h := partyHints(game.HealthHealthy, nil, fightSides{}); len(h) != 1 || !strings.Contains(h[0], "good shape") {
 		t.Errorf("a healthy party: %v", h)
 	}
 	if h := zeroHPHint(game.HealthStable, true); strings.Contains(strings.ToLower(h), "make your death") || !strings.Contains(h, "no Death Saving Throws") {

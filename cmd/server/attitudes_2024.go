@@ -11,6 +11,54 @@ import (
 	"strings"
 )
 
+// attitudeWords: the attitudes a creature can have (Indifferent is the default of a creature with none recorded).
+var attitudeWords = []string{"friendly", "indifferent", "hostile"}
+
+// setAttitude is the one writer of an attitude ("clear" forgets it): the GM's attitude request and combat/add.
+func setAttitude(ex execer, lobby, targetID int, npc, name, att string) error {
+	key := attitudeKey(targetID, npc)
+	if att == "clear" {
+		_, err := ex.Exec(`DELETE FROM attitudes WHERE lobby_id = $1 AND target_key = $2`, lobby, key)
+		return err
+	}
+	_, err := ex.Exec(`INSERT INTO attitudes (lobby_id, target_key, name, attitude) VALUES ($1,$2,$3,$4)
+		ON CONFLICT (lobby_id, target_key) DO UPDATE SET attitude = EXCLUDED.attitude, name = EXCLUDED.name`, lobby, key, name, att)
+	return err
+}
+
+// clearFightAttitudes: the attitudes of a fight's monsters end with the fight (a new fight gives its ids again from -1), called when
+// a fight starts and when it ends (combat_state_2024.go).
+func clearFightAttitudes(ex execer, lobby int) {
+	ex.Exec(`DELETE FROM attitudes WHERE lobby_id = $1 AND target_key LIKE 'id:-%'`, lobby)
+}
+
+// fightAttitudes: the attitude the GM recorded for each creature of the fight, by its combat id.
+func fightAttitudes(lobby int) map[int]string {
+	out := map[int]string{}
+	if db == nil || lobby == 0 {
+		return out
+	}
+	rows, err := db.Query(`SELECT target_key, attitude FROM attitudes WHERE lobby_id = $1 AND target_key LIKE 'id:%'`, lobby)
+	if err != nil {
+		return out
+	}
+	defer rows.Close()
+	for rows.Next() {
+		var k, a string
+		var id int
+		if rows.Scan(&k, &a) == nil {
+			if _, err := fmt.Sscanf(k, "id:%d", &id); err == nil {
+				out[id] = a
+			}
+		}
+	}
+	return out
+}
+
+// hostileInFight: a creature of the fight is the party's enemy unless the GM recorded it as Friendly or Indifferent (the guards the
+// party defends, a merchant caught in the fight). my-turn's enemies and its hints read it.
+func hostileInFight(attitude string) bool { return attitude == "" || attitude == "hostile" }
+
 func attitudeKey(targetID int, npc string) string {
 	if targetID != 0 {
 		return fmt.Sprintf("id:%d", targetID)
@@ -46,7 +94,7 @@ func attitudeFor(lobbyID, targetID int, description string) (attitude, name stri
 }
 
 // @Summary NPC and monster attitudes
-// @Description A creature's attitude toward the characters: friendly, indifferent (the default) or hostile. Friendly gives Advantage on Influence checks against it, Hostile Disadvantage. POST {"target_id": -2, "attitude": "friendly"} for a combatant, or {"npc": "Ismark", "attitude": "hostile"} for any named NPC (the Influence action finds the name in the player's description); attitude "clear" forgets it. GET ?campaign_id lists them. Players see the effect in their Influence result, not this list.
+// @Description A creature's attitude toward the characters: friendly, indifferent (the default) or hostile. Friendly gives Advantage on Influence checks against it, Hostile Disadvantage. In a fight, a creature with no attitude recorded, or a Hostile one, is the party's enemy in what players read (my-turn's enemies); mark the creatures the party fights beside Friendly or Indifferent (here, or with attitude in combat/add). A combatant's attitude ends with the fight. POST {"target_id": -2, "attitude": "friendly"} for a combatant, or {"npc": "Ismark", "attitude": "hostile"} for any named NPC (the Influence action finds the name in the player's description); attitude "clear" forgets it. GET ?campaign_id lists them. Players see the effect in their Influence result, not this list.
 // @Tags GM
 // @Body Creature and attitude
 // @Router /gm/attitude [post]
@@ -85,15 +133,13 @@ func handleGMAttitude(w http.ResponseWriter, r *http.Request) {
 	if req.TargetID != 0 {
 		name = creatureName(lobby, req.TargetID)
 	}
-	key := attitudeKey(req.TargetID, req.NPC)
-	var result string
+	if err := setAttitude(db, lobby, req.TargetID, req.NPC, name, att); err != nil {
+		writeDBWriteError(w, err, "the attitude")
+		return
+	}
+	result := fmt.Sprintf("%s is %s toward the party.", name, titleCase(att))
 	if att == "clear" {
-		db.Exec(`DELETE FROM attitudes WHERE lobby_id = $1 AND target_key = $2`, lobby, key)
-		result = fmt.Sprintf("%s's attitude is no longer recorded (Indifferent by default).", name)
-	} else {
-		db.Exec(`INSERT INTO attitudes (lobby_id, target_key, name, attitude) VALUES ($1,$2,$3,$4)
-			ON CONFLICT (lobby_id, target_key) DO UPDATE SET attitude = EXCLUDED.attitude, name = EXCLUDED.name`, lobby, key, name, att)
-		result = fmt.Sprintf("%s is %s toward the party.", name, titleCase(att))
+		result = fmt.Sprintf("%s's attitude is no longer recorded (Indifferent by default; a creature in a fight with none recorded is an enemy).", name)
 	}
 	// not written to the campaign feed: players learn an attitude from how the creature acts and from their Influence result
 	writeJSONStatus(w, 200, map[string]interface{}{"success": true, "result": result})
