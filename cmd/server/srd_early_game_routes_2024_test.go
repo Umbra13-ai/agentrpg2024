@@ -117,6 +117,7 @@ func TestPostgresEarlyGameEveryEntry(t *testing.T) {
 		return fmt.Sprint(len(loadConditionRecords(camp, id)), effectsOn(id), s.DayUses, s.RechargeSpent, s.LAOnce, monsterEntryVitals(camp, id).HP, formOf(camp, id))
 	}
 	narrateAt := func(monster, action, target, use string, attacks []string) (int, string) {
+		newMonsterTurn(camp) // each call stands for a turn of its own: a monster takes one Bonus Action a turn
 		ma := map[string]interface{}{"monster": monster, "action": action, "target": target, "confirm_targeting": true}
 		if use != "" {
 			ma["use"] = use

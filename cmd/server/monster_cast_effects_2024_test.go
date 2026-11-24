@@ -46,6 +46,7 @@ func TestPostgresMonsterCastEffects(t *testing.T) {
 	}
 	id := func(name string) int { return monsterIDsByKeyOrName(camp, name)[0] }
 	cast := func(who, action string, target interface{}, use string) string {
+		newMonsterTurn(camp) // each call stands for a turn of its own: a monster takes one Bonus Action a turn
 		t.Helper()
 		ma := map[string]interface{}{"monster": who, "action": action}
 		if target != nil {

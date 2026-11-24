@@ -61,6 +61,7 @@ func TestPostgresObscuredAreasAndSenses(t *testing.T) {
 	mephit, octopus, shadow, kobold := id("Mist Mephit"), id("Ink Octopus"), id("Gloom Shadow"), id("Sun Kobold")
 	pgExec(t, `UPDATE characters SET hp=500, max_hp=500, blindsight_range=0 WHERE id=$1`, char)
 	act := func(body map[string]interface{}) (int, string) {
+		newMonsterTurn(camp) // each call stands for a turn of its own: a monster takes one Bonus Action a turn
 		t.Helper()
 		c, r := pgCall(t, "POST", "/api/gm/narrate", gm, map[string]interface{}{"campaign_id": camp, "narration": "x", "monster_action": body})
 		return c, fmt.Sprint(r["monster_action_result"])

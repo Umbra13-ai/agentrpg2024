@@ -121,3 +121,11 @@ func TestPostgresMonsterBonusActionOnceATurn(t *testing.T) {
 		t.Errorf("after its turn began: %d %s (taken %d)", code, res, taken())
 	}
 }
+
+// newMonsterTurn: a test that sends several of one monster's Bonus Actions stands each for a turn of its own (the monster's next turn gives the
+// Bonus Action back: resetBonusActions).
+func newMonsterTurn(camp int) {
+	if db != nil {
+		db.Exec(`UPDATE combat_monster_state SET bonus_used = 0 WHERE lobby_id = $1`, camp)
+	}
+}

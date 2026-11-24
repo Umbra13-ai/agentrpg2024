@@ -248,6 +248,7 @@ func TestPostgresBlurredFormAndIgnitedLight(t *testing.T) {
 	}
 	before := monsterLightingAt(camp, charID)
 	kindle := func(use string) string {
+		newMonsterTurn(camp) // each call stands for a turn of its own: a monster takes one Bonus Action a turn
 		_, j := pgCall(t, "POST", "/api/gm/narrate", gm, map[string]interface{}{"campaign_id": camp, "narration": "x",
 			"monster_action": map[string]interface{}{"monster": "Cinder Gnome", "action": "Kindle", "use": use}})
 		return fmt.Sprint(j["monster_action_result"])
@@ -279,6 +280,7 @@ func TestPostgresShapeShiftForms(t *testing.T) {
 	ids := importInventedMonsters(t, gm, camp, were)
 	tr := ids["Den Mauler"]
 	narrate := func(action, use string, attacks []string) (int, map[string]interface{}) {
+		newMonsterTurn(camp) // each call stands for a turn of its own: a monster takes one Bonus Action a turn
 		t.Helper()
 		ma := map[string]interface{}{"monster": "Den Mauler", "action": action, "target": fmt.Sprint(charID)}
 		if use != "" {

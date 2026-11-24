@@ -39,6 +39,7 @@ func TestPostgresMonsterNimbleEscape(t *testing.T) {
 		}
 	}
 	use := func(choice string) string {
+		newMonsterTurn(camp) // each call stands for a turn of its own: a monster takes one Bonus Action a turn
 		body := map[string]interface{}{"monster": "Nimble Raider", "action": "Nimble Escape"}
 		if choice != "" {
 			body["use"] = choice
@@ -106,6 +107,7 @@ func TestPostgresOptionalHideAfterMove(t *testing.T) {
 	raider := monsterIDsByKeyOrName(camp, "Prowling Raider")[0]
 	pgExec(t, `UPDATE combat_state SET current_turn_index=$1, turn_started_at=NOW() WHERE lobby_id=$2`, idxOfID(fr, raider), camp)
 	use := func(choice string) string {
+		newMonsterTurn(camp) // each call stands for a turn of its own: a monster takes one Bonus Action a turn
 		body := map[string]interface{}{"monster": "Prowling Raider", "action": "Prowl"}
 		if choice != "" {
 			body["use"] = choice
