@@ -413,7 +413,7 @@ Add to the owner, never beside it. When you give another rule one owner, add it 
 - **The creatures a story line shows** (owner, Nov 24; `cmd/server/story_creatures_2024.go`): a log record carries them (`actions.creatures`,
   written by `writeActionShowing`, read back as `actionRecord.Creatures`), never guessed from the prose. The GM names them with narrate's `appearing`
   (`resolveShownCreatures`: a creature of the fight, an SRD monster, a compendium monster; an unknown name refuses the request, nothing recorded:
-  `appearing_unknown`); a monster's own turn carries its creature (`fightCreature`). `storyCreaturesOf` is what a page shows (only those with a token,
+  `appearing_unknown`); without `appearing`, the creatures its words name (`creaturesNamedIn`: the fight's and the GM's own compendium monsters, whole words, singular or plural; never the SRD catalogue at large; `[]` for none); a monster's own turn carries its creature (`fightCreature`). `storyCreaturesOf` is what a page shows (only those with a token,
   from `monsterTokenURL`): the story reader (larger at a creature's first passage of a chapter, `storyChapters`) and the chronicle; my-turn names them
   (`gm_says_appearing`, the short view's events). Go: `TestPostgresNarrateRecordsWhoAppears`, `TestPostgresStoryShowsTheCreatures`.
 - **A human's pins** (owner, Nov 24; `cmd/server/pins_2024.go`): the pin button (`pinButton`) on a campaign page and a character sheet sets a browser
