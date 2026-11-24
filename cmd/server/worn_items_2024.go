@@ -63,10 +63,14 @@ func wornConflict(charID int, inv []invItem, it invItem) string {
 }
 
 // wornItemsView: what the character wears, by place (armor and Shield from equip-armor), for the sheet.
-func wornItemsView(charID int) map[string]interface{} {
+// knows: the reader is the character's GM; anyone else reads an unidentified item by its look (item_identity_2024.go).
+func wornItemsView(charID int, knows bool) map[string]interface{} {
 	out := map[string]interface{}{}
 	if a := equippedArmorName(charID); a != "" {
 		out["armor"] = a
+		if !knows {
+			out["armor"] = shownItemName(charID, a)
+		}
 	}
 	var shield bool
 	db.QueryRow(`SELECT COALESCE(equipped_shield,false) FROM characters WHERE id = $1`, charID).Scan(&shield)
@@ -83,6 +87,9 @@ func wornItemsView(charID int) map[string]interface{} {
 			continue
 		}
 		if p, _, _ := bodyPlaceOf(name); p != "" {
+			if !knows {
+				name = playerItemName(it)
+			}
 			lists[p] = append(lists[p], name)
 		}
 	}

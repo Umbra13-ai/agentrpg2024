@@ -125,6 +125,9 @@ func shopBuysKind(def *shopTypeDef, a appraisal, name string) bool {
 func sellBlocked(q rowQuerier, charID int, inv []invItem, it invItem, qty int) string {
 	name := itemStr(it, "name")
 	id := itemStr(it, "id")
+	if itemUnidentified(it) { // its price would tell what it is (item_identity_2024.go)
+		return fmt.Sprintf("%s (id %s) is unidentified: a shop can't price what nobody knows. Identify it first, or the GM sells it in the story.", playerItemName(it), id)
+	}
 	if itemStr(it, "source") == playerAddedSource {
 		return fmt.Sprintf("%s (id %s) is a bag you added to organise your pack, not one you bought: a shop doesn't pay for it.", name, id)
 	}
@@ -280,7 +283,7 @@ func sellOffers(charID int, def *shopTypeDef, priceCP func(float64) int) []map[s
 	for _, it := range inv {
 		name := itemStr(it, "name")
 		a, ok := appraiseItem(name)
-		if !ok || !shopBuysKind(def, a, name) || priceCP(a.ValueGP)/2 == 0 {
+		if !ok || !shopBuysKind(def, a, name) || priceCP(a.ValueGP)/2 == 0 || itemUnidentified(it) { // no price for an unknown item (sellBlocked)
 			continue
 		}
 		o := map[string]interface{}{"item_id": itemStr(it, "id"), "item": name, "pays_each": moneyText(priceCP(a.ValueGP) / 2)}

@@ -55,11 +55,19 @@ func portraitPrompt(charID int) string {
 		b.WriteString(strings.TrimSpace(appearance) + " ")
 	}
 	var gear []string
-	if armor.Valid && armor.String != "" {
-		gear = append(gear, "wearing "+article(nice(armor.String)))
+	if armor.Valid && armor.String != "" { // an unidentified piece by its look (item_identity_2024.go)
+		if shown := shownItemName(charID, armor.String); shown != armor.String {
+			gear = append(gear, "wearing "+shown)
+		} else {
+			gear = append(gear, "wearing "+article(nice(armor.String)))
+		}
 	}
 	if mainHand.Valid && mainHand.String != "" {
-		gear = append(gear, "holding a "+nice(mainHand.String))
+		if shown := shownItemName(charID, mainHand.String); shown != mainHand.String {
+			gear = append(gear, "holding "+shown)
+		} else {
+			gear = append(gear, "holding a "+nice(mainHand.String))
+		}
 	}
 	if shield {
 		gear = append(gear, "carrying a shield")

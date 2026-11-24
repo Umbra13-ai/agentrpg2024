@@ -291,6 +291,7 @@ func findItem(inv []invItem, ref string) (invItem, error) {
 // ---- layout (what the public page shows) ----
 
 func describeItem(it invItem) map[string]interface{} {
+	it = playerItemView(it) // an unidentified item by its look (item_identity_2024.go): the layout is the public page's
 	d := map[string]interface{}{
 		"id": itemStr(it, "id"), "name": itemStr(it, "name"), "quantity": itemQty(it),
 	}
@@ -365,7 +366,11 @@ func buildEquipmentLayout(inv []invItem, equippedArmor string, shield bool, main
 			return
 		}
 		equippedNames[normalizeRef(name)] = true
-		entry := map[string]interface{}{"name": titleWords(name), "quantity": 1, "note": label}
+		shown := titleWords(name)
+		if s := shownNameIn(inv, name); s != name { // unidentified: its look (item_identity_2024.go)
+			shown = s
+		}
+		entry := map[string]interface{}{"name": shown, "quantity": 1, "note": label}
 		if w := itemUnitWeight(invItem{"name": name}); w > 0 {
 			entry["weight_lbs"] = w
 		}
@@ -789,7 +794,7 @@ func isWeaponItem(it invItem) bool {
 func carriedView(charID int) map[string]interface{} {
 	items := []string{}
 	for _, it := range inventoryOf(charID) {
-		name := strings.TrimSpace(itemStr(it, "name"))
+		name := strings.TrimSpace(playerItemName(it)) // an unidentified item by its look (item_identity_2024.go)
 		if name == "" {
 			continue
 		}

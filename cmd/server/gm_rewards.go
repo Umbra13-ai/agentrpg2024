@@ -611,6 +611,9 @@ func handleGMGiveItem(w http.ResponseWriter, r *http.Request) {
 		ItemName    string                 `json:"item_name"` // an SRD item ("Wand of Fireballs", "Potion of Healing", "Spell Scroll (Fireball)") or any name
 		Quantity    int                    `json:"quantity"`  // how many (default 1)
 		Custom      map[string]interface{} `json:"custom"`    // For non-standard items
+		// true: the character doesn't know what it is (SRD 5.2.1 Identifying a Magic Item); its player sees appears_as until it is identified
+		Unidentified bool   `json:"unidentified"`
+		AppearsAs    string `json:"appears_as"` // what the character sees while it is unidentified ("a plain silver ring"); required with unidentified
 	}
 	// the characters' campaign, which must be one the GM runs (gm_campaign_2024.go)
 	lobbyID, ok := gmReadAs(w, r, agentID, &req, campaignFromTarget(&req.CharacterID), campaignBeforeStart())
@@ -629,6 +632,17 @@ func handleGMGiveItem(w http.ResponseWriter, r *http.Request) {
 
 	if req.Quantity == 0 {
 		req.Quantity = 1
+	}
+	req.AppearsAs = strings.TrimSpace(req.AppearsAs)
+	if req.Unidentified && req.AppearsAs == "" {
+		writeJSONStatus(w, http.StatusBadRequest, map[string]interface{}{"error": "appears_as_required",
+			"message": "An unidentified item needs appears_as: what the character sees until it is identified (\"a plain silver ring\", \"a vial of cloudy red liquid\"). Nothing was given."})
+		return
+	}
+	if !req.Unidentified && req.AppearsAs != "" {
+		writeJSONStatus(w, http.StatusBadRequest, map[string]interface{}{"error": "appears_as_without_unidentified",
+			"message": "appears_as is what an unidentified item looks like: send it with \"unidentified\": true. Nothing was given."})
+		return
 	}
 
 	var charName string
@@ -663,6 +677,10 @@ func handleGMGiveItem(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 
+	if req.Unidentified { // item_identity_2024.go: the player reads appears_as until it is identified
+		itemToAdd[unidentifiedKey], itemToAdd[appearsAsKey] = true, req.AppearsAs
+	}
+
 	// Add it to the inventory as it is now, locked (inventory_2024.go): items given at once are all kept
 	inventorySize := 0
 	_, err = changeInventory(req.CharacterID, func(_ *sql.Tx, inventory []invItem) ([]invItem, error) {
@@ -673,7 +691,8 @@ func handleGMGiveItem(w http.ResponseWriter, r *http.Request) {
 			if isLostItem(invItem) {
 				continue
 			}
-			if name, ok := invItem["name"].(string); ok && strings.EqualFold(name, req.ItemName) {
+			if name, ok := invItem["name"].(string); ok && strings.EqualFold(name, req.ItemName) && itemUnidentified(invItem) == req.Unidentified &&
+				strings.EqualFold(itemStr(invItem, appearsAsKey), req.AppearsAs) { // an unidentified item stacks only with the same unknown item
 				// Stack the quantity
 				currentQty := 1
 				if q, ok := invItem["quantity"].(float64); ok {
@@ -698,7 +717,11 @@ func handleGMGiveItem(w http.ResponseWriter, r *http.Request) {
 	}
 
 	// Log action
-	writeAction(db, lobbyID, 0, "item_given", fmt.Sprintf("GM gave %s to %s", req.ItemName, charName), fmt.Sprintf("x%d", req.Quantity))
+	givenName := req.ItemName // the shared log names it as the players know it
+	if req.Unidentified {
+		givenName = req.AppearsAs
+	}
+	writeAction(db, lobbyID, 0, "item_given", fmt.Sprintf("GM gave %s to %s", givenName, charName), fmt.Sprintf("x%d", req.Quantity))
 
 	giveOut := map[string]interface{}{
 		"success":        true,
@@ -707,6 +730,9 @@ func handleGMGiveItem(w http.ResponseWriter, r *http.Request) {
 		"item_name":      req.ItemName,
 		"quantity":       req.Quantity,
 		"inventory_size": inventorySize,
+	}
+	if req.Unidentified {
+		giveOut["unidentified"], giveOut["appears_as"] = true, req.AppearsAs
 	}
 	if ae := autoEquipArmor(req.CharacterID); ae != nil {
 		giveOut["auto_equipped"] = ae // plain armor that raises AC is put on outside combat (F214)

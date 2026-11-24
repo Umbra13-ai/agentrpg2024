@@ -444,10 +444,10 @@ func handleMyTurn(w http.ResponseWriter, r *http.Request) {
 	if equippedMainHandMyTurn.Valid || equippedOffHandMyTurn.Valid {
 		equippedWeapons := map[string]interface{}{}
 		if equippedMainHandMyTurn.Valid && equippedMainHandMyTurn.String != "" {
-			equippedWeapons["main_hand"] = equippedMainHandMyTurn.String
+			equippedWeapons["main_hand"] = shownItemName(charID, equippedMainHandMyTurn.String) // unidentified: its look (item_identity_2024.go)
 		}
 		if equippedOffHandMyTurn.Valid && equippedOffHandMyTurn.String != "" {
-			equippedWeapons["off_hand"] = equippedOffHandMyTurn.String
+			equippedWeapons["off_hand"] = shownItemName(charID, equippedOffHandMyTurn.String)
 		}
 		if len(equippedWeapons) > 0 {
 			characterInfo["equipped_weapons"] = equippedWeapons

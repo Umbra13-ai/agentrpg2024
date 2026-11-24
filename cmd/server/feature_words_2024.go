@@ -232,6 +232,9 @@ func featureWordsFor(charID int) []featureWord {
 
 	// magic items that take a word
 	for _, it := range inventoryOf(charID) {
+		if itemUnidentified(it) { // its words are learned when it is identified (item_identity_2024.go)
+			continue
+		}
 		n := strings.ToLower(itemStr(it, "name"))
 		switch {
 		case strings.HasPrefix(n, "scimitar of speed"):

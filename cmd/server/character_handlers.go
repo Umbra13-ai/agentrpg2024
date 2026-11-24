@@ -1050,6 +1050,8 @@ func handleCharacterByID(w http.ResponseWriter, r *http.Request) {
 	var inventory []interface{}
 	json.Unmarshal(inventoryJSON, &inventory)
 	inventory = usableInventoryAny(inventory) // lost bags are not on the sheet
+	knowsItems := readerKnowsItems(r, charID)
+	inventory = inventoryAsRead(knowsItems, inventory) // an unidentified item as its player sees it, but for the GM (item_identity_2024.go)
 
 	// Parse pact slots used and class levels for multiclass Warlock support
 	var pactSlotsUsed map[string]int
@@ -1349,16 +1351,28 @@ func handleCharacterByID(w http.ResponseWriter, r *http.Request) {
 		} else {
 			equipment["armor"] = equippedArmor.String
 		}
+		if !knowsItems { // unidentified armor: its look, not its name (item_identity_2024.go)
+			if shown := shownItemName(charID, equippedArmor.String); shown != equippedArmor.String {
+				equipment["armor"] = shown
+			}
+		}
 	}
 	// Add equipped weapons: their details come from the weapon data (findWeapon)
-	if equippedMainHand.Valid && equippedMainHand.String != "" {
-		equipment["main_hand"] = heldWeaponView(equippedMainHand.String)
-	}
-	if equippedOffHand.Valid && equippedOffHand.String != "" {
-		equipment["off_hand"] = heldWeaponView(equippedOffHand.String)
+	for _, h := range []struct {
+		key  string
+		held sql.NullString
+	}{{"main_hand", equippedMainHand}, {"off_hand", equippedOffHand}} {
+		if h.held.Valid && h.held.String != "" {
+			equipment[h.key] = heldWeaponView(h.held.String)
+			if !knowsItems { // an unidentified weapon: its look (item_identity_2024.go)
+				if shown := shownItemName(charID, h.held.String); shown != h.held.String {
+					equipment[h.key] = shown
+				}
+			}
+		}
 	}
 	response["equipment"] = equipment
-	response["worn_items"] = wornItemsView(charID) // by place: armor, shield, feet, hands, wrists, head, shoulders, fingers, neck ... (F213)
+	response["worn_items"] = wornItemsView(charID, knowsItems) // by place: armor, shield, feet, hands, wrists, head, shoulders, fingers, neck ... (F213)
 	response["in_melee_range"] = isInMeleeRange(charID)
 	if owed := game.PendingToolChoices(game.ToolChoicesFor(class, classLevels), toolProfsRaw); len(owed) > 0 {
 		response["pending_choices"] = map[string]interface{}{

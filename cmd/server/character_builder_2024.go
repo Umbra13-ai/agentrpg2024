@@ -3233,7 +3233,7 @@ func setupView(charID int) (map[string]interface{}, bool) {
 		weapon := ""
 		for _, it := range inventoryOf(charID) {
 			n := itemStr(it, "name")
-			if _, _, ok := findWeapon(n); ok && itemStr(it, "location") != "lost" {
+			if _, _, ok := findWeapon(n); ok && itemStr(it, "location") != "lost" && !itemUnidentified(it) { // unknown gear is the player's own choice
 				weapon = n
 				break
 			}
@@ -3261,7 +3261,7 @@ func setupView(charID int) (map[string]interface{}, bool) {
 			}
 		}
 	} else {
-		extra(setupStep{Key: "weapon_in_hand", Title: "Hold a weapon", Done: true, Why: "In your main hand: " + mainHand})
+		extra(setupStep{Key: "weapon_in_hand", Title: "Hold a weapon", Done: true, Why: "In your main hand: " + shownItemName(charID, mainHand)})
 	}
 	// the starting shop, an optional question while it is open: shop for more equipment, or answer no (shop_2024.go)
 	if st := shopSetupStep(charID); st != nil {

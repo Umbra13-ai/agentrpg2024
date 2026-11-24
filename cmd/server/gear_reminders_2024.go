@@ -144,7 +144,7 @@ func autoEquipArmor(charID int) map[string]interface{} {
 	}
 	for _, it := range inventoryOf(charID) {
 		name := itemStr(it, "name")
-		if itemBool(it, "no_auto_equip") || itemBool(it, "destroyed") || sameArmor(name, current.String) {
+		if itemBool(it, "no_auto_equip") || itemBool(it, "destroyed") || sameArmor(name, current.String) || itemUnidentified(it) { // unknown armor: the player's choice (item_identity_2024.go)
 			continue
 		}
 		value, info := armorValueFor(name)
@@ -246,7 +246,7 @@ func gearReminders(charID int) []map[string]interface{} {
 	for _, it := range inv {
 		name := itemStr(it, "name")
 		low := strings.ToLower(name)
-		if itemBool(it, "remind_off") || itemBool(it, "destroyed") || seen[low] {
+		if itemBool(it, "remind_off") || itemBool(it, "destroyed") || seen[low] || itemUnidentified(it) { // what it would give tells what it is (item_identity_2024.go)
 			continue
 		}
 		seen[low] = true

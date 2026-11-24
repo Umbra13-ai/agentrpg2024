@@ -129,12 +129,13 @@ func dropToGround(charID int, itemRef string, quantity int, place string) (*drop
 		}
 		b, _ := json.Marshal(bundle)
 		if err := tx.QueryRow(`INSERT INTO dropped_items (lobby_id, name, quantity, bundle, dropped_by, left_where) VALUES ($1, $2, $3, $4, $5, NULLIF($6, '')) RETURNING id`,
-			lobby.Int64, itemStr(bundle[0], "name"), qty, string(b), charID, place).Scan(&dropID); err != nil {
+			lobby.Int64, playerItemName(bundle[0]), qty, string(b), charID, place).Scan(&dropID); err != nil { // the ground lists it as its player knows it; the bundle keeps it whole (item_identity_2024.go)
 			return nil, err
 		}
-		what, result := fmt.Sprintf("%s drops %s", charName, itemStr(bundle[0], "name")), "It lies on the ground."
+		shown := playerItemName(bundle[0])
+		what, result := fmt.Sprintf("%s drops %s", charName, shown), "It lies on the ground."
 		if place != "" {
-			what, result = fmt.Sprintf("%s leaves %s %s", charName, itemStr(bundle[0], "name"), place), "It is no longer carried: it stays there until someone picks it up."
+			what, result = fmt.Sprintf("%s leaves %s %s", charName, shown, place), "It is no longer carried: it stays there until someone picks it up."
 		}
 		if err := writeAction(tx, int(lobby.Int64), charID, "drop", what, result); err != nil {
 			return nil, err

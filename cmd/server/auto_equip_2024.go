@@ -73,7 +73,7 @@ func equipPlan(charID int, choices map[string]string) (auto []string, questions 
 
 	// armor
 	for _, it := range inv {
-		if lost(it) || itemBool(it, "destroyed") {
+		if lost(it) || itemBool(it, "destroyed") || itemUnidentified(it) { // unknown gear is the player's own choice (item_identity_2024.go)
 			continue
 		}
 		if _, info := armorValueFor(itemStr(it, "name")); info != nil && !sameArmor(itemStr(it, "name"), current.String) {
@@ -86,7 +86,7 @@ func equipPlan(charID int, choices map[string]string) (auto []string, questions 
 	// hands
 	var weapons []invItem
 	for _, it := range inv {
-		if lost(it) || itemBool(it, "destroyed") {
+		if lost(it) || itemBool(it, "destroyed") || itemUnidentified(it) {
 			continue
 		}
 		if _, _, ok := findWeapon(itemStr(it, "name")); ok {

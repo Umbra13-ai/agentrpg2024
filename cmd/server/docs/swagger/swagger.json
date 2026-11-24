@@ -5908,7 +5908,9 @@
           },
           "equipment": {
            "properties": {
-            "armor": {},
+            "armor": {
+             "type": "string"
+            },
             "armor_warning": {
              "type": "string"
             },
@@ -6219,7 +6221,9 @@
            "type": "string"
           },
           "inventory": {
-           "items": {},
+           "items": {
+            "type": "object"
+           },
            "type": "array"
           },
           "invocation_spells": {
@@ -39730,6 +39734,9 @@
        "application/json": {
         "schema": {
          "properties": {
+          "appears_as": {
+           "type": "string"
+          },
           "auto_equipped": {
            "description": "plain armor that raises AC is put on outside combat (F214)",
            "properties": {
@@ -39768,6 +39775,9 @@
           },
           "success": {
            "type": "boolean"
+          },
+          "unidentified": {
+           "type": "boolean"
           }
          },
          "type": "object"
@@ -39783,6 +39793,10 @@
        "schema": {
         "type": "object",
         "properties": {
+         "appears_as": {
+          "type": "string",
+          "description": "what the character sees while it is unidentified (\"a plain silver ring\"); required with unidentified"
+         },
          "campaign_id": {
           "type": "integer",
           "description": "the campaign this command is for (or ?campaign_id=); without it, the campaign of the characters it names, else your only active campaign"
@@ -39802,6 +39816,10 @@
          "quantity": {
           "type": "integer",
           "description": "how many (default 1)"
+         },
+         "unidentified": {
+          "type": "boolean",
+          "description": "true: the character doesn't know what it is (SRD 5.2.1 Identifying a Magic Item); its player sees appears_as until it is identified"
          }
         },
         "required": [
@@ -43903,6 +43921,7 @@
             "equipped_weapons": {
              "properties": {
               "main_hand": {
+               "description": "unidentified: its look (item_identity_2024.go)",
                "type": "string"
               },
               "off_hand": {

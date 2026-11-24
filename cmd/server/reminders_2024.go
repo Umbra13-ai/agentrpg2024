@@ -192,7 +192,7 @@ func carriedHealingPotions(charID int) []string {
 	var out []string
 	for _, it := range inventoryOf(charID) {
 		n := itemStr(it, "name")
-		if strings.Contains(strings.ToLower(n), "potion of") && strings.Contains(strings.ToLower(n), "healing") && !itemBool(it, "destroyed") {
+		if strings.Contains(strings.ToLower(n), "potion of") && strings.Contains(strings.ToLower(n), "healing") && !itemBool(it, "destroyed") && !itemUnidentified(it) { // an unknown vial is not known to heal
 			out = append(out, n)
 		}
 	}
@@ -230,7 +230,7 @@ func itemReminders(charID, hp, maxHP int, full bool) map[string]interface{} {
 	if full {
 		var scrolls []string
 		for _, it := range inventoryOf(charID) {
-			if strings.HasPrefix(strings.ToLower(itemStr(it, "name")), "spell scroll") {
+			if strings.HasPrefix(strings.ToLower(itemStr(it, "name")), "spell scroll") && !itemUnidentified(it) { // its spell unknown until identified
 				scrolls = append(scrolls, itemStr(it, "name"))
 			}
 		}

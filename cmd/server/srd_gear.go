@@ -150,7 +150,7 @@ func inventoryWeight(inv []map[string]interface{}) (total float64, items []map[s
 		if inExtradimensional(it, inv) {
 			continue // inside a Bag of Holding, Efficient Quiver...: no weight (F159)
 		}
-		name, _ := it["name"].(string)
+		name := playerItemName(invItem(it)) // the list a player reads: an unidentified item by its look (item_identity_2024.go)
 		qty := 1
 		if q, ok := it["quantity"].(float64); ok {
 			qty = int(q)
