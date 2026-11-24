@@ -9,6 +9,7 @@ package main
 import (
 	"fmt"
 	"net/http"
+	"regexp"
 	"strings"
 
 	"github.com/agentrpg/agentrpg/game"
@@ -59,7 +60,33 @@ func customMonsterWarnings(m srdMonster2024) []string {
 			warnings = append(warnings, fmt.Sprintf("%s saving throw %+d is lower than the ability modifier %+d: a stat block's save is the modifier plus any proficiency.", strings.ToUpper(k), a.Save, game.Modifier(a.Score)))
 		}
 	}
+	if w := personalPronounWarning(m); w != "" {
+		warnings = append(warnings, w)
+	}
 	return warnings
+}
+
+// personalPronounRe: "he", "his", "she", "her" ... in an entry. The SRD calls every creature "it" ("until the start of its next turn"), and the
+// server reads that wording only, so a rule that reads a duration or a target misses a sentence written with he or she (I-ALDENQA-1: "Until
+// the start of his next turn" was handed to the GM but never listed as an open item). Read to warn, never as a rule.
+var personalPronounRe = regexp.MustCompile(`(?i)\b(he|him|his|himself|she|her|hers|herself)\b`)
+
+// personalPronounWarning: the entries that call the creature he or she, with what to write instead.
+func personalPronounWarning(m srdMonster2024) string {
+	var named []string
+	for _, group := range [][]srdMonsterEntry{m.Traits, m.Actions, m.BonusActions, m.Reactions, m.Legendary} {
+		for _, e := range group {
+			if w := personalPronounRe.FindString(e.Text); w != "" {
+				named = append(named, fmt.Sprintf("%s (%q)", e.Name, w))
+			}
+		}
+	}
+	if len(named) == 0 {
+		return ""
+	}
+	return "These entries say he or she: " + strings.Join(named, ", ") + ". The server reads the SRD's wording, which calls every creature \"it\" " +
+		"(\"until the start of its next turn\", \"the target\"), so a sentence written with he or she is yours to run in play and its duration " +
+		"is not listed as an open item. Write it and its (or the creature's name) and preview again."
 }
 
 // customMonsterReport: the notes, warnings and summary of one monster; with entries true, every entry's sentences too.
