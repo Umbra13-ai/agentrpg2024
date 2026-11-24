@@ -176,6 +176,11 @@ func TestPostgresSheetAttackBonusIsTheAttacksOwn(t *testing.T) {
 	if !m.Archery || m.Attack != game.Modifier(dex)+game.ProficiencyBonus(level)+2 {
 		t.Errorf("the Longbow's bonus: %+v", m)
 	}
+	// a "+3" the player writes in the attack's description is no magic bonus: the plain longbow it holds has none
+	if claimed := weaponAttackMods(weaponUse{charID: id, class: "fighter", level: level, str: str, dex: dex, profs: profs, key: key, weapon: bow, hasWeapon: true,
+		description: "I shoot my longbow +3 at the orc"}); claimed.Plus != 0 || claimed.Attack != m.Attack {
+		t.Errorf("a +3 written in the description changed the attack: %+v, the bow's own %+v", claimed, m)
+	}
 	skey, sword, _ := findWeapon("scimitar")
 	if s := weaponAttackMods(weaponUse{charID: id, class: "fighter", level: level, str: str, dex: dex, profs: profs, key: skey, weapon: sword, hasWeapon: true}); s.Archery {
 		t.Errorf("Archery on a melee weapon: %+v", s)

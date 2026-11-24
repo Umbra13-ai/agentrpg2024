@@ -209,12 +209,9 @@ func namedWeaponInDescription(charID int, description string) string {
 	return ""
 }
 
-// weaponPlusFor is the magic bonus of the weapon an attack uses: a "+N" in the description, else the held item's "+N" or its
-// named-weapon bonus.
-func weaponPlusFor(charID int, description, weaponKey string, offHand bool) int {
-	if p := itemPlus(description); p > 0 && !offHand {
-		return p
-	}
+// weaponPlusFor is the magic bonus of the weapon an attack uses: the held item's "+N" or its named-weapon bonus. A "+N" the player
+// writes in the description gives nothing: the bonus is the weapon's, read from what the character holds.
+func weaponPlusFor(charID int, weaponKey string, offHand bool) int {
 	item := heldItemFor(charID, weaponKey, offHand)
 	if item == "" {
 		return 0

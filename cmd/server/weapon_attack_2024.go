@@ -82,7 +82,7 @@ func weaponAttackMods(u weaponUse) weaponMods {
 		m.Parts = append(m.Parts, fmt.Sprintf("proficiency %s", signedBonus(p)))
 	}
 	if stored && u.hasWeapon && !u.improvised {
-		if m.Plus = weaponPlusFor(u.charID, u.description, u.key, u.offHand); m.Plus > 0 { // Weapon, +1, +2 or +3; a named weapon's bonus
+		if m.Plus = weaponPlusFor(u.charID, u.key, u.offHand); m.Plus > 0 { // Weapon, +1, +2 or +3; a named weapon's bonus
 			m.Attack += m.Plus
 			m.Damage += m.Plus
 			m.Parts = append(m.Parts, fmt.Sprintf("magic weapon %s", signedBonus(m.Plus)))
