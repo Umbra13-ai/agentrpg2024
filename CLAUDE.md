@@ -3,10 +3,11 @@
 **Read `ENGINEERING_STANDARDS.md` first and follow it on every task** (the owner's permanent engineering standards for every
 coding agent). This file adds this project's own rules.
 
-For AI coding sessions working on the Agent RPG 2024 server (Go; code in `cmd/server` and `game/`). The built-in rules and public catalog use the D&D SRD 5.2.1. **Monster rules target the 330 SRD 5.2.1 stat blocks
-(`cmd/server/data/srd521_monsters.json`) only** (owner, Nov 21): every monster text pattern must match an SRD stat block or an
-invented test monster (`TestMonsterPatternsServeSRDWording`); never add a rule, comment, test or doc built from Monster Manual text
-outside the SRD (the earlier 2024 Monster Manual work is archived outside the repository). GMs may import their own structured
+For AI coding sessions working on the Agent RPG 2024 server (Go; code in `cmd/server` and `game/`). The built-in rules and public catalog use the D&D SRD 5.2.1. **Monster rules serve the 330 SRD 5.2.1 stat blocks
+(`cmd/server/data/srd521_monsters.json`) and, since the owner's word of Nov 25, the 2024 mechanics and wordings outside the SRD** (the stat
+blocks GMs import: the 2024 Monster Manual, adventures, older books). Every monster text pattern must match an SRD stat block or an
+invented sentence of the test that uses it (`TestMonsterPatternsServeSRDWording`, `patternWitnesses`; a branch: `branchWitnesses`);
+never copy a book's own text into the repository: a witness is a sentence written for the test. GMs may import their own structured
 monsters into the separate shared compendium in the existing database (a generic feature); importing text does not implement
 unfamiliar rules, and wording no rule reads is flagged to the GM. **Structured mechanics a GM attaches to an entry are generic and allowed** (owner, Nov 23:
 `mechanicCatalog`, `monster_mechanics_2024.go`), on an imported monster or on a copy of an SRD monster as a house rule; SRD-only stays
@@ -69,6 +70,11 @@ Report: "Wizard Scholar accepts any skill for Expertise."
   message all read that table. Remove the per-class code. Test every class that gets Expertise at each level it gets it.
 
 ### Rules that already have one owner
+- **The uses an entry's name gives** (owner, Nov 25): a per-day limit after a clause of its own ("Moon Ray (Gleam Only; 3/Day)") is `perDayRe`
+  in the day-use owner (`monsterDayUse`, I-ALDENQA-34); a Legendary Action's cost ("Wing Attack (Costs 2 Actions)") is `legendaryCost`
+  (`takeLegendaryAction` spends it and refuses with fewer uses left; `legendaryOptions` offers only what can be paid, I-ALDENQA-19); an entry
+  its creature can't use while it has a condition ("unless the jabberwock has the Blinded condition") is `entryConditionGate` in
+  `monsterEntryRefusal` (I-ALDENQA-27). Go: `TestDayLimitAfterAClause`, `TestLegendaryActionCost`, `TestPostgresEntryUnlessCondition`.
 - **Legendary Resistance counts:** `monster_resistance_2024.go` owns locked counts for automatic saves, GM commands, item effects and Concentration decisions. General monster-state snapshots never overwrite those counts.
 - **Tracked monster Concentration:** `monster_concentration_2024.go` owns cast identity, damage-time `game.SaveResult` queues, decision identity and transactional decisions/cleanup. `resolveMonsterSpell` starts the cast before effects. Cleanup calls `changeConditionsIn` in the same transaction; never write condition rows directly or reroll stored outcomes. The pending-dependent progression boundary is still incomplete; see `docs/MONSTER_REPAIR_LOG.md`.
 - **A monster's saving-throw effect on its targets:** parseSaveEffect and applySaveEffect in
@@ -144,7 +150,8 @@ Report: "Wizard Scholar accepts any skill for Expertise."
   `TestPostgresAttackerNextAttackAdvantage`. A new
   rider kind is one pattern built with `riderPattern` plus the owner that reads its marker; never write the duration into its pattern.
   Every target kind gets them through `giveConditions` (a companion's hit too). Go: `TestPostgresRiderDurationsOnEveryTarget`.
-- **A trait that acts on a monster's death** (Death Burst, `cmd/server/monster_death_trigger_2024.go`): the writers of a monster's Hit Points
+- **A trait that acts on a monster's death** (Death Burst; any trait that says it acts "when it dies" or "when the <creature> dies": `deathTriggerRe`;
+  a save in the 2024 form is rolled, words it can't read go to the GM at the death; owner, Nov 25, Darkling Death Flash; `cmd/server/monster_death_trigger_2024.go`): the writers of a monster's Hit Points
   call `monsterDiedIn`, which records the trigger in their transaction; `drainDeathTriggers` resolves it after the request (`withProtections`)
   and at each turn start, through `applySaveEffect`; the request's own reply carries what it did (`addDeathTriggersToReply`, called by `guardDB` before the held reply is sent: `after_this_request`, the GM's line or a player's `playerText`). Never roll a death effect inside a damage transaction. Go: `TestPostgresDeathBurst`.
 - **A standard action a stat-block entry takes** ("takes the Disengage or Hide action", `cmd/server/monster_standard_actions_2024.go`):
@@ -511,7 +518,8 @@ Add to the owner, never beside it. When you give another rule one owner, add it 
 - **A monster's and a companion's Hit Points:** `cmd/server/monster_hp_2024.go`, the game rule of `game/hit_points.go` (Temporary
   Hit Points first, 0 to the maximum, healing from 0; no Death Saving Throws): `changeMonsterVitals` under `changeFight` with
   `setMonsterHP`, `healMonster`, `loseMonsterHP`, `setMonsterMaxHP`, `setMonsterTempHP`; `saveMonsterHit` (a hit worked out without
-  a lock, saved as a change); `hurtMonster` / `damageMonster` (resistances, Polymorph, Undead Fortitude); `reshapeMonster` (a new
+  a lock, saved as a change); `hurtMonster` / `damageMonster` (resistances, Polymorph, Undead Fortitude; exact damage asks `exactDamageFortitude` first: the GM's
+  adjust-monster and the Sphere, I-ALDENQA-35); `reshapeMonster` (a new
   form). Companions: `changeCompanionHP` (row locked) with `damageCompanion`, `healCompanion`, `companionTakesForm`.
   `TestNoOtherCompanionHPWriter` checks; suite: `combat_state_rule_test.py`.
 - **A creature's conditions:** `condition_records` is the one store (one row per entry of a creature's list: rules conditions with
