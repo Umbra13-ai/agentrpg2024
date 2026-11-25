@@ -22635,7 +22635,6 @@
              "additionalProperties": {
               "type": "string"
              },
-             "properties": {},
              "type": "object"
             },
             "alignment": {

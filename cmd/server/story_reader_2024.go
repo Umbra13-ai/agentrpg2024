@@ -58,7 +58,8 @@ type storyPassage struct {
 	// the creatures it shows, with their tokens (story_creatures_2024.go)
 	Creatures []storyCreature `json:"creatures,omitempty"`
 	at        time.Time
-	endsFor   bool // the fight ended here: the next passage begins a chapter
+	kind      string // its record's action type (the Live Table says what kind of passage it is)
+	endsFor   bool   // the fight ended here: the next passage begins a chapter
 }
 
 type storyChapter struct {
@@ -88,7 +89,7 @@ func storyPassages(recs []actionRecord, speakers map[int]storySpeaker) []storyPa
 			continue
 		}
 		desc, res := strings.TrimSpace(playerText(a.Description)), strings.TrimSpace(playerText(a.Result))
-		p := storyPassage{ID: fmt.Sprintf("e%d", a.ID), at: a.At}
+		p := storyPassage{ID: fmt.Sprintf("e%d", a.ID), at: a.At, kind: a.Type}
 		switch {
 		case a.Type == actionFightOver:
 			if n := len(out); n > 0 {

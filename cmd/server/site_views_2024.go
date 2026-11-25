@@ -76,6 +76,7 @@ type liveTable struct {
 	Observations               []liveObservation
 	TableRules                 string // HTML from its owner (table_rules.go)
 	Background                 string // the picture behind the header (campaign_background_2024.go); empty is the default
+	TurnOrder                  []byte // the fight's turn order as stored (combat_state), for the preview's creatures
 }
 
 var trailingNumber = regexp.MustCompile(`\s+\d+$`)

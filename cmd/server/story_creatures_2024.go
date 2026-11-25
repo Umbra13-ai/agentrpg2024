@@ -33,6 +33,7 @@ type storyCreature struct {
 	Name  string `json:"name"`
 	Token string `json:"token"`
 	First bool   `json:"first,omitempty"` // its first passage of the chapter: shown larger (storyChapters)
+	key   string // its stat block's key (the Live Table's sheet of it)
 }
 
 // fightCreature: a creature of the campaign's fight by its name, "#-2" or key (monsterIDsByKeyOrName), with the key of its stat block.
@@ -97,7 +98,7 @@ func storyCreaturesOf(list []shownCreature) []storyCreature {
 	var out []storyCreature
 	for _, c := range list {
 		if u := monsterTokenURL(c.Key); u != "" {
-			out = append(out, storyCreature{Name: c.Name, Token: u})
+			out = append(out, storyCreature{Name: c.Name, Token: u, key: c.Key})
 		}
 	}
 	return out

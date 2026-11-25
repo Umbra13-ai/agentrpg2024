@@ -2913,6 +2913,22 @@ func handleCampaignPage(w http.ResponseWriter, r *http.Request) {
 // serveCampaignPage writes a campaign's Live Table view (the caller checked the campaign may be watched).
 func serveCampaignPage(w http.ResponseWriter, r *http.Request, campaignID int) {
 	w.Header().Set("Content-Type", "text/html; charset=utf-8")
+	t, what, err := loadLiveTable(campaignID)
+	if err == sql.ErrNoRows {
+		http.Error(w, "Campaign not found", http.StatusNotFound)
+		return
+	}
+	if err != nil {
+		writeDBErrorPage(w, err, what)
+		return
+	}
+	fmt.Fprint(w, wrapView(t.Name+" - Agent RPG 2024", liveTablePage(t)))
+}
+
+// loadLiveTable reads what a campaign's Live Table shows: the campaign, its fight, the party's cards, the observations, the place, the table
+// rules and the picture. The Live Table and its preview (preview_table_2024.go) read it. On an error it says what it was reading;
+// sql.ErrNoRows: no such campaign.
+func loadLiveTable(campaignID int) (liveTable, string, error) {
 	var err error
 
 	// Get campaign details
@@ -2932,8 +2948,7 @@ func serveCampaignPage(w http.ResponseWriter, r *http.Request, campaignID int) {
 	`, campaignID).Scan(&name, &status, &setting, &maxPlayers, &minLevel, &maxLevel, &dmID, &dmName, &createdAt)
 
 	if err != nil {
-		http.Error(w, "Campaign not found", http.StatusNotFound)
-		return
+		return liveTable{}, "the campaign", err
 	}
 
 	// Get current turn info
@@ -2986,8 +3001,7 @@ func serveCampaignPage(w http.ResponseWriter, r *http.Request, campaignID int) {
 		WHERE c.lobby_id = $1
 	`, campaignID)
 	if qerr != nil {
-		writeDBErrorPage(w, qerr, "the campaign's party")
-		return
+		return liveTable{}, "the campaign's party", qerr
 	}
 	playerCount := 0
 	if partyRows != nil {
@@ -3049,8 +3063,7 @@ func serveCampaignPage(w http.ResponseWriter, r *http.Request, campaignID int) {
 			Health: health, IsTurn: combatActive && pm.CharName == currentTurnName, HasPortrait: pm.HasPortrait, PortraitAt: pm.PortraitAt,
 			Activity: activity}
 		if err := liveCardExtras(&card); err != nil { // Temporary Hit Points, Inspiration, saves, Hit Dice, conditions, companions (live_cards_2024.go)
-			writeDBErrorPage(w, err, "the party's cards")
-			return
+			return liveTable{}, "the party's cards", err
 		}
 		cards = append(cards, card)
 	}
@@ -3070,8 +3083,7 @@ func serveCampaignPage(w http.ResponseWriter, r *http.Request, campaignID int) {
 		ORDER BY o.created_at DESC LIMIT 20
 	`, campaignID)
 	if qerr != nil {
-		writeDBErrorPage(w, qerr, "the campaign's observations")
-		return
+		return liveTable{}, "the campaign's observations", qerr
 	}
 	for obsRows.Next() {
 		var o liveObservation
@@ -3094,13 +3106,13 @@ func serveCampaignPage(w http.ResponseWriter, r *http.Request, campaignID int) {
 		}
 	}
 
-	page := liveTablePage(liveTable{
+	return liveTable{
 		ID: campaignID, Name: name, Status: status, Levels: formatLevelRequirement(minLevel, maxLevel), Setting: setting,
 		GM: gm, Players: playerCount, MaxPlayers: maxPlayers, Created: createdAt.Format("January 2, 2006"), Location: location,
 		Combat: combatActive, Round: combatRound, TurnName: currentTurnName, Enemies: liveEnemies(turnOrderJSON, combatActive),
 		Party: cards, Observations: observations, TableRules: tableRulesHTML(campaignID), Background: backgroundURL(campaignID),
-	})
-	fmt.Fprint(w, wrapView(name+" - Agent RPG 2024", page))
+		TurnOrder: turnOrderJSON,
+	}, "", nil
 }
 
 // handleCampaignLog shows the full action log for a campaign with pagination

@@ -67,13 +67,18 @@ func canonicalPlayerAlignment(s string) string {
 var alignmentDescriptions = srdAlignments
 
 type sbEntry struct {
-	Name        string `json:"name"`
-	Description string `json:"description"`
-	Source      string `json:"source,omitempty"`
-	Group       string `json:"group,omitempty"` // species, class, subclass, feat, background
-	Label       string `json:"label,omitempty"` // heading for the group, e.g. "Gnome" or "Evocation"
-	Kind        string `json:"kind,omitempty"`  // trait, action, bonus_action, reaction, attack
+	Name        string      `json:"name"`
+	Description string      `json:"description"`
+	Source      string      `json:"source,omitempty"`
+	Group       string      `json:"group,omitempty"` // species, class, subclass, feat, background
+	Label       string      `json:"label,omitempty"` // heading for the group, e.g. "Gnome" or "Evocation"
+	Kind        string      `json:"kind,omitempty"`  // trait, action, bonus_action, reaction, attack
+	line        *attackLine // an attack's numbers apart, as the description says them (the Live Table preview's sheet)
 }
+
+// attackLine: an attack entry's to-hit bonus, what makes it up with the reach or range, and its damage ("+5", "Dexterity +3, proficiency +2 ·
+// reach 5 ft.", "1d6 + 3 piercing"), written by the same code as the entry's description.
+type attackLine struct{ Hit, Detail, Damage string }
 
 // classifyActionType reads a feature description and reports which heading it
 // belongs under: "action", "bonus_action", "reaction", or "" for a trait.

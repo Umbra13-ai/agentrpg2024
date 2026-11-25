@@ -191,6 +191,7 @@ func weaponAttackEntry(in combatInput, key string, w SRDWeapon, qty int) sbEntry
 		Name:        name,
 		Description: kind + ": " + mods.toHit() + ", " + reach + ", one target. Hit: " + hit + ".",
 		Kind:        "attack",
+		line:        &attackLine{signedBonus(mods.Attack), strings.Join(mods.Parts, ", ") + " · " + reach, dmg + " " + w.DamageType},
 	}
 }
 
@@ -207,6 +208,7 @@ func unarmedStrikeEntry(in combatInput) sbEntry {
 		Name:        "Unarmed Strike",
 		Description: "Melee Weapon Attack: " + mods.toHit() + ", reach 5 ft., one target. Hit: " + hit + ".",
 		Kind:        "attack",
+		line:        &attackLine{signedBonus(mods.Attack), strings.Join(mods.Parts, ", ") + " · reach 5 ft.", strings.TrimSuffix(hit, " damage")},
 	}
 }
 

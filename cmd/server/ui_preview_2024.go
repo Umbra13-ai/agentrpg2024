@@ -33,6 +33,14 @@ func handleUIPreview(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	name := strings.TrimPrefix(r.URL.Path, "/preview/")
+	if name == previewTablePath { // the Nov 25 mock-up with live data (preview_table_2024.go)
+		handlePreviewTable(w, r)
+		return
+	}
+	if name+"/" == previewTablePath {
+		http.Redirect(w, r, "/preview/"+previewTablePath, http.StatusMovedPermanently)
+		return
+	}
 	if name == "" {
 		name = "index.html"
 	}

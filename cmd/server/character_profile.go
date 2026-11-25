@@ -379,44 +379,7 @@ func getCharacterProfile(w http.ResponseWriter, charID int) {
 	}
 
 	// Stat block data (size, speed, alignment, resistances, traits, actions...)
-	var sbSpecies, sbClass, sbSub, sbBg, sbAnc, sbFiend, sbAlign string
-	var sbLevel, sbCon int
-	var sbFeats, sbOrigin []byte
-	if err := db.QueryRow(`
-		SELECT COALESCE(species,''), COALESCE(class,''), level, COALESCE(subclass,''), COALESCE(background,''),
-			COALESCE(draconic_ancestry,''), COALESCE(fiendish_resilience,''), COALESCE(alignment,''), con, COALESCE(feats,'[]'), COALESCE(origin,'{}')
-		FROM characters WHERE id = $1`, charID).
-		Scan(&sbSpecies, &sbClass, &sbLevel, &sbSub, &sbBg, &sbAnc, &sbFiend, &sbAlign, &sbCon, &sbFeats, &sbOrigin); err == nil {
-		sbMap := buildStatBlock(charID, sbSpecies, sbClass, sbLevel, sbSub, sbBg, sbAnc, sbFiend, sbAlign, game.Modifier(sbCon), sbFeats, sbOrigin)
-		// attacks, Armor Class / Speed / Initiative notes, saving throw notes
-		var invRaw []byte
-		var wprofs string
-		var strScore, dexScore int
-		var armorSlug, mainHand, offHand sql.NullString
-		var shield bool
-		if err := db.QueryRow(`
-			SELECT COALESCE(inventory, '[]'), COALESCE(weapon_proficiencies, ''), str, dex,
-				equipped_armor, COALESCE(equipped_shield, false), equipped_main_hand, equipped_off_hand
-			FROM characters WHERE id = $1`, charID).
-			Scan(&invRaw, &wprofs, &strScore, &dexScore, &armorSlug, &shield, &mainHand, &offHand); err == nil {
-			var inv []invItem
-			json.Unmarshal(invRaw, &inv)
-			ensureItemIDs(inv)
-			names := []string{}
-			if ts, ok := sbMap["traits"].([]sbEntry); ok {
-				for _, t := range ts {
-					names = append(names, t.Name)
-				}
-			}
-			baseSpeed, _ := sbMap["speed_feet"].(int)
-			addCombatBlock(sbMap, combatInput{
-				Class: sbClass, Subclass: sbSub, Species: sbSpecies, Level: sbLevel,
-				Str: strScore, Dex: dexScore, WeaponProfs: wprofs, Inventory: inv,
-				EquippedArmor: armorSlug.String, Shield: shield,
-				MainHand: mainHand.String, OffHand: offHand.String,
-				BaseSpeed: baseSpeed, TraitNames: names, ExtraAttacks: characterExtraAttacks(charID, sbClass, sbLevel), CharID: charID,
-			})
-		}
+	if sbMap := characterStatBlock(charID); sbMap != nil {
 		resp["statblock"] = sbMap
 	}
 
@@ -814,3 +777,49 @@ function render(d, p) {
 })();
 </script>
 `
+
+// characterStatBlock: a character's stat block as its profile shows it (size, speed, alignment, resistances, traits, actions, and its
+// attacks: every weapon it has with the attack's own numbers); nil when the character can't be read. The profile and the Live Table read it.
+func characterStatBlock(charID int) map[string]interface{} {
+	var sbSpecies, sbClass, sbSub, sbBg, sbAnc, sbFiend, sbAlign string
+	var sbLevel, sbCon int
+	var sbFeats, sbOrigin []byte
+	if err := db.QueryRow(`
+		SELECT COALESCE(species,''), COALESCE(class,''), level, COALESCE(subclass,''), COALESCE(background,''),
+			COALESCE(draconic_ancestry,''), COALESCE(fiendish_resilience,''), COALESCE(alignment,''), con, COALESCE(feats,'[]'), COALESCE(origin,'{}')
+		FROM characters WHERE id = $1`, charID).
+		Scan(&sbSpecies, &sbClass, &sbLevel, &sbSub, &sbBg, &sbAnc, &sbFiend, &sbAlign, &sbCon, &sbFeats, &sbOrigin); err == nil {
+		sbMap := buildStatBlock(charID, sbSpecies, sbClass, sbLevel, sbSub, sbBg, sbAnc, sbFiend, sbAlign, game.Modifier(sbCon), sbFeats, sbOrigin)
+		// attacks, Armor Class / Speed / Initiative notes, saving throw notes
+		var invRaw []byte
+		var wprofs string
+		var strScore, dexScore int
+		var armorSlug, mainHand, offHand sql.NullString
+		var shield bool
+		if err := db.QueryRow(`
+			SELECT COALESCE(inventory, '[]'), COALESCE(weapon_proficiencies, ''), str, dex,
+				equipped_armor, COALESCE(equipped_shield, false), equipped_main_hand, equipped_off_hand
+			FROM characters WHERE id = $1`, charID).
+			Scan(&invRaw, &wprofs, &strScore, &dexScore, &armorSlug, &shield, &mainHand, &offHand); err == nil {
+			var inv []invItem
+			json.Unmarshal(invRaw, &inv)
+			ensureItemIDs(inv)
+			names := []string{}
+			if ts, ok := sbMap["traits"].([]sbEntry); ok {
+				for _, t := range ts {
+					names = append(names, t.Name)
+				}
+			}
+			baseSpeed, _ := sbMap["speed_feet"].(int)
+			addCombatBlock(sbMap, combatInput{
+				Class: sbClass, Subclass: sbSub, Species: sbSpecies, Level: sbLevel,
+				Str: strScore, Dex: dexScore, WeaponProfs: wprofs, Inventory: inv,
+				EquippedArmor: armorSlug.String, Shield: shield,
+				MainHand: mainHand.String, OffHand: offHand.String,
+				BaseSpeed: baseSpeed, TraitNames: names, ExtraAttacks: characterExtraAttacks(charID, sbClass, sbLevel), CharID: charID,
+			})
+		}
+		return sbMap
+	}
+	return nil
+}
