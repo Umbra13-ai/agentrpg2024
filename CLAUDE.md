@@ -438,11 +438,13 @@ Add to the owner, never beside it. When you give another rule one owner, add it 
   (gated like every read under `/api/campaigns/{id}/`: a private campaign's picture is private). The admin editor never sends the bytes (`editorColumns`). Go:
   `TestPostgresAdminCampaignBackground`, `TestNoOtherBackgroundWriter`.
 - **A GM-built monster's token and stat block** (owner, Nov 24): `cmd/server/monster_token_2024.go` owns the token of a compendium monster
-  (`custom_monsters.token*`): `monsterTokenRule` (an `imageRule` with `Square`: a square PNG, JPEG or WebP, 128 to 2048 px, 2 MB; `checkImage` reads a WebP's
-  size with `webpSize`) and `monsterTokenRuleText`, the words every builder reply gives as `token_rule`; `saveMonsterToken` / `clearMonsterToken`
+  (`custom_monsters.token*`): `monsterTokenRule` (an `imageRule` with `Square`: a square PNG, JPEG or WebP, 128 to 2048 px, 3 MB; `checkImage` reads a WebP's
+  size with `webpSize`; the admin page's own size check says the same, `TestAdminPageTokenLimitIsTheRules`) and `monsterTokenRuleText`, the words every builder reply gives as `token_rule`; `saveMonsterToken` / `clearMonsterToken`
   (`TestNoOtherMonsterTokenWriter`), from the GM's `POST|DELETE /api/gm/compendium/monsters/token` and the admin's `/api/admin/monsters/{key}/token`
-  (`putMonsterToken`, both); an edit's new version keeps it (`copyMonsterTokenIn`). What is stored is `normalizeToken` (`token_normalize_2024.go`, read by `putMonsterToken` for both routes): a PNG or JPEG becomes a PNG of at most 512 px a side
-  (scaled down by averaging, tags dropped, the reply says so), a WebP stays as it came (no decoder here). `monsterTokenURL` answers for an SRD slug and a `custom:` key
+  (`putMonsterToken`, both); an edit's new version keeps it (`copyMonsterTokenIn`). What is stored is `normalizeToken` (`token_normalize_2024.go`, read by `putMonsterToken` for both routes): a PNG, JPEG or WebP becomes a lossless WebP of at most 192 px a side
+  (`tokenStoredPx`; scaled down by averaging, never enlarged, tags dropped, the reply says so; a WebP already that small stays as it came; the WebP reader and writer are
+  `golang.org/x/image` and `nativewebp`), and `custom_monsters.token_px` records the side it was stored at: `convertStoredTokens` (run at each start) brings every token with no
+  recorded side to the rule once, through `saveMonsterToken`, and leaves a damaged one alone (`TestPostgresStoredTokensAreConvertedOnce`). `monsterTokenURL` answers for an SRD slug and a `custom:` key
   alike (the encounter stage). **The stat block** is `statBlockHTML` (`statblock_view_2024.go`, the character sheet's components, each sentence
   marked Server or GM from `entryVerdicts`): the GM's page `GET /monsters/custom/{key}` opens only with `statBlockLink` (signed, 24 hours;
   `stat_block_url` in the builder's replies), the admin's Monsters tab frames `statBlockDocument` (`admin_monsters_2024.go`). Image uploads'
