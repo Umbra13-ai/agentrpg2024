@@ -426,6 +426,9 @@ var schemaSteps = []schemaStep{
 	// the creatures a log record shows (story_creatures_2024.go): [{name, key}]
 	{"story_creatures_2024.go", `ALTER TABLE actions ADD COLUMN IF NOT EXISTS creatures JSONB`},
 	{"monster_token_2024.go", `ALTER TABLE custom_monsters ADD COLUMN IF NOT EXISTS token BYTEA; ALTER TABLE custom_monsters ADD COLUMN IF NOT EXISTS token_type VARCHAR(32); ALTER TABLE custom_monsters ADD COLUMN IF NOT EXISTS token_updated_at TIMESTAMPTZ`},
+	// the side in pixels a token was stored at (192 pixel WebP, token_normalize_2024.go); empty for a token stored before that rule, which
+	// convertStoredTokens brings to it once at the start
+	{"token_normalize_2024.go", `ALTER TABLE custom_monsters ADD COLUMN IF NOT EXISTS token_px INT`},
 	{"monster_bonus_action_2024.go", `ALTER TABLE combat_monster_state ADD COLUMN IF NOT EXISTS bonus_used INTEGER NOT NULL DEFAULT 0; ALTER TABLE combat_monster_state ADD COLUMN IF NOT EXISTS bonus_allowed INTEGER NOT NULL DEFAULT 0`}, // the Bonus Actions a monster has taken this turn, and how many its stat block gives it
 	{"combat_effects.go", `ALTER TABLE combat_effects ADD COLUMN IF NOT EXISTS origin TEXT NOT NULL DEFAULT ''`},                                                                                                                            // what gave the effect (a spell, a mastery, the GM): its roll line names it
 }

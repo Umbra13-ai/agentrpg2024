@@ -44,7 +44,13 @@ func startDatabase(dbURL string) error {
 		return err
 	}
 	log.Printf("Database schema ready (%d steps)", len(schemaSteps))
-	return retryStartup("the SRD data", seedAndLoad)
+	if err := retryStartup("the SRD data", seedAndLoad); err != nil {
+		return err
+	}
+	if err := convertStoredTokens(); err != nil { // monster tokens stored before the 192 pixel WebP rule (token_normalize_2024.go): once
+		log.Printf("Monster tokens could not be converted this start (they are tried again at the next): %v", err)
+	}
+	return nil
 }
 
 // retryStartup runs one startup step until it succeeds, startupAttempts times at most.

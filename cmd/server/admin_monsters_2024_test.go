@@ -99,3 +99,11 @@ func TestPostgresAdminMonsters(t *testing.T) {
 		t.Errorf("remove: %d", code)
 	}
 }
+
+// The admin page's own size check says the rule's size (the page's script is a string, so the test holds it to monsterTokenRule).
+func TestAdminPageTokenLimitIsTheRules(t *testing.T) {
+	want := fmt.Sprintf("file.size>%d*1024*1024", monsterTokenRule.MaxBytes/(1024*1024))
+	if !strings.Contains(adminPageHTML, want) {
+		t.Errorf("the admin page doesn't check %q", want)
+	}
+}

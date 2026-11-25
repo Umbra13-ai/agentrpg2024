@@ -53,7 +53,7 @@ func TestMonsterTokenRule(t *testing.T) {
 			t.Errorf("%dx%d: %q, want %q", c.w, c.h, got, c.code)
 		}
 	}
-	if !strings.Contains(monsterTokenRuleText, "square") || !strings.Contains(monsterTokenRuleText, "128 to 2048") || !strings.Contains(monsterTokenRuleText, "2 MB") {
+	if !strings.Contains(monsterTokenRuleText, "square") || !strings.Contains(monsterTokenRuleText, "128 to 2048") || !strings.Contains(monsterTokenRuleText, "3 MB") || !strings.Contains(monsterTokenRuleText, "192 pixels a side") {
 		t.Errorf("the rule's words: %s", monsterTokenRuleText)
 	}
 }
@@ -108,7 +108,7 @@ func TestPostgresMonsterTokens(t *testing.T) {
 	if _, l := pgCall(t, "GET", fmt.Sprintf("/api/gm/compendium/monsters?mine=1&campaign_id=%d", camp), gm, nil); !strings.Contains(fmt.Sprint(l["monsters"]), "token_url:/monster-tokens/") {
 		t.Errorf("the list: %v", l["monsters"])
 	}
-	if code, body := pgRawGet(t, u, ""); code != 200 || !bytes.HasPrefix(body, []byte("\x89PNG")) {
+	if code, body := pgRawGet(t, u, ""); code != 200 || !(bytes.HasPrefix(body, []byte("RIFF")) && bytes.Equal(body[8:12], []byte("WEBP"))) {
 		t.Errorf("serving it: %d", code)
 	}
 	// an edit's new version keeps it

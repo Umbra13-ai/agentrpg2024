@@ -266,7 +266,7 @@ function monsterTokenCard(m,rule){var s=section('Token',true);s.appendChild(el('
   var f=el('input',{type:'file',accept:'image/png,image/jpeg,image/webp','aria-label':'Token image'});
   var up=el('button',{'class':'btn primary'},'Add or replace token');var path='/api/admin/monsters/'+encodeURIComponent(m.key)+'/token';
   up.onclick=function(){var file=f.files&&f.files[0];if(!file){toast('Choose an image first',true);return}
-    if(file.size>2*1024*1024){toast('The image is over 2 MB. Choose a smaller one.',true);return}
+    if(file.size>3*1024*1024){toast('The image is over 3 MB. Choose a smaller one.',true);return}
     var rd=new FileReader();rd.onload=function(){up.disabled=true;api('POST',path,{image_base64:rd.result}).then(function(r){up.disabled=false;toast(r.message||'Token saved');f.value='';show(r.token&&r.token.url)}).catch(function(e){up.disabled=false;fail(e)})};
     rd.onerror=function(){toast('That file could not be read',true)};rd.readAsDataURL(file)};
   var rm=el('button',{'class':'btn danger'},'Remove token');

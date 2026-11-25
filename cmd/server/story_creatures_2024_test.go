@@ -21,7 +21,7 @@ func storyCreatureFixture(t *testing.T) (gm, player string, camp, hero int) {
 	if !ok || !strings.HasPrefix(raider.Key, "custom:") {
 		t.Fatalf("the fight's raider: %+v", raider)
 	}
-	if err := saveMonsterToken(raider.Key, pngOf(t, 128, 128), "image/png"); err != nil {
+	if err := saveMonsterToken(raider.Key, pngOf(t, 128, 128), "image/png", 128); err != nil {
 		t.Fatal(err)
 	}
 	// a compendium NPC with a token, named by its name
