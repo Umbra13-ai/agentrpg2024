@@ -317,17 +317,9 @@ func handleCombatStart(w http.ResponseWriter, r *http.Request, campaignID int) {
 		var name, class string
 		var subclass sql.NullString
 		rows.Scan(&id, &name, &dex, &initBonus, &class, &level, &cha, &subclass)
-		clearUses(id, "improve_fate")     // Boon of Fate returns when Initiative is rolled
-		evergreenWildShape(id)            // Archdruid
-		if hasSpecificFeat(id, "alert") { // 2024 Alert: add the Proficiency Bonus to Initiative
-			initBonus += game.ProficiencyBonus(level)
-		}
-		if strings.EqualFold(class, "bard") && level >= 2 { // Jack of All Trades: Initiative is a Dexterity check without proficiency
-			initBonus += game.ProficiencyBonus(level) / 2
-		}
-		var exhaustion int
-		db.QueryRow(`SELECT COALESCE(exhaustion_level,0) FROM characters WHERE id = $1`, id).Scan(&exhaustion)
-		initBonus -= 2 * exhaustion // 2024 Exhaustion: -2 per level on every D20 Test, Initiative included
+		clearUses(id, "improve_fate") // Boon of Fate returns when Initiative is rolled
+		evergreenWildShape(id)        // Archdruid
+		initBonus = initiativeBonus(id, class, level, initBonus)
 
 		classLower := strings.ToLower(class)
 		dexMod := game.Modifier(dex)
@@ -2070,4 +2062,20 @@ func handleSetCover(w http.ResponseWriter, r *http.Request, charID int) {
 		"ac_bonus": bonus,
 		"message":  message,
 	})
+}
+
+// initiativeBonus: what a character adds to its Initiative besides its Dexterity modifier: the stored bonus, the 2024 Alert feat's Proficiency
+// Bonus, a Bard's Jack of All Trades (Initiative is a Dexterity check) and Exhaustion's -2 per level. The roll at a fight's start and the
+// preview's sheet read it.
+func initiativeBonus(charID int, class string, level, stored int) int {
+	b := stored
+	if hasSpecificFeat(charID, "alert") {
+		b += game.ProficiencyBonus(level)
+	}
+	if strings.EqualFold(class, "bard") && level >= 2 {
+		b += game.ProficiencyBonus(level) / 2
+	}
+	var exhaustion int
+	db.QueryRow(`SELECT COALESCE(exhaustion_level,0) FROM characters WHERE id = $1`, charID).Scan(&exhaustion)
+	return b - 2*exhaustion
 }
