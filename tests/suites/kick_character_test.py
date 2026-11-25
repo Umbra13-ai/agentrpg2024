@@ -26,7 +26,7 @@ for cls,cid in chars.items(): call("POST",f"/api/campaigns/{cmp}/join",{"charact
 c,j=call("POST",f"/api/campaigns/{cmp}/start",None,G,"pt")
 B=f"/api/campaigns/{cmp}/combat"
 c,j=call("POST",B+"/start",{},G,"pt"); check("combat start",c==200,j)
-c,j=call("POST",B+"/add",{"combatants":[{"name":"Goblin A","monster_key":"goblin","initiative":-5,"hp":500},{"name":"Goblin B","monster_key":"goblin","initiative":-6,"hp":500}]},G,"pt"); check("add goblins",c==200,j)
+c,j=call("POST",B+"/add",{"combatants":[{"name":"Goblin A","monster_key":"goblin-warrior","initiative":-5,"hp":500},{"name":"Goblin B","monster_key":"goblin-warrior","initiative":-6,"hp":500}]},G,"pt"); check("add goblins",c==200,j)
 B=f"/api/campaigns/{cmp}/combat"
 call("POST",B+"/start",{},G,"k"); call("POST",B+"/add",{"combatants":[{"name":"Gob","monster_key":"goblin-minion","initiative":-5}]},G,"k")
 r=chars["rogue"]; nm=call("GET",f"/api/characters/{r}",None,toks["rogue"],"k")[1]["name"]

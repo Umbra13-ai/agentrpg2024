@@ -43,7 +43,7 @@ def turn(r, i):
 def fight():
     call("POST", B + "/end", {"award_xp": False}, G)
     c, j = call("POST", B + "/start", {}, G)
-    c2, j2 = call("POST", B + "/add", {"combatants": [{"name": n, "monster_key": "goblin", "initiative": 40 - k, "hp": 50} for k, n in enumerate(["Gob A", "Gob B", "Gob C", "Gob D"])]}, G)
+    c2, j2 = call("POST", B + "/add", {"combatants": [{"name": n, "monster_key": "goblin-warrior", "initiative": 40 - k, "hp": 50} for k, n in enumerate(["Gob A", "Gob B", "Gob C", "Gob D"])]}, G)
     # the fight started on the character's turn (the goblins joined ahead of it): the character dodges, the GM ends the turn
     c3, j3 = call("POST", "/api/action", {"character_id": cid, "action": "dodge"}, P)
     c4, j4 = call("POST", B + "/next", {}, G)
