@@ -70,6 +70,10 @@ Report: "Wizard Scholar accepts any skill for Expertise."
   message all read that table. Remove the per-class code. Test every class that gets Expertise at each level it gets it.
 
 ### Rules that already have one owner
+- **A compendium monster that calls itself he or she** (owner, Nov 25, I-ALDENQA-1): `readAsIt` (`pronouns_2024.go`) reads its he, his, she and her
+  as it and its, once, where the rules' two views are made from the GM's definition (`customMonsterStats`, `metaFromMonster`); the definition keeps the
+  GM's words and the import report names the entries (`personalPronounWarning`). No sentence reader knows about pronouns. Go: `TestItsWording`,
+  `TestPostgresHeAndSheReadAsIt`.
 - **The uses an entry's name gives** (owner, Nov 25): a per-day limit after a clause of its own ("Moon Ray (Gleam Only; 3/Day)") is `perDayRe`
   in the day-use owner (`monsterDayUse`, I-ALDENQA-34); a Legendary Action's cost ("Wing Attack (Costs 2 Actions)") is `legendaryCost`
   (`takeLegendaryAction` spends it and refuses with fewer uses left; `legendaryOptions` offers only what can be paid, I-ALDENQA-19); an entry
