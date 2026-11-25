@@ -5231,6 +5231,9 @@
            "description": "a stat block entry the server only shows: what it does is yours to apply",
            "type": "string"
           },
+          "reminder": {
+           "type": "string"
+          },
           "success": {
            "type": "boolean"
           },
