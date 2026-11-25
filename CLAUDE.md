@@ -1077,7 +1077,7 @@ Add to the owner, never beside it. When you give another rule one owner, add it 
 - **The GUI rework previews** (Matt, Nov 17 and 21): `handleUIPreview` (`cmd/server/ui_preview_2024.go`) serves the saved designs in
   `data/ui_preview/` at `/preview/` (the Nov 21 one at `/preview/gui-2026-11-21/`), frozen data, only where `AGENTRPG_UI_PREVIEW=1`
   (staging); 404 elsewhere. The real pages are built from the layout above. **The Nov 25 mock-up with live data** (owner, Nov 25: "implement what I
-  gave you") is `/preview/gui-2026-11-25/` (`preview_table_2024.go`): the owner's file as it is (`data/preview_table_2024.html`, its Tailwind compiled
+  gave you") is what `/preview/` opens (and `/preview/gui-2026-11-25/`; the first saved design is `/preview/old/`) (`preview_table_2024.go`): the owner's file as it is (`data/preview_table_2024.html`, its Tailwind compiled
   into `data/preview_table_2024.css` from that file), only its demo constants filled from `loadLiveTable` (the Live Table's one loader), `loadStory` and the
   stat blocks; every value HTML-escaped (the mock-up's script writes them as markup); a monster shows its look, never its Hit Points; unread pages,
   bookmarks, pins of characters and the viewer's settings are kept in the browser. Never restyle it: a change to its look is the owner's file. Go:
