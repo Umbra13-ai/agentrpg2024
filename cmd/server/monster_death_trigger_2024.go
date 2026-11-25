@@ -29,15 +29,17 @@ import (
 // on the battle map: characters, companions and the other monsters (a burst can kill another monster and set off its own). Without
 // a battle map or without the monster's token, nothing is rolled and the GM is told to resolve it. The result goes to the
 // campaign's log (its GM-only parts to the GM's notices, as every log line) and, whole, to the GM's notices.
-var deathTriggerRe = regexp.MustCompile(`(?i)\bexplodes when it dies\b`)
+//
+// Any trait whose words say it acts when its creature dies ("explodes when it dies"; "When the darkling dies, ...": owner, Nov 25, 2024 and
+// older stat blocks outside the SRD) is recorded: the server rolls the save when it reads one in the 2024 form, else the GM gets the trait's
+// words at the moment of the death (I-ALDENQA Darkling death traits).
+var deathTriggerRe = regexp.MustCompile(`(?i)\bwhen (?:it|the [a-z'’ -]+?) dies\b`)
 
 // deathTriggerOf: the trait of a stat block that acts on its death, if any.
 func deathTriggerOf(traits []srdMonsterEntry) (srdMonsterEntry, bool) {
 	for _, t := range traits {
 		if deathTriggerRe.MatchString(t.Text) {
-			if _, ok := parseSaveEffect(t.Text); ok {
-				return t, true
-			}
+			return t, true
 		}
 	}
 	return srdMonsterEntry{}, false
@@ -145,12 +147,14 @@ func resolvePendingDeathTriggers() []deathTriggerResult {
 
 // resolveDeathTrigger rolls the trait's saving throw for every creature in its Emanation and records what happened.
 func resolveDeathTrigger(lobby, id int, name, traitName, text string) string {
-	e, _ := parseSaveEffect(text)
+	e, readable := parseSaveEffect(text)
 	e.SourceID = id
 	e.FromUndead = monsterTypeOf(lobby, id) == "undead"
 	source := name + "'s " + traitName
 	var line string
 	switch _, hasMap := activeEncounterMap(lobby); {
+	case !readable:
+		line = fmt.Sprintf("%s dies: its %s acts. Nothing was rolled: the server reads no saving throw in its words. [GM: resolve it: %s]", name, traitName, text) // gm-one-shot: its creature has died; it acts once, now
 	case e.Emanation <= 0:
 		line = fmt.Sprintf("%s dies: its %s acts (%s). The GM resolves it: its area is not an Emanation the server can find.", name, traitName, text)
 	case !hasMap || !monsterOnMap(lobby, id):

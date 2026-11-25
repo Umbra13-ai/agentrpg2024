@@ -88,3 +88,41 @@ func TestPostgresUndeadFortitudeRoutes(t *testing.T) {
 		t.Error("the character's attack never hit the zombie")
 	}
 }
+
+// TestPostgresUndeadFortitudeOnExactDamage (I-ALDENQA-35): the GM's exact damage (POST /api/gm/adjust-monster "damage") is damage, so the
+// zombie it drops to 0 makes the save (DC 5 + the damage); a success leaves 1 Hit Point; Radiant calls for none.
+func TestPostgresUndeadFortitudeOnExactDamage(t *testing.T) {
+	testPostgres(t)
+	gm, _, camp, _, _, _ := companionReactionFixture(t)
+	pgCall(t, "POST", fmt.Sprintf("/api/campaigns/%d/combat/add", camp), gm, map[string]interface{}{"combatants": []map[string]interface{}{
+		{"name": "Exact Shambler", "monster_key": "zombie", "initiative": -900}}})
+	z := monsterIDsByKeyOrName(camp, "Exact Shambler")[0]
+	adjust := func(dtype string) string {
+		_, r := pgCall(t, "POST", "/api/gm/adjust-monster", gm, map[string]interface{}{"campaign_id": camp, "target": "Exact Shambler", "damage": 1, "damage_type": dtype})
+		return fmt.Sprint(r["message"], r["changes"], r["did"], r)
+	}
+	seenSuccess := false
+	for n := 0; n < 30 && !seenSuccess; n++ {
+		setMonsterHP(camp, z, 1)
+		res := adjust("slashing")
+		hp := monsterEntryVitals(camp, z).HP
+		if !strings.Contains(res, "Undead Fortitude") {
+			t.Fatalf("exact damage that dropped the zombie to 0 called for no save (HP %d): %s", hp, res)
+		}
+		if strings.Contains(res, "drops to 1 Hit Point instead") {
+			seenSuccess = true
+			if hp != 1 {
+				t.Errorf("a successful save left %d Hit Points: %s", hp, res)
+			}
+		} else if hp != 0 {
+			t.Errorf("a failed save left %d Hit Points: %s", hp, res)
+		}
+	}
+	if !seenSuccess {
+		t.Error("no successful save in 30 tries at DC 6")
+	}
+	setMonsterHP(camp, z, 1)
+	if res := adjust("radiant"); strings.Contains(res, "Undead Fortitude") || monsterEntryVitals(camp, z).HP != 0 {
+		t.Errorf("Radiant exact damage: HP %d: %s", monsterEntryVitals(camp, z).HP, res)
+	}
+}

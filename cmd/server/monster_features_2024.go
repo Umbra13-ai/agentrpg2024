@@ -77,6 +77,9 @@ var (
 	// Constitution Saving Throw ...") is the GM's, who judges the condition.
 	saveEndAuraRe   = regexp.MustCompile(`^[A-Z][a-z]+ Saving Throw: DC \d+, each (?:creature|enemy)( of the [^ ]+ choice)? in an? (\d+)-foot Emanation originating from the [^ ]+ at the end of the [^ ]+ turns?\b`)
 	legendaryOnceRe = regexp.MustCompile(`can['’]t take this action again until the start of its next turn`)
+	// a Legendary Action that costs more than one use, as its name says ("Wing Attack (Costs 2 Actions)", "Rend (2 Actions)": the older
+	// books; every 2024 Legendary Action costs one): legendaryCost (I-ALDENQA-19)
+	legendaryCostRe = regexp.MustCompile(`(?i)\((?:Costs )?(\d) Actions\)`)
 )
 
 func monsterMetaFor(key string) *monsterMeta {
@@ -264,6 +267,16 @@ func setLastTurnEnded(lobbyID int, marker string, id int) {
 	db.Exec(`UPDATE combat_state SET last_turn_ended = $1, last_turn_ended_id = $2 WHERE lobby_id = $3`, marker, id, lobbyID)
 }
 
+// legendaryCost: the Legendary Action uses an entry spends: the number its name gives, else one.
+func legendaryCost(entryName string) int {
+	if m := legendaryCostRe.FindStringSubmatch(entryName); m != nil {
+		if n, _ := strconv.Atoi(m[1]); n > 1 {
+			return n
+		}
+	}
+	return 1
+}
+
 func findLegendary(meta *monsterMeta, name string) (srdMonsterEntry, bool) {
 	name = strings.ToLower(strings.TrimSpace(name))
 	for _, a := range meta.Legendary {
@@ -320,6 +333,9 @@ func takeLegendaryAction(r *http.Request, lobbyID int, req legendaryRequest, win
 		}
 		return map[string]interface{}{"available": names}, "action_not_found", fmt.Sprintf("%q is not a Legendary Action of %s.", req.Action, name)
 	}
+	if cost := legendaryCost(act.Name); s.LAUsed+cost > total {
+		return nil, "no_uses_left", fmt.Sprintf("%s costs %d Legendary Action uses and %s has %d left; they come back at the start of its turn.", act.Name, cost, name, total-s.LAUsed)
+	}
 	if containsStr(s.LAOnce, act.Name) {
 		return nil, "not_again_yet", fmt.Sprintf("%s can't take %s again until the start of its next turn.", name, act.Name)
 	}
@@ -375,7 +391,7 @@ func takeLegendaryAction(r *http.Request, lobbyID int, req legendaryRequest, win
 		return map[string]interface{}{"combatant": name, "action": act.Name, "result": text, "uses_left": total - s.LAUsed, "uses": total, "preview": true}, "", ""
 	}
 
-	s.LAUsed++
+	s.LAUsed += legendaryCost(act.Name)
 	s.LAWindow = window
 	if legendaryOnceRe.MatchString(act.Text) {
 		s.LAOnce = append(s.LAOnce, act.Name)
@@ -406,8 +422,8 @@ func legendaryOptions(lobbyID int, window string, endingID int) []map[string]int
 		}
 		var acts []map[string]interface{}
 		for _, a := range meta.Legendary {
-			if !containsStr(s.LAOnce, a.Name) {
-				acts = append(acts, map[string]interface{}{"name": a.Name, "text": a.Text})
+			if !containsStr(s.LAOnce, a.Name) && s.LAUsed+legendaryCost(a.Name) <= total { // one it can't afford now isn't offered
+				acts = append(acts, map[string]interface{}{"name": a.Name, "text": a.Text, "cost": legendaryCost(a.Name)})
 			}
 		}
 		out = append(out, map[string]interface{}{"combatant_id": id, "name": e["name"], "uses_left": total - s.LAUsed, "actions": acts,
@@ -1226,8 +1242,32 @@ func resolveMonsterActionByNameAt(r *http.Request, lobbyID int, point []int, mon
 }
 
 // monsterEntryRefusal: why the monster can't use this entry now (a Recharge entry not recharged, the monster Incapacitated), or "".
+// entryUnlessRe: an entry its creature can't use while it has a condition ("... each creature in a 120-foot-long, 5-foot-wide Line, unless the
+// jabberwock has the Blinded condition": owner, Nov 25, 2024 and older stat blocks outside the SRD; I-ALDENQA-27). A gate on the target
+// ("unless the target has ...") is not this one.
+var entryUnlessRe = regexp.MustCompile(`(?i)\bunless (it|the [a-z'’ -]+?) has the ([a-z]+) condition\b`)
+
+// entryConditionGate: the condition its creature has now that keeps it from using the entry, or "".
+func entryConditionGate(lobbyID, id int, text string) string {
+	if i := strings.Index(text, "Failure:"); i >= 0 {
+		text = text[:i] // the entry's own setup, never what its failure does
+	}
+	for _, m := range entryUnlessRe.FindAllStringSubmatch(text, -1) {
+		if strings.EqualFold(m[1], "the target") {
+			continue
+		}
+		if cond := strings.ToLower(m[2]); hasCondMarker(lobbyID, id, cond) {
+			return cond
+		}
+	}
+	return ""
+}
+
 func monsterEntryRefusal(lobbyID, id int, entry srdMonsterEntry) string {
 	base := stripUsage(entry.Name)
+	if cond := entryConditionGate(lobbyID, id, entry.Text); cond != "" {
+		return fmt.Sprintf("%s can't use %s while it has the %s condition.", creatureName(lobbyID, id), base, titleCase(cond))
+	}
 	if rechargeRe.MatchString(entry.Name) && containsStr(loadMonsterState(lobbyID, id).RechargeSpent, base) {
 		return fmt.Sprintf("%s's %s hasn't recharged yet (it rolls at the start of each of its turns).", creatureName(lobbyID, id), base)
 	}

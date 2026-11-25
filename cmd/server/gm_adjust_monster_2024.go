@@ -27,7 +27,7 @@ import (
 
 // handleGMAdjustMonster godoc
 // @Summary GM: change anything about a monster in the encounter
-// @Description The GM is the final word: exact damage (resistances only with apply_resistances), healing, HP, max HP, Temporary Hit Points, AC, conditions with rounds or a repeated save (set even on an immune creature), conditions removed ("all"), riders ("disadvantage_next_attack": its next attack roll has Disadvantage, as Vicious Mockery), initiative (the turn order is re-sorted, the current turn kept), battle map position, name, or removal from the encounter. target is the monster's name ("Kobold 4") or negative id. Each change goes in the campaign feed with the note. Add monsters with POST /api/campaigns/{id}/combat/add.
+// @Description The GM is the final word: exact damage (resistances only with apply_resistances; Undead Fortitude still makes its save when it drops a zombie to 0), healing, HP, max HP, Temporary Hit Points, AC, conditions with rounds or a repeated save (set even on an immune creature), conditions removed ("all"), riders ("disadvantage_next_attack": its next attack roll has Disadvantage, as Vicious Mockery), initiative (the turn order is re-sorted, the current turn kept), battle map position, name, or removal from the encounter. target is the monster's name ("Kobold 4") or negative id. Each change goes in the campaign feed with the note. Add monsters with POST /api/campaigns/{id}/combat/add.
 // @Tags GM
 // @Accept json
 // @Produce json
@@ -153,11 +153,13 @@ func handleGMAdjustMonster(w http.ResponseWriter, r *http.Request) {
 			}
 			did = append(did, strings.TrimSuffix(text, "."))
 		} else {
-			if _, err := loseMonsterHP(campaignID, tid, *req.Damage, dtype); err != nil { // exact: Temporary Hit Points first
+			dealt, fortitude := exactDamageFortitude(campaignID, tid, *req.Damage, dtype) // damage is damage: Undead Fortitude has its save (I-ALDENQA-35)
+			if _, err := loseMonsterHP(campaignID, tid, dealt, dtype); err != nil {       // exact: Temporary Hit Points first
 				writeJSONStatus(w, http.StatusInternalServerError, map[string]interface{}{"error": "monster_damage_failed", "message": "The monster damage could not be applied."})
 				return
 			}
 			text := fmt.Sprintf("%s takes %d%s damage (exact)", name, *req.Damage, strings.TrimRight(" "+dtype, " "))
+			text += strings.TrimSuffix(fortitude, ".")
 			text += wakeOnDamage(campaignID, tid, name)
 			did = append(did, text)
 		}

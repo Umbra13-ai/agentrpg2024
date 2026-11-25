@@ -478,13 +478,14 @@ func sphereOfAnnihilation(charID int, it invItem, req itemCastReq, description s
 				continue
 			}
 			got, _ := adjustMonsterDamage(fmt.Sprint(e["monster_key"]), "force", dmg)
-			r, err := loseMonsterHP(lobby, t, got, "force") // the monster Hit Point owner (monster_hp_2024.go)
+			dealt, fortitude := exactDamageFortitude(lobby, t, got, "force") // Undead Fortitude has its save (dodge_2024.go)
+			r, err := loseMonsterHP(lobby, t, dealt, "force")                // the monster Hit Point owner (monster_hp_2024.go)
 			if err != nil {
 				addGMNotice(lobby, fmt.Sprintf("The Sphere's damage to %s couldn't be applied. Review the hit before continuing.", mname))
 				continue
 			}
 			hp := r.After.HP
-			out += fmt.Sprintf(" %s: the sphere touches it for %d Force damage", sv.LineAgainst(mname), got)
+			out += fmt.Sprintf(" %s: the sphere touches it for %d Force damage%s", sv.LineAgainst(mname), got, strings.TrimSuffix(fortitude, "."))
 			if hp == 0 {
 				out += ", and it is obliterated (its possessions stay behind; no other remains)."
 			} else {

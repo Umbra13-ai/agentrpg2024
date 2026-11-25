@@ -165,9 +165,10 @@ func alternationVariants(pattern string) (variants []string, branchOf []string) 
 }
 
 // branchWitnesses: a branch kept for safety with no SRD wording, and the invented sentence a test feeds it (the sentence must be in a
-// _test.go file and the branch's variant must match it). Only refusals belong here: a branch that keeps the server from applying
-// something, never one that applies a rule.
+// _test.go file and the branch's variant must match it). Owner, Nov 25: a rule may serve the wording of 2024 and older stat blocks outside
+// the SRD, with an invented sentence of the test that uses it (never a book's own words).
 var branchWitnesses = map[string]map[string]string{
+	"deathTriggerRe": {"the [a-z'’ -]+?": "When the test glimmer dies, light flashes from it."},
 	"hitRiderChoiceRe": {
 		"choice of":             "the target has the brute's choice of (A) the Charmed condition",
 		"determined by rolling": "the target has a condition determined by rolling 1d4",

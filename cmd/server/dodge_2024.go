@@ -3,6 +3,8 @@ package main
 import (
 	"fmt"
 	"strings"
+
+	"github.com/agentrpg/agentrpg/game"
 )
 
 // Dodge (SRD 5.2.1): "Until the start of your next turn, any attack roll made against you has Disadvantage if you can see the
@@ -54,7 +56,8 @@ func undeadFortitude(lobbyID int, e map[string]interface{}, hp, taken int, dtype
 
 // undeadFortitudeFor is the same for the places that hold the monster's id and Hit Points and not its turn-order entry. It is
 // called wherever damage can take a monster to 0 Hit Points: a weapon hit and a Graze (attack_target.go), every spell, item and
-// feature that deals damage (damageMonster, cleric_2024.go), and a companion's attack (companions_2024.go).
+// feature that deals damage (damageMonster, cleric_2024.go), a companion's attack (companions_2024.go), and exact damage
+// (exactDamageFortitude: the GM's adjust-monster, the Sphere of Annihilation; I-ALDENQA-35).
 func undeadFortitudeFor(lobbyID, id int, name string, hpBefore, hp, taken int, dtype string, crit bool) (int, string) {
 	if hp > 0 || taken <= 0 || id >= 0 || hpBefore <= 0 || crit || strings.EqualFold(strings.TrimSpace(dtype), "radiant") {
 		return hp, ""
@@ -86,4 +89,26 @@ func endUntilNextTurnIn(campaignID int) {
 	for _, id := range ids {
 		endUntilNextTurn(id)
 	}
+}
+
+// exactDamageFortitude: the damage to deal exactly (loseMonsterHP, Temporary Hit Points first) once Undead Fortitude has had its say: when
+// the damage would leave the monster at 0, the save is rolled and a success leaves it 1 Hit Point (the damage dealt is cut to that).
+func exactDamageFortitude(lobbyID, id, amount int, dtype string) (int, string) {
+	f, err := readFight(db, lobbyID)
+	if err != nil {
+		return amount, ""
+	}
+	_, e := f.entry(id)
+	if e == nil {
+		return amount, ""
+	}
+	v := monsterVitals(e)
+	if r := game.TakeDamage(v, amount, false, false); r.After.HP > 0 {
+		return amount, ""
+	}
+	hp, note := undeadFortitudeFor(lobbyID, id, fmt.Sprint(e["name"]), v.HP, 0, amount, dtype, false)
+	if hp == 1 {
+		return v.Temp + v.HP - 1, note
+	}
+	return amount, note
 }

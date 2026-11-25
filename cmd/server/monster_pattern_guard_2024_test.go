@@ -59,6 +59,9 @@ type patternWitness struct {
 }
 
 var patternWitnesses = map[string]patternWitness{
+	"entryUnlessRe": {Invented: "unless the test wyrm has the Blinded condition", Test: "TestPostgresEntryUnlessCondition"},
+	// no SRD 5.2.1 Legendary Action costs more than one use (owner, Nov 25: 2024 and older mechanics outside the SRD are allowed)
+	"legendaryCostRe": {Invented: "Wing Attack (Costs 2 Actions)", Test: "TestLegendaryActionCost"},
 	// the damage owner hands these the words after an amount ("... Slashing damage" + tail)
 	"advantageOnlyRe": {Monster: "Goblin Warrior", Entry: "Scimitar", Fragment: "if the attack roll had Advantage."},
 	// an entry that is only "Each target takes N damage": no SRD 5.2.1 entry is (owner to decide whether the whole-entry rule stays)

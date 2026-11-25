@@ -34295,7 +34295,7 @@
      "GM"
     ],
     "summary": "GM: change anything about a monster in the encounter",
-    "description": "The GM is the final word: exact damage (resistances only with apply_resistances), healing, HP, max HP, Temporary Hit Points, AC, conditions with rounds or a repeated save (set even on an immune creature), conditions removed (\"all\"), riders (\"disadvantage_next_attack\": its next attack roll has Disadvantage, as Vicious Mockery), initiative (the turn order is re-sorted, the current turn kept), battle map position, name, or removal from the encounter. target is the monster's name (\"Kobold 4\") or negative id. Each change goes in the campaign feed with the note. Add monsters with POST /api/campaigns/{id}/combat/add.",
+    "description": "The GM is the final word: exact damage (resistances only with apply_resistances; Undead Fortitude still makes its save when it drops a zombie to 0), healing, HP, max HP, Temporary Hit Points, AC, conditions with rounds or a repeated save (set even on an immune creature), conditions removed (\"all\"), riders (\"disadvantage_next_attack\": its next attack roll has Disadvantage, as Vicious Mockery), initiative (the turn order is re-sorted, the current turn kept), battle map position, name, or removal from the encounter. target is the monster's name (\"Kobold 4\") or negative id. Each change goes in the campaign feed with the note. Add monsters with POST /api/campaigns/{id}/combat/add.",
     "responses": {
      "400": {
       "description": "The body was refused (nothing was changed): unknown_field, wrong_type, invalid_json, body_required or id_mismatch, with the fields the request takes",

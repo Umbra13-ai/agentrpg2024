@@ -121,3 +121,41 @@ func TestPostgresImportedSpellcastingOnTheRoute(t *testing.T) {
 		t.Errorf("Polymorph on itself rolled a save: %s", res)
 	}
 }
+
+// TestDayLimitAfterAClause (I-ALDENQA-34): a use limit that follows a clause of its own in an entry's name ("Moon Ray (Gleam Only; 3/Day)")
+// is counted like a plain one, by the one day-use owner every route asks.
+func TestDayLimitAfterAClause(t *testing.T) {
+	for _, c := range []struct {
+		name, key string
+		limit     int
+	}{
+		{"Moon Ray (Gleam Only; 3/Day)", "action:moon ray", 3},
+		{"Spores (1/Day)", "action:spores", 1},
+		{"Sun Ray (Glister Only; 3/day)", "action:sun ray", 3},
+		{"Bite (Bat or Vampire Form Only)", "", 0},
+	} {
+		if k, l := monsterDayUse(srdMonsterEntry{Name: c.name}, ""); k != c.key || l != c.limit {
+			t.Errorf("%q: key %q limit %d, want %q %d", c.name, k, l, c.key, c.limit)
+		}
+	}
+}
+
+// TestPostgresEntryUnlessCondition (I-ALDENQA-27): an entry its creature can't use while it has a condition ("..., unless the test wyrm has the
+// Blinded condition.") is refused before anything is rolled or spent while it has it, and runs once it doesn't.
+func TestPostgresEntryUnlessCondition(t *testing.T) {
+	testPostgres(t)
+	gm, _, camp, hero, wyrm := earlyRulesFixture(t, "Test Wyrm", []srdMonsterEntry{{Name: "Fire Line",
+		Text: "Dexterity Saving Throw: DC 18, each creature in a 60-foot-long, 5-foot-wide Line, unless the test wyrm has the Blinded condition. Failure: 10 (3d6) Fire damage. Success: Half damage."}})
+	var before, after int
+	db.QueryRow(`SELECT hp FROM characters WHERE id=$1`, hero).Scan(&before)
+	applyCondition(camp, wyrm, "blinded", "test", 10, "", 0)
+	c, line := narrateAs(t, gm, camp, wyrm, "Fire Line", fmt.Sprint(hero), "")
+	db.QueryRow(`SELECT hp FROM characters WHERE id=$1`, hero).Scan(&after)
+	if c != 409 || !strings.Contains(line, "can't use Fire Line while it has the Blinded condition") || after != before {
+		t.Errorf("a blinded wyrm's Fire Line: %d (hp %d -> %d) %s", c, before, after, line)
+	}
+	removeConditionsWhere(camp, wyrm, func(r conditionRecord) bool { return r.Condition == "blinded" })
+	if c, line := narrateAs(t, gm, camp, wyrm, "Fire Line", fmt.Sprint(hero), ""); c != 200 || !strings.Contains(line, "saving throw") {
+		t.Errorf("the wyrm's Fire Line once it sees: %d %s", c, line)
+	}
+}

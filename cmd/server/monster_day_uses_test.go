@@ -588,3 +588,59 @@ func TestPostgresRestRechargeActions(t *testing.T) {
 		t.Errorf("an unknown rest: %d", c)
 	}
 }
+
+// TestLegendaryActionCost (I-ALDENQA-19): a Legendary Action whose name gives a cost ("Wing Attack (Costs 2 Actions)", "Rend (3 Actions)")
+// spends that many uses, is refused when fewer are left, and isn't offered then; any other costs one.
+func TestLegendaryActionCost(t *testing.T) {
+	for name, want := range map[string]int{"Wing Attack (Costs 2 Actions)": 2, "Rend (3 Actions)": 3, "Tail Swipe": 1, "Dive (1/Day)": 1} {
+		if got := legendaryCost(name); got != want {
+			t.Errorf("legendaryCost(%q) = %d, want %d", name, got, want)
+		}
+	}
+	testPostgres(t)
+	_, gm := pgAgent(t, "legend cost gm")
+	_, player := pgAgent(t, "legend cost player")
+	_, j := pgCall(t, "POST", "/api/campaigns", gm, map[string]interface{}{"name": "Legend cost", "max_players": 2})
+	camp := int(j["campaign_id"].(float64))
+	m := compendiumFixture()
+	m.Name = "Cost Wyrm"
+	m.Actions = []srdMonsterEntry{{Name: "Bite", Text: "Melee Attack Roll: +9, reach 5 ft. Hit: 7 (2d6) Piercing damage."}}
+	m.Legendary = []srdMonsterEntry{{Name: "Wing Attack (Costs 2 Actions)", Text: "The wyrm makes one Bite attack."}, {Name: "Snap", Text: "The wyrm makes one Bite attack."}}
+	c, j := pgCall(t, "POST", "/api/gm/compendium/monsters", gm, map[string]interface{}{"source_note": "invented test", "monsters": []srdMonster2024{m}})
+	if c != 201 {
+		t.Fatalf("import %d %v", c, j)
+	}
+	key := j["monsters"].([]interface{})[0].(map[string]interface{})["monster_key"].(string)
+	pgExec(t, `UPDATE lobbies SET status='active',schedule_state='off' WHERE id=$1`, camp)
+	pgFight(t, camp)
+	_, j = pgCall(t, "POST", "/api/characters", player, pgRogue(fmt.Sprintf("Cost target %d", camp)))
+	char := int(j["character_id"].(float64))
+	pgExec(t, `UPDATE characters SET lobby_id=$1,hp=1000,max_hp=1000,ac=1 WHERE id=$2`, camp, char)
+	pgCall(t, "POST", fmt.Sprintf("/api/campaigns/%d/combat/add", camp), gm, map[string]interface{}{"combatants": []map[string]interface{}{{"name": "Cost Wyrm", "monster_key": key, "initiative": 1}}})
+	id := firstMonster(t, camp, "Cost Wyrm")
+	request := httptest.NewRequest("POST", "/api/gm/legendary-action", nil)
+	take := func(action, window string) string {
+		_, code, msg := takeLegendaryAction(request, camp, legendaryRequest{CombatantID: id, Action: action, Target: fmt.Sprint(char)}, window, char)
+		return code + " " + msg
+	}
+	total, _ := legendaryUseTotals(monsterMetaFor(key), loadMonsterState(camp, id))
+	if total != 3 {
+		t.Fatalf("the fixture's uses: %d, want 3", total)
+	}
+	if got := take("Wing Attack", "1:1"); strings.TrimSpace(got) != "" || loadMonsterState(camp, id).LAUsed != 2 {
+		t.Fatalf("Wing Attack with 3 left: %q, used %d (want 2)", got, loadMonsterState(camp, id).LAUsed)
+	}
+	if got := take("Wing Attack", "1:2"); !strings.Contains(got, "no_uses_left") || loadMonsterState(camp, id).LAUsed != 2 {
+		t.Errorf("Wing Attack with 1 left: %q, used %d", got, loadMonsterState(camp, id).LAUsed)
+	}
+	for _, o := range legendaryOptions(camp, "1:3", char) {
+		for _, a := range o["actions"].([]map[string]interface{}) {
+			if strings.HasPrefix(fmt.Sprint(a["name"]), "Wing Attack") {
+				t.Errorf("Wing Attack is offered with 1 use left: %v", o)
+			}
+		}
+	}
+	if got := take("Snap", "1:3"); strings.TrimSpace(got) != "" || loadMonsterState(camp, id).LAUsed != 3 {
+		t.Errorf("Snap with 1 left: %q, used %d", got, loadMonsterState(camp, id).LAUsed)
+	}
+}

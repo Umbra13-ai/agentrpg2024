@@ -166,3 +166,65 @@ func TestTraitReportSaysWhatTheServerDoes(t *testing.T) {
 		}
 	}
 }
+
+// TestPostgresDeathTraitsOutsideTheSRD (Darkling death traits): a trait that acts "when the <creature> dies" is set off by the death; its
+// 2024-form saving throw is rolled on the battle map (Blinded until the end of the target's next turn), and words the server can't read go
+// to the GM at the moment of the death.
+func TestPostgresDeathTraitsOutsideTheSRD(t *testing.T) {
+	testPostgres(t)
+	gm, _, camp, charID, _, _ := companionReactionFixture(t)
+	mk := func(name, text string) srdMonster2024 {
+		m := compendiumFixture()
+		m.Name, m.Type, m.Legendary, m.LegendaryIn = name, "Fey", nil, ""
+		m.Traits = []srdMonsterEntry{{Name: "Death Flash", Text: text}}
+		return m
+	}
+	readable := mk("Test Glimmer", "When the test glimmer dies, light flashes from it. Constitution Saving Throw: DC 40, each creature in a 10-foot Emanation originating from the glimmer. Failure: The target has the Blinded condition until the end of its next turn.")
+	unread := mk("Test Old Glimmer", "When the test glimmer dies, light flashes from it, and each creature that sees it must win a contest of wills or be dazzled.")
+	if _, ok := deathTriggerOf(readable.Traits); !ok {
+		t.Fatal("a 'when the <creature> dies' trait is not a death trigger")
+	}
+	status, imported := pgCall(t, "POST", "/api/gm/compendium/monsters", gm, map[string]interface{}{"source_note": "invented death-trait fixture",
+		"monsters": []srdMonster2024{readable, unread}})
+	if status != 201 {
+		t.Fatalf("import: %d %v", status, imported)
+	}
+	keys := map[string]string{}
+	for _, m := range imported["monsters"].([]interface{}) {
+		mm := m.(map[string]interface{})
+		keys[fmt.Sprint(mm["name"])] = fmt.Sprint(mm["monster_key"])
+		t.Cleanup(func() { db.Exec(`DELETE FROM custom_monsters WHERE key=$1`, fmt.Sprint(mm["monster_key"])) })
+	}
+	cp := fmt.Sprintf("/api/campaigns/%d", camp)
+	pgCall(t, "POST", cp+"/combat/add", gm, map[string]interface{}{"combatants": []map[string]interface{}{
+		{"name": "Test Glimmer", "monster_key": keys["Test Glimmer"], "hp": 5, "ac": 1, "initiative": -300},
+		{"name": "Test Old Glimmer", "monster_key": keys["Test Old Glimmer"], "hp": 5, "ac": 1, "initiative": -301}}})
+	glimmer := monsterIDsByKeyOrName(camp, "Test Glimmer")[0]
+	pgExec(t, `UPDATE characters SET hp=1000,max_hp=1000,con=1 WHERE id=$1`, charID)
+	_, state := pgCall(t, "GET", cp+"/battle-map", gm, nil)
+	req := map[string]interface{}{"map": encounterMap{Grid: []string{"......"}, Tokens: []mapToken{
+		{ID: glimmer, Name: "Test Glimmer", Position: mapSquare{0, 0}, Size: 1}, {ID: charID, Name: "hero", Position: mapSquare{1, 0}, Size: 1}}}, "forced_movement": true}
+	if rev, ok := state["revision"].(string); ok {
+		req["confirmation"] = rev
+	}
+	if c, r := pgCall(t, "PUT", cp+"/battle-map", gm, req); c != 200 {
+		t.Fatalf("put map: %d %v", c, r)
+	}
+	for _, name := range []string{"Test Glimmer", "Test Old Glimmer"} {
+		if c, r := pgCall(t, "POST", "/api/gm/adjust-monster", gm, map[string]interface{}{"campaign_id": camp, "target": name, "hp": 0}); c != 200 {
+			t.Fatalf("adjust-monster %s: %d %v", name, c, r)
+		}
+	}
+	drainDeathTriggers() // the request resolved them already (withProtections); any left are resolved now
+	var lines string
+	recs, _ := readActions(actionFilter{lobby: camp, limit: 50})
+	for _, a := range recs {
+		lines += a.Description + " " + a.Result + "\n"
+	}
+	if rs := recordsOf(camp, charID, "blinded"); len(rs) != 1 {
+		t.Errorf("the readable death flash didn't blind the hero within 10 feet: %v\n%s", rs, lines)
+	}
+	if !strings.Contains(lines, "Test Old Glimmer dies: its Death Flash acts. Nothing was rolled") { // its words are the GM's notice (the log keeps them from players)
+		t.Errorf("the unread death trait wasn't handed to the GM at the death:\n%s", lines)
+	}
+}
