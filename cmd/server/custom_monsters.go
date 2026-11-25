@@ -189,6 +189,7 @@ func validateCustomMonster(m srdMonster2024) string {
 // customMonsterStats adapts the same structured 2024 input to the legacy database stat-block columns.
 // Complex action text remains subject to the existing engine's parsers and GM adjudication.
 func customMonsterStats(key string, m srdMonster2024) map[string]interface{} {
+	m = readAsIt(m) // the play rows read a creature called he or she as it (pronouns_2024.go)
 	speed, _ := strconv.Atoi(speedNumRe.FindString(m.Speed))
 	hitDice := ""
 	if parts := strings.FieldsFunc(m.HPFormula, func(r rune) bool { return r == '+' || r == '-' }); len(parts) > 0 {

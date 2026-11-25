@@ -9,7 +9,6 @@ package main
 import (
 	"fmt"
 	"net/http"
-	"regexp"
 	"strings"
 
 	"github.com/agentrpg/agentrpg/game"
@@ -85,12 +84,7 @@ func customMonsterWarnings(m srdMonster2024) []string {
 	return warnings
 }
 
-// personalPronounRe: "he", "his", "she", "her" ... in an entry. The SRD calls every creature "it" ("until the start of its next turn"), and the
-// server reads that wording only, so a rule that reads a duration or a target misses a sentence written with he or she (I-ALDENQA-1: "Until
-// the start of his next turn" was handed to the GM but never listed as an open item). Read to warn, never as a rule.
-var personalPronounRe = regexp.MustCompile(`(?i)\b(he|him|his|himself|she|her|hers|herself)\b`)
-
-// personalPronounWarning: the entries that call the creature he or she, with what to write instead.
+// personalPronounWarning: the entries that call the creature he or she: the server reads them as it and its (readAsIt), so the GM knows.
 func personalPronounWarning(m srdMonster2024) string {
 	var named []string
 	for _, group := range [][]srdMonsterEntry{m.Traits, m.Actions, m.BonusActions, m.Reactions, m.Legendary} {
@@ -103,9 +97,9 @@ func personalPronounWarning(m srdMonster2024) string {
 	if len(named) == 0 {
 		return ""
 	}
-	return "These entries say he or she: " + strings.Join(named, ", ") + ". The server reads the SRD's wording, which calls every creature \"it\" " +
-		"(\"until the start of its next turn\", \"the target\"), so a sentence written with he or she is yours to run in play and its duration " +
-		"is not listed as an open item. Write it and its (or the creature's name) and preview again."
+	return "These entries say he or she: " + strings.Join(named, ", ") + ". The rules read the creature's own he, his, she and her as it and its " +
+		"(\"until the start of his next turn\" is read as \"until the start of its next turn\"); your text stays as you wrote it. A he or she that " +
+		"means another creature is read the same way: name that creature instead."
 }
 
 // customMonsterReport: the notes, warnings and summary of one monster; with entries true, every entry's sentences too.

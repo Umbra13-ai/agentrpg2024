@@ -1433,6 +1433,7 @@ func resolveMonsterActionByName(r *http.Request, lobbyID int, monster, action, t
 }
 
 func metaFromMonster(key string, m srdMonster2024) *monsterMeta {
+	m = readAsIt(m) // a creature called he or she is read as it (pronouns_2024.go)
 	mm := &monsterMeta{Key: key, Name: m.Name, Senses: m.Senses, Traits: m.Traits, Actions: m.Actions, BonusActions: m.BonusActions,
 		Reactions: m.Reactions, Legendary: m.Legendary, XP: m.XP, XPLair: m.XPLair}
 	if x := laUsesRe.FindStringSubmatch(m.LegendaryIn); x != nil {
