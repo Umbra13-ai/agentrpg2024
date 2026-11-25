@@ -228,6 +228,119 @@
       store.set("theme", state.theme);
       store.set("time_format", state.timeFormat);
       store.set("timezone", state.timezone);
+      store.set("tts_rate", TTS.rate);
+      store.set("tts_names", TTS.names);
+      store.set("tts_rolls", TTS.rolls);
+      store.set("tts_voice", TTS.voice);
+    }
+
+    // Listen (added to the mock-up at the owner's request, Nov 25): the browser's own voice reads the Chronicle's story text, page after page.
+    // Only the story is spoken (the speaker's name when chosen, a roll when chosen): never a button, a time or a menu.
+    const TTS = {
+      ok: "speechSynthesis" in window && "SpeechSynthesisUtterance" in window,
+      on: false, paused: false, gen: 0, index: -1,
+      rate: store.get("tts_rate", 1), names: store.get("tts_names", true), rolls: store.get("tts_rolls", false), voice: store.get("tts_voice", "")
+    };
+    function ttsPlain(html) { const t = document.createElement("textarea"); t.innerHTML = html || ""; return t.value; }
+    function ttsChunks(text) {
+      // short pieces: some browsers stop a long utterance after about fifteen seconds
+      const out = [];
+      (text.match(/[^.!?…]+[.!?…]*["”')\]]*\s*/g) || [text]).forEach(sentence => {
+        let rest = sentence.trim();
+        while (rest.length > 220) {
+          let cut = rest.lastIndexOf(",", 220);
+          if (cut < 80) cut = rest.lastIndexOf(" ", 220);
+          if (cut < 1) cut = 220;
+          out.push(rest.slice(0, cut + 1).trim());
+          rest = rest.slice(cut + 1).trim();
+        }
+        if (rest) out.push(rest);
+      });
+      return out.filter(Boolean);
+    }
+    function ttsVoices() {
+      return (TTS.ok ? speechSynthesis.getVoices() : []).filter(v => /^en/i.test(v.lang));
+    }
+    function ttsPlayPage() {
+      const item = CHRONICLE_PAGES[state.pageIndex];
+      const gen = ++TTS.gen;
+      speechSynthesis.cancel();
+      if (!item) { ttsStop(); return; }
+      TTS.index = state.pageIndex;
+      TTS.paused = false;
+      const parts = [];
+      if (TTS.names) {
+        const who = ttsPlain(item.speakerName);
+        parts.push(item.speakerId === "narrator" ? "Narrator." : who + ".");
+      }
+      if (TTS.rolls && item.roll) parts.push("Roll: " + ttsPlain(item.roll) + ".");
+      ttsChunks(ttsPlain(item.text)).forEach(c => parts.push(c));
+      const voice = ttsVoices().find(v => v.voiceURI === TTS.voice);
+      let i = 0;
+      const next = () => {
+        if (gen !== TTS.gen || !TTS.on) return;
+        if (i >= parts.length) {
+          if (state.pageIndex < CHRONICLE_PAGES.length - 1) {
+            state.pageIndex++;
+            ttsPlayPage();
+            render();
+          } else {
+            ttsStop();
+          }
+          return;
+        }
+        const u = new SpeechSynthesisUtterance(parts[i++]);
+        u.rate = TTS.rate;
+        if (voice) { u.voice = voice; u.lang = voice.lang; }
+        u.onend = next;
+        u.onerror = (ev) => { if (gen === TTS.gen && ev.error !== "interrupted" && ev.error !== "canceled") ttsStop(); };
+        speechSynthesis.speak(u);
+      };
+      next();
+    }
+    function ttsStart() {
+      if (!TTS.ok) return;
+      state.readerMode = "flip";
+      TTS.on = true;
+      ttsPlayPage();
+      render();
+    }
+    function ttsStop() {
+      TTS.on = false; TTS.paused = false; TTS.gen++; TTS.index = -1;
+      if (TTS.ok) speechSynthesis.cancel();
+      render();
+    }
+    function ttsBar() {
+      if (!TTS.ok) return "";
+      if (!TTS.on) {
+        return `<button id="btn-listen" type="button" class="w-full px-3 py-1.5 rounded-lg border border-[#d4a853]/60 text-[11px] font-semibold text-theme-gold-bright hover:bg-[#d4a853]/10">▶ Listen from this page</button>`;
+      }
+      const chip = (on) => on ? 'border-[#d4a853] bg-[#d4a853]/15 text-theme-gold-bright' : 'border-slate-500/30 text-theme-muted';
+      const voices = ttsVoices();
+      return `
+        <div class="elevated-card rounded-xl border p-2.5 space-y-2">
+          <div class="flex items-center gap-1.5">
+            <button id="btn-tts-pause" type="button" class="flex-1 px-2.5 py-1.5 rounded-lg bg-[#d4a853] text-[#0b0e16] text-[11px] font-bold">${TTS.paused ? '▶ Resume' : '⏸ Pause'}</button>
+            <button id="btn-tts-stop" type="button" class="flex-1 px-2.5 py-1.5 rounded-lg border border-slate-500/30 text-[11px] font-semibold text-theme-main">■ Stop</button>
+          </div>
+          <div class="flex items-center gap-1 text-[11px]">
+            <span class="text-theme-muted mr-1">Speed</span>
+            ${[0.8, 1, 1.25, 1.5].map(r => `<button type="button" data-tts-rate="${r}" class="px-2 py-1 rounded-lg border ${chip(TTS.rate === r)}">${r}×</button>`).join("")}
+          </div>
+          <div class="flex items-center gap-1.5 text-[11px]">
+            <button type="button" data-tts-toggle="names" class="px-2 py-1 rounded-lg border ${chip(TTS.names)}">Say who speaks</button>
+            <button type="button" data-tts-toggle="rolls" class="px-2 py-1 rounded-lg border ${chip(TTS.rolls)}">Read rolls</button>
+          </div>
+          ${voices.length > 1 ? `
+          <select id="tts-voice" aria-label="Voice" class="w-full px-2 py-1.5 rounded-lg border border-slate-500/30 bg-transparent text-[11px] text-theme-main">
+            <option value="">Default voice</option>
+            ${voices.map(v => `<option value="${v.voiceURI}" ${v.voiceURI === TTS.voice ? 'selected' : ''}>${v.name} (${v.lang})</option>`).join("")}
+          </select>` : ""}
+        </div>`;
+    }
+    if (TTS.ok) {
+      speechSynthesis.addEventListener("voiceschanged", () => { if (TTS.on) render(); });
+      window.addEventListener("pagehide", () => speechSynthesis.cancel());
     }
 
     const mainEl = document.getElementById("main-content");
@@ -511,6 +624,7 @@
                   </div>
                 </div>
               </div>
+              ${ttsBar()}
             </div>
 
             <div class="mt-3 h-1 w-full rounded-full bg-slate-500/20 overflow-hidden">
@@ -774,6 +888,7 @@
     }
 
     function render() {
+      if (TTS.on && TTS.index !== state.pageIndex) ttsPlayPage(); // the reader turned the page: read that one
       saveState();
       applyTheme();
       updateNavHighlight();
@@ -931,6 +1046,18 @@
         return;
       }
 
+      if (e.target.id === "btn-listen") { ttsStart(); return; }
+      if (e.target.id === "btn-tts-stop") { ttsStop(); return; }
+      if (e.target.id === "btn-tts-pause") {
+        if (TTS.paused) { speechSynthesis.resume(); TTS.paused = false; } else { speechSynthesis.pause(); TTS.paused = true; }
+        render();
+        return;
+      }
+      const ttsRateBtn = e.target.closest("[data-tts-rate]");
+      if (ttsRateBtn) { TTS.rate = Number(ttsRateBtn.dataset.ttsRate); if (TTS.on) ttsPlayPage(); render(); return; }
+      const ttsToggleBtn = e.target.closest("[data-tts-toggle]");
+      if (ttsToggleBtn) { TTS[ttsToggleBtn.dataset.ttsToggle] = !TTS[ttsToggleBtn.dataset.ttsToggle]; if (TTS.on) ttsPlayPage(); render(); return; }
+
       if (e.target.id === "btn-see-latest") {
         state.readerMode = "flip";
         state.pageIndex = CHRONICLE_PAGES.length - 1;
@@ -1044,6 +1171,10 @@
         render();
         return;
       }
+    });
+
+    document.addEventListener("change", (e) => {
+      if (e.target.id === "tts-voice") { TTS.voice = e.target.value; if (TTS.on) ttsPlayPage(); render(); }
     });
 
     document.addEventListener("input", (e) => {
