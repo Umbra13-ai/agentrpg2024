@@ -112,7 +112,9 @@ func shortScene(full map[string]interface{}, since []actionRecord, after string)
 			inList = true
 		}
 	}
-	if !inList { // the newest narration came before the character's last action: say it, it is still the scene
+	if inList { // the list holds it: say where it is, so a reader of scene.gm_says never finds the key empty without a word (I-THISTLE-9)
+		scene["latest_narration_in"] = "since_your_last_action"
+	} else { // the newest narration came before the character's last action: say it, it is still the scene
 		for _, k := range []string{"gm_says", "gm_says_at", "gm_says_round_name", "gm_says_appearing"} {
 			if v, ok := full[k]; ok && !nothingToSay(v) {
 				scene[k] = v

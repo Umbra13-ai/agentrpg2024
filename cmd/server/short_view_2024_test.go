@@ -61,6 +61,9 @@ func TestShortTurnIsBuiltNotTrimmed(t *testing.T) {
 	if scene["gm_says"] != nil {
 		t.Error("gm_says repeats the newest narration the list holds")
 	}
+	if scene["latest_narration_in"] != "since_your_last_action" { // a reader of scene.gm_says is told where the newest narration went (I-THISTLE-9)
+		t.Errorf("the short view doesn't say where the newest narration is: %v", scene["latest_narration_in"])
+	}
 	// a short history: every event since the last action, no note
 	few := shortTurn(full, 5, 9, recs[36:], url.Values{})["scene"].(map[string]interface{})
 	if l := few["since_your_last_action"].([]map[string]interface{}); len(l) != 4 || few["since_your_last_action_note"] != nil {

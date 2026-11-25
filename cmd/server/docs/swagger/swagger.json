@@ -45627,6 +45627,9 @@
           "scene": {
            "properties": {
             "fight_over": {},
+            "latest_narration_in": {
+             "type": "string"
+            },
             "since_your_last_action": {
              "items": {
               "properties": {
