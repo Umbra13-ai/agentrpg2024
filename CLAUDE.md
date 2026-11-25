@@ -75,6 +75,9 @@ Report: "Wizard Scholar accepts any skill for Expertise."
   cmd/server/monster_effects_2024.go; a monster as the target goes through
   applySaveEffectOnMonster (cmd/server/monster_save_targets.go), which uses saveCtx, hurtMonster
   and addCondition. No other code rolls a stat block's "Saving Throw: DC N" effect.
+  An escape a failure prints ("An engulfed target can try to escape by taking an action to make a DC 12 Strength (Athletics) check":
+  Gelatinous Cube Engulf) is on the given condition's record (`saveEscapeActionRe`, POST /api/conditions/escape), never the GM's text.
+  Go: `TestPostgresSRDEngulfEscape` (I-ALDENQA-36).
   What a single target must be is read from the entry's header by `monsterSaveTargetIssue` (`singleSaveTarget`: range, sight, "one
   Frightened creature", "one living creature ... that has 0 Hit Points"), refused before anything is rolled or spent; a header that names only the creatures the source
   holds ("one creature Grappled by the glabrezu", "each creature Grappled by the otyugh": `heldSaveTargetRe`, `heldTargetIssue`) is checked in the same place against the grapple records
