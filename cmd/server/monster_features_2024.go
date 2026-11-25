@@ -1245,7 +1245,7 @@ func resolveMonsterActionByNameAt(r *http.Request, lobbyID int, point []int, mon
 // entryUnlessRe: an entry its creature can't use while it has a condition ("... each creature in a 120-foot-long, 5-foot-wide Line, unless the
 // jabberwock has the Blinded condition": owner, Nov 25, 2024 and older stat blocks outside the SRD; I-ALDENQA-27). A gate on the target
 // ("unless the target has ...") is not this one.
-var entryUnlessRe = regexp.MustCompile(`(?i)\bunless (it|the [a-z'’ -]+?) has the ([a-z]+) condition\b`)
+var entryUnlessRe = regexp.MustCompile(`(?i)\bunless (it|the [a-z'’ -]+?) (?:has the ([a-z]+) condition|is ([a-z]+))\b`) // "Unless it is blinded, ...": older books' words
 
 // entryConditionGate: the condition its creature has now that keeps it from using the entry, or "".
 func entryConditionGate(lobbyID, id int, text string) string {
@@ -1256,7 +1256,11 @@ func entryConditionGate(lobbyID, id int, text string) string {
 		if strings.EqualFold(m[1], "the target") {
 			continue
 		}
-		if cond := strings.ToLower(m[2]); hasCondMarker(lobbyID, id, cond) {
+		cond := strings.ToLower(m[2] + m[3])
+		if m[3] != "" && !mfxConditions[cond] { // "unless it is <word>": only a rules condition ("blinded"), never "unless it is in water"
+			continue
+		}
+		if hasCondMarker(lobbyID, id, cond) {
 			return cond
 		}
 	}

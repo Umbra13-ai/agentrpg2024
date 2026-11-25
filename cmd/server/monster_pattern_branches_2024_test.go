@@ -168,6 +168,7 @@ func alternationVariants(pattern string) (variants []string, branchOf []string) 
 // _test.go file and the branch's variant must match it). Owner, Nov 25: a rule may serve the wording of 2024 and older stat blocks outside
 // the SRD, with an invented sentence of the test that uses it (never a book's own words).
 var branchWitnesses = map[string]map[string]string{
+	"mfxEndSaveRe":   {"can repeat the saving throw at the end of each of its turns": "A creature can repeat the saving throw at the end of each of its turns, ending the effect on itself on a success."},
 	"deathTriggerRe": {"the [a-z'’ -]+?": "When the test glimmer dies, light flashes from it."},
 	"hitRiderChoiceRe": {
 		"choice of":             "the target has the brute's choice of (A) the Charmed condition",

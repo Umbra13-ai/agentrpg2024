@@ -49,9 +49,9 @@ var (
 	mfxSpellDCRe           = regexp.MustCompile(`spell save DC (\d+)`)
 	mfxSpellAtkRe          = regexp.MustCompile(`([+−-]\d+) to hit with spell attacks`)
 	mfxEmanRe              = regexp.MustCompile(`(\d+)\s*-?\s*foot Emanation`)
-	mfxUntilStartRe        = regexp.MustCompile(`until the start of (?:its|the (?:[^ ]+?)['’]s) next turn`) // the attacker's turn ("the vrock's"); "the target's" is the target's own
-	mfxUntilEndRe          = regexp.MustCompile(`until the end of the ([^ ]+?)['’]s next turn`)             // an end anchored to a named creature's turn; "the target's" is the target's own
-	mfxEndSaveRe           = regexp.MustCompile(`(?i)repeats the save at the end of each of its turns|at the end of each of its turns, (?:the target|it) repeats the save`)
+	mfxUntilStartRe        = regexp.MustCompile(`until the start of (?:its|the (?:[^ ]+?)['’]s) next turn`)                                                                                                                             // the attacker's turn ("the vrock's"); "the target's" is the target's own
+	mfxUntilEndRe          = regexp.MustCompile(`until the end of the ([^ ]+?)['’]s next turn`)                                                                                                                                         // an end anchored to a named creature's turn; "the target's" is the target's own
+	mfxEndSaveRe           = regexp.MustCompile(`(?i)repeats the save at the end of each of its turns|at the end of each of its turns, (?:the target|it) repeats the save|can repeat the saving throw at the end of each of its turns`) // the last: older books' words (owner, Nov 25; I-ALDENQA-28)
 	mfxAutoSucceedRe       = regexp.MustCompile(`(?i)\bAfter (\d+) minutes?, it succeeds automatically`)
 	targetIsCreatureGateRe = regexp.MustCompile(`(?i)\bIf the target is a creature,?(?:\s+(?:its|it)\b)?`)
 	mfxDurationRe          = regexp.MustCompile(`(?i)(?:until the (?:start|end) of (?:its|the [^ ]+) next turn|for \d+ (?:minutes?|hours?)|, until it takes damage)`)
@@ -445,7 +445,7 @@ func (e *saveEffect) readRider(fail string) (extra []string) {
 			autoLimit = false // that one sentence is applied as the condition's duration (Rounds); a later one is another effect's
 			continue
 		}
-		if strings.Contains(ls, "repeats the save") || strings.Contains(ls, "exhaustion level") || len(plain) < 25 {
+		if strings.Contains(ls, "repeats the save") || (e.EndSave && strings.Contains(ls, "can repeat the saving throw")) || strings.Contains(ls, "exhaustion level") || len(plain) < 25 {
 			continue
 		}
 		if loc := endsOnDamageRe.FindStringIndex(s); e.EndsOnDamage && loc != nil {

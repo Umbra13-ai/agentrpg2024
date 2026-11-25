@@ -158,6 +158,26 @@ func TestPostgresEntryUnlessCondition(t *testing.T) {
 	if c, line := narrateAs(t, gm, camp, wyrm, "Fire Line", fmt.Sprint(hero), ""); c != 200 || !strings.Contains(line, "saving throw") {
 		t.Errorf("the wyrm's Fire Line once it sees: %d %s", c, line)
 	}
+	// the older books' words: "Unless it is blinded, ..." (a rules condition only: "unless it is in water" is no gate)
+	if got := entryConditionGate(camp, wyrm, "Unless it is blinded, the test wyrm breathes fire. Dexterity Saving Throw: DC 18."); got != "" {
+		t.Errorf("a gate with the wyrm not blinded: %q", got)
+	}
+	applyCondition(camp, wyrm, "blinded", "test", 10, "", 0)
+	if got := entryConditionGate(camp, wyrm, "Unless it is blinded, the test wyrm breathes fire. Dexterity Saving Throw: DC 18."); got != "blinded" {
+		t.Errorf("'Unless it is blinded' with the wyrm blinded: %q", got)
+	}
+	if got := entryConditionGate(camp, wyrm, "Unless it is submerged, the test wyrm breathes fire."); got != "" {
+		t.Errorf("a gate on a word that is no condition: %q", got)
+	}
+}
+
+// TestCanRepeatTheSavingThrow (I-ALDENQA-28): "A creature can repeat the saving throw at the end of each of its turns, ending the effect on
+// itself on a success." (older books' words) is the repeated save, never the GM's text.
+func TestCanRepeatTheSavingThrow(t *testing.T) {
+	e, ok := parseSaveEffect("Constitution Saving Throw: DC 10, each creature in a 15-foot Cone. Failure: The target has the Blinded condition for 1 minute. A creature can repeat the saving throw at the end of each of its turns, ending the effect on itself on a success.")
+	if !ok || !e.EndSave || strings.Contains(e.Extra, "repeat the saving throw") {
+		t.Errorf("the repeated save: ok %v, EndSave %v, GM text %q", ok, e.EndSave, e.Extra)
+	}
 }
 
 // TestPostgresBlurAndEvasionInTheirWords (I-ALDENQA-5, -6): a trait that gives attacks against its creature Disadvantage in the 2024 words
