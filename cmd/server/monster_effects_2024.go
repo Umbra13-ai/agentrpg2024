@@ -35,6 +35,9 @@ var (
 	mfxDamageRe              = regexp.MustCompile(`(\d+) \((\d+d\d+(?:\s*[+−-]\s*\d+)?)\) ([A-Za-z]+) damage`)
 	mfxCondRe                = regexp.MustCompile(`has the ((?:[A-Z][a-z]+)(?:(?:, | and | or )[A-Z][a-z]+)*) conditions?`)
 	mfxEscapeRe              = regexp.MustCompile(`Grappled condition \(escape DC (\d+)\)`)
+	// "An engulfed target can try to escape by taking an action to make a DC 12 Strength (Athletics) check." (SRD 5.2.1 Gelatinous Cube
+	// Engulf): the escape of the condition the failure gives, on its record (POST /api/conditions/escape)
+	saveEscapeActionRe = regexp.MustCompile(`(?i)can try to escape by taking an action to make a DC (\d+) Strength \(Athletics\) check`)
 	// mfxRestrainRe: a second condition that lasts as long as the grapple ("and it has the Restrained condition until the grapple ends",
 	// "and the target has the Poisoned condition until the grapple ends": SRD 5.2.1 Roper Tentacle; "While Grappled, the target has the
 	// Restrained condition"). Group 1: the condition ("" for the last form: Restrained).
@@ -296,6 +299,10 @@ func (e *saveEffect) readRider(fail string) (extra []string) {
 	if x := mfxEscapeRe.FindStringSubmatch(fail); x != nil {
 		e.EscapeDC, _ = strconv.Atoi(x[1])
 	}
+	if x := saveEscapeActionRe.FindStringSubmatch(fail); x != nil && len(e.Conditions) > 0 && len(e.Escapes) == 0 {
+		dc, _ := strconv.Atoi(x[1])
+		e.Escapes = []conditionEscape{{Label: "escape", Ability: "Strength", Skill: "Athletics", DC: dc}}
+	}
 	if m := mfxRestrainRe.FindStringSubmatch(fail); m != nil && e.EscapeDC > 0 && (m[1] == "" || mfxConditions[strings.ToLower(m[1])]) {
 		e.RestrainedToo, e.LinkedCond = true, strings.ToLower(m[1])
 	}
@@ -327,6 +334,9 @@ func (e *saveEffect) readRider(fail string) (extra []string) {
 				continue
 			}
 			ls = strings.ToLower(s)
+		}
+		if len(e.Escapes) > 0 && saveEscapeActionRe.MatchString(s) {
+			continue // the escape is on the condition's record (above)
 		}
 		// "If the target has 20 Hit Points or fewer, it drops to 0 Hit Points." (SRD 5.2.1 Sea Hag Death Glare): dropsToZero decides it per
 		// target before the damage, which then only "Otherwise" applies

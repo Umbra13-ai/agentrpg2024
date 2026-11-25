@@ -1222,3 +1222,43 @@ func TestPostgresAllyGrantMechanic(t *testing.T) {
 		t.Errorf("it outlasts the start of the captain's next turn")
 	}
 }
+
+// TestPostgresSRDEngulfEscape (I-ALDENQA-36): the SRD Gelatinous Cube's Engulf gives the Restrained record the escape its text prints ("An
+// engulfed target can try to escape by taking an action to make a DC 12 Strength (Athletics) check"), on a character and on a monster, and
+// the character's escape ends it; the sentence is no longer handed to the GM.
+func TestPostgresSRDEngulfEscape(t *testing.T) {
+	testPostgres(t)
+	gm, player, camp, hero, _ := earlyRulesFixture(t, "Test Engulf Host", nil)
+	pgExec(t, `UPDATE characters SET dex=1 WHERE id=$1`, hero)
+	cp := fmt.Sprintf("/api/campaigns/%d", camp)
+	pgCall(t, "POST", cp+"/combat/add", gm, map[string]interface{}{"combatants": []map[string]interface{}{
+		{"name": "Test Cube", "monster_key": "gelatinous-cube", "initiative": 25},
+		{"name": "Engulf Victim", "monster_key": "goblin-warrior", "hp": 1000, "initiative": -600}}})
+	cube, victim := monsterIDsByKeyOrName(camp, "Test Cube")[0], monsterIDsByKeyOrName(camp, "Engulf Victim")[0]
+	for _, tg := range []struct {
+		id   int
+		name string
+	}{{hero, fmt.Sprint(hero)}, {victim, "Engulf Victim"}} {
+		var line string
+		for i := 0; i < 30 && !hasCondMarker(camp, tg.id, "restrained"); i++ { // a success leaves it free: the cube tries again
+			_, line = narrateAs(t, gm, camp, cube, "Engulf", tg.name, "")
+		}
+		rs := recordsOf(camp, tg.id, "restrained")
+		if len(rs) != 1 || len(rs[0].Escapes) != 1 || rs[0].Escapes[0].DC != 12 || !strings.EqualFold(rs[0].Escapes[0].Skill, "athletics") {
+			t.Fatalf("Engulf at %s: the Restrained record %+v (%s)", tg.name, rs, line)
+		}
+		if strings.Contains(line, "can try to escape by taking an action") {
+			t.Errorf("Engulf at %s: the escape sentence is still the GM's: %s", tg.name, line)
+		}
+	}
+	rs := recordsOf(camp, hero, "restrained")
+	var c int
+	var j map[string]interface{}
+	for i := 0; i < 60 && hasCondMarker(camp, hero, "restrained"); i++ { // a failed check leaves it: try again on a new turn, as a player would
+		pgExec(t, `UPDATE characters SET action_used=false, str=30 WHERE id=$1`, hero)
+		c, j = pgCall(t, "POST", "/api/conditions/escape", player, map[string]interface{}{"character_id": hero, "record_id": rs[0].ID, "escape": 0})
+	}
+	if c != 200 || hasCondMarker(camp, hero, "restrained") {
+		t.Errorf("the escape: %d %v; restrained %v", c, j, hasCondMarker(camp, hero, "restrained"))
+	}
+}

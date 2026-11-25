@@ -158,6 +158,7 @@ var monsterTextPatterns = map[string]*regexp.Regexp{
 	"mfxEmanRe":                mfxEmanRe,                // monster_effects_2024.go
 	"mfxEndSaveRe":             mfxEndSaveRe,             // monster_effects_2024.go
 	"mfxEscapeRe":              mfxEscapeRe,              // monster_effects_2024.go
+	"saveEscapeActionRe":       saveEscapeActionRe,       // monster_effects_2024.go
 	"mfxExhaustRe":             mfxExhaustRe,             // monster_effects_2024.go
 	"mfxOptionRe":              mfxOptionRe,              // monster_effects_2024.go
 	"mfxRestrainRe":            mfxRestrainRe,            // monster_effects_2024.go
