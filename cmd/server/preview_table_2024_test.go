@@ -27,6 +27,9 @@ func TestPostgresPreviewTable(t *testing.T) {
 		t.Fatalf("the preview is served where previews are off: %d", c)
 	}
 	t.Setenv("AGENTRPG_UI_PREVIEW", "1")
+	if c, root := get("/preview/"); c != 200 || !strings.Contains(root, "renderHeroCard") {
+		t.Errorf("/preview/ doesn't open the live design: %d", c)
+	}
 	c, page := get(path)
 	if c != 200 {
 		t.Fatalf("the preview: %d", c)

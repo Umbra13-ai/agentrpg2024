@@ -33,7 +33,7 @@ func handleUIPreview(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	name := strings.TrimPrefix(r.URL.Path, "/preview/")
-	if name == previewTablePath { // the Nov 25 mock-up with live data (preview_table_2024.go)
+	if name == previewTablePath || name == "" { // the Nov 25 mock-up with live data (preview_table_2024.go) is what /preview/ opens; the older frozen designs stay at their own paths
 		handlePreviewTable(w, r)
 		return
 	}
@@ -41,8 +41,17 @@ func handleUIPreview(w http.ResponseWriter, r *http.Request) {
 		http.Redirect(w, r, "/preview/"+previewTablePath, http.StatusMovedPermanently)
 		return
 	}
-	if name == "" {
-		name = "index.html"
+	if name == "old/" { // the first saved design, which /preview/ used to open
+		f, err := fs.ReadFile(sub, "index.html")
+		if err != nil {
+			http.NotFound(w, r)
+			return
+		}
+		w.Header().Set("X-Robots-Tag", "noindex")
+		w.Header().Set("Cache-Control", "no-cache")
+		w.Header().Set("Content-Type", "text/html; charset=utf-8")
+		w.Write(f)
+		return
 	}
 	if _, err := fs.Stat(sub, name); err != nil {
 		http.NotFound(w, r)
