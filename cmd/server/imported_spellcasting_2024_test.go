@@ -159,3 +159,40 @@ func TestPostgresEntryUnlessCondition(t *testing.T) {
 		t.Errorf("the wyrm's Fire Line once it sees: %d %s", c, line)
 	}
 }
+
+// TestPostgresBlurAndEvasionInTheirWords (I-ALDENQA-5, -6): a trait that gives attacks against its creature Disadvantage in the 2024 words
+// ("have Disadvantage unless ... Incapacitated ... or its speed is 0") holds while it moves freely and not at Speed 0 or Incapacitated; a
+// trait in Evasion's words under another name (Avoidance) is Evasion for any saving throw when its words name none.
+func TestPostgresBlurAndEvasionInTheirWords(t *testing.T) {
+	testPostgres(t)
+	gm, _, camp, _, _ := earlyRulesFixture(t, "Test Blur Host", nil)
+	m := inventedMonster("Test Blur", "Fey", []srdMonsterEntry{
+		{Name: "Blurred Movement", Text: "Attack rolls against the test blur have Disadvantage unless the test blur has the Incapacitated condition or its speed is 0."},
+		{Name: "Avoidance", Text: "If the test blur is subjected to an effect that allows it to make a saving throw to take only half damage, it instead takes no damage if it succeeds on the saving throw and only half damage if it fails."}}, nil)
+	c, j := pgCall(t, "POST", "/api/gm/compendium/monsters", gm, map[string]interface{}{"source_note": "invented blur fixture", "monsters": []srdMonster2024{m}})
+	if c != 201 {
+		t.Fatalf("import: %d %v", c, j)
+	}
+	key := fmt.Sprint(j["monsters"].([]interface{})[0].(map[string]interface{})["monster_key"])
+	t.Cleanup(func() { db.Exec(`DELETE FROM custom_monsters WHERE key = $1`, key) })
+	pgCall(t, "POST", fmt.Sprintf("/api/campaigns/%d/combat/add", camp), gm, map[string]interface{}{"combatants": []map[string]interface{}{{"name": "Test Blur", "monster_key": key, "initiative": 3}}})
+	blur := monsterIDsByKeyOrName(camp, "Test Blur")[0]
+	conds := func() []string { return creatureConditions(camp, blur) }
+	if got := attackedWithDisadvantage(camp, blur, conds()); got != "Blurred Movement" {
+		t.Errorf("free to move: %q, want Blurred Movement", got)
+	}
+	applyCondition(camp, blur, "restrained", "test", 10, "", 0)
+	if got := attackedWithDisadvantage(camp, blur, conds()); got != "" {
+		t.Errorf("Restrained (Speed 0): %q, want none", got)
+	}
+	removeConditionsWhere(camp, blur, func(r conditionRecord) bool { return true })
+	applyCondition(camp, blur, "stunned", "test", 10, "", 0)
+	if got := attackedWithDisadvantage(camp, blur, conds()); got != "" {
+		t.Errorf("Stunned (Incapacitated): %q, want none", got)
+	}
+	for _, ab := range []string{"dex", "con", "wis"} {
+		if !creatureEvasion(camp, blur, ab) {
+			t.Errorf("Avoidance is not Evasion for a %s save", ab)
+		}
+	}
+}

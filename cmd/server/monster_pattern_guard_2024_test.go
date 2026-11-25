@@ -59,7 +59,10 @@ type patternWitness struct {
 }
 
 var patternWitnesses = map[string]patternWitness{
-	"entryUnlessRe": {Invented: "unless the test wyrm has the Blinded condition", Test: "TestPostgresEntryUnlessCondition"},
+	"blurredHaveRe":     {Invented: "Attack rolls against the test blur have Disadvantage unless the test blur has the Incapacitated condition or its speed is 0.", Test: "TestPostgresBlurAndEvasionInTheirWords"},
+	"speedZeroExceptRe": {Invented: "Attack rolls against the test blur have Disadvantage unless the test blur has the Incapacitated condition or its speed is 0.", Test: "TestPostgresBlurAndEvasionInTheirWords"},
+	"evasionWordsRe":    {Invented: "If the test blur is subjected to an effect that allows it to make a saving throw to take only half damage, it instead takes no damage if it succeeds on the saving throw and only half damage if it fails.", Test: "TestPostgresBlurAndEvasionInTheirWords"},
+	"entryUnlessRe":     {Invented: "unless the test wyrm has the Blinded condition", Test: "TestPostgresEntryUnlessCondition"},
 	// no SRD 5.2.1 Legendary Action costs more than one use (owner, Nov 25: 2024 and older mechanics outside the SRD are allowed)
 	"legendaryCostRe": {Invented: "Wing Attack (Costs 2 Actions)", Test: "TestLegendaryActionCost"},
 	// the damage owner hands these the words after an amount ("... Slashing damage" + tail)
@@ -80,7 +83,7 @@ var patternWitnesses = map[string]patternWitness{
 func monsterTextFile(name string) bool {
 	for _, p := range []string{"monster_", "creature_", "condition_lasting_effects", "disadvantage_riders", "rider_duration", "hit_after_damage",
 		"hp_max_drain", "item_state", "obscured_areas", "hide_2024", "map_spaces", "speed_owner", "area_geometry", "map_rules", "wild_shape",
-		"attack_2024", "attack_target", "monsters_2024", "combat_handlers", "effect_records", "curse_records", "wound_records", "gm_handover"} {
+		"attack_2024", "attack_target", "monsters_2024", "combat_handlers", "effect_records", "curse_records", "wound_records", "gm_handover", "evasion_2024"} {
 		if strings.HasPrefix(name, p) {
 			return true
 		}

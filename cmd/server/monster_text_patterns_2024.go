@@ -193,6 +193,9 @@ var monsterTextPatterns = map[string]*regexp.Regexp{
 	"monsterLightToggleRe":     monsterLightToggleRe,     // monster_lighting_2024.go
 	"legendaryCostRe":          legendaryCostRe,          // monster_features_2024.go
 	"entryUnlessRe":            entryUnlessRe,            // monster_features_2024.go
+	"blurredHaveRe":            blurredHaveRe,            // monster_condition_traits_2024.go
+	"speedZeroExceptRe":        speedZeroExceptRe,        // monster_condition_traits_2024.go
+	"evasionWordsRe":           evasionWordsRe,           // evasion_2024.go
 	"perDayRe":                 perDayRe,                 // monster_reactions_2024.go
 	"restRechargeRe":           restRechargeRe,           // monster_day_uses.go
 	"reactACRe":                reactACRe,                // monster_reactions_2024.go
