@@ -498,6 +498,8 @@ Add to the owner, never beside it. When you give another rule one owner, add it 
   campaign page's boxes, companions, the GM's monster adjustment and every "looks bloodied" line read it; my-turn's hints follow it
   (`partyHints`, `zeroHPHint`: no help hint for the dead, a Death Saving Throw only for the dying). Feedback log 66 (I-ALDRIC-1, 5);
   Go: `TestHealthLabel`, `TestPostgresHealthLabelsMapAndActionBudget`.
+- **A character's Initiative bonus** (besides its Dexterity modifier: the stored bonus, Alert, Jack of All Trades, Exhaustion): `initiativeBonus`
+  (`combat_handlers.go`), read by the roll at a fight's start and the preview's sheet.
 - **The attacks an Attack action holds:** `attacksPerAction` (`actions.go`: Extra Attack, or a Pact of the Blade invocation's when
   higher): the Attack action's spending, the action economy views and a pending turn's action budget (`actionBudgetWarning`, with a
   queued Action Surge that has a use left; S-ALDEN-11) read it.
@@ -837,7 +839,10 @@ Add to the owner, never beside it. When you give another rule one owner, add it 
 - **A character that can't act** (I-ALDENQA-2, Nov 24): `cantActBecause` (`conditions_legacy.go`: the Incapacitating condition holding it, from
   `game.IsIncapacitatingCondition`) is the one answer, read by the action gate (`handleAction`, its hint `cantActNote`), `turnNeeds` (`turnNeedOf`: the turn
   needs nothing and passes on its own, `howAutomatic`, as an unconscious one does: the walk, `gmEndsTurn`, `endedHow`) and my-turn (`cant_act`; the menu's
-  `sceneFacts.CantAct` moves every entry to `more`). Go: `TestPostgresIncapacitatedTurnPasses`.
+  `sceneFacts.CantAct` moves every entry to `more`). What a turn needs is the same with the turn schedule or without it: the walk passes an automatic turn
+  and the stand-in refuses one (409 `automatic_turn`) either way (I-ALDENQA-37: without the schedule the walk asked for a stand-in, and the turn's end, with
+  its repeated saves and durations, never came). Every turn-ending route runs the turn's end (`advanceTurn`): Go: `TestPostgresIncapacitatedTurnPasses`,
+  `TestPostgresStagedSaveOnEveryTurnEndRoute` (next, skip, narrate's `advance_turn`, a pending turn the resolve plays, the automatic pass; schedule on and off).
 - **A character's purse** (I-ALDEN-1, Nov 24): `cmd/server/money_2024.go`. A payment comes from the whole purse (`purse.pay`: the coin named alone when it
   holds the price, else change, what is left written as GP, SP and CP; a purse that can't pay changes nothing); `readPurseIn` / `writePurseIn` /
   `lockPurse` are the reads and writes, inside the caller's locked transaction. On it: the shop's purchases and sales, the GM's `POST /api/gm/gold`
@@ -1067,7 +1072,12 @@ Add to the owner, never beside it. When you give another rule one owner, add it 
   `TestPostgresStoryReaderPage`.
 - **The GUI rework previews** (Matt, Nov 17 and 21): `handleUIPreview` (`cmd/server/ui_preview_2024.go`) serves the saved designs in
   `data/ui_preview/` at `/preview/` (the Nov 21 one at `/preview/gui-2026-11-21/`), frozen data, only where `AGENTRPG_UI_PREVIEW=1`
-  (staging); 404 elsewhere. The real pages are built from the layout above.
+  (staging); 404 elsewhere. The real pages are built from the layout above. **The Nov 25 mock-up with live data** (owner, Nov 25: "implement what I
+  gave you") is `/preview/gui-2026-11-25/` (`preview_table_2024.go`): the owner's file as it is (`data/preview_table_2024.html`, its Tailwind compiled
+  into `data/preview_table_2024.css` from that file), only its demo constants filled from `loadLiveTable` (the Live Table's one loader), `loadStory` and the
+  stat blocks; every value HTML-escaped (the mock-up's script writes them as markup); a monster shows its look, never its Hit Points; unread pages,
+  bookmarks, pins of characters and the viewer's settings are kept in the browser. Never restyle it: a change to its look is the owner's file. Go:
+  `TestPostgresPreviewTable`.
 - **The guide served to agents:** `docs/skill.md`, built into the program by the `docs` package (`docs.Skill`).
 - **A monster attack's damage and a Multiattack's plan** (`parseMonsterAttack`, `prepareMonsterAttack`, `multiattackPlan`): every damage amount of a
   Hit is rolled, or (when its condition or wording has no reader: "plus an extra 5 (2d4) Piercing damage if it has at least 18 Hit Points", "can expend up to 3 charges,
