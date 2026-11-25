@@ -129,3 +129,51 @@ func newMonsterTurn(camp int) {
 		db.Exec(`UPDATE combat_monster_state SET bonus_used = 0 WHERE lobby_id = $1`, camp)
 	}
 }
+
+// "The target is immune to this banshee's Horrify for 24 hours": the immunity is that one banshee's. A second banshee of the fight, and a banshee
+// of the next fight (its combat id starts again from -1), is another creature and makes the target save again.
+func TestPostgresSaveImmunityIsPerCreature(t *testing.T) {
+	testPostgres(t)
+	gm, _, camp, hero, _ := earlyRulesFixture(t, "Test Immunity Host", nil)
+	cp := fmt.Sprintf("/api/campaigns/%d", camp)
+	horrify := inventedMonster("Test Banshee", "Undead", nil, []srdMonsterEntry{{Name: "Horrify", Text: "Wisdom Saving Throw: DC 1, one creature within 60 feet. Success: The target is immune to this banshee's Horrify for 24 hours. Failure: The target has the Frightened condition for 1 minute."}})
+	c, j := pgCall(t, "POST", "/api/gm/compendium/monsters", gm, map[string]interface{}{"campaign_id": camp, "source_note": "invented immunity fixture", "monsters": []srdMonster2024{horrify}})
+	if c != 201 {
+		t.Fatalf("import: %d %v", c, j)
+	}
+	key := fmt.Sprint(j["monsters"].([]interface{})[0].(map[string]interface{})["monster_key"])
+	t.Cleanup(func() { db.Exec(`DELETE FROM custom_monsters WHERE key = $1`, key) })
+	add := func(name string, init int) {
+		pgCall(t, "POST", cp+"/combat/add", gm, map[string]interface{}{"combatants": []map[string]interface{}{{"name": name, "monster_key": key, "initiative": init}}})
+	}
+	horrifies := func(name string) string {
+		_, r := pgCall(t, "POST", "/api/gm/narrate", gm, map[string]interface{}{"campaign_id": camp, "narration": "x",
+			"monster_action": map[string]interface{}{"monster": name, "action": "Horrify", "target": fmt.Sprint(hero), "confirm_targeting": true}})
+		return fmt.Sprint(r["monster_action_result"], r["message"])
+	}
+	add("Banshee A", 30)
+	add("Banshee B", 29)
+	// the target succeeds against A's Horrify (a DC of 1: only a natural 1 fails; send it again until the save holds)
+	saved := false
+	for try := 0; try < 40 && !saved; try++ {
+		db.Exec(`DELETE FROM spell_effects WHERE lobby_id = $1 AND kind = 'effect_immune'`, camp)
+		res := horrifies("Banshee A")
+		saved = strings.Contains(res, "succeeds")
+	}
+	if !saved {
+		t.Fatal("the target never succeeded against a DC 1")
+	}
+	if res := horrifies("Banshee A"); !strings.Contains(res, "immune") {
+		t.Fatalf("the same banshee's second Horrify: %s", res)
+	}
+	if res := horrifies("Banshee B"); strings.Contains(res, "every target is immune") {
+		t.Errorf("another banshee of the same fight: %s", res)
+	}
+	// the next fight: the ids start again from -1, and the immunity is gone with the monsters
+	pgCall(t, "POST", cp+"/combat/end", gm, nil)
+	pgCall(t, "POST", cp+"/combat/start", gm, nil)
+	add("Banshee C", 30)
+	if res := horrifies("Banshee C"); strings.Contains(res, "every target is immune") {
+		t.Errorf("a banshee of the next fight: %s", res)
+	}
+}
