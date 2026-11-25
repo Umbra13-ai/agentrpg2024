@@ -680,7 +680,6 @@ func resolvePendingTurns(lobbyID int) map[string]interface{} {
 			break
 		}
 		slot["character_id"] = e.ID
-		var need turnNeed
 		if scheduled {
 			// a turn that has already ended this round is never run again (a second resolve re-runs nothing)
 			how, err := slotRecorded(lobbyID, c.Round, e.ID, e.Second)
@@ -695,27 +694,25 @@ func resolvePendingTurns(lobbyID int) map[string]interface{} {
 				}
 				continue
 			}
-			if need, err = turnNeeds(e.ID); err != nil {
-				slot["reason"], slot["message"] = "database_error", "The character's Hit Points couldn't be read; nothing more was resolved."
-				stop = slot
+		}
+		// what the turn needs is the same with the turn schedule or without it (turnNeeds: I-ALDENQA-37, a turn that couldn't be chosen
+		// waited for a stand-in without the schedule, and its end, with the repeated saves and durations, never came)
+		need, err := turnNeeds(e.ID)
+		if err != nil {
+			slot["reason"], slot["message"] = "database_error", "The character's Hit Points couldn't be read; nothing more was resolved."
+			stop = slot
+			break
+		}
+		if need.Kind == needNothing {
+			// stable, unconscious or otherwise unable to act: nothing to choose (Matt, 11.3): the turn passes once, at its place, and never waits
+			closePendingTurns(lobbyID, e.ID, c.Round, "The character couldn't act when the slot came ("+need.Why+"): the turn passed automatically.")
+			resolved = append(resolved, map[string]interface{}{"slot": c.Index + 1, "name": e.Name, "character_id": e.ID, "round": c.Round,
+				"used": "automatic (" + need.Why + ": no action to choose)", "steps": []map[string]interface{}{}})
+			recordGMAction(db, lobbyID, "pending_turn", fmt.Sprintf("%s is %s: the turn passed automatically", e.Name, need.Why), "")
+			if !advance(c, howAutomatic, slot, fmt.Sprintf("%s's turn passed automatically", e.Name)) {
 				break
 			}
-			if need.Kind == needNothing {
-				// stable or unconscious: nothing to choose (Matt, 11.3): the turn passes once, at its place, and never waits
-				closePendingTurns(lobbyID, e.ID, c.Round, "The character couldn't act when the slot came ("+need.Why+"): the turn passed automatically.")
-				resolved = append(resolved, map[string]interface{}{"slot": c.Index + 1, "name": e.Name, "character_id": e.ID, "round": c.Round,
-					"used": "automatic (" + need.Why + ": no action to choose)", "steps": []map[string]interface{}{}})
-				recordGMAction(db, lobbyID, "pending_turn", fmt.Sprintf("%s is %s: the turn passed automatically", e.Name, need.Why), "")
-				if !advance(c, howAutomatic, slot, fmt.Sprintf("%s's turn passed automatically", e.Name)) {
-					break
-				}
-				continue
-			}
-		} else {
-			need = turnNeed{Kind: needChoose}
-			if needsDeathSave(e.ID) {
-				need = turnNeed{Kind: needDeathSave}
-			}
+			continue
 		}
 		if need.Kind == needDeathSave {
 			// at 0 Hit Points and not stable: the rules give this turn no choice ("whenever you start your turn with 0 Hit Points,
@@ -1263,14 +1260,15 @@ func standInTurn(w http.ResponseWriter, campaignID int, steps []map[string]inter
 			writeJSONStatus(w, http.StatusConflict, map[string]interface{}{"error": codeTurnAlreadyResolve, "message": fmt.Sprintf("%s's turn in round %d has already ended (%s): a character never takes a second turn in a round. POST /api/campaigns/%d/combat/resolve moves on.", e.Name, c.Round, turnResultHows[how], campaignID)})
 			return nil, false
 		}
-		need, err := turnNeeds(e.ID)
-		if answerDBFailure(w, err, "the character's Hit Points") {
-			return nil, false
-		}
-		if need.Kind != needChoose {
-			writeJSONStatus(w, http.StatusConflict, map[string]interface{}{"error": "automatic_turn", "message": fmt.Sprintf("%s's turn is automatic (%s): no submission or stand-in; POST /api/campaigns/%d/combat/resolve processes it. Nothing was changed.", e.Name, need.Why, campaignID)})
-			return nil, false
-		}
+	}
+	// an automatic turn is the server's, with the turn schedule or without it (turnNeeds, as the walk reads it)
+	need, err := turnNeeds(e.ID)
+	if answerDBFailure(w, err, "the character's Hit Points") {
+		return nil, false
+	}
+	if need.Kind != needChoose {
+		writeJSONStatus(w, http.StatusConflict, map[string]interface{}{"error": "automatic_turn", "message": fmt.Sprintf("%s's turn is automatic (%s): no submission or stand-in; POST /api/campaigns/%d/combat/resolve processes it. Nothing was changed.", e.Name, need.Why, campaignID)})
+		return nil, false
 	}
 	sc, err := standInNow(campaignID, paused)
 	if answerDBFailure(w, err, "the campaign's turn schedule") {
