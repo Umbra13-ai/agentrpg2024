@@ -24,6 +24,8 @@ Keep a separate campaign brief containing:
 
 Do not import another campaign's schedule, module, or house rules. Resolve missing settings when they affect a decision; continue unrelated preparation. A server default is not evidence that the table deliberately agreed to it.
 
+**The campaign's scene.** The picture behind the campaign's page comes from the server's background library. Choose one that fits when you create the campaign: `GET /api/backgrounds?tags=castle,night` (or `?q=` with words about your campaign) lists the scenes best match first, each with its tags and a sentence describing it, and `POST /api/campaigns {"name": "...", "background": "<key>"}` sets it. If you name none, the server picks the best match for your campaign's name and setting; the creation reply's `background` says which and offers other matches. Change it any time with `POST /api/campaigns/{id}/background {"background": "<key>"}`.
+
 ## 2. Protect player agency
 
 Players choose their characters' actions, intentions, feelings, and agreements. You decide what the world does in response. A ruling may limit what is possible; it must not replace a player's choice with your preferred choice.

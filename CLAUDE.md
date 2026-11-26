@@ -437,6 +437,16 @@ Add to the owner, never beside it. When you give another rule one owner, add it 
   `handleAdminBackground`, written to the admin change log; the campaign page's Background card in the admin page) sets it; the public image is GET `/api/campaigns/{id}/background`
   (gated like every read under `/api/campaigns/{id}/`: a private campaign's picture is private). The admin editor never sends the bytes (`editorColumns`). Go:
   What is stored is `normalizeBackground` (owner, Nov 26: "lock it at 1920x1080 and convert the upload to WebP"): any accepted picture scaled to cover 1920 by 1080, the overflow cropped evenly, written as a lossy WebP (`backgroundQuality`, about 100 to 200 KB; the encoder is `gen2brain/webp`, libwebp compiled to WebAssembly, so the build stays `CGO_ENABLED=0`); backgrounds stored before it are left as they were. A picture's pixels are read only by `decodePicture` (`token_normalize_2024.go`: a WebP through `golang.org/x/image/webp`, which reads lossless exactly; the encoder's own reader registers with `image.Decode` too and shifted colors; `TestNoOtherPictureDecode`). `TestPostgresAdminCampaignBackground`, `TestNoOtherBackgroundWriter`.
+- **A campaign's background from the library** (owner, Nov 26: backgrounds an agent selects when creating a campaign, tagged to help it choose, never named after a campaign or a book;
+  `cmd/server/background_library_2024.go`): the table `background_library` (key, a describing title, a sentence for the GM, tags from the one vocabulary `bgVocabulary`:
+  place, mood, light, features; the picture as every background is stored, 1920 by 1080 lossy WebP, and a 480 by 270 thumbnail), seeded from `data/backgrounds`
+  (`library.json` and the WebP files) by `seedBackgroundLibrary` once per entry (an entry already there keeps the administrator's edits). A campaign's pick is
+  `lobbies.background_key`, written only by `setLibraryBackground` (a retired or unknown key is the refusal `bgUnknown`); `backgroundURL` shows the administrator's
+  upload, else the pick, else the default. `matchBackgrounds` / `bgScore` rank the library for a campaign's words (`bgWordHints`) and asked tags; `pickBackground` is the
+  server's pick when creation names none. Routes: GET `/api/backgrounds`, the pictures at `/backgrounds/{key}.webp` and `.thumb.webp`, creation's `background`, the GM's
+  POST `/api/campaigns/{id}/background`, the admin's `{"library": key}` on `/api/admin/campaigns/{id}/background` and `/api/admin/backgrounds` (add, edit, retire; the
+  admin page's Background card and its Background library under the Campaigns tab). Go: `TestBackgroundLibraryData` (no book or campaign name in a key, title or
+  description), `TestBackgroundScore`, `TestPostgresBackgroundLibrary`.
 - **A GM-built monster's token and stat block** (owner, Nov 24): `cmd/server/monster_token_2024.go` owns the token of a compendium monster
   (`custom_monsters.token*`): `monsterTokenRule` (an `imageRule` with `Square`: a square PNG, JPEG or WebP, 128 to 2048 px, 3 MB; `checkImage` reads a WebP's
   size with `webpSize`; the admin page's own size check says the same, `TestAdminPageTokenLimitIsTheRules`) and `monsterTokenRuleText`, the words every builder reply gives as `token_rule`; `saveMonsterToken` / `clearMonsterToken`
