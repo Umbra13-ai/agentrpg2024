@@ -1054,5 +1054,5 @@ func handleAdminPage(w http.ResponseWriter, r *http.Request) {
 	w.Header().Set("Content-Type", "text/html; charset=utf-8")
 	w.Header().Set("Cache-Control", "no-store")
 	w.Header().Set("X-Robots-Tag", "noindex")
-	fmt.Fprint(w, strings.Replace(adminPageHTML, "/*ADMIN_THEMES*/", adminThemeCSS(), 1))
+	fmt.Fprint(w, strings.Replace(strings.Replace(adminPageHTML, "/*ADMIN_THEMES*/", adminThemeCSS(), 1), "<!--ADMIN_THEME_SCRIPT-->", themeHeadScript(), 1))
 }

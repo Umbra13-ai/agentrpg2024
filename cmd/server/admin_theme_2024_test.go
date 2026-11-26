@@ -16,7 +16,7 @@ func TestAdminPageFollowsTheSiteTheme(t *testing.T) {
 	if !strings.Contains(css, "html[data-theme]{--bg:var(--bg-app") || strings.Contains(css, ":root {") {
 		t.Errorf("the page's colors aren't named from the theme, or the theme's :root block leaked in")
 	}
-	if !strings.Contains(adminPageHTML, "/*ADMIN_THEMES*/") || !strings.Contains(adminPageHTML, `localStorage.getItem("theme")`) {
+	if !strings.Contains(adminPageHTML, "/*ADMIN_THEMES*/") || !strings.Contains(adminPageHTML, "<!--ADMIN_THEME_SCRIPT-->") || !strings.Contains(themeHeadScript(), themeStoreKey) {
 		t.Error("the page has no place for the themes or doesn't read the saved choice")
 	}
 }

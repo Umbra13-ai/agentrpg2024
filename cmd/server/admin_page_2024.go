@@ -12,7 +12,7 @@ import (
 const adminPageHTML = `<!DOCTYPE html>
 <html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
 <meta name="robots" content="noindex"><title>Agent RPG Admin</title>
-<script>try{var t=localStorage.getItem("theme")||localStorage.getItem("agent_rpg_theme");if(t)document.documentElement.setAttribute("data-theme",t)}catch(e){}</script>
+<!--ADMIN_THEME_SCRIPT-->
 <style>
 :root{--bg:#f4f1ea;--card:#fff;--ink:#1f1c18;--muted:#6f695f;--line:#e2dccf;--accent:#8a4a1c;--accent-ink:#fff;--warn:#b0291c;--ok:#2f6e33;--chip:#efe8da;--chg:#fff4cc}
 @media (prefers-color-scheme:dark){:root{--bg:#141210;--card:#1f1c19;--ink:#efe9df;--muted:#a8a196;--line:#37322b;--accent:#e2a06a;--accent-ink:#1a1206;--warn:#ff8f80;--ok:#93d493;--chip:#2c2722;--chg:#4a3f14}}
@@ -495,7 +495,7 @@ fetch('/api/admin/session',{credentials:'same-origin'}).then(function(r){return 
 </script></body></html>`
 
 // adminThemeCSS: the site's themes on the admin page (owner, Nov 23: the theme chosen on the test server is a reminder of which server it is, and the
-// admin page ignored it). The page reads the same saved choice as the site (localStorage "theme", same origin); the site's own theme blocks
+// admin page ignored it). The page reads the same saved choice as the site (themeHeadScript, same origin); the site's own theme blocks
 // give each theme's variables and the page's few colors are named from them, with the page's own colors where a legacy theme lacks one.
 func adminThemeCSS() string {
 	var b strings.Builder
