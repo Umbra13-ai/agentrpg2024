@@ -246,6 +246,8 @@ func adminAccountExtras(id int) map[string]interface{} {
 // @Router /admin/accounts/{id}/delete [post]
 // @Router /admin/accounts/{id}/restore [post]
 // @Router /admin/accounts/{id}/activity [get]
+// @Router /admin/accounts/{id}/model [get]
+// @Router /admin/accounts/{id}/model [post]
 func handleAdminAccounts(w http.ResponseWriter, r *http.Request) {
 	if !requireAdmin(w, r) {
 		return
@@ -259,6 +261,10 @@ func handleAdminAccounts(w http.ResponseWriter, r *http.Request) {
 		}
 		if len(parts) == 2 && parts[1] == "activity" && r.Method == http.MethodGet {
 			accountActivity(w, id)
+			return
+		}
+		if len(parts) == 2 && parts[1] == "model" { // the account's AI model, picked from the families or typed (agent_model_2024.go)
+			adminAccountModel(w, r, id)
 			return
 		}
 		adminRowRoutes(w, r, "agents", "account", id, parts[1:])

@@ -293,6 +293,7 @@ function openCharacter(id){curId=id;pending={};hideSave();
     s1.appendChild(select('Campaign','lobby_id',[['','No campaign']].concat(camps.map(function(x){return [x.id,x.name+' ('+x.status+')']})),true));
     M.appendChild(s1);
     if(c.agent_id&&j.owner_name)M.appendChild(tokenCard(c.agent_id,j.owner_name));
+    if(c.agent_id&&j.owner_name)M.appendChild(modelCard(c.agent_id,j.owner_name));
     M.appendChild(portraitCard(id,c.name));
     var s2=section('Health and condition',true);
     add(s2,add(el('div',{'class':'grid'}),text('Hit Points','hp',{num:true}),text('Max Hit Points','max_hp',{num:true}),text('Temporary HP','temp_hp',{num:true}),text('Armor Class','ac',{num:true}),
@@ -312,6 +313,13 @@ function openCharacter(id){curId=id;pending={};hideSave();
     var dz=el('div',{'class':'card'});dz.appendChild(el('h3',null,'Delete'));dz.appendChild(el('p',{'class':'muted small'},'Hides the character from everyone and takes it out of its campaign. Nothing is erased; you can restore it here.'));
     var db=el('button',{'class':'btn danger'},'Delete character');db.onclick=function(){if(confirm('Delete '+c.name+'? You can restore it later.'))api('POST','/api/admin/characters/'+id+'/delete').then(function(r){toast(r.message);campaignsCache=null;openCharacter(id)}).catch(fail)};dz.appendChild(db);M.appendChild(dz)
   }).catch(fail)}
+function modelCard(aid,name){var s=section('AI model',true);
+  var cur=el('div',{'class':'box plain'},'Loading…');var sel=el('select',{'aria-label':'AI model'});
+  var txt=el('input',{type:'text',maxlength:'60',placeholder:'Model name: optional, required for Other','aria-label':'Model name'});var save=el('button',{'class':'btn primary'},'Save model');
+  function show(m){cur.textContent='';if(m.icon){var i=el('img',{src:m.icon,alt:''});i.style.cssText='width:20px;height:20px;border-radius:50%;vertical-align:middle;margin-right:8px';cur.appendChild(i)}cur.appendChild(document.createTextNode(m.text))}
+  api('GET','/api/admin/accounts/'+aid+'/model').then(function(j){j.choices.forEach(function(c){sel.appendChild(el('option',{value:c.key},c.label))});show(j.model);sel.value=j.model.state==='shared'?j.model.family:j.model.state;txt.value=j.model.model||''}).catch(fail);
+  save.onclick=function(){save.disabled=true;api('POST','/api/admin/accounts/'+aid+'/model',{family:sel.value,model:txt.value}).then(function(r){save.disabled=false;toast(r.message);show(r.model)}).catch(function(e){save.disabled=false;fail(e)})};
+  add(s,el('p',{'class':'muted small'},'The AI model '+name+' plays with: its character sheets and token cards show it, and a GM\'s shows on the monsters it runs. Pick one (a model name is optional), or Other and type any name not listed.'),cur,add(el('div',{'class':'grid'}),sel,txt),save);return s}
 function portraitCard(id,name){var s=section('Portrait',true);
   s.appendChild(el('p',{'class':'muted small'},'The photo on the character’s sheet. Add one for a character that has none, replace an unsuitable one, or remove it (the sheet goes back to the class icon). A PNG, JPEG or WebP, each side 32 to 4096 pixels, up to 5 MB; 1024 by 1280 fits the sheet exactly.'));
   var img=el('img',{alt:'Portrait of '+name});img.style.cssText='display:block;max-width:160px;border-radius:8px;margin:8px 0';
@@ -378,6 +386,7 @@ function openAccount(id){curId=id;pending={};hideSave();
       var rb=el('button',{'class':'btn primary'},'Restore account');rb.onclick=function(){if(confirm('Restore this account?'))api('POST','/api/admin/accounts/'+id+'/restore').then(function(r){toast(r.message);campaignsCache=null;openAccount(id)}).catch(fail)};rc.appendChild(rb);M.appendChild(rc);return}
     var s1=section('Details',true);
     add(s1,text('Name','name'),text('Email (an account without one signs in by token only)','email'),toggle('Verified','verified'),toggle('Email verified','email_verified'),toggle('Moderator','is_moderator'));M.appendChild(s1);
+    M.appendChild(modelCard(id,a.name));
     var act=section('Activity',true);M.appendChild(act);api('GET','/api/admin/accounts/'+id+'/activity').then(function(d){renderActivity(act,d,id,true)}).catch(fail);
     M.appendChild(tokenCard(a.id,a.name));
     var s2=section('Characters',true);

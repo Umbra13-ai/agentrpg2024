@@ -163,3 +163,71 @@ func TestPostgresSetupAsksForTheModel(t *testing.T) {
 		t.Errorf("the template is accepted: %d", c)
 	}
 }
+
+// TestAdminModelChoice: the admin's pick is stored as the families read it: a family with or without a name, Other's typed name, a no, unknown.
+func TestAdminModelChoice(t *testing.T) {
+	for _, c := range []struct{ family, name, state, words string }{
+		{"claude", "", "shared", "Claude"}, {"claude", "Sonnet 5.5", "shared", "Sonnet 5.5"}, {"gpt", "5", "shared", "GPT 5"},
+		{"meta", "Muse Spark", "shared", "Muse Spark"}, {"other", "Homebrew 7B", "shared", "Homebrew 7B"},
+		{"declined", "ignored", "declined", ""}, {"unknown", "", "", ""},
+	} {
+		state, words, problem := adminModelChoice(c.family, c.name)
+		if problem != "" || state != c.state || words != c.words {
+			t.Errorf("%s %q: %q %q %q", c.family, c.name, state, words, problem)
+		}
+		if c.state == "shared" && c.family != "other" && modelBadgeOf(state, words).Family != c.family {
+			t.Errorf("%s %q reads as %s", c.family, c.name, modelBadgeOf(state, words).Family)
+		}
+	}
+	for _, bad := range [][2]string{{"other", ""}, {"other", "<b>"}, {"nope", ""}} {
+		if _, _, problem := adminModelChoice(bad[0], bad[1]); problem == "" {
+			t.Errorf("%v is accepted", bad)
+		}
+	}
+	if n := len(modelChoices()); n != len(modelFamilies)+3 {
+		t.Errorf("the picker offers %d choices", n)
+	}
+}
+
+// TestPostgresAdminPicksAModel: the admin page's picker sets the account's model through its route, logged, and the character's sheet shows it.
+func TestPostgresAdminPicksAModel(t *testing.T) {
+	testPostgres(t)
+	const key = "test-admin-key-for-model-picker"
+	t.Setenv("ADMIN_KEY", key)
+	_, _, _, chars, _ := pgFightWith(t, "pickmodel", 1)
+	var agentID int
+	db.QueryRow(`SELECT agent_id FROM characters WHERE id = $1`, chars[0]).Scan(&agentID)
+	call := func(method string, body interface{}) (int, map[string]interface{}) {
+		var b []byte
+		if body != nil {
+			b, _ = json.Marshal(body)
+		}
+		r := httptest.NewRequest(method, fmt.Sprintf("/api/admin/accounts/%d/model", agentID), bytes.NewReader(b))
+		r.RemoteAddr = "10.77.4.1:1234"
+		r.Header.Set("X-Admin-Key", key)
+		r.Header.Set("Content-Type", "application/json")
+		w := httptest.NewRecorder()
+		newServer("").Handler.ServeHTTP(w, r)
+		out := map[string]interface{}{}
+		json.Unmarshal(w.Body.Bytes(), &out)
+		return w.Code, out
+	}
+	if c, j := call("GET", nil); c != 200 || len(asList(j["choices"])) != len(modelFamilies)+3 {
+		t.Fatalf("GET: %d %v", c, j)
+	}
+	if c, j := call("POST", map[string]interface{}{"family": "other", "model": "Homebrew 7B", "note": "test"}); c != 200 {
+		t.Fatalf("other: %d %v", c, j)
+	}
+	_, j := pgCall(t, "GET", fmt.Sprintf("/api/characters/%d/profile", chars[0]), "", nil)
+	if m := j["player"].(map[string]interface{})["model"].(map[string]interface{}); m["family"] != "other" || m["model"] != "Homebrew 7B" {
+		t.Errorf("the sheet after Other: %v", m)
+	}
+	if c, _ := call("POST", map[string]interface{}{"family": "other"}); c != 400 {
+		t.Errorf("Other with no name: %d", c)
+	}
+	var n int
+	db.QueryRow(`SELECT COUNT(*) FROM admin_changes WHERE kind='account' AND row_id=$1 AND field='ai_model'`, agentID).Scan(&n)
+	if n != 1 {
+		t.Errorf("logged %d times, want 1", n)
+	}
+}

@@ -260,3 +260,88 @@ func adminModelEdit(set map[string]interface{}) {
 		set["ai_model_state"] = ""
 	}
 }
+
+// modelChoices: what the admin page's picker offers, from the one table: each family, then Other (typed), Not shared and Unknown.
+func modelChoices() []map[string]string {
+	out := []map[string]string{}
+	for _, f := range modelFamilies {
+		out = append(out, map[string]string{"key": f.Key, "label": f.Label, "icon": modelIcon(f)})
+	}
+	return append(out, map[string]string{"key": "other", "label": "Other", "icon": modelIcon(modelOther)},
+		map[string]string{"key": "declined", "label": "Not shared", "icon": modelIcon(modelDeclined)},
+		map[string]string{"key": "unknown", "label": "Unknown", "icon": modelIcon(modelUnknown)})
+}
+
+// adminModelChoice turns the admin's pick into what is stored: a family with an optional model name ("Claude" and "Sonnet 5.5": "Claude Sonnet 5.5";
+// a name that already reads as the family is kept as it is), Other with its typed name (any name not listed), Not shared, or Unknown.
+func adminModelChoice(family, name string) (state, words, problem string) {
+	name = strings.TrimSpace(name)
+	switch family {
+	case "unknown":
+		return "", "", ""
+	case "declined":
+		return "declined", "", ""
+	case "other":
+		if name == "" {
+			return "", "", "Type the model's name for Other."
+		}
+		if why := modelNameProblem(name); why != "" {
+			return "", "", why
+		}
+		return "shared", name, ""
+	}
+	for _, f := range modelFamilies {
+		if f.Key != family {
+			continue
+		}
+		words := f.Label
+		if name != "" {
+			words = name
+			if modelFamilyOf(name).Key != f.Key {
+				words = f.Label + " " + name
+			}
+		}
+		if why := modelNameProblem(words); why != "" {
+			return "", "", why
+		}
+		return "shared", words, ""
+	}
+	return "", "", "family: one of the families, other, declined or unknown"
+}
+
+// adminAccountModel: GET shows an account's model and the choices; POST {"family": "claude", "model": "Sonnet 5.5", "note": "why"} sets it (logged).
+func adminAccountModel(w http.ResponseWriter, r *http.Request, id int) {
+	if adminRow("agents", id) == nil {
+		writeJSONStatus(w, http.StatusNotFound, map[string]interface{}{"error": "account_not_found"})
+		return
+	}
+	if r.Method == http.MethodGet {
+		writeJSONStatus(w, http.StatusOK, map[string]interface{}{"model": agentModelBadge(id), "choices": modelChoices()})
+		return
+	}
+	if r.Method != http.MethodPost {
+		writeJSONStatus(w, http.StatusMethodNotAllowed, map[string]interface{}{"error": "method_not_allowed"})
+		return
+	}
+	var req struct {
+		Family string `json:"family"` // a family's key (claude, gpt, gemini, meta, mistral, deepseek, grok, qwen), other, declined or unknown
+		Model  string `json:"model"`  // the model's name: optional with a family ("Sonnet 5.5"), required with other (any name not listed)
+		Note   string `json:"note"`   // why: written to the admin change log
+	}
+	if !readRequest(w, r, &req) {
+		return
+	}
+	state, words, problem := adminModelChoice(strings.ToLower(strings.TrimSpace(req.Family)), req.Model)
+	if problem != "" {
+		writeJSONStatus(w, http.StatusBadRequest, map[string]interface{}{"error": "invalid_model", "message": problem})
+		return
+	}
+	before := agentModelBadge(id)
+	if err := setAgentModel(id, state, words); err != nil {
+		writeDBWriteError(w, err, "the model")
+		return
+	}
+	after := agentModelBadge(id)
+	logAdminChange("account", id, "ai_model", before.Text, after.Text, "admin", req.Note)
+	writeJSONStatus(w, http.StatusOK, map[string]interface{}{"success": true, "model": after, "message": "Saved: " + after.Text})
+}
