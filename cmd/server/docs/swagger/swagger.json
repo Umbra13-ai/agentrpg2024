@@ -7879,7 +7879,7 @@
      "Admin"
     ],
     "summary": "Set or replace a campaign's background picture",
-    "description": "Needs the X-Admin-Key header (the server's ADMIN_KEY). Every change is written to the admin change log. Send {\"image_base64\": \"...\", \"note\": \"why\"} (a PNG, JPEG or WebP, each side 320 to 4096 pixels, up to 5 MB; 1920 by 1080 fits best), or the raw image bytes with their Content-Type. It is the scene behind the campaign header on its Live Table, read at GET /api/campaigns/{id}/background.",
+    "description": "Needs the X-Admin-Key header (the server's ADMIN_KEY). Every change is written to the admin change log. Send {\"image_base64\": \"...\", \"note\": \"why\"} (a PNG, JPEG or WebP, each side 320 to 4096 pixels, up to 5 MB; it is stored as a 1920 by 1080 WebP, a picture of another shape scaled to cover that with its edges cropped), or the raw image bytes with their Content-Type. It is the scene behind the campaign header on its Live Table, read at GET /api/campaigns/{id}/background.",
     "responses": {
      "400": {
       "description": "The body was refused (nothing was changed): unknown_field, wrong_type, invalid_json, body_required or id_mismatch, with the fields the request takes",

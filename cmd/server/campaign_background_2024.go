@@ -1,18 +1,23 @@
 package main
 
 import (
+	"bytes"
 	"database/sql"
 	"fmt"
+	"image"
 	"net/http"
 	"strconv"
 	"strings"
+
+	"github.com/HugoSmits86/nativewebp"
+	xdraw "golang.org/x/image/draw"
 )
 
 // campaign_background_2024.go: the one owner of a campaign's background picture (the scene behind the Live Table's header) and of its writes.
 // The administrator sets it (POST, PUT and DELETE /api/admin/campaigns/{id}/background, the admin page's Background card, written to the admin
 // change log); everyone who may watch the campaign reads it (GET /api/campaigns/{id}/background, gated like every read under /api/campaigns/{id}/,
 // so a private campaign's picture is private too). With none set the page shows the site's dragon (defaultBackground). What a picture may be is
-// `checkImage` (portrait_2024.go) with `backgroundRule`, the same check as a portrait's with a wide picture's sizes. Nothing else writes the
+// `checkImage` (portrait_2024.go) with `backgroundRule`, then `normalizeBackground`: every background is stored as a 1920 by 1080 WebP. Nothing else writes the
 // background columns (TestNoOtherBackgroundWriter).
 
 const (
@@ -21,15 +26,50 @@ const (
 	maxBackgroundBodySize = 8 * 1024 * 1024 // request body (covers base64 overhead)
 )
 
-// backgroundRule: a wide scene; the stage crops it to its own frame, centred.
+// backgroundRule: what may be sent in. What is stored is always backgroundW by backgroundH, a WebP (normalizeBackground), so the size and shape
+// of what comes in only decide how much is cropped.
 var backgroundRule = imageRule{MaxBytes: maxBackgroundBytes, MinPx: 320, MaxPx: 4096,
-	Best: "1920 by 1080 pixels is the best size for the page",
-	Shape: func(w, h int) string {
-		if float64(w)/float64(h) < 1.3 {
-			return fmt.Sprintf("Saved. The image is %d by %d pixels; the page shows the scene wide and crops the top and bottom, so a tall picture may lose its subject. 1920 by 1080 fits best.", w, h)
-		}
-		return ""
-	}}
+	Best: "1920 by 1080 pixels (16 by 9) is stored as it is; any other picture is scaled to cover that and the edges are cropped"}
+
+// The stored size of every background (owner, Nov 26: "lock it at 1920x1080 and then convert the upload to webp").
+const (
+	backgroundW = 1920
+	backgroundH = 1080
+)
+
+// normalizeBackground returns the picture to store: scaled to cover backgroundW by backgroundH, the overflow cropped evenly from both sides
+// (the scene's centre stays), written as a lossless WebP, and a sentence saying what was done. checkImage has passed the picture. A WebP that
+// is already exactly that size is kept as it is.
+func normalizeBackground(imageBytes []byte, mime string) (stored []byte, storedMime, note string, err error) {
+	src, _, err := image.Decode(bytes.NewReader(imageBytes))
+	if err != nil {
+		return nil, "", "", fmt.Errorf("the picture could not be read: %w", err)
+	}
+	b := src.Bounds()
+	w, h := b.Dx(), b.Dy()
+	if w == backgroundW && h == backgroundH && mime == "image/webp" {
+		return imageBytes, mime, "", nil
+	}
+	// the source area that has the stored shape, centred: the largest such rectangle inside the picture
+	cw, ch := w, h
+	if w*backgroundH > h*backgroundW { // wider than 16:9: cut the sides
+		cw = h * backgroundW / backgroundH
+	} else { // taller: cut the top and bottom
+		ch = w * backgroundH / backgroundW
+	}
+	crop := image.Rect(b.Min.X+(w-cw)/2, b.Min.Y+(h-ch)/2, b.Min.X+(w-cw)/2+cw, b.Min.Y+(h-ch)/2+ch)
+	out := image.NewRGBA(image.Rect(0, 0, backgroundW, backgroundH))
+	xdraw.CatmullRom.Scale(out, out.Bounds(), src, crop, xdraw.Src, nil)
+	var buf bytes.Buffer
+	if err := nativewebp.Encode(&buf, out, nil); err != nil {
+		return nil, "", "", err
+	}
+	note = fmt.Sprintf("Stored as a %d by %d WebP (it was %d by %d, %d KB, now %d KB).", backgroundW, backgroundH, w, h, (len(imageBytes)+1023)/1024, (buf.Len()+1023)/1024)
+	if cw != w || ch != h {
+		note += " The picture was not 16 by 9, so its edges were cropped (the centre is kept)."
+	}
+	return buf.Bytes(), "image/webp", note, nil
+}
 
 // saveBackground writes a checked image as the campaign's background.
 func saveBackground(campaignID int, imageBytes []byte, mime string) error {
@@ -137,9 +177,14 @@ func handleAdminBackground(w http.ResponseWriter, r *http.Request, id int) {
 			}
 			imageBytes = raw
 		}
-		mime, shapeNote, ref := checkImage(imageBytes, backgroundRule)
+		mime, _, ref := checkImage(imageBytes, backgroundRule)
 		if ref != nil {
 			writeJSONStatus(w, ref.Status, ref.Body)
+			return
+		}
+		imageBytes, mime, shapeNote, nerr := normalizeBackground(imageBytes, mime)
+		if nerr != nil {
+			writeJSONStatus(w, http.StatusBadRequest, map[string]interface{}{"error": "corrupt_image", "message": "The image could not be read: the file looks damaged. Save it again and resend it. Nothing was changed."})
 			return
 		}
 		if err := saveBackground(id, imageBytes, mime); err != nil {

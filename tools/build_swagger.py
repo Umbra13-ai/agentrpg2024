@@ -168,7 +168,7 @@ paths["/api/admin/campaigns/{id}"] = {
     "post": op("Admin", "Edit a campaign", _admin + ' {"set": {...}} as for characters, or {"add_character": id} / {"remove_character": id}.',
                params=[pth("id", "", "integer")])}
 paths["/api/admin/campaigns/{id}/background"] = {
-    "post": op("Admin", "Set or replace a campaign's background picture", _admin + ' Send {"image_base64": "...", "note": "why"} (a PNG, JPEG or WebP, each side 320 to 4096 pixels, up to 5 MB; 1920 by 1080 fits best), or the raw image bytes with their Content-Type. It is the scene behind the campaign header on its Live Table, read at GET /api/campaigns/{id}/background.',
+    "post": op("Admin", "Set or replace a campaign's background picture", _admin + ' Send {"image_base64": "...", "note": "why"} (a PNG, JPEG or WebP, each side 320 to 4096 pixels, up to 5 MB; it is stored as a 1920 by 1080 WebP, a picture of another shape scaled to cover that with its edges cropped), or the raw image bytes with their Content-Type. It is the scene behind the campaign header on its Live Table, read at GET /api/campaigns/{id}/background.',
                params=[pth("id", "", "integer")], example={"image_base64": "<the image file as base64>", "note": "the campaign's cover scene"}),
     "delete": op("Admin", "Remove a campaign's background picture", _admin + ' Optional {"note": "why"}; the page goes back to the default scene.', params=[pth("id", "", "integer")], example={"note": "removed an unsuitable image"})}
 paths["/api/admin/campaigns/{id}/delete"] = {"post": op("Admin", "Delete a campaign (hide; restorable)", _admin + " Its characters are let go and remembered for a restore.", params=[pth("id", "", "integer")])}

@@ -327,7 +327,7 @@ function portraitCard(id,name){var s=section('Portrait',true);
   rm.onclick=function(){if(confirm('Remove the portrait of '+name+'?'))api('DELETE','/api/admin/characters/'+id+'/portrait').then(function(r){toast(r.message);show()}).catch(fail)};
   add(s,img,none,f,add(el('div',{'class':'row'}),up,rm));show();return s}
 function backgroundCard(id,name){var s=section('Background picture',true);
-  s.appendChild(el('p',{'class':'muted small'},'The scene behind the campaign’s header on its Live Table. With none set the page shows the default dragon. A PNG, JPEG or WebP, each side 320 to 4096 pixels, up to 5 MB; a wide picture such as 1920 by 1080 fits best.'));
+  s.appendChild(el('p',{'class':'muted small'},'The scene behind the campaign’s header on its Live Table. With none set the page shows the default dragon. A PNG, JPEG or WebP, each side 320 to 4096 pixels, up to 5 MB. It is stored as a 1920 by 1080 WebP: a picture of another shape is scaled to cover that and its edges are cropped.'));
   var img=el('img',{alt:'Background of '+name});img.style.cssText='display:block;max-width:100%;width:320px;border-radius:8px;margin:8px 0';
   var none=el('p',{'class':'box plain'},'No picture of its own: the page shows the default scene.');
   function show(){img.style.display='none';none.style.display='block';img.onload=function(){img.style.display='block';none.style.display='none'};img.onerror=function(){img.style.display='none';none.style.display='block'};img.src='/api/campaigns/'+id+'/background?'+Date.now()}

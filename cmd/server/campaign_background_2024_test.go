@@ -5,6 +5,7 @@ import (
 	"encoding/base64"
 	"encoding/json"
 	"fmt"
+	"image"
 	"net/http/httptest"
 	"os"
 	"path/filepath"
@@ -88,18 +89,43 @@ func TestPostgresAdminCampaignBackground(t *testing.T) {
 		t.Fatal("a refused image was saved")
 	}
 
-	// set: the public image and the page both show it; a tall picture is saved with a note about the crop
-	if c, j := upload(wide, "the cover scene"); c != 200 || j["content_type"] != "image/png" || j["note"] != nil {
-		t.Fatalf("set: %d %v", c, j)
+	// set: whatever is sent is stored as a 1920 by 1080 WebP; the public image and the page show it
+	stored := func() (w, h int, mime string, n int) {
+		_, _, body := call("GET", fmt.Sprintf("/api/campaigns/%d/background", camp), "", nil, "")
+		cfg, _, err := image.DecodeConfig(strings.NewReader(body))
+		if err != nil {
+			t.Fatalf("the stored picture can't be read: %v", err)
+		}
+		db.QueryRow(`SELECT background_type FROM lobbies WHERE id = $1`, camp).Scan(&mime)
+		return cfg.Width, cfg.Height, mime, len(body)
 	}
-	if c, _, body := call("GET", fmt.Sprintf("/api/campaigns/%d/background", camp), "", nil, ""); c != 200 || len(body) != len(wide) {
-		t.Fatalf("the image is public: %d (%d bytes)", c, len(body))
+	if c, j := upload(wide, "the cover scene"); c != 200 || j["content_type"] != "image/webp" || j["note"] == nil || strings.Contains(fmt.Sprint(j["note"]), "cropped") {
+		t.Fatalf("set a 16:9 picture: %d %v", c, j)
+	}
+	if w, h, mime, _ := stored(); w != backgroundW || h != backgroundH || mime != "image/webp" {
+		t.Fatalf("stored %dx%d %s, want %dx%d image/webp", w, h, mime, backgroundW, backgroundH)
 	}
 	if p := page(); !strings.Contains(p, fmt.Sprintf(`class="vtt-bg" src="/api/campaigns/%d/background?v=`, camp)) || strings.Contains(p, `class="vtt-bg" src="`+defaultBackground+`"`) {
 		t.Error("the page does not show the campaign's own background")
 	}
-	if c, j := upload(testPNG(t, 400, 640), ""); c != 200 || j["note"] == nil {
+	if c, j := upload(testPNG(t, 400, 640), ""); c != 200 || !strings.Contains(fmt.Sprint(j["note"]), "cropped") {
 		t.Errorf("a tall picture: %d %v", c, j)
+	}
+	if w, h, _, _ := stored(); w != backgroundW || h != backgroundH {
+		t.Errorf("a tall picture stored %dx%d", w, h)
+	}
+	if c, j := upload(testPNG(t, 4000, 1000), ""); c != 200 || !strings.Contains(fmt.Sprint(j["note"]), "cropped") {
+		t.Errorf("a very wide picture: %d %v", c, j)
+	}
+	if w, h, _, _ := stored(); w != backgroundW || h != backgroundH {
+		t.Errorf("a very wide picture stored %dx%d", w, h)
+	}
+	// a WebP already 1920 by 1080 is kept as it came
+	if w, h, _, _ := stored(); w == backgroundW && h == backgroundH {
+		_, _, body := call("GET", fmt.Sprintf("/api/campaigns/%d/background", camp), "", nil, "")
+		if c, j := upload([]byte(body), ""); c != 200 || j["note"] != nil {
+			t.Errorf("the stored WebP sent back: %d %v", c, j)
+		}
 	}
 	// the admin editor never sends the picture's bytes
 	if _, j, _ := call("GET", fmt.Sprintf("/api/admin/campaigns/%d", camp), "", nil, key); j["campaign"] == nil {
@@ -116,8 +142,8 @@ func TestPostgresAdminCampaignBackground(t *testing.T) {
 	}
 	var n int
 	db.QueryRow(`SELECT COUNT(*) FROM admin_changes WHERE kind='campaign' AND row_id=$1 AND field='background'`, camp).Scan(&n)
-	if n != 3 { // set, set again (the tall one), remove
-		t.Errorf("the admin change log holds %d background changes, want 3", n)
+	if n != 5 { // set, tall, very wide, the stored WebP sent back, remove
+		t.Errorf("the admin change log holds %d background changes, want 5", n)
 	}
 }
 
