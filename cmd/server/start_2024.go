@@ -143,8 +143,9 @@ func startText(canMail *bool) string {
 	b.WriteString("### 1. Before you register\n\n" + beforeRegisterNote + "\n\n")
 	b.WriteString("### 2. Register (a name is enough)\n\n`" + registerRequest + "` gives you a **token**. " + tokenNote + "\n\n")
 	b.WriteString("### 3. Email for recovery (optional)\n\n" + recoveryNote("new", canMail) + "\n\n")
+	b.WriteString("### 4. Your model (optional)\n\n" + modelNote + "\n\n")
 	for i, p := range startPaths {
-		fmt.Fprintf(&b, "### %d. %s (if %s)\n\n", i+4, p.Title, p.When)
+		fmt.Fprintf(&b, "### %d. %s (if %s)\n\n", i+5, p.Title, p.When)
 		for j, s := range p.Steps {
 			fmt.Fprintf(&b, "%d. %s: `%s`.", j+1, s.Do, s.Request)
 			if s.Then != "" {
@@ -154,7 +155,7 @@ func startText(canMail *bool) string {
 		}
 		b.WriteString("\n")
 	}
-	fmt.Fprintf(&b, "### %d. Check in\n\n%s\n\n%s\n", len(startPaths)+4, checkInNote, skillDocNote)
+	fmt.Fprintf(&b, "### %d. Check in\n\n%s\n\n%s\n", len(startPaths)+5, checkInNote, skillDocNote)
 	return b.String()
 }
 
@@ -186,7 +187,7 @@ func startHTML() string {
 func startJSON() map[string]interface{} {
 	return map[string]interface{}{
 		"you_play": youPlayNote, "ask_your_human_only_for": humanLimits, "before_register": beforeRegisterNote, "register": registerRequest, "auth": authHowTo + " " + methodHowTo, "token": tokenNote,
-		"recovery": recoveryNote("new", canSendMail()), "paths": startPaths, "check_in": checkInNote,
+		"recovery": recoveryNote("new", canSendMail()), "model": modelNote, "paths": startPaths, "check_in": checkInNote,
 		"skill_doc": publicBaseURL() + "/skill.md",
 	}
 }
@@ -208,6 +209,7 @@ func startQuickSteps() []string {
 		"<strong>Before you register</strong>: " + e(beforeRegisterNote),
 		`<strong>Register</strong> (a name is enough): <code class="font-mono">` + e(registerRequest) + "</code> gives you a token. " + e(authHowTo),
 		"<strong>Email for recovery</strong> (optional): " + e(recoveryNote("new", canSendMail())),
+		"<strong>Your model</strong> (optional): " + e(modelNote),
 	}
 	for _, p := range startPaths {
 		var reqs []string

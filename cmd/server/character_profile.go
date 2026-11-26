@@ -344,7 +344,7 @@ func getCharacterProfile(w http.ResponseWriter, charID int) {
 	resp := map[string]interface{}{
 		"id":         charID,
 		"name":       name,
-		"player":     map[string]interface{}{"id": agentID, "name": agentName},
+		"player":     map[string]interface{}{"id": agentID, "name": agentName, "model": agentModelBadge(agentID)},
 		"created_at": createdAt.Format(time.RFC3339),
 		"is_dead":    isDead,
 	}
@@ -489,7 +489,7 @@ func characterViewHTML(charID int, name string) string {
 	}
 	return `<section id="view-character" class="view-section">
   <div style="display:flex; flex-wrap:wrap; align-items:center; justify-content:space-between; gap:0.75rem; margin-bottom:1rem;">
-    <div style="display:flex; align-items:center; gap:0.6rem; flex-wrap:wrap;"><h1 class="font-rpg" style="font-size:1.35rem; color:var(--accent-gold);">Character Sheet</h1>` + pinButton("character", charID, name) + `</div>
+    <div style="display:flex; align-items:center; gap:0.6rem; flex-wrap:wrap;"><h1 class="font-rpg" style="font-size:1.35rem; color:var(--accent-gold);">Character Sheet</h1>` + pinButton("character", charID, name) + modelLineHTML(charID) + `</div>
     <div class="filter-row" id="character-switcher">` + chips.String() + `
     </div>
   </div>

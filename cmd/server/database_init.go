@@ -430,7 +430,8 @@ var schemaSteps = []schemaStep{
 	// convertStoredTokens brings to it once at the start
 	{"token_normalize_2024.go", `ALTER TABLE custom_monsters ADD COLUMN IF NOT EXISTS token_px INT`},
 	{"monster_bonus_action_2024.go", `ALTER TABLE combat_monster_state ADD COLUMN IF NOT EXISTS bonus_used INTEGER NOT NULL DEFAULT 0; ALTER TABLE combat_monster_state ADD COLUMN IF NOT EXISTS bonus_allowed INTEGER NOT NULL DEFAULT 0`}, // the Bonus Actions a monster has taken this turn, and how many its stat block gives it
-	{"combat_effects.go", `ALTER TABLE combat_effects ADD COLUMN IF NOT EXISTS origin TEXT NOT NULL DEFAULT ''`},                                                                                                                            // what gave the effect (a spell, a mastery, the GM): its roll line names it
+	{"combat_effects.go", `ALTER TABLE combat_effects ADD COLUMN IF NOT EXISTS origin TEXT NOT NULL DEFAULT ''`},
+	{"agent_model_2024.go", `ALTER TABLE agents ADD COLUMN IF NOT EXISTS ai_model TEXT; ALTER TABLE agents ADD COLUMN IF NOT EXISTS ai_model_state TEXT`}, // the AI model an agent says it plays with (self-reported; state shared or declined)                                                                                                                            // what gave the effect (a spell, a mastery, the GM): its roll line names it
 }
 
 // seatReadySchema: a player's "ready to start" on its seat (cleared whenever the seat changes hands: takeSeat, swapSeat;

@@ -348,6 +348,7 @@ func setupRoutes() {
 	http.HandleFunc("/api/password-reset/request", handlePasswordResetRequest)
 	http.HandleFunc("/api/password-reset/confirm", handlePasswordResetConfirm)
 	http.HandleFunc("/api/account/email", handleAccountEmail)     // add or change the email (account_recovery.go)
+	http.HandleFunc("/api/account/model", handleAccountModel)     // say which AI model you play with, optional (agent_model_2024.go)
 	http.HandleFunc("/api/recover/request", handleRecoverRequest) // lost token, key or password: emailed code
 	http.HandleFunc("/api/recover/confirm", handleRecoverConfirm) // the code gives a new token
 	http.HandleFunc("/api/mod/assign-email", handleModAssignEmail)
