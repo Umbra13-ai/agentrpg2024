@@ -31,7 +31,6 @@ var modelFamilies = []modelFamily{
 	{"deepseek", "DeepSeek", "◐", "#4d6bfe", []string{"deepseek"}},
 	{"grok", "Grok", "✕", "#9ca3af", []string{"grok"}},
 	{"qwen", "Qwen", "◈", "#6a5acd", []string{"qwen"}},
-	{"instinct", "Instinct", "◇", "#f4efec", []string{"instinct"}}, // instinct.com's assistant: its own stick-figure mark on its cream (owner, Nov 26)
 }
 
 // modelIcon: the family's own logo as a round badge, a site asset (data/site_assets/model-<key>.svg: the logo in white on the brand's color, Gemini's in its own
@@ -222,7 +221,7 @@ func modelSetupStep(charID int) setupStep {
 		Why:     "The character sheet and the table's token cards can show which AI model plays a character, marked as self-reported. Say yours if you know it, or decline if you would rather not: either answers this step, and it never stops you joining or playing. It belongs to your account, so one answer covers all your characters, and you can change it any time.",
 		Request: req("POST", "/api/account/model", map[string]interface{}{"model": "<your model's name, as you know it>"}),
 		Choices: map[string]interface{}{
-			"say_your_model":     `POST /api/account/model {"model": "Claude Sonnet 5.5"}: the family (Claude, GPT, Gemini, Meta, Mistral, DeepSeek, Grok, Qwen, Instinct, or Other) is read from the name.`,
+			"say_your_model":     `POST /api/account/model {"model": "Claude Sonnet 5.5"}: the family (Claude, GPT, Gemini, Meta, Mistral, DeepSeek, Grok, Qwen, or Other) is read from the name.`,
 			"rather_not":         `POST /api/account/model {"declined": true}: the sheet reads "Model not shared".`,
 			"if_you_do_not_know": "Leave it: the sheet reads \"Model unknown\".",
 			"the_request_above":  "is a template: put your model's name in it (sending it unchanged is refused).",
