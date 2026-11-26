@@ -73,14 +73,14 @@ func gmReminderNow(lobby int) string {
 	return gmReminder(checkInAt(in, now))
 }
 
-// finalCheckInClause: ", and no later than the round's final check-in (11:55 UTC)": the GM reads a turn at a check-in, and says when it will at the
-// latest, so a player who looks at the first one and finds nothing knows how long to wait (I-THISTLE-8). "" when the final check-in is not after
-// the time named or the schedule is paused.
-func finalCheckInClause(final time.Time, valid bool, at time.Time) string {
+// resolveWhen: when the GM resolves a submitted turn, the one wording of the submit reply and my-turn (I-THISTLE-8): the round's final
+// check-in first, the time a player can count on, then the GM's next check-in, when it may come sooner. at is the GM check-in the turn
+// counts for; final the round's final check-in (valid false while paused).
+func resolveWhen(at, final time.Time, valid bool) string {
 	if !valid || !final.After(at) {
-		return ""
+		return fmt.Sprintf("the GM resolves it at their next check-in, %s", clockText(at))
 	}
-	return fmt.Sprintf(", and no later than the round's final check-in (%s)", clockText(final))
+	return fmt.Sprintf("the GM resolves it by the round's final check-in, %s, at the latest (their next check-in is %s)", clockText(final), clockText(at))
 }
 
 // openRoundOf reads a campaign's open round (nil when none).
@@ -435,6 +435,7 @@ type checkIn struct {
 	State         string       `json:"state"`
 	Round         *roundView   `json:"round"`
 	GMCheckIns    []time.Time  `json:"gm_check_ins,omitempty"`
+	GMMinutes     []int        `json:"gm_minutes,omitempty"` // the GM's check-ins in minutes past every hour (scheduleOf), for its reminder
 	NextGMCheckIn *time.Time   `json:"next_gm_check_in,omitempty"`
 	Due           *dueView     `json:"due,omitempty"`
 	GMOverdue     *overdueView `json:"gm_overdue"`
@@ -488,6 +489,9 @@ func tp(t time.Time) *time.Time { return &t }
 func checkInAt(in checkInInputs, now time.Time) checkIn {
 	now = now.UTC()
 	out := checkIn{Now: now, State: in.State, Characters: []charStatus{}}
+	if in.Timed {
+		out.GMMinutes = in.Sched.GM
+	}
 	switch {
 	case in.State == scheduleOff:
 		out.Message = "The turn schedule is off: the campaign plays as before."
@@ -547,7 +551,7 @@ func checkInAt(in checkInInputs, now time.Time) checkIn {
 	submittedText := func(sent time.Time) string {
 		switch at := resolvesAt(sent); {
 		case out.NextGMCheckIn != nil && at != nil:
-			return fmt.Sprintf("Submitted: it resolves at the GM's next check-in (%s)%s.", clockText(*at), finalCheckInClause(deadline, !paused, *at))
+			return "Submitted: " + resolveWhen(*at, deadline, !paused) + "."
 		case lateGM != nil:
 			return fmt.Sprintf("Submitted: the round's final check-in has passed, so the GM resolves it at their next check-in (%s). There is nothing more for you to do this round.", clockText(*lateGM))
 		}

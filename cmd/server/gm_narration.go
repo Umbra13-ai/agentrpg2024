@@ -833,6 +833,9 @@ func handleGMStatus(w http.ResponseWriter, r *http.Request) {
 		}
 		ci := checkInAt(in, now)
 		response["check_in"] = ci
+		if rem := gmReminder(ci); rem != "" { // the same reminder as the resolve and narrate replies: the next check-in and every one of them
+			response["reminder"] = rem
+		}
 		if c, ok := ptLoadCombat(campaignID); ok {
 			response["pending_turns"] = map[string]interface{}{"queue": pendingQueue(campaignID, c)}
 			if ptEnemiesDown(campaignID) {

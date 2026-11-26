@@ -493,7 +493,7 @@ func submittedReminder(s *pendingSubmission, now time.Time) string {
 	msg := fmt.Sprintf("Your submission is saved for round %d (outside a fight); the GM resolves it at a check-in.", s.Round.Number)
 	if note, err := roundNoteFor(s.Lobby, s.CharacterID); err == nil && note != nil {
 		if at, ok := note["resolves_at"].(*time.Time); ok && at != nil {
-			msg = fmt.Sprintf("Your submission is saved for round %d (outside a fight); the GM resolves it at their next check-in, %s%s.", s.Round.Number, clockText(*at), finalCheckInClause(s.Round.Deadline.Time, s.Round.Deadline.Valid, *at))
+			msg = fmt.Sprintf("Your submission is saved for round %d (outside a fight); %s.", s.Round.Number, resolveWhen(*at, s.Round.Deadline.Time, s.Round.Deadline.Valid))
 		}
 	}
 	if next, ok := playerNextCheckIn(s.Lobby, s.CharacterID, s.Round, now); ok {

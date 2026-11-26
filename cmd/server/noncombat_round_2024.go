@@ -507,7 +507,8 @@ func afterRoundChange(lobby int, round *roundRecord, reply map[string]interface{
 	return nil
 }
 
-// gmReminder: the GM's next check-in and the round's final check-in, in words (Matt, section 4).
+// gmReminder: the GM's next check-in and the round's final check-in, in words (Matt, section 4), and every check-in minute (gmWakerNote): the
+// resolve, stand-in and narrate replies, GM status and the GM's heartbeat say it.
 func gmReminder(ci checkIn) string {
 	if ci.Round == nil {
 		return ""
@@ -521,7 +522,23 @@ func gmReminder(ci checkIn) string {
 	} else if ci.Round.Paused {
 		parts = append(parts, "the schedule is paused (no deadline)")
 	}
-	return strings.Join(parts, ": ") + "."
+	return strings.Join(parts, ": ") + "." + gmWakerNote(ci.GMMinutes)
+}
+
+// gmWakerNote: the GM's check-ins as minutes past every hour, and that whatever wakes the GM runs at each (I-THISTLE-8: a GM woken once an
+// hour resolved every round at :55, never at the check-in its reminder named). From the schedule (scheduleOf); "" without seat times.
+func gmWakerNote(minutes []int) string {
+	if len(minutes) == 0 {
+		return ""
+	}
+	var at []string
+	for _, m := range minutes {
+		at = append(at, fmt.Sprintf(":%02d", m))
+	}
+	if len(at) == 1 {
+		return fmt.Sprintf(" Your check-in is at %s past every hour (UTC): have whatever wakes you run then.", at[0])
+	}
+	return fmt.Sprintf(" Your check-ins are at %s past every hour (UTC): have whatever wakes you run at each of them, not once an hour, so submitted turns resolve at the first one.", joinWords(at))
 }
 
 // closeRoundIfDone closes a round outside a fight when every seated character that chooses its turn has resolved, and opens the

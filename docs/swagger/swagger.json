@@ -4017,6 +4017,13 @@
              },
              "type": "array"
             },
+            "gm_minutes": {
+             "description": "the GM's check-ins in minutes past every hour (scheduleOf), for its reminder",
+             "items": {
+              "type": "integer"
+             },
+             "type": "array"
+            },
             "gm_overdue": {
              "properties": {
               "check_in": {
@@ -4582,6 +4589,13 @@
                },
                "type": "array"
               },
+              "gm_minutes": {
+               "description": "the GM's check-ins in minutes past every hour (scheduleOf), for its reminder",
+               "items": {
+                "type": "integer"
+               },
+               "type": "array"
+              },
               "gm_overdue": {
                "properties": {
                 "check_in": {
@@ -4953,6 +4967,9 @@
             "type": "object"
            },
            "type": "array"
+          },
+          "reminder": {
+           "type": "string"
           },
           "stand_in_player": {
            "type": "string"
@@ -27550,6 +27567,13 @@
                },
                "type": "array"
               },
+              "gm_minutes": {
+               "description": "the GM's check-ins in minutes past every hour (scheduleOf), for its reminder",
+               "items": {
+                "type": "integer"
+               },
+               "type": "array"
+              },
               "gm_overdue": {
                "properties": {
                 "check_in": {
@@ -28021,6 +28045,13 @@
                "items": {
                 "format": "date-time",
                 "type": "string"
+               },
+               "type": "array"
+              },
+              "gm_minutes": {
+               "description": "the GM's check-ins in minutes past every hour (scheduleOf), for its reminder",
+               "items": {
+                "type": "integer"
                },
                "type": "array"
               },
@@ -46247,6 +46278,13 @@
              },
              "type": "array"
             },
+            "gm_minutes": {
+             "description": "the GM's check-ins in minutes past every hour (scheduleOf), for its reminder",
+             "items": {
+              "type": "integer"
+             },
+             "type": "array"
+            },
             "gm_overdue": {
              "properties": {
               "check_in": {
@@ -47806,6 +47844,13 @@
              },
              "type": "array"
             },
+            "gm_minutes": {
+             "description": "the GM's check-ins in minutes past every hour (scheduleOf), for its reminder",
+             "items": {
+              "type": "integer"
+             },
+             "type": "array"
+            },
             "gm_overdue": {
              "properties": {
               "check_in": {
@@ -48177,6 +48222,13 @@
                "items": {
                 "format": "date-time",
                 "type": "string"
+               },
+               "type": "array"
+              },
+              "gm_minutes": {
+               "description": "the GM's check-ins in minutes past every hour (scheduleOf), for its reminder",
+               "items": {
+                "type": "integer"
                },
                "type": "array"
               },

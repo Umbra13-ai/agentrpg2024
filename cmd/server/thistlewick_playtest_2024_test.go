@@ -56,21 +56,29 @@ func TestPostgresThistlewickPlaytest(t *testing.T) {
 	_, sub := pgCall(t, "POST", "/api/action", player, map[string]interface{}{"action": "declare", "description": "I pay the ferryman and board"})
 	_, mt = pgCall(t, "GET", "/api/my-turn?view=short", player, nil)
 	round, _ = mt["round"].(map[string]interface{})
-	if at, _ := round["resolves_at"].(string); at == "" || !strings.Contains(fmt.Sprint(sub["message"]), "resolves it at their next check-in") {
+	if at, _ := round["resolves_at"].(string); at == "" || !strings.Contains(fmt.Sprint(sub["message"]), "the GM resolves it") || !strings.Contains(fmt.Sprint(round["message"]), "the GM resolves it") {
 		t.Errorf("the submission's reply and the round: %v / %v", sub["message"], round)
 	}
 	// the GM is told its next and final check-in at every narration, not only when it resolves a round (I-THISTLE-8)
 	_, nar := pgCall(t, "POST", "/api/gm/narrate", gm, map[string]interface{}{"campaign_id": camp, "narration": "The ferry pushes off."})
-	if rem := fmt.Sprint(nar["reminder"]); !strings.Contains(rem, "your next check-in is") || !strings.Contains(rem, "final check-in is") {
+	if rem := fmt.Sprint(nar["reminder"]); !strings.Contains(rem, "your next check-in is") || !strings.Contains(rem, "final check-in is") || !strings.Contains(rem, "past every hour (UTC)") {
 		t.Errorf("narrate's reply names no check-in: %v", nar["reminder"])
 	}
-	// and a turn that waits says the latest the GM reads it
+	// GM status says it too: the GM reads it when it signs in, not only when it resolves
+	_, st := pgCall(t, "GET", fmt.Sprintf("/api/gm/status?campaign_id=%d", camp), gm, nil)
+	if fmt.Sprint(st["reminder"]) != fmt.Sprint(nar["reminder"]) {
+		t.Errorf("GM status's reminder %q differs from narrate's %q", st["reminder"], nar["reminder"])
+	}
+	// a turn that waits says first the latest the GM reads it, then the GM's next check-in (I-THISTLE-8)
 	final := time.Date(2026, 11, 24, 11, 55, 0, 0, time.UTC)
-	if got := finalCheckInClause(final, true, time.Date(2026, 11, 24, 11, 10, 0, 0, time.UTC)); !strings.Contains(got, "no later than the round's final check-in (11:55 UTC)") {
+	if got := resolveWhen(time.Date(2026, 11, 24, 11, 10, 0, 0, time.UTC), final, true); got != "the GM resolves it by the round's final check-in, 11:55 UTC, at the latest (their next check-in is 11:10 UTC)" {
 		t.Errorf("the latest time: %q", got)
 	}
-	if finalCheckInClause(final, true, final) != "" || finalCheckInClause(final, false, time.Time{}) != "" {
-		t.Error("a final check-in that is not later is named")
+	if got := resolveWhen(final, final, true); got != "the GM resolves it at their next check-in, 11:55 UTC" || resolveWhen(final, time.Time{}, false) != got {
+		t.Errorf("no later final check-in: %q", got)
+	}
+	if got := gmWakerNote([]int{10, 25, 40, 55}); !strings.Contains(got, ":10, :25, :40 and :55 past every hour (UTC)") || gmWakerNote(nil) != "" {
+		t.Errorf("the GM's check-in minutes: %q", got)
 	}
 	// examples name the party, never another story's people (I-THISTLE-5)
 	for _, at := range actionTypes {

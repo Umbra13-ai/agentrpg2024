@@ -13,7 +13,7 @@ func TestSubmittedTurnNamesTheGMsCheckIn(t *testing.T) {
 	in := exampleInputs(at("09:55:00"))
 	in.Round.Kind, in.Fight = roundNoncombat, nil
 	submit(&in, ann, at("10:05:00"))
-	if s := statusOfChar(t, checkInAt(in, at("10:06:00")), ann); s.ResolvesAt == nil || !strings.Contains(s.Message, "GM's next check-in") {
+	if s := statusOfChar(t, checkInAt(in, at("10:06:00")), ann); s.ResolvesAt == nil || !strings.Contains(s.Message, "their next check-in is 10:10 UTC") || !strings.Contains(s.Message, "by the round's final check-in, 10:55 UTC") {
 		t.Errorf("in the round's window: %v %q", s.ResolvesAt, s.Message)
 	}
 	s := statusOfChar(t, checkInAt(in, at("11:39:00")), ann) // final check-in 10:55 has passed
