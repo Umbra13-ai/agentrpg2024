@@ -105,6 +105,9 @@ func TestPostgresAdminCampaignBackground(t *testing.T) {
 	if w, h, mime, _ := stored(); w != backgroundW || h != backgroundH || mime != "image/webp" {
 		t.Fatalf("stored %dx%d %s, want %dx%d image/webp", w, h, mime, backgroundW, backgroundH)
 	}
+	if _, _, body := call("GET", fmt.Sprintf("/api/campaigns/%d/background", camp), "", nil, ""); len(body) < 16 || body[8:12] != "WEBP" || body[12:16] != "VP8 " {
+		t.Errorf("the stored picture is not a lossy WebP: %q", body[:min(16, len(body))])
+	}
 	if p := page(); !strings.Contains(p, fmt.Sprintf(`class="vtt-bg" src="/api/campaigns/%d/background?v=`, camp)) || strings.Contains(p, `class="vtt-bg" src="`+defaultBackground+`"`) {
 		t.Error("the page does not show the campaign's own background")
 	}

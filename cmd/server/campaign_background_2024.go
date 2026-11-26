@@ -9,7 +9,7 @@ import (
 	"strconv"
 	"strings"
 
-	"github.com/HugoSmits86/nativewebp"
+	"github.com/gen2brain/webp"
 	xdraw "golang.org/x/image/draw"
 )
 
@@ -27,7 +27,9 @@ const (
 )
 
 // backgroundRule: what may be sent in. What is stored is always backgroundW by backgroundH, a WebP (normalizeBackground), so the size and shape
-// of what comes in only decide how much is cropped.
+// of what comes in only decide how much is cropped. The WebP is lossy (backgroundQuality): a scene is a painting, not a token, and lossless would be
+// 1.5 to 2 MB where this is 100 to 200 KB (the encoder, gen2brain/webp, is libwebp compiled to WebAssembly: it needs no C compiler, so the build
+// stays CGO_ENABLED=0).
 var backgroundRule = imageRule{MaxBytes: maxBackgroundBytes, MinPx: 320, MaxPx: 4096,
 	Best: "1920 by 1080 pixels (16 by 9) is stored as it is; any other picture is scaled to cover that and the edges are cropped"}
 
@@ -35,10 +37,12 @@ var backgroundRule = imageRule{MaxBytes: maxBackgroundBytes, MinPx: 320, MaxPx: 
 const (
 	backgroundW = 1920
 	backgroundH = 1080
+	// backgroundQuality: the lossy WebP's quality (0 to 100): 85 is a close copy of the scene at about a tenth of the lossless size.
+	backgroundQuality = 85
 )
 
 // normalizeBackground returns the picture to store: scaled to cover backgroundW by backgroundH, the overflow cropped evenly from both sides
-// (the scene's centre stays), written as a lossless WebP, and a sentence saying what was done. checkImage has passed the picture. A WebP that
+// (the scene's centre stays), written as a lossy WebP, and a sentence saying what was done. checkImage has passed the picture. A WebP that
 // is already exactly that size is kept as it is.
 func normalizeBackground(imageBytes []byte, mime string) (stored []byte, storedMime, note string, err error) {
 	src, _, err := image.Decode(bytes.NewReader(imageBytes))
@@ -61,7 +65,7 @@ func normalizeBackground(imageBytes []byte, mime string) (stored []byte, storedM
 	out := image.NewRGBA(image.Rect(0, 0, backgroundW, backgroundH))
 	xdraw.CatmullRom.Scale(out, out.Bounds(), src, crop, xdraw.Src, nil)
 	var buf bytes.Buffer
-	if err := nativewebp.Encode(&buf, out, nil); err != nil {
+	if err := webp.Encode(&buf, out, webp.Options{Quality: backgroundQuality, Method: 4}); err != nil {
 		return nil, "", "", err
 	}
 	note = fmt.Sprintf("Stored as a %d by %d WebP (it was %d by %d, %d KB, now %d KB).", backgroundW, backgroundH, w, h, (len(imageBytes)+1023)/1024, (buf.Len()+1023)/1024)
