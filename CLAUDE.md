@@ -804,8 +804,8 @@ Add to the owner, never beside it. When you give another rule one owner, add it 
   (`class_helpers.go`), so the cast deals none and, where no owner adds the extra damage (`hitRiderRules`, a buff's effect row), says the server
   doesn't (`laterHitDamageNote`). Not done: an owner that adds the smites' and the Elementals' extra damage to the next hit (a one-hit rider marker
   in `hitRiderRules`: a new rule, owner's decision). Go: `TestPostgresMagicMissileAtCharacters`, `TestLaterHitDamageSpellsAreReadFromTheirText`.
-- **The pages at a phone's width:** `tools/page_check_320.js` (Playwright with the installed Chromium; `BASE`, `ADMIN_PATH`, `ADMIN_KEY`): the five
-  views, their linked pages and the signed-in admin page at 320 px: no horizontal scroll, no text under 12 px, no control under 40 px high. The admin
+- **The pages at a phone's width:** `tools/page_check_320.js` (Playwright with the installed Chromium; `BASE`, `ADMIN_PATH`, `ADMIN_KEY`): the four
+  tabs, the page shell's pages they link and the signed-in admin page at 320 px: no horizontal scroll, no text under 12 px, no control under 40 px high. The admin
   page's own stylesheet (`admin_page_2024.go`) had 36 px inputs, 20 px chip buttons and a card 415 px wide; fixed there once.
 - **my-turn's short view** (`?view=short`; S-WREN-1, Calla's answers, Nov 24): `shortTurn` (`cmd/server/short_view_2024.go`) BUILDS it from a fixed list
   (`shortKeep`, `shortScene`, `shortYou`), never the full reply with cuts: a key my-turn gains reaches it only by being placed there. The events since
@@ -1047,29 +1047,35 @@ Add to the owner, never beside it. When you give another rule one owner, add it 
 - **The GM guide:** `docs/gm_guide.md` (`docs.GMGuide`), sent as `gm_guide` when a campaign is created and served at
   `/gm-guide.md`, with this server's address where it says `https://YOUR-SERVER` and the schedule table from `scheduleOf` at
   its marker (`gmGuide`).
-- **Every web page's frame and the five views** (the GUI rework, Matt Nov 21: the owner's mock-up
-  `data/ui_preview/gui-2026-11-21/index.html`, implemented as it is): `cmd/server/site_layout_2024.go`. `framePage` puts a page into
-  `baseHTML` / `pageTemplate`: the mock-up's top bar (brand, `siteNav`'s desktop navigation, the theme select `themeMenu`, the Agent
-  Quickstart button), the phones' bottom tab bar with its icons and the footer, all made from `siteNav` (the one list of the five views:
-  Live Table `/live`, Campaigns, Character `/character`, Universe, Commands & API; the page being read is marked active by its `Match`
-  paths), and the Agent Quickstart modal (`quickstartModal`: its six steps and its cURL are `startQuickSteps` / `startCurl` in
-  `start_2024.go`; the whole start text is `/start`). The mock-up's stylesheet is `designCSS` (`site_design_css_2024.go`, generated from
-  the mock-up with sizes under 12 px raised); `siteCSS` is only what the real site adds (link colors, the 40 px touch targets, `.prose`
-  for text pages, `a.solo-link` for a link that is its block's whole text). The five themes of the mock-up (Obsidian Gold the default,
-  Crimson Maroon, Forest Emerald, Royal Sapphire, Parchment) are `siteThemes` in `themes_2024.go` (`designTheme`; the older themes stay
-  for saved choices, `legacyTheme`, off the menu). `wrapView` is a view in the mock-up's own markup; `wrapHTML` a text page (`.prose`).
-  The views (`site_views_2024.go`, each with the mock-up's sections and classes and real data; what the demo made up, such as Simulate
-  Next Turn, is not there; real content the mock-up has no place for comes after its sections in its components): the Live Table
-  (`liveTablePage`, a campaign's page `/campaign/{id}`; `/` and `/live` show `featuredCampaign`), its chronicle entries
-  (`chronicleEntries`, also the whole chronicle `chroniclePage` at `/campaign/{id}/log`), the Campaign Browser (`campaignBrowserPage`),
-  the Character Sheet (`characterViewHTML` and `characterProfileScript`, character_profile.go; `/character` opens the featured
-  campaign's party), the Universe Compendium (`universePage` / `universeCategories`) and Commands & API (commands_page.go: every action
-  type, `actionTypesHTML`, and every reference operation as the mock-up's cards, under its filter pills All / Player / GM / Campaign,
-  `commandGroups`' `Filter`). A page adds only its own CSS; never paste the shared parts into a page. Mobile first: text never under
-  12 px, a touch target never under 40 px, no horizontal scroll from 320 px. The design's images are served from `data/site_assets` at
-  `/assets/` (`handleSiteAsset`). `classIcon` is a character's token without a portrait, `feedKind` a feed entry's kind.
+- **Every web page's frame: two shells, one palette, one list of tabs** (owner, Nov 26: "Replace the whole site's design" with the Nov 25 mock-up,
+  `data/preview_table_2024.html`). **The app shell** is the mock-up itself, the site's front pages (`live_table_2024.go`, `serveAppShell`): `/` and
+  `/live` (the Current tab on `featuredCampaign`), `/campaign/{id}` (Current on that campaign, behind its watch password), `/campaigns`, `/universe`,
+  `/settings`; each route opens its tab (`LIVE.initialTab`). The owner's file is used as it is, its Tailwind compiled into `data/preview_table_2024.css`
+  from it; its demo constants are filled by `fillPreviewTable` from `loadLiveTable`, `loadStory` and the stat blocks, every value HTML-escaped, a
+  monster shown by its look, never its Hit Points. Its only changes are hooks, each marked `hook (site, Nov 26)` in it and counted by
+  `TestOwnerFileChangesAreHooks`: the tab the route opens and the address a tab click sets (`history`, Back), a campaign opened by its page, the
+  theme kept under the site's one key, the status pills on the party cards (`cardPills`, `live_cards_2024.go`: conditions, Concentration, dying with its
+  saves, stable, dead, Temp HP, Heroic Inspiration, companions; a monster card its conditions only), the SRD compendium's lists on the Universe tab
+  (`LIVE.compendium`, from `universeCategories`; its browser and search is `/universe/srd`), the site's other pages on the Settings tab (`LIVE.guides`,
+  `settingsLinks`) and the full sheet's link in the quick sheet. **Listen** (owner, Nov 25) is the other addition: the browser's own voice reads the
+  Chronicle's story text (`TTS`: the speaker's name and a roll only when chosen, never a button, time or menu). Never restyle the file: a change to its
+  look is the owner's. **The page shell** is every other page (`site_layout_2024.go`): `framePage` puts it into the mock-up's header (brand, Agent
+  Quickstart: `quickstartModal`, its steps and cURL from `start_2024.go`), a centred column, a footer line (license, version) and the bottom bar made
+  from `siteNav`, in plain CSS (`siteCSS`; Tailwind's reset would undo the pages' classes). `siteNav` is the mock-up's four tabs, its words, icons and
+  order (`TestSiteNavIsTheMockupsTabs` reads the owner's file); a page is under the tab its `Match` paths name (`siteTab`): the character sheet and
+  chronicle under Current, `/universe/*` and stat blocks under Universe, Commands & API, the docs, Start, About and How it works under Settings.
+  `wrapView` is a page drawn with the content components (`designCSS`, `site_design_css_2024.go`: panels, buttons, badges, the sheet, the feed, the
+  modal; its Nov 21 chrome is gone), `wrapHTML` running text (`.prose`). **Themes** (`themes_2024.go`): the mock-up's Midnight (default), Parchment
+  and Contrast with its token values; each theme defines the content pages' older names from its tokens (`themeVars`), so a page re-skins without
+  touching its handler. One stored choice: `themeStoreKey` in the browser, written by the Settings tab and read by `themeReadJS` / `themeHeadScript`
+  before paint on every page (app shell, page shell, admin page; an older saved theme reads as the nearest). Mobile first: text never under 12 px, a
+  touch target never under 40 px, no horizontal scroll from 320 px (the owner's file has its own sizes; they are the owner's). The design's images are
+  served from `data/site_assets` at `/assets/` (`handleSiteAsset`). `classIcon` is a character's token without a portrait, `feedKind` a feed entry's
+  kind, `chronicleEntries` / `chroniclePage` the whole chronicle at `/campaign/{id}/log`, `characterViewHTML` the sheet, commands_page.go Commands &
+  API. Go: `TestPostgresAppShell`, `TestPageShellFrame`, `TestSiteNavIsTheMockupsTabs`, `TestOwnerFileChangesAreHooks`, `TestCardPills`,
+  `TestPostgresLiveCardsShowTheCharacter`.
 - **The Campaign Story Reader** (owner, Nov 23; the mock-up `data/ui_preview/story-reader-2026-11-23/index.html`): `cmd/server/story_reader_2024.go`,
-  GET `/campaign/{id}/story` (behind the watch password like the chronicle), linked from the chronicle and the campaign cards. **On the Live Table the reader IS the chronicle** (owner, Nov 23: it replaces the old Table Chronicle feed, it is not a button to another page): `storyPanel` puts `storyReaderMarkup` and the reader script in the panel and fetches the story from GET `/campaign/{id}/story.json` (`serveStoryJSON`; `loadStory` is the one reader of the log for both, `storyData` the one shape; the data's `inline` makes scroll mode scroll its own box); the party chat is not in the story, the whole log is still `/campaign/{id}/log`. A human reads
+  GET `/campaign/{id}/story` (behind the watch password like the chronicle), linked from the chronicle and the campaign cards. The Live Table's Chronicle is the app shell's (its pages from `loadStory`, the one reader of the log for the reader and the app shell; `storyData` the one shape, also GET `/campaign/{id}/story.json`); the party chat is not in the story, the whole log is still `/campaign/{id}/log`. A human reads
   the log as a book: Page Flip and Scroll, a chapters-and-bookmarks drawer, text size, a dice toggle, a resume banner; its place and bookmarks stay in the
   browser, one set per campaign. The story is made from `readActions`, never a copy: `storyPassages` (which records are story and in whose voice; the party
   chat and `storySkipTypes` are not) and `storyChapters` (a scene: a fight's end, a pause of `storyChapterGap`, or `storyChapterMax` passages; named by when it
@@ -1077,15 +1083,9 @@ Add to the owner, never beside it. When you give another rule one owner, add it 
   12 px and 40 px floors and the site's themes in place of its theme buttons; text is escaped in the script). Go: `TestStoryPassagesAndChapters`,
   `TestPostgresStoryReaderPage`.
 - **The GUI rework previews** (Matt, Nov 17 and 21): `handleUIPreview` (`cmd/server/ui_preview_2024.go`) serves the saved designs in
-  `data/ui_preview/` at `/preview/` (the Nov 21 one at `/preview/gui-2026-11-21/`), frozen data, only where `AGENTRPG_UI_PREVIEW=1`
-  (staging); 404 elsewhere. The real pages are built from the layout above. **The Nov 25 mock-up with live data** (owner, Nov 25: "implement what I
-  gave you") is what `/preview/` opens (and `/preview/gui-2026-11-25/`; the first saved design is `/preview/old/`) (`preview_table_2024.go`): the owner's file as it is (`data/preview_table_2024.html`, its Tailwind compiled
-  into `data/preview_table_2024.css` from that file), only its demo constants filled from `loadLiveTable` (the Live Table's one loader), `loadStory` and the
-  stat blocks; every value HTML-escaped (the mock-up's script writes them as markup); a monster shows its look, never its Hit Points; unread pages,
-  bookmarks, pins of characters and the viewer's settings are kept in the browser. **Listen** (owner, Nov 25) is the one addition to the owner's file: the browser's
-  own voice reads the Chronicle's story text page after page (`TTS` in the template: the speaker's name and a roll only when chosen, never a button, time or menu).
-  Never restyle it: a change to its look is the owner's file. Go:
-  `TestPostgresPreviewTable`.
+  `data/ui_preview/` at `/preview/` (the Nov 21 one at `/preview/gui-2026-11-21/`, the first at `/preview/old/`), frozen data, only where
+  `AGENTRPG_UI_PREVIEW=1`; 404 elsewhere. `/preview/` and `/preview/gui-2026-11-25/` send the reader to `/`: the Nov 25 mock-up is the site's front
+  (the frame entry above).
 - **The guide served to agents:** `docs/skill.md`, built into the program by the `docs` package (`docs.Skill`).
 - **A monster attack's damage and a Multiattack's plan** (`parseMonsterAttack`, `prepareMonsterAttack`, `multiattackPlan`): every damage amount of a
   Hit is rolled, or (when its condition or wording has no reader: "plus an extra 5 (2d4) Piercing damage if it has at least 18 Hit Points", "can expend up to 3 charges,
