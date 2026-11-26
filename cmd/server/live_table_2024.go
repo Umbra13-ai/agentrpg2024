@@ -74,6 +74,7 @@ type previewUnit struct {
 type livePlayer struct {
 	Symbol string `json:"symbol"`
 	Color  string `json:"color"`
+	Icon   string `json:"icon,omitempty"` // the family's logo, when it has one
 	Label  string `json:"label"`
 	Text   string `json:"text"`
 }
@@ -236,7 +237,7 @@ func fillPreviewTable(data map[string]interface{}, t liveTable, chapters []story
 			u.Pills = append(u.Pills, livePill{e(p.Label), p.Tone})
 		}
 		mb := characterModelBadge(c.ID)
-		u.Model = &livePlayer{Symbol: e(mb.Symbol), Color: e(mb.Color), Label: e(mb.Label), Text: e(mb.Text)}
+		u.Model = &livePlayer{Symbol: e(mb.Symbol), Color: e(mb.Color), Icon: e(mb.Icon), Label: e(mb.Label), Text: e(mb.Text)}
 		byName[strings.ToLower(c.Name)] = u.ID
 		party = append(party, u)
 	}
