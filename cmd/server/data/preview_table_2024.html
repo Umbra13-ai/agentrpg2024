@@ -1251,6 +1251,23 @@
       if (e.target.id === "tts-voice") { TTS.voice = e.target.value; if (TTS.on) ttsPlayPage(); render(); }
     });
 
+    // hook (site, Nov 26): a swipe on the Chronicle's page turns it in Flip mode, as the story reader did (a left swipe is the next page)
+    let swipeX = 0, swipeY = 0, swipeOn = false;
+    document.addEventListener("touchstart", (e) => {
+      swipeOn = state.readerMode === "flip" && e.touches.length === 1 && !!e.target.closest("article");
+      if (swipeOn) { swipeX = e.touches[0].clientX; swipeY = e.touches[0].clientY; }
+    }, { passive: true });
+    document.addEventListener("touchend", (e) => {
+      if (!swipeOn || !e.changedTouches.length) return;
+      swipeOn = false;
+      const dx = e.changedTouches[0].clientX - swipeX, dy = e.changedTouches[0].clientY - swipeY;
+      if (Math.abs(dx) < 48 || Math.abs(dx) < Math.abs(dy) * 1.2) return;
+      const next = state.pageIndex + (dx < 0 ? 1 : -1);
+      if (next < 0 || next > CHRONICLE_PAGES.length - 1) return;
+      state.pageIndex = next;
+      render();
+    }, { passive: true });
+
     document.addEventListener("input", (e) => {
       if (e.target.id === "page-slider") {
         state.pageIndex = Number(e.target.value);

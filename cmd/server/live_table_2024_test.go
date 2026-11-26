@@ -140,7 +140,7 @@ func TestPostgresAppShell(t *testing.T) {
 // TestOwnerFileChangesAreHooks: every change to the owner's file is a marked hook: the file's script keeps the mock-up's own render
 // functions, and each line the site added carries the mark (counted, so a new unmarked change shows up as a different count).
 func TestOwnerFileChangesAreHooks(t *testing.T) {
-	if n := strings.Count(previewTableHTML, "hook (site, Nov 26)"); n != 25 {
+	if n := strings.Count(previewTableHTML, "hook (site, Nov 26)"); n != 26 {
 		t.Errorf("the owner's file has %d marked hooks; a change to it is a marked hook, listed in live_table_2024.go and CLAUDE.md", n)
 	}
 	for _, own := range []string{"function renderHeroCard", "function renderPartySection", "function renderChronicleSection", "function renderCampaignsView",
