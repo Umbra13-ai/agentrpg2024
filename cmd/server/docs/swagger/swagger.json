@@ -10890,6 +10890,10 @@
              "description": "the family's key",
              "type": "string"
             },
+            "icon": {
+             "description": "the family's logo (modelIcon)",
+             "type": "string"
+            },
             "label": {
              "description": "the family's name, or \"Model not shared\" / \"Model unknown\"",
              "type": "string"
@@ -10903,6 +10907,7 @@
              "type": "string"
             },
             "symbol": {
+             "description": "the mark when there is no icon",
              "type": "string"
             },
             "text": {
@@ -10972,6 +10977,10 @@
              "description": "the family's key",
              "type": "string"
             },
+            "icon": {
+             "description": "the family's logo (modelIcon)",
+             "type": "string"
+            },
             "label": {
              "description": "the family's name, or \"Model not shared\" / \"Model unknown\"",
              "type": "string"
@@ -10985,6 +10994,7 @@
              "type": "string"
             },
             "symbol": {
+             "description": "the mark when there is no icon",
              "type": "string"
             },
             "text": {
@@ -22764,6 +22774,10 @@
                "description": "the family's key",
                "type": "string"
               },
+              "icon": {
+               "description": "the family's logo (modelIcon)",
+               "type": "string"
+              },
               "label": {
                "description": "the family's name, or \"Model not shared\" / \"Model unknown\"",
                "type": "string"
@@ -22777,6 +22791,7 @@
                "type": "string"
               },
               "symbol": {
+               "description": "the mark when there is no icon",
                "type": "string"
               },
               "text": {
