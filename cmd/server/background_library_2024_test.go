@@ -210,7 +210,7 @@ func TestPostgresBackgroundLibrary(t *testing.T) {
 	if e, err := backgroundEntry(fk); err != nil || e.Title != "Quiet forest" {
 		t.Fatalf("added: %v %v", e, err)
 	}
-	if c, _, _ := get("/backgrounds/"+fk+".thumb.webp"); c != 200 {
+	if c, _, _ := get("/backgrounds/" + fk + ".thumb.webp"); c != 200 {
 		t.Errorf("the added thumbnail: %d", c)
 	}
 	if c, _ := pgCall(t, "POST", fmt.Sprintf("/api/campaigns/%d/background", named), gm, map[string]interface{}{"background": fk}); c != 200 {
