@@ -12,13 +12,29 @@ import (
 	"fmt"
 	"image"
 	"image/draw"
-	_ "image/jpeg" // image.Decode reads these three
+	_ "image/jpeg" // image.Decode reads these two; decodePicture reads a WebP
 	_ "image/png"
 	"log"
 
 	"github.com/HugoSmits86/nativewebp"
-	_ "golang.org/x/image/webp"
+	xwebp "golang.org/x/image/webp"
 )
+
+// decodePicture is the one reading of an uploaded or stored picture's pixels (portraits, backgrounds, tokens). A WebP is read by golang.org/x/image/webp,
+// which reads a lossless WebP exactly: the lossy encoder the backgrounds use (gen2brain/webp) also registers a WebP reader with image.Decode, and
+// whichever registers first answers image.Decode, so a picture is never read through it (it shifted a stored token's colors).
+func decodePicture(b []byte) (image.Image, error) {
+	if isWebP(b) {
+		return xwebp.Decode(bytes.NewReader(b))
+	}
+	img, _, err := image.Decode(bytes.NewReader(b))
+	return img, err
+}
+
+// isWebP: the bytes are a WebP file (its RIFF header).
+func isWebP(b []byte) bool {
+	return len(b) >= 12 && string(b[0:4]) == "RIFF" && string(b[8:12]) == "WEBP"
+}
 
 // tokenStoredPx: the largest side a stored token keeps (the stage and the stat block show it at 192 or less).
 const tokenStoredPx = 192
@@ -27,7 +43,7 @@ const tokenStoredPx = 192
 // came). The picture has passed checkImage (a square PNG, JPEG or WebP in the token rule's sizes). A WebP that is already small enough is kept
 // as it is: re-writing it would only make it larger.
 func normalizeToken(imageBytes []byte, mime string) (stored []byte, storedMime string, px int, note string, err error) {
-	src, _, err := image.Decode(bytes.NewReader(imageBytes))
+	src, err := decodePicture(imageBytes)
 	if err != nil {
 		return nil, "", 0, "", fmt.Errorf("the picture could not be read: %w", err)
 	}

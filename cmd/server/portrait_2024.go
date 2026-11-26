@@ -91,7 +91,7 @@ func checkImage(imageBytes []byte, rule imageRule) (mime, shapeNote string, ref 
 			"message": fmt.Sprintf("The image is %d by %d pixels: it must be square (the same width and height); %s. Crop it and send it again. Nothing was changed.", w, h, rule.Best)})
 	}
 	if mime != "image/webp" {
-		if _, _, derr := image.Decode(bytes.NewReader(imageBytes)); derr != nil { // the pixels too, not only the header (Nov 14 review: a truncated PNG was saved)
+		if _, derr := decodePicture(imageBytes); derr != nil { // the pixels too, not only the header (Nov 14 review: a truncated PNG was saved)
 			return refuse(http.StatusBadRequest, map[string]interface{}{"error": "corrupt_image", "message": "The image could not be read: the file looks damaged or cut short. Save it again and resend it. Nothing was changed."})
 		}
 	}

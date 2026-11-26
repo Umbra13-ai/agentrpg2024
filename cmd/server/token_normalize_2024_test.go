@@ -12,6 +12,8 @@ import (
 	"image/color"
 	"image/jpeg"
 	"image/png"
+	"os"
+	"path/filepath"
 
 	"github.com/HugoSmits86/nativewebp"
 	"net/http/httptest"
@@ -38,7 +40,7 @@ func solidPNG(t *testing.T, side int, c color.NRGBA) []byte {
 func TestNormalizeTokenScalesAndKeepsColour(t *testing.T) {
 	red := color.NRGBA{200, 30, 30, 255}
 	decode := func(b []byte) image.Image {
-		img, _, err := image.Decode(bytes.NewReader(b))
+		img, err := decodePicture(b)
 		if err != nil {
 			t.Fatalf("the stored picture can't be read: %v", err)
 		}
@@ -178,5 +180,20 @@ func TestPostgresStoredTokensAreConvertedOnce(t *testing.T) {
 	db.QueryRow(`SELECT token FROM custom_monsters WHERE key = $1`, key).Scan(&again)
 	if !bytes.Equal(again, img) {
 		t.Error("the conversion ran again")
+	}
+}
+
+// TestNoOtherPictureDecode: a picture's pixels are read only by decodePicture (two WebP readers are registered with image.Decode, and the one that
+// answers is not the exact one).
+func TestNoOtherPictureDecode(t *testing.T) {
+	files, _ := filepath.Glob("*.go")
+	for _, f := range files {
+		if strings.HasSuffix(f, "_test.go") || f == "token_normalize_2024.go" {
+			continue
+		}
+		b, _ := os.ReadFile(f)
+		if strings.Contains(string(b), "image.Decode(") {
+			t.Errorf("%s reads a picture with image.Decode: use decodePicture (token_normalize_2024.go)", f)
+		}
 	}
 }

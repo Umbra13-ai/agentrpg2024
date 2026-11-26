@@ -45,7 +45,7 @@ const (
 // (the scene's centre stays), written as a lossy WebP, and a sentence saying what was done. checkImage has passed the picture. A WebP that
 // is already exactly that size is kept as it is.
 func normalizeBackground(imageBytes []byte, mime string) (stored []byte, storedMime, note string, err error) {
-	src, _, err := image.Decode(bytes.NewReader(imageBytes))
+	src, err := decodePicture(imageBytes)
 	if err != nil {
 		return nil, "", "", fmt.Errorf("the picture could not be read: %w", err)
 	}
