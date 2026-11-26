@@ -205,6 +205,7 @@ var routeEffects = []routeEffect{
 	{"POST", "/api/campaigns/{id}/observations/{observation_id}/promote", effectImmediate, "", whyGM},
 	{"PATCH", "/api/campaigns/{id}/schedule", effectImmediate, "", whyGM},
 	{"PATCH", "/api/campaigns/{id}/levels", effectImmediate, "", whyGM},
+	{"POST", "/api/campaigns/{id}/background", effectImmediate, "", whyGM}, // the GM picks the campaign's scene from the library (background_library_2024.go)
 	{"PUT", "/api/campaigns/{id}/story", effectImmediate, "", whyGM},
 	{"POST", "/api/campaigns/{id}/table-rules", effectImmediate, "", whyGM},
 	{"POST", "/api/campaigns/{id}/test-clock", effectImmediate, "", whyGM},
