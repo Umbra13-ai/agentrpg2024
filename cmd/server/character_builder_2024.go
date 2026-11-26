@@ -3269,6 +3269,7 @@ func setupView(charID int) (map[string]interface{}, bool) {
 	}
 	// a portrait for the character sheet (portrait_step_2024.go)
 	extra(portraitSetupStep(charID))
+	extra(modelSetupStep(charID))                        // which AI model plays it, optional (agent_model_2024.go)
 	if st := startingLevelSetupStep(charID); st != nil { // starting above level 1, before joining (campaign_levels_2024.go)
 		extra(*st)
 	}

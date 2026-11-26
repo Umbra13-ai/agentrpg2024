@@ -1,7 +1,10 @@
 package main
 
 import (
+	"bytes"
+	"encoding/json"
 	"fmt"
+	"net/http/httptest"
 	"strings"
 	"testing"
 )
@@ -9,7 +12,7 @@ import (
 // TestModelFamiliesAndBadges: the one reading of what an agent says: a family from the words, the three states, the sheet's line.
 func TestModelFamiliesAndBadges(t *testing.T) {
 	for name, want := range map[string]string{"Claude Sonnet 5.5": "claude", "claude-opus-5-5": "claude", "GPT-5": "gpt", "ChatGPT": "gpt", "Gemini 3 Pro": "gemini",
-		"Llama 4 Maverick": "llama", "Mistral Large": "mistral", "DeepSeek V4": "deepseek", "Grok 5": "grok", "Qwen 3": "qwen", "Homebrew 7B": "other"} {
+		"Llama 4 Maverick": "meta", "Muse Spark": "meta", "Mistral Large": "mistral", "DeepSeek V4": "deepseek", "Grok 5": "grok", "Qwen 3": "qwen", "Homebrew 7B": "other"} {
 		if got := modelFamilyOf(name).Key; got != want {
 			t.Errorf("modelFamilyOf(%q) = %s, want %s", name, got, want)
 		}
@@ -77,5 +80,81 @@ func TestPostgresAccountModel(t *testing.T) {
 	}
 	if m := profile(); m["state"] != "unknown" {
 		t.Errorf("cleared: %v", m)
+	}
+}
+
+// TestPostgresAdminSetsAnAccountsModel: the administrator sets an account's model in the account editor: words alone are "shared", declined drops
+// the words, an emptied state clears, and a bad name or state is refused; the character sheet's profile shows what the editor set.
+func TestPostgresAdminSetsAnAccountsModel(t *testing.T) {
+	testPostgres(t)
+	const key = "test-admin-key-for-models"
+	t.Setenv("ADMIN_KEY", key)
+	_, _, _, chars, _ := pgFightWith(t, "adminmodel", 1)
+	var agentID int
+	db.QueryRow(`SELECT agent_id FROM characters WHERE id = $1`, chars[0]).Scan(&agentID)
+	set := func(fields map[string]interface{}) int {
+		b, _ := json.Marshal(map[string]interface{}{"set": fields})
+		r := httptest.NewRequest("POST", fmt.Sprintf("/api/admin/accounts/%d", agentID), bytes.NewReader(b))
+		r.RemoteAddr = "10.77.3.1:1234"
+		r.Header.Set("X-Admin-Key", key)
+		r.Header.Set("Content-Type", "application/json")
+		w := httptest.NewRecorder()
+		newServer("").Handler.ServeHTTP(w, r)
+		return w.Code
+	}
+	profile := func() map[string]interface{} {
+		_, j := pgCall(t, "GET", fmt.Sprintf("/api/characters/%d/profile", chars[0]), "", nil)
+		return j["player"].(map[string]interface{})["model"].(map[string]interface{})
+	}
+	if c := set(map[string]interface{}{"ai_model": "Gemini 3 Pro"}); c != 200 {
+		t.Fatalf("words alone: %d", c)
+	}
+	if m := profile(); m["state"] != "shared" || m["family"] != "gemini" {
+		t.Errorf("words alone are shared: %v", m)
+	}
+	if c := set(map[string]interface{}{"ai_model_state": "declined"}); c != 200 {
+		t.Fatalf("declined: %d", c)
+	}
+	if m := profile(); m["state"] != "declined" || m["model"] != nil {
+		t.Errorf("declined drops the words: %v", m)
+	}
+	if c := set(map[string]interface{}{"ai_model_state": ""}); c != 200 {
+		t.Fatalf("cleared: %d", c)
+	}
+	if m := profile(); m["state"] != "unknown" {
+		t.Errorf("cleared: %v", m)
+	}
+	for _, bad := range []map[string]interface{}{{"ai_model": "<b>x</b>"}, {"ai_model": strings.Repeat("z", 61)}, {"ai_model_state": "maybe"}} {
+		if c := set(bad); c != 400 {
+			t.Errorf("%v: %d", bad, c)
+		}
+	}
+}
+
+// TestPostgresSetupAsksForTheModel: the character's setup has the optional model step: open while the account has said nothing, answered by a model or
+// a no, never counted in steps_left, and never sending the agent to its human.
+func TestPostgresSetupAsksForTheModel(t *testing.T) {
+	testPostgres(t)
+	_, toks, _, chars, _ := pgFightWith(t, "setupmodel", 1)
+	step := func() map[string]interface{} {
+		_, j := pgCall(t, "GET", fmt.Sprintf("/api/characters/%d/setup", chars[0]), toks[0], nil)
+		for _, s := range asList(j["steps"]) {
+			if m, _ := s.(map[string]interface{}); m["key"] == "model" {
+				return m
+			}
+		}
+		t.Fatalf("setup has no model step: %v", j)
+		return nil
+	}
+	st := step()
+	if st["done"] == true || st["optional"] != true || strings.Contains(fmt.Sprint(st), "human") {
+		t.Errorf("the open step: %v", st)
+	}
+	pgCall(t, "POST", "/api/account/model", toks[0], map[string]interface{}{"declined": true})
+	if st := step(); st["done"] != true {
+		t.Errorf("a no answers it: %v", st)
+	}
+	if c, _ := pgCall(t, "POST", "/api/account/model", toks[0], map[string]interface{}{"model": "<your model's name, as you know it>"}); c != 400 {
+		t.Errorf("the template is accepted: %d", c)
 	}
 }

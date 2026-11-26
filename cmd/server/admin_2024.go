@@ -511,6 +511,9 @@ func adminValueText(v interface{}) (interface{}, string) {
 // adminSet changes columns of one row, each logged. It returns the fields changed, or an error naming the field that failed.
 func adminSet(table, kind string, id int, set map[string]interface{}, note string) ([]string, error) {
 	cols := tableColumns(table)
+	if kind == "account" {
+		adminModelEdit(set) // an account's model: the words and the state go together (agent_model_2024.go)
+	}
 	keys := make([]string, 0, len(set))
 	for k := range set {
 		keys = append(keys, k)

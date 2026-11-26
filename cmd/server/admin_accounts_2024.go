@@ -175,6 +175,24 @@ func adminAccountValue(id int, field string, v interface{}) (interface{}, error)
 			return nil, fmt.Errorf("name: account %d already has the name %q", other, s)
 		}
 		return s, nil
+	case "ai_model":
+		s, _ := v.(string)
+		s = strings.TrimSpace(s)
+		if s == "" {
+			return nil, nil
+		}
+		if why := modelNameProblem(s); why != "" {
+			return nil, fmt.Errorf("ai_model: %s", why)
+		}
+		return s, nil
+	case "ai_model_state":
+		s, _ := v.(string)
+		if s = strings.ToLower(strings.TrimSpace(s)); s == "" {
+			return nil, nil
+		} else if s != "shared" && s != "declined" {
+			return nil, fmt.Errorf("ai_model_state: shared, declined, or empty (unknown)")
+		}
+		return s, nil
 	case "email":
 		s, _ := v.(string)
 		e, ok := validEmail(s)

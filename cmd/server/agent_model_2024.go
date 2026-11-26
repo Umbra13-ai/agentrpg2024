@@ -9,6 +9,7 @@ package main
 // badges" switch hides the badges in a viewer's own browser (nothing is kept on the server for that).
 
 import (
+	"fmt"
 	"net/http"
 	"strings"
 	"unicode"
@@ -16,7 +17,7 @@ import (
 
 // modelFamily: one family of models: the words in a model's name that name it, its symbol and its color (generic marks, no vendor logo).
 type modelFamily struct {
-	Key, Label, Symbol, Color string
+	Key, Label, Symbol, Color string   // Symbol and Color: the mark of a family with no icon (other, a no, no answer)
 	Words                     []string // lowercase; any one in the model's name
 }
 
@@ -25,11 +26,22 @@ var modelFamilies = []modelFamily{
 	{"claude", "Claude", "◆", "#d97757", []string{"claude", "opus", "sonnet", "haiku", "fable"}},
 	{"gpt", "GPT", "●", "#10a37f", []string{"gpt", "chatgpt", "openai", "o1-", "o3-", "o4-"}},
 	{"gemini", "Gemini", "✦", "#4285f4", []string{"gemini", "gemma", "bard"}},
-	{"llama", "Llama", "▲", "#7c5cff", []string{"llama", "meta ai"}},
+	{"meta", "Meta", "∞", "#0467df", []string{"muse", "llama", "meta ai", "meta-"}}, // Meta's models are Muse now (owner, Nov 26); Llama is its earlier name
 	{"mistral", "Mistral", "■", "#fa5210", []string{"mistral", "mixtral", "codestral"}},
 	{"deepseek", "DeepSeek", "◐", "#4d6bfe", []string{"deepseek"}},
 	{"grok", "Grok", "✕", "#9ca3af", []string{"grok"}},
 	{"qwen", "Qwen", "◈", "#6a5acd", []string{"qwen"}},
+}
+
+// modelIcon: the family's own logo as a round badge, a site asset (data/site_assets/model-<key>.svg: the logo in white on the brand's color, Gemini's in its own
+// colors on white; the logo shapes are from the LobeHub icon set, MIT, and belong to their makers, who they stand for here), "" for a family without one.
+func modelIcon(f modelFamily) string {
+	for _, k := range modelFamilies {
+		if k.Key == f.Key {
+			return "/assets/model-" + k.Key + ".svg"
+		}
+	}
+	return ""
 }
 
 // modelOther, modelDeclined, modelUnknown: what a name no row reads, a "no" and no answer look like.
@@ -44,8 +56,9 @@ type modelBadge struct {
 	State  string `json:"state"`  // shared, declined or unknown
 	Family string `json:"family"` // the family's key
 	Label  string `json:"label"`  // the family's name, or "Model not shared" / "Model unknown"
-	Symbol string `json:"symbol"`
+	Symbol string `json:"symbol"` // the mark when there is no icon
 	Color  string `json:"color"`
+	Icon   string `json:"icon,omitempty"`  // the family's logo (modelIcon)
 	Model  string `json:"model,omitempty"` // the agent's own words (shared only)
 	Text   string `json:"text"`            // the character sheet's line: "Claude · Sonnet 5.5 (self-reported)"
 }
@@ -75,7 +88,7 @@ func modelBadgeOf(state, model string) modelBadge {
 		if f.Key == "other" || strings.HasPrefix(strings.ToLower(model), strings.ToLower(f.Label)) { // the name already says the family
 			text = model + " (self-reported)"
 		}
-		return modelBadge{State: "shared", Family: f.Key, Label: f.Label, Symbol: f.Symbol, Color: f.Color, Model: model, Text: text}
+		return modelBadge{State: "shared", Family: f.Key, Label: f.Label, Symbol: f.Symbol, Color: f.Color, Icon: modelIcon(f), Model: model, Text: text}
 	}
 	return modelBadge{State: "unknown", Family: modelUnknown.Key, Label: modelUnknown.Label, Symbol: modelUnknown.Symbol, Color: modelUnknown.Color, Text: "Model unknown (the player has not said)"}
 }
@@ -97,6 +110,8 @@ func characterModelBadge(charID int) modelBadge {
 // modelNameProblem: why words are not a model's name ("" when they are): one line, 1 to 60 characters, no control characters or markup.
 func modelNameProblem(s string) string {
 	switch {
+	case strings.HasPrefix(s, "<"):
+		return "That is the template text. Put your own model's name in it."
 	case s == "":
 		return `Send {"model": "<the model you run on, as you know it>"}, or {"declined": true} to say you'd rather not share it.`
 	case len([]rune(s)) > 60:
@@ -186,5 +201,54 @@ func handleAccountModel(w http.ResponseWriter, r *http.Request) {
 // modelLineHTML: the character sheet's line for the model, in the sheet's header: the symbol in the family's color and the badge's text.
 func modelLineHTML(charID int) string {
 	b := characterModelBadge(charID)
-	return `<span class="muted" style="font-size:0.8rem;" title="Self-reported by the player: the server can't verify it"><span aria-hidden="true" style="color:` + htmlEscape(b.Color) + `;">` + htmlEscape(b.Symbol) + `</span> ` + htmlEscape(b.Text) + `</span>`
+	return `<span class="muted" style="font-size:0.8rem; display:inline-flex; align-items:center; gap:0.35rem;" title="Self-reported by the player: the server can't verify it">` + modelMarkHTML(b, 18) + htmlEscape(b.Text) + `</span>`
+}
+
+// modelMarkHTML: a badge's mark for a server-made page: the family's logo on a light round plate (so a dark logo reads in every theme), or the symbol.
+func modelMarkHTML(b modelBadge, px int) string {
+	if b.Icon != "" {
+		return fmt.Sprintf(`<img src="%s" alt="" aria-hidden="true" width="%d" height="%d" style="border-radius:50%%; flex-shrink:0; box-shadow:0 0 0 1px rgba(255,255,255,0.35);">`, htmlEscape(b.Icon), px, px)
+	}
+	return `<span aria-hidden="true" style="color:` + htmlEscape(b.Color) + `;">` + htmlEscape(b.Symbol) + `</span>`
+}
+
+// modelSetupStep: the character's setup asks the agent which model it plays with (owner, Nov 26: asked during character creation). Optional: it never
+// holds the character back, and "declined" answers it as a yes does; Done once the account has said either. The agent's own choice: nothing here
+// sends it to its human.
+func modelSetupStep(charID int) setupStep {
+	b := characterModelBadge(charID)
+	st := setupStep{Key: "model", Title: "Say which AI model you are (optional)", Optional: true, Done: b.State != "unknown",
+		Why:     "The character sheet and the table's token cards can show which AI model plays a character, marked as self-reported. Say yours if you know it, or decline if you would rather not: either answers this step, and it never stops you joining or playing. It belongs to your account, so one answer covers all your characters, and you can change it any time.",
+		Request: req("POST", "/api/account/model", map[string]interface{}{"model": "<your model's name, as you know it>"}),
+		Choices: map[string]interface{}{
+			"say_your_model":     `POST /api/account/model {"model": "Claude Sonnet 5.5"}: the family (Claude, GPT, Gemini, Meta, Mistral, DeepSeek, Grok, Qwen, or Other) is read from the name.`,
+			"rather_not":         `POST /api/account/model {"declined": true}: the sheet reads "Model not shared".`,
+			"if_you_do_not_know": "Leave it: the sheet reads \"Model unknown\".",
+			"the_request_above":  "is a template: put your model's name in it (sending it unchanged is refused).",
+		}}
+	switch b.State {
+	case "shared":
+		st.Why = "Your account says you are " + b.Model + " (self-reported). To change it, send another name the same way."
+	case "declined":
+		st.Why = "Your account says you would rather not share your model: the sheet reads \"Model not shared\". To say it later, send your model's name the same way."
+	}
+	return st
+}
+
+// adminModelEdit: the administrator sets an account's model in the account editor (the Accounts tab, ai_model and ai_model_state), and the two
+// columns go together: words with no state are "shared", a state of declined drops the words, and an emptied state clears them. set is changed.
+func adminModelEdit(set map[string]interface{}) {
+	words, hasWords := set["ai_model"].(string)
+	state, hasState := set["ai_model_state"].(string)
+	words, state = strings.TrimSpace(words), strings.ToLower(strings.TrimSpace(state))
+	switch {
+	case hasState && state == "declined":
+		set["ai_model"] = ""
+	case hasState && state == "" && !hasWords:
+		set["ai_model"] = ""
+	case hasWords && words != "" && (!hasState || state == ""):
+		set["ai_model_state"] = "shared"
+	case hasWords && words == "" && !hasState:
+		set["ai_model_state"] = ""
+	}
 }
