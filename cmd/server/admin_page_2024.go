@@ -69,6 +69,9 @@ details.card>summary::after{content:"\25B8";color:var(--muted)}details.card[open
 details.card>summary::-webkit-details-marker{display:none}details.card[open]>summary{margin-bottom:12px}
 .f{margin-bottom:12px}.f label{display:block;font-size:14px;font-weight:600;color:var(--muted);margin-bottom:4px}
 .f.changed input,.f.changed select,.f.changed textarea,.f.changed .box{background:var(--chg)}
+.bggrid{display:grid;grid-template-columns:repeat(2,1fr);gap:8px}.bgpick{display:flex;flex-direction:column;gap:4px;border:1px solid var(--line);background:var(--card);border-radius:10px;padding:6px;font-size:13px;text-align:left;min-height:44px}.bgpick img{width:100%;aspect-ratio:16/9;object-fit:cover;border-radius:6px}
+.tagchips{display:flex;flex-wrap:wrap;gap:6px;margin-bottom:6px}.tagchip{border:1px solid var(--line);background:var(--card);border-radius:99px;padding:8px 12px;font-size:14px;min-height:40px}.tagchip[aria-pressed=true]{background:var(--accent);border-color:var(--accent);color:var(--accent-ink)}
+@media (min-width:600px){.bggrid{grid-template-columns:repeat(4,1fr)}}
 .grid{display:grid;grid-template-columns:repeat(2,1fr);gap:0 10px}.grid3{display:grid;grid-template-columns:repeat(3,1fr);gap:0 10px}
 @media (min-width:600px){.grid{grid-template-columns:repeat(3,1fr)}.grid3{grid-template-columns:repeat(6,1fr)}}
 .chips{display:flex;flex-wrap:wrap;gap:6px;margin-bottom:8px}
@@ -130,7 +133,7 @@ function showList(){hideSave();pending={};M.textContent='';window.scrollTo(0,0);
   if(tab==='settings')return showSettings();
   var s=el('div',{'class':'search'});var i=el('input',{type:'search',placeholder:tab==='characters'?'Search name, player or id':(tab==='accounts'?'Name, email or id':'Search name, GM or id')});i.value=q;
   var sel=el('select');[['','Active'],['only','Deleted'],['include','All']].forEach(function(o){var op=el('option',{value:o[0]},o[1]);if(o[0]===which)op.selected=true;sel.appendChild(op)});
-  add(s,i,sel);M.appendChild(s);var box=el('div');M.appendChild(box);
+  add(s,i,sel);M.appendChild(s);if(tab==='campaigns'){var lb=el('button',{'class':'btn'},'Background library');lb.style.cssText='width:100%;margin:-2px 0 12px';lb.onclick=showBackgrounds;M.appendChild(lb)}var box=el('div');M.appendChild(box);
   var t;i.oninput=function(){clearTimeout(t);t=setTimeout(function(){q=i.value;load()},300)};sel.onchange=function(){which=sel.value;load()};
   function load(){api('GET','/api/admin/'+tab+'?q='+encodeURIComponent(q)+'&deleted='+which).then(function(j){var list=j[tab];box.textContent='';
     if(!list.length){box.appendChild(el('p',{'class':'muted'},'Nothing found.'));return}
@@ -259,6 +262,34 @@ function openMonster(key){M.textContent='';window.scrollTo(0,0);
     var sb=section('Stat block',true);var f=el('iframe',{src:j.page,title:'Stat block of '+m.name,loading:'lazy'});f.style.cssText='width:100%;border:0;border-radius:10px;min-height:600px;background:transparent';
     f.onload=function(){try{f.style.height=(f.contentWindow.document.documentElement.scrollHeight+8)+'px'}catch(_){}};
     var open=el('a',{href:j.page,target:'_blank',rel:'noopener'},'Open the stat block on its own');add(sb,f,open);M.appendChild(sb)}).catch(fail)}
+function showBackgrounds(){M.textContent='';window.scrollTo(0,0);M.appendChild(back());
+  var h=el('div',{'class':'card'});add(h,el('h2',null,'Background library'),el('p',{'class':'muted small'},'The scenes a campaign’s background is chosen from. Agents pick by the tags and description when they create a campaign (the server picks the best match when they name none). A retired scene is no longer offered; campaigns that use it keep it. Titles describe the picture: never a campaign’s or a book’s name.'));
+  var nb=el('button',{'class':'btn primary'},'Add a picture');nb.onclick=function(){editBackground(null)};h.appendChild(nb);M.appendChild(h);var box=el('div');M.appendChild(box);
+  api('GET','/api/admin/backgrounds').then(function(j){bgVocab=j.vocabulary;(j.backgrounds||[]).forEach(function(x){var b=el('button',{'class':'item rowflex'});
+    var im=el('img',{alt:'',src:x.thumb_url,loading:'lazy'});im.style.cssText='width:96px;height:54px;object-fit:cover;border-radius:6px;flex:none';
+    var m=el('div',{'class':'main'});var t=el('b',null,x.title);if(x.retired)t.appendChild(el('span',{'class':'badge del'},'Retired'));
+    add(m,t,el('span',{'class':'muted small'},tagWords(x.tags).join(', ')+' · '+x.campaigns+' campaign'+(x.campaigns===1?'':'s')));add(b,im,m);b.onclick=function(){editBackground(x)};box.appendChild(b)})}).catch(fail)}
+var bgVocab=null;
+function tagWords(t){var o=[];['place','mood','light','features'].forEach(function(g){(t&&t[g]||[]).forEach(function(w){o.push(w)})});return o}
+function editBackground(x){M.textContent='';window.scrollTo(0,0);var bk=el('button',{'class':'link'},'‹ Library');bk.onclick=showBackgrounds;M.appendChild(bk);
+  var c=el('div',{'class':'card'});c.appendChild(el('h2',null,x?x.title:'Add a picture'));
+  if(x){var big=el('img',{alt:'',src:x.image_url});big.style.cssText='width:100%;border-radius:8px;margin-bottom:8px';c.appendChild(big);c.appendChild(el('p',{'class':'muted small'},'Key '+x.key))}
+  function field(label,v,area){var l=el('label',{'class':'f'});l.appendChild(el('span',null,label));var i=el(area?'textarea':'input');i.value=v||'';if(area)i.rows=3;l.appendChild(i);c.appendChild(l);return i}
+  var key=x?null:field('Key (lowercase words joined by hyphens, describing the picture)','');
+  var title=field('Title',x&&x.title),desc=field('Description (one sentence for a GM choosing a scene)',x&&x.description,true);
+  var picked={};['place','mood','light','features'].forEach(function(g){picked[g]={};((x&&x.tags[g])||[]).forEach(function(w){picked[g][w]=true})});
+  ['place','mood','light','features'].forEach(function(g){c.appendChild(el('h3',null,g.charAt(0).toUpperCase()+g.slice(1)));var row=el('div',{'class':'tagchips'});
+    ((bgVocab||{})[g]||[]).forEach(function(w){var b=el('button',{'class':'tagchip','aria-pressed':picked[g][w]?'true':'false'},w);b.onclick=function(){picked[g][w]=!picked[g][w];b.setAttribute('aria-pressed',picked[g][w]?'true':'false')};row.appendChild(b)});c.appendChild(row)});
+  var ret=null;if(x){var rl=el('label',{'class':'row'});ret=el('input',{type:'checkbox'});ret.style.width='auto';ret.checked=!!x.retired;add(rl,ret,el('span',null,' Retired: no longer offered'));c.appendChild(rl)}
+  c.appendChild(el('p',{'class':'muted small'},x?'Replace the picture (optional): PNG, JPEG or WebP, stored as a 1920 by 1080 WebP.':'The picture: PNG, JPEG or WebP, up to 5 MB, stored as a 1920 by 1080 WebP (another shape is cropped to cover it).'));
+  var f=el('input',{type:'file',accept:'image/png,image/jpeg,image/webp','aria-label':'Picture'});c.appendChild(f);
+  var sv=el('button',{'class':'btn primary'},x?'Save':'Add to the library');sv.style.marginTop='10px';c.appendChild(sv);M.appendChild(c);
+  sv.onclick=function(){var tags={};Object.keys(picked).forEach(function(g){tags[g]=Object.keys(picked[g]).filter(function(w){return picked[g][w]})});
+    var body={title:title.value,description:desc.value,tags:tags};if(key)body.key=key.value.trim();if(ret)body.retired=ret.checked;
+    function send(){sv.disabled=true;api('POST','/api/admin/backgrounds'+(x?'/'+encodeURIComponent(x.key):''),body).then(function(r){sv.disabled=false;toast(r.note||'Saved');showBackgrounds()}).catch(function(e){sv.disabled=false;fail(e)})}
+    var file=f.files&&f.files[0];if(!file){if(!x){toast('Choose the picture first',true);return}send();return}
+    if(file.size>5*1024*1024){toast('The image is over 5 MB. Choose a smaller one.',true);return}
+    var rd=new FileReader();rd.onload=function(){body.image_base64=rd.result;send()};rd.onerror=function(){toast('That file could not be read',true)};rd.readAsDataURL(file)}}
 function monsterTokenCard(m,rule){var s=section('Token',true);s.appendChild(el('p',{'class':'muted small'},rule||''));
   var img=el('img',{alt:'Token of '+m.name});img.style.cssText='display:block;width:128px;height:128px;border-radius:50%;object-fit:cover;margin:8px 0';
   var none=el('p',{'class':'box plain'},'No token: the encounter stage shows 👹.');
@@ -347,7 +378,13 @@ function backgroundCard(id,name){var s=section('Background picture',true);
     rd.onerror=function(){toast('That file could not be read',true)};rd.readAsDataURL(file)};
   var rm=el('button',{'class':'btn danger'},'Remove background');
   rm.onclick=function(){if(confirm('Remove the background of '+name+'? The page goes back to the default scene.'))api('DELETE','/api/admin/campaigns/'+id+'/background').then(function(r){toast(r.message);show()}).catch(fail)};
-  add(s,img,none,f,add(el('div',{'class':'row'}),up,rm));show();return s}
+  add(s,img,none,f,add(el('div',{'class':'row'}),up,rm));
+  s.appendChild(el('h3',null,'Or choose from the library'));s.appendChild(el('p',{'class':'muted small'},'Tap a scene to show it on this campaign (its own uploaded picture, if any, is removed).'));
+  var lib=el('div',{'class':'bggrid'});s.appendChild(lib);
+  api('GET','/api/admin/backgrounds').then(function(j){(j.backgrounds||[]).filter(function(x){return !x.retired}).forEach(function(x){
+    var b=el('button',{'class':'bgpick',title:x.description});var im=el('img',{alt:'',src:x.thumb_url,loading:'lazy'});add(b,im,el('span',null,x.title));
+    b.onclick=function(){if(!confirm('Show “'+x.title+'” on '+name+'?'))return;api('POST','/api/admin/campaigns/'+id+'/background',{library:x.key}).then(function(r){toast(r.message||'Saved');show()}).catch(fail)};lib.appendChild(b)})}).catch(fail);
+  show();return s}
 function tokenCard(aid,owner){var s=section('Player’s token',true);
   s.appendChild(el('p',{'class':'muted small'},'If '+owner+' lost their token and can’t recover it by email, regenerate it here, copy it and send it to them privately. A token is shown once.'));
   var keep=el('label',{'class':'toggle'});var kc=el('input',{type:'checkbox'});kc.checked=true;add(keep,el('span',null,'End their old tokens and signing keys (recommended)'),kc);s.appendChild(keep);
