@@ -1,13 +1,20 @@
 package main
 
-// The owner's mock-up of Nov 25 ("Agent RPG 2024 — Redesigned UI Mockup", the second one: Current, Campaigns, Universe and Settings tabs) served
-// with live data at /preview/gui-2026-11-25/ (staging only: uiPreviewOn). The page is the mock-up's own file (data/preview_table_2024.html) with
+// The site's front pages (owner, Nov 26: "Replace the whole site's design" with the Nov 25 mock-up, "Agent RPG 2024 — Redesigned UI
+// Mockup": its Current, Campaigns, Universe and Settings tabs). The page is the mock-up's own file (data/preview_table_2024.html) with
 // its stylesheet compiled from it (data/preview_table_2024.css: Tailwind 3.4.17, as the mock-up's CDN script would make it) and its demo
-// constants replaced by this campaign's: previewTableData fills CAMPAIGNS, PARTY, ENEMIES, CHRONICLE_PAGES and the rest from the Live Table's
-// loader (loadLiveTable), the story reader's (loadStory) and the stat blocks. Every text is HTML-escaped here, as the mock-up's script puts
-// the values into the page as markup. ?campaign=<id> opens another campaign; without it, the Live Table's featured one.
+// constants replaced by a campaign's: fillPreviewTable fills CAMPAIGNS, PARTY, ENEMIES, CHRONICLE_PAGES and the rest from the Live
+// Table's loader (loadLiveTable), the story reader's (loadStory) and the stat blocks. Every text is HTML-escaped here, as the mock-up's
+// script puts the values into the page as markup. serveAppShell serves it on the site's routes, each opening its tab: / and /live
+// (Current, the featured campaign), /campaign/{id} (Current, that campaign), /campaigns, /universe and /settings.
+//
+// The owner's file is used as it is; its only changes are hooks, each marked "hook (site, Nov 26)" in it: the tab the route opens
+// (LIVE.initialTab) and the address a tab click sets (history), a campaign opened by its page (/campaign/{id}), the theme kept under the
+// site's one key (themes_2024.go), the status pills on the party cards (cardPills), the SRD compendium's lists on the Universe tab
+// (LIVE.compendium), the site's other pages on the Settings tab (LIVE.guides, settingsLinks) and the full sheet's link in the quick sheet.
 
 import (
+	"database/sql"
 	_ "embed"
 	"encoding/json"
 	"fmt"
@@ -29,7 +36,7 @@ var previewTableHTML string
 //go:embed data/preview_table_2024.css
 var previewTableCSS string
 
-// previewTablePath: where the preview is served, under /preview/.
+// previewTablePath: where the preview was served, under /preview/ (it sends the address to the site's front page now).
 const previewTablePath = "gui-2026-11-25/"
 
 type previewAction struct {
@@ -58,6 +65,7 @@ type previewUnit struct {
 	Avatar    string          `json:"avatar"`
 	Tag       string          `json:"tag,omitempty"`
 	Actions   []previewAction `json:"actions"`
+	Pills     []livePill      `json:"pills"` // what is on it (cardPills; a monster: its conditions only)
 }
 
 type previewCampaign struct {
@@ -105,40 +113,68 @@ type previewLore struct {
 	Body  string `json:"body"` // markup, escaped here
 }
 
-// handlePreviewTable serves the preview (handleUIPreview sends it the path previewTablePath).
-func handlePreviewTable(w http.ResponseWriter, r *http.Request) {
-	id, _ := strconv.Atoi(r.URL.Query().Get("campaign"))
-	if id <= 0 || campaignIsDeleted(id) || !canWatch(r, id) {
-		id = featuredCampaign(w, r)
+// appTabs: the app shell's tabs, as the routes name them (siteNav's Tab).
+var appTabs = map[string]bool{"current": true, "campaigns": true, "universe": true, "settings": true}
+
+// compendiumLink: one list of the SRD compendium on the Universe tab.
+type compendiumLink struct {
+	Name  string `json:"name"`
+	Count string `json:"count"`
+	Href  string `json:"href"`
+}
+
+// serveAppShell writes the app shell opened on tab, with campaignID's table (0: none; the tabs still work). The caller checked the
+// campaign may be watched; a campaign that doesn't exist is 404.
+func serveAppShell(w http.ResponseWriter, r *http.Request, tab string, campaignID int) {
+	if !appTabs[tab] {
+		tab = "current"
 	}
-	w.Header().Set("X-Robots-Tag", "noindex")
-	w.Header().Set("Cache-Control", "no-cache")
-	w.Header().Set("Content-Type", "text/html; charset=utf-8")
-	data := map[string]interface{}{"campaignId": 0, "campaigns": previewCampaigns(r, id), "party": []previewUnit{}, "enemies": []previewUnit{},
+	e := html.EscapeString
+	comp := []compendiumLink{{Name: "Browse and search the whole compendium", Href: "/universe/srd"}}
+	for _, c := range universeCategories() {
+		comp = append(comp, compendiumLink{Name: e(c.Name), Count: e(c.Count), Href: c.Href})
+	}
+	guides := make([]map[string]string, 0, len(settingsLinks))
+	for _, l := range settingsLinks {
+		guides = append(guides, map[string]string{"label": e(l.Label), "href": l.Href, "note": e(l.Note)})
+	}
+	data := map[string]interface{}{"campaignId": 0, "campaigns": previewCampaigns(r, campaignID), "party": []previewUnit{}, "enemies": []previewUnit{},
 		"creatures": []previewUnit{}, "chronicle": []previewPage{}, "lore": []previewLore{}, "gm": "", "combat": false, "round": 0, "roundLabel": "",
-		"fallbackAvatar": previewIconAvatar("🛡️"), "registerCurl": html.EscapeString(withBaseURL(startCurl())), "registerRequest": html.EscapeString(strings.Join(strings.Fields(registerRequest)[:2], " "))}
+		"fallbackAvatar": previewIconAvatar("🛡️"), "registerCurl": html.EscapeString(withBaseURL(startCurl())), "registerRequest": html.EscapeString(strings.Join(strings.Fields(registerRequest)[:2], " ")),
+		"initialTab": tab, "compendium": comp, "guides": guides, "themeKey": themeStoreKey, "version": e("v" + version)}
 	title := "Agent RPG 2024"
-	if id > 0 {
-		t, what, err := loadLiveTable(id)
+	if campaignID > 0 {
+		t, what, err := loadLiveTable(campaignID)
+		if err == sql.ErrNoRows {
+			http.Error(w, "Campaign not found", http.StatusNotFound)
+			return
+		}
 		if err != nil {
 			writeDBErrorPage(w, err, what)
 			return
 		}
-		_, _, chapters, _, ok := loadStory(w, id)
+		_, _, chapters, _, ok := loadStory(w, campaignID)
 		if !ok {
 			return
 		}
 		title = t.Name + " - Agent RPG 2024"
 		fillPreviewTable(data, t, chapters)
 	}
+	w.Header().Set("Cache-Control", "no-cache")
+	w.Header().Set("Content-Type", "text/html; charset=utf-8")
 	js, _ := json.Marshal(data)
 	page := strings.Replace(previewTableHTML, "{{TITLE}}", html.EscapeString(title), 1)
 	page = strings.Replace(page, "{{TAILWIND}}", previewTableCSS, 1)
+	page = strings.Replace(page, "{{THEME_SCRIPT}}", themeHeadScript(), 1)
 	page = strings.Replace(page, "{{DATA}}", string(js), 1)
 	fmt.Fprint(w, page)
 }
 
-// fillPreviewTable puts one campaign's Live Table and story into the page's data.
+// handleSettingsPage serves the Settings tab (GET /settings).
+func handleSettingsPage(w http.ResponseWriter, r *http.Request) {
+	serveAppShell(w, r, "settings", featuredCampaign(w, r))
+}
+
 func fillPreviewTable(data map[string]interface{}, t liveTable, chapters []storyChapter) {
 	e := html.EscapeString
 	data["campaignId"], data["gm"], data["combat"], data["round"] = t.ID, e(t.GM.Name), t.Combat, t.Round
@@ -158,7 +194,7 @@ func fillPreviewTable(data map[string]interface{}, t liveTable, chapters []story
 	byName := map[string]string{}
 	for _, c := range t.Party {
 		u := previewUnit{ID: fmt.Sprintf("c%d", c.ID), Name: e(c.Name), ShortName: e(shortName(c.Name)), Role: e(c.Meta), HP: c.HP, MaxHP: c.MaxHP,
-			HPText: fmt.Sprintf("%d/%d", c.HP, c.MaxHP), Pct: pct(c.HP, c.MaxHP), HD: e(c.HitDice), AC: strconv.Itoa(c.AC), Actions: []previewAction{}}
+			HPText: fmt.Sprintf("%d/%d", c.HP, c.MaxHP), Pct: pct(c.HP, c.MaxHP), HD: e(c.HitDice), AC: strconv.Itoa(c.AC), Actions: []previewAction{}, Pills: []livePill{}}
 		if c.HasPortrait {
 			u.Avatar = fmt.Sprintf("/api/characters/%d/portrait?v=%d", c.ID, c.PortraitAt)
 		} else {
@@ -181,6 +217,9 @@ func fillPreviewTable(data map[string]interface{}, t liveTable, chapters []story
 				}
 			}
 		}
+		for _, p := range cardPills(c) {
+			u.Pills = append(u.Pills, livePill{e(p.Label), p.Tone})
+		}
 		byName[strings.ToLower(c.Name)] = u.ID
 		party = append(party, u)
 	}
@@ -202,6 +241,14 @@ func fillPreviewTable(data map[string]interface{}, t liveTable, chapters []story
 		look := game.MonsterHealth(asInt(en["hp"]), asInt(en["max_hp"]))
 		u.HP, u.MaxHP, u.HPText, u.Pct = 0, 0, e(titleCase(look)), lookPct(look)
 		u.IsEnemy = true
+		if u.Avatar == "" { // a monster with no token (a GM's own without one): the old stage's emoji
+			u.Avatar = previewIconAvatar("👹")
+		}
+		for _, cond := range creatureConditions(t.ID, id) { // its conditions only: never its Hit Points
+			if base, _ := splitConditionEntry(cond); ruleConditions[base] {
+				u.Pills = append(u.Pills, livePill{e(titleCase(base)), "crimson"})
+			}
+		}
 		if n, ok := inits[id]; ok {
 			u.Init = strings.TrimSpace(u.Init + fmt.Sprintf(" (%d)", n))
 		}
@@ -300,7 +347,7 @@ func fillPreviewTable(data map[string]interface{}, t liveTable, chapters []story
 // attacks as the attack owner reads them); a key with no stat block gives an empty one.
 func previewMonster(key string) previewUnit {
 	e := html.EscapeString
-	u := previewUnit{Actions: []previewAction{}, Avatar: monsterTokenURL(key)}
+	u := previewUnit{Actions: []previewAction{}, Pills: []livePill{}, Avatar: monsterTokenURL(key)}
 	if u.Avatar == "" {
 		u.Avatar = previewIconAvatar("👹")
 	}

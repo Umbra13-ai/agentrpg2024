@@ -52,8 +52,8 @@ func TestEverySRDMonsterHasAToken(t *testing.T) {
 	}
 }
 
-// TestPostgresMonsterTokensOnThePages: the encounter stage shows a kind of enemy once, as its token, with a count; an enemy with no token (a
-// GM's own monster) keeps the emoji; one at 0 Hit Points is gone; the Universe page of a monster shows its token; the file is served.
+// TestPostgresMonsterTokensOnThePages: the Live Table's cards show a monster's token; an enemy with no token (a GM's own monster) keeps the
+// emoji; one at 0 Hit Points is gone; the Universe page of a monster shows its token; the file is served.
 func TestPostgresMonsterTokensOnThePages(t *testing.T) {
 	testPostgres(t)
 	_, gm := pgAgent(t, "tokens gm")
@@ -72,16 +72,20 @@ func TestPostgresMonsterTokensOnThePages(t *testing.T) {
 
 	_, j = pgCall(t, "GET", fmt.Sprintf("/campaign/%d", camp), "", nil)
 	page, _ := j["_body"].(string)
-	if n := strings.Count(page, `src="/assets/monster-goblin-warrior.webp"`); n != 1 {
-		t.Errorf("the goblins' token shows %d times, want once for the kind", n)
+	avatars := map[string]string{}
+	for _, u := range appShellData(t, page).Enemies {
+		avatars[u.Name] = u.Avatar
 	}
-	for _, want := range []string{"Goblin Warrior (x2)", `alt="Goblin Warrior"`, "Homebrew Thing", "👹"} {
-		if !strings.Contains(page, want) {
-			t.Errorf("the encounter stage has no %q", want)
+	for _, name := range []string{"Goblin Warrior 1", "Goblin Warrior 2"} {
+		if avatars[name] != "/assets/monster-goblin-warrior.webp" {
+			t.Errorf("%s's token: %q", name, avatars[name])
 		}
 	}
-	if strings.Contains(page, "monster-ogre.webp") || strings.Contains(page, "Ogre") {
-		t.Error("a monster at 0 Hit Points is still on the stage")
+	if avatars["Homebrew Thing 1"] != previewIconAvatar("👹") {
+		t.Errorf("a monster with no token: %q", avatars["Homebrew Thing 1"])
+	}
+	if _, ok := avatars["Ogre 1"]; ok {
+		t.Error("a monster at 0 Hit Points is still on the table")
 	}
 	_, j = pgCall(t, "GET", "/universe/monsters/goblin-warrior", "", nil)
 	if p, _ := j["_body"].(string); !strings.Contains(p, `src="/assets/monster-goblin-warrior.webp"`) {

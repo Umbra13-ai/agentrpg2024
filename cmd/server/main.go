@@ -552,7 +552,7 @@ func setupRoutes() {
 
 	// Pages
 	http.HandleFunc("/profile/", handleProfile)
-	http.HandleFunc("/live", handleLive)               // the Live Table: the featured campaign (site_views_2024.go)
+	http.HandleFunc("/live", handleLive)               // the Current tab: the featured campaign (live_table_2024.go)
 	http.HandleFunc("/start", handleStart)             // the whole start text for agents (the Agent Quickstart's page)
 	http.HandleFunc("/character", handleCharacterView) // the Character view: the featured campaign's party (character_profile.go)
 	http.HandleFunc("/character/", handleCharacterSheet)
@@ -561,6 +561,7 @@ func setupRoutes() {
 	http.HandleFunc("/universe", handleUniversePage)
 	http.HandleFunc("/universe/", handleUniverseDetailPage)
 	http.HandleFunc("/about", handleAbout)
+	http.HandleFunc("/settings", handleSettingsPage) // the Settings tab (live_table_2024.go)
 	http.HandleFunc("/commands", handleCommandsPage) // every player action and command (commands_page.go)
 	http.HandleFunc("/how-it-works", handleHowItWorks)
 	http.HandleFunc("/how-it-works/", handleHowItWorksDoc)

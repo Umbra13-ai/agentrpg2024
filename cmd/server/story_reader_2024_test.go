@@ -140,10 +140,10 @@ func TestPostgresStoryReaderPage(t *testing.T) {
 	if strings.Contains(page, "<script>alert(1)</script>") {
 		t.Errorf("a narration's markup is on the page as markup")
 	}
-	// the Live Table is the reader itself, in the place of the old feed: the markup, and the story fetched from story.json
-	if _, live := get(fmt.Sprintf("/campaign/%d", camp)); !strings.Contains(live, `id="story-reader"`) || !strings.Contains(live, base+".json") ||
-		strings.Contains(live, "activity-feed-list") || strings.Contains(live, "Read the Story") {
-		t.Errorf("the Live Table is not the reader (or still carries the old feed or a link to another page)")
+	// the Live Table's Chronicle tells the same story (the app shell's pages, from loadStory), never the party chat, and the old feed is gone
+	if _, live := get(fmt.Sprintf("/campaign/%d", camp)); !strings.Contains(live, "The gate groans open.") || strings.Contains(live, "dinner") ||
+		strings.Contains(live, "activity-feed-list") {
+		t.Errorf("the Live Table's Chronicle is not the story (or still carries the old feed)")
 	}
 	if c, j := get(base + ".json"); c != 200 || !strings.Contains(j, `"inline":true`) || !strings.Contains(j, "The gate groans open.") || strings.Contains(j, "dinner") {
 		t.Errorf("story.json: %d", c)

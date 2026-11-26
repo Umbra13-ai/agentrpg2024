@@ -2799,73 +2799,7 @@ func handleObserve(w http.ResponseWriter, r *http.Request) {
 }
 
 func handleCampaignsPage(w http.ResponseWriter, r *http.Request) {
-	w.Header().Set("Content-Type", "text/html; charset=utf-8")
-	view := campaignBrowser{Status: r.URL.Query().Get("status"), Search: strings.TrimSpace(r.URL.Query().Get("q"))}
-	if db == nil {
-		fmt.Fprint(w, wrapView("Campaign Browser - Agent RPG 2024", campaignBrowserPage(view)))
-		return
-	}
-	db.QueryRow(`SELECT COUNT(*) FROM lobbies WHERE status = 'recruiting'`).Scan(&view.Recruiting)
-	db.QueryRow(`SELECT COUNT(*) FROM lobbies WHERE status = 'active'`).Scan(&view.Active)
-	db.QueryRow(`SELECT COUNT(*) FROM lobbies WHERE status = 'completed'`).Scan(&view.Completed)
-	rows, err := db.Query(`
-		SELECT l.id, l.name, l.status, COALESCE(l.setting, ''), l.max_players,
-			COALESCE(l.min_level, 1), COALESCE(l.max_level, 1),
-			a.id, a.name,
-			(SELECT COUNT(*) FROM characters WHERE lobby_id = l.id) as player_count,
-			l.created_at,
-			COALESCE((SELECT active FROM combat_state WHERE lobby_id = l.id), false)
-		FROM lobbies l
-		LEFT JOIN agents a ON l.dm_id = a.id
-		WHERE COALESCE(l.status,'') <> 'deleted'
-		ORDER BY
-			CASE l.status WHEN 'active' THEN 1 WHEN 'recruiting' THEN 2 ELSE 3 END,
-			l.created_at DESC`)
-	if err != nil {
-		writeDBErrorPage(w, err, "campaigns")
-		return
-	}
-	defer rows.Close()
-	for rows.Next() {
-		var c campaignCard
-		var maxPlayers, minLevel, maxLevel, playerCount int
-		var dmID sql.NullInt64
-		var dmName sql.NullString
-		var setting string
-		var createdAt time.Time
-		if err := rows.Scan(&c.ID, &c.Name, &c.Status, &setting, &maxPlayers, &minLevel, &maxLevel, &dmID, &dmName, &playerCount, &createdAt, &c.Combat); err != nil {
-			writeDBErrorPage(w, err, "campaigns")
-			return
-		}
-		if dmName.Valid && dmID.Valid {
-			c.GM = dmName.String
-		}
-		c.Levels = formatLevelRequirement(minLevel, maxLevel)
-		c.Players = fmt.Sprintf("%d/%d players", playerCount, maxPlayers)
-		if maxPlayers <= 0 {
-			c.Players = fmt.Sprintf("%d player%s", playerCount, pluralize(playerCount, "", "s"))
-		}
-		c.Created = createdAt.Format("Jan 2, 2006")
-		if left, ok := openSeats(maxPlayers, playerCount).(int); ok && c.Status == "recruiting" {
-			c.Full = left == 0
-			if left > 0 {
-				c.Spots = fmt.Sprintf("%d spot%s left", left, pluralize(left, "", "s"))
-			}
-		}
-		c.Summary = setting
-		if i := strings.Index(c.Summary, "\n\n"); i > 0 {
-			c.Summary = c.Summary[:i]
-		}
-		if r := []rune(c.Summary); len(r) > 220 {
-			c.Summary = string(r[:220]) + "..."
-		}
-		view.Cards = append(view.Cards, c)
-	}
-	if err := rows.Err(); err != nil {
-		writeDBErrorPage(w, err, "campaigns")
-		return
-	}
-	fmt.Fprint(w, wrapView("Campaign Browser - Agent RPG 2024", campaignBrowserPage(view)))
+	serveAppShell(w, r, "campaigns", featuredCampaign(w, r))
 }
 
 func handleCampaignPage(w http.ResponseWriter, r *http.Request) {
@@ -2910,23 +2844,14 @@ func handleCampaignPage(w http.ResponseWriter, r *http.Request) {
 	serveCampaignPage(w, r, campaignID)
 }
 
-// serveCampaignPage writes a campaign's Live Table view (the caller checked the campaign may be watched).
+// serveCampaignPage writes a campaign's Live Table: the app shell's Current tab on that campaign (the caller checked the campaign may be
+// watched).
 func serveCampaignPage(w http.ResponseWriter, r *http.Request, campaignID int) {
-	w.Header().Set("Content-Type", "text/html; charset=utf-8")
-	t, what, err := loadLiveTable(campaignID)
-	if err == sql.ErrNoRows {
-		http.Error(w, "Campaign not found", http.StatusNotFound)
-		return
-	}
-	if err != nil {
-		writeDBErrorPage(w, err, what)
-		return
-	}
-	fmt.Fprint(w, wrapView(t.Name+" - Agent RPG 2024", liveTablePage(t)))
+	serveAppShell(w, r, "current", campaignID)
 }
 
 // loadLiveTable reads what a campaign's Live Table shows: the campaign, its fight, the party's cards, the observations, the place, the table
-// rules and the picture. The Live Table and its preview (preview_table_2024.go) read it. On an error it says what it was reading;
+// rules and the picture. The Live Table (live_table_2024.go) reads it. On an error it says what it was reading;
 // sql.ErrNoRows: no such campaign.
 func loadLiveTable(campaignID int) (liveTable, string, error) {
 	var err error

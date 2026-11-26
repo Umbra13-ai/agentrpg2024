@@ -36,57 +36,106 @@ func handleSiteAsset(w http.ResponseWriter, r *http.Request) {
 	http.ServeFileFS(w, r, sub, name)
 }
 
-// The site's page layout: the GUI rework (Matt, Nov 21), the "Tabletop Command & Spectator" mock-up saved in
-// data/ui_preview/gui-2026-11-21/index.html, implemented as it is designed. One owner for every web page's frame:
-//   - siteNav: the mock-up's five views, in its order and words (Live Table, Campaigns, Character, Universe, Commands & API). The
-//     desktop navigation (from 1024 px) and the phones' bottom tab bar (the mock-up's icons and short words) are made from it; the
-//     view being read is marked active by its Match paths. footerLinks: the site's other pages, in the footer.
-//   - designCSS (site_design_css_2024.go): the mock-up's stylesheet as it is; siteCSS: what the real site adds (links, the touch
-//     targets, the text pages' typography in .prose, the footer's links).
-//   - the mock-up's top bar (brand, navigation, Agent Quickstart on its right; no theme select until a settings area holds it: every
-//     page shows the default theme), its Agent Quickstart modal (quickstartModal: the
-//     server's real start, start_2024.go), its toast and its footer line.
-// framePage puts a page into it: wrapView for a view of the design (Live Table, Campaigns, Character, Universe, Commands & API), whose
-// markup is the mock-up's own; wrapHTML for a text page (about, how it works, the guide, the universe's lists), its content in
-// .prose. Text is never under 12 px and a touch target never under 40 px on a touch screen (checked with Playwright at 320 to 1920 px).
+// The site's page layout (owner, Nov 26: the Nov 25 mock-up, data/preview_table_2024.html, is the whole site's design). Two shells share
+// one palette (themes_2024.go) and one list of the tabs:
+//   - the app shell: the mock-up itself, the site's front pages (/, /live, /campaign/{id}, /campaigns, /universe, /settings;
+//     live_table_2024.go), with its own header and bottom bar;
+//   - the page shell: every other page (the character sheet, Commands & API, the docs, the SRD compendium, about, how it works, the
+//     start, the chronicle and the story, stat blocks), framed here in the mock-up's header, its centred column and its bottom bar,
+//     in plain CSS (Tailwind's reset would undo the pages' own classes). framePage puts a page into it: wrapView for a page drawn
+//     with the design's components (designCSS), wrapHTML for running text (.prose).
+// siteNav is the mock-up's four tabs, its words, its icons and its order (TestSiteNavIsTheMockupsTabs reads the owner's file); a page
+// is marked under the tab its Match paths name. The pages with no tab of their own are listed on the Settings tab (settingsLinks)
+// and the SRD compendium on the Universe tab. Text is never under 12 px and a touch target never under 40 px (tools/page_check_320.js).
 
 type siteLink struct {
-	Label, Short, Href, Icon string
-	Match                    []string // the paths (prefixes; "/" alone matches only the home page) that make it the active view
+	Label, Href, Tab, Icon string
+	Match                  []string // the paths (prefixes; "/" alone matches only the home page) that put a page under this tab
+}
+
+// navIcon: the mock-up's 24-pixel line icon from its strokes.
+func navIcon(strokes string) string {
+	return `<svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">` + strokes + `</svg>`
 }
 
 var siteNav = []siteLink{
-	{Label: "Live Table", Short: "Live", Href: "/live", Icon: "⚔️", Match: []string{"/", "/live", "/campaign/"}},
-	{Label: "Campaigns", Short: "Campaigns", Href: "/campaigns", Icon: "🗺️", Match: []string{"/campaigns"}},
-	{Label: "Character", Short: "Character", Href: "/character", Icon: "🛡️", Match: []string{"/character", "/profile/"}},
-	{Label: "Universe", Short: "Universe", Href: "/universe", Icon: "📖", Match: []string{"/universe"}},
-	{Label: "Commands & API", Short: "API", Href: "/commands", Icon: "⚡", Match: []string{"/commands", "/docs"}},
+	{Label: "Current", Href: "/live", Tab: "current", Match: []string{"/", "/live", "/campaign/", "/character", "/profile/"},
+		Icon: navIcon(`<polyline points="14.5 17.5 3 6 3 3 6 3 17.5 14.5"></polyline><line x1="13" y1="19" x2="19" y2="13"></line><line x1="16" y1="16" x2="20" y2="20"></line><line x1="19" y1="21" x2="21" y2="19"></line><polyline points="14.5 6.5 18 3 21 3 21 6 17.5 9.5"></polyline><line x1="5" y1="14" x2="9" y2="18"></line><line x1="7" y1="17" x2="4" y2="20"></line><line x1="3" y1="19" x2="5" y2="21"></line>`)},
+	{Label: "Campaigns", Href: "/campaigns", Tab: "campaigns", Match: []string{"/campaigns"},
+		Icon: navIcon(`<polygon points="3 6 9 3 15 6 21 3 21 18 15 21 9 18 3 21"></polygon><line x1="9" y1="3" x2="9" y2="18"></line><line x1="15" y1="6" x2="15" y2="21"></line>`)},
+	{Label: "Universe", Href: "/universe", Tab: "universe", Match: []string{"/universe", "/monsters/custom/"},
+		Icon: navIcon(`<path d="M2 3h6a4 4 0 0 1 4 4v14a3 3 0 0 0-3-3H2z"></path><path d="M22 3h-6a4 4 0 0 0-4 4v14a3 3 0 0 1 3-3h7z"></path>`)},
+	{Label: "Settings", Href: "/settings", Tab: "settings", Match: []string{"/settings", "/commands", "/docs", "/about", "/how-it-works", "/start"},
+		Icon: navIcon(`<circle cx="12" cy="12" r="3"></circle><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 2.83-2.83l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z"></path>`)},
 }
 
-// footerLinks: the site's pages outside the five views (the mock-up has no place for them in its navigation).
-var footerLinks = []struct{ Label, Href string }{
-	{"Agent Start", "/start"}, {"How It Works", "/how-it-works"}, {"Skill", "/skill.md"}, {"API Reference", "/docs"}, {"About", "/about"},
-	{"Source", "https://github.com/Umbra13-ai/agentrpg2024"},
+// siteTab: the tab a path is under ("" for none).
+func siteTab(path string) string {
+	for _, l := range siteNav {
+		for _, m := range l.Match {
+			if (m == "/" && path == "/") || (m != "/" && (path == m || strings.HasPrefix(path, m))) {
+				return l.Tab
+			}
+		}
+	}
+	return ""
+}
+
+// settingsLinks: the site's pages with no tab of their own, listed on the Settings tab (the app shell's Guides & Reference card).
+var settingsLinks = []struct {
+	Label string `json:"label"`
+	Href  string `json:"href"`
+	Note  string `json:"note"`
+}{
+	{"Commands & API", "/commands", "Every action and request an agent can send"},
+	{"API Reference", "/docs", "The whole reference, made from the server's code"},
+	{"Agent Start", "/start", "How an AI agent registers and joins"},
+	{"How It Works", "/how-it-works", "How a table plays"},
+	{"Skill Guide", "/skill.md", "The guide an agent reads"},
+	{"About", "/about", "The project"},
+	{"Source", "https://github.com/Umbra13-ai/agentrpg2024", "On GitHub"},
 }
 
 func (l siteLink) matchAttr() string { return strings.Join(l.Match, " ") }
 
-// siteNavHTML: the desktop navigation and the bottom tab bar, from siteNav.
-func siteNavHTML() (desktop, tabs string) {
-	var d, t strings.Builder
+// siteNavHTML: the page shell's bottom bar, from siteNav.
+func siteNavHTML() string {
+	var t strings.Builder
 	for _, l := range siteNav {
-		fmt.Fprintf(&d, `<a class="nav-btn" data-match="%s" href="%s">%s</a>`, l.matchAttr(), l.Href, html.EscapeString(l.Label))
-		fmt.Fprintf(&t, `<a class="mobile-nav-btn" data-match="%s" href="%s"><span aria-hidden="true">%s</span><span>%s</span></a>`, l.matchAttr(), l.Href, l.Icon, html.EscapeString(l.Short))
+		fmt.Fprintf(&t, `<a class="tab-btn" data-match="%s" href="%s">%s<span>%s</span></a>`, l.matchAttr(), l.Href, l.Icon, html.EscapeString(l.Label))
 	}
-	return d.String(), t.String()
+	return t.String()
 }
 
 const siteFonts = `<link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=Cinzel:wght@600;700;800&family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500;600;700&display=swap" rel="stylesheet">`
 
-// siteCSS: what the real site adds to the mock-up's stylesheet.
+// siteCSS: the page shell (the Nov 25 mock-up's header, column and bottom bar, owner Nov 26) and what the real site adds to the
+// components (links, touch targets, the text pages' typography).
 const siteCSS = `
+body { display: flex; justify-content: center; font-family: 'Inter', -apple-system, BlinkMacSystemFont, sans-serif; }
+.font-display { font-family: 'Cinzel', Georgia, serif; letter-spacing: 0.04em; }
+.page-shell { width: 100%; max-width: 48rem; min-width: 0; min-height: 100vh; background: var(--bg-base); border-left: 1px solid var(--border-subtle);
+  border-right: 1px solid var(--border-subtle); display: flex; flex-direction: column; position: relative; padding-bottom: 6rem; }
+.shell-header { position: sticky; top: 0; z-index: 30; background: var(--bg-glass); backdrop-filter: blur(12px); -webkit-backdrop-filter: blur(12px);
+  border-bottom: 1px solid var(--border-subtle); padding: 0.75rem 1rem; display: flex; align-items: center; justify-content: space-between; gap: 0.75rem; }
+.shell-brand { font-family: 'Cinzel', Georgia, serif; letter-spacing: 0.04em; font-size: 1.125rem; font-weight: 700; color: var(--gold); white-space: nowrap;
+  overflow: hidden; text-overflow: ellipsis; text-decoration: none; display: inline-flex; align-items: center; min-height: 40px; }
+@media (min-width: 640px) { .shell-brand { font-size: 1.25rem; } }
+.shell-quickstart { flex-shrink: 0; min-height: 40px; padding: 0.375rem 0.75rem; border-radius: 0.5rem; border: 1px solid rgba(212, 168, 83, 0.6);
+  background: transparent; color: var(--gold-bright); font: 600 0.75rem/1 'Inter', sans-serif; cursor: pointer; }
+.shell-quickstart:hover { background: rgba(212, 168, 83, 0.1); }
+.main-wrap { flex: 1; min-width: 0; padding: 1rem 0.875rem 1.5rem; }
+@media (min-width: 640px) { .main-wrap { padding: 1rem 1rem 1.5rem; } }
+.tab-bar { position: fixed; bottom: 0; left: 50%; transform: translateX(-50%); width: 100%; max-width: 48rem; z-index: 30; background: var(--bg-glass);
+  backdrop-filter: blur(12px); -webkit-backdrop-filter: blur(12px); border-top: 1px solid var(--border-subtle);
+  padding: 0.5rem 0.5rem calc(0.5rem + env(safe-area-inset-bottom)); display: flex; align-items: center; justify-content: space-around; }
+.tab-btn { display: flex; flex-direction: column; align-items: center; gap: 0.25rem; padding: 0.25rem 1rem; min-height: 44px; border-radius: 0.5rem;
+  color: var(--text-muted); text-decoration: none; font-size: 12px; font-weight: 500; }
+.tab-btn.active, .tab-btn:hover { color: var(--gold-bright); }
+.shell-footer { text-align: center; padding: 1rem 1rem 0.5rem; font-size: 0.75rem; color: var(--text-muted); border-top: 1px solid var(--border-subtle); }
+.shell-footer a { display: inline-flex; align-items: center; min-height: 40px; }
 /* The ability and save names keep the mock-up's whole words at the 12 px floor on a phone. */
 @media (max-width: 480px) { .ddb-ability { padding-left: 0.12rem; padding-right: 0.12rem; } .ddb-ability-name, .save-name { letter-spacing: 0; font-weight: 600; } .save-pill { gap: 0.3rem; padding-left: 0.4rem; } }
 a { color: var(--accent-gold); }
@@ -95,36 +144,20 @@ img { max-width: 100%; }
 .pin-btn .pin-icon { filter: grayscale(1); opacity: 0.65; }
 .pin-btn[aria-pressed="true"] { border-color: var(--accent-gold); color: var(--accent-gold); }
 .pin-btn[aria-pressed="true"] .pin-icon { filter: none; opacity: 1; }
-a.nav-btn.is-pinned, a.mobile-nav-btn.is-pinned { position: relative; }
-a.nav-btn.is-pinned::after, a.mobile-nav-btn.is-pinned::after { content: "📌"; font-size: 12px; position: absolute; top: 0; right: 2px; }
-a.brand, a.nav-btn, a.mobile-nav-btn, a.btn, a.pill-btn, a.map-token, a.party-card { text-decoration: none; }
+a.tab-btn.is-pinned { position: relative; }
+a.tab-btn.is-pinned::after { content: "📌"; font-size: 12px; position: absolute; top: 0; right: 0.5rem; }
+a.btn, a.pill-btn { text-decoration: none; }
 a.plain-link, a.plain-link:visited { color: inherit; text-decoration: none; }
 a.plain-link:hover { text-decoration: underline; }
-a.nav-btn { display: inline-flex; align-items: center; }
-a.mobile-nav-btn { text-align: center; }
 a.btn-gold, a.btn-gold:visited { color: var(--btn-accent-text); }
-a.btn-ghost, a.btn-ghost:visited, a.party-card, a.party-card:visited { color: var(--text-primary); }
-a.map-token, a.map-token:visited { color: #f5efe2; }
-a.party-card { display: block; }
-.brand-title { color: var(--accent-gold); }
-.token-label { max-width: 12.5rem; overflow: hidden; text-overflow: ellipsis; }
-.map-token.is-down .token-ring { border-color: var(--accent-crimson); filter: grayscale(0.6); }
-.map-token.is-gm .token-ring { border-color: #b48cf0; }
+a.btn-ghost, a.btn-ghost:visited { color: var(--text-primary); }
 .feed-entry.type-message { border-left-color: var(--accent-emerald); }
 .hidden-by-filter { display: none !important; }
 /* a touch screen: every control at least 40 px */
 @media (max-width: 1023px), (pointer: coarse) {
-  .btn, .btn-sm, .pill-btn, .nav-btn, .accordion-btn { min-height: 40px; }
-  .mobile-nav-btn { min-height: 46px; }
-  a.brand, a.solo-link { display: inline-flex; align-items: center; min-height: 40px; min-width: 1.75rem; }
+  .btn, .btn-sm, .pill-btn, .accordion-btn { min-height: 40px; }
+  a.solo-link { display: inline-flex; align-items: center; min-height: 40px; min-width: 1.75rem; }
 }
-@media (max-width: 420px) { .topbar-actions #open-quickstart-btn { padding-left: 0.6rem; padding-right: 0.6rem; } }
-/* Agent Quickstart stays at the top bar's right, on the brand's line down to 320 px (the title a little smaller under 360 px) */
-.topbar-actions { margin-left: auto; }
-@media (max-width: 359px) { .brand-title { font-size: 1.1rem; } }
-/* the footer's links */
-.site-footer-links { display: flex; flex-wrap: wrap; justify-content: center; gap: 0 0.9rem; margin-bottom: 0.35rem; }
-.site-footer-links a { display: inline-flex; align-items: center; min-height: 40px; padding: 0 0.25rem; }
 /* the modal's steps */
 .qs-steps code { overflow-wrap: anywhere; }
 /* the text pages (about, how it works, the guide, the universe's lists): the typography the mock-up's reset takes away */
@@ -244,15 +277,6 @@ func quickstartModal() string {
 var baseHTML, pageTemplate string
 
 func init() {
-	desktop, tabs := siteNavHTML()
-	var foot strings.Builder
-	for _, l := range footerLinks {
-		rel := ""
-		if strings.HasPrefix(l.Href, "http") {
-			rel = ` rel="noopener"`
-		}
-		fmt.Fprintf(&foot, `<a href="%s"%s>%s</a>`, l.Href, rel, html.EscapeString(l.Label))
-	}
 	baseHTML = `<!DOCTYPE html>
 <html lang="en" data-theme="` + defaultTheme + `">
 <head>
@@ -261,33 +285,28 @@ func init() {
 <meta name="text-scale" content="scale">
 <link rel="icon" type="image/svg+xml" href="/favicon.svg">
 <title>Agent RPG 2024</title>
+` + themeHeadScript() + `
 ` + siteFonts + `
 <style>
 ` + themeCSS() + designCSS + siteCSS + `</style>
 </head>
 <body>
-  <header class="topbar">
-    <div class="topbar-inner">
-      <a class="brand" id="brand-home" href="/">
-        <span class="brand-title font-rpg">Agent RPG 2024</span>
-      </a>
-      <nav class="desktop-nav" aria-label="Main navigation">` + desktop + `</nav>
-      <div class="topbar-actions">
-        <button class="btn btn-gold btn-sm" id="open-quickstart-btn">Agent Quickstart</button>
-      </div>
-    </div>
+<div class="page-shell">
+  <header class="shell-header">
+    <a class="shell-brand" id="brand-home" href="/">AGENT RPG 2024</a>
+    <button type="button" class="shell-quickstart" id="open-quickstart-btn">Agent Quickstart</button>
   </header>
   <main class="main-wrap">
 `
 	pageTemplate = `{{content}}
   </main>
-  <nav class="mobile-nav" aria-label="Mobile navigation">` + tabs + `</nav>
+  <footer class="shell-footer">
+    Agent RPG 2024, an unofficial fork of <a href="https://github.com/agentrpg/agentrpg">Agent RPG</a> · <a rel="license" href="https://creativecommons.org/licenses/by-sa/4.0/">CC BY-SA 4.0</a> · v{{version}} · {{deploy_time}}
+  </footer>
+  <nav class="tab-bar" aria-label="Primary navigation">` + siteNavHTML() + `</nav>
+</div>
 {{quickstart}}
   <div class="toast" id="toast" role="status" aria-live="polite"></div>
-  <footer style="text-align:center; padding:1rem 1rem 5rem 1rem; font-size:0.75rem; color:var(--text-muted); border-top:1px solid var(--border-subtle);">
-    <nav class="site-footer-links" aria-label="Site links">` + foot.String() + `</nav>
-    Agent RPG 2024, an unofficial fork of <a href="https://github.com/agentrpg/agentrpg">Agent RPG</a> · <a href="https://github.com/Umbra13-ai/agentrpg2024/issues">Issues</a> · <a rel="license" href="https://creativecommons.org/licenses/by-sa/4.0/">CC BY-SA 4.0</a> · v{{version}} · {{deploy_time}}
-  </footer>
 ` + siteScript + `
 `
 }
@@ -297,8 +316,7 @@ func wrapHTML(title, content string) string {
 	return framePage(title, `<div class="prose">`+content+`</div>`)
 }
 
-// wrapView: a view of the design (Live Table, Campaigns, Character, Universe, Commands & API) in the site's frame; its content is the
-// mock-up's markup.
+// wrapView: a page drawn with the design's components (the character sheet, Commands & API, the story reader ...) in the page shell.
 func wrapView(title, content string) string { return framePage(title, content) }
 
 // framePage puts content into the frame: the title (escaped: titles often hold names chosen by users), the version and deploy time,

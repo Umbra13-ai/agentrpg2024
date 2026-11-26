@@ -1,15 +1,13 @@
 package main
 
-// The Party & Initiative cards of the Live Table (owner, Nov 23: the "Party & Initiative Cards" proposal): a portrait or class icon, the
-// name and "Level N Species Class", Hit Points with Temporary Hit Points (and the bar that shows both), Hit Dice left, Armor Class, the
-// Heroic Inspiration pip and a Turn mark, then one row of what is on the character: dead, dying (with the Death Saving Throw dots) or
-// stable, Concentration, the rules conditions, and its companions (familiar, steed, summon, pet) with their Hit Points. liveCardExtras
-// reads what the card needs beyond the party query; liveCardHTML is the one render of a card. How healthy a character looks is the
-// health owner's label (game.Vitals.Health: Card.Health), never worked out again here.
+// What a party card on the Live Table says about its character (owner, Nov 23: the cards proposal; Nov 26: the cards are the Nov 25
+// mock-up's, with small status pills added): liveCardExtras reads what the card needs beyond the party query (Temporary Hit Points,
+// Heroic Inspiration, the Death Saving Throws, Hit Dice left, Concentration and the conditions, the companions) and cardPills is the one
+// wording of it, shown on the cards by live_table_2024.go. How healthy a character looks is the health owner's label
+// (game.Vitals.Health: Card.Health), never worked out again here.
 
 import (
 	"fmt"
-	"html"
 	"sort"
 	"strings"
 )
@@ -111,123 +109,42 @@ func liveCardExtras(c *liveCard) error {
 	return nil
 }
 
-// sheetIcon: the small paper sheet in a card's top right corner (owner, Nov 24), drawn in the theme's accent with currentColor.
-const sheetIcon = `<svg viewBox="0 0 24 24" width="18" height="18" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M14 3H6.5A1.5 1.5 0 0 0 5 4.5v15A1.5 1.5 0 0 0 6.5 21h11a1.5 1.5 0 0 0 1.5-1.5V8z"/><path d="M14 3v5h5"/><path d="M8.5 12.5h7M8.5 16h7"/></svg>`
+// livePill is one status pill of a party card on the Live Table (owner, Nov 26: the cards keep the mock-up's design with small pills
+// added): its words and its tone (crimson, gold, arcane, emerald), which picks the pill's color class in the page.
+type livePill struct {
+	Label string `json:"label"`
+	Tone  string `json:"tone"`
+}
 
-// liveCardHTML renders one party card: a tap (or Enter or Space) opens the quick sheet in the page's script; the sheet icon in its top
-// right corner is the link to the character's full sheet (a link can't hold another link, so the card itself is not one).
-func liveCardHTML(c liveCard) string {
-	e := html.EscapeString
-	dead, dying := c.Health == "dead", c.Health == "dying"
-	hp := c.HP
-	if dead {
-		hp = 0
-	}
-	pool := max(c.MaxHP, hp+c.TempHP)
-	hpPct := 0
-	if pool > 0 {
-		hpPct = max(0, min(100, (hp*100+pool/2)/pool))
-	}
-	thpPct := 0
-	if !dead && c.TempHP > 0 && pool > 0 {
-		thpPct = max(4, min(100-hpPct, (c.TempHP*100+pool/2)/pool))
-	}
-	color := hpFillColor(c.Health)
-
-	cls := "party-card"
-	badge := ""
-	if c.IsTurn {
-		cls += " is-turn"
-		badge = `<span class="badge badge-recruiting party-turn">Turn</span>`
-	}
-	if dead {
-		cls += " is-dead"
-	}
-	face := "<span>" + e(c.Icon) + "</span>"
-	if c.HasPortrait {
-		face = fmt.Sprintf(`<img src="/api/characters/%d/portrait?v=%d" alt="%s" />`, c.ID, c.PortraitAt, e(shortName(c.Name)))
-	}
-	pip := ""
-	if c.Inspired {
-		pip = `<span class="insp-pip" title="Heroic Inspiration">★</span>`
-	}
-	temp := ""
-	if !dead && c.TempHP > 0 {
-		temp = fmt.Sprintf(`<span class="font-mono party-temp" title="Temporary Hit Points">+%d</span>`, c.TempHP)
-	}
-	hd := ""
-	if c.HitDice != "" {
-		hd = `<span class="font-mono party-hd" title="Hit Point Dice left">HD ` + e(c.HitDice) + `</span>`
-	}
-	barTitle := fmt.Sprintf("HP %d/%d", hp, c.MaxHP)
-	if !dead && c.TempHP > 0 {
-		barTitle += fmt.Sprintf(" + %d Temp HP", c.TempHP)
-	}
-	thp := ""
-	if thpPct > 0 {
-		thp = fmt.Sprintf(`<div class="thp-fill-seg" style="width:%d%%;"></div>`, thpPct)
-	}
-
-	var row strings.Builder
-	switch {
-	case dead:
-		row.WriteString(`<span class="cond-pill cond-dead">Dead</span>`)
-	case dying:
-		dots := func(n int, class string) string {
-			var s strings.Builder
-			for i := 0; i < 3; i++ {
-				on := ""
-				if i < n {
-					on = " " + class
-				}
-				s.WriteString(`<span class="ds-dot` + on + `"></span>`)
-			}
-			return s.String()
-		}
-		row.WriteString(fmt.Sprintf(`<span class="cond-pill cond-dying" title="Death Saving Throws: %d successes, %d failures"><span>Dying</span><span class="ds-track">%s<span class="ds-sep">/</span>%s</span></span>`,
-			c.DeathSucc, c.DeathFail, dots(c.DeathSucc, "is-succ"), dots(c.DeathFail, "is-fail")))
-	case c.Health == "stable":
-		row.WriteString(`<span class="cond-pill cond-gold">Stable</span>`)
+// cardPills: what is on a character, as its card's pills, from the card liveCardExtras filled: dead, dying with its Death Saving
+// Throws, or stable (the health owner's label), Concentration and the conditions, Temporary Hit Points, Heroic Inspiration and its
+// companions with their Hit Points. The one wording of a card's state.
+func cardPills(c liveCard) []livePill {
+	pills := []livePill{}
+	dead := c.Health == "dead"
+	switch c.Health {
+	case "dead":
+		pills = append(pills, livePill{"Dead", "crimson"})
+	case "dying":
+		pills = append(pills, livePill{fmt.Sprintf("Dying · saves %d✓ %d✗", c.DeathSucc, c.DeathFail), "crimson"})
+	case "stable":
+		pills = append(pills, livePill{"Stable", "gold"})
 	}
 	for _, cd := range c.Conds {
-		row.WriteString(`<span class="cond-pill cond-` + cd.Tone + `">` + e(cd.Label) + `</span>`)
+		pills = append(pills, livePill{cd.Label, cd.Tone})
 	}
-	var comps strings.Builder
+	if !dead && c.TempHP > 0 {
+		pills = append(pills, livePill{fmt.Sprintf("+%d Temp HP", c.TempHP), "arcane"})
+	}
+	if c.Inspired {
+		pills = append(pills, livePill{"★ Inspiration", "gold"})
+	}
 	for _, cm := range c.Comps {
-		hpText := fmt.Sprintf("%d/%d", cm.HP, cm.MaxHP)
+		hp := fmt.Sprintf("%d/%d", cm.HP, cm.MaxHP)
 		if cm.Away {
-			hpText = "away"
+			hp = "away"
 		}
-		comps.WriteString(fmt.Sprintf(`<span class="companion-pill" title="%s"><span>%s %s</span><span class="font-mono party-comp-hp">%s</span></span>`, e(cm.Title), cm.Icon, e(cm.Label), hpText))
+		pills = append(pills, livePill{cm.Icon + " " + cm.Label + " " + hp, "emerald"})
 	}
-	footer := ""
-	if row.Len() > 0 || comps.Len() > 0 {
-		footer = `<div class="party-bottom-row"><div class="cond-list">` + row.String() + `</div>`
-		if comps.Len() > 0 {
-			footer += `<div class="comp-group">` + comps.String() + `</div>`
-		}
-		footer += `</div>`
-	}
-	return fmt.Sprintf(`
-        <div class="%s" role="button" tabindex="0" data-inspect-char="%d" title="%s">
-          <a class="party-sheet-link" href="/character/%d" title="%s's character sheet" aria-label="Open %s's character sheet">%s</a>
-          <div>
-            <div class="party-card-row">
-              <div class="party-avatar-col">
-                <div class="party-avatar-wrap"><div class="party-avatar">%s</div>%s</div>
-                %s
-              </div>
-              <div class="party-meta-col">
-                <strong class="font-rpg party-name">%s</strong>
-                <div class="party-meta">%s</div>
-                <div class="party-stats-line">
-                  <span><span class="font-mono" style="color:%s; font-weight:600;">HP %d/%d</span>%s</span>
-                  %s
-                  <span class="font-mono party-ac">AC %d</span>
-                </div>
-              </div>
-            </div>
-            <div class="hp-bar-wrap" title="%s"><div class="hp-fill-seg" style="width:%d%%; background:%s;"></div>%s</div>
-          </div>%s
-        </div>`, cls, c.ID, e(c.Activity), c.ID, e(c.Name), e(c.Name), sheetIcon, face, pip, badge, e(c.Name), e(c.Meta), color, hp, c.MaxHP, temp, hd, c.AC, e(barTitle), hpPct, color, thp, footer)
+	return pills
 }

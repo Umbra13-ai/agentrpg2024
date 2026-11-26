@@ -1,15 +1,18 @@
 package main
 
-// Themes (Nov 10). Every page draws its colors and fonts from these variables, so a theme changes the whole site, the character sheet
-// included (its parchment colors were fixed in the page, so other themes didn't reach it). Obsidian Gold is the default (defaultTheme); Parchment, the look of the character
-// sheets, is one of the named themes. The theme menu lists the themes by
-// name; the choice is kept in the browser (localStorage).
+// Themes (owner, Nov 26: the Nov 25 mock-up is the site's design). The mock-up's three themes, Midnight (the default), Parchment and
+// Contrast, are the site's only themes, with the mock-up's own token values (data/preview_table_2024.html: --bg-outer, --bg-base,
+// --bg-surface, --bg-elevated, --text-main, --text-muted, --border-subtle, --gold, --gold-bright). Every page draws its colors from
+// these variables: the app shell (the mock-up itself, live_table_2024.go) reads the tokens by their names, and the page shell's pages
+// (site_layout_2024.go) read the older content names (--accent-gold, --text-primary, --bg-code ...), which each theme defines from its
+// tokens here, once, so a page re-skins without touching its handler.
 //
-// Variables: page (--bg, --fg, --muted, --link, --link-visited, --border, --code-bg, --note-bg, --note-border), sheet and panels
-// (--surface, --panel, --panel-strong, --panel-border, --rule, --heading, --accent, --accent-fg), status (--ok, --warn, --bad, --info and
-// their -bg), fonts (--font-body, --font-sheet).
+// The choice is kept in the browser under one key, themeStoreKey: the app shell's Settings tab writes it, and every page (the app
+// shell, the page shell, the admin page) reads it through themeReadJS before it paints. A saved key that is no longer a theme reads as
+// the nearest one (in themeReadJS, the one reading).
 
 import (
+	"encoding/json"
 	"fmt"
 	"sort"
 	"strings"
@@ -18,85 +21,37 @@ import (
 type siteTheme struct {
 	Key, Name string
 	Vars      map[string]string
-	Menu      bool // one of the mock-up's five, for the theme choice a settings area will offer (no page offers one now)
 }
 
-var lightStatus = map[string]string{"--ok": "#1e7b34", "--ok-bg": "#d4edda", "--warn": "#8a6100", "--warn-bg": "#fff3cd",
-	"--bad": "#a3212c", "--bad-bg": "#f8d7da", "--info": "#0b5394", "--info-bg": "#d1ecf1"}
-var darkStatus = map[string]string{"--ok": "#88ee88", "--ok-bg": "#2a4a2a", "--warn": "#f0d060", "--warn-bg": "#4a4a2a",
-	"--bad": "#ff8888", "--bad-bg": "#4a2a2a", "--info": "#88ccff", "--info-bg": "#2a3a4a"}
-
-const serifStack = `Georgia, serif`
-const bookStack = `"Palatino Linotype", "Book Antiqua", Palatino, "Iowan Old Style", Georgia, serif`
-
-func themeVars(base map[string]string, status map[string]string, body, sheet string) map[string]string {
-	out := map[string]string{"--font-body": body, "--font-sheet": sheet}
-	for k, v := range status {
-		out[k] = v
-	}
-	for k, v := range base {
-		out[k] = v
-	}
-	return out
-}
-
-// The design's themes (Matt, Nov 21: the "Tabletop Command & Spectator" mock-up, data/ui_preview/gui-2026-11-21): Obsidian Gold,
-// Crimson Maroon, Forest Emerald, Royal Sapphire and Parchment, with the mock-up's own variables and values, exactly as its CSS
-// defines them (a theme block overrides the Obsidian Gold values on :root, as the mock-up's cascade does). designTheme also derives
-// the older variable names from them (--bg, --fg, --surface, --accent ...), so every page drawn with those follows the theme.
 const interStack = `Inter, -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif`
 const cinzelStack = `Cinzel, Georgia, serif`
 const monoStack = `"JetBrains Mono", ui-monospace, SFMono-Regular, Menlo, monospace`
 
-// obsidianVars: the mock-up's :root (Obsidian Gold).
-var obsidianVars = map[string]string{
-	"--bg-app": "#08090e", "--bg-radial": "radial-gradient(circle at 50% 0%, rgba(212, 162, 58, 0.11) 0%, rgba(11, 13, 22, 0) 58%)",
-	"--bg-surface": "#111420", "--bg-elevated": "#181d2e", "--bg-glass": "rgba(17, 20, 32, 0.86)", "--bg-code": "#0a0c13",
-	"--border-subtle": "rgba(214, 173, 86, 0.24)", "--border-strong": "rgba(214, 173, 86, 0.62)",
-	"--text-primary": "#f5efe2", "--text-secondary": "#beb7a8", "--text-muted": "#7f7a6f",
-	"--accent-gold": "#e5b85c", "--accent-gold-soft": "rgba(229, 184, 92, 0.16)",
-	"--accent-crimson": "#e0565b", "--accent-crimson-soft": "rgba(224, 86, 91, 0.18)",
-	"--accent-emerald": "#46c284", "--accent-emerald-soft": "rgba(70, 194, 132, 0.18)",
-	"--accent-arcane": "#699bf7", "--accent-arcane-soft": "rgba(105, 155, 247, 0.18)",
-	"--btn-accent-bg": "linear-gradient(135deg, #f0c975, #b48224)", "--btn-accent-text": "#140f06",
-	"--panel-sheen": "rgba(229, 184, 92, 0.06)",
-	"--shadow-rpg":  "inset 0 1px 0 rgba(255, 225, 155, 0.12), 0 14px 36px rgba(0, 0, 0, 0.55)",
-	"--radius-lg":   "14px", "--radius-md": "10px", "--radius-sm": "6px",
+// themePalette: one theme's mock-up tokens and the colors the content pages need besides them.
+type themePalette struct {
+	Outer, Base, Surface, Elevated, Main, Muted, Border, Gold, GoldBright string // the mock-up's tokens
+	Code, Glass, BorderStrong, Secondary, Crimson, Emerald, Arcane        string // for the content pages
+	Soft                                                                  string // the alpha of a soft accent ("0.15")
+	ButtonBG, ButtonText, Shadow                                          string
+	Dark                                                                  bool
 }
 
-// tabletopDark: the mock-up's maroon, emerald and royal blocks (they share all but their accent).
-func tabletopDark(radial, borderStrong, accent, accentSoft, btnBG, btnFG, sheen string) map[string]string {
-	return map[string]string{"--bg-app": "#0b0d13", "--bg-radial": radial, "--bg-surface": "#121520", "--bg-elevated": "#191e2d",
-		"--bg-glass": "rgba(18, 21, 32, 0.9)", "--bg-code": "#0a0c12", "--border-subtle": "rgba(255, 255, 255, 0.11)", "--border-strong": borderStrong,
-		"--text-primary": "#f3efe8", "--text-secondary": "#b6b1a8", "--text-muted": "#7c7870", "--accent-gold": accent, "--accent-gold-soft": accentSoft,
-		"--btn-accent-bg": btnBG, "--btn-accent-text": btnFG, "--panel-sheen": sheen,
-		"--shadow-rpg": "inset 0 1px 0 rgba(255, 255, 255, 0.06), 0 14px 36px rgba(0, 0, 0, 0.55)"}
-}
-
-// parchmentVars: the mock-up's Parchment block.
-var parchmentVars = map[string]string{
-	"--bg-app": "#efe4cc", "--bg-radial": "radial-gradient(circle at 50% 0%, rgba(168, 112, 34, 0.14) 0%, rgba(239, 228, 204, 0) 60%)",
-	"--bg-surface": "#fbf5e6", "--bg-elevated": "#f1e5ca", "--bg-glass": "rgba(251, 245, 230, 0.92)", "--bg-code": "#e6d7b9",
-	"--border-subtle": "rgba(132, 90, 38, 0.28)", "--border-strong": "rgba(132, 90, 38, 0.65)",
-	"--text-primary": "#261b12", "--text-secondary": "#584431", "--text-muted": "#826d58",
-	"--accent-gold": "#9a6412", "--accent-gold-soft": "rgba(154, 100, 18, 0.14)",
-	"--accent-crimson": "#a82828", "--accent-crimson-soft": "rgba(168, 40, 40, 0.14)",
-	"--accent-emerald": "#206e47", "--accent-emerald-soft": "rgba(32, 110, 71, 0.14)",
-	"--accent-arcane": "#26569e", "--accent-arcane-soft": "rgba(38, 86, 158, 0.14)",
-	"--btn-accent-bg": "linear-gradient(135deg, #b87e24, #8a590f)", "--btn-accent-text": "#fffaf0",
-	"--panel-sheen": "rgba(154, 100, 18, 0.05)",
-	"--shadow-rpg":  "inset 0 1px 0 rgba(255, 255, 255, 0.6), 0 10px 26px rgba(66, 44, 18, 0.14)",
-}
-
-// designTheme: a mock-up theme block over the Obsidian Gold values, with the older names derived from the result.
-func designTheme(over map[string]string) map[string]string {
-	v := map[string]string{}
-	for k, x := range obsidianVars {
-		v[k] = x
+// themeVars: a palette as the variables every page reads.
+func themeVars(p themePalette) map[string]string {
+	soft := func(hex string) string { return softColor(hex, p.Soft) }
+	v := map[string]string{
+		// the mock-up's tokens
+		"--bg-outer": p.Outer, "--bg-base": p.Base, "--bg-surface": p.Surface, "--bg-elevated": p.Elevated, "--text-main": p.Main,
+		"--text-muted": p.Muted, "--border-subtle": p.Border, "--gold": p.Gold, "--gold-bright": p.GoldBright,
+		// the content pages' names, from the tokens
+		"--bg-app": p.Base, "--bg-code": p.Code, "--bg-glass": p.Glass, "--bg-radial": "none", "--border-strong": p.BorderStrong,
+		"--text-primary": p.Main, "--text-secondary": p.Secondary, "--accent-gold": p.Gold, "--accent-gold-soft": soft(p.Gold),
+		"--accent-crimson": p.Crimson, "--accent-crimson-soft": soft(p.Crimson), "--accent-emerald": p.Emerald, "--accent-emerald-soft": soft(p.Emerald),
+		"--accent-arcane": p.Arcane, "--accent-arcane-soft": soft(p.Arcane), "--btn-accent-bg": p.ButtonBG, "--btn-accent-text": p.ButtonText,
+		"--panel-sheen": "transparent", "--shadow-rpg": p.Shadow, "--radius-lg": "14px", "--radius-md": "10px", "--radius-sm": "6px",
+		"--font-body": interStack, "--font-sheet": interStack, "--font-heading": cinzelStack, "--font-mono": monoStack,
 	}
-	for k, x := range over {
-		v[k] = x
-	}
+	// the oldest names (pages written before the Nov 21 rework)
 	for k, from := range map[string]string{"--bg": "--bg-app", "--fg": "--text-primary", "--muted": "--text-secondary", "--link": "--accent-gold",
 		"--link-visited": "--accent-gold", "--border": "--border-subtle", "--code-bg": "--bg-code", "--note-bg": "--bg-elevated",
 		"--note-border": "--border-strong", "--surface": "--bg-surface", "--panel": "--bg-elevated", "--panel-strong": "--bg-code",
@@ -106,76 +61,65 @@ func designTheme(over map[string]string) map[string]string {
 		"--warn-bg": "--accent-gold-soft"} {
 		v[k] = v[from]
 	}
-	v["--font-body"], v["--font-sheet"], v["--font-heading"], v["--font-mono"] = interStack, interStack, cinzelStack, monoStack
+	v["color-scheme"] = "light"
+	if p.Dark {
+		v["color-scheme"] = "dark"
+	}
 	return v
 }
 
-// legacyTheme: an older theme (kept for a viewer who chose it before the rework; not in the menu) given the design's variable names
-// from its own colors.
-func legacyTheme(v map[string]string) map[string]string {
-	for k, from := range map[string]string{"--bg-app": "--bg", "--bg-surface": "--surface", "--bg-elevated": "--panel", "--bg-code": "--code-bg",
-		"--bg-glass": "--bg", "--border-subtle": "--border", "--border-strong": "--rule", "--text-primary": "--fg", "--text-secondary": "--muted",
-		"--text-muted": "--muted", "--accent-gold": "--accent", "--accent-crimson": "--bad", "--accent-crimson-soft": "--bad-bg",
-		"--accent-emerald": "--ok", "--accent-emerald-soft": "--ok-bg", "--accent-arcane": "--info", "--accent-arcane-soft": "--info-bg",
-		"--btn-accent-text": "--accent-fg"} {
-		v[k] = v[from]
+// softColor: a #rrggbb color at the given alpha.
+func softColor(hex, alpha string) string {
+	var r, g, b int
+	if len(hex) == 7 {
+		fmt.Sscanf(hex[1:], "%02x%02x%02x", &r, &g, &b)
 	}
-	v["--accent-gold-soft"] = "color-mix(in srgb, " + v["--accent"] + " 16%, transparent)"
-	v["--btn-accent-bg"] = v["--accent"]
-	v["--bg-radial"], v["--panel-sheen"], v["--shadow-rpg"] = "none", "transparent", "0 1px 4px rgba(0, 0, 0, 0.2)"
-	v["--font-heading"], v["--font-mono"] = cinzelStack, monoStack
-	return v
+	return fmt.Sprintf("rgba(%d, %d, %d, %s)", r, g, b, alpha)
 }
 
 var siteThemes = []siteTheme{
-	{"obsidian", "Obsidian Gold", designTheme(nil), true},
-	{"maroon", "Crimson Maroon", designTheme(tabletopDark("radial-gradient(circle at 50% 0%, rgba(168, 44, 68, 0.14) 0%, rgba(11, 13, 19, 0) 55%)",
-		"rgba(196, 62, 92, 0.55)", "#d95b76", "rgba(217, 91, 118, 0.15)", "linear-gradient(135deg, #9e2a45, #731a30)", "#fff5f7", "rgba(217, 91, 118, 0.04)")), true},
-	{"emerald", "Forest Emerald", designTheme(tabletopDark("radial-gradient(circle at 50% 0%, rgba(34, 128, 78, 0.14) 0%, rgba(11, 13, 19, 0) 55%)",
-		"rgba(56, 168, 108, 0.55)", "#46b87c", "rgba(70, 184, 124, 0.15)", "linear-gradient(135deg, #24784c, #175233)", "#f2fff7", "rgba(70, 184, 124, 0.04)")), true},
-	{"royal", "Royal Sapphire", designTheme(tabletopDark("radial-gradient(circle at 50% 0%, rgba(44, 92, 196, 0.15) 0%, rgba(11, 13, 19, 0) 55%)",
-		"rgba(76, 128, 235, 0.55)", "#5d92f5", "rgba(93, 146, 245, 0.15)", "linear-gradient(135deg, #2a56b8, #1b3a82)", "#f3f7ff", "rgba(93, 146, 245, 0.04)")), true},
-	{"parchment", "Parchment", designTheme(parchmentVars), true},
-	{"light", "Light", legacyTheme(themeVars(map[string]string{
-		"--bg": "#ffffff", "--fg": "#222222", "--muted": "#666666", "--link": "#0645ad", "--link-visited": "#0b0080",
-		"--border": "#cccccc", "--code-bg": "#f5f5f5", "--note-bg": "#fffbdd", "--note-border": "#e6d9a6",
-		"--surface": "#ffffff", "--panel": "#f6f6f6", "--panel-strong": "#e9e9e9", "--panel-border": "#cccccc", "--rule": "#bbbbbb",
-		"--heading": "#222222", "--accent": "#0645ad", "--accent-fg": "#ffffff"}, lightStatus, serifStack, bookStack)), false},
-	{"dark", "Dark", legacyTheme(themeVars(map[string]string{
-		"--bg": "#111111", "--fg": "#dddddd", "--muted": "#888888", "--link": "#6699ff", "--link-visited": "#cc99ff",
-		"--border": "#444444", "--code-bg": "#1a1a1a", "--note-bg": "#1a1a1a", "--note-border": "#444444",
-		"--surface": "#181818", "--panel": "#202020", "--panel-strong": "#2a2a2a", "--panel-border": "#444444", "--rule": "#666666",
-		"--heading": "#eeeeee", "--accent": "#6699ff", "--accent-fg": "#111111"}, darkStatus, serifStack, bookStack)), false},
-	{"tokyonight", "Tokyo Night", legacyTheme(themeVars(map[string]string{
-		"--bg": "#1a1b26", "--fg": "#c0caf5", "--muted": "#565f89", "--link": "#7aa2f7", "--link-visited": "#bb9af7",
-		"--border": "#3b4261", "--code-bg": "#24283b", "--note-bg": "#1f2335", "--note-border": "#3b4261",
-		"--surface": "#1f2335", "--panel": "#24283b", "--panel-strong": "#292e42", "--panel-border": "#3b4261", "--rule": "#565f89",
-		"--heading": "#bb9af7", "--accent": "#7aa2f7", "--accent-fg": "#1a1b26"}, darkStatus, serifStack, bookStack)), false},
-	{"tokyonight-day", "Tokyo Night Day", legacyTheme(themeVars(map[string]string{
-		"--bg": "#e1e2e7", "--fg": "#3760bf", "--muted": "#6172b0", "--link": "#2e7de9", "--link-visited": "#9854f1",
-		"--border": "#c4c8da", "--code-bg": "#d0d5e3", "--note-bg": "#d0d5e3", "--note-border": "#c4c8da",
-		"--surface": "#e9e9ed", "--panel": "#d0d5e3", "--panel-strong": "#c4c8da", "--panel-border": "#a8aecb", "--rule": "#a8aecb",
-		"--heading": "#9854f1", "--accent": "#2e7de9", "--accent-fg": "#ffffff"}, lightStatus, serifStack, bookStack)), false},
-	{"catppuccin-latte", "Catppuccin Latte", legacyTheme(themeVars(map[string]string{
-		"--bg": "#eff1f5", "--fg": "#4c4f69", "--muted": "#8c8fa1", "--link": "#1e66f5", "--link-visited": "#8839ef",
-		"--border": "#ccd0da", "--code-bg": "#e6e9ef", "--note-bg": "#e6e9ef", "--note-border": "#ccd0da",
-		"--surface": "#eff1f5", "--panel": "#e6e9ef", "--panel-strong": "#dce0e8", "--panel-border": "#bcc0cc", "--rule": "#bcc0cc",
-		"--heading": "#8839ef", "--accent": "#1e66f5", "--accent-fg": "#ffffff"}, lightStatus, serifStack, bookStack)), false},
-	{"catppuccin-mocha", "Catppuccin Mocha", legacyTheme(themeVars(map[string]string{
-		"--bg": "#1e1e2e", "--fg": "#cdd6f4", "--muted": "#6c7086", "--link": "#89b4fa", "--link-visited": "#cba6f7",
-		"--border": "#45475a", "--code-bg": "#313244", "--note-bg": "#313244", "--note-border": "#45475a",
-		"--surface": "#181825", "--panel": "#313244", "--panel-strong": "#45475a", "--panel-border": "#585b70", "--rule": "#6c7086",
-		"--heading": "#cba6f7", "--accent": "#89b4fa", "--accent-fg": "#1e1e2e"}, darkStatus, serifStack, bookStack)), false},
-	{"solarized-light", "Solarized Light", legacyTheme(themeVars(map[string]string{
-		"--bg": "#fdf6e3", "--fg": "#657b83", "--muted": "#93a1a1", "--link": "#268bd2", "--link-visited": "#6c71c4",
-		"--border": "#eee8d5", "--code-bg": "#eee8d5", "--note-bg": "#eee8d5", "--note-border": "#93a1a1",
-		"--surface": "#fdf6e3", "--panel": "#eee8d5", "--panel-strong": "#e4ddc8", "--panel-border": "#93a1a1", "--rule": "#93a1a1",
-		"--heading": "#cb4b16", "--accent": "#268bd2", "--accent-fg": "#fdf6e3"}, lightStatus, serifStack, bookStack)), false},
-	{"solarized-dark", "Solarized Dark", legacyTheme(themeVars(map[string]string{
-		"--bg": "#002b36", "--fg": "#839496", "--muted": "#586e75", "--link": "#268bd2", "--link-visited": "#6c71c4",
-		"--border": "#073642", "--code-bg": "#073642", "--note-bg": "#073642", "--note-border": "#586e75",
-		"--surface": "#073642", "--panel": "#0a4050", "--panel-strong": "#11505f", "--panel-border": "#586e75", "--rule": "#586e75",
-		"--heading": "#cb4b16", "--accent": "#268bd2", "--accent-fg": "#002b36"}, darkStatus, serifStack, bookStack)), false},
+	{"midnight", "Midnight", themeVars(themePalette{
+		Outer: "#07090f", Base: "#0b0e16", Surface: "#121726", Elevated: "#192034", Main: "#e6e9f2", Muted: "#94a3b8",
+		Border: "rgba(255, 255, 255, 0.08)", Gold: "#d4a853", GoldBright: "#eab95c",
+		Code: "#080b12", Glass: "rgba(11, 14, 22, 0.88)", BorderStrong: "rgba(212, 168, 83, 0.5)", Secondary: "#cbd5e1",
+		Crimson: "#f87171", Emerald: "#34d399", Arcane: "#60a5fa", Soft: "0.15",
+		ButtonBG: "#d4a853", ButtonText: "#0b0e16", Shadow: "0 10px 30px rgba(0, 0, 0, 0.45)", Dark: true})},
+	{"parchment", "Parchment", themeVars(themePalette{
+		Outer: "#e7dfd1", Base: "#f4efe6", Surface: "#fcfaf5", Elevated: "#ede5d8", Main: "#1f2430", Muted: "#5c6475",
+		Border: "rgba(31, 36, 48, 0.12)", Gold: "#9a6b16", GoldBright: "#82570b",
+		Code: "#ebe3d4", Glass: "rgba(244, 239, 230, 0.9)", BorderStrong: "rgba(154, 107, 22, 0.5)", Secondary: "#3d4452",
+		Crimson: "#b91c1c", Emerald: "#047857", Arcane: "#1d4ed8", Soft: "0.12",
+		ButtonBG: "#9a6b16", ButtonText: "#fcfaf5", Shadow: "0 6px 18px rgba(31, 36, 48, 0.12)"})},
+	{"contrast", "Contrast", themeVars(themePalette{
+		Outer: "#000000", Base: "#000000", Surface: "#0a0a0f", Elevated: "#14141f", Main: "#ffffff", Muted: "#cbd5e1",
+		Border: "rgba(255, 255, 255, 0.24)", Gold: "#fbbf24", GoldBright: "#fcd34d",
+		Code: "#000000", Glass: "rgba(0, 0, 0, 0.92)", BorderStrong: "rgba(251, 191, 36, 0.8)", Secondary: "#e2e8f0",
+		Crimson: "#fca5a5", Emerald: "#6ee7b7", Arcane: "#93c5fd", Soft: "0.2",
+		ButtonBG: "#fbbf24", ButtonText: "#000000", Shadow: "none", Dark: true})},
+}
+
+// defaultTheme: the theme of a viewer who chose none (the mock-up's Midnight).
+const defaultTheme = "midnight"
+
+// themeStoreKey: where the browser keeps the viewer's theme (the key's value is the theme's Key).
+const themeStoreKey = "arpg_theme"
+
+// themeReadJS: the one reading of the viewer's theme in the browser, as a JavaScript function arpgTheme() that returns a theme's Key:
+// the saved choice, else the preview's and the older site's keys, an older theme read as the nearest one (Parchment for a light one); never throws.
+func themeReadJS() string {
+	keys := []string{}
+	for _, t := range siteThemes {
+		keys = append(keys, t.Key)
+	}
+	known, _ := json.Marshal(keys)
+	return `function arpgTheme(){var k=` + string(known) + `,v="";try{v=localStorage.getItem("` + themeStoreKey + `")||localStorage.getItem("arpg_preview_theme")||localStorage.getItem("theme")||"";}catch(e){}` +
+		`v=String(v).replace(/"/g,"").toLowerCase();if(k.indexOf(v)>=0)return v;` +
+		`if(v==="light"||v.indexOf("latte")>=0||/-day$/.test(v)||v==="solarized-light")return "parchment";return "` + defaultTheme + `";}`
+}
+
+// themeHeadScript: the page's theme set on <html data-theme> before it paints.
+func themeHeadScript() string {
+	return `<script>` + themeReadJS() + `document.documentElement.setAttribute("data-theme",arpgTheme());</script>`
 }
 
 func themeBlock(selector string, vars map[string]string) string {
@@ -192,9 +136,6 @@ func themeBlock(selector string, vars map[string]string) string {
 	b.WriteString(" }\n")
 	return b.String()
 }
-
-// defaultTheme: the theme of a viewer who chose none (Obsidian Gold since the GUI rework, Matt Nov 21; Dark before).
-const defaultTheme = "obsidian"
 
 // themeCSS: the default theme on :root, then each theme by name.
 func themeCSS() string {

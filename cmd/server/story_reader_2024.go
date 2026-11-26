@@ -250,16 +250,6 @@ func storyData(campaignID int, name, gmName string, chapters []storyChapter, inl
 	return map[string]interface{}{"campaign_id": campaignID, "name": name, "gm": gmName, "chapters": chapters, "inline": inline}
 }
 
-// storyPanel is the reader inside the Live Table, in the place of the old Table Chronicle feed: the same markup and script as the page, with the story
-// fetched once the page is up (a long story is never read for a Live Table view that doesn't need it yet).
-func storyPanel(campaignID int, name, gmName string) string {
-	return `<div class="reader-inline"><style>` + storyReaderCSS + `</style>` + storyReaderMarkup(campaignID, name, gmName, 0, false) +
-		fmt.Sprintf(`<script>window.__startReader = function () {`+"\n"+`%s`+"\n"+`};
-fetch('/campaign/%d/story.json', { credentials: 'same-origin' }).then(function (r) { return r.ok ? r.json() : Promise.reject(); })
-  .then(function (j) { window.__STORY__ = j; window.__startReader(); })
-  .catch(function () { var r = document.getElementById('story-reader'); if (r) r.textContent = 'The story could not be loaded. Reload the page to try again.'; });</script></div>`, storyReaderJS, campaignID)
-}
-
 // storyReaderMarkup is the reader's markup (the mock-up's): its bar, controls, book, scroll box, empty state and Chapters drawer. withBack: the empty state links back to the Live Table.
 func storyReaderMarkup(campaignID int, name, gmName string, total int, withBack bool) string {
 	e := html.EscapeString

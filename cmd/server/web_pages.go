@@ -248,10 +248,9 @@ func pluralize(count int, singular, plural string) string {
 	return plural
 }
 
-// handleUniversePage serves the Universe Compendium view (site_views_2024.go: universePage, the mock-up's #view-universe).
+// handleUniversePage serves the Universe tab (the app shell, live_table_2024.go); the SRD compendium's browser is /universe/srd.
 func handleUniversePage(w http.ResponseWriter, r *http.Request) {
-	w.Header().Set("Content-Type", "text/html; charset=utf-8")
-	fmt.Fprint(w, wrapView("Universe - Agent RPG 2024", universePage(universeCategories())))
+	serveAppShell(w, r, "universe", featuredCampaign(w, r))
 }
 
 func handleUniverseDetailPage(w http.ResponseWriter, r *http.Request) {
@@ -260,6 +259,10 @@ func handleUniverseDetailPage(w http.ResponseWriter, r *http.Request) {
 	path := strings.TrimPrefix(r.URL.Path, "/universe/")
 	parts := strings.SplitN(path, "/", 2)
 	category := parts[0]
+	if path == "srd" { // the SRD compendium's browser (site_views_2024.go: universePage), under the Universe tab
+		fmt.Fprint(w, wrapView("SRD Compendium - Agent RPG 2024", universePage(universeCategories())))
+		return
+	}
 
 	var content string
 

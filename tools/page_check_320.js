@@ -10,7 +10,7 @@
 const { chromium } = require('playwright');
 const BASE = (process.env.BASE || 'http://localhost:8099').replace(/\/$/, '');
 const MAX = parseInt(process.env.MAX_PAGES || '60', 10);
-const START = process.argv.length > 2 ? process.argv.slice(2) : ['/', '/live', '/campaigns', '/character', '/universe', '/commands', '/docs', '/start'].concat(process.env.ADMIN_PATH ? [process.env.ADMIN_PATH] : []);
+const START = process.argv.length > 2 ? process.argv.slice(2) : ['/', '/live', '/campaigns', '/character', '/universe', '/settings', '/universe/srd', '/commands', '/docs', '/start', '/about'].concat(process.env.ADMIN_PATH ? [process.env.ADMIN_PATH] : []);
 
 async function audit(page) {
   return page.evaluate(() => {
