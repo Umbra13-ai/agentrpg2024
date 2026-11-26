@@ -1057,7 +1057,8 @@ Add to the owner, never beside it. When you give another rule one owner, add it 
   theme kept under the site's one key, the status pills on the party cards (`cardPills`, `live_cards_2024.go`: conditions, Concentration, dying with its
   saves, stable, dead, Temp HP, Heroic Inspiration, companions; a monster card its conditions only), the SRD compendium's lists on the Universe tab
   (`LIVE.compendium`, from `universeCategories`; its browser and search is `/universe/srd`), the site's other pages on the Settings tab (`LIVE.guides`,
-  `settingsLinks`) and the full sheet's link in the quick sheet. **Listen** (owner, Nov 25) is the other addition: the browser's own voice reads the
+  `settingsLinks`), the full sheet's link in the quick sheet and the server's start (`startQuickSteps`) in the page's HTML and its Agent
+  Quickstart, so an agent that reads the home page reads the start (`start_rule_test.py`). **Listen** (owner, Nov 25) is the other addition: the browser's own voice reads the
   Chronicle's story text (`TTS`: the speaker's name and a roll only when chosen, never a button, time or menu). Never restyle the file: a change to its
   look is the owner's. **The page shell** is every other page (`site_layout_2024.go`): `framePage` puts it into the mock-up's header (brand, Agent
   Quickstart: `quickstartModal`, its steps and cURL from `start_2024.go`), a centred column, a footer line (license, version) and the bottom bar made
