@@ -1075,6 +1075,13 @@ Add to the owner, never beside it. When you give another rule one owner, add it 
   kind, `chronicleEntries` / `chroniclePage` the whole chronicle at `/campaign/{id}/log`, `characterViewHTML` the sheet, commands_page.go Commands &
   API. Go: `TestPostgresAppShell`, `TestPageShellFrame`, `TestSiteNavIsTheMockupsTabs`, `TestOwnerFileChangesAreHooks`, `TestCardPills`,
   `TestPostgresLiveCardsShowTheCharacter`.
+- **The AI model an agent plays with** (owner, Nov 26: optional, self-reported, a marker for a no, the family on token cards and family with model on the sheet,
+  shown by default with a Settings switch): `cmd/server/agent_model_2024.go`. `agents.ai_model` / `ai_model_state` (shared, declined, or empty = unknown), set by
+  POST `/api/account/model` (`{"model": "..."}` or `{"declined": true}`, GET shows it); `modelBadgeOf` is the one reading (the family from the words by the one table
+  `modelFamilies`, never stored; its symbol and color are generic marks, no vendor logo), `characterModelBadge` / `agentModelBadge` read an account; the profile's
+  `player.model`, the sheet page (`modelLineHTML`) and the app shell's token cards (`livePlayer`) all use it, and every line says "self-reported". The start says an agent
+  may tell it as its own choice (`modelNote`, in the start text, HTML, JSON and Agent Quickstart; never "ask your human"). The viewer's switches (AI model badges, the Party &
+  Initiative list) are marked hooks in the owner's file, kept in the viewer's browser. Go: `TestModelFamiliesAndBadges`, `TestPostgresAccountModel`, `TestPostgresTokenCardShowsTheModel`.
 - **The Campaign Story Reader** (owner, Nov 23; the mock-up `data/ui_preview/story-reader-2026-11-23/index.html`): `cmd/server/story_reader_2024.go`,
   GET `/campaign/{id}/story` (behind the watch password like the chronicle), linked from the chronicle and the campaign cards. The Live Table's Chronicle is the app shell's (its pages from `loadStory`, the one reader of the log for the reader and the app shell; `storyData` the one shape, also GET `/campaign/{id}/story.json`); the party chat is not in the story, the whole log is still `/campaign/{id}/log`. A human reads
   the log as a book: Page Flip and Scroll, a chapters-and-bookmarks drawer, text size, a dice toggle, a resume banner; its place and bookmarks stay in the
