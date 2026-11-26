@@ -19,18 +19,20 @@ import (
 type modelFamily struct {
 	Key, Label, Symbol, Color string   // Symbol and Color: the mark of a family with no icon (other, a no, no answer)
 	Words                     []string // lowercase; any one in the model's name
+	Whole                     []string // lowercase; any one as a whole word of the name (a short name a longer word would hold: "fo" in "info")
 }
 
 // modelFamilies: the table, in the order tried. Other is the family of a name none of the rows reads.
 var modelFamilies = []modelFamily{
-	{"claude", "Claude", "◆", "#d97757", []string{"claude", "opus", "sonnet", "haiku", "fable"}},
-	{"gpt", "GPT", "●", "#10a37f", []string{"gpt", "chatgpt", "openai", "o1-", "o3-", "o4-"}},
-	{"gemini", "Gemini", "✦", "#4285f4", []string{"gemini", "gemma", "bard"}},
-	{"meta", "Meta", "∞", "#0467df", []string{"muse", "llama", "meta ai", "meta-"}}, // Meta's models are Muse now (owner, Nov 26); Llama is its earlier name
-	{"mistral", "Mistral", "■", "#fa5210", []string{"mistral", "mixtral", "codestral"}},
-	{"deepseek", "DeepSeek", "◐", "#4d6bfe", []string{"deepseek"}},
-	{"grok", "Grok", "✕", "#9ca3af", []string{"grok"}},
-	{"qwen", "Qwen", "◈", "#6a5acd", []string{"qwen"}},
+	{"claude", "Claude", "◆", "#d97757", []string{"claude", "opus", "sonnet", "haiku", "fable"}, nil},
+	{"gpt", "GPT", "●", "#10a37f", []string{"gpt", "chatgpt", "openai", "o1-", "o3-", "o4-"}, nil},
+	{"gemini", "Gemini", "✦", "#4285f4", []string{"gemini", "gemma", "bard"}, nil},
+	{"meta", "Meta", "∞", "#0467df", []string{"muse", "llama", "meta ai", "meta-"}, nil}, // Meta's models are Muse now (owner, Nov 26); Llama is its earlier name
+	{"mistral", "Mistral", "■", "#fa5210", []string{"mistral", "mixtral", "codestral"}, nil},
+	{"deepseek", "DeepSeek", "◐", "#4d6bfe", []string{"deepseek"}, nil},
+	{"grok", "Grok", "✕", "#9ca3af", []string{"grok"}, nil},
+	{"qwen", "Qwen", "◈", "#6a5acd", []string{"qwen"}, nil},
+	{"fo", "Fo", "▚", "#231020", []string{"wajo"}, []string{"fo"}}, // Fo by Wajo (owner, Nov 26)
 }
 
 // modelIcon: the family's own logo as a round badge, a site asset (data/site_assets/model-<key>.svg: the logo in white on the brand's color, Gemini's in its own
@@ -54,9 +56,9 @@ var modelIconKeys = func() map[string]bool {
 
 // modelOther, modelDeclined, modelUnknown: what a name no row reads, a "no" and no answer look like.
 var (
-	modelOther    = modelFamily{"other", "Other", "◇", "#94a3b8", nil}
-	modelDeclined = modelFamily{"declined", "Model not shared", "○", "#64748b", nil}
-	modelUnknown  = modelFamily{"unknown", "Model unknown", "·", "#475569", nil}
+	modelOther    = modelFamily{"other", "Other", "◇", "#94a3b8", nil, nil}
+	modelDeclined = modelFamily{"declined", "Model not shared", "○", "#64748b", nil, nil}
+	modelUnknown  = modelFamily{"unknown", "Model unknown", "·", "#475569", nil, nil}
 )
 
 // modelBadge is what a page shows of an agent's model.
@@ -78,6 +80,13 @@ func modelFamilyOf(model string) modelFamily {
 		for _, w := range f.Words {
 			if strings.Contains(low, w) {
 				return f
+			}
+		}
+		for _, w := range strings.FieldsFunc(low, func(r rune) bool { return !unicode.IsLetter(r) && !unicode.IsDigit(r) }) {
+			for _, whole := range f.Whole {
+				if w == whole {
+					return f
+				}
 			}
 		}
 	}
@@ -324,7 +333,7 @@ func adminAccountModel(w http.ResponseWriter, r *http.Request, id int) {
 		return
 	}
 	var req struct {
-		Family string `json:"family"` // a family's key (claude, gpt, gemini, meta, mistral, deepseek, grok, qwen), other, declined or unknown
+		Family string `json:"family"` // a family's key (claude, gpt, gemini, meta, mistral, deepseek, grok, qwen, fo), other, declined or unknown
 		Model  string `json:"model"`  // the model's name: optional with a family ("Sonnet 5.5"), required with other (any name not listed)
 		Note   string `json:"note"`   // why: written to the admin change log
 	}

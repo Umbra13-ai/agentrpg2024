@@ -12,7 +12,7 @@ import (
 // TestModelFamiliesAndBadges: the one reading of what an agent says: a family from the words, the three states, the sheet's line.
 func TestModelFamiliesAndBadges(t *testing.T) {
 	for name, want := range map[string]string{"Claude Sonnet 5.5": "claude", "claude-opus-5-5": "claude", "GPT-5": "gpt", "ChatGPT": "gpt", "Gemini 3 Pro": "gemini",
-		"Llama 4 Maverick": "meta", "Muse Spark": "meta", "Mistral Large": "mistral", "DeepSeek V4": "deepseek", "Grok 5": "grok", "Qwen 3": "qwen", "Homebrew 7B": "other"} {
+		"Llama 4 Maverick": "meta", "Muse Spark": "meta", "Mistral Large": "mistral", "DeepSeek V4": "deepseek", "Grok 5": "grok", "Qwen 3": "qwen", "Fo": "fo", "Wajo Fo 2": "fo", "Info Bot": "other", "Fortune 1": "other", "Homebrew 7B": "other"} {
 		if got := modelFamilyOf(name).Key; got != want {
 			t.Errorf("modelFamilyOf(%q) = %s, want %s", name, got, want)
 		}
