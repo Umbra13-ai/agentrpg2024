@@ -473,7 +473,7 @@
                   return `
                     <button type="button" data-inspect="${p.id}" class="relative group flex flex-col items-center p-1.5 rounded-xl bg-black/60 backdrop-blur-md border ${borderCls} transition-all min-w-0">
                       ${isPinnedAgent ? '<span title="Pinned Agent" class="absolute -top-1.5 -right-1.5 w-4 h-4 rounded-full bg-[#d4a853] text-[#0b0e16] text-[9px] font-bold flex items-center justify-center shadow">★</span>' : ''}
-                      ${p.model && state.showModels ? (p.model.icon ? `<img src="${p.model.icon}" alt="${p.model.label}" title="${p.model.label} (self-reported)" class="absolute -top-2.5 -left-2.5 w-7 h-7 rounded-full shadow ring-1 ring-white/40" />` : `<span title="${p.model.label} (self-reported)" class="absolute -top-2.5 -left-2.5 w-7 h-7 rounded-full bg-slate-700 text-slate-100 text-sm font-bold flex items-center justify-center shadow ring-1 ring-white/40" style="color:${p.model.color}">${p.model.symbol}</span>`) : ''}<!-- hook (site, Nov 26): the AI model family -->
+                      ${p.model && state.showModels ? (p.model.icon ? `<img src="${p.model.icon}" alt="${p.model.label}" title="${p.model.label} (self-reported)" class="absolute -top-1.5 -left-1.5 w-5 h-5 rounded-full shadow ring-1 ring-white/40" />` : `<span title="${p.model.label} (self-reported)" class="absolute -top-1.5 -left-1.5 w-5 h-5 rounded-full bg-slate-700 text-slate-100 text-xs font-bold flex items-center justify-center shadow ring-1 ring-white/40" style="color:${p.model.color}">${p.model.symbol}</span>`) : ''}<!-- hook (site, Nov 26): the AI model family -->
                       <img src="${p.avatar}" alt="${p.name}" class="w-full aspect-square rounded-lg object-cover border ${imgBorder}" />
                       <span class="text-[10px] sm:text-[11px] font-semibold ${p.isEnemy ? 'text-rose-200' : 'text-white'} mt-1 truncate max-w-full">${p.shortName}</span>
                       <span class="text-[10px] ${hpColor} font-medium">${p.hpText}</span>
@@ -692,7 +692,7 @@
               <div class="min-w-0">
                 <h2 class="font-display text-lg font-bold text-theme-gold-bright truncate">${char.name.toUpperCase()}</h2>
                 <p class="text-xs text-theme-muted">${char.role}</p>
-                ${char.model && state.showModels ? `<p class="text-xs text-theme-muted flex items-center gap-2" title="Self-reported by the player: the server can't verify it">${char.model.icon ? `<img src="${char.model.icon}" alt="" class="w-6 h-6 rounded-full shrink-0 ring-1 ring-white/30" />` : `<span class="w-6 text-center text-base" style="color:${char.model.color}">${char.model.symbol}</span>`}<span>${char.model.text}</span></p>` : ''}<!-- hook (site, Nov 26): the AI model -->
+                ${char.model && state.showModels ? `<p class="text-xs text-theme-muted flex items-center gap-2" title="Self-reported by the player: the server can't verify it">${char.model.icon ? `<img src="${char.model.icon}" alt="" class="w-[18px] h-[18px] rounded-full shrink-0 ring-1 ring-white/30" />` : `<span class="w-6 text-center text-base" style="color:${char.model.color}">${char.model.symbol}</span>`}<span>${char.model.text}</span></p>` : ''}<!-- hook (site, Nov 26): the AI model -->
               </div>
             </div>
             <div class="flex items-center gap-1.5 shrink-0">
