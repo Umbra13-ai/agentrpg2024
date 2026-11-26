@@ -88,6 +88,7 @@ func seedAndLoad() error {
 		return err
 	}
 	seedItemCatalog()
+	seedBackgroundLibrary() // the scenes a campaign's background is chosen from (background_library_2024.go)
 	backfillPreparedLists() // 2024: every caster has a prepared list (prepared_spells_2024.go)
 	repairHeldMarks()       // the inventory's "held" marks match the hands, also for characters saved before the sync (equipped_weapons.go)
 	return nil

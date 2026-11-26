@@ -1,0 +1,654 @@
+[
+ {
+  "key": "lich-lord-floating-ruins-purple-void",
+  "title": "Skeletal lich lord amid floating ruins in a purple void",
+  "description": "An undead sorcerer-king reaches out before drifting gothic ruins, a dragon and violet storms; suits high-stakes, world-ending arcane campaigns.",
+  "tags": {
+   "place": [
+    "planes",
+    "ruins"
+   ],
+   "mood": [
+    "gothic",
+    "epic",
+    "horror"
+   ],
+   "light": [
+    "dark",
+    "storm"
+   ],
+   "features": [
+    "undead",
+    "magic",
+    "dragon",
+    "portal"
+   ]
+  }
+ },
+ {
+  "key": "marble-staircases-portal-doors",
+  "title": "Marble staircases with portal doors to many worlds",
+  "description": "A smiling robed god-like figure beside endless marble stairways and golden doors that open onto a cave city, forest, desert pyramid and starship.",
+  "tags": {
+   "place": [
+    "planes",
+    "castle"
+   ],
+   "mood": [
+    "whimsical",
+    "exploration",
+    "epic"
+   ],
+   "light": [
+    "day"
+   ],
+   "features": [
+    "portal",
+    "magic"
+   ]
+  }
+ },
+ {
+  "key": "harbor-city-market-dusk",
+  "title": "Harbor city market at dusk with a hooded rogue",
+  "description": "A busy waterfront market below a hillside fortress and giant griffin statue, with ships, a treasure chest, mask and map; ideal for intrigue and urban heists.",
+  "tags": {
+   "place": [
+    "city",
+    "coast"
+   ],
+   "mood": [
+    "intrigue",
+    "mystery"
+   ],
+   "light": [
+    "dusk"
+   ],
+   "features": [
+    "ship",
+    "treasure",
+    "crowd",
+    "heist"
+   ]
+  }
+ },
+ {
+  "key": "magical-city-plaza-portal-arch",
+  "title": "Magical city plaza with a glowing portal arch",
+  "description": "A fantastical cobbled square of tieflings, elves and small clockwork creatures, gambling halls, potion stalls and a portal arch showing a distant spired city.",
+  "tags": {
+   "place": [
+    "city",
+    "planes"
+   ],
+   "mood": [
+    "whimsical",
+    "intrigue",
+    "exploration"
+   ],
+   "light": [
+    "dusk"
+   ],
+   "features": [
+    "portal",
+    "magic",
+    "crowd"
+   ]
+  }
+ },
+ {
+  "key": "mountain-laboratory-crashed-vessel",
+  "title": "Cavern laboratory beside a crashed vessel in snowy mountains",
+  "description": "Steampunk lab with glowing tubes, a giant robot and explorers studying a wrecked metal ship wedged in an icy mountainside; for inventive, sci-fantasy mysteries.",
+  "tags": {
+   "place": [
+    "cavern",
+    "mountains"
+   ],
+   "mood": [
+    "mystery",
+    "exploration"
+   ],
+   "light": [
+    "day"
+   ],
+   "features": [
+    "magic",
+    "ice"
+   ]
+  }
+ },
+ {
+  "key": "multi-headed-dragon-ruined-fortress",
+  "title": "Five-headed dragon above a burning ruined fortress",
+  "description": "A colossal multi-headed dragon looms over a ruined citadel as robed cultists and adventurers clash among flames, banners and smaller wyverns.",
+  "tags": {
+   "place": [
+    "ruins",
+    "castle"
+   ],
+   "mood": [
+    "epic",
+    "war",
+    "heroic"
+   ],
+   "light": [
+    "fire",
+    "storm"
+   ],
+   "features": [
+    "dragon",
+    "monsters"
+   ]
+  }
+ },
+ {
+  "key": "devil-lord-throne-infernal-realm",
+  "title": "Devil lord on a throne above an infernal landscape",
+  "description": "A horned archdevil in crimson robes reclines on a skull throne overlooking lava rivers and ice cliffs, as chained captives are led past guards.",
+  "tags": {
+   "place": [
+    "hell",
+    "castle"
+   ],
+   "mood": [
+    "intrigue",
+    "horror",
+    "epic"
+   ],
+   "light": [
+    "fire",
+    "dark"
+   ],
+   "features": [
+    "devils",
+    "lava",
+    "ice"
+   ]
+  }
+ },
+ {
+  "key": "mining-village-aberration-cave",
+  "title": "Mountain mining village above an aberration-haunted cave",
+  "description": "A cozy lantern-lit village and mine at sunset, while tentacle-faced psionic aberrations lurk in a glowing purple cave beneath a strange standing stone.",
+  "tags": {
+   "place": [
+    "village",
+    "mountains",
+    "cavern"
+   ],
+   "mood": [
+    "mystery",
+    "exploration"
+   ],
+   "light": [
+    "dusk"
+   ],
+   "features": [
+    "monsters",
+    "magic"
+   ]
+  }
+ },
+ {
+  "key": "two-headed-demon-glowing-cavern",
+  "title": "Two-headed demon in a glowing underground cavern",
+  "description": "Adventurers with a lantern face a tentacled, two-headed demon lord wading in a crystal-lit lake beneath a dark fortress and giant glowing mushrooms.",
+  "tags": {
+   "place": [
+    "abyss",
+    "cavern"
+   ],
+   "mood": [
+    "horror",
+    "epic"
+   ],
+   "light": [
+    "dark"
+   ],
+   "features": [
+    "demons",
+    "monsters"
+   ]
+  }
+ },
+ {
+  "key": "tavern-bottomless-well-adventurers",
+  "title": "Tavern built around a huge bottomless well",
+  "description": "Adventurers with torch and maps peer down a vast stone shaft in the middle of a warm, candlelit tavern; classic dungeon-delving starting point.",
+  "tags": {
+   "place": [
+    "tavern",
+    "dungeon"
+   ],
+   "mood": [
+    "exploration",
+    "mystery"
+   ],
+   "light": [
+    "night"
+   ],
+   "features": []
+  }
+ },
+ {
+  "key": "dwarven-undercity-wizard-portal",
+  "title": "Dwarven underground ruins with a mad wizard and portal",
+  "description": "Adventurers overlook carved dwarf-king statues, bridges, a hidden forest and a purple portal while a wild-eyed old wizard gestures from a wall.",
+  "tags": {
+   "place": [
+    "dungeon",
+    "cavern",
+    "ruins"
+   ],
+   "mood": [
+    "mystery",
+    "exploration"
+   ],
+   "light": [
+    "dark"
+   ],
+   "features": [
+    "portal",
+    "magic",
+    "undead"
+   ]
+  }
+ },
+ {
+  "key": "moonlit-fey-carnival-fairy-castle",
+  "title": "Moonlit fey carnival with a fairy castle",
+  "description": "A colorful circus and carousel under a full moon, with fairies, giant glowing mushrooms and a heart-shaped castle on a hill; whimsical fey adventures.",
+  "tags": {
+   "place": [
+    "feywild",
+    "forest"
+   ],
+   "mood": [
+    "whimsical",
+    "peaceful",
+    "mystery"
+   ],
+   "light": [
+    "night",
+    "dusk"
+   ],
+   "features": [
+    "magic",
+    "crowd"
+   ]
+  }
+ },
+ {
+  "key": "white-dragon-snowy-peak-ruins",
+  "title": "White dragon above a snowy peak with a ruined keep",
+  "description": "A party of adventurers on a forested ridge watch a frost-breathing white dragon circle a mountain crowned with an old ruined castle.",
+  "tags": {
+   "place": [
+    "mountains",
+    "forest",
+    "ruins"
+   ],
+   "mood": [
+    "heroic",
+    "exploration"
+   ],
+   "light": [
+    "day",
+    "storm"
+   ],
+   "features": [
+    "dragon",
+    "ice"
+   ]
+  }
+ },
+ {
+  "key": "storm-giant-coastal-cliffs-lightning",
+  "title": "Storm giant on coastal cliffs under lightning",
+  "description": "A towering trident-wielding giant stands beside a party above stormy seas, with a cloud castle, blue dragon, fiery fortress and an icy giant citadel.",
+  "tags": {
+   "place": [
+    "coast",
+    "mountains",
+    "sky"
+   ],
+   "mood": [
+    "epic",
+    "heroic"
+   ],
+   "light": [
+    "storm"
+   ],
+   "features": [
+    "giants",
+    "dragon",
+    "ice",
+    "lava"
+   ]
+  }
+ },
+ {
+  "key": "jungle-ruins-skull-pyramid-volcano",
+  "title": "Jungle ruins with a pyramid, giant skull and volcano",
+  "description": "Adventurers in dense jungle face an overgrown stepped pyramid, a skull-shaped cliff with waterfalls, a smoking volcano, a parrot and a predatory dinosaur.",
+  "tags": {
+   "place": [
+    "jungle",
+    "ruins"
+   ],
+   "mood": [
+    "exploration",
+    "heroic"
+   ],
+   "light": [
+    "day"
+   ],
+   "features": [
+    "monsters",
+    "temple"
+   ]
+  }
+ },
+ {
+  "key": "magical-university-gardens-campus",
+  "title": "Magical university campus with gardens and waterfalls",
+  "description": "Young students with books and floating arcane shapes walk before a grand Gothic academy with banners, greenhouses and lily ponds; cheerful school setting.",
+  "tags": {
+   "place": [
+    "city",
+    "castle"
+   ],
+   "mood": [
+    "whimsical",
+    "peaceful",
+    "exploration"
+   ],
+   "light": [
+    "day"
+   ],
+   "features": [
+    "school",
+    "magic"
+   ]
+  }
+ },
+ {
+  "key": "floating-crystal-city-bridges",
+  "title": "Floating crystal city with bridges at night",
+  "description": "A glowing spired city rests on a giant hovering crystal, linked by arched bridges and lantern-lit markets, with cherry blossoms and floating gems overhead.",
+  "tags": {
+   "place": [
+    "city",
+    "sky"
+   ],
+   "mood": [
+    "whimsical",
+    "peaceful",
+    "exploration"
+   ],
+   "light": [
+    "night"
+   ],
+   "features": [
+    "magic",
+    "crowd"
+   ]
+  }
+ },
+ {
+  "key": "vault-heist-giant-golden-door",
+  "title": "Heist crew before a giant gilded strongroom door",
+  "description": "A rogue picks a floor mechanism as companions hide beside guarded pedestals of crowns and gems, with laser-like tripwires and a magic key before a huge vault.",
+  "tags": {
+   "place": [
+    "dungeon",
+    "castle"
+   ],
+   "mood": [
+    "intrigue",
+    "mystery"
+   ],
+   "light": [
+    "dark"
+   ],
+   "features": [
+    "heist",
+    "treasure",
+    "magic"
+   ]
+  }
+ },
+ {
+  "key": "vampire-lord-gothic-castle-moonlit",
+  "title": "Vampire lord above a gothic castle under the moon",
+  "description": "A cloaked vampire stands on a balcony overlooking a spired castle on a crag, a misty pine valley and a small lit village under a full moon.",
+  "tags": {
+   "place": [
+    "castle",
+    "forest",
+    "mountains"
+   ],
+   "mood": [
+    "gothic",
+    "horror"
+   ],
+   "light": [
+    "night",
+    "dark"
+   ],
+   "features": [
+    "undead"
+   ]
+  }
+ },
+ {
+  "key": "vast-library-tower-sea-cliffs",
+  "title": "Vast candlelit library tower beside sea cliffs",
+  "description": "A towering library of spiral stairs, statues and glowing orbs with an open magic tome in the foreground and a castle on seaside cliffs beyond the window.",
+  "tags": {
+   "place": [
+    "library",
+    "castle",
+    "coast"
+   ],
+   "mood": [
+    "mystery",
+    "exploration"
+   ],
+   "light": [
+    "dusk"
+   ],
+   "features": [
+    "magic"
+   ]
+  }
+ },
+ {
+  "key": "dragon-army-besieging-coastal-city",
+  "title": "Dragon army besieging a walled coastal city",
+  "description": "Red dragon, draconic soldiers and catapults assault a burning walled port city while a crowned skeletal knight with a greatsword watches from a rock.",
+  "tags": {
+   "place": [
+    "city",
+    "coast"
+   ],
+   "mood": [
+    "war",
+    "epic"
+   ],
+   "light": [
+    "fire",
+    "dusk"
+   ],
+   "features": [
+    "dragon",
+    "undead",
+    "ship"
+   ]
+  }
+ },
+ {
+  "key": "chained-titan-sunken-ruins",
+  "title": "Chained titan in sunken underwater ruins",
+  "description": "Adventurers look up at a glowing, shackled giant figure seated amid drowned columns, banners and red crystals under shafts of sunlight.",
+  "tags": {
+   "place": [
+    "underwater",
+    "ruins"
+   ],
+   "mood": [
+    "mystery",
+    "epic"
+   ],
+   "light": [
+    "dark"
+   ],
+   "features": [
+    "giants",
+    "magic"
+   ]
+  }
+ },
+ {
+  "key": "fishfolk-underwater-village-reef",
+  "title": "Fishfolk village on a coral reef",
+  "description": "Amphibious fish-people with tridents and nets tend docks and shell-roofed homes among coral and ruined arches while a sea monster swirls in the water above.",
+  "tags": {
+   "place": [
+    "underwater",
+    "village"
+   ],
+   "mood": [
+    "exploration",
+    "mystery"
+   ],
+   "light": [
+    "day"
+   ],
+   "features": [
+    "monsters"
+   ]
+  }
+ },
+ {
+  "key": "frozen-northern-village-aurora-spirit",
+  "title": "Frozen northern village under an aurora and ice spirit",
+  "description": "Furred adventurers face a frozen lake and snowbound village as a huge horned frost spirit looms in the aurora-lit sky; bleak arctic survival setting.",
+  "tags": {
+   "place": [
+    "arctic",
+    "village"
+   ],
+   "mood": [
+    "horror",
+    "exploration"
+   ],
+   "light": [
+    "night",
+    "storm"
+   ],
+   "features": [
+    "ice",
+    "monsters"
+   ]
+  }
+ },
+ {
+  "key": "sailing-ship-starry-nebula-floating-ruins",
+  "title": "Sailing ship through a starry nebula past floating ruins",
+  "description": "Crew on a ship with iridescent sails gaze at planets, drifting marble ruins and a crystal city across a colorful nebula; for space-faring fantasy.",
+  "tags": {
+   "place": [
+    "planes",
+    "sky"
+   ],
+   "mood": [
+    "exploration",
+    "whimsical",
+    "epic"
+   ],
+   "light": [
+    "night"
+   ],
+   "features": [
+    "ship",
+    "airship",
+    "magic"
+   ]
+  }
+ },
+ {
+  "key": "stormy-harbor-town-haunted-mansion",
+  "title": "Stormy harbor town with a haunted mansion and sea monster",
+  "description": "A rain-lashed fishing port, a ghostly green-lit mansion on a cliff, a ghost ship in the distance and a monster glowing beneath the waves.",
+  "tags": {
+   "place": [
+    "coast",
+    "village",
+    "sea"
+   ],
+   "mood": [
+    "horror",
+    "mystery",
+    "gothic"
+   ],
+   "light": [
+    "storm",
+    "night"
+   ],
+   "features": [
+    "ship",
+    "undead",
+    "monsters"
+   ]
+  }
+ },
+ {
+  "key": "winged-angel-hellscape-war-carts",
+  "title": "Winged angel in a hellscape of war carts",
+  "description": "A fiery armored angel stands over a lava-streaked infernal plain where horned demon troops pull spiked war wagons beneath a chained floating city.",
+  "tags": {
+   "place": [
+    "hell",
+    "planes"
+   ],
+   "mood": [
+    "war",
+    "epic"
+   ],
+   "light": [
+    "fire",
+    "storm"
+   ],
+   "features": [
+    "devils",
+    "demons",
+    "lava"
+   ]
+  }
+ },
+ {
+  "key": "elemental-wizards-ruined-temple",
+  "title": "Four elemental wizards at a ruined temple",
+  "description": "Robed casters of fire, water, earth and air channel magic atop a ruined temple among waterfalls, lava, a tornado and hovering rocks.",
+  "tags": {
+   "place": [
+    "ruins",
+    "mountains"
+   ],
+   "mood": [
+    "epic",
+    "heroic"
+   ],
+   "light": [
+    "storm",
+    "fire"
+   ],
+   "features": [
+    "magic",
+    "temple"
+   ]
+  }
+ }
+]

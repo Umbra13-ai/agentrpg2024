@@ -7926,6 +7926,9 @@
           "content_type": {
            "type": "string"
           },
+          "message": {
+           "type": "string"
+          },
           "note": {
            "type": "string"
           },
@@ -7960,6 +7963,10 @@
          "image_base64": {
           "type": "string",
           "description": "the image as base64 (a data: URL is accepted); or send the raw PNG, JPEG or WebP bytes with their Content-Type instead"
+         },
+         "library": {
+          "type": "string",
+          "description": "instead of an image: the key of a background in the library (GET /api/admin/backgrounds); the campaign's own picture is removed"
          },
          "note": {
           "type": "string",
@@ -8825,6 +8832,291 @@
         "family": "...",
         "model": "...",
         "note": "..."
+       }
+      }
+     }
+    }
+   }
+  },
+  "/api/admin/backgrounds": {
+   "get": {
+    "tags": [
+     "Admin"
+    ],
+    "summary": "The background library",
+    "description": "Needs the X-Admin-Key header (the server's ADMIN_KEY). Every change is written to the admin change log. Every scene a campaign's background is chosen from, the retired ones too, with its tags, how many campaigns use it, and the tag vocabulary.",
+    "responses": {
+     "200": {
+      "description": "Success",
+      "content": {
+       "application/json": {
+        "schema": {
+         "properties": {
+          "backgrounds": {
+           "items": {
+            "properties": {
+             "campaigns": {
+              "type": "integer"
+             }
+            },
+            "type": "object"
+           },
+           "type": "array"
+          },
+          "vocabulary": {
+           "additionalProperties": {
+            "items": {
+             "type": "string"
+            },
+            "type": "array"
+           },
+           "properties": {},
+           "type": "object"
+          }
+         },
+         "type": "object"
+        }
+       }
+      }
+     }
+    }
+   },
+   "post": {
+    "tags": [
+     "Admin"
+    ],
+    "summary": "Add a picture to the background library",
+    "description": "Needs the X-Admin-Key header (the server's ADMIN_KEY). Every change is written to the admin change log. {\"key\": \"gothic-castle-moonlit-valley\", \"title\": \"...\", \"description\": \"...\", \"tags\": {\"place\": [\"castle\"], \"mood\": [\"gothic\"], \"light\": [\"night\"], \"features\": [\"undead\"]}, \"image_base64\": \"...\", \"note\": \"why\"}: the tags from the vocabulary, a title that describes the picture (never a campaign's or a book's name). The picture is stored as a 1920 by 1080 lossy WebP. Logged.",
+    "responses": {
+     "400": {
+      "description": "The body was refused (nothing was changed): unknown_field, wrong_type, invalid_json, body_required or id_mismatch, with the fields the request takes",
+      "content": {
+       "application/json": {
+        "schema": {
+         "properties": {
+          "error": {
+           "type": "string"
+          },
+          "fields": {
+           "items": {
+            "type": "string"
+           },
+           "type": "array"
+          },
+          "message": {
+           "type": "string"
+          },
+          "unknown": {
+           "items": {
+            "type": "string"
+           },
+           "type": "array"
+          }
+         },
+         "type": "object"
+        }
+       }
+      }
+     },
+     "200": {
+      "description": "Success",
+      "content": {
+       "application/json": {
+        "schema": {
+         "properties": {
+          "background": {
+           "type": "object"
+          },
+          "note": {
+           "type": "string"
+          },
+          "success": {
+           "type": "boolean"
+          }
+         },
+         "type": "object"
+        }
+       }
+      }
+     }
+    },
+    "requestBody": {
+     "required": true,
+     "content": {
+      "application/json": {
+       "schema": {
+        "type": "object",
+        "properties": {
+         "description": {
+          "type": "string",
+          "description": "one sentence that helps a GM decide whether it fits"
+         },
+         "image_base64": {
+          "type": "string",
+          "description": "the picture (adding, or replacing it): PNG, JPEG or WebP, stored as a 1920 by 1080 WebP"
+         },
+         "key": {
+          "type": "string",
+          "description": "the new entry's key (adding only): lowercase words joined by hyphens, describing the picture"
+         },
+         "note": {
+          "type": "string",
+          "description": "why: written to the admin change log"
+         },
+         "retired": {
+          "type": "boolean",
+          "description": "true: no longer offered (the campaigns that use it keep it); false: offered again"
+         },
+         "tags": {
+          "additionalProperties": {
+           "items": {
+            "type": "string"
+           },
+           "type": "array"
+          },
+          "type": "object",
+          "description": "tag words by group (place, mood, light, features), from the vocabulary"
+         },
+         "title": {
+          "type": "string",
+          "description": "a short descriptive name (never a campaign's or a book's)"
+         }
+        }
+       },
+       "example": {
+        "description": "...",
+        "image_base64": "...",
+        "key": "...",
+        "note": "...",
+        "retired": true,
+        "title": "..."
+       }
+      }
+     }
+    }
+   }
+  },
+  "/api/admin/backgrounds/{key}": {
+   "post": {
+    "tags": [
+     "Admin"
+    ],
+    "summary": "Edit a picture of the background library",
+    "description": "Needs the X-Admin-Key header (the server's ADMIN_KEY). Every change is written to the admin change log. Any of title, description, tags, retired (true: no longer offered; campaigns that use it keep it) and image_base64 (a new picture). Logged.",
+    "responses": {
+     "400": {
+      "description": "The body was refused (nothing was changed): unknown_field, wrong_type, invalid_json, body_required or id_mismatch, with the fields the request takes",
+      "content": {
+       "application/json": {
+        "schema": {
+         "properties": {
+          "error": {
+           "type": "string"
+          },
+          "fields": {
+           "items": {
+            "type": "string"
+           },
+           "type": "array"
+          },
+          "message": {
+           "type": "string"
+          },
+          "unknown": {
+           "items": {
+            "type": "string"
+           },
+           "type": "array"
+          }
+         },
+         "type": "object"
+        }
+       }
+      }
+     },
+     "200": {
+      "description": "Success",
+      "content": {
+       "application/json": {
+        "schema": {
+         "properties": {
+          "background": {
+           "type": "object"
+          },
+          "note": {
+           "type": "string"
+          },
+          "success": {
+           "type": "boolean"
+          }
+         },
+         "type": "object"
+        }
+       }
+      }
+     }
+    },
+    "parameters": [
+     {
+      "name": "key",
+      "in": "path",
+      "required": true,
+      "description": "The picture's key",
+      "schema": {
+       "type": "string"
+      }
+     }
+    ],
+    "requestBody": {
+     "required": true,
+     "content": {
+      "application/json": {
+       "schema": {
+        "type": "object",
+        "properties": {
+         "description": {
+          "type": "string",
+          "description": "one sentence that helps a GM decide whether it fits"
+         },
+         "image_base64": {
+          "type": "string",
+          "description": "the picture (adding, or replacing it): PNG, JPEG or WebP, stored as a 1920 by 1080 WebP"
+         },
+         "key": {
+          "type": "string",
+          "description": "the new entry's key (adding only): lowercase words joined by hyphens, describing the picture"
+         },
+         "note": {
+          "type": "string",
+          "description": "why: written to the admin change log"
+         },
+         "retired": {
+          "type": "boolean",
+          "description": "true: no longer offered (the campaigns that use it keep it); false: offered again"
+         },
+         "tags": {
+          "additionalProperties": {
+           "items": {
+            "type": "string"
+           },
+           "type": "array"
+          },
+          "type": "object",
+          "description": "tag words by group (place, mood, light, features), from the vocabulary"
+         },
+         "title": {
+          "type": "string",
+          "description": "a short descriptive name (never a campaign's or a book's)"
+         }
+        }
+       },
+       "example": {
+        "description": "...",
+        "image_base64": "...",
+        "key": "...",
+        "note": "...",
+        "retired": true,
+        "title": "..."
        }
       }
      }
@@ -12990,6 +13282,73 @@
     }
    }
   },
+  "/api/backgrounds": {
+   "get": {
+    "tags": [
+     "Campaigns"
+    ],
+    "summary": "The background library",
+    "description": "The scenes a campaign's background is chosen from, best match first: each with its key, title, a sentence of description, its tags (place, mood, light, features) and its picture and thumbnail. Name a key in campaign creation's `background`, or change a campaign's with POST /api/campaigns/{id}/background. With no `background` at creation the server picks the best match for the campaign's own name and setting.",
+    "responses": {
+     "200": {
+      "description": "backgrounds, vocabulary",
+      "content": {
+       "application/json": {
+        "schema": {
+         "properties": {
+          "backgrounds": {
+           "items": {
+            "properties": {
+             "match": {
+              "type": "integer"
+             }
+            },
+            "type": "object"
+           },
+           "type": "array"
+          },
+          "how": {
+           "type": "string"
+          },
+          "vocabulary": {
+           "additionalProperties": {
+            "items": {
+             "type": "string"
+            },
+            "type": "array"
+           },
+           "properties": {},
+           "type": "object"
+          }
+         },
+         "type": "object"
+        }
+       }
+      }
+     }
+    },
+    "parameters": [
+     {
+      "name": "tags",
+      "in": "query",
+      "required": false,
+      "description": "Tag words to match, comma separated (the words are in vocabulary)",
+      "schema": {
+       "type": "string"
+      }
+     },
+     {
+      "name": "q",
+      "in": "query",
+      "required": false,
+      "description": "Words describing the campaign to match against the tags and descriptions",
+      "schema": {
+       "type": "string"
+      }
+     }
+    ]
+   }
+  },
   "/api/gm/intimidating-presence": {
    "post": {
     "tags": [
@@ -14391,8 +14750,8 @@
     "tags": [
      "Campaigns"
     ],
-    "summary": "A campaign's background picture",
-    "description": "The picture behind the Live Table's header, as its image (PNG, JPEG or WebP). 404 `no_background` when the administrator set none: the page then shows the default scene. Private campaigns need the watch password or a seat, like every read under /api/campaigns/{id}/. Only the administrator sets it (POST /api/admin/campaigns/{id}/background).",
+    "summary": "A campaign's background picture, or change its pick from the library",
+    "description": "GET: the picture behind the Live Table's header, as its image: the one the administrator uploaded, else (a redirect to) the campaign's pick from the background library; 404 `no_background` when it has neither and the page shows the default scene. Private campaigns need the watch password or a seat, like every read under /api/campaigns/{id}/. POST (the campaign's GM): pick a background from the library by its key (GET /api/backgrounds lists them), or \"\" for the default scene. Only the administrator uploads a picture of a campaign's own (POST /api/admin/campaigns/{id}/background), and while it has one the page shows that.",
     "responses": {
      "200": {
       "description": "The image, with its Content-Type",
@@ -14416,6 +14775,131 @@
       }
      }
     ]
+   },
+   "post": {
+    "tags": [
+     "Campaigns"
+    ],
+    "summary": "A campaign's background picture, or change its pick from the library",
+    "description": "GET: the picture behind the Live Table's header, as its image: the one the administrator uploaded, else (a redirect to) the campaign's pick from the background library; 404 `no_background` when it has neither and the page shows the default scene. Private campaigns need the watch password or a seat, like every read under /api/campaigns/{id}/. POST (the campaign's GM): pick a background from the library by its key (GET /api/backgrounds lists them), or \"\" for the default scene. Only the administrator uploads a picture of a campaign's own (POST /api/admin/campaigns/{id}/background), and while it has one the page shows that.",
+    "responses": {
+     "400": {
+      "description": "The body was refused (nothing was changed): unknown_field, wrong_type, invalid_json, body_required or id_mismatch, with the fields the request takes",
+      "content": {
+       "application/json": {
+        "schema": {
+         "properties": {
+          "error": {
+           "type": "string"
+          },
+          "fields": {
+           "items": {
+            "type": "string"
+           },
+           "type": "array"
+          },
+          "message": {
+           "type": "string"
+          },
+          "unknown": {
+           "items": {
+            "type": "string"
+           },
+           "type": "array"
+          }
+         },
+         "type": "object"
+        }
+       }
+      }
+     },
+     "200": {
+      "description": "The image, with its Content-Type",
+      "content": {
+       "application/json": {
+        "schema": {
+         "properties": {
+          "background": {
+           "properties": {
+            "change": {
+             "type": "string"
+            },
+            "chosen": {
+             "type": "object"
+            },
+            "how": {
+             "type": "string"
+            },
+            "other_matches": {
+             "items": {
+              "properties": {
+               "description": {
+                "type": "string"
+               },
+               "key": {
+                "type": "string"
+               },
+               "title": {
+                "type": "string"
+               }
+              },
+              "type": "object"
+             },
+             "type": "array"
+            }
+           },
+           "type": "object"
+          },
+          "background_url": {
+           "type": "string"
+          },
+          "note": {
+           "type": "string"
+          },
+          "success": {
+           "type": "boolean"
+          }
+         },
+         "type": "object"
+        }
+       }
+      }
+     }
+    },
+    "parameters": [
+     {
+      "name": "id",
+      "in": "path",
+      "required": true,
+      "description": "Campaign ID",
+      "schema": {
+       "type": "integer"
+      }
+     }
+    ],
+    "requestBody": {
+     "required": true,
+     "content": {
+      "application/json": {
+       "schema": {
+        "type": "object",
+        "properties": {
+         "background": {
+          "type": "string",
+          "description": "the key of a background in the library (GET /api/backgrounds), or \"\" for the default scene"
+         }
+        },
+        "required": [
+         "background"
+        ]
+       },
+       "example": {
+        "background": "..."
+       }
+      }
+     },
+     "description": "The library background to show: its key, or \"\" for the default scene"
+    }
    }
   },
   "/api/campaigns": {
@@ -14551,6 +15035,38 @@
        "application/json": {
         "schema": {
          "properties": {
+          "background": {
+           "description": "the scene behind the campaign's page and how to change it (background_library_2024.go)",
+           "properties": {
+            "change": {
+             "type": "string"
+            },
+            "chosen": {
+             "type": "object"
+            },
+            "how": {
+             "type": "string"
+            },
+            "other_matches": {
+             "items": {
+              "properties": {
+               "description": {
+                "type": "string"
+               },
+               "key": {
+                "type": "string"
+               },
+               "title": {
+                "type": "string"
+               }
+              },
+              "type": "object"
+             },
+             "type": "array"
+            }
+           },
+           "type": "object"
+          },
           "before_start": {
            "description": "questions, character changes, ready flags (campaign_ready_2024.go)",
            "type": "string"
@@ -14736,6 +15252,10 @@
        "schema": {
         "type": "object",
         "properties": {
+         "background": {
+          "type": "string",
+          "description": "optional: the key of the scene behind the campaign's page, from GET /api/backgrounds; without it the server picks the best match for the name and setting"
+         },
          "max_level": {
           "type": "integer",
           "description": "the highest character level that may join (default: min_level)"
@@ -14763,6 +15283,7 @@
         }
        },
        "example": {
+        "background": "...",
         "max_level": 1,
         "max_players": 1,
         "min_level": 1,

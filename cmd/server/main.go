@@ -340,6 +340,8 @@ func setupRoutes() {
 	http.HandleFunc("/api/admin/reports/", handleAdminReports)
 	http.HandleFunc("/api/admin/errors", handleAdminErrors)
 	http.HandleFunc("/api/admin/settings", handleAdminSettings)
+	http.HandleFunc("/api/admin/backgrounds", handleAdminBackgrounds) // the background library (background_library_2024.go)
+	http.HandleFunc("/api/admin/backgrounds/", handleAdminBackgrounds)
 	http.HandleFunc("/api/admin/monsters", handleAdminMonsters) // the GM-built monsters (admin_monsters_2024.go)
 	http.HandleFunc("/api/admin/monsters/", handleAdminMonsters)
 	http.HandleFunc("/api/admin/session", handleAdminSession) // the admin page's sign-in cookie
@@ -549,7 +551,9 @@ func setupRoutes() {
 
 	// Static assets
 	http.HandleFunc("/favicon.svg", handleFavicon)
-	http.HandleFunc("/assets/", handleSiteAsset) // the design's images (site_layout_2024.go)
+	http.HandleFunc("/api/backgrounds", handleBackgrounds)  // the background library (background_library_2024.go)
+	http.HandleFunc("/backgrounds/", handleBackgroundImage) // its pictures and thumbnails
+	http.HandleFunc("/assets/", handleSiteAsset)            // the design's images (site_layout_2024.go)
 
 	// Pages
 	http.HandleFunc("/profile/", handleProfile)

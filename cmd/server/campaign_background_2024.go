@@ -94,26 +94,61 @@ func hasBackground(campaignID int) bool {
 	return n > 0
 }
 
-// backgroundURL is the picture the Live Table shows: the campaign's own (with its change time, so a new one is fetched) or the default.
+// backgroundURL is the picture the Live Table shows: the administrator's upload (with its change time, so a new one is fetched), else the
+// campaign's pick from the library (background_library_2024.go), else the default.
 func backgroundURL(campaignID int) string {
 	var updated sql.NullTime
 	var n int
 	db.QueryRow(`SELECT COALESCE(length(background_image), 0), background_updated_at FROM lobbies WHERE id = $1`, campaignID).Scan(&n, &updated)
-	if n == 0 {
-		return defaultBackground
+	if n > 0 {
+		return fmt.Sprintf("/api/campaigns/%d/background?v=%d", campaignID, updated.Time.Unix())
 	}
-	return fmt.Sprintf("/api/campaigns/%d/background?v=%d", campaignID, updated.Time.Unix())
+	if key, at := libraryBackgroundOf(campaignID); key != "" {
+		return fmt.Sprintf("/backgrounds/%s.webp?v=%d", key, at.Unix())
+	}
+	return defaultBackground
 }
 
 // handleCampaignBackground godoc
-// @Summary A campaign's background picture
-// @Description The picture behind the Live Table's header, as its image (PNG, JPEG or WebP). 404 `no_background` when the administrator set none: the page then shows the default scene. Private campaigns need the watch password or a seat, like every read under /api/campaigns/{id}/. Only the administrator sets it (POST /api/admin/campaigns/{id}/background).
+// @Summary A campaign's background picture, or change its pick from the library
+// @Description GET: the picture behind the Live Table's header, as its image: the one the administrator uploaded, else (a redirect to) the campaign's pick from the background library; 404 `no_background` when it has neither and the page shows the default scene. Private campaigns need the watch password or a seat, like every read under /api/campaigns/{id}/. POST (the campaign's GM): pick a background from the library by its key (GET /api/backgrounds lists them), or "" for the default scene. Only the administrator uploads a picture of a campaign's own (POST /api/admin/campaigns/{id}/background), and while it has one the page shows that.
 // @Tags Campaigns
 // @Param id path int true "Campaign ID"
+// @Body The library background to show: its key, or "" for the default scene
 // @Success 200 {file} binary "The image, with its Content-Type"
 // @Failure 404 {object} map[string]interface{} "No background set"
 // @Router /campaigns/{id}/background [get]
+// @Router /campaigns/{id}/background [post]
 func handleCampaignBackground(w http.ResponseWriter, r *http.Request, campaignID int) {
+	if r.Method == http.MethodPost {
+		if _, ok := requireCampaignGM(w, r, campaignID, "change the campaign's background"); !ok {
+			return
+		}
+		var req struct {
+			Background *string `json:"background"` // the key of a background in the library (GET /api/backgrounds), or "" for the default scene
+		}
+		if !readRequest(w, r, &req) {
+			return
+		}
+		if req.Background == nil {
+			writeJSONStatus(w, http.StatusBadRequest, map[string]interface{}{"error": "background_required", "message": "Send {\"background\": \"<key>\"} (keys: GET /api/backgrounds), or \"\" for the default scene. Nothing was changed."})
+			return
+		}
+		key, err := setLibraryBackground(campaignID, strings.TrimSpace(*req.Background))
+		if err != nil {
+			if answerHelperDBFailure(w, err) {
+				return
+			}
+			writeJSONStatus(w, http.StatusBadRequest, map[string]interface{}{"error": "unknown_background", "message": err.Error() + ". Nothing was changed."})
+			return
+		}
+		reply := map[string]interface{}{"success": true, "background": backgroundChoiceView(campaignID, key, "chosen by the GM", ""), "background_url": backgroundURL(campaignID)}
+		if hasBackground(campaignID) {
+			reply["note"] = "The administrator gave this campaign a picture of its own, which the page shows instead; your pick shows if that is removed."
+		}
+		writeJSONStatus(w, http.StatusOK, reply)
+		return
+	}
 	if r.Method != http.MethodGet && r.Method != http.MethodHead {
 		writeJSONStatus(w, http.StatusMethodNotAllowed, map[string]interface{}{"error": "method_not_allowed"})
 		return
@@ -124,6 +159,10 @@ func handleCampaignBackground(w http.ResponseWriter, r *http.Request, campaignID
 	err := db.QueryRow(`SELECT background_image, background_type, background_updated_at FROM lobbies WHERE id = $1`, campaignID).Scan(&data, &mime, &updated)
 	if err != nil || len(data) == 0 || !mime.Valid {
 		if answerDBFailure(w, err, "the campaign") {
+			return
+		}
+		if key, at := libraryBackgroundOf(campaignID); key != "" {
+			http.Redirect(w, r, fmt.Sprintf("/backgrounds/%s.webp?v=%d", key, at.Unix()), http.StatusFound)
 			return
 		}
 		writeJSONStatus(w, http.StatusNotFound, map[string]interface{}{"error": "no_background"})
@@ -150,9 +189,13 @@ func handleAdminBackground(w http.ResponseWriter, r *http.Request, id int) {
 		return
 	}
 	had := hasBackground(id)
-	words := func(has bool) string {
+	pick, _ := libraryBackgroundOf(id)
+	words := func(has bool, key string) string {
 		if has {
 			return "a background"
+		}
+		if key != "" {
+			return "the library's " + key
 		}
 		return "the default background"
 	}
@@ -160,11 +203,30 @@ func handleAdminBackground(w http.ResponseWriter, r *http.Request, id int) {
 	case http.MethodPost, http.MethodPut:
 		var req struct {
 			ImageBase64 string `json:"image_base64"` // the image as base64 (a data: URL is accepted); or send the raw PNG, JPEG or WebP bytes with their Content-Type instead
+			Library     string `json:"library"`      // instead of an image: the key of a background in the library (GET /api/admin/backgrounds); the campaign's own picture is removed
 			Note        string `json:"note"`         // why: written to the admin change log
 		}
 		var imageBytes []byte
 		if strings.HasPrefix(strings.ToLower(r.Header.Get("Content-Type")), "application/json") {
 			if !readRequest(w, r, &req) {
+				return
+			}
+			if req.Library != "" { // a scene from the library in place of the campaign's own picture (background_library_2024.go)
+				if _, err := setLibraryBackground(id, req.Library); err != nil {
+					if answerHelperDBFailure(w, err) {
+						return
+					}
+					writeJSONStatus(w, http.StatusBadRequest, map[string]interface{}{"error": "unknown_background", "message": err.Error() + ". Nothing was changed."})
+					return
+				}
+				if had {
+					if err := clearBackground(id); err != nil {
+						writeJSONStatus(w, http.StatusInternalServerError, map[string]interface{}{"error": "save_failed"})
+						return
+					}
+				}
+				logAdminChangeIn(db, "campaign", id, "background", words(had, pick), words(false, req.Library), "admin", req.Note)
+				writeJSONStatus(w, http.StatusOK, map[string]interface{}{"success": true, "background_url": backgroundURL(id), "message": "The campaign shows the library's " + req.Library + "."})
 				return
 			}
 			var ref *portraitRefusal
@@ -195,7 +257,7 @@ func handleAdminBackground(w http.ResponseWriter, r *http.Request, id int) {
 			writeJSONStatus(w, http.StatusInternalServerError, map[string]interface{}{"error": "save_failed"})
 			return
 		}
-		logAdminChangeIn(db, "campaign", id, "background", words(had), fmt.Sprintf("a background (%s, %d bytes)", mime, len(imageBytes)), "admin", req.Note)
+		logAdminChangeIn(db, "campaign", id, "background", words(had, pick), fmt.Sprintf("a background (%s, %d bytes)", mime, len(imageBytes)), "admin", req.Note)
 		writeJSONStatus(w, http.StatusOK, map[string]interface{}{"success": true, "content_type": mime, "bytes": len(imageBytes),
 			"background_url": fmt.Sprintf("/api/campaigns/%d/background", id), "note": nilIfEmpty(shapeNote)})
 	case http.MethodDelete:
@@ -205,15 +267,19 @@ func handleAdminBackground(w http.ResponseWriter, r *http.Request, id int) {
 		if !readRequest(w, r, &req, optionalBody()) {
 			return
 		}
-		if !had {
-			writeJSONStatus(w, http.StatusOK, map[string]interface{}{"success": true, "message": "The campaign has no background of its own: nothing to remove."})
+		if !had && pick == "" {
+			writeJSONStatus(w, http.StatusOK, map[string]interface{}{"success": true, "message": "The campaign shows the default scene already: nothing to remove."})
 			return
 		}
 		if err := clearBackground(id); err != nil {
 			writeJSONStatus(w, http.StatusInternalServerError, map[string]interface{}{"error": "save_failed"})
 			return
 		}
-		logAdminChangeIn(db, "campaign", id, "background", words(true), words(false), "admin", req.Note)
+		if _, err := setLibraryBackground(id, ""); err != nil {
+			writeJSONStatus(w, http.StatusInternalServerError, map[string]interface{}{"error": "save_failed"})
+			return
+		}
+		logAdminChangeIn(db, "campaign", id, "background", words(had, pick), words(false, ""), "admin", req.Note)
 		writeJSONStatus(w, http.StatusOK, map[string]interface{}{"success": true, "message": "The background is removed: the page shows the default scene."})
 	default:
 		writeJSONStatus(w, http.StatusMethodNotAllowed, map[string]interface{}{"error": "method_not_allowed"})

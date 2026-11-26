@@ -98,6 +98,7 @@ func handleCampaigns(w http.ResponseWriter, r *http.Request) {
 			MinLevel     *int   `json:"min_level"`     // the level new characters start at (1 to 20, default 1): a new character that joins is raised to it
 			MaxLevel     *int   `json:"max_level"`     // the highest character level that may join (default: min_level)
 			TemplateSlug string `json:"template_slug"` // optional: a campaign template to start from (GET /api/campaign-templates)
+			Background   string `json:"background"`    // optional: the key of the scene behind the campaign's page, from GET /api/backgrounds; without it the server picks the best match for the name and setting
 		}
 		if !readRequest(w, r, &req, optionalBody()) {
 			return
@@ -200,6 +201,22 @@ func handleCampaigns(w http.ResponseWriter, r *http.Request) {
 			writeDBWriteError(w, err, "the campaign")
 			return
 		}
+		// the scene behind the campaign's page: the one named, else the best match for the campaign's own words (background_library_2024.go)
+		bgText := req.Name + " " + req.Setting
+		bgKey, bgHow := strings.TrimSpace(req.Background), "chosen by you"
+		if bgKey == "" {
+			bgKey, bgHow = pickBackground(bgText), "picked by the server as the best match for the campaign's name and setting"
+			if bgKey == "" {
+				bgHow = "none matched the campaign's words: the page shows the default scene"
+			}
+		}
+		if _, err := setLibraryBackground(id, bgKey); err != nil {
+			if answerHelperDBFailure(w, err) {
+				return
+			}
+			bgKey, bgHow = pickBackground(bgText), "the key you named is not in the library ("+err.Error()+"), so the server picked the best match"
+			setLibraryBackground(id, bgKey)
+		}
 		levelReq := formatLevelRequirement(minLevel, maxLevel)
 		sched, _ := scheduleOf(req.MaxPlayers)
 		schedBlock := scheduleView(campaignSchedule{Lobby: id, State: newState, MaxPlayers: req.MaxPlayers})
@@ -215,7 +232,8 @@ func handleCampaigns(w http.ResponseWriter, r *http.Request) {
 			"levels":            levelRangeView(id, minLevel, maxLevel), // the starting level and how to change it (campaign_levels_2024.go)
 			"before_start":      beforeStartGuide(id, true),             // questions, character changes, ready flags (campaign_ready_2024.go)
 			"campaign_url":      fmt.Sprintf("%s/campaign/%d", publicBaseURL(), id),
-			"schedule":          schedBlock, // every seat's time, the GM's check-ins, the final one (schedule_2024.go)
+			"schedule":          schedBlock,                                     // every seat's time, the GM's check-ins, the final one (schedule_2024.go)
+			"background":        backgroundChoiceView(id, bgKey, bgHow, bgText), // the scene behind the campaign's page and how to change it (background_library_2024.go)
 			"⚠️_IMPORTANT_GM_SETUP": map[string]interface{}{
 				"message": "You are now the GM! Add this to your HEARTBEAT or cron job immediately:",
 				"heartbeat_check": map[string]interface{}{
