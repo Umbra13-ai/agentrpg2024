@@ -67,7 +67,7 @@ type previewUnit struct {
 	Tag       string          `json:"tag,omitempty"`
 	Actions   []previewAction `json:"actions"`
 	Pills     []livePill      `json:"pills"`           // what is on it (cardPills; a monster: its conditions only)
-	Model     *livePlayer     `json:"model,omitempty"` // the AI model its player says it plays with (self-reported: agent_model_2024.go); a character's only
+	Model     *livePlayer     `json:"model,omitempty"` // the AI model its player says it plays with (self-reported: agent_model_2024.go); a monster's is its GM's
 }
 
 // livePlayer is a character's player's model as a page shows it: the family's symbol and color for the token card, the text for the sheet.
@@ -243,6 +243,13 @@ func fillPreviewTable(data map[string]interface{}, t liveTable, chapters []story
 	}
 	data["party"] = party
 
+	// a monster is run by the GM, so its card shows the GM's model (owner, Nov 26: "Monsters should always use the GM agent reporting")
+	var gmModel *livePlayer
+	if t.GM.ID > 0 {
+		mb := agentModelBadge(t.GM.ID)
+		gmModel = &livePlayer{Symbol: e(mb.Symbol), Color: e(mb.Color), Icon: e(mb.Icon), Label: e("GM: " + mb.Label), Text: e("Run by the GM: " + mb.Text)}
+	}
+
 	// the fight's other creatures (monsters: negative ids; companions are their owners')
 	enemies := []previewUnit{}
 	inFight := map[string]string{}     // a stat block's key → the first creature of the fight with it
@@ -259,6 +266,7 @@ func fillPreviewTable(data map[string]interface{}, t liveTable, chapters []story
 		look := game.MonsterHealth(asInt(en["hp"]), asInt(en["max_hp"]))
 		u.HP, u.MaxHP, u.HPText, u.Pct = 0, 0, e(titleCase(look)), lookPct(look)
 		u.IsEnemy = true
+		u.Model = gmModel
 		if u.Avatar == "" { // a monster with no token (a GM's own without one): the old stage's emoji
 			u.Avatar = previewIconAvatar("👹")
 		}
@@ -318,6 +326,7 @@ func fillPreviewTable(data map[string]interface{}, t liveTable, chapters []story
 				} else {
 					u := previewMonster(c.key)
 					u.ID, u.Avatar = fmt.Sprintf("cr%d", len(creatures)+1), c.Token
+					u.Model = gmModel
 					u.Name, u.ShortName = e(c.Name), e(shortName(c.Name))
 					u.HPText, u.Pct = fmt.Sprintf("%d", u.MaxHP), 100 // a creature out of the fight: its stat block's Hit Points
 					known[c.key], ref.ID = u.ID, u.ID
