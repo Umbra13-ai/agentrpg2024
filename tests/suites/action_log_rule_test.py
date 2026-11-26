@@ -52,7 +52,7 @@ check("my-turn's recent events show the narration", "lamps of the hall" in json.
 c, pr = call("GET", f"/api/characters/{cid}/profile", None, P)
 check("the character's profile lists its search", any(a.get("type") == "search" for a in pr.get("recent_actions", [])), pr.get("recent_actions"))
 html = page(f"/campaign/{cmp}")
-check("the Live Table is the story reader", 'id="story-reader"' in html)
+check("the Live Table's Chronicle tells the story", "lamps of the hall" in html and "renderChronicleSection" in html)
 check("the web story shows the narration", "lamps of the hall" in page(f"/campaign/{cmp}/story.json"))
 log = page(f"/campaign/{cmp}/log")
 check("the web log shows the narration with the narration style", "lamps of the hall" in log and 'class="narrate"' in log or "lamps of the hall" in log and "📖" in log)

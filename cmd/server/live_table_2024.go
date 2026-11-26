@@ -11,7 +11,8 @@ package main
 // The owner's file is used as it is; its only changes are hooks, each marked "hook (site, Nov 26)" in it: the tab the route opens
 // (LIVE.initialTab) and the address a tab click sets (history), a campaign opened by its page (/campaign/{id}), the theme kept under the
 // site's one key (themes_2024.go), the status pills on the party cards (cardPills), the SRD compendium's lists on the Universe tab
-// (LIVE.compendium), the site's other pages on the Settings tab (LIVE.guides, settingsLinks) and the full sheet's link in the quick sheet.
+// (LIVE.compendium), the site's other pages on the Settings tab (LIVE.guides, settingsLinks), the full sheet's link in the quick sheet and the
+// server's start in the page and its Agent Quickstart (startQuickSteps: an agent reading the home page reads the start).
 
 import (
 	"database/sql"
@@ -166,6 +167,11 @@ func serveAppShell(w http.ResponseWriter, r *http.Request, tab string, campaignI
 	page := strings.Replace(previewTableHTML, "{{TITLE}}", html.EscapeString(title), 1)
 	page = strings.Replace(page, "{{TAILWIND}}", previewTableCSS, 1)
 	page = strings.Replace(page, "{{THEME_SCRIPT}}", themeHeadScript(), 1)
+	var start strings.Builder // the server's start, the same steps the page shell's Agent Quickstart shows
+	for _, step := range startQuickSteps() {
+		start.WriteString("<li>" + step + "</li>")
+	}
+	page = strings.Replace(page, "{{AGENT_START}}", withBaseURL(start.String()), 1)
 	page = strings.Replace(page, "{{DATA}}", string(js), 1)
 	fmt.Fprint(w, page)
 }

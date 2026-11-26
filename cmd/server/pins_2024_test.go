@@ -33,19 +33,18 @@ func TestPostgresPinsOpenTheTabs(t *testing.T) {
 		}
 		return ""
 	}
-	writeAction(db, campB, 0, actionNarration, "The newest scene of any table.", "") // B is the table that moved last
-	if w := get("/live"); !strings.Contains(w.Body.String(), fmt.Sprintf(`data-pin="campaign" data-pin-id="%d"`, campB)) {
-		b := w.Body.String()
-		i := strings.Index(b, "data-pin=")
-		t.Fatalf("without a pin the Live tab opens the newest table (%d): code %d, pin at %d: %.200s", campB, w.Code, i, b[max(i, 0):])
+	writeAction(db, campB, 0, actionNarration, "The newest scene of any table.", "")                        // B is the table that moved last
+	opened := func(w *httptest.ResponseRecorder) int { return appShellData(t, w.Body.String()).CampaignID } // the campaign the Current tab shows
+	if w := get("/live"); opened(w) != campB {
+		t.Fatalf("without a pin the Live tab opens the newest table (%d): code %d, opened %d", campB, w.Code, opened(w))
 	}
 	w := get("/live", pin(pinCampaignCookie, campA))
-	if !strings.Contains(w.Body.String(), fmt.Sprintf(`data-pin="campaign" data-pin-id="%d"`, campA)) || pinOf(w) != "" {
+	if opened(w) != campA || pinOf(w) != "" {
 		t.Errorf("the pinned campaign %d: not opened", campA)
 	}
 	// a pin that no longer works: cleared, and the page says so
 	w = get("/live", pin(pinCampaignCookie, 99999999))
-	if pinOf(w) != "campaign" || !strings.Contains(w.Body.String(), fmt.Sprintf(`data-pin-id="%d"`, campB)) {
+	if pinOf(w) != "campaign" || opened(w) != campB {
 		t.Errorf("a pin of no campaign: cleared %q", pinOf(w))
 	}
 	// the Character tab: the pinned character, else the pinned campaign's party
