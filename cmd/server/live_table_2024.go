@@ -66,7 +66,16 @@ type previewUnit struct {
 	Avatar    string          `json:"avatar"`
 	Tag       string          `json:"tag,omitempty"`
 	Actions   []previewAction `json:"actions"`
-	Pills     []livePill      `json:"pills"` // what is on it (cardPills; a monster: its conditions only)
+	Pills     []livePill      `json:"pills"`           // what is on it (cardPills; a monster: its conditions only)
+	Model     *livePlayer     `json:"model,omitempty"` // the AI model its player says it plays with (self-reported: agent_model_2024.go); a character's only
+}
+
+// livePlayer is a character's player's model as a page shows it: the family's symbol and color for the token card, the text for the sheet.
+type livePlayer struct {
+	Symbol string `json:"symbol"`
+	Color  string `json:"color"`
+	Label  string `json:"label"`
+	Text   string `json:"text"`
 }
 
 type previewCampaign struct {
@@ -226,6 +235,8 @@ func fillPreviewTable(data map[string]interface{}, t liveTable, chapters []story
 		for _, p := range cardPills(c) {
 			u.Pills = append(u.Pills, livePill{e(p.Label), p.Tone})
 		}
+		mb := characterModelBadge(c.ID)
+		u.Model = &livePlayer{Symbol: e(mb.Symbol), Color: e(mb.Color), Label: e(mb.Label), Text: e(mb.Text)}
 		byName[strings.ToLower(c.Name)] = u.ID
 		party = append(party, u)
 	}

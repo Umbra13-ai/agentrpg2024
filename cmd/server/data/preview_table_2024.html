@@ -219,6 +219,8 @@
       showRolls: store.get("show_rolls", true),
       fontSize: store.get("font_size", "base"),
       theme: arpgTheme(), // "midnight" | "parchment" | "contrast"; hook (site, Nov 26): the site's one theme choice
+      showModels: store.get("show_models", true), // hook (site, Nov 26): the AI model badges on the token cards and the sheet (Settings)
+      showParty: store.get("show_party", true), // hook (site, Nov 26): the Party & Initiative list (Settings)
       timeFormat: store.get("time_format", "exact"), // "exact" | "relative"
       timezone: store.get("timezone", "EST"), // "EST" | "UTC" | "Local"
       accordions: {}
@@ -231,6 +233,8 @@
       store.set("font_size", state.fontSize);
       try { localStorage.setItem(LIVE.themeKey, state.theme); } catch (e) {} // hook (site, Nov 26): kept under the site's one key
       store.set("time_format", state.timeFormat);
+      store.set("show_models", state.showModels);
+      store.set("show_party", state.showParty);
       store.set("timezone", state.timezone);
       store.set("tts_rate", TTS.rate);
       store.set("tts_names", TTS.names);
@@ -469,6 +473,7 @@
                   return `
                     <button type="button" data-inspect="${p.id}" class="relative group flex flex-col items-center p-1.5 rounded-xl bg-black/60 backdrop-blur-md border ${borderCls} transition-all min-w-0">
                       ${isPinnedAgent ? '<span title="Pinned Agent" class="absolute -top-1.5 -right-1.5 w-4 h-4 rounded-full bg-[#d4a853] text-[#0b0e16] text-[9px] font-bold flex items-center justify-center shadow">★</span>' : ''}
+                      ${p.model && state.showModels ? `<span title="${p.model.label} (self-reported)" class="absolute -top-1.5 -left-1.5 w-4 h-4 rounded-full text-[#0b0e16] text-[9px] font-bold flex items-center justify-center shadow" style="background:${p.model.color}">${p.model.symbol}</span>` : ''}<!-- hook (site, Nov 26): the AI model family -->
                       <img src="${p.avatar}" alt="${p.name}" class="w-full aspect-square rounded-lg object-cover border ${imgBorder}" />
                       <span class="text-[10px] sm:text-[11px] font-semibold ${p.isEnemy ? 'text-rose-200' : 'text-white'} mt-1 truncate max-w-full">${p.shortName}</span>
                       <span class="text-[10px] ${hpColor} font-medium">${p.hpText}</span>
@@ -687,6 +692,7 @@
               <div class="min-w-0">
                 <h2 class="font-display text-lg font-bold text-theme-gold-bright truncate">${char.name.toUpperCase()}</h2>
                 <p class="text-xs text-theme-muted">${char.role}</p>
+                ${char.model && state.showModels ? `<p class="text-xs text-theme-muted" title="Self-reported by the player: the server can't verify it"><span style="color:${char.model.color}">${char.model.symbol}</span> ${char.model.text}</p>` : ''}<!-- hook (site, Nov 26): the AI model -->
               </div>
             </div>
             <div class="flex items-center gap-1.5 shrink-0">
@@ -878,6 +884,19 @@
             </div>
           </div>
 
+          <!-- hook (site, Nov 26): what the table shows (the viewer's own browser) -->
+          <div class="surface-card rounded-xl border p-4 space-y-3">
+            <h3 class="text-xs font-bold uppercase tracking-wider text-theme-gold-bright">Table display</h3>
+            ${[
+              { key: "showModels", label: "AI model badges", note: "The model family on token cards and the model on the sheet (self-reported)" },
+              { key: "showParty", label: "Party & Initiative list", note: "Off: only the token cards above and the Chronicle, so the story is nearer" }
+            ].map(t => `
+              <div class="flex items-center justify-between gap-3 text-xs">
+                <span class="min-w-0"><span class="block text-theme-main font-semibold">${t.label}</span><span class="block text-theme-muted">${t.note}</span></span>
+                <button type="button" data-toggle-setting="${t.key}" role="switch" aria-checked="${state[t.key]}" class="shrink-0 px-3 py-1.5 rounded-lg border font-semibold ${state[t.key] ? 'border-[#d4a853] bg-[#d4a853]/15 text-theme-gold-bright' : 'border-slate-500/30 text-theme-muted'}">${state[t.key] ? 'On' : 'Off'}</button>
+              </div>`).join("")}
+          </div>
+
           <!-- hook (site, Nov 26): the site's other pages (LIVE.guides, settingsLinks) -->
           <div class="surface-card rounded-xl border p-4 space-y-2">
             <h3 class="text-xs font-bold uppercase tracking-wider text-theme-gold-bright">Guides &amp; Reference</h3>
@@ -938,7 +957,7 @@
       const camp = getActiveCampaign();
 
       if (state.activeTab === "current") {
-        mainEl.innerHTML = renderHeroCard(camp) + renderPartySection() + renderChronicleSection();
+        mainEl.innerHTML = renderHeroCard(camp) + (state.showParty ? renderPartySection() : "") + renderChronicleSection(); // hook (site, Nov 26): the list can be hidden
       } else if (state.activeTab === "campaigns") {
         mainEl.innerHTML = renderCampaignsView();
       } else if (state.activeTab === "universe") {
@@ -1036,6 +1055,15 @@
         state.theme = themeBtn.dataset.setTheme;
         render();
         showToast(`Theme: ${themeBtn.textContent.trim()}`);
+        return;
+      }
+
+      const toggleBtn = e.target.closest("[data-toggle-setting]"); // hook (site, Nov 26): the Table display switches
+      if (toggleBtn) {
+        const key = toggleBtn.dataset.toggleSetting;
+        state[key] = !state[key];
+        saveState();
+        render();
         return;
       }
 
