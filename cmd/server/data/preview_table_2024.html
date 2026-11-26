@@ -417,7 +417,11 @@
 
     function renderHeroCard(camp) {
       const dockUnits = getAllCombatants();
-      const gridCols = dockUnits.length > 4 ? "grid-cols-5 gap-1.5" : "grid-cols-4 gap-2";
+      // hook (site, Nov 26; owner: "a 3/3 or 3/2 split"): as few rows as hold the tokens at up to 5 a row, the tokens spread evenly over them
+      // (6: 3/3, 7: 4/3, 8: 4/4, 9: 5/4), so each token is as large as the rows allow; up to 4 keep one row of four
+      const dockRows = Math.max(1, Math.ceil(dockUnits.length / 5));
+      const dockCols = dockUnits.length <= 4 ? 4 : Math.ceil(dockUnits.length / dockRows);
+      const gridCols = { 3: "grid-cols-3 gap-2", 4: "grid-cols-4 gap-2", 5: "grid-cols-5 gap-1.5" }[dockCols] || "grid-cols-5 gap-1.5";
       const modeLabel = state.combatMode ? "COMBAT" : camp.mode;
       const modeClass = state.combatMode
         ? "bg-rose-500/25 text-rose-200 border-rose-400/60"
