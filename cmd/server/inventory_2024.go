@@ -65,6 +65,7 @@ type invRefusal struct {
 }
 
 func (e *invRefusal) Error() string { return fmt.Sprint(e.body["error"]) }
+func (e *invRefusal) isRefusal()    {}
 
 func refuseInv(status int, body map[string]interface{}) error { return &invRefusal{status, body} }
 
@@ -82,6 +83,7 @@ func answerInvRefusal(w http.ResponseWriter, err error) bool {
 type codeRefusal string
 
 func (c codeRefusal) Error() string { return string(c) }
+func (c codeRefusal) isRefusal()    {}
 
 // refusalCode is the code a failed change answers: its refusal's, notFound when the row is missing, else dbErrorCode.
 func refusalCode(err error, notFound string) string {

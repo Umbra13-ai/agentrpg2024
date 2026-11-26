@@ -26,6 +26,7 @@ type originError struct {
 }
 
 func (e *originError) Error() string { return e.Code + ": " + e.Message }
+func (e *originError) isRefusal()    {}
 
 func originErr(code string, options []string, format string, a ...interface{}) *originError {
 	return &originError{Code: code, Message: fmt.Sprintf(format, a...), Options: options}

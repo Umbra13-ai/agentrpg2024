@@ -286,6 +286,7 @@ type seatRefusal struct {
 }
 
 func (e *seatRefusal) Error() string { return e.Message }
+func (e *seatRefusal) isRefusal()    {}
 
 // reply: the refusal as a request's answer.
 func (e *seatRefusal) reply() map[string]interface{} {
@@ -374,7 +375,7 @@ func claimSeat(tx *sql.Tx, c seatClaim) (seatTaken, error) {
 		return out, err
 	}
 	if limit := seatLimit(maxPlayers, pending); campaignFull(limit, count) {
-		return out, &seatRefusal{Status: http.StatusConflict, Code: "campaign_full", Message: "This campaign is full.",
+		return out, &seatRefusal{Status: http.StatusConflict, Code: "campaign_full", Message: fmt.Sprintf("This campaign is full: %d of %d seats are taken.", count, limit),
 			Extra: map[string]interface{}{"campaign_id": c.Lobby, "max_players": limit, "player_count": count}}
 	}
 	if _, err := tx.Exec(`UPDATE characters SET lobby_id = $1 WHERE id = $2`, c.Lobby, c.Character); err != nil {

@@ -159,6 +159,7 @@ type notEnough struct {
 }
 
 func (e *notEnough) Error() string { return e.Msg }
+func (e *notEnough) isRefusal()    {}
 
 // refusedSpend says whether err is a refusal (not enough left) and returns it.
 func refusedSpend(err error) (*notEnough, bool) {

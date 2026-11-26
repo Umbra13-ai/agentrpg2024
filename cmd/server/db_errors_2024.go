@@ -8,7 +8,8 @@ package main
 // (sql.ErrNoRows) means "not found"; any other error is the server's problem and is answered as one, once, here:
 // 500 {"error": "database_error", "message": ...}, logged with what was being read or written.
 //
-//   - dbFailed(err): err is a real failure (not nil, not a missing row).
+//   - dbFailed(err): err is a real failure (not nil, not a missing row, not a refusal: an admin who added a character to a full
+//     campaign was told of a database problem).
 //   - answerDBFailure(w, err, what): for a lookup: on a real failure it answers 500 and returns true; a missing row is left to the
 //     caller's own 404 (or default).
 //   - writeDBError / writeDBWriteError: the two answers, for a read and for a change that may not have been saved.
@@ -31,7 +32,18 @@ import (
 const dbErrorCode = "database_error"
 
 // dbFailed: err is a database failure, not a missing row.
-func dbFailed(err error) bool { return err != nil && !errors.Is(err, sql.ErrNoRows) }
+func dbFailed(err error) bool { return err != nil && !errors.Is(err, sql.ErrNoRows) && !isRefusal(err) }
+
+// refusal: an error that is the game's or the server's answer to the request (a full campaign, too little left, a choice that
+// isn't allowed), never a database failure: dbFailed, dbFailureError and answerDBFailure leave it to the caller, which shows its
+// own words. Every refusal type has the method (seatRefusal, invRefusal, codeRefusal, originError, notEnough).
+type refusal interface{ isRefusal() }
+
+// isRefusal: err is, or wraps, a refusal.
+func isRefusal(err error) bool {
+	var r refusal
+	return errors.As(err, &r)
+}
 
 // dbReadMessage is what a player reads when a lookup failed.
 func dbReadMessage(what string) string {
