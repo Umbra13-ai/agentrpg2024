@@ -144,7 +144,7 @@ func adminMonsterView(w http.ResponseWriter, c compendiumEntry) {
 	writeJSONStatus(w, http.StatusOK, map[string]interface{}{"monster": map[string]interface{}{
 		"key": c.Key, "name": c.Monster.Name, "cr": c.Monster.CR, "owner": c.Owner, "owner_id": c.OwnerID, "shared": c.Shared, "deleted": c.Hidden.Valid,
 		"source_note": c.Note, "replaces": c.Replaces, "created": c.Created.UTC().Format("2006-01-02 15:04 UTC"), "token_url": monsterTokenURL(c.Key)},
-		"versions": versions, "page": "/api/admin/monsters/" + url.PathEscape(c.Key) + "/page", "token_rule": monsterTokenRuleText})
+		"versions": versions, "page": "/api/admin/monsters/" + url.PathEscape(c.Key) + "/page", "token_rule": monsterTokenRuleShort})
 }
 
 // adminMonsterToken: the administrator's upload or removal, by the GM route's rule and writes, written to the admin change log.

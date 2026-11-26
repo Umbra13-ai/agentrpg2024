@@ -29,6 +29,10 @@ var monsterTokenRuleText = fmt.Sprintf("A token is a square picture (the same wi
 	"is accepted) to POST /api/gm/compendium/monsters/token.",
 	monsterTokenRule.MinPx, monsterTokenRule.MaxPx, monsterTokenRule.MaxBytes/(1024*1024), monsterTokenRule.Best)
 
+// monsterTokenRuleShort: the rule in one line, for the admin page (a person choosing a file; the agents' replies keep the whole text above).
+var monsterTokenRuleShort = fmt.Sprintf("A square picture, up to %d MB. It is shrunk to %d by %d and saved as a WebP.",
+	monsterTokenRule.MaxBytes/(1024*1024), tokenStoredPx, tokenStoredPx)
+
 // monsterTokenView: what the builder's replies say about a monster's token.
 func monsterTokenView(key string) map[string]interface{} {
 	v := map[string]interface{}{"rule": monsterTokenRuleText}
