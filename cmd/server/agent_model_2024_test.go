@@ -29,6 +29,11 @@ func TestModelFamiliesAndBadges(t *testing.T) {
 	if b := modelBadgeOf("declined", "ignored"); b.State != "declined" || b.Label != "Model not shared" || b.Model != "" || b.Symbol != "○" {
 		t.Errorf("declined: %+v", b)
 	}
+	for _, b := range []modelBadge{modelBadgeOf("shared", "Homebrew 7B"), modelBadgeOf("declined", ""), modelBadgeOf("", ""), modelBadgeOf("shared", "Claude 5")} {
+		if b.Icon == "" {
+			t.Errorf("a badge with no icon: %+v", b)
+		}
+	}
 	if b := modelBadgeOf("", ""); b.State != "unknown" || b.Label != "Model unknown" {
 		t.Errorf("unknown: %+v", b)
 	}

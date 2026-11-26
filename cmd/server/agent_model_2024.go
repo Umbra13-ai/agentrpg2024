@@ -36,13 +36,21 @@ var modelFamilies = []modelFamily{
 // modelIcon: the family's own logo as a round badge, a site asset (data/site_assets/model-<key>.svg: the logo in white on the brand's color, Gemini's in its own
 // colors on white; the logo shapes are from the LobeHub icon set, MIT, and belong to their makers, who they stand for here), "" for a family without one.
 func modelIcon(f modelFamily) string {
-	for _, k := range modelFamilies {
-		if k.Key == f.Key {
-			return "/assets/model-" + k.Key + ".svg"
-		}
+	if _, ok := modelIconKeys[f.Key]; ok {
+		return "/assets/model-" + f.Key + ".svg"
 	}
 	return ""
 }
+
+// modelIconKeys: every key with an icon file: the families, and the three states a family can't stand for (other: a model with no logo here, unknown: the
+// player never said, declined: the player chose not to say; generic glyphs from Lucide, ISC, in white on a slate plate).
+var modelIconKeys = func() map[string]bool {
+	m := map[string]bool{"other": true, "unknown": true, "declined": true}
+	for _, f := range modelFamilies {
+		m[f.Key] = true
+	}
+	return m
+}()
 
 // modelOther, modelDeclined, modelUnknown: what a name no row reads, a "no" and no answer look like.
 var (
@@ -80,7 +88,7 @@ func modelFamilyOf(model string) modelFamily {
 func modelBadgeOf(state, model string) modelBadge {
 	switch {
 	case state == "declined":
-		return modelBadge{State: "declined", Family: modelDeclined.Key, Label: modelDeclined.Label, Symbol: modelDeclined.Symbol, Color: modelDeclined.Color,
+		return modelBadge{State: "declined", Family: modelDeclined.Key, Label: modelDeclined.Label, Symbol: modelDeclined.Symbol, Color: modelDeclined.Color, Icon: modelIcon(modelDeclined),
 			Text: "Model not shared (the player chose not to say)"}
 	case state == "shared" && strings.TrimSpace(model) != "":
 		f := modelFamilyOf(model)
@@ -90,7 +98,7 @@ func modelBadgeOf(state, model string) modelBadge {
 		}
 		return modelBadge{State: "shared", Family: f.Key, Label: f.Label, Symbol: f.Symbol, Color: f.Color, Icon: modelIcon(f), Model: model, Text: text}
 	}
-	return modelBadge{State: "unknown", Family: modelUnknown.Key, Label: modelUnknown.Label, Symbol: modelUnknown.Symbol, Color: modelUnknown.Color, Text: "Model unknown (the player has not said)"}
+	return modelBadge{State: "unknown", Family: modelUnknown.Key, Label: modelUnknown.Label, Symbol: modelUnknown.Symbol, Color: modelUnknown.Color, Icon: modelIcon(modelUnknown), Text: "Model unknown (the player has not said)"}
 }
 
 // agentModelBadge: the badge of an agent's account.
