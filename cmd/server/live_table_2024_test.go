@@ -105,7 +105,7 @@ func TestPostgresAppShell(t *testing.T) {
 	for _, p := range data.Chronicle {
 		if strings.Contains(p.Text, "The gate groans open.") {
 			found = true
-			if strings.Contains(p.Text, "<img") || !strings.Contains(p.Text, "&lt;img") || p.SpeakerID != "narrator" {
+			if strings.Contains(p.Text, "<img") || !strings.Contains(p.Text, "&lt;img") || p.SpeakerID != "narrator" || !strings.HasPrefix(p.SpeakerName, "GM ") || !strings.HasSuffix(html.UnescapeString(p.SpeakerName), "'s Narration") { // the page puts it in as markup: escaped here
 				t.Errorf("the narration's page: %+v", p)
 			}
 		}
@@ -140,7 +140,7 @@ func TestPostgresAppShell(t *testing.T) {
 // TestOwnerFileChangesAreHooks: every change to the owner's file is a marked hook: the file's script keeps the mock-up's own render
 // functions, and each line the site added carries the mark (counted, so a new unmarked change shows up as a different count).
 func TestOwnerFileChangesAreHooks(t *testing.T) {
-	if n := strings.Count(previewTableHTML, "hook (site, Nov 26)"); n != 23 {
+	if n := strings.Count(previewTableHTML, "hook (site, Nov 26)"); n != 25 {
 		t.Errorf("the owner's file has %d marked hooks; a change to it is a marked hook, listed in live_table_2024.go and CLAUDE.md", n)
 	}
 	for _, own := range []string{"function renderHeroCard", "function renderPartySection", "function renderChronicleSection", "function renderCampaignsView",
@@ -200,5 +200,15 @@ func TestPageShellFrame(t *testing.T) {
 	}
 	if strings.Index(page, "function arpgTheme()") > strings.Index(page, "<style>") {
 		t.Error("the theme is read after the styles: the page would flash the default theme")
+	}
+}
+
+// TestGMNarrationName: a narration is by "GM <name>'s Narration", never "Narrator" (owner, Nov 26).
+func TestGMNarrationName(t *testing.T) {
+	if got := gmNarrationName(" Alden "); got != "GM Alden's Narration" {
+		t.Errorf("with a GM: %q", got)
+	}
+	if got := gmNarrationName(""); got != "GM's Narration" {
+		t.Errorf("without: %q", got)
 	}
 }

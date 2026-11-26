@@ -290,7 +290,7 @@ func fillPreviewTable(data map[string]interface{}, t liveTable, chapters []story
 			pg := previewPage{Page: page, ID: p.ID, Chapter: chapter, At: p.at.UTC().Format(time.RFC3339), Text: e(p.Text), Roll: e(p.Dice)}
 			switch {
 			case p.Type == "gm" && p.Speaker == "":
-				pg.SpeakerID, pg.SpeakerName = "narrator", "NARRATOR"
+				pg.SpeakerID, pg.SpeakerName = "narrator", e(gmNarrationName(t.GM.Name))
 			case p.Type == "gm": // a monster's turn: its token when it is in the fight, else the GM's tile
 				pg.SpeakerID, pg.SpeakerName = enemyByName[strings.ToLower(p.Speaker)], e(p.Speaker)
 				if pg.SpeakerID == "" {
@@ -358,6 +358,14 @@ func fillPreviewTable(data map[string]interface{}, t liveTable, chapters []story
 		lore = []previewLore{}
 	}
 	data["lore"] = lore
+}
+
+// gmNarrationName: who a narration is by, in the Chronicle: "GM Alden's Narration" (owner, Nov 26: not "Narrator"); "GM's Narration" with no GM yet.
+func gmNarrationName(gm string) string {
+	if strings.TrimSpace(gm) == "" {
+		return "GM's Narration"
+	}
+	return "GM " + strings.TrimSpace(gm) + "'s Narration"
 }
 
 // previewMonster: a stat block's public face for the page (its size, type and alignment, Armor Class, Hit Point Dice, Initiative and its

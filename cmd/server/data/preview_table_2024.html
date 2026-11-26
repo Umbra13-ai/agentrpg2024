@@ -279,7 +279,7 @@
       const parts = [];
       if (TTS.names) {
         const who = ttsPlain(item.speakerName);
-        parts.push(item.speakerId === "narrator" ? "Narrator." : who + ".");
+        parts.push(who + "."); // hook (site, Nov 26): the narration is read by its name ("GM Alden's Narration")
       }
       if (TTS.rolls && item.roll) parts.push("Roll: " + ttsPlain(item.roll) + ".");
       ttsChunks(ttsPlain(item.text)).forEach(c => parts.push(c));
@@ -579,7 +579,7 @@
             <div class="pl-3.5 border-l-2 ${isPinnedSpeaker ? 'border-[#4c8bf5]' : 'border-[#d4a853]'}">
               <div class="flex items-center justify-between gap-2 mb-2">
                 <div class="flex items-center gap-2.5 min-w-0">
-                  ${av ? `<img src="${av}" alt="${item.speakerName}" class="w-9 h-9 rounded-lg object-cover border border-white/15 shrink-0" />` : `<div class="w-9 h-9 rounded-lg ${item.speakerId === 'narrator' ? 'bg-[#d4a853]/15 border-[#d4a853]/40 text-theme-gold-bright' : 'bg-blue-500/20 border-blue-400/40 text-blue-400'} border flex items-center justify-center text-[10px] font-bold shrink-0">${item.speakerId === 'narrator' ? 'NAR' : 'GM'}</div>`}
+                  ${av ? `<img src="${av}" alt="${item.speakerName}" class="w-9 h-9 rounded-lg object-cover border border-white/15 shrink-0" />` : `<div class="w-9 h-9 rounded-lg ${item.speakerId === 'narrator' ? 'bg-[#d4a853]/15 border-[#d4a853]/40 text-theme-gold-bright' : 'bg-blue-500/20 border-blue-400/40 text-blue-400'} border flex items-center justify-center text-[10px] font-bold shrink-0">GM</div>`}<!-- hook (site, Nov 26): the narrator's box says GM -->
                   <div class="min-w-0">
                     <div class="flex items-center gap-1.5">
                       <span class="text-sm font-semibold text-theme-gold-bright truncate">${item.speakerName}</span>
