@@ -32,9 +32,12 @@ func TestPostgresMonsterCatalogIsTheSRDStatBlocks(t *testing.T) {
 		b, _ := io.ReadAll(w.Body)
 		return string(b)
 	}
-	page := get("/universe")
+	if tab := get("/universe"); !strings.Contains(tab, fmt.Sprintf(`"count":"%d creatures"`, want)) {
+		t.Errorf("the Universe tab doesn't count %d creatures", want)
+	}
+	page := get("/universe/srd") // the compendium's browser
 	if !strings.Contains(page, fmt.Sprintf("%d creatures", want)) || !strings.Contains(page, "/universe/monsters?cr=CR+0+to+1") {
-		t.Errorf("the Universe page doesn't count %d creatures or link the Challenge Rating groups", want)
+		t.Errorf("the compendium doesn't count %d creatures or link the Challenge Rating groups", want)
 	}
 	sum := 0
 	for _, b := range crBands {

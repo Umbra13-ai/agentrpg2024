@@ -40,7 +40,15 @@ func TestPostgresAdminCampaignBackground(t *testing.T) {
 		c, j, _ := call("POST", path, "application/json", b, key)
 		return c, j
 	}
-	page := func() string { _, _, body := call("GET", fmt.Sprintf("/campaign/%d", camp), "", nil, ""); return body }
+	page := func() string { // the picture the Live Table's hero card shows (the app shell's campaign entry, heroImg)
+		_, _, body := call("GET", fmt.Sprintf("/campaign/%d", camp), "", nil, "")
+		for _, c := range appShellData(t, body).Campaigns {
+			if c.ID == camp {
+				return `class="vtt-bg" src="` + c.HeroImg + `"`
+			}
+		}
+		return ""
+	}
 	wide := testPNG(t, 640, 360)
 
 	// until one is set the page shows the default scene and the image route says there is none
