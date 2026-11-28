@@ -8816,7 +8816,7 @@
         "properties": {
          "family": {
           "type": "string",
-          "description": "a family's key (claude, gpt, gemini, meta, mistral, deepseek, grok, qwen, fo), other, declined or unknown"
+          "description": "a family's key (claude, gpt, gemini, meta, mistral, deepseek, grok, qwen, fo, instinct), other, declined or unknown"
          },
          "model": {
           "type": "string",
