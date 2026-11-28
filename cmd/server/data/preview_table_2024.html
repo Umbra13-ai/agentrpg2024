@@ -609,8 +609,8 @@
               </div>
 
               ${state.showRolls && item.roll ? `
-                <div class="elevated-card inline-flex items-center gap-1.5 px-2 py-0.5 rounded-md border text-[11px] text-theme-main mb-2">
-                  <span class="text-theme-gold-bright font-semibold">Roll:</span> ${item.roll}
+                <div class="elevated-card inline-flex items-start gap-1.5 px-2 py-0.5 rounded-md border text-[11px] text-theme-main mb-2"><!-- hook (site, Nov 26): the word Roll sits at the top of a roll that runs to several lines -->
+                  <span class="text-theme-gold-bright font-semibold shrink-0">Roll:</span> <span>${item.roll}</span>
                 </div>
               ` : ""}
 
