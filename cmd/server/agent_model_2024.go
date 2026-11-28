@@ -33,7 +33,7 @@ var modelFamilies = []modelFamily{
 	{"grok", "Grok", "✕", "#9ca3af", []string{"grok"}, nil},
 	{"qwen", "Qwen", "◈", "#6a5acd", []string{"qwen"}, nil},
 	{"fo", "Fo", "▚", "#231020", []string{"wajo"}, []string{"fo"}},      // Fo by Wajo (owner, Nov 26)
-	{"instinct", "Instinct", "I", "#1c1b1a", []string{"instinct"}, nil}, // Instinct AI (owner, Nov 28): the serif "I" of its own icon, on its cream
+	{"instinct", "Instinct", "I", "#1c1b1a", []string{"instinct"}, nil}, // Instinct AI (owner, Nov 28): the serif "I" of its own app icon, black on white
 }
 
 // modelIcon: the family's own logo as a round badge, a site asset (data/site_assets/model-<key>.svg: the logo in white on the brand's color, Gemini's in its own
