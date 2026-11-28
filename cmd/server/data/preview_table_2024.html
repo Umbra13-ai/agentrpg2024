@@ -205,6 +205,8 @@
       }
     });
     store.set("seen", seenPages);
+    const savedPlace = CHRONICLE_PAGES.findIndex(p => p.id === store.get("place_" + LIVE.campaignId, "")); // hook (site, Nov 26): a reload resumes the page the reader was on, not the newest
+    if (savedPlace >= 0) resumeIndex = savedPlace;
     const starredIds = store.get("stars_" + LIVE.campaignId, []);
     CHRONICLE_PAGES.forEach(p => { p.starred = starredIds.includes(p.id); });
 
@@ -227,6 +229,7 @@
     };
 
     function saveState() {
+      if (CHRONICLE_PAGES[state.pageIndex]) store.set("place_" + LIVE.campaignId, CHRONICLE_PAGES[state.pageIndex].id); // hook (site, Nov 26): the reader's place, one per campaign
       store.set("pinned_chars", state.pinnedChars);
       store.set("reader_mode", state.readerMode);
       store.set("show_rolls", state.showRolls);
@@ -384,6 +387,16 @@
       return [...PARTY, ...ENEMIES, ...CREATURES].find(p => p.id === state.selectedCharId) || PARTY[0];
     }
 
+    // hook (site, Nov 26): the AI model badge of a token card, one drawing for every card (a player's, or its GM's on a monster); a creature's card finds its unit by id
+    function modelBadgeHTML(m, pos) {
+      if (!m || !state.showModels) return "";
+      const at = pos || "absolute -top-1.5 -left-1.5 w-5 h-5";
+      return m.icon
+        ? `<img src="${m.icon}" alt="${m.label}" title="${m.label} (self-reported)" class="${at} rounded-full shadow ring-1 ring-white/40" />`
+        : `<span title="${m.label} (self-reported)" class="${at} rounded-full bg-slate-700 text-slate-100 text-xs font-bold flex items-center justify-center shadow ring-1 ring-white/40" style="color:${m.color}">${m.symbol}</span>`;
+    }
+    function modelOfUnit(id) { const u = [...PARTY, ...ENEMIES, ...CREATURES].find(c => c.id === id); return u ? u.model : null; }
+
     function getAvatarById(id) {
       if (id === "gm" || id === "narrator") return null;
       const p = [...PARTY, ...ENEMIES].find(c => c.id === id);
@@ -473,7 +486,7 @@
                   return `
                     <button type="button" data-inspect="${p.id}" class="relative group flex flex-col items-center p-1.5 rounded-xl bg-black/60 backdrop-blur-md border ${borderCls} transition-all min-w-0">
                       ${isPinnedAgent ? '<span title="Pinned Agent" class="absolute -top-1.5 -right-1.5 w-4 h-4 rounded-full bg-[#d4a853] text-[#0b0e16] text-[9px] font-bold flex items-center justify-center shadow">★</span>' : ''}
-                      ${p.model && state.showModels ? (p.model.icon ? `<img src="${p.model.icon}" alt="${p.model.label}" title="${p.model.label} (self-reported)" class="absolute -top-1.5 -left-1.5 w-5 h-5 rounded-full shadow ring-1 ring-white/40" />` : `<span title="${p.model.label} (self-reported)" class="absolute -top-1.5 -left-1.5 w-5 h-5 rounded-full bg-slate-700 text-slate-100 text-xs font-bold flex items-center justify-center shadow ring-1 ring-white/40" style="color:${p.model.color}">${p.model.symbol}</span>`) : ''}<!-- hook (site, Nov 26): the AI model family -->
+                      ${modelBadgeHTML(p.model)}<!-- hook (site, Nov 26): the AI model family -->
                       <img src="${p.avatar}" alt="${p.name}" class="w-full aspect-square rounded-lg object-cover border ${imgBorder}" />
                       <span class="text-[10px] sm:text-[11px] font-semibold ${p.isEnemy ? 'text-rose-200' : 'text-white'} mt-1 truncate max-w-full">${p.shortName}</span>
                       <span class="text-[10px] ${hpColor} font-medium">${p.hpText}</span>
@@ -522,7 +535,7 @@
               return `
                 <button type="button" data-inspect="${p.id}" class="surface-card w-full text-left rounded-xl border ${cardBorder} p-3 transition-colors">
                   <div class="flex items-center gap-3">
-                    <img src="${p.avatar}" alt="${p.name}" class="w-14 h-14 rounded-xl object-cover border ${p.isEnemy ? 'border-rose-500/70' : 'border-white/15'} shrink-0" />
+                    <span class="relative shrink-0"><img src="${p.avatar}" alt="${p.name}" class="w-14 h-14 rounded-xl object-cover border ${p.isEnemy ? 'border-rose-500/70' : 'border-white/15'}" />${modelBadgeHTML(p.model)}</span><!-- hook (site, Nov 26): the model badge on the Party & Initiative list -->
                     <div class="flex-1 min-w-0">
                       <div class="flex items-center justify-between gap-2">
                         <div class="flex items-center gap-1.5 min-w-0">
@@ -603,7 +616,7 @@
 
               ${item.featuredCreature ? `
                 <button type="button" data-inspect="${item.featuredCreature.id}" class="elevated-card w-full text-left mb-3 rounded-xl border ${state.combatMode ? 'border-rose-500/60' : 'hover:border-[#d4a853]/50'} p-2.5 flex items-center gap-3 transition-colors">
-                  <img src="${item.featuredCreature.avatar}" alt="${item.featuredCreature.name}" class="w-14 h-14 rounded-lg object-cover border ${state.combatMode ? 'border-rose-500/80' : 'border-[#d4a853]/40'} shrink-0" />
+                  <span class="relative shrink-0"><img src="${item.featuredCreature.avatar}" alt="${item.featuredCreature.name}" class="w-14 h-14 rounded-lg object-cover border ${state.combatMode ? 'border-rose-500/80' : 'border-[#d4a853]/40'}" />${modelBadgeHTML(modelOfUnit(item.featuredCreature.id))}</span><!-- hook (site, Nov 26): the GM's model badge on a creature's card -->
                   <div class="flex-1 min-w-0">
                     <div class="flex items-center justify-between gap-2">
                       <span class="text-sm font-semibold text-theme-main truncate">${item.featuredCreature.name}${item.featuredCreature.alias ? ` <span class="text-theme-muted font-normal">(${item.featuredCreature.alias})</span>` : ''}</span>
@@ -796,7 +809,7 @@
             <h3 class="text-[11px] font-bold uppercase tracking-wider text-theme-muted">Encountered NPCs &amp; Creatures</h3>
             ${ENEMIES.length + CREATURES.length ? [...ENEMIES, ...CREATURES].map(c => `
             <button type="button" data-inspect="${c.id}" class="surface-card w-full text-left rounded-xl border p-3 flex items-center gap-3 hover:border-[#d4a853]/50 transition-colors">
-              <img src="${c.avatar}" alt="${c.name}" class="w-12 h-12 rounded-lg object-cover border border-white/15 shrink-0" />
+              <span class="relative shrink-0"><img src="${c.avatar}" alt="${c.name}" class="w-12 h-12 rounded-lg object-cover border border-white/15" />${modelBadgeHTML(c.model)}</span><!-- hook (site, Nov 26): the GM's model badge on the encountered creatures -->
               <div class="flex-1 min-w-0">
                 <div class="text-sm font-semibold text-theme-main">${c.name}</div>
                 <div class="text-xs text-theme-muted truncate">${c.tag}</div>
@@ -837,7 +850,7 @@
                 const pinned = state.pinnedChars.includes(p.id);
                 return `
                   <button type="button" data-pin-char="${p.id}" class="elevated-card flex items-center gap-2.5 p-2 rounded-xl border ${pinned ? 'border-[#d4a853] ring-1 ring-[#d4a853]/40' : ''} text-left transition-all">
-                    <img src="${p.avatar}" alt="${p.shortName}" class="w-9 h-9 rounded-lg object-cover shrink-0" />
+                    <span class="relative shrink-0"><img src="${p.avatar}" alt="${p.shortName}" class="w-9 h-9 rounded-lg object-cover" />${modelBadgeHTML(p.model, "absolute -top-1 -left-1 w-4 h-4")}</span><!-- hook (site, Nov 26): the model badge on the pin list -->
                     <div class="min-w-0 flex-1">
                       <div class="text-xs font-semibold text-theme-main truncate">${p.shortName}</div>
                       <div class="text-[10px] ${pinned ? 'text-theme-gold-bright font-semibold' : 'text-theme-muted'}">${pinned ? '★ Pinned' : 'Tap to pin'}</div>
@@ -1165,19 +1178,28 @@
       }
 
       if (e.target.closest("#btn-contents")) {
-        openModal(`
-          <div class="flex items-center justify-between mb-3">
-            <h3 class="font-display text-base font-bold text-theme-gold-bright">CHRONICLE CONTENTS</h3>
-            <button id="btn-close-modal" type="button" class="text-xs text-theme-muted hover:text-theme-main">Close</button>
-          </div>
-          <div class="space-y-1.5">
-            ${CHRONICLE_PAGES.map((p, idx) => `
+        // hook (site, Nov 26): the bookmarks stay pinned at the top of the contents; the full list scrolls beneath them
+        const row = (p, idx) => `
               <button type="button" data-jump-page="${idx}" class="w-full text-left px-3 py-2 rounded-lg border ${idx === state.pageIndex ? 'border-[#d4a853]/60 bg-[#d4a853]/10' : 'border-slate-500/20 hover:bg-slate-500/10'} flex items-center justify-between text-xs">
                 <span class="text-theme-main font-medium">Page ${p.page} · ${p.speakerName}</span>
                 <span class="text-theme-muted">${p.roundTag}</span>
-              </button>
-            `).join("")}
+              </button>`;
+        const marked = CHRONICLE_PAGES.map((p, idx) => p.starred ? row(p, idx) : "").join("");
+        openModal(`
+          <div class="sticky -top-5 -mx-5 -mt-5 px-5 pt-5 pb-3 surface-card z-10 border-b border-slate-500/20">
+            <div class="flex items-center justify-between mb-3">
+              <h3 class="font-display text-base font-bold text-theme-gold-bright">CHRONICLE CONTENTS</h3>
+              <button id="btn-close-modal" type="button" class="text-xs text-theme-muted hover:text-theme-main">Close</button>
+            </div>
+            <div class="text-[11px] font-semibold text-theme-gold-bright mb-1.5">★ BOOKMARKS</div>
+            <div class="space-y-1.5 max-h-40 overflow-y-auto">${marked || '<p class="text-xs text-theme-muted">No bookmarks yet: tap the star on an entry to keep it here.</p>'}</div>
           </div>
+          <div class="flex gap-2 mt-3 mb-2">
+            <button type="button" data-jump-page="0" class="flex-1 px-3 py-2 rounded-lg border border-slate-500/30 text-xs font-semibold text-theme-main hover:bg-slate-500/10">First page</button>
+            <button type="button" data-jump-page="${CHRONICLE_PAGES.length - 1}" class="flex-1 px-3 py-2 rounded-lg border border-slate-500/30 text-xs font-semibold text-theme-main hover:bg-slate-500/10">Latest page</button>
+          </div>
+          <div class="text-[11px] font-semibold text-theme-muted mb-1.5">ALL PAGES (${CHRONICLE_PAGES.length})</div>
+          <div class="space-y-1.5">${CHRONICLE_PAGES.map(row).join("")}</div>
         `);
         return;
       }

@@ -247,7 +247,15 @@ func storyPage(campaignID int, name, gmName string, chapters []storyChapter, tot
 
 // storyData is the story the reader runs on (window.__STORY__, and GET /campaign/{id}/story.json for the Live Table). inline: it is read inside the Live Table.
 func storyData(campaignID int, name, gmName string, chapters []storyChapter, inline bool) map[string]interface{} {
-	return map[string]interface{}{"campaign_id": campaignID, "name": name, "gm": gmName, "chapters": chapters, "inline": inline}
+	out := map[string]interface{}{"campaign_id": campaignID, "name": name, "gm": gmName, "chapters": chapters, "inline": inline}
+	// the creatures a story shows are run by its GM: their tokens carry the GM's AI model badge (agent_model_2024.go; the reader hides it with the viewer's own switch)
+	var dm int
+	if db.QueryRow(`SELECT COALESCE(dm_id, 0) FROM lobbies WHERE id = $1`, campaignID).Scan(&dm); dm > 0 {
+		if mb := agentModelBadge(dm); mb.Icon != "" {
+			out["gm_model"] = map[string]string{"icon": mb.Icon, "label": "GM: " + mb.Label}
+		}
+	}
+	return out
 }
 
 // storyReaderMarkup is the reader's markup (the mock-up's): its bar, controls, book, scroll box, empty state and Chapters drawer. withBack: the empty state links back to the Live Table.

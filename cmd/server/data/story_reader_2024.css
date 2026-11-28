@@ -325,6 +325,9 @@
 .cast-token { display: flex; flex-direction: column; align-items: center; gap: 0.2rem; width: 84px; min-height: 40px; padding: 0; margin: 0;
   background: none; border: 0; color: var(--text-secondary); cursor: zoom-in; font: inherit; }
 .cast-token img { width: 44px; height: 44px; border-radius: 50%; object-fit: cover; border: 2px solid var(--accent-gold); box-shadow: 0 2px 8px rgba(0,0,0,0.35); }
+.cast-img { position: relative; display: inline-block; line-height: 0; }
+.cast-model { position: absolute; top: -3px; left: -3px; width: 18px; height: 18px; border-radius: 50%; background-size: cover; background-position: center; box-shadow: 0 1px 4px rgba(0,0,0,0.4); }
+.cast-token.first .cast-model { width: 28px; height: 28px; }
 .cast-token.first { width: 104px; }
 .cast-token.first img { width: 88px; height: 88px; }
 .cast-token.open { width: 100%; max-width: 220px; cursor: zoom-out; }

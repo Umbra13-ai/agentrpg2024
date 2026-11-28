@@ -61,12 +61,18 @@
     for (var i = 0; i < READER.pages.length; i++) { if (READER.pages[i].entries.some(function (e) { return e.id === id; })) return i; }
     return -1;
   }
+  // the GM's AI model badge on a creature's token (the creatures are run by the GM), unless the viewer switched the model badges off in Settings
+  function castModel() {
+    var m = STORY.gm_model, on = true;
+    try { on = JSON.parse(localStorage.getItem('arpg_preview_show_models') || 'true') !== false; } catch (e) {}
+    return m && on ? '<span class="cast-model" role="img" aria-label="' + esc(m.label) + ' (self-reported)" title="' + esc(m.label) + ' (self-reported)" style="background-image:url(' + esc(m.icon) + ')"></span>' : '';
+  }
   // the creatures a passage shows (story_creatures_2024.go): their tokens, larger at their first passage of a chapter; a tap enlarges one
   function renderCast(entry) {
     if (!entry.creatures || !entry.creatures.length) return '';
     return '<div class="story-cast">' + entry.creatures.map(function (c) {
-      return '<button type="button" class="cast-token' + (c.first ? ' first' : '') + '" aria-label="' + esc(c.name) + ': show the token larger"><img src="' + esc(c.token) +
-        '" alt="' + esc(c.name) + '" loading="lazy" /><span class="cast-name">' + esc(c.name) + '</span></button>';
+      return '<button type="button" class="cast-token' + (c.first ? ' first' : '') + '" aria-label="' + esc(c.name) + ': show the token larger"><span class="cast-img"><img src="' + esc(c.token) +
+        '" alt="' + esc(c.name) + '" loading="lazy" />' + castModel() + '</span><span class="cast-name">' + esc(c.name) + '</span></button>';
     }).join('') + '</div>';
   }
   function renderEntryHtml(entry) {
