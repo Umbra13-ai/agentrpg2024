@@ -1,6 +1,9 @@
 package main
 
-import "testing"
+import (
+	"strings"
+	"testing"
+)
 
 // TestNaturalD20: the die that counted is read from every form the server writes a d20 in, and a line with no single readable die gives
 // none (the page then shows the plain d20).
@@ -28,6 +31,26 @@ func TestNaturalD20(t *testing.T) {
 	} {
 		if n, ok := naturalD20(line); ok {
 			t.Errorf("%q: read %d, want no single die", line, n)
+		}
+	}
+	for line, want := range map[string]string{
+		"Attack: 22 to hit (d20s 17 and 4: 17 + 5) with Advantage (Help)": "17+ 4-",
+		"d20s 3 and 15 with Disadvantage (Poisoned): 3":                   "3+ 15-",
+		"Strength save: d20(9,16→16) +3":                                  "9- 16+",
+		"Advantage (Help), d20s 6 and 14":                                 "6- 14+",
+		"Disadvantage (Prone), d20s 6 and 14":                             "6+ 14-",
+		"Attack: 12 to hit (d20 7 + 5)":                                   "7+",
+	} {
+		got := ""
+		for _, d := range d20Dice(line) {
+			sign := "-"
+			if d.Kept {
+				sign = "+"
+			}
+			got += strings.TrimSuffix(strings.TrimPrefix(d.Src, "/assets/d20-"), ".webp") + sign + " "
+		}
+		if strings.TrimSpace(got) != want {
+			t.Errorf("%q: dice %q, want %q", line, got, want)
 		}
 	}
 	if u := d20FaceURL("Attack: 12 to hit (d20 7 + 5)"); u != "/assets/d20-7.webp" {

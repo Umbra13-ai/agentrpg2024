@@ -609,8 +609,8 @@
               </div>
 
               ${state.showRolls && item.roll ? `
-                <div class="elevated-card inline-flex items-start gap-1.5 px-2 py-0.5 rounded-md border text-[11px] text-theme-main mb-2"><!-- hook (site, Nov 26): the word Roll at the top of the roll, the owner's small d20 under it showing the face rolled (item.d20) -->
-                  <span class="flex flex-col items-center shrink-0"><span class="text-theme-gold-bright font-semibold">Roll:</span><img src="${item.d20 || '/assets/d20.webp'}" alt="" aria-hidden="true" class="w-5 h-5 mt-1 object-contain" /></span> <span>${item.roll}</span>
+                <div class="elevated-card inline-flex items-start gap-1.5 px-2 py-0.5 rounded-md border text-[11px] text-theme-main mb-2"><!-- hook (site, Nov 26): the word Roll at the top of the roll, the owner's small d20 under it showing the face rolled, both dice for Advantage or Disadvantage, the same size, a gold glow around the one that counted (item.dice) -->
+                  <span class="flex flex-col items-center shrink-0"><span class="text-theme-gold-bright font-semibold">Roll:</span><span class="flex items-center gap-0.5 mt-1">${(item.dice && item.dice.length ? item.dice : [{src: '/assets/d20.webp', kept: true}]).map(d => `<img src="${d.src}" alt="" aria-hidden="true" class="w-5 h-5 object-contain ${d.kept && item.dice.length > 1 ? 'drop-shadow-[0_0_4px_rgba(234,185,92,0.95)]' : ''}" />`).join("")}</span></span> <span>${item.roll}</span>
                 </div>
               ` : ""}
 
