@@ -113,6 +113,7 @@ type previewPage struct {
 	SpeakerName string              `json:"speakerName"`
 	RoundTag    string              `json:"roundTag"`
 	Roll        string              `json:"roll"`
+	D20         string              `json:"d20,omitempty"` // the picture of the face its d20 shows (d20_face_2024.go); none: the plain d20
 	Starred     bool                `json:"starred"`
 	Featured    *previewCreatureRef `json:"featuredCreature,omitempty"`
 	Text        string              `json:"text"`
@@ -296,7 +297,7 @@ func fillPreviewTable(data map[string]interface{}, t liveTable, chapters []story
 		chapter := e(ch.Num + " — " + ch.Title)
 		for _, p := range ch.Entries {
 			page++
-			pg := previewPage{Page: page, ID: p.ID, Chapter: chapter, At: p.at.UTC().Format(time.RFC3339), Text: e(p.Text), Roll: e(p.Dice)}
+			pg := previewPage{Page: page, ID: p.ID, Chapter: chapter, At: p.at.UTC().Format(time.RFC3339), Text: e(p.Text), Roll: e(p.Dice), D20: d20FaceURL(p.Dice)}
 			switch {
 			case p.Type == "gm" && p.Speaker == "":
 				pg.SpeakerID, pg.SpeakerName = "narrator", e(gmNarrationName(t.GM.Name))
